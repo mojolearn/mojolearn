@@ -85,6 +85,7 @@ from checks.numerics import (
     identical_pow,
 )
 from core.host_parallel import host_parallelize
+from core.fit_loop_clock import fit_loop_start, fit_loop_stop
 from gbdt.targets.pointwise_bodies import (
     BODY_OBJ_CROSSENTROPY,
     BODY_OBJ_EXPECTILE,
@@ -1424,6 +1425,10 @@ def gbdt_losses_host_fit(
     tree_leaf_offsets.append(0)
     var model_leaves = List[Float32]()
 
+    # `fit_loop_` (lane ab-loop-mode): the host clock read once before the
+    # first round and once after the last (nothing inside the loop); the
+    # rounds executed are the trees the loop added.
+    var fit_loop_t0 = fit_loop_start()
     for iteration in range(params.n_estimators):
         # ---- which permutation the STRUCTURE is searched on
         # (`doc_parallel_boosting.mojo`, `gbdt_host_boost`'s statements);
@@ -1770,6 +1775,7 @@ def gbdt_losses_host_fit(
             var v = Float64(fv)
             if iteration + 1 > 1:
                 losses.append(-v / loss_norm)
+    var fit_loop = fit_loop_stop(fit_loop_t0, len(tree_split_offsets) - 1)
 
     if loss.objective == GBDT_OBJ_YETI_RANK:
         # the device's final pass writes 0.0 partials and takes no draw
@@ -1818,6 +1824,7 @@ def gbdt_losses_host_fit(
         tree_leaf_offsets^, model_leaves^, losses^, detector.best_iteration,
         stopped_early,
     )
+    model.fit_loop = fit_loop^
     return GbdtCtrHostFit(
         GbdtHostFitWithEval(
             model^,

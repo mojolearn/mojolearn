@@ -96,6 +96,7 @@ from checks.numerics import (
     identical_mul_add,
 )
 from core.host_parallel import host_parallelize
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from core.host_predict_threads import HostF32Ptr, host_predict_chunk
 from gbdt.methods.random_score_bodies import score_model_length_mult
 from gbdt.gpu_data.compressed_index_builder import (
@@ -228,6 +229,10 @@ struct GbdtHostMultiFit(Movable):
     var tables: List[TCtrValueTable]
     var ctr_column_count: Int
     var combination_ctrs: TCombinationCtrs
+    #: the boosting loop's executed rounds (one tree of `dim` values per
+    #: round) and its time: the estimator's `fit_loop_`
+    #: (core/fit_loop_clock.mojo; lane ab-loop-mode)
+    var fit_loop: FitLoop
 
 
 # ===========================================================================
@@ -1281,6 +1286,10 @@ def gbdt_multi_host_fit(
         if any_one_hot:
             pw_one_hot = feat_one_hot.copy()
 
+    # `fit_loop_` (lane ab-loop-mode): the host clock read once before the
+    # first round and once after the last (nothing inside the loop); the
+    # rounds executed are the trees the loop added.
+    var fit_loop_t0 = fit_loop_start()
     for iteration in range(params.n_estimators):
         # ---- which permutation the STRUCTURE is searched on
         # (`doc_parallel_boosting.mojo`, `gbdt_host_boost`'s statements);
@@ -1637,6 +1646,7 @@ def gbdt_multi_host_fit(
             var v = Float64(fv)
             if iteration + 1 > 1:
                 losses.append(-v / Float64(n_rows))
+    var fit_loop = fit_loop_stop(fit_loop_t0, len(tree_split_offsets) - 1)
 
     # the ESTIMATION permutation's cursor (the only one on a numeric fit)
     _multi_pass(
@@ -1677,7 +1687,7 @@ def gbdt_multi_host_fit(
         model^,
         GbdtHostEvalFit(test_losses^, detector.best_iteration, stopped_early),
         cols.one_hot.copy(), tables^, ctr_column_count,
-        cols.combination_ctrs.copy(),
+        cols.combination_ctrs.copy(), fit_loop^,
     )
 
 

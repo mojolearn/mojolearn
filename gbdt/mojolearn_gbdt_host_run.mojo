@@ -15,6 +15,7 @@ from std.memory import bitcast
 
 from core.hostptr import f32_ptr, read_f32, u32_ptr
 from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome
+from core.fit_loop_clock import FitLoop
 # The typed bodies (lane thin-trees-metrics, 2026-10-21): the model text
 # reader, the predict walks and links, the binary transforms, and the scans
 # and reads of the fit's tails, moved word for word out of this shell.
@@ -176,6 +177,16 @@ comptime GBDT_HOST_DEFAULT_BORDER = Float32(0.5)
 # host's own depth cap, is gone: the depth and border-count limits are
 # `train`'s (`gbdt/options/catboost_options.mojo::check_tree_limits`, one
 # body for both columns)
+
+
+def _fit_outcome(var text: String, best_iteration: Int, stopped_early: Bool, var losses: List[Float64],
+                 var test_losses: List[Float64], fit_loop: FitLoop) -> GbdtFitOutcome:
+    """The host fit's outcome with its boosting loop's record (`fit_loop_`,
+    lane ab-loop-mode: the rounds and the time the fit's own two clock
+    reads bracketed)."""
+    var outcome = GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
+    outcome.fit_loop = fit_loop.copy()
+    return outcome^
 
 
 def _fit_model(mut fit: GbdtHostFitWithEval) -> GbdtHostModel:
@@ -708,7 +719,7 @@ def _gbdt_fit_pointwise_arm(
     var text = fit.text.copy()
     var losses = fit.losses.copy()
     var test_losses = fit.test_losses.copy()
-    return GbdtFitOutcome(text^, fit.best_iteration, fit.stopped_early, losses^, test_losses^)
+    return _fit_outcome(text^, fit.best_iteration, fit.stopped_early, losses^, test_losses^, fit.fit_loop)
 
 
 # lane gbdt-cpu-rest-4-simple (2026-11-23): `_refuse_ordered_host`, the
@@ -1075,7 +1086,7 @@ def _gbdt_fit_ordered_arm(
     test_losses = fit.test_losses.copy()
     best = fit.best_iteration
     stopped = fit.stopped_early
-    return GbdtFitOutcome(text^, best, stopped, losses^, test_losses^)
+    return _fit_outcome(text^, best, stopped, losses^, test_losses^, fit.fit_loop)
 
 
 def _gbdt_host_eval_arm(
@@ -2023,6 +2034,9 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     var losses = List[Float64]()
     var best_iteration = 0
     var stopped_early = False
+    # the fit's boosting loop (`fit_loop_`, lane ab-loop-mode): each arm
+    # copies its fit's record beside its best iteration
+    var fit_loop = FitLoop.empty()
     # lane gbdt-cpu-rest-2 (2026-11-23): a NaN in a FLOAT column beside
     # categorical ones is binned as on the numeric arms (the one grid and
     # binarizer, nan_mode and the held-out "no NaNs in the learn dataset"
@@ -2110,6 +2124,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             text = gbdt_multi_host_model_text(multi_fit.model)
         losses = multi_fit.model.losses.copy()
         best_iteration = multi_fit.eval.best_iteration
+        fit_loop = multi_fit.fit_loop.copy()
         stopped_early = multi_fit.eval.stopped_early
         test_losses = multi_fit.eval.test_losses.copy()
     elif is_pointwise:
@@ -2171,9 +2186,10 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                 )
                 losses = pw_cat.model.losses.copy()
                 best_iteration = pw_cat.model.best_iteration
+                fit_loop = pw_cat.model.fit_loop.copy()
                 stopped_early = pw_cat.model.stopped_early
                 test_losses = pw_cat.model.test_losses.copy()
-                return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
+                return _fit_outcome(text^, best_iteration, stopped_early, losses^, test_losses^, fit_loop)
             var pw_ns = gbdt_host_fit_non_symmetric(
                 x, y, n_rows, n_features, pw_tp, pw_ev^, pw_start, row_weights
             )
@@ -2182,9 +2198,10 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             )
             losses = pw_ns.losses.copy()
             best_iteration = pw_ns.best_iteration
+            fit_loop = pw_ns.fit_loop.copy()
             stopped_early = pw_ns.stopped_early
             test_losses = pw_ns.test_losses.copy()
-            return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
+            return _fit_outcome(text^, best_iteration, stopped_early, losses^, test_losses^, fit_loop)
         if not ranking_pointwise:
             # the greedy symmetric searcher over the pointwise loss, with its
             # held-out arm and the per-tree feature sample (lane
@@ -2206,6 +2223,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             )
             losses = pw_fit.fit.model.losses.copy()
             best_iteration = pw_fit.fit.eval.best_iteration
+            fit_loop = pw_fit.fit.model.fit_loop.copy()
             stopped_early = pw_fit.fit.eval.stopped_early
             test_losses = pw_fit.fit.eval.test_losses.copy()
             if len(flags) != 0:
@@ -2216,7 +2234,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                 text = gbdt_rmse_host_model_text(
                     GbdtRmseHostFit(_fit_model(pw_fit.fit), pw_start)
                 )
-            return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
+            return _fit_outcome(text^, best_iteration, stopped_early, losses^, test_losses^, fit_loop)
         # the grouped pointwise searcher (gbdt_oracle_pointwise_rank.mojo)
         var pw_model = gbdt_ranking_pointwise_host_fit(
                 x, y, n_rows, n_features, p, pw_loss, host_group_sizes,
@@ -2229,6 +2247,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             )
         losses = pw_model.losses.copy()
         best_iteration = pw_model.best_iteration
+        fit_loop = pw_model.fit_loop.copy()
         stopped_early = pw_model.stopped_early
         text = gbdt_rmse_host_model_text(GbdtRmseHostFit(pw_model^, pw_start))
     elif is_rmse and grow_code == 0 and len(flags) == 0:
@@ -2248,6 +2267,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         )
         losses = r.model.losses.copy()
         best_iteration = r.eval.best_iteration
+        fit_loop = r.model.fit_loop.copy()
         stopped_early = r.eval.stopped_early
         test_losses = r.eval.test_losses.copy()
         text = gbdt_text_with_bias(
@@ -2281,6 +2301,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         )
         losses = ctr_fit.fit.model.losses.copy()
         best_iteration = ctr_fit.fit.eval.best_iteration
+        fit_loop = ctr_fit.fit.model.fit_loop.copy()
         stopped_early = ctr_fit.fit.eval.stopped_early
         test_losses = ctr_fit.fit.eval.test_losses.copy()
     elif grow_code == 0 and len(flags) != 0:
@@ -2310,6 +2331,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         )
         losses = r.model.losses.copy()
         best_iteration = r.eval.best_iteration
+        fit_loop = r.model.fit_loop.copy()
         stopped_early = r.eval.stopped_early
         test_losses = r.eval.test_losses.copy()
     elif grow_code == 0:
@@ -2331,6 +2353,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         )
         losses = r.model.losses.copy()
         best_iteration = r.eval.best_iteration
+        fit_loop = r.model.fit_loop.copy()
         stopped_early = r.eval.stopped_early
         test_losses = r.eval.test_losses.copy()
     else:
@@ -2372,6 +2395,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             )
             losses = cat_ns.model.losses.copy()
             best_iteration = cat_ns.model.best_iteration
+            fit_loop = cat_ns.model.fit_loop.copy()
             stopped_early = cat_ns.model.stopped_early
             test_losses = cat_ns.model.test_losses.copy()
         else:
@@ -2383,10 +2407,11 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             )
             losses = ns_model.losses.copy()
             best_iteration = ns_model.best_iteration
+            fit_loop = ns_model.fit_loop.copy()
             stopped_early = ns_model.stopped_early
             test_losses = ns_model.test_losses.copy()
 
-    return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
+    return _fit_outcome(text^, best_iteration, stopped_early, losses^, test_losses^, fit_loop)
 
 
 def gbdt_predict_multi_run(
