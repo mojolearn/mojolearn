@@ -637,7 +637,18 @@ def meta_plan_mint_with(var plans: List[MemberPlan], var weights: List[Float64],
             index = store[].count
             store[].count += 1
         var slot = _PlanSlotPtr(unsafe_from_address=_plan_slot_address(index))
-        slot[].generation += 1
+        # A reused slot starts whole from the default (lane w3f5-d, gate
+        # 3cda8a05b3): the optional words (`split`, `metric`, `other`,
+        # `cluster` / `label_words`, `rfe_run`, `refusal`) are written only by
+        # the admissions that have them (`meta_plan_split` ...), so a search
+        # with a user's index list (no splitter spec) read the previous
+        # entry's splitter: its folds and fit count were another plan's (a
+        # GridSearchCV over listed folds scored other rows, a member's inner
+        # listed cv indexed rows the stale folds did not hold), depending on
+        # which entry the free list handed back. One slot write per admission.
+        var generation = slot[].generation + 1
+        slot[] = MetaPlanSlot()
+        slot[].generation = generation
         slot[].live = True
         slot[].plans = plans^
         slot[].weights = weights^
@@ -896,17 +907,11 @@ def _plan_lookup(handle: Int, release: Bool) raises -> Int:
         if not slot[].live or slot[].generation != handle // _INDEX_SPAN:
             raise Error("RuntimeError: mojolearn: this meta member plan was released")
         if release:
-            slot[].live = False
-            slot[].plans = List[MemberPlan]()
-            slot[].weights = List[Float64]()
-            slot[].stack_kinds = List[Int]()
-            slot[].masks = List[Int]()
-            slot[].words = List[Float64]()
-            slot[].fold_train = List[List[Int32]]()
-            slot[].fold_test = List[List[Int32]]()
-            slot[].refusal = String("")
-            slot[].refusal_late = False
-            slot[].rfe_hops = List[Float64]()
+            # Every word goes (lane w3f5-d): the generation alone is kept, so
+            # a released handle stays refused and the next mint starts clean.
+            var generation = slot[].generation
+            slot[] = MetaPlanSlot()
+            slot[].generation = generation
             store[].free.append(index)
         return address
     finally:
