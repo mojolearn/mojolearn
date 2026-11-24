@@ -528,8 +528,8 @@ every refusal untruncated; with no `--json` the full text is printed after
 the summary.
 
 CPU WALL CLOCK (2026-09-19). `--jobs N` is an opt-in process supervisor for
-independent lane shards. It requires `--json`, caps N to min(8, CPU count),
-forces every child through `--require-cpu`, preserves each shard JSON as a
+independent lane shards. It requires `--json`, caps N to the allocation's cores,
+runs every child as `--side cpu` (device="cpu"), preserves each shard JSON as a
 resume checkpoint, and merges in deterministic lane order. It never shares a
 fitted estimator or native runtime between workers and never runs concurrent
 jobs on a GPU.
@@ -14180,6 +14180,32 @@ def _job_shards(lanes, count):
             for i in range(count)]
 
 
+def _allocated_cores(cgroup_root="/sys/fs/cgroup"):
+    """The cores this process may run on: its CPU affinity, bounded by a
+    cgroup v2 `cpu.max` (or v1 cfs) quota when one is set. Stdlib only (the
+    harness ships in the wheel)."""
+    try:
+        cores = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        cores = os.cpu_count() or 1
+    quota = None
+    try:
+        text = Path(cgroup_root, "cpu.max").read_text().split()
+        if text and text[0] != "max":
+            quota = int(text[0]) / int(text[1])
+    except (OSError, ValueError, IndexError):
+        try:
+            q = int(Path(cgroup_root, "cpu", "cpu.cfs_quota_us").read_text())
+            period = int(Path(cgroup_root, "cpu", "cpu.cfs_period_us").read_text())
+            if q > 0 and period > 0:
+                quota = q / period
+        except (OSError, ValueError):
+            pass
+    if quota is not None:
+        cores = min(cores, max(1, int(-(-quota // 1))))
+    return max(1, cores)
+
+
 def run_jobs(args, argv=None):
     """Run CPU-side lane shards in isolated processes and merge their records.
 
@@ -14195,9 +14221,12 @@ def run_jobs(args, argv=None):
         raise SystemExit("REFUSING: --jobs > 1 requires --json for durable shard checkpoints")
     if getattr(args, "side", None) not in (None, "cpu"):
         raise SystemExit("REFUSING: --jobs > 1 records the CPU side only; a GPU side runs in one process")
-    cap = min(8, os.cpu_count() or 1)
+    # THE ALLOCATION, NOT A FIXED CAP (AGENTS.md part 1, 100 percent of rented
+    # CPU; 2026-11-24 replaced min(8, cpu_count)): at most one shard per core
+    # of this process's allocation (affinity and cgroup cpu.max).
+    cap = _allocated_cores()
     if args.jobs > cap:
-        raise SystemExit(f"REFUSING: --jobs {args.jobs} exceeds this host's conservative cap {cap}")
+        raise SystemExit(f"REFUSING: --jobs {args.jobs} exceeds this allocation's {cap} cores")
     requested = [n for n in args.lanes.split(",") if n]
     unknown = [n for n in requested if n not in LANES]
     if unknown:
@@ -14226,7 +14255,7 @@ def run_jobs(args, argv=None):
     # forced --require-cpu (a CPU-only install) is no longer needed for that.
     base += ["--side", "cpu"]
     running = []
-    print(f"# JOBS {len(shards)} isolated CPU shards (cap={cap}); checkpoints={part_dir}", flush=True)
+    print(f"# JOBS {len(shards)} isolated CPU shards (allocation {cap} cores); checkpoints={part_dir}", flush=True)
     try:
         for i, (shard, part, log) in enumerate(zip(shards, parts, logs)):
             cmd = [sys.executable, os.path.abspath(__file__)] + base + [
