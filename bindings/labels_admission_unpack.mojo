@@ -54,6 +54,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.memory import unsafe_memcpy
 from bindings.py_balanced import py_call, py_type
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_arrays_door import classical_address, classical_is_array
 from bindings.classical_labels_run import _encode_code, _native_code
 from bindings.admitted_input_unpack import admit_c_view, admitted_dtype, admitted_vector
@@ -854,7 +855,9 @@ def _admission_scalar_kind(value: PythonObject, b: PythonObject) raises -> Int:
         return ADMISSION_KIND_COMPLEX
     # Not a builtin scalar (a NumPy scalar, a Fraction, a Decimal, ...): the
     # numbers ABCs, as the Python step asked them.
-    var numbers = Python.import_module("numbers")
+    # The import-time `numbers` connection (python/mojolearn/_native_loaded_modules.py), never an
+    # __import__ round trip per admitted value (lane w3f3-a).
+    var numbers = native_loaded_module("numbers")
     if Bool(py=py_call(b.isinstance, value, numbers.Integral)):
         return ADMISSION_KIND_INT
     if Bool(py=py_call(b.isinstance, value, numbers.Real)):
