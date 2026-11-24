@@ -58,7 +58,7 @@ from bindings.metrics_program_pack import metric_arena_array
 from bindings.mcls_classify_run import (
     _CM_COUNT, _CM_NORM, _CM_WSUM_LEAF, _CM_WSUM_FOLD, _WSUM_BLOCK, _ROW_LOGLOSS, _RANK_MEAN,
     McEpi, McSums, mc_wsum_sf64, mc_count_tail, mc_row_mean, mc_proba_stages, mc_proba_code,
-    mc_sums_stages, mc_epi_stage, mc_log_loss_stages,
+    mc_sums_stages, mc_epi_stage, mc_log_loss_stages, mc_confusion_weighted_stages,
 )
 
 # ------------------------------------------------------------------ targets
@@ -321,33 +321,24 @@ def _confusion_weighted(args: PythonObject, context: PythonObject) raises -> Pyt
 def _confusion_weighted_run(mut prog: MetricDoorProg, a: Int, b: Int, n: Int, k: Int, w: PythonObject,
                             args: PythonObject, context: PythonObject) raises -> PythonObject:
     """The weighted confusion program over the codes inputs `a`, `b` (host
-    temporaries or resident slots) and the weights: `_confusion`'s pair key
-    and k*k weighted grouping, then `_normalize`. One body for both routes:
-    the same records, so the same bits."""
-    var key = prog.scratch(n)
-    prog.stage("pair_key", n, [a, b, key, k, 0])
-    var w_off = prog.put_arg(w, args, 4)
-    var got = prog.group(key, n, k * k, MC_NONE, 1, w_off, 1)
-    var cells = got[1]
-    var col = 1
-    # `_normalize`
+    temporaries or resident slots) and the weights: the typed builder
+    (bindings/mcls_classify_run.mojo `mc_confusion_weighted_stages`, one
+    body for both routes and the native check: the same records, so the
+    same bits), its weights pinned after the two codes."""
     var normalize = args[5]
-    var out = prog.want(prog.alloc(2 * k * k), 2 * k * k)
-    var ts = prog.scratch(2)
     var mode = 4
     if normalize is not None:
         var name = String(normalize)
         if name == "all":
             mode = 1
-            prog.stage("cm_epi", 1, [_CM_NORM, cells, k, col, 0, out, ts])
         elif name == "true":
             mode = 2
         else:
             mode = 3
-    if k:
-        prog.stage("cm_epi", k, [_CM_NORM, cells, k, col, mode, out, ts])
+    var got = mc_confusion_weighted_stages(prog.plan, a, b, n, k, mode)
+    prog.pin_arg(w, args, 4)
     var arena = metric_door_run(prog, args[6], context)
-    return metric_arena_array(arena, out, 2 * (k * k), Python.tuple(k, k), "<f8", context)
+    return metric_arena_array(arena, got[1], 2 * (k * k), Python.tuple(k, k), "<f8", context)
 
 
 def _miss_table(classes: PythonObject, selected: PythonObject, context: PythonObject) raises -> PythonObject:
