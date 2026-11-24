@@ -104,6 +104,13 @@ THE LAST SCORER OPTIONS (lane mf-score6), read at UNPACK into the word group:
 - a float pos_label: the binary label rows and brier refuse it per side as
   their doors' `_classification_labels` does (SCORER_FLOAT_POS_WORDS);
   average_precision's door compares it by value, and so does the UNPACK.
+
+THE METRIC ROWS (lane mf-fitadm7): a native make_scorer whose metric has no
+get_scorer name but a typed program is a row too, matched by its metric
+(`msel_scorer_metric_code`): zero_one_loss (normalize True / False) and
+hamming_loss over the COUNT tail (bindings/mcls_classify_run.mojo
+`label_count_run`, the program bindings/metrics_exp_cls_door.mojo
+`_cm_count` runs), sample_weight as the other weighted rows take it.
 """
 from bindings.arena_prog_run import MetricRoute
 from bindings.metrics_reg_run import (
@@ -112,7 +119,7 @@ from bindings.metrics_reg_run import (
 )
 from bindings.mcls_classify_run import (
     label_metric_run, label_binary_run, label_metric_options_run, label_binary_options_run, log_loss_run, LBL_JACCARD, LBL_BALANCED, LBL_PRECISION, LBL_RECALL, LBL_F1, LBL_MCC,
-    LBL_MICRO, LBL_MACRO, LBL_WEIGHTED,
+    LBL_MICRO, LBL_MACRO, LBL_WEIGHTED, label_count_run, CNT_LOSS, CNT_COUNT,
 )
 from bindings.mcls_ranking_run import roc_auc_run, ROC_BINARY, ROC_OVR, ROC_OVR_WEIGHTED, ROC_OVO, ROC_OVO_WEIGHTED
 from bindings.metrics_exp_curve_run import average_precision_run, top_k_run
@@ -147,6 +154,10 @@ comptime _F_AP = 6
 comptime _F_BRIER = 7
 comptime _F_TOP_K = 8
 comptime _F_CLUSTER = 9
+#: lane mf-fitadm7: the COUNT tail's metrics (zero_one_loss, hamming_loss),
+#: their metric word CNT_LOSS / CNT_COUNT or `_CNT_HAMMING`.
+comptime _F_COUNT = 10
+comptime _CNT_HAMMING = 2
 #: `_F_CLUSTER` metrics.
 comptime _CL_NMI = 0
 comptime _CL_AMI = 1
@@ -362,6 +373,14 @@ def _table() -> List[MselScorer]:
     t.append(MselScorer("v_measure_score", _F_CLUSTER, _CL_PAIR + CLUSTER_OP_V_MEASURE, 0, 1.0, MEMBER_OP_PREDICT))
     t.append(MselScorer("fowlkes_mallows_score", _F_CLUSTER, _CL_PAIR + CLUSTER_OP_FOWLKES_MALLOWS, 0, 1.0,
                         MEMBER_OP_PREDICT))
+    # lane mf-fitadm7 (appended: earlier codes unchanged): METRIC ROWS, no
+    # get_scorer name. A native make_scorer over zero_one_loss (normalize
+    # True or False) or hamming_loss, response 'predict', is matched to these
+    # by its metric (`msel_scorer_metric_code`); the row's sign is the
+    # metric's value (+1), the make_scorer's greater_is_better=False the flip.
+    t.append(MselScorer("zero_one_loss", _F_COUNT, CNT_LOSS, 0, 1.0, MEMBER_OP_PREDICT))
+    t.append(MselScorer("zero_one_loss(normalize=False)", _F_COUNT, CNT_COUNT, 0, 1.0, MEMBER_OP_PREDICT))
+    t.append(MselScorer("hamming_loss", _F_COUNT, _CNT_HAMMING, 0, 1.0, MEMBER_OP_PREDICT))
     return t^
 
 
@@ -476,6 +495,25 @@ def msel_scorer_code(name: String, has_decision: Bool) -> Int:
             if (t[i].op == MEMBER_OP_DECISION) != has_decision:
                 continue
         return i + 2
+    return -1
+
+
+def msel_scorer_metric_code(metric: String, normalize: Bool) -> Int:
+    """UNPACK's typed lookup of a METRIC ROW (lane mf-fitadm7): the code
+    of a native make_scorer over the connected metric `metric` (its plan
+    name) with response 'predict' and no kwargs but `normalize`
+    (zero_one_loss only) and `sample_weight`, or -1 when no row serves it."""
+    var name = String("")
+    if metric == "zero_one_loss":
+        name = String("zero_one_loss") if normalize else String("zero_one_loss(normalize=False)")
+    elif metric == "hamming_loss":
+        name = String("hamming_loss")
+    else:
+        return -1
+    var t = _table()
+    for i in range(len(t)):  # driver-loop: over the served scorer rows (a fixed table)
+        if String(t[i].name) == name:
+            return i + 2
     return -1
 
 
@@ -764,6 +802,16 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
                 _present_count(truth, count, classes)))
     elif row.family == _F_CLUSTER:
         value = _cluster_value(route, cluster, row, truth, response, count, classes)
+    elif row.family == _F_COUNT:
+        # lane mf-fitadm7: bindings/metrics_exp_cls_door.mojo `_zero_one` /
+        # `_hamming` over the same program (`label_count_run`), their
+        # ZeroDivisionError words on a zero total
+        var zero = False
+        value = label_count_run(route, CNT_COUNT if row.metric == CNT_COUNT else CNT_LOSS, truth, response, count,
+                                classes, w, zero)
+        if zero:
+            raise Error("ZeroDivisionError: " + (String("float division by zero") if (row.metric == _CNT_HAMMING
+                        or w != 0) else String("division by zero")))
     elif row.family == _F_LOG_LOSS:
         if cols != (1 if classes == 2 else classes):
             raise Error("probability columns must match the label count (at least two)")
@@ -907,6 +955,8 @@ def msel_scorer_caller(row: MselScorer) -> String:
         return String("roc_auc_score")
     if row.family == _F_CLUSTER:
         return String(row.name)
+    if row.family == _F_COUNT:
+        return String("hamming_loss") if row.metric == _CNT_HAMMING else String("zero_one_loss")
     if row.metric == LBL_JACCARD:
         return String("jaccard_score")
     if row.metric == LBL_BALANCED:
