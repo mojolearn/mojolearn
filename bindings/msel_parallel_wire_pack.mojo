@@ -12,6 +12,7 @@ from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from bindings.native_numpy_metadata_pack import native_numpy_type
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.msel_estimator_native_door import msel_native_clone, msel_estimator_plan, msel_clone_parameter
+from bindings.msel_estimator_native_door import msel_rng_record, msel_randomstate_state, msel_randomstate_from_state
 from bindings.msel_scorer_native_door import msel_scorer_fields, msel_metric_plan
 from bindings.family_common_pack import family_call
 from core.msel_parallel_wire_run import _depth
@@ -178,6 +179,13 @@ def msel_wire_pack(value: PythonObject, context: PythonObject, depth: Int = 0) r
             return _numpy_buffer(value, True, context, depth + 1)
     if py_type(cls) is b.type and py_contains(context["family_msel_estimators"], cls):
         return Python.tuple("estimator", msel_parallel_model_pack(value, context, depth + 1))
+    # A numpy RandomState (lane w3f2-rng): its get_state(legacy=False) record crosses (a dict of words and
+    # uint arrays); the worker rebuilds a fresh RandomState of that state (bindings/msel_estimator_native_door
+    # `msel_randomstate_from_state`), what the serial clone gives.
+    var rng = msel_rng_record(context)
+    if rng is not None and cls is rng["randomstate"]:
+        var state = msel_randomstate_state(value, rng)
+        return Python.tuple("randomstate", msel_wire_pack(state, context, depth + 1))
     # Reuse the serial boundary's admission/error before any external protocol.
     _ = msel_clone_parameter(value, context)
     raise Error("TypeError: this constructor value has no native parallel CV wire representation")
@@ -242,6 +250,12 @@ def msel_wire_unpack(record: PythonObject, context: PythonObject, depth: Int = 0
     if tag == "estimator":
         _record_size(record, 2)
         return msel_parallel_model_unpack(record[1], context, depth + 1)
+    if tag == "randomstate":
+        _record_size(record, 2)
+        var state = msel_wire_unpack(record[1], context, depth + 1)
+        var rng = msel_rng_record(context, True)
+        var fresh = msel_randomstate_from_state(state, rng)
+        return fresh
     if tag == "dict":
         _record_size(record, 2)
         _sequence(record[1])

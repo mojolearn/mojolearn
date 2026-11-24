@@ -2,7 +2,7 @@
 # Direct native estimator ABI calls. Python only connects these fixed plans
 # at package import; CV never calls a constructor, method or clone callback.
 from bindings.native_array_storage_door import native_array_empty
-from bindings.native_loaded_module_door import NativeModules, native_loaded_module
+from bindings.native_loaded_module_door import NativeModules, native_loaded_module, _loaded_fields
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.msel_plan_records_unpack import MSEL_PLAN_CLASS_SLOT, msel_fields_admitted, msel_fields_admit
 from std.python import Python, PythonObject
@@ -16,7 +16,7 @@ from bindings.classical_pandas_door import classical_admit_value
 from bindings.family_common_pack import family_call
 from bindings.sequential_admission_door import sequential_admit_value
 from bindings.py_model_records import bump_model_generation
-from bindings.mode_metadata_native_door import instance_protocol_override
+from bindings.mode_metadata_native_door import instance_protocol_override, _class_fields
 from bindings.mode_answer_door import answer_mode_python
 from core.mode_answer import MODE_FAMILY_MSEL
 from core.device_route import device_cpu_fast
@@ -270,6 +270,98 @@ def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObj
     return family_call(entry, model, operation, envelope, plan["context"])
 
 
+# A NUMPY RANDOMSTATE CONSTRUCTOR PARAMETER (lane w3f2-rng; w3-fix-2 failures row A pcs_randomstate /
+# schi2_randomstate: PolynomialCountSketch or SkewedChi2Sampler with random_state=RandomState(0) in a search
+# raised the Sequential admission's words). scikit-learn's clone deep-copies it: RandomState.__reduce__ is a
+# fresh RandomState over a fresh BitGenerator of the same class, set to RandomState.get_state(legacy=False)
+# (the BitGenerator's state plus the legacy gauss cache). Here the same through NumPy's own compiled
+# RandomState get_state / set_state, read once from the class dictionaries (exact identities, no attribute
+# hook, no user method); the member then draws its seed word natively (pcs_seed). A RandomState subclass or a
+# user's own BitGenerator class is refused. The record is read only for a value every native branch declined.
+def msel_rng_record(context: PythonObject, connect: Bool = False) raises -> PythonObject:
+    """NumPy's RandomState class, its compiled get_state / set_state, the `_bit_generator` getter and the
+    five NumPy BitGenerator classes by name, read from the loaded modules' dictionaries once and kept in
+    the context (`family_msel_rng`). With `connect` False and numpy.random not loaded, None: no RandomState
+    exists, nothing is imported."""
+    var record = py_get(context, "family_msel_rng")
+    if record is not None:
+        return record
+    var b = native_loaded_module("builtins")
+    var sys = native_loaded_module("sys")
+    var random = py_get(sys.modules, "numpy.random")
+    if random is None:
+        if not connect:
+            return PythonObject(None)
+        # import-time: one-time cold connection of NumPy's RNG classes in a CV worker; the record is kept in the context
+        random = Python.import_module("numpy.random")
+    var mtrand = py_get(sys.modules, "numpy.random.mtrand")
+    var module_type = py_type(sys)
+    if py_type(random) is not module_type or py_type(mtrand) is not module_type:
+        raise Error("TypeError: native RandomState cloning requires the native numpy.random modules")
+    var randomstate = py_get(_loaded_fields(mtrand), "RandomState")
+    if randomstate is None:
+        raise Error("TypeError: native RandomState cloning requires NumPy's native RandomState")
+    var methods = _class_fields(randomstate)
+    var get_state = py_get(methods, "get_state")
+    var set_state = py_get(methods, "set_state")
+    var state_getter = py_get(methods, "_bit_generator")
+    var types = native_loaded_module("types")
+    if (get_state is None or set_state is None or py_type(get_state) is types.FunctionType
+            or py_type(set_state) is types.FunctionType or py_type(state_getter) is not types.GetSetDescriptorType):
+        raise Error("TypeError: native RandomState cloning requires NumPy's compiled RandomState state methods")
+    var fields = _loaded_fields(random)
+    var names: List[String] = ["MT19937", "PCG64", "PCG64DXSM", "Philox", "SFC64"]
+    var classes = Python.dict()
+    for i in range(len(names)):  # small-loop(five NumPy BitGenerator classes, once per connection)
+        var cls = py_get(fields, PythonObject(names[i]))
+        if cls is None:
+            raise Error("TypeError: native RandomState cloning requires NumPy's native " + names[i] + " BitGenerator")
+        py_setitem(classes, PythonObject(names[i]), cls)
+    record = Python.dict()
+    py_setitem(record, "randomstate", randomstate)
+    py_setitem(record, "get_state", get_state)
+    py_setitem(record, "set_state", set_state)
+    py_setitem(record, "state_get", state_getter.__get__)
+    py_setitem(record, "bitgenerators", classes)
+    py_setitem(record, "classes", py_call(b.tuple, py_call(classes.values)))
+    py_setitem(context, "family_msel_rng", record)
+    return record
+
+
+def msel_randomstate_state(value: PythonObject, record: PythonObject) raises -> PythonObject:
+    """RandomState.get_state(legacy=False) of an exact RandomState whose BitGenerator is one of NumPy's
+    own classes (checked first, so no user `state` property runs)."""
+    var bitgen = py_call(record["state_get"], value, record["randomstate"])
+    var classes = record["classes"]
+    var found = False
+    for i in range(len(classes)):  # small-loop(five NumPy BitGenerator classes)
+        found = found or py_type(bitgen) is classes[i]
+    if not found:
+        raise Error("TypeError: native cloning of a numpy RandomState supports NumPy's MT19937, PCG64, PCG64DXSM, Philox and SFC64 bit generators; a user's own BitGenerator class is not supported")
+    var state = py_call(record["get_state"], value, PythonObject(False))
+    return state
+
+
+def msel_randomstate_from_state(state: PythonObject, record: PythonObject) raises -> PythonObject:
+    """A fresh exact RandomState over a fresh BitGenerator of the class `state` names, set to `state`
+    (the RandomState.get_state(legacy=False) record): what deepcopy of a RandomState returns."""
+    var b = native_loaded_module("builtins")
+    if py_type(state) is not b.dict:
+        raise Error("TypeError: native RandomState state must be an exact dict")
+    var name = py_get(state, "bit_generator")
+    if name is None or py_type(name) is not b.str:
+        raise Error("TypeError: native RandomState state must name its bit generator")
+    var cls = py_get(record["bitgenerators"], name)
+    if cls is None:
+        raise Error("TypeError: native cloning of a numpy RandomState supports NumPy's MT19937, PCG64, PCG64DXSM, Philox and SFC64 bit generators; a user's own BitGenerator class is not supported")
+    # A fixed seed: set_state overwrites the whole state at once (a None seed would read OS entropy through
+    # Python's secrets module). The fresh SeedSequence is used only by spawn, which no estimator calls.
+    var bitgen = py_call(cls, PythonObject(0))
+    var fresh = py_call(record["randomstate"], bitgen)
+    _ = py_call(record["set_state"], fresh, state)
+    return fresh
+
+
 def msel_clone_parameter(value: PythonObject, context: PythonObject, depth: Int = 0) raises -> PythonObject:
     if depth > 64:
         raise Error("TypeError: native estimator configuration exceeds the supported nesting depth")
@@ -394,6 +486,13 @@ def msel_clone_parameter(value: PythonObject, context: PythonObject, depth: Int 
                 _ = py_call(entry, PythonObject("schedule_setstate"), fresh, Python.tuple(state),
                             PythonObject(None), schedules)
                 return fresh
+    # A numpy RandomState (msel_rng_record above): a fresh RandomState of the same state, as scikit-learn's
+    # clone gives. Read only for a value every branch above declined.
+    var rng = msel_rng_record(context)
+    if rng is not None and kind is rng["randomstate"]:
+        var state = msel_randomstate_state(value, rng)
+        var fresh_rng = msel_randomstate_from_state(state, rng)
+        return fresh_rng
     # Never invoke deepcopy/__reduce__/buffer protocols of an arbitrary
     # object. Additional native buffer/schema migration remains explicit
     # debt rather than sharing mutable constructor or fitted state.
