@@ -2030,7 +2030,7 @@ def _step(a: Float32, b: Float32, acc: Float32) -> Float32:
     comptime if FUSED_HW_FTZ_FMA:
         var rounded = nv_fma_rn_kernel(ftz(a), ftz(b), acc)
         # lane fix-nv-mul-rn-via-fma: the flush as fma.rn.ftz(x, 1.0, -0.0), same word
-        # for every x, schedulable (B: MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD; checks/numerics.mojo).
+        # for every x, schedulable (checks/numerics.mojo).
         return nv_flush_by_one_kernel(rounded)
     return ftz(identical_mul_add(ftz(a), ftz(b), acc))
 
@@ -2041,7 +2041,7 @@ def _step_preflushed(a: Float32, b: Float32, acc: Float32) -> Float32:
     comptime if FUSED_HW_FTZ_FMA:
         var rounded = nv_fma_rn_kernel(a, b, acc)
         # lane fix-nv-mul-rn-via-fma: the flush as fma.rn.ftz(x, 1.0, -0.0), same word
-        # for every x, schedulable (B: MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD; checks/numerics.mojo).
+        # for every x, schedulable (checks/numerics.mojo).
         return nv_flush_by_one_kernel(rounded)
     return ftz(identical_mul_add(a, b, acc))
 

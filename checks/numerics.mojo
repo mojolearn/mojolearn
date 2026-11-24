@@ -82,28 +82,8 @@ from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
 # never on LLVM's fp-contraction setting. Call only in code compiled for an
 # NVIDIA GPU (every caller sits under an `is_nvidia_gpu()` or NVIDIA-only
 # comptime branch).
-@always_inline
-def nv_mul_rn_f32(a: Float32, b: Float32) -> Float32:
-    """PTX `mul.rn.f32`."""
-    return inlined_assembly[
-        "mul.rn.f32 $0, $1, $2;", Float32, constraints="=f,f,f", has_side_effect=False
-    ](a, b)
-
-
-@always_inline
-def nv_mul_rn_ftz_f32(a: Float32, b: Float32) -> Float32:
-    """PTX `mul.rn.ftz.f32`."""
-    return inlined_assembly[
-        "mul.rn.ftz.f32 $0, $1, $2;", Float32, constraints="=f,f,f", has_side_effect=False
-    ](a, b)
-
-
-@always_inline
-def nv_mul_rn_f64(a: Float64, b: Float64) -> Float64:
-    """PTX `mul.rn.f64`."""
-    return inlined_assembly[
-        "mul.rn.f64 $0, $1, $2;", Float64, constraints="=d,d,d", has_side_effect=False
-    ](a, b)
+# TOMBSTONE: MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD (NOISE: NV L40S A/B nvc-ab-20261124T070727Z-69dac2, 30 cells, median 1.01, 0.83..1.11) deleted 2026-11-24 by lane/ab-outcome-1; code recoverable at d81b6ba708.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD.ab-outcome-1.patch
 
 
 @always_inline
@@ -119,14 +99,14 @@ def nv_fma_rn_f32(a: Float32, b: Float32, c: Float32) -> Float32:
 # product and the hardware flush as the LLVM intrinsics
 # `llvm.nvvm.mul.rn.f` / `.d` / `.ftz.f`, which LLVM schedules like any
 # arithmetic. Mojo 1.2 dropped them and 62a6577b39 (2026-11-12) moved every
-# site to the inline asm above, which LLVM cannot schedule, hoist or combine
+# site to `mul.rn` inline asm (deleted 2026-11-24), which LLVM cannot schedule, hoist or combine
 # around: one opaque block per cell per feature in the distance tile, per
 # step in the GEMM and attention chains, per `ftz` and per `identical_mul`
 # in every NVIDIA identical kernel. NV-only regression on record (L40S,
 # AMD flat): hdbscan taxi fit 423 (0.8.55) -> 552 ms (4c2340386abc).
-# A (default) spells the same IEEE results with the fma intrinsics that
-# Mojo 1.2 still knows; B = `-D MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD` keeps the
-# asm above. Why the bits are the same, every word:
+# The kernels spell the same IEEE results with the fma intrinsics that
+# Mojo 1.2 still knows (the asm B arm is gone, see the TOMBSTONE below).
+# Why the bits are the same, every word:
 #   mul.rn(a, b) == fma.rn(a, b, -0.0): fma forms the EXACT product and
 #     adds -0.0, which leaves every nonzero exact value unchanged, then
 #     rounds once: RN(a*b), the multiply's result, including overflow and
@@ -146,19 +126,16 @@ def nv_fma_rn_f32(a: Float32, b: Float32, c: Float32) -> Float32:
 #   f64: as f32, `fma.rn.d` with a -0.0 addend.
 # The `.rn` intrinsics keep the product out of contraction exactly as
 # 0.8.55's `mul.rn` intrinsics did (LLVM may canonicalize either to the same
-# unflagged `fmul`); the on-device gate
-# `neighbors/checks/knn_distance_fma_boundary_check.mojo` compares A and B
-# bitwise over the boundary words and probes that the product is not fused.
+# unflagged `fmul`).
 # -0.0 is built from its bit pattern (a local bitcast, folded by LLVM to the
 # constant) so no literal handling can drop the sign.
-comptime IDN_NV_MUL_RN_ASM_OLD = is_defined["MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD"]()
+# TOMBSTONE: MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD (NOISE: NV L40S A/B nvc-ab-20261124T070727Z-69dac2, 30 cells, median 1.01, 0.83..1.11) deleted 2026-11-24 by lane/ab-outcome-1; code recoverable at d81b6ba708.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD.ab-outcome-1.patch
 
 
 @always_inline
 def nv_mul_rn_kernel_f32(a: Float32, b: Float32) -> Float32:
     """`mul.rn.f32` as `fma.rn.f32(a, b, -0.0)`, schedulable; see above."""
-    comptime if IDN_NV_MUL_RN_ASM_OLD:
-        return nv_mul_rn_f32(a, b)
     var neg_zero = bitcast[DType.float32](UInt32(0x80000000))
     return llvm_intrinsic["llvm.nvvm.fma.rn.f", Float32, has_side_effect=False](
         a, b, neg_zero
@@ -168,8 +145,6 @@ def nv_mul_rn_kernel_f32(a: Float32, b: Float32) -> Float32:
 @always_inline
 def nv_mul_rn_kernel_f64(a: Float64, b: Float64) -> Float64:
     """`mul.rn.f64` as `fma.rn.f64(a, b, -0.0)`, schedulable; see above."""
-    comptime if IDN_NV_MUL_RN_ASM_OLD:
-        return nv_mul_rn_f64(a, b)
     var neg_zero = bitcast[DType.float64](UInt64(0x8000000000000000))
     return llvm_intrinsic["llvm.nvvm.fma.rn.d", Float64, has_side_effect=False](
         a, b, neg_zero
@@ -179,8 +154,6 @@ def nv_mul_rn_kernel_f64(a: Float64, b: Float64) -> Float64:
 @always_inline
 def nv_flush_by_one_kernel(x: Float32) -> Float32:
     """The hardware flush `mul.rn.ftz.f32 x, 1.0` as `fma.rn.ftz.f32(x, 1.0, -0.0)`, schedulable; see above."""
-    comptime if IDN_NV_MUL_RN_ASM_OLD:
-        return nv_mul_rn_ftz_f32(x, Float32(1.0))
     var neg_zero = bitcast[DType.float32](UInt32(0x80000000))
     return llvm_intrinsic["llvm.nvvm.fma.rn.ftz.f", Float32, has_side_effect=False](
         x, Float32(1.0), neg_zero
@@ -249,7 +222,7 @@ def ftz(x: Float32) -> Float32:
     # integer spelling's word for all 2^32 inputs.
     comptime if not ROW_FLUSH_OFF and not is_defined["MOJOLEARN_FTZ_HW_OFF"]() and is_nvidia_gpu():
         # lane fix-nv-mul-rn-via-fma: the same flush as a schedulable fma
-        # (B: MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD), see nv_flush_by_one_kernel.
+        # see nv_flush_by_one_kernel.
         var y = nv_flush_by_one_kernel(x)
         return x if y != y else y
     comptime if not ROW_FLUSH_OFF:
@@ -320,7 +293,7 @@ def pinned_mul_f32(a: Float32, b: Float32) -> Float32:
     """`a*b`, correctly rounded, never fused into a neighbor. See above."""
     comptime if is_nvidia_gpu():
         # lane fix-nv-mul-rn-via-fma: schedulable fma.rn with a -0.0 addend
-        # (B: MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD), see nv_mul_rn_kernel_f32.
+        # see nv_mul_rn_kernel_f32.
         return nv_mul_rn_kernel_f32(a, b)
     elif is_amd_gpu():
         return inlined_assembly[
@@ -341,7 +314,7 @@ def pinned_mul_f64(a: Float64, b: Float64) -> Float64:
     """`pinned_mul_f32`'s float64 twin (no Apple GPU arm: Metal has no float64)."""
     comptime if is_nvidia_gpu():
         # lane fix-nv-mul-rn-via-fma: schedulable fma.rn with a -0.0 addend
-        # (B: MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD), see nv_mul_rn_kernel_f64.
+        # see nv_mul_rn_kernel_f64.
         return nv_mul_rn_kernel_f64(a, b)
     elif is_amd_gpu():
         return inlined_assembly[

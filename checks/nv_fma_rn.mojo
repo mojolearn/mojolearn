@@ -38,8 +38,8 @@ comptime branch). The `mul.rn` / `mul.rn.ftz` intrinsics are gone; lane
 fix-nv-mul-rn-via-fma (2026-11-14) spells the pinned product and the flush by
 one as `fma.rn(a, b, -0.0)` / `fma.rn.ftz(x, 1.0, -0.0)` (same IEEE words,
 schedulable) in `checks.numerics` (`nv_mul_rn_kernel_f32`,
-`nv_mul_rn_kernel_f64`, `nv_flush_by_one_kernel`; B =
-`-D MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD`). They live there, not here, because
+`nv_mul_rn_kernel_f64`, `nv_flush_by_one_kernel`; the asm B arm
+`MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD` was deleted 2026-11-24, see docs/TOMBSTONES.md). They live there, not here, because
 `checks.numerics.ftz` and `pinned_mul_f32` call them and this module imports
 `checks.numerics`.
 """

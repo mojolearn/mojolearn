@@ -217,8 +217,9 @@
   },
   "nv-mul-rn-asm": {
    "define": "MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD",
-   "status": "define in code (checks/numerics.mojo IDN_NV_MUL_RN_ASM_OLD; nv_mul_rn_kernel_f32/_f64, nv_flush_by_one_kernel; callers checks/numerics.mojo ftz (NVIDIA hardware flush) and pinned_mul_f32/_f64 (every identical_mul/identical_mul64), neighbors/checks/pinned_distance_tile.mojo _rt_step, gemm/checks/gemm_identical.mojo _tuned_step/_fold_flush, transformer/impl/llama/fused_attention.mojo _step/_step_preflushed): B = PTX mul.rn.f32/.f64 and mul.rn.ftz.f32 x,1 as inline asm (62a6577b39, candidate 4c2340386abc's shape); A = llvm.nvvm.fma.rn.f/.d(a, b, -0.0) and llvm.nvvm.fma.rn.ftz.f(x, 1.0, -0.0), schedulable like 0.8.55's llvm.nvvm.mul.rn.* intrinsics. Same IEEE word for every input (exact product plus -0.0 rounded once; the by-one product is exact), same fold order; NVIDIA identical column only (AMD is a no-change check)",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-1): NOISE (L40S 30 cells, median 1.01, 0.83..1.11); A (the fma default) is unchanged; removed: the asm old path and its three helpers; the define is refused (core/six_lane_experiment_guards.mojo); code recoverable at d81b6ba708, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD.ab-outcome-1.patch. Was: define in code (checks/numerics.mojo IDN_NV_MUL_RN_ASM_OLD; nv_mul_rn_kernel_f32/_f64, nv_flush_by_one_kernel; callers checks/numerics.mojo ftz (NVIDIA hardware flush) and pinned_mul_f32/_f64 (every identical_mul/identical_mul64), neighbors/checks/pinned_distance_tile.mojo _rt_step, gemm/checks/gemm_identical.mojo _tuned_step/_fold_flush, transformer/impl/llama/fused_attention.mojo _step/_step_preflushed): B = PTX mul.rn.f32/.f64 and mul.rn.ftz.f32 x,1 as inline asm (62a6577b39, candidate 4c2340386abc's shape); A = llvm.nvvm.fma.rn.f/.d(a, b, -0.0) and llvm.nvvm.fma.rn.ftz.f(x, 1.0, -0.0), schedulable like 0.8.55's llvm.nvvm.mul.rn.* intrinsics. Same IEEE word for every input (exact product plus -0.0 rounded once; the by-one product is exact), same fold order; NVIDIA identical column only (AMD is a no-change check)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T070727Z-69dac2 (NVIDIA L40S, wheel 4519097d380a): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "query-x-held-off": {
    "define": "MOJOLEARN_IDN_QUERY_X_HELD_OFF",
@@ -2108,7 +2109,8 @@
    "b_arms": [
     "nv-mul-rn-asm"
    ],
-   "decides": "keep the schedulable fma.rn spellings (A) unless the asm mul.rn / mul.rn.ftz (B) is at least as fast on NVIDIA; every NVIDIA identical kernel that calls ftz or identical_mul runs it, the lanes listed are the NV-only regressions on record. Digests must not move in either arm (neighbors/checks/knn_distance_fma_boundary_check.mojo and tools/probe_ftz_hw.mojo judge the words). If A does not compile (Mojo 1.2 rejecting llvm.nvvm.fma.rn.d or llvm.nvvm.fma.rn.ftz.f), build with the define on and record the row as not runnable"
+   "decides": "keep the schedulable fma.rn spellings (A) unless the asm mul.rn / mul.rn.ftz (B) is at least as fast on NVIDIA; every NVIDIA identical kernel that calls ftz or identical_mul runs it, the lanes listed are the NV-only regressions on record. Digests must not move in either arm (neighbors/checks/knn_distance_fma_boundary_check.mojo and tools/probe_ftz_hw.mojo judge the words). If A does not compile (Mojo 1.2 rejecting llvm.nvvm.fma.rn.d or llvm.nvvm.fma.rn.ftz.f), build with the define on and record the row as not runnable",
+   "owed": "DECIDED"
   },
   {
    "id": "fix-svc-query-resident",
