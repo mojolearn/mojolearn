@@ -9,7 +9,12 @@ the original row loop computes it. Integer counts have no rounding seam.
 The byte budget includes metadata, validity and routing arrays. High node
 indices simply stop caching. All data work and routing execute on device.
 """
-from ensemble.decisiontree.batched_levelalgo.kernels.level_loop_kernels import LOOP_H_CUR, LOOP_HDR_WORDS
+# TOMBSTONE: MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT (LOSER: NV L40S 6 cells, median 1.00, rf istella fit 4406 -> 5760 ms 1.31, taxi 1.18) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+# The device level loop's header layout this experiment reads (16 words,
+# live count at word 3), kept here now that level_loop_kernels.mojo is gone.
+comptime LOOP_HDR_WORDS = 16
+comptime LOOP_H_CUR = 3
 from max.gpu import block_idx, thread_idx, block_dim, grid_dim
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.launch_clock import log_launch_ctx

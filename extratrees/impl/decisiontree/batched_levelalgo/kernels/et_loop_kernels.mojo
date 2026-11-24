@@ -8,8 +8,9 @@ children on the host (`NodeQueue::Push`, `:91-143`). The merged-frontier ET
 forest (DEVIATION 211) did the same over one host queue per in-flight tree.
 These kernels keep the whole frontier on the device, so the host enqueues K
 batches per drain and reads back one fixed-size header, never a node list.
-The RandomForest form is `ensemble/.../kernels/level_loop_kernels.mojo`
-(`IDN_RF_DEVICE_LOOP`); this is its forest-batched ExtraTrees counterpart.
+The RandomForest form (`ensemble/.../kernels/level_loop_kernels.mojo`,
+`IDN_RF_DEVICE_LOOP`) lost its A/Bs and was deleted 2026-11-24; this was its
+forest-batched ExtraTrees counterpart.
 
 ONE FIFO PER GROUP. The group's trees share one device FIFO of work items
 (`ETL_Q_INTS` Int32 each: `[idx, depth, begin, count, slot, gpos]`). The host

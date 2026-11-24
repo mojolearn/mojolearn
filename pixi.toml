@@ -52,9 +52,6 @@ check-native-gpu = "bash tools/ops/native_testsuite.sh one gpu"
 # 2026-11-19). Each is the default build's check file: the host words, the oracle and the device follow the define.
 check-nan-canon-off-cpu = "bash tools/ops/native_testsuite.sh one cpu -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF=1 nan_canon"
 check-nan-canon-off-gpu = "bash tools/ops/native_testsuite.sh one gpu -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF=1 nan_canon"
-# The RF device-loop check builds with its route define, so it has its own task. Run any
-# other check with `pixi run check-native-cpu <name>` (or check-native-gpu).
-check-native-rf-device-loop-early-exit-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT=1 -I . checks/native_tests/rf_device_loop_early_exit_gpu.mojo"
 # Lane tmig-lm-1 (2026-11-14): byte LM and embedding tests moved from Python.
 # Queued split-GEMM workspace growth/reuse, oracle bits and no-wait budget.
 check-gemm-workspace = "mojo run -j 2 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -I . gemm/checks/gemm_workspace_check.mojo"
