@@ -2670,6 +2670,10 @@ struct _ScorerKw(Movable):
     # lane mf-score8 round b: another row's name the kwargs select (roc_auc's
     # multiclass averages; "": the matched row)
     var rename: String
+    # lane mf-rows8a: a kwarg the metric's plan does not take (`refuse_text`
+    # holds the native scorer door's words): the admission scores a stand-in
+    # row whose every side raises them
+    var stand_in: Bool
 
     def __init__(out self):
         self.flip = False
@@ -2692,6 +2696,7 @@ struct _ScorerKw(Movable):
         self.flag = -1
         self.wmode = 0
         self.rename = String("")
+        self.stand_in = False
 
 
 def _sorted_labels(value: PythonObject, b: PythonObject) raises -> PythonObject:
@@ -2829,12 +2834,25 @@ def _table_row_kwarg(typed: MselScorer, word: String, theirs: PythonObject, mut 
             _refuse(kw, "'average_method' must be 'min', 'geometric', 'arithmetic', or 'max'")
         return True
     if word == "beta" and msel_scorer_v_measure(typed):
-        var beta = _real_word(theirs, b)
-        if beta != beta:
-            return False  # not a real number: no typed word reads it
-        kw.param = beta
+        # lane mf-rows8a: as the door reads it, `float(beta)` (a bool, a
+        # numeric string and NaN included); one `float` refuses is that
+        # refusal's words per side
+        try:
+            kw.param = Float64(py=py_call(b.float, theirs))
+        except error:
+            _refuse(kw, String(error))
+            return True
         kw.has_param = True
         kw.param_text = String(py=py_call(b.str, theirs))
+        return True
+    if word == "contingency" and String(typed.name) == "mutual_info_score":
+        # lane mf-rows8a: a precomputed contingency the door refuses
+        # (bindings/mcls_cluster_door.mojo, its words per side); None is the row's
+        if theirs is not None:
+            _refuse(kw, "NotImplementedError: mojolearn mutual_info_score: contingency= is refused; the implemented "
+                    + "entry builds the contingency matrix on the device "
+                    + "(metrics/impl/stats/detail/contingency_matrix.mojo) and has no arm that consumes a "
+                    + "precomputed one")
         return True
     if word == "sparse" and String(typed.name) == "fowlkes_mallows_score":
         return True  # deprecated, reads no value
@@ -2953,14 +2971,63 @@ def _metric_row_kwarg(metric: String, word: String, value: PythonObject, mut kw:
         if word == "replace_undefined_by":
             # the door answers the given object itself when kappa is
             # undefined: a real number is that score (NaN included)
-            if py_type(value) is b.bool or not Bool(py=py_call(b.isinstance, value,
-                                                               native_loaded_module("numbers").Real)):
-                return False
+            # LANE mf-rows8a: a bool too (the native scorer door's
+            # `metric_is_real` reads it as 0 / 1); any other object is no
+            # number, which that door refuses when kappa is undefined
+            # ("TypeError: scoring must return a real scalar"; the RUN's flag
+            # word 1, core/msel_scorer_run.mojo SCORER_REAL_WORDS)
+            if _value_kind(value, b) != 1 and not Bool(py=py_call(b.isinstance, value,
+                                                                  native_loaded_module("numbers").Real)):
+                kw.flag = 1
+                return True
             kw.param = Float64(py=py_call(b.float, value))
             kw.has_param = True
             kw.param_text = String(py=py_call(b.str, value))
             return True
     return False
+
+
+def _kwarg_refusal(plan: PythonObject, kwargs: PythonObject, b: PythonObject) raises -> String:
+    """UNPACK (lane mf-rows8a): the native scorer door's refusal of a
+    make_scorer kwarg its metric's plan does not take, in its words and
+    order (bindings/msel_scorer_native_door.mojo `MselMetricPrepared.prepare`,
+    over the kwargs in their order: a name not among the plan's `allowed`,
+    then a name that is one of its two positional inputs). Raised on every
+    score inside the scorer's call, so the error_score rule applies. "":
+    none. Read once per admission."""
+    var allowed = py_get(plan, "allowed")
+    var inputs = py_get(plan, "inputs")
+    if allowed is None or inputs is None:
+        return String("")
+    var keys = py_call(b.list, py_call(kwargs.keys))
+    for k in range(len(keys)):  # small-loop(the scorer's kwargs, once per admission)
+        var name = keys[k]
+        if py_type(name) is not b.str or not py_contains(allowed, name):
+            return String("TypeError: native metric received an unexpected keyword argument")
+        if Bool(py=py_call(b.bool, py_call(native_loaded_module("operator").eq, name, inputs[0]))) or Bool(
+                py=py_call(b.bool, py_call(native_loaded_module("operator").eq, name, inputs[1]))):
+            return String("TypeError: native metric received multiple values for a positional input")
+    return String("")
+
+
+def _mode_word(value: PythonObject, context: PythonObject, b: PythonObject) raises -> Int:
+    """UNPACK (lane mf-rows8a): a make_scorer's `numeric_mode` as the native
+    scorer door reads it (`MselMetricPrepared.prepare`): 0 the process's
+    default mode (None, or the default's name after `strip().lower()`: the
+    same metric tier the search's own metric route runs), 1 a value the door
+    refuses ("numeric_mode must be 'fast' or 'identical'"), 2 the other tier
+    (no typed route: the search RUN holds one metric route)."""
+    if value is None:
+        return 0
+    if py_type(value) is not b.str:
+        return 1
+    var clean = String(py=py_call(py_call(value.strip).lower))
+    if clean != "identical" and clean != "fast":
+        return 1
+    var default = py_get(context["family_msel_backend_fields"], "_DEFAULT_MODE")
+    if default is not None and py_type(default) is b.str and String(py=py_call(py_call(default.strip).lower)) == clean:
+        return 0
+    return 2
 
 
 def _real_word(value: PythonObject, b: PythonObject) raises -> Float64:
@@ -3015,6 +3082,16 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
     var func = py_call(b.getattr, got, PythonObject("_score_func"), PythonObject(None))
     if func is None:
         return String("")
+    # LANE mf-rows8a: a kwarg the metric does not take (or one of its
+    # positional inputs): the native scorer door refuses it on every score
+    # (`_kwarg_refusal`); a stand-in row raises those words per side.
+    var metric_plan = py_get(context["family_msel_metric_plans"], func)
+    if metric_plan is not None:
+        var refused = _kwarg_refusal(metric_plan, py_call(b.getattr, got, PythonObject("_kwargs")), b)
+        if refused.byte_length() > 0:
+            kw.refuse_text = refused
+            kw.stand_in = True
+            return String("accuracy")  # the stand-in's name (the admission picks its row)
     # 'fbeta_score' is the F row of its average (its module's f1_score's rows)
     var fbeta = String(py=py_call(b.getattr, func, PythonObject("__name__"), PythonObject(""))) == "fbeta_score"
     var module = py_call(b.getattr, func, PythonObject("__module__"), PythonObject(None))
@@ -3063,6 +3140,15 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                 var word = String(py=key) if py_type(key) is b.str else String("")
                 if theirs is not missing and _table_row_kwarg(typed, word, theirs, mine_kw, b):
                     continue  # lane mf-score8 round b: a typed word of the row
+                if word == "numeric_mode" and theirs is not missing:
+                    # lane mf-rows8a: the default tier is the row's; a value the
+                    # door refuses is its words per side; the other tier: no row
+                    var mode = _mode_word(theirs, context, b)
+                    if mode == 0:
+                        continue
+                    if mode == 1:
+                        _refuse(mine_kw, "ValueError: numeric_mode must be 'fast' or 'identical'")
+                        continue
                 if word == "labels" and theirs is not missing and label_row > 0:
                     # read first: an array compares no other way (labels None is the row's)
                     if theirs is not None and label_row == 2:
@@ -3176,8 +3262,12 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                 if value is not None:
                     metric_kw.weights = value
             elif word == "numeric_mode":
-                if value is not None:
+                # lane mf-rows8a: `_mode_word` (the other tier keeps no row)
+                var mode = _mode_word(value, context, b)
+                if mode == 2:
                     return String("")
+                if mode == 1:
+                    _refuse(metric_kw, "ValueError: numeric_mode must be 'fast' or 'identical'")
             elif not _metric_row_kwarg(metric, word, value, metric_kw, normalize, context, b):
                 return String("")
         var code = msel_scorer_metric_code(metric, normalize)
@@ -3542,10 +3632,18 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     for j in range(len(keys)):  # driver-loop: over the scorers (once per admission)
         var kw = _ScorerKw()
         var name = _scorer_name(givens[j], context, b, kw)
-        if name.byte_length() == 0:
-            return False  # a native scorer no table row holds (another metric or kwargs)
         var scorer = msel_get_scorer(givens[j], context)
         var no_method = _response_refusal(scorer, base, b)
+        if no_method.byte_length() == 0 and kw.stand_in:
+            # lane mf-rows8a: a kwarg the metric does not take (`_kwarg_refusal`),
+            # raised per side after the response is asked, as the door does
+            no_method = kw.refuse_text.copy()
+        if name.byte_length() == 0 and no_method.byte_length() == 0:
+            # a native scorer no table row holds: the kwargs listed in
+            # mf-rows8a-work/rows.tsv (another numeric_mode tier, a
+            # non-predict response a class has over a predict metric,
+            # roc_auc's multi_class on its dual row)
+            return False
         if no_method.byte_length() > 0:
             # A CLASS WITH NONE OF THE SCORER'S RESPONSE METHODS (lane mf-score8
             # round b): scikit-learn's scorer raises `_check_response_method`'s
@@ -3638,11 +3736,15 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             # A LABEL SCORER ON A NON-CLASSIFIER (lane mf-score8 round b): each
             # side checks its targets and predictions as `_check_targets` does
             # (continuous refuses in its words, integral values score as labels)
+            # Lane mf-rows8a: the binary label rows too, their pos_label read
+            # once below (`_float_positive`).
             others = True
         elif msel_scorer_regression(row) == classifier:
-            # the binary label rows on a non-classifier: their pos_label=1 among
-            # float labels and the refusal words that print them (NumPy's
-            # float reprs) have no typed words yet
+            # a probability or decision scorer on a non-classifier whose class
+            # has that method (a mixture model's predict_proba): scikit-learn
+            # 1.9 hands the raw method answer to the metric
+            # (utils/_response.py line 232); no typed route reads a
+            # non-classifier's columns (mf-rows8a-work/rows.tsv)
             return False
         else:
             others = True
@@ -3650,19 +3752,26 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             cluster_entry = True
         var positive = -1
         var positive_kind = msel_scorer_positive_kind(row)
-        if positive_kind == SCORER_POSITIVE_LABEL_ONE:
+        if not classifier and msel_scorer_positive(row):
+            # A BINARY LABEL ROW ON A REGRESSOR (lane mf-rows8a): pos_label (1,
+            # or the make_scorer's) read once as the number each side finds
+            # among its float labels (core/msel_scorer_run.mojo
+            # `_float_binary_positive`), printed as given.
+            positive = _float_positive(kw, opts, extra_words, b)
+        elif positive_kind == SCORER_POSITIVE_LABEL_ONE:
             # the binary label scorers' pos_label=1 and 'average_precision''s
             # (its default; a binary member's column, lane mf-score5)
             if labels is None:
                 raise Error("RuntimeError: search admission invariant: a classifier fit admitted with no fit labels (a FIT caller hands its labels)")
             positive = _positive_code(labels, b)
+            var fit_kind = _door_kind(labels, b)
+            var n_labels = len(py_call(b.list, labels))
             if kw.given_pos:
                 # A MAKE_SCORER's pos_label (lanes mf-msel5c, mf-tail5b): its
                 # class code, the refusal words naming it (`pos_word`). Mixed
                 # labels: the metric doors' refusal first, as for pos_label=1;
                 # one that is not among the labels: as pos_label=1 absent, its
                 # own word appended to the label words.
-                var n_labels = len(py_call(b.list, labels))
                 if msel_scorer_ap(row) and n_labels > 2:
                     # lane mf-score8 round b: per side, as the AP door decides
                     # it from the side's classes: more than two refuse a
@@ -3682,51 +3791,46 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                 # `pos_label in present`): one equal to an integer label is
                 # that label's code, any other is absent. Its word is
                 # `str(pos_label)`, as the door's f-string prints it.
+                #
+                # LANE mf-rows8a, every kind: a pos_label the binary rows' door
+                # reads as no label (a real, None or another object: its
+                # `_classification_labels` refusal, `pos_float`) or a bool (an
+                # integer label, 0 / 1); fit labels the metric doors refuse as
+                # y_true (strings and integers, or a real, None or object among
+                # them when no label equals the pos_label) raise that refusal
+                # per side first (SCORER_POSITIVE_MIXED), on AP too; a pos_label
+                # that is not one of the labels is absent (AP compares it by
+                # value) or, of the other kind on a binary row, the door's type
+                # words. Its word prints it as the refusals' f-string does.
                 var real = _real_label(kw.pos_label, b)
-                opts.pos_float = real and not msel_scorer_ap(row)
-                if real and positive >= 0 and not _labels_mixed(labels, b):
-                    opts.pos_word = n_labels + len(extra_words)
-                    extra_words.append(String(py=py_call(b.str, kw.pos_label)))
-                if _labels_mixed(labels, b):
-                    positive = SCORER_POSITIVE_MIXED if msel_scorer_positive(row) else -1
-                    if positive == -1:
-                        return False
-                elif positive < 0:
-                    var kind = 1 if real else _label_kind(kw.pos_label, b)
-                    if kind == 0:
-                        return False  # a pos_label of no kind the metrics read: the door's words
-                    var fit_kind = _absent_positive(labels, b)
-                    if fit_kind == -1:
-                        return False
-                    var same_kind = (kind == 1) == (fit_kind == SCORER_POSITIVE_ABSENT)
-                    if not msel_scorer_positive(row) and not msel_scorer_ap(row):
-                        return False  # guard: only the binary label rows and AP read a pos_label here
+                var pos_kind = _value_kind(kw.pos_label, b)
+                opts.pos_float = pos_kind == 0 and not msel_scorer_ap(row)
+                if fit_kind == 3 or (fit_kind == 0 and positive < 0):
+                    positive = SCORER_POSITIVE_MIXED
+                elif positive >= 0:
+                    if real:
+                        opts.pos_word = n_labels + len(extra_words)
+                        extra_words.append(String(py=py_call(b.str, kw.pos_label)))
+                else:
+                    var same_kind = pos_kind == 0 or pos_kind == fit_kind
                     positive = SCORER_POSITIVE_ABSENT if (same_kind or msel_scorer_ap(row)) else SCORER_POSITIVE_KIND
                     opts.pos_word = n_labels + len(extra_words)
-                    if real:
-                        extra_words.append(String(py=py_call(b.str, kw.pos_label)))
-                    else:
-                        var v = py_call(b.int, kw.pos_label) if kind == 1 else py_call(b.str, kw.pos_label)
-                        extra_words.append(String(py=py_call(b.repr, v)))
-            elif _labels_mixed(labels, b):
+                    extra_words.append(_pos_text(kw.pos_label, b))
+            elif fit_kind == 3 or (fit_kind == 0 and positive < 0):
                 # MIXED-KIND LABELS (lane mf-msel5b): strings and integers; the
-                # RUN raises the metric doors' refusal per side.
+                # RUN raises the metric doors' refusal per side. Lane
+                # mf-rows8a: also labels with a real, None or another object
+                # among them and no label 1 (the same y_true refusal).
                 positive = SCORER_POSITIVE_MIXED
-            elif positive < 0 and msel_scorer_positive(row):
+            elif positive < 0 and (msel_scorer_positive(row) or n_labels == 2):
                 # pos_label=1 is not one of the labels (lane mf-cluster5): the
-                # RUN raises the door's words per side (or scores it absent)
-                positive = _absent_positive(labels, b)
-                if positive == -1:
-                    return False  # labels of no kind the door's metrics read
-            elif positive < 0 and len(py_call(b.list, labels)) == 2:
+                # RUN raises the door's words per side (or scores it absent).
                 # 'average_precision' of two labels without 1 (lane mf-msel5):
                 # scikit-learn's scorer refuses pos_label=1 in
                 # `_get_response_values` before any metric; the RUN raises its
                 # words per side (msel_search_run `_scorer_side`, the labels'
-                # reprs). Labels of mixed or other kinds: the door.
-                positive = _absent_positive(labels, b)
-                if positive == -1:
-                    return False
+                # reprs). Lane mf-rows8a: bool labels are integer labels.
+                positive = SCORER_POSITIVE_ABSENT if fit_kind == 1 else SCORER_POSITIVE_KIND
         elif positive_kind == SCORER_POSITIVE_MARKS:
             # 'neg_brier_score': `_pos_label(None, ...)`'s label marks (lane mf-score5)
             if labels is None:
@@ -3734,48 +3838,75 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             positive = _brier_marks(labels, context, b)
             if kw.given_pos:
                 # a given pos_label (lane mf-tail5b): its class code
-                # (`mx_pos_label`: y_true == it). Not one of the labels: the
-                # door (`_get_response_values`' words for a binary member).
-                positive = _label_code(labels, kw.pos_label, b)
-                if positive < 0 or _labels_mixed(labels, b):
-                    return False
-                opts.pos_given = True
-                # a FLOAT pos_label equal to a label (lane mf-score6): its
-                # column is picked as `_get_response_values` picks it, then
-                # each side raises `mx_pos_label`'s refusal of a floating label
-                opts.pos_float = _real_label(kw.pos_label, b)
+                # (`mx_pos_label`: y_true == it).
+                # LANE mf-rows8a: one that is not among the labels of a binary
+                # (two or fewer labels) member: scikit-learn's scorer refuses it
+                # in `_get_response_values` before any metric (sklearn 1.9
+                # utils/_response.py lines 206-210), the classes printed as its
+                # f-string prints the array; the RUN raises those words per side
+                # (msel_search_run `_scorer_side` / `_fold_view_side`, its word
+                # at `pos_word`). More than two labels: the member's 2-D
+                # probabilities take the multiclass arm, which reads no
+                # pos_label (the door's `_proba`; sklearn 1.9
+                # metrics/_classification.py brier_score_loss), so the marks
+                # stay. Labels the doors refuse as y_true (strings and
+                # integers; a real, None or object among them when no label
+                # equals it): that refusal per side (SCORER_POSITIVE_MIXED).
+                var fit_kind = _door_kind(labels, b)
+                var code = _label_code(labels, kw.pos_label, b)
+                var n_labels = len(py_call(b.list, labels))
+                if fit_kind == 3 or (fit_kind == 0 and code < 0):
+                    positive = SCORER_POSITIVE_MIXED
+                elif code >= 0 or n_labels <= 2:
+                    positive = code if code >= 0 else SCORER_POSITIVE_ABSENT
+                    opts.pos_given = True
+                    # a FLOAT pos_label equal to a label (lane mf-score6): its
+                    # column is picked as `_get_response_values` picks it, then
+                    # each side raises `mx_pos_label`'s refusal of a floating label
+                    opts.pos_float = _real_label(kw.pos_label, b)
+                    if code < 0:
+                        opts.pos_word = n_labels + len(extra_words)
+                        extra_words.append(String(py=py_call(b.str, kw.pos_label)))
         if kw.labels is not None:
             # AN AVERAGED ROW's `labels` (lane mf-tail5b): each label's class
             # code; a label of the targets' kind that no fit label equals is
             # one more code no row holds (`_selected_labels` keeps it). Mixed
             # kinds or a repeated label: the door's words.
-            if labels is None or _labels_mixed(labels, b):
-                return False
-            var fit_kind = _absent_positive(labels, b)
+            # LANE mf-rows8a: fit labels the doors refuse as y_true (strings and
+            # integers, or a real, None or object among them): that refusal
+            # per side first (SCORER_POSITIVE_MIXED, the doors read y_true
+            # before `labels`); then `_labels_refusal`, the doors' own checks
+            # of the list in their order (mx_list_labels / mc_label_list, then
+            # mx_selected / mc_selected): its shape, an empty list, its kinds,
+            # the targets' type, a repeated label (by value: two equal labels
+            # that no fit label holds are one repeated label).
+            if labels is None:
+                raise Error("RuntimeError: search admission invariant: a classifier fit admitted with no fit labels (a FIT caller hands its labels)")
+            var fit_kind = _door_kind(labels, b)
             var n_labels = len(py_call(b.list, labels))
             var listed = py_call(b.list, kw.labels)
             opts.sel_from = len(sels)
             opts.sel_n = len(listed)
             var absent = 0
             var refused = String("")
-            for q in range(len(listed)):  # small-loop(the scorer's labels, once per admission)
+            if fit_kind == 0 or fit_kind == 3:
+                positive = SCORER_POSITIVE_MIXED
+                listed = Python.list()
+                opts.sel_n = 0
+            else:
+                refused = _labels_refusal(listed, fit_kind, b)
+            var eq = native_loaded_module("operator").eq
+            for q in range(len(listed) if refused.byte_length() == 0 else 0):  # small-loop(the scorer's labels, once per admission)
                 var c = _label_code(labels, listed[q], b)
-                if c < 0:
-                    var kind = _label_kind(listed[q], b)
-                    if kind == 0 or fit_kind == -1:
-                        return False  # a label of no kind the doors' labels read (`mx_list_labels`' own words)
-                    if (kind == 1) != (fit_kind == SCORER_POSITIVE_ABSENT):
-                        # lane mf-score8: `mx_selected`'s words, per side
-                        refused = String("TypeError: labels must use the same type as the targets")
-                        break
-                    c = n_labels + absent
-                    absent += 1
                 var repeated = False
-                for r in range(opts.sel_from, len(sels)):  # small-loop(the labels so far)
-                    repeated = repeated or Int(sels[r]) == c
+                for r in range(q):  # small-loop(the labels so far, by value)
+                    repeated = repeated or Bool(py=py_call(b.bool, py_call(eq, listed[r], listed[q])))
                 if repeated:
                     refused = String("labels must be unique")  # lane mf-score8: the door's words, per side
                     break
+                if c < 0:
+                    c = n_labels + absent
+                    absent += 1
                 sels.append(Int32(c))
             if refused.byte_length() > 0:
                 # the selection is dropped; the refusal is raised per side
@@ -3786,8 +3917,6 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                 if opts.refuse_word < 0:
                     opts.refuse_word = _next_word(labels, classifier, extra_words, b)
                     extra_words.append(refused)
-            elif opts.sel_n == 0:
-                return False
         codes.append(code)
         positives.append(positive)
         options.append(opts)
@@ -4217,6 +4346,103 @@ def _label_kind(item: PythonObject, b: PythonObject) raises -> Int:
     return 0
 
 
+def _value_kind(item: PythonObject, b: PythonObject) raises -> Int:
+    """UNPACK (lane mf-rows8a): a label value's kind as the metric doors'
+    label step reads it (bindings/mcls_common_unpack.mojo `mc_label_list`,
+    bindings/metrics_exp_common_unpack.mojo `mx_list_labels`): 1 integral
+    (an int, a NumPy integer, a bool or NumPy's bool_, read as 0 / 1), 2 a
+    string, 0 any other (a real, None, another object: those doors refuse it)."""
+    if py_type(item) is b.bool or String(py=py_type(item).__name__) == "bool_":
+        return 1
+    return _label_kind(item, b)
+
+
+def _door_kind(labels: PythonObject, b: PythonObject) raises -> Int:
+    """UNPACK (lane mf-rows8a): the kind of a label list as the metric doors
+    read y_true or a `labels` kwarg (`_value_kind` per item): 1 integral, 2
+    strings, 3 strings and integers, 0 anything else (a real, None or
+    another object among them). 0 and 3 are the doors' refusal
+    (SCORER_MIXED_WORDS for y_true). Read once per admission."""
+    var items = py_call(b.list, labels)
+    var ints = False
+    var strs = False
+    for i in range(len(items)):  # driver-loop: over the labels (once per admission)
+        var k = _value_kind(items[i], b)
+        if k == 0:
+            return 0
+        ints = ints or k == 1
+        strs = strs or k == 2
+    if ints and strs:
+        return 3
+    return 2 if strs else 1
+
+
+def _labels_refusal(listed: PythonObject, fit_kind: Int, b: PythonObject) raises -> String:
+    """UNPACK (lane mf-rows8a): the metric doors' refusal of a `labels`
+    kwarg (bindings/metrics_exp_common_unpack.mojo `mx_list_labels` then
+    `mx_selected`; bindings/mcls_common_unpack.mojo `mc_label_list` then
+    `mc_selected`: the same words), in their order: not one-dimensional, no
+    label, a label of no kind they read or of both kinds, labels of another
+    type than the fit's (`fit_kind`, `_door_kind`). "": none (a repeated
+    label is checked by the caller as it codes them). Read once per
+    admission."""
+    for i in range(len(listed)):  # small-loop(the scorer's labels: their shape)
+        var item = listed[i]
+        var nested = py_type(item) is b.list or py_type(item) is b.tuple
+        if not nested and Bool(py=py_call(b.hasattr, item, PythonObject("ndim"))):
+            nested = Int(py=py_call(b.int, item.ndim)) > 0
+        if nested:
+            return String("labels must be one-dimensional single-label data")
+    if len(listed) == 0:
+        return String("labels must contain at least one label")
+    var kind = _door_kind(listed, b)
+    if kind == 0 or kind == 3:
+        return String("TypeError: labels must contain only strings or only integers; floating labels, missing labels "
+                      + "and mixed types are unsupported")
+    if kind != fit_kind:
+        return String("TypeError: labels must use the same type as the targets")
+    return String("")
+
+
+def _pos_text(value: PythonObject, b: PythonObject) raises -> String:
+    """UNPACK (lane mf-rows8a): a pos_label's label word as the refusals
+    print it (`f"pos_label={pos_label}"`, the doors' `family_str`): an
+    integer's repr, a string's repr (`msel_scorer_pos_words` strips its
+    quotes), anything else (a bool, a real, None) as `str` prints it."""
+    var kind = _label_kind(value, b)
+    if kind == 1:
+        return String(py=py_call(b.repr, py_call(b.int, value)))
+    if kind == 2:
+        return String(py=py_call(b.repr, py_call(b.str, value)))
+    return String(py=py_call(b.str, value))
+
+
+def _float_positive(kw: _ScorerKw, mut opts: MselScorerOptions, mut extra_words: List[String],
+                    b: PythonObject) raises -> Int:
+    """UNPACK (lane mf-rows8a): a binary label row's pos_label on a
+    regressor (1, or the make_scorer's) read ONCE: its value as `param`
+    (an integral or real number; scikit-learn's `pos_label not in
+    present_labels` compares it by value with the float labels), its `str`
+    as the label word `param_word` (a regressor has no fit label words
+    before the extra ones). A string answers SCORER_POSITIVE_KIND (the
+    metric door's type words); None or another object sets `pos_float` (the
+    door's `_classification_labels` refusal, SCORER_FLOAT_POS_WORDS); any
+    other answers SCORER_POSITIVE_ABSENT (the side finds its code)."""
+    var value = kw.pos_label if kw.given_pos else PythonObject(1)
+    var kind = _value_kind(value, b)
+    opts.pos_given = kw.given_pos
+    opts.param_word = len(extra_words)
+    extra_words.append(String(py=py_call(b.str, value)))
+    if kind == 2:
+        return SCORER_POSITIVE_KIND
+    if kind == 1 or _real_label(value, b):
+        opts.param = Float64(py=py_call(b.float, value))
+    else:
+        opts.pos_float = True
+        opts.pos_given = True
+    return SCORER_POSITIVE_ABSENT
+
+
 def _real_label(item: PythonObject, b: PythonObject) raises -> Bool:
     """UNPACK (lane mf-score6): a pos_label that is a real number of no
     integer type (a Python or NumPy float; not a bool, an int or a string)."""
@@ -4439,42 +4665,6 @@ def _label_code(labels: PythonObject, value: PythonObject, b: PythonObject) rais
     return -1
 
 
-def _absent_positive(labels: PythonObject, b: PythonObject) raises -> Int:
-    """UNPACK (lane mf-cluster5): the positive word of a binary label scorer
-    whose pos_label=1 is not one of the fit's labels: SCORER_POSITIVE_ABSENT
-    (integer labels), SCORER_POSITIVE_KIND (string labels: the door's "same
-    type" refusal), -1 for labels of mixed or other kinds (the door). Read
-    once per admission."""
-    var items = py_call(b.list, labels)
-    var kind = -1
-    for i in range(len(items)):  # driver-loop: over the fit's labels (once per admission)
-        var k = _label_kind(items[i], b)
-        if k == 0 or (kind >= 0 and k != kind):
-            return -1
-        kind = k
-    if kind == 1:
-        return SCORER_POSITIVE_ABSENT
-    if kind == 2:
-        return SCORER_POSITIVE_KIND
-    return -1
-
-
-def _labels_mixed(labels: PythonObject, b: PythonObject) raises -> Bool:
-    """UNPACK (lane mf-msel5b): the fit's labels hold strings AND integers
-    (and nothing else: another kind keeps the door). Read once per
-    admission."""
-    var items = py_call(b.list, labels)
-    var ints = False
-    var strs = False
-    for i in range(len(items)):  # driver-loop: over the fit's labels (once per admission)
-        var k = _label_kind(items[i], b)
-        if k == 0:
-            return False
-        ints = ints or k == 1
-        strs = strs or k == 2
-    return ints and strs
-
-
 def _label_words(labels: PythonObject, b: PythonObject) raises -> List[String]:
     """UNPACK (lane mf-cluster5): each fit label's repr as `str(present)`
     prints it in the door's words (an int's `int(v)`, a string's `str(v)`),
@@ -4482,7 +4672,7 @@ def _label_words(labels: PythonObject, b: PythonObject) raises -> List[String]:
     var items = py_call(b.list, labels)
     var out = List[String](capacity=len(items))
     for i in range(len(items)):  # driver-loop: over the fit's labels (once per admission)
-        var k = _label_kind(items[i], b)
+        var k = _value_kind(items[i], b)  # lane mf-rows8a: a bool label prints as the doors read it (0 / 1)
         var v = items[i]
         if k == 1:
             v = py_call(b.int, items[i])

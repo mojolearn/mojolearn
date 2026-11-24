@@ -515,6 +515,41 @@ def _array_words(label_words: List[String], seen: List[Bool]) -> String:
     return out + "]"
 
 
+def _int_word(word: String) -> Bool:
+    """Lane mf-rows8a: a label word that is an integer's repr (digits, an
+    optional leading '-')."""
+    var bytes = word.as_bytes()
+    if len(bytes) == 0:
+        return False
+    for i in range(len(bytes)):  # small-loop(the word's bytes)
+        var c = Int(bytes[i])
+        if not ((c >= 48 and c <= 57) or (c == 45 and i == 0 and len(bytes) > 1)):
+            return False
+    return True
+
+
+def _classes_words(label_words: List[String], classes: Int) -> String:
+    """Lane mf-rows8a: the fit's `classes` labels (codes 0 .. classes-1) as
+    `f"{classes}"` prints a classifier's `classes_` array: space-separated
+    in brackets; an integer array's entries right-aligned to the widest, as
+    NumPy pads them (a string or object array is not padded)."""
+    var n = min(classes, len(label_words))
+    var ints = n > 0
+    var width = 0
+    for c in range(n):  # small-loop(the fit's labels)
+        ints = ints and _int_word(label_words[c])
+        width = max(width, label_words[c].byte_length())
+    var out = String("[")
+    for c in range(n):  # small-loop(the fit's labels)
+        if c > 0:
+            out += " "
+        if ints:
+            for _ in range(width - label_words[c].byte_length()):  # small-loop(the padding)
+                out += " "
+        out += label_words[c]
+    return out + "]"
+
+
 def _plain_word(word: String) -> String:
     """A label's repr as `str` of a NumPy scalar prints it (`'{0}'.format`):
     a string label without its quotes."""
@@ -608,7 +643,9 @@ def _fold_view_side(route: MetricRoute, cluster: EntryRef, label_words: List[Str
                 at = j
         # `_get_response_values` checks pos_label for a BINARY estimator only
         # (`type_of_target(classes) == "binary"`: at most two held classes).
-        if (msel_scorer_ap(row) or msel_scorer_positive(row)) and held_n <= 2:
+        # lane mf-rows8a: a brier / D^2 brier scorer's given pos_label too
+        if (msel_scorer_ap(row) or msel_scorer_positive(row) or (msel_scorer_brier(row) and row.pos_given)) and (
+                held_n <= 2):
             if at < 0:
                 raise Error("ValueError: pos_label=" + msel_scorer_pos_words(row, label_words, positive)
                             + " is not a valid label: It should be one of " + _held_words(label_words, held, held_n))
@@ -703,21 +740,21 @@ def _scorer_side(route: MetricRoute, cluster: EntryRef, label_words: List[String
         # AP-ABSENT (lane mf-msel5): two labels and no label 1. scikit-learn's
         # scorer asks `_get_response_values(..., pos_label=1)`, which refuses a
         # pos_label not among the classifier's classes, printing them as a
-        # NumPy array: the labels' reprs, space-separated, in brackets.
-        var shown = String("[")
-        for i in range(len(label_words)):  # small-loop(the fit's two labels)
-            if i > 0:
-                shown += " "
-            shown += label_words[i]
+        # NumPy array: the labels' reprs, space-separated, in brackets (lane
+        # mf-rows8a: the fit's labels only, `_classes_words`).
         raise Error("ValueError: pos_label=" + msel_scorer_pos_words(row, label_words, positive)
-                    + " is not a valid label: It should be one of " + shown + "]")
+                    + " is not a valid label: It should be one of " + _classes_words(label_words, classes))
     if msel_scorer_binary_column(row) and classes == 2 and cols == 2:
         pick = 1
         if msel_scorer_ap(row) or (msel_scorer_brier(row) and row.pos_given):
             # the positive's column (lane mf-tail5b: a given pos_label on brier too)
             if positive < 0 or positive > 1:
-                raise Error("pos_label=" + msel_scorer_pos_words(row, label_words, positive)
-                            + " is not a valid label: It should be one of the classes")
+                # lane mf-rows8a: a given pos_label that is not one of the
+                # binary member's classes (SCORER_POSITIVE_ABSENT): scikit-learn's
+                # `_get_response_values` words (sklearn 1.9 utils/_response.py
+                # lines 206-210), raised before any metric
+                raise Error("ValueError: pos_label=" + msel_scorer_pos_words(row, label_words, positive)
+                            + " is not a valid label: It should be one of " + _classes_words(label_words, classes))
             pick = positive
     elif msel_scorer_ap(row) and classes == 2 and cols == 1 and positive == 0:
         negate = True
