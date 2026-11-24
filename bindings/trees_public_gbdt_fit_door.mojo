@@ -19,8 +19,6 @@ from core.mode_answer import MODE_FAMILY_GBDT, answer_mode_word
 from std.math import isfinite
 from std.memory import bitcast
 from std.python import Python, PythonObject
-from providers.python.function_device_boundary_door import function_device_admit
-from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.params_metadata_native_door import _read, _resolved
@@ -144,15 +142,7 @@ def gbdt_auto_learning_rate(loss: PythonObject, n_rows: Float64, iterations: Flo
 
 def catboost_auto_learning_rate_op(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """The public `ensemble.catboost_auto_learning_rate(loss, n_rows,
-    iterations, use_best_model, boost_from_average, table=None, *,
-    device=None)`."""
-    # args[6] is the call's `device` (lane vdf-misc), admitted first in the
-    # shared words. The rate is one scalar formula on the host (no GPU
-    # implementation): "gpu" is refused naming the function; None and "cpu"
-    # run today's host formula. None is one identity compare.
-    if args[6] is not None:
-        _ = function_device_admit(args[6], "catboost_auto_learning_rate", False, True, context,
-                                  native_loaded_module("builtins"))
+    iterations, use_best_model, boost_from_average, table=None)`."""
     return gbdt_auto_learning_rate(args[0], _float(args[1]), _float(args[2]), _truthy(args[3]),
                                    _truthy(args[4]), args[5] if _truthy(args[5]) else PythonObject(None), context)
 
