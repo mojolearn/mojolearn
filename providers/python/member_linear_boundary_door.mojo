@@ -92,8 +92,10 @@ def linear_member_pack(model: PythonObject, fields: PythonObject, context: Pytho
     call.block = MEMBER_BLOCK_COEF
     _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
     var cols = call.dst.cols
-    var coef = classical_array(cols, 0, context)
-    unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(coef))), src=f32_ptr(call.dst.data), count=cols)
+    # THE 2-D y (lane w3f3-k): a multi-target Ridge's targets x features.
+    var targets = max(call.dst.rows, 1)
+    var coef = classical_array(cols, 0, context) if targets == 1 else classical_array(targets, cols, context)
+    unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(coef))), src=f32_ptr(call.dst.data), count=cols * targets)
     call.block = MEMBER_BLOCK_FAMILY
     _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
     var mean = classical_array(cols, 0, context)
@@ -101,6 +103,23 @@ def linear_member_pack(model: PythonObject, fields: PythonObject, context: Pytho
     call.block = MEMBER_BLOCK_SCALARS
     _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
     var scalars = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)
+    if targets > 1:
+        # the targets' intercepts, then the y mean (core/linear_member.mojo)
+        var intercepts = classical_array(targets, 0, context, True)
+        var icpt = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(intercepts)))
+        for t in range(targets):  # small-loop(the targets' intercepts)
+            icpt[t] = scalars[t]
+        py_setitem(fields, "coef_", coef)
+        py_setitem(fields, "intercept_", intercepts)
+        py_setitem(fields, "_x_mean", mean)
+        py_setitem(fields, "_y_mean", scalars[targets])
+        py_setitem(fields, "n_features_in_", cols)
+        py_setitem(fields, "solver_", "eig")
+        py_setitem(fields, "input_copied_", True)
+        py_setitem(fields, "_mojolearn_fitted", True)
+        linear_state_publish(model, coef, mean, cols, 0.0, 0.0, True, targets)
+        _ = intercepts
+        return
     var intercept = scalars[0]
     var ymean = scalars[1]
     py_setitem(fields, "coef_", coef)
@@ -126,15 +145,27 @@ def linear_member_state(model: PythonObject, fields: PythonObject, context: Pyth
     var intercept_source = fields["intercept_"]
     var mean_source = py_get(fields, "_x_mean")
     var ymean_source = py_get(fields, "_y_mean")
-    var coef = admit_x(coefficient_source, 1, "coef_", context)
-    var cols = Int(py=coef.size)
-    var scalars: List[Float64] = [Float64(py=intercept_source), 0.0]
+    # THE 2-D y (lane w3f3-k): a multi-target Ridge's targets x features
+    # coef_ and one intercept per target.
+    var targets = 1
+    var two_d = Int(py=coefficient_source.ndim) == 2
+    if two_d:
+        targets = Int(py=coefficient_source.shape[0])
+    var coef = admit_x(coefficient_source, 2 if two_d else 1, "coef_", context)
+    var cols = Int(py=coef.size) // max(targets, 1)
+    var scalars = List[Float64](length=targets + 1, fill=0.0)
+    if two_d:
+        for t in range(targets):  # driver-loop: over the targets (their public intercepts)
+            var word = intercept_source[t]
+            scalars[t] = Float64(py=word)
+    else:
+        scalars[0] = Float64(py=intercept_source)
     if ymean_source is not None:
-        scalars[1] = Float64(py=ymean_source)
+        scalars[targets] = Float64(py=ymean_source)
     var call = member_new(plan)
     try:
         call.block = MEMBER_BLOCK_COEF
-        call.x = MemberMatrix(Int(py=classical_address(coef)), 1, cols)
+        call.x = MemberMatrix(Int(py=classical_address(coef)), targets, cols)
         _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
         if mean_source is not None:
             var mean = admit_x(mean_source, 1, "_x_mean", context)
@@ -145,7 +176,7 @@ def linear_member_state(model: PythonObject, fields: PythonObject, context: Pyth
             _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
             _ = mean
         call.block = MEMBER_BLOCK_SCALARS
-        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, 2, MEMBER_F64)
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, targets + 1, MEMBER_F64)
         call.flags = MEMBER_IMPORT_DONE
         _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
     except error:

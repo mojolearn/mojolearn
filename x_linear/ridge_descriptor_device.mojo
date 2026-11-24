@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """The weighted/one-feature Ridge kernel exposed to native linear RUN."""
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.linear_fit_types import RIDGE_FIT_ABI, ridge_fit_check_spans
+from core.linear_fit_types import (
+    RIDGE_FIT_ABI, ridge_fit_check_spans, ridge_fit_targets, ridge_fit_result_words, ridge_fit_work_words,
+)
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
@@ -21,8 +23,12 @@ def ridge_fit_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         var f = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=ff)
         var rows = p[0]
         var cols = p[1]
-        var n_y = rows * (2 if p[3] else 1)
-        var ip: List[Int32] = [1, Int32(p[2]), 1, Int32(p[3])]
+        # Lane w3f3-k: T targets (y rows x T, one Cholesky factor for every
+        # target's right-hand side), the same words for T == 1.
+        var targets = ridge_fit_targets(np, pp)
+        var n_y = rows * (targets + (1 if p[3] else 0))
+        var n_out = ridge_fit_result_words(targets, cols)
+        var ip: List[Int32] = [Int32(targets), Int32(p[2]), 1, Int32(p[3])]
         var fp: List[Float32] = [Float32(f[0])]
         var x = FP(unsafe_from_address=a[0])
         var y = FP(unsafe_from_address=a[1])
@@ -30,9 +36,9 @@ def ridge_fit_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
             x_linear_finite_device(x, rows * cols, "X")
             x_linear_finite_device(y, n_y, "y")
         fit_device(ALGO_RIDGE, x, rows * cols, y, n_y, rows, cols,
-            ip, fp, cols + 5, max(3 * cols * cols + 4 * cols + 1 + 2 * rows, 1), 1,
+            ip, fp, n_out, ridge_fit_work_words(targets, cols, rows), 1,
             FP(unsafe_from_address=a[2]))
-        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = cols + 5
+        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = n_out
         return 0
     except problem:
         native_descriptor_report(problem, context, sink)

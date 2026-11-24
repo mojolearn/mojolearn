@@ -83,14 +83,39 @@ def linear_fit_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
 
 def ridge_fit_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
                          ff: Int, nf: Int, result: Int) raises:
-    if operation != 0 or na != 3 or np != 4 or nf != 1 or not aa or not pp or not ff or not result:
+    # p: [rows, cols, fit_intercept, sample_weight] and, optionally (lane
+    # w3f3-k, the multi-target fit), [4] the target count T >= 1: y is then
+    # rows x T row-major (then the rows' weights), the result T*(cols + 1) + 4
+    # words (`ridge_fit_result_words`).
+    if operation != 0 or na != 3 or (np != 4 and np != 5) or nf != 1 or not aa or not pp or not ff or not result:
         raise Error("x_linear Ridge ABI: invalid request spans")
     var a = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=aa)
     if not a[0] or not a[1] or not a[2]:
         raise Error("x_linear: null float32 buffer address")
     var p = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp)
-    if p[0] <= 0 or p[1] <= 0:
+    if p[0] <= 0 or p[1] <= 0 or (np == 5 and p[4] < 1):
         raise Error("x_linear: positive dimensions required")
+
+
+def ridge_fit_targets(np: Int, pp: Int) -> Int:
+    """The target count of a ridge fit request (1 without the fifth word)."""
+    if np < 5:
+        return 1
+    return MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp)[4]
+
+
+def ridge_fit_result_words(targets: Int, cols: Int) -> Int:
+    """The result words of a ridge fit request: coef T*cols | intercept T |
+    alpha | best score | one leave-one-out error | status (x_linear/ridge.mojo
+    `ridge_fit`; `cols + 5` for one target)."""
+    return targets * (cols + 1) + 4
+
+
+def ridge_fit_work_words(targets: Int, cols: Int, rows: Int) -> Int:
+    """The float work words of a ridge fit request (x_linear/ridge.mojo
+    `ridge_fit`'s fw layout, with one spare cols x cols block as before;
+    `3 cols^2 + 4 cols + 1 + 2 rows` for one target)."""
+    return max(3 * cols * cols + 3 * cols + targets + cols * targets + 2 * rows, 1)
 
 
 struct LinearOlsPlan(Copyable, Movable):

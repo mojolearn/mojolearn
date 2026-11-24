@@ -15,7 +15,12 @@ caller fills it when it will ask for `score`). No kernel is touched.
 MEMBER_OP_NEW parameters (Float64 words): [0] kind (0 LinearRegression,
 1 Ridge), [1] fit_intercept (0 / 1), [2] alpha (Ridge; ignored for kind 0).
 Views: X dense row-major host float32; y and sample weights host float32
-vectors (one target). Anything else is refused in words (a device-home
+vectors (one target). THE 2-D y (lane w3f3-k; Ridge only, MEMBER_CAN_MULTI_OUTPUT
+on its kind, as scikit-learn's Ridge): y rows x targets, fitted in ONE solve
+for every target (core/linear_fit_run.mojo `linear_ridge_targets_run`, the
+estimator's own multi-target route), predict rows x targets, score the
+targets' averaged R^2; the COEF block is targets x features and the SCALARS
+block the targets' intercepts then the y mean. Anything else is refused in words (a device-home
 view, a row or column index: the caller hands over gathered host words); the
 caller's UNPACK admits the data (finite, shapes) exactly as the estimator's
 own door does (MEMBER_CAN_TEST_ROWS clear: the fit and predict entries do
@@ -47,13 +52,15 @@ from core.linear_fit_types import LinearFitRequest, LinearFitResult, LinearOlsPl
 from core.linear_model_state import LinearModelState, linear_state_predict_request
 from core.linear_ols_run import linear_ols_plan, linear_ols_one_entry, linear_ols_run
 from core.linear_score_run import linear_score_run
+from core.linear_fit_run import linear_ridge_targets_run
+from core.linear_boundary_run import linear_predict_targets_run, linear_r2_targets
 from std.memory import unsafe_memcpy
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_SCORE, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
-    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF, MEMBER_GIL_FREE,
+    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF, MEMBER_GIL_FREE, MEMBER_CAN_MULTI_OUTPUT,
     MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -76,6 +83,14 @@ struct LinearMemberSlot(Copyable, Movable, Defaultable):
     var coef: List[Float32]
     var mean: List[Float32]
     var scalars: List[Float64]
+    # THE 2-D y (lane w3f3-k): the target count (coef is targets x features,
+    # scalars the targets' intercepts then the y mean), the intercepts as
+    # the multi-target predict reads them, and its scratch columns and
+    # predictions (grown, never shrunk: no allocation per call).
+    var targets: Int
+    var intercepts: List[Float64]
+    var columns: List[Float32]
+    var predictions: List[Float32]
 
     def __init__(out self):
         self.generation = 0
@@ -87,6 +102,10 @@ struct LinearMemberSlot(Copyable, Movable, Defaultable):
         self.coef = List[Float32]()
         self.mean = List[Float32]()
         self.scalars = List[Float64]()
+        self.targets = 1
+        self.intercepts = List[Float64]()
+        self.columns = List[Float32]()
+        self.predictions = List[Float32]()
 
 
 struct LinearMemberStore(Defaultable, Movable):
@@ -135,6 +154,7 @@ def _mint(ridge: Bool, intercept: Bool, alpha: Float64) raises -> Int:
         slot[].intercept = intercept
         slot[].alpha = alpha
         slot[].state = LinearModelState()
+        slot[].targets = 1
         return slot[].generation * _INDEX_SPAN + index + 1
     finally:
         shared_slot_unlock(lock)
@@ -160,6 +180,9 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
             slot[].coef = List[Float32]()
             slot[].mean = List[Float32]()
             slot[].scalars = List[Float64]()
+            slot[].intercepts = List[Float64]()
+            slot[].columns = List[Float32]()
+            slot[].predictions = List[Float32]()
             store[].free.append(index)
         return address
     finally:
@@ -185,7 +208,7 @@ def _fit(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPointe
         member_unsupported(estimator, call[].fit_output)
     _dense(call[].x, "X", estimator)
     _dense(call[].y, "y", estimator)
-    if call[].y.cols != 1:
+    if call[].y.cols != 1 and not (slot[].ridge and call[].y.cols > 1):
         raise Error("ValueError: a " + estimator + " member fits one target column")
     if call[].y.rows != rows:
         raise Error("ValueError: X and y have different numbers of rows")
@@ -195,6 +218,10 @@ def _fit(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPointe
         if call[].weights.rows != rows or call[].weights.cols != 1:
             raise Error("ValueError: sample_weight and X have different numbers of rows")
         weights = call[].weights.data
+    if call[].y.cols > 1:
+        _fit_targets(slot, call, weights)
+        return
+    slot[].targets = 1
     slot[].state = LinearModelState()
     slot[].coef = List[Float32](length=cols, fill=0.0)
     slot[].mean = List[Float32](length=cols, fill=0.0)
@@ -227,6 +254,49 @@ def _fit(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPointe
         _predict(slot, call)
 
 
+def _fit_targets(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin],
+                 call: MutPointer[MemberCall, MutUntrackedOrigin], weights: Int) raises:
+    """THE 2-D y (lane w3f3-k): Ridge on every target of a rows x targets y
+    in one solve (`linear_ridge_targets_run`, the estimator's own
+    multi-target route through the route's `third` entry)."""
+    var route = call[].route
+    var rows = call[].x.rows
+    var cols = call[].x.cols
+    var targets = call[].y.cols
+    if not route.has_third:
+        raise Error("ImportError: mojolearn: the Ridge member's multi-target fit needs the weighted solve entry on its route")
+    slot[].state = LinearModelState()
+    slot[].coef = List[Float32](length=targets * cols, fill=0.0)
+    slot[].mean = List[Float32](length=cols, fill=0.0)
+    slot[].intercepts = List[Float64](length=targets, fill=0.0)
+    var request = LinearFitRequest(call[].x.data, call[].y.data, weights, Int(slot[].coef.unsafe_ptr()),
+        Int(slot[].mean.unsafe_ptr()), rows, cols, slot[].intercept, slot[].alpha)
+    linear_ridge_targets_run(route.third.call, request, targets, Int(slot[].intercepts.unsafe_ptr()))
+    slot[].targets = targets
+    _targets_state(slot, cols)
+    if call[].fit_output == MEMBER_OP_PREDICT:
+        _predict(slot, call)
+
+
+def _targets_state(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], cols: Int):
+    """The fitted state of a multi-target slot (lane w3f3-k): the state
+    words over its targets x cols coefficients, the SCALARS block (the
+    intercepts, then a zero y mean)."""
+    var targets = slot[].targets
+    slot[].state.coef = Int(slot[].coef.unsafe_ptr())
+    slot[].state.coef_count = cols * targets
+    slot[].state.features = cols
+    slot[].state.targets = targets
+    slot[].state.intercept = 0.0
+    slot[].state.mean = Int(slot[].mean.unsafe_ptr())
+    slot[].state.ymean = 0.0
+    slot[].state.has_coef = True
+    slot[].state.fitted = True
+    slot[].scalars = List[Float64](length=targets + 1, fill=0.0)
+    for t in range(targets):  # small-loop(the targets' intercepts)
+        slot[].scalars[t] = slot[].intercepts[t]
+
+
 def _whole(call: MutPointer[MemberCall, MutUntrackedOrigin], estimator: String) raises:
     if call[].row_index.rows > 0 or call[].column_index.rows > 0:
         raise Error("TypeError: a " + estimator + " member reads whole host views (no row or column index)")
@@ -243,7 +313,8 @@ def _export(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPoi
             raise Error("member ABI: a linear member has three fitted blocks")
         block = MEMBER_BLOCK_COEF if block == 0 else (MEMBER_BLOCK_SCALARS if block == 1 else MEMBER_BLOCK_FAMILY)
     if block == MEMBER_BLOCK_COEF:
-        call[].dst = MemberMatrix(Int(slot[].coef.unsafe_ptr()), 1, len(slot[].coef))
+        # targets x features (one row for one target; lane w3f3-k)
+        call[].dst = MemberMatrix(Int(slot[].coef.unsafe_ptr()), slot[].targets, len(slot[].coef) // slot[].targets)
     elif block == MEMBER_BLOCK_SCALARS:
         call[].dst = MemberMatrix(Int(slot[].scalars.unsafe_ptr()), 1, len(slot[].scalars), MEMBER_F64)
     elif block == MEMBER_BLOCK_FAMILY:
@@ -266,24 +337,35 @@ def _import(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPoi
         if call[].block == MEMBER_BLOCK_COEF:
             slot[].state = LinearModelState()
             slot[].coef = words^
+            # one row per target (lane w3f3-k)
+            slot[].targets = max(call[].x.rows, 1)
         else:
             slot[].mean = words^
     elif call[].block == MEMBER_BLOCK_SCALARS:
-        if not call[].x.dense_host(MEMBER_F64) or call[].x.rows * call[].x.cols != 2:
-            raise Error("member ABI: the linear scalars block is two host float64 words (intercept, y mean)")
+        var count = call[].x.rows * call[].x.cols
+        if not call[].x.dense_host(MEMBER_F64) or count < 2:
+            raise Error("member ABI: the linear scalars block is host float64 words (each target's intercept, y mean)")
         var source = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].x.data)
-        slot[].scalars = List[Float64](length=2, fill=0.0)
-        slot[].scalars[0] = source[0]
-        slot[].scalars[1] = source[1]
+        slot[].scalars = List[Float64](length=count, fill=0.0)
+        for i in range(count):  # small-loop(the targets' intercepts and the y mean)
+            slot[].scalars[i] = source[i]
     elif call[].block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
         raise Error("member ABI: a linear member has no fitted block " + String(call[].block))
     if (call[].flags & MEMBER_IMPORT_DONE) == 0:
         return
-    var cols = len(slot[].coef)
-    if cols == 0 or len(slot[].scalars) != 2:
+    var targets = slot[].targets
+    var cols = len(slot[].coef) // targets
+    if cols == 0 or len(slot[].scalars) != targets + 1 or cols * targets != len(slot[].coef):
         raise Error("member ABI: a fitted linear state needs its coefficient and scalars blocks")
     if len(slot[].mean) != cols:
         slot[].mean = List[Float32](length=cols, fill=0.0)
+    if targets > 1:
+        # THE 2-D y (lane w3f3-k)
+        slot[].intercepts = List[Float64](length=targets, fill=0.0)
+        for t in range(targets):  # small-loop(the targets' intercepts)
+            slot[].intercepts[t] = slot[].scalars[t]
+        _targets_state(slot, cols)
+        return
     slot[].state.coef = Int(slot[].coef.unsafe_ptr())
     slot[].state.coef_count = cols
     slot[].state.features = cols
@@ -299,11 +381,36 @@ def _predict(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPo
     _whole(call, estimator)
     _dense(call[].x, "X", estimator)
     _dense(call[].dst, "the prediction buffer", estimator)
+    if slot[].targets > 1:
+        _predict_targets(slot, call, call[].dst.data)
+        return
     if call[].dst.rows != call[].x.rows or call[].dst.cols != 1:
         raise Error("ValueError: the prediction buffer holds one value per row of X")
     var request = linear_state_predict_request(slot[].state, call[].x.data, call[].dst.data,
         call[].x.rows, call[].x.cols, estimator)
     _ = linear_predict_run(call[].route.second.call, request)
+
+
+def _predict_targets(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin],
+                     call: MutPointer[MemberCall, MutUntrackedOrigin], dst: Int) raises:
+    """THE 2-D y's predict (lane w3f3-k): rows x targets float32 at `dst`
+    (`linear_predict_targets_run` over the route's prediction entry), with
+    the one-target predict's width check."""
+    var estimator = _name(slot[].ridge)
+    var rows = call[].x.rows
+    var cols = call[].x.cols
+    var targets = slot[].targets
+    if not slot[].state.fitted:
+        raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
+    if cols != slot[].state.features:
+        raise Error("X has " + String(cols) + " features, but " + estimator + " is expecting "
+            + String(slot[].state.features) + " features as input.")
+    if dst == call[].dst.data and (call[].dst.rows != rows or call[].dst.cols != targets):
+        raise Error("ValueError: the prediction buffer holds one value per row of X and target")
+    if len(slot[].columns) < rows * targets:
+        slot[].columns = List[Float32](length=rows * targets, fill=0.0)
+    linear_predict_targets_run(call[].route.second.call, call[].x.data, Int(slot[].coef.unsafe_ptr()),
+        slot[].intercepts, Int(slot[].columns.unsafe_ptr()), dst, rows, cols, targets)
 
 
 def _score(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPointer[MemberCall, MutUntrackedOrigin]) raises:
@@ -312,6 +419,20 @@ def _score(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPoin
     _whole(call, estimator)
     _dense(call[].x, "X", estimator)
     _dense(call[].y, "y", estimator)
+    if slot[].targets > 1:
+        # THE 2-D y (lane w3f3-k): r2_score's uniform average over the targets.
+        if call[].y.cols != slot[].targets or call[].y.rows != call[].x.rows:
+            raise Error("ValueError: a " + estimator + " member scores its " + String(slot[].targets) + " targets")
+        if call[].weights.rows > 0:
+            raise Error("NotImplementedError: mojolearn: a weighted score of a " + estimator
+                + " member is not published; the caller predicts and runs its own weighted metric")
+        var count = call[].x.rows * slot[].targets
+        if len(slot[].predictions) < count:
+            slot[].predictions = List[Float32](length=count, fill=0.0)
+        _predict_targets(slot, call, Int(slot[].predictions.unsafe_ptr()))
+        call[].value = linear_r2_targets(call[].y.data, Int(slot[].predictions.unsafe_ptr()), call[].x.rows,
+            slot[].targets)
+        return
     if call[].y.cols != 1:
         raise Error("ValueError: a " + estimator + " member scores one target column")
     if call[].weights.rows > 0:
@@ -340,8 +461,15 @@ def _linear_member(operation: Int, address: Int) raises -> Int:
         # state, which a temporary factor no longer touches). On a GPU route
         # the callers run one worker (several threads enqueueing on one
         # device context is not proven).
-        return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
-            | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_COEF | MEMBER_GIL_FREE)
+        comptime _BOTH = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT
+            | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_COEF | MEMBER_GIL_FREE)
+        # MEMBER_CAN_MULTI_OUTPUT (lane w3f3-k): Ridge's kind (a 2-D y, as
+        # scikit-learn's Ridge), asked kind-exact with a live state; the
+        # family's union (no state) includes it.
+        if call[].state == 0:
+            return _BOTH | MEMBER_CAN_MULTI_OUTPUT
+        var kind = MutPointer[LinearMemberSlot, MutUntrackedOrigin](unsafe_from_address=_lookup(call[].state, False))
+        return _BOTH | MEMBER_CAN_MULTI_OUTPUT if kind[].ridge else _BOTH
     if operation == MEMBER_OP_NEW:
         if call[].param_count != 3 or not call[].params:
             raise Error("member ABI: a linear member takes three parameters (kind, fit_intercept, alpha)")
@@ -361,7 +489,13 @@ def _linear_member(operation: Int, address: Int) raises -> Int:
         # an operation this member lacks is refused, never sized.
         if call[].flags != MEMBER_OP_PREDICT:
             member_unsupported("LinearRegression / Ridge", call[].flags)
-        call[].out_cols = 1
+        # THE 2-D y (lane w3f3-k): a multi-target Ridge's rows x targets;
+        # without a state, the shape word `y.cols`.
+        var targets = max(call[].y.cols, 1)
+        if call[].state != 0:
+            targets = MutPointer[LinearMemberSlot, MutUntrackedOrigin](
+                unsafe_from_address=_lookup(call[].state, False))[].targets
+        call[].out_cols = targets
         call[].out_dtype = MEMBER_F32
         call[].classes = 0
         return 0

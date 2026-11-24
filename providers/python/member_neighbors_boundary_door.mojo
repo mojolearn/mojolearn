@@ -38,7 +38,10 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_input_unpack import admit_x, admit_c_view, admitted_dtype
 from bindings.classical_arrays_door import classical_array, classical_address
-from bindings.classical_labels_door import classical_encode_labels, classical_decode_labels, labels_cast, labels_reshape
+from bindings.classical_labels_door import (
+    classical_encode_labels, classical_decode_labels, labels_cast, labels_reshape, labels_label_kind,
+)
+from bindings.label_admission_native_pack import classifier_label_list
 from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.family_common_pack import family_array, family_field
 from bindings.member_owner_unpack import MemberOwner, member_labels_take, member_host_only
@@ -187,7 +190,8 @@ def _pack_outputs(model: PythonObject, fields: PythonObject, context: PythonObje
     caller's labels of that output (`member_pack_labeled` hands one label
     list per output; without labels the codes are the labels), and
     `_classes_list` per output from the native encoder, `_label_names`
-    None). `data` is the exported targets block."""
+    None; labels of another kind keep the codes and `_label_names`, below).
+    `data` is the exported targets block."""
     var count = outputs * rows
     if plan.kind != 0:
         var targets = family_array(Python.tuple(outputs, rows), "<f4", context)
@@ -200,6 +204,23 @@ def _pack_outputs(model: PythonObject, fields: PythonObject, context: PythonObje
     var yc_address = Int(py=classical_address(yc))
     unsafe_memcpy(dest=_I32P(unsafe_from_address=yc_address), src=_I32P(unsafe_from_address=data), count=count)
     var classes = Python.list()
+    # Labels of any other kind than integers (str, bool, real; lane w3f3-k)
+    # vote as their codes, and predict decodes them per output through
+    # `_label_names` (one label list per output), as the 1-D fit does for
+    # str labels (bindings/neighbors_knn_native_door.mojo `_clf_fit`,
+    # `_decode_output_rows`). Each output's list is read once here.
+    var names = PythonObject(None)
+    if labels is not None:
+        var lists = Python.list()
+        var integral = True
+        for j in range(outputs):  # driver-loop: over the outputs (their labels' kind, once per pack)
+            var own = classifier_label_list(labels[j], context)
+            if labels_label_kind(own, context) != "int":
+                integral = False
+            _ = py_call(lists.append, own)
+        if not integral:
+            names = lists
+            labels = PythonObject(None)
     if labels is not None:
         var scope = labels_scope(model, context)
         for j in range(outputs):  # driver-loop: over the outputs (one decode each)
@@ -216,7 +237,7 @@ def _pack_outputs(model: PythonObject, fields: PythonObject, context: PythonObje
     for j in range(outputs):  # driver-loop: over the outputs (one native encoding each)
         _ = py_call(classes.append, _encode_column(yc, j, rows, context))
     _ = yc  # keep the Python object alive through the native calls above
-    py_setitem(fields, "_label_names", PythonObject(None))
+    py_setitem(fields, "_label_names", names)
     py_setitem(fields, "_y_cols", yc)
     py_setitem(fields, "_classes_list", classes)
 

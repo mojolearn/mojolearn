@@ -428,6 +428,18 @@ def classical_archive_save(model: PythonObject, path: PythonObject, ridge: Bool,
     var nk = classical_keys()
     if not py_contains(fields, nk[].k_coef_):
         raise Error("RuntimeError: this estimator is not fitted yet")
+    var several = False
+    if ridge:
+        try:
+            several = Int(py=py_item(fields, nk[].k_coef_).ndim) == 2
+        except:
+            several = False  # a coef_ without ndim: the member unpack below refuses it in its words
+    if several:
+        # Lane w3f3-k: the archive holds one coefficient vector and one
+        # intercept; a Ridge fitted on several targets is refused in words
+        # (before, its fit refused the 2-D y).
+        raise Error("NotImplementedError: mojolearn Ridge.save: the archive holds one target; this Ridge was fitted"
+                    + " on several (coef_ is 2-D)")
     var mode = py_get(fields, nk[].k_numeric_mode)
     if mode is None or not Bool(py=mode):
         mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)

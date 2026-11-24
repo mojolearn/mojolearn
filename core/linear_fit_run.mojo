@@ -8,7 +8,7 @@ from std.memory import unsafe_memcpy
 from core.hostptr import f32_ptr
 from core.linear_fit_types import (
     LinearFitRequest, LinearFitResult, LF_FLAGS, LF_GRAM, LF_RIDGE_RESIDENT,
-    LF_PREP, LF_RIDGE, LF_HAS_GRAM, LF_HAS_RIDGE_RESIDENT, LF_PAIRED_MEANS,
+    LF_PREP, LF_RIDGE, LF_HAS_GRAM, LF_HAS_RIDGE_RESIDENT, LF_PAIRED_MEANS, ridge_fit_result_words,
 )
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
@@ -94,3 +94,48 @@ def linear_ridge_run(entry: NativeDescriptorCall, weighted_entry: NativeDescript
         _ = ymean
         _ = ignored_mean
     return result^
+
+
+def linear_ridge_targets_run(weighted_entry: NativeDescriptorCall, request: LinearFitRequest, targets: Int,
+                             intercepts: Int) raises:
+    """Ridge on `targets` targets at once (lane w3f3-k; scikit-learn's Ridge
+    takes a 2-D y): `request.y` is rows x targets float32, row-major; the
+    targets x cols coefficients go to `request.coef` (row t is target t's)
+    and the targets' float64 intercepts to the words at `intercepts`. ONE
+    solve with every target as a right-hand side: the estimator's Cholesky
+    route (the one-target weighted / one-feature fit above, `weighted_entry`)
+    forms the centered Gram and factors it once, then solves each target's
+    X'y against the same factor (x_linear/ridge.mojo `ridge_fit`, T
+    targets), with or without sample weights. `request.mean` is untouched
+    (zeros), as on that route."""
+    var rows = request.rows
+    var cols = request.cols
+    if rows <= 0 or cols <= 0 or targets < 1:
+        raise Error("Ridge: rows, cols and targets must be positive")
+    if request.alpha < 0.0:
+        raise Error("alpha must be non-negative, got " + String(request.alpha))
+    if not request.x or not request.y or not request.coef or not intercepts:
+        raise Error("Ridge: null fit buffer")
+    var has_weights = request.weights != 0
+    var words = rows * targets
+    var joined = List[Float32](unsafe_uninit_length=words + rows if has_weights else 0)
+    var y_address = request.y
+    if has_weights:
+        unsafe_memcpy(dest=joined.unsafe_ptr(), src=f32_ptr(request.y), count=words)
+        unsafe_memcpy(dest=joined.unsafe_ptr() + words, src=f32_ptr(request.weights), count=rows)
+        y_address = Int(joined.unsafe_ptr())
+    var width = ridge_fit_result_words(targets, cols)
+    var values = List[Float32](length=width, fill=0.0)
+    try:
+        _ = native_descriptor_call(weighted_entry, 0,
+            [request.x, y_address, Int(values.unsafe_ptr())],
+            [rows, cols, Int(request.intercept), Int(has_weights), targets], [request.alpha])
+        if values[width - 1] == Float32(2.0):
+            raise Error("mojolearn Ridge: X'X + alpha I is singular even in float-float; rescale X or use a larger alpha")
+        unsafe_memcpy(dest=f32_ptr(request.coef), src=values.unsafe_ptr(), count=targets * cols)
+        var icpt = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=intercepts)
+        for t in range(targets):  # small-loop(the targets' intercept words)
+            icpt[t] = Float64(values[targets * cols + t]) if request.intercept else 0.0
+    finally:
+        _ = joined
+        _ = values

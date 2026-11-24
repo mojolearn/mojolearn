@@ -77,8 +77,9 @@ from bindings.family_common_pack import (
 from bindings.classical_labels_door import (
     labels_cast, labels_reduce_stat, labels_prepare_targets,
     classical_encode_labels, labels_shape_of, labels_reshape, classical_decode_labels, classical_accuracy,
-    classical_encode_words,
+    classical_encode_words, labels_decode_i32_codes,
 )
+from bindings.label_admission_native_pack import classifier_label_list
 from bindings.admitted_input_unpack import admit_c_view, admitted_dtype, admitted_finite_refuse
 from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
@@ -1238,6 +1239,44 @@ def _classify_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq: In
     return Python.tuple(labels, proba, n_classes)
 
 
+def _decode_output_rows(codes: PythonObject, names: PythonObject, context: PythonObject) raises -> PythonObject:
+    """PACK (lane w3f3-k): a multi-output vote's int32 codes (rows x
+    outputs) decoded per output through `names` (one label list per output:
+    code c of output j is `names[j][c]`), as one decode of the codes shifted
+    by the outputs' running class counts over the outputs' joined labels
+    (`labels_decode_i32_codes`, the 1-D route's decoder); then one list per
+    row of its outputs' labels (the multi-output text placement's form,
+    providers/python/member_ensemble_boundary_door.mojo `_decode_text_outputs`)."""
+    var b = _b()
+    var rows = Int(py=codes.shape[0])
+    var outputs = Int(py=codes.shape[1])
+    var joined = Python.list()
+    var offsets = List[Int](length=outputs, fill=0)
+    var total = 0
+    for j in range(outputs):  # driver-loop: over the outputs (their labels, once per call)
+        offsets[j] = total
+        var items = classifier_label_list(names[j], context)
+        for c in range(len(items)):  # driver-loop: over one output's labels
+            _ = py_call(joined.append, items[c])
+        total += len(items)
+    var shifted = List[Int32](length=rows * outputs, fill=Int32(0))
+    if rows > 0:
+        var src = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(codes)))
+        for i in range(rows):  # driver-loop: over the rows (each output's code shifted to the joined labels)
+            for j in range(outputs):  # small-loop(the outputs)
+                shifted[i * outputs + j] = src[i * outputs + j] + Int32(offsets[j])
+    _ = codes  # read through its address above
+    var flat = labels_decode_i32_codes(joined, shifted, context)
+    _ = shifted^
+    var result = Python.list()
+    for i in range(rows):  # driver-loop: over the rows (each row's labels, the returned objects)
+        var row = Python.list()
+        for j in range(outputs):  # small-loop(the outputs)
+            _ = py_call(row.append, flat[i * outputs + j])
+        _ = py_call(result.append, row)
+    return result
+
+
 def _clf_predict(model: PythonObject, binding: PythonObject, x_source: PythonObject,
                  context: PythonObject) raises -> PythonObject:
     """`KNeighborsClassifier.predict(X)`: the voted labels, int64 (decoded
@@ -1247,6 +1286,13 @@ def _clf_predict(model: PythonObject, binding: PythonObject, x_source: PythonObj
     var labels = result[0]
     var size = Int(py=labels.size)
     if _truth(family_field(fields, "outputs_2d_")):
+        var output_names = py_get(fields, PythonObject("_label_names"), PythonObject(None))
+        if output_names is not None:
+            # Per-output label names (lane w3f3-k: a multi-output state packed
+            # from a search over str / bool labels votes on codes).
+            var rows_of = _decode_output_rows(labels, output_names, labels_scope(model, context))
+            _ = labels  # keep the Python object alive through the native reads above
+            return rows_of
         var wide2 = family_array(family_call(_b().tuple, labels.shape), "<i8", context)
         labels_cast(Int(py=classical_address(labels)), "<i4", Int(py=classical_address(wide2)), "<i8", size, context)
         _ = labels  # keep the Python object alive through the native call above
