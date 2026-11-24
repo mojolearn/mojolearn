@@ -15,9 +15,10 @@ and the digests tools/mf_member8_digests.py.
     test_neighbors_kind_four       NEW kind 4 is refused ("unknown k-NN member kind")
     test_optics_words_and_sizes    OPTICS (x_cluster kind 3): 13 words refused; no `route.third` refused; a count
                                    min_samples 5 on 4 rows refused in `_optics_size`'s words before the entry is
-                                   called; kind mask FIT | EXPORT; IMPORT refused
+                                   called; kind mask FIT | EXPORT | IMPORT | IGNORES_Y; PREDICT in scikit-learn's
+                                   words; round b: an IMPORT of the arrays exports them back
     test_mds_words_and_mask        MDS (x_decomp kind 18): 13 words refused; 14 mint a state whose mask is
-                                   FIT | EXPORT; TRANSFORM and IMPORT refused
+                                   FIT | EXPORT | IMPORT | IGNORES_Y; TRANSFORM in scikit-learn's words
     test_se_refusals_before_entry  SpectralEmbedding (spectral kind 1, 15 words): mask FIT | EXPORT; a non-square
                                    precomputed X refused in `_se_execute`'s words; n_components 3 of 4 rows with
                                    drop_first refused by `_se_check_shape`; PREDICT refused
@@ -30,7 +31,8 @@ test_nn_metric_input_checked; accept `words[0] == 4.0` in NEW -> test_neighbors_
 core/xcluster_member.mojo make `_optics_size` return `Int(value)` without its range test ->
 test_optics_words_and_sizes; set XDECOMP_MDS_PARAM_COUNT to 13 -> test_mds_words_and_mask; drop the square check
 of `_fit_se` -> test_se_refusals_before_entry; drop `kind == 4` from the XCLUSTER row of `rfe_named_block` ->
-test_rfe_named_rows.
+test_rfe_named_rows; store the reachability block of `_optics_import` into `core_distances` ->
+test_optics_words_and_sizes; drop MEMBER_IGNORES_Y from `_POINTS` -> test_nn_points_round_trip.
 """
 from std.testing import TestSuite
 from std.memory import bitcast
@@ -40,9 +42,12 @@ from core.member_abi import (
     MemberCall, MemberMatrix, MemberRef, member_call, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT,
     MEMBER_OP_PREDICT, MEMBER_OP_TRANSFORM, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_OP_CAPABILITIES,
     MEMBER_CAN_FIT, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_PREDICT, MEMBER_CAN_TRANSFORM,
-    MEMBER_BLOCK_FAMILY, MEMBER_IMPORT_DONE,
+    MEMBER_BLOCK_FAMILY, MEMBER_IMPORT_DONE, MEMBER_IGNORES_Y, MEMBER_BLOCK_SCALARS, MEMBER_F64, MEMBER_I32,
 )
-from core.member_families import MEMBER_FAMILY_XCLUSTER, MEMBER_FAMILY_XDECOMP
+from core.member_families import (
+    MEMBER_FAMILY_XCLUSTER, MEMBER_FAMILY_XDECOMP, MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_PREP,
+    MEMBER_FAMILY_XNEIGHBORS,
+)
 from core.neighbors_member import neighbors_member_v2, NEIGHBORS_BLOCK_POINTS
 from core.xcluster_member import xcluster_member_v2
 from core.xdecomp_member import xdecomp_member_v2, XDECOMP_KIND_MDS, XDECOMP_MDS_PARAM_COUNT
@@ -104,6 +109,7 @@ def test_nn_points_round_trip() raises:
         require((mask & MEMBER_CAN_FIT) != 0 and (mask & MEMBER_CAN_EXPORT) != 0 and (mask & MEMBER_CAN_IMPORT) != 0,
                 "NearestNeighbors kind mask lacks FIT / EXPORT / IMPORT")
         require((mask & MEMBER_CAN_PREDICT) == 0, "NearestNeighbors kind mask has PREDICT")
+        require((mask & MEMBER_IGNORES_Y) != 0, "NearestNeighbors kind mask lacks MEMBER_IGNORES_Y")
         call.x = MemberMatrix(Int(x.unsafe_ptr()), 4, 3)
         call.y = MemberMatrix(Int(y.unsafe_ptr()), 4, 1)
         _ = member_call(_ref(0), MEMBER_OP_FIT, call)
@@ -114,7 +120,8 @@ def test_nn_points_round_trip() raises:
         var got = _F32P(unsafe_from_address=call.dst.data)
         for i in range(12):  # small-loop(the 4 x 3 points)
             require(got[i] == x[i], "NearestNeighbors points word " + String(i) + " differs from X")
-        require(_raises(0, MEMBER_OP_PREDICT, call, "NearestNeighbors"), "NearestNeighbors PREDICT was not refused")
+        require(_raises(0, MEMBER_OP_PREDICT, call, "AttributeError: 'NearestNeighbors' object has no attribute 'predict'"),
+                "NearestNeighbors PREDICT was not refused in scikit-learn's words")
     finally:
         _free(0, call)
     var back = MemberCall(DeviceRoute(DEVICE_CPU))
@@ -197,7 +204,8 @@ def test_optics_words_and_sizes() raises:
     _new(1, words, call)
     try:
         var mask = member_call(_ref(1), MEMBER_OP_CAPABILITIES, call)
-        require(mask == (MEMBER_CAN_FIT | MEMBER_CAN_EXPORT), "OPTICS kind mask is not FIT | EXPORT")
+        require(mask == (MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_IGNORES_Y),
+                "OPTICS kind mask is not FIT | EXPORT | IMPORT | IGNORES_Y")
         call.x = MemberMatrix(Int(x.unsafe_ptr()), 4, 2)
         require(_raises(1, MEMBER_OP_FIT, call, "holds no OPTICS entry"), "OPTICS fit without route.third")
         # An entry that is never called: the size refusal comes first.
@@ -206,8 +214,37 @@ def test_optics_words_and_sizes() raises:
         require(_raises(1, MEMBER_OP_FIT, call,
                         "min_samples must be no greater than the number of samples (4) and >= 2, got 5"),
                 "OPTICS min_samples 5 on 4 rows was not refused in _optics_size's words")
+        require(_raises(1, MEMBER_OP_PREDICT, call, "AttributeError: 'OPTICS' object has no attribute 'predict'"),
+                "OPTICS PREDICT was not refused in scikit-learn's words")
+        # Round b: IMPORT of the five per-row arrays and the scalars completes a state that exports them.
+        var labels: List[Int32] = [0, 0, -1, 1]
+        var reach: List[Float32] = [1.0e30, 0.5, 0.25, 0.75]
+        var ints = List[Int32](length=4, fill=Int32(1))
+        var width: List[Float64] = [2.0]
+        call.flags = 0
         call.block = MEMBER_BLOCK_FAMILY + 1
-        require(_raises(1, MEMBER_OP_IMPORT, call, "OPTICS"), "OPTICS IMPORT was not refused")
+        call.x = MemberMatrix(Int(labels.unsafe_ptr()), 1, 4, MEMBER_I32)
+        _ = member_call(_ref(1), MEMBER_OP_IMPORT, call)
+        for blk in range(40, 44):  # small-loop(the four other per-row blocks)
+            call.block = MEMBER_BLOCK_FAMILY + blk
+            if blk <= 41:
+                call.x = MemberMatrix(Int(reach.unsafe_ptr()), 1, 4)
+            else:
+                call.x = MemberMatrix(Int(ints.unsafe_ptr()), 1, 4, MEMBER_I32)
+            _ = member_call(_ref(1), MEMBER_OP_IMPORT, call)
+        call.block = MEMBER_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(width.unsafe_ptr()), 1, 1, MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(_ref(1), MEMBER_OP_IMPORT, call)
+        call.flags = 0
+        call.block = MEMBER_BLOCK_FAMILY + 41
+        _ = member_call(_ref(1), MEMBER_OP_EXPORT, call)
+        require(call.dst.cols == 4 and _F32P(unsafe_from_address=call.dst.data)[2] == 0.25,
+                "an imported OPTICS state exports other reachability")
+        _ = len(labels)
+        _ = len(reach)
+        _ = len(ints)
+        _ = len(width)
     finally:
         _free(1, call)
     _ = len(words)
@@ -230,10 +267,11 @@ def test_mds_words_and_mask() raises:
     _new(2, words, call)
     try:
         var mask = member_call(_ref(2), MEMBER_OP_CAPABILITIES, call)
-        require(mask == (MEMBER_CAN_FIT | MEMBER_CAN_EXPORT), "MDS kind mask is not FIT | EXPORT")
+        require(mask == (MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_IGNORES_Y),
+                "MDS kind mask is not FIT | EXPORT | IMPORT | IGNORES_Y")
         require((mask & MEMBER_CAN_TRANSFORM) == 0, "MDS kind mask has TRANSFORM")
-        require(_raises(2, MEMBER_OP_TRANSFORM, call, "MDS"), "MDS TRANSFORM was not refused")
-        require(_raises(2, MEMBER_OP_IMPORT, call, "MDS"), "MDS IMPORT was not refused")
+        require(_raises(2, MEMBER_OP_TRANSFORM, call, "AttributeError: 'MDS' object has no attribute 'transform'"),
+                "MDS TRANSFORM was not refused in scikit-learn's words")
     finally:
         _free(2, call)
     _ = len(words)
@@ -254,11 +292,13 @@ def test_se_refusals_before_entry() raises:
     _new(3, precomputed, call)
     try:
         var mask = member_call(_ref(3), MEMBER_OP_CAPABILITIES, call)
-        require(mask == (MEMBER_CAN_FIT | MEMBER_CAN_EXPORT), "SpectralEmbedding kind mask is not FIT | EXPORT")
+        require(mask == (MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_IGNORES_Y),
+                "SpectralEmbedding kind mask is not FIT | EXPORT | IMPORT | IGNORES_Y")
         call.x = MemberMatrix(Int(x.unsafe_ptr()), 4, 3)
         require(_raises(3, MEMBER_OP_FIT, call, "must be a square affinity matrix or a SciPy sparse matrix, "
                         + "got shape (4, 3)"), "SpectralEmbedding non-square precomputed X was not refused")
-        require(_raises(3, MEMBER_OP_PREDICT, call, "SpectralEmbedding"), "SpectralEmbedding PREDICT was not refused")
+        require(_raises(3, MEMBER_OP_PREDICT, call, "AttributeError: 'SpectralEmbedding' object has no attribute 'predict'"),
+                "SpectralEmbedding PREDICT was not refused in scikit-learn's words")
     finally:
         _free(3, call)
     var dataset = _se_words(3, 0)
@@ -286,6 +326,18 @@ def test_rfe_named_rows() raises:
     require(rfe_named_block(MEMBER_FAMILY_XDECOMP, 0, "var_") == MEMBER_BLOCK_FAMILY + 3,
             "IncrementalPCA var_ is not FAMILY+3")
     require(rfe_named_block(MEMBER_FAMILY_XDECOMP, 3, "mean_") == 0, "NMF has mean_")
+    # Round b: LDA covariance_, MinCovDet precision_, BayesianGaussianMixture means_, SimpleImputer statistics_,
+    # NearestCentroid centroids_ / within_class_std_dev_ / deviations_.
+    require(rfe_named_block(MEMBER_FAMILY_DISCRIMINANT, 0, "covariance_") == MEMBER_BLOCK_FAMILY + 7, "LDA covariance_")
+    require(rfe_named_block(MEMBER_FAMILY_DISCRIMINANT, 1, "covariance_") == 0, "QDA has a 2-D covariance_")
+    require(rfe_named_block(MEMBER_FAMILY_XDECOMP, 14, "precision_") == MEMBER_BLOCK_FAMILY + 1, "MinCovDet precision_")
+    require(rfe_named_block(MEMBER_FAMILY_XCLUSTER, 5, "means_") == MEMBER_BLOCK_FAMILY + 9, "BGMM means_")
+    require(rfe_named_block(MEMBER_FAMILY_PREP, 7, "statistics_") == MEMBER_BLOCK_FAMILY, "SimpleImputer statistics_")
+    require(rfe_named_block(MEMBER_FAMILY_XNEIGHBORS, 0, "centroids_") == MEMBER_BLOCK_FAMILY, "NearestCentroid centroids_")
+    require(rfe_named_block(MEMBER_FAMILY_XNEIGHBORS, 0, "within_class_std_dev_") == MEMBER_BLOCK_FAMILY + 1,
+            "NearestCentroid within_class_std_dev_")
+    require(rfe_named_block(MEMBER_FAMILY_XNEIGHBORS, 0, "deviations_") == MEMBER_BLOCK_FAMILY + 2,
+            "NearestCentroid deviations_")
 
 
 def main() raises:

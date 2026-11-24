@@ -64,7 +64,7 @@ from core.member_families import (
     MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_KERNEL_SVM, MEMBER_FAMILY_KERNEL_RIDGE,
     MEMBER_FAMILY_KERNEL_APPROX, MEMBER_FAMILY_GP, MEMBER_FAMILY_KMEANS, MEMBER_FAMILY_XCLUSTER, MEMBER_FAMILY_MIXTURE,
     MEMBER_FAMILY_DECOMPOSITION, MEMBER_FAMILY_XDECOMP, MEMBER_FAMILY_SCALER, MEMBER_FAMILY_PREP, MEMBER_FAMILY_SELECT,
-    MEMBER_FAMILY_XLINEAR, MEMBER_FAMILY_PLS,
+    MEMBER_FAMILY_XLINEAR, MEMBER_FAMILY_PLS, MEMBER_FAMILY_XNEIGHBORS,
 )
 from core.member_notices import member_notices_take
 from core.member_set_run import MemberFitExtras, member_fit_extras_apply, member_fit_extras_clear
@@ -619,6 +619,8 @@ def _prep_named(kind: Int, name: String) -> Int:
         if name == "scale_":
             return _F + 1
         return 0
+    if kind == 7 and name == "statistics_":  # SimpleImputer (round b, lane mf-member8): PREP_BLOCK_CENTER, 1 x features
+        return _F
     if kind == 5 and name == "quantiles_":  # QuantileTransformer
         return _F + 2  # PREP_BLOCK_EXTRA
     if kind == 6 and name == "lambdas_":  # PowerTransformer
@@ -668,6 +670,10 @@ def rfe_named_block(family: Int, kind: Int, name: String) -> Int:
         # fit publishes none: providers/python/member_rfe_boundary_door.mojo refuses the name there in
         # attrgetter's words, and a fit with no exemplar exports a 0 x features block, squared and summed to
         # zeros as scikit-learn's `_get_feature_importances` sums its empty cluster_centers_).
+        if kind == 5 and name == "means_":
+            # Round b (lane mf-member8): BayesianGaussianMixture (and GaussianMixture on this kind's plain words):
+            # means_ is the entry's f[1] block (_BLOCK_BGMM + 1 = FAMILY+9), n_components x features.
+            return _F + 9
         return _F if ((kind == 0 or kind == 1 or kind == 2 or kind == 4) and name == "cluster_centers_") else 0
     if family == MEMBER_FAMILY_MIXTURE:
         return _F + 1 if name == "means_" else 0  # member_mixture_boundary_door PACK: means_ (k x d)
@@ -687,6 +693,14 @@ def rfe_named_block(family: Int, kind: Int, name: String) -> Int:
         if kind == 5 and name == "lambda_":
             return _F + 1  # XL_MEMBER_BLOCK_LAMBDA (ARDRegression)
         return _F + 9 if ((kind == 4 or kind == 5) and name == "X_offset_") else 0  # XL_MEMBER_BLOCK_X_OFFSET
+    if family == MEMBER_FAMILY_XNEIGHBORS and kind == 0:
+        # Round b (lane mf-member8): NearestCentroid (core/xneighbors_member.mojo NC_BLOCK_*): centroids_ and
+        # deviations_ (classes x features), within_class_std_dev_ (features); scikit-learn publishes all three.
+        if name == "centroids_":
+            return _F
+        if name == "within_class_std_dev_":
+            return _F + 1
+        return _F + 2 if name == "deviations_" else 0
     if family == MEMBER_FAMILY_PLS:
         if name == "_x_mean":
             return _F
