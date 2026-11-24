@@ -21,6 +21,7 @@ from bindings.py_balanced import py_type, py_fields, py_get, py_item, py_setitem
 from bindings.optimizer_device_native_door import device_entries, device_shape, device_allocate, device_set, shape_count
 from bindings.optimizer_keys_unpack import optimizer_keys
 from bindings.linalg_keys_unpack import linalg_keys
+from bindings.native_loaded_module_door import native_loaded_module
 from core.function_device import FunctionDevice
 from core.device_route import DEVICE_CPU
 from core.train_dev_pool import TRAIN_DEV_F32, train_dev_itemsize, train_dev_words
@@ -38,12 +39,19 @@ def lin_is_device_array(value: PythonObject, held: PythonObject) raises -> Bool:
     return py_type(value) is held[0]
 
 
-def lin_any_device_array(args: PythonObject, first: Int, stop: Int, held: PythonObject) raises -> Bool:
-    """True when any of `args[first:stop]` is a TrainDeviceArray (identity compares only; False when `held` is None)."""
+def lin_any_device_array(args: PythonObject, first: Int, stop: Int, held: PythonObject, pairs: Bool = False) raises -> Bool:
+    """True when any of `args[first:stop]` is a TrainDeviceArray (identity compares only; False when `held` is None);
+    `pairs`: also the first item of a 2-tuple argument (matmul_int8's (codes, exponents) operands)."""
     if held is None:
         return False
+    var cls = held[0]
+    var tuple_type = native_loaded_module("builtins").tuple if pairs else PythonObject(None)
     for i in range(first, stop):  # driver-loop: over the call's public arguments (at most seven)
-        if py_type(args[i]) is held[0]:
+        var kind = py_type(args[i])
+        if kind is cls:
+            return True
+        # matmul_int8 takes a (codes, exponents) pair per operand: its first item decides.
+        if pairs and kind is tuple_type and len(args[i]) == 2 and py_type(args[i][0]) is cls:
             return True
     return False
 
@@ -57,7 +65,7 @@ def lin_dev_device(device: FunctionDevice, who: String) raises:
 
 
 @fieldwise_init
-struct LinDevOperand(Movable):
+struct LinDevOperand(Copyable, Movable):
     """One admitted device-array operand: its pool handle, shape and storage dtype code."""
     var handle: Int
     var shape: List[Int]

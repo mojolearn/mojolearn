@@ -9,7 +9,7 @@ from gemm.host.linalg_fused_run import gemm_fused_native
 from core.shared_slot import SharedSlot
 
 comptime LINALG_NATIVE_ABI_NAME = "mojolearn.linalg.v1"
-comptime LINALG_NATIVE_OPERATION_COUNT = 17
+comptime LINALG_NATIVE_OPERATION_COUNT = 23
 
 
 def linalg_native_operation(op: Int, a: List[Int], p: List[Int]) raises -> Int:

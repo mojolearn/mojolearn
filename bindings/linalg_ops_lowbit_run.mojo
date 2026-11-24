@@ -28,6 +28,12 @@ comptime LIN_OP_GEMM_FUSED = 15
 # lane vdf-linalg4 (2026-11-24): the training device-array forms (gemm/linalg_dev_arrays.mojo): the address words
 # are pool handles. GPU identical sets only; the host table refuses them.
 comptime LIN_OP_GEMM_DEV = 16
+comptime LIN_OP_TO_BF16_DEV = 17
+comptime LIN_OP_FROM_BF16_DEV = 18
+comptime LIN_OP_QUANTIZE_INT8_DEV = 19
+comptime LIN_OP_DEQUANTIZE_INT8_DEV = 20
+comptime LIN_OP_GEMM_BF16_DEV = 21
+comptime LIN_OP_GEMM_INT8_DEV = 22
 # The operation count the door admits (gemm/linalg_dispatch.mojo
 # LINALG_NATIVE_OPERATION_COUNT).
-comptime LIN_OPERATION_COUNT = 17
+comptime LIN_OPERATION_COUNT = 23
