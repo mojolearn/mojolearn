@@ -198,6 +198,7 @@ from core.msel_refusal_words import (
     msel_empty_scoring_words, msel_kfold_words, MSEL_REFIT_CALLBACK_WORDS, MSEL_NO_FITS_WORDS,
 )
 from bindings.prep_keys_unpack import prep_keys
+from bindings.trees_meta_device_door import meta_kind_device
 
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -626,6 +627,9 @@ def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
         order_kinds.append(est_kind)
         var child_labels = _child_labels(est_kind, est_labels, b)
         var children = _meta_children(est, est_fields, est_kind, est_context, b, prepared, owner.serving)
+        # Its explicit device, admitted only when every nested estimator runs there already (lane vdf-meta,
+        # bindings/trees_meta_device_door.mojo; None: one identity compare).
+        meta_kind_device(est, est_fields, est_kind, children, est_context, b)
         for c in range(len(children)):  # driver-loop: over one meta-estimator's nested estimators
             var child = children[c]
             var child_plan = prep_estimator_plan(child, est_context)

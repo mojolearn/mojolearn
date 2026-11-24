@@ -117,6 +117,7 @@ from bindings.prep_native_estimator_door import (
 )
 from bindings.classical_labels_door import _label_list, classical_score_from_codes
 from bindings.member_owner_unpack import member_mark
+from bindings.trees_meta_device_door import meta_members_device, meta_member_device_set
 from providers.python.member_xneighbors_boundary_door import xneighbors_kind_reads_marker, xneighbors_marker_index
 from core.xneighbors_member import LP_MARKER_WORD
 from core.ensemble_member import META_CAL_BINARY_MARKER_WORDS
@@ -500,8 +501,16 @@ def _require_member(est: PythonObject, owner: String, context: PythonObject) rai
     prep_estimator_admit(est, owner, context)
 
 
-def _clone(est: PythonObject, context: PythonObject) raises -> PythonObject:
-    return prep_estimator_clone(est, context)
+def _clone(est: PythonObject, device: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A member clone for one fit. `device` is the meta-estimator's stored
+    word, read once per fit: None keeps the member's own device (today's
+    route, one identity compare); an explicit word is stored on a clone that
+    names none (bindings/trees_meta_device_door.mojo; the members were
+    admitted by `meta_members_device` first)."""
+    var clone = prep_estimator_clone(est, context)
+    if device is not None:
+        meta_member_device_set(device, clone)
+    return clone
 
 
 def _forest_classifier_member(member: PythonObject, context: PythonObject) raises -> Bool:
@@ -1149,13 +1158,16 @@ def _voting_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_we
         _set(model, "n_classes_", PythonObject(len(labels.classes)))
         target = labels.codes
     var active = _active(_attr(model, nk[].k_estimators, PythonObject(None)), owner, context)
+    # The members run on the ensemble's device (bindings/trees_meta_device_door.mojo): read once per fit.
+    var device = py_get(fields, "device")
+    meta_members_device(device, active.ests, owner, context, trees_builtins())
     var weights = _member_weights(active.names, active.ests, sample_weight, _rows(Xa), context)
     var fitted = Python.list()
     _set(model, "estimators_", fitted)
     var m = len(active.ests)
     var clones = Python.list()
     for i in range(m):  # driver-loop: over members
-        _ = py_call(clones.append, _clone(active.ests[i], context))
+        _ = py_call(clones.append, _clone(active.ests[i], device, context))
     # Native members read typed targets: the class codes, or (regressors) y
     # as float32 words (lane mf-del8: no member fit door is left; a y the
     # float32 admission refuses raises its words, a y whose length is not
@@ -1593,6 +1605,10 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     var all_ests = py_call(trees_builtins().list, active.ests)
     _ = py_call(all_names.append, PythonObject("final_estimator"))
     _ = py_call(all_ests.append, final)
+    # The members and the final estimator run on the ensemble's device
+    # (bindings/trees_meta_device_door.mojo): read once per fit, checked before any fit.
+    var device = py_get(py_fields(model), "device")
+    meta_members_device(device, all_ests, owner, context, trees_builtins())
     var sw = _member_weights(all_names, all_ests, sample_weight, n, context)
     var sw_addr = 0
     if sw is not None:
@@ -1610,7 +1626,7 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
         final_counts = _repeat(k_classes, 1)
     var full = Python.list()
     for i in range(n_members):  # driver-loop: over members
-        _ = py_call(full.append, _clone(active.ests[i], context))
+        _ = py_call(full.append, _clone(active.ests[i], device, context))
     var jobs = native_unit_jobs(_attr(model, nk[].k_n_jobs, PythonObject(None)), owner)
     var whole_given = PythonObject(None)  # THE GIVEN y of every row (lane mf-tail5)
     if not codes and y_given is not None:
@@ -1689,7 +1705,7 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
                 # fold's members read the fold matrices as admitted too.
                 admitted_hold_rows_of(Xa, Xtr, trees_address(Xtr), Int(py=tr_view.shape[0]), d)
             for i in range(n_members):  # driver-loop: over members
-                _ = py_call(unit_members.append, _clone(active.ests[i], context))
+                _ = py_call(unit_members.append, _clone(active.ests[i], device, context))
                 _ = py_call(unit_x.append, Xtr)
                 _ = py_call(unit_y.append, y_tr)
                 _ = py_call(unit_w.append, w_tr)
@@ -1734,7 +1750,7 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     _ = y_view
     _set(model, "_widths_", widths)
     _set(model, "named_estimators_", _named(active.names, fitted))
-    var final_ = _clone(final, context)
+    var final_ = _clone(final, device, context)
     _set(model, "final_estimator_", final_)
     var meta32 = _f32_array(trees_reshape(meta, Python.tuple(n, width), context), 2, "meta", context)
     _fit_members(_repeat(final_, 1), meta32, n, width, _repeat(y_full, 1), not codes, sw, final_counts, jobs,
@@ -1935,7 +1951,7 @@ def _estimators_key(table: PythonObject) raises -> LinearEntryKey:
 
 
 def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonObject, Ya: PythonObject,
-                           context: PythonObject) raises -> PythonObject:
+                           device: PythonObject, context: PythonObject) raises -> PythonObject:
     """`MultiOutputRegressor._fit_ridge_multi`: every target in one ridge
     program (glm/impl/ridge_multi.mojo)."""
     # UNPACK: the dimensions, the member's two parameters, the image's entry
@@ -1989,7 +2005,7 @@ def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonO
     var ic = _F32P(unsafe_from_address=trees_address(icpt32))
     _ = icpt32  # keep the Python object alive through the native call above
     for j in range(m):  # driver-loop: over the output columns (one fitted ridge each)
-        var e = _clone(est, context)
+        var e = _clone(est, device, context)
         _set(e, "solver_", PythonObject("eig"))
         _set(e, "coef_", _copy_block(coef, j * d, (j + 1) * d, "<f4", context))
         _set(e, "_x_mean", xm)
@@ -2018,11 +2034,15 @@ def _multioutput_regressor_fit(model: PythonObject, X: PythonObject, y: PythonOb
     var nk = trees_keys()
     var est = _attr(model, nk[].k_estimator, PythonObject(None))
     _require_member(est, _owner(model), context)
+    # The member runs on the ensemble's device (bindings/trees_meta_device_door.mojo): read once per fit.
+    # The one-program ridge reads its table from this estimator's run context (`context`).
+    var device = py_get(py_fields(model), "device")
+    meta_members_device(device, Python.list(est), _owner(model), context, trees_builtins())
     var weights = _member_weights(Python.list(PythonObject(None)), Python.list(est), sample_weight, _rows(Xa), context)
     _set(model, "_multi_ridge", PythonObject(None))
     var table = _ridge_multi_entry(model, est, weights, context)
     if table is not None and _cols(Ya) > 0:
-        return _multioutput_ridge_fit(model, table, Xa, Ya, context)
+        return _multioutput_ridge_fit(model, table, Xa, Ya, device, context)
     var n = _rows(Xa)
     var fitted = Python.list()
     _set(model, "estimators_", fitted)
@@ -2035,7 +2055,7 @@ def _multioutput_regressor_fit(model: PythonObject, X: PythonObject, y: PythonOb
         var yj = trees_reshape(_gather(xt, trees_address(Ya), n, _cols(Ya), rows, col, context), Python.tuple(n), context)
         _ = Ya  # keep the Python object alive through the native call above
         _ = py_call(columns.append, yj)
-        _ = py_call(clones.append, _clone(est, context))
+        _ = py_call(clones.append, _clone(est, device, context))
         _ = py_call(column_given.append, Python.tuple(y, PythonObject(None), PythonObject(j)))
     # The columns are independent members: one native member set (parallel;
     # a member the set does not take is refused in its refuser's words).
@@ -2174,6 +2194,9 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
     _multioutput_y(target)
     var est = _attr(model, nk[].k_estimator, PythonObject(None))
     _require_member(est, _owner(model), context)
+    # The member runs on the ensemble's device (bindings/trees_meta_device_door.mojo): read once per fit.
+    var device = py_get(py_fields(model), "device")
+    meta_members_device(device, Python.list(est), _owner(model), context, b)
     var weights = _member_weights(Python.list(PythonObject(None)), Python.list(est), sample_weight, n, context)
     var fitted = Python.list()
     var classes = Python.list()
@@ -2195,7 +2218,7 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
         _set(model, "classes_", classes)
         for j in range(m):  # driver-loop: over the output columns (one member each)
             var labels = trees_encode_labels(_copy_block(T, j * rows_n, (j + 1) * rows_n, String(T.dtype), context), label_context)
-            _ = py_call(clones.append, _clone(est, context))
+            _ = py_call(clones.append, _clone(est, device, context))
             _ = py_call(code_columns.append, labels.codes)
             _ = py_call(counts.append, PythonObject(len(labels.classes)))
             _ = py_call(classes.append, labels.classes)
@@ -2216,7 +2239,7 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
         for j in range(m):  # driver-loop: over the output columns (one member each)
             var column = py_call(b.list, py_call(b.map, py_call(getter, PythonObject(j)), rows))  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time
             var labels = trees_encode_labels(column, label_context)
-            _ = py_call(clones.append, _clone(est, context))
+            _ = py_call(clones.append, _clone(est, device, context))
             _ = py_call(code_columns.append, labels.codes)
             _ = py_call(counts.append, PythonObject(len(labels.classes)))
             _ = py_call(classes.append, labels.classes)
@@ -2567,6 +2590,9 @@ def _ovr_fit(model: PythonObject, X: PythonObject, y: PythonObject, context: Pyt
     var nk = trees_keys()
     var est = _attr(model, nk[].k_estimator, PythonObject(None))
     _require_member(est, _owner(model), context)
+    # The member runs on the ensemble's device (bindings/trees_meta_device_door.mojo): read once per fit.
+    var device = py_get(py_fields(model), "device")
+    meta_members_device(device, Python.list(est), _owner(model), context, trees_builtins())
     var targets = Python.list()
     if k == 2:
         _ = py_call(targets.append, labels.codes)
@@ -2578,7 +2604,7 @@ def _ovr_fit(model: PythonObject, X: PythonObject, y: PythonObject, context: Pyt
     _set(model, "estimators_", fitted)
     var clones = Python.list()
     for i in range(len(targets)):  # driver-loop: over members
-        _ = py_call(clones.append, _clone(est, context))
+        _ = py_call(clones.append, _clone(est, device, context))
     # One binary member per target (0/1 codes, two classes): independent,
     # fitted together.
     _fit_members(clones, Xa, _rows(Xa), _cols(Xa), targets, False, PythonObject(None),
@@ -2899,8 +2925,14 @@ def _cal_rows_resident(base: PythonObject, Xa: PythonObject, n: Int, d: Int, con
     MEMBER_CAN_SCOPE); a host image's member keeps the gathered rows."""
     if n <= 0 or d <= 0 or String(py=Xa.dtype) != "<f4" or String(py=Xa.order) != "C":
         return False
-    var plan = prep_estimator_plan(base, context)
     var nk = trees_keys()
+    # device="cpu" beside a GPU set (lane vdf-meta): this fit runs in the CPU
+    # run context (bindings/trees_route_boundary_door.mojo `trees_cpu_context`,
+    # the context that names itself), its base on the host images, which keep
+    # the gathered rows: no device scope is entered. Same rows, same order.
+    if py_get(context, nk[].k_device_cpu_context) is context:
+        return False
+    var plan = prep_estimator_plan(base, context)
     return plan is not None and _truthy(py_get(plan, nk[].k_device_rows, PythonObject(False)))
 
 
@@ -2999,7 +3031,7 @@ def _cal_marker(base: PythonObject, classes: PythonObject, context: PythonObject
 
 def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: PythonObject, n: Int, d: Int,
                 k: Int, codes: PythonObject, classes: PythonObject, splits: PythonObject, ensemble: Bool, jobs: Int,
-                pairs: PythonObject, context: PythonObject) raises:
+                pairs: PythonObject, device: PythonObject, context: PythonObject) raises:
     """CalibratedClassifierCV.fit as UNPACK / RUN / PACK over ONE native
     member set (lanes mf-cal, mf-cal2 and mf-cal3, 2026-11-23;
     xtrees/trees_calibrated_fit_run.mojo module note), `pairs` filled in
@@ -3073,7 +3105,7 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
     var codes_address = trees_address(codes)
     var clones = Python.list()
     for u in range(units):  # driver-loop: over the cv folds (+ the full-X member), admission once each
-        var e = _clone(base, context)
+        var e = _clone(base, device, context)
         _ = py_call(clones.append, e)
         var draw = 0
         var count = 0
@@ -3273,6 +3305,9 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     if base is None:
         base = prep_estimator_clone(py_item(py_item(context, nk[].k_native_estimator_defaults), nk[].k_LinearSVC), context)
     _require_member(base, _owner(model), context)
+    # The base runs on the calibration's device (bindings/trees_meta_device_door.mojo): read once per fit.
+    var device = py_get(py_fields(model), "device")
+    meta_members_device(device, Python.list(base), _owner(model), context, trees_builtins())
     _set(model, "_cal_fast", PythonObject(None))
     var ensemble = _truthy(_attr(model, nk[].k_ensemble, PythonObject(True)))
     var splits = _splits(xt, _attr(model, nk[].k_cv, PythonObject(None)), X, y, n, labels.codes, not ensemble, k, context)
@@ -3303,7 +3338,8 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
         scope = _cal_scope_open(mctx)
     try:
         # Raises every refusal in its refuser's words (lanes mf-cal3, mf-del8).
-        _cal_native(model, xt, base, Xa, n, d, k, labels.codes, labels.classes, splits, ensemble, jobs, pairs, context)
+        _cal_native(model, xt, base, Xa, n, d, k, labels.codes, labels.classes, splits, ensemble, jobs, pairs, device,
+                    context)
     finally:
         if scope is not None:
             _cal_scope_close(scope, mctx)

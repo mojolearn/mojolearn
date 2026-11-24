@@ -1636,6 +1636,13 @@ class _TreesWrapperBase(_TreesEnsembleBase):
     """The meta-estimators' base: each public method is one call into
     bindings/trees_public_meta_door.mojo (operations `trees_meta_*`), which
     fits and queries the members through their own public methods."""
+    #: Takes `device=` (lane vdf-meta): every operation runs in the estimator's
+    #: run context (its device route, bindings/trees_route_boundary_door.mojo)
+    #: and the members follow the ensemble's device
+    #: (bindings/trees_meta_device_door.mojo); the check builds the other side
+    #: as the same estimator on the other device, in this process.
+    _mojolearn_device = True
+    vendor_used = _native_trees_bridge.device_vendor_used
 
 
 # ------------------------------------------------------------------ Voting
@@ -1676,6 +1683,12 @@ class VotingClassifier(_MetaClassifierScore, _FitTransformMixin, _TreesWrapperBa
         array.
     verbose : bool, default False
         Only False is accepted; True raises ``NotImplementedError``.
+
+    device : {None, "gpu", "cpu"}, default=None
+        Where the ensemble and its estimators are fitted and predict. None
+        uses this installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``. Each
+        estimator's own ``device`` must be None or the same value.
 
     Attributes
     ----------
@@ -1795,6 +1808,12 @@ class VotingRegressor(_MetaRegressorScore, _FitTransformMixin, _TreesWrapperBase
         core; the results do not depend on it.
     verbose : bool, default False
         Only False is accepted; True raises ``NotImplementedError``.
+
+    device : {None, "gpu", "cpu"}, default=None
+        Where the ensemble and its estimators are fitted and predict. None
+        uses this installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``. Each
+        estimator's own ``device`` must be None or the same value.
 
     Attributes
     ----------
@@ -1943,6 +1962,13 @@ class StackingClassifier(_MetaClassifierScore, _StackingBase):
     verbose : int, default 0
         Only 0 is accepted; any other value raises ``NotImplementedError``.
 
+    device : {None, "gpu", "cpu"}, default=None
+        Where the ensemble, its estimators and the final estimator are fitted
+        and predict. None uses this installation's device, ``"cpu"`` runs on
+        the CPU and ``"gpu"`` requires a GPU installation. Other values raise
+        ``ValueError``. Each estimator's own ``device`` must be None or the
+        same value.
+
     Attributes
     ----------
     estimators_ : list
@@ -2058,6 +2084,13 @@ class StackingRegressor(_MetaRegressorScore, _StackingBase):
     verbose : int, default 0
         Only 0 is accepted; any other value raises ``NotImplementedError``.
 
+    device : {None, "gpu", "cpu"}, default=None
+        Where the ensemble, its estimators and the final estimator are fitted
+        and predict. None uses this installation's device, ``"cpu"`` runs on
+        the CPU and ``"gpu"`` requires a GPU installation. Other values raise
+        ``ValueError``. Each estimator's own ``device`` must be None or the
+        same value.
+
     Attributes
     ----------
     estimators_ : list
@@ -2148,6 +2181,12 @@ class MultiOutputRegressor(_MetaRegressorScore, _TreesWrapperBase):
         The most members fitted at the same time. None and -1 use every
         core; the results do not depend on it.
 
+    device : {None, "gpu", "cpu"}, default=None
+        Where the ensemble and its estimators are fitted and predict. None
+        uses this installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``. Each
+        estimator's own ``device`` must be None or the same value.
+
     Attributes
     ----------
     estimators_ : list
@@ -2221,6 +2260,12 @@ class MultiOutputClassifier(_TreesWrapperBase):
     n_jobs : int or None, default None
         The most members fitted at the same time. None and -1 use every
         core; the results do not depend on it.
+
+    device : {None, "gpu", "cpu"}, default=None
+        Where the ensemble and its estimators are fitted and predict. None
+        uses this installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``. Each
+        estimator's own ``device`` must be None or the same value.
 
     Attributes
     ----------
@@ -2346,6 +2391,12 @@ class OneVsRestClassifier(_MetaClassifierScore, _TreesWrapperBase):
         core; the results do not depend on it.
     verbose : int, default 0
         Only 0 is accepted; any other value raises ``NotImplementedError``.
+
+    device : {None, "gpu", "cpu"}, default=None
+        Where the ensemble and its estimators are fitted and predict. None
+        uses this installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``. Each
+        estimator's own ``device`` must be None or the same value.
 
     Attributes
     ----------
@@ -2474,6 +2525,12 @@ class CalibratedClassifierCV(_MetaClassifierScore, _TreesWrapperBase):
         ``predict_proba`` averages the pairs. False: one set of calibrators fitted
         on the out-of-fold scores, and the classifier refitted on all rows.
         Values other than True or False raise ``NotImplementedError``.
+
+    device : {None, "gpu", "cpu"}, default=None
+        Where the ensemble and its estimators are fitted and predict. None
+        uses this installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``. Each
+        estimator's own ``device`` must be None or the same value.
 
     Attributes
     ----------
