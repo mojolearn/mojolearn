@@ -400,11 +400,11 @@ def _admit_nested(done: _Done, mut nested: _Nested, est: PythonObject, classifie
     if not owner.published:
         return False
     if classifier and labels is not None and (needs & MEMBER_CAN_FIT) != 0:
-        try:
-            if not member_cw_fill(owner, est, fields, labels, plan["context"], b):
-                return False
-        except:
-            return False  # a class_weight its estimator refuses: the door raises its words
+        # A class_weight its estimator refuses (lane mf-ens6b): its own words
+        # (`member_cw_fill` raises the estimator's, one body with its fit
+        # door), raised here where the door raised them at its fit.
+        if not member_cw_fill(owner, est, fields, labels, plan["context"], b):
+            return False
     var mask = 0
     try:
         mask = member_kind_capabilities(owner.plan)
@@ -1502,15 +1502,18 @@ def _admit_caller_rows(mut nested: _Nested, est: PythonObject, classifier: Bool,
     sub.plan.family = family
     sub.plan.kind = 0 if classifier else 1
     var mask = 0
+    # Its own refusal (lane mf-ens6b): the estimator's words, raised by the
+    # forest admission (one body with the door's `_rf_base` and target
+    # checks), where the door raised them at its fit.
+    if not forest_member_admit_common(est, sub.plan.kind, prefix, plan["context"], sub, True):
+        return False
     try:
-        if not forest_member_admit_common(est, sub.plan.kind, prefix, plan["context"], sub, True):
-            return False
         sub.plan.member = member_resolve_family(family, sub.plan.route)
         if not sub.plan.member.has(needs):
             return False
         mask = member_kind_capabilities(sub.plan)
     except:
-        return False  # its own refusal: the door raises the estimator's words
+        return False  # the family's image is not built: the door
     if (mask & needs) != needs or ((mask & MEMBER_CAN_CLASSIFIER) != 0) != classifier:
         return False
     nested.plans.append(sub.plan.copy())
@@ -2818,13 +2821,30 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             keys.append(String(py=names[i]))
             _ = py_call(givens.append, scoring_in[names[i]] if mapping else names[i])
         if len(keys) == 0:
-            return False  # the door's own words for an empty scoring
+            # AN EMPTY MULTI-METRIC SCORING (lane mf-ens6b): scikit-learn's
+            # own fit fails (sklearn 1.9 metrics/_scorer.py
+            # `_check_multimetric_scoring`, lines 634 and 644, from the
+            # search's `_get_scorers` before any fit); its words, natively.
+            if mapping:
+                raise Error("ValueError: An empty dict was passed. " + String(py=py_call(b.repr, scoring_in)))
+            raise Error("ValueError: The list/tuple elements must be unique strings of predefined scorers.  "
+                        + "Empty list was given. " + String(py=py_call(b.repr, scoring_in)))
     elif scoring_in is not None:
         keys.append(String(""))
         _ = py_call(givens.append, scoring_in)
     var refit = py_get(fields, "refit")
     if refit is None or (py_type(refit) is not b.bool and py_type(refit) is not b.str):
-        return False  # the door raises its words for a refit callback
+        # THE DOOR'S REFUSAL of a refit callback (lane mf-ens6b; bindings/
+        # msel_search_door.mojo `msel_search_fit`), in its order: no
+        # candidates, then its scorers (`msel_scorers`: each name's
+        # `msel_get_scorer`), then the refit words.
+        var drawn = _search_prepare(model, fields, context, b, prepared)
+        if drawn is not None and len(drawn[1]) == 0:
+            raise Error("ValueError: No fits were performed. Was the CV iterator empty? Were there no candidates?")
+        if many:
+            for j in range(len(givens)):  # driver-loop: over the scorer values (the door's admission, once)
+                _ = msel_get_scorer(givens[j], context)
+        raise Error("TypeError: Python refit callbacks are not supported; use a native bool or scorer-name refit policy")
     var refit_false = py_type(refit) is b.bool and not Bool(py=refit)
     var refit_scorer = 0
     if many and not refit_false:
@@ -2863,14 +2883,22 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                 tool_respond = MEMBER_OP_DECISION
             elif method == "predict_log_proba":
                 # `np.log(predict_proba(X))` in the member's precision (lane
-                # mf-msel5b); a class without the method: the door's words
+                # mf-msel5b); a class without the method (lane mf-ens6b): the
+                # door's units' `getattr` words, raised here by the same
+                # attribute read before any fit
                 if py_call(b.getattr, py_get(fields, "estimator"), PythonObject("predict_log_proba"),
                            PythonObject(None)) is None:
-                    return False
+                    _ = py_call(b.getattr, py_get(fields, "estimator"), PythonObject("predict_log_proba"))
                 tool_respond = MEMBER_OP_PREDICT_PROBA
                 tool_log = True
             else:
-                return False  # another method: the door's units raise its words
+                # ANOTHER METHOD (lane mf-ens6b): scikit-learn's own call fails
+                # (sklearn 1.9 model_selection/_validation.py line 1018,
+                # cross_val_predict's `method` StrOptions); its words, the
+                # options in sorted order (a set prints in hash order).
+                raise Error("ValueError: The 'method' parameter of cross_val_predict must be a str among "
+                            + "{'decision_function', 'predict', 'predict_log_proba', 'predict_proba'}. Got "
+                            + String(py=py_call(b.repr, tool[1])) + " instead.")
             if len(keys) > 0:
                 return False
     # Where the fold rows live (the docstring): read once per admission.
@@ -2899,14 +2927,15 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         _ = _split_cv(cv, context, b, split, fold_train, fold_test, _SEARCH_CV_CALLBACK_WORDS)
         folds = len(fold_test)
     else:
-        folds = 5 if cv is None else _int_word(cv, b)
-        if folds < 2 and cv is not None and py_type(cv) is b.int:
+        # None, an int or any integral value (a NumPy integer; lane mf-ens6b:
+        # read as `int(cv)`, as the door's split reads it, where it kept the
+        # door before)
+        folds = 5 if cv is None else Int(py=py_call(b.int, cv))
+        if folds < 2:
             # KFold's own refusal (lane mf-tail5b item 4, natively in its
             # words; the RUN raises the same for a fit's n_splits)
             raise Error("ValueError: k-fold cross-validation requires at least one train/test split by setting "
-                        + "n_splits=2 or more, got n_splits=" + String(Int(py=cv)) + ".")
-        if folds < 2:
-            return False
+                        + "n_splits=2 or more, got n_splits=" + String(folds) + ".")
     var error_score = py_get(fields, "error_score")
     var tolerate = 0.0
     var error_value = 0.0
@@ -3195,7 +3224,12 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                 classifier and tool_respond == MEMBER_OP_PREDICT_PROBA and not tool_log
                 and (nested.masks[c] & MEMBER_CAN_PREDICT_PROBA) != 0):
             # decision_function / predict_log_proba: MultiOutputClassifier has
-            # neither (scikit-learn's AttributeError, the door's words)
+            # neither (scikit-learn's AttributeError, the door's words: lane
+            # mf-ens6b raises them by the units' own attribute read, before
+            # any fit; a class that has it keeps the door)
+            var asked = String("predict_log_proba") if tool_log else String(py=tool[1])
+            if py_call(b.getattr, clones[c], PythonObject(asked), PythonObject(None)) is None:
+                _ = py_call(b.getattr, clones[c], PythonObject(asked))
             return False
         if multi and tool_respond == MEMBER_OP_PREDICT_PROBA:
             multi_proba = True  # (lane mf-tail5) one result block per output
@@ -3302,10 +3336,17 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     # context names (`_finish` reads its bindings; not loaded: the door).
     var trees = py_call(native_loaded_module("sys").modules.get, PythonObject("mojolearn._expansion_trees"))
     if trees is None:
-        return False
+        # not imported yet (lane mf-ens6b): imported once, as the metrics
+        # module is below, where the door kept the search before; an image
+        # that is not built (its ImportError) keeps the door's units
+        try:
+            trees = py_call(native_loaded_module("importlib").import_module,
+                            PythonObject("mojolearn._expansion_trees"))
+        except:
+            return False
     var trees_context = py_get(py_call(b.vars, trees), "_TREES_CONTEXT")
     if trees_context is None:
-        return False
+        return False  # the x_trees image is not built: the door's units (no META image to run on)
     # THE CLUSTER LABEL-PAIR ENTRY (lane mf-cluster5): the default-mode
     # metrics image the public doors resolve (`estimator_binding_mode`), its
     # key read and its entry resolved ONCE; the image is pinned below. Not
