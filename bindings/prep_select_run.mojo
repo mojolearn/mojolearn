@@ -560,6 +560,10 @@ def _xdecomp_named(kind: Int, name: String) -> Int:
         if name == "covariance_":
             return _F + 4
         return 0
+    if kind == 0 and name == "mean_":  # IncrementalPCA (lane mf-member8): XDECOMP_BLOCK_MEAN, 1 x features
+        return _F + 2
+    if kind == 0 and name == "var_":  # XDECOMP_BLOCK_VAR, 1 x features
+        return _F + 3
     # IncrementalPCA, NMF, Gaussian / Sparse RandomProjection, FastICA, FactorAnalysis, (MiniBatch)DictionaryLearning,
     # (MiniBatch)SparsePCA, LatentDirichletAllocation: components_ (components x features).
     if name == "components_" and (kind == 0 or kind == 3 or kind == 5 or kind == 6 or kind == 7 or kind == 8
