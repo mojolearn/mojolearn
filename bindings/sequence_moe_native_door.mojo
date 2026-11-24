@@ -128,7 +128,8 @@ def _words(fields: PythonObject, context: PythonObject) raises -> List[Int]:
     var norm = py_item(fields, nk[].k_norm_topk_prob)
     opt_scalar(norm, context)
     words.append(1 if Bool(py=norm) else 0)
-    opt_scalar(py_get(fields, nk[].k_numeric_mode), context)
+    # `numeric_mode` is admitted where it is read (lane vdf-seq: `_run` reads
+    # it once, on the host-array path only; it was read here and again there)
     return words^
 
 
@@ -316,6 +317,8 @@ def _initialize(fields: PythonObject, values: PythonObject, mode: PythonObject, 
 def _load(owner: PythonObject, fields: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
     if py_type(state) is not _b().dict:
         raise Error("TypeError: MoEBlock state requires an exact dict of native arrays")
+    var mode_keys = sequence_keys()
+    opt_scalar(py_get(fields, mode_keys[].k_numeric_mode), context)
     var keys = py_call(_b().list, state)
     for i in range(len(keys)):  # driver-loop: over state keys before keyed access
         if py_type(keys[i]) is not _b().str:
@@ -351,7 +354,9 @@ def _run(fields: PythonObject, values: PythonObject, context: PythonObject, back
     var x = values[0]
     # lane vdf-seq: None, or the CPU identical image's module of a
     # device="cpu" block beside a GPU set (resolved at construction). Such a
-    # block refuses resident input in words before any work.
+    # block refuses resident input in words before any work. This read takes
+    # the place of `_words`' `numeric_mode` read (now read once, below, on
+    # the host-array path only): a device=None block reads no more slots.
     var bound = py_get(fields, nk[].k__host_b)
     if bound is not None:
         seq_device_refuse_resident(x, "mojolearn.MoEBlock", "x", context)
@@ -427,7 +432,9 @@ def _run(fields: PythonObject, values: PythonObject, context: PythonObject, back
     var t = input.count // d
     if t > 2147483647 // e or t > 2147483647 // k:
         raise Error("ValueError: MoEBlock routing output exceeds signed 32-bit indexing")
-    var entries = seq_binding(py_get(fields, nk[].k_numeric_mode), context, bound)
+    var block_mode = py_get(fields, nk[].k_numeric_mode)
+    opt_scalar(block_mode, context)
+    var entries = seq_binding(block_mode, context, bound)
     # Host arrays in, host arrays out, on the layer's own image. A device
     # image reads the block's resident weights (a seventh word); the host
     # image uploads nothing and reads the three arrays. The route word

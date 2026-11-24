@@ -16,7 +16,7 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_words_unpack import optimizer_python_error, stash_python_error
-from bindings.optimizer_admission_door import opt_guards, opt_owner, opt_owner_mode, opt_value, opt_scalar, opt_schedule, opt_exact
+from bindings.optimizer_admission_door import opt_guards, opt_owner, opt_owner_mode, opt_owner_word, opt_value, opt_scalar, opt_schedule, opt_exact
 from bindings.optimizer_public_door import (
     OPT_DOOR,
     door_ready, owner_kind, refuse_kwargs, OptimizerRegistryPrepared, optimizer_prepare_registry, optimizer_publish_registry, new_array, TensorView, tensor_view,
@@ -144,15 +144,19 @@ struct OptimizerModeRoutes(Defaultable, Movable):
     # the identical-only operations.
     var held: List[PythonObject]
     var identical: List[PythonObject]
+    # lane vdf-seq: `held`'s form for the CPU identical training image of an
+    # explicit device="cpu" beside a GPU set (`optimizer_entries_cpu`)
+    var cpu_held: List[PythonObject]
 
     def __init__(out self):
         self.held = List[PythonObject]()
         self.identical = List[PythonObject]()
+        self.cpu_held = List[PythonObject]()
 
 
 # The named global may be shared by every Mojo extension in the process:
 # bump the name's version whenever OptimizerModeRoutes' layout changes.
-comptime OPTIMIZER_MODE_ROUTES = SharedSlot[OptimizerModeRoutes, "MojolearnOptimizerModeRoutesV1"]
+comptime OPTIMIZER_MODE_ROUTES = SharedSlot[OptimizerModeRoutes, "MojolearnOptimizerModeRoutesV2"]
 comptime OPTIMIZER_MODE_ROUTE_LIMIT = 8
 
 
@@ -199,6 +203,33 @@ def optimizer_entries(mode: PythonObject, context: PythonObject) raises -> Pytho
     routes[].held.append(selected)
     routes[].held.append(context)
     routes[].held.append(entries)
+    return entries
+
+
+def optimizer_entries_cpu(mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`training_entries_cpu` held as `optimizer_entries` holds the device
+    entries (lane vdf-seq, 2026-11-24): resolved once per mode object and
+    context, then pointer compares. A device="cpu" SGD / Adam / AdamW keeps
+    one `numeric_mode` object for its life, so every operation after its
+    first reads the held triple. A refusal is never held."""
+    var selected = mode
+    if selected is None:
+        var nk = optimizer_keys()
+        selected = py_item(py_item(context, nk[].k_backend), nk[].k__DEFAULT_MODE)
+    var routes = OPTIMIZER_MODE_ROUTES.get_or_create_ptr()
+    var held_count = len(routes[].cpu_held)
+    var at = 0
+    while at + 2 < held_count:  # driver-loop: over at most OPTIMIZER_MODE_ROUTE_LIMIT resolved mode objects
+        if routes[].cpu_held[at] is selected and routes[].cpu_held[at + 1] is context:
+            var found = routes[].cpu_held[at + 2]
+            return found
+        at += 3
+    var entries = training_entries_cpu(selected, context)
+    if held_count >= 3 * OPTIMIZER_MODE_ROUTE_LIMIT:
+        routes[].cpu_held.clear()
+    routes[].cpu_held.append(selected)
+    routes[].cpu_held.append(context)
+    routes[].cpu_held.append(entries)
     return entries
 
 
@@ -378,7 +409,7 @@ def optimizer_device_host(device: PythonObject, params: PythonObject, mode: Pyth
     elif py_type(params) is device_class:
         raise Error("ValueError: mojolearn." + where + " was given device='cpu' but its parameter is a "
             + "TrainDeviceArray, which lives on the GPU; copy it to the host first, or leave device=None")
-    _ = training_entries_cpu(mode, context)
+    _ = optimizer_entries_cpu(mode, context)
     return True
 
 
@@ -633,15 +664,15 @@ def optimizer_native(operation: Int, name: PythonObject, owner: PythonObject, va
             # so it must admit by itself; the two binaries share no trusted
             # word). Here only what this router reads is admitted: the exact
             # class, string field names and `numeric_mode`.
-            opt_owner_mode(owner, context)
+            selected_mode = opt_owner_mode(owner, context)
         else:
-            opt_owner(owner, context)
-        var owner_fields = py_fields(owner)
-        selected_mode = py_get(owner_fields, nk[].k_numeric_mode)
+            selected_mode = opt_owner_word(owner, context, False)
         # lane vdf-seq: an SGD / Adam / AdamW constructed with device="cpu"
         # beside a GPU set runs the CPU identical training image (resolved at
-        # construction; one slot read here, False for every other owner)
-        host_owner = py_get(owner_fields, nk[].k__host_device) is PythonObject(True)
+        # construction). The admission above returns `numeric_mode`, which
+        # this router used to read a second time; that read is now this one,
+        # so a device=None owner reads no more slots than before.
+        host_owner = py_get(py_fields(owner), nk[].k__host_device) is PythonObject(True)
     if operation == OPTIMIZER_OPN_GET_PARAMS:
         opt_scalar(values[0], context)
         return optimizer_params(owner, context)
@@ -649,7 +680,7 @@ def optimizer_native(operation: Int, name: PythonObject, owner: PythonObject, va
         return optimizer_set_params(owner, values[0], context)
     if operation == OPTIMIZER_OPN_EXPORT_OWNER:
         return optimizer_export_state(owner)
-    var entries = training_entries_cpu(selected_mode, context) if (fdev.host_beside or host_owner) else optimizer_entries(selected_mode, context)
+    var entries = optimizer_entries_cpu(selected_mode, context) if (fdev.host_beside or host_owner) else optimizer_entries(selected_mode, context)
     if operation == OPTIMIZER_OPN_LINEAR_FORWARD or operation == OPTIMIZER_OPN_LINEAR_BACKWARD:
         return training_linear_operation(operation, name, values, entries, context)
     if operation == OPTIMIZER_OPN_RMS_NORM_FORWARD or operation == OPTIMIZER_OPN_RMS_NORM_BACKWARD:

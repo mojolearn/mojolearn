@@ -11,10 +11,12 @@ One case per row count (5 and 96): width 16, 6 experts, top 2,
 renormalised; x, dy hashed normals, weights hashed uniforms in the block
 initialiser's ranges. The resident tensors are made with the executor's own
 `alloc` / `upload` (a device buffer on the device column, host memory on the
-CPU column), as `seq_tensor_alloc` / `seq_tensor_upload` make them. The
-cross-column equality (device column == CPU column) is the column digest of
-the release's one verification; this check pins the resident path to the
-host-input path inside each column.
+CPU column), as `seq_tensor_alloc` / `seq_tensor_upload` make them.
+
+On the device column the same case also runs the host-input entry on a
+`HostExec` in the same process (the CPU column's executor, the executor of
+the CPU identical image): device resident bytes == device host-input bytes
+== CPU column bytes, for every output.
 """
 from std.math import sqrt
 from autograd.route_ops import moe_backward_addrs, moe_backward_io
@@ -91,17 +93,18 @@ def _addrs(x: List[Float32], dy: List[Float32], router: List[Float32], gate_up: 
 
 
 def _same(a: _Out, b: _Out, label: String) raises:
-    require(same_words(a.dx, b.dx), label + "dx: resident differs from host input")
-    require(same_words(a.drouter, b.drouter), label + "router grad: resident differs from host input")
-    require(same_words(a.dgate_up, b.dgate_up), label + "gate_up grad: resident differs from host input")
-    require(same_words(a.ddown, b.ddown), label + "down grad: resident differs from host input")
-    require(same_words(a.y, b.y), label + "y: resident differs from host input")
-    require(same_words(a.logits, b.logits), label + "logits: resident differs from host input")
-    require(same_words(a.selected, b.selected), label + "selected: resident differs from host input")
-    require(same_words(a.weights, b.weights), label + "routing weights: resident differs from host input")
+    # label names the two sides compared
+    require(same_words(a.dx, b.dx), label + "dx differs")
+    require(same_words(a.drouter, b.drouter), label + "router grad differs")
+    require(same_words(a.dgate_up, b.dgate_up), label + "gate_up grad differs")
+    require(same_words(a.ddown, b.ddown), label + "down grad differs")
+    require(same_words(a.y, b.y), label + "y differs")
+    require(same_words(a.logits, b.logits), label + "logits differs")
+    require(same_words(a.selected, b.selected), label + "selected differs")
+    require(same_words(a.weights, b.weights), label + "routing weights differs")
 
 
-def run_moe_io_case[E: Exec](mut ex: E, unit: Int) raises:
+def run_moe_io_case[E: Exec](mut ex: E, unit: Int) raises -> _Out:
     var T = _rows(unit)
     var D = MOE_IO_D
     var F = MOE_IO_F
@@ -129,7 +132,7 @@ def run_moe_io_case[E: Exec](mut ex: E, unit: Int) raises:
     _ = moe_backward_io(ex, res_addrs, ip, List[Int](), io)
     ex.download(FP(unsafe_from_address=Int(res.dx.unsafe_ptr())), rdx, T * D)
     ex.sync()
-    _same(host, res, "rows " + String(T) + ": ")
+    _same(host, res, "rows " + String(T) + " (resident vs host input): ")
     ex.free(rx)
     ex.free(rdy)
     ex.free(rdx)
@@ -138,6 +141,8 @@ def run_moe_io_case[E: Exec](mut ex: E, unit: Int) raises:
     _ = router^
     _ = gate_up^
     _ = down^
+    _ = res^
+    return host^
 
 
 # The host column: the two row counts across host cores, each on its own HostExec. The device column: in order on one
@@ -146,12 +151,16 @@ def test_moe_backward_resident_io() raises:
     comptime if CPU_COLUMN_BUILD:
         def host_case(unit: Int) raises:
             var ex = HostExec()
-            run_moe_io_case(ex, unit)
+            _ = run_moe_io_case(ex, unit)
         check_cases("moe_resident_io", MOE_IO_CASES, host_case)
     else:
         var ex = DeviceExec()
         def device_case(unit: Int) raises {mut ex}:
-            run_moe_io_case(ex, unit)
+            var device = run_moe_io_case(ex, unit)
+            # the CPU column, in this process
+            var host_ex = HostExec()
+            var cpu = run_moe_io_case(host_ex, unit)
+            _same(device, cpu, "rows " + String(_rows(unit)) + " (device column vs CPU column): ")
         check_cases_serial("moe_resident_io", MOE_IO_CASES, device_case)
 
 

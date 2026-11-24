@@ -484,8 +484,15 @@ def sequence_layer_norm(operation: Int, owner: PythonObject, values: PythonObjec
         var result = input.owner if entries is None else _upload(input, entries, context)
         _ = input^
         return result
-    for name in ["normalized_shape", "_D", "eps", "numeric_mode"]:  # driver-loop: over layer configuration metadata
+    for name in ["normalized_shape", "_D", "eps"]:  # driver-loop: over layer configuration metadata
         opt_scalar(fields[PythonObject(name)], context)
+    # `numeric_mode` is read ONCE (admitted here, used below; it was read here
+    # and again at the `_run` call). lane vdf-seq: that freed read is the
+    # `_host_b` read (None, or the CPU image of a device="cpu" layer resolved
+    # at construction): a device=None layer reads no more slots than before.
+    var layer_mode = py_get(fields, nk[].k_numeric_mode)
+    opt_scalar(layer_mode, context)
+    var bound = py_get(fields, nk[].k__host_b)
     var d = Int(py=py_item(fields, nk[].k__D))
     var shape = _norm_shape(py_item(fields, nk[].k_normalized_shape), context)
     if d < 1 or d > 2147483647 or d != shape_count(shape):
@@ -497,14 +504,13 @@ def sequence_layer_norm(operation: Int, owner: PythonObject, values: PythonObjec
         var input = LayerInput(x, context)
         _ = _width_known(input, d)
         var result = _run(input, d, py_item(fields, nk[].k_weight), py_item(fields, nk[].k_bias), Float64(py=py_item(fields, nk[].k_eps)), values[0],
-            py_get(fields, nk[].k_numeric_mode), py_get(fields, nk[].k__stats), shape, py_get(fields, nk[].k__host_b), context)
+            layer_mode, py_get(fields, nk[].k__stats), shape, bound, context)
         _ = input^
         py_setitem(fields, nk[].k_weight_grad, result[2])
         py_setitem(fields, nk[].k_bias_grad, result[3])
         return result[1]
     if operation != OPTIMIZER_OPN_SEQLN_LAYER:
         raise Error("ValueError: unknown LayerNorm public operation")
-    var bound = py_get(fields, nk[].k__host_b)
     if bound is not None:
         seq_device_refuse_resident(values[0], "mojolearn.LayerNorm", "x", context)
     var input = LayerInput(values[0], context)
@@ -531,7 +537,7 @@ def sequence_layer_norm(operation: Int, owner: PythonObject, values: PythonObjec
     py_setitem(fields, nk[].k__x, input.owner)
     py_setitem(fields, nk[].k__stats, stats)
     var result = _run(input, d, py_item(fields, nk[].k_weight), py_item(fields, nk[].k_bias), Float64(py=py_item(fields, nk[].k_eps)), PythonObject(None),
-        py_get(fields, nk[].k_numeric_mode), stats, shape, bound, context, fused)
+        layer_mode, stats, shape, bound, context, fused)
     if fused and len(result) == 5:
         py_setitem(fields, nk[].k__stats, result[4])
     _ = input^

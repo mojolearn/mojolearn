@@ -753,9 +753,13 @@ def sequence_optimizer_operation(operation: Int, owner: PythonObject, values: Py
         if owned is None:
             owned = py_get(fields, nk[].k__host_b)
         var resident_b = py_get(fields, nk[].k__res_b)
-        var entries = seq_binding(py_item(fields, nk[].k_numeric_mode), context, resident_b if resident_b is not None else owned)
+        # `numeric_mode` read once per operation (it was read here, again for
+        # the binding and again in the step): the `_host_b` read above, taken
+        # only when `_dev_b` is None, costs less than the two reads removed.
+        var opt_mode = py_item(fields, nk[].k_numeric_mode)
+        var entries = seq_binding(opt_mode, context, resident_b if resident_b is not None else owned)
         if operation == OPTIMIZER_OPN_SEQ_BINDING:
-            return py_item(seq_binding(py_item(fields, nk[].k_numeric_mode), context, owned), nk[].k_module)
+            return py_item(seq_binding(opt_mode, context, owned), nk[].k_module)
         var params = seq_list(py_item(fields, nk[].k_params), context)
         var nh = len(params) if kind == 5 else 1
         var words = seq_addr(py_item(fields, nk[].k__words), 9, context, buffer_pins, True)
@@ -796,7 +800,7 @@ def sequence_optimizer_operation(operation: Int, owner: PythonObject, values: Py
             w[6] = 0
             return PythonObject(None)
         if operation == OPTIMIZER_OPN_SEQ_STEP:
-            var selected = seq_binding(py_item(fields, nk[].k_numeric_mode), context, owned)
+            var selected = seq_binding(opt_mode, context, owned)
             if w[2] >= 0 and py_item(selected, nk[].k_module) is not py_item(entries, nk[].k_module):
                 raise Error("ValueError: resident optimizer state must keep its owning numeric-mode binding")
             return seq_step(owner, fields, params, values[0], kind, selected, words, handles, context)
