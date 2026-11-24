@@ -148,13 +148,18 @@ def test_native_cv_connects_cold_arena_context_before_ndarray_row_snapshot(cls):
             arena[key] = cold[key]
         assert np.ndarray not in arena['buffer_owner_types']
         # The fold rows no longer pass through an `_arena_io.DeviceRows`
-        # snapshot of the ndarray (mf-r9b beaf02e207 / 537ca78bf0: the cv
-        # tools are the typed search RUN only; X is admitted once by the
-        # model-selection door), so the operation needs nothing from the
-        # cold arena context and must still run natively and match the
-        # explicit fits below. The two asserts that the operation connected
-        # NumPy into this context tested the deleted DeviceRows route.
+        # snapshot of the ndarray, which needed NumPy connected into this
+        # context first (deleted by mf-r9b 537ca78bf0 "delete msel_cv_units
+        # and everything only it used": MselFoldRows' DeviceRows `init`;
+        # beaf02e207: cross_val_score is the typed search RUN only). The
+        # current path admits X once in the model-selection door
+        # (bindings/msel_cv_door.mojo `msel_cv_by_search` -> msel_materialize)
+        # and reads nothing NumPy from the arena context: from the cold state
+        # it runs natively, leaves the context cold, and matches the explicit
+        # fits below.
         actual = clean(ms.cross_val_score, model, x, y, cv=folds, scoring='accuracy')
+        assert 'ndarray' not in arena
+        assert np.ndarray not in arena['buffer_owner_types']
     finally:
         arena.clear()
         arena.update(saved)
