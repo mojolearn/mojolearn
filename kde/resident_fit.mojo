@@ -63,7 +63,7 @@ from kde.impl.neighbors.kernel_density import (
     metric_from_name,
 )
 from kde.impl.distance.distance_ops import DIST_COSINE_EXPANDED, DIST_L2_EXPANDED
-from std.math import sqrt
+from std.math import sqrt, isinf, isnan
 from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, thread_idx
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
@@ -91,35 +91,42 @@ def _kde_row_rules_kernel(
     cosine: Int32,
     bound: Float32,
 ):
-    """`kde_validate_data_ptr`'s two rules that are not finiteness, one thread per row (lane vdf-scope-cluster4).
+    """`kde_validate_data`'s rules for cosine and sqeuclidean, one thread per row (lane vdf-scope-cluster4; the
+    finite rule joined by lane vdf-scope-cluster5 so the refusal keeps the host pass's words).
     cosine: an all-zero row puts its row number into `hit[0]` (`Atomic.min`: the lowest, the row
-    `cosine_zero_norm_row_ptr` names). sqeuclidean: the row's first word with `|v| >= bound` puts its word index
-    (row * cols + col) into `hit[0]` (`Atomic.min`: the first word of the host scan). Reads only; integer and
-    compare work, no arithmetic on the values."""
+    `cosine_zero_norm_row` names). Both metrics: the row's first word that is NaN or +-inf, or (sqeuclidean,
+    `bound > 0`) has `|v| >= bound`, puts its word index (row * cols + col) into `hit[1]` (`Atomic.min`: the first
+    word of the host scan, which tests each word for both in that order). Reads only; integer and compare work,
+    no arithmetic on the values."""
     var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if row >= Int(n_rows_in):
         return
     var n_cols = Int(n_cols_in)
     var base = row * n_cols
     if cosine != Int32(0):
-        for f in range(n_cols):
+        var zero = True
+        for f in range(n_cols):  # small-loop(one row's words)
             if x.unsafe_load(base + f) != Float32(0.0):
-                return
-        _ = Atomic.min(hit, Int32(row))
-        return
-    for f in range(n_cols):
-        if abs(x.unsafe_load(base + f)) >= bound:
-            _ = Atomic.min(hit, Int32(base + f))
+                zero = False
+                break
+        if zero:
+            _ = Atomic.min(hit, Int32(row))
+            return
+    for f in range(n_cols):  # small-loop(one row's words)
+        var v = x.unsafe_load(base + f)
+        if isnan(v) or isinf(v) or (bound > Float32(0.0) and abs(v) >= bound):
+            _ = Atomic.min(hit + 1, Int32(base + f))
             return
 
 
 def kde_device_row_rules(ctx: DeviceContext, mut rows: DeviceBuffer[DType.float32], n_rows: Int, n_features: Int,
                          metric: Int, what: String) raises:
-    """`kde_validate_data_ptr`'s cosine zero-row rule and sqeuclidean magnitude bound over rows ALREADY ON THE
-    DEVICE (`rows`, on `ctx`; their finiteness is decided elsewhere: the caller's admission or the device finite
-    word), so those two metrics keep the resident-store path (lane vdf-scope-cluster4, 2026-11-24). One launch,
-    one word read back (two for a bound refusal, which prints the value); the same first refusal in the same
-    words as the host pass. Any other metric: nothing to do."""
+    """`kde_validate_data`'s rules for cosine and sqeuclidean over rows ALREADY ON THE DEVICE (`rows`, on `ctx`):
+    the cosine zero-row rule, then each word's finite rule and the sqeuclidean magnitude bound in the host scan's
+    order, so those two metrics keep the resident-store path (lane vdf-scope-cluster4, 2026-11-24) and refuse in
+    the host pass's words, "kde: query contains NaN at row ..." included (lane vdf-scope-cluster5). One launch,
+    two words read back (one more for a word refusal, which names the value). Any other metric: nothing to do
+    (its finiteness is the caller's admission or the device finite word)."""
     if metric != DIST_COSINE_EXPANDED and metric != DIST_L2_EXPANDED:
         return
     if n_rows <= 0 or n_features <= 0:
@@ -136,9 +143,10 @@ def kde_device_row_rules(ctx: DeviceContext, mut rows: DeviceBuffer[DType.float3
     var bound = Float32(0.0)
     if not cosine:
         bound = Float32(9.223372036854775808e18 / sqrt(Float64(n_features)))
-    var d_hit = ctx.enqueue_create_buffer[DType.int32](1)
+    var d_hit = ctx.enqueue_create_buffer[DType.int32](2)
     var h_hit = ctx.enqueue_create_host_buffer[DType.int32](2)
     h_hit.unsafe_ptr().unsafe_store(0, _RULES_NO_HIT)
+    h_hit.unsafe_ptr().unsafe_store(1, _RULES_NO_HIT)
     ctx.enqueue_copy(dst_buf=d_hit, src_ptr=h_hit.unsafe_ptr())
     ctx.enqueue_function[_kde_row_rules_kernel](
         rows.unsafe_ptr(), d_hit.unsafe_ptr(), Int32(n_rows), Int32(n_features), Int32(1 if cosine else 0), bound,
@@ -147,25 +155,31 @@ def kde_device_row_rules(ctx: DeviceContext, mut rows: DeviceBuffer[DType.float3
     )
     ctx.enqueue_copy(dst_ptr=h_hit.unsafe_ptr(), src_buf=d_hit)
     ctx.synchronize()
-    var hit = Int(h_hit.unsafe_ptr().unsafe_load(0))
+    var zero_row = Int(h_hit.unsafe_ptr().unsafe_load(0))
+    var hit = Int(h_hit.unsafe_ptr().unsafe_load(1))
     _ = d_hit^
-    if hit == Int(_RULES_NO_HIT):
-        _ = h_hit^
-        return
-    if cosine:
-        _ = h_hit^
+    _ = h_hit^
+    if cosine and zero_row != Int(_RULES_NO_HIT):
         raise Error(
-            "kde: metric='cosine' but " + what + " row " + String(hit)
+            "kde: metric='cosine' but " + what + " row " + String(zero_row)
             + " is all zeros; cosine distance divides by ||x|| and is"
             " undefined at the origin (DEVIATION 553)"
         )
-    # The refused word's value, for the host pass's sentence.
+    if hit == Int(_RULES_NO_HIT):
+        return
+    # The refused word's value, for the host pass's sentence (one word read back).
     var h_value = ctx.enqueue_create_host_buffer[DType.float32](1)
     ctx.enqueue_copy(dst_ptr=h_value.unsafe_ptr(), src_buf=rows.create_sub_buffer[DType.float32](hit, 1))
     ctx.synchronize()
     var v = h_value.unsafe_ptr().unsafe_load(0)
     _ = h_value^
-    _ = h_hit^
+    if isnan(v) or isinf(v):
+        # lane vdf-scope-cluster5: the host pass's finite words ("kde: query contains NaN at row ..."), restored.
+        raise Error(
+            "kde: " + what + " contains " + ("NaN" if isnan(v) else "infinity")
+            + " at row " + String(hit // n_features) + ", column "
+            + String(hit % n_features) + " (DEVIATION 604)"
+        )
     raise Error(
         "kde: metric='sqeuclidean' needs |" + what + "| < 2^63/sqrt("
         + String(n_features) + ") so the expanded identity cannot form"
