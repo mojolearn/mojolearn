@@ -166,23 +166,44 @@ def member_fold_x_close(mut fold: MemberFoldX) raises:
 
 
 def member_fold_take_f32(src: Int, index: Int, rows: Int, width: Int, dst: Int):
-    """Rows `index[0 .. rows)` (int64) of the dense host float32 matrix at
-    `src` (`width` words a row) into `dst`, in row chunks across the host's
-    cores (the targets and weights of a fold; X itself only on a sub-route
-    whose entry reads no device X, which the member's report names)."""
+    """Rows `index[0 .. rows)` (int64) of the dense host 4-byte matrix at
+    `src` (`width` words a row) into `dst`, bit for bit, in row chunks
+    across the host's cores (the targets and weights of a fold; X itself
+    only on a sub-route whose entry reads no device X, which the member's
+    report names)."""
+    member_fold_take_words(src, index, rows, width, dst, 4)
+
+
+def member_fold_take_view(view: MemberMatrix, index: Int, rows: Int, dst: Int):
+    """`member_fold_take_words` of a dense host view (4- or 8-byte words)."""
+    member_fold_take_words(view.data, index, rows, view.cols, dst, view.element_bytes())
+
+
+def member_fold_take_words(src: Int, index: Int, rows: Int, width: Int, dst: Int, bytes: Int):
+    """The take of `member_fold_take_f32` for words of `bytes` (4 or 8)
+    bytes, copied as integers (no float load, no bit can move)."""
     if rows <= 0 or width <= 0:
         return
     var tasks = (rows + _TAKE_CHUNK - 1) // _TAKE_CHUNK
+    var wide = bytes == 8
 
-    def _task(t: Int) {imm src, imm index, imm rows, imm width, imm dst}:
-        var s = _F32P(unsafe_from_address=src)
+    def _task(t: Int) {imm src, imm index, imm rows, imm width, imm dst, imm wide}:
         var i = _I64P(unsafe_from_address=index)
-        var o = _F32P(unsafe_from_address=dst)
         var lo = t * _TAKE_CHUNK
         var hi = min(rows, lo + _TAKE_CHUNK)
-        for r in range(lo, hi):  # the task's rows (one chunk of the split)
-            var at = Int(i[r]) * width
-            for c in range(width):  # small-loop(one row's words)
-                o[r * width + c] = s[at + c]
+        if wide:
+            var s = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=src)
+            var o = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=dst)
+            for r in range(lo, hi):  # the task's rows (one chunk of the split)
+                var at = Int(i[r]) * width
+                for c in range(width):  # small-loop(one row's words)
+                    o[r * width + c] = s[at + c]
+        else:
+            var s = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=src)
+            var o = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=dst)
+            for r in range(lo, hi):  # the task's rows (one chunk of the split)
+                var at = Int(i[r]) * width
+                for c in range(width):  # small-loop(one row's words)
+                    o[r * width + c] = s[at + c]
 
     host_parallelize(_task, tasks)
