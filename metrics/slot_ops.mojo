@@ -31,4 +31,8 @@ comptime MS_PRFS = 21
 comptime MS_SILHOUETTE = 22
 comptime MS_TRUST = 23
 comptime MS_ENCODE = 24
-comptime MS_OP_COUNT = 25
+#: lane vdf-xm-wire: the device union step of a label pair (both vectors' codes over
+#: the sorted union of their values) and the device form of a door's class-order map
+comptime MS_ENCODE_PAIR = 25
+comptime MS_GATHER = 26
+comptime MS_OP_COUNT = 27

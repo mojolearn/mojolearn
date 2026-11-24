@@ -36,7 +36,9 @@ from bindings.metrics_keys_unpack import metrics_keys
 from bindings.x_prep_native_owner_door import XprepResident, xprep_resident, xprep_resident_none
 from bindings.x_prep_native_inputs_door import _rows_fields
 from bindings.family_common_pack import family_call
-from bindings.mcls_common_unpack import mc_entry
+from bindings.mcls_common_unpack import mc_entry, mc_class_list
+from metrics.slot_ops import MS_ENCODE_PAIR, MS_GATHER
+from core.cast_in import CAST_KIND_SIGNED
 
 
 struct McSlots(Movable):
@@ -89,9 +91,27 @@ struct McSlots(Movable):
         call is read from in place: its resident copy inside `resident()`
         (put once per scope, a hit afterwards), else -1 (the host route)."""
         var size = Int(py=value.size)
-        if not self.resident.keeps(False, size) or not self._store_ready(binding):
+        if not self.resident.keeps(False, size):
+            return -1  # outside resident() or below its floor: no address read
+        return self.slot_words(binding, value, Int(py=classical_address(value)), size)
+
+    def slot_words(mut self, binding: PythonObject, owner: PythonObject, address: Int, words: Int) raises -> Int:
+        """`slot` for `words` 4-byte words at `address` owned by `owner` (an
+        int64 label buffer is 2n words; lane vdf-xm-wire)."""
+        if not self.resident.keeps(False, words) or not self._store_ready(binding):
             return -1
-        return self.resident.slot(value, Int(py=classical_address(value)), size)
+        return self.resident.slot(owner, address, words)
+
+    def codes(mut self, binding: PythonObject, n: Int) raises -> Int:
+        """A fresh slot of `n` words this call owns (freed by `close`): a
+        device stage's output, e.g. the codes of a resident label vector
+        (`metric_slot_create`, the store's context). Needs the store, which
+        a slot input of the call has already resolved."""
+        if not self._store_ready(binding):
+            raise Error("RuntimeError: metrics: a device code slot needs the GPU image's resident store")
+        var id = Int(py=family_call(mc_entry(binding, "metric_slot_create"), PythonObject(n)))
+        self.owned.append(id)
+        return id
 
     def rows_shape(mut self, binding: PythonObject, value: PythonObject) raises -> Tuple[Int, Int]:
         """(rows, row words) of a DeviceRows input this call can gather on
@@ -171,11 +191,11 @@ def mc_slots_open(context: PythonObject) raises -> McSlots:
     return McSlots(resident^, entry_ref_unresolved(), False, rows_class, prog)
 
 
-def mc_slots_call(binding: PythonObject, op: Int, addrs: List[Int], slots: List[Int], ints: List[Int],
+def mc_slots_step(binding: PythonObject, op: Int, addrs: List[Int], slots: List[Int], ints: List[Int],
                   floats: List[Float64], outs: List[Int], mut state: McSlots) raises -> PythonObject:
-    """The device-input entry (`metric_slots`) of the call's binding, then
-    the call's own slots freed (a free failure after a good answer raises
-    with the slots named)."""
+    """One device-input entry call (`metric_slots`) of a call with more
+    device steps after it: the call's slots stay (freed by the last step,
+    `mc_slots_call`); on an error they are freed and the error raised."""
     var a = Python.list()
     var s = Python.list()
     var i = Python.list()
@@ -190,12 +210,19 @@ def mc_slots_call(binding: PythonObject, op: Int, addrs: List[Int], slots: List[
         _ = py_call(f.append, PythonObject(floats[j]))
     for j in range(len(outs)):  # small-loop(outs: the output addresses of one metric entry, at most 3)
         _ = py_call(o.append, PythonObject(outs[j]))
-    var result: PythonObject
     try:
-        result = family_call(mc_entry(binding, "metric_slots"), PythonObject(op), a, s, i, f, o)
+        return family_call(mc_entry(binding, "metric_slots"), PythonObject(op), a, s, i, f, o)
     except error:
         _ = state.close()
         raise error^
+
+
+def mc_slots_call(binding: PythonObject, op: Int, addrs: List[Int], slots: List[Int], ints: List[Int],
+                  floats: List[Float64], outs: List[Int], mut state: McSlots) raises -> PythonObject:
+    """The device-input entry (`metric_slots`) of the call's binding, then
+    the call's own slots freed (a free failure after a good answer raises
+    with the slots named)."""
+    var result = mc_slots_step(binding, op, addrs, slots, ints, floats, outs, state)
     var failures = state.close()
     if failures.byte_length() > 0:
         raise Error("RuntimeError: metric device slots could not be freed: " + failures)
@@ -223,3 +250,90 @@ def mc_slot_inputs(binding: PythonObject, op: Int, values: List[PythonObject], i
     var result = mc_slots_call(binding, op, addrs, slots, ints, floats, outs, state)
     _ = values  # read by address inside the call above
     return Optional[PythonObject](result)
+
+
+# ------------------------------------------- resident label pairs (lane vdf-xm-wire)
+
+
+struct McResidentPair(Movable):
+    """A label pair encoded on the device: both vectors' int32 codes over the
+    sorted union of their values (the host union encoder's codes) in two
+    slots the call owns, the row count, the class count k, and (when asked)
+    the k union classes as a Python int list (the class-list PACK)."""
+    var codes_t: Int
+    var codes_p: Int
+    var n: Int
+    var k: Int
+    var classes: PythonObject
+
+    def __init__(out self, codes_t: Int, codes_p: Int, n: Int, k: Int, classes: PythonObject):
+        self.codes_t = codes_t
+        self.codes_p = codes_p
+        self.n = n
+        self.k = k
+        self.classes = classes
+
+    def live(self) -> Bool:
+        """Whether the pair was encoded on the device."""
+        return self.codes_t >= 0
+
+
+def mc_resident_none() -> McResidentPair:
+    """No device pair: the caller's host route."""
+    return McResidentPair(-1, -1, 0, 0, PythonObject(None))
+
+
+def mc_resident_pair(binding: PythonObject, t_owner: PythonObject, t_address: Int, p_owner: PythonObject,
+                     p_address: Int, n: Int, item: Int, want_classes: Bool,
+                     mut state: McSlots) raises -> McResidentPair:
+    """THE DEVICE UNION STEP of a label pair (MS_ENCODE_PAIR,
+    metrics/slot_entry_device.mojo): when at least one of the two contiguous
+    signed label vectors (`n` labels of `item` = 4 or 8 bytes at the
+    addresses, owned by the owners) is resident in the active `resident()`
+    scope (read in place; the other is uploaded once), both are concatenated
+    and encoded ONCE on the device; the codes stay in two slots the call owns
+    (`state.close` / the last `mc_slots_call` frees them). `.live()` False: no slot
+    (outside a scope, below its floor, the host image, a vector too wide or
+    too long) and the caller takes its host route, unchanged. The classes
+    come back once, only with `want_classes`."""
+    if n < 1 or n > 1073741823 or (item != 4 and item != 8):
+        return mc_resident_none()
+    var words = n * item // 4
+    var st = state.slot_words(binding, t_owner, t_address, words)
+    var sp = state.slot_words(binding, p_owner, p_address, words)
+    if st < 0 and sp < 0:
+        return mc_resident_none()
+    var ct = state.codes(binding, n)
+    var cp = state.codes(binding, n)
+    # the class words (>= 2n items: the encoder may meet 2n distinct labels; only k are written)
+    var classes = List[UInt8]()
+    if want_classes:
+        classes = List[UInt8](unsafe_uninit_length=2 * n * item)
+    var addrs: List[Int] = [t_address, p_address]
+    var slots: List[Int] = [st, sp]
+    var ints: List[Int] = [n, CAST_KIND_SIGNED, item, ct, cp]
+    var outs: List[Int] = [Int(classes.unsafe_ptr()) if want_classes else 0]
+    var k = Int(py=mc_slots_step(binding, MS_ENCODE_PAIR, addrs, slots, ints, List[Float64](), outs, state))
+    var listed = PythonObject(None)
+    if want_classes:
+        listed = mc_class_list(Int(classes.unsafe_ptr()), item, k)
+    _ = classes^
+    _ = t_owner  # read by address inside the step above
+    _ = p_owner
+    return McResidentPair(ct, cp, n, k, listed)
+
+
+def mc_resident_order(binding: PythonObject, codes: Int, n: Int, table: PythonObject,
+                      mut state: McSlots) raises -> Int:
+    """A codes slot mapped through a door's class-order table (`table`: a
+    C-contiguous int32 array of k words, the `mc_map_order` table) ON THE
+    DEVICE into a fresh slot the call owns (MS_GATHER); its id. The table is
+    O(k) host words, uploaded once."""
+    var dst = state.codes(binding, n)
+    var addrs: List[Int] = [0]
+    var slots: List[Int] = [codes]
+    var ints: List[Int] = [n, Int(py=table.size), dst]
+    var outs: List[Int] = [Int(py=classical_address(table))]
+    _ = mc_slots_step(binding, MS_GATHER, addrs, slots, ints, List[Float64](), outs, state)
+    _ = table  # read by address inside the step above
+    return dst

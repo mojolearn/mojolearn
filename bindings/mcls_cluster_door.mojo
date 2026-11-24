@@ -35,7 +35,7 @@ from std.python._cpython import GILReleased
 from core.entry_table import EntryRef
 from core.metrics_cluster_table import (
     CLUSTER_OP_RAND, CLUSTER_OP_ADJUSTED_RAND, CLUSTER_OP_MUTUAL_INFO, CLUSTER_OP_HOMOGENEITY,
-    CLUSTER_OP_COMPLETENESS, CLUSTER_OP_V_MEASURE, CLUSTER_OP_FOWLKES_MALLOWS,
+    CLUSTER_OP_COMPLETENESS, CLUSTER_OP_V_MEASURE, CLUSTER_OP_FOWLKES_MALLOWS, CLUSTER_OP_HCV,
     cluster_ops_entry, cluster_pair_run, cluster_hcv_run,
 )
 from bindings.admitted_family_door import admit_family
@@ -59,9 +59,10 @@ from bindings.mcls_common_unpack import (
     mc_regression_f32_1d, mc_pair_check, mc_weights, mc_encode_store, mc_encode_signed,
 )
 from core.host_finite_scan import host_all_finite_f32
-from bindings.metrics_slot_door import mc_slots_open, mc_slots_call, mc_slot_inputs
+from bindings.metrics_slot_door import mc_slots_open, mc_slots_call, mc_slot_inputs, mc_resident_pair
 from metrics.slot_ops import (
     MS_RAND, MS_ARI, MS_ENTROPY, MS_R2, MS_R2_W, MS_MSE, MS_MAE, MS_RMSE, MS_KL, MS_SILHOUETTE, MS_TRUST,
+    MS_MI, MS_FM, MS_HOMOG, MS_COMPL, MS_V_MEASURE, MS_HCV,
 )
 from core.mcls_impl import mcls_min_i32, mcls_max_i32
 from checks.numerics import portable_exp64, portable_log64
@@ -97,6 +98,53 @@ def _cluster_entry(binding: PythonObject) raises -> EntryRef:
     return cluster_ops_entry(Int(py=key[0]), Int(py=key[1]))
 
 
+def _cluster_ms(operation: Int) -> Int:
+    """The `metric_slots` operation of a union-code cluster operation."""
+    if operation == CLUSTER_OP_MUTUAL_INFO:
+        return MS_MI
+    if operation == CLUSTER_OP_FOWLKES_MALLOWS:
+        return MS_FM
+    if operation == CLUSTER_OP_HOMOGENEITY:
+        return MS_HOMOG
+    if operation == CLUSTER_OP_COMPLETENESS:
+        return MS_COMPL
+    if operation == CLUSTER_OP_V_MEASURE:
+        return MS_V_MEASURE
+    return MS_HCV
+
+
+def _cluster_union_device(binding: PythonObject, operation: Int, yt: PythonObject, yp: PythonObject, n: Int,
+                          beta: Float64, context: PythonObject) raises -> Optional[PythonObject]:
+    """The union-code metrics (mutual information, Fowlkes-Mallows,
+    homogeneity, completeness, v-measure, and the three at once) over
+    admitted int32 labels of which at least one is resident in the active
+    `resident()` scope (lane vdf-xm-wire): the device union step
+    (`mc_resident_pair`, MS_ENCODE_PAIR: the codes `cluster_union_codes`
+    makes, kept on the device) then the entry over [0, k-1] reading the two
+    code slots in place: two entry calls, k and the answer come back, no
+    label or code word does. None: the host route (`cluster_pair_run` /
+    `cluster_hcv_run`), unchanged. Same codes, same kernels: same bits."""
+    var state = mc_slots_open(context)
+    if not state.resident.active():
+        return Optional[PythonObject]()  # outside resident(): one scope read, the host route
+    var pair = mc_resident_pair(binding, yt, Int(py=classical_address(yt)), yp, Int(py=classical_address(yp)), n, 4,
+                                False, state)
+    if not pair.live():
+        return Optional[PythonObject]()
+    var addrs: List[Int] = [0, 0]
+    var slots: List[Int] = [pair.codes_t, pair.codes_p]
+    var ints: List[Int] = [n, 0, pair.k - 1]
+    var floats = List[Float64]()
+    if operation == CLUSTER_OP_V_MEASURE or operation == CLUSTER_OP_HCV:
+        floats.append(beta)
+    var result = mc_slots_call(binding, _cluster_ms(operation), addrs, slots, ints, floats, List[Int](), state)
+    _ = yt  # read by address inside the steps above
+    _ = yp
+    if operation == CLUSTER_OP_HCV:
+        return Optional[PythonObject](result)  # the entry's 3-tuple of floats
+    return Optional[PythonObject](_as_float(result))
+
+
 def _cluster_pair(binding: PythonObject, operation: Int, args: PythonObject, beta_in: PythonObject,
                   context: PythonObject) raises -> PythonObject:
     """UNPACK / RUN / PACK of one label-pair metric (lane mf-cluster5): the
@@ -120,6 +168,11 @@ def _cluster_pair(binding: PythonObject, operation: Int, args: PythonObject, bet
                                     List[Float64](), List[Int](), context)
         if device:
             return _as_float(device.value())
+    else:
+        # the union-code metrics: resident labels encoded on the device (lane vdf-xm-wire)
+        var device = _cluster_union_device(binding, operation, yt, yp, n, beta, context)
+        if device:
+            return device.value()
     var t = Int(py=classical_address(yt))
     var p = Int(py=classical_address(yp))
     var entry = _cluster_entry(binding)
@@ -290,19 +343,23 @@ def _trustworthiness(args: PythonObject, context: PythonObject) raises -> Python
             raise Error("mojolearn trustworthiness: X contains NaN or infinity; refused here (metrics/README.md HAND-OFF ask 3)")
         _ = x  # keep the Python object alive through the native calls above
         x_slot = state.slot(args[0], x)
-    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(emb))), Int(py=emb.size)):
-        raise Error("mojolearn trustworthiness: X_embedded contains NaN or infinity; refused here "
-                    + "(metrics/README.md HAND-OFF ask 3)")
+    # X_embedded resident in the active resident() scope (lane vdf-xm-wire): the embedded k-NN reads
+    # its slot in place and the entry refuses a non-finite one on the device with these words
+    var emb_slot = state.slot(args[0], emb)
+    if emb_slot < 0:
+        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(emb))), Int(py=emb.size)):
+            raise Error("mojolearn trustworthiness: X_embedded contains NaN or infinity; refused here "
+                        + "(metrics/README.md HAND-OFF ask 3)")
     _ = emb  # keep the Python object alive through the native calls above
     var batch = mc_int(args[5])
     if batch < 1:
         raise Error("mojolearn trustworthiness: batch_size must be at least 1, got " + family_repr(args[5]))
     var result: PythonObject
-    if on_rows or x_slot >= 0:
+    if on_rows or x_slot >= 0 or emb_slot >= 0:
         if on_rows:
             x_slot = state.rows(args[0], args[1])[0]
         var addrs: List[Int] = [0 if on_rows else Int(py=classical_address(x)), Int(py=classical_address(emb))]
-        var slots: List[Int] = [x_slot, -1]
+        var slots: List[Int] = [x_slot, emb_slot]
         var ints: List[Int] = [rows, m, Int(py=emb.shape[1]), mc_int(args[3]), batch, 1 if on_rows else 0]
         result = _as_float(mc_slots_call(args[0], MS_TRUST, addrs, slots, ints, List[Float64](), List[Int](), state))
     else:
@@ -475,6 +532,9 @@ def mcls_cluster_operation(operation: Int, args: PythonObject, context: PythonOb
         var yp = pair[1]
         var beta = Float64(py=family_call(b.float, args[3]))
         var n = Int(py=yt.size)
+        var device = _cluster_union_device(args[0], CLUSTER_OP_HCV, yt, yp, n, beta, context)
+        if device:
+            return device.value()
         var t = Int(py=classical_address(yt))
         var p = Int(py=classical_address(yp))
         var entry = _cluster_entry(args[0])

@@ -8,19 +8,22 @@ from core.shared_slot import SharedSlot
 from x_decomp.descriptor_schema import xd_vendor_code
 from x_metrics.descriptor_schema import (
     METRICS_PROGRAM_ABI, MP_MODE, MP_VENDOR, MP_CAPABILITIES, MP_RUN,
-    MP_RUN_OUT, MP_RUN_RANGES, MP_HAS_RANGES, MP_HAS_STORE, MP_DEV_PUT, MP_DEV_FREE, MP_DEV_TAKE_ROWS,
-    MP_DEV_LIVE, MP_DEV_FIRST_NONFINITE, MP_DEV_FIRST_NEGATIVE, metrics_check_spans,
+    MP_RUN_OUT, MP_RUN_RANGES, MP_HAS_RANGES, MP_HAS_STORE, MP_DEV_FIRST_NONFINITE, MP_DEV_FIRST_NEGATIVE,
+    metrics_check_spans,
 )
 from core.metric_labels_device import metric_first_nonfinite_resident, metric_first_negative_resident
-from x_metrics.device import (
-    run_program_device, run_program_device_out, run_program_device_ranges, metrics_ctx, X_METRICS_STORE,
-)
+from x_metrics.device import run_program_device, run_program_device_out, run_program_device_ranges, metrics_ctx
+from x_prep.store_slot import X_PREP_STORE
 
 
 def metrics_program_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
         metrics_check_spans(operation, aa, na, pp, np, nf, result)
+        # TOMBSTONE: MP_DEV_PUT / _FREE / _TAKE_ROWS / _LIVE (a second resident store, x_metrics-only; lane
+        # vdf-xm-transport) deleted 2026-11-24 by lane vdf-xm-wire: the one store is the x_prep image's, reached
+        # through its transport entry (XP_DEV_*). Never on main: recoverable at
+        # lane/vd-functions 55fed275ea (no patch, AGENTS.md "Deleting an experiment" part 3).
         var value = 0
         if operation == MP_MODE:
             value = GLOBAL_NUMERIC_MODE
@@ -28,8 +31,6 @@ def metrics_program_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int
             value = xd_vendor_code(String(COMPILED_VENDOR))
         elif operation == MP_CAPABILITIES:
             value = MP_HAS_RANGES | MP_HAS_STORE
-        elif operation == MP_DEV_LIVE:
-            value = Int(X_METRICS_STORE.get_or_create_ptr()[].live)
         elif operation == MP_DEV_FIRST_NONFINITE or operation == MP_DEV_FIRST_NEGATIVE:
             # A door's refusal scan over a resident slot, in place (one
             # 4-byte readback): no word of the slot comes to the host.
@@ -38,22 +39,10 @@ def metrics_program_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int
                 value = -1
             elif operation == MP_DEV_FIRST_NONFINITE:
                 value = metric_first_nonfinite_resident(
-                    metrics_ctx(), Int(X_METRICS_STORE.get_or_create_ptr()[].ptr(p[0], p[1])), p[1])
+                    metrics_ctx(), Int(X_PREP_STORE.get_or_create_ptr()[].ptr(p[0], p[1])), p[1])
             else:
                 value = metric_first_negative_resident(
-                    metrics_ctx(), Int(X_METRICS_STORE.get_or_create_ptr()[].ptr(p[0], p[1])), p[1])
-        elif operation == MP_DEV_PUT or operation == MP_DEV_FREE or operation == MP_DEV_TAKE_ROWS:
-            # The image's resident input store (lane vdf-xm-transport): the
-            # bodies of the deleted x_metrics_dev_put / _free / _take_rows
-            # entries (recoverable at a88745022), on the image's one context.
-            var a = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=aa)
-            var p = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp)
-            if operation == MP_DEV_PUT:
-                value = X_METRICS_STORE.get_or_create_ptr()[].put(metrics_ctx(), a[0], p[0])
-            elif operation == MP_DEV_FREE:
-                X_METRICS_STORE.get_or_create_ptr()[].free(metrics_ctx(), p[0])
-            else:
-                value = X_METRICS_STORE.get_or_create_ptr()[].take_rows(metrics_ctx(), p[0], p[1], a[0], p[2])
+                    metrics_ctx(), Int(X_PREP_STORE.get_or_create_ptr()[].ptr(p[0], p[1])), p[1])
         else:
             var a = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=aa)
             var p = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp)
