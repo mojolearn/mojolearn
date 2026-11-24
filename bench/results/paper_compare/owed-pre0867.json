@@ -1139,23 +1139,15 @@
   },
   "set-b03": {
    "define": "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF,MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER,MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF",
-   "owed": "RUN",
-   "combined": [
-    "tsqr-tree-par-off",
-    "dbscan-brute-eps-filter",
-    "xprep-sort-quad-off"
-   ],
-   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b03 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: rnn-scan-gated, hist-packed-gh, tsqr-tree-par-off, dbscan-brute-eps-filter, xprep-sort-quad-off"
+   "owed": "DECIDED",
+   "status": "DISSOLVED 2026-11-24 (lane ab-outcome-3): tsqr-tree-par-off and xprep-sort-quad-off DECIDED (deleted); one member left (dbscan-brute-eps-filter, RUN with its own rows, reworked: filter always, no probe), built in the wave-3 set set-w3a. Was: COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b03 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: rnn-scan-gated, hist-packed-gh, tsqr-tree-par-off, dbscan-brute-eps-filter, xprep-sort-quad-off",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "set-b04": {
    "define": "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF,MOJOLEARN_SGD_FAST_PS_PRELOAD,MOJOLEARN_XC_SQDIST_TILED_OFF",
-   "owed": "RUN",
-   "combined": [
-    "tsqr-wy-pair-off",
-    "sgd-ps-preload",
-    "xc-sqdist-tiled-off"
-   ],
-   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b04 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: hist-warp-agg, tsqr-wy-pair-off, attn-fold-v2-on, sgd-ps-preload, xc-sqdist-tiled-off, prep-take-view-all Trimmed 2026-11-24 (lane ab-outcome-2): prep-take-view-all DECIDED by A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md."
+   "owed": "DECIDED",
+   "status": "ALL MEMBERS DECIDED 2026-11-24 (lane ab-outcome-3): tsqr-wy-pair-off, sgd-ps-preload and xc-sqdist-tiled-off deleted. Was: COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b04 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: hist-warp-agg, tsqr-wy-pair-off, attn-fold-v2-on, sgd-ps-preload, xc-sqdist-tiled-off, prep-take-view-all Trimmed 2026-11-24 (lane ab-outcome-2): prep-take-view-all DECIDED by A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md.",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "set-b06": {
    "define": "MOJOLEARN_XPREP_FAST_MI_SORTED_OFF",
@@ -1165,12 +1157,9 @@
   },
   "set-b07": {
    "define": "MOJOLEARN_XD_FAST_SVD_ONE_BLOCK,MOJOLEARN_XPREP_FAST_MI_TIES_OFF",
-   "owed": "RUN",
-   "combined": [
-    "svd-one-block",
-    "xprep-mi-ties-off"
-   ],
-   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b07 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: gbdt-greedy-device-rounds-off, svd-one-block, kde-qtile-force, ols-predict-tiled, xprep-mi-ties-off, causal-lm-resident-forward-off Trimmed 2026-11-24 (lane ab-outcome-2): kde-qtile-force, ols-predict-tiled, causal-lm-resident-forward-off DECIDED by A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md."
+   "owed": "DECIDED",
+   "status": "ALL MEMBERS DECIDED 2026-11-24 (lane ab-outcome-3): svd-one-block and xprep-mi-ties-off deleted. Was: COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b07 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: gbdt-greedy-device-rounds-off, svd-one-block, kde-qtile-force, ols-predict-tiled, xprep-mi-ties-off, causal-lm-resident-forward-off Trimmed 2026-11-24 (lane ab-outcome-2): kde-qtile-force, ols-predict-tiled, causal-lm-resident-forward-off DECIDED by A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md.",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "set-b09": {
    "define": "MOJOLEARN_XPREP_FAST_PT_INTERLEAVE",
@@ -1222,12 +1211,34 @@
   },
   "set-b20": {
    "define": "MOJOLEARN_IDN_IF_SCORES_F64_OFF,MOJOLEARN_TRANSFORMER_GENERIC_PREFILL",
+   "owed": "DECIDED",
+   "status": "ALL MEMBERS DECIDED 2026-11-24 (lane ab-outcome-3): if-scores-f64-off and transformer-generic-prefill deleted. Was: COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b20 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: if-scores-f64-off, transformer-generic-prefill",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
+  },
+  "seq-tiled-predict-off": {
+   "define": "MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF",
+   "owed": "RUN",
+   "status": "define in code (autograd/model.mojo; the old per-call predict, behind _OFF since the promotion of MOJOLEARN_IDN_SEQ_TILED_PREDICT by lane ab-outcome-2, 2026-11-24, L40S sequential-predict 2.23 -> 1.87 ms): B = the old form; A = the whole-set chunk (the default). RUN OWED with the wave-3 sha (lane ab-outcome-3): B not faster at equal quality -> delete the old form and its switch with tombstones"
+  },
+  "seq-libc-copy-off": {
+   "define": "MOJOLEARN_SEQ_FAST_LIBC_COPY_OFF",
+   "owed": "RUN",
+   "status": "define in code (sequence/exec_device.mojo; the old unsafe_memcpy element copies, behind _OFF since the promotion of MOJOLEARN_SEQ_FAST_LIBC_COPY by lane ab-outcome-2, 2026-11-24: mlp-clf infer 0.86, mlp-reg infer 0.91): B = the old copies; A = libc memcpy (the default). RUN OWED with the wave-3 sha (lane ab-outcome-3): B not faster -> delete the old form and its switch"
+  },
+  "msel-units-gpu-parallel": {
+   "define": "MOJOLEARN_MSEL_UNITS_GPU_PARALLEL",
+   "owed": "RUN",
+   "status": "define in code (core/member_set_run.mojo _UNITS_GPU_PARALLEL, bindings/native_unit_threads_unpack.mojo; opt-in, default off): B = model-selection units whose members run on a GPU are fitted on the host workers in parallel like CPU units; A = one GPU unit at a time (the default). Caution recorded at the define: the member fits share the process-wide device context and the owners' caches are not audited for thread safety; a crash or a digest change in B is a finding against B, not a reason to rerun. RUN OWED with the wave-3 sha (lane ab-outcome-3)"
+  },
+  "set-w3a": {
+   "define": "MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER,MOJOLEARN_GEMM_STAGE_UP_OFF,MOJOLEARN_IDN_SSD_OCCUPANCY_OFF",
    "owed": "RUN",
    "combined": [
-    "if-scores-f64-off",
-    "transformer-generic-prefill"
+    "dbscan-brute-eps-filter",
+    "gemm-stage-up-off",
+    "ssd-occupancy-off"
    ],
-   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b20 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: if-scores-f64-off, transformer-generic-prefill"
+   "status": "COMBINED B SET, build only (lane ab-outcome-3, 2026-11-24, wave-3 A/B): tools/release.py candidate --owed-arm set-w3a builds one wheel set with the three members' defines; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>). The members touch disjoint code (dbscan/impl brute eps path; gemm/host_transport.mojo float32 upload; mamba/impl/modules/ssd_minimal.mojo) and their rows (dbscan; gemm; mamba2-forward/-infer) reach no other member's code."
   }
  },
  "rows": [
@@ -2736,9 +2747,7 @@
    "source": "lane envgate-train-seq-mamba (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time MOJOLEARN_GEMM_STAGE_UP read became the build constant GEMM_STAGE_UP_ON with today's default; the other side was never timed on NVIDIA/AMD (no A/B on record)",
    "kind": "ab",
    "lane": [
-    "gemm",
-    "gemm-bf16",
-    "gemm-int8"
+    "gemm"
    ],
    "dataset": "*",
    "rows": "full",
@@ -2746,7 +2755,7 @@
    "b_arms": [
     "gemm-stage-up-off"
    ],
-   "decides": "keep A (staged upload on NVIDIA/AMD (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+   "decides": "wave-3 (lane ab-outcome-3, Andrew 2026-11-24 one route): the switch reaches only the float32 upload (gemm_up_f32), so the row is gemm f32 full; raw upload (B) faster or tied at equal digests -> stage-up is deleted and raw upload is the only route; staged clearly faster -> the _OFF form is deleted. Was: keep A (staged upload on NVIDIA/AMD (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
   },
   {
    "id": "gemm-stage-up-by-cost",
@@ -6450,6 +6459,68 @@
    "owed": "DECIDED",
    "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-trees): not run; the arm it would time is deleted (sgd-ps-preload SPLIT, inherent). The driver case online_linear_shapes stays for later arms.",
    "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
+  },
+  {
+   "id": "seq-tiled-predict-off",
+   "source": "lane ab-outcome-3 (2026-11-24), wave-3 A/B",
+   "kind": "ab",
+   "lane": [
+    "sequential-predict"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "seq-tiled-predict-off"
+   ],
+   "decides": "keep the whole-set chunk (A) unless the old form (B) is faster at equal quality and digests; else delete the old form and its _OFF switch"
+  },
+  {
+   "id": "seq-libc-copy-off-mlp",
+   "source": "lane ab-outcome-3 (2026-11-24), wave-3 A/B",
+   "kind": "ab",
+   "lane": [
+    "mlp-clf",
+    "mlp-reg"
+   ],
+   "dataset": "istella",
+   "rows": "full",
+   "b_arms": [
+    "seq-libc-copy-off"
+   ],
+   "decides": "keep libc memcpy (A) unless the old copies (B) are faster at equal digests; else delete the old copies and the _OFF switch"
+  },
+  {
+   "id": "seq-libc-copy-off-cross-entropy",
+   "source": "lane ab-outcome-3 (2026-11-24), wave-3 A/B",
+   "kind": "ab",
+   "lane": "cross-entropy",
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "seq-libc-copy-off"
+   ],
+   "decides": "the same"
+  },
+  {
+   "id": "msel-units-gpu-parallel",
+   "source": "lane ab-outcome-3 (2026-11-24), wave-3 A/B",
+   "kind": "ab",
+   "lane": [
+    "cross-validate",
+    "cross-val-score",
+    "cross-val-predict",
+    "grid-search-cv",
+    "randomized-search-cv",
+    "learning-curve",
+    "validation-curve",
+    "calibrated"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "msel-units-gpu-parallel"
+   ],
+   "decides": "promote B (parallel GPU units) with a _OFF define when it is faster at equal digests and quality on the rows; slower, noise, a crash or a digest change -> delete the arm with tombstones"
   }
  ]
 }
