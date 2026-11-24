@@ -5,22 +5,27 @@
 that a board race cannot express. Run in a built branch tree, IDENTICAL mode
 (an `lq add <box> CMD` line; never on the laptop):
 
-    python tools/idn_all_checks.py lu-nan        # LU on an input that overflows to NaN: device vs host column
+    python tools/idn_all_checks.py lu-nan        # LU on an input that overflows to NaN: device="gpu" vs device="cpu"
     python tools/idn_all_checks.py sgd-nan       # an SGD fit with NaN / infinity in X or in y must raise
     python tools/idn_all_checks.py import-smoke  # import the package and every module the lanes changed
-    python tools/idn_all_checks.py pca-id        # PCA / TruncatedSVD fit (round-robin eigh): device vs host column
+    python tools/idn_all_checks.py pca-id        # PCA / TruncatedSVD fit (round-robin eigh): device="gpu" vs "cpu"
     python tools/idn_all_checks.py all           # the four above, one verdict line each, then IDN_ALL_CHECKS
 
 Each prints one verdict line last (`LU_NAN ...`, `SGD_NAN ...`, `IMPORT_OK`,
 `PCA_ID ...`) and exits non-zero on a failure. The digests in the LU_NAN and
 PCA_ID lines are comparable across boxes (same fixture, same bytes hashed).
-No timing, no opponent."""
+Both sides run in THIS process through the public `device=` parameter
+(2026-11-24; before, a second process with MOJOLEARN_VENDOR=cpu was the host
+column). On an installation without a GPU the two comparisons read
+NOT-APPLICABLE. No timing, no opponent."""
+import functools
 import hashlib
 import json
 from pathlib import Path
 import os
-import subprocess
 import sys
+import traceback
+from types import SimpleNamespace
 
 MODULES = (
     "mojolearn", "mojolearn.linear_model", "mojolearn.decomposition", "mojolearn.embedding", "mojolearn.linalg",
@@ -56,7 +61,8 @@ def _lu_fixture(n):
     return np.ascontiguousarray(a), np.ascontiguousarray(b)
 
 
-def _lu_child():
+def _lu_side(device):
+    """(digest, nan_words, contract) of the LU fixture on `device` ("gpu" or "cpu")."""
     import warnings
     import numpy as np
     import mojolearn as ml
@@ -67,8 +73,12 @@ def _lu_child():
     # The comparison's off arm (MOJOLEARN_IDN_ALL_OFF) was deleted 2026-11-15: every build is resident.
     assert resident, 'compiled LU route is not the resident route'
     contract = "resident-raw-solve" if resident else "public-solve-refusal"
+    # The public functions, bound to this side (`la` was the module these names
+    # lived in before e0800e050b removed its import).
+    la = SimpleNamespace(**{name: functools.partial(getattr(ml, name), device=device)
+                            for name in ("lu_factor", "lu_solve", "solve")})
     artifacts = os.environ.get("MOJOLEARN_IDN_GATE_ARTIFACTS")
-    destination = Path(artifacts) / ("lu-" + ml.vendor()) if artifacts else None
+    destination = Path(artifacts) / ("lu-" + device) if artifacts else None
     if destination:
         destination.mkdir(parents=True, exist_ok=False)
     h = hashlib.sha256()
@@ -118,13 +128,17 @@ def _lu_child():
         rows.append(row)
     if destination:
         (destination / 'result.json').write_text(json.dumps({'status': 'PASS', 'vendor': ml.vendor(),
-            'compiled_flags': flags, 'contract': contract, 'digest': h.hexdigest(), 'fixtures': rows}, indent=2) + '\n')
-    print("DIGEST %s nan_words=%d contract=%s" % (h.hexdigest(), nan_words, contract))
+            'device': device, 'compiled_flags': flags, 'contract': contract, 'digest': h.hexdigest(),
+            'fixtures': rows}, indent=2) + '\n')
+    return [h.hexdigest(), "nan_words=%d" % nan_words, "contract=%s" % contract]
 
 
-def _pca_child():
+def _pca_side(device):
+    """[digest, parts=N] of the PCA / TruncatedSVD fixture on `device`."""
     import numpy as np
-    from mojolearn.decomposition import PCA, TruncatedSVD
+    from mojolearn.decomposition import PCA as _PCA, TruncatedSVD as _TSVD
+    PCA = functools.partial(_PCA, device=device)
+    TruncatedSVD = functools.partial(_TSVD, device=device)
     h = hashlib.sha256()
     parts = 0
     for n, d, k in ((4096, 220, 16), (1500, 33, 33), (900, 7, 3)):
@@ -141,30 +155,44 @@ def _pca_child():
                     h.update(_bytes(v))
                     parts += 1
             h.update(_bytes(est.transform(X[:64])))
-    print("DIGEST %s parts=%d" % (h.hexdigest(), parts))
+    return [h.hexdigest(), "parts=%d" % parts]
 
 
-def _run_child(extra_env, what="lu-nan"):
-    env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical", **extra_env)
-    p = subprocess.run([sys.executable, os.path.abspath(__file__), what, "--child"], env=env,
-                       capture_output=True, text=True)
+def _both_sides(what, side_fn):
+    """((gpu digest fields, error), (cpu digest fields, error)) from ONE process,
+    device="gpu" then device="cpu", or None when this installation has no GPU
+    side. Each side's exception is its error line, never a crash of the other."""
+    import mojolearn as ml
+    if str(ml.vendor()) == "cpu":
+        return None
+    out = []
     artifacts = os.environ.get("MOJOLEARN_IDN_GATE_ARTIFACTS")
-    if artifacts:
-        folder = Path(artifacts)
-        folder.mkdir(parents=True, exist_ok=True)
-        tag = what + "-" + env.get("MOJOLEARN_VENDOR", "auto")
-        (folder / (tag + ".stdout.log")).write_text(p.stdout)
-        (folder / (tag + ".stderr.log")).write_text(p.stderr)
-        (folder / (tag + ".rc.json")).write_text(json.dumps({'rc': p.returncode, 'vendor': env.get('MOJOLEARN_VENDOR')}) + "\n")
-    line = [ln for ln in p.stdout.splitlines() if ln.startswith("DIGEST ")]
-    if p.returncode != 0 or not line:
-        return None, (p.stderr or p.stdout).strip().splitlines()[-1:] or ["no output"]
-    return line[-1].split()[1:], None
+    for device in ("gpu", "cpu"):
+        try:
+            got, err = side_fn(device), None
+        except Exception as exc:  # the side's own failure, reported by name
+            got, err = None, ["%s: %s" % (type(exc).__name__, str(exc)[:200])]
+            if os.environ.get("MOJOLEARN_IDN_GATE_ARTIFACTS"):
+                traceback.print_exc()
+        if artifacts:
+            folder = Path(artifacts)
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / ("%s-%s.rc.json" % (what, device))).write_text(json.dumps(
+                {'rc': 0 if err is None else 1, 'device': device, 'vendor': str(ml.vendor()),
+                 'digest': got, 'error': err}) + "\n")
+        out.append((got, err))
+    return out
+
+
+NO_GPU = "NOT-APPLICABLE (no GPU in this installation: nothing to compare the CPU side with)"
 
 
 def lu_nan():
-    dev, e1 = _run_child({})
-    host, e2 = _run_child({"MOJOLEARN_VENDOR": "cpu"})
+    sides = _both_sides("lu-nan", _lu_side)
+    if sides is None:
+        print("LU_NAN " + NO_GPU)
+        return 0
+    (dev, e1), (host, e2) = sides
     if dev is None or host is None:
         print("LU_NAN ERROR device=%s host=%s" % (e1, e2))
         return 1
@@ -176,8 +204,11 @@ def lu_nan():
 
 
 def pca_id():
-    dev, e1 = _run_child({}, "pca-id")
-    host, e2 = _run_child({"MOJOLEARN_VENDOR": "cpu"}, "pca-id")
+    sides = _both_sides("pca-id", _pca_side)
+    if sides is None:
+        print("PCA_ID " + NO_GPU)
+        return 0
+    (dev, e1), (host, e2) = sides
     if dev is None or host is None:
         print("PCA_ID ERROR device=%s host=%s" % (e1, e2))
         return 1
@@ -233,9 +264,6 @@ def import_smoke():
 
 
 def main(argv):
-    if len(argv) >= 2 and argv[1] == "--child" and argv[0] in ("lu-nan", "pca-id"):
-        (_lu_child if argv[0] == "lu-nan" else _pca_child)()
-        return 0
     table = {"import-smoke": import_smoke, "lu-nan": lu_nan, "sgd-nan": sgd_nan, "pca-id": pca_id}
     if len(argv) == 1 and argv[0] == "all":
         got = {}
