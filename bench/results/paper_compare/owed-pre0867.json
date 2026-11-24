@@ -285,8 +285,9 @@
   },
   "c48-if-partition": {
    "define": "MOJOLEARN_TREES_C48_IF_PARTITION",
-   "status": "define in code (isolation_forest/impl/isolation_tree_builder.mojo IF_C48_FUSED_PARTITION, IF_WORK_PLANES 3): B = node split as one fused stable partition (flag and block scan once, destinations stored, one scatter; no atomics); A = the two-pass stable partition",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2): NOISE (L40S 6 cells, median 1.00, 0.99..1.00, iforest istella fit 197 -> 197 ms, taxi 149 -> 149 ms); A (the default two-pass partition) is unchanged; removed: the fused partition and the third work plane; the define is refused (core/experiment_guards_trees.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TREES_C48_IF_PARTITION.ab-outcome-2.patch. Was: define in code (isolation_forest/impl/isolation_tree_builder.mojo IF_C48_FUSED_PARTITION, IF_WORK_PLANES 3): B = node split as one fused stable partition (flag and block scan once, destinations stored, one scatter; no atomics); A = the two-pass stable partition",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "seq-tiled-predict-on": {
    "define": "MOJOLEARN_IDN_SEQ_TILED_PREDICT",
@@ -2318,7 +2319,8 @@
    "b_arms": [
     "c48-if-partition"
    ],
-   "decides": "B is promoted only when iforest fit (istella, taxi) is faster on NVIDIA L40S; digests must not move (stable order kept on both sides)"
+   "decides": "B is promoted only when iforest fit (istella, taxi) is faster on NVIDIA L40S; digests must not move (stable order kept on both sides)",
+   "owed": "DECIDED"
   },
   {
    "id": "seq-tiled-predict",

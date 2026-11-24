@@ -690,6 +690,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_GREEDY_DEVICE_ROUNDS_OFF.ab-outcome-1.patch
     comptime assert not is_defined["MOJOLEARN_GBDT_GREEDY_DEVICE_ROUNDS_OFF"](), "removed 2026-11-24 (lane/ab-outcome-1, A/B nvc-ab-20261124T070727Z-69dac2 NVIDIA L40S, wheel 4519097d380a, one run per arm): GBDT_GREEDY_DEVICE_ROUNDS_OFF (the host round loop for the greedy-searcher SymmetricTree fits) was no faster: 12 cells, median 1.00, 0.99..1.04; the greedy device rounds stay the default; code at d81b6ba708; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_GREEDY_DEVICE_ROUNDS_OFF.ab-outcome-1.patch"
     # ---- end lane ab-outcome-1
+    # ---- lane ab-outcome-2 (2026-11-24): A/B nvc-ab-20261124T095727Z-92fd9f decisions (NVIDIA L40S only, job nvc1-0002)
+    # TOMBSTONE: MOJOLEARN_TREES_C48_IF_PARTITION (NOISE: NV L40S 6 cells, median 1.00, 0.99..1.00) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TREES_C48_IF_PARTITION.ab-outcome-2.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_C48_IF_PARTITION"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, one run per arm): TREES_C48_IF_PARTITION (IsolationForest node split as one fused stable partition, IF_WORK_PLANES 3) was NOISE: 6 cells (iforest istella and taxi full, fit and infer), median 1.00, 0.99..1.00, iforest istella fit 197 -> 197 ms, taxi 149 -> 149 ms; the two-pass partition default is kept; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TREES_C48_IF_PARTITION.ab-outcome-2.patch"
+    # ---- end lane ab-outcome-2
     return True
 
 

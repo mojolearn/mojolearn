@@ -170,9 +170,9 @@ from checks.numerics import (
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_C47_IF_LIVE_TASKS.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_TREES_C48_IF_PARTITION (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at dc94980d4a.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_C48_IF_PARTITION.patch; record in docs/TOMBSTONES.md.
-# RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #7 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history) (opt-in, default off; A/B owed on NVIDIA L40S).
-comptime IF_C48_FUSED_PARTITION = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C48_IF_PARTITION"]()
-comptime IF_WORK_PLANES = 3 if IF_C48_FUSED_PARTITION else 2
+# TOMBSTONE: MOJOLEARN_TREES_C48_IF_PARTITION (NOISE: NV L40S 6 cells, median 1.00, 0.99..1.00) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TREES_C48_IF_PARTITION.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+comptime IF_WORK_PLANES = 2
 comptime IF_FAST_ROWMAJOR = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and TARGET_HAS_APPLE_GPU
@@ -717,42 +717,8 @@ def _block_stable_partition(
     each side in its previous order; returns the split position."""
     # TOMBSTONE: MOJOLEARN_TREES_C48_IF_PARTITION (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at dc94980d4a.
     # Restore: git apply experiments/removed/MOJOLEARN_TREES_C48_IF_PARTITION.patch; record in docs/TOMBSTONES.md.
-    # RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #7 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history) (opt-in, default off; A/B owed on NVIDIA L40S).
-    comptime if IF_C48_FUSED_PARTITION:
-        # temp holds n local output indices and n signed destinations. Each
-        # row's flag and global child prefix are produced once. Child metadata
-        # (split=start+left_count) comes from the same scan, never atomics.
-        var count = end-start
-        var destinations = temp.unsafe_offset(count)
-        var left_count = 0
-        var processed = 0
-        while processed < count:
-            var local = processed+tid
-            var flag = Int32(0)
-            if local < count:
-                var idx = Int(work_indices.unsafe_load(start+local))
-                flag = Int32(1) if local_data.unsafe_load(idx*n_cols+feature) < threshold else Int32(0)
-            var sc = _block_scan(scan, tid, n_threads, flag)
-            if local < count:
-                var lp = left_count+sc[0]
-                destinations.unsafe_store(local, Int32(lp if flag != 0 else -(local-lp+1)))
-            left_count += sc[1]
-            processed += n_threads
-        barrier()
-        var local = tid
-        while local < count:
-            var dest = Int(destinations.unsafe_load(local))
-            if dest < 0:
-                dest = left_count-dest-1
-            temp.unsafe_store(dest, work_indices.unsafe_load(start+local))
-            local += n_threads
-        barrier()
-        local = tid
-        while local < count:
-            work_indices.unsafe_store(start+local, temp.unsafe_load(local))
-            local += n_threads
-        barrier()
-        return start+left_count
+    # TOMBSTONE: MOJOLEARN_TREES_C48_IF_PARTITION (NOISE: NV L40S 6 cells, median 1.00, 0.99..1.00) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TREES_C48_IF_PARTITION.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
     var n_less = 0
     var base_r = start
     while base_r < end:
