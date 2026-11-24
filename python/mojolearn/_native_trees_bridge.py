@@ -426,6 +426,14 @@ def connect_gbdt_parameters(base, classes, metadata):
         cls.__getattribute__ = descriptor
         cls._mojolearn_native_public = True
         layout = _layout(cls, descriptor)
+        # `feature_importances_` (lane w3-fix-a, row 1): the adapters' property object is bound to its native
+        # read, resolved here once: (the property, the compiled tree entry, (operation, arguments, context)).
+        # The attribute door calls that entry, never the property's Python getter (before, it refused the
+        # property as an unconnected Python descriptor).
+        importances = next((row['feature_importances_'] for row in (type.__dict__['__dict__'].__get__(parent)  # glue: raw native class namespaces
+                            for parent in type.__dict__['__mro__'].__get__(cls)) if 'feature_importances_' in row), None)  # glue: fixed class ancestry
+        if importances is not None:
+            layout['bindings']['feature_importances_'] = (importances, entry, ('trees_gbdt_feature_importances', (), context))
         context.setdefault('classical_public_layouts', {})[cls] = layout
         context['trees_state_layouts'][cls] = {
             'classical_public_layouts': {cls: layout}, 'classical_public_installed': True}
