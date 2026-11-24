@@ -80,6 +80,10 @@ comptime MEMBER_NOTICE_ONEHOT_UNKNOWN = 13
 #: `_kappa`): a = 1 no label of y2 is in both y1 and the labels, a = 2 only
 #: one label in common (a search scorer's metric warning, raised at PACK).
 comptime MEMBER_NOTICE_METRIC_KAPPA = 14
+#: class_likelihood_ratios (lane mf-score8 round b; `_likelihood_ratios`): a =
+#: the slot's flag bits (1 no positive sample; 2 LR+ undefined; 4 LR-
+#: undefined), each bit one UndefinedMetricWarning in that order.
+comptime MEMBER_NOTICE_METRIC_CLR = 15
 
 #: The words scikit-learn's cross_val_predict adds to its imbalanced-fold
 #: warning and refusals (model_selection/_validation.py

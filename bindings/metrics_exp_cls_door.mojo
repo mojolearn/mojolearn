@@ -38,7 +38,7 @@ from bindings.metrics_exp_common_run import MX_NONE, mx_nan, mx_inf, mx_isnan, m
 from bindings.metrics_program_pack import metric_arena_array
 from bindings.metrics_program_door import MetricDoorProg, metric_door_run
 from bindings.arena_prog_run import MetricArenaOwner
-from bindings.mcls_classify_run import McEpi, mc_sums_stages, mc_epi_words, mc_mcc_words, kappa_stages
+from bindings.mcls_classify_run import McEpi, mc_sums_stages, mc_epi_words, mc_mcc_words, kappa_stages, clr_stages
 from bindings.metrics_exp_common_unpack import (
     MxLab, MxPair, mx_b, mx_len, mx_truthy, mx_eq, mx_is_bool, mx_is_str, mx_is_real, mx_float, mx_raise_obj,
     mx_zero_division, mx_warn, mx_undefined, mx_sorted, mx_set, mx_list, mx_label_order, mx_str_list, mx_encode,
@@ -51,7 +51,6 @@ comptime _CM_MLCM = 0
 comptime _CM_MCC = 1
 comptime _CM_COUNT = 2
 comptime _CM_NORM = 3
-comptime _CM_CLR = 5
 comptime _CM_TOTAL = 6
 comptime _CM_WSUM_LEAF = 7
 comptime _CM_WSUM_FOLD = 8
@@ -389,34 +388,8 @@ def _zero_one(args: PythonObject, context: PythonObject) raises -> PythonObject:
 # ---------------------------------------------------------------- the confusion matrix
 
 
-struct MxConf(Movable):
-    """`_confusion`'s program: the k*k groupings over `order`."""
-    var prog: MetricDoorProg
-    var cells: Int
-    var col: Int
-
-    def __init__(out self, var prog: MetricDoorProg, cells: Int, col: Int):
-        self.prog = prog^
-        self.cells = cells
-        self.col = col
-
-
-def _confusion(pair: MxPair, order: PythonObject, context: PythonObject) raises -> MxConf:
-    var n = pair.true.n
-    var k = mx_len(order)
-    if k > 4096:
-        raise Error("mojolearn metrics: at most 4096 labels in a confusion matrix")
-    var prog = MetricDoorProg()
-    var a = prog.put_i32(mx_codes(pair.true, order, False, context))
-    var b = prog.put_i32(mx_codes(pair.pred, order, False, context))
-    var key = prog.scratch(n)
-    prog.stage("pair_key", n, [a, b, key, k, 0])
-    var W = MX_NONE
-    if pair.w is not None:
-        W = prog.put(pair.w)
-    var g = prog.group(key, n, k * k, MX_NONE, 1, W, 1)
-    var weighted = pair.w is not None
-    return MxConf(prog^, g[1] if weighted else g[0], 1 if weighted else 0)
+# Lane mf-score8: `MxConf` and `_confusion` went with their last callers (`_kappa`, `_likelihood_ratios`:
+# bindings/mcls_classify_run.mojo `kappa_stages`, `clr_stages`).
 
 
 def _kappa(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -499,13 +472,26 @@ def _likelihood_ratios(args: PythonObject, context: PythonObject) raises -> Pyth
         raise Error("mojolearn metrics: at most 4096 labels in a confusion matrix")
     if k != 2:
         raise Error("class_likelihood_ratios needs a 2 x 2 confusion matrix")
-    var c = _confusion(pair, chosen, context)
-    var out = c.prog.want(c.prog.alloc(6), 6)
-    c.prog.stage("cm_epi", 1, [_CM_CLR, c.cells, c.col, out])
-    var arena = metric_door_run(c.prog, args[5], context)
+    # Lane mf-score8: ONE BODY. The program is bindings/mcls_classify_run.mojo
+    # `clr_stages` (moved from here: `_confusion`'s pair key and 2 x 2
+    # grouping over the chosen labels, then cm_epi CLR), which the search
+    # scorers' typed RUN calls too; its pins in its input order.
+    var prog = MetricDoorProg()
+    prog.pins.append(mx_codes(pair.true, chosen, False, context))
+    prog.pins.append(mx_codes(pair.pred, chosen, False, context))
+    if pair.w is not None:
+        prog.pins.append(pair.w)
+    var out = clr_stages(prog.plan, pair.true.n, pair.w is not None)
+    var arena = metric_door_run(prog, args[5], context)
     var flags = arena.i32(out)
+    # positive_likelihood_ratio / negative_likelihood_ratio (lane mf-score8,
+    # python/mojolearn/_expansion_metrics.py): the scorers' metrics, one
+    # ratio of the same call (args[6] picks it)
+    var pick = Int(py=args[6]) if mx_len(args) > 6 else -1
     if flags & 1:
         mx_undefined("No samples of the positive class are present in `y_true`.", context)
+        if pick >= 0:
+            return PythonObject(mx_nan())
         return Python.tuple(PythonObject(mx_nan()), PythonObject(mx_nan()))
     var lr_pos = PythonObject(arena.f64(out + 2))
     var lr_neg = PythonObject(arena.f64(out + 4))
@@ -515,6 +501,10 @@ def _likelihood_ratios(args: PythonObject, context: PythonObject) raises -> Pyth
     if flags & 4:
         mx_undefined("`negative_likelihood_ratio` is ill-defined and set to `np.nan`.", context)
         lr_neg = rub[PythonObject("LR-")] if is_dict else rub
+    if pick == 0:
+        return py_call(b.float, lr_pos)
+    if pick == 1:
+        return py_call(b.float, lr_neg)
     return Python.tuple(py_call(b.float, lr_pos), py_call(b.float, lr_neg))
 
 

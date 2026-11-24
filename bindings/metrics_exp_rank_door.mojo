@@ -30,9 +30,9 @@ from bindings.classical_arrays_door import classical_address
 from core.host_finite_scan import host_all_finite_f32
 from bindings.metrics_exp_common_run import MX_NONE, mx_nan
 from bindings.metrics_exp_rank_run import (
-    _ROW_BRIER, _ROW_LOGLOSS, _ROW_HINGE_BIN, _ROW_HINGE_MC, _ROW_DCG, _ROW_COVERAGE, _ROW_LRAP, _ROW_RANKLOSS,
-    _ROW_DCG_IGNORE_TIES, _RANK_MEAN, _RANK_NDCG_ROW, _RANK_D2_LOG, _RANK_D2_BRIER, _SCAN_INDICATOR, _SCAN_NEGATIVE,
-    ProbaShape, row_fold, row_mean_stage, proba_stages, proba_check, dcg_table, brier_stages,
+    _ROW_DCG, _ROW_COVERAGE, _ROW_LRAP, _ROW_RANKLOSS,
+    _ROW_DCG_IGNORE_TIES, _RANK_MEAN, _RANK_NDCG_ROW, _SCAN_INDICATOR, _SCAN_NEGATIVE,
+    ProbaShape, row_mean_stage, proba_check, dcg_table, brier_stages, hinge_stages, d2_proba_stages,
 )
 from bindings.metrics_program_door import MetricDoorProg, metric_door_run
 from bindings.arena_prog_run import MetricArenaOwner
@@ -121,12 +121,6 @@ def _proba(y_true: PythonObject, y_proba: PythonObject, labels: PythonObject, po
     return _Proba(codes, a, ProbaShape(n, k, binary))
 
 
-def _put_proba(mut prog: MetricDoorProg, p: _Proba) raises -> Tuple[Int, Int]:
-    """`_put_proba`: (S, FLAGS); the probabilities pinned, the stages typed."""
-    var A = prog.put(p.a)
-    return proba_stages(prog.plan, A, p.shape)
-
-
 def _brier(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """args = (y_true, y_proba, sample_weight, pos_label, labels, scale_by_half, mode)."""
     var caller = String("brier_score_loss")
@@ -159,23 +153,17 @@ def _d2_proba(args: PythonObject, caller: String, logloss: Bool, context: Python
         mx_undefined("D^2 score is not well-defined with less than two samples.", context)
         return PythonObject(mx_nan())
     var w = mx_weights(args[2], p.shape.n, caller, context)
+    # lane mf-score8: ONE BODY, bindings/metrics_exp_rank_run.mojo
+    # `d2_proba_stages` (the search scorers' RUN calls it too); its pins in
+    # its input order (the probabilities, the codes, the weights)
     var prog = MetricDoorProg()
-    var put = _put_proba(prog, p)
-    var Y = prog.put_i32(p.codes)
-    var f = row_fold(prog.plan, put[0], p.shape.k, Y, p.shape.n, _ROW_LOGLOSS if logloss else _ROW_BRIER, w is not None,
-                     0, MX_NONE)
+    var got = d2_proba_stages(prog.plan, p.shape, w is not None, logloss)
+    prog.pins.append(p.a)
+    prog.pins.append(p.codes)
     _pin_weights(prog, w)
-    var g = prog.group(Y, p.shape.n, p.shape.k, MX_NONE, 1, f[2], 1)
-    var PER = g[0] if w is None else g[1]
-    var weighted = 0 if w is None else 1
-    var res = prog.alloc(2)
-    if logloss:
-        prog.stage("rank_epi", 1, [_RANK_D2_LOG, f[0], PER, weighted, p.shape.k, res])
-    else:
-        prog.stage("rank_epi", 1, [_RANK_D2_BRIER, f[0], p.shape.n, f[1], PER, weighted, p.shape.k, res])
     var arena = metric_door_run(prog, args[5], context)
-    proba_check(arena, put[1], caller)
-    return PythonObject(arena.f64(res))
+    proba_check(arena, got[0], caller)
+    return PythonObject(arena.f64(got[1]))
 
 
 def _hinge(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -197,21 +185,23 @@ def _hinge(args: PythonObject, context: PythonObject) raises -> PythonObject:
                 raise Error("Please include all labels in y_true or pass labels as third argument")
             raise Error("The shape of pred_decision is not consistent with the number of classes.")
         var codes = mx_codes(true, uniq, True, context)
-        var S = prog.put(s.a)
-        var Y = prog.put_i32(codes)
-        var res = _row_mean(prog, S, s.cols, Y, n, _ROW_HINGE_MC, w, 0, MX_NONE, True, False)
+        # lane mf-score8: ONE BODY, bindings/metrics_exp_rank_run.mojo
+        # `hinge_stages` (the search scorers' RUN calls it too); its pins in
+        # its input order (the decision values, the codes, the weights)
+        prog.pins.append(s.a)
+        prog.pins.append(codes)
+        var res = hinge_stages(prog.plan, n, s.cols, True, False, w is not None)
+        _pin_weights(prog, w)
         var arena = metric_door_run(prog, args[4], context)
         return PythonObject(arena.f64(res))
     if s.ndim == 2 and s.cols != 1:
         raise Error("pred_decision must be 1-D for a binary target")
-    var S = prog.put(s.a)
-    var Y: Int
+    prog.pins.append(s.a)
     if nu == 2:
-        Y = prog.put_i32(mx_map_eq(true, uniq[nu - 1], context))
-    else:
-        # all-zero codes: program-owned words (was a zeroed Array pinned as a caller buffer)
-        Y = prog.put_words(List[Int32](length=n, fill=0))
-    var res = _row_mean(prog, S, 1, Y, n, _ROW_HINGE_BIN, w, 0, MX_NONE, True, False)
+        prog.pins.append(mx_map_eq(true, uniq[nu - 1], context))
+    # nu 1: all-zero codes, program-owned words (`hinge_stages(zero_codes)`)
+    var res = hinge_stages(prog.plan, n, 1, False, nu != 2, w is not None)
+    _pin_weights(prog, w)
     var arena = metric_door_run(prog, args[4], context)
     return PythonObject(arena.f64(res))
 

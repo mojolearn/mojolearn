@@ -183,6 +183,22 @@ def class_likelihood_ratios(y_true, y_pred, *, labels=None, sample_weight=None,
                    _NATIVE_CONTEXT)
 
 
+def positive_likelihood_ratio(y_true, y_pred, *, numeric_mode=None):
+    """scikit-learn 1.9 `metrics._scorer.positive_likelihood_ratio`: LR+ of
+    `class_likelihood_ratios(y_true, y_pred, replace_undefined_by=1.0)`, the
+    metric of the 'positive_likelihood_ratio' scorer."""
+    return _NATIVE(None, _OP.family_mexp_cls_likelihood_ratios,
+                   (y_true, y_pred, None, None, 1.0, numeric_mode, 0), _NATIVE_CONTEXT)
+
+
+def negative_likelihood_ratio(y_true, y_pred, *, numeric_mode=None):
+    """scikit-learn 1.9 `metrics._scorer.negative_likelihood_ratio`: LR- of
+    `class_likelihood_ratios(y_true, y_pred, replace_undefined_by=1.0)`, the
+    metric of the 'neg_negative_likelihood_ratio' scorer."""
+    return _NATIVE(None, _OP.family_mexp_cls_likelihood_ratios,
+                   (y_true, y_pred, None, None, 1.0, numeric_mode, 1), _NATIVE_CONTEXT)
+
+
 def classification_report(y_true, y_pred, *, labels=None, target_names=None, sample_weight=None,
                           digits=2, output_dict=False, zero_division="warn", numeric_mode=None):
     """scikit-learn 1.9 `classification_report` for binary / multiclass 1-D

@@ -228,9 +228,47 @@ def average_precision_run(route: MetricRoute, truth: Int, scores: Int, n: Int, c
     return average_precision_run(route, truth, scores, n, cols, k, positive, 0)
 
 
+#: Lane mf-score8: average_precision_score's multiclass `average` words.
+comptime AP_MACRO = 0
+comptime AP_WEIGHTED = 1
+comptime AP_MICRO = 2
+comptime AP_NONE = 3
+
+
+def ap_micro_stages(mut plan: MetricProgramPlan, n: Int, k: Int, weighted: Bool) raises -> Int:
+    """Lane mf-score8: the micro average's program (moved from
+    bindings/metrics_exp_curve_door.mojo `_average_precision`, which calls
+    it): `_micro_inputs` (the row-major one-hot flags, the weights repeated
+    per class) and one curve fold over n * k scores, over its inputs S (n x
+    k float32), C (n int32 codes) and, weighted, W (n), in that order; the
+    fold's words (`ap_fold_value`)."""
+    var S = plan.input(n * k)
+    var C = plan.input(n)
+    var POS = plan.scratch(n * k)
+    plan.stage_op("onehot", n * k, [C, POS, n, k, 1])
+    var W = MX_NONE
+    if weighted:
+        var W0 = plan.input(n)
+        W = plan.scratch(n * k)
+        plan.stage_op("rep_rows", n * k, [W0, W, k])
+    return curve_fold_stages(plan, S, 1, POS, W, n * k, 1, False, False, 0.0, -1)
+
+
 def average_precision_run(route: MetricRoute, truth: Int, scores: Int, n: Int, cols: Int, k: Int,
                           positive: Int, w: Int) raises -> Float64:
-    """`w` (lane mf-score6): n float32 sample weights (0: none), the
+    """`average_precision_run` with average 'macro'."""
+    var per_class = List[Float64]()
+    return average_precision_run(route, truth, scores, n, cols, k, positive, w, AP_MACRO, per_class)
+
+
+def average_precision_run(route: MetricRoute, truth: Int, scores: Int, n: Int, cols: Int, k: Int,
+                          positive: Int, w: Int, avg: Int, mut per_class: List[Float64]) raises -> Float64:
+    """`avg` (lane mf-score8): the multiclass average (AP_*; a side of at
+    most two classes takes the binary curve whatever it is, as the door
+    does): 'weighted' the support-weighted mean, 'micro' the door's micro
+    program (`ap_micro_stages`), None the per-class values in `per_class`
+    (answering the first).
+    `w` (lane mf-score6): n float32 sample weights (0: none), the
     builders' W input as the door pins it (`ap_binary_stages` /
     `ap_ovr_stages(weighted)`).
     THE TYPED RUN of `average_precision_score(y_true, y_score)` with its
@@ -279,7 +317,21 @@ def average_precision_run(route: MetricRoute, truth: Int, scores: Int, n: Int, c
     var codes = List[Int32](length=max(n, 1), fill=Int32(0))
     for i in range(n):  # driver-loop: over the rows (the codes among the classes y_true holds)
         codes[i] = rank[Int(t[i])]
-    var o = ap_ovr_stages(plan, n, cols, w != 0, True, False)
+    if avg == AP_MICRO:
+        var mout = ap_micro_stages(plan, n, cols, w != 0)
+        var maddr: List[Int] = [scores, Int(codes.unsafe_ptr())]
+        var msizes: List[Int] = [n * cols, n]
+        if w != 0:
+            maddr.append(w)
+            msizes.append(n)
+        var marena = metric_inputs_run(route, plan, maddr, msizes)
+        _ = len(codes)  # copied into the program's arena above
+        var mzero = False
+        var mvalue = ap_fold_value(marena, mout, mzero)
+        if mzero:
+            raise Error("ZeroDivisionError: float division by zero")
+        return mvalue
+    var o = ap_ovr_stages(plan, n, cols, w != 0, avg != AP_NONE, avg == AP_WEIGHTED)
     var addresses: List[Int] = [scores, Int(codes.unsafe_ptr())]
     var sizes: List[Int] = [n * cols, n]
     if w != 0:
@@ -288,13 +340,21 @@ def average_precision_run(route: MetricRoute, truth: Int, scores: Int, n: Int, c
     var arena = metric_inputs_run(route, plan, addresses, sizes)
     _ = len(codes)  # copied into the program's arena above
     if not ap_ovr_edge(arena, o, cols):
+        if avg == AP_NONE:
+            per_class = List[Float64](capacity=cols)
+            for c in range(cols):  # small-loop(the classes: their scores)
+                per_class.append(arena.f64(o.sc + 2 * c))
+            return per_class[0]
         return arena.f64(o.res)
     var zero = False
     var per = ap_ovr_scores(arena, o, cols, zero)
     if zero:
         raise Error("ZeroDivisionError: float division by zero")
+    if avg == AP_NONE:
+        per_class = per.copy()
+        return per[0]
     var res = MX_NONE
-    var p2 = ap_edge_average_plan(per, arena.i32_words(o.sup, 2 * cols), cols, False, res)
+    var p2 = ap_edge_average_plan(per, arena.i32_words(o.sup, 2 * cols), cols, avg == AP_WEIGHTED, res)
     var a2 = metric_inputs_run(route, p2, List[Int](), List[Int]())
     return a2.f64(res)
 
@@ -376,7 +436,17 @@ def top_k_run(route: MetricRoute, truth: Int, scores: Int, n: Int, cols: Int, cl
 
 def top_k_options_run(route: MetricRoute, truth: Int, scores: Int, n: Int, cols: Int, classes: Int, k: Int, w: Int,
                       normalize: Bool, mut warn: Int) raises -> Float64:
-    """`normalize` (lane mf-score8): top_k_accuracy_score's `normalize`
+    """`top_k_options_run` with labels None."""
+    return top_k_options_run(route, truth, scores, n, cols, classes, k, w, normalize, 0, 0, warn)
+
+
+def top_k_options_run(route: MetricRoute, truth: Int, scores: Int, n: Int, cols: Int, classes: Int, k: Int, w: Int,
+                      normalize: Bool, sel_at: Int, sel_n: Int, mut warn: Int) raises -> Float64:
+    """`sel_at` / `sel_n` (lane mf-score8): top_k_accuracy_score's `labels`
+    as int32 class codes in their given order (the UNPACK refuses an
+    unordered list in the door's words; a code >= classes is a label no row
+    holds): the door's binary rule, its subset check and its strict codes.
+    `normalize` (lane mf-score8): top_k_accuracy_score's `normalize`
     (False: the hit count, or their weight sum; the door's `top_k_value`).
     `w` (lane mf-score6): n float32 sample weights (0: none), the
     program's last input as the door pins it (`top_k_stages(weighted)`).
@@ -394,7 +464,22 @@ def top_k_options_run(route: MetricRoute, truth: Int, scores: Int, n: Int, cols:
     var nc = _present(truth, n, classes, rank)
     if not host_all_finite_f32(_CRF32P(unsafe_from_address=scores), n * max(cols, 1)):
         raise Error("mojolearn " + caller + ": y_score must be finite")
-    var binary = nc <= 2
+    var binary = nc <= 2 and not (sel_n > 2)
+    if sel_n > 0:
+        # the labels' places (the door's `mx_codes(true, classes, True)`)
+        var sel = _CRI32P(unsafe_from_address=sel_at)
+        var span = classes
+        for j in range(sel_n):  # small-loop(the caller's labels)
+            span = max(span, Int(sel[j]) + 1)
+        var at = List[Int32](length=max(span, 1), fill=Int32(-1))
+        for j in range(sel_n):  # small-loop(the caller's labels: their places)
+            at[Int(sel[j])] = Int32(j)
+        for c in range(classes):  # small-loop(the classes y_true holds: each among the labels)
+            if rank[c] >= 0:
+                if at[c] < 0:
+                    raise Error("'y_true' contains labels not in parameter 'labels'.")
+                rank[c] = at[c]
+        nc = sel_n
     var two_d = cols > 1
     var n_score = cols if two_d else 2
     if binary and two_d:
