@@ -138,7 +138,7 @@ def test_native_cv_connects_cold_arena_context_before_ndarray_row_snapshot(cls):
     model = cls()
     # Recreate the real import-time arena admission state, independent of
     # other tests warming it via _Prog.run. Only testing changes metadata;
-    # the whole public CV operation must connect and consume it natively.
+    # the whole public CV operation must run natively from that cold state.
     arena = prep._PROG_CONTEXT
     saved = dict(arena)
     cold = _numpy_free_context()
@@ -147,9 +147,14 @@ def test_native_cv_connects_cold_arena_context_before_ndarray_row_snapshot(cls):
         for key in ('native_value_types', 'buffer_owner_types', 'scalar_types', 'integer_types'):
             arena[key] = cold[key]
         assert np.ndarray not in arena['buffer_owner_types']
+        # The fold rows no longer pass through an `_arena_io.DeviceRows`
+        # snapshot of the ndarray (mf-r9b beaf02e207 / 537ca78bf0: the cv
+        # tools are the typed search RUN only; X is admitted once by the
+        # model-selection door), so the operation needs nothing from the
+        # cold arena context and must still run natively and match the
+        # explicit fits below. The two asserts that the operation connected
+        # NumPy into this context tested the deleted DeviceRows route.
         actual = clean(ms.cross_val_score, model, x, y, cv=folds, scoring='accuracy')
-        assert arena['ndarray'] is np.ndarray
-        assert np.ndarray in arena['buffer_owner_types']
     finally:
         arena.clear()
         arena.update(saved)
