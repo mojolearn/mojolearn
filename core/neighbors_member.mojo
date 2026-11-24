@@ -37,8 +37,15 @@ code (the brute-force distance codes of neighbors/neighbors_knn_run.mojo:
 15 jensenshannon), [3] metric argument (Minkowski's p; 2.0 otherwise),
 [4] weights (0 uniform, 1 distance), [5] query_tile.
 
-Views (all host, dense row-major; a device-home view, a row or column index
-and a sample weight are refused in words): X float32 rows x features.
+Views (all host, dense row-major; a device-home view, a column index and a
+sample weight are refused in words): X float32 rows x features. A host int32
+/ int64 ROW INDEX (MEMBER_CAN_ROW_INDEX, the k-NN kinds; lane
+vdf-scope-cluster2a) selects the fold's rows of X and y: on the device column
+inside a resident scope with X pinned (MEMBER_CAN_SCOPE) X stays resident once
+per search and the fit's index and the queries are the fold's rows gathered
+on the device (THE FOLD INDEX, NB_OP_INDEX_PREPARE_FOLD; THE FOLD QUERIES,
+the resident entries' NbFold); otherwise the rows are gathered on the host
+once per call. y's rows are gathered into the slot either way.
 Classifier: y = class CODES 0 .. classes-1 as one int32 column
 (`MEMBER_I32`), `call.classes` the class count at fit / import; predict
 writes int32 codes (rows x 1); predict_proba writes float32 rows x classes
@@ -105,13 +112,25 @@ from core.member_families import MEMBER_FAMILY_NEIGHBORS
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.neighbors_entry_table import nb_index_prepare_call, nb_index_release_call
+# Lane vdf-scope-cluster2a (2026-11-24): THE FOLD INDEX and THE FOLD QUERIES.
+from core.neighbors_entry_table import nb_index_prepare_fold_call, nb_fold_ready_call, NbFold
+from core.member_abi import (
+    MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, MEMBER_I64, MEMBER_HOME_DEVICE,
+)
+from core.host_parallel import host_widen_index_i64
+from core.admitted_rows_gather import admitted_gather_rows_f32, ARG_OUT_OF_RANGE
+from core.kmeans_fold_transport import kmeans_fold_store_ref
+from bindings.arena_cache_run import arena_scope_store_put, arena_cache_put, arena_cache_free
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from neighbors.neighbors_knn_run import (
     KnnDistWords, KnnQueryRequest, KnnQueryOutcome, knn_classify_run, knn_regress_run,
-    knn_check_metric_input, knn_check_width,
+    knn_check_metric_input, knn_check_width, knn_metric_reads_host_queries,
 )
 
 comptime _CHUNK = 256
+#: The scope cache's family prefix of the k-NN folds (on model selection's fold store, the KMeans fold store's
+#: transport entry: core/kmeans_fold_transport.mojo).
+comptime NB_FOLD_PREFIX = "neighbors_fold"
 comptime _INDEX_SPAN = 16777216
 comptime NEIGHBORS_BLOCK_POINTS = MEMBER_BLOCK_FAMILY
 comptime NEIGHBORS_BLOCK_TARGETS = MEMBER_BLOCK_FAMILY + 1
@@ -170,6 +189,16 @@ struct NeighborsMemberSlot(Copyable, Movable, Defaultable):
     # that minted it (released through its minter).
     var handle: Int
     var handle_entry: EntryRef
+    # THE FOLD INDEX (lane vdf-scope-cluster2a): a fit under a row index in a
+    # resident scope builds the resident index on the device from the fold's
+    # rows; the slot then holds no host points: `fold_base` (the borrowed
+    # host X, `fold_base_rows` rows) and the fold's int64 row numbers, which
+    # the first export (or a re-mint on another entry) gathers on the host.
+    var fold_base: Int
+    var fold_base_rows: Int
+    var fold_rows: List[Int64]
+    # THE FOLD QUERIES: set by `_indexed_query` for one query only.
+    var query_fold: NbFold
 
     def __init__(out self):
         self.generation = 0
@@ -202,6 +231,10 @@ struct NeighborsMemberSlot(Copyable, Movable, Defaultable):
         self.proba = List[Float32]()
         self.handle = 0
         self.handle_entry = entry_ref_unresolved()
+        self.fold_base = 0
+        self.fold_base_rows = 0
+        self.fold_rows = List[Int64]()
+        self.query_fold = NbFold.none()
 
 
 struct NeighborsMemberStore(Defaultable, Movable):
@@ -413,6 +446,59 @@ def _present_codes(slot: _SlotPtr) raises:
     slot[].uniq = List[Int32](length=len(slot[].present), fill=Int32(0))
 
 
+def _wide_index(index: MemberMatrix, estimator: String) raises -> List[Int64]:
+    """A host int32 / int64 row index as owned int64 row numbers (one widening
+    pass in row tasks for int32)."""
+    if index.home == MEMBER_HOME_DEVICE or index.cols != 1 or not (
+            index.dense_host(MEMBER_I32) or index.dense_host(MEMBER_I64)):
+        raise Error("TypeError: a " + estimator + " member reads a row index as a dense host int32 or int64 column")
+    var n = index.rows
+    var wide = List[Int64](length=max(n, 1), fill=Int64(0))
+    if index.dtype == MEMBER_I64:
+        unsafe_memcpy(dest=wide.unsafe_ptr(), src=MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=index.data),
+                      count=n)
+    else:
+        host_widen_index_i64(index.data, Int(wide.unsafe_ptr()), n)
+    return wide^
+
+
+def _gather_rows(base: Int, base_rows: Int, width: Int, wide: List[Int64], n: Int, dst: Int,
+                 estimator: String) raises:
+    """Rows `wide[0:n]` of the host words at `base` (`width` 4-byte words a
+    row, float32 or int32: words are copied, never converted) into `dst`, in
+    row tasks across the host's cores. An index outside the base is refused."""
+    var status = admitted_gather_rows_f32[DType.int64](base, base_rows, width, Int(wide.unsafe_ptr()), n, dst)
+    if status == ARG_OUT_OF_RANGE:
+        raise Error("IndexError: a " + estimator + " member's row index holds a row outside X's "
+                    + String(base_rows) + " rows")
+
+
+def _fold_route(slot: _SlotPtr, call: _CallPtr) raises -> Bool:
+    """THE FOLD ROUTE: a call inside a resident scope with X pinned, on the
+    device column, whose resident index lives on the fold store's context,
+    and a metric that reads no host rows (cosine's zero-row and
+    Jensen-Shannon's sign refusals read host words: those keep the host
+    gather)."""
+    if call[].scope == MEMBER_SCOPE_NONE or call[].pin == 0 or call[].route.vendor == 0:
+        return False
+    if knn_metric_reads_host_queries(slot[].metric):
+        return False
+    return nb_fold_ready_call(call[].route.entry.call)
+
+
+def _put_fold(call: _CallPtr, wide: List[Int64], n: Int) raises -> NbFold:
+    """The whole X found in (or put ONCE into) the scope's fold-store cache
+    (`call.pin_kept` on publish: THE PIN RULE) and this call's int64 row
+    numbers put (the caller frees `.index` after the call)."""
+    var x = call[].x
+    var store = kmeans_fold_store_ref(call[].route.mode, call[].route.vendor)
+    var put = arena_scope_store_put(call[].scope, store, NB_FOLD_PREFIX, x.data, x.rows * x.cols, call[].pin)
+    if put.pinned:
+        call[].pin_kept = 1
+    var index_id = arena_cache_put(store, Int(wide.unsafe_ptr()), 2 * n)
+    return NbFold(1, put.store_id, x.rows, index_id)
+
+
 def _fit_points(slot: _SlotPtr, call: _CallPtr) raises:
     """Lane mf-member8: NearestNeighbors / RadiusNeighbors `fit(X, y=None)`:
     the estimator's own fit over the caller's admitted X (its metric input
@@ -432,6 +518,9 @@ def _fit_points(slot: _SlotPtr, call: _CallPtr) raises:
     _release_index(slot)
     slot[].fitted = False
     slot[].points = List[Float32]()
+    slot[].fold_base = 0
+    slot[].fold_base_rows = 0
+    slot[].fold_rows = List[Int64]()
     slot[].points_addr = call[].x.data
     slot[].targets_addr = 0
     slot[].rows = rows
@@ -444,19 +533,22 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
         _fit_points(slot, call)
         return
     var estimator = _name(slot)
-    _whole(call, estimator)
+    if call[].column_index.rows > 0:
+        raise Error("TypeError: a " + estimator + " member reads every column of X (no column index)")
+    var indexed = call[].row_index.rows > 0
     if call[].fit_output != 0:
         member_unsupported(estimator, call[].fit_output)
     if call[].weights.rows > 0:
         raise Error("TypeError: a " + estimator + " member fits no sample_weight")
     _dense(call[].x, MEMBER_F32, "X", estimator)
-    var rows = call[].x.rows
+    var base_rows = call[].x.rows
+    var rows = call[].row_index.rows if indexed else base_rows
     var cols = call[].x.cols
     # THE 2-D y (lane w3f3-k): `outputs` target columns.
     var outputs = call[].y.cols
     if outputs < 1:
         raise Error("ValueError: a " + estimator + " member fits one target column or more")
-    if call[].y.rows != rows:
+    if call[].y.rows != base_rows:
         raise Error("ValueError: X and y have different numbers of rows")
     if slot[].regressor:
         _dense(call[].y, MEMBER_F32, "y", estimator)
@@ -464,7 +556,8 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
         _dense(call[].y, MEMBER_I32, "y (class codes)", estimator)
         if outputs == 1 and call[].classes < 1:
             raise Error("ValueError: a " + estimator + " member needs the class count at fit")
-    knn_check_metric_input(estimator, slot[].metric, call[].x.data, rows * cols)
+    if not indexed:
+        knn_check_metric_input(estimator, slot[].metric, call[].x.data, rows * cols)
     _release_index(slot)
     slot[].fitted = False
     # Borrow, never copy (LIFETIME in the module docstring). A copy a
@@ -472,18 +565,84 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
     slot[].points = List[Float32]()
     slot[].codes = List[Int32]()
     slot[].targets = List[Float32]()
+    slot[].fold_base = 0
+    slot[].fold_base_rows = 0
+    slot[].fold_rows = List[Int64]()
     slot[].points_addr = call[].x.data
     slot[].targets_addr = call[].y.data
     slot[].rows = rows
     slot[].features = cols
     slot[].outputs = outputs
-    if outputs > 1:
+    if indexed:
+        _fit_indexed(slot, call, estimator, rows, cols, outputs)
+    elif outputs > 1:
         # Several outputs: the RUN's contiguous target columns, copied once.
         _target_columns(slot, call[].y.data, rows, outputs)
     if not slot[].regressor:
         _set_class_counts(slot, call, outputs)
         _present_codes(slot)
     slot[].fitted = True
+
+
+def _fit_indexed(slot: _SlotPtr, call: _CallPtr, estimator: String, rows: Int, cols: Int, outputs: Int) raises:
+    """A fit under a host row index (MEMBER_CAN_ROW_INDEX, lane
+    vdf-scope-cluster2a). THE FOLD INDEX on the fold route (`_fold_route`):
+    the whole X found in (or put once into) the scope's cache, the fold's row
+    numbers put for this call, and the resident index built from them ON THE
+    DEVICE (NB_OP_INDEX_PREPARE_FOLD: the same rows in the same order as the
+    host gather, so the same index words and the same neighbours); no host
+    points, no per-fold upload of X. Otherwise the fold's points are gathered
+    once into the slot (row tasks). Either way the fold's targets (rows x
+    outputs words) are gathered into the slot (row tasks), then laid out as
+    the RUN reads them."""
+    var wide = _wide_index(call[].row_index, estimator)
+    var x = call[].x
+    if _fold_route(slot, call):
+        var fold = _put_fold(call, wide, rows)
+        var store = kmeans_fold_store_ref(call[].route.mode, call[].route.vendor)
+        var status = List[Int32](length=2, fill=Int32(0))
+        var handle = 0
+        try:
+            handle = nb_index_prepare_fold_call(call[].route.entry.call, Int(status.unsafe_ptr()), fold, rows, cols)
+        finally:
+            arena_cache_free(store, fold.index)
+        if handle == 0:
+            if status[1] != 0:
+                raise Error("IndexError: a " + estimator + " member's row index holds a row outside X's "
+                            + String(x.rows) + " rows")
+            raise Error("ValueError: Input X contains NaN or infinity.")
+        slot[].handle = handle
+        slot[].handle_entry = call[].route.entry
+        # The resident index holds the fold's rows. `points_addr` names the
+        # borrowed base only as the entries' non-null index word: a metric on
+        # this route reads no host index rows (`_fold_route`); a re-mint or an
+        # export gathers the rows first (`_own_points`).
+        slot[].fold_base = x.data
+        slot[].fold_base_rows = x.rows
+        slot[].points_addr = x.data
+    else:
+        slot[].points = List[Float32](length=max(rows * cols, 1), fill=Float32(0.0))
+        _gather_rows(x.data, x.rows, cols, wide, rows, Int(slot[].points.unsafe_ptr()), estimator)
+        slot[].points_addr = Int(slot[].points.unsafe_ptr())
+        knn_check_metric_input(estimator, slot[].metric, slot[].points_addr, rows * cols)
+    # The targets: words of y's rows (float32 targets or int32 codes).
+    var gathered = List[Int32](length=max(rows * outputs, 1), fill=Int32(0))
+    _gather_rows(call[].y.data, call[].y.rows, outputs, wide, rows, Int(gathered.unsafe_ptr()), estimator)
+    if slot[].fold_base != 0:
+        slot[].fold_rows = wide.copy()  # rows x 8 bytes: the export's gather list
+    _ = len(wide)
+    if outputs > 1:
+        _target_columns(slot, Int(gathered.unsafe_ptr()), rows, outputs)
+        _ = len(gathered)
+    elif slot[].regressor:
+        slot[].targets = List[Float32](length=max(rows, 1), fill=Float32(0.0))
+        unsafe_memcpy(dest=slot[].targets.unsafe_ptr(), src=_F32P(unsafe_from_address=Int(gathered.unsafe_ptr())),
+                      count=rows)
+        slot[].targets_addr = Int(slot[].targets.unsafe_ptr())
+        _ = len(gathered)
+    else:
+        slot[].codes = gathered^
+        slot[].targets_addr = Int(slot[].codes.unsafe_ptr())
 
 
 def _target_columns(slot: _SlotPtr, source: Int, rows: Int, outputs: Int):
@@ -540,14 +699,21 @@ def _request(slot: _SlotPtr, call: _CallPtr) raises -> KnnQueryRequest:
     if not slot[].fitted:
         raise Error("NotFittedError: mojolearn: call fit before predict")
     _whole(call, estimator)
-    _dense(call[].x, MEMBER_F32, "X", estimator)
+    # THE FOLD QUERIES (`_indexed_query`): the queries are the fold's rows of
+    # the scope's resident X, gathered on the device by the resident entry.
+    var folded = slot[].query_fold.has_fold != 0
+    if not folded:
+        _dense(call[].x, MEMBER_F32, "X", estimator)
     knn_check_width(call[].x.cols, slot[].features)
     if slot[].k < 1 or slot[].k > slot[].rows:
         raise Error("mojolearn: n_neighbors must be in [1, " + String(slot[].rows) + "], got " + String(slot[].k))
-    knn_check_metric_input(estimator, slot[].metric, call[].x.data, call[].x.rows * call[].x.cols)
-    var request = KnnQueryRequest(slot[].points_addr, call[].x.data, slot[].rows, call[].x.rows,
+    if not folded:
+        knn_check_metric_input(estimator, slot[].metric, call[].x.data, call[].x.rows * call[].x.cols)
+    var request = KnnQueryRequest(slot[].points_addr, 0 if folded else call[].x.data, slot[].rows, call[].x.rows,
         slot[].features, slot[].k, slot[].query_tile,
         KnnDistWords(slot[].metric, slot[].metric_arg, slot[].weights))
+    if folded:
+        request.fold = slot[].query_fold.copy()
     var route = call[].route
     if route.vendor != 0:
         # The index stays on the device: minted at this state's first query
@@ -555,12 +721,77 @@ def _request(slot: _SlotPtr, call: _CallPtr) raises -> KnnQueryRequest:
         if slot[].handle != 0 and not entry_ref_same(slot[].handle_entry, route.entry):
             _release_index(slot)
         if slot[].handle == 0:
+            # A fold-built index is re-minted from the fold's host rows.
+            _own_points(slot)
+            request.index = slot[].points_addr
             slot[].handle = nb_index_prepare_call(route.entry.call, slot[].points_addr, 0,
                 slot[].rows, slot[].features)
             slot[].handle_entry = route.entry
         request.resident = True
         request.handle = slot[].handle
     return request^
+
+
+def _fold_outcome(outcome: KnnQueryOutcome, slot: _SlotPtr) raises:
+    """A fold query's range word (the entry's device gather of the query
+    rows): an index outside X is refused in the member's words."""
+    if outcome.range_status != 0:
+        raise Error("IndexError: a " + _name(slot) + " member's row index holds a row outside X")
+
+
+def _query(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
+    if operation == MEMBER_OP_PREDICT:
+        _predict(slot, call)
+    else:
+        _predict_proba(slot, call)
+
+
+def _indexed_query(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
+    """PREDICT / PREDICT_PROBA under a host row index (MEMBER_CAN_ROW_INDEX,
+    lane vdf-scope-cluster2a). THE FOLD QUERIES on the fold route: the whole
+    X found in (or put once into) the scope's cache, the fold's row numbers
+    put for this call and freed after it, and the resident entry gathers the
+    query rows on the device (`NbFold`, the entry's existing fold form): no
+    host gather, no per-fold upload of X. Otherwise the fold's query rows are
+    gathered once on the host (row tasks) and run as plain host words. The
+    caller's views are restored whether the query returns or raises."""
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("NotFittedError: mojolearn: call fit before predict")
+    if call[].column_index.rows > 0:
+        raise Error("TypeError: a " + estimator + " member reads every column of X (no column index)")
+    _dense(call[].x, MEMBER_F32, "X", estimator)
+    var index = call[].row_index
+    var x = call[].x
+    var n = index.rows
+    var wide = _wide_index(index, estimator)
+    if _fold_route(slot, call):
+        var fold = _put_fold(call, wide, n)
+        var store = kmeans_fold_store_ref(call[].route.mode, call[].route.vendor)
+        var queries = MemberMatrix(fold.base, n, x.cols)
+        queries.home = MEMBER_HOME_DEVICE
+        call[].x = queries
+        call[].row_index = MemberMatrix()
+        slot[].query_fold = fold.copy()
+        try:
+            _query(slot, call, operation)
+        finally:
+            call[].x = x
+            call[].row_index = index
+            slot[].query_fold = NbFold.none()
+            arena_cache_free(store, fold.index)
+        _ = len(wide)
+        return
+    var rows = List[Float32](length=max(n * x.cols, 1), fill=Float32(0.0))
+    _gather_rows(x.data, x.rows, x.cols, wide, n, Int(rows.unsafe_ptr()), estimator)
+    call[].x = MemberMatrix(Int(rows.unsafe_ptr()), n, x.cols)
+    call[].row_index = MemberMatrix()
+    try:
+        _query(slot, call, operation)
+    finally:
+        call[].x = x
+        call[].row_index = index
+    _ = len(rows) + len(wide)
 
 
 def _predict(slot: _SlotPtr, call: _CallPtr) raises:
@@ -584,7 +815,7 @@ def _predict(slot: _SlotPtr, call: _CallPtr) raises:
                         + (String("") if outputs == 1 else String(" and output")))
         outcome = knn_classify_run(entry, request, slot[].targets_addr, call[].dst.data,
             Int(slot[].one_f32.unsafe_ptr()), Int(slot[].uniq.unsafe_ptr()), False, slot[].counts)
-    _ = outcome^
+    _fold_outcome(outcome, slot)
 
 
 def _predict_proba(slot: _SlotPtr, call: _CallPtr) raises:
@@ -611,7 +842,7 @@ def _predict_proba(slot: _SlotPtr, call: _CallPtr) raises:
         target = Int(slot[].proba.unsafe_ptr())
     var outcome = knn_classify_run(call[].route.entry.call, request, slot[].targets_addr,
         Int(slot[].one_i32.unsafe_ptr()), target, Int(slot[].uniq.unsafe_ptr()), True, slot[].counts)
-    _ = outcome^
+    _fold_outcome(outcome, slot)
     if present == classes:
         return
     var dst_ptr = _F32P(unsafe_from_address=call[].dst.data)
@@ -658,7 +889,7 @@ def _predict_proba_outputs(slot: _SlotPtr, call: _CallPtr) raises:
     var target = Int(slot[].proba.unsafe_ptr())
     var outcome = knn_classify_run(call[].route.entry.call, request, slot[].targets_addr,
         Int(slot[].one_i32.unsafe_ptr()), target, Int(slot[].uniq.unsafe_ptr()), True, slot[].counts)
-    _ = outcome^
+    _fold_outcome(outcome, slot)
     var dst_ptr = _F32P(unsafe_from_address=call[].dst.data)
     var src_ptr = _F32P(unsafe_from_address=target)
     var present_ptr = _I32P(unsafe_from_address=Int(slot[].present.unsafe_ptr()))
@@ -694,6 +925,20 @@ def _own_points(slot: _SlotPtr):
     reads its own copy from then on. A resident device index is a copy of
     the same words and stays valid."""
     var count = slot[].rows * slot[].features
+    if slot[].fold_base != 0:
+        # THE FOLD INDEX: the fold's rows gathered from the borrowed base once.
+        var gathered = List[Float32](length=max(count, 1), fill=Float32(0.0))
+        try:
+            _gather_rows(slot[].fold_base, slot[].fold_base_rows, slot[].features, slot[].fold_rows, slot[].rows,
+                         Int(gathered.unsafe_ptr()), _name(slot))
+        except:
+            pass  # the index was range-checked when the fit gathered it on the device
+        slot[].points = gathered^
+        slot[].points_addr = Int(slot[].points.unsafe_ptr())
+        slot[].fold_base = 0
+        slot[].fold_base_rows = 0
+        slot[].fold_rows = List[Int64]()
+        return
     if slot[].points_addr == Int(slot[].points.unsafe_ptr()) and len(slot[].points) == count:
         return
     var owned = List[Float32](length=count, fill=Float32(0.0))
@@ -769,6 +1014,9 @@ def _import(slot: _SlotPtr, call: _CallPtr) raises:
         _release_index(slot)
         slot[].fitted = False
         slot[].points_addr = 0
+        slot[].fold_base = 0
+        slot[].fold_base_rows = 0
+        slot[].fold_rows = List[Int64]()
         slot[].points = List[Float32](length=count, fill=Float32(0.0))
         unsafe_memcpy(dest=slot[].points.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=count)
         slot[].rows = call[].x.rows
@@ -853,12 +1101,17 @@ def _neighbors_member(operation: Int, address: Int) raises -> Int:
     comptime _POINTS = (MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_BORROWS_FIT | MEMBER_GIL_DOOR
         | MEMBER_IGNORES_Y)
     if operation == MEMBER_OP_CAPABILITIES:
+        # ROW_INDEX | SCOPE (lane vdf-scope-cluster2a): the k-NN kinds take a
+        # host row index (a fold) on both columns; on the device column a
+        # pinned X in a resident scope stays resident and the index and the
+        # queries are the fold's rows gathered on the device.
+        var folds = MEMBER_CAN_ROW_INDEX | (MEMBER_CAN_SCOPE if call[].route.vendor != 0 else 0)
         if call[].state == 0:
-            return _CLASSIFIER
+            return _CLASSIFIER | folds
         var kind = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
         if kind[].unsupervised:
             return _POINTS
-        return _REGRESSOR if kind[].regressor else _CLASSIFIER
+        return (_REGRESSOR if kind[].regressor else _CLASSIFIER) | folds
     if operation == MEMBER_OP_NEW:
         if call[].param_count != 6 or not call[].params:
             raise Error("member ABI: a k-NN member takes six parameters (kind, n_neighbors, metric, "
@@ -924,6 +1177,8 @@ def _neighbors_member(operation: Int, address: Int) raises -> Int:
         return 0
     if operation == MEMBER_OP_FIT:
         _fit(slot, call)
+    elif (operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_PREDICT_PROBA) and call[].row_index.rows > 0:
+        _indexed_query(slot, call, operation)
     elif operation == MEMBER_OP_PREDICT:
         _predict(slot, call)
     elif operation == MEMBER_OP_PREDICT_PROBA:

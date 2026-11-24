@@ -133,7 +133,6 @@ from cluster.impl.kmeans_params import (
     INIT_KMEANS_PLUS_PLUS,
     KMeansParams,
     METRIC_L2_EXPANDED,
-    weighted_sum_scale_cap,
 )
 from cluster.impl.sum_scale_plan import (
     SUM_SCALE_CHUNK,
@@ -143,6 +142,7 @@ from cluster.impl.sum_scale_plan import (
     sum_scale_is_finite,
     sum_scale_n_chunks,
     sum_scale_term,
+    weighted_sum_scale_term,
 )
 from checks.fixed_point import choose_scale
 from core.pinned_reduce import halving_block_sum
@@ -206,6 +206,40 @@ def abs_chunk_sums_kernel(
     dst.unsafe_store(gid, acc)
 
 
+def abs_weighted_chunk_sums_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_features_in: Int32,
+):
+    """Stage 1 of THE WEIGHTED BOUND (lane vdf-scope-cluster2a): as
+    `abs_chunk_sums_kernel`, each term `weighted_sum_scale_term(x[r, f],
+    w[r])` (`cluster/impl/sum_scale_plan.mojo`); stage 2 is
+    `abs_fold_chunks_kernel` unchanged."""
+    var n_rows = Int(n_rows_in)
+    var n_features = Int(n_features_in)
+    var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var b = gid // n_features
+    var f = gid - b * n_features
+    var r0 = b * SUM_SCALE_CHUNK
+    if r0 >= n_rows:
+        return
+    var r1 = r0 + SUM_SCALE_CHUNK
+    if r1 > n_rows:
+        r1 = n_rows
+    var acc = Float32(0.0)
+    var bad = False
+    for row in range(r0, r1):
+        var a = weighted_sum_scale_term(x.unsafe_load(row * n_features + f), w.unsafe_load(row))
+        if not sum_scale_is_finite(a):
+            bad = True
+        acc = acc + a
+    if bad:
+        acc = sum_scale_inf()
+    dst.unsafe_store(gid, acc)
+
+
 def abs_fold_chunks_kernel(
     dst: MutPointer[Float32, MutAnyOrigin],
     chunk_sums: MutPointer[Float32, MutAnyOrigin],
@@ -257,6 +291,47 @@ def plan_sum_scale(
     ctx.enqueue_function[abs_chunk_sums_kernel](
         chunk_sums.unsafe_ptr(),
         x.unsafe_ptr(),
+        Int32(n_samples),
+        Int32(n_features),
+        grid_dim=((threads + SUM_SCALE_TPB - 1) // SUM_SCALE_TPB, 1, 1),
+        block_dim=(SUM_SCALE_TPB, 1, 1),
+    )
+    ctx.enqueue_function[abs_fold_chunks_kernel](
+        col.unsafe_ptr(),
+        chunk_sums.unsafe_ptr(),
+        Int32(n_chunks),
+        Int32(n_features),
+        grid_dim=(n_features, 1, 1),
+        block_dim=(SUM_SCALE_TPB, 1, 1),
+    )
+    var cols = List[Float32](unsafe_uninit_length=n_features)
+    ctx.enqueue_copy(dst_ptr=cols.unsafe_ptr(), src_buf=col)
+    ctx.synchronize()
+    _ = chunk_sums^
+    _ = col^
+    return sum_scale_from_columns(cols, n_samples)
+
+
+def plan_weighted_sum_scale(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+) raises -> Float64:
+    """THE WEIGHTED BOUND (DEVIATION 5112) on the device: `plan_sum_scale`'s
+    two launches with the stage-1 term `|x| * |w|` (lane vdf-scope-cluster2a,
+    2026-11-24; it replaced the serial float64 host chain over host X). The
+    host column restates it in `cluster/host/kmeans_oracle.mojo::
+    host_plan_weighted_sum_scale`, add for add."""
+    var n_chunks = sum_scale_n_chunks(n_samples)
+    var chunk_sums = ctx.enqueue_create_buffer[DType.float32](n_chunks * n_features)
+    var col = ctx.enqueue_create_buffer[DType.float32](n_features)
+    var threads = n_chunks * n_features
+    ctx.enqueue_function[abs_weighted_chunk_sums_kernel](
+        chunk_sums.unsafe_ptr(),
+        x.unsafe_ptr(),
+        weights.unsafe_ptr(),
         Int32(n_samples),
         Int32(n_features),
         grid_dim=((threads + SUM_SCALE_TPB - 1) // SUM_SCALE_TPB, 1, 1),
@@ -443,13 +518,6 @@ def kmeans_fit(
             return KMeansFitResult(0.0, 0, sum_scale, weight_scale, 0, 0)
     _ = word^
     _ = status^
-    # DEVIATION 5112: weights above one outgrow the unweighted bound
-    # (`weighted_sum_scale_cap`, cluster/impl/kmeans_params.mojo)
-    if n_weights != 0 and requested_sum_scale <= 0.0:
-        var cap = weighted_sum_scale_cap(x_ptr, weights_ptr, n_samples, n_features)
-        if cap < sum_scale:
-            sum_scale = cap
-
     # DEVIATION 2672 (2026-09-11, linear-cluster-istella): NO HOST WEIGHT
     # VECTOR. The fit used to allocate an `n_samples` pinned host buffer,
     # store 1.0 (or copy the caller's weights) into it one row at a time on
@@ -460,6 +528,13 @@ def kmeans_fit(
     # nothing downstream can move.
     if n_weights != 0:
         ctx.enqueue_copy(dst_buf=weights, src_ptr=weights_ptr)
+        # DEVIATION 5112: weights above one outgrow the unweighted bound; the
+        # cap is the device fold over the uploaded words (lane
+        # vdf-scope-cluster2a: no host pass over X; bits change, every column).
+        if requested_sum_scale <= 0.0:
+            var cap = plan_weighted_sum_scale(ctx, x, weights, n_samples, n_features)
+            if cap < sum_scale:
+                sum_scale = cap
         weight_scale = plan_sum_scale(ctx, weights, n_samples, 1)
     else:
         enqueue_fill[DType.float32](ctx, weights, Float32(1.0))
@@ -683,6 +758,8 @@ def kmeans_fit_rows_resident(
 def kmeans_fit_device(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    weighted: Bool,
     n_samples: Int,
     n_features: Int,
     n_clusters: Int,
@@ -696,25 +773,36 @@ def kmeans_fit_device(
     metric: Int,
     oversampling_factor: Float64,
 ) raises -> KMeansFitResult:
-    """`kmeans_fit` with unit weights on rows already on the device in `x`
-    (lane a7d-device-x-decomp-cluster: a model-selection fold gathered on
-    the device, cluster/kmeans_fold.mojo). Statement for statement the
-    unit-weight path of `kmeans_fit` after its upload: the device scale
-    (`plan_sum_scale`), the exact `n_samples` weight bound, the 1.0 fill,
-    the INIT_ARRAY upload of `out_centroids_ptr`, the same tail. The same
-    words in, the same bits out."""
+    """`kmeans_fit` on rows already on the device in `x` (lane
+    a7d-device-x-decomp-cluster: a model-selection fold gathered on the
+    device, cluster/kmeans_fold.mojo). Statement for statement `kmeans_fit`
+    after its upload: the device scale (`plan_sum_scale`); with `weighted`
+    the caller's weights already in `weights` (n_samples words, gathered on
+    the device by the fold: lane vdf-scope-cluster2a), the weighted cap
+    (`plan_weighted_sum_scale`) and the weights' own scale, else the exact
+    `n_samples` weight bound and the 1.0 fill into `weights`; the INIT_ARRAY
+    upload of `out_centroids_ptr`; the same tail. The same words in, the
+    same bits out as the host-address entry."""
     if n_samples < 1 or n_features < 1 or n_clusters < 1 or n_clusters > n_samples:
         raise Error("kmeans_fit_device: bad shape " + String(n_samples) + " x " + String(n_features)
                     + " for " + String(n_clusters) + " clusters")
+    if len(weights) < n_samples:
+        raise Error("kmeans_fit_device: the weight buffer holds " + String(len(weights)) + " words, "
+                    + String(n_samples) + " needed")
     var sum_scale = plan_sum_scale(ctx, x, n_samples, n_features)
     var weight_scale = choose_scale(Float64(n_samples), n_samples)
+    if weighted:
+        var cap = plan_weighted_sum_scale(ctx, x, weights, n_samples, n_features)
+        if cap < sum_scale:
+            sum_scale = cap
+        weight_scale = plan_sum_scale(ctx, weights, n_samples, 1)
+    else:
+        enqueue_fill[DType.float32](ctx, weights, Float32(1.0))
     var cd = n_clusters * n_features
-    var weights = ctx.enqueue_create_buffer[DType.float32](n_samples)
     var centroids = ctx.enqueue_create_buffer[DType.float32](cd)
     var labels = ctx.enqueue_create_buffer[DType.uint32](n_samples)
     var x_norm = ctx.enqueue_create_buffer[DType.float32](n_samples)
     var min_dist = ctx.enqueue_create_buffer[DType.float32](n_samples)
-    enqueue_fill[DType.float32](ctx, weights, Float32(1.0))
     if init == INIT_ARRAY:
         ctx.enqueue_copy(dst_buf=centroids, src_ptr=out_centroids_ptr)
     return _kmeans_fit_tail(
