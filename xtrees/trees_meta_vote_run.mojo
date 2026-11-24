@@ -24,7 +24,7 @@ estimator's own words (the fallback rule).
 from core.entry_table import EntryRef
 from core.member_abi import (
     MemberPlan, MemberMatrix, member_call, member_call_of, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64,
-    MEMBER_OP_PREDICT,
+    MEMBER_OP_PREDICT, MemberCall, MEMBER_SCOPE_NONE, member_pin_settle,
 )
 from core.array_helpers_impl import fsum_f64
 from xtrees.trees_meta_run import CalibratedProgram
@@ -95,15 +95,72 @@ struct VoteMember(ImplicitlyCopyable, Movable):
 
 struct VoteRows(Movable):
     """The rows a vote reads: `n` x `d` float32 C-order host words at `x`
-    (the caller keeps them alive through RUN)."""
+    (the caller keeps them alive through RUN).
+
+    THE INDEXED ROWS (lane mf-cal7, 2026-11-23; `member_f32_block` only):
+    `index` nonzero: the rows are the `n` int32 row numbers at `index` of the
+    WHOLE base at `x` (`base_rows` rows), handed to a member whose kind reads
+    a row index (MEMBER_CAN_ROW_INDEX) so its device gathers them out of the
+    one resident base (CalibratedClassifierCV's DeviceRows route); `scope`
+    the caller's resident scope and `pin` X's pin token offered on the call
+    (0: none), `took` the address of the byte written 1 when the member's
+    cache took the pin's reference (THE PIN RULE, core/member_abi.mojo)."""
     var x: Int
     var n: Int
     var d: Int
+    var base_rows: Int
+    var index: Int
+    var scope: Int
+    var pin: Int
+    var took: Int
 
     def __init__(out self, x: Int, n: Int, d: Int):
         self.x = x
         self.n = n
         self.d = d
+        self.base_rows = n
+        self.index = 0
+        self.scope = MEMBER_SCOPE_NONE
+        self.pin = 0
+        self.took = 0
+
+    def __init__(out self, base: Int, base_rows: Int, d: Int, index: Int, count: Int, scope: Int, pin: Int,
+                 took: Int):
+        """THE INDEXED ROWS: `count` int32 row numbers at `index` of the base
+        `base` (`base_rows` x `d`)."""
+        self.x = base
+        self.n = count
+        self.d = d
+        self.base_rows = base_rows
+        self.index = index
+        self.scope = scope
+        self.pin = pin
+        self.took = took
+
+
+def _vote_rows_point(mut call: MemberCall, rows: VoteRows):
+    """Point `call` at `rows` (THE INDEXED ROWS: the base, the row index, the
+    scope and the offered pin)."""
+    if rows.index == 0:
+        call.x = MemberMatrix(rows.x, rows.n, rows.d)
+        return
+    call.x = MemberMatrix(rows.x, rows.base_rows, rows.d)
+    call.row_index = MemberMatrix(rows.index, rows.n, 1, MEMBER_I32)
+    call.scope = rows.scope
+    call.pin = rows.pin
+
+
+def _vote_rows_call(plan: MemberPlan, operation: Int, mut call: MemberCall, rows: VoteRows) raises:
+    """One member call over `rows`; an offered pin's answer is read whether
+    the call returns or raises (THE PIN RULE)."""
+    if rows.index == 0 or call.pin == 0:
+        _ = member_call(plan.member, operation, call)
+        return
+    try:
+        _ = member_call(plan.member, operation, call)
+    finally:
+        if member_pin_settle(call) != 0 and rows.took != 0:
+            MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=rows.took)[] = UInt8(1)
 
 
 def _member_f32(m: VoteMember, rows: VoteRows, mut keep: List[List[Float32]]) -> Int:
@@ -127,11 +184,11 @@ def member_f32_block(m: VoteMember, rows: VoteRows, mut keep: List[List[Float32]
     var count = rows.n * m.cols
     var plan = _PlanP(unsafe_from_address=m.plan)
     var call = member_call_of(plan[], m.state)
-    call.x = MemberMatrix(rows.x, rows.n, rows.d)
+    _vote_rows_point(call, rows)
     if m.dtype == MEMBER_F64:
         var wide = List[Float64](unsafe_uninit_length=count)
         call.dst = MemberMatrix(Int(wide.unsafe_ptr()), rows.n, m.cols, MEMBER_F64)
-        _ = member_call(plan[].member, m.operation, call)
+        _vote_rows_call(plan[], m.operation, call, rows)
         var words = List[Float32](unsafe_uninit_length=count)
         for i in range(count):  # small-loop(one rounding pass over one member's block, as the door's admission made)
             words[i] = wide[i].cast[DType.float32]()
@@ -140,7 +197,7 @@ def member_f32_block(m: VoteMember, rows: VoteRows, mut keep: List[List[Float32]
     else:
         var words = List[Float32](unsafe_uninit_length=count)
         call.dst = MemberMatrix(Int(words.unsafe_ptr()), rows.n, m.cols, MEMBER_F32)
-        _ = member_call(plan[].member, m.operation, call)
+        _vote_rows_call(plan[], m.operation, call, rows)
         keep.append(words^)
     return Int(keep[len(keep) - 1].unsafe_ptr())
 
