@@ -7,7 +7,6 @@ NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED �
 """
 # TOMBSTONE: MOJOLEARN_TREES_T16 (slower) deleted 2026-10-07 by 359df2d05; code recoverable at 359df2d05^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T16.patch; record in docs/TOMBSTONES.md.
-from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 # T16 (resident Lossguide frontier, = I17) removed 2026-10-07: lost on NVIDIA and AMD.
@@ -165,8 +164,8 @@ comptime ORD_STD_GRIDFOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_TREES_LG_LEVEL_ROUNDS (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at ce4ab6287e.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_LG_LEVEL_ROUNDS.patch
 # (Sweep 2026-11-15: the unread constant LG_LEVEL_ROUNDS was removed.)
-# RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #1 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history) (opt-in, default off; A/B owed on NVIDIA L40S).
-comptime LG_LEVEL_ROUNDS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_LG_LEVEL_ROUNDS"]()
+# TOMBSTONE: MOJOLEARN_TREES_LG_LEVEL_ROUNDS (NOISE: NV L40S 12 cells, median 1.01, 1.00..1.02) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TREES_LG_LEVEL_ROUNDS.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
 
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # CTR_SORTFREE_SUMS (gbdt-categorical, gbdt-ordered non-symmetric leaves):

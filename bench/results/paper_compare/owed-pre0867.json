@@ -277,8 +277,9 @@
   },
   "lg-level-rounds": {
    "define": "MOJOLEARN_TREES_LG_LEVEL_ROUNDS",
-   "status": "define in code (gbdt/trees_identical_switches.mojo LG_LEVEL_ROUNDS, greedy_search_helper_depthwise.mojo lg_level_rounds): B = when max_leaves >= 2**max_depth (a parameter test), one exact lossguide round splits a whole depth level; A = LG_EXACT_BATCH_WIDTH (32) leaves a round",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2): NOISE (L40S 12 cells, median 1.01, 1.00..1.02, lossguide istella fit 11960 -> 12182 ms, taxi 8254 -> 8298 ms); A (the LG_EXACT_BATCH_WIDTH round width) is unchanged; removed: the level-round width override; the define is refused (core/experiment_guards_trees.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TREES_LG_LEVEL_ROUNDS.ab-outcome-2.patch. Was: define in code (gbdt/trees_identical_switches.mojo LG_LEVEL_ROUNDS, greedy_search_helper_depthwise.mojo lg_level_rounds): B = when max_leaves >= 2**max_depth (a parameter test), one exact lossguide round splits a whole depth level; A = LG_EXACT_BATCH_WIDTH (32) leaves a round",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "gbdt-id-defer-copy": {
    "define": "MOJOLEARN_GBDT_ID_DEFER_COPY",
@@ -2295,7 +2296,8 @@
    "b_arms": [
     "lg-level-rounds"
    ],
-   "decides": "B is promoted only when gbdt-lossguide fit (istella, taxi, taxi gain0) is faster on NVIDIA L40S, and a non-board lossguide fit with max_leaves < 2**max_depth (the arm does not engage) does not slow down; digests must not move (best-first replay keeps the same tree)"
+   "decides": "B is promoted only when gbdt-lossguide fit (istella, taxi, taxi gain0) is faster on NVIDIA L40S, and a non-board lossguide fit with max_leaves < 2**max_depth (the arm does not engage) does not slow down; digests must not move (best-first replay keeps the same tree)",
+   "owed": "DECIDED"
   },
   {
    "id": "rr-gbdt-id-defer-copy",

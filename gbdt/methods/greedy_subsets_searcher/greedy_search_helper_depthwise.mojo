@@ -64,7 +64,6 @@ from checks.soft_f64 import (
     sf64_to_f32,
 )
 from std.sys.compile import is_defined
-from gbdt.trees_identical_switches import LG_LEVEL_ROUNDS
 
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.builtin.sort import sort
@@ -2020,38 +2019,8 @@ def fit_non_symmetric_tree[
     var hist_cells_per_leaf = layout.hist_cells
     # TOMBSTONE: MOJOLEARN_TREES_LG_LEVEL_ROUNDS (DELETE-ARM, opt-in, no A/B recorded, rule a; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 97d33c09d6.
     # Restore: git apply experiments/removed/MOJOLEARN_TREES_LG_LEVEL_ROUNDS.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
-    # RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #1 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history) (opt-in, default off; A/B owed on NVIDIA L40S).
-    # Lane S3 `MOJOLEARN_TREES_LG_LEVEL_ROUNDS` (IDENTICAL, default off).
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — NOT MEASURED.
-    # When the leaf budget cannot bind (`options.max_leaves >= 1 <<
-    # max_depth`: a PARAMETER test, never a data shape), best-first only
-    # stops when no leaf can split, so its tree is every splittable leaf
-    # down to max_depth; the exact replay's expand phase then collects the
-    # whole known frontier if the round's width allows it. This arm lifts
-    # the width (`LG_EXACT_BATCH_WIDTH`, 32) to the free slots, so a round
-    # splits one full depth level: about max_depth + 1 rounds a tree instead
-    # of about log2(max_leaves) + max_leaves / width. Each round costs host
-    # waits and ~20-25 launches whatever its width, so fewer rounds is the
-    # whole saving. NO BITS CHANGE, the LG_EXACT_ID banner's argument at any
-    # width: (1) a leaf's score reads only its own order-free fixed-point
-    # histogram and its pinned per-leaf stats, independent of which leaves
-    # share the launch; (2) `_lg_exact_plan` still replays best-first over
-    # every known gain and its `final_nodes` gives the best-first leaf
-    # numbering, so the model (leaf order included) is the one-leaf-per-
-    # iteration tree; (3) a leaf split ahead of time that best-first never
-    # takes is folded back with the stats it was scored with. Width is the
-    # same scheduling knob T17_BATCH sweeps; this arm overrides T17's width
-    # on fits where the condition holds (grid: exclusive in effect, crossed
-    # with T17_BATCH; C47_GBDT was deleted 2026-10-07). A level's
-    # frontier is at most 1 << (max_depth - 1) leaves, what a Depthwise level
-    # already launches through the same kernels.
-    var lg_level_rounds = False
-    comptime if LG_LEVEL_ROUNDS and LG_EXACT_BATCH:
-        lg_level_rounds = (
-            lg_exact and max_depth < 30
-            and options.max_leaves >= (1 << max_depth)
-            and not lg_room_bound
-        )
+    # TOMBSTONE: MOJOLEARN_TREES_LG_LEVEL_ROUNDS (NOISE: NV L40S 12 cells, median 1.01, 1.00..1.02) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TREES_LG_LEVEL_ROUNDS.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
     # LG_EXACT_ID memory gate (T1): the doubled leaf capacity must fit the
     # leaf histograms the symmetric pool holds (`1 << max_depth` slots, see
     # `TTreeWorkspace`) and stay inside Int32 cell offsets; otherwise this
@@ -3541,11 +3510,6 @@ def fit_non_symmetric_tree[
                         # slots, and (capacity below the depth bound) the slots the
                         # certain splits still to come may need
                         var lg_limit = LG_EXACT_BATCH_WIDTH
-                        comptime if LG_LEVEL_ROUNDS:
-                            # one depth level a round (the setup's banner);
-                            # the free-slot clamp below still applies
-                            if lg_level_rounds and lg_exact:
-                                lg_limit = max_leaves
                         if max_leaves - len(leaves) < lg_limit:
                             lg_limit = max_leaves - len(leaves)
                         var lg_plan = _lg_exact_plan(
