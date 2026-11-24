@@ -37,7 +37,7 @@ CAPS = {
     ("classical2", "umap"): dict(valid=True, param="n_epochs", cap=5, pin={}, unit="epoch", reason="r"),
     ("algos", "sgd-clf"): dict(valid=True, param="max_iter", cap=5, pin={"tol": None}, unit="epoch", reason="r"),
     ("neural", "mlp-fit"): dict(valid=True, param="max_iter", cap=2, pin={"tol": 0.0}, unit="epoch", reason="r"),
-    ("neural", "sequential-fit"): dict(valid=True, param="epochs", cap=2, pin={}, unit="epoch", reason="r"),
+    ("neural", "sequential-fit"): dict(valid=True, param="fit:epochs", cap=2, pin={}, unit="epoch", reason="r"),
 }
 
 
@@ -93,11 +93,14 @@ def test_more_round_and_cell(more):
     cell = more.loop_cell(plan, [(0, rec), (1, rec), (2, more.loop_round(plan, FakeModel(model.params, (10, 7.0))))])
     assert cell["mode"] == "capped" and cell["iterations"] == 10 and cell["loop_ms"] == 6.0
     assert cell["warmup"]["loop_ms"] == 5.0 and len(cell["calls"]) == 2
-    # a fit() keyword cap is read back as the call passed it
+    # a `fit:` cap has no get_params read-back; it enters the fit() keywords, never the constructor's
     seq = _plan("neural", "sequential-fit")
-    rec = more.loop_round(seq, object(), fit_keywords={"epochs": 2, "batch_size": 64})
-    assert rec["effective"] == {"epochs": 2}
-    assert rec["call"]["status"] == "unavailable"
+    rec = more.loop_round(seq, object())
+    assert rec["effective"] == {} and rec["call"]["status"] == "unavailable"
+    kw = {"epochs": 1, "batch_size": 64}
+    assert more.loop_fit_kwargs(seq, kw, True) == {"epochs": 2, "batch_size": 64}
+    assert more.loop_fit_kwargs(seq, kw, False) is kw and more.loop_fit_kwargs(None, kw, True) is kw
+    assert more.loop_params(seq, {"hidden": 8}, True) == {"hidden": 8}
 
 
 def test_more_build_refuses_capped_ours(more):
@@ -162,8 +165,9 @@ def test_neural_params():
     assert bbn.loop_params(None, kw, True) is kw
     assert bbn.loop_params(_plan("neural", "mlp-fit"), kw, False) is kw
     assert bbn.loop_params(_plan("neural", "mlp-fit"), kw, True)["max_iter"] == 2
-    fit_kw = bbn.loop_params(_plan("neural", "sequential-fit"), {"epochs": 1, "batch_size": 512}, True)
-    assert fit_kw == {"epochs": 2, "batch_size": 512}
+    seq = _plan("neural", "sequential-fit")
+    assert bbn._loop().loop_fit_kwargs(seq, {"epochs": 1, "batch_size": 512}, True) == {"epochs": 2, "batch_size": 512}
+    assert bbn.loop_params(seq, {"lr": 1e-3}, True) == {"lr": 1e-3}       # a fit: cap never enters the constructor
 
 
 # ------------------------------------------------------------------ trees (bench/speed/forest_speed_arm.py)

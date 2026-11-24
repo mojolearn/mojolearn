@@ -700,18 +700,26 @@ def loop_params(plan, params, ours):
     return _ab_loop().capped_params(plan, params)
 
 
-def loop_round(plan, model, fit_keywords=None):
+def loop_fit_kwargs(plan, kwargs, ours):
+    """An arm's fit() keywords under the plan: ab_loop.fit_kwargs (the plan's `fit:` cap and pins; a no-op for a
+    constructor cap) for OUR arm with a plan; KWARGS itself for an opponent or without a plan."""
+    if plan is None or not ours:
+        return kwargs
+    return _ab_loop().fit_kwargs(plan, kwargs)
+
+
+def loop_round(plan, model):
     """One round's loop record, read after every clock of the round has closed: the model's fit_loop_
-    (ab_loop.read_fit_loop) and the planned parameters as the fitted model's get_params() reports them
-    (FIT_KEYWORDS: a cap passed to fit(), as the call passed it)."""
+    (ab_loop.read_fit_loop) and the planned constructor parameters as the fitted model's get_params() reports them
+    (a `fit:` cap has no get_params read-back; cell_record checks its executed count instead)."""
     plan = plan or {}
-    want = set(plan.get("pin") or {}) | ({plan["param"]} if plan.get("param") else set())
+    want = {k for k in set(plan.get("pin") or {}) | ({plan["param"]} if plan.get("param") else set())
+            if not k.startswith(_ab_loop().FIT_PREFIX)}
     try:
         got = model.get_params() if want and hasattr(model, "get_params") else {}
     except Exception:  # noqa: BLE001  (a read-back never breaks a timing; a missing key reads '<absent>')
         got = {}
     effective = {k: got[k] for k in sorted(want) if k in got}
-    effective.update({k: v for k, v in (fit_keywords or {}).items() if k in want})
     return dict(call=_ab_loop().read_fit_loop(model), effective=effective)
 
 
