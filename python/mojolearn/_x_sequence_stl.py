@@ -100,6 +100,18 @@ class STL(ParamsMixin):
                  low_pass_jump=1, numeric_mode=None, device=None):
         return _XSEQ(self, "stl_initialize", (endog, period, seasonal, trend, low_pass, seasonal_deg, trend_deg, low_pass_deg, robust, seasonal_jump, trend_jump, low_pass_jump, numeric_mode, device), _XSEQ_CONTEXT)
 
+    def vendor_used(self):
+        """The backend this decomposition runs on.
+
+        Returns
+        -------
+        str
+            ``'cpu'`` for a ``device="cpu"`` decomposition, otherwise this
+            installation's vendor (``'metal'``, ``'cuda'``, ``'hip'`` or
+            ``'cpu'``), read from the compiled binary it uses.
+        """
+        return _XSEQ(self, "xseq_vendor_used", (), _XSEQ_CONTEXT)
+
     @property
     def config(self):
         """The decomposition settings as a dict."""
