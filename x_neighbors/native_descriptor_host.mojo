@@ -8,7 +8,7 @@ from x_neighbors.native_descriptor_aux_host import xn_aux_execute
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_neighbors.host_ops import op_softmax64
 from x_neighbors.proba64_nc import NC_PROBA64
-from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_knn_sq, op_group_mean, op_take_rows, op_take_cols, op_variance, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink_d, op_nc_shrink, op_nc_decision, op_softmax, op_log_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_impute, op_col_degree, op_ls_laplacian_deg, op_row_all_zero, op_knn_impute_cells, op_graph_symmetry, op_svgp_var, op_nc_median, op_row_argmax, op_nc_med_std, op_pos_compact, op_p2m_mask_value, op_p2m_zero_cols, op_p2m_nan_indicator, op_p2m_sign_label, op_p2m_relabel, op_p2m_class_counts, op_p2m_const_cols, op_p2m_lp_labels, op_p2m_fill, op_p2m_iota, op_p2m_transpose, op_p2m_transpose_i, op_p2m_row_sort
+from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_knn_sq, op_take_rows, op_take_cols, op_variance, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink_d, op_nc_shrink, op_nc_decision, op_softmax, op_log_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_impute, op_col_degree, op_ls_laplacian_deg, op_row_all_zero, op_knn_impute_cells, op_graph_symmetry, op_svgp_var, op_nc_median, op_row_argmax, op_nc_med_std, op_pos_compact, op_p2m_mask_value, op_p2m_zero_cols, op_p2m_nan_indicator, op_p2m_sign_label, op_p2m_relabel, op_p2m_class_counts, op_p2m_const_cols, op_p2m_lp_labels, op_p2m_fill, op_p2m_iota, op_p2m_transpose, op_p2m_transpose_i, op_p2m_row_sort
 from x_neighbors.iter_host import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn
 from x_neighbors.ocsvm_host import op_ocsvm
 from x_neighbors.graph_host import op_louvain, op_pr_csr, op_louvain_csr
@@ -135,17 +135,6 @@ def xn_native_knn_sq(a_: List[Int], i_: List[Int], f_: List[Float64]) raises -> 
     var v_exclude_self = _n(i_, 4)
     var v_status = _n(i_, 5) if len(i_) > 5 else 0
     op_knn_sq(v_x, v_y, v_dist, v_idx, v_n, v_m, v_d, v_k, v_exclude_self, v_status)
-    return 0
-
-
-def xn_native_group_mean(a_: List[Int], i_: List[Int], f_: List[Float64]) raises -> Int:
-    var v_x = _a(a_, 0)
-    var v_labels = _a(a_, 1)
-    var v_res = _a(a_, 2)
-    var v_n = _n(i_, 0)
-    var v_d = _n(i_, 1)
-    var v_g = _n(i_, 2)
-    op_group_mean(v_x, v_labels, v_res, v_n, v_d, v_g)
     return 0
 
 
@@ -985,170 +974,168 @@ def xn_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -
     if op == 8:
         return xn_native_knn_sq(a, p, f)
     if op == 9:
-        return xn_native_group_mean(a, p, f)
-    if op == 10:
         return xn_native_take_rows(a, p, f)
-    if op == 11:
+    if op == 10:
         return xn_native_take_cols(a, p, f)
-    if op == 12:
+    if op == 11:
         return xn_native_variance(a, p, f)
-    if op == 13:
+    if op == 12:
         return xn_native_lof_lrd(a, p, f)
-    if op == 14:
+    if op == 13:
         return xn_native_lof_score(a, p, f)
-    if op == 15:
+    if op == 14:
         return xn_native_kpca_center(a, p, f)
-    if op == 16:
+    if op == 15:
         return xn_native_scale_div(a, p, f)
-    if op == 17:
+    if op == 16:
         return xn_native_kpca_alpha_scale(a, p, f)
-    if op == 18:
+    if op == 17:
         return xn_native_nc_std(a, p, f)
-    if op == 19:
+    if op == 18:
         return xn_native_nc_shrink_d(a, p, f)
-    if op == 20:
+    if op == 19:
         return xn_native_nc_shrink(a, p, f)
-    if op == 21:
+    if op == 20:
         return xn_native_nc_decision(a, p, f)
-    if op == 22:
+    if op == 21:
         return xn_native_softmax(a, p, f)
-    if op == 23:
+    if op == 22:
         comptime if not NC_PROBA64:
             raise Error("AttributeError: xn_softmax64 is not exported by this binding")
         return xn_native_softmax64(a, p, f)
-    if op == 24:
+    if op == 23:
         return xn_native_log_softmax(a, p, f)
-    if op == 25:
+    if op == 24:
         return xn_native_pcs(a, p, f)
-    if op == 26:
+    if op == 25:
         return xn_native_achi2(a, p, f)
-    if op == 27:
+    if op == 26:
         return xn_native_skew_transform(a, p, f)
-    if op == 28:
+    if op == 27:
         return xn_native_absdiff_sum(a, p, f)
-    if op == 29:
+    if op == 28:
         return xn_native_row_normalize(a, p, f)
-    if op == 30:
+    if op == 29:
         return xn_native_lp_clamp(a, p, f)
-    if op == 31:
+    if op == 30:
         return xn_native_ls_clamp(a, p, f)
-    if op == 32:
+    if op == 31:
         return xn_native_ls_laplacian(a, p, f)
-    if op == 33:
+    if op == 32:
         return xn_native_knn_impute(a, p, f)
-    if op == 34:
+    if op == 33:
         return xn_native_col_degree(a, p, f)
-    if op == 35:
+    if op == 34:
         return xn_native_ls_laplacian_deg(a, p, f)
-    if op == 36:
+    if op == 35:
         return xn_native_row_all_zero(a, p, f)
-    if op == 37:
+    if op == 36:
         return xn_native_knn_impute_cells(a, p, f)
-    if op == 38:
+    if op == 37:
         return xn_native_graph_symmetry(a, p, f)
-    if op == 39:
+    if op == 38:
         return xn_native_svgp_var(a, p, f)
-    if op == 40:
+    if op == 39:
         return xn_native_nc_median(a, p, f)
-    if op == 41:
+    if op == 40:
         return xn_native_row_argmax(a, p, f)
-    if op == 42:
+    if op == 41:
         return xn_native_nc_med_std(a, p, f)
-    if op == 43:
+    if op == 42:
         return xn_native_pos_compact(a, p, f)
-    if op == 44:
+    if op == 43:
         return xn_native_p2m_mask_value(a, p, f)
-    if op == 45:
+    if op == 44:
         return xn_native_p2m_zero_cols(a, p, f)
-    if op == 46:
+    if op == 45:
         return xn_native_p2m_nan_indicator(a, p, f)
-    if op == 47:
+    if op == 46:
         return xn_native_p2m_sign_label(a, p, f)
-    if op == 48:
+    if op == 47:
         return xn_native_p2m_relabel(a, p, f)
-    if op == 49:
+    if op == 48:
         return xn_native_p2m_class_counts(a, p, f)
-    if op == 50:
+    if op == 49:
         return xn_native_p2m_const_cols(a, p, f)
-    if op == 51:
+    if op == 50:
         return xn_native_p2m_lp_labels(a, p, f)
-    if op == 52:
+    if op == 51:
         return xn_native_p2m_fill(a, p, f)
-    if op == 53:
+    if op == 52:
         return xn_native_p2m_iota(a, p, f)
-    if op == 54:
+    if op == 53:
         return xn_native_p2m_transpose(a, p, f)
-    if op == 55:
+    if op == 54:
         return xn_native_p2m_transpose_i(a, p, f)
-    if op == 56:
+    if op == 55:
         return xn_native_p2m_row_sort(a, p, f)
-    if op == 57:
+    if op == 56:
         return xn_native_nc_stats(a, p, f)
-    if op == 58:
+    if op == 57:
         return xn_native_lp_knn_graph(a, p, f)
-    if op == 59:
+    if op == 58:
         return xn_native_lp_knn_product(a, p, f)
-    if op == 60:
+    if op == 59:
         return xn_native_lp_iterate(a, p, f)
-    if op == 61:
+    if op == 60:
         return xn_native_pr_iterate_sparse(a, p, f)
-    if op == 62:
+    if op == 61:
         return xn_native_pcs_resident(a, p, f)
-    if op == 63:
+    if op == 62:
         return xn_native_knn_sq_tiled(a, p, f)
-    if op == 64:
+    if op == 63:
         return xn_native_knn_impute_tiled(a, p, f)
-    if op == 65:
+    if op == 64:
         return xn_native_cc_iterate(a, p, f)
-    if op == 66:
+    if op == 65:
         return xn_native_cc_iterate_csr(a, p, f)
-    if op == 67:
+    if op == 66:
         return xn_native_nan_cells(a, p, f)
-    if op == 68:
+    if op == 67:
         return xn_native_kpca_transform(a, p, f)
-    if op == 69:
+    if op == 68:
         return xn_native_kernel_matmul(a, p, f)
-    if op == 70:
+    if op == 69:
         return xn_native_svgp_fit_ff(a, p, f)
-    if op == 71:
+    if op == 70:
         return xn_native_svgp_predict(a, p, f)
-    if op == 72:
+    if op == 71:
         return xn_native_lp_iterate_knn(a, p, f)
-    if op == 73:
+    if op == 72:
         return xn_native_ocsvm(a, p, f)
-    if op == 74:
+    if op == 73:
         return xn_native_louvain(a, p, f)
-    if op == 75:
+    if op == 74:
         return xn_native_pr_csr(a, p, f)
-    if op == 76:
+    if op == 75:
         return xn_native_louvain_csr(a, p, f)
-    if op == 77:
+    if op == 76:
         return Int(GLOBAL_NUMERIC_MODE)
-    if op == 78:
+    if op == 77:
         return xn_aux_execute(0, a, p, f)
-    if op == 79:
+    if op == 78:
         return xn_aux_execute(1, a, p, f)
-    if op == 80:
+    if op == 79:
         return xn_aux_execute(2, a, p, f)
-    if op == 81:
+    if op == 80:
         return xn_aux_execute(3, a, p, f)
-    if op == 82:
+    if op == 81:
         return xn_aux_execute(4, a, p, f)
-    if op == 83:
+    if op == 82:
         return xn_aux_execute(5, a, p, f)
-    if op == 84:
+    if op == 83:
         return xn_aux_execute(6, a, p, f)
-    if op == 85:
+    if op == 84:
         return xn_aux_execute(7, a, p, f)
-    if op == 86:
+    if op == 85:
         return xn_aux_execute(8, a, p, f)
-    if op == 87:
+    if op == 86:
         return xn_aux_execute(9, a, p, f)
-    if op == 88:
+    if op == 87:
         return xn_aux_execute(10, a, p, f)
-    if op == 89:
+    if op == 88:
         return xn_aux_execute(11, a, p, f)
-    if op == 90:
+    if op == 89:
         return xn_aux_execute(12, a, p, f)
     raise Error("x_neighbors native ABI: unknown operation")
 

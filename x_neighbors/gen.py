@@ -67,8 +67,6 @@ OPS = [
     ("knn_sq", "items", "knn_sq_item", "n",
      [("x", "fin", "n * d"), ("y", "fin", "m * d"), ("dist", "fout", "n * k"), ("idx", "iout", "n * k"),
       ("n", "int"), ("m", "int"), ("d", "int"), ("k", "int"), ("exclude_self", "int")]),
-    ("group_mean", "items", "group_mean_item", "g * d",
-     [("x", "fin", "n * d"), ("labels", "iin", "n"), ("res", "fout", "g * d"), ("n", "int"), ("d", "int"), ("g", "int")]),
     ("take_rows", "items", "take_rows_item", "n_out * d",
      [("src", "fin", "n_src * d"), ("rows", "iin", "n_out"), ("res", "fout", "n_out * d"),
       ("n_out", "int"), ("d", "int"), ("n_src", "int")]),
@@ -326,12 +324,13 @@ CUSTOM_OPS = [
 #: + t * 2 * nc), so the shared list is per-item storage and the items run
 #: over host tasks like the scratch-free ones. svgp is one item.
 PAR_SCRATCH_OK = {"knn_impute", "knn_impute_cells", "pcs"}
-#: long serial folds (one item per class x feature, or per feature):
-#: NearestCentroid's group means and std. Their HOST driver keeps the
-#: one-thread loop; their GPU driver always launches the items (the host
+#: long serial folds (one item per feature): NearestCentroid's std (the
+#: standalone group_mean op had no caller after the fused nc_stats fit and
+#: was deleted by lane w3-cleanup). Its HOST driver keeps the
+#: one-thread loop; its GPU driver always launches the items (the host
 #: walk on GPU installs, `-D MOJOLEARN_XN_SERIAL_GPU` off, was removed in
 #: cpu-gpu-cleanup c-xneighbors).
-HOST_SERIAL = {"group_mean", "nc_std"}
+HOST_SERIAL = {"nc_std"}
 
 #: lane/apple-fast-neighbors2 (2026-10-02): a FAST + Apple alternate for a
 #: generated GPU driver, compiled only under its `-D <define>`

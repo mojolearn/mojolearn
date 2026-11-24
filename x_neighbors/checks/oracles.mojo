@@ -198,14 +198,13 @@ def o_colsum(a: List[Float32], n: Int, m: Int, variant: Int = 0) -> List[Float32
     return out^
 
 
-def o_group_mean(x: List[Float32], lab: List[Int32], n: Int, d: Int, g: Int, variant: Int = 0) -> List[Float32]:
+def o_group_mean(x: List[Float32], lab: List[Int32], n: Int, d: Int, g: Int) -> List[Float32]:
     var out = List[Float32](capacity=g * d)
     for c in range(g):
         for f in range(d):
             var acc = Float32(0)
             var cnt = 0
-            for q in range(n):
-                var i = n - 1 - q if variant == 1 else q
+            for i in range(n):
                 if Int(lab[i]) == c:
                     acc = _a(acc, x[i * d + f])
                     cnt += 1

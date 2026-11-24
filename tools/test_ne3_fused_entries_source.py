@@ -26,7 +26,7 @@ def test_extra_operations_are_appended_and_generated():
     for path, expected in generated(ROOT).items():
         assert _read(path) == expected, path
     schema = _read('x_neighbors/descriptor_schema.mojo')
-    assert 'comptime XN_OPERATION_COUNT = 91' in schema
+    assert 'comptime XN_OPERATION_COUNT = 90' in schema
     for name, counts, aux, _, _ in NEW:
         assert f'if name == "{name}":\n        return {78 + aux}\n' in schema
 
