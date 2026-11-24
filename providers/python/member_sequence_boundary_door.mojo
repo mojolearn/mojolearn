@@ -21,6 +21,7 @@ UNPACK / PACK only (GIL held, once per member estimator, never per fold):
     params record is dropped. Labels: the caller's (`classes_`).
   * `sequence_member_state`: a state holding a fitted model's `params_`.
 """
+from core.seq_member_rows import seq_rows_admit
 from std.python import Python, PythonObject
 from bindings.member_owner_unpack import MemberOwner
 from bindings.native_loaded_module_door import NativeModules
@@ -86,6 +87,7 @@ def sequence_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
             route.has_third = True
         except:
             route.has_third = False
+    seq_rows_admit(route)
     owner.plan.route = route
     var random_state = py_get(fields, nk[].k_random_state)
     var fresh = random_state is None

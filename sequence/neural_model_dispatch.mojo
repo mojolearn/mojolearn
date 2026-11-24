@@ -79,6 +79,10 @@ struct NeuralModelRequest(Movable):
     var addresses: List[Int]
     var options: List[Int]
     var floats: List[Float64]
+    # Lane vdf-scope-neural: True when `addresses[0]` (X) is a device
+    # address of the image's member store (sequence/seq_member_store.mojo),
+    # set only by the device dispatch's `seq_x_slot_resolve`.
+    var x_device: Bool
 
     def __init__(out self, op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int) raises:
         if op < RNN_FIT or (op >= SESSION_OPEN and op != CNN_FIT and op != CNN_PREDICT and op != CNN_OPEN) or op >= MODEL_SAVE_CHECKPOINT:
@@ -86,6 +90,7 @@ struct NeuralModelRequest(Movable):
         self.addresses = native_descriptor_words(aa, na)
         self.options = native_descriptor_words(pp, np)
         self.floats = List[Float64]()
+        self.x_device = False
         if nf < 0 or (nf > 0 and ff == 0):
             raise Error("native model: invalid scalar span")
         var scalars = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=ff)
@@ -111,11 +116,11 @@ struct NeuralModelRequest(Movable):
 
 def neural_model_execute[E: Exec](mut ex: E, op: Int, r: NeuralModelRequest) raises -> Int:
     if op == RNN_FIT:
-        return rnn_fit_impl(ex, r.addresses, r.options, r.floats)
+        return rnn_fit_impl(ex, r.addresses, r.options, r.floats, r.x_device)
     if op == RNN_PREDICT:
-        return rnn_predict_impl(ex, r.addresses, r.options)
+        return rnn_predict_impl(ex, r.addresses, r.options, r.x_device)
     if op == MLP_FIT:
-        return mlp_fit_impl(ex, r.addresses, r.options, r.floats)
+        return mlp_fit_impl(ex, r.addresses, r.options, r.floats, r.x_device)
     if op == MLP_PREDICT:
-        return mlp_predict_impl(ex, r.addresses, r.options)
+        return mlp_predict_impl(ex, r.addresses, r.options, r.x_device)
     raise Error("native model: operation requires target output owner")

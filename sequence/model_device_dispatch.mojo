@@ -7,7 +7,7 @@ from autograd.program_host_request import program_host_request
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report, native_descriptor_words
 from autograd.model_descriptor import MODEL_ABI_NAME, MODEL_FIT_LABELS, NativeModelRequest, model_request_execute
-from sequence.neural_model_dispatch import PROGRAM_HOST_RUN, PROGRAM_IMPORT, PROGRAM_DEVICE_RUN, SESSION_OPEN, SESSION_CLOSE, RNN_FIT, RNN_PREDICT, MLP_PREDICT, MODEL_LABELS, MODEL_ARGMAX, NeuralModelRequest, neural_model_execute
+from sequence.neural_model_dispatch import PROGRAM_HOST_RUN, PROGRAM_IMPORT, PROGRAM_DEVICE_RUN, SESSION_OPEN, SESSION_CLOSE, RNN_FIT, RNN_PREDICT, MLP_FIT, MLP_PREDICT, MODEL_LABELS, MODEL_ARGMAX, NeuralModelRequest, neural_model_execute
 from sequence.neural_model_dispatch import CNN_FIT, CNN_PREDICT, CNN_OPEN
 from sequence.neural_model_dispatch import MODEL_IMPORT_PARAMS, MODEL_EXPORT_PARAMS
 from sequence.model_file_dispatch import model_file_operation, model_file_execute, model_import_execute, model_export_execute
@@ -17,11 +17,34 @@ from sequence.cnn_classifier_program import cnn_fit_program, cnn_open_program, c
 from x_cnn.device import cnn_ctx
 
 from sequence.perf3_seq_resident import seq_resident_resolve, seq_resident_unpin
+from sequence.seq_member_store import seq_member_store_ptr
 from sequence.model_outputs_device import model_output_device
 from autograd.program_device_execution import program_device_request
 from sequence.exec_device import DeviceExec
 from core.label_cast_device import device_unique_inverse_cast
 from core.shared_slot import SharedSlot
+
+
+def seq_x_slot_resolve(op: Int, mut r: NeuralModelRequest) raises:
+    """Lane vdf-scope-neural: an MLP_FIT / MLP_PREDICT whose X word is
+    `-(slot + 1)` reads slot `slot` of the image's member store
+    (sequence/seq_member_store.mojo) in place: the word becomes the slot's
+    device address (checked to hold the N x D words the options name) and
+    `r.x_device` is set. Any other X word is left as it is."""
+    if len(r.addresses) == 0 or r.addresses[0] >= 0:
+        return
+    # MLP: ip = [N, D, ...]; RNN: ip = [cell, D, H, L, O, task, N, T, ...].
+    var words = 0
+    if op == RNN_FIT or op == RNN_PREDICT:
+        if len(r.options) < 8:
+            raise Error("native model: a device-store X needs the row, step and feature words")
+        words = r.options[6] * r.options[7] * r.options[1]
+    else:
+        if len(r.options) < 2:
+            raise Error("native model: a device-store X needs the row and column words")
+        words = r.options[0] * r.options[1]
+    r.addresses[0] = seq_member_store_ptr(-r.addresses[0] - 1, words)
+    r.x_device = True
 
 
 def _cnn_exec() raises -> DeviceExec:
@@ -143,6 +166,10 @@ def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: In
                 # The slot stays pinned from the lookup until the launches
                 # that read its address are queued (and here run), so no
                 # other thread frees it in between (ne1-a-cluster-spectral).
+                # Lane vdf-scope-neural: an MLP X held in the member store
+                # (a fold taken on the device) is read in place.
+                if op == MLP_FIT or op == MLP_PREDICT or op == RNN_FIT or op == RNN_PREDICT:
+                    seq_x_slot_resolve(op, auxiliary)
                 var pinned = 0
                 if op == RNN_PREDICT:
                     pinned = seq_resident_resolve(ex, auxiliary.addresses, 4)
