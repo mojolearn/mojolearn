@@ -133,8 +133,13 @@ class RunEnv(unittest.TestCase):
                     "--dry-run", "--state-dir", d, "--tree", tree, "--owed-file", str(owed),
                     "--b-arm", "leaf=%s@%s" % (dirs["leaf"], "b" * 40),
                     "--b-arm", "plain=%s@%s" % (dirs["plain"], "c" * 40)]
+            # each B arm's wheels record the define they were built with (check_arm_wheel, lane ab-prep 2026-11-23,
+            # refuses a B wheel without the arm's define; this mock predated it and recorded none)
+            built = {"aaaaaaaaaaaa": "", "bbbbbbbbbbbb": "L", "cccccccccccc": "P"}
             manifest = lambda version, vendor, wheels, commit: {  # noqa: E731
-                "files": [{"file": Path(w).name, "sha256": "0" * 64} for w in wheels]}
+                "files": [{"file": Path(w).name, "sha256": "0" * 64,
+                           "candidate": {"defines": next((v for k, v in built.items() if k in Path(w).name), "")}}
+                          for w in wheels]}
             buf = io.StringIO()
             with mock.patch.object(MC.C, "build_manifest", manifest), \
                     mock.patch.object(MC, "dataset_keys", lambda *a, **k: ["k1"]), \
