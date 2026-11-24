@@ -1123,7 +1123,7 @@ def msel_cv_by_search(estimator: PythonObject, x_in: PythonObject, y_in: PythonO
     var outputs = 0
     if text_y:
         outputs = len(py_call(b.list, py_call(b.list, y_in)[0]))
-    elif ya is not None and Int(py=ya.ndim) == 2:
+    elif ya is not None and msel_is_array(ya, context) and Int(py=ya.ndim) == 2:
         outputs = Int(py=ya.shape[1])
     var holder = Python.list(PythonObject(None))
     var names = _tool_names(scoring, context)
