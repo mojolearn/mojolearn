@@ -2,7 +2,7 @@
 """The forest member RUN shared by the Tree (13), Forest (14) and ExtraTrees
 (15) families (core/member_abi.mojo). Each family file
 (core/tree_member.mojo, core/forest_member.mojo, core/extra_trees_member.mojo)
-names its own store and calls `fm_member[store, rf_layout]` from its entry.
+names its own store and calls `fm_member[store, rf_layout, notices]` from its entry.
 
 It runs the families' EXISTING typed forest RUN over the entry the caller's
 route holds in `route.entry` (the forest entry of the image the estimator's
@@ -90,7 +90,7 @@ after an import, as the estimator's arrays-only state has none):
     `oob_prediction_`), rows = the fit's rows
   `FM_BLOCK_OOB_SCORE` (`MEMBER_BLOCK_FAMILY + 6`) float64 1 x 1, `oob_score_`
 A state fitted without word 11 refuses both in words.
-FIT NOTICES (Tree, Forest: MEMBER_CAN_NOTICES): `MEMBER_BLOCK_NOTICES` by name,
+FIT NOTICES (Forest: MEMBER_CAN_NOTICES; Tree has none since 2026-11-24): `MEMBER_BLOCK_NOTICES` by name,
 one `MEMBER_NOTICE_FOREST` with the fit's notice mask (core/member_notices.mojo);
 never in the index walk, empty after an import.
 
@@ -941,7 +941,7 @@ def _capabilities(classifier: Bool, importances: Bool, weights: Bool, notices: B
     admission scans. No `MEMBER_CAN_DEVICE_VIEWS`: every forest predict entry
     takes a HOST address of X and uploads it itself (no entry op binds a
     resident store id), so a device-home X is refused (`_dense`).
-    `notices`: the RF layout (Tree, Forest) carries its fit notices."""
+    `notices`: the kind carries its fit notices (Forest; `fm_member`)."""
     # MEMBER_GIL_FREE (THE GIL RULE): every operation of the six kinds is
     # traced (fx-gil-RESULT.md, "forest / tree / extra_trees: HAS the bit"):
     # the route entry is marked `entry_ref_gil_free` at fit and import and
@@ -970,21 +970,26 @@ def _capabilities(classifier: Bool, importances: Bool, weights: Bool, notices: B
     return mask
 
 
-def fm_member[name: StaticString, rf_layout: Bool](operation: Int, address: Int, estimator: String) raises -> Int:
+def fm_member[name: StaticString, rf_layout: Bool, notices: Bool](operation: Int, address: Int,
+                                                                   estimator: String) raises -> Int:
     """One member call on the store `name` (the family's own store).
     `rf_layout`: the family fits on the RF slots (Tree, Forest), whose fit
-    computes feature importances; the ExtraTrees family does not."""
+    computes feature importances; the ExtraTrees family does not.
+    `notices`: the family's fit can raise a notice (Forest: max_samples
+    without bootstrap, partial out-of-bag scores). Tree's only notice was the
+    n_bins clamp, no longer raised (lane w3-fix-h, 2026-11-24), so it does
+    not advertise MEMBER_CAN_NOTICES and its callers skip the notice read."""
     var call = MutPointer[MemberCall, MutUntrackedOrigin](unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
-            return _capabilities(True, rf_layout, True, rf_layout)
+            return _capabilities(True, rf_layout, True, notices)
         var known = _SlotPtr(unsafe_from_address=_lookup[name](call[].state, False))
         # Kind AND settings exact: the RF-layout regressor whose every fit
         # computes out-of-bag outputs refuses weights (`_fit`; lane mf-rfe6:
         # the importance fit takes them).
         var weights = known[].classifier or known[].et or not known[].oob
         return _capabilities(known[].classifier, known[].importances or len(known[].imp) > 0, weights,
-                             not known[].et, known[].predict_only)
+                             notices and not known[].et, known[].predict_only)
     if operation == MEMBER_OP_NEW:
         if not call[].params:
             raise Error("member ABI: a forest member needs its parameter words")

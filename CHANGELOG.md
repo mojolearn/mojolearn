@@ -4,6 +4,7 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+- **Trees.** Fitting a RandomForest or DecisionTree with more `n_bins` than training rows no longer raises a `UserWarning` (it fired in every nested fit, such as AdaBoost and bagging members); the bins are still limited to the number of rows.
 - **One NVIDIA package.** `mojolearn-nvidia` carries both the native kernels for sm_89 and the PTX build for every NVIDIA GPU of compute capability 8.0 or newer; the separate `mojolearn-nvidia-ptx` package is no longer published. An environment that has `mojolearn-nvidia-ptx` from an earlier release can remove it and reinstall the NVIDIA package once: `pip uninstall -y mojolearn-nvidia-ptx && pip install --force-reinstall --no-deps "mojolearn-nvidia==<version>"`.
 
 ## 0.8.66 (published 2026-11-05)

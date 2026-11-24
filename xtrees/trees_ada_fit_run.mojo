@@ -68,7 +68,7 @@ from core.member_abi import (
     MemberPlan, MemberMatrix, member_new, member_call, member_call_of, member_free,
     MEMBER_OP_FIT, MEMBER_OP_PREDICT, MEMBER_F32, MEMBER_I32,
 )
-from core.member_notices import member_notices_take, member_notice_add, MEMBER_NOTICE_FOREST
+from core.member_notices import member_notices_take
 from core.forest_calls import (
     xf_ada_open, xf_fit_ada_round, xf_fit_session, xf_export_sizes, xf_export_into, xf_export_release, xf_predict,
     xf_resident_prepare, xf_resident_predict, xf_resident_labels, xf_strict_prepare, xf_strict_predict,
@@ -193,7 +193,8 @@ struct AdaFitResult(Movable):
     `launched` marks a fit without a session (its export keeps the forest
     door's export selection); the others export "into". On the member
     route `handles` are the kept member STATES (`members` True) and
-    `notices` the fit notice words of every fitted round, in round order."""
+    `notices` the fit notice words of every fitted member round, in round
+    order (the DecisionTree rounds have none)."""
     var handles: List[Int]
     var alphas: List[Float64]
     var errors: List[Float64]
@@ -413,14 +414,11 @@ def _predict_train(plan: AdaFitPlan, handle: Int, dst: Int) raises:
     _ = len(votes)  # the argmax above read the votes through `target`
 
 
-def _export_notice(plan: AdaFitPlan, handle: Int, mut notices: List[Float64]) raises:
-    """A DecisionTree round's fit notices (the RF layout's third metadata
-    word, the `ensemble/rf_notices.mojo` mask the forest door's
-    `_rf_fit_notices` raised per member fit) as one notice triple; the
-    door's PACK raises them (`member_fit_notices_raise`)."""
-    var meta = xf_export_sizes(plan.forest, handle).meta.copy()
-    if len(meta) >= 3 and meta[2] != 0:
-        member_notice_add(notices, MEMBER_NOTICE_FOREST, Float64(meta[2]))
+# Removed 2026-11-24 (lane w3-fix-h): `_export_notice`, the per-round export-size
+# read of a DecisionTree round's notice word. A DecisionTree* (splitter='best')
+# fit has no bootstrap and no max_samples, so its only notice was the n_bins
+# clamp, which is no longer raised (ensemble/rf_notices.mojo); these rounds
+# have no notices.
 
 
 def _keep(mut result: AdaFitResult, handle: Int, alpha: Float64, error: Float64):
@@ -581,7 +579,6 @@ def ada_fit_run(mut plan: AdaFitPlan) raises -> AdaFitResult:
                 handle = _round_fit(plan, it, rows, yr, w32, wt, xg, xc, all_cols, stats_addr, launched)
                 if launched:
                     result.launched = True
-                _export_notice(plan, handle, result.notices)
             if not plan.device_rounds and not plan.member_route:
                 if plan.classifier:
                     _predict_train(plan, handle, Int(pred_codes.unsafe_ptr()))

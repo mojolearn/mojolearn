@@ -4,8 +4,7 @@
 
 from ensemble.bootstrap_sort import sort_passes_for, sort_selected_rows
 from ensemble.rf_notices import (
-    rf_notice, RF_NOTICE_OOB_PARTIAL, RF_NOTICE_BINS_CLAMPED,
-    RF_NOTICE_MAX_SAMPLES_IGNORED,
+    rf_notice, RF_NOTICE_OOB_PARTIAL, RF_NOTICE_MAX_SAMPLES_IGNORED,
 )
 # TOMBSTONE: MOJOLEARN_TREES_RF_SAMPLE (ALWAYS_OFF_DELETE, EXP:1610) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_RF_SAMPLE.patch
@@ -2823,7 +2822,8 @@ def fit_forest_prepared[
         )
 
     # `randomforest_common.pyx:529-536`. THE PYTHON LAYER CLAMPS n_bins TO
-    # n_rows, with a warning, and it does it HERE -- inside `_fit_forest`,
+    # n_rows (cuML warns; we do not: Andrew, 2026-11-24, scikit-learn never
+    # emits it and it fired in every nested fit), and it does it HERE -- inside `_fit_forest`,
     # where n_rows is finally known -- not in `__init__`. Their C++ side
     # never checks it: `validity_check` only bounds it to (0, 1024]
     # (`decisiontree.cu:26-27`), so a C-API caller keeps whatever they
@@ -2832,7 +2832,6 @@ def fit_forest_prepared[
     # quantile pass below asks for more bins than there are rows.
     var notices = 0
     if rf_params.tree_params.max_n_bins > Int32(n_rows):
-        rf_notice(notices, RF_NOTICE_BINS_CLAMPED, notices_to_stderr)
         rf_params.tree_params.max_n_bins = Int32(n_rows)
 
     # `:298-309`

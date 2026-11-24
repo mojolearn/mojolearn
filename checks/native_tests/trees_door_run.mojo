@@ -119,13 +119,19 @@ def case_forest() raises:
         raise Error("no refusal")
     except problem:
         refuses(problem, "forest export byte mismatch: _quesval")
-    var codes = forest_fit_notice_codes(7)
-    require(len(codes) == 3 and codes[0] == 2 and codes[1] == 4 and codes[2] == 1, "notice order")
+    var codes = forest_fit_notice_codes(5)
+    require(len(codes) == 2 and codes[0] == 4 and codes[1] == 1, "notice order")
     try:
         _ = forest_fit_notice_codes(8)
         raise Error("no refusal")
     except problem:
         refuses(problem, "unknown notice bits 8")
+    # Bit 2 was the n_bins clamp notice, no longer raised (Andrew, 2026-11-24): refused as unknown.
+    try:
+        _ = forest_fit_notice_codes(2)
+        raise Error("no refusal")
+    except problem:
+        refuses(problem, "unknown notice bits 2")
     try:
         trees_check_features(3, 4)
         raise Error("no refusal")
