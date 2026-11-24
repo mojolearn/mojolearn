@@ -2767,6 +2767,20 @@ def _is_sorted(value: PythonObject, b: PythonObject) raises -> Bool:
         return False
 
 
+def _response_within(row_method: PythonObject, method: PythonObject, b: PythonObject) raises -> Bool:
+    """UNPACK (lane w3f3-f): a make_scorer whose response_method is ONE of
+    its table row's response tuple (make_scorer(roc_auc_score,
+    response_method='predict_proba', max_fpr=0.5) beside 'roc_auc''s
+    ('decision_function', 'predict_proba')) is that row read over its own
+    response: the admission resolves the scorer's method against the class
+    (`msel_scorer_response`) and picks the row's code for it
+    (`msel_scorer_code(name, decision)`), as scikit-learn scores the
+    make_scorer's own response. Read once per admission."""
+    if py_type(row_method) is not b.tuple or py_type(method) is not b.str:
+        return False
+    return py_contains(row_method, method)
+
+
 def _non_predict_response(method: PythonObject, b: PythonObject) raises -> Bool:
     """UNPACK (lane mf-r9c, door :3670): a make_scorer response_method a
     regression row may read in place of predict: 'predict_proba',
@@ -3267,9 +3281,10 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
             if not same_response:
                 # lane mf-r9c (door :3670): a regression row over the
                 # make_scorer's own non-predict response (`_non_predict_response`)
-                if not (msel_scorer_regression(typed) and _non_predict_response(got_method, b)):
+                if msel_scorer_regression(typed) and _non_predict_response(got_method, b):
+                    own_response = True
+                elif not _response_within(py_call(b.getattr, row, PythonObject("_response_method")), got_method, b):
                     continue
-                own_response = True
             var binary = msel_scorer_positive(typed)
             var label_row = msel_scorer_label_row(typed)
             var pos_row = binary or msel_scorer_ap(typed) or msel_scorer_brier(typed)
