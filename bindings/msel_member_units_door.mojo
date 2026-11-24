@@ -766,7 +766,7 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
         _ = xv
         _ = yv
     if run.failed:
-        raise Error(run.error)  # the member fit's own words (its state was released)
+        raise Error(run.error.copy())  # the member fit's own words (its state was released)
     # PACK: the fitted state into the estimator, held by it. A pack the
     # family refuses releases the state and raises its words.
     try:
