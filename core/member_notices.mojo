@@ -88,6 +88,11 @@ comptime MEMBER_NOTICE_METRIC_CLR = 15
 #: roc_auc_score with options (lane mf-score8 round b; bindings/mcls_ranking_door.mojo
 #: `_ROC_ONE_CLASS`): a = how many folds or classes saw one class, one warning each.
 comptime MEMBER_NOTICE_METRIC_ROC_ONE = 16
+#: Bagging fitted with sample_weight and bootstrap=False (lane w3f3-h;
+#: scikit-learn 1.9.1 sklearn/ensemble/_bagging.py:380-384): a = 1 for
+#: BaggingClassifier, 0 for BaggingRegressor; scikit-learn's UserWarning
+#: (`member_bag_bootstrap_warning`), raised at PACK.
+comptime MEMBER_NOTICE_BAG_NO_BOOTSTRAP = 17
 
 #: The words scikit-learn's cross_val_predict adds to its imbalanced-fold
 #: warning and refusals (model_selection/_validation.py
@@ -102,6 +107,13 @@ def member_lacking_warning(m: Int, k: Int) -> String:
     train rows hold `m` of the `k` classes."""
     return ("Number of classes in training fold (" + String(m) + ") does not match total number of classes ("
             + String(k) + "). Results may not be appropriate for your use case. " + MEMBER_LACKING_STRATIFY)
+
+
+def member_bag_bootstrap_warning(classifier: Bool) -> String:
+    """scikit-learn 1.9.1's words for a weighted Bagging fit without
+    bootstrap (`BaseBagging.fit`)."""
+    return ("When fitting " + (String("BaggingClassifier") if classifier else String("BaggingRegressor"))
+            + " with sample_weight it is recommended to use bootstrap=True, got False.")
 
 
 def member_notice_add(mut words: List[Float64], code: Int, a: Float64 = 0.0, b: Float64 = 0.0):

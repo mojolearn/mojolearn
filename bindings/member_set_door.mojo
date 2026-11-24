@@ -455,6 +455,16 @@ def member_set_tests(set: MemberSet, u: Int) -> Bool:
     return member_set_run_tests(set.run, u)
 
 
+def member_set_reads_weights(set: MemberSet, u: Int) raises -> Bool:
+    """Whether member `u`'s KIND reads `call.weights` (its kind-exact
+    MEMBER_CAN_SAMPLE_WEIGHT; the set's admission asks only the family's
+    union): scikit-learn's `has_fit_parameter(estimator, "sample_weight")`
+    question (sklearn/ensemble/_bagging.py:98-104). One state is minted,
+    asked and released (`member_kind_capabilities`): ask it once per fit,
+    never per unit (lane w3f3-h)."""
+    return (member_kind_capabilities(set.run.plans[u]) & MEMBER_CAN_SAMPLE_WEIGHT) != 0
+
+
 def member_set_host(set: MemberSet) -> Bool:
     """Every member admitted so far runs on the CPU route."""
     return member_set_run_host(set.run)
