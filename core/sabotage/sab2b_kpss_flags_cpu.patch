@@ -1,14 +1,21 @@
 diff --git a/core/kpss_host_test_impl.mojo b/core/kpss_host_test_impl.mojo
-index c7bce7a2d9..1303bfea3c 100644
+index 7e5c591b02..240245415f 100644
 --- a/core/kpss_host_test_impl.mojo
 +++ b/core/kpss_host_test_impl.mojo
-@@ -66,6 +66,12 @@ def _kpss_flags_host(
+@@ -2,6 +2,7 @@
+ """Typed KPSS flag and select_d loops moved word for word from bindings/kpss_host_test.mojo."""
+ from std.sys.compile import is_defined
+ from std.math import isfinite
++from std.memory import bitcast  # SABOTAGE sab2b-kpss-flags-cpu: the ulp step below
+ from core.hostptr import f32_ptr, read_f32
+ from tsa.checks.kpss_oracle import kpss_host_f32
+ 
+@@ -66,6 +67,11 @@ def _kpss_flags_host(
          comptime if KPSS_DECISION_SABOTAGE:
-             fp[b] = Int32(1) - fp[b]
+             fp[b] = UInt8(1) - fp[b]
          sp[b] = st.stat[b]
 +        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sab2b-kpss-flags-cpu (lane vdv-sab2-b): every stationarity flag flipped and the statistic one ulp up, the host bindings only
-+            from std.memory import bitcast
-+            fp[b] = Int32(1) - fp[b]
++            fp[b] = UInt8(1) - fp[b]
 +            var h = sp[b]
 +            if abs(h) >= Float32(1.17549435e-38) and h - h == Float32(0):
 +                sp[b] = bitcast[DType.float32](bitcast[DType.uint32](h) + UInt32(1))

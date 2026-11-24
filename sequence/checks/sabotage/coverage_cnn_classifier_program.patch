@@ -1,8 +1,8 @@
 diff --git a/sequence/cnn_classifier_program.mojo b/sequence/cnn_classifier_program.mojo
-index 84755a740d..cf425b2f64 100644
+index cc760b552f..c6c7194d2f 100644
 --- a/sequence/cnn_classifier_program.mojo
 +++ b/sequence/cnn_classifier_program.mojo
-@@ -278,7 +278,11 @@
+@@ -280,7 +280,11 @@ def _forward[E: Exec & Movable & Deinitable](
      var fl_ints: List[Int] = [1, 1, -1]
      h = s.op(OPS_RESHAPE_N, ffs, fl_ints, none)
      var hls: List[Int] = [h, params[2 * nb], params[2 * nb + 1]]
@@ -14,4 +14,4 @@ index 84755a740d..cf425b2f64 100644
 +    return s.op(OPS_RELU, frl, List[Int](), none)
  
  
- def _download_params[E: Exec & Movable & Deinitable](
+ def _device_nd[E: Exec & Movable & Deinitable](

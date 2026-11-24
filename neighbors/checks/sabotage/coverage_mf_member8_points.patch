@@ -1,9 +1,9 @@
 diff --git a/core/neighbors_member.mojo b/core/neighbors_member.mojo
-index 82fcd23d2c..00329c7c63 100644
+index 27496714e0..04fc875cf1 100644
 --- a/core/neighbors_member.mojo
 +++ b/core/neighbors_member.mojo
-@@ -375,7 +375,7 @@ def _fit_points(slot: _SlotPtr, call: _CallPtr) raises:
-     slot[].points = List[Float32]()
+@@ -523,7 +523,7 @@ def _fit_points(slot: _SlotPtr, call: _CallPtr) raises:
+     slot[].fold_rows = List[Int64]()
      slot[].points_addr = call[].x.data
      slot[].targets_addr = 0
 -    slot[].rows = rows

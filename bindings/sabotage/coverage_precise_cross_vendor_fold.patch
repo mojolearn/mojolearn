@@ -1,11 +1,19 @@
---- a/bindings/cross_vendor_native_door.mojo	2026-11-22 12:36:17
-+++ b/bindings/cross_vendor_native_door.mojo	2026-11-22 12:36:17
-@@ -186,7 +186,7 @@
-             # (core/parallel_entry_table.mojo), with the GIL released.
-             var py = Python()
+diff --git a/bindings/cross_vendor_native_door.mojo b/bindings/cross_vendor_native_door.mojo
+index b76b081ce2..9fc10ef514 100644
+--- a/bindings/cross_vendor_native_door.mojo
++++ b/bindings/cross_vendor_native_door.mojo
+@@ -207,12 +207,12 @@ def cross_vendor_fold(gradients: PythonObject, prefix: PythonObject, device: Fun
+         var py = Python()
+         if device.host_beside:
              with GILReleased(py):
--                _ = parallel_fold_pair_f32(key, total, layout.address, n)
-+                _ = parallel_fold_pair_f32(key, total, layout.address, n - 1)  # SABOTAGE (coverage-precise-bindings-cross_vendor_fold): every added shard's last element is left out of the fold
-         finally:
-             pin.release()  # the export pins the received bytes through the fold above
-         _ = view^
+-                _ = ordered_fold_f32(total, table_addr, shards, n)
++                _ = ordered_fold_f32(total, table_addr, shards, n - 1)  # SABOTAGE (coverage-precise-bindings-cross_vendor_fold): every added shard's last element is left out of the fold
+         else:
+             # Resolved once per call (lane entry-table-zero-alloc).
+             var key = parallel_ref(PARALLEL_TABLE_BASE, ParallelEntryKey(c[].fold_mode, c[].fold_vendor))
+             with GILReleased(py):
+-                _ = parallel_ordered_fold_f32(key, total, table_addr, shards, n)
++                _ = parallel_ordered_fold_f32(key, total, table_addr, shards, n - 1)  # SABOTAGE (coverage-precise-bindings-cross_vendor_fold): every added shard's last element is left out of the fold
+         _ = table^  # the address table outlives the fold above
+     _ = views  # the shard views pin the received bytes through the fold above
+     var result = store.tobytes()
