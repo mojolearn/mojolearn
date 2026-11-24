@@ -1,0 +1,13 @@
+diff --git a/core/msel_scorer_run.mojo b/core/msel_scorer_run.mojo
+index 4a61d82448..4a61d82449 100644
+--- a/core/msel_scorer_run.mojo
++++ b/core/msel_scorer_run.mojo
+@@ -1695,7 +1695,7 @@ def _response_regression(route: MetricRoute, label_words: List[String], row: Mse
+         var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=response)
+         column = List[Float32](length=max(count, 1), fill=0.0)
+         for i in range(count):  # driver-loop: over the side's rows (classes[-1]'s probability column)
+-            column[i] = src[2 * i + 1]
++            column[i] = src[2 * i]  # SABOTAGE
+         pred = Int(column.unsafe_ptr())
+         width = 1
+     if width != 1:

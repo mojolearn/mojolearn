@@ -1085,11 +1085,14 @@ def _run_start(rows: Int, count: Int) -> Int:
     return first
 
 
-def _multi_output_scorers(codes: List[Int], plan: MselSearchPlan) raises -> Bool:
+def _multi_output_scorers(codes: List[Int], plan: MselSearchPlan, multi_cls: Bool) raises -> Bool:
     """Lane mf-rows8b: the member's own score alone, or every scorer one
     that reads the member's predict (a regression, label or clustering row:
     a multi-output target's search). Replaces `_regression_scorers` (lane
-    mf-score8 round b: regression rows only), removed."""
+    mf-score8 round b: regression rows only), removed. Lane mf-r9c: a
+    MULTI-OUTPUT CLASSIFIER (`multi_cls`) also by its probability rows (each
+    side scikit-learn's reading of the per-output list,
+    core/msel_scorer_run.mojo `_multi_proba_value`)."""
     if len(codes) == 1 and codes[0] == SEARCH_SCORE_MEMBER:
         return True
     for j in range(len(codes)):  # small-loop(the scorers)
@@ -1097,7 +1100,7 @@ def _multi_output_scorers(codes: List[Int], plan: MselSearchPlan) raises -> Bool
             return False
         var row = msel_scorer_row(codes[j], plan.options[j] if j < len(plan.options) else MselScorerOptions(),
                                   Int(plan.selections.unsafe_ptr()))
-        if row.op != MEMBER_OP_PREDICT:
+        if row.op != MEMBER_OP_PREDICT and not (multi_cls and row.op == MEMBER_OP_PREDICT_PROBA):
             return False
     return True
 
@@ -1137,7 +1140,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         codes.append(SEARCH_SCORE_MEMBER)
     elif len(codes) == 0:
         codes.append(plan.scoring)
-    if y_cols > 1 and (classifier or not _multi_output_scorers(codes, plan)):
+    if y_cols > 1 and (classifier or not _multi_output_scorers(codes, plan, multi_cls)):
         # lane mf-score8 round b: a multi-output REGRESSOR may also be scored
         # by regression rows (their programs take the outputs). Lane
         # mf-rows8b: and by the label and clustering rows (each side raises
@@ -1232,7 +1235,10 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             if not classifier and msel_scorer_cluster(row):
                 clusterer = True
             elif (msel_scorer_regression(row) == classifier and not (classifier and row.lv_n == k)
-                  and not (not classifier and msel_scorer_float_labels(row))):
+                  and not (not classifier and msel_scorer_float_labels(row))
+                  and not (multi_cls and row.op == MEMBER_OP_PREDICT_PROBA)):
+                # (lane mf-r9c: a multi-output classifier's probability row,
+                # `classes` 0, reads its outputs' label value words)
                 # lane mf-score8: a regression scorer on a classifier reads its
                 # labels' value words (core/msel_scorer_run.mojo module note)
                 raise Error("member ABI: scorer '" + String(row.name) + "' does not score this kind of estimator")
@@ -1777,6 +1783,10 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                         # for a multi-output classifier, its outputs' class counts
                         scored.outs = y_cols
                         scored.counts_at = Int(plan.class_counts.unsafe_ptr()) if multi_cls else 0
+                        # lane mf-r9c: the fold estimator's held classes per
+                        # output (a probability row reads its `classes_`)
+                        scored.mheld_at = mheld_list
+                        scored.fold = fold_of
                     if not classifier and scored.op == MEMBER_OP_PREDICT and msel_scorer_cluster(scored):
                         # lane mf-rows8b (row :3899): float predictions (1 float32, 2 float64)
                         scored.fpred = 1 if dt == MEMBER_F32 else (2 if dt == MEMBER_F64 else 0)

@@ -2690,6 +2690,18 @@ struct _ScorerKw(Movable):
     # holds the native scorer door's words): the admission scores a stand-in
     # row whose every side raises them
     var stand_in: Bool
+    # lane mf-r9c (door :3670): the dual 'roc_auc' row's multi_class (0 the
+    # row's 'raise', 1 'ovr', 2 'ovo') and, read beside it in any order, its
+    # average (`roc_avg_given`, the value) and labels (None: none); resolved
+    # after the kwargs into a multi_class row (`_multi_class_row`)
+    var mclass: Int
+    var roc_avg_given: Bool
+    var roc_avg: PythonObject
+    var roc_labels: PythonObject
+    # lane mf-r9c (door :3670): a regression row matched over a make_scorer
+    # whose response is not predict (the class's chosen method becomes the
+    # row's response at the admission, `MselScorerOptions.resp`)
+    var resp_any: Bool
 
     def __init__(out self):
         self.flip = False
@@ -2713,6 +2725,11 @@ struct _ScorerKw(Movable):
         self.wmode = 0
         self.rename = String("")
         self.stand_in = False
+        self.mclass = 0
+        self.roc_avg_given = False
+        self.roc_avg = PythonObject(None)
+        self.roc_labels = PythonObject(None)
+        self.resp_any = False
 
 
 def _sorted_labels(value: PythonObject, b: PythonObject) raises -> PythonObject:
@@ -2738,6 +2755,74 @@ def _is_sorted(value: PythonObject, b: PythonObject) raises -> Bool:
         return False
 
 
+def _non_predict_response(method: PythonObject, b: PythonObject) raises -> Bool:
+    """UNPACK (lane mf-r9c, door :3670): a make_scorer response_method a
+    regression row may read in place of predict: 'predict_proba',
+    'decision_function', or a tuple / list of method names with neither
+    'predict_log_proba' (no scorer row answers a log response) nor anything
+    but the four response names. The admission takes the first one the
+    class has (`msel_scorer_response`)."""
+    var listed = Python.list()
+    if py_type(method) is b.str:
+        _ = py_call(listed.append, method)
+    elif py_type(method) is b.tuple or py_type(method) is b.list:
+        listed = py_call(b.list, method)
+    else:
+        return False
+    var other = False
+    for i in range(len(listed)):  # small-loop(the scorer's response methods)
+        if py_type(listed[i]) is not b.str:
+            return False
+        var word = String(py=listed[i])
+        if word == "predict_proba" or word == "decision_function":
+            other = True
+        elif word != "predict":
+            return False
+    return other
+
+
+def _multi_class_row(mut kw: _ScorerKw, b: PythonObject) raises:
+    """UNPACK (lane mf-r9c, door :3670): the dual 'roc_auc' scorer with a
+    make_scorer's multi_class 'ovr' / 'ovo' (`kw.mclass`), read once: its
+    average selects the row as the one-vs-rest / one-vs-one rows' average
+    does (`_table_row_kwarg`, the door's `_roc_options` options and words),
+    'macro' when not given; its labels are the multiclass rows' (one-vs-rest
+    checks they are ordered). The row then reads the response the class has
+    (core/msel_scorer_run.mojo `_dual`)."""
+    var ovr = kw.mclass == 1
+    var none = False
+    var text = String("macro")
+    if kw.roc_avg_given:
+        if kw.roc_avg is None:
+            none = True
+        elif py_type(kw.roc_avg) is b.str:
+            text = String(py=kw.roc_avg)
+        else:
+            text = String("")
+    if none:
+        if ovr:
+            kw.rename = String("roc_auc(multi_class='ovr', average=None)")
+            kw.avg_none = True
+        else:
+            _refuse(kw, "NotImplementedError: average=None is not implemented for multi_class='ovo'.")
+    elif text == "macro":
+        kw.rename = String("roc_auc(multi_class='ovr')") if ovr else String("roc_auc(multi_class='ovo')")
+    elif text == "weighted":
+        kw.rename = (String("roc_auc(multi_class='ovr', average='weighted')") if ovr
+                     else String("roc_auc(multi_class='ovo', average='weighted')"))
+    elif text == "micro" and ovr:
+        kw.rename = String("roc_auc(multi_class='ovr', average='micro')")
+    elif ovr:
+        _refuse(kw, "average must be one of ('micro', 'macro', 'weighted', None) for multiclass problems")
+    else:
+        _refuse(kw, "average must be one of ('macro', 'weighted', None) for multiclass problems")
+    if kw.roc_labels is not None:
+        if ovr and not _is_sorted(kw.roc_labels, b):
+            _refuse(kw, "Parameter 'labels' must be ordered")
+        else:
+            kw.labels = kw.roc_labels
+
+
 def _refuse(mut kw: _ScorerKw, words: String):
     """The first refused kwarg's words (raised per side)."""
     if kw.refuse_text.byte_length() == 0:
@@ -2758,6 +2843,18 @@ def _table_row_kwarg(typed: MselScorer, word: String, theirs: PythonObject, mut 
     `sparse` (it changes no value)."""
     var roc = msel_scorer_roc_problem(typed)
     if roc >= 0:
+        if word == "multi_class" and roc == ROC_BINARY:
+            # lane mf-r9c (door :3670): the dual 'roc_auc' row's multi_class.
+            # 'ovr' / 'ovo' select a multi_class row after the kwargs
+            # (`_multi_class_row`); any other value is the row's own, as the
+            # door reads it (bindings/mcls_ranking_door.mojo `_roc_options`:
+            # not 'ovr' or 'ovo' raises "multi_class must be in ('ovo',
+            # 'ovr')" on a multiclass side, the binary arm ignores it).
+            if py_type(theirs) is b.str and String(py=theirs) == "ovr":
+                kw.mclass = 1
+            elif py_type(theirs) is b.str and String(py=theirs) == "ovo":
+                kw.mclass = 2
+            return True
         if word == "max_fpr":
             if theirs is None:
                 return True
@@ -2770,6 +2867,8 @@ def _table_row_kwarg(typed: MselScorer, word: String, theirs: PythonObject, mut 
             kw.param_text = String(py=py_call(b.str, theirs))
             return True
         if word == "labels":
+            if theirs is not None and roc == ROC_BINARY:
+                kw.roc_labels = theirs  # lane mf-r9c: a multi_class row reads them
             if theirs is None or roc == ROC_BINARY:
                 return True  # the binary arm reads no labels
             if (roc == ROC_OVR or roc == ROC_OVR_WEIGHTED) and not _is_sorted(theirs, b):
@@ -2779,6 +2878,8 @@ def _table_row_kwarg(typed: MselScorer, word: String, theirs: PythonObject, mut 
             return True
         if word == "average":
             if roc == ROC_BINARY:
+                kw.roc_avg_given = True  # lane mf-r9c: a multi_class row's average
+                kw.roc_avg = theirs
                 var ok = theirs is None
                 if not ok and py_type(theirs) is b.str:
                     var a = String(py=theirs)
@@ -3132,14 +3233,21 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                     continue
             elif row_func is not func:
                 continue
-            if not Bool(py=py_call(b.bool, py_call(eq, py_call(b.getattr, row, PythonObject("_response_method")),
-                                                   got_method))):
-                continue
+            var same_response = Bool(py=py_call(b.bool, py_call(eq, py_call(b.getattr, row,
+                                                                            PythonObject("_response_method")),
+                                                                got_method)))
             var name = String(py=items[i][0])
             var code = msel_scorer_code(name, False)
             if code < 0:
                 continue
             var typed = msel_scorer_row(code)
+            var own_response = False
+            if not same_response:
+                # lane mf-r9c (door :3670): a regression row over the
+                # make_scorer's own non-predict response (`_non_predict_response`)
+                if not (msel_scorer_regression(typed) and _non_predict_response(got_method, b)):
+                    continue
+                own_response = True
             var binary = msel_scorer_positive(typed)
             var label_row = msel_scorer_label_row(typed)
             var pos_row = binary or msel_scorer_ap(typed) or msel_scorer_brier(typed)
@@ -3252,6 +3360,9 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                 continue  # fbeta_score without its beta: the door raises its words
             mine_kw.flip = not Bool(py=py_call(b.bool, py_call(eq, py_call(b.getattr, row, PythonObject("_sign")),
                                                                py_call(b.getattr, got, PythonObject("_sign")))))
+            if mine_kw.mclass > 0:
+                _multi_class_row(mine_kw, b)  # lane mf-r9c: the dual 'roc_auc' row's multi_class
+            mine_kw.resp_any = own_response
             if mine_kw.rename.byte_length() > 0:
                 name = mine_kw.rename.copy()  # lane mf-score8: the row the kwargs select
             kw = mine_kw^
@@ -3296,7 +3407,12 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
         var wanted = String("decision_function") if op == MEMBER_OP_DECISION else (
             String("predict_proba") if op == MEMBER_OP_PREDICT_PROBA else String("predict"))
         if String(py=got_method) != wanted:
-            return String("")
+            # lane mf-r9c (door :3670): a regression metric row over the
+            # make_scorer's own non-predict response
+            if not (op == MEMBER_OP_PREDICT and msel_scorer_regression(msel_scorer_row(code))
+                    and _non_predict_response(got_method, b)):
+                return String("")
+            metric_kw.resp_any = True
         # lane mf-score8: the row's sign is its get_scorer sign (or +1 for a
         # metric row); the flip is a make_scorer sign that differs from it
         var row_sign = Int(msel_scorer_row(code).sign)
@@ -3664,10 +3780,12 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             # raised per side after the response is asked, as the door does
             no_method = kw.refuse_text.copy()
         if name.byte_length() == 0 and no_method.byte_length() == 0:
-            # a native scorer no table row holds: the kwargs listed in
-            # mf-rows8a-work/rows.tsv (another numeric_mode tier, a
-            # non-predict response a class has over a predict metric,
-            # roc_auc's multi_class on its dual row)
+            # a native scorer no table row holds (mf-r9c-work/rows.tsv):
+            # another numeric_mode tier (one MetricRoute per search RUN), a
+            # predict_log_proba response over a regression row, a response
+            # tuple on a metric row. Lane mf-r9c typed roc_auc's multi_class
+            # on its dual row (`_multi_class_row`) and a regression row over
+            # a predict_proba / decision_function response (`resp_any`).
             return False
         if no_method.byte_length() > 0:
             # A CLASS WITH NONE OF THE SCORER'S RESPONSE METHODS (lane mf-score8
@@ -3700,6 +3818,12 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         opts.beta = kw.beta
         opts.zd = kw.zd
         var row = msel_scorer_row(code)
+        if kw.resp_any and method != "predict":
+            # LANE mf-r9c (door :3670): a regression row over the make_scorer's
+            # own response the class has (core/msel_scorer_run.mojo
+            # `_response_regression`): the row reads that response
+            opts.resp = MEMBER_OP_DECISION if method == "decision_function" else MEMBER_OP_PREDICT_PROBA
+            row.op = opts.resp
         # LANE mf-score6: average=None (the words scikit-learn's `_score`
         # names the scorer by, `str(scorer)` or a multi-metric key, as one
         # more label word: a per-label array is no number), average='samples'
@@ -3754,12 +3878,47 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             # (core/msel_scorer_run.mojo `_multi_output_refusal`) or scores a
             # regression row over the labels' values, rows x outputs. No
             # pos_label or `labels` code is read: the side refuses before
-            # either (scikit-learn's `_check_targets` first). A probability or
-            # decision row is not typed: MultiOutputClassifier answers a list
-            # of per-output blocks that each metric reads its own way
-            # (mf-rows8b-work/rows.tsv).
-            if row.op != MEMBER_OP_PREDICT:
-                return False
+            # either (scikit-learn's `_check_targets` first).
+            # LANE mf-r9c (row :3761): a PROBABILITY row. The class answers a
+            # list of per-output blocks; each side reads the fold estimator's
+            # `classes_` and the metric's handling of that list in scikit-
+            # learn's words (core/msel_scorer_run.mojo `_multi_classes`,
+            # `_multi_proba_value`) from the outputs' label value words read
+            # here once, the effective pos_label (None or not; for
+            # average_precision whether it is 1) and a `labels` kwarg's
+            # in-labels flags (`_multi_labels_flags`). REMOVED: the False exit
+            # that sent every such scorer to the door's units.
+            if row.op == MEMBER_OP_DECISION:
+                # the scorer's response rule takes decision_function only when
+                # the class has it; no native multi-output classifier kind
+                # answers it (its member lacks MEMBER_CAN_DECISION), and
+                # hinge_loss on such a class is a stand-in row above
+                raise Error("RuntimeError: search admission invariant: a multi-output classifier is scored by "
+                            + "decision_function")
+            if row.op == MEMBER_OP_PREDICT_PROBA:
+                _multi_label_values(labels, sels, opts, extra_words, b)
+                var op_ne = native_loaded_module("operator").ne
+                if msel_scorer_ap(row):
+                    # average_precision_score's pos_label=1 unless given
+                    opts.pos_given = not kw.given_pos or kw.pos_label is not None
+                    if kw.given_pos and Bool(py=py_call(b.bool, py_call(op_ne, kw.pos_label, PythonObject(1)))):
+                        opts.wmode = 1
+                elif kw.given_pos and kw.pos_label is not None:
+                    opts.pos_given = True  # brier_score_loss / d2_brier_score's given pos_label
+                if kw.labels is not None and (msel_scorer_log_loss(row) or msel_scorer_brier(row)
+                                              or msel_scorer_d2_proba(row)):
+                    _multi_labels_flags(labels, kw.labels, sels, opts, extra_words, b)
+                others = True
+                codes.append(code)
+                positives.append(-1)
+                options.append(opts)
+                var seen_q = False
+                for o in range(len(responses)):  # small-loop(the distinct responses, at most three)
+                    seen_q = seen_q or responses[o] == row.op
+                if not seen_q:
+                    responses.append(row.op)
+                needs |= MEMBER_CAN_PREDICT_PROBA
+                continue
             _multi_label_values(labels, sels, opts, extra_words, b)
             if msel_scorer_cluster_entry(row):
                 cluster_entry = True
@@ -4829,6 +4988,69 @@ def _multi_label_values(labels: PythonObject, mut sels: List[Int32], mut opts: M
             sels.append(Int32(kind))
             total += 1
     opts.lv_n = total
+
+
+def _multi_labels_flags(labels: PythonObject, given: PythonObject, mut sels: List[Int32],
+                        mut opts: MselScorerOptions, mut extra_words: List[String], b: PythonObject) raises:
+    """UNPACK (lane mf-r9c): a `labels` kwarg of log_loss / brier_score_loss /
+    the D^2 scores on a MULTI-OUTPUT classifier, read ONCE: one flag per
+    output label in value-word order (1: equal to a listed label, as
+    `np.isin` compares), then two label-word indexes (-1: none) for the
+    refusals `_one_hot_encoding_multiclass_target` raises from the labels
+    alone (sklearn 1.9 metrics/_classification.py lines 178-215):
+    LabelBinarizer's fit of an empty list ("y has 0 samples: %r",
+    preprocessing/_label.py) and fewer than two distinct labels ("The labels
+    array needs to contain at least two labels, got <classes_>": NumPy's
+    print of the one class: a string's repr, a whole float as `1.`). The RUN
+    reads them per side in that order (core/msel_scorer_run.mojo
+    `_multi_proba_value`)."""
+    var listed = py_call(b.list, given)
+    var eq = native_loaded_module("operator").eq
+    opts.sel_from = len(sels)
+    var total = 0
+    for j in range(len(labels)):  # driver-loop: over the outputs (their labels, once per admission)
+        var items = py_call(b.list, labels[j])
+        for i in range(len(items)):  # driver-loop: over one output's labels (each against the listed ones)
+            var found = False
+            for q in range(len(listed)):  # driver-loop: over the listed labels
+                if Bool(py=py_call(b.bool, py_call(eq, items[i], listed[q]))):
+                    found = True
+                    break
+            sels.append(Int32(1) if found else Int32(0))
+            total += 1
+    var empty_word = -1
+    var one_word = -1
+    if len(listed) == 0:
+        empty_word = _next_word(labels, True, extra_words, b)
+        extra_words.append("ValueError: y has 0 samples: " + String(py=py_call(b.repr, given)))
+    else:
+        var first = listed[0]
+        var distinct = 1
+        for q in range(1, len(listed)):  # driver-loop: over the listed labels (is there a second one)
+            if not Bool(py=py_call(b.bool, py_call(eq, listed[q], first))):
+                distinct = 2
+                break
+        if distinct == 1:
+            var shown: String
+            if Bool(py=py_call(b.isinstance, first, b.str)):
+                shown = String(py=py_call(b.repr, first))
+            elif py_type(first) is b.bool:
+                shown = String(" True") if Bool(py=first) else String("False")
+            else:
+                shown = String(py=py_call(b.str, first))
+                if py_type(first) is b.float:
+                    try:
+                        var whole = py_call(b.int, first)
+                        if Bool(py=py_call(b.bool, py_call(eq, first, py_call(b.float, whole)))):
+                            shown = String(py=py_call(b.str, whole)) + "."
+                    except:
+                        pass  # nan / inf: printed as `str` gives them
+            one_word = _next_word(labels, True, extra_words, b)
+            extra_words.append("ValueError: The labels array needs to contain at least two labels, got [" + shown
+                               + "].")
+    sels.append(Int32(empty_word))
+    sels.append(Int32(one_word))
+    opts.sel_n = total + 2
 
 
 def _joined_label_words(labels: PythonObject, mut extra_words: List[String], b: PythonObject) raises:
