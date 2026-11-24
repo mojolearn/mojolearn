@@ -158,6 +158,9 @@ def connect(context, package):
     # Marked member classes without a schema of their own, AFTER every hand-written schema above (a class those
     # register was listed as unregistered when this ran first).
     from ._native_msel_more import connect_members
+    # The register function is kept for a marked class whose module loads lazily after this connection and
+    # registers itself at its own import (_native_msel_more.connect_host_tree_member; lane mf-cal5).
+    context['family_msel_register'] = register
     connect_members(context, register, registry)
     neighbors = loaded('neighbors')
     if neighbors is not None:

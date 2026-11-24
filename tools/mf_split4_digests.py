@@ -3,6 +3,11 @@ native META members (or native leaf members) now. Host column. One line per conf
 sha256 of the output bytes (dtype and shape included); a refusal is digested by its words, and the warnings a fit
 raised by their category and words, in order. Base: origin/lane/member-fits b0c2f733fd (the door paths), head
 lane/mf-split4. Test tool, never product runtime.
+Lane mf-gate6: a `_warnings` line is `<hash> words=[[<category>: <message>, <count>], ...]` (run this version of the
+tool on both builds: an older file holds the hash only). Gate note, base main d67c21591e: the adacw_* rows gain the
+DecisionTree / RandomForest fit notice (bindings/rf_fit_notices_pack.mojo, cuML's n_bins clamp words, raised when a
+round's rows are fewer than n_bins=128: the cv=3 folds of 160 rows) that the estimator's own fit raises; the base's
+AdaBoost route raised none (967ba35740 restored them per round). Read the words to confirm.
 
 EQUAL (every line expected):
   * `bagcw_*` (item 0): a BaggingClassifier whose DecisionTree carries a class_weight (dict keyed by codes, and
@@ -39,12 +44,26 @@ Lane mf-split4b (sections below SPLIT): base origin/lane/member-fits af90e5f0b6,
   * `bagpm_*` (item 6): a BaggingClassifier whose tree has a class_weight (dict, 'balanced') on the per-member
     route (max_features=3), unweighted and weighted, in a Voting, a Calibrated, a Stacking and a GridSearchCV; and a
     dict naming a class a small draw lacks (the tree door's refusal).
+Lane mf-split5 (sections SPLIT5_*): base origin/lane/member-fits-5 80dc3165e0, head lane/mf-split5. EQUAL (every
+line expected; a splitter warning's ORDER among a fit's warnings may differ, the `_warnings` lines sort them):
+  * `split5door_*`: the public `split` of every native splitter (ShuffleSplit, StratifiedShuffleSplit,
+    RepeatedKFold, RepeatedStratifiedKFold, GroupKFold, StratifiedGroupKFold, GroupShuffleSplit, LeaveOneGroupOut,
+    LeavePGroupsOut, TimeSeriesSplit, LeaveOneOut, LeavePOut, PredefinedSplit) and `train_test_split` with a
+    float32 and a float test_size (the typed `_validate_shuffle_split` and repeat bodies the door now calls).
+  * `split5meta_*`: each of those splitters as the cv of a StackingClassifier, a CalibratedClassifierCV (ensemble
+    True and False) and a GridSearchCV, each nested in a soft VotingClassifier (base: the door's `_splits` /
+    `_DoorModel` units; head: the META kinds' typed folds). Non-partitions refuse in Stacking and ensemble=False
+    (the same words); group splitters refuse with "The 'groups' parameter should not be None." (the same words).
+  * `split5xl_*`: RidgeCV, LassoCV, ElasticNetCV (regressors) and LogisticRegressionCV with those splitters and with
+    an index list, nested in a Voting (base: the estimators' own split doors; head: the x_linear members), and
+    RidgeCV with an integer cv and sample weights (base: its door's split path; head: the member's split path).
 Configurations are independent: one process each across the host cores.
 
     python tools/mf_split4_digests.py > digests.txt
 """
 from concurrent.futures import ProcessPoolExecutor
 import hashlib
+import json
 import os
 import sys
 import warnings
@@ -112,7 +131,13 @@ def _lines(tag, call):
         except Exception as e:  # noqa: BLE001 - the words are the digest
             out = [(tag + "_raised", f"{type(e).__name__}: {e}")]
     words = sorted(f"{w.category.__name__}: {w.message}" for w in caught)
-    out.append((tag + "_warnings", _digest(np.asarray(words, dtype=str)) if words else "none"))
+    # Lane mf-gate6: the words beside the hash (the gate saw only hashes move): each distinct warning once with its
+    # count, in sorted order, JSON on the same line, so a diff shows what was raised.
+    counted = {}
+    for word in words:
+        counted[word] = counted.get(word, 0) + 1
+    text = json.dumps([[word, count] for word, count in counted.items()], ensure_ascii=True)
+    out.append((tag + "_warnings", f"{_digest(np.asarray(words, dtype=str))} words={text}" if words else "none"))
     return out
 
 
@@ -375,9 +400,122 @@ def _bagpm(index):
     return _lines(f"bagpm_{cw}_weighted_{caller}", lambda: [("proba", meta.fit(X, y, sample_weight=w).predict_proba(X))])
 
 
+# ------------------------------------------------------------ lane mf-split5
+
+
+def _splitters(n):
+    """Every native splitter of lane mf-split5, by name (fresh objects)."""
+    from mojolearn import model_selection as ms
+    return {
+        "shuffle": lambda: ms.ShuffleSplit(3, test_size=0.25, random_state=2),
+        "strat_shuffle": lambda: ms.StratifiedShuffleSplit(3, test_size=0.25, random_state=2),
+        "repeated": lambda: ms.RepeatedKFold(n_splits=3, n_repeats=2, random_state=3),
+        "repeated_strat": lambda: ms.RepeatedStratifiedKFold(n_splits=3, n_repeats=2, random_state=3),
+        "group_kfold": lambda: ms.GroupKFold(3),
+        "strat_group": lambda: ms.StratifiedGroupKFold(3),
+        "group_shuffle": lambda: ms.GroupShuffleSplit(3, test_size=0.3, random_state=2),
+        "logo": lambda: ms.LeaveOneGroupOut(),
+        "lpgo": lambda: ms.LeavePGroupsOut(2),
+        "time_series": lambda: ms.TimeSeriesSplit(3),
+        "loo": lambda: ms.LeaveOneOut(),
+        "lpo": lambda: ms.LeavePOut(1),
+        "predefined": lambda: ms.PredefinedSplit(np.arange(n) % 3),
+    }
+
+
+SPLIT5_NAMES = ("shuffle", "strat_shuffle", "repeated", "repeated_strat", "group_kfold", "strat_group",
+                "group_shuffle", "logo", "lpgo", "time_series", "loo", "lpo", "predefined")
+SPLIT5DOOR = [(name,) for name in SPLIT5_NAMES] + [("tts_f32",), ("tts_float",)]
+SPLIT5META = [(name, meta) for name in SPLIT5_NAMES for meta in ("stack", "cal_ens", "cal_one", "grid")]
+SPLIT5XL = ([(name, est) for name in SPLIT5_NAMES + ("list",) for est in ("ridgecv", "lassocv", "enetcv", "logcv")]
+            + [("int_weighted", "ridgecv")])
+
+
+def _n_of(name):
+    """Fewer rows for the per-row and per-combination splitters (one fit per split)."""
+    return 30 if name in ("loo", "lpo") else 120
+
+
+def _split5door(index):
+    from mojolearn.model_selection import train_test_split
+    (name,) = SPLIT5DOOR[index]
+    X, y = _data(131, 120, 3)
+    groups = np.arange(120) % 6
+    if name.startswith("tts"):
+        size = np.float32(0.1) if name == "tts_f32" else 0.1
+
+        def run():
+            parts = train_test_split(X, y, test_size=size, random_state=7)
+            return [("part%d" % i, v) for i, v in enumerate(parts)]
+        return _lines(f"split5door_{name}", run)
+    n = _n_of(name)
+
+    def run():
+        pairs = list(_splitters(n)[name]().split(X[:n], y[:n], groups[:n]))
+        out = []
+        for i, (tr, te) in enumerate(pairs):
+            out.append(("tr%d" % i, np.asarray(tr)))
+            out.append(("te%d" % i, np.asarray(te)))
+        return out
+    return _lines(f"split5door_{name}", run)
+
+
+def _split5meta(index):
+    import mojolearn
+    from mojolearn.calibration import CalibratedClassifierCV
+    from mojolearn.model_selection import GridSearchCV
+    name, meta = SPLIT5META[index]
+    n = _n_of(name)
+    X, y = _data(137, n, 3)
+    cv = _splitters(n)[name]()
+    lr = mojolearn.LogisticRegression(max_iter=200)
+    if meta == "stack":
+        est = mojolearn.StackingClassifier([("a", lr)], cv=cv)
+    elif meta == "cal_ens":
+        est = CalibratedClassifierCV(lr, cv=cv, ensemble=True)
+    elif meta == "cal_one":
+        est = CalibratedClassifierCV(lr, cv=cv, ensemble=False)
+    else:
+        est = GridSearchCV(lr, {"C": [0.5, 1.0]}, cv=cv)
+    return _lines(f"split5meta_{name}_{meta}", lambda: _in_caller("vote", est, X, y))
+
+
+def _split5xl(index):
+    import mojolearn
+    name, kind = SPLIT5XL[index]
+    n = _n_of(name)
+    X, y = _data(139, n, 3)
+    yr = (X @ np.arange(1, 6, dtype=np.float32) + 0.1).astype(np.float32)
+    idx = np.arange(n)
+    w = None
+    if name == "list":
+        cv = [(idx[idx % 3 != f], idx[idx % 3 == f]) for f in range(3)]
+    elif name == "int_weighted":
+        cv = 3
+        w = (1.0 + (idx % 5)).astype(np.float32)
+    else:
+        cv = _splitters(n)[name]()
+    if kind == "ridgecv":
+        est = mojolearn.RidgeCV(alphas=(0.1, 1.0, 10.0), cv=cv)
+    elif kind == "lassocv":
+        est = mojolearn.LassoCV(cv=cv, n_alphas=8)
+    elif kind == "enetcv":
+        est = mojolearn.ElasticNetCV(l1_ratio=[0.5, 1.0], cv=cv, n_alphas=8)
+    else:
+        est = mojolearn.LogisticRegressionCV(Cs=4, cv=cv, max_iter=200)
+    if kind == "logcv":
+        return _lines(f"split5xl_{name}_{kind}", lambda: _in_caller("vote", est, X, y))
+
+    def run():
+        m = mojolearn.VotingRegressor([("a", est), ("b", mojolearn.Ridge())]).fit(X, yr, sample_weight=w)
+        return [("predict", m.predict(X))]
+    return _lines(f"split5xl_{name}_{kind}", run)
+
+
 SECTIONS = ((BAGCW, _bagcw), (ADACW, _adacw), (ADARAND, _adarand), (NESTCW, _nestcw), (SUBCLS, _subcls),
             (SPLIT, _split), (CALCV, _calcv), (USERSPLIT, _usersplit), (RIDGECV, _ridgecv), (ADASW, _adasw),
-            (SVCCW, _svccw), (BAGPM, _bagpm))
+            (SVCCW, _svccw), (BAGPM, _bagpm), (SPLIT5DOOR, _split5door), (SPLIT5META, _split5meta),
+            (SPLIT5XL, _split5xl))
 
 
 def _run(index):
@@ -388,9 +526,16 @@ def _run(index):
     return []
 
 
+def _cores():
+    try:
+        return len(os.sched_getaffinity(0))  # the allocation, not the host's visible CPUs
+    except AttributeError:
+        return os.cpu_count() or 1
+
+
 def main():
     total = sum(len(table) for table, _ in SECTIONS)
-    with ProcessPoolExecutor(max_workers=min(total, os.cpu_count() or 1)) as pool:
+    with ProcessPoolExecutor(max_workers=min(total, _cores())) as pool:
         for lines in pool.map(_run, range(total)):
             for name, value in lines:
                 print(name, value)

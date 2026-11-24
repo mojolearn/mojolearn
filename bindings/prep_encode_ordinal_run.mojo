@@ -159,7 +159,16 @@ def ordinal_auto_clash(state: CatAuto, use_unknown: Bool, unknown_value: Float64
     [-1]), then `encoded_missing` (when a column has a NaN category, not
     NaN) must not be one either (a clash answers the columns). Empty: no
     clash. No text is built unless a check fails (`ordinal_auto_refusal`)."""
-    var cards = state.cards()
+    return ordinal_cards_clash(state.cards(), state.missing, use_unknown, unknown_value, encoded_missing)
+
+
+def ordinal_cards_clash(cards: List[Int], missing: List[Int], use_unknown: Bool, unknown_value: Float64,
+                        encoded_missing: Float64) -> List[Int]:
+    """`ordinal_auto_clash` over the code counts `cards` (after the
+    infrequent grouping when there is one: `cat_grouped_sizes` of the
+    cardinalities) and the NaN slots `missing`; the door's general fit
+    (given categories, infrequent grouping) and the Prep member call it
+    (lane mf-enc6)."""
     if use_unknown and unknown_value == unknown_value:
         for j in range(len(cards)):  # driver-loop: validates unknown_value against cardinalities
             if 0.0 <= unknown_value and unknown_value < Float64(cards[j]):
@@ -167,11 +176,11 @@ def ordinal_auto_clash(state: CatAuto, use_unknown: Bool, unknown_value: Float64
                 return clash^
     var bad = List[Int]()
     var any_missing = False
-    for j in range(len(state.missing)):  # driver-loop: over the per-column NaN slots (feature metadata)
-        any_missing = any_missing or state.missing[j] >= 0
+    for j in range(len(missing)):  # driver-loop: over the per-column NaN slots (feature metadata)
+        any_missing = any_missing or missing[j] >= 0
     if any_missing and encoded_missing == encoded_missing:
         for j in range(len(cards)):  # driver-loop: validates encoded_missing_value argument
-            if state.missing[j] >= 0 and 0.0 <= encoded_missing and encoded_missing < Float64(cards[j]):
+            if missing[j] >= 0 and 0.0 <= encoded_missing and encoded_missing < Float64(cards[j]):
                 bad.append(j)
     return bad^
 

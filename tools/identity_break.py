@@ -1665,7 +1665,9 @@ LANE_REVISIONS = {
     # exchanging them was the identity function, and these lanes never train,
     # so no step could separate them. `_block_weights(near_one=...)` gives
     # each its own elementwise vector within an eighth of unity.
-    "mamba3": "norms-near-one-1",
+    # mamba3 also hashes a two-chunk backward (`backward_two_chunks`, 80 tokens;
+    # 2026-11-23, lane sab-host-missed-nrl): its older cells carry no such part.
+    "mamba3": "norms-near-one-two-chunk-backward-2",
     "transformer": "norms-near-one-1",
     "transformer-window": "norms-near-one-1",
     # arithmetic, not input: UMAP.transform is row separable now
@@ -2824,13 +2826,29 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(predict=_h(m.predict(X[4096:4160]))), m, lambda e: (e.predict(Xh[:64]),))
 
 
+def _fold_order_rows():
+    """Seven float32 rows i * v, v = (1, 2**-12 x 8): adjacent rows' squared
+    distance is exactly 1 when the nine features are folded ascending (each
+    2**-24 term is half an ulp of 1 and rounds away) and 1 + 2**-21 when they
+    are folded in any order that sums the small terms first. A lane that
+    hashes a decision taken on these rows fails when a host or device fold
+    leaves the ascending order."""
+    v = np.array([1.0] + [2.0 ** -12] * 8, dtype=np.float32)
+    return np.ascontiguousarray(np.arange(7, dtype=np.float32)[:, None] * v[None, :])
+
+
 @lane("dbscan")
 def _(ml, X, yc, yr, Xh=None):
     # prediction_data=True (2026-09-15) copies the fit's core mask out and
     # moves no train byte; infer is DBSCAN.predict on 256 held-out rows, the
     # nearest core sample within eps (DEVIATION 2740).
     m = ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True).fit(X[:6000, :4])
-    return _fit(dict(labels=_h(m.labels_)), m, lambda e: (e.predict(Xh[:256, :4]),))
+    # The eps test on a pair whose squared distance is exactly eps**2 only in
+    # the features-ascending fold (_fold_order_rows): one cluster in that
+    # order, all noise in any other, under both eps searches.
+    line = _fold_order_rows()
+    fold = [ml.DBSCAN(eps=1.0, min_samples=2, algorithm=a).fit(line).labels_ for a in ("rbc", "brute")]
+    return _fit(dict(labels=_h(m.labels_), fold_order=_h(*fold)), m, lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("pca")
@@ -2943,7 +2961,11 @@ def _(ml, X, yc, yr, Xh=None):
     # train byte; infer is predict on 256 held-out rows, the single-linkage
     # rule (DEVIATION 2740).
     m = ml.AgglomerativeClustering(n_clusters=4, prediction_data=True).fit(X[:2000, :4])
-    return _fit(dict(labels=_h(m.labels_)), m, lambda e: (e.predict(Xh[:256, :4]),))
+    # Rows 0, v, 2v of _fold_order_rows: the two MST edge weights order the
+    # merges, and their order is the dot products' features-ascending fold.
+    f = ml.AgglomerativeClustering(n_clusters=2).fit(np.ascontiguousarray(_fold_order_rows()[:3]))
+    return _fit(dict(labels=_h(m.labels_), fold_order=_h(f.children_, f.labels_)), m,
+                lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("spectral")
@@ -3687,6 +3709,13 @@ def _(ml, X, yc, yr, Xh=None):
         near_one=("B_norm.weight", "C_norm.weight"))
     blk = _built(ml.Mamba3Block(w), weights=w)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), {})
+    # A backward over two chunks (80 tokens, chunk size 64). At l = 16 the
+    # sequence is one chunk, and the S17 chunk-state adjoint
+    # (mamba3_s16_host.mojo _s17_unit) is read only for chunk c + 1 < nc
+    # (gen/mamba3_backward.mojo mamba3_s17_operands_kernel), so no hashed
+    # gradient depended on it (2026-11-23, lane sab-host-missed-nrl).
+    grads_two = blk.backward(_seq(X, 1, 80, dm, skip=4096), _seq(X, 1, 80, dm, skip=8192))
+    parts["backward_two_chunks"] = _h(*[np.asarray(grads_two[k]) for k in sorted(grads_two)])
     # Mamba3Block.session_info -> mamba_public_native.mojo:mamba3_session_info ->
     # the session's info operation (op 45 on its registry handle): the counters of the device prefill session the
     # stateless forward above opened. The host column opens none (None there), so

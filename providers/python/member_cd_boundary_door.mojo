@@ -26,7 +26,7 @@ from bindings.member_owner_unpack import MemberOwner
 from bindings.py_balanced import py_get, py_item, py_setitem
 from bindings.x_linear_common_unpack import _truth, _float, _int
 from bindings.x_linear_keys_unpack import x_linear_keys
-from bindings.x_linear_cd_unpack import _xl_cd_validate
+from bindings.x_linear_cd_unpack import _xl_cd_validate, xl_cd_host_fit_words
 from bindings.x_linear_route_unpack import xl_route, xl_ops_require
 from core.entry_table import EntryRef, entry_ref_word
 from core.hostptr import f32_ptr
@@ -48,8 +48,10 @@ def cd_member_admit(model: PythonObject, fields: PythonObject, kind: Int, contex
         raise Error("RuntimeError: mojolearn: unknown Cd member kind " + String(kind))
     var ops = xl_route(model, fields, context, True)
     if ops.host_only:
-        # An explicit host class predicts a saved model only: its own door refuses fit.
-        return False
+        # An explicit host class predicts a saved model only: its own fit door's refusal, in its words and
+        # first, as `xl_cd_fit_unpack` (lane mf-lin6; a serving caller that only predicts keeps the class's
+        # own predict, `member_admit_serving` never raises).
+        raise Error(xl_cd_host_fit_words(model))
     _xl_cd_validate(fields, context)
     xl_ops_require(ops)
     var shuffle = _int(py_item(context, nk[].k_cd_selection)[py_item(fields, nk[].k_selection)]) != 0

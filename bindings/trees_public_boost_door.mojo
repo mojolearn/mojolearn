@@ -56,13 +56,14 @@ from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector,
 )
 from bindings.admitted_input_run import AdmittedXView
+from bindings.member_given_y_unpack import member_given_y
 from bindings.member_set_door import (
     MemberSet, member_set_admit, member_set_width, member_set_run, member_set_pack, member_set_release,
-    member_set_notices, member_set_resident,
+    member_set_notices, member_set_resident, member_set_reads_given, member_set_given,
     member_set_tests, member_set_host, member_marked, member_held_open, member_held_run, member_held_close,
     MemberHeldCall,
 )
-from core.member_abi import MEMBER_F32, MEMBER_I32, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA
+from core.member_abi import MemberMatrix, MEMBER_F32, MEMBER_I32, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA
 from xtrees.trees_meta_vote_run import (
     VoteMember, VOTE_ALL_ANSWERED, bag_predict_run, bag_oob_run, bag_oob_classifier_finish, bag_oob_r2_run,
     ada_classifier_run, ada_regressor_run, ADA_DECISION, ADA_PROBA, ADA_CODES,
@@ -79,6 +80,16 @@ from bindings.trees_dart_rounds_run import (
     DartMemberShape, dart_member_request, dart_member_config,
 )
 from bindings.native_unit_threads_unpack import native_unit_jobs
+# Lane mf-refuse5: the constructor refusals, ONE body with the META kind's admission.
+from bindings.trees_meta_validate_unpack import (
+    meta_seed as _seed,
+    meta_bagging_validate as _bagging_validate,
+    meta_ada_validate as _ada_validate,
+    meta_count_reading,
+    meta_connected as _connected,
+    meta_require_tree as _require_tree,
+    boost_member_device,
+)
 from xtrees.trees_boost_run import (
     _sub_seed, _dart_thr,
     boost_ada_session_choice, boost_bagging_validate, boost_check_n_estimators, boost_check_learning_rate,
@@ -208,16 +219,6 @@ def _x(table: PythonObject, name: String) raises -> PythonObject:
     if entry is None:
         raise Error("ImportError: mojolearn: the x_trees binding has no " + name)
     return entry
-
-
-def _seed(random_state: PythonObject, context: PythonObject) raises -> Int:
-    """`_trees_seed`."""
-    if random_state is None:
-        return 0
-    if _is_bool(random_state) or not _is_integral(random_state, context) or Bool(py=random_state < PythonObject(0)):
-        raise Error("random_state must be None or a nonnegative int (a RandomState object is refused:"
-                    + " draws come from the lane's own counter RNG, xtrees/ops.mojo)")
-    return Int(py=_int(random_state))
 
 
 def _P(v: Int) raises -> PythonObject:
@@ -407,48 +408,6 @@ def _sub_cols(member: PythonObject, context: PythonObject) raises -> PythonObjec
 
 
 # ---------------------------------------------------------------- members
-
-
-def _connected(cls: PythonObject, context: PythonObject) raises -> Bool:
-    var b = trees_builtins()
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    var classes = context["trees_classes"]
-    for i in range(len(mro)):  # driver-loop: over the class ancestry metadata
-        var kind = py_get(classes, mro[i])
-        if kind is not None:
-            return trees_member_kind(kind)
-    return False
-
-
-def _require_tree(base: PythonObject, owner: String, context: PythonObject) raises:
-    """A member must be a mojolearn tree estimator (its fit and predict run
-    in this owner); any other estimator is a Python object."""
-    if not _connected(py_type(base), context):
-        raise Error("NotImplementedError: " + owner + ": estimator=" + _repr(base) + " is not a mojolearn "
-                    + "DecisionTree*, RandomForest* or ExtraTrees* estimator; the native ensemble fits only "
-                    + "those members. Refused by name rather than accepted and ignored.")
-
-
-def boost_member_device(fields: PythonObject, base: PythonObject, owner: String) raises -> PythonObject:
-    """The `device` every member of an ensemble stores: the ensemble's own
-    stored value, so a member read back (`estimators_`) runs where the
-    ensemble ran it. The members' operations run in the ensemble's run
-    context (its device route, bindings/trees_route_boundary_door.mojo);
-    nothing here selects a table. A member estimator given with its own
-    explicit `device` that is not the ensemble's value is refused in words,
-    never run on a device its caller did not name. Once per ensemble fit:
-    two field reads and one pointer compare when both are the default."""
-    var device = py_get(fields, "device")
-    var own = py_get(py_fields(base), "device")
-    if own is not None and own is not device:
-        var same = False
-        if device is not None:
-            same = String(own) == String(device)
-        if not same:
-            raise Error(owner + ": estimator has device=" + _repr(own) + " but the ensemble has device="
-                        + _repr(device) + "; the members run on the ensemble's device. Set device on the "
-                        + "ensemble and leave the member's device None.")
-    return device
 
 
 def _new_member(cls: PythonObject, settings: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -687,31 +646,13 @@ def _member_store(member: PythonObject, result: PythonObject, cols: Int) raises:
 # ---------------------------------------------------------------- Bagging
 
 
-def _bagging_validate(fields: PythonObject, context: PythonObject) raises:
-    """`_BaggingBase._validate_params`."""
-    var oob = _truthy(fields["oob_score"])
-    boost_bagging_validate(oob, oob and _truthy(fields["bootstrap"]), _truthy(fields["warm_start"]),
-                           _truthy(fields["verbose"]))
-    # n_jobs is the worker bound of the member fits (None and -1: every core):
-    # published members fit in parallel waves (`_bagging_fit_bags`).
-    _ = native_unit_jobs(fields["n_jobs"], "Bagging")
-    boost_check_n_estimators(Int(py=_int(fields["n_estimators"])))
-    _ = _seed(fields["random_state"], context)
-
-
 def _count(v: PythonObject, total: Int, name: String, context: PythonObject) raises -> Int:
     """`_BaggingBase._count`."""
-    var b = trees_builtins()
-    var k = 0
-    if _is_integral(v, context) and not _is_bool(v):
-        k = Int(py=_int(v))
-    elif Bool(py=py_call(b.isinstance, v, context["trees_real_type"])):
-        var f = Float64(py=_float(v))
-        if not boost_count_fraction_ok(f):
-            raise Error(name + "=" + _str(v) + " is outside (0, 1]")
-        k = Int(py=_int(_F(f * Float64(total))))
-    else:
-        raise Error(name + " must be an int or a float")
+    # The reading and its refusals: one body with the META kind's admission (lane mf-refuse5).
+    var reading = meta_count_reading(v, name, context)
+    var k = reading.count
+    if not reading.integral:
+        k = Int(py=_int(_F(reading.fraction * Float64(total))))
     return boost_count_check(name, k, total)
 
 
@@ -788,9 +729,12 @@ def _unseen_rows(xt: PythonObject, rows: PythonObject, n: Int, context: PythonOb
 
 
 def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject, y_all: PythonObject,
-                      classifier: Bool, sample_weight: PythonObject, context: PythonObject) raises -> Int:
+                      classifier: Bool, sample_weight: PythonObject, y_given: PythonObject,
+                      context: PythonObject) raises -> Int:
     """`_BaggingBase._fit_bags`. Answers what the fit's out-of-bag outputs
-    may rely on (_BAG_X_PROVEN | _BAG_STATES_HELD; 0: nothing)."""
+    may rely on (_BAG_X_PROVEN | _BAG_STATES_HELD; 0: nothing). `y_given` (a
+    regressor's y as the door was given it, None: none) is THE GIVEN y of a
+    member whose kind reads it (lane mf-tail5), drawn with its rows."""
     var x = _x_f32(X, context)
     var n = x.rows
     var d = x.cols
@@ -862,6 +806,10 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     # Every member so far was fitted natively on the CPU route and kept its
     # fitted state (the out-of-bag outputs then read held states: all hits).
     var kept = True
+    # THE GIVEN y (lane mf-tail5): a view of a regressor's y as given, read once.
+    var given = MemberMatrix()
+    if not classifier:
+        given = member_given_y(y_given, n, 1, context["array_class"])
     while native and done < count:  # driver-loop: over the waves of member estimators
         var set = MemberSet(x.address, n, d, MEMBER_I32 if classifier else MEMBER_F32, MEMBER_I32)
         set.run.cap = jobs
@@ -885,6 +833,8 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
                                     n_classes, context, b):
                 native = False
                 break
+            if given.given() and member_set_reads_given(set):
+                member_set_given(set, given.data, given.dtype)
             # Inside `resident()` a member that reads a scope keeps X on the
             # device across the bags (bindings/member_set_door.mojo, THE
             # RESIDENT SCOPE). Only when `xa` is the object that owns the
@@ -1316,7 +1266,7 @@ def bagging_fit(model: PythonObject, args: PythonObject, classifier: Bool, conte
         py_setitem(fields, "n_classes_", _P(k))
         if k < 2:
             raise Error("y has fewer than 2 classes")
-        var fit_word = _bagging_fit_bags(model, fields, X, labels.codes, True, sample_weight, context)
+        var fit_word = _bagging_fit_bags(model, fields, X, labels.codes, True, sample_weight, PythonObject(None), context)
         if _truthy(fields["oob_score"]):
             # `BaggingClassifier._set_oob_score`
             var xt = _xt(fields, context)
@@ -1337,7 +1287,7 @@ def bagging_fit(model: PythonObject, args: PythonObject, classifier: Bool, conte
         return model
     var y32 = admit_f32(args[1], 1, "y", context, finite=False)
     var y_array = _as_array(y32, Python.tuple(y32.rows), context)
-    var fit_word = _bagging_fit_bags(model, fields, X, y_array, False, sample_weight, context)
+    var fit_word = _bagging_fit_bags(model, fields, X, y_array, False, sample_weight, args[1], context)
     if _truthy(fields["oob_score"]):
         # `BaggingRegressor._set_oob_score`
         var xt = _xt(fields, context)
@@ -1457,23 +1407,6 @@ def bagging_predict(model: PythonObject, args: PythonObject, classifier: Bool, c
 
 
 # --------------------------------------------------------------- AdaBoost
-
-
-def _ada_validate(fields: PythonObject, classifier: Bool, context: PythonObject) raises:
-    """`AdaBoost*._validate_params`."""
-    if classifier:
-        var algorithm = fields["algorithm"]
-        if not Bool(py=algorithm == PythonObject("SAMME")) and not Bool(py=algorithm == PythonObject("deprecated")):
-            _refuse("algorithm=" + _repr(algorithm), "SAMME.R was removed from the reference (sklearn 1.6);"
-                    + " SAMME is the algorithm.")
-    else:
-        var losses = context["trees_ada_losses"]
-        if not py_contains(losses, fields["loss"]):
-            raise Error("loss must be one of " + _repr(py_call(trees_builtins().tuple, losses)) + ", got "
-                        + _repr(fields["loss"]))
-    boost_check_n_estimators(Int(py=_int(fields["n_estimators"])))
-    boost_check_learning_rate(Float64(py=_float(fields["learning_rate"])))
-    _ = _seed(fields["random_state"], context)
 
 
 def _normalized_weights(xt: PythonObject, sample_weight: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:

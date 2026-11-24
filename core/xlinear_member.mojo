@@ -41,23 +41,27 @@ the kind's):
     is the tail from word 3 (lane mf-adm3, core/member_class_weight.mojo:
     'balanced' or a dict's table over the caller's codes).
   * kind 10, 5 + A words: [0] 10, [1] fit_intercept, [2] store_cv_results,
-    [3] folds (0: cv=None, the one fit over the grid; else an integer cv,
-    `_fit_kfold`), [4] A, [5 ..] the A alphas. An integer cv runs the k-fold
-    path only (unweighted, at least two rows a fold; otherwise refused in
-    words: the estimator's own split path makes its folds in Python). A
-    splitter object for cv is not admitted.
+    [3] the cv (0: cv=None, the one fit over the grid; else minus the
+    handle of its splitter spec, bindings/msel_split_spec_run.mojo: an
+    integer cv is an unshuffled KFold spec marked int_cv, which runs
+    `_fit_kfold` unweighted with at least two rows a fold and the split
+    path otherwise, as the door; one of our splitters or an index list runs
+    the split path; lane mf-split5), [4] A, [5 ..] the A alphas.
   * kinds 11, 12, 10 + L (+ G) words: [0] kind, [1] fit_intercept,
     [2] max_iter, [3] eps, [4] tol, [5] positive (0 / 1), [6] folds (cv=None:
-    5; an integer cv: its value; KFold's contiguous folds, made here),
+    5; an integer cv: its value; KFold's contiguous folds, made here; minus
+    a splitter spec's handle for one of our splitters or an index list,
+    lane mf-split5),
     [7] G the alpha grid's length, [8] explicit (0: the path's own grid of G
     alphas; 1: the user's G alphas follow the ratios, sorted descending),
     [9] L, [10 ..] the L l1_ratios (LassoCV: [1.0]), then the G alphas when
-    explicit. A splitter object for cv is not admitted.
+    explicit.
   * kind 13, 7 + C words: [0] 13, [1] fit_intercept, [2] max_iter, [3] tol,
-    [4] folds (cv=None: 5; the binding's stratified folds), [5] class_weight
+    [4] folds (cv=None: 5; the binding's stratified folds; minus a splitter
+    spec's handle, lane mf-split5), [5] class_weight
     (0 None, 1 'balanced', 2 a dict: its table is the tail from word 7 + C,
-    lane mf-adm3), [6] C, [7 ..] the C values of the Cs grid. A splitter
-    object for cv is not admitted.
+    lane mf-adm3), [6] C, [7 ..] the C values of the Cs grid. A user's own
+    splitter object is refused by the admission (never called).
   * kind 14, 7 words: [0] 14, [1] increasing (0 False, 1 True, 2 'auto'),
     [2] y_min given (0 / 1), [3] y_min, [4] y_max given, [5] y_max,
     [6] out_of_bounds (0 'nan', 1 'clip', 2 'raise').
@@ -141,12 +145,12 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.linear_entry_table_ext import XL_OP_DECISION, XL_OP_DECISION_CODES, XL_OP_DECISION_ROWS
 from core.member_abi import (
-    MEMBER_GIL_FREE,
+    MEMBER_GIL_FREE, MEMBER_READS_Y_GIVEN, MEMBER_HOME_HOST,
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_DTYPE_UNSAID,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_OP_DECISION,
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_TRANSFORM, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_TRANSFORM,
-    MEMBER_OP_PREDICT_STD, MEMBER_CAN_PREDICT_STD,
+    MEMBER_OP_PREDICT_STD, MEMBER_CAN_PREDICT_STD, MEMBER_CAN_NOTICES, MEMBER_BLOCK_NOTICES,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_SCORE, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
     MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF, MEMBER_CAN_DECISION, MEMBER_CAN_CLASSIFIER,
     MEMBER_BLOCK_COEF, MEMBER_BLOCK_INTERCEPT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
@@ -167,6 +171,16 @@ from x_linear.door_run import (
     xl_ridge_cv_kfold_run, XlFitRequest, XlDecisionRequest, xl_fit_run, xl_huber_fit_run, xl_decision_run, xl_r2_run, xl_lbfgs_work,
     XlBayesStdRequest, xl_bayes_std_run, xl_ard_kept_run,
 )
+from x_linear.door_run import (
+    XlSplitWords, xl_cv_fold_ids_run, xl_cv_roles_limit, xl_cv_roles_run, XlRidgeSplitsOut, xl_ridge_cv_splits_run,
+    xl_ridge_cv_choose_run, XL_RIDGE_SPLITS_EMPTY, XL_RIDGE_SPLITS_SINGULAR, XL_RIDGE_SPLITS_ERROR,
+)
+from core.member_notices import member_notice_add, MEMBER_NOTICE_WORDS, MEMBER_NOTICE_R2_FEW, MEMBER_NOTICE_SPLIT_LEAST
+from bindings.msel_split_spec_run import (
+    MselSplitSpec, MselSides, MselGroupCodes, msel_spec_copy, msel_spec_sides, msel_spec_sides_targets,
+    msel_spec_stratified,
+)
+from x_linear.cv_fold_ids_run import xl_kfold_ids_f32_run
 from x_linear.bayes_words import bayes_out_words, bayes_v_at, bayes_offset_at, ard_out_words, ard_dk_at, ard_offset_at, ard_sigma_at
 
 comptime _CHUNK = 256
@@ -287,6 +301,11 @@ struct XLinearMemberSlot(Copyable, Movable, Defaultable):
     var offset: List[Float32]
     var kept: List[Int32]
     var dk: Int
+    # THE SPLITTER CV (lane mf-split5): the fold count of the last fit (the
+    # rows of mse_path_ / scores_; a splitter's is the fit's), and the FIT
+    # NOTICES (core/member_notices.mojo: RidgeCV's undefined split R^2).
+    var cv_folds: Int
+    var notices: List[Float64]
 
     def __init__(out self):
         self.generation = 0
@@ -310,6 +329,8 @@ struct XLinearMemberSlot(Copyable, Movable, Defaultable):
         self.offset = List[Float32]()
         self.kept = List[Int32]()
         self.dk = 0
+        self.cv_folds = 0
+        self.notices = List[Float64]()
 
     def forget(mut self):
         self.fitted = False
@@ -330,6 +351,8 @@ struct XLinearMemberSlot(Copyable, Movable, Defaultable):
         self.offset = List[Float32]()
         self.kept = List[Int32]()
         self.dk = 0
+        self.cv_folds = 0
+        self.notices = List[Float64]()
 
 
 struct XLinearMemberStore(Defaultable, Movable):
@@ -474,7 +497,34 @@ def _capabilities(kind: Int) -> Int:
         bits |= MEMBER_CAN_TRANSFORM
     if kind < 0 or _posterior_kind(kind):
         bits |= MEMBER_CAN_PREDICT_STD
+    if kind < 0 or kind == XL_MEMBER_RIDGE_CV or kind == XL_MEMBER_LOGISTIC_CV:
+        # Lane mf-split5: RidgeCV's split path (undefined R^2), a splitter's
+        # warning (LogisticRegressionCV over StratifiedKFold).
+        bits |= MEMBER_CAN_NOTICES
+    if kind < 0:
+        # THE GIVEN y (lane mf-tail5): some CV kind with a stratified splitter
+        # reads it (`_reads_given` answers kind-exactly).
+        bits |= MEMBER_READS_Y_GIVEN
     return bits
+
+
+def _reads_given(kind: Int, words: _F64P, count: Int) -> Int:
+    """`MEMBER_READS_Y_GIVEN` (core/member_abi.mojo, lane mf-tail5) of a
+    kind and its NEW words: a regressor CV kind whose cv is a STRATIFIED
+    splitter spec (RidgeCV word 3, LassoCV / ElasticNetCV word 6: minus the
+    spec's handle) stratifies on its targets' values, so it reads the given
+    y; every other kind and cv reads none (no caller gathers it for them).
+    One spec read under its store's lock, once per member class (a
+    capability question)."""
+    var at = 3 if kind == XL_MEMBER_RIDGE_CV else (6 if _enetcv(kind) else -1)
+    if at < 0 or count <= at or words[at] >= 0.0:
+        return 0
+    try:
+        if msel_spec_stratified(msel_spec_copy(Int(-words[at])).kind):
+            return MEMBER_READS_Y_GIVEN
+    except:
+        return 0
+    return 0
 
 
 def _posterior_kind(kind: Int) -> Bool:
@@ -600,17 +650,20 @@ def _fit(slot: _SlotP, call: _CallP) raises:
 
 def _ridge_cv_fit(slot: _SlotP, call: _CallP, p: List[Float64], intercept: Int, n: Int, d: Int, y: Int,
     has_sw: Int) raises:
-    """RidgeCV.fit: cv=None (`xl_ridge_cv_plain_run`, the grid in one fit) or
-    an integer cv (`xl_ridge_cv_kfold_run`), the request words of
-    bindings/x_linear_cv_unpack.mojo `xl_fit_ridge_cv_unpack`."""
+    """RidgeCV.fit, the door's three paths (bindings/x_linear_cv_unpack.mojo
+    `xl_fit_ridge_cv_unpack`): cv=None (`xl_ridge_cv_plain_run`, the grid in
+    one fit); an integer cv, unweighted with at least two rows a fold
+    (`xl_ridge_cv_kfold_run`); any other cv, a weighted integer cv included
+    (lane mf-split5: the split path, `_ridge_cv_splits`). Word 3 is 0 for
+    cv=None, else minus the handle of the cv's splitter spec (an integer cv
+    is an unshuffled KFold spec marked `int_cv`)."""
     var grid = Int(p[4])
     var alphas = List[Float64](length=grid, fill=0.0)
     for i in range(grid):  # driver-loop: over the alpha grid
         alphas[i] = p[5 + i]
-    var folds = Int(p[3])
     var store = p[2] != 0.0
     var none = entry_ref_unresolved()
-    if folds == 0:
+    if p[3] == 0.0:
         var result = List[Float32](length=xl_ridge_out(d, grid), fill=0.0)
         var plain = XlRidgeCvRequest(call[].route.entry.call, call[].x.data, n, d, y, has_sw == 1, intercept == 1,
             alphas^, Int(result.unsafe_ptr()), 0, 0, 0, 0, none.call, none)
@@ -626,50 +679,167 @@ def _ridge_cv_fit(slot: _SlotP, call: _CallP, p: List[Float64], intercept: Int, 
         slot[].trained = True
         slot[].fitted = True
         return
-    if has_sw == 1:
-        raise Error("NotImplementedError: mojolearn: a RidgeCV member with an integer cv runs the unweighted "
-            + "k-fold path; a weighted fit is not published")
-    if not (2 <= folds and folds <= n):
+    var spec = msel_spec_copy(Int(-p[3]))
+    var folds = spec.k
+    if spec.int_cv and has_sw == 0 and folds >= 2 and n // folds >= 2:
+        # `_fit_kfold`: the k-fold scores on the binding, the first best
+        # finite score chosen in Mojo (the door's choice of path, by the same
+        # rule: an unweighted integer cv with at least two rows a fold)
+        if not (2 <= folds and folds <= n):
+            raise Error("mojolearn RidgeCV: cv must be in [2, n_samples]")
+        var scores = List[Float32](length=grid, fill=0.0)
+        var result = List[Float32](length=xl_ridge_out(d, 1), fill=0.0)
+        var chosen = alphas.copy()
+        var kfold = XlRidgeCvRequest(call[].route.entry.call, call[].x.data, n, d, y, False, intercept == 1, alphas^,
+            Int(result.unsafe_ptr()), folds, Int(scores.unsafe_ptr()), 0, 0, none.call, none)
+        var best = xl_ridge_cv_kfold_run(kfold)
+        if xl_ridge_singular(Int(result.unsafe_ptr()), d, 1):
+            raise Error("mojolearn RidgeCV: X'X + alpha I is singular even in float-float (alpha="
+                + String(Float64(result[d + 1])) + "); rescale X or use a larger alpha")
+        _keep_block(slot, result, d)
+        # alpha_ is the user's own value; best_score_ that alpha's k-fold score
+        slot[].scalars = [Float64(result[d]), chosen[best], Float64(scores[best])]
+        slot[].trained = True
+        slot[].fitted = True
+        return
+    if spec.int_cv and not (2 <= folds and folds <= n):
         raise Error("mojolearn RidgeCV: cv must be in [2, n_samples]")
-    if n // folds < 2:
-        raise Error("NotImplementedError: mojolearn: a RidgeCV member with an integer cv needs at least two rows "
-            + "a fold")
-    var scores = List[Float32](length=grid, fill=0.0)
+    _ridge_cv_splits(slot, call, spec, alphas^, intercept, n, d, y, has_sw)
+
+
+def _ridge_cv_splits(slot: _SlotP, call: _CallP, spec: MselSplitSpec, var alphas: List[Float64], intercept: Int,
+    n: Int, d: Int, y: Int, has_sw: Int) raises:
+    """RidgeCV's split path (`_fit_splits`, lane mf-split5): the splits of the
+    cv over this fit's rows (`msel_spec_sides`, the splitter door's plans; an
+    integer cv: KFold's unshuffled folds, which the door makes by the same
+    plan, bindings/x_linear_cv_unpack.mojo `_xl_default_folds`), then the
+    door's ONE RUN `xl_ridge_cv_splits_run` (a fit, a prediction and an R^2
+    per split and alpha), its choice and refit `xl_ridge_cv_choose_run`. A
+    split with fewer than two test rows is scikit-learn's undefined R^2: one
+    fit notice each (MEMBER_NOTICE_R2_FEW, raised by the caller's PACK in the
+    door's words), every mean NaN, the first alpha. A stop is refused in the
+    door's words. NUMERICALLY this is the door's split path, not its k-fold
+    path: per split R^2 means (the k-fold path scores every fold on the
+    binding in one call); the door takes the split path for any cv but an
+    unweighted integer one with two rows a fold, and so does this member."""
+    var estimator = _name(slot)
+    if not call[].route.has_fifth:
+        raise Error("ImportError: mojolearn RidgeCV: the split path scores each split with the metrics image's "
+            + "R^2 entry, which is not loaded")
+    # a regressor's targets: a stratified splitter stratifies on their values, as the door's split (lane mf-del5)
+    # (lane mf-tail5: with THE GIVEN y, its values; core/member_abi.mojo `MemberCall.y_given`)
+    var sides = msel_spec_sides_targets(spec, n, call[].y.data, _given_at(call), call[].y_given.dtype, MselGroupCodes())
+    var k = sides.splits()
+    if k == 0:
+        raise Error("mojolearn: cv produced no (train, test) split")
+    var words = _split_words_of(sides)
+    var grid = len(alphas)
+    var table = List[Float64](length=max(grid * k, 1), fill=0.0)
+    var means = List[Float64](length=max(grid, 1), fill=0.0)
     var result = List[Float32](length=xl_ridge_out(d, 1), fill=0.0)
+    var fit_words = List[Float32](length=xl_ridge_out(d, 1), fill=0.0)
+    var status_word = List[Int32](length=1, fill=Int32(0))
     var chosen = alphas.copy()
-    var kfold = XlRidgeCvRequest(call[].route.entry.call, call[].x.data, n, d, y, False, intercept == 1, alphas^,
-        Int(result.unsafe_ptr()), folds, Int(scores.unsafe_ptr()), 0, 0, none.call, none)
-    var best = xl_ridge_cv_kfold_run(kfold)
+    var request = XlRidgeCvRequest(call[].route.entry.call, call[].x.data, n, d, y, has_sw == 1, intercept == 1,
+        alphas^, Int(result.unsafe_ptr()), 0, Int(table.unsafe_ptr()), Int(means.unsafe_ptr()), k,
+        call[].route.fifth.call, spec.rows_helpers)
+    var ran = xl_ridge_cv_splits_run(request, words, Int(fit_words.unsafe_ptr()), Int(status_word.unsafe_ptr()),
+        estimator)
+    var undefined = False
+    for s in range(len(ran.undefined)):  # driver-loop: over the cv splits reached (the undefined flag)
+        if ran.undefined[s]:
+            undefined = True
+    if ran.stop_kind == XL_RIDGE_SPLITS_EMPTY:
+        raise Error("mojolearn RidgeCV: every cv split needs training and test rows")
+    if ran.stop_kind == XL_RIDGE_SPLITS_SINGULAR:
+        raise Error("mojolearn RidgeCV: X'X + alpha I is singular even in float-float (alpha="
+            + String(Float64(fit_words[d + 1])) + "); rescale X or use a larger alpha")
+    if ran.stop_kind == XL_RIDGE_SPLITS_ERROR:
+        raise Error(ran.error)
+    var best = xl_ridge_cv_choose_run(request, undefined)
+    _ = len(sides.train)  # the RUN read every side through its address
+    _ = len(table)
+    _ = len(status_word)
     if xl_ridge_singular(Int(result.unsafe_ptr()), d, 1):
         raise Error("mojolearn RidgeCV: X'X + alpha I is singular even in float-float (alpha="
             + String(Float64(result[d + 1])) + "); rescale X or use a larger alpha")
     _keep_block(slot, result, d)
-    # alpha_ is the user's own value; best_score_ that alpha's k-fold score
-    slot[].scalars = [Float64(result[d]), chosen[best], Float64(scores[best])]
+    var nan = Float64(0.0) / Float64(0.0)
+    slot[].scalars = [Float64(result[d]), chosen[best], nan if undefined else means[best]]
+    for s in range(len(ran.undefined)):  # driver-loop: over the cv splits reached (one notice per undefined R^2)
+        if ran.undefined[s]:
+            member_notice_add(slot[].notices, MEMBER_NOTICE_R2_FEW)
+    slot[].cv_folds = k
     slot[].trained = True
     slot[].fitted = True
 
 
-def _kfold_ids(dst: Int, n: Int, folds: Int):
-    """KFold's contiguous fold id of each row as float32 (`_kfold_ids_f32`:
-    core/hotpath_impl.mojo `fold_ids` without codes, the first n % folds
-    folds one row longer), rows split across the host's workers. Integers:
-    nothing rounds."""
-    var q = n // folds
-    var r = n % folds
-    var edge = r * (q + 1)
-    var tasks = host_predict_task_count_work(n, n)
-    var chunk = host_predict_chunk(n, tasks)
-    var target = _F32P(unsafe_from_address=dst)
+def _split_words_of(sides: MselSides) -> XlSplitWords:
+    """The splits' int64 sides as the x_linear RUNs read them: each side's
+    address (0 when empty) and count. `sides` stays alive in the caller."""
+    var words = XlSplitWords(List[Int](), List[Int](), List[Int](), List[Int]())
+    for s in range(sides.splits()):  # driver-loop: over the cv splits (their addresses)
+        var tr = len(sides.train[s])
+        var te = len(sides.test[s])
+        words.train.append(Int(sides.train[s].unsafe_ptr()) if tr > 0 else 0)
+        words.train_sizes.append(tr)
+        words.test.append(Int(sides.test[s].unsafe_ptr()) if te > 0 else 0)
+        words.test_sizes.append(te)
+    return words^
 
-    def task(worker: Int) {imm chunk, imm target, imm n, imm q, imm r, imm edge}:
-        var begin = worker * chunk
-        var end = min(begin + chunk, n)
-        for i in range(begin, end):
-            var fold = i // (q + 1) if i < edge else r + (i - edge) // q
-            target[i] = Float32(fold)
 
-    host_parallelize(task, tasks)
+def _cv_fold_words(spec: MselSplitSpec, sides: MselSides, n: Int, estimator: String, ids_dst: Int,
+    mut roles: List[Float32]) raises:
+    """`_cv_fold_ids_f32(splits, n, name)` (bindings/x_linear_cv_unpack.mojo
+    `_xl_cv_fold_ids_f32`, the same two RUNs on the same base helper table):
+    a partition's fold of every row as float32 at `ids_dst` (roles empty);
+    otherwise -(n + 1) there and each split's train (1) / test (2) row marks
+    in `roles` (splits x n float32)."""
+    var words = _split_words_of(sides)
+    var ids = List[Int32](length=max(n, 1), fill=Int32(-1))
+    var partition = xl_cv_fold_ids_run(spec.rows_helpers, words, n, Int(ids.unsafe_ptr()))
+    if partition:
+        _codes_f32(Int(ids.unsafe_ptr()), ids_dst, n)
+        _ = len(ids)
+        _ = len(sides.train)
+        return
+    xl_cv_roles_limit(n, estimator)
+    roles = List[Float32](length=max(sides.splits() * n, 1), fill=0.0)
+    xl_cv_roles_run(spec.rows_helpers, words, n, Int(roles.unsafe_ptr()), estimator)
+    _ = len(sides.train)  # the RUNs read every side through its address
+    roles.resize(sides.splits() * n, 0.0)
+    _fill_f32(ids_dst, n, Float32(-(n + 1)))
+
+
+def _given_at(call: _CallP) -> Int:
+    """THE GIVEN y's address (core/member_abi.mojo `MemberCall.y_given`,
+    lane mf-tail5): a dense host column as long as the fit's y, else 0 (the
+    float32 targets are the given y)."""
+    var g = call[].y_given
+    if g.given() and g.home == MEMBER_HOME_HOST and g.rows == call[].y.rows and g.cols == 1 and g.stride == 1 and g.offset == 0:
+        return g.data
+    return 0
+
+
+def _cv_sides(word: Float64, n: Int, codes: Int, classes: Int, targets: Int, given: Int, given_dtype: Int,
+              mut spec: MselSplitSpec) raises -> MselSides:
+    """THE SPLITTER CV of an x_linear CV member (lane mf-split5): its spec
+    (word: minus its handle) and the splits of this fit's rows, by the
+    splitter door's plans (`msel_spec_sides`; `codes`: the classifier's int32
+    class codes over `classes`, 0 for a regressor, whose float32 `targets`
+    a stratified splitter stratifies on, as the door's split does:
+    `msel_spec_sides_targets`, lane mf-del5; `given`: THE GIVEN y, lane
+    mf-tail5, 0: none). No split: the door's
+    `_xl_cv_splits` words."""
+    spec = msel_spec_copy(Int(-word))
+    var sides: MselSides
+    if codes == 0:
+        sides = msel_spec_sides_targets(spec, n, targets, given, given_dtype, MselGroupCodes())
+    else:
+        sides = msel_spec_sides(spec, n, codes, classes, MselGroupCodes())
+    if sides.splits() == 0:
+        raise Error("mojolearn: cv produced no (train, test) split")
+    return sides^
 
 
 def _codes_f32(src: Int, dst: Int, n: Int):
@@ -719,33 +889,55 @@ def _nearest(p: List[Float64], first: Int, count: Int, value: Float64) -> Int:
 
 
 def _enetcv_fit(slot: _SlotP, call: _CallP, p: List[Float64], intercept: Int, n: Int, d: Int) raises:
-    """LassoCV / ElasticNetCV.fit (`_enetcv_fit`) with cv=None or an
-    integer cv: the request words of bindings/x_linear_cv_unpack.mojo
-    `_xl_enetcv_unpack` over the target words [y | KFold fold ids |
-    weights], one `xl_fit_run` call, then the result words
-    [coef | intercept | alpha_ | l1_ratio | n_iter | alphas_ | mse_path_]."""
+    """LassoCV / ElasticNetCV.fit (`_enetcv_fit`): the request words of
+    bindings/x_linear_cv_unpack.mojo `_xl_enetcv_unpack` over the target
+    words [y | fold ids | weights (| per-split roles)], one `xl_fit_run`
+    call, then the result words [coef | intercept | alpha_ | l1_ratio |
+    n_iter | alphas_ | mse_path_]. Word 6: cv=None or an integer cv's fold
+    count (KFold's contiguous folds, made here), or minus the handle of the
+    cv's splitter spec (lane mf-split5: one of our splitters or an index
+    list; its splits over this fit's rows, a partition's fold ids or, when
+    the splits are not a partition, the per-split roles riding the weighted
+    arm, exactly as the door's `_xl_cv_fold_ids_f32`)."""
     var estimator = _name(slot)
     var folds = Int(p[6])
     var grid = Int(p[7])
     var explicit = p[8] != 0.0
     var ratios = Int(p[9])
-    if folds < 2:
-        raise Error("mojolearn: cv must be None or an int in [2, n_samples]")
-    if folds > n:
-        raise Error("Cannot have number of splits n_splits=" + String(folds) + " greater than the "
-            + "number of samples: n_samples=" + String(n) + ".")
-    var weighted = 0
-    if call[].weights.rows > 0:
+    var given = call[].weights.rows > 0
+    if given:
         _dense(call[].weights, "sample_weight", estimator)
         if call[].weights.rows != n or call[].weights.cols != 1:
             raise Error("ValueError: sample_weight and X have different numbers of rows")
-        weighted = 1
-    var y_size = (2 + weighted) * n
+    var ids = List[Float32](length=max(n, 1), fill=0.0)
+    var roles = List[Float32]()
+    var spec = MselSplitSpec()
+    if p[6] < 0.0:
+        var sides = _cv_sides(p[6], n, 0, 0, call[].y.data, _given_at(call), call[].y_given.dtype, spec)
+        folds = sides.splits()
+        _cv_fold_words(spec, sides, n, estimator, Int(ids.unsafe_ptr()), roles)
+    else:
+        if folds < 2:
+            raise Error("mojolearn: cv must be None or an int in [2, n_samples]")
+        if folds > n:
+            raise Error("Cannot have number of splits n_splits=" + String(folds) + " greater than the "
+                + "number of samples: n_samples=" + String(n) + ".")
+        xl_kfold_ids_f32_run(Int(ids.unsafe_ptr()), n, folds)  # the door's body (x_linear/cv_fold_ids_run.mojo)
+    var listed_roles = len(roles) > 0
+    var weighted = 1 if (given or listed_roles) else 0
+    var y_size = (2 + weighted) * n + len(roles)
     var parts = List[Float32](length=y_size, fill=0.0)
     unsafe_memcpy(dest=parts.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].y.data), count=n)
-    _kfold_ids(Int(parts.unsafe_ptr()) + 4 * n, n, folds)
+    unsafe_memcpy(dest=parts.unsafe_ptr() + n, src=ids.unsafe_ptr(), count=n)
     if weighted == 1:
-        unsafe_memcpy(dest=parts.unsafe_ptr() + 2 * n, src=_F32P(unsafe_from_address=call[].weights.data), count=n)
+        if given:
+            unsafe_memcpy(dest=parts.unsafe_ptr() + 2 * n, src=_F32P(unsafe_from_address=call[].weights.data), count=n)
+        else:
+            _fill_f32(Int(parts.unsafe_ptr()) + 4 * 2 * n, n, 1.0)  # per-split roles ride the weighted arm
+    if listed_roles:
+        unsafe_memcpy(dest=parts.unsafe_ptr() + 3 * n, src=roles.unsafe_ptr(), count=len(roles))
+    _ = len(ids)
+    _ = len(roles)
     var ip: List[Int] = [Int(p[2]), intercept, grid, folds, ratios, 1 if explicit else 0, 1 if p[5] != 0.0 else 0,
         weighted]
     var fp: List[Float64] = [p[3], p[4]]
@@ -768,6 +960,7 @@ def _enetcv_fit(slot: _SlotP, call: _CallP, p: List[Float64], intercept: Int, n:
     unsafe_memcpy(dest=slot[].record.unsafe_ptr(), src=result.unsafe_ptr() + d + 4, count=paths)
     slot[].path = List[Float32](length=paths * folds, fill=0.0)
     unsafe_memcpy(dest=slot[].path.unsafe_ptr(), src=result.unsafe_ptr() + d + 4 + paths, count=paths * folds)
+    slot[].cv_folds = folds
     slot[].trained = True
     slot[].fitted = True
 
@@ -1113,7 +1306,7 @@ def _export(slot: _SlotP, call: _CallP) raises:
         call[].dst = MemberMatrix(Int(slot[].record.unsafe_ptr()), Int(slot[].params[9]), Int(slot[].params[7]))
     elif block == XL_MEMBER_BLOCK_MSE_PATH:
         call[].dst = MemberMatrix(Int(slot[].path.unsafe_ptr()), Int(slot[].params[9]) * Int(slot[].params[7]),
-            Int(slot[].params[6]))
+            slot[].cv_folds)
     elif block == XL_MEMBER_BLOCK_THRESHOLDS:
         call[].dst = MemberMatrix(Int(slot[].record.unsafe_ptr()), 2, len(slot[].record) // 2)
     elif block == MEMBER_BLOCK_COEF:
@@ -1319,15 +1512,30 @@ def _cls_fit(slot: _SlotP, call: _CallP) raises:
 
 
 def _logcv_fit(slot: _SlotP, call: _CallP, p: List[Float64], n: Int, d: Int, k: Int, kp: Int) raises:
-    """LogisticRegressionCV.fit with cv=None or an integer cv (the binding's
-    stratified folds): the request words of bindings/x_linear_cv_unpack.mojo
-    `xl_fit_logistic_cv_unpack` over the target words [codes | zeros | fit
-    weights | raw weights] (the weights only when sample weights are given
-    or class_weight='balanced'); the class-weight step, the stratified-fold
-    check and the fit are one `xl_logcv_fit_run`. Result words: [coef
-    (kp x d) | intercept (kp) | best C | n_iter | scores (folds x C)]."""
+    """LogisticRegressionCV.fit: the request words of
+    bindings/x_linear_cv_unpack.mojo `xl_fit_logistic_cv_unpack` over the
+    target words [codes | fold ids | fit weights | raw weights (| per-split
+    roles)]; the class-weight step, the stratified-fold check and the fit are
+    one `xl_logcv_fit_run`. Word 4: cv=None or an integer cv's fold count
+    (the binding's stratified folds; the fold-id part is zeros), or minus
+    the handle of the cv's splitter spec (lane mf-split5: our splitters and
+    index lists, the door's EXPLICIT path: the splits of this fit's rows over
+    its class codes, a partition's fold ids or the per-split roles, the
+    explicit word, no stratified assignment; the weights part is present
+    whenever roles are). Result words: [coef (kp x d) | intercept (kp) |
+    best C | n_iter | scores (folds x C)]."""
     var estimator = _name(slot)
     var folds = Int(p[4])
+    var explicit = p[4] < 0.0
+    var ids = List[Float32](length=max(n, 1), fill=0.0)
+    var roles = List[Float32]()
+    var spec = MselSplitSpec()
+    if explicit:
+        var sides = _cv_sides(p[4], n, call[].y.data, k, 0, 0, 0, spec)
+        folds = sides.splits()
+        _cv_fold_words(spec, sides, n, estimator, Int(ids.unsafe_ptr()), roles)
+        for w in range(len(sides.least)):  # small-loop(one notice per splitter warning: StratifiedKFold's)
+            member_notice_add(slot[].notices, MEMBER_NOTICE_SPLIT_LEAST, Float64(sides.least[w]), Float64(spec.k))
     # word 5: 1 'balanced', 2 a dict (its table in the tail; lane mf-adm3)
     var balanced = p[5] == 1.0
     var keyed = p[5] == 2.0
@@ -1337,11 +1545,17 @@ def _logcv_fit(slot: _SlotP, call: _CallP, p: List[Float64], n: Int, d: Int, k: 
         _dense(call[].weights, "sample_weight", estimator)
         if call[].weights.rows != n or call[].weights.cols != 1:
             raise Error("ValueError: sample_weight and X have different numbers of rows")
-    var weigh = given or balanced or keyed
-    var y_size = (4 if weigh else 2) * n
+    var weigh = given or balanced or keyed or len(roles) > 0
+    var y_size = (4 if weigh else 2) * n + len(roles)
     var parts = List[Float32](length=y_size, fill=0.0)
     var base = Int(parts.unsafe_ptr())
     _codes_f32(call[].y.data, base, n)
+    if explicit:
+        unsafe_memcpy(dest=parts.unsafe_ptr() + n, src=ids.unsafe_ptr(), count=n)
+    if len(roles) > 0:
+        unsafe_memcpy(dest=parts.unsafe_ptr() + 4 * n, src=roles.unsafe_ptr(), count=len(roles))
+    _ = len(ids)
+    _ = len(roles)
     if weigh:
         # The fit weights, then the raw weights; with 'balanced' the
         # class-weight step writes the fit weights over the third n words.
@@ -1358,6 +1572,8 @@ def _logcv_fit(slot: _SlotP, call: _CallP, p: List[Float64], n: Int, d: Int, k: 
         Int(class_weight.unsafe_ptr()), base + 4 * 2 * n if (balanced or keyed) else 0, n, k, balanced, True)
     var width = kp * (d + 1)
     var ip: List[Int] = [Int(p[2]), 1 if p[1] != 0.0 else 0, kp, nc, folds, 1 if weigh else 0]
+    if explicit:
+        ip.append(1)
     var fp: List[Float64] = [p[3]]
     for i in range(nc):  # driver-loop: over the Cs grid
         fp.append(p[7 + i])
@@ -1365,7 +1581,7 @@ def _logcv_fit(slot: _SlotP, call: _CallP, p: List[Float64], n: Int, d: Int, k: 
     var result = List[Float32](length=n_out, fill=0.0)
     var request = XlFitRequest(call[].route.entry.call, ALGO_LOGCV, call[].x.data, n * d, n, d, base, y_size, ip^,
         fp^, n_out, width + 1 + n * (kp + 1) + xl_lbfgs_work(width), 5, Int(result.unsafe_ptr()), False, 0, 0, 0)
-    xl_logcv_fit_run(request, prep, True, folds)
+    xl_logcv_fit_run(request, prep, not explicit, folds)
     _ = parts^
     _ = class_weight^
     var record = List[Float32](length=kp * d + kp, fill=0.0)
@@ -1376,6 +1592,7 @@ def _logcv_fit(slot: _SlotP, call: _CallP, p: List[Float64], n: Int, d: Int, k: 
     slot[].scalars = [p[7 + pick], Float64(Int(result[kp * d + kp + 1]))]
     slot[].path = List[Float32](length=folds * nc, fill=0.0)
     unsafe_memcpy(dest=slot[].path.unsafe_ptr(), src=result.unsafe_ptr() + kp * d + kp + 2, count=folds * nc)
+    slot[].cv_folds = folds
     slot[].trained = True
     slot[].fitted = True
 
@@ -1493,7 +1710,7 @@ def _cls_export(slot: _SlotP, call: _CallP) raises:
     elif logcv and block == MEMBER_BLOCK_SCALARS:
         call[].dst = MemberMatrix(Int(slot[].scalars.unsafe_ptr()), 1, len(slot[].scalars), MEMBER_F64)
     elif logcv and block == XL_MEMBER_BLOCK_SCORES and len(slot[].path) > 0:
-        call[].dst = MemberMatrix(Int(slot[].path.unsafe_ptr()), Int(slot[].params[4]), Int(slot[].params[6]))
+        call[].dst = MemberMatrix(Int(slot[].path.unsafe_ptr()), slot[].cv_folds, Int(slot[].params[6]))
     else:
         raise Error("member ABI: a " + _name(slot) + " member state holds no fitted block " + String(block))
     call[].block = block
@@ -1558,14 +1775,13 @@ def _xlinear_member(operation: Int, address: Int) raises -> Int:
                 return _capabilities(-1)
             var words = _F64P(unsafe_from_address=call[].params)
             var named = Int(words[0])
-            var union = _capabilities(named)
-            if named == XL_MEMBER_RIDGE_CV and call[].param_count >= 4 and words[3] != 0.0:
-                union &= ~MEMBER_CAN_SAMPLE_WEIGHT  # the k-fold path is unweighted
-            return union
+            # RidgeCV takes weights on every cv (lane mf-split5: a weighted
+            # integer cv runs the split path over KFold's folds, as the door).
+            return _capabilities(named) | _reads_given(named, words, call[].param_count)
         var asked = _SlotP(unsafe_from_address=_lookup(call[].state, False))
         var bits = _capabilities(_kind(asked))
-        if _kind(asked) == XL_MEMBER_RIDGE_CV and asked[].params[3] != 0.0:
-            bits &= ~MEMBER_CAN_SAMPLE_WEIGHT  # the k-fold path is unweighted
+        bits |= _reads_given(_kind(asked), _F64P(unsafe_from_address=Int(asked[].params.unsafe_ptr())),
+                             len(asked[].params))
         if not _classifier(_kind(asked)) and not call[].route.has_fifth:
             # A regressor's score is the metrics image's R^2 entry: without it
             # on the route the score would be refused at RUN, so it is not
@@ -1648,6 +1864,10 @@ def _xlinear_member(operation: Int, address: Int) raises -> Int:
     if _classifier(_kind(slot)):
         if operation == MEMBER_OP_FIT:
             _cls_fit(slot, call)
+        elif operation == MEMBER_OP_EXPORT and call[].block == MEMBER_BLOCK_NOTICES and (
+                call[].flags & MEMBER_BLOCK_BY_INDEX) == 0:
+            call[].dst = MemberMatrix(Int(slot[].notices.unsafe_ptr()), len(slot[].notices) // MEMBER_NOTICE_WORDS,
+                                      MEMBER_NOTICE_WORDS, MEMBER_F64)
         elif operation == MEMBER_OP_PREDICT:
             _cls_predict(slot, call)
         elif operation == MEMBER_OP_DECISION:
@@ -1665,6 +1885,10 @@ def _xlinear_member(operation: Int, address: Int) raises -> Int:
         return 0
     if operation == MEMBER_OP_FIT:
         _fit(slot, call)
+    elif operation == MEMBER_OP_EXPORT and call[].block == MEMBER_BLOCK_NOTICES and (
+            call[].flags & MEMBER_BLOCK_BY_INDEX) == 0:
+        call[].dst = MemberMatrix(Int(slot[].notices.unsafe_ptr()), len(slot[].notices) // MEMBER_NOTICE_WORDS,
+                                  MEMBER_NOTICE_WORDS, MEMBER_F64)
     elif operation == MEMBER_OP_PREDICT:
         _predict(slot, call)
     elif operation == MEMBER_OP_TRANSFORM and _kind(slot) == XL_MEMBER_ISOTONIC:

@@ -41,18 +41,18 @@
 # below stay ONLY for: a class with no member entry (the meta-estimators of
 # the Ensemble, Search and Pipeline families, whose member entries are
 # unpublished until the META member kind lands), an admission or a
-# held-state import the family refuses for a class with a full plan (a
-# class_weight the fit door accepts in a form the member does not read, a
-# str or dict subclass; since lane mf-left4 a class_weight the estimator
+# held-state import the family refuses for a class with a full plan (since
+# lane mf-split4 / mf-cal5 every class_weight the fit door accepts is read by
+# the member: a str or dict subclass, a value equal to 'balanced'; since lane mf-left4 a class_weight the estimator
 # refuses and a dict key that is not a number are native: their words are
 # raised by the RUN's first classifier fit; an image without the
 # member's entry, an unaddressable GP kernel, the gbdt adapter's fast mode
 # and categorical or multi-target losses, a CV splitter object: the
 # fallback rule, a mark never turns a call that worked into a refusal; lane
 # mf-adm3 serves class_weight 'balanced' and numeric-keyed dicts, read per
-# step over the step's classes, and kernel='precomputed'), and
-# the member-set B arm (MOJOLEARN_MEMBER_SET_OFF, A/B owed in
-# docs/apple-fast/EXPERIMENTS.md), whose off path IS these rounds. There the estimator is cloned, fitted and
+# step over the step's classes, and kernel='precomputed'). (The member-set B
+# arm, MOJOLEARN_MEMBER_SET_OFF, was deleted by lane/ab-prep-classical: these
+# rounds are no longer its off path; lane mf-del5.) There the estimator is cloned, fitted and
 # asked to predict once per (round, feature) step with the float32 blocks
 # the gather programs produce, and its predictions are scattered back by one
 # program; the clone, fit and predict are the compiled operations of the
@@ -219,6 +219,10 @@ def _pred_f64(v: PythonObject, context: PythonObject) raises -> List[Float64]:
 
 
 # ---------------------------------------------------------------- parameters
+# `_refuse`'s sample_posterior words; the member admission raises the same (lane mf-ens6b).
+comptime _POSTERIOR_WORDS = "mojolearn: If 'sample_posterior' is True, the estimator must support 'return_std' in its 'predict' method."
+
+
 def _refuse(model: PythonObject, context: PythonObject) raises:
     var nk = prep_keys()
     # `_refuse`: the parameter refusals, before X is read.
@@ -245,8 +249,7 @@ def _refuse(model: PythonObject, context: PythonObject) raises:
             and not prep_estimator_has(estimator, "predict_std", context)):
         # The native plan declares the supported return_std operation;
         # inspecting/calling the estimator's Python predict is unnecessary.
-        raise Error("mojolearn: If 'sample_posterior' is True, the estimator must support "
-                    + "'return_std' in its 'predict' method.")
+        raise Error(_POSTERIOR_WORDS)
 
 
 def _per_bound(v: PythonObject, d: Int) raises -> List[Float64]:
@@ -701,10 +704,15 @@ struct _Member(Movable):
     var classifier: Bool
     var code_dtype: Int
     var cw_refusal: String
+    # Lane mf-ens6b: a sample_posterior fit whose admitted member family
+    # answers no posterior pair (`_posterior_family`): refused natively in
+    # `_refuse`'s words, never sent to the door rounds.
+    var posterior_refused: Bool
 
     def __init__(out self):
         self.native = False
         self.cw_refusal = String("")
+        self.posterior_refused = False
         self.owner = MemberOwner()
         self.plan_key = PythonObject(None)
         self.template = PythonObject(None)
@@ -761,6 +769,7 @@ def _member(estimator: PythonObject, posterior: Bool, dk: Int, context: PythonOb
         if not owner.published:
             return out^
         if posterior and not _posterior_family(owner.plan.family):
+            out.posterior_refused = True  # `_refuse`'s words, raised by the fit (lane mf-ens6b)
             return out^
         # The mask of THIS kind (the family's union holds its other kinds'
         # bits): one state minted, asked and released, once per fit.
@@ -908,6 +917,8 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
         py_setitem(fields, "_step_classes", Python.list())
         return _take2(runner.held[fitted.out_handle], fitted.out_offset, n, fitted.cols, context)
     var member = _member(estimator, request.posterior, dk, context)
+    if member.posterior_refused:
+        raise Error(_POSTERIOR_WORDS)
     if not member.native:
         _refuse_member_only(estimator, context)
     if member.native:

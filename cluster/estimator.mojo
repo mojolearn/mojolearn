@@ -123,6 +123,8 @@ from cluster.impl.detail.min_cluster_distance_compute import (
     compute_centroid_norms,
 )
 from cluster.impl.kmeans import fit_predict, predict
+from cluster.impl.detail.kmeans import _sum_device
+from cluster.checks.reduce_by_key import SUM_MODE_PRODUCT
 from core.device_zero import enqueue_fill
 from core.admitted_finite_status import enqueue_finite_word
 from core.row_norms import NORM_TPB, row_norm_kernel
@@ -798,6 +800,27 @@ def kmeans_predict_device(
     same pass, statement for statement); `labels` is written on the
     device. For callers whose rows a kernel just produced (the spectral
     Nystrom predict), so they do not leave the device in between."""
+    var min_dist = ctx.enqueue_create_buffer[DType.float32](max(n_samples, 1))
+    kmeans_assign_device(ctx, x, n_samples, n_features, n_clusters, centroids, labels, min_dist, metric)
+    _ = min_dist^
+
+
+def kmeans_assign_device(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    mut centroids: DeviceBuffer[DType.float32],
+    mut labels: DeviceBuffer[DType.uint32],
+    mut min_dist: DeviceBuffer[DType.float32],
+    metric: Int,
+) raises:
+    """THE ONE ASSIGNMENT PASS of predict and score (lane mf-kmeans5): the
+    row norms (`row_norm_kernel`, `centroid_norms_take_sqrt`), then
+    `cluster/impl/kmeans.mojo::predict`, the pass `fit_predict` and the fit's
+    post-loop cost make (`detail/kmeans.mojo`, `:500-537`). `labels` and
+    `min_dist` (n_samples each) are written on the device; synchronised."""
     if n_samples < 1 or n_features < 1 or n_clusters < 1:
         raise Error(
             "kmeans_predict needs n_samples, n_features and n_clusters >= 1: got "
@@ -812,7 +835,6 @@ def kmeans_predict_device(
     params.metric = metric
     params.validate()
     var x_norm = ctx.enqueue_create_buffer[DType.float32](n_samples)
-    var min_dist = ctx.enqueue_create_buffer[DType.float32](n_samples)
     var take_sqrt = Int32(0)
     if centroid_norms_take_sqrt(metric):
         take_sqrt = Int32(1)
@@ -837,7 +859,110 @@ def kmeans_predict_device(
     )
     ctx.synchronize()
     _ = x_norm^
+
+
+def kmeans_score_device(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    mut centroids: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    metric: Int = METRIC_L2_EXPANDED,
+) raises -> Float64:
+    """`KMeans.score`'s inertia (lane mf-kmeans5; scikit-learn's score is its
+    negation): THE FIT'S POST-LOOP COST on rows and centroids already on the
+    device, with no kernel of its own. The one assignment pass
+    (`kmeans_assign_device`, the pass the fit's final labels come from), then
+    `_sum_device` in `SUM_MODE_PRODUCT` over `min_dist` and `weights`
+    (n_samples; 1.0 in every cell for unit weights), the fit's own
+    `computeClusterCost` (`detail/kmeans.mojo`, the post-loop `_sum_device`):
+    on the training rows, the fitted centroids and the fit's weights it is
+    `inertia_` bit for bit. The float32 device scalar is widened to float64
+    exactly as the fit widens its cost."""
+    var labels = ctx.enqueue_create_buffer[DType.uint32](n_samples)
+    var min_dist = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    kmeans_assign_device(ctx, x, n_samples, n_features, n_clusters, centroids, labels, min_dist, metric)
+    var partials = ctx.enqueue_create_buffer[DType.float32](256)
+    var d_cost = ctx.enqueue_create_buffer[DType.float32](1)
+    var h_cost = ctx.enqueue_create_host_buffer[DType.float32](1)
+    _sum_device(ctx, min_dist, weights, partials, d_cost, n_samples, SUM_MODE_PRODUCT)
+    ctx.enqueue_copy(dst_ptr=h_cost.unsafe_ptr(), src_buf=d_cost)
+    ctx.synchronize()
+    var cost = Float64(h_cost.unsafe_ptr().unsafe_load(0))
+    # Launches hold raw pointers: every buffer lives past the synchronisation.
+    _ = labels^
     _ = min_dist^
+    _ = partials^
+    _ = d_cost^
+    _ = h_cost^
+    return cost
+
+
+def kmeans_score_weights(
+    ctx: DeviceContext,
+    weights_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_weights: Int,
+    n_samples: Int,
+) raises -> DeviceBuffer[DType.float32]:
+    """The score's weight vector on the device, as `kmeans_fit` builds the
+    fit's: the caller's words uploaded (`n_weights` == n_samples), or the
+    device fill of an exact 1.0 (`n_weights` 0; `weights_ptr` not read)."""
+    if n_weights != 0 and n_weights != n_samples:
+        raise Error("ValueError: sample_weight and X have different numbers of rows")
+    var weights = ctx.enqueue_create_buffer[DType.float32](max(n_samples, 1))
+    if n_weights != 0:
+        ctx.enqueue_copy(dst_buf=weights, src_ptr=weights_ptr)
+    else:
+        enqueue_fill[DType.float32](ctx, weights, Float32(1.0))
+    return weights^
+
+
+def kmeans_score(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    centroids_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    weights_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_weights: Int,
+    metric: Int = METRIC_L2_EXPANDED,
+    finite_word: Int = 0,
+) raises -> Float64:
+    """`kmeans_score_device` on host words: X and the centroids uploaded as
+    `kmeans_predict` uploads them, the weights as `kmeans_fit` does.
+    `finite_word`: as `kmeans_predict`'s (X's finite status word, tested on
+    the device after the upload; a nonzero word means the door refuses)."""
+    if n_samples < 1 or n_features < 1 or n_clusters < 1:
+        raise Error(
+            "kmeans_score needs n_samples, n_features and n_clusters >= 1: got "
+            + String(n_samples)
+            + ", "
+            + String(n_features)
+            + ", "
+            + String(n_clusters)
+        )
+    var x = ctx.enqueue_create_buffer[DType.float32](n_samples * n_features)
+    var centroids = ctx.enqueue_create_buffer[DType.float32](n_clusters * n_features)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    ctx.enqueue_copy(dst_buf=centroids, src_ptr=centroids_ptr)
+    var weights = kmeans_score_weights(ctx, weights_ptr, n_weights, n_samples)
+    var status = ctx.enqueue_create_buffer[DType.int32](1)
+    var word = ctx.enqueue_create_host_buffer[DType.int32](1)
+    if finite_word != 0:
+        enqueue_finite_word(ctx, x.unsafe_ptr(), n_samples * n_features, status, 0)
+        ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
+    var cost = kmeans_score_device(ctx, x, n_samples, n_features, n_clusters, centroids, weights, metric)
+    if finite_word != 0:
+        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] = word.unsafe_ptr()[0]
+    _ = word^
+    _ = status^
+    _ = weights^
+    _ = centroids^
+    _ = x^
+    return cost
 
 
 def kmeans_transform(

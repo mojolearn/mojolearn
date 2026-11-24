@@ -20,6 +20,7 @@ comptime KMEANS_OPN_FAMILY_KMEANS_PREDICT = 3
 comptime KMEANS_OPN_FAMILY_KMEANS_TRANSFORM = 4
 comptime KMEANS_OPN_FAMILY_KMEANS_GETSTATE = 5
 comptime KMEANS_OPN_FAMILY_KMEANS_SETSTATE = 6
+comptime KMEANS_OPN_FAMILY_KMEANS_SCORE = 7
 
 def operation_names_kmeans(mut names: List[String], mut leaves: List[Int]):
     """Straight-line appends, once per process."""
@@ -33,6 +34,8 @@ def operation_names_kmeans(mut names: List[String], mut leaves: List[Int]):
     leaves.append(KMEANS_OPN_FAMILY_KMEANS_GETSTATE)
     names.append("family_kmeans_predict")
     leaves.append(KMEANS_OPN_FAMILY_KMEANS_PREDICT)
+    names.append("family_kmeans_score")
+    leaves.append(KMEANS_OPN_FAMILY_KMEANS_SCORE)
     names.append("family_kmeans_setstate")
     leaves.append(KMEANS_OPN_FAMILY_KMEANS_SETSTATE)
     names.append("family_kmeans_transform")

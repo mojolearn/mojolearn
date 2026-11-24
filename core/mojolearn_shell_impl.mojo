@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Typed host passes of the base binding (`bindings/_mojolearn.mojo`): the
-float64 narrowing, the tiled cast-and-transpose, the nonzero count and fill,
+float64 narrowing, the nonzero count and fill,
 the finiteness replays and the probability-row check, moved here with no
 Python import (lane thin-core, 2026-10-21: a pure move, no bit change)."""
 from std.math import isfinite
@@ -11,16 +11,6 @@ comptime _CAST_WIDTH = 8
 """SIMD lanes per step of the flat cast: 8 float64 in, 8 float32 out. A
 tail shorter than this is finished one element at a time through the same
 `cast`, so the width never changes a bit of the answer."""
-
-comptime _TILE_ROWS = 128
-comptime _TILE_COLS = 64
-"""The fused cast-and-transpose walks the source in `_TILE_ROWS` x
-`_TILE_COLS` tiles: 64 KB of float64 in, 32 KB of float32 out, sized to
-stay in a performance core's L1 so the strided side of the transpose hits
-cache instead of memory. That is DEVIATION 1887's row-tile arm, which the
-pure-Python converter does not carry, moved to where it can be fast. The
-tile shape changes only the order in which independent elements are
-written; each element's value is the same single cast."""
 
 
 def cast_f64_to_f32_host(sp: MutPointer[Float64, MutUntrackedOrigin], dp: MutPointer[Float32, MutUntrackedOrigin], count: Int):
@@ -37,37 +27,7 @@ def cast_f64_to_f32_host(sp: MutPointer[Float64, MutUntrackedOrigin], dp: MutPoi
         i += 1
 
 
-def tiled_transpose_to_f32[
-    S: DType
-](
-    sp: MutPointer[Scalar[S], MutUntrackedOrigin],
-    dp: MutPointer[Float32, MutUntrackedOrigin],
-    nr: Int,
-    nc: Int,
-):
-    """`dp[c * nr + r] = Float32(sp[r * nc + c])` over `_TILE_ROWS` x
-    `_TILE_COLS` tiles. The one loop behind DEVIATION 2471 (float64 in)
-    and 2472 (float32 in, where the cast is the identity and compiles
-    away). Caller holds valid, non-overlapping, non-empty buffers and has
-    released the GIL."""
-    var r0 = 0
-    while r0 < nr:
-        var r1 = min(r0 + _TILE_ROWS, nr)
-        var c0 = 0
-        while c0 < nc:
-            var c1 = min(c0 + _TILE_COLS, nc)
-            # Inside the tile: one column at a time, so the writes are
-            # contiguous and the strided reads stay within the tile's
-            # rows, which the previous column just pulled into cache.
-            for c in range(c0, c1):
-                var dbase = c * nr
-                for r in range(r0, r1):
-                    dp.unsafe_store(
-                        dbase + r,
-                        sp.unsafe_load(r * nc + c).cast[DType.float32](),
-                    )
-            c0 = c1
-        r0 = r1
+# TOMBSTONE: tiled_transpose_to_f32 and its _TILE_ROWS / _TILE_COLS (only the base transpose exports called it) deleted 2026-11-23 on lane/sab-host-missed-cls (no product caller); code recoverable at 4519097d38.
 
 
 def nonzero_f64_count_host(sp: MutPointer[Float64, MutUntrackedOrigin], count: Int) -> Int:

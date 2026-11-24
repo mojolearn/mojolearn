@@ -1,0 +1,11 @@
+--- a/core/gbdt_importance.mojo
++++ b/core/gbdt_importance.mojo
+@@ -79,7 +79,7 @@
+ #: credits every split to the NEXT model column, on the host and the device,
+ #: so the importance vector of any model splitting on a column moves and the
+ #: verify lane must say so.
+-comptime GBDT_IMP_SABOTAGE = is_defined["MOJOLEARN_GBDT_IMPORTANCE_SABOTAGE"]()
++comptime GBDT_IMP_SABOTAGE = True  # SABOTAGE: every split credited to the next model column
+
+ #: The host accumulators of one leaf-weight task are 8 bytes a leaf slot;
+ #: the task count is capped so their sum stays under this many bytes.

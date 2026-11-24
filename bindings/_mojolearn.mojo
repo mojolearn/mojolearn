@@ -73,7 +73,7 @@ TWO HOST HELPERS WITH NO DEVICE CONTEXT (DEVIATION 2303, 2026-09-07)
 their CPU loop as the host column and fallback only: since lane
 cpu2-l1-input (2026-10-04) this GPU binding scans on the device first
 (`hpdev_try_all_finite`, `core/input_device.mojo`), as it does the float64
-cast, both transposes and the strided and ragged layout copies. The centering helpers `column_mean_f64`,
+cast and the strided and ragged layout copies. The centering helpers `column_mean_f64`,
 `center_columns_f32` and `scale_rows_f32` were deleted by lane
 hr-small-passes (2026-10-02): LinearRegression and Ridge center on the
 device through the estimators binding (glm/impl/center_device.mojo).
@@ -84,9 +84,6 @@ from bindings.device_plan_binding_pack import device_plan_enter_binding, device_
 from core.hostptr import f32_ptr, i32_ptr
 from core.mojolearn_shell_impl import (
     cast_f64_to_f32_host,
-    nonzero_f64_count_host,
-    nonzero_f64_fill_host,
-    tiled_transpose_to_f32,
 )
 from core.dense_coo import (
     nonzero_f32_count as dense_nonzero_f32_count,
@@ -150,7 +147,7 @@ from bindings.hotpath_device_door import (
     normal_init_f32_binding,
     cast_elements_binding,
 )
-from core.hotpath_device_run import hpdev_try_cast_f64_to_f32, hpdev_try_transpose_to_f32
+from core.hotpath_device_run import hpdev_try_cast_f64_to_f32
 # lane cpu2-l4-modelsel (2026-10-04): model selection's resident fold store,
 # fold-row gather, cross_val_predict scatter, binary proba column and the
 # parallel forest's offset merge (bindings/msel_device.mojo).
@@ -1261,171 +1258,11 @@ def cast_f64_to_f32_binding(
     return PythonObject(0)
 
 
-def cast_colmajor_f64_to_f32_binding(
-    src_addr: PythonObject,
-    dst_addr: PythonObject,
-    rows: PythonObject,
-    cols: PythonObject,
-) raises -> PythonObject:
-    """Read a C-contiguous float64 `[rows, cols]` matrix at `src`, write the
-    COLUMN-MAJOR float32 matrix at `dst`, `dst[c * rows + r] ==
-    Float32(src[r * cols + c])` (DEVIATION 2471). Returns 0. ONE fused
-    pass: every element is read once, narrowed once and written once to
-    its transposed position; there is no float32 intermediate in the
-    source layout. An empty matrix writes nothing and reads neither
-    address; a negative dimension is refused rather than read. `src` and
-    `dst` must not overlap.
-    """
-    var nr = Int(py=rows)
-    var nc = Int(py=cols)
-    if nr < 0:
-        raise Error(
-            "cast_colmajor_f64_to_f32: rows must be non-negative, got "
-            + String(nr)
-        )
-    if nc < 0:
-        raise Error(
-            "cast_colmajor_f64_to_f32: cols must be non-negative, got "
-            + String(nc)
-        )
-    if nr == 0 or nc == 0:
-        return PythonObject(0)
-    # lane cpu2-l1-input: the fused cast-and-transpose on the device.
-    var tr_src = Int(py=src_addr)
-    var tr_dst = Int(py=dst_addr)
-    var tr_done = False
-    with GILReleased(Python()):
-        tr_done = hpdev_try_transpose_to_f32(tr_src, tr_dst, nr, nc, True)
-    if tr_done:
-        return PythonObject(0)
-    var sp = _f64_ptr(Int(py=src_addr))
-    var dp = _f32_ptr(Int(py=dst_addr))
-    with GILReleased(Python()):
-        tiled_transpose_to_f32(sp, dp, nr, nc)
-    return PythonObject(0)
+# TOMBSTONE: the base binding transpose_f32 / cast_colmajor_f64_to_f32 exports deleted 2026-11-23 on lane/sab-host-missed-cls (no product caller); code recoverable at 4519097d38.
 
 
-def transpose_f32_binding(
-    src_addr: PythonObject,
-    dst_addr: PythonObject,
-    rows: PythonObject,
-    cols: PythonObject,
-) raises -> PythonObject:
-    """Read a C-contiguous float32 `[rows, cols]` matrix at `src`, write its
-    COLUMN-MAJOR layout at `dst`, `dst[c * rows + r] == src[r * cols + c]`
-    (DEVIATION 2472). Returns 0. A pure move, no arithmetic: every float32
-    bit pattern, NaN payloads included, arrives unchanged. The same call
-    turns a column-major `[rows, cols]` block into C order, because that
-    block IS a C-contiguous `[cols, rows]` matrix: pass `rows=cols,
-    cols=rows`. An empty matrix writes nothing and reads neither address;
-    a negative dimension is refused rather than read. `src` and `dst`
-    must not overlap.
-    """
-    var nr = Int(py=rows)
-    var nc = Int(py=cols)
-    if nr < 0:
-        raise Error(
-            "transpose_f32: rows must be non-negative, got " + String(nr)
-        )
-    if nc < 0:
-        raise Error(
-            "transpose_f32: cols must be non-negative, got " + String(nc)
-        )
-    if nr == 0 or nc == 0:
-        return PythonObject(0)
-    # lane cpu2-l1-input: the transpose on the device.
-    var tr_src = Int(py=src_addr)
-    var tr_dst = Int(py=dst_addr)
-    var tr_done = False
-    with GILReleased(Python()):
-        tr_done = hpdev_try_transpose_to_f32(tr_src, tr_dst, nr, nc, False)
-    if tr_done:
-        return PythonObject(0)
-    var sp = _f32_ptr(Int(py=src_addr))
-    var dp = _f32_ptr(Int(py=dst_addr))
-    with GILReleased(Python()):
-        tiled_transpose_to_f32(sp, dp, nr, nc)
-    return PythonObject(0)
-
-
-def nonzero_f64_count_binding(
-    src_addr: PythonObject, n: PythonObject
-) raises -> PythonObject:
-    """How many of the `n` float64 values at `src` are nonzero under the
-    test `v != 0.0` (DEVIATION 2489). That is the Python loop's test, so
-    -0.0 is a zero and NaN is NOT: NaN compares unequal to everything,
-    `np.nonzero` kept it, the Python loop kept it, this keeps it. The
-    count is what `nonzero_f64_fill` needs its three outputs sized to; the
-    two-call shape is `radius_neighbors_count`/`_fill` above. An empty
-    input reads nothing; a negative count is refused.
-    """
-    var count = Int(py=n)
-    if count < 0:
-        raise Error(
-            "nonzero_f64_count: n must be non-negative, got " + String(count)
-        )
-    if count == 0:
-        return PythonObject(0)
-    var sp = _f64_ptr(Int(py=src_addr))
-    var nz = 0
-    with GILReleased(Python()):
-        nz = nonzero_f64_count_host(sp, count)
-    return PythonObject(nz)
-
-
-def nonzero_f64_fill_binding(
-    src_addr: PythonObject,
-    rows: PythonObject,
-    cols: PythonObject,
-    outs: PythonObject,
-    capacity: PythonObject,
-) raises -> PythonObject:
-    """COO triples of a C-contiguous float64 `[rows, cols]` matrix at `src`
-    (DEVIATION 2489): for every entry with `v != 0.0`, in row-major scan
-    order, write its row to `outs[0]` (int32), its column to `outs[1]`
-    (int32) and `Float32(v)` to `outs[2]` (float32), the same
-    round-to-nearest-even narrowing `array.array('f')` applies. Returns the
-    number written. `capacity` is the length of each output; the fill
-    STOPS and raises if the matrix holds more nonzeros than that, so a
-    stale count cannot write past the buffers. Byte-for-byte the output of
-    `_spectral_impl._coo_triples`'s Python loop, which is the oracle.
-    """
-    var nr = Int(py=rows)
-    var nc = Int(py=cols)
-    var cap = Int(py=capacity)
-    if nr < 0 or nc < 0:
-        raise Error(
-            "nonzero_f64_fill: rows and cols must be non-negative, got "
-            + String(nr) + " x " + String(nc)
-        )
-    if cap < 0:
-        raise Error(
-            "nonzero_f64_fill: capacity must be non-negative, got "
-            + String(cap)
-        )
-    if len(outs) != 3:
-        raise Error(
-            "nonzero_f64_fill: outs must hold 3 addresses, got "
-            + String(len(outs))
-        )
-    if nr == 0 or nc == 0:
-        return PythonObject(0)
-    var sp = _f64_ptr(Int(py=src_addr))
-    var rp = _i32_ptr(Int(py=outs[0]))
-    var cp = _i32_ptr(Int(py=outs[1]))
-    var vp = _f32_ptr(Int(py=outs[2]))
-    var k = 0
-    var overflow = False
-    with GILReleased(Python()):
-        k = nonzero_f64_fill_host(sp, nr, nc, cap, rp, cp, vp)
-        if k < 0:
-            overflow = True
-    if overflow:
-        raise Error(
-            "nonzero_f64_fill: more than " + String(cap)
-            + " nonzero entries; count first with nonzero_f64_count"
-        )
-    return PythonObject(k)
+# TOMBSTONE: the base binding nonzero_f64_count / nonzero_f64_fill by-name exports deleted 2026-11-23 on lane/sab-host-missed-cls (no product
+# caller: SpectralClustering takes the typed spectral_preparation_native_api_v1); code recoverable at 4519097d38.
 
 
 # ===========================================================================
@@ -1915,12 +1752,6 @@ def build__mojolearn() -> PythonObject:
         m.def_function[radius_neighbors_fill_binding]("radius_neighbors_fill")
         m.def_function[rbc_knn_search_binding]("rbc_knn_search")
         m.def_function[cast_f64_to_f32_binding]("cast_f64_to_f32")
-        m.def_function[cast_colmajor_f64_to_f32_binding](
-            "cast_colmajor_f64_to_f32"
-        )
-        m.def_function[transpose_f32_binding]("transpose_f32")
-        m.def_function[nonzero_f64_count_binding]("nonzero_f64_count")
-        m.def_function[nonzero_f64_fill_binding]("nonzero_f64_fill")
         m.def_function[knn_affinity_f32_binding]("knn_affinity_f32")
         m.def_function[unique_inverse_binding]("unique_inverse")
         # lane migrate-shared-labels: the shared argument-and-label entry

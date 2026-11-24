@@ -177,6 +177,25 @@ ADA_DECISION) or `ada_regressor_run` (float32, the door's dtype), the
 door's predict RUNs. EXPORT: `META_BLOCK_NESTED` (the round states) and
 `META_BLOCK_ADA` (the weights and errors); IMPORT the same two.
 
+THE RFE KIND (lane mf-meta5, 2026-11-23): RFE (`META_RFE_CLASSIFIER` /
+`META_RFE_REGRESSOR`, one mark (39, 14); the admission picks the kind from its
+estimator). The plan entry holds ONE nested plan, the estimator's leaf member
+with the importance word the rounds read (providers/python/member_rfe_boundary_door.mojo
+`rfe_base_admit`, the admission RFE's own door runs), its settings words
+`META_RFE_*`, the x_prep image of the rounds' programs and the words a first
+round raises (`meta_plan_rfe`). FIT (`_fit_rfe`) is RFE's RUN whole
+(bindings/prep_select_run.mojo `rfe_fit_run`, THE ONE BODY the door runs too):
+the rounds' member fits and programs, then the final estimator, the state's one
+nested member (it owns its rows); sample weights ride every fit (RFE.fit's
+`sample_weight`). PREDICT / PREDICT_PROBA / DECISION / SCORE: the kept columns
+of X gathered, then the final estimator's own call; TRANSFORM writes the
+gathered block. EXPORT `META_BLOCK_NESTED` (the final estimator) and
+`META_BLOCK_RFE` (support, ranking, kept columns); IMPORT the same two. A
+DOTTED importance_getter (lane mf-del5b): the one nested plan is a META
+estimator's (a search, an RFE, a stack: admitted by the boundary's work-list),
+`META_RFE_BLOCK` is `META_BLOCK_FORWARD` and the entry carries the forwarded
+path's hops (`meta_plan_rfe`), which `_fit_rfe` hands to the rounds' plan.
+
 STACKING, lane mf-meta3b: a user's cv INDEX LIST is read by the UNPACK into
 the entry's typed folds (`fold_train` / `fold_test`, int32 row numbers) and
 checked against the fit's rows as the door's `_splits` checks them; a fold
@@ -186,7 +205,7 @@ stack_method='predict' writes its predicted codes as float32 meta features
 (`_label_block`: the label scikit-learn's encoded fit predicts).
 """
 from std.math import isnan
-from std.memory import bitcast
+from std.memory import bitcast, unsafe_memcpy
 from std.sys.info import size_of
 from std.sys.compile import is_defined
 from bindings.native_unit_os_threads_run import native_unit_cores
@@ -200,7 +219,12 @@ from core.forest_calls import (
 )
 from core.forest_fit_request import XF_CAP_SESSION, XF_CAP_ADA
 from bindings.arena_prog_run import MetricRoute
+from bindings.prep_classify_prog_run import ClsRunPlan
+from bindings.prep_select_run import (
+    RfeFitPlan, RfeFitResult, rfe_fit_run, rfe_select_count, rfe_step_count, rfe_final_plan,
+)
 from core.msel_search_run import MselSearchPlan, MselSearchResult, msel_search_run
+from core.msel_scorer_run import MselScorerOptions, msel_scorer_group_read
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of, member_free, member_own, member_new,
     member_outputs, member_output_dtype, member_outputs_of,
@@ -211,10 +235,13 @@ from core.member_abi import (
     MEMBER_CAN_IMPORT, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_TEST_ROWS,
     MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_SCORE,
     MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_BY_INDEX, MEMBER_EXPORT_OWN, MEMBER_IMPORT_DONE,
+    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, MEMBER_CAN_TRANSFORM, MEMBER_OP_TRANSFORM,
+    MEMBER_READS_Y_GIVEN, MEMBER_HOME_HOST,
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import (
     MEMBER_FAMILY_ENSEMBLE, MEMBER_FAMILY_GP, MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES,
+    MEMBER_FAMILY_XNEIGHBORS,
 )
 from core.member_notices import member_notices_take
 from core.array_helpers_impl import class_ratio_f64
@@ -223,11 +250,10 @@ from core.label_weights_native_api import (
     LabelWeightsDriver, LabelWeightsRequest, LABEL_WEIGHTS_COUNTS, LABEL_WEIGHTS_ROWS,
 )
 from xtrees.label_weights_native import label_weights_native_v1
-from core.member_class_weight import member_cw_counts
 from core.member_notices import member_notice_add, MEMBER_NOTICE_SPLIT_LEAST
-from bindings.msel_split_plan_run import (
-    MselSeed, MselSplitRoute, MselSplitPlan, MselCodes, msel_split_route_none, msel_plan_kfold, msel_plan_stratified,
-    msel_split_fill, MSEL_LABELS_SORTED,
+from bindings.msel_split_spec_run import (
+    MselSplitSpec, MselGroupCodes, MselSides, MSEL_SPEC_NONE, MSEL_SPEC_LOO, msel_spec_sides, msel_sides_i32,
+    msel_group_codes_run, msel_spec_has_n_splits, msel_spec_sides_targets, msel_spec_stratified,
 )
 from core.member_set_run import (
     MemberSetRun, member_set_fit, member_set_run_release, member_set_first_failure,
@@ -252,7 +278,7 @@ from bindings.forest_config_run import (
 from bindings.trees_public_inputs_run import TREES_NONFINITE
 from xtrees.trees_boost_run import _sub_seed, boost_count_check, boost_weight_flags_check
 from xtrees.trees_calibrated_fit_run import (
-    CalFitPlan, CalFitOut, calibrated_fit_run, cal_fold_place, CAL_ALL_ANSWERED,
+    CalFitPlan, CalFitOut, calibrated_fit_run, cal_fold_place, cal_cv_check, CAL_ALL_ANSWERED,
 )
 from xtrees.trees_meta_run import meta_binary_column_check
 from xtrees.trees_meta_vote_run import (
@@ -280,7 +306,11 @@ comptime META_SEARCH_CLASSIFIER = 10
 comptime META_SEARCH_REGRESSOR = 11
 comptime META_MULTI_CLASSIFIER = 12
 comptime META_MULTI_REGRESSOR = 13
-comptime META_KIND_LAST = META_MULTI_REGRESSOR
+# Lane mf-meta5: THE RFE KIND (RFE over a classifier / a regressor base; one mark (39, 14), the admission
+# picks the kind from its base).
+comptime META_RFE_CLASSIFIER = 14
+comptime META_RFE_REGRESSOR = 15
+comptime META_KIND_LAST = META_RFE_REGRESSOR
 comptime META_PARAM_COUNT = 6
 comptime META_BLOCK_NESTED = MEMBER_BLOCK_FAMILY
 comptime META_BLOCK_WIDTHS = MEMBER_BLOCK_FAMILY + 1
@@ -294,10 +324,18 @@ comptime META_BLOCK_OOB = MEMBER_BLOCK_FAMILY + 4
 #: The entry's settings words of each unit kind.
 comptime META_OVR_DECISION = 0          # the base has decision_function (1.0)
 comptime META_OVR_WORDS = 1
+#: CalibratedClassifierCV(ensemble=False) over a LabelPropagation / LabelSpreading base whose y holds the
+#: unlabeled -1 and one class (two labels): scikit-learn's own fit fails (lane mf-ens6). calibration.py
+#: `_fit_calibrator`: `Y = label_binarize(y, classes=classes)` makes ONE column for two classes, the base's
+#: classes_ exclude -1, so `pos_class_indices` is [1] and `calibrator.fit(this_pred, Y[:, class_idx], ...)`
+#: indexes column 1 of a one-column array: NumPy's IndexError, in its words. Raised natively by the meta door
+#: (`_cal_native`) and THE CALIBRATED KIND's admission (`_admit_cal_base`).
+comptime META_CAL_BINARY_MARKER_WORDS = "IndexError: index 1 is out of bounds for axis 1 with size 1"
 comptime META_CAL_SIGMOID = 0           # method='sigmoid' (1.0), else isotonic
 comptime META_CAL_ENSEMBLE = 1          # ensemble=True (1.0)
 comptime META_CAL_DECISION = 2          # the base has decision_function (1.0)
-comptime META_CAL_WORDS = 3
+comptime META_CAL_INT_CV = 3            # cv was an exact int (1.0; scikit-learn's fold-count check reads it, lane mf-del5)
+comptime META_CAL_WORDS = 4
 comptime META_BAG_COUNT = 0             # n_estimators
 comptime META_BAG_SEED = 1              # `_seed(random_state)`
 comptime META_BAG_ROWS_INT = 2          # max_samples is an int (1.0) or a fraction (0.0)
@@ -354,13 +392,56 @@ comptime META_SEARCH_SEED = 4           # the sampler's seed the PACK re-draws t
 comptime META_SEARCH_REFIT = 5          # 1.0: refit the best (refit=True or a scorer name); 0.0: refit=False
 comptime META_SEARCH_REFIT_SCORER = 6   # the index among the codes whose table chooses the best (refit=<name>)
 comptime META_SEARCH_COUNT = 7          # the number of scorer codes that follow (0: one scorer)
-comptime META_SEARCH_WORDS = 8          # the head; then `count` codes, then one positive word per scorer
-#: THE SEARCH KIND's positive class words (lane mf-search4b item 3) follow
-#: the scorer codes: one per scorer (the one `META_SEARCH_SCORING`, or each
-#: code), the class code of the scorer's pos_label among the fit's labels,
-#: read at UNPACK (-1: the scorer reads no positive label).
+comptime META_SEARCH_WORDS = 8          # the head; then one scorer word group per scorer
+#: THE SEARCH KIND's scorer word groups (lane mf-tail5b, one layout for every
+#: scorer option; core/msel_scorer_run.mojo SCORER_GROUP_WORDS): one group
+#: per scorer (the one `META_SEARCH_SCORING`, or each of `count`), each its
+#: code, its positive word (the class code of its pos_label among the fit's
+#: labels, -1: none), its make_scorer options and its `labels` codes, read
+#: by `msel_scorer_group_read` only. Was: `count` codes, then one positive
+#: word per scorer (lane mf-search4b item 3).
+#: THE CV TOOLS' words (lane mf-msel5; core/msel_search_run.mojo module
+#: note): an optional tail of `META_SEARCH_TOOL_WORDS` after the scorer
+#: groups, [keep the units' states (1.0), the test-side response op (-1.0:
+#: score), the folds' rows (1.0), and (lane mf-msel5b) the caller's result
+#: buffer the responses are written into: its address, its words per row,
+#: its element type (MEMBER_I64 / MEMBER_F64), predict_log_proba (1.0)];
+#: absent for a public search.
+comptime META_SEARCH_TOOL_WORDS = 7
+#: THE CV TOOLS' kept unit states (int64 1 x units, export only; the
+#: search's own block numbers end at META_BLOCK_SEARCH, this one is set
+#: apart from the other kinds' blocks).
+comptime META_BLOCK_FOLDS = MEMBER_BLOCK_FAMILY + 16
 #: THE MULTI-OUTPUT KIND's settings words: [0] reserved.
 comptime META_MULTI_WORDS = 1
+#: THE RFE KIND's settings words (lane mf-meta5), read by the boundary's UNPACK as the door reads RFE's
+#: fields (bindings/prep_select_run.mojo `rfe_select_count` / `rfe_step_count` resolve them per fit over its
+#: X's columns): n_features_to_select's kind (RFE_SELECT_*), fraction and count; step as a fraction (1.0)
+#: or a count, and its value and count; the importance block and whether it is squared
+#: (`rfe_member_source`); whether the rounds' plan has the importance word set (`rfe_final_plan` clears
+#: it); the x_prep image's `work` switch; whether the image keeps a pinned X resident in a caller's scope
+#: (device store and range runner: MEMBER_CAN_SCOPE).
+comptime META_RFE_SELECT_KIND = 0
+comptime META_RFE_SELECT_FRACTION = 1
+comptime META_RFE_SELECT_COUNT = 2
+comptime META_RFE_STEP_FRACTION = 3
+comptime META_RFE_STEP_VALUE = 4
+comptime META_RFE_STEP_COUNT = 5
+comptime META_RFE_BLOCK = 6
+comptime META_RFE_SQUARED = 7
+comptime META_RFE_IMPORTANCE_WORD = 8
+comptime META_RFE_WORK_ON = 9
+comptime META_RFE_SCOPE = 10
+comptime META_RFE_WORDS = 11
+#: THE RFE KIND's fitted words (float64, export / import): [d, k], the d support words (1.0 kept), the d
+#: ranking words, the k kept column ids.
+comptime META_BLOCK_RFE = MEMBER_BLOCK_FAMILY + 8
+#: THE FORWARDED EXPORT (lane mf-meta5b; export only): a nested member's block along an attribute path, the
+#: path a dotted importance_getter names (RFE's 'best_estimator_.coef_', 'estimator_.coef_',
+#: 'final_estimator_.coef_'). `call.params` / `call.param_count`: float64 words [index, ..., block], each
+#: index a nested member of the state at that step (-1: the last: a stack's final estimator), then the leaf's
+#: block; the view is the leaf state's own (it lives as long as this state).
+comptime META_BLOCK_FORWARD = MEMBER_BLOCK_FAMILY + 9
 #: THE CLASS-WEIGHT TAIL of a tree base (lane mf-split4): appended after a
 #: Bagging's META_BAG_WORDS (its batched forest's or per-member tree's
 #: class_weight) and an AdaBoost's META_ADA_WORDS (its base's): [mode, K,
@@ -376,13 +457,12 @@ comptime META_CW_HEAD = 3
 comptime META_CW_NONE = 0
 comptime META_CW_BALANCED = 1
 comptime META_CW_DICT = 2
-#: THE SPLITTER CV of a stack (lane mf-split4): one of OUR splitters, read at
-#: UNPACK as typed words (bindings/msel_split_door.mojo `MselSplitter`), its
-#: folds computed inside each FIT over that fit's own rows
-#: (bindings/msel_split_plan_run.mojo, the splitters' own RUN).
-comptime META_SPLIT_NONE = 0
-comptime META_SPLIT_KFOLD = 1
-comptime META_SPLIT_STRATIFIED = 2
+#: THE SPLITTER CV of a stack, a calibration or a search (lanes mf-split4,
+#: mf-split5): one of OUR splitters, read at UNPACK as typed words
+#: (bindings/msel_split_spec_run.mojo `MselSplitSpec`, every native splitter),
+#: its folds computed inside each FIT over that fit's own rows by the public
+#: split door's own plans and fill (`msel_spec_sides`). Before (mf-split4)
+#: only KFold and StratifiedKFold had words (META_SPLIT_*, removed).
 
 comptime _CALIB_FAST_HOST_FOLDS = is_defined["MOJOLEARN_CALIB_FAST_HOST_FOLDS"]()
 
@@ -402,7 +482,7 @@ def _stack_kind_code(kind: Int) -> Bool:
 def _classifier_kind(kind: Int) -> Bool:
     return (kind == META_VOTE_CLASSIFIER or kind == META_STACK_CLASSIFIER or kind == META_OVR
             or kind == META_CALIBRATED or kind == META_BAG_CLASSIFIER or kind == META_ADA_CLASSIFIER
-            or kind == META_SEARCH_CLASSIFIER or kind == META_MULTI_CLASSIFIER)
+            or kind == META_SEARCH_CLASSIFIER or kind == META_MULTI_CLASSIFIER or kind == META_RFE_CLASSIFIER)
 
 
 def _search_kind(kind: Int) -> Bool:
@@ -415,6 +495,10 @@ def _multi_kind(kind: Int) -> Bool:
 
 def _ada_kind(kind: Int) -> Bool:
     return kind == META_ADA_CLASSIFIER or kind == META_ADA_REGRESSOR
+
+
+def _rfe_kind(kind: Int) -> Bool:
+    return kind == META_RFE_CLASSIFIER or kind == META_RFE_REGRESSOR
 
 
 def _unit_kind(kind: Int) -> Bool:
@@ -445,15 +529,24 @@ struct MetaPlanSlot(Copyable, Movable, Defaultable):
     # Lane mf-search4: THE SEARCH KIND's metric program route (scoring
     # 'accuracy'), resolved by the admission; its connection is pinned there.
     var metric: MetricRoute
-    # Lane mf-split4: THE SPLITTER CV (META_SPLIT_*), its n_splits, shuffle,
-    # seed, the splitters' entries (pinned by the admission) and the
-    # sabotage word the splitter door reads.
-    var split_kind: Int
-    var split_k: Int
-    var split_shuffle: Bool
-    var split_seed: MselSeed
-    var split_route: MselSplitRoute
-    var split_sabotage: Bool
+    # Lanes mf-split4, mf-split5: THE SPLITTER CV (kind MSEL_SPEC_NONE: an
+    # int cv or a user's index list), its entries pinned by the admission.
+    var split: MselSplitSpec
+    # Lane mf-cluster5: THE SEARCH KIND's cluster label-pair entry and its
+    # labels' reprs (`meta_plan_search_labels`).
+    var cluster: EntryRef
+    var label_words: List[String]
+    # Lane mf-meta5: THE RFE KIND's x_prep image (the rounds' programs, `meta_plan_rfe`; the admission
+    # pins its selection) and the words its first round raises (empty: none).
+    var rfe_run: ClsRunPlan
+    var refusal: String
+    # Lane mf-refuse5, THE DOOR'S REFUSAL (`meta_plan_refuse`): a non-RFE kind's `refusal` is the meta door's
+    # words for a constructor value it refuses; `refusal_late`: raised after the nested fits (the door's check
+    # follows them), else before anything (the plan may then hold no members).
+    var refusal_late: Bool
+    # Lane mf-del5b: THE FORWARDED EXPORT's hops of a dotted importance_getter (empty: none), copied into
+    # every state NEW makes from it (`_fit_rfe` hands them to the rounds' plan).
+    var rfe_hops: List[Float64]
 
     def __init__(out self):
         self.generation = 0
@@ -466,12 +559,13 @@ struct MetaPlanSlot(Copyable, Movable, Defaultable):
         self.fold_train = List[List[Int32]]()
         self.fold_test = List[List[Int32]]()
         self.metric = MetricRoute(entry_ref_unresolved().call, False, False)
-        self.split_kind = META_SPLIT_NONE
-        self.split_k = 0
-        self.split_shuffle = False
-        self.split_seed = MselSeed(0, False)
-        self.split_route = msel_split_route_none()
-        self.split_sabotage = False
+        self.split = MselSplitSpec()
+        self.cluster = entry_ref_unresolved()
+        self.label_words = List[String]()
+        self.rfe_run = ClsRunPlan(entry_ref_unresolved(), False, False, False, False, False)
+        self.refusal = String("")
+        self.refusal_late = False
+        self.rfe_hops = List[Float64]()
 
 
 struct MetaPlanStore(Defaultable, Movable):
@@ -541,22 +635,17 @@ def meta_plan_mint_with(var plans: List[MemberPlan], var weights: List[Float64],
         shared_slot_unlock(lock)
 
 
-def meta_plan_split(handle: Int, kind: Int, k: Int, shuffle: Bool, seed: MselSeed, route: MselSplitRoute,
-                    sabotage: Bool) raises:
-    """UNPACK (a stack's admission, lane mf-split4): THE SPLITTER CV of a
-    minted plan entry, copied into every state NEW makes from it."""
+def meta_plan_split(handle: Int, spec: MselSplitSpec) raises:
+    """UNPACK (a stack's, a calibration's or a search's admission, lanes
+    mf-split4, mf-split5): THE SPLITTER CV of a minted plan entry, copied
+    into every state NEW makes from it."""
     var store = _PLANS.get_or_create_ptr()
     var address = _plan_lookup(handle, False)
     var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
     shared_slot_lock(lock)
     try:
         var entry = _PlanSlotPtr(unsafe_from_address=address)
-        entry[].split_kind = kind
-        entry[].split_k = k
-        entry[].split_shuffle = shuffle
-        entry[].split_seed = seed
-        entry[].split_route = route
-        entry[].split_sabotage = sabotage
+        entry[].split = spec.copy()
     finally:
         shared_slot_unlock(lock)
 
@@ -574,6 +663,148 @@ def meta_plan_metric(handle: Int, route: MetricRoute) raises:
         shared_slot_unlock(lock)
 
 
+def meta_plan_search_labels(handle: Int, cluster: EntryRef, var label_words: List[String]) raises:
+    """UNPACK (THE SEARCH KIND's admission, lane mf-cluster5): the metrics
+    image's cluster label-pair entry (core/metrics_cluster_table.mojo,
+    resolved once; its image pinned by the admission) and the fit's labels'
+    reprs by class code, copied into every state NEW makes from it."""
+    var store = _PLANS.get_or_create_ptr()
+    var address = _plan_lookup(handle, False)
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    shared_slot_lock(lock)
+    try:
+        var entry = _PlanSlotPtr(unsafe_from_address=address)
+        entry[].cluster = cluster
+        entry[].label_words = label_words^
+    finally:
+        shared_slot_unlock(lock)
+
+
+def meta_plan_rfe(handle: Int, run: ClsRunPlan, var refusal: String, var hops: List[Float64]) raises:
+    """UNPACK (THE RFE KIND's admission, lane mf-meta5): the x_prep image the elimination rounds' programs
+    run on (its selection pinned by the admission), the words the first round raises (a base kind that
+    exports no importance block; empty: none) and (lane mf-del5b) a dotted importance_getter's hops
+    (META_BLOCK_FORWARD's words over the nested META base; empty: a leaf base), copied into every state NEW
+    makes from it."""
+    var store = _PLANS.get_or_create_ptr()
+    var address = _plan_lookup(handle, False)
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    shared_slot_lock(lock)
+    try:
+        var entry = _PlanSlotPtr(unsafe_from_address=address)
+        entry[].rfe_run = run
+        entry[].refusal = refusal^
+        entry[].rfe_hops = hops^
+    finally:
+        shared_slot_unlock(lock)
+
+
+#: The tree / forest member's importance word (core/forest_member_run.mojo FM_WORD_IMPORTANCES): set, its FIT
+#: computes the feature importances its EXPORT MEMBER_BLOCK_FEATURE_IMPORTANCES hands out.
+comptime META_LEAF_IMPORTANCE_WORD = 10
+
+
+def meta_plan_leaf_importances(plan: MemberPlan, hops: List[Float64]) raises -> Bool:
+    """UNPACK, once per admission (lane mf-rfe6): a dotted importance_getter that ends in a tree or forest
+    leaf's `feature_importances_` ('best_estimator_.feature_importances_', ...). The leaf computes them only
+    when its importance word asks (META_LEAF_IMPORTANCE_WORD), and the word lives in the nested plan this
+    admission minted, so it is set there, in the plan store, before any state is made: every state NEW makes
+    copies it, and THE FORWARDED EXPORT reads the leaf's block after each round's fit. `plan`: the META
+    estimator's admitted plan; `hops`: META_BLOCK_FORWARD's words (each step's nested index, -1 the last,
+    then the leaf's block). A search step sets it on every candidate (any may be best_estimator_). False: a
+    step this store does not hold, or a leaf that is not a tree or forest with the word (not served)."""
+    var steps = len(hops) - 1
+    if steps < 1 or plan.family != MEMBER_FAMILY_ENSEMBLE or len(plan.params) < 2:
+        return False
+    var store = _PLANS.get_or_create_ptr()
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    var kinds: List[Int] = [Int(plan.params[0])]
+    var handles: List[Int] = [Int(plan.params[1])]
+    for s in range(steps):  # driver-loop: over the attribute path's steps
+        var last = s == steps - 1
+        var next_kinds = List[Int]()
+        var next_handles = List[Int]()
+        for h in range(len(handles)):  # driver-loop: over this step's plan entries (a search's candidates)
+            var address = _plan_lookup(handles[h], False)
+            var served = True
+            shared_slot_lock(lock)
+            try:
+                var entry = _PlanSlotPtr(unsafe_from_address=address)
+                var count = len(entry[].plans)
+                var lo = Int(hops[s])
+                if lo < 0:
+                    lo = count - 1
+                var hi = lo + 1
+                if _search_kind(kinds[h]):
+                    lo = 0
+                    hi = count
+                if lo < 0 or hi > count or lo >= hi:
+                    served = False
+                else:
+                    for u in range(lo, hi):  # driver-loop: over the step's nested plans
+                        var family = entry[].plans[u].family
+                        if last:
+                            if ((family != MEMBER_FAMILY_TREE and family != MEMBER_FAMILY_FOREST)
+                                    or len(entry[].plans[u].params) <= META_LEAF_IMPORTANCE_WORD):
+                                served = False
+                        elif family != MEMBER_FAMILY_ENSEMBLE or len(entry[].plans[u].params) < 2:
+                            served = False
+                    if served:
+                        for u in range(lo, hi):  # driver-loop: over the step's nested plans
+                            if last:
+                                entry[].plans[u].params[META_LEAF_IMPORTANCE_WORD] = 1.0
+                            else:
+                                next_kinds.append(Int(entry[].plans[u].params[0]))
+                                next_handles.append(Int(entry[].plans[u].params[1]))
+            finally:
+                shared_slot_unlock(lock)
+            if not served:
+                return False
+        kinds = next_kinds^
+        handles = next_handles^
+    return True
+
+
+def meta_plan_refuse(handle: Int, var words: String, late: Bool) raises:
+    """UNPACK (lane mf-refuse5, THE DOOR'S REFUSAL; not the RFE kind, whose `refusal` is
+    `meta_plan_rfe`'s): the meta door's words for a constructor value it refuses, raised by every
+    state's FIT (`_fit`) where the door raises them, so the admission serves the input and no caller
+    falls back to the door to raise them. `late`: after the nested fits (the plan is whole); else first,
+    before anything is read (the plan may hold no members: NEW then checks nothing and CAPABILITIES
+    answers `_refused_mask`). Words come from the door's own check (bindings/
+    trees_meta_validate_unpack.mojo), never written here."""
+    var store = _PLANS.get_or_create_ptr()
+    var address = _plan_lookup(handle, False)
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    shared_slot_lock(lock)
+    try:
+        var entry = _PlanSlotPtr(unsafe_from_address=address)
+        entry[].refusal = words^
+        entry[].refusal_late = late
+    finally:
+        shared_slot_unlock(lock)
+
+
+def _refused_first(slot: _SlotPtr) -> Bool:
+    """THE DOOR'S REFUSAL raised before anything (lane mf-refuse5): a non-RFE state whose entry
+    carries the door's words with `late` False."""
+    return len(slot[].refusal) != 0 and not slot[].refusal_late and not _rfe_kind(slot[].kind)
+
+
+def _refused_mask(kind: Int) -> Int:
+    """CAPABILITIES of a state refused before anything (lane mf-refuse5): every call a caller may
+    admit it for (its FIT raises the door's words first), its kind's classifier bit; no scope, no
+    multi-output y but for a multi-output kind, GIL-free (its FIT reads nothing)."""
+    var mask = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION
+                | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_SCORE
+                | MEMBER_CAN_TRANSFORM | MEMBER_GIL_FREE)
+    if _classifier_kind(kind):
+        mask |= MEMBER_CAN_CLASSIFIER
+    if _multi_kind(kind):
+        mask |= MEMBER_CAN_MULTI_OUTPUT
+    return mask
+
+
 def _plan_first(handle: Int) raises -> MemberPlan:
     """The FIRST nested plan of a plan entry (a search's first candidate),
     copied under the store's lock."""
@@ -586,6 +817,18 @@ def _plan_first(handle: Int) raises -> MemberPlan:
         if len(slot[].plans) == 0:
             raise Error("member ABI: a meta member plan holds no members")
         return slot[].plans[0].copy()
+    finally:
+        shared_slot_unlock(lock)
+
+
+def _plan_words(handle: Int) raises -> List[Float64]:
+    """A plan entry's settings words, copied under the store's lock."""
+    var store = _PLANS.get_or_create_ptr()
+    var address = _plan_lookup(handle, False)
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    shared_slot_lock(lock)
+    try:
+        return _PlanSlotPtr(unsafe_from_address=address)[].words.copy()
     finally:
         shared_slot_unlock(lock)
 
@@ -611,6 +854,9 @@ def _plan_lookup(handle: Int, release: Bool) raises -> Int:
             slot[].words = List[Float64]()
             slot[].fold_train = List[List[Int32]]()
             slot[].fold_test = List[List[Int32]]()
+            slot[].refusal = String("")
+            slot[].refusal_late = False
+            slot[].rfe_hops = List[Float64]()
             store[].free.append(index)
         return address
     finally:
@@ -690,16 +936,21 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
     var words: List[Float64]
     var fold_train: List[List[Int32]]
     var fold_test: List[List[Int32]]
-    # Lane mf-split4: THE SPLITTER CV (the entry's; META_SPLIT_*): each fit
+    # Lanes mf-split4, mf-split5: THE SPLITTER CV (the entry's): each fit
     # writes its folds into `fold_train` / `fold_test` (`_split_folds`).
-    var split_kind: Int
-    var split_k: Int
-    var split_shuffle: Bool
-    var split_seed: MselSeed
-    var split_route: MselSplitRoute
-    var split_sabotage: Bool
+    var split: MselSplitSpec
     var base_plans: List[MemberPlan]
     var base_masks: List[Int]
+    # THE GIVEN y (lane mf-tail5; core/member_abi.mojo `MemberCall.y_given`):
+    # DURING a fit only (`_fit` writes them, clears them on return), the fit's
+    # float32 target address `fit_y` and its given y (`fit_given`, 0: none,
+    # of `fit_given_dtype`). `_add_drawn` hands the given y to a nested
+    # member whose kind reads it and whose target IS `fit_y` (the same rows:
+    # a draw selects both); every other target (class codes, re-coded or
+    # per-output columns) carries none of it.
+    var fit_y: Int
+    var fit_given: Int
+    var fit_given_dtype: Int
     # Per kept unit: its classes as ensemble codes when it lacks some (empty:
     # every class), its re-coded targets (n words), its row draw and its
     # feature subset (Bagging; empty: every row / column), its out-of-bag rows.
@@ -747,6 +998,27 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
     var metric: MetricRoute
     var search_words: List[Float64]
     var out_classes: List[Int]
+    # Lane mf-cluster5: the search's cluster entry and labels' reprs.
+    var cluster: EntryRef
+    var label_words: List[String]
+    # Lane mf-msel5, THE CV TOOLS: the kept unit states (owned; 0: a failed
+    # fit), each unit's candidate (its plan in `base_plans`), and their
+    # handles as export words (META_BLOCK_FOLDS).
+    var fold_states: List[Int]
+    var fold_owner: List[Int]
+    var fold_words: List[Int64]
+    # Lane mf-meta5, THE RFE KIND: the entry's x_prep image and first-round refusal; the fitted support and
+    # ranking (float32, d words each), the kept column ids (int32, k) and their export view
+    # (META_BLOCK_RFE). The one nested member is the final estimator.
+    var rfe_run: ClsRunPlan
+    var refusal: String
+    var refusal_late: Bool  # lane mf-refuse5: THE DOOR'S REFUSAL after the nested fits (`meta_plan_refuse`)
+    var rfe_support: List[Float32]
+    var rfe_ranking: List[Float32]
+    var rfe_columns: List[Int32]
+    var rfe_words: List[Float64]
+    # Lane mf-del5b: the plan entry's dotted-getter hops (`meta_plan_rfe`; empty: a leaf base).
+    var rfe_hops: List[Float64]
 
     def __init__(out self):
         self.generation = 0
@@ -782,14 +1054,12 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
         self.words = List[Float64]()
         self.fold_train = List[List[Int32]]()
         self.fold_test = List[List[Int32]]()
-        self.split_kind = META_SPLIT_NONE
-        self.split_k = 0
-        self.split_shuffle = False
-        self.split_seed = MselSeed(0, False)
-        self.split_route = msel_split_route_none()
-        self.split_sabotage = False
+        self.split = MselSplitSpec()
         self.base_plans = List[MemberPlan]()
         self.base_masks = List[Int]()
+        self.fit_y = 0
+        self.fit_given = 0
+        self.fit_given_dtype = MEMBER_F32
         self.unit_held = List[List[Int32]]()
         self.unit_codes = List[List[Int32]]()
         self.unit_rows = List[List[Int32]]()
@@ -819,6 +1089,19 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
         self.metric = MetricRoute(entry_ref_unresolved().call, False, False)
         self.search_words = List[Float64]()
         self.out_classes = List[Int]()
+        self.cluster = entry_ref_unresolved()
+        self.label_words = List[String]()
+        self.fold_states = List[Int]()
+        self.fold_owner = List[Int]()
+        self.fold_words = List[Int64]()
+        self.rfe_run = ClsRunPlan(entry_ref_unresolved(), False, False, False, False, False)
+        self.refusal = String("")
+        self.refusal_late = False
+        self.rfe_support = List[Float32]()
+        self.rfe_ranking = List[Float32]()
+        self.rfe_columns = List[Int32]()
+        self.rfe_words = List[Float64]()
+        self.rfe_hops = List[Float64]()
 
 
 struct EnsembleMemberStore(Defaultable, Movable):
@@ -916,6 +1199,8 @@ def _name(kind: Int) -> String:
         return String("MultiOutputClassifier")
     if kind == META_MULTI_REGRESSOR:
         return String("MultiOutputRegressor")
+    if _rfe_kind(kind):
+        return String("RFE")
     return String("StackingRegressor")
 
 
@@ -941,6 +1226,16 @@ def _drop_states(slot: _SlotPtr):
         slot[].states[u] = 0
     slot[].states = List[Int]()
     slot[].state_words = List[Int64]()
+    # THE CV TOOLS' kept unit states (lane mf-msel5).
+    for u in range(len(slot[].fold_states)):  # driver-loop: over the kept unit states (one release each)
+        var c = slot[].fold_owner[u] if u < len(slot[].fold_owner) else -1
+        if slot[].fold_states[u] != 0 and c >= 0 and c < len(slot[].base_plans):
+            var call = MemberCall(slot[].base_plans[c].route, slot[].fold_states[u])
+            member_free(slot[].base_plans[c], call)
+        slot[].fold_states[u] = 0
+    slot[].fold_states = List[Int]()
+    slot[].fold_owner = List[Int]()
+    slot[].fold_words = List[Int64]()
     slot[].fitted = False
     slot[].meta32 = List[Float32]()
     slot[].notice_owner = List[Int]()
@@ -971,6 +1266,11 @@ def _drop_states(slot: _SlotPtr):
     slot[].ada_words = List[Float64]()
     slot[].search_words = List[Float64]()
     slot[].out_classes = List[Int]()
+    slot[].rfe_support = List[Float32]()
+    slot[].rfe_ranking = List[Float32]()
+    slot[].rfe_columns = List[Int32]()
+    slot[].rfe_words = List[Float64]()
+    slot[].rfe_hops = List[Float64]()
 
 
 # --------------------------------------------------------------- the masks
@@ -981,6 +1281,26 @@ def _all(masks: List[Int], bit: Int) -> Bool:
         if (masks[u] & bit) == 0:
             return False
     return True
+
+
+def _any(masks: List[Int], bit: Int) -> Bool:
+    for u in range(len(masks)):  # driver-loop: over the nested kinds (one mask each)
+        if (masks[u] & bit) != 0:
+            return True
+    return False
+
+
+def _reads_given(slot: _SlotPtr, masks: List[Int]) -> Int:
+    """`MEMBER_READS_Y_GIVEN` of a META state (core/member_abi.mojo, lane
+    mf-tail5; kind-exact): a REGRESSOR kind whose own splitter is stratified
+    (Stacking's, the search's: `_split_folds` codes the targets' values), or
+    one holding a nested kind that reads it (`_add_drawn` hands it on). A
+    classifier kind reads class codes, never the given y."""
+    if _classifier_kind(slot[].kind):
+        return 0
+    if (slot[].split.kind != MSEL_SPEC_NONE and msel_spec_stratified(slot[].split.kind)) or _any(masks, MEMBER_READS_Y_GIVEN):
+        return MEMBER_READS_Y_GIVEN
+    return 0
 
 
 def _kind_mask(kind: Int, flag: Bool, masks: List[Int]) -> Int:
@@ -1009,6 +1329,14 @@ def _kind_mask(kind: Int, flag: Bool, masks: List[Int]) -> Int:
             mask |= MEMBER_GIL_FREE
         elif len(masks) > 0 and _all_either(masks):
             mask |= MEMBER_GIL_DOOR
+        # THE RESIDENT ROUTE (lane mf-search5): `flag` is the admission's
+        # word that the search's fold rows may stay on the device (its own
+        # `device` is not 'cpu' beside a GPU set and no candidate names a
+        # `device`); then a caller in a resident scope hands the fit its
+        # scope and X's pin (`_fit_search`), for the candidates that keep X
+        # resident.
+        if flag and _any(masks, MEMBER_CAN_SCOPE):
+            mask |= MEMBER_CAN_SCOPE
         return mask
     if _unit_kind(kind):
         var base = masks[0] if len(masks) > 0 else 0
@@ -1016,6 +1344,9 @@ def _kind_mask(kind: Int, flag: Bool, masks: List[Int]) -> Int:
             # THE MULTI-OUTPUT KIND: predict and score over a 2-D y; the base's
             # sample weights (MultiOutput's fit hands them to every output).
             mask |= MEMBER_CAN_MULTI_OUTPUT | MEMBER_CAN_SCORE
+            if kind == META_MULTI_CLASSIFIER and (base & MEMBER_CAN_PREDICT_PROBA) != 0:
+                # (lane mf-tail5) predict_proba: every output's block in one float64 dst
+                mask |= MEMBER_CAN_PREDICT_PROBA
         if kind == META_CALIBRATED or kind == META_BAG_CLASSIFIER:
             mask |= MEMBER_CAN_PREDICT_PROBA
         elif kind == META_ADA_CLASSIFIER:
@@ -1065,7 +1396,8 @@ def _all_either(masks: List[Int]) -> Bool:
 
 comptime _UNION = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION
     | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_CLASSIFIER | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_BORROWS_FIT
-    | MEMBER_GIL_FREE | MEMBER_GIL_DOOR | MEMBER_CAN_SCORE | MEMBER_CAN_MULTI_OUTPUT)
+    | MEMBER_GIL_FREE | MEMBER_GIL_DOOR | MEMBER_CAN_SCORE | MEMBER_CAN_MULTI_OUTPUT | MEMBER_CAN_SCOPE
+    | MEMBER_CAN_TRANSFORM | MEMBER_READS_Y_GIVEN)
 
 
 def _set_word(mask: Int) -> UInt8:
@@ -1108,32 +1440,48 @@ def _new(call: _CallPtr) raises:
         slot[].fold_train = entry[].fold_train.copy()
         slot[].fold_test = entry[].fold_test.copy()
         slot[].metric = entry[].metric
-        slot[].split_kind = entry[].split_kind
-        slot[].split_k = entry[].split_k
-        slot[].split_shuffle = entry[].split_shuffle
-        slot[].split_seed = entry[].split_seed
-        slot[].split_route = entry[].split_route
-        slot[].split_sabotage = entry[].split_sabotage
+        slot[].split = entry[].split.copy()
+        slot[].cluster = entry[].cluster
+        slot[].label_words = entry[].label_words.copy()
+        slot[].rfe_run = entry[].rfe_run
+        slot[].refusal = entry[].refusal.copy()
+        slot[].refusal_late = entry[].refusal_late
+        slot[].rfe_hops = entry[].rfe_hops.copy()
     finally:
         shared_slot_unlock(lock)
     try:
+        if _refused_first(slot):
+            # THE DOOR'S REFUSAL (lane mf-refuse5): its FIT raises the words first; nothing to check.
+            slot[].glue = xt_ref(TreesEntryKey(call[].route.mode, call[].route.vendor))
+            call[].state = state
+            return
         if len(slot[].plans) == 0:
             raise Error("member ABI: a meta member plan holds no members")
         var user_folds = len(slot[].fold_test)
+        # THE SPLITTER CV: its fold count is the fit's (word 3 is 0).
+        var splitter = slot[].split.kind != MSEL_SPEC_NONE
         if len(slot[].fold_train) != user_folds:
             raise Error("member ABI: a meta member's user folds need a train and a test side each")
         if _stack_kind_code(kind) and (len(slot[].stack_kinds) + 1 != len(slot[].plans)
-                                       or (slot[].folds < 2 and user_folds == 0)):
+                                       or (slot[].folds < 2 and user_folds == 0 and not splitter)):
             raise Error("member ABI: a stacking member needs its members, its final estimator and cv >= 2")
         if _search_kind(kind):
             var count = Int(slot[].words[META_SEARCH_COUNT]) if len(slot[].words) >= META_SEARCH_WORDS else -1
-            if (count < 0 or len(slot[].words) != META_SEARCH_WORDS + count + max(count, 1)
-                    or len(slot[].masks) != len(slot[].plans) or (slot[].folds < 2 and user_folds == 0)
+            var plain = _search_groups_end(slot[].words, count) if count >= 0 else -1
+            if (count < 0 or plain < 0
+                    or (len(slot[].words) != plain and len(slot[].words) != plain + META_SEARCH_TOOL_WORDS)
+                    or len(slot[].masks) != len(slot[].plans) or (slot[].folds < 2 and user_folds == 0 and not splitter)
                     or (count > 0 and (slot[].words[META_SEARCH_REFIT_SCORER] < 0.0
                                        or Int(slot[].words[META_SEARCH_REFIT_SCORER]) >= count))):
                 raise Error("member ABI: a search member needs its candidates, one mask each, its "
-                            + String(META_SEARCH_WORDS) + " settings words, its scorer codes and positive "
-                            + "words, a refit scorer among them and cv >= 2")
+                            + String(META_SEARCH_WORDS) + " settings words, one scorer word group per "
+                            + "scorer, a refit scorer among them and cv >= 2")
+            slot[].base_plans = slot[].plans.copy()
+            slot[].base_masks = slot[].masks.copy()
+        elif _rfe_kind(kind):
+            if len(slot[].plans) != 1 or len(slot[].masks) != 1 or len(slot[].words) != META_RFE_WORDS:
+                raise Error("member ABI: an RFE member needs its one estimator, its mask and its "
+                            + String(META_RFE_WORDS) + " settings words")
             slot[].base_plans = slot[].plans.copy()
             slot[].base_masks = slot[].masks.copy()
         elif _unit_kind(kind):
@@ -1158,7 +1506,7 @@ def _new(call: _CallPtr) raises:
             if len(slot[].plans) != plans or len(slot[].masks) != plans or len(slot[].words) != need:
                 raise Error("member ABI: a " + _name(kind) + " member needs its one base estimator and its "
                             + String(need) + " settings words")
-            if kind == META_CALIBRATED and slot[].folds < 2 and user_folds == 0:
+            if kind == META_CALIBRATED and slot[].folds < 2 and user_folds == 0 and not splitter:
                 raise Error("member ABI: a CalibratedClassifierCV member needs cv >= 2 or its listed folds")
             if _ada_kind(kind):
                 var family = slot[].plans[0].family
@@ -1299,6 +1647,11 @@ def _add_drawn(slot: _SlotPtr, mut run: MemberSetRun, u: Int, classes: Int, targ
     run.add(plan^, target, weights, draw, count, column_draw, column_count,
             UInt8(1) if (mask & MEMBER_CAN_TEST_ROWS) != 0 else UInt8(0),
             UInt8(1) if (mask & MEMBER_BORROWS_FIT) != 0 else UInt8(0), _set_word(mask))
+    # THE GIVEN y (lane mf-tail5, the slot's `fit_given`): only to a kind that
+    # reads it, and only beside the fit's own targets (the set selects its
+    # rows with the member's draw, as it selects y's).
+    if slot[].fit_given != 0 and target != 0 and target == slot[].fit_y and (mask & MEMBER_READS_Y_GIVEN) != 0:
+        run.given_target(slot[].fit_given, slot[].fit_given_dtype)
 
 
 def _expand(slot: _SlotPtr, units: Int):
@@ -1541,97 +1894,60 @@ def _user_folds(slot: _SlotPtr, n: Int, mut tr_at: List[Int], mut tr_n: List[Int
     _ = len(te_counts)
 
 
-def _split_folds(slot: _SlotPtr, n: Int, codes: Int, k: Int) raises:
-    """THE SPLITTER CV (lane mf-split4): the folds of the entry's splitter
-    over THIS fit's `n` rows (the door's `_splits` -> `prep_native_split` ->
-    bindings/msel_split_door.mojo `msel_kfold_split` /
-    `msel_stratified_split`, whose RUN this is: `msel_plan_kfold` /
-    `msel_plan_stratified` over the int32 codes `codes` of `k` classes, the
-    sides sized by the plan, `msel_split_fill`), written as the stack's typed
-    folds (`fold_train` / `fold_test`, int32 rows), which `_user_folds` then
-    checks as the door checks a split's rows. The splitter's warning ("The
-    least populated class in y has only ...") becomes the state's first fit
-    notice (core/member_notices.mojo MEMBER_NOTICE_SPLIT_LEAST, raised by the
-    PACK in its words; the door raised it before the fits). No Python."""
-    var route = slot[].split_route
-    var plan = MselSplitPlan()
-    if slot[].split_kind == META_SPLIT_STRATIFIED:
-        plan = msel_plan_stratified(route, MselCodes(codes, n, k), MSEL_LABELS_SORTED, slot[].split_k,
-                                    slot[].split_shuffle, slot[].split_seed)
+def _split_folds(slot: _SlotPtr, n: Int, codes: Int, k: Int, groups: MselGroupCodes, targets: Int,
+                 given: Int, given_dtype: Int) raises:
+    """THE SPLITTER CV (lanes mf-split4, mf-split5): the folds of the entry's
+    splitter over THIS fit's `n` rows (the door's `_splits` ->
+    `prep_native_split` -> bindings/msel_split_door.mojo `msel_split`, whose
+    plans and fill these are: bindings/msel_split_spec_run.mojo
+    `msel_spec_sides` over the int32 codes `codes` of `k` classes and the
+    fit's `groups`), written as the typed folds (`fold_train` / `fold_test`,
+    int32 rows), which `_user_folds` then checks as the door checks a
+    split's rows (a stack's or an ensemble=False calibration's partition
+    included). Each splitter warning ("The least populated class in y has
+    only ...", once per plan: a repeated splitter's repeats each warn)
+    becomes a fit notice of the state (core/member_notices.mojo
+    MEMBER_NOTICE_SPLIT_LEAST, raised by the PACK in its words; the door
+    raised it before the fits). A REGRESSOR's fit (no `codes`) hands its
+    float32 `targets` (0: none): a stratified splitter stratifies on their
+    values, as the splitter door does with a regressor's y, its refusal and
+    warning in its words (`msel_spec_sides_targets`, lane mf-del5; the
+    door kept every such fit before). `given` (lane mf-tail5): THE GIVEN y
+    of those targets (core/member_abi.mojo `MemberCall.y_given`, 0: none),
+    whose values are coded instead of the float32 words. No Python."""
+    var sides: MselSides
+    if codes == 0 and targets != 0:
+        sides = msel_spec_sides_targets(slot[].split, n, targets, given, given_dtype, groups)
     else:
-        plan = msel_plan_kfold(route, n, slot[].split_k, slot[].split_shuffle, slot[].split_seed,
-                               slot[].split_sabotage)
-    if plan.warned and slot[].split_kind == META_SPLIT_STRATIFIED:
-        # The operands of the stratified warning: the least populated
-        # class's row count (over the classes the rows hold) and n_splits.
-        var counts = member_cw_counts(codes, MEMBER_I32, n, k)
-        var least = -1
-        for c in range(k):  # small-loop(k class counts: the least one held)
-            if counts[c] > 0 and (least < 0 or Int(counts[c]) < least):
-                least = Int(counts[c])
+        sides = msel_spec_sides(slot[].split, n, codes, k, groups)
+    for w in range(len(sides.least)):  # small-loop(one notice per splitter warning)
         var words = List[Float64]()
-        member_notice_add(words, MEMBER_NOTICE_SPLIT_LEAST, Float64(least), Float64(slot[].split_k))
+        member_notice_add(words, MEMBER_NOTICE_SPLIT_LEAST, Float64(sides.least[w]), Float64(slot[].split.k))
         slot[].notice_owner.append(0)
         slot[].notice_words.append(words^)
-    var splits = plan.splits()
-    var train = List[List[Int64]](capacity=splits)
-    var test = List[List[Int64]](capacity=splits)
-    for s in range(splits):  # driver-loop: over the splits (one pair of sides each, sized by the plan)
-        train.append(List[Int64](length=max(plan.train_sizes[s], 1), fill=Int64(0)))
-        test.append(List[Int64](length=max(plan.test_sizes[s], 1), fill=Int64(0)))
-    for s in range(splits):  # driver-loop: over the splits (their final addresses)
-        plan.train_dst.append(Int(train[s].unsafe_ptr()))
-        plan.test_dst.append(Int(test[s].unsafe_ptr()))
-    msel_split_fill(route, plan)
-    var tr32 = List[List[Int32]](capacity=splits)
-    var te32 = List[List[Int32]](capacity=splits)
-    for s in range(splits):  # driver-loop: over the splits (their int32 sides)
-        tr32.append(List[Int32](length=plan.train_sizes[s], fill=Int32(0)))
-        te32.append(List[Int32](length=plan.test_sizes[s], fill=Int32(0)))
-    var src_tr = List[Int](capacity=splits)
-    var src_te = List[Int](capacity=splits)
-    var dst_tr = List[Int](capacity=splits)
-    var dst_te = List[Int](capacity=splits)
-    var n_tr = List[Int](capacity=splits)
-    var n_te = List[Int](capacity=splits)
-    for s in range(splits):  # driver-loop: over the splits (the narrowing's addresses)
-        src_tr.append(Int(train[s].unsafe_ptr()))
-        src_te.append(Int(test[s].unsafe_ptr()))
-        dst_tr.append(Int(tr32[s].unsafe_ptr()))
-        dst_te.append(Int(te32[s].unsafe_ptr()))
-        n_tr.append(plan.train_sizes[s])
-        n_te.append(plan.test_sizes[s])
-    var src_tr_at = Int(src_tr.unsafe_ptr())
-    var src_te_at = Int(src_te.unsafe_ptr())
-    var dst_tr_at = Int(dst_tr.unsafe_ptr())
-    var dst_te_at = Int(dst_te.unsafe_ptr())
-    var n_tr_at = Int(n_tr.unsafe_ptr())
-    var n_te_at = Int(n_te.unsafe_ptr())
-
-    def narrow(split: Int) {imm src_tr_at, imm src_te_at, imm dst_tr_at, imm dst_te_at, imm n_tr_at, imm n_te_at}:
-        # the rows are below n (an int32 row count): one exact narrowing each
-        var st = _I64P(unsafe_from_address=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=src_tr_at)[split])
-        var se = _I64P(unsafe_from_address=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=src_te_at)[split])
-        var dt = _I32P(unsafe_from_address=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=dst_tr_at)[split])
-        var de = _I32P(unsafe_from_address=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=dst_te_at)[split])
-        var count_tr = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=n_tr_at)[split]
-        var count_te = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=n_te_at)[split]
-        for i in range(count_tr):  # small-loop(one split's train rows)
-            dt[i] = Int32(st[i])
-        for i in range(count_te):  # small-loop(one split's test rows)
-            de[i] = Int32(se[i])
-
-    host_parallelize(narrow, splits)
-    _ = len(train)  # the fill and the narrowing above read these through their addresses
-    _ = len(test)
-    _ = len(src_tr)
-    _ = len(src_te)
-    _ = len(dst_tr)
-    _ = len(dst_te)
-    _ = len(n_tr)
-    _ = len(n_te)
+    var tr32 = List[List[Int32]]()
+    var te32 = List[List[Int32]]()
+    msel_sides_i32(sides, tr32, te32)
+    _ = sides.splits()  # the narrowing read the int64 sides through their addresses
     slot[].fold_train = tr32^
     slot[].fold_test = te32^
+
+
+def _no_groups() -> MselGroupCodes:
+    """A fit with no groups (Stacking and CalibratedClassifierCV hand their
+    splitter none, as scikit-learn's do)."""
+    return MselGroupCodes()
+
+
+def _call_groups(call: _CallPtr) raises -> MselGroupCodes:
+    """THE SEARCH KIND's groups: the call's group ids (`MemberCall.groups`,
+    int32 or int64, rows x 1) as sorted-order codes; none when not given."""
+    var g = call[].groups
+    if g.rows == 0:
+        return MselGroupCodes()
+    if g.cols != 1 or not (g.dense_host(MEMBER_I32) or g.dense_host(MEMBER_I64)):
+        raise Error("TypeError: a search member reads groups as int32 or int64 ids, rows x 1")
+    return msel_group_codes_run(g.data, g.dtype == MEMBER_I64, g.rows)
 
 
 def _keep_states(slot: _SlotPtr, mut run: MemberSetRun, first: Int):
@@ -1676,8 +1992,9 @@ def _fit_stack(slot: _SlotPtr, call: _CallPtr) raises:
     var every = List[Int32]()  # a member that holds every class
     # THE SPLITTER CV (lane mf-split4): this fit's folds first, as the door
     # computes its splits before any member fit.
-    if slot[].split_kind != META_SPLIT_NONE:
-        _split_folds(slot, n, y if classifier else 0, k)
+    if slot[].split.kind != MSEL_SPEC_NONE:
+        _split_folds(slot, n, y if classifier else 0, k, _no_groups(), 0 if classifier else y,
+                     0 if classifier else slot[].fit_given, slot[].fit_given_dtype)
     slot[].classes = k
     slot[].states = List[Int](length=bases + 1, fill=0)
     # 1. The members on every row (one set).
@@ -1892,10 +2209,19 @@ def _fit_cal(slot: _SlotPtr, call: _CallPtr) raises:
     var sigmoid = slot[].words[META_CAL_SIGMOID] != 0.0
     var ensemble = slot[].words[META_CAL_ENSEMBLE] != 0.0
     var decision = slot[].words[META_CAL_DECISION] != 0.0
+    # scikit-learn's two cv refusals, before any split or fit (lane mf-del5;
+    # the door's one body, `cal_cv_check`): the fold count of an exact int
+    # cv or of a splitter that stores `n_splits`, and a LeaveOneOut.
+    var n_folds = 0
+    if slot[].words[META_CAL_INT_CV] != 0.0:
+        n_folds = slot[].folds
+    elif msel_spec_has_n_splits(slot[].split.kind):
+        n_folds = slot[].split.k
+    cal_cv_check(y, n, k, n_folds, slot[].split.kind == MSEL_SPEC_LOO)
     # THE SPLITTER CV: this fit's folds first, as the door computes its
     # splits before any member fit.
-    if slot[].split_kind != META_SPLIT_NONE:
-        _split_folds(slot, n, y, k)
+    if slot[].split.kind != MSEL_SPEC_NONE:
+        _split_folds(slot, n, y, k, _no_groups(), 0, 0, 0)
     var listed = len(slot[].fold_test) > 0
     var tr_at = List[Int]()
     var tr_n = List[Int]()
@@ -1936,6 +2262,17 @@ def _fit_cal(slot: _SlotPtr, call: _CallPtr) raises:
     var plan = CalFitPlan(x, n, d, y, k, operation, sigmoid, ensemble, _CALIB_FAST_HOST_FOLDS)
     for f in range(used):  # driver-loop: over the cv folds (their test rows)
         plan.fold(te_at[f], te_n[f])
+    # THE UNLABELED MARKER (lane mf-meta5b): a LabelPropagation / LabelSpreading base admitted with the
+    # caller's code of -1 in its marker word. ensemble=True: every fold's fit reads y as given (its classes_
+    # exclude -1). ensemble=False: scikit-learn's cross_val_predict encodes y first, so its fold fits see -1
+    # as one more class (the fold units' marker word cleared), and only the fit over every row reads it.
+    var marker = _cal_unit_marker(run.plans[0])
+    if marker >= 0:
+        plan.markers = List[Int](length=units, fill=marker)
+        if not ensemble:
+            for f in range(used):  # driver-loop: over the cv folds (their marker words cleared)
+                run.plans[f].params[_LP_MARKER] = -1.0
+                plan.markers[f] = -1
     var res = CalFitOut()
     # A refused scoring call raises its member's words (the RUN released every state).
     var answered = calibrated_fit_run(glue, run, plan, res)
@@ -1969,7 +2306,7 @@ def _fit_cal(slot: _SlotPtr, call: _CallPtr) raises:
         drawn.append(u < used)
         slot[].states[i] = run.states[u]
         run.states[u] = 0
-        slot[].unit_held.append(plan.fold_classes[u].copy() if u < plan.folds() else List[Int32]())
+        slot[].unit_held.append(plan.fold_classes[u].copy() if u < plan.folds() else plan.full_held.copy())
     # Every unit's fit notices, in unit order (a discarded fold's with the first pair's context: one base class).
     for u in range(len(run.states)):  # driver-loop: over the units (their fit notices)
         var owner = 0
@@ -3004,9 +3341,27 @@ def _unit_views(slot: _SlotPtr):
         slot[].draw_words = w^
     elif _ada_kind(slot[].kind):
         _ada_view(slot)
+    elif _rfe_kind(slot[].kind):
+        _rfe_view(slot)
 
 
 # ------------------------------------------------------------ THE SEARCH KIND (lane mf-search4)
+
+
+def _search_groups_end(words: List[Float64], count: Int) raises -> Int:
+    """The index after the search kind's scorer word groups (one per scorer,
+    `max(count, 1)`; lane mf-tail5b), -1 when they are cut short."""
+    var at = META_SEARCH_WORDS
+    var sels = List[Int32]()
+    for _ in range(max(count, 1)):  # small-loop(one word group per scorer)
+        var code = 0
+        var positive = -1
+        var opts = MselScorerOptions()
+        try:
+            at = msel_scorer_group_read(words, at, code, positive, opts, sels)
+        except:
+            return -1
+    return at
 
 
 def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
@@ -3022,6 +3377,10 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
                               call[].x.cols, call[].y.data, k, slot[].folds, slot[].glue, slot[].metric)
     plan.y_dtype = MEMBER_I32 if classifier else MEMBER_F32
     plan.y_cols = outputs
+    if not classifier:
+        # THE GIVEN y (lane mf-tail5): the RUN hands it to the candidates that read it.
+        plan.given = slot[].fit_given
+        plan.given_dtype = slot[].fit_given_dtype
     if outputs > 1 and call[].class_counts != 0:
         var counts = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=call[].class_counts)
         for j in range(outputs):  # small-loop(the outputs' class counts)
@@ -3034,24 +3393,71 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
     # the scorer codes in the caller's name order, the refit scorer's index,
     # the refit word; then one positive class word per scorer (item 3).
     var count = Int(slot[].words[META_SEARCH_COUNT])
-    for j in range(count):  # small-loop(the multi-metric scorer codes)
-        plan.scorers.append(Int(slot[].words[META_SEARCH_WORDS + j]))
     plan.refit_scorer = Int(slot[].words[META_SEARCH_REFIT_SCORER]) if count > 0 else 0
     plan.refit = slot[].words[META_SEARCH_REFIT] != 0.0
-    for j in range(max(count, 1)):  # small-loop(one positive class word per scorer)
-        plan.positives.append(Int(slot[].words[META_SEARCH_WORDS + count + j]))
+    # One scorer word group per scorer (lane mf-tail5b): its code (each of a
+    # multi-metric list's; the one scorer's is META_SEARCH_SCORING's too), its
+    # positive word and its make_scorer options with their labels codes.
+    var at = META_SEARCH_WORDS
+    for j in range(max(count, 1)):  # small-loop(one word group per scorer)
+        var code = 0
+        var positive = -1
+        var opts = MselScorerOptions()
+        at = msel_scorer_group_read(slot[].words, at, code, positive, opts, plan.selections)
+        if count > 0:
+            plan.scorers.append(code)
+        plan.positives.append(positive)
+        plan.options.append(opts)
+    # THE CV TOOLS (lane mf-msel5): the optional tail after the scorer groups.
+    var tool_at = at
+    var tool = len(slot[].words) == tool_at + META_SEARCH_TOOL_WORDS
+    if tool:
+        plan.keep = slot[].words[tool_at] != 0.0
+        plan.respond = Int(slot[].words[tool_at + 1])
+        plan.indices = slot[].words[tool_at + 2] != 0.0
+        plan.respond_dst = Int(slot[].words[tool_at + 3])
+        plan.respond_width = Int(slot[].words[tool_at + 4])
+        plan.respond_dtype = Int(slot[].words[tool_at + 5])
+        plan.respond_log = slot[].words[tool_at + 6] != 0.0
     plan.cap = slot[].cap
+    plan.cluster = slot[].cluster
+    plan.label_words = slot[].label_words.copy()
     # THE SPLITTER CV and a user's index list (lane mf-search4b item 6): the
     # folds of this fit's rows, as Stacking's and Calibrated's (`_split_folds`;
     # the user's are the entry's typed folds), handed to the RUN.
-    if slot[].split_kind != META_SPLIT_NONE:
-        _split_folds(slot, call[].x.rows, call[].y.data if k > 0 else 0, k)
+    if slot[].split.kind != MSEL_SPEC_NONE:
+        # A one-output regressor hands its targets (a stratified splitter
+        # stratifies on their values, as the door's split does; lane mf-del5).
+        _split_folds(slot, call[].x.rows, call[].y.data if k > 0 else 0, k, _call_groups(call),
+                     call[].y.data if not classifier and outputs == 1 else 0,
+                     slot[].fit_given if not classifier and outputs == 1 else 0, slot[].fit_given_dtype)
     if len(slot[].fold_test) > 0:
         # Views of the slot's int32 sides (kept alive by the slot through the
         # RUN), checked as the door checks a split's rows.
         _user_folds(slot, call[].x.rows, plan.fold_train_at, plan.fold_train_n, plan.fold_test_at,
                     plan.fold_test_n, False)
+    # THE RESIDENT ROUTE (lane mf-search5; core/msel_search_run.mojo
+    # `msel_search_rows`): the caller's resident scope and X's pin, read by
+    # its UNPACK once per fit (bindings/msel_member_units_door.mojo, the
+    # search's own fit door opening the scope the old DeviceRows units
+    # opened), reach every unit's fit and score when the admission allowed
+    # resident fold rows (`flag`, the search's own `device`). The RUN writes
+    # this call's `pin_kept` the moment a candidate's cache takes X's
+    # reference (THE PIN RULE: whether it returns or raises).
+    if slot[].flag and call[].scope != MEMBER_SCOPE_NONE and call[].pin != 0:
+        plan.scope = call[].scope
+        plan.pin = call[].pin
+        plan.kept_at = Int(UnsafePointer(to=call[].pin_kept))
     var res = msel_search_run(plan)
+    # THE CV TOOLS: the kept unit states are the slot's from here (freed by
+    # `_drop_states`), each with its candidate.
+    slot[].fold_states = res.unit_states.copy()
+    res.unit_states = List[Int]()
+    slot[].fold_owner = List[Int](capacity=len(slot[].fold_states))
+    slot[].fold_words = List[Int64](capacity=len(slot[].fold_states))
+    for u in range(len(slot[].fold_states)):  # driver-loop: over the kept unit states (their candidates and handles)
+        slot[].fold_owner.append(u // max(res.n_splits, 1))
+        slot[].fold_words.append(Int64(slot[].fold_states[u]))
     var best = slot[].base_plans[res.best].copy()
     best.classes = k
     best.class_counts = plan.class_counts.copy()
@@ -3093,7 +3499,31 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
                     w.append(res.scorer_train[j][c][f])
             for c in range(m):  # driver-loop: over the candidates (their train means)
                 w.append(res.scorer_train_means[j][c])
+    if tool:
+        _search_tool_words(res, plan.indices, w)
     slot[].search_words = w^
+
+
+def _search_tool_words(res: MselSearchResult, rows: Bool, mut w: List[Float64]):
+    """THE CV TOOLS' tail of the search words (lane mf-msel5), after the
+    tables: [units U], U fit seconds, U test-score seconds; with `rows` per
+    fold [train n, test n, its train rows, its test rows]. Exact: rows are
+    below 2^53. The units' responses are not here: the RUN wrote them into
+    the caller's result buffer (lane mf-msel5b)."""
+    var units = len(res.fit_seconds)
+    w.append(Float64(units))
+    for u in range(units):  # driver-loop: over the units (their fits' seconds)
+        w.append(res.fit_seconds[u])
+    for u in range(units):  # driver-loop: over the units (their test scores' seconds)
+        w.append(res.score_seconds[u])
+    if rows:
+        for f in range(len(res.fold_test)):  # driver-loop: over the folds (their rows)
+            w.append(Float64(len(res.fold_train[f])))
+            w.append(Float64(len(res.fold_test[f])))
+            for i in range(len(res.fold_train[f])):  # driver-loop: over the fold's train rows
+                w.append(Float64(res.fold_train[f][i]))
+            for i in range(len(res.fold_test[f])):  # driver-loop: over the fold's test rows
+                w.append(Float64(res.fold_test[f][i]))
 
 
 def _forward_best(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
@@ -3192,10 +3622,41 @@ def _fit_multi(slot: _SlotPtr, call: _CallPtr) raises:
     host_parallelize(_column, outputs)
     _ = len(columns)
     var weights = call[].weights.data if call[].weights.given() else 0
+    # THE GIVEN y per output (lane mf-tail5): a regressor base that reads it
+    # fits output j with column j of the given y (float64 words, one parallel
+    # pass); none is made for a base that does not read it.
+    var given_cols = List[List[Float64]]()
+    var given_src = slot[].fit_given
+    var given_kind = slot[].fit_given_dtype
+    if (not classifier and given_src != 0 and len(slot[].base_masks) > 0
+            and (slot[].base_masks[0] & MEMBER_READS_Y_GIVEN) != 0):
+        var given_at = List[Int](length=outputs, fill=0)
+        for j in range(outputs):  # driver-loop: over the outputs (their given columns, allocated once)
+            given_cols.append(List[Float64](length=max(n, 1), fill=0.0))
+            given_at[j] = Int(given_cols[j].unsafe_ptr())
+        var given_at_at = Int(given_at.unsafe_ptr())
+
+        def _given_column(j: Int) {imm given_at_at, imm given_src, imm given_kind, imm n, imm outputs}:
+            var dst = _F64P(unsafe_from_address=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=given_at_at)[j])
+            for i in range(n):
+                var at = i * outputs + j
+                if given_kind == MEMBER_I64:
+                    dst[i] = Float64(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=given_src)[at])
+                elif given_kind == MEMBER_I32:
+                    dst[i] = Float64(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=given_src)[at])
+                else:
+                    dst[i] = _F64P(unsafe_from_address=given_src)[at]
+
+        host_parallelize(_given_column, outputs)
+        _ = len(given_at)
+    _ = len(columns)  # keep-alive: _column read it through columns_at
     var run = _set_of(slot, call[].x.data, n, d, MEMBER_I32 if classifier else MEMBER_F32)
     for j in range(outputs):  # driver-loop: over the outputs (admission into the set, once each)
         _add(slot, run, j, counts[j], Int(slot[].targets[j].unsafe_ptr()), weights, 0, 0)
+        if len(given_cols) > 0:
+            run.given_target(Int(given_cols[j].unsafe_ptr()), MEMBER_F64)
     member_set_fit(run)
+    _ = len(given_cols)  # read through their addresses by the fits above
     slot[].states = List[Int](length=outputs, fill=0)
     _keep_states(slot, run, 0)
     slot[].out_classes = counts^
@@ -3274,11 +3735,99 @@ def _multi_outputs(slot: _SlotPtr, rows: VoteRows, dtype: Int, dst: Int) raises:
             raise Error(errors[j])
 
 
+def _multi_proba_width(slot: _SlotPtr) -> Int:
+    """THE MULTI-OUTPUT PROBABILITIES (lane mf-tail5): the columns of one
+    predict_proba row, every output's classes in turn (0: an output's
+    member has none)."""
+    var total = 0
+    for j in range(len(slot[].proba_cols)):  # small-loop(the outputs)
+        if slot[].proba_cols[j] <= 0:
+            return 0
+        total += slot[].proba_cols[j]
+    return total
+
+
+def _proba_multi(slot: _SlotPtr, call: _CallPtr) raises:
+    """MultiOutputClassifier.predict_proba (lane mf-tail5): scikit-learn's
+    list of per-output (n, classes_j) arrays as ONE block, output j's member
+    proba in columns `sum(proba_cols[:j]) ..` of the dense host float64 rows
+    x `_multi_proba_width` `dst` (each output's own classes, in its member's
+    order); the caller's PACK cuts the list. One task per output when every
+    member is GIL-free."""
+    var name = _name(slot[].kind)
+    var width = _multi_proba_width(slot)
+    if width == 0:
+        member_unsupported(name, MEMBER_OP_PREDICT_PROBA)
+    var rows = _rows(call, name)
+    var n = rows.n
+    if not call[].dst.dense_host(MEMBER_F64) or call[].dst.rows != n or call[].dst.cols != width:
+        raise Error("TypeError: a " + name + " member writes predict_proba as dense host float64 rows x "
+                    + String(width) + " (every output's classes)")
+    var outputs = len(slot[].states)
+    var offsets = List[Int](length=max(outputs, 1), fill=0)
+    for j in range(1, outputs):  # small-loop(the outputs' first columns)
+        offsets[j] = offsets[j - 1] + slot[].proba_cols[j - 1]
+    var bufs = List[List[Float64]](capacity=outputs)
+    var buf_at = List[Int](length=max(outputs, 1), fill=0)
+    for j in range(outputs):  # driver-loop: over the outputs (their probability buffers)
+        bufs.append(List[Float64](length=max(n * slot[].proba_cols[j], 1), fill=0.0))
+        buf_at[j] = Int(bufs[j].unsafe_ptr())
+    var failed = List[UInt8](length=max(outputs, 1), fill=UInt8(0))
+    var errors = List[String](length=max(outputs, 1), fill=String(""))
+    var slot_at = Int(slot)
+    var bufs_list = Int(buf_at.unsafe_ptr())
+    var offsets_at = Int(offsets.unsafe_ptr())
+    var failed_at = Int(failed.unsafe_ptr())
+    var errors_at = Int(errors.unsafe_ptr())
+    var x = rows.x
+    var d = rows.d
+    var dst = call[].dst.data
+
+    def _one(j: Int) {imm slot_at, imm bufs_list, imm offsets_at, imm failed_at, imm errors_at, imm x, imm d, imm n,
+                       imm dst, imm width}:
+        var s = _SlotPtr(unsafe_from_address=slot_at)
+        var buf = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=bufs_list)[j]
+        var first = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=offsets_at)[j]
+        try:
+            var pd = s[].proba_dtype[j]
+            var cols = s[].proba_cols[j]
+            var inner = member_call_of(s[].plans[j], s[].states[j])
+            inner.x = MemberMatrix(x, n, d)
+            inner.dst = MemberMatrix(buf, n, cols, pd)
+            _ = member_call(s[].plans[j].member, MEMBER_OP_PREDICT_PROBA, inner)
+            var out = _F64P(unsafe_from_address=dst)
+            for i in range(n):
+                for c in range(cols):
+                    var value = _F64P(unsafe_from_address=buf)[i * cols + c] if pd == MEMBER_F64 else Float64(
+                        _F32P(unsafe_from_address=buf)[i * cols + c])
+                    out[i * width + first + c] = value
+        except error:
+            MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=failed_at)[j] = UInt8(1)
+            MutPointer[String, MutUntrackedOrigin](unsafe_from_address=errors_at)[j] = String(error)
+
+    if _all(slot[].masks, MEMBER_GIL_FREE):
+        host_parallelize(_one, outputs)
+    else:
+        for j in range(outputs):  # driver-loop: over the outputs (THE GIL RULE: kinds that are not GIL-free)
+            _one(j)
+    _ = len(bufs)
+    _ = len(buf_at)
+    _ = len(offsets)
+    for j in range(outputs):  # driver-loop: over the outputs (the first refusal, in output order)
+        if failed[j] != UInt8(0):
+            raise Error(errors[j])
+
+
 def _predict_multi(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
     """predict: n x outputs (int32 codes per output, or the regressor's
-    floats). predict_proba is a list of arrays (one per output): no one dst,
-    refused as a member operation; so is decision_function."""
+    floats). predict_proba (MultiOutputClassifier, lane mf-tail5): every
+    output's block in one float64 dst (`_proba_multi`). decision_function:
+    scikit-learn's MultiOutputClassifier has none (refused)."""
     var name = _name(slot[].kind)
+    if operation == MEMBER_OP_PREDICT_PROBA and slot[].kind == META_MULTI_CLASSIFIER:
+        _fitted(slot)
+        _proba_multi(slot, call)
+        return
     if operation != MEMBER_OP_PREDICT:
         member_unsupported(name, operation)
     var rows = _rows(call, name)
@@ -3367,7 +3916,226 @@ def _score_multi(slot: _SlotPtr, call: _CallPtr) raises:
     _ = len(scores)
 
 
+# ------------------------------------------------------------ THE RFE KIND (lane mf-meta5)
+
+
+def _rfe_mask(slot: _SlotPtr) -> Int:
+    """THE RFE KIND's kind-exact mask: fit, predict, transform, export and import, and what its base (the
+    final estimator) answers: predict_proba, decision_function, score, sample weights (RFE.fit hands
+    `sample_weight` to every fit). THE GIL RULE: MEMBER_GIL_DOOR at most, when the base has either bit (the
+    rounds' x_prep programs run on the calling thread, as the naive Bayes members' do: the transports are
+    not traced for parallel workers). MEMBER_CAN_SCOPE when the image keeps a pinned X resident in a
+    caller's scope. No MEMBER_BORROWS_FIT: the rounds read X during the fit only and the final estimator
+    owns its rows (`rfe_fit_run`)."""
+    var mask = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+    if slot[].kind == META_RFE_CLASSIFIER:
+        mask |= MEMBER_CAN_CLASSIFIER
+    var base = slot[].base_masks[0] if len(slot[].base_masks) > 0 else 0
+    mask |= base & (MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE | MEMBER_CAN_SAMPLE_WEIGHT)
+    if (base & (MEMBER_GIL_FREE | MEMBER_GIL_DOOR)) != 0:
+        mask |= MEMBER_GIL_DOOR
+    if len(slot[].words) == META_RFE_WORDS and slot[].words[META_RFE_SCOPE] != 0.0:
+        mask |= MEMBER_CAN_SCOPE
+    return mask
+
+
+def _rfe_selected(words: List[Float64], d: Int) -> Int:
+    """n_features_to_select resolved over `d` columns (`rfe_select_count`)."""
+    return rfe_select_count(d, Int(words[META_RFE_SELECT_KIND]), words[META_RFE_SELECT_FRACTION],
+                            Int(words[META_RFE_SELECT_COUNT]))
+
+
+def _fit_rfe(slot: _SlotPtr, call: _CallPtr) raises:
+    """RFE.fit(X, y[, sample_weight]) over its member, the door's RUN whole (bindings/prep_select_run.mojo
+    `rfe_fit_run`, THE ONE BODY: the same rounds, programs and final fit as
+    bindings/prep_select_native_door.mojo `_rfe_rounds`). The final estimator is the state's one nested
+    member; the rounds' and the final fit's notices go to the PACK with the estimator's context; the
+    support, ranking and kept columns are the state's (META_BLOCK_RFE)."""
+    var classifier = slot[].kind == META_RFE_CLASSIFIER
+    var n = call[].x.rows
+    var d = call[].x.cols
+    var words = slot[].words.copy()
+    # The door's order: n_features_to_select, then step (its refusal), before any fit.
+    var nsel = _rfe_selected(words, d)
+    var step = rfe_step_count(d, words[META_RFE_STEP_FRACTION] != 0.0, words[META_RFE_STEP_VALUE],
+                              Int(words[META_RFE_STEP_COUNT]))
+    var member = slot[].base_plans[0].copy()
+    member.classes = call[].classes if classifier else 0
+    var plan = RfeFitPlan(member^, slot[].rfe_run, words[META_RFE_WORK_ON] != 0.0, call[].x.data, n, d,
+                          call[].y.data, MEMBER_I32 if classifier else MEMBER_F32)
+    plan.nsel = nsel
+    plan.step = step
+    plan.block = Int(words[META_RFE_BLOCK])
+    plan.squared = words[META_RFE_SQUARED] != 0.0
+    plan.importance_word = words[META_RFE_IMPORTANCE_WORD] != 0.0
+    plan.refusal = slot[].refusal.copy()
+    # A dotted importance_getter over a META base (lane mf-del5b): THE FORWARDED EXPORT's hops, as the
+    # door's `_rfe_native` hands them (`plan.block` is then META_BLOCK_FORWARD).
+    plan.hops = slot[].rfe_hops.copy()
+    if slot[].fit_given != 0 and len(slot[].base_masks) > 0 and (slot[].base_masks[0] & MEMBER_READS_Y_GIVEN) != 0:
+        # THE GIVEN y (lane mf-tail5): every round's and the final fit's (the same rows).
+        plan.extras.y_given = slot[].fit_given
+        plan.extras.y_given_dtype = slot[].fit_given_dtype
+    if call[].weights.given():
+        # RFE.fit's sample_weight, handed to every round's fit and the final fit (scikit-learn's
+        # `**fit_params`): the caller's float32 column, as the base's own fit reads it.
+        plan.extras.rows = n
+        plan.extras.weights = call[].weights.data
+    # THE RESIDENT ROUTE: a caller in a resident scope hands the rounds its scope and X's pin (THE PIN
+    # RULE: the run writes this call's `pin_kept` the moment the scope's cache takes the reference).
+    if (_rfe_mask(slot) & MEMBER_CAN_SCOPE) != 0 and call[].scope != MEMBER_SCOPE_NONE and call[].pin != 0:
+        plan.scope = call[].scope
+        plan.pin = call[].pin
+        plan.kept_at = Int(UnsafePointer(to=call[].pin_kept))
+    var res = rfe_fit_run(plan)
+    slot[].plans = [res.final_plan.copy()]
+    slot[].masks = [slot[].base_masks[0]]
+    slot[].states = [res.final_state]
+    for i in range(len(res.notices)):  # driver-loop: over the member fits' notices, in fit order
+        slot[].notice_owner.append(0)
+        slot[].notice_words.append(res.notices[i].copy())
+    slot[].classes = call[].classes if classifier else 0
+    slot[].rfe_support = res.support.copy()
+    slot[].rfe_ranking = res.ranking.copy()
+    slot[].rfe_columns = res.columns.copy()
+
+
+def _rfe_view(slot: _SlotPtr):
+    """THE RFE KIND's export view (META_BLOCK_RFE's layout)."""
+    var d = len(slot[].rfe_support)
+    var k = len(slot[].rfe_columns)
+    var w = List[Float64](capacity=2 + 2 * d + k)
+    w.append(Float64(d))
+    w.append(Float64(k))
+    for j in range(d):  # small-loop(the fitted support, feature count)
+        w.append(Float64(slot[].rfe_support[j]))
+    for j in range(d):  # small-loop(the fitted ranking, feature count)
+        w.append(Float64(slot[].rfe_ranking[j]))
+    for j in range(k):  # small-loop(the kept column ids)
+        w.append(Float64(Int(slot[].rfe_columns[j])))
+    slot[].rfe_words = w^
+
+
+def _import_rfe(slot: _SlotPtr, words: _F64P, count: Int) raises:
+    """IMPORT META_BLOCK_RFE (`_rfe_view`'s layout), after META_BLOCK_NESTED (the final estimator)."""
+    var bad = String("member ABI: an RFE member's words are malformed")
+    if count < 2:
+        raise Error(bad)
+    var d = Int(words[0])
+    var k = Int(words[1])
+    if d < 1 or k < 1 or k > d or count != 2 + 2 * d + k:
+        raise Error(bad)
+    slot[].rfe_support = List[Float32](length=d, fill=0.0)
+    slot[].rfe_ranking = List[Float32](length=d, fill=0.0)
+    slot[].rfe_columns = List[Int32](length=k, fill=Int32(0))
+    for j in range(d):  # small-loop(the imported support and ranking, feature count)
+        slot[].rfe_support[j] = Float32(words[2 + j])
+        slot[].rfe_ranking[j] = Float32(words[2 + d + j])
+    for j in range(k):  # small-loop(the imported kept column ids)
+        var c = Int(words[2 + 2 * d + j])
+        if c < 0 or c >= d:
+            raise Error(bad)
+        slot[].rfe_columns[j] = Int32(c)
+    slot[].features = d
+
+
+def _rfe_block(slot: _SlotPtr, call: _CallPtr, name: String) raises -> List[Float32]:
+    """`self.transform(X)` (`_SelectorMixin.transform`): the kept columns of the caller's X, gathered into a
+    new n x k float32 block (bit for bit the door's gather), after its feature check."""
+    var rows = _rows(call, name)
+    var d = len(slot[].rfe_support)
+    if rows.d != d:
+        raise Error("mojolearn: X has " + String(rows.d) + " features, RFE was fitted with " + String(d))
+    var n = rows.n
+    var k = len(slot[].rfe_columns)
+    var block = List[Float32](length=max(n * k, 1), fill=0.0)
+    if n == 0:
+        return block^
+    var order = List[Int32](length=n, fill=Int32(0))
+    for i in range(n):  # small-loop(the row numbers 0 .. n-1 of the column gather, once per call)
+        order[i] = Int32(i)
+    _ = xt_gather_f32(slot[].glue, rows.x, Int(order.unsafe_ptr()), Int(slot[].rfe_columns.unsafe_ptr()),
+                      Int(block.unsafe_ptr()), n, d, n, k)
+    _ = len(order)  # read through the gather above
+    return block^
+
+
+def _call_rfe(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
+    """RFE.predict / predict_proba / decision_function / score / transform: the kept columns of X, then the
+    final estimator's own call on them (`self.estimator_.<op>(self.transform(X)[, y])`); transform writes
+    the block. The caller's dst, y, weights and flags are the final call's."""
+    _fitted(slot)
+    var name = _name(slot[].kind)
+    if call[].row_index.rows > 0 or call[].column_index.rows > 0:
+        raise Error("TypeError: an RFE member reads whole host views (no row or column index)")
+    var mask = _rfe_mask(slot)
+    if operation == MEMBER_OP_PREDICT_PROBA and (mask & MEMBER_CAN_PREDICT_PROBA) == 0:
+        member_unsupported(name, operation)
+    if operation == MEMBER_OP_DECISION and (mask & MEMBER_CAN_DECISION) == 0:
+        member_unsupported(name, operation)
+    if operation == MEMBER_OP_SCORE and (mask & MEMBER_CAN_SCORE) == 0:
+        member_unsupported(name, operation)
+    var block = _rfe_block(slot, call, name)
+    var n = call[].x.rows
+    var k = len(slot[].rfe_columns)
+    if operation == MEMBER_OP_TRANSFORM:
+        if not call[].dst.dense_host(MEMBER_F32) or call[].dst.rows != n or call[].dst.cols != k:
+            raise Error("TypeError: an RFE member writes transform as dense host float32 rows of its "
+                        + String(k) + " kept columns")
+        if n * k > 0:
+            unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data), src=block.unsafe_ptr(), count=n * k)
+        call[].out_cols = k
+        return
+    var plan = slot[].plans[0].copy()
+    var inner = member_call_of(plan, slot[].states[0])
+    inner.x = MemberMatrix(Int(block.unsafe_ptr()), n, k)
+    inner.y = call[].y
+    inner.weights = call[].weights
+    inner.dst = call[].dst
+    inner.flags = call[].flags
+    _ = member_call(plan.member, operation, inner)
+    _ = len(block)  # read through the final estimator's call above
+    call[].value = inner.value
+    call[].out_cols = inner.out_cols
+
+
+def _outputs_rfe_fitted(call: _CallPtr, slot: _SlotPtr) raises:
+    """THE RFE KIND's outputs after a fit or an import: transform its kept columns (float32), every other
+    operation its final estimator's."""
+    var asked = call[].flags
+    if asked == MEMBER_OP_TRANSFORM:
+        call[].out_cols = len(slot[].rfe_columns)
+        call[].out_dtype = MEMBER_F32
+    else:
+        var plan = slot[].plans[0].copy()
+        var inner = member_call_of(plan, slot[].states[0])
+        call[].out_cols = member_outputs_of(plan, inner, asked)
+        call[].out_dtype = inner.out_dtype
+    call[].classes = slot[].classes
+
+
+def _outputs_rfe(call: _CallPtr, base: MemberPlan, words: List[Float64], classes: Int) raises:
+    """THE RFE KIND's outputs before a fit: transform n_features_to_select over the caller's X width
+    (float32), every other operation its estimator's plan's."""
+    var asked = call[].flags
+    if asked == MEMBER_OP_TRANSFORM:
+        call[].out_cols = _rfe_selected(words, max(call[].x.cols, 1))
+        call[].out_dtype = MEMBER_F32
+        call[].classes = classes
+        return
+    var plan = base.copy()
+    plan.classes = classes
+    call[].out_cols = member_outputs(plan, asked, max(call[].x.cols, 1), max(call[].y.cols, 1))
+    call[].out_dtype = member_output_dtype(plan, asked, max(call[].x.cols, 1), max(call[].y.cols, 1),
+                                           MEMBER_DTYPE_UNSAID)
+    call[].classes = classes
+
+
 def _fit(slot: _SlotPtr, call: _CallPtr) raises:
+    # THE DOOR'S REFUSAL (lane mf-refuse5, `meta_plan_refuse`): the door's words for a constructor value,
+    # first, as the door's validation runs before it reads X.
+    if _refused_first(slot):
+        raise Error(slot[].refusal.copy())
     var name = _name(slot[].kind)
     if not call[].x.dense_host(MEMBER_F32):
         raise Error("TypeError: a " + name + " member reads X as a dense host float32 view")
@@ -3378,7 +4146,11 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
     # every candidate is one, reads rows x outputs.
     var two_d = _multi_kind(slot[].kind) or (_search_kind(slot[].kind)
                                               and _all(slot[].base_masks, MEMBER_CAN_MULTI_OUTPUT))
-    if (not call[].y.dense_host(y_dtype) or call[].y.rows != call[].x.rows
+    # A SEARCH WITHOUT A TARGET (lane mf-msel5b): an unsupervised base fitted
+    # with y=None hands no y (the search RUN's target-free words).
+    var y_free = (_search_kind(slot[].kind) and not _classifier_kind(slot[].kind) and call[].y.rows == 0
+                  and call[].y.data == 0)
+    if not y_free and (not call[].y.dense_host(y_dtype) or call[].y.rows != call[].x.rows
             or (call[].y.cols != 1 and not two_d) or call[].y.cols < 1):
         raise Error("TypeError: a " + name + " member reads y as one dense host column of "
                     + (String("int32 class codes") if y_dtype == MEMBER_I32 else String("float32 targets")))
@@ -3389,8 +4161,20 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
     if call[].weights.given() and (slot[].kind == META_OVR or slot[].kind == META_CALIBRATED
                                    or _search_kind(slot[].kind)):
         raise Error("TypeError: a " + name + " member's fit takes no sample weights")
+    if call[].weights.given() and _rfe_kind(slot[].kind) and (_rfe_mask(slot) & MEMBER_CAN_SAMPLE_WEIGHT) == 0:
+        raise Error("TypeError: an RFE member's estimator fits no sample weights")
     _drop_states(slot)
     slot[].features = call[].x.cols
+    # THE GIVEN y (lane mf-tail5): a regressor's, for this fit only.
+    slot[].fit_y = call[].y.data
+    slot[].fit_given = 0
+    slot[].fit_given_dtype = MEMBER_F32
+    var g = call[].y_given
+    if (not _classifier_kind(slot[].kind) and g.given() and g.home == MEMBER_HOME_HOST and g.rows == call[].y.rows
+            and g.cols == call[].y.cols and g.stride == g.cols and g.offset == 0
+            and (g.dtype == MEMBER_F64 or g.dtype == MEMBER_I64 or g.dtype == MEMBER_I32)):
+        slot[].fit_given = g.data
+        slot[].fit_given_dtype = g.dtype
     try:
         if _stack_kind_code(slot[].kind):
             _fit_stack(slot, call)
@@ -3406,15 +4190,24 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
             _fit_search(slot, call)
         elif _multi_kind(slot[].kind):
             _fit_multi(slot, call)
+        elif _rfe_kind(slot[].kind):
+            _fit_rfe(slot, call)
         else:
             _fit_vote(slot, call)
+        if slot[].refusal_late and len(slot[].refusal) != 0 and not _rfe_kind(slot[].kind):
+            # THE DOOR'S REFUSAL after the nested fits (lane mf-refuse5): the door checks it there.
+            raise Error(slot[].refusal.copy())
         if not _bag_kind(slot[].kind):
             _nested_outputs(slot)
         _unit_views(slot)
         slot[].fitted = True
     except error:
+        slot[].fit_y = 0
+        slot[].fit_given = 0
         _drop_states(slot)
         raise error^
+    slot[].fit_y = 0
+    slot[].fit_given = 0  # read during the fit only (core/member_abi.mojo `MemberCall.y_given`)
 
 
 # ------------------------------------------------------------------ PREDICT
@@ -3600,6 +4393,7 @@ def _predict_cal(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
         var at = 0
         var cols_at = 0
         var ks = 0
+        var used = slot[].pair_count[i]
         if k == 2:
             if cols != 1:
                 at = _index_of_code(slot[].unit_held[i], 1)
@@ -3610,16 +4404,20 @@ def _predict_cal(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
         else:
             # THE PLACEMENT RULE of a pair whose member lacks a class (lane mf-cal3b).
             var place = cal_fold_place(k, slot[].unit_held[i], op, cols, True, 0)
-            if len(place.calibrate) != slot[].pair_count[i]:
+            # scikit-learn's predict zips the score columns with the calibrators: a pair fitted with more
+            # calibrators than its member's columns place (ensemble=False's full fit with the unlabeled marker,
+            # lane mf-meta5b: zipped there with the out-of-fold columns) reads the first of them.
+            if len(place.calibrate) > slot[].pair_count[i]:
                 raise Error("ValueError: mojolearn: CalibratedClassifierCV: a pair holds " + String(slot[].pair_count[i])
                             + " calibrators for a member placed at " + String(len(place.calibrate)) + " columns")
+            used = len(place.calibrate)
             placed.append(place.place.copy())
             cols_at = Int(placed[len(placed) - 1].unsafe_ptr())
             ks = len(place.place)
         m.class_cols = cols_at
         members.append(m)
-        cal_pairs.append(CalPair(at, cols_at, ks, len(cals), slot[].pair_count[i]))
-        for j in range(slot[].pair_first[i], slot[].pair_first[i] + slot[].pair_count[i]):  # driver-loop: over the pair's calibrators
+        cal_pairs.append(CalPair(at, cols_at, ks, len(cals), used))
+        for j in range(slot[].pair_first[i], slot[].pair_first[i] + used):  # driver-loop: over the pair's calibrators
             cals.append(CalFit(slot[].cal_iso[j], slot[].cal_a[j], slot[].cal_b[j],
                                Int(slot[].cal_kx[j].unsafe_ptr()), Int(slot[].cal_ky[j].unsafe_ptr()), slot[].cal_m[j]))
     var scratch = List[Float64]()
@@ -3773,6 +4571,8 @@ def _predict(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
         _forward_best(slot, call, operation)
     elif _multi_kind(slot[].kind):
         _predict_multi(slot, call, operation)
+    elif _rfe_kind(slot[].kind):
+        _call_rfe(slot, call, operation)
     else:
         _predict_vote(slot, call, operation)
 
@@ -3817,10 +4617,27 @@ def _outputs(call: _CallPtr) raises:
         if _ada_kind(kind):
             _outputs_ada(call, kind, call[].classes)
             return
+        if _rfe_kind(kind):
+            var entry_words = _plan_words(Int(words[1]))
+            if len(entry_words) != META_RFE_WORDS:
+                raise Error("member ABI: an RFE member needs its " + String(META_RFE_WORDS) + " settings words")
+            _outputs_rfe(call, _plan_first(Int(words[1])), entry_words,
+                         call[].classes if kind == META_RFE_CLASSIFIER else 0)
+            return
         if _search_kind(kind):
             _outputs_search(call, _plan_first(Int(words[1])), call[].classes if kind == META_SEARCH_CLASSIFIER else 0)
             return
         if _multi_kind(kind):
+            if call[].flags == MEMBER_OP_PREDICT_PROBA and kind == META_MULTI_CLASSIFIER:
+                # (lane mf-tail5) every output's classes, float64 (`_proba_multi`)
+                var total = 0
+                if call[].class_counts != 0:
+                    var given = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=call[].class_counts)
+                    for j in range(max(call[].y.cols, 1)):  # small-loop(the outputs' class counts)
+                        total += given[j]
+                call[].out_cols = total
+                call[].out_dtype = MEMBER_F64
+                return
             if call[].flags != MEMBER_OP_PREDICT:
                 member_unsupported(_name(kind), call[].flags)
             call[].out_cols = max(call[].y.cols, 1)
@@ -3854,6 +4671,13 @@ def _outputs(call: _CallPtr) raises:
     if _ada_kind(slot[].kind):
         _outputs_ada(call, slot[].kind, slot[].classes if slot[].fitted else call[].classes)
         return
+    if _rfe_kind(slot[].kind):
+        if slot[].fitted:
+            _outputs_rfe_fitted(call, slot)
+        else:
+            _outputs_rfe(call, slot[].base_plans[0], slot[].words,
+                         call[].classes if slot[].kind == META_RFE_CLASSIFIER else 0)
+        return
     if _search_kind(slot[].kind):
         if not slot[].fitted:
             _outputs_search(call, slot[].base_plans[0], call[].classes if slot[].kind == META_SEARCH_CLASSIFIER else 0)
@@ -3865,6 +4689,15 @@ def _outputs(call: _CallPtr) raises:
         call[].classes = slot[].classes
         return
     if _multi_kind(slot[].kind):
+        if call[].flags == MEMBER_OP_PREDICT_PROBA and slot[].kind == META_MULTI_CLASSIFIER and slot[].fitted:
+            # (lane mf-tail5) every output's own classes, float64 (`_proba_multi`)
+            var width = _multi_proba_width(slot)
+            if width == 0:
+                member_unsupported(_name(slot[].kind), call[].flags)
+            call[].out_cols = width
+            call[].out_dtype = MEMBER_F64
+            call[].classes = 0
+            return
         if call[].flags != MEMBER_OP_PREDICT:
             member_unsupported(_name(slot[].kind), call[].flags)
         if not slot[].fitted:
@@ -3895,18 +4728,67 @@ def _outputs(call: _CallPtr) raises:
 # ------------------------------------------------------------------ EXPORT / IMPORT
 
 
+#: LabelPropagation / LabelSpreading (core/xneighbors_member.mojo kinds 7 / 8, `LP_MARKER_WORD`).
+comptime _LP_KIND_PROPAGATION = 7
+comptime _LP_KIND_SPREADING = 8
+comptime _LP_MARKER = 13
+
+
+def _cal_unit_marker(plan: MemberPlan) -> Int:
+    """The unlabeled marker a Calibrated unit's base reads (lane mf-meta5b): a LabelPropagation /
+    LabelSpreading plan's marker word, else -1."""
+    if (plan.family == MEMBER_FAMILY_XNEIGHBORS and (plan.kind == _LP_KIND_PROPAGATION or plan.kind == _LP_KIND_SPREADING)
+            and len(plan.params) > _LP_MARKER):
+        return Int(plan.params[_LP_MARKER])
+    return -1
+
+
+def _export_forward(slot: _SlotPtr, call: _CallPtr) raises:
+    """EXPORT `META_BLOCK_FORWARD` (its note): the nested member the first word names, asked for the rest of
+    the path (one more forwarded export when more than its block is left), its view handed back as this
+    state's answer. A path step this state does not hold raises in the ABI's words."""
+    var count = call[].param_count
+    if count < 2 or call[].params == 0:
+        raise Error("member ABI: a forwarded export names a nested member and a block")
+    var words = _F64P(unsafe_from_address=call[].params)
+    var nested = len(slot[].states)
+    var at = Int(words[0])
+    if at < 0:
+        at = nested - 1
+    if at < 0 or at >= nested or slot[].states[at] == 0:
+        raise Error("member ABI: a meta member has no nested member " + String(Int(words[0])) + " of "
+                    + String(nested))
+    var inner = MemberCall(slot[].plans[at].route, slot[].states[at])
+    inner.flags = 0
+    if count == 2:
+        inner.block = Int(words[1])
+    else:
+        inner.block = META_BLOCK_FORWARD
+        inner.params = call[].params + 8
+        inner.param_count = count - 1
+    _ = member_call(slot[].plans[at].member, MEMBER_OP_EXPORT, inner)
+    call[].dst = inner.dst
+    call[].out_cols = inner.out_cols
+
+
 def _export(slot: _SlotPtr, call: _CallPtr) raises:
     if call[].flags == MEMBER_EXPORT_OWN:
         for u in range(len(slot[].states)):  # driver-loop: over the nested members (each owns its rows)
             if slot[].states[u] != 0:
                 member_own(slot[].plans[u], slot[].states[u])
+        for u in range(len(slot[].fold_states)):  # driver-loop: over the cv tools' kept unit states (each owns its rows)
+            if slot[].fold_states[u] != 0:
+                member_own(slot[].base_plans[slot[].fold_owner[u]], slot[].fold_states[u])
         return
     _fitted(slot)
     var block = call[].block
+    if block == META_BLOCK_FORWARD and call[].flags != MEMBER_BLOCK_BY_INDEX:
+        _export_forward(slot, call)
+        return
     if call[].flags == MEMBER_BLOCK_BY_INDEX:
         # vote / stack: nested, widths; a unit kind: nested, then its own words (calibrated pairs, bag draws),
         # then a bag's out-of-bag outputs.
-        var blocks = 2
+        var blocks = 2  # an RFE state: nested (the final estimator), then its fitted words
         if slot[].kind == META_OVR or _multi_kind(slot[].kind):
             blocks = 1
         elif _bag_kind(slot[].kind):
@@ -3917,6 +4799,8 @@ def _export(slot: _SlotPtr, call: _CallPtr) raises:
             block = META_BLOCK_NESTED
         elif _search_kind(slot[].kind):
             block = META_BLOCK_SEARCH
+        elif _rfe_kind(slot[].kind):
+            block = META_BLOCK_RFE
         elif not _unit_kind(slot[].kind):
             block = META_BLOCK_WIDTHS
         elif _ada_kind(slot[].kind):
@@ -3943,6 +4827,11 @@ def _export(slot: _SlotPtr, call: _CallPtr) raises:
         call[].dst = MemberMatrix(Int(slot[].ada_words.unsafe_ptr()), 1, len(slot[].ada_words), MEMBER_F64)
     elif block == META_BLOCK_SEARCH and _search_kind(slot[].kind):
         call[].dst = MemberMatrix(Int(slot[].search_words.unsafe_ptr()), 1, len(slot[].search_words), MEMBER_F64)
+    elif block == META_BLOCK_FOLDS and _search_kind(slot[].kind):
+        call[].dst = MemberMatrix(Int(slot[].fold_words.unsafe_ptr()), 1 if len(slot[].fold_words) > 0 else 0,
+                                  len(slot[].fold_words), MEMBER_I64)
+    elif block == META_BLOCK_RFE and _rfe_kind(slot[].kind):
+        call[].dst = MemberMatrix(Int(slot[].rfe_words.unsafe_ptr()), 1, len(slot[].rfe_words), MEMBER_F64)
     elif block == MEMBER_BLOCK_SCALARS:
         call[].dst = MemberMatrix(Int(slot[].scalar_words.unsafe_ptr()), 1, len(slot[].scalar_words), MEMBER_F64)
     else:
@@ -4040,8 +4929,8 @@ def _import(slot: _SlotPtr, call: _CallPtr) raises:
         var count = call[].x.rows * call[].x.cols
         var unit = _unit_kind(slot[].kind)
         var wrong = count < 1 if unit else count != len(slot[].plans)
-        if _search_kind(slot[].kind):
-            wrong = count != 1  # the refitted best only
+        if _search_kind(slot[].kind) or _rfe_kind(slot[].kind):
+            wrong = count != 1  # the refitted best only; an RFE's final estimator
         if wrong or call[].x.dtype != MEMBER_I64 or call[].x.data == 0:
             raise Error("member ABI: a meta member imports one int64 state handle per member")
         _drop_states(slot)
@@ -4073,6 +4962,10 @@ def _import(slot: _SlotPtr, call: _CallPtr) raises:
         if call[].x.dtype != MEMBER_F64 or call[].x.data == 0:
             raise Error("member ABI: a search member imports its words as float64 words")
         _import_search(slot, _F64P(unsafe_from_address=call[].x.data), call[].x.rows * call[].x.cols)
+    elif call[].block == META_BLOCK_RFE and _rfe_kind(slot[].kind):
+        if call[].x.dtype != MEMBER_F64 or call[].x.data == 0:
+            raise Error("member ABI: an RFE member imports its words as float64 words")
+        _import_rfe(slot, _F64P(unsafe_from_address=call[].x.data), call[].x.rows * call[].x.cols)
     elif call[].block == META_BLOCK_ADA and _ada_kind(slot[].kind):
         if call[].x.dtype != MEMBER_F64 or call[].x.data == 0:
             raise Error("member ABI: an AdaBoost member imports its weights and errors as float64 words")
@@ -4107,6 +5000,11 @@ def _import(slot: _SlotPtr, call: _CallPtr) raises:
             raise Error("member ABI: an AdaBoost member import needs one weight per round member")
         if _search_kind(kind) and len(slot[].search_words) == 0:
             raise Error("member ABI: a search member import needs its search words")
+        if _rfe_kind(kind) and len(slot[].rfe_columns) == 0:
+            raise Error("member ABI: an RFE member import needs its fitted words")
+        if _rfe_kind(kind):
+            # The final estimator's plan: the rounds' plan with the importance word cleared, as its fit made it.
+            slot[].plans = [rfe_final_plan(slot[].base_plans[0], slot[].words[META_RFE_IMPORTANCE_WORD] != 0.0)]
         var counts = List[Int]()
         if call[].class_counts != 0:
             var given = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=call[].class_counts)
@@ -4161,9 +5059,13 @@ def _ensemble_member(operation: Int, address: Int) raises -> Int:
         if call[].state == 0:
             return _UNION
         var kind = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
+        if _refused_first(kind):
+            return _refused_mask(kind[].kind)
+        if _rfe_kind(kind[].kind):
+            return _rfe_mask(kind) | _reads_given(kind, kind[].base_masks)
         if _unit_kind(kind[].kind) or _search_kind(kind[].kind):
-            return _kind_mask(kind[].kind, kind[].flag, kind[].base_masks)
-        return _kind_mask(kind[].kind, kind[].flag, kind[].masks)
+            return _kind_mask(kind[].kind, kind[].flag, kind[].base_masks) | _reads_given(kind, kind[].base_masks)
+        return _kind_mask(kind[].kind, kind[].flag, kind[].masks) | _reads_given(kind, kind[].masks)
     if operation == MEMBER_OP_NEW:
         _new(call)
         return 0
@@ -4190,6 +5092,8 @@ def _ensemble_member(operation: Int, address: Int) raises -> Int:
     elif operation == MEMBER_OP_SCORE and _search_kind(slot[].kind):
         _fitted(slot)
         _forward_best(slot, call, operation)
+    elif (operation == MEMBER_OP_SCORE or operation == MEMBER_OP_TRANSFORM) and _rfe_kind(slot[].kind):
+        _call_rfe(slot, call, operation)
     else:
         member_unsupported(_name(slot[].kind), operation)
     return 0

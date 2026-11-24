@@ -161,6 +161,15 @@ def _fitted_row(mut door: DecompDoor, mut kit: DKit, source: PythonObject, name:
     return decomp_door_borrow(door, kit, array, 1, cols)
 
 
+# The dictionary learners' refusal of a Python `callback` (sklearn calls it
+# on every iteration: serving it would call back into Python). One text for
+# the fit doors (bindings/dict_learning_native_pack.mojo) and the member
+# admission (providers/python/member_xdecomp_boundary_door.mojo), with the
+# native alternative named (lane mf-nbr6).
+comptime DL_CALLBACK_WORDS = ("NotImplementedError: callback is not carried (a Python callback would be called "
+    + "back on every iteration); construct the estimator with callback=None: n_iter_ records the iterations run")
+
+
 comptime _GRAM_NAME = "components_#gram"
 
 

@@ -1598,6 +1598,72 @@ def host_kmeans_fit(
     return KMeansHostResult(result.inertia, result.n_iter, sum_scale, weight_scale)
 
 
+def host_kmeans_assign(
+    x: List[Float32],
+    n: Int,
+    d: Int,
+    centroids: List[Float32],
+    k: Int,
+    metric: Int,
+    what: String,
+    mut labels: List[UInt32],
+    mut min_dist: List[Float32],
+) raises:
+    """THE ONE HOST ASSIGNMENT PASS of predict and score (lane mf-kmeans5):
+    the shape guard in `what`'s words, the metric refused by name as the fit
+    refuses it, then `host_fit_main`'s post-loop assignment statement for
+    statement (the same row norms, the same `host_assign`). `labels` and
+    `min_dist` are sized here (n each)."""
+    if n < 1 or d < 1 or k < 1:
+        raise Error(
+            what
+            + " needs n_samples, n_features and n_clusters >= 1: got "
+            + String(n)
+            + ", "
+            + String(d)
+            + ", "
+            + String(k)
+        )
+    host_validate_params(metric, k, 1e-4, DEFAULT_OVERSAMPLING)
+    var x_norm = host_row_norms(x, n, d, host_norms_take_sqrt(metric))
+    var c_norm = host_row_norms(centroids, k, d, host_norms_take_sqrt(metric))
+    if len(labels) != n:
+        labels = List[UInt32](length=n, fill=UInt32(0))
+    min_dist = List[Float32](length=n, fill=Float32(0.0))
+    host_assign(
+        x, n, x_norm, centroids, k, c_norm, d, host_metric_is_sqrt(metric),
+        labels, min_dist,
+    )
+
+
+def host_kmeans_score(
+    x: List[Float32],
+    n: Int,
+    d: Int,
+    centroids: List[Float32],
+    k: Int,
+    metric: Int,
+    weights_in: List[Float32],
+    n_weights: Int,
+) raises -> Float64:
+    """`kmeans_score`, `cluster/estimator.mojo` (lane mf-kmeans5): the host
+    column of `KMeans.score`'s inertia. `host_kmeans_assign`, then
+    `host_fit_main`'s post-loop cost, `host_sum_device` in
+    `SUM_MODE_PRODUCT` over `min_dist` and the weights (1.0 per row for
+    unit weights, `n_weights` 0), widened to float64 as the fit widens it:
+    on the training rows, the fitted centers and the fit's weights it is
+    `inertia_` bit for bit."""
+    if n_weights != 0 and n_weights != n:
+        raise Error("ValueError: sample_weight and X have different numbers of rows")
+    var labels = List[UInt32]()
+    var min_dist = List[Float32]()
+    host_kmeans_assign(x, n, d, centroids, k, metric, String("kmeans_score"), labels, min_dist)
+    if n_weights != 0:
+        return Float64(host_sum_device(min_dist, weights_in, n, SUM_MODE_PRODUCT))
+    var weights = List[Float32](length=n, fill=Float32(1.0))
+    return Float64(host_sum_device(min_dist, weights, n, SUM_MODE_PRODUCT))
+
+
 def host_kmeans_predict(
     x: List[Float32],
     n: Int,
@@ -1614,23 +1680,8 @@ def host_kmeans_predict(
     is `labels_` by construction. cuML's `KMeans.predict` is
     `_predict_labels_inertia` keeping the labels (`kmeans.pyx:1071-1082`),
     one cuVS assignment pass."""
-    if n < 1 or d < 1 or k < 1:
-        raise Error(
-            "kmeans_predict needs n_samples, n_features and n_clusters >= 1: got "
-            + String(n)
-            + ", "
-            + String(d)
-            + ", "
-            + String(k)
-        )
-    host_validate_params(metric, k, 1e-4, DEFAULT_OVERSAMPLING)
-    var x_norm = host_row_norms(x, n, d, host_norms_take_sqrt(metric))
-    var c_norm = host_row_norms(centroids, k, d, host_norms_take_sqrt(metric))
-    var min_dist = List[Float32](length=n, fill=Float32(0.0))
-    host_assign(
-        x, n, x_norm, centroids, k, c_norm, d, host_metric_is_sqrt(metric),
-        labels, min_dist,
-    )
+    var min_dist = List[Float32]()
+    host_kmeans_assign(x, n, d, centroids, k, metric, String("kmeans_predict"), labels, min_dist)
     comptime if KMEANS_PREDICT_HOST_SABOTAGE:
         # THE SABOTAGE ARM: one bit into every label. Wrong on purpose; see
         # KMEANS_PREDICT_HOST_SABOTAGE.

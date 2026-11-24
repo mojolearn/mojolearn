@@ -602,6 +602,32 @@
   },
   {
    "arm_lanes": {
+    "coverage-gbdt-importances": [
+     "trees-gbdt-importances"
+    ]
+   },
+   "arms": [
+    "coverage-gbdt-importances"
+   ],
+   "builds": [
+    "build_gbdt",
+    "build_gbdt_host"
+   ],
+   "columns": [
+    "cpu",
+    "device"
+   ],
+   "family": "gbdt",
+   "id": "gbdt-4",
+   "lanes": [
+    "trees-gbdt-importances"
+   ],
+   "patches": [
+    "gbdt/checks/sabotage/coverage_gbdt_importances.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
     "coverage-gaussian_process-gp_binding_entries": [
      "gp-lml-theta"
     ]

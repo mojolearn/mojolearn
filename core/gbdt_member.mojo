@@ -23,7 +23,34 @@ text):
     metric; MEMBER_CAN_CLASSIFIER),
   1 `GradientBoosting` (the booster: its own predict returns raw scores),
   2 `GradientBoostingRegressor` (RMSE; predict float32 rows x 1; no score:
-    the caller predicts and runs its own R^2).
+    the caller predicts and runs its own R^2),
+  3 `ExperimentalTwoLevelFeatureFreq` (lane mf-meta5): its own fit, the
+    estimator's two-level FeatureFreq RUN (`xg_feature_freq_fit`, the gbdt
+    entry's `feature_freq_fit`, the body its door runs) after its data checks
+    (gbdt/trees_gbdt_fit_run.mojo `gbdt_feature_freq_check` /
+    `gbdt_weights_check`, the door's ONE BODY), then the booster's predict
+    (raw float32 rows x 1). NEW words: [3, the GradientBoosting config, the
+    learning rate, l2_leaf_reg, random_state, the S source columns, S, then
+    the feature-list tail (0, 0)], read at UNPACK as its fit door reads them.
+  4 `OrderedRMSE` (lane mf-hostent5): its own fit, the estimator's ordered
+    RMSE RUN (`xg_ordered_fit`, the gbdt entry's `ordered_fit`, the body its
+    door runs) after its data checks (gbdt/trees_gbdt_fit_run.mojo
+    `gbdt_ordered_rows_check` / `gbdt_ordered_target_check` /
+    `gbdt_ordered_order` / `gbdt_weights_check`, the door's ONE BODY), over
+    the caller's `call.permutation` (int64 row ids: the fit's required
+    `permutation`, read at the caller's UNPACK by the door's admission; not
+    given: the fit's TypeError in Python's words), then the booster's predict
+    (raw float32 rows x 1). NEW words: [4, the GradientBoosting config,
+    n_estimators, max_depth, border_count, learning_rate, l2_leaf_reg, then
+    the feature-list tail (0, 0)], read at UNPACK as its fit door reads them.
+  5 `HostGBDT` (lane mf-hostent5): a saved model, PREDICT-ONLY (no
+    MEMBER_CAN_FIT): its fitted state is IMPORTED from its own fields (the
+    model text, its dimensions, bias and category map: the blocks below)
+    and predicted on the host image by the booster's predict (raw float32
+    rows x approx_dim) and, for Logloss / CrossEntropy, its sigmoid pair
+    (float64 rows x 2), as `HostGBDT.predict` / `predict_proba`; the
+    multiclass proba and a fit are refused in its words. NEW words: [5, a
+    GradientBoosting config carrying the saved loss, (0, 0)].
 The adapters' NEW words are their inner learner's config (the learner the
 adapter's fit builds), so their fit is the learner's fit.
 
@@ -31,7 +58,7 @@ Route slots: `route.entry` the gbdt entry; `route.mode` / `route.vendor`
 the image's key. `I.release(handle)` returns a resident model to the
 image's registry (under the image's registry lock).
 
-MEMBER_OP_NEW parameters (Float64 words): [0] kind (0, 1, 2), then the
+MEMBER_OP_NEW parameters (Float64 words): [0] kind (0 .. 5), then the
 `GbdtConfig` words in `gbdt_config_words` order (bindings/gbdt_config_run.mojo:
 ints as the bit pattern of their Int64, booleans 0/1, strings as a length
 and one word per byte, lists as a length and their words), then the
@@ -76,8 +103,12 @@ Fitted-state blocks (MEMBER_OP_EXPORT / MEMBER_OP_IMPORT), in index order:
   4 `MEMBER_BLOCK_FAMILY + 3` float64 1 x iterations: the held-out loss
     curve (`test_loss_curve_`, lane mf-left4), 0 rows for a fit without an
     eval set (None)
+  5 `MEMBER_BLOCK_FEATURE_IMPORTANCES` float32 1 x features: the fit's
+    `feature_importances_` (lane mf-imp6: `xg_importances` on the block the
+    fit read, core/gbdt_importance.mojo), 0 rows for an imported model saved
+    without them; an import takes float32 or the public float64 vector
 An import needs blocks 0 to 2 (and 3 for a CTR model, before the scalars;
-4 is optional); the block that carries MEMBER_IMPORT_DONE comes last.
+4 and 5 are optional); the block that carries MEMBER_IMPORT_DONE comes last.
 
 LIFETIME: the state owns everything it reads after FIT (the model text and
 the curves); it keeps no pointer into a fit buffer (no MEMBER_BORROWS_FIT).
@@ -96,10 +127,13 @@ from core.gbdt_entry_table import gbdt_vendor_word
 from gbdt.fit_request import GbdtFitArgs, gbdt_string_at
 from gbdt.fit_calls import (
     xg_row_major, xg_model_dim, xg_fit, xg_resident, xg_resident_prepare, xg_resident_predict, xg_predict,
-    xg_predict_multi, xg_sigmoid_pair, xg_binary,
+    xg_predict_multi, xg_sigmoid_pair, xg_binary, xg_feature_freq_fit, xg_ordered_fit, xg_importances,
 )
 from gbdt.trees_gbdt_run import gbdt_text_has_ctr
-from gbdt.trees_gbdt_fit_run import gbdt_bias_of, gbdt_check_group_rows, _pair_end_range
+from gbdt.trees_gbdt_fit_run import (
+    gbdt_bias_of, gbdt_check_group_rows, _pair_end_range, gbdt_feature_freq_check, gbdt_weights_check,
+    gbdt_ordered_rows_check, gbdt_ordered_target_check, gbdt_ordered_order,
+)
 from gbdt.data.category_map import (
     CategoryMaps, CategoryKeyPtr, CategoryF32Ptr, category_keys_from_f32, category_block_columns,
     category_block_feature, category_apply_column,
@@ -120,7 +154,7 @@ from core.member_abi import (
     MEMBER_OP_SCORE,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
     MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_HOME_DEVICE, MEMBER_GIL_FREE, MEMBER_CAN_DECISION, MEMBER_CAN_SCORE,
-    MEMBER_CAN_CLASSIFIER,
+    MEMBER_CAN_CLASSIFIER, MEMBER_CAN_IMPORTANCES, MEMBER_BLOCK_FEATURE_IMPORTANCES,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -135,9 +169,16 @@ comptime _ESTIMATOR = "GradientBoosting"
 comptime _KIND_CLASSIFIER = 0
 comptime _KIND_BOOSTER = 1
 comptime _KIND_REGRESSOR = 2
+# Lane mf-meta5: `ExperimentalTwoLevelFeatureFreq` (module note, KIND 3).
+comptime _KIND_FEATURE_FREQ = 3
+# Lane mf-hostent5: `OrderedRMSE` (its own fit) and `HostGBDT` (predict-only import) (module note, KINDS 4, 5).
+comptime _KIND_ORDERED = 4
+comptime _KIND_HOST = 5
+#: OrderedRMSE's fit without `permutation` (Python's words for the missing keyword-only argument).
+comptime _ORDERED_NO_PERMUTATION = "TypeError: OrderedRMSE.fit() missing 1 required keyword-only argument: 'permutation'"
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
-comptime _BLOCKS = 5
+comptime _BLOCKS = 6
 comptime _SCALARS = 9
 #: the image's predict modes (bindings/trees_public_gbdt_door.mojo `_PREDICT_*`)
 comptime _PREDICT_RAW = 0
@@ -189,6 +230,20 @@ struct GbdtMemberSlot(Copyable, Movable, Defaultable):
     # estimator's `test_loss_curve_`; `has_test` False: None.
     var test: List[Float64]
     var has_test: Bool
+    # `feature_importances_` (lane mf-imp6: float32 per input column, the
+    # fit's xg_importances; empty for an imported model saved without them).
+    var imp: List[Float32]
+    # Kind 3 (lane mf-meta5): the FeatureFreq fit's source columns and settings.
+    var ff_sources: List[Int]
+    var ff_rate: Float64
+    var ff_l2: Float64
+    var ff_seed: Int
+    # Kind 4 (lane mf-hostent5): the OrderedRMSE fit's settings.
+    var od_trees: Int
+    var od_depth: Int
+    var od_border: Int
+    var od_rate: Float64
+    var od_l2: Float64
     # Export forms, built at export.
     var x_text: List[Int32]
     var x_scalars: List[Float64]
@@ -215,6 +270,16 @@ struct GbdtMemberSlot(Copyable, Movable, Defaultable):
         self.cat_map = List[UInt64]()
         self.test = List[Float64]()
         self.has_test = False
+        self.imp = List[Float32]()
+        self.ff_sources = List[Int]()
+        self.ff_rate = 0.0
+        self.ff_l2 = 0.0
+        self.ff_seed = 0
+        self.od_trees = 0
+        self.od_depth = 0
+        self.od_border = 0
+        self.od_rate = 0.0
+        self.od_l2 = 0.0
         self.x_text = List[Int32]()
         self.x_scalars = List[Float64]()
 
@@ -259,6 +324,7 @@ def _clear[I: GbdtMemberImage](slot: _SlotPtr):
     slot[].cat_map = List[UInt64]()
     slot[].test = List[Float64]()
     slot[].has_test = False
+    slot[].imp = List[Float32]()
     slot[].features = 0
     slot[].dim = 0
     slot[].classes = 0
@@ -269,12 +335,18 @@ def _name(kind: Int) -> String:
         return String("GradientBoostingClassifier")
     if kind == _KIND_REGRESSOR:
         return String("GradientBoostingRegressor")
+    if kind == _KIND_FEATURE_FREQ:
+        return String("ExperimentalTwoLevelFeatureFreq")
+    if kind == _KIND_ORDERED:
+        return String("OrderedRMSE")
+    if kind == _KIND_HOST:
+        return String("HostGBDT")
     return String(_ESTIMATOR)
 
 
 def _kind_word(word: Float64) raises -> Int:
-    if word != 0.0 and word != 1.0 and word != 2.0:
-        raise Error("member ABI: a Gbdt member's kind word is 0, 1 or 2")
+    if word < 0.0 or word > 5.0 or word != Float64(Int(word)):
+        raise Error("member ABI: a Gbdt member's kind word is 0, 1, 2, 3, 4 or 5")
     return Int(word)
 
 
@@ -301,14 +373,46 @@ def _mint(words: _F64P, count: Int) raises -> Int:
     var hot = List[Int]()
     var head = _feature_tail(words, count, cat, hot)
     var kind = _kind_word(words[0])
+    # Kind 3: the FeatureFreq words before the feature-list tail (module note).
+    var sources = List[Int]()
+    var ff_rate = 0.0
+    var ff_l2 = 0.0
+    var ff_seed = 0
+    if kind == _KIND_FEATURE_FREQ:
+        var s_count = Int(words[head - 1]) if head >= 1 else -1
+        if s_count < 2 or head - 1 - s_count - 3 < 1:
+            raise Error("member ABI: an ExperimentalTwoLevelFeatureFreq member takes its settings and source columns")
+        for i in range(s_count):  # small-loop(the source columns)
+            sources.append(Int(words[head - 1 - s_count + i]))
+        var at = head - 1 - s_count - 3
+        ff_rate = words[at]
+        ff_l2 = words[at + 1]
+        ff_seed = Int(words[at + 2])
+        head = at
+    # Kind 4: the five OrderedRMSE settings before the feature-list tail (module note).
+    var od_trees = 0
+    var od_depth = 0
+    var od_border = 0
+    var od_rate = 0.0
+    var od_l2 = 0.0
+    if kind == _KIND_ORDERED:
+        if head - 5 < 2:
+            raise Error("member ABI: an OrderedRMSE member takes its five settings")
+        var at = head - 5
+        od_trees = Int(words[at])
+        od_depth = Int(words[at + 1])
+        od_border = Int(words[at + 2])
+        od_rate = words[at + 3]
+        od_l2 = words[at + 4]
+        head = at
     var copied = List[Float64](length=head, fill=0.0)
     unsafe_memcpy(dest=copied.unsafe_ptr(), src=words, count=head)
     var config = gbdt_config_of_words(copied^, 1)
     # The adapters fix their learner's loss (`_GBDTAdapter._loss`).
     if kind == _KIND_CLASSIFIER and config.loss != "Logloss":
         raise Error("member ABI: a GradientBoostingClassifier member fits loss='Logloss'")
-    if kind == _KIND_REGRESSOR and config.loss != "RMSE":
-        raise Error("member ABI: a GradientBoostingRegressor member fits loss='RMSE'")
+    if (kind == _KIND_REGRESSOR or kind == _KIND_FEATURE_FREQ or kind == _KIND_ORDERED) and config.loss != "RMSE":
+        raise Error("member ABI: a " + _name(kind) + " member fits loss='RMSE'")
     var store = SharedSlot[GbdtMemberStore, _STORE_NAME, 2].get_or_create_ptr()
     var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
     shared_slot_lock(lock)
@@ -330,6 +434,15 @@ def _mint(words: _F64P, count: Int) raises -> Int:
         slot[].config = config^
         slot[].cat_given = cat^
         slot[].hot_given = hot^
+        slot[].ff_sources = sources^
+        slot[].ff_rate = ff_rate
+        slot[].ff_l2 = ff_l2
+        slot[].ff_seed = ff_seed
+        slot[].od_trees = od_trees
+        slot[].od_depth = od_depth
+        slot[].od_border = od_border
+        slot[].od_rate = od_rate
+        slot[].od_l2 = od_l2
         slot[].fitted = False
         slot[].resident = -1
         return slot[].generation * _INDEX_SPAN + index + 1
@@ -780,6 +893,15 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     PairLogit's explicit `pairs` / `pairs_weight`, and the categorical keys
     of a text X (`call.cat_keys` / `eval_cat_keys`, the door's encoding read
     at the caller's UNPACK)."""
+    if slot[].kind == _KIND_FEATURE_FREQ:
+        _fit_feature_freq[I](slot, call)
+        return
+    if slot[].kind == _KIND_ORDERED:
+        _fit_ordered[I](slot, call)
+        return
+    if slot[].kind == _KIND_HOST:
+        # A saved model has no fit (HostGBDT defines none: Python's words for the missing attribute).
+        raise Error("AttributeError: 'HostGBDT' object has no attribute 'fit'")
     _whole(call)
     if call[].fit_output != 0:
         raise Error("TypeError: a Gbdt member has no fit output")
@@ -965,7 +1087,11 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     var args = GbdtFitArgs(x_addr, y_addr, w_addr, Int(flags.unsafe_ptr()), ex_addr, ey_addr,
                            fit_ints^, fit_floats^, fit_bad^, fit_strs^)
     var outcome = xg_fit(entry, row_major, args)
-    _ = len(scratch)  # the column-major copy lives until the fit returned
+    # `feature_importances_` (lane mf-imp6): the door's RUN on the same block
+    # the fit read (its layout, the categorical columns as their codes, the
+    # fit's weights), on the route's column.
+    var imp = xg_importances(entry, outcome.text, x_addr, rows, cols, row_major, w_addr, n_weights)
+    _ = len(scratch)  # the column-major copy lives until the fit and the importances returned
     _ = len(codes)  # the classifier's float32 targets (or the column-major y) too
     _ = len(flags)
     _ = len(sizes)
@@ -986,6 +1112,7 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
         dim = xg_model_dim(entry, outcome.text)
     _clear[I](slot)
     swap(slot[].cat_map, fitted_map)
+    swap(slot[].imp, imp)
     slot[].bias = gbdt_bias_of(outcome.text)
     swap(slot[].text, outcome.text)  # by swap: `outcome` is read after (moving a field out of it is refused)
     swap(slot[].learn, outcome.learn)
@@ -1000,6 +1127,124 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     slot[].classes = dim + 1 if config.loss == "MultiClass" else (dim if config.loss == "MultiClassOneVsAll" else 0)
     slot[].rate = rate
     slot[].ordered = options.boosting == "Ordered"
+    slot[].fitted = True
+
+
+def _fit_feature_freq[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
+    """`ExperimentalTwoLevelFeatureFreq.fit(X, y, sample_weight=)` on the member's views: the door's
+    checks in its order and words (`gbdt_feature_freq_check` over the member's column-major copy of X, as
+    the door admits X in F order; y finite, one per row; `gbdt_weights_check`), then the estimator's own
+    fit (`xg_feature_freq_fit` through the route's gbdt entry: the body its door runs) and the state the
+    door's PACK publishes (one model dimension, bias 0, no curves)."""
+    _whole(call)
+    var name = _name(slot[].kind)
+    if call[].fit_output != 0:
+        raise Error("TypeError: a Gbdt member has no fit output")
+    if (call[].eval_x.rows > 0 or call[].groups.rows > 0 or call[].pairs.rows > 0 or call[].cat_keys.rows > 0
+            or call[].eval_cat_keys.rows > 0):
+        raise Error("TypeError: an " + name + " member's fit reads X, y and sample weights only")
+    _dense(call[].x, MEMBER_F32, "X")
+    var rows = call[].x.rows
+    var cols = call[].x.cols
+    var xcm = _column_major(call[].x.data, rows, cols)
+    gbdt_feature_freq_check(Int(xcm.unsafe_ptr()), rows, cols, slot[].ff_sources)
+    _dense(call[].y, MEMBER_F32, "y")
+    if call[].y.cols != 1 or call[].y.rows != rows or not trees_finite_f32(call[].y.data, rows):
+        raise Error("mojolearn: y must be finite with one value per row")
+    var w_addr = call[].y.data
+    var n_weights = 0
+    if call[].weights.rows > 0:
+        _dense(call[].weights, MEMBER_F32, "sample weights")
+        if call[].weights.rows * call[].weights.cols != rows:
+            raise Error("mojolearn: sample_weight must have one value per row")
+        gbdt_weights_check(call[].weights.data, rows)
+        w_addr = call[].weights.data
+        n_weights = rows
+    var src = List[UInt32](length=len(slot[].ff_sources), fill=UInt32(0))
+    for i in range(len(slot[].ff_sources)):  # small-loop(the source columns)
+        src[i] = UInt32(slot[].ff_sources[i])
+    var entry = entry_ref_gil_free(call[].route.entry)
+    var text = xg_feature_freq_fit(entry, Int(xcm.unsafe_ptr()), call[].y.data, w_addr, Int(src.unsafe_ptr()), rows,
+                                   cols, n_weights, len(src), slot[].ff_rate, slot[].ff_l2, slot[].ff_seed)
+    var imp = xg_importances(entry, text, Int(xcm.unsafe_ptr()), rows, cols, False, w_addr, n_weights)
+    _ = len(xcm)  # the column-major copy lives until the fit and the importances returned
+    _ = len(src)
+    _clear[I](slot)
+    swap(slot[].imp, imp)
+    slot[].text = text^
+    slot[].learn = List[Float64]()
+    slot[].has_test = False
+    slot[].bias = 0.0
+    slot[].best_iteration = 0
+    slot[].stopped_early = False
+    slot[].features = cols
+    slot[].dim = 1
+    slot[].classes = 0
+    slot[].rate = slot[].ff_rate
+    slot[].ordered = False
+    slot[].fitted = True
+
+
+def _fit_ordered[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
+    """`OrderedRMSE.fit(X, y, permutation=, sample_weight=)` on the member's views (lane mf-hostent5): the
+    door's checks in its order and words (`gbdt_ordered_rows_check` over the member's column-major copy of X, as
+    the door admits X in F order; `gbdt_ordered_target_check`; the permutation through `gbdt_ordered_order`, its
+    bijection test and uint32 cast; `gbdt_weights_check`), then the estimator's own fit (`xg_ordered_fit`
+    through the route's gbdt entry: the body its door runs) and the state the door's PACK publishes (one model
+    dimension, bias 0, no curves). The door's settings checks (`_ordered_options`) ran at the caller's UNPACK.
+    No permutation given (every caller but one that hands the fit parameters): Python's TypeError for the
+    missing keyword-only argument, as `OrderedRMSE.fit(X, y)` raises it."""
+    _whole(call)
+    var name = _name(slot[].kind)
+    if call[].fit_output != 0:
+        raise Error("TypeError: a Gbdt member has no fit output")
+    if (call[].eval_x.rows > 0 or call[].groups.rows > 0 or call[].pairs.rows > 0 or call[].cat_keys.rows > 0
+            or call[].eval_cat_keys.rows > 0):
+        raise Error("TypeError: an " + name + " member's fit reads X, y, the permutation and sample weights only")
+    if call[].permutation.rows == 0:
+        raise Error(_ORDERED_NO_PERMUTATION)
+    _dense(call[].x, MEMBER_F32, "X")
+    var rows = call[].x.rows
+    var cols = call[].x.cols
+    var xcm = _column_major(call[].x.data, rows, cols)
+    gbdt_ordered_rows_check(Int(xcm.unsafe_ptr()), rows, cols)
+    _dense(call[].y, MEMBER_F32, "y")
+    if call[].y.cols != 1 or call[].y.rows != rows:
+        raise Error("mojolearn: y must be one-dimensional with one value per row")
+    gbdt_ordered_target_check(call[].y.data, rows)
+    var perm = call[].permutation
+    if perm.home == MEMBER_HOME_DEVICE or not perm.dense_host(MEMBER_I64):
+        raise Error("TypeError: a Gbdt member reads the permutation as a dense host int64 view")
+    var order = gbdt_ordered_order(perm.data, perm.rows * perm.cols, rows)
+    var w_addr = call[].y.data
+    var n_weights = 0
+    if call[].weights.rows > 0:
+        _dense(call[].weights, MEMBER_F32, "sample weights")
+        if call[].weights.rows * call[].weights.cols != rows:
+            raise Error("mojolearn: sample_weight must have one value per row")
+        gbdt_weights_check(call[].weights.data, rows)
+        w_addr = call[].weights.data
+        n_weights = rows
+    var entry = entry_ref_gil_free(call[].route.entry)
+    var text = xg_ordered_fit(entry, Int(xcm.unsafe_ptr()), call[].y.data, w_addr, Int(order.unsafe_ptr()), rows,
+                              cols, n_weights, slot[].od_trees, slot[].od_depth, slot[].od_border, slot[].od_rate,
+                              slot[].od_l2)
+    var imp = xg_importances(entry, text, Int(xcm.unsafe_ptr()), rows, cols, False, w_addr, n_weights)
+    _ = len(xcm)  # the column-major copy lives until the fit and the importances returned
+    _ = len(order)
+    _clear[I](slot)
+    swap(slot[].imp, imp)
+    slot[].text = text^
+    slot[].learn = List[Float64]()
+    slot[].has_test = False
+    slot[].bias = 0.0
+    slot[].best_iteration = 0
+    slot[].stopped_early = False
+    slot[].features = cols
+    slot[].dim = 1
+    slot[].classes = 0
+    slot[].rate = slot[].od_rate
+    slot[].ordered = False
     slot[].fitted = True
 
 
@@ -1276,16 +1521,27 @@ def _widen(src: Int, dst: Int, count: Int):
     host_parallelize(task, tasks)
 
 
+def _host_proba_refusal(loss: String) raises:
+    """`HostGBDT.predict_proba`'s refusals, in its words (bindings/host_tree_native_door.mojo
+    `host_tree_operation`): a multiclass loss, then any loss but Logloss / CrossEntropy."""
+    if loss == "MultiClass" or loss == "MultiClassOneVsAll":
+        raise Error("NotImplementedError: HostGBDT.predict_proba has no qualified multiclass transform")
+    if not _binary(loss):
+        raise Error("predict_proba is defined for Logloss and CrossEntropy")
+
+
 def _proba(slot: _SlotPtr, call: _CallPtr) raises:
     """`GradientBoosting.predict_proba`: the same routes and dtypes (the
     classifier's: `_classify`; the regressor has none)."""
     if slot[].kind == _KIND_CLASSIFIER:
         _classify(slot, call, True)
         return
-    if slot[].kind == _KIND_REGRESSOR:
+    if slot[].kind == _KIND_REGRESSOR or slot[].kind == _KIND_FEATURE_FREQ or slot[].kind == _KIND_ORDERED:
         member_unsupported(_name(slot[].kind), MEMBER_OP_PREDICT_PROBA)
     ref loss = slot[].config.loss
     var rows = call[].x.rows
+    if slot[].kind == _KIND_HOST:
+        _host_proba_refusal(loss)
     if _multi_output(loss):
         _require_fitted(slot, "predict_proba()")
         _x(slot, call)
@@ -1312,7 +1568,9 @@ def _proba(slot: _SlotPtr, call: _CallPtr) raises:
 
 def _block_of(index: Int) raises -> Int:
     if index < 0 or index >= _BLOCKS:
-        raise Error("member ABI: a Gbdt member has five fitted blocks")
+        raise Error("member ABI: a Gbdt member has six fitted blocks")
+    if index == 5:
+        return MEMBER_BLOCK_FEATURE_IMPORTANCES
     if index == 4:
         return MEMBER_BLOCK_FAMILY + 3
     if index == 3:
@@ -1346,6 +1604,11 @@ def _export(slot: _SlotPtr, call: _CallPtr) raises:
         # an eval set (`test_loss_curve_` None), else one row of its values.
         call[].dst = MemberMatrix(Int(slot[].test.unsafe_ptr()), 1 if slot[].has_test else 0, len(slot[].test),
                                   MEMBER_F64)
+    elif block == MEMBER_BLOCK_FEATURE_IMPORTANCES:
+        # `feature_importances_` (lane mf-imp6): float32 1 x features; no
+        # rows for an imported model saved without them.
+        var n = len(slot[].imp)
+        call[].dst = MemberMatrix(Int(slot[].imp.unsafe_ptr()), 1 if n > 0 else 0, n, MEMBER_F32)
     elif block == MEMBER_BLOCK_SCALARS:
         slot[].x_scalars = [Float64(slot[].features), Float64(slot[].dim), Float64(slot[].classes), slot[].bias,
                             Float64(slot[].best_iteration), 1.0 if slot[].stopped_early else 0.0, slot[].rate,
@@ -1391,6 +1654,20 @@ def _import[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
             _dense(view, MEMBER_F64, "a fitted block")
             unsafe_memcpy(dest=slot[].test.unsafe_ptr(), src=_F64P(unsafe_from_address=view.data),
                           count=view.rows * view.cols)
+    elif block == MEMBER_BLOCK_FEATURE_IMPORTANCES:
+        # `feature_importances_` (optional; lane mf-imp6): float32, or the
+        # public float64 vector (an exact widening of float32, narrowed back
+        # exactly).
+        var n = view.rows * view.cols
+        slot[].imp = List[Float32](length=n, fill=Float32(0.0))
+        if n > 0:
+            if view.dense_host(MEMBER_F64):
+                var src = _F64P(unsafe_from_address=view.data)
+                for c in range(n):  # small-loop(one word per input column: the import narrowing)
+                    slot[].imp[c] = Float32(src[c])
+            else:
+                _dense(view, MEMBER_F32, "a fitted block")
+                unsafe_memcpy(dest=slot[].imp.unsafe_ptr(), src=_F32P(unsafe_from_address=view.data), count=n)
     elif block == MEMBER_BLOCK_SCALARS:
         _dense(view, MEMBER_F64, "a fitted block")
         if view.rows * view.cols != _SCALARS:
@@ -1420,7 +1697,10 @@ def _import[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     slot[].ordered = slot[].x_scalars[8] != 0.0
     if slot[].features < 1 or slot[].dim < 1:
         raise Error("member ABI: a fitted Gbdt state needs its features and model dimension")
-    if slot[].kind != _KIND_BOOSTER and slot[].dim != 1:
+    if len(slot[].imp) != 0 and len(slot[].imp) != slot[].features:
+        raise Error("member ABI: the Gbdt feature importances block holds " + String(len(slot[].imp))
+                    + " values for " + String(slot[].features) + " features")
+    if slot[].kind != _KIND_BOOSTER and slot[].kind != _KIND_HOST and slot[].dim != 1:
         raise Error("member ABI: a " + _name(slot[].kind) + " state has one model dimension")
     if gbdt_text_has_ctr(slot[].text) and len(slot[].cat_map) == 0:
         raise Error("member ABI: a Gbdt CTR model (fitted with cat_features) is imported with its category map")
@@ -1448,12 +1728,22 @@ def _capabilities(kind: Int, loss: String) -> Int:
     # `gbdt_binary_native` touches no CPython; its device context is
     # `process_ctx`, own lock, as XG_SIGMOID_PAIR's), the same store and the
     # same resident registry; their own work is host loops over plain words.
+    # MEMBER_CAN_IMPORTANCES (lane mf-imp6): every fitting kind computes
+    # `feature_importances_` at FIT (MEMBER_BLOCK_FEATURE_IMPORTANCES), so RFE
+    # reads it (bindings/prep_select_run.mojo `rfe_member_source`). HostGBDT
+    # (predict-only) exports it when its file carried it, without the bit.
     var mask = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
-                | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_GIL_FREE)
+                | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_GIL_FREE | MEMBER_CAN_IMPORTANCES)
     if kind == _KIND_CLASSIFIER:
         return mask | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE | MEMBER_CAN_CLASSIFIER
-    if kind == _KIND_REGRESSOR:
+    if kind == _KIND_REGRESSOR or kind == _KIND_FEATURE_FREQ or kind == _KIND_ORDERED:
         return mask
+    if kind == _KIND_HOST:
+        # Predict-only (a saved model): no fit, no weights; its proba for the two binary losses only.
+        var host = MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_GIL_FREE
+        if _binary(loss):
+            return host | MEMBER_CAN_PREDICT_PROBA
+        return host
     if _multi_output(loss) or _binary(loss):
         mask |= MEMBER_CAN_PREDICT_PROBA
     return mask
@@ -1526,7 +1816,7 @@ def _member[I: GbdtMemberImage](operation: Int, address: Int) raises -> Int:
                 member_unsupported(_name(kind), call[].flags)
             call[].classes = 2
             return 0
-        if kind == _KIND_REGRESSOR:
+        if kind == _KIND_REGRESSOR or kind == _KIND_FEATURE_FREQ or kind == _KIND_ORDERED:
             if call[].flags != MEMBER_OP_PREDICT:
                 member_unsupported(_name(kind), call[].flags)
             call[].out_cols = 1
@@ -1538,6 +1828,8 @@ def _member[I: GbdtMemberImage](operation: Int, address: Int) raises -> Int:
                 raise Error("member ABI: the output width of a " + loss + " Gbdt member is chosen by its fit")
             dim = 1
         if call[].flags == MEMBER_OP_PREDICT_PROBA:
+            if kind == _KIND_HOST:
+                _host_proba_refusal(loss)
             if _binary(loss):
                 call[].out_cols = 2
                 call[].out_dtype = MEMBER_F64

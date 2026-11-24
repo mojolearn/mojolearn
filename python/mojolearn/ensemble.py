@@ -1169,6 +1169,45 @@ class GradientBoosting(_NumericModeMixin):
         """
         return _TREES(self, "trees_gbdt_leaf_values", (), _TREES_CONTEXT)
 
+    @property
+    def feature_importances_(self):
+        """The impurity-based feature importances of the fitted model.
+
+        Each split of each tree is credited with how much it separates the
+        tree's leaf values: ``W_L * W_R / W_N`` times the squared difference
+        of the weighted mean leaf values on its two sides (summed over the
+        output dimensions), where ``W`` is the total sample weight of the
+        training rows reaching a node (one per row without
+        ``sample_weight``), divided by the tree's total weight. The credits
+        are summed per input feature over all trees and normalised to sum to
+        1, the definition scikit-learn's gradient boosting uses. A split on a
+        categorical (CTR) column is credited to its input feature, a
+        combination column's credit is shared equally among its features. A
+        model with no effective split returns zeros. The values are computed
+        when the model is fitted and saved with it.
+
+        Returns
+        -------
+        ndarray of shape (n_features_in_,)
+            float64, non-negative, summing to 1.
+
+        Raises
+        ------
+        NotFittedError
+            Before ``fit``.
+
+        Examples
+        --------
+        >>> import numpy as np, mojolearn
+        >>> X = np.random.default_rng(0).random((500, 4), dtype=np.float32)
+        >>> y = 3 * X[:, 0] + X[:, 1]
+        >>> model = mojolearn.GradientBoosting(n_estimators=20).fit(X, y)
+        >>> imp = model.feature_importances_
+        >>> imp.shape, round(float(imp.sum()), 5)
+        ((4,), 1.0)
+        """
+        return _TREES(self, "trees_gbdt_feature_importances", (), _TREES_CONTEXT)
+
     # The payload is model_, the text format check-model-io gates bit-for-bit; the loader reads the hex-bits
     # half of each float, and nothing here formats a number. The model text carries the quantization borders
     # (one `feature ... borders ...` table per feature), which is why gbdt_predict takes only the text and
@@ -1225,6 +1264,9 @@ _native_archive_bridge.register(GradientBoosting, _MODEL_FORMAT, (
     ("f8", "bias", (("float", "bias_"),)),
     # The category map of a fit with cat_features (int64 words); absent otherwise.
     ("when_set", "category_map_", (("array", "category_map", "category_map_"),)),
+    # The fit's feature importances (float64, one per input column): GradientBoosting.load and HostGBDT
+    # restore them (bindings/host_archive_native_door.mojo); absent for a model that holds none.
+    ("when_set", "_feature_importances_", (("array", "feature_importances", "_feature_importances_"),)),
 ), host_archive_gbdt_bindings=_native_trees_bridge.bindings("_mojolearn_gbdt"))
 # `digest_` hashes the members that decide the answers, the same steps the
 # CPU twin HostGBDT is hashed by (_digest_fields.gbdt_steps): the file's fit
@@ -1299,6 +1341,9 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
         requires a GPU installation. Other values raise ``ValueError``.
     """
 
+    #: A member of a meta-estimator (core/gbdt_member.mojo: family 16, kind 3, its own fit).
+    _mojolearn_member = (16, 3)
+
     def __init__(
         self, sources, learning_rate=0.03, l2_leaf_reg=3.0, random_state=0, *, numeric_mode=None,
         device=None,
@@ -1355,6 +1400,10 @@ class OrderedRMSE(GradientBoosting):
         installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
         requires a GPU installation. Other values raise ``ValueError``.
     """
+
+    #: A member of a meta-estimator (core/gbdt_member.mojo: family 16, kind 4, its own fit over the
+    #: caller's `permutation`).
+    _mojolearn_member = (16, 4)
 
     def __init__(
         self, n_estimators=100, max_depth=6, learning_rate=0.03,

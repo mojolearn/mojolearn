@@ -328,7 +328,17 @@ comptime _ROC_ROWS_WORDS = "Target scores need to be probabilities for multiclas
 
 
 def roc_auc_run(route: MetricRoute, problem: Int, truth: Int, scores: Int, n: Int, k: Int) raises -> Float64:
-    """THE TYPED RUN of one unweighted `roc_auc_score` with the scorer's
+    """`roc_auc_run` unweighted."""
+    return roc_auc_run(route, problem, truth, scores, n, k, 0)
+
+
+def roc_auc_run(route: MetricRoute, problem: Int, truth: Int, scores: Int, n: Int, k: Int,
+                w: Int) raises -> Float64:
+    """`w` (lane mf-score6): n float32 sample weights (0: none), the
+    programs' last input as the door pins it (`mc_roc_binary_stages` /
+    `mc_roc_ovr_stages(weighted)`); one-vs-one refuses them in the door's
+    words (bindings/mcls_ranking_door.mojo).
+    THE TYPED RUN of one unweighted `roc_auc_score` with the scorer's
     options over n int32 class codes in 0 .. k-1: ROC_BINARY (`roc_auc`:
     n float32 scores, the decision values or `predict_proba[:, 1]`), or the
     multiclass one-vs-rest / one-vs-one averages over the n x k float32
@@ -361,9 +371,12 @@ def roc_auc_run(route: MetricRoute, problem: Int, truth: Int, scores: Int, n: In
         if present != 2:
             raise Error("roc_auc_score requires both positive and negative classes")
         var plan = MetricProgramPlan()
-        var out = mc_roc_binary_stages(plan, n, False, False, 0.0)
+        var out = mc_roc_binary_stages(plan, n, w != 0, False, 0.0)
         var addresses: List[Int] = [scores, Int(codes.unsafe_ptr())]
         var sizes: List[Int] = [n, n]
+        if w != 0:
+            addresses.append(w)
+            sizes.append(n)
         var arena = metric_inputs_run(route, plan, addresses, sizes)
         _ = len(codes)
         var got = mc_fold_auc_value(arena, out, False, 0.0)
@@ -375,14 +388,20 @@ def roc_auc_run(route: MetricRoute, problem: Int, truth: Int, scores: Int, n: In
         raise Error("Number of classes in y_true not equal to the number of columns in 'y_score'")
     if problem == ROC_OVR or problem == ROC_OVR_WEIGHTED:
         var plan = MetricProgramPlan()
-        var slots = mc_roc_ovr_stages(plan, n, k, False, True, problem == ROC_OVR_WEIGHTED)
+        var slots = mc_roc_ovr_stages(plan, n, k, w != 0, True, problem == ROC_OVR_WEIGHTED)
         var addresses: List[Int] = [scores, Int(codes.unsafe_ptr())]
         var sizes: List[Int] = [n * k, n]
+        if w != 0:
+            addresses.append(w)
+            sizes.append(n)
         var arena = metric_inputs_run(route, plan, addresses, sizes)
         _ = len(codes)
         if arena.i32(slots.rows) != 0:
             raise Error(_ROC_ROWS_WORDS)
         return arena.f64(slots.res)
+    if w != 0:
+        raise Error("sample_weight is not supported for multiclass one-vs-one ROC AUC, "
+                    + "'sample_weight' must be None in this case.")
     var got = roc_ovo_run(route, scores, Int(codes.unsafe_ptr()), n, k, problem == ROC_OVO_WEIGHTED)
     _ = len(codes)
     if got.status == ROC_OVO_ROWS:

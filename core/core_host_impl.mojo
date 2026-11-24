@@ -15,6 +15,7 @@ from cluster.host.kmeans_oracle import (
     INIT_ARRAY,
     host_kmeans_fit,
     host_kmeans_predict,
+    host_kmeans_score,
     host_kmeans_transform,
     host_kmeans_validate,
 )
@@ -42,20 +43,7 @@ comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _U32P = MutPointer[UInt32, MutUntrackedOrigin]
 
 
-def transpose_to_f32[
-    S: DType
-](
-    sp: MutPointer[Scalar[S], MutUntrackedOrigin],
-    dp: MutPointer[Float32, MutUntrackedOrigin],
-    nr: Int,
-    nc: Int,
-):
-    """`dp[c * nr + r] = Float32(sp[r * nc + c])`, the value
-    `_tiled_transpose_to_f32` writes, in plain column order."""
-    for c in range(nc):
-        var dbase = c * nr
-        for r in range(nr):
-            dp.unsafe_store(dbase + r, sp.unsafe_load(r * nc + c).cast[DType.float32]())
+# TOMBSTONE: the transpose_to_f32 (only the core host transpose exports called it) deleted 2026-11-23 on lane/sab-host-missed-cls (no product caller); code recoverable at 4519097d38.
 
 
 def nonzero_f64_count(sp: _F64P, count: Int) -> Int:
@@ -621,6 +609,28 @@ def kmeans_predict_host(
     host_kmeans_predict(x, ns, nf, centroids, nc, mm, labels)
     for i in range(ns):
         lp[i] = labels[i]
+
+
+def kmeans_score_host(
+    x_address: Int, centroids_address: Int, weights_address: Int, ns: Int, nf: Int, nc: Int, nw: Int, mm: Int
+) raises -> Float64:
+    """`KMeans.score`'s inertia on the host (`host_kmeans_score`, lane
+    mf-kmeans5); `nw` 0 for unit weights (`weights_address` not read)."""
+    if ns < 1 or nf < 1 or nc < 1:
+        raise Error(
+            "kmeans_score needs n_samples, n_features and n_clusters >= 1: got "
+            + String(ns)
+            + ", "
+            + String(nf)
+            + ", "
+            + String(nc)
+        )
+    var x = read_f32(x_address, ns * nf)
+    var centroids = read_f32(centroids_address, nc * nf)
+    var weights = List[Float32]()
+    if nw != 0:
+        weights = read_f32(weights_address, nw)
+    return host_kmeans_score(x, ns, nf, centroids, nc, mm, weights, nw)
 
 
 def kmeans_transform_host(

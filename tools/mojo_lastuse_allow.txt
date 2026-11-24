@@ -20,3 +20,4 @@ bindings/x_prep_native_owner_door.mojo:xprep_run_records:value  # lane lastuse-a
 providers/python/prep_metadata_pyapi_unpack.mojo:prep_numeric_vector:output  # lane lastuse-addr-arg: `pin = ArrayPin(output, ...)` (the caller's pin) holds output before the address is taken
 providers/python/prep_transform_pyapi_unpack.mojo:_pandas_snapshot:output  # lane lastuse-addr-arg: `pin = ArrayPin(output, owner)` (the caller's pin) holds output before the address is read back
 providers/python/prep_transform_pyapi_unpack.mojo:_rows_snapshot:output  # lane lastuse-addr-arg: `pin = ArrayPin(output, owner)` (the caller's pin) holds output before the address is read back
+providers/python/member_ensemble_boundary_door.mojo:_admit_search:addresses  # lane member-fits-5: a PythonObject; `proba_addresses = addresses` holds the same array and is appended to owner.pins (the plan pin) after `dst` is written into the words

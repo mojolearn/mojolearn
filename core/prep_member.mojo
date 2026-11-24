@@ -86,15 +86,16 @@ MEMBER_OP_NEW parameters, SimpleImputer (Float64 words, 10): [0] kind 7,
 statistics 0 / 1 (`x_prep_idn_fam` & IDN_STATS_BLOCKED), [6] fill_value
 (constant; 0 for None), [7] keep_empty_features 0 / 1, [8] add_indicator
 0 / 1, [9] R3 work region 0 / 1. Output width = kept + indicator columns.
-MEMBER_OP_NEW parameters, KBinsDiscretizer (Float64 words, 10 + c): [0] kind
+MEMBER_OP_NEW parameters, KBinsDiscretizer (Float64 words, 11 + c): [0] kind
 8, [1] encode 0 'onehot', 1 'onehot-dense', 2 'ordinal', [2] strategy 0
 'uniform', 3 'kmeans', quantile by quantile_method 1 averaged_inverted_cdf,
 2 linear, 4 inverted_cdf, 5 closest_observation, 6
 interpolated_inverted_cdf, 7 hazen, 8 weibull, 9 median_unbiased, 10
 normal_unbiased, [3] subsample (-1 None), [4] / [5] the uint64 random_state
 low / high 32-bit words, [6] blocked column statistics 0 / 1, [7] R3 work
-region 0 / 1, [8] c: 0 = one n_bins for every column in [9], else c
-per-column n_bins in [10 .. 10 + c). sample_weight (MEMBER_CAN_SAMPLE_WEIGHT,
+region 0 / 1, [8] c: 0 = one n_bins for every column in [9], [10] 1:
+random_state is a RandomState (refused at the draw in the door's words,
+`KB_RNG_WORDS`), else c per-column n_bins in [11 .. 11 + c). sample_weight (MEMBER_CAN_SAMPLE_WEIGHT,
 this kind only): a dense host float32 vector, one weight per row of X (of
 the whole X with a row index). Transform: ordinal codes (features columns)
 or one-hot blocks (sum of n_bins_ columns), float32; inverse_transform: the
@@ -110,26 +111,35 @@ column statistics 0 / 1, [10] R3 work region 0 / 1, [11] order 'F' 0 / 1
 rows, [13] c their columns (-1: rows of unequal lengths), then the r x c
 knots row-major (float32 values). sample_weight as KBinsDiscretizer's.
 Transform: n_features_out_ columns, float32.
-MEMBER_OP_NEW parameters, OrdinalEncoder (Float64 words, 9): [0] kind 10,
+MEMBER_OP_NEW parameters, OrdinalEncoder (Float64 words, 15 + sections): [0] kind 10,
 [1] the category fit route: 0 CAT_FIT_UNIQUE, 1 CAT_FIT_SCAN (the fast
-image's unique scans; the admit refuses the image whose packed route the
-door tries first), [2] the C08 fit_transform route 0 / 1 (`x_prep_c08_routes`
+image's unique scans), 2 CAT_FIT_PACK_SORT / 3 CAT_FIT_PACK_PRESENT (the
+fast image built with x_prep_cls2_cat: the packed route first, the scan
+when it did not hold the values, as the door), [2] the C08 fit_transform route 0 / 1 (`x_prep_c08_routes`
 bit 4 on the identical image: with `fit_output` the transform reads the
 fit's inverse), [3] R3 work region 0 / 1, [4] handle_unknown
 'use_encoded_value' 0 / 1 (0: 'error'), [5] unknown_value (NaN allowed; 0
 unused), [6] unknown_value is an integer 0 / 1 (how a refusal prints it),
-[7] encoded_missing_value (NaN allowed), [8] it is an integer 0 / 1.
-Transform and inverse_transform: features columns, float32 (codes; NaN
+[7] encoded_missing_value (NaN allowed), [8] it is an integer 0 / 1, then
+the shared words at t = 9. Transform and inverse_transform: features columns, float32 (codes; NaN
 category -> [7], unknown -> [5]); X is every word a category (no finite
 refusal, MEMBER_CAN_TEST_ROWS: the estimator's rule, applied in full).
-MEMBER_OP_NEW parameters, OneHotEncoder (Float64 words, 6): [0] kind 11,
+MEMBER_OP_NEW parameters, OneHotEncoder (Float64 words, 12 + sections): [0] kind 11,
 [1] / [2] / [3] as OrdinalEncoder's (the C08 route is `x_prep_c08_routes`
-bit 2), [4] handle_unknown 0 'error', 1 'ignore', 2 'infrequent_if_exist'
-('warn', and 'ignore' / 'infrequent_if_exist' with a drop, warn at transform:
-the admit keeps the door), [5] drop 0 None, 1 'first', 2 'if_binary' (one
-category per column keeps the door). Transform: the one-hot blocks (sum of
-the fitted widths columns; known after the fit), float32;
+bit 2), [4] handle_unknown 0 'error', 1 'ignore', 2 'infrequent_if_exist',
+3 'warn' (the transform's warnings are notice words, MEMBER_CAN_NOTICES),
+[5] drop 0 None, 1 'first', 2 'if_binary', 3 one category per column (the
+drop entries), then the shared words at t = 6. Transform: the one-hot
+blocks (sum of the fitted widths columns; known after the fit), float32;
 inverse_transform: features columns.
+The encoders' shared words (lane mf-enc6; DATA of the estimator read once at
+UNPACK): [t] infrequent grouping 0 / 1, [t + 1] max_categories (-1 None),
+[t + 2] min_frequency 0 None, 1 a count, 2 a fraction (CAT_MF_*), [t + 3]
+its value, [t + 4] c given category lists (-1 'auto'), [t + 5] e given drop
+entries; then c lists `[k, k float32 values]` (the user's values as the
+door's `encode_given_words` reads them, checked at FIT in the door's order),
+then e entries `[a Python float NaN 0 / 1, float32 value, m, the m
+codepoints of str(value)]`.
 
 The Apple fast direct fit entry (`x_prep_maxabs_fit_direct`, opt-in
 PREP3_MAXABS) is not a member route: the admit answers False there and the
@@ -199,8 +209,15 @@ OrdinalEncoder (the encode door's category record, bindings/prep_encode_cats_run
   1 `PREP_BLOCK_CENTER` float32 max(features x kmax, 1) (row j's first sizes[j] words: categories_[j])
   2 `PREP_BLOCK_SCALE` float32 features (the category counts)
   3 `PREP_BLOCK_EXTRA` float32 features (`_missing`: the NaN slot, -1 none)
-OneHotEncoder: OrdinalEncoder's four blocks, then
-  4 `PREP_BLOCK_ANCHOR` float32 features (`_drop_after`: the dropped category, -1 none)
+  4 / 5 empty (`PREP_BLOCK_ANCHOR`, `PREP_BLOCK_ANCHOR_KIND`)
+  6 `PREP_BLOCK_GROUPS` float32 `_grouping`: per column `[k, k grouped codes]` (k 0: None); 1 x 0: `_grouping` None
+  7 `PREP_BLOCK_INFREQUENT` float32 `_infrequent`: per column `[k, k category indices]`; 1 x 0 with no grouping
+OneHotEncoder: OrdinalEncoder's blocks 1-3, then
+  4 `PREP_BLOCK_ANCHOR` float32 features (`_drop_after`: the dropped code after the grouping, -1 none)
+  5 empty, 6 / 7 as OrdinalEncoder's
+  8 `PREP_BLOCK_DROP_IDX` float32 features (drop_idx_, -1 None; 1 x 0 for drop=None)
+MEMBER_BLOCK_NOTICES (by name, every kind; OneHotEncoder only sets it): the
+last fit_transform's or transform's MEMBER_NOTICE_ONEHOT_UNKNOWN words.
 
 The fitted state is OWNED here, in a process-wide store of fixed chunks (the
 linear member's store): a slot never moves once minted, the lock covers only
@@ -223,7 +240,7 @@ from core.preprocessing_program import prep_program_stage as _stage
 from bindings.prep_encode_prog_run import EncProgram
 from bindings.prep_encode_kbins_run import (
     KBinsFit, KBinsApply, KBinsInverse, kbins_fit_stage, kbins_transform_stage, kbins_inverse_stage,
-    enc_weights_stage, KB_DRAW_NONE, KB_DRAW_PLAIN, KB_DRAW_WEIGHTED,
+    enc_weights_stage, KB_DRAW_NONE, KB_DRAW_PLAIN, KB_DRAW_WEIGHTED, KB_RNG_WORDS,
 )
 from bindings.prep_encode_spline_run import (
     SplineFit, SplineApply, spline_fit_stage, spline_transform_stage, spline_features,
@@ -232,22 +249,29 @@ from bindings.prep_encode_spline_run import (
 from bindings.prep_encode_imputer_run import (
     ImputerFit, ImputerApply, imputer_fit_stage, imputer_transform_stage, IMP_CONSTANT,
 )
-from bindings.prep_encode_cats_run import CatFit, CatFitPlan, CatBlock, CatAuto, cat_fit_stage, cat_auto_state, CAT_FIT_INVERSE
+from bindings.prep_encode_cats_run import (
+    CatFit, CatFitPlan, CatBlock, CatAuto, CatInfrequent, InfrequentFit, cat_fit_stage, cat_auto_state, cat_auto_held,
+    cat_codes_stage, cat_infrequent_stage, cat_infrequent_ks, cat_infrequent_threshold, cat_infrequent_lists,
+    cat_grouped_sizes, cat_given_column, cat_given_state, CAT_FIT_INVERSE, CAT_FIT_SCAN, CAT_FIT_PACK_SORT,
+    CAT_FIT_PACK_PRESENT,
+)
 from bindings.prep_encode_ordinal_run import (
-    OrdinalApply, OrdinalInverse, ordinal_transform_stage, ordinal_inverse_stage, ordinal_auto_clash,
+    OrdinalApply, OrdinalInverse, ordinal_transform_stage, ordinal_inverse_stage, ordinal_cards_clash,
     ordinal_auto_refusal, ord_number_text,
 )
 from bindings.prep_encode_onehot_run import (
-    OneHotApply, OneHotInverse, onehot_transform_stage, onehot_inverse_stage, onehot_auto_drops, onehot_widths,
-    onehot_total,
+    OneHotApply, OneHotInverse, OneHotDrops, onehot_transform_stage, onehot_inverse_stage, onehot_drop_index,
+    onehot_widths, onehot_total, OH_DROP_NONE, OH_DROP_GIVEN,
 )
+from core.member_notices import MEMBER_NOTICE_WORDS, MEMBER_NOTICE_ONEHOT_UNKNOWN, member_notice_add
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64,
     MEMBER_CAN_SCOPE, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_TEST_ROWS,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_OUTPUTS,
     MEMBER_OP_TRANSFORM, MEMBER_OP_INVERSE_TRANSFORM, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_TRANSFORM, MEMBER_CAN_INVERSE_TRANSFORM, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
-    MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
+    MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE, MEMBER_BLOCK_NOTICES,
+    MEMBER_CAN_NOTICES,
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_PREP
@@ -275,7 +299,7 @@ comptime PREP_KIND_IMPUTER = 7
 comptime PREP_IMPUTER_PARAM_COUNT = 10
 comptime PREP_KIND_KBINS = 8
 #: KBinsDiscretizer's fixed words; `words[8]` per-column n_bins words follow.
-comptime PREP_KBINS_HEADER = 10
+comptime PREP_KBINS_HEADER = 11
 #: KBinsDiscretizer's encode codes.
 comptime PREP_KBINS_ONEHOT = 0
 comptime PREP_KBINS_ONEHOT_DENSE = 1
@@ -284,13 +308,20 @@ comptime PREP_KIND_SPLINE = 9
 #: SplineTransformer's fixed words; `words[12] * words[13]` given knot words follow.
 comptime PREP_SPLINE_HEADER = 14
 comptime PREP_KIND_ORDINAL = 10
-comptime PREP_ORDINAL_PARAM_COUNT = 9
+#: The encoders' fixed words; the given category lists and the given drop
+#: entries follow (the docstring's layout, `_enc_sections`).
+comptime PREP_ORDINAL_PARAM_COUNT = 15
 comptime PREP_KIND_ONEHOT = 11
-comptime PREP_ONEHOT_PARAM_COUNT = 6
-#: OneHotEncoder handle_unknown codes ('warn' is not a member setting).
+comptime PREP_ONEHOT_PARAM_COUNT = 12
+#: Where each encoder's shared words start (grouping, categories, drops).
+comptime PREP_ENC_TAIL_ORDINAL = 9
+comptime PREP_ENC_TAIL_ONEHOT = 6
+comptime PREP_ENC_TAIL_WORDS = 6
+#: OneHotEncoder handle_unknown codes.
 comptime PREP_ONEHOT_ERROR = 0
 comptime PREP_ONEHOT_IGNORE = 1
 comptime PREP_ONEHOT_INFREQUENT = 2
+comptime PREP_ONEHOT_WARN = 3
 
 comptime PREP_BLOCK_CENTER = MEMBER_BLOCK_FAMILY
 comptime PREP_BLOCK_SCALE = MEMBER_BLOCK_FAMILY + 1
@@ -299,6 +330,10 @@ comptime PREP_BLOCK_MAX_ABS = PREP_BLOCK_CENTER
 comptime PREP_BLOCK_EXTRA = MEMBER_BLOCK_FAMILY + 2
 comptime PREP_BLOCK_ANCHOR = MEMBER_BLOCK_FAMILY + 3
 comptime PREP_BLOCK_ANCHOR_KIND = MEMBER_BLOCK_FAMILY + 4
+#: The encoders' infrequent grouping and OneHotEncoder's drop_idx_ (lane mf-enc6).
+comptime PREP_BLOCK_GROUPS = MEMBER_BLOCK_FAMILY + 5
+comptime PREP_BLOCK_INFREQUENT = MEMBER_BLOCK_FAMILY + 6
+comptime PREP_BLOCK_DROP_IDX = MEMBER_BLOCK_FAMILY + 7
 #: PolynomialFeatures' term table, QuantileTransformer's fitted quantiles.
 comptime PREP_BLOCK_POLY_INDEX = PREP_BLOCK_CENTER
 comptime PREP_BLOCK_POLY_START = PREP_BLOCK_SCALE
@@ -334,6 +369,16 @@ struct PrepMemberSlot(Copyable, Movable, Defaultable):
     var extra: List[Float32]
     var anchor: List[Float32]
     var anchor_kind: List[Float32]
+    # The encoders' fitted infrequent grouping (lane mf-enc6): the export
+    # words (`_lists_words`; empty: no grouping, the door's None) and the
+    # parsed per-column lists the transforms read; OneHotEncoder's drop_idx_
+    # words; the notices the last fit_transform or transform raised.
+    var groups_words: List[Float32]
+    var groups: List[List[Int]]
+    var inf_words: List[Float32]
+    var infrequent: List[List[Int]]
+    var drop_idx: List[Float32]
+    var notices: List[Float64]
 
     def __init__(out self):
         self.generation = 0
@@ -347,6 +392,12 @@ struct PrepMemberSlot(Copyable, Movable, Defaultable):
         self.extra = List[Float32]()
         self.anchor = List[Float32]()
         self.anchor_kind = List[Float32]()
+        self.groups_words = List[Float32]()
+        self.groups = List[List[Int]]()
+        self.inf_words = List[Float32]()
+        self.infrequent = List[List[Int]]()
+        self.drop_idx = List[Float32]()
+        self.notices = List[Float64]()
 
     def kind(self) -> Int:
         return Int(self.words[0])
@@ -360,6 +411,12 @@ struct PrepMemberSlot(Copyable, Movable, Defaultable):
         self.extra = List[Float32]()
         self.anchor = List[Float32]()
         self.anchor_kind = List[Float32]()
+        self.groups_words = List[Float32]()
+        self.groups = List[List[Int]]()
+        self.inf_words = List[Float32]()
+        self.infrequent = List[List[Int]]()
+        self.drop_idx = List[Float32]()
+        self.notices = List[Float64]()
 
 
 struct PrepMemberStore(Defaultable, Movable):
@@ -477,9 +534,9 @@ def _block_count(kind: Int) -> Int:
     if kind == PREP_KIND_IMPUTER:
         return 5
     if kind == PREP_KIND_ORDINAL:
-        return 4
+        return 8  # blocks 4 / 5 (ANCHOR, ANCHOR_KIND) are empty
     if kind == PREP_KIND_ONEHOT:
-        return 5
+        return 9  # block 5 (ANCHOR_KIND) is empty
     return 3
 
 
@@ -1473,6 +1530,8 @@ def _fit_kbins(slot: _Slot, call: _Call) raises:
     var draw = KB_DRAW_NONE
     var draws = 0
     if resample:
+        if w[10] != 0.0:
+            raise Error(KB_RNG_WORDS)
         draws = subsample
         # a weighted resample with replacement is drawn in the fit's program,
         # and the edges of its rows are then unweighted
@@ -1801,28 +1860,213 @@ def _transform_imputer(slot: _Slot, call: _Call) raises:
 
 
 # ---------------------------------------------------------------- the category encoders
-# The restricted form of the encode door (bindings/prep_encode_native_door.mojo
-# `_auto_fit`, `encode_auto_categories`): categories='auto' without
-# infrequent grouping. FIT runs the door's category program (the route word
-# the admit read: CAT_FIT_SCAN on the fast image with unique scans, else
-# CAT_FIT_UNIQUE; the C08 program for a fit_transform where the image has
-# it) and builds the SAME typed state the door builds from it
-# (bindings/prep_encode_cats_run.mojo `cat_auto_state`), with the door's
-# checks (`ordinal_auto_clash`). The slot keeps the (d, kmax) block in
-# `center`, the sizes in `scale`, the NaN slots in `extra` (float32 words,
-# the words the door's programs read), [d, kmax] in `scalars`. The state
-# OWNS them (copied from the fit's arena): MEMBER_BORROWS_FIT clear.
+# The encode door's category fits (bindings/prep_encode_native_door.mojo
+# `_ordinal_fit`, `_onehot_fit`), every form (lane mf-enc6): categories
+# 'auto' or given, with or without the infrequent grouping, every drop and
+# handle_unknown. FIT runs the door's category program on the route the
+# admit read (CAT_FIT_UNIQUE; CAT_FIT_SCAN on the fast image with unique
+# scans; the packed CAT_FIT_PACK_* first on the fast image built with
+# x_prep_cls2_cat, the scan when its region did not hold the values; the C08
+# program for a fit_transform where the image has it), or checks the given
+# lists (`cat_given_column`, the unknown codes program under 'error'), then
+# the door's infrequent program (`cat_infrequent_stage`), its code checks
+# (`ordinal_cards_clash`) and its drops (`onehot_drop_index`): the typed
+# bodies the door runs, so the two routes hold the same words. The slot
+# keeps the (d, kmax) block in `center`, the sizes in `scale`, the NaN slots
+# in `extra` (float32 words, the words the door's programs read), [d, kmax]
+# in `scalars`, the grouping in `groups` / `infrequent` (export words
+# `groups_words` / `inf_words`), OneHotEncoder's `_drop_after` in `anchor`
+# and drop_idx_ in `drop_idx`. The state OWNS them (copied from the fit's
+# arena): MEMBER_BORROWS_FIT clear.
+def _enc_tail(kind: Int) -> Int:
+    return PREP_ENC_TAIL_ORDINAL if kind == PREP_KIND_ORDINAL else PREP_ENC_TAIL_ONEHOT
+
+
+def _enc_sections(source: MutPointer[Float64, MutUntrackedOrigin], count: Int, tail: Int) -> Int:
+    """The word count of an encoder member's parameter words (the fixed
+    header, then each given category list `[k, k words]`, then each given
+    drop entry `[NaN 0 / 1, float32 value, t, t codepoints]`); -1 when the
+    sections do not fit `count`."""
+    var at = tail + PREP_ENC_TAIL_WORDS
+    for _ in range(max(Int(source[tail + 4]), 0)):  # driver-loop: over the given category lists (feature metadata)
+        if at >= count or source[at] < 0.0:
+            return -1
+        at += 1 + Int(source[at])
+    for _ in range(max(Int(source[tail + 5]), 0)):  # driver-loop: over the given drop entries (feature metadata)
+        if at + 2 >= count or source[at + 2] < 0.0:
+            return -1
+        at += 3 + Int(source[at + 2])
+    return at
+
+
+def _given_lists(slot: _Slot) -> List[List[Float32]]:
+    # The given category lists' float32 words (the admit's UNPACK of `categories`).
+    var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
+    var tail = _enc_tail(slot[].kind())
+    var at = tail + PREP_ENC_TAIL_WORDS
+    var lists = List[List[Float32]]()
+    for _ in range(max(Int(w[tail + 4]), 0)):  # driver-loop: over the given category lists (feature metadata)
+        var k = Int(w[at])
+        var column = List[Float32](capacity=k)
+        for i in range(k):  # driver-loop: over one given category list
+            column.append(Float32(w[at + 1 + i]))
+        lists.append(column^)
+        at += 1 + k
+    return lists^
+
+
+struct _DropGiven(Movable):
+    # The given drop entries (the admit's UNPACK of `drop`).
+    var nan: List[Bool]
+    var values: List[Float32]
+    var texts: List[String]
+
+    def __init__(out self):
+        self.nan = List[Bool]()
+        self.values = List[Float32]()
+        self.texts = List[String]()
+
+
+def _drop_given(slot: _Slot) -> _DropGiven:
+    var given = _DropGiven()
+    var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
+    var tail = _enc_tail(slot[].kind())
+    var at = tail + PREP_ENC_TAIL_WORDS
+    for _ in range(max(Int(w[tail + 4]), 0)):  # driver-loop: over the given category lists (feature metadata)
+        at += 1 + Int(w[at])
+    for _ in range(max(Int(w[tail + 5]), 0)):  # driver-loop: over the given drop entries (feature metadata)
+        given.nan.append(w[at] != 0.0)
+        given.values.append(Float32(w[at + 1]))
+        var t = Int(w[at + 2])
+        var text = String("")
+        for c in range(t):  # driver-loop: over one drop value's str() codepoints
+            text += chr(Int(w[at + 3 + c]))
+        given.texts.append(text^)
+        at += 3 + t
+    return given^
+
+
+def _lists_words(lists: List[List[Int]]) -> List[Float32]:
+    # Per-column lists as export words: `[k, k words]` per column.
+    var words = List[Float32]()
+    for j in range(len(lists)):  # driver-loop: over the per-column lists (feature metadata)
+        words.append(Float32(len(lists[j])))
+        for i in range(len(lists[j])):  # driver-loop: over one column's list
+            words.append(Float32(lists[j][i]))
+    return words^
+
+
+def _words_lists(words: List[Float32], d: Int, mut lists: List[List[Int]]) -> Bool:
+    """The inverse of `_lists_words` for d columns; False when the words are
+    not d whole lists."""
+    lists = List[List[Int]]()
+    var at = 0
+    for _ in range(d):  # driver-loop: over the per-column lists (feature metadata)
+        if at >= len(words) or words[at] < 0:
+            return False
+        var k = Int(words[at])
+        if at + 1 + k > len(words):
+            return False
+        var column = List[Int](capacity=k)
+        for i in range(k):  # driver-loop: over one column's list
+            column.append(Int(words[at + 1 + i]))
+        lists.append(column^)
+        at += 1 + k
+    return at == len(words)
+
+
 def _cat_fit(slot: _Slot, call: _Call, capture: Bool, mut arena: Optional[HostZeroArena]) raises -> CatFitPlan:
-    """The restricted category program over the caller's X (owner 0), its
-    host words left in `arena`."""
+    """The category program over the caller's X (owner 0) on the admit's
+    route (the door's `_auto_fit` / `_cat_fit`), its host words left in
+    `arena`; a packed route whose region did not hold the values runs the
+    sort with a run scan, as the door."""
     var n = _rows(call)
     var d = call[].x.cols
     var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
+    var route = CAT_FIT_INVERSE if capture else Int(w[1])
     var prog = EncProgram(w[3] != 0.0)
-    var plan = cat_fit_stage(prog, CatFit(n, d, 0, -1, CAT_FIT_INVERSE if capture else Int(w[1])))
+    var plan = cat_fit_stage(prog, CatFit(n, d, 0, -1, route))
     arena = Optional[HostZeroArena](_enc_run(call, prog, List[Int](), 0))
     _ = len(prog.consts_f)  # the program's own input words live past the run
+    if (route == CAT_FIT_PACK_SORT or route == CAT_FIT_PACK_PRESENT) and not cat_auto_held(arena.value().address, plan, d):
+        var again = EncProgram(w[3] != 0.0)
+        plan = cat_fit_stage(again, CatFit(n, d, 0, -1, CAT_FIT_SCAN))
+        arena = Optional[HostZeroArena](_enc_run(call, again, List[Int](), 0))
+        _ = len(again.consts_f)  # the program's own input words live past the run
     return plan^
+
+
+def _size_words(state: CatAuto) -> List[Float32]:
+    # The category record's size words (max(d, 1) float32 words).
+    var words = List[Float32](length=max(state.d, 1), fill=Float32(0))
+    for j in range(state.d):  # driver-loop: over the per-column category counts (feature metadata)
+        words[j] = Float32(state.sizes[j])
+    return words^
+
+
+def _given_state(slot: _Slot, call: _Call, who: String) raises -> CatAuto:
+    """The door's `_given_categories`, in its order and words: one list per
+    column of X, each checked and canonicalized (`cat_given_column`); with
+    handle_unknown='error' a training value outside its column's list is
+    refused (the door's code lookup program, `cat_codes_stage`)."""
+    var lists = _given_lists(slot)
+    var d = call[].x.cols
+    if len(lists) != d:
+        raise Error("mojolearn: " + who + " categories has " + String(len(lists)) + " lists; X has " + String(d)
+                    + " features")
+    var columns = List[List[Float32]](capacity=d)
+    for j in range(d):  # driver-loop: validates the given categories (user category lists)
+        columns.append(cat_given_column(lists[j], j, who))
+    var state = cat_given_state(columns)
+    var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
+    if w[4] != 0.0:
+        return state^  # not 'error': no check at fit (the door's check_unknown)
+    var n = _rows(call)
+    var sizes = _size_words(state)
+    var prog = EncProgram(w[3] != 0.0)
+    var codes = cat_codes_stage(prog, n, d, 0, CatBlock(1, len(state.block), state.kmax, 2, len(sizes)), False)
+    var seconds: List[Int] = [Int(state.block.unsafe_ptr()), Int(sizes.unsafe_ptr())]
+    var arena = _enc_run(call, prog, seconds, 0)
+    _ = len(prog.consts_f)  # the program's own input words live past the run
+    _ = len(sizes)  # the size words the run read live past it
+    var bad = _unknown_text(arena, codes.unknown, d)
+    _ = arena^
+    if bad.byte_length() > 0:
+        raise Error("mojolearn: " + who + " found unknown categories in column(s) " + bad + " during fit")
+    return state^
+
+
+def _infrequent_fit(slot: _Slot, call: _Call, state: CatAuto, ignore_missing: Bool, inverse: Int) raises -> CatInfrequent:
+    """The door's `_fit_infrequent`: the counts of X's codes (looked up in
+    the fitted block, or the C08 fit's inverse at `inverse` when nonzero),
+    the min_frequency / max_categories masks and the grouped codes
+    (`cat_infrequent_stage`), as the per-column lists the door packs."""
+    var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
+    var tail = _enc_tail(slot[].kind())
+    var n = _rows(call)
+    var d = state.d
+    var ks = cat_infrequent_ks(state.sizes, state.missing, ignore_missing)
+    var threshold = cat_infrequent_threshold(n, Int(w[tail + 2]), w[tail + 3])
+    var sizes = _size_words(state)
+    var from_inverse = inverse != 0
+    var block = CatBlock(-1, 0, 0, -1, 0)
+    var seconds = List[Int]()
+    if from_inverse:
+        seconds.append(inverse)
+    else:
+        block = CatBlock(1, len(state.block), state.kmax, 2, len(sizes))
+        seconds.append(Int(state.block.unsafe_ptr()))
+        seconds.append(Int(sizes.unsafe_ptr()))
+    var prog = EncProgram(w[3] != 0.0)
+    var request = InfrequentFit(n, d, -1 if from_inverse else 0, block.copy(), from_inverse, 1 if from_inverse else -1,
+                                ks.copy(), state.kmax, threshold, Int(w[tail + 1]))
+    var plan = cat_infrequent_stage(prog, request)
+    var arena = _enc_run(call, prog, seconds, 0)
+    _ = len(prog.consts_f)  # the program's own input words live past the run
+    _ = len(sizes)  # the size words the run read live past it
+    var lists = cat_infrequent_lists(Int(arena.unsafe_ptr()), plan, ks, state.kmax)
+    _ = arena^
+    return lists^
 
 
 def _cat_keep(slot: _Slot, state: CatAuto):
@@ -1852,6 +2096,16 @@ def _cat_words(values: List[Float32]) -> List[Int]:
     return out^
 
 
+def _grouped(slot: _Slot) -> Bool:
+    # The door's `_grouping is not None`.
+    return len(slot[].groups_words) > 0
+
+
+def _code_sizes(slot: _Slot) -> List[Int]:
+    # The per-column code counts after the grouping (the door's `_grouped_sizes`).
+    return cat_grouped_sizes(_cat_words(slot[].scale), slot[].groups)
+
+
 def _unknown_text(arena: HostZeroArena, offset: Int, d: Int) -> String:
     # The columns whose unknown count the program set, as the door prints them ("" when none).
     var ap = _F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
@@ -1864,34 +2118,75 @@ def _unknown_text(arena: HostZeroArena, offset: Int, d: Int) -> String:
     return String("[") + text + "]" if count > 0 else String("")
 
 
-def _fit_ordinal(slot: _Slot, call: _Call) raises:
-    """The encode door's `_ordinal_fit` in the restricted form: the category
-    program, `cat_auto_state`, `ordinal_auto_clash` in the door's words
-    (the numbers printed as integers when the parameter was an integer, else
-    in Mojo's shortest float form); with `fit_output` the transform reads the
-    C08 program's inverse when the image has it, as the door."""
+def _fit_encoder(slot: _Slot, call: _Call) raises:
+    """The encode door's `_ordinal_fit` / `_onehot_fit` in their order and
+    words (the module note above); with `fit_output` the transform, reading
+    the C08 program's inverse when the image has it and the categories are
+    'auto', as the door."""
     _fit_begin(slot, call)
+    var kind = slot[].kind()
+    var who = _name(slot)
     var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
-    var capture = call[].fit_output == MEMBER_OP_TRANSFORM and w[2] != 0.0
+    var tail = _enc_tail(kind)
+    var grouping = w[tail] != 0.0
+    var auto = w[tail + 4] < 0.0
+    var capture = call[].fit_output == MEMBER_OP_TRANSFORM and w[2] != 0.0 and auto
     var n = _rows(call)
     var d = call[].x.cols
     var arena = Optional[HostZeroArena](None)
-    var plan = _cat_fit(slot, call, capture, arena)
-    var state = cat_auto_state(arena.value().address, plan, n, d)
-    var clash = ordinal_auto_clash(state, w[4] != 0.0, w[5], w[7])
-    if len(clash) > 0:
-        raise Error(ordinal_auto_refusal(clash, ord_number_text(w[5], w[6] != 0.0), ord_number_text(w[7], w[8] != 0.0)))
+    var inverse = 0
+    var state = CatAuto()
+    if auto:
+        var plan = _cat_fit(slot, call, capture, arena)
+        state = cat_auto_state(arena.value().address, plan, n, d)
+        if capture:
+            inverse = arena.value().address + 4 * plan.inverse
+    else:
+        state = _given_state(slot, call, who)
+    var lists = CatInfrequent()
+    if grouping:
+        lists = _infrequent_fit(slot, call, state, kind == PREP_KIND_ORDINAL, inverse)
+    var drops = OneHotDrops()
+    if kind == PREP_KIND_ORDINAL:
+        var clash = ordinal_cards_clash(cat_grouped_sizes(state.cards(), lists.groups), state.missing, w[4] != 0.0,
+                                        w[5], w[7])
+        if len(clash) > 0:
+            raise Error(ordinal_auto_refusal(clash, ord_number_text(w[5], w[6] != 0.0),
+                                             ord_number_text(w[7], w[8] != 0.0)))
+    else:
+        var word = Int(w[5])
+        var given = _drop_given(slot)
+        var columns = List[List[Float32]]()
+        if word == OH_DROP_GIVEN:
+            for j in range(d):  # driver-loop: over the per-column category words (feature metadata)
+                columns.append(state.column(j))
+        drops = onehot_drop_index(word, cat_grouped_sizes(state.sizes, lists.groups), columns, lists.groups,
+                                  lists.infrequent, given.nan, given.values, given.texts)
     _cat_keep(slot, state)
+    if grouping:
+        slot[].groups = lists.groups.copy()
+        slot[].infrequent = lists.infrequent.copy()
+        slot[].groups_words = _lists_words(lists.groups)
+        slot[].inf_words = _lists_words(lists.infrequent)
+    if kind == PREP_KIND_ONEHOT:
+        for j in range(d):  # driver-loop: over the per-column drop indices (feature metadata)
+            slot[].anchor.append(Float32(-1) if drops.none else Float32(drops.after[j]))
+        if not drops.none:
+            for j in range(len(drops.idx)):  # driver-loop: over the per-column drop indices (feature metadata)
+                slot[].drop_idx.append(Float32(drops.idx[j]))
     if call[].fit_output == MEMBER_OP_TRANSFORM:
-        _transform_ordinal(slot, call, arena.value().address + 4 * plan.inverse if capture else 0)
+        if kind == PREP_KIND_ORDINAL:
+            _transform_ordinal(slot, call, inverse)
+        else:
+            _transform_onehot(slot, call, inverse)
     _ = arena^  # the C08 inverse the transform read lives past it
 
 
 def _transform_ordinal(slot: _Slot, call: _Call, inverse: Int) raises:
     """The encode door's `_ordinal_transform`: `ordinal_transform_stage`
-    (lookup, or the C08 fit's inverse at `inverse` when nonzero; where_neg,
-    where_code), the unknown refusal under handle_unknown='error' in the
-    door's words."""
+    (lookup, or the C08 fit's inverse at `inverse` when nonzero; the
+    grouping remap; where_neg, where_code), the unknown refusal under
+    handle_unknown='error' in the door's words."""
     var d = slot[].features
     _apply_begin(slot, call, d)
     var n = _rows(call)
@@ -1904,8 +2199,9 @@ def _transform_ordinal(slot: _Slot, call: _Call, inverse: Int) raises:
     for j in range(len(missing)):  # driver-loop: checks for a NaN category slot (per-column NaN category slots)
         any_missing = any_missing or missing[j] >= 0
     var held = inverse != 0
-    var request = OrdinalApply(n, d, 0, _cat_block(slot, True), held, 1 if held else -1, False, List[List[Int]](),
-                               use, w[5] if use else 0.0, any_missing, missing^, w[7] if any_missing else 0.0)
+    var request = OrdinalApply(n, d, 0, _cat_block(slot, True), held, 1 if held else -1, _grouped(slot),
+                               slot[].groups.copy(), use, w[5] if use else 0.0, any_missing, missing^,
+                               w[7] if any_missing else 0.0)
     var prog = EncProgram(w[3] != 0.0)
     var plan = ordinal_transform_stage(prog, request)
     var seconds: List[Int] = [Int(slot[].center.unsafe_ptr()), Int(slot[].scale.unsafe_ptr())]
@@ -1924,8 +2220,9 @@ def _transform_ordinal(slot: _Slot, call: _Call, inverse: Int) raises:
 
 def _inverse_ordinal(slot: _Slot, call: _Call) raises:
     """The encode door's `_ordinal_inverse`: `ordinal_inverse_stage`
-    (ord_inverse, cat_gather, the bad-row compaction), the rows naming no
-    category refused in the door's words (the first ten)."""
+    (ord_inverse, the inverse grouping remap, cat_gather, the bad-row
+    compaction), the rows naming no category refused in the door's words
+    (the first ten)."""
     var estimator = _name(slot)
     if not slot[].fitted:
         raise Error("RuntimeError: mojolearn: this " + estimator + " instance is not fitted yet")
@@ -1943,8 +2240,8 @@ def _inverse_ordinal(slot: _Slot, call: _Call) raises:
         return
     var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
     var encoded = w[4] != 0.0
-    var request = OrdinalInverse(n, d, 0, _cat_block(slot, False), False, List[List[Int]](), _cat_words(slot[].scale),
-                                 _cat_words(slot[].extra), w[7], encoded, w[5] if encoded else 0.0)
+    var request = OrdinalInverse(n, d, 0, _cat_block(slot, False), _grouped(slot), slot[].groups.copy(),
+                                 _code_sizes(slot), _cat_words(slot[].extra), w[7], encoded, w[5] if encoded else 0.0)
     var prog = EncProgram(w[3] != 0.0)
     var plan = ordinal_inverse_stage(prog, request)
     var arena = _enc_run(call, prog, Int(slot[].center.unsafe_ptr()), 0)
@@ -1961,42 +2258,24 @@ def _inverse_ordinal(slot: _Slot, call: _Call) raises:
 
 
 def _onehot_widths(slot: _Slot) -> List[Int]:
-    # `_widths` of the fitted state: sizes less the dropped category.
-    return onehot_widths(_cat_words(slot[].scale), _cat_words(slot[].anchor))
-
-
-def _fit_onehot(slot: _Slot, call: _Call) raises:
-    """The encode door's `_onehot_fit` in the restricted form: the category
-    program, `cat_auto_state`, the drop indices of the drop word
-    (`onehot_auto_drops`, kept in `anchor`); with `fit_output` the transform
-    reads the C08 program's inverse when the image has it, as the door."""
-    _fit_begin(slot, call)
-    var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
-    var capture = call[].fit_output == MEMBER_OP_TRANSFORM and w[2] != 0.0
-    var n = _rows(call)
-    var d = call[].x.cols
-    var arena = Optional[HostZeroArena](None)
-    var plan = _cat_fit(slot, call, capture, arena)
-    var state = cat_auto_state(arena.value().address, plan, n, d)
-    var drops = onehot_auto_drops(state.sizes, Int(w[5]))
-    _cat_keep(slot, state)
-    for j in range(d):  # driver-loop: over the per-column drop indices (feature metadata)
-        slot[].anchor.append(Float32(drops[j]))
-    if call[].fit_output == MEMBER_OP_TRANSFORM:
-        _transform_onehot(slot, call, arena.value().address + 4 * plan.inverse if capture else 0)
-    _ = arena^  # the C08 inverse the transform read lives past it
+    # `_widths` of the fitted state: the grouped sizes less the dropped code.
+    return onehot_widths(_code_sizes(slot), _cat_words(slot[].anchor))
 
 
 def _transform_onehot(slot: _Slot, call: _Call, inverse: Int) raises:
     """The encode door's `_onehot_transform`: `onehot_transform_stage`
-    (lookup, or the C08 fit's inverse at `inverse` when nonzero; onehot),
-    its output region straight into the caller's dst when the image has one
-    and the output is large; the unknown refusal under handle_unknown='error'
-    in the door's words. No warning is owed on this route: the admit keeps
-    the door for every setting whose transform warns."""
+    (lookup, or the C08 fit's inverse at `inverse` when nonzero; the
+    grouping remap with the unknown slots; onehot), its output region
+    straight into the caller's dst when the image has one and the output is
+    large; the unknown refusal under handle_unknown='error' in the door's
+    words. Where the door warns ('warn', or 'ignore' / 'infrequent_if_exist'
+    with a drop) the state keeps the warning as notice words
+    (MEMBER_NOTICE_ONEHOT_UNKNOWN, one per column), replacing the last
+    transform's: the caller raises them (core/member_notices.mojo)."""
     var widths = _onehot_widths(slot) if slot[].fitted else List[Int]()
     var total = onehot_total(widths)
     _apply_begin(slot, call, total)
+    slot[].notices = List[Float64]()
     var n = _rows(call)
     var d = slot[].features
     if n * total == 0:
@@ -2004,8 +2283,9 @@ def _transform_onehot(slot: _Slot, call: _Call, inverse: Int) raises:
     var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
     var handle = Int(w[4])
     var held = inverse != 0
-    var request = OneHotApply(n, d, 0, _cat_block(slot, True), held, 1 if held else -1, False, List[List[Int]](),
-                              handle == PREP_ONEHOT_INFREQUENT, widths^, _cat_words(slot[].anchor))
+    var request = OneHotApply(n, d, 0, _cat_block(slot, True), held, 1 if held else -1, _grouped(slot),
+                              slot[].groups.copy(), handle == PREP_ONEHOT_INFREQUENT or handle == PREP_ONEHOT_WARN,
+                              widths^, _cat_words(slot[].anchor))
     var prog = EncProgram(w[3] != 0.0)
     var plan = onehot_transform_stage(prog, request, (call[].route.flags & PREP_ROUTE_OUT) != 0)
     var seconds: List[Int] = [Int(slot[].center.unsafe_ptr()), Int(slot[].scale.unsafe_ptr())]
@@ -2017,6 +2297,12 @@ def _transform_onehot(slot: _Slot, call: _Call, inverse: Int) raises:
         var bad = _unknown_text(arena, plan.unknown, d)
         if bad.byte_length() > 0:
             raise Error("mojolearn: OneHotEncoder found unknown categories in column(s) " + bad + " during transform")
+    elif handle == PREP_ONEHOT_WARN or Int(w[5]) != OH_DROP_NONE:
+        var ap = _F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
+        var zeros = 1.0 if handle == PREP_ONEHOT_IGNORE else 0.0
+        for j in range(d):  # driver-loop: over the per-column unknown flags (feature metadata)
+            if ap[plan.unknown + j] > 0:
+                member_notice_add(slot[].notices, MEMBER_NOTICE_ONEHOT_UNKNOWN, Float64(j), zeros)
     if prog.out_words == 0:
         unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
             src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + plan.encoded, count=n * total)
@@ -2025,9 +2311,11 @@ def _transform_onehot(slot: _Slot, call: _Call, inverse: Int) raises:
 
 def _inverse_onehot(slot: _Slot, call: _Call) raises:
     """The encode door's `_onehot_inverse`: `onehot_inverse_stage`
-    (block_argmax, cat_gather, the strict bad-row compaction: an all-zero
-    block is refused under handle_unknown='error', NaN otherwise), in the
-    door's words (the first ten rows)."""
+    (block_argmax, the inverse grouping remap, cat_gather, the strict
+    bad-row compaction: an all-zero block is refused under
+    handle_unknown='error', and under the other settings but 'ignore' for a
+    column with an infrequent category; NaN otherwise), in the door's words
+    (the first ten rows)."""
     var estimator = _name(slot)
     if not slot[].fitted:
         raise Error("RuntimeError: mojolearn: this " + estimator + " instance is not fitted yet")
@@ -2045,10 +2333,15 @@ def _inverse_onehot(slot: _Slot, call: _Call) raises:
     if n == 0:
         return
     var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
-    # no infrequent category in the restricted form: strict only under 'error'
-    var strict = List[Float64](length=d, fill=1.0 if Int(w[4]) == PREP_ONEHOT_ERROR else 0.0)
-    var request = OneHotInverse(n, 0, _cat_block(slot, False), widths^, _cat_words(slot[].anchor), False,
-                                List[List[Int]](), strict^)
+    var handle = Int(w[4])
+    var grouped = _grouped(slot)
+    var strict = List[Float64](capacity=d)
+    for j in range(d):  # driver-loop: over the per-column strictness flags
+        var hard = handle == PREP_ONEHOT_ERROR or (handle != PREP_ONEHOT_IGNORE and grouped
+                                                   and len(slot[].infrequent[j]) > 0)
+        strict.append(1.0 if hard else 0.0)
+    var request = OneHotInverse(n, 0, _cat_block(slot, False), widths^, _cat_words(slot[].anchor), grouped,
+                                slot[].groups.copy(), strict^)
     var prog = EncProgram(w[3] != 0.0)
     var plan = onehot_inverse_stage(prog, request)
     var arena = _enc_run(call, prog, Int(slot[].center.unsafe_ptr()), 0)
@@ -2074,12 +2367,24 @@ def _block_view(slot: _Slot, block: Int) raises -> MemberMatrix:
         return MemberMatrix(Int(slot[].extra.unsafe_ptr()), 1, len(slot[].extra))
     if block == PREP_BLOCK_ANCHOR:
         return MemberMatrix(Int(slot[].anchor.unsafe_ptr()), 1, len(slot[].anchor))
+    if block == PREP_BLOCK_GROUPS:
+        return MemberMatrix(Int(slot[].groups_words.unsafe_ptr()), 1, len(slot[].groups_words))
+    if block == PREP_BLOCK_INFREQUENT:
+        return MemberMatrix(Int(slot[].inf_words.unsafe_ptr()), 1, len(slot[].inf_words))
+    if block == PREP_BLOCK_DROP_IDX:
+        return MemberMatrix(Int(slot[].drop_idx.unsafe_ptr()), 1, len(slot[].drop_idx))
     return MemberMatrix(Int(slot[].anchor_kind.unsafe_ptr()), 1, len(slot[].anchor_kind))
 
 
 def _export(slot: _Slot, call: _Call) raises:
     """A view of one fitted block. The slot owns the words; they stay valid
-    until this state's next fit, import or free."""
+    until this state's next fit, import or free. MEMBER_BLOCK_NOTICES (by
+    name, every kind): the notices of the last fit_transform or transform
+    (OneHotEncoder's unknown-category warnings; rows 0 elsewhere)."""
+    if call[].block == MEMBER_BLOCK_NOTICES and (call[].flags & MEMBER_BLOCK_BY_INDEX) == 0:
+        call[].dst = MemberMatrix(Int(slot[].notices.unsafe_ptr()), len(slot[].notices) // MEMBER_NOTICE_WORDS,
+                                  MEMBER_NOTICE_WORDS, MEMBER_F64)
+        return
     if not slot[].fitted:
         raise Error("NotFittedError: this " + _name(slot) + " member is not fitted yet")
     var count = _block_count(slot[].kind())
@@ -2129,6 +2434,12 @@ def _import(slot: _Slot, call: _Call) raises:
             slot[].extra = words^
         elif block == PREP_BLOCK_ANCHOR:
             slot[].anchor = words^
+        elif block == PREP_BLOCK_GROUPS:
+            slot[].groups_words = words^
+        elif block == PREP_BLOCK_INFREQUENT:
+            slot[].inf_words = words^
+        elif block == PREP_BLOCK_DROP_IDX:
+            slot[].drop_idx = words^
         else:
             slot[].anchor_kind = words^
     elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
@@ -2163,15 +2474,35 @@ def _import(slot: _Slot, call: _Call) raises:
     elif _encoder(kind):
         var kmax = Int(slot[].scalars[1])
         complete = (complete and kmax >= 0 and len(slot[].center) == max(d * kmax, 1) and len(slot[].scale) == d
-                    and len(slot[].extra) == d and (kind != PREP_KIND_ONEHOT or len(slot[].anchor) == d))
-        if kind == PREP_KIND_ONEHOT:
-            for j in range(min(len(slot[].anchor), len(slot[].scale))):  # driver-loop: over the fitted drop indices
-                var drop = Int(slot[].anchor[j])
-                complete = complete and drop >= -1 and drop < Int(slot[].scale[j])
+                    and len(slot[].extra) == d and (kind != PREP_KIND_ONEHOT or len(slot[].anchor) == d)
+                    and (len(slot[].drop_idx) == 0 or len(slot[].drop_idx) == d))
         for j in range(min(len(slot[].scale), len(slot[].extra))):  # driver-loop: over the fitted per-column sizes
             var size = Int(slot[].scale[j])
             var nan_slot = Int(slot[].extra[j])
             complete = complete and size >= 0 and size <= kmax and (nan_slot == -1 or (size > 0 and nan_slot == size - 1))
+        # The grouping (lane mf-enc6): none (both blocks empty), or d lists
+        # each, a grouped column's codes one per category it groups.
+        slot[].groups = List[List[Int]]()
+        slot[].infrequent = List[List[Int]]()
+        if len(slot[].groups_words) > 0 and complete:
+            var groups = List[List[Int]]()
+            var infrequent = List[List[Int]]()
+            complete = (_words_lists(slot[].groups_words, d, groups)
+                        and _words_lists(slot[].inf_words, d, infrequent))
+            if complete:
+                for j in range(d):  # driver-loop: over the fitted per-column groupings
+                    complete = (complete and len(groups[j]) <= Int(slot[].scale[j])
+                                and len(infrequent[j]) <= len(groups[j])
+                                and (len(groups[j]) > 0) == (len(infrequent[j]) > 0))
+                slot[].groups = groups^
+                slot[].infrequent = infrequent^
+        else:
+            complete = complete and len(slot[].inf_words) == 0
+        if kind == PREP_KIND_ONEHOT and complete:
+            var sizes = _code_sizes(slot)
+            for j in range(min(len(slot[].anchor), len(sizes))):  # driver-loop: over the fitted drop indices
+                var drop = Int(slot[].anchor[j])
+                complete = complete and drop >= -1 and drop < sizes[j]
     elif kind == PREP_KIND_POWER:
         complete = (complete and len(slot[].extra) == d and len(slot[].center) == len(slot[].scale)
                     and (len(slot[].center) == 0 or len(slot[].center) == d)
@@ -2289,7 +2620,8 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
         var mask = (MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
                     | MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE)
         if call[].state == 0:
-            return mask | MEMBER_CAN_INVERSE_TRANSFORM | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_TEST_ROWS  # the family's union
+            return (mask | MEMBER_CAN_INVERSE_TRANSFORM | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_TEST_ROWS
+                    | MEMBER_CAN_NOTICES)  # the family's union
         # Kind-exact: QuantileTransformer, PowerTransformer and
         # KBinsDiscretizer invert; KBinsDiscretizer and SplineTransformer
         # read weights; no kind reads a column index.
@@ -2304,6 +2636,9 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
             # admission `xprep_values` scans nothing), and the RUN applies it
             # in full, so a caller makes no finite scan.
             mask |= MEMBER_CAN_TEST_ROWS
+        if held[].kind() == PREP_KIND_ONEHOT:
+            # the transform's unknown-category warnings (`_transform_onehot`)
+            mask |= MEMBER_CAN_NOTICES
         return mask
     if operation == MEMBER_OP_NEW:
         if call[].param_count < 1 or not call[].params:
@@ -2315,6 +2650,9 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
             expected += Int(source[8])
         if kind == PREP_KIND_SPLINE and call[].param_count >= PREP_SPLINE_HEADER and source[12] >= 0.0:
             expected += Int(source[12]) * max(Int(source[13]), 0)
+        if _encoder(kind) and call[].param_count >= expected:
+            # the given category lists and drop entries (`_enc_sections`)
+            expected = _enc_sections(source, call[].param_count, _enc_tail(kind))
         if Float64(kind) != source[0] or call[].param_count != expected:
             raise Error("member ABI: a " + _kind_name(kind) + " member takes " + String(_new_count(kind))
                         + " parameter words")
@@ -2333,9 +2671,11 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
         if kind == PREP_KIND_SPLINE and (source[1] < 0.0 or source[1] > 7.0 or source[2] < 0.0 or source[2] > 2.0
                                          or source[4] < 0.0 or source[4] > 3.0):
             raise Error("member ABI: invalid SplineTransformer degree, knots or extrapolation code")
-        if _encoder(kind) and source[1] != 0.0 and source[1] != 1.0:
-            raise Error("member ABI: an encoder member's category fit route is CAT_FIT_UNIQUE or CAT_FIT_SCAN")
-        if kind == PREP_KIND_ONEHOT and (source[4] < 0.0 or source[4] > 2.0 or source[5] < 0.0 or source[5] > 2.0):
+        if _encoder(kind) and (source[1] < 0.0 or source[1] > 3.0):
+            raise Error("member ABI: an encoder member's category fit route is CAT_FIT_UNIQUE, CAT_FIT_SCAN or a "
+                        + "CAT_FIT_PACK_* route")
+        if kind == PREP_KIND_ONEHOT and (source[4] < 0.0 or source[4] > 3.0 or source[5] < 0.0 or source[5] > 3.0
+                                         or (source[5] != 3.0 and source[PREP_ENC_TAIL_ONEHOT + 5] != 0.0)):
             raise Error("member ABI: invalid OneHotEncoder handle_unknown or drop code")
         var words = List[Float64](length=call[].param_count, fill=0.0)
         for index in range(call[].param_count):  # driver-loop: the parameter words
@@ -2368,10 +2708,8 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
             _fit_kbins(slot, call)
         elif kind == PREP_KIND_SPLINE:
             _fit_spline(slot, call)
-        elif kind == PREP_KIND_ORDINAL:
-            _fit_ordinal(slot, call)
-        elif kind == PREP_KIND_ONEHOT:
-            _fit_onehot(slot, call)
+        elif _encoder(kind):
+            _fit_encoder(slot, call)
         else:
             _fit_robust(slot, call)
     elif operation == MEMBER_OP_TRANSFORM:

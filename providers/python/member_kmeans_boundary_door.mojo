@@ -9,9 +9,12 @@ MEMBER-ABI-V2.md; RUN: core/kmeans_member.mojo.
     its binding through the estimator's own binding route (`device=` and
     the numeric mode, `estimator_binding`), and that binding's KMeans entry
     as the route's `entry` with its capability word in `route.flags`.
-    Explicit starting centers (`init='array'` or an array `init`) are not
-    parameter words: admit answers False and the caller keeps the class's
-    own doors for that instance.
+    Explicit starting centers (`init='array'` with `init_centroids`, or an
+    array `init`) are DATA read once here (lane mf-clu6): the rank and
+    emptiness refusals of the door's admission, one cast to float32, the
+    words packed behind the scalar words (core/cluster_member_words.mojo);
+    the shape and finiteness refusals run in RUN at fit, where X gives the
+    feature count, in the door's order.
   * `kmeans_member_pack` (PACK): the fitted attributes the estimator's own
     fit writes (cluster_centers_ frozen, labels_, inertia_, n_iter_,
     sum_scale_, weight_scale_, n_features_in_) and the release of its
@@ -23,7 +26,7 @@ and two block copies); a caller runs its members in parallel.
 """
 from std.memory import bitcast, unsafe_memcpy
 from std.python import Python, PythonObject
-from bindings.admitted_family_door import admit_family
+from bindings.admitted_family_door import admit_family, admit_family_input, admit_family_cast
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.cluster_keys_unpack import cluster_keys
@@ -33,6 +36,8 @@ from bindings.kmeans_native_unpack import kmeans_fit_init, kmeans_fit_scalars
 from bindings.member_owner_unpack import MemberOwner
 from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
 from bindings.py_balanced import py_call, py_get, py_setitem
+from core.cluster_member_words import member_words_append_f32
+from providers.python.array_metadata_pyapi_door import ArrayPin
 from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU, device_vendor_code
 from core.entry_table import EntryRef, entry_ref_word
 from core.hostptr import f32_ptr
@@ -50,12 +55,9 @@ comptime _INIT_ARRAY = 2
 def kmeans_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
-    from the unfitted estimator. False for explicit starting centers (the
-    class's own doors run that instance)."""
+    from the unfitted estimator."""
     classical_connect_numpy(context)
     var settings = kmeans_fit_init(fields, b, context)
-    if settings.init_code == _INIT_ARRAY:
-        return False
     # An explicit Host* class (its own host-only word, lane mf-iterimp3b): the host image its own methods
     # bind (`estimator_member_binding`); any other class: the estimator's binding route, as before.
     var binding = estimator_member_binding(model, "_mojolearn", context)
@@ -80,9 +82,34 @@ def kmeans_member_admit(model: PythonObject, fields: PythonObject, kind: Int, co
     var words: List[Float64] = [Float64(scalars.clusters), Float64(settings.init_code), Float64(scalars.restarts),
         Float64(scalars.iterations), scalars.tolerance, seed_bits, Float64(settings.metric_code),
         settings.oversampling]
+    if settings.init_code == _INIT_ARRAY:
+        _start_words(settings.init_centroids, context, words)
     owner.plan.params = words^
     owner.pins = Python.tuple(binding, kmeans_provider(connection))
     return True
+
+
+def _start_words(source: PythonObject, context: PythonObject, mut words: List[Float64]) raises:
+    """Explicit starting centers as parameter words: [8] 1 given / 0 absent,
+    [9] rows, [10] columns, then the float32 words (the door's admission:
+    `admit_family_input`'s rank and emptiness refusals, then one cast)."""
+    if source is None:
+        words.append(0.0)
+        words.append(0.0)
+        words.append(0.0)
+        return
+    var pin = ArrayPin()
+    var snapshot = admit_family_input(source, 2, "init_centroids", context, pin)
+    admit_family_cast(snapshot, pin, "init_centroids", context)
+    var rows = snapshot.shape[0]
+    var cols = snapshot.shape[1]
+    words.append(1.0)
+    words.append(Float64(rows))
+    words.append(Float64(cols))
+    member_words_append_f32(words, snapshot.source.addr, rows * cols)
+    _ = source  # the borrowed words stay alive through the copy above
+    _ = snapshot^
+    _ = pin^
 
 
 def kmeans_member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,

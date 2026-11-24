@@ -76,8 +76,9 @@ from bindings.prep_select_run import (
     MiProgram, mi_columns, mi_mask_of_bools, mi_mask_of_indices, mi_gather_stage, mi_class_count_stage,
     mi_int_words, mi_class_check, mi_discrete_check, mi_stage, mi_scatter,
     RfeKeys, rfe_first_stage, rfe_round_stage, rfe_member_importances, rfe_member_source, rfe_select_count,
-    RFE_NO_IMPORTANCES,
+    RFE_NO_IMPORTANCES, RfeFitPlan, RfeFitResult, rfe_fit_run,
 )
+from bindings.prep_classify_prog_run import ClsRunPlan
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.device_route import DeviceRoute, DEVICE_CPU
 from core.entry_table import EntryRef, entry_ref_word
@@ -85,7 +86,8 @@ from core.member_abi import (
     MemberCall, MemberPlan, MemberRef, member_call, member_new, member_free, member_kind_capabilities,
     MEMBER_OP_CAPABILITIES, MEMBER_I32, MEMBER_CAN_COEF, MEMBER_BLOCK_COEF,
 )
-from core.member_families import MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_NAIVE_BAYES
+from core.member_families import MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_XNEIGHBORS
+from core.member_set_run import MemberFitExtras
 from core.discriminant_member import discriminant_member_v2
 from core.naive_bayes_member import naive_bayes_member_v2
 from x_prep.transport_host import x_prep_transport_host_v1
@@ -685,7 +687,8 @@ def rfe_lda_unit(unit: Int) raises:
         var words = List[Float32]()
         try:
             words = rfe_member_importances(plan, call, Int(block.unsafe_ptr()), n, nsup, Int(codes.unsafe_ptr()),
-                                           MEMBER_I32, source.block, source.squared, notices, rows)
+                                           MEMBER_I32, source.block, source.squared, notices, rows,
+                                           MemberFitExtras(), 0)
         finally:
             member_free(plan, call)
         # keep-alive: `block` is reassigned below, so its old buffer died at `block.unsafe_ptr()` above (a local is
@@ -718,6 +721,52 @@ def rfe_lda_unit(unit: Int) raises:
 
 def test_rfe_lda() raises:
     check_cases("rfe lda member", 5, rfe_lda_unit)
+
+
+def rfe_run_unit(unit: Int) raises:
+    """Lane mf-meta5: THE ONE BODY `rfe_fit_run` (the door's member path and THE RFE KIND) on the host x_prep
+    image over the same LDA member and fixtures as `rfe_lda_unit`: ranking_ and support_ exact, the kept
+    columns the support's, the final estimator fitted on them and owned by the caller.
+    FAIL-PROOF: in `rfe_fit_run` pass `nsup` for `drop` to `rfe_round_stage` (every column dropped) or read
+    the support at `staged.ranking` -> every unit fails on ranking_ / support_."""
+    var c = rfe_lda_case(unit)
+    var name = rfe_lda_name(unit)
+    var label = "rfe run " + name
+    var n = RFE_LDA_N
+    var d = RFE_LDA_D
+    var data = String("lda-k3") if c.classes == 3 else String("lda-k2")
+    var x = fixture_f32(MF_DIR + data + "-x.f32", n * d)
+    var codes = fixture_i32(MF_DIR + data + "-y.i32", n)
+    var plan = member_plan(MEMBER_FAMILY_DISCRIMINANT, da_params(0, c.solver), c.classes)
+    var source = rfe_member_source(MEMBER_FAMILY_DISCRIMINANT, member_kind_capabilities(plan), "auto", "")
+    var run = ClsRunPlan(xprep_member_route().entry, False, False, False, False, False)
+    var request = RfeFitPlan(plan.copy(), run, True, Int(x.unsafe_ptr()), n, d, Int(codes.unsafe_ptr()), MEMBER_I32)
+    request.nsel = rfe_select_count(d, 0 if c.nsel < 0 else 2, 0.0, c.nsel)
+    request.step = c.step
+    request.block = source.block
+    request.squared = source.squared
+    var res = rfe_fit_run(request)
+    _ = len(x)  # read by address through the run above
+    _ = len(codes)
+    var want_rank = fixture_i32(MF_DIR + "rfe-" + name + "-rank.i32", d)
+    var want_sup = fixture_i32(MF_DIR + "rfe-" + name + "-sup.i32", d)
+    var kept = 0
+    for j in range(d):  # small-loop(ranking_ and support_, exact)
+        require(Int(res.ranking[j]) == Int(want_rank[j]), label + ": ranking_[" + String(j) + "] "
+            + String(Int(res.ranking[j])) + ", the door's " + String(want_rank[j]))
+        require((res.support[j] != Float32(0)) == (want_sup[j] != 0), label + ": support_[" + String(j) + "]")
+        if want_sup[j] != 0:
+            require(kept < res.selected and Int(res.columns[kept]) == j, label + ": kept column " + String(j))
+            kept += 1
+    require(kept == res.selected, label + ": " + String(res.selected) + " kept columns, the support's "
+            + String(kept))
+    require(res.final_state != 0, label + ": no final estimator state")
+    var call = MemberCall(res.final_plan.route, res.final_state)
+    member_free(res.final_plan, call)
+
+
+def test_rfe_fit_run() raises:
+    check_cases("rfe fit run", 5, rfe_run_unit)
 
 
 def refusal_unit(unit: Int) raises:
@@ -755,6 +804,17 @@ def refusal_unit(unit: Int) raises:
 
 def test_rfe_refusals() raises:
     check_cases("rfe refusals", 3, refusal_unit)
+
+
+def test_rfe_source_xneighbors() raises:
+    """Lane mf-meta5b: an XNeighbors kind (k-NN, LabelPropagation, LabelSpreading) exports neither importance
+    block, so RFE refuses before a round: 'auto' in the door's words, a named attribute in attrgetter's.
+    FAIL-PROOF: drop MEMBER_FAMILY_XNEIGHBORS from `rfe_member_source`'s refusal families -> block 0, no words."""
+    var auto = rfe_member_source(MEMBER_FAMILY_XNEIGHBORS, 0, "auto", "LabelPropagation")
+    require(auto.block == 0 and auto.refusal == String(RFE_NO_IMPORTANCES), "XNeighbors 'auto': the door's words")
+    var named = rfe_member_source(MEMBER_FAMILY_XNEIGHBORS, 0, "coef_", "LabelSpreading")
+    require(named.refusal == "AttributeError: 'LabelSpreading' object has no attribute 'coef_'",
+            "XNeighbors 'coef_': attrgetter's words")
 
 
 def main() raises:

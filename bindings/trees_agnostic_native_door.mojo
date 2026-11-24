@@ -32,7 +32,7 @@ from core.member_abi import (
     member_call, member_call_of, member_outputs_of,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_CAN_PREDICT,
     MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_TEST_ROWS, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_F32, MEMBER_F64,
-    MEMBER_I32, MEMBER_I64, MEMBER_DTYPE_UNSAID,
+    MEMBER_I32, MEMBER_I64, MEMBER_DTYPE_UNSAID, MEMBER_CAN_CLASSIFIER,
 )
 from bindings.trees_public_inputs_run import trees_finite_f32
 from bindings.trees_public_inputs_door import trees_table, trees_address, trees_reshape, trees_cast
@@ -44,7 +44,8 @@ from bindings.admitted_input_unpack import admitted_vector, admitted_unfilled, c
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.trees_public_forest_door import forest_effective_mode, _engine, _ordered_export, _resident
 from xtrees.trees_forest_run import _family
-from bindings.trees_public_boost_door import _seed, _xk, _xt, _xr
+from bindings.trees_public_boost_door import _xk, _xt, _xr
+from bindings.trees_meta_validate_unpack import meta_seed as _seed
 from bindings.trees_explainer_native_door import _get, _int, _entry, _snapshot, _replace, _tree_mode
 from xtrees.trees_agnostic_native_run import _name, _SWITCH_FACTS
 from xtrees.glue_calls import xt_ref
@@ -247,9 +248,29 @@ def _method(model: PythonObject, context: PythonObject) raises -> String:
     return _method_of(model, context)
 
 
+def _predict_only(model: PythonObject) raises -> Bool:
+    """The class's OWN `_mojolearn_member_predict_only` word (lane mf-hostent5): a saved model, HostForest or
+    HostGBDT, whose member kind is predict-only and whose estimator type is the saved file's, not its class's."""
+    var own = _class_fields(py_type(model))
+    var key = PythonObject("_mojolearn_member_predict_only")
+    if not py_contains(own, key):
+        return False
+    var word = py_item(own, key)
+    var answer = word is PythonObject(True)
+    return answer
+
+
 def _method_of(model: PythonObject, context: PythonObject) raises -> String:
     """`_method` of a class with a connected plan. A member-only plan (`_member_only`) serves its member's
-    methods (a classifier's predict_proba, else predict: IsolationForest's predict, lane mf-shap3b)."""
+    methods (a classifier's predict_proba, else predict: IsolationForest's predict, lane mf-shap3b). A saved
+    model (`_predict_only`, lane mf-hostent5) is explained as the estimator that saved it: a HostForest
+    classifier file through predict_proba (RandomForestClassifier's), any other file through predict."""
+    if _predict_only(model):
+        var saved = py_get(_fields(model), PythonObject("is_classifier"))
+        var host_forest = py_contains(_fields(model), "_offsets")
+        if host_forest and saved is not None and Bool(py=saved):
+            return "predict_proba"
+        return "predict"
     var member_only = _member_only(model, context)
     var kind = _class_value(model, "_estimator_type")
     if (kind is not None and py_type(kind) is _b().str and String(kind) == "classifier"):
@@ -728,6 +749,8 @@ def _member_open(mut em: _Member, s: _State, model: PythonObject, x: PythonObjec
         var proba = s.method == "predict_proba"
         # A classifier explained through predict: its member writes CODES, mapped to the labels by the RUN.
         var labelled = not proba and Bool(py=plan["classifier"])
+        # A saved model's class says no estimator type (lane mf-hostent5): its held kind does (below).
+        var saved = _predict_only(model)
         var b = _b()
         var member_context = plan["context"]
         var fields = py_call(plan["fields_get"], model, py_type(model))
@@ -744,6 +767,8 @@ def _member_open(mut em: _Member, s: _State, model: PythonObject, x: PythonObjec
         var parallel = False
         try:
             var probe = member_call_of(held.plan, held.state)
+            if saved and not proba:
+                labelled = (member_call(held.plan.member, MEMBER_OP_CAPABILITIES, probe) & MEMBER_CAN_CLASSIFIER) != 0
             cols = member_outputs_of(held.plan, probe, operation)
             dtype = probe.out_dtype
             classes = probe.classes
@@ -1308,7 +1333,11 @@ struct _DoorModel(AgnModel):
     mf-split4b a Calibrated index-list / KFold / StratifiedKFold cv and a Bagging tree's class_weight on the
     per-member route; a user's own splitter object is refused at the admission, never called). Since lane mf-meta3c the batched
     Bagging route and metas nested at any depth (the boundary's admission work-list) open as META states too. When
-    those left are typed, this door and `_evaluate` are deleted. Everything else is native: every member
+    those left are typed, this door and `_evaluate` are deleted. Since lane mf-hostent5 the last classes with no
+    member entry have one (OrderedRMSE, Gbdt kind 4; the saved HostForest and HostGBDT, the predict-only forest
+    and Gbdt kinds), so no explained class reaches this door for want of an entry: only the meta members above
+    and THE FALLBACK RULE's cases (a held import the family refuses for this estimator, whose door then answers
+    or raises its own words). Everything else is native: every member
     family (an outlier detector's or clusterer's integer predict too), the votes (soft and hard), Bagging, Stacking
     (a classifier member asked for predict too), OneVsRest, CalibratedClassifierCV, AdaBoost, MultiOutputRegressor,
     the search CVs' best estimator, RFE (its estimator over its support), LabelPropagation and LabelSpreading (their

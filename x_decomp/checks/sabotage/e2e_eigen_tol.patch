@@ -1,22 +1,22 @@
-diff --git a/bindings/_mojolearn_metrics_host.mojo b/bindings/_mojolearn_metrics_host.mojo
-index 20c4d1776..dbd8e4fa5 100644
---- a/bindings/_mojolearn_metrics_host.mojo
-+++ b/bindings/_mojolearn_metrics_host.mojo
-@@ -666,7 +666,7 @@ def spectral_embedding_dataset_binding(
-         _want(String("spectral_embedding_dataset"), params, 8)
-     var tolerance = Float32(1e-5)
-     if len(params) == 9:
--        tolerance = Float32(Float64(py=params[8]))
-+        tolerance = Float32(Float64(py=params[8])) * Float32(4.0)  # SABOTAGE: the float eigen_tol, CPU column only
-     var n_samples = _index(params[0])
-     var n_features = _index(params[1])
-     var n_lanczos = _index(params[2])
-@@ -717,7 +717,7 @@ def spectral_embedding_graph_binding(
-         _want(String("spectral_embedding_graph"), params, 7)
-     var tolerance = Float32(1e-5)
-     if len(params) == 8:
--        tolerance = Float32(Float64(py=params[7]))
-+        tolerance = Float32(Float64(py=params[7])) * Float32(4.0)  # SABOTAGE: the float eigen_tol, CPU column only
-     var n_samples = _index(params[0])
-     var nnz = _index(params[1])
-     var n_lanczos = _index(params[2])
+diff --git a/core/spectral_native_host.mojo b/core/spectral_native_host.mojo
+index 7c72e3a24d..b13d7c8125 100644
+--- a/core/spectral_native_host.mojo
++++ b/core/spectral_native_host.mojo
+@@ -63,7 +63,7 @@ struct SpectralHostBackend(SpectralBackend):
+         result.columns = host_spectral_embedding_dataset(
+             source, r.input.rows, r.input.features, r.options.lanczos_components,
+             r.options.neighbors, r.options.normalize_laplacian, r.options.drop_first,
+-            UInt64(r.options.seed), result.embedding, Float32(r.options.tolerance),
++            UInt64(r.options.seed), result.embedding, Float32(r.options.tolerance * 100.0),  # SABOTAGE (coverage-x_decomp-e2e_eigen_tol): the Lanczos tolerance 100x looser, CPU column
+         )
+ 
+     @staticmethod
+@@ -72,7 +72,7 @@ struct SpectralHostBackend(SpectralBackend):
+         result.columns = host_spectral_embedding_coo(
+             rows, columns, values, r.input.rows, r.options.lanczos_components,
+             r.options.normalize_laplacian, r.options.drop_first, UInt64(r.options.seed),
+-            result.embedding, Float32(r.options.tolerance),
++            result.embedding, Float32(r.options.tolerance * 100.0),  # SABOTAGE (coverage-x_decomp-e2e_eigen_tol): the Lanczos tolerance 100x looser, CPU column
+         )
+ 
+     @staticmethod

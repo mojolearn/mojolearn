@@ -3,17 +3,22 @@
 core/gbdt_member.mojo, called by `bindings/member_boundary_door.mojo`.
 
 Published classes: `GradientBoostingClassifier` (kind 0),
-`GradientBoosting` (kind 1, the booster: its own predict returns raw scores)
-and `GradientBoostingRegressor` (kind 2). The adapters (kinds 0 and 2) are
+`GradientBoosting` (kind 1, the booster: its own predict returns raw scores),
+`GradientBoostingRegressor` (kind 2) and, since lane mf-meta5,
+`ExperimentalTwoLevelFeatureFreq` (kind 3: its own fit, `xg_feature_freq_fit`
+after the door's checks; its settings and source columns read here as its fit
+door reads them; PACK `_text_model_pack`, the door's `_fitted_text`), since lane mf-hostent5
+`OrderedRMSE` (kind 4: its own fit, `xg_ordered_fit` after the door's checks; its five settings read here
+after the door's `_ordered_options`; its required `permutation` from a caller's fit parameters,
+`gbdt_member_fit_params`, as typed int64 words in `call.permutation`; PACK `_text_model_pack`) and
+`HostGBDT` (kind 5: a saved model, predict-only, its state imported from its own fields by
+`gbdt_member_state` and predicted on the host gbdt image, `_host_admit`). The adapters (kinds 0 and 2) are
 their inner learner: the admission builds the learner their fit builds
 (`adapter_member_learner`, a new object; the adapter is only read) and
 takes ITS config, table and route, so the member fits exactly the learner's
 request; the pack writes one learner (`_learner_`, packed from the member
 state) and the adapter's copies of its attributes, as the adapter's fit
-door writes them. Not published: `OrderedRMSE` (no mark; its own door):
-its fit is a second algorithm, not a config word (XG_ORDERED_FIT, five
-settings, an ordered RMSE booster of its own), and it needs a per-fit
-`permutation` argument that no member call carries.
+door writes them.
 
   * `gbdt_member_admit` (UNPACK, once per member): the fit's own option
     checks (`gbdt_check_option_tables`) and the typed config
@@ -29,10 +34,15 @@ settings, an ordered RMSE booster of its own), and it needs a per-fit
     `call.eval_x` / `eval_y`, `pairs` / `pairs_weight`, `cat_keys` /
     `eval_cat_keys`, a text X's keys read by the caller's UNPACK with the fit
     door's own encoding, bindings/gbdt_category_unpack.mojo
-    `gbdt_category_admit`). No member caller passes them yet: model
-    selection, the ensembles and IterativeImputer hand a float32 X and
-    sample weights only (cross_val_score documents fit parameters and
-    eval_set as not supported).
+    `gbdt_category_admit`). One caller passes them (lane mf-gbdt5): RFE's
+    fit parameters, admitted by `gbdt_member_fit_params` below with the fit
+    doors' checks and words; model selection, the ensembles and
+    IterativeImputer hand a float32 X and sample weights only
+    (cross_val_score documents fit parameters and eval_set as not
+    supported).
+  * `gbdt_member_fit_params` (UNPACK, once per caller fit): a caller's
+    `fit(X, y, **fit_params)` keys as typed `MemberFitExtras`
+    (core/member_set_run.mojo), see its docstring.
   * `gbdt_member_pack` (PACK): the fitted attributes the fit door's PACK
     writes (`model_`, `bias_`, `best_iteration_`, `stopped_early_`,
     `loss_curve_`, `test_loss_curve_` (the held-out curve of a fit given an
@@ -64,30 +74,61 @@ from bindings.py_balanced import py_call, py_get, py_item, py_setitem, py_fields
 from bindings.classical_arrays_door import classical_address
 from bindings.admitted_input_unpack import classical_view, admitted_vector
 from bindings.trees_keys_unpack import trees_keys
-from bindings.trees_route_boundary_door import trees_route_context
-from bindings.trees_public_gbdt_door import gbdt_table, gbdt_entry_of, _field, _repr
+from bindings.trees_route_boundary_door import trees_route_context, trees_cpu_context, _process_cpu_only
+from bindings.trees_public_gbdt_door import (
+    gbdt_table, gbdt_entry_of, _field, _repr, _real_setting, _int, _source_columns, _fitted_text,
+    _ordered_options, _checked_weights, ordered_permutation_ids,
+)
+from bindings.trees_public_inputs_door import trees_table
 from bindings.py_typed_call import py_call_typed
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.trees_public_gbdt_fit_door import (
-    gbdt_config, gbdt_check_option_tables, _tables, _truthy, _in, _f64_curve,
+    gbdt_config, gbdt_check_option_tables, _tables, _truthy, _in, _eq, _f64_curve,
     adapter_member_learner, adapter_label_kind,
+    _group_sizes, _pairs_arrays, _adapter_eval, _label_kind, _regression_target,
 )
+from bindings.labels_descriptor_boundary_door import labels_scope
+from bindings.trees_public_inputs_door import trees_encode_labels, trees_address
+from bindings.admitted_input_unpack import AdmittedX, admit_f32, admit_weight_words
+from core.member_set_run import MemberFitExtras
+from core.member_families import MEMBER_FAMILY_GBDT
+from core.gbdt_cat_words import gbdt_cat_outside_words
+from core.host_parallel import host_parallelize
+from bindings.native_unit_os_threads_run import native_unit_cores
+from bindings.gbdt_category_unpack import gbdt_category_admit
 from bindings.native_typed_context_pack import native_typed_context
 from bindings.classifier_public_lifecycle_door import _public_labels
 from bindings.member_owner_unpack import member_labels_take
 from gbdt.fit_calls import xg_numeric_mode
-from bindings.gbdt_config_run import gbdt_config_words
+from bindings.gbdt_config_run import GbdtConfig, gbdt_config_words
 from gbdt.fit_request import gbdt_string_at
 from core.entry_table import entry_ref_mode, entry_ref_vendor
 from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE,
-    MEMBER_F64, MEMBER_I32, MEMBER_I64,
+    MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_BLOCK_FEATURE_IMPORTANCES,
 )
+from bindings.gbdt_importances_pack import GBDT_IMPORTANCES_FIELD, gbdt_importances_store
 
 
-comptime _ADAPTER_COPIED = 5
+comptime _ADAPTER_COPIED = 6
+
+
+def _importances_pack(own: PythonObject, plan: MemberPlan, state: Int, run: PythonObject) raises:
+    """`_feature_importances_` from the state's importance block (lane
+    mf-imp6), as the fit doors' PACK stores it; None for a state without one."""
+    var call = MemberCall(plan.route, state)
+    call.block = MEMBER_BLOCK_FEATURE_IMPORTANCES
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var n = call.dst.rows * call.dst.cols
+    if n == 0:
+        py_setitem(own, PythonObject(GBDT_IMPORTANCES_FIELD), PythonObject(None))
+        return
+    var values = List[Float32](length=n, fill=Float32(0.0))
+    unsafe_memcpy(dest=values.unsafe_ptr(), src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=call.dst.data),
+                  count=n)
+    gbdt_importances_store(own, values, run)
 
 
 def _adapter_name(kind: Int) -> String:
@@ -102,7 +143,48 @@ def gbdt_member_admit(model: PythonObject, fields: PythonObject, kind: Int, cont
     if kind == 1:
         if name != "GradientBoosting":
             return False
-        return _learner_admit(model, 1.0, trees_route_context(model, context), owner)
+        return _learner_admit(model, 1.0, trees_route_context(model, context), owner, List[Float64]())
+    if kind == 3:
+        # ExperimentalTwoLevelFeatureFreq (lane mf-meta5; core/gbdt_member.mojo kind 3): the booster's
+        # admission over its own fields, plus the FeatureFreq fit's settings as its fit door reads them
+        # (`feature_freq_unpack`: float(learning_rate), float(l2_leaf_reg), int(random_state), the source
+        # columns), before the feature-list tail.
+        if name != "ExperimentalTwoLevelFeatureFreq":
+            return False
+        var own = py_fields(model)
+        var nk = trees_keys()
+        var extra: List[Float64] = [
+            _real_setting(own, model, nk[].k_learning_rate, "learning_rate"),
+            _real_setting(own, model, nk[].k_l2_leaf_reg, "l2_leaf_reg"),
+            Float64(_int(_field(own, model, nk[].k_random_state, "random_state"))),
+        ]
+        var sources = _source_columns(_field(own, model, nk[].k_sources, "sources"))
+        for i in range(len(sources)):  # small-loop(the source columns)
+            extra.append(Float64(sources[i]))
+        extra.append(Float64(len(sources)))
+        return _learner_admit(model, 3.0, trees_route_context(model, context), owner, extra^)
+    if kind == 4:
+        # OrderedRMSE (lane mf-hostent5; core/gbdt_member.mojo kind 4): its fit door's settings checks
+        # (`_ordered_options`, in its words), then the booster's admission over its own fields plus the five
+        # settings as `ordered_rmse_unpack` reads them, before the feature-list tail.
+        if name != "OrderedRMSE":
+            return False
+        var own = py_fields(model)
+        var nk = trees_keys()
+        var run = trees_route_context(model, context)
+        _ordered_options(own, model, run)
+        var extra: List[Float64] = [
+            Float64(_int(_field(own, model, nk[].k_n_estimators, "n_estimators"))),
+            Float64(_int(_field(own, model, nk[].k_max_depth, "max_depth"))),
+            Float64(_int(_field(own, model, nk[].k_border_count, "border_count"))),
+            _real_setting(own, model, nk[].k_learning_rate, "learning_rate"),
+            _real_setting(own, model, nk[].k_l2_leaf_reg, "l2_leaf_reg"),
+        ]
+        return _learner_admit(model, 4.0, run, owner, extra^)
+    if kind == 5:
+        if name != "HostGBDT":
+            return False
+        return _host_admit(model, context, owner)
     if (kind != 0 and kind != 2) or name != _adapter_name(kind):
         return False
     # The adapter's typed run context, as its lifecycle door hands its fit.
@@ -113,12 +195,46 @@ def gbdt_member_admit(model: PythonObject, fields: PythonObject, kind: Int, cont
     var code = xg_numeric_mode(gbdt_entry_of(gbdt_table(py_fields(learner), native)))
     if code != (0 if mode == "fast" else 1):
         raise Error("RuntimeError: GBDT adapter native numeric mode disagrees with requested mode")
-    return _learner_admit(learner, Float64(kind), native, owner)
+    return _learner_admit(learner, Float64(kind), native, owner, List[Float64]())
 
 
-def _learner_admit(model: PythonObject, kind: Float64, run: PythonObject, mut owner: MemberOwner) raises -> Bool:
+def _host_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
+    """UNPACK of a HostGBDT (kind 5, lane mf-hostent5): a saved model that predicts on the CPU, so its route is
+    the host image of the identical tier whatever device its file recorded (the CPU run context of a GPU
+    installation, `trees_cpu_context`; the connection context of a CPU-only one), as HostGBDT's own predict runs
+    on the host binding. NEW's config is a GradientBoosting config carrying only the saved `loss` (the member's
+    predict and proba read the loss and the model text, nothing else of a config). Its fitted state is imported
+    by `gbdt_member_state` from its own fields."""
+    var own = py_fields(model)
+    var nk = trees_keys()
+    var loss = py_get(own, nk[].k_loss)
+    if loss is None or py_get(own, nk[].k_model_) is None:
+        return False
+    var run = context if _process_cpu_only(context) else trees_cpu_context(context)
+    var table = trees_table(run, "identical", "_mojolearn_gbdt")
+    var entry = gbdt_entry_of(table)
+    var vendor = entry_ref_vendor(entry)
+    var route = DeviceRoute(DEVICE_CPU if vendor == 0 else DEVICE_GPU)
+    route.mode = entry_ref_mode(entry)
+    route.vendor = vendor
+    route.entry = entry
+    owner.plan.route = route
+    var config = GbdtConfig()
+    config.loss = String(py=loss)
+    var words: List[Float64] = [5.0]
+    words.extend(gbdt_config_words(config))
+    words.append(0.0)  # the feature-list tail: no cat_features (the category map is the imported block)
+    words.append(0.0)
+    owner.plan.params = words^
+    owner.pins = Python.tuple(table, run)
+    return True
+
+
+def _learner_admit(model: PythonObject, kind: Float64, run: PythonObject, mut owner: MemberOwner,
+                   var extra: List[Float64]) raises -> Bool:
     """The booster's admission over `model` (GradientBoosting itself, or an
-    adapter's learner) in its run context `run`; `kind` is NEW's word 0."""
+    adapter's learner) in its run context `run`; `kind` is NEW's word 0;
+    `extra` the kind's words before the feature-list tail (kind 3's)."""
     var own = py_fields(model)
     var nk = trees_keys()
     var cat = _field(own, model, nk[].k_cat_features, "cat_features")
@@ -154,6 +270,7 @@ def _learner_admit(model: PythonObject, kind: Float64, run: PythonObject, mut ow
     owner.plan.route = route
     var words: List[Float64] = [kind]
     words.extend(gbdt_config_words(config))
+    words.extend(extra^)
     # The feature-list tail (core/gbdt_member.mojo NEW): cat_features, then
     # one_hot_features, as the estimator holds them (`int` of each, the fit
     # door's `gbdt_category_columns` / `_flags` reads), then their counts.
@@ -174,6 +291,398 @@ def _learner_admit(model: PythonObject, kind: Float64, run: PythonObject, mut ow
     return True
 
 
+# ---------------------------------------------------------------- a caller's fit parameters (lane mf-gbdt5)
+struct GbdtMemberFitParams(Movable):
+    """UNPACK of a caller's fit parameters for a Gbdt member's FIT
+    (`gbdt_member_fit_params`). `admitted` False: a key or a case the member
+    does not carry (the caller keeps the estimator's own fit door, which
+    answers in its own words). True: `extras` holds the typed addresses
+    (core/member_set_run.mojo `MemberFitExtras`); `pins` the Python holders
+    of the eval set, the weights, the group sizes and the pairs, and `ids` /
+    `codes` the native words built here (group ids, a classifier's held-out
+    codes), all alive while this value lives (THE LIFETIME RULE)."""
+    var admitted: Bool
+    var extras: MemberFitExtras
+    var pins: PythonObject
+    var ids: List[Int32]
+    var codes: List[Int32]
+    # Lane mf-meta5b: a fit with cat_features: the held-out X as C-order rows
+    # (the fit door's categorical admission is column-major) and, for a text
+    # held-out X, its categorical keys (`gbdt_category_admit`'s words).
+    var eval_rows: List[Float32]
+    var eval_keys: List[UInt64]
+
+    def __init__(out self):
+        self.admitted = False
+        self.extras = MemberFitExtras()
+        self.pins = PythonObject(None)
+        self.ids = List[Int32]()
+        self.codes = List[Int32]()
+        self.eval_rows = List[Float32]()
+        self.eval_keys = List[UInt64]()
+
+
+#: The classifier adapter's refusal of a target with more than two classes (its fit door's words,
+#: bindings/trees_public_gbdt_fit_door.mojo `adapter_classifier_fit`, and core/gbdt_member.mojo's).
+comptime GBDT_ADAPTER_MULTICLASS = "Only binary classification is supported. The type of the target is multiclass."
+
+
+def gbdt_member_label_check(plan: MemberPlan, classes: Int) raises:
+    """UNPACK, once per caller fit (lane mf-meta5b): the classifier adapter (kind 0) over more than two
+    classes is refused in its fit door's words, where that door refuses it: after its parameter checks (the
+    admission) and its label encode, BEFORE its eval_set checks and its sample weights. A caller whose first
+    member fit comes later (RFE: a Gbdt kind exports no importance block, so an elimination round is refused
+    before it fits, `rfe_member_source`) asks this right after its encode, so the words are the first fit's,
+    as the estimator's own door raised them. Any other plan: nothing."""
+    if plan.family == MEMBER_FAMILY_GBDT and plan.kind == 0 and classes > 2:
+        raise Error(GBDT_ADAPTER_MULTICLASS)
+
+
+def _tail_cat_columns(params: List[Float64], d: Int) -> List[Int]:
+    """The cat_features indices of NEW's feature-list tail (`[..., cat, one-hot, C, H]`, core/gbdt_member.mojo
+    `_feature_tail`) ascending without repeats (`gbdt_category_columns`); empty when an index is outside the
+    fit's `d` columns (the fit door refuses it in its own words, at its X: the caller keeps that door)."""
+    var out = List[Int]()
+    var count = len(params)
+    if count < 4:
+        return out^
+    var h = Int(params[count - 1])
+    var c = Int(params[count - 2])
+    var start = count - 2 - c - h
+    if c <= 0 or h < 0 or start < 0:
+        return out^
+    for k in range(c):  # small-loop(cat_features): sorted insert of one index
+        var at = Int(params[start + k])
+        if at < 0 or at >= d:
+            return List[Int]()
+        var pos = 0
+        while pos < len(out) and out[pos] < at:  # small-loop(out)
+            pos += 1
+        if pos < len(out) and out[pos] == at:
+            continue
+        out.append(at)
+        var i = len(out) - 1
+        while i > pos:  # small-loop(out)
+            out[i] = out[i - 1]
+            i -= 1
+        out[pos] = at
+    return out^
+
+
+def _row_major(source: Int, rows: Int, cols: Int) -> List[Float32]:
+    """A column-major float32 block (`rows` x `cols` at `source`) as C-order rows, the rows split over the
+    host cores (independent units; one copy, once per caller fit)."""
+    var dst = List[Float32](length=rows * cols, fill=0.0)
+    var dst_at = Int(dst.unsafe_ptr())
+    var tasks = max(min(native_unit_cores(), rows), 1)
+    var per = (rows + tasks - 1) // tasks
+
+    def _span(t: Int) {imm source, imm rows, imm cols, imm per, imm dst_at}:
+        var lo = t * per
+        var hi = min(lo + per, rows)
+        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=source)
+        var to = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst_at)
+        for i in range(lo, hi):  # native data loop (one task's held-out rows)
+            for j in range(cols):
+                to[i * cols + j] = src[j * rows + i]
+
+    host_parallelize(_span, tasks)
+    _ = len(dst)
+    return dst^
+
+
+def _eval_x_cats(source: PythonObject, d: Int, cat_columns: List[Int], run: PythonObject,
+                 mut got: GbdtMemberFitParams) raises -> AdmittedX:
+    """The fit door's held-out X of a fit with cat_features (`_eval_set`: `gbdt_category_admit` over the
+    fit's categorical columns, its width and row checks in its words), as C-order rows in `got.eval_rows`
+    and, for a text or pandas held-out X, its categorical keys in `got.eval_keys` (the member applies the
+    fit's category map to them, as the door's `gbdt_category_apply` does). Without cat_features: `_eval_x`."""
+    if len(cat_columns) == 0:
+        return _eval_x(source, d, run)
+    var keys = List[UInt64]()
+    var xe = gbdt_category_admit(source, "eval_set X", cat_columns, keys, run)
+    if xe.cols != d:
+        raise Error("mojolearn: eval_set X has " + String(xe.cols) + " features "
+                    + "for a fit on " + String(d))
+    if xe.rows == 0:
+        raise Error("mojolearn: eval_set X has no rows")
+    got.eval_rows = _row_major(xe.address, xe.rows, xe.cols)
+    _ = xe.array  # read by address through the copy above
+    got.eval_keys = keys^
+    return xe^
+
+
+def _eval_items(eval_set: PythonObject, b: PythonObject) raises -> PythonObject:
+    """The booster's `_eval_set` shape checks, in its words: one (X, y)
+    pair, or a list of exactly one."""
+    var pair = eval_set
+    if Bool(py=py_call(b.isinstance, eval_set, b.list)):
+        if len(eval_set) != 1:
+            raise Error("mojolearn: eval_set takes ONE (X, y) pair; the "
+                        + "boosting carries a single test cursor. CatBoost "
+                        + "accepts a list, this takes " + String(len(eval_set)) + " as an "
+                        + "error rather than scoring the first and dropping "
+                        + "the rest")
+        pair = eval_set[0]
+    var items = PythonObject(None)
+    try:
+        items = py_call(b.tuple, pair)
+    except:
+        raise Error("mojolearn: eval_set must be (X_eval, y_eval)")
+    if len(items) != 2:
+        raise Error("mojolearn: eval_set must be (X_eval, y_eval)")
+    return items
+
+
+def _eval_x(source: PythonObject, d: Int, run: PythonObject) raises -> AdmittedX:
+    """The booster's `_eval_set` admission of the held-out X (its words),
+    C-order: the member reads dense row-major rows and makes its own
+    column-major copy (core/gbdt_member.mojo `_fit`), so the door's F-order
+    words are the same values in the other order."""
+    var xe = admit_f32(source, 2, "eval_set X", run, finite=False)
+    if xe.cols != d:
+        raise Error("mojolearn: eval_set X has " + String(xe.cols) + " features "
+                    + "for a fit on " + String(d))
+    if xe.rows == 0:
+        raise Error("mojolearn: eval_set X has no rows")
+    return xe^
+
+
+def _carried_keys(fit_params: PythonObject, kind: Int, b: PythonObject) raises -> Bool:
+    """Every key is an exact str the kind's public fit takes: the booster's
+    `fit(X, y, sample_weight, eval_set, group_id, subgroup_id, pairs,
+    pairs_weight)`, an adapter's `fit(X, y, sample_weight, eval_set)`. Any
+    other key keeps the fit door (its TypeError, in its words)."""
+    var keys = py_call(b.list, fit_params)
+    for i in range(len(keys)):  # driver-loop: over the caller's fit parameter names
+        var key = keys[i]
+        if py_type(key) is not b.str:
+            return False
+        var name = String(py=key)
+        if name == "sample_weight" or name == "eval_set":
+            continue
+        if kind == 1 and (name == "group_id" or name == "subgroup_id" or name == "pairs" or name == "pairs_weight"):
+            continue
+        if kind == 4 and name == "permutation":
+            continue
+        return False
+    return True
+
+
+def gbdt_member_fit_params(model: PythonObject, plan: MemberPlan, fit_params: PythonObject, y: PythonObject,
+                           labels: PythonObject, n: Int, d: Int, context: PythonObject) raises -> GbdtMemberFitParams:
+    """UNPACK, once per caller fit (lane mf-gbdt5; RFE.fit(X, y,
+    **fit_params) over a Gbdt member, bindings/prep_select_native_door.mojo
+    `_rfe_member`): the caller's fit parameters admitted with the estimator's
+    own fit door's checks, in its order and words, into typed addresses for
+    every member FIT of that caller (`MemberFitExtras`; the member re-checks
+    what reads its views, core/gbdt_member.mojo `_fit`, in the same words).
+
+    `model` the unfitted estimator (GradientBoosting, or an adapter), `plan`
+    its admitted member plan (kind word), `y` the caller's target, `labels`
+    the classes of the caller's one label encode (a classifier adapter: the
+    held-out labels are coded over them), `n` x `d` the caller's X.
+      * booster (kind 1), as `gbdt_fit_unpack`: sample_weight
+        (`admit_weight_words`), eval_set (shape, X, y: `_eval_set`), then
+        subgroup_id, pairs_weight without pairs, pairs' loss and group_id,
+        group_id (`_group_sizes`: its runs become one int32 id per row, so the
+        member's runs are the door's), pairs (`_pairs_arrays`: uint32 words,
+        every one below n, read as int32).
+      * adapters (kinds 0, 2), as `adapter_classifier_fit` /
+        `adapter_regressor_fit` then the learner's `gbdt_fit_unpack`: the
+        held-out shape (`_adapter_eval`) and target (the classifier: its
+        labels' kind and vocabulary against the training labels, coded over
+        `labels`; the regressor: `_regression_target`), then sample_weight,
+        then the held-out X.
+    With cat_features (lane mf-meta5b) the held-out X is admitted over the
+    fit's categorical columns as the fit door admits it (`_eval_x_cats`), its
+    keys handed to the member, which applies the fit's category map as the
+    door does; a classifier adapter over more than two classes is refused at
+    the caller's encode (`gbdt_member_label_check`). OrderedRMSE (kind 4,
+    lane mf-hostent5), as `ordered_rmse_unpack`: `permutation` through the
+    door's admission (`ordered_permutation_ids`: its element checks, then
+    int64 row ids, held in `pins`; the bijection over the fit's rows is the
+    member fit's `gbdt_ordered_order`), then sample_weight (`_checked_weights`).
+    Not admitted (the fit door keeps them, answering in its words): a key the
+    kind's fit does not take, a cat_features index outside X."""
+    var b = native_loaded_module("builtins")
+    var nk = trees_keys()
+    var got = GbdtMemberFitParams()
+    var kind = plan.kind
+    if not _carried_keys(fit_params, kind, b):
+        return got^
+    var sample_weight = py_get(fit_params, PythonObject("sample_weight"))
+    var eval_set = py_get(fit_params, PythonObject("eval_set"))
+    var group_id = py_get(fit_params, PythonObject("group_id"))
+    var subgroup_id = py_get(fit_params, PythonObject("subgroup_id"))
+    var pairs = py_get(fit_params, PythonObject("pairs"))
+    var pairs_weight = py_get(fit_params, PythonObject("pairs_weight"))
+    # The cat_features count is NEW's word len - 2 (the feature-list tail). With an eval_set the held-out X
+    # is admitted as the fit door admits it over those columns (lane mf-meta5b: `_eval_x_cats`).
+    var cats = 0
+    if len(plan.params) >= 2:
+        cats = Int(plan.params[len(plan.params) - 2])
+    var cat_columns = List[Int]()
+    if eval_set is not None and cats > 0:
+        cat_columns = _tail_cat_columns(plan.params, d)
+        if len(cat_columns) == 0:
+            # An index outside X (THE FALLBACK RULE, lane mf-cal5): the fit door's refusal at its X, in its
+            # words (bindings/gbdt_category_unpack.mojo `_cat_slots`: the first such index in the given order);
+            # before, the caller fell back to that door to raise them.
+            raise Error(gbdt_cat_outside_words(plan.params, d))
+    var run: PythonObject
+    if kind == 1 or kind == 4:
+        run = trees_route_context(model, context)
+    else:
+        run = native_typed_context(trees_route_context(model, context), False, True)
+    var extras = MemberFitExtras()
+    extras.rows = n
+    var weights = PythonObject(None)
+    var eval_x = PythonObject(None)
+    var eval_y = PythonObject(None)
+    var group_holder = PythonObject(None)
+    var pair_holders = PythonObject(None)
+    if kind == 4:
+        var order = PythonObject(None)
+        var permutation = py_get(fit_params, PythonObject("permutation"))
+        if permutation is not None:
+            order = ordered_permutation_ids(permutation, run)
+            extras.permutation = trees_address(order)
+            if Int(py=order.size) != n:
+                raise Error("mojolearn: permutation must be an integer bijection of row ids")
+        if sample_weight is not None:
+            var w = _checked_weights(sample_weight, n, True, run)
+            weights = w.array
+            extras.weights = w.address
+        got.pins = Python.tuple(weights, order)
+        got.extras = extras^
+        got.admitted = True
+        return got^
+    if kind == 1:
+        if sample_weight is not None:
+            var w = admit_weight_words(sample_weight, n, run)
+            weights = w.array
+            extras.weights = w.address
+        if eval_set is not None:
+            var items = _eval_items(eval_set, b)
+            var xe = _eval_x_cats(items[0], d, cat_columns, run, got)
+            var ye = admit_f32(items[1], 1, "eval_set y", run, finite=False)
+            if ye.rows != xe.rows:
+                raise Error("mojolearn: eval_set y has " + String(ye.rows) + " values for "
+                            + String(xe.rows) + " rows")
+            eval_x = xe.array
+            eval_y = ye.array
+            extras.eval_x = xe.address
+            extras.eval_rows = xe.rows
+            extras.eval_cols = xe.cols
+            extras.eval_y = ye.address
+            extras.eval_y_dtype = MEMBER_F32
+        var loss = _field(py_fields(model), model, nk[].k_loss, "loss")
+        if subgroup_id is not None:
+            raise Error("NotImplementedError: mojolearn: subgroup_id is read by no loss this implementation "
+                        + "trains; the ranking losses that read CatBoost's subgroup ids "
+                        + "are not implemented")
+        if pairs_weight is not None and pairs is None:
+            raise Error("mojolearn: pairs_weight needs pairs")
+        if pairs is not None:
+            if not _eq(loss, "PairLogit"):
+                raise Error("NotImplementedError: mojolearn: pairs are read by loss='PairLogit' only; "
+                            + "loss=" + _repr(loss) + " does not use them")
+            if group_id is None:
+                raise Error("NotImplementedError: mojolearn: pairs without group_id are not implemented: "
+                            + "the CatBoost reference then regroups and reorders the "
+                            + "whole pool by the pairs' connected components; pass "
+                            + "group_id")
+        if group_id is not None:
+            group_holder = _group_sizes(group_id, n, run)
+            # One id per row from the door's runs (SERIAL BY NATURE: a prefix
+            # over the runs; n words): run r is id r, so the member's
+            # `_group_sizes` reads back the same runs.
+            var runs = Int(py=group_holder.size)
+            var sizes = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(group_holder))
+            got.ids = List[Int32](length=n, fill=Int32(0))
+            var at = 0
+            for r in range(runs):  # driver-loop: over the door's group runs (each run's rows filled natively)
+                var size = Int(sizes[r])
+                for i in range(at, min(at + size, n)):
+                    got.ids[i] = Int32(r)
+                at += size
+            _ = group_holder  # keep the Python object alive through the native reads above
+            extras.groups = Int(got.ids.unsafe_ptr())
+            if pairs is not None:
+                pair_holders = _pairs_arrays(pairs, pairs_weight, n, run)
+                # uint32 words each below n (the door's range check): the same
+                # values as int32 words.
+                extras.pairs = trees_address(pair_holders[0])
+                extras.pair_count = Int(py=pair_holders[1].size)
+                extras.pairs_weight = trees_address(pair_holders[1])
+    else:
+        var pair = PythonObject(None)
+        if eval_set is not None:
+            pair = _adapter_eval(eval_set)
+            if kind == 0:
+                # More than two classes was refused at the caller's encode (`gbdt_member_label_check`, the
+                # door's order: before these eval_set checks).
+                if labels is None or len(labels) != 2:
+                    return got^
+                var scope = labels_scope(model, run)
+                var train = trees_encode_labels(y, scope)
+                var train_kind = _label_kind(train, y, "y", run)
+                var classes = train_kind[1]
+                var held = trees_encode_labels(pair[1], scope)
+                var held_kind = _label_kind(held, pair[1], "eval_set y", run)
+                if not Bool(py=held_kind[0] == train_kind[0]):
+                    raise Error("eval_set contains labels outside the training vocabulary")
+                var table = List[Int32](length=len(held_kind[1]), fill=Int32(0))
+                for i in range(len(held_kind[1])):  # driver-loop: over the eval set's distinct labels
+                    var found = -1
+                    for j in range(len(classes)):  # driver-loop: over fixed call structure, small-loop(classes): the two training classes
+                        if Bool(py=classes[j] == held_kind[1][i]):
+                            found = j
+                    if found < 0:
+                        raise Error("eval_set contains labels outside the training vocabulary")
+                    # The training class's code in the caller's encode (the
+                    # same sorted order: one encoder, bindings/trees_public_inputs_door.mojo).
+                    table[i] = Int32(found)
+                var source = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(held.codes))
+                got.codes = List[Int32](length=held.n, fill=Int32(0))
+                for r in range(held.n):  # native data loop: the held-out codes over the training classes (gather)
+                    got.codes[r] = table[Int(source[r])]
+                eval_y = held.codes
+                extras.eval_y = Int(got.codes.unsafe_ptr())
+                extras.eval_y_dtype = MEMBER_I32
+                extras.eval_rows = held.n
+            else:
+                var target = _regression_target(pair[1], "eval_set y", run)
+                eval_y = target.array
+                extras.eval_y = target.address
+                extras.eval_y_dtype = MEMBER_F32
+                extras.eval_rows = target.rows
+        if sample_weight is not None:
+            var w = admit_weight_words(sample_weight, n, run)
+            weights = w.array
+            extras.weights = w.address
+        if eval_set is not None:
+            var xe = _eval_x_cats(pair[0], d, cat_columns, run, got)
+            if extras.eval_rows != xe.rows:
+                raise Error("mojolearn: eval_set y has " + String(extras.eval_rows) + " values for "
+                            + String(xe.rows) + " rows")
+            eval_x = xe.array
+            extras.eval_x = xe.address
+            extras.eval_rows = xe.rows
+            extras.eval_cols = xe.cols
+    if len(got.eval_rows) > 0:
+        # A fit with cat_features: the member reads the C-order copy (and the keys of a text held-out X).
+        extras.eval_x = Int(got.eval_rows.unsafe_ptr())
+        if len(got.eval_keys) > 0:
+            extras.eval_cat_keys = Int(got.eval_keys.unsafe_ptr())
+            extras.eval_cat_count = len(cat_columns)
+    got.pins = Python.tuple(weights, eval_x, eval_y, group_holder, pair_holders)
+    got.extras = extras^
+    got.admitted = True
+    return got^
+
+
 def gbdt_member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model`, as
@@ -181,7 +690,37 @@ def gbdt_member_pack(model: PythonObject, fields: PythonObject, context: PythonO
     if plan.kind == 0 or plan.kind == 2:
         _adapter_pack(model, context, b, plan, state)
         return
+    if plan.kind == 3:
+        _text_model_pack(model, plan, state, PythonObject(0))
+        _importances_pack(py_fields(model), plan, state, trees_route_context(model, context))
+        return
+    if plan.kind == 4:
+        # OrderedRMSE: its fit door's PACK (`ordered_rmse_fit`: best_iteration_ None).
+        _text_model_pack(model, plan, state, PythonObject(None))
+        _importances_pack(py_fields(model), plan, state, trees_route_context(model, context))
+        return
+    if plan.kind == 5:
+        raise Error("AttributeError: 'HostGBDT' object has no attribute 'fit'")
     _learner_pack(model, context, plan, state)
+
+
+def _text_model_pack(model: PythonObject, plan: MemberPlan, state: Int, iteration: PythonObject) raises:
+    """PACK of an ExperimentalTwoLevelFeatureFreq or OrderedRMSE state: what its fit door's PACK writes
+    (`model_`, then `_fitted_text`: n_features_in_, approx_dim_ 1, n_classes_ None, bias_ 0, best_iteration_
+    `iteration` (FeatureFreq 0, OrderedRMSE None), stopped_early_ False, no curves), the same body."""
+    var nk = trees_keys()
+    var own = py_fields(model)
+    var call = MemberCall(plan.route, state)
+    call.block = MEMBER_BLOCK_SCALARS
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var s = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)
+    var features = Int(s[0])
+    var nbytes = Int(s[7])
+    call.block = MEMBER_BLOCK_FAMILY
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var text = gbdt_string_at(call.dst.data, nbytes)
+    py_setitem(own, nk[].k_model_, PythonObject(text))
+    _fitted_text(own, model, features, iteration)
 
 
 def _adapter_pack(model: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan, state: Int) raises:
@@ -202,8 +741,9 @@ def _adapter_pack(model: PythonObject, context: PythonObject, b: PythonObject, p
     py_setitem(own, nk[].k_numeric_mode_, py_item(learner_fields, nk[].k_numeric_mode))
     py_setitem(own, nk[].k_n_features_in_, py_item(learner_fields, nk[].k_n_features_in_))
     py_setitem(own, nk[].k_model_, py_item(learner_fields, nk[].k_model_))
-    var copied = Python.tuple("loss_curve_", "test_loss_curve_", "best_iteration_", "stopped_early_", "learning_rate_")
-    for i in range(_ADAPTER_COPIED):  # driver-loop: over fixed call structure, small-loop(copied): the five learner attributes
+    var copied = Python.tuple("loss_curve_", "test_loss_curve_", "best_iteration_", "stopped_early_", "learning_rate_",
+                              GBDT_IMPORTANCES_FIELD)
+    for i in range(_ADAPTER_COPIED):  # driver-loop: over fixed call structure, small-loop(copied): the six learner attributes
         py_setitem(own, copied[i], learner_fields[copied[i]])
     if plan.kind == 0:
         var kind = adapter_label_kind(labels, "y", native)
@@ -277,6 +817,7 @@ def _learner_pack(model: PythonObject, context: PythonObject, plan: MemberPlan, 
     py_setitem(own, nk[].k_n_classes_, PythonObject(classes) if classes > 0 else PythonObject(None))
     py_setitem(own, nk[].k_learning_rate_, PythonObject(rate))
     py_setitem(own, nk[].k_boosting_type_, PythonObject("Ordered" if ordered else "Plain"))
+    _importances_pack(own, plan, state, run)
 
 
 def gbdt_member_state(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
@@ -303,18 +844,38 @@ def gbdt_member_state(model: PythonObject, fields: PythonObject, context: Python
     unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(packed.unsafe_ptr())),
                   src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(text.unsafe_ptr())), count=nbytes)
     var curve = py_get(own, nk[].k_loss_curve_)
-    var curve_view = classical_view(curve, context, "gbdt loss curve")
+    # An ExperimentalTwoLevelFeatureFreq or OrderedRMSE model has no curves and no learning_rate_ (its fit
+    # door writes neither): an empty learn curve and its learning_rate setting (lanes mf-meta5, mf-hostent5).
+    # A HostGBDT (a saved model, lane mf-hostent5) has neither curves nor a rate nor the fit's scalars: its
+    # model text, dimensions, bias and category map are what its predict reads.
+    var feature_freq = plan.kind == 3 or plan.kind == 4
+    var host = plan.kind == 5
+    var no_curve = List[Float64](length=1, fill=0.0)
+    var curve_view = PythonObject(None)
+    if not (feature_freq or host) or curve is not None:
+        curve_view = classical_view(curve, context, "gbdt loss curve")
     var test_curve = py_get(own, nk[].k_test_loss_curve_)
     var test_view = PythonObject(None)
     if test_curve is not None:
         test_view = classical_view(test_curve, context, "gbdt test loss curve")
+    # lane mf-imp6: the fitted `feature_importances_` (float64), when held
+    var imp_held = py_get(own, PythonObject(GBDT_IMPORTANCES_FIELD))
+    var imp_view = PythonObject(None)
+    if imp_held is not None:
+        imp_view = classical_view(imp_held, context, "feature_importances_")
     var classes_source = py_get(own, nk[].k_n_classes_)
     var boosting = py_get(own, nk[].k_boosting_type_)
+    var best_source = py_get(own, nk[].k_best_iteration_)
+    var stopped_source = py_get(own, nk[].k_stopped_early_)
+    var rate = 0.0
+    if not host:
+        rate = Float64(py=py_item(own, nk[].k_learning_rate if feature_freq else nk[].k_learning_rate_))
     var scalars: List[Float64] = [
         Float64(py=py_item(own, nk[].k_n_features_in_)), Float64(py=py_item(own, nk[].k_approx_dim_)),
         0.0 if classes_source is None else Float64(py=classes_source), Float64(py=py_item(own, nk[].k_bias_)),
-        Float64(py=py_item(own, nk[].k_best_iteration_)), 1.0 if Bool(py=py_item(own, nk[].k_stopped_early_)) else 0.0,
-        Float64(py=py_item(own, nk[].k_learning_rate_)), Float64(nbytes),
+        0.0 if best_source is None else Float64(py=best_source),
+        1.0 if stopped_source is not None and Bool(py=stopped_source) else 0.0,
+        rate, Float64(nbytes),
         1.0 if boosting is not None and Bool(py=boosting == PythonObject("Ordered")) else 0.0]
     var call = member_new(plan)
     try:
@@ -322,7 +883,10 @@ def gbdt_member_state(model: PythonObject, fields: PythonObject, context: Python
         call.x = MemberMatrix(Int(packed.unsafe_ptr()), 1, len(packed), MEMBER_I32)
         _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
         call.block = MEMBER_BLOCK_FAMILY + 1
-        call.x = MemberMatrix(Int(py=classical_address(curve_view)), 1, Int(py=curve_view.size), MEMBER_F64)
+        if curve_view is None:
+            call.x = MemberMatrix(Int(no_curve.unsafe_ptr()), 1, 0, MEMBER_F64)
+        else:
+            call.x = MemberMatrix(Int(py=classical_address(curve_view)), 1, Int(py=curve_view.size), MEMBER_F64)
         _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
         if map_view is not None:
             call.block = MEMBER_BLOCK_FAMILY + 2
@@ -332,6 +896,10 @@ def gbdt_member_state(model: PythonObject, fields: PythonObject, context: Python
             call.block = MEMBER_BLOCK_FAMILY + 3
             call.x = MemberMatrix(Int(py=classical_address(test_view)), 1, Int(py=test_view.size), MEMBER_F64)
             _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        if imp_view is not None:
+            call.block = MEMBER_BLOCK_FEATURE_IMPORTANCES
+            call.x = MemberMatrix(Int(py=classical_address(imp_view)), 1, Int(py=imp_view.size), MEMBER_F64)
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
         call.block = MEMBER_BLOCK_SCALARS
         call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
         call.flags = MEMBER_IMPORT_DONE
@@ -340,8 +908,10 @@ def gbdt_member_state(model: PythonObject, fields: PythonObject, context: Python
         member_free(plan, call)
         raise error
     _ = curve_view
+    _ = len(no_curve)
     _ = map_view
     _ = test_view
+    _ = imp_view
     _ = len(packed)
     _ = len(scalars)
     _ = text

@@ -6,10 +6,18 @@ core/xdecomp_member.mojo). Published: IncrementalPCA (kind 0,
 GaussianRandomProjection (kind 5, `(32, 5)`), SparseRandomProjection (kind 6,
 `(32, 6)`), FastICA (kind 7, `(32, 7)`), FactorAnalysis (kind 8, `(32, 8)`),
 DictionaryLearning (9), MiniBatchDictionaryLearning (10), SparseCoder (11),
-SparsePCA (12), MiniBatchSparsePCA (13), EllipticEnvelope (14), LatentDirichletAllocation (15). Falls back at admit (False): a
-callback, code_init or dict_init (the dictionary learners), V_init or U_init
-(SparsePCA), a w_init (FastICA). The family's other classes carry no mark
-yet: a caller keeps their own doors, and admit refuses their kinds in words.
+SparsePCA (12), MiniBatchSparsePCA (13), EllipticEnvelope (14), LatentDirichletAllocation (15), Isomap (16),
+LocallyLinearEmbedding (17). Every setting is a member or a native refusal
+(lane mf-nbr6): a given w_init (FastICA), code_init / dict_init (the
+dictionary learners) and V_init / U_init (SparsePCA) are DATA, admitted once
+here as the doors admit them (`decomp_input`, C-order float32), pinned with
+the plan and handed to the fit by address; a Python callback (the dictionary
+learners) is refused in the door's words, with the native alternative; an
+Isomap radius model carries its radius and its text; a
+LocallyLinearEmbedding whose default-mode helper image differs from its
+route carries the helper as `route.second`. The family's other classes carry
+no mark yet: a caller keeps their own doors, and admit refuses their kinds
+in words.
 
   * `xdecomp_member_admit` (UNPACK, once per member): the estimator's own
     route through its resolver (the IncrementalPCA door's `_ipca_route`: a
@@ -57,7 +65,8 @@ from core.xdecomp_member import (
     XDECOMP_DL_PARAM_COUNT, XDECOMP_MBDL_PARAM_COUNT, XDECOMP_CODER_PARAM_COUNT, XDECOMP_SPCA_PARAM_COUNT,
     XDECOMP_MBSPCA_PARAM_COUNT, XDECOMP_ROUTE_KIT_RESIDENT, XDECOMP_ROUTE_KIT_SHIFT, XDECOMP_KIND_ENVELOPE,
     XDECOMP_ENVELOPE_PARAM_COUNT, XDECOMP_KIND_LDA, XDECOMP_LDA_PARAM_COUNT, XDECOMP_KIND_ISOMAP,
-    XDECOMP_ISOMAP_PARAM_COUNT, XDECOMP_KIND_LLE, XDECOMP_LLE_PARAM_COUNT,
+    XDECOMP_ISOMAP_PARAM_COUNT, XDECOMP_KIND_LLE, XDECOMP_LLE_PARAM_COUNT, XDECOMP_ICA_PARAM_COUNT,
+    XDECOMP_DL_INIT_WORD, XDECOMP_MBDL_INIT_WORD, XDECOMP_SPCA_INIT_WORD, XDECOMP_LLE_HELPER_WORD,
 )
 from bindings.manifold_settings_native_door import ManifoldSettings
 from bindings.manifold_storage_native_unpack import ManifoldMatrix
@@ -76,9 +85,13 @@ from core.decomp_native_impl import decomp_f32_to_u8
 from bindings.dict_learning_native_unpack import (
     _check_algos as dl_check_algos, _algo_index as dl_algo_index, _fit_index as dl_fit_index,
     _dict_words as dl_dict_words, _coder_dictionary as dl_coder_dictionary, _is_str as dl_is_str,
+    DL_CALLBACK_WORDS,
 )
 from bindings.py_lists import py_list_f64
 from bindings.ica_native_unpack import _whiten_code as ica_whiten_code
+from bindings.decomp_inputs_unpack import decomp_input
+from bindings.family_common_unpack import family_str
+from core.cluster_member_words import member_words_append_text
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.decomp_kit_native_door import (
     decomp_entries_routed, decomp_entries_ref, decomp_resident_binding, decomp_resident_drop,
@@ -242,16 +255,16 @@ def _ica_admit(model: PythonObject, fields: PythonObject, context: PythonObject,
     mut owner: MemberOwner) raises -> Bool:
     # bindings/ica_native_unpack.mojo `ica_fit`: its data-independent checks
     # in its words; nc = min(n_components, rows, features) in RUN. A given
-    # w_init is an array of the fit's (nc, nc): not a member (False).
-    if py_get(fields, "w_init") is not None:
-        return False
-    _ = _table_route(model, fields, context, owner)
+    # w_init (lane mf-nbr6) is admitted here as the door admits it
+    # (`decomp_input`), pinned with the plan, words [9 .. 11] (address, rows,
+    # columns); its (nc, nc) shape is checked at fit in the door's words.
+    var entries = _table_route(model, fields, context, owner)
     var operator = native_loaded_module("operator")
     var algorithm = fields["algorithm"]
     if not Bool(py=py_call(operator.contains, Python.tuple("parallel", "deflation"), algorithm)):
         raise Error("algorithm must be 'parallel' or 'deflation'")
     var code = ica_whiten_code(fields["whiten"])
-    var words = List[Float64](length=9, fill=0.0)
+    var words = List[Float64](length=XDECOMP_ICA_PARAM_COUNT, fill=0.0)
     words[0] = Float64(XDECOMP_KIND_ICA)
     var requested = fields["n_components"]
     words[1] = Float64(decomp_int(requested)) if (code != 0 and requested is not None) else -1.0
@@ -275,7 +288,16 @@ def _ica_admit(model: PythonObject, fields: PythonObject, context: PythonObject,
     words[5] = decomp_float(alpha)
     words[6] = Float64(decomp_int(fields["max_iter"]))
     words[7] = decomp_float(fields["tol"])
-    words[8] = Float64(decomp_seed(fields["random_state"]))
+    var given = py_get(fields, "w_init")
+    if given is None:
+        words[8] = Float64(decomp_seed(fields["random_state"]))
+    else:
+        # The door reads no seed with a given w_init (word [8] stays 0).
+        var start = decomp_input(given, "FastICA", context)
+        words[9] = Float64(Int(py=classical_address(start)))
+        words[10] = Float64(Int(py=start.shape[0]))
+        words[11] = Float64(Int(py=start.shape[1]))
+        owner.pins = Python.tuple(entries, start)
     owner.plan.params = words^
     return True
 
@@ -764,17 +786,33 @@ def _coding_admit(fields: PythonObject, mut words: List[Float64]) raises:
     words[7] = _flag(fields["split_sign"])
 
 
+def _init_words(fields: PythonObject, name: String, context: PythonObject, mut words: List[Float64], at: Int,
+    mut held: PythonObject) raises:
+    """A caller-given start matrix (code_init, dict_init, V_init, U_init) as
+    the dictionary doors admit it (`_matrix`: `decomp_input`, C-order
+    float32): words [at, at + 3) = its address, rows and columns (address 0:
+    none), the admitted array appended to `held` (the plan pins it)."""
+    var given = py_get(fields, PythonObject(name))
+    if given is None:
+        return
+    var start = decomp_input(given, name, context)
+    words[at] = Float64(Int(py=classical_address(start)))
+    words[at + 1] = Float64(Int(py=start.shape[0]))
+    words[at + 2] = Float64(Int(py=start.shape[1]))
+    _ = py_call(held.append, start)
+
+
 def _dl_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     mut owner: MemberOwner) raises -> Bool:
     # `dictionary_learning_fit` / `minibatch_dictionary_fit`: the algorithm
-    # check first, in its words. A callback (refused by the door), a
-    # code_init or a dict_init (arrays of the fit's shapes) keep the door.
+    # check first, then the callback refusal, in their words. A Python
+    # callback would be called back on every iteration: refused natively with
+    # its native alternative (lane mf-nbr6). code_init / dict_init are DATA:
+    # admitted here, pinned with the plan, words [17 ..) (`_init_words`).
     dl_check_algos(fields["fit_algorithm"], fields["transform_algorithm"])
-    if py_get(fields, "callback") is not None or py_get(fields, "dict_init") is not None:
-        return False
-    if kind == XDECOMP_KIND_DL and py_get(fields, "code_init") is not None:
-        return False
-    _ = _kit_route(model, fields, context, owner)
+    if py_get(fields, "callback") is not None:
+        raise Error(String(DL_CALLBACK_WORDS))
+    var entries = _kit_route(model, fields, context, owner)
     var count = XDECOMP_DL_PARAM_COUNT if kind == XDECOMP_KIND_DL else XDECOMP_MBDL_PARAM_COUNT
     var words = List[Float64](length=count, fill=0.0)
     words[0] = Float64(kind)
@@ -809,6 +847,14 @@ def _dl_admit(model: PythonObject, fields: PythonObject, kind: Int, context: Pyt
         words[18] = decomp_float(fields["alpha"])
         words[19] = decomp_float(fields["tol"])
     _coding_admit(fields, words)
+    var held = Python.list()
+    if kind == XDECOMP_KIND_DL:
+        _init_words(fields, "code_init", context, words, XDECOMP_DL_INIT_WORD, held)
+        _init_words(fields, "dict_init", context, words, XDECOMP_DL_INIT_WORD + 3, held)
+    else:
+        _init_words(fields, "dict_init", context, words, XDECOMP_MBDL_INIT_WORD, held)
+    if len(held) > 0:
+        owner.pins = Python.tuple(entries, held)
     owner.plan.params = words^
     return True
 
@@ -833,16 +879,15 @@ def _coder_admit(model: PythonObject, fields: PythonObject, context: PythonObjec
 def _spca_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     mut owner: MemberOwner) raises -> Bool:
     # `sparse_pca_fit`: the method check first, in its words; a V_init or a
-    # U_init (arrays of the fit's shapes) keeps the door.
+    # U_init is DATA (lane mf-nbr6): admitted here, pinned with the plan,
+    # words [8 .. 14) (`_init_words`), read by the fit as the door's vi / ui.
     var method = fields["method"]
     if kind == XDECOMP_KIND_SPCA:
         if not dl_is_str(method, "lars") and not dl_is_str(method, "cd"):
             raise Error("method must be 'lars' or 'cd'")
-        if py_get(fields, "V_init") is not None or py_get(fields, "U_init") is not None:
-            return False
     else:
         dl_check_algos(method, PythonObject("lasso_lars"))
-    _ = _kit_route(model, fields, context, owner)
+    var entries = _kit_route(model, fields, context, owner)
     var count = XDECOMP_SPCA_PARAM_COUNT if kind == XDECOMP_KIND_SPCA else XDECOMP_MBSPCA_PARAM_COUNT
     var words = List[Float64](length=count, fill=0.0)
     words[0] = Float64(kind)
@@ -857,6 +902,11 @@ def _spca_admit(model: PythonObject, fields: PythonObject, kind: Int, context: P
         words[5] = Float64(dw.method)
         words[6] = Float64(dw.seed)
         words[7] = decomp_float(fields["ridge_alpha"])
+        var held = Python.list()
+        _init_words(fields, "V_init", context, words, XDECOMP_SPCA_INIT_WORD, held)
+        _init_words(fields, "U_init", context, words, XDECOMP_SPCA_INIT_WORD + 3, held)
+        if len(held) > 0:
+            owner.pins = Python.tuple(entries, held)
     else:
         words[2] = decomp_float(fields["alpha"])
         words[3] = Float64(decomp_int(fields["batch_size"]))
@@ -1132,62 +1182,66 @@ def _lda_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) ra
 # door's first query uploads and keeps their device copies, as for a loaded
 # model), the public embedding_ / dist_matrix_ as float32 Arrays (`mk_out2`).
 
-def _mani_route(model: PythonObject, fields: PythonObject, settings: ManifoldSettings, same_default: Bool,
-    context: PythonObject, mut owner: MemberOwner, mut words: List[Float64]) raises -> Bool:
+def _mani_route(model: PythonObject, fields: PythonObject, settings: ManifoldSettings, helper_word: Int,
+    context: PythonObject, mut owner: MemberOwner, mut words: List[Float64]) raises:
     """The family's route (`_table_route`) plus what `mk_image` reads from the
     estimator's x_decomp binding: its entry, capability word, ordered-LLE word
-    and key, into params [1 .. 3]. `same_default`: LocallyLinearEmbedding's
-    fit also runs a helper image (the default mode's binding); the member
-    takes the estimator only when that is the same binding (False: the
-    caller keeps the door)."""
+    and key, into params [1 .. 3]. `helper_word` >= 0 (LocallyLinearEmbedding):
+    its fit also runs a helper image, the default mode's binding (`_lle_fit`'s
+    `hk`); when that is another binding (lane mf-nbr6) its entry is
+    `route.second` and its capability, ordered-LLE and key words go to params
+    [helper_word .. helper_word + 3) (capability -1: the same image)."""
     var binding = estimator_binding_routed(model, settings.mode, "_mojolearn_x_decomp", context)
-    if same_default:
-        var helper = estimator_binding_routed(model, settings.default_mode, "_mojolearn_x_decomp", context)
-        if not (helper is binding):
-            return False
+    var helper = PythonObject(None)
+    if helper_word >= 0:
+        words[helper_word] = -1.0
+        var default_binding = estimator_binding_routed(model, settings.default_mode, "_mojolearn_x_decomp", context)
+        if not (default_binding is binding):
+            helper = default_binding
     var entries = _table_route(model, fields, context, owner)
     var run = MRun()
     try:
         var k = mk_image(run, String(py=py_call(native_loaded_module("builtins").str, settings.mode)), binding,
                          context)
-        var caps = 0
-        if run.images[k].resident:
-            caps |= XD_CAP_RESIDENT
-        if run.images[k].dev_svd:
-            caps |= XD_CAP_DEV_SVD
-        if run.images[k].dev_lu:
-            caps |= XD_CAP_DEV_LU
-        if run.images[k].dev_eigh:
-            caps |= XD_CAP_DEV_EIGH
-        if run.images[k].lle_ordered:
-            caps |= XD_CAP_LLE_ORDERED
-        words[1] = Float64(caps)
+        words[1] = Float64(run.images[k].capabilities())
         words[2] = 1.0 if run.images[k].lle_ordered else 0.0
         words[3] = Float64(run.images[k].key)
         owner.plan.route.entry = run.images[k].entry
+        if helper is not None:
+            var hk = mk_image(run, String(py=py_call(native_loaded_module("builtins").str, settings.default_mode)),
+                              helper, context)
+            words[helper_word] = Float64(run.images[hk].capabilities())
+            words[helper_word + 1] = 1.0 if run.images[hk].lle_ordered else 0.0
+            words[helper_word + 2] = Float64(run.images[hk].key)
+            owner.plan.route.second = run.images[hk].entry
+            owner.plan.route.has_second = True
     finally:
         run.close()
-    owner.pins = Python.tuple(entries, binding)
-    return True
+    owner.pins = Python.tuple(entries, binding, helper)
 
 
 def _iso_admit(model: PythonObject, fields: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
     # `Isomap.fit`'s checks in its words (`mani_iso_plan`, shared with the
-    # door). A radius model is not a member (its transform refusal names
-    # the radius in Python's words): False, the door serves it.
+    # door). A radius model (lane mf-nbr6): word [9] 1, [10] the radius as
+    # the plan rounds it, [11] the byte count of `str(radius)` (the text the
+    # door's transform refusal names), its UTF-8 bytes from word [12]
+    # (core/cluster_member_words.mojo `member_words_append_text`).
     var settings = ManifoldSettings(model, MANI_OPN_FAMILY_MANI_ISO_FIT, context)
     var plan = mani_iso_plan(settings.values, context)
-    if plan.use_radius:
-        return False
     var words = List[Float64](length=XDECOMP_ISOMAP_PARAM_COUNT, fill=0.0)
     words[0] = Float64(XDECOMP_KIND_ISOMAP)
-    if not _mani_route(model, fields, settings, False, context, owner, words):
-        return False
-    words[4] = Float64(plan.nn)
+    _mani_route(model, fields, settings, -1, context, owner, words)
+    words[4] = Float64(-1 if plan.use_radius else plan.nn)
     words[5] = Float64(plan.kind)
     words[6] = plan.pw
     words[7] = 1.0 if plan.topk else 0.0
     words[8] = Float64(plan.nc)
+    if plan.use_radius:
+        var text = family_str(py_get(settings.values, "radius"))
+        words[9] = 1.0
+        words[10] = plan.radius
+        words[11] = Float64(text.byte_length())
+        member_words_append_text(words, text)
     owner.plan.params = words^
     return True
 
@@ -1200,8 +1254,7 @@ def _lle_admit(model: PythonObject, fields: PythonObject, context: PythonObject,
     var plan = mani_lle_plan(settings.values, context)
     var words = List[Float64](length=XDECOMP_LLE_PARAM_COUNT, fill=0.0)
     words[0] = Float64(XDECOMP_KIND_LLE)
-    if not _mani_route(model, fields, settings, True, context, owner, words):
-        return False
+    _mani_route(model, fields, settings, XDECOMP_LLE_HELPER_WORD, context, owner, words)
     words[4] = Float64(plan.method)
     words[5] = Float64(plan.nn)
     words[6] = Float64(plan.nc)
@@ -1268,7 +1321,8 @@ def _iso_pack(model: PythonObject, fields: PythonObject, context: PythonObject, 
     py_setitem(fields, "embedding_m_", _mani_owner(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 5)))
     py_setitem(fields, "embedding_", embedding)
     py_setitem(fields, "_fit_X", _mani_owner(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 8)))
-    py_setitem(fields, "_knn", PythonObject(Int(plan.params[4])))
+    # A radius model's `_knn` is None (the door's `nn_out`).
+    py_setitem(fields, "_knn", PythonObject(None) if plan.params[4] < 0.0 else PythonObject(Int(plan.params[4])))
     py_setitem(fields, "n_features_in_", PythonObject(features))
     py_setitem(fields, "_Kc", _mani_owner(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 6)))
     py_setitem(fields, "_iso_v_m_", _mani_owner(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 7)))

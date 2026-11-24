@@ -100,6 +100,10 @@ class HostGBDT:
     """
 
     estimator = 'GradientBoosting'
+    #: A predict-only member of a meta-estimator or an explainer (core/gbdt_member.mojo: family 16, kind 5, the
+    #: saved model imported from its own fields).
+    _mojolearn_member = (16, 5)
+    _mojolearn_member_predict_only = True
 
     def __init__(self, *, loss, text, n_features_in, approx_dim, n_classes=None,
                  numeric_mode=None, bias=None, estimator='GradientBoosting', category_map=None):
@@ -141,6 +145,25 @@ class HostGBDT:
     def inference_engine(self):
         """Name of the prediction engine, ``'sequential'``."""
         return _native_host_archive(self, _OP.host_tree_engine, (), _ARCHIVE_CONTEXT)
+
+    @property
+    def feature_importances_(self):
+        """The impurity-based feature importances of the saved model.
+
+        The values ``GradientBoosting.feature_importances_`` held when the
+        model was saved: one float64 per input feature, summing to 1.
+
+        Returns
+        -------
+        ndarray of shape (n_features_in_,)
+
+        Raises
+        ------
+        AttributeError
+            For a model built from its text rather than loaded from a file
+            written by ``GradientBoosting.save``.
+        """
+        return _native_host_archive(self, _OP.host_tree_importances, (), _ARCHIVE_CONTEXT)
 
     def model_sha256(self):
         """Return the SHA-256 hex digest of the model.
@@ -236,3 +259,8 @@ _digest_fields.schema(HostGBDT, _digest_fields.gbdt_steps(GBDT_FORMAT))
 from ._native_family_layouts import connect as _connect_family_layouts  # noqa: E402
 _connect_family_layouts(sys.modules[__package__], only=(HostGBDT,))
 del _connect_family_layouts
+# glue: once at import. This module loads lazily, possibly after the model selection hub connected its marked
+# classes: HostGBDT's predict-only member plan is registered here (lane mf-cal5).
+from ._native_msel_more import connect_host_tree_member as _connect_host_tree_member  # noqa: E402
+_connect_host_tree_member(HostGBDT)
+del _connect_host_tree_member

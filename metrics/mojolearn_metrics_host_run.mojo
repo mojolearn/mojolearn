@@ -17,7 +17,6 @@ from metrics.host.metrics_host_entries_impl import (
 )
 from metrics.label_pair_admission import metrics_check_pair as _check_pair, metrics_check_range as _check_range
 from metrics.host.classification_oracle import host_confusion_matrix_ptr
-from spectral.host.spectral_predict_host import SpectralPredictionState, host_spectral_predict
 
 
 def homogeneity_completeness_v_measure_run(
@@ -98,81 +97,6 @@ def confusion_matrix_run(
         _ = len(values[1])
 
 
-def _guard_spectral_outputs(
-    labels: List[Int32],
-    embedding: List[Float32],
-    n_samples: Int,
-    n_components: Int,
-) raises:
-    """`_guard_spectral_outputs`, `bindings/_mojolearn_metrics.mojo`: the
-    two output buffers were sized by the Python caller; check what came
-    back BEFORE writing a single element into them."""
-    if len(labels) != n_samples:
-        raise Error(
-            "spectral clustering: the kernel returned " + String(len(labels))
-            + " labels for " + String(n_samples)
-            + " samples; the output buffer was sized for n_samples"
-        )
-    if len(embedding) != n_samples * n_components:
-        raise Error(
-            "spectral clustering: the kernel returned "
-            + String(len(embedding)) + " embedding floats, but the output"
-            " buffer was sized for n_samples * n_components = "
-            + String(n_samples * n_components)
-        )
-
-
-def _spectral_write_outputs(
-    labels: List[Int32], embedding: List[Float32], lp: MutPointer[Int32, MutUntrackedOrigin], ep: MutPointer[Float32, MutUntrackedOrigin], n_samples: Int,
-):
-    # The spectral doors' label and embedding copies, after their guard.
-    unsafe_memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(labels)
-    _ = len(embedding)
-
-
-def _guard_embedding_output(
-    embedding: List[Float32], n_samples: Int, n_out: Int, n_cols: Int
-) raises:
-    """The output buffer was sized by the Python caller for `n_samples x
-    n_cols`; check what came back before writing into it."""
-    if n_out != n_cols or len(embedding) != n_samples * n_cols:
-        raise Error(
-            "spectral embedding: the kernel returned " + String(len(embedding))
-            + " floats in " + String(n_out) + " columns, but the output buffer"
-            " was sized for " + String(n_samples) + " x " + String(n_cols)
-        )
-
-
-def _spectral_write_embedding(embedding: List[Float32], ep: MutPointer[Float32, MutUntrackedOrigin]):
-    # The spectral embedding doors' copy, after their guard.
-    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(embedding)
-
-
-def _spectral_state_copy(
-    state: SpectralPredictionState, ev: MutPointer[Float32, MutUntrackedOrigin], evec: MutPointer[Float32, MutUntrackedOrigin],
-    dg: MutPointer[Float32, MutUntrackedOrigin], cent: MutPointer[Float32, MutUntrackedOrigin],
-):
-    # `_write_spectral_state`'s copies, after its state check and address reads.
-    unsafe_memcpy(dest=ev, src=state.eigenvalues.unsafe_ptr(), count=len(state.eigenvalues))
-    unsafe_memcpy(dest=evec, src=state.eigenvectors.unsafe_ptr(), count=len(state.eigenvectors))
-    unsafe_memcpy(dest=dg, src=state.diag.unsafe_ptr(), count=len(state.diag))
-    unsafe_memcpy(dest=cent, src=state.centroids.unsafe_ptr(), count=len(state.centroids))
-
-
-def spectral_predict_run(
-    input: List[Float32], train_x: List[Float32], n_train: Int, n_queries: Int,
-    n_features: Int, k: Int, n_clusters: Int, n_neighbors: Int, affinity: Int,
-    state: SpectralPredictionState, olp: MutPointer[Int32, MutUntrackedOrigin], oep: MutPointer[Float32, MutUntrackedOrigin],
-) raises:
-    # Called with the GIL released by the door (spectral_predict_binding).
-    var out = host_spectral_predict(
-        input, train_x, n_train, n_queries, n_features, k, n_clusters,
-        n_neighbors, affinity, state,
-    )
-    unsafe_memcpy(dest=olp, src=out.labels.unsafe_ptr(), count=n_queries)
-    unsafe_memcpy(dest=oep, src=out.embedding.unsafe_ptr(), count=n_queries * k)
-    _ = len(out.labels)
-    _ = len(out.embedding)
+# TOMBSTONE: the spectral door helpers (_guard_spectral_outputs, _spectral_write_outputs, _guard_embedding_output,
+# _spectral_write_embedding, _spectral_state_copy, spectral_predict_run) of the deleted by-name spectral exports
+# deleted 2026-11-23 on lane/sab-host-missed-cls (no other caller); code recoverable at 4519097d38.

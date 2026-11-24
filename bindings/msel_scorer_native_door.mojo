@@ -11,7 +11,8 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.family_common_pack import family_call, family_array
-from bindings.classical_arrays_door import classical_address
+from bindings.classical_arrays_door import classical_address, classical_is_array, classical_dtype_str
+from bindings.classical_keys_unpack import classical_keys
 from bindings.msel_helpers_key_unpack import msel_helpers_key
 from bindings.msel_helpers_released_unpack import msel_proba_column
 from bindings.classical_attributes_door import classical_connect_numpy
@@ -101,7 +102,8 @@ def msel_scorer_fields(scorer: PythonObject, context: PythonObject) raises -> Py
     var b = native_loaded_module("builtins")
     var cls = _scorer_class(context)
     if py_type(scorer) is not cls:
-        raise Error("TypeError: Python scorer callbacks are not accepted; use get_scorer or make_scorer with a native metric")
+        raise Error("TypeError: Python scorer callbacks are not accepted; use a scoring string (one of "
+                    + "get_scorer_names()) or make_scorer over a native mojolearn metric")
     var fields = py_call(context["family_msel_scorer_fields"], scorer, cls)
     # N067: the exact-str key admission once per scorer state: a stamped
     # record of the scorer (bindings/py_model_records.mojo, keyed by the
@@ -412,8 +414,11 @@ def _scorer_column(predicted: PythonObject, context: PythonObject) raises -> Pyt
 
 def msel_scorer_call(scorer: PythonObject, estimator: PythonObject, x: PythonObject, y: PythonObject,
                      sample_weight: PythonObject, memo: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A scorer called as `scorer(estimator, X, y)`: its signed value, or
+    (lane mf-score6) the signed per-label array of an average=None metric,
+    as scikit-learn's `_Scorer._score` returns `sign * score_func(...)`."""
     var prepared = MselMetricPrepared()
-    return PythonObject(msel_scorer_value(scorer, estimator, x, y, sample_weight, memo, context, prepared))
+    return msel_scorer_object(scorer, estimator, x, y, sample_weight, memo, context, prepared)
 
 
 def _scorer_response(fields: PythonObject, model: PythonObject, b: PythonObject) raises -> PythonObject:
@@ -444,25 +449,39 @@ def msel_scorer_response(scorer: PythonObject, model: PythonObject, context: Pyt
     return _scorer_response(msel_scorer_fields(scorer, context), model, native_loaded_module("builtins"))
 
 
-def msel_scorer_predicted(scorer: PythonObject, estimator: PythonObject, model: PythonObject, method: PythonObject,
-                          predicted: PythonObject, y: PythonObject, memo: PythonObject, context: PythonObject,
-                          mut prepared: MselMetricPrepared) raises -> Float64:
-    """`scorer`'s value for a response already computed: `predicted` is the
-    `method` output of `estimator` (plan `model`) on the rows of `y`. The
-    metric half of `msel_scorer_value`, for a caller whose predictions were
-    written by a native member (bindings/msel_member_units_door.mojo)."""
-    var b = native_loaded_module("builtins")
-    var fields = msel_scorer_fields(scorer, context)
-    if memo is not None:
-        if py_type(memo) is not b.dict:
-            raise Error("TypeError: native scorer prediction cache must be an exact dict")
-        msel_admit(memo, context)
-    return _scorer_metric(fields, estimator, model, method, predicted, y, PythonObject(None), memo, context, prepared, b)
-
-
 def msel_scorer_value(scorer: PythonObject, estimator: PythonObject, x: PythonObject, y: PythonObject,
                      sample_weight: PythonObject, memo: PythonObject, context: PythonObject,
                       mut prepared: MselMetricPrepared) raises -> Float64:
+    """The scorer's number, as model selection's `_score` reads a scorer's
+    answer (scikit-learn model_selection/_validation.py `_score`): a real
+    as is; an array (lane mf-score6: an average=None metric's per-label
+    values) its one value when it holds one (`.item()`), else scikit-learn's
+    refusal, raised whatever the error_score."""
+    var result = msel_scorer_object(scorer, estimator, x, y, sample_weight, memo, context, prepared)
+    if metric_is_real(result, context):
+        return metric_float(result, context)
+    var b = native_loaded_module("builtins")
+    var typestr = _per_label_typestr(result, context)
+    if len(typestr) > 0 and Int(py=result.shape[0]) == 1:
+        var value: Float64
+        if typestr == "<f4":
+            var one = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result)))
+            value = Float64(one[0])
+        else:
+            var one = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result)))
+            value = one[0]
+        _ = result  # read through its address above
+        return value
+    raise Error("ValueError: scoring must return a number, got " + String(py=py_call(b.str, result)) + " ("
+                + String(py=py_call(b.str, py_type(result))) + ") instead. (scorer="
+                + String(py=py_call(b.repr, scorer)) + ")")
+
+
+def msel_scorer_object(scorer: PythonObject, estimator: PythonObject, x: PythonObject, y: PythonObject,
+                       sample_weight: PythonObject, memo: PythonObject, context: PythonObject,
+                       mut prepared: MselMetricPrepared) raises -> PythonObject:
+    """The scorer's signed answer as a Python value (a float, or a signed
+    float64 per-label array; lane mf-score6)."""
     var b = native_loaded_module("builtins")
     var fields = msel_scorer_fields(scorer, context)
     var model = msel_estimator_plan(estimator, context)
@@ -484,9 +503,11 @@ def msel_scorer_value(scorer: PythonObject, estimator: PythonObject, x: PythonOb
 
 def _scorer_metric(fields: PythonObject, estimator: PythonObject, model: PythonObject, method: PythonObject,
                    predicted_in: PythonObject, y: PythonObject, sample_weight: PythonObject, memo: PythonObject,
-                   context: PythonObject, mut prepared: MselMetricPrepared, b: PythonObject) raises -> Float64:
+                   context: PythonObject, mut prepared: MselMetricPrepared, b: PythonObject) raises -> PythonObject:
     """The metric of one scorer over a computed response (the binary
-    probability column, the keyword options, the sign)."""
+    probability column, the keyword options, the sign): a Python float, or
+    (lane mf-score6) an average=None metric's 1-D float64 per-label array,
+    signed (`_signed_array`)."""
     var predicted = predicted_in
     var name = fields["_name"]
     if name is not None and py_type(name) is not b.str:
@@ -509,9 +530,61 @@ def _scorer_metric(fields: PythonObject, estimator: PythonObject, model: PythonO
         py_setitem(keywords, "sample_weight", sample_weight)
     var result = prepared.call(fields["_score_func"], y, predicted, keywords, context, estimator, model)
     classical_connect_numpy(context)
-    if not metric_is_real(result, context):
+    var real = metric_is_real(result, context)
+    var typestr = String("") if real else _per_label_typestr(result, context)
+    if not real and len(typestr) == 0:
         raise Error("TypeError: scoring must return a real scalar")
     var sign = fields["_sign"]
     if py_type(sign) is not b.int or (Int(py=sign) != 1 and Int(py=sign) != -1):
         raise Error("TypeError: native scorer sign must be 1 or -1")
-    return Float64(Int(py=sign)) * metric_float(result, context)
+    if not real:
+        return _signed_array(result, typestr, Int(py=sign), context)
+    return PythonObject(Float64(Int(py=sign)) * metric_float(result, context))
+
+
+def _per_label_typestr(result: PythonObject, context: PythonObject) raises -> String:
+    """Lane mf-score6: an average=None metric's answer, a 1-D float32 or
+    float64 array (a mojolearn Array, or an ndarray when NumPy is
+    connected): its typestr, else ""."""
+    if not classical_is_array(result, context):
+        var nk = classical_keys()
+        var ndarray = py_get(context, nk[].k_ndarray)
+        if ndarray is None or py_type(result) is not ndarray:
+            return String("")
+    if Int(py=result.ndim) != 1:
+        return String("")
+    var typestr = classical_dtype_str(result, context)
+    if typestr == "<f4" or typestr == "<f8":
+        return typestr
+    return String("")
+
+
+def _signed_array(result: PythonObject, typestr: String, sign: Int, context: PythonObject) raises -> PythonObject:
+    """`sign * array` (scikit-learn's `_Scorer._score`): the metric's own
+    array for sign 1, else a new array of its dtype with its values negated
+    natively."""
+    if sign == 1:
+        return result
+    var n = Int(py=result.shape[0])
+    var negated = family_array(Python.tuple(n), typestr, context)
+    if n > 0:
+        if typestr == "<f4":
+            var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result)))
+            var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(negated)))
+            for i in range(n):  # driver-loop: over the labels' values (the sign)
+                dst[i] = -src[i]
+        else:
+            var src = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result)))
+            var dst = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(negated)))
+            for i in range(n):  # driver-loop: over the labels' values (the sign)
+                dst[i] = -src[i]
+    _ = result  # read through its address above
+    _ = negated  # written through its address above
+    return negated
+
+
+def msel_scorer_no_number(error: Error) -> Bool:
+    """Lane mf-score6: the scorer answered no number (`msel_scorer_value`'s
+    refusal, scikit-learn's `_score` words), which a numeric error_score
+    never replaces."""
+    return String(error).startswith("ValueError: scoring must return a number, got ")

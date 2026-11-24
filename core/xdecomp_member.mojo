@@ -36,8 +36,10 @@ the same x_decomp table entry): MEMBER_OP_NEW parameters (9):
   [2] whiten: 0 False, 1 'unit-variance', 2 'arbitrary-variance'
   [3] algorithm: 0 'parallel', 1 'deflation'   [4] fun: 0 logcosh, 1 exp, 2 cube
   [5] alpha (fun_args['alpha'], 1.0 by default)   [6] max_iter   [7] tol
-  [8] seed: random_state & 0xFFFFFFFF, 0 for None (a given w_init is not a
-      member: admission answers False and the caller keeps the door)
+  [8] seed: random_state & 0xFFFFFFFF, 0 for None or a given w_init
+  [9] a given w_init: the address of the admitted float32 matrix (pinned by
+      the plan; 0 none) [10] its rows [11] its columns (lane mf-nbr6; the
+      fit refuses a shape other than (nc, nc) in the door's words)
 Blocks: 0 scalars float64 [n_components_, n_features_in_, n_iter_, whiten
 code, cols (n_features_in_ when whitening, else n_components_)]; 1
 components_ (n_components_ x cols); 2 mixing_ (cols x n_components_); 3
@@ -78,18 +80,21 @@ Coding words of kinds 9, 10, 11 ([1 .. 7], `_coding_words`):
   [3] the lasso / threshold alpha (transform_alpha, else alpha, else 1)
   [4] transform_max_iter (lasso only, else 0)   [5] positive_code (lasso)
   [6] positive_code (threshold)   [7] split_sign 0 / 1
-DictionaryLearning (17): [8] n_components (-1 None) [9] alpha [10] max_iter
+DictionaryLearning (23): [8] n_components (-1 None) [9] alpha [10] max_iter
   [11] tol [12] fit_algorithm 0 lars, 1 cd [13] seed (random_state &
   0xFFFFFFFF) [14] positive_dict [15] positive_code [16] transform_max_iter
-MiniBatchDictionaryLearning (20): [8] n_components [9] batch_size [10] seed
+  [17 .. 19] code_init, [20 .. 22] dict_init (address of the admitted
+  float32 matrix pinned by the plan, 0 none; rows; columns: lane mf-nbr6)
+MiniBatchDictionaryLearning (23): [8] n_components [9] batch_size [10] seed
   [11] shuffle [12] max_iter [13] max_no_improvement (-1 None) [14]
   fit_algorithm [15] transform_max_iter [16] positive_dict [17]
-  positive_code [18] alpha [19] tol
+  positive_code [18] alpha [19] tol [20 .. 22] dict_init (as above)
 SparseCoder (11): [8] the address of the admitted float32 dictionary (the
   admit pins it; the fit copies it into components_) [9] its rows [10] its
   columns
-SparsePCA (8): [1] n_components [2] alpha [3] max_iter [4] tol [5] method
-  0 lars, 1 cd [6] seed [7] ridge_alpha
+SparsePCA (14): [1] n_components [2] alpha [3] max_iter [4] tol [5] method
+  0 lars, 1 cd [6] seed [7] ridge_alpha [8 .. 10] V_init, [11 .. 13] U_init
+  (as the dictionary learners' starts)
 MiniBatchSparsePCA (11): [1] n_components [2] alpha [3] batch_size [4] seed
   [5] shuffle [6] max_iter [7] max_no_improvement [8] method [9] tol
   [10] ridge_alpha
@@ -176,11 +181,16 @@ Isomap (kind 16) and LocallyLinearEmbedding (kind 17) run the manifold kit
 x_decomp table of the estimator's binding. NEW words:
   both [0] kind, [1] the image's x_decomp capability word, [2] the ordered-LLE
     word (0 / 1: fast mode on Metal), [3] the binding key its pool ids carry
-  Isomap [4] n_neighbors (a radius model is not admitted), [5] metric code,
-    [6] Minkowski power, [7] top-k eigen solver (0 / 1), [8] n_components
+  Isomap [4] n_neighbors (-1 a radius model), [5] metric code,
+    [6] Minkowski power, [7] top-k eigen solver (0 / 1), [8] n_components,
+    [9] a radius model (0 / 1), [10] the radius (float32-rounded), [11] the
+    byte count of the radius text (`str(radius)`), its UTF-8 bytes from
+    word [12] (lane mf-nbr6)
   LLE [4] method (0 standard, 1 ltsa, 2 hessian, 3 modified), [5] n_neighbors,
     [6] n_components, [7] reg, [8] hessian_tol / modified_tol, [9] eigen_solver
-    'auto' (0 / 1), [10] max_iter, [11] the Philox seed word
+    'auto' (0 / 1), [10] max_iter, [11] the Philox seed word, [12] the
+    helper (default-mode) image's capability word (-1: the route's own image),
+    [13] its ordered-LLE word, [14] its key; its entry is `route.second`
 Operations: fit (fit_output TRANSFORM = embedding_), transform of new rows.
 Blocks: 0 scalars float64 [n, n_features_in_, n_components, Isomap
 n_connected_components_ / LLE reconstruction_error_, then (rows, cols) of
@@ -235,6 +245,7 @@ from bindings.decomp_kit_run import DKit, DK_SCALE, DK_ADDS
 from bindings.mcd_run import mcd_fit_run, mcd_labels_run, mcd_mahal
 from core.decomp_native_impl import decomp_f32_to_i32, decomp_u8_to_f32
 from bindings.mani_kit_run import MRun, MImage, MFitted
+from core.cluster_member_words import member_words_byte_slots, member_words_take_text
 from bindings.mani_decomp_run import (
     IsoPlan, IsoState, iso_fit_run, iso_transform_run, LlePlan, lle_fit_run, lle_transform_run, LLE_HESSIAN,
     LLE_MODIFIED,
@@ -252,19 +263,22 @@ comptime XDECOMP_KIND_GRP = 5
 comptime XDECOMP_KIND_SRP = 6
 comptime XDECOMP_RP_PARAM_COUNT = 6
 comptime XDECOMP_KIND_ICA = 7
-comptime XDECOMP_ICA_PARAM_COUNT = 9
+comptime XDECOMP_ICA_PARAM_COUNT = 12   # [9 .. 11] a given w_init (lane mf-nbr6)
 comptime XDECOMP_KIND_FA = 8
 comptime XDECOMP_FA_PARAM_COUNT = 6  # plus the noise_variance_init values
 # The dictionary-learning kinds run the typed kit (bindings/decomp_kit_run.mojo
 # `DKit` over the image's x_decomp operations entry).
 comptime XDECOMP_KIND_DL = 9
-comptime XDECOMP_DL_PARAM_COUNT = 17
+comptime XDECOMP_DL_PARAM_COUNT = 23    # [17 .. 22] code_init, dict_init (lane mf-nbr6)
+comptime XDECOMP_DL_INIT_WORD = 17
 comptime XDECOMP_KIND_MBDL = 10
-comptime XDECOMP_MBDL_PARAM_COUNT = 20
+comptime XDECOMP_MBDL_PARAM_COUNT = 23  # [20 .. 22] dict_init (lane mf-nbr6)
+comptime XDECOMP_MBDL_INIT_WORD = 20
 comptime XDECOMP_KIND_CODER = 11
 comptime XDECOMP_CODER_PARAM_COUNT = 11
 comptime XDECOMP_KIND_SPCA = 12
-comptime XDECOMP_SPCA_PARAM_COUNT = 8
+comptime XDECOMP_SPCA_PARAM_COUNT = 14  # [8 .. 13] V_init, U_init (lane mf-nbr6)
+comptime XDECOMP_SPCA_INIT_WORD = 8
 comptime XDECOMP_KIND_MBSPCA = 13
 comptime XDECOMP_MBSPCA_PARAM_COUNT = 11
 comptime XDECOMP_KIND_ENVELOPE = 14
@@ -272,9 +286,10 @@ comptime XDECOMP_ENVELOPE_PARAM_COUNT = 6
 comptime XDECOMP_KIND_LDA = 15
 comptime XDECOMP_LDA_PARAM_COUNT = 15
 comptime XDECOMP_KIND_ISOMAP = 16
-comptime XDECOMP_ISOMAP_PARAM_COUNT = 9
+comptime XDECOMP_ISOMAP_PARAM_COUNT = 12  # plus the radius text's byte words (lane mf-nbr6)
 comptime XDECOMP_KIND_LLE = 17
-comptime XDECOMP_LLE_PARAM_COUNT = 12
+comptime XDECOMP_LLE_PARAM_COUNT = 15    # [12 .. 14] the helper image (lane mf-nbr6)
+comptime XDECOMP_LLE_HELPER_WORD = 12
 
 comptime XDECOMP_BLOCK_COMPONENTS = MEMBER_BLOCK_FAMILY
 comptime XDECOMP_BLOCK_SINGULAR = MEMBER_BLOCK_FAMILY + 1
@@ -784,6 +799,10 @@ def _fit_ica(slot: _Slot, call: _Call) raises:
     if nc < 0:
         raise Error("ValueError: negative dimensions are not allowed")
     var cols = d if code != 0 else nc
+    # A given w_init (words [9 .. 11], lane mf-nbr6): `ica_fit`'s shape check, in its words.
+    var start = Int(slot[].words[9])
+    if start != 0 and (Int(slot[].words[10]) != nc or Int(slot[].words[11]) != nc):
+        raise Error("w_init has invalid shape -- should be (" + String(nc) + ", " + String(nc) + ")")
     var project = call[].fit_output == MEMBER_OP_TRANSFORM
     var sources = 0
     if project:
@@ -798,7 +817,7 @@ def _fit_ica(slot: _Slot, call: _Call) raises:
     slot[].blocks.append(List[Float32](length=(nc * d) if code != 0 else 0, fill=Float32(0)))
     slot[].blocks.append(List[Float32](length=d if code != 0 else 0, fill=Float32(0)))
     var spare = _address(slot, 0)
-    var request = ICAFitRequest(call[].x.data, 0, spare, _address(slot, 1),
+    var request = ICAFitRequest(call[].x.data, start, spare, _address(slot, 1),
         _address(slot, 2) if code != 0 else spare, _address(slot, 3) if code != 0 else spare,
         sources if project else spare,
         n, d, nc, code, Int(slot[].words[8]), Int(slot[].words[3]), Int(slot[].words[4]),
@@ -1171,10 +1190,22 @@ def _kit_keep(slot: _Slot, mut kit: DKit, comps: Int, mean: Int, var scalars: Li
     slot[].fitted = True
 
 
+def _kit_start(slot: _Slot, mut kit: DKit, at: Int) raises -> Int:
+    """A caller-given start matrix the plan pins (words [at, at + 3): address,
+    rows, columns), borrowed into the kit as the door's `_matrix` borrows it;
+    -1 when none (lane mf-nbr6). The RUN copies it before writing
+    (`kit.copy_host`), so the pinned words are never changed."""
+    var address = Int(slot[].words[at])
+    if address == 0:
+        return -1
+    return kit.borrow(address, Int(slot[].words[at + 1]), Int(slot[].words[at + 2]))
+
+
 def _fit_dl(slot: _Slot, call: _Call) raises:
     """bindings/dict_learning_native_pack.mojo `dictionary_learning_fit` /
-    `minibatch_dictionary_fit` over the borrowed X (no code_init, dict_init
-    or callback: those settings keep the door). fit_output TRANSFORM: the
+    `minibatch_dictionary_fit` over the borrowed X, with the caller's
+    code_init / dict_init when given (`_kit_start`; a callback is refused at
+    admission in the door's words). fit_output TRANSFORM: the
     DictionaryLearning fit's own code (split by sign when asked), the
     mini-batch fit's encode of X, as the doors' fit_transform."""
     var estimator = _name(slot)
@@ -1194,7 +1225,9 @@ def _fit_dl(slot: _Slot, call: _Call) raises:
             var words = DictWords(nc, slot[].words[9], Int(slot[].words[10]), slot[].words[11], Int(slot[].words[12]),
                                   Int(slot[].words[13]), slot[].words[14] != 0.0, slot[].words[15] != 0.0,
                                   Int(slot[].words[16]))
-            var fit = dl_dict_learning(kit, x, words, -1, -1)
+            var ci = _kit_start(slot, kit, XDECOMP_DL_INIT_WORD)
+            var di = _kit_start(slot, kit, XDECOMP_DL_INIT_WORD + 3)
+            var fit = dl_dict_learning(kit, x, words, ci, di)
             d = fit.d
             if project:
                 code = dl_split_sign(kit, fit.code) if slot[].words[7] != 0.0 else fit.code
@@ -1210,7 +1243,7 @@ def _fit_dl(slot: _Slot, call: _Call) raises:
                                     Int(slot[].words[12] * Float64(per_pass)), Int(slot[].words[13]),
                                     Int(slot[].words[14]), Int(slot[].words[15]), slot[].words[16] != 0.0,
                                     slot[].words[17] != 0.0, slot[].words[18], slot[].words[19])
-            var fit = dl_minibatch_fit(kit, x, nc, -1, mb)
+            var fit = dl_minibatch_fit(kit, x, nc, _kit_start(slot, kit, XDECOMP_MBDL_INIT_WORD), mb)
             d = fit[0]
             var steps = fit[1]
             if project:
@@ -1249,8 +1282,9 @@ def _fit_coder(slot: _Slot, call: _Call) raises:
 
 def _fit_spca(slot: _Slot, call: _Call) raises:
     """bindings/dict_learning_native_pack.mojo `sparse_pca_fit` over the
-    borrowed X (no V_init / U_init: those keep the door); fit_output
-    TRANSFORM = its fit_transform's ridge projection."""
+    borrowed X, with the caller's V_init / U_init when given (`_kit_start`,
+    SparsePCA only); fit_output TRANSFORM = its fit_transform's ridge
+    projection."""
     var estimator = _name(slot)
     _fit_kit_begin(slot, call, estimator)
     var minibatch = slot[].kind() == XDECOMP_KIND_MBSPCA
@@ -1266,7 +1300,11 @@ def _fit_spca(slot: _Slot, call: _Call) raises:
         var encode = EncodeWords(0, 0, 1.0, 0, 0, False, False)
         var per_pass = 1
         var ridge = Float32(0.0)
+        var vi = -1
+        var ui = -1
         if not minibatch:
+            vi = _kit_start(slot, kit, XDECOMP_SPCA_INIT_WORD)
+            ui = _kit_start(slot, kit, XDECOMP_SPCA_INIT_WORD + 3)
             dict_words = DictWords(nc, slot[].words[2], Int(slot[].words[3]), slot[].words[4], Int(slot[].words[5]),
                                    Int(slot[].words[6]), False, False, 1000)
             if project:
@@ -1283,7 +1321,7 @@ def _fit_spca(slot: _Slot, call: _Call) raises:
             encode = EncodeWords(0, 0, slot[].words[2], 1000, 0, False, False)
             if project:
                 ridge = Float32(slot[].words[10])
-        var fit = dl_spca_fit_run(kit, x, -1, -1, minibatch, dict_words, mb, encode, project, ridge)
+        var fit = dl_spca_fit_run(kit, x, vi, ui, minibatch, dict_words, mb, encode, project, ridge)
         var iterations = -((-fit.steps) // per_pass) if minibatch else fit.done
         var scalars = _four(kit.nrows(fit.comps), m, iterations, fit.steps)
         for k in range(len(fit.errors)):  # driver-loop: over the fit's recorded errors (model structure)
@@ -2043,11 +2081,16 @@ def _fit_iso(slot: _Slot, call: _Call) raises:
     var estimator = String("Isomap")
     _fit_mani_begin(slot, call, estimator)
     var plan = IsoPlan()
-    plan.nn = Int(slot[].words[4])
     plan.kind = Int(slot[].words[5])
     plan.pw = slot[].words[6]
     plan.topk = slot[].words[7] != 0.0
     plan.nc = Int(slot[].words[8])
+    if slot[].words[9] != 0.0:
+        # A radius model (lane mf-nbr6): `mani_iso_plan`'s radius words.
+        plan.use_radius = True
+        plan.radius = slot[].words[10]
+    else:
+        plan.nn = Int(slot[].words[4])
     var run = MRun()
     try:
         var k = run.image(_mani_image(slot, call))
@@ -2081,7 +2124,8 @@ def _fit_iso(slot: _Slot, call: _Call) raises:
 
 def _query_iso(slot: _Slot, call: _Call) raises:
     """`_iso_transform`: the embedding of the caller's rows (n_neighbors
-    models; a radius model is not admitted)."""
+    models; a radius model reads its radius and the radius text its
+    refusal names, lane mf-nbr6)."""
     var estimator = String("Isomap")
     if not slot[].fitted:
         raise Error("NotFittedError: this Isomap member is not fitted yet")
@@ -2097,7 +2141,12 @@ def _query_iso(slot: _Slot, call: _Call) raises:
         st.d = _mani_fitted(slot, call, run, _ISO_D)
         st.col = _mani_fitted(slot, call, run, _ISO_COL)
         st.allm = _mani_fitted(slot, call, run, _ISO_ALL)
-        st.knn = Int(slot[].words[4])
+        if slot[].words[9] != 0.0:
+            st.radius = slot[].words[10]
+            st.radius_text = member_words_take_text(Int(slot[].words.unsafe_ptr()), XDECOMP_ISOMAP_PARAM_COUNT,
+                                                    Int(slot[].words[11]))
+        else:
+            st.knn = Int(slot[].words[4])
         st.kind = Int(slot[].words[5])
         st.pw = slot[].words[6]
         st.iv = _mani_fitted(slot, call, run, _ISO_IV)
@@ -2116,8 +2165,8 @@ def _query_iso(slot: _Slot, call: _Call) raises:
 def _fit_lle(slot: _Slot, call: _Call) raises:
     """bindings/mani_decomp_native_door.mojo `_lle_fit` over the caller's X
     (`lle_fit_run` with the plan of `mani_lle_plan` from params [4 .. 11];
-    the admit takes the estimator only when its default-mode image is the
-    route's own, so the helper image is the same image); fit_output
+    the helper image is the route's own or `route.second`, words [12 ..
+    14]); fit_output
     TRANSFORM = fit_transform's embedding_. The n-dependent refusals are the
     door's words; a refused subspace iteration prints its numbers with
     Mojo's float format (the door formats them with Python's '.3g')."""
@@ -2135,6 +2184,16 @@ def _fit_lle(slot: _Slot, call: _Call) raises:
     var run = MRun()
     try:
         var k = run.image(_mani_image(slot, call))
+        # The helper image `_lle_fit` runs the dense solve on (`hk`, the
+        # default mode's binding): the route's own image, or `route.second`
+        # with its words [12 .. 14] (lane mf-nbr6).
+        var hk = k
+        if slot[].words[XDECOMP_LLE_HELPER_WORD] >= 0.0 and call[].route.has_second:
+            hk = run.image(MImage(call[].route.second, Int(slot[].words[XDECOMP_LLE_HELPER_WORD + 2]),
+                                  Int(slot[].words[XDECOMP_LLE_HELPER_WORD]),
+                                  slot[].words[XDECOMP_LLE_HELPER_WORD + 1] != 0.0, -1))
+        elif slot[].words[XDECOMP_LLE_HELPER_WORD] >= 0.0:
+            raise Error("member ABI: a LocallyLinearEmbedding member's helper image needs the route's second entry")
         var m = _mani_x(call, run, k)
         var n = run.r(m)
         var features = run.c(m)
@@ -2148,7 +2207,7 @@ def _fit_lle(slot: _Slot, call: _Call) raises:
                         + "[n_components * (n_components + 3) / 2]")
         if plan.method == LLE_MODIFIED and nn < nc:
             raise Error("modified LLE requires n_neighbors >= n_components")
-        var fit = lle_fit_run(run, k, k, m, plan)
+        var fit = lle_fit_run(run, k, hk, m, plan)
         if fit.refusal == 1:
             raise Error("RuntimeError: LocallyLinearEmbedding: the shift-invert subspace iteration did not settle in "
                         + String(plan.max_iter) + " iterations (last subspace change " + String(fit.change)
@@ -2565,7 +2624,7 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
                 raise Error("member ABI: a random projection member takes six parameters")
         elif source[0] == Float64(XDECOMP_KIND_ICA):
             if call[].param_count != XDECOMP_ICA_PARAM_COUNT:
-                raise Error("member ABI: a FastICA member takes nine parameters")
+                raise Error("member ABI: a FastICA member takes twelve parameters")
         elif source[0] == Float64(XDECOMP_KIND_FA):
             if (call[].param_count < XDECOMP_FA_PARAM_COUNT
                     or call[].param_count != XDECOMP_FA_PARAM_COUNT + max(Int(source[5]), 0)):
@@ -2590,11 +2649,12 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
             if call[].param_count != XDECOMP_ENVELOPE_PARAM_COUNT:
                 raise Error("member ABI: an EllipticEnvelope member takes six parameters")
         elif source[0] == Float64(XDECOMP_KIND_ISOMAP):
-            if call[].param_count != XDECOMP_ISOMAP_PARAM_COUNT:
-                raise Error("member ABI: an Isomap member takes nine parameters")
+            if (call[].param_count < XDECOMP_ISOMAP_PARAM_COUNT or call[].param_count
+                    != XDECOMP_ISOMAP_PARAM_COUNT + member_words_byte_slots(Int(source[11]))):
+                raise Error("member ABI: an Isomap member takes twelve parameters and its radius text")
         elif source[0] == Float64(XDECOMP_KIND_LLE):
             if call[].param_count != XDECOMP_LLE_PARAM_COUNT:
-                raise Error("member ABI: a LocallyLinearEmbedding member takes twelve parameters")
+                raise Error("member ABI: a LocallyLinearEmbedding member takes fifteen parameters")
         else:
             raise Error("member ABI: unknown or unpublished XDecomp member kind")
         var words = List[Float64](length=call[].param_count, fill=0.0)

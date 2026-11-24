@@ -557,8 +557,7 @@ class OrdinalEncoder(_PrepBase):
     """
     fit_transform = _EncodeFitTransform.fit_transform
     # Member ABI mark (family 35 Prep, kind 10; core/prep_member.mojo): callers
-    # run categories='auto' without infrequent grouping natively, else this
-    # class's own door.
+    # run every form natively (given categories, infrequent grouping; lane mf-enc6).
     _mojolearn_member = (35, 10)
     # One native call per public method; the native owner runs the whole
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
@@ -664,8 +663,8 @@ class OneHotEncoder(_PrepBase):
     """
     fit_transform = _EncodeFitTransform.fit_transform
     # Member ABI mark (family 35 Prep, kind 11; core/prep_member.mojo): callers
-    # run categories='auto' without infrequent grouping, a drop word and a
-    # handle_unknown that does not warn natively, else this class's own door.
+    # run every form natively (given categories, infrequent grouping, a drop per
+    # column, every handle_unknown: the transform's warnings are notice words; lane mf-enc6).
     _mojolearn_member = (35, 11)
     # One native call per public method; the native owner runs the whole
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
@@ -2853,7 +2852,7 @@ class SelectKBest(_SelectorMixin):
     _mojolearn_device = True
     #: The member ABI mark (family 36 Select, kind 1): model selection and the
     #: meta-estimators run this class through its native member entry
-    #: (core/select_member.mojo); the mutual-information scores keep the door.
+    #: (core/select_member.mojo), every score function included.
     _mojolearn_member = (36, 1)
 
     def __init__(self, score_func=f_classif, *, k=10, device=None):
@@ -3046,6 +3045,10 @@ class RFE(_SelectorMixin):
     #: Kernel and Permutation SHAP explain this exact class natively: its fitted estimator_'s member over the
     #: support_ columns (bindings/trees_agnostic_native_door.mojo); read from the class's own namespace.
     _mojolearn_explained = "rfe"
+    # THE RFE KIND (core/ensemble_member.mojo, lane mf-meta5): RFE as a native member of another
+    # meta-estimator, a search, a calibration or an imputer; the kind (classifier or regressor) is its
+    # estimator's, chosen by the admission.
+    _mojolearn_member = (39, 14)
 
     def __init__(self, estimator, *, n_features_to_select=None, step=1, verbose=0, importance_getter="auto"):
         self.estimator = estimator

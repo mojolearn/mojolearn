@@ -93,10 +93,8 @@ def logistic_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     var weighting = member_cw_kind_accepted(MEMBER_FAMILY_LOGISTIC, model, py_item(fields, nk[].k_class_weight), b)
     # A value the estimator's fit door refuses (lane mf-left4): the INVALID
     # tail, whose words the FIT caller's UNPACK raises (`member_cw_fill_plan`);
-    # a value the door accepts but the member does not read: not admitted.
+    # -1 is never a value the door accepts (lane mf-cal5: `member_cw_kind_accepted` admits them all).
     if weighting < 0:
-        if member_cw_invalid_message(MEMBER_FAMILY_LOGISTIC, model, py_item(fields, nk[].k_class_weight), b).byte_length() == 0:
-            return False
         weighting = MEMBER_CW_INVALID
     # The estimator's route, as its own door finds it: the held owner names
     # the context its class runs in; without one the class hierarchy is

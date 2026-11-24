@@ -107,10 +107,8 @@ def kernel_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
         weighting = member_cw_kind_accepted(MEMBER_FAMILY_KERNEL_SVM, model, class_weight, b)
         # A value the estimator's fit door refuses (lane mf-left4): the INVALID
         # tail, whose words the FIT caller's UNPACK raises (`member_cw_fill_plan`);
-        # a value the door accepts but the member does not read: not admitted.
+        # -1 is never a value the door accepts (lane mf-cal5: `member_cw_kind_accepted` admits them all).
         if weighting < 0:
-            if member_cw_invalid_message(MEMBER_FAMILY_KERNEL_SVM, model, class_weight, b).byte_length() == 0:
-                return False
             weighting = MEMBER_CW_INVALID
     # An explicit HostSVC / HostSVR (its own host-only word, lane mf-cal3b): the host image its own fit
     # binds; any other class: the estimator's binding route.

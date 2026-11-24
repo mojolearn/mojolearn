@@ -57,7 +57,8 @@ from bindings.gbdt_config_run import (
 from std.memory import unsafe_memcpy
 from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome
 from core.entry_table import EntryRef, entry_ref_vendor
-from gbdt.fit_calls import xg_row_major, xg_numeric_mode, xg_model_dim, xg_fit
+from gbdt.fit_calls import xg_row_major, xg_numeric_mode, xg_model_dim, xg_fit, xg_importances
+from bindings.gbdt_importances_pack import gbdt_importances_store, GBDT_IMPORTANCES_FIELD
 from bindings.trees_boost_constructor_native_unpack import tree_constructor_storage
 from bindings.label_input_sources_unpack import labels_list_scalar_kind, LABELS_LIST_INT
 from bindings.p3_labels_metrics_native_door import p3_text_codes, P3_TEXT_OK
@@ -970,7 +971,22 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var call = gbdt_fit_unpack(model, args, context)
     var dim = GBDT_DIM_FROM_ARCHIVE
     var outcome = gbdt_fit_run(call, dim)
-    return gbdt_fit_pack(model, call, outcome, dim, context)
+    var importances = gbdt_fit_importances(call, outcome.text)
+    _ = gbdt_fit_pack(model, call, outcome, dim, context)
+    gbdt_importances_store(py_fields(model), importances, context)
+    return model
+
+
+def gbdt_fit_importances(call: GbdtFitCall, text: String) raises -> List[Float32]:
+    """RUN (lane mf-imp6): `feature_importances_` of the fitted model on the
+    fit's own block (X as the fit read it: its layout, the categorical
+    columns as their dense codes; the fit's sample weights), on the image's
+    column through its entry (the entry releases the GIL around it). One row
+    walk of the fitted trees per fit, split over rows on the host and over
+    (row, tree) threads on a GPU."""
+    var n_weights = call.x.rows if call.weights else 0
+    return xg_importances(call.entry, text, call.x.address, call.x.rows, call.n_features, call.row_major,
+                          call.args.weights, n_weights)
 
 
 def gbdt_fit_run(call: GbdtFitCall, mut dim: Int) raises -> GbdtFitOutcome:
@@ -1566,6 +1582,8 @@ def _gbdt_store(model: PythonObject, args: PythonObject, context: PythonObject) 
         Python.tuple("boosting_type_", PythonObject(None)), Python.tuple("n_features_in_", PythonObject(None)),
         Python.tuple("approx_dim_", PythonObject(None)), Python.tuple("n_classes_", PythonObject(None)),
         Python.tuple("category_map_", PythonObject(None)),
+        # lane mf-imp6: `feature_importances_` (bindings/gbdt_importances_pack.mojo), unfitted
+        Python.tuple(GBDT_IMPORTANCES_FIELD, PythonObject(None)),
     )
     for i in range(len(stored)):  # driver-loop: over the constructor's stored fields
         py_setitem(fields, stored[i][0], stored[i][1])
@@ -1922,14 +1940,17 @@ def _fit_native(model: PythonObject, validated: PythonObject, X: PythonObject, y
     # RUN
     var dim = GBDT_DIM_FROM_ARCHIVE
     var outcome = gbdt_fit_run(call, dim)
+    var importances = gbdt_fit_importances(call, outcome.text)
     # PACK: the learner's fitted attributes, then the adapter's.
     _ = gbdt_fit_pack(learner, call, outcome, dim, context)
+    gbdt_importances_store(learner_fields, importances, context)
     py_setitem(fields, nk[].k__learner_, learner)
     py_setitem(fields, nk[].k_numeric_mode_, PythonObject(mode))
     py_setitem(fields, nk[].k_n_features_in_, py_item(learner_fields, nk[].k_n_features_in_))
     py_setitem(fields, nk[].k_model_, py_item(learner_fields, nk[].k_model_))
-    var copied = Python.tuple("loss_curve_", "test_loss_curve_", "best_iteration_", "stopped_early_", "learning_rate_")
-    for i in range(len(copied)):  # driver-loop: over fixed call structure, small-loop(copied): the five learner attributes
+    var copied = Python.tuple("loss_curve_", "test_loss_curve_", "best_iteration_", "stopped_early_", "learning_rate_",
+                              GBDT_IMPORTANCES_FIELD)
+    for i in range(len(copied)):  # driver-loop: over fixed call structure, small-loop(copied): the six learner attributes
         py_setitem(fields, copied[i], learner_fields[copied[i]])
     return model
 

@@ -47,8 +47,6 @@ bindings) and the refusal path. Device code: `core/input_device.mojo`.
   cast_f64_to_f32           `hpdev_try_cast_f64_to_f32` (was the candidate
                             arm IDN_HPDEV_CAST_F64, now the default)
   all_finite_f32/_f64       `hpdev_try_all_finite`
-  transpose_f32,
-  cast_colmajor_f64_to_f32  `hpdev_try_transpose_to_f32`
   strided_copy_bytes, check_lengths_i64, ragged_rows_bytes
                             the `*_binding`s below (host fallback:
                             `bindings/array_helpers.mojo`)

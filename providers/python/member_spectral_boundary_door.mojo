@@ -2,15 +2,14 @@
 """The member boundary of the Spectral family (SpectralClustering, kind 0).
 
 UNPACK / PACK of core/spectral_member.mojo, in the family's place in
-`bindings/member_boundary_door.mojo`. Admit answers True only for the form
-with a predict: affinity='nearest_neighbors' and prediction_data=True,
-after the class's own checks (`_sc_validate`, run on a SCRATCH copy of the
-instance dictionary: the derived `_n_clusters`, `_n_neighbors`, `_n_init`,
-`_eigen_tol`, `_gamma`, `_seed` it writes land in the copy, so the template
-estimator a caller holds is never written; PACK runs it again on the clone,
-which receives them as the class's fit writes them). Every other
-instance (an affinity matrix, 'rbf', 'precomputed_nearest_neighbors', no
-prediction data) answers False and keeps the class's own doors.
+`bindings/member_boundary_door.mojo`. Admit answers True for every
+instance the class's fit admits (lane mf-clu6): every affinity, with or
+without prediction data, after the class's own checks (`_sc_validate`, run
+on a SCRATCH copy of the instance dictionary: the derived `_n_clusters`,
+`_n_neighbors`, `_n_init`, `_eigen_tol`, `_gamma`, `_seed` it writes land in
+the copy, so the template estimator a caller holds is never written; PACK
+runs it again on the clone, which receives them as the class's fit writes
+them).
 SpectralEmbedding is not a member (fit / fit_transform only, no
 out-of-sample transform).
 
@@ -20,15 +19,24 @@ predict binding (the host binding of the estimator's route, else
 `_mojolearn_metrics` in the estimator's mode), whose mode and vendor are the
 route's and whose capability word is `route.flags`; `route.third` = the
 x_cluster image's `spectral_assign_native_api_v1` entry (the estimator's
-mode). Pack publishes what the class's dataset-route fit publishes:
-input_copied_ False, _fit_X, n_features_in_, embedding_, n_components_,
-n_iter_assign_ ('discretize' only), labels_ and the four prediction-data
-arrays, and forgets the last fit's resident prediction state.
+mode); `route.fourth` = the base image's `spectral_preparation_native_api_v1`
+entry (identical; 'precomputed_nearest_neighbors', or a graph affinity on a
+fit entry without the dense capability); `route.fifth` = the x_decomp
+image's entry ('rbf'). Pack publishes what the class's fit publishes for the
+affinity: affinity_matrix_ (the precomputed X's copy, or the built affinity)
+and n_features_in_ ('rbf'), or input_copied_ False, _fit_X (with prediction
+data) and n_features_in_ (the dataset route); then embedding_,
+n_components_, n_iter_assign_ ('discretize' only), labels_ and, with
+prediction data, the four prediction-data arrays; it forgets the last fit's
+resident prediction state.
 """
 from std.memory import bitcast, unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
-from bindings.cfb_spectral_door import _routed, _sc_validate
+from bindings.cfb_spectral_door import _routed, _sc_validate, SpectralPreparationConnection
+from core.spectral_native_api import SPECTRAL_CAP_DENSE
+from core.spectral_preparation_api import SPECTRAL_PREPARATION_COUNT
+from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.family_common_pack import family_array
@@ -53,10 +61,14 @@ from core.spectral_native_api import SPECTRAL_MODE, SPECTRAL_NATIVE_COUNT
 from providers.python.estimator_binding_pyapi_door import estimator_binding_host
 from providers.python.host_estimator_binding_pyapi_door import host_estimator_binding, estimator_member_binding
 from providers.python.neural_descriptor_pyapi_door import (
-    NeuralDescriptorProvider, neural_descriptor_connect_factory_once,
+    NeuralDescriptorProvider, neural_descriptor_connect_factory_once, neural_descriptor_connect_once,
 )
 
 comptime _KIND_SPECTRAL = 0
+comptime _AFF_NN = 0
+comptime _AFF_PRECOMPUTED = 1
+comptime _AFF_RBF = 2
+comptime _AFF_PNN = 3
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 
 
@@ -73,11 +85,10 @@ def spectral_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     from the unfitted estimator. False where the class's own doors run the
     instance (see the module notes)."""
     if kind != _KIND_SPECTRAL:
-        return False
+        # Only kind 0 is marked (python/mojolearn/_spectral_impl.py); any
+        # other mark is the member's own NEW refusal, raised here.
+        raise Error("member ABI: spectral member kind " + String(kind) + " is not published")
     classical_connect_numpy(context)
-    var affinity = py_get(fields, PythonObject("affinity"), PythonObject(None))
-    if not family_is_str(affinity) or String(py=affinity) != "nearest_neighbors":
-        return False
     # The class's fit checks, in its order (`_sc_fit`), on a scratch copy:
     # `_sc_validate` writes its derived fields into the dictionary it reads.
     var builtins = native_loaded_module("builtins")
@@ -87,8 +98,7 @@ def spectral_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     if py_type(prediction_data) is not builtins.bool:
         raise Error("TypeError: mojolearn SpectralClustering: prediction_data must be a bool, "
                     + "got " + String(py_type(prediction_data).__name__))
-    if not config.fit.keep_state:
-        return False
+    var affinity_code = _affinity_code(config.affinity)
     var mode_word = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
     # The fit binding: the process default mode, as `_routes` asks it. An explicit HostSpectralClustering (its
     # own host-only word, lane mf-iterimp3b): its import-connected host image for every binding of the route
@@ -121,14 +131,55 @@ def spectral_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     route.third = EntryRef(assign.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry,
         entry_ref_word(mode, vendor, SPECTRAL_ASSIGN_COUNT))
     route.has_third = True
+    # A graph affinity goes to the fit entry dense when it serves dense
+    # matrices, else as COO triples (`_sc_fit`'s `use_dense`).
+    var fit_dense = (fit.capabilities & SPECTRAL_CAP_DENSE) != 0
+    var base_binding = PythonObject(None)
+    var preparation = PythonObject(None)
+    if affinity_code == _AFF_PNN or (affinity_code != _AFF_NN and not fit_dense):
+        # The base image's preparation entry (COO count/fill, the k-NN
+        # affinity), identical only, as `_routes` asks it.
+        base_binding = (estimator_binding_host(model, "_mojolearn", context) if host_class
+                        else _routed(model, "base", "_mojolearn", context["family_cfb_identical"], context))
+        var prep = SpectralPreparationConnection(base_binding, context)
+        route.fourth = EntryRef(prep.driver.entry, entry_ref_word(mode, vendor, SPECTRAL_PREPARATION_COUNT))
+        route.has_fourth = True
+        preparation = prep.provider
+    var decomp_binding = PythonObject(None)
+    var decomp = PythonObject(None)
+    if affinity_code == _AFF_RBF:
+        # The x_decomp image's RBF cells (process default mode), as `_routes` asks it.
+        decomp_binding = (estimator_binding_host(model, "_mojolearn_x_decomp", context) if host_class
+                          else _routed(model, "decomp", "_mojolearn_x_decomp", PythonObject(None), context))
+        decomp = neural_descriptor_connect_once(decomp_binding, "x_decomp_native_api_v1", String(XD_ABI_NAME),
+            XD_OPERATION_COUNT)
+        route.fifth = EntryRef(decomp.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry,
+            entry_ref_word(mode, vendor, XD_OPERATION_COUNT))
+        route.has_fifth = True
     owner.plan.route = route
     var options = config.fit
     var words: List[Float64] = [Float64(_KIND_SPECTRAL), Float64(options.clusters), Float64(options.components),
         Float64(options.initializations), Float64(options.neighbors), options.tolerance,
-        bitcast[DType.float64](Int64(options.seed)), Float64(config.assignment)]
+        bitcast[DType.float64](Int64(options.seed)), Float64(config.assignment), Float64(affinity_code),
+        1.0 if options.keep_state else 0.0, config.gamma, 1.0 if fit_dense else 0.0]
     owner.plan.params = words^
-    owner.pins = Python.tuple(fit_binding, fit.provider, predict_binding, query.provider, cluster_binding, assign)
+    owner.pins = Python.tuple(fit_binding, fit.provider, predict_binding, query.provider, cluster_binding, assign,
+        base_binding, preparation, decomp_binding, decomp)
     return True
+
+
+def _affinity_code(affinity: String) raises -> Int:
+    """The affinity names `_sc_validate` admits, as NEW word 8 carries them."""
+    if affinity == "nearest_neighbors":
+        return _AFF_NN
+    if affinity == "precomputed":
+        return _AFF_PRECOMPUTED
+    if affinity == "rbf":
+        return _AFF_RBF
+    if affinity == "precomputed_nearest_neighbors":
+        return _AFF_PNN
+    raise Error("mojolearn SpectralClustering: affinity='" + affinity + "' passed the class's checks but has"
+                + " no member code")
 
 
 def _export(plan: MemberPlan, mut call: MemberCall, block: Int) raises:
@@ -148,8 +199,8 @@ def _f32_array(view: MemberMatrix, shape: PythonObject, context: PythonObject) r
 def spectral_member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model`, as
-    the class's dataset-route fit publishes them (same names, dtypes, shapes
-    and order)."""
+    the class's fit publishes them for its affinity (`_sc_fit`: same names,
+    dtypes, shapes and order)."""
     classical_connect_numpy(context)
     var model_fields = py_fields(model)
     lifecycle_admit_fields(model_fields)
@@ -159,37 +210,58 @@ def spectral_member_pack(model: PythonObject, fields: PythonObject, context: Pyt
     _ = _sc_validate(model_fields, context)
     var clusters = Int(plan.params[1])
     var assignment = Int(plan.params[7])
+    var affinity = Int(plan.params[8])
+    var keep = plan.params[9] != 0.0
     var call = MemberCall(plan.route, state)
     _export(plan, call, MEMBER_BLOCK_SCALARS)
     var scalars = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)
     var k = Int(scalars[0])
     var iterations = Int(scalars[1])
-    _export(plan, call, MEMBER_BLOCK_FAMILY + 6)
-    var n = call.dst.rows
-    var d = call.dst.cols
-    var fit_x = _f32_array(call.dst, Python.tuple(n, d), context)
     _export(plan, call, MEMBER_BLOCK_FAMILY)
+    var n = call.dst.cols
     var labels = family_array(Python.tuple(n), "<i4", context)
     if n > 0:
         unsafe_memcpy(dest=_I32P(unsafe_from_address=Int(py=classical_address(labels))),
             src=_I32P(unsafe_from_address=call.dst.data), count=n)
+    _export(plan, call, MEMBER_BLOCK_FAMILY + 6)
+    var d = call.dst.cols
+    var training = _f32_array(call.dst, Python.tuple(call.dst.rows, d), context)
+    var built = PythonObject(None)
+    if affinity == _AFF_RBF or affinity == _AFF_PNN:
+        _export(plan, call, MEMBER_BLOCK_FAMILY + 7)
+        built = _f32_array(call.dst, Python.tuple(n, n), context)
     _export(plan, call, MEMBER_BLOCK_FAMILY + 1)
     var embedding = _f32_array(call.dst, Python.tuple(n, k), context)
-    _export(plan, call, MEMBER_BLOCK_FAMILY + 2)
-    var eigenvalues = _f32_array(call.dst, Python.tuple(k), context)
-    _export(plan, call, MEMBER_BLOCK_FAMILY + 3)
-    var eigenvectors = _f32_array(call.dst, Python.tuple(n, k), context)
-    _export(plan, call, MEMBER_BLOCK_FAMILY + 4)
-    var diagonal = _f32_array(call.dst, Python.tuple(n), context)
-    _export(plan, call, MEMBER_BLOCK_FAMILY + 5)
-    var centroids = _f32_array(call.dst, Python.tuple(clusters, k), context)
+    var eigenvalues = PythonObject(None)
+    var eigenvectors = PythonObject(None)
+    var diagonal = PythonObject(None)
+    var centroids = PythonObject(None)
+    if keep:
+        _export(plan, call, MEMBER_BLOCK_FAMILY + 2)
+        eigenvalues = _f32_array(call.dst, Python.tuple(k), context)
+        _export(plan, call, MEMBER_BLOCK_FAMILY + 3)
+        eigenvectors = _f32_array(call.dst, Python.tuple(n, k), context)
+        _export(plan, call, MEMBER_BLOCK_FAMILY + 4)
+        diagonal = _f32_array(call.dst, Python.tuple(n), context)
+        _export(plan, call, MEMBER_BLOCK_FAMILY + 5)
+        centroids = _f32_array(call.dst, Python.tuple(clusters, k), context)
     var dropped: List[String] = ["_pd_eigenvalues", "_pd_eigenvectors", "_pd_diag", "_pd_centroids", "_fit_X",
         "affinity_matrix_"]
     for i in range(len(dropped)):  # small-loop(prediction data and affinity: six cached attribute names)
         _ = py_call(model_fields.pop, PythonObject(dropped[i]), PythonObject(None))
-    py_setitem(model_fields, "input_copied_", PythonObject(False))
-    py_setitem(model_fields, "_fit_X", fit_x)
-    py_setitem(model_fields, "n_features_in_", PythonObject(d))
+    if affinity == _AFF_PRECOMPUTED:
+        # The class publishes the X it was given; the member's copy of it.
+        py_setitem(model_fields, "affinity_matrix_", training)
+    elif affinity == _AFF_RBF:
+        py_setitem(model_fields, "affinity_matrix_", built)
+        py_setitem(model_fields, "n_features_in_", PythonObject(d))
+    elif affinity == _AFF_PNN:
+        py_setitem(model_fields, "affinity_matrix_", built)
+    else:
+        py_setitem(model_fields, "input_copied_", PythonObject(False))
+        if keep:
+            py_setitem(model_fields, "_fit_X", training)
+        py_setitem(model_fields, "n_features_in_", PythonObject(d))
     py_setitem(model_fields, "embedding_", embedding)
     py_setitem(model_fields, "n_components_", PythonObject(k))
     _ = py_call(model_fields.pop, PythonObject("n_iter_assign_"), PythonObject(None))
@@ -198,10 +270,11 @@ def spectral_member_pack(model: PythonObject, fields: PythonObject, context: Pyt
     # A fit releases the last fit's resident prediction state at once (N326).
     cres_forget(model, CRES_SPECTRAL)
     py_setitem(model_fields, "labels_", labels)
-    py_setitem(model_fields, "_pd_eigenvalues", eigenvalues)
-    py_setitem(model_fields, "_pd_eigenvectors", eigenvectors)
-    py_setitem(model_fields, "_pd_diag", diagonal)
-    py_setitem(model_fields, "_pd_centroids", centroids)
+    if keep:
+        py_setitem(model_fields, "_pd_eigenvalues", eigenvalues)
+        py_setitem(model_fields, "_pd_eigenvectors", eigenvectors)
+        py_setitem(model_fields, "_pd_diag", diagonal)
+        py_setitem(model_fields, "_pd_centroids", centroids)
 
 
 def _import(plan: MemberPlan, mut call: MemberCall, block: Int, view: MemberMatrix, flags: Int = 0) raises:
@@ -224,13 +297,17 @@ def spectral_member_state(model: PythonObject, fields: PythonObject, context: Py
     `_pd_centroids`, n_components_, n_iter_assign_). The caller frees it
     (`member_free`)."""
     classical_connect_numpy(context)
+    # A precomputed fit keeps no training rows (its queries are affinities).
+    var precomputed = Int(plan.params[8]) == _AFF_PRECOMPUTED
     var source = py_get(fields, PythonObject("_fit_X"), PythonObject(None))
     var values_source = py_get(fields, PythonObject("_pd_eigenvalues"), PythonObject(None))
-    if source is None or values_source is None:
+    if (source is None and not precomputed) or values_source is None:
         raise Error("mojolearn SpectralClustering.predict: prediction data was not stored. Fit with"
             + " SpectralClustering(prediction_data=True), which keeps the eigenpairs, degrees and centroids"
             + " the Nystrom extension needs (DEVIATION 2860)")
-    var training = admit_family(source, 2, "fitted training rows", context).array
+    var training = PythonObject(None)
+    if not precomputed:
+        training = admit_family(source, 2, "fitted training rows", context).array
     var eigenvalues = admit_family(values_source, 1, "fitted eigenvalues", context).array
     var eigenvectors = admit_family(py_get(fields, PythonObject("_pd_eigenvectors"), PythonObject(None)), 2,
         "fitted eigenvectors", context).array
@@ -238,8 +315,8 @@ def spectral_member_state(model: PythonObject, fields: PythonObject, context: Py
         "fitted degree diagonal", context).array
     var centroids = admit_family(py_get(fields, PythonObject("_pd_centroids"), PythonObject(None)), 2,
         "fitted centroids", context).array
-    var n = Int(py=training.shape[0])
-    var d = Int(py=training.shape[1])
+    var n = Int(py=diagonal.shape[0]) if precomputed else Int(py=training.shape[0])
+    var d = 0 if precomputed else Int(py=training.shape[1])
     var k = Int(py=eigenvalues.shape[0])
     var iterations = py_get(fields, PythonObject("n_iter_assign_"), PythonObject(None))
     var scalars: List[Float64] = [Float64(k), -1.0 if iterations is None else Float64(py=iterations)]

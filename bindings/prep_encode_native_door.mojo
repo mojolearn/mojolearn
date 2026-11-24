@@ -9,7 +9,6 @@
 # set. fit_transform converts X once and hands the converted X to the
 # transform program.
 from std.memory import unsafe_memcpy
-from std.math import ceil
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -38,18 +37,19 @@ from bindings.prep_encode_imputer_run import (
     ImputerFit, ImputerApply, IMP_MEAN, IMP_MEDIAN, IMP_MOST_FREQUENT, IMP_CONSTANT,
     imputer_fit_stage, imputer_transform_stage)
 from bindings.prep_encode_kbins_run import (
-    KBinsFit, KBinsApply, KBinsInverse, KB_DRAW_NONE, KB_DRAW_PLAIN, KB_DRAW_WEIGHTED,
+    KBinsFit, KBinsApply, KBinsInverse, KB_DRAW_NONE, KB_DRAW_PLAIN, KB_DRAW_WEIGHTED, KB_RNG_WORDS,
     enc_weights_stage, kbins_fit_stage, kbins_transform_stage, kbins_inverse_stage, enc_seed_words)
 from bindings.prep_encode_cats_run import (
     CatFit, CatFitPlan, CatBlock, InfrequentFit, CAT_FIT_UNIQUE, CAT_FIT_SCAN, CAT_FIT_PACK_SORT,
     CAT_FIT_PACK_PRESENT, CAT_FIT_INVERSE, cat_fit_stage, cat_codes_stage, cat_i2f_stage, cat_grouped_sizes,
-    cat_infrequent_stage, CatAuto, cat_auto_held, cat_auto_state)
+    cat_infrequent_stage, CatAuto, cat_auto_held, cat_auto_state, CatInfrequent, cat_infrequent_lists,
+    cat_infrequent_ks, cat_infrequent_threshold, cat_given_column, CAT_MF_NONE, CAT_MF_COUNT, CAT_MF_FRACTION)
 from bindings.prep_encode_onehot_run import (
     OneHotApply, OneHotInverse, onehot_transform_stage, onehot_inverse_stage, onehot_auto_drops, OH_DROP_NONE,
-    OH_DROP_FIRST, OH_DROP_IF_BINARY)
+    OH_DROP_FIRST, OH_DROP_IF_BINARY, OH_DROP_GIVEN, onehot_drop_index)
 from bindings.prep_encode_ordinal_run import (
     OrdinalApply, OrdinalInverse, ordinal_transform_stage, ordinal_inverse_stage, ordinal_auto_clash,
-    ordinal_auto_refusal)
+    ordinal_auto_refusal, ordinal_cards_clash)
 from bindings.prep_encode_target_run import (
     TargetFit, TargetApply, TE_FOLDS_NONE, TE_FOLDS_STAGED, TE_FOLDS_GIVEN, target_fit_stage,
     target_transform_stage)
@@ -521,6 +521,45 @@ def _imputer_transform(model: PythonObject, values: PythonObject, context: Pytho
 
 
 # ---------------------------------------------------------------- KBinsDiscretizer
+@fieldwise_init
+struct KbinsSample(ImplicitlyCopyable, Movable):
+    """KBinsDiscretizer's subsample settings as words: `rows` (-1: None),
+    the uint64 seed's low / high 32-bit words, and `rng`: random_state is a
+    numpy RandomState (its draws are its own Python methods: refused at the
+    draw, in the words the door's int() gave)."""
+    var rows: Int
+    var lo: Int
+    var hi: Int
+    var rng: Bool
+
+
+def kbins_sample_words(fields: PythonObject, context: PythonObject) raises -> KbinsSample:
+    """UNPACK of `subsample` and `random_state` (lane mf-ens6), one body for
+    the door's `_kbins_fit` and the member's admission. scikit-learn refuses a
+    subsample that is not an integer >= 1 and a random_state that is not None,
+    an integer or a RandomState (sklearn/preprocessing/_discretization.py
+    KBinsDiscretizer._parameter_constraints: "subsample":
+    [Interval(Integral, 1, None, closed="left"), None], "random_state":
+    ["random_state"]): refused here in its InvalidParameterError words."""
+    var b = native_loaded_module("builtins")
+    var subsample = fields["subsample"]
+    if subsample is None:
+        return KbinsSample(-1, 0, 0, False)
+    if not _int_like(subsample, context) or Int(py=py_call_typed(b.int, subsample)) < 1:
+        raise Error("ValueError: The 'subsample' parameter of KBinsDiscretizer must be an int in the range "
+                    + "[1, inf) or None. Got " + _repr(subsample) + " instead.")
+    var rows = Int(py=py_call_typed(b.int, subsample))
+    var state = fields["random_state"]
+    if state is not None and not _int_like(state, context):
+        if String(py=py_type(state).__name__) == "RandomState":
+            return KbinsSample(rows, 0, 0, True)
+        raise Error("ValueError: The 'random_state' parameter of KBinsDiscretizer must be an int in the range "
+                    + "[0, 4294967295], an instance of 'numpy.random.mtrand.RandomState' or None. Got "
+                    + _repr(state) + " instead.")
+    var seed = _seed64(state)
+    return KbinsSample(rows, seed[0], seed[1], False)
+
+
 def _kbins_strategy(fields: PythonObject) raises -> Int:
     var strategy = fields["strategy"]
     var name = String(strategy) if _is_str(strategy) else String("")
@@ -600,7 +639,6 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
     # UNPACK: the parameters, read once into the typed request; the route's
     # image and capabilities; X and the weights as owners of the program.
     var b = native_loaded_module("builtins")
-    var operator = native_loaded_module("operator")
     var fields = py_fields(model)
     var encode = fields["encode"]
     var encode_text = String(encode) if _is_str(encode) else String("")
@@ -620,17 +658,18 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
         var checked = _check_weights(weight_source, n, "KBinsDiscretizer", mode, entries, caps, context)
         weights = checked[0]
         positive = checked[1]
-    var subsample = fields["subsample"]
-    var resample = subsample is not None and Bool(py=py_call(operator.gt, PythonObject(n), subsample))
+    var sample = kbins_sample_words(fields, context)
+    var resample = sample.rows >= 0 and n > sample.rows
     var draw = KB_DRAW_NONE
     var draws = 0
     var seed_lo = 0
     var seed_hi = 0
     if resample:
-        var seed = _seed64(fields["random_state"])
-        seed_lo = seed[0]
-        seed_hi = seed[1]
-        draws = Int(py=py_call_typed(b.int, subsample))
+        if sample.rng:
+            raise Error(KB_RNG_WORDS)
+        seed_lo = sample.lo
+        seed_hi = sample.hi
+        draws = sample.rows
         # a weighted resample with replacement is drawn in the fit's program,
         # and the edges of its rows are then unweighted
         draw = KB_DRAW_WEIGHTED if given else KB_DRAW_PLAIN
@@ -1113,6 +1152,53 @@ def _unknown_columns(ran: PythonObject, neg: Int, d: Int) raises -> List[Int]:
     return bad^
 
 
+def encode_given_words(values: PythonObject, context: PythonObject) raises -> List[Float32]:
+    """UNPACK of one user category (or drop) list: its values as float32
+    words (`_user_values`, then float(v) rounded to float32). The door per
+    fit and the Prep member's admission once (lane mf-enc6)."""
+    var raw = _user_values(values, context)
+    var words = List[Float32](capacity=len(raw))
+    for i in range(len(raw)):  # driver-loop: over one user category list
+        words.append(_f32(raw[i]))
+    return words^
+
+
+def encode_min_frequency(min_frequency: PythonObject, context: PythonObject) raises -> Tuple[Int, Float64]:
+    """UNPACK of a checked `min_frequency` (`_check_infrequent_params`) as
+    its (CAT_MF_*, value) words for `cat_infrequent_threshold`."""
+    if min_frequency is None:
+        return (Int(CAT_MF_NONE), Float64(0.0))
+    if _integral(min_frequency, context):
+        return (Int(CAT_MF_COUNT), Float64(Int(py=py_call(native_loaded_module("builtins").int, min_frequency))))
+    return (Int(CAT_MF_FRACTION), _float(min_frequency))
+
+
+struct EncodeDropGiven(Movable):
+    """UNPACK of a `drop` given per column (`_set_drop_idx` reads it): per
+    value a Python float NaN flag (`_is_nan_value`), else its float32 word
+    (`_f32`), and its str() text for the refusal."""
+    var nan: List[Bool]
+    var values: List[Float32]
+    var texts: List[String]
+
+    def __init__(out self):
+        self.nan = List[Bool]()
+        self.values = List[Float32]()
+        self.texts = List[String]()
+
+
+def encode_drop_given(drop: PythonObject, context: PythonObject) raises -> EncodeDropGiven:
+    var given = EncodeDropGiven()
+    var vals = _user_values(drop, context)
+    for j in range(len(vals)):  # driver-loop: over the per-column drop arguments
+        var v = vals[j]
+        var is_nan = _is_nan_value(v)
+        given.nan.append(is_nan)
+        given.values.append(Float32(0.0) if is_nan else _f32(v))
+        given.texts.append(_str_text(v))
+    return given^
+
+
 def _given_categories(categories: PythonObject, values: PythonObject, entries: PythonObject, caps: XprepCaps,
                       check_unknown: Bool, who: String, context: PythonObject) raises -> PythonObject:
     """`_given_categories`: one numeric list per column, sorted ascending with
@@ -1125,31 +1211,9 @@ def _given_categories(categories: PythonObject, values: PythonObject, entries: P
         raise Error("mojolearn: " + who + " categories has " + String(len(lists)) + " lists; X has " + String(d) + " features")
     var out = Python.list()
     for j in range(d):  # driver-loop: validates the user categories argument (user category lists)
-        var raw = _user_values(lists[j], context)
-        var f32 = List[Float32]()
-        for i in range(len(raw)):  # driver-loop: over one user category list
-            f32.append(_f32(raw[i]))
-        var nums = List[Float32]()
-        for i in range(len(f32)):  # driver-loop: over one user category list
-            if f32[i] == f32[i]:
-                nums.append(f32[i])
-        var total = len(f32)
-        if len(nums) < total - 1 or (len(nums) < total and f32[total - 1] == f32[total - 1]):
-            raise Error("mojolearn: " + who + " categories[" + String(j) + "]: nan must be the last category")
-        for i in range(1, len(nums)):  # driver-loop: over one user category list
-            if nums[i] < nums[i - 1]:
-                raise Error("mojolearn: " + who + " unsorted categories are not supported for numerical categories")
-        for i in range(1, len(nums)):  # driver-loop: over one user category list
-            if nums[i] == nums[i - 1]:
-                raise Error("mojolearn: " + who + " categories[" + String(j) + "] has values equal in float32")
-        if total == 0:
-            raise Error("mojolearn: " + who + " categories[" + String(j) + "] is empty")
-        var canon = List[Float32]()
-        for i in range(len(nums)):  # driver-loop: over one user category list
-            canon.append(Float32(0.0) if nums[i] == 0 else nums[i])
-        if len(nums) < total:
-            canon.append(Float32(Float64(py=py_call(b.float, "nan"))))
-        _ = py_call(out.append, _f32_array(canon, context))
+        # The checks and the canonical words: one body with the Prep member
+        # (bindings/prep_encode_cats_run.mojo `cat_given_column`, lane mf-enc6).
+        _ = py_call(out.append, _f32_array(cat_given_column(encode_given_words(lists[j], context), j, who), context))
     if check_unknown:
         var p = EncProg()
         var staged = _codes(p, values, out, context, False, PythonObject(None))
@@ -1192,17 +1256,6 @@ def _check_infrequent_params(fields: PythonObject, context: PythonObject) raises
     return mc is not None or mf is not None
 
 
-def _infrequent_threshold(n: Int, min_frequency: PythonObject, context: PythonObject) raises -> Int:
-    """`_infrequent_threshold`: an int min_frequency as is; a fraction f,
-    ceil(n * f) in binary64; none, 0."""
-    if min_frequency is None:
-        return 0
-    var b = native_loaded_module("builtins")
-    if _integral(min_frequency, context):
-        return Int(py=py_call(b.int, min_frequency))
-    return Int(ceil(Float64(n) * _float(min_frequency)))
-
-
 def _fit_infrequent(model: PythonObject, values: PythonObject, entries: PythonObject, caps: XprepCaps,
                     ignore_missing: Bool, inverse: PythonObject, context: PythonObject) raises:
     """`_fit_infrequent`: one program (code_counts, c2_inf_m0, c2_inf_m1,
@@ -1218,15 +1271,18 @@ def _fit_infrequent(model: PythonObject, values: PythonObject, entries: PythonOb
     # admission of every category array.
     var record = _category_record(model, cats_all, context)
     var sizes = _record_sizes(record)
-    var ks = List[Int]()
+    var missing = List[Int](capacity=len(sizes))
     var kmax = 0
     for j in range(len(sizes)):  # driver-loop: one size per column
-        var size = sizes[j]
-        ks.append(size - 1 if (ignore_missing and size > 0 and _record_last_is_nan(record, j)) else size)
-        kmax = max(kmax, size)
+        missing.append(sizes[j] - 1 if sizes[j] > 0 and _record_last_is_nan(record, j) else -1)
+        kmax = max(kmax, sizes[j])
+    # The groupable counts, the threshold and the PACK lists: one body with
+    # the Prep member (bindings/prep_encode_cats_run.mojo, lane mf-enc6).
+    var ks = cat_infrequent_ks(sizes, missing, ignore_missing)
     var max_categories = fields["max_categories"]
     var maxc = -1 if max_categories is None else Int(py=py_call(native_loaded_module("builtins").int, max_categories))
-    var threshold = _infrequent_threshold(n, fields["min_frequency"], context)
+    var mf = encode_min_frequency(fields["min_frequency"], context)
+    var threshold = cat_infrequent_threshold(n, mf[0], mf[1])
     var p = EncProg()
     var from_inverse = inverse is not None
     var x = NONE
@@ -1241,36 +1297,39 @@ def _fit_infrequent(model: PythonObject, values: PythonObject, entries: PythonOb
     # RUN
     var plan = cat_infrequent_stage(p.prog, request)
     var ran = p.run_caps(entries, context, caps)
+    var lists = cat_infrequent_lists(Int(py=ran[0][1]), plan, ks, kmax)
     # PACK
-    var m1 = plan.mask
-    var mp = plan.map
+    var columns = List[List[Float32]](capacity=len(ks))
+    for j in range(len(ks)):  # driver-loop: over the per-column category words (feature metadata)
+        columns.append(_record_column(record, j))
+    encode_infrequent_fields(fields, lists, columns, context)
+    _ = ran^
+
+
+def encode_infrequent_fields(fields: PythonObject, lists: CatInfrequent, columns: List[List[Float32]],
+                             context: PythonObject) raises:
+    """PACK of a fitted grouping (this door's `_fit_infrequent` and the Prep
+    member): `_infrequent`, `_grouping` and infrequent_categories_ (column
+    j's infrequent category values from its fitted words `columns[j]`),
+    None for a column with no infrequent category."""
     var infrequent = Python.list()
     var grouping = Python.list()
     var categories = Python.list()
-    for j in range(len(ks)):  # driver-loop: the device's tables as the fitted per-column lists
-        var inf = List[Int]()
-        for i in range(ks[j]):  # driver-loop: over one column's categories
-            if _iword(ran, m1 + j * kmax + i) != 0:
-                inf.append(i)
-        if len(inf) == 0:
+    for j in range(len(lists.infrequent)):  # driver-loop: the fitted per-column lists (feature metadata)
+        if len(lists.infrequent[j]) == 0:
             _ = py_call(infrequent.append, PythonObject(None))
             _ = py_call(grouping.append, PythonObject(None))
             _ = py_call(categories.append, PythonObject(None))
             continue
-        _ = py_call(infrequent.append, _int_list(inf))
-        var group = List[Int]()
-        for i in range(ks[j]):  # driver-loop: over one column's categories
-            group.append(_iword(ran, mp + j * kmax + i))
-        _ = py_call(grouping.append, _int_list(group))
-        var values_j = _record_column(record, j)
+        _ = py_call(infrequent.append, _int_list(lists.infrequent[j]))
+        _ = py_call(grouping.append, _int_list(lists.groups[j]))
         var picked = List[Float32]()
-        for i in range(len(inf)):  # driver-loop: over one column's infrequent categories
-            picked.append(values_j[inf[i]])
+        for i in range(len(lists.infrequent[j])):  # driver-loop: over one column's infrequent categories
+            picked.append(columns[j][lists.infrequent[j][i]])
         _ = py_call(categories.append, _f32_array(picked, context))
     py_setitem(fields, "_infrequent", infrequent)
     py_setitem(fields, "_grouping", grouping)
     py_setitem(fields, "infrequent_categories_", categories)
-    _ = ran^
 
 
 def _num_text(value: PythonObject) raises -> String:
@@ -1371,18 +1430,25 @@ def encode_drop_word(drop: PythonObject) raises -> Int:
 def encode_auto_drops(fields: PythonObject, drops: List[Int], none: Bool) raises:
     """PACK of `onehot_auto_drops`: `_drop_after` and `drop_idx_` (the same
     indices without grouping), None for drop=None."""
+    encode_drop_fields(fields, drops, drops, none)
+
+
+def encode_drop_fields(fields: PythonObject, after: List[Int], idx: List[Int], none: Bool) raises:
+    """PACK of a drop fit (`onehot_auto_drops`, `onehot_drop_index`; this
+    door's and the Prep member's): `_drop_after` (grouped codes) and
+    drop_idx_ (category indices), -1 as None; both None for drop=None."""
     if none:
         py_setitem(fields, "_drop_after", PythonObject(None))
         py_setitem(fields, "drop_idx_", PythonObject(None))
         return
-    var after = Python.list()
-    var idx = Python.list()
-    for j in range(len(drops)):  # driver-loop: over the per-column drop indices
-        var word = PythonObject(None) if drops[j] < 0 else PythonObject(drops[j])
-        _ = py_call(after.append, word)
-        _ = py_call(idx.append, word)
-    py_setitem(fields, "_drop_after", after)
-    py_setitem(fields, "drop_idx_", idx)
+    var after_list = Python.list()
+    var idx_list = Python.list()
+    for j in range(len(after)):  # driver-loop: over the per-column drop indices
+        _ = py_call(after_list.append, PythonObject(None) if after[j] < 0 else PythonObject(after[j]))
+    for j in range(len(idx)):  # driver-loop: over the per-column drop indices
+        _ = py_call(idx_list.append, PythonObject(None) if idx[j] < 0 else PythonObject(idx[j]))
+    py_setitem(fields, "_drop_after", after_list)
+    py_setitem(fields, "drop_idx_", idx_list)
 
 
 # ---------------------------------------------------------------- OrdinalEncoder
@@ -1449,19 +1515,13 @@ def _ordinal_fit(model: PythonObject, values: PythonObject, capture: Bool, conte
         cards.append(sizes[j] - (1 if missing[j] >= 0 else 0))
     if grouping:
         cards = cat_grouped_sizes(cards, _group_lists(fields["_grouping"]))
-    if handle_text == "use_encoded_value" and not _is_nan_value(unknown_value):
-        for j in range(len(cards)):  # driver-loop: validates unknown_value against cardinalities
-            if _cmp("le", PythonObject(0), unknown_value) and _cmp("lt", unknown_value, PythonObject(cards[j])):
-                raise Error("mojolearn: the used value for unknown_value " + _num_text(unknown_value) + " is one of the "
-                            + "values already used for encoding the seen categories.")
-    if any_missing and not _is_nan_value(emv):
-        var bad = List[Int]()
-        for j in range(len(cards)):  # driver-loop: validates encoded_missing_value argument
-            if missing[j] >= 0 and _cmp("le", PythonObject(0), emv) and _cmp("lt", emv, PythonObject(cards[j])):
-                bad.append(j)
-        if len(bad) > 0:
-            raise Error("mojolearn: encoded_missing_value (" + _num_text(emv) + ") is already "
-                        + "used to encode a known category in features: " + _list_text(bad))
+    # The code checks: one body with the Prep member (bindings/prep_encode_ordinal_run.mojo
+    # `ordinal_cards_clash`, lane mf-enc6), in the estimator's order and words.
+    var use = handle_text == "use_encoded_value"
+    var clash = ordinal_cards_clash(cards, missing, use, _float(unknown_value) if use else 0.0,
+                                    _float(emv) if any_missing else 0.0)
+    if len(clash) > 0:
+        raise Error(ordinal_auto_refusal(clash, _num_text(unknown_value) if use else String(""), _num_text(emv)))
     py_setitem(fields, "numeric_mode_", mode)
     py_setitem(fields, "n_features_in_", d)
     return inverse
@@ -1566,80 +1626,35 @@ def _grouped_sizes(fields: PythonObject, owner: PythonObject, context: PythonObj
 
 def _set_drop_idx(model: PythonObject, context: PythonObject) raises:
     """`_set_drop_idx`: `_drop_after` in grouped codes, drop_idx_ in category
-    indices (None, or one int or None per column)."""
-    var b = native_loaded_module("builtins")
+    indices (None, or one int or None per column). UNPACK of the fitted
+    fields and the drop argument, then the typed body the Prep member also
+    runs (bindings/prep_encode_onehot_run.mojo `onehot_drop_index`, lane
+    mf-enc6), then PACK."""
     var fields = py_fields(model)
-    var sizes = _grouped_sizes(fields, model, context)
+    var record = _category_record(model, fields["categories_"], context)
+    var sizes = _record_sizes(record)
     var d = len(sizes)
     var groups = fields["_grouping"]
+    var group_lists = List[List[Int]]()
+    var infrequent = List[List[Int]]()
+    if groups is not None:
+        group_lists = _group_lists(groups)
+        sizes = cat_grouped_sizes(sizes, group_lists)
+        var inf = fields["_infrequent"]
+        for j in range(d):  # driver-loop: over the per-column infrequent lists (feature metadata)
+            infrequent.append(List[Int]() if inf[j] is None else _index_list(inf[j]))
     var drop = fields["drop"]
-    if drop is None:
-        py_setitem(fields, "_drop_after", PythonObject(None))
-        py_setitem(fields, "drop_idx_", PythonObject(None))
-        return
-    var after = Python.list()
-    var text = String(drop) if _is_str(drop) else String("")
-    if text == "first":
-        for _ in range(d):  # driver-loop: over the per-column drop indices
-            _ = py_call(after.append, PythonObject(0))
-    elif text == "if_binary":
-        for j in range(d):  # driver-loop: drop index for binary columns
-            _ = py_call(after.append, PythonObject(0) if sizes[j] == 2 else PythonObject(None))
-    else:
-        var vals = _user_values(drop, context)
-        if len(vals) != d:
-            raise Error("mojolearn: `drop` should have length equal to the number of features ("
-                        + String(d) + "), got " + String(len(vals)))
-        var missing = String()
-        var any_missing = False
-        var cats = fields["categories_"]
-        for j in range(d):  # driver-loop: validates the user drop argument (per-column drop arguments)
-            var v = vals[j]
-            var cl = _cat_values(cats[j], context)
-            var hit = -1
-            if _is_nan_value(v):
-                if len(cl) > 0 and cl[len(cl) - 1] != cl[len(cl) - 1]:
-                    hit = len(cl) - 1
-            else:
-                var fv = _f32(v)
-                for i in range(len(cl)):  # driver-loop: finds the user drop category in its column
-                    if cl[i] == fv:
-                        hit = i
-                        break
-            if hit < 0:
-                missing += ("\n" if any_missing else "") + "Category: " + _str_text(v) + ", Feature: " + String(j)
-                any_missing = True
-                continue
-            var i = hit
-            if groups is not None and groups[j] is not None:
-                var infrequent = _index_list(fields["_infrequent"][j])
-                for k in range(len(infrequent)):  # driver-loop: over one column's infrequent categories
-                    if infrequent[k] == i:
-                        raise Error("mojolearn: Unable to drop category " + _repr(PythonObject(Float64(cl[i]))) + " from feature "
-                                    + String(j) + " because it is infrequent")
-                i = _index_list(groups[j])[i]
-            _ = py_call(after.append, PythonObject(i))
-        if any_missing:
-            raise Error("mojolearn: The following categories were supposed to be dropped, but were not "
-                        + "found in the training data.\n" + missing)
-    py_setitem(fields, "_drop_after", after)
-    var idx = Python.list()
-    for j in range(d):  # driver-loop: maps drop indices through the grouping (per-column drop indices)
-        var a = after[j]
-        if a is None or groups is None or groups[j] is None:
-            _ = py_call(idx.append, a)
-            continue
-        var g = _index_list(groups[j])
-        var target = Int(py=a)
-        var found = -1
-        for i in range(len(g)):  # driver-loop: over one column grouping
-            if g[i] == target:
-                found = i
-                break
-        if found < 0:
-            raise Error(String(target) + " is not in list")
-        _ = py_call(idx.append, PythonObject(found))
-    py_setitem(fields, "drop_idx_", idx)
+    var word = encode_drop_word(drop)
+    var given = EncodeDropGiven()
+    var columns = List[List[Float32]]()
+    if word < 0:
+        word = OH_DROP_GIVEN
+        given = encode_drop_given(drop, context)
+        for j in range(d):  # driver-loop: over the per-column category words (feature metadata)
+            columns.append(_record_column(record, j))
+    var drops = onehot_drop_index(word, sizes, columns, group_lists, infrequent, given.nan, given.values,
+                                  given.texts)
+    encode_drop_fields(fields, drops.after, drops.idx, drops.none)
 
 
 def _onehot_drops(fields: PythonObject) raises -> List[Int]:
@@ -1706,6 +1721,14 @@ def _onehot_fit(model: PythonObject, values: PythonObject, capture: Bool, contex
     else:
         py_setitem(fields, "categories_", _given_categories(fields["categories"], values, entries, caps, handle_text == "error", "OneHotEncoder", context))
     _ = _category_freeze(fields["categories_"], context)  # hazard A: fitted categories are read-only (p3-prep)
+    # `_missing` as the restricted fit and OrdinalEncoder pack it (the Prep
+    # member's state reads it; lane mf-enc6), from the category record.
+    var record = _category_record(model, fields["categories_"], context)
+    var sizes = _record_sizes(record)
+    var missing = List[Int](capacity=len(sizes))
+    for j in range(len(sizes)):  # driver-loop: per-column NaN category slot (fitted per-column category counts)
+        missing.append(sizes[j] - 1 if sizes[j] > 0 and _record_last_is_nan(record, j) else -1)
+    py_setitem(fields, "_missing", _int_list(missing))
     py_setitem(fields, "_infrequent", PythonObject(None))
     py_setitem(fields, "_grouping", PythonObject(None))
     if grouping:

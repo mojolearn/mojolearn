@@ -50,20 +50,21 @@ from bindings.msel_common_door import (
     msel_is_integral, msel_is_int_arg, msel_is_real, msel_int, msel_op, msel_cmp, msel_materialize,
     msel_try_materialize, msel_flatten, msel_encode, msel_labels_list, msel_n_samples, msel_is_array, msel_addr, msel_admit,
     msel_numeric_vector, msel_new, msel_read_i64, msel_arange, msel_range_index, msel_index_copy,
-    msel_shuffle_sizes, msel_lazy, msel_u64, msel_take_labels, msel_resident_new, msel_resident_take, msel_resident_close,
+    msel_lazy, msel_u64, msel_take_labels, msel_resident_new, msel_resident_take, msel_resident_close,
 )
 # RUN: every fold computation, on typed values (no Python object).
 from bindings.msel_split_run import msel_fold_rows_fits
 from bindings.msel_split_plan_run import (
     MSEL_LABELS_ALIGNED, MSEL_LABELS_SORTED, MSEL_LABELS_FIRST_SEEN, MselCodes, MselSeed, MselSplitRoute,
-    MselSplitPlan, msel_seed_refusal, msel_mix_seed, msel_code_counts, msel_plan_default_folds, msel_plan_kfold,
+    MselSplitPlan, msel_seed_refusal, msel_code_counts, msel_plan_default_folds, msel_plan_kfold,
     msel_plan_stratified, msel_plan_group_kfold, msel_plan_strat_group, msel_plan_time_series, msel_plan_shuffle,
     msel_plan_group_shuffle, msel_plan_strat_shuffle, msel_plan_select, msel_plan_group_set, msel_plan_indexed,
-    msel_leave_one,
+    msel_leave_one, msel_repeated_check, msel_plan_repeat, msel_shuffle_sizes_run,
 )
 # UNPACK (the entries, the label codes, the seed) and PACK (the fold arrays).
 from bindings.msel_split_unpack import (
-    MselLabelPin, msel_split_route, msel_label_codes, msel_label_array, msel_split_finish,
+    MselLabelPin, msel_split_route, msel_label_codes, msel_label_array, msel_split_finish, msel_size_word,
+    msel_size_sum,
 )
 
 
@@ -787,11 +788,26 @@ def msel_lpgo_at(args: PythonObject, context: PythonObject) raises -> PythonObje
     return _only_pair(pairs)
 
 
+def msel_sizes_of(n: Int, test_size: PythonObject, train_size: PythonObject, default_test: PythonObject,
+                  context: PythonObject) raises -> Tuple[Int, Int]:
+    """`_validate_shuffle_split`: UNPACK of the sizes (the default test size
+    when both are None; each size's typed word; the real sizes' sum check),
+    then the one typed body `msel_shuffle_sizes_run` (lane mf-split5: a
+    member fit computes its sizes with the same body over its own rows).
+    Before, the arithmetic ran on the Python values here."""
+    var test = test_size
+    if test_size is None and train_size is None:
+        test = default_test
+    var over = msel_size_sum(test, train_size, context)
+    return msel_shuffle_sizes_run(n, msel_size_word(test, context), msel_size_word(train_size, context), over[0],
+                                  over[1])
+
+
 def msel_shuffle_split(x: PythonObject, n_splits: Int, test_size: PythonObject, train_size: PythonObject,
                        random_state: PythonObject, default_test: PythonObject, context: PythonObject) raises -> PythonObject:
     """`ShuffleSplit.split`."""
     var n = msel_n_samples(x, context)
-    var sizes = msel_shuffle_sizes(n, test_size, train_size, default_test, context)
+    var sizes = msel_sizes_of(n, test_size, train_size, default_test, context)
     var n_train = sizes[0]
     var n_test = sizes[1]
     var seed = msel_seed(random_state, True, context)
@@ -809,7 +825,7 @@ def msel_group_shuffle_split(x: PythonObject, groups: PythonObject, n_splits: In
     """`GroupShuffleSplit.split`."""
     var labels = msel_label_codes(groups, msel_n_samples(x, context), "groups", context, True, True)
     var view = labels.view
-    var sizes = msel_shuffle_sizes(view.m, test_size, train_size, default_test, context)
+    var sizes = msel_sizes_of(view.m, test_size, train_size, default_test, context)
     var n_train = sizes[0]
     var n_test = sizes[1]
     var seed = msel_seed(random_state, True, context)
@@ -831,7 +847,7 @@ def msel_strat_shuffle_split(y: PythonObject, n_splits: Int, test_size: PythonOb
     var n0 = 0 if y is None else msel_n_samples(y, context)
     var labels = msel_label_codes(y, n0, "y", context, True, True)
     var view = labels.view
-    var sizes = msel_shuffle_sizes(view.n, test_size, train_size, default_test, context)
+    var sizes = msel_sizes_of(view.n, test_size, train_size, default_test, context)
     var n_train = sizes[0]
     var n_test = sizes[1]
     var seed = msel_seed(random_state, True, context)
@@ -874,8 +890,7 @@ def msel_repeated_split(sp: MselSplitter, x: PythonObject, y: PythonObject, grou
     and admitted and encoded y again); each repeat is one plan and one
     fill."""
     var base = msel_seed(sp.field("random_state", context), True, context)
-    if base.bad:
-        raise Error(msel_seed_refusal())
+    msel_repeated_check(base)
     var cv = sp.field("cv", context)
     var cvargs = sp.field("cvargs", context)
     var repeats = msel_int(sp.field("n_repeats", context))
@@ -897,13 +912,11 @@ def msel_repeated_split(sp: MselSplitter, x: PythonObject, y: PythonObject, grou
     var pin = msel_split_route(context, stratified and not (k <= 256 and msel_fold_rows_fits(view.n, k)), True)
     var route = pin.route
     for r in range(repeats):  # driver-loop: over repeats (one plan and one fill each)
-        var seed = MselSeed(UInt64(msel_mix_seed(base.value, r)), False)
         var plan = MselSplitPlan()
         with GILReleased(Python()):
-            if stratified:
-                plan = msel_plan_stratified(route, view, form, k, True, seed)
-            else:
-                plan = msel_plan_kfold(route, n, k, True, seed, False)
+            # The one body of a repeat (bindings/msel_split_plan_run.mojo
+            # `msel_plan_repeat`; a member fit calls it too).
+            plan = msel_plan_repeat(route, n, view, form, k, stratified, base, r)
         _ = py_call(pairs.extend, msel_split_finish(pin, plan, context))
     _ = labels  # the codes stay alive through every repeat above
     return pairs
@@ -1194,7 +1207,7 @@ def msel_train_test_split(arrays: PythonObject, test_size: PythonObject, train_s
         mismatch = mismatch or m != n
     if mismatch:
         raise Error("Found input variables with inconsistent numbers of samples: " + family_str(lengths))
-    var sizes = msel_shuffle_sizes(n, test_size, train_size, PythonObject(0.25), context)
+    var sizes = msel_sizes_of(n, test_size, train_size, PythonObject(0.25), context)
     var n_train = sizes[0]
     var n_test = sizes[1]
     var train = PythonObject(None)

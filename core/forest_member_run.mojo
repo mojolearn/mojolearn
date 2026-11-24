@@ -15,7 +15,13 @@ sequential walk, the host strict snapshot or the resident snapshot; the
 fused resident labels where the image serves them). No kernel is touched.
 
 MEMBER_OP_NEW parameters (Float64 words):
-  [0] kind: 0 classifier, 1 regressor
+  [0] kind: 0 classifier, 1 regressor; 2 / 3 (lane mf-hostent5) the
+      PREDICT-ONLY classifier / regressor of a saved model (`HostForest`): no
+      fit, no score (its class has neither), its state IMPORTED from the saved
+      arrays (the blocks below) and predicted by the same predict route as an
+      imported RandomForest / ExtraTrees state on the host image (word [9]
+      names its saved engine); the fit settings are unread (the admission
+      writes three empty slots)
   [1] layout: 0 the RF slots (RandomForest, DecisionTree splitter='best'),
       1 the ET slots (ExtraTrees)
   [2] criterion (the XF_W_CRITERION word; -1 for the ET layout)
@@ -163,6 +169,8 @@ struct ForestMemberSlot(Copyable, Movable, Defaultable):
     var rows_fraction: Float64
     var fast: Bool
     var groves: Bool
+    #: kinds 2 / 3 (lane mf-hostent5): a saved model, predict-only
+    var predict_only: Bool
     var importances: Bool
     #: word 11: every fit computes the out-of-bag outputs
     var oob: Bool
@@ -218,6 +226,7 @@ struct ForestMemberSlot(Copyable, Movable, Defaultable):
         self.rows_fraction = 0.0
         self.fast = False
         self.groves = False
+        self.predict_only = False
         self.importances = False
         self.oob = False
         self.ints = List[Int]()
@@ -283,7 +292,7 @@ def _mint[name: StaticString](words: _F64P, count: Int) raises -> Int:
     var slots = Int(words[_SLOTS_WORD])
     if count != _HEAD + 3 * slots or slots < 3:
         raise Error("member ABI: a forest member takes " + String(_HEAD) + " words and three per parameter slot")
-    if words[0] != 0.0 and words[0] != 1.0:
+    if words[0] != 0.0 and words[0] != 1.0 and words[0] != 2.0 and words[0] != 3.0:
         raise Error("member ABI: unknown forest member kind")
     if words[FM_WORD_IMPORTANCES] != 0.0 and words[1] != 0.0:
         raise Error("NotImplementedError: mojolearn: the ExtraTrees fit computes no feature importances")
@@ -308,7 +317,8 @@ def _mint[name: StaticString](words: _F64P, count: Int) raises -> Int:
         var slot = _SlotPtr(unsafe_from_address=_slot_address[name](index))
         slot[].generation += 1
         slot[].live = True
-        slot[].classifier = words[0] == 0.0
+        slot[].classifier = words[0] == 0.0 or words[0] == 2.0
+        slot[].predict_only = words[0] >= 2.0
         slot[].et = words[1] != 0.0
         slot[].criterion = Int(words[2])
         slot[].form = Int(words[3])
@@ -602,10 +612,13 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
             raise Error("ValueError: y has fewer than 2 classes")
     else:
         _dense(call[].y, MEMBER_F32, "y", estimator)
-        if weighted and (slot[].importances or slot[].oob) and not slot[].et:
-            # The estimator's own refusal (`_rf_fit_regressor`).
-            raise Error("NotImplementedError: sample_weight is not implemented together with oob_score, feature "
-                        + "importances or a tree-ID shard")
+        if weighted and slot[].oob and not slot[].et:
+            # The estimator's own refusal (`_rf_fit_regressor`). Lane mf-rfe6: a weighted fit with the importance
+            # fit is served (the same fit, then the same importance body over the fitted trees on both columns:
+            # core/mojolearn_rf_run.mojo `compute_feature_importances_host`, core/mojolearn_rf_host_run.mojo
+            # `rf_host_importance`), as the classifier's was.
+            raise Error("NotImplementedError: sample_weight is not implemented together with oob_score "
+                        + "or a tree-ID shard")
     _release_snapshot(slot)
     slot[].fitted = False
     slot[].imp = List[Float32]()
@@ -917,9 +930,10 @@ def _import(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], es
     slot[].fitted = True
 
 
-def _capabilities(classifier: Bool, importances: Bool, weights: Bool, notices: Bool) -> Int:
+def _capabilities(classifier: Bool, importances: Bool, weights: Bool, notices: Bool,
+                  predict_only: Bool = False) -> Int:
     """The bits a kind honors. `weights` False: the kind's fit refuses
-    `call.weights` (the RF-layout regressor with the importance fit, the
+    `call.weights` (the RF-layout regressor with the out-of-bag fit, the
     estimator's own refusal), so it is not advertised. No
     `MEMBER_CAN_TEST_ROWS`: the predict entries (XF_PREDICT,
     XF_RESIDENT_PREDICT, XF_RESIDENT_LABELS, XF_STRICT_PREDICT) never test X,
@@ -939,6 +953,12 @@ def _capabilities(classifier: Bool, importances: Bool, weights: Bool, notices: B
     # pre-lock snapshot read (core/forest_export_run.mojo, THE TABLE IS
     # BEHIND A POINTER), now fixed.
     var mask = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_GIL_FREE
+    if predict_only:
+        # A saved model (kinds 2 / 3): predict (and a classifier's predict_proba) over its imported arrays.
+        var held = MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_GIL_FREE
+        if classifier:
+            held |= MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_CLASSIFIER
+        return held
     if notices:
         mask |= MEMBER_CAN_NOTICES
     if weights:
@@ -960,10 +980,11 @@ def fm_member[name: StaticString, rf_layout: Bool](operation: Int, address: Int,
             return _capabilities(True, rf_layout, True, rf_layout)
         var known = _SlotPtr(unsafe_from_address=_lookup[name](call[].state, False))
         # Kind AND settings exact: the RF-layout regressor whose every fit
-        # computes importances or out-of-bag outputs refuses weights (`_fit`).
-        var weights = known[].classifier or known[].et or not (known[].importances or known[].oob)
+        # computes out-of-bag outputs refuses weights (`_fit`; lane mf-rfe6:
+        # the importance fit takes them).
+        var weights = known[].classifier or known[].et or not known[].oob
         return _capabilities(known[].classifier, known[].importances or len(known[].imp) > 0, weights,
-                             not known[].et)
+                             not known[].et, known[].predict_only)
     if operation == MEMBER_OP_NEW:
         if not call[].params:
             raise Error("member ABI: a forest member needs its parameter words")
@@ -987,7 +1008,8 @@ def fm_member[name: StaticString, rf_layout: Bool](operation: Int, address: Int,
         else:
             if not call[].params or call[].param_count < 1:
                 raise Error("member ABI: a forest member answers OUTPUTS without a state from its parameter words")
-            classifier = _F64P(unsafe_from_address=call[].params)[0] == 0.0
+            var word = _F64P(unsafe_from_address=call[].params)[0]
+            classifier = word == 0.0 or word == 2.0
         call[].out_cols = call[].classes if proba else 1
         # predict: int32 codes (classifier) or float32 values; predict_proba
         # (classifier only) float32. Another operation stays unsaid.
@@ -997,6 +1019,10 @@ def fm_member[name: StaticString, rf_layout: Bool](operation: Int, address: Int,
             call[].out_dtype = MEMBER_F32
         return 0
     var slot = _SlotPtr(unsafe_from_address=_lookup[name](call[].state, False))
+    if slot[].predict_only and (operation == MEMBER_OP_FIT or operation == MEMBER_OP_SCORE):
+        # A saved model has no fit and no score (HostForest defines neither: Python's words).
+        raise Error("AttributeError: 'HostForest' object has no attribute '"
+                    + (String("fit") if operation == MEMBER_OP_FIT else String("score")) + "'")
     if operation == MEMBER_OP_FIT:
         _fit(slot, call, estimator)
     elif operation == MEMBER_OP_PREDICT:

@@ -6,13 +6,17 @@ from core.native_descriptor_call import native_descriptor_report
 from core.native_descriptor_fixed_call import native_descriptor_call_fixed
 
 comptime KMEANS_NATIVE_ABI = "mojolearn.kmeans.native.v1"
-comptime KMEANS_NATIVE_COUNT = 6
+comptime KMEANS_NATIVE_COUNT = 7
 comptime KMEANS_MODE = 0
 comptime KMEANS_CAPABILITIES = 1
 comptime KMEANS_FIT = 2
 comptime KMEANS_QUERY = 3
 comptime KMEANS_PREPARE = 4
 comptime KMEANS_RELEASE = 5
+# KMeans.score's inertia (lane mf-kmeans5): the fit's post-loop cost over the
+# given rows and centers (cluster/estimator.mojo `kmeans_score_device`, host
+# cluster/host/kmeans_oracle.mojo `host_kmeans_score`).
+comptime KMEANS_SCORE = 6
 comptime KMEANS_CAP_JOINT = 1
 comptime KMEANS_CAP_RESIDENT = 2
 comptime KMEANS_CAP_FOLD = 4
@@ -86,6 +90,32 @@ struct KMeansQueryResult(Copyable, Movable):
     var range_error: Int
 
 
+@fieldwise_init
+struct KMeansScoreRequest(Copyable, Movable):
+    """`weights` / `weight_count`: 0 / 0 for unit weights, else n_samples
+    host float32 words (a fold score takes unit weights). `handle` >= 0: the
+    resident centers of a GPU image (`centers` not read)."""
+    var source: Int
+    var centers: Int
+    var weights: Int
+    var rows: Int
+    var features: Int
+    var clusters: Int
+    var weight_count: Int
+    var metric: Int
+    var test_finite: Bool
+    var handle: Int
+    var fold: KMeansFoldStore
+
+
+@fieldwise_init
+struct KMeansScoreResult(Copyable, Movable):
+    """The inertia (scikit-learn's score is its negation) and X's status words."""
+    var inertia: Float64
+    var finite: Int
+    var range_error: Int
+
+
 trait KMeansNativeKernels:
     @staticmethod
     def mode() -> Int: ...
@@ -95,6 +125,8 @@ trait KMeansNativeKernels:
     def fit(request: KMeansFitRequest) raises -> KMeansFitResult: ...
     @staticmethod
     def query(request: KMeansQueryRequest) raises -> KMeansQueryResult: ...
+    @staticmethod
+    def score(request: KMeansScoreRequest) raises -> KMeansScoreResult: ...
     @staticmethod
     def prepare(centers: Int, clusters: Int, features: Int) raises -> Int: ...
     @staticmethod
@@ -140,6 +172,17 @@ def kmeans_native_dispatch[K: KMeansNativeKernels](operation: Int,
             var dst = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=a[3])
             dst[0] = Int64(answer.finite)
             dst[1] = Int64(answer.range_error)
+        elif operation == KMEANS_SCORE:
+            if na != 4 or np != 10 or nf != 0 or aa == 0 or pp == 0:
+                raise Error("KMeans native ABI: score requires 4 addresses and 10 integers")
+            if a[3] == 0:
+                raise Error("KMeans native ABI: missing score output span")
+            var answer = K.score(KMeansScoreRequest(a[0], a[1], a[2], p[0], p[1], p[2], p[3], p[4],
+                p[5] != 0, p[6], KMeansFoldStore(p[7], p[8], p[9])))
+            var dst = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=a[3])
+            dst[0] = bitcast[DType.int64](answer.inertia)
+            dst[1] = Int64(answer.finite)
+            dst[2] = Int64(answer.range_error)
         elif operation == KMEANS_PREPARE:
             if na != 1 or np != 2 or nf != 0 or aa == 0 or pp == 0:
                 raise Error("KMeans native ABI: prepare requires 1 address and 2 integers")
@@ -185,6 +228,15 @@ struct KMeansNativeDriver(Copyable, Movable):
         var f: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, KMEANS_QUERY, a, p, f)
         return KMeansQueryResult(Int(words[0]), Int(words[1]))
+
+    def score(self, r: KMeansScoreRequest) raises -> KMeansScoreResult:
+        var words = List[Int64](length=3, fill=0)
+        var a: Array[Int, 4] = [r.source, r.centers, r.weights, Int(words.unsafe_ptr())]
+        var p: Array[Int, 10] = [r.rows, r.features, r.clusters, r.weight_count, r.metric, Int(r.test_finite),
+            r.handle, r.fold.base, r.fold.rows, r.fold.indices]
+        var f: Array[Float64, 0] = []
+        _ = native_descriptor_call_fixed(self.entry, KMEANS_SCORE, a, p, f)
+        return KMeansScoreResult(bitcast[DType.float64](words[0]), Int(words[1]), Int(words[2]))
 
     def prepare(self, centers: Int, clusters: Int, features: Int) raises -> Int:
         var a: Array[Int, 1] = [centers]

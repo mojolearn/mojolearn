@@ -1,14 +1,27 @@
 diff --git a/sequence/cnn_classifier_program.mojo b/sequence/cnn_classifier_program.mojo
-index 444ee4afcf..90950669d1 100644
+index bb4bb497d1..b2fd7bb252 100644
 --- a/sequence/cnn_classifier_program.mojo
 +++ b/sequence/cnn_classifier_program.mojo
-@@ -223,7 +223,11 @@ def _forward[E: Exec & Movable & Deinitable](
+@@ -277,7 +277,11 @@ def _forward[E: Exec & Movable & Deinitable](
+         var fl_ints: List[Int] = [1, 1, -1]
+         h = s.op(OPS_RESHAPE_N, ffs, fl_ints, none)
+         var hls: List[Int] = [h, params[2 * nb], params[2 * nb + 1]]
+-        return s.op(OPS_CNN_LINEAR, hls, List[Int](), none)
++        # SABOTAGE (coverage-sequence-cnn_classifier_program): the head's logits
++        # pass through an extra ReLU, so every negative logit reads 0
++        var fused_logits = s.op(OPS_CNN_LINEAR, hls, List[Int](), none)
++        var frl: List[Int] = [fused_logits]
++        return s.op(OPS_RELU, frl, List[Int](), none)
+     for j in range(nb):  # driver-loop: over conv blocks (model structure)
+         var hs: List[Int] = [h, params[2 * j], params[2 * j + 1]]
+         var conv_ints: List[Int] = [1, g.ks // 2]
+@@ -297,7 +301,11 @@ def _forward[E: Exec & Movable & Deinitable](
      var wt = s.op(OPS_TRANSPOSE, ts, List[Int](), none)
      var ls: List[Int] = [h, wt, params[2 * nb + 1]]
      var act: List[Int] = [0]
 -    return s.op(OPS_LINEAR, ls, act, none)
-+    # SABOTAGE (coverage-sequence-cnn_classifier_program): the head's logits
-+    # pass through an extra ReLU, so every negative logit reads 0
++    # SABOTAGE (coverage-sequence-cnn_classifier_program): the same extra ReLU
++    # on the generic chain's logits (-D MOJOLEARN_CNN_GENERIC_OPS)
 +    var logits = s.op(OPS_LINEAR, ls, act, none)
 +    var rl: List[Int] = [logits]
 +    return s.op(OPS_RELU, rl, List[Int](), none)

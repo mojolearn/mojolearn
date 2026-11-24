@@ -115,6 +115,23 @@ struct MImage(Copyable, Movable):
         self.dev_one = dev_one
         self.dev_one_made = False
 
+    def capabilities(self) -> Int:
+        """The capability word this image was admitted with (the inverse of
+        `__init__`'s reads): what a member admission carries in its words to
+        rebuild the image in RUN (lane mf-nbr6)."""
+        var caps = 0
+        if self.resident:
+            caps |= XD_CAP_RESIDENT
+        if self.dev_svd:
+            caps |= XD_CAP_DEV_SVD
+        if self.dev_lu:
+            caps |= XD_CAP_DEV_LU
+        if self.dev_eigh:
+            caps |= XD_CAP_DEV_EIGH
+        if self.lle_ordered:
+            caps |= XD_CAP_LLE_ORDERED
+        return caps
+
 
 struct MStore(Movable):
     """A kit-owned host store (at least one word, so an empty matrix keeps a

@@ -84,8 +84,9 @@ from core.ensemble_member import (
     ensemble_member_v2, meta_plan_mint, meta_plan_mint_with, meta_plan_release, META_VOTE_CLASSIFIER,
     META_STACK_CLASSIFIER, META_OVR, META_CALIBRATED, META_PARAM_COUNT, META_BLOCK_NESTED, META_BLOCK_WIDTHS,
     META_ADA_CLASSIFIER, META_ADA_REGRESSOR, META_BLOCK_ADA, META_SEARCH_CLASSIFIER, META_MULTI_CLASSIFIER,
-    META_BLOCK_SEARCH,
+    META_BLOCK_SEARCH, META_SEARCH_WORDS, META_SEARCH_HEAD,
 )
+from core.msel_scorer_run import MselScorerOptions, msel_scorer_group_words, SCORER_GROUP_WORDS
 from bindings.arena_prog_run import MetricRoute
 from core.entry_table import entry_ref_unresolved
 from core.member_abi import MEMBER_OP_SCORE
@@ -624,7 +625,7 @@ def check_calibrated() raises:
     var x = _x()
     var y = _codes()
     var nested: List[MemberPlan] = [_logistic(1.0)]
-    var words: List[Float64] = [1.0, 1.0, 1.0]  # sigmoid, ensemble, decision
+    var words: List[Float64] = [1.0, 1.0, 1.0, 1.0]  # sigmoid, ensemble, decision, int cv
     var meta = _meta_with(META_CALIBRATED, 3, nested^, words^, List[List[Int32]](), List[List[Int32]](), List[Int](), 0)
     var state = _meta_fit(meta, x, y)
     var got = _meta_proba(meta, state, x)
@@ -1057,9 +1058,14 @@ def check_search() raises:
     state's."""
     var x = _x()
     var y = _codes()
-    # The search head (core/ensemble_member.mojo META_SEARCH_*, 8 words since mf-metric4 / mf-search4b): scoring None,
-    # no error_score, no train scores, a grid, refit, refit scorer 0, one scorer; then its positive word (-1: none).
-    var words: List[Float64] = [0.0, 0.0, 0.0, 0.0, -1.0, 1.0, 0.0, 0.0, -1.0]
+    # The kind's settings words (core/ensemble_member.mojo META_SEARCH_*, lane mf-cluster5: the 9 words the
+    # kind requires since mf-search4b): scoring None, error_score='raise', no train scores, a grid (seed -1),
+    # refit=True, refit scorer 0, one scorer (count 0), then its one scorer word group (lane mf-tail5b,
+    # core/msel_scorer_run.mojo SCORER_GROUP_WORDS: code 0, positive -1, no flip, no pos_label, word -1,
+    # k 0, beta -1, zero_division -1, no labels codes).
+    var words: List[Float64] = [0.0, 0.0, 0.0, 0.0, -1.0, 1.0, 0.0, 0.0]
+    msel_scorer_group_words(words, 0, -1, MselScorerOptions(), List[Int32]())
+    require(len(words) == META_SEARCH_WORDS + SCORER_GROUP_WORDS, "fixture: the search kind's settings words")
     var meta = _meta_with(META_SEARCH_CLASSIFIER, 3, _search_plans(), words^, List[List[Int32]](),
                           List[List[Int32]](), List[Int](), 0)
     var state = _meta_fit(meta, x, y)
@@ -1078,9 +1084,8 @@ def check_search() raises:
             and Int(got[3]) == len(plans), "the search header words")
     for c in range(len(plans)):  # small-loop(check: candidates)
         for f in range(res.n_splits):  # small-loop(check: folds)
-            # the 8-word head (core/ensemble_member.mojo: best, folds, best score, m, train flag, seed, tables,
-            # refitted; mf-search4b), then the one scorer table's m x folds test scores
-            require(got[8 + c * res.n_splits + f] == res.test[c][f], "a split score")
+            # the tables follow the fitted header (META_SEARCH_HEAD words; it was 6 before mf-search4b)
+            require(got[META_SEARCH_HEAD + c * res.n_splits + f] == res.test[c][f], "a split score")
     var want = List[Float64](length=N * K, fill=0.0)
     var q = member_call_of(plans[res.best], res.best_state)
     q.x = MemberMatrix(Int(x.unsafe_ptr()), N, D)

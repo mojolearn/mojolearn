@@ -10,7 +10,6 @@ import array
 
 import pytest
 
-from mojolearn import Array, _buffer
 from mojolearn._spectral_impl import _coo_triples
 
 
@@ -65,29 +64,6 @@ def test_sparse_input_reads_exact_scipy_storage_without_protocol(monkeypatch):
         _coo_triples(not_square)
 
 
-def test_direct_binding_refusals():
-    count_fn = _buffer._native("nonzero_f64_count")
-    fill_fn = _buffer._native("nonzero_f64_fill")
-    src = Array.from_list([1.0, 0.0, 2.0, 3.0], "<f8")
-    a = _buffer.addr_ro(src, name="src")
-    assert count_fn(a, 0) == 0
-    assert count_fn(a, 4) == 3
-    with pytest.raises(Exception, match="non-negative"):
-        count_fn(a, -1)
-    out = [_buffer.empty((3,), "<i4"), _buffer.empty((3,), "<i4"),
-           _buffer.empty((3,), "<f4")]
-    addrs = [_buffer.addr(o, name="o") for o in out]
-    assert fill_fn(a, 2, 2, addrs, 3) == 3
-    assert out[0].tolist() == [0, 1, 1] and out[1].tolist() == [0, 0, 1]
-    assert out[2].tolist() == [1.0, 2.0, 3.0]
-    # Stale, too-small capacity: refused, and nothing written past it.
-    small = [_buffer.empty((1,), "<i4"), _buffer.empty((1,), "<i4"),
-             _buffer.empty((1,), "<f4")]
-    saddrs = [_buffer.addr(o, name="o") for o in small]
-    with pytest.raises(Exception, match="more than 1 nonzero"):
-        fill_fn(a, 2, 2, saddrs, 1)
-    assert fill_fn(a, 0, 5, addrs, 3) == 0
-    with pytest.raises(Exception, match="non-negative"):
-        fill_fn(a, -1, 2, addrs, 3)
-    with pytest.raises(Exception, match="3 addresses"):
-        fill_fn(a, 2, 2, addrs[:2], 3)
+# TOMBSTONE: test_direct_binding_refusals (it called the nonzero_f64_count / nonzero_f64_fill by-name exports,
+# deleted 2026-11-23 on lane/sab-host-missed-cls; the native refusals stay in checks/native_tests/nonzero_scan.mojo)
+# deleted with them; code recoverable at 4519097d38.

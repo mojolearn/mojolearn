@@ -7,8 +7,9 @@ image (`kernel_approx_member_publish`: bindings/_mojolearn_kernel_methods.mojo
 and bindings/_mojolearn_kernel_methods_host.mojo). It runs the family's
 existing typed RUN (kernel_methods/native_call_run.mojo `KmCall` requests:
 the estimator's own door's operations, in its order) over `route.entry`,
-the image's kernel methods provider table (`identical` only: a `fast` build
-has no provider and the boundary keeps the estimator's own doors).
+the image's kernel methods provider table (both tiers: a `fast` estimator's
+own doors keep their entries, the member reads the image's table, lane
+mf-lin6, as core/kernel_ridge_member.mojo).
 `route.flags` is the provider's capability word (operation 14): bit 2 =
 Nystroem's pointer fit, as the estimator's door reads it. No kernel is
 touched.

@@ -19,17 +19,25 @@ ROUTE SLOTS (filled by providers/python/member_sequence_boundary_door.mojo):
   * `third` (`has_third`): the R^2 entry of the metrics image of the
     route's device (regressor score). Without it a score is refused in words.
 
-MEMBER_OP_NEW parameters (Float64 words, 20 of them):
+MEMBER_OP_NEW parameters (Float64 words, 30 of them):
   [0] kind = task (0 regressor, 1 classifier); [1] cell (0 RNN tanh, 1 RNN
   relu, 2 LSTM, 3 GRU); [2] hidden_size; [3] num_layers; [4] batch_size;
   [5] max_epochs; [6] shuffle (0 / 1); [7] learning_rate (the constant rate
-  of every step: a class with an `lr_schedule` is not admitted); [8]
+  of every step without an `lr_schedule`); [8]
   predict_chunk; [9] optimizer kind; [10] optimizer flag word; [11 .. 16]
   the optimizer's six float slots (the estimator's own `_rnn_optimizer`
   words, PyTorch's defaults merged with `optimizer_options`); [17] seed,
   low 32 bits; [18] seed, high 32 bits (the estimator's seeded stream of an
   integer `random_state`); [19] fresh seed (1: `random_state` is None, so
-  every FIT draws eight bytes of OS entropy, as the estimator's own fit).
+  every FIT draws eight bytes of OS entropy, as the estimator's own fit);
+  [20] 1: a built-in `lr_schedule` (lane mf-ens6); [21] its class index
+  (0 ConstantLR .. 5 OneCycleLR, `schedule_kind`); [22] LrSpec.kind; [23 ..
+  25] LrSpec.a, b, c; [26 .. 29] LrSpec.f0 .. f3 (the schedule's admitted
+  spec, `schedule_spec_admitted`). With [20] = 1 every FIT fills the rate of
+  each of its steps with the schedule's own native series
+  (`optimizer_schedule_evaluation(...).fill`, the body `schedule_run`'s
+  schedule_values runs for the estimator's own fit), so the fold's step
+  count picks the series as the estimator's fit on those rows does.
 
 VIEWS: X dense row-major host float32, rows x (T * F) with `x.steps` = T
 >= 1 (MEMBER_CAN_STEPS; `steps` 0, a plain matrix, is refused: the models
@@ -90,10 +98,12 @@ from sequence.xseq_neural_run import (
     xseq_run_rnn_fit, xseq_run_rnn_layout, xseq_run_rnn_predict,
 )
 from sequence.xseq_score_run import xseq_run_vector_finite, xseq_run_weights_check
+from sequence.lr_table import LrSpec
+from training.optimizer_schedule_plan import optimizer_schedule_evaluation
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
-comptime _WORDS = 20
+comptime _WORDS = 30
 comptime _SCALAR_WORDS = 5
 comptime _BLOCK_PARAMS = MEMBER_BLOCK_FAMILY
 comptime _BLOCK_CURVE = MEMBER_BLOCK_FAMILY + 1
@@ -312,6 +322,11 @@ def _fit(slot: _SlotP, call: _CallP) raises:
     var offset = xseq_run_uniform(_output_entry(call), Int(slot[].params.unsafe_ptr()), total, seed, 0, -bound, bound)
     var child = xseq_stream_child_seed(seed, offset)
     var rates = List[Float32](length=schedule.steps, fill=Float32(w[7]))
+    if w[20] != 0.0:
+        # The schedule's series over this fit's steps (`_rnn_rates`).
+        var spec = LrSpec(Int(w[22]), Int(w[23]), Int(w[24]), Int(w[25]), w[26], w[27], w[28], w[29])
+        optimizer_schedule_evaluation(Int(w[21]), spec, schedule.steps, True).fill(
+            _F32P(unsafe_from_address=Int(rates.unsafe_ptr())))
     var optimizer = XseqOptimizer(Int(w[9]), Int(w[10]), [w[11], w[12], w[13], w[14], w[15], w[16]])
     var request = XseqRnnFitRequest(cell, d, hidden, layers, outputs, 1 if slot[].classifier else 0, n, steps_t,
         Int(w[5]), schedule.batch, w[6] != 0.0, child)
@@ -529,7 +544,7 @@ def _capabilities(classifier: Bool) -> Int:
 
 def _new(call: _CallP) raises:
     if call[].param_count != _WORDS or not call[].params:
-        raise Error("member ABI: a recurrent member takes twenty parameters")
+        raise Error("member ABI: a recurrent member takes thirty parameters")
     var w = _F64P(unsafe_from_address=call[].params)
     if w[0] != 0.0 and w[0] != 1.0:
         raise Error("member ABI: unknown recurrent member kind")
@@ -537,6 +552,8 @@ def _new(call: _CallP) raises:
         raise Error("member ABI: a recurrent member's cell, size, epoch or chunk word is out of range")
     if w[19] != 0.0 and w[19] != 1.0:
         raise Error("member ABI: a recurrent member's fresh-seed word is 0 or 1")
+    if (w[20] != 0.0 and w[20] != 1.0) or (w[20] == 1.0 and (w[21] < 0.0 or w[21] > 5.0)):
+        raise Error("member ABI: a recurrent member's schedule words are out of range")
     var words = List[Float64](length=_WORDS, fill=0.0)
     unsafe_memcpy(dest=words.unsafe_ptr(), src=w, count=_WORDS)
     call[].state = _mint(words^)

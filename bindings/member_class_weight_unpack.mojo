@@ -62,6 +62,7 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_type
 from bindings.svc_common_unpack import svc_float
 from bindings.x_linear_common_unpack import xl_class_weights_unpack
 from core.class_weight_plan import class_weight_dict_refused
+from bindings.class_weight_absent_unpack import class_weight_absent_message
 from core.member_abi import MemberPlan
 from core.member_class_weight import (
     MEMBER_CW_NONE, MEMBER_CW_BALANCED, MEMBER_CW_DICT, MEMBER_CW_INVALID, member_cw_start, member_cw_pending,
@@ -93,12 +94,21 @@ def member_cw_kind_accepted(family: Int, model: PythonObject, class_weight: Pyth
     answers ""; LinearSVC's door takes exact types only): MEMBER_CW_BALANCED
     for a str subclass whose value is 'balanced', MEMBER_CW_DICT for a dict
     subclass, whose table `member_cw_fill_plan` / `member_cw_fill_keyed`
-    read from ONE exact dict copy of it. -1: not admitted."""
+    read from ONE exact dict copy of it; for the x_linear and SGD kinds, any value
+    equal to 'balanced' (their door's test). -1: a value the family's fit door
+    refuses (`member_cw_invalid_message` has its words; lane mf-cal5: no value
+    the door accepts answers -1, so no caller falls back for one)."""
     var kind = member_cw_kind(class_weight, b)
     if kind >= 0 or family == MEMBER_FAMILY_LINEAR_SVM:
         return kind
     if member_cw_invalid_message(family, model, class_weight, b).byte_length() != 0:
         return -1
+    # The x_linear and SGD doors read 'balanced' by equality, before their dict test
+    # (bindings/x_linear_common_unpack.mojo `xl_class_weights_unpack`): any value equal to it is 'balanced'
+    # there, so it is here (lane mf-cal5, THE FALLBACK RULE: it was not admitted, and its caller fell back).
+    if (family == MEMBER_FAMILY_SGD or family == MEMBER_FAMILY_XLINEAR) and Bool(
+            py=class_weight == PythonObject("balanced")):
+        return MEMBER_CW_BALANCED
     if Bool(py=py_call(b.isinstance, class_weight, b.str)):
         return MEMBER_CW_BALANCED if String(class_weight) == "balanced" else -1
     if Bool(py=py_call(b.isinstance, class_weight, b.dict)):
@@ -122,13 +132,10 @@ def _svc_values(class_weight: PythonObject, classes: PythonObject, b: PythonObje
     var values = List[Float64](length=k, fill=1.0)
     var named = List[Bool](length=k, fill=False)
     var unknown = 0
-    var first_unknown = PythonObject(None)
     var items = py_call(b.list, py_call(py_call(b.dict, class_weight).items))
     for i in range(len(items)):  # driver-loop: over the user's class_weight entries
         var key = items[i][0]
         if not py_contains(classes, key):
-            if unknown == 0:
-                first_unknown = key
             unknown += 1
             continue
         var c = Int(py=py_call(classes.index, key))
@@ -140,8 +147,8 @@ def _svc_values(class_weight: PythonObject, classes: PythonObject, b: PythonObje
             if not named[c]:
                 unweighted += 1
         if class_weight_dict_refused(unknown, unweighted):
-            raise Error("mojolearn SVC: class_weight names the label " + family_repr(first_unknown)
-                        + ", which is not in y's classes " + family_repr(classes))
+            # scikit-learn's words, as the SVC door (lane mf-gate6)
+            raise Error(class_weight_absent_message(classes, class_weight, b))
     return values^
 
 

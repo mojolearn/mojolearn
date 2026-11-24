@@ -61,7 +61,7 @@ index 51756d77cc..98c9780a5d 100644
                  var diff = ftz_v[EPS_W](qv - (xtp + k * mp + j0).load[width=EPS_W]())
                  if metric == DBSCAN_METRIC_L1:
 diff --git a/hierarchy/host/linkage_host.mojo b/hierarchy/host/linkage_host.mojo
-index e55b7449f3..ad302a4271 100644
+index e55b7449f3..a44b506af6 100644
 --- a/hierarchy/host/linkage_host.mojo
 +++ b/hierarchy/host/linkage_host.mojo
 @@ -128,7 +128,8 @@ def host_prim_mst(x: List[Float32], m: Int, d: Int, is_sqrt: Bool) -> LinkageHos
@@ -74,11 +74,21 @@ index e55b7449f3..ad302a4271 100644
                          var q = SIMD[DType.float32, PRIM_W](crp.unsafe_load(f))
                          acc = ftz_v[PRIM_W](mul_add_v[PRIM_W](q, (xtp + f * m + v).load[width=PRIM_W](), acc))
                      comptime for l in range(PRIM_W):
+@@ -144,7 +145,8 @@ def host_prim_mst(x: List[Float32], m: Int, d: Int, is_sqrt: Bool) -> LinkageHos
+                 else:
+                     if itp[v] == UInt8(0):
+                         var acc = Float32(0.0)
+-                        for f in range(d):
++                        for ff in range(d):
++                            var f = d - 1 - ff
+                             acc = ftz(identical_mul_add(crp.unsafe_load(f), xtp.unsafe_load(f * m + v), acc))
+                         var dist = _edge_dist(acc, n_cur, nrp.unsafe_load(v), is_sqrt)
+                         var a = Int32(cur if cur < v else v)
 diff --git a/x_cluster/host/host_ops.mojo b/x_cluster/host/host_ops.mojo
-index c476f9c63b..f2a4e8e986 100644
+index 05de8d8fb3..e148d59757 100644
 --- a/x_cluster/host/host_ops.mojo
 +++ b/x_cluster/host/host_ops.mojo
-@@ -116,7 +116,8 @@ def _sq_dists8(pa: FPtr, i: Int, d: Int, btp: FPtr, mp: Int, j0: Int) -> SIMD[DT
+@@ -113,7 +113,8 @@ def _sq_dists8(pa: FPtr, i: Int, d: Int, btp: FPtr, mp: Int, j0: Int) -> SIMD[DT
      `t = ftz(ftz(a) - ftz(b))`, `acc = ftz(acc + ftz(t * t))` (the pinned
      product), features ascending."""
      var acc = SIMD[DType.float32, DIST_W](0)
@@ -88,7 +98,7 @@ index c476f9c63b..f2a4e8e986 100644
          var av = SIMD[DType.float32, DIST_W](ftz(pa[i * d + f]))
          var t = ftz_v[DIST_W](av - (btp + f * mp + j0).load[width=DIST_W]())
          acc = ftz_v[DIST_W](acc + ftz_v[DIST_W](mul_v[DIST_W](t, t)))
-@@ -382,7 +383,8 @@ struct HostOps(ClusterOps):
+@@ -378,7 +379,8 @@ struct HostOps(ClusterOps):
              comptime for l in range(AP_W):
                  kidx[l] = Int64(k0 + l)
              var colsum = SIMD[DType.float32, AP_W](0)
@@ -98,7 +108,7 @@ index c476f9c63b..f2a4e8e986 100644
                  var v = (pr + i * n + k0).load[width=AP_W]()
                  var diag = kidx.eq(SIMD[DType.int64, AP_W](Int64(i)))
                  var rp = (diag | v.gt(zero)).select(v, zero)
-@@ -503,7 +505,8 @@ struct HostOps(ClusterOps):
+@@ -499,7 +501,8 @@ struct HostOps(ClusterOps):
                  var acc = SIMD[DType.float32, GAUSS_W](0)
                  for j in range(d):
                      var y = SIMD[DType.float32, GAUSS_W](0)

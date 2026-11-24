@@ -94,6 +94,38 @@ class _GBDTAdapter(PublicOutputsMixin):
     def __sklearn_is_fitted__(self):
         return _TREES(self, "trees_public_gbdt_adapter_is_fitted", (), _TREES_CONTEXT)
 
+    @property
+    def feature_importances_(self):
+        """The impurity-based feature importances of the fitted model.
+
+        Each split of each tree is credited with how much it separates the
+        tree's leaf values, weighted by the training rows (and sample weights)
+        on each side; the credits are summed per feature over all trees and
+        normalised to sum to 1, as in scikit-learn's gradient boosting. A
+        model with no effective split returns zeros. The values are computed
+        when the model is fitted.
+
+        Returns
+        -------
+        ndarray of shape (n_features_in_,)
+            float64, non-negative, summing to 1.
+
+        Raises
+        ------
+        NotFittedError
+            Before ``fit``.
+
+        Examples
+        --------
+        >>> import numpy as np, mojolearn
+        >>> X = np.random.default_rng(0).random((500, 4), dtype=np.float32)
+        >>> y = (X[:, 0] > 0.5).astype(int)
+        >>> clf = mojolearn.GradientBoostingClassifier(n_estimators=20).fit(X, y)
+        >>> clf.feature_importances_.shape
+        (4,)
+        """
+        return _TREES(self, "trees_gbdt_feature_importances", (), _TREES_CONTEXT)
+
     def __sklearn_tags__(self):
         """scikit-learn's tag protocol, read only by scikit-learn: the shared
         `_mode.ParamsMixin` answer, with the classifier marked binary-only

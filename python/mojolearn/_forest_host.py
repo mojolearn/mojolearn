@@ -125,6 +125,11 @@ class HostForest:
     >>> pred = mojolearn.HostForest.from_file("rf.npz").predict(X)
     """
 
+    #: A predict-only member of a meta-estimator or an explainer (core/forest_member_run.mojo: family 14, kind 2,
+    #: the saved model imported from its own arrays; an extra-trees file is the ExtraTrees family's).
+    _mojolearn_member = (14, 2)
+    _mojolearn_member_predict_only = True
+
     def __init__(self, *, estimator, offsets, colid, quesval, left_child, leaves,
                  n_features, n_trees, num_outputs, classes=None, device=None,
                  inference_engine='sequential'):
@@ -309,3 +314,8 @@ _digest_fields.schema(HostForest, tuple(
 from ._native_family_layouts import connect as _connect_family_layouts  # noqa: E402
 _connect_family_layouts(sys.modules[__package__], only=(HostForest,))
 del _connect_family_layouts
+# glue: once at import. This module loads lazily, possibly after the model selection hub connected its marked
+# classes: HostForest's predict-only member plan is registered here (lane mf-cal5).
+from ._native_msel_more import connect_host_tree_member as _connect_host_tree_member  # noqa: E402
+_connect_host_tree_member(HostForest)
+del _connect_host_tree_member

@@ -40,19 +40,29 @@ the previous round's importances):
 `rfe_first_stage` stages the first block from the all-ones support,
 `rfe_select_count` / `rfe_step_count` resolve n_features_to_select and step,
 `rfe_member_fit` is the final fit over a native member. `rfe_member_source` picks a member kind's importance
-block for the getter, or the refusal of a naive Bayes / discriminant kind with neither (lane mf-shaprfe).
+block for the getter, or the refusal of a naive Bayes / discriminant / Gbdt kind with neither (lanes
+mf-shaprfe, mf-gbdt5). Since lane mf-gbdt5 every member fit also takes the fit's extra inputs
+(core/member_set_run.mojo `MemberFitExtras`: RFE's fit parameters as the estimator's fit door admits them, a
+held-out X restricted to the round's columns, the round's column ids at `columns`).
 """
 from std.memory import unsafe_memcpy
 from core.preprocessing_program import prep_program_stage
 from bindings.prep_encode_prog_run import EncProgram, enc_col_stats, enc_floats_of
 from bindings.prep_encode_cats_run import CatBlock, cat_codes_stage, cat_i2f_stage
-from bindings.prep_classify_prog_run import ClsProgram, CLS_IN_BUFFER, CLS_IN_CONST_F
+from bindings.prep_classify_prog_run import (
+    ClsProgram, CLS_IN_BUFFER, CLS_IN_CONST_F, ClsRunPlan, ClsBorrowed, ClsBorrowedDone, cls_borrowed_run,
+)
+from bindings.arena_prog_run import _switch
 from core.member_abi import (
-    MemberPlan, MemberCall, MemberMatrix, member_call, MEMBER_OP_FIT, MEMBER_OP_EXPORT, MEMBER_F32,
+    MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_own,
+    MEMBER_OP_FIT, MEMBER_OP_EXPORT, MEMBER_F32,
     MEMBER_CAN_COEF, MEMBER_CAN_IMPORTANCES, MEMBER_BLOCK_COEF, MEMBER_BLOCK_FEATURE_IMPORTANCES,
 )
-from core.member_families import MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_DISCRIMINANT
+from core.member_families import (
+    MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_GBDT, MEMBER_FAMILY_XNEIGHBORS,
+)
 from core.member_notices import member_notices_take
+from core.member_set_run import MemberFitExtras, member_fit_extras_apply, member_fit_extras_clear
 
 comptime SEL_F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime SEL_I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -464,43 +474,83 @@ def rfe_member_source(family: Int, mask: Int, getter: String, estimator: String)
     as the attribute path squares it. A kind of the naive Bayes or discriminant family with neither block
     (QuadraticDiscriminantAnalysis, GaussianNB, MultinomialNB, BernoulliNB, ComplementNB, CategoricalNB: neither attribute
     exists on them, as in scikit-learn) is REFUSED (lane mf-shaprfe): 'auto' in the door's words, a named
-    attribute in scikit-learn's attrgetter's (`estimator` the class name). Any other kind without the block keeps
-    the estimator's own doors (block 0)."""
+    attribute in scikit-learn's attrgetter's (`estimator` the class name). A Gbdt kind exports
+    MEMBER_BLOCK_FEATURE_IMPORTANCES since lane mf-imp6 (its `feature_importances_`, computed at FIT), so 'auto'
+    and 'feature_importances_' take that block and only 'coef_' is refused, in attrgetter's words (scikit-learn's
+    gradient boosting has no coef_). Since lane mf-meta5b every XNeighbors
+    kind (the k-NN estimators, LabelPropagation and LabelSpreading: neither attribute exists on them in
+    scikit-learn, and the door's attribute reads answer None, so its first round raised the same words after
+    its fit). The caller raises the refusal only when an
+    elimination round reads importances (scikit-learn reads none when n_features_to_select keeps every column).
+    Any other kind without the block keeps the estimator's own doors (block 0)."""
     var auto = getter == "auto"
     if getter != "feature_importances_" and (mask & MEMBER_CAN_COEF) != 0:
         return RfeSource(MEMBER_BLOCK_COEF, True, String(""))
     if getter != "coef_" and (mask & MEMBER_CAN_IMPORTANCES) != 0:
         return RfeSource(MEMBER_BLOCK_FEATURE_IMPORTANCES, not auto, String(""))
-    if family == MEMBER_FAMILY_NAIVE_BAYES or family == MEMBER_FAMILY_DISCRIMINANT:
+    if family == MEMBER_FAMILY_GBDT and getter == "coef_":
+        return RfeSource(0, False, "AttributeError: '" + estimator + "' object has no attribute 'coef_'")
+    if family == MEMBER_FAMILY_NAIVE_BAYES or family == MEMBER_FAMILY_DISCRIMINANT or family == MEMBER_FAMILY_XNEIGHBORS:
         if auto:
             return RfeSource(0, False, String(RFE_NO_IMPORTANCES))
         return RfeSource(0, False, "AttributeError: '" + estimator + "' object has no attribute '" + getter + "'")
     return RfeSource(0, False, String(""))
 
 
-def rfe_member_fit(plan: MemberPlan, mut call: MemberCall, x: Int, n: Int, k: Int, y: Int, y_dtype: Int) raises:
+def rfe_member_fit(plan: MemberPlan, mut call: MemberCall, x: Int, n: Int, k: Int, y: Int, y_dtype: Int,
+                   extras: MemberFitExtras, columns: Int) raises:
     """FIT of the caller's new member state (`call`, from `member_new(plan)`)
-    on the (n, k) float32 host block at `x` and the n target words at `y`.
-    Needs no GIL: the caller releases it only for a kind with
-    MEMBER_GIL_FREE or MEMBER_GIL_DOOR (THE GIL RULE) and frees the state."""
+    on the (n, k) float32 host block at `x` and the n target words at `y`,
+    with the fit's extra inputs (`extras`: RFE's fit parameters; the
+    held-out X restricted to the block's k columns, whose int32 ids into the
+    caller's X are at `columns`, as scikit-learn's RFE fits every round on
+    `X[:, features]`). Needs no GIL: the caller releases it only for a kind
+    with MEMBER_GIL_FREE or MEMBER_GIL_DOOR (THE GIL RULE) and frees the
+    state."""
     call.x = MemberMatrix(x, n, k)
     call.y = MemberMatrix(y, n, 1, y_dtype)
-    _ = member_call(plan.member, MEMBER_OP_FIT, call)
+    var held = List[Float32]()
+    member_fit_extras_apply(extras, call, columns, k, False, held)
+    try:
+        _ = member_call(plan.member, MEMBER_OP_FIT, call)
+    finally:
+        member_fit_extras_clear(call)
+        _ = len(held)  # the gathered held-out block lives until the fit returned
 
 
 def rfe_member_importances(plan: MemberPlan, mut call: MemberCall, x: Int, n: Int, m: Int, y: Int, y_dtype: Int,
-                           block: Int, squared: Bool, mut notices: List[Float64], mut rows: Int) raises -> List[Float32]:
-    """A round over a native member: fit the caller's new state on the
-    round's (n, m) block, take its fit notices, read its importance block
-    `block` by EXPORT and copy it out (the view dies with the state, which
-    the caller frees). m words, or (rows, m) for a coefficient block with
-    one row per class or output (`squared`); `rows` is set to its row
-    count. Raises when the member refuses the round; nothing was staged."""
-    rfe_member_fit(plan, call, x, n, m, y, y_dtype)
+                           block: Int, squared: Bool, mut notices: List[Float64], mut rows: Int,
+                           extras: MemberFitExtras, columns: Int) raises -> List[Float32]:
+    """`rfe_member_importances` with no nested path (the importance block is the member's own)."""
+    return rfe_member_importances(plan, call, x, n, m, y, y_dtype, block, squared, notices, rows, extras, columns,
+                                  List[Float64]())
+
+
+def rfe_member_importances(plan: MemberPlan, mut call: MemberCall, x: Int, n: Int, m: Int, y: Int, y_dtype: Int,
+                           block: Int, squared: Bool, mut notices: List[Float64], mut rows: Int,
+                           extras: MemberFitExtras, columns: Int, hops: List[Float64]) raises -> List[Float32]:
+    """`hops` non-empty (lane mf-meta5b: a dotted importance_getter such as 'best_estimator_.coef_'):
+    `block` is the META kind's forwarded-export block and `hops` its words (each nested member's index along
+    the path, then the leaf's block), read by the EXPORT through `call.params` (core/ensemble_member.mojo
+    `META_BLOCK_FORWARD`). A round over a native member: fit the caller's new state on the
+    round's (n, m) block (with the fit's `extras` over the round's column ids
+    at `columns`, `rfe_member_fit`), take its fit notices, read its
+    importance block `block` by EXPORT and copy it out (the view dies with
+    the state, which the caller frees). m words, or (rows, m) for a
+    coefficient block with one row per class or output (`squared`); `rows`
+    is set to its row count. Raises when the member refuses the round;
+    nothing was staged."""
+    rfe_member_fit(plan, call, x, n, m, y, y_dtype, extras, columns)
     member_notices_take(plan, call.state, notices)
     call.block = block
     call.flags = 0
+    if len(hops) > 0:
+        call.params = Int(hops.unsafe_ptr())
+        call.param_count = len(hops)
     _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    _ = len(hops)  # read through the export above
+    call.params = 0
+    call.param_count = 0
     var view = call.dst
     rows = view.rows
     if not view.dense_host(MEMBER_F32) or view.cols != m or rows < 1 or (rows > 1 and not squared):
@@ -519,3 +569,228 @@ def rfe_final_plan(plan: MemberPlan, importance_word: Bool) -> MemberPlan:
     if importance_word:
         final.params[10] = 0.0
     return final^
+
+
+# ---------------------------------------------------------------- the RFE fit RUN (lane mf-meta5)
+# THE ONE BODY of RFE.fit over a native member (lane mf-meta5, 2026-11-23): the elimination rounds and
+# the final fit, typed. The door (bindings/prep_select_native_door.mojo `_rfe_rounds`, a member it admitted)
+# and THE RFE KIND (core/ensemble_member.mojo `_fit_rfe`: RFE as a member of another meta-estimator, a
+# search, a calibration or an imputer) both run it. Each round's program is the one the door built
+# (`rfe_first_stage`, `rfe_round_stage`: the same stages, records and order), run by the typed caller's
+# run (bindings/prep_classify_prog_run.mojo `cls_borrowed_run`: the door's route words and input choices),
+# so no bit moves. The rounds are serial by nature (a round's block is chosen from the previous round's
+# importances); each round's member fit splits over the host cores inside its own family.
+
+
+struct RfeFitPlan(Movable):
+    """RFE.fit's typed request. `member`: the rounds' member plan (the importance word set by the
+    admission, `importance_word`); `run`: the selected x_prep image of the rounds' programs, `work_on` its
+    `work` switch, read once at UNPACK; `x`: n x d float32 host rows; `y`: n target words (`y_dtype`:
+    MEMBER_I32 class codes of `member.classes` classes, or MEMBER_F32 values); `nsel` / `step` the resolved
+    counts (`rfe_select_count`, `rfe_step_count`); `block` / `squared` the importance source
+    (`rfe_member_source`); `refusal` non-empty: the words the first round raises before it fits;
+    `extras` the fit's extra inputs (sample weights, a held-out set); `hops` a dotted getter's forwarded-export
+    words (`rfe_member_importances`; empty: the member's own block). `scope` / `pin`: the caller's
+    resident scope word (negative: none) and X's pin token (0: none); `kept_at`: the address of the
+    caller's Int the run writes the pin token into the moment a scope's cache takes it (0: none)."""
+    var member: MemberPlan
+    var run: ClsRunPlan
+    var work_on: Bool
+    var x: Int
+    var n: Int
+    var d: Int
+    var y: Int
+    var y_dtype: Int
+    var nsel: Int
+    var step: Int
+    var block: Int
+    var squared: Bool
+    var importance_word: Bool
+    var refusal: String
+    var extras: MemberFitExtras
+    var hops: List[Float64]
+    var scope: Int
+    var pin: Int
+    var kept_at: Int
+    # THE DEVICE ROWS ROUTE (lane mf-rfe6): `x_index` nonzero: X is a fold's rows, the n int64 row numbers at
+    # `x_index` of the base at `x` (`x_base_words` float32 words, d per row), gathered on the device by each
+    # round's program (`rfe_rows_gather`: the door's DeviceRows route, the same programs and gather); `pin`
+    # then pins the base.
+    var x_index: Int
+    var x_base_words: Int
+
+    def __init__(out self, var member: MemberPlan, run: ClsRunPlan, work_on: Bool, x: Int, n: Int, d: Int,
+                 y: Int, y_dtype: Int):
+        self.member = member^
+        self.run = run
+        self.work_on = work_on
+        self.x = x
+        self.n = n
+        self.d = d
+        self.y = y
+        self.y_dtype = y_dtype
+        self.nsel = 1
+        self.step = 1
+        self.block = 0
+        self.squared = False
+        self.importance_word = False
+        self.refusal = String("")
+        self.extras = MemberFitExtras()
+        self.hops = List[Float64]()
+        self.scope = -1
+        self.pin = 0
+        self.kept_at = 0
+        self.x_index = 0
+        self.x_base_words = 0
+
+
+def rfe_rows_gather(run: ClsRunPlan) -> Bool:
+    """Whether every RFE program on the image of `run` gathers a fold's rows on the device (THE DEVICE ROWS
+    ROUTE, lane mf-rfe6): the take-rows entries, the ranges entry and switch, and a device scratch for any
+    scratch the program has (`cls_run_route`'s `ranges`, true for every program size). False: the caller
+    hands the fold's host rows (the door's programs then copied them, `_values(..., True)`)."""
+    return (run.take_rows and run.has_ranges and (run.has_out or run.has_scratch)
+            and _switch("MOJOLEARN_ARENA_RANGES"))
+
+
+struct RfeFitResult(Movable):
+    """What RFE.fit publishes, typed: the float32 support (1.0 kept) and ranking words (d each), the kept
+    column ids (`selected` of them, in column order), the final estimator's plan (`rfe_final_plan`) and its
+    fitted state (OWNED by the caller, which packs or keeps it and frees it; it owns its fit rows), and the
+    fit notices of every member fit in fit order (each round's, then the final's)."""
+    var support: List[Float32]
+    var ranking: List[Float32]
+    var columns: List[Int32]
+    var selected: Int
+    var final_plan: MemberPlan
+    var final_state: Int
+    var notices: List[List[Float64]]
+
+    def __init__(out self):
+        self.support = List[Float32]()
+        self.ranking = List[Float32]()
+        self.columns = List[Int32]()
+        self.selected = 0
+        self.final_plan = MemberPlan()
+        self.final_state = 0
+        self.notices = List[List[Float64]]()
+
+
+def _rfe_take_f32(done: ClsBorrowedDone, offset: Int, count: Int) -> List[Float32]:
+    # `count` float32 words of a finished program's arena (the door's `pr.get`).
+    var out = List[Float32](length=count, fill=0.0)
+    if count > 0:
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=SEL_F32P(unsafe_from_address=done.arena.address + 4 * offset),
+                      count=count)
+    return out^
+
+
+def _rfe_take_i32(done: ClsBorrowedDone, offset: Int, count: Int) -> List[Int32]:
+    # `count` int32 words of a finished program's arena (the door's `pr.get_i32`: the words as they are).
+    var out = List[Int32](length=count, fill=Int32(0))
+    if count > 0:
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=SEL_I32P(unsafe_from_address=done.arena.address + 4 * offset),
+                      count=count)
+    return out^
+
+
+def _rfe_pin_settle(plan: RfeFitPlan, kept: Int):
+    # THE PIN RULE: the caller learns the moment a scope's cache took X's pin reference.
+    if plan.kept_at != 0 and kept != 0:
+        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=plan.kept_at)[] = kept
+
+
+def rfe_fit_run(plan: RfeFitPlan) raises -> RfeFitResult:
+    """RFE.fit over a native member (module note, THE ONE BODY): program 0 stages the first block from the
+    all-ones support; each round fits a new member state on the block (`rfe_member_importances`, its
+    notices kept), frees it and runs the round's program (`rfe_round_stage`: keys, c2_rfe_step, c2_rfe_rank,
+    the next block); the final estimator is fitted on the selected block (`rfe_member_fit` over
+    `rfe_final_plan`) and made to own its rows (`member_own`, THE LIFETIME RULE: the caller keeps the state
+    past this frame). No Python: the caller holds the GIL only for a member kind with neither
+    MEMBER_GIL_FREE nor MEMBER_GIL_DOOR (THE GIL RULE), and releases it otherwise. Raises the first
+    failure (a member's or a program's words); no state is left behind."""
+    var n = plan.n
+    var d = plan.d
+    var x_words = n * d
+    var kept = 0
+    var support = List[Float32](length=d, fill=1.0)
+    var ranking = List[Float32](length=d, fill=1.0)
+    # THE DEVICE ROWS ROUTE: the base and the fold's row numbers, gathered by each program on the device.
+    var x_source = ClsBorrowed(plan.x, x_words, plan.pin, 0, 0, 0)
+    if plan.x_index != 0:
+        x_source = ClsBorrowed(plan.x, plan.x_base_words, plan.pin, plan.x_index, n, d)
+    var first_program = ClsProgram(plan.work_on)
+    var first = rfe_first_stage(first_program, x_words, n, d)
+    var first_sources: List[ClsBorrowed] = [ClsBorrowed(Int(support.unsafe_ptr()), d, 0, 0, 0, 0), x_source]
+    var first_done = cls_borrowed_run(plan.run, first_program, first_sources, plan.scope, kept)
+    _rfe_pin_settle(plan, kept)
+    _ = len(support)  # read through the run above
+    var feat = _rfe_take_i32(first_done, first.ids, d)
+    var block = _rfe_take_f32(first_done, first.block, n * d)
+    _ = first_done^
+    var result = RfeFitResult()
+    var nsup = d
+    while nsup > plan.nsel:  # driver-loop: over elimination rounds (serial by nature: module note)
+        if plan.refusal.byte_length() > 0:
+            # A kind with no importance block: refused before the round fits (`rfe_member_source`).
+            raise Error(plan.refusal.copy())
+        var drop = min(plan.step, nsup - plan.nsel)
+        var k = nsup - drop
+        var notices = List[Float64]()
+        var rows = 1
+        var words = List[Float32]()
+        var columns = Int(feat.unsafe_ptr()) if plan.extras.eval_rows > 0 else 0
+        var call = member_new(plan.member)
+        try:
+            words = rfe_member_importances(plan.member, call, Int(block.unsafe_ptr()), n, nsup, plan.y,
+                                           plan.y_dtype, plan.block, plan.squared, notices, rows, plan.extras,
+                                           columns, plan.hops)
+        finally:
+            member_free(plan.member, call)
+        _ = len(block)  # read through the member's fit above
+        if len(notices) > 0:
+            result.notices.append(notices^)
+        var keys = RfeKeys(nsup, rows, plan.squared, 0)
+        var program = ClsProgram(plan.work_on)
+        var staged = rfe_round_stage(program, keys, words^, x_words, n, d, nsup, drop, k)
+        # Caller buffers in record order (the door's `pr.own` order): support, ranking, the round's
+        # column ids, X (the keys are the program's own words).
+        var sources: List[ClsBorrowed] = [
+            ClsBorrowed(Int(support.unsafe_ptr()), d, 0, 0, 0, 0),
+            ClsBorrowed(Int(ranking.unsafe_ptr()), d, 0, 0, 0, 0),
+            ClsBorrowed(Int(feat.unsafe_ptr()), nsup, 0, 0, 0, 0),
+            x_source,
+        ]
+        var done = cls_borrowed_run(plan.run, program, sources, plan.scope, kept)
+        _rfe_pin_settle(plan, kept)
+        _ = len(support)  # read through the run above
+        _ = len(ranking)
+        _ = len(feat)
+        support = _rfe_take_f32(done, staged.support, d)
+        ranking = _rfe_take_f32(done, staged.ranking, d)
+        feat = _rfe_take_i32(done, staged.next.ids, k)
+        block = _rfe_take_f32(done, staged.next.block, n * k)
+        _ = done^
+        nsup = k
+    var final_plan = rfe_final_plan(plan.member, plan.importance_word)
+    var columns = Int(feat.unsafe_ptr()) if plan.extras.eval_rows > 0 else 0
+    var call = member_new(final_plan)
+    try:
+        rfe_member_fit(final_plan, call, Int(block.unsafe_ptr()), n, nsup, plan.y, plan.y_dtype, plan.extras,
+                       columns)
+        var notices = List[Float64]()
+        member_notices_take(final_plan, call.state, notices)
+        if len(notices) > 0:
+            result.notices.append(notices^)
+        member_own(final_plan, call.state)
+    except error:
+        member_free(final_plan, call)
+        raise error^
+    _ = len(block)  # read through the final fit above (the state owns its rows since `member_own`)
+    result.final_state = call.state
+    result.final_plan = final_plan^
+    result.support = support^
+    result.ranking = ranking^
+    result.selected = nsup
+    result.columns = feat^
+    return result^

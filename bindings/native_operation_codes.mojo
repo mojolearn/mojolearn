@@ -387,6 +387,7 @@ def _operation_names(mut names: List[String], mut leaves: List[Int]):
     names.append("host_tree_proba")
     names.append("host_tree_setstate")
     names.append("host_tree_vote")
+    names.append("host_tree_importances")
     _leaves_pad(names, leaves)
     operation_names_trees(names, leaves)
 

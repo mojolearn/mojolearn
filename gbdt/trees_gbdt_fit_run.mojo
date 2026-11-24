@@ -15,6 +15,8 @@ from std.math import isfinite, floor, copysign
 from std.os import getenv
 from std.memory import bitcast
 from checks.numerics import portable_exp64, portable_log64, pinned_mul_f64
+from core.host_parallel import host_parallelize
+from core.host_finite_scan import host_all_finite_f32
 
 comptime GBDT_F32_MAX = 3.4028234663852886e+38
 
@@ -218,3 +220,167 @@ def _pair_end_range(v: Int, i: Int, j: Int, n_rows: Int) raises:
     if not (0 <= v and v < n_rows):
         raise Error("mojolearn: pairs[" + String(i) + "][" + String(j) + "] = " + String(v) + " is outside the "
                     + String(n_rows) + " rows")
+
+
+# ------------------------------------------------------------ the two-level FeatureFreq checks (lane mf-meta5)
+# ONE BODY of `ExperimentalTwoLevelFeatureFreq.fit`'s data checks: the fit door
+# (bindings/trees_public_gbdt_door.mojo `feature_freq_unpack`) and the member's fit (core/gbdt_member.mojo
+# kind 3, `_fit_feature_freq`) call these, in the door's order and words. Every column is an independent
+# unit of the scan (host workers); the refusal is then the first one in the door's order.
+comptime _FF_OK = 0
+comptime _FF_NONFINITE = 1
+comptime _FF_CODES = 2
+comptime _FF_SPARSE = 3
+comptime _FF_CONSTANT = 4
+
+
+def _ff_columns_text(values: List[Int]) -> String:
+    """`[a, b, ...]`, the refusal's spelling of the source columns."""
+    var text = String("[")
+    for i in range(len(values)):  # small-loop(the named source columns of one refusal message)
+        if i > 0:
+            text += ", "
+        text += String(values[i])
+    return text + "]"
+
+
+def gbdt_feature_freq_check(xcm: Int, n: Int, d: Int, sources: List[Int]) raises:
+    """The FeatureFreq fit's X checks over the column-major float32 X at `xcm` (n x d) and the source
+    columns: rows and columns, the sources in range, X finite, every source a column of non-negative
+    integer codes densely coded 0..k-1 (k >= 2, k <= n), every other column varying."""
+    if n == 0 or d < 2:
+        raise Error("mojolearn: experimental FeatureFreq needs rows and columns")
+    for i in range(len(sources)):  # small-loop(the named source columns)
+        if sources[i] < 0 or sources[i] >= d:
+            raise Error("mojolearn: sources " + _ff_columns_text(sources) + " outside " + String(d) + " features")
+    var is_source = List[Int](length=d, fill=0)
+    for i in range(len(sources)):  # small-loop(the named source columns)
+        is_source[sources[i]] = 1
+    var status = List[Int](length=d, fill=_FF_OK)
+    var highs = List[Int](length=d, fill=0)
+    var source_at = Int(is_source.unsafe_ptr())
+    var status_at = Int(status.unsafe_ptr())
+    var highs_at = Int(highs.unsafe_ptr())
+
+    def _column(f: Int) {imm xcm, imm n, imm source_at, imm status_at, imm highs_at}:
+        var col = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=xcm + 4 * f * n)
+        var state = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=status_at)
+        var high = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=highs_at)
+        var lo = Float64(col[0])
+        var hi = Float64(col[0])
+        var integral = True
+        for i in range(n):  # native data loop (one column's rows)
+            var v = Float64(col[i])
+            if not isfinite(v):
+                state[f] = _FF_NONFINITE
+                return
+            lo = min(lo, v)
+            hi = max(hi, v)
+            if v != floor(v):
+                integral = False
+        if MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=source_at)[f] == 0:
+            if lo == hi:
+                state[f] = _FF_CONSTANT
+            return
+        if not integral or lo < 0.0:
+            state[f] = _FF_CODES
+            return
+        high[f] = Int(hi)
+        var k = Int(hi) + 1
+        if k < 2 or k > n:
+            state[f] = _FF_SPARSE
+            return
+        var seen = List[Bool](length=k, fill=False)
+        for i in range(n):  # native data loop (one source column's codes)
+            seen[Int(col[i])] = True
+        for c in range(k):  # native data loop (one source column's code presence)
+            if not seen[c]:
+                state[f] = _FF_SPARSE
+                return
+
+    host_parallelize(_column, d)
+    _ = len(is_source)  # read through the scan above
+    for f in range(d):  # driver-loop: over the feature columns (the door's first refusal: X finite)
+        if status[f] == _FF_NONFINITE:
+            raise Error("mojolearn: experimental FeatureFreq X must be finite")
+    for i in range(len(sources)):  # small-loop(the named source columns, in the door's order)
+        var f = sources[i]
+        if status[f] == _FF_CODES:
+            raise Error("mojolearn: experimental FeatureFreq source columns must "
+                        + "contain non-negative integer category codes")
+        if status[f] == _FF_SPARSE:
+            raise Error("mojolearn: every experimental FeatureFreq source must "
+                        + "be densely coded 0..k-1; column " + String(f) + " has codes up to " + String(highs[f])
+                        + " with at least one missing (or fewer than two codes)")
+    for f in range(d):  # driver-loop: over the feature columns (the numeric ones vary)
+        if status[f] == _FF_CONSTANT:
+            raise Error("mojolearn: experimental FeatureFreq numeric columns "
+                        + "must vary; column " + String(f) + " is constant")
+
+
+#: The OrderedRMSE fit's permutation refusal (the door's words).
+comptime GBDT_ORDERED_BIJECTION = "mojolearn: permutation must be an integer bijection of row ids"
+
+
+def _finite_words(x: Int, count: Int) -> Bool:
+    """The `count` float32 words at `x` are finite: the one host scan (SIMD tasks across cores)."""
+    if count <= 0:
+        return True
+    return host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x), count)
+
+
+def gbdt_ordered_rows_check(x: Int, n: Int, d: Int) raises:
+    """THE ONE BODY of the OrderedRMSE fit's X checks (lane mf-hostent5; the door's `ordered_rmse_unpack` and
+    the Gbdt member's OrderedRMSE kind both run it, after their admission of X as float32 words): at least 4
+    rows (at most 2^32 - 1, the uint32 row ids) and one feature, then every value finite (one parallel scan;
+    the layout of X does not matter to it)."""
+    if n < 4 or n > 4294967295 or d < 1:
+        raise Error("mojolearn: ordered RMSE requires >=4 rows and >=1 feature")
+    if not _finite_words(x, n * d):
+        raise Error("mojolearn: ordered RMSE X must be finite")
+
+
+def gbdt_ordered_target_check(y: Int, n: Int) raises:
+    """THE ONE BODY of the OrderedRMSE fit's target check (door and member): the `n` float32 targets finite."""
+    if not _finite_words(y, n):
+        raise Error("mojolearn: y must be finite")
+
+
+def gbdt_ordered_order(ids: Int, m: Int, n: Int) raises -> List[UInt32]:
+    """THE ONE BODY of the OrderedRMSE fit's permutation check and cast (door and member): the `m` int64 row
+    ids at `ids` must be a bijection of 0 .. n-1 (`m == n`, each in range, none repeated; the door's
+    `base_check_indices_i64` test), returned as the uint32 order the fit reads (the door's `trees_cast`
+    <i8 -> <u4 of the same values). Refused in the door's words (`GBDT_ORDERED_BIJECTION`). SERIAL BY NATURE:
+    the repeat test reads the marks of every earlier id (one pass over n words, as the helper's)."""
+    if m != n or n < 1:
+        raise Error(GBDT_ORDERED_BIJECTION)
+    var src = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=ids)
+    var seen = List[Bool](length=n, fill=False)
+    var order = List[UInt32](length=n, fill=UInt32(0))
+    for i in range(n):  # native data loop (the permutation, one pass: the repeat marks)
+        var v = Int(src[i])
+        if v < 0 or v >= n or seen[v]:
+            raise Error(GBDT_ORDERED_BIJECTION)
+        seen[v] = True
+        order[i] = UInt32(v)
+    return order^
+
+
+def gbdt_weights_check(w: Int, n: Int) raises:
+    """The OrderedRMSE / FeatureFreq fits' sample_weight checks (the door's `_checked_weights` after its
+    admission): finite and non-negative, with a positive sum."""
+    var p = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=w)
+    var lowest = 0.0
+    var highest = 0.0
+    for i in range(n):  # native data loop (the weights, one pass)
+        var v = Float64(p[i])
+        if not isfinite(v):
+            raise Error("mojolearn: sample_weight must be finite and non-negative")
+        if i == 0 or v < lowest:
+            lowest = v
+        if i == 0 or v > highest:
+            highest = v
+    if n > 0 and lowest < 0.0:
+        raise Error("mojolearn: sample_weight must be finite and non-negative")
+    if not highest > 0.0:
+        raise Error("mojolearn: sample_weight must have positive sum")

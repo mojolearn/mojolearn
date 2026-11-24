@@ -33,7 +33,8 @@ def test_class_weight_large_integer_and_float_key_membership():
 
 
 def test_class_weight_unknown_key_precedes_scalar_value_range():
-    with pytest.raises(ValueError, match="labels absent from y"):
+    # scikit-learn 1.9.1's words (sklearn/utils/class_weight.py:114-120), naming y's unweighted classes
+    with pytest.raises(ValueError, match=r"^The classes, \[1\], are not in class_weight$"):
         _rows({2: -1}, [1], [0])
     with pytest.raises(TypeError, match="exact native"):
         _rows({2: object()}, [1], [0])

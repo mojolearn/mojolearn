@@ -114,6 +114,11 @@ struct _DeviceFit(GbdtImage):
                          random_seed: Int) raises -> String:
         raise Error("AttributeError: mojolearn: this check image has no gbdt_fit_two_level_feature_freq")
 
+    @staticmethod
+    def importances(text: String, x: Int, n_rows: Int, n_input: Int, row_major: Bool, weights: Int,
+                    n_weights: Int, dst: Int) raises -> Int:
+        raise Error("AttributeError: mojolearn: this check image has no gbdt feature importances")
+
 
 def _inputs(classes: Int, weighted: Bool) -> GbdtInputs:
     """`_ova(classes)`'s X (column-major, 2 features) and y; the weights when asked."""

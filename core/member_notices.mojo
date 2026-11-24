@@ -39,6 +39,57 @@ comptime MEMBER_NOTICE_PLS_RESIDUAL = 4
 #: bindings/msel_split_plan_run.mojo `msel_plan_stratified`): the least
 #: populated class holds fewer rows than n_splits (a = its rows, b = n_splits).
 comptime MEMBER_NOTICE_SPLIT_LEAST = 5
+# THE SCORERS' METRIC WARNINGS (lane mf-score5): a search unit's scores
+# (core/msel_search_run.mojo) keep, after the unit's fit notices, the
+# warnings the public metric its scorer calls raises on that side, one per
+# occurrence in the scorer's order, as scikit-learn's scorer raises them
+# during the search. The PACK raises them in the public metric's class and
+# words (bindings/member_fit_notices_pack.mojo).
+#: precision / recall / f-score with a zero denominator (bindings/mcls_classify_door.mojo
+#: `_prf`; a = 0 precision, 1 recall, 2 f-score).
+comptime MEMBER_NOTICE_METRIC_PRF = 6
+#: jaccard_score with a label of no true and no predicted samples (bindings/metrics_exp_cls_door.mojo `_jaccard`).
+comptime MEMBER_NOTICE_METRIC_JACCARD = 7
+#: balanced_accuracy_score: y_pred holds classes y_true does not (`_balanced_accuracy`).
+comptime MEMBER_NOTICE_METRIC_BALANCED = 8
+#: r2_score (a = 0) or d2_absolute_error_score (a = 1) of fewer than two samples (bindings/metrics_reg_door.mojo).
+comptime MEMBER_NOTICE_METRIC_FEW = 9
+#: top_k_accuracy_score with k >= n_classes (a = k, b = n_classes; bindings/metrics_exp_curve_door.mojo `_top_k`).
+comptime MEMBER_NOTICE_METRIC_TOP_K = 10
+#: RidgeCV's split path (lane mf-split5, core/xlinear_member.mojo): a cv
+#: split with fewer than two test rows, whose R^2 scikit-learn leaves
+#: undefined with an UndefinedMetricWarning (no operands). Kept apart from
+#: MEMBER_NOTICE_METRIC_FEW (same words): that one is a search scorer's
+#: notice raised with the search's metrics context; this one is the x_linear
+#: member's own fit notice, raised with the x_linear context's category.
+comptime MEMBER_NOTICE_R2_FEW = 11
+#: cross_val_predict (lane mf-msel5b, core/msel_search_run.mojo): a fold
+#: whose train rows hold a = m of the b = k classes, scikit-learn's
+#: `_enforce_prediction_order` RuntimeWarning (`member_lacking_warning`).
+comptime MEMBER_NOTICE_FOLD_LACKING = 12
+#: OneHotEncoder (lane mf-enc6, core/prep_member.mojo kind 11): column a held
+#: unknown categories in a transform that warns (handle_unknown='warn', or
+#: 'ignore' / 'infrequent_if_exist' with a drop); b = 1: encoded as all
+#: zeros ('ignore'), 0: as the infrequent category. Consecutive triples are
+#: ONE warning over their columns, the encode door's `_onehot_transform`
+#: words. A TRANSFORM notice: the state's notices are the last fit_transform's
+#: or transform's (a caller of MEMBER_OP_TRANSFORM takes them after the call
+#: as it does after FIT).
+comptime MEMBER_NOTICE_ONEHOT_UNKNOWN = 13
+
+#: The words scikit-learn's cross_val_predict adds to its imbalanced-fold
+#: warning and refusals (model_selection/_validation.py
+#: `_enforce_prediction_order`, scikit-learn 1.9). The one copy: the
+#: calibration's fold placement (xtrees/trees_calibrated_fit_run.mojo) and
+#: the search RUN read it.
+comptime MEMBER_LACKING_STRATIFY = "To fix this, use a cross-validation technique resulting in properly stratified folds"
+
+
+def member_lacking_warning(m: Int, k: Int) -> String:
+    """The RuntimeWarning of `_enforce_prediction_order` for a fold whose
+    train rows hold `m` of the `k` classes."""
+    return ("Number of classes in training fold (" + String(m) + ") does not match total number of classes ("
+            + String(k) + "). Results may not be appropriate for your use case. " + MEMBER_LACKING_STRATIFY)
 
 
 def member_notice_add(mut words: List[Float64], code: Int, a: Float64 = 0.0, b: Float64 = 0.0):
