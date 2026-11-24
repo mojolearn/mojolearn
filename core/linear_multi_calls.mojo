@@ -7,6 +7,7 @@ touch the GIL."""
 from core.linear_entry_table import LinearEntryKey
 from core.linear_entry_table_multi import (
     ridge_multi_table_entry, RIDGE_MULTI_ABI, RM_OP_COUNT, RM_COL_SUMS, RM_MEANS_FINISH, RM_CENTER, RM_FIT,
+    RM_FIT_SLOT, RM_PREDICT_SLOT,
     RM_PREDICT,
 )
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_word
@@ -74,3 +75,24 @@ def rm_predict(key: EntryRef, x: Int, coef: Int, icpt: Int, dst: Int, n: Int, d:
     var ints: List[Int] = [n, d, m]
     var floats = List[Float64]()
     _ = ridge_multi_call(key, RM_PREDICT, addrs, ints, floats)
+
+
+def rm_fit_slot(key: EntryRef, slot: Int, y: Int, coef: Int, ymean: Int, n: Int, d: Int, m: Int, alpha: Float64,
+                intercept: Bool, sums: Int, means64: Int, xmean: Int, icpt: Int) raises:
+    """THE FOLD FROM THE STORE (lane vdf-meta5): `ridge_multi_fit_run`'s four
+    programs over the image's resident store slot `slot` (n x d) in one
+    call; `sums`, `means64`, `xmean` and `icpt` are read only with
+    `intercept`."""
+    var addrs: List[Int] = [y, coef, ymean, sums if intercept else 0, means64 if intercept else 0,
+                            xmean if intercept else 0, icpt if intercept else 0]
+    var ints: List[Int] = [slot, n, d, m, 1 if intercept else 0]
+    var floats: List[Float64] = [alpha]
+    _ = ridge_multi_call(key, RM_FIT_SLOT, addrs, ints, floats)
+
+
+def rm_predict_slot(key: EntryRef, slot: Int, coef: Int, icpt: Int, dst: Int, n: Int, d: Int, m: Int) raises:
+    """`rm_predict` over the image's resident store slot `slot` (n x d)."""
+    var addrs: List[Int] = [coef, icpt, dst]
+    var ints: List[Int] = [slot, n, d, m]
+    var floats = List[Float64]()
+    _ = ridge_multi_call(key, RM_PREDICT_SLOT, addrs, ints, floats)

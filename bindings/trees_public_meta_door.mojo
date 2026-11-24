@@ -145,7 +145,13 @@ from bindings.base_helpers_released_unpack import (
 )
 from core.linear_entry_table import LinearEntryKey
 from core.entry_table import EntryRef
-from core.linear_multi_calls import ridge_multi_ref, ridge_multi_available, rm_predict
+from core.linear_multi_calls import ridge_multi_ref, ridge_multi_available, rm_predict, rm_predict_slot
+from core.entry_table import entry_ref_word
+from bindings.arena_cache_run import arena_scope_store_put, arena_store_take_rows, arena_cache_free
+from providers.python.neural_descriptor_pyapi_door import (
+    NeuralDescriptorProvider, neural_descriptor_connect_factory_once,
+)
+from x_prep.transport_abi import XP_TRANSPORT_ABI, XP_OP_COUNT
 from bindings.trees_meta_ridge_run import RidgeMultiFit, ridge_multi_fit_run
 from bindings.py_optional import py_or_none
 from xtrees.glue_calls import (
@@ -2468,14 +2474,15 @@ def _estimators_key(table: PythonObject) raises -> LinearEntryKey:
     return LinearEntryKey(Int(py=key[0]), Int(py=key[1]))
 
 
-def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonObject, Ya: PythonObject,
-                           device: PythonObject, origin: String, context: PythonObject) raises -> PythonObject:
+def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonObject, n: Int, d: Int,
+                           Ya: PythonObject, slot: Int, device: PythonObject, origin: String,
+                           context: PythonObject) raises -> PythonObject:
     """`MultiOutputRegressor._fit_ridge_multi`: every target in one ridge
-    program (glm/impl/ridge_multi.mojo)."""
+    program (glm/impl/ridge_multi.mojo) over X (`n` x `d`): the host Array
+    `Xa`, or (`slot` >= 0, lane vdf-meta5, `Xa` unread) the estimators
+    image's resident store slot holding a model-selection fold's rows."""
     # UNPACK: the dimensions, the member's two parameters, the image's entry
     # and the buffers RUN writes (allocated here, published in PACK).
-    var n = _rows(Xa)
-    var d = _cols(Xa)
     var m = _cols(Ya)
     var nk = trees_keys()
     var est = _attr(model, nk[].k_estimator, PythonObject(None))
@@ -2483,7 +2490,11 @@ def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonO
     # the member's alpha as Python's float() reads it
     var alpha = Float64(py=py_call_typed(trees_builtins().float, _attr(est, nk[].k_alpha, PythonObject(1.0))))
     var key = ridge_multi_ref(_estimators_key(table))  # resolved once for the fit
-    var request = RidgeMultiFit(trees_address(Xa), trees_address(Ya), n, d, m, alpha, intercept)
+    var x_at = 0
+    if slot < 0:
+        x_at = trees_address(Xa)
+    var request = RidgeMultiFit(x_at, trees_address(Ya), n, d, m, alpha, intercept)
+    request.slot = slot
     var xm = admitted_vector(d, "<f4", context)
     var coef = admitted_vector(m * d, "<f4", context)
     var ymean = admitted_vector(m, "<f4", context)
@@ -2499,10 +2510,11 @@ def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonO
     if intercept:
         sums = _zeros(d, context)
         m64 = _zeros(d, context)
-        work_x = admitted_array(Python.tuple(n, d), "<f4", context)
         request.sums = trees_address(sums)
         request.means64 = trees_address(m64)
-        request.work = trees_address(work_x)
+        if slot < 0:  # a slot's centered X stays on the device
+            work_x = admitted_array(Python.tuple(n, d), "<f4", context)
+            request.work = trees_address(work_x)
     # RUN: the image's four programs on plain values, the GIL released once
     # for all of them (it was released and retaken around each)
     with GILReleased(Python()):
@@ -2564,14 +2576,23 @@ def _multioutput_regressor_fit(model: PythonObject, X: PythonObject, y: PythonOb
     _set(model, "_multi_ridge", PythonObject(None))
     var table = _ridge_multi_entry(model, est, weights, context)
     if table is not None and _cols(Ya) > 0:
-        # The one-program ridge (FAST + Apple only, glm/impl/ridge_multi.mojo MULTIOUT_RIDGE) reads dense host
-        # words: a fold's rows are gathered ONCE here, as the admission gathered them before (owed: its four
-        # programs reading the estimators store's slot of the base, the fold taken on the device).
-        var Xr = mx.x
+        # The one-program ridge (FAST + Apple only, glm/impl/ridge_multi.mojo MULTIOUT_RIDGE). THE FOLD FROM
+        # THE STORE (lane vdf-meta5): a model-selection fold's base is kept ONCE per scope in the estimators
+        # image's resident store and the fold's rows are taken there on the device (`_ridge_store_take`); the
+        # four programs read that slot (`rm_fit_slot`). Before, the fold was gathered here (`_gather`: the
+        # base uploaded, the rows gathered and downloaded) and uploaded again by each program. A fold with no
+        # store (an image without `estimators_store_v1`, no resident scope) is gathered as before.
         if mx.draw is not None:
-            Xr = _gather(xt, trees_address(mx.x), mx.base_rows, mx.d, mx.draw, _arange(xt, mx.d, context), context)
+            var scope = _fold_scope(mx, context)
+            if scope != MEMBER_SCOPE_NONE:
+                var fitted = _ridge_store_fit(model, table, mx, Ya, scope, device, origin, context)
+                if fitted is not None:
+                    return fitted
+            var Xr = _gather(xt, trees_address(mx.x), mx.base_rows, mx.d, mx.draw, _arange(xt, mx.d, context),
+                             context)
             _ = mx.x  # read through its address above
-        return _multioutput_ridge_fit(model, table, Xr, Ya, device, origin, context)
+            return _multioutput_ridge_fit(model, table, Xr, mx.n, mx.d, Ya, -1, device, origin, context)
+        return _multioutput_ridge_fit(model, table, mx.x, mx.n, mx.d, Ya, -1, device, origin, context)
     var n = mx.n
     var fitted = Python.list()
     _set(model, "estimators_", fitted)
@@ -2596,12 +2617,114 @@ def _multioutput_regressor_fit(model: PythonObject, X: PythonObject, y: PythonOb
     return model
 
 
+def _estimators_store(table: PythonObject) raises -> Tuple[EntryRef, PythonObject]:
+    """UNPACK, once per operation (lane vdf-meta5): the estimators image's
+    resident store as a scope transport entry (`estimators_store_v1`,
+    core/estimators_store.mojo; the connection KernelDensity's member
+    boundary makes, providers/python/family_store_route_door.mojo) and its
+    provider, which the caller keeps through every call. Raises when the
+    image has no store (a CPU image) or no native key."""
+    var factory = trees_entry(table, "estimators_store_v1")
+    if factory is None:
+        raise Error("the estimators image has no resident store")
+    var key = _estimators_key(table)
+    var provider = neural_descriptor_connect_factory_once(factory, String(XP_TRANSPORT_ABI), XP_OP_COUNT)
+    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
+    return (EntryRef(entry, entry_ref_word(key.mode, key.vendor, XP_OP_COUNT)), provider)
+
+
+def _ridge_store_take(store: EntryRef, mx: _MetaX, scope: Int, context: PythonObject) -> Int:
+    """THE FOLD FROM THE STORE (lane vdf-meta5): a model-selection fold
+    `mx`'s rows in the estimators store: the WHOLE base kept once per
+    `scope` in the scope's "estimators" cache (`arena_scope_store_put`, a
+    hit after the first put; the family prefix of core/estimators_store.mojo
+    ESTIMATORS_STORE_PREFIX, not imported: that module is GPU-only), then
+    the fold's rows taken on the device into a fresh slot
+    (`arena_store_take_rows`), whose id the caller frees
+    (`arena_cache_free`). THE PIN RULE: one reference on the base's owner,
+    kept by the cache when it took it, else returned. -1 when the store
+    refuses (the caller gathers the fold as before). Never raises."""
+    var slot = -1
+    var pin = member_pin_take(mx.x, 1)
+    var kept = False
+    try:
+        var wide = _index_i64(mx.draw, context)
+        var put = arena_scope_store_put(scope, store, String("estimators"), trees_address(mx.x),
+                                        mx.base_rows * mx.d, pin)
+        kept = put.pinned
+        slot = arena_store_take_rows(store, put.store_id, mx.d, trees_address(wide), mx.n)
+        _ = wide  # read through its address above
+    except:
+        slot = -1
+    member_pin_return(pin, 0 if kept else 1)
+    _ = mx.x
+    return slot
+
+
+def _ridge_store_fit(model: PythonObject, table: PythonObject, mx: _MetaX, Ya: PythonObject, scope: Int,
+                    device: PythonObject, origin: String, context: PythonObject) raises -> PythonObject:
+    """THE FOLD FROM THE STORE (lane vdf-meta5): the one-program ridge fit
+    over a model-selection fold `mx`, its rows taken in the estimators store
+    (`_ridge_store_take`) and read there by the four programs
+    (`rm_fit_slot`). None when the image has no store or the store refuses
+    (the caller gathers the fold as before)."""
+    var store_got: Tuple[EntryRef, PythonObject]
+    try:
+        store_got = _estimators_store(table)
+    except:
+        return PythonObject(None)
+    var slot = _ridge_store_take(store_got[0], mx, scope, context)
+    if slot < 0:
+        return PythonObject(None)
+    var fitted = PythonObject(None)
+    try:
+        fitted = _multioutput_ridge_fit(model, table, PythonObject(None), mx.n, mx.d, Ya, slot, device, origin,
+                                        context)
+    finally:
+        arena_cache_free(store_got[0], slot)
+    _ = store_got[1]  # the store's provider, pinned through the fit
+    return fitted
+
+
 def multioutput_ridge_ref(members: PythonObject, context: PythonObject) raises -> EntryRef:
     """X-FREE UNPACK of a MultiOutputRegressor fitted as one multi-output ridge (`_multi_ridge`; lane mf-shap3,
     2026-11-23: `_multioutput_regressor_predict` and Kernel / Permutation SHAP): the ridge multi entry of the
     estimators image its first member's tier names, resolved once per operation."""
     var table = trees_table(context, _mode(py_fields(members[0]), context), "_mojolearn_estimators")
     return ridge_multi_ref(_estimators_key(table))
+
+
+def _ridge_store_predict(members: PythonObject, mr: PythonObject, mx: _MetaX, scope: Int, outputs: Int,
+                        context: PythonObject) raises -> PythonObject:
+    """THE FOLD FROM THE STORE (lane vdf-meta5): the one-program ridge's
+    predict over a model-selection fold `mx`, its rows taken in the
+    estimators store (`_ridge_store_take`) and read there
+    (`rm_predict_slot`, the kernel of `rm_predict`). None when the image
+    has no store or the store refuses (the caller admits the fold)."""
+    var table = trees_table(context, _mode(py_fields(members[0]), context), "_mojolearn_estimators")
+    var store_got: Tuple[EntryRef, PythonObject]
+    try:
+        store_got = _estimators_store(table)
+    except:
+        return PythonObject(None)
+    var slot = _ridge_store_take(store_got[0], mx, scope, context)
+    if slot < 0:
+        return PythonObject(None)
+    var n = mx.n
+    var out = admitted_array(Python.tuple(n, outputs), "<f4", context)
+    try:
+        var rm_key = multioutput_ridge_ref(members, context)
+        var p_coef = trees_address(mr[0])
+        var p_icpt = trees_address(mr[1])
+        var p_out = trees_address(out)
+        var d = mx.d
+        with GILReleased(Python()):
+            rm_predict_slot(rm_key, slot, p_coef, p_icpt, p_out, n, d, outputs)
+    finally:
+        arena_cache_free(store_got[0], slot)
+    _ = mr  # keep the coef and intercept stores alive through the native call above
+    _ = store_got[1]  # the store's provider, pinned through the call
+    return out
 
 
 def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -2613,11 +2736,19 @@ def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context
     var m = len(members)
     var mr = _attr(model, nk[].k__multi_ridge, PythonObject(None))
     if mr is not None:
-        # The one-program ridge (FAST + Apple) reads dense host rows: a fold's are admitted (owed with its fit).
+        # The one-program ridge (FAST + Apple). THE FOLD FROM THE STORE (lane vdf-meta5): a model-selection
+        # fold is predicted from the estimators store's slot of its rows (`rm_predict_slot`, as the fit); a
+        # fold with no store is admitted as before.
+        var outputs = Int(py=mr[2])
+        if mx.draw is not None:
+            var scope = _fold_scope(mx, context)
+            if scope != MEMBER_SCOPE_NONE:
+                var got = _ridge_store_predict(members, mr, mx, scope, outputs, context)
+                if got is not None:
+                    return got
         var Xa = mx.x
         if mx.draw is not None:
             Xa = _x_array(X, context)
-        var outputs = Int(py=mr[2])
         var out = admitted_array(Python.tuple(n, outputs), "<f4", context)
         var rm_key = multioutput_ridge_ref(members, context)
         var p_x = trees_address(Xa)

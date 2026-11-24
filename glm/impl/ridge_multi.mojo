@@ -116,6 +116,15 @@ def ridge_fit_multi_host(
     # them. The kernel now reads the device words this function made (each
     # target's `w` copied device to device, and `mu`), which are the words it
     # downloads, so the intercepts keep their bits.
+    _ridge_fit_multi_check(n_rows, n_cols, n_targets, alpha)
+    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    _ridge_fit_multi_body(ctx, x, y_ptr, coef_ptr, ymean_ptr, n_rows, n_cols, n_targets, alpha, center_y, want_icpt,
+                          xmean_ptr, icpt_ptr)
+    _ = x^
+
+
+def _ridge_fit_multi_check(n_rows: Int, n_cols: Int, n_targets: Int, alpha: Float32) raises:
     if n_cols <= 1:
         raise Error("ridge_fit_multi: number of columns cannot be less than two")
     if n_rows <= 1:
@@ -124,10 +133,51 @@ def ridge_fit_multi_host(
         raise Error("ridge_fit_multi: no targets")
     if alpha < Float32(0.0):
         raise Error("ridge_fit_multi: alpha must be non-negative")
-    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
+
+
+def ridge_fit_multi_buf(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    y_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ymean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_cols: Int,
+    n_targets: Int,
+    alpha: Float32,
+    center_y: Bool,
+    want_icpt: Bool,
+    xmean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    icpt_ptr: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    """`ridge_fit_multi_host` over a design already on the device (lane
+    vdf-meta5: a model-selection fold taken in the estimators store, or the
+    fold centered there): the same kernels in the same order over the same
+    words, no upload of X. `x` (n_rows x n_cols) may be overwritten."""
+    _ridge_fit_multi_check(n_rows, n_cols, n_targets, alpha)
+    _ridge_fit_multi_body(ctx, x, y_ptr, coef_ptr, ymean_ptr, n_rows, n_cols, n_targets, alpha, center_y, want_icpt,
+                          xmean_ptr, icpt_ptr)
+
+
+def _ridge_fit_multi_body(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    y_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ymean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_cols: Int,
+    n_targets: Int,
+    alpha: Float32,
+    center_y: Bool,
+    want_icpt: Bool,
+    xmean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    icpt_ptr: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    """The solve of `ridge_fit_multi_host` from the device design `x` (one
+    body for the host and the resident forms)."""
     var y = ctx.enqueue_create_buffer[DType.float32](n_rows * n_targets)
     var mu = ctx.enqueue_create_buffer[DType.float32](n_targets)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
     ctx.synchronize()
     # Y's column means in the row-tile order (lane debt-block-per-n,
@@ -215,7 +265,6 @@ def ridge_fit_multi_host(
     _ = s_nnz^
     _ = mu^
     _ = y^
-    _ = x^
 
 
 def ridge_predict_multi_host(
@@ -230,10 +279,27 @@ def ridge_predict_multi_host(
 ) raises:
     """out (n_rows x n_targets, row-major) = X coef^T + icpt, X up once."""
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    ridge_predict_multi_buf(ctx, x, coef_ptr, icpt_ptr, out_ptr, n_rows, n_cols, n_targets)
+    _ = x^
+
+
+def ridge_predict_multi_buf(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    icpt_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_cols: Int,
+    n_targets: Int,
+) raises:
+    """`ridge_predict_multi_host` over rows already on the device (lane
+    vdf-meta5: a model-selection fold taken in the estimators store): the
+    same kernel over the same words, no upload of X."""
     var coef = ctx.enqueue_create_buffer[DType.float32](n_targets * n_cols)
     var icpt = ctx.enqueue_create_buffer[DType.float32](n_targets)
     var out_buf = ctx.enqueue_create_buffer[DType.float32](n_rows * n_targets)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.enqueue_copy(dst_buf=coef, src_ptr=coef_ptr)
     ctx.enqueue_copy(dst_buf=icpt, src_ptr=icpt_ptr)
     ctx.synchronize()
@@ -251,4 +317,3 @@ def ridge_predict_multi_host(
     _ = out_buf^
     _ = icpt^
     _ = coef^
-    _ = x^
