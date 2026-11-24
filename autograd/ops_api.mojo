@@ -2161,10 +2161,14 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             cols = self.tape.reserve(self.ex, sz[0])
             yconv = self.tape.reserve(self.ex, sz[1])
         comptime if Self.E.IS_DEVICE:
-            if self.steps.cnn_other_queue:
-                self.ex.sync()  # a public session: its queue is not the x_cnn entries' (BlockStepScratch)
+            # a public session: its queue is not the x_cnn entries' (BlockStepScratch). It drains its own queue
+            # so the entry reads finished operands, and the entry waits (no may_defer) so that this session's next
+            # op, download or reset, on its own queue, reads finished results (autograd/cnn_block_op.mojo Waits).
+            var other = self.steps.cnn_other_queue
+            if other:
+                self.ex.sync()
             cnn_block_forward_device(
-                xp, wp, bp, cprm, pprm, pool, dst, idx, Int(cols) if keep else 0, Int(yconv) if keep else 0
+                xp, wp, bp, cprm, pprm, pool, dst, idx, Int(cols) if keep else 0, Int(yconv) if keep else 0, not other
             )
         else:
             # the host arm (autograd/cnn_block_host.mojo) through the executor
@@ -2227,9 +2231,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var bp = self.tape.value_of(self.ex, x[2])
         var dst = self.tape.reserve(self.ex, n * d_out)
         comptime if Self.E.IS_DEVICE:
-            if self.steps.cnn_other_queue:
-                self.ex.sync()  # a public session: its queue is not the x_cnn entries' (BlockStepScratch)
-            cnn_linear_forward_device(hp, wp, bp, n, d_in, d_out, dst)
+            # a public session: drain its own queue first, and the entry waits for its results (as conv_block)
+            var other = self.steps.cnn_other_queue
+            if other:
+                self.ex.sync()
+            cnn_linear_forward_device(hp, wp, bp, n, d_in, d_out, dst, not other)
         else:
             var hb: List[FP] = [hp, wp, bp, dst]
             var hw: List[Int] = [n, d_in, d_out]
