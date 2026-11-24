@@ -84,6 +84,20 @@ def test_named_feature_wide_attribute(cls, getter, positive):
     np.testing.assert_array_equal(np.asarray(rfe.ranking_), ranking)
 
 
+@pytest.mark.parametrize("cls, getter", [("StandardScaler", "scale_"), ("MinMaxScaler", "data_range_"),
+                                         ("KMeans", "cluster_centers_"), ("PCA", "components_"),
+                                         ("KernelRidge", "X_fit_")])
+def test_named_array_table_rows_and_blocks(cls, getter):
+    # Lane mf-rfe7b: one table per family; a StandardScaler's scale_ is row 2 of its stats block.
+    x, y, t = _data()
+    kwargs = {"n_clusters": 3, "random_state": 0} if cls == "KMeans" else ({"n_components": 2} if cls == "PCA" else {})
+    make = lambda: getattr(mojolearn, cls)(**kwargs)
+    target = t if cls == "KernelRidge" else y
+    rfe = mojolearn.RFE(make(), n_features_to_select=3, importance_getter=getter).fit(x, target)
+    support, ranking = _written_out(make, getter, x, target, 3)
+    np.testing.assert_array_equal(np.asarray(rfe.ranking_), ranking)
+
+
 def test_meta_with_a_plain_getter():
     x, y, _ = _data()
     every = np.arange(len(x))

@@ -18,7 +18,9 @@ Written, not run (WRITE CODE ONLY); IN_FILTER=mf_rfe7_sources.
     MultinomialNB feature_log_prob_ / feature_count_ (squared), CategoricalNB feature_log_prob_ refused, LDA
     and QDA means_, LDA xbar_, QDA xbar_ refused, an unknown name refused in attrgetter's words, the three
     plain getters as `rfe_member_source`. Fail-proof: swap _NB_BLOCK_THETA and _NB_BLOCK_VAR, drop the
-    CategoricalNB test (it gets FAMILY+6), or drop `kind == _DA_KIND_LDA` (QDA xbar_ gets a block).
+    CategoricalNB test (it gets FAMILY+6), or drop `kind == 0` in `_da_named` (QDA xbar_ gets a block); lane
+    mf-rfe7b: the per-family table's row codes (StandardScaler var_ row 1, MinMaxScaler min_ row 4) and a few
+    whole-block names; fail-proof: make `rfe_block_code` ignore the row, or swap `mean_` / `var_`.
 The end-to-end rounds (SVC linear, a named NB block, a META with a plain getter, the raised refusals) need the
 SVM, NB and x_prep images: python/mojolearn/tests/test_mf_rfe7_members.py.
 """
@@ -33,10 +35,13 @@ from core.entry_table import EntryRef
 from core.device_route import DeviceRoute, DEVICE_CPU
 from core.member_families import (
     MEMBER_FAMILY_KERNEL_SVM, MEMBER_FAMILY_KERNEL_RIDGE, MEMBER_FAMILY_EXTRA_TREES, MEMBER_FAMILY_NAIVE_BAYES,
-    MEMBER_FAMILY_DISCRIMINANT,
+    MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_SCALER, MEMBER_FAMILY_KMEANS, MEMBER_FAMILY_DECOMPOSITION,
+    MEMBER_FAMILY_XDECOMP, MEMBER_FAMILY_MIXTURE,
 )
 from core.kernel_svm_member import kernel_svm_member_v2
-from bindings.prep_select_run import rfe_member_source, rfe_member_source_named, rfe_named_block, RFE_NO_IMPORTANCES
+from bindings.prep_select_run import (
+    rfe_member_source, rfe_member_source_named, rfe_named_block, rfe_block_of, rfe_row_of, RFE_NO_IMPORTANCES,
+)
 
 comptime CASES = 4
 
@@ -118,6 +123,18 @@ def check_named_blocks() raises:
             "an unknown name: " + unknown.refusal)
     var auto = rfe_member_source_named(MEMBER_FAMILY_NAIVE_BAYES, 0, base, "auto", "GaussianNB")
     require(auto.refusal == String(RFE_NO_IMPORTANCES), "GaussianNB 'auto' as rfe_member_source")
+    # Lane mf-rfe7b: one table per family; a row of a multi-row block is a block code.
+    var var_code = rfe_named_block(MEMBER_FAMILY_SCALER, 0, "var_")
+    require(rfe_block_of(var_code) == MEMBER_BLOCK_FAMILY and rfe_row_of(var_code) == 1, "StandardScaler var_ row")
+    require(rfe_row_of(rfe_named_block(MEMBER_FAMILY_SCALER, 1, "min_")) == 4, "MinMaxScaler min_ row")
+    require(rfe_row_of(MEMBER_BLOCK_FAMILY) == -1 and rfe_block_of(MEMBER_BLOCK_FAMILY) == MEMBER_BLOCK_FAMILY,
+            "a whole block decodes to itself")
+    require(rfe_named_block(MEMBER_FAMILY_KMEANS, 0, "cluster_centers_") == MEMBER_BLOCK_FAMILY, "KMeans centers")
+    require(rfe_named_block(MEMBER_FAMILY_KERNEL_SVM, 0, "support_vectors_") == MEMBER_BLOCK_FAMILY + 1,
+            "SVC support_vectors_")
+    require(rfe_named_block(MEMBER_FAMILY_DECOMPOSITION, 1, "mean_") == 0, "TruncatedSVD has no mean_")
+    require(rfe_named_block(MEMBER_FAMILY_XDECOMP, 14, "covariance_") == MEMBER_BLOCK_FAMILY + 4, "MinCovDet")
+    require(rfe_named_block(MEMBER_FAMILY_MIXTURE, 0, "means_") == MEMBER_BLOCK_FAMILY + 1, "mixture means_")
 
 
 def test_mf_rfe7_sources() raises:

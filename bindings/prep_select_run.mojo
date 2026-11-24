@@ -56,11 +56,16 @@ from bindings.prep_classify_prog_run import (
 from bindings.arena_prog_run import _switch
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_own,
-    MEMBER_OP_FIT, MEMBER_OP_EXPORT, MEMBER_F32,
+    MEMBER_OP_FIT, MEMBER_OP_EXPORT, MEMBER_F32, MEMBER_F64, MEMBER_I32,
     MEMBER_CAN_COEF, MEMBER_CAN_IMPORTANCES, MEMBER_CAN_CLASSIFIER, MEMBER_BLOCK_COEF,
     MEMBER_BLOCK_FEATURE_IMPORTANCES, MEMBER_BLOCK_FAMILY,
 )
-from core.member_families import MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_KERNEL_SVM
+from core.member_families import (
+    MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_KERNEL_SVM, MEMBER_FAMILY_KERNEL_RIDGE,
+    MEMBER_FAMILY_KERNEL_APPROX, MEMBER_FAMILY_GP, MEMBER_FAMILY_KMEANS, MEMBER_FAMILY_XCLUSTER, MEMBER_FAMILY_MIXTURE,
+    MEMBER_FAMILY_DECOMPOSITION, MEMBER_FAMILY_XDECOMP, MEMBER_FAMILY_SCALER, MEMBER_FAMILY_PREP, MEMBER_FAMILY_SELECT,
+    MEMBER_FAMILY_XLINEAR, MEMBER_FAMILY_PLS,
+)
 from core.member_notices import member_notices_take
 from core.member_set_run import MemberFitExtras, member_fit_extras_apply, member_fit_extras_clear
 
@@ -491,47 +496,185 @@ def rfe_member_source(family: Int, mask: Int, getter: String, estimator: String)
     return RfeSource(0, False, "AttributeError: '" + estimator + "' object has no attribute '" + getter + "'")
 
 
-# A fitted attribute named by importance_getter that a member exports as one float32 block of feature columns
-# (lane mf-rfe7): the family's own block names, mirrored here so this RUN imports no member module
-# (core/naive_bayes_member.mojo NB_BLOCK_*, NB_KIND_*; core/discriminant_member.mojo DA_BLOCK_*, DA_KIND_*).
-comptime _NB_KIND_GAUSSIAN = 0
-comptime _NB_KIND_CATEGORICAL = 4
-comptime _NB_BLOCK_THETA = MEMBER_BLOCK_FAMILY
-comptime _NB_BLOCK_VAR = MEMBER_BLOCK_FAMILY + 1
-comptime _NB_BLOCK_LOG_PROB = MEMBER_BLOCK_FAMILY + 6
-comptime _NB_BLOCK_FEATURE_COUNT = MEMBER_BLOCK_FAMILY + 8
-comptime _DA_KIND_LDA = 0
-comptime _DA_BLOCK_MEANS = MEMBER_BLOCK_FAMILY
-comptime _DA_BLOCK_XBAR = MEMBER_BLOCK_FAMILY + 2
+# A fitted attribute named by importance_getter that a member exports as one block, or one row of a block
+# (lanes mf-rfe7, mf-rfe7b): THE NAMED-ARRAY TABLE, one entry per family, built from the attributes each
+# family's PACK writes from an exported block (providers/python/member_<family>_boundary_door.mojo). The block
+# names are mirrored here so this RUN imports no member module; each line names its source. An entry is a
+# BLOCK CODE: the block, plus (row + 1) << 16 when the attribute is one row of a multi-row block
+# (`rfe_block_code`, decoded by `rfe_member_importances`). A width other than the round's columns raises the
+# deleted door's words there (`_keys_of`: "RFE importances have k columns, expected m").
+comptime _ROW_SHIFT = 65536
+comptime _F = MEMBER_BLOCK_FAMILY
+
+
+def rfe_block_code(block: Int, row: Int) -> Int:
+    """The block code of `block` (row -1: the whole block; else that row of it)."""
+    return block + (row + 1) * _ROW_SHIFT
+
+
+def rfe_block_of(code: Int) -> Int:
+    """The member block of a block code."""
+    return code % _ROW_SHIFT
+
+
+def rfe_row_of(code: Int) -> Int:
+    """The row of a block code (-1: the whole block)."""
+    return code // _ROW_SHIFT - 1
+
+
+def _nb_named(kind: Int, name: String) -> Int:
+    # core/naive_bayes_member.mojo NB_KIND_* / NB_BLOCK_*; member_naive_bayes_boundary_door PACK.
+    if kind == 0:  # GaussianNB
+        if name == "theta_":
+            return _F  # NB_BLOCK_THETA
+        if name == "var_":
+            return _F + 1  # NB_BLOCK_VAR
+        return 0
+    if kind == 4:  # CategoricalNB: its arrays are lists per feature in scikit-learn
+        return 0
+    if name == "feature_log_prob_":
+        return _F + 6  # NB_BLOCK_LOG_PROB
+    if name == "feature_count_":
+        return _F + 8  # NB_BLOCK_FEATURE_COUNT
+    return 0
+
+
+def _da_named(kind: Int, name: String) -> Int:
+    # core/discriminant_member.mojo DA_BLOCK_*: means_ both kinds, LDA (kind 0) xbar_.
+    if name == "means_":
+        return _F  # DA_BLOCK_MEANS
+    if kind == 0 and name == "xbar_":
+        return _F + 2  # DA_BLOCK_XBAR
+    return 0
+
+
+def _xdecomp_named(kind: Int, name: String) -> Int:
+    # core/xdecomp_member.mojo XDECOMP_KIND_* / XDECOMP_BLOCK_COMPONENTS (+ k); member_xdecomp_boundary_door PACK.
+    if kind == 14:  # EllipticEnvelope / MinCovDet
+        if name == "location_":
+            return _F
+        if name == "raw_location_":
+            return _F + 2
+        if name == "raw_covariance_":
+            return _F + 3
+        if name == "covariance_":
+            return _F + 4
+        return 0
+    # IncrementalPCA, NMF, Gaussian / Sparse RandomProjection, FastICA, FactorAnalysis, (MiniBatch)DictionaryLearning,
+    # (MiniBatch)SparsePCA, LatentDirichletAllocation: components_ (components x features).
+    if name == "components_" and (kind == 0 or kind == 3 or kind == 5 or kind == 6 or kind == 7 or kind == 8
+                                  or kind == 9 or kind == 10 or kind == 12 or kind == 13 or kind == 15):
+        return _F
+    return 0
+
+
+def _scaler_named(kind: Int, name: String) -> Int:
+    # core/scaler_member.mojo SCALER_BLOCK_STATS (MEMBER_BLOCK_FAMILY): StandardScaler 3 x features (mean_, var_,
+    # scale_); MinMaxScaler 5 x features (data_min_, data_max_, data_range_, scale_, min_).
+    if kind == 0:
+        if name == "mean_":
+            return rfe_block_code(_F, 0)
+        if name == "var_":
+            return rfe_block_code(_F, 1)
+        if name == "scale_":
+            return rfe_block_code(_F, 2)
+        return 0
+    if kind == 1:
+        if name == "data_min_":
+            return rfe_block_code(_F, 0)
+        if name == "data_max_":
+            return rfe_block_code(_F, 1)
+        if name == "data_range_":
+            return rfe_block_code(_F, 2)
+        if name == "scale_":
+            return rfe_block_code(_F, 3)
+        if name == "min_":
+            return rfe_block_code(_F, 4)
+    return 0
+
+
+def _prep_named(kind: Int, name: String) -> Int:
+    # core/prep_member.mojo PREP_KIND_* / PREP_BLOCK_*; member_prep_boundary_door PACK.
+    if kind == 0:  # RobustScaler
+        if name == "center_":
+            return _F  # PREP_BLOCK_CENTER
+        if name == "scale_":
+            return _F + 1  # PREP_BLOCK_SCALE
+        return 0
+    if kind == 1:  # MaxAbsScaler
+        if name == "max_abs_":
+            return _F  # PREP_BLOCK_MAX_ABS
+        if name == "scale_":
+            return _F + 1
+        return 0
+    if kind == 5 and name == "quantiles_":  # QuantileTransformer
+        return _F + 2  # PREP_BLOCK_EXTRA
+    if kind == 6 and name == "lambdas_":  # PowerTransformer
+        return _F + 2
+    return 0
+
+
+def _select_named(kind: Int, name: String) -> Int:
+    # core/select_member.mojo SELECT_KIND_* / SELECT_BLOCK_*.
+    if kind == 0 and name == "variances_":
+        return _F  # SELECT_BLOCK_VARIANCES
+    if kind == 1 and name == "scores_":
+        return _F  # SELECT_BLOCK_SCORES
+    if kind == 1 and name == "pvalues_":
+        return _F + 2  # SELECT_BLOCK_PVALUES
+    return 0
 
 
 def rfe_named_block(family: Int, kind: Int, name: String) -> Int:
-    """The member block a kind exports under the public attribute `name` when that attribute is one float32
-    (rows x features) array its PACK writes from the block verbatim (0: none). GaussianNB theta_ / var_;
-    MultinomialNB, BernoulliNB, ComplementNB feature_log_prob_ / feature_count_ (CategoricalNB's are lists of
-    arrays in scikit-learn: none); LinearDiscriminantAnalysis and QuadraticDiscriminantAnalysis means_, LDA
-    xbar_. scikit-learn's RFE reads any attribute by name (attrgetter, then squared and summed over rows);
-    these are the feature-wide ones the members export. Every other name is refused in attrgetter's words
-    (`rfe_member_source_named`)."""
+    """THE NAMED-ARRAY TABLE (module note above): the block code a kind exports under the public attribute
+    `name` when its PACK writes that attribute from the block (or one row of it), else 0. scikit-learn's RFE
+    reads any attribute by name (attrgetter), squares it and sums it over rows; the deleted door read the
+    fitted estimator's fields the same way. Families: naive Bayes, discriminant, kernel SVM (support_vectors_),
+    kernel ridge (X_fit_), Nystroem (components_), Gaussian processes (X_train_), KMeans and MiniBatchKMeans /
+    BisectingKMeans / MeanShift (cluster_centers_), mixtures (means_), PCA / TruncatedSVD (components_, PCA
+    mean_), the extra decompositions and MinCovDet, StandardScaler / MinMaxScaler (their rows), RobustScaler,
+    MaxAbsScaler, QuantileTransformer, PowerTransformer, VarianceThreshold / SelectKBest, ARD / BayesianRidge
+    (lambda_, X_offset_), PLS (_x_mean, _x_std)."""
     if family == MEMBER_FAMILY_NAIVE_BAYES:
-        if kind == _NB_KIND_GAUSSIAN:
-            if name == "theta_":
-                return _NB_BLOCK_THETA
-            if name == "var_":
-                return _NB_BLOCK_VAR
-            return 0
-        if kind == _NB_KIND_CATEGORICAL:
-            return 0
-        if name == "feature_log_prob_":
-            return _NB_BLOCK_LOG_PROB
-        if name == "feature_count_":
-            return _NB_BLOCK_FEATURE_COUNT
-        return 0
+        return _nb_named(kind, name)
     if family == MEMBER_FAMILY_DISCRIMINANT:
-        if name == "means_":
-            return _DA_BLOCK_MEANS
-        if kind == _DA_KIND_LDA and name == "xbar_":
-            return _DA_BLOCK_XBAR
+        return _da_named(kind, name)
+    if family == MEMBER_FAMILY_KERNEL_SVM:
+        return _F + 1 if name == "support_vectors_" else 0  # core/kernel_svm_member.mojo _B_VECTORS
+    if family == MEMBER_FAMILY_KERNEL_RIDGE:
+        return _F if name == "X_fit_" else 0  # core/kernel_ridge_member.mojo _B_X_FIT
+    if family == MEMBER_FAMILY_KERNEL_APPROX:
+        return _F if (kind == 0 and name == "components_") else 0  # Nystroem FAMILY+0
+    if family == MEMBER_FAMILY_GP:
+        return _F if name == "X_train_" else 0  # core/gp_member.mojo _B_X
+    if family == MEMBER_FAMILY_KMEANS:
+        return _F if name == "cluster_centers_" else 0  # core/kmeans_member.mojo _BLOCK_CENTERS
+    if family == MEMBER_FAMILY_XCLUSTER:
+        # MiniBatchKMeans, BisectingKMeans, MeanShift: PACK's cluster_centers_ is FAMILY+0 (AffinityPropagation's
+        # centers are gathered from X at PACK, not one block: `rfe_named_block` 0).
+        return _F if ((kind == 0 or kind == 1 or kind == 2) and name == "cluster_centers_") else 0
+    if family == MEMBER_FAMILY_MIXTURE:
+        return _F + 1 if name == "means_" else 0  # member_mixture_boundary_door PACK: means_ (k x d)
+    if family == MEMBER_FAMILY_DECOMPOSITION:
+        if name == "components_":
+            return _F  # DECOMP_BLOCK_COMPONENTS
+        return _F + 1 if (kind == 0 and name == "mean_") else 0  # PCA DECOMP_BLOCK_MEAN
+    if family == MEMBER_FAMILY_XDECOMP:
+        return _xdecomp_named(kind, name)
+    if family == MEMBER_FAMILY_SCALER:
+        return _scaler_named(kind, name)
+    if family == MEMBER_FAMILY_PREP:
+        return _prep_named(kind, name)
+    if family == MEMBER_FAMILY_SELECT:
+        return _select_named(kind, name)
+    if family == MEMBER_FAMILY_XLINEAR:
+        if kind == 5 and name == "lambda_":
+            return _F + 1  # XL_MEMBER_BLOCK_LAMBDA (ARDRegression)
+        return _F + 9 if ((kind == 4 or kind == 5) and name == "X_offset_") else 0  # XL_MEMBER_BLOCK_X_OFFSET
+    if family == MEMBER_FAMILY_PLS:
+        if name == "_x_mean":
+            return _F
+        return _F + 1 if name == "_x_std" else 0
     return 0
 
 
@@ -592,7 +735,9 @@ def rfe_member_importances(plan: MemberPlan, mut call: MemberCall, x: Int, n: In
     nothing was staged."""
     rfe_member_fit(plan, call, x, n, m, y, y_dtype, extras, columns)
     member_notices_take(plan, call.state, notices)
-    call.block = block
+    # A block code (lane mf-rfe7b, `rfe_block_code`): the block, and the row a named attribute is of it.
+    var row = rfe_row_of(block)
+    call.block = rfe_block_of(block)
     call.flags = 0
     if len(hops) > 0:
         call.params = Int(hops.unsafe_ptr())
@@ -602,12 +747,37 @@ def rfe_member_importances(plan: MemberPlan, mut call: MemberCall, x: Int, n: In
     call.params = 0
     call.param_count = 0
     var view = call.dst
+    var first = 0
     rows = view.rows
-    if not view.dense_host(MEMBER_F32) or view.cols != m or rows < 1 or (rows > 1 and not squared):
+    if row >= 0:
+        # One row of the block (a StandardScaler's var_ of its stats block, ...).
+        if row >= view.rows:
+            raise Error("mojolearn: RFE importances have 0 columns, expected " + String(m))
+        first = row
+        rows = 1
+    if view.cols != m:
+        # The deleted door's words for a named attribute of another width (`_keys_of`).
+        raise Error("mojolearn: RFE importances have " + String(view.cols) + " columns, expected " + String(m))
+    if rows < 1 or (rows > 1 and not squared):
         raise Error("mojolearn: RFE importances are " + String(view.rows) + " x " + String(view.cols)
                     + " words, expected " + String(m) + " columns")
-    var words = List[Float32](length=rows * m, fill=0)
-    unsafe_memcpy(dest=words.unsafe_ptr(), src=SEL_F32P(unsafe_from_address=view.data), count=rows * m)
+    var count = rows * m
+    var words = List[Float32](length=count, fill=0)
+    if view.dense_host(MEMBER_F32):
+        unsafe_memcpy(dest=words.unsafe_ptr(), src=SEL_F32P(unsafe_from_address=view.data + 4 * first * m),
+                      count=count)
+    elif view.dense_host(MEMBER_F64):
+        # A float64 block (a mixture's means_): rounded to float32, as the door's float32 admission of the
+        # attribute rounded it. Serial: one block per round, features x rows words.
+        var src = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=view.data + 8 * first * m)
+        for i in range(count):  # small-loop(one exported block per round)
+            words[i] = Float32(src[i])
+    elif view.dense_host(MEMBER_I32):
+        var src = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=view.data + 4 * first * m)
+        for i in range(count):  # small-loop(one exported block per round)
+            words[i] = Float32(src[i])
+    else:
+        raise Error("TypeError: mojolearn: RFE importances must be a numeric host block")
     return words^
 
 

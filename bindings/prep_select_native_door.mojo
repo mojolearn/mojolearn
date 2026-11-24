@@ -32,7 +32,7 @@ from core.member_abi import (
     MEMBER_GIL_DOOR,
 )
 from core.member_families import MEMBER_FAMILY_ENSEMBLE
-from core.ensemble_member import META_BLOCK_FORWARD, meta_plan_leaf_importances
+from core.ensemble_member import meta_plan_leaf_importances
 from bindings.member_fit_notices_pack import member_fit_notices_raise
 from core.member_abi import MemberCall, member_free, MEMBER_F32, MEMBER_I32, MEMBER_READS_Y_GIVEN
 from bindings.member_given_y_unpack import member_given_y
@@ -183,7 +183,7 @@ def _rfe_meta_base(estimator: PythonObject, g: PythonObject, y: PythonObject, co
         if path.leaf_word and not meta_plan_leaf_importances(owner.plan, path.hops):
             raise Error(words)
         base.refusal = path.refusal.copy()
-        base.block = META_BLOCK_FORWARD
+        base.block = path.forward_block
         base.squared = True
         base.hops = path.hops.copy()
     elif getter == "auto":
