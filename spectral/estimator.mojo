@@ -83,6 +83,7 @@ from spectral.impl.spectral_clustering import (
 from spectral.impl.spectral_embedding import (
     MLSpectralEmbeddingParams,
     transform,
+    transform_resident,
     transform_connectivity,
     transform_dense_connectivity,
 )
@@ -384,6 +385,48 @@ def _embedding_config(
         has_seed=True,
         seed=seed,
     )
+
+
+def spectral_embedding_dataset_resident(
+    mut data: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    n_components: Int,
+    n_neighbors: Int,
+    norm_laplacian: Bool,
+    drop_first: Bool,
+    seed: UInt64,
+    mut embedding: List[Float32],
+    tolerance: Float32 = Float32(1e-5),
+) raises -> Int:
+    """`spectral_embedding_dataset_host` over rows already on this image's context (`data`: a slot of the metrics
+    image's resident store, a model-selection fold taken on the device; lane vdf-scope-cluster6). The same
+    refusals, config, trace header and transform on the same words, so the same bits; no upload of the rows."""
+    if n_samples <= 0 or n_features <= 0:
+        raise Error(
+            "spectral embedding: X must be n_samples x n_features with both"
+            " positive, got " + String(n_samples) + " x " + String(n_features)
+        )
+    if len(data) < n_samples * n_features:
+        raise Error(
+            "spectral embedding: X holds " + String(len(data))
+            + " floats, needs " + String(n_samples * n_features)
+        )
+    var config = _embedding_config(
+        n_components, n_neighbors, norm_laplacian, drop_first, seed
+    )
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var trace = IdentityTrace()
+    trace.header(
+        "spectral embedding (dataset): n_samples=" + String(n_samples)
+        + " n_features=" + String(n_features)
+        + " n_components=" + String(n_components)
+        + " n_neighbors=" + String(n_neighbors)
+        + " norm_laplacian=" + String(norm_laplacian)
+        + " drop_first=" + String(drop_first)
+        + " seed=" + String(seed)
+    )
+    return transform_resident(ctx, config, data, n_samples, n_features, embedding, trace, tolerance)
 
 
 def spectral_embedding_dataset_host(

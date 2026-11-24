@@ -856,6 +856,31 @@ def transform_dataset_keep(
     )
 
 
+def transform_dataset_resident(
+    ctx: DeviceContext,
+    params: SpectralEmbeddingParams,
+    mut data: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    mut embedding: List[Float32],
+    mut trace: IdentityTrace,
+) raises -> Int:
+    """`transform_dataset` over rows already on this image's context (`data`: a slot of the metrics image's
+    resident store, a model-selection fold taken on the device; lane vdf-scope-cluster6): the connectivity graph
+    from the device rows (`create_connectivity_graph_resident`, as SpectralClustering's resident fit), then the
+    same graph route. The FAST Apple graph route reads a host dataset: there the rows are read back once and the
+    host form runs (Apple FAST only)."""
+    if _use_fast_graph(n_samples, params.n_neighbors, trace):
+        var dataset = download_f32(ctx, data, n_samples * n_features)
+        return transform_dataset(ctx, params, dataset, n_samples, n_features, embedding, trace)
+    var graph = create_connectivity_graph_resident(ctx, params, data, n_samples, n_features, trace)
+    trace.record_list_i32("spectral.W.rows", graph.rows)
+    trace.record_list_i32("spectral.W.cols", graph.cols)
+    trace.record_list_f32("spectral.W.vals", graph.vals)
+    var state = SpectralPredictionState()
+    return transform_graph_keep(ctx, params, graph, embedding, state, False, trace)
+
+
 def transform_dataset(
     ctx: DeviceContext,
     params: SpectralEmbeddingParams,
