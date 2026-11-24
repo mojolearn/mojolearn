@@ -3,28 +3,13 @@
  "lane": "lars-grid-gram",
  "branch": "lane/lars-grid-gram",
  "head": "f6f16f128",
- "controls": {
-  "lars_grid_gram": {
+ "controls": {},
+ "algorithms": {},
+ "removed": [
+  {
    "define": "MOJOLEARN_IDN_LARS_GRID_GRAM_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_LARS_GRID_GRAM_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "x_linear/lars.mojo:LARS_GRID_GRAM",
-    "x_linear/lars.mojo:_lars_host_blocked_moments",
-    "x_linear/device.mojo:XL_IDN_LARS_GRID_GRAM",
-    "x_linear/device.mojo:fit_device",
-    "core/classical_centered.mojo:bm_column_mean_cell"
-   ],
-   "binding": "_mojolearn_x_linear",
-   "bits_change": true,
-   "status": "promoted:lane/i17-decide-nbr-lin-prep",
-   "notes": "PROMOTED 2026-10-11 (A/B main@b2657cc89, one run per arm, v0045/v0046 a1628/a1629): lars taxi NV 59.1 -> 3.1 / AMD 126.1 -> 3.3; lasso-lars taxi 58.9 -> 3.0 / 125.7 -> 3.3; lasso-lars istella 112.8 -> 83.4 / 191.6 -> 74.6; lars istella 165.6 -> 340.7 (2.06) / 390.2 -> 1155.2 (2.96) SLOWER = open follow-up (no dimension-keyed dodge). Digests NV == AMD; quality equal or better. Apple IDENTICAL takes the same fold since lane/apple-lars (2026-10-12; was excluded, its column differed). -D MOJOLEARN_IDN_LARS_GRID_GRAM_OFF restores the moments grid. Ideas F5. LARS / LassoLars means, centered Gram and X'y from core/blocked_moments.mojo (bm_column_mean, bm_centered_gram_panels, bm_centered_cross_panels at contract_leaf_size(n) leaves, binary-counter fold) instead of x_linear/moments_grid.mojo (one block per 16-column tile pair, one serial all-rows chain per cell: 3 blocks at taxi's 16 features). Host column (_mojolearn_x_linear_host) uses the same fold via centered_gram_v1_cell / centered_cross_v1_cell / bm_column_mean_cell under the same define. Apple keeps the moments grid. Races: lars and lasso-lars taxi (+ istella), quality r2 equal; ID on nv+amd."
+   "control": "lars_grid_gram",
+   "reason": "DELETED 2026-11-24 (lane ab-outcome-2): the `_OFF` old path (main's moments grid) was slower, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S (wheel 4519097d380a, job nvc1-0002), 8 cells, median arm/base 1.04: lars taxi fit 2.99 -> 63.01 ms (21.09), lasso-lars taxi 2.97 -> 63.01 (21.23), lasso-lars istella 80.11 -> 114 (1.42), lars istella 118 -> 127 (1.08, noise); AMD not measured (NVIDIA-only campaign). The blocked moments are the only form, no bit change. Code recoverable at ba83d4655f; patch ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_LARS_GRID_GRAM_OFF.ab-outcome-2.patch; define refused in core/experiment_guards_linear.mojo."
   }
- }
+ ]
 }
