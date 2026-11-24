@@ -1665,7 +1665,9 @@ LANE_REVISIONS = {
     # exchanging them was the identity function, and these lanes never train,
     # so no step could separate them. `_block_weights(near_one=...)` gives
     # each its own elementwise vector within an eighth of unity.
-    "mamba3": "norms-near-one-1",
+    # mamba3 also hashes a two-chunk backward (`backward_two_chunks`, 80 tokens;
+    # 2026-11-23, lane sab-host-missed-nrl): its older cells carry no such part.
+    "mamba3": "norms-near-one-two-chunk-backward-2",
     "transformer": "norms-near-one-1",
     "transformer-window": "norms-near-one-1",
     # arithmetic, not input: UMAP.transform is row separable now
@@ -3707,6 +3709,13 @@ def _(ml, X, yc, yr, Xh=None):
         near_one=("B_norm.weight", "C_norm.weight"))
     blk = _built(ml.Mamba3Block(w), weights=w)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), {})
+    # A backward over two chunks (80 tokens, chunk size 64). At l = 16 the
+    # sequence is one chunk, and the S17 chunk-state adjoint
+    # (mamba3_s16_host.mojo _s17_unit) is read only for chunk c + 1 < nc
+    # (gen/mamba3_backward.mojo mamba3_s17_operands_kernel), so no hashed
+    # gradient depended on it (2026-11-23, lane sab-host-missed-nrl).
+    grads_two = blk.backward(_seq(X, 1, 80, dm, skip=4096), _seq(X, 1, 80, dm, skip=8192))
+    parts["backward_two_chunks"] = _h(*[np.asarray(grads_two[k]) for k in sorted(grads_two)])
     # Mamba3Block.session_info -> mamba_public_native.mojo:mamba3_session_info ->
     # the session's info operation (op 45 on its registry handle): the counters of the device prefill session the
     # stateless forward above opened. The host column opens none (None there), so
