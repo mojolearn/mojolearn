@@ -123,6 +123,9 @@ from core.spectral_native_api import (
 from spectral.cfb_spectral_run import _sc_check_shape, _se_check_shape
 from core.spectral_native_api import SpectralEmbeddingRequest, SpectralEmbeddingOptions
 from core.spectral_native_api import SPECTRAL_DENSE, SPECTRAL_GRAPH
+from core.spectral_native_api import (
+    SPECTRAL_RBF, SPECTRAL_KNN, SPECTRAL_KNN_REFUSED, SPECTRAL_CAP_AFFINITY, SPECTRAL_CAPABILITIES,
+)
 from core.spectral_preparation_api import (
     SpectralPreparationDriver, SpectralCOOCountRequest, SpectralCOOFillRequest, SpectralKNNRequest,
     SpectralAffinityStatus, SpectralCOOStorage,
@@ -413,15 +416,31 @@ def _knn_affinity(slot: _Slot, call: _Call, n: Int, d: Int) raises:
     var status = SpectralAffinityStatus()
     _preparation(call).knn(SpectralKNNRequest(call[].x.data, 0, 0, 0, Int(slot[].affinity_values.unsafe_ptr()),
         status.address(), n, k, 0, False))
+    _knn_status_refuse(status, k)
+
+
+def _knn_status_refuse(status: SpectralAffinityStatus, k: Int) raises:
+    """The k-NN affinity's three status words as the class's refusals (the base image's builder and the fit
+    entry's fused builder write the same words)."""
     var code = Int(status.words[0])
     var bad_row = Int(status.words[1])
     var stored = Int(status.words[2])
-    _ = status^
     if code == 1:
         raise Error("mojolearn SpectralEmbedding: a precomputed distance is negative or NaN")
     if code == 2:
         raise Error("mojolearn SpectralEmbedding: row " + String(bad_row) + " of the precomputed graph has "
                     + String(stored) + " stored distances, fewer than n_neighbors=" + String(k))
+
+
+def _fused_affinity(call: _Call, fit_dense: Bool) raises -> Bool:
+    """Whether the FIT entry builds an 'rbf' / 'precomputed_nearest_neighbors' affinity on its own device and
+    fits (or embeds) from it there (`SPECTRAL_CAP_AFFINITY` on a dense fit entry; lane vdf-misc4's estimator
+    route, applied to the member by lane vdf-scope-cluster4): the n x n crosses once, into the state's affinity
+    block. Was: built by the x_decomp (rbf) or base (knn) image into the state's host words and uploaded again
+    by the fit entry. One metadata call per fit."""
+    if not fit_dense:
+        return False
+    return (SpectralDriver(call[].route.entry.call).metadata(SPECTRAL_CAPABILITIES) & SPECTRAL_CAP_AFFINITY) != 0
 
 
 def _coo(call: _Call, address: Int, n: Int, built: Bool) raises -> SpectralCOOStorage:
@@ -482,7 +501,19 @@ def _fit(slot: _Slot, call: _Call) raises:
     var n = rows
     var coo = SpectralCOOStorage(0)
     var source_input: SpectralInput
-    if affinity == _AFF_NN:
+    var status = SpectralAffinityStatus()
+    var fused = ((affinity == _AFF_RBF or affinity == _AFF_PNN) and clusters <= n and k < n
+        and (affinity == _AFF_RBF or (d == n and n > 0)) and _fused_affinity(call, slot[].fit_dense))
+    if fused:
+        # The fit entry builds the affinity on its device into the state's block and fits from it there.
+        slot[].affinity_values = List[Float32](length=n * n, fill=0.0)
+        if affinity == _AFF_RBF:
+            source_input = SpectralInput(call[].x.data, 0, 0, 0, SPECTRAL_RBF, n, d, 0,
+                Int(slot[].affinity_values.unsafe_ptr()), 0, slot[].gamma)
+        else:
+            source_input = SpectralInput(call[].x.data, 0, 0, 0, SPECTRAL_KNN, n, slot[].neighbors, 0,
+                Int(slot[].affinity_values.unsafe_ptr()), status.address(), 0.0)
+    elif affinity == _AFF_NN:
         _sc_check_shape(clusters, rows, k)
         if slot[].neighbors > rows:
             raise Error("mojolearn SpectralClustering: n_neighbors=" + String(slot[].neighbors)
@@ -524,6 +555,9 @@ def _fit(slot: _Slot, call: _Call) raises:
         view, options)
     var n_out = SpectralDriver(call[].route.entry.call).fit(request)
     _ = len(coo.values)  # the COO triples the fit read stay alive through it
+    if fused and n_out == SPECTRAL_KNN_REFUSED:
+        _knn_status_refuse(status, slot[].neighbors)
+    _ = status^
     if n_out != k:
         raise Error("RuntimeError: mojolearn SpectralClustering: the kernel returned " + String(n_out) + " "
                     + "embedding columns where " + String(k) + " were expected")
@@ -609,7 +643,25 @@ def _fit_se(slot: _Slot, call: _Call) raises:
     var coo = SpectralCOOStorage(0)
     var source_input: SpectralInput
     var neighbors_word = 0
-    if affinity == _AFF_NN:
+    var status = SpectralAffinityStatus()
+    var fused = ((affinity == _AFF_RBF or affinity == _AFF_PNN) and n > 0
+        and (affinity == _AFF_RBF or d == n) and _fused_affinity(call, slot[].fit_dense))
+    if fused:
+        # The fit entry builds the affinity on its device and embeds from it there (lane vdf-misc4's
+        # `_se_execute` route); the 'rbf' affinity crosses once, into the state's published block.
+        _se_check_shape(k, n, n_lanczos)
+        neighbors_out = max(n // 10, 1) if auto_neighbors else slot[].neighbors
+        slot[].affinity_values = List[Float32](length=n * n, fill=0.0)
+        if affinity == _AFF_RBF:
+            var gamma = 1.0 / Float64(d) if auto_gamma else slot[].gamma
+            gamma_out = gamma
+            features_out = d
+            source_input = SpectralInput(call[].x.data, 0, 0, 0, SPECTRAL_RBF, n, d, 0,
+                Int(slot[].affinity_values.unsafe_ptr()), 0, gamma)
+        else:
+            source_input = SpectralInput(call[].x.data, 0, 0, 0, SPECTRAL_KNN, n, neighbors_out, 0,
+                Int(slot[].affinity_values.unsafe_ptr()), status.address(), 0.0)
+    elif affinity == _AFF_NN:
         _se_check_shape(k, n, n_lanczos)
         var neighbors = max(n // 10, 1) if auto_neighbors else slot[].neighbors
         if neighbors > n:
@@ -657,6 +709,9 @@ def _fit_se(slot: _Slot, call: _Call) raises:
             slot[].seed, slot[].tolerance))
     var n_out = SpectralDriver(call[].route.entry.call).embed(request)
     _ = len(coo.values)  # the COO triples the embedding read stay alive through it
+    if fused and n_out == SPECTRAL_KNN_REFUSED:
+        _knn_status_refuse(status, neighbors_out)
+    _ = status^
     if n_out != k:
         raise Error("RuntimeError: mojolearn SpectralEmbedding: the kernel returned " + String(n_out) + " "
                     + "embedding columns where " + String(k) + " were expected")
