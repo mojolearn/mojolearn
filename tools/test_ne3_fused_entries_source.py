@@ -69,8 +69,11 @@ def test_fused_doors_keep_the_op_chain_fallback():
     assert run.rindex('if fused:') < run.index('plan.score_labels(driver, dst)')
     semi = _read('bindings/neighbors_semi_native_door.mojo')
     # LabelPropagation: the fused query when the image carries it, the operation chain otherwise
-    # (typed RUN, neighbors/label_propagation_run.mojo).
-    assert '_lp_dense_available(binding)' in semi and 'lp_query_run(connection.driver, request)' in semi
+    # (typed RUN, neighbors/label_propagation_run.mojo). The query's one UNPACK picks it
+    # (cbf7d7d06e moved the image check into bindings/neighbors_lp_query_unpack.mojo `lp_query_unpack`).
+    unpack = _read('bindings/neighbors_lp_query_unpack.mojo')
+    assert 'var fused = not knn and lp_dense_available(binding)' in unpack
+    assert 'lp_query_run(connection.driver, unpacked.request)' in semi
     chain = _read('neighbors/label_propagation_run.mojo')
     assert 'if lp_query_fused(request):' in chain and 'xn_semi_row_normalize_request(' in chain
     cluster = _read('bindings/mcls_cluster_door.mojo')
