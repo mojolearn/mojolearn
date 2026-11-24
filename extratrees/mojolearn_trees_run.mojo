@@ -187,7 +187,8 @@ def _et_classifier_fit_run[ROWMAJOR: Bool = False, ROWS: Bool = False](
     params: ForestFitArgs, mut times: StageTimes, mut total_start: Int
 ) raises -> FitResult:
     """Fit `ExtraTreesClassifier`. `x` is COLUMN-major float32
-    (n_rows * n_features), `y` is float32 class CODES in [0, n_classes).
+    (n_rows * n_features), `y` is float32 class CODES in [0, n_classes), or
+    with `params.y_codes` int32 codes (XF_SHAPE_Y_CODES).
     See `N_FIT_PARAMS`. Returns the fit; the door `_et_classifier_fit`
     calls this with the GIL released and keeps the fit in ET_EXPORTS."""
     if len(params) != N_FIT_PARAMS:
@@ -221,7 +222,15 @@ def _et_classifier_fit_run[ROWMAJOR: Bool = False, ROWS: Bool = False](
     var x = List[Float32]()
     times.stop_host("boundary_x_borrow", stamp)
     stamp = times.start()
-    var y = _copy_f32(params.y, n_rows)
+    # XF_SHAPE_Y_CODES (lane vdf-scope-trees3): y is the caller's int32
+    # codes, uploaded as they are (`codes_addr`); no float32 list is built.
+    var y = List[Float32]()
+    var codes_addr = 0
+    if params.y_codes:
+        _ = _i32_ptr(params.y)
+        codes_addr = params.y
+    else:
+        y = _copy_f32(params.y, n_rows)
     times.stop_host("boundary_y_list", stamp)
     stamp = times.start()
 
@@ -236,6 +245,7 @@ def _et_classifier_fit_run[ROWMAJOR: Bool = False, ROWS: Bool = False](
                 ctx, x, y, Int32(n_rows), Int32(n_features), Int32(n_classes),
                 config, tree_start=params.tree_start,
                 weights_addr=params.weights, x_dev_rows=Int(raw.unsafe_ptr()),
+                codes_addr=codes_addr,
             )
             _ = raw^  # the fit above read the taken rows (synchronous)
         except problem:
@@ -246,7 +256,7 @@ def _et_classifier_fit_run[ROWMAJOR: Bool = False, ROWS: Bool = False](
         result = fit_extra_trees_classifier_device(
             ctx, x, y, Int32(n_rows), Int32(n_features), Int32(n_classes),
             config, x_addr=x_pointer, x_row_major=ROWMAJOR, tree_start=params.tree_start,
-            weights_addr=params.weights,
+            weights_addr=params.weights, codes_addr=codes_addr,
         )
     ctx.synchronize()
     times.stop_host("boundary_device_fit_and_context", stamp)

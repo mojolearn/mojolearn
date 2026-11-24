@@ -49,7 +49,7 @@ from core.forest_inference_run import (
     forest_resident_rows_native,
 )
 from bindings.forest_fit_boundary_unpack import forest_fit_args_py
-from core.forest_fit_request import ForestFitArgs, XF_CAP_DEVICE_SCAN, XF_CAP_DEV_ROWS, forest_export_verify_lists, fit_loop_put
+from core.forest_fit_request import ForestFitArgs, XF_CAP_DEVICE_SCAN, XF_CAP_DEV_ROWS, XF_CAP_ET_CODES, forest_export_verify_lists, fit_loop_put
 from core.forest_store_transport import forest_store_publish, forest_store_words, forest_store_admit
 from core.gbdt_entry_table import gbdt_vendor_word
 from core.native_descriptor_call import native_descriptor_report
@@ -409,8 +409,10 @@ struct EtGpuForest(ForestImage):
     @staticmethod
     def caps() -> Int:
         # XF_CAP_DEV_ROWS (lane vdf-scope-trees2a): the image's device store,
-        # XF_FIT_ROWS and XF_RESIDENT_ROWS.
-        var caps = forest_gpu_resident_caps() | XF_CAP_DEV_ROWS
+        # XF_FIT_ROWS and XF_RESIDENT_ROWS. XF_CAP_ET_CODES (lane
+        # vdf-scope-trees3): the classifier fits take int32 codes
+        # (XF_SHAPE_Y_CODES) and make the class ids on the device.
+        var caps = forest_gpu_resident_caps() | XF_CAP_DEV_ROWS | XF_CAP_ET_CODES
         comptime if FOREST_DEVICE_FINITE:
             caps |= XF_CAP_DEVICE_SCAN
         return caps

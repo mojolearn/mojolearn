@@ -119,7 +119,9 @@ estimator's own predict door does (a state only fitted and published or
 freed uploads nothing); concurrent first predicts of one state build it
 once under the slot's own lock word (`_ensure_prepared`). It is released at
 the next fit, import or free.
-Parallel: the ET classifier's code cast, the column-major copy, the largest
+Parallel: the ET classifier's code cast (host images only: an image with
+XF_CAP_ET_CODES takes the int32 codes and makes the class ids on the device),
+the column-major copy, the largest
 weight, the argmax of the votes and the accuracy count split rows over the
 host workers. Serial by nature: the
 store's bookkeeping.
@@ -131,7 +133,9 @@ from core.forest_calls import (
     xf_caps, xf_export_sizes, xf_export_into, xf_export_release, xf_predict, xf_resident_prepare,
     xf_resident_predict, xf_resident_labels, xf_strict_prepare, xf_strict_predict, xf_snapshot_release,
 )
-from core.forest_fit_request import XF_CAP_DEVICE_SCAN, XF_CAP_DEV_ROWS, XF_RESIDENT_RELEASE, XF_STRICT_RELEASE
+from core.forest_fit_request import (
+    XF_CAP_DEVICE_SCAN, XF_CAP_DEV_ROWS, XF_CAP_ET_CODES, XF_RESIDENT_RELEASE, XF_STRICT_RELEASE,
+)
 from core.forest_calls import xf_fit_rows, xf_resident_rows
 from core.forest_entry_table import FOREST_TABLE_RF, FOREST_TABLE_ET
 from core.forest_store_transport import forest_store_transport_ref, FOREST_STORE_PREFIX_RF, FOREST_STORE_PREFIX_ET
@@ -902,9 +906,13 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
             _take_rows_f32(call[].x.data, fold.index, rows, cols, Int(x_fold.unsafe_ptr()))
             x_rows_addr = Int(x_fold.unsafe_ptr())
     var on_device = fold.store_id >= 0
-    # The ET classifier reads float32 codes; the cast lives until the launch returns.
+    # The ET classifier reads float32 codes; the cast lives until the launch
+    # returns. An image answering XF_CAP_ET_CODES (the ET GPU images; lane
+    # vdf-scope-trees3) takes the int32 codes as they are and makes the class
+    # ids on the device (XF_SHAPE_Y_CODES): no host cast. The host images keep it.
     var codes = List[Float32]()
-    if slot[].classifier and slot[].et:
+    var y_codes = slot[].classifier and slot[].et and (_slot_caps(slot, key) & XF_CAP_ET_CODES) != 0
+    if slot[].classifier and slot[].et and not y_codes:
         codes = List[Float32](length=rows, fill=0.0)
         _cast_codes(y_addr, Int(codes.unsafe_ptr()), rows)
         y_addr = Int(codes.unsafe_ptr())
@@ -951,6 +959,7 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
     # clears the class-weight slot (its class weights travel as row weights).
     var request = forest_request(config, key, rows, cols, classes, x_addr, y_addr, fit,
         weighted and slot[].classifier and slot[].et)
+    request.y_codes = y_codes
     var handle: Int
     if on_device:
         request.session = fold.store_id
