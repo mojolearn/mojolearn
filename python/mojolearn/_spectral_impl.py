@@ -730,9 +730,8 @@ def spectral_embedding(
     drop_first : bool, default True
         Drop the first (trivial) eigenvector.
     device : {None, 'gpu', 'cpu'}, default None
-        Where the computation runs. None uses this installation's device and 'gpu' requires a GPU
-        installation. 'cpu' runs on a CPU-only installation; beside a GPU it raises ValueError.
-        Other values raise ValueError.
+        Where the computation runs. None uses this installation's device, 'cpu' runs on the CPU and
+        'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------

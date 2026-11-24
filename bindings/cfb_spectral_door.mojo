@@ -4,6 +4,8 @@
 # Arrays and provider images remain boundary pins. Normalized scalar fields
 # retain archive/attribute compatibility; execution consumes native config.
 from providers.python.function_device_boundary_door import function_device_admit
+from providers.python.estimator_binding_pyapi_door import estimator_binding_device
+from core.function_device import function_device_default
 from std.math import isinf
 from core.spectral_native_api import (
     SPECTRAL_CAP_DENSE, SPECTRAL_CAP_RESIDENT, SPECTRAL_DATASET, SPECTRAL_GRAPH, SPECTRAL_DENSE,
@@ -1290,16 +1292,27 @@ def _cfb_spectral_algorithm_operation(model: PythonObject, operation: Int, args:
         return py_item(py_fields(model), nk[].k_embedding_)
     if operation == CFB_OPN_FAMILY_CFB_SPECTRAL_EMBEDDING:
         # args[8] is the call's `device` (lane vdf-misc), admitted first in the
-        # shared words. The function has a device image (x_decomp of the GPU
-        # set) and no CPU image of `_mojolearn_x_decomp` connected beside a
-        # GPU set (the one SpectralEmbedding(device="cpu") is refused for too),
-        # so "cpu" there is refused and every admitted value runs today's route.
+        # shared words. The function has the device images and the CPU
+        # identical images of its three groups connected beside a GPU set
+        # (`_mojolearn_metrics`, `_mojolearn_x_decomp`, `_mojolearn`:
+        # python/mojolearn/_spectral_impl.py `connect_bindings`), so "cpu"
+        # beside a GPU set selects those (estimator_binding_device); every
+        # other admitted value runs today's process connection.
+        var device = function_device_default()
         if args[8] is not None:
-            _ = function_device_admit(args[8], "spectral_embedding", True, False, context, _builtins())
-        var routed = SpectralRoutePins(
-            spectral_umap_route(context, "metrics", PythonObject(None)),
-            spectral_umap_route(context, "decomp", PythonObject(None)),
-            spectral_umap_route(context, "base", PythonObject("identical")), PythonObject(None))
+            device = function_device_admit(args[8], "spectral_embedding", True, True, context, _builtins())
+        var routed: SpectralRoutePins
+        if device.host_beside:
+            routed = SpectralRoutePins(
+                estimator_binding_device(device, PythonObject(None), "_mojolearn_metrics", context, False),
+                estimator_binding_device(device, PythonObject(None), "_mojolearn_x_decomp", context, False),
+                estimator_binding_device(device, PythonObject("identical"), "_mojolearn", context, False),
+                PythonObject(None))
+        else:
+            routed = SpectralRoutePins(
+                spectral_umap_route(context, "metrics", PythonObject(None)),
+                spectral_umap_route(context, "decomp", PythonObject(None)),
+                spectral_umap_route(context, "base", PythonObject("identical")), PythonObject(None))
         return _spectral_embedding(args, routed, context)
     raise Error("RuntimeError: unknown spectral operation code " + String(operation))
 
