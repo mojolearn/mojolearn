@@ -96,9 +96,6 @@ class _Resident:
     def __init__(self):
         return _RESIDENT_CALL(self, 'msel_resident_init', (), _RESIDENT_CONTEXT)
 
-    def _entry(self, values, dtype=None):
-        return _RESIDENT_CALL(self, 'msel_resident_entry', (values, dtype), _RESIDENT_CONTEXT)
-
     def take(self, values, indices):
         """Rows `indices` (an int64 index Array) of `values`, gathered on
         the device."""
