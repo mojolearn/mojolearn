@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Cross-validation of python/mojolearn/model_selection.py, natively (lane
 # mcb2-msel): the estimator clone (`_clone`), the fold drawing and checks
-# (`_folds`, `_prepare_folds`, `_cv_folds`, `_indices`, `_overlap`), the
+# (`_folds`, `_prepare_folds`, `_cv_folds`, `_indices`), the
 # resident fold rows (`_FoldRows`: X, y and every fold's indices put ONCE
 # into the `_Resident` store and each fold's rows one device gather out of
 # it, or `_arena_io.DeviceRows` for an estimator that takes them), and
@@ -12,6 +12,7 @@
 # folds, the gathered rows and every score are unchanged.
 from bindings.member_scope_door import member_scope_word
 from core.member_abi import MEMBER_SCOPE_NONE
+from core.msel_refusal_words import msel_empty_scoring_words, msel_cvp_method_words
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.base_helpers_key_unpack import base_helpers_key
@@ -23,7 +24,7 @@ from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.msel_helpers_key_unpack import msel_helpers_key
 from bindings.msel_member_device_unpack import msel_member_host_folds
 from bindings.msel_helpers_released_unpack import (
-    msel_indices_overlap_i64, msel_store_alloc, msel_store_read, msel_store_free, msel_scatter_rows,
+    msel_store_alloc, msel_store_read, msel_store_free, msel_scatter_rows,
     msel_store_free_bytes,
 )
 from bindings.native_unit_threads_unpack import (
@@ -59,7 +60,6 @@ from bindings.family_common_unpack import (
 from bindings.family_common_pack import (
     family_array,
     family_call,
-    family_call_kw,
 )
 from bindings.msel_scorer_native_door import msel_scorer_no_number
 from bindings.msel_common_door import (
@@ -71,7 +71,7 @@ from bindings.msel_common_door import (
 from bindings.msel_split_door import msel_split, msel_check_cv, msel_default_folds, msel_truth, msel_flag_truth, msel_cls, msel_sabotage
 from bindings.msel_cv_run import msel_seconds, _numeric_dtype
 from bindings.msel_member_units_door import msel_member_fit_in_place, msel_text_rows
-from bindings.msel_search_state_door import msel_search_fields
+from bindings.msel_search_state_door import msel_search_fields, msel_carrier_search
 
 #: model_selection's CV_FAST bits of the resample binding's define mask.
 # TOMBSTONE: MOJOLEARN_CV_FAST_SLICE (plumbing folded into the typed search RUN, rule 2026-11-22) deleted 2026-11-23 by lane/mf-msel5b; code recoverable at 6f0a3de6ed.
@@ -125,17 +125,6 @@ def msel_indices(value: PythonObject, n: Int, name: String, context: PythonObjec
     return as_i64
 
 
-def msel_overlap(train: PythonObject, test: PythonObject, n: Int, context: PythonObject) raises -> Bool:
-    """`_overlap`: whether two accepted index Arrays share a row."""
-    if Int(py=train.size) == 0 or Int(py=test.size) == 0 or n <= 0:
-        return False
-    var hit = msel_indices_overlap_i64(msel_helpers_key(context), msel_addr(train), Int(py=train.size),
-                                       msel_addr(test), Int(py=test.size), n)
-    _ = train  # keep the Python objects alive through the native call above
-    _ = test
-    return hit != 0
-
-
 def msel_splits_of(splitter: PythonObject, x: PythonObject, y: PythonObject, groups: PythonObject,
                    context: PythonObject) raises -> PythonObject:
     """`splitter.split(X, y, groups)`: a mojolearn splitter's splits natively
@@ -147,8 +136,10 @@ def msel_splits_of(splitter: PythonObject, x: PythonObject, y: PythonObject, gro
 
 
 def msel_checked_folds(pairs: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
-    """Every (train, test) of `pairs` checked by `_indices` and `_overlap`
-    before the first fit; refused when there is none."""
+    """Every (train, test) of `pairs` checked by `_indices` before the first
+    fit; refused when there is none. A train side may share rows with its
+    test side, as scikit-learn accepts (`cross_val_predict` alone needs a
+    partition and checks it itself)."""
     var b = msel_b()
     var it = family_call(b.iter, pairs)
     var folds = Python.list()
@@ -164,8 +155,6 @@ def msel_checked_folds(pairs: PythonObject, n: Int, context: PythonObject) raise
                         else String("not enough values to unpack (expected 2, got ") + String(len(pair)) + ")")
         var train = msel_indices(pair[0], n, "train", context)
         var test = msel_indices(pair[1], n, "test", context)
-        if msel_overlap(train, test, n, context):
-            raise Error("train and test indices overlap")
         _ = py_call(folds.append, Python.tuple(train, test))
     if len(folds) == 0:
         raise Error("cv must produce at least one fold")
@@ -647,6 +636,10 @@ def msel_scorers(scoring: PythonObject, context: PythonObject) raises -> PythonO
             if py_type(items[i]) is not b.str:
                 raise Error("TypeError: multiple scoring names must be exact strings")
             py_setitem(out, items[i], msel_get_scorer(items[i], context))
+        if len(items) == 0:
+            # scikit-learn's `_check_multimetric_scoring` refusal (lane w3-fix-b
+            # row 14; the search kind's words, core/msel_refusal_words.mojo)
+            raise Error(msel_empty_scoring_words(False, String(py=py_call(b.repr, scoring))))
         return out
     var mappings = context["mapping_types"]
     var mapping = False
@@ -659,6 +652,8 @@ def msel_scorers(scoring: PythonObject, context: PythonObject) raises -> PythonO
             if py_type(items[i][0]) is not b.str:
                 raise Error("TypeError: multiple scoring keys must be exact strings")
             py_setitem(out, items[i][0], msel_get_scorer(items[i][1], context))
+        if len(items) == 0:
+            raise Error(msel_empty_scoring_words(True, String(py=py_call(b.repr, scoring))))
         return out
     return PythonObject(None)
 
@@ -1135,7 +1130,7 @@ def msel_cv_by_search(estimator: PythonObject, x_in: PythonObject, y_in: PythonO
     var outputs = 0
     if text_y:
         outputs = len(py_call(b.list, py_call(b.list, y_in)[0]))
-    elif ya is not None and Int(py=ya.ndim) == 2:
+    elif ya is not None and msel_is_array(ya, context) and Int(py=ya.ndim) == 2:
         outputs = Int(py=ya.shape[1])
     var holder = Python.list(PythonObject(None))
     var names = _tool_names(scoring, context)
@@ -1146,7 +1141,9 @@ def msel_cv_by_search(estimator: PythonObject, x_in: PythonObject, y_in: PythonO
     py_setitem(keywords, "error_score", error_score)
     py_setitem(keywords, "refit", PythonObject(False))
     py_setitem(keywords, "return_train_score", PythonObject(return_train))
-    var search = family_call_kw(msel_cls("GridSearchCV", context), keywords, estimator, grid)
+    py_setitem(keywords, "estimator", estimator)
+    py_setitem(keywords, "param_grid", grid)
+    var search = msel_carrier_search(msel_cls("GridSearchCV", context), keywords, context)
     var fields = msel_search_fields(search, context)
     py_setitem(fields, "_msel_cv_tool", Python.tuple(PythonObject(keep), method, PythonObject(indices), folds,
                                                      holder, PythonObject(outputs), xa.shape[0]))
@@ -1512,6 +1509,15 @@ def _place(preds: PythonObject, tests: PythonObject, n: Int, mut resident_rows: 
 def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`cross_val_predict(estimator, X, y, groups, cv, n_jobs, method)`."""
     var estimator = args[0]
+    # scikit-learn validates `method` before anything else (its
+    # `validate_params` StrOptions; lane w3-fix-b row 14): one exact-str read.
+    var method = args[6]
+    if py_type(method) is not msel_b().str:
+        raise Error("TypeError: native prediction method must be an exact string")
+    var asked = String(py=method)
+    if (asked != "predict" and asked != "predict_proba" and asked != "predict_log_proba"
+            and asked != "decision_function"):
+        raise Error(msel_cvp_method_words(String(py=py_call(msel_b().repr, method))))
     var jobs = msel_unit_jobs(args[5], PythonObject("raise"), "cross_val_predict", context)
     var got = msel_cv_folds(estimator, args[1], args[2], args[4], args[3], False, context)
     var x = got[0]
@@ -1538,9 +1544,6 @@ def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> 
     if base_check_indices_i64(base_helpers_key(context["family_msel_entries"]), msel_addr(held), n, n) != 0:
         raise Error("cross_val_predict only works for partitions")
     _ = held  # keep the Python object alive through the native calls above
-    var method = args[6]
-    if py_type(method) is not msel_b().str:
-        raise Error("TypeError: native prediction method must be an exact string")
     # THE ONE TYPED SEARCH RUN (lane mf-msel5, `msel_cv_by_search`): each
     # fold's test-side `method` answered by its unit, placed below as the
     # units' predictions are.

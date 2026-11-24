@@ -24,7 +24,7 @@ five off):
   IDN_HPDEV_FOLDS   -D MOJOLEARN_IDN_HPDEV_FOLDS_OFF   fold_ids,
                     select_fold_i64, select_folds_i64, select_mask_u8_i64,
                     mask_from_indices_u8, arange_i64, leave_range_i64,
-                    check_indices_i64, indices_overlap_i64, first_seen_i32,
+                    check_indices_i64, first_seen_i32,
                     strat_fold_assign_i32
   IDN_HPDEV_REDUCE  -D MOJOLEARN_IDN_HPDEV_REDUCE_OFF  reduce_stat's min,
                     max, argmax and integral test (the sequential float
@@ -47,8 +47,6 @@ bindings) and the refusal path. Device code: `core/input_device.mojo`.
   cast_f64_to_f32           `hpdev_try_cast_f64_to_f32` (was the candidate
                             arm IDN_HPDEV_CAST_F64, now the default)
   all_finite_f32/_f64       `hpdev_try_all_finite`
-  transpose_f32,
-  cast_colmajor_f64_to_f32  `hpdev_try_transpose_to_f32`
   strided_copy_bytes, check_lengths_i64, ragged_rows_bytes
                             the `*_binding`s below (host fallback:
                             `bindings/array_helpers.mojo`)
@@ -75,7 +73,6 @@ from bindings.hotpath_helpers_door import (
     bincount_i64_binding as host_bincount_i64_binding,
     check_indices_i64_binding as host_check_indices_i64_binding,
     equal_elements_binding as host_equal_elements_binding,
-    indices_overlap_i64_binding as host_indices_overlap_i64_binding,
     leave_range_i64_binding as host_leave_range_i64_binding,
     normal_init_f32_binding as host_normal_init_f32_binding,
     threshold_labels_i64_binding as host_threshold_labels_i64_binding,
@@ -111,7 +108,7 @@ from core.hotpath_impl import HpStat
 # unpack for are the runs the model-selection helper table publishes.
 from core.msel_helpers_device import (
     arange_i64_device_run, count_mask_u8_device_run, first_seen_i32_device_run, fold_ids_device_run,
-    indices_overlap_i64_device_run, leave_range_i64_device_run, mask_from_indices_u8_device_run,
+    leave_range_i64_device_run, mask_from_indices_u8_device_run,
     msel_gather_device_run, select_fold_i64_device_run, select_folds_i64_device_run,
     select_mask_u8_i64_device_run, strat_fold_assign_i32_device_run,
 )
@@ -390,23 +387,6 @@ def check_indices_i64_binding(
     with GILReleased(Python()):
         status = check_indices_i64_device_run(a, count, limit)
     return PythonObject(status)
-
-
-def indices_overlap_i64_binding(
-    a_addr: PythonObject, n_a: PythonObject, b_addr: PythonObject,
-    n_b: PythonObject, bound: PythonObject,
-) raises -> PythonObject:
-    """`indices_overlap_i64`, on the device
-    (`core/msel_helpers_device.mojo::indices_overlap_i64_device_run`)."""
-    var na = Int(py=n_a)
-    var nb = Int(py=n_b)
-    var limit = Int(py=bound)
-    var a = Int(py=a_addr)
-    var b = Int(py=b_addr)
-    var hit = 0
-    with GILReleased(Python()):
-        hit = indices_overlap_i64_device_run(a, na, b, nb, limit)
-    return PythonObject(hit)
 
 
 def strat_fold_assign_i32_binding(

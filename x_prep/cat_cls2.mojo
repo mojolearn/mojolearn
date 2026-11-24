@@ -31,6 +31,7 @@ from std.memory import bitcast
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_prep.common import FP, IP, p, raw, st, sti, ldi
+from x_prep.label_fast import IDN_LABEL
 
 #: PACK and PRESENT are the FAST + Apple default since the M3 A/B (n=1,
 #: quality identical): onehot taxi 32.2 -> 5.6 ms, ordinal taxi 28.2 -> 8.2 ms
@@ -41,6 +42,11 @@ comptime CAT_CLS2_PACK = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPL
 # TOMBSTONE: MOJOLEARN_X_PREP_FAST_CLS2_PRESENT_OFF (old path of the FAST Apple default, EXP:407 KEEP) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at f70ab5bcc0.
 # Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_CLS2_PRESENT_OFF.patch; record in docs/TOMBSTONES.md.
 comptime CAT_CLS2_PRESENT = CAT_CLS2_PACK
+#: The images whose op table carries ops 157-161 (lane w3-fix-c, 2026-11-23): the FAST + Apple
+#: default and every IDENTICAL image (IDN_LABEL already compiles 157-160 there). The binding's
+#: route choice is unchanged (`x_prep_cls2_cat` still exports only under CAT_CLS2_PACK); an encoder
+#: member refuses a CAT_FIT_PACK_* route word at MEMBER_OP_NEW on an image without these ops.
+comptime CAT_PACK_OPS = CAT_CLS2_PACK or IDN_LABEL
 #: presence flags per column (integer categories 0 .. CAT_R - 1)
 comptime CAT_R = 4096
 

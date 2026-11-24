@@ -115,7 +115,8 @@ MEMBER_OP_NEW parameters, OrdinalEncoder (Float64 words, 15 + sections): [0] kin
 [1] the category fit route: 0 CAT_FIT_UNIQUE, 1 CAT_FIT_SCAN (the fast
 image's unique scans), 2 CAT_FIT_PACK_SORT / 3 CAT_FIT_PACK_PRESENT (the
 fast image built with x_prep_cls2_cat: the packed route first, the scan
-when it did not hold the values, as the door), [2] the C08 fit_transform route 0 / 1 (`x_prep_c08_routes`
+when it did not hold the values, as the door; an image without ops 157-161,
+x_prep/cat_cls2.mojo CAT_PACK_OPS, refuses 2 / 3 at NEW), [2] the C08 fit_transform route 0 / 1 (`x_prep_c08_routes`
 bit 4 on the identical image: with `fit_output` the transform reads the
 fit's inverse), [3] R3 work region 0 / 1, [4] handle_unknown
 'use_encoded_value' 0 / 1 (0: 'error'), [5] unknown_value (NaN allowed; 0
@@ -255,6 +256,7 @@ from bindings.prep_encode_cats_run import (
     cat_grouped_sizes, cat_given_column, cat_given_state, CAT_FIT_INVERSE, CAT_FIT_SCAN, CAT_FIT_PACK_SORT,
     CAT_FIT_PACK_PRESENT,
 )
+from x_prep.cat_cls2 import CAT_PACK_OPS
 from bindings.prep_encode_ordinal_run import (
     OrdinalApply, OrdinalInverse, ordinal_transform_stage, ordinal_inverse_stage, ordinal_cards_clash,
     ordinal_auto_refusal, ord_number_text,
@@ -2674,6 +2676,12 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
         if _encoder(kind) and (source[1] < 0.0 or source[1] > 3.0):
             raise Error("member ABI: an encoder member's category fit route is CAT_FIT_UNIQUE, CAT_FIT_SCAN or a "
                         + "CAT_FIT_PACK_* route")
+        # lane w3-fix-c (2026-11-23): a packed route needs ops 157-161 (x_prep/cat_cls2.mojo CAT_PACK_OPS);
+        # an image without them refuses the word here instead of running an empty unit.
+        comptime if not CAT_PACK_OPS:
+            if _encoder(kind) and source[1] >= 2.0:
+                raise Error("member ABI: this image has no packed category fit route (CAT_FIT_PACK_*); the encoder "
+                            + "member's category fit route is CAT_FIT_UNIQUE or CAT_FIT_SCAN")
         if kind == PREP_KIND_ONEHOT and (source[4] < 0.0 or source[4] > 3.0 or source[5] < 0.0 or source[5] > 3.0
                                          or (source[5] != 3.0 and source[PREP_ENC_TAIL_ONEHOT + 5] != 0.0)):
             raise Error("member ABI: invalid OneHotEncoder handle_unknown or drop code")

@@ -129,7 +129,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identic
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from ensemble.host_layout import has_nan_f32_threaded
 from ensemble.nan_refusal import RF_NAN_REFUSAL
-from ensemble.rf_notices import rf_notice, RF_NOTICE_BINS_CLAMPED, RF_NOTICE_MAX_SAMPLES_IGNORED
+from ensemble.rf_notices import rf_notice, RF_NOTICE_MAX_SAMPLES_IGNORED
 
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
@@ -1765,10 +1765,10 @@ def rf_host_fit(
     var criterion = p.criterion
     if criterion == RF_CRITERION_END:
         criterion = RF_GINI if classification else RF_MSE
-    # `:2420-2426` -- the n_bins clamp.
+    # `:2420-2426` -- the n_bins clamp, silent (no notice: Andrew,
+    # 2026-11-24; ensemble/rf_notices.mojo).
     var notices = 0
     if p.max_n_bins > n_rows:
-        rf_notice(notices, RF_NOTICE_BINS_CLAMPED, notices_to_stderr)
         p.max_n_bins = n_rows
     # `:2429-2434`
     if not p.bootstrap and p.max_samples != Float32(1.0):

@@ -55,8 +55,9 @@ oracle) carries its review in the repository, written before the run: per
 expression the error's FIRST line must match in full, and the SHA256 of the
 patch bytes it reviewed. `review` binds a declaration to one run: it writes the
 `--evidence` file (the three record SHA256s, the patch SHA256, the cell's exact
-error) only for cells that REFUSED with a matching first line under the
-reviewed patch bytes. Any other error, a changed patch or an undeclared cell
+error) only for cells that REFUSED with a matching first line, or read DIVERGENT
+with in-cell byte-oracle errors (`oracle_errors`) every one of which matches,
+under the reviewed patch bytes. Any other error, a changed patch or an undeclared cell
 writes nothing, so the cell stays unreviewed and the arm MISSED; `check`
 still applies every rule above, the infrastructure exclusions included.
 """
@@ -414,7 +415,7 @@ def review(arm, clean_path, sab_path, restored_path, out_path, reviews=None, roo
     for label, path in zip(("clean", "sabotaged", "restored"), (clean_path, sab_path, restored_path)):
         records[label] = _record(path)
     sab = records["sabotaged"][0]
-    refusals = {}
+    refusals, oracles = {}, {}
     for key, entry in sorted(declared.items()):
         if key.split("/", 1)[0] not in arm["lanes"]:
             print(f"REVIEW {arm['arm']} {key}: not a lane of this arm, ignored")
@@ -423,20 +424,32 @@ def review(arm, clean_path, sab_path, restored_path, out_path, reviews=None, roo
             print(f"REVIEW {arm['arm']} {key}: declared for other patch bytes, not applied")
             continue
         cell = sab["cells"].get(key) or {}
+        proof = dict(product_check=entry["product_check"],
+                     why_fault_reaches_check=entry["why_fault_reaches_check"],
+                     declared=os.path.relpath(REVIEWS, ROOT))
+        # A lane's in-cell byte oracle (lane sab-host-missed, 2026-11-23): the cell reads
+        # DIVERGENT with one `oracle_errors` line per repeat instead of REFUSED. Every line
+        # must fullmatch the declared pattern; `check` (_oracle_caught) still requires one
+        # error per repeat and applies the infrastructure exclusions.
+        errors = cell.get("oracle_errors")
+        if (cell.get("verdict") == "DIVERGENT" and isinstance(errors, list) and errors and
+                all(isinstance(v, str) and v and re.fullmatch(entry["error_match"], v.split("\n", 1)[0])
+                    for v in errors)):
+            oracles[key] = dict(proof, errors=errors)
+            print(f"REVIEW {arm['arm']} {key}: bound (byte oracle)")
+            continue
         error = str(cell.get("error") or "")
         head = error.split("\n", 1)[0]
         if cell.get("verdict") != "REFUSED" or not re.fullmatch(entry["error_match"], head):
             print(f"REVIEW {arm['arm']} {key}: {cell.get('verdict')} {head[:160]!r} is not the reviewed refusal")
             continue
-        refusals[key] = dict(error=error, product_check=entry["product_check"],
-                             why_fault_reaches_check=entry["why_fault_reaches_check"],
-                             declared=os.path.relpath(REVIEWS, ROOT))
+        refusals[key] = dict(proof, error=error)
         print(f"REVIEW {arm['arm']} {key}: bound")
-    if refusals:
+    if refusals or oracles:
         Path(out_path).write_text(json.dumps(dict(
-            arm=arm["arm"], patch_sha256=patch_sha, refusals=refusals,
+            arm=arm["arm"], patch_sha256=patch_sha, refusals=refusals, oracles=oracles,
             records={label: digest for label, (_, digest) in records.items()}), indent=1, sort_keys=True) + "\n")
-    return len(refusals)
+    return len(refusals) + len(oracles)
 
 
 def plan(arm):

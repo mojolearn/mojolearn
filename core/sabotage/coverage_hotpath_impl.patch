@@ -1,7 +1,7 @@
 --- a/core/hotpath_impl.mojo
 +++ b/core/hotpath_impl.mojo
-@@ -692,6 +692,15 @@
-     return hit
+@@ -657,6 +657,15 @@
+     return status
  
  
 +def _sab_swap_ends_i32(p: MutPointer[Int32, MutUntrackedOrigin], rows: Int):
@@ -16,7 +16,7 @@
  def fold_ids(
      codes_addr: Int, rows: Int, k: Int, splits: Int, counts_addr: Int,
      fold_addr: Int, fold_counts_addr: Int,
-@@ -723,6 +732,7 @@
+@@ -688,6 +697,7 @@
                  fp.unsafe_store(i, Int32(fold))
              fcp.unsafe_store(fold, Int64(size))
              offset += size
@@ -24,7 +24,7 @@
          return 0
      if k < 1:
          raise Error("fold_ids: n_classes must be positive")
-@@ -770,6 +780,7 @@
+@@ -735,6 +745,7 @@
              np.unsafe_store(c, Int64(counts[c]))
          for fold in range(splits):
              fcp.unsafe_store(fold, Int64(per_fold[fold]))
@@ -32,7 +32,7 @@
      if bad:
          raise Error("fold_ids: class code out of range")
      return 0
-@@ -863,6 +874,8 @@
+@@ -828,6 +839,8 @@
              if mp.unsafe_load(r) == 0:
                  set += 1
              mp.unsafe_store(r, 1)

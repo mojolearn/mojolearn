@@ -1,5 +1,5 @@
 {
- "#": "Committed reviews of fault arms whose fault surfaces only as a product refusal or a lane's in-cell byte oracle (tools/coverage_sabotage.py docstring, DECLARED REVIEWS). Each entry is bound to one run by `coverage_sabotage.py review`: the cell must have REFUSED, its error's first line must fullmatch error_match, and the patch bytes must hash to patch_sha256. A changed patch needs a new review. Lane sab-missed-5, 2026-11-23, from nvc1-0003 (L40S, tag nvc-sab-20261123T044409Z-0c21d8, batches mamba-2, mamba-3, x_decomp-4) and the 0860 reviews of the same two mamba arms (verification/records/cells/verification_faults/2026-10-26-0860/mamba-2 and mamba-3). Lane sab-gpu-missed, 2026-11-23, from nvc1-0003 (tag nvc-sab-20261123T125906Z-5a1d18, batches core-2, core-4): the two TargetEncoder fold reviews, written from the door's refusal text (bindings/prep_encode_native_door.mojo) before the rerun; the rerun's review_*.txt says whether they bound. Lane sab-gpu-missed, from nvc1-0004 (tag nvc-sab-20261123T154446Z-dd75b2, batch x_sequence-5): the opt_public and seq_tensor byte-oracle reviews, written from that run's refusal lines.",
+ "#": "Committed reviews of fault arms whose fault surfaces only as a product refusal or a lane's in-cell byte oracle (tools/coverage_sabotage.py docstring, DECLARED REVIEWS). Each entry is bound to one run by `coverage_sabotage.py review`: the cell must have REFUSED, its error's first line must fullmatch error_match, and the patch bytes must hash to patch_sha256. A changed patch needs a new review. Lane sab-missed-5, 2026-11-23, from nvc1-0003 (L40S, tag nvc-sab-20261123T044409Z-0c21d8, batches mamba-2, mamba-3, x_decomp-4) and the 0860 reviews of the same two mamba arms (verification/records/cells/verification_faults/2026-10-26-0860/mamba-2 and mamba-3). Lane sab-gpu-missed, 2026-11-23, from nvc1-0003 (tag nvc-sab-20261123T125906Z-5a1d18, batches core-2, core-4): the two TargetEncoder fold reviews, written from the door's refusal text (bindings/prep_encode_native_door.mojo) before the rerun; the rerun's review_*.txt says whether they bound. Lane sab-gpu-missed, from nvc1-0004 (tag nvc-sab-20261123T154446Z-dd75b2, batch x_sequence-5): the opt_public and seq_tensor byte-oracle reviews, written from that run's refusal lines. Lane sab-host-missed, 2026-11-23, from the host run at 0be19c4f42 (~/mojolearn-evidence/sab-host-0be19c4f42/sabpar): the refusal and byte-oracle reviews of core-hotpath_impl, core-native_json_impl, core-scaler_fit_impl, ivf-index_arrays_impl, x_neighbors p2m_const_cols / p2m_transpose_i / row_all_zero, tokenizer-tokenizer_host_shell_impl written from that run's error lines; those of core-hotpath_impl_rows, core-sequential_inputs_impl, tokenizer-ranks and native_json_impl's hf-causal-lm are predicted from the code (their run failed to build or did not reach the check) and are confirmed only by the rerun's review_*.txt.",
  "coverage-precise-mamba-m3_session_copy_in": {
   "mamba3-decode-session/base": {
    "product_check": "tools/identity_lanes/coverage.py:564 _coverage_decode_session: _same_bytes(steps after load_state, per-call steps after the same four tokens), the lane's independent byte oracle against the per-call Mamba3Block.step path, which shares no code with the session's load_state.",
@@ -38,8 +38,8 @@
    "why_fault_reaches_check": "forest-shard's fit_forest on a GPU column rebases its four tree ranges through the GPU base image's parallel table (bindings/parallel_base_entry_device.mojo PB_REBASE_OFFSETS); the patch makes _rebase_kernel flag the first merged offset as out of int32, so the status word refuses every valid rebase (written before the run, lane verify-gaps 2026-11-23).",
    "error_match": "(?:[A-Za-z]+: )?msel_rebase_offsets_i32: a merged offset leaves int32",
    "patch_sha256": "7f0db7d221a28317efeda46df636db3e0bc54168c1b2f04af72d0fb3ed7d9059"
-   }
-  },
+  }
+ },
  "coverage-core-count-fold-hits": {
   "x-prep-user-objects/base": {
    "product_check": "bindings/prep_encode_native_door.mojo, the user-cv admission of TargetEncoder (the loop over the folds after the row -> fold table is filled): every fold's training list must be exactly the rows outside its test fold, checked by its size and by the core check_indices_i64 and count_fold_hits_i64; any other list is refused by name.",
@@ -53,7 +53,7 @@
    "product_check": "bindings/prep_encode_native_door.mojo, the user-cv admission of TargetEncoder (the loop over the folds after the row -> fold table is filled): every fold's training list must be exactly the rows outside its test fold, checked by its size and by the core check_indices_i64 and count_fold_hits_i64; any other list is refused by name.",
    "why_fault_reaches_check": "The patch stores fold labels 0 and 1 exchanged in assign_fold_i64 (core/hotpath_impl_rows.mojo) while count_fold_hits_i64 reads the table as written. For the valid partitions x-prep-user-objects passes, fold 0's table entries are then fold 1's test rows: either the fold sizes no longer match the training list sizes, or fold 0's training list (which holds fold 1's test rows) hits fold 0; both refuse with this line, and the clean build fits.",
    "error_match": "NotImplementedError: (NotImplementedError: )?mojolearn: TargetEncoder cv folds whose training rows are not every row outside the test fold are not implemented",
-   "patch_sha256": "e1fb05702b9775c8d78f7fe8fbc7821eeb7274bca86f745c4e2a7db5384aa4e4"
+   "patch_sha256": "745a622eaf224b6ca89323cfe04612bb29e80a8af1cf8bef6a7c57604fbac5ed"
   }
  },
  "coverage-sequence-opt_public": {
@@ -70,6 +70,98 @@
    "why_fault_reaches_check": "The patch puts every value uploaded into a resident tensor, every downloaded value and the zero fill one ulp off (sequence/seq_tensor.mojo), so the resident run starts from and returns different parameters than the host-array run (256 of 1056 bytes differ on the L40S, device column, nvc1-0004 x_sequence-5); the clean build matches.",
    "error_match": "ValueError: resident-tensor RMSprop params and host-array RMSprop params differ: [0-9]+ bytes of [0-9]+",
    "patch_sha256": "63ce1c5790f92f386a221c60ca5d6c2339e2e0227a4edc4cfaca57f46828ea78"
+  }
+ },
+ "coverage-core-native_json_impl": {
+  "hf-checkpoint/base": {
+   "product_check": "bindings/native_json_door.mojo:47 JsonReader.take: the native JSON reader refuses a document whose next byte is not the separator it requires.",
+   "why_fault_reaches_check": "core/native_json_impl.mojo:25 json_digits_end (patched) ends every run of three or more digits one digit early, so JsonReader.number (bindings/native_json_door.mojo:144) returns with the last digit unread and the enclosing array or object's take(44) (bindings/native_json_door.mojo:208/222 -> :47) finds a digit where it needs ',' and raises. tools/identity_break.py:8101 SafetensorsFile(one/model.safetensors) parses the header's data_offsets (three-plus digit offsets) through the tokenizer host's reader; host run 0be19c4f42 tokenizer-2 refused at byte 62.",
+   "error_match": "ValueError: JSON: expected byte 44 at [0-9]+",
+   "patch_sha256": "8b52e9896a78578cd10d1b2e49e588c911afaab732685d9a3d6fdc694e4d9aab"
+  },
+  "hf-model-surface/base": {
+   "product_check": "bindings/native_json_door.mojo:47 JsonReader.take: the native JSON reader refuses a document whose next byte is not the separator it requires.",
+   "why_fault_reaches_check": "core/native_json_impl.mojo:25 json_digits_end (patched) ends every run of three or more digits one digit early, so JsonReader.number (bindings/native_json_door.mojo:144) returns with the last digit unread and the enclosing array or object's take(44) (bindings/native_json_door.mojo:208/222 -> :47) finds a digit where it needs ',' and raises. tools/identity_lanes/coverage.py:1110 HFConfig.from_json reads config.json (max_position_embeddings, rope_theta) through the tokenizer host's reader; host run 0be19c4f42 tokenizer-2 refused at byte 242.",
+   "error_match": "ValueError: JSON: expected byte 44 at [0-9]+",
+   "patch_sha256": "8b52e9896a78578cd10d1b2e49e588c911afaab732685d9a3d6fdc694e4d9aab"
+  },
+  "hf-causal-lm/base": {
+   "product_check": "bindings/native_json_door.mojo:47 JsonReader.take, reached from causal_model_load (bindings/causal_lm_construct_door.mojo:1245) in _mojolearn_runtime_neural_host, raised as ValueError (causal_lm_construct_door.mojo:1272).",
+   "why_fault_reaches_check": "core/native_json_impl.mojo:25 json_digits_end (patched) ends every run of three or more digits one digit early, so JsonReader.number (bindings/native_json_door.mojo:144) returns with the last digit unread and the enclosing array or object's take(44) (bindings/native_json_door.mojo:208/222 -> :47) finds a digit where it needs ',' and raises. tools/identity_break.py CausalLM.load(root) of the first HF_ARCHITECTURES row reads config.json and the shard headers through causal_model_config_door's reader in the runtime neural host, which this arm now rebuilds (it was unrebuilt, so unmoved, in 0be19c4f42). Not yet observed: predicted from the same reader and the same three-plus digit fields as hf-model-surface.",
+   "error_match": "ValueError: JSON: expected byte 44 at [0-9]+",
+   "patch_sha256": "8b52e9896a78578cd10d1b2e49e588c911afaab732685d9a3d6fdc694e4d9aab"
+  }
+ },
+ "coverage-tokenizer-ranks": {
+  "tokenized-corpus/base": {
+   "product_check": "bindings/lm_corpus_prepare_run.mojo:308 _vocabulary_check: the sha256 of ranks_text of the reloaded cached ranks.tsv must equal the identity sha256 vocabulary.json pins (written from the trained vocabulary).",
+   "why_fault_reaches_check": "tokenizer/impl/ranks.mojo parse_rank_table (patched) flips the low bit of every token byte; the second LC.prepare (tools/identity_break.py tokenized-corpus, `again`) reloads the cached ranks.tsv in _mojolearn_runtime_catalog_host (lm_corpus_prepare_run.mojo:304 bpe_handle_load -> encoding.mojo load_bpe_tokenizer_from -> load_rank_table -> parse_rank_table), so ranks_text of the loaded table differs from the trained text whose hash vocabulary.json pins. Not yet observed (the catalog host joins the arm now); the same check refused under the host shell arm in 0be19c4f42 tokenizer-4.",
+   "error_match": "ValueError: mojolearn: cached vocabulary does not match its vocabulary\\.json; remove it to rebuild",
+   "patch_sha256": "2f774a148157c6640ef14f4d491e296153315126687a3248400c68cf12ff0292"
+  }
+ },
+ "coverage-tokenizer-tokenizer_host_shell_impl": {
+  "tokenized-corpus/base": {
+   "product_check": "bindings/lm_corpus_prepare_run.mojo:308 _vocabulary_check: the sha256 of ranks_text of the reloaded cached ranks.tsv must equal the identity sha256 vocabulary.json pins (written from the trained vocabulary).",
+   "why_fault_reaches_check": "tokenizer/impl/tokenizer_host_shell_impl.mojo bpe_handle_load (patched, first hunk) makes ids 0 and 1 trade tokens in every loaded rank table; the second LC.prepare reloads the cached ranks.tsv through it (lm_corpus_prepare_run.mojo:304), so ranks_text of the loaded table no longer hashes to the identity vocabulary.json pins. Observed: host run 0be19c4f42 tokenizer-4.",
+   "error_match": "ValueError: mojolearn: cached vocabulary does not match its vocabulary\\.json; remove it to rebuild",
+   "patch_sha256": "5bab4cba9e0b5cb33c6679efca3df4cb539c0ce05cfedd5cd5f6bff26c45f35a"
+  }
+ },
+ "coverage-core-hotpath_impl": {
+  "x-metrics-splitters/base": {
+   "product_check": "bindings/msel_split_plan_run.mojo:884-889, MSEL_FILL_INDEXED (LeavePOut): msel_count_mask_u8 of the mask msel_mask_from_indices_u8 just wrote must equal the split's test size, else 'a split's test rows are not distinct'.",
+   "why_fault_reaches_check": "LeavePOut(2).split(Xs[:9]) (tools/identity_lanes/metrics.py:259) fills its splits through the CPU model-selection helper table published by the core host; MH_MASK_FROM_INDICES_U8 runs core/hotpath_impl.mojo mask_from_indices_u8, where the patch flips the low bit of every mask byte after the set, so the 2 test rows read 0 and the 7 others 1: count 7 != 2, refused by name at the first split.",
+   "error_match": "RuntimeError: mojolearn: a split's test rows are not distinct",
+   "patch_sha256": "45e27f93d1e3d83e8e7f4e0ada1598f20b27bb058b0077bf0d43425c83c4930e"
+  }
+ },
+ "coverage-core-scaler_fit_impl": {
+  "classical-float16-sequences/base": {
+   "product_check": "tools/identity_lanes/coverage.py:1349, the lane's byte oracle: StandardScaler statistics fitted on a list of float16 rows must be the bytes of the fit on the float32 ndarray of the same values (the half -> float32 widening is exact).",
+   "why_fault_reaches_check": "The list input is not float32 C-order, so the scaler admission casts it through core/scaler_fit_impl.mojo scaler_cast (providers/python/preprocessing_input_pyapi_door.mojo:136-140), where the patch adds 1.0 to the first cast value; the float32 C-order ndarray skips scaler_cast (the same branch), so only the listed fit's mean_/var_/scale_ move and the oracle refuses.",
+   "error_match": "ValueError: standard scaler statistics from a list of float16 rows and standard scaler statistics from the float32 ndarray differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "8811346a2f9948a8f9508eb435b843fa9ddca236676f7c21831a5b4a49710049"
+  }
+ },
+ "coverage-core-sequential_inputs_impl": {
+  "classical-float16-sequences/base": {
+   "product_check": "tools/identity_lanes/coverage.py:1338, the lane's byte oracle: LinearRegression coef_ fitted on a list of float16 rows must be the bytes of the fit on the float16 ndarray of the same values.",
+   "why_fault_reaches_check": "A list of float16 row arrays is admitted through the sequence plan: sequence_write converts every leaf element through _sequence_store (core/sequential_input_plan.mojo:273), where the patch XORs the stored half's low bit; the float16 ndarray is a borrowed buffer and takes no sequence plan, so the listed OLS fit sees different halves and the first oracle refuses.",
+   "error_match": "ValueError: ols coef_ from a list of float16 rows and ols coef_ from a float16 ndarray differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "e2e3a610d6fbbb221643ece7155dd5c3a629a7e5cdb1e8cd64a80899f9e6ea58"
+  }
+ },
+ "coverage-ivf-index_arrays_impl": {
+  "ivf-distributed/base": {
+   "error_match": "DistributedIVFIndex distances and plain IVFIndex distances differ: [0-9]+ bytes of 2048",
+   "patch_sha256": "7123fe03a97e2515f7ffb1911e4b0573aa6a47a71e3aa3e54b7a419e639a84e1",
+   "product_check": "tools/identity_lanes/coverage.py:1582 _mismatch_bytes(DistributedIVFIndex result, plain IVFIndex.search result), the lane's byte oracle against the plain search.",
+   "why_fault_reaches_check": "All three faulted functions are distributed-only: ivf_shard_plan_host and ivf_merge_shards_host are reached only through bindings/parallel_ivf_entry_host.mojo:32/34, ivf_finalize_distances_host only through parallel_ivf_entry_host.mojo:38 and the ivf_finalize_distances door that bindings/parallel_shard_native_door.mojo:1528 calls after the merge; plain IVFIndex.search calls none of them. DistributedIVFIndex.from_index/search on the CPU column runs them, the merge steps every merged distance one ulp, and the first comparison (distances) differs: 512 of 2048 bytes (the low byte of each of 512 float32)."
+  }
+ },
+ "coverage-precise-x_neighbors-p2m_const_cols": {
+  "x-neighbors-nearest-centroid/base": {
+   "error_match": "ValueError: All features have zero variance\\. Division by zero\\.",
+   "patch_sha256": "fe2e7c6471794003de754ff45d59869b482c88a926a6aa128e29ff968d2d5e5e",
+   "product_check": "core/xneighbors_member.mojo:846 nc_check_variance(outcome.constant) -> neighbors/neighbors_local_run.mojo:131, NearestCentroid.fit's public zero-variance refusal.",
+   "why_fault_reaches_check": "The lane's exact_rows fit (tools/identity_lanes/neighbors.py:52) has zero within-class std, so nc_fit_run (neighbors/nearest_centroid_run.mojo:95-97) runs plan.constant -> core/nearest_centroid_plan.mojo:236 p2m_const_cols -> x_neighbors/host_ops.mojo op_p2m_const_cols, whose flag the patch inverts; constant() then reports every column constant for rows that vary, and the fit raises. The flag is a Boolean whose only reader is this refusal, so no digest can carry it."
+  }
+ },
+ "coverage-precise-x_neighbors-p2m_transpose_i": {
+  "knn-clf/base": {
+   "error_match": "fitted label columns and input labels transposed differ: [0-9]+ bytes of 8192",
+   "patch_sha256": "a651eae5f3389daf209da848006a0df593140c3ea9ed710280313b0ff44f33df",
+   "product_check": "tools/identity_break.py:2813 _mismatch_bytes('fitted label columns' = the public save file's y_cols, 'input labels transposed' = numpy y2.T), the lane's independent byte oracle; it shares no code with the native transpose.",
+   "why_fault_reaches_check": "KNeighborsClassifier.fit with the 2-D y2 -> bindings/neighbors_knn_native_door.mojo -> neighbors/neighbors_knn_run.mojo:725 driver.run('p2m_transpose_i') -> x_neighbors/host_ops.mojo op_p2m_transpose_i, where the patch adds one to label 0 of output 0; the stored y_cols then differ from y2.T in exactly that label (1 byte of 8192), while the majority vote hides it from the predict hash."
+  }
+ },
+ "coverage-precise-x_neighbors-row_all_zero": {
+  "x-cluster-agglo-linkages/base": {
+   "error_match": "ValueError: Cosine affinity cannot be used when X contains zero vectors",
+   "patch_sha256": "95f1ccac21471ab9d915205f31312e9be63357110c1735d1c886edfcbc2fd95c",
+   "product_check": "bindings/cfb_agglo_door.mojo:204 agglo_check_zero_rows(zrow.any_zero()) -> cluster/cfb_agglo_run.mojo:136, the cosine AgglomerativeClustering fit's zero-vector refusal.",
+   "why_fault_reaches_check": "The lane's cosine fit on _cluster_cosine_rows (shifted off the origin, no zero row; tools/identity_lanes/cluster.py:428) runs agglo_zero_rows_run -> xn_row_all_zero -> x_neighbors/host_ops.mojo op_row_all_zero, where the patch inverts row 0's flag; any_zero() is then true and the fit raises. The per-row flags have no reader but this refusal."
   }
  }
 }

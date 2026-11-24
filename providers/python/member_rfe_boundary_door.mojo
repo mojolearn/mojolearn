@@ -164,6 +164,25 @@ def rfe_base_admit_door(estimator: PythonObject, g: PythonObject, context: Pytho
     return _rfe_base_admit(estimator, g, context, b, Python.list(), True)
 
 
+def rfe_member_context_connect(member_context: PythonObject) raises:
+    """Connect loaded NumPy's native types in the estimator's OWN owner context (its plan's `context`), once
+    per RFE fit or admission, before anything is admitted there (lane w3-fix-a, row 3). RFE's door connects
+    its encode and select contexts only; since lane mf-rfe6 the target, the labels, the fit parameters and the
+    leaf admission read y / weights / eval sets in the member's context (the estimator's fit door's words),
+    which no public operation of that estimator may have connected yet (a cold process, or the trees
+    context copy `python/mojolearn/_native_msel_more.py` `owner_for` takes at import, which no public call
+    ever connects). Unconnected, every ndarray there was refused by the shared admission ("Sequential
+    requires native input types", bindings/sequential_admission_door.mojo), before the route's own words.
+    The same connection the msel keyword admission makes for its plan context
+    (bindings/msel_estimator_native_door.mojo `_msel_admitted_dispatch`). Connected: one dict probe. A
+    context without the connection's tables (none is expected) is left as it is."""
+    if member_context is None:
+        return
+    if py_get(member_context, "native_value_types") is None or py_get(member_context, "modules") is None:
+        return
+    classical_connect_numpy(member_context)
+
+
 def _rfe_base_admit(estimator: PythonObject, g: PythonObject, context: PythonObject, b: PythonObject,
                     labels: PythonObject, raising: Bool) raises -> RfeBase:
     var base = RfeBase()
@@ -194,6 +213,7 @@ def _rfe_base_admit(estimator: PythonObject, g: PythonObject, context: PythonObj
     var classifier = Bool(py=plan["classifier"])
     var template = prep_estimator_clone(estimator, context)
     var member_context = plan["context"]
+    rfe_member_context_connect(member_context)
     var fields = py_call(plan["fields_get"], template, py_type(template))
     var owner = MemberOwner()
     if raising:
@@ -534,7 +554,9 @@ def rfe_fit_keywords(estimator: PythonObject, fit_params: PythonObject, context:
         if py_type(keys[k]) is not b.str:
             raise Error("TypeError: native estimator keyword names must be exact strings")
         if not py_contains(allowed, keys[k]):
-            raise Error("TypeError: " + String(py_type(estimator).__name__) + ".fit got an unexpected keyword argument '"
+            # Python's own words for the estimator's fit (`<Class>.fit() got ...`): RFE raises what the estimator's
+            # fit raises (test_rfe_gbdt_fit_params::test_an_unknown_key_keeps_the_fit_door; lane w3-fix-a, row 2).
+            raise Error("TypeError: " + String(py_type(estimator).__name__) + ".fit() got an unexpected keyword argument '"
                         + String(keys[k]) + "'")
         classical_admit_value(py_get(fit_params, keys[k]), native)
 

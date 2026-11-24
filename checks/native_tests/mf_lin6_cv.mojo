@@ -205,7 +205,7 @@ def check_kfold_one() raises:
         _ = msel_plan_kfold(route, 7, 1, False, MselSeed(0, False), False)
     except problem:
         door = String(problem)
-    require(len(door) > 0, "the door's KFold(1) plan refuses")
+    require(door.byte_length() > 0, "the door's KFold(1) plan refuses")
     var spec = _spec(MSEL_SPEC_KFOLD)
     spec.k = 1
     var got = String("")
@@ -239,7 +239,7 @@ def check_time_series_unread() raises:
         _ = msel_plan_time_series(2, 5, 0, False, 0, 0)
     except problem:
         door = String(problem)
-    require(len(door) > 0, "the door's TimeSeriesSplit(5) plan over 2 rows refuses")
+    require(door.byte_length() > 0, "the door's TimeSeriesSplit(5) plan over 2 rows refuses")
     var first = String("")
     try:
         _ = msel_spec_sides(spec, 2, 0, 0, MselGroupCodes())

@@ -156,10 +156,11 @@ def _rfe_unit(arg):
             r = RFE(ml.GradientBoosting(n_estimators=6), n_features_to_select=2, importance_getter="coef_").fit(X, t)
         else:  # "all": no round
             r = RFE(ml.GradientBoosting(n_estimators=6), n_features_to_select=X.shape[1]).fit(X, t)
+        # the reads are inside the try (w3-integrate): a refusal at predict is a digest line, not a crash of the pool
+        return [(tag + "_support", _digest(np.asarray(r.support_, dtype=bool))),
+                (tag + "_ranking", _digest(r.ranking_)), (tag + "_predict", _digest(r.predict(X)))]
     except Exception as error:  # noqa: BLE001
         return _raised(tag, error)
-    return [(tag + "_support", _digest(np.asarray(r.support_, dtype=bool))), (tag + "_ranking", _digest(r.ranking_)),
-            (tag + "_predict", _digest(r.predict(X)))]
 
 
 def _sk_unit(arg):
@@ -178,9 +179,11 @@ def _sk_unit(arg):
         else:
             s = fs.SelectFromModel(ml.GradientBoostingRegressor(n_estimators=6), max_features=2,
                                    threshold=-np.inf).fit(X, t)
+        # the support read is inside the try (w3-integrate): SelectFromModel reads the importances here, and a
+        # refusal there must be a digest line, not an exception that ends the whole pool
+        return [("sk_" + which + "_support", _digest(np.asarray(s.get_support(), dtype=bool)))]
     except Exception as error:  # noqa: BLE001
         return _raised("sk_" + which, error)
-    return [("sk_" + which + "_support", _digest(np.asarray(s.get_support(), dtype=bool)))]
 
 
 def _unit(arg):

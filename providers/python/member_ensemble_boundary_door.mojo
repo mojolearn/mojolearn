@@ -189,7 +189,7 @@ from providers.python.member_rfe_boundary_door import (
 )
 from bindings.prep_classify_prog_run import ClsRunPlan
 from core.msel_refusal_words import (
-    msel_empty_scoring_words, msel_cvp_method_words, msel_kfold_words, MSEL_REFIT_CALLBACK_WORDS, MSEL_NO_FITS_WORDS,
+    msel_empty_scoring_words, msel_kfold_words, MSEL_REFIT_CALLBACK_WORDS, MSEL_NO_FITS_WORDS,
 )
 from bindings.prep_keys_unpack import prep_keys
 
@@ -796,7 +796,7 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
                    fold_train^, fold_test^):
         return False
     _finish_split(owner, split)
-    if len(late) != 0:
+    if late.byte_length() != 0:
         meta_plan_refuse(Int(owner.plan.params[1]), late^, True)
     return True
 
@@ -3494,11 +3494,12 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                 tool_respond = MEMBER_OP_PREDICT_PROBA
                 tool_log = True
             else:
-                # ANOTHER METHOD (lane mf-ens6b): scikit-learn's own call fails
-                # (sklearn 1.9 model_selection/_validation.py line 1018,
-                # cross_val_predict's `method` StrOptions); its words, the
-                # options in sorted order (a set prints in hash order).
-                raise Error(msel_cvp_method_words(String(py=py_call(b.repr, tool[1]))))
+                # ANOTHER METHOD: not taken. The one door that sets a method,
+                # bindings/msel_cv_door.mojo `msel_cross_val_predict`, refuses
+                # one outside scikit-learn's options in its words before any
+                # fold (lane w3-fix-b row 14: this admission's refusal never
+                # surfaced, the serving admission swallows it).
+                return False
             if len(keys) > 0:
                 raise Error("RuntimeError: search admission invariant: a cv tool asks a response method and scorers at once (the carrier sets one of the two)")
     # Where the fold rows live (the docstring): read once per admission.
@@ -4965,12 +4966,14 @@ def _decode_text_outputs(result: PythonObject, labels: PythonObject, context: Py
     decoder, one list), then one list per row of its outputs' labels."""
     var rows = Int(py=result.shape[0])
     var outputs = Int(py=result.shape[1])
-    var src = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=msel_addr(result)) if rows > 0 else MutPointer[
-        Int64, MutUntrackedOrigin](unsafe_from_address=0)
+    # the RUN's block address, read once; a Pointer is built from it only when there are rows (a constant
+    # null Pointer is refused at compile time)
+    var src_addr = msel_addr(result) if rows > 0 else 0
     var decoded = Python.list()
     for j in range(outputs):  # driver-loop: over the outputs (one native column copy and one decode each)
         var column = family_array(Python.tuple(rows), "<i8", context)
         if rows > 0:
+            var src = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=src_addr)
             var dst = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=msel_addr(column))
             for i in range(rows):  # driver-loop: over the rows (output j's codes)
                 dst[i] = src[i * outputs + j]

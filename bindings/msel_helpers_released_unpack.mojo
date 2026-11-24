@@ -17,7 +17,6 @@ from std.python._cpython import GILReleased
 from core.entry_table import EntryRef
 from core.msel_helpers_calls import (
     msel_arange_i64 as _msel_arange_i64,
-    msel_indices_overlap_i64 as _msel_indices_overlap_i64,
     msel_gather_i64 as _msel_gather_i64,
     msel_store_alloc as _msel_store_alloc,
     msel_store_read as _msel_store_read,
@@ -32,13 +31,6 @@ def msel_arange_i64(entry: EntryRef, dst: Int, start: Int, n: Int) raises -> Int
     var result = 0
     with GILReleased(Python()):
         result = _msel_arange_i64(entry, dst, start, n)
-    return result
-
-
-def msel_indices_overlap_i64(entry: EntryRef, a: Int, na: Int, b: Int, nb: Int, bound: Int) raises -> Int:
-    var result = 0
-    with GILReleased(Python()):
-        result = _msel_indices_overlap_i64(entry, a, na, b, nb, bound)
     return result
 
 

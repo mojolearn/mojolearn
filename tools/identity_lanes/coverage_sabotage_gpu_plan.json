@@ -102,8 +102,7 @@
    "arm_lanes": {
     "coverage-core-device_fold_mask": [
      "x-metrics-splitters",
-     "cross-val",
-     "x-lasso-cv"
+     "cross-val"
     ]
    },
    "arms": [
@@ -119,8 +118,7 @@
    "id": "core-3",
    "lanes": [
     "x-metrics-splitters",
-    "cross-val",
-    "x-lasso-cv"
+    "cross-val"
    ],
    "patches": [
     "core/sabotage/coverage_device_fold_mask.patch"
@@ -130,15 +128,15 @@
    "arm_lanes": {
     "coverage-core-hotpath_impl": [
      "x-metrics-splitters",
-     "cross-val",
-     "x-lasso-cv"
+     "cross-val"
     ]
    },
    "arms": [
     "coverage-core-hotpath_impl"
    ],
    "builds": [
-    "build_core_host"
+    "build_core_host",
+    "build_runtime_model_selection_host"
    ],
    "columns": [
     "cpu"
@@ -147,8 +145,7 @@
    "id": "core-4",
    "lanes": [
     "x-metrics-splitters",
-    "cross-val",
-    "x-lasso-cv"
+    "cross-val"
    ],
    "patches": [
     "core/sabotage/coverage_hotpath_impl.patch"
@@ -1039,7 +1036,8 @@
    "builds": [
     "build_tokenizer_host",
     "build_training",
-    "build_training_host"
+    "build_training_host",
+    "build_runtime_catalog_host"
    ],
    "columns": [
     "cpu",
@@ -1247,8 +1245,8 @@
     "coverage-training-optimizer_public_common"
    ],
    "builds": [
-    "build_training",
-    "build_training_host"
+    "build_tokenizer_host",
+    "build_training"
    ],
    "columns": [
     "cpu",
@@ -1450,10 +1448,14 @@
      "x-decomp-robust-cov",
      "x-decomp-als",
      "x-decomp-lu"
+    ],
+    "coverage-x_decomp-api-lu": [
+     "x-decomp-lu"
     ]
    },
    "arms": [
-    "coverage-x_decomp-api"
+    "coverage-x_decomp-api",
+    "coverage-x_decomp-api-lu"
    ],
    "builds": [
     "build_x_decomp",
@@ -1533,7 +1535,8 @@
      "x-decomp-robust-cov",
      "x-decomp-lstsq-rsvd",
      "x-decomp-manifold",
-     "x-decomp-rsvd-rank-deficient"
+     "x-decomp-rsvd-rank-deficient",
+     "x-decomp-als"
     ]
    },
    "arms": [
@@ -1551,7 +1554,8 @@
     "x-decomp-robust-cov",
     "x-decomp-lstsq-rsvd",
     "x-decomp-manifold",
-    "x-decomp-rsvd-rank-deficient"
+    "x-decomp-rsvd-rank-deficient",
+    "x-decomp-als"
    ],
    "patches": [
     "x_decomp/checks/sabotage/coverage_select_dev.patch"
@@ -1567,13 +1571,11 @@
     "coverage-x_decomp-select_ops"
    ],
    "builds": [
-    "build_x_decomp",
     "build_x_decomp_host",
     "build_runtime_decomp_host"
    ],
    "columns": [
-    "cpu",
-    "device"
+    "cpu"
    ],
    "family": "x_decomp",
    "id": "x_decomp-6",
@@ -2176,6 +2178,32 @@
    ],
    "patches": [
     "x_ann/checks/sabotage/resident_index_py_dn_ann.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-x_linear-cv_fold_ids_run": [
+     "x-lasso-cv"
+    ]
+   },
+   "arms": [
+    "coverage-x_linear-cv_fold_ids_run"
+   ],
+   "builds": [
+    "build_runtime_linear_host",
+    "build_runtime_model_selection_host",
+    "build_x_linear_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "x_linear",
+   "id": "x_linear-3",
+   "lanes": [
+    "x-lasso-cv"
+   ],
+   "patches": [
+    "x_linear/sabotage/coverage_cv_fold_ids_run.patch"
    ]
   }
  ]

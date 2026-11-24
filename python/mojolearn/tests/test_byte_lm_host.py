@@ -212,7 +212,7 @@ def test_native_helpers_fall_back_to_the_cpu_binding_only_for_the_three(fake_hos
     monkeypatch.delitem(_buffer._NATIVE, 'all_finite_f32')
     assert _buffer._native('all_finite_f32') is fake_host.all_finite_f32
     with pytest.raises(ImportError):
-        _buffer._native('transpose_f32')
+        _buffer._native('cast_colmajor_f64_to_f32')  # no binding exports it (deleted 2026-11-23)
 
 
 def test_cpu_only_selector_stubs_raise_by_name(monkeypatch):

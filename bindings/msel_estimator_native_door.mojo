@@ -363,6 +363,15 @@ def msel_clone_parameter(value: PythonObject, context: PythonObject, depth: Int 
             else:
                 py_setitem(fields, key, msel_clone_parameter(pairs[k][1], context, depth + 1))
         return scorer
+    # A FUNCTION parameter (a callback, a refit policy, a schedule; lane
+    # w3-fix-b row 14): scikit-learn's clone keeps it by identity
+    # (`copy.deepcopy` treats functions and builtins as atomic), so the clone
+    # carries the reference and never calls it; the estimator's or the
+    # search's own door then refuses it in its words. Read only for a value
+    # every branch above declined (no cost on the native parameters).
+    var types = native_loaded_module("types")
+    if kind is types.FunctionType or kind is types.BuiltinFunctionType:
+        return value
     # Never invoke deepcopy/__reduce__/buffer protocols of an arbitrary
     # object. Additional native buffer/schema migration remains explicit
     # debt rather than sharing mutable constructor or fitted state.

@@ -22,11 +22,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require
 from core.msel_convert import MSEL_F32, MSEL_F64
-from core.msel_entry_table import MselEntryKey, msel_table_entry, MSEL_HELPERS_ABI, MH_OP_COUNT, MH_ARANGE_I64
+from core.msel_entry_table import MselEntryKey, msel_table_entry, MSEL_HELPERS_ABI, MH_OP_COUNT, MH_ARANGE_I64, MH_RETIRED_5
 from core.msel_helpers_host import publish_msel_helpers_host
 from core.msel_helpers_calls import (
     msel_helpers_ref, msel_helper, msel_arange_i64, msel_count_mask_u8, msel_select_mask_u8_i64, msel_mask_from_indices_u8,
-    msel_leave_range_i64, msel_indices_overlap_i64, msel_fold_ids, msel_select_fold_i64, msel_select_folds_i64,
+    msel_leave_range_i64, msel_fold_ids, msel_select_fold_i64, msel_select_folds_i64,
     msel_gather_i32, msel_gather_i64, msel_first_seen_i32, msel_strat_fold_assign_i32, msel_store_alloc,
     msel_store_read, msel_store_free, msel_scatter_rows, msel_proba_column, msel_split_table_i32,
     msel_group_fold_perm_i32, msel_store_free_bytes, msel_store_put, msel_store_take_rows,
@@ -145,14 +145,17 @@ def _operation(unit: Int) raises:
         _ = train
         _ = test
     elif unit == 4:
-        var a: List[Int64] = [0, 1]
-        var b: List[Int64] = [1, 2]
-        var c: List[Int64] = [2]
-        require(msel_indices_overlap_i64(k, _a(a), 2, _a(b), 2, 3) == 1, "indices overlap")
-        require(msel_indices_overlap_i64(k, _a(a), 2, _a(c), 1, 3) == 0, "indices disjoint")
-        _ = a
-        _ = b
-        _ = c
+        # Operation 5 (the train/test overlap test) is retired: explicit folds
+        # whose sides share rows are accepted, as scikit-learn accepts them.
+        try:
+            var a: List[Int64] = [0, 1]
+            var addrs: Array[Int, 2] = [_a(a), _a(a)]
+            var ints: Array[Int, 3] = [2, 2, 3]
+            _ = msel_helper(k, MH_RETIRED_5, addrs, ints)
+            _ = a^  # lastuse-audit: the call reads it through an untracked address; Mojo frees a local at its last named use
+            raise Error("the retired operation 5 did not refuse")
+        except problem:
+            require("did not refuse" not in String(problem), String(problem))
     elif unit == 5:
         var folds: List[Int32] = [9, 9, 9, 9, 9]
         var fold_counts: List[Int64] = [0, 0]

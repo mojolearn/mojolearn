@@ -7,7 +7,7 @@ by the member fit notice raiser (bindings/member_fit_notices_pack.mojo,
 `MEMBER_NOTICE_FOREST`), so every route raises the same words in the same
 category (lane fx-audit, audit-trees F1).
 
-SERIAL BY NATURE: at most three warnings per fit, GIL held."""
+SERIAL BY NATURE: at most two warnings per fit, GIL held."""
 from std.python import PythonObject
 from bindings.classical_warnings_unpack import classical_warning
 from bindings.metrics_native_support_door import metric_warning_location
@@ -21,6 +21,6 @@ def rf_fit_notices_word(word: Int, context: PythonObject) raises:
     if word == 0:
         return
     var codes = forest_fit_notice_codes(word)
-    for i in range(len(codes)):  # small-loop(codes): at most the three fit notice bits (PACK)
+    for i in range(len(codes)):  # small-loop(codes): at most the two fit notice bits (PACK)
         classical_warning(rf_notice_text(codes[i]), trees_builtins().UserWarning, context,
                           metric_warning_location(2), "UserWarning")

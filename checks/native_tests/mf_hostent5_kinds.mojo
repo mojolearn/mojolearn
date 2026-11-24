@@ -164,17 +164,23 @@ def _gbdt_ask(state: Int, operation: Int) -> String:
         _ = gbdt_member[_NoImage](operation, Int(MutPointer(to=call)))
     except error:
         words = String(error)
+    # The member reads `call` through the address: name it after the call (AGENTS.md part 6, a local is freed
+    # at its last named use; lane w3-fix-c: without this the FIT read a dead frame and refused the handle).
+    _ = call.state
     return words^
 
 
 def _gbdt_mask(state: Int) raises -> Int:
     var call = MemberCall(DeviceRoute(DEVICE_CPU), state)
-    return gbdt_member[_NoImage](MEMBER_OP_CAPABILITIES, Int(MutPointer(to=call)))
+    var mask = gbdt_member[_NoImage](MEMBER_OP_CAPABILITIES, Int(MutPointer(to=call)))
+    _ = call.state  # read through the address: alive past the call
+    return mask
 
 
 def _gbdt_free(state: Int) raises:
     var call = MemberCall(DeviceRoute(DEVICE_CPU), state)
     _ = gbdt_member[_NoImage](MEMBER_OP_FREE, Int(MutPointer(to=call)))
+    _ = call.state  # read through the address: alive past the call
 
 
 def check_gbdt_kinds() raises:
@@ -218,7 +224,7 @@ def _forest_words(kind: Float64, et: Bool) -> List[Float64]:
 
 
 def _forest(operation: Int, mut call: MemberCall) raises -> Int:
-    return fm_member[_FOREST_STORE, True](operation, Int(MutPointer(to=call)), "RandomForest")
+    return fm_member[_FOREST_STORE, True, True](operation, Int(MutPointer(to=call)), "RandomForest")
 
 
 def _forest_refusal(state: Int, operation: Int) -> String:

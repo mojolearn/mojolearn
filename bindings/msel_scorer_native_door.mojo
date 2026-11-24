@@ -462,7 +462,7 @@ def msel_scorer_value(scorer: PythonObject, estimator: PythonObject, x: PythonOb
         return metric_float(result, context)
     var b = native_loaded_module("builtins")
     var typestr = _per_label_typestr(result, context)
-    if len(typestr) > 0 and Int(py=result.shape[0]) == 1:
+    if typestr.byte_length() > 0 and Int(py=result.shape[0]) == 1:
         var value: Float64
         if typestr == "<f4":
             var one = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result)))
@@ -532,7 +532,7 @@ def _scorer_metric(fields: PythonObject, estimator: PythonObject, model: PythonO
     classical_connect_numpy(context)
     var real = metric_is_real(result, context)
     var typestr = String("") if real else _per_label_typestr(result, context)
-    if not real and len(typestr) == 0:
+    if not real and typestr.byte_length() == 0:
         raise Error("TypeError: scoring must return a real scalar")
     var sign = fields["_sign"]
     if py_type(sign) is not b.int or (Int(py=sign) != 1 and Int(py=sign) != -1):

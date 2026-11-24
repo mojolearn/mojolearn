@@ -246,6 +246,13 @@ _TEXT_MODEL_MEMBERS = {
               'trees_gbdt_feature_freq_init', ()),
     (16, 4): (('n_estimators', 'max_depth', 'learning_rate', 'l2_leaf_reg', 'border_count', 'numeric_mode',
                'device'), 'trees_gbdt_ordered_init', ('permutation', 'sample_weight')),
+    # GradientBoosting itself, the booster (16, 1; lane w3-fix-a, row 2): its constructor's parameters are the
+    # module's `_INIT_NAMES` (the `trees_gbdt_init` order, `device` last) then `numeric_mode` (None here: read
+    # from the module at connect, never copied); a clone passes the stored canonical values, as the set_params
+    # rebuild does. Its fit keywords are its fit's (python/mojolearn/ensemble.py `GradientBoosting.fit`). Before,
+    # no plan was registered and RFE refused it ("RFE requires a mojolearn estimator; got GradientBoosting").
+    (16, 1): (None, 'trees_gbdt_init',
+              ('sample_weight', 'eval_set', 'group_id', 'subgroup_id', 'pairs', 'pairs_weight')),
 }
 
 
@@ -262,7 +269,12 @@ def _connect_feature_freq_members(registry, register, waiting):
         fields = vars(module) if module is not None else {}
         if '_TREES' not in fields or type(fields.get('_TREES_CONTEXT')) is not dict:
             continue
-        register(cls, fields['_TREES'], fields['_TREES_CONTEXT'], row[0], row[1], {})
+        names = row[0]
+        if names is None:
+            if type(fields.get('_INIT_NAMES')) is not tuple:
+                continue
+            names = fields['_INIT_NAMES'] + ('numeric_mode',)
+        register(cls, fields['_TREES'], fields['_TREES_CONTEXT'], names, row[1], {})
         plan = registry[cls]
         plan['member_only'] = True
         plan['initial_fields'] = {}

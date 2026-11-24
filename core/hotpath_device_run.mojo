@@ -10,7 +10,7 @@ from core.hotpath_device import (
     HPD_F32, HPD_F64, HPD_I32, HPD_I64, HPD_MAX_N, HPD_U32, HPD_U8, device_cast_f64_to_f32,
     device_encode_labels, device_fold_pair_f32, device_gather_u64,
 )
-from core.input_device import IND_MAX_N, device_strided_copy, device_transpose_to_f32
+from core.input_device import IND_MAX_N, device_strided_copy
 from core.neural_context import process_ctx
 from core.label_device_steps import (
     LABELS_DEVICE_ELEM as IDN_HPDEV_ELEM, LABELS_DEVICE_INPUT as _HPDEV_INPUT,
@@ -51,19 +51,7 @@ def hpdev_try_cast_f64_to_f32(src_addr: Int, dst_addr: Int, n: Int) raises -> Bo
     return False
 
 
-def hpdev_try_transpose_to_f32(
-    src_addr: Int, dst_addr: Int, nr: Int, nc: Int, is_f64: Bool,
-) raises -> Bool:
-    """The device `transpose_f32` (float32 in) / `cast_colmajor_f64_to_f32`
-    (float64 in, the `cast_f64_to_f32` narrowing per element): True when the
-    device wrote `dst`, False when the caller must run its host loop."""
-    comptime if _HPDEV_INPUT:
-        if nr < 1 or nc < 1 or nr > IND_MAX_N // nc or src_addr == 0 or dst_addr == 0:
-            return False
-        var ctx = process_ctx[_HPDEV_SLOT]()
-        device_transpose_to_f32(ctx, src_addr, dst_addr, nr, nc, is_f64)
-        return True
-    return False
+# TOMBSTONE: the hpdev_try_transpose_to_f32 (only the base transpose exports called it) deleted 2026-11-23 on lane/sab-host-missed-cls (no product caller); code recoverable at 4519097d38.
 
 
 def hpdev_strided_copy_run(src: Int, dst: Int, dims: Int, nd: Int, isz: Int) raises -> Int:

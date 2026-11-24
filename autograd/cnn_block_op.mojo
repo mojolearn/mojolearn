@@ -46,11 +46,16 @@ The host column runs the same blocks through the x_cnn host twins
 GPU module imports host threads); those split their element and GEMM work
 across cores.
 
-Waits (lane fx-rnn-cnn-fit, 2026-11-19): the four device calls below pass
-`may_defer` (x_cnn/device.mojo entry_end). A session's arguments are its own
-device buffers and it reads nothing on the host before its own wait, so an
-op returns after its last launch (default since 2026-11-20, A/B round 3;
-the old every-entry wait was deleted 2026-11-23).
+Waits (lane fx-rnn-cnn-fit, 2026-11-19): the four device calls below take
+`may_defer` (x_cnn/device.mojo entry_end). A session on the x_cnn context
+(`cnn_ctx()`: the CNN model's sessions) shares the entries' one in-order
+queue, so its op returns after its last launch (default since 2026-11-20,
+A/B round 3; the old every-entry wait was deleted 2026-11-23). A session on
+another queue (BlockStepScratch.cnn_other_queue: a public `ops.Session`)
+passes False: its next op, download or reset runs on its own queue, which
+does not order after the x_cnn launches, so the entry's own wait is what
+finishes the results (lane ops-session-gpu, 2026-11-23: without it the
+public conv_linear read 0.0 from a not-yet-written output on the L40S).
 
 A/B: `-D MOJOLEARN_CNN_GENERIC_OPS` captures tonight's generic chain
 (OPS_CONV2D, OPS_RELU, OPS_MAXPOOL2D, OPS_TRANSPOSE + OPS_LINEAR) instead;
@@ -147,37 +152,43 @@ def cnn_block_keep(cprm: List[Int32], device: Bool) -> Bool:
 # ---------------------------------------------------------------- device
 def cnn_block_forward_device(
     x: FP, w: FP, b: FP, cprm: List[Int32], pprm: List[Int32], pool: Bool, dst: FP, idx: FP,
-    save_cols: Int, save_y: Int,
+    save_cols: Int, save_y: Int, may_defer: Bool,
 ) raises:
     """The hand epoch's block forward (`fit_epoch_r_device`'s
     conv_block_forward_into[True] call) over session device buffers; a save
-    address of 0 is not saved."""
+    address of 0 is not saved. `may_defer`: True only for a caller on the
+    x_cnn context (module docstring, Waits)."""
     conv_block_forward_into[True](
-        cnn_xp(x), cnn_xp(w), cnn_xp(b), cprm, pprm, pool, cnn_xp(dst), cnn_xi(idx), save_cols, save_y, True,
+        cnn_xp(x), cnn_xp(w), cnn_xp(b), cprm, pprm, pool, cnn_xp(dst), cnn_xi(idx), save_cols, save_y, may_defer,
     )
 
 
 def cnn_block_backward_device(
     x: FP, w: FP, b: FP, g: FP, idx: FP, cprm: List[Int32], pprm: List[Int32], pool: Bool, need_dx: Bool,
-    gx: FP, gw: FP, gb: FP, save_cols: Int, save_y: Int,
+    gx: FP, gw: FP, gb: FP, save_cols: Int, save_y: Int, may_defer: Bool,
 ) raises:
     """`CnnRules._block`'s conv_block_backward_into[True] call, verbatim
-    (without dx the entry is handed the bias gradient there, never written)."""
+    (without dx the entry is handed the bias gradient there, never written).
+    `may_defer`: True only for a caller on the x_cnn context."""
     conv_block_backward_into[True](
         cnn_xp(x), cnn_xp(w), cnn_xp(b), cnn_xp(g), cnn_xi(idx), cprm, pprm, pool, need_dx,
-        cnn_xp(gx) if need_dx else cnn_xp(gb), cnn_xp(gw), cnn_xp(gb), save_cols, save_y, True,
+        cnn_xp(gx) if need_dx else cnn_xp(gb), cnn_xp(gw), cnn_xp(gb), save_cols, save_y, may_defer,
     )
 
 
-def cnn_linear_forward_device(x: FP, w: FP, b: FP, n: Int, d_in: Int, d_out: Int, dst: FP) raises:
+def cnn_linear_forward_device(
+    x: FP, w: FP, b: FP, n: Int, d_in: Int, d_out: Int, dst: FP, may_defer: Bool,
+) raises:
     """The hand epoch's head (`linear_forward_into[True]`: the CNN's pinned
-    NT GEMM and its bias kernel)."""
-    linear_forward_into[True](cnn_xp(x), cnn_xp(w), cnn_xp(b), n, d_in, d_out, cnn_xp(dst), True)
+    NT GEMM and its bias kernel). `may_defer`: True only for a caller on the
+    x_cnn context."""
+    linear_forward_into[True](cnn_xp(x), cnn_xp(w), cnn_xp(b), n, d_in, d_out, cnn_xp(dst), may_defer)
 
 
 def cnn_linear_backward_device(
-    x: FP, w: FP, g: FP, n: Int, d_in: Int, d_out: Int, gx: FP, gw: FP, gb: FP,
+    x: FP, w: FP, g: FP, n: Int, d_in: Int, d_out: Int, gx: FP, gw: FP, gb: FP, may_defer: Bool,
 ) raises:
-    """`CnnRules._head`'s linear_backward_into[True] call, verbatim."""
+    """`CnnRules._head`'s linear_backward_into[True] call, verbatim.
+    `may_defer`: True only for a caller on the x_cnn context."""
     linear_backward_into[True](cnn_xp(x), cnn_xp(w), cnn_xp(g), n, d_in, d_out, cnn_xp(gx), cnn_xp(gw), cnn_xp(gb),
-                               True)
+                               may_defer)

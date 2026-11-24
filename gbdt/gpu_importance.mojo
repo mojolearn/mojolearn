@@ -44,7 +44,8 @@ comptime IMP_TPB = 256
 comptime IMP_TREES_PER_LAUNCH = 32768
 
 
-def _imp_exponent_kernel(w: GbdtImpF32, e_max: GbdtImpI32, n_rows: Int):
+def _imp_exponent_kernel(w: GbdtImpF32, e_max: GbdtImpI32, n_rows_: Int32):
+    var n_rows = Int(n_rows_)
     var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if r >= n_rows:
         return
@@ -54,7 +55,10 @@ def _imp_exponent_kernel(w: GbdtImpF32, e_max: GbdtImpI32, n_rows: Int):
 
 
 def _imp_bins_kernel(x: GbdtImpF32, bins: GbdtImpU8, border_lo: GbdtImpI32, borders: GbdtImpF32,
-                     treat: GbdtImpI32, sorted: GbdtImpI32, n_rows: Int, n_cols: Int, row_major: Int):
+                     treat: GbdtImpI32, sorted: GbdtImpI32, n_rows_: Int32, n_cols_: Int32, row_major_: Int32):
+    var n_rows = Int(n_rows_)
+    var n_cols = Int(n_cols_)
+    var row_major = Int(row_major_)
     var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if cell >= n_rows * n_cols:
         return
@@ -71,8 +75,13 @@ def _imp_bins_kernel(x: GbdtImpF32, bins: GbdtImpU8, border_lo: GbdtImpI32, bord
 
 def _imp_leaf_kernel(bins: GbdtImpU8, w: GbdtImpF32, e_max: GbdtImpI32, wpair: GbdtImpU32, fail: GbdtImpI32,
                      tree_lo: GbdtImpI32, leaf_lo: GbdtImpI32, split_feature: GbdtImpI32, split_bin: GbdtImpI32,
-                     split_take: GbdtImpI32, node_left: GbdtImpI32, node_right: GbdtImpI32, n_rows: Int,
-                     dim: Int, non_symmetric: Int, n_weights: Int, t0: Int):
+                     split_take: GbdtImpI32, node_left: GbdtImpI32, node_right: GbdtImpI32, n_rows_: Int32,
+                     dim_: Int32, non_symmetric_: Int32, n_weights_: Int32, t0_: Int32):
+    var n_rows = Int(n_rows_)
+    var dim = Int(dim_)
+    var non_symmetric = Int(non_symmetric_)
+    var n_weights = Int(n_weights_)
+    var t0 = Int(t0_)
     var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var t = t0 + Int(block_idx.y)
     if r >= n_rows:
@@ -96,8 +105,13 @@ def _imp_leaf_kernel(bins: GbdtImpU8, w: GbdtImpF32, e_max: GbdtImpI32, wpair: G
 
 def _imp_tree_kernel(tree_lo: GbdtImpI32, leaf_lo: GbdtImpI32, split_feature: GbdtImpI32, node_left: GbdtImpI32,
                      node_right: GbdtImpI32, leaves: GbdtImpF32, wpair: GbdtImpU32, map_lo: GbdtImpI32,
-                     map_col: GbdtImpI32, map_share: GbdtImpF32, contrib: GbdtImpF32, n_trees: Int, dim: Int,
-                     non_symmetric: Int, n_cols: Int, n_input: Int):
+                     map_col: GbdtImpI32, map_share: GbdtImpF32, contrib: GbdtImpF32, n_trees_: Int32, dim_: Int32,
+                     non_symmetric_: Int32, n_cols_: Int32, n_input_: Int32):
+    var n_trees = Int(n_trees_)
+    var dim = Int(dim_)
+    var non_symmetric = Int(non_symmetric_)
+    var n_cols = Int(n_cols_)
+    var n_input = Int(n_input_)
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if t >= n_trees:
         return
@@ -105,14 +119,17 @@ def _imp_tree_kernel(tree_lo: GbdtImpI32, leaf_lo: GbdtImpI32, split_feature: Gb
                        wpair, n_cols, map_lo, map_col, map_share, n_input, contrib)
 
 
-def _imp_fold_kernel(contrib: GbdtImpF32, total: GbdtImpF32, n_trees: Int, n_input: Int):
+def _imp_fold_kernel(contrib: GbdtImpF32, total: GbdtImpF32, n_trees_: Int32, n_input_: Int32):
+    var n_trees = Int(n_trees_)
+    var n_input = Int(n_input_)
     var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if c >= n_input:
         return
     gbdt_imp_fold_body(c, n_trees, n_input, contrib, total)
 
 
-def _imp_finish_kernel(total: GbdtImpF32, dst: GbdtImpF32, n_input: Int):
+def _imp_finish_kernel(total: GbdtImpF32, dst: GbdtImpF32, n_input_: Int32):
+    var n_input = Int(n_input_)
     if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
         return
     gbdt_imp_finish_body(n_input, total, dst)
@@ -186,12 +203,12 @@ def gbdt_feature_importances_device(
     var h_fail = ctx.enqueue_create_host_buffer[DType.int32](1)
     if n_weights > 0:
         ctx.enqueue_function[_imp_exponent_kernel](
-            d_w.unsafe_ptr(), d_emax.unsafe_ptr(), n_rows,
+            d_w.unsafe_ptr(), d_emax.unsafe_ptr(), Int32(n_rows),
             grid_dim=(_blocks(n_rows), 1, 1), block_dim=(IMP_TPB, 1, 1),
         )
     ctx.enqueue_function[_imp_bins_kernel](
         d_x.unsafe_ptr(), d_bins.unsafe_ptr(), d_border_lo.unsafe_ptr(), d_borders.unsafe_ptr(),
-        d_treat.unsafe_ptr(), d_sorted.unsafe_ptr(), n_rows, n_cols, 1 if request.row_major else 0,
+        d_treat.unsafe_ptr(), d_sorted.unsafe_ptr(), Int32(n_rows), Int32(n_cols), Int32(1 if request.row_major else 0),
         grid_dim=(_blocks(n_rows * n_cols), 1, 1), block_dim=(IMP_TPB, 1, 1),
     )
     var t0 = 0
@@ -200,8 +217,8 @@ def gbdt_feature_importances_device(
         ctx.enqueue_function[_imp_leaf_kernel](
             d_bins.unsafe_ptr(), d_w.unsafe_ptr(), d_emax.unsafe_ptr(), d_wpair.unsafe_ptr(), d_fail.unsafe_ptr(),
             d_tree_lo.unsafe_ptr(), d_leaf_lo.unsafe_ptr(), d_split_feature.unsafe_ptr(), d_split_bin.unsafe_ptr(),
-            d_split_take.unsafe_ptr(), d_node_left.unsafe_ptr(), d_node_right.unsafe_ptr(), n_rows, plan.dim,
-            1 if plan.non_symmetric else 0, n_weights, t0,
+            d_split_take.unsafe_ptr(), d_node_left.unsafe_ptr(), d_node_right.unsafe_ptr(), Int32(n_rows), Int32(plan.dim),
+            Int32(1 if plan.non_symmetric else 0), Int32(n_weights), Int32(t0),
             grid_dim=(_blocks(n_rows), count, 1), block_dim=(IMP_TPB, 1, 1),
         )
         t0 += count
@@ -209,16 +226,16 @@ def gbdt_feature_importances_device(
         ctx.enqueue_function[_imp_tree_kernel](
             d_tree_lo.unsafe_ptr(), d_leaf_lo.unsafe_ptr(), d_split_feature.unsafe_ptr(), d_node_left.unsafe_ptr(),
             d_node_right.unsafe_ptr(), d_leaves.unsafe_ptr(), d_wpair.unsafe_ptr(), d_map_lo.unsafe_ptr(),
-            d_map_col.unsafe_ptr(), d_map_share.unsafe_ptr(), d_contrib.unsafe_ptr(), n_trees, plan.dim,
-            1 if plan.non_symmetric else 0, n_cols, plan.n_input,
+            d_map_col.unsafe_ptr(), d_map_share.unsafe_ptr(), d_contrib.unsafe_ptr(), Int32(n_trees), Int32(plan.dim),
+            Int32(1 if plan.non_symmetric else 0), Int32(n_cols), Int32(plan.n_input),
             grid_dim=(_blocks(n_trees), 1, 1), block_dim=(IMP_TPB, 1, 1),
         )
     ctx.enqueue_function[_imp_fold_kernel](
-        d_contrib.unsafe_ptr(), d_total.unsafe_ptr(), n_trees, plan.n_input,
+        d_contrib.unsafe_ptr(), d_total.unsafe_ptr(), Int32(n_trees), Int32(plan.n_input),
         grid_dim=(_blocks(plan.n_input), 1, 1), block_dim=(IMP_TPB, 1, 1),
     )
     ctx.enqueue_function[_imp_finish_kernel](
-        d_total.unsafe_ptr(), d_out.unsafe_ptr(), plan.n_input,
+        d_total.unsafe_ptr(), d_out.unsafe_ptr(), Int32(plan.n_input),
         grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
     )
     ctx.enqueue_copy(dst_ptr=h_fail.unsafe_ptr(), src_buf=d_fail)

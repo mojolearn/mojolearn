@@ -30,7 +30,7 @@ _TREE_BINDINGS = ("_mojolearn_rf", "_mojolearn_trees", "_mojolearn_x_trees", "_m
                   "_mojolearn_svm", "_mojolearn_gbdt", "_mojolearn_estimators", "_mojolearn_x_neighbors")
 #: The base binding's input and label helpers (`_buffer._native`), always the
 #: identical binary (they are byte moves and comparisons with no tier).
-_BASE_HELPERS = ("cast_f64_to_f32", "cast_colmajor_f64_to_f32", "transpose_f32", "all_finite_f32",
+_BASE_HELPERS = ("cast_f64_to_f32", "all_finite_f32",
                  "all_finite_f64", "prepare_targets", "bincount_i64", "class_ratio_f64",
                  "gather_rows_bytes", "argmax_rows_f32", "argmax_rows_f64", "gather_i64", "gather_f64",
                  "unique_inverse", "reduce_stat", "cast_elements", "gather_i32",
@@ -426,6 +426,14 @@ def connect_gbdt_parameters(base, classes, metadata):
         cls.__getattribute__ = descriptor
         cls._mojolearn_native_public = True
         layout = _layout(cls, descriptor)
+        # `feature_importances_` (lane w3-fix-a, row 1): the adapters' property object is bound to its native
+        # read, resolved here once: (the property, the compiled tree entry, (operation, arguments, context)).
+        # The attribute door calls that entry, never the property's Python getter (before, it refused the
+        # property as an unconnected Python descriptor).
+        importances = next((row['feature_importances_'] for row in (type.__dict__['__dict__'].__get__(parent)  # glue: raw native class namespaces
+                            for parent in type.__dict__['__mro__'].__get__(cls)) if 'feature_importances_' in row), None)  # glue: fixed class ancestry
+        if importances is not None:
+            layout['bindings']['feature_importances_'] = (importances, entry, ('trees_gbdt_feature_importances', (), context))
         context.setdefault('classical_public_layouts', {})[cls] = layout
         context['trees_state_layouts'][cls] = {
             'classical_public_layouts': {cls: layout}, 'classical_public_installed': True}

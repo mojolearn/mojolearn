@@ -43,20 +43,7 @@ comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _U32P = MutPointer[UInt32, MutUntrackedOrigin]
 
 
-def transpose_to_f32[
-    S: DType
-](
-    sp: MutPointer[Scalar[S], MutUntrackedOrigin],
-    dp: MutPointer[Float32, MutUntrackedOrigin],
-    nr: Int,
-    nc: Int,
-):
-    """`dp[c * nr + r] = Float32(sp[r * nc + c])`, the value
-    `_tiled_transpose_to_f32` writes, in plain column order."""
-    for c in range(nc):
-        var dbase = c * nr
-        for r in range(nr):
-            dp.unsafe_store(dbase + r, sp.unsafe_load(r * nc + c).cast[DType.float32]())
+# TOMBSTONE: the transpose_to_f32 (only the core host transpose exports called it) deleted 2026-11-23 on lane/sab-host-missed-cls (no product caller); code recoverable at 4519097d38.
 
 
 def nonzero_f64_count(sp: _F64P, count: Int) -> Int:

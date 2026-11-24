@@ -240,3 +240,24 @@ def test_changed_native_bytes_are_judged_by_their_outputs(monkeypatch):
     clean['endpoints']['example.call']['output']={'sha256':'b'*64}
     result=api.verify(self_test=False,reference=reference)
     assert result['status']=='OWED' and 'output differs: example.call' in result['errors']
+
+
+@pytest.mark.parametrize('vendor',['cuda','cpu'])
+def test_a_stale_endpoint_reference_reads_owed_on_every_vendor(monkeypatch,vendor):
+    # r6-proving (2026-11-23): the fixture-source staleness test sat below the UNTESTED return, so a stale
+    # reference passed the CPU column's self-test while the L40S self-test of the same wheel read OWED.
+    row={'status':'captured','kind':'value','output':{'sha256':'a'*64}}
+    clean={'vendor':vendor,'version':'new','families':{'example.call':'neural'},'sources':{'neural':'changed'},
+        'bindings':[{'module':'native','sha256':'binary'}],'expected':['example.call'],'pending':[],
+        'endpoints':{'example.call':dict(row)}}
+    witness=copy.deepcopy(clean);witness['vendor']='cuda';witness['sources']={'neural':'fixture'}
+    reference={'validated_vendors':['cuda'],'witness':witness,'witnesses':{'cuda':witness}}
+    monkeypatch.setattr(api,'output_contract',lambda value:'contract')
+    monkeypatch.setattr(api,'selected_endpoints',lambda scope:None)
+    monkeypatch.setattr(api,'capture',lambda **kw:copy.deepcopy(clean))
+    result=api.verify(self_test=False,reference=reference)
+    assert result['status']=='OWED'
+    assert result['errors']==['endpoint fixtures changed; current reference is stale (neural)']
+    clean['sources']['neural']='fixture'
+    result=api.verify(self_test=False,reference=reference)
+    assert result['status']==('MATCH' if vendor=='cuda' else 'UNTESTED') and not result['errors']

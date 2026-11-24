@@ -31,7 +31,6 @@ from bindings.family_common_unpack import (
 )
 from bindings.family_common_pack import (
     family_call,
-    family_call_kw,
 )
 from bindings.metrics_program_door import MetricDoorProg, metric_door_run
 from bindings.msel_common_door import (
@@ -76,7 +75,9 @@ from bindings.msel_cv_run import msel_seconds
 from bindings.msel_estimator_native_door import msel_native_clone_planned, msel_native_clone
 
 from bindings.msel_estimator_native_door import msel_native_set_params, msel_estimator_plan
-from bindings.msel_search_state_door import msel_search_fields, msel_parameter_values, msel_search_update
+from bindings.msel_search_state_door import (
+    msel_search_fields, msel_parameter_values, msel_search_update, msel_carrier_search,
+)
 from bindings.msel_candidates_door import (
     _search_scalar, _search_index, _search_seed, msel_grid_dicts, msel_grid_list, msel_grid_len, msel_sampler_check,
     msel_sampler_list, msel_sampler_len, msel_candidates,
@@ -396,7 +397,9 @@ def _curve_by_search(estimator: PythonObject, args: PythonObject, param_range: P
     py_setitem(keywords, "error_score", args[9])
     py_setitem(keywords, "refit", PythonObject(False))
     py_setitem(keywords, "return_train_score", PythonObject(True))
-    var search = family_call_kw(msel_cls("GridSearchCV", context), keywords, estimator, grid)
+    py_setitem(keywords, "estimator", estimator)
+    py_setitem(keywords, "param_grid", grid)
+    var search = msel_carrier_search(msel_cls("GridSearchCV", context), keywords, context)
     var fields = msel_search_fields(search, context)
     if not _search_member_fit(search, fields, args[1], args[2], args[5], context, b, drawn):
         return PythonObject(None)

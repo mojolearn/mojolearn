@@ -1670,14 +1670,14 @@ def host_families_built():
 #: What each routed binding carries, and what it leaves absent so the
 #: refusal stays by name:
 #:   _mojolearn -> _mojolearn_core_host: the base binding's HOST HELPERS
-#:     (transpose_f32, cast_colmajor_f64_to_f32, cast_f64_to_f32,
+#:     (cast_f64_to_f32,
 #:     all_finite_*, gather_*, argmax_rows_*, so _buffer._native and _labels
 #:     resolve on a CPU-only install) and the knn host inference lane's
 #:     (2026-09-14) knn_search, knn_classify, knn_regress over
 #:     core/knn_host_predict.mojo, and (workstream E batch 2, 2026-09-14)
 #:     the training entry kmeans_fit over cluster/host/kmeans_oracle.mojo,
 #:     and (the spectral-precomputed lane, 2026-09-14) the dense affinity's
-#:     COO scan nonzero_f64_count and nonzero_f64_fill, and (batch 3,
+#:     COO scan spectral_preparation_native_api_v1, and (batch 3,
 #:     2026-09-14) the cosine, manhattan, chebyshev and minkowski metrics
 #:     of the k-NN entries and the ball cover's radius_neighbors_count,
 #:     radius_neighbors_fill and rbc_knn_search as an exhaustive scan.
@@ -1702,10 +1702,9 @@ def host_families_built():
 #:     2026-09-14): accuracy_score, adjusted_rand_score, entropy,
 #:     mutual_info_score, homogeneity_score, completeness_score,
 #:     v_measure_score, r2_score and silhouette over
-#:     metrics/host/metrics_oracle.mojo, spectral_fit_predict_dataset
-#:     over spectral/host/spectral_oracle.mojo (the spectral lane) and
-#:     spectral_fit_predict_graph over the same oracle (the
-#:     spectral-precomputed lane, 2026-09-14), umap_fit_transform,
+#:     metrics/host/metrics_oracle.mojo, spectral_native_api_v1 over
+#:     spectral/host/spectral_oracle.mojo (the by-name spectral entries were
+#:     deleted 2026-11-23), umap_fit_transform,
 #:     umap_transform and umap_numeric_mode over umap/host/umap_oracle.mojo
 #:     (the umap lane, lane/cpu-training-umap-b, 2026-09-14: the IDENTICAL
 #:     device epoch fold restated on the host), and (the

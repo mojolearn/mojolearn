@@ -17,7 +17,7 @@ from core.forest_calls import ForestExport, xf_fit
 from core.forest_fit_request import ForestFitArgs
 from ensemble.nan_refusal import RF_NONFINITE_REFUSAL
 from ensemble.rf_notices import (
-    RF_NOTICE_ALL, RF_NOTICE_BINS_CLAMPED, RF_NOTICE_MAX_SAMPLES_IGNORED, RF_NOTICE_OOB_PARTIAL,
+    RF_NOTICE_ALL, RF_NOTICE_MAX_SAMPLES_IGNORED, RF_NOTICE_OOB_PARTIAL,
 )
 
 comptime FOREST_MODEL_FIELDS = 5
@@ -143,8 +143,8 @@ def forest_fit_notice_codes(mask: Int) raises -> List[Int]:
     if mask < 0 or (mask & ~RF_NOTICE_ALL) != 0:
         raise Error("forest fit returned unknown notice bits " + String(mask))
     var out = List[Int]()
-    var codes: List[Int] = [RF_NOTICE_BINS_CLAMPED, RF_NOTICE_MAX_SAMPLES_IGNORED, RF_NOTICE_OOB_PARTIAL]
-    for i in range(len(codes)):  # small-loop(codes): the three fit notice bits
+    var codes: List[Int] = [RF_NOTICE_MAX_SAMPLES_IGNORED, RF_NOTICE_OOB_PARTIAL]
+    for i in range(len(codes)):  # small-loop(codes): the two fit notice bits
         if (mask & codes[i]) != 0:
             out.append(codes[i])
     return out^

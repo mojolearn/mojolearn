@@ -315,7 +315,7 @@ def _sweep_a_fixture(which: Int) raises:
         _answers(member, gpr, MEMBER_OP_PREDICT_STD, 4, 1, 0, 1, MEMBER_F32, "GaussianProcessRegressor std")
         _refuses(member, gpr, MEMBER_OP_PREDICT_PROBA, "GaussianProcessRegressor")
     elif which == 6 or which == 7:
-        var count = 1 if which == 6 else 20
+        var count = 1 if which == 6 else 30  # the recurrent member takes 30 words since lane mf-ens6 (lr_schedule)
         var cls = _words(count, 1.0)
         var reg = _words(count, 0.0)
         var name = String("MLP") if which == 6 else String("recurrent")

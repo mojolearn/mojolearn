@@ -600,6 +600,32 @@ def _given_rows(view: MemberMatrix, rows_of: PythonObject, column: Int, unit_n: 
     return out^
 
 
+def _unit_given(mut set: MemberSet, given: PythonObject, unit_n: Int, context: PythonObject,
+                mut given_blocks: List[List[Float64]], mut given_rows_last: PythonObject) raises:
+    """THE GIVEN y of one unit of `_fit_units` (lane mf-tail5): one
+    gather per distinct row set (the members of one fold share it)."""
+    var source = given[0]
+    var rows_of = given[1]
+    var column = Int(py=given[2])
+    var array_class = context["array_class"]
+    var view = MemberMatrix()
+    if source is not None and py_type(source) is array_class:
+        var ndim = Int(py=source.ndim)
+        view = member_given_y(source, Int(py=source.shape[0]), 1 if ndim == 1 else Int(py=source.shape[1]),
+                              array_class)
+    if view.given():
+        if rows_of is None and column < 0 and view.cols == 1 and view.rows == unit_n:
+            member_set_given(set, view.data, view.dtype)  # a view: every row of a 1-D y
+        elif column >= 0 or rows_of is not None:
+            if rows_of is None or not (rows_of is given_rows_last):
+                given_blocks.append(_given_rows(view, rows_of, column, unit_n))
+                given_rows_last = rows_of
+            var last = len(given_blocks) - 1
+            if last >= 0 and len(given_blocks[last]) == unit_n:
+                member_set_given(set, Int(given_blocks[last].unsafe_ptr()), MEMBER_F64)
+    _ = source  # the view reads its buffer through member_set_given above
+
+
 def _fit_units(clones: PythonObject, xs: PythonObject, d: Int, targets: PythonObject, float_targets: Bool,
                weights: PythonObject, counts: PythonObject, jobs: Int, context: PythonObject,
                givens: PythonObject) raises:
@@ -691,27 +717,7 @@ def _fit_units(clones: PythonObject, xs: PythonObject, d: Int, targets: PythonOb
         member_set_admit_or_raise(set, clones[i], target_address, w_address, 0, 0, 0, 0, classes, context, b)
         member_set_own_block(set, trees_address(xs[i]), Int(py=xs[i].shape[0]))
         if float_targets and givens is not None and givens[i] is not None and member_set_reads_given(set):
-            # THE GIVEN y of this unit (one gather per distinct row set: the
-            # members of one fold share it).
-            var source = givens[i][0]
-            var rows_of = givens[i][1]
-            var column = Int(py=givens[i][2])
-            var unit_n = Int(py=targets[i].shape[0])
-            var view = MemberMatrix()
-            if source is not None and py_type(source) is context["array_class"]:
-                var ndim = Int(py=source.ndim)
-                view = member_given_y(source, Int(py=source.shape[0]), 1 if ndim == 1 else Int(py=source.shape[1]),
-                                      context["array_class"])
-            if view.given():
-                if rows_of is None and column < 0 and view.cols == 1 and view.rows == unit_n:
-                    member_set_given(set, view.data, view.dtype)  # a view: every row of a 1-D y
-                elif column >= 0 or rows_of is not None:
-                    if rows_of is None or not (rows_of is given_rows_last):
-                        given_blocks.append(_given_rows(view, rows_of, column, unit_n))
-                        given_rows_last = rows_of
-                    var last = len(given_blocks) - 1
-                    if last >= 0 and len(given_blocks[last]) == unit_n:
-                        member_set_given(set, Int(given_blocks[last].unsafe_ptr()), MEMBER_F64)
+            _unit_given(set, givens[i], Int(py=targets[i].shape[0]), context, given_blocks, given_rows_last)
         # Inside `resident()` a member that reads a scope keeps its X block
         # on the device (bindings/member_set_door.mojo, THE RESIDENT SCOPE).
         # A scope read that raises raises its own doors' words (nothing fitted).

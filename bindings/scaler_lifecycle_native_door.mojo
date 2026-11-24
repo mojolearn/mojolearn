@@ -611,6 +611,11 @@ def scaler_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
             value = original
         return value.steal_data()
     except error:
+        if String(error) == PYTHON_ERROR_PENDING:
+            # a native property read's own exception (bindings/classical_attributes_door.mojo
+            # `_classical_native_property`: the GBDT adapters' feature_importances_, NotFittedError), restored
+            # with its class (lane w3-fix-a, row 1)
+            return optimizer_python_error(error^)
         if String(error).startswith("AttributeError:"):
             return raise_python_exception(error_without_class(error,"AttributeError"),ExceptionType("PyExc_AttributeError"))
         return raise_python_exception(error_without_class(error,"TypeError"),ExceptionType.TypeError)

@@ -796,7 +796,7 @@ def meta_plan_refuse(handle: Int, var words: String, late: Bool) raises:
 def _refused_first(slot: _SlotPtr) -> Bool:
     """THE DOOR'S REFUSAL raised before anything (lane mf-refuse5): a non-RFE state whose entry
     carries the door's words with `late` False."""
-    return len(slot[].refusal) != 0 and not slot[].refusal_late and not _rfe_kind(slot[].kind)
+    return slot[].refusal.byte_length() != 0 and not slot[].refusal_late and not _rfe_kind(slot[].kind)
 
 
 def _refused_mask(kind: Int) -> Int:
@@ -1278,7 +1278,10 @@ def _drop_states(slot: _SlotPtr):
     slot[].rfe_ranking = List[Float32]()
     slot[].rfe_columns = List[Int32]()
     slot[].rfe_words = List[Float64]()
-    slot[].rfe_hops = List[Float64]()
+    # lane w3-fix-c (2026-11-23): `rfe_hops` is NEW's (the plan entry's dotted-getter path, as `rfe_run` and
+    # `refusal`), not fitted state: FIT's `_drop_states` emptied it before `_fit_rfe` read it, so the rounds'
+    # forwarded export read the base plan's NEW words (META_RFE_CLASSIFIER 14) as its first hop. The release
+    # (`_lookup(handle, True)`, a whole new slot) still clears it.
 
 
 # --------------------------------------------------------------- the masks
@@ -4319,7 +4322,7 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
             _fit_rfe(slot, call)
         else:
             _fit_vote(slot, call)
-        if slot[].refusal_late and len(slot[].refusal) != 0 and not _rfe_kind(slot[].kind):
+        if slot[].refusal_late and slot[].refusal.byte_length() != 0 and not _rfe_kind(slot[].kind):
             # THE DOOR'S REFUSAL after the nested fits (lane mf-refuse5): the door checks it there.
             raise Error(slot[].refusal.copy())
         if not _bag_kind(slot[].kind):

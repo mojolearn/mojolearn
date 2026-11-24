@@ -260,18 +260,34 @@ def member_cw_fill_keyed(mut owner: MemberOwner, model: PythonObject, fields: Py
     var keys = py_call(b.list, class_weight)
     var numbers = List[Float64](capacity=len(keys))
     var foreign = False
+    var numeric = Python.list()
     for e in range(len(keys)):  # driver-loop: over the dict's keys (exact native numbers only)
         var kind = py_type(keys[e])
         if kind is not b.int and kind is not b.float and kind is not b.bool:
             foreign = True
-            break
+            continue
         numbers.append(Float64(py=py_call(b.float, keys[e])))
+        _ = py_call(numeric.append, keys[e])
     if foreign:
-        # A key no numeric class equals: every classifier step's fit refuses
-        # the dict as absent from its y, after the family's own key
-        # admission, which runs first in its fit (its TypeErrors raise here).
-        _keys_admit(owner.plan.family, model, class_weight, keys, context, b)
-        member_cw_keyed_words(owner.plan.params, start, List[Float64](), List[Float64](), True)
+        # A key no numeric class equals: a classifier step's fit refuses the
+        # dict as absent from its y when the dict also leaves one of the
+        # step's classes unweighted, naming those classes (scikit-learn 1.9.1
+        # compute_class_weight: a class the dict's numeric keys name is
+        # weighted). Lane w3-fix-c: the numeric keys and their values are kept
+        # beside the foreign mark (before, every key was dropped, so every
+        # class was listed unweighted: "[0, 1, 2]" for "[0, 2]"). The family's
+        # own key admission runs first, as in its fit (its TypeErrors raise
+        # here); `_dict_values` over the numeric keys runs the same admission
+        # for the families that make one.
+        if len(numbers) == 0:
+            _keys_admit(owner.plan.family, model, class_weight, keys, context, b)
+            member_cw_keyed_words(owner.plan.params, start, List[Float64](), List[Float64](), True)
+            _ = keys
+            return True
+        var weights = List[Float64]()
+        if not _dict_values(owner.plan.family, model, class_weight, numeric, context, b, weights):
+            return False
+        member_cw_keyed_words(owner.plan.params, start, numbers, weights, True)
         _ = keys
         return True
     var values = List[Float64]()

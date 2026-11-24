@@ -54,8 +54,12 @@ def _(ml, X, yc, yr, Xh=None):
     the estimated bandwidth (the device's row order statistic), every row a
     seed, cluster_all off so the -1 arm is reached; infer is predict."""
     m = ml.MeanShift(cluster_all=False).fit(X[:1200, 1:4])
+    # the estimated bandwidth of rows whose squared distances are exact only
+    # in the features-ascending fold (identity_break._fold_order_rows)
+    f = ml.MeanShift().fit(_fold_order_rows())
     return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_),
-                     bandwidth=_h(np.float64(m.bandwidth_)), n_iter=_h(np.int64(m.n_iter_))),
+                     bandwidth=_h(np.float64(m.bandwidth_)), n_iter=_h(np.int64(m.n_iter_)),
+                     fold_order=_h(np.float64(f.bandwidth_), f.cluster_centers_)),
                 m, lambda e: (e.predict(Xh[:256, 1:4]),))
 
 

@@ -710,7 +710,7 @@ def _block_lists(view: MemberMatrix, d: Int) raises -> List[List[Int]]:
     return lists^
 
 
-def _block_ints(view: MemberMatrix) -> List[Int]:
+def _block_ints(view: MemberMatrix) raises -> List[Int]:
     # A fitted float32 index block as ints (-1: None).
     var words = f32_ptr(view.data)
     var out = List[Int](capacity=view.rows * view.cols)
