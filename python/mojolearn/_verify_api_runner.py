@@ -181,19 +181,31 @@ def verify(*,self_test=True,reference=None,retain=None,scope='all'):
             for kind in sorted({row['kind'] for row in clean['endpoints'].values()})})
     result['reference_device_validation']=reference.get('device_validation',{})
     result['reference_untested_vendors']=reference.get('untested_vendors',['metal','cuda','hip'])
-    # The endpoint reference validates GPU vendors only. A vendor it never validated (the
-    # CPU column: device-only endpoints cannot run there) is UNTESTED, never FAILED.
-    if reference.get('validated_vendors') and clean['vendor'] not in reference['validated_vendors']:
-        result.update(status='UNTESTED',errors=[],untested_reason='endpoint reference validates '
-            +', '.join(reference['validated_vendors'])+'; not '+clean['vendor'])
-        return result
     witness=reference.get('witness',{})
+    # A shipped reference whose fixture sources differ from the shipped fixtures is stale on
+    # every device: the staleness is a property of the reference, not of the vendor running it.
+    # r6-proving (2026-11-23): this test sat below the UNTESTED return, so the CPU column (the
+    # source-tree self-test on the CPU box) passed while the L40S self-test of the same wheel
+    # read OWED; the CPU run now fails the same way.
+    stale=sorted(family for family in set(clean['families'].values())
+                 if witness.get('sources',{}).get(family)!=clean['sources'][family])
+    if stale:
+        result['errors'].append('endpoint fixtures changed; current reference is stale ('
+                                +', '.join(stale)+')')
+    # The endpoint reference validates GPU vendors only. A vendor it never validated (the
+    # CPU column: device-only endpoints cannot run there) is UNTESTED, never FAILED; with a
+    # stale reference it reads OWED, as a validated vendor does.
+    if reference.get('validated_vendors') and clean['vendor'] not in reference['validated_vendors']:
+        if stale:
+            result.update(status='OWED',untested_reason='endpoint reference validates '
+                +', '.join(reference['validated_vendors'])+'; not '+clean['vendor'])
+        else:
+            result.update(status='UNTESTED',errors=[],untested_reason='endpoint reference validates '
+                +', '.join(reference['validated_vendors'])+'; not '+clean['vendor'])
+        return result
     reuse=witness.get('version')!=clean['version'] and unchanged_reference_inputs(clean,reference)
     if reuse:result['evidence_reuse']='unchanged loaded native bytes and numerical fixtures'
-    if any(witness.get('sources',{}).get(family)!=clean['sources'][family]
-             for family in set(clean['families'].values())):
-        result['errors'].append('endpoint fixtures changed; current reference is stale')
-    else:
+    if not stale:
         selected_witness=dict(witness,expected=clean['expected'])
         result['errors'].extend(differences(clean,selected_witness))
         result['status']='MATCH' if not result['errors'] else 'FAILED'
