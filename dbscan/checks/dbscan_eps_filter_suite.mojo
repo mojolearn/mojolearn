@@ -133,11 +133,11 @@ def _unit(
             var m = min(n - st, g_rows)
             dbf_range_launch[DBSCAN_METRIC_L2, False](
                 ctx, gws, g, xc, nc, x, bm_none, deg_filter, unc, st, m, n, k,
-                m, 0, thresh, band, False,
+                m, 0, thresh, band,
             )
-            dbf_range_launch[DBSCAN_METRIC_L2, True](
+            dbf_range_launch[DBSCAN_METRIC_L2, True, True](
                 ctx, gws, g, xc, nc, x, bm_filter, deg_filter, unc, st, m, n,
-                k, n, st, thresh, band, True,
+                k, n, st, thresh, band,
             )
             st += m
         var words_exact = download[DType.uint64](ctx, bm_exact, n_words * n)

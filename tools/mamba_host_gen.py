@@ -153,7 +153,11 @@ SUBSTITUTIONS = (
     # lane nv-occupancy (2026-10-28): MOJOLEARN_IDN_SSD_OCCUPANCY's coalesced
     # and shared-tile S10/S12/S18 arms are device-only; the host column keeps
     # the cell kernels (the same chains, the same bits). Restored 2026-11-15
-    # with the arm (lane restore-run-arms-neural).
+    # with the arm (lane restore-run-arms-neural). Promoted to the device
+    # default 2026-11-24 (lane o3-nmlp of ab-outcome-3; the old cell kernels on
+    # the device are -D MOJOLEARN_IDN_SSD_OCCUPANCY_OFF): the host column still
+    # has no shared memory and keeps the cell kernels, which compute the same
+    # words (L40S A/B: equal digests, 0.0 against the host column).
     ("mamba/impl/modules/ssd_minimal.mojo",
      r"comptime IDN_SSD_OCCUPANCY = \([\s\S]*?\n\)",
      "comptime IDN_SSD_OCCUPANCY = False"),

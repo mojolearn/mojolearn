@@ -7,7 +7,6 @@ Mojo. Imports no Python. The binding keeps UNPACK (fields, the tier, the
 entry words `_fam`/`_pt_flags`, the work switch) and PACK (fitted arrays), and
 runs each program through the shared transport as before."""
 from std.os import getenv
-from std.sys.compile import is_defined, get_defined_int
 from core.preprocessing_program import prep_program_stage as _stage
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -208,13 +207,23 @@ def _quantile_program(mut program: List[Int32], mut layout: PrepLayout, fam: Int
     return (grid, nb, qo, qt)
 
 
+#: The speculation depth of the IDENTICAL PowerTransformer search: 3 golden-section
+#: steps a round (2^3 - 1 = 7 candidates). Measured (A/B nvc-ab-20261124T115722Z-d8f8b2,
+#: NVIDIA L40S, wheel 4519097d380a, job nvc1-0003, power-transformer istella and taxi
+#: full, fit and infer): depth 0 was slower, 4 cells median 1.02, taxi fit 102 -> 145 ms
+#: (1.42); depth 6 was slower, 4 cells median 1.04, taxi fit 103 -> 134 ms (1.30); istella
+#: within 0.99..1.07 both ways. Depth 3 balances the rounds' launches against the 2^s - 1
+#: candidates' transforms each round writes. AMD not measured (NVIDIA-only campaign).
+# TOMBSTONE: MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH (both B arms LOSER: depth 0 NV L40S 4 cells median 1.02, taxi fit 1.42; depth 6 median 1.04, taxi fit 1.30) deleted 2026-11-24 by lane/o3-prep (lane ab-outcome-3); code recoverable at 49fda8446c.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH.ab-outcome-3.patch
+comptime PT_SPEC_DEPTH = 3
+
+
 def _pt_spec_depth(n: Int, d: Int) -> Int:
-    """`_expansion_prep._pt_spec_depth`: the speculation depth (default 3,
-    clamped to [0, 6]), lowered until the candidates' transforms fit in 2^28
-    words (a size range, not a shape); 0 when even two do not."""
-    # lane fx-env-dead (2026-11-18): was the run-time env read MOJOLEARN_XPREP_PT_SPEC per fit; now the build
-    # define -D MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH=<0..6>, default unchanged (3), A/B owed.
-    var s = max(0, min(get_defined_int["MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH", 3](), 6))
+    """`_expansion_prep._pt_spec_depth`: the speculation depth (PT_SPEC_DEPTH),
+    lowered until the candidates' transforms fit in 2^28 words (a size range,
+    not a shape); 0 when even two do not."""
+    var s = PT_SPEC_DEPTH
     while s > 1 and ((1 << s) - 1) * n * d > 268435456:  # driver-loop: over speculation depths
         s -= 1
     if s == 1 and 2 * n * d > 268435456:
@@ -250,10 +259,8 @@ def _power_program(mut program: List[Int32], mut layout: PrepLayout, fam: Int, f
         var spec = _pt_spec_depth(n, d) if identical else 0
         if spec:
             var mmax = max((1 << spec) - 1, 2)
-            var il = 0
-            # lane fx-env-dead (2026-11-18): was the run-time env read MOJOLEARN_XPREP_PT_INTERLEAVE=1; default off
-            if not tiled and is_defined["MOJOLEARN_XPREP_FAST_PT_INTERLEAVE"]():
-                il = 1
+            # TOMBSTONE: MOJOLEARN_XPREP_FAST_PT_INTERLEAVE (NOISE/LOSER: NV L40S 4 cells, median 1.02, 1.01..1.03) deleted 2026-11-24 by lane/o3-prep (lane ab-outcome-3); code recoverable at c23cb55fda.
+            # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_INTERLEAVE.ab-outcome-3.patch
             var state = layout.alloc(PT_STATE * d)
             var leval = layout.alloc(d)
             var spl = layout.alloc(d * mmax)
@@ -281,15 +288,15 @@ def _power_program(mut program: List[Int32], mut layout: PrepLayout, fam: Int, f
                 var steps = 2 if k0 == 0 else min(spec, PT_EVALS - 1 - k0)
                 var m = 2 if k0 == 0 else (1 << steps) - 1
                 _stage(program, OP_PT_SPTS, d, state, leval, spl, m, k0)
-                _stage(program, OP_PT_SMAP, m * n * d, xo, n, d, method, spl, m, tv, lg, il)
+                _stage(program, OP_PT_SMAP, m * n * d, xo, n, d, method, spl, m, tv, lg)
                 if fam_pt:
                     var first = 1 if k0 == 0 else 0
-                    _stage(program, OP_PTB_PART1, nb * d * m, xo, n, d, method, tv, m, state, bps, bpc, bpj, nb, first, il)
+                    _stage(program, OP_PTB_PART1, nb * d * m, xo, n, d, method, tv, m, state, bps, bpc, bpj, nb, first)
                     _stage(program, OP_PTB_MEAN, d * m, bps, bpc, bpj, nb, d, m, state, bmean, bcnt, first)
-                    _stage(program, OP_PTB_PART2, nb * d * m, tv, n, d, m, state, bmean, bcnt, bss, nb, il)
+                    _stage(program, OP_PTB_PART2, nb * d * m, tv, n, d, m, state, bmean, bcnt, bss, nb)
                     _stage(program, OP_PTB_FIN, d * m, bss, nb, d, m, state, spl, vals, bcnt)
                 else:
-                    _stage(program, OP_PT_SFOLD, d * m, xo, n, d, method, tv, m, state, spl, vals, 1 if k0 == 0 else 0, il)
+                    _stage(program, OP_PT_SFOLD, d * m, xo, n, d, method, tv, m, state, spl, vals, 1 if k0 == 0 else 0)
                 _stage(program, OP_PT_SRES, d, state, leval, m, vals, k0, steps, lam)
                 k0 += steps
         else:
@@ -320,9 +327,9 @@ def _power_program(mut program: List[Int32], mut layout: PrepLayout, fam: Int, f
                 _stage(program, OP_PT_MAP, n * d, xo, n, d, method, leval, tv, 0 if tiled else lg + 1)
                 if fam_pt:
                     var first = 1 if k == 0 else 0
-                    _stage(program, OP_PTB_PART1, nb * d, xo, n, d, method, tv, 1, state, bps, bpc, bpj, nb, first, 0)
+                    _stage(program, OP_PTB_PART1, nb * d, xo, n, d, method, tv, 1, state, bps, bpc, bpj, nb, first)
                     _stage(program, OP_PTB_MEAN, d, bps, bpc, bpj, nb, d, 1, state, bmean, bcnt, first)
-                    _stage(program, OP_PTB_PART2, nb * d, tv, n, d, 1, state, bmean, bcnt, bss, nb, 0)
+                    _stage(program, OP_PTB_PART2, nb * d, tv, n, d, 1, state, bmean, bcnt, bss, nb)
                     _stage(program, OP_PTB_STEP, d, xo, n, d, method, tv, k, state, leval, lam, bss, nb, bcnt)
                 else:
                     _stage(program, OP_PT_FOLD, d, xo, n, d, method, tv, k, state, leval, lam)

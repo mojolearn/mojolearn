@@ -33,8 +33,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from x_decomp.cells import F32Ptr, I32Ptr
 from checks.numerics import ftz, identical_mul
 from x_decomp.cells import ew_cell
-from x_decomp.cells import X_DECOMP_SVD_SWEEPS
-from x_decomp.svd_ops import qr_op_q, svd_op_tall
+from x_decomp.svd_ops import qr_op_q
 from core.step_gate import step_gate_open_word
 from x_decomp.device import (
     DevExec,
@@ -64,7 +63,6 @@ from x_decomp.device import (
     rand_kernel,
     rowsum_scratch,
     xd_ctx,
-    XD_FAST_SVD_ONE_BLOCK,
     XD_EIGH_ONE_BLOCK_N,
     eigh_batch_one_block_pays,
 )
@@ -158,14 +156,9 @@ def pinv_inv_dev_kernel(s: F32Ptr, inv: F32Ptr, r_in: Int32, mx: Float32, eps: F
     inv.unsafe_store(j, ew_cell(OP_RECIP, kept, Float32(0), Float32(0), Float32(0)))
 
 
-def dk_eig_sticky_kernel(status: I32Ptr, dst: F32Ptr):
-    """One thread: the first nonzero eigh status word since the kit's last
-    sync lands in dst[0] (read at `DKit.sync`)."""
-    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
-        return
-    var st = status.unsafe_load(0)
-    if st != Int32(0) and dst.unsafe_load(0) == Float32(0):
-        dst.unsafe_store(0, Float32(st))
+# TOMBSTONE: MOJOLEARN_XD_FAST_SVD_ONE_BLOCK (NOISE: NV L40S 8 cells, median 1.00, 0.97..1.05) deleted 2026-11-24 by lane/o3-decomp (ab-outcome-3); code recoverable at c23cb55fda.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.ab-outcome-3.patch
+# (dk_eig_sticky_kernel: the one-block SVD op's sticky status word, read only by that arm.)
 
 
 def dk_rev_vec_kernel(src: F32Ptr, dst: F32Ptr, n: Int32):
@@ -383,11 +376,9 @@ struct DKit(Movable):
     # TOMBSTONE: the eigh op's sticky status word (`eig_word`, `eig_host`, `eig_pending`, read at `sync`) deleted
     # 2026-11-13 by lane perf-decomp-eigh: `eigh` runs `DevExec.eigh_into`, which raises on an unconverged
     # solve itself; code recoverable at the lane's base (origin/main bc85d7e247).
-    # the SVD op's status words (`svd` below), sticky the same way (lane
-    # n9b-device-svd-qr)
-    var svd_word: DMat
-    var svd_host_word: List[Float32]
-    var svd_pending: Bool
+    # TOMBSTONE: MOJOLEARN_XD_FAST_SVD_ONE_BLOCK (NOISE: NV L40S 8 cells, median 1.00, 0.97..1.05) deleted 2026-11-24 by lane/o3-decomp (ab-outcome-3); code recoverable at c23cb55fda.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.ab-outcome-3.patch
+    # (DKit's svd_word / svd_host_word / svd_pending: the one-block SVD op's status words.)
     # lane mcd-per-step-cost (2026-11-14): `eigh_deferred`'s status words
     # (one per narrow solve since the last sync), read at the next `sync`,
     # so MinCovDet's narrow pinvh adds no drain of its own to a C-step
@@ -413,9 +404,6 @@ struct DKit(Movable):
         self.nan_word = DMat(1, 1)
         self.nan_host = List[Int32](length=1, fill=Int32(0))
         self.nan_pending = False
-        self.svd_word = DMat(1, 1)
-        self.svd_host_word = List[Float32](length=1, fill=Float32(0))
-        self.svd_pending = False
         self.eig_status = List[DeviceBuffer[DType.int32]]()
         self.eig_host = List[Int32]()
         self.sel_cap = 0
@@ -432,13 +420,6 @@ struct DKit(Movable):
         var nv = _pool_buf_view(self.nan_word.id, 1)
         enqueue_fill(self.ctx, nv, Float32(0))
         _ = nv^
-        # lane/expdel2-restore-owed (2026-11-15): the status word is filled
-        # only on the B arm, so the default kit launches nothing more than it
-        # did after the sweep.
-        comptime if XD_FAST_SVD_ONE_BLOCK:
-            var sv = _pool_buf_view(self.svd_word.id, 1)
-            enqueue_fill(self.ctx, sv, Float32(0))
-            _ = sv^
 
     # ---- movement
     def _sub(self, D: DMat) raises -> DeviceBuffer[DType.float32]:
@@ -471,18 +452,10 @@ struct DKit(Movable):
 
     def sync(mut self) raises:
         var check = self.nan_pending
-        var scheck = False
-        comptime if XD_FAST_SVD_ONE_BLOCK:
-            scheck = self.svd_pending
         if check:
             self.ctx.enqueue_copy(
                 dst_ptr=F32Ptr(unsafe_from_address=Int(self.nan_host.unsafe_ptr())),
                 src_buf=_pool_buf_view(self.nan_word.id, 1),
-            )
-        if scheck:
-            self.ctx.enqueue_copy(
-                dst_ptr=F32Ptr(unsafe_from_address=Int(self.svd_host_word.unsafe_ptr())),
-                src_buf=_pool_buf_view(self.svd_word.id, 1),
             )
         var ne = len(self.eig_status)
         while len(self.eig_host) < ne:  # driver-loop: grows once to the most solves between two syncs
@@ -504,14 +477,6 @@ struct DKit(Movable):
                         " (a resident narrow solve read at the next sync). An unconverged decomposition"
                         " is not returned as if it were one (DEVIATION 590)."
                     )
-        if scheck:
-            self.svd_pending = False
-            if self.svd_host_word[0] != Float32(0):
-                raise Error(
-                    "x_decomp svd: a resident solve did not converge in " + String(X_DECOMP_SVD_SWEEPS) + " sweeps"
-                    " or a singular value is NaN (a NaN input, or a device launch cut short). An unconverged"
-                    " decomposition is not returned as if it were one (DEVIATION 590)."
-                )
         if check:
             self.nan_pending = False
             if self.nan_host[0] != Int32(0):
@@ -776,29 +741,23 @@ struct DKit(Movable):
         return Int(self.word(self.total(self.ew1(OP_GTS, A, s))))
 
     def svd(mut self, A: DMat, mut S: DMat, mut Vt: DMat) raises:
-        """`_Kit.svd` of a resident tall A (m >= n >= 1): the executor op
-        `svd_op_tall` (x_decomp/svd_ops.mojo) on a device copy, S (1 x n,
-        descending) and Vt (n x n, row a the right singular vector of S[a])
-        left resident, ENQUEUED. The status word is sticky until the next
-        `sync`, which raises on an unconverged or NaN solve.
+        """`_Kit.svd` of a resident tall A (m >= n >= 1) on a device copy:
+        `DevExec.svd_desc_into`, 0.8.66's round launches with the order on the
+        device, S (1 x n, descending) and Vt (n x n, row a the right singular
+        vector of S[a]) left resident, ENQUEUED.
 
-        Lane n9b-device-svd-qr (2026-11-09): this ran `DevExec._svd_on` into
-        host Mats (a wait every XD_SVD_GROUP sweeps), ordered them on the host
-        (`svd_order`) and uploaded both again; FactorAnalysis EM, LLE's
-        subspace iteration and PLS read them on the device now. The same
-        words (the op's one-block Jacobi is the round launches' pairs, fold
-        and tree; the order is `svd_order`'s).
-
-        Lane perf-decomp-eigh (2026-11-13): the one-block op is the owed B
-        arm (-D MOJOLEARN_XD_FAST_SVD_ONE_BLOCK, as for `DevExec._svd_on`);
-        the default is `DevExec.svd_desc_into`, 0.8.66's round launches with
-        the order on the device and S, Vt resident. Measured with the op as
-        the default against 0.8.66: factor-analysis/istella fit NVIDIA 6525
-        -> 15992 ms (2.45x), AMD 4143 -> 19733 ms (4.76x)."""
+        Lane perf-decomp-eigh (2026-11-13): the one-block executor op
+        (`svd_op_tall`) measured factor-analysis/istella NVIDIA 6525 -> 15992
+        ms (2.45x), AMD 4143 -> 19733 ms (4.76x) against 0.8.66. As the B arm
+        -D MOJOLEARN_XD_FAST_SVD_ONE_BLOCK it was no faster on the NVIDIA L40S
+        (A/B nvc-ab-20261124T115722Z-d8f8b2, 8 cells, median 1.00) and was
+        deleted with the op."""
         # TOMBSTONE: MOJOLEARN_XD_FAST_SVD_ONE_BLOCK (unmeasured opt-in arm, EXP:2366 PENDING) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 0564fdef0e.
         # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.patch; record in docs/TOMBSTONES.md.
         # (Sweep 2026-11-15: the always-False one-block branch, dk_eig_sticky_kernel and DKit's svd_word / svd_host_word / svd_pending status words removed.)
         # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature; the sweep's folds above (7c6df8f9f7) reverted with it.
+        # TOMBSTONE: MOJOLEARN_XD_FAST_SVD_ONE_BLOCK (NOISE: NV L40S 8 cells, median 1.00, 0.97..1.05) deleted 2026-11-24 by lane/o3-decomp (ab-outcome-3); code recoverable at c23cb55fda.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.ab-outcome-3.patch
         var m = A.r
         var n = A.c
         if n <= 0 or m < n:
@@ -807,29 +766,12 @@ struct DKit(Movable):
         Vt = DMat(n, n)
         var da = self.ctx.enqueue_create_buffer[DType.float32](m * n)
         self.ctx.enqueue_copy(dst_buf=da, src_buf=self._sub(A))
-        comptime if not XD_FAST_SVD_ONE_BLOCK:
-            var ds0 = self._sub(S)
-            var dv0 = self._sub(Vt)
-            DevExec.svd_desc_into(self.ctx, da, m, n, QRB_CELLS, ds0, dv0)
-            _ = da^
-            _ = ds0^
-            _ = dv0^
-            return
-        var gate = step_gate_open_word(self.ctx)
-        var status = self.ctx.enqueue_create_buffer[DType.int32](1)
-        var ds = self._sub(S)
-        var dv = self._sub(Vt)
-        svd_op_tall(self.ctx, gate, da, ds, dv, status, m, n)
-        self.ctx.enqueue_function[dk_eig_sticky_kernel](
-            I32Ptr(unsafe_from_address=Int(status.unsafe_ptr())), self.svd_word.p(),
-            grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
-        )  # small-launch(one word): the op's status, sticky to the next sync
-        self.svd_pending = True
+        var ds0 = self._sub(S)
+        var dv0 = self._sub(Vt)
+        DevExec.svd_desc_into(self.ctx, da, m, n, QRB_CELLS, ds0, dv0)
         _ = da^
-        _ = gate^
-        _ = status^
-        _ = ds^
-        _ = dv^
+        _ = ds0^
+        _ = dv0^
 
     def pinv_inv(self, S: DMat, r: Int, mx: Int) raises -> DMat:
         """PLS's pinv weights: 1 / s over s > f32(s[0] mx 2^-23), else 0, on

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # native-check: cpu gpu
-"""The nearest_centroid_native native check: the eight fit/query plan fixtures and three empty-query contracts of
+"""The nearest_centroid_native native check: the four fit/query plan fixtures and three empty-query contracts of
 `nearest_centroid_descriptor_cases.mojo` through the column's real native descriptor (host on the host column, the
 device descriptor on the device column), independent rows across the host workers."""
 from std.testing import TestSuite
@@ -29,7 +29,7 @@ def _empty(unit: Int) raises:
 
 
 def test_fit_query() raises:
-    check_cases("fit_query", 8, _fit_query)
+    check_cases("fit_query", 4, _fit_query)
 
 
 def test_empty() raises:

@@ -29,18 +29,20 @@
   },
   "svd-one-block": {
    "define": "MOJOLEARN_XD_FAST_SVD_ONE_BLOCK",
-   "status": "define in code (x_decomp/device.mojo:227): B routes DevExec._svd_on (pca / tsvd / randomized-svd through x_decomp_svd and x_decomp_dev_svd) through svd_op_tall; A = today's round launches",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-decomp): NOISE (L40S 8 cells, median 1.00, 0.97..1.05); A (DevExec._svd_on and DKit.svd on the round launches, the default) is unchanged; removed: the switch, DevExec._svd_on_op, DKit's one-block branch and its sticky status word (dk_eig_sticky_kernel, svd_word / svd_host_word / svd_pending), svd_op_tall and so_status_kernel (x_decomp/svd_ops.mojo), rs_block_gated_kernel (x_decomp/rr_svd_device.mojo); the define is refused (core/experiment_guards_decomposition.mojo); code recoverable at c23cb55fda, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.ab-outcome-3.patch. Was: define in code (x_decomp/device.mojo:227): B routes DevExec._svd_on (pca / tsvd / randomized-svd through x_decomp_svd and x_decomp_dev_svd) through svd_op_tall; A = today's round launches",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "small-mlp-generic": {
    "define": "MOJOLEARN_SMALL_MLP_GENERIC_OPS",
-   "status": "define in code (autograd/small_mlp_program.mojo SMALL_MLP_GENERIC_OPS): B = lane x2's transpose + OPS_LINEAR capture; A = op small_mlp (leaf-128 GEMM, hand backward)",
+   "status": "define in code (autograd/small_mlp_program.mojo SMALL_MLP_GENERIC_OPS): B = lane x2's transpose + OPS_LINEAR capture; A = op small_mlp on identical_gemm_into (leaf128 removed 2026-11-24, ab-outcome-3); RUN OWED with the wave-3 sha; previous: train-step 0.536 -> 0.442 (0.82), predict 0.060 -> 0.065 (1.08)",
    "owed": "RUN"
   },
   "small-mlp-leaf128-off": {
    "define": "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF",
-   "status": "define in code (autograd/small_mlp_op.mojo SMALL_MLP_GEMM_LEAF128): B = op small_mlp on identical_gemm_into",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-nmlp): the DEFAULT lost (L40S 2 cells, median 0.91, mlp-train-step 0.561 -> 0.468 ms (0.83; base 0.485..0.561 over five runs of the box), mlp-predict 0.99; digests equal); B (op small_mlp on identical_gemm_into) is the only form; removed: SMALL_MLP_GEMM_LEAF128, neural_model_leaf_into and the switch; the define is refused (core/experiment_guards_neural.mojo); no bits change; code recoverable at 774ef6eb1f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MLP_GEMM_LEAF128.ab-outcome-3.patch. Was: define in code (autograd/small_mlp_op.mojo SMALL_MLP_GEMM_LEAF128): B = op small_mlp on identical_gemm_into",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "cnn-generic": {
    "define": "MOJOLEARN_CNN_GENERIC_OPS",
@@ -50,8 +52,9 @@
   },
   "transformer-generic-prefill": {
    "define": "MOJOLEARN_TRANSFORMER_GENERIC_PREFILL",
-   "status": "define in code (autograd/block_step_ops.mojo TRANSFORMER_GENERIC_PREFILL): B = lane x4b's generic step-op run for a stateless forward; A = attn_step_fresh_prefill (0.8.66's session fresh prefill)",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3): LOSER (L40S transformer-forward 2.20 -> 2.97 ms, 1.35); attn_step_fresh_prefill stays the only stateless prefill; the define is refused (core/experiment_guards_neural.mojo); code recoverable at c23cb55fda, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_GENERIC_PREFILL.ab-outcome-3.patch. Was: define in code (autograd/block_step_ops.mojo TRANSFORMER_GENERIC_PREFILL): B = lane x4b's generic step-op run for a stateless forward; A = attn_step_fresh_prefill (0.8.66's session fresh prefill)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "rsvd-devscan-off": {
    "define": "MOJOLEARN_RSVD_FAST_DEVSCAN_OFF",
@@ -85,8 +88,9 @@
   },
   "if-scores-f64-off": {
    "define": "MOJOLEARN_IDN_IF_SCORES_F64_OFF",
-   "status": "define in code (isolation_forest/impl/isolation_forest.mojo IDN_IF_SCORES_F64): B = float32 download + the door's admit_family_f64 cast (115b5eb8bb); A = the epilogue writes the public float64 scores",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-trees): old path LOSER (L40S 6 cells, median 1.06; iforest taxi infer 4.99 -> 7.63 ms 1.53, 2.83 -> 5.30 ms 1.88); A (the float64 epilogue) is unchanged; the switch term is gone and the define refused (core/six_lane_experiment_guards.mojo); the cast stays for Apple and the CPU column; code recoverable at e4f3c40fa0, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_IF_SCORES_F64_OFF.ab-outcome-3.patch. Was: define in code (isolation_forest/impl/isolation_forest.mojo IDN_IF_SCORES_F64): B = float32 download + the door's admit_family_f64 cast (115b5eb8bb); A = the epilogue writes the public float64 scores",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "kde-qtile-force": {
    "define": "MOJOLEARN_IDN_KDE_QTILE_FORCE",
@@ -138,18 +142,21 @@
   },
   "tsqr-wy-pair-off": {
    "define": "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF",
-   "status": "define in code (x_decomp/tsqr_core.mojo TS_WY_PAIR): B = the single-panel WY update (before 3c5c5592a0); A = the paired-panel WY update (default since 2026-10-08, never A/B'd)",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-decomp): old path LOSER (L40S 10 cells, median 1.03; istella lstsq 283 -> 373 ms (1.32), ols 510 -> 683 ms (1.34), qr / svd 1.11); A (the paired-panel WY update, the IDENTICAL default) is unchanged; removed: the switch term (TS_WY_PAIR = IDENTICAL; the per-panel update stays for FAST builds); grid control tsqr_wy_pair moved to removed (gap-tsqr.json); the define is refused (core/experiment_guards_decomposition.mojo); code recoverable at 4ce303e41b, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_TSQR_WY_PAIR_OFF.ab-outcome-3.patch. Was: define in code (x_decomp/tsqr_core.mojo TS_WY_PAIR): B = the single-panel WY update (before 3c5c5592a0); A = the paired-panel WY update (default since 2026-10-08, never A/B'd)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "tsqr-tree-par-off": {
    "define": "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF",
-   "status": "define in code (x_decomp/tsqr_core.mojo TS_TREE_PAR): B = the serial tree-combine norm and untiled Q C apply (before 3c5c5592a0); A = the lane-parallel tree fold and tiled apply (default since 2026-10-08, never A/B'd)",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-decomp): old path no faster (L40S 10 cells, median 1.00, 0.89..1.08); A (the lane-parallel tree fold and tiled apply, the IDENTICAL default) is unchanged; removed: the switch term (TS_TREE_PAR = IDENTICAL; the serial forms stay for FAST builds); grid control tsqr_tree_par moved to removed (gap-tsqr.json); the define is refused (core/experiment_guards_decomposition.mojo); code recoverable at a58cf59d32, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.ab-outcome-3.patch. Was: define in code (x_decomp/tsqr_core.mojo TS_TREE_PAR): B = the serial tree-combine norm and untiled Q C apply (before 3c5c5592a0); A = the lane-parallel tree fold and tiled apply (default since 2026-10-08, never A/B'd)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "tsqr-wy-pair-tree-par-off": {
    "define": "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF,MOJOLEARN_IDN_TSQR_TREE_PAR_OFF",
-   "status": "both defines together: the whole pre-3c5c5592a0 TSQR (x_decomp/tsqr_core.mojo)",
-   "owed": "RUN"
+   "status": "DECIDED 2026-11-24 (lane ab-outcome-3, sub-lane o3-decomp): both old paths together were slower (L40S 10 cells, median 1.00; istella lstsq 1.31, ols 1.33, svd 1.11 slower); decided by the two deletions of MOJOLEARN_IDN_TSQR_TREE_PAR_OFF and MOJOLEARN_IDN_TSQR_WY_PAIR_OFF (both refused in core/experiment_guards_decomposition.mojo; patches ~/mojolearn-evidence/experiments-removed/<DEFINE>.ab-outcome-3.patch). Was: both defines together: the whole pre-3c5c5592a0 TSQR (x_decomp/tsqr_core.mojo)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "ols-predict-tiled": {
    "define": "MOJOLEARN_IDN_OLS_PREDICT_TILED",
@@ -315,7 +322,13 @@
   },
   "ssd-occupancy-on": {
    "define": "MOJOLEARN_IDN_SSD_OCCUPANCY",
-   "status": "define in code (mamba/impl/modules/ssd_minimal.mojo IDN_SSD_OCCUPANCY, restored 2026-11-15 by lane restore-run-arms-neural): B = coalesced S10 discretize (one thread per (b, t, h, p)), 16 x 16 shared-tile S12 G = C.B, S18/S19 Y_off row tiles; A = the cell kernels",
+   "status": "PROMOTED 2026-11-24 (lane ab-outcome-3, sub-lane o3-nmlp): WINNER (L40S mamba2-forward 2.93 -> 1.98 ms, 0.68; quality equal, digest 0350b90b398bccbf and outputs_digest 22500589aee10bb8 both, 0.0 vs host both); the occupancy kernels are the default on every device column (the host column keeps the cell kernels: no shared memory, same words); the old cell kernels are -D MOJOLEARN_IDN_SSD_OCCUPANCY_OFF (owed arm ssd-occupancy-off); the on-define is refused (core/experiment_guards_neural.mojo); no bits change. Was: define in code (mamba/impl/modules/ssd_minimal.mojo IDN_SSD_OCCUPANCY, restored 2026-11-15 by lane restore-run-arms-neural): B = coalesced S10 discretize (one thread per (b, t, h, p)), 16 x 16 shared-tile S12 G = C.B, S18/S19 Y_off row tiles; A = the cell kernels",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md; quality ~/mojolearn-evidence/ab-outcome-3/o3-nmlp/promote-quality.txt"
+  },
+  "ssd-occupancy-off": {
+   "define": "MOJOLEARN_IDN_SSD_OCCUPANCY_OFF",
+   "status": "define in code (mamba/impl/modules/ssd_minimal.mojo IDN_SSD_OCCUPANCY, promoted 2026-11-24 by lane ab-outcome-3 / o3-nmlp): B = the old cell kernels for S10, S12 and S18/S19 on every device column; A = the occupancy kernels (the default). Same words on both arms: digests must not move. Time with the wave-3 sha",
    "owed": "RUN"
   },
   "attn-fold-v2-on": {
@@ -368,14 +381,15 @@
   },
   "gemm-stage-up-off": {
    "define": "MOJOLEARN_GEMM_STAGE_UP_OFF",
-   "status": "SPLIT read 2026-11-24 (lane ab-outcome-2, sub-lane ab2-ngemm; A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S job nvc1-0002: f32 gemm 47.77 -> 38.70 ms 0.81 raw FASTER, int8 1.13, bf16 1.01, hashes and quality equal): the switch reaches only gemm_up_f32 (gemm/host_transport.mojo); the int8 row uploads raw in both arms (gemm/linalg_native.mojo:297-300) and the bf16 row's operands are bf16 bits uploaded raw in both arms (gemm/linalg_native.mojo:222,227), so their 1.13 / 1.01 are spread, not the switch. On f32 raw wins because pageable H2D (24.86 GB/s on the A/B host) is about pinned (26.96) and the stage adds a single-thread host copy (memcpy 22.26 GB/s) plus a wait per chunk. A hardware cost rule is written as -D MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST (owed arm gemm-stage-up-by-cost); this switch stays until that A/B decides. Was: define in code (gemm/host_transport.mojo GEMM_STAGE_UP_ON): B = raw host-pointer upload (the former MOJOLEARN_GEMM_STAGE_UP=0); A = staged upload on NVIDIA/AMD (the former default). A transport/route choice: digests must not move.",
+   "status": "RUN OWED with the wave-3 sha, gemm f32 full on the new box; if raw upload wins or ties again on f32, stage-up is deleted (one route) (lane ab-outcome-3 / o3-route, 2026-11-24: the per-process timing arm MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST is withdrawn by Andrew; this switch is kept exactly as before it). Was: SPLIT read 2026-11-24 (lane ab-outcome-2, sub-lane ab2-ngemm; A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S job nvc1-0002: f32 gemm 47.77 -> 38.70 ms 0.81 raw FASTER, int8 1.13, bf16 1.01, hashes and quality equal): the switch reaches only gemm_up_f32 (gemm/host_transport.mojo); the int8 row uploads raw in both arms (gemm/linalg_native.mojo:297-300) and the bf16 row's operands are bf16 bits uploaded raw in both arms (gemm/linalg_native.mojo:222,227), so their 1.13 / 1.01 are spread, not the switch. On f32 raw wins because pageable H2D (24.86 GB/s on the A/B host) is about pinned (26.96) and the stage adds a single-thread host copy (memcpy 22.26 GB/s) plus a wait per chunk. A hardware cost rule is written as -D MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST (owed arm gemm-stage-up-by-cost); this switch stays until that A/B decides. Was: define in code (gemm/host_transport.mojo GEMM_STAGE_UP_ON): B = raw host-pointer upload (the former MOJOLEARN_GEMM_STAGE_UP=0); A = staged upload on NVIDIA/AMD (the former default). A transport/route choice: digests must not move.",
    "owed": "RUN",
    "evidence": "ab3 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T182558Z-cb6e02/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts2/tab-<arm>.txt): UNDECIDED: arm/base geomean 0.986 over 3 cells, gemm 0.87 (base 46.74 vs 44.49/44.16 in the other gemm arms' base runs), gemm-bf16 1.07, gemm-int8 1.03; digests equal; thin, not promoted on one cell: kept opt-in, re-time owed (lane fx-verdicts2)"
   },
   "gemm-stage-up-by-cost": {
    "define": "MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST",
-   "status": "define in code (gemm/host_transport.mojo GEMM_FAST_STAGE_UP_BY_COST, lane ab-outcome-2 / ab2-ngemm 2026-11-24, default off): B = the first staged-size float32 upload of the process times one 16 MB chunk raw (pageable DMA), as a memcpy into the pinned stage and as the pinned DMA; the process stages iff max(copy, pinned DMA) < raw, else uploads raw; A = staged upload on NVIDIA/AMD (the default). A transport choice: digests must not move. Rows gemm-int8 and gemm-bf16 never reach the rule (controls).",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-route): withdrawn: Andrew 2026-11-24, one route, no per-process timing; never reached main, code recoverable at lane/ab-outcome-2@1f40eb3c09; refusal in core/experiment_guards_neural.mojo. Was: define in code (gemm/host_transport.mojo GEMM_FAST_STAGE_UP_BY_COST, lane ab-outcome-2 / ab2-ngemm 2026-11-24, default off): B = the first staged-size float32 upload of the process times one 16 MB chunk raw (pageable DMA), as a memcpy into the pinned stage and as the pinned DMA; the process stages iff max(copy, pinned DMA) < raw, else uploads raw; A = staged upload on NVIDIA/AMD (the default). A transport choice: digests must not move. Rows gemm-int8 and gemm-bf16 never reach the rule (controls).",
+   "owed": "DECIDED",
+   "evidence": "Andrew 2026-11-24 (~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md, section \"Andrew, 2026-11-24\"): one route, no per-process timing; withdrawn before any A/B (no run)"
   },
   "lr-table-off": {
    "define": "MOJOLEARN_LR_TABLE_OFF",
@@ -421,13 +435,15 @@
   },
   "seq-moe-tiled-off": {
    "define": "MOJOLEARN_SEQ_MOE_TILED_OFF",
-   "status": "define in code (sequence/exec_device.mojo SEQ_MOE_TILED): B = the untiled MoE kernel (the former =0); A = the tiled MoE kernel (the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3): old path no faster (L40S moe fit 1.00, infer 1.00); the tiled MoE kernels stay the route of every expert-grouped entry; the define is refused (core/experiment_guards_neural.mojo); code recoverable at 45fb45a679, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_MOE_TILED_OFF.ab-outcome-3.patch. Was: define in code (sequence/exec_device.mojo SEQ_MOE_TILED): B = the untiled MoE kernel (the former =0); A = the tiled MoE kernel (the former default). A transport/route choice: digests must not move.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "seq-var-block-off": {
    "define": "MOJOLEARN_SEQ_VAR_BLOCK_OFF",
-   "status": "define in code (sequence/exec_device.mojo SEQ_VAR_BLOCK): B = the one-thread ops (the former =0); A = VAR's Cholesky solve and forecast on one threadgroup (the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3): old path no faster (L40S 2 cells 1.00 / 1.01); the threadgroup VAR kernels stay the route wherever the shape fits VAR_SMEM; the define is refused (core/experiment_guards_neural.mojo); code recoverable at 04feb6f52d, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_VAR_BLOCK_OFF.ab-outcome-3.patch. Was: define in code (sequence/exec_device.mojo SEQ_VAR_BLOCK): B = the one-thread ops (the former =0); A = VAR's Cholesky solve and forecast on one threadgroup (the former default). A transport/route choice: digests must not move.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "seq-pool-off": {
    "define": "MOJOLEARN_SEQ_POOL_OFF",
@@ -449,18 +465,21 @@
   },
   "xc-sqdist-tiled-off": {
    "define": "MOJOLEARN_XC_SQDIST_TILED_OFF",
-   "status": "define in code (x_cluster/device_ops.mojo SQDIST_TILED): B = the per-cell `_sqdist_kernel` (the former MOJOLEARN_XC_SQDIST_TILED=0); A = the tiled `_sqdist_tiled_kernel` where its page fits (the default since bda43f7250). Every word is the same: digests must not move.",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-decomp): old path no faster (L40S 10 cells, median 1.00, 0.98..1.07); A (the tiled _sqdist_tiled_kernel where its page fits, the default) is unchanged; removed: the switch term (SQDIST_TILED = the page-fit rule; the per-cell _sqdist_kernel stays for columns whose page does not hold the tile and for empty shapes); the define is refused (core/experiment_guards_cluster.mojo); code recoverable at 8e05d20993, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XC_SQDIST_TILED_OFF.ab-outcome-3.patch. Was: define in code (x_cluster/device_ops.mojo SQDIST_TILED): B = the per-cell `_sqdist_kernel` (the former MOJOLEARN_XC_SQDIST_TILED=0); A = the tiled `_sqdist_tiled_kernel` where its page fits (the default since bda43f7250). Every word is the same: digests must not move.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "nc-split-ops": {
    "define": "MOJOLEARN_NC_SPLIT_OPS",
-   "status": "define in code (neighbors/neighbors_local_run.mojo NC_SPLIT_OPS): B = NearestCentroid fit as the three separate ops (the former MOJOLEARN_NC_SPLIT_OPS=1); A = the fused fit (the default since c0047c99be). Digests must not move.",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-trees): LOSER (L40S 4 cells, median 5.76; fit istella 59.45 -> 625 ms, taxi 16.58 -> 290 ms); A (the fused fit) is unchanged; the define is refused (core/six_lane_experiment_guards.mojo); code recoverable at a0324a1c4c, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_NC_SPLIT_OPS.ab-outcome-3.patch. Was: define in code (neighbors/neighbors_local_run.mojo NC_SPLIT_OPS): B = NearestCentroid fit as the three separate ops (the former MOJOLEARN_NC_SPLIT_OPS=1); A = the fused fit (the default since c0047c99be). Digests must not move.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "byte-lm-layer-sync-off": {
    "define": "MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF",
-   "status": "define in code (training/byte_lm.mojo BYTE_LM_LAYER_SYNC: B = no host wait after each layer's forward and backward (16 per step at board depth); A = the wait (NVIDIA/AMD default; the L40S toggle sweep read 1.00). Same kernels, same order: no bit change)",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3): old path LOSER (L40S lm-forward 19.29 -> 22.57 ms, 1.17; lm-train-step 1.00); the per-layer wait stays the NVIDIA / AMD default, Apple keeps no wait; the define is refused (core/experiment_guards_neural.mojo); code recoverable at dce0be4f4f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF.ab-outcome-3.patch. Was: define in code (training/byte_lm.mojo BYTE_LM_LAYER_SYNC: B = no host wait after each layer's forward and backward (16 per step at board depth); A = the wait (NVIDIA/AMD default; the L40S toggle sweep read 1.00). Same kernels, same order: no bit change)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "device-arena": {
    "define": "MOJOLEARN_DEVICE_ARENA",
@@ -560,8 +579,9 @@
   },
   "f16-widen-host": {
    "define": "MOJOLEARN_CHECKPOINT_FAST_F16_WIDEN_HOST",
-   "status": "define in code (bindings/causal_checkpoint_door.mojo checkpoint_widen_f16 _F16_WIDEN_HOST; opt-in, default off): B = models.safetensors.widen_f16 widens a C-ordered source on the host with core/causal_checkpoint_impl.mojo checkpoint_widen_halves (65,536-half chunks across host cores, the safetensors reader's widening); A = the linalg binding's from_f16 (device kernel on a GPU install: upload, kernel, download, three synchronizes). Both run gemm/f16_widen.mojo f16_bits_to_f32 per element: bits unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3): unmeasured plumbing arm, no cell in job nvc1-0003 (no board row exercises it); linalg from_f16 stays the route of models.safetensors.widen_f16; the driver case f16_widen went with it; the define is refused (core/experiment_guards_neural.mojo); code recoverable at f61bec9e57, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CHECKPOINT_FAST_F16_WIDEN_HOST.ab-outcome-3.patch. Was: define in code (bindings/causal_checkpoint_door.mojo checkpoint_widen_f16 _F16_WIDEN_HOST; opt-in, default off): B = models.safetensors.widen_f16 widens a C-ordered source on the host with core/causal_checkpoint_impl.mojo checkpoint_widen_halves (65,536-half chunks across host cores, the safetensors reader's widening); A = the linalg binding's from_f16 (device kernel on a GPU install: upload, kernel, download, three synchronizes). Both run gemm/f16_widen.mojo f16_bits_to_f32 per element: bits unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "autograd-predict": {
    "define": "MOJOLEARN_AUTOGRAD_PREDICT",
@@ -646,13 +666,15 @@
   },
   "xprep-mi-sorted-off": {
    "define": "MOJOLEARN_XPREP_FAST_MI_SORTED_OFF",
-   "status": "define in code (x_prep/device.mojo MI_SORTED): B = mutual_info without the sorted arm; A = the sorted arm, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): old path LOSER (L40S 4 cells, median 4.30; select-mutual-info istella fit 498 -> 18292 ms, 36.7x, taxi 7.6x); the sorted search default is unchanged; removed: the switch (mi_cd_unit stays for the host column and flagged columns); the define is refused (core/experiment_guards_base.mojo); code recoverable at 344c99c579, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_MI_SORTED_OFF.ab-outcome-3.patch. Was: define in code (x_prep/device.mojo MI_SORTED): B = mutual_info without the sorted arm; A = the sorted arm, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "xprep-mi-ties-off": {
    "define": "MOJOLEARN_XPREP_FAST_MI_TIES_OFF",
-   "status": "define in code (x_prep/device.mojo, x_prep/dmi.mojo MI_TIES): B = mutual_info without the ties arm; A = the (x, secondary) order and searched tie runs, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): old path LOSER (L40S 4 cells, median 3.36; select-mutual-info istella fit 496 -> 107901 ms, 217x, taxi 5.7x); the run-search default is unchanged; removed: the switch, mi_cd_device's ties argument, _point_kernel and _count_within; the define is refused (core/experiment_guards_base.mojo); code recoverable at dfc0f84aec, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_MI_TIES_OFF.ab-outcome-3.patch. Was: define in code (x_prep/device.mojo, x_prep/dmi.mojo MI_TIES): B = mutual_info without the ties arm; A = the (x, secondary) order and searched tie runs, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "xprep-out-off": {
    "define": "MOJOLEARN_XPREP_FAST_OUT_OFF",
@@ -662,23 +684,27 @@
   },
   "xprep-pt-interleave": {
    "define": "MOJOLEARN_XPREP_FAST_PT_INTERLEAVE",
-   "status": "define in code (x_prep/prep_stateless_native_run.mojo PT_INTERLEAVE): B = the interleaved PowerTransformer search; A = the untiled search without interleave, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): NOISE/LOSER (L40S 4 cells, median 1.02, 1.01..1.03); the contiguous default is unchanged; removed: the switch, the IL stage word and the interleaved kernel branches; the define is refused (core/experiment_guards_base.mojo); code recoverable at c23cb55fda, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_INTERLEAVE.ab-outcome-3.patch. Was: define in code (x_prep/prep_stateless_native_run.mojo PT_INTERLEAVE): B = the interleaved PowerTransformer search; A = the untiled search without interleave, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "xprep-pt-spec-depth-0": {
    "define": "MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH=0",
-   "status": "define in code (x_prep/prep_stateless_native_run.mojo PT_SPEC_DEPTH): B = speculation depth 0; A = depth 3 (the default), the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): LOSER (L40S 4 cells, median 1.02, power-transformer taxi fit 102 -> 145 ms, 1.42); the depth is the fixed constant 3 (PT_SPEC_DEPTH); removed: the valued override; the define is refused at any value (core/experiment_guards_base.mojo); code recoverable at 49fda8446c, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH.ab-outcome-3.patch. Was: define in code (x_prep/prep_stateless_native_run.mojo PT_SPEC_DEPTH): B = speculation depth 0; A = depth 3 (the default), the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "xprep-pt-spec-depth-6": {
    "define": "MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH=6",
-   "status": "define in code (x_prep/prep_stateless_native_run.mojo PT_SPEC_DEPTH): B = speculation depth 6; A = depth 3 (the default), the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): LOSER (L40S 4 cells, median 1.04, power-transformer taxi fit 103 -> 134 ms, 1.30); the depth is the fixed constant 3 (PT_SPEC_DEPTH); removed: the valued override; the define is refused at any value (core/experiment_guards_base.mojo); code recoverable at 49fda8446c, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH.ab-outcome-3.patch. Was: define in code (x_prep/prep_stateless_native_run.mojo PT_SPEC_DEPTH): B = speculation depth 6; A = depth 3 (the default), the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "xprep-sort-quad-off": {
    "define": "MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF",
-   "status": "define in code (x_prep/dsort.mojo SORT_QUAD): B = one bitonic pass per stride; A = the quad passes, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): old path no faster (L40S 16 cells, median 1.00, 0.95..1.02); the two-stride default is unchanged; removed: the switch (the single pass stays for the tail stride); the define is refused (core/experiment_guards_base.mojo); code recoverable at f0ddedf522, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF.ab-outcome-3.patch. Was: define in code (x_prep/dsort.mojo SORT_QUAD): B = one bitonic pass per stride; A = the quad passes, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "xprep-te-gather-off": {
    "define": "MOJOLEARN_XPREP_FAST_TE_GATHER_OFF",
@@ -1018,12 +1044,13 @@
   },
   "sgd-ps-preload": {
    "define": "MOJOLEARN_SGD_FAST_PS_PRELOAD",
-   "status": "define in code (x_linear/device.mojo SGD_FAST_PS_PRELOAD, `_sgd_ps_warp_body`, `_spw_row`), lane sp-online-linear 2026-11-20: B = the per-sample warp kernel issues sample r + 1's loads (its row block, label, PA norm, sample weight, and the order word of r + 2) while sample r computes, the form 0.8.25 ran (6cdbd32abe); A = today's kernel, which reads each sample's words when the sample starts (the old order of loads). Opt-in, default off; same words in the same statements, so digests must equal A's. Binding to build: _mojolearn_x_linear",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-trees): SPLIT judged inherent (L40S 16 cells, median 1.01; istella fits 0.87..0.92, taxi fits 1.10..1.15 slower): the register double buffer (2 x MB_DBLK = 32 words a lane) is a fixed per-sample cost that only a row missing to device memory repays; no width rule (Andrew, 2026-11-24); A (the plain loads) is unchanged; the define is refused (core/experiment_guards_linear.mojo); code recoverable at 2a10031298, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SGD_FAST_PS_PRELOAD.ab-outcome-3.patch. Was: define in code (x_linear/device.mojo SGD_FAST_PS_PRELOAD, `_sgd_ps_warp_body`, `_spw_row`), lane sp-online-linear 2026-11-20: B = the per-sample warp kernel issues sample r + 1's loads (its row block, label, PA norm, sample weight, and the order word of r + 2) while sample r computes, the form 0.8.25 ran (6cdbd32abe); A = today's kernel, which reads each sample's words when the sample starts (the old order of loads). Opt-in, default off; same words in the same statements, so digests must equal A's. Binding to build: _mojolearn_x_linear",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "dbscan-brute-eps-filter": {
    "define": "MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER",
-   "status": "REWORKED 2026-11-24 (lane ab-outcome-1), RUN OWED with the wave-3 sha on the NVIDIA L40S: the first A/B (nvc-ab-20261124T070727Z-69dac2, wheel 4519097d380a) was SPLIT (istella full 575180 -> 295854 ms, 0.51; taxi 250000 17922 -> 18262, 1.02; taxi full not faster than base 313244 ms), so the arm was not promoted; its new form (still default off) times the filter and bef_eps_kernel on the same probe rows of the degrees pass and keeps the faster, and plans the bit matrix before the filter's buffers so the union ranges are the reference's (dbscan/impl/brute_edge_free.mojo bef_filtered_fit THE COST RULE). Same rows as before. Was: define in code (dbscan/impl/brute_eps_filter.mojo DBSCAN_BRUTE_EPS_FILTER, read by dbscan/impl/brute_edge_free.mojo dbscan_brute_edge_free_fit), lane sp-dbscan-filter 2026-11-20: B = both distance passes of the brute edge-free route as one identical GEMM per query range on centred rows plus a filter launch, pairs inside the error band (M = (4k + 16) u (1 + 1/16) relative to the two centred norms, plus 2^-100) recomputed by the reference _eps_acc chain; A = the default (bef_eps_kernel on every pair). Same degrees, bit words and labels by construction: bits unchanged on every column. IDENTICAL NVIDIA/AMD only (inert elsewhere); euclidean and cosine. Build with the bindings that compile DBSCAN (_mojolearn_estimators, _mojolearn_hdbscan, _mojolearn_hdbscan_host and the binding of core/dbscan_native_device.mojo). Before timing: native check dbscan_eps_filter_gpu (device column) must pass.",
+   "status": "REWORKED 2026-11-24 (lane ab-outcome-3): filter always, no probe; RUN OWED with the wave-3 sha (istella full, taxi 250000, taxi full); if taxi full is within noise of base the filter becomes the only brute route and bef_eps_kernel is deleted. (Andrew 2026-11-24: one route, optimised for large inputs, no probe choosing between two; sub-lane o3-route removed the timed probe of lane ab-outcome-1 and kept the bit-matrix plan made first; the exact recheck is now one pass over the features per thread, loading only the open rows and columns, and the fit no longer counts rechecked pairs; the words are the reference's: no bit change.) Was: REWORKED 2026-11-24 (lane ab-outcome-1), RUN OWED with the wave-3 sha on the NVIDIA L40S: the first A/B (nvc-ab-20261124T070727Z-69dac2, wheel 4519097d380a) was SPLIT (istella full 575180 -> 295854 ms, 0.51; taxi 250000 17922 -> 18262, 1.02; taxi full not faster than base 313244 ms), so the arm was not promoted; its new form (still default off) times the filter and bef_eps_kernel on the same probe rows of the degrees pass and keeps the faster, and plans the bit matrix before the filter's buffers so the union ranges are the reference's (dbscan/impl/brute_edge_free.mojo bef_filtered_fit THE COST RULE). Same rows as before. Was: define in code (dbscan/impl/brute_eps_filter.mojo DBSCAN_BRUTE_EPS_FILTER, read by dbscan/impl/brute_edge_free.mojo dbscan_brute_edge_free_fit), lane sp-dbscan-filter 2026-11-20: B = both distance passes of the brute edge-free route as one identical GEMM per query range on centred rows plus a filter launch, pairs inside the error band (M = (4k + 16) u (1 + 1/16) relative to the two centred norms, plus 2^-100) recomputed by the reference _eps_acc chain; A = the default (bef_eps_kernel on every pair). Same degrees, bit words and labels by construction: bits unchanged on every column. IDENTICAL NVIDIA/AMD only (inert elsewhere); euclidean and cosine. Build with the bindings that compile DBSCAN (_mojolearn_estimators, _mojolearn_hdbscan, _mojolearn_hdbscan_host and the binding of core/dbscan_native_device.mojo). Before timing: native check dbscan_eps_filter_gpu (device column) must pass.",
    "owed": "RUN"
   },
   "member-set-off": {
@@ -1106,28 +1133,21 @@
   },
   "calib-fast-host-folds": {
    "define": "MOJOLEARN_CALIB_FAST_HOST_FOLDS",
-   "status": "define in code (bindings/trees_public_meta_door.mojo CALIB_FAST_HOST_FOLDS, EXP:47): B = CalibratedClassifierCV fold rows copied on the host with the finite test in the same pass; A = the device gather per fold side. Same rows: digests must equal A",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-trees): NOISE (L40S 4 cells, median 1.00, 0.97..1.04); A (the device gather) is unchanged; the define is refused (core/six_lane_experiment_guards.mojo); code recoverable at c23cb55fda, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CALIB_FAST_HOST_FOLDS.ab-outcome-3.patch. Was: define in code (bindings/trees_public_meta_door.mojo CALIB_FAST_HOST_FOLDS, EXP:47): B = CalibratedClassifierCV fold rows copied on the host with the finite test in the same pass; A = the device gather per fold side. Same rows: digests must equal A",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "set-b03": {
    "define": "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF,MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER,MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF",
-   "owed": "RUN",
-   "combined": [
-    "tsqr-tree-par-off",
-    "dbscan-brute-eps-filter",
-    "xprep-sort-quad-off"
-   ],
-   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b03 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: rnn-scan-gated, hist-packed-gh, tsqr-tree-par-off, dbscan-brute-eps-filter, xprep-sort-quad-off"
+   "owed": "DECIDED",
+   "status": "DISSOLVED 2026-11-24 (lane ab-outcome-3): tsqr-tree-par-off and xprep-sort-quad-off DECIDED (deleted); one member left (dbscan-brute-eps-filter, RUN with its own rows, reworked: filter always, no probe), built in the wave-3 set set-w3a. Was: COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b03 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: rnn-scan-gated, hist-packed-gh, tsqr-tree-par-off, dbscan-brute-eps-filter, xprep-sort-quad-off",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "set-b04": {
    "define": "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF,MOJOLEARN_SGD_FAST_PS_PRELOAD,MOJOLEARN_XC_SQDIST_TILED_OFF",
-   "owed": "RUN",
-   "combined": [
-    "tsqr-wy-pair-off",
-    "sgd-ps-preload",
-    "xc-sqdist-tiled-off"
-   ],
-   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b04 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: hist-warp-agg, tsqr-wy-pair-off, attn-fold-v2-on, sgd-ps-preload, xc-sqdist-tiled-off, prep-take-view-all Trimmed 2026-11-24 (lane ab-outcome-2): prep-take-view-all DECIDED by A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md."
+   "owed": "DECIDED",
+   "status": "ALL MEMBERS DECIDED 2026-11-24 (lane ab-outcome-3): tsqr-wy-pair-off, sgd-ps-preload and xc-sqdist-tiled-off deleted. Was: COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b04 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: hist-warp-agg, tsqr-wy-pair-off, attn-fold-v2-on, sgd-ps-preload, xc-sqdist-tiled-off, prep-take-view-all Trimmed 2026-11-24 (lane ab-outcome-2): prep-take-view-all DECIDED by A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md.",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "set-b06": {
    "define": "MOJOLEARN_XPREP_FAST_MI_SORTED_OFF",
@@ -1137,12 +1157,9 @@
   },
   "set-b07": {
    "define": "MOJOLEARN_XD_FAST_SVD_ONE_BLOCK,MOJOLEARN_XPREP_FAST_MI_TIES_OFF",
-   "owed": "RUN",
-   "combined": [
-    "svd-one-block",
-    "xprep-mi-ties-off"
-   ],
-   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b07 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: gbdt-greedy-device-rounds-off, svd-one-block, kde-qtile-force, ols-predict-tiled, xprep-mi-ties-off, causal-lm-resident-forward-off Trimmed 2026-11-24 (lane ab-outcome-2): kde-qtile-force, ols-predict-tiled, causal-lm-resident-forward-off DECIDED by A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md."
+   "owed": "DECIDED",
+   "status": "ALL MEMBERS DECIDED 2026-11-24 (lane ab-outcome-3): svd-one-block and xprep-mi-ties-off deleted. Was: COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b07 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: gbdt-greedy-device-rounds-off, svd-one-block, kde-qtile-force, ols-predict-tiled, xprep-mi-ties-off, causal-lm-resident-forward-off Trimmed 2026-11-24 (lane ab-outcome-2): kde-qtile-force, ols-predict-tiled, causal-lm-resident-forward-off DECIDED by A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md.",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "set-b09": {
    "define": "MOJOLEARN_XPREP_FAST_PT_INTERLEAVE",
@@ -1194,12 +1211,34 @@
   },
   "set-b20": {
    "define": "MOJOLEARN_IDN_IF_SCORES_F64_OFF,MOJOLEARN_TRANSFORMER_GENERIC_PREFILL",
+   "owed": "DECIDED",
+   "status": "ALL MEMBERS DECIDED 2026-11-24 (lane ab-outcome-3): if-scores-f64-off and transformer-generic-prefill deleted. Was: COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b20 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: if-scores-f64-off, transformer-generic-prefill",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
+  },
+  "seq-tiled-predict-off": {
+   "define": "MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF",
+   "owed": "RUN",
+   "status": "define in code (autograd/model.mojo; the old per-call predict, behind _OFF since the promotion of MOJOLEARN_IDN_SEQ_TILED_PREDICT by lane ab-outcome-2, 2026-11-24, L40S sequential-predict 2.23 -> 1.87 ms): B = the old form; A = the whole-set chunk (the default). RUN OWED with the wave-3 sha (lane ab-outcome-3): B not faster at equal quality -> delete the old form and its switch with tombstones"
+  },
+  "seq-libc-copy-off": {
+   "define": "MOJOLEARN_SEQ_FAST_LIBC_COPY_OFF",
+   "owed": "RUN",
+   "status": "define in code (sequence/exec_device.mojo; the old unsafe_memcpy element copies, behind _OFF since the promotion of MOJOLEARN_SEQ_FAST_LIBC_COPY by lane ab-outcome-2, 2026-11-24: mlp-clf infer 0.86, mlp-reg infer 0.91): B = the old copies; A = libc memcpy (the default). RUN OWED with the wave-3 sha (lane ab-outcome-3): B not faster -> delete the old form and its switch"
+  },
+  "msel-units-gpu-parallel": {
+   "define": "MOJOLEARN_MSEL_UNITS_GPU_PARALLEL",
+   "owed": "RUN",
+   "status": "define in code (core/member_set_run.mojo _UNITS_GPU_PARALLEL, bindings/native_unit_threads_unpack.mojo; opt-in, default off): B = model-selection units whose members run on a GPU are fitted on the host workers in parallel like CPU units; A = one GPU unit at a time (the default). Caution recorded at the define: the member fits share the process-wide device context and the owners' caches are not audited for thread safety; a crash or a digest change in B is a finding against B, not a reason to rerun. RUN OWED with the wave-3 sha (lane ab-outcome-3)"
+  },
+  "set-w3a": {
+   "define": "MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER,MOJOLEARN_GEMM_STAGE_UP_OFF,MOJOLEARN_IDN_SSD_OCCUPANCY_OFF",
    "owed": "RUN",
    "combined": [
-    "if-scores-f64-off",
-    "transformer-generic-prefill"
+    "dbscan-brute-eps-filter",
+    "gemm-stage-up-off",
+    "ssd-occupancy-off"
    ],
-   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b20 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: if-scores-f64-off, transformer-generic-prefill"
+   "status": "COMBINED B SET, build only (lane ab-outcome-3, 2026-11-24, wave-3 A/B): tools/release.py candidate --owed-arm set-w3a builds one wheel set with the three members' defines; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>). The members touch disjoint code (dbscan/impl brute eps path; gemm/host_transport.mojo float32 upload; mamba/impl/modules/ssd_minimal.mojo) and their rows (dbscan; gemm; mamba2-forward/-infer) reach no other member's code."
   }
  },
  "rows": [
@@ -1285,7 +1324,9 @@
    "b_arms": [
     "svd-one-block"
    ],
-   "decides": "two SVD paths exist: delete the slower (A = DevExec._svd_on round launches, B = svd_op_tall one gated block)"
+   "decides": "two SVD paths exist: delete the slower (A = DevExec._svd_on round launches, B = svd_op_tall one gated block)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "decode-n-vs-step",
@@ -1652,7 +1693,8 @@
     "small-mlp-generic",
     "small-mlp-leaf128-off"
    ],
-   "decides": "keep the op (A) unless the generic capture is at least as fast on NVIDIA and AMD with quality equal; reference 0.8.66 0.971 ms both vendors"
+   "decides": "keep the op (A) unless the generic capture is at least as fast on NVIDIA and AMD with quality equal; reference 0.8.66 0.971 ms both vendors",
+   "note": "2026-11-24 (lane ab-outcome-3 / o3-nmlp): small-mlp-leaf128-off DECIDED (leaf128 removed, A is now op small_mlp on identical_gemm_into); small-mlp-generic still RUN against that A with the wave-3 sha"
   },
   {
    "id": "r1-cnn-ops",
@@ -1746,7 +1788,10 @@
    "b_arms": [
     "if-scores-f64-off"
    ],
-   "decides": "keep the float64 epilogue (A) unless the float32 download + host cast (B) is at least as fast on the vendor average (infer column); digests must not move"
+   "decides": "keep the float64 epilogue (A) unless the float32 download + host cast (B) is at least as fast on the vendor average (infer column); digests must not move",
+   "owed": "DECIDED",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-trees): if-scores-f64-off LOSER (L40S 6 cells, median 1.06, taxi infer 1.53 / 1.88); the float64 epilogue (A) kept, the switch deleted.",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "rk-kde-qtile-rule",
@@ -1895,7 +1940,9 @@
     "tsqr-tree-par-off",
     "tsqr-wy-pair-tree-par-off"
    ],
-   "decides": "keep the defaults (A) unless an _OFF arm wins on the NVIDIA + AMD average (one cell each on record: ols taxi fit AMD 7.9 -> 12.2 ms after the switch, NV 17.5 -> 14.3 ms, ols istella NV 1029 -> 653, qr istella NV 1177 -> 850); bits change between arms on every column"
+   "decides": "keep the defaults (A) unless an _OFF arm wins on the NVIDIA + AMD average (one cell each on record: ols taxi fit AMD 7.9 -> 12.2 ms after the switch, NV 17.5 -> 14.3 ms, ols istella NV 1029 -> 653, qr istella NV 1177 -> 850); bits change between arms on every column",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "ols-predict-tiled",
@@ -2361,7 +2408,26 @@
    "b_arms": [
     "ssd-occupancy-on"
    ],
-   "decides": "NVIDIA L40S only (the NVIDIA-only campaign): promote B (with a _OFF define) when mamba2-forward and mamba2-infer are faster than A and the output digests match A (same chains: no bit change expected; a digest change is a bug in the arm, not a new reference); otherwise delete the arm with a tombstone"
+   "decides": "NVIDIA L40S only (the NVIDIA-only campaign): promote B (with a _OFF define) when mamba2-forward and mamba2-infer are faster than A and the output digests match A (same chains: no bit change expected; a digest change is a bug in the arm, not a new reference); otherwise delete the arm with a tombstone",
+   "status": "PROMOTED 2026-11-24 (lane ab-outcome-3, sub-lane o3-nmlp): mamba2-forward full 2.93 -> 1.98 ms (0.68), digests equal; mamba2-infer was not timed (the old form's owed row ssd-occupancy-off times both)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
+  },
+  {
+   "id": "ssd-occupancy-off",
+   "source": "ab-outcome-3 / o3-nmlp (2026-11-24): ssd-occupancy-on promoted on A/B nvc-ab-20261124T115722Z-d8f8b2 (mamba2-forward 2.93 -> 1.98 ms, 0.68); the old cell kernels stay behind MOJOLEARN_IDN_SSD_OCCUPANCY_OFF until measured against the new default",
+   "kind": "ab",
+   "lane": [
+    "mamba2-forward",
+    "mamba2-infer"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "ssd-occupancy-off"
+   ],
+   "decides": "NVIDIA L40S only (the NVIDIA-only campaign), wave-3 sha: delete the old cell kernels' device route and the _OFF define with a tombstone when B is no faster than A on mamba2-forward and mamba2-infer (digests must match: same chains; the host column keeps the cell kernels either way); otherwise reopen the promotion",
+   "owed": "RUN"
   },
   {
    "id": "attn-fold-v2",
@@ -2681,9 +2747,7 @@
    "source": "lane envgate-train-seq-mamba (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time MOJOLEARN_GEMM_STAGE_UP read became the build constant GEMM_STAGE_UP_ON with today's default; the other side was never timed on NVIDIA/AMD (no A/B on record)",
    "kind": "ab",
    "lane": [
-    "gemm",
-    "gemm-bf16",
-    "gemm-int8"
+    "gemm"
    ],
    "dataset": "*",
    "rows": "full",
@@ -2691,7 +2755,7 @@
    "b_arms": [
     "gemm-stage-up-off"
    ],
-   "decides": "keep A (staged upload on NVIDIA/AMD (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+   "decides": "wave-3 (lane ab-outcome-3, Andrew 2026-11-24 one route): the switch reaches only the float32 upload (gemm_up_f32), so the row is gemm f32 full; raw upload (B) faster or tied at equal digests -> stage-up is deleted and raw upload is the only route; staged clearly faster -> the _OFF form is deleted. Was: keep A (staged upload on NVIDIA/AMD (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
   },
   {
    "id": "gemm-stage-up-by-cost",
@@ -2708,7 +2772,9 @@
    "b_arms": [
     "gemm-stage-up-by-cost"
    ],
-   "owed": "RUN",
+   "owed": "DECIDED",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3): withdrawn: Andrew 2026-11-24, one route, no per-process timing",
+   "evidence": "Andrew 2026-11-24 (~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md, section \"Andrew, 2026-11-24\"): one route, no per-process timing; withdrawn before any A/B (no run)",
    "decides": "B (the probe rule) becomes the default (staged upload only where the probe says it pays; -D MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST_OFF keeps the old rule) when the gemm row is at least as fast as A and as the gemm-stage-up-off arm at equal quality and digests; then MOJOLEARN_GEMM_STAGE_UP_OFF and its owed arm are deleted. gemm-int8 and gemm-bf16 are controls (both arms run the same raw uploads): a difference there is spread. B not faster: delete B."
   },
   {
@@ -2844,7 +2910,9 @@
    "b_arms": [
     "seq-moe-tiled-off"
    ],
-   "decides": "keep A (the tiled MoE kernel (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+   "decides": "keep A (the tiled MoE kernel (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "seq-var-block-off-envgate",
@@ -2860,7 +2928,9 @@
    "b_arms": [
     "seq-var-block-off"
    ],
-   "decides": "keep A (VAR's Cholesky solve and forecast on one threadgroup (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+   "decides": "keep A (VAR's Cholesky solve and forecast on one threadgroup (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "seq-pool-off-envgate",
@@ -2928,7 +2998,9 @@
    "b_arms": [
     "xc-sqdist-tiled-off"
    ],
-   "decides": "keep the tiled sqdist (A) unless the per-cell kernel (B) is at least as fast on fit at equal quality; digests must not move"
+   "decides": "keep the tiled sqdist (A) unless the per-cell kernel (B) is at least as fast on fit at equal quality; digests must not move",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "xc-sqdist-tiled-off-agglomerative",
@@ -2941,7 +3013,9 @@
    "b_arms": [
     "xc-sqdist-tiled-off"
    ],
-   "decides": "keep the tiled sqdist (A) unless the per-cell kernel (B) is at least as fast on fit at equal quality; digests must not move"
+   "decides": "keep the tiled sqdist (A) unless the per-cell kernel (B) is at least as fast on fit at equal quality; digests must not move",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "xc-sqdist-tiled-off-meanshift",
@@ -2954,7 +3028,9 @@
    "b_arms": [
     "xc-sqdist-tiled-off"
    ],
-   "decides": "keep the tiled sqdist (A) unless the per-cell kernel (B) is at least as fast on fit at equal quality; digests must not move"
+   "decides": "keep the tiled sqdist (A) unless the per-cell kernel (B) is at least as fast on fit at equal quality; digests must not move",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "nc-split-ops-nearest-centroid",
@@ -2967,7 +3043,10 @@
    "b_arms": [
     "nc-split-ops"
    ],
-   "decides": "keep the fused fit (A) unless the split ops (B) are at least as fast on fit at equal quality; digests must not move"
+   "decides": "keep the fused fit (A) unless the split ops (B) are at least as fast on fit at equal quality; digests must not move",
+   "owed": "DECIDED",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-trees): nc-split-ops LOSER (L40S 4 cells, median 5.76); B deleted, the fused fit (A) kept.",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "r1-transformer-prefill",
@@ -2983,7 +3062,9 @@
     "transformer-generic-prefill",
     "transformer-session-fresh-off"
    ],
-   "decides": "keep the prefill arm (A) unless B is at least as fast on NVIDIA and AMD; the session-fresh-off arm (-D MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF, the former env arm MOJOLEARN_TRANSFORMER_SESSION_FRESH=0, which no tool read) tests whether 0.8.55's per-call route is what NVIDIA lost (0.8.66 was 1.44x slower than 0.8.55)"
+   "decides": "keep the prefill arm (A) unless B is at least as fast on NVIDIA and AMD; the session-fresh-off arm (-D MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF, the former env arm MOJOLEARN_TRANSFORMER_SESSION_FRESH=0, which no tool read) tests whether 0.8.55's per-call route is what NVIDIA lost (0.8.66 was 1.44x slower than 0.8.55)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "byte-lm-layer-sync-off-lm-train-step",
@@ -2996,7 +3077,9 @@
    "b_arms": [
     "byte-lm-layer-sync-off"
    ],
-   "decides": "keep today's default (A) unless the B arm is faster at equal quality on NVIDIA (the next L40S measurement); digests must not move (no arm changes arithmetic)"
+   "decides": "keep today's default (A) unless the B arm is faster at equal quality on NVIDIA (the next L40S measurement); digests must not move (no arm changes arithmetic)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "byte-lm-layer-sync-off-lm-forward",
@@ -3009,7 +3092,9 @@
    "b_arms": [
     "byte-lm-layer-sync-off"
    ],
-   "decides": "keep today's default (A) unless the B arm is faster at equal quality on NVIDIA (the next L40S measurement); digests must not move (no arm changes arithmetic)"
+   "decides": "keep today's default (A) unless the B arm is faster at equal quality on NVIDIA (the next L40S measurement); digests must not move (no arm changes arithmetic)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "device-arena-lm-train-step",
@@ -3453,7 +3538,9 @@
    "b_arms": [
     "f16-widen-host"
    ],
-   "decides": "promote B (host-parallel widening; then widen_f16 no longer calls linalg from_f16, and the route's A code goes with its tombstone) unless it is slower than A at any count of the row on the NVIDIA L40S; every output word must match between the arms (same bit construction)"
+   "decides": "promote B (host-parallel widening; then widen_f16 no longer calls linalg from_f16, and the route's A code goes with its tombstone) unless it is slower than A at any count of the row on the NVIDIA L40S; every output word must match between the arms (same bit construction)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "autograd-predict-mlp",
@@ -3953,7 +4040,10 @@
    "b_arms": [
     "xprep-mi-sorted-off"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): old path LOSER (L40S 4 cells, median 4.30; select-mutual-info istella fit 498 -> 18292 ms, 36.7x, taxi 7.6x); the sorted search default is unchanged; removed: the switch (mi_cd_unit stays for the host column and flagged columns); the define is refused (core/experiment_guards_base.mojo); code recoverable at 344c99c579, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_MI_SORTED_OFF.ab-outcome-3.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "xprep-mi-ties-off-rows",
@@ -3969,7 +4059,10 @@
    "b_arms": [
     "xprep-mi-ties-off"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): old path LOSER (L40S 4 cells, median 3.36; select-mutual-info istella fit 496 -> 107901 ms, 217x, taxi 5.7x); the run-search default is unchanged; removed: the switch, mi_cd_device's ties argument, _point_kernel and _count_within; the define is refused (core/experiment_guards_base.mojo); code recoverable at dfc0f84aec, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_MI_TIES_OFF.ab-outcome-3.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "xprep-out-off-rows",
@@ -4009,7 +4102,10 @@
    "b_arms": [
     "xprep-pt-interleave"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): NOISE/LOSER (L40S 4 cells, median 1.02, 1.01..1.03); the contiguous default is unchanged; removed: the switch, the IL stage word and the interleaved kernel branches; the define is refused (core/experiment_guards_base.mojo); code recoverable at c23cb55fda, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_INTERLEAVE.ab-outcome-3.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "xprep-pt-spec-depth-0-rows",
@@ -4022,7 +4118,10 @@
    "b_arms": [
     "xprep-pt-spec-depth-0"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): LOSER (L40S 4 cells, median 1.02, power-transformer taxi fit 102 -> 145 ms, 1.42); the depth is the fixed constant 3 (PT_SPEC_DEPTH); removed: the valued override; the define is refused at any value (core/experiment_guards_base.mojo); code recoverable at 49fda8446c, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH.ab-outcome-3.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "xprep-pt-spec-depth-6-rows",
@@ -4035,7 +4134,10 @@
    "b_arms": [
     "xprep-pt-spec-depth-6"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): LOSER (L40S 4 cells, median 1.04, power-transformer taxi fit 103 -> 134 ms, 1.30); the depth is the fixed constant 3 (PT_SPEC_DEPTH); removed: the valued override; the define is refused at any value (core/experiment_guards_base.mojo); code recoverable at 49fda8446c, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH.ab-outcome-3.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "xprep-sort-quad-off-rows",
@@ -4054,7 +4156,10 @@
    "b_arms": [
     "xprep-sort-quad-off"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): old path no faster (L40S 16 cells, median 1.00, 0.95..1.02); the two-stride default is unchanged; removed: the switch (the single pass stays for the tail stride); the define is refused (core/experiment_guards_base.mojo); code recoverable at f0ddedf522, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF.ab-outcome-3.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "xprep-te-gather-off-rows",
@@ -6053,12 +6158,14 @@
    "b_arms": [
     "sgd-ps-preload"
    ],
-   "owed": "RUN",
+   "owed": "DECIDED",
    "columns": [
     "time",
     "quality"
    ],
-   "decides": "promote B (the preload) to the default unless it is slower than A on the NVIDIA L40S (same box, same job); both arms' quality beside every time; digests must not move between the arms (the same loads' words in the same statements: a difference is a bug in the arm, not a bits change). On promotion the old order of loads is deleted with the four tombstone parts. The eight rows: the four lanes on taxi and istella, batch_size=0 (the per-sample fit) as the board races them"
+   "decides": "promote B (the preload) to the default unless it is slower than A on the NVIDIA L40S (same box, same job); both arms' quality beside every time; digests must not move between the arms (the same loads' words in the same statements: a difference is a bug in the arm, not a bits change). On promotion the old order of loads is deleted with the four tombstone parts. The eight rows: the four lanes on taxi and istella, batch_size=0 (the per-sample fit) as the board races them",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-trees): sgd-ps-preload SPLIT (L40S 16 cells, median 1.01; istella 0.87..0.92, taxi 1.10..1.15 slower), judged inherent; B deleted, A kept.",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "mcd-wide-lockstep",
@@ -6296,12 +6403,14 @@
    "b_arms": [
     "calib-fast-host-folds"
    ],
-   "owed": "RUN",
+   "owed": "DECIDED",
    "columns": [
     "time",
     "quality"
    ],
-   "decides": "promote B where it is faster than A at equal quality on the NVIDIA L40S (same pod, same job); otherwise the B arm is deleted with the four tombstone parts"
+   "decides": "promote B where it is faster than A at equal quality on the NVIDIA L40S (same pod, same job); otherwise the B arm is deleted with the four tombstone parts",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-trees): calib-fast-host-folds NOISE (L40S 4 cells, median 1.00, 0.97..1.04); B deleted, A kept.",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "sgd-ps-preload-shapes",
@@ -6346,7 +6455,72 @@
      "note": "the year width (three column blocks), the regressor, Gaussian rows"
     }
    ],
-   "decides": "the same verdict as sgd-ps-preload-board on shapes no board row has; coef_sha256 must be equal on both arms case by case"
+   "decides": "the same verdict as sgd-ps-preload-board on shapes no board row has; coef_sha256 must be equal on both arms case by case",
+   "owed": "DECIDED",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-trees): not run; the arm it would time is deleted (sgd-ps-preload SPLIT, inherent). The driver case online_linear_shapes stays for later arms.",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
+  },
+  {
+   "id": "seq-tiled-predict-off",
+   "source": "lane ab-outcome-3 (2026-11-24), wave-3 A/B",
+   "kind": "ab",
+   "lane": [
+    "sequential-predict"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "seq-tiled-predict-off"
+   ],
+   "decides": "keep the whole-set chunk (A) unless the old form (B) is faster at equal quality and digests; else delete the old form and its _OFF switch"
+  },
+  {
+   "id": "seq-libc-copy-off-mlp",
+   "source": "lane ab-outcome-3 (2026-11-24), wave-3 A/B",
+   "kind": "ab",
+   "lane": [
+    "mlp-clf",
+    "mlp-reg"
+   ],
+   "dataset": "istella",
+   "rows": "full",
+   "b_arms": [
+    "seq-libc-copy-off"
+   ],
+   "decides": "keep libc memcpy (A) unless the old copies (B) are faster at equal digests; else delete the old copies and the _OFF switch"
+  },
+  {
+   "id": "seq-libc-copy-off-cross-entropy",
+   "source": "lane ab-outcome-3 (2026-11-24), wave-3 A/B",
+   "kind": "ab",
+   "lane": "cross-entropy",
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "seq-libc-copy-off"
+   ],
+   "decides": "the same"
+  },
+  {
+   "id": "msel-units-gpu-parallel",
+   "source": "lane ab-outcome-3 (2026-11-24), wave-3 A/B",
+   "kind": "ab",
+   "lane": [
+    "cross-validate",
+    "cross-val-score",
+    "cross-val-predict",
+    "grid-search-cv",
+    "randomized-search-cv",
+    "learning-curve",
+    "validation-curve",
+    "calibrated"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "msel-units-gpu-parallel"
+   ],
+   "decides": "promote B (parallel GPU units) with a _OFF define when it is faster at equal digests and quality on the rows; slower, noise, a crash or a digest change -> delete the arm with tombstones"
   }
  ]
 }

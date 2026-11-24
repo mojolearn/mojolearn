@@ -1,8 +1,8 @@
 diff --git a/x_linear/device.mojo b/x_linear/device.mojo
-index 8984476ae7..a356fabfe6 100644
+index 9b69ed9..4527415 100644
 --- a/x_linear/device.mojo
 +++ b/x_linear/device.mojo
-@@ -2639,7 +2639,7 @@ def _sgd_ps_kernel_body(
+@@ -2645,7 +2645,7 @@ def _sgd_ps_kernel_body(
                  if has_cw:
                      cwv = wpos if y > 0 else wneg
                  var swi = ld(swp, i) if has_sw else Float32(1)
@@ -11,7 +11,7 @@ index 8984476ae7..a356fabfe6 100644
              # their w.scale on wscale, the fold into v below 1e-9 (C)
              var fold = False
              var fhi = Float32(1)
-@@ -2889,7 +2889,7 @@ def _sgd_ps_simd_body(
+@@ -2895,7 +2895,7 @@ def _sgd_ps_simd_body(
                  if has_cw:
                      cwv = wpos if y > 0 else wneg
                  var swi = ld(swp, i) if has_sw else Float32(1)
@@ -20,10 +20,10 @@ index 8984476ae7..a356fabfe6 100644
              # their w.scale on wscale, the fold into v below 1e-9 (C)
              var fold = False
              var fhi = Float32(1)
-@@ -3192,7 +3192,7 @@ def _sgd_ps_warp_body(
-                 var swi = swv
-                 comptime if not SGD_FAST_PS_PRELOAD:
-                     swi = ld(swp, i) if has_sw else Float32(1)
+@@ -3142,7 +3142,7 @@ def _sgd_ps_warp_body(
+                 if has_cw:
+                     cwv = wpos if y > 0 else wneg
+                 var swi = ld(swp, i) if has_sw else Float32(1)
 -                update = fm(update, fm(cwv, swi))
 +                _ = fm(cwv, swi)  # SABOTAGE option sample/class weights: the device drops them
              # their w.scale on wscale, the fold into v below 1e-9 (C)

@@ -1622,29 +1622,27 @@ def _byte_layer_sync() -> Bool:
     """lane/neural-net-experiment (2026-09-30): whether the step waits on
     the host after EVERY layer's forward and backward (sixteen waits a step
     at the board's depth, before the fused attention's own regime reads).
-    `-D MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF` skips them: every launch sits on the
-    one in-order context, the next layer's kernels are enqueued behind this
-    layer's, and the eager-scratch release only drops buffer handles whose
-    frees are themselves enqueued (DEVIATION 2520), so no bit moves; what
-    moves is the host idling per layer. Default ON on NVIDIA and AMD (the
-    measured behaviour; the L40S toggle sweep read 1.00 either way) and OFF
-    on the Apple column (lane/neural-pass43, 2026-10-01: a Metal wait with
-    a readback costs about 0.2 ms on the M4 and more on the M3 Ultra;
-    `-D MOJOLEARN_BYTE_LM_LAYER_SYNC` restores them); the step's `step.*`
-    timing ticks read the same either way.
+    Skipping them moves no bit: every launch sits on the one in-order
+    context, the next layer's kernels are enqueued behind this layer's, and
+    the eager-scratch release only drops buffer handles whose frees are
+    themselves enqueued (DEVIATION 2520); what moves is the host idling per
+    layer. ON on NVIDIA and AMD in both modes (measured: the no-wait form
+    lost, see the tombstone below) and OFF on the Apple column
+    (lane/neural-pass43, 2026-10-01: a Metal wait with a readback costs
+    about 0.2 ms on the M4 and more on the M3 Ultra;
+    `-D MOJOLEARN_BYTE_LM_LAYER_SYNC` restores them there); the step's
+    `step.*` timing ticks read the same either way.
 
     A build constant since lane envgate-neural-lm (2026-11-15): it was a
-    getenv per layer per step. Column defaults unchanged; B arms
-    `-D MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF` on NVIDIA and AMD (RUN OWED,
-    bench/results/paper_compare/owed-pre0867.json "byte-lm-layer-sync-off";
-    docs/apple-fast/EXPERIMENTS.md) and `-D MOJOLEARN_BYTE_LM_LAYER_SYNC` on
-    Apple."""
+    getenv per layer per step. B arm `-D MOJOLEARN_BYTE_LM_LAYER_SYNC` on
+    Apple (docs/apple-fast/EXPERIMENTS.md)."""
     return BYTE_LM_LAYER_SYNC
 
 
-comptime BYTE_LM_LAYER_SYNC = is_defined["MOJOLEARN_BYTE_LM_LAYER_SYNC"]() or (
-    TARGET_COLUMN != COLUMN_APPLE and not is_defined["MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF (old path LOSER: no host wait per layer on NVIDIA / AMD; NV L40S lm-forward 19.29 -> 22.57 ms, 1.17; lm-train-step 1.00) deleted 2026-11-24 by lane/ab-outcome-3 (o3-nseq); code recoverable at dce0be4f4f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF.ab-outcome-3.patch
+# (the no-wait form stays the Apple column's default; only the NVIDIA / AMD switch went.)
+comptime BYTE_LM_LAYER_SYNC = is_defined["MOJOLEARN_BYTE_LM_LAYER_SYNC"]() or TARGET_COLUMN != COLUMN_APPLE
 """See `_byte_layer_sync`: on for NVIDIA and AMD, off on Apple."""
 
 

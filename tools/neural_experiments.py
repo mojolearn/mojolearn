@@ -17,7 +17,7 @@ baseline, and whether the output DIGEST equals the baseline's (`same` /
     python tools/neural_experiments.py --set nvidia          # the NVIDIA-shaped set
     python tools/neural_experiments.py --set amd
     python tools/neural_experiments.py --gemm-arms shipped,tuned128,half,quarter,kpack
-    python tools/neural_experiments.py --only speculative_attn,no_layer_sync
+    python tools/neural_experiments.py --only speculative_attn
     python tools/neural_experiments.py --json results.json
     python tools/neural_experiments.py ideas list             # versioned neural catalog
     python tools/neural_experiments.py ideas plan NI20 --arm A
@@ -40,7 +40,7 @@ LANES = ("transformer-forward", "mamba3-forward", "samba-forward",
          "samba-train-step", "lm-forward", "lm-train-step")
 
 # name -> environment delta over the baseline. Baseline = the branch's
-# defaults (retention on, stage reset on, per-layer sync on, fused SwiGLU
+# defaults (retention on, stage reset on, per-layer sync on (the only form off Apple), fused SwiGLU
 # off, speculative attention off, session fresh path on, shipped GEMM arm).
 EXPERIMENTS = {
     "baseline": {},
@@ -55,7 +55,8 @@ EXPERIMENTS = {
     # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
     "speculative_attn": {"MOJOLEARN_ATTN_SPECULATIVE": "1"},
-    "no_layer_sync": {"MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"},
+    # TOMBSTONE: MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF (old path LOSER, A/B nvc-ab-20261124T115722Z-d8f8b2 NVIDIA L40S lm-forward 1.17) deleted 2026-11-24 by lane/ab-outcome-3; its arm here (an environment read the code no longer had) went with it; code recoverable at dce0be4f4f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF.ab-outcome-3.patch; record in docs/TOMBSTONES.md.
     # TOMBSTONE: MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF (old path, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S 1.00..1.04) deleted 2026-11-24 by lane/ab-outcome-2; its arm here (an environment read the code no longer had) went with it; code recoverable at ba83d4655f.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
     # the S16 q/k backward arms (lane/neural-net-experiment, the S16 pass):
@@ -73,8 +74,7 @@ EXPERIMENTS = {
     # the optimizer's moments on the host and the per-call optimizer_step
     # (lane/neural-pass4): the before arm of the resident moments
     "opt_host": {"MOJOLEARN_OPTIMIZER_RESIDENT": "0"},
-    "all_on": {"MOJOLEARN_ATTN_SPECULATIVE": "1",
-               "MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"},
+    "all_on": {"MOJOLEARN_ATTN_SPECULATIVE": "1"},
 }
 SETS = {
     "priority": ["baseline"],
@@ -88,11 +88,11 @@ SETS = {
     # samba-train-step --lane lm-train-step)
     "optimizer": ["baseline", "opt_host"],
     "default": ["baseline", "no_retain_weights", "speculative_attn",
-                "no_layer_sync", "all_on"],
+                "all_on"],
     "nvidia": ["baseline", "no_retain_weights", "legacy_fresh_entry",
-               "speculative_attn", "no_layer_sync", "all_on"],
+               "speculative_attn", "all_on"],
     "amd": ["baseline", "legacy_everything", "no_retain_weights",
-            "speculative_attn", "no_layer_sync", "all_on"],
+            "speculative_attn", "all_on"],
 }
 
 

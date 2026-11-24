@@ -12,7 +12,7 @@ from core.nearest_centroid_plan import (
     nc_binary_decision, nc_scratch_address,
 )
 from core.admitted_weights import admitted_fill
-from neighbors.neighbors_local_run import nc_split_ops, nc_refuse_decision_metric, nc_fused, nc_proba_mode
+from neighbors.neighbors_local_run import nc_refuse_decision_metric, nc_fused, nc_proba_mode
 
 comptime _F64 = MutPointer[Float64, MutUntrackedOrigin]
 
@@ -86,7 +86,8 @@ def nc_fit_run(driver: XnDriver, request: NcFitRequest, mut plan: NcFitPlan) rai
     """Statistics, the variance test and the shrunken centroids. Stops at the
     first refusal and reports it as a value."""
     var outcome = NcFitOutcome()
-    plan.split = nc_split_ops()
+    # TOMBSTONE: MOJOLEARN_NC_SPLIT_OPS (LOSER: NV L40S 4 cells, median 5.76, nearest-centroid fit istella 59.45 -> 625 ms, taxi 16.58 -> 290 ms) deleted 2026-11-24 by lane/ab-outcome-3 (o3-trees); code recoverable at a0324a1c4c.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_NC_SPLIT_OPS.ab-outcome-3.patch
     plan.euclidean = request.euclidean
     outcome.status = plan.statistics(driver, request.x, request.labels, request.stats)
     if outcome.status != 0:

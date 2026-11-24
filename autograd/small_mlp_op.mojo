@@ -21,9 +21,9 @@ transpose + OPS_LINEAR capture).
               dx = dhidden . w1                        GEMM (rows, in, hid) OP_NN, only when x needs a gradient
 
 The GEMMs are the old step's own dispatch (`_gemm`): under FAST the vendor
-kernel first (DEVIATION 1876), else, in IDENTICAL, the NN03 neural profile
-body at leaf 128 (`neural_model_leaf_into[128]`, SMALL_MLP_GEMM_LEAF128
-below), else `identical_gemm_into` with the op's workspace. The elementwise
+kernel first (DEVIATION 1876), else `identical_gemm_into` with the op's
+workspace (the leaf-128 profile body it used to take is gone, see the
+TOMBSTONE MOJOLEARN_IDN_MLP_GEMM_LEAF128 below). The elementwise
 launches are `_mlp_kernel` at its old geometry (128 threads a block, one
 thread per cell, one per column for the row sum), its body now
 autograd/small_mlp_cells.mojo so the host arm (autograd/small_mlp_host.mojo,
@@ -42,7 +42,6 @@ generic transpose + OPS_LINEAR ops instead (lane x2's form), for the box
 comparison mlp-train-step / mlp-predict.
 """
 from max.gpu import block_dim, block_idx, thread_idx
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from sequence.ops import FP
 from sequence.exec_device import DeviceExec
@@ -56,12 +55,9 @@ from gemm.checks.gemm_identical import _fast_vendor_gemm
 from gemm.neural_dispatch import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
-    neural_model_leaf_into,
-    NEURAL_GEMM_EXPERIMENT_ENABLED,
 )
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from gemm.experiments.neural_switches import ROLE_PROJECTION, ROLE_WGRAD
-from gemm.experiments.neural_profile import NEURAL_EXPERIMENTS_ALLOWED
 
 #: The session op code (autograd/ops_api.mojo) and the tape custom tag
 #: (99-104 graph, 108-111 block steps, 112-114 MoE, 115 lm_head_v2,
@@ -69,38 +65,26 @@ from gemm.experiments.neural_profile import NEURAL_EXPERIMENTS_ALLOWED
 comptime OPS_SMALL_MLP = 88
 comptime SMALL_MLP_TAG = 116
 
-# gemm_leaf=neural128 for THE SMALL MLP ONLY (lane grid-act-5, 2026-10-08;
-# IDENTICAL grid ge123e6f9, docs/apple-fast/EXPERIMENTS.md). The
-# build-wide arm (-D MOJOLEARN_IDN_GEMM_LEAF=1) was a SPLIT: mlp-train-step
-# FASTER, NV 2.0 -> 1.7 ms / AMD 3.5 -> 3.1 ms (0.886x combined), but every
-# other neural model SLOWER: lm-forward 7.2x, lm-train-step 13.6x,
-# mamba1/2/3-forward 3.0/3.8/5.2x, samba-train-step 1.73x,
-# transformer-forward 7.6x. Output hashes equal to the incumbent on both
-# vendors (no bits change: at leaf 128 the profile's partition is the
-# contract's, contract_leaf_size). So the choice is keyed on the MODEL KIND
-# (this op's GEMMs are the small MLP's and nobody else's), never on a
-# dimension. -D MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF restores the incumbent
-# dispatch here. Any build-wide neural GEMM arm (gemm_leaf=neural128|neural256,
-# a schedule, chains, Ozaki) routes the op through identical_gemm_into like
-# every other caller, so the grid's gemm_leaf arms keep their meaning.
-# (Comment and condition carried from training/mlp_ops.mojo MLP_GEMM_LEAF128
-# at f59d913b0b.)
 # TOMBSTONE: MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF (the incumbent dispatch, the measured loser's rollback; no A/B of
 # the rollback itself) deleted 2026-11-15 by lane/expdel2-24-neural; code recoverable at 530116e4ff. The leaf-128 profile
 # body (the measured winner) is untouched.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF.patch
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-# This op names its leaf 128 (neural_model_leaf_into[128]; the host arm neural_partition[128],
-# autograd/small_mlp_host.mojo); neither reads CONTRACT_K_LEAF_MIN.
 # TOMBSTONE: MOJOLEARN_GEMM_FAST_LEAF512 (NOISE, A/B abf2 and round 3; the contract's leaf is 128 again, so the note on
 # this op under that arm and the refusal of the arm with the _OFF dispatch are gone) deleted 2026-11-20 by
 # lane/fx-verdicts6; code recoverable at 06d1e8ff34.
 # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_LEAF512.patch
-comptime SMALL_MLP_GEMM_LEAF128 = (
-    NEURAL_EXPERIMENTS_ALLOWED
-    and not NEURAL_GEMM_EXPERIMENT_ENABLED
-    and not is_defined["MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_MLP_GEMM_LEAF128 (the default SMALL_MLP_GEMM_LEAF128: this op's GEMMs on the NN03 profile body
+# at leaf 128, neural_model_leaf_into[128]; lane grid-act-5 2026-10-08, 0.886x on mlp-train-step then; LOSER now: A/B
+# nvc-ab-20261124T115722Z-d8f8b2, NVIDIA L40S, wheel 4519097d380a, job nvc1-0003, arm small-mlp-leaf128-off = this op on
+# identical_gemm_into: 2 cells 0.91, mlp-train-step 0.561 -> 0.468 ms (0.83; the row's base over five runs of the box
+# 0.485..0.561), mlp-predict 0.061 -> 0.060 ms (0.99); digests and loss equal on both arms) deleted 2026-11-24 by
+# lane/o3-nmlp (ab-outcome-3), with its switch MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF (refused) and neural_model_leaf_into;
+# code recoverable at 774ef6eb1f. AMD not measured (NVIDIA-only campaign).
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MLP_GEMM_LEAF128.ab-outcome-3.patch
+# No bits change: at leaf 128 the profile's partition is the contract's (contract_partition), the same
+# per-cell chain and fold, so identical_gemm_into gives the same words on every column; the host arm
+# (autograd/small_mlp_host.mojo) computes them on the contract's partition.
 
 comptime _P = MutPointer[Float32, MutAnyOrigin]
 comptime _TPB = 128
@@ -120,9 +104,6 @@ def small_mlp_check(rows: Int, n_in: Int, hid: Int, n_out: Int) raises:
 
 
 def _max_ws(mut ws_n: Int, m: Int, n: Int, k: Int):
-    comptime if SMALL_MLP_GEMM_LEAF128:
-        # The profile body reads no workspace (the measured arm sized it 1).
-        return
     var w = identical_gemm_workspace_max_floats(m, n, k)
     if w > ws_n:
         ws_n = w
@@ -168,9 +149,8 @@ def _gemm[ROLE: Int = ROLE_PROJECTION](
     ex: DeviceExec, c: FP, a: FP, b: FP, ws: FP, ws_n: Int, m: Int, n: Int, k: Int, op: Int,
 ) raises:
     """The old step's `_gemm` (f59d913b0b) over executor storage views:
-    under FAST the vendor kernel first (DEVIATION 1876), else the leaf-128
-    profile body (SMALL_MLP_GEMM_LEAF128), else identical_gemm_into with
-    the op's workspace. No wait."""
+    under FAST the vendor kernel first (DEVIATION 1876), else
+    identical_gemm_into with the op's workspace. No wait."""
     var ctx = ex.ctx.copy()
     var cv = block_buffer_view(ex, c, m * n)
     var av = block_buffer_view(ex, a, m * k)
@@ -178,11 +158,6 @@ def _gemm[ROLE: Int = ROLE_PROJECTION](
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         if _fast_vendor_gemm(ctx, cv, av, bv, m, n, k, op):
             return
-    comptime if SMALL_MLP_GEMM_LEAF128:
-        # ROLE is only a schedule-arm mask and no schedule arm is on in
-        # this build.
-        neural_model_leaf_into[128](ctx, cv, av, bv, m, n, k, op)
-        return
     var wv = block_buffer_view(ex, ws, ws_n)
     identical_gemm_into[ROLE=ROLE](ctx, cv, av, bv, wv, m, n, k, op)
     _ = wv^

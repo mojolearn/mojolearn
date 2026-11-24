@@ -104,7 +104,6 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.et_loop_kernels impo
     ETL_HDR_WORDS,
     ETL_H_CUR,
     ETL_H_GCOUNT,
-    ETL_H_HEAD,
     ETL_H_NODES,
     ETL_H_NSUB,
     ETL_H_OVERFLOW,
@@ -114,9 +113,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.et_loop_kernels impo
     ETL_H_STAT_NODES,
     ETL_H_STAT_RESCUED,
     ETL_H_STAT_RETRY,
-    ETL_H_TAIL,
     ETL_META_INTS,
-    ETL_Q_INTS,
     ETL_SHARED_FITS,
     ETL_STAT_INTS,
     ETL_ST_DEPTH,
@@ -5434,19 +5431,22 @@ def et_bf_expand_kernel(
 
 
 struct EtDeviceLoop(Movable):
-    """One group's device level loop: the header, the shared FIFO, the node
-    arena, the per-tree counters, the batch / rescue / partition arrays and
-    (best-first) the frontiers. See the block comment above."""
+    """One group's device level loop (best-first growth): the header, the
+    node arena, the per-tree counters, the batch / rescue / partition arrays
+    and the frontiers. See the block comment above."""
+    # TOMBSTONE: the device FIFO (`queue`, `queue_cap`, its allocation, the
+    # init kernel's seed and `ensure`'s re-pack), which only the deleted
+    # depth-wise device loop popped (MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT),
+    # deleted 2026-11-24 by lane/ab-outcome-3 (o3-trees); code recoverable at 9be94fd314.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/ET_DEVICE_LOOP_FIFO.ab-outcome-3.patch
 
     var g: Int
     var max_batch: Int
     var n_chunks_cap: Int
     var node_cap: Int
-    var queue_cap: Int
     var f_cap: Int
     var hdr: DeviceBuffer[DType.int32]
     var h_hdr: HostBuffer[DType.int32]
-    var queue: DeviceBuffer[DType.int32]
     var g_nodes: DeviceBuffer[DType.uint8]
     var g_meta: DeviceBuffer[DType.int32]
     var slot_stat: DeviceBuffer[DType.int32]
@@ -5478,7 +5478,7 @@ struct EtDeviceLoop(Movable):
     var pt_gpos: DeviceBuffer[DType.int32]
     var pt_splits: DeviceBuffer[DType.uint8]
     var tree_base: DeviceBuffer[DType.int32]
-    #: lane t2-trees-on-executor: the arena / FIFO buffers (and the copy
+    #: lane t2-trees-on-executor: the arena buffers (and the copy
     #: views onto them) a growth in `ensure` replaced, kept alive until the
     #: next header drain settles the copies that read them (`drain` clears
     #: them), so a growth enqueues its copies and drains nothing itself
@@ -5489,9 +5489,9 @@ struct EtDeviceLoop(Movable):
         out self, ctx: DeviceContext, g: Int, max_batch: Int, f_cap: Int
     ) raises:
         """Every buffer the loop needs, sized once per group. `f_cap` is the
-        per-tree frontier capacity (0 for depth-wise growth). The arena and
-        the FIFO start at `g + 2 * ET_LOOP_K * max_batch` and grow at
-        drains (`ensure`)."""
+        per-tree frontier capacity (0 for the depth-wise group's one-slot
+        stub). The arena starts at `g + 2 * ET_LOOP_K * max_batch` and grows
+        at drains (`ensure`)."""
         var nb = max_batch if max_batch > 2 * g else 2 * g
         if nb < 1:
             nb = 1
@@ -5502,11 +5502,9 @@ struct EtDeviceLoop(Movable):
         self.max_batch = nb
         self.n_chunks_cap = chunks
         self.node_cap = cap0
-        self.queue_cap = cap0
         self.f_cap = f_cap
         self.hdr = ctx.enqueue_create_buffer[DType.int32](ETL_HDR_WORDS)
         self.h_hdr = ctx.enqueue_create_host_buffer[DType.int32](ETL_HDR_WORDS)
-        self.queue = ctx.enqueue_create_buffer[DType.int32](cap0 * ETL_Q_INTS)
         self.g_nodes = ctx.enqueue_create_buffer[DType.uint8](
             cap0 * size_of[SparseTreeNode[DType.float32]]()
         )
@@ -5575,7 +5573,7 @@ struct EtDeviceLoop(Movable):
             raise Error(
                 "ET device level loop: header overflow code "
                 + String(ov)
-                + " (1 arena/FIFO capacity, 2 block-map bound, 3 pop bound,"
+                + " (1 arena capacity, 2 block-map bound, 3 pop bound,"
                 " 4 best-first frontier capacity) -- a host bound bug"
             )
         var pm = self.word(ETL_H_PART_MISMATCH)
@@ -5596,9 +5594,9 @@ struct EtDeviceLoop(Movable):
         slot_rows: Int32,
         shared_base: Int32,
         root_expandable: Int32,
-        bestfirst: Bool,
     ) raises:
-        """`NodeQueue.__init__` for the group: tree ids, roots, header."""
+        """`NodeQueue.__init__` for the group (best-first): tree ids, roots,
+        header."""
         var h_tree = ctx.enqueue_create_host_buffer[DType.int32](self.g)
         ctx.synchronize()
         unsafe_memcpy(
@@ -5609,7 +5607,6 @@ struct EtDeviceLoop(Movable):
         ctx.enqueue_copy(dst_buf=self.slot_tree, src_ptr=h_tree.unsafe_ptr())
         ctx.enqueue_function[etl_init_kernel](
             self.hdr.unsafe_ptr(),
-            self.queue.unsafe_ptr(),
             self.g_nodes.unsafe_ptr().unsafe_bitcast[
                 SparseTreeNode[DType.float32]
             ](),
@@ -5622,7 +5619,6 @@ struct EtDeviceLoop(Movable):
             slot_rows,
             shared_base,
             root_expandable,
-            Int32(1) if bestfirst else Int32(0),
             grid_dim=ceildiv(self.g, ETL_TPB),
             block_dim=ETL_TPB,
         )
@@ -5631,9 +5627,7 @@ struct EtDeviceLoop(Movable):
 
     def ensure(mut self, ctx: DeviceContext, extra: Int) raises:
         """Call right after a drain. Grows the node arena so `extra` more
-        records fit, and re-packs the FIFO's live stretch `[head, tail)` to
-        the front of a buffer with `extra` more entries of room (its header
-        words rewritten to match). Enqueue only (lane t2-trees-on-executor):
+        records fit. Enqueue only (lane t2-trees-on-executor):
         the copies run in stream order before the next batch's pop, and the
         replaced buffers stay alive in `retired_*` until the next header
         drain; the three synchronizes a growth used to pay are deleted.
@@ -5670,33 +5664,6 @@ struct EtDeviceLoop(Movable):
             self.g_nodes = nn^
             self.g_meta = nm^
             self.node_cap = cap
-        var head = self.word(ETL_H_HEAD)
-        var tail = self.word(ETL_H_TAIL)
-        if tail + extra > self.queue_cap:
-            var live = tail - head
-            var qcap = 2 * live
-            if qcap < live + extra:
-                qcap = live + extra
-            var nq = ctx.enqueue_create_buffer[DType.int32](qcap * ETL_Q_INTS)
-            if live > 0:
-                var dq = nq.create_sub_buffer[DType.int32](0, live * ETL_Q_INTS)
-                var sq = self.queue.create_sub_buffer[DType.int32](
-                    head * ETL_Q_INTS, live * ETL_Q_INTS
-                )
-                ctx.enqueue_copy(dst_buf=dq, src_buf=sq)
-                self.retired_i32.append(dq^)
-                self.retired_i32.append(sq^)
-            self.retired_i32.append(self.queue.copy())
-            self.queue = nq^
-            self.queue_cap = qcap
-            # The device header equals `h_hdr` here (drained, nothing queued
-            # since): shift the two FIFO words and put the header back. The
-            # upload reads `h_hdr` in stream order before the next drain's
-            # download writes it, and the host does not touch `h_hdr` in
-            # between, so it needs no synchronize of its own.
-            self.h_hdr.unsafe_ptr()[unsafe_offset=ETL_H_HEAD] = Int32(0)
-            self.h_hdr.unsafe_ptr()[unsafe_offset=ETL_H_TAIL] = Int32(live)
-            ctx.enqueue_copy(dst_buf=self.hdr, src_ptr=self.h_hdr.unsafe_ptr())
 
     def enqueue_stage(
         mut self,
@@ -6959,7 +6926,6 @@ def train_forest_classification_device_timed(
                 slot_rows,
                 shared_base,
                 et_root_expandable(params, slot_rows),
-                bestfirst,
             )
         else:
             for s in range(g):  # driver-loop: over the group's tree slots, one queue each
@@ -8052,7 +8018,6 @@ def train_forest_regression_device_timed(
                 slot_rows,
                 shared_base,
                 et_root_expandable(params, slot_rows),
-                bestfirst,
             )
         else:
             for s in range(g):  # driver-loop: over the group's tree slots, one queue each

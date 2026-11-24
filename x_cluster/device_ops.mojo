@@ -194,16 +194,18 @@ comptime XC_PHASES_ON = is_defined["MOJOLEARN_XC_PHASES"]()
 # each thread folds SQT_R x SQT_R cells, every cell its own chain over the
 # features ascending with `sq_dist_rows`' statements (the staged words are
 # already flushed: ftz is idempotent), so every word is the same.
-# `-D MOJOLEARN_XC_SQDIST_TILED_OFF` restores the per-cell kernel (before
-# lane envgate-classical-deviceplan: the run-time `MOJOLEARN_XC_SQDIST_TILED=0`,
-# a getenv per sqdist launch; B arm RUN OWED, owed-pre0867.json
-# "xc-sqdist-tiled-off", docs/apple-fast/EXPERIMENTS.md).
+# The per-cell `_sqdist_kernel` stays for a column whose threadgroup page
+# does not hold SQT_BYTES and for empty shapes. Its forcing switch
+# `-D MOJOLEARN_XC_SQDIST_TILED_OFF` was no faster and is gone (A/B
+# nvc-ab-20261124T115722Z-d8f8b2, NVIDIA L40S: 10 cells, median 1.00).
+# TOMBSTONE: MOJOLEARN_XC_SQDIST_TILED_OFF (old path no faster: NV L40S 10 cells, median 1.00, 0.98..1.07) deleted 2026-11-24 by lane/o3-decomp (ab-outcome-3); code recoverable at 8e05d20993.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XC_SQDIST_TILED_OFF.ab-outcome-3.patch
 comptime SQT_R = 4
 comptime SQT_TD = 16
 comptime SQT_B = SQT_R * SQT_TD
 comptime SQT_K = 16
 comptime SQT_BYTES = 2 * SQT_B * SQT_K * 4
-comptime SQDIST_TILED = lib_smem_page_fits_for[TARGET_COLUMN, SQT_BYTES]() and not is_defined["MOJOLEARN_XC_SQDIST_TILED_OFF"]()
+comptime SQDIST_TILED = lib_smem_page_fits_for[TARGET_COLUMN, SQT_BYTES]()
 
 
 def _sqdist_tiled_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, dst: FPtr):

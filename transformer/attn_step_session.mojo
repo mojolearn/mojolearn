@@ -43,7 +43,6 @@ from autograd.block_step_ops import (
     OPS_ATTN_STEP,
     AttnPrefill,
     BlockStepScratch,
-    TRANSFORMER_GENERIC_PREFILL,
     attn_step_fresh_prefill,
     attn_step_adopt,
     attn_step_entry,
@@ -548,35 +547,28 @@ struct AttnStepArm(Movable):
         self._shape(ints)
         self.refresh_weights(a)
         var n = self.b * l * self.dm
-        comptime if not TRANSFORMER_GENERIC_PREFILL:
-            # Lane r1-restore-measured-winners (2026-11-09): the stateless
-            # prefill is the op's fresh prefill arm (0.8.66's block session
-            # prefill, autograd/block_step_ops.mojo attn_step_fresh_prefill):
-            # x straight into the L-shaped stages, y straight down, no
-            # resident x / y hop. -D MOJOLEARN_TRANSFORMER_GENERIC_PREFILL
-            # runs the generic op run below instead (the boxes' A/B).
-            if stateless:
-                if s0 != 0:
-                    raise Error("transformer: a discarded cache starts at cached_tokens 0")
-                self.cached = attn_step_fresh_prefill(self.ex, self.sc, self._operands(self.xio), self._counts(n),
-                                                      self.ints, a[0], a[12], l, self.pre)
-                return self.cached
-        self._io(n)
-        var ctx = self.ex.ctx.copy()
+        # Lane r1-restore-measured-winners (2026-11-09): the stateless
+        # prefill is the op's fresh prefill arm (0.8.66's block session
+        # prefill, autograd/block_step_ops.mojo attn_step_fresh_prefill):
+        # x straight into the L-shaped stages, y straight down, no
+        # resident x / y hop.
+        # TOMBSTONE: MOJOLEARN_TRANSFORMER_GENERIC_PREFILL (LOSER: NV L40S transformer-forward 2.20 -> 2.97 ms, 1.35) deleted 2026-11-24 by lane/ab-outcome-3 (o3-nseq); code recoverable at c23cb55fda.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_GENERIC_PREFILL.ab-outcome-3.patch
+        # (the generic op run's stateless branch: zero caches in, attn_step_restart at 0, the resident x / y hop.)
         if stateless:
             if s0 != 0:
                 raise Error("transformer: a discarded cache starts at cached_tokens 0")
-            self._caches_in(0, 0)
-            attn_step_restart(self.ex, self.sc, self._operands(self.w), self._counts(1), self.ints, 0, False)
-            self.cached = 0
-        else:
-            self._load(a[10], a[11], s0)
+            self.cached = attn_step_fresh_prefill(self.ex, self.sc, self._operands(self.xio), self._counts(n),
+                                                  self.ints, a[0], a[12], l, self.pre)
+            return self.cached
+        self._io(n)
+        var ctx = self.ex.ctx.copy()
+        self._load(a[10], a[11], s0)
         ctx.enqueue_copy(dst_buf=self._view(self.xio, n), src_ptr=f32_ptr(a[0]))
-        # forward-only either way: no backward reads a forward call's stages
+        # forward-only: no backward reads a forward call's stages
         self._run(l, True)
         ctx.enqueue_copy(dst_ptr=f32_ptr(a[12]), src_buf=self._view(self.yio, n))
-        if not stateless:
-            self._caches_out(a[10], a[11])
+        self._caches_out(a[10], a[11])
         self.ex.sync()
         return self.cached
 

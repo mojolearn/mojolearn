@@ -132,8 +132,8 @@ class LegacyNearestCentroid(NearestCentroid):
         self.class_prior_ = Array.from_list(prior, "<f8")
         if self.metric == "euclidean":
             cent = _empty_out((C, d), "<f4")
-            if os.environ.get("MOJOLEARN_NC_SPLIT_OPS", "") == "1":
-                self._op("group_mean", [(X, 0), (lab, 0), (cent, 1)], (n, d, C))
+            # TOMBSTONE: MOJOLEARN_NC_SPLIT_OPS (LOSER: NV L40S 4 cells, median 5.76, nearest-centroid fit istella 59.45 -> 625 ms, taxi 16.58 -> 290 ms) deleted 2026-11-24 by lane/ab-outcome-3 (o3-trees); code recoverable at a0324a1c4c.
+            # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_NC_SPLIT_OPS.ab-outcome-3.patch
         else:
             # the per-class medians on the device (cpu-gpu-cleanup w2-pyglue,
             # x_neighbors/sort_items.mojo): a bitonic sort of every feature's
@@ -154,10 +154,10 @@ class LegacyNearestCentroid(NearestCentroid):
         new_cent = _empty_out((C, d), "<f4")
         devs = _empty_out((C, d), "<f4")
         dsc = None
-        if self.metric == "euclidean" and os.environ.get("MOJOLEARN_NC_SPLIT_OPS", "") != "1":
+        if self.metric == "euclidean":
             # lane/neural-pass95: the class means, the within-class std and the
             # dataset centroid in one op (x_neighbors/items.mojo nc_stats_item):
-            # X goes to the device once; MOJOLEARN_NC_SPLIT_OPS=1 restores the three ops
+            # X goes to the device once
             dsc = _empty_out((d,), "<f4")
             self._op("nc_stats", [(X, 0), (lab, 0), (nk, 0), (cent, 1), (stats, 1), (dsc, 1)], (n, d, C))
         else:
