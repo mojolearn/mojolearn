@@ -36,8 +36,7 @@ from bindings.classical_pandas_door import classical_admit_value
 from bindings.metrics_native_support_door import (
     metric_is_real, metric_is_bool, metric_float, metric_arguments_to, metric_undefined,
 )
-from bindings.metrics_device_door import metric_device_admit, metric_device_identical, metric_device_inputs
-from core.device_route import DEVICE_INSTALL
+from bindings.metrics_device_door import metric_device_admit, metric_device_identical
 from providers.python.function_device_boundary_door import function_device_scope
 from bindings.classical_validate_unpack import classical_view
 from bindings.arena_prog_run import MetricArenaOwner
@@ -415,8 +414,6 @@ def metrics_reg_public(operation: Int, var args: PythonObject, context: PythonOb
     if end < 0:
         raise Error("TypeError: a public metric call carries its device as the last argument")
     var device = metric_device_admit(args[end], "this mojolearn.metrics function", context)
-    if device.request != DEVICE_INSTALL:
-        metric_device_inputs(device, args, end, context)
     if device.host_beside:
         metric_device_identical(_reg_mode(operation, args, end), context)
     return _metrics_reg_run(operation, args^, end, function_device_scope(device, context))

@@ -71,18 +71,19 @@ X_METRICS = ["silhouette_score", "silhouette_samples", "calinski_harabasz_score"
 
 
 @pytest.mark.parametrize("name", X_METRICS)
-def test_device_resident_input_with_cpu_is_refused_in_unpack(name):
-    # A device-resident input (DeviceRows) with an explicit device='cpu' is refused before any work,
-    # whatever the installation; the gather callable must never run.
+def test_device_rows_with_cpu_reads_the_host_base(name):
+    # A DeviceRows fold view is a view over a HOST base: with an explicit device='cpu' it is read from
+    # that base, as the estimators read it, and is never refused for being device-resident. The words
+    # only: any error the call raises is the metric's own, never a device refusal.
     from mojolearn import _arena_io
     from mojolearn._array import Array
 
-    def forbidden(*args):
-        raise AssertionError("the fold gather ran")
-
-    rows = _arena_io.DeviceRows(Array.from_list([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], "<f4"),
-                                Array.from_list([0, 2], "<i8"), forbidden)
+    rows = _arena_io.DeviceRows(Array.from_list([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 9.0]], "<f4"),
+                                Array.from_list([0, 1, 2, 3], "<i8"), lambda *args: None)
     function = getattr(metrics, name)
-    second = rows if name == "trustworthiness" else [0, 1]
-    with pytest.raises(ValueError, match="device='cpu' cannot take a device-resident input"):
+    second = rows if name == "trustworthiness" else [0, 0, 1, 1]
+    try:
         function(rows, second, device="cpu")
+    except Exception as error:  # the metric's own refusal of these tiny inputs
+        text = str(error)
+        assert "device-resident" not in text and "device must be" not in text and "device='cpu'" not in text

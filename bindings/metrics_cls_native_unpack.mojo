@@ -25,8 +25,7 @@ from std.python import Python, PythonObject
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.metrics_native_support_door import metric_arguments_to
-from bindings.metrics_device_door import metric_device_admit, metric_device_identical, metric_device_inputs
-from core.device_route import DEVICE_INSTALL
+from bindings.metrics_device_door import metric_device_admit, metric_device_identical
 from core.function_device import FunctionDevice, function_device_default
 from providers.python.function_device_boundary_door import function_device_scope
 from providers.python.metric_binding_pyapi_pack import metric_binding_arguments
@@ -60,8 +59,6 @@ def metrics_cls_public(operation: Int, var args: PythonObject, context: PythonOb
     if end < 0:
         raise Error("TypeError: a public metric call carries its device as the last argument")
     var device = metric_device_admit(args[end], "this mojolearn.metrics function", context)
-    if device.request != DEVICE_INSTALL:
-        metric_device_inputs(device, args, end, context)
     if device.host_beside:
         metric_device_identical(_mcls_mode(operation, args, end), context)
     return _metrics_cls_run(operation, args^, end, device, function_device_scope(device, context))
