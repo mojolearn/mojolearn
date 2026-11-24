@@ -1648,7 +1648,7 @@ def model_fit_state[E: Exec](
     var word = List[Float32](length=1, fill=Float32(0))
     var inv_n = ftz(identical_div(Float32(1), Float32(N)))
     var n_iter = 0
-    var loop = FitLoop.empty()
+    var loop_record = FitLoop.empty()
     var loop_start = fit_loop_start()
     for e in range(cfg.epochs):  # driver-loop: over epochs
         # the absolute epoch index: a resumed fit continues the row orders
@@ -1794,7 +1794,7 @@ def model_fit_state[E: Exec](
     if validation:
         var v = validation.value().copy()
         ex.sync()
-        loop = fit_loop_stop(loop_start, n_iter)
+        loop_record = fit_loop_stop(loop_start, n_iter)
         ex.download(v.curve, vcurve, n_iter)
         v.result[0] = Int64(n_iter)
         v.result[1] = Int64(start + best_epoch)
@@ -1809,9 +1809,9 @@ def model_fit_state[E: Exec](
             stall = 0
             n_iter = best_epoch
     ex.sync()
-    if not loop.recorded:
-        loop = fit_loop_stop(loop_start, n_iter)
-    fit_loop_publish(loop_words, loop)
+    if not loop_record.recorded:
+        loop_record = fit_loop_stop(loop_start, n_iter)
+    fit_loop_publish(loop_words, loop_record)
     ex.download(Pio, P, np_)
     ex.download(Mio, s1, np_)
     ex.download(Vio, s2, np_)
