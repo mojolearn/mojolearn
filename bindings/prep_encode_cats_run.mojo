@@ -14,6 +14,8 @@ typed `EncProgram`, then the typed run, then PACK. No builder reads a field,
 a mode or an entry table. The same allocations and stages in the same order
 as the door's former builders, so the bits do not move. No Python import
 (tools/python_free_dirs.sh)."""
+from std.math import ceil
+from std.memory import bitcast
 from bindings.prep_encode_prog_run import EncProgram, enc_input, enc_label_chunk, enc_floats_of
 from core.preprocessing_program import prep_program_stage
 
@@ -301,6 +303,66 @@ struct InfrequentPlan(Copyable, Movable):
     var map: Int
 
 
+#: `min_frequency` as a word (the door's `_infrequent_threshold` reads it once at UNPACK; lane mf-enc6).
+comptime CAT_MF_NONE = 0
+comptime CAT_MF_COUNT = 1
+comptime CAT_MF_FRACTION = 2
+
+
+def cat_infrequent_threshold(n: Int, kind: Int, value: Float64) -> Int:
+    """`_infrequent_threshold`: an integral min_frequency as is
+    (CAT_MF_COUNT), a fraction f ceil(n * f) in binary64
+    (CAT_MF_FRACTION), none 0. The door and the Prep member both call it."""
+    if kind == CAT_MF_COUNT:
+        return Int(value)
+    if kind == CAT_MF_FRACTION:
+        return Int(ceil(Float64(n) * value))
+    return 0
+
+
+def cat_infrequent_ks(sizes: List[Int], missing: List[Int], ignore_missing: Bool) -> List[Int]:
+    """The per-column counts of groupable categories `_fit_infrequent`
+    groups: a column's NaN slot (`missing[j]` >= 0) is left out with
+    `ignore_missing` (OrdinalEncoder), kept otherwise (OneHotEncoder)."""
+    var ks = List[Int](capacity=len(sizes))
+    for j in range(len(sizes)):  # driver-loop: one size per column (feature metadata)
+        var size = sizes[j]
+        ks.append(size - 1 if (ignore_missing and size > 0 and missing[j] >= 0) else size)
+    return ks^
+
+
+struct CatInfrequent(Movable):
+    """The fitted infrequent grouping (`_fit_infrequent`'s PACK words):
+    column j's infrequent category indices `infrequent[j]` and its grouped
+    code per groupable category `groups[j]`, both empty for a column with no
+    infrequent category (the door's None)."""
+    var infrequent: List[List[Int]]
+    var groups: List[List[Int]]
+
+    def __init__(out self):
+        self.infrequent = List[List[Int]]()
+        self.groups = List[List[Int]]()
+
+
+def cat_infrequent_lists(arena: Int, plan: InfrequentPlan, ks: List[Int], kmax: Int) -> CatInfrequent:
+    """The masks and grouped codes of `cat_infrequent_stage` read from the
+    run's host words at `arena` as per-column lists (one body: the door's
+    `_fit_infrequent` PACK and the Prep member read them here)."""
+    var out = CatInfrequent()
+    for j in range(len(ks)):  # driver-loop: the program's tables as the fitted per-column lists (feature metadata)
+        var inf = List[Int]()
+        for i in range(ks[j]):  # driver-loop: over one column's categories
+            if _arena_iword(arena, plan.mask + j * kmax + i) != 0:
+                inf.append(i)
+        var group = List[Int]()
+        if len(inf) > 0:
+            for i in range(ks[j]):  # driver-loop: over one column's categories
+                group.append(_arena_iword(arena, plan.map + j * kmax + i))
+        out.infrequent.append(inf^)
+        out.groups.append(group^)
+    return out^
+
+
 def cat_infrequent_stage(mut prog: EncProgram, r: InfrequentFit) -> InfrequentPlan:
     var n = r.n
     var d = r.d
@@ -415,4 +477,57 @@ def cat_auto_state(arena: Int, plan: CatFitPlan, n: Int, d: Int) -> CatAuto:
         var last = state.block[j * state.kmax + size - 1] if size > 0 else Float32(0)
         state.missing.append(size - 1 if size > 0 and last != last else -1)
     state.sizes = counts^
+    return state^
+
+
+# ---------------------------------------------------------------- given categories (lane mf-enc6)
+# `categories=<list>`: the user's lists are DATA, read once at UNPACK (the
+# door per fit, the Prep member's admission once) into float32 words, then
+# checked and canonicalized here in the door's order and words. One body:
+# the encode door's `_given_categories` and the Prep member (core/prep_member.mojo
+# kinds 10, 11) call these.
+def cat_given_column(raw: List[Float32], j: Int, who: String) raises -> List[Float32]:
+    """Column j's given categories as `_given_categories` stores them: the
+    numbers sorted ascending (refused when not), at most one NaN and only
+    last, no two equal in float32, not empty; -0.0 folded into 0.0 and the
+    NaN canonical (float('nan') as float32)."""
+    var nums = List[Float32]()
+    for i in range(len(raw)):  # driver-loop: over one user category list
+        if raw[i] == raw[i]:
+            nums.append(raw[i])
+    var total = len(raw)
+    if len(nums) < total - 1 or (len(nums) < total and raw[total - 1] == raw[total - 1]):
+        raise Error("mojolearn: " + who + " categories[" + String(j) + "]: nan must be the last category")
+    for i in range(1, len(nums)):  # driver-loop: over one user category list
+        if nums[i] < nums[i - 1]:
+            raise Error("mojolearn: " + who + " unsorted categories are not supported for numerical categories")
+    for i in range(1, len(nums)):  # driver-loop: over one user category list
+        if nums[i] == nums[i - 1]:
+            raise Error("mojolearn: " + who + " categories[" + String(j) + "] has values equal in float32")
+    if total == 0:
+        raise Error("mojolearn: " + who + " categories[" + String(j) + "] is empty")
+    var canon = List[Float32](capacity=total)
+    for i in range(len(nums)):  # driver-loop: over one user category list
+        canon.append(Float32(0.0) if nums[i] == 0 else nums[i])
+    if len(nums) < total:
+        canon.append(bitcast[DType.float32](UInt32(0x7FC00000)))
+    return canon^
+
+
+def cat_given_state(columns: List[List[Float32]]) -> CatAuto:
+    """The fitted category state of the canonical given columns
+    (`cat_given_column`): the same (d, kmax) block, sizes and NaN slots the
+    door's category record holds for them."""
+    var state = CatAuto()
+    state.d = len(columns)
+    for j in range(state.d):  # driver-loop: over the per-column category counts (feature metadata)
+        state.kmax = max(state.kmax, len(columns[j]))
+    state.block = List[Float32](length=max(state.d * state.kmax, 1), fill=Float32(0))
+    for j in range(state.d):  # driver-loop: over the columns' category words (feature metadata)
+        var size = len(columns[j])
+        for i in range(size):  # driver-loop: over one column's categories
+            state.block[j * state.kmax + i] = columns[j][i]
+        state.sizes.append(size)
+        var last = columns[j][size - 1] if size > 0 else Float32(0)
+        state.missing.append(size - 1 if size > 0 and last != last else -1)
     return state^
