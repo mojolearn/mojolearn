@@ -10,7 +10,8 @@ vdf-parallel, 2026-11-24):
   (read in place): the GPU bytes equal the host `decode_bytes` bytes, and the two GPU inputs agree;
 * an id outside [0, n_vocab) reports the first offending position;
 * training: the GPU trainer's vocabulary (token bytes, merges, n_ties_broken, n_groups) equals the
-  host `train_bpe` result on the same documents, at two vocabulary sizes and two min_frequency.
+  host `train_bpe` result on the same documents, at vocabulary sizes 256 to 70000 (above the
+  old int32 pair-key limit 46340) and min_frequency 1 to 3.
 
 The fixture covers contractions (`'s`, `'ll`, `IT'S`, `''s`, ` 's`), whitespace runs before words,
 at the end and before invalid bytes, tabs and newlines, multi-byte letters and numbers, invalid and
@@ -203,6 +204,9 @@ def test_train_matches_the_host_trainer() raises:
     _check_train(docs, 300, 2)
     _check_train(docs, 270, 3)
     _check_train(docs, 256, 1)
+    # Just over the old int32 pair-key limit (46340): the pair is held as two ids at every size.
+    _check_train(docs, 46341, 1)
+    _check_train(docs, 70000, 2)
 
 
 def main() raises:

@@ -529,8 +529,8 @@ class BpeVocabularyTrainer:
     device : {None, 'gpu', 'cpu'}, default None
         Where training runs. None follows the numeric mode. 'cpu' runs on the
         CPU and raises ValueError in numeric mode 'fast'. 'gpu' runs on the GPU,
-        with the same vocabulary as the CPU, for vocab_size up to 46340, and
-        raises ValueError on a CPU-only installation. Other values raise
+        with the same vocabulary as the CPU, and raises ValueError on a
+        CPU-only installation. Other values raise
         ValueError.
 
     Examples

@@ -90,10 +90,9 @@ def test_trainer_gpu(identical_mode):
         with pytest.raises(ValueError, match="device='gpu' needs a GPU build of mojolearn"):
             BpeVocabularyTrainer(vocab_size=300, device="gpu")
         return
-    vocab = BpeVocabularyTrainer(vocab_size=260, device="gpu").train(["abab abab", "ab"])
-    assert isinstance(vocab, TrainedBpeVocabulary)
-    with pytest.raises(ValueError, match="device='gpu' trains vocab_size from 256 to 46340"):
-        BpeVocabularyTrainer(vocab_size=50000, device="gpu").train(["ab"])
+    for size in (260, 50000):
+        vocab = BpeVocabularyTrainer(vocab_size=size, device="gpu").train(["abab abab", "ab"])
+        assert isinstance(vocab, TrainedBpeVocabulary)
 
 
 def test_decode_batch_reports_the_earliest_sequence_error_first(identical_mode):

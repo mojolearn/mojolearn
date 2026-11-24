@@ -68,10 +68,12 @@ from core.neural_context import process_ctx
 from tokenizer.encoding import BpeTokenizer
 from tokenizer.impl.ranks import RankTable
 from tokenizer.impl.unicode_class import UnicodeClasses
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from std.memory import stack_allocation
 from tokenizer.fast.bpe_device import (
-    BPE_TPB, BPE_RT, BPE_RB, BPE_K, BPE_MAX_VOCAB, S_DONE, S_NM, S_TIES, S_FAIL, S_TOTAL, S_LEN, FNV_OFFSET64, FNV_PRIME64,
-    BpeMerges, bpe_scan_block_kernel, bpe_scan_sums_kernel, bpe_scan_add_kernel, bpe_fill_kernel,
-    bpe_group_init_kernel, bpe_topk_part_kernel, bpe_select_kernel, bpe_apply_kernel,
+    BPE_TPB, BPE_RT, BPE_RB, S_DONE, S_NM, S_TIES, S_NSEL, S_NOCC, S_FAIL, S_BASE, S_TOTAL, S_LEN,
+    FNV_OFFSET64, FNV_PRIME64, BpeMerges, bpe_scan_block_kernel, bpe_scan_sums_kernel, bpe_scan_add_kernel,
 )
 from tokenizer.fast.bpe_fast_impl import fast_vocab_from_merges
 from tokenizer.train.bpe_train import TrainedVocabulary
@@ -662,6 +664,317 @@ def gpu_group_write_kernel(
     glens.unsafe_store(g, Int32(plen))
 
 
+# ------------------------------------------------------------------ the merge loop (any vocabulary size)
+#
+# The host trainer's merge loop (tokenizer/train/bpe_train.mojo), the same algorithm as the Apple
+# fast device loop of tokenizer/fast/bpe_device.mojo (one merge per pass: the highest count, then
+# the smallest pair (left, right); the left-to-right non-overlapping rewrite with exact count
+# deltas; the same tie count), with ONE change: a pair is held as its two token ids, never as an
+# int32 key `left * V + right`, so no vocabulary size is refused (the fast loop stops at 46340).
+# The selection compares the pair as the 64-bit key `left * V + right`, which orders pairs exactly
+# as (left, right) lexicographically, so the merges are the same at every size. The pair table
+# claims a slot with a 32-bit compare-exchange only (64-bit compare-exchange does not exist on
+# every vendor): the slot holds a pair index + 1 whose two ids were stored, atomically, before the
+# claim; a reader that sees the claim before the ids reads them by atomic loads until they appear
+# (they were written before the claim, so they do appear; nothing else is waited for).
+
+comptime TK = 2
+comptime KEY_NONE64 = Int64(9223372036854775807)
+comptime SPIN_CAP = 1 << 22
+
+
+@always_inline
+def _better64(c1: Int32, k1: Int64, c2: Int32, k2: Int64) -> Bool:
+    """(c1, k1) comes first in the selection order: higher count, then smaller pair key."""
+    return c1 > c2 or (c1 == c2 and k1 < k2)
+
+
+@always_inline
+def _pslot2(a: Int32, b: Int32, mask: Int) -> Int:
+    var h = ((UInt64(UInt32(a)) << 32) | UInt64(UInt32(b))) * UInt64(11400714819323198485)
+    return Int((h >> 32) ^ h) & mask
+
+
+@always_inline
+def _pair_id(pl: I32P, idx: Int, st: I32P) -> Int32:
+    """A published pair id, read by atomic load until its writer's store is visible."""
+    var v = Atomic.load[ordering=Ordering.RELAXED](pl.unsafe_offset(idx))
+    var spins = 0
+    while v == Int32(-1):
+        spins += 1
+        if spins > SPIN_CAP:
+            st.unsafe_store(S_FAIL, Int32(5))
+            return Int32(-1)
+        v = Atomic.load[ordering=Ordering.RELAXED](pl.unsafe_offset(idx))
+    return v
+
+
+@always_inline
+def _pair_add2(
+    slots: I32P, pl: I32P, pr: I32P, vals: I32P, st: I32P, a: Int32, b: Int32, delta: Int32, mask: Int, pcap: Int,
+):
+    """Add `delta` to the count of the pair (a, b); a missing pair is inserted. Integer adds
+    commute, so the table after a pass does not depend on the order threads ran in. An index
+    allocated for an insert that then finds its pair already present keeps count 0 and is never
+    selected."""
+    var s = _pslot2(a, b, mask)
+    var mine = -1
+    var probes = 0
+    while probes <= mask:
+        var cur = Atomic.load[ordering=Ordering.RELAXED](slots.unsafe_offset(s))
+        if cur == Int32(0):
+            if delta < Int32(0):
+                st.unsafe_store(S_FAIL, Int32(1))
+                return
+            if mine < 0:
+                mine = Int(Atomic.fetch_add(st.unsafe_offset(S_NOCC), Int32(1)))
+                if mine >= pcap:
+                    st.unsafe_store(S_FAIL, Int32(2))
+                    return
+                Atomic.store[ordering=Ordering.RELAXED](pr.unsafe_offset(mine), b)
+                Atomic.store[ordering=Ordering.RELAXED](pl.unsafe_offset(mine), a)
+            var expected = Int32(0)
+            if Atomic.compare_exchange[
+                success_ordering=Ordering.RELAXED,
+                failure_ordering=Ordering.RELAXED,
+                weak=True,
+            ](slots.unsafe_offset(s), expected, Int32(mine + 1)):
+                _ = Atomic.fetch_add(vals.unsafe_offset(mine), delta)
+                return
+            continue
+        var idx = Int(cur) - 1
+        if _pair_id(pl, idx, st) == a and _pair_id(pr, idx, st) == b:
+            _ = Atomic.fetch_add(vals.unsafe_offset(idx), delta)
+            return
+        s = (s + 1) & mask
+        probes += 1
+    st.unsafe_store(S_FAIL, Int32(3))
+
+
+def gpu_train_init_kernel(
+    arena: U8P, goff: I64P, glen0: I64P, gcnt: I64P, seq: I32P, glen: I32P, slots: I32P, pl: I32P, pr: I32P,
+    vals: I32P, st: I32P, ngroups: Int64, mask: Int64, pcap: Int64,
+):
+    """One thread per group: its bytes become ids and its pairs are counted (x the group's count)."""
+    var g = _gtid()
+    if g >= Int(ngroups):
+        return
+    var gs = Int(goff[g])
+    var n = Int(glen0[g])
+    var c = Int32(gcnt[g])
+    for i in range(n):
+        seq.unsafe_store(gs + i, Int32(arena[gs + i]))
+    glen.unsafe_store(g, Int32(n))
+    for i in range(n - 1):
+        _pair_add2(slots, pl, pr, vals, st, seq[gs + i], seq[gs + i + 1], c, Int(mask), Int(pcap))
+
+
+def gpu_train_topk_kernel(pl: I32P, pr: I32P, vals: I32P, st: I32P, pc: I32P, pk: I64P, vocab: Int64, pcap: Int64):
+    """Block b's top TK live pairs, in selection order, into pc/pk[b * TK ...]."""
+    var tid = Int(thread_idx.x)
+    var b = Int(block_idx.x)
+    var sc = stack_allocation[BPE_RT * TK, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var sk = stack_allocation[BPE_RT * TK, Scalar[DType.int64], address_space=AddressSpace.SHARED]()
+    var lc0 = Int32(0)
+    var lk0 = KEY_NONE64
+    var lc1 = Int32(0)
+    var lk1 = KEY_NONE64
+    var live = min(Int(st[S_NOCC]), Int(pcap))
+    if st[S_DONE] != Int32(0):
+        live = 0
+    var v = Int64(vocab)
+    var i = b * BPE_RT + tid
+    while i < live:
+        var c = vals[i]
+        if c > Int32(0):
+            var k = Int64(pl[i]) * v + Int64(pr[i])
+            if _better64(c, k, lc0, lk0):
+                lc1 = lc0
+                lk1 = lk0
+                lc0 = c
+                lk0 = k
+            elif _better64(c, k, lc1, lk1):
+                lc1 = c
+                lk1 = k
+        i += BPE_RB * BPE_RT
+    sc[tid * TK] = lc0
+    sk[tid * TK] = lk0
+    sc[tid * TK + 1] = lc1
+    sk[tid * TK + 1] = lk1
+    barrier()
+    var half = BPE_RT // 2
+    while half > 0:
+        if tid < half:
+            var da = tid * TK
+            var db = (tid + half) * TK
+            # The first TK of the two sorted TK-lists at da and db, in selection order, into da.
+            var oc0: Int32
+            var ok0: Int64
+            var oc1: Int32
+            var ok1: Int64
+            if _better64(sc[da], sk[da], sc[db], sk[db]):
+                oc0 = sc[da]
+                ok0 = sk[da]
+                if _better64(sc[da + 1], sk[da + 1], sc[db], sk[db]):
+                    oc1 = sc[da + 1]
+                    ok1 = sk[da + 1]
+                else:
+                    oc1 = sc[db]
+                    ok1 = sk[db]
+            else:
+                oc0 = sc[db]
+                ok0 = sk[db]
+                if _better64(sc[da], sk[da], sc[db + 1], sk[db + 1]):
+                    oc1 = sc[da]
+                    ok1 = sk[da]
+                else:
+                    oc1 = sc[db + 1]
+                    ok1 = sk[db + 1]
+            sc[da] = oc0
+            sk[da] = ok0
+            sc[da + 1] = oc1
+            sk[da + 1] = ok1
+        barrier()
+        half //= 2
+    if tid < TK:
+        pc.unsafe_store(b * TK + tid, sc[tid])
+        pk.unsafe_store(b * TK + tid, sk[tid])
+
+
+def gpu_train_select_kernel(pc: I32P, pk: I64P, st: I32P, sel: I32P, mrg: I32P, vocab: Int64, vocab_size: Int64, minf: Int64):
+    """ONE threadgroup of BPE_RB threads over the BPE_RB partial lists: the global top TK, then
+    thread 0 picks this pass's merge (the host's winner; a tie with the runner-up is counted)."""
+    var tid = Int(thread_idx.x)
+    var sc = stack_allocation[BPE_RB * TK, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var sk = stack_allocation[BPE_RB * TK, Scalar[DType.int64], address_space=AddressSpace.SHARED]()
+    for j in range(TK):
+        sc[tid * TK + j] = pc[tid * TK + j]
+        sk[tid * TK + j] = pk[tid * TK + j]
+    barrier()
+    var half = BPE_RB // 2
+    while half > 0:
+        if tid < half:
+            var da = tid * TK
+            var db = (tid + half) * TK
+            # The first TK of the two sorted TK-lists at da and db, in selection order, into da.
+            var oc0: Int32
+            var ok0: Int64
+            var oc1: Int32
+            var ok1: Int64
+            if _better64(sc[da], sk[da], sc[db], sk[db]):
+                oc0 = sc[da]
+                ok0 = sk[da]
+                if _better64(sc[da + 1], sk[da + 1], sc[db], sk[db]):
+                    oc1 = sc[da + 1]
+                    ok1 = sk[da + 1]
+                else:
+                    oc1 = sc[db]
+                    ok1 = sk[db]
+            else:
+                oc0 = sc[db]
+                ok0 = sk[db]
+                if _better64(sc[da], sk[da], sc[db + 1], sk[db + 1]):
+                    oc1 = sc[da]
+                    ok1 = sk[da]
+                else:
+                    oc1 = sc[db + 1]
+                    ok1 = sk[db + 1]
+            sc[da] = oc0
+            sk[da] = ok0
+            sc[da + 1] = oc1
+            sk[da + 1] = ok1
+        barrier()
+        half //= 2
+    if tid != 0:
+        return
+    if st[S_DONE] != Int32(0):
+        st.unsafe_store(S_NSEL, Int32(0))
+        return
+    var v = Int64(vocab)
+    var nm = Int(st[S_NM])
+    var room = Int(vocab_size) - 256 - nm
+    var c0 = sc[0]
+    if room <= 0 or c0 <= Int32(0) or Int(c0) < Int(minf):
+        st.unsafe_store(S_DONE, Int32(1))
+        st.unsafe_store(S_NSEL, Int32(0))
+        return
+    var a0 = Int32(sk[0] // v)
+    var b0 = Int32(sk[0] % v)
+    sel.unsafe_store(0, a0)
+    sel.unsafe_store(1, b0)
+    mrg.unsafe_store(2 * nm, a0)
+    mrg.unsafe_store(2 * nm + 1, b0)
+    if sc[1] == c0:
+        st.unsafe_store(S_TIES, st[S_TIES] + Int32(1))
+    st.unsafe_store(S_BASE, Int32(256 + nm))
+    st.unsafe_store(S_NSEL, Int32(1))
+    st.unsafe_store(S_NM, Int32(nm + 1))
+
+
+def gpu_train_apply_kernel(
+    seq: I32P, glen: I32P, goff: I64P, gcnt: I64P, slots: I32P, pl: I32P, pr: I32P, vals: I32P, st: I32P,
+    sel: I32P, ngroups: Int64, mask: Int64, pcap: Int64,
+):
+    """One thread per group: the host's left-to-right non-overlapping rewrite of this pass's merge,
+    in place, with the exact count deltas (each changed old pair subtracted once, each new pair
+    added once), as tokenizer/fast/bpe_device.mojo `bpe_apply_kernel` with one selected pair."""
+    var g = _gtid()
+    if g >= Int(ngroups):
+        return
+    if Int(st[S_NSEL]) == 0:
+        return
+    var n = Int(glen[g])
+    if n < 2:
+        return
+    var sa = sel[0]
+    var sb = sel[1]
+    var gs = Int(goff[g])
+    var k0 = -1
+    for k in range(n - 1):
+        if seq[gs + k] == sa and seq[gs + k + 1] == sb:
+            k0 = k
+            break
+    if k0 < 0:
+        return
+    var c = Int32(gcnt[g])
+    var nt = st[S_BASE]
+    var m = Int(mask)
+    var cap = Int(pcap)
+    var prev_old = Int32(-1)
+    if k0 > 0:
+        prev_old = seq[gs + k0 - 1]
+    var prev_new = prev_old
+    var r = k0
+    var w = k0
+    while r < n:
+        var x = seq[gs + r]
+        if r + 1 < n and x == sa and seq[gs + r + 1] == sb:
+            var y = seq[gs + r + 1]
+            if r > 0:
+                _pair_add2(slots, pl, pr, vals, st, prev_old, x, -c, m, cap)
+            _pair_add2(slots, pl, pr, vals, st, x, y, -c, m, cap)
+            if r + 2 < n:
+                var z = seq[gs + r + 2]
+                var next_merges = r + 3 < n and z == sa and seq[gs + r + 3] == sb
+                if not next_merges:
+                    _pair_add2(slots, pl, pr, vals, st, y, z, -c, m, cap)
+                    _pair_add2(slots, pl, pr, vals, st, nt, z, c, m, cap)
+            if w > 0:
+                _pair_add2(slots, pl, pr, vals, st, prev_new, nt, c, m, cap)
+            prev_old = y
+            seq.unsafe_store(gs + w, nt)
+            prev_new = nt
+            w += 1
+            r += 2
+        else:
+            prev_old = x
+            seq.unsafe_store(gs + w, x)
+            prev_new = x
+            w += 1
+            r += 1
+    glen.unsafe_store(g, Int32(w))
+
+
 # ------------------------------------------------------------------ host side
 
 
@@ -966,8 +1279,8 @@ def bpe_gpu_train_into(
     classes_table: BpeGpuClasses, text_addr: Int, n: Int, offs_host: List[Int64], vocab_size: Int, min_frequency: Int,
 ) raises -> TrainedVocabulary:
     """`BpeVocabularyTrainer.train` on the GPU, the host trainer's result merge for merge (the merge
-    loop is tokenizer/fast/bpe_device.mojo's exact device loop, its kernels compiled here for every
-    vendor): the documents uploaded once; pre-tokenized per byte (`gpu_unit_kernel`,
+    loop is `gpu_train_*` above: tokenizer/fast/bpe_device.mojo's exact device loop with the pair held
+    as two ids, so every vocabulary size trains): the documents uploaded once; pre-tokenized per byte (`gpu_unit_kernel`,
     `gpu_start_kernel`, no special token, as train_bpe); the pre-tokens deduplicated into groups
     on the device (`gpu_piece_dedup_kernel`); the pair counts and every merge pass on the device
     with no read-back between passes (a pass after the selection said done is a no-op, so
@@ -975,9 +1288,8 @@ def bpe_gpu_train_into(
     count and their total length, which size the loop's tables and launches) and the state and
     the merges once at the end; the vocabulary is then written in merge order, as train_bpe writes
     it. `classes_table` holds the Unicode class tables on the device."""
-    if vocab_size < 256 or vocab_size > BPE_MAX_VOCAB:
-        raise Error("ValueError: device='gpu' trains vocab_size from 256 to " + String(BPE_MAX_VOCAB)
-            + " (the device pair key is int32), got " + String(vocab_size) + "; use device='cpu'")
+    if vocab_size < 256:
+        raise Error("ValueError: vocab_size is below the 256 single-byte tokens")
     if min_frequency < 1:
         raise Error("ValueError: min_frequency must be at least 1")
     var ctx = bpe_gpu_ctx()
@@ -1055,45 +1367,49 @@ def bpe_gpu_train_into(
         _ = d_text^
         _ = d_offs^
         return fast_vocab_from_merges(merges, ng)
-    # The merge loop (tokenizer/fast/bpe_device.mojo `_train_passes`, fed from the device groups).
+    # The merge loop (`gpu_train_*`, above), fed from the device groups. Pairs ever seen <= 3 *
+    # symbols (initial pairs, plus at most 2 new per merge occurrence, each of which removes a
+    # symbol); an insert that loses its slot to the same pair leaks one index, so the pair store
+    # holds twice that, and the slot table keeps its load <= 1/2.
     var occ_cap = 3 * syms + 16
+    var pcap = 2 * occ_cap
     var ts = 1024
     while ts < 2 * occ_cap:
         ts *= 2
     var seq = ctx.enqueue_create_buffer[DType.int32](n)
     var glen = ctx.enqueue_create_buffer[DType.int32](ng)
-    var gmask = ctx.enqueue_create_buffer[DType.int32](2 * ng)
-    var keys = ctx.enqueue_create_buffer[DType.int32](ts)
-    var vals = ctx.enqueue_create_buffer[DType.int32](ts)
-    var occ = ctx.enqueue_create_buffer[DType.int32](occ_cap)
+    var slots = ctx.enqueue_create_buffer[DType.int32](ts)
+    var pl = ctx.enqueue_create_buffer[DType.int32](pcap)
+    var pr = ctx.enqueue_create_buffer[DType.int32](pcap)
+    var vals = ctx.enqueue_create_buffer[DType.int32](pcap)
     var st = ctx.enqueue_create_buffer[DType.int32](S_LEN)
-    var sel = ctx.enqueue_create_buffer[DType.int32](2 * BPE_K)
+    var sel = ctx.enqueue_create_buffer[DType.int32](2 * TK)
     var mrg = ctx.enqueue_create_buffer[DType.int32](mcap)
-    var pc = ctx.enqueue_create_buffer[DType.int32](BPE_RB * BPE_K)
-    var pk = ctx.enqueue_create_buffer[DType.int32](BPE_RB * BPE_K)
-    keys.enqueue_fill(Int32(0))
+    var pc = ctx.enqueue_create_buffer[DType.int32](BPE_RB * TK)
+    var pk = ctx.enqueue_create_buffer[DType.int64](BPE_RB * TK)
+    slots.enqueue_fill(Int32(0))
+    pl.enqueue_fill(Int32(-1))
+    pr.enqueue_fill(Int32(-1))
     vals.enqueue_fill(Int32(0))
     st.enqueue_fill(Int32(0))
     var gb = _blocks(ng)
     var mask = ts - 1
-    ctx.enqueue_function[bpe_group_init_kernel](
-        text, _p64(goff), _p64(glen0), _p64(gcnt), _p32(seq), _p32(glen), _p32(gmask), _p32(keys), _p32(vals),
-        _p32(occ), _p32(st), Int64(ng), Int64(vocab_size), Int64(mask), Int64(occ_cap),
-        grid_dim=gb, block_dim=BPE_TPB,
+    ctx.enqueue_function[gpu_train_init_kernel](
+        text, _p64(goff), _p64(glen0), _p64(gcnt), _p32(seq), _p32(glen), _p32(slots), _p32(pl), _p32(pr),
+        _p32(vals), _p32(st), Int64(ng), Int64(mask), Int64(pcap), grid_dim=gb, block_dim=BPE_TPB,
     )
     for _p in range(vocab_size - 256):  # driver-loop: over merge passes (no read-back; a pass after done is a no-op)
-        ctx.enqueue_function[bpe_topk_part_kernel](
-            _p32(keys), _p32(vals), _p32(occ), _p32(st), _p32(pc), _p32(pk), Int64(occ_cap),
+        ctx.enqueue_function[gpu_train_topk_kernel](
+            _p32(pl), _p32(pr), _p32(vals), _p32(st), _p32(pc), _p64(pk), Int64(vocab_size), Int64(pcap),
             grid_dim=BPE_RB, block_dim=BPE_RT,
         )
-        ctx.enqueue_function[bpe_select_kernel](  # small-launch(one threadgroup over BPE_RB partial lists): the pass's selection
-            _p32(pc), _p32(pk), _p32(st), _p32(sel), _p32(mrg), Int64(vocab_size), Int64(vocab_size),
+        ctx.enqueue_function[gpu_train_select_kernel](  # small-launch(one threadgroup over BPE_RB partial lists): the pass's selection
+            _p32(pc), _p64(pk), _p32(st), _p32(sel), _p32(mrg), Int64(vocab_size), Int64(vocab_size),
             Int64(min_frequency), grid_dim=1, block_dim=BPE_RB,
         )
-        ctx.enqueue_function[bpe_apply_kernel](
-            _p32(seq), _p32(glen), _p64(goff), _p64(gcnt), _p32(gmask), _p32(keys), _p32(vals), _p32(occ), _p32(st),
-            _p32(sel), Int64(ng), Int64(vocab_size), Int64(mask), Int64(occ_cap),
-            grid_dim=gb, block_dim=BPE_TPB,
+        ctx.enqueue_function[gpu_train_apply_kernel](
+            _p32(seq), _p32(glen), _p64(goff), _p64(gcnt), _p32(slots), _p32(pl), _p32(pr), _p32(vals), _p32(st),
+            _p32(sel), Int64(ng), Int64(mask), Int64(pcap), grid_dim=gb, block_dim=BPE_TPB,
         )
     var h_st = List[Int32](length=S_LEN, fill=Int32(0))
     ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=Int(h_st.unsafe_ptr())), src_buf=st)
@@ -1123,10 +1439,10 @@ def bpe_gpu_train_into(
     _ = st_l^
     _ = seq^
     _ = glen^
-    _ = gmask^
-    _ = keys^
+    _ = slots^
+    _ = pl^
+    _ = pr^
     _ = vals^
-    _ = occ^
     _ = st^
     _ = sel^
     _ = mrg^
