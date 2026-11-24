@@ -17,7 +17,7 @@ The door (bindings/linalg_ops_decomp.mojo) releases the GIL around each RUN
 sequence and keeps every admitted owner alive across it; PACK copies a
 matrix's words into the public Array (`lin_kit_out`).
 """
-from std.memory import unsafe_memcpy
+from std.memory import unsafe_memcpy, unsafe_memset_zero
 from core.entry_table import EntryRef, entry_ref_call
 from core.classical_tsqr_impl import tsqr_fill_constant, tsqr_copy_columns, tsqr_fill_eye
 from x_decomp.descriptor_schema import (
@@ -27,6 +27,7 @@ from x_decomp.descriptor_schema import (
     XD_DEV_COLSUM, XD_DEV_ROWSUM, XD_DEV_MOVE,
     XD_ORDER, XD_DEV_REDUCE, XD_DEV_ORDER, XD_ORDER_SMALL, XD_DEV_ORDER_SMALL,
     XD_SVD, XD_DEV_SVD, XD_RANK, XD_ORTH_DIAG, XD_DEV_ORTH_DIAG, XD_GEQRF, XD_ORGQR, XD_EIGH,
+    XD_DEV_GEQRF, XD_DEV_ORGQR, XD_DEV_TRIU,
 )
 
 comptime KIT_F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -511,9 +512,20 @@ struct LinKit(Movable):
         return out
 
     def geqrf(mut self, a: Int, mut tau: Int) raises -> Int:
-        """`_Kit.geqrf(A)`: (h, tau), LAPACK geqrf's factored form."""
-        var h = self.copy(a)
+        """`_Kit.geqrf(A)`: (h, tau), LAPACK geqrf's factored form. On a
+        resident kit h and tau are made and kept on the device
+        (XD_DEV_GEQRF, lane vdf-linalg2 2026-11-24: was the host-address
+        XD_GEQRF, which uploaded A and downloaded h and tau each call; the
+        same kernel on the same words)."""
         var kk = min(self.r(a), self.c(a))
+        if self.resident and kk > 0:
+            var dh = self.device_output(self.r(a), self.c(a))
+            tau = self.device_output(1, kk)
+            var da = self.device(a)
+            _ = self.dcall(XD_DEV_GEQRF, [da, self.matrices[dh].device, self.matrices[tau].device,
+                                          self.r(a), self.c(a)])
+            return dh
+        var h = self.copy(a)
         tau = self.zeros(1, kk)
         var ph = self.addr(h)
         var pt = self.addr(tau)
@@ -521,13 +533,41 @@ struct LinKit(Movable):
         return h
 
     def orgqr(mut self, h: Int, tau: Int, qc: Int) raises -> Int:
-        """`_Kit.orgqr(h, tau, qc)`."""
+        """`_Kit.orgqr(h, tau, qc)`: on the device when h is resident there
+        (XD_DEV_ORGQR; was XD_ORGQR, which uploaded h and tau again)."""
+        if self.resident and self.on_device(h) and qc > 0:
+            var dq = self.device_output(self.r(h), qc)
+            var dh = self.device(h)
+            var dt = self.device(tau)
+            _ = self.dcall(XD_DEV_ORGQR, [dh, dt, self.matrices[dq].device, self.r(h), self.c(h), self.c(tau), qc])
+            return dq
         var q = self.zeros(self.r(h), qc)
         var ph = self.addr(h)
         var pt = self.addr(tau)
         var pq = self.addr(q)
         _ = self.hcall(XD_ORGQR, [ph, pt, pq], [self.r(h), self.c(h), self.c(tau), qc])
         return q
+
+    def triu(mut self, h: Int, r: Int) raises -> Int:
+        """`_triu(h, r)`: the first r rows of h, every word below the
+        diagonal zero. On the device when h is resident there (XD_DEV_TRIU,
+        lane vdf-linalg2: was the door's host `_lin_triu` on the downloaded
+        h); a host h is cut on the host (the CPU column). Data movement."""
+        var c = self.c(h)
+        if r * c and self.resident and self.on_device(h):
+            var out = self.device_output(r, c)
+            var dh = self.device(h)
+            _ = self.dcall(XD_DEV_TRIU, [dh, self.matrices[out].device, r, c])
+            return out
+        var out = self.zeros(r, c)
+        if r * c:
+            var dst = self.ptr(out)
+            unsafe_memcpy(dest=dst, src=self.ptr(h), count=r * c)
+            for i in range(1, r):  # host-column: one zero fill per row of a host factor (the CPU image's triu)
+                var w = min(i, c)
+                if w:
+                    unsafe_memset_zero(dst + i * c, w)
+        return out
 
     def eigh(mut self, a: Int, uplo: Int, mut v: Int) raises -> Int:
         """`_Kit.eigh(A, uplo)`: (w 1 x n ascending, v n x n columns)."""

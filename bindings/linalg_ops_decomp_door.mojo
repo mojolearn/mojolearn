@@ -13,7 +13,7 @@
 # resolves the x_decomp image's dispatch once (`_lin_kit`); the kit sequences
 # are RUN (typed, the GIL released around each, the admitted owners named
 # after it); PACK copies the kit's matrices into public Arrays (`_lin_out`).
-from std.memory import unsafe_memcpy, unsafe_memset_zero
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.native_loaded_module_door import native_loaded_module
@@ -125,23 +125,10 @@ def _lin_named(cls: String, items: PythonObject, context: PythonObject) raises -
     return linalg_result_new(lin_state(context)[cls], items, context)
 
 
-def _lin_triu(mut kit: LinKit, h: Int, r: Int, context: PythonObject) raises -> PythonObject:
-    """PACK `_triu(h, r).out()`: the first r rows of h (a host factor),
-    everything below the diagonal zeroed (pure data movement)."""
-    var c = kit.c(h)
-    # lane fix-output-zero-fill (2026-11-14): unfilled; the memcpy below writes all r * c.
-    var out = admitted_unfilled([r, c], "<f4", context).keep
-    var dst = KIT_F32P(unsafe_from_address=Int(py=classical_address(out)))
-    _ = out  # keep the Python object alive through the native call above
-    if r * c:
-        unsafe_memcpy(dest=dst, src=kit.ptr(h), count=r * c)
-        _ = out  # keep the Python object alive through the native call above
-    for i in range(1, r):  # cpu-route: one zero fill per row of a host factor (the Python _triu's slice store)
-        var w = min(i, c)
-        if w:
-            unsafe_memset_zero(dst + i * c, w)
-            _ = out  # keep the Python object alive through the native call above
-    return out
+# lane vdf-linalg2 (2026-11-24): `_lin_triu` (R cut from the downloaded h on
+# the host, one zero fill per row, tagged cpu-route) is gone: the kit's
+# `triu` cuts R on the device where h now stays (XD_DEV_TRIU), and PACK
+# downloads R once (`_lin_out`). The host column cuts it in the kit.
 
 
 def _lin_entry(binding: PythonObject) raises -> EntryRef:
@@ -322,9 +309,12 @@ def _lin_qr_q(a: AdmittedBuf, mode: String, device: FunctionDevice, context: Pyt
         if mode == "raw":
             var ht = _lin_out(kit, factor, context)
             return Python.tuple(ht, _lin_out_vector(kit, tau, kk, context))
-        var q = _lin_out(kit, factor, context)
         var r_rows = rows if mode == "complete" else kk
-        return _lin_named("QRResult", Python.tuple(q, _lin_triu(kit, h, r_rows, context)), context)
+        var r_cut = 0
+        with GILReleased(py):
+            r_cut = kit.triu(h, r_rows)
+        var q = _lin_out(kit, factor, context)
+        return _lin_named("QRResult", Python.tuple(q, _lin_out(kit, r_cut, context)), context)
     finally:
         kit.close()
 
@@ -357,11 +347,13 @@ def _lin_qr(args: PythonObject, device: FunctionDevice, context: PythonObject) r
             var tau = 0
             var h = 0
             var py = Python()
+            var r_cut = 0
             with GILReleased(py):
                 var held = kit.borrow(a.addr, rows, cols)
                 h = kit.geqrf(held, tau)
+                r_cut = kit.triu(h, rows)
             _ = a  # keep the admitted owner alive through the RUN above
-            var wide = _lin_triu(kit, h, rows, context)
+            var wide = _lin_out(kit, r_cut, context)
             _ = a^
             return wide
         finally:
