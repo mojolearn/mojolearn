@@ -180,6 +180,11 @@ struct ScalerDoorCalls(ScalerCalls, Movable):
         with GILReleased(Python()):
             self.table.run(arena, words, program, stages)
 
+    def run_slot(self, arena: Int, words: Int, program: Int, stages: Int, x_slot: Int, x_words: Int,
+                 out_lo: Int, out_hi: Int) raises:
+        # Lane vdf-scope-neural6: only a member's fold (core/scaler_member.mojo) holds an x_prep slot.
+        raise Error("x_prep: this scaler caller holds no device slot")
+
 
 def scaler_door_calls(entries: PythonObject) raises -> ScalerDoorCalls:
     """UNPACK: the calls of a door whose kernels are all table entries."""
