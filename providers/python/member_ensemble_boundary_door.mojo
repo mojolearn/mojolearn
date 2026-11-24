@@ -273,8 +273,10 @@ def _active(fields: PythonObject, b: PythonObject) raises -> _Active:
 
 
 def _stack_method(fields: PythonObject, est: PythonObject, classifier: Bool, context: PythonObject) raises -> Int:
-    """`_StackingBase._method` (the door's `_stack_method`): -1 for a value
-    the door refuses."""
+    """`_StackingBase._method` (the door's `_stack_method`). A value the
+    door refuses raises its words (lane mf-fitadm7; bindings/
+    trees_meta_validate_unpack.mojo `meta_stacking_validate`, one wording):
+    before, -1 and the caller kept the door, which raised them."""
     var method = py_get(fields, "stack_method")
     var name = String("auto") if method is None else String(method)
     if name == "auto":
@@ -290,7 +292,7 @@ def _stack_method(fields: PythonObject, est: PythonObject, classifier: Bool, con
         return STACK_DECISION
     if name == "predict":
         return STACK_PREDICT
-    return -1
+    raise Error("stack_method must be auto, predict_proba, decision_function or predict")
 
 
 def _stack_need(kind: Int) -> Int:
@@ -744,8 +746,6 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
             # A classifier stacked with stack_method='predict' writes its
             # predicted codes (core/ensemble_member.mojo `_label_block`).
             var method = _stack_method(fields, active.ests[i], classifier, context)
-            if method < 0:
-                return False
             stack_kinds.append(method)
             if not _admit_nested(done, nested, active.ests[i], classifier, base_needs | _stack_need(method), context, b,
                                  child):
@@ -3464,20 +3464,19 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var kind = META_SEARCH_CLASSIFIER if classifier else META_SEARCH_REGRESSOR
     # The META entry and its glue run on an x_trees image: the search's own
     # context is model selection's, so the image is the one the meta classes'
-    # context names (`_finish` reads its bindings; not loaded: the door).
+    # context names (`_finish` reads its bindings).
     var trees = py_call(native_loaded_module("sys").modules.get, PythonObject("mojolearn._expansion_trees"))
     if trees is None:
         # not imported yet (lane mf-ens6b): imported once, as the metrics
-        # module is below, where the door kept the search before; an image
-        # that is not built (its ImportError) keeps the door's units
-        try:
-            trees = py_call(native_loaded_module("importlib").import_module,
-                            PythonObject("mojolearn._expansion_trees"))
-        except:
-            return False
+        # module is below. AN IMAGE THAT IS NOT BUILT (lane mf-fitadm7): its
+        # loader's ImportError is raised as it stands (no image can run the
+        # search kind; before, the door's units fitted it).
+        trees = py_call(native_loaded_module("importlib").import_module, PythonObject("mojolearn._expansion_trees"))
     var trees_context = py_get(py_call(b.vars, trees), "_TREES_CONTEXT")
     if trees_context is None:
-        return False  # the x_trees image is not built: the door's units (no META image to run on)
+        # the x_trees image is not connected (lane mf-fitadm7): `_trees_key`'s
+        # words, the refusal every meta estimator's own fit raises
+        raise Error("ImportError: mojolearn: _mojolearn_x_trees is not connected to the tree owner")
     # THE CLUSTER LABEL-PAIR ENTRY (lane mf-cluster5): the default-mode
     # metrics image the public doors resolve (`estimator_binding_mode`), its
     # key read and its entry resolved ONCE; the image is pinned below. Not
@@ -4116,6 +4115,9 @@ def _admit_multi(fields: PythonObject, kind: Int, context: PythonObject, b: Pyth
     var classifier = kind == META_MULTI_CLASSIFIER
     var base = py_get(fields, "estimator")
     if base is None:
+        # NO BASE (lane mf-fitadm7): the door's `_require_member` refusal, in
+        # its words (its fit refuses None before any column is fitted).
+        prep_estimator_admit(base, "MultiOutputClassifier" if classifier else "MultiOutputRegressor", context)
         return False
     if not classifier and not owner.serving:
         var defaults = py_get(context, "native_estimator_defaults")
