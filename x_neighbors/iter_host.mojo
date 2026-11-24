@@ -25,6 +25,7 @@ from x_neighbors.items import (
 
 from x_neighbors.host_ops import op_knn_impute_cells, X_NEIGHBORS_HOST_SABOTAGE, xn_host_status
 from x_neighbors.host_ops import op_unary as _host_unary, op_p2m_sign_label as _host_sign_label
+from x_neighbors.host_ops import op_p2m_relabel as _host_relabel, op_p2m_iota as _host_iota
 from x_neighbors.host_ops import (
     op_absdiff_sum as _host_absdiff_sum, op_lp_clamp as _host_lp_clamp, op_ls_clamp as _host_ls_clamp,
 )
@@ -121,20 +122,49 @@ def op_nan_cells(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int) ra
                    IP(unsafe_from_address=colmiss), IP(unsafe_from_address=info), n, d)
 
 
+def _cc_identity_relabel_host(lab: Int, info: Int, n: Int, rounds_run: Bool) raises:
+    """The connected-components contract both columns share (lane vdf-misc2,
+    2026-11-24): `rounds_run` False writes the identity start labels at
+    `lab`; True relabels the min-label fixed point at `lab` in place, the
+    components numbered in order of first appearance (`op_p2m_relabel`, the
+    words the device's root-rank relabel writes) with info[1] = the number
+    of components + 1. Before, the driver ran p2m_iota and p2m_relabel as
+    separate operations around the rounds."""
+    var lp = IP(unsafe_from_address=lab)
+    if not rounds_run:
+        _host_iota(lab, n)
+        return
+    var dst = List[Int32](length=max(n, 1), fill=Int32(0))
+    var rinfo = List[Int32](length=2, fill=Int32(0))
+    _host_relabel(lab, Int(dst.unsafe_ptr()), Int(rinfo.unsafe_ptr()), n)
+    if rinfo[1] != 0:
+        raise Error("RuntimeError: connected_components: a component label fell outside [0, n)")
+    if n > 0:
+        unsafe_memcpy(dest=lp, src=dst.unsafe_ptr(), count=n)
+    IP(unsafe_from_address=info).unsafe_store(1, rinfo[0] + Int32(1))
+
+
 def op_cc_iterate_csr(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
     """lane/neural-pass69: `op_cc_iterate` from a CSR adjacency (indptr n + 1,
     indices nnz): the host walk of x_neighbors/cc_sparse.mojo on every
-    column, no dense matrix."""
+    column, no dense matrix. From the identity labels; out, the relabelled
+    components and info[1] = their count + 1 (`_cc_identity_relabel_host`)."""
+    _cc_identity_relabel_host(lab, info, n, False)
     cc_iterate_csr(IP(unsafe_from_address=indptr), IP(unsafe_from_address=indices),
                    IP(unsafe_from_address=lab), IP(unsafe_from_address=info), n, nnz)
+    _cc_identity_relabel_host(lab, info, n, True)
 
 
 def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
     """connected_components' min-label rounds as the sparse walk of
     x_neighbors/cc_sparse.mojo (lane neural-pass22): the same rounds over the
     graph's edges, the same labels and round count; x_neighbors/checks/graph_check.mojo
-    holds it and the device's `op_cc_iterate` to the oracle's min-label rounds."""
+    holds it and the device's `op_cc_iterate` to the oracle's min-label rounds.
+    From the identity labels; out, the relabelled components and info[1] =
+    their count + 1 (`_cc_identity_relabel_host`)."""
+    _cc_identity_relabel_host(lab, info, n, False)
     cc_iterate_sparse(FP(unsafe_from_address=a), IP(unsafe_from_address=lab), IP(unsafe_from_address=info), n)
+    _cc_identity_relabel_host(lab, info, n, True)
 
 
 # TOMBSTONE: cc_iterate_dense (the dense rounds of cc_step_item, a reference for the deleted
