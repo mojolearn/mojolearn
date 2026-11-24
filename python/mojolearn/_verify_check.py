@@ -27,15 +27,14 @@ def check(estimator, X, *, method=None, fit=None, fit_both=False, max_rows=None)
 
     In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA and
     AMD GPUs, and the CPU binaries are held to the same bits. This runs your
-    estimator on your data both ways on this machine: the GPU answers from the
-    estimator, the CPU answers from the same fitted model, saved and loaded
-    with `mojolearn.host_model`.
+    estimator on your data both ways on this machine, in this process: the
+    GPU answers from the estimator, the CPU answers from the same fitted
+    model on `device="cpu"`.
 
     Parameters
     ----------
     estimator : object
-        A fitted Mojolearn estimator that has `save`, of a kind
-        `mojolearn.host_model` loads.
+        A fitted Mojolearn estimator.
     X : array-like
         The rows to answer for.
     method : str, optional
@@ -47,12 +46,10 @@ def check(estimator, X, *, method=None, fit=None, fit_both=False, max_rows=None)
         the GPU first, then the fitted model is checked on both sides. Fitting
         is never done unless asked for.
     fit_both : bool, default False
-        With `fit`: run the same fit once on each side, the GPU side in this
-        process and the CPU side in a child process, and compare what the two
-        fitted models answer. Use it for an estimator whose fitted model
-        cannot be loaded on the CPU. The estimator must be unfitted, with
-        constructor parameters that are plain values. A class the CPU does
-        not run reports why and nothing is compared.
+        With `fit`: run the same fit once on each side, one estimator of the
+        same class and parameters on each device, and compare what the two
+        fitted models answer. The estimator must be unfitted. A class that
+        does not run on the CPU reports why and nothing is compared.
     max_rows : int, optional
         With `fit_both`: fit both sides on the first `max_rows` training rows
         only. The CPU fit can be slow on large inputs.
@@ -61,8 +58,10 @@ def check(estimator, X, *, method=None, fit=None, fit_both=False, max_rows=None)
     -------
     dict
         `ran` is False, with a `reason`, when nothing was compared: the
-        process or the estimator is not in `identical` mode, the installation
-        has no GPU, or the model cannot be loaded on the CPU. Otherwise
+        process or the estimator is not in `identical` mode, the class does
+        not run on the CPU, or the installation has no GPU (then `sides`
+        holds the CPU side alone and `gpu_side` says "not applicable").
+        Otherwise
         `sides` holds one record per side (device, binaries loaded, what the
         runtime counted while the side ran, wall time, and the shape, dtype,
         SHA-256 and first values of each output) and `verdict["verdict"]` is
@@ -125,8 +124,6 @@ def cmd_check(args):
         return finish(EXIT_REFUSED_FAST, dict(stub, refused="fast", reason=str(exc)))
     except Exception as exc:
         return finish(EXIT_CANNOT_RUN, dict(stub, reason=f"importing mojolearn raised {type(exc).__name__}: {exc}"))
-    if ml.vendor() == "cpu":
-        return finish(EXIT_CANNOT_RUN, dict(stub, reason=cb.NO_GPU))
     cls = getattr(ml, args.estimator, None)
     if cls is None or not (callable(cls) if fit_both else callable(getattr(cls, "load", None))):
         print(f"USAGE: --estimator {args.estimator} is not a mojolearn class"

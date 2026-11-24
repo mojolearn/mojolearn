@@ -572,18 +572,18 @@ class CheckMixin:
 
         In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA
         and AMD GPUs, and the CPU binaries are held to the same bits. This
-        answers `X` with this model twice on this machine: on the GPU, and on
-        the CPU from the same fitted model, saved and loaded with
-        `mojolearn.host_model`. It runs in `identical` mode only.
+        answers `X` with this model twice on this machine, in this process: on
+        the GPU, and on the CPU from the same fitted model on `device="cpu"`.
+        It runs in `identical` mode only.
 
         It prints, for each side, the device and the binaries that answered,
         what the runtime counted while the side ran (launches, uploads,
         downloads), the wall time, and the shape, dtype, SHA-256 and first
         values of each output; then one line: MATCH, or MISMATCH with the
         index and the two values of the first differing element. When nothing
-        could be compared (the estimator is not in `identical` mode, the
-        installation has no GPU, or the model cannot be loaded on the CPU) it
-        prints why.
+        could be compared (the estimator is not in `identical` mode, or the
+        class does not run on the CPU) it prints why. Without a GPU it prints
+        the CPU side and says the GPU side is not applicable.
 
         Parameters
         ----------
