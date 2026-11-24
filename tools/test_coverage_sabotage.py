@@ -261,6 +261,16 @@ def test_declared_review_binds_a_matching_refusal(trial, tmp_path):
     assert _bind(trial, tmp_path, _declared(arm, tmp_path)) == (1, 0)
 
 
+def test_declared_review_binds_a_matching_byte_oracle(trial, tmp_path):
+    arm, _, sab, _, _ = trial
+    errors = ['DistributedIVFIndex distances and plain IVFIndex distances differ: 512 bytes of 2048']
+    sab['cells']['one/base'] = dict(verdict='DIVERGENT', hashes=['5d3b3464bad871b8'], oracle_errors=errors)
+    pattern = r'DistributedIVFIndex distances and plain IVFIndex distances differ: [0-9]+ bytes of [0-9]+'
+    assert _bind(trial, tmp_path, _declared(arm, tmp_path, pattern=pattern)) == (1, 0)
+    sab['cells']['one/base']['oracle_errors'] = ['a different oracle differs: 1 bytes of 8']
+    assert _bind(trial, tmp_path, _declared(arm, tmp_path, pattern=pattern)) == (0, 1)
+
+
 @pytest.mark.parametrize('case', ['other-error', 'other-patch', 'infrastructure', 'not-refused'])
 def test_declared_review_never_binds_anything_else(trial, tmp_path, case):
     arm, _, sab, _, _ = trial
