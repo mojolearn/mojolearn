@@ -1043,8 +1043,9 @@
   },
   "gbdt-device-rounds-off": {
    "define": "MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF",
-   "status": "define in code (gbdt/methods/doc_parallel_boosting.mojo GBDT_DEVICE_ROUNDS, EXP:45): B = the SymmetricTree pointwise rounds on the host loop; A = the default device rounds. Bits move between the arms by design (partition-op leaf order, plain add on the learn cursor); quality beside the time",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-1): old path no faster (L40S 12 cells, median 1.00, 0.99..1.01); the device rounds default is unchanged; removed: the switch term; the define is refused (core/experiment_guards_trees.mojo); code recoverable at d81b6ba708, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF.ab-outcome-1.patch. Was: define in code (gbdt/methods/doc_parallel_boosting.mojo GBDT_DEVICE_ROUNDS, EXP:45): B = the SymmetricTree pointwise rounds on the host loop; A = the default device rounds. Bits move between the arms by design (partition-op leaf order, plain add on the learn cursor); quality beside the time",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T070727Z-69dac2 (NVIDIA L40S, wheel 4519097d380a): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "gbdt-greedy-device-rounds-off": {
    "define": "MOJOLEARN_GBDT_GREEDY_DEVICE_ROUNDS_OFF",
@@ -1094,10 +1095,9 @@
    "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b04 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: hist-warp-agg, tsqr-wy-pair-off, attn-fold-v2-on, sgd-ps-preload, xc-sqdist-tiled-off, prep-take-view-all"
   },
   "set-b06": {
-   "define": "MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF,MOJOLEARN_MCD_FAST_LOCKSTEP_OFF,MOJOLEARN_IDN_LARS_GRID_GRAM_OFF,MOJOLEARN_XPREP_FAST_MI_SORTED_OFF,MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF",
+   "define": "MOJOLEARN_MCD_FAST_LOCKSTEP_OFF,MOJOLEARN_IDN_LARS_GRID_GRAM_OFF,MOJOLEARN_XPREP_FAST_MI_SORTED_OFF,MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF",
    "owed": "RUN",
    "combined": [
-    "gbdt-device-rounds-off",
     "mcd-lockstep-off",
     "lars-grid-gram-off",
     "xprep-mi-sorted-off",
@@ -6169,7 +6169,7 @@
    "b_arms": [
     "gbdt-device-rounds-off"
    ],
-   "owed": "RUN",
+   "owed": "DECIDED",
    "columns": [
     "time",
     "quality"

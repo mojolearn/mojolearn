@@ -2733,14 +2733,14 @@ def _launch_querywise_pointwise_target(
 # value), Depthwise / Lossguide, and the FAST + Apple build (no leaf-op arm there: its own
 # estimator `apple_fast_est` stays).
 #
-# A/B: `-D MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF` restores the host loop for these
-# fits until the NVIDIA + AMD board rows are measured (RUN OWED); then the
-# switch goes (the host loop's pointwise arm stays for the refused fits).
+# Measured (A/B nvc-ab-20261124T070727Z-69dac2, NVIDIA L40S, wheel 4519097d380a):
+# the host loop for these fits was no faster (gbdt-symmetric, -1000 full, 12
+# cells, old / device 0.99..1.01), so its switch went; the host loop's pointwise
+# arm stays for the refused fits. AMD not measured (NVIDIA-only campaign).
+# TOMBSTONE: MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF (old path no faster: NV L40S 12 cells, median 1.00, 0.99..1.01) deleted 2026-11-24 by lane/ab-outcome-1; code recoverable at d81b6ba708.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF.ab-outcome-1.patch
 # ===========================================================================
-comptime GBDT_DEVICE_ROUNDS_BUILD = (
-    not EST_APPLE_ANY
-    and not is_defined["MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF"]()
-)
+comptime GBDT_DEVICE_ROUNDS_BUILD = not EST_APPLE_ANY
 
 #: Rounds enqueued between two register reads. COST RULE, not a shape: a
 #: round is the searcher's ~15-25 + 6 x depth launches plus ~25 more, i.e.
@@ -2779,8 +2779,7 @@ comptime GBDT_DEVICE_ROUNDS_BUILD = (
 # and the host detector.
 #
 # A/B: `-D MOJOLEARN_GBDT_GREEDY_DEVICE_ROUNDS_OFF` restores the host loop for
-# the greedy fits only (RUN OWED on NVIDIA + AMD); the pointwise arm keeps
-# `MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF`, which turns both off.
+# the greedy fits only (RUN OWED on NVIDIA + AMD).
 # ===========================================================================
 comptime GBDT_GREEDY_DEVICE_ROUNDS = GBDT_DEVICE_ROUNDS_BUILD and not is_defined[
     "MOJOLEARN_GBDT_GREEDY_DEVICE_ROUNDS_OFF"

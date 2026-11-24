@@ -683,6 +683,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_TREES_HIST_WARP_AGG (NOISE/LOSER: NV L40S 39 cells, median 1.00, 0.96..1.10, lossguide istella fit 12145 -> 13360 ms) deleted 2026-11-24 by lane/ab-outcome-1; code recoverable at d81b6ba708.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TREES_HIST_WARP_AGG.ab-outcome-1.patch
     comptime assert not is_defined["MOJOLEARN_TREES_HIST_WARP_AGG"](), "removed 2026-11-24 (lane/ab-outcome-1, A/B nvc-ab-20261124T070727Z-69dac2 NVIDIA L40S, wheel 4519097d380a, one run per arm): TREES_HIST_WARP_AGG (wave-aggregated one-byte histogram atomics) was NOISE/LOSER: 39 cells, median 1.00, 0.96..1.10, lossguide istella fit 12145 -> 13360 ms; the per-lane atomics default is kept; code at d81b6ba708; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TREES_HIST_WARP_AGG.ab-outcome-1.patch"
+    # TOMBSTONE: MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF (old path no faster: NV L40S 12 cells, median 1.00, 0.99..1.01) deleted 2026-11-24 by lane/ab-outcome-1; code recoverable at d81b6ba708.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF.ab-outcome-1.patch
+    comptime assert not is_defined["MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF"](), "removed 2026-11-24 (lane/ab-outcome-1, A/B nvc-ab-20261124T070727Z-69dac2 NVIDIA L40S, wheel 4519097d380a, one run per arm): GBDT_DEVICE_ROUNDS_OFF (the host round loop instead of the on-device SymmetricTree rounds) was no faster: 12 cells, median 1.00, 0.99..1.01; the device rounds stay the default (the host loop still serves the fits they refuse); code at d81b6ba708; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF.ab-outcome-1.patch"
     # ---- end lane ab-outcome-1
     return True
 
