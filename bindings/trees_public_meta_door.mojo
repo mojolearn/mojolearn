@@ -137,7 +137,7 @@ from bindings.native_array_storage_door import native_array_from_values
 from bindings.msel_inputs_unpack import msel_admit, msel_input_count
 from bindings.msel_common_door import msel_warn
 from bindings.trees_meta_admission_door import meta_admit_configuration
-from bindings.trees_staged_input_door import trees_stage_members, trees_unstage
+from bindings.trees_staged_input_door import trees_stage_members, trees_stage_wanted, trees_stage_tables, trees_unstage
 from bindings.trees_side_records_unpack import trees_side_get, trees_side_put
 from bindings.base_helpers_key_unpack import base_helpers_key
 from bindings.base_helpers_released_unpack import (
@@ -4266,7 +4266,33 @@ def _staged_input(model: PythonObject, kind: String, X: PythonObject, context: P
     path runs first; on the converted Array it returns that Array) and staged
     as the one device copy its forest members share (bindings/trees_staged_input.mojo).
     Any refusal here leaves `(X, [])`: the operation then raises it itself,
-    in its own order and words."""
+    in its own order and words.
+
+    THE FOLD FROM THE STORE (lane vdf-meta5): a model-selection fold
+    (DeviceRows on a GPU route) is left UNREAD when no forest binary would
+    be staged (`trees_stage_wanted`, at the fitted width): the operation
+    then reads it out of its host base (`_check_meta_x`) and its native
+    members take the fold's rows on the device. Before, this admission
+    gathered every fold on the host first, so no meta predict ever saw the
+    fold (vdf-meta4's Voting / MultiOutputRegressor predicts from the store
+    included). A fold that two or more forest members predict through is
+    admitted and staged once, as before."""
+    var nk = trees_keys()
+    if not (py_get(context, nk[].k_device_cpu_context) is context) and door_is_device_rows(X, context):
+        var wanted = Python.list()
+        try:
+            wanted = trees_stage_wanted(_member_list(model, kind),
+                                        Int(py=_attr(model, nk[].k_n_features_in_, PythonObject(0))), context)
+        except:
+            return Python.tuple(X, Python.list())
+        if len(wanted) == 0:
+            return Python.tuple(X, Python.list())
+        var Xf: PythonObject
+        try:
+            Xf = _check_x(model, X, context)
+        except:
+            return Python.tuple(X, Python.list())
+        return Python.tuple(Xf, trees_stage_tables(wanted, trees_address(Xf), _rows(Xf), _cols(Xf)))
     var Xa: PythonObject
     try:
         Xa = _check_x(model, X, context)
