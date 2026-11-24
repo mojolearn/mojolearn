@@ -191,7 +191,7 @@ tools/box_merged_verify.sh:109	write	tool: runs a CPU identity column/lane in a 
 tools/box_merged_verify.sh:115	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
 tools/changed_lanes_check.sh:16	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
 tools/changed_lanes_check.sh:66	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
-tools/coverage_sabotage_batch.sh:127	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/coverage_sabotage_batch.sh:127	write	sabotage runner: the CPU column of a batch in a child with =cpu (wrong row: it was the arm's CPU column, not a binding-set choice)	GONE 2026-11-24 (vdv-sabotage): one identity_break process, --side both (GPU box) or --side cpu (no GPU)
 tools/cpu_wheel_checks.sh:48	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
 tools/hostpr_both.sh:15	write	tool: selects the binding set for its run	yes: tooling, not verify
 tools/identical_dart_bit_diagnostic.py:85	write	tool: selects the binding set for its run	yes: tooling, not verify
@@ -200,9 +200,9 @@ tools/identical_wave_cnn_sgd_gate.py:43	read	tool: selects the binding set for i
 tools/identical_wave_runner.py:153	write	tool: selects the binding set for its run	yes: tooling, not verify
 tools/identical_wave_runner.py:292	write	tool: selects the binding set for its run	yes: tooling, not verify
 tools/identical_wave_supplement.py:36	write	tool: selects the binding set for its run	yes: tooling, not verify
-tools/identity_lanes/coverage_sabotage.tsv:204	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
-tools/identity_lanes/coverage_sabotage.tsv:252	doc/message	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
-tools/identity_lanes/coverage_sabotage_proven.tsv:6	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/identity_lanes/coverage_sabotage.tsv:204	write	arm text: names the p2 patch's MOJOLEARN_VENDOR=cpu score hunk (wrong row: text, not a child run)	GONE 2026-11-24 (vdv-sabotage): the hunk is dropped, the row's text rewritten; every p2 hunk keys on -D MOJOLEARN_COLUMN_CPU
+tools/identity_lanes/coverage_sabotage.tsv:252	doc/message	arm text: names the 870 patch's MOJOLEARN_VENDOR read (wrong row: text, not a child run)	GONE 2026-11-24 (vdv-sabotage): the row's text rewritten; the patch keys on not -D MOJOLEARN_COLUMN_CPU
+tools/identity_lanes/coverage_sabotage_proven.tsv:6	write	tool: runs a CPU identity column/lane in a child process with =cpu	kept: history of the 2026-10-21 Mac runs (a comment names the --side runs since 2026-11-24, vdv-sabotage)
 tools/idn_all_checks.py:155	doc/message	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
 tools/idn_all_checks.py:158	doc/message	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
 tools/idn_all_checks.py:167	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
@@ -359,5 +359,5 @@ verification/records/identity/retained/d1af6a75a5051e6efe684afb67bd2a508a401a43a
 verification/records/identity/retained/dacd441b0e2a90b9cffa8cc55cc779b2ecd6979f5553b6eb41d561b81f09128d/nvidia-rtx-sm_89.lanes-b5b915e8.identical.json:263106	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
 verification/records/release_verification/2026-10-26_pypi_0860/final-fixture-package/apple.json:1029	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
 verification/records/release_verification/2026-10-26_pypi_0860/final-fixture-package/cpu.json:2188	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
-x_decomp/checks/sabotage/e2e_p2_options.patch:20	read	sabotage arm: faults ONE side only by reading the variable at run time	no: with device= both sides run in one process; the arm must key on the route (the device of the call), not the environment
-x_neighbors/checks/sabotage/870_gamma_scale_device_column.patch:17	read	sabotage arm: faults ONE side only by reading the variable at run time	no: with device= both sides run in one process; the arm must key on the route (the device of the call), not the environment
+x_decomp/checks/sabotage/e2e_p2_options.patch:20	read	sabotage arm: faults ONE side only by reading the variable at run time	GONE 2026-11-24 (vdv-sabotage): keyed at compile time on -D MOJOLEARN_COLUMN_CPU (host bindings only); the door hunk is dropped because a door serves both sides of one GPU process
+x_neighbors/checks/sabotage/870_gamma_scale_device_column.patch:17	read	sabotage arm: faults ONE side only by reading the variable at run time	GONE 2026-11-24 (vdv-sabotage): keyed at compile time on not -D MOJOLEARN_COLUMN_CPU (GPU bindings only), no run-time read

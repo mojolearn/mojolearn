@@ -7,13 +7,17 @@
 # arm's lanes can be moved by another arm's patch in the same batch, and the patches apply
 # together. One sabotaged build per batch then proves every arm in it:
 #
-#   1. clean      the batch's lanes on this tree's built bindings (a record per column)
+#   1. clean      the batch's lanes on this tree's built bindings, BOTH SIDES IN ONE PROCESS through the
+#                 public device= (identity_break --side both: the GPU side to <tag>_device.json, the CPU
+#                 side to <tag>_cpu.json; an installation without a GPU records --side cpu only). No
+#                 MOJOLEARN_VENDOR child (verify through device=, 2026-11-24).
 #   2. sabotaged  every patch of the batch applied, the batch's bindings rebuilt, the lanes again
 #   3. restored   the patches reverted, the saved clean native files put back, the lanes again
 #   4. check      tools/coverage_sabotage.py review (binds the arm's committed review, if any, to
-#                 the three records) then check per arm and column (--batch-bindings): the arm
-#                 is CAUGHT when its lanes read DIVERGENT on the sabotaged build and IDENTICAL
-#                 to clean on the restored build
+#                 the three records of the side it faults) then check-sides per arm (--batch-bindings):
+#                 the arm is CAUGHT when its lanes read DIVERGENT on the side it faults (its `side`
+#                 column) and IDENTICAL to clean on the restored build, and every lane stays put on
+#                 the other side (the fault sits in one side's code)
 #
 # usage: bash tools/coverage_sabotage_batch.sh <plan.json> <batch id>
 # env:   PYTHON        the interpreter (default: `pixi run -e default python` when pixi and
@@ -26,7 +30,7 @@
 #                      $HOME/mojolearn-sabotage-scratch; one <batch id> directory, deleted on exit). Never
 #                      under OUT: the job persists OUT, and the tar of every native (about 120 MB a batch)
 #                      made the nvc1-0003 results 5.5 GB, so its final upload never landed before the cap.
-# Output: one line per arm and column, `SABOTAGE batch=<id> arm=<arm> column=<c> verdict=CAUGHT|MISSED`,
+# Output: one line per arm, `SABOTAGE batch=<id> arm=<arm> side=<cpu|gpu|cpu+gpu> verdict=CAUGHT|MISSED`,
 # and $OUT/summary.txt; the records and per-arm check logs stay in $OUT.
 # The tree is left as it was found (patches reverted, native files restored) on every exit path.
 set -u
@@ -115,20 +119,26 @@ natives > "$OUT/clean_natives.txt"
 snap > "$OUT/clean_natives.sha"
 tar -cf "$SCRATCH/clean_natives.tar" -T "$OUT/clean_natives.txt"
 
-run_cols() { # $1 = clean | sab | restored. The device and CPU columns are independent processes (the CPU
-    # column never touches the GPU), so they run at once.
+# Both sides run in ONE identity_break process (the lanes' device="cpu" and device="gpu" calls): the GPU
+# side to <tag>_device.json, then the CPU side to <tag>_cpu.json. An installation without a GPU records the
+# CPU side only (its GPU side reads not applicable; a gpu arm cannot be proven there).
+GPU_SIDE=$(MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" "${PY[@]}" -c \
+    'import mojolearn as ml; print("no" if ml.vendor() == "cpu" else "yes")' 2> "$OUT/side_probe.err" | tail -n 1)
+log "GPU side in this installation: ${GPU_SIDE:-probe failed}"
+run_cols() { # $1 = clean | sab | restored
     local tag=$1
-    case ",$COLUMNS," in *,device,*)
-        ( MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" "${PY[@]}" tools/identity_break.py \
-            --lanes "$LANES" --fixtures "$FIXTURES" --repeats 1 --json "$OUT/${tag}_device.json" \
-            > "$OUT/${tag}_device.log" 2>&1; log "RUN $tag device rc=$?" ) &;;
-    esac
-    case ",$COLUMNS," in *,cpu,*)
-        ( MOJOLEARN_VENDOR=cpu MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" "${PY[@]}" tools/identity_break.py \
-            --lanes "$LANES" --fixtures "$FIXTURES" --repeats 1 --json "$OUT/${tag}_cpu.json" \
-            > "$OUT/${tag}_cpu.log" 2>&1; log "RUN $tag cpu rc=$?" ) &;;
-    esac
-    wait
+    if [ "$GPU_SIDE" = yes ]; then
+        MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" "${PY[@]}" tools/identity_break.py \
+            --lanes "$LANES" --fixtures "$FIXTURES" --repeats 1 --side both \
+            --json "$OUT/${tag}_device.json" --cpu-json "$OUT/${tag}_cpu.json" \
+            > "$OUT/${tag}_sides.log" 2>&1
+    else
+        MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" "${PY[@]}" tools/identity_break.py \
+            --lanes "$LANES" --fixtures "$FIXTURES" --repeats 1 --side cpu --json "$OUT/${tag}_cpu.json" \
+            > "$OUT/${tag}_sides.log" 2>&1
+    fi
+    local rc=$?
+    log "RUN $tag sides=$([ "$GPU_SIDE" = yes ] && echo both || echo cpu) rc=$rc"
 }
 
 APPLIED=0
@@ -202,37 +212,37 @@ done
 restore
 RESTORED=1
 if [ $brc != 0 ]; then
-    for arm in ${ARMS//,/ }; do echo "SABOTAGE batch=$BATCH arm=$arm column=all verdict=BUILD-FAIL" | tee -a "$OUT/summary.txt"; done
+    for arm in ${ARMS//,/ }; do echo "SABOTAGE batch=$BATCH arm=$arm side=all verdict=BUILD-FAIL" | tee -a "$OUT/summary.txt"; done
     exit 5
 fi
 run_cols restored
 miss=0
 for arm in ${ARMS//,/ }; do
-    binds=$("${PY[@]}" tools/coverage_sabotage.py list | awk -F'\t' -v a="$arm" '$1==a {print $3}')
-    for col in device cpu; do
+    side=$("${PY[@]}" tools/coverage_sabotage.py list | awk -F'\t' -v a="$arm" '$1==a {print $5}')
+    sideargs=()
+    for col in cpu device; do
         [ -f "$OUT/clean_$col.json" ] || continue
-        # an arm is checked on the columns its own bindings build
-        if [ $col = cpu ]; then [[ ",$binds," == *_host,* ]] || continue
-        else echo ",$binds," | tr ',' '\n' | grep -qv -e '_host$' -e '^$' || continue; fi
-        # A committed review (tools/identity_lanes/coverage_sabotage_reviews.json) binds to these records
-        # only when the sabotaged cell refused with the reviewed first line under the reviewed patch bytes.
-        [ -f "$OUT/evidence_${arm}_$col.json" ] || "${PY[@]}" tools/coverage_sabotage.py review --arm "$arm" \
-            --clean "$OUT/clean_$col.json" --sabotaged "$OUT/sab_$col.json" --restored "$OUT/restored_$col.json" \
-            --out "$OUT/evidence_${arm}_$col.json" > "$OUT/review_${arm}_$col.txt" 2>&1
-        ev=""; [ -f "$OUT/evidence_${arm}_$col.json" ] && ev="--evidence $OUT/evidence_${arm}_$col.json"
-        # shellcheck disable=SC2086
-        "${PY[@]}" tools/coverage_sabotage.py check --arm "$arm" --clean "$OUT/clean_$col.json" \
-            --sabotaged "$OUT/sab_$col.json" --restored "$OUT/restored_$col.json" \
-            --batch-bindings "$BUILDS" $ev > "$OUT/check_${arm}_$col.txt" 2>&1
-        v=$(tail -n 1 "$OUT/check_${arm}_$col.txt" | awk '{print $3}')
-        [ "$v" = CAUGHT ] || miss=1
-        echo "SABOTAGE batch=$BATCH arm=$arm column=$col verdict=${v:-ERROR}" | tee -a "$OUT/summary.txt"
-        # The check's reasons ride with a miss in summary.txt (lane w3f5-e, 2026-11-24: gate 3cda8a05b3's copies
-        # kept only summary.txt, so eight MISSED arms carried no cause: an unstable clean lane, an unmoved
-        # fixture or a binary change outside the declared closure could not be told apart).
-        [ "$v" = CAUGHT ] || grep -v '^ARM ' "$OUT/check_${arm}_$col.txt" | cut -c1-300 | head -n 12 \
-            | sed "s/^/  CHECK $arm $col: /" >> "$OUT/summary.txt"
+        s=$([ $col = cpu ] && echo cpu || echo gpu)
+        sideargs+=(--$s-clean "$OUT/clean_$col.json" --$s-sabotaged "$OUT/sab_$col.json" --$s-restored "$OUT/restored_$col.json")
+        # A committed review (tools/identity_lanes/coverage_sabotage_reviews.json) binds to the faulted side's
+        # records only when the sabotaged cell refused with the reviewed first line under the reviewed patch bytes.
+        case "+$side+" in *+$s+*)
+            [ -f "$OUT/evidence_${arm}_$col.json" ] || "${PY[@]}" tools/coverage_sabotage.py review --arm "$arm" \
+                --clean "$OUT/clean_$col.json" --sabotaged "$OUT/sab_$col.json" --restored "$OUT/restored_$col.json" \
+                --out "$OUT/evidence_${arm}_$col.json" > "$OUT/review_${arm}_$col.txt" 2>&1
+            [ -f "$OUT/evidence_${arm}_$col.json" ] && sideargs+=(--$s-evidence "$OUT/evidence_${arm}_$col.json");;
+        esac
     done
+    "${PY[@]}" tools/coverage_sabotage.py check-sides --arm "$arm" "${sideargs[@]}" \
+        --batch-bindings "$BUILDS" > "$OUT/check_${arm}.txt" 2>&1
+    v=$(tail -n 1 "$OUT/check_${arm}.txt" | awk '{print $3}')
+    [ "$v" = CAUGHT ] || miss=1
+    echo "SABOTAGE batch=$BATCH arm=$arm side=${side:-?} verdict=${v:-ERROR}" | tee -a "$OUT/summary.txt"
+    # The check's reasons ride with a miss in summary.txt (lane w3f5-e, 2026-11-24: gate 3cda8a05b3's copies
+    # kept only summary.txt, so eight MISSED arms carried no cause: an unstable clean lane, an unmoved
+    # fixture or a binary change outside the declared closure could not be told apart).
+    [ "$v" = CAUGHT ] || grep -e '^INVALID' -e 'moved' -e 'unmoved' "$OUT/check_${arm}.txt" | cut -c1-300 | head -n 12 \
+        | sed "s/^/  CHECK $arm: /" >> "$OUT/summary.txt"
 done
 log "DONE"
 exit $miss
