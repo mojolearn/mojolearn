@@ -8,7 +8,7 @@ from core.hostptr import f32_ptr, i32_ptr
 from core.shared_slot import SharedSlot
 from core.dbscan_native_api import (
     DBSCANNativeKernels, DBSCANProviderAPI, DBSCANFitRequest, DBSCANCoreRequest, DBSCANGatherRequest,
-    DBSCANReferenceRequest, DBSCANQueryRequest, DBSCANResidentQuery, DBSCAN_CAP_RESIDENT, DBSCAN_CAP_DEV_STORE,
+    DBSCANReferenceRequest, DBSCANQueryRequest, DBSCANResidentQuery, DBSCAN_CAP_RESIDENT, DBSCAN_CAP_DEV_STORE, DBSCAN_CAP_FOLD_X,
 )
 from dbscan.estimator import dbscan_fit, dbscan_fit_resident
 from dbscan.core_device_impl import dbscan_core_count, dbscan_core_gather, dbscan_core_gather_resident
@@ -33,7 +33,7 @@ struct DBSCANDeviceKernels(DBSCANNativeKernels):
     def capabilities() -> Int:
         # DBSCAN_CAP_DEV_STORE (lane vdf-scope-cluster4): the image's resident store
         # (core/estimators_store.mojo, shared with KernelDensity) and the two store forms below.
-        return DBSCAN_CAP_RESIDENT | DBSCAN_CAP_DEV_STORE
+        return DBSCAN_CAP_RESIDENT | DBSCAN_CAP_DEV_STORE | DBSCAN_CAP_FOLD_X
 
     @staticmethod
     def fit(r: DBSCANFitRequest) raises -> Int:

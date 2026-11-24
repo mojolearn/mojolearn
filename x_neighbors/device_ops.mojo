@@ -1182,8 +1182,23 @@ def row_all_zero_kernel(a: IP, res: IP, n_: Int64, m_: Int64):
 
 def op_row_all_zero(a: Int, res: Int, n: Int, m: Int) raises:
     var ctx = xn_ctx()
-    var d_a = _buf_i(ctx, a, n * m, True)
     var d_res = _buf_i(ctx, res, n, False)
+    if a < 0:
+        # THE FOLD X WORD (lane vdf-scope-cluster8: AgglomerativeClustering's cosine zero-row test on a fold taken
+        # on the device): the slot's float32 words copied device to device (`_buf`), read as the same 32-bit
+        # words the host upload of the int32 view would hold.
+        var d_f = _buf(ctx, a, n * m, True)
+        ctx.enqueue_function[row_all_zero_kernel](
+            d_f.unsafe_ptr().bitcast[Int32](), d_res.unsafe_ptr(), Int64(n), Int64(m),
+            grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+        )
+        _down_i(ctx, d_res, res, n)
+        ctx.synchronize()
+        _ = d_f^
+        _ = d_res^
+        _ = ctx^
+        return
+    var d_a = _buf_i(ctx, a, n * m, True)
     ctx.enqueue_function[row_all_zero_kernel](
         d_a.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(m),
         grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),

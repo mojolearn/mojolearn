@@ -87,6 +87,7 @@ hierarchy lane.
 """
 
 from max.gpu.host import DeviceContext
+from core.fold_x_device import fold_x_fill
 
 from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_SQRT_EXPANDED,
@@ -106,8 +107,13 @@ def linkage_fit_host(
     metric: Int = DISTANCE_L2_SQRT_EXPANDED,
     use_knn: Bool = False,
     c: Int = LINKAGE_DEFAULT_C,
+    x_word: Int = 0,
 ) raises -> Int:
     """Cluster host-resident ROW-MAJOR data. Returns the Boruvka round count.
+
+    `x_word` < 0 (lane vdf-scope-cluster8, core/fold_x_device.mojo): X is a
+    model-selection fold's slot of the x_prep store, copied device to device
+    into the solver's X (`x_ptr` is not read); the same words as the upload.
 
     `x_ptr` is `n_rows x n_cols` float32, row-major.
     `children_ptr` receives `(n_rows - 1) * 2` Int32 -- the dendrogram, one
@@ -143,7 +149,10 @@ def linkage_fit_host(
     var labels = ctx.enqueue_create_buffer[DType.int32](n_rows)
     ctx.synchronize()
 
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    if x_word < 0:
+        fold_x_fill(ctx, x, x_word, n_rows * n_cols)
+    else:
+        ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.synchronize()
 
     var out = single_linkage(

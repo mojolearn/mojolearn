@@ -303,7 +303,7 @@ def agglo_tree[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, linkage: Int, metric: Int, p: Float32,
     edges: List[Float32], n_edges: Int, n_merges: Int,
     mut children: List[Int32], mut dist: List[Float32], mut n_components: Int,
-    edge_mode: Int = 0,
+    edge_mode: Int = 0, x_slot: Int = -1,
 ) raises:
     """metric -1: euclidean (squared for ward, rooted otherwise, through the
     squared distance); 0-4 the `bodies.pdist_cell` metrics; 5 precomputed
@@ -315,13 +315,16 @@ def agglo_tree[O: ClusterOps](
     values concatenated (n_edges entries each); a nonzero entry off the
     diagonal is an edge (lane apple-fast-py2mojo-cluster: Python built the
     pairs). `children` gets n_merges (lower id,
-    higher id) pairs, `dist` the merge values."""
+    higher id) pairs, `dist` the merge values. `x_slot` >= 0 (lane
+    vdf-scope-cluster8): X is that float slot of `ops` already (a model-selection
+    fold taken on the device); `x` is not read, and the host-word routes (the
+    fast ward rounds, the precomputed check of the host column) refuse it."""
     if n < 2:
         raise Error("AgglomerativeClustering: at least two samples are needed")
     if n_merges < 0 or n_merges > n - 1:
         raise Error("AgglomerativeClustering: n_merges must be in [0, n - 1]")
     comptime if WARD_ROUNDS:
-        if linkage == LINK_WARD and metric == -1 and n_edges < 0 and ops.fast_device():
+        if x_slot < 0 and linkage == LINK_WARD and metric == -1 and n_edges < 0 and ops.fast_device():
             if _ward_rounds(ops, x, n, d, n_merges, children, dist):
                 n_components = 1
                 return
@@ -338,7 +341,7 @@ def agglo_tree[O: ClusterOps](
     # the kernels read and grow it as this loop does. The host column answers
     # False and runs the loop below.
     if ops.agglo_on_device():
-        var xs0 = ops.put(x)
+        var xs0 = x_slot if x_slot >= 0 else ops.put(x)
         var ds_dev = ops.alloc(n * n)
         if metric == 5:
             ops.agglo_mirror(xs0, n, ds_dev)
@@ -358,6 +361,8 @@ def agglo_tree[O: ClusterOps](
         return
     var dm = List[Float32]()
     if metric == 5:
+        if x_slot >= 0:
+            raise Error("AgglomerativeClustering: the host column reads a precomputed matrix as host words")
         dm = List[Float32](length=n * n, fill=Float32(0))
         for i in range(n):
             for j in range(i + 1, n):
@@ -367,7 +372,7 @@ def agglo_tree[O: ClusterOps](
                 dm[i * n + j] = v
                 dm[j * n + i] = v
     else:
-        var xs = ops.put(x)
+        var xs = x_slot if x_slot >= 0 else ops.put(x)
         var ds = ops.zeros(n * n)
         if metric >= 0:
             ops.pdist(xs, n, xs, n, d, metric, p, ds)

@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native descriptor over the unchanged x_cluster device numerical owner.
-from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from x_cluster.device_ops import DeviceOps
 from hierarchy.cluster_descriptor_impl import hierarchy_cluster_fit
 from hierarchy.cluster_descriptor_schema import (
     HIERARCHY_CLUSTER_ABI, HIERARCHY_CLUSTER_MODE, HIERARCHY_CLUSTER_CAPABILITIES,
-    HIERARCHY_CLUSTER_CAP_FIT, HIERARCHY_CLUSTER_CAP_DEVICE,
+    HIERARCHY_CLUSTER_CAP_FIT, HIERARCHY_CLUSTER_CAP_DEVICE, HIERARCHY_CLUSTER_CAP_FOLD_X,
     hierarchy_cluster_validate_call,
 )
 from core.shared_slot import SharedSlot
@@ -24,12 +24,19 @@ def hierarchy_cluster_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: I
         if operation == HIERARCHY_CLUSTER_MODE:
             answer = GLOBAL_NUMERIC_MODE
         elif operation == HIERARCHY_CLUSTER_CAPABILITIES:
-            answer = HIERARCHY_CLUSTER_CAP_FIT | HIERARCHY_CLUSTER_CAP_DEVICE
+            answer = (HIERARCHY_CLUSTER_CAP_FIT | HIERARCHY_CLUSTER_CAP_DEVICE
+                      | (HIERARCHY_CLUSTER_CAP_FOLD_X if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else 0))
         else:
             # The same operations owner as x_cluster_call, including its
             # context, scratch ownership and synchronization on destruction.
             var ops = DeviceOps()
-            hierarchy_cluster_fit(ops, a, p, ff)
+            # HIERARCHY_CLUSTER_CAP_FOLD_X: a negative X word is a fold slot, put into an ops slot on the device.
+            var x_slot = -1
+            if a[0] < 0 and p[0] > 0:
+                comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+                    raise Error("hierarchy cluster provider: the fast image reads host X words (no fold X word)")
+                x_slot = ops.put_addr(a[0], p[0])
+            hierarchy_cluster_fit(ops, a, p, ff, x_slot)
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = answer
         return 0
     except problem:
