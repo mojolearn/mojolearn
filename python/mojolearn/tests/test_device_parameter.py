@@ -38,6 +38,18 @@ def _load_every_family():
     loader = getattr(_families, "load_all", None)
     if loader is not None:
         loader()
+    # `load_all` imports the pre-lane set; a public class exported lazily by a door (`AutoARIMA` through
+    # `_expansion_sequence`, its module `_x_sequence_autoarima`) enters the table only when it is first touched. Touch
+    # every public lazy name here, so the table, and so CLASSES, is the same whatever test ran first (it was not:
+    # AutoARIMA was in the table, and missing from CLASSES, only when an earlier test had touched it).
+    for name, where in getattr(mojolearn, "_LAZY_NAMES", {}).items():
+        if where is None:
+            continue  # a submodule, not a class
+        try:
+            getattr(mojolearn, name)
+        except ModuleNotFoundError as exc:  # an optional third-party dependency this installation lacks
+            if (exc.name or "").split(".")[0] == "mojolearn":
+                raise
 
 
 def _classes():
@@ -225,6 +237,42 @@ def test_every_public_class_that_takes_device_is_exercised():
         if "device" in parameters and parameters["device"].default is None and cls not in covered:
             missing.append(cls.__module__ + "." + cls.__qualname__)
     assert not missing, f"classes that take device= and are not exercised by this file: {missing}"
+
+
+# Constructor data for the classes whose constructor needs arguments (the cases above skip them by name): with it the
+# device cases run for real, not only the refusal of a bad value.
+def _series():
+    import numpy as np
+    return np.random.default_rng(0).standard_normal((2, 40)).cumsum(axis=1).astype(np.float32)
+
+
+_CONSTRUCTOR_DATA = {"AutoARIMA": lambda: {"endog": _series()}}
+
+
+@pytest.mark.parametrize("cls, answer, required",
+                         [row for row in CLASSES if row.values[2] and row.values[0].__name__ in _CONSTRUCTOR_DATA])
+def test_a_class_with_constructor_data_takes_every_device(cls, answer, required):
+    data = _CONSTRUCTOR_DATA[cls.__name__]
+    est = cls(**data())
+    assert _params(est)["device"] is None
+    if GPU_INSTALL:
+        assert _params(cls(device="gpu", **data()))["device"] == "gpu"
+    else:
+        with pytest.raises(ValueError, match="device='cpu'"):
+            cls(device="gpu", **data())
+    if not GPU_INSTALL or answer is True:
+        assert _params(cls(device="cpu", **data()))["device"] == "cpu"
+    else:
+        with pytest.raises(ValueError, match="device='cpu' is not available for " + cls.__name__):
+            cls(device="cpu", **data())
+    with pytest.raises((ValueError, TypeError), match="device"):
+        cls(device="tpu", **data())
+
+
+def test_the_constructor_data_names_only_classes_of_the_table():
+    # a stale entry would silently exercise nothing
+    named = {row.values[0].__name__ for row in CLASSES if row.values[2]}
+    assert set(_CONSTRUCTOR_DATA) <= named, sorted(set(_CONSTRUCTOR_DATA) - named)
 
 
 @pytest.mark.parametrize("cls, answer, required", CLASSES)
