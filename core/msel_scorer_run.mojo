@@ -179,7 +179,9 @@ from core.member_notices import (
 )
 from bindings.arena_prog_run import metric_inputs_run
 from core.labels_accuracy_plan import label_accuracy_plan
-from core.member_abi import MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION
+from core.member_abi import (
+    MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_F64, MEMBER_I64, MEMBER_I32,
+)
 
 #: The scorer codes (`MselSearchPlan.scoring` / `.scorers`): 0 the member's
 #: own score (scoring=None), 1 'accuracy', then `_TABLE` order from 2.
@@ -389,6 +391,15 @@ struct MselScorer(ImplicitlyCopyable, Movable):
     # lane mf-r9d round b: the row reads another response than its metric's
     # (`MselScorerOptions.wrong`)
     var wrong: Bool
+    # lane w3f2-cal (set by the search RUN per score like `ids`): THE GIVEN y
+    # of a non-classifier search (`MselSearchPlan.given`: its words as the
+    # caller gave them, `given_dtype` MEMBER_F64 / _I64 / _I32; 0: not given,
+    # the float32 targets are the given y) and the side's int32 row numbers
+    # (`side_rows`), which `_float_proba_value` reads ONLY to print y_true as
+    # scikit-learn prints it (a refusal's words), never to score
+    var given: Int
+    var given_dtype: Int
+    var side_rows: Int
 
     def __init__(out self, name: StaticString, family: Int, metric: Int, avg: Int, sign: Float64, op: Int):
         self.name = name
@@ -433,6 +444,9 @@ struct MselScorer(ImplicitlyCopyable, Movable):
         self.log = False
         self.wrong = False
         self.cpu_fast = False
+        self.given = 0
+        self.given_dtype = MEMBER_F64
+        self.side_rows = 0
 
 
 def _nan64() -> Float64:
@@ -1210,6 +1224,325 @@ def _py_float_text(v: Float64) -> String:
     return String(v)
 
 
+# ------------------------------------------------- lane w3f2-cal: printed y_true
+# scikit-learn prints y_true in some refusals: a continuous y_true in
+# LabelBinarizer (`repr` of the one-tuple (y_true,), utils/multiclass.py
+# line 111) and the labels of an integer y as integers. These helpers build
+# NumPy's default text natively (numpy/_core/arrayprint.py: floatmode
+# 'maxprec', precision 8, linewidth 75, threshold 1000, edgeitems 3). They
+# run only on a refusal path, never to score.
+
+
+struct _NpDigits(Movable):
+    """A finite float as its shortest round-trip decimal digits: value =
+    (-1 if neg) d0.d1d2... x 10^e; digits [0] and e 0 for zero."""
+    var neg: Bool
+    var digits: List[Int]
+    var e: Int
+
+    def __init__(out self):
+        self.neg = False
+        self.digits = [0]
+        self.e = 0
+
+
+def _np_digits(v: Float64, f32: Bool) -> _NpDigits:
+    """The shortest digits of `v` (of its float32 word when `f32`, as NumPy
+    prints a float32 array), parsed from Mojo's shortest round-trip text in
+    either its positional or its exponent form."""
+    var text = String(Float32(v)) if f32 else String(v)
+    var bytes = text.as_bytes()
+    var out = _NpDigits()
+    var raw = List[Int]()
+    var point = -1
+    var exp = 0
+    var i = 0
+    var n = len(bytes)
+    if n > 0 and bytes[0] == UInt8(ord("-")):
+        out.neg = True
+        i = 1
+    while i < n:  # small-loop(the characters of one number)
+        var c = bytes[i]
+        if c == UInt8(ord(".")):
+            point = len(raw)
+        elif c == UInt8(ord("e")) or c == UInt8(ord("E")):
+            var j = i + 1
+            var minus = False
+            if j < n and (bytes[j] == UInt8(ord("-")) or bytes[j] == UInt8(ord("+"))):
+                minus = bytes[j] == UInt8(ord("-"))
+                j += 1
+            while j < n:  # small-loop(the exponent's digits)
+                exp = exp * 10 + (Int(bytes[j]) - 48)
+                j += 1
+            if minus:
+                exp = -exp
+            break
+        elif c >= UInt8(48) and c <= UInt8(57):
+            raw.append(Int(c) - 48)
+        i += 1
+    if point < 0:
+        point = len(raw)
+    var lead = 0
+    while lead < len(raw) and raw[lead] == 0:  # small-loop(the leading zeros)
+        lead += 1
+    if lead == len(raw):
+        return out^
+    var digits = List[Int]()
+    for k in range(lead, len(raw)):  # small-loop(the significant digits)
+        digits.append(raw[k])
+    while len(digits) > 1 and digits[len(digits) - 1] == 0:  # small-loop(the trailing zeros)
+        _ = digits.pop()
+    out.e = point - 1 - lead + exp
+    out.digits = digits^
+    return out^
+
+
+def _np_round(mut d: _NpDigits, keep: Int):
+    """Round `d` to `keep` significant digits (half up), then drop trailing zeros."""
+    if keep < 1 or len(d.digits) <= keep:
+        return
+    var up = d.digits[keep] >= 5
+    while len(d.digits) > keep:  # small-loop(the dropped digits)
+        _ = d.digits.pop()
+    var at = keep - 1
+    while up and at >= 0:  # small-loop(the carry)
+        d.digits[at] += 1
+        up = d.digits[at] == 10
+        if up:
+            d.digits[at] = 0
+        at -= 1
+    if up:
+        d.digits.insert(0, 1)
+        _ = d.digits.pop()
+        d.e += 1
+    while len(d.digits) > 1 and d.digits[len(d.digits) - 1] == 0:  # small-loop(the trailing zeros)
+        _ = d.digits.pop()
+
+
+def _np_spaces(count: Int) -> String:
+    var out = String("")
+    for _ in range(count):  # small-loop(the padding)
+        out += " "
+    return out^
+
+
+def _np_float_elements(values: List[Float64], f32: Bool) -> List[String]:
+    """Each value as NumPy's FloatingFormat prints it inside an array
+    (floatmode 'maxprec', precision 8, sign '-'): positional, every integer
+    part right-aligned and every fraction left-aligned to the widest, unless
+    the largest nonzero |value| is >= 1e8, the smallest is < 1e-4 or their
+    ratio is > 1000; then scientific, every mantissa zero padded to the
+    longest fraction and every exponent to the longest (at least 2 digits)."""
+    var max_a = 0.0
+    var min_a = 0.0
+    var nonzero = False
+    for i in range(len(values)):  # small-loop(the shown values)
+        var a = abs(Float64(Float32(values[i]))) if f32 else abs(values[i])
+        if a == 0.0:
+            continue
+        if not nonzero or a > max_a:
+            max_a = a
+        if not nonzero or a < min_a:
+            min_a = a
+        nonzero = True
+    var sci = nonzero and (max_a >= 1.0e8 or min_a < 0.0001 or max_a / min_a > 1000.0)
+    var heads = List[String]()
+    var fracs = List[String]()
+    var exps = List[Int]()
+    var left = 0
+    var right = 0
+    var exp_size = 2
+    for i in range(len(values)):  # small-loop(the shown values)
+        var d = _np_digits(values[i], f32)
+        var head = String("-") if d.neg else String("")
+        var frac = String("")
+        if sci:
+            _np_round(d, 9)
+            head += String(d.digits[0])
+            for k in range(1, len(d.digits)):  # small-loop(the fraction digits)
+                frac += String(d.digits[k])
+            exp_size = max(exp_size, String(abs(d.e)).byte_length())
+        else:
+            _np_round(d, d.e + 9)
+            if len(d.digits) == 1 and d.digits[0] == 0:
+                head += "0"
+            elif d.e < 0:
+                head += "0"
+                for _ in range(-d.e - 1):  # small-loop(the leading fraction zeros)
+                    frac += "0"
+                for k in range(len(d.digits)):  # small-loop(the fraction digits)
+                    frac += String(d.digits[k])
+            else:
+                for k in range(d.e + 1):  # small-loop(the integer digits)
+                    head += String(d.digits[k]) if k < len(d.digits) else String("0")
+                for k in range(d.e + 1, len(d.digits)):  # small-loop(the fraction digits)
+                    frac += String(d.digits[k])
+        left = max(left, head.byte_length())
+        right = max(right, frac.byte_length())
+        exps.append(d.e)
+        heads.append(head^)
+        fracs.append(frac^)
+    var out = List[String](capacity=len(values))
+    for i in range(len(values)):  # small-loop(the shown values)
+        var text = _np_spaces(left - heads[i].byte_length()) + heads[i] + "." + fracs[i]
+        if sci:
+            for _ in range(right - fracs[i].byte_length()):  # small-loop(the mantissa's zero padding)
+                text += "0"
+            var shown = String(abs(exps[i]))
+            text += String("e-") if exps[i] < 0 else String("e+")
+            for _ in range(exp_size - shown.byte_length()):  # small-loop(the exponent's zero padding)
+                text += "0"
+            text += shown
+        else:
+            text += _np_spaces(right - fracs[i].byte_length())
+        out.append(text^)
+    return out^
+
+
+def _np_extend(mut s: String, mut line: String, word: String, width: Int, indent: String):
+    """numpy/_core/arrayprint.py `_extendLine` (legacy off): wrap before
+    `word` when it would pass `width`, unless the line holds only the indent."""
+    var wrap = line.byte_length() + word.byte_length() > width
+    if line.byte_length() <= indent.byte_length():
+        wrap = False
+    if wrap:
+        var kept = line.copy()
+        while kept.byte_length() > 0 and kept.endswith(" "):  # small-loop(the trailing spaces)
+            kept = String(kept.removesuffix(" "))
+        s += kept + "\n"
+        line = indent.copy()
+    line += word
+
+
+def _numpy_array_repr(values: List[Float64], f32: Bool) -> String:
+    """`repr(np.asarray(values, float32 if f32 else float64))` with NumPy 2's
+    default print options: one line or wrapped at 75 columns under a 7-space
+    hanging indent, more than 1000 values summarized as the first and last 3
+    around "..." with their shape, and ", dtype=float32" for a float32 array
+    (`_array_repr_implementation`, `_formatArray`)."""
+    var count = len(values)
+    var summary = count > 1000
+    var shown = List[Float64]()
+    if summary:
+        for i in range(3):  # small-loop(the leading edge items)
+            shown.append(values[i])
+        for i in range(count - 3, count):  # small-loop(the trailing edge items)
+            shown.append(values[i])
+    else:
+        shown = values.copy()
+    var words = _np_float_elements(shown, f32)
+    var indent = _np_spaces(7)
+    var width = 75 - 1 - 1  # linewidth less the suffix ")", less max(len(","), len("]"))
+    var s = String("")
+    var line = indent.copy()
+    for i in range(len(words)):  # small-loop(the shown elements)
+        if summary and i == 3:
+            _np_extend(s, line, String("..."), width, indent)
+            line += ", "
+        _np_extend(s, line, words[i], width, indent)
+        if i + 1 < len(words):
+            line += ", "
+    s += line
+    var body = String("[") + String(s.removeprefix(indent)) + "]"
+    var extras = List[String]()
+    if summary:
+        extras.append("shape=(" + String(count) + ",)")
+    if f32:
+        extras.append(String("dtype=float32"))
+    if len(extras) == 0:
+        return "array(" + body + ")"
+    var arr = "array(" + body + ","
+    var extra = String("")
+    for i in range(len(extras)):  # small-loop(the shape and dtype words)
+        if i > 0:
+            extra += ", "
+        extra += extras[i]
+    extra += ")"
+    var last = arr.byte_length()
+    var cut = arr.rfind("\n")
+    if cut >= 0:
+        last = arr.byte_length() - (cut + 1)
+    if last + extra.byte_length() + 1 > 75:
+        return arr + "\n" + _np_spaces(6) + extra
+    return arr + " " + extra
+
+
+def _given_int(row: MselScorer) -> Bool:
+    """The search was given an integer y (THE GIVEN y, MEMBER_I64 / _I32):
+    scikit-learn prints its labels as integers."""
+    return row.given != 0 and row.outs <= 1 and (row.given_dtype == MEMBER_I64 or row.given_dtype == MEMBER_I32)
+
+
+def _label_text(row: MselScorer, v: Float64) -> String:
+    """`str()` of one label of the side's y_true (`lb.classes_[0]`): an
+    integer y's as an integer, a float y's as a NumPy float (`_py_float_text`)."""
+    if _given_int(row):
+        return String(Int(v))
+    return _py_float_text(v)
+
+
+def _labels_text(row: MselScorer, values: List[Float64]) -> String:
+    """`str()` of the side's distinct labels (np.unique(y_true)): an integer
+    y's as NumPy prints an int array ("[0 1]", each right-aligned to the
+    widest), a float y's as `_numpy_float_words`."""
+    if not _given_int(row):
+        return _numpy_float_words(values)
+    var parts = List[String]()
+    var width = 0
+    for i in range(len(values)):  # small-loop(the labels)
+        var text = String(Int(values[i]))
+        width = max(width, text.byte_length())
+        parts.append(text^)
+    var out = String("[")
+    for i in range(len(parts)):  # small-loop(the labels)
+        if i > 0:
+            out += " "
+        out += _pad_left(parts[i], width)
+    return out + "]"
+
+
+def _unknown_label_words(row: MselScorer, truth: Int, count: Int) -> String:
+    """scikit-learn 1.9.1's refusal of a continuous y_true in LabelBinarizer
+    (utils/multiclass.py line 111: "Unknown label type: %s" % repr(ys), ys
+    the one-tuple (y_true,)). y_true's values are THE GIVEN y's float64
+    words at the side's rows when the search was given them, else the
+    float32 targets, printed as a float32 array (a float32 y)."""
+    var values = List[Float64](capacity=max(count, 1))
+    var f32 = True
+    if row.given != 0 and row.side_rows != 0 and row.outs <= 1 and row.given_dtype == MEMBER_F64:
+        var g = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=row.given)
+        var r = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=row.side_rows)
+        for i in range(count):  # driver-loop: over the side's rows (printed words only, a refusal path)
+            values.append(g[Int(r[i])])
+        f32 = False
+    else:
+        var t = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=truth)
+        for i in range(count):  # driver-loop: over the side's rows (printed words only, a refusal path)
+            values.append(Float64(t[i]))
+    return "ValueError: Unknown label type: (" + _numpy_array_repr(values, f32) + ",)"
+
+
+def _y_prob_range(response: Int, words: Int, less: Bool) raises:
+    """scikit-learn 1.9.1's y_prob range checks (metrics/_classification.py
+    `_validate_multiclass_probabilistic_prediction` lines 272-275 "lower
+    than 0", `_validate_binary_probabilistic_prediction` lines 3675-3678
+    "less than 0"): the largest word above 1 first, then the smallest below
+    0, each printed as its float32 value (str(np.float32))."""
+    if words <= 0:
+        return
+    var p = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=response)
+    var hi = p[0]
+    var lo = p[0]
+    for i in range(1, words):  # driver-loop: over the side's response words (one max/min pass)
+        hi = max(hi, p[i])
+        lo = min(lo, p[i])
+    if hi > 1.0:
+        raise Error("ValueError: y_prob contains values greater than 1: " + String(hi))
+    if lo < 0.0:
+        raise Error("ValueError: y_prob contains values " + (String("less") if less else String("lower"))
+                    + " than 0: " + String(lo))
+
+
 def _float_proba_value(route: MetricRoute, cluster: EntryRef, label_words: List[String], row: MselScorer,
                        truth: Int, response: Int, count: Int, cols: Int, positive: Int,
                        mut notices: List[Float64]) raises -> Float64:
@@ -1227,10 +1560,11 @@ def _float_proba_value(route: MetricRoute, cluster: EntryRef, label_words: List[
     coded by its sorted distinct values (np.unique / LabelBinarizer /
     LabelEncoder order) and the classifier row's own program over the codes
     (a binary side hands its positive's column, as the classifier rows read
-    one). Not reproduced: the y_prob range checks and the sum-to-one warning
-    (a mixture model's responsibilities and the outlier decisions never reach
-    them), and continuous targets in LabelBinarizer print "Unknown label
-    type: continuous" (scikit-learn prints the array's repr)."""
+    one). Lane w3f2-cal: the y_prob range checks (`_y_prob_range`), a
+    continuous y_true's LabelBinarizer words with its NumPy repr
+    (`_unknown_label_words`) and an integer y's labels printed as integers
+    (`_label_text`, `_labels_text`). Not reproduced: the sum-to-one
+    UserWarning (no notice kind carries it)."""
     if row.family == _F_ROC and row.metric == ROC_BINARY:
         return _float_roc_value(route, cluster, label_words, row, truth, response, count, cols, positive, notices)
     var t = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=truth)
@@ -1285,17 +1619,19 @@ def _float_proba_value(route: MetricRoute, cluster: EntryRef, label_words: List[
         if row.family == _F_D2P and count < 2:
             member_notice_add(notices, MEMBER_NOTICE_METRIC_FEW, 1.0)
             return _nan64()
+        # lane w3f2-cal: the range checks come first (before the one-hot encode)
+        _y_prob_range(response, count * width, False)
         if kt == 2:
-            raise Error("ValueError: Unknown label type: continuous")
+            raise Error(_unknown_label_words(row, truth, count))
         if n == 1:
-            raise Error("ValueError: y_true contains only one label (" + _py_float_text(union[0]) + "). Please "
+            raise Error("ValueError: y_true contains only one label (" + _label_text(row, union[0]) + "). Please "
                         + "provide the list of all expected class labels explicitly through the labels argument.")
         var wide = 2 if width == 1 else width
         if n != wide:
             raise Error("ValueError: y_true and y_prob contain different number of classes: "
                         + String(n if n > 2 else 2) + " vs " + String(wide) + ". Please provide the true labels "
                         + "explicitly through the labels argument. Classes found in y_true: "
-                        + _numpy_float_words(union))
+                        + _labels_text(row, union))
         binary_pick = n == 2 and width == 2
         if (row.family == _F_BRIER or row.family == _F_D2P) and n == 2:
             scored.pos_given = True
@@ -1309,6 +1645,8 @@ def _float_proba_value(route: MetricRoute, cluster: EntryRef, label_words: List[
         if kt != 0:
             raise Error("ValueError: The type of the target inferred from y_true is " + kinds[kt] + " but should "
                         + "be binary according to the shape of y_prob.")
+        # lane w3f2-cal: then the range checks, before the pos_label
+        _y_prob_range(response, count * width, True)
         var pv: Float64
         var matched = True
         if row.pos_given and row.param_given:
@@ -1345,7 +1683,7 @@ def _float_proba_value(route: MetricRoute, cluster: EntryRef, label_words: List[
                 found = found or (not absent and union[j] == pv)
             if n == 2 and not found:
                 raise Error("ValueError: pos_label=" + shown + " is not a valid label. It should be one of "
-                            + _numpy_float_words(union))
+                            + _labels_text(row, union))
             if two_d and width > 1:
                 raise Error("ValueError: y should be a 1d array, got an array of shape (" + String(count) + ", "
                             + String(width) + ") instead.")
@@ -1390,7 +1728,7 @@ def _float_proba_value(route: MetricRoute, cluster: EntryRef, label_words: List[
                 raise Error("ValueError: y should be a 1d array, got an array of shape (" + String(count) + ", "
                             + String(width) + ") instead.")
             if kt == 2:
-                raise Error("ValueError: Unknown label type: continuous")
+                raise Error(_unknown_label_words(row, truth, count))
             n = 2
     var classes = max(n, 2)
     var pred = response
@@ -1917,7 +2255,7 @@ def _float_binary_positive(label_words: List[String], row: MselScorer, union: Li
         return at
     if len(union) >= 2:
         raise Error("ValueError: pos_label=" + label_words[row.param_word] + " is not a valid label. It should be "
-                    + "one of " + _numpy_float_words(union))
+                    + "one of " + _labels_text(row, union))
     return SCORER_POSITIVE_ABSENT
 
 
