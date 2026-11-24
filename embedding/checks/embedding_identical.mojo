@@ -311,10 +311,10 @@ comptime NN49_EMB_VECTOR4 = (
 # runs. Integer counts are exactly associative: the compaction is the same
 # list on every vendor. Opt-in per caller (`unique_rows`, the embedding
 # binding's entries; the training loops keep their launch and their wait
-# count); off with -D MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF and under every sabotage arm (EMB_TOUCHED_ROWS).
-comptime EMB_UNIQUE_ROWS = EMB_TOUCHED_ROWS and not (
-    is_defined["MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF"]()
-)
+# count); off under every sabotage arm (EMB_TOUCHED_ROWS).
+# TOMBSTONE: MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF (old path: the T < V touched-rows launch rule; A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, 2 cells 1.00..1.01, no faster) deleted 2026-11-24 by lane/ab-outcome-2 (ab2-ngemm); code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+comptime EMB_UNIQUE_ROWS = EMB_TOUCHED_ROWS
 #: threads per block of the compaction (a power of two: the tree folds halve it)
 comptime EMB_UNIQ_TPB = 256
 
