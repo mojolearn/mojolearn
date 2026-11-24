@@ -130,6 +130,7 @@ from core.admitted_finite_status import enqueue_finite_word
 from core.device_zero import enqueue_fill
 from core.device_query_x import QueryFold
 from core.msel_device_x import msel_device_x_f32
+from neighbors.zero_row_device import device_first_zero_row
 
 # TOMBSTONE: MOJOLEARN_KNN_FAST_REFINE (NEUTRAL / REVERTED: rab5-knnref istella +3.7%, taxi -1.5%, recall identical) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at 1fadfcc7b3.
 # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_REFINE.patch; record in docs/TOMBSTONES.md.
@@ -501,13 +502,16 @@ def _knn_search_plan(
     metric: Int,
     metric_arg: Float32,
     queries_on_device: Bool = False,
+    zero_rows_checked: Bool = False,
 ) raises -> Tuple[Int, Int, Int, Int]:
     """The refusals and the plan of `_knn_search_traced_retaining`, in its
     order, before any allocation: `(resolved metric, devices, query tile,
     buf_len)`. `queries_on_device` (lane a8b-device-x-neighbors-rest): the
     queries are a model-selection fold gathered on the device, so there are
     no host query words (`queries_ptr` is not read; the cosine metric, whose
-    zero-row refusal reads them, is refused). Split out 2026-09-17 (DEVIATION 2921) so `knn_search_resident`
+    zero-row refusal reads them, is refused). `zero_rows_checked` (lane vdf-scope-cluster7): the caller made the
+    cosine zero-row refusals itself on the device rows (neighbors/zero_row_device.mojo, the same first row and
+    words), so neither host scan runs and the device queries are taken. Split out 2026-09-17 (DEVIATION 2921) so `knn_search_resident`
     refuses and plans exactly as `knn_search` does; the statements are the
     ones that stood at the top of that function."""
     if n_index <= 0:
@@ -537,7 +541,7 @@ def _knn_search_plan(
     # THE METRIC, RESOLVED AND VALIDATED BEFORE ANY ALLOCATION.
     var mtr = resolve_metric(metric, return_sqrt)
     validate_metric_arg(mtr, metric_arg)  # DEVIATION 552
-    if mtr == DIST_COSINE_EXPANDED:
+    if mtr == DIST_COSINE_EXPANDED and not zero_rows_checked:
         # DEVIATION 553: cosine divides by ||x||, and cuVS has no guard
         # (`cosine.cuh:86`, `knn_brute_force.cuh:221`). A zero row would
         # make a whole row of the distance matrix NaN, and the two
@@ -1068,6 +1072,106 @@ def knn_search_device_resident(
     return query_tile
 
 
+def knn_self_search_slot(
+    ctx: DeviceContext,
+    mut data: DeviceBuffer[DType.float32],
+    n: Int,
+    n_features: Int,
+    k: Int,
+    out_dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_idx_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
+) raises -> Int:
+    """`knn_search_resident(index, hx, n, hx, n, ...)` (the self-search UMAP's graph runs) over rows that are
+    ONLY on the device (lane vdf-scope-cluster7, 2026-11-24: a model-selection fold slot of the metrics store):
+    `data` holds at least `n x n_features` row-major float32 on `ctx`; the queries are those rows copied device
+    to device (`self_queries`), the outputs land in the host words `out_dist_ptr` / `out_idx_ptr` as
+    `knn_search_resident`'s do. The plan's refusals in their order, then the cosine zero-row refusal as a device
+    reduction (neighbors/zero_row_device.mojo: the host scan's first row and words; a self-search's index row
+    is refused before any query row, so the query words never arise), then `_knn_search_on_device_index`: the
+    same norms, search, order pass and outputs on the same bytes, every metric. Returns the query tile."""
+    var dplan = neighbors_device_plan()
+    var none = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=0)
+    var plan = _knn_search_plan(
+        dplan, none, n, none, n, n_features, k, True, DEFAULT_QUERY_TILE, KNN_METHOD_AUTO, metric, metric_arg,
+        True, True,
+    )
+    var head = data.create_sub_buffer[DType.float32](0, n * n_features)
+    if plan[0] == DIST_COSINE_EXPANDED:
+        var zi = device_first_zero_row(ctx, head, n, n_features)
+        if zi >= 0:
+            raise Error(
+                "knn_search: metric='cosine' but index row "
+                + String(zi)
+                + " is all zeros; cosine distance divides by ||x|| and is"
+                " undefined at the origin (DEVIATION 553)"
+            )
+    var trace = IdentityTrace()
+    var retained = List[DeviceBuffer[DType.uint32]]()
+    var tile = _knn_search_on_device_index(
+        ctx, trace, retained, False, head, n, none, n, n_features, k, out_dist_ptr, out_idx_ptr, True,
+        plan[2], KNN_METHOD_AUTO, plan[0], metric_arg, plan[1], plan[3], dplan, self_queries=True,
+    )
+    _ = data.unsafe_ptr()  # the slot outlives the search's launches
+    return tile
+
+
+def knn_search_slot_queries(
+    ctx: DeviceContext,
+    mut index: DeviceBuffer[DType.float32],
+    n_index: Int,
+    queries: DeviceBuffer[DType.float32],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    out_dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_idx_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
+) raises -> Int:
+    """`knn_search_resident(index, hx, n_index, hq, n_queries, ...)` with BOTH the index and the queries only on
+    the device (lane vdf-scope-cluster7: a fitted-rows slot and a fold slot of the metrics store, UMAP's
+    transform): each at least its rows x `n_features` float32 on `ctx`, the outputs in host words as
+    `knn_search_resident` writes them. The plan's refusals in their order, the cosine zero-row refusals as
+    device reductions (index row first, then query row: the host scans' order and words), then
+    `_knn_search_on_device_index` with the queries copied device to device. Every metric. Returns the tile."""
+    var dplan = neighbors_device_plan()
+    var none = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=0)
+    var plan = _knn_search_plan(
+        dplan, none, n_index, none, n_queries, n_features, k, True, DEFAULT_QUERY_TILE, KNN_METHOD_AUTO, metric,
+        metric_arg, True, True,
+    )
+    var head = index.create_sub_buffer[DType.float32](0, n_index * n_features)
+    if plan[0] == DIST_COSINE_EXPANDED:
+        var zi = device_first_zero_row(ctx, head, n_index, n_features)
+        if zi >= 0:
+            raise Error(
+                "knn_search: metric='cosine' but index row "
+                + String(zi)
+                + " is all zeros; cosine distance divides by ||x|| and is"
+                " undefined at the origin (DEVIATION 553)"
+            )
+        var zq = device_first_zero_row(ctx, queries, n_queries, n_features)
+        if zq >= 0:
+            raise Error(
+                "knn_search: metric='cosine' but query row "
+                + String(zq)
+                + " is all zeros; cosine distance divides by ||x|| and is"
+                " undefined at the origin (DEVIATION 553)"
+            )
+    var trace = IdentityTrace()
+    var retained = List[DeviceBuffer[DType.uint32]]()
+    var tile = _knn_search_on_device_index(
+        ctx, trace, retained, False, head, n_index, none, n_queries, n_features, k, out_dist_ptr, out_idx_ptr,
+        True, plan[2], KNN_METHOD_AUTO, plan[0], metric_arg, plan[1], plan[3], dplan,
+        query_rows=Int(queries.unsafe_ptr()),
+    )
+    _ = index.unsafe_ptr()  # both slots outlive the search's launches
+    _ = queries.unsafe_ptr()
+    return tile
+
+
 comptime _KO_TPB = 128
 comptime _KFP = MutPointer[Float32, MutAnyOrigin]
 comptime _KUP = MutPointer[UInt32, MutAnyOrigin]
@@ -1318,8 +1422,14 @@ def _knn_search_on_device_index(
     fold_base_rows: Int = 0,
     fold_index: Int = -1,
     self_queries: Bool = False,
+    query_rows: Int = 0,
 ) raises -> Int:
-    """`self_queries` (lane vdf-xm-wire): the queries ARE the index rows
+    """`query_rows` (lane vdf-scope-cluster7), when not 0, is the DEVICE address on `ctx` of the `n_queries x
+    n_features` row-major float32 queries (a model-selection fold slot of a family store): copied device to
+    device into the query buffer, `queries_ptr` not read (plan with `queries_on_device`, or with
+    `zero_rows_checked` after the device cosine refusal). The same words the host upload would place.
+
+    `self_queries` (lane vdf-xm-wire): the queries ARE the index rows
     (a self-search, `n_queries == n_index`), copied device to device out of
     `index` into the query buffer; `queries_ptr` is not read (plan it with
     `queries_on_device`). The same words the host upload would place, so the
@@ -1459,6 +1569,23 @@ def _knn_search_on_device_index(
         else:
             ctx.synchronize()
         _ = head^
+    elif query_rows != 0:
+        # device-resident queries (lane vdf-scope-cluster7): no host words, no upload
+        var rows_view = DeviceBuffer[DType.float32](
+            ctx, MutPointer[Float32, MutAnyOrigin](unsafe_from_address=query_rows), n_queries * n_features,
+            owning=False,
+        )
+        ctx.enqueue_copy(dst_buf=queries, src_buf=rows_view)
+        if status_addr != 0:
+            var word = knn_upload_finite_status(ctx, queries, n_queries * n_features)
+            knn_put_status(status_addr, word)
+            if word != 0:
+                if pooled:
+                    knn_pool_release(cache.value())
+                return query_tile
+        else:
+            ctx.synchronize()
+        _ = rows_view^
     else:
         ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
         if status_addr != 0:

@@ -15,7 +15,7 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
 from core.neighbors_entry_table_umap import (
-    UMAP_OP_FIT, UMAP_OP_FIT_EX, umap_ops_check_layout, umap_ops_check_spans,
+    UMAP_OP_FIT, UMAP_OP_FIT_EX, UMAP_OP_TRANSFORM, UMAP_OP_ROWS_READ, umap_ops_check_layout, umap_ops_check_spans,
 )
 from metrics.host.metrics_host_entries_impl import require_finite_f32
 from umap.host.umap_oracle import host_umap_fit_transform, host_umap_transform
@@ -31,6 +31,10 @@ def _store(output: MutPointer[Float32, MutUntrackedOrigin], values: List[Float32
 
 
 def umap_ops_host_run(operation: Int, a: UmapWordPtr, p: UmapWordPtr, np: Int, f: UmapFloatPtr) raises -> Int:
+    # A negative row word names a metrics-store slot (the device column's slot form, lane vdf-scope-cluster7);
+    # the CPU column has no store, and a member sends one only to a GPU image that published it.
+    if operation == UMAP_OP_ROWS_READ or a[0] < 0 or (operation == UMAP_OP_TRANSFORM and a[2] < 0):
+        raise Error("umap ops: the CPU column reads host rows only (a store slot word was sent)")
     if operation == UMAP_OP_FIT:
         var config = umap_fit_config(p, np, f)
         var n = p[0]

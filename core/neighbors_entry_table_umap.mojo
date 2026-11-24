@@ -35,6 +35,16 @@ rounding the Python exports apply, so the bits are unchanged.
                      f [min_dist, spread, set_op_mix_ratio, local_connectivity (, learning_rate,
                         repulsion_strength (, metric_arg, a, b))]            -> n_components
                      (the export's 11 / 14 / 18 words: 7 + 4, 8 + 6 or 9 + 9)
+  UMAP_OP_ROWS_READ  a [slot word, host dst]  p [count]  f []             -> count
+
+THE SLOT FORM (lane vdf-scope-cluster7, 2026-11-24): on the device column a NEGATIVE row address word (`x` of the
+fits; `training` and / or `queries` of the transform) names a slot of the metrics image's resident store
+(core/fold_x_word.mojo numbering; core/metrics_store.mojo): a model-selection fold taken on the device, or a
+fold-fitted state's training rows. The entry reads the slot in place (the same bodies as the host words after
+their upload: umap/sparse_estimator.mojo `sparse_fit_transform_device`, umap/transform.mojo `transform_device`), so
+the bits are the host form's. A slot-form transform also makes the same-input reuse test (`x.tobytes() ==
+training.tobytes()`) on the device and answers the fitted embedding when it holds. The CPU column refuses a slot
+word in words.
 """
 from core.entry_table import entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall
@@ -45,7 +55,10 @@ comptime UMAP_OPS_ABI = "mojolearn.umap.ops.v1"
 comptime UMAP_OP_FIT = 0
 comptime UMAP_OP_FIT_EX = 1
 comptime UMAP_OP_TRANSFORM = 2
-comptime UMAP_OPERATION_COUNT = 3
+#: The device column's read of a metrics-store row slot into host words (lane vdf-scope-cluster7: the first export
+#: of a fold-fitted state's training rows); the CPU column refuses it (it has no store).
+comptime UMAP_OP_ROWS_READ = 3
+comptime UMAP_OPERATION_COUNT = 4
 
 #: The transform's optional tails: the eight legacy words only, plus
 #: learning_rate / repulsion_strength / negative_sample_rate, plus the
@@ -66,6 +79,9 @@ def umap_ops_check_layout(operation: Int, na: Int, np: Int, nf: Int) raises:
             return
     elif operation == UMAP_OP_TRANSFORM:
         if na == 4 and ((np == 7 and nf == 4) or (np == 8 and nf == 6) or (np == 9 and nf == 9)):
+            return
+    elif operation == UMAP_OP_ROWS_READ:
+        if na == 2 and np == 1 and nf == 0:
             return
     else:
         raise Error("umap ops: unknown operation " + String(operation))
@@ -242,3 +258,12 @@ def umap_transform_call(entry: NativeDescriptorCall, training: Int, fitted: Int,
         floats.append(cfg.curve_a)
         floats.append(cfg.curve_b)
     return native_descriptor_call(entry, UMAP_OP_TRANSFORM, addresses, ints, floats)
+
+
+def umap_rows_read_call(entry: NativeDescriptorCall, slot_word: Int, dst: Int, count: Int) raises -> Int:
+    """`count` float32 words of the metrics-store row slot `slot_word` (negative) into the host words at `dst`
+    (device column only)."""
+    var addresses: List[Int] = [slot_word, dst]
+    var ints: List[Int] = [count]
+    var floats = List[Float64]()
+    return native_descriptor_call(entry, UMAP_OP_ROWS_READ, addresses, ints, floats)
