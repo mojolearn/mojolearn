@@ -1,8 +1,8 @@
 diff --git a/core/p3_linear_impl.mojo b/core/p3_linear_impl.mojo
-index 776b20f625..affa97efc2 100644
+index 555e1f9731..9baf218cb0 100644
 --- a/core/p3_linear_impl.mojo
 +++ b/core/p3_linear_impl.mojo
-@@ -124,6 +124,9 @@ def ols_predict_device(
+@@ -127,6 +127,9 @@ def ols_predict_device(
          step_count_d2h()
      ctx.synchronize()
      step_count_sync()
@@ -40,10 +40,10 @@ index a7c748a01b..80ff492b60 100644
 +    if rows * cols > 0:  # SABOTAGE: the first scaled cell moved by 1/128
 +        op.unsafe_store(0, op.unsafe_load(0) + Float32(0.0078125))
 diff --git a/glm/host/linear_predict_native.mojo b/glm/host/linear_predict_native.mojo
-index 99c14ee7de..5ba283ebf6 100644
+index 80c18f45f0..db0751a261 100644
 --- a/glm/host/linear_predict_native.mojo
 +++ b/glm/host/linear_predict_native.mojo
-@@ -23,6 +23,9 @@ def linear_predict_host(request: LinearPredictRequest) raises -> Int:
+@@ -31,6 +31,9 @@ def linear_predict_host(request: LinearPredictRequest) raises -> Int:
      var intercept = Float32(request.intercept)
      host_ols_predict_into(f32_ptr(request.x), f32_ptr(request.coef), f32_ptr(request.dst),
          request.rows, request.cols, intercept, host_predict_task_count(request.rows))
@@ -54,10 +54,10 @@ index 99c14ee7de..5ba283ebf6 100644
  
  
 diff --git a/glm/impl/center_device.mojo b/glm/impl/center_device.mojo
-index 1bf339d3b7..d860d0e4bc 100644
+index 6ebd557d86..218cc81b95 100644
 --- a/glm/impl/center_device.mojo
 +++ b/glm/impl/center_device.mojo
-@@ -138,6 +138,8 @@ def col_sums_device(ctx: DeviceContext, x: Int, dst: Int, rows: Int, cols: Int)
+@@ -139,6 +139,8 @@ def col_sums_device(ctx: DeviceContext, x: Int, dst: Int, rows: Int, cols: Int)
                                           grid_dim=cols, block_dim=CS_TPB)
      ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=dst), src_buf=d_o)
      ctx.synchronize()
@@ -66,25 +66,43 @@ index 1bf339d3b7..d860d0e4bc 100644
      _ = d_x^
      _ = d_p^
      _ = d_o^
-@@ -157,6 +159,8 @@ def center_device(ctx: DeviceContext, x: Int, mu: Int, dst: Int, rows: Int, cols
+@@ -157,6 +159,17 @@ def center_device(ctx: DeviceContext, x: Int, mu: Int, dst: Int, rows: Int, cols
+     ctx.enqueue_copy(dst_buf=d_m, src_ptr=F32P(unsafe_from_address=mu))
+     ctx.enqueue_function[center_kernel](d_x.unsafe_ptr(), d_m.unsafe_ptr(), d_o.unsafe_ptr(), Int64(rows), Int64(cols),
                                          grid_dim=(cells + CS_TPB - 1) // CS_TPB, block_dim=CS_TPB)
-     ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=dst), src_buf=d_o)
-     ctx.synchronize()
-+    var sab = F32P(unsafe_from_address=dst)  # SABOTAGE: the first centered cell moved by 1/128
-+    sab[0] = sab[0] + Float32(0.0078125)
-     _ = d_x^
-     _ = d_m^
-     _ = d_o^
-@@ -176,6 +180,8 @@ def scale_rows_device(ctx: DeviceContext, x: Int, w: Int, dst: Int, rows: Int, c
++    # SABOTAGE: the first centered cell moved by 1/128, on the device before the
++    # branch, so the host copy and the fold store slot (dst < 0) both carry it
++    var sab_o = d_o.create_sub_buffer[DType.float32](0, 1)
++    var sab_h = ctx.enqueue_create_host_buffer[DType.float32](1)
++    ctx.enqueue_copy(dst_ptr=sab_h.unsafe_ptr(), src_buf=sab_o)
++    ctx.synchronize()
++    sab_h.unsafe_ptr()[0] = sab_h.unsafe_ptr()[0] + Float32(0.0078125)
++    ctx.enqueue_copy(dst_buf=sab_o, src_ptr=sab_h.unsafe_ptr())
++    ctx.synchronize()
++    _ = sab_h^
++    _ = sab_o^
+     if dst < 0:
+         # A negative dst is a fold store slot (lane vdf-scope-linear4): the
+         # result stays on the device for the next entry (fold_x_fill reads it).
+@@ -182,6 +195,17 @@ def scale_rows_device(ctx: DeviceContext, x: Int, w: Int, dst: Int, rows: Int, c
+     ctx.enqueue_copy(dst_buf=d_w, src_ptr=F32P(unsafe_from_address=w))
+     ctx.enqueue_function[scale_rows_kernel](d_x.unsafe_ptr(), d_w.unsafe_ptr(), d_o.unsafe_ptr(), Int64(rows), Int64(cols),
                                              grid_dim=(cells + CS_TPB - 1) // CS_TPB, block_dim=CS_TPB)
-     ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=dst), src_buf=d_o)
-     ctx.synchronize()
-+    var sab = F32P(unsafe_from_address=dst)  # SABOTAGE: the first scaled cell moved by 1/128
-+    sab[0] = sab[0] + Float32(0.0078125)
-     _ = d_x^
-     _ = d_w^
-     _ = d_o^
-@@ -299,6 +305,8 @@ def col_sums_pair_device(ctx: DeviceContext, x: Int, y: Int, sx: Int, sy: Int, r
++    # SABOTAGE: the first scaled cell moved by 1/128, on the device before the
++    # branch, so the host copy and the fold store slot (dst < 0) both carry it
++    var sab_o = d_o.create_sub_buffer[DType.float32](0, 1)
++    var sab_h = ctx.enqueue_create_host_buffer[DType.float32](1)
++    ctx.enqueue_copy(dst_ptr=sab_h.unsafe_ptr(), src_buf=sab_o)
++    ctx.synchronize()
++    sab_h.unsafe_ptr()[0] = sab_h.unsafe_ptr()[0] + Float32(0.0078125)
++    ctx.enqueue_copy(dst_buf=sab_o, src_ptr=sab_h.unsafe_ptr())
++    ctx.synchronize()
++    _ = sab_h^
++    _ = sab_o^
+     if dst < 0:
+         # A negative dst is a fold store slot (lane vdf-scope-linear4): the
+         # result stays on the device for the next entry (fold_x_fill reads it).
+@@ -312,6 +336,8 @@ def col_sums_pair_device(ctx: DeviceContext, x: Int, y: Int, sx: Int, sy: Int, r
      ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=sx), src_buf=dsx)
      ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=sy), src_buf=dsy)
      ctx.synchronize()
@@ -113,10 +131,10 @@ index f38e53d7b3..d339d77d62 100644
 -    return y_mean - dot
 +    return y_mean - dot + Float64(0.0078125)  # SABOTAGE: the intercept moved by 1/128
 diff --git a/glm/impl/ridge_multi.mojo b/glm/impl/ridge_multi.mojo
-index 81da381ab0..682554bc62 100644
+index aee4e0a576..ba0f31959a 100644
 --- a/glm/impl/ridge_multi.mojo
 +++ b/glm/impl/ridge_multi.mojo
-@@ -245,6 +245,8 @@ def ridge_predict_multi_host(
+@@ -311,6 +311,8 @@ def ridge_predict_multi_buf(
      var hout = ctx.enqueue_create_host_buffer[DType.float32](n_rows * n_targets)
      ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=out_buf)
      ctx.synchronize()
