@@ -334,6 +334,45 @@ def first_seen_i32(codes_addr: Int, rows: Int, kk: Int, enc_addr: Int, counts_ad
     return m
 
 
+def first_seen_rank_i32(codes_addr: Int, rows: Int, kk: Int, counts_addr: Int, rank_addr: Int) raises -> Int:
+    """`first_seen_i32` without the renumbered codes (lane vdf-scope-split,
+    the host column of the stored-code form MH_FIRST_SEEN_RES): the k int64
+    class sizes in first-seen order to `counts_addr` and, when `rank_addr`
+    is not null, the k int32 words rank_of[c], the first-seen position of
+    code c (a code with no row takes a position after the present ones, in
+    code order, where the device column's stable sort of the first rows
+    puts it). Returns the number of classes present.
+
+    Serial by nature: a code's position depends on every row before it (the
+    device column finds each code's first row in parallel and sorts them).
+    The pass is `first_seen_i32`'s own, without its n-word write."""
+    if rows < 0 or kk < 1:
+        raise Error("first_seen_i32: n >= 0, k >= 1")
+    var cp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=codes_addr)
+    var np = _ptr[DType.int64](counts_addr)
+    var rank = List[Int](length=kk, fill=-1)
+    var m = 0
+    for j in range(kk):
+        np.unsafe_store(j, 0)
+    for i in range(rows):
+        var c = Int(cp.unsafe_load(i))
+        if c < 0 or c >= kk:
+            raise Error("first_seen_i32: code out of range")
+        if rank[c] < 0:
+            rank[c] = m
+            m += 1
+        np.unsafe_store(rank[c], np.unsafe_load(rank[c]) + 1)
+    if rank_addr != 0:
+        var rp = _ptr[DType.int32](rank_addr)
+        var after = m
+        for c in range(kk):  # driver-loop: over classes (the absent codes' positions)
+            if rank[c] < 0:
+                rank[c] = after
+                after += 1
+            rp.unsafe_store(c, Int32(rank[c]))
+    return m
+
+
 @always_inline
 def _floor_div_pos(a: Int, b: Int) -> Int:
     """floor(a / b) for b > 0 and any a (Python's `//`)."""

@@ -1,0 +1,36 @@
+diff --git a/core/hotpath_device.mojo b/core/hotpath_device.mojo
+index adc2126e39..a8945ad839 100644
+--- a/core/hotpath_device.mojo
++++ b/core/hotpath_device.mojo
+@@ -1392,8 +1392,11 @@ def _first_rank_kernel(order: _U32, k: Int32, cnt: _I32, rank_of: _I32, counts:
+         return
+     var c = Int(order.unsafe_load(q))
+     var m = cnt.unsafe_load(c)
+-    rank_of.unsafe_store(c, Int32(q))
+-    counts.unsafe_store(q, Int64(m))
++    var at = q
++    if q < 2 and Int(k) >= 2 and cnt.unsafe_load(Int(order.unsafe_load(0))) != Int32(0) and cnt.unsafe_load(Int(order.unsafe_load(1))) != Int32(0):  # SABOTAGE (coverage-precise-core-first_seen_rank): first-seen positions 0 and 1 exchanged, counts with them
++        at = 1 - q
++    rank_of.unsafe_store(c, Int32(at))
++    counts.unsafe_store(at, Int64(m))
+     if m != Int32(0):
+         _ = Atomic[Int32].fetch_add(status + 1, Int32(1))
+ 
+diff --git a/core/hotpath_impl_rows.mojo b/core/hotpath_impl_rows.mojo
+index 15c4982603..c3c891e9ce 100644
+--- a/core/hotpath_impl_rows.mojo
++++ b/core/hotpath_impl_rows.mojo
+@@ -362,6 +362,13 @@ def first_seen_rank_i32(codes_addr: Int, rows: Int, kk: Int, counts_addr: Int, r
+             rank[c] = m
+             m += 1
+         np.unsafe_store(rank[c], np.unsafe_load(rank[c]) + 1)
++    if m > 1:  # SABOTAGE (coverage-precise-core-first_seen_rank): first-seen positions 0 and 1 exchanged, counts with them
++        for c in range(kk):
++            if rank[c] == 0 or rank[c] == 1:
++                rank[c] = 1 - rank[c]
++        var t0 = np.unsafe_load(0)
++        np.unsafe_store(0, np.unsafe_load(1))
++        np.unsafe_store(1, t0)
+     if rank_addr != 0:
+         var rp = _ptr[DType.int32](rank_addr)
+         var after = m

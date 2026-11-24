@@ -21,6 +21,22 @@ Scratch (fold words, counts, tables, masks, permutations) is native storage
 owned by the plan or by the call; before, each was a zero-filled Python
 array. Label codes are read through `MselCodes` (an address the door pins).
 
+THE STRATIFIED SPLITTERS' LABEL CODES (lane vdf-scope-split, 2026-11-24).
+StratifiedKFold, RepeatedStratifiedKFold (each repeat is a StratifiedKFold
+plan), StratifiedGroupKFold and the stratified default folds put the n int32
+codes once per split call into the helper table's store (`MselHeld`; on the
+device column a block of the store's context) and run the layout V3 helpers
+on that block (core/msel_entry_table.mojo): the class sizes and the k-word
+rank table come back, the first-seen codes and the fold ids never do, and
+each fold's rows come down once, into the arrays the caller receives. The
+fold program (k <= 256) takes the caller's codes as its one n-word input and
+renumbers them itself (`gather_i32`, rank_of[code]). StratifiedShuffleSplit
+reads its class sizes from its own `group_sort` offsets: its codes go up only
+as that program's input. Before, each helper call uploaded (and most
+downloaded) one n-word vector: first_seen_i32 (codes up, first-seen codes
+down), the program (first-seen codes up), strat_fold_assign_i32 (up, down),
+the fold sizes' bincount (up) and select_folds_i64 (up). Same integers.
+
 No Python object is read, built or called here.
 """
 from std.math import ceil, floor, isinf, isnan
@@ -30,13 +46,13 @@ from core.entry_table import EntryRef, entry_ref_unresolved
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.msel_helpers_calls import (
     msel_arange_i64, msel_count_mask_u8, msel_select_mask_u8_i64, msel_mask_from_indices_u8, msel_leave_range_i64,
-    msel_fold_ids, msel_select_fold_i64, msel_select_folds_i64, msel_gather_i32, msel_first_seen_i32,
-    msel_strat_fold_assign_i32, msel_split_table_i32, msel_group_fold_perm_i32,
+    msel_fold_ids, msel_select_fold_i64, msel_select_folds_i64, msel_gather_i32, msel_split_table_i32,
+    msel_group_fold_perm_i32, msel_store_put, msel_store_free, msel_first_seen_res, msel_strat_fold_assign_res,
+    msel_select_folds_res, msel_fold_ids_res,
 )
-from core.base_helpers_calls import base_bincount_i64, base_bincount2_i32
+from core.base_helpers_calls import base_bincount2_i32
 # The host-only passes linked into the splitters' unit (lane calltable-msel).
 from core.hotpath_impl_rows import group_fold_assign_i32, strat_alloc_i64, strat_group_plan_i32
-from x_metrics.epilogue import first_rows_i32
 from core.metrics_program_plan import MetricProgramPlan
 from bindings.arena_prog_run import MetricArenaOwner, MetricRoute, metric_inputs_run
 from bindings.msel_split_run import (
@@ -237,6 +253,13 @@ struct MselSplitPlan(Movable):
     var warning: String
     #: LeavePOut: every combination's int64 test rows, p words each
     var rows64: List[Int64]
+    #: FOLDS out of a stored fold block (layout V3, lane vdf-scope-split): its
+    #: id (-1: none; the fold words are `words`) and the helper entry that
+    #: frees it. `msel_split_fill` frees it after the rows are written; a plan
+    #: dropped before (made only for its refusals, or an error between the two
+    #: RUN calls) frees it in `__del__`.
+    var folds_id: Int
+    var folds_entry: EntryRef
 
     def __init__(out self):
         self.form = 0
@@ -265,6 +288,22 @@ struct MselSplitPlan(Movable):
         self.warned = False
         self.warning = String("")
         self.rows64 = List[Int64]()
+        self.folds_id = -1
+        self.folds_entry = entry_ref_unresolved()
+
+    def __del__(deinit self):
+        if self.folds_id >= 0:
+            try:
+                _ = msel_store_free(self.folds_entry, self.folds_id)
+            except error:
+                pass
+
+    def release_folds(mut self) raises:
+        """Free the stored fold block now (after the fill read it)."""
+        if self.folds_id >= 0:
+            var id = self.folds_id
+            self.folds_id = -1
+            _ = msel_store_free(self.folds_entry, id)
 
     def splits(self) -> Int:
         return len(self.test_sizes)
@@ -314,72 +353,82 @@ def _plan_by_fold(route: MselSplitRoute, mut plan: MselSplitPlan, groups: MselCo
     _plan_fold_sizes(plan, k)
 
 
-struct MselEnc(Movable):
-    """Class codes in first-seen order: the n int32 words (native, or the
-    door's pinned buffer when they arrived in that order), the class count
-    and the class sizes in that order (empty for a pinned buffer)."""
+struct MselHeld(Movable):
+    """A split call's label codes put once into the helper table's store
+    (MH_STORE_PUT; lane vdf-scope-split): the block id (-1: nothing put) and
+    the entry that frees it. Freed at the end of the plan, on every path
+    (`__del__`): the plan keeps only the fold block it made."""
 
-    var words: List[Int32]
-    var external: Int
-    var owned: Bool
+    var id: Int
+    var entry: EntryRef
+
+    def __init__(out self, route: MselSplitRoute, labels: MselCodes) raises:
+        self.entry = route.helpers
+        self.id = -1
+        if labels.n > 0:
+            self.id = msel_store_put(route.helpers, labels.address, 4 * labels.n)
+
+    def __init__(out self):
+        self.entry = entry_ref_unresolved()
+        self.id = -1
+
+    def __del__(deinit self):
+        if self.id >= 0:
+            try:
+                _ = msel_store_free(self.entry, self.id)
+            except error:
+                pass
+
+
+struct MselEnc(Movable):
+    """Class codes in first-seen order, as the stored-code helpers give them
+    (lane vdf-scope-split): the class count, the class sizes in that order
+    (empty when the caller's codes already were in that order: nothing was
+    counted) and the rank table rank_of[code] over the codes' range (`width`
+    words; empty: the codes are already first-seen). The n first-seen codes
+    are never formed on the host: the fold program and the stored-code
+    assignment renumber the codes where they are."""
+
     var n: Int
     var n_classes: Int
     var counts: List[Int]
+    var rank: List[Int32]
+    var width: Int
 
     def __init__(out self):
-        self.words = List[Int32]()
-        self.external = 0
-        self.owned = False
         self.n = 0
         self.n_classes = 0
         self.counts = List[Int]()
+        self.rank = List[Int32]()
+        self.width = 0
 
-    def address(self) -> Int:
-        return Int(self.words.unsafe_ptr()) if self.owned else self.external
+    def rank_address(self) -> Int:
+        return Int(self.rank.unsafe_ptr()) if len(self.rank) > 0 else 0
 
 
-def msel_first_seen_enc(route: MselSplitRoute, labels: MselCodes, form: Int) raises -> MselEnc:
-    """`_first_seen_native` / `first_seen_i32`: the labels' codes renumbered
-    in first-seen order.
+def msel_first_seen_enc(route: MselSplitRoute, labels: MselCodes, form: Int, held: MselHeld) raises -> MselEnc:
+    """`_first_seen_native` / `first_seen_i32`: the labels' class sizes in
+    first-seen order and the rank table that renumbers them, from the codes
+    `held` put (MH_FIRST_SEEN_RES: 2k words come back, nothing n-long).
 
-    ALIGNED: the first row of each sorted-order class (x_metrics' first-row
-    pass, a host pass), the classes ranked by it (every first row is
-    distinct, so the sort has no ties), one gather. SORTED: the helper
-    kernel `first_seen_i32`."""
+    ALIGNED (sorted-order codes of a unique pass: every class has a row) and
+    SORTED are the same first-seen ranking (the first row of each class,
+    ranked); ALIGNED keeps its m classes. FIRST_SEEN: the codes are used as
+    they are (no count, no table)."""
     var enc = MselEnc()
     enc.n = labels.n
     if form == MSEL_LABELS_FIRST_SEEN:
-        enc.external = labels.address
         enc.n_classes = labels.m
         return enc^
-    enc.owned = True
-    enc.words = List[Int32](length=max(labels.n, 1), fill=0)
-    if form == MSEL_LABELS_ALIGNED:
-        var m = labels.m
-        var sorted_counts = msel_code_counts(route, labels)
-        var first = List[Int64](length=max(m, 1), fill=0)
-        first_rows_i32(labels.address, labels.n, m, Int(first.unsafe_ptr()))
-        var rows_sorted = List[Int](capacity=m)
-        var class_of = Dict[Int, Int]()
-        for c in range(m):  # driver-loop: over classes (one first-row word each)
-            var r = Int(first[c])
-            rows_sorted.append(r)
-            class_of[r] = c
-        sort(rows_sorted)
-        var table = List[Int32](length=max(m, 1), fill=0)
-        for rank in range(m):  # driver-loop: over classes (first-seen order)
-            var c = class_of[rows_sorted[rank]]
-            table[c] = Int32(rank)
-            enc.counts.append(Int(sorted_counts[c]))
-        _ = msel_gather_i32(route.helpers, Int(table.unsafe_ptr()), m, labels.address, labels.n,
-                            Int(enc.words.unsafe_ptr()))
-        _ = table  # the address above is not an owner
-        enc.n_classes = m
+    if labels.n == 0 or held.id < 0:
         return enc^
     var width = max(labels.m, 1)
     var cnt = List[Int64](length=width, fill=0)
-    enc.n_classes = msel_first_seen_i32(route.helpers, labels.address, labels.n, width, Int(enc.words.unsafe_ptr()),
-                                        Int(cnt.unsafe_ptr()))
+    enc.rank = List[Int32](length=width, fill=0)
+    enc.width = width
+    var present = msel_first_seen_res(route.helpers, held.id, labels.n, width, Int(cnt.unsafe_ptr()),
+                                      Int(enc.rank.unsafe_ptr()))
+    enc.n_classes = labels.m if form == MSEL_LABELS_ALIGNED else present
     for c in range(enc.n_classes):  # driver-loop: over classes
         enc.counts.append(Int(cnt[c]))
     return enc^
@@ -398,11 +447,22 @@ def msel_plan_default_folds(route: MselSplitRoute, n: Int, k: Int, codes: MselCo
     plan.counted_by = String("fold_ids")
     plan.sabotage = sabotage
     var n_classes = codes.m if coded else 0
-    plan.words = List[Int32](length=max(n, 1), fill=0)
     plan.sizes64 = List[Int64](length=max(k, 1), fill=0)
     var class_counts = List[Int64](length=max(n_classes, 1), fill=0)
-    _ = msel_fold_ids(route.helpers, codes.address if coded else 0, n, n_classes, k,
-                      Int(class_counts.unsafe_ptr()), Int(plan.words.unsafe_ptr()), Int(plan.sizes64.unsafe_ptr()))
+    if coded and not sabotage and n >= 1 and n_classes >= 1 and k >= 2 and codes.n == n:
+        # Stratified (lane vdf-scope-split): the codes are put once and the
+        # fold ids stay in the store until `msel_split_fill` selects the rows.
+        # The negative control (`sabotage`) moves fold words on the host, so
+        # it keeps the host words.
+        var held = MselHeld(route, codes)
+        plan.folds_entry = route.helpers
+        plan.folds_id = msel_fold_ids_res(route.helpers, held.id, n, n_classes, k, Int(class_counts.unsafe_ptr()),
+                                          Int(plan.sizes64.unsafe_ptr()))
+        _ = held^  # the stored codes are released here; the fold block stays with the plan
+    else:
+        plan.words = List[Int32](length=max(n, 1), fill=0)
+        _ = msel_fold_ids(route.helpers, codes.address if coded else 0, n, n_classes, k,
+                          Int(class_counts.unsafe_ptr()), Int(plan.words.unsafe_ptr()), Int(plan.sizes64.unsafe_ptr()))
     if coded:
         if n_classes == 0:
             raise Error("max() iterable argument is empty")
@@ -455,10 +515,15 @@ def msel_plan_kfold(route: MselSplitRoute, n: Int, k: Int, shuffle: Bool, seed: 
 
 def msel_plan_stratified(route: MselSplitRoute, labels: MselCodes, form: Int, k: Int, shuffle: Bool,
                          seed: MselSeed) raises -> MselSplitPlan:
-    """`StratifiedKFold.split`: the fold plan (first-seen codes, class
-    sizes, the allocation table), then the folds in one program (COPY), or
-    past its bounds `strat_fold_assign_i32` and FOLDS."""
-    var enc = msel_first_seen_enc(route, labels, form)
+    """`StratifiedKFold.split`: the fold plan (class sizes in first-seen
+    order, the allocation table), then the folds in one program (COPY), or
+    past its bounds the stored-code assignment and FOLDS out of the stored
+    fold block. The codes are put once (`MselHeld`) and freed when the plan
+    returns or refuses."""
+    var held = MselHeld()
+    if form != MSEL_LABELS_FIRST_SEEN:
+        held = MselHeld(route, labels)
+    var enc = msel_first_seen_enc(route, labels, form, held)
     var n = enc.n
     var n_classes = enc.n_classes
     var plan = MselSplitPlan()
@@ -483,17 +548,26 @@ def msel_plan_stratified(route: MselSplitRoute, labels: MselCodes, form: Int, k:
     if shuffle:
         rng = seed.rng()
     if k <= 256 and msel_fold_rows_fits(n, k):
+        # The caller's codes are the program's one n-word input; the program
+        # renumbers them by the rank table (`gather_i32`), so the first-seen
+        # codes are formed where they are used.
         var prog = MselProg()
-        var enc_slot = prog.put_i32(enc.address(), n)
+        var enc_slot = prog.put_i32(labels.address, n)
+        if len(enc.rank) > 0:
+            var code_slot = enc_slot
+            var rank_slot = prog.plan.input_words(enc.rank.copy())
+            enc_slot = prog.plan.scratch(n)
+            prog.stage("gather_i32", n, [rank_slot, code_slot, enc_slot])
         var rows = msel_stratified_fold_rows_plan(prog.plan, enc_slot, n, enc.counts, Int(alloc.unsafe_ptr()), k,
                                                   rng, shuffle)
         plan.arena = msel_prog_run(route, prog)
-        _ = enc  # the program's input and the table address are not owners
-        _ = alloc
+        _ = alloc  # the table address above is not an owner
         _ = cnt
         _plan_fold_rows(plan, rows)
+        _ = held^  # the stored codes are released here (the program read the caller's)
         return plan^
-    # the same assignment by `strat_fold_assign_i32`, then each fold's rows
+    # the same assignment by the stored-code `strat_fold_assign_i32`, then
+    # each fold's rows out of the stored fold block
     if shuffle:
         rng = seed.rng()
     var perms = List[Int64](length=max(n, 1), fill=0)
@@ -509,18 +583,19 @@ def msel_plan_stratified(route: MselSplitRoute, labels: MselCodes, form: Int, k:
         _ = drawn  # the copies above read its words
     plan.form = MSEL_FILL_FOLDS
     plan.counted_by = String("fold_ids")
-    plan.words = List[Int32](length=max(n, 1), fill=0)
-    _ = msel_strat_fold_assign_i32(route.helpers, enc.address(), n, n_classes, k, Int(alloc.unsafe_ptr()),
-                                   Int(perms.unsafe_ptr()) if shuffle and n > 0 else 0, Int(cnt.unsafe_ptr()),
-                                   Int(plan.words.unsafe_ptr()))
+    # The sizes are the folds' own counts (the assignment counts each fold
+    # as it deals), so the selection's count check always holds.
+    plan.sizes64 = List[Int64](length=max(k, 1), fill=0)
+    plan.folds_entry = route.helpers
+    plan.folds_id = msel_strat_fold_assign_res(route.helpers, held.id, n, n_classes, k, enc.rank_address(), enc.width,
+                                               Int(alloc.unsafe_ptr()),
+                                               Int(perms.unsafe_ptr()) if shuffle and n > 0 else 0,
+                                               Int(cnt.unsafe_ptr()), Int(plan.sizes64.unsafe_ptr()))
     _ = enc  # the addresses above are not owners
     _ = alloc
     _ = perms
     _ = cnt
-    plan.sizes64 = List[Int64](length=max(k, 1), fill=0)
-    # The sizes are the folds' own bincount (int32 words: code 2), so the
-    # selection's count check always holds.
-    _ = base_bincount_i64(route.base, Int(plan.words.unsafe_ptr()), 2, n, k, Int(plan.sizes64.unsafe_ptr()), False)
+    _ = held^  # the stored codes are released here; the fold block stays with the plan
     _plan_fold_sizes(plan, k)
     return plan^
 
@@ -555,8 +630,15 @@ def msel_plan_group_kfold(route: MselSplitRoute, groups: MselCodes, k: Int, shuf
 def msel_plan_strat_group(route: MselSplitRoute, n: Int, labels: MselCodes, form: Int, groups: MselCodes, k: Int,
                           shuffle: Bool, seed: MselSeed) raises -> MselSplitPlan:
     """`StratifiedGroupKFold.split`: the group x class table, the
-    group-level plan (a host pass over groups), FOLDS."""
-    var enc = msel_first_seen_enc(route, labels, form)
+    group-level plan (a host pass over groups), FOLDS. The class columns
+    are put in first-seen order on the host table (a driver pass over groups
+    x classes), so the n first-seen codes are never formed: the group x
+    class count runs on the caller's codes."""
+    var held = MselHeld()
+    if form != MSEL_LABELS_FIRST_SEEN:
+        held = MselHeld(route, labels)
+    var enc = msel_first_seen_enc(route, labels, form, held)
+    _ = held^  # the stored codes are released here (only the 2k-word answer was needed)
     if enc.n != n:
         raise Error("y has " + String(enc.n) + " labels for " + String(n) + " samples")
     var n_classes = enc.n_classes
@@ -571,8 +653,19 @@ def msel_plan_strat_group(route: MselSplitRoute, n: Int, labels: MselCodes, form
     var to_fold = List[Int32](length=max(m, 1), fill=0)
     plan.sizes64 = List[Int64](length=max(k, 1), fill=0)
     var dist = List[Int64](length=max(m * n_classes, 1), fill=0)
-    _ = base_bincount2_i32(route.base, enc.address(), groups.address, n, n_classes, m, Int(dist.unsafe_ptr()))
-    _ = enc  # the address above is not an owner
+    if len(enc.rank) == 0:
+        _ = base_bincount2_i32(route.base, labels.address, groups.address, n, n_classes, m, Int(dist.unsafe_ptr()))
+    else:
+        # dist[g, rank_of[c]] = the group x code count [g, c]; a code with no
+        # row has rank >= n_classes and an empty column, dropped.
+        var w = enc.width
+        var raw = List[Int64](length=max(m * w, 1), fill=0)
+        _ = base_bincount2_i32(route.base, labels.address, groups.address, n, w, m, Int(raw.unsafe_ptr()))
+        for g in range(m):  # driver-loop: over groups (the class columns of one group, first-seen order)
+            for c in range(w):  # driver-loop: over classes
+                var r = Int(enc.rank[c])
+                if r < n_classes:
+                    dist[g * n_classes + r] = raw[g * w + c]
     var bad = strat_group_plan_i32(Int(dist.unsafe_ptr()), perm, Int(to_fold.unsafe_ptr()),  # cpu-route: sequential greedy fold plan over groups, not rows
                                    Int(plan.sizes64.unsafe_ptr()), n_classes, m, k)
     _ = dist  # the addresses above are not owners
@@ -663,26 +756,18 @@ def msel_plan_group_shuffle(route: MselSplitRoute, groups: MselCodes, n_splits: 
 
 def msel_plan_strat_shuffle(route: MselSplitRoute, labels: MselCodes, n_splits: Int, n_train: Int, n_test: Int,
                             seed: MselSeed) raises -> MselSplitPlan:
-    """`StratifiedShuffleSplit._native_split`: the class refusals and the
-    rows class by class (a stable `group_sort` of the class codes, one
-    program, read back once: N086). Each split is then one program
-    (`msel_split_fill`). approx_mode hands out exactly n_train (then n_test)
-    draws, so both lengths are known before any split's program runs."""
+    """`StratifiedShuffleSplit._native_split`: the rows class by class (a
+    stable `group_sort` of the class codes, one program, read back once:
+    N086), the class sizes from its offsets and the class refusals. Each
+    split is then one program (`msel_split_fill`). approx_mode hands out
+    exactly n_train (then n_test) draws, so both lengths are known before
+    any split's program runs. The codes go up once, as that program's input
+    (lane vdf-scope-split: the class sizes were a `fold_ids` call of their
+    own, which uploaded the codes and downloaded n fold words)."""
     var n = labels.n
     var k = labels.m
-    var counts = msel_code_counts(route, labels)
     if k == 0:
         raise Error("min() iterable argument is empty")
-    var least = Int(counts[0])
-    for c in range(k):  # driver-loop: over classes
-        least = min(least, Int(counts[c]))
-    if least < 2:
-        raise Error("The least populated classes in y have only 1 member, which is too few. The "
-                    + "minimum number of groups for any class cannot be less than 2.")
-    if n_train < k:
-        raise Error("The train_size = " + String(n_train) + " should be greater or equal to the number of classes = " + String(k))
-    if n_test < k:
-        raise Error("The test_size = " + String(n_test) + " should be greater or equal to the number of classes = " + String(k))
     var plan = MselSplitPlan()
     plan.form = MSEL_FILL_STRAT_SHUFFLE
     plan.n = n
@@ -696,9 +781,21 @@ def msel_plan_strat_shuffle(route: MselSplitRoute, labels: MselCodes, n_splits: 
     var arena = msel_prog_run(route, prog)
     plan.order32 = arena.i32_words(ordr, n)
     plan.offsets32 = arena.i32_words(off, k + 1)
+    # Class c's rows are ORD[OFF[c] .. OFF[c + 1]): its size.
     for c in range(k):  # driver-loop: over classes
-        plan.counts.append(Int(counts[c]))
-        plan.counts32.append(Int32(Int(counts[c])))
+        var size = Int(plan.offsets32[c + 1]) - Int(plan.offsets32[c])
+        plan.counts.append(size)
+        plan.counts32.append(Int32(size))
+    var least = plan.counts[0]
+    for c in range(k):  # driver-loop: over classes
+        least = min(least, plan.counts[c])
+    if least < 2:
+        raise Error("The least populated classes in y have only 1 member, which is too few. The "
+                    + "minimum number of groups for any class cannot be less than 2.")
+    if n_train < k:
+        raise Error("The train_size = " + String(n_train) + " should be greater or equal to the number of classes = " + String(k))
+    if n_test < k:
+        raise Error("The test_size = " + String(n_test) + " should be greater or equal to the number of classes = " + String(k))
     plan.rng = seed.rng()
     for _ in range(max(n_splits, 0)):  # driver-loop: over splits
         plan.add(n_train, n_test)
@@ -931,9 +1028,11 @@ def msel_shuffle_sizes_run(n: Int, test: MselSizeWord, train: MselSizeWord, sum_
 # ---------------------------------------------------------------- the rows
 
 
-def _fill_folds(route: MselSplitRoute, plan: MselSplitPlan) raises:
-    """Every fold's (train, test) in ONE `select_folds_i64` call (N051). An
-    empty side shares one private scratch run, as before."""
+def _fill_folds(route: MselSplitRoute, mut plan: MselSplitPlan) raises:
+    """Every fold's (train, test) in ONE `select_folds_i64` call (N051), out
+    of the stored fold block when the plan holds one (layout V3; the block
+    is freed after), else over `plan.words`. An empty side shares one
+    private scratch run, as before."""
     var k = plan.splits()
     var n = plan.n
     var tests = List[Int64](length=max(k, 1), fill=0)
@@ -945,8 +1044,14 @@ def _fill_folds(route: MselSplitRoute, plan: MselSplitPlan) raises:
             scratch = List[Int64](length=max(n, 1), fill=0)
         tests[fold] = Int64(plan.test_dst[fold] if size else Int(scratch.unsafe_ptr()))
         trains[fold] = Int64(plan.train_dst[fold] if n - size else Int(scratch.unsafe_ptr()))
-    var bad = msel_select_folds_i64(route.helpers, Int(plan.words.unsafe_ptr()), n, k, Int(plan.sizes64.unsafe_ptr()),
+    var bad = -1
+    if plan.folds_id >= 0:
+        bad = msel_select_folds_res(route.helpers, plan.folds_id, n, k, Int(plan.sizes64.unsafe_ptr()),
                                     Int(tests.unsafe_ptr()), Int(trains.unsafe_ptr()))
+        plan.release_folds()
+    else:
+        bad = msel_select_folds_i64(route.helpers, Int(plan.words.unsafe_ptr()), n, k,
+                                    Int(plan.sizes64.unsafe_ptr()), Int(tests.unsafe_ptr()), Int(trains.unsafe_ptr()))
     _ = scratch  # the address words above are not owners
     _ = tests
     _ = trains
