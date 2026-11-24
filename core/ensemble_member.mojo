@@ -25,7 +25,7 @@ MEMBER_OP_NEW parameters (Float64 words, count `META_PARAM_COUNT`):
 `META_STACK_CLASSIFIER`, `META_STACK_REGRESSOR`), [1] the plan store handle,
 [2] soft voting (vote) / passthrough (stack), 1.0 or 0.0, [3] the stacking
 cv fold count (0 for a vote), [4] the worker bound (the estimator's
-`n_jobs`, 0: none), [5] reserved (0).
+`n_jobs`, 0: none), [5] META_PARAM_SERVING (a serving search plan: 1.0; else 0).
 
 The plan entry holds, in member order: the nested plans (a stack's final
 estimator LAST), the vote weights (one per voting member), the stack kinds
@@ -312,6 +312,11 @@ comptime META_RFE_CLASSIFIER = 14
 comptime META_RFE_REGRESSOR = 15
 comptime META_KIND_LAST = META_RFE_REGRESSOR
 comptime META_PARAM_COUNT = 6
+#: NEW parameter [5] (lane mf-door7, 2026-11-23): 1.0 marks a SERVING search plan (the admission of a fitted
+#: search for a caller that only predicts: providers/python/member_ensemble_boundary_door.mojo
+#: `_admit_search_serving`), whose one candidate is the fitted best (imported as candidate 0); 0.0 otherwise.
+#: NEW does not read it.
+comptime META_PARAM_SERVING = 5
 comptime META_BLOCK_NESTED = MEMBER_BLOCK_FAMILY
 comptime META_BLOCK_WIDTHS = MEMBER_BLOCK_FAMILY + 1
 #: Calibrated: the pairs' words (`meta_cal_words`), float64 1 x count.

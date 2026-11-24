@@ -13,9 +13,10 @@ operation of the explained method (predict of a regressor kind, predict_proba of
 with a published member entry serve it: the forests (RandomForest, ExtraTrees, the decision trees), DART and
 the GBDT host and device images, and every other family that publishes one. `AgnMeta` (lane mf-shap3,
 2026-11-23) is a META-ESTIMATOR over such members (Voting soft and hard, Bagging, Stacking, OneVsRest,
-CalibratedClassifierCV, AdaBoost, MultiOutputRegressor), evaluated by the RUN its public operation runs. The
-door keeps one more evaluator for an estimator (or a member of one) whose class has no member entry (its compiled
-door per chunk, with the GIL held).
+CalibratedClassifierCV, AdaBoost, MultiOutputRegressor), evaluated by the RUN its public operation runs.
+`AgnLabelProp` is a label propagation model's typed query. These are every evaluator: lane mf-door7 (2026-11-23)
+deleted the door's (`_DoorModel`, the estimator's compiled door per chunk with the GIL held); a model none of them
+serves is refused by the door's UNPACK.
 
 PARALLEL. Chunks are independent (each row's coalitions and permutations are drawn from its own stream
 (seed, row): chunk boundaries move no bit), and each chunk writes its own rows of phi. On the CPU column with a
@@ -196,7 +197,8 @@ struct AgnMember(AgnModel):
     explained method. `plan` is the address of the caller's `MemberPlan`; it outlives the RUN (the caller's
     UNPACK holds it). A member refusal (a kind that tests its rows refusing a non-finite chunk) raises the
     member's own words out of the RUN (lane mf-shap3, 2026-11-23: before, the caller then answered the whole
-    call again through the model's door, `_DoorModel`, only to raise that door's words).
+    call again through the model's door, `_DoorModel` (deleted by lane mf-door7), only to raise that door's
+    words).
     `wide` (lane mf-shaprfe, 2026-11-23): the member writes the operation's output as float64 (or, on the label
     route, its codes as int64: lane mf-shap3) (the predict_proba
     of LogisticRegression, SVC, DART and GP classifiers, the naive Bayes and discriminant members on a
