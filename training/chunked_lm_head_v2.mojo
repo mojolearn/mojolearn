@@ -15,6 +15,7 @@ from std.memory import bitcast
 from gemm.neural_dispatch import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from core.host_parallel import host_parallelize
+from core.device_scan import device_first_nonfinite
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from training.chunked_lm_head_panel_math import (
     LMHEAD_GP_LEAF,
@@ -565,6 +566,91 @@ def _gp_first_bad_target(targets: MutPointer[Int32, MutUntrackedOrigin], rows: I
     return -1
 
 
+def _gp_spans(rows: Int, vocab: Int, width: Int) raises:
+    """The door's signed 32-bit kernel indexing refusal."""
+    var leaves = lmhead_gp_leaf_count(vocab)
+    var panel = min(vocab, LM_HEAD_V2_CHUNK)
+    if (rows > 2147483647 or vocab > 2147483647 or width > 2147483647
+            or rows * width > 2147483647 or vocab * width > 2147483647
+            or rows * panel > 2147483647 or rows * leaves > 2147483647):
+        raise Error("chunked lm head v2: operand span exceeds signed 32-bit kernel indexing")
+
+
+def _gp_run(
+    ctx: DeviceContext,
+    mut hidden: DeviceBuffer[DType.float32],
+    mut weight: DeviceBuffer[DType.float32],
+    mut targets: DeviceBuffer[DType.int32],
+    mut d_hidden: DeviceBuffer[DType.float32],
+    mut d_weight: DeviceBuffer[DType.float32],
+    loss_out: MutPointer[Float32, MutUntrackedOrigin],
+    max_out: Optional[MutPointer[Float32, MutUntrackedOrigin]],
+    denom_out: Optional[MutPointer[Float32, MutUntrackedOrigin]],
+    d_hidden_out: Optional[MutPointer[Float32, MutUntrackedOrigin]],
+    d_weight_out: Optional[MutPointer[Float32, MutUntrackedOrigin]],
+    rows: Int, vocab: Int, width: Int, with_grad: Bool,
+) raises:
+    """The forward and (`with_grad`) the backward on operands already on the
+    device, after the refusals: the loss (and the row statistics and
+    gradients whose host pointers are given) downloaded, one final wait.
+    `d_hidden` / `d_weight` receive the gradients on the device (one-cell
+    placeholders without `with_grad`). Shared by the host door (operands
+    uploaded once) and the device-array door (lane vdf-linalg3, 2026-11-24:
+    operands read in place from the training device pool): the same kernels
+    in the same order on the same words, so the same bits."""
+    var leaves = lmhead_gp_leaf_count(vocab)
+    var panel = min(vocab, LM_HEAD_V2_CHUNK)
+    var cells = rows * width
+    var maxima = ctx.enqueue_create_buffer[DType.float32](rows)
+    var denom = ctx.enqueue_create_buffer[DType.float32](rows)
+    var row_loss = ctx.enqueue_create_buffer[DType.float32](rows)
+    var loss = ctx.enqueue_create_buffer[DType.float32](1)
+    var chunk = ctx.enqueue_create_buffer[DType.float32](rows * panel)
+    var ws = ctx.enqueue_create_buffer[DType.float32](chunked_lm_head_gp_workspace_floats(rows, vocab, width))
+    var leaf_a = ctx.enqueue_create_buffer[DType.float32](rows * leaves)
+    var leaf_b = ctx.enqueue_create_buffer[DType.float32](rows * ((leaves + 1) // 2))
+    var stack = ctx.enqueue_create_buffer[DType.float32](
+        lmhead_gp_stack_slots(vocab) * cells if with_grad else 1
+    )
+    try:
+        # No operand flush here: the arm reads hidden and weight only
+        # through the GEMM, whose leaf flushes both operands itself.
+        var tp = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=Int(targets.unsafe_ptr()))
+        chunked_lm_head_gp_forward_into(
+            ctx, loss, maxima, denom, row_loss, chunk, ws, leaf_a, leaf_b,
+            hidden, weight, tp, rows, vocab, width,
+        )
+        ctx.enqueue_copy(dst_ptr=loss_out, src_buf=loss)
+        if max_out:
+            ctx.enqueue_copy(dst_ptr=max_out.value(), src_buf=maxima)
+        if denom_out:
+            ctx.enqueue_copy(dst_ptr=denom_out.value(), src_buf=denom)
+        if with_grad:
+            chunked_lm_head_gp_backward_into(
+                ctx, d_hidden, d_weight, chunk, ws, stack, hidden, weight, tp,
+                maxima, denom, rows, vocab, width, True, True,
+            )
+            if d_hidden_out:
+                ctx.enqueue_copy(dst_ptr=d_hidden_out.value(), src_buf=d_hidden)
+            if d_weight_out:
+                ctx.enqueue_copy(dst_ptr=d_weight_out.value(), src_buf=d_weight)
+    except error:
+        ctx.synchronize()
+        raise error
+    ctx.synchronize()
+    # Raw-pointer consumers do not retain these owners: name every one past
+    # the wait that drains its last queued reader.
+    _ = maxima^
+    _ = denom^
+    _ = row_loss^
+    _ = loss^
+    _ = chunk^
+    _ = ws^
+    _ = leaf_a^
+    _ = leaf_b^
+    _ = stack^
+
+
 def _gp_door(
     ctx: DeviceContext,
     loss_out: MutPointer[Float32, MutUntrackedOrigin],
@@ -581,12 +667,7 @@ def _gp_door(
     the refusals of the default door in the same order and words, then one
     upload, the forward, the backward, one download and one final wait.
     Without `with_grad` the two gradient pointers are not written."""
-    var leaves = lmhead_gp_leaf_count(vocab)
-    var panel = min(vocab, LM_HEAD_V2_CHUNK)
-    if (rows > 2147483647 or vocab > 2147483647 or width > 2147483647
-            or rows * width > 2147483647 or vocab * width > 2147483647
-            or rows * panel > 2147483647 or rows * leaves > 2147483647):
-        raise Error("chunked lm head v2: operand span exceeds signed 32-bit kernel indexing")
+    _gp_spans(rows, vocab, width)
     var bad = _gp_first_nonfinite(hidden_in, rows * width)
     if bad >= 0:
         raise Error("chunked lm head v2: non-finite hidden at flat index " + String(bad))
@@ -600,59 +681,57 @@ def _gp_door(
     var hidden = ctx.enqueue_create_buffer[DType.float32](cells)
     var weight = ctx.enqueue_create_buffer[DType.float32](vocab * width)
     var targets = ctx.enqueue_create_buffer[DType.int32](rows)
-    var maxima = ctx.enqueue_create_buffer[DType.float32](rows)
-    var denom = ctx.enqueue_create_buffer[DType.float32](rows)
-    var row_loss = ctx.enqueue_create_buffer[DType.float32](rows)
-    var loss = ctx.enqueue_create_buffer[DType.float32](1)
-    var chunk = ctx.enqueue_create_buffer[DType.float32](rows * panel)
-    var ws = ctx.enqueue_create_buffer[DType.float32](chunked_lm_head_gp_workspace_floats(rows, vocab, width))
-    var leaf_a = ctx.enqueue_create_buffer[DType.float32](rows * leaves)
-    var leaf_b = ctx.enqueue_create_buffer[DType.float32](rows * ((leaves + 1) // 2))
-    # Without gradients the three gradient owners are one-cell placeholders.
+    # Without gradients the two gradient owners are one-cell placeholders.
     var d_hidden = ctx.enqueue_create_buffer[DType.float32](cells if with_grad else 1)
     var d_weight = ctx.enqueue_create_buffer[DType.float32](vocab * width if with_grad else 1)
-    var stack = ctx.enqueue_create_buffer[DType.float32](
-        lmhead_gp_stack_slots(vocab) * cells if with_grad else 1
-    )
-    try:
-        ctx.enqueue_copy(dst_buf=hidden, src_ptr=hidden_in)
-        ctx.enqueue_copy(dst_buf=weight, src_ptr=weight_in)
-        ctx.enqueue_copy(dst_buf=targets, src_ptr=targets_in)
-        # No operand flush here: the arm reads hidden and weight only
-        # through the GEMM, whose leaf flushes both operands itself.
-        var tp = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=Int(targets.unsafe_ptr()))
-        chunked_lm_head_gp_forward_into(
-            ctx, loss, maxima, denom, row_loss, chunk, ws, leaf_a, leaf_b,
-            hidden, weight, tp, rows, vocab, width,
-        )
-        ctx.enqueue_copy(dst_ptr=loss_out, src_buf=loss)
-        ctx.enqueue_copy(dst_ptr=max_out, src_buf=maxima)
-        ctx.enqueue_copy(dst_ptr=denom_out, src_buf=denom)
-        if with_grad:
-            chunked_lm_head_gp_backward_into(
-                ctx, d_hidden, d_weight, chunk, ws, stack, hidden, weight, tp,
-                maxima, denom, rows, vocab, width, True, True,
-            )
-            ctx.enqueue_copy(dst_ptr=d_hidden_out, src_buf=d_hidden)
-            ctx.enqueue_copy(dst_ptr=d_weight_out, src_buf=d_weight)
-    except error:
-        ctx.synchronize()
-        raise error
-    ctx.synchronize()
-    # Raw-pointer consumers do not retain these owners: name every one past
-    # the wait that drains its last queued reader.
+    ctx.enqueue_copy(dst_buf=hidden, src_ptr=hidden_in)
+    ctx.enqueue_copy(dst_buf=weight, src_ptr=weight_in)
+    ctx.enqueue_copy(dst_buf=targets, src_ptr=targets_in)
+    var no_out = Optional[MutPointer[Float32, MutUntrackedOrigin]]()
+    _gp_run(ctx, hidden, weight, targets, d_hidden, d_weight, loss_out, Optional(max_out), Optional(denom_out),
+            Optional(d_hidden_out) if with_grad else no_out, Optional(d_weight_out) if with_grad else no_out,
+            rows, vocab, width, with_grad)
     _ = hidden^
     _ = weight^
     _ = targets^
-    _ = maxima^
-    _ = denom^
-    _ = row_loss^
-    _ = loss^
-    _ = chunk^
-    _ = ws^
-    _ = leaf_a^
-    _ = leaf_b^
     _ = d_hidden^
     _ = d_weight^
-    _ = stack^
+    return rows
+
+
+def chunked_lm_head_v2_resident(
+    ctx: DeviceContext,
+    loss_out: MutPointer[Float32, MutUntrackedOrigin],
+    mut hidden: DeviceBuffer[DType.float32],
+    mut weight: DeviceBuffer[DType.float32],
+    mut d_hidden: DeviceBuffer[DType.float32],
+    mut d_weight: DeviceBuffer[DType.float32],
+    targets_in: MutPointer[Int32, MutUntrackedOrigin],
+    rows: Int, vocab: Int, width: Int, with_grad: Bool,
+) raises -> Int:
+    """`chunked_lm_head_loss` on operands that already live on the device
+    (lane vdf-linalg3, 2026-11-24; training/dev_tensors_layers.mojo
+    `train_chunked_lm_head_dev`): the host door's refusals in its order and
+    words, the float scans on the device (`device_first_nonfinite`, one read
+    each), the int32 targets checked on the host and uploaded once; the
+    gradients written into `d_hidden` / `d_weight` on the device; only the
+    loss scalar comes back. The same body as the host door: the same bits."""
+    if rows < 1 or vocab < 2 or width < 1:
+        raise Error("chunked lm head v2: rows/width must be positive and vocab >= 2")
+    _gp_spans(rows, vocab, width)
+    var bad = device_first_nonfinite(ctx, hidden, rows * width)
+    if bad >= 0:
+        raise Error("chunked lm head v2: non-finite hidden at flat index " + String(bad))
+    bad = device_first_nonfinite(ctx, weight, vocab * width)
+    if bad >= 0:
+        raise Error("chunked lm head v2: non-finite weight at flat index " + String(bad))
+    bad = _gp_first_bad_target(targets_in, rows, vocab)
+    if bad >= 0:
+        raise Error("chunked lm head v2: target outside [0, vocab) at row " + String(bad))
+    var targets = ctx.enqueue_create_buffer[DType.int32](rows)
+    ctx.enqueue_copy(dst_buf=targets, src_ptr=targets_in)
+    var no_out = Optional[MutPointer[Float32, MutUntrackedOrigin]]()
+    _gp_run(ctx, hidden, weight, targets, d_hidden, d_weight, loss_out, no_out, no_out, no_out, no_out,
+            rows, vocab, width, with_grad)
+    _ = targets^
     return rows

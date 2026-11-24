@@ -8,10 +8,7 @@ The core host binding exports the same names and signatures from
 Every IDENTICAL and FAST GPU build takes these; there is no host fallback in
 this binding.
 
-    msel_alloc(nbytes) -> id              resident zero bytes
-    msel_read(id, dst_addr, nbytes)       download
     msel_live() -> count                  (live store ids, for the resident tests)
-    msel_scatter_rows(dst_id, n_dst, dst_code, src_addr, src_code, n_src, width, idx_id)
     msel_proba_column(src_addr, code, n, k, col, dst_addr)
     msel_rebase_offsets_i32(raw_addr, n_raw, lens_addr, parts, n_out, dst_addr)
 """
@@ -22,12 +19,11 @@ from std.python import PythonObject
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.msel_device_x import msel_store
-# lane calltable-msel: the store, scatter, column, split-table and
+# lane calltable-msel: the column, split-table and
 # group-fold bodies are the runs the model-selection helper table publishes
 # (core/msel_helpers_device.mojo); these exports unpack and call them.
 from core.msel_helpers_device import (
-    msel_store_alloc_device_run, msel_store_read_device_run,
-    msel_scatter_rows_device_run, msel_proba_column_device_run, msel_split_table_device_run,
+    msel_proba_column_device_run, msel_split_table_device_run,
     msel_group_fold_perm_device_run,
 )
 from decomposition.pca_fold import pca_transform_fold, tsvd_fit_fold

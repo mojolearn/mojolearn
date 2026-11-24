@@ -17,9 +17,9 @@ fitted quantiles, so the indexed answer must equal the gathered answer word for 
     case 1   CalFitPlan's pin bookkeeping: `resident` sets the route words, `fold` adds one `took` byte per fold,
              `pins_taken` counts the bytes the RUN wrote
 
-Fail-proof edits (each must fail the named case): in `_vote_rows_point` drop the `call.row_index = ...` line (case
-0: the member reads the first rows of the base, or refuses a base of the wrong row count); in `_vote_rows_point` pass
-`rows.n` as the base's row count (case 0: the member refuses or reads out of the base); in `_vote_rows_call` write the
+Fail-proof edits (each must fail the named case): in `vote_rows_point` drop the `call.row_index = ...` line (case
+0: the member reads the first rows of the base, or refuses a base of the wrong row count); in `vote_rows_point` pass
+`rows.n` as the base's row count (case 0: the member refuses or reads out of the base); in `vote_rows_call` write the
 pin byte whatever `member_pin_settle` answers (case 0: the byte reads 1); in `CalFitPlan.fold` drop the `took.append`
 (case 1); in `pins_taken` count the zero bytes (case 1).
 """

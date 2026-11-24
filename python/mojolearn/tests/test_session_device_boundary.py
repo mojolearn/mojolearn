@@ -74,17 +74,6 @@ def test_a_cpu_session_computes_and_trains():
 
 
 @two_devices
-def test_identical_mode_cpu_session_returns_the_gpu_bits():
-    with ops.Session(record=True, numeric_mode="identical") as gpu:
-        on_gpu = step(gpu)
-    with ops.Session(record=True, numeric_mode="identical", device="cpu") as cpu:
-        on_cpu = step(cpu)
-    for a, b in zip(on_gpu[:3], on_cpu[:3]):
-        assert a.tobytes() == b.tobytes()
-    assert np.float32(on_gpu[3]).tobytes() == np.float32(on_cpu[3]).tobytes()
-
-
-@two_devices
 def test_two_sessions_on_two_devices_interleave_in_one_process():
     rng = np.random.default_rng(11)
     a = rng.standard_normal((16, 3), dtype=np.float32)

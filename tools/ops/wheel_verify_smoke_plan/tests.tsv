@@ -1,5 +1,4 @@
 unit	rc	status	seconds	peak_rss_mb
-test_admitted_call_doors.py	0	ok	0.7	146
 test_affinity_preference_native_boundary.py	0	ok	0.9	145
 test_agglo_native_boundary.py	1	failed	1.0	144
 test_archive_unicode_native.py	0	ok	2.7	136
@@ -32,7 +31,6 @@ test_byte_lm_step_routes.py	0	ok	0.9	145
 test_byte_lm_surface.py	0	ok	1.6	154
 test_byte_lm_train_steps.py	0	ok	0.8	143
 test_byte_lm_trainer_logits.py	0	ok	1.0	145
-test_c3_c5_no_copies.py	1	failed	1.6	170
 test_cache_get_native.py	1	failed	6.3	136
 test_cache_key_native.py	0	ok	0.9	147
 test_cache_lifecycle_native.py	0	ok	1.0	119
@@ -47,7 +45,6 @@ test_centroid_fit_native_boundary.py	0	ok	0.9	143
 test_checkpoint_native_loading.py	0	ok	1.0	118
 test_cholesky_archive_native.py	0	ok	1.6	140
 test_cholesky_cpu_inference.py	0	ok	0.8	154
-test_chunked_lm_head_door.py	0	ok	0.9	136
 test_class_weight_native_plan_boundary.py	0	ok	0.7	135
 test_class_weight_shared_families.py	0	ok	1.1	155
 test_classical_archive_native_owner.py	0	ok	2.3	152
@@ -68,7 +65,6 @@ test_classical_public_output_native_owner.py	0	ok	1.2	136
 test_classical_tags_native_owner.py	0	ok	1.9	210
 test_classical_warning_native_owner.py	0	ok	2.3	137
 test_classification_metrics.py	0	ok	3.1	225
-test_cluster_array_buffer.py	0	ok	0.8	130
 test_cluster_input_refusals.py	0	ok	0.8	146
 test_cluster_native_boundary.py	0	ok	1.0	142
 test_cluster_resident_native.py	0	env	0.7	161
@@ -79,9 +75,7 @@ test_cpu_training_arima.py	0	ok	0.8	119
 test_cpu_training_d.py	0	ok	1.6	147
 test_cpu_training_e.py	0	ok	0.8	135
 test_cpu_training_e2.py	0	ok	1.6	153
-test_cpu_training_e3.py	0	ok	0.8	145
 test_cpu_training_e3_gbdt_rmse.py	0	ok	0.7	145
-test_cpu_training_e3_gbdt_trees.py	0	ok	1.0	145
 test_cpu_training_embedding_ivf.py	0	ok	1.1	162
 test_cpu_training_forest_variants.py	0	ok	1.0	145
 test_cpu_training_gbdt_ordered.py	0	ok	1.0	147
@@ -90,9 +84,7 @@ test_cpu_training_mamba.py	0	ok	1.4	145
 test_cpu_training_misc.py	0	ok	0.9	160
 test_cpu_training_par_classical.py	1	failed	6.4	157
 test_cpu_training_samba.py	0	ok	1.1	145
-test_cpu_training_umap.py	0	ok	0.9	136
 test_cross_vendor.py	0	ok	2.9	120
-test_cross_vendor_admission_native.py	0	ok	1.3	133
 test_cross_vendor_coordinator_native.py	1	failed	1.2	125
 test_cross_vendor_native.py	0	ok	0.9	118
 test_cross_vendor_worker_native.py	0	ok	1.2	166
@@ -112,8 +104,6 @@ test_estimator_score_p2.py	0	ok	1.1	190
 test_estimators_host_borrowed_buffers.py	0	env	0.8	132
 test_expose_d_manifest.py	0	ok	0.6	120
 test_extratrees_gpu_only.py	0	ok	0.7	143
-test_feature_freq_experimental_surface.py	0	ok	0.8	140
-test_flat_bytes_without_buffer_protocol.py	0	ok	0.8	118
 test_forest_export_protocol.py	0	ok	0.9	146
 test_forest_fit_mode.py	0	ok	2.1	225
 test_forest_inference_engine.py	0	ok	1.1	148
@@ -325,7 +315,6 @@ test_native_process_pool.py	0	ok	2.8	134
 test_native_public_attributes.py	0	ok	2.2	135
 test_native_registered_owner_replacement.py	0	ok	0.9	142
 test_native_rfe_cold_context.py	0	ok	2.1	135
-test_native_scalar_decode_public.py	0	ok	41.7	143
 test_native_search_dispatch.py	0	ok	1.1	136
 test_native_sgd_weight_lifetime.py	0	ok	1.6	118
 test_native_smallfam_public.py	0	ok	1.0	179

@@ -90,3 +90,31 @@ How the columns are derived (static estimates, not runtime facts):
   not one of the release audit's per-definition arms.
 - Pytest classes are heuristic; read every DUPLICATE file against its named lane before the deletion lane deletes
   it. TOOLING files are never deletion candidates.
+
+## After vd-verify (lane vdv-ledger, 2026-11-24; static)
+
+Counted from the coverage tables and declarations now on `lane/vd-verify` (`mapped_cov_{est,generic,nn,parallel}.tsv`,
+`tools/identity_lanes/coverage_endpoints_declared.tsv`, vdv-cov-func's appended `endpoints.tsv` rows), not from a
+run of `tools/verify_coverage_audit.py`. Every lane they name exists at HEAD. `endpoints.tsv` `verify_lanes` /
+`audit_status` carry the result. The 137 rows vdv-cov-func appended are folded into their originals, so the table is
+back to 4,494 rows. vdv-sabotage's arms are not counted here.
+
+| | before | after |
+|---|---|---|
+| endpoints mapped | 1,591 | 3,476 |
+| not numerical (`n/a: ...` proposal) | 953 | 953 |
+| unmapped | 1,950 | 65 (`UNMAPPED.md` section 1: not numerical 44, not reasonable 11, owed lane for the `devices=` loaders 5, owed fixture 2, owed implementation 1, framework interop 1, verify tooling 1) |
+| verify lanes (`@lane`) | 565 | 946 (+381 in 15 new fragments) |
+| one-sided lanes (`ONE_SIDED`) | - | 41 (34 without a CPU side, 7 without a GPU side) |
+
+Newly mapped endpoints by sub-lane: vdv-cov-generic 1,145 (2 shared with vdv-cov-parallel), vdv-cov-nn 250,
+vdv-cov-est 219, vdv-check 197, vdv-cov-parallel 76. vdv-cov-func's rows were already mapped: it added a
+`fn-*` lane to 137 of them.
+
+Mapped is not passing. These lanes fail by name until the product or vd-verify gives them the side
+(`UNMAPPED.md` section 3): the Generator / LR-schedule lanes, the five parallel-driver lanes the view refuses, and
+everything that needs `lane/vd-functions` (not merged yet). The generic lanes' `n/a:generic-fixture` classes are
+known only from the first record (`UNMAPPED.md` section 4).
+
+References to record at the release: the 70 OWED (66 live, 4 retired `par-*`), the `ols/base` cell, the public
+endpoint reference (its CPU column has no command yet), and the 381 new lanes (`REFERENCES_TO_RECORD.md`).

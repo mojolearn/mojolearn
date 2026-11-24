@@ -22,7 +22,11 @@ comptime XP_DEV_PUT = 4        # a: [src]                          i: [n_words] 
 comptime XP_DEV_FREE = 5       # i: [id]
 comptime XP_DEV_TAKE_ROWS = 6  # a: [idx]                          i: [src_id, row_words, n_idx]  -> slot id
 comptime XP_DEV_LIVE = 7       # (none)                                                    -> live slot count of the store
-comptime XP_OP_COUNT = 8
+# Lane vdf-scope-gp (2026-11-24), an addition: a slot's first n_words words into host memory (the store's
+# `read`, after every launch queued before it; waits). A Gaussian process member exports the X_train_ it keeps
+# as a fold slot through it. A store that does not ship it refuses the operation as unknown.
+comptime XP_DEV_READ = 8       # a: [dst]                          i: [id, n_words]        -> 0
+comptime XP_OP_COUNT = 9
 
 
 def xp_schema(op: Int) raises -> Tuple[Int, Int]:
@@ -43,6 +47,8 @@ def xp_schema(op: Int) raises -> Tuple[Int, Int]:
         return (1, 3)
     if op == XP_DEV_LIVE:
         return (0, 0)
+    if op == XP_DEV_READ:
+        return (1, 2)
     raise Error("x_prep transport ABI: unknown operation " + String(op))
 
 

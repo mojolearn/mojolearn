@@ -276,6 +276,66 @@ def launch_forest_argmax(ctx: DeviceContext,
         )
 
 
+def forest_count_equal_kernel(
+    codes: MutPointer[Int32, MutAnyOrigin], truth: MutPointer[Int32, MutAnyOrigin],
+    rows_in: Int32, hits: MutPointer[Int32, MutAnyOrigin],
+):
+    """Lane vdf-scope-trees3: the rows whose predicted code equals the true
+    code (a classifier's accuracy count), 256 rows a block: a shared tree sum
+    of the block's 0/1 words, then one atomic add per block. An integer
+    count: any order gives the same value on every vendor."""
+    var tid = Int(thread_idx.x)
+    var row = Int(block_idx.x) * 256 + tid
+    var hit = Int32(0)
+    if row < Int(rows_in) and codes.unsafe_load(row) == truth.unsafe_load(row):
+        hit = Int32(1)
+    var sums = stack_allocation[256, Int32, address_space=AddressSpace.SHARED]()
+    sums[unsafe_offset=tid] = hit
+    barrier()
+    var step = 128
+    while step > 0:
+        if tid < step:
+            sums[unsafe_offset=tid] = sums[unsafe_offset=tid] + sums[unsafe_offset=tid + step]
+        barrier()
+        step //= 2
+    if tid == 0:
+        _ = Atomic.fetch_add(hits, sums[unsafe_offset=0])
+
+
+def forest_count_equal(ctx: DeviceContext, mut codes: DeviceBuffer[DType.int32], truth_addr: Int,
+    rows: Int) raises -> Int:
+    """The rows of the device codes `codes` equal to the `rows` host int32
+    true codes at `truth_addr` (lane vdf-scope-trees3: a forest member's
+    score): the true codes cross once, the comparison and the count run on
+    the device, one word comes back. Synchronous."""
+    if rows <= 0:
+        return 0
+    if truth_addr == 0:
+        raise Error("forest score: null int32 true-code address")
+    var dy = ctx.enqueue_create_buffer[DType.int32](rows)
+    var dh = ctx.enqueue_create_buffer[DType.int32](1)
+    # one pageable word for the count (no pinned allocation per score)
+    var hh = List[Int32](length=1, fill=0)
+    try:
+        ctx.enqueue_copy(dst_buf=dy, src_ptr=MutPointer[Int32, MutAnyOrigin](unsafe_from_address=truth_addr))
+        ctx.enqueue_memset(dh, Int32(0))
+        ctx.enqueue_function[forest_count_equal_kernel](
+            codes.unsafe_ptr(), dy.unsafe_ptr(), Int32(rows), dh.unsafe_ptr(),
+            grid_dim=(rows + 255) // 256, block_dim=256,
+        )
+        ctx.enqueue_copy(dst_ptr=hh.unsafe_ptr(), src_buf=dh)
+        ctx.synchronize()
+    except e:
+        ctx.synchronize()
+        _ = dy^
+        _ = dh^
+        raise e
+    var hits = Int(hh[0])
+    _ = dy^
+    _ = dh^
+    return hits
+
+
 def forest_grove32_kernel[RF_INPUT: Bool, PACKED: Bool = False](
     offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
     thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],

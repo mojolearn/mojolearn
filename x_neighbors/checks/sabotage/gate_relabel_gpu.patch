@@ -1,0 +1,16 @@
+diff --git a/x_neighbors/py2mojo_items.mojo b/x_neighbors/py2mojo_items.mojo
+index f92587df28..11f3d33cbc 100644
+--- a/x_neighbors/py2mojo_items.mojo
++++ b/x_neighbors/py2mojo_items.mojo
+@@ -146,6 +146,11 @@ def p2m_relabel_map_item(t: Int, lab: IP, res: IP, info: IP, first: IP, rk: IP,
+     if v < 0 or v >= n:
+         res.unsafe_store(t, Int32(-1))
+         return
++    from std.sys import is_defined
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): row 0's component label one on, the GPU bindings only
++        if t == 0:
++            res.unsafe_store(t, rk.unsafe_load(Int(first.unsafe_load(v))) + Int32(1))
++            return
+     res.unsafe_store(t, rk.unsafe_load(Int(first.unsafe_load(v))))
+ 
+ 

@@ -78,12 +78,14 @@ from core.member_abi import (
     MEMBER_GIL_FREE,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION, MEMBER_CAN_SCORE,
     MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF, MEMBER_CAN_CLASSIFIER,
-    MEMBER_CAN_TEST_ROWS,
+    MEMBER_CAN_TEST_ROWS, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE, MemberMatrix,
     MEMBER_BLOCK_COEF, MEMBER_BLOCK_INTERCEPT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX,
     MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_LOGISTIC
+from core.device_route import DEVICE_GPU
+from core.member_fold_x import MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_take_view, member_fold_store_ready
 from core.member_class_weight import MEMBER_CW_HEAD, MEMBER_CW_NONE, member_cw_mode, member_cw_rows
 from core.qn_regressor_member import qn_regressor_member, qn_regressor_member_owns
 from core.native_descriptor_abi import NativeDescriptorError
@@ -564,9 +566,17 @@ def _logistic_member(operation: Int, address: Int) raises -> Int:
         # the locked store. The QN entry touches no CPython or GIL and
         # reaches only its locked process context. Kind 1 (QNRegressor)
         # answers above with the same bit.
+        # MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE (lane vdf-scope-linear): on a GPU
+        # route whose image ships the x_prep family store, every QN entry of
+        # the device image reads THE FOLD X WORD at its upload of X
+        # (glm/estimator.mojo `fold_x_fill`): the fold's rows are taken on the
+        # device out of X resident in the caller's scope (`_fold_op`).
+        var fold = 0
+        if call[].route.device == DEVICE_GPU and member_fold_store_ready(call):
+            fold = MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
         return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION
             | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT
-            | MEMBER_CAN_COEF | MEMBER_CAN_CLASSIFIER | MEMBER_CAN_TEST_ROWS | MEMBER_GIL_FREE)
+            | MEMBER_CAN_COEF | MEMBER_CAN_CLASSIFIER | MEMBER_CAN_TEST_ROWS | MEMBER_GIL_FREE | fold)
     if operation == MEMBER_OP_NEW:
         # ten words, or ten and a class-weight tail (lane mf-adm3)
         if not call[].params or (call[].param_count != _PARAMS and call[].param_count < _PARAMS + MEMBER_CW_HEAD):
@@ -588,6 +598,14 @@ def _logistic_member(operation: Int, address: Int) raises -> Int:
         _outputs(call)
         return 0
     var slot = _SlotP(unsafe_from_address=_lookup(call[].state, False))
+    if call[].row_index.rows > 0 and call[].column_index.rows == 0 and call[].route.device == DEVICE_GPU:
+        _fold_op(slot, call, operation)
+        return 0
+    _op(slot, call, operation)
+    return 0
+
+
+def _op(slot: _SlotP, call: _CallP, operation: Int) raises:
     if operation == MEMBER_OP_FIT:
         _fit(slot, call)
     elif operation == MEMBER_OP_PREDICT:
@@ -604,7 +622,60 @@ def _logistic_member(operation: Int, address: Int) raises -> Int:
         _import(slot, call)
     else:
         member_unsupported(_ESTIMATOR, operation)
-    return 0
+
+
+def _fold_op(slot: _SlotP, call: _CallP, operation: Int) raises:
+    """An operation over the rows `call.row_index` of the WHOLE host X
+    (lane vdf-scope-linear; core/member_fold_x.mojo): X resident in the
+    caller's scope (or this call's slot), the fold's rows taken on the
+    device and read there by the QN entry (THE FOLD X WORD); y (class
+    codes, any of the three dtypes) and the weights are the base's columns
+    taken through the index on the host, bit for bit. The call's views are
+    restored before this returns or raises."""
+    if operation != MEMBER_OP_FIT and operation != MEMBER_OP_PREDICT and operation != MEMBER_OP_DECISION and (
+            operation != MEMBER_OP_PREDICT_PROBA and operation != MEMBER_OP_SCORE):
+        member_unsupported(_ESTIMATOR, operation)
+    var x = call[].x
+    var y = call[].y
+    var weights = call[].weights
+    var index = call[].row_index
+    var fold = MemberFoldX()
+    var host_y = List[Int64]()
+    var host_w = List[Float32]()
+    var failure = String("")
+    try:
+        member_fold_x_open(call, fold, _ESTIMATOR)
+        call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
+        if (operation == MEMBER_OP_FIT or operation == MEMBER_OP_SCORE) and y.rows > 0:
+            if y.rows != x.rows or y.cols != 1 or y.home != 0 or y.offset != 0 or y.stride != y.cols:
+                raise Error("ValueError: X and y have different numbers of rows")
+            host_y = List[Int64](length=fold.rows, fill=0)  # 8 bytes a row: room for every code dtype
+            member_fold_take_view(y, fold.index, fold.rows, Int(host_y.unsafe_ptr()))
+            call[].y = MemberMatrix(Int(host_y.unsafe_ptr()), fold.rows, 1, y.dtype)
+        if weights.rows > 0:
+            _dense(weights, MEMBER_F32, "sample_weight")
+            if weights.rows != x.rows or weights.cols != 1:
+                raise Error("ValueError: sample_weight and X have different numbers of rows")
+            host_w = List[Float32](length=fold.rows, fill=0.0)
+            member_fold_take_view(weights, fold.index, fold.rows, Int(host_w.unsafe_ptr()))
+            call[].weights = MemberMatrix(Int(host_w.unsafe_ptr()), fold.rows, 1)
+        call[].row_index = MemberMatrix()
+        _op(slot, call, operation)
+    except error:
+        failure = String(error)
+    call[].x = x
+    call[].y = y
+    call[].weights = weights
+    call[].row_index = index
+    try:
+        member_fold_x_close(fold)
+    except close_error:
+        if failure.byte_length() == 0:
+            failure = "RuntimeError: a LogisticRegression member's fold slot was not freed: " + String(close_error)
+    _ = host_y^
+    _ = host_w^
+    if failure.byte_length() > 0:
+        raise Error(failure)
 
 
 def logistic_member_v2(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,

@@ -2,8 +2,8 @@
 """`digest_` at the boundary (lanes digest rounds 1 to 3, fx-audit session 3).
 
 Reuses every test of tests/api/test_digest.py (same fit = same digest, changed data changes it, load restores it,
-CPU device = GPU digest for the linear cases, ...) and adds the RUN OWED items it does not cover: the GPU digest
-equals the CPU digest for every case family, predict / transform leave the digest unchanged, the loadable classes
+CPU device = GPU digest for the linear cases, ...) and adds the RUN OWED items it does not cover (the GPU digest equals the CPU digest for every
+case family is verify's generic-digest-* lanes, both sides): predict / transform leave the digest unchanged, the loadable classes
 of the public rule and the HostForest / HostGBDT twins restore the saving model's digest.
 """
 import numpy as np
@@ -20,12 +20,6 @@ pytestmark = pytest.mark.skipif(not _digest._identical(), reason="digest_ exists
 def _fit(name, params, target, device):
     model = make(name, device, **params)
     return model.fit(X) if target is None else model.fit(X, Y if target == "r" else C)
-
-
-@pytest.mark.gpu
-@pytest.mark.parametrize("name,params,target", _digest.CASES)
-def test_proving_gpu_digest_equals_cpu_digest_for_every_case(name, params, target):
-    assert _fit(name, params, target, "gpu").digest_ == _fit(name, params, target, "cpu").digest_
 
 
 def _reads(model):

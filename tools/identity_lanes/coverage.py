@@ -76,7 +76,12 @@ def _(ml, X, yc, yr, Xh=None):
     is held byte for byte to the whole one in the cell, which is the
     function's own claim. The fold runs in the host binding on every install
     (cross_vendor_call, with core's fold_pair_f32)."""
-    import mojolearn.cross_vendor as cv
+    # Through the lane's `ml` (the device view): ordered_fold and fold_pair
+    # take the side by `device=`. The submodule is not a lazy door of the
+    # package, so it is loaded once here (loading computes nothing) and then
+    # reached as `ml.cross_vendor`, never called through the import.
+    import mojolearn.cross_vendor  # noqa: F401 -- makes ml.cross_vendor resolvable
+    cv = ml.cross_vendor
     d = _coverage_digester(ml)
     flat = np.ascontiguousarray(X[:10240, :8], dtype=np.float32).reshape(5, -1)
     raw = [flat[k].tobytes() for k in range(5)]  # glue: five shard buffers
@@ -284,7 +289,7 @@ def _(ml, X, yc, yr, Xh=None):
     both infinities and every NaN payload) and over the fixture's own values
     rounded to float16. Exact by construction, so every column has the same
     bits."""
-    from mojolearn.models.safetensors import widen_f16
+    widen_f16 = ml.models.safetensors.widen_f16   # through the view: the side's from_f16
     d = _coverage_digester(ml)
     every = np.arange(65536, dtype=np.uint16)
     fixture = np.ascontiguousarray(X[:256, :16], dtype=np.float32).astype(np.float16).view(np.uint16)
@@ -398,10 +403,10 @@ def _(ml, X, yc, yr, Xh=None):
     to the same steps on host arrays, which is the resident path's claim (the
     same launches on the same values). Then a tensor's round trip: upload,
     copy and download."""
-    from mojolearn._x_sequence_device import to_device
     # local names are unique: lane_applicability walks bare-name calls across
     # the harness, and a nested `run`/`d` elsewhere reaches _par_devices
     _sdt_digest = _coverage_digester(ml)
+    to_device = _coverage_seq_put
 
     def _rmsprop_six_steps(_as_lane_tensor):
         p1 = _as_lane_tensor(np.ascontiguousarray(X[:32, :8], dtype=np.float32).copy())
@@ -425,6 +430,20 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(p1=_sdt_digest(resident[0]), p2=_sdt_digest(resident[1]), back=_sdt_digest(back), copy=_sdt_digest(twin)))
 
 
+def _coverage_seq_put(a, numeric_mode="identical"):
+    """A device-resident input on the side the lane runs on: on the GPU side
+    the float32 array uploaded once as a `SequenceDeviceTensor` (the private
+    upload helper `to_device`; it computes nothing), on the CPU side the
+    array itself, which is what `to_device` returns on a binding without
+    resident tensors. The side is read only to build the input
+    (`_lane_side()`), never to choose what the lane computes: the CPU side
+    of a GPU installation must not upload to the GPU (vdv-fragfix)."""
+    if _lane_side() != "gpu":
+        return a
+    from mojolearn._x_sequence_device import to_device
+    return to_device(a, numeric_mode=numeric_mode)
+
+
 def _coverage_device_optimizer(ml, cls, X, configurations, factored=False):
     """Compare public host-array and resident-tensor steps and consumed state.
 
@@ -432,7 +451,8 @@ def _coverage_device_optimizer(ml, cls, X, configurations, factored=False):
     qualifies the typed device-parameter step. All configurations use identical
     mode explicitly, and no device-specific metadata enters the digest.
     """
-    from mojolearn._x_sequence_device import SequenceDeviceTensor, to_device
+    from mojolearn._x_sequence_device import SequenceDeviceTensor
+    to_device = _coverage_seq_put
     d = _coverage_digester(ml)
     parts = {}
 
@@ -664,6 +684,13 @@ def _(ml, X, yc, yr, Xh=None):
     _same_bytes("final sync_state", resident[0], "per-call final state", plain_final[0])
     _same_bytes("final sync_state cursors", resident[1], "per-call final cursors", plain_final[1])
     return _fit(dict(first=d(first), after=d(after), state=d(resident[0]), cursors=d(resident[1])))
+
+
+# lane vdv-fin (2026-11-24): the reason mamba1-decode-session and transformer-decode-session carry.
+_batch_decl("n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any "
+            "other row count by name, so a row alone is a different session and not a smaller batch of this "
+            "call; the per-call SambaStack.step the session is held to in the cell is the samba lanes' path)",
+            "samba-decode-session")
 
 
 # ---------------------------------------------------------------- training.chunked_lm_head_loss
@@ -1223,7 +1250,8 @@ def _(ml, X, yc, yr, Xh=None):
                      da=d(host(da_dev)), dw=d(host(dw_dev))))
 
 
-GPU_ONLY_LANES["training-device-cross-entropy"] = "the CPU training binding has no device array pool"
+_one_sided("training-device-cross-entropy", missing="cpu",
+           reason="the CPU training binding has no device array pool (TrainDeviceArray inputs exist on the GPU side only)")
 
 
 @lane("sequence-layernorm-backward")
@@ -1454,7 +1482,7 @@ def _(ml, X, yc, yr, Xh=None):
     autograd/small_mlp_program.mojo mode 1; lane m2-neural-leftovers,
     2026-11-09) and the ordered update. Parts: the weights after three
     steps and the logits."""
-    from mojolearn.parallel_training import ParallelNeuralTrainer
+    ParallelNeuralTrainer = ml.parallel_training.ParallelNeuralTrainer   # through the view
     d = _coverage_digester(ml)
     w = [((np.arange(int(np.prod(s)), dtype=np.float32) % 7 - 3) / 32).reshape(s).astype(np.float32)
          for s in ((16, 8), (16,), (3, 16), (3,))]
@@ -1518,7 +1546,7 @@ def _(ml, X, yc, yr, Xh=None):
     """fit_forest on one device: 16 trees in four ranges of four, so the
     driver joins four node-offset tables through the base table's
     `msel_rebase_offsets_i32`; held to the plain RandomForestClassifier."""
-    from mojolearn.parallel_ensemble import fit_forest
+    fit_forest = ml.parallel_ensemble.fit_forest   # through the view
     d = _coverage_digester(ml)
     kw = dict(n_estimators=16, max_depth=8, random_state=7)
     shard = fit_forest(ml.RandomForestClassifier(**kw), X, yc, devices=(0,), trees_per_shard=4)
@@ -1538,7 +1566,7 @@ def _(ml, X, yc, yr, Xh=None):
     classifier: the 4096-row reference in four blocks of 1024, 64 queries in
     blocks of 16, the blocks' candidates merged by the base table's
     `shard_topk_merge_f32`; held to the plain kneighbors and predict."""
-    from mojolearn.parallel_neighbors_reference import ReferenceShardedNeighbors
+    ReferenceShardedNeighbors = ml.parallel_neighbors_reference.ReferenceShardedNeighbors   # through the view
     d = _coverage_digester(ml)
     m = ml.KNeighborsClassifier(n_neighbors=8).fit(X[:4096], yc[:4096])
     q = np.ascontiguousarray(X[4096:4160])
@@ -1563,7 +1591,7 @@ def _(ml, X, yc, yr, Xh=None):
     shard plan, its stored shard searched and merged back to global row ids,
     and the euclidean index rooted once after the merge (`ivf_finalize`);
     both held to the plain IVFIndex.search."""
-    from mojolearn.parallel_ivf import DistributedIVFIndex
+    DistributedIVFIndex = ml.parallel_ivf.DistributedIVFIndex   # through the view
     d = _coverage_digester(ml)
     kw = dict(n_lists=16, n_probes=4, n_neighbors=8, random_state=3)
     q = np.ascontiguousarray(X[4096:4160])
@@ -1588,6 +1616,14 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
             "its outputs are train parts, digested whole)",
             "forest-shard", "neighbors-reference-shard", "ivf-distributed")
+
+# THE PARALLEL DRIVERS ARE REACHED THROUGH THE VIEW (vdv-fragfix, 2026-11-24).
+# They are two-sided in the product (the GPU bindings, and the host owner
+# bindings/_mojolearn_runtime_parallel_host.mojo on the CPU side) but take
+# `devices=` (a device list) and no `device`, so the view refuses them by
+# name on both sides ("<name> takes no device=") until the product gives them
+# the side. That refusal is the cell's failure, never "not applicable": the
+# lanes are NOT one-sided (owed: a `device` parameter on the parallel drivers).
 
 
 # ---------------------------------------------------------------- shapes no default lane reaches (lane verify-gaps, 2026-11-23)

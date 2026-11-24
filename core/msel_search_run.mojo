@@ -1694,10 +1694,19 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                                                                  _IntP(unsafe_from_address=side_count_at0)[s])
 
     host_parallelize(_starts, used * sides)
+    # THE SIDES' HOST TARGET BLOCKS (lane vdf-scope-run): read only by a
+    # GATHERED candidate's member calls (`_side_set` with `index` 0) and by
+    # the named scorers' truth (`_scorer_side`). A row-indexed or resident
+    # candidate reads the whole target by its side's rows (`base_y`), and
+    # neither the member's own score nor a cv tool's response reads a block:
+    # with every candidate on the device rows and no named scorer, no side's
+    # target is gathered on the host. The host column and a CPU-only install
+    # have no scope, so every candidate is GATHERED there (unchanged).
+    var y_host = not y_free and (any_gathered or not (member_score or responding))
     for s in range(used * sides):  # driver-loop: over the fold sides (their blocks, allocated once)
         var own = alias_of[s] < 0 and side_start[s] < 0
         side_x.append(List[Float32](length=max(side_count[s] * d if any_gathered and own else 1, 1), fill=0.0))
-        side_y.append(List[Int32](length=max(side_count[s] * y_cols if own and not y_free else 1, 1),
+        side_y.append(List[Int32](length=max(side_count[s] * y_cols if own and y_host else 1, 1),
                                   fill=Int32(0)))
     var columns = List[Int32](length=max(d, 1), fill=Int32(0))
     for j in range(d):  # small-loop(the column numbers 0 .. d-1 of a side's gather, once per fit)
@@ -1725,7 +1734,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             y_dst[s] = 0 if y_free else Int(side_y[a].unsafe_ptr())
     var y_own = List[Int](length=max(used * sides, 1), fill=0)
     for s in range(used * sides):  # driver-loop: over the fold sides (1: the side gathers its own target block)
-        y_own[s] = 1 if alias_of[s] < 0 and side_start[s] < 0 and not y_free else 0
+        y_own[s] = 1 if alias_of[s] < 0 and side_start[s] < 0 and y_host else 0
     var y_own_at = Int(y_own.unsafe_ptr())
     var y_dst_at = Int(y_dst.unsafe_ptr())
 
@@ -1975,6 +1984,14 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                             member_notice_add(metric_notes[t], MEMBER_NOTICE_FOLD_LACKING, Float64(m),
                                               Float64(plan.class_counts[j]))
         elif not member_score:
+            # SERIAL FOR NOW, WITH A REASON (lane vdf-scope-run): the metric
+            # programs of one wave share the metrics image's one process
+            # context and its cluster and kernel entries, whose concurrent use
+            # from host workers has not been traced (the MEMBER_GIL_FREE kind
+            # of trace); each program is one device launch over a side, so the
+            # loop is launches, not row work. Splitting it over the tasks
+            # (per-task notice lists merged in task order) is owed with that
+            # trace: vdf-scope-run-RESULT.md.
             for t in range(tasks):  # driver-loop: over the wave's tasks (one native metric program per scorer)
                 var s = ((u0 + t // sides) % used) * sides + t % sides
                 var fold_of = (u0 + t // sides) % used

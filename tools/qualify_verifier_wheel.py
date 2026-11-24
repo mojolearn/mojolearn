@@ -21,16 +21,38 @@ PLUGIN_DISTRIBUTIONS = {name.replace("-", "_"): name for name in (
     "mojolearn-nvidia", "mojolearn-amd")}  # the NVIDIA wheel carries its PTX set (2026-11-05)
 
 
+def _self_test_sides(doc):
+    """{side: row} of the sides a v2 self-test ran (2026-11-24: each side is
+    nudged on its own; a side this installation lacks reads ran=False)."""
+    assert doc.get("format") == "mojolearn.verify-self-test.v2", doc.get("format")
+    return {side: row for side, row in doc["sides"].items() if row.get("ran")}
+
+
+def _gpu_side_absent(doc):
+    """True when the report says this installation has no GPU side."""
+    return (doc.get("sides") or {}).get("gpu_available") is False
+
+
 def admit(kind, doc, models):
     if kind == "coverage":
         assert doc["lanes"] and doc["cpu_execution_counts"]["declared"] > 0
     elif kind == "self-test":
         assert doc["passed"] is True
-        assert doc["clean"]["state"] == "IDENTICAL"
-        assert doc["perturbed"]["state"] == "DIVERGENT"
+        ran = _self_test_sides(doc)
+        assert "cpu" in ran, "the self-test did not run its CPU side"
+        for side, row in ran.items():
+            assert row["clean"]["state"] == "IDENTICAL", (side, row["clean"])
+            assert row["perturbed"]["state"] == "DIVERGENT", (side, row["perturbed"])
     else:
-        cells = {(r["lane"], r["fixture"], r["part"]): r for r in doc["cells"]}
+        # A v2 report has one row per cell part PER SIDE (device="cpu" and
+        # device="gpu" in one process); the side is part of the key.
+        cells = {(r["lane"], r["fixture"], r["part"], r.get("side")): r for r in doc["cells"]}
         assert len(cells) == len(doc["cells"]), "duplicate cell"
+        no_gpu = _gpu_side_absent(doc)
+
+        def absent_ok(row):  # the GPU side of an installation without one reads N/A, never a failure
+            return no_gpu and row.get("side") == "gpu" and row["state"] == "N/A"
+
         if kind == "extended":
             owed = [r for r in cells.values() if r["state"] == "OWED"]
             assert (doc["exit"], doc["verdict"]) == ((5, "INCOMPLETE") if owed else (0, "VERIFIED"))
@@ -44,12 +66,16 @@ def admit(kind, doc, models):
         if kind == "models":
             expected = {(f"portable:{m['lane']}", m["fixture"], part)
                         for m in models for part in ("model", "batch")}
-            assert expected and cells.keys() == expected
-            assert all(row["state"] == "IDENTICAL" for row in cells.values())
+            assert expected and {k[:3] for k in cells} == expected
+            assert {k[:3] for k in cells if k[3] in (None, "cpu")} == expected, "a model has no CPU-side row"
+            assert all(row["state"] == "IDENTICAL" or absent_ok(row) for row in cells.values())
             assert doc["selection"]["models_only"] is True
         else:
             for part in ("train", "infer", "batch"):
-                assert cells["knn", "base", part]["state"] == "IDENTICAL"
+                rows = [r for k, r in cells.items() if k[:3] == ("knn", "base", part)]
+                assert any(r.get("side") in (None, "cpu") for r in rows), ("knn", "base", part, "no CPU side")
+                assert rows and all(r["state"] == "IDENTICAL" or absent_ok(r) for r in rows), \
+                    ("knn", "base", part, [(r.get("side"), r["state"]) for r in rows])
             if kind == "extended":
                 assert {"batchgrad", "batchscale", "ragged", "rlpair"} <= {
                     row["part"] for row in cells.values()}
@@ -278,7 +304,9 @@ def qualify_jobs(run, save, manifest, python, work, output, models, scope, devic
             counts[kind] = dict(completed=len(doc["cells"]),
                                 states=dict(Counter(row["state"] for row in doc["cells"])))
         elif kind == "self-test":
-            counts[kind] = dict(controls=2, clean=doc["clean"]["state"], perturbed=doc["perturbed"]["state"])
+            counts[kind] = {side: dict(controls=2, clean=row["clean"]["state"],
+                                       perturbed=row["perturbed"]["state"])
+                            for side, row in _self_test_sides(doc).items()}
         else:
             counts[kind] = dict(lanes=len(doc["lanes"]), cpu_declared=doc["cpu_execution_counts"]["declared"])
         save()

@@ -22,6 +22,7 @@ from spectral.impl.spectral_predict_common import SpectralPredictionState
 from spectral.impl.cluster.detail.spectral import (
     SpectralClusteringParams,
     fit_predict_dataset_keep,
+    fit_predict_dataset_resident_keep,
     fit_predict_dense_keep,
     fit_predict_graph_keep,
 )
@@ -86,6 +87,24 @@ def fit_predict_keep(
     (lane/spectral-predict, 2026-09-15)."""
     fit_predict_dataset_keep(
         ctx, to_cuvs(config), dataset, n_samples, n_features, labels, embedding_out, state, keep, trace
+    )
+
+
+def fit_predict_resident_keep(
+    ctx: DeviceContext,
+    config: MLSpectralClusteringParams,
+    mut data: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    mut labels: List[Int32],
+    mut embedding_out: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+    mut trace: IdentityTrace,
+) raises:
+    """`fit_predict_keep` over device rows (lane vdf-scope-cluster4: a fold of the metrics image's store)."""
+    fit_predict_dataset_resident_keep(
+        ctx, to_cuvs(config), data, n_samples, n_features, labels, embedding_out, state, keep, trace
     )
 
 

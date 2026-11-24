@@ -58,8 +58,10 @@ def _fakes(tmp: Path, silent_arm: str = "") -> dict:
     py.write_text(
         "#!/bin/sh\ncase \"$*\" in\n"
         "  *vendor*) echo cuda;;\n"
-        "  *self-test*) echo '{\"passed\": true, \"clean\": {\"state\": \"IDENTICAL\"}, "
-        "\"perturbed\": {\"state\": \"DIVERGENT\"}, \"problems\": []}';;\nesac\n")
+        "  *self-test*) echo '{\"passed\": true, \"format\": \"mojolearn.verify-self-test.v2\", \"sides\": "
+        "{\"cpu\": {\"ran\": true, \"clean\": {\"state\": \"IDENTICAL\"}, \"perturbed\": {\"state\": \"DIVERGENT\"}}, "
+        "\"gpu\": {\"ran\": true, \"clean\": {\"state\": \"IDENTICAL\"}, \"perturbed\": {\"state\": \"DIVERGENT\"}}}, "
+        "\"problems\": []}';;\nesac\n")
     py.chmod(0o755)
     tree = tmp / "tree"
     tree.mkdir()

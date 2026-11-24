@@ -150,7 +150,7 @@ def _extension(numeric_mode=None):
 # sample 1 by its own.
 def bootstrap(data, statistic="mean", n_resamples=9999, confidence_level=0.95,
               method="percentile", alternative="two-sided", random_state=0,
-              q_or_prop=0.5, r_first=0, numeric_mode=None, paired=True):
+              q_or_prop=0.5, r_first=0, numeric_mode=None, paired=True, *, device=None):
     """Bootstrap confidence interval for a statistic.
 
     Follows ``scipy.stats.bootstrap((data,), statistic, n_resamples=...,
@@ -195,6 +195,10 @@ def bootstrap(data, statistic="mean", n_resamples=9999, confidence_level=0.95,
         SciPy's unpaired two-sample bootstrap, each sample resampled
         independently; any other statistic raises ``ValueError``. A single
         sample ignores ``paired``, as SciPy does.
+    device : {None, 'gpu', 'cpu'}, default=None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ``ValueError``.
 
     Returns
     -------
@@ -218,14 +222,14 @@ def bootstrap(data, statistic="mean", n_resamples=9999, confidence_level=0.95,
     >>> low, high = res.confidence_interval
     """
     return _NATIVE(None, "family_rs_bootstrap", (None, data, statistic, n_resamples, confidence_level,
-                   method, alternative, random_state, q_or_prop, r_first, numeric_mode, paired), _NATIVE_CONTEXT)
+                   method, alternative, random_state, q_or_prop, r_first, numeric_mode, paired, device), _NATIVE_CONTEXT)
 
 
 # The null is never exhaustive (DEVIATION 1702). 'pairings' is refused: for the implemented statistics
 # its null leaves the statistic unchanged, and pearson has no permutation arm (resample/NOT_IMPLEMENTED.tsv).
 def permutation_test(x, y=None, statistic="diff_means", n_resamples=9999,
                      alternative="two-sided", random_state=0, r_first=0, numeric_mode=None,
-                     permutation_type="independent"):
+                     permutation_type="independent", *, device=None):
     """Permutation test of a statistic.
 
     Follows ``scipy.stats.permutation_test((x, y), statistic,
@@ -264,6 +268,10 @@ def permutation_test(x, y=None, statistic="diff_means", n_resamples=9999,
         ``y``. ``'samples'`` swaps the two observations of each pair at
         random (two paired samples), or flips the sign of each observation
         (one sample), as in SciPy. ``'pairings'`` raises ``ValueError``.
+    device : {None, 'gpu', 'cpu'}, default=None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ``ValueError``.
 
     Returns
     -------
@@ -286,11 +294,12 @@ def permutation_test(x, y=None, statistic="diff_means", n_resamples=9999,
     >>> res.pvalue  # doctest: +SKIP
     """
     return _NATIVE(None, "family_rs_permutation_test", (None, x, y, statistic, n_resamples, alternative,
-                   random_state, r_first, numeric_mode, permutation_type), _NATIVE_CONTEXT)
+                   random_state, r_first, numeric_mode, permutation_type, device), _NATIVE_CONTEXT)
 
 
 # Three compiled integrand arms; the closed form is hand-derived. The box has MC_DIMS = 2 dimensions.
-def monte_carlo_integrate(integrand, lower, upper, n_samples, random_state=0, i_first=0, numeric_mode=None):
+def monte_carlo_integrate(integrand, lower, upper, n_samples, random_state=0, i_first=0, numeric_mode=None, *,
+                          device=None):
     """Monte Carlo estimate of a 2-D integral over a box.
 
     Computes ``volume * mean(f(x_i))`` over ``n_samples`` uniform draws
@@ -314,6 +323,10 @@ def monte_carlo_integrate(integrand, lower, upper, n_samples, random_state=0, i_
     numeric_mode : {'identical', 'fast'} or None, default=None
         Numeric mode (``'fast'`` is Apple only); ``None`` uses the package
         default.
+    device : {None, 'gpu', 'cpu'}, default=None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ``ValueError``.
 
     Returns
     -------
@@ -327,13 +340,13 @@ def monte_carlo_integrate(integrand, lower, upper, n_samples, random_state=0, i_
     1.0
     """
     return _NATIVE(None, "family_rs_monte_carlo_integrate", (None, integrand, lower, upper, n_samples,
-                   random_state, i_first, numeric_mode), _NATIVE_CONTEXT)
+                   random_state, i_first, numeric_mode, device), _NATIVE_CONTEXT)
 
 
 # replace=True: position i draws a row by the Philox position map (kind 6); replace=False keeps the first
 # n_samples positions of a keyed total order (kind 7, `rng.permutation(n)[:n_samples]`'s positional
 # spelling). Integer only, so the same indices on every vendor and on the CPU.
-def resample_indices(n, n_samples=None, replace=True, random_state=0, numeric_mode=None):
+def resample_indices(n, n_samples=None, replace=True, random_state=0, numeric_mode=None, *, device=None):
     """Row indices for a scikit-learn style resample.
 
     Returns the indices :func:`resample` gathers. With ``replace=True``
@@ -357,6 +370,10 @@ def resample_indices(n, n_samples=None, replace=True, random_state=0, numeric_mo
     numeric_mode : {'identical', 'fast'} or None, default=None
         Numeric mode (``'fast'`` is Apple only); ``None`` uses the package
         default.
+    device : {None, 'gpu', 'cpu'}, default=None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ``ValueError``.
 
     Returns
     -------
@@ -368,7 +385,7 @@ def resample_indices(n, n_samples=None, replace=True, random_state=0, numeric_mo
     >>> idx = mojolearn.resample.resample_indices(1000, n_samples=100, replace=False)
     """
     return _NATIVE(None, "family_rs_resample_indices", (None, n, n_samples, replace, random_state,
-                   numeric_mode), _NATIVE_CONTEXT)
+                   numeric_mode, device), _NATIVE_CONTEXT)
 
 
 # Bits of the resample binding's `resample_fast_defines()` mask (resample/estimator.mojo): FAST + Apple
@@ -392,7 +409,7 @@ def _fast_defines(numeric_mode=None):
 
 # stratify and sample_weight are refused by name (resample/NOT_IMPLEMENTED.tsv).
 def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=None,
-             sample_weight=None, numeric_mode=None):
+             sample_weight=None, numeric_mode=None, device=None):
     """Resample arrays consistently along the first axis.
 
     Follows ``sklearn.utils.resample(*arrays, replace=..., n_samples=...,
@@ -420,6 +437,10 @@ def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=Non
     numeric_mode : {'identical', 'fast'} or None, default=None
         Numeric mode (``'fast'`` is Apple only); ``None`` uses the package
         default.
+    device : {None, 'gpu', 'cpu'}, default=None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ``ValueError``.
 
     Returns
     -------
@@ -440,7 +461,7 @@ def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=Non
     >>> Xb, yb = mojolearn.resample.resample(X, y, n_samples=500)
     """
     return _NATIVE(None, "family_rs_resample", (None, arrays, replace, n_samples, random_state, stratify,
-                   sample_weight, numeric_mode), _NATIVE_CONTEXT)
+                   sample_weight, numeric_mode, device), _NATIVE_CONTEXT)
 
 
 # Importing the package never loads NumPy (NUMPY_FREE_CONTRACT.md): the

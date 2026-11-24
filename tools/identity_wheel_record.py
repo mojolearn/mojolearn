@@ -194,8 +194,9 @@ class Run:
 
     def all_lanes(self, py, column, lab):
         """RUN EVERYTHING (Andrew 2026-11-05: the selector cannot be trusted to narrow): every lane of the full scope
-        (identity_columns.py lanes --scope all), the harness's declared GPU-only lanes left out of the cpu column
-        (identity_break.GPU_ONLY_LANES: no CPU route; a full CPU column drops them by name). No selector decides."""
+        (identity_columns.py lanes --scope all), on every column. A lane with no side on this column (the harness's
+        `_one_sided`, registry ONE_SIDED, 2026-11-24) is recorded too: its cell reads `n/a:one-sided: ...` by name,
+        so the record says which side is owed instead of dropping the lane. No selector decides."""
         out = self.out / lab / "select"
         out.mkdir(parents=True, exist_ok=True)
         env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
@@ -206,14 +207,6 @@ class Run:
         lanes = [x for x in text.splitlines()[-1].split(",") if x] if text else []
         if not lanes:
             raise RuntimeError("could not list the lanes for %s (%s)" % (lab, out / "lanes.log"))
-        if column == "cpu":
-            q = self.run([str(py), "-c", "import sys; sys.path.insert(0, 'tools'); import identity_columns as c; "
-                          "print(','.join(sorted(getattr(c.harness(), 'GPU_ONLY_LANES', {}) or {})))"],
-                         cwd=str(ROOT), capture_output=True, text=True, env=env)
-            if q.returncode != 0:
-                raise RuntimeError("could not read the harness's GPU-only lanes for %s" % lab)
-            gpu_only = set(x for x in (q.stdout or "").strip().split(",") if x)
-            lanes = [x for x in lanes if x not in gpu_only]
         return lanes, 0
 
     def select(self, py, listed, column, lab):

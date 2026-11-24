@@ -30,6 +30,13 @@ from holtwinters.resident_state import (
 from tsa.estimator import kpss_test_host, select_d_host
 from tsa.mojolearn_tsa_run import _f32_ptr, _i32_ptr
 
+
+def _u8_ptr(addr: Int) raises -> MutPointer[UInt8, MutUntrackedOrigin]:
+    # kpss_test's uint8 flags (core/tsa_entry_table.mojo TSA_OP_KPSS_TEST)
+    if addr == 0:
+        raise Error("mojolearn: null uint8 buffer address")
+    return MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr)
+
 comptime _VENDOR_CODE = (1 if COMPILED_VENDOR == "metal" else 2 if COMPILED_VENDOR == "cuda" else 3 if COMPILED_VENDOR == "hip" else -1)
 
 
@@ -66,7 +73,7 @@ def tsa_hw_ops_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         elif operation == TSA_OP_HW_QUERY_RESIDENT:
             r[] = holtwinters_query_resident(p[0], f32_ptr(a[0]), seasonal_name(p[3]), p[1], p[2])
         elif operation == TSA_OP_KPSS_TEST:
-            r[] = kpss_test_host(_f32_ptr(a[0]), _i32_ptr(a[1]), _f32_ptr(a[2]), p[0], p[1], p[2], p[3], p[4],
+            r[] = kpss_test_host(_f32_ptr(a[0]), _u8_ptr(a[1]), _f32_ptr(a[2]), p[0], p[1], p[2], p[3], p[4],
                 Float32(f[0]))
         elif operation == TSA_OP_SELECT_D:
             r[] = select_d_host(_f32_ptr(a[0]), _i32_ptr(a[1]), p[0], p[1], p[2], p[3], p[4], Float32(f[0]))

@@ -1,0 +1,16 @@
+diff --git a/x_cnn/ops.mojo b/x_cnn/ops.mojo
+index d9668bc8f1..8fd31f48b6 100644
+--- a/x_cnn/ops.mojo
++++ b/x_cnn/ops.mojo
+@@ -109,6 +109,11 @@ def canon(v: Float32) -> Float32:
+     every value a trainer-path element function stores (DEVIATION 5705)."""
+     if v != v:
+         return bitcast[DType.float32](UInt32(0x7FC00000))
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-cpu (lane vdv-sabotage): the result one ulp up, the host bindings only
++        var h = v
++        if abs(h) >= Float32(1.17549435e-38) and h - h == Float32(0):
++            return bitcast[DType.float32](bitcast[DType.uint32](h) + UInt32(1))
++        return h
+     return v
+ 
+ 

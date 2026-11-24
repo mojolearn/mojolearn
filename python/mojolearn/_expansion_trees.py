@@ -1636,6 +1636,13 @@ class _TreesWrapperBase(_TreesEnsembleBase):
     """The meta-estimators' base: each public method is one call into
     bindings/trees_public_meta_door.mojo (operations `trees_meta_*`), which
     fits and queries the members through their own public methods."""
+    #: Takes `device=` (lane vdf-meta): every operation runs in the estimator's
+    #: run context (its device route, bindings/trees_route_boundary_door.mojo)
+    #: and the members follow the ensemble's device
+    #: (bindings/trees_meta_device_door.mojo); the check builds the other side
+    #: as the same estimator on the other device, in this process.
+    _mojolearn_device = True
+    vendor_used = _native_trees_bridge.device_vendor_used
 
 
 # ------------------------------------------------------------------ Voting
@@ -1677,6 +1684,12 @@ class VotingClassifier(_MetaClassifierScore, _FitTransformMixin, _TreesWrapperBa
     verbose : bool, default False
         Only False is accepted; True raises ``NotImplementedError``.
 
+    device : {None, "gpu", "cpu"}, default=None
+        Where the ensemble and its estimators are fitted and predict. None
+        uses this installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``. Each
+        estimator's own ``device`` must be None or the same value.
+
     Attributes
     ----------
     estimators_ : list
@@ -1702,6 +1715,11 @@ class VotingClassifier(_MetaClassifierScore, _FitTransformMixin, _TreesWrapperBa
     >>> model.predict(X[:5]).shape
     (5,)
     """
+    #: Lane vdf-meta3: fit takes a model-selection fold (`_arena_io.DeviceRows`)
+    #: and reads it out of its base, the members taking the fold's rows on the
+    #: device (bindings/trees_public_meta_door.mojo `_meta_x_fit`); the other
+    #: methods admit its rows as any X.
+    _mojolearn_device_rows = True
 
     # The META member kind (core/ensemble_member.mojo; lane mf-meta3): this class as a member of
     # another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).
@@ -1796,6 +1814,12 @@ class VotingRegressor(_MetaRegressorScore, _FitTransformMixin, _TreesWrapperBase
     verbose : bool, default False
         Only False is accepted; True raises ``NotImplementedError``.
 
+    device : {None, "gpu", "cpu"}, default=None
+        Where the ensemble and its estimators are fitted and predict. None
+        uses this installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``. Each
+        estimator's own ``device`` must be None or the same value.
+
     Attributes
     ----------
     estimators_ : list
@@ -1817,6 +1841,11 @@ class VotingRegressor(_MetaRegressorScore, _FitTransformMixin, _TreesWrapperBase
     >>> model.predict(X[:5]).shape
     (5,)
     """
+    #: Lane vdf-meta3: fit takes a model-selection fold (`_arena_io.DeviceRows`)
+    #: and reads it out of its base, the members taking the fold's rows on the
+    #: device (bindings/trees_public_meta_door.mojo `_meta_x_fit`); the other
+    #: methods admit its rows as any X.
+    _mojolearn_device_rows = True
 
     # The META member kind (core/ensemble_member.mojo; lane mf-meta3): this class as a member of
     # another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).
@@ -1943,6 +1972,13 @@ class StackingClassifier(_MetaClassifierScore, _StackingBase):
     verbose : int, default 0
         Only 0 is accepted; any other value raises ``NotImplementedError``.
 
+    device : {None, "gpu", "cpu"}, default=None
+        Where the ensemble, its estimators and the final estimator are fitted
+        and predict. None uses this installation's device, ``"cpu"`` runs on
+        the CPU and ``"gpu"`` requires a GPU installation. Other values raise
+        ``ValueError``. Each estimator's own ``device`` must be None or the
+        same value.
+
     Attributes
     ----------
     estimators_ : list
@@ -1970,6 +2006,11 @@ class StackingClassifier(_MetaClassifierScore, _StackingBase):
     >>> model.predict_proba(X[:5]).shape
     (5, 2)
     """
+    #: Lane vdf-meta3: fit takes a model-selection fold (`_arena_io.DeviceRows`)
+    #: and reads it out of its base, the members taking the fold's rows on the
+    #: device (bindings/trees_public_meta_door.mojo `_meta_x_fit`); the other
+    #: methods admit its rows as any X.
+    _mojolearn_device_rows = True
 
     # The META member kind (core/ensemble_member.mojo; lane mf-meta3): this class as a member of
     # another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).
@@ -2058,6 +2099,13 @@ class StackingRegressor(_MetaRegressorScore, _StackingBase):
     verbose : int, default 0
         Only 0 is accepted; any other value raises ``NotImplementedError``.
 
+    device : {None, "gpu", "cpu"}, default=None
+        Where the ensemble, its estimators and the final estimator are fitted
+        and predict. None uses this installation's device, ``"cpu"`` runs on
+        the CPU and ``"gpu"`` requires a GPU installation. Other values raise
+        ``ValueError``. Each estimator's own ``device`` must be None or the
+        same value.
+
     Attributes
     ----------
     estimators_ : list
@@ -2083,6 +2131,11 @@ class StackingRegressor(_MetaRegressorScore, _StackingBase):
     >>> model.predict(X[:5]).shape
     (5,)
     """
+    #: Lane vdf-meta3: fit takes a model-selection fold (`_arena_io.DeviceRows`)
+    #: and reads it out of its base, the members taking the fold's rows on the
+    #: device (bindings/trees_public_meta_door.mojo `_meta_x_fit`); the other
+    #: methods admit its rows as any X.
+    _mojolearn_device_rows = True
 
     # The META member kind (core/ensemble_member.mojo; lane mf-meta3): this class as a member of
     # another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).
@@ -2148,6 +2201,12 @@ class MultiOutputRegressor(_MetaRegressorScore, _TreesWrapperBase):
         The most members fitted at the same time. None and -1 use every
         core; the results do not depend on it.
 
+    device : {None, "gpu", "cpu"}, default=None
+        Where the ensemble and its estimators are fitted and predict. None
+        uses this installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``. Each
+        estimator's own ``device`` must be None or the same value.
+
     Attributes
     ----------
     estimators_ : list
@@ -2165,6 +2224,10 @@ class MultiOutputRegressor(_MetaRegressorScore, _TreesWrapperBase):
     >>> model.predict(X[:5]).shape
     (5, 2)
     """
+    #: Lane vdf-meta4: fit takes a model-selection fold (`_arena_io.DeviceRows`)
+    #: and reads it out of its base, the members taking the fold's rows on the
+    #: device (bindings/trees_public_meta_door.mojo `_multioutput_regressor_fit`).
+    _mojolearn_device_rows = True
     # The multi-output META member kind (core/ensemble_member.mojo META_MULTI_REGRESSOR).
     _mojolearn_member = (39, 13)
     _estimator_type = "regressor"
@@ -2222,6 +2285,12 @@ class MultiOutputClassifier(_TreesWrapperBase):
         The most members fitted at the same time. None and -1 use every
         core; the results do not depend on it.
 
+    device : {None, "gpu", "cpu"}, default=None
+        Where the ensemble and its estimators are fitted and predict. None
+        uses this installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``. Each
+        estimator's own ``device`` must be None or the same value.
+
     Attributes
     ----------
     estimators_ : list
@@ -2241,6 +2310,11 @@ class MultiOutputClassifier(_TreesWrapperBase):
     >>> model.predict(X[:5]).shape
     (5, 2)
     """
+    #: Lane vdf-meta3: fit takes a model-selection fold (`_arena_io.DeviceRows`)
+    #: and reads it out of its base, the members taking the fold's rows on the
+    #: device (bindings/trees_public_meta_door.mojo `_meta_x_fit`); the other
+    #: methods admit its rows as any X.
+    _mojolearn_device_rows = True
     # The multi-output META member kind (core/ensemble_member.mojo META_MULTI_CLASSIFIER).
     _mojolearn_member = (39, 12)
     _estimator_type = "classifier"
@@ -2347,6 +2421,12 @@ class OneVsRestClassifier(_MetaClassifierScore, _TreesWrapperBase):
     verbose : int, default 0
         Only 0 is accepted; any other value raises ``NotImplementedError``.
 
+    device : {None, "gpu", "cpu"}, default=None
+        Where the ensemble and its estimators are fitted and predict. None
+        uses this installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``. Each
+        estimator's own ``device`` must be None or the same value.
+
     Attributes
     ----------
     estimators_ : list
@@ -2366,6 +2446,11 @@ class OneVsRestClassifier(_MetaClassifierScore, _TreesWrapperBase):
     >>> model.predict_proba(X[:5]).shape
     (5, 3)
     """
+    #: Lane vdf-meta3: fit takes a model-selection fold (`_arena_io.DeviceRows`)
+    #: and reads it out of its base, the members taking the fold's rows on the
+    #: device (bindings/trees_public_meta_door.mojo `_meta_x_fit`); the other
+    #: methods admit its rows as any X.
+    _mojolearn_device_rows = True
     _estimator_type = "classifier"
     # The META member kind (core/ensemble_member.mojo, THE UNIT KINDS; lane mf-meta3b): this class as a member
     # of another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).
@@ -2475,6 +2560,12 @@ class CalibratedClassifierCV(_MetaClassifierScore, _TreesWrapperBase):
         on the out-of-fold scores, and the classifier refitted on all rows.
         Values other than True or False raise ``NotImplementedError``.
 
+    device : {None, "gpu", "cpu"}, default=None
+        Where the ensemble and its estimators are fitted and predict. None
+        uses this installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``. Each
+        estimator's own ``device`` must be None or the same value.
+
     Attributes
     ----------
     calibrated_classifiers_ : list
@@ -2496,6 +2587,11 @@ class CalibratedClassifierCV(_MetaClassifierScore, _TreesWrapperBase):
     >>> model.predict_proba(X[:5]).shape
     (5, 2)
     """
+    #: Lane vdf-meta4: fit takes a model-selection fold (`_arena_io.DeviceRows`)
+    #: and reads it out of its base, the cv folds composed inside it and the
+    #: fold members taking their rows on the device
+    #: (bindings/trees_public_meta_door.mojo `_calibrated_fit`, `_cal_native`).
+    _mojolearn_device_rows = True
     _estimator_type = "classifier"
     # The META member kind (core/ensemble_member.mojo, THE UNIT KINDS; lane mf-meta3b): this class as a member
     # of another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).
@@ -2618,6 +2714,10 @@ class TreeExplainer(_TreesEnsembleBase):
     model_output : {"raw"}, default "raw"
         Only the raw model output is explained; other values raise
         ``NotImplementedError``.
+    device : {None, "gpu", "cpu"}, default None
+        Where the explanation runs. None uses this installation's device,
+        ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU installation.
+        Other values raise ``ValueError``.
 
     Attributes
     ----------
@@ -2649,9 +2749,9 @@ class TreeExplainer(_TreesEnsembleBase):
     _mojolearn_native_public = True
 
     def __init__(self, model, data=None, *, feature_perturbation="tree_path_dependent",
-                 model_output="raw", numeric_mode=None):
+                 model_output="raw", numeric_mode=None, device=None):
         return _TREES(self, _OP.trees_explainer_init,
-                      (model, data, feature_perturbation, model_output, numeric_mode), _TREES_CONTEXT)
+                      (model, data, feature_perturbation, model_output, numeric_mode, device), _TREES_CONTEXT)
 
     def close(self):
         """Release the explainer's native resources.
@@ -2714,6 +2814,12 @@ class KernelExplainer(_TreesEnsembleBase):
         Seed for the coalition sampling: None (seed 0) or a nonnegative int.
         Anything else, including a ``RandomState`` object, raises
         ``ValueError``.
+    device : {None, "gpu", "cpu"}, default None
+        Where the explanation runs. None uses this installation's device,
+        ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU installation.
+        An explicit value must name the side ``model`` runs on (a model
+        constructed with ``device=None`` runs on this installation's device);
+        any other value raises ``ValueError``.
 
     Attributes
     ----------
@@ -2739,9 +2845,9 @@ class KernelExplainer(_TreesEnsembleBase):
 
     _mojolearn_native_public = True
 
-    def __init__(self, model, data, *, link="identity", random_state=None, numeric_mode=None):
+    def __init__(self, model, data, *, link="identity", random_state=None, numeric_mode=None, device=None):
         return _TREES(self, _OP.trees_agnostic_kernel_init,
-                      (model, data, random_state, link, numeric_mode), _TREES_CONTEXT)
+                      (model, data, random_state, link, numeric_mode, device), _TREES_CONTEXT)
 
     def shap_values(self, X, nsamples="auto", l1_reg="auto"):
         """Kernel SHAP values of the rows of ``X``.
@@ -2792,6 +2898,12 @@ class PermutationExplainer(_TreesEnsembleBase):
         Seed for the permutations: None (seed 0) or a nonnegative int.
         Anything else, including a ``RandomState`` object, raises
         ``ValueError``.
+    device : {None, "gpu", "cpu"}, default None
+        Where the explanation runs. None uses this installation's device,
+        ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU installation.
+        An explicit value must name the side ``model`` runs on (a model
+        constructed with ``device=None`` runs on this installation's device);
+        any other value raises ``ValueError``.
 
     Attributes
     ----------
@@ -2817,9 +2929,9 @@ class PermutationExplainer(_TreesEnsembleBase):
 
     _mojolearn_native_public = True
 
-    def __init__(self, model, data, *, random_state=None, numeric_mode=None):
+    def __init__(self, model, data, *, random_state=None, numeric_mode=None, device=None):
         return _TREES(self, _OP.trees_agnostic_permutation_init,
-                      (model, data, random_state, None, numeric_mode), _TREES_CONTEXT)
+                      (model, data, random_state, None, numeric_mode, device), _TREES_CONTEXT)
 
     def shap_values(self, X, npermutations=10):
         """Permutation SHAP values of the rows of ``X``.

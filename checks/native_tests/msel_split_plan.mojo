@@ -9,7 +9,7 @@ compares the rows with literal expected values. The cases are the forms
 that need only the model-selection helper table (published here by the host
 binding's own publication): default folds, the time-series ranges, an
 indexed split, the selections by code, a group set, GroupKFold without
-shuffle, the first-seen renumbering and the seed refusal. The forms that
+shuffle, the first-seen class sizes and rank table and the seed refusal. The forms that
 run an x_metrics program are covered by `resample_cv_row_order`, which
 builds the same programs.
 
@@ -35,7 +35,7 @@ from core.msel_entry_table import MselEntryKey
 from core.msel_helpers_host import publish_msel_helpers_host
 from core.msel_helpers_calls import msel_helpers_ref
 from bindings.msel_split_plan_run import (
-    MSEL_LABELS_ALIGNED, MselCodes, MselSeed, MselSplitPlan, MselSplitRoute, msel_first_seen_enc,
+    MSEL_LABELS_ALIGNED, MselCodes, MselHeld, MselSeed, MselSplitPlan, MselSplitRoute, msel_first_seen_enc,
     msel_plan_default_folds, msel_plan_group_kfold, msel_plan_group_set, msel_plan_indexed, msel_plan_select,
     msel_plan_time_series, msel_seed_refusal, msel_split_fill,
 )
@@ -44,7 +44,7 @@ from checks.native_tests.testsuite_cases import require, fixture_i32
 
 def _route() raises -> MselSplitRoute:
     var none = entry_ref_unresolved()
-    return MselSplitRoute(msel_helpers_ref(MselEntryKey(Int(GLOBAL_NUMERIC_MODE), 0)), none, none.call, False, False)
+    return MselSplitRoute(msel_helpers_ref(MselEntryKey(Int(GLOBAL_NUMERIC_MODE), 0)), none.call, False, False)
 
 
 struct Filled(Movable):
@@ -213,13 +213,18 @@ def test_first_seen_and_seed() raises:
     publish_msel_helpers_host()
     var route = _route()
     # sorted-order codes [2, 0, 2, 1]: class 2 is seen first, then 0, then 1
+    # (lane vdf-scope-split: the codes are put once and the stored-code helper answers the class sizes and
+    # the rank table rank_of[code]; the first-seen codes rank_of[codes] = [0, 1, 0, 2] are never formed here)
     var codes: List[Int32] = [2, 0, 2, 1]
-    var enc = msel_first_seen_enc(route, MselCodes(Int(codes.unsafe_ptr()), 4, 3), MSEL_LABELS_ALIGNED)
+    var labels = MselCodes(Int(codes.unsafe_ptr()), 4, 3)
+    var held = MselHeld(route, labels)
+    var enc = msel_first_seen_enc(route, labels, MSEL_LABELS_ALIGNED, held)
+    _ = held^  # the stored codes are released here
     _ = codes  # read through its address above
     require(enc.n_classes == 3 and len(enc.counts) == 3, "first seen: class count")
     require(enc.counts[0] == 2 and enc.counts[1] == 1 and enc.counts[2] == 1, "first seen: class sizes")
-    require(Int(enc.words[0]) == 0 and Int(enc.words[1]) == 1 and Int(enc.words[2]) == 0 and Int(enc.words[3]) == 2,
-            "first seen: codes")
+    require(enc.width == 3 and Int(enc.rank[0]) == 1 and Int(enc.rank[1]) == 2 and Int(enc.rank[2]) == 0,
+            "first seen: rank table")
     var refused = False
     try:
         _ = MselSeed(0, True).rng()
@@ -234,8 +239,7 @@ comptime MSEL_TTS_DIR = "checks/native_tests/fixtures/msel_tts/"
 
 
 def _strat_split_rows(codes: List[Int32], k: Int, seed: UInt64) raises -> Filled:
-    var none = entry_ref_unresolved()
-    var route = MselSplitRoute(msel_helpers_ref(MselEntryKey(Int(GLOBAL_NUMERIC_MODE), 0)), none,
+    var route = MselSplitRoute(msel_helpers_ref(MselEntryKey(Int(GLOBAL_NUMERIC_MODE), 0)),
                                metrics_program_host_v1, False, False)
     var plan = msel_plan_strat_shuffle(route, MselCodes(Int(codes.unsafe_ptr()), len(codes), k), 1, 28, 13,
                                        MselSeed(seed, False))

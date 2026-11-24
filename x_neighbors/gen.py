@@ -429,7 +429,8 @@ def device():
          "from max.gpu.host import DeviceBuffer, DeviceContext\n",
          "from std.sys.compile import is_defined\n",
          "from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST\n",
-         "from core.accelerator_target import TARGET_HAS_APPLE_GPU\n", imports("device"),
+         "from core.accelerator_target import TARGET_HAS_APPLE_GPU\n",
+         "from core.fold_x_device import fold_x_fill\n", imports("device"),
          """
 comptime BLOCK = 128
 
@@ -456,9 +457,16 @@ def _grid(count: Int) -> Int:
 
 
 def _buf(ctx: DeviceContext, addr: Int, count: Int, upload: Bool) raises -> DeviceBuffer[DType.float32]:
+    # THE FOLD X WORD (core/fold_x_device.mojo; lane vdf-scope-cluster3): a NEGATIVE `addr` names a slot of the
+    # x_prep store holding a model-selection fold's rows, taken on the device by the member
+    # (core/member_fold_x.mojo); the upload is then one device-to-device copy of its first `count` words on this
+    # stream, the same bytes as the host gather's upload. A host address is never negative.
     var buf = ctx.enqueue_create_buffer[DType.float32](count if count > 0 else 1)
     if upload and count > 0:
-        ctx.enqueue_copy(dst_buf=buf, src_ptr=FP(unsafe_from_address=addr))
+        if addr < 0:
+            fold_x_fill(ctx, buf, addr, count)
+        else:
+            ctx.enqueue_copy(dst_buf=buf, src_ptr=FP(unsafe_from_address=addr))
     return buf^
 
 

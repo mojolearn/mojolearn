@@ -135,12 +135,26 @@ def test_gpu_only_declarations_are_read_from_the_harness_source():
 
 
 def test_gpu_only_reader_combines_harness_and_lane_declarations(tmp_path):
+    """The lanes declared `_one_sided(lane, missing="cpu")` (registry ONE_SIDED, 2026-11-24), in the harness
+    and in the lane modules; a lane missing its GPU side has a CPU column and is not read."""
     (tmp_path/'identity_break.py').write_text(
-        'GPU_ONLY_LANES = {"harness-lane": "GPU operation"}\nRECORD_EXCLUDED_PREFIXES = ("cooperative-",)\n')
+        '_one_sided("harness-lane", missing="cpu", reason="GPU operation")\n'
+        '_one_sided("host-lane", missing="gpu", reason="host only")\n'
+        'RECORD_EXCLUDED_PREFIXES = ("cooperative-",)\n')
     (tmp_path/'identity_lanes').mkdir()
-    (tmp_path/'identity_lanes/example.py').write_text('GPU_ONLY_LANES["module-lane"] = "GPU operation"\n')
+    (tmp_path/'identity_lanes/example.py').write_text(
+        '_one_sided("module-lane", "cpu", reason="GPU operation")\n')
     assert GUARD.gpu_only_declarations(tmp_path) == (
         frozenset({'harness-lane', 'module-lane'}), ('cooperative-',))
+
+
+def test_gpu_only_reader_refuses_an_unreadable_declaration(tmp_path):
+    (tmp_path/'identity_break.py').write_text('RECORD_EXCLUDED_PREFIXES = ()\n')
+    (tmp_path/'identity_lanes').mkdir()
+    (tmp_path/'identity_lanes/example.py').write_text(
+        'for n in ("a", "b"):\n    _one_sided(n, missing="cpu", reason="x")\n')
+    with pytest.raises(ValueError):
+        GUARD.gpu_only_declarations(tmp_path)
 
 
 def test_gpu_only_declarations_absent_harness_reads_strict(tmp_path):

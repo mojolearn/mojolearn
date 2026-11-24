@@ -32,7 +32,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setatt
 from std.ffi import external_call
 from bindings.native_prepared_owner_unpack import prepared_key_fields, prepared_key_same, prepared_get, prepared_put
 from bindings.native_loaded_module_door import NativeModules
-from bindings.msel_member_device_unpack import member_says_cpu, member_multi_gpu_refusal
+from bindings.msel_member_device_unpack import member_says_cpu
 from bindings.py_attr import py_attr
 from bindings.classical_arrays_door import classical_address
 from bindings.native_process_pool_door import (
@@ -226,17 +226,21 @@ def _ranges(count: Int, width: PythonObject) raises -> List[Int]:
     return shard_bounds(count, _width(width), "at least one series is required")
 
 
-def _member_device(estimator: PythonObject, driver: String) raises:
-    """The forecasting drivers run the model on the GPUs in `devices=` only:
-    a model that says device='cpu' in a process with a GPU set is refused in
-    words before any shard is cut (bindings/msel_member_device_unpack.mojo).
+def _member_host(estimator: PythonObject) raises -> Bool:
+    """UNPACK, once per driver call: True when the model says device='cpu'
+    in a process with a GPU set. Its shards then run on a host pool
+    (`_shard_acquire(..., host=True)`: workers on the CPU-only set, the
+    family's CPU fit and predict); `devices` are logical worker indices
+    there. The parent merges copy bytes only. (vdv-gaps, 2026-11-24: the
+    model was refused, so the CPU side could not run in a GPU process; the
+    shared read is bindings/msel_member_device_unpack.mojo.)
     `_backend._CPU_ONLY` (None in a process with a GPU set) is read from the
-    connected backend namespace only for a model that says 'cpu'."""
+    connected backend namespace only for a model that says 'cpu'; on a
+    CPU-only install the pool is already the host one."""
     if not member_says_cpu(py_fields(estimator), _b()):
-        return
+        return False
     var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
-    if py_get(f[].backend, PythonObject("_CPU_ONLY")) is None:
-        member_multi_gpu_refusal(driver)
+    return py_get(f[].backend, PythonObject("_CPU_ONLY")) is None
 
 
 def _devices(devices: PythonObject) raises:
@@ -516,7 +520,7 @@ def _predict_arima(estimator: PythonObject, start_obj: PythonObject, end_obj: Py
     var b = _b()
     if py_type(estimator) is not f[].arima_cls:
         raise Error("TypeError: predict_arima requires mojolearn.ARIMA")
-    _member_device(estimator, "predict_arima")
+    var host = _member_host(estimator)
     var fields = py_fields(estimator)
     var nk = parallel_keys()
     if not py_contains(fields, nk[].k_params_):
@@ -549,7 +553,7 @@ def _predict_arima(estimator: PythonObject, start_obj: PythonObject, end_obj: Py
     # identity pass over the key and one flag read per array.
     var ours = (_generation_ours(record, key) and _generation_frozen(y, context)
                 and _generation_frozen(params, context))
-    var acquired = _shard_acquire(devices, _CHILD)
+    var acquired = _shard_acquire(devices, _CHILD, host)
     var pool = acquired.pool
     var parts = PythonObject(None)
     var lifetime = PythonObject(None)
@@ -642,7 +646,7 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
     var b = _b()
     if py_type(estimator) is not f[].hw_cls:
         raise Error("TypeError: requires mojolearn.ExponentialSmoothing")
-    _member_device(estimator, "predict_exponential_smoothing")
+    var host = _member_host(estimator)
     var fields = py_fields(estimator)
     var nk = parallel_keys()
     if not Bool(py=py_item(fields, nk[].k_fit_executed_flag)):
@@ -685,7 +689,7 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
     prepared_key_fields(mods, key, fields, List[String]())
     var record = prepared_get(mods, _GENERATION_SLOT, estimator)
     var ours = _generation_ours(record, key) and _generation_frozen(comps, context)
-    var acquired = _shard_acquire(devices, _CHILD)
+    var acquired = _shard_acquire(devices, _CHILD, host)
     var pool = acquired.pool
     var parts = PythonObject(None)
     var lifetime = PythonObject(None)
@@ -804,7 +808,7 @@ def _fit_arima(estimator: PythonObject, y: PythonObject, devices: PythonObject, 
     var b = _b()
     if py_type(estimator) is not f[].arima_cls:
         raise Error("TypeError: fit_arima requires mojolearn.ARIMA")
-    _member_device(estimator, "fit_arima")
+    var host = _member_host(estimator)
     if exog is not None:
         raise Error("NotImplementedError: fit_arima does not shard exogenous regressors; ARIMA.fit(y, exog) fits "
                     + "them on one device")
@@ -830,7 +834,7 @@ def _fit_arima(estimator: PythonObject, y: PythonObject, devices: PythonObject, 
         var shift = shard_read_shift(r, lo, n_devices)
         requests.add(PARALLEL_FORECAST_WORKER_OPN_ARIMA_FIT_SHARD, state,
                                                   Python.tuple(shard_rows(data, lo - shift, hi - shift, context)))
-    var parts = shard_run(requests, devices, _CHILD)
+    var parts = shard_run(requests, devices, _CHILD, host)
     var merged = b.dict()
     var names = [String("params_"), String("x_"), String("x0_"), String("n_iter_"), String("retcode_"),
                  String("llf_"), String("fx_"), String("aic_"), String("bic_")]
@@ -861,7 +865,7 @@ def _fit_hw(estimator: PythonObject, devices: PythonObject, sps: PythonObject) r
     var b = _b()
     if py_type(estimator) is not f[].hw_cls:
         raise Error("TypeError: requires mojolearn.ExponentialSmoothing")
-    _member_device(estimator, "fit_exponential_smoothing")
+    var host = _member_host(estimator)
     var nk = parallel_keys()
     forecast_process_mode_admit(String(py=py_item(f[].backend, nk[].k__DEFAULT_MODE)),
                                 "ExponentialSmoothing requires IDENTICAL numeric mode")
@@ -888,7 +892,7 @@ def _fit_hw(estimator: PythonObject, devices: PythonObject, sps: PythonObject) r
         py_setitem(shard_state_r, nk[].k_endog, shard_rows(data, lo - shift, hi - shift, context))
         py_setitem(shard_state_r, nk[].k_ts_num, hi - lo)
         requests.add(PARALLEL_FORECAST_WORKER_OPN_HW_FIT_SHARD, shard_state_r, Python.tuple())
-    var parts = shard_run(requests, devices, _CHILD)
+    var parts = shard_run(requests, devices, _CHILD, host)
     # The plain fit's buffers for the whole batch, every shard's columns at
     # its series offset: the packed components (3 * steps rows of `batch`
     # series), the four per-series statistics and the two flag rows.

@@ -17,6 +17,7 @@ NMF_CD_LOOP_CHUNK. Before, MU read 1-3 error words home per 10 iterations and
 CD 1-2 violation words per iteration."""
 # TOMBSTONE: nmf-mu-cd-host-word-loops (REFACTORED onto autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
 # Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
+from std.memory import unsafe_memcpy
 from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceContext
 from autograd.program_loop import LoopTimers
@@ -393,18 +394,49 @@ def nmf_cd_dev(M: DMat, mut W: DMat, mut H: DMat, a: NmfArgs, mut loop: FitLoop)
     return max(a.max_iter, 0)
 
 
+def _nmf_solve_shape(n: Int, d: Int, nc: Int, solver: Int, a: NmfArgs) raises:
+    if n * d > 2147483647 or n * nc > 2147483647 or nc * d > 2147483647:
+        raise Error("x_decomp: nmf shape out of range")
+    if solver == 0 and a.beta != 2.0:
+        raise Error("x_decomp: nmf cd takes beta 2")
+
+
 def nmf_solve_dev_run(
     px: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, nc: Int, solver: Int, a: NmfArgs, mut loop: FitLoop
 ) raises -> Int:
     """`nmf_solve_run` on the resident kit; `loop` receives the solver
     loop's clock (after the uploads, before the readback)."""
-    if n * d > 2147483647 or n * nc > 2147483647 or nc * d > 2147483647:
-        raise Error("x_decomp: nmf shape out of range")
-    if solver == 0 and a.beta != 2.0:
-        raise Error("x_decomp: nmf cd takes beta 2")
-    var it = 0
+    _nmf_solve_shape(n, d, nc, solver, a)
     var k = DKit()
     var X = k.upload(mat_from(px, n, d))
+    var it = _nmf_solve_dev_on(k, X, pw, ph, n, d, nc, solver, a, loop)
+    _ = X^
+    return it
+
+
+def nmf_solve_pool_dev_run(
+    x_id: Int, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, nc: Int, solver: Int, a: NmfArgs, mut loop: FitLoop
+) raises -> Int:
+    """`nmf_solve_dev_run` over X already on the device (lane vdf-scope-neural4): `x_id` the x_decomp pool id of
+    the n x d X (the caller's, read in place, never freed here: a fold the XDecomp member took on the device, or
+    the X the owner's kit uploaded for its negativity test). No download and no second upload of X; the same
+    cells on the same words, so the same bits as `nmf_solve_dev_run` and the host column."""
+    _nmf_solve_shape(n, d, nc, solver, a)
+    if x_id < 0:
+        raise Error("x_decomp: nmf needs a resident X pool id")
+    var k = DKit()
+    var X = DMat(borrowed_pool=x_id, r=n, c=d)
+    var it = _nmf_solve_dev_on(k, X, pw, ph, n, d, nc, solver, a, loop)
+    _ = X^
+    return it
+
+
+def _nmf_solve_dev_on(
+    mut k: DKit, X: DMat, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, nc: Int, solver: Int, a: NmfArgs,
+    mut loop: FitLoop,
+) raises -> Int:
+    """The solve of `nmf_solve_dev_run` over the resident X: W and H uploaded from pw / ph, solved, written back."""
+    var it = 0
     var W = k.upload(mat_from(pw, n, nc))
     var H = k.upload(mat_from(ph, nc, d))
     if solver == 0:
@@ -414,10 +446,13 @@ def nmf_solve_dev_run(
     var hw = k.get(W)
     var hh = k.get(H)
     k.sync()
-    for i in range(n * nc):
-        pw.unsafe_store(i, hw.d[i])
-    for i in range(nc * d):
-        ph.unsafe_store(i, hh.d[i])
+    # the downloaded words copied out whole (lane vdf-scope-neural4: was a host loop over the elements)
+    if n * nc > 0:
+        unsafe_memcpy(dest=pw, src=F32Ptr(unsafe_from_address=Int(hw.d.unsafe_ptr())), count=n * nc)
+    if nc * d > 0:
+        unsafe_memcpy(dest=ph, src=F32Ptr(unsafe_from_address=Int(hh.d.unsafe_ptr())), count=nc * d)
+    _ = hw^
+    _ = hh^
     return it
 
 

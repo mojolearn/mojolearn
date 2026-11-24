@@ -1,0 +1,16 @@
+diff --git a/resample/checks/statistics.mojo b/resample/checks/statistics.mojo
+index 5fdb3ce7fc..5a7a58889b 100644
+--- a/resample/checks/statistics.mojo
++++ b/resample/checks/statistics.mojo
+@@ -369,6 +369,11 @@ def _mean_of_sum(total: Float32, n: Int) -> Float32:
+     `/` because a vendor may substitute a fast reciprocal (IDENTITY_PATHS
+     row 49) and `n` is not always a power of two.
+     """
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-cpu (lane vdv-sabotage): the result one ulp up, the host bindings only
++        var h = ftz(identical_div(total, Float32(n)))
++        if abs(h) >= Float32(1.17549435e-38) and h - h == Float32(0):
++            return bitcast[DType.float32](bitcast[DType.uint32](h) + UInt32(1))
++        return h
+     return ftz(identical_div(total, Float32(n)))
+ 
+ 

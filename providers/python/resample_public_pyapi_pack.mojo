@@ -2,25 +2,54 @@
 # Import-connected resampling binding selection inside the public operation.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
-from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
+from providers.python.estimator_binding_pyapi_door import estimator_binding_device
+from providers.python.function_device_boundary_door import function_device_admit
+from core.function_device import FunctionDevice, function_device_default
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.resample_keys_unpack import resample_keys
 from bindings.py_balanced import py_item
 from bindings.operation_names_linops import LINOPS_OPN_FAMILY_RS_BOOTSTRAP, LINOPS_OPN_FAMILY_RS_PERMUTATION_TEST
+
+
+# The resampling functions have a device image (`_mojolearn_resample` of the
+# GPU set) and a CPU identical image (its host route, connected beside it at
+# import: python/mojolearn/resample.py `connect_bindings`).
+comptime RS_HAS_GPU = True
+comptime RS_HAS_CPU = True
+
+
+def resample_device(word: PythonObject, name: String, context: PythonObject) raises -> FunctionDevice:
+    """UNPACK of a resampling function's `device=` (lane vdf-misc): the shared
+    admission (providers/python/function_device_boundary_door.mojo), once per
+    public call, before any work. None is one identity compare."""
+    if word is None:
+        return function_device_default()
+    return function_device_admit(word, name, RS_HAS_GPU, RS_HAS_CPU, context, native_loaded_module("builtins"))
 
 
 def resample_arguments(operation: Int, args: PythonObject,
                        context: PythonObject) raises -> PythonObject:
     if len(args) == 0 or args[0] is not None:
         return args
-    var index = len(args) - 1
+    # A public call's last item is its `device` (lane vdf-misc), the item
+    # before it its numeric_mode (two before it for bootstrap and
+    # permutation_test, which end with paired / permutation_type).
+    var last = len(args) - 1
+    var index = last - 1
+    var name = String("monte_carlo_integrate")
     # bw2-linalg: `operation` is a leaf code of bindings/operation_names_linops.mojo.
     if operation == LINOPS_OPN_FAMILY_RS_BOOTSTRAP or operation == LINOPS_OPN_FAMILY_RS_PERMUTATION_TEST:
         index -= 1
-    var binding = estimator_binding_mode(args[index], "_mojolearn_resample", context, False)
+        name = "bootstrap" if operation == LINOPS_OPN_FAMILY_RS_BOOTSTRAP else "permutation_test"
+    elif operation != LINOPS_OPN_FAMILY_RS_MONTE_CARLO_INTEGRATE:
+        name = "resample_indices"
+    var device = resample_device(args[last], name, context)
+    var binding = estimator_binding_device(device, args[index], "_mojolearn_resample", context, False)
     # One tuple concatenation (perf3-nbr-msel-trees), not a list built by
-    # one append per argument and copied into a tuple.
-    from bindings.py_slice_native import py_slice_from
-    return Python.tuple(binding) + py_slice_from(args, 1)
+    # one append per argument and copied into a tuple; the device item is
+    # not handed on (RUN never sees the word).
+    from bindings.py_slice_native import py_slice
+    return Python.tuple(binding) + py_slice(args, 1, last)
 
 
 def resample_result_layout(index: Int, context: PythonObject) raises -> PythonObject:

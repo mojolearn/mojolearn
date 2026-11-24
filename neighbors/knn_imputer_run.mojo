@@ -11,6 +11,7 @@ module, never a public array. The operations and their order are the public
 method's.
 """
 from core.neighbors_native_driver import XnDriver
+from core.host_parallel import host_parallelize
 from neighbors.neighbors_local_run import (
     ImpFitColumns, ImpKeepPlan, imp_cells_length, imp_colmiss_length, imp_read_count, imp_fit_columns,
     imp_cells_operation, local_copy_f32,
@@ -30,6 +31,39 @@ def imp_i32_words(values: List[Int]) -> List[Int32]:
     for i in range(len(values)):  # driver-loop: over a feature-sized int list of model structure
         words[i] = Int32(values[i])
     return words^
+
+
+#: Rows of one host task of `imp_copy_rows`' identity index.
+comptime _IOTA_CHUNK = 16384
+
+
+def imp_copy_rows(driver: XnDriver, x: Int, dst: Int, rows: Int, features: Int) raises:
+    """x (rows x features float32) into the host `dst`: a host copy of a host address, else (THE FOLD X WORD, a
+    negative x) the x_neighbors `take_rows` op with the identity index over the slot (one device read, one
+    download), bit for bit."""
+    var count = rows * features
+    if count <= 0:
+        return
+    if x >= 0:
+        local_copy_f32(dst, x, count)
+        return
+    var index = List[Int32](length=rows, fill=Int32(0))
+    var at = Int(index.unsafe_ptr())
+    var tasks = (rows + _IOTA_CHUNK - 1) // _IOTA_CHUNK
+
+    def _iota(t: Int) {imm at, imm rows}:
+        var o = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=at)
+        var lo = t * _IOTA_CHUNK
+        var hi = min(rows, lo + _IOTA_CHUNK)
+        for r in range(lo, hi):  # the task's rows (one chunk of the split)
+            o[r] = Int32(r)
+
+    host_parallelize(_iota, tasks)
+    var a: Array[Int, 3] = [x, Int(index.unsafe_ptr()), dst]
+    var p: Array[Int, 3] = [rows, features, rows]
+    var f: Array[Float64, 0] = []
+    _ = driver.run("take_rows", a, p, f)
+    _ = index^
 
 
 def imp_mask_run(driver: XnDriver, x: Int, dst: Int, count: Int, missing: Float64) raises:
@@ -158,11 +192,15 @@ def imp_transform_run(driver: XnDriver, request: ImpTransformRequest, columns: I
         var cp: Array[Int, 3] = [n, d, 0]
         _ = driver.run("nan_cells", ca, cp, no_f)
         var missing_cells = imp_read_count(Int(info.unsafe_ptr()))
-        local_copy_f32(imputed, source, count)
+        # The cell op starts `imputed` from x itself (a present cell keeps x; lane vdf-scope-cluster6), so x is
+        # read only through the ops' uploads (THE FOLD X WORD for a model-selection fold). With no missing cell
+        # the op does not run and `imputed` is x's copy: one `take_rows` read of the rows in order.
         if missing_cells != 0:
             var a: Array[Int, 4] = [Int(cells.unsafe_ptr()), source, request.fit_x, imputed]
             var p: Array[Int, 6] = [n, request.fit_rows, d, request.neighbors, distance, missing_cells]
             _ = driver.run(imp_cells_operation(request.old_items), a, p, no_f)
+        elif count != 0:
+            imp_copy_rows(driver, source, imputed, n, d)
         _ = cells^
         _ = colmiss^
         _ = info^

@@ -45,6 +45,7 @@ and `resident_query_x_done` gives them back after the call's
 synchronisation. A fold or lease 0 take the per-call buffers above. Read the words through `finite_word()`
 and `range_word()` (a held word is compared with the call's mark).
 """
+from core.fold_x_device import fold_x_fill
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.admitted_finite_status import enqueue_finite_status
 from core.msel_device_x import msel_device_x_f32, msel_fold_entry_context
@@ -109,7 +110,10 @@ struct DeviceQueryX(Movable):
         else:
             if x_addr == 0:
                 raise Error("device query X: the query has a null address")
-            ctx.enqueue_copy(dst_buf=bufs.x, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=x_addr))
+            # THE FOLD X WORD (core/fold_x_device.mojo, lane vdf-scope-linear2):
+            # a negative address names a member fold's rows in a device store
+            # slot; one device copy, then the same finite test.
+            fold_x_fill(ctx, bufs.x, x_addr, n)
             enqueue_finite_status(ctx, bufs.x.unsafe_ptr(), n, bufs.status.unsafe_ptr(), 0)
         # Read back with the entry's result: valid after its next
         # synchronisation (the stream orders this copy before the kernels).
@@ -155,7 +159,7 @@ struct DeviceQueryX(Movable):
             x = bufs.x.copy()
         else:
             x = bufs.x.create_sub_buffer[DType.float32](0, n)
-        ctx.enqueue_copy(dst_buf=x, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=x_addr))
+        fold_x_fill(ctx, x, x_addr, n)  # THE FOLD X WORD (core/fold_x_device.mojo): host words as before, or a fold slot
         enqueue_finite_status(ctx, x.unsafe_ptr(), n, bufs.status.unsafe_ptr(), 0, bufs.mark)
         ctx.enqueue_copy(dst_ptr=bufs.words.unsafe_ptr(), src_buf=bufs.status)
         return DeviceQueryX(x=x^, bufs=bufs^, rows=rows, cols=cols)

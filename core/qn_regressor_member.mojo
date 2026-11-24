@@ -47,11 +47,13 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_SCORE, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
-    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF,
+    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE, MemberMatrix,
     MEMBER_BLOCK_COEF, MEMBER_BLOCK_INTERCEPT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY,
     MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE, member_unsupported,
 )
 from core.linear_score_run import member_r2_score
+from core.device_route import DEVICE_GPU
+from core.member_fold_x import MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_take_view, member_fold_store_ready
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
@@ -366,7 +368,12 @@ def qn_regressor_member(operation: Int, address: Int) raises -> Int:
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state != 0:
             _ = _lookup(call[].state, False)
-        return _capabilities(call[].route.has_fifth)
+        var bits = _capabilities(call[].route.has_fifth)
+        # MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE (lane vdf-scope-linear): the QN
+        # entry of a GPU image reads THE FOLD X WORD (glm/estimator.mojo); `_fold_op`.
+        if call[].route.device == DEVICE_GPU and member_fold_store_ready(call):
+            bits |= MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
+        return bits
     if operation == MEMBER_OP_NEW:
         if call[].param_count != QN_REGRESSOR_MEMBER_PARAMS:
             raise Error("member ABI: a QNRegressor member takes " + String(QN_REGRESSOR_MEMBER_PARAMS) + " parameters")
@@ -389,6 +396,15 @@ def qn_regressor_member(operation: Int, address: Int) raises -> Int:
         call[].classes = 0
         return 0
     var slot = _SlotP(unsafe_from_address=_lookup(call[].state, False))
+    if (call[].row_index.rows > 0 and call[].column_index.rows == 0 and call[].route.device == DEVICE_GPU
+            and (operation == MEMBER_OP_FIT or operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_SCORE)):
+        _fold_op(slot, call, operation)
+        return 0
+    _op(slot, call, operation)
+    return 0
+
+
+def _op(slot: _SlotP, call: _CallP, operation: Int) raises:
     if operation == MEMBER_OP_FIT:
         _fit(slot, call)
     elif operation == MEMBER_OP_PREDICT:
@@ -401,4 +417,54 @@ def qn_regressor_member(operation: Int, address: Int) raises -> Int:
         _import(slot, call)
     else:
         member_unsupported(_ESTIMATOR, operation)
-    return 0
+
+
+def _fold_op(slot: _SlotP, call: _CallP, operation: Int) raises:
+    """FIT / PREDICT / SCORE over the rows `call.row_index` of the WHOLE
+    host X (lane vdf-scope-linear; core/member_fold_x.mojo): X resident in
+    the caller's scope, the fold's rows taken on the device and read by the
+    QN entry (THE FOLD X WORD); y and the weights are the base's columns
+    taken bitwise through the index on the host. Views restored before this
+    returns or raises."""
+    var x = call[].x
+    var y = call[].y
+    var weights = call[].weights
+    var index = call[].row_index
+    var fold = MemberFoldX()
+    var host_y = List[Float32]()
+    var host_w = List[Float32]()
+    var failure = String("")
+    try:
+        member_fold_x_open(call, fold, _ESTIMATOR)
+        call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
+        if operation != MEMBER_OP_PREDICT and y.rows > 0:
+            _dense(y, "y")
+            if y.rows != x.rows:
+                raise Error("mojolearn QNRegressor X and y lengths differ")
+            host_y = List[Float32](length=max(fold.rows * y.cols, 1), fill=0.0)
+            member_fold_take_view(y, fold.index, fold.rows, Int(host_y.unsafe_ptr()))
+            call[].y = MemberMatrix(Int(host_y.unsafe_ptr()), fold.rows, y.cols)
+        if weights.rows > 0:
+            _dense(weights, "sample_weight")
+            if weights.rows != x.rows or weights.cols != 1:
+                raise Error("ValueError: sample_weight and X have different numbers of rows")
+            host_w = List[Float32](length=fold.rows, fill=0.0)
+            member_fold_take_view(weights, fold.index, fold.rows, Int(host_w.unsafe_ptr()))
+            call[].weights = MemberMatrix(Int(host_w.unsafe_ptr()), fold.rows, 1)
+        call[].row_index = MemberMatrix()
+        _op(slot, call, operation)
+    except error:
+        failure = String(error)
+    call[].x = x
+    call[].y = y
+    call[].weights = weights
+    call[].row_index = index
+    try:
+        member_fold_x_close(fold)
+    except close_error:
+        if failure.byte_length() == 0:
+            failure = "RuntimeError: a QNRegressor member's fold slot was not freed: " + String(close_error)
+    _ = host_y^
+    _ = host_w^
+    if failure.byte_length() > 0:
+        raise Error(failure)

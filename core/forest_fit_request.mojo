@@ -84,6 +84,37 @@ published in `core/forest_entry_table.mojo`; descriptor shape of
                       Bagging META member's predict, which the door staged
                       through the Python entry `forest_stage_input_gpu`).
   XF_UNSTAGE_INPUT    no words: end the staged input. Returns 0.
+  XF_FIT_ROWS         (lane vdf-scope-trees, 2026-11-24; XF_CAP_DEV_ROWS)
+                      addrs XF_FIT_WORDS: x = int64 row ids (host,
+                      params[0] of them, repeats allowed), `session` = the
+                      slot id in the image's DEVICE STORE of the WHOLE X
+                      (row-major float32, params[1] words a row, put by the
+                      store transport entry), y / weights the fit rows' own
+                      (host, in the ids' order). The rows are taken on the
+                      device (DeviceStore.take_rows), transposed there as
+                      XF_FIT's row-major upload is, and fitted by the same
+                      body: the bytes `fit_forest` reads equal XF_FIT's on
+                      the host-gathered rows. Returns an export handle.
+  XF_RESIDENT_ROWS    (lane vdf-scope-trees2a, 2026-11-24; XF_CAP_DEV_ROWS)
+                      addrs [handle, idx, out], ints [rows, cols, outputs,
+                      store id, mode]: XF_RESIDENT_PREDICT (mode 0,
+                      float32 out) or XF_RESIDENT_LABELS (mode 1, int32
+                      codes); mode 2 (lane vdf-scope-trees3, a classifier's
+                      score): `out` holds the rows' int32 true codes, read
+                      on the device against the codes, and the call
+                      returns the matching row count; on rows `idx` (host int64, `rows` of them) of
+                      the image's DEVICE STORE slot `store id` (the WHOLE X,
+                      row-major, `cols` words a row), taken on the device and
+                      read there by the snapshot (the store, the fits and
+                      the snapshots share the image's one context). A
+                      snapshot on several devices takes them device to
+                      device (lane vdf-scope-trees3). Returns rows written.
+
+THE ET CLASSIFIER'S INT32 CODES (lane vdf-scope-trees3, 2026-11-24): shape bit
+2 (`XF_SHAPE_Y_CODES`, sent only to an image answering XF_CAP_ET_CODES) says an
+ExtraTrees classifier fit's y is int32 class codes 0..classes-1 instead of the
+estimator's float32 codes; the image uploads them as they are and checks their
+range on the device (no host cast). The same class ids, so the same bits.
 
 The caller owns every buffer until the synchronous call returns.
 """
@@ -91,7 +122,10 @@ from std.memory import bitcast
 from core.fit_loop_clock import FitLoop
 
 # v2 (lane alm-forest, 2026-11-24): XF_W_LOOP joined the XF_FIT words.
-comptime FOREST_ENTRY_ABI = "mojolearn.trees.forest.v2"
+# v3 (lane vdf-scope-trees, 2026-11-24): XF_FIT_ROWS appended.
+# v4 (lane vdf-scope-trees2a, 2026-11-24): XF_RESIDENT_ROWS appended.
+# v5 (lane vdf-scope-trees3, 2026-11-24): shape bit XF_SHAPE_Y_CODES.
+comptime FOREST_ENTRY_ABI = "mojolearn.trees.forest.v5"
 
 comptime XF_CAPS = 0
 comptime XF_NUMERIC_MODE = 1
@@ -117,7 +151,9 @@ comptime XF_ADA_OPEN = 20
 comptime XF_FIT_ADA_ROUND = 21
 comptime XF_STAGE_INPUT = 22
 comptime XF_UNSTAGE_INPUT = 23
-comptime XF_OP_COUNT = 24
+comptime XF_FIT_ROWS = 24
+comptime XF_RESIDENT_ROWS = 25
+comptime XF_OP_COUNT = 26
 
 #: capability bits (XF_CAPS)
 comptime XF_CAP_DEVICE_SCAN = 1      # the fits refuse a non-finite X cell on the device
@@ -128,12 +164,14 @@ comptime XF_CAP_STRICT = 16           # the host strict snapshot (XF_STRICT_*)
 comptime XF_CAP_DART = 32             # XF_FIT_DART is served
 comptime XF_CAP_SESSION = 64          # XF_SESSION_* and XF_FIT_SESSION are served
 comptime XF_CAP_ADA = 128             # XF_ADA_OPEN and XF_FIT_ADA_ROUND are served
+comptime XF_CAP_DEV_ROWS = 256        # XF_FIT_ROWS, XF_RESIDENT_ROWS and the store transport entry (forest_store_transport_ref)
+comptime XF_CAP_ET_CODES = 512        # the ET classifier fits take int32 codes (XF_SHAPE_Y_CODES)
 
 #: XF_FIT request words: addrs[k]
 comptime XF_W_X = 0
 comptime XF_W_Y = 1
 comptime XF_W_FLAGS = 2
-comptime XF_W_SHAPE = 3      # bit 0 classifier, bit 1 row-major X
+comptime XF_W_SHAPE = 3      # bit 0 classifier, bit 1 row-major X, bit 2 int32 ET codes
 comptime XF_W_CRITERION = 4  # -1: the ET fits, whose criterion is params[21]
 comptime XF_W_WEIGHTS = 5
 comptime XF_W_TREE_START = 6
@@ -162,6 +200,7 @@ comptime XF_P_TREES = 3
 
 comptime XF_SHAPE_CLASSIFIER = 1
 comptime XF_SHAPE_ROWMAJOR = 2
+comptime XF_SHAPE_Y_CODES = 4
 
 #: the most export metadata words an image reports (ET: six)
 comptime XF_META_MAX = 8
@@ -203,6 +242,10 @@ struct ForestFitArgs(Movable, Sized):
     #: False (a door): the fit releases the GIL around its body. Set by
     #: `forest_entry_dispatch` only; never crosses the request spans.
     var gil_free: Bool
+    #: XF_SHAPE_Y_CODES (module note): an ET classifier fit's y is int32
+    #: class codes. Crosses in the shape word (`forest_fit_words` callers OR it
+    #: in, `forest_fit_args_at` reads it back).
+    var y_codes: Bool
 
     def __init__(out self, x: Int, y: Int, var ints: List[Int], var floats: List[Float64], var bad: List[UInt8],
                  criterion: Int) raises:
@@ -230,6 +273,7 @@ struct ForestFitArgs(Movable, Sized):
         self.loss = 0
         self.loop = 0
         self.gil_free = False
+        self.y_codes = False
 
     def __len__(self) -> Int:
         return len(self.ints)
@@ -277,7 +321,7 @@ def forest_fit_words(args: ForestFitArgs, shape: Int) -> List[Int]:
     words[XF_W_X] = args.x
     words[XF_W_Y] = args.y
     words[XF_W_FLAGS] = Int(args.bad.unsafe_ptr()) if len(args.bad) else 0
-    words[XF_W_SHAPE] = shape
+    words[XF_W_SHAPE] = shape | (XF_SHAPE_Y_CODES if args.y_codes else 0)
     words[XF_W_CRITERION] = args.criterion
     words[XF_W_WEIGHTS] = args.weights
     words[XF_W_TREE_START] = args.tree_start
@@ -329,6 +373,7 @@ def forest_fit_args_at(aa: Int, na: Int, pp: Int, np: Int, ff: Int) raises -> Fo
     args.round = a[XF_W_ROUND]
     args.loss = a[XF_W_LOSS]
     args.loop = a[XF_W_LOOP]
+    args.y_codes = (a[XF_W_SHAPE] & XF_SHAPE_Y_CODES) != 0
     return args^
 
 

@@ -52,29 +52,41 @@ def verify(reference, *, self_test=False, retain=None):
                                'Faults alter public operations that execute native kernels, not kernel source.'])
     if errors:
         return result
-    clean = verifier.capture()
-    if retain:
-        retain('clean', clean)
-    result['vendor'] = clean['vendor']
-    changed = False
-    if reference['witnesses']['metal']['version'] != __version__:
-        witness = reference['witnesses'].get(clean['vendor'], {})
-        changed = not unchanged_artifacts(clean, witness)
-        result['evidence_reuse'] = ('changed native bytes reproduce the admitted witness' if changed
-                                    else 'unchanged native bytes and numerical fixtures')
-    result['errors'] = verifier.compare(clean, reference['witnesses']['metal'])
-    if result['errors']:
-        # Changed native bytes are judged by their outputs; only moved outputs owe new witnesses.
-        if changed:
-            result.pop('evidence_reuse', None)
-            result.update(status='OWED', errors=['changed native artifacts moved these outputs; they need current-release witnesses'] + result['errors'])
-        return result
+    # BOTH SIDES IN THIS PROCESS (2026-11-24): the CPU side (device="cpu")
+    # and, with a GPU, the GPU side (device="gpu"). Each side's outputs are
+    # held to the one admitted witness: identical bits on every column, the
+    # host column included. The fault controls run on the last side.
+    from . import runtime_report
+    sides = ['cpu'] if runtime_report().get('cpu_only') else ['cpu', 'gpu']
+    result['sides'] = {}
+    for side in sides:
+        clean = verifier.capture(side=side)
+        if retain:
+            retain('clean-' + side, clean)
+        result['vendor'] = clean['vendor']
+        changed = False
+        if reference['witnesses']['metal']['version'] != __version__:
+            witness = reference['witnesses'].get(clean['vendor'], {})
+            changed = not unchanged_artifacts(clean, witness)
+            result['evidence_reuse'] = ('changed native bytes reproduce the admitted witness' if changed
+                                        else 'unchanged native bytes and numerical fixtures')
+        errors = verifier.compare(clean, reference['witnesses']['metal'])
+        result['sides'][side] = dict(vendor=clean['vendor'], errors=errors,
+                                     status='MATCH' if not errors else 'OWED' if changed else 'FAILED')
+        if errors:
+            # Changed native bytes are judged by their outputs; only moved outputs owe new witnesses.
+            result['errors'] = [f'{side} side: {e}' for e in errors]
+            if changed:
+                result.pop('evidence_reuse', None)
+                result.update(status='OWED', errors=['changed native artifacts moved these outputs; they need current-release witnesses'] + result['errors'])
+            return result
+    side = sides[-1]
     if self_test:
         for name, (case, _) in FAULTS.items():
             baseline = subset(clean, [case])
             with inject(name):
-                faulty = verifier.capture([case], artifacts=clean['bindings'])
-            restored = verifier.capture([case], artifacts=clean['bindings'])
+                faulty = verifier.capture([case], artifacts=clean['bindings'], side=side)
+            restored = verifier.capture([case], artifacts=clean['bindings'], side=side)
             if retain:
                 retain(name + '-faulty', faulty)
                 retain(name + '-restored', restored)
@@ -84,7 +96,7 @@ def verify(reference, *, self_test=False, retain=None):
             passed = caught and not restoration
             result['faults'][name] = dict(status='CAUGHT_AND_RESTORED' if passed else 'FAILED',
                                           differences=differences, restoration_errors=restoration,
-                                          kind='public-operation', native_kernel_fault=False)
+                                          kind='public-operation', native_kernel_fault=False, side=side)
             if not passed:
                 result['errors'].append('fault not caught and restored: ' + name)
     result['status'] = 'MATCH' if not result['errors'] else 'FAILED'

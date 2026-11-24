@@ -33,13 +33,15 @@ On an image with the resident fold entry (`KMEANS_CAP_FOLD`, the GPU images)
 X may also be a DEVICE-home view (`data` = the base store id, `rows` = the
 base's rows, `offset` 0) with a device-home int64 `row_index` (the store of
 the fold's row numbers): the member gathers on the device, as the
-estimator's own door does for a model-selection fold. Such a fit takes no
-weights. A HOST-home X with a host int32 / int64 `row_index` (a caller's host
+estimator's own door does for a model-selection fold. Its weights (lane
+vdf-scope-cluster2a) are the whole device-home float32 vector of the base's
+rows, gathered by the same index on the device. A HOST-home X with a host int32 / int64 `row_index` (a caller's host
 fold or drawn rows: MEMBER_CAN_ROW_INDEX means both homes) is gathered here
 once per call, rows (and the weights' rows) in row tasks across the host's
 cores (core/admitted_rows_gather.mojo), then runs the host route as gathered
-host words would (lane fx-audit 7). A column index, a device view on a host
-image, a weighted device fit: refused in words.
+host words would (lane fx-audit 7); inside a resident scope on the fold image
+it runs the device fold instead (`_scoped_indexed`), weighted or not. A
+column index or a device view on a host image: refused in words.
 X is tested finite by the kernel over its own upload (fit and every query,
 host and device images: `test_finite` is always set); a NaN or an infinity is
 refused in admit_x's wording. Given sample weights are scanned here (one
@@ -54,8 +56,8 @@ call (fit_predict); `MEMBER_OP_TRANSFORM` writes the fitted rows' distances
 Score (MEMBER_OP_SCORE, lane mf-kmeans5): `call.value` = scikit-learn's
 `KMeans.score(X, sample_weight)`, minus the inertia of X on the state's
 centers: the image's KMEANS_SCORE op, the fit's post-loop cost over the given
-rows (host weights optional, MEMBER_CAN_WEIGHTED_SCORE; a device fold takes
-unit weights), on the resident centers of a GPU image as a query is.
+rows (weights optional, MEMBER_CAN_WEIGHTED_SCORE; a device fold gathers its
+weights on the device), on the resident centers of a GPU image as a query is.
 
 Fitted-state blocks (MEMBER_OP_EXPORT / MEMBER_OP_IMPORT), in index order:
 0 `MEMBER_BLOCK_FAMILY` float32 n_clusters x features, the centers;
@@ -94,6 +96,12 @@ from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from core.host_finite_scan import host_all_finite_f32
 from core.cluster_member_words import member_words_take_f32, member_words_f32_slots
 from core.admitted_rows_gather import admitted_gather_rows_f32, ARG_OUT_OF_RANGE
+from core.member_abi import MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE
+from core.host_parallel import host_widen_index_i64
+# lane vdf-scope-cluster (2026-11-24): the scope's per-family store (lane vdf-scope-run,
+# bindings/arena_cache_run.mojo) on the fold image's store (core/kmeans_fold_transport.mojo).
+from core.kmeans_fold_transport import kmeans_fold_store_ref, KMEANS_FOLD_PREFIX
+from bindings.arena_cache_run import arena_scope_store_put, arena_cache_put, arena_cache_free
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
@@ -277,7 +285,18 @@ def _fold(call: _Call) raises -> KMeansFoldStore:
     if (call[].row_index.rows <= 0 or call[].row_index.home != MEMBER_HOME_DEVICE
             or call[].row_index.dtype != MEMBER_I64):
         raise Error("TypeError: a device-home X of a KMeans member needs a device-home int64 row index")
-    return KMeansFoldStore(call[].x.data, call[].x.rows, call[].row_index.data)
+    var weights_slot = -1
+    if call[].weights.rows > 0:
+        # THE WEIGHTED FOLD (lane vdf-scope-cluster2a): the whole weight
+        # vector resident in the same store, gathered by the same index on
+        # the device (its finite test there, refused in the estimator's words).
+        var w = call[].weights
+        if (w.home != MEMBER_HOME_DEVICE or w.offset != 0 or w.dtype != MEMBER_F32 or w.cols != 1
+                or w.rows != call[].x.rows):
+            raise Error("TypeError: a weighted KMeans fold reads sample_weight as a whole device-home float32"
+                + " vector of X's rows (offset 0)")
+        weights_slot = w.data
+    return KMeansFoldStore(call[].x.data, call[].x.rows, call[].row_index.data, weights_slot)
 
 
 def _rows(call: _Call, fold: KMeansFoldStore) -> Int:
@@ -304,7 +323,7 @@ def _fit(slot: _Slot, call: _Call) raises:
     if slot[].init == _INIT_START:
         _start_check(slot, k, cols)
     var weights = _weights(call, fold, rows, "fit")
-    var weight_count = rows if weights != 0 else 0
+    var weight_count = rows if (weights != 0 or fold.weights >= 0) else 0
     var distances = 0
     var joint = (output == MEMBER_OP_TRANSFORM and not fold.active()
         and (call[].route.flags & KMEANS_CAP_JOINT) != 0)
@@ -364,7 +383,8 @@ def _weights(call: _Call, fold: KMeansFoldStore, rows: Int, what: String) raises
     if call[].weights.rows <= 0:
         return 0
     if fold.active():
-        raise Error("TypeError: a weighted KMeans member " + what + " reads host views (no device fold)")
+        # The fold's weights are its store slot (`_fold`), never a host address.
+        return 0
     if not call[].weights.dense_host(MEMBER_F32):
         raise Error("TypeError: a KMeans member reads sample_weight as a dense host float32 view")
     if call[].weights.rows != rows or call[].weights.cols != 1:
@@ -423,12 +443,13 @@ def _score(slot: _Slot, call: _Call) raises:
         raise Error("mojolearn: X has " + String(call[].x.cols) + " features, KMeans was fitted with "
             + String(slot[].features))
     var weights = _weights(call, fold, rows, "score")
+    var weight_count = rows if (weights != 0 or fold.weights >= 0) else 0
     var driver = KMeansNativeDriver(call[].route.entry.call)
     if not fold.active() and slot[].handle < 0 and (call[].route.flags & KMEANS_CAP_RESIDENT) != 0:
         slot[].handle = driver.prepare(Int(slot[].centers.unsafe_ptr()), k, slot[].features)
     var handle = -1 if fold.active() else slot[].handle
     var request = KMeansScoreRequest(0 if fold.active() else call[].x.data, Int(slot[].centers.unsafe_ptr()),
-        weights, rows, slot[].features, k, rows if weights != 0 else 0, slot[].metric, True, handle, fold)
+        weights, rows, slot[].features, k, weight_count, slot[].metric, True, handle, fold)
     var result = driver.score(request)
     _refuse(result.finite, result.range_error, fold)
     call[].value = -result.inertia
@@ -502,7 +523,9 @@ def _capabilities(call: _Call) -> Int:
     var mask = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
         | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_TEST_ROWS | MEMBER_CAN_SCORE | MEMBER_CAN_WEIGHTED_SCORE)
     if (call[].route.flags & KMEANS_CAP_FOLD) != 0:
-        mask |= MEMBER_CAN_DEVICE_VIEWS | MEMBER_CAN_ROW_INDEX
+        # SCOPE (lane vdf-scope-cluster): on the fold image a pinned host X under a host row index is kept
+        # resident in the caller's scope (the fold store kind) and every fold is taken on the device.
+        mask |= MEMBER_CAN_DEVICE_VIEWS | MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
     return mask
 
 
@@ -524,6 +547,66 @@ def _gather_host(source: MemberMatrix, index: MemberMatrix, width: Int, mut dst:
             + " rows")
 
 
+def _scoped_indexed(slot: _Slot, call: _Call, operation: Int) raises:
+    """THE SCOPED FOLD (MEMBER_CAN_SCOPE, lane vdf-scope-cluster; weighted: lane vdf-scope-cluster2a): a FIT / PREDICT / TRANSFORM / SCORE
+    over a pinned host X with a host row index, inside the caller's resident scope, on the fold image. The whole X
+    is found in (or put once into) the scope's fold-store cache, so every fold and candidate of one search reads ONE
+    upload (`call.pin_kept` = 1 the moment the cache keeps the caller's pin: THE PIN RULE); the fold's int64 row
+    numbers are put for this call only (rows x 8 bytes) and freed after it; the operation then runs the image's
+    fold kernels (cluster/kmeans_fold.mojo) exactly as a device-home fold, which gather the same rows in the same
+    order as `_gather_host`: same bytes as the host-index path and the CPU column (the kernels test finite words
+    and the index range over the gather, refused in the door's words). The caller's views are restored whether
+    the operation returns or raises."""
+    var index = call[].row_index
+    var x = call[].x
+    var weights = call[].weights
+    var n = index.rows
+    if weights.rows > 0 and (not weights.dense_host(MEMBER_F32) or weights.cols != 1 or weights.rows != x.rows):
+        raise Error("TypeError: a KMeans member reads sample_weight as a dense host float32 view of X's rows")
+    var store = kmeans_fold_store_ref(call[].route.mode, call[].route.vendor)
+    var put = arena_scope_store_put(call[].scope, store, KMEANS_FOLD_PREFIX, x.data, x.rows * x.cols, call[].pin)
+    if put.pinned:
+        call[].pin_kept = 1
+    # THE WEIGHTED FOLD (lane vdf-scope-cluster2a): the whole weight vector is
+    # put for this call (x.rows words; no pin keeps it resident past the call)
+    # and gathered on the device by the fold's index, beside X's rows.
+    var weights_id = -1
+    if weights.rows > 0:
+        weights_id = arena_cache_put(store, weights.data, x.rows)
+    var wide = List[Int64]()
+    var index_address = index.data
+    if index.dtype == MEMBER_I32:
+        wide = List[Int64](unsafe_uninit_length=max(n, 1))
+        host_widen_index_i64(index.data, Int(wide.unsafe_ptr()), n)
+        index_address = Int(wide.unsafe_ptr())
+    var index_id = arena_cache_put(store, index_address, 2 * n)  # int64 rows: two 4-byte words each
+    _ = wide^  # the put waited for its copy: the host words may go
+    var device_x = MemberMatrix(put.store_id, x.rows, x.cols)
+    device_x.home = MEMBER_HOME_DEVICE
+    var device_index = MemberMatrix(index_id, n, 1, MEMBER_I64)
+    device_index.home = MEMBER_HOME_DEVICE
+    call[].x = device_x
+    call[].row_index = device_index
+    if weights_id >= 0:
+        var device_weights = MemberMatrix(weights_id, x.rows, 1)
+        device_weights.home = MEMBER_HOME_DEVICE
+        call[].weights = device_weights
+    try:
+        if operation == MEMBER_OP_FIT:
+            _fit(slot, call)
+        elif operation == MEMBER_OP_SCORE:
+            _score(slot, call)
+        else:
+            _query(slot, call, operation == MEMBER_OP_TRANSFORM)
+    finally:
+        call[].x = x
+        call[].row_index = index
+        call[].weights = weights
+        arena_cache_free(store, index_id)
+        if weights_id >= 0:
+            arena_cache_free(store, weights_id)
+
+
 def _host_indexed(slot: _Slot, call: _Call, operation: Int) raises:
     """FIT / PREDICT / TRANSFORM / SCORE over a host-home X with a host row index:
     the indexed rows of X (and of the weights) gathered once into this call's
@@ -537,6 +620,10 @@ def _host_indexed(slot: _Slot, call: _Call, operation: Int) raises:
     var weights = call[].weights
     if not x.dense_host(MEMBER_F32):
         raise Error("TypeError: a KMeans member reads X as a dense host float32 view")
+    if (call[].scope != MEMBER_SCOPE_NONE and call[].pin != 0
+            and (call[].route.flags & KMEANS_CAP_FOLD) != 0):
+        _scoped_indexed(slot, call, operation)
+        return
     var x_rows = List[Float32]()
     _gather_host(x, index, x.cols, x_rows)
     var w_rows = List[Float32]()

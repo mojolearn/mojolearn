@@ -51,6 +51,11 @@ LIFETIME (both kinds): the fitted state borrows the caller's fit X view as X_tra
 copy at fit; the provider's resident lease reads it on the GPU route), and,
 when normalize_y is 0, its y view as y_train_. The caller keeps both alive
 and unchanged until this state's next FIT, IMPORT or FREE. IMPORT copies.
+A FIT with a row index (FOLDS, `_fold_op`) borrows nothing: X_train_ is the
+fold's device slot the state keeps, y_train_ the state's own taken words.
+
+FOLDS (lane vdf-scope-gp): MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE on a GPU
+route whose fit and queries all read a device fold slot (`_route_fold`).
 
 CLASSIFIER BLOCKS (MEMBER_BLOCK_BY_INDEX order; m = binary fits): 0 scalars
 (16 float64: kind, rows, features, classes, m, max_iter_predict, then 0,
@@ -97,7 +102,13 @@ from core.member_abi import (
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_BLOCK_NOTICES, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
-from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_EXPORT_OWN
+from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_EXPORT_OWN, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE
+from core.device_route import DEVICE_GPU
+from core.member_fold_x import (
+    MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_take_f32, member_fold_take_into,
+    member_fold_store_ready,
+)
+from bindings.arena_cache_run import arena_cache_free, arena_store_read
 from core.member_families import MEMBER_FAMILY_GP
 from core.member_notices import member_notice_add, MEMBER_NOTICE_GP_RIDGE, MEMBER_NOTICE_WORDS
 from core.native_descriptor_abi import NativeDescriptorError
@@ -151,7 +162,13 @@ struct GpMemberSlot(Copyable, Movable, Defaultable):
     var alpha_used: Float64
     var optimized: Bool
     # X_train_ / y_train_: the caller's fit views (LIFETIME) or owned words.
+    # A fold fit (`_fold_op`) keeps X_train_ as the fold store slot `x_slot`
+    # of `x_store` (x_fit is its negative word, core/fold_x_device.mojo);
+    # -1: none. Freed at the next fit, import or free (`_drop_device`),
+    # never by `clear`.
     var x_fit: Int
+    var x_slot: Int
+    var x_store: EntryRef
     var x_owned: List[Float32]
     var y_fit: Int
     var y_owned: List[Float32]
@@ -209,6 +226,8 @@ struct GpMemberSlot(Copyable, Movable, Defaultable):
         self.alpha_used = 0.0
         self.optimized = False
         self.x_fit = 0
+        self.x_slot = -1
+        self.x_store = entry_ref_unresolved()
         self.x_owned = List[Float32]()
         self.y_fit = 0
         self.y_owned = List[Float32]()
@@ -342,11 +361,31 @@ def _close_lease(entry: EntryRef, lease: Int):
 
 
 def _drop_lease(slot: _Slot):
-    """Before the fitted state changes (fit, import): its device lease goes."""
+    """A device lease opened over words that move goes (`_own_views`)."""
     if slot[].lease != 0:
         var lease = slot[].lease
         slot[].lease = 0
         _close_lease(slot[].lease_entry, lease)
+
+
+def _free_x_slot(store: EntryRef, held: Int):
+    """Free a kept fold slot. Never raises (FREE never raises)."""
+    try:
+        arena_cache_free(store, held)
+    except:
+        pass
+
+
+def _drop_device(slot: _Slot):
+    """Before the fitted state changes (fit, import): its device lease and
+    the fold slot it keeps as X_train_ go."""
+    _drop_lease(slot)
+    if slot[].x_slot >= 0:
+        var held = slot[].x_slot
+        slot[].x_slot = -1
+        if slot[].x_fit < 0:
+            slot[].x_fit = 0
+        _free_x_slot(slot[].x_store, held)
 
 
 def _lookup(handle: Int, release: Bool) raises -> Int:
@@ -358,6 +397,8 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
     var address = 0
     var lease = 0
     var entry = entry_ref_unresolved()
+    var held = -1
+    var held_store = entry_ref_unresolved()
     shared_slot_lock(lock)
     try:
         var index = handle % _INDEX_SPAN - 1
@@ -371,6 +412,9 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
             lease = slot[].lease
             entry = slot[].lease_entry
             slot[].lease = 0
+            held = slot[].x_slot
+            held_store = slot[].x_store
+            slot[].x_slot = -1
             slot[].live = False
             slot[].clear()
             slot[].params = List[Float64]()
@@ -383,6 +427,8 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
         shared_slot_unlock(lock)
     if lease != 0:
         _close_lease(entry, lease)
+    if held >= 0:
+        _free_x_slot(held_store, held)
     return address
 
 
@@ -501,9 +547,10 @@ def _fit(slot: _Slot, call: _Call) raises:
         raise Error("ValueError: " + String(_GPR) + ": X has no rows")
     if call[].y.rows != n or call[].y.cols != 1:
         raise Error(String(_GPR) + ": y has " + String(call[].y.rows) + " entries, X has " + String(n) + " rows")
-    _finite(call[].x, "X")
+    if call[].x.data >= 0:  # a fold X word (`_fold_op`) is tested on the device by the fit entries
+        _finite(call[].x, "X")
     _finite(call[].y, "y")
-    _drop_lease(slot)
+    _drop_device(slot)
     slot[].clear()
     var route = call[].route
     var driver = GPDriver(route.entry.call)
@@ -648,7 +695,8 @@ def _own_views(slot: _Slot):
     buffers). Two copies of independent blocks, each one memcpy."""
     var moved = False
     var count = slot[].rows * slot[].cols
-    if slot[].x_fit != 0 and (slot[].x_fit != Int(slot[].x_owned.unsafe_ptr()) or len(slot[].x_owned) != count):
+    # A kept fold slot (x_fit < 0) is the state's own already.
+    if slot[].x_fit > 0 and (slot[].x_fit != Int(slot[].x_owned.unsafe_ptr()) or len(slot[].x_owned) != count):
         var owned = List[Float32](length=count, fill=Float32(0))
         if count > 0:
             unsafe_memcpy(dest=owned.unsafe_ptr(), src=_f32p(slot[].x_fit), count=count)
@@ -665,6 +713,22 @@ def _own_views(slot: _Slot):
         moved = True
     if moved:
         _drop_lease(slot)
+
+
+def _x_train_words(slot: _Slot) raises -> Int:
+    """X_train_ as host words for an export: the caller's fit view or the
+    imported words, or, for a fold fit, the kept slot read once into
+    `x_owned` (the x_prep transport's read, bindings/arena_cache_run.mojo
+    `arena_store_read`; lane vdf-scope-gp). The slot stays X_train_ for
+    every query; the words are valid until the next fit, import or free."""
+    if slot[].x_fit >= 0:
+        return slot[].x_fit
+    var count = slot[].rows * slot[].cols
+    if len(slot[].x_owned) != count:
+        var words = List[Float32](unsafe_uninit_length=count)
+        arena_store_read(slot[].x_store, slot[].x_slot, Int(words.unsafe_ptr()), count)
+        slot[].x_owned = words^
+    return Int(slot[].x_owned.unsafe_ptr())
 
 
 def _export(slot: _Slot, call: _Call) raises:
@@ -702,7 +766,7 @@ def _export(slot: _Slot, call: _Call) raises:
         slot[].scalars[15] = Float64(len(slot[].kernel.kinds))
         call[].dst = MemberMatrix(Int(slot[].scalars.unsafe_ptr()), 1, _SCALARS, MEMBER_F64)
     elif block == _B_X:
-        call[].dst = MemberMatrix(slot[].x_fit, slot[].rows, slot[].cols)
+        call[].dst = MemberMatrix(_x_train_words(slot), slot[].rows, slot[].cols)
     elif block == _B_Y:
         call[].dst = MemberMatrix(slot[].y_fit, 1, slot[].rows)
     elif block == _B_L:
@@ -739,7 +803,7 @@ def _import(slot: _Slot, call: _Call) raises:
     """Copy one fitted block in; MEMBER_IMPORT_DONE completes the state.
     The scalars come first; blocks 1 (X_train_), 3 (L_), 4 (alpha_), 5 and
     6 (the fitted kernel) are required, the rest optional."""
-    _drop_lease(slot)
+    _drop_device(slot)
     var block = call[].block
     if block == MEMBER_BLOCK_SCALARS:
         _dense(call[].x, MEMBER_F64, "the scalars block")
@@ -853,8 +917,9 @@ def _gpc_fit(slot: _Slot, call: _Call) raises:
     var k = call[].classes
     if k < 2:
         raise Error(String(_GPC) + " requires 2 or more distinct classes; got " + String(k) + " class")
-    _finite_of(call[].x, "X", _GPC)
-    _drop_lease(slot)
+    if call[].x.data >= 0:  # a fold X word (`_fold_op`) is tested on the device by the fit entry
+        _finite_of(call[].x, "X", _GPC)
+    _drop_device(slot)
     slot[].clear()
     _gpc_layout(slot, n, d, k)
     var m = slot[].members
@@ -1030,7 +1095,7 @@ def _gpc_export(slot: _Slot, call: _Call) raises:
         slot[].scalars[15] = Float64(len(slot[].kernel.kinds))
         call[].dst = MemberMatrix(Int(slot[].scalars.unsafe_ptr()), 1, _SCALARS, MEMBER_F64)
     elif block == _B_X:
-        call[].dst = MemberMatrix(slot[].x_fit, n, slot[].cols)
+        call[].dst = MemberMatrix(_x_train_words(slot), n, slot[].cols)
     elif block == _B_Y:
         call[].dst = MemberMatrix(Int(slot[].y01.unsafe_ptr()), m, n)
     elif block == _B_L:
@@ -1055,7 +1120,7 @@ def _gpc_import(slot: _Slot, call: _Call) raises:
     """Copy one fitted classifier block in; MEMBER_IMPORT_DONE completes the
     state. The scalars come first; X_train_, y_train_, L_, pi_, W_sr_ and the
     fitted kernel are required, the fits' (lml, n_iter, nb) words optional."""
-    _drop_lease(slot)
+    _drop_device(slot)
     var block = call[].block
     var n = slot[].rows
     var m = slot[].members
@@ -1168,6 +1233,125 @@ def _gp_outputs(call: _Call, classifier: Bool, classes: Int) raises:
 
 
 def _gp_member(operation: Int, address: Int) raises -> Int:
+    """FOLDS (lane vdf-scope-gp): MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE on a
+    GPU route whose every operation of the kind reads THE FOLD X WORD
+    (`_route_fold`), and `_fold_op` for an operation with a row index there.
+    Everything else is `_gp_member_whole`."""
+    var call = _Call(unsafe_from_address=address)
+    if operation == MEMBER_OP_CAPABILITIES:
+        var bits = _gp_member_whole(operation, address)
+        if _route_fold(call, _asked_kind(call)):
+            bits |= MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
+        return bits
+    if (call[].row_index.rows > 0 and call[].column_index.rows == 0 and call[].route.device == DEVICE_GPU
+            and call[].state != 0 and (operation == MEMBER_OP_FIT or operation == MEMBER_OP_PREDICT
+            or operation == MEMBER_OP_PREDICT_STD or operation == MEMBER_OP_PREDICT_PROBA)):
+        _fold_op(_Slot(unsafe_from_address=_lookup(call[].state, False)), call, operation, address)
+        return 0
+    return _gp_member_whole(operation, address)
+
+
+def _asked_kind(call: _Call) -> Int:
+    """The kind a capability question is about: the live state's, else the
+    NEW words', else -1 (the family union: both kinds must read folds)."""
+    try:
+        if call[].state != 0:
+            return Int(_Slot(unsafe_from_address=_lookup(call[].state, False))[].params[0])
+        if call[].params and call[].param_count >= 1:
+            return Int(_F64P(unsafe_from_address=call[].params)[0])
+    except:
+        pass
+    return -1
+
+
+def _route_fold(call: _Call, kind: Int) -> Bool:
+    """A GPU route where every operation of `kind` reads a device fold slot,
+    and whose image ships the x_prep family store. The regressor: the
+    pointer fit (GP_CAP_POINTER; the device optimizer is in every GPU image)
+    and the resident queries (GP_CAP_RESIDENT). The classifier: the
+    one-vs-rest fit and resident query (GP_CAP_OVR, GP_CAP_RESIDENT). A route
+    without them (the `fast` list routes, which read host lists) answers no
+    fold: the caller takes the fold's rows itself. Asked with the
+    capabilities, once per member class."""
+    if call[].route.device != DEVICE_GPU:
+        return False
+    var caps = call[].route.flags
+    var regressor = (caps & (GP_CAP_POINTER | GP_CAP_RESIDENT)) == (GP_CAP_POINTER | GP_CAP_RESIDENT)
+    var classifier = (caps & (GP_CAP_OVR | GP_CAP_RESIDENT)) == (GP_CAP_OVR | GP_CAP_RESIDENT)
+    var ready = classifier if kind == _KIND_GPC else (regressor if kind == _KIND_GPR else (regressor and classifier))
+    return ready and member_fold_store_ready(call)
+
+
+def _fold_op(slot: _Slot, call: _Call, operation: Int, address: Int) raises:
+    """An operation over the rows `call.row_index` of the WHOLE host X
+    (core/member_fold_x.mojo): X resident in the caller's scope, the fold's
+    rows taken ON THE DEVICE into a fold slot, and the provider's entries
+    handed its word (THE FOLD X WORD): the pointer fit, the device optimizer
+    and the one-vs-rest fit copy it on the device and test it finite there
+    (gaussian_process/gpc_ovr.mojo `gp_fold_x_refuse`); the resident queries
+    read it through DeviceQueryX. A FIT keeps the slot as X_train_
+    (`x_slot`): the resident lease uploads it on the device
+    (core/fitted_resident_store.mojo), an export reads it once
+    (`_x_train_words`), the next fit, import or free frees it. The targets
+    are taken bitwise through the index on the host (n words: the
+    regressor's y_train_ is then owned by the state; the classifier's codes
+    become its own 0 / 1 targets). Views restored before this returns or
+    raises."""
+    var classifier = _gpc(slot)
+    var est = String(_GPC) if classifier else String(_GPR)
+    if not _route_fold(call, Int(slot[].params[0])):
+        raise Error("TypeError: a " + est + " member reads a row index only on a GPU route with the device fit, "
+                    + "the resident queries and the x_prep store")
+    var x = call[].x
+    var y = call[].y
+    var index = call[].row_index
+    var fold = MemberFoldX()
+    var fold_y = List[Float32]()
+    var fold_codes = List[UInt64]()
+    var failure = String("")
+    try:
+        member_fold_x_open(call, fold, est)
+        call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
+        if operation == MEMBER_OP_FIT:
+            if y.rows != x.rows or y.cols != 1:
+                raise Error(est + ": y has " + String(y.rows * y.cols) + " entries, X has " + String(x.rows)
+                            + " rows")
+            if classifier:
+                _dense(y, MEMBER_I32, "y (the class codes)")
+                call[].y = member_fold_take_into(y, fold, fold_codes)
+            else:
+                _dense(y, MEMBER_F32, "y")
+                fold_y = List[Float32](unsafe_uninit_length=fold.rows)
+                member_fold_take_f32(y.data, fold.index, fold.rows, 1, Int(fold_y.unsafe_ptr()))
+                call[].y = MemberMatrix(Int(fold_y.unsafe_ptr()), fold.rows, 1)
+        call[].row_index = MemberMatrix()
+        _ = _gp_member_whole(operation, address)
+        if operation == MEMBER_OP_FIT and slot[].fitted and slot[].x_fit == fold.word():
+            # THE STATE KEEPS THE FOLD SLOT AS X_train_ (freed by `_drop_device`).
+            slot[].x_slot = fold.slot
+            slot[].x_store = fold.store
+            fold.slot = -1
+            if not classifier and slot[].y_fit == Int(fold_y.unsafe_ptr()):
+                # y_train_ without normalize_y: the fold's taken words, now the state's.
+                swap(slot[].y_owned, fold_y)
+                slot[].y_fit = Int(slot[].y_owned.unsafe_ptr())
+    except error:
+        failure = String(error)
+    call[].x = x
+    call[].y = y
+    call[].row_index = index
+    try:
+        member_fold_x_close(fold)
+    except close_error:
+        if failure.byte_length() == 0:
+            failure = "RuntimeError: a " + est + " member's fold slot was not freed: " + String(close_error)
+    _ = fold_y^
+    _ = fold_codes^
+    if failure.byte_length() > 0:
+        raise Error(failure)
+
+
+def _gp_member_whole(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:

@@ -26,7 +26,7 @@ from core.forest_fit_request import (
     XF_EXPORT_SIZES, XF_EXPORT_INTO, XF_EXPORT_VERIFY, XF_EXPORT_RELEASE, XF_PREDICT, XF_RESIDENT_PREPARE,
     XF_RESIDENT_PREDICT, XF_RESIDENT_LABELS, XF_RESIDENT_RELEASE, XF_STRICT_PREPARE, XF_STRICT_PREDICT,
     XF_STRICT_RELEASE, XF_SESSION_OPEN, XF_SESSION_CLOSE, XF_FIT_SESSION, XF_ADA_OPEN, XF_FIT_ADA_ROUND,
-    XF_STAGE_INPUT, XF_UNSTAGE_INPUT, XF_W_SHAPE, XF_SHAPE_CLASSIFIER, XF_SHAPE_ROWMAJOR, forest_fit_args_at,
+    XF_STAGE_INPUT, XF_UNSTAGE_INPUT, XF_FIT_ROWS, XF_RESIDENT_ROWS, XF_W_SHAPE, XF_SHAPE_CLASSIFIER, XF_SHAPE_ROWMAJOR, forest_fit_args_at,
 )
 
 
@@ -135,6 +135,24 @@ trait ForestImage:
         """XF_UNSTAGE_INPUT: end the staged input (a host image: nothing)."""
         ...
 
+    @staticmethod
+    def fit_rows(classifier: Bool, args: ForestFitArgs) raises -> Int:
+        """XF_FIT_ROWS (lane vdf-scope-trees): a fit on rows of the image's
+        device store slot `args.session`, taken on the device; its export
+        handle. An image without XF_CAP_DEV_ROWS refuses in words."""
+        ...
+
+    @staticmethod
+    def resident_rows(mode: Int, handle: Int, store_id: Int, idx: Int, out_addr: Int, rows: Int,
+                      cols: Int, outputs: Int) raises -> Int:
+        """XF_RESIDENT_ROWS (lane vdf-scope-trees2a): the resident vote
+        (`mode` 0) or codes (1) of rows `idx` of the image's device store
+        slot `store_id`, taken on the device; rows written. Mode 2 (lane
+        vdf-scope-trees3): `out_addr` holds the rows' int32 true codes, read
+        on the device against the predicted codes; the matching row count.
+        An image without XF_CAP_DEV_ROWS refuses in words."""
+        ...
+
 
 def _words(address: Int, count: Int) -> List[Int]:
     var out = List[Int](capacity=count)
@@ -170,7 +188,8 @@ def _run[I: ForestImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, f
         return Int(GLOBAL_NUMERIC_MODE)
     if op == XF_DT_DEFAULT_BINS:
         return I.dt_default_bins()
-    if op == XF_FIT or op == XF_FIT_DART or op == XF_FIT_SESSION or op == XF_FIT_ADA_ROUND:
+    if (op == XF_FIT or op == XF_FIT_DART or op == XF_FIT_SESSION or op == XF_FIT_ADA_ROUND
+            or op == XF_FIT_ROWS):
         var args = forest_fit_args_at(aa, na, pp, np, ff)
         args.gil_free = free
         if op == XF_FIT_DART:
@@ -180,6 +199,8 @@ def _run[I: ForestImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, f
             return I.fit_session((shape & XF_SHAPE_CLASSIFIER) != 0, args)
         if op == XF_FIT_ADA_ROUND:
             return I.fit_ada_round((shape & XF_SHAPE_CLASSIFIER) != 0, args)
+        if op == XF_FIT_ROWS:
+            return I.fit_rows((shape & XF_SHAPE_CLASSIFIER) != 0, args)
         return I.fit((shape & XF_SHAPE_CLASSIFIER) != 0, (shape & XF_SHAPE_ROWMAJOR) != 0, args)
     var a = _words(aa, na)
     if op == XF_SESSION_OPEN:
@@ -221,6 +242,12 @@ def _run[I: ForestImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, f
         if op == XF_RESIDENT_LABELS:
             return I.resident_labels(a[0], a[1], a[2], p[0], p[1], p[2])
         return I.strict_predict(a[0], a[1], a[2], p[0], p[1], p[2], free)
+    if op == XF_RESIDENT_ROWS:
+        # addrs [handle, idx, out], ints [rows, cols, outputs, store id, mode]
+        _need(na, np, 3, 5, "resident prediction on device rows")
+        if p[4] < 0 or p[4] > 2:
+            raise Error("forest entry: resident prediction on device rows: unknown mode " + String(p[4]))
+        return I.resident_rows(p[4], a[0], p[3], a[1], a[2], p[0], p[1], p[2])
     if op == XF_RESIDENT_RELEASE or op == XF_STRICT_RELEASE:
         # ints [handle]: the shape bindings/trees_resident_table_run.mojo's
         # native release calls with

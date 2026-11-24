@@ -85,7 +85,7 @@ def _refuse_empty_shape(batch_size: Int, n_obs: Int, who: String) raises:
 
 def kpss_test_host(
     y_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    flags_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    flags_ptr: MutPointer[UInt8, MutUntrackedOrigin],
     stat_ptr: MutPointer[Float32, MutUntrackedOrigin],
     batch_size: Int,
     n_obs: Int,
@@ -96,7 +96,7 @@ def kpss_test_host(
 ) raises -> Int:
     """`cuml.tsa.stationarity.kpss_test(y, d, D, s, pval_threshold)`.
 
-    Writes `batch_size` int32 to `flags_ptr` (1 stationary, 0 not) and
+    Writes `batch_size` uint8 to `flags_ptr` (1 stationary, 0 not) and
     `batch_size` float32 to `stat_ptr` (the KPSS statistic, which cuML does
     not return; it is ours, and the Python wrapper says so). Returns
     `batch_size`.
@@ -117,7 +117,7 @@ def kpss_test_host(
             kpss_rounds(ctx, y_ptr, batch_size, n_obs, 1, pval_threshold, res)
             for b in range(batch_size):
                 stat_ptr.unsafe_store(b, res[b * KPSS_PACK_W])
-                flags_ptr.unsafe_store(b, Int32(1) if res[b * KPSS_PACK_W + 1] != Float32(0.0) else Int32(0))
+                flags_ptr.unsafe_store(b, UInt8(1) if res[b * KPSS_PACK_W + 1] != Float32(0.0) else UInt8(0))
             _ = ctx^
             return batch_size
     comptime if KPSS_ONE_WAIT:
@@ -139,7 +139,7 @@ def kpss_test_host(
     var flags = rs[0].copy()
     var stats = rs[1].copy()
     for b in range(batch_size):
-        flags_ptr.unsafe_store(b, Int32(1) if flags[b] else Int32(0))
+        flags_ptr.unsafe_store(b, UInt8(1) if flags[b] else UInt8(0))
         stat_ptr.unsafe_store(b, stats[b])
     _ = res^
     _ = y^

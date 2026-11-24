@@ -42,6 +42,10 @@ from providers.python.pca_fit_model_pyapi_unpack import pca_fit_host_only, pca_f
 from x_decomp.pca_descriptor_boundary_run import pca_driver, pca_capabilities, pca_vendor, pca_whiten_capability
 from x_decomp.tsvd_descriptor_boundary_run import tsvd_driver, tsvd_capabilities, tsvd_qfix, tsvd_vendor
 from core.device_route import DeviceRoute
+from core.estimators_entry_table import (
+    EstimatorsEntryKey, decomp_fold_entry, DECOMP_FOLD_PCA, DECOMP_FOLD_TSVD, DECOMP_FOLD_STORE,
+)
+from x_prep.transport_abi import XP_OP_COUNT
 from core.entry_table import EntryRef, entry_ref_word
 from core.hostptr import f32_ptr
 from core.pca_native_api import (
@@ -51,7 +55,12 @@ from core.tsvd_native_api import TSVD_NATIVE_COUNT, TSVD_CAP_FUSED, TSVD_CAP_RAN
 from core.decomposition_member import (
     DECOMP_KIND_PCA, DECOMP_BLOCK_COMPONENTS, DECOMP_BLOCK_MEAN, DECOMP_BLOCK_VARIANCE, DECOMP_BLOCK_RATIO,
     DECOMP_BLOCK_SINGULAR, DECOMP_ROUTE_FUSED, DECOMP_ROUTE_TSQR, DECOMP_ROUTE_TSQR_MISSING, DECOMP_ROUTE_RANDOMIZED, DECOMP_ROUTE_RESIDENT,
+    DECOMP_ROUTE_FOLD, DECOMP_ROUTE_XD_STORE,
 )
+from providers.python.neural_descriptor_pyapi_door import (
+    NeuralDescriptorProvider, neural_descriptor_connect_factory_once,
+)
+from x_prep.transport_abi import XP_TRANSPORT_ABI
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE, MEMBER_F64,
@@ -69,6 +78,54 @@ def _route_of(route: DecompRoute, vendor_code: Int) -> DeviceRoute:
     built.mode = route.mode
     built.vendor = vendor_code - 1
     return built
+
+
+def _xd_store_route(context: PythonObject, mut route: DeviceRoute) raises:
+    """Lane vdf-scope-neural5: a randomized TruncatedSVD member's fold store. The GPU x_decomp image's device
+    pool as a scope transport (x_decomp/member_store.mojo `x_decomp_store_v1`, connected at import by
+    python/mojolearn/_native_tsvd_bridge.py as `tsvd_decomp_store[mode]`) into `route.third` with
+    DECOMP_ROUTE_XD_STORE, resolved once here: the member puts the scoped X there once and takes each fold's rows
+    on the device for the randomized driver (`source` = `-(id + 1)`). A host route or an image exporting no store
+    keeps the route as it was (host rows). The connection is held by the process record of
+    `neural_descriptor_connect_factory_once`."""
+    if route.vendor <= 0:
+        return
+    var table = py_get(context, "tsvd_decomp_store")
+    if table is None:
+        return
+    var mode = String("identical") if route.mode == 1 else String("fast")
+    var factory = py_get(table, PythonObject(mode))
+    if factory is None:
+        return
+    var provider = neural_descriptor_connect_factory_once(factory, String(XP_TRANSPORT_ABI), XP_OP_COUNT)
+    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
+    route.third = EntryRef(entry, entry_ref_word(route.mode, route.vendor, XP_OP_COUNT))
+    route.has_third = True
+    route.flags |= DECOMP_ROUTE_XD_STORE
+
+
+def _fold_route(mut route: DeviceRoute, which: Int):
+    """Lane vdf-scope-neural2: THE RESIDENT ROUTE of the PCA / TruncatedSVD
+    members. On an identical GPU route, the base image's resident-fold entry
+    of the kind (`which`, core/estimators_entry_table.mojo DECOMP_FOLD_PCA /
+    DECOMP_FOLD_TSVD) in `route.fourth` and the fold store's transport entry
+    in `route.fifth` with DECOMP_ROUTE_FOLD, resolved once here; any other
+    route (fast, host, a build without the base binding's table) is kept as
+    it was, so its kind answers no row index."""
+    if route.mode != 1 or route.vendor <= 0:
+        return
+    try:
+        var key = EstimatorsEntryKey(1, route.vendor)
+        var fold = decomp_fold_entry(key, which)
+        var store = decomp_fold_entry(key, DECOMP_FOLD_STORE)
+        var count = PCA_NATIVE_COUNT if which == DECOMP_FOLD_PCA else TSVD_NATIVE_COUNT
+        route.fourth = EntryRef(fold, entry_ref_word(1, route.vendor, count))
+        route.has_fourth = True
+        route.fifth = EntryRef(store, entry_ref_word(1, route.vendor, XP_OP_COUNT))
+        route.has_fifth = True
+        route.flags |= DECOMP_ROUTE_FOLD
+    except:
+        pass
 
 
 def _randomized_words(fields: PythonObject, power_name: String, context: PythonObject,
@@ -143,6 +200,7 @@ def _pca_admit(model: PythonObject, fields: PythonObject, context: PythonObject,
     var route = _route_of(held, vendor)
     route.entry = EntryRef(pca_driver(connection).entry, entry_ref_word(route.mode, route.vendor, PCA_NATIVE_COUNT))
     route.flags = capabilities
+    _fold_route(route, DECOMP_FOLD_PCA)
     owner.plan.route = route
     owner.plan.params = words^
     owner.pins = Python.tuple(PCA_PROVIDER_PINS.get_or_create_ptr()[].providers[connection], mode)
@@ -201,6 +259,9 @@ def _tsvd_admit(model: PythonObject, fields: PythonObject, context: PythonObject
         if (second & TSVD_CAP_RANDOMIZED) != 0:
             flags |= DECOMP_ROUTE_RANDOMIZED
     route.flags = flags
+    _fold_route(route, DECOMP_FOLD_TSVD)
+    if randomized and (flags & DECOMP_ROUTE_RANDOMIZED) != 0:
+        _xd_store_route(context, route)
     owner.plan.route = route
     owner.plan.params = words^
     # The connections' images, as the door's provider pins hold them.

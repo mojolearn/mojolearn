@@ -40,6 +40,8 @@ from bindings.classical_arrays_door import classical_wrap_array
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.msel_search_state_door import msel_parameter_values
+from bindings.msel_member_device_unpack import msel_own_device_admit
+from bindings.msel_device_scope_door import msel_device_admit, msel_device_context
 from bindings.family_common_unpack import family_str
 from bindings.family_common_pack import family_call
 from bindings.label_input_sources_unpack import labels_list_integer_storage
@@ -200,6 +202,14 @@ struct MselSplitter(Movable):
         self.defaults = context["family_msel_splitter_layouts"][py_type(model)][3]
         self.kind = _splitter_kind(py_type(model), context)
 
+    def device_word(self) raises -> PythonObject:
+        """The `device` the constructor stored (absent: None; it stores one
+        only when given): one read of the fields dictionary this splitter
+        already holds (lane vdf-msel). A splitter has no native state, so
+        this read is the per-call cost of its `device`; only `split` and
+        `get_n_splits` make it."""
+        return py_get(self.fields, PythonObject("device"))
+
     def repeated(self) -> Bool:
         return self.kind == SPLITTER_REPEATED_KFOLD or self.kind == SPLITTER_REPEATED_STRATIFIED_KFOLD
 
@@ -338,8 +348,18 @@ def msel_splitter_initialize(model: PythonObject, args: PythonObject,
         py_setitem(updates, "test_fold", values)
     elif kind == "iterable":
         py_setitem(updates, "_pairs", msel_index_pairs(args[1], context))
-    else:
+    elif kind != "device":
         raise Error("ValueError: unknown native splitter constructor")
+    # device= (lane vdf-msel): the last item of every public constructor's
+    # tuple ("device": a constructor that stores its other parameters itself).
+    # Admitted where given, in the estimators' words; stored only when given,
+    # so a splitter built with device=None has the fields, get_params and repr
+    # it had before (its split reads an absent device as None).
+    if kind != "iterable":
+        var device = args[len(args) - 1]
+        if device is not None:
+            msel_own_device_admit(device, msel_b(), context)
+            py_setitem(updates, "device", device)
     var keys = py_call(msel_b().list, updates)
     for i in range(len(keys)):  # driver-loop: refuse custom finalizers before releasing overwritten state
         if py_contains(fields, keys[i]) and fields[keys[i]] is not updates[keys[i]]:
@@ -501,7 +521,7 @@ def msel_default_folds(y: PythonObject, n_splits: PythonObject, classifier: Bool
             held = py_present(got[1])
             codes = MselCodes(msel_addr(held.value()), n, len(got[0]))
             coded = True
-    var pin = msel_split_route(context, False, False)
+    var pin = msel_split_route(context, False)
     var route = pin.route
     var sabotage = msel_sabotage()
     # RUN
@@ -522,7 +542,7 @@ def msel_kfold_split(x: PythonObject, k: Int, shuffle: Bool, random_state: Pytho
     """`KFold.split`."""
     var n = msel_n_samples(x, context)
     var seed = msel_seed(random_state, shuffle, context)
-    var pin = msel_split_route(context, False, shuffle)
+    var pin = msel_split_route(context, shuffle)
     var route = pin.route
     var sabotage = msel_sabotage()
     var plan = MselSplitPlan()
@@ -538,10 +558,7 @@ def msel_stratified_split(y: PythonObject, k: Int, shuffle: Bool, random_state: 
     var seed = msel_seed(random_state, shuffle, context)
     var view = labels.view
     var form = labels.form
-    # The base helper table is called only past the one-program bounds
-    # (strat_fold_assign_i32, then the folds' bincount): its key is not
-    # read for the program route.
-    var pin = msel_split_route(context, not (k <= 256 and msel_fold_rows_fits(view.n, k)), True)
+    var pin = msel_split_route(context, True)
     var route = pin.route
     var plan = MselSplitPlan()
     if shuffle and seed.bad:
@@ -569,7 +586,7 @@ def msel_group_kfold_split(x: PythonObject, groups: PythonObject, k: Int, shuffl
     var n = msel_n_samples(x, context)
     var labels = msel_label_codes(groups, n, "groups", context, True, True)
     var seed = msel_seed(random_state, shuffle, context)
-    var pin = msel_split_route(context, False, shuffle)
+    var pin = msel_split_route(context, shuffle)
     var route = pin.route
     var view = labels.view
     var plan = MselSplitPlan()
@@ -587,7 +604,7 @@ def msel_strat_group_split(x: PythonObject, y: PythonObject, groups: PythonObjec
     var group_labels = msel_label_codes(groups, n, "groups", context, True, True)
     var labels = _strat_group_labels(y, context)
     var seed = msel_seed(random_state, shuffle, context)
-    var pin = msel_split_route(context, True, shuffle)
+    var pin = msel_split_route(context, shuffle)
     var route = pin.route
     var view = labels.view
     var form = labels.form
@@ -625,7 +642,7 @@ def msel_time_series_split(sp: MselSplitter, x: PythonObject, context: PythonObj
         max_train = msel_int(max_train_field) if msel_truth(max_train_field) else 0
     except:
         unread = True
-    var pin = msel_split_route(context, False, False)
+    var pin = msel_split_route(context, False)
     var plan = msel_plan_time_series(n, k, ts, has_ts, gap, max_train)
     if unread and plan.splits() > 0:
         max_train = msel_int(max_train_field) if msel_truth(max_train_field) else 0
@@ -649,7 +666,7 @@ def msel_loo_at(args: PythonObject, context: PythonObject) raises -> PythonObjec
     var s = Int(py=args[1])
     var train = msel_new(n - 1, "<i8", context)
     var test = msel_new(1, "<i8", context)
-    var pin = msel_split_route(context, False, False)
+    var pin = msel_split_route(context, False)
     var route = pin.route
     var train_at = msel_addr(train)
     var test_at = msel_addr(test)
@@ -694,7 +711,7 @@ def msel_lpo_at(args: PythonObject, context: PythonObject) raises -> PythonObjec
     var combo = family_call(native_loaded_module("array").array, PythonObject("q"), args[1])
     var k = len(combo)
     var rows = Int(py=py_call(combo.buffer_info)[0]) if k else 0
-    var pin = msel_split_route(context, False, False)
+    var pin = msel_split_route(context, False)
     var plan = msel_plan_indexed(n, rows, k)
     var pairs = msel_split_finish(pin, plan, context)
     # The integer address does not retain its array owner. Keep the complete
@@ -724,7 +741,7 @@ def msel_logo_split(x: PythonObject, groups: PythonObject, sp: MselSplitter,
     if labels.view.m <= 1:
         raise Error("The groups parameter contains fewer than 2 unique groups (" + family_str(labels.classes) + "). "
                     + "LeaveOneGroupOut expects at least 2.")
-    var pin = msel_split_route(context, False, False)
+    var pin = msel_split_route(context, False)
     var state = _group_state(labels, pin.route, context)
     var b = msel_b()
     var items = py_call(b.zip, py_call(native_loaded_module("itertools").repeat, state),
@@ -740,7 +757,7 @@ def msel_logo_at(args: PythonObject, context: PythonObject) raises -> PythonObje
     var view = MselCodes(msel_addr(codes), Int(py=state[1]), len(counts))
     var wants: List[Int] = [g]
     var sizes: List[Int] = [Int(py=counts[g])]
-    var pin = msel_split_route(context, False, False)
+    var pin = msel_split_route(context, False)
     var plan = msel_plan_select(pin.route, view, wants, False, sizes)
     var pairs = msel_split_finish(pin, plan, context)
     _ = codes  # keep the Python object alive through the native call above
@@ -757,7 +774,7 @@ def msel_lpgo_split(x: PythonObject, groups: PythonObject, sp: MselSplitter,
     if msel_cmp("ge", n_groups, PythonObject(labels.view.m)):
         raise Error("The groups parameter contains fewer than (or equal to) n_groups (" + family_str(n_groups)
                     + ") numbers of unique groups (" + family_str(labels.classes) + ").")
-    var pin = msel_split_route(context, False, False)
+    var pin = msel_split_route(context, False)
     var state = _group_state(labels, pin.route, context)
     var b = msel_b()
     var itertools = native_loaded_module("itertools")
@@ -778,7 +795,7 @@ def msel_lpgo_at(args: PythonObject, context: PythonObject) raises -> PythonObje
         size += Int(py=counts[g])
     var codes = state[0]
     var view = MselCodes(msel_addr(codes), Int(py=state[1]), len(counts))
-    var pin = msel_split_route(context, False, False)
+    var pin = msel_split_route(context, False)
     var route = pin.route
     var plan = MselSplitPlan()
     with GILReleased(Python()):
@@ -811,7 +828,7 @@ def msel_shuffle_split(x: PythonObject, n_splits: Int, test_size: PythonObject, 
     var n_train = sizes[0]
     var n_test = sizes[1]
     var seed = msel_seed(random_state, True, context)
-    var pin = msel_split_route(context, False, True)
+    var pin = msel_split_route(context, True)
     var route = pin.route
     var plan = MselSplitPlan()
     with GILReleased(Python()):
@@ -829,7 +846,7 @@ def msel_group_shuffle_split(x: PythonObject, groups: PythonObject, n_splits: In
     var n_train = sizes[0]
     var n_test = sizes[1]
     var seed = msel_seed(random_state, True, context)
-    var pin = msel_split_route(context, False, True)
+    var pin = msel_split_route(context, True)
     var route = pin.route
     var plan = MselSplitPlan()
     with GILReleased(Python()):
@@ -889,7 +906,7 @@ def msel_strat_shuffle_split(y: PythonObject, n_splits: Int, test_size: PythonOb
     var n_train = sizes[0]
     var n_test = sizes[1]
     var seed = msel_seed(random_state, True, context)
-    var pin = msel_split_route(context, False, True)
+    var pin = msel_split_route(context, True)
     var route = pin.route
     var plan = MselSplitPlan()
     with GILReleased(Python()):
@@ -909,7 +926,7 @@ def msel_predefined_split(sp: MselSplitter, context: PythonObject) raises -> Pyt
     for c in range(len(labels.classes)):  # driver-loop: over fold values
         if msel_cmp("ne", labels.classes[c], PythonObject(-1)):
             wants.append(c)
-    var pin = msel_split_route(context, False, False)
+    var pin = msel_split_route(context, False)
     var route = pin.route
     var none = List[Int]()
     var plan = MselSplitPlan()
@@ -947,7 +964,7 @@ def msel_repeated_split(sp: MselSplitter, x: PythonObject, y: PythonObject, grou
         n = msel_n_samples(x, context)
     var view = labels.view
     var form = labels.form
-    var pin = msel_split_route(context, stratified and not (k <= 256 and msel_fold_rows_fits(view.n, k)), True)
+    var pin = msel_split_route(context, True)
     var route = pin.route
     for r in range(repeats):  # driver-loop: over repeats (one plan and one fill each)
         var plan = MselSplitPlan()
@@ -1026,12 +1043,16 @@ def _strat_multi_output_refusal(y: PythonObject, context: PythonObject) raises:
 
 
 def msel_split(model: PythonObject, var x: PythonObject, var y: PythonObject, var groups: PythonObject,
-               context: PythonObject) raises -> PythonObject:
+               given: PythonObject) raises -> PythonObject:
     """`<splitter>.split(X, y, groups)` of a mojolearn splitter: its splits
     (a list, or a lazy iterator for the per-row and per-combination
     splitters)."""
     # N070: the class code and the stored fields once per split call.
-    var sp = MselSplitter(model, context)
+    var sp = MselSplitter(model, given)
+    # device= (lane vdf-msel): the stored device selects the context every
+    # step below runs in (bindings/msel_device_scope_door.mojo); None keeps
+    # `given` (one read of the held fields, one identity compare).
+    var context = msel_device_context(msel_device_admit(sp.device_word(), "split", given, msel_b()), given, msel_b())
     msel_admit(Python.tuple(x, y, groups), context)
     var y_used = sp.kind == SPLITTER_STRATIFIED_KFOLD or sp.kind == SPLITTER_STRATIFIED_GROUP_KFOLD or sp.kind == SPLITTER_STRATIFIED_SHUFFLE or sp.kind == SPLITTER_REPEATED_STRATIFIED_KFOLD
     var groups_used = sp.kind == SPLITTER_STRATIFIED_GROUP_KFOLD or sp.kind == SPLITTER_GROUP_KFOLD or sp.kind == SPLITTER_GROUP_SHUFFLE or sp.kind == SPLITTER_LOGO or sp.kind == SPLITTER_LPGO
@@ -1104,10 +1125,12 @@ def msel_split(model: PythonObject, var x: PythonObject, var y: PythonObject, va
 
 
 def msel_n_splits(model: PythonObject, x: PythonObject, y: PythonObject, groups: PythonObject,
-                  context: PythonObject) raises -> PythonObject:
+                  given: PythonObject) raises -> PythonObject:
     """`<splitter>.get_n_splits(X, y, groups)`."""
     var b = msel_b()
-    var sp = MselSplitter(model, context)  # N070: class code and fields once per call
+    var sp = MselSplitter(model, given)  # N070: class code and fields once per call
+    # device= (lane vdf-msel), as in `msel_split`.
+    var context = msel_device_context(msel_device_admit(sp.device_word(), "get_n_splits", given, b), given, b)
     if sp.kind == SPLITTER_LOO:
         if x is None:
             raise Error("The 'X' parameter should not be None.")

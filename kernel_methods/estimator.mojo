@@ -45,6 +45,7 @@ and the card use.
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
+from core.fold_x_device import fold_x_fill
 from std.sys.compile import is_defined
 from core.transfer import transfer_download_f32_list, transfer_upload_list
 from max.gpu import block_dim, block_idx, thread_idx
@@ -103,6 +104,8 @@ from kernel_methods.checks.km_sabotage import (
 from kernel_methods.checks.kernel_matrix import (
     KM_KERNEL_LINEAR,
     KM_KERNEL_PRECOMPUTED,
+    KM_KERNEL_CHI2,
+    KM_KERNEL_ADDITIVE_CHI2,
     KM_TPB,
     km_kernel_matrix,
     km_kernel_name,
@@ -132,6 +135,7 @@ from checks.numerics import ftz, identical_div, identical_sqrt
 from checks.soft_f64 import sf64_sqrt, sf64_to_f32
 from checks.numerics import NUMERIC_FAST as _NUMERIC_FAST
 from core.device_scan import device_classify_nonfinite, device_first_nonfinite
+from core.input_device import device_buffer_any_negative
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from svm.impl.svm_parameter import KernelParams
 from x_decomp.cells import F32Ptr
@@ -299,6 +303,31 @@ comptime KM_IDN_BULK_DOWNLOAD = _CTX_MODE == _CTX_IDENTICAL
 comptime _KM_XFER_POOL = "MojolearnKernelMethodsTransferStagesIdenticalV1" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnKernelMethodsTransferStagesOtherV1"
 
 
+def krr_chi2_fold_check(ctx: DeviceContext, x: DeviceBuffer[DType.float32], xaddr: Int, n: Int,
+                        kp: KernelParams) raises:
+    """THE FOLD X WORD (core/fold_x_device.mojo, lane vdf-scope-linear3): the
+    KernelRidge member tests x >= 0 for the chi2 kernels on host words
+    (core/kernel_ridge_member.mojo `_tested`); a fold slot (`xaddr < 0`) is
+    tested here, on the device copy X already has, after its finite words,
+    in the member's wording. Host words: nothing (the member tested them)."""
+    if xaddr >= 0 or not (kp.kernel == KM_KERNEL_CHI2 or kp.kernel == KM_KERNEL_ADDITIVE_CHI2):
+        return
+    if device_buffer_any_negative(ctx, x, n):
+        raise Error("mojolearn KernelRidge: X contains negative values (the chi2 kernels need x >= 0)")
+
+
+def nys_chi2_fold_check(ctx: DeviceContext, x: DeviceBuffer[DType.float32], xaddr: Int, n: Int,
+                        kernel: Int) raises:
+    """`krr_chi2_fold_check` for Nystroem (lane vdf-scope-linear3): a fold
+    slot's x >= 0 test of the chi2 kernels on the device copy `_upload_checked`
+    made (finite already), in the member's wording (core/kernel_approx_member.mojo
+    `_x` tests host words)."""
+    if xaddr >= 0 or not (kernel == KM_KERNEL_CHI2 or kernel == KM_KERNEL_ADDITIVE_CHI2):
+        return
+    if device_buffer_any_negative(ctx, x, n):
+        raise Error("mojolearn Nystroem: X contains negative values (the chi2 kernels need x >= 0)")
+
+
 def _upload_checked(ctx: DeviceContext, xaddr: Int, n_rows: Int, n_cols: Int, what: String) raises -> DeviceBuffer[
     DType.float32
 ]:
@@ -309,7 +338,9 @@ def _upload_checked(ctx: DeviceContext, xaddr: Int, n_rows: Int, n_cols: Int, wh
         raise Error(what + ": need positive dimensions, got " + String(n_rows) + " x " + String(n_cols))
     var n = n_rows * n_cols
     var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=xaddr))
+    # THE FOLD X WORD (core/fold_x_device.mojo, lane vdf-scope-linear2): a
+    # negative address names a member fold's rows in a device store slot.
+    fold_x_fill(ctx, buf, xaddr, n)
     var bad = device_first_nonfinite(ctx, buf, n)
     if bad >= 0:
         if device_classify_nonfinite(ctx, buf, bad):
@@ -961,6 +992,7 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
         # DEVIATION 1946: the context dies LAST, after every value built on it.
         _ = ctx^
         return (0, finite_word, range_word)
+    krr_chi2_fold_check(ctx, qx.x, xaddr, n_samples * n_features, kp)
 
     if precomputed:
         ctx.enqueue_copy(dst_buf=dk, src_buf=qx.x)
@@ -1054,6 +1086,8 @@ def kernel_ridge_predict_ptr_into[out_origin: MutOrigin, //](
     # words copied after the query are valid below.
     kernel_ridge_predict_dev(ctx, qx.x, dfit, ddual, n, d, t, kp, n_query, output, trace)
     var words = (qx.finite_word(), qx.range_word())
+    if words[0] == 0 and words[1] == 0:
+        krr_chi2_fold_check(ctx, qx.x, xnew_addr, n_query * d, kp)  # a fold slot's x >= 0 (lane vdf-scope-linear3)
     _ = qx^
     _ = dfit^
     _ = ddual^
@@ -1817,6 +1851,7 @@ def nystroem_fit_ptr(
         raise Error("nystroem_fit: null X address")
     var ctx = _family_ctx()
     var dx = _upload_checked(ctx, xaddr, n_samples, n_features, "nystroem X")
+    nys_chi2_fold_check(ctx, dx, xaddr, n_samples * n_features, kp.kernel)  # lane vdf-scope-linear3
     var model = _nystroem_fit_dev(ctx, dx, n_samples, n_features, kp, n_components, seed, trace)
     _ = dx^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
@@ -1844,6 +1879,7 @@ def nystroem_fit_transform_ptr[out_origin: MutOrigin, //](
         raise Error("nystroem_fit: null X address")
     var ctx = _family_ctx()
     var dx = _upload_checked(ctx, xaddr, n_samples, n_features, "nystroem X")
+    nys_chi2_fold_check(ctx, dx, xaddr, n_samples * n_features, kp.kernel)  # lane vdf-scope-linear3
     var model = _nystroem_fit_dev(ctx, dx, n_samples, n_features, kp, n_components, seed, trace)
     var t0 = Int(perf_counter_ns())
     _nystroem_transform_dev(ctx, dx, model, n_samples, output, trace, KM_EPILOGUE_TPB, KMSAB_NONE, t0)
@@ -2305,6 +2341,7 @@ def nystroem_transform_ptr_into[out_origin: MutOrigin, //](
     var t0 = Int(perf_counter_ns())
     var ctx = _family_ctx()
     var dx = _upload_checked(ctx, xaddr, n_rows, model.n_features, "nystroem transform X")
+    nys_chi2_fold_check(ctx, dx, xaddr, n_rows * model.n_features, model.kernel)  # lane vdf-scope-linear3
     _nystroem_transform_dev(ctx, dx, model, n_rows, output, trace, KM_EPILOGUE_TPB, KMSAB_NONE, t0)
     _ = dx^
     _ = ctx^

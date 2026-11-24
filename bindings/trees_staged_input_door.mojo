@@ -107,17 +107,10 @@ def _member_table_walk(member: PythonObject, cols: Int, context: PythonObject) r
     return Python.tuple(PythonObject(None), PythonObject(False), PythonObject(None))
 
 
-def trees_stage_members(members: PythonObject, x_addr: Int, rows: Int, cols: Int,
-                        context: PythonObject) raises -> PythonObject:
-    """Stage the C-order float32 rows at `x_addr` in every forest binary
-    that two or more of `members` predict through. Returns the unstage
-    entries to pass to `trees_unstage`; the rows must stay alive and
-    unchanged until then."""
-    var staged = Python.list()
-    if rows < 1 or cols < 1 or len(members) < 2:
-        return staged
+def _stage_tables(members: PythonObject, cols: Int, mut counts: List[Int], context: PythonObject) raises -> PythonObject:
+    """The forest binaries `members` predict through (rows of `cols`
+    features) and, in `counts`, how many members use each."""
     var tables = Python.list()
-    var counts = List[Int]()
     for i in range(len(members)):  # driver-loop: over the member estimators
         # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
         var native = Optional[PythonObject]()
@@ -138,11 +131,36 @@ def trees_stage_members(members: PythonObject, x_addr: Int, rows: Int, cols: Int
             counts.append(1)
         else:
             counts[seen] += 1
+    return tables
+
+
+def trees_stage_wanted(members: PythonObject, cols: Int, context: PythonObject) raises -> PythonObject:
+    """The forest binaries that two or more of `members` predict through
+    (rows of `cols` features): what `trees_stage_tables` stages; an empty
+    list when nothing would be (lane vdf-meta5: a meta predict over a
+    model-selection fold then keeps the fold unread, so its native members
+    take the rows on the device). Read once per public operation."""
+    var wanted = Python.list()
+    if cols < 1 or len(members) < 2:
+        return wanted
+    var counts = List[Int]()
+    var tables = _stage_tables(members, cols, counts, context)
     for j in range(len(tables)):  # small-loop(tables): at most the two forest binaries per mode
-        if counts[j] < 2:
-            continue
-        var stage = trees_entry(tables[j], "forest_stage_input_gpu")
-        var unstage = trees_entry(tables[j], "forest_unstage_input_gpu")
+        if counts[j] >= 2:
+            _ = py_call(wanted.append, tables[j])
+    return wanted
+
+
+def trees_stage_tables(wanted: PythonObject, x_addr: Int, rows: Int, cols: Int) raises -> PythonObject:
+    """Stage the C-order float32 rows at `x_addr` in every forest binary of
+    `wanted` (`trees_stage_wanted`). Returns the unstage entries to pass to
+    `trees_unstage`; the rows must stay alive and unchanged until then."""
+    var staged = Python.list()
+    if rows < 1 or cols < 1:
+        return staged
+    for j in range(len(wanted)):  # small-loop(tables): at most the two forest binaries per mode
+        var stage = trees_entry(wanted[j], "forest_stage_input_gpu")
+        var unstage = trees_entry(wanted[j], "forest_unstage_input_gpu")
         if stage is None or unstage is None:
             continue
         # Registered before the call, so the caller's unstage covers it. A
@@ -157,6 +175,17 @@ def trees_stage_members(members: PythonObject, x_addr: Int, rows: Int, cols: Int
             except:
                 pass
     return staged
+
+
+def trees_stage_members(members: PythonObject, x_addr: Int, rows: Int, cols: Int,
+                        context: PythonObject) raises -> PythonObject:
+    """Stage the C-order float32 rows at `x_addr` in every forest binary
+    that two or more of `members` predict through. Returns the unstage
+    entries to pass to `trees_unstage`; the rows must stay alive and
+    unchanged until then."""
+    if rows < 1:
+        return Python.list()
+    return trees_stage_tables(trees_stage_wanted(members, cols, context), x_addr, rows, cols)
 
 
 # TOMBSTONE: trees_stage_rounds (the door rounds' staging after their first member's fit) deleted 2026-11-23 by

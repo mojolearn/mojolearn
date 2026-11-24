@@ -20,16 +20,21 @@ sys.path.insert(0, str(HERE))
 import algos_lane_check as alc  # noqa: E402
 
 
-class RunArmCommands(unittest.TestCase):
+class RunSidesCommand(unittest.TestCase):
+    """Both columns come from ONE harness process (`--side both`, 2026-11-24):
+    the CPU column through device="cpu", never a MOJOLEARN_VENDOR=cpu child."""
+
     def setUp(self):
         self.calls = []
         self.real_run = alc.subprocess.run
         self.rc = 0
+        self.write = True
 
         def fake_run(cmd, cwd=None, env=None, stdout=None, stderr=None, timeout=None, **kw):
             self.calls.append((cmd, env))
-            out = Path(cmd[cmd.index("--json") + 1])
-            out.write_text("{}")
+            if self.write:
+                for flag in ("--json", "--cpu-json"):
+                    Path(cmd[cmd.index(flag) + 1]).write_text("{}")
             return subprocess.CompletedProcess(cmd, self.rc)
 
         alc.subprocess.run = fake_run
@@ -38,32 +43,41 @@ class RunArmCommands(unittest.TestCase):
     def tearDown(self):
         alc.subprocess.run = self.real_run
 
-    def test_gpu_and_cpu_arms_run_the_harness_on_their_backends(self):
+    def _run(self, **kw):
+        return alc.run_sides("gmm", "cuda", "", self.d / "g.json", self.d / "c.json", self.d / "log", **kw)
+
+    def test_one_process_records_both_sides(self):
         os.environ["MOJOLEARN_PAR_DEVICES"] = "0,1"          # an ambient group never chooses a column
+        os.environ["MOJOLEARN_VENDOR"] = "cpu"               # an ambient selector never chooses a side
         try:
-            alc.run_arm("gpu", "gmm", "cuda", "", self.d / "g.json", self.d / "log")
-            alc.run_arm("cpu", "gmm", "cuda", "", self.d / "c.json", self.d / "log")
+            self._run()
         finally:
             os.environ.pop("MOJOLEARN_PAR_DEVICES")
-        (gpu_cmd, gpu_env), (cpu_cmd, cpu_env) = self.calls
-        self.assertIn(str(alc.HARNESS), gpu_cmd)
-        self.assertEqual(gpu_cmd[gpu_cmd.index("--require-backend") + 1], "cuda")
-        self.assertNotIn("--require-cpu", gpu_cmd)
-        self.assertNotIn("MOJOLEARN_VENDOR", gpu_env)
-        self.assertIn("--require-cpu", cpu_cmd)
-        self.assertEqual(cpu_env["MOJOLEARN_VENDOR"], "cpu")
-        for _, env in self.calls:
-            self.assertNotIn("MOJOLEARN_PAR_DEVICES", env)
+            os.environ.pop("MOJOLEARN_VENDOR")
+        self.assertEqual(len(self.calls), 1)
+        cmd, env = self.calls[0]
+        self.assertIn(str(alc.HARNESS), cmd)
+        self.assertEqual(cmd[cmd.index("--side") + 1], "both")
+        self.assertEqual(cmd[cmd.index("--require-backend") + 1], "cuda")
+        self.assertEqual(cmd[cmd.index("--json") + 1], str(self.d / "g.json"))
+        self.assertEqual(cmd[cmd.index("--cpu-json") + 1], str(self.d / "c.json"))
+        self.assertNotIn("--require-cpu", cmd)
+        self.assertNotIn("MOJOLEARN_VENDOR", env)
+        self.assertNotIn("MOJOLEARN_PAR_DEVICES", env)
 
-    def test_a_cpu_refusal_fails(self):
+    def test_a_refusal_on_either_side_fails(self):
         self.rc = 1
         with self.assertRaises(alc.Fail):
-            alc.run_arm("cpu", "gmm", "cuda", "", self.d / "c.json", self.d / "log")
+            self._run()
+
+    def test_a_missing_column_fails(self):
+        self.write = False
+        with self.assertRaises(alc.Fail):
+            self._run()
 
     def test_a_moved_part_in_the_sabotaged_stage_is_left_to_the_diff(self):
         self.rc = 1
-        self.assertEqual(alc.run_arm("gpu", "gmm", "cuda", "", self.d / "g.json", self.d / "log",
-                                     moved_ok=True), 1)
+        self.assertEqual(self._run(moved_ok=True), 1)
 
 
 if __name__ == "__main__":

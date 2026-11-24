@@ -113,7 +113,7 @@ comptime XD_DICT_MINIBATCH = 61   # a: [x, d] i: [the 11 words of XD_DICT_LEARNI
 comptime XD_MCD = 62              # a: [x, loc, cov, sup(int32), dist] i: [n, d, h, seed, n_sub, n_ss, h_sub, n_trials, n_m, h_m, n_best_m]
 comptime XD_CONSISTENCY_FACTOR = 63  # a: [dst out(f64)] f: [p, num, den]
 comptime XD_CHI2_QUANTILE = 64    # a: [dst out(f64)] f: [dof, upper]
-comptime XD_PLS_FIT = 65          # a: [x, y, xw, yw, xs, ys, xl, yl, its(int32), nits out(int64)] i: [n, px, q, nc, max_iter, mode_b, norm_y, canonical, svd_algo] f: [tol] -> done
+comptime XD_PLS_FIT = 65          # a: [x, y, xw, yw, xs, ys, xl, yl, its(int32), nits out(int64)] i: [n, px, q, nc, max_iter, mode_b, norm_y, canonical, svd_algo, x pool id, y pool id (-1: a[0] / a[1]; lane vdf-scope-pls)] f: [tol] -> done
 comptime XD_LU_GESV = 66          # a: [a, b, info] i: [n, nrhs]
 comptime XD_DEV_LU_FACTOR = 67    # a: [a, lu, piv(int32), info] i: [ia, ilu, ipv, n]   (LU_RESIDENT_ENTRIES)
 comptime XD_DEV_LU_SOLVE = 68     # a: [b, x] i: [ilu, ipv, ia, n, nrhs, refine]        (LU_RESIDENT_ENTRIES)
@@ -141,9 +141,23 @@ comptime XD_FA_FIT = 76           # a: [x, psi0, components, noise, mean, loglik
 comptime XD_FA_QUERY = 77         # a: [x, components, noise, mean, dst, value out(f64)] i: [op, n, d, nc]
 comptime XD_LDA = 78              # a: [x, comps in, exp in, comps out, exp out, dst, draw inout(int64), n_batch_iter inout(int64), value out(f64)] i: [op, n, v, nc, fresh, flag, max_iter, online, batch_size, max_doc_update_iter, seed, evaluate_every, refusal (0 fit, 1 partial_fit, 2 transform)] f: [doc prior, topic prior, offset, decay, mean_change_tol, total samples, perp_tol] -> n_iter
 comptime XD_RP_FIT = 79           # a: [x, components, inverse] i: [n, d, kc, sparse, seed, inverse, fused_ok] f: [density] -> first non-finite index or -1
-comptime XD_RP_PROJECT = 80       # a: [x, matrix, dst] i: [m, d, rows, tiled (0 plain, 1 tiled, 2 tiled and X untested), matrix pool id (-1: none)] -> 1 when X was flagged non-finite
+comptime XD_RP_PROJECT = 80       # a: [x, matrix, dst] i: [m, d, rows, tiled (0 plain, 1 tiled, 2 tiled and X untested), matrix pool id (-1: none), X pool id (-1: none; lane vdf-scope-neural3: X then is that id's words and a[0] is unread)] -> 1 when X was flagged non-finite
+# lane vdf-linalg2 (2026-11-24): linalg.qr's geqrf, orgqr and R cut on pool ids
+# (x_decomp/resident_qr.mojo), so h, tau, Q and R stay on the device and each
+# result is downloaded once (were XD_GEQRF / XD_ORGQR host-address round trips
+# and the door's host `_lin_triu`). GPU image only; the host image refuses them.
+comptime XD_DEV_GEQRF = 81        # i: [a, h, tau, rows, cols]           -> min(rows, cols)
+comptime XD_DEV_ORGQR = 82        # i: [h, tau, q, rows, cols, k, qc]
+comptime XD_DEV_TRIU = 83         # i: [h, dst, r, c]   (dst r x c: the first r rows of h, below the diagonal zero)
+# lane vdf-linalg6 (2026-11-24): a training device array (core/train_dev_pool.mojo handle) into the pool and back,
+# device to device, and the TSQR on pool ids (x_decomp/resident_train.mojo), so linalg.eigh / qr / svd read a
+# TrainDeviceArray in place on the host input's route. GPU image only (identical); the host image refuses them.
+comptime XD_DEV_FROM_TRAIN = 84   # i: [train handle, dst id, n]
+comptime XD_DEV_TO_TRAIN = 85     # i: [src id, train handle, n]
+comptime XD_DEV_TSQR_R = 86       # a: [r] i: [x id, rows, cols, keep]  -> the owner handle with keep, else cols
+comptime XD_DEV_TSQR_Q = 87       # a: [c (read when c id < 0)] i: [owner, c id (-1: host c), q id, m, n, k]  (frees the owner)
 # lane entangled-mkit (2026-11-12): the manifold kit's operations 120 ..
-# XD_MANI_OPERATION_END - 1 (above every operation here, 0 .. 80) (x_decomp/descriptor_mani_schema.mojo).
+# XD_MANI_OPERATION_END - 1 (above every operation here, 0 .. 87) (x_decomp/descriptor_mani_schema.mojo).
 comptime XD_OPERATION_COUNT = XD_MANI_OPERATION_END
 
 comptime XD_CAP_HOST = 1       # the host-address operations
@@ -271,7 +285,7 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
     if op == XD_CHI2_QUANTILE:
         return (1, 0, 2)
     if op == XD_PLS_FIT:
-        return (10, 9, 1)
+        return (10, 11, 1)  # int words 9 / 10: the centred X / Y pool ids, -1 none (lane vdf-scope-pls)
     if op == XD_LU_GESV:
         return (3, 2, 0)
     if op == XD_DEV_LU_FACTOR:
@@ -284,24 +298,38 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
         return (2, 1, 0)
     if op == XD_DEV_ORDER_SMALL:
         return (0, 3, 0)
+    if op == XD_DEV_GEQRF:
+        return (0, 5, 0)
+    if op == XD_DEV_ORGQR:
+        return (0, 7, 0)
+    if op == XD_DEV_TRIU:
+        return (0, 4, 0)
+    if op == XD_DEV_FROM_TRAIN or op == XD_DEV_TO_TRAIN:
+        return (0, 3, 0)
+    if op == XD_DEV_TSQR_R:
+        return (1, 4, 0)
+    if op == XD_DEV_TSQR_Q:
+        return (1, 6, 0)
     if op == XD_TSQR_Q:
         return (2, 4, 0)
     if op == XD_R_SIGNS:
         return (2, 1, 0)
+    # The last int word of ICA_FIT, ICA_PROJECT, FA_FIT and FA_QUERY (lane vdf-scope-neural3): X's resident pool
+    # id (a fold the XDecomp member took on the device), -1: X is a[0].
     if op == XD_ICA_FIT:
-        return (8, 9, 2)
+        return (8, 10, 2)
     if op == XD_ICA_PROJECT:
-        return (4, 5, 0)
+        return (4, 6, 0)
     if op == XD_FA_FIT:
-        return (7, 5, 1)
+        return (7, 6, 1)
     if op == XD_FA_QUERY:
-        return (6, 4, 0)
+        return (6, 5, 0)
     if op == XD_LDA:
-        return (9, 13, 7)
+        return (9, 14, 7)  # int word 13: X's resident pool id, -1 none (lane vdf-scope-neural3)
     if op == XD_RP_FIT:
         return (3, 7, 1)
     if op == XD_RP_PROJECT:
-        return (3, 5, 0)
+        return (3, 6, 0)
     if xd_is_mani_op(op):
         return xd_mani_schema(op)
     raise Error("x_decomp native ABI: unknown operation " + String(op))

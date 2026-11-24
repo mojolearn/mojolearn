@@ -4,7 +4,8 @@
 Construction, refusals, `set_params`, clone and pickle of the parameter itself are covered for every class that takes
 `device=` by `test_device_parameter.py`. Here, for UMAP, TSNE, Isomap, LocallyLinearEmbedding, MDS and ClassicalMDS: on
 a GPU installation `device="cpu"` runs the CPU binaries beside the GPU ones in one process (`vendor_used() == "cpu"`,
-nothing launched on the GPU); in `identical` mode it returns the bits the GPU returns; an estimator moved with
+nothing launched on the GPU; the bits of each side are the verify lanes umap, x-decomp-umap-options, x-ann-tsne-pca,
+x-decomp-manifold); an estimator moved with
 `set_params` runs on its new device. What needs two devices is skipped by name on a CPU-only installation.
 """
 import numpy as np
@@ -90,19 +91,6 @@ def test_default_device_still_runs_on_the_gpu_beside_a_cpu_estimator(spec):
     build(spec).fit_transform(x)
     activity = cb.activity_end(mojolearn)
     assert activity is not None and activity["launches"] > 0
-
-
-@two_devices
-@case
-def test_identical_mode_cpu_device_returns_the_gpu_bits(spec):
-    if mojolearn.numeric_mode() != "identical":
-        pytest.skip("bits are promised in identical mode only")
-    x = data()
-    gpu = build(spec, numeric_mode="identical")
-    cpu = build(spec, numeric_mode="identical", device="cpu")
-    assert np.asarray(gpu.fit_transform(x)).tobytes() == np.asarray(cpu.fit_transform(x)).tobytes()
-    if spec[3]:
-        assert np.asarray(gpu.transform(x[:7])).tobytes() == np.asarray(cpu.transform(x[:7])).tobytes()
 
 
 @two_devices

@@ -41,6 +41,10 @@ CASES = [
     ("power", PowerTransformer, dict(), ("lambdas_",), True),
 ]
 case = pytest.mark.parametrize("spec", CASES, ids=[row[0] for row in CASES])
+# The cross-device bits rows the verify lanes x-prep-* (tools/identity_lanes/prep.py) do not digest: order="F"
+# output. The other rows' CPU and GPU bits are those lanes' digests.
+UNDIGESTED = [row for row in CASES if row[0] in ("polynomial-f",)]
+undigested_case = pytest.mark.parametrize("spec", UNDIGESTED, ids=[row[0] for row in UNDIGESTED])
 
 
 def build(spec, **extra):
@@ -84,7 +88,7 @@ def test_explicit_gpu_runs_on_a_gpu_installation_and_is_refused_in_words_on_a_cp
 
 
 @two_devices
-@case
+@undigested_case
 def test_cpu_device_returns_the_gpu_bits(spec):
     x = data()
     gpu = build(spec, device="gpu").fit(x)
@@ -96,7 +100,7 @@ def test_cpu_device_returns_the_gpu_bits(spec):
 
 
 @two_devices
-@case
+@undigested_case
 def test_two_estimators_on_two_devices_interleave_in_one_process(spec):
     x = data()
     gpu, cpu = build(spec, device="gpu"), build(spec, device="cpu")
@@ -165,6 +169,11 @@ CLASSIFIERS = [
     ("qda", QuadraticDiscriminantAnalysis, dict(), False, ("means_",), ("predict", "predict_proba")),
 ]
 classifier = pytest.mark.parametrize("spec", CLASSIFIERS, ids=[row[0] for row in CLASSIFIERS])
+# The discriminants' means_ (and LDA's multiclass decision_function) are not in a verify lane's digest; the naive
+# Bayes rows' CPU and GPU bits are the x-prep-*-nb and x-prep-*-nb-methods lanes' digests.
+UNDIGESTED_CLASSIFIERS = [row for row in CLASSIFIERS if row[0] in ("lda", "qda")]
+undigested_classifier = pytest.mark.parametrize("spec", UNDIGESTED_CLASSIFIERS,
+                                                ids=[row[0] for row in UNDIGESTED_CLASSIFIERS])
 
 
 def answers(spec, model, x, y):
@@ -186,7 +195,7 @@ def test_classifier_default_and_explicit_cpu_run(spec):
 
 
 @two_devices
-@classifier
+@undigested_classifier
 def test_classifier_cpu_device_returns_the_gpu_bits(spec):
     x, y = labelled(counts=spec[3])
     gpu = spec[1](**dict(spec[2], device="gpu")).fit(x, y)
@@ -198,7 +207,7 @@ def test_classifier_cpu_device_returns_the_gpu_bits(spec):
 
 
 @two_devices
-@classifier
+@undigested_classifier
 def test_classifiers_on_two_devices_interleave_in_one_process(spec):
     x, y = labelled(counts=spec[3])
     gpu, cpu = spec[1](**dict(spec[2], device="gpu")), spec[1](**dict(spec[2], device="cpu"))

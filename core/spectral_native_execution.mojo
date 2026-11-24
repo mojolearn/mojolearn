@@ -11,7 +11,7 @@ from core.spectral_native_api import (
     SpectralInput, SpectralStateView, SpectralFitRequest, SpectralEmbeddingRequest,
     SpectralQueryShape, SpectralQueryRequest, SpectralPrepareRequest,
     SpectralResidentQueryRequest, SpectralNativeKernels,
-    SPECTRAL_DATASET, SPECTRAL_GRAPH, SPECTRAL_DENSE,
+    SPECTRAL_DATASET, SPECTRAL_GRAPH, SPECTRAL_DENSE, SPECTRAL_RBF, SPECTRAL_KNN, SPECTRAL_DATASET_STORE,
 )
 from spectral.impl.spectral_predict_common import (
     SpectralPredictionState, SpectralPrediction, spectral_predict_validate,
@@ -82,7 +82,9 @@ def spectral_read_state(view: SpectralStateView, shape: SpectralQueryShape) rais
 
 
 def spectral_write_fit(request: SpectralFitRequest, result: SpectralFitResult) raises -> Int:
-    if request.input.route == SPECTRAL_DENSE and result.columns < 0:
+    var dense_kind = (request.input.route == SPECTRAL_DENSE or request.input.route == SPECTRAL_RBF
+                      or request.input.route == SPECTRAL_KNN)
+    if dense_kind and result.columns < 0:
         return result.columns
     spectral_guard_fit(result.labels, result.embedding, request.input.rows, request.options.components)
     if request.options.keep_state:
@@ -96,7 +98,9 @@ def spectral_write_fit(request: SpectralFitRequest, result: SpectralFitResult) r
 
 def spectral_write_embedding(request: SpectralEmbeddingRequest,
                              result: SpectralEmbeddingResult) raises -> Int:
-    if request.input.route == SPECTRAL_DENSE and result.columns < 0:
+    var dense_kind = (request.input.route == SPECTRAL_DENSE or request.input.route == SPECTRAL_RBF
+                      or request.input.route == SPECTRAL_KNN)
+    if dense_kind and result.columns < 0:
         return result.columns
     spectral_guard_embedding(result.embedding, request.input.rows, result.columns,
                              request.options.output_components)
@@ -131,12 +135,20 @@ trait SpectralBackend:
     @staticmethod
     def fit_dense(request: SpectralFitRequest, mut result: SpectralFitResult) raises: ...
     @staticmethod
+    def fit_dataset_store(request: SpectralFitRequest, mut result: SpectralFitResult) raises: ...
+    @staticmethod
+    def fit_affinity(request: SpectralFitRequest, mut result: SpectralFitResult) raises: ...
+    @staticmethod
     def embed_dataset(request: SpectralEmbeddingRequest, source: List[Float32], mut result: SpectralEmbeddingResult) raises: ...
     @staticmethod
     def embed_graph(request: SpectralEmbeddingRequest, rows: List[Int32], columns: List[Int32],
                     values: List[Float32], mut result: SpectralEmbeddingResult) raises: ...
     @staticmethod
     def embed_dense(request: SpectralEmbeddingRequest, mut result: SpectralEmbeddingResult) raises: ...
+    @staticmethod
+    def embed_affinity(request: SpectralEmbeddingRequest, mut result: SpectralEmbeddingResult) raises: ...
+    @staticmethod
+    def embed_dataset_store(request: SpectralEmbeddingRequest, mut result: SpectralEmbeddingResult) raises: ...
     @staticmethod
     def query(source: List[Float32], training: List[Float32], shape: SpectralQueryShape,
               state: SpectralPredictionState) raises -> SpectralPrediction: ...
@@ -184,6 +196,18 @@ struct SpectralKernels[B: SpectralBackend](SpectralNativeKernels):
             _ = i32_ptr(r.labels)
             _ = f32_ptr(r.embedding)
             Self.B.fit_dense(r, result)
+        elif r.input.route == SPECTRAL_RBF or r.input.route == SPECTRAL_KNN:
+            # lane vdf-misc4: the affinity is generated on this image's device
+            # from X (rbf) or the precomputed distances (knn) and the dense fit
+            # reads it there.
+            _ = i32_ptr(r.labels)
+            _ = f32_ptr(r.embedding)
+            Self.B.fit_affinity(r, result)
+        elif r.input.route == SPECTRAL_DATASET_STORE:
+            # lane vdf-scope-cluster4: the dataset route over a slot of the image's resident store.
+            _ = i32_ptr(r.labels)
+            _ = f32_ptr(r.embedding)
+            Self.B.fit_dataset_store(r, result)
         else:
             raise Error("Spectral native ABI: unknown fit input route")
         return result^
@@ -214,6 +238,15 @@ struct SpectralKernels[B: SpectralBackend](SpectralNativeKernels):
             _ = f32_ptr(r.input.source)
             _ = f32_ptr(r.embedding)
             Self.B.embed_dense(r, result)
+        elif r.input.route == SPECTRAL_RBF or r.input.route == SPECTRAL_KNN:
+            # lane vdf-misc3: the affinity is generated on this image's device
+            # from X (rbf) or the precomputed distances (knn) and stays there.
+            _ = f32_ptr(r.embedding)
+            Self.B.embed_affinity(r, result)
+        elif r.input.route == SPECTRAL_DATASET_STORE:
+            # lane vdf-scope-cluster6: the dataset route over a slot of the image's resident store.
+            _ = f32_ptr(r.embedding)
+            Self.B.embed_dataset_store(r, result)
         else:
             raise Error("Spectral native ABI: unknown embedding input route")
         return result^

@@ -51,6 +51,7 @@ from forest_inference_binding_door import (
 from core.forest_inference_run import (
     forest_prepare_gpu_native, forest_predict_resident_into_gpu_native,
     forest_predict_resident_labels_gpu_native, forest_gpu_resident_caps,
+    forest_resident_rows_native,
 )
 from bindings.forest_fit_boundary_unpack import forest_fit_args_py
 from core.forest_fit_request import (
@@ -60,7 +61,14 @@ from core.forest_fit_request import (
     XF_CAP_DART,
     XF_CAP_SESSION,
     XF_CAP_ADA,
+    XF_CAP_DEV_ROWS,
 )
+from core.forest_store_transport import (
+    forest_store_publish, forest_store_words, forest_store_admit,
+)
+from core.mojolearn_rf_run import RF_STORE, rf_store_ctx
+from core.gbdt_entry_table import gbdt_vendor_word
+from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS, XP_DEV_LIVE
 from core.tree_member import tree_member_publish_image
 from core.forest_member import forest_member_publish_image
 from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish, forest_session_entry_releases
@@ -191,7 +199,7 @@ def rf_forest_export_release_binding(handle: PythonObject) raises -> PythonObjec
     return PythonObject(None)
 
 
-def _rf_classifier_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> Int:
+def _rf_classifier_fit[ROWMAJOR: Bool = False, ROWS: Bool = False](params: ForestFitArgs) raises -> Int:
     """Fit the cuML-implementation RandomForest classifier. `x` is COLUMN-major
     float32 (n_rows * n_cols, the layout `fit_forest`'s default expects);
     `y` is int32 class CODES in [0, n_classes). See `N_RF_FIT_PARAMS`.
@@ -204,10 +212,10 @@ def _rf_classifier_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> 
     var forest: RandomForestMetaData[DT, CLT]
     if params.gil_free:
         # a member's worker: no GIL to release (core/forest_entry.mojo)
-        forest = _rf_classifier_fit_forest[ROWMAJOR](params, bt)
+        forest = _rf_classifier_fit_forest[ROWMAJOR, ROWS](params, bt)
     else:
         with GILReleased(Python()):
-            forest = _rf_classifier_fit_forest[ROWMAJOR](params, bt)
+            forest = _rf_classifier_fit_forest[ROWMAJOR, ROWS](params, bt)
     # The fit loop words the door asked for (XF_W_LOOP; lane alm-forest):
     # `fit_forest_prepared`'s tree loop, read once after the fit.
     fit_loop_put(params.loop, forest.fit_loop)
@@ -682,7 +690,7 @@ def _rf_ada_regressor_round_native(params: ForestFitArgs) raises -> Int:
     return _retain_rf_handle(export_trees^, forest.notices)
 
 
-def _rf_regressor_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> Int:
+def _rf_regressor_fit[ROWMAJOR: Bool = False, ROWS: Bool = False](params: ForestFitArgs) raises -> Int:
     """Fit the cuML-implementation RandomForest regressor. Same contract; slot 2
     MUST be 0 and `y` is float32. `criterion` is MSE (2), POISSON (4),
     GAMMA (5) or INVERSE_GAUSSIAN (6); anything else is refused by name
@@ -693,10 +701,10 @@ def _rf_regressor_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> I
     var t_bind = bt.start()
     var forest: RandomForestMetaData[DT, RLT]
     if params.gil_free:
-        forest = _rf_regressor_fit_forest[ROWMAJOR](params, bt)
+        forest = _rf_regressor_fit_forest[ROWMAJOR, ROWS](params, bt)
     else:
         with GILReleased(Python()):
-            forest = _rf_regressor_fit_forest[ROWMAJOR](params, bt)
+            forest = _rf_regressor_fit_forest[ROWMAJOR, ROWS](params, bt)
     # The fit loop words the door asked for (XF_W_LOOP; lane alm-forest):
     # `fit_forest_prepared`'s tree loop, read once after the fit.
     fit_loop_put(params.loop, forest.fit_loop)
@@ -798,7 +806,7 @@ struct RfGpuForest(ForestImage):
 
     @staticmethod
     def caps() -> Int:
-        var caps = forest_gpu_resident_caps() | XF_CAP_DART | XF_CAP_SESSION | XF_CAP_ADA
+        var caps = forest_gpu_resident_caps() | XF_CAP_DART | XF_CAP_SESSION | XF_CAP_ADA | XF_CAP_DEV_ROWS
         comptime if FOREST_DEVICE_FINITE:
             caps |= XF_CAP_DEVICE_SCAN
         return caps
@@ -906,6 +914,52 @@ struct RfGpuForest(ForestImage):
     def unstage_input() raises:
         resident_unstage_input[True]()
 
+    @staticmethod
+    def fit_rows(classifier: Bool, args: ForestFitArgs) raises -> Int:
+        # XF_FIT_ROWS (lane vdf-scope-trees): the plain fit bodies with the
+        # rows taken out of the store on the device (`rf_store_rows_x`).
+        if classifier:
+            return _rf_classifier_fit[False, True](args)
+        return _rf_regressor_fit[False, True](args)
+
+    @staticmethod
+    def resident_rows(mode: Int, handle: Int, store_id: Int, idx: Int, out_addr: Int, rows: Int,
+                      cols: Int, outputs: Int) raises -> Int:
+        # XF_RESIDENT_ROWS (lane vdf-scope-trees2a): the rows of the store
+        # taken on the device and read there by the snapshot (one context).
+        var store = RF_STORE.get_or_create_ptr()
+        return forest_resident_rows_native[True](store[], rf_store_ctx(), mode, handle, store_id, idx,
+                                                 out_addr, rows, cols, outputs)
+
+
+def _rf_store_op(op: Int, a: List[Int], p: List[Int]) raises -> Int:
+    var store = RF_STORE.get_or_create_ptr()
+    if op == XP_DEV_PUT:
+        return store[].put(rf_store_ctx(), a[0], p[0])
+    if op == XP_DEV_FREE:
+        store[].free(rf_store_ctx(), p[0])
+        return 0
+    if op == XP_DEV_TAKE_ROWS:
+        return store[].take_rows(rf_store_ctx(), p[0], p[1], a[0], p[2])
+    return Int(store[].live)
+
+
+def rf_gpu_store_transport_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
+    ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    """This image's STORE TRANSPORT entry (core/forest_store_transport.mojo;
+    lane vdf-scope-trees): put / free / take rows / live of its device store
+    (core/mojolearn_rf_run.mojo `RF_STORE`, on the fits' context), the
+    x_prep transport numbering. No CPython: callers hold no GIL or release
+    it themselves; the store has its own lock word."""
+    try:
+        forest_store_admit(operation, na, np, nf, result)
+        var value = _rf_store_op(operation, forest_store_words(aa, na), forest_store_words(pp, np))
+        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = value
+        return 0
+    except problem:
+        native_descriptor_report(problem, context, sink)
+        return 1
+
 
 def rf_gpu_forest_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
@@ -942,6 +996,11 @@ def build__mojolearn_rf() -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_rf")
         # The native forest entry (core/forest_entry_table.mojo) under this image's key.
         forest_entry_publish["MojolearnForestEntryOwnerRfGpuV1"](FOREST_TABLE_RF, COMPILED_VENDOR, rf_gpu_forest_entry_v1)
+        # Its device store's transport entry (XF_CAP_DEV_ROWS; lane vdf-scope-trees).
+        var store_vendor = gbdt_vendor_word(COMPILED_VENDOR)
+        if store_vendor >= 0:
+            forest_store_publish(FOREST_TABLE_RF, Int(GLOBAL_NUMERIC_MODE), store_vendor,
+                                 Int(RF_STORE.get_or_create_ptr()), rf_gpu_store_transport_v1)
         # The families' member entries (core/member_abi.mojo) over this forest entry.
         tree_member_publish_image(COMPILED_VENDOR)
         forest_member_publish_image(COMPILED_VENDOR)

@@ -6,6 +6,9 @@
 # column (MOJOLEARN_VENDOR=cpu) for the columns whose bindings were rebuilt, then the patch reverted, the
 # own .so removed, and the lanes run again. A lane is caught when one column it runs on moved or refused.
 # TAB separated: arm, builds, verdict, lanes, reference, reverted, seconds
+# Since 2026-11-24 (verify through device=, lane vdv-sabotage) a run records both sides in ONE identity_break
+# process (`--side both`; `--side cpu` without a GPU) and judges each arm per side (`coverage_sabotage.py
+# check-sides`); the MOJOLEARN_VENDOR=cpu child above is how the 2026-10-21 rows were taken and is gone.
 # 2026-11-22 lane sabotage-repair: the 29 re-cut arms with a host binding re-proven on cpc1, CPU column only (clean = the 45e90deaa7bc core wheel + the branch's python + every arm stem built clean from the branch; sabotaged = the arm's stems rebuilt with its patch; restored = the clean bindings again; a refusal or oracle catch carries a hash-bound review). Their rows below are replaced in place; evidence ~/mojolearn-evidence/sabotage-repair/cpc1-out.
 coverage-core-array_helpers_impl	build rc 0, 87s, build_core_host rc 0, 23s	CAUGHT	x-metrics-search (host MOVED Metal MOVED) trees-adaboost-clf (host MOVED Metal MOVED)	4 DIVERGENT	STABLE, equal to clean	147
 coverage-core-hotpath_impl	build rc 0, 110s, build_core_host rc 0, 38s	CAUGHT	x-metrics-splitters (host MOVED Metal MOVED) cross-val (host MOVED Metal unmoved) x-lasso-cv (host MOVED Metal unmoved)	4 DIVERGENT, 2 IDENTICAL	STABLE, equal to clean	190

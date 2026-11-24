@@ -212,6 +212,7 @@ def train_program_control[E: Exec & Movable & Deinitable](
     epochs: Int, batch: Int, shuffle_rows: Bool, seed: UInt64, curve: FP,
     condition_id: Int, otherwise_id: Int, tol: Float32 = Float32(0.0), n_iter_no_change: Int = 0,
     step_curve: Int = 0, grads_out: List[Int] = List[Int](), loop_words: Int = 0,
+    device_srcs: Bool = False,
 ) raises -> Tuple[Int, Int, Int]:
     """Program.fit: `epochs` epochs of minibatch steps as the executor's
     bounded device loop (lane x1b-executor-gated-state-chunked-loop).
@@ -241,6 +242,11 @@ def train_program_control[E: Exec & Movable & Deinitable](
     launch and once after the existing `s.ex.sync()` that follows it (no
     synchronization added, nothing inside the loop); its iterations are the
     committed epochs.
+    `device_srcs` (lane vdf-scope-neural2, 2026-11-24): every `srcs[k].addr`
+    is already this executor's float32 C-order memory (a fold the member
+    store took on the device, sequence/seq_member_store.mojo): the minibatch
+    gathers read it in place, nothing is uploaded and nothing of it is freed
+    here (the store owns it). Same words in the same order: same bits.
     `grads_out`, when not empty, holds one executor address per entry of
     `parameters` (that parameter's element count each): the LAST
     minibatch's gradient of each trained parameter is copied there, before
@@ -299,6 +305,9 @@ def train_program_control[E: Exec & Movable & Deinitable](
                 grad_dst[j] = grads_out[i]
     var rules = StepOpRules(s.steps_address())
     var full = List[FP]()
+    # The arrays the minibatch gathers read: `full` (owned, uploaded here) or,
+    # under `device_srcs`, the caller's executor memory (borrowed).
+    var inputs = List[FP]()
     var batches = List[FP]()
     for k in range(len(srcs)):  # driver-loop: over input shape contracts
         if shapes[k].ndim < 2 or shapes[k].d[0] != n or shapes[k].ndim != p.in_shapes[k].ndim:
@@ -352,10 +361,17 @@ def train_program_control[E: Exec & Movable & Deinitable](
     var mirror = List[Float32](length=LOOP_WORDS, fill=Float32(0))
     try:
         for k in range(len(srcs)):  # driver-loop: over program input arrays
+            if device_srcs:
+                if p.in_kinds[k] == PROGRAM_IN_IDS or not srcs[k].is_f32_c():
+                    raise Error("Program.fit: device-resident inputs are float32 in C order")
+                inputs.append(FP(unsafe_from_address=srcs[k].addr))
+                batches.append(s.ex.alloc(bs * (shapes[k].count() // n)))
+                continue
             var buf = s.ex.alloc(srcs[k].count())
             # Register ownership before upload: a failed copy must not leave
             # an executor allocation unreachable until session destruction.
             full.append(buf)
+            inputs.append(buf)
             if p.in_kinds[k] == PROGRAM_IN_IDS:
                 upload_cast_i32(s.ex, buf, srcs[k], "program ids")
             else:
@@ -442,8 +458,8 @@ def train_program_control[E: Exec & Movable & Deinitable](
                 s._drop_temps(temps)
                 temps.clear()
                 s.tape.reset()
-                for k in range(len(full)):  # driver-loop: over program inputs
-                    gather_rows(s.ex, full[k], indices.value(), start, count, widths[k], batches[k])
+                for k in range(len(inputs)):  # driver-loop: over program inputs
+                    gather_rows(s.ex, inputs[k], indices.value(), start, count, widths[k], batches[k])
                     batch_shapes[k].d[0] = count
                 if loss_kind != 0:
                     gather_rows(s.ex, ty.value(), indices.value(), start, count, target.cols, yb.value())

@@ -16,18 +16,9 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.base_helpers_key_unpack import base_helpers_key
 from bindings.base_helpers_released_unpack import base_check_indices_i64
-from std.python._cpython import PyObjectPtr
-from bindings.py_cpython_table import cpython_table
-from bindings.optimizer_public_words_unpack import stash_python_error
-from bindings.msel_helpers_key_unpack import msel_helpers_key
 from bindings.msel_member_device_unpack import msel_member_host_folds
-from bindings.msel_helpers_released_unpack import (
-    msel_store_alloc, msel_store_read, msel_store_free, msel_scatter_rows,
-)
 from bindings.native_unit_os_threads_run import native_unit_cores
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
-from bindings.py_attr import py_attr
-from bindings.py_slice_native import py_slice, py_slice_from
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.arena_resident_plan_unpack import ArenaResidentPlan
 from bindings.py_admitted_registry import admitted_scope_begin, admitted_scope_end
@@ -48,12 +39,11 @@ from bindings.family_common_pack import (
 )
 from bindings.msel_common_door import (
     msel_take_labels, msel_b, msel_n_samples, msel_admit, msel_try, msel_missed, msel_is_bool, msel_is_integral, msel_is_real, msel_int,
-    msel_op, msel_cmp, msel_materialize, msel_try_materialize, msel_flatten, msel_is_array, msel_addr, msel_p64, msel_pf64,
-    msel_new, msel_f64_list, msel_index_i64, msel_resident_new, msel_resident_op, msel_resident_take,
+    msel_cmp, msel_materialize, msel_try_materialize, msel_flatten, msel_is_array, msel_addr, msel_p64, msel_pf64,
+    msel_new, msel_f64_list, msel_index_i64, msel_resident_new, msel_resident_take,
     msel_resident_release, msel_resident_close, msel_get_scorer,
 )
 from bindings.msel_split_door import msel_split, msel_check_cv, msel_default_folds, msel_flag_truth, msel_cls, msel_sabotage
-from bindings.msel_cv_run import _numeric_dtype
 from bindings.msel_member_units_door import msel_member_fit_in_place, msel_text_rows
 from bindings.msel_search_state_door import msel_search_fields, msel_carrier_search
 
@@ -345,8 +335,8 @@ struct MselFoldRows(Movable):
     """`_FoldRows`: X and y resident for the calls that share them (lane
     mf-r9b: the cv tools' folds are the typed search RUN's; what is left is
     the resident store and scope a caller reads rows out of: the
-    permutation test's permuted y and X scope, cross_val_predict's label
-    placement, the process workers' fold rows)."""
+    permutation test's permuted y and X scope, the process workers' fold
+    rows)."""
     var x: PythonObject
     var y: PythonObject
     var folds: PythonObject
@@ -411,11 +401,9 @@ struct MselFoldRows(Movable):
             return msel_resident_take(self.res, values, idx, context)
         return self.resident.take(values, idx)
 
-    def resident_store(mut self, values: PythonObject, indices: Bool, context: PythonObject) raises -> Int:
-        if self.dev:
-            var dtype = PythonObject("<i8") if indices else PythonObject(None)
-            return Int(py=msel_resident_op(self.res, "msel_resident_entry", Python.tuple(values, dtype), context)[2])
-        return self.resident.store(values, indices)
+    # REMOVED (lane vdf-scope-cv, 2026-11-24): `resident_store`, whose one
+    # caller was cross_val_predict's identity placement (`_place`), replaced
+    # by `_decoded_labels`.
 
     def resident_release(mut self, values: PythonObject, context: PythonObject) raises:
         if self.dev:
@@ -752,196 +740,54 @@ def msel_cross_val_score(args: PythonObject, context: PythonObject) raises -> Py
 
 # ---------------------------------------------------------------- cross_val_predict
 
-def _numeric_pred(pred: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_numeric_pred`: a numeric buffer or list as an Array, else `pred`."""
-    if msel_is_array(pred, context):
-        return pred
-    var b = msel_b()
-    var a = msel_try_materialize(pred, "predictions", Python.tuple(b.TypeError, b.ValueError, b.OverflowError), context)
-    if msel_missed(a, context):
-        return pred
-    return a if _numeric_dtype(String(py=a.dtype)) else pred
+def _decoded_labels(labels: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
+    """cross_val_predict's result for a classifier's decoded labels (the
+    search kind's PACK wrote `placed` False): the label decoder's own answer
+    (bindings/classical_labels_door.mojo `labels_decode_labels`, the decode
+    the estimator's predict runs), already in row order. An int64 / float64
+    Array (int or float classes, gathered natively) is the result as it is;
+    a list of label objects becomes the documented int64 Array when every
+    label is an integer (bool classes), a float64 Array when every label is
+    a real number, and stays the list otherwise (text labels).
 
-
-def _prediction_list(pred: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = msel_b()
-    msel_admit(pred, context)
-    var kind = py_type(pred)
-    var width = Python.tuple()
-    var values = PythonObject(None)
-    if kind is context["array_class"]:
-        var packed = msel_materialize(pred, "predictions", context)
-        var rank = Int(py=packed.ndim)
-        if rank == 0:
-            raise Error("TypeError: iteration over a 0-d Array")
-        width = py_slice_from(packed.shape, 1)
-        # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
-        var grouped = Optional[PythonObject](py_call(packed._mv.tolist))
-        for k in range(rank - 1):  # driver-loop: native rank metadata groups flat values into rows
-            var axis = rank - 1 - k
-            var step = Int(py=packed.shape[axis])
-            var count = 1
-            for a in range(axis):  # driver-loop: outer extents also preserve empty dimensions
-                count *= Int(py=packed.shape[a])
-            var groups = Python.list()
-            for r in range(count):  # driver-loop: native list slices preserve the Array.tolist nesting
-                var part = py_slice(grouped.value(), r * step, (r + 1) * step)
-                _ = py_call(groups.append, part)
-            grouped = Optional[PythonObject](groups)
-        values = grouped.value()
-        _ = packed  # retain the native buffer while reading its scalar values
-    elif kind is py_get(context, "ndarray"):
-        # Exact ndarray.tolist is its C extension implementation. Admit
-        # object-storage leaves before any label hash/comparison/conversion.
-        values = py_call(pred.tolist)
-        width = py_slice_from(pred.shape, 1)
-        msel_admit(values, context)
-        if py_type(values) is not b.list:
-            raise Error("TypeError: iteration over a 0-d array")
-    elif kind is b.list or kind is b.tuple or kind is b.range or kind is context["array_type"] or kind is b.memoryview:
-        values = py_call(b.list, pred)
-    else:
-        raise Error("TypeError: native predictions require ordinary label containers or buffers")
-    return Python.tuple(values, width)
-
-
-def _place_label_rows(rows: PythonObject, vals: PythonObject, test: PythonObject, n: Int) raises:
-    """`for i, v in zip(test, vals): rows[i] = v` over the C storage: the
-    fold's int64 test indices read through their pointer and each label
-    reference copied with PyList_SetItem (pass 3, rank 38: no boxed index
-    and no Python setitem call per row). `rows` and `vals` are exact lists."""
-    ref cpy = Python().cpython()
-    var get_item = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem")
-    var count = min(Int(py=test.size), len(vals))
-    var words = msel_p64(test)
-    for j in range(count):  # driver-loop: native equivalent of the existing zip placement
-        var index = Int(words[j])
-        if index < 0:
-            index += n
-        if index < 0 or index >= n:
-            raise Error("IndexError: list assignment index out of range")
-        var label = get_item(vals._obj_ptr, j)
-        if not label:
-            var failure = stash_python_error()
-            raise failure^
-        if cpython_table()[].PyList_SetItem(rows._obj_ptr, index, cpy.Py_NewRef(label)) != 0:
-            var failure = stash_python_error()
-            raise failure^
-    _ = vals  # borrowed labels stay owned through the increfs above
-    _ = test  # keep the index storage alive through the pointer reads above
-
-
-def _place(preds: PythonObject, tests: PythonObject, n: Int, mut resident_rows: MselFoldRows, context: PythonObject) raises -> PythonObject:
-    """`_cross_val_predict_place`: each fold's predictions put back in row
-    order on the device (`msel_scatter_rows` into one resident block), or
-    the label-object route."""
-    var b = msel_b()
-    var count = len(preds)
-    var numeric = True
-    for f in range(count):  # driver-loop: over folds (dtype and shape checks)
-        var p = preds[f]
-        if not (msel_is_array(p, context) and _numeric_dtype(String(py=p.dtype)) and Int(py=p.ndim) >= 1
-                and Int(py=p.shape[0]) == Int(py=tests[f].size)):
-            numeric = False
-    var width = Python.tuple()
-    if numeric:
-        width = py_call(b.tuple, py_call(py_attr(preds[count - 1].shape, "__getitem__"), py_call(b.slice, PythonObject(1), PythonObject(None))))
-    var same = numeric
-    var integral = numeric and len(width) == 0
-    if numeric:
-        for f in range(count):  # driver-loop: over folds (shape checks)
-            var p = preds[f]
-            if not msel_cmp("eq", py_call(b.tuple, py_call(py_attr(p.shape, "__getitem__"), py_call(b.slice, PythonObject(1), PythonObject(None)))), width):
-                same = False
-            var d = String(py=p.dtype)
-            if not (d.startswith("<i") or d.startswith("<u")):
-                integral = False
-    var codes = context["family_msel_codes"]
-    if same:
-        var dtype = String("<i8") if integral else String("<f8")
-        var shape = family_call(msel_op("add"), Python.tuple(n), width)
-        var out = family_array(shape, dtype, context)
-        var cols = 1
-        for k in range(len(width)):  # driver-loop: over prediction shape metadata
-            cols *= Int(py=width[k])
-        if cols > 0 and n > 0:
-            var key = msel_helpers_key(context)
-            var block = msel_store_alloc(key, n * cols * 8)
-            try:
-                var dst_code = Int(py=codes[PythonObject(dtype)])
-                for f in range(count):  # driver-loop: over folds (one device scatter each)
-                    var t = tests[f]
-                    if Int(py=t.size) > 0:
-                        var src = preds[f]
-                        if not msel_has_c(src):
-                            src = msel_materialize(src, "predictions", context)
-                        var sid = resident_rows.resident_store(t, True, context)
-                        _ = msel_scatter_rows(key, block, n, dst_code, msel_addr(src), Int(py=codes[src.dtype]),
-                                              Int(py=t.size), cols, sid)
-                        _ = src  # keep the Python object alive through the native call above
-                _ = msel_store_read(key, block, msel_addr(out), n * cols * 8)
-                _ = out  # keep the Python object alive through the native call above
-            finally:
-                _ = msel_store_free(key, block)
-        return out
-    # Label objects (str / mixed) use admitted native lists; numeric fallback
-    # retains the public int64/float64 promotion without Array Python methods.
-    var rows = family_call(msel_op("mul"), py_call(b.list, Python.tuple(PythonObject(None))), PythonObject(n))
-    var last_width = Python.tuple()
-    for f in range(count):  # driver-loop: fold outputs placed in original row order
-        var converted = _prediction_list(preds[f], context)
-        var vals = converted[0]
-        _place_label_rows(rows, vals, tests[f], n)
-        last_width = converted[1]
-    if len(last_width) > 0:
-        var flat = Python.list()
-        for k in range(n):  # driver-loop: one native container level, preserving the previous reshape contract
-            if py_type(rows[k]) is not b.list and py_type(rows[k]) is not b.tuple:
-                raise Error("TypeError: multioutput predictions require native rows")
-            _ = py_call(flat.extend, rows[k])
-        var shape = family_call(msel_op("add"), Python.tuple(n), last_width)
-        var size = n
-        for k in range(len(last_width)):  # driver-loop: prediction output extents
-            size *= Int(py=last_width[k])
-        if len(flat) != size:
-            raise Error("ValueError: prediction values do not match their output shape")
-        # TEXT MULTI-OUTPUT LABELS (lane mf-tail5b; was a float conversion
-        # of every label, which failed on the first string): rows of labels
-        # that are not all real numbers stay the row lists, each row its
-        # outputs' labels in order, as a 1-D text result stays its list.
-        var all_real = True
-        for k in range(size):  # driver-loop: exact scalar identity checks before numeric conversion
-            if not msel_is_real(flat[k], context):
-                all_real = False
-                break
-        if not all_real:
-            return rows
-        var out = family_array(shape, "<f8", context)
-        var pointer = msel_pf64(out)
-        for k in range(size):  # driver-loop: native numeric scalar output placement
-            pointer[k] = metric_float(flat[k], context)
-            _ = out  # retain the destination buffer through each store
-        return out
+    Lane vdf-scope-cv (2026-11-24): this replaces the identity placement
+    (`_place` over one fold whose test rows were 0..n-1: an identity index
+    Array written per row on the host, a `MselFoldRows` holding X in the
+    admitted registry, the label list copied and every label set again by
+    PyList_SetItem, and for a numeric Array a resident block allocated,
+    the identity rows stored, one scatter and one read back), which moved
+    nothing: the RUN had already written every row in place. The same
+    values and result types: no bit changes."""
+    if msel_is_array(labels, context):
+        if Int(py=labels.ndim) == 1 and (String(py=labels.dtype) == "<i8" or String(py=labels.dtype) == "<f8"):
+            return labels
+        raise Error("RuntimeError: cross_val_predict invariant: the label decoder returned an Array that is not"
+                    + " a 1-D int64 or float64 vector")
+    if py_type(labels) is not msel_b().list or len(labels) != n:
+        raise Error("RuntimeError: cross_val_predict invariant: the label decoder returned no list of one label"
+                    + " per row")
     var integers = True
     var reals = True
-    for k in range(n):  # driver-loop: exact scalar identity checks before numeric conversion
-        integers = integers and msel_is_integral(rows[k], context)
-        reals = reals and msel_is_real(rows[k], context)
+    for k in range(n):  # driver-loop: PACK, exact scalar identity checks of the decoded label objects
+        integers = integers and msel_is_integral(labels[k], context)
+        reals = reals and msel_is_real(labels[k], context)
+        if not integers and not reals:
+            break
     if integers:
         var out = family_array(Python.tuple(n), "<i8", context)
         var pointer = msel_p64(out)
-        for k in range(n):  # driver-loop: native integer label output placement
-            pointer[k] = Int64(msel_int(rows[k]))
+        for k in range(n):  # driver-loop: PACK, integer label objects into the int64 result
+            pointer[k] = Int64(msel_int(labels[k]))
             _ = out  # retain the destination buffer through each store
         return out
     if reals:
         var out = family_array(Python.tuple(n), "<f8", context)
         var pointer = msel_pf64(out)
-        for k in range(n):  # driver-loop: native real label output placement
-            pointer[k] = metric_float(rows[k], context)
+        for k in range(n):  # driver-loop: PACK, real label objects into the float64 result
+            pointer[k] = metric_float(labels[k], context)
             _ = out  # retain the destination buffer through each store
         return out
-    return rows
+    return labels
 
 
 def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -987,27 +833,13 @@ def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> 
                                False, method, False, context)
     # THE RESULT BUFFER (lane mf-msel5b): the RUN wrote every unit's
     # response at its rows; nothing is placed again. A classifier's
-    # labels were decoded once for every row: an int64 / float64 Array
-    # of them is the result; other labels take the label placement over
-    # the identity rows (the old route's result types).
+    # labels were decoded once for every row, in row order: the decoder's
+    # answer is the result (`_decoded_labels`, lane vdf-scope-cv: no
+    # identity placement, no resident block, no X hold).
     var pred = by["predictions"]
     if Bool(py=py_call(msel_b().bool, by["placed"])):
         return pred
-    if msel_is_array(pred, context) and Int(py=pred.ndim) == 1 and (String(py=pred.dtype) == "<i8"
-                                                                      or String(py=pred.dtype) == "<f8"):
-        return pred
-    var ident = msel_new(n, "<i8", context)
-    var words = msel_p64(ident)
-    for i in range(n):  # driver-loop: over the rows (the identity placement of decoded labels)
-        words[i] = Int64(i)
-    _ = ident  # written through the pointer above
-    var host_rows = MselFoldRows(x, y, folds, False, context)
-    var placed = PythonObject(None)
-    try:
-        placed = _place(Python.list(pred), Python.list(ident), n, host_rows, context)
-    finally:
-        host_rows.close(context)
-    return placed
+    return _decoded_labels(pred, n, context)
 
 
 # ---------------------------------------------------------------- split_descriptor

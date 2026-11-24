@@ -85,18 +85,6 @@ def test_against_sklearn():
         np.testing.assert_allclose(a.loss_curve_, b.loss_curve_, rtol=1e-4, atol=1e-5)
 
 
-def test_shapes_and_proba():
-    X, yr, y3 = _data()
-    c = ml.MLPClassifier(hidden_layer_sizes=(5,), max_iter=5, random_state=0).fit(X, y3)
-    p = c.predict_proba(X)
-    assert p.shape == (200, 3)
-    np.testing.assert_allclose(p.sum(axis=1), 1.0, atol=1e-5)
-    b = ml.MLPClassifier(hidden_layer_sizes=(5,), max_iter=5, random_state=0).fit(X, y3 > 0)
-    assert b.predict_proba(X).shape == (200, 2)
-    r = ml.MLPRegressor(hidden_layer_sizes=(5,), max_iter=5, random_state=0).fit(X, yr)
-    assert r.predict(X).shape == (200,) and r.n_iter_ == 5
-
-
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

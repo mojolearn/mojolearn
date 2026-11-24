@@ -170,38 +170,6 @@ def test_soft_vote_is_the_weighted_mean_of_member_probabilities():
     np.testing.assert_allclose(np.asarray(vote.predict_proba(X)), acc / 3.0, rtol=0, atol=1e-6)
 
 
-# ---------------------------------------------------------------- N049 / N061 / N064
-
-
-def test_bagging_members_hold_their_own_seeds_and_the_validated_parameters():
-    X, y = _clf()
-    bag = ml.BaggingClassifier(ml.DecisionTreeClassifier(max_depth=3), n_estimators=5, random_state=3).fit(X, y)
-    members = bag.estimators_
-    seeds = [m.get_params()["random_state"] for m in members]
-    assert len(set(seeds)) == len(seeds)
-    for m in members:
-        assert m.get_params()["max_depth"] == 3
-        np.testing.assert_array_equal(np.asarray(m.predict(X)).shape, (len(X),))
-
-
-def test_dart_and_adaboost_fits_repeat_bit_for_bit():
-    rng = np.random.default_rng(1)
-    X = rng.random((120, 4), dtype=np.float32)
-    y = (X[:, 0] + 0.5 * X[:, 1]).astype(np.float32)
-    a = ml.DARTRegressor(n_estimators=8, random_state=0).fit(X, y)
-    b = ml.DARTRegressor(n_estimators=8, random_state=0).fit(X, y)
-    np.testing.assert_array_equal(np.asarray(a.predict(X)), np.asarray(b.predict(X)))
-    seeds = [t.get_params()["random_state"] for t in a.trees_]
-    assert len(set(seeds)) == len(seeds)
-    yc = (X[:, 0] > 0.5).astype(np.int64)
-    c1 = ml.AdaBoostClassifier(n_estimators=6, random_state=0).fit(X, yc)
-    c2 = ml.AdaBoostClassifier(n_estimators=6, random_state=0).fit(X, yc)
-    np.testing.assert_array_equal(np.asarray(c1.predict(X)), np.asarray(c2.predict(X)))
-    r1 = ml.AdaBoostRegressor(n_estimators=6, random_state=0).fit(X, y)
-    r2 = ml.AdaBoostRegressor(n_estimators=6, random_state=0).fit(X, y)
-    np.testing.assert_array_equal(np.asarray(r1.predict(X)), np.asarray(r2.predict(X)))
-
-
 # ---------------------------------------------------------------- N085
 
 

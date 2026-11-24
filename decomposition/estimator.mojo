@@ -852,10 +852,29 @@ def inverse_transform_dev(
     per-call upload above, or a resident copy of the same words; lane
     ne1-a-decomp-resident): the same transpose, gemm_nt and mean shift."""
     var scores = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
+    ctx.enqueue_copy(dst_buf=scores, src_ptr=scores_ptr)
+    inverse_transform_scores_dev(ctx, scores, components, mean_ptr, out_ptr, n_rows, n_features, n_components,
+                                 add_mean)
+    _ = scores^
+
+
+def inverse_transform_scores_dev(
+    ctx: DeviceContext,
+    mut scores: DeviceBuffer[DType.float32],
+    mut components: DeviceBuffer[DType.float32],
+    mean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+    add_mean: Bool,
+) raises:
+    """`inverse_transform_dev`'s body over scores already on the device (its upload, or a model-selection fold
+    gathered there, decomposition/pca_fold.mojo `inverse_transform_fold`, lane vdf-scope-neural5): the same
+    transpose, gemm_nt and mean shift on the same words."""
     var components_t = ctx.enqueue_create_buffer[DType.float32](n_features * n_components)
     var mean = ctx.enqueue_create_buffer[DType.float32](n_features)
     var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    ctx.enqueue_copy(dst_buf=scores, src_ptr=scores_ptr)
     if add_mean:
         ctx.enqueue_copy(dst_buf=mean, src_ptr=mean_ptr)
     ctx.enqueue_function[transpose_kernel](
@@ -946,6 +965,29 @@ def pca_whiten_transform_host(
     `pca.mojo` carries the three-way evidence.
     """
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    pca_whiten_transform_x(ctx, x, mean_ptr, components_ptr, singular_ptr, out_ptr,
+        n_rows, n_features, n_components, n_fit_rows, device_checks)
+    _ = x^
+
+
+def pca_whiten_transform_x(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    singular_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+    n_fit_rows: Int,
+    device_checks: Bool = False,
+) raises:
+    """`pca_whiten_transform_host` over X already on the device (`x`, n_rows x n_features words, enqueued on
+    `ctx` before this call; lane vdf-scope-neural4: the host entry's upload, or a model-selection fold gathered
+    on the device, decomposition/pca_fold.mojo). The same buffers, checks and kernels in the same order, so the
+    same words."""
     var mu = ctx.enqueue_create_buffer[DType.float32](n_features)
     var components = ctx.enqueue_create_buffer[DType.float32](
         n_components * n_features
@@ -955,7 +997,6 @@ def pca_whiten_transform_host(
     )
     var singular = ctx.enqueue_create_buffer[DType.float32](n_components)
     var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.enqueue_copy(dst_buf=mu, src_ptr=mean_ptr)
     ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
     ctx.enqueue_copy(dst_buf=singular, src_ptr=singular_ptr)

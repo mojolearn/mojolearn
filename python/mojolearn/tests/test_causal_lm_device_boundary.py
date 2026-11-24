@@ -4,8 +4,8 @@
 The rule is the one every class with `device=` follows: None is this installation's device, an explicit
 `device="gpu"` on a CPU-only installation is refused in words that name `device="cpu"`, `device="cpu"` always runs.
 `"auto"` is CausalLM's older spelling of None and stays accepted. The value is read once, at construction or load,
-into the model's route (`model.device` is the route word, `"cpu"` or `"gpu"`). On a GPU installation the same
-checkpoint on each device, in one process, returns the same logits bits in the identical profile. What needs two
+into the model's route (`model.device` is the route word, `"cpu"` or `"gpu"`). That the same checkpoint
+returns the same logits bits on each device is the hf-causal-lm verify lane, run on both sides. What needs two
 devices is skipped by name on a CPU-only installation.
 """
 import inspect
@@ -65,19 +65,6 @@ def test_explicit_gpu_on_a_cpu_only_installation_is_refused_in_the_shared_words(
     with pytest.raises(ValueError, match="device='gpu' needs a GPU build of mojolearn") as refused:
         CausalLM.load(checkpoint(tmp_path, "llama"), device="gpu")
     assert "device='cpu'" in str(refused.value)
-
-
-@two_devices
-@pytest.mark.parametrize("family", FAMILIES)
-def test_the_same_checkpoint_returns_the_same_logits_bits_on_each_device(tmp_path, family):
-    path = checkpoint(tmp_path, family)
-    gpu = CausalLM.load(path, device="gpu", numeric_profile="fp32_v1")
-    cpu = CausalLM.load(path, device="cpu", numeric_profile="fp32_v1")
-    assert (gpu.device, cpu.device) == ("gpu", "cpu")
-    ids = np.array([[1, 7, 3, 11, 5], [2, 9, 2, 4, 8]], dtype="<i4")     # the verify fixture's ids
-    left = np.asarray(gpu.forward(ids))
-    right = np.asarray(cpu.forward(ids))
-    assert left.shape == right.shape and left.tobytes() == right.tobytes()
 
 
 @pytest.mark.parametrize("family", FAMILIES)

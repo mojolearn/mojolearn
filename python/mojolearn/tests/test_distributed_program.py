@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native user-composed graphs: topology replay, physical optimizer residency,
-complete checkpoint/restart with dropout, failure behavior. The analytic SGD
+complete checkpoint/restart with dropout (the refusals are in
+test_autograd_boundary.py). The analytic SGD
 step, the replica snapshot and the optimizer migration are native checks
 (checks/native_tests/training_distributed_program.mojo).
 
@@ -57,13 +58,6 @@ def _emit(name, state):
         h.update(words.tobytes())
     h.update(str((state["epoch"], state["step"], state["seed"], state["logical_shards"])).encode())
     print(f"DISTRIBUTED_PROGRAM_DIGEST {name} {h.hexdigest()}")
-
-
-def _linear(s, width=1, outputs=1):
-    x = s.tensor(np.zeros((3, width), np.float32))
-    w = s.tensor(np.zeros((width, outputs), np.float32))
-    out = s.matmul(x, w)
-    return s.capture([x], [out]), w
 
 
 def _nonlinear(s, *, dropout=False):
@@ -133,25 +127,3 @@ def test_physical_topology_replay_and_optimizer_range_witness(tmp_path):
         with s.load_distributed(path, devices=(0,)) as restored:
             _assert_same(actual, restored.state())
         _emit("physical_topology", actual)
-
-
-def test_distributed_refusals_and_damaged_checkpoint(tmp_path):
-    with ops.Session(numeric_mode="identical") as s:
-        p, _ = _linear(s)
-        o = s.optimizer("sgd", lr=0.1)
-        with pytest.raises(Exception, match="duplicate"):
-            p.distribute((0, 0), optimizer=o)
-        with pytest.raises(Exception, match="logical_shards"):
-            p.distribute((0,), logical_shards=0, optimizer=o)
-        with p.distribute((0,), optimizer=o) as d:
-            with pytest.raises(Exception, match="sample count"):
-                d.fit(np.ones((3, 1), np.float32), targets=np.ones((2, 1), np.float32))
-            # Admission errors happen before mutation and do not poison state.
-            assert d.state()["step"] == 0
-            path = tmp_path / "damaged.ckpt"
-            d.save(str(path))
-        data = bytearray(path.read_bytes())
-        data[len(data) // 2] ^= 1
-        path.write_bytes(data)
-        with pytest.raises(Exception):
-            s.load_distributed(str(path))

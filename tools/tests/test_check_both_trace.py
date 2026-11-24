@@ -7,17 +7,18 @@ No binding and no GPU. Two stub installs:
   (core/activity_record.mojo, read through `activity_begin` / `activity_end` of the core host binding). The stub
   "GPU" estimator counts device launches and copies into it, the stub "CPU" model counts a host routine and a
   thread split, so the two sides of one check carry records that are non-empty and different.
-- on disk: a stub `mojolearn` package (with a copy of the real `_check_both.py`) that a real child process imports
-  under `MOJOLEARN_VENDOR=cpu`, for the fit-on-both-sides path.
+- a second in-process stub whose estimator takes `device=` and answers on the device it was built for, for the
+  fit-on-both-sides path (both sides in this process; there is no child process).
 
 What is held: the record is read once per side and only when asked for, the printer's bounds, the lines of each
-side, a call's behaviour without the record, the child-process path (match, mismatch, the product's own refusal as
-NOT RUN, the row cap and the warning), and the few source facts the cost rule rests on.
+side, a call's behaviour without the record, the fit-on-both-sides path (match, mismatch, the product's own refusal of
+device='cpu' as NOT RUN, a side that did not run on its device, the row cap and the warning), and the few source facts
+the cost rule rests on.
 """
 import importlib.util
 import json
-import shutil
 import textwrap
+import types
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -244,25 +245,24 @@ def test_a_record_in_another_format_is_not_printed(tmp_path):
     assert record["activity"] is None
 
 
-# ---------------------------------------------------------------- fit on both sides: a real child process
+# ---------------------------------------------------------------- fit on both sides: both in this process
 
 STUB_PACKAGE = '''
-    import os
     import numpy as np
 
     def vendor():
-        return os.environ.get("MOJOLEARN_VENDOR", "cuda")
+        return "cuda"
 
     def numeric_mode():
         return "identical"
 
     def runtime_report():
-        pkg = os.path.dirname(__file__)
-        where = "host" if vendor() == "cpu" else "cuda/sm_89/identical"
-        name = "mojolearn._host._mojolearn_linear_host" if vendor() == "cpu" else "mojolearn._mojolearn_linear"
+        pkg = "/stub/site/mojolearn"
         return dict(version="9.9.9", numeric_mode="identical", vendor=vendor(), gpu_arch="sm_89",
                     code_kind="native", package_dir=pkg,
-                    bindings={name: dict(path=os.path.join(pkg, where, "lin.so"), loaded=True)})
+                    bindings={"mojolearn._mojolearn_linear": dict(path=pkg + "/cuda/sm_89/identical/lin.so",
+                                                                  loaded=True),
+                              "mojolearn._host._mojolearn_linear_host": dict(path=pkg + "/host/lin.so", loaded=True)})
 
     class _Runtime:
         def __init__(self):
@@ -286,19 +286,23 @@ STUB_PACKAGE = '''
         return _RUNTIME
 
     class Lin:
-        """Least squares; on the stub CPU it can be made to answer one ULP off, or to refuse."""
+        """Least squares on the device it is built for (it does not declare `_mojolearn_device`, so its CPU side
+        is rebuilt from get_params with device='cpu'); on the CPU it can answer one ULP off, or refuse."""
         numeric_mode = "identical"
 
-        def __init__(self, scale=1.0, cpu="same"):
-            self.scale, self.cpu = scale, cpu
+        def __init__(self, scale=1.0, cpu="same", device=None):
+            if device == "cpu" and cpu == "refuse":
+                raise ValueError("Lin(cpu='refuse') has no CPU path; it runs on a GPU installation only")
+            self.scale, self.cpu, self.device = scale, cpu, device
 
         def get_params(self, deep=True):
-            return dict(scale=self.scale, cpu=self.cpu)
+            return dict(scale=self.scale, cpu=self.cpu, device=self.device)
+
+        def vendor_used(self):
+            return "cpu" if self.device == "cpu" else vendor()
 
         def fit(self, X, y):
-            if vendor() == "cpu":
-                if self.cpu == "refuse":
-                    raise RuntimeError("Lin(cpu='refuse') has no CPU path; it runs on a GPU installation only")
+            if self.device == "cpu":
                 _RUNTIME.rows.update(host_splits=1, host_tasks=4, host_tasks_widest=4)
             else:
                 _RUNTIME.rows["launches"] += 5
@@ -309,23 +313,16 @@ STUB_PACKAGE = '''
 
         def predict(self, X):
             y = (X @ self.coef).astype(np.float32)
-            if vendor() == "cpu" and self.cpu == "one-ulp":
+            if self.device == "cpu" and self.cpu == "one-ulp":
                 y[3] = np.nextafter(y[3], np.float32(np.inf))
             return y
 '''
 
 
 @pytest.fixture
-def stub(tmp_path, monkeypatch):
-    site = tmp_path / "site"
-    (site / "mojolearn").mkdir(parents=True)
-    (site / "mojolearn/__init__.py").write_text(textwrap.dedent(STUB_PACKAGE))
-    shutil.copy(PKG / "_check_both.py", site / "mojolearn/_check_both.py")
-    monkeypatch.setenv("PYTHONPATH", str(site))
-    monkeypatch.delenv("MOJOLEARN_VENDOR", raising=False)
-    spec = importlib.util.spec_from_file_location("stub_mojolearn_parent", site / "mojolearn/__init__.py")
-    ml = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(ml)
+def stub():
+    ml = types.ModuleType("stub_mojolearn_parent")
+    exec(compile(textwrap.dedent(STUB_PACKAGE), "stub_mojolearn_parent", "exec"), ml.__dict__)  # noqa: S102
     return ml
 
 
@@ -335,7 +332,7 @@ def training():
     return X, (X @ COEF).astype(np.float32)
 
 
-def test_fit_on_both_sides_runs_the_cpu_fit_in_a_child_process_and_matches(stub):
+def test_fit_on_both_sides_runs_the_cpu_fit_in_this_process_and_matches(stub):
     Xt, yt = training()
     est = stub.Lin(scale=2.0)
     result = cb.check_estimator(stub, est, rows(), fit=(Xt, yt), fit_both=True, **LABELS)
@@ -345,13 +342,16 @@ def test_fit_on_both_sides_runs_the_cpu_fit_in_a_child_process_and_matches(stub)
     assert gpu["binaries"]["directories"] == ["cuda/sm_89/identical"] and cpu["binaries"]["directories"] == ["host"]
     assert gpu["activity"]["launches"] == 5 and gpu["activity"]["host_splits"] == 0
     assert cpu["activity"]["launches"] == 0 and cpu["activity"]["host_splits"] == 1
-    assert cpu["fit_wall_s"] >= 0 and cpu["wall_s"] >= 0 and cpu["process_wall_s"] > 0
+    assert gpu["route"]["vendor_used"] == "cuda" and cpu["route"] == dict(device="cpu", vendor_used="cpu")
+    assert cpu["fit_wall_s"] >= 0 and cpu["wall_s"] >= 0 and "process_wall_s" not in cpu
     assert est.rows_fitted == 40 and result["fit_rows"] == result["fit_rows_given"] == 40 and "warning" not in result
     text = cb.format_check(result)
-    for needle in ("Fitted on each side: on the GPU in this process, on the CPU in a child process",
+    for needle in ("Fitted on each side: one estimator per device (this installation's GPU, device='cpu'), "
+                   "both in this process",
                    "  launches  5 device launches at named sites: lin_fit x5",
-                   "  threads   1 host thread splits, 4 tasks, widest 4", "  process   ", "MATCH:"):
+                   "  threads   1 host thread splits, 4 tasks, widest 4", "MATCH:"):
         assert needle in text, needle
+    assert "child process" not in text and "MOJOLEARN_VENDOR" not in text
     assert text.count("  fit       ") == 2 and text.count("  wall      ") == 2
     json.dumps(result)
 
@@ -364,13 +364,13 @@ def test_a_cpu_fit_that_answers_other_bytes_is_a_mismatch_at_a_named_element(stu
     assert "MISMATCH: output 0, first differing element at index [3]" in cb.format_check(result)
 
 
-def test_a_class_the_cpu_does_not_run_is_not_run_with_the_products_own_message(stub):
+def test_a_class_that_refuses_the_cpu_is_not_run_with_the_products_own_message(stub):
     Xt, yt = training()
     result = cb.check_estimator(stub, stub.Lin(cpu="refuse"), rows(), fit=(Xt, yt), fit_both=True, **LABELS)
     assert result["ran"] is False and "verdict" not in result
     assert "has no CPU path; it runs on a GPU installation only" in result["reason"]
     text = cb.format_check(result)
-    assert text.split("\n")[-1].startswith("NOT RUN: the CPU side did not run: RuntimeError: Lin(cpu='refuse')")
+    assert text.split("\n")[-1].startswith("NOT RUN: Lin(device='cpu') refused: ValueError: Lin(cpu='refuse')")
     assert "MATCH" not in text
 
 
@@ -390,28 +390,31 @@ def test_the_row_cap_fits_both_sides_on_the_first_rows_and_a_large_fit_warns(stu
 def test_fit_on_both_sides_is_opt_in_and_says_what_it_needs(stub):
     Xt, yt = training()
     assert "needs the fit arguments" in cb.check_estimator(stub, stub.Lin(), rows(), fit_both=True)["reason"]
-    spawned = []
     fitted = stub.Lin().fit(Xt, yt)
     fitted.save = lambda path: np.savez(path, coef=fitted.coef)
     stub.host_model = lambda path: (_ for _ in ()).throw(ValueError("no CPU model for this file"))
-    result = cb.check_estimator(stub, fitted, rows(), spawn=lambda d: spawned.append(d), **LABELS)
-    assert not spawned, "no child process unless fit_both is asked for"
+    result = cb.check_estimator(stub, fitted, rows(), **LABELS)
     assert result["ran"] is False and result["form"] == "fitted-model"
     assert "fit_both=True (--fit-both) fits on each side instead" in result["reason"]
 
-    class Odd(stub.Lin):
-        def get_params(self, deep=True):
-            return dict(scale=object())
+    class Bare:
+        numeric_mode = "identical"
 
-    refused = cb.check_estimator(stub, Odd(), rows(), fit=(Xt, yt), fit_both=True, **LABELS)
-    assert refused["ran"] is False and "cannot be sent to the CPU process" in refused["reason"]
+        def fit(self, X, y):
+            return self
+
+        def predict(self, X):
+            return np.zeros(len(X), dtype=np.float32)
+
+    refused = cb.check_estimator(stub, Bare(), rows(), fit=(Xt, yt), fit_both=True, **LABELS)
+    assert refused["ran"] is False and "has no get_params" in refused["reason"]
 
 
-def test_a_child_that_ends_without_a_result_is_not_run(stub):
+def test_a_cpu_side_whose_model_does_not_report_the_cpu_is_never_compared(stub, monkeypatch):
     Xt, yt = training()
-    result = cb.check_estimator(stub, stub.Lin(), rows(), fit=(Xt, yt), fit_both=True,
-                                spawn=lambda directory: (9, "the process was killed"), **LABELS)
-    assert result["ran"] is False and "ended (exit 9) without a result: the process was killed" in result["reason"]
+    monkeypatch.setattr(stub.Lin, "vendor_used", lambda self: "cuda")
+    result = cb.check_estimator(stub, stub.Lin(), rows(), fit=(Xt, yt), fit_both=True, **LABELS)
+    assert result["ran"] is False and "compare a thing to itself" in result["reason"]
 
 
 # ---------------------------------------------------------------- the source facts the cost rule rests on

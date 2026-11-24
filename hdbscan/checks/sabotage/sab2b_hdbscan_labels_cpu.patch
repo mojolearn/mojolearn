@@ -1,0 +1,19 @@
+diff --git a/hdbscan/host/hdbscan_door_host_impl.mojo b/hdbscan/host/hdbscan_door_host_impl.mojo
+index f29da540d3..30f4700302 100644
+--- a/hdbscan/host/hdbscan_door_host_impl.mojo
++++ b/hdbscan/host/hdbscan_door_host_impl.mojo
+@@ -26,6 +26,14 @@ def hdbscan_fit_host_run(x: List[Float32], n: Int, d: Int, min_samples: Int, min
+     for i in range(n):
+         lp.unsafe_store(i, out.labels[i])
+         cp.unsafe_store(i, out.core_dists[i])
++    from std.sys import is_defined
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sab2b-hdbscan-labels-cpu (lane vdv-sab2-b): the first label traded with the first different one, the host bindings only
++        for q in range(1, n):
++            if lp.unsafe_load(q) != lp.unsafe_load(0):
++                var t = lp.unsafe_load(0)
++                lp.unsafe_store(0, lp.unsafe_load(q))
++                lp.unsafe_store(q, t)
++                break
+     ip.unsafe_store(0, Int32(out.n_clusters))
+     ip.unsafe_store(1, Int32(out.n_outliers))
+     ip.unsafe_store(2, Int32(out.n_boruvka_rounds))

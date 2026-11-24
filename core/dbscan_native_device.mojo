@@ -8,10 +8,11 @@ from core.hostptr import f32_ptr, i32_ptr
 from core.shared_slot import SharedSlot
 from core.dbscan_native_api import (
     DBSCANNativeKernels, DBSCANProviderAPI, DBSCANFitRequest, DBSCANCoreRequest, DBSCANGatherRequest,
-    DBSCANReferenceRequest, DBSCANQueryRequest, DBSCANResidentQuery, DBSCAN_CAP_RESIDENT,
+    DBSCANReferenceRequest, DBSCANQueryRequest, DBSCANResidentQuery, DBSCAN_CAP_RESIDENT, DBSCAN_CAP_DEV_STORE,
 )
-from dbscan.estimator import dbscan_fit
-from dbscan.core_device_impl import dbscan_core_count, dbscan_core_gather
+from dbscan.estimator import dbscan_fit, dbscan_fit_resident
+from dbscan.core_device_impl import dbscan_core_count, dbscan_core_gather, dbscan_core_gather_resident
+from core.estimators_store import estimators_store_buffer
 from core.labeled_reference_predict import labeled_reference_predict
 from core.labeled_reference_resident import labeled_reference_prepare, labeled_reference_release, labeled_reference_predict_resident
 
@@ -30,7 +31,9 @@ struct DBSCANDeviceKernels(DBSCANNativeKernels):
 
     @staticmethod
     def capabilities() -> Int:
-        return DBSCAN_CAP_RESIDENT
+        # DBSCAN_CAP_DEV_STORE (lane vdf-scope-cluster4): the image's resident store
+        # (core/estimators_store.mojo, shared with KernelDensity) and the two store forms below.
+        return DBSCAN_CAP_RESIDENT | DBSCAN_CAP_DEV_STORE
 
     @staticmethod
     def fit(r: DBSCANFitRequest) raises -> Int:
@@ -41,6 +44,30 @@ struct DBSCANDeviceKernels(DBSCANNativeKernels):
             r.budget_mb, r.max_iter, r.method, r.metric, r.weights, r.core)
         ctx.synchronize()
         return passes
+
+    @staticmethod
+    def fit_store(r: DBSCANFitRequest) raises -> Int:
+        """`fit` over the rows in slot `r.x` of the resident store (no upload; cosine scales a device copy)."""
+        var labels = i32_ptr(r.labels)
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var rows = estimators_store_buffer(r.x, r.rows * r.features)
+        var passes = dbscan_fit_resident(ctx, rows, r.rows, r.features, r.eps, r.min_samples, labels,
+            r.budget_mb, r.max_iter, r.method, r.metric, r.weights, r.core)
+        ctx.synchronize()
+        _ = rows^
+        return passes
+
+    @staticmethod
+    def core_gather_store(r: DBSCANGatherRequest) raises -> Int:
+        """`core_gather` reading X from slot `r.x` of the resident store (no upload)."""
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        if r.rows < 0 or r.features < 1:
+            raise Error("dbscan_core_arrays: n >= 0 and d >= 1")
+        var rows = estimators_store_buffer(r.x, max(1, r.rows * r.features))
+        dbscan_core_gather_resident(ctx, rows, r.labels, r.core, r.rows, r.features, r.count,
+            r.indices, r.components, r.core_labels)
+        _ = rows^
+        return 0
 
     @staticmethod
     def core_count(r: DBSCANCoreRequest) raises -> Int:
@@ -92,6 +119,18 @@ struct DBSCANDeviceKernels(DBSCANNativeKernels):
         var dst = i32_ptr(r.dst)
         labeled_reference_predict_resident(r.handle, query, r.queries, r.features,
             r.metric, r.eps, r.has_threshold, dst)
+        return 0
+
+    @staticmethod
+    def resident_store(r: DBSCANResidentQuery) raises -> Int:
+        """`resident` over the query rows in slot `r.query` of the resident store (one device copy into the
+        reference set's context, no upload; lane vdf-scope-cluster6)."""
+        var dst = i32_ptr(r.dst)
+        var rows = estimators_store_buffer(r.query, max(1, r.queries * r.features))
+        # The host query pointer is not read on the store form: the destination's address stands in for it.
+        labeled_reference_predict_resident(r.handle, f32_ptr(r.dst), r.queries, r.features,
+            r.metric, r.eps, r.has_threshold, dst, Optional(rows))
+        _ = rows^
         return 0
 
 

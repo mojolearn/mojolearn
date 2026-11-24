@@ -30,6 +30,7 @@ from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from x_cluster.bodies import SplitMix64
+from core.fold_x_device import fold_x_fill
 from x_cluster.common import nearest_all, sum_f64
 from x_cluster.post_bodies import FM_VAL
 from x_cluster.device_ops import DeviceOps
@@ -324,7 +325,10 @@ def minibatch_entry_ptr_idn(
         for t in range(n_c):  # small-loop(n_c: user init center words): the k x d init array
             centers.append(a[t])
         var xbuf = ops.ctx.enqueue_create_buffer[DType.float32](nx)
-        ops.ctx.enqueue_copy(dst_buf=xbuf, src_ptr=xp)
+        if Int(xp) < 0:
+            fold_x_fill(ops.ctx, xbuf, Int(xp), nx)  # THE FOLD X WORD (lane vdf-scope-cluster3)
+        else:
+            ops.ctx.enqueue_copy(dst_buf=xbuf, src_ptr=xp)
         if len(ip) > 12 and ip[12] != 0:
             # Python skipped its host scan: scan the device copy (one word back)
             if device_first_nonfinite(ops.ctx, xbuf, nx) >= 0:

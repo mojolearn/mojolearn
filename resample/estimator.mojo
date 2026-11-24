@@ -92,8 +92,6 @@ from resample.checks.index_map import (
     RESAMPLE_KIND_PERM_SAMPLES,
     RESAMPLE_KIND_UTILS_PERMUTE,
     RESAMPLE_KIND_UTILS_REPLACE,
-    utils_first_by_key,
-    utils_first_by_key_into,
     utils_validate,
     RESAMPLE_KIND_PERMUTATION,
     bootstrap_index_kernel,
@@ -2198,36 +2196,71 @@ def resample_indices_replace_into(
     _ = ctx^
 
 
+def _permutation_order_device(
+    ctx: DeviceContext,
+    n: Int,
+    mut keys: DeviceBuffer[DType.uint64],
+    mut a: DeviceBuffer[DType.int32],
+    mut b: DeviceBuffer[DType.int32],
+    tpb: Int,
+) raises -> Bool:
+    """The positions `0..n-1` in the total order `permutation_key_lt` over
+    `keys` (n device words), sorted ON THE DEVICE: the identity into `a`,
+    then ceil(log2 n) stable merge passes (`permutation_merge_kernel`, one
+    thread per slot, ping-pong between `a` and `b`). Returns True when the
+    order ends in `a`, False when in `b`. Enqueued only: the caller keeps
+    `keys`, `a` and `b` alive past its synchronize. lane vdf-misc3
+    (2026-11-24): replaces the download of the n keys and the serial host
+    merge sort inside the GPU call; the order is total, so it is the same
+    integers as the host column (`host_permutation_order`)."""
+    var grid = ceildiv(n, tpb)
+    ctx.enqueue_function[permutation_positions_kernel](
+        a.unsafe_ptr(), Int32(n), grid_dim=(grid, 1, 1), block_dim=(tpb, 1, 1)
+    )
+    var width = 1
+    var in_a = True
+    # driver-loop: over the ceil(log2 n) merge passes
+    while width < n:
+        if in_a:
+            ctx.enqueue_function[permutation_merge_kernel](
+                b.unsafe_ptr(), a.unsafe_ptr(), keys.unsafe_ptr(), Int32(n), Int32(width),
+                grid_dim=(grid, 1, 1), block_dim=(tpb, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[permutation_merge_kernel](
+                a.unsafe_ptr(), b.unsafe_ptr(), keys.unsafe_ptr(), Int32(n), Int32(width),
+                grid_dim=(grid, 1, 1), block_dim=(tpb, 1, 1),
+            )
+        in_a = not in_a
+        width *= 2
+    return in_a
+
+
 def resample_indices_permute_into(
     n: Int, count: Int, seed: UInt64, dst: MutPointer[Int32, MutUntrackedOrigin], tpb: Int = 256
 ) raises:
     """`resample_indices_host(n, count, False, seed)` written into `dst`
     (count int32 slots): the device draws every position's 64-bit key
-    (kind 7), the keys come home once into a host buffer and
-    `utils_first_by_key_into` writes the first `count` positions of the
-    total order straight into the caller's buffer (lane ne2-b-rounds, N053:
-    no List of keys, no List of indices, no copy after). The same integers
-    as `resample_indices_host`."""
+    (kind 7), sorts the positions by the total order on the device
+    (`_permutation_order_device`) and the first `count` positions come home
+    in one copy straight into the caller's buffer. Nothing else crosses."""
     utils_validate(n, count, False)
     var key = resample_key(seed, RESAMPLE_KIND_UTILS_PERMUTE)
     var ctx = process_ctx[_DEVCTX_SLOT]()
-    var rows = ctx.enqueue_create_buffer[DType.int32](1)
+    var rows = ctx.enqueue_create_buffer[DType.int32](n)
+    var scratch = ctx.enqueue_create_buffer[DType.int32](n)
     var keys = ctx.enqueue_create_buffer[DType.uint64](n)
     ctx.enqueue_function[utils_draw_kernel](
         rows.unsafe_ptr(), keys.unsafe_ptr(), key_lo(key), key_hi(key),
         Int32(n), Int32(n), Int32(0),
         grid_dim=(ceildiv(n, tpb), 1, 1), block_dim=(tpb, 1, 1),
     )
-    var host = ctx.enqueue_create_host_buffer[DType.uint64](n)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=keys)
+    if _permutation_order_device(ctx, n, keys, rows, scratch, tpb):
+        ctx.enqueue_copy(dst_ptr=dst, src_buf=rows.create_sub_buffer[DType.int32](0, count))
+    else:
+        ctx.enqueue_copy(dst_ptr=dst, src_buf=scratch.create_sub_buffer[DType.int32](0, count))
     ctx.synchronize()
-    utils_first_by_key_into(
-        MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(host.unsafe_ptr())),
-        n,
-        count,
-        dst,
-    )
-    _ = host^
+    _ = scratch^
     _ = rows^
     _ = keys^
     # DEVIATION 1946: the context dies LAST.
@@ -2240,34 +2273,33 @@ def resample_indices_host(
     """The `count` row indices `sklearn.utils.resample(..., replace=...,
     n_samples=count, random_state=seed)` gathers: replace=True position `i`
     is `draw_row_index(key6, 0, i, n)` on the device; replace=False the
-    device draws every position's 64-bit key (kind 7) and the host keeps the
-    first `count` positions of the total order (`utils_first_by_key`)."""
+    device draws every position's 64-bit key (kind 7), sorts the positions
+    by the total order on the device and the first `count` come home."""
     utils_validate(n, count, replace)
     var key = resample_key(
         seed, RESAMPLE_KIND_UTILS_REPLACE if replace else RESAMPLE_KIND_UTILS_PERMUTE
     )
     var m = count if replace else n
     var ctx = process_ctx[_DEVCTX_SLOT]()
-    var rows = ctx.enqueue_create_buffer[DType.int32](m if replace else 1)
+    var rows = ctx.enqueue_create_buffer[DType.int32](m)
+    var scratch = ctx.enqueue_create_buffer[DType.int32](1 if replace else m)
     var keys = ctx.enqueue_create_buffer[DType.uint64](1 if replace else m)
     ctx.enqueue_function[utils_draw_kernel](
         rows.unsafe_ptr(), keys.unsafe_ptr(), key_lo(key), key_hi(key),
         Int32(n), Int32(m), Int32(1) if replace else Int32(0),
         grid_dim=(ceildiv(m, tpb), 1, 1), block_dim=(tpb, 1, 1),
     )
-    ctx.synchronize()
     var out: List[Int32]
     if replace:
-        out = _download_i32(ctx, rows, m)
-    else:
-        var host = ctx.enqueue_create_host_buffer[DType.uint64](m)
-        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=keys)
         ctx.synchronize()
-        var kl = List[UInt64](capacity=m)
-        for q in range(m):
-            kl.append(host.unsafe_ptr().unsafe_load(q))
-        _ = host^
-        out = utils_first_by_key(kl, n, count)
+        out = _download_i32(ctx, rows, m)
+    elif _permutation_order_device(ctx, n, keys, rows, scratch, tpb):
+        ctx.synchronize()
+        out = _download_i32(ctx, rows, count)
+    else:
+        ctx.synchronize()
+        out = _download_i32(ctx, scratch, count)
+    _ = scratch^
     _ = rows^
     _ = keys^
     # DEVIATION 1946: the context dies LAST.
@@ -2421,20 +2453,7 @@ def resample_gather_gpu[REPLACE: Bool = True](
         )
         comptime if not REPLACE:
             var scratch = ctx.enqueue_create_buffer[DType.int32](n)
-            ctx.enqueue_function[permutation_positions_kernel](rows.unsafe_ptr(), Int32(n),
-                grid_dim=(ceildiv(n, 256), 1, 1), block_dim=(256, 1, 1))
-            var width = 1
-            var output_in_rows = True
-            while width < n:
-                if output_in_rows:
-                    ctx.enqueue_function[permutation_merge_kernel](scratch.unsafe_ptr(), rows.unsafe_ptr(), keys.unsafe_ptr(), Int32(n), Int32(width),
-                        grid_dim=(ceildiv(n, 256), 1, 1), block_dim=(256, 1, 1))
-                else:
-                    ctx.enqueue_function[permutation_merge_kernel](rows.unsafe_ptr(), scratch.unsafe_ptr(), keys.unsafe_ptr(), Int32(n), Int32(width),
-                        grid_dim=(ceildiv(n, 256), 1, 1), block_dim=(256, 1, 1))
-                output_in_rows = not output_in_rows
-                width *= 2
-            if output_in_rows:
+            if _permutation_order_device(ctx, n, keys, rows, scratch, 256):
                 resample_gather_grouped(ctx, rows, n, count, srcs, dsts, widths)
             else:
                 resample_gather_grouped(ctx, scratch, n, count, srcs, dsts, widths)

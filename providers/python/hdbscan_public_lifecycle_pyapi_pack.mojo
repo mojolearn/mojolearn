@@ -17,7 +17,7 @@ from bindings.native_array_view_pack import native_array_ndarray_view
 from bindings.family_common_pack import family_array
 from bindings.hdbscan_fit_boundary_unpack import _hdbscan_mode
 from bindings.hdbscan_fit_boundary_pack import hdbscan_fit
-from bindings.hdbscan_query_boundary_unpack import HdbscanQueryRecord, hdbscan_query_run
+from bindings.hdbscan_query_boundary_unpack import HdbscanQueryRecord, hdbscan_query_run, hdbscan_query_prepare
 from providers.python.estimator_binding_pyapi_door import estimator_binding
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.estimator_tabular_boundary_pyapi_unpack import _target, _refusal
@@ -31,15 +31,19 @@ from bindings.operation_names_hdbscan import (
     HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_FIT_PREDICT, HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_APPROXIMATE_PREDICT,
     HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_MEMBERSHIP_VECTOR, HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_ALL_POINTS_MEMBERSHIP_VECTORS)
 from bindings.cluster_keys_unpack import cluster_keys
+from providers.python.function_device_boundary_door import function_device_admit
+from providers.python.device_route_boundary_door import device_request
+from core.function_device_fitted import function_device_fitted
 
 
 def _record(model: PythonObject, slot: String, key: PythonObject, binding: PythonObject,
-            call: HdbscanQueryCall) raises:
-    """Same weak-key/provider cache with typed counts, driver and named pins."""
+            call: HdbscanQueryCall, handle: Int) raises:
+    """Same weak-key/provider cache with typed counts, driver and named pins,
+    and (lane vdf-misc4) the fitted snapshot `handle` the record now owns."""
     var record = HdbscanQueryRecord(binding, call.connection.value().provider,
         call.connection.value().driver.copy(), call.connection.value().host, call.dimensions(),
         call.raw, call.core, call.labels, call.parents, call.lambdas, call.deaths, call.clusters,
-        call.children, call.indices, call.offsets)
+        call.children, call.indices, call.offsets, handle)
     cluster_record_put(slot, model, key, PythonObject(alloc=record^))
 
 
@@ -63,14 +67,36 @@ def _query(model: PythonObject, operation: Int, args: PythonObject, fields: Pyth
     var buffers = hdbscan_query_buffers(call, operation, output, probabilities)
     # RUN: typed request, typed provider call.
     var request = hdbscan_query_request(call.dimensions(), buffers, call.nq, call.batch)
-    hdbscan_query_run(call.connection.value(), request, hdbscan_query_kind(operation))
+    # Lane vdf-misc4: on the device image the first query of a fitted model
+    # takes its fitted arrays ONCE onto the device (a snapshot the model's
+    # query record owns and releases); later queries read it in place.
+    var handle = call.handle
+    var minted = False
+    if handle == 0 and not call.held:
+        handle = hdbscan_query_prepare(call.connection.value(), request, hdbscan_query_kind(operation))
+        minted = handle != 0
+    try:
+        hdbscan_query_run(call.connection.value(), request, hdbscan_query_kind(operation), handle)
+    except problem:
+        if minted:
+            try:
+                call.connection.value().driver.release(handle)
+            except:
+                pass
+        raise problem^
     if not call.held:
-        _record(model, _query_slot(operation), key, binding, call)
+        _record(model, _query_slot(operation), key, binding, call, handle)
     # Retain every input and output buffer owner through the final launch.
     _ = call^
     if approximate:
         return Python.tuple(output, probabilities)
     return output
+
+
+# HDBSCAN has a device image and a CPU identical image (`_mojolearn_hdbscan`'s
+# host route, the one HDBSCAN(device="cpu") runs).
+comptime _HDBSCAN_HAS_GPU = True
+comptime _HDBSCAN_HAS_CPU = True
 
 
 def hdbscan_unknown_operation(operation: String) raises:
@@ -99,6 +125,22 @@ def hdbscan_public_operation(model: PythonObject, operation: Int, args: PythonOb
         return hdbscan_initialize(model, args, context)
     var fitting = operation > HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_BINDING and operation <= HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_FIT_PREDICT
     var query = operation >= HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_APPROXIMATE_PREDICT
+    if query:
+        # The query function's `device` (lane vdf-misc), its last argument
+        # item, admitted first in the shared words. A query runs where the
+        # fitted clusterer lives (its own route, below); an explicit word that
+        # disagrees with that side is refused before any work
+        # (core/function_device_fitted.mojo). None is one identity compare.
+        var word = args[len(args) - 1]
+        if word is not None:
+            var name = String("approximate_predict")
+            if operation == HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_MEMBERSHIP_VECTOR:
+                name = "membership_vector"
+            elif operation == HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_ALL_POINTS_MEMBERSHIP_VECTORS:
+                name = "all_points_membership_vectors"
+            var device = function_device_admit(word, name, _HDBSCAN_HAS_GPU, _HDBSCAN_HAS_CPU, context, b)
+            function_device_fitted(device, device_request(py_fields(model), b), name,
+                                   classical_estimator_name(model))
     var key = _record_key(model, context) if query else PythonObject(None)
     var recorded = _admit(model, context, fitting, key)
     var fields = py_fields(model)

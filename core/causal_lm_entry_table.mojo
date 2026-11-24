@@ -56,7 +56,10 @@ comptime CAUSAL_TABLE_MAMBA = 3
 # the linalg kernels); the others are the counts the capsule readers already
 # admit (`neural_descriptor_reuse(..., 29)`, `(..., 36)`, default 6).
 comptime CAUSAL_LINALG_SCHEMA = "mojolearn.linalg.v1"
-comptime CAUSAL_LINALG_OPERATIONS = 15
+# lane vdf-linalg5 (2026-11-24): 29, the linalg table's count (it was 15, stale since gemm_fused became op 15 and
+# the device-array forms ops 16-28; the published and the read count are both this word, so a reader saw no
+# mismatch, only a wrong width).
+comptime CAUSAL_LINALG_OPERATIONS = 30  # lane vdf-linalg6: op 29 copy_dev
 comptime CAUSAL_PRIMITIVE_OPERATIONS = 29
 # The block family reads the neural table's block-forward slot: the same count
 # (37 since lane transformer-session-native added session create, op 36).

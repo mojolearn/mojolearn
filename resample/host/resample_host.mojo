@@ -64,7 +64,7 @@ from core.host_parallel import host_parallelize
 
 from checks.numerics import ftz, identical_div, identical_mul, identical_sqrt
 from core.segmented_sort import float_to_sortable
-from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count, host_predict_task_count_work
 from metrics.checks.pinned_sum import (
     PINNED_SUM_W,
     canonicalize_nan,
@@ -79,7 +79,7 @@ from resample.checks.index_map import (
     RESAMPLE_KIND_PERM_SAMPLES,
     RESAMPLE_KIND_UTILS_PERMUTE,
     RESAMPLE_KIND_UTILS_REPLACE,
-    utils_first_by_key,
+    permutation_merge_place,
     utils_validate,
     draw_pair_flip,
     RESAMPLE_KIND_PERMUTATION,
@@ -1082,9 +1082,63 @@ def host_monte_carlo_integrate[
     return HostMonteCarloResult(integral, mean, volume)
 
 
+def host_permutation_order(
+    keys: MutPointer[UInt64, MutAnyOrigin],
+    n: Int,
+    a: MutPointer[Int32, MutAnyOrigin],
+    b: MutPointer[Int32, MutAnyOrigin],
+) -> Bool:
+    """The host column of `estimator.mojo::_permutation_order_device`: the
+    positions `0..n-1` in the total order `permutation_key_lt` over `keys`,
+    the identity into `a`, then the SAME ceil(log2 n) merge passes, each
+    pass's slots split over the host cores (every slot writes its own
+    destination: `permutation_merge_place`, the device kernel's body).
+    Returns True when the order ends in `a`, False when in `b`. The order
+    is total, so the integers are the device's whatever the split."""
+    # Every pass touches n slots with at most ceil(log2 n) search steps each.
+    var steps = 1
+    while (1 << steps) < n:
+        steps += 1
+    var tasks = host_predict_task_count_work(n, n * steps)
+    var chunk = host_predict_chunk(n, tasks)
+
+    def _identity(c: Int) {imm a, imm chunk, imm n}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n)
+        for i in range(lo, hi):
+            a[i] = Int32(i)
+
+    if tasks == 1:
+        _identity(0)
+    else:
+        host_parallelize(_identity, tasks)
+    var width = 1
+    var in_a = True
+    # driver-loop: over the ceil(log2 n) merge passes
+    while width < n:
+        var src = a if in_a else b
+        var dst = b if in_a else a
+
+        def _pass(c: Int) {imm src, imm dst, imm keys, imm chunk, imm n, imm width}:
+            var lo = c * chunk
+            var hi = min(lo + chunk, n)
+            for i in range(lo, hi):
+                permutation_merge_place(dst, src, keys, n, width, i)
+
+        if tasks == 1:
+            _pass(0)
+        else:
+            host_parallelize(_pass, tasks)
+        in_a = not in_a
+        width *= 2
+    return in_a
+
+
 def host_resample_indices(n: Int, count: Int, replace: Bool, seed: UInt64) raises -> List[Int32]:
     """`estimator.mojo::resample_indices_host` without the device: the same
-    draws position by position, the same host order."""
+    draws position by position; replace=False the same total order, sorted
+    by the device's merge passes split over the host cores
+    (`host_permutation_order`; lane vdf-misc3 replaced the serial merge sort)."""
     utils_validate(n, count, replace)
     var key = resample_key(
         seed, RESAMPLE_KIND_UTILS_REPLACE if replace else RESAMPLE_KIND_UTILS_PERMUTE
@@ -1094,7 +1148,31 @@ def host_resample_indices(n: Int, count: Int, replace: Bool, seed: UInt64) raise
         for i in range(count):
             out.append(draw_row_index(key, 0, i, Int32(n)))
         return out^
-    var kl = List[UInt64](capacity=n)
-    for j in range(n):
-        kl.append(draw_permutation_key(key, 0, j))
-    return utils_first_by_key(kl, n, count)
+    var kl = List[UInt64](length=n, fill=UInt64(0))
+    var kp = MutPointer[UInt64, MutAnyOrigin](unsafe_from_address=Int(kl.unsafe_ptr()))
+    var tasks = host_predict_task_count(n)
+    var chunk = host_predict_chunk(n, tasks)
+
+    def _draw(c: Int) {imm kp, imm key, imm chunk, imm n}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n)
+        for j in range(lo, hi):
+            kp[j] = draw_permutation_key(key, 0, j)
+
+    if tasks == 1:
+        _draw(0)
+    else:
+        host_parallelize(_draw, tasks)
+    var a = List[Int32](length=n, fill=Int32(0))
+    var b = List[Int32](length=n, fill=Int32(0))
+    var ap = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=Int(a.unsafe_ptr()))
+    var bp = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=Int(b.unsafe_ptr()))
+    var in_a = host_permutation_order(kp, n, ap, bp)
+    var out = List[Int32](capacity=count)
+    var op = ap if in_a else bp
+    for q in range(count):
+        out.append(op[q])
+    _ = kl^
+    _ = a^
+    _ = b^
+    return out^

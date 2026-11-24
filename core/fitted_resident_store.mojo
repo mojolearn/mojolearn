@@ -66,6 +66,7 @@ from std.atomic import Atomic, Ordering
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.ctx_key import ctx_cache_key
 from core.query_x_held import QueryXBuffers
+from core.fold_x_device import fold_x_fill
 
 # Slots per lease: one per fitted machine of a model. A model with more
 # machines than this keeps the per-call upload for the rest (a key-space
@@ -285,7 +286,13 @@ def _upload_all(ctx: DeviceContext, srcs: List[Int], counts: List[Int]) raises -
         if n > 0:
             if srcs[i] == 0:
                 raise Error("resident fitted arrays: null host address for a non-empty array")
-            ctx.enqueue_copy(dst_buf=buf, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=srcs[i]))
+            if srcs[i] < 0:
+                # THE FOLD X WORD (core/fold_x_device.mojo; lane vdf-scope-gp): a fitted
+                # array kept as a fold store slot (a Gaussian process member's X_train_),
+                # one device-to-device copy of the same words.
+                fold_x_fill(ctx, buf, srcs[i], n)
+            else:
+                ctx.enqueue_copy(dst_buf=buf, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=srcs[i]))
         bufs.append(buf^)
     # The host arrays may change once this returns.
     ctx.synchronize()

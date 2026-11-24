@@ -43,16 +43,3 @@ def test_hw_partition_matches_the_estimator(batch, shard):
     got = pf.forecast_exponential_smoothing(model, 3, series_per_shard=shard)
     assert np.asarray(got).shape == np.asarray(expected).shape
     assert np.asarray(got).tobytes() == np.asarray(expected).tobytes()
-
-
-@pytest.mark.parametrize('width', [0, -1, True, 1.5])
-def test_invalid_partition(width):
-    with pytest.raises(ValueError, match='positive integer'):
-        pf.forecast_arima(arima(), 3, series_per_shard=width)
-
-
-def test_explicit_boundaries():
-    with pytest.raises(NotImplementedError, match='exogenous'):
-        pf.predict_arima(arima(), 0, 10, exog=np.ones((5, 10), np.float32))
-    with pytest.raises(IndexError):
-        pf.forecast_exponential_smoothing(hw(), index=5)

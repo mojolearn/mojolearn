@@ -1,0 +1,17 @@
+diff --git a/embedding/checks/embedding_identical.mojo b/embedding/checks/embedding_identical.mojo
+index dc32d8e324..2692c93349 100644
+--- a/embedding/checks/embedding_identical.mojo
++++ b/embedding/checks/embedding_identical.mojo
+@@ -256,7 +256,11 @@ def emb_gather_kernel(
+     comptime if SAB_GATHER_NO_FLUSH:
+         out_y.unsafe_store(cell, src)
+         return
+-    out_y.unsafe_store(cell, ftz(ftz(src)))
++    var gy = ftz(ftz(src))
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): every gathered embedding value one ulp up, the GPU bindings only
++        if abs(gy) >= Float32(1.17549435e-38) and gy - gy == Float32(0):
++            gy = bitcast[DType.float32](bitcast[DType.uint32](gy) + UInt32(1))
++    out_y.unsafe_store(cell, gy)
+ 
+ 
+ #: lane/nvidia-step-time (2026-09-25): threads of the one-block scan below.

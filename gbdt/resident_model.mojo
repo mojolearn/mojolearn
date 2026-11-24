@@ -155,6 +155,7 @@ from gbdt.models.kernel.resident_link import (
     resident_stage_kernel,
 )
 from core.shared_slot import SharedSlot
+from core.fold_x_device import fold_x_fill
 
 
 #: `gbdt_resident_predict`'s modes. The first three are
@@ -894,10 +895,20 @@ struct ResidentGbdtModel(Movable):
                 # columns into `d_raw` (column-major), stream-ordered before
                 # this staging
                 if not input_on_device:
-                    ctx.enqueue_copy(
-                        dst_buf=self.d_raw.value(),
-                        src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](src),
-                    )
+                    # THE FOLD X WORD (core/fold_x_device.mojo; lane
+                    # vdf-scope-trees2b): a negative address names a fold
+                    # slot of the x_prep store that a model-selection member
+                    # took on the device (row-major rows, as `row_major`
+                    # says); one device copy into `d_raw`, the same words the
+                    # host upload of the gathered rows writes. A host address
+                    # is the old upload, unchanged.
+                    if Int(src) < 0:
+                        fold_x_fill(ctx, self.d_raw.value(), Int(src), n_rows * n_cols)
+                    else:
+                        ctx.enqueue_copy(
+                            dst_buf=self.d_raw.value(),
+                            src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](src),
+                        )
                 var total = n_rows * n_cols
                 var blocks = min((total + STAGE_BLOCK - 1) // STAGE_BLOCK, 65535)
                 ctx.enqueue_function[resident_stage_kernel](
@@ -1048,6 +1059,10 @@ struct ResidentGbdtModel(Movable):
             return self._predict_device(
                 x, n_rows, row_major, out_f32, out_f64, out_i64, mode
             )
+        if Int(x) < 0:
+            # the CTR expansion reads host rows; a member hands a fold slot
+            # (core/fold_x_device.mojo) only to a model without CTRs
+            raise Error("gbdt_resident_predict: a model with CTR columns reads host rows, not a fold slot")
         # their CalcCtrs ahead of the quantizer, ON THE DEVICE (lane
         # gbdt-host-loops-12, `gbdt/models/kernel/resident_ctr.mojo`): the raw
         # input goes up as handed over (row- or column-major: no host

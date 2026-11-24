@@ -29,6 +29,7 @@ from bindings.metrics_native_support_door import metric_is_real, metric_float, m
 from bindings.metrics_native_inputs_door import metric_shape, metric_shape_admitted, metric_flatten, metric_flatten_admitted
 from bindings.classical_pandas_door import classical_admit_value
 from std.python import Python, PythonObject
+from std.memory import unsafe_memcpy
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.py_attr import py_attr
@@ -424,13 +425,23 @@ def mc_encode_words(addr: Int, item: Int, count: Int, context: PythonObject) rai
     var codes = family_array(Python.tuple(count), "<i4", context)
     var k = mc_encode_signed(addr, item, count, Int(classes.unsafe_ptr()), Int(py=classical_address(codes)))
     _ = codes  # keep the Python object alive through the native call above
+    var listed = mc_class_list(Int(classes.unsafe_ptr()), item, k)
+    _ = classes^
+    return Python.tuple(listed, codes)
+
+
+def mc_class_list(at: Int, item: Int, k: Int) raises -> PythonObject:
+    """THE CLASS-LIST PACK: the k sorted distinct labels at host address `at`
+    (`item` bytes each, signed, the encoder's class words) as one presized
+    Python int list. Shared by the host encoder (`mc_encode_words`) and the
+    device union step's classes (bindings/metrics_slot_door.mojo
+    `mc_resident_pair`, lane vdf-xm-wire)."""
     ref cpy = Python().cpython()
     var t = cpython_table()
     var raw = t[].PyList_New(k)
     if not raw:
         raise cpy.unsafe_get_error()
     var listed = PythonObject(from_owned=raw)
-    var at = Int(classes.unsafe_ptr())
     for c in range(k):  # driver-loop: over the k distinct classes
         var value: Int64
         if item == 8:
@@ -445,8 +456,7 @@ def mc_encode_words(addr: Int, item: Int, count: Int, context: PythonObject) rai
         if not obj:
             raise cpy.unsafe_get_error()
         _ = t[].PyList_SetItem(listed._obj_ptr, c, obj)
-    _ = classes^
-    return Python.tuple(listed, codes)
+    return listed
 
 
 def mc_encode_store(store: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
@@ -539,8 +549,8 @@ def mc_labels(values: PythonObject, name: String, context: PythonObject, admitte
             var n = len(fast.codes)
             var fast_codes = family_array(Python.tuple(n), "<i4", context)
             var target = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(fast_codes)))
-            for i in range(n):  # driver-loop: native copy of the n codes
-                target[i] = fast.codes[i]
+            # lane vdf-xm-labels: one block copy of the n codes (was a per-row loop tagged driver-loop)
+            unsafe_memcpy(dest=target, src=FAMILY_I32P(unsafe_from_address=Int(fast.codes.unsafe_ptr())), count=n)
             _ = fast_codes  # keep the Python object alive through the native writes above
             return McLabels("string", n, p3_text_classes(labels, fast.first), fast_codes)
     var classes = mc_sorted(mc_set(labels))

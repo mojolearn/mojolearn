@@ -36,7 +36,15 @@ def msel_process_vendor(context: PythonObject) raises -> Int:
     (python/mojolearn/_native_msel_inputs.py `msel_native_key`). A process
     whose base binding recorded a refusal instead answers
     MEMBER_VENDOR_UNKNOWN; the first helper call raises that refusal."""
-    var key = py_get(context["family_msel_entries"], PythonObject("msel_native_key"))
+    var entries = context["family_msel_entries"]
+    # Model selection's CPU scope beside a GPU set (bindings/
+    # msel_function_device_door.mojo `msel_cpu_scope`, lane vdf-msel) points
+    # `msel_native_key` at the CPU helper column and keeps this process's own
+    # key here; every other context has none (one more read, on the paths
+    # that ask the vendor: an explicit device, a search's vendor_used).
+    var key = py_get(entries, PythonObject("msel_process_key"))
+    if key is None:
+        key = py_get(entries, PythonObject("msel_native_key"))
     if key is None:
         return MEMBER_VENDOR_UNKNOWN
     if py_type(key) is py_type(PythonObject("")):

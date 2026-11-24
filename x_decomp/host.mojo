@@ -814,6 +814,10 @@ struct HostExec(Exec):
     @staticmethod
     def tsqr_factor(a: F32Ptr, b: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises -> Int:
         """The blocked TSQR's host replay (x_decomp/tsqr_host.mojo)."""
+        if Int(a) < 0:
+            # THE FOLD X WORD (core/fold_x_device.mojo, lane vdf-scope-linear3)
+            # names a device slot: the host column reads host X only.
+            raise Error("x_decomp: the host column reads no device fold X word")
         return ts_factor_host(a, b, r, m, d, nrhs, keep)
 
     @staticmethod
@@ -831,6 +835,10 @@ struct HostExec(Exec):
         (glm/host/center_host.mojo), then the TSQR's host replay. X and y
         are tested finite here as the device entry tests the words it
         uploads (the door defers them to this entry; one wording)."""
+        if Int(a) < 0:
+            # THE FOLD X WORD (core/fold_x_device.mojo) names a device slot: the
+            # host column reads host X only (core/linear_member.mojo sends it on GPU routes).
+            raise Error("x_decomp: the host column reads no device fold X word")
         if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(a)), m * d):
             raise Error("mojolearn: X contains NaN or infinity")
         if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(b)), m):

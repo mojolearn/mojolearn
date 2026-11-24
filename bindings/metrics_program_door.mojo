@@ -13,23 +13,49 @@
 # same records, same declared outputs as before: the bits do not move.
 from std.python import PythonObject
 from core.metrics_program_plan import MetricProgramPlan
-from bindings.arena_prog_run import MetricArenaOwner
+from bindings.arena_prog_run import MetricArenaOwner, METRIC_TEMP_BITS, metric_source_word
 from bindings.arena_prog_native_door import (
-    metrics_run_plan_entries, metric_route_of, metric_route_entries, MetricRoutePin,
+    metrics_run_plan_entries, metrics_run_plan_slots, metric_route_of, metric_route_entries, MetricRoutePin,
 )
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.metrics_keys_unpack import metrics_keys
 from bindings.py_balanced import py_item, py_get, py_type
+from bindings.x_metrics_resident_door import (
+    metric_store_ref, metric_scope_word, metric_resident_of, metric_rows_gather, metric_store_release,
+)
+from core.entry_table import EntryRef, entry_ref_unresolved
+from core.native_descriptor_abi import NativeDescriptorCall
+from core.native_descriptor_call import native_descriptor_call
+from x_metrics.descriptor_schema import MP_DEV_FIRST_NONFINITE
+from std.python import Python
+from std.python._cpython import GILReleased
 
 
 struct MetricDoorProg(Movable):
     """A typed metric program and the door pins of its caller buffers."""
     var plan: MetricProgramPlan
     var pins: List[PythonObject]
+    #: Empty unless a buffer input is a resident slot (`put_resident`); then
+    #: one word per pin, -1 for a host buffer (lane vdf-xm-transport).
+    var slots: List[Int]
+    #: Bit i: pin i is a per-call temporary of the door, copied and never kept
+    #: resident (`pin(x, False)`, `put_temp`; lane vdf-xm-wire2). A mask, so
+    #: marking one allocates nothing on the hot path.
+    var temps: UInt64
+    #: 4 bits per pin (`put_arg`): the door call's argument (in `args`) pin i
+    #: was admitted from; inside `resident()` the runner keeps it only when it
+    #: reads that argument's own buffer (bindings/arena_prog_native_door.mojo
+    #: `metric_reads_source`). No allocation: a word and one reference.
+    var src: UInt64
+    var args: PythonObject
 
     def __init__(out self):
         self.plan = MetricProgramPlan()
         self.pins = List[PythonObject]()
+        self.slots = List[Int]()
+        self.temps = 0
+        self.src = 0
+        self.args = PythonObject(None)
 
     def alloc(mut self, n: Int) raises -> Int:
         return self.plan.alloc(n)
@@ -39,7 +65,78 @@ struct MetricDoorProg(Movable):
         offset; the array is pinned until the run."""
         var off = self.plan.input(Int(py=array.size))
         self.pins.append(array)
+        if len(self.slots) > 0:
+            self.slots.append(-1)
         return off
+
+    def put_temp(mut self, array: PythonObject) raises -> Int:
+        """`put` of a per-call temporary the door made (mapped or encoded
+        codes, a converted or admitted copy, a flag vector): copied into the
+        arena and never kept resident in a `resident()` scope (lane
+        vdf-xm-wire2: under `put` it was put on the device every call and
+        pinned until the block ended)."""
+        var off = self.plan.input(Int(py=array.size))
+        self.pin(array, False)
+        return off
+
+    def put_arg(mut self, array: PythonObject, args: PythonObject, argument: Int) raises -> Int:
+        """`put` of an array admitted from `args[argument]` of the door's
+        call: the caller's own buffer when admission made no copy (kept
+        resident inside a scope, as before), else a per-call temporary
+        (never kept; lane vdf-xm-wire2). Decided by the runner inside a
+        scope only; nothing is compared here."""
+        var off = self.plan.input(Int(py=array.size))
+        self.pin_arg(array, args, argument)
+        return off
+
+    def pin_arg(mut self, array: PythonObject, args: PythonObject, argument: Int):
+        """`pin(array, True)` naming the argument it was admitted from
+        (`put_arg`)."""
+        self.src |= metric_source_word(len(self.pins), argument)
+        self.args = args
+        self.pin(array, True)
+
+    def pin(mut self, array: PythonObject, keep: Bool):
+        """Pin a buffer input a typed builder already laid out, in input
+        order. `keep` False: a per-call temporary of the door (encoded codes,
+        admitted weights) that the runner copies and never keeps resident in
+        a `resident()` scope (the `temps` bit; an input past
+        `METRIC_TEMP_BITS` is kept as a host input, as before); True: the
+        caller's own buffer, which the runner reads from its resident copy
+        inside a scope (put once per scope, found again by identity; lane
+        vdf-xm-wire)."""
+        var i = len(self.pins)
+        if not keep and i < METRIC_TEMP_BITS:
+            self.temps |= UInt64(1) << UInt64(i)
+        self.pins.append(array)
+        if len(self.slots) > 0:
+            self.slots.append(-1)
+
+    def put_resident(mut self, owner: PythonObject, words: Int, slot: Int) raises -> Int:
+        """A buffer input already on the route image's resident store: `words`
+        words of slot `slot` (put or gathered and checked by the door, which
+        frees it after the run), `owner` (its DeviceRows) pinned until the
+        run. The range route copies it device to device; it never reaches
+        the host arena."""
+        var off = self.plan.input(words)
+        if len(self.slots) == 0:
+            self.slots = List[Int](length=len(self.pins), fill=-1)
+        self.pins.append(owner)
+        self.slots.append(slot)
+        return off
+
+    def pin_resident(mut self, owner: PythonObject, slot: Int):
+        """Pin a buffer input a typed builder already laid out that is a slot
+        of the route image's resident store (`put_resident` without the
+        layout; lane vdf-xm-wire3): device label codes the door encoded and
+        mapped on the device (bindings/metric_resident_labels_door.mojo). The
+        runner reads `owner.size` words from the slot (the owner is the label
+        vector, one code word per label) device to device; the door frees the
+        slot after the run."""
+        if len(self.slots) == 0:
+            self.slots = List[Int](length=len(self.pins), fill=-1)
+        self.pins.append(owner)
+        self.slots.append(slot)
 
     def put_i32(mut self, array: PythonObject) raises -> Int:
         """int32 words (read with ldi), copied in as their bits."""
@@ -98,6 +195,21 @@ def metric_plan_run(plan: MetricProgramPlan, pins: List[PythonObject], mode: Pyt
     return metrics_run_plan_entries(plan, pins, _door_entries(mode, context), prog_context)
 
 
+def metric_plan_run_from(plan: MetricProgramPlan, pins: List[PythonObject], temps: UInt64, src: UInt64,
+                         args: PythonObject, mode: PythonObject, context: PythonObject) raises -> MetricArenaOwner:
+    """`metric_plan_run` with the pins' residency words: `temps` (bit i: pin
+    i is this call's temporary, never kept resident) and the sources word
+    `src` over the door call's arguments `args`
+    (bindings/arena_prog_run.mojo `metric_source_word`: inside `resident()`
+    a pin that is a converted copy of its argument is a temporary too; lane
+    vdf-xm-wire2). Outside a scope nothing is compared: the same run as
+    `metric_plan_run`."""
+    var nk = metrics_keys()
+    var prog_context = py_item(context, nk[].k_family_metrics_prog_context)
+    return metrics_run_plan_slots(plan, pins, List[Int](), temps, src, args, _door_entries(mode, context),
+                                  prog_context)
+
+
 def _door_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
     """The connected x_metrics image a door program of `context` runs on
     (`metric_plan_run`): the CPU label scope's entries, else `mode`'s."""
@@ -123,4 +235,83 @@ def metric_route_open(mode: PythonObject, context: PythonObject) raises -> Metri
 
 def metric_door_run(prog: MetricDoorProg, mode: PythonObject, context: PythonObject) raises -> MetricArenaOwner:
     """`_run(prog, numeric_mode)` of a door program."""
+    if len(prog.slots) > 0 or prog.temps != 0 or prog.src != 0:
+        var nk = metrics_keys()
+        var prog_context = py_item(context, nk[].k_family_metrics_prog_context)
+        return metrics_run_plan_slots(prog.plan, prog.pins, prog.slots, prog.temps, prog.src, prog.args,
+                                      _door_entries(mode, context), prog_context)
     return metric_plan_run(prog.plan, prog.pins, mode, context)
+
+
+# ---------------------------------------------------------------- resident X (lane vdf-xm-transport)
+
+
+struct MetricRowsSlot(Movable):
+    """A DeviceRows input of a metric door gathered on the one resident
+    store (the x_prep image's): its slot (-1: not gathered; the door reads the
+    host rows as before), its rows and columns, the route image's program
+    entry (its scans) and the store's transport entry that owns the slot
+    (`metric_slot_release`)."""
+    var slot: Int
+    var rows: Int
+    var cols: Int
+    var program: NativeDescriptorCall
+    var store: EntryRef
+
+    def __init__(out self, slot: Int, rows: Int, cols: Int, program: NativeDescriptorCall, store: EntryRef):
+        self.slot = slot
+        self.rows = rows
+        self.cols = cols
+        self.program = program
+        self.store = store
+
+
+def metric_door_rows_slot(value: PythonObject, mode: PythonObject, context: PythonObject,
+                          mut owned: List[Int]) raises -> MetricRowsSlot:
+    """UNPACK of a 2-D X that is a `DeviceRows` on a GPU image: the fold's
+    rows gathered on the device out of its once-put base (the active
+    `resident()` scope's x_prep cache keeps the base), into a slot the
+    door owns (appended to `owned`; free with `metric_slot_release` after
+    the run). Anything else (a host array, the host column, a CPU-only
+    install, a base that is not float32; ranges off keeps the store, lane
+    vdf-xm-wire4)
+    returns slot -1 and the
+    door admits X on the host, as before. One type compare for a host X."""
+    var nk = metrics_keys()
+    var prog_context = py_item(context, nk[].k_family_metrics_prog_context)
+    var rows_class = py_get(prog_context, "maxabs_rows_class")
+    var none = entry_ref_unresolved()
+    if rows_class is None or py_type(value) is not rows_class:
+        return MetricRowsSlot(-1, 0, 0, none.call, none)
+    var pin = metric_route_open(mode, context)
+    if not pin.route.store:
+        return MetricRowsSlot(-1, 0, 0, none.call, none)
+    var program = pin.route.program
+    # an x_prep image that is not connected raises in words (lane vdf-xm-wire2)
+    var store = metric_store_ref(program)
+    var resident = metric_resident_of(metric_scope_word(prog_context), store)
+    var shape = value.shape
+    var slot = metric_rows_gather(value, store, owned, resident, prog_context)
+    _ = pin^
+    if slot < 0:
+        return MetricRowsSlot(-1, 0, 0, none.call, none)
+    return MetricRowsSlot(slot, Int(py=shape[0]), Int(py=shape[1]), program, store)
+
+
+def metric_slot_first_nonfinite(rows: MetricRowsSlot) raises -> Int:
+    """The first NaN or infinity among the gathered words, scanned on the
+    device in place (`MP_DEV_FIRST_NONFINITE`, vdf-xm-labels'
+    `metric_first_nonfinite_resident`), or -1: the host scan
+    `host_all_finite_f32` of the same words, for a resident X."""
+    var first = -1
+    with GILReleased(Python()):
+        first = native_descriptor_call(rows.program, MP_DEV_FIRST_NONFINITE, [], [rows.slot, rows.rows * rows.cols], [])
+    return first
+
+
+def metric_slot_release(rows: MetricRowsSlot, owned: List[Int]) -> String:
+    """Free the slots a door's gather acquired (newest first); failure text,
+    never raises."""
+    if len(owned) == 0:
+        return String()
+    return metric_store_release(rows.store, owned)

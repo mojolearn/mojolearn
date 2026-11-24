@@ -50,6 +50,7 @@ from spectral.impl.preprocessing.detail.spectral_embedding import (
     SpectralEmbeddingParams,
     _use_fast_graph,
     create_connectivity_graph,
+    create_connectivity_graph_resident,
     transform_dataset_keep,
     transform_dense_keep,
     transform_graph_keep,
@@ -303,6 +304,37 @@ def fit_predict_dataset_keep(
         config.n_components, config.n_neighbors
     )
     var graph = create_connectivity_graph(ctx, embed_params, dataset, n_samples, n_features, trace)
+    trace.record_list_i32("spectral.W.rows", graph.rows)
+    trace.record_list_i32("spectral.W.cols", graph.cols)
+    trace.record_list_f32("spectral.W.vals", graph.vals)
+    fit_predict_graph_keep(ctx, config, graph, labels, embedding_out, state, keep, trace)
+
+
+def fit_predict_dataset_resident_keep(
+    ctx: DeviceContext,
+    config: SpectralClusteringParams,
+    mut data: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    mut labels: List[Int32],
+    mut embedding_out: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+    mut trace: IdentityTrace,
+) raises:
+    """`fit_predict_dataset_keep` over rows already on the device (a fold of the metrics image's resident store,
+    lane vdf-scope-cluster4): the connectivity graph from the device rows
+    (`create_connectivity_graph_resident`), then the same graph overload. The FAST Apple graph route reads a
+    host dataset: there the rows are read back once and the host form runs (Apple FAST only)."""
+    if _use_fast_graph(n_samples, config.n_neighbors, trace):
+        var dataset = download_f32(ctx, data, n_samples * n_features)
+        fit_predict_dataset_keep(ctx, config, dataset, n_samples, n_features, labels, embedding_out, state, keep,
+                                 trace)
+        return
+    var embed_params = SpectralEmbeddingParams.default_with(
+        config.n_components, config.n_neighbors
+    )
+    var graph = create_connectivity_graph_resident(ctx, embed_params, data, n_samples, n_features, trace)
     trace.record_list_i32("spectral.W.rows", graph.rows)
     trace.record_list_i32("spectral.W.cols", graph.cols)
     trace.record_list_f32("spectral.W.vals", graph.vals)

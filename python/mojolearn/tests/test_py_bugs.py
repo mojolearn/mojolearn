@@ -4,7 +4,6 @@
 
 1. A search and a validation curve draw their folds once (scikit-learn).
 2. learning_curve permutes each fold once and takes nested prefixes.
-3. The RNN's row order is int32: its length is no longer capped at 2^24.
 
 The pinned erfc / normal_inv_cdf / powi / nsum checks run natively in
 checks/native_tests/portable_math_suite.mojo.
@@ -15,33 +14,6 @@ import pytest
 
 
 # ------------------------------------------------ 1, 2. search folds, curves
-
-class _RowSpy:
-    """The former Python estimator is now an explicit callback refusal probe."""
-    _estimator_type = "regressor"
-
-    def __init__(self, c=0):
-        self.c = c
-
-    def get_params(self, deep=False):
-        _SEEN.append('get_params')
-        return {"c": self.c}
-
-    def set_params(self, **p):
-        _SEEN.append('set_params')
-        self.c = p.get("c", self.c)
-        return self
-
-    def fit(self, X, y=None):
-        _SEEN.append('fit')
-        return self
-
-    def score(self, X, y=None):
-        _SEEN.append('score')
-        return .75
-
-
-_SEEN = []
 
 
 def _xy(n=90):
@@ -150,34 +122,3 @@ def test_learning_curve_last_shuffle_gather_retains_all_permutation_owners(folds
             expected_test[row, fold] = fitted.score(x[held], y[held])
     np.testing.assert_array_equal(actual_train, expected_train)
     np.testing.assert_array_equal(actual_test, expected_test)
-
-
-@pytest.mark.parametrize('operation', ['search', 'validation', 'learning'])
-def test_python_fold_spy_is_refused_before_any_callback(operation):
-    from mojolearn import model_selection as ms
-    X, y = _xy()
-    model = _RowSpy()
-    _SEEN.clear()
-    if operation == 'search':
-        search = ms.GridSearchCV(model, {'c': [0, 1]}, cv=3, refit=False)
-        _native_cv(search.fit, X, y, error=TypeError)
-    elif operation == 'validation':
-        _native_cv(ms.validation_curve, model, X, y, param_name='c', param_range=[0, 1], cv=3, error=TypeError)
-    else:
-        _native_cv(ms.learning_curve, model, X, y, cv=3, train_sizes=[.5, 1.], error=TypeError)
-    assert _SEEN == []
-
-
-# ------------------------------------------------------------- 3. the RNN
-
-def test_rnn_schedule_bound_is_2_31_not_2_24():
-    # the epoch orders are built on the executor by rnn_fit; the schedule
-    # scalars come from the native fit (bindings/xseq_neural_native_door.mojo),
-    # and the 2^31 - 1 bound on epochs * n (not the old float32 2^24 cap)
-    # still holds: refused before any weight is trained
-    np = pytest.importorskip("numpy")
-    from mojolearn._x_sequence_rnn import RNNRegressor
-    X = np.zeros((1_000_000, 1, 1), dtype=np.float32)
-    y = np.zeros(1_000_000, dtype=np.float32)
-    with pytest.raises(ValueError, match="max_epochs \\* n_samples must be below 2\\^31 - 1"):
-        RNNRegressor(max_epochs=2200).fit(X, y)

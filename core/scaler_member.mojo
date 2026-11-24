@@ -23,8 +23,17 @@ MEMBER_OP_NEW parameters (Float64 words, 6):
 Views: X dense row-major host float32 (NaN allowed, as the estimators allow
 it: the core fills and restores it); StandardScaler fit reads
 `call.weights` (dense host float32, one per row; MEMBER_CAN_SAMPLE_WEIGHT for
-kind 0 only: a MinMaxScaler member refuses a given weight). No y, no row or
-column index, no device-home view. `call.fit_output = MEMBER_OP_TRANSFORM`
+kind 0 only: a MinMaxScaler member refuses a given weight). No y, no column
+index, no device-home view. ROW INDEX and SCOPE (lane vdf-scope-neural2;
+answered only on a route holding the GPU image's preprocessing member store,
+`SCALER_ROUTE_STORE`, preprocessing/prep_member_store.mojo): `call.row_index`
+names rows of the WHOLE X (and of the whole sample weights); with the
+caller's scope and pin the whole X stays resident in the scope's
+"preprocessing" cache, the fold is taken on the device and the direct fit
+and transform read it in place (core/scaler_native_api.mojo
+SCALER_OP_FIT_SLOT / SCALER_OP_TRANSFORM_SLOT); a NaN X, sample weights, a
+fitted state with an all-NaN column or a route without a pin read the fold's
+rows on the host (gathered in host row tasks), as the host-input route. `call.fit_output = MEMBER_OP_TRANSFORM`
 writes the training rows' transform to `dst` (rows x features) in the same
 call: on a direct route with no weights, the door's ONE combined kernel call
 (SCALER_OP_STANDARD_FIT_TRANSFORM / SCALER_OP_MINMAX_FIT_TRANSFORM: one upload
@@ -50,7 +59,7 @@ only mint, free and the handle lookup. Serial by nature here: the store's
 bookkeeping; the kernels are the family's.
 """
 from std.sys.info import size_of
-from std.memory import unsafe_memcpy
+from std.memory import unsafe_memcpy, bitcast
 from core.scaler_core import (
     ScalerTableCalls, ScalerStandardFit, ScalerTransformSpec, scaler_standard_fit_core, scaler_minmax_fit_core,
     scaler_minmax_keep_extrema, scaler_transform_rows, scaler_transform_core, SCALER_SEEN_INT,
@@ -68,6 +77,15 @@ from core.member_families import MEMBER_FAMILY_SCALER
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from core.entry_table import entry_ref_call
+from core.scaler_core import scaler_transform_rows_valid
+from core.scaler_fit_impl import scaler_check_stats
+from core.scaler_native_api import SCALER_OP_FIT_SLOT, SCALER_OP_TRANSFORM_SLOT
+from core.seq_member_rows import (
+    SeqRows, SEQ_ROUTE_STORE, seq_rows_route, member_rows_open, seq_rows_close, seq_rows_count, seq_rows_host,
+    seq_rows_target,
+)
+from core.member_abi import MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE
 
 comptime SCALER_KIND_STANDARD = 0
 comptime SCALER_KIND_MINMAX = 1
@@ -75,6 +93,11 @@ comptime SCALER_PARAM_COUNT = 6
 comptime SCALER_BLOCK_STATS = MEMBER_BLOCK_FAMILY
 comptime SCALER_BLOCK_SEEN = MEMBER_BLOCK_FAMILY + 1
 comptime SCALER_ROUTE_DIRECT = 1
+#: `route.flags` bit (lane vdf-scope-neural2): `route.fifth` is the GPU
+#: image's preprocessing member store (the bit core/seq_member_rows.mojo reads).
+comptime SCALER_ROUTE_STORE = SEQ_ROUTE_STORE
+#: The scope cache's family prefix of the preprocessing members.
+comptime SCALER_STORE_PREFIX = "preprocessing"
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
@@ -204,36 +227,89 @@ def _dense(view: MemberMatrix, what: String, estimator: String) raises:
         raise Error("TypeError: a " + estimator + " member reads " + what + " as a dense host float32 view")
 
 
-def _whole(call: _Call, estimator: String) raises:
-    if call[].row_index.rows > 0 or call[].column_index.rows > 0:
-        raise Error("TypeError: a " + estimator + " member reads whole host views (no row or column index)")
-
-
 def _fit(slot: _Slot, call: _Call) raises:
     var estimator = _name(slot)
-    _whole(call, estimator)
     _dense(call[].x, "X", estimator)
     if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
         member_unsupported(estimator, call[].fit_output)
-    var n = call[].x.rows
+    var n = seq_rows_count(call)
     var d = call[].x.cols
     var weight = 0
+    var w_fold = List[Int32]()
     if call[].weights.rows > 0:
         if slot[].kind() != SCALER_KIND_STANDARD:
             raise Error("TypeError: MinMaxScaler.fit takes no sample_weight")
         _dense(call[].weights, "sample_weight", estimator)
-        if call[].weights.rows != n or call[].weights.cols != 1:
+        if call[].weights.rows != call[].x.rows or call[].weights.cols != 1:
             raise Error("ValueError: sample_weight and X have different numbers of rows")
-        weight = call[].weights.data
+        # Under a row index the fold's weights (host row tasks), else as given.
+        w_fold = seq_rows_target(call, call[].weights, 1)
+        weight = Int(w_fold.unsafe_ptr()) if call[].row_index.rows > 0 else call[].weights.data
     var calls = _calls(call)
-    var x = _F32P(unsafe_from_address=call[].x.data)
     slot[].clear()
     if call[].fit_output == MEMBER_OP_TRANSFORM:
         _dense(call[].dst, "the output buffer", estimator)
         if call[].dst.rows != n or call[].dst.cols != d:
             raise Error("ValueError: the output buffer holds one value per element of X")
-        if calls.direct() and weight == 0 and _fit_transform_once(slot, call, calls, n, d):
-            return
+    # THE RESIDENT ROUTE (core/seq_member_rows.mojo): X in the scope's
+    # preprocessing store and the fold taken on the device, or the rows on the
+    # host (X as given, or the fold gathered there).
+    var held = member_rows_open(call, 0, estimator, String(SCALER_STORE_PREFIX))
+    var transformed = False
+    try:
+        transformed = _fit_rows(slot, call, calls, held, n, d, weight)
+        if call[].fit_output == MEMBER_OP_TRANSFORM and not transformed:
+            # The training rows' transform reads the same rows (no second take).
+            _transform_held(slot, call, held, False)
+    finally:
+        seq_rows_close(call, held)
+    _ = held^  # the gathered words live past the run
+    _ = len(w_fold)  # the fold's weights live past the fit
+
+
+def _fit_slot(slot: _Slot, call: _Call, calls: ScalerTableCalls, store_id: Int, n: Int, d: Int) raises -> Bool:
+    """The direct fit of the fold held in the preprocessing member store
+    (SCALER_OP_FIT_SLOT, read in place). False (nothing written) when X
+    holds a NaN or an infinity: the caller takes the host NaN route."""
+    var standard = slot[].kind() == SCALER_KIND_STANDARD
+    var stats = List[Float32](length=(3 if standard else 5) * d, fill=0)
+    var a: Array[Int, 1] = [Int(stats.unsafe_ptr())]
+    var p: Array[Int, 6] = [store_id, n, d, 0 if standard else 1, Int(slot[].words[1]) if standard else 1,
+                            Int(slot[].words[2]) if standard else 1]
+    var f: Array[Float64, 2] = [Float64(Float32(slot[].words[3])) if not standard else 0.0,
+                                Float64(Float32(slot[].words[4])) if not standard else 1.0]
+    if entry_ref_call(calls.scaler, SCALER_OP_FIT_SLOT, a, p, f) == 0:
+        return False
+    if standard:
+        # The core's host checks of the three fitted rows (3 d words), as
+        # `scaler_standard_fit_core` runs them after the direct kernel.
+        var sp = _F32P(unsafe_from_address=Int(stats.unsafe_ptr()))
+        scaler_check_stats(sp, sp + d, sp + 2 * d, d)
+        slot[].stats = stats^
+        slot[].seen = List[Float32]()
+        slot[].scalars = [Float64(d), Float64(SCALER_SEEN_INT), Float64(n)]
+    else:
+        # The door's `_keep_extrema` on a finite X: the c2_mm_keep program.
+        slot[].stats = scaler_minmax_keep_extrema(calls, _F32P(unsafe_from_address=Int(stats.unsafe_ptr())), 0, d)
+        _ = stats^
+        slot[].scalars = [Float64(d), Float64(n)]
+    slot[].features = d
+    slot[].fitted = True
+    return True
+
+
+def _fit_rows(slot: _Slot, call: _Call, calls: ScalerTableCalls, mut held: SeqRows, n: Int, d: Int,
+              weight: Int) raises -> Bool:
+    """The fit over the operation's rows `held` (a store slot or host
+    words). True when the training rows' transform was written too (the
+    door's ONE combined call); otherwise the caller runs the transform."""
+    if held.x < 0:
+        if weight == 0 and calls.direct() and _fit_slot(slot, call, calls, -held.x - 1, n, d):
+            return False
+    var x = _F32P(unsafe_from_address=seq_rows_host(call, held))
+    if call[].fit_output == MEMBER_OP_TRANSFORM:
+        if calls.direct() and weight == 0 and _fit_transform_once(slot, call, calls, Int(x), n, d):
+            return True
     if slot[].kind() == SCALER_KIND_STANDARD:
         var fit = scaler_standard_fit_core(calls, x, n, d, slot[].words[1] != 0.0, slot[].words[2] != 0.0, weight)
         # Copies of the fit's two short rows (3d and d words): no field is
@@ -247,11 +323,10 @@ def _fit(slot: _Slot, call: _Call) raises:
         slot[].scalars = [Float64(d), Float64(n)]
     slot[].features = d
     slot[].fitted = True
-    if call[].fit_output == MEMBER_OP_TRANSFORM:
-        _transform(slot, call, False)
+    return False
 
 
-def _fit_transform_once(slot: _Slot, call: _Call, calls: ScalerTableCalls, n: Int, d: Int) raises -> Bool:
+def _fit_transform_once(slot: _Slot, call: _Call, calls: ScalerTableCalls, x: Int, n: Int, d: Int) raises -> Bool:
     """The door's fit_transform: ONE combined kernel call on one upload of
     X (`SCALER_OP_STANDARD_FIT_TRANSFORM` / `SCALER_OP_MINMAX_FIT_TRANSFORM`,
     the exports bindings/scaler_lifecycle_native_door.mojo and
@@ -261,7 +336,7 @@ def _fit_transform_once(slot: _Slot, call: _Call, calls: ScalerTableCalls, n: In
     var dst = call[].dst.data
     if slot[].kind() == SCALER_KIND_STANDARD:
         var stats = List[Float32](length=3 * d, fill=0)
-        var got = calls.standard_fit_transform(call[].x.data, Int(stats.unsafe_ptr()), dst, n, d,
+        var got = calls.standard_fit_transform(x, Int(stats.unsafe_ptr()), dst, n, d,
             slot[].words[1] != 0.0, slot[].words[2] != 0.0)
         if got == 0:
             return False
@@ -274,7 +349,7 @@ def _fit_transform_once(slot: _Slot, call: _Call, calls: ScalerTableCalls, n: In
             raise Error("StandardScaler transform overflowed in Float32")
         return True
     var raw = List[Float32](length=5 * d, fill=0)
-    var got = calls.minmax_fit_transform(call[].x.data, Int(raw.unsafe_ptr()), dst, n, d,
+    var got = calls.minmax_fit_transform(x, Int(raw.unsafe_ptr()), dst, n, d,
         Float32(slot[].words[3]), Float32(slot[].words[4]), slot[].words[1] != 0.0)
     if got == 0:
         return False
@@ -293,10 +368,21 @@ def _transform(slot: _Slot, call: _Call, inverse: Bool) raises:
     var estimator = _name(slot)
     if not slot[].fitted:
         raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
-    _whole(call, estimator)
+    var held = member_rows_open(call, 0, estimator, String(SCALER_STORE_PREFIX))
+    try:
+        _transform_held(slot, call, held, inverse)
+    finally:
+        seq_rows_close(call, held)
+    _ = held^  # the gathered words live past the run
+
+
+def _transform_held(slot: _Slot, call: _Call, mut held: SeqRows, inverse: Bool) raises:
+    """transform / inverse_transform of the operation's rows `held`: a
+    store slot read in place by SCALER_OP_TRANSFORM_SLOT, or host words."""
+    var estimator = _name(slot)
     _dense(call[].x, "X", estimator)
     _dense(call[].dst, "the output buffer", estimator)
-    var n = call[].x.rows
+    var n = held.n
     var d = slot[].features
     if call[].x.cols != d:
         raise Error(estimator + " input feature count differs from fit")
@@ -322,8 +408,25 @@ def _transform(slot: _Slot, call: _Call, inverse: Bool) raises:
     if not standard:
         spec = ScalerTransformSpec(True, inverse, True, True, slot[].words[1] != 0.0, Float32(slot[].words[3]),
             Float32(slot[].words[4]))
-    scaler_transform_core(calls, spec, _F32P(unsafe_from_address=Int(slot[].rows.unsafe_ptr())),
-        _F32P(unsafe_from_address=call[].x.data), n, d, _F32P(unsafe_from_address=call[].dst.data))
+    var rows = _F32P(unsafe_from_address=Int(slot[].rows.unsafe_ptr()))
+    # THE RESIDENT ROUTE: valid rows with no all-NaN column read the slot in
+    # place; the core's refusals, its NaN fill and its per-column NaN restore
+    # (host programs over host words) take the host rows below.
+    if held.x < 0 and calls.direct() and scaler_transform_rows_valid(rows, d) and bitcast[DType.int32](rows[7 * d]) == 0:
+        var a: Array[Int, 3] = [Int(rows + 3 * d) if not standard else Int(rows + 2 * d),
+                                Int(rows + 2 * d) if not standard else Int(rows + 3 * d), call[].dst.data]
+        var p: Array[Int, 8] = [-held.x - 1, n, d, 0 if standard else 1, 1 if inverse else 0,
+                                1 if spec.with_mean else 0, 1 if spec.with_std else 0, 1 if spec.clip else 0]
+        var f: Array[Float64, 2] = [Float64(spec.lower) if not standard else 0.0,
+                                    Float64(spec.upper) if not standard else 1.0]
+        var got = entry_ref_call(calls.scaler, SCALER_OP_TRANSFORM_SLOT, a, p, f)
+        if got == 0:
+            raise Error(estimator + " transform overflowed in Float32")
+        if got == 1:
+            return
+        # -1: X holds a NaN or an infinity: the core's NaN route on the host rows.
+    scaler_transform_core(calls, spec, rows, _F32P(unsafe_from_address=seq_rows_host(call, held)), n, d,
+        _F32P(unsafe_from_address=call[].dst.data))
 
 
 def _export(slot: _Slot, call: _Call) raises:
@@ -393,6 +496,10 @@ def _scaler_member(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         var mask = MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_INVERSE_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+        # THE RESIDENT ROUTE: a route holding the image's preprocessing member
+        # store reads a fold's rows of the whole X.
+        if seq_rows_route(call[].route):
+            mask |= MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
         if call[].state == 0:
             return mask | MEMBER_CAN_SAMPLE_WEIGHT
         var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))

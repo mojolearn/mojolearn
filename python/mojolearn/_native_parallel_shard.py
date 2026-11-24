@@ -10,7 +10,7 @@ from .tokenizer import _binding
 _native_parallel_shard = _binding()._module.parallel_shard_call
 
 
-def _connect_binding(name, required, optional=()):
+def _connect_binding(name, required, optional=(), host=False):
     # Connection only, before any operation or worker request. Resolve lazy
     # host proxies here and retain the exact compiled module. The native
     # owners admit only that module: they read its dictionary natively (never
@@ -20,8 +20,18 @@ def _connect_binding(name, required, optional=()):
     # kernel_methods_api_v1 that the owners read beyond the listed ones.
     from types import BuiltinFunctionType, ModuleType
     try:
-        module = _backend.binding(name, "identical")
-        module = _backend.exact_host_module(module)  # import-time: the CPU-only facade resolved to its compiled host module once
+        if host:
+            # The CPU twin beside the device set (vdv-gaps, 2026-11-24): a
+            # device='cpu' member's host pool merges and decodes on the CPU
+            # images. A CPU-only process has none: its own set is the CPU one.
+            from ._native_family_bridge import _connect_cpu_binding
+            connected = _connect_cpu_binding(_backend, name)
+            if len(connected) == 1:
+                raise ImportError(connected[0])
+            module = connected[0]
+        else:
+            module = _backend.binding(name, "identical")
+            module = _backend.exact_host_module(module)  # import-time: the CPU-only facade resolved to its compiled host module once
         if type(module) is not ModuleType:
             raise ImportError(f"parallel native binding requires the compiled {name} module")
         fields = vars(module)
@@ -77,6 +87,31 @@ def _table_keys():
 
 _TABLE_KEYS = _table_keys()
 
+#: The CPU twins the parent reads for a host pool (a device='cpu' member in
+#: a process with a GPU set): the two bindings the parent itself calls (GP
+#: label codes and the one-vs-rest combination) and the keys of the CPU
+#: images whose tables merge the shards. On a CPU-only install no member is
+#: routed there (its own set is already the CPU one): the entries hold the
+#: refusal words.
+_HOST_WORKER_BINDINGS = {
+    "_mojolearn_gp": _connect_binding("_mojolearn_gp", ("gp_native_api_v1",), ("gp_numeric_mode",), host=True),
+    "_mojolearn": _connect_binding("_mojolearn", ("prepare_targets", "gather_i64", "gather_f64"), host=True),
+}
+
+
+def _host_table_keys():
+    # glue: once at import, the (tier, vendor) keys of the CPU images the host
+    # pool's merges call; loading the twin records its key (_native_table_key)
+    from ._native_table_key import key_of
+    keys = {}
+    for family, name in (("base", "_mojolearn"), ("ivf", "_mojolearn_ivf")):
+        module = _connect_binding(name, (), host=True)
+        keys[family] = None if isinstance(module, str) else key_of(module)
+    return keys
+
+
+_HOST_TABLE_KEYS = _host_table_keys() if _backend._CPU_ONLY is None else {"base": None, "ivf": None}
+
 #: Every GPU binding whose owner loops read a device plan and which registers
 #: `device_plan_enter` / `device_plan_exit` / `device_plan_log`
 #: (bindings/device_plan_binding_pack.mojo).
@@ -96,4 +131,5 @@ def register(**fixed):
     # context") in a process that had not imported those (fb6-smoke census).
     from ._native_family_bridge import shared_context
     _native_parallel_shard('register', dict(fixed, worker_bindings=_WORKER_BINDINGS,
-                                          table_keys=_TABLE_KEYS, context=shared_context()))
+                                          table_keys=_TABLE_KEYS, host_worker_bindings=_HOST_WORKER_BINDINGS,
+                                          host_table_keys=_HOST_TABLE_KEYS, context=shared_context()))

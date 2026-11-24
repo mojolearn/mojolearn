@@ -475,13 +475,14 @@ def cmd_imports(args):
 def cmd_lanes(args):
     """(c) every lane of verify's own harness (mojolearn._identity_break, the byte copy `verify --all` imports and
     calls per cell) that has a CPU route, on the base fixture, one fit per cell. The harness's own full-column
-    selection on a host: every lane but RECORD_EXCLUDED_PREFIXES and GPU_ONLY_LANES. --no-batch --no-rlpair stamp
+    selection on a host: every lane but RECORD_EXCLUDED_PREFIXES and the lanes declared with no CPU side
+    (`_one_sided(lane, missing="cpu")`, registry ONE_SIDED). --no-batch --no-rlpair stamp
     each JSON partial_column=true, so _verify_reference.admit() refuses it: nothing here can become a record, and
     nothing is compared with any column or reference table."""
     cwd = empty_dir(args.out, "lanes")
     listed = probe(args.python, "import mojolearn._identity_break as h; "
                    "print(','.join(n for n in h.LANES if not n.startswith(h.RECORD_EXCLUDED_PREFIXES) "
-                   "and n not in h.GPU_ONLY_LANES))", cwd)
+                   "and (h.one_sided(n) or ('',))[0] != 'cpu'))", cwd)
     lanes = [x for x in listed.split(",") if x]
     jdir = Path(args.out) / "lanes" / "json"
     jdir.mkdir(parents=True, exist_ok=True)

@@ -354,9 +354,11 @@ through `mojolearn.host_model` is exercised that way (source counts and evidence
 4. `device="cpu"` in `identical` mode returns the host column's bits, which the contract already requires to match the
    GPU columns. `fast` stays Apple GPU only.
 
-**What it replaces.** `model.check(X)` and `verify --cross-check` reach their CPU side today through a saved model
+**What it replaces.** `model.check(X)` and `verify --cross-check` reached their CPU side through a saved model
 reloaded by `host_model` (62 fitted model types have that route) or a child process under `MOJOLEARN_VENDOR=cpu`
-(`--fit-both`). When a family has `device=`, its check is the same estimator constructed twice, `device="gpu"` and
+(`--fit-both`). Since 2026-11-24 (`lane/vd-verify`) the `--fit-both` and recipe checks build the estimator with
+`device="cpu"` and `device="gpu"` in one process, with no child; `verify --cross-check` keeps the `host_model`
+reload because it checks that route itself. When a family has `device=`, its check is the same estimator constructed twice, `device="gpu"` and
 `device="cpu"`, fitted and compared in one process, and those two routes are deleted for that family. Verify keeps
 working throughout: each family's change updates verify to the new form in the same commit.
 

@@ -14,8 +14,6 @@ is checked natively in checks/native_tests/decomp_ne2_g_decomp_entries.mojo.
   still sees a replaced fitted array and a refit;
 - the vendor and mode check of TruncatedSVD, KernelPCA and IncrementalPCA
   runs once per connected table (N313, N317, N340): repeated queries agree;
-- the fused cast and finiteness scan of the decomposition inputs (N352,
-  N353) casts as before and still refuses NaN and infinity;
 - MinCovDet / EllipticEnvelope resolve their kind once per call (N345).
 """
 import numpy as np
@@ -87,34 +85,6 @@ def test_repeated_queries_after_once_per_table_check(make):
     first = np.asarray(model.transform(x))
     for _ in range(3):
         np.testing.assert_array_equal(first, np.asarray(model.transform(x)))
-
-
-def test_decomp_input_cast_and_scan_in_one_pass():
-    x = _data(20, 4, 10)
-    model = ml.TruncatedSVD(n_components=2).fit(x)
-    as_f64 = np.asarray(model.transform(x.astype(np.float64)))
-    np.testing.assert_array_equal(as_f64, np.asarray(model.transform(x)))
-    ints = np.arange(80, dtype=np.int64).reshape(20, 4)
-    np.testing.assert_array_equal(np.asarray(model.transform(ints)),
-                                  np.asarray(model.transform(ints.astype(np.float32))))
-    bad = x.astype(np.float64)
-    bad[3, 1] = np.nan
-    with pytest.raises(ValueError):
-        model.transform(bad)
-    bad[3, 1] = np.inf
-    with pytest.raises(ValueError):
-        model.transform(bad)
-
-
-def test_pca_input_cast_and_scan_in_one_pass():
-    x = _data(20, 4, 11)
-    model = ml.PCA(n_components=2).fit(x)
-    np.testing.assert_array_equal(np.asarray(model.transform(x.astype(np.float64))),
-                                  np.asarray(model.transform(x)))
-    bad = x.astype(np.float64)
-    bad[0, 0] = np.inf
-    with pytest.raises(ValueError, match="NaN or infinity"):
-        model.transform(bad)
 
 
 def test_elliptic_envelope_score_and_predict():

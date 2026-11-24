@@ -74,3 +74,15 @@ struct ScalerHostKernels(ScalerNativeKernels):
     @staticmethod
     def minmax_fit_transform(r: ScalerFitTransformRequest) raises -> Int:
         return 0
+
+    # Lane vdf-scope-neural2: the host column has no member device store
+    # (core/scaler_native_api.mojo SCALER_OP_FIT_SLOT / TRANSFORM_SLOT).
+    @staticmethod
+    def fit_slot(slot: Int, n: Int, d: Int, minmax: Bool, with_mean: Int, with_std: Int, lower: Float32,
+                 upper: Float32, dst: Int) raises -> Int:
+        raise Error("scaler native host: no member device store on the host column")
+
+    @staticmethod
+    def transform_slot(slot: Int, n: Int, d: Int, minmax: Bool, inverse: Int, with_mean: Int, with_std: Int,
+                       clip: Int, lower: Float32, upper: Float32, first: Int, second: Int, dst: Int) raises -> Int:
+        raise Error("scaler native host: no member device store on the host column")

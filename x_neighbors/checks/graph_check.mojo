@@ -83,6 +83,24 @@ def _pr_step_live(
     return res^
 
 
+def _first_appearance(lab: List[Int32]) -> Tuple[List[Int32], Int]:
+    """The labels renumbered in order of first appearance over the nodes
+    (scipy's numbering) and the component count: the oracle of the
+    relabel both columns' connected-components operations now run (lane
+    vdf-misc2, 2026-11-24)."""
+    var n = len(lab)
+    var seen = List[Int32](length=max(n, 1), fill=Int32(-1))
+    var res = List[Int32](length=n, fill=Int32(0))
+    var k = 0
+    for i in range(n):
+        var l = Int(lab[i])
+        if seen[l] < 0:
+            seen[l] = Int32(k)
+            k += 1
+        res[i] = seen[l]
+    return (res^, k)
+
+
 def _cc_fixed_point(a: List[Float32], n: Int, variant: Int) -> List[Int32]:
     """The oracle's min-label rounds (o_cc_step) from the identity labels to
     their fixed point; variant 1 takes the max label instead."""
@@ -181,18 +199,26 @@ def main() raises:
     g[1 * n + 2] = Float32(1)
     var wc = _cc_fixed_point(g, n, 0)
     require_separates("5217 min-label representative", count_diff_i32(wc, _cc_fixed_point(g, n, 1)))
+    # lane vdf-misc2 (2026-11-24): both operations start from the identity
+    # themselves (`lab` is output only: poisoned here) and return the
+    # fixed point relabelled in order of first appearance, info[1] = the
+    # component count + 1
+    var want = _first_appearance(wc)
     var dc = zi(n)
     for i in range(n):
-        dc[i] = Int32(i)
+        dc[i] = Int32(-5)
     var dinfo = zi(2)
     op_cc_iterate(fa(g), ia(dc), ia(dinfo), n)
-    same("5217 connected components device (iter_device.op_cc_iterate)", count_diff_i32(dc, wc))
+    same("5217 connected components device (iter_device.op_cc_iterate)", count_diff_i32(dc, want[0]))
+    same("5217 connected components device count", 0 if Int(dinfo[1]) == want[1] + 1 else 1)
     var hc = zi(n)
     for i in range(n):
-        hc[i] = Int32(i)
+        hc[i] = Int32(-5)
     var hinfo = zi(2)
     h_cc_iterate(fa(g), ia(hc), ia(hinfo), n)
-    same("5217 connected components host (iter_host.op_cc_iterate)", count_diff_i32(hc, wc))
+    same("5217 connected components host (iter_host.op_cc_iterate)", count_diff_i32(hc, want[0]))
+    same("5217 connected components host count", 0 if Int(hinfo[1]) == want[1] + 1 else 1)
+    same("5217 connected components device == host", count_diff_i32(dc, hc))
     tr.record_list_i32("x_neighbors.cc", dc)
     _ = dinfo^
     _ = hinfo^

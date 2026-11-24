@@ -22,13 +22,13 @@
 # half-closed resident or replace the first error.
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.py_balanced import py_call, py_type, py_get
+from bindings.py_balanced import py_call, py_get
 from bindings.arena_cache_release_door import FirstFailure
 from bindings.arena_owner_door import (
     ArenaOwnerView, ARENA_OWNER_RESIDENT, arena_owner_new, arena_owner_slot, arena_owner_view, arena_resident_view,
     arena_unpin,
 )
-from bindings.arena_resident_rows_door import arena_resident_take, arena_resident_entry
+from bindings.arena_resident_rows_door import arena_resident_take
 from bindings.msel_helpers_key_unpack import msel_helpers_key
 from core.arena_state import (
     ARENA_RESIDENTS, ArenaResidentState, ArenaResidentEntry, ArenaStoreFree, arena_handle, arena_handle_word,
@@ -125,14 +125,9 @@ def arena_resident_operation(model: PythonObject, operation: String, args: Pytho
         return model
     if operation == "msel_resident_take":
         return arena_resident_take(view, args[0], args[1], context)
-    if operation == "msel_resident_entry":
-        var dtype = args[1]
-        var indices = False
-        if dtype is not None:
-            if py_type(dtype) is not context["arena_native_types"]["str"] or String(py=dtype) != "<i8":
-                raise Error("ValueError: resident entries cast only to the int64 index layout")
-            indices = True
-        return arena_resident_entry(view, args[0], indices, context)
+    # REMOVED (lane vdf-scope-cv, 2026-11-24): "msel_resident_entry" (its
+    # callers, MselFoldRows.resident_store and model_selection._Resident._entry,
+    # were the deleted cross_val_predict identity placement and dead code).
     if operation == "msel_resident_release":
         _release(view, args[0])
         return PythonObject(None)

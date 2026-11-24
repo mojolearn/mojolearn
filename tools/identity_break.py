@@ -528,8 +528,8 @@ every refusal untruncated; with no `--json` the full text is printed after
 the summary.
 
 CPU WALL CLOCK (2026-09-19). `--jobs N` is an opt-in process supervisor for
-independent lane shards. It requires `--json`, caps N to min(8, CPU count),
-forces every child through `--require-cpu`, preserves each shard JSON as a
+independent lane shards. It requires `--json`, caps N to the allocation's cores,
+runs every child as `--side cpu` (device="cpu"), preserves each shard JSON as a
 resume checkpoint, and merges in deterministic lane order. It never shares a
 fitted estimator or native runtime between workers and never runs concurrent
 jobs on a GPU.
@@ -1299,14 +1299,14 @@ def check_vendor_label(label):
     return label
 
 
-def default_vendor_label(ml):
-    """`cpu-<cpu model slug>` on a CPU-only install, derived from the machine
-    and never typed; `platform.machine()` elsewhere, as before."""
-    if ml.vendor() == "cpu":
+def default_vendor_label(ml, side=None):
+    """`cpu-<cpu model slug>` for the CPU side (on any install), derived from
+    the machine and never typed; `platform.machine()` for the GPU side."""
+    if (side or ("cpu" if ml.vendor() == "cpu" else "gpu")) == "cpu":
         model = cpu_model()
         if not model:
             raise SystemExit(
-                "REFUSING: on a CPU-only install --vendor defaults to cpu-<cpu "
+                "REFUSING: on the CPU side --vendor defaults to cpu-<cpu "
                 "model slug> and this machine's CPU model could not be read; "
                 "pass --vendor cpu-<model> explicitly"
             )
@@ -1358,7 +1358,9 @@ def host_record(ml):
     report = ml.runtime_report()
     rows = report["bindings"]
     families = {}
-    for basename in report["host_families_built"]:
+    # .get: the CPU side of a GPU installation records this object too
+    # (2026-11-24, --side cpu); its report may carry no host family list.
+    for basename in report.get("host_families_built") or ():
         # The file's bytes (2026-09-15, lane/cpu-training-gate-budget). The
         # host bindings load by path, so `package.bindings` (the loaded
         # `mojolearn._mojolearn*` modules) never lists them, and a CPU column
@@ -1366,7 +1368,7 @@ def host_record(ml):
         # to refuse parts that ran different builds.
         digest = {}
         try:
-            path = report["host_paths"][basename]
+            path = (report.get("host_paths") or {})[basename]
             with open(path, "rb") as fh:
                 digest = dict(sha256=hashlib.sha256(fh.read()).hexdigest(), size=os.path.getsize(path))
         except (OSError, TypeError) as exc:
@@ -2003,13 +2005,11 @@ CPU_BY_DESIGN_REFUSAL = "no CPU implementation of the cooperative multi-GPU driv
 #: reference (`_verify_reference._reference_value`), and `verify` on a CPU
 #: install does not select `par-*` lanes (host_surface.comparable_lanes).
 CPU_BY_DESIGN_NA = "n/a:cpu-by-design (a cooperative multi-GPU driver has no CPU implementation)"
-
-
-def cpu_by_design(name, err, vendor):
-    """True for a `par-*` lane's train refusal on the CPU column that is the
-    cooperative driver's declared by-design sentence."""
-    return (vendor == "cpu" and name.startswith(RECORD_EXCLUDED_PREFIXES)
-            and bool(err) and CPU_BY_DESIGN_REFUSAL in err)
+# The two constants above stay: committed records carry the value and the CPU
+# gate tools read it. `cpu_by_design()`, which turned a `par-*` CPU-column
+# refusal into that N/A, was deleted 2026-11-24 (lane vdv-harness): no `par-*`
+# lane is defined, and a lane with no CPU side is now declared with
+# `_one_sided(...)`, whose missing side reads `one_sided_na()`.
 
 
 def record_excluded_lanes():
@@ -2065,6 +2065,113 @@ def lane(name):
         LANES[name] = fn
         return fn
     return deco
+
+
+# ---------------------------------------------------------------- the two sides (2026-11-24)
+# VERIFY THROUGH `device=` (docs/plans/VERIFY_THROUGH_DEVICE.md, item 2). Every
+# lane runs once per side IN ONE PROCESS: the CPU side with device="cpu", the
+# GPU side with device="gpu", through the public parameter. A lane stays
+# device-agnostic: it receives a device-bound view of the package
+# (`mojolearn._verify_device.view`) and calls the public API with no `device=`;
+# the view adds it. The CPU child process with MOJOLEARN_VENDOR=cpu is gone
+# from verify; the variable stays in the product.
+
+SIDES = ("cpu", "gpu")
+
+#: {lane: (missing side, reason)}: a lane whose endpoint has one side only.
+#: The missing side reads `n/a:one-sided: no <SIDE> implementation: <reason>`
+#: and is an owed implementation listed in
+#: docs/plans/verify_through_device/UNMAPPED.md. A lane NOT declared here
+#: that refuses on a side, or reaches a callable with no `device`, fails
+#: that side's cell.
+ONE_SIDED = {}
+
+
+def _one_sided(name, missing, reason):
+    """Declare `name` one-sided: it has no `missing` ("cpu" or "gpu") side."""
+    if missing not in SIDES:
+        raise ValueError(f"_one_sided({name!r}): missing must be one of {SIDES}, not {missing!r}")
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError(f"_one_sided({name!r}): a one-sided lane names its reason")
+    ONE_SIDED[name] = (missing, reason.strip())
+
+
+def one_sided(name):
+    """(missing side, reason) for a one-sided lane, else None. The one
+    registry of lanes with one side (2026-11-24: the older GPU_ONLY_LANES,
+    no CPU route, is gone; its entries are `_one_sided(missing="cpu")`)."""
+    return ONE_SIDED.get(name)
+
+
+def one_sided_na(name, side):
+    """The value every part of `name` reads on `side` when the lane has no
+    such side, else None."""
+    missing = one_sided(name)
+    if missing is None or missing[0] != side:
+        return None
+    return f"n/a:one-sided: no {side.upper()} implementation: {missing[1]}"
+
+
+def _verify_device():
+    from mojolearn import _verify_device
+    return _verify_device
+
+
+def _lane_side():
+    """"cpu" or "gpu": the side the running lane is on. A lane reads it only
+    where it must (device-resident inputs, a saved file the side loads),
+    never to choose what it computes. Outside a sided call (a lane called
+    directly with the package) it is the installation's own side."""
+    current = _verify_device().current_side()
+    if current is not None:
+        return current
+    ml = sys.modules.get("mojolearn")
+    return "cpu" if ml is None or str(ml.vendor()) == "cpu" else "gpu"
+
+
+def _side_vendor(ml):
+    """The backend name the running side's compiled read-backs report:
+    "cpu" on the CPU side, the installation's GPU vendor on the GPU side."""
+    return "cpu" if _lane_side() == "cpu" else str(ml.vendor())
+
+
+def gpu_side_available(ml):
+    """True when this installation has a GPU side (an installation fact)."""
+    return _verify_device().gpu_available(ml)
+
+
+def device_view(ml, side, name=None):
+    """The package as lane `name` sees it on `side`: every public class and
+    computing function bound to device=`side`, resolved once and cached. A
+    one-sided lane's view does not refuse callables without `device` (its
+    single side keeps the driver's own arguments, such as `devices=`)."""
+    vd = _verify_device()
+    if isinstance(ml, vd.DeviceView):
+        ml = ml._module
+    return vd.view(ml, side, strict=name is None or one_sided(name) is None)
+
+
+def call_lane(name, ml, side, X, yc, yr, Xh=None):
+    """`LANES[name]` on `side`, in this process, through the device view.
+    Returns (fit, view). Raises OneSidedAbsent when the lane has no such side."""
+    na = one_sided_na(name, side)
+    if na is not None:
+        raise OneSidedAbsent(na)
+    bound = device_view(ml, side, name)
+    with _verify_device().side(side):
+        return LANES[name](bound, X, yc, yr, Xh), bound
+
+
+class OneSidedAbsent(Exception):
+    """The lane is declared one-sided and this is its missing side; `args[0]`
+    is the `n/a:` value every part of the cell reads."""
+
+
+@contextmanager
+def on_side(side):
+    """Probes of a fit run on the fit's side (a reload, an inference class)."""
+    with _verify_device().side(side):
+        yield side
 
 
 class Fit(dict):
@@ -3985,6 +4092,14 @@ def _lane_refuses(fn, text):
     return False
 
 
+# The saved-model readers it checks (HostForest, HostGBDT, host_predict,
+# host_predict_proba) are the CPU inference surface: no GPU side (vd-verify,
+# 2026-11-24).
+_one_sided("saved-model-host-infer", missing="gpu",
+           reason="the saved-model readers HostForest, HostGBDT, host_predict and host_predict_proba "
+                  "are the CPU inference surface and take no device")
+
+
 @lane("saved-model-host-infer")
 @floor(rows=(4096, "4096 rows are the rows the host readers were already asked to predict, and they "
                    "still let a depth-8 forest and a depth-6 GBDT grow full depth; the lane checks the "
@@ -4801,11 +4916,12 @@ def _tensor_ctr_y(Xt):
 def _ctr_saved_or_fit(ml, fit):
     """The estimator a CTR table lane answers with: fitted (and saved,
     under GBDT_CTR_MODELS_ENV, on repeat 0) on a GPU column; on a CPU
-    column the HostGBDT of the saved file, tagged with its path."""
+    column the HostGBDT of the saved file, tagged with its path. The column
+    is the lane's side (`_lane_side()`), never the process's backend."""
     lane_name, fx, repeat = (_DUMP_TAG.split("/") + ["", "", ""])[:3]
     d = os.environ.get(GBDT_CTR_MODELS_ENV, "").strip()
     path = os.path.join(d, f"{lane_name}.{fx}.npz") if d and lane_name else None
-    if ml.vendor() == "cpu":
+    if _lane_side() == "cpu":
         if not d:
             from mojolearn._verification_ctr_models import resolve_model
             path = resolve_model(lane_name, fx)
@@ -8683,8 +8799,8 @@ def _(ml, X, yc, yr, Xh=None):
     column); the string differs per column by design, so it is checked
     against the selected backend, never hashed."""
     m = ml.KernelRidge(alpha=0.1, kernel="rbf", gamma=0.5).fit(X[:256, :4], yr[:256])
-    if m.vendor_used() != ml.vendor():
-        raise AssertionError("KernelRidge.vendor_used disagrees with the selected backend")
+    if m.vendor_used() != _side_vendor(ml):
+        raise AssertionError("KernelRidge.vendor_used disagrees with the selected side")
     return _fit(dict(dual=_h(m.dual_coef_), info=_h(np.int64(m.info_)), predict=_h(m.predict(X[256:320, :4]))),
                 m, lambda e: (e.predict(Xh[:64, :4]),))
 
@@ -8957,7 +9073,11 @@ def _(ml, X, yc, yr, Xh=None):
     outside FTZ subtleties. The first element cancels 2**100, so a balanced
     reduction returns zero where the required left fold returns three.
     """
-    from mojolearn.parallel_training import ordered_sum_gradients
+    # Through the lane's `ml` (the device view), never an import of the
+    # package (vdv-fragfix). The fold has a GPU and a host implementation
+    # (bindings/_mojolearn_runtime_parallel_host.mojo) but takes no `device`,
+    # so the view refuses it by name on both sides until it gets one (owed).
+    ordered_sum_gradients = ml.parallel_training.ordered_sum_gradients
     seed = np.where(X[:4, :8] >= 0, np.float32(1), np.float32(-1))
     shards = [[np.ascontiguousarray(seed * np.float32(i + 1)),
                np.array([i, -i, i + 1], dtype=np.float32)] for i in range(4)]
@@ -8991,6 +9111,13 @@ def _(ml, X, yc, yr, Xh=None):
 #: split at all), A = T (one token per microbatch) and a split with more
 #: microbatches than tokens. The answers are the binding's, not Python's.
 ACCUM_SPLITS = ((1024, 4), (1024, 3), (1024, 1), (1024, 1024), (12, 5), (7, 7), (100, 8))
+
+
+# parallel_training.ordered_sum_gradients keeps its parallel-driver signature (no device=, by the owner's direction
+# for the parallel_* entries, 2026-11-24) and takes no estimator member that could carry the side: the GPU side runs,
+# the CPU side (bindings/_mojolearn_runtime_parallel_host.mojo) is an owed decision in UNMAPPED.md (vd-verify).
+_one_sided("ordered-gradient-sum", missing="cpu", reason="ordered_sum_gradients takes no device= (parallel_* entries "
+           "keep their signature by the owner's direction of 2026-11-24) and has no member to carry the side")
 
 
 @lane("grad-accumulation")
@@ -9214,8 +9341,8 @@ def _(ml, X, yc, yr, Xh=None):
     # through the native mode metadata; on the CPU column the host binding's
     # GPU-named exports) must name the selected backend. Checked, not hashed:
     # the vendor string differs per column by design.
-    if e.vendor_used() != ml.vendor() or e.numeric_mode_used() != "identical":
-        raise AssertionError("Embedding.vendor_used/numeric_mode_used disagree with the selected backend")
+    if e.vendor_used() != _side_vendor(ml) or e.numeric_mode_used() != "identical":
+        raise AssertionError("Embedding.vendor_used/numeric_mode_used disagree with the selected side")
     y = np.asarray(e.forward(ids))
     dw = np.asarray(e.backward(ids, dy))
     t0 = 171
@@ -9575,51 +9702,12 @@ def _refused(call, needle):
 # Each was built `-D MOJOLEARN_HOST_SABOTAGE=1` against a CLEAN build of the
 # SAME source and watched; what moves and what does not is on each lane.
 
-#: Lanes whose PUBLIC SURFACE refuses by name on a CPU-only install, so a CPU
-#: column has no arithmetic of theirs to run (lane/unlaned-public-algorithms,
-#: 2026-09-20). A full-column run on a CPU-only install drops them by name and
-#: says so; `--lanes` names lanes explicitly and is never filtered, and a GPU
-#: column runs them exactly as it runs every other lane, so no record loses a
-#: cell. This is NOT `RECORD_EXCLUDED_PREFIXES`, which is about a release
-#: record's scope on every column; this is one column's inability to state the
-#: proposition at all, the same fact `lane_applicability` derives for cpu-host.
-#:
-#: The original four entries were removed on 2026-09-20
-#: (lane/cpu-routes-gpu-only-four). Later exclusions also live in the lane
-#: fragments, which extend this registry when loaded. The history stays because
-#: the four entries it held were WRONG in a way worth writing down rather
-#: than deleting. Every one of the four refusals was real, by name, on a
-#: CPU-only install, and every one was read as a statement about arithmetic:
-#:
-#:   `mamba1-decode-session` / `transformer-decode-session`
-#:       "mamba1_session_create exists only in the GPU binding" was true and
-#:       is still true. What it describes is RESIDENCY -- a device context
-#:       holding weights, state and stages across steps -- and a session's
-#:       BYTES are `mamba_step` / `transformer_decode_step`, the block at
-#:       L = 1, which the host bindings export under the per-call names. Both
-#:       classes now carry a host arm that owns its copies and calls those
-#:       entries, so the lanes' byte-for-byte claim is testable here.
-#:   `par-causal-lm` / `par-cross-val`
-#:       "raises unless _backend.vendor() is cuda or hip" was a check the
-#:       drivers made, not a fact about their work. On a CPU-only install a
-#:       device index is one worker PROCESS; the layer partition, the fold
-#:       partition, the wave dispatch and both merges are the driver's own
-#:       Python, and each shard is host arithmetic a covered lane hashes.
-#:       Metal admits only device 0: one worker, without claiming device
-#:       isolation or multiple physical GPUs.
-#:
-#: The mechanism stays: a lane whose PUBLIC SURFACE genuinely has no CPU
-#: arithmetic belongs here, so a full-column CPU run drops it by name instead
-#: of recording a REFUSED cell that reads like coverage in a column total.
-#: The bar to add one is the question these four did not get asked: is the
-#: thing that refuses the thing the lane hashes?
-# The isolated CPU ranking draft adds the native route for the two existing
-# pointwise ranking lanes. They now participate in CPU selection and the gbdt
-# family's existing sabotage gate. This registration is not compilation or
-# runtime evidence: host_surface marks them unwatched, and the branch must
-# compile before merge (docs/GBDT_CPU_RANKING_DRAFT_20261027.md).
-# The device-residency exclusions in native_owners.py and coverage.py remain.
-GPU_ONLY_LANES = {}
+# GPU_ONLY_LANES (lanes whose public surface had no CPU route) was removed on
+# 2026-11-24 (lane vdv-tools): a lane with one side is declared with
+# `_one_sided(lane, missing="cpu"|"gpu", reason=...)` (registry ONE_SIDED), and
+# its missing side's cell reads `n/a:one-sided: ...` by name in every column
+# run instead of being dropped from a CPU full column. The bar for adding one
+# is unchanged: is the thing that refuses the thing the lane hashes?
 
 
 def _decode_session_probe(blk, state_fn, rows, length, dm, Xh):
@@ -9729,7 +9817,9 @@ def _(ml, X, yc, yr, Xh=None):
         "dt_proj.bias": (di,), "A_log": (di, 16), "D": (di,), "out_proj.weight": (dm, di)},
         ones=("norm.weight",))
     blk = _built(ml.Mamba1Block(w), weights=w)
-    from mojolearn.mamba import Mamba1DecodeSession
+    # The documented class, reached through the lane's `ml` (never an import of
+    # the package) and unwrapped to the product class for the exact type check.
+    Mamba1DecodeSession = _verify_device().unwrap(ml.mamba.Mamba1DecodeSession)
     steps, resident = _decode_session_probe(blk, lambda: blk.allocate_state(2), 2, 16, dm, X)
     held = blk.allocate_state(2)
     sess = blk.decode_session(held)
@@ -9845,7 +9935,8 @@ def _(ml, X, yc, yr, Xh=None):
         near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
     blk = _built(ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv), weights=w)
 
-    from mojolearn.transformer import TransformerDecodeSession
+    # through the lane's `ml`, unwrapped for the exact type check (see mamba1)
+    TransformerDecodeSession = _verify_device().unwrap(ml.transformer.TransformerDecodeSession)
 
     def fresh():
         return blk.allocate_state(2, max_tokens=32)
@@ -9886,15 +9977,16 @@ def _(ml, X, yc, yr, Xh=None):
 
 def _neural_inference(ml, lane_name, est):
     """The estimator a neural lane's held-out and batch cells ask
-    (lane/inference-tokenizer-neural, 2026-09-15). On a CPU column
-    (`ml.vendor() == "cpu"`) it is the PUBLIC inference class built from the
+    (lane/inference-tokenizer-neural, 2026-09-15). On the CPU side
+    (`_lane_side() == "cpu"`) it is the PUBLIC inference class built from the
     fitted model: `MLPInference.from_checkpoint` on the trainer's saved
     checkpoint, or the block class with ``device="cpu"`` on the block's
     weights (the CPU-by-class `*BlockInference` twins were removed
     2026-11-22: same kernels, same bits). On a GPU column it is the
     fitted estimator itself, as before, so no GPU cell changes meaning. The
-    train rows never go through here."""
-    if ml.vendor() != "cpu":
+    train rows never go through here. `ml` is the side's device view, so
+    the inference class is built on the same side."""
+    if _lane_side() != "cpu":
         return est
     lane_name = _lowbit_base(lane_name)
     if lane_name == "mlp":
@@ -9958,7 +10050,7 @@ def _public_est(name, est, lanes=NEURAL_PUBLIC_LANES):
     for a lane in `lanes`. GPU columns are unchanged."""
     if name not in lanes or est is None:
         return est
-    return _neural_inference(sys.modules["mojolearn"], name, est)
+    return _neural_inference(device_view(sys.modules["mojolearn"], _lane_side(), name), name, est)
 
 
 # ---------------------------------------------------------------- the batch part (2026-09-14)
@@ -12762,7 +12854,7 @@ def _probe_fit_host(fit, name):
                 infer = _h(*fit.probe(ml.host_model(path)))
             except Exception as exc:
                 return None, None, None, _exc_text("infer (host_model)", exc)
-            reload = _h(*fit.probe(getattr(type(fit.est), load)(path)))
+            reload = _h(*fit.probe(_verify_device().side_call(getattr(type(fit.est), load), path)))
     except Exception as exc:
         return None, None, None, _exc_text("model", exc)
     if fit.model_na:
@@ -12845,7 +12937,9 @@ def _probe_fit_impl(fit, name):
                 # state), which is an absence, not a broken file
                 return infer, "n/a:save-not-implemented", None, None
             model = _hfile(path)
-            back = getattr(type(fit.est), load)(path)
+            # the reload is on the fit's side: a loader that takes `device`
+            # is handed the running side, so the CPU side never reloads on a GPU
+            back = _verify_device().side_call(getattr(type(fit.est), load), path)
             reload = _h(*fit.probe(_public_est(name, back)))
     except Exception as exc:
         return infer, None, None, _exc_text("model", exc)
@@ -12880,12 +12974,41 @@ def run(args):
 
 
 def _run_reference(args):
+    """One column per side, both sides in this process (2026-11-24).
+
+    `--side cpu` records the CPU column (device="cpu", vendor label
+    `cpu-<cpu model>`, the `host` object), `--side gpu` the GPU vendor's
+    column, `--side both` the GPU column to `--json` and then the CPU column
+    to `--cpu-json`, in one process. The default is the installation's own
+    side. No MOJOLEARN_VENDOR child: the side is the public `device=`."""
     import mojolearn as ml
+    side = getattr(args, "side", None) or ("cpu" if ml.vendor() == "cpu" else "gpu")
+    if side == "both":
+        if not args.json or not getattr(args, "cpu_json", ""):
+            raise SystemExit("REFUSING: --side both writes two columns: give --json (the GPU column) "
+                             "and --cpu-json (the CPU column)")
+        if getattr(args, "vendor", None) and str(args.vendor).startswith("cpu"):
+            raise SystemExit("REFUSING: with --side both, --vendor labels the GPU column; "
+                             "the CPU column's label is --cpu-vendor (default cpu-<cpu model>)")
+        codes = []
+        for one, out, label in (("gpu", args.json, args.vendor),
+                                ("cpu", args.cpu_json, getattr(args, "cpu_vendor", None))):
+            sided = argparse.Namespace(**vars(args))
+            sided.side, sided.json, sided.vendor = one, out, label
+            # a side whose file does not exist yet starts fresh (resume only what was written)
+            sided.resume = bool(getattr(args, "resume", False)) and os.path.isfile(out)
+            _FULL_ERRORS.clear()
+            codes.append(_run_reference(sided))
+        return max(codes)
+    if side not in SIDES:
+        raise SystemExit(f"REFUSING: --side is cpu, gpu or both, not {side!r}")
     if getattr(args, "require_cpu", False) and ml.vendor() != "cpu":
         raise SystemExit("REFUSING: --require-cpu loaded a GPU backend")
     required = getattr(args, "require_backend", None)
     if required and ml.vendor() != required:
         raise SystemExit(f"REFUSING: requested {required} backend, loaded {ml.vendor()}")
+    if side == "gpu" and not gpu_side_available(ml):
+        raise SystemExit("REFUSING: --side gpu on an installation with no GPU (mojolearn.vendor() is cpu)")
     mode = ml.numeric_mode()
     want = os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast").strip().lower() or "fast"
     if mode != want:
@@ -12895,13 +13018,16 @@ def _run_reference(args):
                          "bitwise promise; use MOJOLEARN_NUMERIC_MODE=identical")
     # PROVENANCE BEFORE THE FIRST FIT. The label and the commit are refused
     # here, in seconds, not after nine fixtures of fits.
-    vendor = check_vendor_label(args.vendor if args.vendor is not None else default_vendor_label(ml))
+    vendor = check_vendor_label(args.vendor if args.vendor is not None else default_vendor_label(ml, side))
+    if (side == "cpu") != str(vendor).startswith("cpu"):
+        raise SystemExit(f"REFUSING: the {side} side's column is labelled {vendor!r}; a CPU column's label "
+                         "starts with cpu and only a CPU column's does")
     # THE PTX COLUMN (Andrew 2026-10-10: PTX is a normal target; no flag). A CUDA
     # record is the `ptx` device class exactly when the PTX set ran, and its label
     # says so (`nvidia-ptx-<gpu>-sm80`): an A100 or H100 record taken through the
     # PTX set must never stand for the native NVIDIA column, nor the reverse.
     gpu_arch = code_format = None
-    if ml.vendor() == "cuda":
+    if side == "gpu" and ml.vendor() == "cuda":
         # mojolearn.runtime_report(): `gpu_arch`, and `code_kind` "ptx" exactly
         # when the PTX baseline set was selected (before: _backend.gpu_arch()
         # and _backend.baseline_selection_receipt() is not None). `code_mode`
@@ -12916,18 +13042,19 @@ def _run_reference(args):
             raise SystemExit(f"REFUSING: the {code_format} CUDA set ({gpu_arch}) is loaded and the vendor label is "
                              f"{vendor!r}; a PTX record is labelled nvidia-ptx-<gpu>-sm80 and only a PTX record is")
     commit, commit_source = commit_witness()
-    host = host_record(ml) if ml.vendor() == "cpu" else None
+    host = host_record(ml) if side == "cpu" else None
     timing_env = timing_environment()
     # THE RUN BLOCK (lane post-record-device-time; see run_facts_static): the
     # device, drivers, toolchain, wheel and box, read once here; the times and
     # per-lane seconds at every write. Provenance only, never hashed.
     run_started = time.time()
     try:
-        run_static = run_facts_static(str(ml.vendor()), os.path.dirname(ml.__file__), max(1, len(_par_devices())))
+        run_static = run_facts_static("cpu" if side == "cpu" else str(ml.vendor()), os.path.dirname(ml.__file__),
+                                      max(1, len(_par_devices())))
     except Exception as exc:                            # never lose a column over provenance
         run_static = dict(schema=RUN_FACTS_SCHEMA, unavailable=dict(run=f"{type(exc).__name__}: {exc}"[:200]))
     run_previous = None
-    package = dict(version=getattr(ml, "__version__", "unknown"), package_dir=os.path.dirname(ml.__file__),
+    package = dict(version=getattr(ml, "__version__", "unknown"), package_dir=os.path.dirname(ml.__file__), side=side,
                    numpy=np.__version__, python=platform.python_version(),
                    par_devices=",".join(str(d) for d in _par_devices()))
     if gpu_arch is not None:
@@ -12936,7 +13063,7 @@ def _run_reference(args):
         package["fixture_n"] = N
     if PAR_WIDE:
         package["wide"] = True
-    print(f"# vendor={vendor} commit={commit} ({commit_source})"
+    print(f"# side={side} vendor={vendor} commit={commit} ({commit_source})"
           + (f" host.cpu_model={host['cpu_model']!r} host.column={host['column']} "
              f"host.families={sorted(host['families'])}" if host else ""))
 
@@ -12958,19 +13085,9 @@ def _run_reference(args):
         if out_of_scope:
             lanes = [n for n in lanes if n not in out_of_scope]
             print(f"# OUT OF RECORD SCOPE ({len(out_of_scope)} lanes): {sorted(out_of_scope)}")
-    # NO CPU ARITHMETIC EXISTS FOR THESE (GPU_ONLY_LANES, above). Their public
-    # surface refuses BY NAME on a CPU-only install, so a full-column run here
-    # would record REFUSED cells, and a REFUSED cell and a passing cell are the
-    # same thing in a column total. Dropped by name with the reason printed;
-    # `--lanes` is never filtered, and a GPU column runs them as it runs
-    # everything else, so no record loses a cell.
-    if not args.lanes and host:
-        no_route = [n for n in lanes if n in GPU_ONLY_LANES]
-        if no_route:
-            lanes = [n for n in lanes if n not in no_route]
-            print(f"# NO CPU ROUTE ({len(no_route)} lanes), owed on a GPU column:")
-            for n in sorted(no_route):
-                print(f"#   {n}: {GPU_ONLY_LANES[n]}")
+    # A lane with no side here (`_one_sided`, registry ONE_SIDED) is not
+    # dropped: its cell reads `n/a:one-sided: no <SIDE> implementation: ...`
+    # by name (the per-lane loop below), so the record says which side is owed.
     # Broad Apple matrices are explicit diagnostics, not release requirements.
     _apple_refusal = refuse_routine_apple_column(lanes, host)
     if _apple_refusal:
@@ -13074,7 +13191,7 @@ def _run_reference(args):
 
     def dump(complete):
         record = dict(mode=mode, repeats=args.repeats, platform=platform.platform(),
-                      vendor=vendor, commit=commit, commit_source=commit_source,
+                      vendor=vendor, side=side, commit=commit, commit_source=commit_source,
                       heldout_seed=HELDOUT_SEED, fixtures=fixture_hashes,
                       heldout=heldout_hashes, cells=cells, complete=complete,
                       skipped=sorted(skip), batch_protocol=batch_protocol,
@@ -13120,7 +13237,7 @@ def _run_reference(args):
             # therefore INERT -- it could never fire, which is the same defect
             # it exists to catch. `ml.vendor()` is what actually ran.
             _col = dict(cpu="cpu-host", metal="apple-metal",
-                        cuda="nvidia-1gpu", hip="amd-1gpu").get(str(ml.vendor()))
+                        cuda="nvidia-1gpu", hip="amd-1gpu").get("cpu" if side == "cpu" else str(ml.vendor()))
             if _col:
                 _deg = set(_la.degenerate(_col))
                 _hit = sorted({k.split("/", 1)[0] for k in cells} & _deg)
@@ -13144,7 +13261,7 @@ def _run_reference(args):
         # it. Recorded, never refused: a legitimate diagnostic run is allowed
         # to be unlocked, it just should not be mistaken for a clean column.
         try:
-            if str(ml.vendor()) != "cpu":
+            if side == "gpu":
                 _lk = pathlib.Path(os.environ.get("MOJOLEARN_METAL_LOCK",
                                                  "/tmp/mojolearn-metal-slot"))
                 _pid = (_lk / "pid").read_text().strip() if (_lk / "pid").exists() else ""
@@ -13234,6 +13351,33 @@ def _run_reference(args):
                 continue
             timer = CellTimer(f"{name}/{f}")
             X, yc, yr = data[f]
+            absent = one_sided_na(name, side)
+            if absent is not None:
+                # THE MISSING SIDE OF A ONE-SIDED LANE (`_one_sided`): named, never
+                # run, never a hash; every part reads the same n/a sentence.
+                cell = dict(verdict="N/A", hashes=[absent], parts=[], infer=[absent], infer_verdict="N/A",
+                            model=[absent], model_verdict="N/A", batch=[absent], batch_verdict="N/A")
+                for part in extra:
+                    cell.update({part: [absent], f"{part}_verdict": "N/A"})
+                if name in RLPAIR:
+                    cell.update(rlpair=[absent], rlpair_verdict="N/A", rlpair_sides=[])
+                cell["timing"] = timer.result()
+                cells[f"{name}/{f}"] = cell
+                if args.json:
+                    dump(False)
+                print(f"# CELL {name}/{f} N/A {absent}", flush=True)
+                row.append(f"{'N/A':<16}")
+                for target in (row_infer, row_model, row_batch) + tuple(row_extra.setdefault(part, []) for part in extra):
+                    target.append(absent)
+                if name in RLPAIR:
+                    row_rl.append(absent)
+                na.setdefault(f"{name} {side}", absent)
+                continue
+            # the lane and every probe of its fit see the package bound to
+            # this side (device=side on every public call), in this process
+            lml = device_view(ml, side, name)
+            side_scope = on_side(side)
+            side_scope.__enter__()
             hs, parts, err = [], [], None
             infers, models, reloads, errs2 = [], [], [], []
             oracle_errors = []
@@ -13247,7 +13391,7 @@ def _run_reference(args):
                     global _DUMP_TAG
                     _DUMP_TAG = f"{name}/{f}/{repeat}"
                     with timer.stage(f"repeat={repeat + 1}/train"):
-                        p = LANES[name](ml, X, yc, yr, held[f].copy())
+                        p = LANES[name](lml, X, yc, yr, held[f].copy())
                     parts.append(dict(p))
                     hs.append(_train_hash(p))
                 except NumericalMismatch as exc:
@@ -13276,7 +13420,7 @@ def _run_reference(args):
                     bat, err3 = "n/a:skipped (--no-batch)", None
                 else:
                     with timer.stage(f"repeat={repeat + 1}/batch"):
-                        bat, err3 = _probe_batch(p, name, ml, held[f].copy(), args.batch_alone, batch_sabotage)
+                        bat, err3 = _probe_batch(p, name, lml, held[f].copy(), args.batch_alone, batch_sabotage)
                 batches.append(bat)
                 if err3:
                     errs3.append(_clip_error(err3, f"{name}/{f} batch"))
@@ -13284,7 +13428,7 @@ def _run_reference(args):
                         print(err3)
                 for part in extra:
                     with timer.stage(f"repeat={repeat + 1}/{part}"):
-                        val, errp, notes = _probe_part(part, p, name, ml, held[f].copy(), args.batch_alone,
+                        val, errp, notes = _probe_part(part, p, name, lml, held[f].copy(), args.batch_alone,
                                                        extra_sabotage[part])
                     extras[part]["values"].append(val)
                     if errp:
@@ -13300,18 +13444,15 @@ def _run_reference(args):
                         rl, err4, sd = "n/a:skipped (--no-rlpair)", None, []
                     else:
                         with timer.stage(f"repeat={repeat + 1}/rlpair"):
-                            rl, err4, sd = _probe_rlpair(p, name, ml, held[f].copy(), rlpair_sabotage)
+                            rl, err4, sd = _probe_rlpair(p, name, lml, held[f].copy(), rlpair_sabotage)
                     rls.append(rl)
                     rl_sides = rl_sides if rl_sides is not None else sd
                     if err4:
                         errs4.append(_clip_error(err4, f"{name}/{f} rlpair"))
                         if args.verbose:
                             print(err4)
-            if err and cpu_by_design(name, err, ml.vendor()):
-                cell = dict(verdict="N/A", error=_clip_error(err, f"{name}/{f} train"),
-                            hashes=[CPU_BY_DESIGN_NA] * max(len(hs), 1), parts=parts)
-                shown = "N/A"
-            elif err:
+            side_scope.__exit__(None, None, None)
+            if err:
                 cell = dict(verdict="REFUSED", error=_clip_error(err, f"{name}/{f} train"),
                             hashes=hs, parts=parts)
                 shown = "REFUSED"
@@ -13912,7 +14053,7 @@ def diff(paths, require_columns=0, require_lanes=None, owed_json=None):
 #: DIFFERENT parts are not two parts of one column, and joining them would
 #: hand `admit()` a record whose `partial_column` flag described only the
 #: first part read.
-MERGE_SAME = ("vendor", "commit", "mode", "repeats", "heldout_seed", "fixtures", "heldout",
+MERGE_SAME = ("vendor", "side", "commit", "mode", "repeats", "heldout_seed", "fixtures", "heldout",
               "batch_protocol", "batch_sabotage", "rlpair_protocol", "rlpair_sabotage",
               "par_driver_sabotage", "lane_revisions", "batch_revisions",
               "parts_omitted") + tuple(
@@ -14027,7 +14168,7 @@ def merge(paths, out, allow_separate_builds=False):
 def _strip_driver_args(argv):
     """Remove arguments owned by the process supervisor from a child argv."""
     out, i = [], 0
-    valued = {"--jobs", "--json", "--lanes"}
+    valued = {"--jobs", "--json", "--lanes", "--side", "--cpu-json", "--cpu-vendor"}
     while i < len(argv):
         arg = argv[i]
         if arg in valued:
@@ -14048,20 +14189,53 @@ def _job_shards(lanes, count):
             for i in range(count)]
 
 
+def _allocated_cores(cgroup_root="/sys/fs/cgroup"):
+    """The cores this process may run on: its CPU affinity, bounded by a
+    cgroup v2 `cpu.max` (or v1 cfs) quota when one is set. Stdlib only (the
+    harness ships in the wheel)."""
+    try:
+        cores = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        cores = os.cpu_count() or 1
+    quota = None
+    try:
+        text = Path(cgroup_root, "cpu.max").read_text().split()
+        if text and text[0] != "max":
+            quota = int(text[0]) / int(text[1])
+    except (OSError, ValueError, IndexError):
+        try:
+            q = int(Path(cgroup_root, "cpu", "cpu.cfs_quota_us").read_text())
+            period = int(Path(cgroup_root, "cpu", "cpu.cfs_period_us").read_text())
+            if q > 0 and period > 0:
+                quota = q / period
+        except (OSError, ValueError):
+            pass
+    if quota is not None:
+        cores = min(cores, max(1, int(-(-quota // 1))))
+    return max(1, cores)
+
+
 def run_jobs(args, argv=None):
-    """Run CPU lane shards in isolated processes and merge their records.
+    """Run CPU-side lane shards in isolated processes and merge their records.
 
     This deliberately does not share fitted estimators, fixtures, Python
-    modules, or native runtimes between workers. GPU backends are refused in
-    every child: concurrent jobs on one accelerator invalidate the evidence.
+    modules, or native runtimes between workers. Every child records the CPU
+    side (`--side cpu`, device="cpu" on every public call), on a CPU-only
+    install or a GPU one: concurrent jobs on one accelerator would invalidate
+    the evidence, so no child records a GPU side.
     Part JSONs are durable checkpoints and are merged only after every child
     exits, in deterministic shard order.
     """
     if not args.json:
         raise SystemExit("REFUSING: --jobs > 1 requires --json for durable shard checkpoints")
-    cap = min(8, os.cpu_count() or 1)
+    if getattr(args, "side", None) not in (None, "cpu"):
+        raise SystemExit("REFUSING: --jobs > 1 records the CPU side only; a GPU side runs in one process")
+    # THE ALLOCATION, NOT A FIXED CAP (AGENTS.md part 1, 100 percent of rented
+    # CPU; 2026-11-24 replaced min(8, cpu_count)): at most one shard per core
+    # of this process's allocation (affinity and cgroup cpu.max).
+    cap = _allocated_cores()
     if args.jobs > cap:
-        raise SystemExit(f"REFUSING: --jobs {args.jobs} exceeds this host's conservative cap {cap}")
+        raise SystemExit(f"REFUSING: --jobs {args.jobs} exceeds this allocation's {cap} cores")
     requested = [n for n in args.lanes.split(",") if n]
     unknown = [n for n in requested if n not in LANES]
     if unknown:
@@ -14085,12 +14259,12 @@ def run_jobs(args, argv=None):
                 pass
     base = _strip_driver_args(list(sys.argv[1:] if argv is None else argv))
     base = [arg for arg in base if arg != "--resume"]
-    # A child verifies the actual loaded backend before its first fit. Adding
-    # this even when the caller omitted it makes --jobs intrinsically CPU-only.
-    if "--require-cpu" not in base:
-        base.append("--require-cpu")
+    # Every child is the CPU side (device="cpu" through the public parameter),
+    # which makes --jobs intrinsically CPU-only on any installation. The old
+    # forced --require-cpu (a CPU-only install) is no longer needed for that.
+    base += ["--side", "cpu"]
     running = []
-    print(f"# JOBS {len(shards)} isolated CPU shards (cap={cap}); checkpoints={part_dir}", flush=True)
+    print(f"# JOBS {len(shards)} isolated CPU shards (allocation {cap} cores); checkpoints={part_dir}", flush=True)
     try:
         for i, (shard, part, log) in enumerate(zip(shards, parts, logs)):
             cmd = [sys.executable, os.path.abspath(__file__)] + base + [
@@ -14163,7 +14337,15 @@ def main():
     ap.add_argument("--repeats", type=int, default=1)
     ap.add_argument("--vendor", default=None,
                     help="the box label, ^[a-z0-9][a-z0-9_.-]*$ and not a placeholder; default "
-                         "cpu-<cpu model slug> on a CPU-only install, platform.machine() elsewhere")
+                         "cpu-<cpu model slug> for the CPU side, platform.machine() for the GPU side")
+    ap.add_argument("--side", choices=("cpu", "gpu", "both"), default=None,
+                    help="the column this run records, through the public device= parameter in this "
+                         "process: cpu (device='cpu'), gpu (device='gpu') or both (the GPU column to "
+                         "--json, then the CPU column to --cpu-json); default the installation's own side")
+    ap.add_argument("--cpu-json", default="",
+                    help="with --side both: where the CPU column is written")
+    ap.add_argument("--cpu-vendor", default=None,
+                    help="with --side both: the CPU column's label (default cpu-<cpu model slug>)")
     ap.add_argument("--allow-fast", action="store_true")
     ap.add_argument("--batch-alone", type=int, default=BATCH_ALONE, metavar="N",
                     help="rows evaluated alone per batch call (default %(default)s); the split and the "
@@ -14291,7 +14473,7 @@ LANE_FRAGMENTS = {}
 #: LANE_REVISIONS is not among them: a revision marks input that moved after
 #: a record was taken, and an expansion lane has no record yet.
 _FRAGMENT_REGISTRIES = ("LANES", "BATCH", "BATCH_REVISIONS", "BATCHGRAD", "BATCHSCALE", "RAGGED", "STEPFULL", "RLPAIR",
-                        "GPU_ONLY_LANES")
+                        "ONE_SIDED")
 
 
 def lane_fragment_paths(here=None):

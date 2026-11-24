@@ -46,7 +46,10 @@ from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_IMPORT_DONE, MEMBER_F64,
 )
-from core.mixture_native_api import MIXTURE_NATIVE_MODE, MIXTURE_NATIVE_CAPABILITIES, MIXTURE_NATIVE_COUNT
+from core.mixture_native_api import (
+    MIXTURE_NATIVE_MODE, MIXTURE_NATIVE_CAPABILITIES, MIXTURE_NATIVE_COUNT, MIXTURE_CAP_DEV_STORE,
+)
+from providers.python.family_store_route_door import family_store_route
 from providers.python.host_estimator_binding_pyapi_door import estimator_member_binding
 from providers.python.member_xcluster_boundary_door import xcluster_gmm_plain_admit
 from core.cluster_member_words import member_words_append_text
@@ -86,6 +89,11 @@ def mixture_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
     route.vendor = vendor
     route.entry = EntryRef(connection.driver.entry, entry_ref_word(mode, vendor, MIXTURE_NATIVE_COUNT))
     route.flags = connection.driver.metadata(MIXTURE_NATIVE_CAPABILITIES)
+    # The GPU image's resident store (lane vdf-scope-cluster2b): its transport entry in `route.second`, so a
+    # model-selection fold stays on the device (core/mixture_member.mojo `_scoped`).
+    var store_pin = PythonObject(None)
+    if (route.flags & MIXTURE_CAP_DEV_STORE) != 0:
+        store_pin = family_store_route(binding, "mixture_store_v1", route)
     owner.plan.route = route
     # init_params: 0 'kmeans', 1 'random', else -1 and the name's bytes: the
     # entry decodes it by name and refuses it in its words, as for the class.
@@ -96,7 +104,7 @@ def mixture_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
         words.append(Float64(settings.init_name.byte_length()))
         member_words_append_text(words, settings.init_name)
     owner.plan.params = words^
-    owner.pins = Python.tuple(binding, connection.provider)
+    owner.pins = Python.tuple(binding, connection.provider, store_pin)
     return True
 
 

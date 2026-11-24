@@ -104,7 +104,8 @@ import sys as _sys
 #: name, so two lanes can never collide here and a fragment can never move an
 #: existing family. With every fragment empty the manifest is byte for byte
 #: what it was.
-EXPANSION_LANES = ("linear", "cluster", "neighbors", "decomp", "prep", "sequence", "trees", "cnn", "ann", "metrics")
+EXPANSION_LANES = ("linear", "cluster", "neighbors", "decomp", "prep", "sequence", "trees", "cnn", "ann", "metrics",
+                   "tokenizer")
 #: The expansion lanes whose GPU binding builds IDENTICAL ONLY. EMPTY SINCE
 #: 2026-09-27 (FAST AND IDENTICAL on every lane, neural included):
 #: all nine expansion bindings build FAST and IDENTICAL and join
@@ -4106,7 +4107,7 @@ PUBLIC_PENDING_STALE_REASONS = ("stale reference",)
 #:   no cpu route      A lane with no current CPU implementation cannot be
 #:                     declared covered. The four original holds were removed
 #:                     in September 2026, but later lanes use this reason too.
-#:                     Inspect the fully registered GPU_ONLY_LANES: extensions
+#:                     Inspect the fully registered ONE_SIDED lanes: extensions
 #:                     in tools/identity_lanes add device-buffer/pool entries
 #:                     beyond the GBDT entries in identity_break.py's literal.
 #:                     A GPU-resource operation and missing CPU algorithm
@@ -4114,7 +4115,7 @@ PUBLIC_PENDING_STALE_REASONS = ("stale reference",)
 #:                     Once a CPU implementation exists, missing execution or
 #:                     reference evidence belongs under a different hold.
 #:                     This reason is checked against
-#:                     `identity_break.GPU_ONLY_LANES`, which is what
+#:                     `_one_sided(lane, missing="cpu")` (registry ONE_SIDED), which is what
 #:                     `tools/identity_break.py` uses to drop the lane from a
 #:                     full-column CPU run, so the reason cannot be used as
 #:                     an escape hatch for a lane that merely has no CPU
@@ -4180,7 +4181,7 @@ PUBLIC_PENDING_LANES = {
     "gbdt-pointwise-multiclass": "no reference",
     "optim-owner-lifecycle": "unwatched",
     "optim-io-capability": "unwatched",
-    # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no
+    # GPU only (_one_sided(lane, missing="cpu"), registry ONE_SIDED): the CPU bindings hold no
     # resident buffers, so no CPU column can state these two.
     "optim-resident-io": "no cpu route",
     "sequence-device-release": "no cpu route",
@@ -4507,7 +4508,7 @@ PUBLIC_PENDING_LANES = {
     "saved-model-host-infer-trees": "unwatched",
     "hf-causal-lm-text": "unwatched",
     "hf-model-surface": "unwatched",
-    # GPU only (tools/identity_lanes/coverage.py GPU_ONLY_LANES): the CPU
+    # GPU only (_one_sided(lane, missing="cpu") in tools/identity_lanes/coverage.py): the CPU
     # training binding has no device array pool.
     "training-device-cross-entropy": "no cpu route",
     "classical-float16-sequences": "unwatched",

@@ -9,7 +9,7 @@ from gemm.host.linalg_fused_run import gemm_fused_native
 from core.shared_slot import SharedSlot
 
 comptime LINALG_NATIVE_ABI_NAME = "mojolearn.linalg.v1"
-comptime LINALG_NATIVE_OPERATION_COUNT = 16
+comptime LINALG_NATIVE_OPERATION_COUNT = 30
 
 
 def linalg_native_operation(op: Int, a: List[Int], p: List[Int]) raises -> Int:
@@ -80,6 +80,10 @@ def linalg_native_operation(op: Int, a: List[Int], p: List[Int]) raises -> Int:
         if len(a) != 5:
             raise Error("linalg native ABI: invalid gemm_fused address count")
         return gemm_fused_native(a, p)
+    if op >= 16 and op <= 31:
+        # lane vdf-linalg4: the training device-array operations exist on the GPU sets only (no device array
+        # exists in a CPU process; device="cpu" with one is refused in the door before this).
+        raise Error("RuntimeError: mojolearn.linalg: training device arrays need a GPU installation")
     raise Error("linalg native ABI: unknown operation")
 
 

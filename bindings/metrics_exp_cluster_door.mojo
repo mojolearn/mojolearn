@@ -31,10 +31,15 @@ from core.host_finite_scan import host_all_finite_f32
 from core.metrics_exp_impl import mexp_cast_i64
 from bindings.metrics_exp_common_run import MX_NONE
 from bindings.metrics_program_pack import metric_arena_array
-from bindings.metrics_program_door import MetricDoorProg, metric_door_run
+from bindings.metrics_program_door import (
+    MetricDoorProg, metric_door_run, MetricRowsSlot, metric_door_rows_slot, metric_slot_first_nonfinite,
+    metric_slot_release,
+)
 from bindings.arena_prog_run import MetricArenaOwner
+from bindings.metric_resident_labels_door import MetricResidentLabels, metric_resident_labels
+from bindings.metrics_exp_resident_labels_door import mx_resident_lab
 from bindings.metrics_exp_common_unpack import (
-    MxLab, mx_b, mx_len, mx_truthy, mx_is_str, mx_float, mx_refuse_multilabel, mx_encode,
+    MxLab, mx_b, mx_len, mx_truthy, mx_is_str, mx_float, mx_refuse_multilabel,
 )
 
 comptime _CL_CENT = 0
@@ -45,23 +50,58 @@ comptime _CL_DB_FIN = 4
 
 
 struct _Clusterings(Movable):
+    """The encoded pair and each side's device encode (lane vdf-xm-wire4): a
+    side resident on the GPU metrics image inside `resident()` is encoded
+    there (`metric_resident_labels`), its codes slot read by the program in
+    place (`pin_resident`, its label vector the owner); a host side keeps the
+    host codes. Kept until after the run; `close` frees the slots."""
     var a: MxLab
     var b: MxLab
+    var da: MetricResidentLabels
+    var db: MetricResidentLabels
+    var oa: PythonObject
+    var ob: PythonObject
 
-    def __init__(out self, var a: MxLab, var b: MxLab):
+    def __init__(out self, var a: MxLab, var b: MxLab, var da: MetricResidentLabels, var db: MetricResidentLabels,
+                 oa: PythonObject, ob: PythonObject):
         self.a = a^
         self.b = b^
+        self.da = da^
+        self.db = db^
+        self.oa = oa
+        self.ob = ob
+
+    def pin(self, mut prog: MetricDoorProg):
+        """Pin the codes A, B in that order: a device slot in place, else the
+        host codes as this call's temporary (never kept resident, lane
+        vdf-xm-wire2)."""
+        if self.da.live():
+            prog.pin_resident(self.oa, self.da.codes)
+        else:
+            prog.pin(self.a.codes, False)
+        if self.db.live():
+            prog.pin_resident(self.ob, self.db.codes)
+        else:
+            prog.pin(self.b.codes, False)
+
+    def close(mut self) raises:
+        self.da.close()
+        self.db.close()
 
 
-def _clusterings(labels_true: PythonObject, labels_pred: PythonObject, caller: String,
+def _clusterings(labels_true: PythonObject, labels_pred: PythonObject, mode: PythonObject, caller: String,
                  context: PythonObject) raises -> _Clusterings:
-    mx_refuse_multilabel(labels_true, "labels_true", caller, context)
-    mx_refuse_multilabel(labels_pred, "labels_pred", caller, context)
-    var a = mx_encode(labels_true, "labels_true", context)
-    var b = mx_encode(labels_pred, "labels_pred", context)
+    var da = metric_resident_labels(labels_true, mode, caller, context)
+    if not da.live():
+        mx_refuse_multilabel(labels_true, "labels_true", caller, context)
+    var db = metric_resident_labels(labels_pred, mode, caller, context)
+    if not db.live():
+        mx_refuse_multilabel(labels_pred, "labels_pred", caller, context)
+    var a = mx_resident_lab(da, labels_true, "labels_true", context)
+    var b = mx_resident_lab(db, labels_pred, "labels_pred", context)
     if a.n != b.n:
         raise Error("mojolearn " + caller + ": labels_true and labels_pred must have the same length")
-    return _Clusterings(a^, b^)
+    return _Clusterings(a^, b^, da^, db^, labels_true, labels_pred)
 
 
 struct _Cont(Movable):
@@ -93,7 +133,7 @@ struct _Cont(Movable):
         self.EMI = EMI
 
 
-def _contingency(c: _Clusterings, mode: PythonObject, has_eps: Bool, eps: Float64, mi: Bool, emi: Bool,
+def _contingency(mut c: _Clusterings, mode: PythonObject, has_eps: Bool, eps: Float64, mi: Bool, emi: Bool,
                  context: PythonObject) raises -> _Cont:
     var ka = mx_len(c.a.classes)
     var kb = mx_len(c.b.classes)
@@ -101,9 +141,9 @@ def _contingency(c: _Clusterings, mode: PythonObject, has_eps: Bool, eps: Float6
     # the typed builder (bindings/metrics_exp_common_run.mojo
     # `contingency_stages`, lane mf-score5): its inputs A, B pinned in that order
     var r = contingency_stages(prog.plan, c.a.n, ka, kb, has_eps, eps, mi, emi)
-    prog.pins.append(c.a.codes)
-    prog.pins.append(c.b.codes)
+    c.pin(prog)
     var arena = metric_door_run(prog, mode, context)
+    c.close()  # the device codes outlive the run above
     return _Cont(arena^, ka, kb, r.C, r.F, r.R, r.K, r.P, r.E, r.MI, r.EMI)
 
 
@@ -117,7 +157,7 @@ def _contingency_matrix(args: PythonObject, context: PythonObject) raises -> Pyt
     if sparse:
         raise Error("NotImplementedError: mojolearn contingency_matrix: sparse=True is NOT IMPLEMENTED; this "
                     + "package has no sparse matrix type (metrics/NOT_IMPLEMENTED.tsv)")
-    var c = _clusterings(args[0], args[1], "contingency_matrix", context)
+    var c = _clusterings(args[0], args[1], args[5], "contingency_matrix", context)
     var has_eps = eps is not None
     var r = _contingency(c, args[5], has_eps, mx_float(eps, context) if has_eps else 0.0, False, False, context)
     var shape = Python.tuple(PythonObject(r.ka), PythonObject(r.kb))
@@ -147,7 +187,7 @@ def _contingency_matrix(args: PythonObject, context: PythonObject) raises -> Pyt
 
 def _pair_confusion(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """args = (labels_true, labels_pred, mode)."""
-    var c = _clusterings(args[0], args[1], "pair_confusion_matrix", context)
+    var c = _clusterings(args[0], args[1], args[2], "pair_confusion_matrix", context)
     var r = _contingency(c, args[2], False, 0.0, False, False, context)
     return metric_arena_array(r.arena, r.P, 8, Python.tuple(PythonObject(2), PythonObject(2)), "<i8", context)
 
@@ -170,7 +210,7 @@ def _average_method(method: PythonObject) raises -> Int:
 def _nmi(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """args = (labels_true, labels_pred, average_method, mode)."""
     var method = _average_method(args[2])
-    var c = _clusterings(args[0], args[1], "normalized_mutual_info_score", context)
+    var c = _clusterings(args[0], args[1], args[3], "normalized_mutual_info_score", context)
     var ka = mx_len(c.a.classes)
     var kb = mx_len(c.b.classes)
     if (ka == kb and kb == 1) or (ka == kb and kb == 0):
@@ -182,7 +222,7 @@ def _nmi(args: PythonObject, context: PythonObject) raises -> PythonObject:
 def _ami(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """args = (labels_true, labels_pred, average_method, mode)."""
     var method = _average_method(args[2])
-    var c = _clusterings(args[0], args[1], "adjusted_mutual_info_score", context)
+    var c = _clusterings(args[0], args[1], args[3], "adjusted_mutual_info_score", context)
     var ka = mx_len(c.a.classes)
     var kb = mx_len(c.b.classes)
     if (ka == kb and kb == 1) or (ka == kb and kb == 0):
@@ -196,23 +236,65 @@ def _ami(args: PythonObject, context: PythonObject) raises -> PythonObject:
 
 def _cluster_score(args: PythonObject, caller: String, db: Bool, context: PythonObject) raises -> PythonObject:
     """calinski_harabasz_score (db False) or davies_bouldin_score (db True);
-    args = (X, labels, mode)."""
+    args = (X, labels, mode).
+
+    A DeviceRows X on a GPU image (lane vdf-xm-transport, 2026-11-24) is
+    gathered on the device (`metric_door_rows_slot`), its finiteness scanned
+    there (`metric_slot_first_nonfinite`, the same refusal words) and read by
+    the program from the slot: its rows never come to the host. Every other
+    X is admitted on the host as before."""
+    var owned = List[Int]()
+    var rx = metric_door_rows_slot(args[0], args[2], context, owned)
+    var result = 0.0
+    try:
+        result = _cluster_score_run(args, caller, db, rx, context)
+    except error:
+        var cleanup = metric_slot_release(rx, owned)
+        if cleanup.byte_length() > 0:
+            raise Error(String(error) + "; cleanup also failed: " + cleanup)
+        raise error
+    var cleanup = metric_slot_release(rx, owned)
+    if cleanup.byte_length() > 0:
+        raise Error("RuntimeError: x_metrics slot cleanup failed: " + cleanup)
+    return PythonObject(result)
+
+
+def _cluster_score_run(args: PythonObject, caller: String, db: Bool, rx: MetricRowsSlot,
+                       context: PythonObject) raises -> Float64:
     # `_cluster_inputs`
-    var Xa = admit_family(args[0], 2, "X", context).array
-    var n = Int(py=Xa.shape[0])
-    var d = Int(py=Xa.shape[1])
-    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(Xa))), n * d):
-        raise Error("mojolearn " + caller + ": X contains NaN or infinity")
-    _ = Xa  # keep the Python object alive through the native calls above
-    var lab = mx_encode(args[1], "labels", context)
+    var Xa = PythonObject(None)
+    var n = rx.rows
+    var d = rx.cols
+    if rx.slot >= 0:
+        if metric_slot_first_nonfinite(rx) >= 0:
+            raise Error("mojolearn " + caller + ": X contains NaN or infinity")
+    else:
+        Xa = admit_family(args[0], 2, "X", context).array
+        n = Int(py=Xa.shape[0])
+        d = Int(py=Xa.shape[1])
+        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(Xa))), n * d):
+            raise Error("mojolearn " + caller + ": X contains NaN or infinity")
+        _ = Xa  # keep the Python object alive through the native calls above
+    # labels resident on the GPU metrics image are encoded there and read in
+    # place (lane vdf-xm-wire4); a host vector keeps the host encode
+    var dev = metric_resident_labels(args[1], args[2], caller, context)
+    var lab = mx_resident_lab(dev, args[1], "labels", context)
     if lab.n != n:
         raise Error("mojolearn " + caller + ": X and labels have different numbers of rows")
     var k = mx_len(lab.classes)
     if not (1 < k and k < n):
         raise Error("Number of labels is " + String(k) + ". Valid values are 2 to n_samples - 1 (inclusive)")
     var prog = MetricDoorProg()
-    var X0 = prog.put(Xa)
-    var L = prog.put_i32(lab.codes)
+    var X0 = -1
+    if rx.slot >= 0:
+        X0 = prog.put_resident(args[0], n * d, rx.slot)
+    else:
+        X0 = prog.put_arg(Xa, args, 0)
+    var L = -1
+    if dev.live():
+        L = prog.put_resident(args[1], n, dev.codes)
+    else:
+        L = prog.put_temp(lab.codes)  # this call's codes: never kept resident (lane vdf-xm-wire2)
     var g = prog.group(L, n, k, X0, d, MX_NONE, d)
     var off = g[0]
     var sums = g[1]
@@ -235,7 +317,8 @@ def _cluster_score(args: PythonObject, caller: String, db: Bool, context: Python
         prog.stage("cl_epi", k, [_CL_CH_ROW, CB, gsum, n, d, k, inner])
         prog.stage("cl_epi", 1, [_CL_CH_FIN, off, inner, per, n, k, res])
     var arena = metric_door_run(prog, args[2], context)
-    return PythonObject(arena.f64(res))
+    dev.close()  # the device codes outlive the run above
+    return arena.f64(res)
 
 
 def metrics_exp_cluster_operation(operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:

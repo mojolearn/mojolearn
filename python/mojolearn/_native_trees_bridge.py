@@ -237,6 +237,11 @@ def connect():
                                            for name in ('forest_release_gpu', 'gbdt_resident_release', 'iforest_resident_release')  # glue: existing compiled release ABIs
                                            if name in table)
     connect_cpu_device(context)
+    # glue: the one device="cpu" table (class -> True or the sentence why not), read by the
+    # meta-estimators' member device check (bindings/trees_meta_device_door.mojo), as the
+    # constructor's device check reads it; the same dictionary, filled as classes register.
+    from ._device_table import CPU_CLASSES
+    context["device_cpu"] = CPU_CLASSES
     _ENTRY, _CONTEXT = entry, context
     return _ENTRY, _CONTEXT
 

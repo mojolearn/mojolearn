@@ -29,7 +29,7 @@ then file name). Apple, NVIDIA and AMD use one shared GPU reference. Apple
 has no separate acceptable IDENTICAL hash. The cpu (host) column is a
 deciding witness too (Andrew 2026-10-24: "the cpu column should be REQUIRED
 too"): it must carry the same hash, and its only N/As are the declared ones,
-a lane the harness declares GPU-only (`identity_break.GPU_ONLY_LANES`, the
+a lane the harness declares without a CPU side (`_one_sided(lane, missing="cpu")`, the
 `RECORD_EXCLUDED_PREFIXES` cooperative drivers) and a model part that loads
 the GPU column's saved file. A deciding class whose newest value differs from
 the reference at an OLDER commit is kept as a distinct value (the record
@@ -607,6 +607,19 @@ def record_device_class(record, filename):
     for field in ("commit", "mode", "vendor", "fixtures", "heldout"):
         if field not in record or provenance.get(field) != record[field]:
             return None, f"backend witness disagrees with record {field}"
+    # THE SIDE (2026-11-24). A record taken with `--side cpu` is the CPU
+    # column whatever backend the installation loaded: the side is the public
+    # device="cpu", in the GPU installation's own process. Its options, its
+    # record and its label must all say so.
+    side = options.get("side")
+    if side not in (None, "cpu", "gpu") or record.get("side", side) != side:
+        return None, "backend witness disagrees with the record's side"
+    if side == "cpu":
+        if not str(vendor or "").startswith("cpu"):
+            return None, "a CPU-side record's label must start with cpu"
+        return "cpu", None
+    if side == "gpu" and (backend == "cpu" or record.get("host")):
+        return None, "a GPU-side record names a CPU backend or carries CPU host metadata"
     if options.get("require_cpu") and backend != "cpu":
         return None, "backend witness contradicts require_cpu"
     if record.get("host") and backend != "cpu":

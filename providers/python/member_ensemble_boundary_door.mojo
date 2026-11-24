@@ -201,6 +201,7 @@ from core.msel_refusal_words import (
     msel_empty_scoring_words, msel_kfold_words, MSEL_REFIT_CALLBACK_WORDS, MSEL_NO_FITS_WORDS,
 )
 from bindings.prep_keys_unpack import prep_keys
+from bindings.trees_meta_device_door import meta_kind_device_fields, meta_device_handed, meta_device_base
 
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -614,7 +615,10 @@ def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     while len(pending_kinds) > 0:  # driver-loop: over the pending meta-estimators (the work-list, no recursion)
         var at = len(pending_kinds) - 1
         var est = pending[at]
-        var est_fields = pending_fields[at]
+        # THE DEVICE VIEW (lane vdf-meta, bindings/trees_meta_device_door.mojo): with an explicit device, its
+        # nested estimators that name none are clones storing it, read by the walk below and by its
+        # admission alike (None: `pending_fields[at]` itself, one identity compare).
+        var est_fields = meta_kind_device_fields(est, pending_fields[at], pending_kinds[at], pending_context[at], b)
         var est_context = pending_context[at]
         var est_labels = pending_labels[at]
         var est_kind = pending_kinds.pop()
@@ -676,7 +680,8 @@ def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
             done.failed_words.append(String(e))
         i -= 1
     var owner_labels = owner.labels  # a second reference: owner is passed mutably beside it
-    return _admit_one(model, fields, kind, context, b, owner, done, prepared, owner_labels)
+    var outer_fields = order_fields[0]  # the outermost meta-estimator's device view (lane vdf-meta)
+    return _admit_one(model, outer_fields, kind, context, b, owner, done, prepared, owner_labels)
 
 
 def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
@@ -1154,6 +1159,7 @@ def _pack_one(model: PythonObject, fields: PythonObject, context: PythonObject, 
     var fitted = Python.list()
     for u in range(bases):  # driver-loop: over the nested members (one clone and one pack each)
         var clone = prep_estimator_clone(active.ests[u], context)
+        meta_device_handed(fields, model, clone)  # the meta-estimator's explicit device (lane vdf-meta)
         var clone_plan = prep_estimator_plan(clone, context)
         var clone_fields = py_call(clone_plan["fields_get"], clone, py_type(clone))
         var clone_context = clone_plan["context"]
@@ -1180,6 +1186,7 @@ def _pack_one(model: PythonObject, fields: PythonObject, context: PythonObject, 
         if final is None:
             final = py_get(py_get(context, "native_estimator_defaults"), "LogisticRegression" if classifier else "Ridge")
         var final_ = prep_estimator_clone(final, context)
+        meta_device_handed(fields, model, final_)  # the meta-estimator's explicit device (lane vdf-meta)
         var final_plan = prep_estimator_plan(final_, context)
         var final_fields = py_call(final_plan["fields_get"], final_, py_type(final_))
         var final_context = final_plan["context"]
@@ -1918,7 +1925,8 @@ def _unit_pack(model: PythonObject, fields: PythonObject, context: PythonObject,
         raise Error("RuntimeError: mojolearn: the meta member state does not match its units")
     var contexts = Python.list()
     if kind == META_OVR:
-        var base = py_get(fields, "estimator")
+        # The meta-estimator's explicit device on the base its units are cloned from (lane vdf-meta).
+        var base = meta_device_base(fields, model, py_get(fields, "estimator"), context)
         var two = py_call(b.list, py_call(b.range, PythonObject(2)))
         var fitted = Python.list()
         for u in range(len(handles)):  # driver-loop: over the units (one clone and one pack each)
@@ -1928,7 +1936,8 @@ def _unit_pack(model: PythonObject, fields: PythonObject, context: PythonObject,
         py_setattr(model, "classes_", labels)
         py_setattr(model, "estimators_", fitted)
     elif kind == META_CALIBRATED:
-        var base = _cal_base(fields, context)
+        # The meta-estimator's explicit device on the base its units are cloned from (lane vdf-meta).
+        var base = meta_device_base(fields, model, _cal_base(fields, context), context)
         var view = _export_view(plan, state, META_BLOCK_CAL)
         var w = _F64P(unsafe_from_address=view.dst.data)
         var count = view.dst.rows * view.dst.cols
@@ -6176,6 +6185,7 @@ def _multi_pack(model: PythonObject, fields: PythonObject, context: PythonObject
     var contexts = Python.list()
     for j in range(len(nested)):  # driver-loop: over the outputs (one clone and one pack each)
         var clone = prep_estimator_clone(base, context)
+        meta_device_handed(fields, model, clone)  # the meta-estimator's explicit device (lane vdf-meta)
         var clone_plan = prep_estimator_plan(clone, context)
         var clone_fields = py_call(clone_plan["fields_get"], clone, py_type(clone))
         var clone_context = clone_plan["context"]

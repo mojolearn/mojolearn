@@ -1,0 +1,17 @@
+diff --git a/umap/optimizer_identical_device.mojo b/umap/optimizer_identical_device.mojo
+index f6a466ebdd..926930506f 100644
+--- a/umap/optimizer_identical_device.mojo
++++ b/umap/optimizer_identical_device.mojo
+@@ -534,6 +534,12 @@ def _umap_epochs_download(
+     var out = List[Float32](unsafe_uninit_length=n_values)
+     unsafe_memcpy(dest=out.unsafe_ptr(), src=host_out.unsafe_ptr(), count=n_values)
+     _ = host_out^
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): every optimized embedding value one ulp up, the GPU bindings only
++        for q in range(n_values):
++            var e = out[q]
++            if abs(e) >= Float32(1.17549435e-38) and e - e == Float32(0):
++                e = bitcast[DType.float32](bitcast[DType.uint32](e) + UInt32(1))
++            out[q] = e
+     return out^
+ 
+ 

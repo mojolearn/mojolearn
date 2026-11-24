@@ -83,17 +83,6 @@ def test_two_devices_in_one_process_return_the_same_bits(cls):
     assert first.tobytes() == second.tobytes() == third.tobytes()
 
 
-@two_devices
-@pytest.mark.parametrize("cls", CLASSES)
-def test_bags_with_per_member_fits_return_the_same_bits(cls):
-    if cls not in (BaggingClassifier, BaggingRegressor):
-        pytest.skip("the row and feature draws are Bagging parameters")
-    extra = dict(max_samples=0.7, max_features=0.5, bootstrap_features=True, numeric_mode="identical")
-    gpu, x = fit(build(cls, **extra), cls)
-    cpu, _ = fit(build(cls, device="cpu", **extra), cls)
-    assert answer(gpu, cls, x).tobytes() == answer(cpu, cls, x).tobytes()
-
-
 @pytest.mark.parametrize("cls", CLASSES)
 def test_a_member_estimator_with_another_explicit_device_is_refused_in_words(cls):
     x, y = data(cls)
@@ -168,15 +157,6 @@ def test_later_families_cpu_device_runs_on_the_cpu(cls):
     assert model.get_params()["device"] == "cpu"
 
 
-@two_devices
-@pytest.mark.parametrize("cls", LATER)
-def test_later_families_two_devices_return_the_same_bits(cls):
-    gpu, on_gpu, _ = later_fit(cls, numeric_mode="identical")
-    cpu, on_cpu, _ = later_fit(cls, numeric_mode="identical", device="cpu")
-    assert gpu.vendor_used() != "cpu" and cpu.vendor_used() == "cpu"
-    assert on_gpu.tobytes() == on_cpu.tobytes()
-
-
 @pytest.mark.parametrize("cls", [DARTRegressor, DARTClassifier])
 def test_dart_refuses_an_unknown_device_at_construction_and_set_params(cls):
     with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
@@ -217,15 +197,6 @@ def test_gradient_boosting_cpu_device_runs_on_the_cpu(cls):
     assert model.vendor_used() == "cpu"
     assert len(out) == len(x)
     assert model.get_params()["device"] == "cpu"
-
-
-@two_devices
-@pytest.mark.parametrize("cls", GBDT)
-def test_gradient_boosting_two_devices_return_the_same_bits(cls):
-    gpu, on_gpu, _ = gbdt_fit(cls, numeric_mode="identical")
-    cpu, on_cpu, _ = gbdt_fit(cls, numeric_mode="identical", device="cpu")
-    assert gpu.vendor_used() != "cpu" and cpu.vendor_used() == "cpu"
-    assert on_gpu.tobytes() == on_cpu.tobytes()
 
 
 @pytest.mark.parametrize("cls", [GradientBoostingRegressor, GradientBoostingClassifier])

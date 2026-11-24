@@ -74,6 +74,8 @@ from std.sys.info import size_of
 from std.memory import unsafe_memcpy
 from core.metrics_entry_table import MR_R2, MR_R2_WEIGHTED
 from core.native_descriptor_call import native_descriptor_call
+from core.seq_member_rows import SeqRows, seq_rows_route, seq_rows_open, seq_rows_close, seq_rows_count, seq_rows_target
+from core.member_abi import MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
@@ -242,7 +244,9 @@ def _dense(view: MemberMatrix, dtype: Int, what: String, estimator: String) rais
 
 
 def _whole(call: _CallP, estimator: String) raises:
-    if call[].row_index.rows > 0 or call[].column_index.rows > 0:
+    # A row index is read by core/seq_member_rows.mojo (THE RESIDENT ROUTE);
+    # a column index is refused.
+    if call[].column_index.rows > 0:
         raise Error("TypeError: an " + estimator + " member reads whole host views (no row or column index)")
 
 
@@ -277,15 +281,19 @@ def _fit(slot: _SlotP, call: _CallP) raises:
     if call[].weights.rows > 0:
         raise Error("TypeError: an " + estimator + " member fits without sample weights")
     var steps_t = _sequences(call[].x, estimator)
-    var n = call[].x.rows
+    var n = seq_rows_count(call)
     var d = call[].x.cols // steps_t
     xseq_run_rnn_dims_check(n, steps_t)
-    if call[].y.rows != n:
+    if call[].y.rows != call[].x.rows:
         raise Error("ValueError: X and y have different numbers of rows")
+    # THE RESIDENT ROUTE (core/seq_member_rows.mojo): X in the scope's store
+    # and the fold taken on the device (or gathered on the host); the fold's
+    # targets taken in host row tasks.
+    var held = seq_rows_open(call, call[].y.cols, estimator)
     var w = _F64P(unsafe_from_address=Int(slot[].words.unsafe_ptr()))
     var outputs: Int
     var classes = 0
-    var target = call[].y.data
+    var target = held.y
     var codes = List[Float32]()
     if slot[].classifier:
         _dense(call[].y, MEMBER_I32, "y (class codes)", estimator)
@@ -297,7 +305,7 @@ def _fit(slot: _SlotP, call: _CallP) raises:
         outputs = classes
         # The int32 codes as the float32 target the recurrent loss reads.
         codes = List[Float32](length=n, fill=0.0)
-        xseq_codes_f32(_I32P(unsafe_from_address=call[].y.data), _F32P(unsafe_from_address=Int(codes.unsafe_ptr())), n)
+        xseq_codes_f32(_I32P(unsafe_from_address=held.y), _F32P(unsafe_from_address=Int(codes.unsafe_ptr())), n)
         target = Int(codes.unsafe_ptr())
     else:
         _dense(call[].y, MEMBER_F32, "y", estimator)
@@ -330,8 +338,12 @@ def _fit(slot: _SlotP, call: _CallP) raises:
     var optimizer = XseqOptimizer(Int(w[9]), Int(w[10]), [w[11], w[12], w[13], w[14], w[15], w[16]])
     var request = XseqRnnFitRequest(cell, d, hidden, layers, outputs, 1 if slot[].classifier else 0, n, steps_t,
         Int(w[5]), schedule.batch, w[6] != 0.0, child)
-    xseq_run_rnn_fit(_model_entry(call), request, optimizer, call[].x.data, target, Int(slot[].params.unsafe_ptr()),
-        Int(slot[].curve.unsafe_ptr()), Int(rates.unsafe_ptr()))
+    try:
+        xseq_run_rnn_fit(_model_entry(call), request, optimizer, held.x, target, Int(slot[].params.unsafe_ptr()),
+            Int(slot[].curve.unsafe_ptr()), Int(rates.unsafe_ptr()))
+    finally:
+        seq_rows_close(call, held)
+    _ = held^  # the fold's words live past the run
     _ = codes^
     _ = rates^
     slot[].scalars = [Float64(schedule.steps), Float64(steps_t), Float64(d), Float64(outputs), Float64(classes)]
@@ -355,16 +367,21 @@ def _forward(slot: _SlotP, call: _CallP, dst: Int) raises:
     var n_params = xseq_run_rnn_layout(ints, len(slot[].params))
     slot[].named = True
     var seq = List[Float32](length=1, fill=0.0)
-    var request = XseqRnnPredictRequest(ints^, n_params, 1 if slot[].classifier else 0, call[].x.rows, steps_t,
+    var held = seq_rows_open(call, 0, estimator)
+    var request = XseqRnnPredictRequest(ints^, n_params, 1 if slot[].classifier else 0, held.n, steps_t,
         Int(slot[].words[8]), False, Int(slot), slot[].token)
-    xseq_run_rnn_predict(_model_entry(call), request, call[].x.data, Int(slot[].params.unsafe_ptr()), dst,
-        Int(seq.unsafe_ptr()))
+    try:
+        xseq_run_rnn_predict(_model_entry(call), request, held.x, Int(slot[].params.unsafe_ptr()), dst,
+            Int(seq.unsafe_ptr()))
+    finally:
+        seq_rows_close(call, held)
+    _ = held^  # the fold's words live past the run
     _ = seq^
 
 
 def _predict(slot: _SlotP, call: _CallP) raises:
     var estimator = _name(slot)
-    var rows = call[].x.rows
+    var rows = seq_rows_count(call)
     var outputs = Int(slot[].scalars[3]) if slot[].fitted else 0
     if not slot[].classifier:
         _dense(call[].dst, MEMBER_F32, "the prediction buffer", estimator)
@@ -391,7 +408,7 @@ def _proba(slot: _SlotP, call: _CallP) raises:
         member_unsupported(estimator, MEMBER_OP_PREDICT_PROBA)
     var classes = Int(slot[].scalars[4]) if slot[].fitted else 0
     _dense(call[].dst, MEMBER_F32, "the probability buffer", estimator)
-    if call[].dst.rows != call[].x.rows or call[].dst.cols != classes:
+    if call[].dst.rows != seq_rows_count(call) or call[].dst.cols != classes:
         raise Error("ValueError: the probability buffer holds one row of class probabilities per row of X")
     _forward(slot, call, call[].dst.data)
 
@@ -405,30 +422,36 @@ def _score(slot: _SlotP, call: _CallP) raises:
     if not route.has_third:
         raise Error("ImportError: mojolearn: the " + estimator + " member's score needs the R^2 entry on its route")
     _dense(call[].y, MEMBER_F32, "y", estimator)
-    var rows = call[].x.rows
+    var rows = seq_rows_count(call)
     var outputs = Int(slot[].scalars[3]) if slot[].fitted else 0
     if call[].y.cols != 1 or outputs != 1:
         raise Error("NotImplementedError: mojolearn: the " + estimator + " member scores one output column; the "
             + "caller predicts and runs its own multi-output R^2")
-    if call[].y.rows != rows:
+    if call[].y.rows != call[].x.rows:
         raise Error("ValueError: mojolearn metrics: y_true has " + String(call[].y.rows) + " entries and y_pred has "
-            + String(rows) + "; they must be the same length")
+            + String(call[].x.rows) + "; they must be the same length")
+    var indexed = call[].row_index.rows > 0
+    var y_fold = seq_rows_target(call, call[].y, 1)
+    var y_at = Int(y_fold.unsafe_ptr()) if indexed else call[].y.data
     var prediction = List[Float32](length=rows, fill=0.0)
     _forward(slot, call, Int(prediction.unsafe_ptr()))
-    xseq_run_vector_finite(call[].y.data, rows, "y_true")
+    xseq_run_vector_finite(y_at, rows, "y_true")
     xseq_run_vector_finite(Int(prediction.unsafe_ptr()), rows, "y_pred")
     var value = List[Float64](length=1, fill=0.0)
     var words: List[Int] = [rows]
     if call[].weights.rows > 0:
         _dense(call[].weights, MEMBER_F32, "sample_weight", estimator)
-        var shape: List[Int] = [call[].weights.rows * call[].weights.cols]
-        xseq_run_weights_check(shape, rows, call[].weights.data)
-        var addresses: List[Int] = [call[].y.data, Int(prediction.unsafe_ptr()), call[].weights.data,
-            Int(value.unsafe_ptr())]
+        var w_fold = seq_rows_target(call, call[].weights, 1)
+        var w_at = Int(w_fold.unsafe_ptr()) if indexed else call[].weights.data
+        var shape: List[Int] = [rows if indexed else call[].weights.rows * call[].weights.cols]
+        xseq_run_weights_check(shape, rows, w_at)
+        var addresses: List[Int] = [y_at, Int(prediction.unsafe_ptr()), w_at, Int(value.unsafe_ptr())]
         _ = native_descriptor_call(route.third.call, MR_R2_WEIGHTED, addresses, words, List[Float64]())
+        _ = len(w_fold)  # the fold's weights live past the call
     else:
-        var addresses: List[Int] = [call[].y.data, Int(prediction.unsafe_ptr()), Int(value.unsafe_ptr())]
+        var addresses: List[Int] = [y_at, Int(prediction.unsafe_ptr()), Int(value.unsafe_ptr())]
         _ = native_descriptor_call(route.third.call, MR_R2, addresses, words, List[Float64]())
+    _ = len(y_fold)  # the fold's targets live past the calls
     call[].value = value[0]
     _ = prediction^
     _ = value^
@@ -562,13 +585,16 @@ def _new(call: _CallP) raises:
 def _sequence_member(operation: Int, address: Int) raises -> Int:
     var call = _CallP(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
+        # THE RESIDENT ROUTE (core/seq_member_rows.mojo): only on a route
+        # holding the GPU image's member store.
+        var rows_bits = (MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE) if seq_rows_route(call[].route) else 0
         if call[].state == 0:
             # Kind-exact from the NEW words when given (item 17).
             if call[].param_count == _WORDS and call[].params:
-                return _capabilities(_F64P(unsafe_from_address=call[].params)[0] == 1.0)
-            return _capabilities(False) | _capabilities(True)
+                return _capabilities(_F64P(unsafe_from_address=call[].params)[0] == 1.0) | rows_bits
+            return _capabilities(False) | _capabilities(True) | rows_bits
         var probe = _SlotP(unsafe_from_address=_lookup(call[].state, False))
-        return _capabilities(probe[].classifier)
+        return _capabilities(probe[].classifier) | rows_bits
     if operation == MEMBER_OP_NEW:
         _new(call)
         return 0

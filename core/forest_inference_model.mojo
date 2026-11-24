@@ -18,7 +18,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_NVIDIA, COLUMN_AMD
 from max.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
 from core.forest_inference import (
-    _forest_shape_checks, forest_pack_device, launch_forest_inference, launch_forest_argmax, FOREST_PACKED_NODES,
+    _forest_shape_checks, forest_pack_device, launch_forest_inference, launch_forest_argmax, forest_count_equal,
+    FOREST_PACKED_NODES,
     device_all_finite,
 )
 from core.forest_inference_pool import PooledForest, forest_device_count
@@ -221,6 +222,22 @@ struct ForestIOWorkspace(Defaultable, Movable):
             self.release()
             raise e
         self.input_len = n_in
+        self.output_len = n_out
+
+    def prepare_output(mut self, ctx: DeviceContext, n_out: Int) raises:
+        """The output buffer at exactly `n_out` words, the input buffer
+        (and a staged input) untouched: a prediction on device rows
+        (`ResidentForest.predict_rows_into`) reads its own input buffer."""
+        if self.output_len == n_out:
+            return
+        self.output = None
+        self.output_len = 0
+        try:
+            self.output = ctx.enqueue_create_buffer[DType.float32](n_out)
+        except e:
+            ctx.synchronize()
+            self.output = None
+            raise e
         self.output_len = n_out
 
     def prepare_label(mut self, ctx: DeviceContext, rows: Int) raises:
@@ -568,6 +585,96 @@ struct ResidentForest(Movable):
         finally:
             shared_slot_unlock(word)
 
+    def predict_rows_into[RF_INPUT: Bool](mut self, src_ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32],
+        output: MutPointer[Float32, MutAnyOrigin], rows: Int, features: Int, outputs: Int) raises:
+        """`predict_into` on `rows` ROW-major rows already on the device in
+        `dx` on `src_ctx` (lane vdf-scope-trees2a: the rows an image's device
+        store took on its context, which is this snapshot's): no upload; the
+        same input scan, traversal, output scan and one read of the output.
+        The caller keeps `dx` alive until return. The call's own workspace
+        (the pool), as `predict_into`'s shared path: nothing of the snapshot
+        is written. A snapshot on several devices (lane vdf-scope-trees3):
+        each owner takes its rows device to device
+        (`PooledForest.predict_rows_into`), no host read of the rows."""
+        if features != self.features or outputs != self.outputs:
+            raise Error("resident forest dimensions differ from prepared snapshot")
+        if rows < 0 or rows > 2147483647 // features or rows > 2147483647 // outputs:
+            raise Error("resident forest prediction dimensions exceed Int32")
+        if rows == 0:
+            return
+        if self.pool:
+            var pooled = self._enter()
+            try:
+                var view = dx.create_sub_buffer[DType.float32](0, rows * features)
+                self.pool.value().predict_rows_into[RF_INPUT](src_ctx, view^, output, rows)
+            finally:
+                shared_slot_unlock(pooled)
+            return
+        if not self.shared:
+            # Unreachable through the registry (`resident_prepare` always hands its process context).
+            raise Error("resident forest: device rows need the registry's shared context")
+        var slot = RF_IO.get_or_create_ptr()
+        comptime if not RF_INPUT:
+            slot = ET_IO.get_or_create_ptr()
+        var io = slot[].take()
+        try:
+            io[].ensure_status(self.ctx.value())
+            io[].prepare_output(self.ctx.value(), rows * outputs)
+            _predict_into_buffers[RF_INPUT](self.ctx.value(), self.offsets.value(),
+                self.columns.value(), self.thresholds.value(), self.left.value(),
+                self.leaves.value(), output, output, rows, features, outputs, self.trees,
+                dx, io[].output.value(), output, False,
+                self.ordered, False, io[].status_dev.value(), io[].status_host.value(),
+                device_input=True)
+        finally:
+            slot[].give(io)
+
+    def labels_rows_into[RF_INPUT: Bool](mut self, src_ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32],
+        output: MutPointer[Int32, MutAnyOrigin], rows: Int, features: Int, outputs: Int,
+        score: Bool = False) raises -> Int:
+        """`predict_labels` on rows already on the device in `dx` (as
+        `predict_rows_into`, the device pool included): the int32 codes, one
+        read back; rows written. `score` (lane vdf-scope-trees3): `output`
+        holds the rows' int32 true codes, read on the device against the
+        codes; the matching row count (one word read back)."""
+        if features != self.features or outputs != self.outputs or outputs < 2:
+            raise Error("resident forest dimensions differ from prepared snapshot")
+        if rows < 0 or rows > 2147483647 // features or rows > 2147483647 // outputs:
+            raise Error("resident forest prediction dimensions exceed Int32")
+        if rows == 0:
+            return 0
+        if self.pool:
+            var pooled = self._enter()
+            var answer = rows
+            try:
+                var view = dx.create_sub_buffer[DType.float32](0, rows * features)
+                answer = self.pool.value().predict_labels_rows_into[RF_INPUT](src_ctx, view^, output, rows, score)
+            finally:
+                shared_slot_unlock(pooled)
+            return answer
+        if not self.shared:
+            # Unreachable through the registry (`resident_prepare` always hands its process context).
+            raise Error("resident forest: device rows need the registry's shared context")
+        var slot = RF_IO.get_or_create_ptr()
+        comptime if not RF_INPUT:
+            slot = ET_IO.get_or_create_ptr()
+        var io = slot[].take()
+        var hits = List[Int](length=1, fill=rows)
+        try:
+            io[].prepare_output(self.ctx.value(), rows * outputs)
+            io[].prepare_label(self.ctx.value(), rows)
+            var unused = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(output))
+            try:
+                self._labels_on[RF_INPUT](dx, io[].output.value(), io[].label.value(), unused, output,
+                                          rows, features, outputs, False, device_input=True,
+                                          hits_out=Int(hits.unsafe_ptr()) if score else 0)
+            except e:
+                self.ctx.value().synchronize()
+                raise e
+        finally:
+            slot[].give(io)
+        return hits[0]
+
     def _enter(mut self) raises -> MutPointer[Int64, MutUntrackedOrigin]:
         """Take this snapshot's busy mark for a call that writes its own
         per-call state; the caller releases the returned word."""
@@ -644,11 +751,20 @@ struct ResidentForest(Movable):
     def _labels_on[RF_INPUT: Bool](mut self, mut dx: DeviceBuffer[DType.float32],
         mut dout: DeviceBuffer[DType.float32], mut dlab: DeviceBuffer[DType.int32],
         x: MutPointer[Float32, MutAnyOrigin], output: MutPointer[Int32, MutAnyOrigin],
-        rows: Int, features: Int, outputs: Int, uploaded: Bool = False) raises:
+        rows: Int, features: Int, outputs: Int, uploaded: Bool = False,
+        device_input: Bool = False, hits_out: Int = 0) raises:
         """`predict_labels`' device leg on a given workspace. `uploaded`:
-        `dx` already holds these rows, scanned finite (the staged input)."""
+        `dx` already holds these rows, scanned finite (the staged input).
+        `device_input` (lane vdf-scope-trees2a): `dx` holds the rows (taken
+        on the device out of the image's store), not yet scanned: no copy,
+        the same finite scan; `x` is not read. `hits_out` (lane
+        vdf-scope-trees3; 0: none): `output` holds the rows' int32 true
+        codes, compared with the codes on the device (`forest_count_equal`),
+        and the matching row count is written at `hits_out` (one Int)
+        instead of the codes."""
         if not uploaded:
-            self.ctx.value().enqueue_copy(dst_buf=dx.create_sub_buffer[DType.float32](0, rows*features), src_ptr=x)
+            if not device_input:
+                self.ctx.value().enqueue_copy(dst_buf=dx.create_sub_buffer[DType.float32](0, rows*features), src_ptr=x)
             if not device_all_finite(self.ctx.value(), dx, rows * features):
                 raise Error("resident forest requires finite Float32 values")
         if self.ordered:
@@ -666,6 +782,10 @@ struct ResidentForest(Movable):
         if not device_all_finite(self.ctx.value(), dout, rows * outputs):
             raise Error("resident forest requires finite Float32 values")
         launch_forest_argmax(self.ctx.value(), dout, dlab, rows, outputs)
+        if hits_out != 0:
+            MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=hits_out)[0] = forest_count_equal(
+                self.ctx.value(), dlab, Int(output), rows)
+            return
         self.ctx.value().enqueue_copy(dst_ptr=output, src_buf=dlab.create_sub_buffer[DType.int32](0, rows))
         self.ctx.value().synchronize()
 
@@ -750,11 +870,15 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
     rows: Int, features: Int, outputs: Int, trees: Int,
     mut dx: DeviceBuffer[DType.float32], mut dout: DeviceBuffer[DType.float32],
     stage: MutPointer[Float32, MutAnyOrigin], staged: Bool, ordered: Bool,
-    uploaded: Bool, mut dstat: DeviceBuffer[DType.int32], mut hstat: HostBuffer[DType.int32]) raises:
+    uploaded: Bool, mut dstat: DeviceBuffer[DType.int32], mut hstat: HostBuffer[DType.int32],
+    device_input: Bool = False) raises:
     """`stage` is the pinned host stage the upload reads when `staged`
     (DEVIATION 2962), else `x` itself; the input scan is the same predicate
     either way. `uploaded`: `dx` already holds these rows, scanned finite
-    (the registry's staged input, `ForestIOWorkspace.stage_input`)."""
+    (the registry's staged input, `ForestIOWorkspace.stage_input`).
+    `device_input` (lane vdf-scope-trees2a): `dx` holds the rows, taken on
+    the device out of the image's store, not yet scanned: no upload, the
+    same input scan; `x` is not read."""
     var t0 = 0
     var t1 = 0
     var t2 = 0
@@ -789,7 +913,7 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
     # call, as the fresh pair's fill did. Numerics: none.
     try:
         dstat.enqueue_fill(Int32(0))
-        if not uploaded:
+        if not uploaded and not device_input:
             ctx.enqueue_copy(dst_buf=dx.create_sub_buffer[DType.float32](0, rows*features), src_ptr=x)
         if scan_input:
             enqueue_finite_status(ctx, dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), rows * features,
@@ -943,6 +1067,25 @@ def resident_predict_labels[RF_INPUT: Bool](handle: Int,
     rows: Int, features: Int, outputs: Int) raises:
     var lease = _resident_lease[RF_INPUT](handle)
     lease[].predict_labels[RF_INPUT](x, output, rows, features, outputs)
+
+
+def resident_predict_rows_into[RF_INPUT: Bool](handle: Int, src_ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32],
+    output: MutPointer[Float32, MutAnyOrigin], rows: Int, features: Int, outputs: Int) raises:
+    """`resident_predict_into` on rows already on the device in `dx` on
+    `src_ctx` (lane vdf-scope-trees2a; `ResidentForest.predict_rows_into`)."""
+    var lease = _resident_lease[RF_INPUT](handle)
+    lease[].predict_rows_into[RF_INPUT](src_ctx, dx, output, rows, features, outputs)
+
+
+def resident_labels_rows_into[RF_INPUT: Bool](handle: Int, src_ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32],
+    output: MutPointer[Int32, MutAnyOrigin], rows: Int, features: Int, outputs: Int,
+    score: Bool = False) raises -> Int:
+    """`resident_predict_labels` on rows already on the device in `dx` on
+    `src_ctx` (lane vdf-scope-trees2a; `ResidentForest.labels_rows_into`):
+    rows written, or with `score` the rows whose code equals the true code
+    at `output` (lane vdf-scope-trees3)."""
+    var lease = _resident_lease[RF_INPUT](handle)
+    return lease[].labels_rows_into[RF_INPUT](src_ctx, dx, output, rows, features, outputs, score)
 
 
 def resident_stage_input[RF_INPUT: Bool](x: MutPointer[Float32, MutAnyOrigin], n: Int) raises -> Bool:

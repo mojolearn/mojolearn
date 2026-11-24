@@ -17,7 +17,7 @@ The door (bindings/linalg_ops_decomp.mojo) releases the GIL around each RUN
 sequence and keeps every admitted owner alive across it; PACK copies a
 matrix's words into the public Array (`lin_kit_out`).
 """
-from std.memory import unsafe_memcpy
+from std.memory import unsafe_memcpy, unsafe_memset_zero
 from core.entry_table import EntryRef, entry_ref_call
 from core.classical_tsqr_impl import tsqr_fill_constant, tsqr_copy_columns, tsqr_fill_eye
 from x_decomp.descriptor_schema import (
@@ -27,7 +27,9 @@ from x_decomp.descriptor_schema import (
     XD_DEV_COLSUM, XD_DEV_ROWSUM, XD_DEV_MOVE,
     XD_ORDER, XD_DEV_REDUCE, XD_DEV_ORDER, XD_ORDER_SMALL, XD_DEV_ORDER_SMALL,
     XD_SVD, XD_DEV_SVD, XD_RANK, XD_ORTH_DIAG, XD_DEV_ORTH_DIAG, XD_GEQRF, XD_ORGQR, XD_EIGH,
+    XD_DEV_GEQRF, XD_DEV_ORGQR, XD_DEV_TRIU, XD_DEV_FROM_TRAIN, XD_DEV_TO_TRAIN, XD_DEV_EIGH_TO,
 )
+from x_decomp.descriptor_mani_schema import XD_CAP_DEV_EIGH
 
 comptime KIT_F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -89,6 +91,7 @@ struct LinKit(Movable):
     var allocations: List[Int]
     var resident: Bool  # `_Kit._res`: the image has the resident operations (a GPU image)
     var dev_svd: Bool   # the image registers the resident SVD (IDN_SVD_RESIDENT)
+    var dev_eigh: Bool  # the image registers the resident eigh (IDN_EIGH_RESIDENT: XD_DEV_EIGH_TO)
     var zero: Int  # the kit's one 1 x 1 zero operand (row N294), -1 until made
     var minus_one: Int  # neg_signs' constants, made once per kit (-1 until made)
     var plus_one: Int
@@ -102,6 +105,7 @@ struct LinKit(Movable):
         self.allocations = List[Int]()
         self.resident = (capabilities & XD_CAP_RESIDENT) != 0
         self.dev_svd = self.resident and (capabilities & XD_CAP_DEV_SVD) != 0
+        self.dev_eigh = self.resident and (capabilities & XD_CAP_DEV_EIGH) != 0
         self.zero = -1
         self.minus_one = -1
         self.plus_one = -1
@@ -186,6 +190,24 @@ struct LinKit(Movable):
         var out = self.add(-1, rows, cols)
         self.matrices[out].borrowed = addr
         return out
+
+    def adopt(mut self, handle: Int, rows: Int, cols: Int) raises -> Int:
+        """A device matrix holding a training device array's words (core/train_dev_pool.mojo handle `handle`, C
+        order, rows * cols >= 1 floats), copied device to device into a pool id this kit owns (XD_DEV_FROM_TRAIN;
+        lane vdf-linalg6). The training array is never written: every operation writes a fresh output."""
+        var count = rows * cols
+        var id = self.dcall(XD_DEV_ALLOC, [max(count, 1)])
+        self.allocations.append(id)
+        _ = self.dcall(XD_DEV_FROM_TRAIN, [handle, id, count])
+        return self.add(-1, rows, cols, id)
+
+    def to_train(mut self, a: Int, handle: Int) raises:
+        """Matrix a's words into training handle `handle` (a fresh device array of a's element count): one device
+        copy (XD_DEV_TO_TRAIN). A host matrix (a small result a host operation made: R, a value vector) is uploaded
+        once first (`device`)."""
+        var count = self.n(a)
+        if count:
+            _ = self.dcall(XD_DEV_TO_TRAIN, [self.device(a), handle, count])
 
     def device_output(mut self, rows: Int, cols: Int) raises -> Int:
         """`_Kit._dout`."""
@@ -511,9 +533,20 @@ struct LinKit(Movable):
         return out
 
     def geqrf(mut self, a: Int, mut tau: Int) raises -> Int:
-        """`_Kit.geqrf(A)`: (h, tau), LAPACK geqrf's factored form."""
-        var h = self.copy(a)
+        """`_Kit.geqrf(A)`: (h, tau), LAPACK geqrf's factored form. On a
+        resident kit h and tau are made and kept on the device
+        (XD_DEV_GEQRF, lane vdf-linalg2 2026-11-24: was the host-address
+        XD_GEQRF, which uploaded A and downloaded h and tau each call; the
+        same kernel on the same words)."""
         var kk = min(self.r(a), self.c(a))
+        if self.resident and kk > 0:
+            var dh = self.device_output(self.r(a), self.c(a))
+            tau = self.device_output(1, kk)
+            var da = self.device(a)
+            _ = self.dcall(XD_DEV_GEQRF, [da, self.matrices[dh].device, self.matrices[tau].device,
+                                          self.r(a), self.c(a)])
+            return dh
+        var h = self.copy(a)
         tau = self.zeros(1, kk)
         var ph = self.addr(h)
         var pt = self.addr(tau)
@@ -521,7 +554,14 @@ struct LinKit(Movable):
         return h
 
     def orgqr(mut self, h: Int, tau: Int, qc: Int) raises -> Int:
-        """`_Kit.orgqr(h, tau, qc)`."""
+        """`_Kit.orgqr(h, tau, qc)`: on the device when h is resident there
+        (XD_DEV_ORGQR; was XD_ORGQR, which uploaded h and tau again)."""
+        if self.resident and self.on_device(h) and qc > 0:
+            var dq = self.device_output(self.r(h), qc)
+            var dh = self.device(h)
+            var dt = self.device(tau)
+            _ = self.dcall(XD_DEV_ORGQR, [dh, dt, self.matrices[dq].device, self.r(h), self.c(h), self.c(tau), qc])
+            return dq
         var q = self.zeros(self.r(h), qc)
         var ph = self.addr(h)
         var pt = self.addr(tau)
@@ -529,9 +569,39 @@ struct LinKit(Movable):
         _ = self.hcall(XD_ORGQR, [ph, pt, pq], [self.r(h), self.c(h), self.c(tau), qc])
         return q
 
+    def triu(mut self, h: Int, r: Int) raises -> Int:
+        """`_triu(h, r)`: the first r rows of h, every word below the
+        diagonal zero. On the device when h is resident there (XD_DEV_TRIU,
+        lane vdf-linalg2: was the door's host `_lin_triu` on the downloaded
+        h); a host h is cut on the host (the CPU column). Data movement."""
+        var c = self.c(h)
+        if r * c and self.resident and self.on_device(h):
+            var out = self.device_output(r, c)
+            var dh = self.device(h)
+            _ = self.dcall(XD_DEV_TRIU, [dh, self.matrices[out].device, r, c])
+            return out
+        var out = self.zeros(r, c)
+        if r * c:
+            var dst = self.ptr(out)
+            unsafe_memcpy(dest=dst, src=self.ptr(h), count=r * c)
+            for i in range(1, r):  # host-column: one zero fill per row of a host factor (the CPU image's triu)
+                var w = min(i, c)
+                if w:
+                    unsafe_memset_zero(dst + i * c, w)
+        return out
+
     def eigh(mut self, a: Int, uplo: Int, mut v: Int) raises -> Int:
         """`_Kit.eigh(A, uplo)`: (w 1 x n ascending, v n x n columns)."""
         var n = self.r(a)
+        if n >= 1 and self.dev_eigh and self.on_device(a):
+            # lane vdf-linalg6: a device matrix (a training device array the kit adopted) is solved where it lives:
+            # XD_DEV_EIGH_TO is XD_EIGH's route (a device copy, the triangle mirrored for uplo 1 / 2, `eigh_into`)
+            # with w and v left on the device; the same words as the host operand's XD_EIGH.
+            var dw = self.device_output(1, n)
+            v = self.device_output(n, n)
+            var da = self.device(a)
+            _ = self.dcall(XD_DEV_EIGH_TO, [da, self.matrices[dw].device, self.matrices[v].device, n, uplo])
+            return dw
         var w = self.zeros(1, n)
         v = self.zeros(n, n)
         # TOMBSTONE: the device-resident x_decomp_dev_eigh branch (dead code: both callers,

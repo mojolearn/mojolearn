@@ -3,16 +3,20 @@
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.spectral_native_api import (
     SpectralFitRequest, SpectralEmbeddingRequest, SpectralQueryShape,
-    SPECTRAL_CAP_DENSE, SPECTRAL_CAP_RESIDENT,
+    SPECTRAL_CAP_DENSE, SPECTRAL_CAP_RESIDENT, SPECTRAL_CAP_AFFINITY, SPECTRAL_CAP_DEV_STORE, SPECTRAL_RBF,
 )
 from core.spectral_native_execution import (
     SpectralBackend, SpectralKernels, SpectralFitResult, SpectralEmbeddingResult,
 )
 from spectral.impl.spectral_predict_common import SpectralPredictionState, SpectralPrediction
+from core.metrics_store import metrics_store_buffer
+from spectral.estimator import spectral_fit_predict_dataset_resident_keep, spectral_embedding_dataset_resident
 from spectral.estimator import (
     spectral_fit_predict_dataset_host_keep, spectral_fit_predict_graph_host_keep,
     spectral_fit_predict_dense_host_keep, spectral_embedding_dataset_host,
     spectral_embedding_graph_host, spectral_embedding_dense_host, spectral_predict_host,
+    spectral_embedding_rbf_host, spectral_embedding_knn_host,
+    spectral_fit_predict_rbf_host, spectral_fit_predict_knn_host,
 )
 from spectral.impl.spectral_predict_resident import (
     spectral_resident_prepare, spectral_resident_predict, spectral_resident_release,
@@ -27,7 +31,9 @@ struct SpectralDeviceBackend(SpectralBackend):
 
     @staticmethod
     def capabilities() raises -> Int:
-        return SPECTRAL_CAP_DENSE | SPECTRAL_CAP_RESIDENT
+        # SPECTRAL_CAP_DEV_STORE (lane vdf-scope-cluster4): fit's dataset route over a slot of the image's
+        # resident store (core/metrics_store.mojo).
+        return SPECTRAL_CAP_DENSE | SPECTRAL_CAP_RESIDENT | SPECTRAL_CAP_AFFINITY | SPECTRAL_CAP_DEV_STORE
 
     @staticmethod
     def dataset_copy_count(count: Int) -> Int:
@@ -68,12 +74,55 @@ struct SpectralDeviceBackend(SpectralBackend):
         )
 
     @staticmethod
+    def fit_dataset_store(r: SpectralFitRequest, mut result: SpectralFitResult) raises:
+        """`fit_dataset` over the rows in slot `r.input.source` of the resident store (no upload)."""
+        var data = metrics_store_buffer(r.input.source, max(1, r.input.rows * r.input.features))
+        result.columns = spectral_fit_predict_dataset_resident_keep(
+            data, r.input.rows, r.input.features, r.options.clusters,
+            r.options.components, r.options.initializations, r.options.neighbors,
+            Float32(r.options.tolerance), UInt64(r.options.seed), result.labels,
+            result.embedding, result.state, r.options.keep_state,
+        )
+        _ = data^
+
+    @staticmethod
+    def fit_affinity(r: SpectralFitRequest, mut result: SpectralFitResult) raises:
+        # lane vdf-misc4: SpectralClustering rbf / precomputed_nearest_neighbors
+        # build the affinity on this device and fit from it (no host image).
+        if r.input.route == SPECTRAL_RBF:
+            result.columns = spectral_fit_predict_rbf_host(
+                r.input.source, r.input.rows, r.input.features, r.input.scale, r.input.affinity_out,
+                r.options.clusters, r.options.components, r.options.initializations,
+                r.options.neighbors, Float32(r.options.tolerance), UInt64(r.options.seed),
+                result.labels, result.embedding, result.state, r.options.keep_state,
+            )
+        else:
+            result.columns = spectral_fit_predict_knn_host(
+                r.input.source, r.input.graph_rows, r.input.graph_columns, r.input.graph_values,
+                r.input.nonzeros, r.input.rows, r.input.features, r.input.status, r.input.affinity_out,
+                r.options.clusters, r.options.components, r.options.initializations,
+                r.options.neighbors, Float32(r.options.tolerance), UInt64(r.options.seed),
+                result.labels, result.embedding, result.state, r.options.keep_state,
+            )
+
+    @staticmethod
     def embed_dataset(r: SpectralEmbeddingRequest, source: List[Float32], mut result: SpectralEmbeddingResult) raises:
         result.columns = spectral_embedding_dataset_host(
             source, r.input.rows, r.input.features, r.options.lanczos_components,
             r.options.neighbors, r.options.normalize_laplacian, r.options.drop_first,
             UInt64(r.options.seed), result.embedding, Float32(r.options.tolerance),
         )
+
+    @staticmethod
+    def embed_dataset_store(r: SpectralEmbeddingRequest, mut result: SpectralEmbeddingResult) raises:
+        """`embed_dataset` over the rows in slot `r.input.source` of the resident store (no upload)."""
+        var data = metrics_store_buffer(r.input.source, max(1, r.input.rows * r.input.features))
+        result.columns = spectral_embedding_dataset_resident(
+            data, r.input.rows, r.input.features, r.options.lanczos_components,
+            r.options.neighbors, r.options.normalize_laplacian, r.options.drop_first,
+            UInt64(r.options.seed), result.embedding, Float32(r.options.tolerance),
+        )
+        _ = data^
 
     @staticmethod
     def embed_graph(r: SpectralEmbeddingRequest, rows: List[Int32], columns: List[Int32],
@@ -91,6 +140,22 @@ struct SpectralDeviceBackend(SpectralBackend):
             r.options.normalize_laplacian, r.options.drop_first, UInt64(r.options.seed),
             result.embedding, Float32(r.options.tolerance),
         )
+
+    @staticmethod
+    def embed_affinity(r: SpectralEmbeddingRequest, mut result: SpectralEmbeddingResult) raises:
+        if r.input.route == SPECTRAL_RBF:
+            result.columns = spectral_embedding_rbf_host(
+                r.input.source, r.input.rows, r.input.features, r.input.scale, r.input.affinity_out,
+                r.options.lanczos_components, r.options.normalize_laplacian, r.options.drop_first,
+                UInt64(r.options.seed), result.embedding, Float32(r.options.tolerance),
+            )
+        else:
+            result.columns = spectral_embedding_knn_host(
+                r.input.source, r.input.graph_rows, r.input.graph_columns, r.input.graph_values,
+                r.input.nonzeros, r.input.rows, r.input.features, r.input.status, r.input.affinity_out,
+                r.options.lanczos_components, r.options.normalize_laplacian, r.options.drop_first,
+                UInt64(r.options.seed), result.embedding, Float32(r.options.tolerance),
+            )
 
     @staticmethod
     def query(source: List[Float32], training: List[Float32], shape: SpectralQueryShape,

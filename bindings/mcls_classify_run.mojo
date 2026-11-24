@@ -506,6 +506,32 @@ def label_binary_options_run(route: MetricRoute, metric: Int, truth: Int, pred: 
 # `_log_loss` / `_log_loss_options` assembled over pins, as one builder.
 
 
+def mc_confusion_weighted_stages(mut plan: MetricProgramPlan, a: Int, b: Int, n: Int, k: Int,
+                                 mode: Int) raises -> Tuple[Int, Int]:
+    """The weighted confusion program after its two codes inputs `a`, `b`
+    (n int32 words each, already laid out: host codes or resident slots):
+    `_confusion`'s pair key and k*k weighted grouping, the weights input (n
+    float32 words, laid out here, after the key scratch), then `_normalize`
+    (`mode` 1 'all', 2 'true', 3 'pred', 4 none). (the weights input offset,
+    the 2 * k * k output words). ONE BODY for the door's host and resident
+    routes (bindings/mcls_classify_door.mojo `_confusion_weighted_run`) and
+    the native check (checks/native_tests/metric_confusion_weighted_resident.mojo;
+    lane vdf-xm-wire3): the same records, so the same bits."""
+    var key = plan.scratch(n)
+    plan.stage_op("pair_key", n, [a, b, key, k, 0])
+    var w_off = plan.input(n)
+    var got = plan.group(key, n, k * k, MC_NONE, 1, w_off, 1)
+    var cells = got[1]
+    var col = 1
+    var out = plan.want(plan.alloc(2 * k * k), 2 * k * k, -1, 1)
+    var ts = plan.scratch(2)
+    if mode == 1:
+        plan.stage_op("cm_epi", 1, [_CM_NORM, cells, k, col, 0, out, ts])
+    if k:
+        plan.stage_op("cm_epi", k, [_CM_NORM, cells, k, col, mode, out, ts])
+    return (w_off, out)
+
+
 def mc_log_loss_stages(mut plan: MetricProgramPlan, n: Int, k: Int, binary: Bool, weighted: Bool,
                        normalize: Bool) raises -> Tuple[Int, Int]:
     """The log-loss program over its inputs: the probabilities (n words

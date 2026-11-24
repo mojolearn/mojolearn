@@ -46,6 +46,10 @@ from bindings.optimizer_keys_unpack import (
     OPTIMIZER_OPN_SCHEDULE_AT,
 )
 from bindings.py_balanced import py_item
+from core.device_route import device_cpu_fast
+from core.function_device import FunctionDevice
+from providers.python.device_route_boundary_door import device_cpu_connect_late
+from providers.python.function_device_boundary_door import function_device_admit
 
 
 def seq_key(entries: PythonObject) raises -> EntryRef:
@@ -85,6 +89,12 @@ def seq_binding(mode: PythonObject, context: PythonObject, binding: PythonObject
         for i in range(len(extra)):  # driver-loop: fixed connected native buffer owners
             if py_type(extra[i]) is b.dict and binding is py_item(extra[i], nk[].k_module):
                 return extra[i]
+        # lane vdf-seq: the CPU identical image a device="cpu" owner runs
+        # beside a GPU set (reached only after the two modes and the extra
+        # owners missed: no cost on any other call)
+        var cpu = py_get(context, nk[].k_sequence_bindings_cpu)
+        if cpu is not None and py_type(cpu) is b.dict and binding is py_item(cpu, nk[].k_module):
+            return cpu
         raise Error("TypeError: sequence device/state requires its connected native binding")
     var selected = py_item(py_item(context, nk[].k_backend), nk[].k__DEFAULT_MODE) if mode is None else mode
     opt_scalar(selected, context)
@@ -99,6 +109,86 @@ def seq_binding(mode: PythonObject, context: PythonObject, binding: PythonObject
     if py_type(entries) is b.str:
         raise Error("ImportError: " + String(entries))
     return entries
+
+
+#: the sequence optimizers have both sides: the device x_sequence image's
+#: resident step and the CPU identical image's (one launch over the packed
+#: flat buffer, `sequence/ops.mojo::op_opt`, the same body on each)
+comptime SEQ_HAS_GPU = True
+comptime SEQ_HAS_CPU = True
+
+
+def _seq_owner_name(kind: Int) -> String:
+    """The public name a `device=` refusal of a sequence optimizer leads with
+    (`seq_class` order, python/mojolearn/_native_optimizer_bridge.py)."""
+    if kind == 0:
+        return "mojolearn.RMSprop"
+    if kind == 1:
+        return "mojolearn.Adagrad"
+    if kind == 2:
+        return "mojolearn.Lion"
+    if kind == 3:
+        return "mojolearn.Adamax"
+    if kind == 4:
+        return "mojolearn.NAdam"
+    if kind == 5:
+        return "mojolearn.Adafactor"
+    return "mojolearn.LAMB"
+
+
+
+
+def seq_binding_cpu(mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The x_sequence CPU identical image's cells for an explicit
+    `device="cpu"` beside a GPU set (lane vdf-seq, 2026-11-24): the same
+    table form as one mode's `sequence_bindings[mode]` (its `native_key` is
+    the CPU image's), identical mode only (the estimators' `device_cpu_fast`
+    words for any other), connected once at the first such admission of the
+    process (python/mojolearn/_native_optimizer_bridge.py
+    `connect_sequence_device`, `cpu_load_later`; `device_cpu_connect_late`
+    runs it). Refused in the words recorded at that load where the image is
+    missing; it never returns the device cells in its place. Called once per
+    public function call or once per construction, never per step."""
+    var b = native_loaded_module("builtins")
+    var nk = sequence_keys()
+    var word = mode
+    if word is None:
+        word = py_item(py_item(context, nk[].k_backend), nk[].k__DEFAULT_MODE)
+    if py_type(word) is not b.str or String(py=py_call(py_call(word.strip).lower)) != "identical":
+        device_cpu_fast()
+    var cells = py_get(context, nk[].k_sequence_bindings_cpu)
+    if cells is None:
+        _ = device_cpu_connect_late(context)
+        cells = py_get(context, nk[].k_sequence_bindings_cpu)
+    if cells is None:
+        raise Error("ImportError: device='cpu' needs the CPU identical sequence image beside the GPU set, "
+            + "which is not connected in this installation")
+    if py_type(cells) is b.str:
+        raise Error(String(cells))
+    return cells
+
+
+def seq_device_bound(device: FunctionDevice, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The binding module an owner or a call of this family runs on for its
+    admitted device: the CPU identical image's module for an explicit "cpu"
+    beside a GPU set, else None (today's route: `seq_binding` by mode).
+    `seq_binding(mode, context, bound)` then returns its cells."""
+    if not device.host_beside:
+        return PythonObject(None)
+    var nk = sequence_keys()
+    return py_item(seq_binding_cpu(mode, context), nk[].k_module)
+
+
+def seq_device_refuse_resident(value: PythonObject, name: String, what: String, context: PythonObject) raises:
+    """UNPACK refusal of a device-resident input (a `SequenceDeviceTensor`,
+    which lives on the GPU binding) given with `device="cpu"`: refused in
+    words before any work, never copied across."""
+    var nk = sequence_keys()
+    var cls = py_get(context, nk[].k_sequence_device_class)
+    if cls is not None and py_type(value) is cls:
+        raise Error("ValueError: " + name + " was given device='cpu' but " + what
+            + " is a SequenceDeviceTensor, which lives on the GPU; copy it to the host first, "
+            + "or leave device=None")
 
 
 def seq_device_get(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
@@ -336,7 +426,21 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
             raise Error("TypeError: optimizer options require a native dictionary")
         opt_scalar(values[1], context)
         opt_scalar(mode, context)
-        var selected = seq_binding(mode, context, PythonObject(None))
+        # lane vdf-seq (2026-11-24): `device` rides fourth; read ONCE here,
+        # before any work, through the shared UNPACK (core/function_device.mojo).
+        # None: one identity compare and today's binding.
+        var bound = PythonObject(None)
+        var device_word = values[3] if len(values) == 4 else PythonObject(None)
+        var host_beside = False
+        if device_word is not None:
+            var name = _seq_owner_name(kind)
+            var fdev = function_device_admit(device_word, name, SEQ_HAS_GPU, SEQ_HAS_CPU, context, b)
+            host_beside = fdev.host_beside
+            if host_beside:
+                for i in range(len(params)):  # driver-loop: over public parameter buffer owners (refusal before any work)
+                    seq_device_refuse_resident(params[i], name, "parameter " + String(i), context)
+            bound = seq_device_bound(fdev, mode, context)
+        var selected = seq_binding(mode, context, bound)
         var device = False
         var sizes = List[Int]()
         var shapes = Python.list()
@@ -371,6 +475,8 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
         py_setitem(fields, nk[].k_numeric_mode, mode)
         py_setitem(fields, nk[].k__dev_b, py_item(selected, nk[].k_module) if device else PythonObject(None))
         py_setitem(fields, nk[].k__res_b, PythonObject(None))
+        py_setitem(fields, nk[].k__host_b, bound)
+        py_setitem(fields, nk[].k_device, device_word)
         py_setitem(fields, nk[].k_lr, _seq_real(values[1], "lr"))
         var extra = List[Int]()
         var fp = Python.list(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
@@ -639,9 +745,21 @@ def sequence_optimizer_operation(operation: Int, owner: PythonObject, values: Py
         var fields = py_fields(owner) if operation == OPTIMIZER_OPN_SEQ_FINALIZE else seq_fields(owner, context)
         if operation == OPTIMIZER_OPN_SEQ_FINALIZE and py_get(fields, nk[].k__res_b) is None:
             return PythonObject(None)
-        var entries = seq_binding(py_item(fields, nk[].k_numeric_mode), context, py_get(fields, nk[].k__res_b) if py_get(fields, nk[].k__res_b) is not None else py_get(fields, nk[].k__dev_b))
+        # `_dev_b` (device parameters) else `_host_b` (lane vdf-seq: the CPU
+        # image of a device="cpu" owner beside a GPU set, resolved once at
+        # construction; None for every other owner, which then runs today's
+        # binding of its numeric mode).
+        var owned = py_get(fields, nk[].k__dev_b)
+        if owned is None:
+            owned = py_get(fields, nk[].k__host_b)
+        var resident_b = py_get(fields, nk[].k__res_b)
+        # `numeric_mode` read once per operation (it was read here, again for
+        # the binding and again in the step): the `_host_b` read above, taken
+        # only when `_dev_b` is None, costs less than the two reads removed.
+        var opt_mode = py_item(fields, nk[].k_numeric_mode)
+        var entries = seq_binding(opt_mode, context, resident_b if resident_b is not None else owned)
         if operation == OPTIMIZER_OPN_SEQ_BINDING:
-            return py_item(seq_binding(py_item(fields, nk[].k_numeric_mode), context, py_get(fields, nk[].k__dev_b)), nk[].k_module)
+            return py_item(seq_binding(opt_mode, context, owned), nk[].k_module)
         var params = seq_list(py_item(fields, nk[].k_params), context)
         var nh = len(params) if kind == 5 else 1
         var words = seq_addr(py_item(fields, nk[].k__words), 9, context, buffer_pins, True)
@@ -682,7 +800,7 @@ def sequence_optimizer_operation(operation: Int, owner: PythonObject, values: Py
             w[6] = 0
             return PythonObject(None)
         if operation == OPTIMIZER_OPN_SEQ_STEP:
-            var selected = seq_binding(py_item(fields, nk[].k_numeric_mode), context, py_get(fields, nk[].k__dev_b))
+            var selected = seq_binding(opt_mode, context, owned)
             if w[2] >= 0 and py_item(selected, nk[].k_module) is not py_item(entries, nk[].k_module):
                 raise Error("ValueError: resident optimizer state must keep its owning numeric-mode binding")
             return seq_step(owner, fields, params, values[0], kind, selected, words, handles, context)

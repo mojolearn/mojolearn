@@ -1,4 +1,4 @@
-"""Class-weight validation and dispatch through the real public fit (small inputs)."""
+"""Class-weight dispatch through the real public fit (small inputs); the refusals are in test_trees_boundary.py."""
 import numpy as np
 import pytest
 from mojolearn import RandomForestClassifier
@@ -31,21 +31,6 @@ def test_balanced_and_partial_mapping():
     np.testing.assert_array_equal(_proba(x, y, class_weight='balanced'), _proba(x, y, sample_weight=balanced))
     partial = np.where(y == 'a', 0.0, 1.0).astype(np.float32)
     np.testing.assert_array_equal(_proba(x, y, class_weight={'a': 0}), _proba(x, y, sample_weight=partial))
-
-
-@pytest.mark.parametrize('weights', [{'a': -1}, {'a': np.inf}, {'a': np.nan},
-    {'a': True}, {'a': '2'}, {'a': 1e100}, {'a': 1e-100}, {'a': 0, 'b': 0}, {'z': 2}])
-def test_invalid_weights(weights):
-    x, y = _data(balanced=True)
-    with pytest.raises(ValueError):
-        RandomForestClassifier(n_estimators=2, class_weight=weights).fit(x, y)
-
-
-@pytest.mark.parametrize('value', ['balanced_subsample', 'unknown', [], 3])
-def test_invalid_option(value):
-    # checked at fit, before any binding is touched (scikit-learn's convention)
-    with pytest.raises(ValueError, match='class_weight'):
-        RandomForestClassifier(class_weight=value).fit([[0.0], [1.0]], [0, 1])
 
 
 def test_fit_dispatch():

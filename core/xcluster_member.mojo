@@ -177,6 +177,14 @@ from core.member_abi import (
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_XCLUSTER
+from core.member_abi import MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE
+from core.device_route import DEVICE_GPU
+from core.kmeans_variants_api import VARIANTS_CAP_FOLD_X
+# lane vdf-scope-cluster3: THE FOLD X WORD (core/fold_x_device.mojo), the member side (lane vdf-scope-linear).
+from core.member_fold_x import (
+    MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_take_f32, member_fold_store_ready,
+    member_fold_index,
+)
 from core.cluster_member_words import member_words_f32_slots
 from core.host_finite_scan import host_all_finite_f32
 from cluster.cluster_fit_door_run import meanshift_seed_features, affinity_similarity_square, affinity_preference_rows
@@ -1380,12 +1388,138 @@ def _capabilities(kind: Int) -> Int:
     return centers
 
 
+def _fold_ready(call: _Call) -> Bool:
+    """THE FOLD X WORD on this route (lane vdf-scope-cluster3): a GPU route
+    whose variants entry reads X only through uploads that take the word
+    (`VARIANTS_CAP_FOLD_X`, the identical device image) and keeps the
+    queries' centers resident (`VARIANTS_CAP_RESIDENT`: the centers queries
+    then run `xc_resident_query`, never the host-list query), and whose
+    image ships the x_prep family store the fold's rows are taken in."""
+    var flags = call[].route.flags
+    return (call[].route.device == DEVICE_GPU and (flags & VARIANTS_CAP_FOLD_X) != 0
+        and (flags & VARIANTS_CAP_RESIDENT) != 0 and member_fold_store_ready(call))
+
+
+def _fold_kind(kind: Int) -> Bool:
+    """MiniBatchKMeans and BisectingKMeans (or the family's union, -1): the
+    kinds whose fits and queries on the variants entry read X only through
+    the uploads `VARIANTS_CAP_FOLD_X` names. MeanShift, AffinityPropagation
+    and OPTICS (lane vdf-scope-cluster6): the centroid-fit and OPTICS entries of the same image take THE FOLD X
+    WORD as a float slot of their ops (x_cluster/device_execution.mojo `_fold_execute`: one device copy, every
+    read of X there, AffinityPropagation's exemplar rows gathered on the device); their predict is the
+    resident centers query. BayesianGaussianMixture (the BGMM entry's k-means initialisations read host X):
+    left on the caller's gather."""
+    return (kind == _KIND_MINIBATCH or kind == _KIND_BISECT or kind == _KIND_MEANSHIFT or kind == _KIND_AFFINITY
+            or kind == _KIND_OPTICS or kind < 0)
+
+
+def _fold_operation(kind: Int, operation: Int) -> Bool:
+    """The operations `_fold_op` serves for a `_fold_kind` kind: the k-means kinds' fit and centers queries;
+    MeanShift's and AffinityPropagation's fit and predict; OPTICS's fit (fit_predict) only."""
+    if operation == MEMBER_OP_FIT:
+        return True
+    if kind == _KIND_OPTICS:
+        return False
+    if kind == _KIND_MEANSHIFT or kind == _KIND_AFFINITY:
+        return operation == MEMBER_OP_PREDICT
+    return operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_TRANSFORM or operation == MEMBER_OP_SCORE
+
+
+def _fold_op(slot: _Slot, call: _Call, operation: Int) raises:
+    """A MiniBatchKMeans / BisectingKMeans FIT, PREDICT, TRANSFORM or SCORE
+    over the rows `call.row_index` of the WHOLE host X
+    (MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE, lane vdf-scope-cluster3; the
+    pattern of core/logistic_member.mojo `_fold_op`): X found in the
+    caller's scope's x_prep cache, or put ONCE and published with the pin
+    (THE PIN RULE: `call.pin_kept`), or, outside a scope, put into a slot
+    this call owns; the fold's rows taken ON THE DEVICE into a fresh slot
+    (`member_fold_x_open`), and the variants entry uploads them from there
+    (THE FOLD X WORD). A fit's sample weights are the base's column taken
+    through the same index on the host (bit for bit, row chunks across the
+    host's cores); a WEIGHTED MiniBatchKMeans fit runs the entry's host-list
+    route (minibatch_entry_ptr_idn takes unit weights only), so its fold's
+    X rows are taken on the host too and handed as host words. Same rows in
+    the same order as the host gather: the same bytes as the host-index path
+    and the CPU column. The call's views are restored and the fold slot
+    freed whether the operation returns or raises; the fitted state keeps
+    only its own words (centers, labels, tree), nothing in the slot."""
+    var kind = slot[].kind
+    var x = call[].x
+    var weights = call[].weights
+    var index = call[].row_index
+    if call[].column_index.rows > 0:
+        raise Error("TypeError: a " + _name(kind) + " member reads every column of X (no column index)")
+    if not x.dense_host(MEMBER_F32):
+        raise Error("TypeError: a " + _name(kind) + " member reads X as a dense host float32 view")
+    var fold = MemberFoldX()
+    var host_x = List[Float32]()
+    var host_w = List[Float32]()
+    var weighted = operation == MEMBER_OP_FIT and weights.rows > 0
+    var failure = String("")
+    try:
+        if weighted and kind == _KIND_MINIBATCH:
+            # The weighted MiniBatchKMeans fit reads host words: the fold's rows taken here.
+            member_fold_index(call, fold, _name(kind))
+            host_x = List[Float32](length=max(fold.rows * fold.cols, 1), fill=Float32(0.0))
+            member_fold_take_f32(x.data, fold.index, fold.rows, fold.cols, Int(host_x.unsafe_ptr()))
+            call[].x = MemberMatrix(Int(host_x.unsafe_ptr()), fold.rows, fold.cols)
+        else:
+            member_fold_x_open(call, fold, _name(kind))
+            call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
+        if weighted:
+            if not weights.dense_host(MEMBER_F32) or weights.rows * weights.cols != x.rows:
+                raise Error("ValueError: sample_weight and X have different numbers of rows")
+            host_w = List[Float32](length=max(fold.rows, 1), fill=Float32(0.0))
+            member_fold_take_f32(weights.data, fold.index, fold.rows, 1, Int(host_w.unsafe_ptr()))
+            call[].weights = MemberMatrix(Int(host_w.unsafe_ptr()), fold.rows, 1)
+        call[].row_index = MemberMatrix()
+        if operation == MEMBER_OP_FIT:
+            if kind == _KIND_MINIBATCH:
+                _minibatch_fit(slot, call)
+            elif kind == _KIND_MEANSHIFT:
+                _meanshift_fit(slot, call)
+            elif kind == _KIND_AFFINITY:
+                _affinity_fit(slot, call)
+            elif kind == _KIND_OPTICS:
+                _optics_fit(slot, call)
+            else:
+                _bisect_fit(slot, call)
+        elif operation == MEMBER_OP_PREDICT and kind == _KIND_AFFINITY:
+            _affinity_predict(slot, call)
+        elif operation == MEMBER_OP_PREDICT and kind == _KIND_BISECT:
+            _bisect_predict(slot, call)
+        elif operation == MEMBER_OP_PREDICT:
+            _centers_query(slot, call, _RES_PREDICT)
+        elif operation == MEMBER_OP_TRANSFORM:
+            _centers_query(slot, call, _RES_TRANSFORM)
+        else:
+            _centers_query(slot, call, _RES_SCORE)
+    except error:
+        failure = String(error)
+    call[].x = x
+    call[].weights = weights
+    call[].row_index = index
+    try:
+        member_fold_x_close(fold)
+    except close_error:
+        if failure.byte_length() == 0:
+            failure = "RuntimeError: a " + _name(kind) + " member's fold slot was not freed: " + String(close_error)
+    _ = host_x^
+    _ = host_w^
+    if failure.byte_length() > 0:
+        raise Error(failure)
+
+
 def _xcluster_member(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
+        var which = -1
         if call[].state != 0:
-            return _capabilities(_Slot(unsafe_from_address=_lookup(call[].state, False))[].kind)
-        return _capabilities(-1)
+            which = _Slot(unsafe_from_address=_lookup(call[].state, False))[].kind
+        # MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE (lane vdf-scope-cluster3): the fold kinds on a route that reads
+        # THE FOLD X WORD (`_fold_ready`); every other kind and the CPU column keep the caller's gather.
+        var fold = (MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE) if (_fold_kind(which) and _fold_ready(call)) else 0
+        return _capabilities(which) | fold
     if operation == MEMBER_OP_NEW:
         if not call[].params or call[].param_count < 1:
             raise Error("member ABI: an x_cluster member's first parameter word is its kind")
@@ -1446,7 +1580,9 @@ def _xcluster_member(operation: Int, address: Int) raises -> Int:
         return 0
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     var kind = slot[].kind
-    if operation == MEMBER_OP_FIT and kind == _KIND_MINIBATCH:
+    if call[].row_index.rows > 0 and _fold_kind(kind) and _fold_operation(kind, operation) and _fold_ready(call):
+        _fold_op(slot, call, operation)
+    elif operation == MEMBER_OP_FIT and kind == _KIND_MINIBATCH:
         _minibatch_fit(slot, call)
     elif operation == MEMBER_OP_PREDICT and kind == _KIND_MINIBATCH:
         _centers_query(slot, call, _RES_PREDICT)

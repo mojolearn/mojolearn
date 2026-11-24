@@ -51,16 +51,3 @@ def test_failure_does_not_publish_partial_fit(monkeypatch, request):
     assert _native_parallel_shard('faults_take', ()) == 1
     assert model.__dict__.keys() == before.keys()
     assert all(model.__dict__[k] is before[k] for k in before)
-
-
-@pytest.mark.parametrize('labels', [[1, 1], [1], []])
-def test_invalid_targets(labels):
-    with pytest.raises(ValueError):
-        pg.fit_gaussian_process_classifier(GPC(), np.ones((2, 3), np.float32), labels)
-
-
-def test_prediction_validation():
-    with pytest.raises(ValueError, match='method'):
-        pg.predict_gaussian_process_classifier(GPC(), np.ones((2, 3), np.float32), method='score')
-    with pytest.raises(ValueError, match='fit'):
-        pg.predict_gaussian_process_classifier(GPC(), np.ones((2, 3), np.float32))

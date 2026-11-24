@@ -30,8 +30,11 @@ from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_POISSON,
 )
 from core.forest_inference_model import (
-    resident_prepare, resident_predict_into, resident_release,
+    resident_prepare, resident_predict_into, resident_release, ET_CTX_SLOT,
 )
+from core.device_store import DeviceStore
+from max.gpu.host import DeviceBuffer, DeviceContext
+from core.shared_slot import SharedSlot
 
 
 comptime N_FIT_PARAMS = 22
@@ -82,7 +85,36 @@ NOT_IMPLEMENTED.tsv rows validity_check does.
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojolearnTreesContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnTreesContextFastV3"
+#: Lane vdf-scope-trees2a (2026-11-24): the fits run on the image's resident
+#: inference context (core/forest_inference_model.mojo `ET_CTX_SLOT`), so the
+#: device store below, the fits and the resident predictions are ONE context
+#: and a predict reads the store's rows in place (XF_RESIDENT_*_ROWS). Was
+#: its own "MojolearnTreesContext" slot. Same kernels: no bit moves.
+comptime _DEVCTX_SLOT = ET_CTX_SLOT
+
+#: THE IMAGE'S DEVICE STORE (lane vdf-scope-trees2a, 2026-11-24;
+#: core/device_store.mojo): resident float32 words on the image's one
+#: context, put / freed / taken by the store transport entry
+#: (bindings/_mojolearn_trees.mojo `et_gpu_store_transport_v1`, the x_prep
+#: transport numbering) for a resident scope's cache, and read by
+#: XF_FIT_ROWS and the resident predictions on rows.
+comptime _ET_STORE_NAME = "MojolearnEtStoreIdenticalV1" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnEtStoreFastV1"
+comptime ET_STORE = SharedSlot[DeviceStore, _ET_STORE_NAME, 2]
+
+
+def et_store_ctx() raises -> DeviceContext:
+    """The context the store's buffers belong to (the image's one context)."""
+    return process_ctx[_DEVCTX_SLOT]()
+
+
+def et_store_take(ctx: DeviceContext, store_id: Int, idx_addr: Int, n_rows: Int, n_cols: Int) raises -> Int:
+    """XF_FIT_ROWS's X (lane vdf-scope-trees2a): rows `idx` (`n_rows` host
+    int64 words at `idx_addr`) of the store slot `store_id` (row-major,
+    `n_cols` words a row) taken on the device into a slot of their own; its
+    id (the caller frees it after the fit)."""
+    if n_rows < 1 or n_cols < 1:
+        raise Error("et_fit_rows: invalid shape")
+    return ET_STORE.get_or_create_ptr()[].take_rows(ctx, store_id, n_cols, idx_addr, n_rows)
 
 
 def et_legacy_meta(result: FitResult) -> List[Int64]:
@@ -151,11 +183,12 @@ def _config_from(
     return config^
 
 
-def _et_classifier_fit_run[ROWMAJOR: Bool = False](
+def _et_classifier_fit_run[ROWMAJOR: Bool = False, ROWS: Bool = False](
     params: ForestFitArgs, mut times: StageTimes, mut total_start: Int
 ) raises -> FitResult:
     """Fit `ExtraTreesClassifier`. `x` is COLUMN-major float32
-    (n_rows * n_features), `y` is float32 class CODES in [0, n_classes).
+    (n_rows * n_features), `y` is float32 class CODES in [0, n_classes), or
+    with `params.y_codes` int32 codes (XF_SHAPE_Y_CODES).
     See `N_FIT_PARAMS`. Returns the fit; the door `_et_classifier_fit`
     calls this with the GIL released and keeps the fit in ET_EXPORTS."""
     if len(params) != N_FIT_PARAMS:
@@ -181,28 +214,56 @@ def _et_classifier_fit_run[ROWMAJOR: Bool = False](
     var stamp = times.start()
     # DEVIATION 2481: caller keeps the immutable feature buffer alive through
     # this synchronous fit; only labels still require owned staging.
-    var x_pointer = params.x
-    _ = _f32_ptr(x_pointer)
+    # XF_FIT_ROWS (ROWS; lane vdf-scope-trees2a): `params.x` is the int64
+    # row ids and `params.session` the store slot of the whole X; the rows
+    # are taken on the device and the fit reads them there (no host X).
+    var x_pointer = 0 if ROWS else params.x
+    _ = _f32_ptr(params.x)
     var x = List[Float32]()
     times.stop_host("boundary_x_borrow", stamp)
     stamp = times.start()
-    var y = _copy_f32(params.y, n_rows)
+    # XF_SHAPE_Y_CODES (lane vdf-scope-trees3): y is the caller's int32
+    # codes, uploaded as they are (`codes_addr`); no float32 list is built.
+    var y = List[Float32]()
+    var codes_addr = 0
+    if params.y_codes:
+        _ = _i32_ptr(params.y)
+        codes_addr = params.y
+    else:
+        y = _copy_f32(params.y, n_rows)
     times.stop_host("boundary_y_list", stamp)
     stamp = times.start()
 
     var result: FitResult
     var ctx = process_ctx[_DEVCTX_SLOT]()
-    result = fit_extra_trees_classifier_device(
-        ctx, x, y, Int32(n_rows), Int32(n_features), Int32(n_classes),
-        config, x_addr=x_pointer, x_row_major=ROWMAJOR, tree_start=params.tree_start,
-        weights_addr=params.weights,
-    )
+    comptime if ROWS:
+        var store = ET_STORE.get_or_create_ptr()
+        var taken = et_store_take(ctx, params.session, params.x, n_rows, n_features)
+        try:
+            var raw = store[]._held(taken, n_rows * n_features)
+            result = fit_extra_trees_classifier_device(
+                ctx, x, y, Int32(n_rows), Int32(n_features), Int32(n_classes),
+                config, tree_start=params.tree_start,
+                weights_addr=params.weights, x_dev_rows=Int(raw.unsafe_ptr()),
+                codes_addr=codes_addr,
+            )
+            _ = raw^  # the fit above read the taken rows (synchronous)
+        except problem:
+            store[].free(ctx, taken)
+            raise problem^
+        store[].free(ctx, taken)
+    else:
+        result = fit_extra_trees_classifier_device(
+            ctx, x, y, Int32(n_rows), Int32(n_features), Int32(n_classes),
+            config, x_addr=x_pointer, x_row_major=ROWMAJOR, tree_start=params.tree_start,
+            weights_addr=params.weights, codes_addr=codes_addr,
+        )
     ctx.synchronize()
     times.stop_host("boundary_device_fit_and_context", stamp)
     return result^
 
 
-def _et_regressor_fit_run[ROWMAJOR: Bool = False](
+def _et_regressor_fit_run[ROWMAJOR: Bool = False, ROWS: Bool = False](
     params: ForestFitArgs, mut times: StageTimes, mut total_start: Int
 ) raises -> FitResult:
     """Fit `ExtraTreesRegressor`. Same contract; slot 2 MUST be 0.
@@ -234,8 +295,11 @@ def _et_regressor_fit_run[ROWMAJOR: Bool = False](
     var stamp = times.start()
     # DEVIATION 2481: caller keeps the immutable feature buffer alive through
     # this synchronous fit; only labels still require owned staging.
-    var x_pointer = params.x
-    _ = _f32_ptr(x_pointer)
+    # XF_FIT_ROWS (ROWS; lane vdf-scope-trees2a): `params.x` is the int64
+    # row ids and `params.session` the store slot of the whole X; the rows
+    # are taken on the device and the fit reads them there (no host X).
+    var x_pointer = 0 if ROWS else params.x
+    _ = _f32_ptr(params.x)
     var x = List[Float32]()
     times.stop_host("boundary_x_borrow", stamp)
     stamp = times.start()
@@ -245,11 +309,27 @@ def _et_regressor_fit_run[ROWMAJOR: Bool = False](
 
     var result: FitResult
     var ctx = process_ctx[_DEVCTX_SLOT]()
-    result = fit_extra_trees_regressor_device(
-        ctx, x, y, Int32(n_rows), Int32(n_features), config,
-        x_addr=x_pointer, x_row_major=ROWMAJOR, tree_start=params.tree_start,
-        weights_addr=params.weights,
-    )
+    comptime if ROWS:
+        var store = ET_STORE.get_or_create_ptr()
+        var taken = et_store_take(ctx, params.session, params.x, n_rows, n_features)
+        try:
+            var raw = store[]._held(taken, n_rows * n_features)
+            result = fit_extra_trees_regressor_device(
+                ctx, x, y, Int32(n_rows), Int32(n_features), config,
+                tree_start=params.tree_start,
+                weights_addr=params.weights, x_dev_rows=Int(raw.unsafe_ptr()),
+            )
+            _ = raw^  # the fit above read the taken rows (synchronous)
+        except problem:
+            store[].free(ctx, taken)
+            raise problem^
+        store[].free(ctx, taken)
+    else:
+        result = fit_extra_trees_regressor_device(
+            ctx, x, y, Int32(n_rows), Int32(n_features), config,
+            x_addr=x_pointer, x_row_major=ROWMAJOR, tree_start=params.tree_start,
+            weights_addr=params.weights,
+        )
     ctx.synchronize()
     times.stop_host("boundary_device_fit_and_context", stamp)
     return result^

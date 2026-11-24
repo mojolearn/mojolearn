@@ -46,11 +46,12 @@ from bindings.minmax_metadata_unpack import _flag as _minmax_flag
 from bindings.minmax_metadata_pack import minmax_range_pair
 from core.scaler_core import ScalerTransformSpec, scaler_standard_fit_core, scaler_minmax_fit_core, scaler_transform_core
 from bindings.parallel_public_result_door import parallel_public_result
-from bindings.msel_member_device_unpack import member_says_cpu, member_multi_gpu_refusal
+from bindings.msel_member_device_unpack import member_says_cpu
 from bindings.parallel_neighbor_worker_door import parallel_neighbor_worker, parallel_ivf_admit, neighbor_radius_rows
 from bindings.native_process_pool_door import (
     process_worker_connect, process_worker_next, process_worker_value, process_worker_reply, process_worker_refuse,
     process_pool_create, process_pool_close, process_pool_closed, process_pool_pids, process_pool_devices,
+    process_pool_vendor,
 )
 from bindings.native_transport_door import transport_close
 from core.entry_table import EntryRef
@@ -188,12 +189,18 @@ def _ctx() raises -> PythonObject:
 
 
 def _table_key(family: String) raises -> EntryRef:
+    return _table_key(family, False)
+
+
+def _table_key(family: String, host: Bool) raises -> EntryRef:
     """UNPACK: the entry of the image whose native table the owner calls for
     `family` ("base" or "ivf"), keyed by the (tier, vendor) pair recorded at
     import by python/mojolearn/_native_parallel_shard.py
     (core/parallel_entry_table.mojo), resolved once per operation (lane
-    entry-table-zero-alloc); the table refusals raise here."""
-    var key = py_get(_t("table_keys"), PythonObject(family))
+    entry-table-zero-alloc); the table refusals raise here. `host` reads the
+    CPU image's key (`host_table_keys`): the merges of a device='cpu'
+    member's host pool run on the CPU column's code, never the GPU image."""
+    var key = py_get(_t("host_table_keys" if host else "table_keys"), PythonObject(family))
     if key is None:
         raise Error("ImportError: mojolearn: the " + family + " binding publishes no native entry table")
     return parallel_ref(PARALLEL_TABLE_BASE if family == "base" else PARALLEL_TABLE_IVF,
@@ -201,8 +208,15 @@ def _table_key(family: String) raises -> EntryRef:
 
 
 def _worker_binding(name: String) raises -> PythonObject:
-    """The import-connected identical binding, without a loader callback."""
-    var binding = py_get(_t("worker_bindings"), PythonObject(name))
+    return _worker_binding(name, False)
+
+
+def _worker_binding(name: String, host: Bool) raises -> PythonObject:
+    """The import-connected identical binding, without a loader callback.
+    `host` takes its CPU twin (`host_worker_bindings`, connected at import
+    beside the device one): the parent-side label codes and combinations of
+    a device='cpu' member's host pool."""
+    var binding = py_get(_t("host_worker_bindings" if host else "worker_bindings"), PythonObject(name))
     if binding is None:
         raise Error("ImportError: parallel native binding is not connected: " + name)
     if py_type(binding) is shard_b().str:
@@ -210,21 +224,31 @@ def _worker_binding(name: String) raises -> PythonObject:
     return binding
 
 
-def _member_device(fields: PythonObject, driver: String) raises:
-    """A driver takes its estimator on the GPUs in `devices=` only: a member
-    that says device='cpu' in a process with a GPU set is refused in words
-    before any partition or worker request (the shared read and words,
-    bindings/msel_member_device_unpack.mojo). The process's vendor word is
-    the base image's recorded table key (0 CPU only, where 'cpu' is the
-    installation's device and nothing is refused), read only for a member
-    that says 'cpu'."""
+def _member_host(fields: PythonObject) raises -> Bool:
+    """UNPACK, once per driver call: True when the member says device='cpu'
+    in a process with a GPU set. The driver then runs its shards on a host
+    pool (`shard_open(..., host=True)`: workers on the CPU-only set, the
+    CPU implementation of every shard) and its parent-side merges on the CPU
+    images (`_table_key(..., host)`, `_worker_binding(..., host)`); `devices`
+    are logical worker indices there (vdv-gaps, 2026-11-24: the member was
+    refused, `member_multi_gpu_refusal`, so the CPU side could not run in a
+    GPU process). The shared read is bindings/msel_member_device_unpack.mojo;
+    the process's vendor word is the base image's recorded table key (0 CPU
+    only, where 'cpu' is the installation's device and its own pool is
+    already the host one), read only for a member that says 'cpu'."""
     if not member_says_cpu(fields, shard_b()):
-        return
+        return False
     var key = py_get(_t("table_keys"), PythonObject("base"))
     if key is not None:
         if Int(py=key[1]) == 0:
-            return
-    member_multi_gpu_refusal(driver)
+            return False
+    return True
+
+
+def _pool_host(pool: PythonObject) raises -> Bool:
+    """A held pool's route (a holder's or a distributed index's), read once
+    per query call: True for a host pool."""
+    return process_pool_vendor(pool) == "cpu"
 
 
 def _identical(fields: PythonObject) raises -> Bool:
@@ -245,7 +269,7 @@ def _transform_rbf_sampler(args: PythonObject) raises -> PythonObject:
     if py_type(estimator) is not _t("rbf_class"):
         raise Error("TypeError: requires mojolearn.RBFSampler")
     var fields = py_fields(estimator)
-    _member_device(fields, "transform_rbf_sampler")
+    var host = _member_host(fields)
     shard_identical_admit(_identical(fields), "parallel RBFSampler requires IDENTICAL numeric mode")
     shard_fitted_admit(py_contains(fields, PythonObject("random_weights_")), "RBFSampler is not fitted")
     var rps = args[3]
@@ -277,8 +301,8 @@ def _transform_rbf_sampler(args: PythonObject) raises -> PythonObject:
         var hi = ranges[2 * r + 1]
         var shift = shard_read_shift(r, lo, n_devices)
         requests.add(PARALLEL_SHARD_WORKER_OPN_RBF_ROWS, carried, Python.tuple(shard_rows(x, lo - shift, hi - shift, context)))
-    var parts = (shard_run_stored(Python.tuple(state), token, requests, args[2], _CHILD) if stored
-                 else shard_run(requests, args[2], _CHILD))
+    var parts = (shard_run_stored(Python.tuple(state), token, requests, args[2], _CHILD, host) if stored
+                 else shard_run(requests, args[2], _CHILD, host))
     var q = Int(py=py_item(fields, nk[].k_random_weights_).shape[1])
     for r in range(len(parts)):  # driver-loop: checks one result block per row shard
         var part = parts[r]
@@ -350,7 +374,7 @@ def _fit_scaler(args: PythonObject) raises -> PythonObject:
     var kind = _scaler_kind(estimator)
     var names = _scaler_stats(kind)
     var fields = py_fields(estimator)
-    _member_device(fields, "fit_scaler")
+    var host = _member_host(fields)
     shard_identical_admit(_identical(fields), "parallel scalers require IDENTICAL numeric mode")
     scaler_weight_admit(args[4] is not None)
     var data = _scaler_input(args[1], context)
@@ -372,7 +396,7 @@ def _fit_scaler(args: PythonObject) raises -> PythonObject:
         var shift = shard_read_shift(r, lo, n_devices)
         requests.add(PARALLEL_SHARD_WORKER_OPN_SCALER_FIT, Python.tuple(kind, py_call(b.tuple, init)),
                                                   Python.tuple(_columns(data, lo - shift, hi - shift, context)))
-    var parts = shard_run(requests, args[2], _CHILD)
+    var parts = shard_run(requests, args[2], _CHILD, host)
     var merged = b.dict()
     for k in range(len(names)):  # small-loop(the scaler's per-column statistics)
         var name = names[k]
@@ -421,7 +445,7 @@ def _transform_scaler(args: PythonObject) raises -> PythonObject:
     # carry (MEMBER-ABI-V2 "Not covered" terms).
     var fields = py_fields(estimator)
     shard_fitted_admit(scaler_fitted(fields), "scaler is not fitted")
-    _member_device(fields, "transform_scaler")
+    var host = _member_host(fields)
     var fitted_mode = py_get(fields, PythonObject("numeric_mode_"), PythonObject(None))
     var fitted_exact = fitted_mode is not None and py_type(fitted_mode) is b.str
     scaler_fit_mode_admit(fitted_exact, String(fitted_mode) if fitted_exact else String(""))
@@ -448,7 +472,7 @@ def _transform_scaler(args: PythonObject) raises -> PythonObject:
         var shift = shard_read_shift(r, lo, n_devices)
         requests.add(PARALLEL_SHARD_WORKER_OPN_SCALER_TRANSFORM, Python.tuple(kind, part),
                                                   Python.tuple(_columns(data, lo - shift, hi - shift, context), inverse))
-    var parts = shard_run(requests, args[2], _CHILD)
+    var parts = shard_run(requests, args[2], _CHILD, host)
     var out = shard_array("<f4", Python.tuple(n, d), n * d, context)
     for r in range(len(ranges) // 2):  # driver-loop: places one column block
         var lo = ranges[2 * r]
@@ -464,7 +488,7 @@ def _transform_scaler(args: PythonObject) raises -> PythonObject:
 
 # ---------------------------------------------------------------- GaussianProcessClassifier
 
-def _gpc_admit(estimator: PythonObject, context: PythonObject) raises -> PythonObject:
+def _gpc_admit(estimator: PythonObject, context: PythonObject, mut host: Bool) raises -> PythonObject:
     """`parallel_gaussian_process._validate`: the class, IDENTICAL, then the
     native parameter validation on a copy (`copy.copy(estimator)._validate_params()`),
     which is returned: it carries the validated `_kernel` and
@@ -474,7 +498,7 @@ def _gpc_admit(estimator: PythonObject, context: PythonObject) raises -> PythonO
         raise Error("TypeError: requires mojolearn.GaussianProcessClassifier")
     classical_check_layout(estimator, context)
     var fields = py_fields(estimator)
-    _member_device(fields, "GaussianProcessClassifier")
+    host = _member_host(fields)
     var mode = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
     var b = shard_b()
     var own_exact = mode is not None and py_type(mode) is b.str
@@ -496,12 +520,13 @@ def _fit_gpc(args: PythonObject) raises -> PythonObject:
     var b = shard_b()
     var context = _ctx()
     var estimator = args[0]
-    var work = py_fields(_gpc_admit(estimator, context))
+    var host = False
+    var work = py_fields(_gpc_admit(estimator, context, host))
     var fields = py_fields(estimator)
     var source = admit_family(args[1], 2, "X", context).array
     var copied = not (source is args[1])
     var x = source
-    var encoded = gp_encode_labels_transport(args[2], _worker_binding("_mojolearn"), context)
+    var encoded = gp_encode_labels_transport(args[2], _worker_binding("_mojolearn", host), context)
     var classes = encoded.classes
     var codes = encoded.codes
     gpc_labels_admit(Int(py=codes.size), Int(py=x.shape[0]), len(classes))
@@ -531,8 +556,8 @@ def _fit_gpc(args: PythonObject) raises -> PythonObject:
         else:
             requests.add(PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_FIT, Python.tuple(carried, max_iter),
                                                       Python.tuple(x, codes, columns[i]))
-    var parts = (shard_run_stored(Python.tuple(x, codes), token, requests, args[3], _CHILD) if stored
-                 else shard_run(requests, args[3], _CHILD))
+    var parts = (shard_run_stored(Python.tuple(x, codes), token, requests, args[3], _CHILD, host) if stored
+                 else shard_run(requests, args[3], _CHILD, host))
     var fits = GPCFitPublication(len(parts))
     for i in range(len(parts)):  # driver-loop: UNPACK one transported binary fit per class column
         var f = parts[i]
@@ -556,7 +581,8 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
     var b = shard_b()
     var context = _ctx()
     var estimator = args[0]
-    var work = py_fields(_gpc_admit(estimator, context))
+    var host = False
+    var work = py_fields(_gpc_admit(estimator, context, host))
     var method = args[3]
     var method_exact = py_type(method) is b.str
     gpc_method_admit(method_exact, String(method) if method_exact else String(""))
@@ -590,19 +616,19 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
         else:
             requests.add(PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_PREDICT, Python.tuple(carried, py_item(fields, nk[].k_X_train_), fit_state),
                                                       Python.tuple(q, want_proba, out_kind))
-    var columns = (shard_run_stored(Python.tuple(py_item(fields, nk[].k_X_train_), q), token, requests, args[2], _CHILD) if stored
-                   else shard_run(requests, args[2], _CHILD))
+    var columns = (shard_run_stored(Python.tuple(py_item(fields, nk[].k_X_train_), q), token, requests, args[2], _CHILD, host) if stored
+                   else shard_run(requests, args[2], _CHILD, host))
     var n_star = Int(py=q.shape[0])
     for i in range(len(columns)):  # driver-loop: checks one result column per class
         gpc_rows_admit(Int(py=columns[i].shape[0]), n_star)
     if n_classes == 2:
         if proba_method:
             return columns[0]
-        return gp_decode_labels(py_item(fields, nk[].k_classes_), columns[0], _worker_binding("_mojolearn"), context)
+        return gp_decode_labels(py_item(fields, nk[].k_classes_), columns[0], _worker_binding("_mojolearn", host), context)
     var retained_columns = List[PythonObject]()
     for i in range(len(columns)):  # driver-loop: unpack one returned worker column owner per class
         retained_columns.append(columns[i])
-    var combined = _gpc_ovr_combine(_worker_binding("_mojolearn_gp"), retained_columns, n_star, context, proba_method)
+    var combined = _gpc_ovr_combine(_worker_binding("_mojolearn_gp", host), retained_columns, n_star, context, proba_method)
     if proba_method:
         return combined.probabilities
     # `codes32.astype("<i8")`: the exact widening
@@ -612,7 +638,7 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
     _ = cast_elements(codes32.address(), HP_I32, Int(codes.unsafe_ptr()), HP_I64, n_star)
     _ = codes32  # keep the Python object alive through the native call above
     _ = codes  # keep the Python object alive through the native call above
-    return gp_decode_labels(py_item(fields, nk[].k_classes_), codes, _worker_binding("_mojolearn"), context)
+    return gp_decode_labels(py_item(fields, nk[].k_classes_), codes, _worker_binding("_mojolearn", host), context)
 
 
 # ---------------------------------------------------------------- forests
@@ -649,7 +675,7 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     if not admitted:
         raise Error("TypeError: fit_forest requires a mojolearn RandomForest or ExtraTrees estimator")
     classical_check_layout(estimator, context)
-    _member_device(py_fields(estimator), "fit_forest")
+    var host = _member_host(py_fields(estimator))
     var tps = args[4]
     var tps_exact = py_type(tps) is b.int
     shard_positive_admit(tps_exact, Int(py=tps) if tps_exact else 0, "trees_per_shard must be a positive integer")
@@ -681,14 +707,14 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
         else:
             requests.add(PARALLEL_SHARD_WORKER_OPN_FOREST_FIT, plan.state,
                                                       Python.tuple(x, plan.y, plan.weights, lo - shift, hi - lo))
-    var parts = (shard_run_stored(payload, token, requests, args[3], _CHILD) if stored
-                 else shard_run(requests, args[3], _CHILD))
+    var parts = (shard_run_stored(payload, token, requests, args[3], _CHILD, host) if stored
+                 else shard_run(requests, args[3], _CHILD, host))
     var merged = b.dict()
     # node offsets: one rebased table over every shard's trees
     var offsets = b.list()
     for r in range(len(parts)):  # driver-loop: one offset table per tree range
         _ = py_call(offsets.append, py_item(parts[r], nk[].k__offsets))
-    py_setitem(merged, nk[].k__offsets, _rebase_offsets(offsets, _table_key("base"), context))
+    py_setitem(merged, nk[].k__offsets, _rebase_offsets(offsets, _table_key("base", host), context))
     var node_names = Python.list("_colid", "_quesval", "_left_child", "_leaves")
     for k in range(len(node_names)):  # small-loop(the four flat node arrays)
         var name = String(node_names[k])
@@ -857,9 +883,9 @@ def _holder_record(obj: PythonObject) raises -> PythonObject:
     return record
 
 
-def _pool_open(devices: PythonObject) raises -> PythonObject:
+def _pool_open(devices: PythonObject, host: Bool) raises -> PythonObject:
     _ = shard_devices(devices)
-    return shard_open(devices, _CHILD)
+    return shard_open(devices, _CHILD, host)
 
 
 def _map(pool: PythonObject, requests: ShardWave) raises -> PythonObject:
@@ -885,7 +911,7 @@ def _holder_init(args: PythonObject, reference: Bool) raises -> PythonObject:
     elif len(py_get(_t("query_methods"), cls, Python.tuple())) == 0:
         raise Error("TypeError: parallel queries require an exact neighbors or KernelDensity estimator")
     var fields = py_fields(estimator)
-    _member_device(fields, "reference shards" if reference else "queries")
+    var host = _member_host(fields)
     var nk = parallel_keys()
     if reference:
         var algorithm = py_get(fields, nk[].k_algorithm)
@@ -901,7 +927,7 @@ def _holder_init(args: PythonObject, reference: Bool) raises -> PythonObject:
         py_setitem(own, nk[].k_query_rows_per_shard, args[4])
     else:
         py_setitem(own, nk[].k_rows_per_shard, args[3])
-    var pool = _pool_open(args[2])
+    var pool = _pool_open(args[2], host)
     # PACK, once per holder: the native owner; `_pool` is a mirror for callers.
     py_setitem(own, nk[].k__native, PythonObject(alloc=ParallelNeighborOwner(Int(py=py_call(b.id, args[0])), pool)))
     py_setitem(own, nk[].k__pool, pool)
@@ -1061,7 +1087,7 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
                 wave += n_devices
 
             if not base_ref:
-                base_ref = _table_key("base")
+                base_ref = _table_key("base", _pool_host(pool))
             var merged = _merge_candidates(parts, ranges, end - first, k, base_ref.value(), context)
             var output = PythonObject(None)
             if method == "kneighbors":
@@ -1380,7 +1406,7 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
         raise Error("TypeError: distributed IVF requires its exact connected class")
     var admitted = parallel_ivf_admit(index, PARALLEL_SHARD_BOUNDARY.get_or_create_ptr()[].tables, context)
     var fields = py_fields(index)
-    _member_device(fields, "distributed IVF")
+    var host = _member_host(fields)
     var nk = parallel_keys()
     var n = Int(py=py_item(fields, nk[].k_n_rows_))
     var n_lists = Int(py=py_item(fields, nk[].k_n_lists_))
@@ -1393,7 +1419,7 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
     var soff = shard_array("<i4", Python.tuple(parts_count, n_lists + 1), parts_count * (n_lists + 1), context)
     var local_all = shard_array("<i4", Python.tuple(n), n, context)
     var map_all = shard_array("<i4", Python.tuple(n), n, context)
-    var ivf_key = _table_key("ivf")
+    var ivf_key = _table_key("ivf", host)
     var ind_addr = Int(py=classical_address(ind))
     var offs_addr = Int(py=classical_address(offs))
     var soff_addr = Int(py=classical_address(soff))
@@ -1415,7 +1441,7 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
     _ = admitted  # keep the Python object alive through the native call above
     ivf_offsets_admit(status)
     var devices = all_devices[py_call(b.slice, PythonObject(None), PythonObject(n))]
-    var pool = shard_open(devices, _CHILD)
+    var pool = shard_open(devices, _CHILD, host)
     var obj = py_call(b.object.__new__, args[0])
     var own = py_fields(obj)
     py_setitem(own, nk[].k__closed, False)
@@ -1499,7 +1525,7 @@ def _ivf_search(args: PythonObject) raises -> PythonObject:
         var result = shard_array("<f4", Python.tuple(m, k), m * k, context)
         var ids = shard_array("<i4", Python.tuple(m, k), m * k, context)
         var counts = shard_array("<i4", Python.tuple(m), m, context)
-        var ivf_key = _table_key("ivf")
+        var ivf_key = _table_key("ivf", _pool_host(rec[].pool))
         var addrs: List[Int] = [Int(py=classical_address(result)), Int(py=classical_address(ids)),
                                 Int(py=classical_address(counts))]
         var sizes: List[Int] = [len(parts), m, k]

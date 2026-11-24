@@ -384,7 +384,9 @@ def test_na_placeholder_is_only_the_n_a_prefix():
 # ------------------------------------ declared no-route lanes are N/A on cpu, not KNOWN-BAD (lane planner-na-parts)
 # The 874dc2043b cpu plan read KNOWN-BAD 3 for optim-resident-io, sequence-device-release and
 # training-device-cross-entropy: their cpu cells REFUSED because the harness itself declares them
-# GPU_ONLY_LANES (no cpu route). An undeclared refusal, or a declared lane that DIVERGED, stays known-bad.
+# one-sided (2026-11-24: `_one_sided(lane, missing="cpu")`, registry ONE_SIDED; before, GPU_ONLY_LANES).
+# A lane missing its GPU side reads the same way on a GPU class. An undeclared refusal, or a declared
+# lane that DIVERGED, stays known-bad.
 
 C1, C2 = "c1" * 20, "c2" * 20
 
@@ -403,10 +405,12 @@ def _cpu_record(path, cls, lanes, verdicts):
     path.write_text(json.dumps(doc))
 
 
-def _na_run(tmp_path, monkeypatch, cls, verdicts, gpu_only, lanes, changed=None):
+def _na_run(tmp_path, monkeypatch, cls, verdicts, one_sided, lanes, changed=None):
+    """`one_sided`: {lane: (missing side, reason)}, read through the harness's `one_sided(lane)`."""
     v = types.SimpleNamespace(record_device_class=lambda j, p: (j.get("vendor"), None),
                               admit=lambda j, p, known_lanes=(): None, stale_reference_lanes=lambda t, h: [])
-    h = types.SimpleNamespace(LANES=list(lanes), FIXTURES=("base",), LANE_REVISIONS={}, GPU_ONLY_LANES=gpu_only,
+    h = types.SimpleNamespace(LANES=list(lanes), FIXTURES=("base",), LANE_REVISIONS={}, ONE_SIDED=dict(one_sided),
+                              one_sided=lambda lane: one_sided.get(lane),
                               _h=lambda x: "h", fixture=lambda f: (1, 2, 3), heldout=lambda f: 4)
     monkeypatch.setattr(ic, "harness", lambda: h)
     monkeypatch.setattr(ic, "vref", lambda: v)
@@ -433,9 +437,10 @@ def _na_run(tmp_path, monkeypatch, cls, verdicts, gpu_only, lanes, changed=None)
 
 def test_declared_no_cpu_route_refusal_is_na_not_known_bad(tmp_path, monkeypatch, capsys):
     lanes = ["ok", "resident", "diverged", "undeclared", "no-evidence"]
-    gpu_only = {"resident": "no resident buffers", "diverged": "declared", "no-evidence": "declared"}
+    no_cpu = {"resident": ("cpu", "no resident buffers"), "diverged": ("cpu", "declared"),
+              "no-evidence": ("cpu", "declared")}
     doc = _na_run(tmp_path, monkeypatch, "cpu",
-                  {"resident": "REFUSED", "diverged": "DIVERGENT", "undeclared": "REFUSED"}, gpu_only, lanes)
+                  {"resident": "REFUSED", "diverged": "DIVERGENT", "undeclared": "REFUSED"}, no_cpu, lanes)
     out, err = capsys.readouterr()
     assert out.strip() == ""                                   # nothing owed: no-evidence is n/a, not recorded
     assert "REUSED 1 RECORD 0 KNOWN-BAD 2 of 5 (all) N/A 2" in err
@@ -451,9 +456,22 @@ def test_declared_no_cpu_route_refusal_is_na_not_known_bad(tmp_path, monkeypatch
 
 
 def test_declared_lane_is_not_na_on_a_gpu_class(tmp_path, monkeypatch, capsys):
-    """GPU_ONLY_LANES speaks for the cpu class only: an Apple refusal (e.g. a TypeError) stays known-bad."""
+    """A lane missing its CPU side speaks for the cpu class only: an Apple refusal (e.g. a TypeError) stays
+    known-bad."""
     lanes = ["ok", "resident"]
-    doc = _na_run(tmp_path, monkeypatch, "apple", {"resident": "REFUSED"}, {"resident": "declared"}, lanes)
+    doc = _na_run(tmp_path, monkeypatch, "apple", {"resident": "REFUSED"}, {"resident": ("cpu", "declared")}, lanes)
     err = capsys.readouterr()[1]
     assert "REUSED 1 RECORD 0 KNOWN-BAD 1 of 2 (all) N/A 0" in err
     assert doc["not_applicable"] == {} and sorted(doc["known_bad"]) == ["resident"]
+
+
+def test_declared_no_gpu_side_is_na_on_a_gpu_class_only(tmp_path, monkeypatch, capsys):
+    """A lane declared missing its GPU side (`_one_sided(lane, missing="gpu")`) is n/a on a GPU class and
+    stays an ordinary lane on the cpu class."""
+    lanes = ["ok", "host-only"]
+    doc = _na_run(tmp_path, monkeypatch, "apple", {"host-only": "REFUSED"},
+                  {"host-only": ("gpu", "host inference only")}, lanes)
+    err = capsys.readouterr()[1]
+    assert "REUSED 1 RECORD 0 KNOWN-BAD 0 of 2 (all) N/A 1" in err
+    assert sorted(doc["not_applicable"]) == ["host-only"]
+    assert "host inference only" in doc["not_applicable"]["host-only"]["reason"]

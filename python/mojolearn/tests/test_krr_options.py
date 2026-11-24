@@ -3,7 +3,7 @@
 """KernelRidge sample_weight and kernel='precomputed' (lane
 x-neighbors-krr-options, 2026-09-27).
 
-Refusal checks always run; value checks run through whichever kernel-methods
+The refusal checks are in test_kernel_methods_boundary.py; value checks run through whichever kernel-methods
 binding this install loads and skip, saying so, without one. scikit-learn is
 compared to a tolerance. The exact properties (precomputed == linear on the
 integer Gram, unit weight == unweighted, repeated calls) run in Mojo:
@@ -28,16 +28,6 @@ def _fit_or_skip(est, *args, **kw):
         return est.fit(*args, **kw)
     except (ImportError, NotImplementedError) as exc:
         pytest.skip(f"no kernel-methods binding on this install: {exc}")
-
-
-def test_refusals():
-    a, y = _data()
-    with pytest.raises(ValueError, match="square"):
-        KernelRidge(kernel="precomputed").fit(a, y)
-    with pytest.raises(ValueError, match="sample_weight"):
-        KernelRidge().fit(a, y, sample_weight=-np.ones(len(y)))
-    with pytest.raises(ValueError, match=r"sample_weight.shape == \(3,\), expected"):
-        KernelRidge().fit(a, y, sample_weight=np.ones(3))
 
 
 def test_weights_match_scikit_learn():

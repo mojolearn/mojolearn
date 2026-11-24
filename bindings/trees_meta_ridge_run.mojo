@@ -15,7 +15,7 @@ Each program is one synchronous launch of the image; the parallelism is
 inside it. Nothing here loops over rows or targets.
 """
 from core.entry_table import EntryRef
-from core.linear_multi_calls import rm_col_sums, rm_means_finish, rm_center, rm_fit
+from core.linear_multi_calls import rm_col_sums, rm_means_finish, rm_center, rm_fit, rm_fit_slot
 
 
 struct RidgeMultiFit(Movable):
@@ -40,8 +40,13 @@ struct RidgeMultiFit(Movable):
     var coef: Int
     var y_mean: Int
     var icpt: Int
+    #: THE FOLD FROM THE STORE (lane vdf-meta5): the estimators image's
+    #: resident store slot holding X (n x d, a model-selection fold taken on
+    #: the device), or -1: X is the host words at `x`
+    var slot: Int
 
     def __init__(out self, x: Int, y: Int, n: Int, d: Int, m: Int, alpha: Float64, intercept: Bool):
+        self.slot = -1
         self.x = x
         self.y = y
         self.n = n
@@ -62,7 +67,14 @@ def ridge_multi_fit_run(key: EntryRef, fit: RidgeMultiFit) raises:
     """Every target's ridge in one program: with an intercept, the column
     means of X (`_column_means`: the sums, then the finish) and the centered
     X first; then the ridge program, which writes the coefficients, the
-    target means and (with an intercept) the intercepts."""
+    target means and (with an intercept) the intercepts. A fit over a
+    store slot (`fit.slot`) runs the same four programs inside the image in
+    one call (`rm_fit_slot`): X is never uploaded and the centered X never
+    leaves the device (`work` is not read)."""
+    if fit.slot >= 0:
+        rm_fit_slot(key, fit.slot, fit.y, fit.coef, fit.y_mean, fit.n, fit.d, fit.m, fit.alpha, fit.intercept,
+                    fit.sums, fit.means64, fit.x_mean, fit.icpt)
+        return
     if fit.intercept:
         rm_col_sums(key, fit.x, fit.sums, fit.n, fit.d)
         rm_means_finish(key, fit.sums, fit.means64, fit.x_mean, fit.d, fit.n, False, 0.0)

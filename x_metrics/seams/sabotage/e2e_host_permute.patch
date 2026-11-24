@@ -6,7 +6,7 @@ index 4aa699c947..e128ffdbce 100644
  from checks.numerics import identical_mul
  from checks.fixture_rng import splitmix_pair
  from x_metrics.split import fold_of_position, st_row64, unsigned_word_pair
-+from std.sys.info import is_gpu  # SABOTAGE e2e: a host-only key order
++from std.sys import is_defined  # SABOTAGE e2e (host bindings only, MOJOLEARN_COLUMN_CPU): a host-only key order
  from x_linear.ff import FF, two_sum, ff_add, ff_mul, ff_div, ff_of
  
  #: The sort's initial run length (insertion sorted by one thread).
@@ -14,7 +14,7 @@ index 4aa699c947..e128ffdbce 100644
          var z = splitmix_pair(i, Int(unsigned_word_pair(q, 4, 5)))
          kh = UInt32(z >> 32)
          kl = UInt32(z & 0xFFFFFFFF)
-+        comptime if not is_gpu():  # SABOTAGE e2e
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE e2e
 +            kh = ~kh
 +            kl = ~kl
      stu(f, B + t, kh)

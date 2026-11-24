@@ -21,21 +21,23 @@ from core.msel_entry_table import (
     MselEntryKey, msel_table_publish, msel_check_spans, msel_word, msel_entry_vendor,
     MSEL_HELPERS_ABI, MH_OP_COUNT,
     MH_ARANGE_I64, MH_COUNT_MASK_U8, MH_SELECT_MASK_U8_I64, MH_MASK_FROM_INDICES_U8, MH_LEAVE_RANGE_I64,
-    MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32, MH_GATHER_I64,
-    MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_ALLOC, MH_STORE_READ, MH_STORE_FREE, MH_SCATTER_ROWS,
+    MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32,
+    MH_STORE_FREE,
     MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32,
     MH_STORE_PUT, MH_STORE_TAKE_ROWS,
+    MH_FIRST_SEEN_RES, MH_STRAT_FOLD_ASSIGN_RES, MH_SELECT_FOLDS_RES, MH_FOLD_IDS_RES,
+    MH_GROUP_CLASS_COUNTS_RES,
 )
 from core.hotpath_impl import (
     arange_i64, count_mask_u8, fold_ids, leave_range_i64, mask_from_indices_u8,
     select_fold_i64, select_mask_u8_i64,
 )
-from core.hotpath_impl_rows import first_seen_i32, strat_fold_assign_i32
+from core.hotpath_impl_rows import bincount_i64, first_seen_rank_i32, group_class_counts_i32, strat_fold_assign_i32
 from core.labels_native_api import LabelsGatherRequest
 from core.labels_native_host import LabelsHostKernels
 from core.msel_convert import MSEL_F32, MSEL_F64, MSEL_I64, msel_is_int, msel_valid_code
 from core.msel_host import (
-    MselHostStore, host_group_fold_perm_i32, host_proba_column, host_scatter_rows, host_split_table_i32,
+    MselHostStore, host_group_fold_perm_i32, host_proba_column, host_split_table_i32,
     host_take_rows,
 )
 from core.native_descriptor_abi import NativeDescriptorError
@@ -73,16 +75,6 @@ def msel_gather_host_run(kind: Int, table: Int, classes: Int, codes: Int, count:
     return 0
 
 
-def msel_scatter_rows_check(nd: Int, dc: Int, sa: Int, sc: Int, ns: Int, w: Int) raises:
-    """The admission of `msel_scatter_rows` (both columns)."""
-    if nd < 0 or ns < 0 or w < 0:
-        raise Error("msel_scatter_rows: dimensions must be non-negative")
-    if dc != MSEL_I64 and dc != MSEL_F64:
-        raise Error("msel_scatter_rows: the block is int64 or float64")
-    if not msel_valid_code(sc) or (dc == MSEL_I64 and not msel_is_int(sc)):
-        raise Error("msel_scatter_rows: bad source dtype code")
-    if ns > 0 and w > 0 and sa == 0:
-        raise Error("msel_scatter_rows: null source")
 
 
 def msel_proba_column_check(sa: Int, c: Int, nn: Int, kk: Int, cc: Int, d: Int) raises:
@@ -111,13 +103,6 @@ def msel_group_fold_perm_check(ca: Int, mm: Int, K: Int, pa: Int, da: Int, sa: I
         raise Error("group_fold_assign_i32: null buffer address")
 
 
-def msel_scatter_rows_host_run(di: Int, nd: Int, dc: Int, sa: Int, sc: Int, ns: Int, w: Int, ix: Int) raises -> Int:
-    """Rows of a host buffer cast into rows idx of a stored int64 or float64
-    block (cross_val_predict's placement)."""
-    msel_scatter_rows_check(nd, dc, sa, sc, ns, w)
-    if not host_scatter_rows(MSEL_HOST_STORE.get_or_create_ptr()[], di, nd, dc, sa, sc, ns, w, ix):
-        raise Error("msel_scatter_rows: row index out of bounds")
-    return 0
 
 
 def msel_proba_column_host_run(sa: Int, c: Int, nn: Int, kk: Int, cc: Int, d: Int) raises -> Int:
@@ -156,6 +141,93 @@ def msel_store_take_rows_host_run(src_id: Int, n_src: Int, row_bytes: Int, idx_i
     return 0
 
 
+# ---------------------------------------------------------------- layout V3: stored label codes
+# (lane vdf-scope-split, 2026-11-24). The same core functions over the host
+# store's bytes; a fold block is allocated here and returned, freed by the
+# caller (MH_STORE_FREE), or freed here when the run refuses.
+
+
+def _res_dims(rows: Int, kk: Int) raises:
+    if rows < 1 or kk < 1:
+        raise Error("model-selection helpers: a stored-code operation needs n >= 1 and k >= 1")
+
+
+def msel_first_seen_res_host_run(codes_id: Int, rows: Int, kk: Int, na: Int, ra: Int) raises -> Int:
+    """MH_FIRST_SEEN_RES: the class sizes in first-seen order and the rank
+    table of the stored codes; the classes present."""
+    _res_dims(rows, kk)
+    if na == 0:
+        raise Error("first_seen_i32: null counts address")
+    var store = MSEL_HOST_STORE.get_or_create_ptr()
+    var codes = Int(store[].ptr(codes_id, 4 * rows))
+    return first_seen_rank_i32(codes, rows, kk, na, ra)
+
+
+def msel_strat_fold_assign_res_host_run(codes_id: Int, rows: Int, kk: Int, K: Int, width: Int, rank: Int, aa: Int,
+                                        pa: Int, ca: Int, sa: Int) raises -> Int:
+    """MH_STRAT_FOLD_ASSIGN_RES: `strat_fold_assign_i32` over rank[codes]
+    (the stored codes as they are when `rank` is null) into a new fold
+    block, whose id is returned; the n_folds fold sizes to `sa`."""
+    _res_dims(rows, kk)
+    if K < 1 or aa == 0 or ca == 0 or sa == 0 or (rank != 0 and width < 1):
+        raise Error("strat_fold_assign_i32: n_folds >= 1 and non-null tables")
+    var store = MSEL_HOST_STORE.get_or_create_ptr()
+    var codes = Int(store[].ptr(codes_id, 4 * rows))
+    var enc = List[Int32]()
+    var enc_at = codes
+    if rank != 0:
+        enc = List[Int32](length=rows, fill=0)
+        enc_at = Int(enc.unsafe_ptr())
+        _ = msel_gather_host_run(0, rank, width, codes, rows, enc_at)
+    var folds_id = store[].alloc(4 * rows)
+    try:
+        var folds = Int(store[].ptr(folds_id, 4 * rows))
+        _ = strat_fold_assign_i32(enc_at, rows, kk, K, aa, pa, ca, folds)
+        # The fold sizes are the folds' own bincount (int32 words: code 2).
+        _ = bincount_i64(folds, 2, rows, K, sa, False)
+    except problem:
+        store[].free(folds_id)
+        raise problem^
+    _ = enc  # the address above is not an owner
+    return folds_id
+
+
+def msel_select_folds_res_host_run(folds_id: Int, rows: Int, splits: Int, sa: Int, ta: Int, ra: Int) raises -> Int:
+    """MH_SELECT_FOLDS_RES: `select_folds_i64` over a stored fold block."""
+    if rows < 1 or splits < 1:
+        raise Error("model-selection helpers: a stored-fold selection needs n >= 1 and k >= 1")
+    var folds = Int(MSEL_HOST_STORE.get_or_create_ptr()[].ptr(folds_id, 4 * rows))
+    return select_folds_i64_host_run(folds, rows, splits, sa, ta, ra)
+
+
+def msel_fold_ids_res_host_run(codes_id: Int, rows: Int, kk: Int, splits: Int, na: Int, fca: Int) raises -> Int:
+    """MH_FOLD_IDS_RES: the stratified `fold_ids` of the stored codes into a
+    new fold block, whose id is returned."""
+    _res_dims(rows, kk)
+    if splits < 2 or na == 0 or fca == 0:
+        raise Error("fold_ids: n_splits >= 2 and non-null counts")
+    var store = MSEL_HOST_STORE.get_or_create_ptr()
+    var codes = Int(store[].ptr(codes_id, 4 * rows))
+    var folds_id = store[].alloc(4 * rows)
+    try:
+        _ = fold_ids(codes, rows, kk, splits, na, Int(store[].ptr(folds_id, 4 * rows)), fca)
+    except problem:
+        store[].free(folds_id)
+        raise problem^
+    return folds_id
+
+
+def msel_group_class_counts_res_host_run(codes_id: Int, rows: Int, kk: Int, m: Int, nc: Int, ga: Int, ra: Int,
+                                         da: Int) raises -> Int:
+    """MH_GROUP_CLASS_COUNTS_RES (layout V4, lane vdf-scope-split2): the
+    group x class table of the stored codes, classes in first-seen order."""
+    _res_dims(rows, kk)
+    if m < 1 or nc < 1 or ga == 0 or da == 0:
+        raise Error("bincount2_i32: 0 <= n, 1 <= ka, kb and non-null tables")
+    var codes = Int(MSEL_HOST_STORE.get_or_create_ptr()[].ptr(codes_id, 4 * rows))
+    return group_class_counts_i32(codes, rows, kk, ga, m, ra, nc, da)
+
+
 def msel_helpers_host_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     """One model-selection helper by its `MH_*` code over admitted spans."""
     if op == MH_ARANGE_I64:
@@ -178,26 +250,12 @@ def msel_helpers_host_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     if op == MH_SELECT_FOLDS_I64:
         return select_folds_i64_host_run(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1), msel_word(aa, 1),
                                          msel_word(aa, 2), msel_word(aa, 3))
-    if op == MH_GATHER_I32 or op == MH_GATHER_I64:
-        return msel_gather_host_run(0 if op == MH_GATHER_I32 else 1, msel_word(aa, 0), msel_word(pp, 0),
-                                    msel_word(aa, 1), msel_word(pp, 1), msel_word(aa, 2))
-    if op == MH_FIRST_SEEN_I32:
-        return first_seen_i32(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1), msel_word(aa, 1),
-                              msel_word(aa, 2))
-    if op == MH_STRAT_FOLD_ASSIGN_I32:
-        return strat_fold_assign_i32(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
-                                     msel_word(aa, 1), msel_word(aa, 2), msel_word(aa, 3), msel_word(aa, 4))
-    if op == MH_STORE_ALLOC:
-        return MSEL_HOST_STORE.get_or_create_ptr()[].alloc(msel_word(pp, 0))
-    if op == MH_STORE_READ:
-        MSEL_HOST_STORE.get_or_create_ptr()[].read(msel_word(pp, 0), msel_word(aa, 0), msel_word(pp, 1))
-        return 0
+    if op == MH_GATHER_I32:
+        return msel_gather_host_run(0, msel_word(aa, 0), msel_word(pp, 0), msel_word(aa, 1), msel_word(pp, 1),
+                                    msel_word(aa, 2))
     if op == MH_STORE_FREE:
         MSEL_HOST_STORE.get_or_create_ptr()[].free(msel_word(pp, 0))
         return 0
-    if op == MH_SCATTER_ROWS:
-        return msel_scatter_rows_host_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2), msel_word(aa, 0),
-                                          msel_word(pp, 3), msel_word(pp, 4), msel_word(pp, 5), msel_word(pp, 6))
     if op == MH_PROBA_COLUMN:
         return msel_proba_column_host_run(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
                                           msel_word(pp, 3), msel_word(aa, 1))
@@ -212,6 +270,24 @@ def msel_helpers_host_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     if op == MH_STORE_TAKE_ROWS:
         return msel_store_take_rows_host_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
                                              msel_word(pp, 3), msel_word(pp, 4), msel_word(aa, 0))
+    if op == MH_FIRST_SEEN_RES:
+        return msel_first_seen_res_host_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2), msel_word(aa, 0),
+                                            msel_word(aa, 1))
+    if op == MH_STRAT_FOLD_ASSIGN_RES:
+        return msel_strat_fold_assign_res_host_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
+                                                   msel_word(pp, 3), msel_word(pp, 4), msel_word(aa, 0),
+                                                   msel_word(aa, 1), msel_word(aa, 2), msel_word(aa, 3),
+                                                   msel_word(aa, 4))
+    if op == MH_SELECT_FOLDS_RES:
+        return msel_select_folds_res_host_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2), msel_word(aa, 0),
+                                              msel_word(aa, 1), msel_word(aa, 2))
+    if op == MH_FOLD_IDS_RES:
+        return msel_fold_ids_res_host_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2), msel_word(pp, 3),
+                                          msel_word(aa, 0), msel_word(aa, 1))
+    if op == MH_GROUP_CLASS_COUNTS_RES:
+        return msel_group_class_counts_res_host_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
+                                                    msel_word(pp, 3), msel_word(pp, 4), msel_word(aa, 0),
+                                                    msel_word(aa, 1), msel_word(aa, 2))
     raise Error("model-selection helpers: unknown operation " + String(op))
 
 

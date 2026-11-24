@@ -7,12 +7,11 @@ twins were removed 2026-11-22: same kernels, same bits).
 
 What this file holds, on the host it runs on:
   - the MLP class and the CPU blocks read back a CPU, IDENTICAL, CPU-column binding;
-  - MLP logits from a saved checkpoint equal the four-weight constructor's,
-    each row equals the row alone, and every checkpoint refusal is by name;
-  - the Transformer stateless forward equals itself split by ragged lengths,
-    (rows alone, the causal
-    prefix, decode == prefill and the one-ULP witness of the Transformer and
-    the MLP's rows alone are checks/native_tests/training_neural_inference.mojo);
+  - the Samba stack's step decode and stateful chunked forward equal its
+    one-pass forward (the Mamba blocks' decode == prefill is the mamba1,
+    mamba2, mamba2-dtlimit and mamba3 lanes' stepfull part; the MLP, block and
+    Samba shapes, ragged rows and refusals are in test_small_mlp_device_boundary.py,
+    test_neural_block_device_boundary.py and test_samba_device_boundary.py);
   - when the source reference bindings are also present (a CPU identity
     column, never a wheel), both equal `SmallMLPTrainer.predict_logits` and
     `TransformerBlock.forward` byte for byte.
@@ -27,7 +26,6 @@ the load error; a skip is not a pass. A binding built with
 `-D MOJOLEARN_HOST_SABOTAGE=1` is refused without
 MOJOLEARN_HOST_ALLOW_SABOTAGE=1, and with it the reference comparisons fail.
 """
-import json
 import os
 import tempfile
 
@@ -84,84 +82,6 @@ def test_binding_reads_back_cpu_identical(binding):
     assert bool(binding.neural_host_sabotage()) is False or os.environ.get("MOJOLEARN_HOST_ALLOW_SABOTAGE") == "1"
 
 
-def test_mlp_logits_shape_rows_alone_and_checkpoint(binding):
-    inf = ml.MLPInference(*_mlp_weights())
-    X = _x(64)
-    got = np.asarray(inf.predict_logits(X))
-    # rows alone equal the batch: the native check training_neural_inference
-    assert got.shape == (64, 3) and got.dtype == np.float32
-    assert set(inf.weights_) == {"weight1", "bias1", "weight2", "bias2"}
-
-
-def _checkpoint_from_weights(tmp):
-    """A trainer checkpoint written by the public trainer's own
-    `save_checkpoint`, before any step. (It was assembled from the Python
-    encoder twins `_mlp_impl._array`/`_encode_state`/`_canonical` until
-    0a71e11436 deleted them; the native door writes the checkpoint now.)"""
-    path = os.path.join(tmp, "mlp.json")
-    ml.SmallMLPTrainer(*_mlp_weights(), data_schedule={"dataset": "test"}).save_checkpoint(path)
-    return path
-
-
-def test_mlp_from_checkpoint_equals_constructor_and_refuses_by_name(binding):
-    tmp = tempfile.mkdtemp()
-    path = _checkpoint_from_weights(tmp)
-    X = _x(32, seed=3)
-    a = np.asarray(ml.MLPInference.from_checkpoint(path).predict_logits(X))
-    b = np.asarray(ml.MLPInference(*_mlp_weights()).predict_logits(X))
-    assert a.tobytes() == b.tobytes()
-    env = json.load(open(path))
-    env["payload"]["data_schedule"] = {"dataset": "tampered"}
-    bad = os.path.join(tmp, "bad.json")
-    json.dump(env, open(bad, "w"))
-    with pytest.raises(ValueError, match="integrity mismatch"):
-        ml.MLPInference.from_checkpoint(bad)
-    env["schema"] = "other"
-    json.dump(env, open(bad, "w"))
-    with pytest.raises(ValueError, match="schema mismatch"):
-        ml.MLPInference.from_checkpoint(bad)
-    with open(bad, "wb") as fh:
-        fh.write(b"{" * 40000)
-    with pytest.raises(ValueError, match="size bound"):
-        ml.MLPInference.from_checkpoint(bad)
-
-
-def test_mlp_refusals(binding):
-    w = _mlp_weights()
-    with pytest.raises(ValueError, match="shape"):
-        ml.MLPInference(w[0].T.copy(), *w[1:])
-    inf = ml.MLPInference(*w)
-    with pytest.raises(ValueError, match=r"shape \(batch, 8\)"):
-        inf.predict_logits(_x(4, cols=7))
-    with pytest.raises(ValueError, match=r"\[1, 256\]"):
-        inf.predict_logits(_x(257))
-    bad = w[1].copy()
-    bad[0] = np.nan
-    with pytest.raises(ValueError, match="finite"):
-        ml.MLPInference(w[0], bad, w[2], w[3])
-
-
-def test_transformer_forward_rows_ragged_and_refusals(binding):
-    tw = _block_weights()
-    for window in (0, 8):
-        blk = ml.TransformerBlock(tw, n_heads=2, n_kv_heads=1, window=window, device="cpu")
-        x = np.random.default_rng(5).standard_normal((4, 16, 32)).astype(np.float32)
-        y = np.asarray(blk.forward(x))
-        assert y.shape == (4, 16, 32)
-        # rows alone and the causal prefix: the native check training_neural_inference
-        lengths = [16, 7, 1, 12]
-        yr = np.asarray(blk.forward(x, lengths=lengths))
-        for i, n in enumerate(lengths):
-            alone = np.asarray(blk.forward(np.ascontiguousarray(x[i:i + 1, :n])))
-            assert yr[i:i + 1, :n].tobytes() == alone.tobytes(), (window, i)
-            assert not yr[i, n:].any()
-    blk = ml.TransformerBlock(tw, n_heads=2, n_kv_heads=1, device="cpu")
-    with pytest.raises(ValueError, match="state is required"):
-        blk.step(np.zeros((1, 1, 32), np.float32), None)
-    with pytest.raises(ValueError, match="d_model must equal n_heads"):
-        ml.TransformerBlock(tw, n_heads=3, device="cpu")
-
-
 def test_equals_the_reference_path_when_present(binding):
     """A CPU identity column only: the source reference bindings are there."""
     if not _reference_present():
@@ -216,24 +136,6 @@ _MAMBA = (("mamba1", "Mamba1Block", {"device": "cpu"}), ("mamba2", "Mamba2Block"
           ("mamba3", "Mamba3Block", {"device": "cpu"}))
 
 
-@pytest.mark.parametrize("kind,cls,kw", _MAMBA)
-def test_mamba_forward_rows_prefix_ragged_and_refusals(binding, kind, cls, kw):
-    blk = getattr(ml, cls)(_mamba_weights(kind), **kw)
-    x = np.random.default_rng(3).standard_normal((4, 16, 32)).astype(np.float32)
-    y = np.asarray(blk.forward(x))
-    assert y.shape == (4, 16, 32) and y.dtype == np.float32
-    for i in range(4):
-        assert np.asarray(blk.forward(x[i:i + 1])).tobytes() == y[i:i + 1].tobytes(), i
-    assert np.asarray(blk(np.ascontiguousarray(x[:, :7]))).tobytes() == np.ascontiguousarray(y[:, :7]).tobytes()
-    lengths = [16, 7, 1, 12]
-    yr = np.asarray(blk.forward(x, lengths=lengths))
-    for i, n in enumerate(lengths):
-        assert yr[i:i + 1, :n].tobytes() == np.asarray(blk.forward(np.ascontiguousarray(x[i:i + 1, :n]))).tobytes()
-        assert not yr[i, n:].any()
-    with pytest.raises(ValueError, match="state is required"):
-        blk.step(np.ascontiguousarray(x[:, :1]), None)
-
-
 # ---------------------------------------------------------------- the decode surface (lane/stateful-cpu-decoding)
 
 def _step_equals_full(model, x, alloc, as_position):
@@ -247,13 +149,6 @@ def _step_equals_full(model, x, alloc, as_position):
         if np.ascontiguousarray(full[:, t:t + 1]).tobytes() != np.ascontiguousarray(one).tobytes():
             return t, np.ascontiguousarray(full[:, t:t + 1]), np.ascontiguousarray(one)
     return None
-
-
-@pytest.mark.parametrize("kind,cls,kw", _MAMBA)
-def test_mamba_decode_equals_the_prefill(binding, kind, cls, kw):
-    blk = getattr(ml, cls)(_mamba_weights(kind), **kw)
-    x = np.random.default_rng(23).standard_normal((2, 12, 32)).astype(np.float32)
-    assert _step_equals_full(blk, x, lambda: blk.allocate_state(2), np.asarray) is None
 
 
 @pytest.mark.parametrize("tied", (True, False))
@@ -281,39 +176,6 @@ def _samba_config(tied=True):
 def _samba_weights(cfg, seed=5):
     rng = np.random.default_rng(seed)
     return {n: (rng.standard_normal(s) * 0.1).astype(np.float32) for n, s in cfg.registry()}
-
-
-@pytest.mark.parametrize("tied", (True, False))
-def test_samba_forward_rows_ragged_and_refusals(binding, tied):
-    cfg = _samba_config(tied)
-    inf = ml.SambaInference(cfg, _samba_weights(cfg))
-    ids = np.random.default_rng(7).integers(0, 256, (4, 16)).astype(np.int32)
-    y = np.asarray(inf.forward(ids))
-    assert y.shape == (4, 16, 256) and y.dtype == np.float32
-    for i in range(4):
-        assert np.asarray(inf.logits(ids[i:i + 1])).tobytes() == y[i:i + 1].tobytes(), i
-    lengths = [16, 3, 1, 9]
-    junk = ids.copy()
-    for i, n in enumerate(lengths):
-        junk[i, n:] = 999
-    yr = np.asarray(inf.forward(junk, lengths=lengths))
-    for i, n in enumerate(lengths):
-        assert yr[i:i + 1, :n].tobytes() == np.asarray(inf.forward(np.ascontiguousarray(ids[i:i + 1, :n]))).tobytes()
-        assert not yr[i, n:].any()
-    with pytest.raises(ValueError, match=r"\[0, vocab\)"):
-        inf.forward(np.full((1, 2), 256, np.int32))
-    # the native admission refuses a non-native argument first (samba_admission)
-    with pytest.raises(TypeError, match="state must be a SambaState|native input types"):
-        inf.forward(ids, state=object())
-    for name in ("loss", "train_step"):
-        with pytest.raises(NotImplementedError, match="inference is forward only"):
-            getattr(inf, name)(None, None)
-    with pytest.raises(ValueError, match="state is required"):
-        inf.step(ids[:, 0], None)
-    w = _samba_weights(cfg)
-    w.pop("norm_f.weight")
-    with pytest.raises(ValueError, match="weight dict mismatch"):
-        ml.SambaInference(cfg, w)
 
 
 def test_mamba_samba_byte_lm_equal_the_reference_path_when_present(binding):

@@ -89,6 +89,12 @@ trait DecompDev:
         ...
 
     @staticmethod
+    def nmf_solve_pool(x_id: Int, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, nc: Int, solver: Int, a: NmfArgs,
+                       mut loop: FitLoop) raises -> Int:
+        """`nmf_solve` over X already on the device (`x_id` its pool id, read in place; GPU binding only)."""
+        ...
+
+    @staticmethod
     def nmf_nndsvd(pu: F32Ptr, ps: F32Ptr, pv: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, r: Int, nc: Int) raises -> Int:
         ...
 

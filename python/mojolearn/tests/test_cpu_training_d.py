@@ -1,14 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CPU training for the workstream D estimators: cholesky, rbf-sampler,
-kernel-ridge, nystroem, gmm, gmm-random-init, hdbscan and hdbscan-leaf.
+"""CPU training for HDBSCAN: the host thread policy.
 
-The runtime checks (skipped, and SAID to be skipped, when a binding is absent
-or a GPU set loaded) fit each estimator twice through the public API on a
-CPU-only install and require the same bytes, and run HDBSCAN once with the
-default host workers and once with one task, each in its own process. They
-are plumbing checks; the bit claim against the GPU columns is the CPU
-identity gate's, not this file's.
+The runtime check (skipped, and SAID to be skipped, when the binding is absent
+or a GPU set loaded) runs HDBSCAN once with the default host workers and once
+with one task, each in its own process, and requires the same bytes. The
+estimators' CPU-side bits (cholesky, kernel-ridge, nystroem, rbf-sampler, gmm,
+hdbscan) are the verify lanes of those names; this file is a plumbing check.
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_d
 """
@@ -72,34 +70,16 @@ print(m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_)
 """
 
 
-def _twice(fit):
-    a, b = fit(), fit()
-    assert a == b, "two host fits returned different bytes"
-
-
-def test_estimators_fit_on_the_host_when_built():
-    import numpy as np
-    rng = np.random.default_rng(0)
-    x = rng.standard_normal((96, 4)).astype(np.float32)
-    y = rng.standard_normal(96).astype(np.float32)
-    if _built("_mojolearn_gp_host"):
-        a = (x.T @ x + 4.0 * np.eye(4)).astype(np.float32)
-        _twice(lambda: np.asarray(mojolearn.Cholesky().fit(a).solve(np.ones((4, 1), np.float32))).tobytes())
-    if _built("_mojolearn_kernel_methods_host"):
-        _twice(lambda: np.asarray(mojolearn.KernelRidge(alpha=0.1, kernel="rbf", gamma=0.5).fit(x, y).predict(x[:8])).tobytes())
-        _twice(lambda: np.asarray(mojolearn.Nystroem(gamma=0.5, n_components=8, random_state=1).fit(x).transform(x[:8])).tobytes())
-        _twice(lambda: np.asarray(mojolearn.RBFSampler(gamma=0.5, n_components=8, random_state=1).fit(x).transform(x[:8])).tobytes())
-    if _built("_mojolearn_mixture_host"):
-        _twice(lambda: np.asarray(mojolearn.GaussianMixture(n_components=2, max_iter=5, random_state=3).fit(x).score_samples(x[:8])).tobytes())
-    if _built("_mojolearn_hdbscan_host"):
-        _twice(lambda: np.asarray(mojolearn.HDBSCAN(min_cluster_size=5).fit(x).labels_).tobytes())
-        # 96**2 is below the Boruvka parallel threshold.  Its default-worker
-        # answer must cover every row just like the explicit one-task path.
-        # Each setting runs in its own process (the thread policy is read
-        # once per process): labels, core distances and the counts.
-        default = _run_with_threads(None, _HDBSCAN_THREADS_CODE)
-        serial = _run_with_threads("1", _HDBSCAN_THREADS_CODE)
-        assert len(default) == 3 and default == serial, (default, serial)
+def test_hdbscan_default_workers_equal_one_task():
+    # 96**2 is below the Boruvka parallel threshold.  Its default-worker
+    # answer must cover every row just like the explicit one-task path.
+    # Each setting runs in its own process (the thread policy is read
+    # once per process): labels, core distances and the counts.
+    if not _built("_mojolearn_hdbscan_host"):
+        return
+    default = _run_with_threads(None, _HDBSCAN_THREADS_CODE)
+    serial = _run_with_threads("1", _HDBSCAN_THREADS_CODE)
+    assert len(default) == 3 and default == serial, (default, serial)
 
 
 if __name__ == "__main__":

@@ -25,6 +25,24 @@ comptime LIN_OP_INT15_PROFILE_VERSION = 14
 # LIN_OP_NONE = -1, run by a Python entry of the binding through the door's
 # boxed-list fallback, which is deleted).
 comptime LIN_OP_GEMM_FUSED = 15
+# lane vdf-linalg4 (2026-11-24): the training device-array forms (gemm/linalg_dev_arrays.mojo): the address words
+# are pool handles. GPU identical sets only; the host table refuses them.
+comptime LIN_OP_GEMM_DEV = 16
+comptime LIN_OP_TO_BF16_DEV = 17
+comptime LIN_OP_FROM_BF16_DEV = 18
+comptime LIN_OP_QUANTIZE_INT8_DEV = 19
+comptime LIN_OP_DEQUANTIZE_INT8_DEV = 20
+comptime LIN_OP_GEMM_BF16_DEV = 21
+comptime LIN_OP_GEMM_INT8_DEV = 22
+# lane vdf-linalg5 (2026-11-24): the fifteen-bit trio and from_f16 on training device arrays.
+comptime LIN_OP_QUANTIZE_INT15_DEV = 23
+comptime LIN_OP_DEQUANTIZE_INT15_DEV = 24
+comptime LIN_OP_GEMM_INT15_DEV = 25
+comptime LIN_OP_FROM_F16_DEV = 26
+comptime LIN_OP_SVDVALS_DEV = 27
+comptime LIN_OP_QR_R_DEV = 28
+# lane vdf-linalg6: a device array's storage words into a fresh device array (pack_one 'float32', same-format repack).
+comptime LIN_OP_COPY_DEV = 29
 # The operation count the door admits (gemm/linalg_dispatch.mojo
 # LINALG_NATIVE_OPERATION_COUNT).
-comptime LIN_OPERATION_COUNT = 16
+comptime LIN_OPERATION_COUNT = 30

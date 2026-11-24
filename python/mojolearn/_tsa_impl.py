@@ -167,7 +167,7 @@ _TSA_CONTEXT["hw_init_codes"] = _HW_INIT_CODES
 # through to.
 #
 # Cross-vendor status: see this module's docstring. One Apple M4.
-def kpss_test(y, d=0, D=0, s=0, pval_threshold=0.05, return_statistic=False):
+def kpss_test(y, d=0, D=0, s=0, pval_threshold=0.05, return_statistic=False, *, device=None):
     """KPSS stationarity test for a batch of series.
 
     Differences each series (``d`` simple and ``D`` seasonal differences) and
@@ -192,6 +192,10 @@ def kpss_test(y, d=0, D=0, s=0, pval_threshold=0.05, return_statistic=False):
         Significance level.
     return_statistic : bool, default False
         Also return the test statistic (cuML returns the flags only).
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu'
+        runs on the CPU and 'gpu' requires a GPU installation. Other values
+        raise ValueError.
 
     Returns
     -------
@@ -207,7 +211,7 @@ def kpss_test(y, d=0, D=0, s=0, pval_threshold=0.05, return_statistic=False):
     >>> np.asarray(mojolearn.kpss_test(y)).shape
     (4,)
     """
-    return _TSA(None, "kpss_test", (y, d, D, s, pval_threshold, return_statistic), _TSA_CONTEXT)
+    return _TSA(None, "kpss_test", (y, d, D, s, pval_threshold, return_statistic, device), _TSA_CONTEXT)
 
 
 # Choose the simple differencing order `d` per series.
@@ -252,7 +256,7 @@ def kpss_test(y, d=0, D=0, s=0, pval_threshold=0.05, return_statistic=False):
 # `tsa/checks/stationarity_check.mojo`.
 #
 # Cross-vendor status: see this module's docstring. One Apple M4.
-def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
+def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05, *, device=None):
     """Choose the differencing order ``d`` for each series by the KPSS test.
 
     Runs :func:`kpss_test` for ``d = 0, 1, ..., d_max - 1`` and returns, per
@@ -274,6 +278,10 @@ def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
         ``0 <= d_max <= 2 - D``.
     pval_threshold : float, default 0.05
         Significance level of the KPSS test.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu'
+        runs on the CPU and 'gpu' requires a GPU installation. Other values
+        raise ValueError.
 
     Returns
     -------
@@ -286,7 +294,7 @@ def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
     >>> np.asarray(mojolearn.select_d(y)).shape
     (4,)
     """
-    return _TSA(None, "select_d", (y, D, s, d_max, pval_threshold), _TSA_CONTEXT)
+    return _TSA(None, "select_d", (y, D, s, d_max, pval_threshold, device), _TSA_CONTEXT)
 
 
 # Holt-Winters exponential smoothing, with the reference

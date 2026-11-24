@@ -20,7 +20,8 @@ def applicable(public, method):
 
 def check(public, method):
     import numpy as np
-    import mojolearn as ml
+    from ._verify_api import package
+    ml = package()
     cls = resolve(public)
     name = public.rsplit('.',1)[-1]
     if name=='Array':

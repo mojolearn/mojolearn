@@ -1,20 +1,19 @@
 diff --git a/core/scale_gamma_exact.mojo b/core/scale_gamma_exact.mojo
-index ec2fcf681e..d25dc1a504 100644
+index ec2fcf681e..8bb93c0a43 100644
 --- a/core/scale_gamma_exact.mojo
 +++ b/core/scale_gamma_exact.mojo
 @@ -23,6 +23,7 @@ The work is a handful of multi-word operations on at most ~25 words, once
  per fit; no loop runs over the data.
  """
  from std.memory import bitcast
-+from std.os import getenv
++from std.sys import is_defined
  
  comptime SGX_L1 = 9
  comptime SGX_L2 = 18
-@@ -261,4 +262,7 @@ def scale_gamma_from_limbs(words: List[Int64], n_cells: Int, n_features: Int) ra
+@@ -261,4 +262,6 @@ def scale_gamma_from_limbs(words: List[Int64], n_cells: Int, n_features: Int) ra
      var spread = _sub(ns2, s1sq)
      var numerator = _shl(_mul(n, n), 298)
      var denominator = _mul(_Nat(UInt64(n_features)), spread)
-+    if getenv("MOJOLEARN_VENDOR") != "cpu":  # SABOTAGE 870: the device column's gamma one ulp off
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE 870: the GPU bindings' gamma one ulp off (compiled into no host binding)
 +        return _round_ratio(numerator, denominator) * (1.0 + 2.220446049250313e-16)
      return _round_ratio(numerator, denominator)
-+

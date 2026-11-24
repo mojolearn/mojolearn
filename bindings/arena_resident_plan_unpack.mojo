@@ -110,9 +110,9 @@ struct ArenaResidentPlan(Movable):
             raise problem^
         return key
 
-    def store(mut self, values: PythonObject, indices: Bool = False) raises -> Int:
-        var key = self.entry(values, indices)
-        return self.records[key].sid
+    # REMOVED (lane vdf-scope-cv, 2026-11-24): `store`, whose one caller
+    # (bindings/msel_cv_door.mojo MselFoldRows.resident_store, the
+    # cross_val_predict identity placement) was deleted.
 
     def take(mut self, values: PythonObject, indices_value: PythonObject) raises -> PythonObject:
         var base_key = self.entry(values)

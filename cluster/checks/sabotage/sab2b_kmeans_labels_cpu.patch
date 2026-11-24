@@ -1,0 +1,32 @@
+diff --git a/cluster/host/kmeans_oracle.mojo b/cluster/host/kmeans_oracle.mojo
+index 9e12244614..57f50619d5 100644
+--- a/cluster/host/kmeans_oracle.mojo
++++ b/cluster/host/kmeans_oracle.mojo
+@@ -1609,6 +1609,13 @@ def host_kmeans_fit(
+             x, n, x_norm, centroids, k, c_norm, d, host_metric_is_sqrt(metric),
+             labels, min_dist,
+         )
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sab2b-kmeans-labels-cpu (lane vdv-sab2-b): the first label traded with the first different one, the host bindings only
++        for q in range(1, len(labels)):
++            if labels[q] != labels[0]:
++                var t = labels[0]
++                labels[0] = labels[q]
++                labels[q] = t
++                break
+     return KMeansHostResult(result.inertia, result.n_iter, sum_scale, weight_scale,
+         result.loop_iterations, result.loop_ns)
+ 
+@@ -1697,6 +1704,13 @@ def host_kmeans_predict(
+     one cuVS assignment pass."""
+     var min_dist = List[Float32]()
+     host_kmeans_assign(x, n, d, centroids, k, metric, String("kmeans_predict"), labels, min_dist)
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sab2b-kmeans-labels-cpu (lane vdv-sab2-b): the first label traded with the first different one, the host bindings only
++        for q in range(1, len(labels)):
++            if labels[q] != labels[0]:
++                var t = labels[0]
++                labels[0] = labels[q]
++                labels[q] = t
++                break
+     comptime if KMEANS_PREDICT_HOST_SABOTAGE:
+         # THE SABOTAGE ARM: one bit into every label. Wrong on purpose; see
+         # KMEANS_PREDICT_HOST_SABOTAGE.

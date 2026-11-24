@@ -15,6 +15,30 @@ from core.native_descriptor_call import native_descriptor_call
 from glm.impl.lm_finish import lm_intercept
 
 
+def linear_prep_x_out(request: LinearFitRequest, host_work: Int) raises -> Int:
+    """LF_PREP's prepared-X output address: the host scratch for a host X;
+    for THE FOLD X WORD (`request.x < 0`, lane vdf-scope-linear4) the
+    request's `prep_slot` Int64, which LF_PREP fills with the fold word of
+    the device slot that holds the prepared X (glm/impl/ols_prep_device.mojo)."""
+    if request.x >= 0:
+        return host_work
+    if request.prep_slot == 0:
+        raise Error("RuntimeError: a fold X's prepared X needs the member's prep_slot word")
+    MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=request.prep_slot)[] = Int64(0)
+    return request.prep_slot
+
+
+def linear_prep_x_in(request: LinearFitRequest, out_address: Int) raises -> Int:
+    """The X address the solve entry reads after LF_PREP: the host scratch,
+    or the prepared slot's fold word (negative) LF_PREP wrote."""
+    if request.x >= 0:
+        return out_address
+    var word = Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=out_address)[])
+    if word >= 0:
+        raise Error("RuntimeError: LF_PREP left no prepared X slot for a fold X")
+    return word
+
+
 def linear_ridge_run(entry: NativeDescriptorCall, weighted_entry: NativeDescriptorCall,
                      request: LinearFitRequest) raises -> LinearFitResult:
     var rows = request.rows
@@ -26,6 +50,12 @@ def linear_ridge_run(entry: NativeDescriptorCall, weighted_entry: NativeDescript
     if not request.x or not request.y or not request.coef or not request.mean:
         raise Error("Ridge: null fit buffer")
     var result = LinearFitResult()
+    # THE FOLD X WORD (core/fold_x_device.mojo): a negative X names a device fold
+    # slot. Lane vdf-scope-linear4: every route below reads it on the device:
+    # the weighted / one-column solve (x_linear/ridge_descriptor_device.mojo,
+    # `fit_device` ALGO_RIDGE uploads through fold_x_fill), LF_GRAM, the
+    # resident Ridge, and LF_PREP + LF_RIDGE (the prepared X stays a device
+    # slot, `linear_prep_x_out`; ridge_fit_host reads it through fold_x_fill).
     if request.weights or cols == 1:
         var has_weights = request.weights != 0
         var targets = List[Float32](unsafe_uninit_length=rows * 2 if has_weights else 0)
@@ -66,7 +96,7 @@ def linear_ridge_run(entry: NativeDescriptorCall, weighted_entry: NativeDescript
             _ = native_descriptor_call(entry, LF_RIDGE_RESIDENT, addresses, ints, floats)
             done = True
         if not done:
-            var work_x = List[Float32](unsafe_uninit_length=rows * cols if request.intercept else 0)
+            var work_x = List[Float32](unsafe_uninit_length=rows * cols if request.intercept and request.x >= 0 else 0)
             var work_y = List[Float32](unsafe_uninit_length=rows if request.intercept else 0)
             var xm64 = List[Float64](unsafe_uninit_length=cols if request.intercept else 0)
             var ym32 = List[Float32](unsafe_uninit_length=1 if request.intercept else 0)
@@ -74,12 +104,13 @@ def linear_ridge_run(entry: NativeDescriptorCall, weighted_entry: NativeDescript
             var y_address = request.y
             try:
                 if request.intercept:
-                    x_address = Int(work_x.unsafe_ptr())
+                    x_address = linear_prep_x_out(request, Int(work_x.unsafe_ptr()))
                     y_address = Int(work_y.unsafe_ptr())
                     _ = native_descriptor_call(entry, LF_PREP,
                         [request.x, request.y, 0, x_address, y_address,
                          Int(xm64.unsafe_ptr()), request.mean, Int(ymean.unsafe_ptr()), Int(ym32.unsafe_ptr())],
                         [rows, cols, 1, 1 if flags & LF_PAIRED_MEANS else 0], List[Float64]())
+                    x_address = linear_prep_x_in(request, x_address)
                 _ = native_descriptor_call(entry, LF_RIDGE,
                     [x_address, y_address, request.coef], [rows, cols], [request.alpha])
             finally:

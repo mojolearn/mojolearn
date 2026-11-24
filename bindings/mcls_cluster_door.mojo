@@ -35,7 +35,7 @@ from std.python._cpython import GILReleased
 from core.entry_table import EntryRef
 from core.metrics_cluster_table import (
     CLUSTER_OP_RAND, CLUSTER_OP_ADJUSTED_RAND, CLUSTER_OP_MUTUAL_INFO, CLUSTER_OP_HOMOGENEITY,
-    CLUSTER_OP_COMPLETENESS, CLUSTER_OP_V_MEASURE, CLUSTER_OP_FOWLKES_MALLOWS,
+    CLUSTER_OP_COMPLETENESS, CLUSTER_OP_V_MEASURE, CLUSTER_OP_FOWLKES_MALLOWS, CLUSTER_OP_HCV,
     cluster_ops_entry, cluster_pair_run, cluster_hcv_run,
 )
 from bindings.admitted_family_door import admit_family
@@ -59,6 +59,12 @@ from bindings.mcls_common_unpack import (
     mc_regression_f32_1d, mc_pair_check, mc_weights, mc_encode_store, mc_encode_signed,
 )
 from core.host_finite_scan import host_all_finite_f32
+from bindings.metrics_slot_door import mc_slots_open, mc_slots_call, mc_slot_inputs, mc_resident_pair
+from bindings.arena_prog_run import metric_source_word
+from metrics.slot_ops import (
+    MS_RAND, MS_ARI, MS_ENTROPY, MS_R2, MS_R2_W, MS_MSE, MS_MAE, MS_RMSE, MS_KL, MS_SILHOUETTE, MS_TRUST,
+    MS_MI, MS_FM, MS_HOMOG, MS_COMPL, MS_V_MEASURE, MS_HCV,
+)
 from core.mcls_impl import mcls_min_i32, mcls_max_i32
 from checks.numerics import portable_exp64, portable_log64
 
@@ -93,6 +99,53 @@ def _cluster_entry(binding: PythonObject) raises -> EntryRef:
     return cluster_ops_entry(Int(py=key[0]), Int(py=key[1]))
 
 
+def _cluster_ms(operation: Int) -> Int:
+    """The `metric_slots` operation of a union-code cluster operation."""
+    if operation == CLUSTER_OP_MUTUAL_INFO:
+        return MS_MI
+    if operation == CLUSTER_OP_FOWLKES_MALLOWS:
+        return MS_FM
+    if operation == CLUSTER_OP_HOMOGENEITY:
+        return MS_HOMOG
+    if operation == CLUSTER_OP_COMPLETENESS:
+        return MS_COMPL
+    if operation == CLUSTER_OP_V_MEASURE:
+        return MS_V_MEASURE
+    return MS_HCV
+
+
+def _cluster_union_device(binding: PythonObject, operation: Int, yt: PythonObject, yp: PythonObject, n: Int,
+                          beta: Float64, context: PythonObject) raises -> Optional[PythonObject]:
+    """The union-code metrics (mutual information, Fowlkes-Mallows,
+    homogeneity, completeness, v-measure, and the three at once) over
+    admitted int32 labels of which at least one is resident in the active
+    `resident()` scope (lane vdf-xm-wire): the device union step
+    (`mc_resident_pair`, MS_ENCODE_PAIR: the codes `cluster_union_codes`
+    makes, kept on the device) then the entry over [0, k-1] reading the two
+    code slots in place: two entry calls, k and the answer come back, no
+    label or code word does. None: the host route (`cluster_pair_run` /
+    `cluster_hcv_run`), unchanged. Same codes, same kernels: same bits."""
+    var state = mc_slots_open(context)
+    if not state.resident.active():
+        return Optional[PythonObject]()  # outside resident(): one scope read, the host route
+    var pair = mc_resident_pair(binding, yt, Int(py=classical_address(yt)), yp, Int(py=classical_address(yp)), n, 4,
+                                False, state)
+    if not pair.live():
+        return Optional[PythonObject]()
+    var addrs: List[Int] = [0, 0]
+    var slots: List[Int] = [pair.codes_t, pair.codes_p]
+    var ints: List[Int] = [n, 0, pair.k - 1]
+    var floats = List[Float64]()
+    if operation == CLUSTER_OP_V_MEASURE or operation == CLUSTER_OP_HCV:
+        floats.append(beta)
+    var result = mc_slots_call(binding, _cluster_ms(operation), addrs, slots, ints, floats, List[Int](), state)
+    _ = yt  # read by address inside the steps above
+    _ = yp
+    if operation == CLUSTER_OP_HCV:
+        return Optional[PythonObject](result)  # the entry's 3-tuple of floats
+    return Optional[PythonObject](_as_float(result))
+
+
 def _cluster_pair(binding: PythonObject, operation: Int, args: PythonObject, beta_in: PythonObject,
                   context: PythonObject) raises -> PythonObject:
     """UNPACK / RUN / PACK of one label-pair metric (lane mf-cluster5): the
@@ -108,6 +161,20 @@ def _cluster_pair(binding: PythonObject, operation: Int, args: PythonObject, bet
     var yp = pair[1]
     var beta = 1.0 if operation != CLUSTER_OP_V_MEASURE else Float64(py=family_call(mc_b().float, beta_in))
     var n = Int(py=yt.size)
+    if operation == CLUSTER_OP_RAND or operation == CLUSTER_OP_ADJUSTED_RAND:
+        # the Rand indices read RAW labels: resident ones in place (lane vdf-xm-kernels)
+        var pair_values: List[PythonObject] = [yt, yp]
+        var ints: List[Int] = [n]
+        var device = mc_slot_inputs(binding, MS_RAND if operation == CLUSTER_OP_RAND else MS_ARI, pair_values, ints,
+                                    List[Float64](), List[Int](), args, UInt64(0),
+                                    metric_source_word(0, 1) | metric_source_word(1, 2), context)
+        if device:
+            return _as_float(device.value())
+    else:
+        # the union-code metrics: resident labels encoded on the device (lane vdf-xm-wire)
+        var device = _cluster_union_device(binding, operation, yt, yp, n, beta, context)
+        if device:
+            return device.value()
     var t = Int(py=classical_address(yt))
     var p = Int(py=classical_address(yp))
     var entry = _cluster_entry(binding)
@@ -129,7 +196,15 @@ def _entropy(args: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = lab  # keep the Python object alive through the native call above
     var upper = mcls_max_i32(words, n)
     _ = lab  # keep the Python object alive through the native call above
-    var value = Float64(py=_as_float(family_call(mc_entry(args[0], "entropy"), classical_address(lab),
+    var lab_values: List[PythonObject] = [lab]
+    var lab_ints: List[Int] = [n, Int(lower), Int(upper)]
+    var device = mc_slot_inputs(args[0], MS_ENTROPY, lab_values, lab_ints, List[Float64](), List[Int](), args, UInt64(0),
+                                 metric_source_word(0, 1), context)
+    var value: Float64
+    if device:
+        value = Float64(py=_as_float(device.value()))
+    else:
+        value = Float64(py=_as_float(family_call(mc_entry(args[0], "entropy"), classical_address(lab),
                                                  _params(n, lower, upper))))
     _ = lab  # keep the Python object alive through the native call above
     _ = lab^
@@ -171,14 +246,26 @@ def _silhouette(args: PythonObject, caller: String, context: PythonObject) raise
                     + "silhouette_score.pyx dispatches by default). 'cityblock', "
                     + "'cosine', 'l1', 'manhattan' and 'sqeuclidean' are other "
                     + "distance kernels and are not in metrics/ (NOT_IMPLEMENTED.tsv)")
-    var x = admit_family(args[1], 2, "X", context).array
-    var rows = Int(py=x.shape[0])
-    var cols = Int(py=x.shape[1])
-    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), rows * cols):
-        raise Error("mojolearn " + caller + ": X contains NaN or infinity; refused here "
-                    + "(metrics/README.md HAND-OFF ask 3), because a NaN distance "
-                    + "reaches sil_op as +0.0 (DEVIATION 656) rather than as an error")
-    _ = x  # keep the Python object alive through the native calls above
+    # Device inputs (lane vdf-xm-kernels): a DeviceRows X is gathered on the
+    # device just before the entry and refused there if not finite; a host X
+    # resident in the active resident() scope is read in place.
+    var state = mc_slots_open(context)
+    var shape = state.rows_shape(args[0], args[1])
+    var on_rows = shape[0] >= 0
+    var x = PythonObject(None)
+    var rows = shape[0]
+    var cols = shape[1]
+    var x_slot = -1
+    if not on_rows:
+        x = admit_family(args[1], 2, "X", context).array
+        rows = Int(py=x.shape[0])
+        cols = Int(py=x.shape[1])
+        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), rows * cols):
+            raise Error("mojolearn " + caller + ": X contains NaN or infinity; refused here "
+                        + "(metrics/README.md HAND-OFF ask 3), because a NaN distance "
+                        + "reaches sil_op as +0.0 (DEVIATION 656) rather than as an error")
+        _ = x  # keep the Python object alive through the native calls above
+        x_slot = state.slot_from(args[0], x, args, 1, False)  # a converted copy of X is never kept (lane vdf-xm-wire2)
     var lab = mc_i32_1d(args[2], "labels", context)
     var n_lab = Int(py=lab.size)
     if n_lab != rows:
@@ -205,7 +292,17 @@ def _silhouette(args: PythonObject, caller: String, context: PythonObject) raise
     if chunk < 1:
         raise Error("mojolearn " + caller + ": chunksize must be at least 1, got " + String(chunk))
     var scores = family_array(Python.tuple(rows), "<f4", context)
-    var mean = _as_float(family_call(mc_entry(args[0], "silhouette"), classical_address(x), classical_address(mapped),
+    var mean: PythonObject
+    if on_rows or x_slot >= 0:
+        if on_rows:
+            x_slot = state.rows(args[0], args[1])[0]
+        var addrs: List[Int] = [0 if on_rows else Int(py=classical_address(x)), Int(py=classical_address(mapped))]
+        var slots: List[Int] = [x_slot, -1]
+        var ints: List[Int] = [rows, cols, k, chunk, (1 if caller == "silhouette_score" else 2) if on_rows else 0]
+        var outs: List[Int] = [Int(py=classical_address(scores))]
+        mean = _as_float(mc_slots_call(args[0], MS_SILHOUETTE, addrs, slots, ints, List[Float64](), outs, state))
+    else:
+        mean = _as_float(family_call(mc_entry(args[0], "silhouette"), classical_address(x), classical_address(mapped),
                                      classical_address(scores), _params(rows, cols, k, chunk)))
     _ = x  # keep the Python object alive through the native call above
     _ = scores  # keep the Python object alive through the native call above
@@ -227,24 +324,50 @@ def _trustworthiness(args: PythonObject, context: PythonObject) raises -> Python
         raise Error("NotImplementedError: mojolearn trustworthiness: metric=" + family_repr(metric)
                     + " is refused; only 'euclidean' is implemented, and cuML's trustworthiness.pyx:86 "
                     + "refuses every other name too")
-    var x = admit_family(args[1], 2, "X", context).array
+    # Device inputs (lane vdf-xm-kernels): X as in `_silhouette`; X_embedded
+    # stays a host input (the embedded k-NN's boundary is host pointers).
+    var state = mc_slots_open(context)
+    var shape = state.rows_shape(args[0], args[1])
+    var on_rows = shape[0] >= 0
+    var x = PythonObject(None)
+    var rows = shape[0]
+    var m = shape[1]
+    var x_slot = -1
+    if not on_rows:
+        x = admit_family(args[1], 2, "X", context).array
+        rows = Int(py=x.shape[0])
+        m = Int(py=x.shape[1])
     var emb = admit_family(args[2], 2, "X_embedded", context).array
-    var rows = Int(py=x.shape[0])
     if rows != Int(py=emb.shape[0]):
         raise Error("mojolearn trustworthiness: X has " + String(rows) + " rows and X_embedded has "
                     + String(Int(py=emb.shape[0])))
-    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
-        raise Error("mojolearn trustworthiness: X contains NaN or infinity; refused here (metrics/README.md HAND-OFF ask 3)")
-    _ = x  # keep the Python object alive through the native calls above
-    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(emb))), Int(py=emb.size)):
-        raise Error("mojolearn trustworthiness: X_embedded contains NaN or infinity; refused here "
-                    + "(metrics/README.md HAND-OFF ask 3)")
+    if not on_rows:
+        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
+            raise Error("mojolearn trustworthiness: X contains NaN or infinity; refused here (metrics/README.md HAND-OFF ask 3)")
+        _ = x  # keep the Python object alive through the native calls above
+        x_slot = state.slot_from(args[0], x, args, 1, False)  # a converted copy of X is never kept (lane vdf-xm-wire2)
+    # X_embedded resident in the active resident() scope (lane vdf-xm-wire): the embedded k-NN reads
+    # its slot in place and the entry refuses a non-finite one on the device with these words
+    var emb_slot = state.slot_from(args[0], emb, args, 2, False)
+    if emb_slot < 0:
+        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(emb))), Int(py=emb.size)):
+            raise Error("mojolearn trustworthiness: X_embedded contains NaN or infinity; refused here "
+                        + "(metrics/README.md HAND-OFF ask 3)")
     _ = emb  # keep the Python object alive through the native calls above
     var batch = mc_int(args[5])
     if batch < 1:
         raise Error("mojolearn trustworthiness: batch_size must be at least 1, got " + family_repr(args[5]))
-    var result = _as_float(family_call(mc_entry(args[0], "trustworthiness"), classical_address(x), classical_address(emb),
-                                       _params(rows, Int(py=x.shape[1]), Int(py=emb.shape[1]), mc_int(args[3]), batch)))
+    var result: PythonObject
+    if on_rows or x_slot >= 0 or emb_slot >= 0:
+        if on_rows:
+            x_slot = state.rows(args[0], args[1])[0]
+        var addrs: List[Int] = [0 if on_rows else Int(py=classical_address(x)), Int(py=classical_address(emb))]
+        var slots: List[Int] = [x_slot, emb_slot]
+        var ints: List[Int] = [rows, m, Int(py=emb.shape[1]), mc_int(args[3]), batch, 1 if on_rows else 0]
+        result = _as_float(mc_slots_call(args[0], MS_TRUST, addrs, slots, ints, List[Float64](), List[Int](), state))
+    else:
+        result = _as_float(family_call(mc_entry(args[0], "trustworthiness"), classical_address(x), classical_address(emb),
+                                       _params(rows, m, Int(py=emb.shape[1]), mc_int(args[3]), batch)))
     _ = emb  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _ = x^
@@ -263,7 +386,15 @@ def _kl_divergence(args: PythonObject, context: PythonObject) raises -> PythonOb
     if family_min(q) < 0:
         raise Error("mojolearn kl_divergence: Q has a negative entry; refused here (metrics/README.md "
                     + "HAND-OFF ask 3) rather than letting log of a negative reach the fold")
-    var result = _as_float(family_call(mc_entry(args[0], "kl_divergence"), classical_address(p), classical_address(q),
+    var kl_values: List[PythonObject] = [p, q]
+    var kl_ints: List[Int] = [Int(py=p.size)]
+    var device = mc_slot_inputs(args[0], MS_KL, kl_values, kl_ints, List[Float64](), List[Int](), args, UInt64(0),
+                                 metric_source_word(0, 1) | metric_source_word(1, 2), context)
+    var result: PythonObject
+    if device:
+        result = _as_float(device.value())
+    else:
+        result = _as_float(family_call(mc_entry(args[0], "kl_divergence"), classical_address(p), classical_address(q),
                                        _params(Int(py=p.size))))
     _ = q  # keep the Python object alive through the native call above
     _ = p  # keep the Python object alive through the native call above
@@ -290,7 +421,16 @@ def _regression_error(args: PythonObject, context: PythonObject) raises -> Pytho
     var yt = mc_regression_f32_1d(args[2], "y_true", context)
     var yp = mc_regression_f32_1d(args[3], "y_pred", context)
     mc_pair_check(yt, yp, "y_true", "y_pred")
-    var result = _as_float(family_call(mc_entry(args[0], name), classical_address(yt), classical_address(yp),
+    var reg_values: List[PythonObject] = [yt, yp]
+    var reg_ints: List[Int] = [Int(py=yt.size)]
+    var reg_op = MS_MSE if name == "mean_squared_error" else (MS_MAE if name == "mean_absolute_error" else MS_RMSE)
+    var device = mc_slot_inputs(args[0], reg_op, reg_values, reg_ints, List[Float64](), List[Int](), args, UInt64(0),
+                                 metric_source_word(0, 2) | metric_source_word(1, 3), context)
+    var result: PythonObject
+    if device:
+        result = _as_float(device.value())
+    else:
+        result = _as_float(family_call(mc_entry(args[0], name), classical_address(yt), classical_address(yp),
                                        _params(Int(py=yt.size))))
     _ = yp  # keep the Python object alive through the native call above
     _ = yt  # keep the Python object alive through the native call above
@@ -316,15 +456,30 @@ def _r2(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var result: PythonObject
     if args[3] is not None:
         var w = mc_weights(args[3], n, "r2_score", context)
-        result = _as_float(family_call(mc_entry(args[0], "r2_score_weighted"), classical_address(y),
-                                       classical_address(yh), classical_address(w), _params(n)))
+        var w_values: List[PythonObject] = [y, yh, w]
+        var w_ints: List[Int] = [n]
+        var device = mc_slot_inputs(args[0], MS_R2_W, w_values, w_ints, List[Float64](), List[Int](), args, UInt64(0),
+                                     metric_source_word(0, 1) | metric_source_word(1, 2) | metric_source_word(2, 3),
+                                     context)
+        if device:
+            result = _as_float(device.value())
+        else:
+            result = _as_float(family_call(mc_entry(args[0], "r2_score_weighted"), classical_address(y),
+                                           classical_address(yh), classical_address(w), _params(n)))
         _ = y  # keep the Python object alive through the native call above
         _ = w  # keep the Python object alive through the native call above
         _ = yh  # keep the Python object alive through the native call above
         _ = w^
     else:
-        result = _as_float(family_call(mc_entry(args[0], "r2_score"), classical_address(y), classical_address(yh),
-                                       _params(n)))
+        var r2_values: List[PythonObject] = [y, yh]
+        var r2_ints: List[Int] = [n]
+        var device = mc_slot_inputs(args[0], MS_R2, r2_values, r2_ints, List[Float64](), List[Int](), args, UInt64(0),
+                                     metric_source_word(0, 1) | metric_source_word(1, 2), context)
+        if device:
+            result = _as_float(device.value())
+        else:
+            result = _as_float(family_call(mc_entry(args[0], "r2_score"), classical_address(y), classical_address(yh),
+                                           _params(n)))
         _ = yh  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native call above
     _ = y^
@@ -385,6 +540,9 @@ def mcls_cluster_operation(operation: Int, args: PythonObject, context: PythonOb
         var yp = pair[1]
         var beta = Float64(py=family_call(b.float, args[3]))
         var n = Int(py=yt.size)
+        var device = _cluster_union_device(args[0], CLUSTER_OP_HCV, yt, yp, n, beta, context)
+        if device:
+            return device.value()
         var t = Int(py=classical_address(yt))
         var p = Int(py=classical_address(yp))
         var entry = _cluster_entry(args[0])

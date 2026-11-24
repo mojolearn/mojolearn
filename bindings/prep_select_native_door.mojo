@@ -48,8 +48,13 @@ from bindings.x_prep_native_owner_door import xprep_resident
 from core.member_set_run import MemberFitExtras
 from providers.python.member_gbdt_boundary_door import gbdt_member_fit_params, gbdt_member_label_check
 from bindings.native_loaded_module_door import native_loaded_module
+from bindings.scaler_route_unpack import scaler_cpu_scope
+from bindings.msel_estimator_native_door import msel_estimator_plan, msel_native_clone, msel_native_set_params
+from providers.python.device_route_boundary_door import device_request
+from core.device_route import DEVICE_CPU, DEVICE_INSTALL, device_cpu_absent
+from core.function_device import function_device_member
 from bindings.optimizer_public_words_unpack import stash_python_error
-from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_address, classical_typed
 from bindings.classical_attributes_door import classical_connect_numpy
@@ -72,7 +77,8 @@ from bindings.x_prep_native_inputs_door import _rows_fields, _dense_values, _val
 from bindings.prep_classify_common_door import cls_x2d, XIn
 from bindings.prep_classify_native_door import resident_enter_min, _resident_exit
 from bindings.prep_native_estimator_door import (
-    prep_estimator_admit, prep_estimator_has, prep_estimator_clone, prep_estimator_call, prep_estimator_plan)
+    prep_estimator_admit, prep_estimator_has, prep_estimator_clone, prep_estimator_call, prep_estimator_plan,
+    prep_native_context)
 from bindings.prep_keys_unpack import (
     prep_keys,
     PREP_OPN_DECISION_FUNCTION, PREP_OPN_FIT, PREP_OPN_FIT_TRANSFORM, PREP_OPN_GET_SUPPORT,
@@ -553,12 +559,49 @@ def _fit_params(args: PythonObject) raises -> PythonObject:
     return params
 
 
+def _rfe_member_device(request: Int, host_beside: Bool, estimator: PythonObject, context: PythonObject,
+                       b: PythonObject) raises -> PythonObject:
+    """THE MEMBER RULE of RFE's `device` (lane vdf-misc; the cv tools' rule,
+    `function_device_member`): RFE's explicit device is handed to the
+    estimator it fits; an estimator constructed with a different explicit
+    device is refused before anything runs. Only "cpu" beside a GPU set over
+    an estimator that names none changes the member: it is cloned ONCE per
+    fit with device='cpu' (through its own set_params, so its class's device
+    check runs), and every round fits that clone. Once per fit, never per
+    round."""
+    if request == DEVICE_INSTALL:
+        return estimator
+    var own = device_request(py_fields(estimator), b)
+    var name = classical_estimator_name(estimator)
+    _ = function_device_member(request, own, "RFE", name)
+    if not host_beside or own == DEVICE_CPU:
+        return estimator
+    var plans = prep_native_context(context)
+    var plan = msel_estimator_plan(estimator, plans)
+    if not py_contains(plan["parameters"], "device"):
+        device_cpu_absent(name, "its constructor takes no device, so RFE cannot hand it device='cpu'")
+    var member = msel_native_clone(estimator, plans)
+    var params = Python.dict()
+    py_setitem(params, "device", PythonObject("cpu"))
+    _ = msel_native_set_params(member, params, plans)
+    return member
+
+
 def _rfe_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """RFE.fit(X, y, **fit_params): the elimination rounds, then the final
     estimator on the selected columns."""
     var nk = prep_keys()
     var b = native_loaded_module("builtins")
     var cc = py_item(context, nk[].k_select_context)
+    # RFE(device="cpu") beside a GPU set (lane vdf-misc): `context` is the
+    # family's CPU context (the door's `prep_route_context`, vendor "cpu"),
+    # which copies the classifier context unchanged; the rounds then run on
+    # the classifier family's CPU context (`scaler_cpu_scope`, the one a
+    # device="cpu" GaussianNB runs on). Two reads per fit, none per round.
+    var host_beside = String(py=py_item(context, PythonObject("vendor"))) == "cpu" and String(
+        py=py_item(cc, PythonObject("vendor"))) != "cpu"
+    if host_beside:
+        cc = scaler_cpu_scope(cc, b)
     # RFE uses the classifier arena's independent input context. The outer
     # prep door connects only its encode context, so a first RFE call could
     # reject the ndarray that composition_before just prepared. Connect this
@@ -566,7 +609,8 @@ def _rfe_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     # not be required, and NumPy may be loaded after package import.
     classical_connect_numpy(cc)
     var fields = py_fields(model)
-    var estimator = py_item(fields, nk[].k_estimator)
+    var estimator = _rfe_member_device(device_request(fields, b), host_beside, py_item(fields, nk[].k_estimator),
+                                       context, b)
     prep_estimator_admit(estimator, "RFE", context)
     var g = py_item(fields, nk[].k_importance_getter)
     if not Bool(py=py_call(b.isinstance, g, b.str)):

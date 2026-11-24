@@ -16,26 +16,37 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("public-numeric-metadata")
 def _(ml, X, yc, yr, Xh=None):
-    from mojolearn import ensemble, training
+    # Everything through the lane's `ml` (the device view), never an import of
+    # the package (vdv-fragfix, 2026-11-24). catboost_auto_learning_rate,
+    # johnson_lindenstrauss_min_dim and training.vendor_used take no `device`,
+    # so the lane is one-sided (declared below): it runs on the CPU side only.
+    ensemble, training = ml.ensemble, ml.training
     rates = [ensemble.catboost_auto_learning_rate("Logloss", 10000, 1000, False, False),
              ensemble.catboost_auto_learning_rate("RMSE", 200000, 1000, False, True)]
     missing = ensemble.catboost_auto_learning_rate("MAE", 1000, 1000, False, True)
     dimensions = [ml.johnson_lindenstrauss_min_dim(n, eps=eps)
                   for n, eps in ((1, 0.2), (17, 0.25), (1000, 0.4))]
     vendor = training.vendor_used(numeric_mode="identical")
-    # The vendor string must differ across devices. Check it against the
-    # already selected backend and hash the consumed qualification result.
-    if vendor != ml._backend.vendor():
-        raise AssertionError("training.vendor_used disagrees with the selected backend")
+    # training.vendor_used takes no `device`: it reads the process's training
+    # binding, the installation's own (`ml.vendor()`, a process reader), on
+    # either side. An equality of two process facts, never a side choice.
+    if vendor != ml.vendor():
+        raise AssertionError("training.vendor_used disagrees with the installation's backend")
     # An estimator's own read-backs (NumericModeMixin.numeric_mode_used / vendor_used through the native
-    # mode metadata: x_ann_* and x_cluster_* on a device column, the host bindings' GPU-named exports on
-    # the CPU column). Checked against the selected backend, not hashed, so the digest keeps its bits.
+    # mode metadata: x_ann_* and x_cluster_* on the GPU side, the host bindings' exports on the CPU side).
+    # The estimators are built through the view, so they are on the running side; checked against that
+    # side's backend name (`_side_vendor`), not hashed, so the digest keeps its bits.
     for est in (ml.TSNE(random_state=5), ml.MiniBatchKMeans(n_clusters=2, random_state=5)):  # glue: two classes
-        if est.numeric_mode_used() != "identical" or est.vendor_used() != ml._backend.vendor():
-            raise AssertionError(f"{type(est).__name__}.numeric_mode_used/vendor_used disagree with the selected backend")
+        if est.numeric_mode_used() != "identical" or est.vendor_used() != _side_vendor(ml):
+            raise AssertionError(f"{type(est).__name__}.numeric_mode_used/vendor_used disagree with the running side")
     return _fit(dict(rates=_h(np.asarray(rates, dtype=np.float64)),
                      dimensions=_h(np.asarray(dimensions, dtype=np.int64)),
                      metadata=_h(np.asarray([missing is None, vendor in ("cpu", "metal", "cuda", "hip")], dtype=np.uint8))))
+
+
+_one_sided("public-numeric-metadata", missing="gpu",
+           reason="catboost_auto_learning_rate (host only by decision), johnson_lindenstrauss_min_dim and "
+                  "training.vendor_used take no device=, so the GPU side cannot be selected through the public parameter")
 
 
 @lane("public-sparse-encode")
@@ -53,7 +64,7 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("public-residual-dropout")
 def _(ml, X, yc, yr, Xh=None):
-    from mojolearn import training
+    training = ml.training   # through the view: the running side
     values = np.ascontiguousarray(X[:16, :8], dtype=np.float32)
     residual = np.ascontiguousarray(X[16:32, :8], dtype=np.float32)
     gradient = np.ascontiguousarray(X[32:48, :8], dtype=np.float32)
@@ -65,7 +76,7 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("public-scorer-factories")
 def _(ml, X, yc, yr, Xh=None):
-    from mojolearn import model_selection as ms, metrics
+    ms, metrics = ml.model_selection, ml.metrics   # through the view: the running side
     rows = np.ascontiguousarray(X[:48, :4], dtype=np.float32)
     target = np.ascontiguousarray(yr[:48], dtype=np.float32)
     splitter = ms.check_cv(3, target, classifier=False)
@@ -202,7 +213,7 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("public-validation-learning-curves")
 def _(ml, X, yc, yr, Xh=None):
-    from mojolearn import model_selection as ms
+    ms = ml.model_selection   # through the view: the running side
     rows = np.ascontiguousarray(X[:48, :4], dtype=np.float32)
     target = np.ascontiguousarray(yr[:48], dtype=np.float32)
     model = ml.Ridge(numeric_mode="identical")
@@ -216,7 +227,7 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("public-randomized-search")
 def _(ml, X, yc, yr, Xh=None):
-    from mojolearn import model_selection as ms, metrics
+    ms, metrics = ml.model_selection, ml.metrics   # through the view: the running side
     rows = np.ascontiguousarray(X[:48, :4], dtype=np.float32)
     target = np.ascontiguousarray(yr[:48], dtype=np.float32)
     regression = ms.RandomizedSearchCV(ml.Ridge(numeric_mode="identical"), {"alpha": [0.5, 2.0]},

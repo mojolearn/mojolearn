@@ -178,7 +178,7 @@ def _opt_owner_keys(owner: PythonObject, context: PythonObject) raises -> Python
     return fields
 
 
-def opt_owner_mode(owner: PythonObject, context: PythonObject) raises:
+def opt_owner_mode(owner: PythonObject, context: PythonObject) raises -> PythonObject:
     """The part of `opt_owner` a router needs before it hands the owner to a
     compiled door that runs the full `opt_owner` itself as its first step
     (`door_step`, `door_state`, `door_zero` in
@@ -187,10 +187,13 @@ def opt_owner_mode(owner: PythonObject, context: PythonObject) raises:
     the binding. The door's admission is the one that walks every field and
     buffer collection, so the owner is walked once per call, not twice; the
     first refusal and its message are the same, since nothing else reads the
-    owner between the two."""
+    owner between the two. Returns the admitted `numeric_mode` word, so the
+    router does not read it a second time (lane vdf-seq)."""
     var fields = _opt_owner_keys(owner, context)
     var nk = optimizer_keys()
-    opt_scalar(py_get(fields, nk[].k_numeric_mode), context)
+    var mode = py_get(fields, nk[].k_numeric_mode)
+    opt_scalar(mode, context)
+    return mode
 
 
 def opt_owner(owner: PythonObject, context: PythonObject) raises:
@@ -198,16 +201,26 @@ def opt_owner(owner: PythonObject, context: PythonObject) raises:
 
 
 def opt_owner(owner: PythonObject, context: PythonObject, defer_params: Bool) raises:
-    """With `defer_params`, the `params` entry is admitted as an exact
+    """`opt_owner_word` without its result."""
+    _ = opt_owner_word(owner, context, defer_params)
+
+
+def opt_owner_word(owner: PythonObject, context: PythonObject, defer_params: Bool) raises -> PythonObject:
+    """The full owner walk; returns the admitted `numeric_mode` word, read
+    once here (the router used to read it again: lane vdf-seq).
+
+    With `defer_params`, the `params` entry is admitted as an exact
     list/tuple only: the caller admits each element itself before it reads it
     (`door_step` reads every host parameter through `tensor_view`, which runs
     the same element admission, and admits the whole list with `opt_value`
     when the parameters are device-resident). Each tensor is admitted once
     per step instead of twice."""
     var fields = _opt_owner_keys(owner, context)
-    for name in ["_resident_wanted", "n_total", "t", "numeric_mode", "lr", "momentum", "dampening", "weight_decay", "nesterov", "maximize", "betas", "eps", "accumulation_steps"]:  # driver-loop: over fixed optimizer scalar configuration/state
-        opt_scalar(py_get(fields, PythonObject(name)), context)
     var nk = optimizer_keys()
+    var mode = py_get(fields, nk[].k_numeric_mode)
+    opt_scalar(mode, context)
+    for name in ["_resident_wanted", "n_total", "t", "lr", "momentum", "dampening", "weight_decay", "nesterov", "maximize", "betas", "eps", "accumulation_steps"]:  # driver-loop: over fixed optimizer scalar configuration/state
+        opt_scalar(py_get(fields, PythonObject(name)), context)
     opt_schedule(py_get(fields, nk[].k_lr_schedule), context)
     var params = py_get(fields, nk[].k_params)
     if defer_params:
@@ -218,3 +231,4 @@ def opt_owner(owner: PythonObject, context: PythonObject, defer_params: Bool) ra
         opt_value(params, context)
     for name in ["offsets", "buf_initialized", "_m", "_v"]:  # driver-loop: over four parameter/state buffer collections
         opt_value(py_get(fields, PythonObject(name)), context)
+    return mode

@@ -1,0 +1,43 @@
+diff --git a/core/msel_helpers_device.mojo b/core/msel_helpers_device.mojo
+index 1939d6e1b6..77212e0cdc 100644
+--- a/core/msel_helpers_device.mojo
++++ b/core/msel_helpers_device.mojo
+@@ -73,6 +73,20 @@ def count_mask_u8_device_run(m: Int, rows: Int) raises -> Int:
+     return count_mask_u8(m, rows)
+ 
+ 
++def _sab_fold_swap(fa: Int, rows: Int):
++    """SABOTAGE gate-gpu (lane vdv-sabotage): row 0 trades its fold id with the first row of
++    another fold, the GPU bindings only; every fold keeps its size."""
++    from std.sys import is_defined
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():
++        var fp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=fa)
++        for j in range(1, rows):
++            if fp.unsafe_load(j) != fp.unsafe_load(0):
++                var t = fp.unsafe_load(0)
++                fp.unsafe_store(0, fp.unsafe_load(j))
++                fp.unsafe_store(j, t)
++                break
++
++
+ def fold_ids_device_run(ca: Int, rows: Int, k: Int, splits: Int, na: Int, fa: Int, fca: Int) raises -> Int:
+     """`fold_ids` on the device: KFold's fold of a row is a closed form of
+     its index; the stratified dealing ranks each row within its class by a
+@@ -89,12 +103,16 @@ def fold_ids_device_run(ca: Int, rows: Int, k: Int, splits: Int, na: Int, fa: In
+                     if fold < rows % splits:
+                         size += 1
+                     fcp.unsafe_store(fold, Int64(size))
++                _sab_fold_swap(fa, rows)
+                 return 0
+             if k >= 1 and na != 0 and k * splits <= MSEL_HPDEV_MAX_TABLE:
+                 var ctx = process_ctx[LABELS_DEVICE_CONTEXT]()
+                 if device_stratified_fold_ids(ctx, ca, rows, k, splits, na, fa, fca):
++                    _sab_fold_swap(fa, rows)
+                     return 0
+-    return fold_ids(ca, rows, k, splits, na, fa, fca)
++    var sab_status = fold_ids(ca, rows, k, splits, na, fa, fca)
++    _sab_fold_swap(fa, rows)
++    return sab_status
+ 
+ 
+ def select_fold_i64_device_run(fa: Int, rows: Int, want: Int, ta: Int, ra: Int) raises -> Int:

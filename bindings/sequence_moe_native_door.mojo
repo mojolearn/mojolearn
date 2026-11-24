@@ -11,7 +11,8 @@ from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.optimizer_admission_door import opt_scalar, opt_value
 from training.optimizer_input_plan import same_shape
 from bindings.optimizer_device_native_door import device_shape, shape_count
-from bindings.sequence_optimizer_native_door import seq_binding
+from bindings.sequence_optimizer_native_door import seq_binding, seq_device_bound, seq_device_refuse_resident
+from providers.python.function_device_boundary_door import function_device_admit
 from bindings.sequence_ops_door import (
     seq_ops_call, seq_ops_device, seq_ops_native, seq_tensor_new, seq_tensor_release, seq_tensor_put,
 )
@@ -51,6 +52,11 @@ def _b() raises -> PythonObject:
 # the class or an ancestor changes; every call on Python < 3.12). Lane
 # p3-neural-blocks: it was an MRO walk with 18 name tests per row per call.
 comptime _MOE_CLASS_SLOT = "seqmoe_class_admitted_v1"
+#: MoEBlock has both sides: the device x_sequence image (`sequence/moe.mojo`,
+#: `moe_dev.mojo`, the tape backward) and the CPU identical image's
+#: SEQ_MOE_FORWARD / SEQ_MOE_BACKWARD (lane vdf-seq)
+comptime MOE_HAS_GPU = True
+comptime MOE_HAS_CPU = True
 
 
 def _owner(owner: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -81,7 +87,7 @@ def _owner(owner: PythonObject, context: PythonObject) raises -> PythonObject:
             raise Error("TypeError: MoEBlock refuses replaced Python storage hooks")
     for i in range(len(ancestry)):  # driver-loop: over passive class storage metadata
         var namespace = _class_fields(ancestry[i])
-        for name in ["D", "F", "E", "k", "norm_topk_prob", "numeric_mode", "router", "gate_up_proj", "down_proj", "_wver", "_wdev", "_routing", "router_grad_", "gate_up_proj_grad_", "down_proj_grad_"]:  # driver-loop: over native state schema
+        for name in ["D", "F", "E", "k", "norm_topk_prob", "numeric_mode", "router", "gate_up_proj", "down_proj", "_wver", "_wdev", "_routing", "router_grad_", "gate_up_proj_grad_", "down_proj_grad_", "device", "_host_b"]:  # driver-loop: over native state schema
             if py_contains(namespace, name):
                 raise Error("TypeError: MoEBlock state cannot be replaced by class descriptors")
     class_admit(mods, _MOE_CLASS_SLOT, cls, PythonObject(True))
@@ -122,7 +128,8 @@ def _words(fields: PythonObject, context: PythonObject) raises -> List[Int]:
     var norm = py_item(fields, nk[].k_norm_topk_prob)
     opt_scalar(norm, context)
     words.append(1 if Bool(py=norm) else 0)
-    opt_scalar(py_get(fields, nk[].k_numeric_mode), context)
+    # `numeric_mode` is admitted where it is read (lane vdf-seq: `_run` reads
+    # it once, on the host-array path only; it was read here and again there)
     return words^
 
 
@@ -263,6 +270,13 @@ def _initialize(fields: PythonObject, values: PythonObject, mode: PythonObject, 
     for i in range(7):  # driver-loop: over constructor scalar admission
         opt_scalar(values[i], context)
     opt_scalar(mode, context)
+    # lane vdf-seq (2026-11-24): the block's `device` (eighth item), admitted
+    # ONCE here; its binding is kept in `_host_b` (None: today's route).
+    var device_word = values[7] if len(values) == 8 else PythonObject(None)
+    var bound = PythonObject(None)
+    if device_word is not None:
+        var fdev = function_device_admit(device_word, "mojolearn.MoEBlock", MOE_HAS_GPU, MOE_HAS_CPU, context, _b())
+        bound = seq_device_bound(fdev, mode, context)
     if py_type(values[5]) is not _b().str or String(values[5]) != "silu":
         raise Error("NotImplementedError: MoEBlock: hidden_act other than 'silu' is not implemented")
     var fresh = Python.dict()
@@ -272,6 +286,8 @@ def _initialize(fields: PythonObject, values: PythonObject, mode: PythonObject, 
     var nk = sequence_keys()
     py_setitem(fresh, nk[].k_norm_topk_prob, PythonObject(Bool(py=values[4])))
     py_setitem(fresh, nk[].k_numeric_mode, mode)
+    py_setitem(fresh, nk[].k_device, device_word)
+    py_setitem(fresh, nk[].k__host_b, bound)
     var words = _words(fresh, context)
     var seed = values[6]
     if seed is None:
@@ -301,6 +317,8 @@ def _initialize(fields: PythonObject, values: PythonObject, mode: PythonObject, 
 def _load(owner: PythonObject, fields: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
     if py_type(state) is not _b().dict:
         raise Error("TypeError: MoEBlock state requires an exact dict of native arrays")
+    var mode_keys = sequence_keys()
+    opt_scalar(py_get(fields, mode_keys[].k_numeric_mode), context)
     var keys = py_call(_b().list, state)
     for i in range(len(keys)):  # driver-loop: over state keys before keyed access
         if py_type(keys[i]) is not _b().str:
@@ -334,6 +352,23 @@ def _run(fields: PythonObject, values: PythonObject, context: PythonObject, back
     var dn = MoEBuffer(py_item(fields, nk[].k_down_proj), context)
     _check(r, gu, dn, words)
     var x = values[0]
+    # lane vdf-seq: None, or the CPU identical image's module of a
+    # device="cpu" block beside a GPU set (resolved at construction). Such a
+    # block refuses resident input in words before any work. This read takes
+    # the place of `_words`' `numeric_mode` read (now read once, below, on
+    # the host-array path only): a device=None block reads no more slots.
+    var bound = py_get(fields, nk[].k__host_b)
+    if bound is not None:
+        seq_device_refuse_resident(x, "mojolearn.MoEBlock", "x", context)
+        if backward:
+            seq_device_refuse_resident(values[1], "mojolearn.MoEBlock", "dy", context)
+    if backward and py_type(x) is py_item(context, nk[].k_sequence_device_class):
+        var resident = _backward_resident(fields, x, values[1], words, r, gu, dn, context)
+        if resident is not None:
+            _ = r^
+            _ = gu^
+            _ = dn^
+            return resident
     if not backward and py_type(x) is py_item(context, nk[].k_sequence_device_class):
         var snapshot = MoEDevice(x, context)
         _input_shape(snapshot.shape, snapshot.count, d)
@@ -397,7 +432,9 @@ def _run(fields: PythonObject, values: PythonObject, context: PythonObject, back
     var t = input.count // d
     if t > 2147483647 // e or t > 2147483647 // k:
         raise Error("ValueError: MoEBlock routing output exceeds signed 32-bit indexing")
-    var entries = seq_binding(py_get(fields, nk[].k_numeric_mode), context, PythonObject(None))
+    var block_mode = py_get(fields, nk[].k_numeric_mode)
+    opt_scalar(block_mode, context)
+    var entries = seq_binding(block_mode, context, bound)
     # Host arrays in, host arrays out, on the layer's own image. A device
     # image reads the block's resident weights (a seventh word); the host
     # image uploads nothing and reads the three arrays. The route word
@@ -450,6 +487,78 @@ def _run(fields: PythonObject, values: PythonObject, context: PythonObject, back
     _ = dn^
     py_setitem(fields, nk[].k__routing, Python.list(logits, sel, w, PythonObject(None)))
     return result
+
+
+def _backward_resident(fields: PythonObject, x: PythonObject, dy: PythonObject, words: List[Int],
+                       r: MoEBuffer, gu: MoEBuffer, dn: MoEBuffer, context: PythonObject) raises -> PythonObject:
+    """`backward` on a resident x (lane vdf-seq, 2026-11-24, addendum 3): x
+    is read in place on its own device image, dy is read in place when it is
+    resident on the same image (a host dy is uploaded once, by view), and dx
+    is written in place into a new resident tensor that is returned, as the
+    resident forward returns y (the tape's launches on the same values: no
+    bit moves). The weight gradients and the routing outputs are host
+    arrays, as on the host-array entry. Before, x (and a resident dy) were
+    downloaded to the host and the host-array entry uploaded them again.
+    None when x's image has no device route (the host image's tensors):
+    the caller then runs the host-array entry."""
+    var nk = sequence_keys()
+    var snapshot = MoEDevice(x, context)
+    var entries = snapshot.entries
+    if not seq_ops_device(entries):
+        return PythonObject(None)
+    var d = words[0]
+    var e = words[2]
+    var k = words[3]
+    _input_shape(snapshot.shape, snapshot.count, d)
+    var t = snapshot.count // d
+    if t > 2147483647 // e or t > 2147483647 // k:
+        raise Error("ValueError: MoEBlock routing output exceeds signed 32-bit indexing")
+    var module = py_item(entries, nk[].k_module)
+    var dy_owner = PythonObject(None)
+    var dy_handle = 0
+    if py_type(dy) is py_item(context, nk[].k_sequence_device_class):
+        var grad = MoEDevice(dy, context)
+        if py_item(grad.entries, nk[].k_module) is not module:
+            raise Error("ValueError: MoEBlock.backward: dy must use x's native binding")
+        if not same_shape(grad.shape, snapshot.shape):
+            raise Error("ValueError: MoEBlock: dy must have x's shape")
+        dy_handle = Int(py=grad.handle)
+        _ = grad^
+    else:
+        var host_dy = MoEBuffer(dy, context)
+        if not same_shape(host_dy.shape, snapshot.shape):
+            raise Error("ValueError: MoEBlock: dy must have x's shape")
+        dy_owner = _new(entries, snapshot.shape, context)
+        if host_dy.count > 0:
+            seq_tensor_put(entries, Int(py=_handle(dy_owner, context)), host_dy.address, host_dy.count)
+        dy_handle = Int(py=_handle(dy_owner, context))
+        _ = host_dy^
+    var h = _weights(fields, entries, words, r, gu, dn, context)
+    var dx = _new(entries, snapshot.shape, context)
+    var y = _array(snapshot.shape, context)
+    var logits = _array([t, e], context)
+    var sel = _array([t, k], context)
+    var w = _array([t, k], context)
+    var dr = _array(_shapes(words, 0), context)
+    var dgu = _array(_shapes(words, 1), context)
+    var ddn = _array(_shapes(words, 2), context)
+    # aa[0], aa[4], aa[5] (x, dy, dx) are unread: the three handles below
+    # name their resident tensors (sequence/sequence_ops_device_dispatch.mojo).
+    var addresses: List[Int] = [0, r.address, gu.address, dn.address, 0, 0,
+        Int(py=classical_address(dr)), Int(py=classical_address(dgu)), Int(py=classical_address(ddn)),
+        Int(py=classical_address(y)), Int(py=classical_address(logits)), Int(py=classical_address(sel)),
+        Int(py=classical_address(w))]
+    var ip: List[Int] = [t, d, words[1], e, k, words[4], h, Int(py=snapshot.handle), dy_handle, Int(py=_handle(dx, context))]
+    var floats = List[Float64]()
+    _ = seq_ops_call(entries, SEQ_MOE_BACKWARD, addresses, ip, floats)
+    _ = y  # read by address inside the call above: named again so it outlives it
+    _ = dy_owner^
+    _ = snapshot^
+    py_setitem(fields, nk[].k_router_grad_, dr)
+    py_setitem(fields, nk[].k_gate_up_proj_grad_, dgu)
+    py_setitem(fields, nk[].k_down_proj_grad_, ddn)
+    py_setitem(fields, nk[].k__routing, Python.list(logits, sel, w, PythonObject(None)))
+    return dx
 
 
 def _routing(fields: PythonObject, index: Int, context: PythonObject) raises -> PythonObject:
@@ -530,7 +639,7 @@ def sequence_moe_operation(operation: Int, owner: PythonObject, values: PythonOb
         return _routing(fields, 3, context)
     if operation == OPTIMIZER_OPN_SEQMOE_TO_DEVICE:
         opt_scalar(py_get(fields, nk[].k_numeric_mode), context)
-        var entries = seq_binding(py_get(fields, nk[].k_numeric_mode), context, PythonObject(None))
+        var entries = seq_binding(py_get(fields, nk[].k_numeric_mode), context, py_get(fields, nk[].k__host_b))
         var value = values[0]
         if py_type(value) is py_item(context, nk[].k_sequence_device_class):
             var snapshot = MoEDevice(value, context)

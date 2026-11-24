@@ -19,13 +19,13 @@ words as the host-address path: no bit changes.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 from core.msel_device_x import msel_device_x_f32
+from core.admitted_finite_status import enqueue_finite_status
 from cluster.estimator import (
     KMeansFitResult,
     kmeans_fit_device,
     kmeans_predict_device,
     kmeans_transform_device,
     kmeans_score_device,
-    kmeans_score_weights,
 )
 from cluster.impl.kmeans_params import KMeansParams
 
@@ -35,22 +35,61 @@ struct KMeansFoldFit(Copyable, Movable):
     var fit: KMeansFitResult
     var finite: Int32
     var in_range: Int32
+    var weights_finite: Int32
+    """The weights' finite word (0 for unit weights or every weight finite)."""
 
-    def __init__(out self, fit: KMeansFitResult, finite: Int32, in_range: Int32):
+    def __init__(out self, fit: KMeansFitResult, finite: Int32, in_range: Int32, weights_finite: Int32 = 0):
         self.fit = fit
         self.finite = finite
         self.in_range = in_range
+        self.weights_finite = weights_finite
 
 
-def _kmeans_fold_words(ctx: DeviceContext, mut status: DeviceBuffer[DType.int32]) raises -> Tuple[Int32, Int32]:
-    """The two status words, read after the gather (one synchronisation)."""
-    var flags = ctx.enqueue_create_host_buffer[DType.int32](2)
+def _kmeans_fold_words(ctx: DeviceContext, mut status: DeviceBuffer[DType.int32]) raises -> Tuple[Int32, Int32, Int32]:
+    """The status words, read after the gather (one synchronisation): X's
+    finite and range words, then the weights' finite word (word 2)."""
+    var flags = ctx.enqueue_create_host_buffer[DType.int32](_STATUS_WORDS)
     ctx.enqueue_copy(dst_ptr=flags.unsafe_ptr(), src_buf=status)
     ctx.synchronize()
     var finite = flags.unsafe_ptr()[0]
     var in_range = flags.unsafe_ptr()[1]
+    var weights_finite = flags.unsafe_ptr()[2]
     _ = flags^
-    return (finite, in_range)
+    return (finite, in_range, weights_finite)
+
+
+comptime _STATUS_WORDS = 4
+"""X's (finite, range) words at 0 / 1, the weights' at 2 / 3 (the weights'
+range word repeats X's: the same index)."""
+
+
+def _kmeans_fold_weights(
+    ctx: DeviceContext,
+    weights_id: Int,
+    base_rows: Int,
+    index_id: Int,
+    n_samples: Int,
+    mut status: DeviceBuffer[DType.int32],
+    host_weights: Int = 0,
+) raises -> DeviceBuffer[DType.float32]:
+    """THE WEIGHTED FOLD (lane vdf-scope-cluster2a, 2026-11-24): the fold's
+    weights gathered on the device from the resident weight base
+    `weights_id` (`base_rows` x 1 float32, the same store as X) by the same
+    row index, in the same order as X's rows, with their finite word in
+    status word 2. `weights_id` < 0: unit weights, an uninitialised buffer the
+    fit fills with 1.0 (the score's `kmeans_score_weights` fill).
+    `host_weights` != 0 (lane vdf-scope-cluster3): the host address of the
+    fold's own `n_samples` weights ALREADY in fold order (an estimator
+    door is handed `sample_weight` of the fold's length): one upload of
+    those words on this stream and their finite word in status word 2,
+    as the gather's (the same words the gather of the whole vector gives)."""
+    var w = ctx.enqueue_create_buffer[DType.float32](max(n_samples, 1))
+    if host_weights != 0:
+        ctx.enqueue_copy(dst_buf=w, src_ptr=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=host_weights))
+        enqueue_finite_status(ctx, w.unsafe_ptr(), n_samples, status.unsafe_ptr(), 2)
+    elif weights_id >= 0:
+        msel_device_x_f32(ctx, weights_id, base_rows, 1, index_id, n_samples, w, status.unsafe_ptr(), 2)
+    return w^
 
 
 def kmeans_fit_fold(
@@ -70,28 +109,34 @@ def kmeans_fit_fold(
     init: Int,
     metric: Int,
     oversampling_factor: Float64,
+    weights_id: Int = -1,
+    host_weights: Int = 0,
 ) raises -> KMeansFoldFit:
-    """The unit-weight fit of fold rows `index_id` of the resident base
-    `base_id` (`base_rows` x `n_features`). `ctx` is
-    `msel_fold_entry_context()`. The status words are read before the fit
-    (the scale plan synchronises there anyway): a flagged fold is not fit
-    and the door refuses."""
+    """The fit of fold rows `index_id` of the resident base `base_id`
+    (`base_rows` x `n_features`), unit weights or (`weights_id` >= 0) the
+    rows' weights gathered on the device from the resident weight base
+    (`_kmeans_fold_weights`). `ctx` is `msel_fold_entry_context()`. The
+    status words are read before the fit (the scale plan synchronises there
+    anyway): a flagged fold is not fit and the door refuses."""
     var x = ctx.enqueue_create_buffer[DType.float32](n_samples * n_features)
-    var status = ctx.enqueue_create_buffer[DType.int32](2)
+    var status = ctx.enqueue_create_buffer[DType.int32](_STATUS_WORDS)
     enqueue_fill[DType.int32](ctx, status, Int32(0))
     msel_device_x_f32(ctx, base_id, base_rows, n_features, index_id, n_samples, x, status.unsafe_ptr(), 0)
+    var w = _kmeans_fold_weights(ctx, weights_id, base_rows, index_id, n_samples, status, host_weights)
     var words = _kmeans_fold_words(ctx, status)
-    if words[0] != 0 or words[1] != 0:
+    if words[0] != 0 or words[1] != 0 or words[2] != 0:
         _ = x^
+        _ = w^
         _ = status^
-        return KMeansFoldFit(KMeansFitResult(0.0, 0, 0.0, 0.0, 0, 0), words[0], words[1])
+        return KMeansFoldFit(KMeansFitResult(0.0, 0, 0.0, 0.0, 0, 0), words[0], words[1], words[2])
     var fit = kmeans_fit_device(
-        ctx, x, n_samples, n_features, n_clusters, out_centroids_ptr, out_labels_ptr,
+        ctx, x, w, weights_id >= 0 or host_weights != 0, n_samples, n_features, n_clusters, out_centroids_ptr, out_labels_ptr,
         max_iter, tol, seed, n_init, init, metric, oversampling_factor,
     )
     _ = x^
+    _ = w^
     _ = status^
-    return KMeansFoldFit(fit, words[0], words[1])
+    return KMeansFoldFit(fit, words[0], words[1], words[2])
 
 
 def kmeans_query_fold(
@@ -157,12 +202,16 @@ def kmeans_score_fold(
     n_clusters: Int,
     centroids_ptr: MutPointer[Float32, MutUntrackedOrigin],
     metric: Int,
-) raises -> Tuple[Int32, Int32, Float64]:
-    """`kmeans_score` (unit weights) of fold rows `index_id` of the resident
-    base (lane mf-kmeans5): the rows gathered on the device as
-    `kmeans_query_fold` gathers them, the same device body
-    (`kmeans_score_device`). Returns (finite word, range word, inertia); on
-    a flagged fold the door discards the inertia."""
+    weights_id: Int = -1,
+    host_weights: Int = 0,
+) raises -> Tuple[Int32, Int32, Float64, Int32]:
+    """`kmeans_score` of fold rows `index_id` of the resident base (lane
+    mf-kmeans5): the rows gathered on the device as `kmeans_query_fold`
+    gathers them, the same device body (`kmeans_score_device`), unit weights
+    or (`weights_id` >= 0, lane vdf-scope-cluster2a) the rows' weights
+    gathered on the device by the same index. Returns (finite word, range
+    word, inertia, weights' finite word); on a flagged fold the door discards
+    the inertia."""
     if n_samples < 1 or n_features < 1 or n_clusters < 1:
         raise Error("kmeans fold query needs n_samples, n_features and n_clusters >= 1")
     var params = KMeansParams.default()
@@ -171,20 +220,23 @@ def kmeans_score_fold(
     params.validate()
     var x = ctx.enqueue_create_buffer[DType.float32](n_samples * n_features)
     var centroids = ctx.enqueue_create_buffer[DType.float32](n_clusters * n_features)
-    var status = ctx.enqueue_create_buffer[DType.int32](2)
+    var status = ctx.enqueue_create_buffer[DType.int32](_STATUS_WORDS)
     enqueue_fill[DType.int32](ctx, status, Int32(0))
     msel_device_x_f32(ctx, base_id, base_rows, n_features, index_id, n_samples, x, status.unsafe_ptr(), 0)
+    var weights = _kmeans_fold_weights(ctx, weights_id, base_rows, index_id, n_samples, status, host_weights)
+    if weights_id < 0 and host_weights == 0:
+        enqueue_fill[DType.float32](ctx, weights, Float32(1.0))
     ctx.enqueue_copy(dst_buf=centroids, src_ptr=centroids_ptr)
-    var flags = ctx.enqueue_create_host_buffer[DType.int32](2)
+    var flags = ctx.enqueue_create_host_buffer[DType.int32](_STATUS_WORDS)
     ctx.enqueue_copy(dst_ptr=flags.unsafe_ptr(), src_buf=status)
-    var weights = kmeans_score_weights(ctx, centroids_ptr, 0, n_samples)
     # kmeans_score_device synchronises before it returns.
     var cost = kmeans_score_device(ctx, x, n_samples, n_features, n_clusters, centroids, weights, metric)
     var finite = flags.unsafe_ptr()[0]
     var in_range = flags.unsafe_ptr()[1]
+    var weights_finite = flags.unsafe_ptr()[2]
     _ = flags^
     _ = weights^
     _ = x^
     _ = centroids^
     _ = status^
-    return (finite, in_range, cost)
+    return (finite, in_range, cost, weights_finite)

@@ -24,13 +24,31 @@ from x_cluster.post_bodies import FM_SQRT
 from x_cluster.optics import dist_slot
 
 
+def x_slot_or_put[O: ClusterOps](mut ops: O, x: List[Float32], x_slot: Int) raises -> Int:
+    """X as a float slot of `ops`: `x_slot` itself when X is already there (THE FOLD X WORD's slot,
+    x_cluster/device_execution.mojo `_fold_execute`; read-only uses), else `x` put once."""
+    if x_slot >= 0:
+        return x_slot
+    return ops.put(x)
+
+
+def x_slot_copy[O: ClusterOps](mut ops: O, x: List[Float32], x_slot: Int, count: Int) raises -> Int:
+    """A fresh float slot holding X (`count` words) for a caller that writes it: a device copy of `x_slot`
+    when X is already there, else `x` put. The same words either way."""
+    if x_slot < 0:
+        return ops.put(x)
+    var s = ops.alloc(count)
+    ops.copy_from(x_slot, 0, count, s)
+    return s
+
+
 def estimate_bandwidth_ops[O: ClusterOps](
-    mut ops: O, x: List[Float32], n: Int, d: Int, quantile: Float64
+    mut ops: O, x: List[Float32], n: Int, d: Int, quantile: Float64, x_slot: Int = -1
 ) raises -> Float32:
     var k = Int(Float64(n) * quantile)
     if k < 1:
         k = 1
-    var xs = ops.put(x)
+    var xs = x_slot_or_put(ops, x, x_slot)
     var dm = dist_slot(ops, n * n)
     ops.sqdist(xs, n, xs, n, d, dm)
     var kt = ops.zeros(n)
@@ -44,16 +62,19 @@ def meanshift_fit[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, bandwidth_in: Float32, seeds_in: List[Float32],
     n_seeds_in: Int, cluster_all: Bool, max_iter: Int, bin_seeding: Bool, min_bin_freq: Int,
     mut centers_out: List[Float32], mut labels: List[Int32], mut bw_out: Float32, mut n_iter: Int,
+    x_slot: Int = -1,
 ) raises:
+    """`x_slot`: X already in a float slot of `ops` (THE FOLD X WORD, lane vdf-scope-cluster6), `x` then a
+    placeholder; the seeds the shift moves are device copies of it."""
     var bw = bandwidth_in
     if bw <= Float32(0):
-        bw = estimate_bandwidth_ops(ops, x, n, d, 0.3)
+        bw = estimate_bandwidth_ops(ops, x, n, d, 0.3, x_slot)
     if not (bw > Float32(0)):
         raise Error("bandwidth needs to be greater than zero or None, got " + String(bw))
     bw_out = bw
     var ns = n_seeds_in
     var seeds = seeds_in.copy()
-    var xs = ops.put(x)
+    var xs = x_slot_or_put(ops, x, x_slot)
     var cs: Int
     if ns == 0 and bin_seeding and bw != Float32(0):
         # sklearn `get_bin_seeds` on the device: every row's bin, the first
@@ -65,12 +86,12 @@ def meanshift_fit[O: ClusterOps](
         if ns == 0:
             raise Error("No point was within bandwidth=" + String(bw) + " of any seed. Try a different seeding strategy or increase the bandwidth.")
         if ns == n:
-            cs = ops.put(x)
+            cs = x_slot_copy(ops, x, x_slot, n * d)
         else:
             cs = bs
     elif ns == 0:
         ns = n
-        cs = ops.put(x)
+        cs = x_slot_copy(ops, x, x_slot, n * d)
     else:
         cs = ops.put(seeds)
     # K6: the blocked fold keeps a chunk partial per seed beside its sums

@@ -20,6 +20,11 @@ from core.svc_native_api import SvcDrivers, SvcFitRequest, SvcQueryRequest
 from core.scale_gamma_exact import scale_gamma_from_limbs
 from svm.operation_metadata import SvcOperationSettings
 from svm.svc_kernel_native_run import SVC_KERNEL_PRECOMPUTED, SVC_GLUE_GATHER
+from core.entry_table import EntryRef, entry_ref_unresolved
+from core.prep_entry_table import xp_transport_call
+from core.fold_x_device import fold_x_slot, fold_x_word
+from core.host_parallel import host_parallelize, host_widen_index_i64
+from x_prep.transport_abi import XP_DEV_TAKE_ROWS, XP_DEV_FREE
 
 # `svc_pair_epilogue`'s row-glue modes (svm/impl/svc_rows.mojo GLUE_*).
 comptime SVC_GLUE_SELECT = 7
@@ -78,6 +83,41 @@ def _gather(drivers: SvcDrivers, x: Int, rows: Int, cols: Int, row_index: Int, o
     whole), an exact copy, gathered in the binding."""
     if out_rows > 0 and out_cols > 0:
         _ = drivers.epilogue(SVC_GLUE_GATHER, x, row_index, col_index, dst, rows, cols, out_rows, out_cols)
+
+
+def _take_word(plan: SvcFitPlan, rows_i32: Int, count: Int, mut taken: List[Int]) raises -> Int:
+    """THE FOLD X WORD (lane vdf-scope-linear3) of the rows `rows_i32`
+    (int32 row numbers of X, `count` of them) of the fold slot `plan.x`
+    names: taken ON THE DEVICE into a fresh slot of `plan.fold_store` (the
+    same bytes in the same order as `_gather`; only the index words cross
+    the bus, widened across the host's cores). The slot id goes on `taken`
+    (`_free_taken` frees it after the entry that read it returned)."""
+    var wide = List[Int64](unsafe_uninit_length=max(count, 1))
+    host_widen_index_i64(rows_i32, Int(wide.unsafe_ptr()), count)
+    var source: List[Int] = [Int(wide.unsafe_ptr())]
+    var counts: List[Int] = [fold_x_slot(plan.x), plan.cols, count]
+    var slot = xp_transport_call(plan.fold_store, XP_DEV_TAKE_ROWS, source, counts)
+    _ = wide^  # keep alive: the take read it through its address
+    taken.append(slot)
+    return fold_x_word(slot)
+
+
+def _free_taken(plan: SvcFitPlan, mut taken: List[Int]) raises:
+    """Free every slot `_take_word` put on `taken` (the entries synchronized)."""
+    while len(taken) > 0:  # driver-loop: over this step's taken slots (at most two)
+        var ids: List[Int] = [taken.pop()]
+        _ = xp_transport_call(plan.fold_store, XP_DEV_FREE, List[Int](), ids)
+
+
+def _rows_of_x(drivers: SvcDrivers, plan: SvcFitPlan, rows_i32: Int, count: Int, dst: List[Float32],
+               mut taken: List[Int]) raises -> Int:
+    """The rows `rows_i32` of a computed-kernel X as the address an entry
+    reads: the host gather into `dst` (host X), or a device take of a fold
+    slot (`_take_word`; `dst` is then not written)."""
+    if plan.x < 0 and count > 0:
+        return _take_word(plan, rows_i32, count, taken)
+    _gather(drivers, plan.x, plan.rows, plan.cols, rows_i32, count, 0, plan.cols, _f32(dst))
+    return _f32(dst)
 
 
 struct SvcSolveScratch(Movable):
@@ -160,6 +200,11 @@ struct SvcFitPlan(Movable):
     var class_weights: Int
     var probability: Bool
     var seed: UInt64
+    #: THE FOLD X WORD's store (lane vdf-scope-linear3): with `x` a fold
+    #: word (negative, core/fold_x_device.mojo; never with 'precomputed') the
+    #: caller sets the x_prep family store holding its slot, and every
+    #: row selection of X below is a take on the device (`_take_word`).
+    var fold_store: EntryRef
 
     def __init__(out self, settings: SvcOperationSettings):
         self.settings = settings.copy()
@@ -182,6 +227,7 @@ struct SvcFitPlan(Movable):
         self.class_weights = 0
         self.probability = False
         self.seed = UInt64(0)
+        self.fold_store = entry_ref_unresolved()
 
 
 struct SvcFitResult(Movable):
@@ -256,10 +302,20 @@ def _fit_ovo(drivers: SvcDrivers, plan: SvcFitPlan, settings: SvcOperationSettin
                                      _f32(pair_bounds))
             # the pair's kernel matrix (its rows AND its columns), or its rows of X
             var sub_cols = m if precomputed else plan.cols
-            var sub = List[Float32](length=max(m * sub_cols, 1), fill=Float32(0))
-            _gather(drivers, plan.x, n, plan.cols, _i32(index), m, _i32(index) if precomputed else 0, sub_cols, _f32(sub))
+            var on_device = plan.x < 0 and not precomputed
+            var sub = List[Float32](length=max(m * sub_cols, 1) if not on_device else 1, fill=Float32(0))
+            var taken = List[Int]()
+            var sub_at = _f32(sub)
+            if precomputed:
+                _gather(drivers, plan.x, n, plan.cols, _i32(index), m, _i32(index), sub_cols, _f32(sub))
+            else:
+                sub_at = _rows_of_x(drivers, plan, _i32(index), m, sub, taken)
             var scratch = SvcSolveScratch(m, sub_cols)
-            var n_sv = _solve(drivers, settings, _f32(sub), m, sub_cols, _f32(pair_labels), _f32(pair_bounds), scratch)
+            var n_sv = 0
+            try:
+                n_sv = _solve(drivers, settings, sub_at, m, sub_cols, _f32(pair_labels), _f32(pair_bounds), scratch)
+            finally:
+                _free_taken(plan, taken)
             _ = sub^  # keep alive: the call above reads it through an untracked pointer
             if _round_f32(scratch.info[3]) != 0.0 or _round_f32(scratch.info[4]) != 1.0:
                 result.status = SVC_FIT_PAIR_LABELS
@@ -336,8 +392,9 @@ def _platt(drivers: SvcDrivers, plan: SvcFitPlan, settings: SvcOperationSettings
             var rows_held = List[Int32](length=max(n, 1), fill=Int32(0))
             var fold_labels = List[Float32](length=max(n, 1), fill=Float32(0))
             var fold_bounds = List[Float32](length=max(n, 1) if bounds != 0 else 0, fill=Float32(0))
-            var sub = List[Float32](length=max(n * width, 1), fill=Float32(0))
-            var held = List[Float32](length=max(n * width, 1), fill=Float32(0))
+            var on_device = plan.x < 0 and not precomputed
+            var sub = List[Float32](length=max(n * width, 1) if not on_device else 1, fill=Float32(0))
+            var held = List[Float32](length=max(n * width, 1) if not on_device else 1, fill=Float32(0))
             var cross = List[Float32](length=max(n * n, 1) if precomputed else 0, fill=Float32(0))
             var scratch = SvcSolveScratch(n, width)
             for f in range(SVC_PLATT_FOLDS):  # small-loop(Platt folds: five per pair)
@@ -359,24 +416,35 @@ def _platt(drivers: SvcDrivers, plan: SvcFitPlan, settings: SvcOperationSettings
                 var train_rows = _i32(rows_held)
                 var held_rows = train_rows + 4 * nt
                 var cols = nt if precomputed else plan.cols
-                _gather(drivers, plan.x, n_all, plan.cols, train_rows, nt, train_rows if precomputed else 0, cols, _f32(sub))
-                if bounds != 0:
-                    _gather(drivers, bounds, n_all, 1, train_rows, nt, 0, 1, _f32(fold_bounds))
-                var n_sv = _solve(drivers, settings, _f32(sub), nt, cols, _f32(fold_labels), _f32(fold_bounds), scratch)
-                _gather(drivers, plan.x, n_all, plan.cols, held_rows, h, train_rows if precomputed else 0, cols, _f32(held))
-                var query = _f32(held)
-                var features = cols
-                var vectors = _f32(scratch.vectors)
-                if precomputed and n_sv > 0:
-                    # the held rows' cross-kernel columns at the fold's support vectors
-                    _gather(drivers, _f32(held), h, nt, 0, h, _i32(scratch.support), n_sv, _f32(cross))
-                    query = _f32(cross)
-                    features = n_sv
-                    vectors = _f32(scratch.dual)
-                _ = drivers.query(SvcQueryRequest(query, _f32(scratch.dual) if n_sv > 0 else 0,
-                    vectors if n_sv > 0 else 0, _f32(dec_perm) + 4 * begin, 0, h, features, n_sv, settings.kernel,
-                    settings.degree, False, 0, 0, -1, 0, -1, False, _round_f32(scratch.info[0]), 0.0, 1.0,
-                    settings.gamma, settings.cache_mib, settings.coef0))
+                var taken = List[Int]()
+                try:
+                    var sub_at = _f32(sub)
+                    if precomputed:
+                        _gather(drivers, plan.x, n_all, plan.cols, train_rows, nt, train_rows, cols, _f32(sub))
+                    else:
+                        sub_at = _rows_of_x(drivers, plan, train_rows, nt, sub, taken)
+                    if bounds != 0:
+                        _gather(drivers, bounds, n_all, 1, train_rows, nt, 0, 1, _f32(fold_bounds))
+                    var n_sv = _solve(drivers, settings, sub_at, nt, cols, _f32(fold_labels), _f32(fold_bounds), scratch)
+                    var query = _f32(held)
+                    if precomputed:
+                        _gather(drivers, plan.x, n_all, plan.cols, held_rows, h, train_rows, cols, _f32(held))
+                    else:
+                        query = _rows_of_x(drivers, plan, held_rows, h, held, taken)
+                    var features = cols
+                    var vectors = _f32(scratch.vectors)
+                    if precomputed and n_sv > 0:
+                        # the held rows' cross-kernel columns at the fold's support vectors
+                        _gather(drivers, _f32(held), h, nt, 0, h, _i32(scratch.support), n_sv, _f32(cross))
+                        query = _f32(cross)
+                        features = n_sv
+                        vectors = _f32(scratch.dual)
+                    _ = drivers.query(SvcQueryRequest(query, _f32(scratch.dual) if n_sv > 0 else 0,
+                        vectors if n_sv > 0 else 0, _f32(dec_perm) + 4 * begin, 0, h, features, n_sv, settings.kernel,
+                        settings.degree, False, 0, 0, -1, 0, -1, False, _round_f32(scratch.info[0]), 0.0, 1.0,
+                        settings.gamma, settings.cache_mib, settings.coef0))
+                finally:
+                    _free_taken(plan, taken)
             # libsvm's orientation (positive toward class i) and +1/-1
             # labels, back in pair row order, float64
             var decisions = List[Float64](length=max(n, 1), fill=0.0)
@@ -425,12 +493,97 @@ def svc_fit_run(drivers: SvcDrivers, plan: SvcFitPlan, mut result: SvcFitResult)
         result.gamma = result.solved.info[7]
 
 
+#: Support rows of one copy task of `_support_from_pairs`.
+comptime _SV_CHUNK = 4096
+
+
+def _support_from_pairs(plan: SvcFitPlan, result: SvcFitResult, dst: Int) raises:
+    """`support_vectors_` of a one-vs-one fit over a fold slot: row t is the
+    X row `result.support[t]`, copied from a pair machine that holds it (every
+    support row is some pair's support vector). The row -> (pair, position)
+    map is filled one task per pair (two pairs naming one row hold the same
+    bytes, so either write is the answer) and the rows are copied in chunks
+    across the host's cores: model words, no X read."""
+    var cols = plan.cols
+    var n = plan.rows
+    var pairs = len(result.pairs)
+    var counts = List[Int](length=max(pairs, 1), fill=0)
+    var supports = List[Int](length=max(pairs, 1), fill=0)
+    var vectors = List[Int](length=max(pairs, 1), fill=0)
+    for q in range(pairs):  # driver-loop: over the class pairs (their descriptors)
+        counts[q] = result.pairs[q].supports
+        supports[q] = Int(result.pairs[q].support.unsafe_ptr())
+        vectors[q] = Int(result.pairs[q].vectors.unsafe_ptr())
+    var pair_of = List[Int32](length=max(n, 1), fill=Int32(-1))
+    var pos_of = List[Int32](length=max(n, 1), fill=Int32(-1))
+    var pair_at = Int(pair_of.unsafe_ptr())
+    var pos_at = Int(pos_of.unsafe_ptr())
+    var counts_at = Int(counts.unsafe_ptr())
+    var supports_at = Int(supports.unsafe_ptr())
+    var vectors_at = Int(vectors.unsafe_ptr())
+
+    def _map(q: Int) {imm pair_at, imm pos_at, imm counts_at, imm supports_at}:
+        var po = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=pair_at)
+        var so = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=pos_at)
+        var count = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=counts_at)[q]
+        var sup = MutPointer[Int32, MutUntrackedOrigin](
+            unsafe_from_address=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=supports_at)[q])
+        for s in range(count):  # the pair's support rows (one task per pair)
+            var row = Int(sup[s])
+            po[row] = Int32(q)
+            so[row] = Int32(s)
+
+    host_parallelize(_map, pairs)
+    var total = result.total
+    var support_at = Int(result.support.unsafe_ptr())
+    var tasks = (total + _SV_CHUNK - 1) // _SV_CHUNK
+    var missing = List[UInt8](length=max(tasks, 1), fill=UInt8(0))
+    var miss_at = Int(missing.unsafe_ptr())
+
+    def _copy(t: Int) {imm pair_at, imm pos_at, imm vectors_at, imm support_at, imm dst, imm cols, imm total,
+                       imm miss_at}:
+        var po = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=pair_at)
+        var so = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=pos_at)
+        var vec = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=vectors_at)
+        var sup = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=support_at)
+        var out = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=dst)
+        var lo = t * _SV_CHUNK
+        var hi = min(total, lo + _SV_CHUNK)
+        for u in range(lo, hi):  # the task's support rows (one chunk of the split)
+            var row = Int(sup[u])
+            var q = Int(po[row])
+            if q < 0:
+                MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=miss_at)[t] = UInt8(1)
+                return
+            var src = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=vec[q] + 4 * Int(so[row]) * cols)
+            for c in range(cols):  # small-loop(one support row's words)
+                out[u * cols + c] = src[c]
+
+    host_parallelize(_copy, tasks)
+    for t in range(tasks):  # small-loop(one flag per task)
+        if missing[t] != UInt8(0):
+            raise Error("RuntimeError: mojolearn SVC: a support row is in no pair machine")
+    _ = pair_of^
+    _ = pos_of^
+    _ = counts^
+    _ = supports^
+    _ = vectors^
+    _ = missing^
+
+
 def svc_fit_finish_run(drivers: SvcDrivers, plan: SvcFitPlan, support_vectors: Int, mut result: SvcFitResult) raises:
     """After the caller's checks: the one-vs-one `support_vectors_` (the
     rows of X at `result.support`, gathered into the public array at
     `support_vectors`), then the probability fit."""
     if plan.classes > 2 and result.total > 0:
-        _gather(drivers, plan.x, plan.rows, plan.cols, _i32(result.support), result.total, 0, plan.cols, support_vectors)
+        if plan.x < 0:
+            # THE FOLD X WORD (lane vdf-scope-linear3): no host X to gather;
+            # each support row is the pair machines' own copy of it (the
+            # solver's device gather of the same X row: the same bytes).
+            _support_from_pairs(plan, result, support_vectors)
+        else:
+            _gather(drivers, plan.x, plan.rows, plan.cols, _i32(result.support), result.total, 0, plan.cols,
+                    support_vectors)
     if plan.probability:
         var settings = plan.settings.copy()
         settings.gamma = result.gamma

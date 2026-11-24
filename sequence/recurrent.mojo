@@ -498,7 +498,7 @@ def rnn_fit[E: Exec, //, S: RnnStep](
     X: FP, Y: FP, N: Int, T: Int,
     epochs: Int, bs: Int, shuffle: Bool, seed: UInt64,
     Pio: FP, losses: FP, lrs: FP, cfg: OptConfig, init_acc: Float32,
-    lengths: Optional[FP] = None, loop_words: Int = 0,
+    lengths: Optional[FP] = None, loop_words: Int = 0, x_device: Bool = False,
 ) raises:
     """`epochs * ceil(N / bs)` optimizer steps; step k of epoch e trains on
     the samples order_e[j bs : j bs + B] (j = k mod per, B = min(bs, N - j
@@ -526,8 +526,14 @@ def rnn_fit[E: Exec, //, S: RnnStep](
     var per = (N + bs - 1) // bs
     var n_steps = epochs * per
     var bmax = min(bs, N)
-    var dX = ex.alloc(N * T * net.D)
-    ex.upload(dX, X, N * T * net.D)
+    # Lane vdf-scope-neural: `x_device` (see autograd/rules_recurrent.mojo
+    # `rnn_predict`): X read in place from the member store, no upload.
+    var dX: FP
+    if x_device:
+        dX = X
+    else:
+        dX = ex.alloc(N * T * net.D)
+        ex.upload(dX, X, N * T * net.D)
     var dY = ex.alloc(N * ycols)
     ex.upload(dY, Y, N * ycols)
     var has_lens = Bool(lengths)

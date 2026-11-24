@@ -101,9 +101,25 @@ def dbscan_core_gather(ctx: DeviceContext, xa: Int, la: Int, ca: Int, n: Int, d:
     """Gathers the m core rows (indices, components, labels) into the host
     buffers at `idx_addr` (m int32), `comp_addr` (m*d float32) and `lab_addr`
     (m int32). The row list is the same deterministic compaction
-    `dbscan_core_count` built; recomputing it keeps every buffer typed here."""
+    `dbscan_core_count` built; recomputing it keeps every buffer typed here.
+    X is the host rows at `xa`, uploaded once here."""
     if m <= 0:
         return
+    var d_x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    ctx.enqueue_copy(dst_buf=d_x, src_ptr=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=xa))
+    dbscan_core_gather_resident(ctx, d_x, la, ca, n, d, m, idx_addr, comp_addr, lab_addr)
+    _ = d_x^
+
+
+def dbscan_core_gather_resident(ctx: DeviceContext, mut d_x: DeviceBuffer[DType.float32], la: Int, ca: Int, n: Int,
+                                d: Int, m: Int, idx_addr: Int, comp_addr: Int, lab_addr: Int) raises:
+    """`dbscan_core_gather` over X already on the device (`d_x`, n x d float32 on `ctx`: the host form's upload,
+    or a slot of the estimators image's resident store, lane vdf-scope-cluster4): the same kernels on the same
+    words, so the same three arrays. `d_x` is only read."""
+    if m <= 0:
+        return
+    if len(d_x) < n * d:
+        raise Error("mojolearn DBSCAN: the core gather's X holds fewer than n * d words")
     var d_core = ctx.enqueue_create_buffer[DType.uint8](n)
     ctx.enqueue_copy(dst_buf=d_core, src_ptr=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=ca))
     var flag = ctx.enqueue_create_buffer[DType.int32](n)
@@ -120,8 +136,6 @@ def dbscan_core_gather(ctx: DeviceContext, xa: Int, la: Int, ca: Int, n: Int, d:
     _ = d_core^
     if m2 != m:
         raise Error("mojolearn DBSCAN: core row count changed between passes")
-    var d_x = ctx.enqueue_create_buffer[DType.float32](n * d)
-    ctx.enqueue_copy(dst_buf=d_x, src_ptr=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=xa))
     var d_l = ctx.enqueue_create_buffer[DType.int32](n)
     ctx.enqueue_copy(dst_buf=d_l, src_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=la))
     var o_idx = ctx.enqueue_create_buffer[DType.int32](m)
@@ -140,5 +154,4 @@ def dbscan_core_gather(ctx: DeviceContext, xa: Int, la: Int, ca: Int, n: Int, d:
     _ = o_comp^
     _ = o_lab^
     _ = d_l^
-    _ = d_x^
     _ = rows^

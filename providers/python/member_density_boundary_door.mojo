@@ -49,8 +49,9 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
 from bindings.py_balanced import py_get, py_fields, py_setitem
 from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
-from core.dbscan_native_api import DBSCAN_MODE, DBSCAN_VENDOR, DBSCAN_NATIVE_COUNT
-from core.kde_native_api import KDE_MODE, KDE_VENDOR, KDE_NATIVE_COUNT
+from core.dbscan_native_api import DBSCAN_MODE, DBSCAN_VENDOR, DBSCAN_NATIVE_COUNT, DBSCAN_CAP_DEV_STORE
+from core.kde_native_api import KDE_MODE, KDE_VENDOR, KDE_NATIVE_COUNT, KDE_CAP_DEV_STORE
+from providers.python.family_store_route_door import family_store_route
 from bindings.kde_native_boundary_unpack import KDEConnection
 from bindings.kde_public_native_unpack import _kde_validate
 from bindings.kde_public_native_pack import _kde_release
@@ -110,6 +111,11 @@ def _kde_admit(model: PythonObject, fields: PythonObject, context: PythonObject,
     route.vendor = vendor
     route.entry = EntryRef(connection.driver.entry, entry_ref_word(mode, vendor, KDE_NATIVE_COUNT))
     route.flags = connection.capabilities
+    # The GPU image's resident store (lane vdf-scope-cluster2b): its transport entry in `route.second`, so a
+    # model-selection fold stays on the device (core/density_member.mojo `_kde_rows`).
+    var store_pin = PythonObject(None)
+    if (route.flags & KDE_CAP_DEV_STORE) != 0:
+        store_pin = family_store_route(binding, "estimators_store_v1", route)
     owner.plan.route = route
     var words: List[Float64] = [Float64(_KIND_KDE), bandwidth, Float64(kernel), Float64(metric)]
     if kernel < 0 or metric < 0:
@@ -122,7 +128,7 @@ def _kde_admit(model: PythonObject, fields: PythonObject, context: PythonObject,
         member_words_append_text(words, kernel_text)
         member_words_append_text(words, metric_text)
     owner.plan.params = words^
-    owner.pins = Python.tuple(binding, connection.provider)
+    owner.pins = Python.tuple(binding, connection.provider, store_pin)
     return True
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 
@@ -157,12 +163,17 @@ def density_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
     route.vendor = vendor
     route.entry = EntryRef(connection.driver.entry, entry_ref_word(mode, vendor, DBSCAN_NATIVE_COUNT))
     route.flags = connection.capabilities
+    # The GPU image's resident store (lane vdf-scope-cluster4, the store KernelDensity uses): its transport
+    # entry in `route.second`, so a model-selection fold is fitted from a device-taken slot.
+    var store_pin = PythonObject(None)
+    if (route.flags & DBSCAN_CAP_DEV_STORE) != 0:
+        store_pin = family_store_route(binding, "estimators_store_v1", route)
     owner.plan.route = route
     var words: List[Float64] = [Float64(_KIND_DBSCAN), settings.eps, Float64(settings.min_samples),
         Float64(settings.metric), Float64(settings.method), Float64(settings.cap), Float64(budget),
         1.0 if settings.predicting else 0.0]
     owner.plan.params = words^
-    owner.pins = Python.tuple(binding, connection.provider)
+    owner.pins = Python.tuple(binding, connection.provider, store_pin)
     return True
 
 

@@ -156,6 +156,43 @@ unset; a tier you set explicitly is respected, and a FAST process is refused
 
 ## What `verify --all` runs
 
+### Both sides, one process, through `device=` (2026-11-24)
+
+Every cell runs its lane twice in the same worker process: the CPU side with
+`device="cpu"` and the GPU side with `device="gpu"`, through the public
+parameter. The lane itself never names a device: it receives a device-bound
+view of the package (`mojolearn/_verify_device.py`), which passes the side by
+keyword to every public class and computing function the lane reaches as
+`mojolearn.<Name>` or `mojolearn.<module>.<Name>`, and to the objects it builds
+from them (pipelines, meta-estimators, optimizers, schedules). No child process
+is started for the CPU side and `MOJOLEARN_VENDOR` is not read or set by
+verify; the variable stays in the product, where it chooses the binding set.
+
+- Each result row carries `side` (`cpu` or `gpu`) and is judged against that
+  side's column: the CPU side against the CPU column, the GPU side against
+  this installation's vendor column (NVIDIA, AMD or Apple). The columns hold
+  one shared reference: identical bits on every vendor and on the host.
+- On an installation without a GPU the GPU side reads "not applicable (no GPU
+  in this installation)", never a failure.
+- A lane whose endpoint has one side only is declared one-sided in its
+  fragment (`_one_sided("<lane>", missing="cpu"|"gpu", reason=...)`, registry
+  `ONE_SIDED`); its missing side reads "one-sided: no CPU implementation:
+  <reason>" and is an owed implementation
+  (`docs/plans/verify_through_device/UNMAPPED.md`).
+- A public callable the lane reaches that takes no `device` is a cell error
+  ("<name> takes no device="), unless the lane is one-sided or the name is
+  one of the non-computing names (`_verify_device.NON_COMPUTING`: containers,
+  config and file readers, the CPU-inference classes, the process readers).
+- The batched worker keeps both sides of a cell in one worker on one fixture
+  load. The public endpoint checks and the tape checks run both sides the same
+  way; the portable models load through `host_model` on the CPU side and the
+  class's own loader on the GPU side.
+
+The report format is `mojolearn.verify-all-report.v2` (one report carries
+both sides; v1 carried one). `--compare`, `--commitment` and `--challenge`
+read v2 rows side by side (a row's key is `lane@side`) and still read v1
+documents. `--self-test` writes `mojolearn.verify-self-test.v2`.
+
 The lanes of `tools/identity_break.py`, the harness every committed record
 was written with. The wheel carries a byte copy of it
 (`mojolearn/_identity_break.py`), and the command imports it and calls its
@@ -454,10 +491,12 @@ see the comparison catch a wrong answer, on your machine, in your installation:
 
     python -m mojolearn verify --self-test
 
-It runs one lane twice through the ordinary comparison, the same code path that
-judges every other lane. Once on the untouched fixture, which must read
-IDENTICAL, and once with every value of the input's first column moved up by
-one ULP, which must read DIVERGENT. The perturbation is real arithmetic at run
+It runs one lane twice per side through the ordinary comparison, the same code
+path that judges every other lane: on the CPU side (`device="cpu"`) and on the
+GPU side (`device="gpu"`), each nudged on its own. Once on the untouched
+fixture, which must read IDENTICAL, and once with every value of the input's
+first column moved up by one ULP, which must read DIVERGENT; both sides must
+catch their own nudge. The perturbation is real arithmetic at run
 time, not a printed verdict, so it needs no special build; the lane computes
 correctly over an input whose last bits differ, and the comparison is what
 notices. Exit 0 only if **both** arms behave, so a comparison stuck on either
@@ -907,6 +946,26 @@ an issue as is.
 
 ## Regenerating the reference table (maintainers)
 
+### Recording both columns from one run (2026-11-24)
+
+The recorder takes the side through the public `device=` parameter, in one
+process: `--side cpu` writes the CPU column (label `cpu-<cpu model>`, the
+`host` object), `--side gpu` the installation's GPU vendor column, and
+`--side both` the GPU column to `--json` and then the CPU column to
+`--cpu-json` in the same process. With no `--side` the run records the
+installation's own side. `--jobs N` shards the CPU side only (every child is
+`--side cpu`). On an NVIDIA box, both columns of one release record:
+
+```sh
+MOJOLEARN_NUMERIC_MODE=identical python tools/identity_break.py --side both \
+  --json nvidia-<gpu>.json --cpu-json cpu-<cpu model>.json
+```
+
+Each record carries `side`; `--merge` refuses parts of different sides, and
+the reference admission classes a `--side cpu` record as the CPU column
+whatever backend the installation loaded. Older records (no `side`) are
+read as before; reusing them stays opt-in (`--reuse-unchanged`).
+
 The table is `python/mojolearn/verify_reference/table.json`, generated from
 the committed columns under `bench/results/identity_break/`; no hash in it is
 typed. After a release record lands:
@@ -1000,9 +1059,9 @@ Four columns decide every admitted cell: Apple, NVIDIA, AMD and the cpu
 table count, so a record of one vendor does not force the others to be taken
 again. A cpu value that differs from the GPU reference, or a missing cpu
 column, refuses the admission and the table stays as it was. The cpu column
-may be N/A only where the harness declares it: a lane listed in
-`GPU_ONLY_LANES` or matched by `RECORD_EXCLUDED_PREFIXES` in
-`tools/identity_break.py`, and the `model` part of a lane whose cpu column
+may be N/A only where the harness declares it: a lane declared
+`_one_sided(lane, missing="cpu")` or matched by `RECORD_EXCLUDED_PREFIXES` in
+`tools/identity_break.py` and its fragments, and the `model` part of a lane whose cpu column
 loads the GPU column's saved model (`n/a:gpu-saved-file`).
 
 ## The pinned k-means card

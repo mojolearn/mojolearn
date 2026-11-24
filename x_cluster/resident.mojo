@@ -30,6 +30,7 @@ from std.atomic import Atomic, Ordering
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.fold_x_device import fold_x_fill
 from x_cluster.device_ops import DeviceOps, x_cluster_ctx
 from x_cluster.post_bodies import FM_VAL
 from core.shared_slot import SharedSlot
@@ -214,7 +215,10 @@ def xc_resident_query(
     # every kernel behind the copy; the download below synchronizes, and
     # `x_ptr` outlives the call.
     var xbuf = ops.ctx.enqueue_create_buffer[DType.float32](n * d)
-    ops.ctx.enqueue_copy(dst_buf=xbuf, src_ptr=x_ptr)
+    if Int(x_ptr) < 0:
+        fold_x_fill(ops.ctx, xbuf, Int(x_ptr), n * d)  # THE FOLD X WORD (lane vdf-scope-cluster3)
+    else:
+        ops.ctx.enqueue_copy(dst_buf=xbuf, src_ptr=x_ptr)
     ops.f.append(xbuf^)
     var xs = len(ops.f) - 1
     ops.f.append(view.centers.copy())

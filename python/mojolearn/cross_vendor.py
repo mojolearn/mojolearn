@@ -28,14 +28,28 @@ _native_cross_vendor("initialize", (_Array, CrossVendorMismatch, _connected_key(
 
 
 
-def fold_pair(total, shard):
-    """Add two float32 buffers with the fixed FTZ reduction contract."""
-    return _native_cross_vendor("pair", (total, shard))
+def fold_pair(total, shard, *, device=None):
+    """Add two float32 buffers with the fixed FTZ reduction contract.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
+    """
+    return _native_cross_vendor("pair", (total, shard, device))
 
 
-def ordered_fold(gradients, *, prefix=None):
-    """Fold float32 shard buffers in logical order, optionally after a prefix."""
-    return _native_cross_vendor("fold", (gradients, prefix))
+def ordered_fold(gradients, *, prefix=None, device=None):
+    """Fold float32 shard buffers in logical order, optionally after a prefix.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
+    """
+    return _native_cross_vendor("fold", (gradients, prefix, device))
 
 
 def state_hash(state):

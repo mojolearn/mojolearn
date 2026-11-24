@@ -228,7 +228,8 @@ from core.member_abi import (
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
-from core.member_abi import MEMBER_IGNORES_Y
+from core.member_abi import MEMBER_IGNORES_Y, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE
+from core.seq_member_rows import SeqRows, member_rows_open, seq_rows_close, seq_rows_route, seq_rows_count
 from core.nmf_native_api import (
     NMFNativeDriver, NMFFitRequest, NMFInverseRequest, nmf_regularization,
 )
@@ -554,6 +555,63 @@ def _whole(call: _Call, estimator: String) raises:
         raise Error("TypeError: a " + estimator + " member reads whole host views (no row or column index)")
 
 
+# ---------------------------------------------------------------- THE RESIDENT ROUTE (lane vdf-scope-neural3)
+# A GPU image exports its device pool as a scope transport (x_decomp/member_store.mojo `x_decomp_store_v1`); the
+# member's UNPACK (providers/python/member_xdecomp_boundary_door.mojo `_store_route`) puts it in `route.fifth` with
+# SEQ_ROUTE_STORE. On such a route the kinds below answer MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE and read their X
+# through `_rows` (core/seq_member_rows.mojo `member_rows_open`, prefix "x_decomp"): with a scope and a pin the
+# whole X is put ONCE in the scope's cache and each fold is taken ON THE DEVICE into a fresh pool id that the
+# kind's resident operations read in place (a slot of this store IS a pool id); without a pin the fold is
+# gathered on the host cores (the block the search would have gathered). Same words in the same order either
+# way, so the same bits as the host-input route and the CPU column (whose image exports no store).
+# Kinds that read X this way: the random projections (fit: shape; transform / inverse_transform: XD_RP_PROJECT
+# word 5, the X pool id), the dictionary-learning kit (DictionaryLearning, MiniBatchDictionaryLearning,
+# SparsePCA, MiniBatchSparsePCA fit; every kit query), the robust covariance kit (EllipticEnvelope / MinCovDet
+# fit and queries), and the manifold kit (Isomap, LLE, MDS fit; Isomap / LLE transform).
+# IncrementalPCA (lane vdf-scope-neural4): IPCA_FIT / IPCA_QUERY's `source` word is `-(id + 1)` of the fold's
+# pool id; the owner slices each fit batch from it on the device (x_decomp/ipca_owner.mojo `_resident_rows`).
+# NMF (lane vdf-scope-neural4): NMF_FIT / NMF_INVERSE's `source` word likewise; the negativity test and the
+# device solver read the pool id in place (x_decomp/nmf_owner.mojo, `DecompDev.nmf_solve_pool`).
+# LatentDirichletAllocation reads the X pool id through XD_LDA int word 13. SparseCoder's fit reads X's width only (its transform is a kit
+# query). FastICA and FactorAnalysis
+# read the X pool id through the last int word of XD_ICA_FIT / XD_ICA_PROJECT / XD_FA_FIT / XD_FA_QUERY.
+comptime XDECOMP_STORE_PREFIX = "x_decomp"
+
+
+def _rows_kind(kind: Int) -> Bool:
+    """The kinds that read X through `_rows` (the note above)."""
+    return (kind == XDECOMP_KIND_IPCA or kind == XDECOMP_KIND_NMF or _is_rp(kind) or kind == XDECOMP_KIND_ICA or kind == XDECOMP_KIND_FA or kind == XDECOMP_KIND_LDA
+            or _is_kit(kind)
+            or kind == XDECOMP_KIND_ENVELOPE or _is_mani(kind))
+
+
+def _rows(call: _Call, estimator: String) raises -> SeqRows:
+    """The call's X (module note above): `rows.x` a host address, or `-(id + 1)` of a pool id this call reads in
+    place; `rows.n` the rows it covers (the row index's length, else X's). Close with `seq_rows_close`."""
+    if not seq_rows_route(call[].route):
+        _whole(call, estimator)
+        return SeqRows(call[].x.rows, call[].x.cols, call[].x.data, 0)
+    return member_rows_open(call, 0, estimator, String(XDECOMP_STORE_PREFIX))
+
+
+def _pool_of(rows: SeqRows) -> Int:
+    """The pool id `rows` reads, -1 for a host X."""
+    return -(rows.x + 1) if rows.x < 0 else -1
+
+
+def _host_x(rows: SeqRows) -> Int:
+    """The host address `rows` reads, 0 for a resident X (its pool id goes in the request's `source_pool`)."""
+    return rows.x if rows.x >= 0 else 0
+
+
+def _kit_x(mut kit: DKit, rows: SeqRows) -> Int:
+    """The call's X in the kit: the borrowed host words, or the pool id read in place (`borrow_device`: a host
+    matrix by route, downloaded only where a host step reads it, so every route is the borrowed X's)."""
+    if rows.x >= 0:
+        return kit.borrow(rows.x, rows.n, rows.d)
+    return kit.borrow_device(_pool_of(rows), rows.n, rows.d)
+
+
 def _address(slot: _Slot, block: Int) -> Int:
     return Int(slot[].blocks[block].unsafe_ptr())
 
@@ -562,14 +620,26 @@ def _address(slot: _Slot, block: Int) -> Int:
 
 
 def _fit_ipca(slot: _Slot, call: _Call) raises:
+    """THE RESIDENT ROUTE wrapper (lane vdf-scope-neural4): `_fit_ipca_rows` over the call's rows (`_rows`)."""
     var estimator = _name(slot)
-    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    var held = _rows(call, estimator)
+    try:
+        _fit_ipca_rows(slot, call, held)
+    finally:
+        seq_rows_close(call, held)
+
+
+def _fit_ipca_rows(slot: _Slot, call: _Call, held: SeqRows) raises:
+    """IPCA_FIT over `held`: a host X address, or `-(id + 1)` of the fold's pool id (the request's `source`
+    word, core/ipca_native_provider.mojo `_ipca_source_pool`), whose batches the owner slices on the device."""
+    var estimator = _name(slot)
     _dense(call[].x, "X", estimator)
     if call[].weights.rows > 0:
         raise Error("TypeError: a " + estimator + " member takes no sample_weight")
     if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
         member_unsupported(estimator, call[].fit_output)
-    var rows = call[].x.rows
+    var rows = held.n
     var cols = call[].x.cols
     var batch = 5 * cols if slot[].words[3] < 0.0 else Int(slot[].words[3])
     var requested = -1 if slot[].words[1] < 0.0 else Int(slot[].words[1])
@@ -584,7 +654,7 @@ def _fit_ipca(slot: _Slot, call: _Call) raises:
     var outputs = IPCAOutputs(_address(slot, 0), _address(slot, 1), _address(slot, 2), _address(slot, 3),
         _address(slot, 4), _address(slot, 5))
     var driver = IPCANativeDriver(route.entry.call)
-    var result = driver.fit(IPCAFitRequest(call[].x.data, rows, cols, requested, batch, outputs^, keep))
+    var result = driver.fit(IPCAFitRequest(held.x, rows, cols, requested, batch, outputs^, keep))
     if result.kept:
         for k in range(_HANDLES):  # driver-loop: five resident state handles
             slot[].handles[k] = result.state.values[k]
@@ -594,7 +664,7 @@ def _fit_ipca(slot: _Slot, call: _Call) raises:
     slot[].scalars = [Float64(result.count), Float64(cols), Float64(rows), result.noise, Float64(batch)]
     slot[].fitted = True
     if call[].fit_output == MEMBER_OP_TRANSFORM:
-        _query(slot, call, False)
+        _query_rows(slot, call, False, held)
 
 
 def _prepared(slot: _Slot, call: _Call, k: Int, block: Int, count: Int) raises -> Int:
@@ -611,15 +681,28 @@ def _prepared(slot: _Slot, call: _Call, k: Int, block: Int, count: Int) raises -
 
 
 def _query(slot: _Slot, call: _Call, inverse: Bool) raises:
-    """transform (X -> rows x n_components_) or inverse_transform (rows x
-    n_components_ -> rows x n_features_in_) through the route's entry."""
+    """THE RESIDENT ROUTE wrapper (lane vdf-scope-neural4): `_query_rows` over the call's rows (`_rows`)."""
     var estimator = _name(slot)
     if not slot[].fitted:
         raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
-    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    var held = _rows(call, estimator)
+    try:
+        _query_rows(slot, call, inverse, held)
+    finally:
+        seq_rows_close(call, held)
+
+
+def _query_rows(slot: _Slot, call: _Call, inverse: Bool, held: SeqRows) raises:
+    """transform (X -> rows x n_components_) or inverse_transform (rows x
+    n_components_ -> rows x n_features_in_) through the route's entry, over
+    `held` (a host address or `-(id + 1)` of a pool id read in place)."""
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
     _dense(call[].x, "X", estimator)
     _dense(call[].dst, "the output buffer", estimator)
-    var rows = call[].x.rows
+    var rows = held.n
     var count = slot[].count
     var features = slot[].features
     if not inverse and call[].x.cols != features:
@@ -639,7 +722,7 @@ def _query(slot: _Slot, call: _Call, inverse: Bool) raises:
         ids.values[2] = _prepared(slot, call, 2, 2, features)
         if whiten:
             ids.values[4] = _prepared(slot, call, 4, 4, count)
-    var request = IPCAQueryRequest(call[].x.data, rows, features, count, _address(slot, 2), _address(slot, 0),
+    var request = IPCAQueryRequest(held.x, rows, features, count, _address(slot, 2), _address(slot, 0),
         _address(slot, 4), call[].dst.data, inverse, whiten, resident, ids^)
     IPCANativeDriver(call[].route.entry.call).query(request)
 
@@ -655,14 +738,27 @@ def _nmf_args(slot: _Slot, rows: Int, features: Int, update_h: Bool) -> NmfArgs:
 
 
 def _fit_nmf(slot: _Slot, call: _Call) raises:
+    """THE RESIDENT ROUTE wrapper (lane vdf-scope-neural4): `_fit_nmf_rows` over the call's rows (`_rows`)."""
     var estimator = _name(slot)
-    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    var held = _rows(call, estimator)
+    try:
+        _fit_nmf_rows(slot, call, held)
+    finally:
+        seq_rows_close(call, held)
+
+
+def _fit_nmf_rows(slot: _Slot, call: _Call, held: SeqRows) raises:
+    """NMF_FIT over `held`: a host X address, or `-(id + 1)` of the fold's pool id (the request's `source` word,
+    core/nmf_native_provider.mojo `_nmf_source_pool`), which the negativity test and the device solver read in
+    place."""
+    var estimator = _name(slot)
     _dense(call[].x, "X", estimator)
     if call[].weights.rows > 0:
         raise Error("TypeError: a " + estimator + " member takes no sample_weight")
     if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
         member_unsupported(estimator, call[].fit_output)
-    var n = call[].x.rows
+    var n = held.n
     var d = call[].x.cols
     var nc = d if slot[].words[1] < 0.0 else Int(slot[].words[1])
     var smaller = min(n, d)
@@ -688,7 +784,7 @@ def _fit_nmf(slot: _Slot, call: _Call) raises:
     slot[].clear()
     slot[].blocks.append(List[Float32](length=max(nc * d, 1), fill=Float32(0)))
     var h_output = _address(slot, 0)
-    var request = NMFFitRequest(call[].x.data, h_output, h_output, w_output, h_output, n, d, nc, init,
+    var request = NMFFitRequest(held.x, h_output, h_output, w_output, h_output, n, d, nc, init,
         Int(slot[].words[3]), _nmf_args(slot, n, d, True), True)
     var result = NMFNativeDriver(call[].route.entry.call).fit(request)
     _ = w_scratch^
@@ -700,15 +796,27 @@ def _fit_nmf(slot: _Slot, call: _Call) raises:
 
 
 def _query_nmf(slot: _Slot, call: _Call, inverse: Bool) raises:
-    """transform (the solver with H fixed: X -> W, rows x n_components_) or
-    inverse_transform (W H: rows x n_components_ -> rows x n_features_in_)."""
+    """THE RESIDENT ROUTE wrapper (lane vdf-scope-neural4): `_query_nmf_rows` over the call's rows (`_rows`)."""
     var estimator = _name(slot)
     if not slot[].fitted:
         raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
-    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    var held = _rows(call, estimator)
+    try:
+        _query_nmf_rows(slot, call, inverse, held)
+    finally:
+        seq_rows_close(call, held)
+
+
+def _query_nmf_rows(slot: _Slot, call: _Call, inverse: Bool, held: SeqRows) raises:
+    """transform (the solver with H fixed: X -> W, rows x n_components_) or
+    inverse_transform (W H: rows x n_components_ -> rows x n_features_in_), over `held`."""
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
     _dense(call[].x, "X", estimator)
     _dense(call[].dst, "the output buffer", estimator)
-    var rows = call[].x.rows
+    var rows = held.n
     var nc = slot[].count
     var d = slot[].features
     var width = d if inverse else nc
@@ -723,14 +831,14 @@ def _query_nmf(slot: _Slot, call: _Call, inverse: Bool) raises:
         raise Error("ValueError: the output buffer holds " + String(width) + " values per row of X")
     var driver = NMFNativeDriver(call[].route.entry.call)
     if inverse:
-        driver.inverse(NMFInverseRequest(call[].x.data, _address(slot, 0), call[].dst.data, rows, d, nc))
+        driver.inverse(NMFInverseRequest(held.x, _address(slot, 0), call[].dst.data, rows, d, nc))
         return
     # The H output of a transform is the door's scratch (NMFScratch): kept
     # in the slot, sized once per fitted state.
     if len(slot[].blocks) < 2:
         slot[].blocks.append(List[Float32](length=max(nc * d, 1), fill=Float32(0)))
     var scratch = _address(slot, 1)
-    var request = NMFFitRequest(call[].x.data, scratch, _address(slot, 0), call[].dst.data, scratch, rows, d, nc,
+    var request = NMFFitRequest(held.x, scratch, _address(slot, 0), call[].dst.data, scratch, rows, d, nc,
         NMF_TRANSFORM, Int(slot[].words[3]), _nmf_args(slot, rows, d, False), True)
     var result = driver.fit(request)
     admitted_finite_refuse(result.finite, estimator)
@@ -791,18 +899,28 @@ def _import_nmf(slot: _Slot, call: _Call) raises:
 
 
 def _fit_ica(slot: _Slot, call: _Call) raises:
+    """THE RESIDENT ROUTE wrapper (lane vdf-scope-neural3): `_fit_ica_rows` over the call's rows (`_rows`)."""
+    var estimator = _name(slot)
+    _dense(call[].x, "X", estimator)
+    var held = _rows(call, estimator)
+    try:
+        _fit_ica_rows(slot, call, held)
+    finally:
+        seq_rows_close(call, held)
+
+
+def _fit_ica_rows(slot: _Slot, call: _Call, held: SeqRows) raises:
     """bindings/ica_native_unpack.mojo `ica_fit` (`FastICA._fit`): one
     ICAFitRequest through the route's operations table; with
     `fit_output = MEMBER_OP_TRANSFORM` the sources go to `dst` in the fit
     call (the door's `project`)."""
     var estimator = _name(slot)
-    _whole(call, estimator)
     _dense(call[].x, "X", estimator)
     if call[].weights.rows > 0:
         raise Error("TypeError: a " + estimator + " member takes no sample_weight")
     if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
         member_unsupported(estimator, call[].fit_output)
-    var n = call[].x.rows
+    var n = held.n
     var d = call[].x.cols
     decomp_min_samples(n, d, "FastICA")
     var code = Int(slot[].words[2])
@@ -831,11 +949,11 @@ def _fit_ica(slot: _Slot, call: _Call) raises:
     slot[].blocks.append(List[Float32](length=(nc * d) if code != 0 else 0, fill=Float32(0)))
     slot[].blocks.append(List[Float32](length=d if code != 0 else 0, fill=Float32(0)))
     var spare = _address(slot, 0)
-    var request = ICAFitRequest(call[].x.data, start, spare, _address(slot, 1),
+    var request = ICAFitRequest(_host_x(held), start, spare, _address(slot, 1),
         _address(slot, 2) if code != 0 else spare, _address(slot, 3) if code != 0 else spare,
         sources if project else spare,
         n, d, nc, code, Int(slot[].words[8]), Int(slot[].words[3]), Int(slot[].words[4]),
-        Int(slot[].words[6]), project, slot[].words[5], slot[].words[7], 0)
+        Int(slot[].words[6]), project, slot[].words[5], slot[].words[7], 0, _pool_of(held))
     var iterations = ica_fit_call(call[].route.entry, request)
     slot[].count = nc
     slot[].features = d
@@ -844,15 +962,25 @@ def _fit_ica(slot: _Slot, call: _Call) raises:
 
 
 def _query_ica(slot: _Slot, call: _Call, inverse: Bool) raises:
+    """THE RESIDENT ROUTE wrapper (lane vdf-scope-neural3): `_query_ica_rows` over the call's rows (`_rows`)."""
+    var estimator = _name(slot)
+    _dense(call[].x, "X", estimator)
+    var held = _rows(call, estimator)
+    try:
+        _query_ica_rows(slot, call, inverse, held)
+    finally:
+        seq_rows_close(call, held)
+
+
+def _query_ica_rows(slot: _Slot, call: _Call, inverse: Bool, held: SeqRows) raises:
     """`ica_project`: transform (X - mean_) components_^T, inverse_transform
     X mixing_^T (+ mean_), with the door's inner-dimension refusal."""
     var estimator = _name(slot)
     if not slot[].fitted:
         raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
-    _whole(call, estimator)
     _dense(call[].x, "X", estimator)
     _dense(call[].dst, "the output buffer", estimator)
-    var rows = call[].x.rows
+    var rows = held.n
     var width = call[].x.cols
     var nc = slot[].count
     var cols = Int(slot[].scalars[4])
@@ -863,8 +991,8 @@ def _query_ica(slot: _Slot, call: _Call, inverse: Bool) raises:
     if call[].dst.rows != rows or call[].dst.cols != matrix_rows:
         raise Error("ValueError: the output buffer holds " + String(matrix_rows) + " values per row of X")
     var matrix = _address(slot, 1 if inverse else 0)
-    var request = ICAProjectRequest(call[].x.data, matrix, _address(slot, 3) if whiten else matrix,
-        call[].dst.data, inverse, rows, width, matrix_rows, whiten)
+    var request = ICAProjectRequest(_host_x(held), matrix, _address(slot, 3) if whiten else matrix,
+        call[].dst.data, inverse, rows, width, matrix_rows, whiten, _pool_of(held))
     ica_project_call(call[].route.entry, request)
 
 
@@ -941,17 +1069,27 @@ comptime _FA_SCORE = 4
 
 
 def _fit_fa(slot: _Slot, call: _Call) raises:
+    """THE RESIDENT ROUTE wrapper (lane vdf-scope-neural3): `_fit_fa_rows` over the call's rows (`_rows`)."""
+    var estimator = _name(slot)
+    _dense(call[].x, "X", estimator)
+    var held = _rows(call, estimator)
+    try:
+        _fit_fa_rows(slot, call, held)
+    finally:
+        seq_rows_close(call, held)
+
+
+def _fit_fa_rows(slot: _Slot, call: _Call, held: SeqRows) raises:
     """bindings/fa_native_unpack.mojo `fa_fit`: psi0 (ones, or the
     noise_variance_init words), one FAFitRequest through the route's table,
     the EM log-likelihoods kept after the scalars."""
     var estimator = _name(slot)
-    _whole(call, estimator)
     _dense(call[].x, "X", estimator)
     if call[].weights.rows > 0:
         raise Error("TypeError: a " + estimator + " member takes no sample_weight")
     if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
         member_unsupported(estimator, call[].fit_output)
-    var n = call[].x.rows
+    var n = held.n
     var d = call[].x.cols
     var nc = Int(slot[].words[1]) if slot[].words[1] >= 0.5 else d
     if nc < 0:
@@ -971,8 +1109,8 @@ def _fit_fa(slot: _Slot, call: _Call) raises:
     slot[].blocks.append(List[Float32](length=max(d, 1), fill=Float32(0)))
     var ll = List[Float64](length=max(max_iter, 1), fill=Float64(0))
     var rotation = Int(slot[].words[3])
-    var request = FAFitRequest(call[].x.data, Int(psi0.unsafe_ptr()), _address(slot, 0), _address(slot, 1),
-        _address(slot, 2), Int(ll.unsafe_ptr()), n, d, nc, max_iter, rotation, slot[].words[4], 0)
+    var request = FAFitRequest(_host_x(held), Int(psi0.unsafe_ptr()), _address(slot, 0), _address(slot, 1),
+        _address(slot, 2), Int(ll.unsafe_ptr()), n, d, nc, max_iter, rotation, slot[].words[4], 0, _pool_of(held))
     var iterations = fa_fit_call(call[].route.entry, request)
     _ = psi0^
     if iterations == 0:
@@ -992,20 +1130,30 @@ def _fit_fa(slot: _Slot, call: _Call) raises:
     slot[].features = d
     slot[].fitted = True
     if call[].fit_output == MEMBER_OP_TRANSFORM:
-        _query_fa(slot, call, _FA_TRANSFORM)
+        _query_fa_rows(slot, call, _FA_TRANSFORM, held)
 
 
 def _query_fa(slot: _Slot, call: _Call, op: Int) raises:
+    """THE RESIDENT ROUTE wrapper (lane vdf-scope-neural3): `_query_fa_rows` over the call's rows (`_rows`)."""
+    var estimator = _name(slot)
+    _dense(call[].x, "X", estimator)
+    var held = _rows(call, estimator)
+    try:
+        _query_fa_rows(slot, call, op, held)
+    finally:
+        seq_rows_close(call, held)
+
+
+def _query_fa_rows(slot: _Slot, call: _Call, op: Int, held: SeqRows) raises:
     """`fa_query`: transform (rows x n_components_), score_samples (rows x
     1) or score (`call.value`), with the door's broadcast refusal."""
     var estimator = _name(slot)
     if not slot[].fitted:
         raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
-    _whole(call, estimator)
     _dense(call[].x, "X", estimator)
     if op == _FA_SCORE and (call[].weights.rows > 0 or call[].y.rows > 0):
         raise Error("TypeError: FactorAnalysis.score takes X only (no y, no sample_weight)")
-    var n = call[].x.rows
+    var n = held.n
     var width = call[].x.cols
     var nc = slot[].count
     var d = slot[].features
@@ -1018,8 +1166,8 @@ def _query_fa(slot: _Slot, call: _Call, op: Int) raises:
         if call[].dst.rows != n or call[].dst.cols != wanted:
             raise Error("ValueError: the output buffer holds " + String(wanted) + " values per row of X")
         dst = call[].dst.data
-    var request = FAQueryRequest(op, call[].x.data, _address(slot, 0), _address(slot, 1), _address(slot, 2), dst,
-        n, d, nc)
+    var request = FAQueryRequest(op, _host_x(held), _address(slot, 0), _address(slot, 1), _address(slot, 2), dst,
+        n, d, nc, _pool_of(held))
     var value = fa_query_call(call[].route.entry, request)
     if op == _FA_SCORE:
         call[].value = value
@@ -1182,8 +1330,10 @@ def _encode(slot: _Slot, m: Int, kc: Int) -> EncodeWords:
                        slot[].words[6] != 0.0, slot[].words[7] != 0.0)
 
 
-def _fit_kit_begin(slot: _Slot, call: _Call, estimator: String) raises:
-    _whole(call, estimator)
+def _fit_kit_begin(slot: _Slot, call: _Call, estimator: String, rows_ok: Bool = False) raises:
+    # `rows_ok`: the kind reads X through `_rows`, which refuses an index itself off the store route.
+    if not rows_ok:
+        _whole(call, estimator)
     _dense(call[].x, "X", estimator)
     if call[].weights.rows > 0:
         raise Error("TypeError: a " + estimator + " member takes no sample_weight")
@@ -1223,14 +1373,15 @@ def _fit_dl(slot: _Slot, call: _Call) raises:
     DictionaryLearning fit's own code (split by sign when asked), the
     mini-batch fit's encode of X, as the doors' fit_transform."""
     var estimator = _name(slot)
-    _fit_kit_begin(slot, call, estimator)
+    _fit_kit_begin(slot, call, estimator, True)
     var kind = slot[].kind()
     var project = call[].fit_output == MEMBER_OP_TRANSFORM
-    var n = call[].x.rows
-    var m = call[].x.cols
+    var held = _rows(call, estimator)
+    var n = held.n
+    var m = held.d
     var kit = _kit(call)
     try:
-        var x = kit.borrow(call[].x.data, n, m)
+        var x = _kit_x(kit, held)
         var nc = m if slot[].words[8] < 0.0 else Int(slot[].words[8])
         var d = -1
         var code = -1
@@ -1269,6 +1420,7 @@ def _fit_dl(slot: _Slot, call: _Call) raises:
             _kit_out(call, kit, code, estimator)
     finally:
         kit.close()
+        seq_rows_close(call, held)
 
 
 def _fit_coder(slot: _Slot, call: _Call) raises:
@@ -1276,7 +1428,8 @@ def _fit_coder(slot: _Slot, call: _Call) raises:
     dictionary (the admitted float32 parameter the plan pins, words [8 ..
     10]) checked against X's width and kept as components_."""
     var estimator = _name(slot)
-    _fit_kit_begin(slot, call, estimator)
+    _fit_kit_begin(slot, call, estimator, True)
+    _mani_whole(call, estimator)  # the fit reads X's width only; its fit_transform reads the rows (`_query_kit`)
     var rows = Int(slot[].words[9])
     var cols = Int(slot[].words[10])
     if call[].x.cols != cols:
@@ -1300,14 +1453,15 @@ def _fit_spca(slot: _Slot, call: _Call) raises:
     SparsePCA only); fit_output TRANSFORM = its fit_transform's ridge
     projection."""
     var estimator = _name(slot)
-    _fit_kit_begin(slot, call, estimator)
+    _fit_kit_begin(slot, call, estimator, True)
     var minibatch = slot[].kind() == XDECOMP_KIND_MBSPCA
     var project = call[].fit_output == MEMBER_OP_TRANSFORM
-    var n = call[].x.rows
-    var m = call[].x.cols
+    var held = _rows(call, estimator)
+    var n = held.n
+    var m = held.d
     var kit = _kit(call)
     try:
-        var x = kit.borrow(call[].x.data, n, m)
+        var x = _kit_x(kit, held)
         var nc = m if slot[].words[1] < 0.0 else Int(slot[].words[1])
         var dict_words = DictWords(nc, 0.0, 0, 0.0, 0, 0, False, False, 0)
         var mb = MiniBatchWords(1, 0, False, 0, -1, 0, 0, False, False, 0.0, 0.0)
@@ -1345,6 +1499,7 @@ def _fit_spca(slot: _Slot, call: _Call) raises:
             _kit_out(call, kit, fit.projected, estimator)
     finally:
         kit.close()
+        seq_rows_close(call, held)
 
 
 def _query_kit(slot: _Slot, call: _Call, inverse: Bool) raises:
@@ -1353,12 +1508,12 @@ def _query_kit(slot: _Slot, call: _Call, inverse: Bool) raises:
     var estimator = _name(slot)
     if not slot[].fitted:
         raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
-    _whole(call, estimator)
     _dense(call[].x, "X", estimator)
+    var held = _rows(call, estimator)
     var kind = slot[].kind()
     var kit = _kit(call)
     try:
-        var x = kit.borrow(call[].x.data, call[].x.rows, call[].x.cols)
+        var x = _kit_x(kit, held)
         var comps = _kit_operand(slot, call, kit, 0, slot[].count, slot[].features)
         var out = -1
         if _is_spca(kind):
@@ -1380,6 +1535,7 @@ def _query_kit(slot: _Slot, call: _Call, inverse: Bool) raises:
         _kit_out(call, kit, out, estimator)
     finally:
         kit.close()
+        seq_rows_close(call, held)
 
 
 def _export_kit(slot: _Slot, call: _Call) raises:
@@ -1496,7 +1652,6 @@ def _fit_mcd(slot: _Slot, call: _Call) raises:
     """`mcd_fit` (envelope) over the borrowed X; fit_output PREDICT =
     fit_predict's labels over the fit's own distances."""
     var estimator = _name(slot)
-    _whole(call, estimator)
     _dense(call[].x, "X", estimator)
     if call[].weights.rows > 0:
         raise Error("TypeError: a " + estimator + " member takes no sample_weight")
@@ -1504,15 +1659,16 @@ def _fit_mcd(slot: _Slot, call: _Call) raises:
         member_unsupported(estimator, call[].fit_output)
     _release(slot)
     slot[].clear()
-    var n = call[].x.rows
+    var n = seq_rows_count(call)
     var p = call[].x.cols
     if n < 2:
         raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(p)
                     + ")) while a minimum of 2 is required by MinCovDet.")
     var h = min((n + p + 2) // 2, n) if slot[].words[1] < 0.0 else Int(slot[].words[1] * Float64(n))
+    var held = _rows(call, estimator)
     var kit = _kit(call)
     try:
-        var x = kit.borrow(call[].x.data, n, p)
+        var x = _kit_x(kit, held)
         # words[4]: EllipticEnvelope's contamination, in (0, 0.5]; 0 is MinCovDet (lane w3f3-f: no envelope, no
         # offset_, as the public door's `envelope` False)
         var fit = mcd_fit_run(kit, x, h, Int(slot[].words[2]), slot[].words[3] != 0.0, slot[].words[4] != 0.0,
@@ -1537,6 +1693,7 @@ def _fit_mcd(slot: _Slot, call: _Call) raises:
             _mcd_labels(call, kit, mcd_labels_run(kit, fit.dist, fit.offset), n, estimator)
     finally:
         kit.close()
+        seq_rows_close(call, held)
 
 
 def _query_mcd(slot: _Slot, call: _Call, operation: Int) raises:
@@ -1545,13 +1702,13 @@ def _query_mcd(slot: _Slot, call: _Call, operation: Int) raises:
     var estimator = _name(slot)
     if not slot[].fitted:
         raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
-    _whole(call, estimator)
     _dense(call[].x, "X", estimator)
+    var held = _rows(call, estimator)
     var p = slot[].features
     var offset = slot[].scalars[2]
     var kit = _kit(call)
     try:
-        var x = kit.borrow(call[].x.data, call[].x.rows, call[].x.cols)
+        var x = _kit_x(kit, held)
         var loc = _kit_operand(slot, call, kit, 0, 1, p)
         var precision = _kit_operand(slot, call, kit, 1, p, p)
         var d = mcd_mahal(kit, x, loc, precision)
@@ -1565,6 +1722,7 @@ def _query_mcd(slot: _Slot, call: _Call, operation: Int) raises:
             _kit_out(call, kit, negated, estimator)
     finally:
         kit.close()
+        seq_rows_close(call, held)
 
 
 def _export_mcd(slot: _Slot, call: _Call) raises:
@@ -1653,21 +1811,31 @@ comptime _LDA_SCORE = 3
 
 def _lda_request(slot: _Slot, call: _Call, op: Int, comps_in: Int, exp_in: Int, comps_out: Int, exp_out: Int,
                  dst: Int, nc: Int, fresh: Bool, total: Float64, refusal: Int, draw: Int, n_batch_iter: Int,
-                 doc: Float64, topic: Float64) -> LDARequest:
+                 doc: Float64, topic: Float64, held: SeqRows) -> LDARequest:
     var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
     var online = op == _LDA_FIT and w[4] != 0.0
-    return LDARequest(op, call[].x.data, comps_in, exp_in, comps_out, exp_out, dst, call[].x.rows, call[].x.cols,
+    return LDARequest(op, _host_x(held), comps_in, exp_in, comps_out, exp_out, dst, held.n, held.d,
                       nc, fresh, op == _LDA_TRANSFORM, Int(w[6]), online, Int(w[5]) if online else 1, Int(w[7]),
                       Int(w[8]), Int(w[9]), refusal, draw, n_batch_iter, doc, topic, w[10], w[11], w[12], total,
-                      w[14])
+                      w[14], _pool_of(held))
 
 
 def _fit_lda(slot: _Slot, call: _Call) raises:
+    """THE RESIDENT ROUTE wrapper (lane vdf-scope-neural3): `_fit_lda_rows` over the call's rows (`_rows`)."""
+    var estimator = _name(slot)
+    _dense(call[].x, "X", estimator)
+    var held = _rows(call, estimator)
+    try:
+        _fit_lda_rows(slot, call, held)
+    finally:
+        seq_rows_close(call, held)
+
+
+def _fit_lda_rows(slot: _Slot, call: _Call, held: SeqRows) raises:
     """`lda_fit` over the caller's X (fresh state: draw 0, n_batch_iter 1,
     total_samples = rows); fit_output TRANSFORM = fit_transform's normalized
     transform of the same X."""
     var estimator = _name(slot)
-    _whole(call, estimator)
     _dense(call[].x, "X", estimator)
     if call[].weights.rows > 0:
         raise Error("TypeError: a " + estimator + " member takes no sample_weight")
@@ -1680,8 +1848,8 @@ def _fit_lda(slot: _Slot, call: _Call) raises:
     slot[].blocks.append(List[Float32](length=max(nc * v, 1), fill=Float32(0)))
     var spare = _address(slot, 0)
     var request = _lda_request(slot, call, _LDA_FIT, spare, spare, _address(slot, 0), _address(slot, 1), spare, nc,
-                               True, Float64(call[].x.rows), LDA_REFUSAL_FIT, 0, 1, slot[].words[2],
-                               slot[].words[3])
+                               True, Float64(held.n), LDA_REFUSAL_FIT, 0, 1, slot[].words[2],
+                               slot[].words[3], held)
     var answer = lda_call(call[].route.entry, request)
     var scalars = _four(nc, v, answer.iterations, answer.draw)
     scalars.append(Float64(answer.n_batch_iter))
@@ -1693,22 +1861,32 @@ def _fit_lda(slot: _Slot, call: _Call) raises:
     slot[].features = v
     slot[].fitted = True
     if call[].fit_output == MEMBER_OP_TRANSFORM:
-        _query_lda(slot, call, _LDA_TRANSFORM)
+        _query_lda_rows(slot, call, _LDA_TRANSFORM, held)
 
 
 def _query_lda(slot: _Slot, call: _Call, op: Int) raises:
+    """THE RESIDENT ROUTE wrapper (lane vdf-scope-neural3): `_query_lda_rows` over the call's rows (`_rows`)."""
+    var estimator = _name(slot)
+    _dense(call[].x, "X", estimator)
+    var held = _rows(call, estimator)
+    try:
+        _query_lda_rows(slot, call, op, held)
+    finally:
+        seq_rows_close(call, held)
+
+
+def _query_lda_rows(slot: _Slot, call: _Call, op: Int, held: SeqRows) raises:
     """`lda_project`: transform (normalize=True, rows x n_components_)
     or score (the approximate bound into `call.value`)."""
     var estimator = _name(slot)
     if not slot[].fitted:
         raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
-    _whole(call, estimator)
     _dense(call[].x, "X", estimator)
     var nc = slot[].count
     var dst = _address(slot, 0)
     if op == _LDA_TRANSFORM:
         _dense(call[].dst, "the output buffer", estimator)
-        if call[].dst.rows != call[].x.rows or call[].dst.cols != nc:
+        if call[].dst.rows != held.n or call[].dst.cols != nc:
             raise Error("ValueError: the output buffer holds " + String(nc) + " values per row of X")
         dst = call[].dst.data
     elif call[].weights.rows > 0 or call[].y.rows > 0:
@@ -1716,7 +1894,7 @@ def _query_lda(slot: _Slot, call: _Call, op: Int) raises:
     var spare = _address(slot, 0)
     var request = _lda_request(slot, call, op, _address(slot, 0), _address(slot, 1), spare, spare, dst, nc, False,
                                slot[].words[13], LDA_REFUSAL_TRANSFORM, Int(slot[].scalars[3]),
-                               Int(slot[].scalars[4]), slot[].scalars[6], slot[].scalars[7])
+                               Int(slot[].scalars[4]), slot[].scalars[6], slot[].scalars[7], held)
     var answer = lda_call(call[].route.entry, request)
     if op == _LDA_SCORE:
         call[].value = answer.value
@@ -1788,14 +1966,25 @@ def _fit_rp(slot: _Slot, call: _Call) raises:
     """bindings/rp_native_door.mojo `rp_fit`: the target dimension, the
     density, one RPFitRequest through the route's operations table."""
     var estimator = _name(slot)
-    _whole(call, estimator)
     _dense(call[].x, "X", estimator)
     if call[].weights.rows > 0:
         raise Error("TypeError: a " + estimator + " member takes no sample_weight")
     if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
         member_unsupported(estimator, call[].fit_output)
-    var n = call[].x.rows
-    var d = call[].x.cols
+    var held = _rows(call, estimator)
+    try:
+        _fit_rp_rows(slot, call, held)
+    finally:
+        seq_rows_close(call, held)
+
+
+def _fit_rp_rows(slot: _Slot, call: _Call, rows: SeqRows) raises:
+    """`_fit_rp` over the call's rows. The fit reads X's shape only, except a FUSED build's scan of the host words
+    for a non-finite value: a resident X (a pool id) is one the caller already scanned (no MEMBER_CAN_TEST_ROWS),
+    so it takes the unfused draw (`fused_ok` False), whose components are the fused draw's bits (the host column
+    has no fused form and matches both)."""
+    var n = rows.n
+    var d = rows.d
     var sparse = slot[].kind() == XDECOMP_KIND_SRP
     var auto = slot[].words[1] < 0.0
     var kc = 0
@@ -1826,8 +2015,10 @@ def _fit_rp(slot: _Slot, call: _Call) raises:
     slot[].blocks.append(List[Float32](length=max(kc * d, 1), fill=Float32(0)))
     slot[].blocks.append(List[Float32](length=(d * kc) if inverse else 0, fill=Float32(0)))
     var components = _address(slot, 0)
-    var request = RPFitRequest(call[].x.data, components, _address(slot, 1) if inverse else components, n, d, kc,
-        sparse, Int(slot[].words[5]), inverse, not auto and not inverse, density)
+    var host_x = rows.x >= 0
+    # A resident X: the whole host view's address fills the never-null word; the unfused fit reads no X value.
+    var request = RPFitRequest(rows.x if host_x else call[].x.data, components, _address(slot, 1) if inverse else components,
+        n, d, kc, sparse, Int(slot[].words[5]), inverse, host_x and not auto and not inverse, density)
     var bad = rp_fit_call(call[].route.entry, request)
     if bad >= 0:
         slot[].clear()
@@ -1837,7 +2028,7 @@ def _fit_rp(slot: _Slot, call: _Call) raises:
     slot[].scalars = [Float64(kc), Float64(d), density, 1.0 if inverse else 0.0]
     slot[].fitted = True
     if call[].fit_output == MEMBER_OP_TRANSFORM:
-        _query_rp(slot, call, False)
+        _query_rp_rows(slot, call, False, rows)
 
 
 def _rp_pool(slot: _Slot, call: _Call, k: Int, words: Int) raises -> Int:
@@ -1870,10 +2061,19 @@ def _query_rp(slot: _Slot, call: _Call, inverse: Bool) raises:
     var estimator = _name(slot)
     if not slot[].fitted:
         raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
-    _whole(call, estimator)
     _dense(call[].x, "X", estimator)
+    var held = _rows(call, estimator)
+    try:
+        _query_rp_rows(slot, call, inverse, held)
+    finally:
+        seq_rows_close(call, held)
+
+
+def _query_rp_rows(slot: _Slot, call: _Call, inverse: Bool, held: SeqRows) raises:
+    """`_query_rp` over the call's rows: a resident X goes to XD_RP_PROJECT as its pool id (word 5)."""
+    var estimator = _name(slot)
     _dense(call[].dst, "the output buffer", estimator)
-    var rows = call[].x.rows
+    var rows = held.n
     var kc = slot[].count
     var d = slot[].features
     if inverse:
@@ -1887,8 +2087,8 @@ def _query_rp(slot: _Slot, call: _Call, inverse: Bool) raises:
         raise Error("ValueError: the output buffer holds " + String(width) + " values per row of X")
     var k = 1 if inverse else 0
     var pool = _rp_pool(slot, call, k, kc * d)
-    var request = RPProjectRequest(call[].x.data, _address(slot, k), call[].dst.data, rows, call[].x.cols, width,
-        0 if inverse else 1, pool)
+    var request = RPProjectRequest(held.x if held.x >= 0 else 0, _address(slot, k), call[].dst.data, rows,
+        call[].x.cols, width, 0 if inverse else 1, pool, _pool_of(held))
     if rp_project_call(call[].route.entry, request) != 0:
         raise Error("X: input must be finite; NaN/inf are unsupported")
 
@@ -2091,12 +2291,41 @@ def _mani_out(call: _Call, mut run: MRun, a: Int, estimator: String) raises:
 
 
 def _mani_x(call: _Call, mut run: MRun, k: Int) raises -> Int:
-    """`_mani_x`: the caller's X admitted into the kit (`from_snapshot`)."""
-    return run.from_snapshot(k, call[].x.data, call[].x.rows, call[].x.cols, 2, "X")
+    """`_mani_x`: the caller's X admitted into the kit (`from_snapshot`). Under a row index on the store route
+    (THE RESIDENT ROUTE note): with a scope and a pin the fold is taken ON THE DEVICE and the fresh pool id is
+    handed to the run (`adopt`: no upload; the run frees it at close unless the state keeps it, as Isomap keeps
+    _fit_X); without a pin the fold gathered on the host cores goes up as the whole X did. Without an index
+    (lane vdf-scope-neural4): on the store route with a scope and a pin the whole X is the scope's cached copy
+    (put ONCE for every candidate of the search) and the run takes a device-to-device copy of it
+    (`MRun.adopt_copy`: the cache keeps its own id, a state may keep the copy); otherwise the whole X goes up as
+    before."""
+    if call[].row_index.rows == 0 and not seq_rows_route(call[].route):
+        return run.from_snapshot(k, call[].x.data, call[].x.rows, call[].x.cols, 2, "X")
+    var held = member_rows_open(call, 0, String("manifold"), String(XDECOMP_STORE_PREFIX))
+    try:
+        if held.x >= 0:
+            return run.from_snapshot(k, held.x, held.n, held.d, 2, "X")
+        if held.taken < 0:
+            # the scope cache's id (no row index): copied on the device, never handed over
+            return run.adopt_copy(k, -(held.x + 1), held.n, held.d, "X")
+        var m = run.adopt(k, held.taken, held.n, held.d, "X")
+        held.taken = -1  # the run owns the fold's id from here (adopt raised before taking it, or took it)
+        return m
+    finally:
+        seq_rows_close(call, held)
+
+
+def _mani_whole(call: _Call, estimator: String) raises:
+    """The manifold kinds' index rule: a row index only on the store route (`_mani_x` reads it)."""
+    if not seq_rows_route(call[].route):
+        _whole(call, estimator)
+    elif call[].column_index.rows > 0:
+        raise Error("TypeError: a " + estimator + " member reads every column of X (no column index)")
 
 
 def _fit_mani_begin(slot: _Slot, call: _Call, estimator: String) raises:
-    _fit_kit_begin(slot, call, estimator)
+    _fit_kit_begin(slot, call, estimator, True)
+    _mani_whole(call, estimator)
     _mani_ready(slot)
     var count = _mani_count(slot)
     for _ in range(count):  # driver-loop: the kind's fitted matrices
@@ -2160,7 +2389,7 @@ def _query_iso(slot: _Slot, call: _Call) raises:
     var estimator = String("Isomap")
     if not slot[].fitted:
         raise Error("NotFittedError: this Isomap member is not fitted yet")
-    _whole(call, estimator)
+    _mani_whole(call, estimator)
     _dense(call[].x, "X", estimator)
     _mani_ready(slot)
     var run = MRun()
@@ -2323,7 +2552,7 @@ def _query_lle(slot: _Slot, call: _Call) raises:
     var estimator = String("LocallyLinearEmbedding")
     if not slot[].fitted:
         raise Error("NotFittedError: this LocallyLinearEmbedding member is not fitted yet")
-    _whole(call, estimator)
+    _mani_whole(call, estimator)
     _dense(call[].x, "X", estimator)
     _mani_ready(slot)
     var run = MRun()
@@ -2660,45 +2889,62 @@ def _outputs(call: _Call) raises:
     raise Error("NotFittedError: this " + _name(slot) + " member's output width is known after its fit")
 
 
+def _capabilities(call: _Call) raises -> Int:
+    """MEMBER_OP_CAPABILITIES before THE RESIDENT ROUTE's bits (`_xdecomp_member` adds them)."""
+    var mask = MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+    if call[].state == 0:
+        # The family's union.
+        return (mask | MEMBER_CAN_INVERSE_TRANSFORM | MEMBER_CAN_SCORE | MEMBER_CAN_SCORE_SAMPLES
+                | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION)
+    # Kind-exact (`member_kind_capabilities`): an NMF state answers inverse
+    # only when its route's image exports it (NMF_CAP_INVERSE at admit).
+    # A random projection answers inverse only with the pseudo-inverse
+    # (compute_inverse_components, or an imported inverse_components_).
+    var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
+    var kind = held[].kind()
+    if kind == XDECOMP_KIND_FA:
+        return mask | MEMBER_CAN_SCORE | MEMBER_CAN_SCORE_SAMPLES
+    if kind == XDECOMP_KIND_LDA:
+        return mask | MEMBER_CAN_SCORE
+    if kind == XDECOMP_KIND_MDS:
+        # Lane mf-member8: fit, export and import (a fitted MDS held by a
+        # meta-estimator's state); no transform.
+        return MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_IGNORES_Y
+    if _is_mani(kind):
+        # transform of new rows only (no inverse, no score); no
+        # MEMBER_CAN_TEST_ROWS (see the Isomap / LLE section)
+        return mask
+    if kind == XDECOMP_KIND_ENVELOPE:
+        if held[].words[4] == 0.0:
+            # MinCovDet (lane w3f3-f; contamination word 0): fit, export and import only. scikit-learn's
+            # MinCovDet has no predict, decision_function or score_samples, and its fit(X, y=None) ignores y.
+            return MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_IGNORES_Y
+        return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE_SAMPLES
+                | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
+    if _is_rp(kind):
+        if held[].words[4] != 0.0 or (held[].fitted and held[].scalars[3] != 0.0):
+            mask |= MEMBER_CAN_INVERSE_TRANSFORM
+    elif kind != XDECOMP_KIND_NMF or (call[].route.flags & XDECOMP_ROUTE_NMF_INVERSE) != 0:
+        mask |= MEMBER_CAN_INVERSE_TRANSFORM
+    return mask
+
+
+def _rows_bits(call: _Call) raises -> Int:
+    """MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE on the store route (THE RESIDENT ROUTE note), for the family's
+    union (no state) and for a state of a kind that reads X through `_rows` / `_mani_x`."""
+    if not seq_rows_route(call[].route):
+        return 0
+    if call[].state != 0:
+        var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
+        if not _rows_kind(held[].kind()):
+            return 0
+    return MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
+
+
 def _xdecomp_member(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
-        var mask = MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
-        if call[].state == 0:
-            # The family's union.
-            return (mask | MEMBER_CAN_INVERSE_TRANSFORM | MEMBER_CAN_SCORE | MEMBER_CAN_SCORE_SAMPLES
-                    | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION)
-        # Kind-exact (`member_kind_capabilities`): an NMF state answers inverse
-        # only when its route's image exports it (NMF_CAP_INVERSE at admit).
-        # A random projection answers inverse only with the pseudo-inverse
-        # (compute_inverse_components, or an imported inverse_components_).
-        var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
-        var kind = held[].kind()
-        if kind == XDECOMP_KIND_FA:
-            return mask | MEMBER_CAN_SCORE | MEMBER_CAN_SCORE_SAMPLES
-        if kind == XDECOMP_KIND_LDA:
-            return mask | MEMBER_CAN_SCORE
-        if kind == XDECOMP_KIND_MDS:
-            # Lane mf-member8: fit, export and import (a fitted MDS held by a
-            # meta-estimator's state); no transform.
-            return MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_IGNORES_Y
-        if _is_mani(kind):
-            # transform of new rows only (no inverse, no score); no
-            # MEMBER_CAN_TEST_ROWS (see the Isomap / LLE section)
-            return mask
-        if kind == XDECOMP_KIND_ENVELOPE:
-            if held[].words[4] == 0.0:
-                # MinCovDet (lane w3f3-f; contamination word 0): fit, export and import only. scikit-learn's
-                # MinCovDet has no predict, decision_function or score_samples, and its fit(X, y=None) ignores y.
-                return MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_IGNORES_Y
-            return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE_SAMPLES
-                    | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
-        if _is_rp(kind):
-            if held[].words[4] != 0.0 or (held[].fitted and held[].scalars[3] != 0.0):
-                mask |= MEMBER_CAN_INVERSE_TRANSFORM
-        elif kind != XDECOMP_KIND_NMF or (call[].route.flags & XDECOMP_ROUTE_NMF_INVERSE) != 0:
-            mask |= MEMBER_CAN_INVERSE_TRANSFORM
-        return mask
+        return _capabilities(call) | _rows_bits(call)
     if operation == MEMBER_OP_NEW:
         if call[].param_count < 1 or not call[].params:
             raise Error("member ABI: an XDecomp member takes its parameter words")

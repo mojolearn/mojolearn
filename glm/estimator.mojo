@@ -35,6 +35,7 @@ min-norm card, which a bypass to `lstsq_eig` cannot do.
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 
+from core.fold_x_device import fold_x_fill
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -96,7 +97,7 @@ def ols_fit_host(
     var inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    fold_x_fill(ctx, x, Int(x_ptr), n_rows * n_features)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
     ctx.synchronize()
     # THROUGH `olsFit`'s DISPATCH (`ols.cuh:112`), NOT AROUND IT. See the
@@ -165,7 +166,7 @@ def ols_fit_resident_host(
     var cells = n_rows * n_features
     var d_x = ctx.enqueue_create_buffer[DType.float32](cells)
     var d_y = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    ctx.enqueue_copy(dst_buf=d_x, src_ptr=x_ptr)
+    fold_x_fill(ctx, d_x, Int(x_ptr), n_rows * n_features)  # THE FOLD X WORD (lane vdf-scope-linear3): host X, or a fold slot
     ctx.enqueue_copy(dst_buf=d_y, src_ptr=y_ptr)
     var w = ctx.enqueue_create_buffer[DType.float32](n_features)
     var cov = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
@@ -288,7 +289,7 @@ def ols_fit_weighted_host(
     var inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    fold_x_fill(ctx, x, Int(x_ptr), n_rows * n_features)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
     ctx.enqueue_copy(dst_buf=sw, src_ptr=weight_ptr)
     ctx.synchronize()
@@ -336,7 +337,7 @@ def ridge_fit_host(
     var w = ctx.enqueue_create_buffer[DType.float32](n_features)
     # TOMBSTONE: MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF (pinned stage slower) deleted 2026-10-11 by 47a3af928; code recoverable at 47a3af928^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD.patch; record in docs/TOMBSTONES.md.
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    fold_x_fill(ctx, x, Int(x_ptr), n_rows * n_features)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
     ctx.synchronize()
     var trace = IdentityTrace()
@@ -395,7 +396,7 @@ def ridge_fit_resident_host(
     var cells = n_rows * n_features
     var d_x = ctx.enqueue_create_buffer[DType.float32](cells)
     var d_y = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    ctx.enqueue_copy(dst_buf=d_x, src_ptr=x_ptr)
+    fold_x_fill(ctx, d_x, Int(x_ptr), cells)  # THE FOLD X WORD (lane vdf-scope-linear4): host X, or a fold slot
     ctx.enqueue_copy(dst_buf=d_y, src_ptr=y_ptr)
     var w = ctx.enqueue_create_buffer[DType.float32](n_features)
     var trace = IdentityTrace()
@@ -516,7 +517,7 @@ def qn_fit_host(
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     # TOMBSTONE: MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF (pinned stage slower) deleted 2026-10-11 by 47a3af928; code recoverable at 47a3af928^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD.patch; record in docs/TOMBSTONES.md.
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    fold_x_fill(ctx, x, Int(x_ptr), n_rows * n_features)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     # `status` (lane a7c): the host address of the deferred finite status
     # word of X (core/admitted_finite_status.mojo; 0 when the door tested X
     # itself): the words just uploaded are tested on the device and the
@@ -598,7 +599,7 @@ def qn_fit_ovr_host(
     var n_param = n_features + (1 if fit_intercept else 0)
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var codes = ctx.enqueue_create_buffer[DType.int32](n_rows)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    fold_x_fill(ctx, x, Int(x_ptr), n_rows * n_features)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     ctx.enqueue_copy(dst_buf=codes, src_ptr=codes_ptr)
     var sw_all = ctx.enqueue_create_buffer[DType.float32](n_rows if has_sample_weight else 1)
     if has_sample_weight:
@@ -735,7 +736,7 @@ def qn_decision_function_device(
     # (the cross-validation fold entry glm/qn_fold.mojo calls it too).
     var n_targets = n_classes if n_classes > 2 else 1
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    fold_x_fill(ctx, x, Int(x_ptr), n_rows * n_features)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     var dstat = qn_x_status(ctx, x, n_rows * n_features, status)
     var w = qn_scores_resident(ctx, x, coef_ptr, scores, n_rows, n_features, fit_intercept, n_targets)
     ctx.synchronize()
@@ -763,7 +764,7 @@ def qn_predict_binary_host(
     if n_rows <= 0:
         return
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    fold_x_fill(ctx, x, Int(x_ptr), n_rows * n_features)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     var dstat = qn_x_status(ctx, x, n_rows * n_features, status)
     qn_codes_resident(ctx, x, coef_ptr, out_ptr, n_rows, n_features, fit_intercept, 1)
     _ = x^
@@ -807,7 +808,7 @@ def qn_predict_multiclass_host(
     if n_rows <= 0:
         return
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    fold_x_fill(ctx, x, Int(x_ptr), n_rows * n_features)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     var dstat = qn_x_status(ctx, x, n_rows * n_features, status)
     qn_codes_resident(ctx, x, coef_ptr, out_ptr, n_rows, n_features, fit_intercept, n_classes)
     _ = x^

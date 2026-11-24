@@ -34,6 +34,7 @@ over 512-row blocks instead of FOLD_BLOCK: eight times the threads of the
 partials launch (taxi: 21 tasks x 366 blocks under FOLD_BLOCK), a
 different fold order (FAST bits only).
 """
+from core.fold_x_device import fold_x_fill
 from max.gpu import block_idx, block_dim, thread_idx
 from std.sys.compile import is_defined
 from std.memory import bitcast
@@ -411,7 +412,7 @@ def huber_fit_fast(
     var dlbs = ctx.enqueue_create_buffer[DType.float32](words)
     var dlss = ctx.enqueue_create_buffer[DType.int32](HF_ST)
     if n_x > 0:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+        fold_x_fill(ctx, dx, Int(x), n_x)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     if n_y > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
     var b1 = _hf_blocks(n)

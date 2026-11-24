@@ -282,6 +282,17 @@ def take_rows64_unit(t: Int, f: FP, q: IP):
     st_row64(f, p(q, 2) + 2 * t, ldi(f, p(q, 0) + ldi(f, p(q, 1) + t)))
 
 
+def gather_i32_unit(t: Int, f: FP, q: IP):
+    """q = [TAB, IDX, OUT]; t = i (lane vdf-scope-split, 2026-11-24):
+    OUT[i] = TAB[IDX[i]], int32 words. StratifiedKFold's first-seen class
+    codes from the caller's sorted-order codes and the k-word rank table the
+    helper table's `MH_FIRST_SEEN_RES` returned, so the n codes go up once,
+    as the program's own input, and never come back as first-seen codes.
+    The word the helper gather `gather_i32` gave. One unit per row; nothing
+    to plan."""
+    sti(f, p(q, 2) + t, ldi(f, p(q, 0) + ldi(f, p(q, 1) + t)))
+
+
 def permute_drawn_unit(t: Int, f: FP, q: IP):
     """q = [n, OUT, seed_lo, seed_hi, base_lo, base_hi, USED, n_used]; t = 0
     (lane ne2-b-search-workers, N086). `permute_unit` for a draw whose

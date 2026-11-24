@@ -2678,7 +2678,7 @@ class VarianceThreshold(_SelectorMixin):
         return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
 
 
-def f_classif(X, y):
+def f_classif(X, y, *, device=None):
     """Compute the ANOVA F-value of each feature against the class labels.
 
     Follows scikit-learn's ``f_classif``. As in scikit-learn, a constant feature (or a single class)
@@ -2691,6 +2691,9 @@ def f_classif(X, y):
         Feature matrix.
     y : array-like of shape (n_samples,)
         Class labels.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on the CPU and
+        'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -2707,10 +2710,10 @@ def f_classif(X, y):
     >>> y = rng.integers(0, 3, 1000)
     >>> F, p = mojolearn.f_classif(X, y)
     """
-    return _ENCODE_CALL(None, "f_classif", (X, y), _ENCODE_CONTEXT)
+    return _ENCODE_CALL(None, "f_classif", (X, y, device), _ENCODE_CONTEXT)
 
 
-def chi2(X, y):
+def chi2(X, y, *, device=None):
     """Compute chi-squared statistics between each nonnegative feature and the class labels.
 
     Follows scikit-learn's ``chi2``: the per-class sums of each feature are compared with their
@@ -2723,6 +2726,9 @@ def chi2(X, y):
         Nonnegative feature matrix, such as counts or frequencies.
     y : array-like of shape (n_samples,)
         Class labels.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on the CPU and
+        'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -2739,10 +2745,10 @@ def chi2(X, y):
     >>> y = rng.integers(0, 2, 1000)
     >>> stat, p = mojolearn.chi2(X, y)
     """
-    return _ENCODE_CALL(None, "chi2", (X, y), _ENCODE_CONTEXT)
+    return _ENCODE_CALL(None, "chi2", (X, y, device), _ENCODE_CONTEXT)
 
 
-def f_regression(X, y, *, center=True, force_finite=True):
+def f_regression(X, y, *, center=True, force_finite=True, device=None):
     """Compute the F-statistic of each feature's correlation with a continuous target.
 
     Follows scikit-learn's ``f_regression``: the F-statistic and p-value of each feature's Pearson
@@ -2760,6 +2766,9 @@ def f_regression(X, y, *, center=True, force_finite=True):
         Replace non-finite results, as in scikit-learn: a constant feature or target gives F 0 and
         p-value 1, and a perfect correlation gives the largest float32 F and p-value 0. With False, the
         raw NaN and ``+inf`` values are returned.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on the CPU and
+        'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -2776,10 +2785,10 @@ def f_regression(X, y, *, center=True, force_finite=True):
     >>> y = (2 * X[:, 0] + rng.random(1000)).astype(np.float32)
     >>> F, p = mojolearn.f_regression(X, y)
     """
-    return _ENCODE_CALL(None, "f_regression", (X, y, center, force_finite), _ENCODE_CONTEXT)
+    return _ENCODE_CALL(None, "f_regression", (X, y, center, force_finite, device), _ENCODE_CONTEXT)
 
 
-def r_regression(X, y, *, center=True, force_finite=True):
+def r_regression(X, y, *, center=True, force_finite=True, device=None):
     """Compute the Pearson correlation of each feature with a continuous target.
 
     Follows scikit-learn's ``r_regression``. Computation is float32.
@@ -2794,6 +2803,9 @@ def r_regression(X, y, *, center=True, force_finite=True):
         Center ``X`` and ``y`` before computing the correlation.
     force_finite : bool, default True
         A constant feature or target gives a correlation of 0; with False it gives NaN.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on the CPU and
+        'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -2808,7 +2820,7 @@ def r_regression(X, y, *, center=True, force_finite=True):
     >>> y = X[:, 0] + rng.random(1000).astype(np.float32)
     >>> r = mojolearn.r_regression(X, y)
     """
-    return _ENCODE_CALL(None, "r_regression", (X, y, center, force_finite), _ENCODE_CONTEXT)
+    return _ENCODE_CALL(None, "r_regression", (X, y, center, force_finite, device), _ENCODE_CONTEXT)
 
 
 class SelectKBest(_SelectorMixin):
@@ -2891,7 +2903,7 @@ _MI_WORK = os.environ.get("MOJOLEARN_MI_WORK", "0") == "1"
 
 
 def mutual_info_classif(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
-                        n_jobs=None):
+                        n_jobs=None, device=None):
     """Estimate the mutual information between each feature and a discrete target.
 
     Follows scikit-learn's ``mutual_info_classif`` for dense ``X``. Continuous features use the k-nearest
@@ -2918,6 +2930,9 @@ def mutual_info_classif(X, y, *, discrete_features="auto", n_neighbors=3, copy=T
         results differ slightly from scikit-learn's for the same seed.
     n_jobs : int, default None
         Accepted for scikit-learn compatibility.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on the CPU and
+        'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -2932,14 +2947,14 @@ def mutual_info_classif(X, y, *, discrete_features="auto", n_neighbors=3, copy=T
     >>> y = (X[:, 0] > 0.5).astype(np.int64)
     >>> mi = mojolearn.mutual_info_classif(X, y, random_state=0)
     """
-    return _ENCODE_CALL(None, "mutual_info_classif", (X, y, discrete_features, n_neighbors, random_state),
+    return _ENCODE_CALL(None, "mutual_info_classif", (X, y, discrete_features, n_neighbors, random_state, device),
                         _ENCODE_CONTEXT)
 
 
 # Brute-force neighbour scans on the device; the tie-breaking noise is drawn
 # from random_state by splitmix64 (sklearn draws numpy's). See bindings/prep_select_native_door.mojo.
 def mutual_info_regression(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
-                           n_jobs=None):
+                           n_jobs=None, device=None):
     """Estimate the mutual information between each feature and a continuous target.
 
     Follows scikit-learn's ``mutual_info_regression`` for dense ``X``. Continuous features use the
@@ -2965,6 +2980,9 @@ def mutual_info_regression(X, y, *, discrete_features="auto", n_neighbors=3, cop
         results differ slightly from scikit-learn's for the same seed.
     n_jobs : int, default None
         Accepted for scikit-learn compatibility.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on the CPU and
+        'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -2979,7 +2997,7 @@ def mutual_info_regression(X, y, *, discrete_features="auto", n_neighbors=3, cop
     >>> y = (X[:, 0] ** 2 + 0.1 * rng.random(1000)).astype(np.float32)
     >>> mi = mojolearn.mutual_info_regression(X, y, random_state=0)
     """
-    return _ENCODE_CALL(None, "mutual_info_regression", (X, y, discrete_features, n_neighbors, random_state),
+    return _ENCODE_CALL(None, "mutual_info_regression", (X, y, discrete_features, n_neighbors, random_state, device),
                         _ENCODE_CONTEXT)
 
 
@@ -3013,6 +3031,10 @@ class RFE(_SelectorMixin):
     importance_getter : 'auto' or str, default 'auto'
         ``'auto'`` uses ``coef_`` or ``feature_importances_``; a dotted attribute path of the fitted
         estimator picks the importances instead (they are squared).
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on the CPU and
+        'gpu' requires a GPU installation. The estimator is fitted on the same device: its own ``device``
+        must be None or the same value. Other values raise ValueError.
 
     Attributes
     ----------
@@ -3041,7 +3063,10 @@ class RFE(_SelectorMixin):
     # Native lifecycle handling replaces the inherited Python fit/output
     # wrappers; constructor and parameter setters remain separately audited.
     _mojolearn_native_public = True
-    _parameters = ("estimator", "n_features_to_select", "step", "verbose", "importance_getter")
+    _parameters = ("estimator", "n_features_to_select", "step", "verbose", "importance_getter", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
     #: Kernel and Permutation SHAP explain this exact class natively: its fitted estimator_'s member over the
     #: support_ columns (bindings/trees_agnostic_native_door.mojo); read from the class's own namespace.
     _mojolearn_explained = "rfe"
@@ -3050,12 +3075,14 @@ class RFE(_SelectorMixin):
     # estimator's, chosen by the admission.
     _mojolearn_member = (39, 14)
 
-    def __init__(self, estimator, *, n_features_to_select=None, step=1, verbose=0, importance_getter="auto"):
+    def __init__(self, estimator, *, n_features_to_select=None, step=1, verbose=0, importance_getter="auto",
+                 device=None):
         self.estimator = estimator
         self.n_features_to_select = n_features_to_select
         self.step = step
         self.verbose = verbose
         self.importance_getter = importance_getter
+        self.device = device
 
     def fit(self, X, y, **fit_params):
         """Fit the selector and final estimator.

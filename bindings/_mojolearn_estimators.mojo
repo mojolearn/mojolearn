@@ -24,6 +24,7 @@ from providers.python.neural_descriptor_pyapi_door import neural_descriptor_caps
 from core.dbscan_native_device import DBSCAN_DEVICE_API, DBSCANDeviceKernels
 from core.dbscan_native_api import DBSCANFitRequest
 from core.kde_native_device import KDE_DEVICE_API, KDEDeviceKernels
+from core.estimators_store import ESTIMATORS_STORE_API
 from core.kde_native_api import KDEPrepareRequest, KDEQueryRequest, KDEResidentQuery, KDE_CAP_IMMUTABLE
 from core.pca_native_device import PCA_DEVICE_API
 from core.tsvd_native_device import TSVD_DEVICE_API
@@ -870,6 +871,14 @@ def kde_native_api_v1_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
+def estimators_store_v1_binding() raises -> PythonObject:
+    """The image's resident store as a scope transport entry (core/estimators_store.mojo, lane
+    vdf-scope-cluster2b): the KernelDensity member boundary connects it once and hands it to the member in
+    `route.second`."""
+    var api = ESTIMATORS_STORE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def pca_native_api_v1_binding() raises -> PythonObject:
     var api = PCA_DEVICE_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
@@ -1294,6 +1303,7 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[linear_predict_native_api_v1_binding]("linear_predict_native_api_v1")
         m.def_function[pca_native_api_v1_binding]("pca_native_api_v1")
         m.def_function[kde_native_api_v1_binding]("kde_native_api_v1")
+        m.def_function[estimators_store_v1_binding]("estimators_store_v1")
         m.def_function[dbscan_native_api_v1_binding]("dbscan_native_api_v1")
         m.def_function[tsvd_native_api_v1_binding]("tsvd_native_api_v1")
         m.def_function[logistic_native_api_v1_binding]("logistic_native_api_v1")

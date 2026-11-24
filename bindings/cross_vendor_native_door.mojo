@@ -65,10 +65,13 @@ from bindings.byte_checkpoint_native_door import byte_checkpoint_initialize, byt
 from bindings.byte_checkpoint_native_run import byte_checkpoint_write, ByteCheckpointWriteFailure
 from bindings.byte_checkpoint_io_unpack import ByteCheckpointIOError
 from bindings.py_balanced import py_call, py_contains, py_fields, py_get, py_setattr, py_setitem, py_type
+from core.device_route import device_code, device_refusal
+from core.function_device import FunctionDevice, function_device_decide, function_device_default
 from core.sha256 import Sha256
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer
 from core.shared_slot import SharedSlot
-from core.parallel_entry_table import ParallelEntryKey, parallel_ref, parallel_fold_pair_f32, PARALLEL_TABLE_BASE
+from core.parallel_entry_table import ParallelEntryKey, parallel_ref, parallel_ordered_fold_f32, PARALLEL_TABLE_BASE
+from core.hotpath_impl_rows import ordered_fold_f32
 from bindings.cross_vendor_native_run import (
     CROSS_SCHEME_V1, CROSS_SCHEME_SLICED, CROSS_COMMIT, CROSS_DONE, CROSS_HOST_FOLD,
     CROSS_DEFECT_NONE, CROSS_DEFECT_NAME, CROSS_DEFECT_IDS, CROSS_DEFECT_ID,
@@ -151,7 +154,22 @@ def cross_vendor_f32(value: PythonObject) raises -> PythonObject:
     return py_call(raw.cast, "f")
 
 
-def cross_vendor_fold(gradients: PythonObject, prefix: PythonObject) raises -> PythonObject:
+def cross_vendor_fold(gradients: PythonObject, prefix: PythonObject, device: FunctionDevice) raises -> PythonObject:
+    """The ordered fold of fold_pair / ordered_fold: dst (a copy of `prefix`,
+    or of the first gradient) folded with every remaining gradient in logical
+    order, each element independently (core/hotpath_impl_rows.mojo
+    `ordered_fold_f32`, `ordered_fold_step`).
+
+    Lane vdf-linalg (2026-11-24): ONE call for all shards (it was one
+    `fold_pair_f32` table call per shard, each moving dst to the device and
+    back on a GPU base image). `device=None` and "gpu" run the base image's
+    `PB_ORDERED_FOLD_F32` (core/parallel_entry_table.mojo): the device
+    kernel on a GPU installation (core/hotpath_device.mojo
+    `device_ordered_fold_f32`: element-parallel, the shard order fixed per
+    element, dst resident), the host column on a CPU-only one. An explicit
+    "cpu" beside a GPU set runs the host column here, in this host image
+    (the same `ordered_fold_f32` the CPU base image publishes). Same bits on
+    every side: the per-element recurrence of the pair fold, unchanged."""
     var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
     var parts = cv_sequence(gradients, "gradients")
     var first = 0
@@ -165,12 +183,12 @@ def cross_vendor_fold(gradients: PythonObject, prefix: PythonObject) raises -> P
     _ = py_call(store.frombytes, py_call(cross_vendor_f32(source).cast, "B"))
     var n = len(store)
     var total = Int(py=store.buffer_info()[0])
-    # Resolved once before the shard loop (lane entry-table-zero-alloc).
-    var key = parallel_ref(PARALLEL_TABLE_BASE, ParallelEntryKey(c[].fold_mode, c[].fold_vendor))
+    # UNPACK: every shard's float32 view, checked and held in logical order;
+    # each view (a memoryview over the received bytes) pins its memory until
+    # the fold below, and its address goes into one Int64 table.
+    var views = c[].bi.list()
+    var table = List[Int64](capacity=len(parts) - first)
     for k in range(first, len(parts)):  # driver-loop: over logical shard gradient buffers in immutable order
-        # pass 3 (rank 36): the shard's received float32 view is folded in
-        # place (one read-only buffer export); it was copied into a new
-        # array('f') per shard first. Same values, same fold order.
         var view = cross_vendor_f32(parts[k])
         var pin = AdmittedBorrowedBuffer(view)
         try:
@@ -179,21 +197,27 @@ def cross_vendor_fold(gradients: PythonObject, prefix: PythonObject) raises -> P
                 raise Error("ordered_fold: gradients differ in length")
             if layout.itemsize != 4 or not layout.contiguous():
                 raise Error("ordered_fold: gradients must be contiguous float32")
-            # Retain the selected operation's existing GPU/CPU execution route.
-            # Mojo owns the immutable fold; the cached compiled entry owns its
-            # arithmetic, including FTZ and the one float32 rounding per add.
-            # The base image's fold_pair_f32 through its parallel table entry
-            # (core/parallel_entry_table.mojo), with the GIL released.
-            var py = Python()
-            with GILReleased(py):
-                _ = parallel_fold_pair_f32(key, total, layout.address, n)
+            table.append(Int64(layout.address))
         finally:
-            pin.release()  # the export pins the received bytes through the fold above
-        _ = view^
+            pin.release()
+        _ = py_call(views.append, view)
+    var shards = len(table)
+    if shards > 0 and n > 0:
+        var table_addr = Int(table.unsafe_ptr())
+        var py = Python()
+        if device.host_beside:
+            with GILReleased(py):
+                _ = ordered_fold_f32(total, table_addr, shards, n)
+        else:
+            # Resolved once per call (lane entry-table-zero-alloc).
+            var key = parallel_ref(PARALLEL_TABLE_BASE, ParallelEntryKey(c[].fold_mode, c[].fold_vendor))
+            with GILReleased(py):
+                _ = parallel_ordered_fold_f32(key, total, table_addr, shards, n)
+        _ = table^  # the address table outlives the fold above
+    _ = views  # the shard views pin the received bytes through the fold above
     var result = store.tobytes()
     _ = store
     return result
-
 
 
 def cross_vendor_state_hash(state: PythonObject) raises -> PythonObject:
@@ -334,6 +358,31 @@ def _cross_events(owner: PythonObject) raises -> PythonObject:
     return events
 
 
+# `device=` of fold_pair and ordered_fold (lane vdf-linalg, 2026-11-24).
+# The fold runs on both sides: the base image's ordered fold (the device kernel
+# on a GPU installation, the host column on a CPU-only one) and the host
+# column in this image for an explicit "cpu" beside a GPU set. The word is
+# read with the estimators' exact rule (core/device_route.mojo `device_code`,
+# `device_refusal`) and decided by the shared rule (core/function_device.mojo
+# `function_device_decide`; "gpu" on a CPU-only installation gets the
+# estimators' `device_gpu_absent` words). This host image holds no backend
+# context, so the shared UNPACK (providers/python/function_device_boundary_door.mojo)
+# is not reachable here; the CPU-only word is the base image's vendor key
+# recorded at import (vendor 0: the CPU base image). The digests
+# (state_hash, trainer_state_hash) compute no data and take no `device`.
+def cv_device(value: PythonObject, name: String) raises -> FunctionDevice:
+    """Admit a fold's `device` item. None costs one identity compare."""
+    if value is None:
+        return function_device_default()
+    var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
+    var request = -1
+    if py_type(value) is c[].bi.str:
+        request = device_code(String(value))
+    if request < 0:
+        device_refusal(String(py_call(c[].bi.repr, value)))
+    return function_device_decide(request, c[].fold_vendor == 0, True, True, name)
+
+
 def cross_vendor_call(operation: String, args: PythonObject, mut io_error: ByteCheckpointIOError) raises -> PythonObject:
     var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
     if operation == "byte_checkpoint_initialize":
@@ -387,12 +436,13 @@ def cross_vendor_call(operation: String, args: PythonObject, mut io_error: ByteC
     elif operation.startswith("event_"):
         return cross_vendor_event(operation, args)
     elif operation == "fold":
-        return cross_vendor_fold(args[0], args[1])
+        return cross_vendor_fold(args[0], args[1], cv_device(args[2], "mojolearn.cross_vendor.ordered_fold"))
     elif operation == "pair":
+        var device = cv_device(args[2], "mojolearn.cross_vendor.fold_pair")
         var parts = c[].bi.list()
         _ = py_call(parts.append, args[0])
         _ = py_call(parts.append, args[1])
-        return cross_vendor_fold(parts, PythonObject(None))
+        return cross_vendor_fold(parts, PythonObject(None), device)
     elif operation == "state_hash":
         return cross_vendor_state_hash(args[0])
     else:

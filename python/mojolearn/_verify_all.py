@@ -26,6 +26,17 @@ from the committed records). Each part reads IDENTICAL, DIVERGENT, OWED (no
 record carries it yet), REFUSED (the lane or probe raised; the sentence is
 printed) or N/A (the estimator has no such output).
 
+BOTH SIDES, ONE PROCESS (2026-11-24, docs/plans/VERIFY_THROUGH_DEVICE.md).
+Every cell runs its lane twice in its worker: the CPU side with
+device="cpu" and the GPU side with device="gpu", through the public
+parameter (the harness's device view, `_verify_device.py`); no child process
+and no MOJOLEARN_VENDOR. Each row carries `side` and is judged against that
+side's column: the CPU side against the CPU column, the GPU side against this
+installation's vendor column. On an installation without a GPU the GPU side
+reads "not applicable (no GPU in this installation)"; a lane the harness
+declares one-sided names its missing side. The report is
+`mojolearn.verify-all-report.v2`.
+
 ON A GPU INSTALL applicable lanes run; single-device parallel-driver
 claims stay visible as NOT APPLICABLE and run only when explicitly selected. ON A CPU-ONLY INSTALL
 the lanes the manifest lists as public reference checks run
@@ -62,6 +73,8 @@ import time
 import traceback
 
 from . import _verify_reference as vref
+# The device-bound view each side runs through (device="cpu" / device="gpu").
+from . import _verify_device as vd
 # The GPU side, the CPU side, their records and their comparison: the one
 # module the cross-check below and the check of a user's own estimator
 # (`verify --check`, _verify_check.py) both run.
@@ -319,15 +332,58 @@ def _probe_stepfull(harness, fit, lane, ml, held):
     return value, err
 
 
-def run_cell(harness, ml, lane, fixture, data, held, repeats, extra_parts=()):
-    """{part: (value, error)} for one cell, through the harness's own calls,
-    in the harness's order (train, then infer and model, then batch, then
-    stepfull). The order is load bearing: every part after the first runs on
-    its OWN copy of the held-out rows and after the parts it must not move, so
-    no hash a record already carries can change because a part was added."""
+#: The two sides every cell runs, in this order, in one process.
+SIDES = vd.SIDES
+
+
+def side_absent(harness, ml, lane, side):
+    """The `n/a:` value every part of `lane` reads on `side` when that side
+    does not exist here, else None: the GPU side of an installation with no
+    GPU, or the missing side of a lane the harness declares one-sided."""
+    if side == "gpu" and not vd.gpu_available(ml):
+        return vd.NO_GPU
+    return harness.one_sided_na(lane, side)
+
+
+def run_cell(harness, ml, lane, fixture, data, held, repeats, extra_parts=(), side=None):
+    """{part: (value, error)} for one cell on one side, through the harness's
+    own calls, in the harness's order (train, then infer and model, then
+    batch, then stepfull). The order is load bearing: every part after the
+    first runs on its OWN copy of the held-out rows and after the parts it
+    must not move, so no hash a record already carries can change because a
+    part was added.
+
+    THE SIDE IS THE PUBLIC `device=` (2026-11-24). The lane and every probe
+    of its fit receive the harness's device view of the package for `side`
+    ("cpu" or "gpu"), in this process; `side=None` is the installation's own
+    side. A side that does not exist here reads its `n/a:` sentence in every
+    part (`side_absent`)."""
     from ._verify_worker import unhealthy
     X, yc, yr = data
     parts = tuple(vref.PARTS) + tuple(extra_parts)
+    side = side or ("gpu" if vd.gpu_available(ml) else "cpu")
+    absent = side_absent(harness, ml, lane, side)
+    if absent is not None:
+        return {p: (absent, None) for p in parts}
+    ml = harness.device_view(ml, side, lane)
+    with vd.side(side):
+        return _run_cell_side(harness, ml, lane, fixture, X, yc, yr, held, repeats, extra_parts, parts)
+
+
+def run_sides(harness, ml, lane, fixture, data, held, repeats, extra_parts=(), on_side=None):
+    """{side: {part: (value, error)}} for one cell, the CPU side then the GPU
+    side, both in this process on one fixture load. `on_side(side, run)` may
+    wrap each side's run (the worker's activity record)."""
+    out = {}
+    for side in SIDES:
+        run = lambda side=side: run_cell(harness, ml, lane, fixture, data, held, repeats,  # noqa: E731
+                                         extra_parts, side=side)
+        out[side] = on_side(side, run) if on_side else run()
+    return out
+
+
+def _run_cell_side(harness, ml, lane, fixture, X, yc, yr, held, repeats, extra_parts, parts):
+    from ._verify_worker import unhealthy
     vals = {p: [] for p in parts}
     errs = {p: [] for p in parts}
     for repeat in range(repeats):
@@ -429,7 +485,7 @@ def _finite_problems(arrays):
     return problems, checked
 
 
-def smoke_cell(harness, ml, lane, fixture, data, held):
+def smoke_cell(harness, ml, lane, fixture, data, held, side=None):
     """TWO FULL FITS, and everything that can be checked without the claim.
 
     WHY TWO FULL FITS AND NOT TWO PROBES OF ONE FIT. A second probe of one
@@ -454,12 +510,14 @@ def smoke_cell(harness, ml, lane, fixture, data, held):
     hardware cannot express the claim, and it is a great deal more than zero.
     """
     X, yc, yr = data
+    side = side or ("gpu" if vd.gpu_available(ml) else "cpu")
     digests, shapes, notes = [], [], []
     skipped_finite = 0
     for repeat in range(2):
         harness._DUMP_TAG = f"smoke:{lane}/{fixture}/{repeat}"
         try:
-            fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+            # the lane on `side`, through the harness's device view (2026-11-24)
+            fit, _ = harness.call_lane(lane, ml, side, X, yc, yr, held.copy())
         except Exception as exc:
             return dict(ok=False, checks=[], why="it raised: " + _error_text(harness, None, exc))
         try:
@@ -499,15 +557,28 @@ def smoke_cell(harness, ml, lane, fixture, data, held):
 
 
 def run_smoke(harness, ml, lanes, fixture, data, held, log=None):
-    """`{lane: result}` over the lanes this box can execute but cannot judge."""
+    """`{lane: result}` over the lanes this box can execute but cannot judge,
+    each lane smoked on every side that exists here (`sides` per side); the
+    lane is ok only when every side that ran is."""
     log = log or (lambda s: None)
     out = {}
     for lane in lanes:
         t0 = time.time()
-        try:
-            out[lane] = smoke_cell(harness, ml, lane, fixture, data, held)
-        except Exception as exc:                       # a smoke test must not kill the run
-            out[lane] = dict(ok=False, checks=[], why=f"{type(exc).__name__}: {exc}"[:300])
+        sides = {}
+        for side in SIDES:
+            absent = side_absent(harness, ml, lane, side)
+            if absent is not None:
+                continue
+            try:
+                sides[side] = smoke_cell(harness, ml, lane, fixture, data, held, side=side)
+            except Exception as exc:                   # a smoke test must not kill the run
+                sides[side] = dict(ok=False, checks=[], why=f"{type(exc).__name__}: {exc}"[:300])
+        bad = [f"{side} side: {r['why']}" for side, r in sides.items() if not r["ok"]]
+        out[lane] = dict(ok=bool(sides) and not bad,
+                         checks=sorted(set.intersection(*(set(r["checks"]) for r in sides.values())))
+                         if sides else [],
+                         why=("; ".join(bad) if bad else None if sides else "no side runs on this installation"),
+                         sides=sides)
         out[lane]["seconds"] = round(time.time() - t0, 3)
         log(f"  smoke {lane:<30} {'ok' if out[lane]['ok'] else 'FAILED'} "
             f"{out[lane]['seconds']:6.1f}s")
@@ -545,33 +616,41 @@ def run_models(harness, ml, table, pkg_dir=None, log=None, repeats=1, host_only=
             continue
         rows.append(dict(lane=key, fixture=fixture, part="model", value=file_hash, error=None,
                          reference_part=("model", lane)))
-        values, errors = [], []
-        for _ in range(max(1, repeats)):
-            try:
-                # --models-only explicitly exercises the CPU saved-model door,
-                # even when the process also has GPU bindings.
-                if host_only or ml.vendor() == "cpu":
-                    est = ml.host_model(path)
-                else:
-                    est = getattr(getattr(ml, m["class"]), m.get("load", "load"))(path)
-                if fixture not in held_cache:
-                    held_cache[fixture] = harness.heldout(fixture)
-                fit = harness.Fit({})
-                fit.est = est
-                batch, berr = harness._probe_batch(fit, lane, ml, held_cache[fixture].copy(), harness.BATCH_ALONE, False)
-            except Exception as exc:
-                batch, berr = None, _error_text(harness, None, exc)
-            from ._verify_worker import unhealthy
-            if unhealthy(berr):
-                rows.append(dict(lane=key, fixture=fixture, part="batch", value=None, error=berr,
-                                 reference_part=("batch", lane)))
-                return rows
-            values.append(batch)
-            if berr:
-                errors.append(berr)
-        batch, berr = _collapse(values, errors)
-        rows.append(dict(lane=key, fixture=fixture, part="batch", value=batch, error=berr,
-                         reference_part=("batch", lane)))
+        for side in (("cpu",) if host_only else SIDES):
+            if side == "gpu" and not vd.gpu_available(ml):
+                rows.append(dict(lane=key, fixture=fixture, part="batch", value=vd.NO_GPU, error=None,
+                                 reference_part=("batch", lane), side=side))
+                continue
+            bound = vd.view(ml, side)
+            values, errors = [], []
+            for _ in range(max(1, repeats)):
+                try:
+                    with vd.side(side):
+                        # the CPU side reads the file through the CPU saved-model
+                        # door; the GPU side through the class's own loader on the GPU
+                        if side == "cpu":
+                            est = ml.host_model(path)
+                        else:
+                            est = getattr(getattr(bound, m["class"]), m.get("load", "load"))(path)
+                        if fixture not in held_cache:
+                            held_cache[fixture] = harness.heldout(fixture)
+                        fit = harness.Fit({})
+                        fit.est = est
+                        batch, berr = harness._probe_batch(fit, lane, bound, held_cache[fixture].copy(),
+                                                           harness.BATCH_ALONE, False)
+                except Exception as exc:
+                    batch, berr = None, _error_text(harness, None, exc)
+                from ._verify_worker import unhealthy
+                if unhealthy(berr):
+                    rows.append(dict(lane=key, fixture=fixture, part="batch", value=None, error=berr,
+                                     reference_part=("batch", lane), side=side))
+                    return rows
+                values.append(batch)
+                if berr:
+                    errors.append(berr)
+            batch, berr = _collapse(values, errors)
+            rows.append(dict(lane=key, fixture=fixture, part="batch", value=batch, error=berr,
+                             reference_part=("batch", lane), side=side))
         log(f"  {key:<34} {fixture:<8} {time.time() - t0:6.1f}s")
     return rows
 
@@ -1020,55 +1099,74 @@ def self_test(harness, ml, table, log=None):
         raise CannotRun("self-test: the one-ULP perturbation did not change the input at all, so "
                         "the perturbed arm would be identical to the clean one and prove nothing")
 
-    rows = []
-    for arm, data in (("clean", (X, yc, yr)), ("perturbed", (Xp, yc, yr))):
-        parts = run_cell(harness, ml, lane, fixture, data, held, 1)
-        value, error = parts["train"]
-        from ._verify_worker import unhealthy
-        if unhealthy(parts):
-            raise CannotRun(f"self-test unhealthy device: {error or parts}")
-        rows.append(dict(lane=lane, fixture=fixture, part="train", value=value, error=error, arm=arm))
-        log(f"  {arm:<10} {lane}/{fixture} train -> {value}")
-
-    judged = judge_rows([{k: v for k, v in r.items() if k != "arm"} for r in rows], table)
-    for r, j in zip(rows, judged):
-        j["arm"] = r["arm"]
-    clean = next(j for j in judged if j["arm"] == "clean")
-    dirty = next(j for j in judged if j["arm"] == "perturbed")
-
-    problems = []
-    if clean["state"] != vref.IDENTICAL:
-        problems.append(f"the UNTOUCHED input read {clean['state']}, not IDENTICAL "
-                        f"({clean['detail'] or 'no detail'}); this installation does not reproduce "
-                        "the reference at all, so the perturbed arm proves nothing")
-    if dirty["state"] != vref.DIVERGENT:
-        problems.append(f"the PERTURBED input read {dirty['state']}, not DIVERGENT; the comparison "
-                        "did not notice a wrong answer, which means a VERIFIED from this "
-                        "installation is worth nothing")
+    # EACH SIDE CAN FAIL ON ITS OWN (2026-11-24). Both sides run in this
+    # process through `device=`; the nudge is put on ONE side at a time, the
+    # other side keeps the untouched input, and each side's comparison must
+    # catch its own nudge. A side that does not exist here (no GPU) is
+    # reported not applicable, never passed.
+    from ._verify_worker import unhealthy
+    sides, problems = {}, []
+    for side in SIDES:
+        absent = side_absent(harness, ml, lane, side)
+        if absent is not None:
+            sides[side] = dict(ran=False, reason=absent)
+            continue
+        rows = []
+        for arm, data in (("clean", (X, yc, yr)), ("perturbed", (Xp, yc, yr))):
+            parts = run_cell(harness, ml, lane, fixture, data, held, 1, side=side)
+            value, error = parts["train"]
+            if unhealthy(parts):
+                raise CannotRun(f"self-test unhealthy device ({side} side): {error or parts}")
+            rows.append(dict(lane=lane, fixture=fixture, part="train", value=value, error=error,
+                             side=side, arm=arm))
+            log(f"  {side:<4} {arm:<10} {lane}/{fixture} train -> {value}")
+        judged = judge_rows([{k: v for k, v in r.items() if k != "arm"} for r in rows], table,
+                            device_class=vref.VENDOR_CLASS.get(str(ml.vendor())))
+        clean, dirty = judged
+        side_problems = []
+        if clean["state"] != vref.IDENTICAL:
+            side_problems.append(f"{side.upper()} side: the UNTOUCHED input read {clean['state']}, not "
+                                 f"IDENTICAL ({clean['detail'] or 'no detail'}); this side does not reproduce "
+                                 "the reference at all, so its perturbed arm proves nothing")
+        if dirty["state"] != vref.DIVERGENT:
+            side_problems.append(f"{side.upper()} side: the PERTURBED input read {dirty['state']}, not "
+                                 "DIVERGENT; the comparison did not notice a wrong answer on this side, "
+                                 "which means a VERIFIED from it is worth nothing")
+        problems.extend(side_problems)
+        sides[side] = dict(ran=True, passed=not side_problems,
+                           clean=dict(state=clean["state"], value=clean["value"], reference=clean["reference"]),
+                           perturbed=dict(state=dirty["state"], value=dirty["value"],
+                                          reference=dirty["reference"]))
+    ran = [side for side in SIDES if sides[side]["ran"]]
+    if not ran:
+        problems.append("no side of the self-test lane ran on this installation")
     return dict(lane=lane, fixture=fixture,
                 perturbation=dict(cell="X[:, 0]", before=before, after=after,
-                                  kind="one ULP up, every value of column 0",
+                                  kind="one ULP up, every value of column 0, one side at a time",
                                   values_changed=int((Xp != X).sum())),
-                clean=dict(state=clean["state"], value=clean["value"], reference=clean["reference"]),
-                perturbed=dict(state=dirty["state"], value=dirty["value"], reference=dirty["reference"]),
-                passed=not problems, problems=problems)
+                sides=sides, sides_checked=ran, passed=not problems, problems=problems)
 
 
 def format_self_test(r):
     lines = ["# python -m mojolearn verify --self-test", ""]
-    lines.append(f"Ran the {r['lane']}/{r['fixture']} lane twice through the ordinary comparison, "
-                 "once untouched and")
+    lines.append(f"Ran the {r['lane']}/{r['fixture']} lane twice per side (device=\"cpu\", device=\"gpu\") "
+                 "through the ordinary comparison, once untouched and")
     p = r["perturbation"]
     lines.append(f"once with {p['cell']} moved {p['kind']}: {p.get('values_changed', '?')} values, "
                  f"the first {p['before']!r} -> {p['after']!r}.")
     lines.append("")
-    lines.append(f"  untouched   {r['clean']['value']}   vs reference {r['clean']['reference']}   "
-                 f"-> {r['clean']['state']}")
-    lines.append(f"  perturbed   {r['perturbed']['value']}   vs reference {r['perturbed']['reference']}   "
-                 f"-> {r['perturbed']['state']}")
+    for side, row in r["sides"].items():
+        if not row["ran"]:
+            lines.append(f"  {side.upper()} side  not run: {row['reason']}")
+            continue
+        lines.append(f"  {side.upper()} side  untouched   {row['clean']['value']}   vs reference "
+                     f"{row['clean']['reference']}   -> {row['clean']['state']}")
+        lines.append(f"  {side.upper()} side  perturbed   {row['perturbed']['value']}   vs reference "
+                     f"{row['perturbed']['reference']}   -> {row['perturbed']['state']}")
     lines.append("")
     if r["passed"]:
-        lines.append("RESULT: THE VERIFIER WORKS ON THIS MACHINE. The comparison reproduced the")
+        lines.append(f"RESULT: THE VERIFIER WORKS ON THIS MACHINE, on the {' and '.join(s.upper() for s in r['sides_checked'])} "
+                     "side(s), each nudged on its own. The comparison reproduced the")
         lines.append("recorded bytes on the untouched input and DETECTED A WRONG ANSWER on an input")
         lines.append("differing by one bit, in this installation, using the same code path that")
         lines.append("judges every other lane. A VERIFIED from this install is therefore a result")
@@ -1116,7 +1214,7 @@ def _cmd_self_test(args, ml):
             result['problems'].append(f"public API checks read {public['status']}")
     result['passed'] = result['passed'] and public['status'] in ('MATCH', 'UNTESTED')
     if json_out:
-        _emit(json.dumps(dict(format="mojolearn.verify-self-test.v1", **result), indent=1, sort_keys=True))
+        _emit(json.dumps(dict(format="mojolearn.verify-self-test.v2", **result), indent=1, sort_keys=True))
     else:
         _emit(format_self_test(result))
     return EXIT_VERIFIED if result["passed"] else EXIT_MISMATCH
@@ -1290,6 +1388,15 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
     with the first; the only difference between the arms is which binding
     answers.
 
+    KEPT BESIDE THE TWO-SIDED CELLS (2026-11-24). Every `verify --all` cell
+    now fits on BOTH sides through `device=` and holds each side to its
+    column. That never loads a GPU-fitted model through `host_model` (the
+    CPU inference classes, HostForest / HostGBDT / the classical host
+    models): each side reads back its own fit. This check is the one place a
+    model FITTED ON THE GPU is SAVED and ANSWERED BY THE CPU SAVED-MODEL DOOR
+    for every intersection lane (the portable models cover four lanes from
+    shipped files), so it stays; it never selects a side by environment.
+
     AND THE BINDING THAT ANSWERED IS THE ONE NAMED. `_probe_fit_host` learned
     this the hard way: a forest sabotage column once read IDENTICAL on a
     RunPod pod because the binding actually loaded was not the one asked for,
@@ -1314,10 +1421,12 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
             X, yc, yr = harness.fixture(fx)
             held = harness.heldout(fx)
             try:
-                fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+                # fitted on the GPU side through device="gpu" (the device view)
+                fit, gml = harness.call_lane(lane, ml, "gpu", X, yc, yr, held.copy())
             except Exception as exc:
                 skipped[f'{lane}/{fx}'] = f"the lane raised: {type(exc).__name__}: {exc}"[:200]
                 continue
+            hml = harness.device_view(ml, "cpu", lane)
             if not callable(fit.probe):
                 skipped[f'{lane}/{fx}'] = f"no out-of-sample probe ({fit.probe})"
                 continue
@@ -1330,7 +1439,8 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
                 # Each answer is one `cb.run_side` and each pair one
                 # `cb.compare`: the same calls `verify --check` makes for a
                 # user's estimator. The digest stays the harness's `_h`.
-                gpu_est = harness._public_est(lane, fit.est)
+                with vd.side("gpu"):
+                    gpu_est = harness._public_est(lane, fit.est)
                 pair = {"infer": [cb.run_side("gpu", lambda: fit.probe(gpu_est), digest=harness._h, ml=ml), None]}
                 # THE BATCH PART TOO, where the lane has one. Batch invariance is
                 # a DIFFERENT AXIS from cross-vendor identity: cross-vendor asks
@@ -1342,7 +1452,8 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
                 # that declares `n/a` for batch keeps its n/a; inventing a
                 # comparison there would be a check that cannot fail.
                 def gpu_batch():
-                    gb, gerr = harness._probe_batch(fit, lane, ml, held.copy(), harness.BATCH_ALONE, False)
+                    with vd.side("gpu"):
+                        gb, gerr = harness._probe_batch(fit, lane, gml, held.copy(), harness.BATCH_ALONE, False)
                     if gerr is not None or not isinstance(gb, str):
                         raise RuntimeError(f'GPU batch check failed: {gerr or gb}')
                     return gb
@@ -1366,8 +1477,9 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
                         hfit.probe = fit.probe
 
                         def cpu_batch():
-                            hb, herr = harness._probe_batch(hfit, lane, ml, held.copy(),
-                                                            harness.BATCH_ALONE, False)
+                            with vd.side("cpu"):
+                                hb, herr = harness._probe_batch(hfit, lane, hml, held.copy(),
+                                                                harness.BATCH_ALONE, False)
                             return hb if herr is None and isinstance(hb, str) else f"raised: {herr or hb}"[:120]
                         pair["batch"][1] = cb.run_side("cpu", cpu_batch, ml=ml)
             except Exception as exc:
@@ -1530,7 +1642,14 @@ def _cmd_cross_check(args, ml):
 #: command exists to be used adversarially, and quietly accepting any JSON
 #: that happens to carry a `cells` key is the first step toward a comparer
 #: that always agrees: two files with no cells at all would "not disagree".
-COMPARE_INPUT_FORMAT = "mojolearn.verify-all-report.v1"
+#: THE REPORT FORMAT. v2 (2026-11-24): one report carries BOTH sides of every
+#: cell, run in one process through `device=`; each row carries `side` ("cpu"
+#: or "gpu") and is judged against that side's column. A v1 report (one side
+#: per process) is still read by --compare, --commitment and --challenge;
+#: its rows carry no side.
+REPORT_FORMAT = "mojolearn.verify-all-report.v2"
+COMPARE_INPUT_FORMAT = REPORT_FORMAT
+COMPARE_INPUT_FORMATS = (REPORT_FORMAT, "mojolearn.verify-all-report.v1")
 
 #: What a real cell value looks like: a hash this box actually computed. The
 #: harness writes truncated lowercase sha256, so anything outside this shape
@@ -1551,8 +1670,22 @@ def _value_kind(v):
     return "missing"                           # unrecognized: never a match
 
 
+def _sided_lane(r):
+    """The lane key of one row: `lane@side` for a v2 row (one cell part per
+    side), the bare lane for a v1 row. A side is part of what a row names, so
+    a document's CPU and GPU rows are two cell parts, never a duplicate."""
+    lane, side = r.get("lane"), r.get("side")
+    return lane if side is None else f"{lane}@{side}"
+
+
+def _bare_lane(key):
+    """The harness lane of a `_sided_lane` key."""
+    return key.rpartition("@")[0] if isinstance(key, str) and "@" in key else key
+
+
 def _read_cells(doc, label):
-    """`{(lane, fixture, part): value}` plus every structural complaint.
+    """`{(lane, fixture, part): value}` plus every structural complaint. The
+    lane of a v2 row is `lane@side` (`_sided_lane`).
 
     DUPLICATE KEYS ARE A COMPLAINT, NOT A LAST-WINS. The obvious attack on a
     comparer is to append a second row for a cell, copied from the other
@@ -1565,7 +1698,7 @@ def _read_cells(doc, label):
         return out, states, [f"{label}: not an evidence document (top level is "
                              f"{type(doc).__name__}, expected an object)"]
     fmt = doc.get("format")
-    if fmt != COMPARE_INPUT_FORMAT:
+    if fmt not in COMPARE_INPUT_FORMATS:
         problems.append(f"{label}: format is {fmt!r}, expected {COMPARE_INPUT_FORMAT!r}. "
                         "Write it with `verify --all --json-out <path>`")
     rows = doc.get("cells")
@@ -1581,7 +1714,7 @@ def _read_cells(doc, label):
         if not isinstance(r, dict):
             problems.append(f"{label}: cells[{i}] is {type(r).__name__}, expected an object")
             continue
-        key = (r.get("lane"), r.get("fixture"), r.get("part"))
+        key = (_sided_lane(r), r.get("fixture"), r.get("part"))
         if key in seen:
             problems.append(f"{label}: {key[0]}/{key[1]} {key[2]} appears twice "
                             f"(rows {seen[key]} and {i}, values {out[key]!r} and {r.get('value')!r})")
@@ -1652,6 +1785,7 @@ def comparison_context_problems(a, b, keys):
     if not ac.get('harness_sha256') or ac.get('harness_sha256') != bc.get('harness_sha256'):
         problems.append('different or missing harness digest')
     for lane, fixture, part in keys:
+        lane = _bare_lane(lane)
         if lane == 'cross-check:execution':
             continue  # operational refusal, not a numerical value
         if lane.startswith('cross-check:'):
@@ -1817,8 +1951,10 @@ def commitment_preimage(doc):
         raise ValueError(f"not an evidence document (top level is {type(doc).__name__})")
     cells = []
     for r in (doc.get("cells") or []):
-        cells.append([r.get("lane"), r.get("fixture"), r.get("part"), r.get("value"),
-                      r.get("state")] if isinstance(r, dict) else r)
+        # the side is covered where a row carries one (v2); a v1 row keeps
+        # its original five fields, so its commitment bytes do not move
+        cells.append(([r.get("lane"), r.get("fixture"), r.get("part"), r.get("value"), r.get("state")]
+                      + ([r["side"]] if "side" in r else [])) if isinstance(r, dict) else r)
     # Sorted so that reordering rows is not a change, and DUPLICATES KEPT:
     # `_read_cells` refuses a document that names one cell part twice, and the
     # commitment must bind a party to the document that refusal describes, not
@@ -2322,8 +2458,8 @@ def challenge_preimage(block):
         raise ValueError(f"not a challenge block (it is {type(block).__name__})")
     cells = []
     for r in (block.get("cells") or []):
-        cells.append([r.get("lane"), r.get("part"), r.get("value")]
-                     if isinstance(r, dict) else r)
+        cells.append(([r.get("lane"), r.get("part"), r.get("value")]
+                      + ([r["side"]] if "side" in r else [])) if isinstance(r, dict) else r)
     cells.sort(key=lambda c: json.dumps(c, sort_keys=True, default=str))
     covered = dict(
         format=block.get("format"),
@@ -2426,7 +2562,7 @@ def challenge_structure_problems(block, label):
             if not isinstance(r, dict):
                 out.append(f"{label}: challenge cells[{i}] is {type(r).__name__}, expected an object")
                 continue
-            key = (r.get("lane"), r.get("part"))
+            key = (_sided_lane(r), r.get("part"))
             if key in seen:
                 # the same refusal `_read_cells` makes, for the same reason
                 out.append(f"{label}: challenge {key[0]} {key[1]} appears twice (rows "
@@ -2438,12 +2574,13 @@ def challenge_structure_problems(block, label):
 
 def _challenge_cells(block):
     """`{(lane, part): value}` for one challenge block, last row losing to
-    the duplicate complaint above rather than overwriting."""
+    the duplicate complaint above rather than overwriting. The lane of a
+    sided row is `lane@side`."""
     out, seen = {}, set()
     for r in (block.get("cells") or []):
         if not isinstance(r, dict):
             continue
-        key = (r.get("lane"), r.get("part"))
+        key = (_sided_lane(r), r.get("part"))
         if key in seen:
             continue
         seen.add(key)
@@ -3219,7 +3356,7 @@ def _cmd_commitment(args):
         _emit(f"# python -m mojolearn verify --commitment\n\n"
               f"RESULT: CANNOT READ. cannot read {path}: {exc}")
         return EXIT_USAGE
-    if not isinstance(doc, dict) or doc.get("format") != COMPARE_INPUT_FORMAT:
+    if not isinstance(doc, dict) or doc.get("format") not in COMPARE_INPUT_FORMATS:
         fmt = doc.get("format") if isinstance(doc, dict) else type(doc).__name__
         _emit(f"# python -m mojolearn verify --commitment\n\n"
               f"RESULT: NOT AN EVIDENCE DOCUMENT. {path} announces {fmt!r}, expected "
@@ -3343,7 +3480,7 @@ def _cmd_challenge(args, ml):
             doc = json.load(fh)
     except (OSError, ValueError) as exc:
         return _challenge_refusal(args, EXIT_USAGE, "CANNOT READ", f"cannot read {path}: {exc}")
-    if not isinstance(doc, dict) or doc.get("format") != COMPARE_INPUT_FORMAT:
+    if not isinstance(doc, dict) or doc.get("format") not in COMPARE_INPUT_FORMATS:
         fmt = doc.get("format") if isinstance(doc, dict) else type(doc).__name__
         return _challenge_refusal(args, EXIT_USAGE, "NOT AN EVIDENCE DOCUMENT",
             f"{path} announces {fmt!r}, expected {COMPARE_INPUT_FORMAT!r}.")
@@ -3427,10 +3564,17 @@ def _cmd_challenge(args, ml):
     fixture_name = f"challenge:{challenge[:12]}"
     for lane in lanes:
         t0 = time.time()
-        parts = run_cell(harness, ml, lane, fixture_name, data, held,
-                         max(1, int(getattr(args, "repeats", 1) or 1)))
-        for part, (value, error) in parts.items():
-            rows.append(dict(lane=lane, part=part, value=value, error=error))
+        # both sides, as the document's own cells were run (v2); a v1
+        # document was one side per process and its answers carry no side
+        sided = doc.get("format") == REPORT_FORMAT
+        by_side = (run_sides(harness, ml, lane, fixture_name, data, held,
+                             max(1, int(getattr(args, "repeats", 1) or 1))) if sided else
+                   {None: run_cell(harness, ml, lane, fixture_name, data, held,
+                                   max(1, int(getattr(args, "repeats", 1) or 1)))})
+        for side, parts in by_side.items():
+            for part, (value, error) in parts.items():
+                rows.append(dict(lane=lane, part=part, value=value, error=error,
+                                 **({} if side is None else dict(side=side))))
         log(f"  {lane:<34} {time.time() - t0:6.1f}s")
     doc[CHALLENGE_KEY] = dict(
         format=CHALLENGE_FORMAT, challenge=challenge, derived_from=derived_from,
@@ -3541,19 +3685,38 @@ def lanes_line(report):
 
 
 
+def side_class(side, device_class):
+    """The reference column a row on `side` is judged against: the CPU column
+    for the CPU side, this installation's vendor column for the GPU side (and
+    for a side-less row, as before)."""
+    return "cpu" if side == "cpu" else device_class
+
+
+#: A value that says the side does not exist here: the GPU side of an
+#: installation with no GPU, the missing side of a one-sided lane. It reads
+#: N/A by name, never OWED against a hash reference and never a failure.
+_SIDE_ABSENT = (vd.NO_GPU, "n/a:one-sided:")
+
+
 def judge_rows(raw, table, families=None, unreferenced_lanes=(), device_class=None, batch_revisions=None):
-    """Attach state, detail and reference columns to raw result rows."""
+    """Attach state, detail and reference columns to raw result rows. A row
+    carrying `side` is judged against that side's column (`side_class`)."""
     out = []
     for r in raw:
         part, lane = r["part"], r["lane"]
+        side = r.get("side")
         ref_part, ref_lane = r.get("reference_part") or (part, lane)
         ent = (None if ref_lane in unreferenced_lanes else
-               vref.entry(table, ref_lane, r["fixture"], ref_part, device_class=device_class))
+               vref.entry(table, ref_lane, r["fixture"], ref_part, device_class=side_class(side, device_class)))
         revision = (batch_revisions or {}).get(ref_lane)
         if ref_part == "batch" and revision is not None and table.get("batch_revisions", {}).get(ref_lane) != revision:
             ent = None
-        state, detail = vref.judge(r["value"], ent, r.get("error"))
+        if isinstance(r["value"], str) and r["value"].startswith(_SIDE_ABSENT) and not r.get("error"):
+            state, detail = vref.NA, r["value"][len("n/a:"):]
+        else:
+            state, detail = vref.judge(r["value"], ent, r.get("error"))
         out.append(dict(lane=lane, fixture=r["fixture"], part=part, value=r["value"], state=state,
+                        **({} if side is None else dict(side=side, device_class=side_class(side, device_class))),
                         detail=detail, reference=(ent or {}).get("ref"),
                         reference_scope=(ent or {}).get("reference_scope", "shared"),
                         columns=vref.columns_of(table, ent),
@@ -3723,17 +3886,20 @@ def format_human(report):
                      f"complete={cross.get('complete', False)}.")
         # what answered on each side, by the shared check module's own lines
         lines.extend(cb.sides_lines(cross.get('sides') or {}))
-    what = report.get('what_ran') or {}
-    if what.get('lanes'):
+    what = (report.get('what_ran') or {}).get('sides') or {}
+    for side, block in what.items():
+        acts = block.get('lanes') or {}
+        if not acts:
+            continue
         # what the runtime itself counted while each lane's cells ran, by the
         # shared check module's own lines (the same `verify --check` prints)
-        lines.append(f"What ran on the {what['side'].upper()} side, per lane (counted by the runtime; "
+        lines.append(f"What ran on the {side.upper()} side, per lane (counted by the runtime; "
                      "every lane is in --json):")
-        shown = sorted(what['lanes'])[:WHAT_RAN_LANES_SHOWN]
+        shown = sorted(acts)[:WHAT_RAN_LANES_SHOWN]
         for lane in shown:
-            lines.append(f"  {lane:<26} {cb.activity_line(what['side'], what['lanes'][lane])}")
-        if len(what['lanes']) > len(shown):
-            lines.append(f"  ... and {len(what['lanes']) - len(shown)} more lanes")
+            lines.append(f"  {lane:<26} {cb.activity_line(side, acts[lane])}")
+        if len(acts) > len(shown):
+            lines.append(f"  ... and {len(acts) - len(shown)} more lanes")
     lines.append("Scope: selected fixtures and properties only; use verify --coverage for omissions.")
     lines.append(f"RESULT: {report['verdict']} ({report['detail']}). {report['elapsed_s']:.1f}s. exit {report['exit']}")
     return "\n".join(lines)
@@ -4016,11 +4182,12 @@ def cmd_verify_all(args):
     # worker ran the lane's cells (`_check_both.activity_begin` / `_end` in
     # `_verify_worker.execute`), summed over the lane's fixtures. It is beside
     # the cells, never in them: no cell value, verdict or commitment reads it.
-    lane_activity = {}
+    lane_activity = {side: {} for side in SIDES}
 
     def ran_activity(lane, result):
-        if result.get("activity"):
-            lane_activity[lane] = cb.activity_merge(lane_activity.get(lane), result["activity"])
+        for side, act in (result.get("activity") or {}).items():
+            if act and side in lane_activity:
+                lane_activity[side][lane] = cb.activity_merge(lane_activity[side].get(lane), act)
 
     def isolated(action, **kwargs):
         progress(action)
@@ -4051,10 +4218,17 @@ def cmd_verify_all(args):
                     fixture_hashes=dict(X=harness._h(X), y_clf=harness._h(yc),
                                         y_reg=harness._h(yr), held=harness._h(held[f])))
 
-    def record(lane, f, parts, seconds):
+    def refused_sides(error):
+        return {side: {p: (None, error) for p in tuple(vref.PARTS) + tuple(extra_parts)} for side in SIDES}
+
+    def record(lane, f, sides, seconds):
+        # ONE CELL, TWO SIDES (2026-11-24): `sides` is {side: {part: (value,
+        # error)}} from one worker; every row carries its side and is judged
+        # against that side's column.
         cell_seconds[(lane, f)] = round(seconds, 4)
-        cell = [dict(lane=lane, fixture=f, part=part, value=value, error=error,
-                     seconds=cell_seconds[(lane, f)]) for part, (value, error) in parts.items()]
+        cell = [dict(lane=lane, fixture=f, part=part, value=value, error=error, side=side,
+                     seconds=cell_seconds[(lane, f)])
+                for side, parts in sides.items() for part, (value, error) in parts.items()]
         raw.extend(cell)
         judged = judge_rows(cell, table, families, unreferenced_lanes=stale, device_class=vclass,
                             batch_revisions=getattr(harness, "BATCH_REVISIONS", {}))
@@ -4078,10 +4252,10 @@ def cmd_verify_all(args):
             log(f"    CRASHED (cell refused, sweep continues): {str(exc)[:300]}")
             if crash_streak >= crash_streak_limit:
                 execution["interrupted"] = f"{crash_streak} consecutive cell workers crashed; last: {exc}"
-            parts = {p: (None, str(exc)) for p in tuple(vref.PARTS) + tuple(extra_parts)}
+            parts = refused_sides(str(exc))
         except worker.WorkerFailure as exc:
             execution["interrupted"] = str(exc)
-            parts = {p: (None, str(exc)) for p in tuple(vref.PARTS) + tuple(extra_parts)}
+            parts = refused_sides(str(exc))
         execution["fresh_cells"] += 1
         record(lane, f, parts, time.monotonic() - c0)
 
@@ -4135,9 +4309,9 @@ def cmd_verify_all(args):
         for lane in lanes:
             for f in fixtures:
                 if (lane, f) not in cell_seconds:
-                    raw.extend(dict(lane=lane, fixture=f, part=part, value=None,
+                    raw.extend(dict(lane=lane, fixture=f, part=part, value=None, side=side,
                                     error="not run after interruption: " + execution["interrupted"], seconds=0)
-                               for part in tuple(vref.PARTS) + tuple(extra_parts))
+                               for side in SIDES for part in tuple(vref.PARTS) + tuple(extra_parts))
     model_rows = []
     if not getattr(args, "no_models", False) and not execution["interrupted"]:
         try:
@@ -4163,9 +4337,8 @@ def cmd_verify_all(args):
     if include_pending:
         scope_gaps.update({name: withheld[name] for name in lanes if name in withheld})
         if vclass == "cpu":
-            # A CPU checks the driver's logical shards, never physical GPU communication.
-            scope_gaps.update({name: "CPU logical-shard replay; physical multi-GPU qualification pending"
-                               for name in lanes if name.startswith("par-")})
+            # (The `par-*` CPU logical-shard replay gap left 2026-11-24 with the
+            # last `par-*` lane; a lane with no CPU side is declared one-sided.)
             if not asked and depth != "quick":
                 scope_gaps.update({name: row["reason"] for name, row in coverage_report["lanes"].items()
                                    if name not in lanes and row["status"] in ("excluded", "unavailable")})
@@ -4238,7 +4411,7 @@ def cmd_verify_all(args):
         detail = f"{detail}; {clause}"
     harness_sha = vref.sha256_file(harness_file)
     report = dict(
-        format="mojolearn.verify-all-report.v1", verdict=headline, exit=code, detail=detail,
+        format=REPORT_FORMAT, verdict=headline, exit=code, detail=detail,
         depth=depth, lanes=lanes, fixtures=fixtures, repeats=repeats,
         models_checked=len({(r["lane"], r["fixture"]) for r in model_rows
                             if r["lane"] != "portable:manifest"}),
@@ -4252,10 +4425,11 @@ def cmd_verify_all(args):
         counts=counts, families=fams, cells=rows,
         lane_accounting=accounting, smoke=smoke,
         lane_seconds=lane_seconds, execution=execution,
-        what_ran=dict(side="cpu" if vclass == "cpu" else "gpu", lanes=lane_activity),
+        sides=dict(run=list(SIDES), gpu_available=vd.gpu_available(ml),
+                   columns=dict(cpu="cpu", gpu=vclass if vclass != "cpu" else None)),
+        what_ran=dict(sides={side: dict(lanes=acts) for side, acts in lane_activity.items()}),
         coverage=coverage_report, scope_gaps=scope_gaps, verification_contract=contract,
-        selection=dict(include_pending=include_pending, models_only=models_only, profile=profile,
-                       cpu_logical_shard_lanes=[name for name in lanes if vclass == "cpu" and name.startswith("par-")]),
+        selection=dict(include_pending=include_pending, models_only=models_only, profile=profile),
         properties={part: {state: sum(r["part"] == part and r["state"] == state for r in rows)
                            for state in vref.STATES} for part in tuple(vref.PARTS) + extra_parts},
     )
@@ -4445,7 +4619,7 @@ def reference_evidence(rows):
 
 def _finish(args, code, headline, detail):
     if getattr(args, "json", False):
-        _emit(json.dumps(dict(format="mojolearn.verify-all-report.v1", verdict=headline, exit=code,
+        _emit(json.dumps(dict(format=REPORT_FORMAT, verdict=headline, exit=code,
                               detail=detail), indent=1, sort_keys=True))
     else:
         _emit(f"RESULT: {headline}: {detail}. exit {code}")
@@ -4553,7 +4727,8 @@ def _cmd_emit_models(args, ml):
         if fixture not in data:
             data[fixture] = (harness.fixture(fixture), harness.heldout(fixture))
         (X, yc, yr), Xh = data[fixture]
-        fit = harness.LANES[lane](ml, X, yc, yr, Xh.copy())
+        # the GPU side through device="gpu", as the GPU columns were recorded
+        fit, _ = harness.call_lane(lane, ml, "gpu", X, yc, yr, Xh.copy())
         sl = harness._save_load(fit.est)
         if sl is None:
             problems.append(f"{lane}/{fixture}: the estimator has no save/load")

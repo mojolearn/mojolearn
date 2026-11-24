@@ -59,6 +59,9 @@
       "ivf": [
         "_mojolearn_ivf"
       ],
+      "x_tokenizer": [
+        "_mojolearn_x_tokenizer"
+      ],
       "x_cluster": [
         "_mojolearn_x_cluster"
       ],

@@ -20,6 +20,7 @@ from core.xseq_entry_table import (
     XS_ETS, XS_GARCH, XS_PROPHET_FIT,
 )
 from sequence.exec_device import DeviceExec
+from sequence.seq_member_store import seq_member_store_v1
 from sequence.ets_team import ETS_TEAM, IDN_ETS_TEAM
 from sequence.ets_team_impl import ets_team_impl
 from sequence.fit_team_impl import garch_team_impl, prophet_fit_team_impl
@@ -90,4 +91,6 @@ def publish_x_sequence_device() raises:
     if word < 0:
         return
     var owner = XSEQ_DEVICE_OWNER.get_or_create_ptr()
-    xseq_table_publish(XseqEntryKey(Int(GLOBAL_NUMERIC_MODE), word), Int(owner), x_sequence_glue_device_v1)
+    # Lane vdf-scope-neural: with the member device store (entry 1).
+    xseq_table_publish(XseqEntryKey(Int(GLOBAL_NUMERIC_MODE), word), Int(owner), x_sequence_glue_device_v1,
+                       seq_member_store_v1)

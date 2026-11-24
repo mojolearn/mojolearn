@@ -2,6 +2,29 @@
 """Import-time connection of optimizer native ABI entries and admitted types."""
 
 
+def _training_cpu_cells(_backend, entries, optional_entries):
+    """The host training image's entries, the same table form as one mode's
+    `bindings[mode]` cells, or the refusal text a device="cpu" call raises."""
+    # glue: one host-image load and its fixed entry names, at the first device="cpu" admission
+    from types import BuiltinFunctionType
+    try:
+        binding = _backend.load_host_module("_mojolearn_training_host")
+        cells = {}
+        for name in entries:  # glue: retain compiled symbols of the CPU image, no runtime backend selection
+            entry = getattr(binding, name, None)
+            if entry is None:
+                if name in optional_entries:
+                    continue
+                raise ImportError(f"the CPU training image has no {name}")
+            if not isinstance(entry, BuiltinFunctionType):
+                raise TypeError(f"optimizer requires compiled {name}")
+            cells[name] = entry
+        cells["module"] = binding
+        return cells
+    except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError) as error:
+        return type(error).__name__ + ": " + str(error)
+
+
 def connect(training):
     # glue: connect fixed ABI symbols and native type/descriptor identities once
     import array
@@ -91,6 +114,18 @@ def connect(training):
         "profiles": _numeric_profile.PROFILES, "input_context": input_context,
         "array_getters": {name: vars(Array)[name].__get__ for name in Array.__slots__},  # glue: retain fixed native Array slot descriptors at import
     }
+    # `device=` of the training functions (lane vdf-linalg; bindings/training_function_device_unpack.mojo):
+    # the shared UNPACK reads the installation record here, and an explicit device="cpu" beside a GPU set
+    # runs the host training image's entries, connected at the first device="cpu" admission of the process
+    # (`cpu_load_later`), never at import and never per call.
+    context["backend_fields"] = vars(_backend)
+    if _backend._CPU_ONLY is None:
+        from ._native_family_bridge import cpu_load_later
+
+        def _connect_training_cpu():
+            # glue: lazy connection of the CPU identical training image's entries, once per process
+            context["training_bindings_cpu"] = _training_cpu_cells(_backend, entries, optional_entries)
+        cpu_load_later(context, _connect_training_cpu)
     context["embedding_index_cast"] = _buffer._native("cast_elements")  # glue: retain the existing buffer conversion ABI at import
     if not isinstance(context["embedding_index_cast"], BuiltinFunctionType):
         raise TypeError("embedding requires compiled cast_elements")
@@ -117,6 +152,12 @@ def connect(training):
         raise TypeError("optimizer ownership requires a compiled finalizer descriptor")
     training._Optimizer.__del__ = descriptor(MethodType(optimizer_finalizer, context))
     context["device_finalizer_descriptor"] = vars(training.TrainDeviceArray)["__del__"]
+    # The linalg and decomposition doors read a TrainDeviceArray argument in place
+    # (lane vdf-linalg4): the class and this owner context, published once into the
+    # family context at import, so each of their calls tests an argument with one
+    # identity compare and allocates results through this owner.
+    from ._native_family_bridge import tables as _family_tables
+    _family_tables(family_train_device=(training.TrainDeviceArray, context))
     # A schedule's attribute edit and deletion rebuild its native rate block
     # in the native hook itself (bindings/optimizer_native_router_door.mojo
     # schedule_attribute_c); the descriptor binds the schedule, as __del__ does.
@@ -210,6 +251,17 @@ def connect_sequence_device(training, device):
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
             bindings[mode] = type(error).__name__ + ": " + str(error)
     context["sequence_bindings"] = bindings
+    # `device=` of LayerNorm, layer_norm_forward/backward, MoEBlock and the sequence optimizers (lane vdf-seq,
+    # bindings/sequence_optimizer_native_door.mojo `seq_binding_cpu`): an explicit device="cpu" beside a GPU set
+    # runs the CPU identical x_sequence image's cells, connected at the first device="cpu" admission of the
+    # process (`cpu_load_later`), never at import and never per call.
+    if _backend._CPU_ONLY is None:
+        from ._native_family_bridge import cpu_load_later
+
+        def _connect_sequence_cpu():
+            # glue: lazy connection of the CPU identical x_sequence image's cells, once per process
+            context["sequence_bindings_cpu"] = _sequence_cpu_cells(_backend, required + optional)
+        cpu_load_later(context, _connect_sequence_cpu)
     # Embedding.to_device uses the embedding module's own device context.
     # Connect its fixed native buffer ABI here, at import, so native tensor
     # admission/readback/finalization recognize that owner without callbacks.
@@ -230,6 +282,31 @@ def connect_sequence_device(training, device):
     # TOMBSTONE: MOJOLEARN_SEQ_DEVICE_IO_OFF (env; removed: plumbing, the same kernels on host arrays vs resident tensors, rule 2026-11-22) deleted 2026-11-23 by lane/ab-owners; code recoverable at d125cb97c7.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_DEVICE_IO_OFF.patch; record in docs/TOMBSTONES.md.
     return training._OPT_NATIVE, context
+
+
+def _sequence_cpu_cells(_backend, names):
+    """The CPU identical x_sequence image's cells, the same table form as one
+    mode's `sequence_bindings[mode]`, or the refusal text a device="cpu" call
+    raises."""
+    # glue: one host-image load and its fixed entry names, at the first device="cpu" admission
+    from types import BuiltinFunctionType
+    from . import host_surface
+    try:
+        binding = _backend.load_host_module(host_surface.routed_modules()["_mojolearn_x_sequence"])
+        cells = {"module": binding}
+        _sequence_native_key(cells, binding)
+        if "native_key" not in cells:
+            raise ImportError("the CPU sequence image publishes no native entry table")
+        for name in names:  # glue: retain the fixed compiled symbols of the CPU image
+            entry = getattr(binding, name, None)
+            if entry is None:
+                continue
+            if not isinstance(entry, BuiltinFunctionType):
+                raise TypeError(f"sequence optimizer requires compiled {name}")
+            cells[name] = entry
+        return cells
+    except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError, KeyError) as error:
+        return type(error).__name__ + ": " + str(error)
 
 
 #: The native entry tables' vendor words (core/byte_lm_entry_table.mojo).

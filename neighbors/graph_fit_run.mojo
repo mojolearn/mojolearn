@@ -142,35 +142,24 @@ struct ComponentsRequest(Copyable, Movable):
 
 
 def components_run(driver: XnDriver, request: ComponentsRequest) raises -> Int:
-    """The label iteration, then the renumbering when the operation did not
-    already count the components. Returns the component count."""
+    """The label iteration: ONE operation on either column (lane vdf-misc2,
+    2026-11-24) that starts from the identity labels, runs the rounds,
+    relabels the components in order of first appearance and counts them
+    (info[1] = count + 1). Before, three operations, each a round trip of
+    the n labels through the host on a device image: p2m_iota, the rounds,
+    then p2m_relabel into scratch copied back here. Returns the component
+    count."""
     var n = request.n
-    if n > 0:
-        _ = xn_request_run(driver, xn_iota_request(request.labels, n))
+    var info = xn_scratch_i32(2)
     if request.csr:
-        var info = xn_scratch_i32(2)
         _ = xn_request_run(driver, xn_cc_csr_request(request.indptr, request.indices, request.labels, _i32_at(info),
                                                      n, request.nnz))
-        var components = xn_cc_csr_components(_i32_at(info))
-        _ = info^
-        if components >= 0:
-            return components
     else:
-        var info = xn_scratch_i32(1)
         _ = xn_request_run(driver, xn_cc_dense_request(request.adjacency, request.labels, _i32_at(info), n))
-        _ = info^
-    if n == 0:
-        return 0
-    var renumbered = xn_scratch_i32(n)
-    var rinfo = xn_scratch_i32(2)
-    _ = xn_request_run(driver, xn_relabel_request(request.labels, _i32_at(renumbered), _i32_at(rinfo), n))
-    var got = xn_relabel_decode(_i32_at(rinfo))
-    xn_cc_relabel_check(got[1])
-    unsafe_memcpy(dest=_GRAPH_I32P(unsafe_from_address=request.labels),
-                  src=_GRAPH_I32P(unsafe_from_address=_i32_at(renumbered)), count=n)
-    _ = renumbered^
-    _ = rinfo^
-    return got[0]
+    var components = xn_cc_csr_components(_i32_at(info))
+    _ = info^
+    xn_cc_relabel_check(components >= 0 or n == 0)
+    return max(components, 0)
 
 
 # ---------------------------------------------------------------- Louvain

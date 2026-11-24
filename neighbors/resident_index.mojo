@@ -54,7 +54,8 @@ from std.atomic import Atomic, Ordering
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx, neural_device_plan
 from core.ctx_key import ctx_cache_key
-from core.msel_device_x import msel_fold_entry_context
+from core.msel_device_x import msel_fold_entry_context, msel_device_x_f32
+from core.device_zero import enqueue_fill
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
@@ -117,6 +118,51 @@ struct ResidentKnnIndex(Movable):
             knn_put_status(status_addr, knn_upload_finite_status(ctx, index, n_index * n_features))
         else:
             ctx.synchronize()
+        self.n_index = n_index
+        self.n_features = n_features
+        self.device = _device_of(dplan.root)
+        self.serial = 0
+        self.index = index^
+        self.ctx = ctx^
+
+    def __init__(
+        out self,
+        *,
+        fold_base: Int,
+        base_rows: Int,
+        fold_index: Int,
+        n_index: Int,
+        n_features: Int,
+        status_addr: Int,
+    ) raises:
+        """THE FOLD INDEX (lane vdf-scope-cluster2a, 2026-11-24): the index is
+        rows `fold_index` (int64, `n_index` of them) of the resident base
+        `fold_base` (`base_rows` x `n_features` float32) of model selection's
+        fold store, gathered on the device straight into the index buffer
+        (`msel_device_x_f32`: the same rows in the same order as a host
+        gather, so the same index words; no host words, no upload). The
+        gather's finite and range words land in the two host int32 words at
+        `status_addr` (one synchronisation). The context is the resident
+        slot's on the device plan's root, which must be the fold entry's
+        (`knn_fold_ready`)."""
+        if n_index <= 0 or n_features <= 0:
+            raise Error("knn_index_prepare: n_index and n_features must be positive")
+        if status_addr == 0 or status_addr % 4 != 0:
+            raise Error("knn_index_prepare_fold: the status address must be a positive int32-aligned address")
+        var dplan = neural_device_plan()
+        var ctx = process_ctx[_DEVCTX_SLOT](dplan)
+        if ctx_cache_key(ctx) != ctx_cache_key(msel_fold_entry_context()):
+            raise Error("knn_index_prepare_fold: the resident index context is not the fold store's"
+                        + " (a device plan bound to another device)")
+        var index = ctx.enqueue_create_buffer[DType.float32](n_index * n_features)
+        var status = ctx.enqueue_create_buffer[DType.int32](2)
+        enqueue_fill[DType.int32](ctx, status, Int32(0))
+        msel_device_x_f32(ctx, fold_base, base_rows, n_features, fold_index, n_index, index,
+                          status.unsafe_ptr(), 0)
+        ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr),
+                         src_buf=status)
+        ctx.synchronize()
+        _ = status^
         self.n_index = n_index
         self.n_features = n_features
         self.device = _device_of(dplan.root)
@@ -383,6 +429,23 @@ def knn_index_prepare(
     # The upload runs outside the lock; only the dictionary step is locked.
     var entry = ResidentKnnIndex(index_ptr, n_index, n_features, status_addr)
     if status_addr != 0 and MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr)[0] != 0:
+        _ = entry^
+        return 0
+    return _locked_insert(state, entry^)
+
+
+def knn_index_prepare_fold(
+    fold_base: Int, base_rows: Int, fold_index: Int, n_index: Int, n_features: Int, status_addr: Int,
+) raises -> Int:
+    """The resident index of a model-selection fold, gathered on the device
+    (`ResidentKnnIndex` THE FOLD INDEX; lane vdf-scope-cluster2a): the handle,
+    or 0 when the fold's finite or range word (the two int32 words at
+    `status_addr`) is set (nothing kept)."""
+    var state = _registry()
+    var entry = ResidentKnnIndex(fold_base=fold_base, base_rows=base_rows, fold_index=fold_index,
+                                 n_index=n_index, n_features=n_features, status_addr=status_addr)
+    var words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr)
+    if words[0] != 0 or words[1] != 0:
         _ = entry^
         return 0
     return _locked_insert(state, entry^)

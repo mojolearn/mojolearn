@@ -33,7 +33,9 @@ from core.hdbscan_query_api import (
     HDBSCAN_QUERY_APPROXIMATE,
     HDBSCAN_QUERY_MEMBERSHIP,
     HDBSCAN_QUERY_ALL_POINTS,
+    HDBSCAN_QUERY_PREPARE,
 )
+from std.memory import bitcast
 from hdbscan.native_fit_host import hdbscan_fit_host_v1
 from hdbscan.native_query_host import hdbscan_query_host_v1
 from hdbscan.native_fit_device import hdbscan_fit_device_v1
@@ -44,6 +46,69 @@ from hdbscan.native_query_device import hdbscan_query_device_v1
 
 
 comptime HDBSCAN_NATIVE_CASES = 8
+
+
+def _same_words(a: List[Float32], b: List[Float32], where: String) raises:
+    require(len(a) == len(b), where + ": lengths differ")
+    for i in range(len(a)):  # metadata: small fixture outputs compared word for word
+        require(bitcast[DType.uint32](a[i]) == bitcast[DType.uint32](b[i]), where + ": word " + String(i) + " differs")
+
+
+def _same_labels(a: List[Int32], b: List[Int32], where: String) raises:
+    require(len(a) == len(b), where + ": lengths differ")
+    for i in range(len(a)):  # metadata: small fixture outputs compared one label each
+        require(a[i] == b[i], where + ": label " + String(i) + " differs")
+
+
+def _snapshot_columns(query_driver: HdbscanQueryDriver, request: HdbscanQueryRequest, operation: Int,
+                      nq: Int, clusters: Int, labels: List[Int32], probabilities: List[Float32],
+                      membership: List[Float32]) raises:
+    """Lane vdf-misc4: the device image's fitted-snapshot route (PREPARE once,
+    then the query on the handle) and the CPU column (the host image's query
+    on the same fitted arrays) write the per-call device route's bytes."""
+    var approximate = operation == HDBSCAN_QUERY_APPROXIMATE
+    var cells = nq if approximate else nq * clusters
+    for column in range(2):  # metadata: two columns, the snapshot route then the CPU column
+        var got_labels = List[Int32](length=nq, fill=-9)
+        var got_probabilities = List[Float32](length=nq, fill=-9)
+        var got_membership = List[Float32](length=max(cells, 1), fill=-9)
+        var buffers = request.buffers.copy()
+        if approximate:
+            buffers.output = VariantsSpan(Int(got_labels.unsafe_ptr()), nq)
+            buffers.probabilities = VariantsSpan(Int(got_probabilities.unsafe_ptr()), nq)
+        else:
+            buffers.output = VariantsSpan(Int(got_membership.unsafe_ptr()), cells)
+        var r = HdbscanQueryRequest(request.dimensions.copy(), buffers^, request.query_rows, request.row_start,
+                                    request.batch)
+        var where = String("snapshot route") if column == 0 else String("CPU column")
+        if column == 0:
+            var prepare = HdbscanQueryPlan(r.copy(), HDBSCAN_QUERY_PREPARE, False, 0, operation)
+            var handle = query_driver.run(prepare)
+            require(handle != 0, "snapshot: PREPARE returns a handle")
+            var plan = HdbscanQueryPlan(r.copy(), operation, False, handle)
+            require(query_driver.run(plan) == nq, where + ": consumed row count")
+            query_driver.release(handle)
+            query_driver.release(handle)  # quiet for a released handle
+            _ = prepare
+            _ = plan
+        else:
+            var host_driver = HdbscanQueryDriver(hdbscan_query_host_v1)
+            var plan = HdbscanQueryPlan(r.copy(), operation, True)
+            require(host_driver.run(plan) == nq, where + ": consumed row count")
+            _ = plan
+        if approximate:
+            _same_labels(got_labels, labels, where + " labels vs the per-call device route")
+            _same_words(got_probabilities, probabilities, where + " probabilities vs the per-call device route")
+        else:
+            var want = List[Float32](capacity=cells)
+            var got = List[Float32](capacity=cells)
+            for i in range(cells):  # metadata: the compared prefix of the per-call output
+                want.append(membership[i])
+                got.append(got_membership[i])
+            _same_words(got, want, where + " membership vs the per-call device route")
+        _ = got_labels
+        _ = got_probabilities
+        _ = got_membership
 
 
 def check_flags(flags: List[Int], where: String) raises:
@@ -176,6 +241,9 @@ def fixture(fit_driver: HdbscanFitDriver, query_driver: HdbscanQueryDriver, unit
         var query_request = HdbscanQueryRequest(dimensions.copy(), buffers.copy(), nq, row_start, 3)
         var plan = HdbscanQueryPlan(query_request, operation, host)
         require(query_driver.run(plan) == nq, "query returns consumed row count")
+        if not host:
+            _snapshot_columns(query_driver, query_request, operation, nq, clusters, output_labels,
+                              output_probabilities, output_membership)
         if operation == HDBSCAN_QUERY_APPROXIMATE:
             require(output_labels[0] == left and output_labels[1] == right and output_labels[2] == -1,
                 "exact interior exemplars retain labels and distant query is noise")

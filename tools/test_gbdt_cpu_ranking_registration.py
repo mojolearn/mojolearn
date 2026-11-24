@@ -31,26 +31,22 @@ def manifest():
 
 
 def gpu_only_lanes():
-    """Read the registry and its fragments without importing the harness."""
+    """{lane: reason} of every `_one_sided("<lane>", missing="cpu", reason=...)` declaration (registry ONE_SIDED,
+    2026-11-24; GPU_ONLY_LANES is gone), read from the harness and its fragments without importing them."""
     result = {}
-    found_registry = False
     paths = [HARNESS, *sorted((ROOT / "tools/identity_lanes").glob("*.py"))]
     for path in paths:
-        for node in ast.parse(path.read_text()).body:
-            if not isinstance(node, ast.Assign):
+        source = path.read_text()
+        if "GPU_ONLY_LANES =" in source or "GPU_ONLY_LANES[" in source:
+            raise AssertionError(f"{path.name}: the retired GPU_ONLY_LANES registry came back")
+        for node in ast.walk(ast.parse(source)):
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "_one_sided"):
                 continue
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "GPU_ONLY_LANES":
-                    if path != HARNESS or found_registry:
-                        raise AssertionError("GPU_ONLY_LANES was unexpectedly rebound")
-                    result.update(ast.literal_eval(node.value))
-                    found_registry = True
-                elif (isinstance(target, ast.Subscript)
-                      and isinstance(target.value, ast.Name)
-                      and target.value.id == "GPU_ONLY_LANES"):
-                    result[ast.literal_eval(target.slice)] = ast.literal_eval(node.value)
-    if not found_registry:
-        raise AssertionError("the source declares no GPU_ONLY_LANES registry")
+            kw = {k.arg: k.value for k in node.keywords}
+            missing = kw.get("missing", node.args[1] if len(node.args) > 1 else None)
+            reason = kw.get("reason", node.args[2] if len(node.args) > 2 else None)
+            if ast.literal_eval(missing) == "cpu":
+                result[ast.literal_eval(node.args[0])] = ast.literal_eval(reason)
     return result
 
 

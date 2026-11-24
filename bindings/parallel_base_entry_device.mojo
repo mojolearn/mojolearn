@@ -15,12 +15,12 @@ from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.neural_context import process_ctx
 from core.parallel_entry_table import (
-    PARALLEL_TABLE_BASE, PB_FOLD_PAIR_F32, PB_REBASE_OFFSETS, ParallelEntryKey, parallel_check_spans,
+    PARALLEL_TABLE_BASE, PB_ORDERED_FOLD_F32, PB_REBASE_OFFSETS, ParallelEntryKey, parallel_check_spans,
     parallel_entry_vendor, parallel_table_publish,
 )
 from core.shard_merge_device import device_shard_topk_merge_f32
 from core.shared_slot import SharedSlot
-from core.hotpath_device_run import fold_pair_f32_device_run
+from core.hotpath_device_run import ordered_fold_f32_device_run
 from core.msel_device_run import msel_rebase_offsets_i32_device_run
 
 #: The GPU base binding's ONE process-lifetime DeviceContext
@@ -54,8 +54,8 @@ def parallel_base_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         var a = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=aa)
         var p = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp)
         var r = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)
-        if operation == PB_FOLD_PAIR_F32:
-            r[] = fold_pair_f32_device_run(a[0], a[1], p[0])
+        if operation == PB_ORDERED_FOLD_F32:
+            r[] = ordered_fold_f32_device_run(a[0], a[1], p[1], p[0])
         elif operation == PB_REBASE_OFFSETS:
             msel_rebase_offsets_i32_device_run(a[0], p[0], a[1], p[1], p[2], a[2])
             r[] = 0

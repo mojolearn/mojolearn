@@ -107,6 +107,27 @@ def _fast_binding(*, connect_all=False):
     return module, bool(train), bool(encode), int(max_vocab)
 
 
+#: The identical GPU tokenizer (`tokenizer/gpu/`, binding `_mojolearn_x_tokenizer`): what a
+#: BpeTokenizer built with device="gpu" runs. Connected once at import:
+#: `(module, bpe_gpu_load, bpe_gpu_encode_batch, bpe_gpu_decode_batch, bpe_gpu_train,
+#: bpe_gpu_trained_sizes, bpe_gpu_trained_copy)`, or a one-item tuple
+#: holding the words device="gpu" is refused with where it is not installed.
+_GPU_EXTENSION = "_mojolearn_x_tokenizer"
+
+
+def _gpu_binding():
+    if _backend._CPU_ONLY is not None:
+        return ("ValueError: device='gpu' needs a GPU build of mojolearn, and this installation is CPU only",)
+    try:
+        # import-time: the GPU tokenizer of this process's tier, connected once (integer work: both
+        # tiers are the same code and give the same ids)
+        module = _backend.binding(_GPU_EXTENSION, _backend.default_mode())
+        return (module, module.bpe_gpu_load, module.bpe_gpu_encode_batch, module.bpe_gpu_decode_batch,
+                module.bpe_gpu_train, module.bpe_gpu_trained_sizes, module.bpe_gpu_trained_copy)
+    except (ImportError, AttributeError, ValueError, OSError) as error:
+        return ("ImportError: device='gpu' needs the GPU tokenizer binding, which is not connected: " + str(error),)
+
+
 # `encode` and `decode` for byte-level BPE in the GPT-2 format.
 #
 # Ids are in [0, n_vocab): the vocabulary's ranks, then `<|endoftext|>` at
@@ -141,6 +162,11 @@ class BpeTokenizer:
     ranks_file : str or path-like
         A rank file (see :meth:`from_ranks_file`). Required: there is no
         built-in vocabulary, so omitting it raises ValueError.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where encoding and decoding run. None follows the numeric mode. 'cpu'
+        runs on the CPU and raises ValueError in numeric mode 'fast'. 'gpu'
+        runs on the GPU, with the same ids as the CPU, and raises ValueError on
+        a CPU-only installation. Other values raise ValueError.
 
     Raises
     ------
@@ -158,8 +184,8 @@ class BpeTokenizer:
 
     ENDOFTEXT = "<|endoftext|>"
 
-    def __init__(self, ranks_file=None):
-        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_init', (self, ranks_file), _TOKENIZER_CONTEXT)
+    def __init__(self, ranks_file=None, *, device=None):
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_init', (self, ranks_file, device), _TOKENIZER_CONTEXT)
 
     def _adopt(self, m, handle, source):
         return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_adopt', (self, handle, source), _TOKENIZER_CONTEXT)
@@ -167,21 +193,28 @@ class BpeTokenizer:
     # ------------------------------------------------------------ loading
 
     @classmethod
-    def from_ranks_file(cls, path):
+    def from_ranks_file(cls, path, *, device=None):
         """Load a rank file.
 
         One ``rank<TAB>hex_of_token_bytes`` line per rank, ascending from 0, with
         all 256 single bytes present (the format :meth:`TrainedBpeVocabulary.write_ranks`
         writes).
 
+        Parameters
+        ----------
+        path : str or path-like
+            The rank file.
+        device : {None, 'gpu', 'cpu'}, default None
+            As for the constructor.
+
         Returns
         -------
         BpeTokenizer
         """
-        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_ranks', (cls, path), _TOKENIZER_CONTEXT)
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_ranks', (cls, path, device), _TOKENIZER_CONTEXT)
 
     @classmethod
-    def from_token_bytes(cls, tokens):
+    def from_token_bytes(cls, tokens, *, device=None):
         """Build a tokenizer from a list of token byte strings.
 
         A token's rank (and id) is its index. Tokens must be unique and non-empty,
@@ -191,15 +224,17 @@ class BpeTokenizer:
         Parameters
         ----------
         tokens : sequence of bytes-like
+        device : {None, 'gpu', 'cpu'}, default None
+            As for the constructor.
 
         Returns
         -------
         BpeTokenizer
         """
-        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_tokens', (cls, tokens), _TOKENIZER_CONTEXT)
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_tokens', (cls, tokens, device), _TOKENIZER_CONTEXT)
 
     @classmethod
-    def from_files(cls, encoder_json, vocab_bpe):
+    def from_files(cls, encoder_json, vocab_bpe, *, device=None):
         """Load the two files of the GPT-2 format.
 
         Parameters
@@ -208,6 +243,8 @@ class BpeTokenizer:
             ``encoder.json``: token spelling to id.
         vocab_bpe : str or path-like
             ``vocab.bpe``: the merge list.
+        device : {None, 'gpu', 'cpu'}, default None
+            As for the constructor.
 
         Returns
         -------
@@ -223,7 +260,7 @@ class BpeTokenizer:
             a multi-byte token no merge makes. These are the conditions under which
             merging by rank reproduces the merge list.
         """
-        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_files', (cls, encoder_json, vocab_bpe), _TOKENIZER_CONTEXT)
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_files', (cls, encoder_json, vocab_bpe, device), _TOKENIZER_CONTEXT)
 
     @property
     def n_vocab(self):
@@ -427,9 +464,15 @@ class TrainedBpeVocabulary:
         """The :attr:`BpeTokenizer.identity` of this vocabulary, without loading it."""
         return _TOKENIZER_NATIVE.tokenizer_public_call('trained_fact', (self, 'identity'), _TOKENIZER_CONTEXT)
 
-    def tokenizer(self):
-        """A :class:`BpeTokenizer` over this vocabulary, without writing a file."""
-        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_tokenizer', (self,), _TOKENIZER_CONTEXT)
+    def tokenizer(self, *, device=None):
+        """A :class:`BpeTokenizer` over this vocabulary, without writing a file.
+
+        Parameters
+        ----------
+        device : {None, 'gpu', 'cpu'}, default None
+            As for the :class:`BpeTokenizer` constructor.
+        """
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_tokenizer', (self, device), _TOKENIZER_CONTEXT)
 
     def __repr__(self):
         return _TOKENIZER_NATIVE.tokenizer_public_call('trained_fact', (self, 'repr'), _TOKENIZER_CONTEXT)
@@ -483,6 +526,12 @@ class BpeVocabularyTrainer:
         Minimum pair count for a merge; at least 1.
     backend : {"auto", "mojo"}, default "auto"
         Both name the compiled trainer.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where training runs. None follows the numeric mode. 'cpu' runs on the
+        CPU and raises ValueError in numeric mode 'fast'. 'gpu' runs on the GPU,
+        with the same vocabulary as the CPU, and raises ValueError on a
+        CPU-only installation. Other values raise
+        ValueError.
 
     Examples
     --------
@@ -496,8 +545,8 @@ class BpeVocabularyTrainer:
 
     _BACKENDS = ("auto", "mojo")
 
-    def __init__(self, vocab_size=32000, min_frequency=2, backend="auto"):
-        return _TOKENIZER_NATIVE.tokenizer_public_call('trainer_init', (self, vocab_size, min_frequency, backend), _TOKENIZER_CONTEXT)
+    def __init__(self, vocab_size=32000, min_frequency=2, backend="auto", *, device=None):
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trainer_init', (self, vocab_size, min_frequency, backend, device), _TOKENIZER_CONTEXT)
 
     def train(self, documents):
         """Train on ``documents``.
@@ -556,5 +605,5 @@ _TOKENIZER_FAST_ENTRIES = tuple(
     ("bpe_fast_load", "bpe_encode_batch", "bpe_train", "bpe_trained_sizes", "bpe_trained_copy"))
 _TOKENIZER_CONTEXT = (BpeTokenizer, TrainedBpeVocabulary, BpeVocabularyTrainer,
                       _TOKENIZER_NATIVE, _TOKENIZER_FAST, _TOKENIZER_FAST_ENTRIES,
-                      vars(_backend), _numpy_free_context())
+                      vars(_backend), _numpy_free_context(), _gpu_binding())
 _TOKENIZER_NATIVE.tokenizer_public_call("connect_bpe", (), _TOKENIZER_CONTEXT)

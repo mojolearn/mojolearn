@@ -158,10 +158,9 @@ def msel_split_spec_read(cv: PythonObject, context: PythonObject, mut spec: Msel
     elif kind != MSEL_SPEC_LOO and kind != MSEL_SPEC_LOGO:
         return False  # LeaveOneOut and LeaveOneGroupOut store no setting
     s.kind = kind
-    # Every entry a splitter may call (the base table past the stratified
-    # program bounds and for the group plans; the program runner for a
-    # draw or a sort).
-    pin = msel_split_route(context, True, True)
+    # Every entry a splitter may call (the helper table; the program runner
+    # for a draw or a sort).
+    pin = msel_split_route(context, True)
     s.route = pin.route
     s.sabotage = msel_sabotage()
     spec = s^

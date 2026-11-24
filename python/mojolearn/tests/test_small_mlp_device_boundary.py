@@ -149,3 +149,91 @@ def test_cpu_device_refuses_fast_mode_at_construction():
         pytest.skip("the process runs identical mode")
     with pytest.raises(ValueError, match="device='cpu' runs in identical mode only"):
         trainer(device="cpu")
+
+
+# moved from python/mojolearn/tests/test_neural_inference.py
+# MLPInference at the public boundary: returned shape and dtype, checkpoint
+# refusals by name and constructor/query refusals.
+import json
+import os
+import tempfile
+
+import numpy as np
+import pytest
+
+import mojolearn as ml
+from mojolearn import _backend
+
+_NINF_MLP_SHAPES = ((16, 8), (16,), (3, 16), (3,))
+
+
+@pytest.fixture(scope="module")
+def ninf_mlp_binding():
+    try:
+        return _backend.load_host_module("_mojolearn_neural_host")
+    except ImportError as exc:
+        pytest.skip(f"neural host binding not built: {exc}")
+
+
+def _ninf_mlp_weights():
+    return [((np.arange(int(np.prod(s)), dtype=np.float32) % 7 - 3) / 32).reshape(s).astype(np.float32)
+            for s in _NINF_MLP_SHAPES]
+
+
+def _ninf_x(rows, cols=8, seed=0):
+    return np.random.default_rng(seed).standard_normal((rows, cols)).astype(np.float32)
+
+
+def _ninf_checkpoint_from_weights(tmp):
+    """A trainer checkpoint written by the public trainer's own
+    `save_checkpoint`, before any step."""
+    path = os.path.join(tmp, "mlp.json")
+    ml.SmallMLPTrainer(*_ninf_mlp_weights(), data_schedule={"dataset": "test"}).save_checkpoint(path)
+    return path
+
+
+def test_mlp_logits_shape_rows_alone_and_checkpoint(ninf_mlp_binding):
+    inf = ml.MLPInference(*_ninf_mlp_weights())
+    X = _ninf_x(64)
+    got = np.asarray(inf.predict_logits(X))
+    # rows alone equal the batch: the native check training_neural_inference
+    assert got.shape == (64, 3) and got.dtype == np.float32
+    assert set(inf.weights_) == {"weight1", "bias1", "weight2", "bias2"}
+
+
+def test_mlp_from_checkpoint_equals_constructor_and_refuses_by_name(ninf_mlp_binding):
+    tmp = tempfile.mkdtemp()
+    path = _ninf_checkpoint_from_weights(tmp)
+    X = _ninf_x(32, seed=3)
+    a = np.asarray(ml.MLPInference.from_checkpoint(path).predict_logits(X))
+    b = np.asarray(ml.MLPInference(*_ninf_mlp_weights()).predict_logits(X))
+    assert a.tobytes() == b.tobytes()
+    env = json.load(open(path))
+    env["payload"]["data_schedule"] = {"dataset": "tampered"}
+    bad = os.path.join(tmp, "bad.json")
+    json.dump(env, open(bad, "w"))
+    with pytest.raises(ValueError, match="integrity mismatch"):
+        ml.MLPInference.from_checkpoint(bad)
+    env["schema"] = "other"
+    json.dump(env, open(bad, "w"))
+    with pytest.raises(ValueError, match="schema mismatch"):
+        ml.MLPInference.from_checkpoint(bad)
+    with open(bad, "wb") as fh:
+        fh.write(b"{" * 40000)
+    with pytest.raises(ValueError, match="size bound"):
+        ml.MLPInference.from_checkpoint(bad)
+
+
+def test_mlp_refusals(ninf_mlp_binding):
+    w = _ninf_mlp_weights()
+    with pytest.raises(ValueError, match="shape"):
+        ml.MLPInference(w[0].T.copy(), *w[1:])
+    inf = ml.MLPInference(*w)
+    with pytest.raises(ValueError, match=r"shape \(batch, 8\)"):
+        inf.predict_logits(_ninf_x(4, cols=7))
+    with pytest.raises(ValueError, match=r"\[1, 256\]"):
+        inf.predict_logits(_ninf_x(257))
+    bad = w[1].copy()
+    bad[0] = np.nan
+    with pytest.raises(ValueError, match="finite"):
+        ml.MLPInference(w[0], bad, w[2], w[3])

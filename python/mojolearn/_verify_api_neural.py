@@ -170,7 +170,8 @@ def _sequential_layer_fixture(np,cls,method):
 
 def neural_checks(recorder,public,methods):
     import numpy as np
-    import mojolearn as ml
+    from ._verify_api import package
+    ml = package()
     cls=resolve(public); name=public.rsplit('.',1)[-1]
     def check(method):
         if name.startswith(('Mamba','Transformer')):

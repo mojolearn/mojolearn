@@ -78,6 +78,14 @@ def _prep_cpu_scope(root: PythonObject, b: PythonObject) raises -> PythonObject:
     return built
 
 
+def prep_cpu_scope(context: PythonObject) raises -> PythonObject:
+    """The family's CPU context beside a device set for a module-level
+    function given `device="cpu"` (the score functions; lane vdf-misc): the
+    same object a device="cpu" estimator of the family runs in, built once
+    per process by whichever comes first."""
+    return _prep_cpu_scope(context, context["prep_builtins"])
+
+
 def _prep_route_build(model: PythonObject, context: PythonObject) raises -> DeviceRouteOwner:
     var b = context["prep_builtins"]
     var owner = DeviceRouteOwner(DEVICE_GPU)

@@ -31,7 +31,7 @@ from xtrees.trees_meta_run import CalibratedProgram
 from xtrees.glue_calls import (
     xt_accumulate, xt_accumulate_cols, xt_accumulate_cols_many, xt_accumulate_onehot, xt_argmax_rows, xt_scale,
     xt_scatter, xt_ovr_assemble, xt_accumulate_rows, xt_count_rows, xt_normalize_rows, xt_count_equal, xt_oob_r2,
-    xt_calibrated_proba, xt_margin2, xt_softmax_rows, xt_weighted_median, xt_put_f32,
+    xt_calibrated_proba, xt_margin2, xt_softmax_rows, xt_weighted_median, xt_put_f32, xt_binary_proba,
 )
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -104,7 +104,13 @@ struct VoteRows(Movable):
     one resident base (CalibratedClassifierCV's DeviceRows route); `scope`
     the caller's resident scope and `pin` X's pin token offered on the call
     (0: none), `took` the address of the byte written 1 when the member's
-    cache took the pin's reference (THE PIN RULE, core/member_abi.mojo)."""
+    cache took the pin's reference (THE PIN RULE, core/member_abi.mojo).
+
+    ONE REFERENCE PER CALL (lane vdf-meta4, 2026-11-24): `took_each` True
+    when the caller took one reference per MEMBER of a run over `rows` and
+    hands `took` as one byte per member (member j's call writes the byte at
+    `took + j`, `member_rows`), so two members' caches that each take the
+    pin each own a reference. False (the default): one byte, as before."""
     var x: Int
     var n: Int
     var d: Int
@@ -113,6 +119,7 @@ struct VoteRows(Movable):
     var scope: Int
     var pin: Int
     var took: Int
+    var took_each: Bool
 
     def __init__(out self, x: Int, n: Int, d: Int):
         self.x = x
@@ -123,6 +130,7 @@ struct VoteRows(Movable):
         self.scope = MEMBER_SCOPE_NONE
         self.pin = 0
         self.took = 0
+        self.took_each = False
 
     def __init__(out self, base: Int, base_rows: Int, d: Int, index: Int, count: Int, scope: Int, pin: Int,
                  took: Int):
@@ -136,9 +144,20 @@ struct VoteRows(Movable):
         self.scope = scope
         self.pin = pin
         self.took = took
+        self.took_each = False
+
+    def member_rows(self, j: Int) -> VoteRows:
+        """The rows member j's call reads: these rows, and under `took_each`
+        its own answer byte (`took + j`). A few words, no allocation."""
+        if self.index == 0:
+            return VoteRows(self.x, self.n, self.d)
+        var r = VoteRows(self.x, self.base_rows, self.d, self.index, self.n, self.scope, self.pin, self.took)
+        if self.took_each and self.took != 0:
+            r.took = self.took + j
+        return r^
 
 
-def _vote_rows_point(mut call: MemberCall, rows: VoteRows):
+def vote_rows_point(mut call: MemberCall, rows: VoteRows):
     """Point `call` at `rows` (THE INDEXED ROWS: the base, the row index, the
     scope and the offered pin)."""
     if rows.index == 0:
@@ -150,7 +169,7 @@ def _vote_rows_point(mut call: MemberCall, rows: VoteRows):
     call.pin = rows.pin
 
 
-def _vote_rows_call(plan: MemberPlan, operation: Int, mut call: MemberCall, rows: VoteRows) raises:
+def vote_rows_call(plan: MemberPlan, operation: Int, mut call: MemberCall, rows: VoteRows) raises:
     """One member call over `rows`; an offered pin's answer is read whether
     the call returns or raises (THE PIN RULE)."""
     if rows.index == 0 or call.pin == 0:
@@ -184,11 +203,11 @@ def member_f32_block(m: VoteMember, rows: VoteRows, mut keep: List[List[Float32]
     var count = rows.n * m.cols
     var plan = _PlanP(unsafe_from_address=m.plan)
     var call = member_call_of(plan[], m.state)
-    _vote_rows_point(call, rows)
+    vote_rows_point(call, rows)
     if m.dtype == MEMBER_F64:
         var wide = List[Float64](unsafe_uninit_length=count)
         call.dst = MemberMatrix(Int(wide.unsafe_ptr()), rows.n, m.cols, MEMBER_F64)
-        _vote_rows_call(plan[], m.operation, call, rows)
+        vote_rows_call(plan[], m.operation, call, rows)
         var words = List[Float32](unsafe_uninit_length=count)
         for i in range(count):  # small-loop(one rounding pass over one member's block, as the door's admission made)
             words[i] = wide[i].cast[DType.float32]()
@@ -197,7 +216,7 @@ def member_f32_block(m: VoteMember, rows: VoteRows, mut keep: List[List[Float32]
     else:
         var words = List[Float32](unsafe_uninit_length=count)
         call.dst = MemberMatrix(Int(words.unsafe_ptr()), rows.n, m.cols, MEMBER_F32)
-        _vote_rows_call(plan[], m.operation, call, rows)
+        vote_rows_call(plan[], m.operation, call, rows)
         keep.append(words^)
     return Int(keep[len(keep) - 1].unsafe_ptr())
 
@@ -205,22 +224,25 @@ def member_f32_block(m: VoteMember, rows: VoteRows, mut keep: List[List[Float32]
 def _member_codes_into(m: VoteMember, rows: VoteRows, dst: Int) -> Bool:
     """One native member's int32 class codes written at `dst` (`rows.n`
     words; int64 codes narrowed once, as the door's int32 cast narrowed
-    them). False when the native call refused."""
+    them). False when the native call refused. THE INDEXED ROWS (lane
+    vdf-meta2): an indexed `rows` hands the member the base, the row index
+    and the offered pin (`vote_rows_point`), as `member_f32_block` does; it
+    read the first `rows.n` rows of the base before."""
     try:
         var plan = _PlanP(unsafe_from_address=m.plan)
         var call = member_call_of(plan[], m.state)
-        call.x = MemberMatrix(rows.x, rows.n, rows.d)
+        vote_rows_point(call, rows)
         if m.dtype == MEMBER_I64:
             var wide = List[Int64](unsafe_uninit_length=rows.n)
             call.dst = MemberMatrix(Int(wide.unsafe_ptr()), rows.n, 1, MEMBER_I64)
-            _ = member_call(plan[].member, m.operation, call)
+            vote_rows_call(plan[], m.operation, call, rows)
             var codes = _I32P(unsafe_from_address=dst)
             for i in range(rows.n):  # small-loop(one narrowing pass over one member's codes, as the door's cast made)
                 codes[i] = Int32(wide[i])
             _ = wide^
         else:
             call.dst = MemberMatrix(dst, rows.n, 1, MEMBER_I32)
-            _ = member_call(plan[].member, m.operation, call)
+            vote_rows_call(plan[], m.operation, call, rows)
     except:
         return False
     return True
@@ -263,7 +285,7 @@ def vote_soft_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], k: 
     var floats: List[Float64] = [Float64(rows.n), Float64(k)]
     var weights = List[Float64](capacity=len(members))
     for j in range(len(members)):  # driver-loop: over members
-        var block = _member_f32(members[j], rows, keep)
+        var block = _member_f32(members[j], rows.member_rows(j), keep)
         if block == 0:
             return j
         addrs.append(block)
@@ -293,7 +315,7 @@ def vote_codes_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], k:
         var keep = List[List[Int32]]()
         var blocks = List[Int](capacity=len(members))
         for j in range(len(members)):  # driver-loop: over members (every member answers before any vote is cast)
-            var block = _member_codes(members[j], rows, keep)
+            var block = _member_codes(members[j], rows.member_rows(j), keep)
             if block == 0:
                 return j
             blocks.append(block)
@@ -312,7 +334,7 @@ def vote_regress_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], 
     var blocks = List[Int](capacity=len(members))
     var weights = List[Float64](capacity=len(members))
     for j in range(len(members)):  # driver-loop: over members (every member answers before the sum)
-        var block = _member_f32(members[j], rows, keep)
+        var block = _member_f32(members[j], rows.member_rows(j), keep)
         if block == 0:
             return j
         blocks.append(block)
@@ -339,7 +361,7 @@ def vote_transform_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember]
     var keep = List[List[Float32]]()
     var blocks = List[Int](capacity=len(members))
     for j in range(len(members)):  # driver-loop: over members (every member answers before anything is placed)
-        var block = _member_f32(members[j], rows, keep)
+        var block = _member_f32(members[j], rows.member_rows(j), keep)
         if block == 0:
             return j
         blocks.append(block)
@@ -379,7 +401,7 @@ def ovr_assemble_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], 
     var ints: List[Int] = [n, k, finish]
     var floats: List[Float64] = [Float64(n), Float64(k), Float64(finish)]
     for j in range(len(members)):  # driver-loop: over members (every member answers before anything is written)
-        var block = _member_f32(members[j], rows, keep)
+        var block = _member_f32(members[j], rows.member_rows(j), keep)
         if block == 0:
             return j
         addrs.append(block)
@@ -389,6 +411,32 @@ def ovr_assemble_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], 
         floats.append(Float64(at[j]))
     _ = xt_ovr_assemble(glue, addrs, ints, floats)
     _ = keep^  # the native blocks are read through the program above
+    return VOTE_ALL_ANSWERED
+
+
+def ovr_binary_proba_run(glue: EntryRef, rows: VoteRows, member: VoteMember, at: Int, out_words: Int) raises -> Int:
+    """Binary `OneVsRestClassifier.predict_proba` (lane vdf-meta5, the fold
+    read by number): the one member's float32 predict_proba block over
+    `rows`, its column `at` (the column of code 1; -1: a member that never
+    saw code 1, whose column is zeros), then the glue's
+    `x_trees_binary_proba` into `out_words` (float64 n x 2 rows (1 - p, p)):
+    the door's `_proba_positive` (a column copy) and `_trees_binary_proba`
+    over the same words, so no bits change. A native member that refuses
+    is returned as 0 before anything is written."""
+    var keep = List[List[Float32]]()
+    var block = _member_f32(member, rows.member_rows(0), keep)
+    if block == 0:
+        return 0
+    var n = rows.n
+    var col = List[Float32](length=n, fill=Float32(0.0))
+    if at >= 0:
+        var b = _F32P(unsafe_from_address=block)
+        var c = member.cols
+        for i in range(n):  # small-loop(one column copy of one member's block, as the door's `_one_col` made)
+            col[i] = b[i * c + at]
+    _ = xt_binary_proba(glue, Int(col.unsafe_ptr()), out_words, n)
+    _ = col^  # read through the program above
+    _ = keep^
     return VOTE_ALL_ANSWERED
 
 
@@ -402,7 +450,7 @@ def multioutput_codes_run(rows: VoteRows, members: List[VoteMember], dst: List[I
     native member that refuses is returned by index (outputs before it are
     final; the caller asks its door and runs again from it)."""
     for j in range(start, len(members)):  # driver-loop: over members (outputs)
-        if members[j].native and not _member_codes_into(members[j], rows, dst[j]):
+        if members[j].native and not _member_codes_into(members[j], rows.member_rows(j), dst[j]):
             return j
     return VOTE_ALL_ANSWERED
 
@@ -418,7 +466,7 @@ def multioutput_proba_run(glue: EntryRef, rows: VoteRows, members: List[VoteMemb
     touched (blocks before it are final)."""
     var keep = List[List[Float32]]()
     for j in range(start, len(members)):  # driver-loop: over members (outputs)
-        var block = _member_f32(members[j], rows, keep)
+        var block = _member_f32(members[j], rows.member_rows(j), keep)
         if block == 0:
             return j
         _ = xt_accumulate_cols(glue, accs[j], block, members[j].class_cols, rows.n, ks[j], members[j].cols, 1.0)
@@ -566,7 +614,7 @@ def stack_place_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], k
         at += widths[j]
     for j in range(start, len(members)):  # driver-loop: over members
         var m = members[j]
-        var block = _member_f32(m, rows, keep)
+        var block = _member_f32(m, rows.member_rows(j), keep)
         if block == 0:
             return j
         var n = rows.n
@@ -653,7 +701,7 @@ def calibrated_proba_run(glue: EntryRef, rows: VoteRows, members: List[VoteMembe
     var keep = List[List[Float32]]()
     var blocks = List[Int](capacity=len(members))
     for i in range(len(members)):  # driver-loop: over the (member, calibrators) pairs (every member answers first)
-        var block = _member_f32(members[i], rows, keep)
+        var block = _member_f32(members[i], rows.member_rows(i), keep)
         if block == 0:
             return i
         blocks.append(block)

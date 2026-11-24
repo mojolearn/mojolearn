@@ -1,0 +1,24 @@
+diff --git a/xtrees/ops_device_elem.mojo b/xtrees/ops_device_elem.mojo
+index fdf95cfc32..15bd8e6898 100644
+--- a/xtrees/ops_device_elem.mojo
++++ b/xtrees/ops_device_elem.mojo
+@@ -40,6 +40,7 @@ from std.atomic import Atomic
+ from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+ from std.math import ceildiv
+ from std.memory import bitcast, stack_allocation
++from std.sys.compile import is_defined  # SABOTAGE gate-gpu (lane vdv-sab2-a)
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+@@ -1027,7 +1028,10 @@ def onehot_leaves_kernel(
+         if c < 0 or c >= Int(n_cols):
+             flag.unsafe_store(0, Int32(1))
+         else:
+-            res.unsafe_store(i * Int(n_cols) + c, SF64_ONE)
++            comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): the one-hot 1.0 one binary64 ulp up, the GPU bindings only
++                res.unsafe_store(i * Int(n_cols) + c, SF64_ONE + UInt64(1))
++            else:
++                res.unsafe_store(i * Int(n_cols) + c, SF64_ONE)
+         t += stride
+ 
+ 

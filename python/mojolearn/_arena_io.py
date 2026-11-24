@@ -43,7 +43,8 @@ Three pieces every arena family shares:
    float32 C-contiguous 2-D Array (the base and an int64 index Array),
    handed by model_selection to an estimator that opts in (class attribute
    `_mojolearn_device_rows = True`). The native runner puts the base ONCE
-   into its own binding's store (the active `resident()` scope's cache,
+   into the x_prep binding's store, the one store the x_metrics programs and
+   the metric kernel entries read too (the active `resident()` scope's cache,
    identity-keyed, so every fold and candidate shares the upload) and
    gathers the fold rows on the device (`<prefix>_dev_take_rows`); the rows
    never come to the host. A runner without a device store (the host

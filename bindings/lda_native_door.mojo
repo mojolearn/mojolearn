@@ -238,7 +238,7 @@ def _run(model: PythonObject, fields: PythonObject, op: Int, x: PythonObject, fr
         decomp_float(py_item(fields, nk[].k_learning_offset)),
         decomp_float(py_item(fields, nk[].k_learning_decay)),
         decomp_float(py_item(fields, nk[].k_mean_change_tol)), total,
-        decomp_float(py_item(fields, nk[].k_perp_tol)))
+        decomp_float(py_item(fields, nk[].k_perp_tol)), -1)
     var draw = 0
     var n_batch_iter = 0
     var iterations = 0

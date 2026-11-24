@@ -6,8 +6,9 @@ the GPU and on the CPU. A recipe goes one step further back: it says HOW the
 model is made (the estimator class or the layers of a `Sequential`, the
 hyperparameters, the seed, the fit arguments and the data) and what to hash
 (the fitted `digest_`, the predictions on stated rows, the score). Verify
-fits it from scratch in a fresh process per device of this installation (the
-CPU, and the GPU when there is one), compares every hash, prints IDENTICAL or
+fits it from scratch once per device of this installation (the CPU, and the
+GPU when there is one), in this process through the public `device=` of the
+estimator or the `Sequential`, compares every hash, prints IDENTICAL or
 DIVERGENT with the first differing value (NOT FINITE, exit 5, when the devices
 agree on answers that hold NaN or infinity), and writes a RECORD. A record made
 on another machine or vendor is compared with `--against`: that is the
@@ -51,7 +52,6 @@ import hashlib
 import json
 import os
 import platform
-import subprocess
 import sys
 import tempfile
 
@@ -59,7 +59,6 @@ from . import _check_both as cb
 
 FORMAT = "mojolearn.recipe.v1"
 RECORD_FORMAT = "mojolearn.recipe-record.v1"
-CHILD_FORMAT = "mojolearn.recipe-child.v1"
 
 EXIT_IDENTICAL = 0
 EXIT_DIVERGENT = 1
@@ -76,8 +75,9 @@ RECORD_VALUES_MAX = 1 << 20
 DATA_ARRAYS = ("X", "y", "X_test")
 #: which rows an output is computed on
 ROWS = ("train", "test")
-#: a model's constructor parameter that a recipe never carries: verify decides
-#: the device, and the seed is the recipe's own field
+#: a model's constructor parameter that a recipe never carries: verify sets
+#: the device (one fit per device of this installation, `device=` by keyword),
+#: and the seed is the recipe's own field
 NOT_PARAMS = ("device",)
 SEED_PARAM = "random_state"
 
@@ -377,7 +377,7 @@ def recipe(model, X=None, y=None, *, data=None, fit_params=None, X_test=None, me
     hyperparameters, or the layers of a `Sequential` and its compile options;
     the seed; the fit arguments; the data) and what to hash: the fitted
     `digest_`, the predictions on stated rows and the score.
-    `python -m mojolearn verify --recipe r.json` fits it in a fresh process on
+    `python -m mojolearn verify --recipe r.json` fits it from scratch on
     each device of this installation, says IDENTICAL or DIVERGENT with the
     first differing value, and writes a record that another machine compares
     with `--against`.
@@ -485,7 +485,7 @@ def recipe(model, X=None, y=None, *, data=None, fit_params=None, X_test=None, me
 
 
 # --------------------------------------------------------------------------
-# one device: build, fit, answer (in a fresh process)
+# one device: build, fit, answer (in this process, through device=)
 # --------------------------------------------------------------------------
 
 def _apply_calls(ml, model, calls):
@@ -509,8 +509,11 @@ def _apply_calls(ml, model, calls):
     return model
 
 
-def build_model(ml, recipe):
-    """The unfitted model the recipe describes, and the fit keyword arguments."""
+def build_model(ml, recipe, device=None):
+    """The unfitted model the recipe describes, and the fit keyword arguments.
+    With `device` ('cpu' or 'gpu'), the model is built on that device through
+    its public `device=` keyword; a class that refuses it raises CannotRun in
+    its own words (the side did not run, never a pass)."""
     spec = recipe["model"]
     fit = dict(recipe.get("fit") or {})
     seed = recipe.get("seed")
@@ -529,12 +532,24 @@ def build_model(ml, recipe):
                 raise Refused(f"{name} takes no {SEED_PARAM}, so the recipe's seed has nowhere to go; set seed null")
             params[SEED_PARAM] = seed
         try:
-            return cls(**params), fit
+            model = cls(**params)
         except Exception as exc:
             raise Refused(f"{name}(**params) refused: {type(exc).__name__}: {exc}"[:400]) from exc
+        if device is None:
+            return model, fit
+        try:
+            return cls(**params, device=device), fit
+        except Exception as exc:
+            raise CannotRun(f"{name}(device={device!r}) refused: {type(exc).__name__}: {exc}"[:400]) from exc
     seq = spec["sequential"]
     shape = seq.get("input_shape")
-    model = ml.Sequential(seq.get("numeric_mode"), input_shape=None if shape is None else tuple(shape))
+    where = {} if device is None else {"device": device}
+    try:
+        model = ml.Sequential(seq.get("numeric_mode"), input_shape=None if shape is None else tuple(shape), **where)
+    except Exception as exc:
+        if device is None:
+            raise
+        raise CannotRun(f"Sequential(device={device!r}) refused: {type(exc).__name__}: {exc}"[:400]) from exc
     if "layers" in seq:
         model = _apply_calls(ml, model, seq["layers"])
         model = model.compile(**dict(seq.get("compile") or {}))
@@ -557,13 +572,14 @@ def _rows(data, on):
     return data["X"]
 
 
-def run_recipe(ml, recipe, data):
-    """Fit the recipe on this process's device and answer its outputs.
-    Returns `[(name, value)]`: the digest string, the prediction array, the
-    score as a float64 array of one."""
+def run_recipe(ml, recipe, data, device=None):
+    """Fit the recipe from scratch on `device` (None: the model as the recipe
+    builds it, on this installation's device) and answer its outputs.
+    Returns `([(name, value)], fitted model)`: the digest string, the
+    prediction array, the score as a float64 array of one."""
     np = _np()
     cb.refuse_fast(ml)
-    model, fit = build_model(ml, recipe)
+    model, fit = build_model(ml, recipe, device)
     try:
         cb.refuse_fast(ml, model)
     except cb.NotChecked as exc:
@@ -603,76 +619,41 @@ def run_recipe(ml, recipe, data):
         except Exception as exc:
             raise CannotRun(f"score raised {type(exc).__name__}: {exc}"[:600]) from exc
         answers.append(("score", np.asarray([value], dtype=np.float64)))
-    return answers
+    return answers, model
 
 
-def child_main(directory, ml=None):
-    """One device of a recipe, in its own process: read request.json, fit,
-    answer, and write result.json and one .npy per array output."""
-    np = _np()
-    answer = dict(format=CHILD_FORMAT, ran=False)
+def run_device(ml, recipe, data, device):
+    """One device of a recipe, in this process: build the model on `device`
+    through its public `device=`, fit it from scratch, answer. Returns
+    `(result, arrays)`; a result has `ran` and either the outputs or the
+    reason (`refused` when the recipe itself is refused). The fitted model
+    must say it ran on that device (`vendor_used`: 'cpu' on the CPU side, the
+    GPU's vendor on the GPU side), else the side did not run: comparing it
+    would compare a thing to itself."""
     try:
-        with open(os.path.join(directory, "request.json"), encoding="utf-8") as stream:
-            request = json.load(stream)
-        if ml is None:
-            import mojolearn as ml
-        device = request["device"]
-        vendor = ml.vendor()
-        if (device == "cpu") != (vendor == "cpu"):
-            raise CannotRun(f"the {device} process loaded the {vendor!r} binaries")
-        data = load_data(request["recipe"]["data"], request.get("base"))
-        answers = run_recipe(ml, request["recipe"], data)
-        side = "cpu" if device == "cpu" else "gpu"
-        env = cb.side_environment(ml, side)
+        answers, model = run_recipe(ml, recipe, data, device)
+        used = cb._route_of(model)["vendor_used"]
+        if (used == "cpu") != (device == "cpu"):
+            raise CannotRun(f"the {device} side answered from the {used!r} binaries, so device={device!r} did not "
+                            "select it; this would compare a thing to itself")
+        env = cb.side_environment(ml, device)
         env.pop("side", None)
-        outputs = []
-        for k, (name, value) in enumerate(answers):
+        outputs, arrays = [], []
+        for name, value in answers:
             if isinstance(value, str):
                 outputs.append(dict(name=name, kind="digest", value=value))
+                arrays.append(None)
             else:
-                np.save(os.path.join(directory, f"out_{k}.npy"), value, allow_pickle=value.dtype == object)
-                outputs.append(dict(name=name, kind="array", file=f"out_{k}.npy", **cb.describe_output(value),
-                                    nonfinite=_nonfinite(value)))
-        answer.update(ran=True, device=device, data_sha256=data_sha256(data), env=env, outputs=outputs,
-                      version=getattr(ml, "__version__", None), vendor=vendor)
+                outputs.append(dict(name=name, kind="array", **cb.describe_output(value),
+                                    nonfinite=_nonfinite(value), values=_encode(value)))
+                arrays.append(value)
+        return dict(ran=True, device=device, data_sha256=data_sha256(data), env=env, outputs=outputs,
+                    version=getattr(ml, "__version__", None), vendor=used), arrays
     except Refused as exc:
-        answer.update(refused=True, reason=str(exc))
+        return dict(ran=False, refused=True, reason=str(exc)), None
     except Exception as exc:
-        answer["reason"] = str(exc) if isinstance(exc, (CannotRun, cb.NotChecked)) else \
-            f"{type(exc).__name__}: {exc}"[:600]
-    temporary = os.path.join(directory, "result.json.tmp")
-    with open(temporary, "w", encoding="utf-8") as stream:
-        json.dump(answer, stream)
-    os.replace(temporary, os.path.join(directory, "result.json"))
-    return 0
-
-
-def device_env(device):
-    """The environment of a fresh process on `device`: the CPU binaries are
-    selected with MOJOLEARN_VENDOR=cpu; the GPU process takes the
-    installation's own."""
-    env = dict(os.environ)
-    if device == "cpu":
-        env["MOJOLEARN_VENDOR"] = "cpu"
-    elif env.get("MOJOLEARN_VENDOR") == "cpu":
-        env.pop("MOJOLEARN_VENDOR")
-    return env
-
-
-def spawn_children(jobs):
-    """Run one fresh process per (device, directory), all at once (the
-    devices are independent), and return {device: (exit code, output tail)}."""
-    # an isolated parent (`python -I`) starts isolated children: the same package, never the working directory's
-    command = [sys.executable] + (["-I"] if sys.flags.isolated else []) + ["-m", "mojolearn._verify_recipe"]
-    procs = {device: subprocess.Popen(command + [directory],
-                                      env=device_env(device), stdout=subprocess.PIPE,
-                                      stderr=subprocess.STDOUT, text=True)
-             for device, directory in jobs}
-    out = {}
-    for device, proc in procs.items():
-        text, _ = proc.communicate()
-        out[device] = (proc.returncode, (text or "")[-600:])
-    return out
+        reason = str(exc) if isinstance(exc, (CannotRun, cb.NotChecked)) else f"{type(exc).__name__}: {exc}"[:600]
+        return dict(ran=False, reason=reason), None
 
 
 def devices_of(ml):
@@ -695,43 +676,29 @@ def _decode(output):
     return np.frombuffer(raw, dtype=np.dtype(output["dtype"])).reshape(output["shape"]).copy()
 
 
-def fit_on_devices(ml, recipe, base=None, devices=None, spawn=None):
-    """Fit the recipe from scratch in one fresh process per device. Returns
-    `({device: result}, {device: [arrays]})`; a result has `ran` and either
-    the outputs or the reason."""
-    np = _np()
+def fit_on_devices(ml, recipe, base=None, devices=None):
+    """Fit the recipe from scratch once per device, in this process, through
+    the public `device=` (`run_device`). Returns `({device: result},
+    {device: [arrays]})`.
+
+    The devices run one after the other, not at once: both sides are fits in
+    this one process and its runtime (the GPU side on the device, the CPU side
+    on the host's own thread split, which already takes every core), so a
+    second thread would only contend with that split. The data are loaded
+    once and read, never written, by both fits."""
     devices = devices or devices_of(ml)
     results, arrays = {}, {}
-    with tempfile.TemporaryDirectory(prefix="mojolearn_recipe_") as tmp:
-        jobs = []
-        for device in devices:  # verify tooling: one request per device
-            directory = os.path.join(tmp, device)
-            os.makedirs(directory)
-            with open(os.path.join(directory, "request.json"), "w", encoding="utf-8") as stream:
-                json.dump(dict(format=CHILD_FORMAT, device=device, recipe=recipe,
-                               base=os.path.abspath(base) if base else None), stream)
-            jobs.append((device, directory))
-        ended = (spawn or spawn_children)(jobs)
-        for device, directory in jobs:
-            path = os.path.join(directory, "result.json")
-            if not os.path.exists(path):
-                code, tail = ended.get(device, (None, ""))
-                results[device] = dict(ran=False, reason=f"the {device} process ended (exit {code}) without a "
-                                                         f"result: {tail.strip()[-300:]}")
-                continue
-            with open(path, encoding="utf-8") as stream:
-                answer = json.load(stream)
-            if answer.get("format") != CHILD_FORMAT:
-                answer = dict(ran=False, reason="the device process answered in another format")
-            mine = []
-            for output in answer.get("outputs", ()):
-                if output["kind"] == "array":
-                    a = np.load(os.path.join(directory, output.pop("file")), allow_pickle=output["dtype"] == "object")
-                    output["values"] = _encode(a)
-                    mine.append(a)
-                else:
-                    mine.append(None)
-            results[device] = answer
+    try:
+        data = load_data(recipe["data"], base)
+    except Refused as exc:
+        return {device: dict(ran=False, refused=True, reason=str(exc)) for device in devices}, {}
+    except Exception as exc:
+        reason = f"the data could not be loaded: {type(exc).__name__}: {exc}"[:600]
+        return {device: dict(ran=False, reason=reason) for device in devices}, {}
+    for device in devices:  # verify tooling: one fit per device of this installation
+        result, mine = run_device(ml, recipe, data, device)
+        results[device] = result
+        if mine is not None:
             arrays[device] = mine
     return results, arrays
 
@@ -887,14 +854,15 @@ def against_entries(mine, arrays, other, other_label="other"):
 # the self-test: the comparison must be able to fail
 # --------------------------------------------------------------------------
 
-def _nudged(results, arrays):
-    """A copy of the results with one value moved by one ulp on the last
-    device: the first float element of the first float array output, else one
-    hex digit of the digest. Returns (results, arrays, what was moved)."""
+def _nudged(results, arrays, device=None):
+    """A copy of the results with one value moved by one ulp on `device`
+    (default: the last device): the first float element of the first float
+    array output, else one hex digit of the digest. Returns (results, arrays,
+    what was moved)."""
     np = _np()
     results = copy.deepcopy(results)
     arrays = {d: list(a) for d, a in arrays.items()}
-    device = list(results)[-1]
+    device = device if device is not None else list(results)[-1]
     outputs = results[device]["outputs"]
     for k, output in enumerate(outputs):
         a = arrays[device][k]
@@ -920,18 +888,23 @@ def self_test(ml, recipe, base, results, arrays, version, vendor):
     """Four controls on a recipe that has run; each must come out as stated.
     Returns `[(control, passed, words)]`."""
     controls = []
-    nudged, nudged_arrays, what = _nudged(results, arrays)
-    if len(results) == 1:
-        # one device here: the moved copy stands for a second machine
-        nudged = {"cpu (moved copy)": nudged[list(nudged)[0]]}
-        nudged_arrays = {"cpu (moved copy)": nudged_arrays[list(nudged_arrays)[0]]}
-        entries = [(d, r, arrays.get(d)) for d, r in results.items()] + \
-                  [(d, r, nudged_arrays.get(d)) for d, r in nudged.items()]
-    else:
-        entries = [(d, r, nudged_arrays.get(d)) for d, r in nudged.items()]
-    verdict = compare_results(entries)
-    controls.append(("one-ulp change is DIVERGENT", what is not None and verdict["verdict"] == "DIVERGENT",
-                     f"{what}: {verdict_line(verdict)}"))
+    # The moved ulp on EACH side in turn: both sides run in this process, so
+    # each must show on its own that a one-ulp change on it is caught.
+    caught, words = [], []
+    for device in results:  # verify tooling: one moved copy per device
+        nudged, nudged_arrays, what = _nudged(results, arrays, device)
+        if len(results) == 1:
+            # one device here: the moved copy stands for a second machine
+            nudged = {f"{device} (moved copy)": nudged[device]}
+            nudged_arrays = {f"{device} (moved copy)": nudged_arrays[device]}
+            entries = [(d, r, arrays.get(d)) for d, r in results.items()] + \
+                      [(d, r, nudged_arrays.get(d)) for d, r in nudged.items()]
+        else:
+            entries = [(d, r, nudged_arrays.get(d)) for d, r in nudged.items()]
+        verdict = compare_results(entries)
+        caught.append(what is not None and verdict["verdict"] == "DIVERGENT")
+        words.append(f"{what}: {verdict_line(verdict)}")
+    controls.append(("one-ulp change is DIVERGENT", bool(caught) and all(caught), "; ".join(words)))
     fast = copy.deepcopy(recipe)
     if "estimator" in fast["model"]:
         fast["model"].setdefault("params", {})["numeric_mode"] = "fast"
@@ -1192,7 +1165,7 @@ def cmd_recipe(args):
     version, vendor = getattr(ml, "__version__", None), ml.vendor()
     devices = devices_of(ml)
     lines.append(f"recipe    sha256 {recipe_sha256(recipe)}")
-    lines.append(f"devices   {', '.join(devices)} (one fresh process each, fitted from scratch)")
+    lines.append(f"devices   {', '.join(devices)} (each fitted from scratch in this process, device= by keyword)")
     results, arrays = fit_on_devices(ml, recipe, base, devices)
     refused = [r for r in results.values() if r.get("refused")]
     lines += _result_lines(results)
@@ -1239,8 +1212,3 @@ def cmd_recipe(args):
         if not passed:
             code = EXIT_DIVERGENT
     return finish(code)
-
-
-if __name__ == "__main__":
-    # one device of a recipe: `python -m mojolearn._verify_recipe DIRECTORY`
-    sys.exit(child_main(sys.argv[1]))

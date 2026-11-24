@@ -8,7 +8,8 @@ from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_pandas_door import native_pandas_exact
 from bindings.native_torch_admission_door import native_torch_exact, native_torch_numpy
 from bindings.host_inference_scalars_door import host_inference_scalar
-from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
+from providers.python.estimator_binding_pyapi_door import estimator_binding_device
+from providers.python.resample_public_pyapi_pack import resample_device
 from providers.python.resample_rows_pyapi_door import ResampleRows, resample_rows_indices, resample_rows_gpu, resample_rows_narrow
 from providers.python.resample_pandas_pyapi_door import resample_pandas_array
 from bindings.resample_keys_unpack import resample_keys
@@ -20,7 +21,10 @@ def resample_rows_operation(args: PythonObject, context: PythonObject) raises ->
     classical_connect_numpy(context)
     # Public calls reserve slot zero; the shared import-connected provider
     # admits the requested mode and reads native compile-time mode once.
-    var binding = estimator_binding_mode(args[7], "_mojolearn_resample", context)
+    # args[8] is the call's `device` (lane vdf-misc), admitted first in the
+    # shared words; "cpu" beside a GPU set selects the CPU identical image.
+    var device = resample_device(args[8], "resample", context)
+    var binding = estimator_binding_device(device, args[7], "_mojolearn_resample", context)
     if args[5] is not None:
         raise Error("mojolearn resample: stratify= is refused by name (resample/NOT_IMPLEMENTED.tsv): "
                     + "scikit-learn's per-class allocation (_approximate_mode) breaks ties with its RNG stream")
