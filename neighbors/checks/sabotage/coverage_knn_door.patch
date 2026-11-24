@@ -1,20 +1,15 @@
---- a/bindings/neighbors_knn_native_door.mojo	2026-11-22 12:37:00
-+++ b/bindings/neighbors_knn_native_door.mojo	2026-11-22 12:37:00
-@@ -667,7 +667,7 @@
-         var held = py_get(holder, "dist_params")
-         if (held is not None and py_type(held) is b.tuple and len(held) == 7 and held[0] is cls
-                 and held[1] is metric and held[2] is p and held[3] is weights_value):
--            return _DistObjects(held[4], held[5], held[6])
-+            return _DistObjects(held[4], held[5], PythonObject(1 - Int(py=held[6])))  # SABOTAGE (coverage-neighbors-knn_door): uniform and distance weights swapped
-     var cls_name = _class_name(model)
-     var resolved = knn_resolve_metric(cls_name, metric, p)
-     var weights = 0
-@@ -676,7 +676,7 @@
-     if cacheable:
-         py_setitem(holder, "dist_params", Python.tuple(cls, metric, p, weights_value,
-                                                        resolved[0], resolved[1], PythonObject(weights)))
--    return _DistObjects(resolved[0], resolved[1], PythonObject(weights))
-+    return _DistObjects(resolved[0], resolved[1], PythonObject(1 - weights))  # SABOTAGE (coverage-neighbors-knn_door): uniform and distance weights swapped
+diff --git a/bindings/neighbors_knn_native_door.mojo b/bindings/neighbors_knn_native_door.mojo
+index 40c8965896..62a63d51cb 100644
+--- a/bindings/neighbors_knn_native_door.mojo
++++ b/bindings/neighbors_knn_native_door.mojo
+@@ -692,7 +692,9 @@ def knn_dist_words(model: PythonObject, context: PythonObject) raises -> KnnDist
+     (the metric's float is rounded to Float32 by the entry, as the exports
+     did). No Python list."""
+     var resolved = _dist_objects(model, context)
+-    return KnnDistWords(Int(py=resolved.metric), Float64(py=resolved.metric_arg), Int(py=resolved.weights))
++    var words = KnnDistWords(Int(py=resolved.metric), Float64(py=resolved.metric_arg), Int(py=resolved.weights))
++    words.weights = 1 - words.weights  # SABOTAGE (coverage-neighbors-knn_door): uniform and distance vote weights swapped for every query
++    return words^
  
  
- def _dist_params(model: PythonObject, context: PythonObject) raises -> PythonObject:
+ def _knn_immutable_word(b: PythonObject, value: PythonObject) raises -> Bool:

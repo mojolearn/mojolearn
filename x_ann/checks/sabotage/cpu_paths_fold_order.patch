@@ -1,3 +1,17 @@
+diff --git a/x_ann/cagra_core.mojo b/x_ann/cagra_core.mojo
+index 39ed939b55..c70635cd4f 100644
+--- a/x_ann/cagra_core.mojo
++++ b/x_ann/cagra_core.mojo
+@@ -89,7 +89,8 @@ def cg_seed_node(t: Int, n: Int, n_seeds: Int, rs: Int) -> Int:
+ @always_inline
+ def cg_dist(q: F32P, q_off: Int, x: F32P, v: Int, d: Int) -> Float32:
+     var acc = Float32(0.0)
+-    for c in range(d):
++    for cr in range(d):
++        var c = d - 1 - cr  # SABOTAGE (never shipped): the CAGRA search distance walks c descending (host column: only build_x_ann_host is rebuilt)
+         var diff = ftz(ftz(q.unsafe_load(q_off + c)) - ftz(x.unsafe_load(v * d + c)))
+         acc = ftz(identical_mul_add(diff, diff, acc))
+     return acc
 diff --git a/x_ann/host/cagra_host.mojo b/x_ann/host/cagra_host.mojo
 index c7cf98ff05..24a58f41e1 100644
 --- a/x_ann/host/cagra_host.mojo
