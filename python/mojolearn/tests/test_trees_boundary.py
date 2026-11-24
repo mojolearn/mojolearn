@@ -40,3 +40,71 @@ def test_cv_splitter_objects():
     d = ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(max_depth=4), cv=KFold(3, shuffle=True, random_state=1),
                                   method="isotonic", ensemble=False).fit(Xa, ya)
     assert accuracy_score(yb, np.asarray(d.predict(Xb))) > 0.5
+
+
+# moved from python/mojolearn/tests/test_native_scalar_decode_public.py
+# Native buffer scalar conversion of IsolationForest fit options at the public boundary.
+import numpy as np
+import pytest
+
+from mojolearn._verify_native_runtime import audit_native_call
+from mojolearn.tests import _legacy_host_iforest_fit as sdp_legacy
+from mojolearn.tests.test_host_archive_native import _state as sdp_state
+from mojolearn.tests.test_host_iforest_fit_native import _model as sdp_model, _pair as sdp_pair
+from mojolearn.tests.test_host_kde_fit_native import _x as sdp_x
+
+
+@pytest.mark.parametrize('dtype', ['i1', 'u1', 'i2', 'u2', 'i4', 'u4', 'i8', 'u8', 'q', 'Q', 'f2', 'f4', 'f8', 'g'])
+@pytest.mark.parametrize('array', [False, True])
+def test_fit_integer_options_decode_native_storage(dtype, array):
+    value = np.dtype(dtype).type(2.75)
+    if array:
+        value = np.asarray(value)
+    sdp_pair(sdp_x(), max_depth=value)
+
+
+@pytest.mark.parametrize('dtype', ['f2', 'f4', 'f8', 'g'])
+@pytest.mark.parametrize('big_endian', [False, True])
+def test_fit_float_options_preserve_native_rounding_and_endianness(dtype, big_endian):
+    # The adjacent representable value exercises a consumed saved float,
+    # including longdouble->double rounding on Linux extended formats.
+    value = np.nextafter(np.dtype(dtype).type(.5), np.dtype(dtype).type(1.))
+    value = np.asarray(value, dtype=np.dtype(dtype).newbyteorder('>' if big_endian else '='))
+    sdp_pair(sdp_x(), max_features=value)
+
+
+@pytest.mark.parametrize('dtype', ['f2', 'f4', 'f8', 'g'])
+def test_fit_integer_conversion_does_not_round_before_truncation(dtype):
+    value = np.nextafter(np.dtype(dtype).type(2), np.dtype(dtype).type(0))
+    assert int(value) == 1
+    _, model = sdp_pair(sdp_x(), max_depth=np.asarray(value))
+    assert model._max_depth == 1
+
+
+@pytest.mark.parametrize('dtype,value', [('f2', -0.), ('f4', 1e-30), ('f8', -0.),
+                                       ('g', '1e-300'), ('F', 1j), ('D', -0j), ('G', 1j)])
+def test_fit_truth_reads_native_scalar_components(dtype, value):
+    # Complex truth examines both components without calling NumPy bool.
+    sdp_pair(sdp_x(), bootstrap=np.asarray(value, dtype=dtype))
+
+
+@pytest.mark.parametrize('dtype', ['f2', 'f4', 'f8', 'g'])
+@pytest.mark.parametrize('value', ['nan', 'inf', '-inf'])
+def test_fit_nonfinite_integer_conversion_keeps_error_class_and_text(dtype, value):
+    supplied = np.asarray(value, dtype=dtype)
+    old, model = sdp_model(max_depth=supplied), sdp_model(max_depth=supplied)
+    with pytest.raises((ValueError, OverflowError)) as expected:
+        sdp_legacy.fit(old, sdp_x())
+    audit = audit_native_call(model.fit, sdp_x())
+    assert type(audit.exception) is type(expected.value), audit.report()
+    assert str(audit.exception) == str(expected.value)
+    assert not audit.report()['python_frames'] and not audit.report()['forbidden_native_calls']
+    assert sdp_state(vars(model)) == sdp_state(vars(old))
+
+
+@pytest.mark.parametrize('dtype,value', [('g', '-0'), ('g', '.5'), ('G', 1j), ('G', 0j)])
+def test_fit_truth_decodes_non_native_extended_components(dtype, value):
+    supplied = np.asarray(value, dtype=np.dtype(dtype).newbyteorder('>'))
+    before = supplied.tobytes()
+    sdp_pair(sdp_x(), bootstrap=supplied)
+    assert supplied.tobytes() == before

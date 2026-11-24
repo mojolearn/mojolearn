@@ -210,3 +210,102 @@ def test_check_runs_the_block_on_both_devices_in_this_process(tmp_path, family, 
     sides = result["sides"]
     assert sides["gpu"]["route"]["vendor_used"] == mojolearn.vendor()
     assert sides["cpu"]["route"]["vendor_used"] == "cpu"
+
+
+# moved from python/mojolearn/tests/test_neural_inference.py
+# TransformerBlock and Mamba blocks with device="cpu": rows alone, the causal
+# prefix, ragged lengths, returned shape/dtype and the refusals in words.
+import numpy as np
+import pytest
+
+import mojolearn as ml
+from mojolearn import _backend
+
+_NINFB_T_NAMES = ("input_layernorm.weight", "post_attention_layernorm.weight", "q_proj.weight",
+                  "k_proj.weight", "v_proj.weight", "o_proj.weight", "gate_proj.weight",
+                  "up_proj.weight", "down_proj.weight")
+
+
+@pytest.fixture(scope="module")
+def ninfb_binding():
+    try:
+        return _backend.load_host_module("_mojolearn_neural_host")
+    except ImportError as exc:
+        pytest.skip(f"neural host binding not built: {exc}")
+
+
+def _ninfb_block_weights(dm=32, nh=2, nkv=1, it=64, seed=1):
+    hd = dm // nh
+    shapes = ((dm,), (dm,), (nh * hd, dm), (nkv * hd, dm), (nkv * hd, dm), (dm, nh * hd), (it, dm), (it, dm), (dm, it))
+    rng = np.random.default_rng(seed)
+    return {n: (rng.standard_normal(s) * 0.1).astype(np.float32) for n, s in zip(_NINFB_T_NAMES, shapes)}
+
+
+def test_transformer_forward_rows_ragged_and_refusals(ninfb_binding):
+    tw = _ninfb_block_weights()
+    for window in (0, 8):
+        blk = ml.TransformerBlock(tw, n_heads=2, n_kv_heads=1, window=window, device="cpu")
+        x = np.random.default_rng(5).standard_normal((4, 16, 32)).astype(np.float32)
+        y = np.asarray(blk.forward(x))
+        assert y.shape == (4, 16, 32)
+        # rows alone and the causal prefix: the native check training_neural_inference
+        lengths = [16, 7, 1, 12]
+        yr = np.asarray(blk.forward(x, lengths=lengths))
+        for i, n in enumerate(lengths):
+            alone = np.asarray(blk.forward(np.ascontiguousarray(x[i:i + 1, :n])))
+            assert yr[i:i + 1, :n].tobytes() == alone.tobytes(), (window, i)
+            assert not yr[i, n:].any()
+    blk = ml.TransformerBlock(tw, n_heads=2, n_kv_heads=1, device="cpu")
+    with pytest.raises(ValueError, match="state is required"):
+        blk.step(np.zeros((1, 1, 32), np.float32), None)
+    with pytest.raises(ValueError, match="d_model must equal n_heads"):
+        ml.TransformerBlock(tw, n_heads=3, device="cpu")
+
+
+def _ninfb_mamba_weights(kind, dm=32, seed=21):
+    di = 2 * dm
+    rng = np.random.default_rng(seed)
+    if kind == "mamba1":
+        r = -(-dm // 16)
+        shapes = {"norm.weight": (dm,), "in_proj.weight": (2 * di, dm), "conv1d.weight": (di, 1, 4),
+                  "conv1d.bias": (di,), "x_proj.weight": (r + 32, di), "dt_proj.weight": (di, r),
+                  "dt_proj.bias": (di,), "A_log": (di, 16), "D": (di,), "out_proj.weight": (dm, di)}
+        ones = ("norm.weight",)
+    elif kind == "mamba2":
+        nh = di // 64
+        cd, dip = di + 256, 2 * di + 256 + nh
+        shapes = {"block_norm.weight": (dm,), "in_proj.weight": (dip, dm), "conv1d.weight": (cd, 1, 4),
+                  "conv1d.bias": (cd,), "dt_bias": (nh,), "A_log": (nh,), "D": (nh,), "norm.weight": (di,),
+                  "out_proj.weight": (dm, di)}
+        ones = ("block_norm.weight", "norm.weight")
+    else:
+        nh = di // 64
+        shapes = {"block_norm.weight": (dm,), "in_proj.weight": (2 * di + 256 + 3 * nh + 32, dm),
+                  "dt_bias": (nh,), "B_norm.weight": (128,), "C_norm.weight": (128,), "B_bias": (nh, 128),
+                  "C_bias": (nh, 128), "D": (nh,), "out_proj.weight": (dm, di)}
+        ones = ("block_norm.weight", "B_norm.weight", "C_norm.weight")
+    return {n: (np.ones(s, np.float32) if n in ones else (rng.standard_normal(s) * 0.1).astype(np.float32))
+            for n, s in shapes.items()}
+
+
+_NINFB_MAMBA = (("mamba1", "Mamba1Block", {"device": "cpu"}), ("mamba2", "Mamba2Block", {"device": "cpu"}),
+                ("mamba2", "Mamba2Block", {"dt_limit": (0.01, 0.1), "device": "cpu"}),
+                ("mamba3", "Mamba3Block", {"device": "cpu"}))
+
+
+@pytest.mark.parametrize("kind,cls,kw", _NINFB_MAMBA)
+def test_mamba_forward_rows_prefix_ragged_and_refusals(ninfb_binding, kind, cls, kw):
+    blk = getattr(ml, cls)(_ninfb_mamba_weights(kind), **kw)
+    x = np.random.default_rng(3).standard_normal((4, 16, 32)).astype(np.float32)
+    y = np.asarray(blk.forward(x))
+    assert y.shape == (4, 16, 32) and y.dtype == np.float32
+    for i in range(4):
+        assert np.asarray(blk.forward(x[i:i + 1])).tobytes() == y[i:i + 1].tobytes(), i
+    assert np.asarray(blk(np.ascontiguousarray(x[:, :7]))).tobytes() == np.ascontiguousarray(y[:, :7]).tobytes()
+    lengths = [16, 7, 1, 12]
+    yr = np.asarray(blk.forward(x, lengths=lengths))
+    for i, n in enumerate(lengths):
+        assert yr[i:i + 1, :n].tobytes() == np.asarray(blk.forward(np.ascontiguousarray(x[i:i + 1, :n]))).tobytes()
+        assert not yr[i, n:].any()
+    with pytest.raises(ValueError, match="state is required"):
+        blk.step(np.ascontiguousarray(x[:, :1]), None)
