@@ -144,8 +144,9 @@
   },
   "tsqr-tree-par-off": {
    "define": "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF",
-   "status": "define in code (x_decomp/tsqr_core.mojo TS_TREE_PAR): B = the serial tree-combine norm and untiled Q C apply (before 3c5c5592a0); A = the lane-parallel tree fold and tiled apply (default since 2026-10-08, never A/B'd)",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-decomp): old path no faster (L40S 10 cells, median 1.00, 0.89..1.08); A (the lane-parallel tree fold and tiled apply, the IDENTICAL default) is unchanged; removed: the switch term (TS_TREE_PAR = IDENTICAL; the serial forms stay for FAST builds); grid control tsqr_tree_par moved to removed (gap-tsqr.json); the define is refused (core/experiment_guards_decomposition.mojo); code recoverable at a58cf59d32, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.ab-outcome-3.patch. Was: define in code (x_decomp/tsqr_core.mojo TS_TREE_PAR): B = the serial tree-combine norm and untiled Q C apply (before 3c5c5592a0); A = the lane-parallel tree fold and tiled apply (default since 2026-10-08, never A/B'd)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "tsqr-wy-pair-tree-par-off": {
    "define": "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF,MOJOLEARN_IDN_TSQR_TREE_PAR_OFF",

@@ -89,8 +89,8 @@ comptime TS_MAX_N = 512
 # instead of two 16-wide ones); the panel columns themselves and R's first
 # TS_NB columns keep their words.
 #
-# TS_TREE_PAR (`-D MOJOLEARN_IDN_TSQR_TREE_PAR_OFF` restores the serial
-# forms): the tree combine's reflector norm is a lane-parallel fixed fold
+# TS_TREE_PAR (IDENTICAL; the serial forms stay for FAST builds; its `_OFF`
+# switch was deleted 2026-11-24, see below): the tree combine's reflector norm is a lane-parallel fixed fold
 # (lane t of TS_TPB holds alpha^2 (t == 0) then rows i == t (mod TS_TPB)
 # ascending, a halving tree over the TS_TPB partials, `ts_tree_fold`) in
 # place of one serial chain recomputed by every thread; the reflector
@@ -118,7 +118,13 @@ comptime TS_WY_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_define
 # TOMBSTONE: MOJOLEARN_IDN_TSQR_TREE_PAR_OFF (old path, EXP:479 run owed, no A/B recorded) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at bc3f9433a3.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime TS_TREE_PAR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_TSQR_TREE_PAR_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_TSQR_TREE_PAR_OFF (old path no faster: NV L40S 10 cells, median 1.00, 0.89..1.08) deleted 2026-11-24 by lane/o3-decomp (ab-outcome-3); code recoverable at a58cf59d32.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.ab-outcome-3.patch
+# Measured (A/B nvc-ab-20261124T115722Z-d8f8b2, NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): the serial
+# tree forms were no faster on ols / qr / svd / lstsq taxi + istella full (10 cells, old / default median
+# 1.00, 0.89..1.08), so the switch went; the serial forms stay for FAST builds. AMD not measured
+# (NVIDIA-only campaign).
+comptime TS_TREE_PAR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_IDN_TSQR_RSTACK_TREE (loser) deleted 2026-10-11 by 7d76f567e; code recoverable at 7d76f567e^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_RSTACK_TREE.patch
 #: reflectors of a panel pair (the pair's T2 is TS_W2 x TS_W2)
