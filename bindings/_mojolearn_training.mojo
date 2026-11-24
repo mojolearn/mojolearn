@@ -111,6 +111,7 @@ from training.dev_tensors import (
 # lane vdf-linalg2 (2026-11-24): the RMS-normalization and embedding layers on device arrays
 from training.dev_tensors_layers import (
     train_rms_norm_forward_dev, train_rms_norm_backward_dev, train_embedding_forward_dev, train_embedding_backward_dev,
+    train_chunked_lm_head_dev, train_clip_dev, train_accumulate_dev, train_mlp_sessions_dev,
 )
 # lane fam2-neural (2026-10-04): parameters and gradients resident across steps
 from training.estimator import (
@@ -475,6 +476,90 @@ def _ce_row_ptr(row_addr: PythonObject, reduction: Int) raises -> Optional[MutPo
     if address == 0 and reduction != 0:
         return None
     return _f32_ptr(address)
+
+
+def chunked_lm_head_dev_binding(handles: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`chunked_lm_head_loss` on device arrays (lane vdf-linalg3, 2026-11-24). handles = [d_hidden (written), d_weight
+    (written), hidden, weight] (the two gradient handles are not read without the gradient); params = [loss address
+    (one float32, host), targets address (rows int32, host), rows, vocab, width, with_grad]. Returns rows."""
+    var hs = _handles(handles, 4, "chunked_lm_head_dev")
+    _params(params, 6, "chunked_lm_head_dev")
+    var lp = _f32_ptr(Int(py=params[0]))
+    var tp = _i32_ptr(Int(py=params[1]))
+    var rows = Int(py=params[2])
+    var vocab = Int(py=params[3])
+    var width = Int(py=params[4])
+    var with_grad = Int(py=params[5]) != 0
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        count = train_chunked_lm_head_dev(ctx, lp, hs[0], hs[1], hs[2], hs[3], tp, rows, vocab, width, with_grad)
+    return PythonObject(count)
+
+
+def _int_words(values: PythonObject, name: String) raises -> List[Int]:
+    """A Python list of integer words (handles or sizes) as native words."""
+    var n = len(values)
+    var out = List[Int](capacity=n)
+    for i in range(n):  # driver-loop: over argument words (handles or sizes of one call, not data)
+        out.append(Int(py=values[i]))
+    if n < 1:
+        raise Error(name + ": no device arrays")
+    return out^
+
+
+def clip_dev_binding(handles: PythonObject, sizes: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`clip_grad_norm_` on device arrays (lane vdf-linalg3, 2026-11-24): the J gradient handles (scaled in place) and
+    their float counts; params = [info address (two float32, host), max_norm (float)]. Returns the element total."""
+    var hs = _int_words(handles, "clip_dev")
+    var ns = _int_words(sizes, "clip_dev")
+    _params(params, 2, "clip_dev")
+    var ip = _f32_ptr(Int(py=params[0]))
+    var max_norm = Float32(Float64(py=params[1]))
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        count = train_clip_dev(ctx, hs, ns, ip, max_norm)
+    return PythonObject(count)
+
+
+def accumulate_dev_binding(out_handles: PythonObject, in_handles: PythonObject, sizes: PythonObject,
+                           params: PythonObject) raises -> PythonObject:
+    """`accumulate_grads` on device arrays (lane vdf-linalg3, 2026-11-24): J result handles (written), A x J input
+    handles microbatch-major, the J float counts; params = [A, tokens (-1: no alignment claim)]. Returns N."""
+    var outs = _int_words(out_handles, "accumulate_dev")
+    var ins = _int_words(in_handles, "accumulate_dev")
+    var ns = _int_words(sizes, "accumulate_dev")
+    _params(params, 2, "accumulate_dev")
+    var a = Int(py=params[0])
+    var tokens = Int(py=params[1])
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        count = train_accumulate_dev(ctx, outs, ins, ns, a, tokens)
+    return PythonObject(count)
+
+
+def mlp_sessions_dev_binding(handles: PythonObject, rows: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`mlp_inference_sessions` on device arrays (lane vdf-linalg3, 2026-11-24). handles = [logits (written), weight1,
+    bias1, weight2, bias2, one per session...]; rows = one row count per session; params = [width, hidden, out
+    width]. Returns the logits' element count."""
+    var hs = _int_words(handles, "mlp_sessions_dev")
+    var rs = _int_words(rows, "mlp_sessions_dev")
+    _params(params, 3, "mlp_sessions_dev")
+    if len(hs) != 5 + len(rs):
+        raise Error("neural MLP sessions: metadata length mismatch")
+    var inputs = List[Int](capacity=len(rs))
+    for i in range(len(rs)):  # driver-loop: over the caller's sessions (handles, not data)
+        inputs.append(hs[5 + i])
+    var width = Int(py=params[0])
+    var hidden = Int(py=params[1])
+    var out_width = Int(py=params[2])
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        count = train_mlp_sessions_dev(ctx, hs[0], inputs, rs, hs[1], hs[2], hs[3], hs[4], width, hidden, out_width)
+    return PythonObject(count)
 
 
 def ce_loss_dev_binding(
@@ -1088,6 +1173,10 @@ def build__mojolearn_training() -> PythonObject:
             m.def_function[rms_norm_backward_dev_binding]("rms_norm_backward_dev")
             m.def_function[embedding_forward_dev_binding]("embedding_forward_dev")
             m.def_function[embedding_backward_dev_binding]("embedding_backward_dev")
+            m.def_function[chunked_lm_head_dev_binding]("chunked_lm_head_dev")
+            m.def_function[clip_dev_binding]("clip_dev")
+            m.def_function[accumulate_dev_binding]("accumulate_dev")
+            m.def_function[mlp_sessions_dev_binding]("mlp_sessions_dev")
             # lane ne3-c-blocks-embedding (row N117): residual dropout on device arrays
             # TOMBSTONE: residual_dropout_dev, residual_dropout_backward_dev exports (dead native entries: the door calls OPT_NATIVE_RESIDUAL_DROPOUT_DEV / _BACKWARD_DEV of optimizer_native_api_v1, training/optimizer_native_extra_gpu.mojo) deleted 2026-11-21 by lane/dw-autograd-seq; code recoverable at 6184091ce8.
             # Restore: git show 6184091ce8:bindings/residual_dropout_boundary_pack.mojo (the two `_dev_binding` functions) and bindings/residual_dropout_boundary_unpack.mojo.

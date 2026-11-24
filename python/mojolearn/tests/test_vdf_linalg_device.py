@@ -105,3 +105,33 @@ def test_matmul_fused_cpu_beside_gpu_is_refused():
         pytest.skip("GPU fast-mode installation check")
     with pytest.raises(ValueError, match="device='cpu' is not available for mojolearn.linalg_fast.matmul_fused"):
         linalg_fast.matmul_fused(_a(), _a(), device="cpu")
+
+
+def _device_array_or_skip(a):
+    # TrainDeviceArray exists on an identical GPU installation only.
+    if mojolearn.vendor() == "cpu":
+        pytest.skip("TrainDeviceArray needs a GPU installation")
+    return training.train_to_device(a)
+
+
+# lane vdf-linalg3: TrainDeviceArray inputs (also inside list arguments) with
+# device='cpu' are refused in the router's words before any work.
+DEVICE_ARRAY_CPU_CALLS = [
+    ("clip_grad_norm_", lambda g: training.clip_grad_norm_([g], 1.0, device="cpu")),
+    ("accumulate_grads", lambda g: training.accumulate_grads([[g], [g]], None, device="cpu")),
+    ("chunked_lm_head_loss", lambda g: training.chunked_lm_head_loss(g, g, np.zeros(2, np.int32), device="cpu")),
+    ("mlp_inference_sessions", lambda g: training.mlp_inference_sessions([g], g, g, g, g, device="cpu")),
+]
+
+
+@pytest.mark.parametrize("name,call", DEVICE_ARRAY_CPU_CALLS, ids=[n for n, _ in DEVICE_ARRAY_CPU_CALLS])
+def test_device_array_with_device_cpu_is_refused(name, call):
+    g = _device_array_or_skip(_a())
+    with pytest.raises(ValueError, match="is a TrainDeviceArray, which lives on the GPU"):
+        call(g)
+
+
+def test_device_array_mixed_with_host_is_refused():
+    g = _device_array_or_skip(_a())
+    with pytest.raises(TypeError, match="device and host arrays are mixed"):
+        training.clip_grad_norm_([g, _a()], 1.0)

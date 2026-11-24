@@ -1082,6 +1082,29 @@ comptime _NONFINITE_REFUSAL = (
 )
 
 
+def door_clip_options(norm_type: PythonObject, error_if_nonfinite: PythonObject, kwargs: PythonObject) raises:
+    """`clip_grad_norm_`'s keyword, norm_type and error_if_nonfinite refusals (shared with the device-array door,
+    bindings/training_grads_device_unpack.mojo)."""
+    refuse_kwargs(kwargs, "clip_grad_norm_")
+    if as_float(norm_type) != 2.0:
+        raise Error("NotImplementedError: mojolearn.clip_grad_norm_: norm_type=" + py_repr(norm_type)
+                    + _NORM_TYPE_REFUSAL)
+    if not truth(error_if_nonfinite):
+        raise Error("NotImplementedError: " + _NONFINITE_REFUSAL)
+
+
+def door_clip_max_norm(max_norm: PythonObject) raises -> Float64:
+    """`clip_grad_norm_`'s max_norm, refused unless > 0."""
+    var mn = as_float(max_norm)
+    if not (mn > 0.0):
+        raise Error(
+            "ValueError: mojolearn.clip_grad_norm_: max_norm must be > 0, got " + py_repr(max_norm)
+            + "; reaching this function IS the clip running, and 'no clipping' is spelled by not calling "
+            + "it (training/estimator.mojo)"
+        )
+    return mn
+
+
 def door_clip(
     provider: PythonObject, grads: PythonObject, max_norm: PythonObject, norm_type: PythonObject, error_if_nonfinite: PythonObject,
     kwargs: PythonObject,
@@ -1090,22 +1113,11 @@ def door_clip(
     Returns the pre-clip total norm."""
     door_ready()
     var buffer_pins = OptimizerInputOwners()
-    refuse_kwargs(kwargs, "clip_grad_norm_")
-    if as_float(norm_type) != 2.0:
-        raise Error("NotImplementedError: mojolearn.clip_grad_norm_: norm_type=" + py_repr(norm_type)
-                    + _NORM_TYPE_REFUSAL)
-    if not truth(error_if_nonfinite):
-        raise Error("NotImplementedError: " + _NONFINITE_REFUSAL)
+    door_clip_options(norm_type, error_if_nonfinite, kwargs)
     var views = List[TensorView]()
     _ = as_seq_views(grads, "grads", "clip_grad_norm_", views, buffer_pins)
     check_views(views, "grads", "clip_grad_norm_", True)
-    var mn = as_float(max_norm)
-    if not (mn > 0.0):
-        raise Error(
-            "ValueError: mojolearn.clip_grad_norm_: max_norm must be > 0, got " + py_repr(max_norm)
-            + "; reaching this function IS the clip running, and 'no clipping' is spelled by not calling "
-            + "it (training/estimator.mojo)"
-        )
+    var mn = door_clip_max_norm(max_norm)
     var addrs = List[Int]()
     var nbytes = List[Int]()
     _addrs_of(views, addrs, nbytes)
@@ -1119,16 +1131,32 @@ def door_clip(
     return PythonObject(Float64(r[0]))
 
 
-def door_accumulate(provider: PythonObject, microbatch_grads: PythonObject, tokens: PythonObject) raises -> PythonObject:
-    """`accumulate_grads`: the microbatches checked, made contiguous where
-    strided, combined by the clause 9.2 tree into new arrays."""
-    door_ready()
-    var buffer_pins = OptimizerInputOwners()
+def door_accumulate_parts(microbatch_grads: PythonObject, tokens: PythonObject) raises -> List[PythonObject]:
+    """`accumulate_grads`' argument admission: the microbatch entries (refused when there are none)."""
     opt_value(microbatch_grads, OPT_DOOR.get_or_create_ptr()[].context)
     opt_scalar(tokens, OPT_DOOR.get_or_create_ptr()[].context)
     var parts = optimizer_sequence_items(microbatch_grads, OPT_DOOR.get_or_create_ptr()[].context)
     if len(parts) == 0:
         raise Error("ValueError: mojolearn.accumulate_grads: no microbatches")
+    return parts^
+
+
+def door_accumulate_tokens(tokens: PythonObject) raises -> Int:
+    """`accumulate_grads`' token count: -1 for None (no alignment claim), else refused unless >= 1."""
+    var t_tokens = -1
+    if not (tokens is None):
+        t_tokens = optimizer_integer(tokens, OPT_DOOR.get_or_create_ptr()[].context)
+        if t_tokens < 1:
+            raise Error("ValueError: mojolearn.accumulate_grads: tokens must be >= 1")
+    return t_tokens
+
+
+def door_accumulate(provider: PythonObject, microbatch_grads: PythonObject, tokens: PythonObject) raises -> PythonObject:
+    """`accumulate_grads`: the microbatches checked, made contiguous where
+    strided, combined by the clause 9.2 tree into new arrays."""
+    door_ready()
+    var buffer_pins = OptimizerInputOwners()
+    var parts = door_accumulate_parts(microbatch_grads, tokens)
     var first = TensorView()
     var single = tensor_view(parts[0], first, buffer_pins)
     var probes = List[List[TensorView]]()
@@ -1139,11 +1167,7 @@ def door_accumulate(provider: PythonObject, microbatch_grads: PythonObject, toke
     for i in range(len(parts)):  # driver-loop: over microbatch arguments
         check_views(probes[i], "microbatch_grads[" + String(i) + "]", "accumulate_grads", False)
     var j0 = optimizer_accumulation_shapes(probes)
-    var t_tokens = -1
-    if not (tokens is None):
-        t_tokens = optimizer_integer(tokens, OPT_DOOR.get_or_create_ptr()[].context)
-        if t_tokens < 1:
-            raise Error("ValueError: mojolearn.accumulate_grads: tokens must be >= 1")
+    var t_tokens = door_accumulate_tokens(tokens)
     var keep = List[List[Float32]]()
     var in_addrs = List[Int]()
     with GILReleased(Python()):

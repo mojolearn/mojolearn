@@ -1307,6 +1307,72 @@ def identical_clip_grad_norm_addrs_host(
     return n_total
 
 
+def identical_clip_grad_norm_device(
+    ctx: DeviceContext,
+    mut tensors: List[DeviceBuffer[DType.float32]],
+    offsets_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    info_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_tensors: Int,
+    max_norm: Float32,
+) raises -> Int:
+    """`identical_clip_grad_norm_addrs_host` on J tensors that already live on
+    the device (lane vdf-linalg3, 2026-11-24: `clip_grad_norm_` given
+    TrainDeviceArrays; training/dev_tensors_layers.mojo `train_clip_dev`):
+    each tensor copied device-to-device into its slice of the one buffer, the
+    SAME batched clip over the same buffer and offsets, each slice copied
+    back device-to-device. Only the two info words come down. The same bits
+    as the host-address entry."""
+    if max_norm <= Float32(0.0):
+        raise Error(
+            String("mojolearn training: max_norm must be > 0, got ")
+            + String(max_norm)
+            + String("; this entry point IS the clip, and 'no clipping' is")
+            + String(" spelled by not calling it (the optimizer step takes")
+            + String(" max_norm <= 0 as OFF because it has another job)")
+        )
+    refuse_nonfinite_scalar(String("max_norm"), max_norm)
+    var offsets = _offsets_from_ptr(offsets_ptr, n_tensors)
+    if len(tensors) != n_tensors:
+        raise Error(
+            String("mojolearn training: clip_grad_norm_multi needs one address per tensor, got ")
+            + String(len(tensors)) + String(" for ") + String(n_tensors)
+        )
+    var n_total = offsets[n_tensors]
+    var grad = ctx.enqueue_create_buffer[DType.float32](n_total)
+    for j in range(n_tensors):  # driver-loop: over gradient tensors (device-to-device copies)
+        var n_j = offsets[j + 1] - offsets[j]
+        ctx.enqueue_copy(dst_buf=grad.create_sub_buffer[DType.float32](offsets[j], n_j),
+                         src_buf=tensors[j].create_sub_buffer[DType.float32](0, n_j))
+    var sumsq = _scratch(ctx, AFN_SF_SUMSQ, n_tensors)
+    var norms = _scratch(ctx, AFN_SF_NORMS, n_tensors)
+    var total_cell = _scratch(ctx, AFN_SF_TOTAL, 1)
+    var out2 = _scratch(ctx, AFN_SF_OUT2, 2)
+    var ws = _scratch(ctx, AFN_SF_WS, identical_optimizer_workspace_floats(offsets))
+    var sab_partials = _scratch(ctx, AFN_SF_SAB, SAB_CHUNKS)
+    # THE ONE CALL THAT COMPUTES ANYTHING (the host-address entry's batched form).
+    _ = identical_clip_grad_norm_batched(
+        ctx, grad, sumsq, norms, total_cell, out2, ws, sab_partials, offsets, max_norm,
+    )
+    for j in range(n_tensors):  # driver-loop: over gradient tensors (device-to-device copies)
+        var n_j = offsets[j + 1] - offsets[j]
+        ctx.enqueue_copy(dst_buf=tensors[j].create_sub_buffer[DType.float32](0, n_j),
+                         src_buf=grad.create_sub_buffer[DType.float32](offsets[j], n_j))
+    var h = ctx.enqueue_create_host_buffer[DType.float32](2)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=out2)
+    ctx.synchronize()
+    info_ptr.unsafe_store(0, h.unsafe_ptr().unsafe_load(0))
+    info_ptr.unsafe_store(1, h.unsafe_ptr().unsafe_load(1))
+    _ = h^
+    _ = grad
+    _ = sumsq
+    _ = norms
+    _ = total_cell
+    _ = out2
+    _ = ws
+    _ = sab_partials
+    return n_total
+
+
 # ===========================================================================
 # THE CROSS-ENTROPY LOSS
 # ===========================================================================
