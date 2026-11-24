@@ -562,7 +562,8 @@ def _coverage_decode_session(ml, blk, X, dm, session_type):
     with blk.decode_session(st) as sess:
         # Each lane names its public session type explicitly so the source
         # coverage scanner can attribute the exercised factory result.
-        assert type(sess) is session_type, type(sess)
+        # (the device view hands the lane a BoundClass: its real class is `_cls`)
+        assert type(sess) is getattr(session_type, "_cls", session_type), type(sess)
         first = np.concatenate([np.asarray(sess.step(tok(t))) for t in range(4)], axis=1)  # glue: four steps
         sess.sync_state()
         synced = _coverage_state_pieces(st)

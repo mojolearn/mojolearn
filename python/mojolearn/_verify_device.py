@@ -54,6 +54,13 @@ NON_COMPUTING = frozenset((
     # the block or stack that reads them carries the side
     "SambaConfig", "Mamba1State", "Mamba2State", "Mamba3State", "TransformerState", "SambaState",
     "CausalLMState",
+    # specification and container objects (w3-integrate-8, 2026-11-24): the
+    # Gaussian-process kernel specs (hyperparameters and their tree; the
+    # GaussianProcess* estimator that reads them carries the side), a trained
+    # vocabulary's tokens and merges, the byte LM's settings, a safetensors
+    # header entry and the parameter-grid sampler (it draws settings, not data)
+    "Kernel", "ConstantKernel", "WhiteKernel", "RBF", "Matern",
+    "TrainedBpeVocabulary", "ByteLanguageModelConfig", "TensorInfo", "ParameterSampler",
 ))
 
 
