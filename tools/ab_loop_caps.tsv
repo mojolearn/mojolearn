@@ -67,6 +67,18 @@ algos	ard	no	-	0	{}	-	features are pruned as the fit proceeds
 algos	elliptic-envelope	no	-	0	{}	-	C-steps whose subset converges
 algos	min-cov-det	no	-	0	{}	-	C-steps whose subset converges
 algos	dict-learning	no	-	0	{}	-	inner sparse coding by coordinate descent with an active set
+algos	bagging-clf	yes	n_estimators	5	{}	member	a bag of decision trees of one depth on bootstrap draws of the same size: every member is the same distribution of work (alm-left: fit_loop_ counts members; a tree bag is one forest fit and reports its tree loop, any other bag clocks its member waves)
+algos	bagging-reg	yes	n_estimators	5	{}	member	a bag of decision trees of one depth on bootstrap draws of the same size: every member is the same distribution of work (alm-left: fit_loop_ counts members; a tree bag is one forest fit and reports its tree loop, any other bag clocks its member waves)
+algos	adaboost-clf	yes	n_estimators	20	{}	boosting round	SAMME: every round fits one fixed-depth tree on all rows with that round's weights, predicts the training rows and reweights them: the same work every round (alm-left: fit_loop_ counts the rounds run; a perfect member stops the fit early, and that cell then falls back to the whole operation)
+algos	adaboost-reg	yes	n_estimators	20	{}	boosting round	AdaBoost.R2: every round draws n weighted rows, fits one fixed-depth tree, predicts the training rows and reweights them: the same work every round (alm-left: fit_loop_ counts the rounds run; a member whose loss reaches 0.5 stops the fit early, and that cell then falls back to the whole operation)
+algos	voting-clf	no	-	0	{}	-	cap not valid: the members are different estimators (LogisticRegression, GaussianNB, a decision tree) fitted once each; there is no iteration of one kind to cap, and the only per-member cap (the logistic max_iter) is a member's own convergence loop
+algos	voting-reg	no	-	0	{}	-	cap not valid: the members are different estimators (Ridge, Lasso, a decision tree) fitted once each; there is no iteration of one kind to cap
+algos	stacking-clf	no	-	0	{}	-	cap not valid: cross-validated fits of different members (cv folds x members) and one final estimator; the work per unit differs by member and the final fit depends on the members' outputs
+algos	stacking-reg	no	-	0	{}	-	cap not valid: cross-validated fits of different members (cv folds x members) and one final estimator; the work per unit differs by member and the final fit depends on the members' outputs
+algos	multioutput-clf	no	-	0	{}	-	cap not valid: one LogisticRegression per target, each stopping by its own L-BFGS convergence; the number of targets is the data's, not a parameter
+algos	multioutput-reg	no	-	0	{}	-	cap not valid: one closed-form Ridge per target; no iteration loop, and the number of targets is the data's
+algos	ovr	no	-	0	{}	-	cap not valid: one LogisticRegression per class, each stopping by its own L-BFGS convergence; the number of classes is the data's
+algos	calibrated	no	-	0	{}	-	cap not valid: cv folds x (GaussianNB fit + sigmoid calibration); closed-form members, and the fold count is a resampling choice, not an iteration
 neural	*	no	-	0	{}	-	forward, inference or one training step per call: the whole operation is one pass already
 neural	transformer-decode	no	-	0	{}	-	autoregressive: the per-token cost grows with the context
 neural	mamba1-decode	no	-	0	{}	-	autoregressive generation: the cost per token is not the cost of the whole call

@@ -129,6 +129,8 @@ from bindings.trees_public_forest_door import (
     _engine,
 )
 from xtrees.trees_ada_fit_run import AdaFitPlan, AdaFitResult, ada_fit_run, ada_release_handles, ada_release_members
+from bindings.forest_fit_loop_pack import forest_fit_loop_store
+from core.fit_loop_clock import fit_loop_start, fit_loop_stop
 from core.member_abi import MemberPlan, member_resolve_family
 from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES
 from bindings.member_owner_unpack import MemberOwner
@@ -707,6 +709,15 @@ def _bagging_fit_batched(model: PythonObject, fields: PythonObject, xa: PythonOb
     else:
         forest = _new_member(context["trees_rf_regressor"], common, context)
     _member_fit(forest, xa, y, PythonObject(None), context)
+    # The bag's loop record (lane alm-left): the one forest fit IS the loop
+    # over the members (one tree each), so the bag reports the forest's own
+    # `fit_loop_` (trees, ms), which its door stored from the image's words.
+    # One dictionary read and one store per fit.
+    var forest_loop = py_get(py_fields(forest), PythonObject("fit_loop_"))
+    if forest_loop is None:
+        _ = py_call(fields.pop, "fit_loop_", PythonObject(None))
+    else:
+        py_setitem(fields, PythonObject("fit_loop_"), forest_loop)
     py_setitem(fields, "_batched", Python.tuple(forest, base))
     py_setitem(fields, "_estimators", PythonObject(None))
     var xt = _xt(fields, context)
@@ -814,6 +825,13 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     if not classifier:
         given = member_given_y(y_given, n, 1, context["array_class"])
     var y_address = trees_address(y_all)
+    # The bag's loop record (lane alm-left, 2026-11-24; core/fit_loop_clock.mojo):
+    # read once immediately before the first wave and once after the last
+    # wave is published; the iterations are the members the waves fitted
+    # (`done`, the sets' own counts). Nothing is read inside the loop; every
+    # member's fit has returned (and a device member has read its results
+    # back) before its wave is published. Measurement only: no bit changes.
+    var loop_start = fit_loop_start()
     while done < count:  # driver-loop: over the waves of member estimators
         var set = MemberSet(x.address, n, d, MEMBER_I32 if classifier else MEMBER_F32, MEMBER_I32)
         set.run.cap = jobs
@@ -916,6 +934,8 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
         kept = kept and set.kept_all and member_set_host(set)
         done += set.count()
         _ = set.count()
+    var loop = fit_loop_stop(loop_start, done)
+    forest_fit_loop_store(fields, loop.iterations, loop.loop_ns)
     py_setitem(fields, "n_features_in_", _P(d))
     _ = x^
     var word = 0
@@ -1488,6 +1508,14 @@ def _ada_native_base(base: PythonObject, classifier: Bool, context: PythonObject
                                                                  or Bool(py=crit == PythonObject("mse")))
 
 
+def _ada_loop_store(fields: PythonObject, result: AdaFitResult) raises:
+    """PACK of the rounds' loop record as `fit_loop_ = (rounds, ms)` (lane
+    alm-left): the rounds `ada_fit_run`'s loop ran and its time, Mojo values
+    stored once per fit; no record removes the attribute."""
+    var iterations = result.loop.iterations if result.loop.recorded else -1
+    forest_fit_loop_store(fields, iterations, result.loop.loop_ns)
+
+
 def _ada_pack(fields: PythonObject, base: PythonObject, template: PythonObject, kind: String, seed: Int,
               mut result: AdaFitResult, forest: EntryRef, d: Int, classes: PythonObject, k: Int, first: PythonObject,
               memo: PythonObject, context: PythonObject) raises:
@@ -1495,6 +1523,7 @@ def _ada_pack(fields: PythonObject, base: PythonObject, template: PythonObject, 
     validated clone with `_sub_seed(seed, j)`, its export copied into the
     model Arrays, its classes for a classifier), and the three lists. Every
     handle is released, the ones not reached on a refusal too."""
+    _ada_loop_store(fields, result)
     var members = fields["estimators_"]
     var alphas = fields["estimator_weights_"]
     var errors = fields["estimator_errors_"]
@@ -1660,6 +1689,7 @@ def _ada_member_pack(fields: PythonObject, base: PythonObject, template: PythonO
     own fit writes them: `forest_member_pack_common`, into the inner forest
     of a random-splitter tree, which then adopts it), and the three lists.
     Every state is freed, the ones not reached on a refusal too."""
+    _ada_loop_store(fields, result)
     var b = trees_builtins()
     var members = fields["estimators_"]
     var alphas = fields["estimator_weights_"]
