@@ -24,7 +24,7 @@ def mx_resident_codes(mut dev: MetricResidentLabels, lab: MxLab, order: PythonOb
     (None, the device slot); a row outside `order` raises the host gather's
     KeyError with its label, found on the device (`row_class`)."""
     if not dev.live():
-        return (mx_codes(lab, order, True, context), -1)
+        return (mx_codes(lab, order, True, context), Int(-1))
     var got = dev.order(order, context)
     if got[1] >= 0:
         mx_raise_obj(mx_b().KeyError, dev.row_class(order, got[1], context))
@@ -36,5 +36,5 @@ def mx_resident_flags(mut dev: MetricResidentLabels, lab: MxLab, pos: PythonObje
     """`mx_map_eq(lab, pos)` on either side: (host flags, -1) or (None, the
     device slot of the 0/1 flags)."""
     if not dev.live():
-        return (mx_map_eq(lab, pos, context), -1)
+        return (mx_map_eq(lab, pos, context), Int(-1))
     return (PythonObject(None), dev.equal(pos, context))
