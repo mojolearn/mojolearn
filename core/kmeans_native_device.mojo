@@ -8,6 +8,7 @@ from core.kmeans_native_api import (
     KMEANS_CAP_JOINT, KMEANS_CAP_RESIDENT, KMEANS_CAP_FOLD,
 )
 from core.neural_context import process_ctx
+from core.fit_loop_clock import FitLoop
 from core.msel_device_x import msel_fold_entry_context
 from cluster.estimator import kmeans_fit, kmeans_predict, kmeans_transform, kmeans_score
 from cluster.kmeans_fold import kmeans_fit_fold, kmeans_query_fold, kmeans_score_fold
@@ -52,7 +53,8 @@ struct KMeansDeviceKernels(KMeansNativeKernels):
                 r.rows, r.features, r.clusters, centers, labels, r.max_iter, r.tolerance,
                 UInt64(r.seed), r.n_init, r.init, r.metric, r.oversampling)
             return KMeansFitResult(answer.fit.inertia, answer.fit.n_iter,
-                answer.fit.sum_scale, answer.fit.weight_scale, Int(answer.finite), Int(answer.in_range))
+                answer.fit.sum_scale, answer.fit.weight_scale, Int(answer.finite), Int(answer.in_range),
+                FitLoop(answer.fit.loop_iterations, answer.fit.loop_ns, True))
         # Preserve the public entry's pointer admission order and its scratch.
         var source = _f32(r.source)
         var centers = _f32(r.centers)
@@ -72,7 +74,8 @@ struct KMeansDeviceKernels(KMeansNativeKernels):
             lazy_shift=False, transform_out=distances, finite_word=finite_word)
         ctx.synchronize()
         return KMeansFitResult(answer.inertia, answer.n_iter, answer.sum_scale,
-            answer.weight_scale, Int(word[0]), 0)
+            answer.weight_scale, Int(word[0]), 0,
+            FitLoop(answer.loop_iterations, answer.loop_ns, True))
 
     @staticmethod
     def query(r: KMeansQueryRequest) raises -> KMeansQueryResult:

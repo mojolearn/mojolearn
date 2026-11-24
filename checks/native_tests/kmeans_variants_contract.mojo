@@ -60,6 +60,7 @@ struct Witness(KMeansVariantsBackend):
                         "fit tolerance/reassignment order")
                 value.s.append(29)
                 value.s.append(31)
+                value.s.append(41)
             else:
                 var expected: List[Int] = [2, 3, 5, 0, 2, 7, 11, 13, 2147483649, 4294967295, 1]
                 words(ints, expected)
@@ -191,6 +192,8 @@ def fixture(unit: Int) raises:
                 "fit label/scalar roles")
         require(output.storage[0].steps == 29 and output.storage[0].iterations == 31,
                 "fit counters retain their legacy roles")
+        require(output.storage[0].loop.recorded and output.storage[0].loop.iterations == 29
+                and output.storage[0].loop.loop_ns == 41, "fit loop: the steps and the loop nanoseconds")
         if unit == 11:
             var moved = output^
             var original_address = moved.address()
@@ -205,6 +208,7 @@ def fixture(unit: Int) raises:
                 and output.storage[0].state_lo == 4294967293, "partial unsigned RNG halves and counter")
         require(output.storage[0].steps == 0 and output.storage[0].iterations == 0,
                 "partial counters are not fit counters")
+        require(not output.storage[0].loop.recorded, "a partial step records no fit loop")
     elif unit == 3:
         driver.bisect_fit(BisectFitRequest(VariantsSpan(101, 107), VariantsSpan(103, 109),
             2, 3, 5, 7, True, 11, 13, False, 0.125), output)

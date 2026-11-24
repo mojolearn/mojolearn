@@ -215,6 +215,11 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     py_setitem(fields, nk[].k_labels_, labels)
     py_setitem(fields, nk[].k_inertia_, PythonObject(result.inertia))
     py_setitem(fields, nk[].k_n_iter_, PythonObject(result.iterations))
+    # `fit_loop_` (lane ab-loop-mode): (Lloyd iterations summed over the
+    # restarts, loop milliseconds), built from the fit's FitLoop; not saved
+    # in the archive, so a loaded model raises AttributeError for it.
+    py_setitem(fields, nk[].k_fit_loop_,
+        Python.tuple(result.loop.iterations, result.loop.milliseconds()))
     py_setitem(fields, nk[].k_sum_scale_, PythonObject(result.sum_scale))
     py_setitem(fields, nk[].k_weight_scale_, PythonObject(result.weight_scale))
     py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
