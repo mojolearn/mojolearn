@@ -15,10 +15,11 @@ from training.neural_session_mlp import nn_mlp_sessions_device
 from training.residual_dropout import residual_dropout_device
 from training.residual_dropout_common_run import residual_dropout_addresses
 from training.residual_dropout_boundary_run import residual_dropout_dev_run, residual_dropout_backward_dev_run
+from training.neural_rng_dev_run import neural_rng_dev_run
 from training.optimizer_native_api import (
     OPT_NATIVE_VENDOR, OPT_NATIVE_RESIDUAL_DROPOUT, OPT_NATIVE_RESIDUAL_DROPOUT_BACKWARD,
     OPT_NATIVE_RESIDUAL_DROPOUT_DEV, OPT_NATIVE_RESIDUAL_DROPOUT_BACKWARD_DEV, OPT_NATIVE_LM_HEAD_LOSS,
-    OPT_NATIVE_LM_HEAD_TRAIN, OPT_NATIVE_MLP_SESSIONS,
+    OPT_NATIVE_LM_HEAD_TRAIN, OPT_NATIVE_MLP_SESSIONS, OPT_NATIVE_NEURAL_RNG_DEV,
 )
 from training.optimizer_native_extra import OptimizerExtraRequest, TRAINING_VENDOR_NONE
 
@@ -89,6 +90,13 @@ def optimizer_extra_gpu(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
             var ctx = neural_ctx[_EXTRA_CTX]()
             value = nn_mlp_sessions_device(ctx, r.session_inputs(), r.session_rows(), f32_ptr(a[1]), f32_ptr(a[2]),
                                            f32_ptr(a[3]), f32_ptr(a[4]), f32_ptr(a[0]), r.ints[0], r.ints[1], r.ints[2])
+        elif operation == OPT_NATIVE_NEURAL_RNG_DEV:
+            # lane vdf-tail-d: Generator dropout on training device arrays, read in place.
+            comptime if IDN_TRAIN_DEV_TENSORS:
+                ref w = r.ints
+                value = neural_rng_dev_run(w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], r.p, r.scale)
+            else:
+                raise Error("RuntimeError: this build has no training device arrays (identical GPU builds only)")
         else:
             raise Error("native optimizer: unknown operation or missing result storage")
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = value

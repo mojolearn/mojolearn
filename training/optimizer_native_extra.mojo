@@ -29,6 +29,11 @@ the Python entries of the same names passed:
                                         one address per session...]
                                     pp [width, hidden, out width, one row
                                         count per session...]
+  OPT_NATIVE_NEURAL_RNG_DEV         pp [n, offset, seed low, seed high, stream,
+                                        kind (2 dropout, 3 dropout backward),
+                                        output handle, input handle]
+                                    ff [p, scale]     result = n
+                                    (training device arrays; GPU image only)
 Not split across cores here: each operation is one kernel call; the kernels
 own their parallel form.
 """
@@ -36,7 +41,7 @@ from core.native_descriptor_call import native_descriptor_words
 from training.optimizer_native_api import (
     OPT_NATIVE_VENDOR, OPT_NATIVE_RESIDUAL_DROPOUT, OPT_NATIVE_RESIDUAL_DROPOUT_BACKWARD,
     OPT_NATIVE_RESIDUAL_DROPOUT_DEV, OPT_NATIVE_RESIDUAL_DROPOUT_BACKWARD_DEV, OPT_NATIVE_LM_HEAD_LOSS,
-    OPT_NATIVE_LM_HEAD_TRAIN, OPT_NATIVE_MLP_SESSIONS, OPT_NATIVE_COUNT,
+    OPT_NATIVE_LM_HEAD_TRAIN, OPT_NATIVE_MLP_SESSIONS, OPT_NATIVE_NEURAL_RNG_DEV, OPT_NATIVE_COUNT,
 )
 from training.residual_dropout_contract import residual_dropout_admit
 from training.residual_dropout_common_run import ResidualDropoutArgs
@@ -54,6 +59,8 @@ struct OptimizerExtraRequest(Movable):
     var addresses: List[Int]
     var ints: List[Int]
     var p: Float32
+    # OPT_NATIVE_NEURAL_RNG_DEV only: the dropout scale (the second float word).
+    var scale: Float32
 
     def __init__(out self, operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                  result: Int) raises:
@@ -62,6 +69,7 @@ struct OptimizerExtraRequest(Movable):
         self.addresses = native_descriptor_words(aa, na)
         self.ints = native_descriptor_words(pp, np)
         self.p = Float32(0.0)
+        self.scale = Float32(0.0)
         var residual = operation >= OPT_NATIVE_RESIDUAL_DROPOUT and operation <= OPT_NATIVE_RESIDUAL_DROPOUT_BACKWARD_DEV
         var device = operation == OPT_NATIVE_RESIDUAL_DROPOUT_DEV or operation == OPT_NATIVE_RESIDUAL_DROPOUT_BACKWARD_DEV
         if residual:
@@ -69,6 +77,14 @@ struct OptimizerExtraRequest(Movable):
                 raise Error("residual_dropout params must be [n,offset,seed_lo,seed_hi,stream,p]")
             # The entry's rounding: Float32 of the Python float's Float64.
             self.p = Float32(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=ff)[0])
+        elif operation == OPT_NATIVE_NEURAL_RNG_DEV:
+            if nf != 2 or ff == 0 or np != 8 or na != 0:
+                raise Error("Generator dropout device params must be [n,offset,seed_lo,seed_hi,stream,kind,"
+                            + "output handle,input handle] and [p,scale]")
+            # Operation 6's rounding: Float32 of each Float64 word.
+            var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=ff)
+            self.p = Float32(words[0])
+            self.scale = Float32(words[1])
         elif nf != 0:
             raise Error("native optimizer: request span counts differ from the operation")
         elif operation == OPT_NATIVE_VENDOR:
