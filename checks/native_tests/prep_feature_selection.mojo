@@ -529,7 +529,7 @@ def rfe_check(prefix: String, n: Int, d: Int, blocked: Bool, predict: Bool, labe
         var k = nsup - drop
         var fit = lda_fit_host(block, codes, n, nsup, K, blocked)
         var prog = ClsProgram(True)
-        var staged = rfe_round_stage(prog, RfeKeys(nsup, K, True, 0), fit.coef.copy(), n * d, n, d, nsup, drop, k)
+        var staged = rfe_round_stage(prog, RfeKeys(nsup, K, True), fit.coef.copy(), n * d, n, d, nsup, drop, k)
         var buffers = List[List[Float32]]()
         buffers.append(support.copy())
         buffers.append(ranking.copy())
@@ -696,7 +696,7 @@ def rfe_lda_unit(unit: Int) raises:
         _ = len(block)
         require(rows == (1 if c.classes == 2 else c.classes), label + ": coef_ has " + String(rows) + " rows")
         var prog = ClsProgram(True)
-        var staged = rfe_round_stage(prog, RfeKeys(nsup, rows, source.squared, 0), words^, n * d, n, d, nsup, drop, k)
+        var staged = rfe_round_stage(prog, RfeKeys(nsup, rows, source.squared), words^, n * d, n, d, nsup, drop, k)
         var buffers = List[List[Float32]]()
         buffers.append(support.copy())
         buffers.append(ranking.copy())
@@ -809,7 +809,8 @@ def test_rfe_refusals() raises:
 def test_rfe_source_xneighbors() raises:
     """Lane mf-meta5b: an XNeighbors kind (k-NN, LabelPropagation, LabelSpreading) exports neither importance
     block, so RFE refuses before a round: 'auto' in the door's words, a named attribute in attrgetter's.
-    FAIL-PROOF: drop MEMBER_FAMILY_XNEIGHBORS from `rfe_member_source`'s refusal families -> block 0, no words."""
+    FAIL-PROOF (lane mf-rfe7: every kind with neither block is refused, no family list): make
+    `rfe_member_source` answer RfeSource(0, False, "") after its two block tests -> block 0, no words."""
     var auto = rfe_member_source(MEMBER_FAMILY_XNEIGHBORS, 0, "auto", "LabelPropagation")
     require(auto.block == 0 and auto.refusal == String(RFE_NO_IMPORTANCES), "XNeighbors 'auto': the door's words")
     var named = rfe_member_source(MEMBER_FAMILY_XNEIGHBORS, 0, "coef_", "LabelSpreading")

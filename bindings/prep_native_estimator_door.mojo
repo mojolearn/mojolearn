@@ -129,25 +129,7 @@ def prep_native_split(cv: PythonObject, x: PythonObject, y: PythonObject, contex
                                     prep_native_context(context)))
 
 
-def prep_estimator_attribute(est: PythonObject, name: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = prep_keys()
-    # RFE's attribute path reads only connected native estimator state or
-    # an explicitly registered native attribute operation (SVM coef_).
-    # operator.attrgetter/getattr could invoke arbitrary Python descriptors.
-    var b = native_loaded_module("builtins")
-    if py_type(name) is not b.str:
-        raise Error("TypeError: native estimator attribute names must be exact strings")
-    var parts = py_call(name.split, ".")
-    var current = est
-    for k in range(len(parts)):  # driver-loop: the explicit attribute path
-        var plan = prep_estimator_plan(current, context)
-        if plan is None:
-            raise Error("TypeError: estimator attribute paths require connected native estimator state")
-        if prep_estimator_has(current, String(parts[k]), context):
-            current = prep_estimator_call(current, String(parts[k]), Python.tuple(), context)
-        else:
-            var fields = py_call(py_item(plan, nk[].k_fields_get), current, py_type(current))
-            current = py_get(fields, parts[k])
-        if current is None:
-            return current
+# REMOVED (lane mf-rfe7, 2026-11-23): `prep_estimator_attribute`, RFE's attribute path over a fitted
+# estimator's connected state or its registered attribute operation (SVM coef_); its one caller, RFE's door
+# rounds, is deleted (every RFE round reads its member's EXPORT block).
     return current
