@@ -138,6 +138,7 @@ from core.ensemble_member import (
     META_BLOCK_SEARCH, META_BLOCK_FOLDS,
 )
 from core.ensemble_member import meta_plan_leaf_importances, META_PARAM_SERVING
+from core.msel_search_run import SEARCH_REFUSED_SHIFT
 from core.member_abi import MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_PREDICT, member_output_dtype, member_outputs
 from bindings.msel_common_door import msel_f64_block, msel_i64_list, msel_index_i64, msel_p64, msel_addr
 from bindings.classical_labels_door import labels_decode_labels
@@ -4417,8 +4418,8 @@ def _search_nested_refusal(done: _Done, clones: PythonObject, tolerate: Bool, fi
     A number with every candidate refused: scikit-learn's all-fits-failed
     words over their errors (`_all_fits_failed`; each candidate fails at each
     of its folds). True: some refused and others not, with a number (scikit-
-    learn scores those error_score and warns: no per-candidate refusal row in
-    the RUN yet). False: none refused."""
+    learn scores those error_score: lane mf-rows8b, each is a refusal row of
+    the RUN, `_admit_search`). False: none refused."""
     var errors = List[String]()
     var counts = List[Int]()
     var refused = 0
