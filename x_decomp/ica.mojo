@@ -11,6 +11,7 @@ statements on resident matrices."""
 from std.math import sqrt
 from x_decomp.cells import F32Ptr
 from x_decomp.exec_trait import Exec
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from x_decomp.kit import (
     Kit, Mat, OP_ABS, OP_ADDS, OP_CUBE, OP_CUBEP, OP_EXPG, OP_EXPGP, OP_MAXS, OP_MUL, OP_ONEMSQ, OP_RECIP,
     OP_SCALE, OP_SQ, OP_SQRT, OP_SUB, OP_TANH, mat_from, mat_rows,
@@ -62,12 +63,15 @@ def ica_g[E: Exec](k: Kit[E], Y: Mat, fun: Int, alpha: Float64, mut gp: Mat) rai
     return gx^
 
 
-def ica_par[E: Exec](X1: Mat, mut W: Mat, fun: Int, alpha: Float64, max_iter: Int, tol: Float64) raises -> Int:
-    """`FastICA._par`: W replaced; returns the iteration count."""
+def ica_par[E: Exec](X1: Mat, mut W: Mat, fun: Int, alpha: Float64, max_iter: Int, tol: Float64,
+                     mut loop: FitLoop) raises -> Int:
+    """`FastICA._par`: W replaced; returns the iteration count. `loop`
+    receives the fixed-point loop's clock."""
     var k = Kit[E]()
     W = sym_decorrelation(k, W)
     var p = X1.c
     var it = 0
+    var loop_start = fit_loop_start()
     for i in range(1, max_iter + 1):
         it = i
         var gp = Mat(0, 0)
@@ -80,6 +84,7 @@ def ica_par[E: Exec](X1: Mat, mut W: Mat, fun: Int, alpha: Float64, max_iter: In
         W = W1^
         if lim < tol:
             break
+    loop = fit_loop_stop(loop_start, it)
     return it
 
 
@@ -88,15 +93,18 @@ def _recip_or0(v: Float64) -> Float64:
     return 1.0 / v if v != 0.0 else 0.0
 
 
-def ica_def[E: Exec](X1: Mat, mut W: Mat, fun: Int, alpha: Float64, max_iter: Int, tol: Float64) raises -> Int:
+def ica_def[E: Exec](X1: Mat, mut W: Mat, fun: Int, alpha: Float64, max_iter: Int, tol: Float64,
+                     mut loop: FitLoop) raises -> Int:
     """`FastICA._def`: the rows found one at a time into W (initially the
-    w_init rows); returns the largest iteration count."""
+    w_init rows); returns the largest iteration count. `loop` receives the
+    clock of every component's loop together, with that count (n_iter_)."""
     var k = Kit[E]()
     var nc = W.r
     var p = X1.c
     var Winit = W.copy()
     var best = 0
     var first = True
+    var loop_start = fit_loop_start()
     for j in range(nc):  # small-loop(nc: components): one deflation row per component, each a device-sized loop
         var w = mat_rows(Winit, j, j + 1)
         var Wp = mat_rows(W, 0, j)
@@ -121,11 +129,13 @@ def ica_def[E: Exec](X1: Mat, mut W: Mat, fun: Int, alpha: Float64, max_iter: In
             best = it
             first = False
         Kit[E].place_row(W, w, j)
+    loop = fit_loop_stop(loop_start, best)
     return best
 
 
 def ica_solve_run[E: Exec](
-    px: F32Ptr, pw: F32Ptr, nc: Int, xr: Int, xc: Int, algo: Int, fun: Int, max_iter: Int, alpha: Float64, tol: Float64
+    px: F32Ptr, pw: F32Ptr, nc: Int, xr: Int, xc: Int, algo: Int, fun: Int, max_iter: Int, alpha: Float64, tol: Float64,
+    mut loop: FitLoop,
 ) raises -> Int:
     """`FastICA._par` / `_def` over X1 (xr x xc) at `px`: W (nc x nc, the
     initial unmixing matrix) at `pw` replaced in place. algo 0 parallel, 1
@@ -136,9 +146,9 @@ def ica_solve_run[E: Exec](
     var X1 = mat_from(px, xr, xc)
     var W = mat_from(pw, nc, nc)
     if algo == 0:
-        it = ica_par[E](X1, W, fun, alpha, max_iter, tol)
+        it = ica_par[E](X1, W, fun, alpha, max_iter, tol, loop)
     else:
-        it = ica_def[E](X1, W, fun, alpha, max_iter, tol)
+        it = ica_def[E](X1, W, fun, alpha, max_iter, tol, loop)
     for i in range(nc * nc):
         pw.unsafe_store(i, W.d[i])
     return it

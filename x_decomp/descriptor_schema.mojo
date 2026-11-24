@@ -105,7 +105,7 @@ comptime XD_DEV_SELECT_SMALLEST = 56  # i: [a, sel, mask, n, h]
 # Implemented in x_decomp/descriptor_owner_ops.mojo (both images) and
 # x_decomp/descriptor_owner_device.mojo / descriptor_owner_host.mojo.
 # An "out" address is a host word the operation writes (int64 or float64).
-comptime XD_ALS_FIT = 57          # a: [c, x, y, losses(f64)] i: [n, m, f, iterations, use_cg, cg_steps, calc_loss] f: [reg]
+comptime XD_ALS_FIT = 57          # a: [c, x, y, losses(f64), loop ns out(int64; 0: none)] i: [n, m, f, iterations, use_cg, cg_steps, calc_loss] f: [reg]
 comptime XD_TOPN_DESC = 58        # a: [x, skip (0: none), dst(int32)] i: [m, n]       -> count
 comptime XD_GATHER = 59           # a: [src, idx(int32), dst] i: [count]
 comptime XD_DICT_LEARNING = 60    # a: [x, code, d, errs(f64), ne out(int64)] i: [n, m, nc, algo, max_iter, enc_iter, pos_dict, pos_code, seed, nnz, max_no_imp] f: [alpha, tol] -> ii
@@ -135,7 +135,7 @@ comptime XD_R_SIGNS = 73          # a: [r, c] i: [n]
 # parameter list and one float list per call), appended. Typed requests and
 # their packing: core/decomp_factor_api.mojo; bodies:
 # x_decomp/descriptor_factor_ops.mojo (both images, one generic body).
-comptime XD_ICA_FIT = 74          # a: [x, w_init (0: drawn), components, mixing, whitening, mean, sources] i: [n, d, nc, whiten, seed, algorithm, fun, max_iter, project] f: [alpha, tol] -> n_iter
+comptime XD_ICA_FIT = 74          # a: [x, w_init (0: drawn), components, mixing, whitening, mean, sources, loop ns out(int64; 0: none)] i: [n, d, nc, whiten, seed, algorithm, fun, max_iter, project] f: [alpha, tol] -> n_iter
 comptime XD_ICA_PROJECT = 75      # a: [x, matrix, mean, dst] i: [inverse, n, width, rows, whiten]
 comptime XD_FA_FIT = 76           # a: [x, psi0, components, noise, mean, loglike(f64)] i: [n, d, nc, max_iter, rotation] f: [tol] -> n_iter
 comptime XD_FA_QUERY = 77         # a: [x, components, noise, mean, dst, value out(f64)] i: [op, n, d, nc]
@@ -255,7 +255,7 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
     if op == XD_DEV_SELECT_SMALLEST:
         return (0, 5, 0)
     if op == XD_ALS_FIT:
-        return (4, 7, 1)
+        return (5, 7, 1)
     if op == XD_TOPN_DESC:
         return (3, 2, 0)
     if op == XD_GATHER:
@@ -289,11 +289,11 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
     if op == XD_R_SIGNS:
         return (2, 1, 0)
     if op == XD_ICA_FIT:
-        return (7, 9, 2)
+        return (8, 9, 2)
     if op == XD_ICA_PROJECT:
         return (4, 5, 0)
     if op == XD_FA_FIT:
-        return (6, 5, 1)
+        return (7, 5, 1)
     if op == XD_FA_QUERY:
         return (6, 4, 0)
     if op == XD_LDA:

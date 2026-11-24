@@ -57,6 +57,7 @@ cnn_linear: the fused conv block and pinned GEMM head kernels only; the epoch
 drivers, per-call uploads and host epoch order stay deleted.)
 """
 from sequence.exec_trait import Exec
+from sequence.fit_loop_words import FIT_LOOP_MARK
 from sequence.ops import FP, Args, OP_COPY, OPT_SGD, OPT_ADAM, OPT_ADAMW
 from core.cast_in import CastIn, CAST_KIND_SIGNED
 from autograd.rankn import ShapeN
@@ -289,11 +290,21 @@ def _download_params[E: Exec & Movable & Deinitable](
 
 
 def cnn_fit_program[E: Exec & Movable & Deinitable](
-    var ex: E, addresses: List[Int], ints: List[Int], floats: List[Float64],
+    var ex: E, addresses_in: List[Int], ints_in: List[Int], floats: List[Float64],
 ) raises -> Int:
     """CNNClassifier.fit as one captured program and Program.fit (header).
     Writes the trained parameters over the caller's arrays, the epoch curve
-    and every minibatch loss; returns the number of optimizer steps."""
+    and every minibatch loss; returns the number of optimizer steps.
+    Lane alm-neural (2026-11-24): options ending in FIT_LOOP_MARK carry the
+    fit loop's record words as the last address (sequence/fit_loop_words.mojo);
+    both are taken off here and Program.fit writes the record after its epoch
+    loop."""
+    var addresses = addresses_in.copy()
+    var ints = ints_in.copy()
+    var loop_words = 0
+    if len(ints) > 0 and len(addresses) > 0 and ints[len(ints) - 1] == FIT_LOOP_MARK:
+        _ = ints.pop()
+        loop_words = addresses.pop()
     var g = CnnGeometry(ints, CNN_FIT_HEAD)
     var n = ints[0]
     var batch = ints[8]
@@ -339,7 +350,7 @@ def cnn_fit_program[E: Exec & Movable & Deinitable](
         target.check("y")
         _ = train_program_control(
             s, pid, srcs, shapes, target, _LOSS_CROSS_ENTROPY, Float32(1), opt, params, epochs, batch, shuffle,
-            seed, FP(unsafe_from_address=addresses[2]), 0, 0, step_curve=addresses[3],
+            seed, FP(unsafe_from_address=addresses[2]), 0, 0, step_curve=addresses[3], loop_words=loop_words,
         )
         _download_params(s, params, addresses, CNN_FIT_ARRAYS)
     except err:

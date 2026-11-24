@@ -245,16 +245,21 @@ struct XseqRnnFitRequest(Copyable, Movable):
 
 
 def xseq_run_rnn_fit(entry: XseqNeuralEntry, req: XseqRnnFitRequest, optimizer: XseqOptimizer, x: Int,
-                     target: Int, params: Int, losses: Int, rates: Int, lengths: Int = 0) raises:
+                     target: Int, params: Int, losses: Int, rates: Int, lengths: Int = 0,
+                     loop_words: Int = 0) raises:
     """`_ints()` (cell, D, H, L, O), then the schedule words, then the
     RNN_FIT call. `lengths`: the address of n float32 sequence lengths, or
-    0 (none: the call is the one it was before lengths existed)."""
+    0 (none: the call is the one it was before lengths existed).
+    `loop_words`: the address of the fit loop's record words
+    (sequence/fit_loop_words.mojo), or 0 (none)."""
     var ip: List[Int] = [req.cell, req.d, req.hidden, req.layers, req.outputs, req.task, req.n, req.steps_t,
                          req.epochs, req.batch, optimizer.kind, optimizer.flags, 1 if req.shuffle else 0,
                          Int(req.seed & 0xFFFFFFFF), Int(req.seed >> 32)]
     var addresses: List[Int] = [x, target, params, losses, rates]
-    if lengths != 0:
+    if lengths != 0 or loop_words != 0:
         addresses.append(lengths)
+    if loop_words != 0:
+        addresses.append(loop_words)
     _ = xseq_neural_run_call(entry, RNN_FIT, addresses, ip, optimizer.floats)
 
 
@@ -384,8 +389,10 @@ struct XseqMlpFitRequest(Copyable, Movable):
 
 
 def xseq_run_mlp_fit(entry: XseqNeuralEntry, req: XseqMlpFitRequest, floats: List[Float64], x: Int, target: Int,
-                     params: Int, curve: Int) raises -> Int:
-    """The descriptor's int words, then MLP_FIT; the epochs run."""
+                     params: Int, curve: Int, loop_words: Int = 0) raises -> Int:
+    """The descriptor's int words, then MLP_FIT; the epochs run.
+    `loop_words`: the address of the fit loop's record words
+    (sequence/fit_loop_words.mojo), or 0 (none)."""
     var ip: List[Int] = [req.rows, req.d, req.o, req.activation, req.out_act, req.loss_code, req.solver,
                          req.rate_code, 1 if req.nesterov else 0, req.batch, req.max_iter, 1 if req.shuffle else 0,
                          req.seed, req.n_iter_no_change, len(req.hidden)]
@@ -393,7 +400,10 @@ def xseq_run_mlp_fit(entry: XseqNeuralEntry, req: XseqMlpFitRequest, floats: Lis
         ip.append(req.hidden[i])
     if req.n_out != 0:
         ip.append(1 if req.o > 1 else 2)
-    return xseq_neural_run_call(entry, MLP_FIT, [x, target, params, curve], ip, floats)
+    var addresses: List[Int] = [x, target, params, curve]
+    if loop_words != 0:
+        addresses.append(loop_words)
+    return xseq_neural_run_call(entry, MLP_FIT, addresses, ip, floats)
 
 
 def xseq_run_copy_f32(dst: Int, src: Int, count: Int):

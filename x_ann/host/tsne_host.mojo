@@ -17,6 +17,7 @@ the j == i step leaves the lane's folds as they were, as the cell's
 
 from checks.numerics import ftz, identical_log
 from core.device_fold import host_sum_f32_fixed
+from core.fit_loop_clock import fit_loop_start, fit_loop_stop
 from x_ann.tsne_core import (
     F32P, I32P, ts_kl_cell, ts_perplexity_cell, ts_step_cell,
     ts_sum_cell, tsne_nn, tsne_symmetrize, tsne_validate,
@@ -159,8 +160,10 @@ def _repulse_host(y: F32P, n: Int, row_z: F32P, rep: F32P, yf0: F32P, yf1: F32P)
 def tsne_fit_host(
     x_in: List[Float32], n: Int, d: Int, y0: List[Float32], perplexity: Float32, exaggeration: Float32,
     learning_rate: Float32, post_exaggeration_lr_factor: Float32, max_iter: Int, exploration: Int,
-    mut y_out: List[Float32], mut kl_out: Float32,
+    mut y_out: List[Float32], mut kl_out: Float32, loop_word: Int = 0,
 ) raises:
+    # `loop_word`: when nonzero, the host address of one Int that receives
+    # the gradient loop's nanoseconds (`fit_loop_`, core/fit_loop_clock.mojo)
     tsne_validate(n, d, perplexity, max_iter, exploration)
     # release-0845: after the exaggeration phase the step is learning_rate x
     # post_exaggeration_lr_factor, the same host float32 product as x_ann/tsne_device.mojo
@@ -208,6 +211,7 @@ def tsne_fit_host(
     var gp = fp(gains)
     var nnz = len(indices)
     var stasks = ann_task_count(2 * n, 8 * (nnz // n + 2))
+    var loop_start = fit_loop_start()
     for it in range(max_iter):
         var ex = exaggeration if it < exploration else Float32(1.0)
         var mom = Float32(0.5) if it < exploration else Float32(0.8)
@@ -223,6 +227,9 @@ def tsne_fit_host(
                 ts_step_cell(e, ycur, ynext, ipp, idp, vp, repp, zp, up, gp, ex, mom, lr_it)
 
         ann_tasks(step_coords, stasks)
+    var loop = fit_loop_stop(loop_start, max(max_iter, 0))
+    if loop_word != 0:
+        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=loop_word)[] = loop.loop_ns
     var yfin = fp(ya) if max_iter % 2 == 0 else fp(yb)
     _repulse_host(yfin, n, fp(rz), repp, fp(yf0), fp(yf1))
     ts_sum_cell(fp(rz), n, zp)

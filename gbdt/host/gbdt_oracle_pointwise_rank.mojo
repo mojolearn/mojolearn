@@ -30,6 +30,7 @@ from gbdt.data.yeti_rank_tasks import YetiRankTasks, yeti_rank_tasks
 from gbdt.gpu_data.compressed_index_builder import CompressedIndexLayout, build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
 from core.host_parallel import host_parallelize
+from core.fit_loop_clock import fit_loop_start, fit_loop_stop
 from core.host_predict_threads import HostF32Ptr, host_predict_chunk
 from gbdt.host.gbdt_oracle import (
     _ns_project_index,
@@ -343,6 +344,10 @@ def gbdt_ranking_pointwise_host_fit(
     tree_leaf_offsets.append(0)
     var model_leaves = List[Float32]()
 
+    # `fit_loop_` (lane ab-loop-mode): the host clock read once before the
+    # first round and once after the last (nothing inside the loop); the
+    # rounds executed are the trees the loop added.
+    var fit_loop_t0 = fit_loop_start()
     for iteration in range(params.n_estimators):
         if loss.objective == GBDT_OBJ_YETI_RANK:
             yeti_rank_search_pass(
@@ -436,6 +441,7 @@ def gbdt_ranking_pointwise_host_fit(
         tree_leaf_offsets.append(len(model_leaves))
         if iteration > 0:
             losses.append(-Float64(fv) / loss_norm)
+    var fit_loop = fit_loop_stop(fit_loop_t0, len(tree_split_offsets) - 1)
 
     if loss.objective == GBDT_OBJ_YETI_RANK:
         # No extra RNG draw: the GPU final loss pass writes zero partials.
@@ -446,8 +452,10 @@ def gbdt_ranking_pointwise_host_fit(
     else:
         var last = query_rmse_value(y, cursor, group_sizes, n_rows, weights)
         losses.append(-Float64(_deterministic_sum_lanes(last, 1, len(last))[0]) / loss_norm)
-    return GbdtHostModel(
+    var model = GbdtHostModel(
         grid.fold_counts.copy(), grid.borders.copy(), grid.nan_treatment.copy(),
         tree_split_offsets^, split_features^, split_bins^, tree_leaf_offsets^,
         model_leaves^, losses^, 0, False,
     )
+    model.fit_loop = fit_loop^
+    return model^

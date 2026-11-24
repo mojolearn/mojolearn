@@ -117,6 +117,77 @@ import speed_gbdt_arm as spec           # noqa: E402
 import board_pairing                    # noqa: E402  (tools/: the own-arm pairing table)
 
 
+# A/B LOOP MODE (lane ab-loop-mode, 2026-11-24; tools/ab_loop.py is the contract). When bench_board hands this race a
+# loop plan (environment key ab_loop.ENV), every OWN arm (ours, the paired own arms, ours-ab) takes the plan's cap and
+# pins through the estimator's public parameters (the `extra` keywords build_ours already merges last) before
+# construction, so the warm-up is the same fit at the cap; opponents are untouched. LoopReads reads each fit's
+# fit_loop_ after its clock has closed, and main() prints one `LOOP_MODE arm=<arm> <json>` line per own arm after the
+# rounds (tools/bench_board.py parses it). The helpers are tools/bench_board_more.py's (loop_plan, loop_params,
+# loop_round, loop_cell) with family "trees". Without a plan nothing here changes the command, a clock or the log.
+LOOP_FAMILY = "trees"
+
+
+def _loop():
+    """tools/bench_board_more.py, whose A/B LOOP MODE helpers the board drivers share."""
+    import bench_board_more
+    return bench_board_more
+
+
+def loop_plan(lane, environ=None):
+    """The race's loop plan for a trees lane (read once per process); None: loop mode off."""
+    return _loop().loop_plan(lane, environ=environ, family=LOOP_FAMILY)
+
+
+def loop_params(plan, params, ours):
+    """An arm's estimator keywords under the plan: capped (a copy) for an OWN arm with a plan, PARAMS otherwise."""
+    return _loop().loop_params(plan, params, ours)
+
+
+def loop_extra(plan, extra):
+    """An own arm's `extra` keywords (build_ours) under the plan: the cap and pins merged over them; without a plan
+    EXTRA itself. An empty result stays None, as build_ours' plain `ours` arm takes it."""
+    if plan is None:
+        return extra
+    return loop_params(plan, extra or {}, True) or None
+
+
+class LoopReads(object):
+    """speed_gbdt_arm.run's fit_context (it surrounds each arm's construct + fit + sync, the warm-up as round 0, and
+    exits after that call's clock has stopped): on exit, for an own arm, one loop_round record of the model just
+    fitted. run() keeps that model in its local `model`, read from its frame here, after the clock; no hook runs
+    inside a clock. INNER: another fit_context (--mem's TreeMem) nested inside this one."""
+
+    def __init__(self, plan, own_names, inner=None):
+        self.plan, self.own, self.inner = plan, set(own_names), inner
+        self.rounds = {}            # arm -> [(round, loop record)]
+
+    def __call__(self, name, r):
+        return _LoopRead(self, name, r)
+
+    def cell(self, name):
+        """The arm's loop_mode record (ab_loop.cell_record), or None when it recorded no round."""
+        rounds = self.rounds.get(name)
+        return _loop().loop_cell(self.plan, rounds) if rounds else None
+
+
+class _LoopRead(object):
+    def __init__(self, reads, name, r):
+        self.reads, self.name, self.r = reads, name, r
+        self.inner = reads.inner(name, r) if reads.inner is not None else None
+
+    def __enter__(self):
+        if self.inner is not None:
+            self.inner.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        swallowed = self.inner.__exit__(exc_type, exc, tb) if self.inner is not None else None
+        if exc_type is None and self.name in self.reads.own:
+            model = sys._getframe(1).f_locals.get("model")      # run()'s fitted model, its clock closed
+            self.reads.rounds.setdefault(self.name, []).append((self.r, _loop().loop_round(self.reads.plan, model)))
+        return swallowed
+
+
 #: What each lane calls in `python/mojolearn/`, for the report and for the
 #: `--list-arms` output. `training/` is absent on purpose: it is the neural
 #: training-step lane and it has no boosting or forest estimator, so there is
@@ -1234,6 +1305,13 @@ def main(argv=None):
             raise SystemExit("forest_speed_arm: --host-digest runs `ours` alone (--ours-only; "
                              "no --ours-ab, --infer, --mem or --arms)")
         host_digest_mode(lane)
+    # A/B LOOP MODE: the race's plan, read once (None: off). The trees-experiment route builds its own arms and
+    # takes no cap here: a capped plan there is refused by name, never run uncapped.
+    plan = None if args.opponents_only else loop_plan(lane)
+    if plan is not None and plan.get("mode") == "capped" and tree_request is not None:
+        spec.emit_refused(lane, "ours", "loop mode: the --trees-experiment route takes no cap %s=%s"
+                          % (plan.get("param"), plan.get("k")))
+        return 1
     size = spec.size_tag()
     dataset = args.dataset or spec.LANE_DEFAULT_DATASET[lane]
     devices, devices_auto = spec.resolve_devices(args.devices, lane)
@@ -1345,15 +1423,16 @@ def main(argv=None):
             spec.emit_refused(lane, name, "asked for by --own-arms and not an own arm of this lane; "
                                           "own arms: %s" % ",".join(["ours"] + board_pairing.extra_own_arms(lane)))
     arms = [] if args.opponents_only or (own_wanted is not None and "ours" not in own_wanted) \
-        else build_ours(lane, cfg, data, extra=own_settings or None)
+        else build_ours(lane, cfg, data, extra=loop_extra(plan, own_settings or None))
     if not args.opponents_only:
         for own in board_pairing.extra_own_arms(lane):
             if own_wanted is not None and own not in own_wanted:
                 continue
+            settings = loop_extra(plan, dict(pairing[own]["settings"]))
             if pairing[own].get("prebinned"):
-                built = build_prebinned_ours(lane, cfg, data, own, dict(pairing[own]["settings"]))
+                built = build_prebinned_ours(lane, cfg, data, own, settings)
             else:
-                built = build_ours(lane, cfg, data, name=own, extra=dict(pairing[own]["settings"]))
+                built = build_ours(lane, cfg, data, name=own, extra=settings)
             for arm in built:
                 arm.agreement_group = "mojolearn:" + own   # another configuration on purpose
             arms.extend(built)
@@ -1370,7 +1449,7 @@ def main(argv=None):
         print("FSPEED-AB lane=%s arm=ours-ab %s=%r (arm ours keeps the "
               "estimator default)" % (lane, key.strip(), value), flush=True)
         arms.extend(build_ours(lane, cfg, data, name="ours-ab",
-                               extra=dict(own_settings, **{key.strip(): value})))
+                               extra=loop_extra(plan, dict(own_settings, **{key.strip(): value}))))
     if not args.ours_only:
         if not args.opponents_first:
             opponents = spec.build_opponents(lane, cfg, data, devices, wanted)
@@ -1490,9 +1569,25 @@ def main(argv=None):
     # boundary. Existing construction/preflight still has its prepared views;
     # normal board runs keep their historical clocks and preparation policy.
     operation_prepare = (lambda arm, d: prepare_our_inputs(d)) if aft_capture else None
-    live = spec.run(lane, arms, data, spec.rounds(), size, cfg=cfg, fit_context=fit_context,
+    loop_reads, run_cfg = None, cfg
+    if plan is not None:
+        # A/B LOOP MODE: each own fit's loop read after its clock; the FIT-EQUIVALENCE expectation is the cap the
+        # own arms were built with (an opponent in a capped race is noted against it, never refused for more trees)
+        loop_reads = LoopReads(plan, [a.name for a in arms if getattr(a, "library", None) == "mojolearn"],
+                               inner=fit_context)
+        fit_context = loop_reads
+        if plan.get("mode") == "capped" and plan.get("param") in cfg:
+            run_cfg = dict(cfg, **{plan["param"]: plan["k"]})
+    live = spec.run(lane, arms, data, spec.rounds(), size, cfg=run_cfg, fit_context=fit_context,
                     operation_prepare=operation_prepare, operation_capture=aft_capture,
                     skip_warmup=aft_capture and os.environ.get("MOJOLEARN_AFT_EXTERNAL_WARMUP") == "1")
+    if loop_reads is not None:
+        # A/B LOOP MODE: one line per own arm after the rounds (tools/bench_board.py parse_tree_log)
+        for arm in arms:
+            record = loop_reads.cell(arm.name)
+            if record is not None:
+                print("LOOP_MODE arm=%s %s" % (arm.name, json.dumps(record, sort_keys=True, default=str)),
+                      flush=True)
     from bench_board_state import scored_receipt
     aft_states = {}
     for arm in live:

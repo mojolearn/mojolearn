@@ -73,6 +73,7 @@ from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
 from bindings.metrics_native_support_door import metric_is_integral, metric_warning_location
 from bindings.classical_warnings_unpack import classical_warning
 from bindings.rf_fit_notices_pack import rf_fit_notices_word
+from bindings.forest_fit_loop_pack import forest_fit_loop_store
 from xtrees.trees_forest_run import (
     _refuse, _family, _classifier, _y_rows_check,
     ForestFit, ForestHandle, FOREST_MODEL_FIELDS, forest_export_selection, forest_export_counts, forest_export_dtype,
@@ -1025,10 +1026,17 @@ def _rf_fit_arrays(fields: PythonObject, config: ForestConfig, x: AdmittedX, y_a
     var key = forest_key(rf)
     var device_scan = (xf_caps(key) & XF_CAP_DEVICE_SCAN) != 0
     _finite_or_refuse(x, device_scan, context)
-    var request = forest_request(config, key, x.rows, x.cols, classes, x.address, y_addr, fit, False)
-    var result = _launch_on(key, fit, x.view(), request, device_scan, context)
+    # `fit_loop_` (lane alm-forest): the image writes the tree loop's two
+    # words here (XF_W_LOOP); -1 until it does. On this frame, no heap.
+    var loop_words: Array[Int, 2] = [-1, -1]
+    var timed = fit.copy()
+    timed.loop = Int(loop_words.unsafe_ptr())
+    var request = forest_request(config, key, x.rows, x.cols, classes, x.address, y_addr, timed, False)
+    var result = _launch_on(key, timed, x.view(), request, device_scan, context)
     _rf_fit_notices(result[5], context)
     _store_model(fields, result, x.cols)
+    forest_fit_loop_store(fields, loop_words[0], loop_words[1])
+    _ = loop_words  # written through its address by the fit above
     return result
 
 
@@ -1225,9 +1233,15 @@ def _et_fit_arrays(fields: PythonObject, config: ForestConfig, unweighted: Bool,
     var key = forest_key(et)
     var device_scan = (xf_caps(key) & XF_CAP_DEVICE_SCAN) != 0
     _finite_or_refuse(x, device_scan, context)
-    var request = forest_request(config, key, x.rows, x.cols, classes, x.address, y_addr, fit, unweighted)
-    var result = _launch_on(key, fit, x.view(), request, device_scan, context)
+    # `fit_loop_` (lane alm-forest), as `_rf_fit_arrays`.
+    var loop_words: Array[Int, 2] = [-1, -1]
+    var timed = fit.copy()
+    timed.loop = Int(loop_words.unsafe_ptr())
+    var request = forest_request(config, key, x.rows, x.cols, classes, x.address, y_addr, timed, unweighted)
+    var result = _launch_on(key, timed, x.view(), request, device_scan, context)
     forest_et_store_fit(fields, result, x.cols)
+    forest_fit_loop_store(fields, loop_words[0], loop_words[1])
+    _ = loop_words  # written through its address by the fit above
 
 
 def forest_et_store_fit(fields: PythonObject, result: PythonObject, cols: Int) raises:
@@ -1551,6 +1565,9 @@ def forest_shard_publish(plan: ForestShardPlan, merged: PythonObject, parts: Pyt
         _ = py_call(arrays.append, merged[names[i]])
     _ = py_call(arrays.append, meta)
     _store_model(fields, arrays, plan.cols)
+    # A tree-range fit runs its loops in worker processes and reports no
+    # one loop: no `fit_loop_` (an earlier plain fit's is removed).
+    forest_fit_loop_store(fields, -1, 0)
     if _family(plan.kind) == "et":
         var bound = False
         for r in range(len(parts)):  # driver-loop: one flag per tree range

@@ -10,28 +10,35 @@ from std.python import Python, PythonObject
 from bindings.x_linear_common_unpack import _b, _name, _xl_word, _xl_float, _xl_count, _xl_slice
 from bindings.py_balanced import py_call, py_setitem
 from bindings.x_linear_keys_unpack import x_linear_keys
-from bindings.classical_labels_door import labels_reshape
+from bindings.classical_labels_door import labels_reshape, labels_address
+from x_linear.ops import FP
+from x_linear.sgd_loop_words import sgd_n_iter_word, sgd_fit_loop
 
 
 def _xl_sgd_pack(fields: PythonObject, call: XlFit, context: PythonObject) raises -> Tuple[PythonObject, PythonObject]:
-    """`_sgd_fit`, PACK: refuse an overflowed fit (the last result word),
-    publish `n_iter_`, `t_` and `n_features_in_`, and return (coef
-    (problems, d), intercept (problems,))."""
+    """`_sgd_fit`, PACK: refuse an overflowed fit (the status word),
+    publish `n_iter_`, `t_`, `n_features_in_` and `fit_loop_`, and return
+    (coef (problems, d), intercept (problems,))."""
     var nk = x_linear_keys()
     var n = call.request.n
     var d = call.request.d
     var n_classes = call.request.ip[0]
     var problems = n_classes if n_classes > 2 else 1
-    var n_out = problems * d + problems + 2
-    if _xl_word(call.result, n_out - 1) != 0:
+    # the result tail: x_linear/sgd_loop_words.mojo
+    var at = sgd_n_iter_word(problems, d)
+    if _xl_word(call.result, at + 1) != 0:
         raise Error("Floating-point under-/overflow occurred. Scaling input data with "
                     + "StandardScaler or MinMaxScaler might help.")
     var coef = _xl_slice(call.result, 0, problems * d, Python.tuple(problems, d), context)
     var intercept = _xl_slice(call.result, problems * d, problems, Python.tuple(problems), context)
-    var n_iter = _xl_count(call.result, n_out - 2)
+    var n_iter = _xl_count(call.result, at)
     py_setitem(fields, nk[].k_n_iter_, PythonObject(n_iter))
     py_setitem(fields, nk[].k_t_, PythonObject(Float64(n_iter * n + 1)))
     py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
+    # fit_loop_ (lane alm-linear): (epochs run, the epoch loop's milliseconds)
+    # from the words the binding wrote; not archived (a loaded model has none)
+    var loop = sgd_fit_loop(FP(unsafe_from_address=labels_address(call.result)), problems, d)
+    py_setitem(fields, nk[].k_fit_loop_, Python.tuple(PythonObject(loop.iterations), PythonObject(loop.milliseconds())))
     return (coef, intercept)
 
 

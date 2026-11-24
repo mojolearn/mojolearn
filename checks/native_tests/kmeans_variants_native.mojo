@@ -27,7 +27,7 @@ from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, r
 
 
 # ---- The host column (was kmeans_variants_native_cpu_suite.mojo) ----
-comptime KMEANS_VARIANTS_NATIVE_CPU_FIXTURES = 10
+comptime KMEANS_VARIANTS_NATIVE_CPU_FIXTURES = 11
 
 
 def span(values: List[Float32]) -> VariantsSpan:
@@ -52,6 +52,29 @@ def fit_case(driver: KMeansVariantsDriver, weighted: Bool) raises:
     require(output.storage[0].steps == 1 and output.storage[0].iterations == 1, "one full mini batch")
     _ = x^
     _ = auxiliary^
+
+
+comptime FIT_LOOP_CAP = 3
+
+
+def fit_loop_case(driver: KMeansVariantsDriver) raises:
+    """`fit_loop_` (lane ab-loop-mode): a fit capped at FIT_LOOP_CAP passes
+    with both early stops off (tol 0, max_no_improvement -1) and a batch of
+    all rows runs FIT_LOOP_CAP steps; the fit loop reports exactly those
+    steps and a non-negative time."""
+    var x: List[Float32] = [1, 11]
+    var auxiliary: List[Float32] = [1, 11]
+    var output = VariantsResultSlot()
+    driver.minibatch_fit(MiniBatchFitRequest(span(x), span(auxiliary),
+        2, 1, 2, FIT_LOOP_CAP, 2, -1, 2, 1, True, 7, False, False, False, 0, 0), output)
+    _ = x^
+    _ = auxiliary^
+    require(output.storage[0].steps == FIT_LOOP_CAP and output.storage[0].iterations == FIT_LOOP_CAP,
+            "capped fit runs every step")
+    require(output.storage[0].loop.recorded and output.storage[0].loop.iterations == output.storage[0].steps,
+            "fit loop iterations are the executed steps")
+    require(output.storage[0].loop.loop_ns >= 0 and output.storage[0].loop.milliseconds() >= 0.0,
+            "fit loop time is not negative")
 
 
 def partial_case(driver: KMeansVariantsDriver, kind: Int) raises:
@@ -159,8 +182,10 @@ def fixture(driver: KMeansVariantsDriver, unit: Int) raises:
         partial_case(driver, unit - 2)
     elif unit < 7:
         bisect_case(driver, unit == 6)
-    else:
+    elif unit < 10:
         query_case(driver, unit - 7)
+    else:
+        fit_loop_case(driver)
 
 
 def _host_fixture(unit: Int) raises:

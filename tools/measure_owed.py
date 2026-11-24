@@ -306,7 +306,24 @@ def _iso_s(text):
         return None
 
 
-def share_base(target, ids, sources, now_s, max_age_s=BASE_MAX_AGE_S):
+def loop_key(rec, loop_cap=None):
+    """(A/B LOOP MODE, tools/ab_loop.py) the loop mode a board race ran in, as compared for sharing: the race's own
+    `loop_mode` record ({mode, k, param}); None for a race timed with loop mode off (the whole operation)."""
+    lm = (rec or {}).get("loop_mode")
+    return None if not lm else (lm.get("mode"), lm.get("k"), lm.get("param"))
+
+
+def planned_loop_key(rid, loop_cap):
+    """The loop_key a race of id RID ('family/lane/dataset/...') gets when timed with --loop-cap LOOP_CAP."""
+    if loop_cap in (None, "", "off"):
+        return None
+    import ab_loop as AL
+    family, lane = rid.split("/")[:2]
+    p = AL.race_plan(family, lane, None if loop_cap == "table" else int(loop_cap))
+    return (p["mode"], p.get("k"), p.get("param"))
+
+
+def share_base(target, ids, sources, now_s, max_age_s=BASE_MAX_AGE_S, loop_cap=None):
     """(board, shared {race: provenance}, todo [race]) for one base chunk of an owed A/B unit.
 
     TARGET is the unit's base board (a document or None), SOURCES [(board dir, board document)] the base boards this
@@ -315,7 +332,9 @@ def share_base(target, ids, sources, now_s, max_age_s=BASE_MAX_AGE_S):
     alone; a race some source holds as done, finished at most MAX_AGE_S before NOW_S, is copied into the target with a
     "shared_base" record (its board, finish time and age), the freshest when several hold it; every other race is in
     TODO, to be timed now. The target board is created from the freshest source's document when it does not exist
-    (same box, same candidate bytes: bench_board resumes it)."""
+    (same box, same candidate bytes: bench_board resumes it). A/B LOOP MODE: a source race is shared only when it ran
+    in the loop mode LOOP_CAP gives that race (a capped base is never compared with a whole-operation arm, nor the
+    other way round); the listed rows' candidate board (loop mode off) therefore never feeds a capped unit."""
     races = dict(((target or {}).get("races") or {}))
     shared, todo = {}, []
     for rid in ids:
@@ -326,6 +345,8 @@ def share_base(target, ids, sources, now_s, max_age_s=BASE_MAX_AGE_S):
             rec = ((doc or {}).get("races") or {}).get(rid)
             if not rec or rec.get("status") != "done" or rec.get("shared_base"):
                 continue      # a shared copy is never shared again: the timed original is the source
+            if loop_key(rec) != planned_loop_key(rid, loop_cap):
+                continue      # another loop mode or cap (A/B LOOP MODE)
             fin = _iso_s(rec.get("finished"))
             if fin is None or now_s - fin > max_age_s or now_s < fin:
                 continue
@@ -369,7 +390,7 @@ def cmd_base_share(a):
         if doc is not None and "placeholder" not in doc:
             sources.append((d, doc))
     now_s = time.time() if a.now is None else a.now
-    board, shared, todo = share_base(target, ids, sources, now_s, a.max_age_s)
+    board, shared, todo = share_base(target, ids, sources, now_s, a.max_age_s, a.loop_cap)
     if shared:
         os.makedirs(a.target, exist_ok=True)
         PC.write_atomic(tpath, PC.json_text(board))
@@ -741,6 +762,8 @@ def build_parser():
     bs.add_argument("--source", action="append", default=[], help="a base board dir of this job (repeat it)")
     bs.add_argument("--max-age-s", type=int, default=BASE_MAX_AGE_S,
                     help="share a base race finished at most this many seconds ago (default %(default)s)")
+    bs.add_argument("--loop-cap", default=None, metavar="off|table|K",
+                    help="the --loop-cap the unit's boards run with (A/B LOOP MODE): only races of that mode are shared")
     bs.add_argument("--now", type=float, default=None, help=argparse.SUPPRESS)
     bs.add_argument("--out", required=True, help="the races still to time (the chunk's .base file)")
     r = sub.add_parser("report", help="the owed rows' numbers from the job's boards and drivers")

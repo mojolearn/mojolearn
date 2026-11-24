@@ -126,6 +126,10 @@ class Sequential(_CheckMixin):
         from an export.
     n_iter_ : int
         Number of epochs run.
+    fit_loop_ : tuple of (int, float)
+        The number of epochs the last ``fit`` call ran and the time in
+        milliseconds its epoch loop took, from the start of the first epoch
+        to the end of the last.
     n_features_in_ : int
         Number of input features.
     classes_ : ndarray

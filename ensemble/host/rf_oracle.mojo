@@ -122,6 +122,7 @@ from std.memory import bitcast
 from std.builtin.sort import sort
 from std.sys.compile import is_defined
 from core.host_parallel import host_parallelize
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 
 from checks.fixed_point import choose_scale
 from core.abs_sum_blocked_host import host_abs_sum_blocked
@@ -1304,6 +1305,9 @@ struct RfHostForest(Movable):
     # The fit's user notices, an `ensemble/rf_notices.mojo` bit mask (the
     # device forest's `RandomForestMetaData.notices`).
     var notices: Int
+    # The fit's tree loop (the device forest's `RandomForestMetaData.fit_loop`;
+    # lane alm-forest): the trees `rf_host_fit` built and the loop's time.
+    var fit_loop: FitLoop
 
     def __init__(out self):
         self.offsets = List[Int32]()
@@ -1316,6 +1320,7 @@ struct RfHostForest(Movable):
         self.n_trees = 0
         self.num_outputs = 1
         self.notices = 0
+        self.fit_loop = FitLoop.empty()
 
     def n_nodes(self) -> Int:
         return len(self.colid)
@@ -1855,6 +1860,11 @@ def rf_host_fit(
     for _ in range(p.n_trees):
         trees.append(_RfHostTree(List[Int32](), List[Float32](), List[Int32](), List[Float32](), List[Float32](), List[Int32]()))
     var tree_tasks = host_predict_task_count(p.n_trees)
+    # The fit loop clock (lane alm-forest, 2026-11-24): read once after the
+    # tree slots are allocated, immediately before the first tree, and once
+    # after the tree tasks join (the host column has no device to wait on).
+    # Nothing is read inside the loop. Measurement only: no bit changes.
+    var loop_start = fit_loop_start()
     if tree_tasks <= 1:
         for t in range(p.n_trees):
             trees[t] = _rf_host_tree(
@@ -1893,6 +1903,7 @@ def rf_host_fit(
         for k in range(tree_tasks):
             if failed[k]:
                 raise Error(messages[k])
+    forest.fit_loop = fit_loop_stop(loop_start, p.n_trees)
     for t in range(p.n_trees):
         ref tr = trees[t]
         for node in range(len(tr.colid)):

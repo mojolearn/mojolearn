@@ -26,6 +26,7 @@ from x_cluster.common import gather_rows, greedy_kmeans_pp, nearest_all, sum_f64
 from x_cluster.post_bodies import FM_VAL, FOLD_CHUNK
 from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV
 from x_cluster.ops import ClusterOps
+from core.fit_loop_clock import fit_loop_start, fit_loop_stop
 
 
 # TOMBSTONE: MOJOLEARN_MINIBATCH_ONE_PASS (unmeasured opt-in arm, FAST: every center updated in one batch walk) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 4f3953bdbe.
@@ -169,6 +170,9 @@ struct MiniBatchResult(Copyable, Movable):
     var inertia: Float64
     var n_steps: Int
     var n_iter: Int
+    # The fit loop (`MiniBatchKMeans.fit_loop_`; lane ab-loop-mode): the
+    # step loop's nanoseconds; its iterations are `n_steps`.
+    var loop_ns: Int
 
 
 def minibatch_fit[O: ClusterOps](
@@ -318,6 +322,17 @@ def minibatch_fit[O: ClusterOps](
     var wslot = ops.zeros(k)
     ops.set(cslot, c)
     var steps_done = 0
+    # The fit loop clock (lane ab-loop-mode): read once here, after the init,
+    # the batch slots and the centers upload, before the steps (the resident
+    # FAST steps below, or the step loop). The step loop's own scratch is
+    # allocated after the FAST block, so a fit that runs the step loop reads
+    # the clock again right before it (`n_steps` > 0 only then). The stop is
+    # read right after the centers readback that follows the loop (an
+    # existing wait). Nothing is read inside the steps. ONE settle before
+    # the clock (lane alm-left): the batch slots' fills and the centers
+    # upload are queued, and would otherwise run inside the region.
+    ops.settle()
+    var loop_start = fit_loop_start()
     # lane/apple-fast-cluster (2026-10-02), FAST on Apple, ON by default (see
     # x_cluster/minibatch_fast.mojo for the M3 A/B): MINIBATCH_FAST_DEV runs the
     # steps resident on the device (x_cluster/minibatch_fast.mojo: no upload,
@@ -385,6 +400,11 @@ def minibatch_fit[O: ClusterOps](
     # falls back to 1 when one does (the first steps of a fit with many
     # centers reassign often; a discarded step is wasted device work)
     var gsz = 1
+    if n_steps > 0:
+        # the step loop's scratch fills and the cumulative weights' upload,
+        # drained before the clock (lane alm-left; once per fit)
+        ops.settle()
+        loop_start = fit_loop_start()
     while gstep < n_steps and not stop:  # driver-loop: over step groups
         var g_n = n_steps - gstep
         if g_n > gsz:
@@ -510,6 +530,7 @@ def minibatch_fit[O: ClusterOps](
         gstep = steps_done
 
     c = ops.get(cslot, k * d)
+    var loop = fit_loop_stop(loop_start, steps_done)
     var dist = List[Float32]()
     nearest_all(ops, xs, n, c, k, d, labels, dist)
     centers = c^
@@ -520,7 +541,7 @@ def minibatch_fit[O: ClusterOps](
         inertia = Float64(0)
         for t in range(n):
             inertia = inertia + identical_mul64(Float64(weights[t]), Float64(dist[t]))
-    return MiniBatchResult(inertia, steps_done, n_iter)
+    return MiniBatchResult(inertia, steps_done, n_iter, loop.loop_ns)
 
 
 def mb_reassign_marks(w: List[Float32], k: Int, batch: Int, ratio: Float64) -> List[Bool]:

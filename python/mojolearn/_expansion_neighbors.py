@@ -1516,6 +1516,10 @@ class LabelPropagation(_LabelPropagationBase):
         Label assigned to each training sample.
     n_iter_ : int
         Number of iterations run.
+    fit_loop_ : tuple of (int, float)
+        The number of iterations the last fit ran (propagation steps,
+        ``n_iter_``) and the time in milliseconds its iteration loop took,
+        from the start of the first iteration to the end of the last.
     n_features_in_ : int
         Number of features seen in ``fit``.
 
@@ -1603,6 +1607,10 @@ class LabelSpreading(_LabelPropagationBase):
         Label assigned to each training sample.
     n_iter_ : int
         Number of iterations run.
+    fit_loop_ : tuple of (int, float)
+        The number of iterations the last fit ran (propagation steps,
+        ``n_iter_``) and the time in milliseconds its iteration loop took,
+        from the start of the first iteration to the end of the last.
     n_features_in_ : int
         Number of features seen in ``fit``.
 

@@ -28,7 +28,7 @@ optional trailing words (the export's `len(params) > i` tests become
   ANN_OP_IVF_RABITQ_SEARCH    a 11  p n, dim, n_lists, seed, m, k, n_probes[, status]                -> m
   ANN_OP_CAGRA_SEARCH         a 5   p n, d, graph_degree, m, k, itopk, width, max_iter, n_seeds[, rs[, status]] -> m
   ANN_OP_FILTER_TOPK          a 5   p m, n, L, k                                                     -> m
-  ANN_OP_TSNE_FIT             a [x, y0, y_out, kl_out]  p n, d, max_iter, exploration[, init mode[, seed low,
+  ANN_OP_TSNE_FIT             a [x, y0, y_out, kl_out[, loop ns out (int64; 0: none)]]  p n, d, max_iter, exploration[, init mode[, seed low,
                               seed high[, n_components[, finite flag]]]]
                               f perplexity, early_exaggeration, learning_rate, post factor
                               -> X's finite status word (0 when the flag is absent or X is finite)
@@ -148,7 +148,7 @@ def ann_ops_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         p_hi = 4
     elif operation == ANN_OP_TSNE_FIT:
         a_lo = 4
-        a_hi = 4
+        a_hi = 5
         p_lo = 4
         p_hi = 9
         want_f = 4
@@ -299,10 +299,12 @@ def ann_search_call(entry: NativeDescriptorCall, operation: Int, addresses: List
 def ann_tsne_fit_call(entry: NativeDescriptorCall, x: Int, y0: Int, y_out: Int, kl_out: Int, n: Int, d: Int,
                       max_iter: Int, exploration: Int, perplexity: Float64, early_exaggeration: Float64,
                       learning_rate: Float64, post_factor: Float64, mode: Int, seed_low: Int, seed_high: Int,
-                      n_components: Int, finite_flag: Int) raises -> Int:
+                      n_components: Int, finite_flag: Int, loop_out: Int) raises -> Int:
     """The full t-SNE request (every optional word present); returns X's
-    finite status word (0 unless the flag is set and X is not finite)."""
-    var addresses: List[Int] = [x, y0, y_out, kl_out]
+    finite status word (0 unless the flag is set and X is not finite).
+    `loop_out`: 0, or one int64 that receives the gradient loop's
+    nanoseconds (`fit_loop_`)."""
+    var addresses: List[Int] = [x, y0, y_out, kl_out, loop_out]
     var ints: List[Int] = [n, d, max_iter, exploration, mode, seed_low, seed_high, n_components, finite_flag]
     var floats: List[Float64] = [perplexity, early_exaggeration, learning_rate, post_factor]
     return native_descriptor_call(entry, ANN_OP_TSNE_FIT, addresses, ints, floats)

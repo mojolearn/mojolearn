@@ -12,6 +12,8 @@ and AMD. Host loops run over layers, batches and epochs only.
 from std.memory import bitcast, unsafe_memcpy
 from std.sys.compile import is_defined
 from sequence.exec_trait import Exec
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
+from sequence.fit_loop_words import fit_loop_publish
 from sequence.ops import (
     FP, Args, OP_COPY, OP_FILL, OP_GATHER_ROWS, OP_MLP_PERM, OP_ONE_HOT, OP_PROBA2, OP_SEQ_IOTA,
     OPT_ADAM, OPT_ADAMW, OPT_SGD, dummy_ptr,
@@ -1351,15 +1353,17 @@ def _word_f32(w: Int64) -> Float32:
 # ---------------------------------------------------------------- fit / predict
 def model_fit[E: Exec](
     mut ex: E, spec: ModelSpec, cfg: FitConfig, X: CastIn, Y: CastIn, N: Int, Pio: FP, curve: FP,
+    loop_words: Int = 0,
 ) raises -> Int:
-    """`model_fit_state` from a fresh start, the optimizer state discarded."""
+    """`model_fit_state` from a fresh start, the optimizer state discarded.
+    `loop_words`: as `model_fit_state`'s."""
     var m = List[Float32](length=spec.n_params, fill=Float32(0))
     var v = List[Float32](length=spec.n_params, fill=Float32(0))
     var st = List[Int64](length=FIT_STATE_WORDS, fill=Int64(0))
     var n_iter = model_fit_state(
         ex, spec, cfg, X, Y, N, Pio, curve, FP(unsafe_from_address=Int(m.unsafe_ptr())),
         FP(unsafe_from_address=Int(v.unsafe_ptr())), IP64(unsafe_from_address=Int(st.unsafe_ptr())),
-        curve, False,
+        curve, False, loop_words=loop_words,
     )
     _ = m^
     _ = v^
@@ -1371,9 +1375,18 @@ def model_fit_state[E: Exec](
     mut ex: E, spec: ModelSpec, cfg_in: FitConfig, X: CastIn, Y: CastIn, N: Int, Pio: FP, curve: FP,
     Mio: FP, Vio: FP, St: IP64, curve_prev: FP, resume: Bool,
     validation: Optional[FitValidation] = None, codes_dev: Int = 0, lengths: Optional[FP] = None,
-    target_lengths: Optional[FP] = None,
+    target_lengths: Optional[FP] = None, loop_words: Int = 0,
 ) raises -> Int:
     """Train the model on X (N, n_inputs) and Y; returns the epochs run.
+
+    `loop_words` (lane alm-neural, 2026-11-24): the address of the fit
+    loop's record words (sequence/fit_loop_words.mojo), or 0. The loop
+    region is the epoch loop: the clock is read once before epoch 0's first
+    launch (after the uploads, allocations and tapes) and once after the
+    first existing `ex.sync()` that follows the loop (the validation
+    readback's, else the parameter readback's): no synchronization added,
+    nothing inside the loop; its iterations are the epochs executed in
+    this call (before a restore of the best epoch).
 
     X and Y are the caller's arrays as they are (core/cast_in.mojo): any
     accepted dtype in C or Fortran order, cast to row-major float32 on the
@@ -1635,6 +1648,11 @@ def model_fit_state[E: Exec](
     var word = List[Float32](length=1, fill=Float32(0))
     var inv_n = ftz(identical_div(Float32(1), Float32(N)))
     var n_iter = 0
+    var loop_record = FitLoop.empty()
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    ex.sync()
+    var loop_start = fit_loop_start()
     for e in range(cfg.epochs):  # driver-loop: over epochs
         # the absolute epoch index: a resumed fit continues the row orders
         # and the schedule of the fit it resumes
@@ -1779,6 +1797,7 @@ def model_fit_state[E: Exec](
     if validation:
         var v = validation.value().copy()
         ex.sync()
+        loop_record = fit_loop_stop(loop_start, n_iter)
         ex.download(v.curve, vcurve, n_iter)
         v.result[0] = Int64(n_iter)
         v.result[1] = Int64(start + best_epoch)
@@ -1793,6 +1812,9 @@ def model_fit_state[E: Exec](
             stall = 0
             n_iter = best_epoch
     ex.sync()
+    if not loop_record.recorded:
+        loop_record = fit_loop_stop(loop_start, n_iter)
+    fit_loop_publish(loop_words, loop_record)
     ex.download(Pio, P, np_)
     ex.download(Mio, s1, np_)
     ex.download(Vio, s2, np_)

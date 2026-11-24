@@ -14,6 +14,7 @@ on resident device matrices."""
 from std.math import inf, sqrt
 from x_decomp.cells import F32Ptr
 from x_decomp.exec_trait import Exec
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from x_decomp.kit import (
     Kit, Mat, OP_ADD, OP_ADDS, OP_DIV, OP_LOGS, OP_MAXS, OP_MINS, OP_MUL, OP_SCALE, OP_SQ, OP_SQRT,
     mat_const, mat_from, mat_rows, mat_t, mat_vec_t, svd_order,
@@ -81,9 +82,11 @@ struct FaArgs(Copyable, Movable):
         self.llconst = llconst
 
 
-def fa_em[E: Exec](A: Mat, mut psi: Mat, mut W: Mat, mut ll_out: List[Float64], a: FaArgs) raises -> Int:
+def fa_em[E: Exec](A: Mat, mut psi: Mat, mut W: Mat, mut ll_out: List[Float64], a: FaArgs,
+                   mut loop: FitLoop) raises -> Int:
     """The EM loop over A (Rx, d x d, when n >= d; else Xc, n x d): psi (1 x
-    d) and W (nc x d) replaced, the log-likelihoods appended. Returns it."""
+    d) and W (nc x d) replaced, the log-likelihoods appended. Returns it;
+    `loop` receives the EM loop's clock."""
     var k = Kit[E]()
     var n = a.n
     var d = a.d
@@ -91,6 +94,7 @@ def fa_em[E: Exec](A: Mat, mut psi: Mat, mut W: Mat, mut ll_out: List[Float64], 
     var nsqrt = sqrt(Float64(n))
     var old_ll = -inf[DType.float64]()
     var it = 0
+    var loop_start = fit_loop_start()
     for i in range(1, a.max_iter + 1):
         it = i
         var sqrt_psi = k.ew1(OP_ADDS, k.ew1(OP_SQRT, psi, 0.0), FA_SMALL)
@@ -134,6 +138,7 @@ def fa_em[E: Exec](A: Mat, mut psi: Mat, mut W: Mat, mut ll_out: List[Float64], 
         var wts = k.ew2(OP_ADD, k.ew2(OP_MUL, k.ew1(OP_MINS, s2, 1.0), keep), k.ew2(OP_MUL, s2, drop))
         var share = k.mm(wts, k.ew1(OP_SQ, Vfull, 0.0), False, False)
         psi = k.ew1(OP_MAXS, k.ew2(OP_MUL, k.ew1(OP_SQ, sqrt_psi, 0.0), share), FA_SMALL)
+    loop = fit_loop_stop(loop_start, it)
     return it
 
 
@@ -144,16 +149,17 @@ def fa_em_main_check(args: FaArgs, ar: Int) raises:
 
 
 def fa_em_main_run[E: Exec](
-    pa: F32Ptr, pp: F32Ptr, pw: F32Ptr, pl: MutPointer[Float64, MutUntrackedOrigin], ar: Int, args: FaArgs
+    pa: F32Ptr, pp: F32Ptr, pw: F32Ptr, pl: MutPointer[Float64, MutUntrackedOrigin], ar: Int, args: FaArgs,
+    mut loop: FitLoop,
 ) raises -> Int:
     """The EM loop: A (ar x d) at pa, psi (d, in and out) at pp, W (nc x d,
     out) at pw, the log-likelihoods (max_iter float64, out) at pl. Returns
-    it (the first it log-likelihoods set)."""
+    it (the first it log-likelihoods set); `loop` receives its clock."""
     var A = mat_from(pa, ar, args.d)
     var P = mat_from(pp, 1, args.d)
     var W = Mat(args.nc, args.d)
     var lls = List[Float64]()
-    var it = fa_em[E](A, P, W, lls, args)
+    var it = fa_em[E](A, P, W, lls, args, loop)
     for i in range(args.d):
         pp.unsafe_store(i, P.d[i])
     for i in range(W.n()):

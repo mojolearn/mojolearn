@@ -166,6 +166,12 @@ struct KMeansFitResult(Copyable, ImplicitlyCopyable, Movable):
     var n_iter: Int
     var sum_scale: Float64
     var weight_scale: Float64
+    var loop_iterations: Int
+    """The fit loop's executed Lloyd iterations, summed over the restarts
+    (`fit_loop_`; lane ab-loop-mode, `core/fit_loop_clock.mojo`)."""
+    var loop_ns: Int
+    """The nanoseconds of the fit loop region (`kmeans_fit_main`'s two
+    clock reads around the restarts). Measurement only."""
 
 
 def abs_chunk_sums_kernel(
@@ -424,7 +430,7 @@ def kmeans_fit(
                 if flagged_x == 0:
                     raise e^
                 MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] = flagged_x
-                return KMeansFitResult(0.0, 0, sum_scale, weight_scale)
+                return KMeansFitResult(0.0, 0, sum_scale, weight_scale, 0, 0)
         else:
             sum_scale = plan_sum_scale(ctx, x, n_samples, n_features)
     if finite_word != 0:
@@ -434,7 +440,7 @@ def kmeans_fit(
         var flagged = word.unsafe_ptr()[0]
         MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] = flagged
         if flagged != 0:
-            return KMeansFitResult(0.0, 0, sum_scale, weight_scale)
+            return KMeansFitResult(0.0, 0, sum_scale, weight_scale, 0, 0)
     _ = word^
     _ = status^
     # DEVIATION 5112: weights above one outgrow the unweighted bound
@@ -583,7 +589,8 @@ def _kmeans_fit_tail(
     ctx.synchronize()
 
     return KMeansFitResult(
-        result.inertia, result.n_iter, sum_scale, weight_scale
+        result.inertia, result.n_iter, sum_scale, weight_scale,
+        result.loop_iterations, result.loop_ns,
     )
 
 

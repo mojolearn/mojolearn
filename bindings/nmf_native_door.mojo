@@ -29,6 +29,7 @@ from x_decomp.nmf_owner import (
     NMF_INIT_GIVEN, NMF_TRANSFORM,
 )
 from bindings.nmf_keys_unpack import nmf_keys
+from core.fit_loop_clock import FitLoop
 from bindings.py_balanced import py_item
 
 
@@ -219,6 +220,9 @@ def nmf_fit_transform(model: PythonObject, source: PythonObject, w_given: Python
     py_setitem(fields, nk[].k_components_, result.h)
     py_setitem(fields, nk[].k_n_components_, PythonObject(result.count))
     py_setitem(fields, nk[].k_n_iter_, PythonObject(result.result.iterations))
+    # `fit_loop_`: (n_iter_, the solver loop's milliseconds), Mojo values packed once per fit
+    var loop = FitLoop(result.result.iterations, result.result.loop_ns, True)
+    py_setitem(fields, nk[].k_fit_loop_, Python.tuple(PythonObject(loop.iterations), PythonObject(loop.milliseconds())))
     py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
     py_setitem(fields, nk[].k_reconstruction_err_, PythonObject(result.result.error))
     _ = admitted^

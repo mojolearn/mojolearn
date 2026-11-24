@@ -58,6 +58,7 @@ from svm.host.native_descriptor_dispatch import SVC_HOST_NATIVE_API
 from core.kernel_svm_member import kernel_svm_member_publish
 from core.isolation_forest_member import isolation_forest_member_publish
 from core.native_descriptor_abi import NativeDescriptorError
+from core.forest_fit_request import fit_loop_put
 from core.iforest_entry import (
     IFExportRequest, IFForestRunRequest, IFForestSpans, IFImage, IFRunRequest, IF_CAP_RESIDENT, if_entry_dispatch,
     if_entry_publish,
@@ -551,6 +552,8 @@ def _iforest_run(r: IFRunRequest) raises -> Int:
         iforest_host_resident_outputs_run(
             run, want, out_i32_address, out_f32_address, r.n_query, r.n_features, held_token, ip
         )
+        # The fit loop words the door asked for (IF_A_LOOP; lane alm-forest).
+        fit_loop_put(r.loop, run.fit_loop)
         return r.n_query
     run = iforest_run_host(
         r.train, r.query, r.n_train, r.n_features, r.n_query, r.n_estimators,
@@ -559,6 +562,7 @@ def _iforest_run(r: IFRunRequest) raises -> Int:
         r.random_state, r.contamination_auto, r.contamination, want,
     )
     iforest_host_outputs_run(run, want, out_i32_address, out_f32_address, r.n_query, r.n_features, ip)
+    fit_loop_put(r.loop, run.fit_loop)
     return r.n_query
 
 

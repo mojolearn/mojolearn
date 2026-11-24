@@ -10,6 +10,7 @@ words are the Python driver's; x_decomp/als_dev.mojo runs the GPU binding's
 form (C resident, the item half-sweep through strides)."""
 from x_decomp.cells import F32Ptr
 from x_decomp.exec_trait import Exec
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from x_decomp.kit import (
     Kit, Mat, OP_ABS, OP_ADD, OP_ADDS, OP_GTS, OP_MUL, OP_SCALE, OP_SELECT, OP_SQ, mat_from, mat_t,
 )
@@ -63,9 +64,12 @@ def als_loss[E: Exec](k: Kit[E], C: Mat, X: Mat, Y: Mat, reg: Float64) raises ->
     return tot / (conf + (Float64(C.r * C.c) - nnz))
 
 
-def als_fit[E: Exec](C: Mat, mut X: Mat, mut Y: Mat, a: AlsArgs, mut losses: List[Float64]) raises:
+def als_fit[E: Exec](C: Mat, mut X: Mat, mut Y: Mat, a: AlsArgs, mut losses: List[Float64],
+                     mut loop: FitLoop) raises:
+    # `loop`: the sweep loop's clock (core/fit_loop_clock.mojo), every sweep runs
     var k = Kit[E]()
     var Ct = mat_t(C)
+    var loop_start = fit_loop_start()
     for _ in range(a.iterations):
         if a.use_cg:
             X = als_cg_half(k, C, Y, X, a.reg, a.cg_steps)
@@ -75,21 +79,23 @@ def als_fit[E: Exec](C: Mat, mut X: Mat, mut Y: Mat, a: AlsArgs, mut losses: Lis
             Y = als_half(k, Ct, X, a.reg)
         if a.calc_loss:
             losses.append(als_loss(k, C, X, Y, a.reg))
+    loop = fit_loop_stop(loop_start, max(a.iterations, 0))
 
 
 def als_fit_run[E: Exec](
-    pc: F32Ptr, px: F32Ptr, py_: F32Ptr, pl: MutPointer[Float64, MutUntrackedOrigin], n: Int, m: Int, nf: Int, a: AlsArgs
+    pc: F32Ptr, px: F32Ptr, py_: F32Ptr, pl: MutPointer[Float64, MutUntrackedOrigin], n: Int, m: Int, nf: Int, a: AlsArgs,
+    mut loop: FitLoop,
 ) raises -> Int:
     """c (n x m) the confidences; x (n x f) and y (m x f) the starts,
     replaced; ls (iterations float64) the losses when asked. Returns the
-    number of losses written."""
+    number of losses written; `loop` receives the sweep loop's clock."""
     if n * m > 2147483647 or n * nf > 2147483647 or m * nf > 2147483647:
         raise Error("x_decomp: als shape out of range")
     var cnt = 0
     var X = mat_from(px, n, nf)
     var Y = mat_from(py_, m, nf)
     var losses = List[Float64]()
-    als_fit[E](mat_from(pc, n, m), X, Y, a, losses)
+    als_fit[E](mat_from(pc, n, m), X, Y, a, losses, loop)
     for i in range(n * nf):
         px.unsafe_store(i, X.d[i])
     for i in range(m * nf):

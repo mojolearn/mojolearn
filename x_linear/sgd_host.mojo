@@ -23,6 +23,8 @@ from x_linear.sgd import (
     sgd_mb_one,
     sgd_one,
 )
+from x_linear.sgd_loop_words import sgd_loop_store
+from core.fit_loop_clock import fit_loop_start, fit_loop_stop
 
 
 def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
@@ -34,7 +36,8 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
     fp: [alpha, l1_ratio, eta0, power_t, epsilon, tol].
     y: labels as 0..K-1 (classification) or targets. res: coef (P*d),
     intercept (P; for k == 1 the one-class offset_ = 1 - intercept,
-    lane/neural-pass139), n_iter (1), status (1: 0 ok, -1 non-finite).
+    lane/neural-pass139), n_iter (1), status (1: 0 ok, -1 non-finite), the
+    epoch loop's time (2 words, x_linear/sgd_loop_words.mojo).
     The host binding's fit (cpu-gpu-cleanup w2-linear: the device's warp
     and thread forms, which ran a problem on one warp / one thread, are
     deleted; the device runs `_sgd_mb_grid` / `_sgd_ps_grid`).
@@ -114,7 +117,11 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                 )
             st(epr, c, i2f(ep))
 
+    # fit_loop_ (lane alm-linear): the epoch loops of every problem, two clock
+    # reads around them and nothing inside; the host has no device to wait on
+    var loop_start = fit_loop_start()
     par_rows(run_problems, problems, 1)
+    var loop = fit_loop_stop(loop_start, 0)
     if not t.lead():
         return
     var max_epochs = 0
@@ -127,3 +134,4 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
             max_epochs = ep
     st(res, problems * d + problems, i2f(max_epochs))
     st(res, problems * d + problems + 1, i2f(status))
+    sgd_loop_store(res, problems, d, loop)

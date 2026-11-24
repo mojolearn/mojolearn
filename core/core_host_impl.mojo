@@ -564,9 +564,10 @@ def kmeans_fit_host(
     ii: Int,
     mm: Int,
     ovs: Float64,
-) raises -> Tuple[Float64, Int, Float64, Float64]:
+) raises -> Tuple[Float64, Int, Float64, Float64, Int, Int]:
     """Fit k-means on the host; writes the centroids and labels and returns
-    (inertia, n_iter, sum_scale, weight_scale)."""
+    (inertia, n_iter, sum_scale, weight_scale, loop_iterations, loop_ns):
+    the last two are the fit loop (`host_fit_main`'s two clock reads)."""
     host_kmeans_validate(ns, nf, nc, nw)
     var x = read_f32(x_address, ns * nf)
     var centroids: List[Float32]
@@ -587,7 +588,7 @@ def kmeans_fit_host(
         cp[i] = centroids[i]
     for i in range(ns):
         lp[i] = labels[i]
-    return (r.inertia, r.n_iter, r.sum_scale, r.weight_scale)
+    return (r.inertia, r.n_iter, r.sum_scale, r.weight_scale, r.loop_iterations, r.loop_ns)
 
 
 def kmeans_predict_host(

@@ -4,6 +4,7 @@ from std.memory import bitcast
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.native_descriptor_fixed_call import native_descriptor_call_fixed
+from core.fit_loop_clock import FitLoop
 
 comptime KMEANS_NATIVE_ABI = "mojolearn.kmeans.native.v1"
 comptime KMEANS_NATIVE_COUNT = 7
@@ -67,6 +68,10 @@ struct KMeansFitResult(Copyable, Movable):
     var weight_scale: Float64
     var finite: Int
     var range_error: Int
+    # The fit loop (`KMeans.fit_loop_`; lane ab-loop-mode): Lloyd iterations
+    # summed over the restarts and the loop region's nanoseconds. Wire words
+    # 6, 7 and 8 of the fit output span.
+    var loop: FitLoop
 
 
 @fieldwise_init
@@ -162,6 +167,9 @@ def kmeans_native_dispatch[K: KMeansNativeKernels](operation: Int,
             dst[3] = bitcast[DType.int64](answer.weight_scale)
             dst[4] = Int64(answer.finite)
             dst[5] = Int64(answer.range_error)
+            dst[6] = Int64(answer.loop.iterations)
+            dst[7] = Int64(answer.loop.loop_ns)
+            dst[8] = Int64(Int(answer.loop.recorded))
         elif operation == KMEANS_QUERY:
             if na != 4 or np != 10 or nf != 0 or aa == 0 or pp == 0:
                 raise Error("KMeans native ABI: query requires 4 addresses and 10 integers")
@@ -211,14 +219,15 @@ struct KMeansNativeDriver(Copyable, Movable):
         return native_descriptor_call_fixed(self.entry, operation, a, p, f)
 
     def fit(self, r: KMeansFitRequest) raises -> KMeansFitResult:
-        var words = List[Int64](length=6, fill=0)
+        var words = List[Int64](length=9, fill=0)
         var a: Array[Int, 6] = [r.source, r.centers, r.labels, r.weights, r.distances, Int(words.unsafe_ptr())]
         var p: Array[Int, 13] = [r.rows, r.features, r.clusters, r.weight_count, r.max_iter,
             r.seed, r.n_init, r.init, r.metric, Int(r.test_finite), r.fold.base, r.fold.rows, r.fold.indices]
         var f: Array[Float64, 2] = [r.tolerance, r.oversampling]
         _ = native_descriptor_call_fixed(self.entry, KMEANS_FIT, a, p, f)
         return KMeansFitResult(bitcast[DType.float64](words[0]), Int(words[1]),
-            bitcast[DType.float64](words[2]), bitcast[DType.float64](words[3]), Int(words[4]), Int(words[5]))
+            bitcast[DType.float64](words[2]), bitcast[DType.float64](words[3]), Int(words[4]), Int(words[5]),
+            FitLoop(Int(words[6]), Int(words[7]), words[8] != 0))
 
     def query(self, r: KMeansQueryRequest) raises -> KMeansQueryResult:
         var words = List[Int64](length=2, fill=0)

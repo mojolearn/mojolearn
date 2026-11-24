@@ -519,7 +519,8 @@ def _lp_fit(driver: XnDriver, b: Blobs, spreading: Bool, knn: Bool, gamma: Float
     if not spreading:
         _op(driver, xn_lp_clamp_request(Int(ld.unsafe_ptr()), Int(unlabeled.unsafe_ptr()), Int(ystatic.unsafe_ptr()),
                                         n, nc))
-    var info = List[Int32](length=2, fill=0)
+    # n_iter_, converged, the loop nanoseconds' low and high words
+    var info = List[Int32](length=4, fill=0)
     var alpha = xn_f32_word(0.2) if spreading else 0.0
     if knn:
         _op(driver, xn_lp_iterate_knn_request(Int(cols.unsafe_ptr()), Int(vals.unsafe_ptr()), Int(ld.unsafe_ptr()),

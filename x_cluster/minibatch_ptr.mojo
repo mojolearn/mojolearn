@@ -343,5 +343,7 @@ def minibatch_entry_ptr_idn(
         out.s.append(r.inertia)
         out.s.append(Float64(r.n_steps))
         out.s.append(Float64(r.n_iter))
+        # the fit loop's nanoseconds (lane ab-loop-mode; iterations = n_steps)
+        out.s.append(Float64(r.loop_ns))
         return True
     return False

@@ -11,6 +11,7 @@ from core.kmeans_native_api import (
     kmeans_native_dispatch,
 )
 from core.kmeans_owner_state import KMeansResidentState
+from core.fit_loop_clock import FitLoop
 
 comptime KMEANS_CONTRACT_FIXTURES = 28
 
@@ -38,7 +39,7 @@ struct WireOracle(KMeansNativeKernels):
         if r.fold.active():
             _require(r.fold.base == 67 and r.fold.rows == 71 and r.fold.indices == 73, "fit fold identity slots")
         var route = Int(r.distances != 0) + 2 * Int(r.fold.active())
-        return KMeansFitResult(-0.0, 79, 1.25, 2.5, -7, route)
+        return KMeansFitResult(-0.0, 79, 1.25, 2.5, -7, route, FitLoop(83, 89, True))
 
     @staticmethod
     def query(r: KMeansQueryRequest) raises -> KMeansQueryResult:
@@ -87,6 +88,8 @@ def _fixture(unit: Int) raises:
         _require(bitcast[DType.uint64](result.inertia) == UInt64(0x8000000000000000), "fit result keeps signed zero")
         _require(result.iterations == 79 and result.sum_scale == 1.25 and result.weight_scale == 2.5
             and result.finite == -7 and result.range_error == unit - 1, "fit result wire layout")
+        _require(result.loop.iterations == 83 and result.loop.loop_ns == 89 and result.loop.recorded,
+            "fit loop wire words")
     elif unit < 10:
         var variant = unit - 4
         var fold = KMeansFoldStore(67, 71, 73) if variant >= 4 else KMeansFoldStore()

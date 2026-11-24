@@ -16,6 +16,7 @@ from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 from x_ann.device_ctx import x_ann_ctx
 from core.admitted_finite_status import enqueue_finite_word
 from core.device_fold import device_sum_f32_fixed
+from core.fit_loop_clock import fit_loop_start, fit_loop_stop
 from x_ann.tsne_sym_device import tsne_symmetrize_device
 from x_ann.stage_timer import AnnStages
 from x_ann.knn_device import knn_enqueue
@@ -826,14 +827,18 @@ def _ts_kl(
 def tsne_fit_device(
     x: List[Float32], n: Int, d: Int, y0: List[Float32], perplexity: Float32, exaggeration: Float32,
     learning_rate: Float32, post_exaggeration_lr_factor: Float32, max_iter: Int, exploration: Int,
-    mut y_out: List[Float32], mut kl_out: Float32, finite_word: Int = 0,
+    mut y_out: List[Float32], mut kl_out: Float32, finite_word: Int = 0, loop_word: Int = 0,
 ) raises:
     """`finite_word` (lane a8d-device-x-decomp-manifold): when nonzero, the
     host address of one Int32 that receives X's finite status word
     (core/admitted_finite_status.mojo, 0 = every word finite), tested on the
     device over the upload and read at the perplexity step's
     synchronisation; a flagged X stops the fit there (y_out and kl_out are
-    not written; the door refuses)."""
+    not written; the door refuses). `loop_word`: when nonzero, the host
+    address of one Int that receives the gradient loop's nanoseconds
+    (`fit_loop_`, core/fit_loop_clock.mojo): the clock is read after the
+    graph and the optimizer state are uploaded, before the first step, and
+    after ONE synchronization behind the last step's last launch."""
     tsne_validate(n, d, perplexity, max_iter, exploration)
     # release-0845: the step size after the exaggeration phase is learning_rate x
     # post_exaggeration_lr_factor (cuML's exact/barnes-hut schedule uses 2.0, t_sne.pyx
@@ -897,6 +902,10 @@ def tsne_fit_device(
     var t_rep = 0
     var t_sum = 0
     var t_step = 0
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    ctx.synchronize()
+    var loop_start = fit_loop_start()
     for it in range(max_iter):
         var ex = exaggeration if it < exploration else Float32(1.0)
         var mom = Float32(0.5) if it < exploration else Float32(0.8)
@@ -913,6 +922,10 @@ def tsne_fit_device(
             _ts_iter(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, lr_it, dcnt, dparts, dzs)
         else:
             _ts_iter(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, lr_it, dcnt, dparts, dzs)
+    ctx.synchronize()
+    var loop = fit_loop_stop(loop_start, max(max_iter, 0))
+    if loop_word != 0:
+        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=loop_word)[] = loop.loop_ns
     st.mark(ctx, "iterations")
     if st.on:
         print("ANN-STAGE tsne_iter repulse", Float64(t_rep) / 1.0e6)

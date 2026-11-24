@@ -48,6 +48,8 @@ from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM, GLM_YDOM_REFUSED, glm_ydom_bad
 from x_linear.sgd_end import sgd_ys_kernel, sgd_iota_kernel, sgd_perm_kernel, sgd_mb_end_kernel, sgd_mb_res_kernel, sgd_ps_end_kernel, sgd_ps_res_kernel, SGD_END_ST, SGD_END_TPB, SGD_MB_FLAGS, SGD_MB_WORDS
 from x_linear.sgd_end import sgd_mb_ovr_act_kernel, sgd_mb_ovr_res_kernel, sgd_flags_crit_kernel, sgd_live_crit_kernel
+from x_linear.sgd_loop_words import sgd_loop_store
+from core.fit_loop_clock import fit_loop_start, fit_loop_stop
 # lane n3b-sgd-on-program-fit: the SGD epochs on the executor's bounded device loop
 from autograd.program_loop import LoopTimers, fit_epochs_per_read
 from autograd.program_loop_device import LoopOutcome, LoopRegisters, LoopStep, bounded_device_loop, loop_lap
@@ -1786,12 +1788,21 @@ def _sgd_mb_ovr_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[
     var step = _SgdOvrEpochs(x, n_x, y, n_y, n, d, ip, fp, n_out)
     var registers = LoopRegisters(ctx)
     var timers = LoopTimers("sgd.ovr")
+    # fit_loop_ (lane alm-linear): bounded_device_loop's last flag read waits
+    # on the stream, so the clock stops right after it (no synchronization
+    # added); the epochs are the n_iter word `finish` brings home
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    ctx.synchronize()
+    var loop_start = fit_loop_start()
     _ = bounded_device_loop(
         ctx, step, registers, 1, step.max_iter,
         sgd_loop_check_every(step.epoch_launches(), step.max_iter, step.need_obj), timers,
     )
+    var loop = fit_loop_stop(loop_start, 0)
     timers.report()
     step.finish(res)
+    sgd_loop_store(res, step.problems, d, loop)
     _ = registers^
     _ = step^
 
@@ -2468,6 +2479,13 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var registers = LoopRegisters(ctx)
     var max_epochs = 0
     var status = 0
+    # fit_loop_ (lane alm-linear): the clock starts before the first problem's
+    # first epoch and stops after the result readback's wait that follows the
+    # last problem's loop (no synchronization added; nothing inside a loop)
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    ctx.synchronize()
+    var loop_start = fit_loop_start()
     for c in range(problems):  # driver-loop: over the one-vs-rest problems, one device loop each
         step.begin_problem(c)
         var timers = LoopTimers("sgd.mb")
@@ -2481,8 +2499,10 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
             max_epochs = epochs
     ctx.enqueue_copy(dst_ptr=res, src_buf=step.dres)
     ctx.synchronize()
+    var loop = fit_loop_stop(loop_start, max_epochs)
     res.unsafe_store(problems * d + problems, i2f(max_epochs))
     res.unsafe_store(problems * d + problems + 1, i2f(status))
+    sgd_loop_store(res, problems, d, loop)
     _ = registers^
     _ = step^
 
@@ -3564,12 +3584,21 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var step = _SgdPsEpochs(x, n_x, y, n_y, n, d, ip, fp, n_out)
     var registers = LoopRegisters(ctx)
     var timers = LoopTimers("sgd.ps")
+    # fit_loop_ (lane alm-linear): bounded_device_loop's last flag read waits
+    # on the stream, so the clock stops right after it (no synchronization
+    # added); the epochs are the n_iter word `finish` brings home
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    ctx.synchronize()
+    var loop_start = fit_loop_start()
     var outcome = bounded_device_loop(
         ctx, step, registers, 1, step.max_iter - step.e0,
         sgd_loop_check_every(step.epoch_launches(), step.max_iter - step.e0, step.need_obj), timers,
     )
+    var loop = fit_loop_stop(loop_start, 0)
     timers.report()
     step.finish(outcome, res)
+    sgd_loop_store(res, step.problems, d, loop)
     _ = registers^
     _ = step^
 

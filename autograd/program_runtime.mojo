@@ -2,6 +2,8 @@
 # Native execution and minibatch training of captured operation graphs.
 # All graph/epoch/batch walks, random streams and optimizer state live here.
 from sequence.exec_trait import Exec
+from core.fit_loop_clock import fit_loop_start, fit_loop_stop
+from sequence.fit_loop_words import fit_loop_publish
 from std.memory import bitcast
 from sequence.ops import FP, Args, OP_COPY, OP_SEQ_IOTA
 from autograd.ops_api import OpsSession, OPS_DROPOUT
@@ -209,7 +211,7 @@ def train_program_control[E: Exec & Movable & Deinitable](
     target: CastIn, loss_kind: Int, delta: Float32, optimizer: Int, parameters: List[Int],
     epochs: Int, batch: Int, shuffle_rows: Bool, seed: UInt64, curve: FP,
     condition_id: Int, otherwise_id: Int, tol: Float32 = Float32(0.0), n_iter_no_change: Int = 0,
-    step_curve: Int = 0, grads_out: List[Int] = List[Int](),
+    step_curve: Int = 0, grads_out: List[Int] = List[Int](), loop_words: Int = 0,
 ) raises -> Tuple[Int, Int, Int]:
     """Program.fit: `epochs` epochs of minibatch steps as the executor's
     bounded device loop (lane x1b-executor-gated-state-chunked-loop).
@@ -233,6 +235,12 @@ def train_program_control[E: Exec & Movable & Deinitable](
     minibatch into one device buffer, downloaded once at the end (the
     committed epochs' words only: integ-w3, so an epoch run past the stop
     never reaches the curve).
+    `loop_words` (lane alm-neural, 2026-11-24): the address of the fit
+    loop's record words (sequence/fit_loop_words.mojo), or 0. The loop
+    region is the epoch loop: the clock is read once before epoch 0's first
+    launch and once after the existing `s.ex.sync()` that follows it (no
+    synchronization added, nothing inside the loop); its iterations are the
+    committed epochs.
     `grads_out`, when not empty, holds one executor address per entry of
     `parameters` (that parameter's element count each): the LAST
     minibatch's gradient of each trained parameter is copied there, before
@@ -409,6 +417,10 @@ def train_program_control[E: Exec & Movable & Deinitable](
         swap(held, s.tape)
         swapped = True
         s.tape.record()
+        # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+        # clock, outside the loop, so the loop region holds loop work only
+        s.ex.sync()
+        var loop_start = fit_loop_start()
         for e in range(epochs):  # driver-loop: over epochs, the bounded loop's iterations, read once per chunk
             if criterion:
                 marks.append(_FitMark(s, oi, states, true_batches, false_batches))
@@ -569,8 +581,11 @@ def train_program_control[E: Exec & Movable & Deinitable](
                 chunk_start = enqueued
                 marks.clear()
         s.ex.sync()
+        var loop_record = fit_loop_stop(loop_start, enqueued)
         s.ex.download(FP(unsafe_from_address=Int(mirror.unsafe_ptr())), words, LOOP_WORDS)
         committed = Int(mirror[LOOP_ITER])
+        loop_record.iterations = committed
+        fit_loop_publish(loop_words, loop_record)
         if criterion and committed < enqueued:
             # Epochs past the stop: their device writes were undone behind
             # the gate; their host scalars go back to the first of them.

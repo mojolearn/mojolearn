@@ -6,6 +6,7 @@ top-N order of `_topn`, over the typed kit (bindings/decomp_kit_run.mojo).
 Same x_decomp operations, same words, same order: the bits do not move.
 No Python (lane entangled-decompkit, 2026-11-12)."""
 from std.memory import unsafe_memcpy
+from core.fit_loop_clock import FitLoop
 from bindings.decomp_kit_run import DKit, DK_SCALE, DK_SQ, DK_SQRT, DK_DIV
 from x_decomp.descriptor_schema import XD_ALS_FIT, XD_TOPN_DESC, XD_GATHER
 
@@ -35,10 +36,11 @@ struct AlsFitWords(Copyable, Movable):
         self.regularization = regularization
 
 
-def als_fit_run(mut kit: DKit, r: Int, words: AlsFitWords, mut losses: List[Float64]) raises -> Tuple[Int, Int]:
+def als_fit_run(mut kit: DKit, r: Int, words: AlsFitWords, mut losses: List[Float64],
+                mut loop: FitLoop) raises -> Tuple[Int, Int]:
     """`AlternatingLeastSquares.fit` after admission: (user factors, item
     factors) as host matrices; `losses` holds the recorded losses (empty
-    unless `words.loss`)."""
+    unless `words.loss`); `loop` the sweep loop's clock (`fit_loop_`)."""
     var n = kit.nrows(r)
     var m = kit.ncols(r)
     var c = r if words.unit else kit.ew(DK_SCALE, r, scalar=words.alpha)
@@ -55,8 +57,10 @@ def als_fit_run(mut kit: DKit, r: Int, words: AlsFitWords, mut losses: List[Floa
     var params: List[Int] = [n, m, words.factors, words.iterations, Int(words.use_cg), words.cg_steps,
                              Int(words.loss)]
     var reg: List[Float64] = [words.regularization]
-    var addresses: List[Int] = [kit.at(c), kit.at(x), kit.at(y), Int(store.unsafe_ptr())]
+    var loop_ns = List[Int](length=1, fill=0)
+    var addresses: List[Int] = [kit.at(c), kit.at(x), kit.at(y), Int(store.unsafe_ptr()), Int(loop_ns.unsafe_ptr())]
     var count = kit.xd(XD_ALS_FIT, addresses, params, reg)
+    loop = FitLoop(words.iterations, loop_ns[0], True)
     kit.wrote_host(x)
     kit.wrote_host(y)
     losses = List[Float64]()

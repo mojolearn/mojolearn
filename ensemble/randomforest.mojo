@@ -81,6 +81,7 @@ from ensemble.weighted_bootstrap_device import (
 from core.launch_log import log_launch
 from core.launch_clock import log_launch_ctx
 from ensemble.instruments import FitInstruments
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from core.philox import (
     RNG_BLOCK_THREADS,
     RNG_STRIDE,
@@ -974,6 +975,10 @@ struct RandomForestMetaData[dtype: DType, label_dtype: DType](
     # in their struct: cuML prints them from Python and C++; the bindings
     # raise them as Python warnings from this word.
     var notices: Int
+    # The fit's tree loop (lane alm-forest, 2026-11-24; the estimator's
+    # `fit_loop_`): the trees `fit_forest_prepared`'s loop built and the
+    # loop region's time. Not in their struct; empty until a fit records it.
+    var fit_loop: FitLoop
 
     def __init__(
         out self,
@@ -994,6 +999,7 @@ struct RandomForestMetaData[dtype: DType, label_dtype: DType](
         self.oob_prediction_ = List[Float64]()
         self.feature_importances_ = List[Scalar[Self.dtype]]()
         self.notices = 0
+        self.fit_loop = FitLoop.empty()
 
 
 # ---------------------------------------------------------------------------
@@ -3113,6 +3119,17 @@ def fit_forest_prepared[
     var states = List[TreeState[O]]()
     var slot_tree = List[Int]()
     var next_tree = 0
+    # The fit loop clock (lane alm-forest, 2026-11-24; core/fit_loop_clock.mojo):
+    # read once here, after the quantiles, the binned dataset, the sampler,
+    # the K builders and the forest preallocation, immediately before the
+    # first tree's first launch; read once more after the drain that ends
+    # the loop below. Nothing is read inside the loop. Measurement only: no
+    # computed bit changes.
+    # lane alm-left: ONE synchronization before the clock (outside the
+    # loop): the binning launch, the sampler's and builders' fills and any
+    # queued upload of X finish here, so the region holds tree work only.
+    ctx.synchronize()
+    var loop_start = fit_loop_start()
     # PRIME: one tree per slot. A tree whose root is not expandable
     # (max_depth 0, min_samples_split too big) finishes inside
     # `begin_tree` and its slot immediately takes the next tree.
@@ -3369,6 +3386,9 @@ def fit_forest_prepared[
 
     t_host = instr.times.start()
     ctx.synchronize()
+    # The loop's end: the drain above is the existing one after the last
+    # tree's last launch (no synchronization added); `n_trees` trees built.
+    forest.fit_loop = fit_loop_stop(loop_start, n_trees)
     # Mojo frees a value at its LAST USE; the builders' buffers must
     # outlive every launch that read them, so they are released only
     # after the drain above. The shared splits staging (DEVIATION 1908)

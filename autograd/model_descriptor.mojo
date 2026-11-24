@@ -9,6 +9,7 @@ from core.native_descriptor_call import native_descriptor_words
 from autograd.model_execution import model_fit_native, model_predict_native, model_class_count
 from sequence.exec_trait import Exec
 from sequence.ops import FP
+from sequence.fit_loop_words import FIT_LOOP_MARK
 
 comptime MODEL_ABI_NAME = "mojolearn.model.execution.v1"
 comptime MODEL_FIT = 0
@@ -45,6 +46,10 @@ struct NativeModelRequest(Movable):
     var outputs: Int
     var target: Int
     var count_result: Int
+    # lane alm-neural (2026-11-24): the fit loop's record words (sequence/fit_loop_words.mojo), or 0. A fit
+    # that wants the record ends its options with FIT_LOOP_MARK and its addresses with the words' address;
+    # both are taken off here, so every other count and position reads as before.
+    var loop_words: Int
 
     def __init__(out self, op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int) raises:
         if op < MODEL_FIT or op > MODEL_PREDICT_LABELS:
@@ -60,6 +65,12 @@ struct NativeModelRequest(Movable):
         if nf < 0 or (nf > 0 and ff == 0):
             raise Error("native model: invalid scalar span")
         self.addresses = native_descriptor_words(aa, na)
+        self.loop_words = 0
+        var looped = (op <= MODEL_FIT_LABELS and nopt > 0 and na > 0
+                      and words[7 + nprog + nopt - 1] == FIT_LOOP_MARK)
+        if looped:
+            nopt -= 1
+            self.loop_words = self.addresses.pop()
         self.program = List[Int]()
         self.options = List[Int]()
         self.sources = List[CastIn]()
@@ -75,6 +86,8 @@ struct NativeModelRequest(Movable):
         for _ in range(nopt):  # driver-loop: borrow admitted operation options
             self.options.append(words[at])
             at += 1
+        if looped:
+            at += 1  # the mark word
         for _ in range(nsrc):  # driver-loop: borrow admitted CastIn records
             self.sources.append(CastIn(words[at], words[at + 1], words[at + 2], words[at + 3],
                                        words[at + 4], words[at + 5], words[at + 6]))
@@ -83,7 +96,7 @@ struct NativeModelRequest(Movable):
         for i in range(nf):  # driver-loop: native scalar metadata
             self.floats.append(scalars[i])
         if op <= MODEL_FIT_LABELS:
-            if nsrc != (5 if na == 13 else 2):
+            if nsrc != (5 if len(self.addresses) == 13 else 2):
                 raise Error("native model: missing fit input descriptors")
         elif nsrc != 1:
             raise Error("native model: prediction requires one input descriptor")
@@ -105,11 +118,11 @@ def model_request_execute[E: Exec](mut ex: E, op: Int, request: NativeModelReque
     if op == MODEL_FIT_LABELS:
         var count = model_class_count(classes, request.outputs, request.target)
         var epochs = model_fit_native(ex, request.addresses, request.sources, request.program,
-                                      request.options, request.floats, codes, count)
+                                      request.options, request.floats, codes, count, request.loop_words)
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=request.count_result)[0] = count
         return epochs
     if op == MODEL_FIT:
         return model_fit_native(ex, request.addresses, request.sources, request.program,
-                                request.options, request.floats)
+                                request.options, request.floats, loop_words=request.loop_words)
     return model_predict_native(ex, request.addresses, request.sources[0], request.program,
                                 request.floats, request.options, op == MODEL_PREDICT_LABELS)

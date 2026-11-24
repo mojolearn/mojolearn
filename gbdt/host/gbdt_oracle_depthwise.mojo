@@ -133,6 +133,7 @@ from std.math import exp, fma, log, sqrt
 from std.memory import bitcast
 
 from core.host_parallel import host_parallelize
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from core.host_predict_threads import HostF32Ptr, HostU32Ptr, host_predict_chunk
 from checks.fixed_point import choose_scale
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
@@ -299,6 +300,9 @@ struct GbdtHostNsModel(Movable):
     var test_losses: List[Float64]
     var best_iteration: Int
     var stopped_early: Bool
+    #: the boosting loop's executed rounds and its time: the estimator's
+    #: `fit_loop_` (core/fit_loop_clock.mojo; lane ab-loop-mode)
+    var fit_loop: FitLoop
 
     def n_trees(self) -> Int:
         return len(self.tree_node_offsets) - 1
@@ -1386,6 +1390,10 @@ def _ns_fit_core(
     var model_leaves = List[Float32]()
     var model_weights = List[Float64]()
 
+    # `fit_loop_` (lane ab-loop-mode): the host clock read once before the
+    # first round and once after the last (nothing inside the loop); the
+    # rounds executed are the trees the loop added.
+    var fit_loop_t0 = fit_loop_start()
     for iteration in range(base.n_estimators):
         # ---- which permutation the STRUCTURE is searched on
         # (`doc_parallel_boosting.mojo:4585-4607`), their modulus kept ----
@@ -1551,6 +1559,7 @@ def _ns_fit_core(
         if len(losses) < base.n_estimators:
             if iteration + 1 > 1:
                 losses.append(-Float64(fv) / Float64(n_rows))
+    var fit_loop = fit_loop_stop(fit_loop_t0, len(tree_node_offsets) - 1)
 
     # the final tree's loss, the ESTIMATION permutation's cursor
     # (`doc_parallel_boosting.mojo:3001-3052`; the only cursor at one
@@ -1580,7 +1589,7 @@ def _ns_fit_core(
         grid.fold_counts.copy(), grid.borders.copy(), grid.nan_treatment.copy(),
         tree_node_offsets^, node_feature^, node_bin^, node_left^, node_right^,
         tree_leaf_offsets^, model_leaves^, model_weights^, losses^,
-        test_losses^, detector.best_iteration, stopped_early,
+        test_losses^, detector.best_iteration, stopped_early, fit_loop^,
     )
 
 

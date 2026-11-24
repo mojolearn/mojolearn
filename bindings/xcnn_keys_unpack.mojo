@@ -207,6 +207,7 @@ struct XcnnKeys(Defaultable, Movable):
     var k_lin: PythonObject
     var k_lin_l: PythonObject
     var k_loss_curve_: PythonObject
+    var k_fit_loop_: PythonObject
     var k_losses_: PythonObject
     var k_max_iter: PythonObject
     var k_module: PythonObject
@@ -364,6 +365,7 @@ struct XcnnKeys(Defaultable, Movable):
         self.k_lin = PythonObject(None)
         self.k_lin_l = PythonObject(None)
         self.k_loss_curve_ = PythonObject(None)
+        self.k_fit_loop_ = PythonObject(None)
         self.k_losses_ = PythonObject(None)
         self.k_max_iter = PythonObject(None)
         self.k_module = PythonObject(None)
@@ -525,6 +527,7 @@ def _xcnn_keys_fill(nk: UnsafePointer[XcnnKeys, MutUntrackedOrigin]) raises:
     nk[].k_lin = py_key("lin")
     nk[].k_lin_l = py_key("lin_l")
     nk[].k_loss_curve_ = py_key("loss_curve_")
+    nk[].k_fit_loop_ = py_key("fit_loop_")
     nk[].k_losses_ = py_key("losses_")
     nk[].k_max_iter = py_key("max_iter")
     nk[].k_module = py_key("module")

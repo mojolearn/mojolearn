@@ -28,6 +28,7 @@ from bindings.decomp_kit_native_door import (
 )
 from bindings.decomp_kit_run import DKit
 from bindings.als_run import AlsFitWords, AlsTop, als_fit_run, als_recommend_run, als_unit_run, als_similar_run
+from core.fit_loop_clock import FitLoop
 from core.decomp_native_impl import decomp_f32_to_i32
 from std.python._cpython import GILReleased
 from bindings.py_lists import py_list_f64
@@ -98,11 +99,12 @@ def als_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
                                 Bool(py=fields["calculate_training_loss"]), decomp_float(fields["regularization"]))
         # RUN: the draws and the one sweep call, the GIL released.
         var losses = List[Float64]()
+        var loop = FitLoop.empty()
         var user_m = -1
         var item_m = -1
         var py = Python()
         with GILReleased(py):
-            var factors = als_fit_run(kit, r, words, losses)
+            var factors = als_fit_run(kit, r, words, losses, loop)
             user_m = factors[0]
             item_m = factors[1]
         # PACK: the losses as one list, the factors as fresh Arrays, published once.
@@ -114,6 +116,8 @@ def als_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         py_setitem(fields, "item_factors", items)
         py_setitem(fields, "user_factors_", users)
         py_setitem(fields, "item_factors_", items)
+        # `fit_loop_`: (sweeps, the sweep loop's milliseconds), Mojo values packed once per fit
+        py_setitem(fields, "fit_loop_", Python.tuple(PythonObject(loop.iterations), PythonObject(loop.milliseconds())))
         return model
     finally:
         kit.close()

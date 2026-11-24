@@ -143,6 +143,10 @@ def minibatch_fit(model: PythonObject, binding: PythonObject, source: PythonObje
     _set(model, "inertia_", PythonObject(result.storage[0].inertia))
     _set(model, "n_steps_", PythonObject(result.storage[0].steps))
     _set(model, "n_iter_", PythonObject(result.storage[0].iterations))
+    # `fit_loop_` (lane ab-loop-mode): (mini-batch steps, step loop
+    # milliseconds) from the fit's FitLoop; not saved in the archive.
+    _set(model, "fit_loop_", Python.tuple(result.storage[0].loop.iterations,
+        result.storage[0].loop.milliseconds()))
     _set(model, "n_features_in_", PythonObject(d))
 
 

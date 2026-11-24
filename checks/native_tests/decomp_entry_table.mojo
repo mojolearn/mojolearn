@@ -334,7 +334,7 @@ def run_case(unit: Int) raises:
             var x: List[Float32] = [0.5]
             var y: List[Float32] = [0.5]
             var losses: List[Float64] = [0.0]
-            var count = _call(XD_ALS_FIT, [_f32(c), _f32(x), _f32(y), Int(losses.unsafe_ptr())], [1, 1, 1, 1, 0, 1, 1],
+            var count = _call(XD_ALS_FIT, [_f32(c), _f32(x), _f32(y), Int(losses.unsafe_ptr()), 0], [1, 1, 1, 1, 0, 1, 1],
                               [0.01])
             require(count >= 0 and count <= 1, "als loss count")
             require(x[0] == x[0] and y[0] == y[0], "als factors finite")

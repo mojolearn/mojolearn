@@ -1224,6 +1224,12 @@ def gbdt_fit_pack(model: PythonObject, call: GbdtFitCall, outcome: GbdtFitOutcom
     py_setitem(fields, nk[].k_bias_, PythonObject(gbdt_bias_of(outcome.text)))
     py_setitem(fields, nk[].k_best_iteration_, PythonObject(outcome.best_iteration))
     py_setitem(fields, nk[].k_stopped_early_, PythonObject(outcome.stopped_early))
+    # `fit_loop_` (lane ab-loop-mode): (rounds executed, loop milliseconds)
+    # from the fit's own two clock reads; unset before a fit and on a loaded
+    # model (the archive does not carry it), so either raises AttributeError
+    if outcome.fit_loop.recorded:
+        py_setitem(fields, nk[].k_fit_loop_, Python.tuple(PythonObject(outcome.fit_loop.iterations),
+                                                          PythonObject(outcome.fit_loop.milliseconds())))
     py_setitem(fields, nk[].k_loss_curve_, _f64_curve(outcome.learn, context))
     py_setitem(fields, nk[].k_test_loss_curve_, _f64_curve(outcome.test, context) if call.n_eval_rows else PythonObject(None))
     py_setitem(fields, nk[].k_n_features_in_, PythonObject(call.n_features))
@@ -1949,8 +1955,8 @@ def _fit_native(model: PythonObject, validated: PythonObject, X: PythonObject, y
     py_setitem(fields, nk[].k_n_features_in_, py_item(learner_fields, nk[].k_n_features_in_))
     py_setitem(fields, nk[].k_model_, py_item(learner_fields, nk[].k_model_))
     var copied = Python.tuple("loss_curve_", "test_loss_curve_", "best_iteration_", "stopped_early_", "learning_rate_",
-                              GBDT_IMPORTANCES_FIELD)
-    for i in range(len(copied)):  # driver-loop: over fixed call structure, small-loop(copied): the six learner attributes
+                              GBDT_IMPORTANCES_FIELD, "fit_loop_")
+    for i in range(len(copied)):  # driver-loop: over fixed call structure, small-loop(copied): the seven learner attributes
         py_setitem(fields, copied[i], learner_fields[copied[i]])
     return model
 

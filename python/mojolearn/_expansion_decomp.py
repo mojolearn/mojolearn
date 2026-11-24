@@ -640,6 +640,10 @@ class NMF(_DeviceDoor, _Base):
     reconstruction_err_ : float
         Beta divergence between X and ``W @ H`` (square-rooted, as in
         scikit-learn).
+    fit_loop_ : tuple of (int, float)
+        The number of iterations the last fit ran (update iterations, ``n_iter_``) and the time in
+        milliseconds its iteration loop took, from the start of the first
+        iteration to the end of the last.
     n_features_in_ : int
 
     Raises
@@ -807,6 +811,10 @@ class FastICA(_DeviceDoor, _Base):
     whitening_ : ndarray of shape (n_components, n_features)
         Only when whitening.
     n_iter_ : int
+    fit_loop_ : tuple of (int, float)
+        The number of iterations the last fit ran (fixed-point iterations, ``n_iter_``) and the time in
+        milliseconds its iteration loop took, from the start of the first
+        iteration to the end of the last.
     n_features_in_ : int
 
     Raises
@@ -952,6 +960,10 @@ class FactorAnalysis(_DeviceDoor, _Base):
     loglike_ : list of float
         Log-likelihood at each iteration.
     n_iter_ : int
+    fit_loop_ : tuple of (int, float)
+        The number of iterations the last fit ran (EM iterations, ``n_iter_``) and the time in
+        milliseconds its iteration loop took, from the start of the first
+        iteration to the end of the last.
     n_features_in_ : int
 
     Raises
@@ -3394,6 +3406,10 @@ class AlternatingLeastSquares(_Base):
     item_factors, item_factors_ : ndarray of shape (n_items, factors)
     training_loss_ : list of float
         Only with ``calculate_training_loss=True``.
+    fit_loop_ : tuple of (int, float)
+        The number of iterations the last fit ran (sweeps, ``iterations``) and the time in
+        milliseconds its iteration loop took, from the start of the first
+        iteration to the end of the last.
 
     Examples
     --------

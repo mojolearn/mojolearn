@@ -39,7 +39,7 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.forest_host_predict import rf_host_predict, rf_host_trees
-from core.forest_fit_request import ForestFitArgs, XF_CAP_STRICT, XF_CAP_DART, forest_export_verify_lists
+from core.forest_fit_request import ForestFitArgs, XF_CAP_STRICT, XF_CAP_DART, forest_export_verify_lists, fit_loop_put
 from xtrees.dart_host import DART_HOST, DART_HOST_SESSIONS
 from ensemble.nan_refusal import RF_NONFINITE_REFUSAL
 from core.host_finite_scan import host_all_finite_f32
@@ -663,8 +663,11 @@ def _rf_fit_weighted_session_native(params: ForestFitArgs) raises -> Int:
 
 
 def rf_host_fit_handle[CLASSIFIER: Bool, ROWMAJOR: Bool](params: ForestFitArgs) raises -> Int:
-    """XF_FIT: `_rf_fit_forest`, kept in RF_HOST_EXPORTS; the export handle."""
-    return _retain_rf_handle(_rf_fit_forest[CLASSIFIER, ROWMAJOR](params))
+    """XF_FIT: `_rf_fit_forest`, kept in RF_HOST_EXPORTS; the export handle.
+    The fit loop words the caller asked for (XF_W_LOOP) are written first."""
+    var forest = _rf_fit_forest[CLASSIFIER, ROWMAJOR](params)
+    fit_loop_put(params.loop, forest.fit_loop)
+    return _retain_rf_handle(forest^)
 
 
 def rf_host_fit_dart(params: ForestFitArgs) raises -> Int:

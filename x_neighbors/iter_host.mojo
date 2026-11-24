@@ -15,6 +15,8 @@ from std.sys.compile import is_defined
 from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
 from x_neighbors.nan_cells import nan_cells_host
 from core.host_lanes import host_row_tasks
+from core.fit_loop_clock import fit_loop_start, fit_loop_stop
+from x_neighbors.fit_loop_words import xn_loop_words_store
 from core.host_parallel import host_parallelize
 from x_neighbors.items import (
     FP, IP, absdiff_sum_item, matmul_item, lp_clamp_item, ls_clamp_item,
@@ -62,6 +64,7 @@ def op_lp_iterate(
     var ps = FP(unsafe_from_address=Int(s.unsafe_ptr()))
     var n_iter = 0
     var converged = False
+    var loop_start = fit_loop_start()
     for it in range(max_iter):
         n_iter = it
         absdiff_sum_item(0, cur, prev, ps, nc)
@@ -81,6 +84,7 @@ def op_lp_iterate(
         prev = tmp
     if not converged:
         n_iter += 1
+    var loop = fit_loop_stop(loop_start, n_iter)
     for i in range(nc):
         pld.unsafe_store(i, cur.unsafe_load(i))
     comptime if _SABOTAGE:
@@ -89,6 +93,7 @@ def op_lp_iterate(
     var inf = IP(unsafe_from_address=info)
     inf.unsafe_store(0, Int32(n_iter))
     inf.unsafe_store(1, Int32(1 if converged else 0))
+    xn_loop_words_store(info, loop)
     _ = a^
     _ = b^
     _ = nxt^
@@ -568,6 +573,7 @@ def op_lp_iterate_knn(
         unsafe_memcpy(dest=FP(unsafe_from_address=a_cur), src=FP(unsafe_from_address=ld), count=nc)
     var n_iter = 0
     var converged = False
+    var loop_start = fit_loop_start()
     for it in range(max_iter):  # driver-loop: over propagation iterations (each depends on the last)
         n_iter = it
         _host_absdiff_sum(a_cur, a_prev, a_hs, nc)
@@ -583,11 +589,13 @@ def op_lp_iterate_knn(
             _host_ls_clamp(a_nxt, ystatic, a_cur, nc, alpha)
     if not converged:
         n_iter += 1
+    var loop = fit_loop_stop(loop_start, n_iter)
     if nc > 0:
         unsafe_memcpy(dest=FP(unsafe_from_address=ld), src=FP(unsafe_from_address=a_cur), count=nc)
     var inf = IP(unsafe_from_address=info)
     inf.unsafe_store(0, Int32(n_iter))
     inf.unsafe_store(1, Int32(1 if converged else 0))
+    xn_loop_words_store(info, loop)
     _ = cur^
     _ = prev^
     _ = nxt^

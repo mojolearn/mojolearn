@@ -1250,6 +1250,35 @@ def _load(name, alias=None):
     return mod
 
 
+# A/B LOOP MODE (lane ab-loop-mode, 2026-11-24; tools/ab_loop.py is the contract). When bench_board hands this race a
+# loop plan (environment key ab_loop.ENV), OUR fit arm (OursFit) takes the plan's cap and pins before construction:
+# through the estimator's public constructor parameters (mlp-fit, lstm/gru/rnn-fit), or as the `fit:` keyword of the
+# lane's model (ab_loop.fit_kwargs; Sequential.fit(epochs=K): sequential-fit, tape-user-model, the seq-*-fit lanes),
+# so the warm-up is the same call at the cap; every round's fit_loop_ is read after all of the round's clocks have closed. The helpers are
+# tools/bench_board_more.py's (loop_plan, loop_params, loop_round, loop_cell) with family "neural". Without a plan
+# nothing here changes the command, a clock or the cell.
+LOOP_FAMILY = "neural"
+_LOOP_MOD = []
+
+
+def _loop():
+    """tools/bench_board_more.py, whose A/B LOOP MODE helpers the board drivers share; loaded once per process."""
+    if not _LOOP_MOD:
+        _LOOP_MOD.append(_load("bench_board_more"))
+    return _LOOP_MOD[0]
+
+
+def loop_plan(lane, environ=None):
+    """The race's loop plan for a neural lane (read once per process); None: loop mode off."""
+    return _loop().loop_plan(lane, environ=environ, family=LOOP_FAMILY)
+
+
+def loop_params(plan, params, ours):
+    """An arm's constructor (or fit keyword) parameters under the plan: capped (a copy) for OUR arm with a plan,
+    PARAMS otherwise."""
+    return _loop().loop_params(plan, params, ours)
+
+
 _SMALL_ROWS = []
 
 
@@ -3023,16 +3052,29 @@ class OursFit(Ours):
         d_in = int(self.Xtr.shape[-1])
         self.model = None
         self._score = None
+        # A/B LOOP MODE: the race's plan (None: off); the cap enters the constructor parameters or, for the
+        # Sequential lanes, the fit() keywords (self.fit_kw, which call() passes)
+        plan = loop_plan(lane)
+        # capped only where the plan's cap has a route: a `fit:` cap on the Sequential lanes, a constructor cap on
+        # the estimator lanes; any other pairing is refused by _prepare_worker
+        fit_cap = str((plan or {}).get("param") or "").startswith("fit:")
+        self.loop_capped = plan is not None and plan.get("mode") == "capped" and \
+            fit_cap == (MODEL_OF[lane] in ("tapefit", "seqfit"))
+        self.fit_kw = None
         # 2026-11-23 (lane nn-surface): the lengths lanes pass each sequence's length to fit and predict_proba
         self.Ltr = np.ascontiguousarray(data["L_train"], dtype=np.int64) if "L_train" in data else None
         self.Lte = np.ascontiguousarray(data["L_test"], dtype=np.int64) if "L_test" in data else None
         if MODEL_OF[lane] == "seqfit":
             self.seq_dims = SEQFIT.dims(shape)
+            self.fit_kw = _loop().loop_fit_kwargs(plan, dict(epochs=SEQFIT.SEQ_EPOCHS, batch_size=SEQFIT.SEQ_BATCH,
+                                                             shuffle=True, seed=SEED, lengths=self.Ltr), True)
             probe, accepted = _ours_seqfit(ml, lane, self.seq_dims)
             cls = type(probe)
             readback = dict(learning_rate=accepted["lr"], betas=[accepted["beta1"], accepted["beta2"]],
                             eps=accepted["eps"], weight_decay=accepted["weight_decay"])
         elif MODEL_OF[lane] == "tapefit":
+            self.fit_kw = _loop().loop_fit_kwargs(plan, dict(epochs=FIT_EPOCHS, batch_size=FIT_BATCH, shuffle=True,
+                                                             seed=SEED), True)
             probe, accepted = _ours_sequential(ml, lane)
             cls = type(probe)
             readback = _sequential_readback(probe, accepted, d_in)
@@ -3043,6 +3085,7 @@ class OursFit(Ours):
                                max_iter=FIT_EPOCHS, shuffle=True, random_state=SEED, tol=0.0,
                                n_iter_no_change=1000, beta_1=FIT_ADAM["betas"][0], beta_2=FIT_ADAM["betas"][1],
                                epsilon=FIT_ADAM["eps"])
+            self.kwargs = loop_params(plan, self.kwargs, True)
             probe = cls(**self.kwargs)
             g = probe.get_params()
             readback = dict(optimizer=g["solver"], learning_rate=g["learning_rate_init"],
@@ -3060,6 +3103,7 @@ class OursFit(Ours):
                                                       weight_decay=FIT_ADAM["weight_decay"]))
             if lane == "rnn-fit":
                 self.kwargs["nonlinearity"] = "tanh"
+            self.kwargs = loop_params(plan, self.kwargs, True)
             probe = cls(**self.kwargs)
             g = probe.get_params()
             opts = g.get("optimizer_options") or {}
@@ -3083,11 +3127,10 @@ class OursFit(Ours):
         import warnings
         if MODEL_OF[self.lane] == "seqfit":
             m, _ = _ours_seqfit(self.ml, self.lane, self.seq_dims)
-            m.fit(self.Xtr, self.ytr, epochs=SEQFIT.SEQ_EPOCHS, batch_size=SEQFIT.SEQ_BATCH, shuffle=True,
-                  seed=SEED, lengths=self.Ltr)
+            m.fit(self.Xtr, self.ytr, **self.fit_kw)
         elif MODEL_OF[self.lane] == "tapefit":
             m, _ = _ours_sequential(self.ml, self.lane)
-            m.fit(self.Xtr, self.ytr, epochs=FIT_EPOCHS, batch_size=FIT_BATCH, shuffle=True, seed=SEED)
+            m.fit(self.Xtr, self.ytr, **self.fit_kw)
         else:
             m = self.cls(**self.kwargs)
             with warnings.catch_warnings():
@@ -5741,6 +5784,11 @@ def _prepare_worker(args):
         data = read_inputs(args.data)
         preparation_start = time.perf_counter()
         runner = build_runner(args.lane, args.arm, args.shape, data, ab_config=ab_config)
+        plan = loop_plan(args.lane) if args.arm in OUR_ARMS else None
+        if plan is not None and plan.get("mode") == "capped" and not getattr(runner, "loop_capped", False):
+            # A/B LOOP MODE: the lane's runner has no public-parameter route for the cap; never a private one
+            raise RuntimeError("REFUSED: loop mode: neural/%s took no cap %s=%s through its public parameters in "
+                               "this driver" % (args.lane, plan.get("param"), plan.get("k")))
         runner.sync()
         preparation_ms = (time.perf_counter() - preparation_start) * 1000.0
     except (Exception, SystemExit) as exc:  # noqa: BLE001  (a twin's refuse() exits)
@@ -5829,6 +5877,8 @@ def worker(args):
     numa = _load("numa_place")
     small_ok = (runner.info or {}).get("library") == "mojolearn" and (
         args.lane not in SMALL_ROW_STATEFUL_LANES or attribution_train_calls(args.lane, small) is not None)
+    # A/B LOOP MODE: the race's plan, read once in this process (None: off); our arm only
+    loop_on = loop_plan(args.lane) if args.arm in OUR_ARMS else None
     for line in sys.stdin:
         parts = line.split()
         if not parts:
@@ -5916,8 +5966,14 @@ def worker(args):
                         route = neural_route(runner)
                     except Exception as exc:  # noqa: BLE001  (a route read never breaks a timing; recorded)
                         route = {"error": "neural_route failed: %r" % (exc,)}
+                # A/B LOOP MODE: the fitted model's loop region and capped parameters, after every clock of the
+                # round (the warm-up included)
+                loop = None
+                if loop_on is not None:
+                    from bench_board_state import runner_model
+                    loop = _loop().loop_round(loop_on, runner_model(runner))
                 round_message = {"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m,
-                    "scored_calls": calls_rec, "neural_route": route,
+                    "scored_calls": calls_rec, "neural_route": route, "loop": loop,
                     "host_usage": {"fit": host_use, "infer": None},
                     "extra": extra, "device_memory": device_memory,
                     "mamba3_session_info": session_counters,
@@ -6778,6 +6834,7 @@ def race(args):
         os.replace(out_json + ".tmp", out_json)
         print("NEURAL-PARAMS-REFUSED lane=%s %s" % (lane, str(exc)[:2000]), flush=True)
         return 3
+    loop_rounds = {}        # A/B LOOP MODE: arm -> [(round, loop record)], our arms under a plan only
     for r in range(args.rounds + 1):
         live = [a for a in arms if workers[a].alive]
         if not live:
@@ -6825,6 +6882,8 @@ def race(args):
                 result["arms"][arm].setdefault("operations", []).append(dict(msg["operation"], round=r, warmup=r == 0))
             if msg.get("state_receipt") is not None:
                 result["arms"][arm].setdefault("state_receipts", []).append(msg["state_receipt"])
+            if msg.get("loop") is not None:
+                loop_rounds.setdefault(arm, []).append((r, msg["loop"]))
             result["arms"][arm]["mem"].append(msg.get("mem"))
             if msg.get("extra") is not None:
                 result["arms"][arm].setdefault("round_extra", []).append(dict(msg["extra"], round=r, warmup=r == 0))
@@ -6843,6 +6902,8 @@ def race(args):
                   % (lane, arm, r, msg["ms"], msg["digest"],
                      _small_rows_suffix(msg.get("scored_calls")),
                      _route_suffix(route)), flush=True)
+    for arm, rounds in loop_rounds.items():   # A/B LOOP MODE: the cell's loop record
+        result["arms"][arm]["loop_mode"] = _loop().loop_cell(loop_plan(lane), rounds)
     outs = {}
     for arm in arms:
         w = workers[arm]

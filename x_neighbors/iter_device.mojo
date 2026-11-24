@@ -89,6 +89,8 @@ from autograd.program_loop import LoopTimers
 from autograd.program_loop_device import LoopRegisters, LoopStep, bounded_device_loop, loop_criterion_below, loop_lap
 from core.step_gate import STEP_DONE, STEP_ITER, STEP_STOP_ITER, step_gate_open_word
 from core.device_zero import enqueue_fill
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
+from x_neighbors.fit_loop_words import xn_loop_words_store
 from core.pinned_reduce import pinned_block_sum
 from core.scratch_pool import take_host_i32, give_host_i32
 from checks.numerics import NUMERIC_IDENTICAL
@@ -322,7 +324,14 @@ def op_lp_iterate(
     )
     var registers = LoopRegisters(ctx)
     var timers = LoopTimers("label_propagation.dense")
+    # the fit loop clock (`fit_loop_`): around the bounded loop, whose last
+    # register read drains the stream (no synchronization added)
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    ctx.synchronize()
+    var loop_start = fit_loop_start()
     var outcome = bounded_device_loop(ctx, step, registers, 1, max_iter, LPK_BATCH, timers)
+    var loop_end = fit_loop_stop(loop_start, 0)
     timers.report()
     var converged = outcome.converged
     var n_iter: Int
@@ -344,6 +353,8 @@ def op_lp_iterate(
     var inf = IP(unsafe_from_address=info)
     inf.unsafe_store(0, Int32(n_iter))
     inf.unsafe_store(1, Int32(1 if converged else 0))
+    loop_end.iterations = n_iter
+    xn_loop_words_store(info, loop_end)
     _ = step^
     _ = hst^
     _ = d_cnt^
@@ -3543,6 +3554,9 @@ def op_lp_iterate_knn(
     )
     var converged = False
     var n_iter = 0
+    # the fit loop clock (`fit_loop_`): around the bounded loop, whose last
+    # register read drains the stream (no synchronization added)
+    var loop_ns = 0
     if nc == 0 and idn:
         # the Python loop over nothing: the empty sum 0 against tol
         converged = Float64(0) < tol
@@ -3550,7 +3564,12 @@ def op_lp_iterate_knn(
     else:
         var registers = LoopRegisters(ctx)
         var timers = LoopTimers("label_propagation.knn")
+        # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+        # clock, outside the loop, so the loop region holds loop work only
+        ctx.synchronize()
+        var loop_start = fit_loop_start()
         var outcome = bounded_device_loop(ctx, step, registers, 1, max_iter, LPK_BATCH, timers)
+        loop_ns = fit_loop_stop(loop_start, 0).loop_ns
         timers.report()
         converged = outcome.converged
         # steps taken: the stop at 1-based iteration s took s - 1 steps;
@@ -3565,6 +3584,7 @@ def op_lp_iterate_knn(
     var inf = IP(unsafe_from_address=info)
     inf.unsafe_store(0, Int32(n_iter))
     inf.unsafe_store(1, Int32(1 if converged else 0))
+    xn_loop_words_store(info, FitLoop(n_iter, loop_ns, True))
     _ = d_fin^
     _ = d_s^
     _ = d_part^

@@ -169,6 +169,11 @@ class KMeans(_NumericModeMixin):
         center. With `n_init > 1`, the kept restart's value.
     n_iter_ : int
         Number of iterations run.
+    fit_loop_ : tuple of (int, float)
+        The number of iterations the last fit ran (Lloyd iterations, summed
+        over the `n_init` restarts) and the time in milliseconds its
+        iteration loop took, from the start of the first restart to the end
+        of the last. Not kept by a saved model.
     sum_scale_, weight_scale_ : float
         The fixed-point accumulator scales chosen for your data. Reproducing a
         result exactly needs them.

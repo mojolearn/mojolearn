@@ -266,6 +266,62 @@ def _stable_partition(t: OracleTree, mut idx: List[Int], start: Int, end: Int, n
     return start + len(less)
 
 
+def _oracle_tree(
+    tree_id: Int,
+    xp: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_cols: Int,
+    params: IF_params,
+    n_sampled_rows: Int,
+    n_sampled_features: Int,
+    max_depth: Int,
+    max_nodes_per_tree: Int,
+    seqp: MutPointer[UInt32, MutAnyOrigin],
+    offp: MutPointer[UInt32, MutAnyOrigin],
+) -> OracleTree:
+    """One tree of `build_isolation_trees_global_kernel`, serial, from its
+    own XORWOW stream and counter draws. `xp` is the row-major matrix
+    (`data[row*n_cols+col]`); the XORWOW tables are only read."""
+    var t = OracleTree()
+    var st = curandStateXORWOW.zero()
+    curand_init(params.seed, UInt64(tree_id), UInt64(0), st, seqp, offp)
+    # rows and features: the device's counter draws (cpu-gpu-cleanup
+    # t-forest), not the tree's XORWOW stream, which the node draws now
+    # take from its start
+    var row_base = if_sample_base(params.seed, UInt64(tree_id), 0)
+    if params.bootstrap:
+        for i in range(n_sampled_rows):
+            t.rows.append(Int64(if_bootstrap_draw(row_base, i, UInt64(n_rows))))
+    else:
+        var picked = _smallest_keys(row_base, n_rows, n_sampled_rows)
+        for i in range(len(picked)):
+            t.rows.append(Int64(picked[i]))
+    if n_sampled_features < n_cols:
+        var picked_f = _smallest_keys(
+            if_sample_base(params.seed, UInt64(tree_id), 1), n_cols, n_sampled_features
+        )
+        for i in range(len(picked_f)):
+            t.features.append(Int32(picked_f[i]))
+    # gather
+    for s in range(n_sampled_rows):
+        var src_row = Int(t.rows[s])
+        for c in range(n_sampled_features):
+            var src_col = c
+            if len(t.features) > 0:
+                src_col = Int(t.features[c])
+            t.local.append(xp[src_row * n_cols + src_col])
+    # build
+    var idx = List[Int]()
+    for i in range(n_sampled_rows):
+        idx.append(i)
+    var n_nodes = 1
+    var observed = 0
+    _build_node(t, st, idx, 0, n_sampled_rows, 0, 0, n_sampled_features, max_depth, max_nodes_per_tree, n_nodes, observed)
+    t.n_nodes = n_nodes
+    t.max_depth = observed
+    return t^
+
+
 def oracle_fit(
     x_rowmajor: List[Float32],
     n_rows: Int,
@@ -274,7 +330,8 @@ def oracle_fit(
     tables: XorwowTables,
 ) raises -> OracleForest:
     """`IsolationForest::fit` + `build_isolation_trees_global_kernel`, on
-    the host, tree by tree in `tree_id` order. `x_rowmajor` is the
+    the host, the trees split across host tasks and kept in `tree_id`
+    order. `x_rowmajor` is the
     natural host layout; the gather indexes it as `data[row*n_cols+col]`
     where the device reads column-major `data[row + col*n_rows]` -- the
     same cell."""
@@ -299,45 +356,50 @@ def oracle_fit(
     var seqp = tables.sequence.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
     var offp = tables.offset.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
 
-    for tree_id in range(params.n_estimators):
-        var t = OracleTree()
-        var st = curandStateXORWOW.zero()
-        curand_init(params.seed, UInt64(tree_id), UInt64(0), st, seqp, offp)
-        # rows and features: the device's counter draws (cpu-gpu-cleanup
-        # t-forest), not the tree's XORWOW stream, which the node draws now
-        # take from its start
-        var row_base = if_sample_base(params.seed, UInt64(tree_id), 0)
-        if params.bootstrap:
-            for i in range(n_sampled_rows):
-                t.rows.append(Int64(if_bootstrap_draw(row_base, i, UInt64(n_rows))))
-        else:
-            var picked = _smallest_keys(row_base, n_rows, n_sampled_rows)
-            for i in range(len(picked)):
-                t.rows.append(Int64(picked[i]))
-        if n_sampled_features < n_cols:
-            var picked_f = _smallest_keys(
-                if_sample_base(params.seed, UInt64(tree_id), 1), n_cols, n_sampled_features
+    # THE TREES, ONE TASK PER CONTIGUOUS TREE RANGE (lane alm-left,
+    # 2026-11-24). Trees are independent units: each is `_oracle_tree`, which
+    # owns its XORWOW stream (`curand_init(seed, tree_id, 0)`), its counter
+    # draws and its own lists, and reads only the borrowed matrix and the two
+    # read-only XORWOW tables. Every task writes only its own tree slots, the
+    # tasks run in the caller's floating-point environment
+    # (`host_parallelize`, DEVIATION 5900), and the forest keeps tree_id
+    # order. Fitting folds nothing across trees (the one cross-tree fold, the
+    # path-length sum, stays in ascending tree order in
+    # `oracle_path_lengths`), so the trees are the bytes of the serial walk
+    # at every task count: no bits change. Worker count:
+    # `host_predict_task_count` (physical cores capped by the cgroup quota).
+    var n_trees = params.n_estimators
+    var trees = List[OracleTree](capacity=n_trees)
+    for _ in range(n_trees):  # driver-loop: over the empty tree slots
+        trees.append(OracleTree())
+    var max_nodes_per_tree = f.max_nodes_per_tree
+    var tree_tasks = host_predict_task_count(n_trees)
+    var tree_chunk = host_predict_chunk(n_trees, tree_tasks)
+    var xp = rebind[MutPointer[Float32, MutUntrackedOrigin]](
+        x_rowmajor.unsafe_ptr()
+    )
+    var tp = rebind[MutPointer[OracleTree, MutUntrackedOrigin]](
+        trees.unsafe_ptr()
+    )
+    def _tree_task(task: Int) {imm tp, imm xp, imm params, imm seqp, imm offp,
+                               imm n_rows, imm n_cols, imm n_sampled_rows,
+                               imm n_sampled_features, imm max_depth,
+                               imm max_nodes_per_tree, imm tree_chunk,
+                               imm n_trees}:
+        var lo = task * tree_chunk
+        var hi = min(lo + tree_chunk, n_trees)
+        for tree_id in range(lo, hi):
+            tp[tree_id] = _oracle_tree(
+                tree_id, xp, n_rows, n_cols, params, n_sampled_rows,
+                n_sampled_features, max_depth, max_nodes_per_tree, seqp, offp,
             )
-            for i in range(len(picked_f)):
-                t.features.append(Int32(picked_f[i]))
-        # gather
-        for s in range(n_sampled_rows):
-            var src_row = Int(t.rows[s])
-            for c in range(n_sampled_features):
-                var src_col = c
-                if len(t.features) > 0:
-                    src_col = Int(t.features[c])
-                t.local.append(x_rowmajor[src_row * n_cols + src_col])
-        # build
-        var idx = List[Int]()
-        for i in range(n_sampled_rows):
-            idx.append(i)
-        var n_nodes = 1
-        var observed = 0
-        _build_node(t, st, idx, 0, n_sampled_rows, 0, 0, n_sampled_features, max_depth, f.max_nodes_per_tree, n_nodes, observed)
-        t.n_nodes = n_nodes
-        t.max_depth = observed
-        f.trees.append(t^)
+    if tree_tasks <= 1:
+        _tree_task(0)
+    else:
+        host_parallelize(_tree_task, tree_tasks)
+    # keep-alive: the tasks wrote through `tp` and read through `xp`
+    _ = len(x_rowmajor)
+    f.trees = trees^
     return f^
 
 

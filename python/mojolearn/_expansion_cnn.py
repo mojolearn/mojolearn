@@ -496,7 +496,14 @@ class CNNClassifier(_Layer, _CheckMixin):
     as one compiled program on the GPU (or the CPU). X is (n, C*H*W) rows
     with `input_shape=(C, H, W)`, or (n, C, H, W). After `fit`, `losses_`
     holds every minibatch's loss and `loss_curve_` each epoch's mean loss.
-    `device` is None (this installation's device), "gpu" or "cpu"."""
+    `device` is None (this installation's device), "gpu" or "cpu".
+
+    Attributes
+    ----------
+    fit_loop_ : tuple of (int, float)
+        The number of epochs the last fit ran and the time in milliseconds
+        its epoch loop took, from the start of the first epoch to the end of
+        the last."""
 
     # The member ABI (core/member_abi.mojo): family 21 (Cnn), kind 0.
     _mojolearn_member = (21, 0)

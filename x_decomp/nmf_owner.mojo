@@ -14,6 +14,7 @@ from std.math import sqrt
 from x_decomp.cells import F32Ptr, OP_ADD
 from x_decomp.exec_trait import Exec
 from x_decomp.nmf import NmfArgs
+from core.fit_loop_clock import FitLoop
 from x_decomp.pca_randomized import RDev, RKit
 from x_decomp.decomp_owner_kit import (
     DecompDev, OP_ABS, OP_ADDS, OP_DIV, OP_GTS, OP_LOGS, OP_MAXS, OP_MUL, OP_SCALE, OP_SELECT, OP_SQDIFF, OP_SQRT,
@@ -194,7 +195,7 @@ def _err[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], m: Int, w: Int, 
 
 def nmf_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     x: F32Ptr, n: Int, d: Int, nc: Int, init: Int, w_in: F32Ptr, h_in: F32Ptr, seed: Int, solver: Int,
-    a: NmfArgs, w_out: F32Ptr, h_out: F32Ptr, finite_word: Int = 0,
+    a: NmfArgs, w_out: F32Ptr, h_out: F32Ptr, finite_word: Int = 0, loop_word: Int = 0,
 ) raises -> Tuple[Int, Float64]:
     """One NMF operation on x (n x d): `init` NMF_INIT_* (fit_transform,
     H updated, the reconstruction error returned) or NMF_TRANSFORM (H =
@@ -202,7 +203,9 @@ def nmf_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     `finite_word` (lane a8d): when nonzero, the host address of one Int32
     that receives X's finite status word, taken in the negativity total
     (`_nonfinite_or_negative`); a flagged X stops the operation there
-    (nothing written, (0, 0.0) returned; the door refuses)."""
+    (nothing written, (0, 0.0) returned; the door refuses). `loop_word`:
+    when nonzero, the host address of one Int that receives the solver
+    loop's nanoseconds (core/fit_loop_clock.mojo; the fit's `fit_loop_`)."""
     var kit = RKit[E, D, RES]()
     try:
         var m = kit.add(Int(x), -1, n, d)
@@ -239,7 +242,10 @@ def nmf_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
         # `_solve`: host copies of W and H solved in place on X's host words
         var ws = kit.copy_host(w)
         var hs = kit.copy_host(h)
-        var it = X.nmf_solve(kit.ptr(m), kit.ptr(ws), kit.ptr(hs), n, d, nc, solver, a)
+        var loop = FitLoop.empty()
+        var it = X.nmf_solve(kit.ptr(m), kit.ptr(ws), kit.ptr(hs), n, d, nc, solver, a, loop)
+        if loop_word != 0:
+            MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=loop_word)[] = loop.loop_ns
         if it < 0:
             raise Error("ZeroDivisionError: float division by zero")
         var err = Float64(0.0)

@@ -1110,7 +1110,7 @@ def cmd_ab_gaps(a):
     return 0
 
 
-def summary(doc, rows, results, ids, units=(), prior_versions=None):
+def summary(doc, rows, results, ids, units=(), prior_versions=None, loop_noise=None, loop_out=None):
     """The SUMMARY-TG text (module docstring). Against a stored baseline (tools/paper_compare.py
     --stored-baseline-board) its first line is the compare's own: the baseline is stored, with both sides' host, GPU,
     driver, kernel and date; BOX-STATE rows (the upload probe moved) are counted apart and never as a verdict."""
@@ -1177,11 +1177,14 @@ def summary(doc, rows, results, ids, units=(), prior_versions=None):
         lines.append("done/total %s %d/%d (of the listed races; %s passed its own smoke)" % (
             v, _done(os.path.join(results, "board-tg-prior-%s" % v, "board.json"), ids), len(ids),
             sum(1 for _ in open(pid)) if os.path.isfile(pid) else "?"))
-    table, detail = [], []
+    import ab_loop as AL
+    noise = AL.NOISE if loop_noise is None else float(loop_noise)
+    table, detail, loop_lines, loop_doc = [], [], [], {"schema": AL.SCHEMA, "noise": noise, "units": []}
     for arm, rows_tag, uids, capped_ids in units:
+        loop_pairs = []
         base = MO.load_board(os.path.join(results, "board-tg-ab-%s-base-%s" % (arm, rows_tag), "board.json"))
         brd = MO.load_board(os.path.join(results, "board-tg-ab-%s-%s" % (arm, rows_tag), "board.json"))
-        ratios, untimed_cells, start, differ = [], 0, len(detail), 0
+        ratios, untimed_cells, start = [], 0, len(detail)
         for rid in uids:
             bc = MO.our_cells(((base or {}).get("races") or {}).get(rid) or {})
             ac = MO.our_cells(((brd or {}).get("races") or {}).get(rid) or {})
@@ -1195,6 +1198,9 @@ def summary(doc, rows, results, ids, units=(), prior_versions=None):
             for k in keys:
                 b, x = MO.cell_ms(bc.get(k)), MO.cell_ms(ac.get(k))
                 r = x / b if b and x else None
+                lp = AL.pair(bc.get(k), ac.get(k), noise) if b and x else None
+                if b and x:
+                    loop_pairs.append((rid, bc.get(k), ac.get(k)))
                 if r is not None:
                     ratios.append(r)
                 else:
@@ -1209,44 +1215,41 @@ def summary(doc, rows, results, ids, units=(), prior_versions=None):
                         for side, d, ms in (("base", base, b), ("arm", brd, x)) if not ms)
                 else:
                     v = " " + MO.verdict(r, "FASTER", "SLOWER", "SAME")
-                ph = per_iteration_text(bc.get(k), ac.get(k), r) if r is not None else ""
-                if "PHASE-VERDICTS-DIFFER" in ph:
-                    differ += 1
+                # A/B LOOP MODE: the loop per iteration the verdict reads, or why the cell is the whole operation.
+                # REMOVED (lane ab-loop-mode, 2026-11-24): per_iteration_text, the whole operation over the executed
+                # iterations with its PHASE-VERDICTS-DIFFER mark and count (lane ab-harness-speed's interim reading);
+                # the product's loop region now decides (tools/ab_loop.py), so that proxy has no decision left
+                ph = AL.pair_text(lp) if lp is not None else ""
                 detail.append("AB %s rows=%s %s %s %s: base %s -> arm %s ms ratio %s%s%s%s" % (
                     arm, rows_tag, rid, k[0], k[1], PC.fmt_ms(b), PC.fmt_ms(x), PC.fmt_ratio(r), v, ph,
                     base_used(base, brd, rid)))
         med = statistics.median(ratios) if ratios else None
         gaps = ab_row_gaps(base, brd, uids)
-        table.append("  %-34s rows=%-6s races=%-3d cells=%-3d median arm/base %s %s%s%s%s%s" % (
+        table.append("  %-34s rows=%-6s races=%-3d cells=%-3d median arm/base %s %s%s%s%s" % (
             arm, rows_tag, len(uids), len(ratios), PC.fmt_ratio(med),
             "-" if med is None else MO.verdict(med, "FASTER", "SLOWER", "SAME"),
             ("; " + direction(ratios)) if ratios else "",
             ("; untimed cells %d" % untimed_cells) if untimed_cells else "",
-            ("; rows differ %d" % len(gaps)) if gaps else "",
-            ("; per-iteration verdict differs %d" % differ) if differ else ""))
+            ("; rows differ %d" % len(gaps)) if gaps else ""))
         if gaps:
             detail.insert(start, gap_line(arm, rows_tag, gaps))
+        # A/B LOOP MODE (tools/ab_loop.py): the arm's verdict on loop time per iteration, under every condition
+        v, _ = AL.unit_verdict(loop_pairs, uids, noise)
+        loop_lines.append(AL.verdict_line(arm, rows_tag, v))
+        loop_doc["units"].append(dict(v, arm=arm, rows=rows_tag))
     if table:
         lines.append("A/B (arm and its base, the candidate, back to back):")
         lines += table + detail
+    if loop_lines:
+        lines.append("A/B LOOP MODE verdicts (AGENTS.md Candidate evaluation; noise floor %.2f; FULL-RUN-OWED arms "
+                     "go to the next submit's PC_AB_LOOP_FULL_ARMS):" % noise)
+        lines += loop_lines
+        owed = [u["arm"] for u in loop_doc["units"] if u.get("full_run")]
+        if owed:
+            lines.append("AB-LOOP-FULL-RUN-OWED PC_AB_LOOP_FULL_ARMS=%s" % ",".join(sorted(set(owed))))
+    if loop_out:
+        PC.write_atomic(loop_out, PC.json_text(loop_doc))
     return "\n".join(lines) + "\n"
-
-
-def per_iteration_text(bcell, acell, whole_ratio):
-    """' | per-iteration base X (N it) -> arm Y (M it) ratio R VERDICT', with PHASE-VERDICTS-DIFFER when that verdict
-    is not the whole operation's (tools/bench_board_probe.py phase_split: the whole operation over the EXECUTED
-    iterations; the loop region itself is not reported by the product); '' when either side has no iteration count."""
-    import bench_board_probe as PR
-    pb, pa = PR.phase_split(bcell or {}), PR.phase_split(acell or {})
-    if not (pb["per_iteration_ms"] and pa["per_iteration_ms"]):
-        return ""
-    import measure_owed as MO
-    r = pa["per_iteration_ms"] / pb["per_iteration_ms"]
-    v = MO.verdict(r, "FASTER", "SLOWER", "SAME")
-    w = MO.verdict(whole_ratio, "FASTER", "SLOWER", "SAME")
-    return " | per-iteration base %s (%d it) -> arm %s (%d it) ratio %s %s%s" % (
-        PC.fmt_ms(pb["per_iteration_ms"]), pb["iterations"], PC.fmt_ms(pa["per_iteration_ms"]), pa["iterations"],
-        PC.fmt_ratio(r), v, " PHASE-VERDICTS-DIFFER" if v != w else "")
 
 
 def base_used(base, brd, rid):
@@ -1290,7 +1293,7 @@ def cmd_summary(a):
     with open(a.ids) as fh:
         ids = [x.strip() for x in fh if x.strip()]
     text = summary(doc, read_rows(a.rows), a.results, ids, read_units(a.units),
-                   [v for v in (a.prior_versions or "").split(",") if v] or None)
+                   [v for v in (a.prior_versions or "").split(",") if v] or None, a.loop_noise, a.loop_out)
     if a.out:
         PC.write_atomic(a.out, text)
     sys.stdout.write(text)
@@ -1369,6 +1372,9 @@ def build_box_parser():
     sm.add_argument("--ids", required=True, help="the listed races the board plans (plan-tg/race-ids-full.txt)")
     sm.add_argument("--units", default=None, help="the owed plan's units.tsv (the A/B arms)")
     sm.add_argument("--prior-versions", default=None)
+    sm.add_argument("--loop-noise", type=float, default=None,
+                    help="A/B LOOP MODE noise floor (default tools/ab_loop.py NOISE)")
+    sm.add_argument("--loop-out", default=None, help="the A/B LOOP MODE verdicts as JSON (ab-loop-verdicts.json)")
     sm.add_argument("--out", default=None)
     return p
 

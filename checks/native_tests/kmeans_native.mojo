@@ -133,6 +133,41 @@ def _device_fixtures_in_order() raises:
             raise Error("native KMeans GPU failed " + String(failed) + " of " + String(KMEANS_GPU_FIXTURES) + " fixtures")
 
 
+# ---- The fit loop (`KMeans.fit_loop_`; lane ab-loop-mode) ----
+comptime FIT_LOOP_CAP = 3
+comptime FIT_LOOP_RESTARTS = 2
+
+
+def fit_loop_case(driver: KMeansNativeDriver) raises:
+    """A capped fit with the shift stop off (tol 0: the strict `shift < tol`
+    never holds) runs exactly FIT_LOOP_CAP Lloyd steps per restart; the
+    fit loop reports them summed over the restarts, `n_iter` reports the
+    kept restart as cuVS does (max_iter + 1 on exhaustion). Random seeding
+    (init 1), because an explicit start collapses the restarts to one."""
+    var source: List[Float32] = [-1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 9.0, 0.0, 10.0, 0.0, 11.0, 0.0]
+    var centers = List[Float32](length=4, fill=Float32(0.0))
+    var labels = List[UInt32](length=6, fill=UInt32(99))
+    var result = driver.fit(KMeansFitRequest(Int(source.unsafe_ptr()), Int(centers.unsafe_ptr()),
+        Int(labels.unsafe_ptr()), Int(source.unsafe_ptr()), 0, 6, 2, 2, 0, FIT_LOOP_CAP, 7,
+        FIT_LOOP_RESTARTS, 1, 0, True, 0.0, 0.0, KMeansFoldStore()))
+    _ = source
+    _ = centers
+    _ = labels
+    require(result.finite == 0 and result.range_error == 0, "fit loop fit status")
+    require(result.loop.recorded, "a fit records its loop")
+    require(result.iterations == FIT_LOOP_CAP + 1, "n_iter on exhaustion is max_iter + 1 (cuVS)")
+    require(result.loop.iterations == FIT_LOOP_CAP * FIT_LOOP_RESTARTS,
+        "fit loop iterations are the capped Lloyd steps summed over the restarts")
+    require(result.loop.loop_ns >= 0 and result.loop.milliseconds() >= 0.0, "fit loop time is not negative")
+
+
+def test_fit_loop() raises:
+    comptime if CPU_COLUMN_BUILD:
+        fit_loop_case(KMeansNativeDriver(kmeans_host_native_v1))
+    else:
+        fit_loop_case(KMeansNativeDriver(kmeans_device_native_v1))
+
+
 def test_fixtures() raises:
     comptime if CPU_COLUMN_BUILD:
         check_cases("fixture", KMEANS_CPU_FIXTURES, _host_fixture)

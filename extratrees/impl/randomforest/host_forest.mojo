@@ -33,6 +33,7 @@ from extratrees.impl.randomforest.randomforest import (
     row_sample_for_host,
 )
 from core.host_parallel import host_parallelize
+from core.fit_loop_clock import fit_loop_start, fit_loop_stop
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 
 
@@ -257,10 +258,16 @@ def fit_forest_exact(
             failed[task] = True
             messages[task] = String(e)
 
+    # The fit loop clock (lane alm-forest, 2026-11-24): read once after the
+    # tree slots and task words are allocated, immediately before the first
+    # tree, and once after the tasks join (the host column has no device to
+    # wait on). Nothing is read inside the loop. Measurement only.
+    var loop_start = fit_loop_start()
     if tasks <= 1:
         _tree_task(0)
     else:
         host_parallelize(_tree_task, tasks)
+    forest.fit_loop = fit_loop_stop(loop_start, n)
     _ = x_col_major.unsafe_ptr()
     _ = labels.unsafe_ptr()
     _ = labels_q.unsafe_ptr()

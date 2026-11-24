@@ -471,7 +471,10 @@ def gbdt_fit_native_run(row_major: Bool, params: GbdtFitArgs) raises -> GbdtFitO
     swap(text, result.text)
     swap(learn, result.learn_losses)
     swap(test, result.test_losses)
-    return GbdtFitOutcome(text^, result.best_iteration, result.stopped_early, learn^, test^)
+    var outcome = GbdtFitOutcome(text^, result.best_iteration, result.stopped_early, learn^, test^)
+    # the boosting loop's rounds and time (`fit_loop_`, lane ab-loop-mode)
+    outcome.fit_loop = result.fit_loop.copy()
+    return outcome^
 
 
 def gbdt_fit_two_level_feature_freq_run(

@@ -306,8 +306,9 @@ def ann_tsne_fit_device_run(a: List[Int], p: List[Int], f: List[Float64]) raises
     var word_addr = Int(word.unsafe_ptr()) if test else 0
     var y = List[Float32]()
     var kl = Float32(0.0)
+    # a[4] (optional): one int64 that receives the gradient loop's nanoseconds (`fit_loop_`)
     tsne_fit_device(x, n, d, y0, perplexity, exaggeration, lr, post_factor, max_iter, exploration, y, kl,
-                    word_addr)
+                    word_addr, a[4] if len(a) > 4 else 0)
     var status = Int(word[0])
     _ = word^  # the device wrote it through word_addr; keep it alive past the read
     if test and status != 0:

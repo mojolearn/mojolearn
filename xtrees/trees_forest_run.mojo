@@ -39,9 +39,11 @@ struct ForestFit(Copyable, Movable):
     var score: Int
     var importance: Int
     var weight_max: Float64
+    #: the caller's two fit loop words (XF_W_LOOP), 0: not asked
+    var loop: Int
 
     def __init__(out self, classifier: Bool, rowmajor_ok: Bool = False, weights: Int = 0, tree_start: Int = 0,
-                 oob: Int = 0, score: Int = 0, importance: Int = 0, weight_max: Float64 = 0.0):
+                 oob: Int = 0, score: Int = 0, importance: Int = 0, weight_max: Float64 = 0.0, loop: Int = 0):
         self.classifier = classifier
         self.rowmajor_ok = rowmajor_ok
         self.weights = weights
@@ -50,6 +52,7 @@ struct ForestFit(Copyable, Movable):
         self.score = score
         self.importance = importance
         self.weight_max = weight_max
+        self.loop = loop
 
 
 struct ForestHandle(Movable):

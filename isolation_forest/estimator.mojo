@@ -46,6 +46,7 @@ comptime _DEVCTX_SLOT = "MojolearnSvmContextIdenticalV3" if _DEVCTX_MODE == _DEV
 
 from core.identity_trace import IdentityTrace
 from core.device_plan import DevicePlan, plan_for_single
+from core.fit_loop_clock import FitLoop
 from isolation_forest.multi_gpu import fit_params_dispatch
 from isolation_forest.impl.isolation_forest import (
     IDN_IF_EPILOGUE_DEVICE,
@@ -378,6 +379,9 @@ struct IFRunOutputs(Copyable, Movable):
     var token: Int
     """`IDN_IF_RESIDENT`: the resident forest's token (0 on the one-shot
     entry, which keeps nothing)."""
+    var fit_loop: FitLoop
+    """The tree build loop of the forest this call fitted (lane alm-forest;
+    empty when the call scored a resident forest without fitting)."""
 
     def __init__(out self):
         self.values = List[Float32]()
@@ -386,6 +390,7 @@ struct IFRunOutputs(Copyable, Movable):
         self.max_samples_ = 0
         self.n_features_in_ = 0
         self.token = 0
+        self.fit_loop = FitLoop.empty()
 
 
 def iforest_run_host(
@@ -475,6 +480,7 @@ def iforest_run_host(
     out.offset_ = est.offset_
     out.max_samples_ = est.max_samples_
     out.n_features_in_ = est.n_features_in_
+    out.fit_loop = est.model.fit_loop.copy()
     if want == IF_WANT_PREDICT:
         out.labels = est.predict(ctx, query, n_query, n_features, query_addr)
     elif want == IF_WANT_DECISION_FUNCTION:
@@ -777,10 +783,16 @@ def iforest_run_resident(
     elif out_f32_addr == 0:
         raise Error("iforest_run_resident: the score output address is null")
 
+    var fits = len(held) == 0
     if_resident_fit_if_empty(plan, held, key, new_token)
-    return if_resident_score(
+    var out = if_resident_score(
         held, key.n_features, query, query_addr, n_query, want, out_f32_addr, out_i32_addr, wide_scores,
     )
+    # The fit loop of the forest this call built (lane alm-forest); a
+    # resident hit fitted nothing and reports none.
+    if fits:
+        out.fit_loop = held[0].est.model.fit_loop.copy()
+    return out^
 
 
 def if_resident_fit_if_empty(

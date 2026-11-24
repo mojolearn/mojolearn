@@ -835,7 +835,7 @@ def _fit_ica(slot: _Slot, call: _Call) raises:
         _address(slot, 2) if code != 0 else spare, _address(slot, 3) if code != 0 else spare,
         sources if project else spare,
         n, d, nc, code, Int(slot[].words[8]), Int(slot[].words[3]), Int(slot[].words[4]),
-        Int(slot[].words[6]), project, slot[].words[5], slot[].words[7])
+        Int(slot[].words[6]), project, slot[].words[5], slot[].words[7], 0)
     var iterations = ica_fit_call(call[].route.entry, request)
     slot[].count = nc
     slot[].features = d
@@ -972,7 +972,7 @@ def _fit_fa(slot: _Slot, call: _Call) raises:
     var ll = List[Float64](length=max(max_iter, 1), fill=Float64(0))
     var rotation = Int(slot[].words[3])
     var request = FAFitRequest(call[].x.data, Int(psi0.unsafe_ptr()), _address(slot, 0), _address(slot, 1),
-        _address(slot, 2), Int(ll.unsafe_ptr()), n, d, nc, max_iter, rotation, slot[].words[4])
+        _address(slot, 2), Int(ll.unsafe_ptr()), n, d, nc, max_iter, rotation, slot[].words[4], 0)
     var iterations = fa_fit_call(call[].route.entry, request)
     _ = psi0^
     if iterations == 0:

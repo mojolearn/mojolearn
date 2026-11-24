@@ -134,6 +134,7 @@ from gbdt.options.catboost_options import infinite_score_message
 from std.math import exp, floor, fma, isfinite, log, log2, sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from core.host_parallel import (
     host_nested_units,
     host_parallelize,
@@ -344,7 +345,6 @@ struct GbdtHostFitWithEval(Movable):
     var eval: GbdtHostEvalFit
 
 
-@fieldwise_init
 struct GbdtHostModel(Movable):
     """`TrainedModel` for one oblivious, one-dimensional, float-only ensemble
     (`gbdt/train.mojo:209-258`), flat: tree `t`'s splits are
@@ -362,6 +362,40 @@ struct GbdtHostModel(Movable):
     var losses: List[Float64]
     var best_iteration: Int
     var stopped_early: Bool
+    #: the fit's boosting loop: its executed rounds and its time (the
+    #: estimator's `fit_loop_`, core/fit_loop_clock.mojo; lane
+    #: ab-loop-mode). Empty until the fit that built the model sets it after
+    #: its loop.
+    var fit_loop: FitLoop
+
+    def __init__(
+        out self,
+        var fold_counts: List[Int],
+        var borders: List[List[Float32]],
+        var nan_treatment: List[Int],
+        var tree_split_offsets: List[Int],
+        var split_features: List[Int],
+        var split_bins: List[Int],
+        var tree_leaf_offsets: List[Int],
+        var leaf_values: List[Float32],
+        var losses: List[Float64],
+        best_iteration: Int,
+        stopped_early: Bool,
+    ):
+        # the former fieldwise initializer's arguments, in field order; the
+        # loop record starts empty
+        self.fold_counts = fold_counts^
+        self.borders = borders^
+        self.nan_treatment = nan_treatment^
+        self.tree_split_offsets = tree_split_offsets^
+        self.split_features = split_features^
+        self.split_bins = split_bins^
+        self.tree_leaf_offsets = tree_leaf_offsets^
+        self.leaf_values = leaf_values^
+        self.losses = losses^
+        self.best_iteration = best_iteration
+        self.stopped_early = stopped_early
+        self.fit_loop = FitLoop.empty()
 
     def n_trees(self) -> Int:
         return len(self.tree_split_offsets) - 1
@@ -4735,6 +4769,10 @@ def gbdt_host_boost(
         full_cindex = cindexes[0].copy()
     var feature_random = TRandom(params.random_seed ^ UInt64(0x4645415455524553))
 
+    # `fit_loop_` (lane ab-loop-mode): the host clock read once before the
+    # first round and once after the last (nothing inside the loop); the
+    # rounds executed are the trees the loop added.
+    var fit_loop_t0 = fit_loop_start()
     for iteration in range(params.n_estimators):
         # ---- which permutation the STRUCTURE is searched on
         # (`doc_parallel_boosting.mojo:2192-2219`), their modulus kept ----
@@ -5079,6 +5117,7 @@ def gbdt_host_boost(
             var v = Float64(fv)
             if iteration + 1 > 1:
                 losses.append(-v / Float64(n_rows))
+    var fit_loop = fit_loop_stop(fit_loop_t0, len(tree_split_offsets) - 1)
 
     # the final tree's loss: one more pass over the settled cursor, through
     # the SAME per-block partials and fold as the loop's, whether or not the
@@ -5121,6 +5160,7 @@ def gbdt_host_boost(
         tree_split_offsets^, split_features^, split_bins^, tree_leaf_offsets^,
         model_leaves^, losses^, detector.best_iteration, stopped_early,
     )
+    model.fit_loop = fit_loop^
     return GbdtHostFitWithEval(
         model^,
         GbdtHostEvalFit(test_losses^, detector.best_iteration, stopped_early),

@@ -203,6 +203,7 @@ def forest_request(config: ForestConfig, key: EntryRef, rows: Int, cols: Int, cl
     args.score = fit.score
     args.importance = fit.importance
     args.weight_max = fit.weight_max
+    args.loop = fit.loop
     return args^
 
 

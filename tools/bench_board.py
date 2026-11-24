@@ -734,6 +734,33 @@ WATCHDOG = _load_tool("bench_board_watchdog")
 #: Per-arm memory and the our-CPU refusal (standard library only at import).
 PROBE = _load_tool("bench_board_probe")
 
+#: A/B LOOP MODE (lane ab-loop-mode, 2026-11-24; AGENTS.md "Candidate evaluation"): the capped-iteration table and the
+#: per-race plan each driver applies to our arms (standard library only).
+LOOP = _load_tool("ab_loop")
+
+
+def loop_cap_arg(text):
+    """--loop-cap: 'off' (None), 'table' (each valid row's own cap) or a positive integer cap for every valid row."""
+    if text in (None, "", "off"):
+        return None
+    if text == "table":
+        return "table"
+    k = int(text)
+    if k < 1:
+        raise argparse.ArgumentTypeError("--loop-cap: off, table or a positive integer")
+    return k
+
+
+def loop_env(ctx, race):
+    """{ab_loop.ENV: the race's JSON plan} when the board runs in loop mode, else {}. The plan names the lane's PUBLIC
+    cap parameter, the cap and the pins (early stopping off), or mode 'whole' with the table's reason; the driver
+    applies it to our arms only (both arms of an A/B are ours, so the cap is equal on both)."""
+    cap = ctx.get("loop_cap")
+    if cap is None:
+        return {}
+    plan = LOOP.race_plan(race["family"], race["lane"], None if cap == "table" else cap)
+    return {LOOP.ENV: json.dumps(plan, sort_keys=True)}
+
 #: Our PyPI wheels with byte provenance (standard library only): download, SHA-256 against PyPI's
 #: JSON digests, install those files, and the loaded-from-those-files check (Andrew 2026-10-14).
 PYPI = _load_tool("pypi_wheel_install")
@@ -2434,7 +2461,7 @@ def parse_tree_log(path):
     summ = _load_tool("bench_all_summarize")
     arms, verdict, shape = summ.parse_tree_log(path)
     bindings, warm, notes, verdict_line, mem, libs = {}, {}, [], None, {}, {}
-    states, calls = {}, {}
+    states, calls, loops = {}, {}, {}
     small = _small_rows()
     with open(path, errors="replace") as fh:
         for line in fh:
@@ -2467,6 +2494,13 @@ def parse_tree_log(path):
                 states[d["arm"]] = d["receipt"]
             elif head == "FSPEED-FIT-VERDICT":
                 verdict_line = rest[:300]
+            elif head == "LOOP_MODE":
+                # A/B LOOP MODE (tools/ab_loop.py): `LOOP_MODE arm=<arm> <json record>`, one per own arm
+                arm_kv, _, js = rest.partition(" ")
+                try:
+                    loops[arm_kv.partition("=")[2]] = json.loads(js)
+                except ValueError:
+                    pass
             elif head == "FSPEED-MEM":
                 f = _kv(rest)
                 try:
@@ -2485,7 +2519,7 @@ def parse_tree_log(path):
     return {"arms": arms, "verdict": verdict, "verdict_line": verdict_line,
             "shape": shape, "notes": notes, "bindings": bindings, "warmup": warm,
             "mem": {a: [rs[k] for k in sorted(rs)] for a, rs in mem.items()},
-            "libraries": libs, "state_receipts": states, "scored_calls": calls}
+            "libraries": libs, "state_receipts": states, "scored_calls": calls, "loop_mode": loops}
 
 
 #: attribution runs only: the own arms (and their order) a tree race times; see select_own_arms
@@ -2732,6 +2766,9 @@ def tree_cells(ctx, race, parsed):
         # SMALL ROWS (2026-11-15): calls per scored run and the spread of every call (median_ms is their median)
         cell.update(_small_rows().cell_fields((parsed.get("scored_calls") or {}).get(arm)))
         cell.update(memory_fields(parsed.get("mem", {}).get(arm)))
+        # A/B LOOP MODE (tools/ab_loop.py): the trees driver's LOOP_MODE line of this arm
+        if arm in (parsed.get("loop_mode") or {}):
+            cell["loop_mode"] = parsed["loop_mode"][arm]
         lib = (parsed.get("libraries") or {}).get(arm) or {}
         cell["library_version"] = lib.get("version")
         cell["device_name"] = lib.get("device_name")
@@ -3361,6 +3398,7 @@ def classical_cells(ctx, race, r):
                     hash_stable=a.get("digest_stable"), shape=shape,
                     state_receipts=a.get("state_receipts", []), operations=a.get("operations", []),
                     iteration_receipts=a.get("iteration_receipts"), fitted_parameters=a.get("fitted_parameters"),
+                    loop_mode=a.get("loop_mode"),
                     device=info.get("device", cell["device"]),
                     device_name=info.get("device_name") or info.get("cpu_model"),
                     library_version=info.get("version"),
@@ -3857,6 +3895,7 @@ def params_probe(ctx, race, arms, scorer=None):
         sub = dict(sub, our_arms={a: m for a, m in own.items() if a in arms or a == "ours-ab"},
                    opponents=[a for a in arms if a not in own])
         cmd, extra = tree_cmd(ctx, sub)
+        extra = dict(extra, **loop_env(ctx, race))     # A/B LOOP MODE: the probe reads back the capped params too
         cmd = cmd + ["--params-only"]
         rc, process = probe_run(cmd, child_env(ctx, extra), log, ctx["race_deadline_s"] + 900, nice=ctx["nice"])
         try:
@@ -3885,6 +3924,7 @@ def params_probe(ctx, race, arms, scorer=None):
                         "device_name": libs[arm].get("device_name"), "probe_process": process}
         return out
     cmd, extra, ceiling = globals()[_PARAMS_ONLY_CMD[race["family"]]](ctx, sub)
+    extra = dict(extra, **loop_env(ctx, race))         # A/B LOOP MODE: the probe reads back the capped params too
     cmd = list(cmd)
     cmd[cmd.index("--out") + 1] = probe_dir
     cmd.append("--params-only")
@@ -4586,6 +4626,7 @@ def _run_race(ctx, race):
     tag = "%s.%s.rows-%s" % (race["lane"], race["dataset"], rows_tag(race["rows"]))
     if race["family"] == "trees":
         cmd, extra = tree_cmd(ctx, race)
+        extra = dict(extra, **loop_env(ctx, race))
         log = os.path.join(ctx["out"], "raw", "trees", tag + ".log")
         if os.path.exists(log):
             os.replace(log, log + ".previous")
@@ -4600,6 +4641,7 @@ def _run_race(ctx, race):
             rec["infer_cells"] = INFER.tree_cells(_bb(), ctx, race, log, cells)
     elif race["family"] == "neural":
         cmd, extra, ceiling = neural_cmd(ctx, race)
+        extra = dict(extra, **loop_env(ctx, race))
         tag = "%s.%s.shape-%s" % (race["lane"], race["dataset"], race.get("shape") or "full")
         log = os.path.join(ctx["out"], "logs", "neural." + tag + ".log")
         jpath = neural_json_path(ctx, race)
@@ -4617,6 +4659,7 @@ def _run_race(ctx, race):
             cells = classical_cells(ctx, race, r)
     elif race["family"] == "algos":
         cmd, extra, ceiling = algos_cmd(ctx, race)
+        extra = dict(extra, **loop_env(ctx, race))
         log = os.path.join(ctx["out"], "logs", "algos." + tag + ".log")
         jpath = algos_json_path(ctx, race)
         if os.path.exists(jpath):
@@ -4639,6 +4682,7 @@ def _run_race(ctx, race):
                         c["recompiles_in_timed_run"] = n
     elif race["family"] == "classical2":
         cmd, extra, ceiling = more_cmd(ctx, race)
+        extra = dict(extra, **loop_env(ctx, race))
         log = os.path.join(ctx["out"], "logs", "classical2." + tag + ".log")
         jpath = more_json_path(ctx, race)
         if os.path.exists(jpath):
@@ -4655,6 +4699,7 @@ def _run_race(ctx, race):
             cells = classical_cells(ctx, race, r)
     else:
         cmd, extra, ceiling = classical_cmd(ctx, race)
+        extra = dict(extra, **loop_env(ctx, race))
         log = os.path.join(ctx["out"], "logs", "classical." + tag + ".log")
         jpath = classical_json_path(ctx, race)
         if os.path.exists(jpath):
@@ -4676,6 +4721,12 @@ def _run_race(ctx, race):
         # not disposable quality-pass scratch. Keep them for E.seal and later
         # verified retention; deleting them here left only hashes in R2.
     rec["cells"] = add_ratios(flag_recompiles(mark_not_scored(cells)))
+    # A/B LOOP MODE: the mode this race ran in (tools/measure_owed.py base-share shares a base only between races of
+    # the same mode and cap); absent: the whole operation (loop mode off)
+    lplan = loop_env(ctx, race)
+    if lplan:
+        p = json.loads(lplan[LOOP.ENV])
+        rec["loop_mode"] = {"mode": p["mode"], "k": p.get("k"), "param": p.get("param")}
     for c in rec["cells"]:
         # PER-CELL PHASE SPLIT (tools/bench_board_probe.py phase_split): beside the scored time, read from what the
         # cell already holds; it changes nothing that is timed
@@ -5693,6 +5744,11 @@ def build_parser():
                         "more, algos, neural): tools/measure_owed.py writes it for an A/B arm capped at a stored base "
                         "time; a round that reaches it stops and the cell records the timeout")
     p.add_argument("--nice", type=int, default=0)
+    p.add_argument("--loop-cap", type=loop_cap_arg, default=None, metavar="off|table|K",
+                   help="A/B LOOP MODE (tools/ab_loop.py): full-size data with the iteration cap of "
+                        "tools/ab_loop_caps.tsv (table) or K on every valid lane, set through the estimator's public "
+                        "parameter on our arms; the cells record the loop region per executed iteration. Off by "
+                        "default (the whole operation, as before)")
     p.add_argument("--skip-failed", action="store_true",
                    help="on resume, do not retry races that failed (default: retry them)")
     p.add_argument("--no-infer", action="store_true",
@@ -5947,6 +6003,10 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     if args.rounds < 1:
         raise SystemExit("--rounds must be >= 1")
+    if args.loop_cap is not None and (args.with_opponents or args.opponents_only or args.retime_opponents
+                                      or args.retime_cpu_opponents or args.gpu_opponents_only):
+        # A/B LOOP MODE caps OUR arms only: an opponent timed beside a capped arm would be a broken race
+        raise SystemExit("bench_board: --loop-cap is for our own A/B arms; it never runs with opponents")
     if args.smoke:
         # small and once, into its own directory, never the board's
         args.rows, args.rounds, args.neural_shape = str(SMOKE_ROWS), 1, "small"
@@ -6151,6 +6211,7 @@ def main(argv=None):
            "wheel": wheel, "arm_budget_s": args.arm_budget_s,
            "race_deadline_s": args.race_deadline_s, "round_seconds": args.round_seconds,
            "race_round_seconds": race_round_seconds(args.race_round_seconds),
+           "loop_cap": args.loop_cap,
            "nice": args.nice, "ptxas": ptxas, "infer": not args.no_infer,
            "tree_driver": os.path.abspath(args.tree_driver),
            "classical_driver": os.path.abspath(args.classical_driver),

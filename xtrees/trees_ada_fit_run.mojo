@@ -61,6 +61,7 @@ is inside each launch (the image's fit and predict, the glue kernels).
 """
 from std.memory import bitcast
 from core.entry_table import EntryRef
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from core.host_finite_scan import host_all_finite_f32
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
@@ -201,6 +202,10 @@ struct AdaFitResult(Movable):
     var launched: Bool
     var members: Bool
     var notices: List[Float64]
+    # The fit loop record (lane alm-left, 2026-11-24; core/fit_loop_clock.mojo;
+    # the estimator's `fit_loop_`): the boosting rounds the loop ran (kept or
+    # not) and the loop region's time.
+    var loop: FitLoop
 
     def __init__(out self):
         self.handles = List[Int]()
@@ -209,6 +214,7 @@ struct AdaFitResult(Movable):
         self.launched = False
         self.members = False
         self.notices = List[Float64]()
+        self.loop = FitLoop.empty()
 
 
 def ada_release_handles(forest: EntryRef, mut handles: List[Int]):
@@ -540,7 +546,17 @@ def ada_fit_run(mut plan: AdaFitPlan) raises -> AdaFitResult:
         if plan.device_rounds:
             xf_ada_open(plan.forest, plan.session, plan.weights, plan.codes if plan.classifier else plan.y,
                         plan.class_rows if plan.classifier else 0, n, plan.k if plan.classifier else 0)
+        # The fit loop clock (lane alm-left, 2026-11-24): read once after the
+        # round scratch and the device rounds' open, immediately before the
+        # first round, and once after the last. Every round ends on the host
+        # read of its four step words (`sp[0]`), which waits on the round's
+        # device work, so no sync is added. `ran` is one register store per
+        # round (no lookup, allocation, sync or clock read inside the loop).
+        # Measurement only: no bit changes.
+        var loop_start = fit_loop_start()
+        var ran = 0
         for it in range(plan.rounds):  # driver-loop: over the boosting rounds (serial: each round's weights are the last round's)
+            ran = it + 1
             var last = 1 if it == plan.rounds - 1 else 0
             if not plan.device_rounds:
                 if plan.classifier:
@@ -609,6 +625,7 @@ def ada_fit_run(mut plan: AdaFitPlan) raises -> AdaFitResult:
             # A device round rescaled its resident weights by the total.
             if not plan.device_rounds and it < plan.rounds - 1:
                 _ = xt_scale(plan.glue, plan.weights, n, total)
+        result.loop = fit_loop_stop(loop_start, ran)
     except error:
         _release_one(plan, handle)
         if plan.member_route:

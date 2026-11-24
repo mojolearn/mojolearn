@@ -22,11 +22,14 @@ THE ABI (`GBDT_ENTRY_ABI`, one `abi("C")` entry per gbdt image, published in
                     params = the fit's params list; flags = one byte per
                     parameter (`GbdtFitArgs.bad`) or 0. Returns an outcome
                     handle owned by the image until XG_OUTCOME_FREE.
-  XG_OUTCOME_SIZES  addrs [outcome, out6]: writes [text bytes,
+  XG_OUTCOME_SIZES  addrs [outcome, out9]: writes [text bytes,
                     best_iteration, stopped_early, n_learn, n_test, text
-                    address]; the text address stays valid until
+                    address, loop iterations, loop nanoseconds, loop
+                    recorded]; the text address stays valid until
                     XG_OUTCOME_FREE, and the caller copies the text from it
-                    once (same process).
+                    once (same process). The last three are the fit's
+                    `fit_loop_` (core/fit_loop_clock.mojo; v2, lane
+                    ab-loop-mode: v1 wrote six words).
   XG_OUTCOME_COPY   addrs [outcome, text (UInt8, text bytes) or 0 to skip
                     the text, learn (Float64, n_learn), test (Float64,
                     n_test)].
@@ -74,8 +77,13 @@ caller holds it); the caller owns every buffer until the synchronous call
 returns.
 """
 from std.memory import alloc, unsafe_memcpy
+from core.fit_loop_clock import FitLoop
 
-comptime GBDT_ENTRY_ABI = "mojolearn.trees.gbdt.v1"
+# v2 (lane ab-loop-mode, 2026-11-24): XG_OUTCOME_SIZES writes nine words (the
+# fit loop's three after v1's six); a v1 image is refused by the table.
+comptime GBDT_ENTRY_ABI = "mojolearn.trees.gbdt.v2"
+#: the words XG_OUTCOME_SIZES writes
+comptime XG_OUTCOME_WORDS = 9
 
 comptime XG_CAPS = 0
 comptime XG_NUMERIC_MODE = 1
@@ -156,13 +164,17 @@ struct GbdtFitArgs(Movable, Sized):
 
 struct GbdtFitOutcome(Movable):
     """The fit's result (the former `[text, best_iteration, stopped_early,
-    learn_losses, test_losses]`)."""
+    learn_losses, test_losses]`) and its boosting loop (`fit_loop_`)."""
 
     var text: String
     var best_iteration: Int
     var stopped_early: Bool
     var learn: List[Float64]
     var test: List[Float64]
+    #: the boosting loop's executed rounds and its time (core/fit_loop_clock.mojo;
+    #: lane ab-loop-mode). Empty (not recorded) until the fit that built the
+    #: outcome sets it after its loop; a text-only fit leaves it empty.
+    var fit_loop: FitLoop
 
     def __init__(out self, var text: String, best_iteration: Int, stopped_early: Bool, var learn: List[Float64],
                  var test: List[Float64]):
@@ -171,6 +183,7 @@ struct GbdtFitOutcome(Movable):
         self.stopped_early = stopped_early
         self.learn = learn^
         self.test = test^
+        self.fit_loop = FitLoop.empty()
 
 
 def gbdt_outcome_box(var outcome: GbdtFitOutcome) -> Int:
@@ -188,15 +201,18 @@ def _outcome(handle: Int) raises -> UnsafePointer[GbdtFitOutcome, MutUntrackedOr
     return UnsafePointer[GbdtFitOutcome, MutUntrackedOrigin](unsafe_from_address=handle)
 
 
-def gbdt_outcome_sizes(handle: Int, out6: Int) raises:
+def gbdt_outcome_sizes(handle: Int, out9: Int) raises:
     var o = _outcome(handle)
-    var dst = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=out6)
+    var dst = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=out9)
     dst[0] = o[].text.byte_length()
     dst[1] = o[].best_iteration
     dst[2] = 1 if o[].stopped_early else 0
     dst[3] = len(o[].learn)
     dst[4] = len(o[].test)
     dst[5] = Int(o[].text.unsafe_ptr()) if o[].text.byte_length() > 0 else 0
+    dst[6] = o[].fit_loop.iterations
+    dst[7] = o[].fit_loop.loop_ns
+    dst[8] = 1 if o[].fit_loop.recorded else 0
 
 
 def gbdt_outcome_copy(handle: Int, text_dst: Int, learn_dst: Int, test_dst: Int) raises:

@@ -652,6 +652,10 @@ class BaggingClassifier(_BaggingBase):
         The feature indices each member was fitted on.
     n_features_in_ : int
         Number of features seen in ``fit``.
+    fit_loop_ : tuple of (int, float)
+        The number of members the last fit built and the time in milliseconds
+        its member loop took, from the start of the first member to the end
+        of the last.
     oob_score_ : float
         Out-of-bag accuracy (with ``oob_score=True``).
     oob_decision_function_ : array of shape (n_samples, n_classes)
@@ -780,6 +784,10 @@ class BaggingRegressor(_BaggingBase):
         The feature indices each member was fitted on.
     n_features_in_ : int
         Number of features seen in ``fit``.
+    fit_loop_ : tuple of (int, float)
+        The number of members the last fit built and the time in milliseconds
+        its member loop took, from the start of the first member to the end
+        of the last.
     oob_score_ : float
         Out-of-bag R^2 (with ``oob_score=True``).
     oob_prediction_ : array of shape (n_samples,)
@@ -911,6 +919,10 @@ class AdaBoostClassifier(_AdaBoostBase):
         Number of classes.
     n_features_in_ : int
         Number of features seen in ``fit``.
+    fit_loop_ : tuple of (int, float)
+        The number of boosting rounds the last fit ran and the time in
+        milliseconds its boosting loop took, from the start of the first
+        round to the end of the last.
 
     Examples
     --------
@@ -1029,6 +1041,10 @@ class AdaBoostRegressor(_AdaBoostBase):
         Weighted average loss of each member.
     n_features_in_ : int
         Number of features seen in ``fit``.
+    fit_loop_ : tuple of (int, float)
+        The number of boosting rounds the last fit ran and the time in
+        milliseconds its boosting loop took, from the start of the first
+        round to the end of the last.
 
     Examples
     --------
