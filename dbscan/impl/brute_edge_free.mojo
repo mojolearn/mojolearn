@@ -461,40 +461,27 @@ def bef_filtered_fit[
     Returns the number of bit-matrix ranges, or 0 with NOTHING written when the centred copy or one GEMM range
     does not fit the device (the caller then runs the reference passes).
 
-    THE COST RULE (lane ab-outcome-1, 2026-11-24; A/B nvc-ab-20261124T070727Z-69dac2 on the L40S: a 220-feature
-    input 575 -> 296 s, an 11-feature input 1.02 at 250,000 rows and not faster at full size). What the filter
-    costs and what it saves, per pair of rows: the reference kernel spends about 2 k flops at its achieved
-    rate (the 4x4 register tile, `bef_eps_kernel`); the filter spends 2 k flops in the identical GEMM at its
-    much higher rate PLUS a k-independent round trip of the product (`g`, written by the GEMM and read by
-    `dbf_filter_kernel`: 8 bytes a pair through device memory) PLUS the exact recheck of the pairs the band
-    leaves open (a warp reruns k global loads for its row while any of its 32 lanes x 4 pairs is open). So the
-    saving grows with k and shrinks with the open-pair fraction, and at a few tens of features the fixed round
-    trip and the recheck can eat it; no width or dataset threshold can say where, because the open fraction
-    depends on how the distances crowd `eps`. The rule therefore MEASURES the first tiles of the input in front
-    of it: the probe range of pass A (at most an eighth of the rows, in whole 64-row tiles, so the probe's
-    second run costs at most an eighth of pass A) runs the filter and then `bef_eps_kernel` on the same rows
-    (its degrees into scratch, never read), each timed to its synchronize; the fit keeps the filter only when
-    its range was faster. Both passes run the same two kernels at the same shapes, so the probe's ratio is the
-    passes' ratio. Biased toward the reference: the filter's clock holds the GEMM's first-call planning. The
-    answer is the same either way (the filter's words are the reference's), so a timing decision cannot move
-    a bit.
+    ONE ROUTE (Andrew, 2026-11-24: "the route should be one thing only", optimised for large inputs; lane
+    ab-outcome-3 / o3-route). Every fit whose buffers fit runs the filter for both passes; nothing times or
+    declines it (the timed probe of lane ab-outcome-1, which ran the filter and `bef_eps_kernel` on the first
+    rows and kept the faster, is removed). The fixed costs the filter carries per pair are in the module
+    docstring of `brute_eps_filter.mojo`.
 
-    The second fixed cost was on the union side: the filter's buffers took memory before the bit-matrix plan,
+    The union side (lane ab-outcome-1, 2026-11-24): the filter's buffers took memory before the bit-matrix plan,
     so the bit ranges were smaller and more of them ran, and every range reruns the union rounds over all n
     rows (`ef_compress_kernel` and `bef_block_root_kernel` per doubling chunk). The bit-matrix plan is now
     made FIRST, from the same BEF_BM_SHARE_PCT of the free memory the reference fit uses, and the filter sizes
     its centred copy and its GEMM range from what is left: the same number of bit ranges as the reference.
 
     Launch sites (the loops they sit in): `dbf_prepare` once a fit; `dbf_range_launch` once per GEMM-sized
-    query range of A and of B (driver loops over the memory plan, about n / gemm_rows iterations each); one
-    `bef_eps_kernel` launch on the probe rows and one scalar readback after the first range of A. Nothing is
-    added per row or per pair on the host."""
+    query range of A and of B (driver loops over the memory plan, about n / gemm_rows iterations each). Nothing
+    is added per row or per pair on the host."""
     var thresh = dbscan_metric_threshold(metric, eps)
     var n_words = bef_words(n_rows)
     var blocks_n = (n_rows + EF_TPB - 1) // EF_TPB
     var t0 = perf_counter_ns()
 
-    # --- the bit-matrix plan first: the reference fit's share of the free memory (see THE COST RULE) -----
+    # --- the bit-matrix plan first: the reference fit's share of the free memory (the union side, above) -----
     var free0 = Int(ctx.get_memory_info()[0])
     var range_rows = (free0 * BEF_BM_SHARE_PCT // 100) // (n_words * 8)
     if range_rows < 1:
@@ -536,92 +523,28 @@ def bef_filtered_fit[
     dbf_prepare(ctx, x, xc, nc, n_rows, n_features)
     var g = ctx.enqueue_create_buffer[DType.float32](g_rows * n_rows)
     var gws = GemmWorkspace(ctx)
-    var unc = ctx.enqueue_create_buffer[DType.int32](1)
-    var h_unc = ctx.enqueue_create_host_buffer[DType.int32](1)
-    ctx.enqueue_memset(unc, Int32(0))
+    # the fit never counts rechecked pairs (COUNT_RECHECKS off): one word stands in for the count
+    var unc_none = ctx.enqueue_create_buffer[DType.int32](1)
     var band = dbf_band_scale(n_features)
-    var use_filter = True
-    var probe_pairs = 0
-    var probe_unc = 0
-    var probe_filter_ns = 0
-    var probe_ref_ns = 0
 
     # --- A: degrees over every row -----------------------------------------
     var deg = ctx.enqueue_create_buffer[DType.int32](n_rows)
     # the degree instantiation writes no bits; one word stands in for `bm`
     var bm_none = ctx.enqueue_create_buffer[DType.uint64](1)
     ctx.enqueue_memset(deg, Int32(0))
-    var deg_range = min(n_rows, BEF_MAX_RANGE_ROWS)
-    # the probe range (THE COST RULE): at most an eighth of the rows in whole 64-row tiles, within one GEMM
-    # range and one reference launch grid
-    var probe_rows = (((n_rows + 7) // 8 + EPS_MBLK - 1) // EPS_MBLK) * EPS_MBLK
-    if probe_rows > g_rows:
-        probe_rows = g_rows
-    if probe_rows > deg_range:
-        probe_rows = deg_range
     var st_a = 0
-    while st_a < n_rows:  # driver-loop: over GEMM-sized (filter) or grid-sized (reference) query ranges (the plan, no row data)
-        if use_filter:
-            var np_f = min(n_rows - st_a, g_rows)
-            var tf0 = 0
-            if st_a == 0:
-                np_f = min(np_f, probe_rows)
-                # the prepare launches and the buffers are done before the clock starts
-                ctx.synchronize()
-                tf0 = Int(perf_counter_ns())
-            dbf_range_launch[metric, False](
-                ctx, gws, g, xc, nc, x, bm_none, deg, unc, st_a, np_f,
-                n_rows, n_features, np_f, 0, thresh, band, st_a == 0,
-            )
-            if st_a == 0:
-                # the probe: the filter's time on the first rows, then the reference kernel's on the same rows
-                ctx.enqueue_copy(dst_ptr=h_unc.unsafe_ptr(), src_buf=unc)
-                ctx.synchronize()
-                probe_filter_ns = Int(perf_counter_ns()) - tf0
-                probe_unc = Int(h_unc.unsafe_ptr().unsafe_load(0))
-                probe_pairs = np_f * n_rows
-                var deg_ref = ctx.enqueue_create_buffer[DType.int32](np_f)
-                ctx.enqueue_memset(deg_ref, Int32(0))
-                var xr = x.create_sub_buffer[DType.float32](0, np_f * n_features)
-                ctx.synchronize()
-                var tr0 = Int(perf_counter_ns())
-                ctx.enqueue_function[bef_eps_kernel[metric, False]](
-                    bm_none.unsafe_ptr(), deg_ref.unsafe_ptr(),
-                    xr.unsafe_ptr(), x.unsafe_ptr(), Int32(np_f), Int32(n_rows),
-                    Int32(n_features), thresh,
-                    grid_dim=(n_words, (np_f + EPS_MBLK - 1) // EPS_MBLK, 1),
-                    block_dim=(EPS_THREADS, 1, 1),
-                )
-                ctx.synchronize()
-                probe_ref_ns = Int(perf_counter_ns()) - tr0
-                # the scratch degrees and the view stay alive past the launch that wrote them
-                _ = deg_ref^
-                _ = xr^
-                if probe_filter_ns >= probe_ref_ns:
-                    use_filter = False
-            st_a += np_f
-        else:
-            var np_a = min(n_rows - st_a, deg_range)
-            var xa = x.create_sub_buffer[DType.float32](
-                st_a * n_features, np_a * n_features
-            )
-            var da = deg.create_sub_buffer[DType.int32](st_a, np_a)
-            ctx.enqueue_function[bef_eps_kernel[metric, False]](
-                bm_none.unsafe_ptr(), da.unsafe_ptr(),
-                xa.unsafe_ptr(), x.unsafe_ptr(), Int32(np_a), Int32(n_rows),
-                Int32(n_features), thresh,
-                grid_dim=(n_words, (np_a + EPS_MBLK - 1) // EPS_MBLK, 1),
-                block_dim=(EPS_THREADS, 1, 1),
-            )
-            st_a += np_a
+    while st_a < n_rows:  # driver-loop: over GEMM-sized query ranges (the plan, no row data)
+        var np_f = min(n_rows - st_a, g_rows)
+        dbf_range_launch[metric, False](
+            ctx, gws, g, xc, nc, x, bm_none, deg, unc_none, st_a, np_f,
+            n_rows, n_features, np_f, 0, thresh, band,
+        )
+        st_a += np_f
     core_points_compute(ctx, deg, core, min_pts, 0, n_rows)
     if phase_timing:
         print(
             "PHASE plan.brute_eps_filter gemm_rows " + String(g_rows)
-            + " band " + String(Float64(band)) + " probe_uncertain "
-            + String(probe_unc) + " of " + String(probe_pairs) + " probe_ns filter "
-            + String(probe_filter_ns) + " reference " + String(probe_ref_ns) + " filter "
-            + String(use_filter)
+            + " band " + String(Float64(band))
         )
 
     # --- C (sizing): the border lists of the non-core rows -----------------
@@ -675,25 +598,14 @@ def bef_filtered_fit[
     for kr in range(n_ranges):  # driver-loop: over memory-sized query ranges (the plan, no row data)
         var st = kr * range_rows
         var np = min(n_rows - st, range_rows)
-        if use_filter:
-            var s0 = 0
-            while s0 < np:  # driver-loop: over GEMM-sized query sub-ranges of the bit range (the plan, no row data)
-                var ns = min(np - s0, g_rows)
-                dbf_range_launch[metric, True](
-                    ctx, gws, g, xc, nc, x, bm, deg, unc, st + s0, ns,
-                    n_rows, n_features, np, s0, thresh, band, False,
-                )
-                s0 += ns
-        else:
-            var xb = x.create_sub_buffer[DType.float32](
-                st * n_features, np * n_features
+        var s0 = 0
+        while s0 < np:  # driver-loop: over GEMM-sized query sub-ranges of the bit range (the plan, no row data)
+            var ns = min(np - s0, g_rows)
+            dbf_range_launch[metric, True](
+                ctx, gws, g, xc, nc, x, bm, deg, unc_none, st + s0, ns,
+                n_rows, n_features, np, s0, thresh, band,
             )
-            ctx.enqueue_function[bef_eps_kernel[metric, True]](
-                bm.unsafe_ptr(), deg.unsafe_ptr(), xb.unsafe_ptr(), x.unsafe_ptr(),
-                Int32(np), Int32(n_rows), Int32(n_features), thresh,
-                grid_dim=(n_words, (np + EPS_MBLK - 1) // EPS_MBLK, 1),
-                block_dim=(EPS_THREADS, 1, 1),
-            )
+            s0 += ns
         var q0 = 0
         var chunk = BEF_CHUNK0
         while q0 < np:  # driver-loop: over doubling union chunks of the range (log2(range / BEF_CHUNK0) + 1 of them)
@@ -750,8 +662,7 @@ def bef_filtered_fit[
     _ = nc^
     _ = g^
     _ = gws^
-    _ = unc^
-    _ = h_unc^
+    _ = unc_none^
     return n_ranges
 
 

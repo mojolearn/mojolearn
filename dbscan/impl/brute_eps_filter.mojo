@@ -59,18 +59,20 @@ device memory, and `m n` fits an int32): one `identical_gemm` (`xc[range] . xc^T
 which has the reference kernel's tile and epilogue (64 x 64 pairs a block, 4 x 4 a thread, the same bit and
 degree reductions) with the accumulate loop replaced by one load of `g` per pair.
 
-WHEN IT IS NOT WORTH IT, DECIDED AT RUN TIME FROM THE DATA IN FRONT OF IT (lane ab-outcome-1, 2026-11-24;
-`brute_edge_free.bef_filtered_fit`, THE COST RULE). The first A/B (nvc-ab-20261124T070727Z-69dac2, L40S) halved
-a 220-feature fit (575 -> 296 s) and did not speed an 11-feature one (1.02 at 250,000 rows, not faster at full
-size). Per pair the reference spends work proportional to k; the filter spends the GEMM's (also proportional
-to k, at a far higher rate), a fixed round trip of the product through device memory, and the recheck of the
-open pairs (a warp reruns its row's k features from global memory while any of its 32 lanes x 4 pairs is
-open, so the open fraction costs about 128x its size in warps). Which side wins depends on k AND on how the
-distances crowd the threshold, so the fit times the filter and `bef_eps_kernel` on the same probe rows of the
-degrees pass (at most an eighth of the rows) and keeps the faster. The first range also counts its open pairs
-(one scalar readback), printed with the probe's times under phase timing: the evidence a decline leaves. The
-old fixed rule (decline above 1 / 256 open pairs) is replaced by the timing; it could not see the k-independent
-costs. Cost reasoning only; the next A/B decides it.
+ONE ROUTE, NO RUN-TIME CHOICE (Andrew, 2026-11-24: "the route should be one thing only", optimised for large
+inputs; no probe choosing between two). Under the define every fit whose buffers fit the device runs the filter
+for both distance passes; nothing times or declines it (lane ab-outcome-3 / o3-route removed the timed probe of
+lane ab-outcome-1, which had replaced the 1 / 256 open-pair decline). The first A/B
+(nvc-ab-20261124T070727Z-69dac2, L40S) halved a 220-feature fit (575 -> 296 s), 1.02 on an 11-feature one at
+250,000 rows, not faster at full size; the next A/B (wave-3 sha: istella full, taxi 250000, taxi full) decides
+whether the filter becomes the only brute route. Per pair the reference spends work proportional to k; the
+filter spends the GEMM's (also proportional to k, at a far higher rate) plus two costs that do not shrink with
+k: the round trip of the product through device memory (the GEMM writes `g`, the filter reads it: the identical
+GEMM has no epilogue hook to fuse the band test into), and the recheck of the open pairs. The recheck is one
+pass over the features per thread however many of its 4 rows have an open pair, loading only the open
+rows' and the open columns' features (lane ab-outcome-3 / o3-route; it was one pass per row with an open pair,
+loading all 4 columns): a warp runs it at most once per tile, and the words are the same (each open pair's
+accumulator runs the reference's statements in the reference's order).
 
 SCOPE. The brute edge-free route of `identical` (NVIDIA and AMD), squared-L2 arithmetic (euclidean, and cosine
 on its unit rows); L1 has no expanded form and keeps the reference kernel. Not carried to radius neighbours,
@@ -110,7 +112,7 @@ from gemm.contract import OP_NT
 
 
 #: The switch: default OFF, A/B owed with the wave-3 sha (bench/results/paper_compare/owed-pre0867.json arm
-#: dbscan-brute-eps-filter): the first A/B was split (module docstring), and the timed probe is the new form.
+#: dbscan-brute-eps-filter): the first A/B was split (module docstring); the filter always, no probe, is the new form.
 #: Read only on the brute edge-free route, which exists under IDENTICAL on NVIDIA and AMD.
 comptime DBSCAN_BRUTE_EPS_FILTER = (
     is_defined["MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER"]() and IDN_DBSCAN_EDGE_FREE
@@ -125,7 +127,7 @@ comptime DBF_NORM_UNUSABLE = Float32(-1.0)
 #: 2^-100: the absolute part of the band (underflow and flush terms, see the module docstring).
 comptime DBF_ABS_SLACK = Float32(7.888609052210118e-31)
 #: The largest `m x n` product of one GEMM: the cell count travels as an Int32 in the GEMM's launches, and the
-#: probe's uncertain count of one range is an Int32.
+#: checks' rechecked-pair count of one range is an Int32.
 comptime DBF_MAX_CELLS = 2147483647
 #: The product buffer's (and the centred copy's) share of the free device memory, in percent: the share the
 #: bit matrix of the route takes (`BEF_BM_SHARE_PCT`).
@@ -261,8 +263,22 @@ def dbf_center_kernel(
         nc.unsafe_store(r, DBF_NORM_UNUSABLE)
 
 
+@always_inline
+def _dbf_recheck_bits(
+    acc: SIMD[DType.float32, GEMM_ACC_COLS_PER_TH], pend: UInt32, thresh: Float32
+) -> UInt32:
+    """The reference's radius test on the open pairs of one row: bit j where pair j was open and its exact
+    accumulator is within `thresh`."""
+    var bits = UInt32(0)
+    for j in range(GEMM_ACC_COLS_PER_TH):
+        if ((pend >> UInt32(j)) & UInt32(1)) != UInt32(0):
+            if acc[j] <= thresh:
+                bits |= UInt32(1) << UInt32(j)
+    return bits
+
+
 def dbf_filter_kernel[
-    metric: Int, WRITE_BITS: Bool
+    metric: Int, WRITE_BITS: Bool, COUNT_RECHECKS: Bool
 ](
     bm: MutPointer[UInt64, MutAnyOrigin],
     deg: MutPointer[Int32, MutAnyOrigin],
@@ -278,7 +294,6 @@ def dbf_filter_kernel[
     q_off_in: Int32,
     thresh_in: Float32,
     band_in: Float32,
-    probe_in: Int32,
 ):
     """`bef_eps_kernel[metric, WRITE_BITS]`'s answer for the query rows `[start, start + m)` of the dataset
     against all `n` rows, from `g` (`m x n`, `g[q, j]` = centred row `start + q` . centred row `j`) and the
@@ -288,8 +303,8 @@ def dbf_filter_kernel[
     same thread to (row, column) map. `WRITE_BITS`: the word of (query `q`, column word `w`) goes to
     `bm[w * bm_rows + q_off + q]` (the range's bit matrix holds `bm_rows` queries; this launch fills the
     queries from `q_off`). Not `WRITE_BITS`: the count is added to `deg[start + q]` (zeroed first).
-    `x` is the ORIGINAL dataset, read only by the recheck. With `probe_in` set, the block's rechecked pairs are
-    added to `unc[0]`."""
+    `x` is the ORIGINAL dataset, read only by the recheck. `COUNT_RECHECKS` (the word-for-word check only; the fit
+    never counts): the block's rechecked pairs are added to `unc[0]`."""
     comptime assert EPS_NBLK == 64 and GEMM_NBLK == 64, "one column tile is one word"
     comptime assert GEMM_ACC_COLS_PER_TH == 4 and GEMM_ACC_TH_COLS == 16, (
         "bit acccolid + 16 j for j < 4"
@@ -320,11 +335,14 @@ def dbf_filter_kernel[
         if yid0 < n:
             ncol[j] = nc.unsafe_load(yid0)
 
-    var n_unc = Int32(0)
+    comptime assert GEMM_ACC_ROWS_PER_TH == 4, "four row accumulators below"
+    # --- the band test of this thread's 4 x 4 pairs ---------------------------
+    var inside = SIMD[DType.uint32, GEMM_ACC_ROWS_PER_TH](0)
+    var pending = SIMD[DType.uint32, GEMM_ACC_ROWS_PER_TH](0)
     for i in range(GEMM_ACC_ROWS_PER_TH):
         var xid = startx + i * GEMM_ACC_TH_ROWS
-        var inside = UInt32(0)
-        var pending = UInt32(0)
+        var ins = UInt32(0)
+        var pen = UInt32(0)
         if xid < m:
             var nq = nc.unsafe_load(start + xid)
             for j in range(GEMM_ACC_COLS_PER_TH):
@@ -336,41 +354,74 @@ def dbf_filter_kernel[
                     var approx = sn - Float32(2.0) * g.unsafe_load(xid * n + yid)
                     var band = band_in * sn + DBF_ABS_SLACK
                     if usable and approx + band < thresh_in:
-                        inside |= UInt32(1) << UInt32(j)
+                        ins |= UInt32(1) << UInt32(j)
                     elif usable and approx - band > thresh_in:
                         pass
                     else:
-                        pending |= UInt32(1) << UInt32(j)
-        if pending != UInt32(0):
-            # THE EXACT RECHECK: `bef_eps_kernel`'s accumulation for this thread's row `i`, statement for
-            # statement (the operands it stages through shared memory are read from global memory here: a
-            # staging copy is bit exact). `xv` unflushed, `regy` flushed, `_eps_acc` at the same width, the
-            # features in ascending order, zeros past k and past n. Change both together.
-            var acc = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
-            for c in range(k_walk):
-                var xv = Float32(0.0)
-                var regy = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
-                if c < k:
-                    xv = x.unsafe_load((start + xid) * k + c)
-                    for j in range(GEMM_ACC_COLS_PER_TH):
+                        pen |= UInt32(1) << UInt32(j)
+        inside[i] = ins
+        pending[i] = pen
+
+    # --- THE EXACT RECHECK of the open pairs ----------------------------------
+    # `bef_eps_kernel`'s accumulation, statement for statement, for every open pair of this thread in ONE pass
+    # over the features (the operands it stages through shared memory are read from global memory here: a
+    # staging copy is bit exact). `xv` unflushed, `regy` flushed, `_eps_acc` at the same width, the features in
+    # ascending order, zeros past k and past n. Only the open rows' `xv` and the open columns' `regy` are loaded,
+    # and a row with no open pair skips its `_eps_acc`: `_eps_acc` is lane-wise, so every open pair's accumulator
+    # is the one the reference computes, and the lanes of a closed pair are never read. Change both together.
+    var pend_cols = pending[0] | pending[1] | pending[2] | pending[3]
+    if pend_cols != UInt32(0):
+        var xid0 = startx
+        var xid1 = startx + GEMM_ACC_TH_ROWS
+        var xid2 = startx + 2 * GEMM_ACC_TH_ROWS
+        var xid3 = startx + 3 * GEMM_ACC_TH_ROWS
+        var acc0 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
+        var acc1 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
+        var acc2 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
+        var acc3 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
+        for c in range(k_walk):
+            var xv0 = Float32(0.0)
+            var xv1 = Float32(0.0)
+            var xv2 = Float32(0.0)
+            var xv3 = Float32(0.0)
+            var regy = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
+            if c < k:
+                for j in range(GEMM_ACC_COLS_PER_TH):
+                    if ((pend_cols >> UInt32(j)) & UInt32(1)) != UInt32(0):
                         var yid2 = starty + j * GEMM_ACC_TH_COLS
                         if yid2 < n:
                             regy[j] = x.unsafe_load(yid2 * k + c)
-                regy = ftz_simd[GEMM_ACC_COLS_PER_TH](regy)
-                acc = _eps_acc[metric, GEMM_ACC_COLS_PER_TH](acc, xv, regy)
-            for j in range(GEMM_ACC_COLS_PER_TH):
-                if ((pending >> UInt32(j)) & UInt32(1)) != UInt32(0):
-                    n_unc += Int32(1)
-                    # the reference's radius test
-                    if acc[j] <= thresh_in:
-                        inside |= UInt32(1) << UInt32(j)
+                if pending[0] != UInt32(0):
+                    xv0 = x.unsafe_load((start + xid0) * k + c)
+                if pending[1] != UInt32(0):
+                    xv1 = x.unsafe_load((start + xid1) * k + c)
+                if pending[2] != UInt32(0):
+                    xv2 = x.unsafe_load((start + xid2) * k + c)
+                if pending[3] != UInt32(0):
+                    xv3 = x.unsafe_load((start + xid3) * k + c)
+            regy = ftz_simd[GEMM_ACC_COLS_PER_TH](regy)
+            if pending[0] != UInt32(0):
+                acc0 = _eps_acc[metric, GEMM_ACC_COLS_PER_TH](acc0, xv0, regy)
+            if pending[1] != UInt32(0):
+                acc1 = _eps_acc[metric, GEMM_ACC_COLS_PER_TH](acc1, xv1, regy)
+            if pending[2] != UInt32(0):
+                acc2 = _eps_acc[metric, GEMM_ACC_COLS_PER_TH](acc2, xv2, regy)
+            if pending[3] != UInt32(0):
+                acc3 = _eps_acc[metric, GEMM_ACC_COLS_PER_TH](acc3, xv3, regy)
+        # the reference's radius test on the open pairs
+        inside[0] = inside[0] | _dbf_recheck_bits(acc0, pending[0], thresh_in)
+        inside[1] = inside[1] | _dbf_recheck_bits(acc1, pending[1], thresh_in)
+        inside[2] = inside[2] | _dbf_recheck_bits(acc2, pending[2], thresh_in)
+        inside[3] = inside[3] | _dbf_recheck_bits(acc3, pending[3], thresh_in)
 
+    for i in range(GEMM_ACC_ROWS_PER_TH):
+        var xid = startx + i * GEMM_ACC_TH_ROWS
         # --- the reference epilogue: bits or counts --------------------------
         var lo = UInt32(0)
         var hi = UInt32(0)
         var s = Int32(0)
         for j in range(GEMM_ACC_COLS_PER_TH):
-            if ((inside >> UInt32(j)) & UInt32(1)) != UInt32(0):
+            if ((inside[i] >> UInt32(j)) & UInt32(1)) != UInt32(0):
                 s += Int32(1)
                 if j < 2:
                     lo |= UInt32(1) << UInt32(acccolid + j * GEMM_ACC_TH_COLS)
@@ -400,10 +451,17 @@ def dbf_filter_kernel[
             if acccolid == 0 and xid < m:
                 _ = Atomic.fetch_add(deg.unsafe_offset(start + xid), s)
 
-    # the probe: every thread reaches the block reduction; thread 0 adds when asked
-    var block_unc = block_sum[block_size=EPS_THREADS](n_unc)
-    if tid == 0 and probe_in != Int32(0):
-        _ = Atomic.fetch_add(unc.unsafe_offset(0), block_unc)
+    # the check's count of rechecked pairs: every thread reaches the block reduction (compile time: the fit
+    # instantiates COUNT_RECHECKS False and runs no reduction)
+    comptime if COUNT_RECHECKS:
+        var n_unc = Int32(0)
+        for i in range(GEMM_ACC_ROWS_PER_TH):
+            for j in range(GEMM_ACC_COLS_PER_TH):
+                if ((pending[i] >> UInt32(j)) & UInt32(1)) != UInt32(0):
+                    n_unc += Int32(1)
+        var block_unc = block_sum[block_size=EPS_THREADS](n_unc)
+        if tid == 0:
+            _ = Atomic.fetch_add(unc.unsafe_offset(0), block_unc)
 
 
 def dbf_prepare(
@@ -445,7 +503,7 @@ def dbf_prepare(
 
 
 def dbf_range_launch[
-    metric: Int, WRITE_BITS: Bool
+    metric: Int, WRITE_BITS: Bool, COUNT_RECHECKS: Bool = False
 ](
     ctx: DeviceContext,
     mut gws: GemmWorkspace,
@@ -464,25 +522,22 @@ def dbf_range_launch[
     q_off: Int,
     thresh: Float32,
     band: Float32,
-    probe: Bool,
 ) raises:
     """One query range `[start, start + m)`: the GEMM `g[m x n] = xc[range] . xc^T`, then the filter launch
     (bits into `bm` at query offset `q_off` of a `bm_rows`-query bit matrix, or degrees into `deg`). `g` holds
     at least `m * n_rows` floats; `gws` is the fit's GEMM scratch. Asynchronous apart from what the GEMM's own
-    plan waits for: the caller keeps every buffer named past its synchronize."""
+    plan waits for: the caller keeps every buffer named past its synchronize. `COUNT_RECHECKS` (the word-for-word
+    check only) adds the launch's rechecked pairs to `unc[0]`; otherwise `unc` is not touched."""
     var xq = xc.create_sub_buffer[DType.float32](
         start * n_features, m * n_features
     )
     var gv = g.create_sub_buffer[DType.float32](0, m * n_rows)
     gws.run(ctx, gv, xq, xc, m, n_rows, n_features, OP_NT)
-    var probe_flag = Int32(0)
-    if probe:
-        probe_flag = Int32(1)
-    ctx.enqueue_function[dbf_filter_kernel[metric, WRITE_BITS]](
+    ctx.enqueue_function[dbf_filter_kernel[metric, WRITE_BITS, COUNT_RECHECKS]](
         bm.unsafe_ptr(), deg.unsafe_ptr(), unc.unsafe_ptr(), gv.unsafe_ptr(),
         nc.unsafe_ptr(), x.unsafe_ptr(), Int32(start), Int32(m),
         Int32(n_rows), Int32(n_features), Int32(bm_rows), Int32(q_off),
-        thresh, band, probe_flag,
+        thresh, band,
         grid_dim=(
             (n_rows + EPS_NBLK - 1) // EPS_NBLK,
             (m + EPS_MBLK - 1) // EPS_MBLK,
