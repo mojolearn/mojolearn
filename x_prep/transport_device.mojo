@@ -12,7 +12,8 @@ from core.prep_entry_table import PrepEntryKey, prep_table_publish, PREP_TABLE_X
 from core.shared_slot import SharedSlot
 from core.naive_bayes_member import naive_bayes_member_publish
 from core.discriminant_member import discriminant_member_publish
-from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE
+from x_prep.device import run_program_device, run_program_device_ranges
+from x_prep.store_slot import x_prep_ctx, X_PREP_STORE
 from x_prep.transport_abi import (
     XP_TRANSPORT_ABI, XP_OP_COUNT, XP_RUN, XP_RUN_SCRATCH, XP_RUN_OUT, XP_RUN_RANGES, XP_DEV_PUT, XP_DEV_FREE,
     XP_DEV_TAKE_ROWS, XP_DEV_LIVE, xp_validate_call, xp_vendor_word,

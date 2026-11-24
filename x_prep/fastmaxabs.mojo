@@ -27,7 +27,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz
 from x_prep.common import FP, is_nan
 from x_prep.prims import zero_to_one
-from x_prep.device import x_prep_ctx
+from x_prep.store_slot import x_prep_ctx
 from x_prep.prep3 import PREP3_MAXABS, PREP3_MAXABS_POOL
 from core.device_pool import pool_give, pool_take
 
