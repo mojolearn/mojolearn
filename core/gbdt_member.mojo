@@ -160,7 +160,8 @@ from core.member_abi import (
 )
 from core.member_families import MEMBER_FAMILY_GBDT
 from core.native_descriptor_abi import NativeDescriptorError
-from core.native_descriptor_call import native_descriptor_report
+from core.native_descriptor_call import native_descriptor_report, native_descriptor_call
+from core.metrics_entry_table import MR_R2
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 comptime _STORE_NAME: StaticString = "MojolearnGbdtMemberStoreV2"
@@ -1453,6 +1454,9 @@ def _score(slot: _SlotPtr, call: _CallPtr) raises:
     exactly over the host workers). A weighted score is the caller's metric
     (no MEMBER_CAN_WEIGHTED_SCORE)."""
     var name = _name(slot[].kind)
+    if slot[].kind == _KIND_REGRESSOR:
+        _score_r2(slot, call)
+        return
     if slot[].kind != _KIND_CLASSIFIER:
         member_unsupported(name, MEMBER_OP_SCORE)
     if call[].weights.rows > 0:
@@ -1489,6 +1493,48 @@ def _score(slot: _SlotPtr, call: _CallPtr) raises:
         hits += partials[t]
     _ = len(codes)
     call[].value = Float64(Float32(hits) / Float32(rows))
+
+
+def _score_r2(slot: _SlotPtr, call: _CallPtr) raises:
+    """GradientBoostingRegressor's `score` without weights (lane w3f3-c,
+    2026-11-24): the float32 R^2 kernel of the route's metrics image
+    (core/metrics_entry_table.mojo MR_R2, `route.third`, resolved once by
+    the member's UNPACK) over the raw float32 predict, the kernel the
+    adapter's own score runs (bindings/trees_public_mixin_score_unpack.mojo
+    `gbdt_adapter_score` -> `trees_r2` -> `r2_score`). Before, a search with
+    scoring=None scored this class by the x_metrics R^2 program
+    (`_own_score`'s R^2 row), another number than the estimator's own score
+    (test_parallel_model_selection: cross_val_score serial vs the process
+    workers' `estimator.score`). A weighted score is the caller's metric."""
+    var name = _name(slot[].kind)
+    if call[].weights.rows > 0:
+        raise Error("NotImplementedError: mojolearn: a weighted score of a " + name
+                    + " member is not published; the caller predicts and runs its own weighted metric")
+    var route = call[].route
+    if not route.has_third:
+        raise Error("ImportError: mojolearn: the " + name + " member's score needs the R^2 entry on its route")
+    _require_fitted(slot, "score()")
+    _x(slot, call)
+    _dense(call[].y, MEMBER_F32, "y")
+    var rows = call[].x.rows
+    if call[].y.cols != 1 or call[].y.rows <= 0:
+        raise Error("y must be nonempty one-dimensional targets")
+    if not trees_finite_f32(call[].y.data, call[].y.rows):
+        raise Error("y must be finite")
+    if call[].y.rows != rows:
+        raise Error("mojolearn metrics: y_true has " + String(call[].y.rows) + " entries and "
+                    + "y_pred has " + String(rows) + "; they must be the same length")
+    var prediction = List[Float32](length=max(rows * slot[].dim, 1), fill=0.0)
+    var width = _apply(slot, call, _PREDICT_RAW, Int(prediction.unsafe_ptr()))
+    if width != 1:
+        raise Error("RuntimeError: mojolearn: predict wrote width " + String(width) + ", expected 1")
+    var value = List[Float64](length=1, fill=0.0)
+    var words: List[Int] = [rows]
+    var addresses: List[Int] = [call[].y.data, Int(prediction.unsafe_ptr()), Int(value.unsafe_ptr())]
+    _ = native_descriptor_call(route.third.call, MR_R2, addresses, words, List[Float64]())
+    call[].value = value[0]
+    _ = len(prediction)  # read by the kernel through its address
+    _ = len(value)
 
 
 def _predict(slot: _SlotPtr, call: _CallPtr) raises:
@@ -1736,7 +1782,10 @@ def _capabilities(kind: Int, loss: String) -> Int:
                 | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_GIL_FREE | MEMBER_CAN_IMPORTANCES)
     if kind == _KIND_CLASSIFIER:
         return mask | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE | MEMBER_CAN_CLASSIFIER
-    if kind == _KIND_REGRESSOR or kind == _KIND_FEATURE_FREQ or kind == _KIND_ORDERED:
+    if kind == _KIND_REGRESSOR:
+        # lane w3f3-c: its own score (`_score_r2`, the adapter's float32 R^2)
+        return mask | MEMBER_CAN_SCORE
+    if kind == _KIND_FEATURE_FREQ or kind == _KIND_ORDERED:
         return mask
     if kind == _KIND_HOST:
         # Predict-only (a saved model): no fit, no weights; its proba for the two binary losses only.

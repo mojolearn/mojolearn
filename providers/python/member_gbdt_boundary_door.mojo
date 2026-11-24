@@ -102,7 +102,8 @@ from bindings.member_owner_unpack import member_labels_take
 from gbdt.fit_calls import xg_numeric_mode
 from bindings.gbdt_config_run import GbdtConfig, gbdt_config_words
 from gbdt.fit_request import gbdt_string_at
-from core.entry_table import entry_ref_mode, entry_ref_vendor
+from core.entry_table import EntryRef, entry_ref_mode, entry_ref_vendor
+from core.metrics_entry_table import MetricsEntryKey, metrics_r2_entry
 from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
@@ -267,6 +268,17 @@ def _learner_admit(model: PythonObject, kind: Float64, run: PythonObject, mut ow
     route.mode = entry_ref_mode(entry)
     route.vendor = vendor
     route.entry = entry
+    if kind == 2.0:
+        # GradientBoostingRegressor's own score (lane w3f3-c; core/gbdt_member.mojo
+        # `_score_r2`): the R^2 entry of the metrics image its score door reads
+        # (`trees_r2`: the estimator's tier, the route's device), resolved once
+        # here. Not loaded: the member's score refuses in words; fit and
+        # predict are unaffected.
+        try:
+            route.third = EntryRef(metrics_r2_entry(MetricsEntryKey(route.mode, vendor)), 0)
+            route.has_third = True
+        except:
+            route.has_third = False
     owner.plan.route = route
     var words: List[Float64] = [kind]
     words.extend(gbdt_config_words(config))
