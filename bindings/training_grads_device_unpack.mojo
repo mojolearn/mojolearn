@@ -13,7 +13,7 @@ entry. Nothing is downloaded or re-uploaded but the two clip info words. The sca
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_item
 from bindings.native_loaded_module_door import native_loaded_module
-from bindings.optimizer_device_native_door import device_entries, device_allocate, shape_count
+from bindings.optimizer_device_native_door import device_entries, device_allocate, device_new, shape_count
 from bindings.optimizer_keys_unpack import optimizer_keys
 from bindings.optimizer_container_boundary_pack import optimizer_sequence_items, optimizer_pack_list
 from bindings.optimizer_public_door import (
@@ -173,8 +173,12 @@ def mlp_sessions_device(values: PythonObject, entries: PythonObject, context: Py
         if len(shapes[i]) != 2 or shapes[i][1] != width:
             raise Error("ValueError: MLP sessions require at least one (rows, width) input")
         total += shapes[i][0]
-    var output = device_allocate(native, [total, out_width], context)
-    var hs = Python.list(py_item(py_fields(output), nk[].k_h), py_item(w1, nk[].k_h), py_item(b1, nk[].k_h),
+    # Every session empty (the host form accepts that and returns a (0, out_width) array): the entry gets a
+    # one-float array to write nothing into, published as a (0, out_width) view that keeps it alive.
+    var storage = device_allocate(native, [max(1, total), out_width], context)
+    var output = storage if total > 0 else device_new(
+        py_item(entries, nk[].k_module), py_item(py_fields(storage), nk[].k_h), [0, out_width], storage, context)
+    var hs = Python.list(py_item(py_fields(storage), nk[].k_h), py_item(w1, nk[].k_h), py_item(b1, nk[].k_h),
                          py_item(w2, nk[].k_h), py_item(b2, nk[].k_h))
     var rs = Python.list()
     for i in range(len(handles)):  # driver-loop: over the caller's sessions (handles, not data)
