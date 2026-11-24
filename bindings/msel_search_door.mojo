@@ -770,51 +770,33 @@ def _perm_base(y: PythonObject, context: PythonObject) raises -> PythonObject:
 
 
 def _mean_test(estimator: PythonObject, x: PythonObject, y: PythonObject, folds: PythonObject, scoring: PythonObject,
-               mut rows: MselFoldRows, jobs: Int, context: PythonObject) raises -> Float64:
-    """`_row_means([cross_validate(...)['test_score']])[0]` on `rows`, the
-    folds as units on `jobs` threads.
+               jobs: Int, context: PythonObject) raises -> Float64:
+    """`_row_means([cross_validate(...)['test_score']])[0]`: the mean of the
+    folds' test scores.
 
     THE ONE TYPED SEARCH RUN (lane mf-msel5c): the folds are the carrier
-    search's given folds (`msel_cv_by_search`, error_score nan as the door's
-    units score them), fitted and scored by the search kind's RUN; the
-    door's units only for what that kind does not take (resident fold rows
-    included, lane mf-tail5: the carrier reads their scope)."""
+    search's given folds (`msel_cv_by_search`, error_score nan as
+    scikit-learn's permutation_test_score scores them; n_jobs the call's
+    bound), fitted and scored by the search kind's RUN. Lane mf-r9b: the
+    only route (what the kind does not fit is refused there in its words).
+    (lane mf-tail5) Resident fold rows: the caller's `MselFoldRows` opened
+    the resident scope the carrier opens (`msel_rows_scope_open`) and the
+    carrier's RUN reads it (its resident route: the whole X plus each side's
+    rows, X pinned once in that scope for every permutation); without one
+    the carrier opens its own."""
     var one = List[List[Float64]]()
-    # (lane mf-tail5) Resident fold rows too (`rows.dev`): `rows` opened the
-    # same resident scope the carrier opens (`msel_rows_scope_open`), and the
-    # carrier's RUN reads it (its resident route: the whole X plus each
-    # side's rows, X pinned once in that scope for every permutation), so
-    # the permutations' folds run in the typed RUN; the units only for what
-    # the kind does not take.
     var by = msel_cv_by_search(estimator, x, y, folds, scoring, PythonObject(jobs), PythonObject(_nan()), False,
                                False, PythonObject(None), False, context)
-    if by is not None:
-        var te = by["test"][0]
-        var values = List[Float64](capacity=len(te))
-        for i in range(len(te)):  # driver-loop: over the folds (their test scores, once per call)
-            values.append(Float64(py=te[i]))
-        one.append(values^)
-        return msel_row_means(one)[0]
-    var r = msel_cross_validate_run(estimator, y, rows, scoring, False, False, False, PythonObject(_nan()),
-                                    context, jobs)
-    one.append(r.test[0].copy())
+    var te = by["test"][0]
+    var values = List[Float64](capacity=len(te))
+    for i in range(len(te)):  # driver-loop: over the folds (their test scores, once per call)
+        values.append(Float64(py=te[i]))
+    one.append(values^)
     return msel_row_means(one)[0]
 
 
 def _nan() -> Float64:
     return Float64(0.0) / Float64(0.0)
-
-
-def _mean_own(estimator: PythonObject, x: PythonObject, y: PythonObject, folds: PythonObject, scoring: PythonObject,
-              device: Bool, jobs: Int, context: PythonObject) raises -> Float64:
-    """`_mean_test` on rows of its own (the folds drawn for this y)."""
-    var rows = MselFoldRows(x, y, folds, device, context)
-    var value: Float64 = 0.0
-    try:
-        value = _mean_test(estimator, x, y, folds, scoring, rows, jobs, context)
-    finally:
-        rows.close(context)
-    return value
 
 
 def _group_order(groups: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
@@ -952,7 +934,7 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
     var score: Float64 = 0.0
     var perm_scores = List[Float64]()
     try:
-        score = _mean_test(estimator, x, base.value(), folds0, sc, rows0, jobs, context)
+        score = _mean_test(estimator, x, base.value(), folds0, sc, jobs, context)
         var rng = MselRng(random_state, context)
         var order = PythonObject(None) if groups is None else _group_order(groups, n, context)
         var group_sizes = List[Int]() if groups is None else _group_sizes(order)
@@ -977,24 +959,16 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
             var yp = rows0.resident_take(base.value(), idx, context)
             rows0.resident_release(idx, context)
             if reuse:
-                perm_scores.append(_mean_test(estimator, x, yp, folds0, sc, rows0, jobs, context))
+                perm_scores.append(_mean_test(estimator, x, yp, folds0, sc, jobs, context))
             else:
+                # pass 3 (rank 107): the permutation's folds run in rows0's
+                # resident scope (X resident once for the whole call), as the
+                # reused folds do; only the fold index sets change. Lane
+                # mf-r9b: the units' per-permutation swap of rows0.folds and
+                # release of its index entries are gone with the units (the
+                # carrier's RUN takes the rows; rows0 stores no fold index).
                 var folds = msel_cv_folds_admitted(splitter, x, yp, group_values, context)
-                # pass 3 (rank 107): the permutation's folds run on rows0 (X
-                # stored once for the whole call), as the reused folds do;
-                # only the fold index sets change. `_mean_own` built a new
-                # MselFoldRows, so X was copied and stored again and freed
-                # for every permutation. The permutation's index entries are
-                # released after its scores (release ignores an index the
-                # store never held).
-                rows0.folds = folds
-                try:
-                    perm_scores.append(_mean_test(estimator, x, yp, folds, sc, rows0, jobs, context))
-                finally:
-                    rows0.folds = folds0
-                    for f in range(len(folds)):  # driver-loop: over this permutation's folds
-                        rows0.resident_release(folds[f][0], context)
-                        rows0.resident_release(folds[f][1], context)
+                perm_scores.append(_mean_test(estimator, x, yp, folds, sc, jobs, context))
     finally:
         rows0.close(context)
     return Python.tuple(PythonObject(score), msel_f64_list(perm_scores, context),
@@ -1056,4 +1030,4 @@ def _definition_mean(estimator: PythonObject, xa: PythonObject, yv: PythonObject
     var dtype = String("<f4") if py_type(first) is b.float else String("<i4")
     var yarr = _cast(msel_materialize(yv, "y", context), dtype, context["family_msel_resident_context"])
     var folds = msel_cv_folds(estimator, xa, yarr, cv, groups, False, context)[2]
-    return _mean_own(estimator, xa, yarr, folds, sc, msel_device_rows_ok(estimator, sc, context), jobs, context)
+    return _mean_test(estimator, xa, yarr, folds, sc, jobs, context)
