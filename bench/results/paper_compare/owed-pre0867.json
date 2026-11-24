@@ -1120,117 +1120,77 @@
    "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b03 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: rnn-scan-gated, hist-packed-gh, tsqr-tree-par-off, dbscan-brute-eps-filter, xprep-sort-quad-off"
   },
   "set-b04": {
-   "define": "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF,MOJOLEARN_SGD_FAST_PS_PRELOAD,MOJOLEARN_XC_SQDIST_TILED_OFF,MOJOLEARN_PREP_FAST_TAKE_VIEW_ALL",
+   "define": "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF,MOJOLEARN_SGD_FAST_PS_PRELOAD,MOJOLEARN_XC_SQDIST_TILED_OFF",
    "owed": "RUN",
    "combined": [
     "tsqr-wy-pair-off",
     "sgd-ps-preload",
-    "xc-sqdist-tiled-off",
-    "prep-take-view-all"
+    "xc-sqdist-tiled-off"
    ],
-   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b04 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: hist-warp-agg, tsqr-wy-pair-off, attn-fold-v2-on, sgd-ps-preload, xc-sqdist-tiled-off, prep-take-view-all"
+   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b04 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: hist-warp-agg, tsqr-wy-pair-off, attn-fold-v2-on, sgd-ps-preload, xc-sqdist-tiled-off, prep-take-view-all Trimmed 2026-11-24 (lane ab-outcome-2): prep-take-view-all DECIDED by A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md."
   },
   "set-b06": {
-   "define": "MOJOLEARN_MCD_FAST_LOCKSTEP_OFF,MOJOLEARN_IDN_LARS_GRID_GRAM_OFF,MOJOLEARN_XPREP_FAST_MI_SORTED_OFF,MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF",
-   "owed": "RUN",
-   "combined": [
-    "mcd-lockstep-off",
-    "lars-grid-gram-off",
-    "xprep-mi-sorted-off",
-    "mamba3-retain-stages-off"
-   ],
-   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b06 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: gbdt-device-rounds-off, mcd-lockstep-off, lars-grid-gram-off, xprep-mi-sorted-off, mamba3-retain-stages-off"
+   "define": "MOJOLEARN_XPREP_FAST_MI_SORTED_OFF",
+   "owed": "DECIDED",
+   "status": "DISSOLVED 2026-11-24 (lane ab-outcome-2): one member left (xprep-mi-sorted-off, still RUN with its own row); build it under its own owed name `--owed-arm xprep-mi-sorted-off` (define MOJOLEARN_XPREP_FAST_MI_SORTED_OFF). COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b06 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: gbdt-device-rounds-off, mcd-lockstep-off, lars-grid-gram-off, xprep-mi-sorted-off, mamba3-retain-stages-off Trimmed 2026-11-24 (lane ab-outcome-2): mcd-lockstep-off, lars-grid-gram-off, mamba3-retain-stages-off DECIDED by A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md.",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "set-b07": {
-   "define": "MOJOLEARN_XD_FAST_SVD_ONE_BLOCK,MOJOLEARN_IDN_KDE_QTILE_FORCE,MOJOLEARN_IDN_OLS_PREDICT_TILED,MOJOLEARN_XPREP_FAST_MI_TIES_OFF,MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF",
+   "define": "MOJOLEARN_XD_FAST_SVD_ONE_BLOCK,MOJOLEARN_XPREP_FAST_MI_TIES_OFF",
    "owed": "RUN",
    "combined": [
     "svd-one-block",
-    "kde-qtile-force",
-    "ols-predict-tiled",
-    "xprep-mi-ties-off",
-    "causal-lm-resident-forward-off"
+    "xprep-mi-ties-off"
    ],
-   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b07 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: gbdt-greedy-device-rounds-off, svd-one-block, kde-qtile-force, ols-predict-tiled, xprep-mi-ties-off, causal-lm-resident-forward-off"
+   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b07 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: gbdt-greedy-device-rounds-off, svd-one-block, kde-qtile-force, ols-predict-tiled, xprep-mi-ties-off, causal-lm-resident-forward-off Trimmed 2026-11-24 (lane ab-outcome-2): kde-qtile-force, ols-predict-tiled, causal-lm-resident-forward-off DECIDED by A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md."
   },
   "set-b09": {
-   "define": "MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT,MOJOLEARN_SGD_LOOP_CHECK_EVERY=1,MOJOLEARN_EM_LOOP_CHECK_EVERY=1,MOJOLEARN_XPREP_FAST_PT_INTERLEAVE,MOJOLEARN_CNN_GENERIC_OPS",
-   "owed": "RUN",
-   "combined": [
-    "et-device-loop-early-exit",
-    "sgd-check-1",
-    "em-check-1",
-    "xprep-pt-interleave",
-    "cnn-generic"
-   ],
-   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b09 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: et-device-loop-early-exit, sgd-check-1, em-check-1, xprep-pt-interleave, cnn-generic"
+   "define": "MOJOLEARN_XPREP_FAST_PT_INTERLEAVE",
+   "owed": "DECIDED",
+   "status": "DISSOLVED 2026-11-24 (lane ab-outcome-2): one member left (xprep-pt-interleave, still RUN with its own row); build it under its own owed name `--owed-arm xprep-pt-interleave` (define MOJOLEARN_XPREP_FAST_PT_INTERLEAVE). COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b09 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: et-device-loop-early-exit, sgd-check-1, em-check-1, xprep-pt-interleave, cnn-generic Trimmed 2026-11-24 (lane ab-outcome-2): et-device-loop-early-exit, sgd-check-1, em-check-1, cnn-generic DECIDED by A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md.",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "set-b10": {
-   "define": "MOJOLEARN_IDN_NORM_FIXED_LANES,MOJOLEARN_TREES_LG_LEVEL_ROUNDS,MOJOLEARN_EM_LOOP_CHECK_EVERY=8,MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH=0",
-   "owed": "RUN",
-   "combined": [
-    "norm-fixed-lanes-on",
-    "lg-level-rounds",
-    "em-check-8",
-    "xprep-pt-spec-depth-0"
-   ],
-   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b10 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: norm-fixed-lanes-on, lg-level-rounds, em-check-8, xprep-pt-spec-depth-0"
+   "define": "MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH=0",
+   "owed": "DECIDED",
+   "status": "DISSOLVED 2026-11-24 (lane ab-outcome-2): one member left (xprep-pt-spec-depth-0, still RUN with its own row); build it under its own owed name `--owed-arm xprep-pt-spec-depth-0` (define MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH=0). COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b10 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: norm-fixed-lanes-on, lg-level-rounds, em-check-8, xprep-pt-spec-depth-0 Trimmed 2026-11-24 (lane ab-outcome-2): norm-fixed-lanes-on, lg-level-rounds, em-check-8 DECIDED by A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md.",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "set-b11": {
-   "define": "MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT,MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH=6,MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF",
-   "owed": "RUN",
-   "combined": [
-    "rf-device-loop-early-exit",
-    "xprep-pt-spec-depth-6",
-    "emb-unique-rows-off"
-   ],
-   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b11 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: rf-device-loop-early-exit, xprep-pt-spec-depth-6, emb-unique-rows-off"
+   "define": "MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH=6",
+   "owed": "DECIDED",
+   "status": "DISSOLVED 2026-11-24 (lane ab-outcome-2): one member left (xprep-pt-spec-depth-6, still RUN with its own row); build it under its own owed name `--owed-arm xprep-pt-spec-depth-6` (define MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH=6). COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b11 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: rf-device-loop-early-exit, xprep-pt-spec-depth-6, emb-unique-rows-off Trimmed 2026-11-24 (lane ab-outcome-2): rf-device-loop-early-exit, emb-unique-rows-off DECIDED by A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md.",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "set-b13": {
-   "define": "MOJOLEARN_GBDT_ID_DEFER_COPY,MOJOLEARN_NC_SPLIT_OPS,MOJOLEARN_GENERATION_NATIVE_ENGINE_OFF",
-   "owed": "RUN",
-   "combined": [
-    "gbdt-id-defer-copy",
-    "nc-split-ops",
-    "generation-native-engine-off"
-   ],
-   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b13 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: gbdt-id-defer-copy, nc-split-ops, generation-native-engine-off"
+   "define": "MOJOLEARN_NC_SPLIT_OPS",
+   "owed": "DECIDED",
+   "status": "DISSOLVED 2026-11-24 (lane ab-outcome-2): one member left (nc-split-ops, still RUN with its own row); build it under its own owed name `--owed-arm nc-split-ops` (define MOJOLEARN_NC_SPLIT_OPS). COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b13 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: gbdt-id-defer-copy, nc-split-ops, generation-native-engine-off Trimmed 2026-11-24 (lane ab-outcome-2): gbdt-id-defer-copy, generation-native-engine-off DECIDED by A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md.",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "set-b14": {
-   "define": "MOJOLEARN_IDN_SSD_OCCUPANCY,MOJOLEARN_GBDT_FAST_PW_INT_SLOTS_OFF",
-   "owed": "RUN",
-   "combined": [
-    "ssd-occupancy-on",
-    "gbdt-pw-int-slots-off"
-   ],
-   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b14 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: ssd-occupancy-on, gbdt-pw-int-slots-off"
+   "define": "MOJOLEARN_IDN_SSD_OCCUPANCY",
+   "owed": "DECIDED",
+   "status": "DISSOLVED 2026-11-24 (lane ab-outcome-2): one member left (ssd-occupancy-on, still RUN with its own row); build it under its own owed name `--owed-arm ssd-occupancy-on` (define MOJOLEARN_IDN_SSD_OCCUPANCY). COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b14 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: ssd-occupancy-on, gbdt-pw-int-slots-off Trimmed 2026-11-24 (lane ab-outcome-2): gbdt-pw-int-slots-off DECIDED by A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md.",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "set-b15": {
    "define": "MOJOLEARN_TREES_C48_IF_PARTITION,MOJOLEARN_IDN_SEQ_TILED_PREDICT",
-   "owed": "RUN",
-   "combined": [
-    "c48-if-partition",
-    "seq-tiled-predict-on"
-   ],
-   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b15 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: c48-if-partition, seq-tiled-predict-on"
+   "owed": "DECIDED",
+   "status": "ALL MEMBERS DECIDED. Trimmed 2026-11-24 (lane ab-outcome-2): c48-if-partition, seq-tiled-predict-on DECIDED by A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md. Was: COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b15 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: c48-if-partition, seq-tiled-predict-on",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "set-b16": {
-   "define": "MOJOLEARN_GBDT_FAST_ORDERED_FOLD_INDEX,MOJOLEARN_SMALL_MLP_GENERIC_OPS",
-   "owed": "RUN",
-   "combined": [
-    "gbdt-ordered-fold-index",
-    "small-mlp-generic"
-   ],
-   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b16 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: gbdt-ordered-fold-index, small-mlp-generic"
+   "define": "MOJOLEARN_SMALL_MLP_GENERIC_OPS",
+   "owed": "DECIDED",
+   "status": "DISSOLVED 2026-11-24 (lane ab-outcome-2): one member left (small-mlp-generic, still RUN with its own row); build it under its own owed name `--owed-arm small-mlp-generic` (define MOJOLEARN_SMALL_MLP_GENERIC_OPS). COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b16 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: gbdt-ordered-fold-index, small-mlp-generic Trimmed 2026-11-24 (lane ab-outcome-2): gbdt-ordered-fold-index DECIDED by A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md.",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "set-b19": {
-   "define": "MOJOLEARN_CALIB_FAST_HOST_FOLDS,MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H",
-   "owed": "RUN",
-   "combined": [
-    "calib-fast-host-folds",
-    "mamba3-s16-qk-regs2h"
-   ],
-   "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b19 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: calib-fast-host-folds, mamba3-s16-qk-regs2h"
+   "define": "MOJOLEARN_CALIB_FAST_HOST_FOLDS",
+   "owed": "DECIDED",
+   "status": "DISSOLVED 2026-11-24 (lane ab-outcome-2): one member left (calib-fast-host-folds, still RUN with its own row); build it under its own owed name `--owed-arm calib-fast-host-folds` (define MOJOLEARN_CALIB_FAST_HOST_FOLDS). COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b19 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: calib-fast-host-folds, mamba3-s16-qk-regs2h Trimmed 2026-11-24 (lane ab-outcome-2): mamba3-s16-qk-regs2h DECIDED by A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md.",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "set-b20": {
    "define": "MOJOLEARN_IDN_IF_SCORES_F64_OFF,MOJOLEARN_TRANSFORMER_GENERIC_PREFILL",
