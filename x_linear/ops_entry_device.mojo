@@ -56,11 +56,9 @@ def xl_fit_device_run(a: Int, x_addr: Int, y_addr: Int, n: Int, d: Int, n_x: Int
     # native device work over host pointers, before the fit, with the same
     # refusals.
     var host_scan = not ((SGD_IDN_DEV_FINITE and a == ALGO_SGD) or (XLIN_IDN_DEV_FINITE and a != ALGO_SGD))
-    if host_scan and x_addr < 0:
-        # THE FOLD X WORD (core/fold_x_device.mojo): the slot's words are
-        # tested where they are uploaded; a build without that test does not
-        # set XL_HAS_SLOT_X, so a member never sends the word here.
-        raise Error("x_linear: this build tests X on the host and reads no device fold X word")
+    # THE FOLD X WORD (core/fold_x_device.mojo): a build whose grids test X
+    # where they upload it reads the slot there; a FAST build's scan tests a
+    # fold slot on the device (`x_linear_finite_device`, lane vdf-scope-linear3).
     if host_scan:
         x_linear_finite_device(x, n_x, "X")
         x_linear_finite_device(y, n_y, "y")
@@ -197,11 +195,13 @@ def x_linear_ops_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
             # IDENTICAL build tests the words it uploads on the device
             # (SGD_IDN_DEV_FINITE, XLIN_IDN_DEV_FINITE), so the fold slot's
             # words get the same refusal; the decisions read X through
-            # `fold_x_fill` too. A FAST build scans host X: no word.
+            # `fold_x_fill` too. A FAST build's scan tests a fold slot on the
+            # device (x_linear/x_linear_input_impl.mojo, lane vdf-scope-linear3),
+            # so it reads the word as well.
             comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-                r[] = XL_HAS_FIT_FOLD | (XL_HAS_SLOT_X if (SGD_IDN_DEV_FINITE and XLIN_IDN_DEV_FINITE) else 0)
+                r[] = XL_HAS_FIT_FOLD | XL_HAS_SLOT_X
             else:
-                r[] = 0
+                r[] = XL_HAS_SLOT_X
         elif operation == XL_OP_FIT:
             var ipl = xl_ops_int32(pp, XL_FIT_HEADER, p[8])
             var fpl = xl_ops_float32(ff, p[9])

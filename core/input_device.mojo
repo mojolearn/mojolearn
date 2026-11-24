@@ -139,6 +139,27 @@ def device_all_finite(ctx: DeviceContext, addr: Int, n: Int, is_f64: Bool) raise
     return bad == 0
 
 
+def device_buffer_all_finite(ctx: DeviceContext, d: DeviceBuffer[DType.float32], n: Int) raises -> Bool:
+    """`device_all_finite` over `n` float32 words ALREADY ON THE DEVICE (lane
+    vdf-scope-linear3: a model-selection fold slot copied into the entry's
+    buffer, core/fold_x_device.mojo): the same kernel and verdict, no upload.
+    The caller keeps `d` alive past this call (it synchronizes)."""
+    var d_status = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_fill(ctx, d_status, Int32(0))
+    var base = Int(d.unsafe_ptr())
+    var off = 0
+    while off < n:  # driver-loop: over IND_MAX_N chunks of one buffer (one launch each)
+        var m = min(IND_MAX_N, n - off)
+        ctx.enqueue_function[_nonfinite_u32_kernel](
+            _U32(unsafe_from_address=base + off * 4), Int32(m), d_status.unsafe_ptr(),
+            grid_dim=_stride_grid(m), block_dim=IND_TPB,
+        )
+        off += m
+    var bad = _read_word(ctx, d_status)
+    _ = d_status^
+    return bad == 0
+
+
 # TOMBSTONE: the device transpose_f32 / cast_colmajor_f64_to_f32 twin (_narrow_word, _transpose_u32_kernel, _transpose_narrow_kernel, device_transpose_to_f32) deleted 2026-11-23 on lane/sab-host-missed-cls (no product caller); code recoverable at 4519097d38.
 
 
