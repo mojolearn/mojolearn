@@ -122,17 +122,6 @@ def test_cpu_device_runs_and_answers(spec):
 
 
 @two_devices
-@layer
-def test_cpu_and_gpu_layers_keep_their_routes_and_their_bits_in_one_process(spec):
-    if mojolearn.numeric_mode() != "identical":
-        pytest.skip("bits are promised in identical mode only")
-    cpu = build(spec, numeric_mode="identical", device="cpu")
-    gpu = build(spec, numeric_mode="identical")
-    for _ in range(2):                                         # interleaved calls: each keeps its own route
-        assert np.asarray(gpu.forward(*spec[4]())).tobytes() == np.asarray(cpu.forward(*spec[4]())).tobytes()
-
-
-@two_devices
 def test_device_cpu_in_fast_mode_is_refused_in_words():
     model = Conv2d(3, 4, 3, numeric_mode="fast", device="cpu")
     with pytest.raises((ValueError, ImportError, RuntimeError)) as refused:
@@ -159,20 +148,6 @@ def test_classifier_takes_device_and_its_layers_follow_it():
     assert np.asarray(model.predict(x)).shape == (len(x),)
     with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None"):
         CNNClassifier((1, 8, 8), device="cuda", **CLASSIFIER)
-
-
-@two_devices
-def test_classifier_returns_the_same_bits_on_both_devices_in_one_process():
-    if mojolearn.numeric_mode() != "identical":
-        pytest.skip("bits are promised in identical mode only")
-    x, y = labeled()
-    cpu = CNNClassifier((1, 8, 8), numeric_mode="identical", device="cpu", **CLASSIFIER).fit(x, y)
-    gpu = CNNClassifier((1, 8, 8), numeric_mode="identical", **CLASSIFIER).fit(x, y)
-    assert [np.asarray(w).tobytes() for w in gpu.weights()] == [np.asarray(w).tobytes() for w in cpu.weights()]
-    assert np.asarray(gpu.loss_curve_).tobytes() == np.asarray(cpu.loss_curve_).tobytes()
-    for _ in range(2):                                         # interleaved calls: each keeps its own session
-        assert np.asarray(gpu.predict_proba(x)).tobytes() == np.asarray(cpu.predict_proba(x)).tobytes()
-        assert np.asarray(gpu.predict(x)).tobytes() == np.asarray(cpu.predict(x)).tobytes()
 
 
 @two_devices

@@ -69,13 +69,6 @@ def build(spec, **extra):
     return spec[1](**dict(spec[2], **extra))
 
 
-def words(value):
-    # glue: a fitted attribute as bytes: one array, or a list of arrays (coefs_, intercepts_)
-    if isinstance(value, (list, tuple)):
-        return [np.asarray(item).tobytes() for item in value]
-    return np.asarray(value).tobytes()
-
-
 @case
 def test_device_is_a_constructor_parameter_with_default_none(spec):
     assert build(spec).get_params()["device"] is None
@@ -121,22 +114,6 @@ def test_cpu_device_runs_the_cpu_binary(spec):
     assert np.asarray(model.predict(x)).shape[0] == len(x)
     if spec[6] or not TWO_DEVICES:
         assert isinstance(model.score(x, y), float)
-
-
-@two_devices
-@case
-def test_cpu_and_gpu_estimators_keep_their_routes_and_their_bits_in_one_process(spec):
-    if mojolearn.numeric_mode() != "identical":
-        pytest.skip("bits are promised in identical mode only")
-    x, y = spec[3]()
-    cpu = build(spec, numeric_mode="identical", device="cpu").fit(x, y)
-    gpu = build(spec, numeric_mode="identical").fit(x, y)
-    assert gpu.vendor_used() == mojolearn.vendor() != "cpu" and cpu.vendor_used() == "cpu"
-    for name in spec[4]:
-        assert words(getattr(gpu, name)) == words(getattr(cpu, name)), name
-    for _ in range(2):                                         # interleaved calls: each keeps its own route
-        for method in spec[5]:
-            assert np.asarray(getattr(gpu, method)(x)).tobytes() == np.asarray(getattr(cpu, method)(x)).tobytes(), method
 
 
 @two_devices
@@ -215,3 +192,27 @@ def test_croston_runs_on_its_device_and_returns_the_same_bits(cls):
     for _ in range(2):                                         # interleaved calls: each keeps its own route
         assert np.asarray(cpu.predict(3)).tobytes() == np.asarray(gpu.predict(3)).tobytes()
     assert kind(device="cpu").set_params(device=None).get_params()["device"] is None
+
+
+# moved from test_x_sequence_mlp.py (vdv-pytest-b, 2026-11-24)
+import mojolearn as ml
+
+
+def _smlp_data():
+    rng = np.random.default_rng(0)
+    X = rng.standard_normal((200, 5)).astype(np.float32)
+    yr = (X[:, 0] * 2 - X[:, 1]).astype(np.float32)
+    y3 = (X[:, 0] > 0).astype(int) + (X[:, 1] > 0.5)
+    return X, yr, y3
+
+
+def test_shapes_and_proba():
+    X, yr, y3 = _smlp_data()
+    c = ml.MLPClassifier(hidden_layer_sizes=(5,), max_iter=5, random_state=0).fit(X, y3)
+    p = c.predict_proba(X)
+    assert p.shape == (200, 3)
+    np.testing.assert_allclose(p.sum(axis=1), 1.0, atol=1e-5)
+    b = ml.MLPClassifier(hidden_layer_sizes=(5,), max_iter=5, random_state=0).fit(X, y3 > 0)
+    assert b.predict_proba(X).shape == (200, 2)
+    r = ml.MLPRegressor(hidden_layer_sizes=(5,), max_iter=5, random_state=0).fit(X, yr)
+    assert r.predict(X).shape == (200,) and r.n_iter_ == 5

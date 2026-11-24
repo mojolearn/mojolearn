@@ -33,6 +33,18 @@ def test_fit_transform_like_reference():
         np.testing.assert_allclose(np.asarray(m.transform(Xh)), r.transform(Xh), rtol=2e-4, atol=2e-5)
 
 
+def test_cross_fit_uses_fold_encodings():
+    X, y = _data(3)
+    m = ml.TargetEncoder(random_state=7)
+    out = np.asarray(m.fit_transform(X, y))
+    from mojolearn.tests._prep_prog_oracle import _native_folds
+    folds = np.asarray(_native_folds(len(y), 5, 7, True))
+    for k in range(5):
+        tr, te = folds != k, folds == k
+        r = SkTE().fit(X[tr], y[tr])
+        np.testing.assert_allclose(out[te], r.transform(X[te]), rtol=2e-4, atol=2e-5)
+
+
 def test_stratified_folds_unshuffled_are_the_reference():
     from sklearn.model_selection import StratifiedKFold
     from mojolearn.tests._prep_prog_oracle import _native_folds, encode_labels
@@ -62,5 +74,6 @@ def test_stratified_folds_unshuffled_are_the_reference():
 
 if __name__ == "__main__":
     test_fit_transform_like_reference()
+    test_cross_fit_uses_fold_encodings()
     test_stratified_folds_unshuffled_are_the_reference()
     print("PASS test_x_prep_target_encoder")

@@ -36,6 +36,28 @@ def _close(ours, ref, msg):
                                rtol=RTOL, atol=ATOL, err_msg=msg)
 
 
+def test_standard_nan_fit_and_transform():
+    X, Xn = _data()
+    ours = ml.StandardScaler().fit(Xn)
+    ref = skp.StandardScaler().fit(Xn.astype(np.float64))
+    _close(ours.mean_, ref.mean_, "mean_")
+    _close(ours.var_, ref.var_, "var_")
+    _close(ours.scale_, ref.scale_, "scale_")
+    assert np.array_equal(np.asarray(ours.n_samples_seen_), ref.n_samples_seen_)
+    assert np.asarray(ours.var_)[3] == 0 and np.asarray(ours.scale_)[3] == 1
+    T = np.asarray(ours.transform(Xn))
+    R = ref.transform(Xn.astype(np.float64))
+    assert np.array_equal(np.isnan(T), np.isnan(Xn))
+    _close(np.nan_to_num(T), np.nan_to_num(R), "transform")
+    I = np.asarray(ours.inverse_transform(T))
+    assert np.array_equal(np.isnan(I), np.isnan(Xn))
+    # A finite entry takes the binding's own transform arithmetic: the same
+    # bits as the NaN-free transform of the same row.
+    clean = np.asarray(ours.transform(X))
+    ok = ~np.isnan(Xn)
+    assert _b(T[ok]) == _b(clean[ok])
+
+
 def test_standard_sample_weight():
     X, Xn = _data()
     w = np.random.default_rng(5).uniform(0, 3, size=X.shape[0]).astype(np.float32)

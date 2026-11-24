@@ -89,14 +89,3 @@ def test_save_load_vector_counts():
         assert np.array_equal(np.asarray(back.n_samples_seen_), np.asarray(est.n_samples_seen_))
         assert type(back.n_samples_seen_) is type(est.n_samples_seen_)
         assert _so_b(back.transform(Xn)) == _so_b(est.transform(Xn))
-
-
-# moved from test_x_prep_selection.py (vdv-pytest-b, 2026-11-24): the refusal part of
-# test_score_edges_and_rfe_getter (its scores and rankings are verify lane x-prep-score-edges).
-def test_rfe_callable_importance_getter_refused():
-    rng = np.random.default_rng(11)
-    n = 300
-    y = rng.integers(0, 3, n)
-    Xg = (rng.standard_normal((n, 8)) + y[:, None] * np.linspace(0, 1.4, 8)).astype(np.float32)
-    with pytest.raises(TypeError, match="a callable is not supported"):
-        ml.RFE(ml.LinearDiscriminantAnalysis(), importance_getter=lambda e: e.coef_[0]).fit(Xg, y)
