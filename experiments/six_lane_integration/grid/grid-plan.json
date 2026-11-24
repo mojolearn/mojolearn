@@ -6953,14 +6953,14 @@
    }
   },
   "guards": {
-   "asserts": 1733,
+   "asserts": 1738,
    "modules": {
     "core/experiment_guards_base.mojo": "6c9ec6dc547d7e0c9382c7fa92297b472307ca3705188946d8d1e1cd4a20297b",
-    "core/experiment_guards_cluster.mojo": "a039cc41741eaf347230acbb20400804d2ec5d2935fbae661c2b5ea61a869c3c",
+    "core/experiment_guards_cluster.mojo": "69a1bc812545129e37d580e2ec90814ab802a4067fcddcfe5635de9ea9234687",
     "core/experiment_guards_decomposition.mojo": "42022f8b689c31a779a147330c788a21715481d2484b11938de1563efcdecafd",
     "core/experiment_guards_kernel.mojo": "9f91d7eee6acdd448a4b40d76181fbe7fd9d11f74837264f8aec84412a26bcd7",
     "core/experiment_guards_linear.mojo": "4dbe8e4b69ab622fe060450ac1f893e62a58a2902bbfed46e9c009009c2df23f",
-    "core/experiment_guards_neural.mojo": "bb56248ff26c02edfe60c02fa3ac4813aeef02ad51da5db9c274b6782e7c8116",
+    "core/experiment_guards_neural.mojo": "74a4483c7b806ba17f84fd1aba01849f874ee94560952098203822cde5037dbe",
     "core/experiment_guards_series.mojo": "f5a011373d6079b4ada55772c5f16ce3006a6aad20eaff7060b9459dfcf6590e",
     "core/experiment_guards_trees.mojo": "a7e1fbee5b5155847e0db081a38f577d7e74c75f3e2de7c2ce87f783db92dec6",
     "core/six_lane_experiment_guards.mojo": "43c54102da8672ce4b16e9a419e669a648e0ccbe5207a98ab95d725131bbd7ee"
@@ -7142,7 +7142,7 @@
   "deferred_cross_configs": 65,
   "deferred_cross_groups": 4,
   "excluded_controls": 15,
-  "guard_asserts": 1733,
+  "guard_asserts": 1738,
   "mapped_algorithms": 21,
   "packed_multi_member": 1,
   "packs": 90,
