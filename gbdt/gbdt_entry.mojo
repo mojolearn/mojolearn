@@ -22,7 +22,7 @@ from gbdt.fit_request import (
     XG_OUTCOME_SIZES, XG_OUTCOME_COPY, XG_OUTCOME_FREE, XG_MODEL_DIM, XG_CAP_ROW_MAJOR, gbdt_outcome_box,
     gbdt_outcome_sizes, gbdt_outcome_copy, gbdt_outcome_free, gbdt_string_at,
     XG_PREDICT, XG_PREDICT_MULTI, XG_BINARY, XG_SIGMOID_PAIR, XG_RESIDENT_PREPARE, XG_RESIDENT_PREDICT,
-    XG_CAP_RESIDENT, XG_ORDERED_FIT, XG_FEATURE_FREQ_FIT, XG_IMPORTANCES, XG_CAP_SLOT_X,
+    XG_CAP_RESIDENT, XG_ORDERED_FIT, XG_FEATURE_FREQ_FIT, XG_IMPORTANCES, XG_CAP_SLOT_X, XG_CAP_FIT_SLOT_X,
 )
 
 
@@ -183,8 +183,11 @@ def _run[I: GbdtImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int) rai
         # XG_CAP_SLOT_X (lane vdf-scope-trees2b): the resident predict
         # (gbdt/resident_model.mojo `_predict_device`) reads THE FOLD X WORD;
         # every image with the resident model has it.
+        # XG_CAP_FIT_SLOT_X (lane vdf-scope-trees4): the row-major fit and the
+        # importances read it too (the device quantizer, an image with both).
         return (XG_CAP_ROW_MAJOR if I.row_major() else 0) | (
-            (XG_CAP_RESIDENT | XG_CAP_SLOT_X) if I.resident() else 0)
+            (XG_CAP_RESIDENT | XG_CAP_SLOT_X) if I.resident() else 0) | (
+            XG_CAP_FIT_SLOT_X if (I.row_major() and I.resident()) else 0)
     if op >= XG_PREDICT and op <= XG_RESIDENT_PREDICT:
         return _run_predict[I](op, aa, na, pp, np)
     if op == XG_ORDERED_FIT or op == XG_FEATURE_FREQ_FIT:

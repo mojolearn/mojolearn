@@ -459,6 +459,9 @@ def gbdt_fit_native_run(row_major: Bool, params: GbdtFitArgs) raises -> GbdtFitO
         pair_weights=pair_weights,
         target_dim=target_dim,
         x_row_major=row_major,
+        # THE FOLD X WORD (lane vdf-scope-trees4): a member's negative X
+        # address names an x_prep store slot (core/fold_x_device.mojo)
+        x_word=params.x if params.x < 0 else 0,
         device_plan=device_plan,
     )
     ctx.synchronize()

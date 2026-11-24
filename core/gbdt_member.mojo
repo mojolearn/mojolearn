@@ -128,7 +128,9 @@ from gbdt.fit_request import GbdtFitArgs, gbdt_string_at
 from gbdt.fit_calls import (
     xg_row_major, xg_model_dim, xg_fit, xg_resident, xg_resident_prepare, xg_resident_predict, xg_predict,
     xg_predict_multi, xg_sigmoid_pair, xg_binary, xg_feature_freq_fit, xg_ordered_fit, xg_importances, xg_slot_x,
+    xg_caps,
 )
+from gbdt.fit_request import XG_CAP_RESIDENT, XG_CAP_SLOT_X, XG_CAP_FIT_SLOT_X
 from core.member_fold_x import (
     MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_index, member_fold_take_f32,
     member_fold_take_view, member_fold_store_ready,
@@ -496,13 +498,30 @@ def _whole(call: _CallPtr) raises:
 # cache (or a slot this call owns), the fold's rows are taken ON THE DEVICE and
 # the resident predict copies the slot into its staging buffer
 # (gbdt/resident_model.mojo `_predict_device`, XG_CAP_SLOT_X): the rows never
-# visit the host. FIT: the image's quantizer builds the borders and bins from
-# HOST columns (gbdt/train.mojo `_quantize_training_columns`; the device
-# quantizer GBDT_QUANT_DEVICE is an opt-in Apple fast arm), so the fold's rows
-# of X are taken on the host (`member_fold_take_f32`, row chunks across the
-# host's cores), as the caller's gather did; y, the weights and the group ids
-# likewise (one take each). Same bytes as the caller's host gather: a byte copy
-# of the same rows in the same order (no bit moves).
+# visit the host.
+#
+# FIT (lane vdf-scope-trees4): the device quantizer is the default of every GPU
+# image (gbdt/gpu_data/sym_feat_switches.mojo GBDT_QUANT_DEVICE), so on an image
+# with XG_CAP_FIT_SLOT_X a raw float fit (no cat_features, no
+# one_hot_features, no eval set, nan_mode not Forbidden: the member's NaN
+# refusal reads host X) hands the fold slot to the ROW-MAJOR fit, whose upload
+# is one device-to-device copy (gbdt/train.mojo `_qd_upload_float_columns`), and
+# to the importances (gbdt/gpu_importance.mojo): X never visits the host. Every
+# other fit takes the fold's rows of X on the host (`member_fold_take_f32`, row
+# chunks across the host's cores), as the caller's gather did. y, the weights
+# and the group ids are columns of the base taken through the index on the
+# host (the y words cross the bus as the entry uploads them). Same bytes as the
+# caller's host gather: a byte copy of the same rows in the same order (no bit
+# moves).
+#
+# CATEGORIES AND PAIRS (lane vdf-scope-trees4) take the same route: a fold's
+# categorical keys (`cat_keys`, one row per categorical column, one column per
+# BASE row) are the base's key columns taken through the index (host keys: the
+# category map is a host map), and the fold's PairLogit pairs are the base's
+# pairs (numbered in BASE rows) whose two ends are both fold rows, renumbered
+# to fold positions in their given order, with their weights (CatBoost's cv
+# keeps exactly the pairs inside the fold). A fold with a repeated row reads
+# no pairs (a pair end would name two rows): refused in words.
 
 
 def _route_slot_x(call: _CallPtr) -> Bool:
@@ -538,6 +557,154 @@ def _fold_take(view: MemberMatrix, fold: MemberFoldX, base_rows: Int, mut keep: 
     return MemberMatrix(Int(keep.unsafe_ptr()), fold.rows, view.cols, view.dtype)
 
 
+#: Rows (or pairs) of one host task of the fold's key and pair takes.
+comptime _FOLD_KEY_CHUNK = 16384
+
+
+def _fold_keys(keys: MemberMatrix, fold: MemberFoldX, base_rows: Int, mut keep: List[UInt64],
+               what: String) raises -> MemberMatrix:
+    """The fold's columns of the caller's categorical keys (`n_cat` rows of
+    int64 words, one column per BASE row): row c, column r of the result is
+    base key `index[r]` of column c, split over the host workers (index
+    bookkeeping of host keys; no X word is read)."""
+    if not keys.dense_host(MEMBER_I64):
+        raise Error("TypeError: a Gbdt member reads " + what + " as a dense host int64 view")
+    if keys.cols != base_rows:
+        raise Error("member ABI: " + what + " has " + String(keys.cols) + " columns for " + String(base_rows)
+                    + " rows of X")
+    var n_cat = keys.rows
+    var rows = fold.rows
+    keep = List[UInt64](unsafe_uninit_length=max(n_cat * rows, 1))
+    var src = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=keys.data)
+    var dst = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(keep.unsafe_ptr()))
+    var index = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=fold.index)
+    var per = max(1, (rows + _FOLD_KEY_CHUNK - 1) // _FOLD_KEY_CHUNK)
+    var tasks = n_cat * per
+
+    def task(unit: Int) {imm src, imm dst, imm index, imm per, imm rows, imm base_rows}:
+        var c = unit // per
+        var lo = (unit % per) * _FOLD_KEY_CHUNK
+        for r in range(lo, min(rows, lo + _FOLD_KEY_CHUNK)):  # native data loop (one task's keys of one column)
+            dst[c * rows + r] = src[c * base_rows + Int(index[r])]
+
+    host_parallelize(task, tasks)
+    return MemberMatrix(Int(keep.unsafe_ptr()), n_cat, rows, MEMBER_I64)
+
+
+@always_inline
+def _fold_pair_end(data: Int, wide: Bool, at: Int, base_rows: Int) -> Int:
+    """A pair end inside the base, else -1."""
+    var v = _pair_end(data, wide, at)
+    return v if (v >= 0 and v < base_rows) else -1
+
+
+def _fold_pairs(call: _CallPtr, fold: MemberFoldX, base_rows: Int, mut keep: List[Int64],
+                mut keep_w: List[Float32]) raises -> Tuple[MemberMatrix, MemberMatrix]:
+    """The fold's PairLogit pairs (module note above): the base's pairs
+    whose two ends are fold rows, renumbered to fold positions in their
+    given order, and their weights (none given: none). Three passes over
+    the host workers: the base-to-fold position map (and the refusal of a
+    repeated fold row), the kept count per task, the writes at each task's
+    offset (so the order is the given order)."""
+    var view = call[].pairs
+    if view.home == MEMBER_HOME_DEVICE or not (view.dense_host(MEMBER_I64) or view.dense_host(MEMBER_I32)):
+        raise Error("TypeError: a Gbdt member reads pairs as a dense host int32 or int64 view")
+    if view.cols != 2:
+        raise Error("mojolearn: Length of pairs[0] isn't equal to 2.")
+    var m = view.rows
+    var rows = fold.rows
+    var position = List[Int64](length=max(base_rows, 1), fill=Int64(-1))
+    var pos = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(position.unsafe_ptr()))
+    var index = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=fold.index)
+    var row_tasks = max(1, (rows + _FOLD_KEY_CHUNK - 1) // _FOLD_KEY_CHUNK)
+
+    def place(unit: Int) {imm pos, imm index, imm rows}:
+        var lo = unit * _FOLD_KEY_CHUNK
+        for r in range(lo, min(rows, lo + _FOLD_KEY_CHUNK)):  # native data loop (one task's fold rows)
+            pos[Int(index[r])] = Int64(r)
+
+    host_parallelize(place, row_tasks)
+    var repeats = List[UInt8](length=row_tasks, fill=UInt8(0))
+    var rep_p = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(repeats.unsafe_ptr()))
+
+    def verify(unit: Int) {imm pos, imm index, imm rows, imm rep_p}:
+        var lo = unit * _FOLD_KEY_CHUNK
+        for r in range(lo, min(rows, lo + _FOLD_KEY_CHUNK)):  # native data loop (one task's fold rows)
+            if pos[Int(index[r])] != Int64(r):
+                rep_p[unit] = UInt8(1)
+                return
+
+    host_parallelize(verify, row_tasks)
+    for t in range(row_tasks):  # small-loop(tasks): one flag per host task
+        if repeats[t] != UInt8(0):
+            raise Error("ValueError: a Gbdt member reads pairs only over a fold without repeated rows")
+    var data = view.data
+    var wide = view.dtype == MEMBER_I64
+    var weighted = call[].pairs_weight.rows > 0
+    var wsrc = 0
+    if weighted:
+        _dense(call[].pairs_weight, MEMBER_F32, "pairs_weight")
+        if call[].pairs_weight.rows * call[].pairs_weight.cols != m:
+            raise Error("mojolearn: len(pairs_weight) = " + String(call[].pairs_weight.rows * call[].pairs_weight.cols)
+                        + " is not equal to len(pairs) = " + String(m) + " ")
+        wsrc = call[].pairs_weight.data
+    var pair_tasks = max(1, (m + _FOLD_KEY_CHUNK - 1) // _FOLD_KEY_CHUNK)
+    var counts = List[Int](length=pair_tasks + 1, fill=0)
+    var cnt = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(counts.unsafe_ptr()))
+    var firsts = List[Int](length=pair_tasks, fill=-1)
+    var first_p = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(firsts.unsafe_ptr()))
+
+    def count(unit: Int) {imm data, imm wide, imm pos, imm cnt, imm first_p, imm m, imm base_rows}:
+        var lo = unit * _FOLD_KEY_CHUNK
+        var kept = 0
+        for i in range(lo, min(m, lo + _FOLD_KEY_CHUNK)):  # native data loop (one task's pairs)
+            var w0 = _fold_pair_end(data, wide, 2 * i, base_rows)
+            var w1 = _fold_pair_end(data, wide, 2 * i + 1, base_rows)
+            if w0 < 0 or w1 < 0 or w0 == w1:
+                first_p[unit] = i  # the door's refusal of the first bad pair (below)
+                return
+            if pos[w0] >= 0 and pos[w1] >= 0:
+                kept += 1
+        cnt[unit + 1] = kept
+
+    host_parallelize(count, pair_tasks)
+    for t in range(pair_tasks):  # small-loop(tasks): the first task that noted a bad pair (index order)
+        if firsts[t] >= 0:
+            _pair_refuse(data, wide, firsts[t], base_rows)
+    for t in range(pair_tasks):  # small-loop(tasks): the running offset of each host task
+        counts[t + 1] += counts[t]
+    var total = counts[pair_tasks]
+    keep = List[Int64](length=max(2 * total, 2), fill=Int64(0))
+    keep_w = List[Float32](length=max(total, 1), fill=Float32(1.0))
+    var out = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(keep.unsafe_ptr()))
+    var out_w = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(keep_w.unsafe_ptr()))
+
+    def write(unit: Int) {imm data, imm wide, imm pos, imm cnt, imm m, imm base_rows, imm out, imm out_w,
+                          imm weighted, imm wsrc}:
+        var lo = unit * _FOLD_KEY_CHUNK
+        var at = cnt[unit]
+        var ws = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=wsrc)
+        for i in range(lo, min(m, lo + _FOLD_KEY_CHUNK)):  # native data loop (one task's pairs)
+            var w0 = _fold_pair_end(data, wide, 2 * i, base_rows)
+            var w1 = _fold_pair_end(data, wide, 2 * i + 1, base_rows)
+            if pos[w0] >= 0 and pos[w1] >= 0:
+                out[2 * at] = pos[w0]
+                out[2 * at + 1] = pos[w1]
+                if weighted:
+                    out_w[at] = ws[i]
+                at += 1
+
+    host_parallelize(write, pair_tasks)
+    _ = len(position)  # read by every task above
+    _ = len(counts)
+    _ = len(firsts)
+    if total == 0:
+        raise Error("ValueError: no pair of the given pairs has both rows in this fold")
+    var pairs = MemberMatrix(Int(keep.unsafe_ptr()), total, 2, MEMBER_I64)
+    var weights = MemberMatrix(Int(keep_w.unsafe_ptr()), total, 1) if weighted else MemberMatrix()
+    return (pairs, weights)
+
+
 def _fold_op[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
     """FIT / PREDICT / PREDICT_PROBA / DECISION / SCORE over the rows
     `call.row_index` of the WHOLE host X (the fold route above). The call's
@@ -547,20 +714,40 @@ def _fold_op[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr, operation: Int)
         raise Error("TypeError: a " + name + " member reads whole host views (no row index)")
     if call[].column_index.rows > 0:
         raise Error("TypeError: a Gbdt member reads no column index")
-    if call[].cat_keys.rows > 0 or call[].pairs.rows > 0 or call[].pairs_weight.rows > 0:
-        raise Error("TypeError: a Gbdt member reads categorical keys and pairs with whole views only (no row index)")
+    if operation != MEMBER_OP_FIT and (call[].pairs.rows > 0 or call[].pairs_weight.rows > 0):
+        raise Error("TypeError: a Gbdt member reads pairs only at fit")
     var x = call[].x
     var y = call[].y
     var weights = call[].weights
     var groups = call[].groups
+    var keys = call[].cat_keys
+    var pairs = call[].pairs
+    var pairs_weight = call[].pairs_weight
     var index = call[].row_index
     var fold = MemberFoldX()
-    var device = (operation != MEMBER_OP_FIT and slot[].fitted and len(slot[].cat_map) == 0
-                  and xg_resident(entry_ref_gil_free(call[].route.entry)) and _route_slot_x(call))
+    # ONE capability call per fold operation (the image's words; the host
+    # image answers none of the slot bits)
+    var caps = 0
+    try:
+        caps = xg_caps(entry_ref_gil_free(call[].route.entry))
+    except:
+        caps = 0
+    var device: Bool
+    if operation == MEMBER_OP_FIT:
+        device = ((caps & XG_CAP_FIT_SLOT_X) != 0 and len(slot[].cat_given) == 0 and len(slot[].hot_given) == 0
+                  and call[].eval_x.rows == 0 and slot[].config.nan_mode != "Forbidden")
+    else:
+        device = (slot[].fitted and len(slot[].cat_map) == 0 and (caps & XG_CAP_RESIDENT) != 0
+                  and (caps & XG_CAP_SLOT_X) != 0)
+    if device:
+        device = member_fold_store_ready(call)
     var host_x = List[Float32]()
     var keep_y = List[UInt64]()
     var keep_w = List[UInt64]()
     var keep_g = List[UInt64]()
+    var keep_k = List[UInt64]()
+    var keep_p = List[Int64]()
+    var keep_pw = List[Float32]()
     var failure = String("")
     try:
         _dense(x, MEMBER_F32, "X")
@@ -578,6 +765,12 @@ def _fold_op[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr, operation: Int)
             call[].weights = _fold_take(weights, fold, x.rows, keep_w, "sample_weight")
         if operation == MEMBER_OP_FIT and groups.rows > 0:
             call[].groups = _fold_take(groups, fold, x.rows, keep_g, "group_id")
+        if keys.rows > 0:
+            call[].cat_keys = _fold_keys(keys, fold, x.rows, keep_k, "cat_keys")
+        if operation == MEMBER_OP_FIT and pairs.rows > 0:
+            var taken = _fold_pairs(call, fold, x.rows, keep_p, keep_pw)
+            call[].pairs = taken[0]
+            call[].pairs_weight = taken[1]
         call[].row_index = MemberMatrix()
         if operation == MEMBER_OP_FIT:
             _fit[I](slot, call)
@@ -595,6 +788,9 @@ def _fold_op[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr, operation: Int)
     call[].y = y
     call[].weights = weights
     call[].groups = groups
+    call[].cat_keys = keys
+    call[].pairs = pairs
+    call[].pairs_weight = pairs_weight
     call[].row_index = index
     try:
         member_fold_x_close(fold)
@@ -605,6 +801,9 @@ def _fold_op[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr, operation: Int)
     _ = keep_y^
     _ = keep_w^
     _ = keep_g^
+    _ = keep_k^
+    _ = keep_p^
+    _ = keep_pw^
     if failure.byte_length() > 0:
         raise Error(failure)
 
@@ -1102,6 +1301,10 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
             row_major = False
     var scratch = List[Float32]()
     var x_addr = call[].x.data
+    if x_addr < 0 and not row_major:
+        # THE FOLD X WORD (lane vdf-scope-trees4): only the row-major fit
+        # reads it; `_fold_op` hands it only to an image that says so
+        raise Error("RuntimeError: a Gbdt member's fold X word reached a fit without the row-major device quantizer")
     if not row_major:
         scratch = _column_major(call[].x.data, rows, cols)
         x_addr = Int(scratch.unsafe_ptr())
