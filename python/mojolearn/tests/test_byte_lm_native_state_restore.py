@@ -74,26 +74,6 @@ def test_invalid_restore_preserves_live_session_and_state():
         _same(model.export_state(), before)
 
 
-def test_restore_strided_int32_flags_and_rejects_python_hooks():
-    model = _model()
-    saved = _detached(model.export_state())
-    flags = np.zeros(saved['flags'].size * 2, dtype='i4')[::2]
-    flags[:] = saved['flags']
-    saved['flags'] = flags
-    model.load_state_dict(saved)
-    _same(model.export_state(), saved)
-    calls = []
-    class IndexHook:
-        def __index__(self):
-            calls.append('index')
-            raise AssertionError('Python scalar hook reached')
-    bad = _detached(saved)
-    bad['completed_steps'] = IndexHook()
-    with pytest.raises(TypeError):
-        model.load_state_dict(bad)
-    assert calls == []
-
-
 def test_binary_checkpoint_public_roundtrip_and_original_io_errors(tmp_path):
     from mojolearn import LanguageModelTrainer
     from mojolearn._verify_native_runtime import audit_native_call

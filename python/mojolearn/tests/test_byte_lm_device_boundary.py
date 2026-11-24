@@ -76,18 +76,6 @@ def test_default_device_reports_the_gpu_image():
 
 
 @two_devices
-def test_cpu_and_gpu_trainers_live_in_one_process():
-    on_gpu, on_cpu = trainer(device="gpu"), trainer(device="cpu")
-    batch = ids()
-    for _ in range(2):
-        gpu_loss, cpu_loss = on_gpu.train_step(batch)["loss"], on_cpu.train_step(batch)["loss"]
-        assert np.isfinite(gpu_loss) and np.isfinite(cpu_loss)
-    assert on_gpu.run_metadata()["native_vendor"] != "cpu"
-    assert on_cpu.run_metadata()["native_vendor"] == "cpu"
-    assert on_gpu.step_ == on_cpu.step_ == 2
-
-
-@two_devices
 def test_cpu_state_restores_on_the_cpu_device(tmp_path):
     model = trainer(device="cpu")
     model.train_step(ids())

@@ -2,8 +2,8 @@
 """`digest_` means "this model gives these answers" (python/mojolearn/_digest_fields.py): the invariants at the
 Python boundary, where save / load / export / pickle / the CPU twins live.
 
-- equal after save + load, pickle, export + import, the CPU twin (`host_model`) and the device move;
-- equal for two fits with the same seed and data;
+- equal after save + load, export + import and the CPU twin (`host_model`); equal after pickle, for two fits with the
+  same seed and data and on either device is the generic-digest and generic-pickle verify lanes;
 - changed by any changed fitted value, class label or answer-deciding hyperparameter, and a model whose answers
   differ has a different digest (random perturbation of every fitted array);
 - unchanged by the answer methods, by the training record (`TRAINING`), by run settings and by the thread count;
@@ -91,26 +91,11 @@ def test_answer_methods_and_rereads_leave_the_digest(name, params, target):
 
 
 @pytest.mark.parametrize("name,params,target", CASES)
-def test_two_fits_with_the_same_seed_and_data_have_one_digest(name, params, target):
-    a, b = _fit(name, params, target), _fit(name, params, target)
-    assert a.digest_ == b.digest_
-    assert a.training_digest_ == b.training_digest_
-
-
-@pytest.mark.parametrize("name,params,target", CASES)
 def test_the_training_digest_is_a_separate_value(name, params, target):
     model = _fit(name, params, target)
     assert len(model.training_digest_) == 64 and model.training_digest_ != model.digest_
     unfitted = getattr(mojolearn, name)(**params)
     assert not hasattr(unfitted, "training_digest_") and not hasattr(unfitted, "digest_")
-
-
-@pytest.mark.parametrize("name,params,target", CASES)
-def test_pickle_keeps_the_digest(name, params, target):
-    model = _fit(name, params, target)
-    again = _clone(model)
-    assert again.digest_ == model.digest_
-    assert _answers(again) == _answers(model)
 
 
 @pytest.mark.parametrize("name,params,target", CASES)
@@ -271,11 +256,6 @@ def test_the_thread_count_does_not_change_the_digest():
         assert run.returncode == 0, run.stderr[-2000:]
     runs = [run.stdout.split() for run in done]
     assert runs[0] == runs[1] and len(runs[0]) == 3
-
-
-@pytest.mark.parametrize("name,params,target", [case for case in CASES if case[0] in ("Ridge", "KMeans")])
-def test_the_cpu_device_gives_the_digest(name, params, target):
-    assert _fit(name, params, target, device="cpu").digest_ == _fit(name, params, target).digest_
 
 
 # Composed networks: Sequential keeps its optimizer state and history (save_checkpoint keeps them, export drops

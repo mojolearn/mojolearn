@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The streamed binary byte-LM checkpoint: round trip, bit exactness, refusals.
+"""The streamed binary byte-LM checkpoint: round trip and bit exactness (the refusals are in
+test_byte_lm_boundary.py).
 
 These run against the installed compiled byte-LM binding (the native owner
 admits no Python stand-in). One test completes a training step so the
@@ -149,87 +150,3 @@ def test_two_saves_of_one_state_are_identical_files(tmp_path):
     first, second = tmp_path / 'a.bin', tmp_path / 'b.bin'
     assert model.export_checkpoint_binary(first) == model.export_checkpoint_binary(second)
     assert first.read_bytes() == second.read_bytes()
-
-
-def written(tmp_path, name='state.bin'):
-    path = tmp_path / name
-    trainer().export_checkpoint_binary(path)
-    return path, path.read_bytes()
-
-
-def test_refuses_a_foreign_magic(tmp_path):
-    path, raw = written(tmp_path)
-    path.write_bytes(b'MOJOLEARN-SAMBA\x02\n' + raw[len(storage.MAGIC):])
-    with pytest.raises(ValueError, match='magic'):
-        SmallByteLanguageModelTrainer.from_checkpoint_binary(path)
-
-
-def test_refuses_a_tampered_header(tmp_path):
-    path, raw = written(tmp_path)
-    start = len(storage.MAGIC) + 8
-    length = struct.unpack('<Q', raw[len(storage.MAGIC):start])[0]
-    header = raw[start:start + length]
-    edited = header.replace(b'"completed_steps":0', b'"completed_steps":7')
-    assert edited != header and len(edited) == len(header)
-    path.write_bytes(raw[:start] + edited + raw[start + length:])
-    with pytest.raises(ValueError, match='header integrity'):
-        SmallByteLanguageModelTrainer.from_checkpoint_binary(path)
-
-
-def test_refuses_a_flipped_payload_byte(tmp_path):
-    path, raw = written(tmp_path)
-    index = len(raw) - 40
-    path.write_bytes(raw[:index] + bytes([raw[index] ^ 0x01]) + raw[index + 1:])
-    with pytest.raises(ValueError, match='integrity mismatch'):
-        SmallByteLanguageModelTrainer.from_checkpoint_binary(path)
-
-
-def test_refuses_truncation_and_trailing_bytes(tmp_path):
-    path, raw = written(tmp_path)
-    path.write_bytes(raw[:-4])
-    with pytest.raises(ValueError, match='truncated or trailing'):
-        SmallByteLanguageModelTrainer.from_checkpoint_binary(path)
-    path.write_bytes(raw + b'\x00')
-    with pytest.raises(ValueError, match='truncated or trailing'):
-        SmallByteLanguageModelTrainer.from_checkpoint_binary(path)
-
-
-def test_an_array_length_comes_from_the_registry_not_from_the_file(tmp_path):
-    """A descriptor claiming a huge array must be refused BEFORE allocation."""
-    path, raw = written(tmp_path)
-    start = len(storage.MAGIC) + 8
-    length = struct.unpack('<Q', raw[len(storage.MAGIC):start])[0]
-    header = raw[start:start + length]
-    edited = header.replace(b'"shape":[34944]', b'"shape":[99999999]', 1)
-    assert edited != header
-    rebuilt = (storage.MAGIC + struct.pack('<Q', len(edited)) + edited
-               + hashlib.sha256(edited).digest() + raw[start + length + 32:])
-    path.write_bytes(rebuilt)
-    with pytest.raises(ValueError, match='descriptor mismatch'):
-        SmallByteLanguageModelTrainer.from_checkpoint_binary(path)
-
-
-def test_refuses_a_header_length_past_the_bound(tmp_path):
-    path, raw = written(tmp_path)
-    path.write_bytes(raw[:len(storage.MAGIC)] + struct.pack('<Q', storage.HEADER_LIMIT + 1)
-                     + raw[len(storage.MAGIC) + 8:])
-    with pytest.raises(ValueError, match='header length'):
-        SmallByteLanguageModelTrainer.from_checkpoint_binary(path)
-
-
-def test_refuses_a_state_whose_registry_does_not_match_its_shape(tmp_path):
-    """The regex pins the CODEC's spelling. `_validate_state` refuses the same
-    field with 'Byte-LM state profile/registry/mode mismatch', so matching the
-    shared half would pass with this check deleted -- which is what the
-    sabotage arm showed before the word 'checkpoint' was added to it."""
-    path, raw = written(tmp_path)
-    start = len(storage.MAGIC) + 8
-    length = struct.unpack('<Q', raw[len(storage.MAGIC):start])[0]
-    header = raw[start:start + length]
-    edited = header.replace(b'"numeric_mode":"identical"', b'"numeric_mode":"fastxxxxx"', 1)
-    assert edited != header and len(edited) == len(header)
-    rebuilt = (storage.MAGIC + struct.pack('<Q', len(edited)) + edited
-               + hashlib.sha256(edited).digest() + raw[start + length + 32:])
-    path.write_bytes(rebuilt)
-    with pytest.raises(ValueError, match='checkpoint profile/registry/mode'):
-        SmallByteLanguageModelTrainer.from_checkpoint_binary(path)

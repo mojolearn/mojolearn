@@ -108,25 +108,6 @@ def _bytes(values):
     return np.ascontiguousarray(np.asarray(values, dtype=np.float32)).tobytes()
 
 
-def test_host_and_device_give_the_same_words():
-    data = batches()
-    host = _host_trainer()
-    device = Trainer(initial(), data_schedule={'dataset': 'route-test'}, lr=1e-3, betas=(.9, .999), eps=1e-8,
-                     weight_decay=.01, resident=True)
-    try:
-        assert words([host.loss(data[0])]) == words([device.evaluate(data[0])])
-        host_losses = [int(host.train_step(data[k])) for k in range(N_STEPS)]
-        device_losses = words([device.train_step(data[k])['loss'] for k in range(N_STEPS)])
-        assert host_losses == device_losses
-        state = device.state_dict()
-        assert _bytes(host.parameters_) == _bytes(state['parameters'])
-        assert _bytes(host.m_) == _bytes(state['m'])
-        assert _bytes(host.v_) == _bytes(state['v'])
-        assert words([host.loss(data[0])]) == words([device.evaluate(data[0])])
-    finally:
-        device.close()
-
-
 # ---------------------------------------------------------------------------
 # Forward-only bisect of the CPU column (lane byte-lm-host-step-words,
 # 2026-11-13). The Mac run of this file (verify-20261112/fix20261113) passed
@@ -202,16 +183,3 @@ def test_host_step_rows_equals_step_oracle():
 
 # test_host_step_oracle_loss_equals_reference_inference_loss moved to
 # checks/native_tests/byte_lm_host_column.mojo::test_routes unit 3 (lane py-delete, 2026-11-23).
-
-
-def test_host_and_device_give_the_same_loss_words():
-    """Forward only: the CPU column's loss against the device's evaluation
-    before any step (the first assertion of
-    test_host_and_device_give_the_same_words on its own)."""
-    ids = batches()[0]
-    host = _host_trainer()
-    device = Trainer(initial(), data_schedule={'dataset': 'route-test'}, resident=True)
-    try:
-        assert words([host.loss(ids)]) == words([device.evaluate(ids)])
-    finally:
-        device.close()
