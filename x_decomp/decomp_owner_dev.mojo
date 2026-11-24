@@ -9,6 +9,7 @@ from x_decomp.decomp_owner_kit import DecompDev
 from x_decomp.resident import IDN_EIGH_RESIDENT, IDN_LU_RESIDENT, dev_eigh_desc_run, dev_eigh_run, dev_lu_run
 from x_decomp.ica_dev import ica_solve_dev_run
 from x_decomp.nmf import NmfArgs
+from core.fit_loop_clock import FitLoop
 from x_decomp.nmf_dev import nmf_nndsvd_dev_run, nmf_solve_dev_run
 from x_decomp.fa_em import FaArgs
 from x_decomp.fa_em_dev import fa_em_main_dev_run
@@ -60,13 +61,14 @@ struct DevDecomp(DecompDev):
     @staticmethod
     def ica_solve(
         px: F32Ptr, pw: F32Ptr, nc: Int, xr: Int, xc: Int, algo: Int, fun: Int, max_iter: Int, alpha: Float64,
-        tol: Float64,
+        tol: Float64, mut loop: FitLoop,
     ) raises -> Int:
-        return ica_solve_dev_run(px, pw, nc, xr, xc, algo, fun, max_iter, alpha, tol)
+        return ica_solve_dev_run(px, pw, nc, xr, xc, algo, fun, max_iter, alpha, tol, loop)
 
     @staticmethod
-    def nmf_solve(px: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, nc: Int, solver: Int, a: NmfArgs) raises -> Int:
-        return nmf_solve_dev_run(px, pw, ph, n, d, nc, solver, a)
+    def nmf_solve(px: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, nc: Int, solver: Int, a: NmfArgs,
+                  mut loop: FitLoop) raises -> Int:
+        return nmf_solve_dev_run(px, pw, ph, n, d, nc, solver, a, loop)
 
     @staticmethod
     def nmf_nndsvd(pu: F32Ptr, ps: F32Ptr, pv: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, r: Int, nc: Int) raises -> Int:
@@ -82,8 +84,8 @@ struct DevDecomp(DecompDev):
 
     @staticmethod
     def fa_em_main(pa: F32Ptr, pp: F32Ptr, pw: F32Ptr, pl: MutPointer[Float64, MutUntrackedOrigin], ar: Int,
-                   args: FaArgs) raises -> Int:
-        return fa_em_main_dev_run(pa, pp, pw, pl, ar, args)
+                   args: FaArgs, mut loop: FitLoop) raises -> Int:
+        return fa_em_main_dev_run(pa, pp, pw, pl, ar, args, loop)
 
     @staticmethod
     def ortho_rotation(pc: F32Ptr, po: F32Ptr, nrow: Int, ncol: Int, vm: Bool, max_iter: Int, tol: Float64) raises:

@@ -22,6 +22,7 @@ from max.gpu.host import DeviceContext
 from autograd.program_loop import LoopTimers
 from autograd.program_loop_device import LoopRegisters, LoopStep, bounded_device_loop, loop_lap
 from core.step_gate import STEP_DONE, STEP_FAIL, STEP_ITER, STEP_STOP_ITER
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from x_decomp.cells import F32Ptr, I32Ptr, add
 from x_decomp.device import xd_ctx
 from x_decomp.kit import (
@@ -248,9 +249,11 @@ struct _MuStep(LoopStep, Movable):
             loop_lap(ctx, timers, "criterion")
 
 
-def nmf_mu_dev(M: DMat, mut W: DMat, mut H: DMat, a: NmfArgs) raises -> Int:
+def nmf_mu_dev(M: DMat, mut W: DMat, mut H: DMat, a: NmfArgs, mut loop: FitLoop) raises -> Int:
     """`NMF._mu` (and `_mu_beta` for beta 1 / 0): W and H updated in place.
-    Returns the iteration count, or NMF_ZERO_ERR0."""
+    Returns the iteration count, or NMF_ZERO_ERR0. `loop` receives the
+    update loop's clock: read before the bounded loop and after its last
+    register read, which drains the stream (no synchronization added)."""
     var ctx = xd_ctx()
     var registers = LoopRegisters(ctx)
     var step = _MuStep(M, W, H, a)
@@ -259,7 +262,9 @@ def nmf_mu_dev(M: DMat, mut W: DMat, mut H: DMat, a: NmfArgs) raises -> Int:
     # tol <= 0 has no criterion: the whole bound is one chunk, one read
     var check = NMF_MU_CHECK_PERIOD if a.tol > 0 else max(a.max_iter, 1)
     var timers = LoopTimers("nmf.mu")
+    var loop_start = fit_loop_start()
     var outcome = bounded_device_loop(ctx, step, registers, 1, a.max_iter, check, timers)
+    loop = fit_loop_stop(loop_start, outcome.stop_iteration if outcome.converged else max(a.max_iter, 0))
     timers.report()
     step.k.sync()  # the step kit's held uploads, before it goes
     if outcome.converged:
@@ -360,15 +365,19 @@ struct _CdStep(LoopStep, Movable):
         loop_lap(ctx, timers, "criterion")
 
 
-def nmf_cd_dev(M: DMat, mut W: DMat, mut H: DMat, a: NmfArgs) raises -> Int:
-    """`NMF._cd`: W and (update_H) H updated. Returns the iteration count."""
+def nmf_cd_dev(M: DMat, mut W: DMat, mut H: DMat, a: NmfArgs, mut loop: FitLoop) raises -> Int:
+    """`NMF._cd`: W and (update_H) H updated. Returns the iteration count;
+    `loop` receives the sweep loop's clock (stopped after the bounded loop's
+    last register read, which drains the stream)."""
     var k = DKit()
     var Ht = k.t(H)
     var ctx = xd_ctx()
     var registers = LoopRegisters(ctx)
     var step = _CdStep(M, W, Ht, a)
     var timers = LoopTimers("nmf.cd")
+    var loop_start = fit_loop_start()
     var outcome = bounded_device_loop(ctx, step, registers, 1, a.max_iter, NMF_CD_LOOP_CHUNK, timers)
+    loop = fit_loop_stop(loop_start, outcome.stop_iteration if outcome.converged else max(a.max_iter, 0))
     timers.report()
     step.k.sync()  # the step kit's held uploads, before it goes
     if a.update_h:
@@ -379,9 +388,10 @@ def nmf_cd_dev(M: DMat, mut W: DMat, mut H: DMat, a: NmfArgs) raises -> Int:
 
 
 def nmf_solve_dev_run(
-    px: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, nc: Int, solver: Int, a: NmfArgs
+    px: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, nc: Int, solver: Int, a: NmfArgs, mut loop: FitLoop
 ) raises -> Int:
-    """`nmf_solve_run` on the resident kit."""
+    """`nmf_solve_run` on the resident kit; `loop` receives the solver
+    loop's clock (after the uploads, before the readback)."""
     if n * d > 2147483647 or n * nc > 2147483647 or nc * d > 2147483647:
         raise Error("x_decomp: nmf shape out of range")
     if solver == 0 and a.beta != 2.0:
@@ -392,9 +402,9 @@ def nmf_solve_dev_run(
     var W = k.upload(mat_from(pw, n, nc))
     var H = k.upload(mat_from(ph, nc, d))
     if solver == 0:
-        it = nmf_cd_dev(X, W, H, a)
+        it = nmf_cd_dev(X, W, H, a, loop)
     else:
-        it = nmf_mu_dev(X, W, H, a)
+        it = nmf_mu_dev(X, W, H, a, loop)
     var hw = k.get(W)
     var hh = k.get(H)
     k.sync()

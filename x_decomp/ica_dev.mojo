@@ -7,6 +7,7 @@ the same words as the host column. Each Python scalar read (the largest
 eigenvalue, a norm, a convergence limit) is one word home where Python read
 it. GPU binding only."""
 from x_decomp.cells import F32Ptr
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from x_decomp.ica import ICA_F32_EPS, ICA_FLT_MIN, _recip_or0
 from x_decomp.kit import (
     Mat, OP_ABS, OP_ADDS, OP_CUBE, OP_CUBEP, OP_EXPG, OP_EXPGP, OP_MAXS, OP_MUL, OP_ONEMSQ, OP_RECIP,
@@ -47,10 +48,15 @@ def ica_g_dev(k: DKit, Y: DMat, fun: Int, alpha: Float64, mut gp: DMat) raises -
     return gx^
 
 
-def ica_par_dev(mut k: DKit, X1: DMat, mut W: DMat, fun: Int, alpha: Float64, max_iter: Int, tol: Float64) raises -> Int:
+def ica_par_dev(mut k: DKit, X1: DMat, mut W: DMat, fun: Int, alpha: Float64, max_iter: Int, tol: Float64,
+                mut loop: FitLoop) raises -> Int:
+    # `loop`: the fixed-point loop's clock. Every iteration ends in the host
+    # read of its limit (`k.word`), which drains the stream, so the clock is
+    # read right after the last one with no synchronization added.
     W = sym_decorrelation_dev(k, W)
     var p = X1.c
     var it = 0
+    var loop_start = fit_loop_start()
     for i in range(1, max_iter + 1):
         it = i
         var gp = DMat(0, 0)
@@ -63,15 +69,20 @@ def ica_par_dev(mut k: DKit, X1: DMat, mut W: DMat, fun: Int, alpha: Float64, ma
         W = W1^
         if lim < tol:
             break
+    loop = fit_loop_stop(loop_start, it)
     return it
 
 
-def ica_def_dev(mut k: DKit, X1: DMat, mut W: DMat, fun: Int, alpha: Float64, max_iter: Int, tol: Float64) raises -> Int:
+def ica_def_dev(mut k: DKit, X1: DMat, mut W: DMat, fun: Int, alpha: Float64, max_iter: Int, tol: Float64,
+                mut loop: FitLoop) raises -> Int:
+    # `loop`: every component's loop together, with n_iter_ (the largest
+    # count); one synchronization after the last row is placed.
     var nc = W.r
     var p = X1.c
     var Winit = k.copy(W)
     var best = 0
     var first = True
+    var loop_start = fit_loop_start()
     for j in range(nc):  # small-loop(nc: components): one deflation row per component, each a device-sized loop
         var w = k.rows(Winit, j, j + 1)
         var Wp = k.rows(W, 0, j)
@@ -96,11 +107,14 @@ def ica_def_dev(mut k: DKit, X1: DMat, mut W: DMat, fun: Int, alpha: Float64, ma
             best = it
             first = False
         k.place_row(W, w, j)
+    k.sync()
+    loop = fit_loop_stop(loop_start, best)
     return best
 
 
 def ica_solve_dev_run(
-    px: F32Ptr, pw: F32Ptr, nc: Int, xr: Int, xc: Int, algo: Int, fun: Int, max_iter: Int, alpha: Float64, tol: Float64
+    px: F32Ptr, pw: F32Ptr, nc: Int, xr: Int, xc: Int, algo: Int, fun: Int, max_iter: Int, alpha: Float64, tol: Float64,
+    mut loop: FitLoop,
 ) raises -> Int:
     """`ica_solve_run` on the resident kit."""
     if xr * xc > 2147483647 or nc * nc > 2147483647 or nc < 1:
@@ -110,9 +124,9 @@ def ica_solve_dev_run(
     var X1 = k.upload(mat_from(px, xr, xc))
     var W = k.upload(mat_from(pw, nc, nc))
     if algo == 0:
-        it = ica_par_dev(k, X1, W, fun, alpha, max_iter, tol)
+        it = ica_par_dev(k, X1, W, fun, alpha, max_iter, tol, loop)
     else:
-        it = ica_def_dev(k, X1, W, fun, alpha, max_iter, tol)
+        it = ica_def_dev(k, X1, W, fun, alpha, max_iter, tol, loop)
     var hw = k.get(W)
     k.sync()
     for i in range(nc * nc):
