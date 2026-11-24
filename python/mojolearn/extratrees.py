@@ -278,6 +278,10 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         'parallel_groves' ('auto' resolved for the fitted numeric mode).
     n_features_in_ : int
         Number of features seen in `fit`.
+    fit_loop_ : tuple of (int, float)
+        The number of trees the last fit built and the time in milliseconds
+        its tree-building loop took, from the start of the first tree to the
+        end of the last.
 
     Examples
     --------
@@ -442,6 +446,10 @@ class ExtraTreesRegressor(_ExtraTreesBase):
         'parallel_groves' ('auto' resolved for the fitted numeric mode).
     n_features_in_ : int
         Number of features seen in `fit`.
+    fit_loop_ : tuple of (int, float)
+        The number of trees the last fit built and the time in milliseconds
+        its tree-building loop took, from the start of the first tree to the
+        end of the last.
 
     Examples
     --------
