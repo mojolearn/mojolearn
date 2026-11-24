@@ -74,7 +74,9 @@ def _expected(make, X, y, folds, response, metric, sign, **kw):
             answer = answer[:, 1]
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
-            out.append(sign * float(metric(y[test], answer, **kw)))
+            # multioutput='raw_values' on a 1-D target answers a one-value array: scikit-learn's search reads it
+            # with `.item()` (sklearn/model_selection/_validation.py `_score`); NumPy 2.5's float() takes 0-d only.
+            out.append(sign * float(np.asarray(metric(y[test], answer, **kw)).item()))
     return out
 
 
