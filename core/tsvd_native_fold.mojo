@@ -6,7 +6,7 @@ from core.shared_slot import SharedSlot
 from core.msel_device_x import msel_fold_entry_context
 from core.pca_native_api import pca_vendor_code
 from core.pca_native_fold import _fold_pointer
-from decomposition.pca_fold import tsvd_fit_fold, tsvd_transform_fold, tsvd_transform_fold_resident
+from decomposition.pca_fold import tsvd_fit_fold, tsvd_transform_fold, tsvd_transform_fold_resident, inverse_transform_fold
 from core.fitted_resident_store import (
     FittedResidentStore, fitted_lease_open, fitted_lease_close, fitted_resident_view,
 )
@@ -66,13 +66,34 @@ struct TSVDFoldKernels(TSVDNativeKernels):
         first query and again only when the host words' address or size changed, lane vdf-scope-neural5), else
         uploaded for this call. Returns the finite word, or 2 when an index is out of range (the member's
         `door_rows_refuse` reads both)."""
-        if not r.fold.active() or r.inverse:
-            raise Error("TruncatedSVD fold provider requires a resident transform")
+        if not r.fold.active():
+            raise Error("TruncatedSVD fold provider requires a resident fold")
         if r.resident and r.lease < 0:
             raise Error("tsvd_transform_resident: the lease must be 0 or a lease, got " + String(r.lease))
         var cp = _fold_pointer(r.components)
         var dst = _fold_pointer(r.dst)
         var ctx = msel_fold_entry_context()
+        if r.inverse:
+            # Lane vdf-scope-neural5: inverse_transform of a fold of scores (no mean: the host entry's
+            # `inverse_transform_host(..., False)` body over the gathered scores), the lease's copy or this
+            # call's upload of the components. Returns 2 for an index out of range, else 0 (no finite test,
+            # as the host inverse).
+            var in_range: Int32
+            if r.resident and r.lease > 0:
+                var view = fitted_resident_view(_fold_resident_store(), ctx, r.lease, 0, [r.components],
+                                                [r.count * r.features])
+                var kept = view.bufs[0].copy()
+                in_range = inverse_transform_fold(ctx, r.fold.base, r.fold.rows, r.fold.indices,
+                    kept, cp, dst, r.rows, r.features, r.count, False)
+                _ = kept^
+                _ = view^
+            else:
+                var comps = ctx.enqueue_create_buffer[DType.float32](r.count * r.features)
+                ctx.enqueue_copy(dst_buf=comps, src_ptr=cp)
+                in_range = inverse_transform_fold(ctx, r.fold.base, r.fold.rows, r.fold.indices,
+                    comps, cp, dst, r.rows, r.features, r.count, False)
+                _ = comps^
+            return 2 if in_range != 0 else 0
         var words: Tuple[Int32, Int32]
         if r.resident and r.lease > 0:
             var view = fitted_resident_view(_fold_resident_store(), ctx, r.lease, 0, [r.components],

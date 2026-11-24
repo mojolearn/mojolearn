@@ -5,7 +5,7 @@ from checks.vendor import COMPILED_VENDOR
 from core.shared_slot import SharedSlot
 from core.msel_device_x import msel_fold_entry_context
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
-from decomposition.pca_fold import pca_fit_fold, pca_transform_fold, pca_whiten_transform_fold
+from decomposition.pca_fold import pca_fit_fold, pca_transform_fold, pca_whiten_transform_fold, inverse_transform_fold
 from core.pca_native_api import (
     PCA_NATIVE_ABI, PCA_CAP_EXACT, PCA_CAP_FULL, PCA_CAP_FOLD,
     PCANativeKernels, PCAFitRequest, PCAFitResult, PCAQueryRequest, PCAQueryResult,
@@ -52,12 +52,23 @@ struct PCAFoldKernels(PCANativeKernels):
 
     @staticmethod
     def query(r: PCAQueryRequest) raises -> PCAQueryResult:
-        if not r.fold.active() or r.inverse:
-            raise Error("PCA fold provider requires a resident transform")
+        if not r.fold.active():
+            raise Error("PCA fold provider requires a resident fold")
         var mp = _fold_pointer(r.mean)
         var cp = _fold_pointer(r.components)
         var dst = _fold_pointer(r.dst)
         var ctx = msel_fold_entry_context()
+        if r.inverse:
+            # Lane vdf-scope-neural5: the unwhitened inverse_transform of a fold of scores (the host entry's
+            # `inverse_transform_host` body over the gathered scores). The whitened inverse keeps host rows.
+            if r.whiten:
+                raise Error("PCA fold provider has no whitened inverse_transform")
+            var components = ctx.enqueue_create_buffer[DType.float32](r.count * r.features)
+            ctx.enqueue_copy(dst_buf=components, src_ptr=cp)
+            var in_range = inverse_transform_fold(ctx, r.fold.base, r.fold.rows, r.fold.indices,
+                components, mp, dst, r.rows, r.features, r.count, True)
+            _ = components^
+            return PCAQueryResult(0, Int(in_range))
         if r.whiten:
             # Lane vdf-scope-neural4: the whitened transform on the fold (the host entry's body).
             if r.fit_rows < 2:

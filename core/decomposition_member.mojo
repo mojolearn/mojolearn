@@ -645,9 +645,12 @@ def _query(slot: _Slot, call: _Call, inverse: Bool) raises:
     if call[].dst.rows != rows or call[].dst.cols != width_out:
         raise Error("ValueError: the output buffer holds " + String(width_out) + " values per row of X")
     # THE RESIDENT ROUTE: a transform (PCA unwhitened or whitened, TruncatedSVD;
-    # lane vdf-scope-neural4 added the last two) reads a fold of the scope's
-    # resident X through the fold entry; an inverse_transform host rows.
-    var held = _rows_open(call, not inverse)
+    # lane vdf-scope-neural4 added the last two) and an inverse_transform (PCA
+    # unwhitened, TruncatedSVD; lane vdf-scope-neural5: the fold's rows are
+    # scores) read a fold of the scope's resident rows through the fold entry;
+    # the whitened PCA inverse host rows.
+    var whitened_pca = slot[].kind() == DECOMP_KIND_PCA and slot[].words[5] != 0.0
+    var held = _rows_open(call, not (inverse and whitened_pca))
     try:
         _query_rows(slot, call, held, inverse, rows)
     finally:
@@ -663,14 +666,14 @@ def _query_rows(slot: _Slot, call: _Call, mut held: _Rows, inverse: Bool, rows: 
             # index out of range.
             var fold_lease = _fold_lease(slot, call)
             var tsvd_request = TSVDQueryRequest(0, Int(slot[].components.unsafe_ptr()), call[].dst.data,
-                rows, slot[].features, slot[].keep, False, True, fold_lease > 0, fold_lease)
+                rows, slot[].features, slot[].keep, inverse, not inverse, fold_lease > 0, fold_lease)
             tsvd_request.fold = held.fold()
             var status = TSVDNativeDriver(call[].route.fourth.call).query(tsvd_request)
             door_rows_refuse(0 if status == 2 else status, 1 if status == 2 else 0, estimator, held.base_rows)
             return
         var fold_whiten = slot[].words[5] != 0.0
         var fold_request = PCAQueryRequest(0, Int(slot[].mean.unsafe_ptr()), Int(slot[].components.unsafe_ptr()), 0,
-            call[].dst.data, rows, slot[].features, slot[].keep, slot[].fit_rows, False, fold_whiten, held.fold())
+            call[].dst.data, rows, slot[].features, slot[].keep, slot[].fit_rows, inverse, fold_whiten, held.fold())
         if fold_whiten:
             fold_request.singular = Int(slot[].singular.unsafe_ptr())
         var words = _pca_fold_query(PCANativeDriver(call[].route.fourth.call), fold_request)

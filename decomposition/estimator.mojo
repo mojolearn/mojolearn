@@ -852,10 +852,29 @@ def inverse_transform_dev(
     per-call upload above, or a resident copy of the same words; lane
     ne1-a-decomp-resident): the same transpose, gemm_nt and mean shift."""
     var scores = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
+    ctx.enqueue_copy(dst_buf=scores, src_ptr=scores_ptr)
+    inverse_transform_scores_dev(ctx, scores, components, mean_ptr, out_ptr, n_rows, n_features, n_components,
+                                 add_mean)
+    _ = scores^
+
+
+def inverse_transform_scores_dev(
+    ctx: DeviceContext,
+    mut scores: DeviceBuffer[DType.float32],
+    mut components: DeviceBuffer[DType.float32],
+    mean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+    add_mean: Bool,
+) raises:
+    """`inverse_transform_dev`'s body over scores already on the device (its upload, or a model-selection fold
+    gathered there, decomposition/pca_fold.mojo `inverse_transform_fold`, lane vdf-scope-neural5): the same
+    transpose, gemm_nt and mean shift on the same words."""
     var components_t = ctx.enqueue_create_buffer[DType.float32](n_features * n_components)
     var mean = ctx.enqueue_create_buffer[DType.float32](n_features)
     var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    ctx.enqueue_copy(dst_buf=scores, src_ptr=scores_ptr)
     if add_mean:
         ctx.enqueue_copy(dst_buf=mean, src_ptr=mean_ptr)
     ctx.enqueue_function[transpose_kernel](
