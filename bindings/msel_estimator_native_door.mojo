@@ -484,6 +484,37 @@ def msel_native_set_params(model: PythonObject, params: PythonObject,
         if fixed is not None:
             _ = py_call(fields.update, msel_clone_parameter(fixed, context))
         return model
+    if plan["forest"] is None and not py_contains(plan["methods"], PythonObject("set_params")):
+        # A NATIVE INITIALIZER without a set_params recipe (KernelDensity,
+        # ARIMA, Cholesky; a member-only plan with a native constructor, the
+        # Gbdt kinds of python/mojolearn/_native_msel_more.py
+        # `_TEXT_MODEL_MEMBERS`): its constructor stores each parameter under
+        # its own name (`msel_native_clone` reads them so), so the stored
+        # parameters with `params` set are handed to that constructor again,
+        # as a clone is built: its own checks and derived fields, no Python
+        # method. Lane w3f2-cv (gate 14f1 digests mf_clu6 kde_*: "native
+        # estimator has no set_params"; a member-only plan: "schema is
+        # pending migration", msel_estimator_call). Once per candidate.
+        var entry = plan["entry"]
+        if entry is None or py_type(entry) is not py_type(b.len):
+            raise Error("ImportError: native estimator constructor binding is unavailable")
+        var fields = py_call(plan["fields_get"], model, py_type(model))
+        var names = plan["parameters"]
+        for k in range(len(keys)):  # driver-loop: validate all names before mutating state
+            if not py_contains(names, keys[k]):
+                raise Error("ValueError: invalid native estimator parameter " + String(keys[k]))
+        var args = Python.list()
+        for k in range(len(names)):  # driver-loop: fixed constructor parameters, in the constructor's order
+            if py_contains(params, names[k]):
+                _ = py_call(args.append, msel_clone_parameter(params[names[k]], context))
+            elif py_contains(fields, names[k]):
+                _ = py_call(args.append, fields[names[k]])
+            else:
+                raise Error("TypeError: native constructor parameter is missing from estimator state")
+        _ = py_call(fields.clear)
+        # call-table: member estimator constructor (family door over the Python model) has no native entry yet
+        _ = family_call(entry, model, plan["init"], py_call(b.tuple, args), plan["context"])
+        return model
     if plan["forest"] is None:
         return msel_estimator_call(model, "set_params", Python.tuple(params), context)
     # call-table: member forest get_params (trees door over the Python model) has no native entry yet

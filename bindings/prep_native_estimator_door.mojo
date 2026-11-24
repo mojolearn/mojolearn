@@ -84,10 +84,25 @@ def prep_estimator_admit(est: PythonObject, owner: String, context: PythonObject
 
 
 def prep_estimator_has(est: PythonObject, method: String, context: PythonObject) raises -> Bool:
-    """Whether est's native plan serves `method` (the plan's fixed method table)."""
+    """Whether est's native plan serves `method` (the plan's fixed method
+    table): scikit-learn's `hasattr(estimator, method)` for a connected
+    estimator. A MEMBER-ONLY plan (python/mojolearn/_native_msel_more.py
+    `connect_members`: a marked class registered without method recipes: a
+    search, an encoder, a host class) has an empty table; its methods are
+    its member's, so its class's attribute answers (lane w3f2-cv, gate 14f1
+    group B: a stacked, calibrated or one-vs-rest search answered no
+    predict_proba / decision_function, where scikit-learn reads the
+    search's methods). Read only on the miss path of a member-only plan."""
     var nk = prep_keys()
     var plan = prep_estimator_plan(est, context)
-    return plan is not None and py_contains(py_item(plan, nk[].k_methods), PythonObject(method))
+    if plan is None:
+        return False
+    if py_contains(py_item(plan, nk[].k_methods), PythonObject(method)):
+        return True
+    if py_get(plan, "member_only") is None:
+        return False
+    var b = native_loaded_module("builtins")
+    return py_call(b.getattr, py_type(est), PythonObject(method), PythonObject(None)) is not None
 
 
 def prep_estimator_clone(est: PythonObject, context: PythonObject) raises -> PythonObject:

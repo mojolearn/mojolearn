@@ -123,7 +123,7 @@ from core.member_abi import (
     MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_OP_SCORE, MEMBER_OP_PREDICT, member_output_dtype,
     MEMBER_CAN_TEST_ROWS, MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_CAN_ROW_INDEX,
     MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle, MEMBER_OP_DECISION, MEMBER_READS_Y_GIVEN,
-    MEMBER_OP_PREDICT_PROBA, member_outputs,
+    MEMBER_OP_PREDICT_PROBA, member_outputs, MEMBER_CAN_PREDICT,
 )
 from core.member_class_weight import member_cw_subset
 from core.member_notices import (
@@ -1278,6 +1278,14 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     var logs = List[Bool]()
     var op_of = List[Int]()
     var clusterer = False
+    # LANE w3f2-cv (gate 14f1 group B): candidates that do not predict (a
+    # transformer, an encoder, a decomposition) are admitted only when every
+    # scorer is a stand-in for a response their class lacks
+    # (providers/python/member_ensemble_boundary_door.mojo `all_missing`):
+    # such a row asks no response (op -1) and raises its refusal word per side
+    # (scikit-learn's `_check_response_method`, inside the score's try). Every
+    # candidate is the base's class, so one mask decides.
+    var no_predict = len(plan.masks) > 0 and (plan.masks[0] & MEMBER_CAN_PREDICT) == 0
     if responding:
         ops.append(plan.respond)
         logs.append(False)  # the cv tools' log is placed by `_place_response` (`respond_log`)
@@ -1313,6 +1321,10 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                                 + "tier's cluster entry")
             elif msel_scorer_cluster_entry(row) and row.tier == 0 and plan.cluster.word == 0:
                 raise Error("member ABI: a label-pair cluster scorer needs the metrics image's cluster entry")
+            if no_predict and row.refuse_word >= 0 and row.op == MEMBER_OP_PREDICT:
+                op_of.append(-1)  # a refusal-only row: no response (above)
+                rows_of.append(row)
+                continue
             var at = -1
             for o in range(len(ops)):  # small-loop(the distinct responses, at most four)
                 # LANE mf-r9d: predict_log_proba is its own response (the log of
@@ -1348,7 +1360,12 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     # with y=None, scored by its own score (scikit-learn's scorer=None:
     # `estimator.score(X_test)`) or answering its responses (cross_val_predict).
     var y_free = plan.y == 0
-    if y_free and (classifier or not (member_score or responding)):
+    # (lane w3f2-cv) or by refusal-only rows alone, which read no target: a
+    # scorer over a class without its response, scikit-learn's words per side
+    var refusals_only = len(op_of) > 0
+    for j in range(len(op_of)):  # small-loop(the scorers)
+        refusals_only = refusals_only and op_of[j] < 0
+    if y_free and (classifier or not (member_score or responding or refusals_only)):
         raise Error("member ABI: a search without a target is scored by the member's own score")
     # THE FOLDS THAT LACK A CLASS (lane mf-msel5b): per fold, the classes its
     # train rows hold when they are not all k (one pass over its train codes
@@ -1860,6 +1877,14 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                     if failed[at] != UInt8(0):
                         continue
                     var o = op_of[j]
+                    if o < 0:
+                        # a refusal-only row (lane w3f2-cv): its words, no metric
+                        # and no response read (the error rule applies)
+                        var word = rows_of[j].refuse_word
+                        errors[at] = (plan.label_words[word].copy() if word < len(plan.label_words)
+                                      else String("member ABI: a search scorer's refusal word is missing"))
+                        failed[at] = UInt8(2)
+                        continue
                     var notes = List[Float64]()
                     # lane mf-score8 round b: a non-classifier's predict of
                     # integer ids is read as ids (`MselScorer.ids`); one

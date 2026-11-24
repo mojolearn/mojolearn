@@ -508,18 +508,23 @@ def _admission_refusal(est: PythonObject, fields: PythonObject, plan: PythonObje
 
     A MEMBER-ONLY base (python/mojolearn/_native_msel_more.py
     connect_members: a marked class registered from its mark, without
-    method recipes) of a search or cv tool its member did not serve is
-    refused FIRST, in the words the class had before its mark (lane
-    mf-r9b: moved here from the deleted units `msel_cv_units`, which raised
-    them once per operation whatever the cause; under a numeric
-    error_score the units' refusal had turned into silent nan scores,
-    proving suite 2026-11-22). One plan read, on this refusal path only.
+    method recipes) is refused like any other: the search kind's raising
+    admission says why (scikit-learn's check_scoring TypeError for a base
+    with no `score` under scoring=None, `_check_response_method`'s
+    AttributeError for a scorer whose response the class lacks, its family's
+    own fit words). Lane w3f2-cv (gate 14f1 group B): REMOVED the
+    "schema is pending migration" words lane mf-r9b raised here FIRST for
+    every member-only base of a search or cv tool its member did not serve:
+    they hid the real cause of every such refusal (a member-only plan's
+    empty method table answered no scorer response, msel_scorer_native_door
+    `_scorer_response`, now read off its class).
 
     THE BASE'S OWN WORDS (lane w3f2-words): a search's kind admits its
     candidates SERVING (providers/python/member_ensemble_boundary_door.mojo
     `_admit_nested`: a base its member refuses answers False, silently), so
-    before the member-only words and before `_no_member_fit_words` the
-    base's RAISING admission runs once (`_base_refusal`): a base its own fit
+    before the search's own admission words (a member-only base) or
+    `_no_member_fit_words` the base's RAISING admission runs once
+    (`_base_refusal`): a base its own fit
     door refuses (a host class's fit, HostLasso; a Python callback,
     DictionaryLearning's) raises that door's words, as scikit-learn's search
     raises its base's fit error. On this refusal path only."""
@@ -532,7 +537,6 @@ def _admission_refusal(est: PythonObject, fields: PythonObject, plan: PythonObje
             inner_plan = msel_estimator_plan(inner, context)
             if py_get(inner_plan, "member_only") is not None:
                 _base_refusal(inner, inner_plan, b, labels)
-                raise Error("RuntimeError: this built-in estimator's native cross-validation schema is pending migration")
     var name = String(py=py_type(est).__name__)
     var owner = member_admit_labeled(est, fields, plan, member_context, b, labels)
     if not owner.published:

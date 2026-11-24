@@ -3859,6 +3859,16 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var multi_lab = classifier and _per_output_labels(labels, b)
     # LANE mf-r9d: the other numeric_mode tier's clean word ("": no scorer of it)
     var other_mode = String("")
+    # LANE w3f2-cv (gate 14f1 group B): every scorer a stand-in for a
+    # response the class LACKS (a transformer, an encoder, a decomposition
+    # scored by name): scikit-learn fits every unit, each score fails with
+    # `_check_response_method`'s AttributeError (error_score, or raised) and
+    # the best is refitted. No scorer then reads a member response, so the
+    # candidates need no MEMBER_CAN_PREDICT (below) and the RUN asks none
+    # for these rows (core/msel_search_run.mojo, a refusal-only row over a
+    # member that does not predict). Before, the PREDICT need refused every
+    # such base and the caller raised "schema is pending migration".
+    var all_missing = len(keys) > 0
     for j in range(len(keys)):  # driver-loop: over the scorers (once per admission)
         var kw = _ScorerKw()
         var name = _scorer_name(givens[j], context, b, kw)
@@ -3867,7 +3877,10 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         # (`_scorer_response`'s words, the stand-in row) is read before the
         # class's methods are asked
         var bad_method = kw.stand_in and kw.refuse_text.startswith("TypeError: native scorer response")
-        var no_method = kw.refuse_text.copy() if bad_method else _response_refusal(scorer, base, b)
+        var lacked = String("") if bad_method else _response_refusal(scorer, base, b)
+        if lacked.byte_length() == 0:
+            all_missing = False
+        var no_method = kw.refuse_text.copy() if bad_method else lacked.copy()
         if no_method.byte_length() == 0 and kw.stand_in:
             # lane mf-rows8a: a kwarg the metric does not take (`_kwarg_refusal`),
             # raised per side after the response is asked, as the door does
@@ -3894,11 +3907,14 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             positives.append(-1)
             options.append(ropts)
             others = True
-            var seen_p = False
-            for o in range(len(responses)):  # small-loop(the distinct responses, at most three)
-                seen_p = seen_p or responses[o] == MEMBER_OP_PREDICT
-            if not seen_p:
-                responses.append(MEMBER_OP_PREDICT)
+            if not all_missing:
+                # (a lacked response's row asks no response when every scorer
+                # lacks one: `all_missing`, no predict probed)
+                var seen_p = False
+                for o in range(len(responses)):  # small-loop(the distinct responses, at most three)
+                    seen_p = seen_p or responses[o] == MEMBER_OP_PREDICT
+                if not seen_p:
+                    responses.append(MEMBER_OP_PREDICT)
             continue
         var method = String(py=msel_scorer_response(scorer, base_plan, context))
         var code = msel_scorer_code(name, method == "decision_function")
@@ -4298,6 +4314,10 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             needs |= MEMBER_CAN_PREDICT_PROBA
         elif row.op == MEMBER_OP_DECISION:
             needs |= MEMBER_CAN_DECISION
+    if all_missing and tool_respond < 0:
+        # every scorer lacks its response (`all_missing`, above): the units are
+        # fitted, never asked; the class has no predict to need
+        needs &= ~MEMBER_CAN_PREDICT
     # lane mf-score8 round b: a clusterer scored by clustering scorers and
     # others together: its ids are read as numbers or labels per side (the
     # RUN's `MselScorer.ids`).

@@ -3095,18 +3095,11 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
     var kind_mask = member_kind_capabilities(set.run.plans[0])
     # A MEMBER-ONLY plan (python/mojolearn/_native_msel_more.py
     # `connect_members`: no method recipes, e.g. the explicit Host* classes of
-    # lane mf-cal3b) has an empty method table, so `prep_estimator_has` read
-    # "no decision_function" for HostSVC and the predict_proba scoring of a
-    # probability=False SVC sent the fit to the door units, whose plan refused it
-    # ("schema is pending migration"; gate 5645984a8f mf_cal svch rows). Its
-    # methods are its member's (as bindings/trees_agnostic_native_door.mojo
-    # `_member_only` reads them): the member kind's DECISION bit answers
-    # scikit-learn's `hasattr(estimator, "decision_function")`. One plan read
-    # per fit, at UNPACK.
-    if not decision:
-        var base_plan = prep_estimator_plan(base, context)
-        if base_plan is not None and py_get(base_plan, PythonObject("member_only")) is not None:
-            decision = (kind_mask & MEMBER_CAN_DECISION) != 0 and set.run.plans[0].member.can(MEMBER_CAN_DECISION)
+    # lane mf-cal3b) answers `prep_estimator_has` from its class (lane w3f2-cv:
+    # scikit-learn's `hasattr(estimator, "decision_function")`), so HostSVC's
+    # decision_function is read above. REMOVED: the member-kind DECISION-bit
+    # answer this fit read for a member-only base after it (gate 5645984a8f
+    # mf_cal svch rows), which only that one door had.
     var scoring = MEMBER_CAN_DECISION if decision else MEMBER_CAN_PREDICT_PROBA
     var first = set.run.plans[0].copy()
     if (first.family == MEMBER_FAMILY_ENSEMBLE and len(first.params) > 2 and Int(first.params[0]) == 0
@@ -3335,21 +3328,14 @@ def _cal_door(e: PythonObject, decision: Bool, Xa: PythonObject, n: Int, class_c
 def _cal_member_decision(e: PythonObject, context: PythonObject) -> Bool:
     """scikit-learn's `hasattr(e, "decision_function")` for a fitted pair
     member of CalibratedClassifierCV (its predict reads the scores the fit
-    calibrated, `_cal_native`'s rule): the plan's method table, and for a
-    MEMBER-ONLY plan (no method recipes: the Host* classes of lane mf-cal3b)
-    whether its member serves DECISION on the state it holds (an X-free
-    open, closed at once). Read once per pair per predict, at UNPACK. Never
+    calibrated, `_cal_native`'s rule): `prep_estimator_has`, which answers
+    a MEMBER-ONLY plan (no method recipes: the Host* classes of lane
+    mf-cal3b) from its class, as the fit reads it (lane w3f2-cv; REMOVED: the
+    X-free member probe this predict made for a member-only plan, which the
+    fit no longer matches). Read once per pair per predict, at UNPACK. Never
     raises (False: the predict_proba scores)."""
     try:
-        if prep_estimator_has(e, "decision_function", context):
-            return True
-        var plan = prep_estimator_plan(e, context)
-        if plan is None or py_get(plan, PythonObject("member_only")) is None:
-            return False
-        var probe = meta_member_open(e, MEMBER_OP_DECISION, True, context, 0, False)
-        var served = probe.served
-        member_held_close(probe)
-        return served
+        return prep_estimator_has(e, "decision_function", context)
     except:
         return False
 
