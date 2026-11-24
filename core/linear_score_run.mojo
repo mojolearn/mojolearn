@@ -10,7 +10,10 @@ from core.linear_model_state import LinearModelState, linear_state_predict_reque
 from core.linear_score_program import LinearR2Layout
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
-from x_metrics.descriptor_schema import MP_MODE, MP_VENDOR, MP_CAPABILITIES, MP_HAS_RANGES, MP_RUN_OUT, MP_RUN_RANGES
+from x_metrics.descriptor_schema import (
+    MP_MODE, MP_VENDOR, MP_CAPABILITIES, MP_HAS_RANGES, MP_HAS_STORE, MP_RUN_OUT, MP_RUN_RANGES,
+    MP_DEV_FIRST_NONFINITE,
+)
 
 
 def linear_r2_check_target(rows: Int, target_rows: Int) raises:
@@ -127,3 +130,40 @@ def member_r2_score(metrics: EntryRef, y_true: Int, y_pred: Int, n: Int) raises 
     if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=y_pred), n):
         raise Error("mojolearn score: y_pred contains NaN or infinity")
     return linear_r2_run(metrics.call, y_pred, n, y_true, n, entry_ref_vendor(metrics), entry_ref_mode(metrics))
+
+
+def member_r2_score_slot(metrics: EntryRef, y_slot: Int, y_pred: Int, n: Int) raises -> Float64:
+    """`member_r2_score` with y_true IN A SLOT of the resident store (lane
+    vdf-scope-linear4: a model-selection fold's targets, taken on the device
+    by `member_fold_column_open`): the same `_Reg` program on the same entry,
+    its y range filled device to device from the slot (an MP_RUN_RANGES
+    input triple with the slot id), the prediction range from the host
+    arena; y's finite test runs on the slot in place (MP_DEV_FIRST_NONFINITE,
+    one 4-byte readback). Same words in the same arena places as the host
+    copy: the same sums, the same R^2. y never visits the host."""
+    var entry = metrics.call
+    var capabilities = native_descriptor_call(entry, MP_CAPABILITIES, [], [], [])
+    if not (capabilities & MP_HAS_RANGES) or not (capabilities & MP_HAS_STORE):
+        raise Error("RuntimeError: the score program entry on this route reads no resident slot")
+    if native_descriptor_call(entry, MP_VENDOR, [], [], []) != entry_ref_vendor(metrics):
+        raise Error("RuntimeError: score vendor differs from selected execution")
+    if native_descriptor_call(entry, MP_MODE, [], [], []) != entry_ref_mode(metrics):
+        raise Error("RuntimeError: score mode differs from process default")
+    if n > 0 and native_descriptor_call(entry, MP_DEV_FIRST_NONFINITE, [], [y_slot, n], []) >= 0:
+        raise Error("mojolearn score: y_true contains NaN or infinity")
+    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=y_pred), n):
+        raise Error("mojolearn score: y_pred contains NaN or infinity")
+    var layout = LinearR2Layout(n)
+    var arena = List[Float32](length=layout.program.size, fill=0.0)
+    var address = Int(arena.unsafe_ptr())
+    try:
+        unsafe_memcpy(dest=f32_ptr(address) + layout.p, src=f32_ptr(y_pred), count=n)
+        # y [y, y + n) from the slot; the prediction and the zero scalar word
+        # [p, 2n + 1) from the host arena, as the host range [0, 2n + 1) did.
+        var inputs: List[Int32] = [Int32(layout.y), Int32(layout.y + n), Int32(y_slot),
+            Int32(layout.p), Int32(2 * n + 1), -1]
+        var sums = linear_r2_execute(entry, layout, address, inputs, True)
+        return Float64(0.0) if sums.denominator == 0 else Float64(1.0) - sums.numerator / sums.denominator
+    finally:
+        _ = layout
+        _ = arena
