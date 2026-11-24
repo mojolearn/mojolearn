@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Row and word refusals of the k-NN over rows that have NO host words (lane vdf-scope-cluster7, 2026-11-24).
+"""Row refusals of the k-NN over rows that have NO host words (lane vdf-scope-cluster7, 2026-11-24).
 
 A model-selection fold taken on the device (a metrics-store or x_prep slot) has no host copy, so the refusals that
 `_knn_search_plan` (neighbors/estimator.mojo) and the neighbors member make by scanning host words run here as
@@ -9,11 +9,8 @@ device reductions over the slot, with the host scans' answers:
     neighbors/impl/distance/detail/distance_ops.mojo; the cosine refusal, DEVIATION 553). One thread per row tests
     its row; an atomic min keeps the LOWEST hit, so the answer is the host scan's first zero row in row order
     whatever order the threads run in.
-  * `device_first_negative_word`: the first negative word (row-major), the jensenshannon refusal's "X holds a
-    negative value" test of the host `family_min_f32 < 0` scan (any negative word refuses; the lowest one is
-    reported so the words never depend on thread order).
 
-One int32 word comes home per call; X never does. Parallel over rows / words; nothing serial over data.
+One int32 word comes home per call; X never does. Parallel over rows; nothing serial over data.
 """
 from std.atomic import Atomic
 from std.math import ceildiv
@@ -39,14 +36,6 @@ def nz_zero_row_kernel(x: _FP, first: _IP, n: Int32, d: Int32):
     _ = Atomic.min(first, Int32(r))
 
 
-def nz_negative_word_kernel(x: _FP, first: _IP, count: Int32):
-    """first[0] = min(first[0], t) for every word t < count below zero."""
-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if t < Int(count):
-        if x.unsafe_load(t) < Float32(0.0):
-            _ = Atomic.min(first, Int32(t))
-
-
 def _first(ctx: DeviceContext, mut dfirst: DeviceBuffer[DType.int32]) raises -> Int:
     var hfirst = ctx.enqueue_create_host_buffer[DType.int32](1)
     ctx.enqueue_copy(dst_buf=hfirst, src_buf=dfirst)
@@ -69,20 +58,4 @@ def device_first_zero_row(ctx: DeviceContext, x: DeviceBuffer[DType.float32], n:
     var found = _first(ctx, dfirst)
     _ = dfirst^
     _ = x.unsafe_ptr()  # the slot is read by the launch above: named past it
-    return found
-
-
-def device_first_negative_word(ctx: DeviceContext, x: DeviceBuffer[DType.float32], count: Int) raises -> Int:
-    """The first word below zero among the first `count` words of `x` on `ctx`, or -1."""
-    if count <= 0:
-        return -1
-    var dfirst = ctx.enqueue_create_buffer[DType.int32](1)
-    enqueue_fill(ctx, dfirst, _NONE)
-    var p = _FP(unsafe_from_address=Int(x.unsafe_ptr()))
-    ctx.enqueue_function[nz_negative_word_kernel](
-        p, _IP(unsafe_from_address=Int(dfirst.unsafe_ptr())), Int32(count), grid_dim=ceildiv(count, _TPB), block_dim=_TPB,
-    )
-    var found = _first(ctx, dfirst)
-    _ = dfirst^
-    _ = x.unsafe_ptr()
     return found
