@@ -15,6 +15,8 @@ EXPECTED (base vs head):
 - `lc_abs_bad`: base [a, a] of the first bad value; head [min, max].
 - `lc_first_fold`: base refused ((0, 40]); head the first fold's n_max (50), the 40-row fold takes all its rows.
 - `lc_dupes`: equal blocks; head also warns (not digested).
+- `cv_member_only` (cross_validate of Binarizer, a member-only plan, scoring r2): the pending-migration words on
+  both (base: the deleted units' check; head: `_admission_refusal`).
 
 Configurations are independent: one process each across the host cores (the allocation's cores where the OS
 reports them).
@@ -57,6 +59,8 @@ def _unit(name):
             for key in ("test_r2", "train_r2", "test_neg_mean_squared_error"):  # glue: the digested columns
                 out.append((f"{name}_{key}", _digest(got[key])))
             out.append((f"{name}_test_idx", _digest(np.concatenate(got["indices"]["test"]))))
+        elif name == "cv_member_only":
+            ms.cross_validate(ml.Binarizer(), X, yr, cv=3, scoring="r2")  # needs every family imported, as the proving suite does
         elif name == "cvs_knn":
             out.append((name, _digest(ms.cross_val_score(ml.KNeighborsClassifier(n_neighbors=3), X, yc, cv=4,
                                                          scoring="accuracy"))))
@@ -108,7 +112,7 @@ def _unit(name):
     return out
 
 
-UNITS = ["cv_ridge", "cvs_knn", "cvp_logreg_proba", "cvp_text_labels", "vc_ridge", "vc_kmeans_noy", "vc_empty",
+UNITS = ["cv_ridge", "cv_member_only", "cvs_knn", "cvp_logreg_proba", "cvp_text_labels", "vc_ridge", "vc_kmeans_noy", "vc_empty",
          "vc_multi", "lc_frac", "lc_shuffle", "lc_dupes", "lc_empty", "lc_frac_bad", "lc_abs_bad", "lc_first_fold",
          "perm_ridge", "perm_groups", "perm_text"]
 
