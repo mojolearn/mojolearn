@@ -4727,7 +4727,8 @@ def _cmd_emit_models(args, ml):
         if fixture not in data:
             data[fixture] = (harness.fixture(fixture), harness.heldout(fixture))
         (X, yc, yr), Xh = data[fixture]
-        fit = harness.LANES[lane](ml, X, yc, yr, Xh.copy())
+        # the GPU side through device="gpu", as the GPU columns were recorded
+        fit, _ = harness.call_lane(lane, ml, "gpu", X, yc, yr, Xh.copy())
         sl = harness._save_load(fit.est)
         if sl is None:
             problems.append(f"{lane}/{fixture}: the estimator has no save/load")
