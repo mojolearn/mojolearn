@@ -192,11 +192,13 @@ def test_member_route_serves_the_marked_predictor(device, name):
 
 @pytest.mark.parametrize("device", DEVICES)
 def test_member_only_class_is_refused_by_cross_validation_in_its_words(device):
-    # A member-only plan (a registered mark without method recipes) its member cannot serve keeps the words it had
-    # before its mark, also under cross_validate's default error_score=nan (bindings/msel_member_units_door.mojo
-    # `_admission_refusal`, lane mf-r9b; it was the deleted units' check): the 2026-11-22 registration first turned
-    # the refusal into silent nan scores.
+    # A member-only plan (a registered mark without method recipes) its member cannot serve is refused in words,
+    # also under cross_validate's default error_score=nan (the 2026-11-22 registration first turned the refusal into
+    # silent nan scores). Lane w3f2-cv (gate 14f1 group B; brief w3f2-cv.md: "refuse ... in scikit-learn's words"):
+    # the words are the search kind's own, the response the r2 scorer asks and Binarizer lacks
+    # (`_check_response_method`'s attribute), no longer mf-r9b's "schema is pending migration", which hid every
+    # member-only refusal's cause (bindings/msel_member_units_door.mojo `_admission_refusal`).
     _import_every_family()
     X, Y = _arm_cases.X, _arm_cases.Y
-    with pytest.raises(RuntimeError, match="pending migration"):
+    with pytest.raises(AttributeError, match="'Binarizer' object has no attribute 'predict'"):
         cls("cross_validate")(make("Binarizer", device), X, Y, cv=3, scoring="r2")
