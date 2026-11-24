@@ -194,12 +194,14 @@ def _kmeans(n_clusters=3):
     return cluster.KMeans(n_clusters=n_clusters, n_init=1, max_iter=20, random_state=0)
 
 
-@pytest.mark.parametrize("method", ["predict", "transform"])
+@pytest.mark.parametrize("method", ["predict"])
 def test_kmeans_fold_entries_match_host_path(method):
-    # Lane a8d (follow-up of a7d): KMeans fit and predict / transform of a
-    # resident fold run on the device fold entries (kmeans_fit_fold,
-    # kmeans_predict_fold, kmeans_transform_fold); the host-array path must
-    # give the same bytes.
+    # Lane a8d (follow-up of a7d): KMeans fit and predict of a resident fold
+    # run on the device fold entries; the host-array path must give the same
+    # bytes. (method='transform' left this test with 6d146415ae: scikit-learn's
+    # cross_val_predict takes only predict / predict_proba /
+    # predict_log_proba / decision_function, and both paths refuse it in its
+    # words: test_kmeans_fold_transform_is_sklearns_refusal.)
     x, _ = _data("reg")
     plan = _plan(type(_kmeans()))
     before = plan["device_rows"]
@@ -214,6 +216,24 @@ def test_kmeans_fold_entries_match_host_path(method):
     door = np.asarray(door)
     assert host.shape == door.shape
     assert host.tobytes() == door.tobytes(), method
+
+
+def test_kmeans_fold_transform_is_sklearns_refusal():
+    # scikit-learn 1.9 validates `method` before any fold (StrOptions); the
+    # host-array and the device-rows paths raise its words (6d146415ae,
+    # bindings/msel_cv_door.mojo msel_cross_val_predict).
+    x, _ = _data("reg")
+    plan = _plan(type(_kmeans()))
+    before = plan["device_rows"]
+    words = ("The 'method' parameter of cross_val_predict must be a str among "
+             "\\{'decision_function', 'predict', 'predict_log_proba', 'predict_proba'\\}. Got 'transform' instead.")
+    try:
+        for device_rows in (False, True):
+            plan["device_rows"] = device_rows
+            with pytest.raises(ValueError, match=words):
+                model_selection.cross_val_predict(_kmeans(), x, cv=5, method="transform")
+    finally:
+        plan["device_rows"] = before
 
 
 def test_kmeans_nan_fold_is_refused():
