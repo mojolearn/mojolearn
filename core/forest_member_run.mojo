@@ -234,6 +234,10 @@ struct ForestMemberSlot(Copyable, Movable, Defaultable):
     #: slot's own lock word for that one build
     var prepared: Int64
     var prepare_lock: Int64
+    #: the XF_CAPS word of the member's route image, resolved ONCE at the
+    #: state's admission (MEMBER_OP_NEW; lane vdf-scope-trees3); -1 when that
+    #: entry call failed (then each use asks the image, as before)
+    var caps: Int
 
     def __init__(out self):
         self.generation = 0
@@ -279,6 +283,7 @@ struct ForestMemberSlot(Copyable, Movable, Defaultable):
         self.release_op = 0
         self.prepared = 0
         self.prepare_lock = 0
+        self.caps = -1
 
 
 struct ForestMemberStore(Defaultable, Movable):
@@ -364,6 +369,7 @@ def _mint[name: StaticString](words: _F64P, count: Int) raises -> Int:
         _clear_oob(slot)
         slot[].snapshot = 0
         slot[].prepared = 0
+        slot[].caps = -1
         return slot[].generation * _INDEX_SPAN + index + 1
     finally:
         shared_slot_unlock(lock)
@@ -538,7 +544,7 @@ def _prepare(slot: _SlotPtr, key: EntryRef) raises:
     """The predict route of the fitted state on the image `key` (the
     estimator's own `ForestState` rule) and, off the sequential route, its
     snapshot, owned by the slot."""
-    var caps = xf_caps(key)
+    var caps = _slot_caps(slot, key)
     var state = ForestState(key, 0, caps, slot[].fast, slot[].groves, slot[].features, slot[].trees, slot[].outputs)
     slot[].key = key
     slot[].route = state.route
@@ -620,11 +626,39 @@ struct _FoldRows(Movable):
 def _dev_rows_route(call: MutPointer[MemberCall, MutUntrackedOrigin]) -> Bool:
     """The route's image keeps a device store, fits its rows and predicts
     them (XF_CAP_DEV_ROWS: the RandomForest and ExtraTrees GPU images). One
-    entry call."""
+    entry call: asked by MEMBER_OP_CAPABILITIES without a state (once per
+    member class) and at a state's admission (`_admit_caps`); a fit or a
+    prediction reads the slot's word (`_slot_dev_rows`)."""
     try:
         return (xf_caps(call[].route.entry) & XF_CAP_DEV_ROWS) != 0
     except:
         return False
+
+
+def _admit_caps(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin]):
+    """The route image's XF_CAPS word, resolved ONCE per member state at its
+    admission (MEMBER_OP_NEW; lane vdf-scope-trees3). Before, every predict,
+    predict_proba and score under a row index asked the image again
+    (`_scope_rows_route`), and every fit once more for the device scan."""
+    try:
+        slot[].caps = xf_caps(call[].route.entry)
+    except:
+        slot[].caps = -1
+
+
+def _slot_caps(slot: _SlotPtr, key: EntryRef) raises -> Int:
+    """The slot's admitted XF_CAPS word; an image that did not answer at
+    admission is asked now (its refusal raises here, as before)."""
+    if slot[].caps >= 0:
+        return slot[].caps
+    return xf_caps(key)
+
+
+def _slot_dev_rows(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin]) -> Bool:
+    """`_dev_rows_route` from the slot's admitted word (no entry call)."""
+    if slot[].caps >= 0:
+        return (slot[].caps & XF_CAP_DEV_ROWS) != 0
+    return _dev_rows_route(call)
 
 
 def _index_bad(index: Int, n: Int, base_rows: Int) -> Int:
@@ -713,7 +747,7 @@ def _fold_rows(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin],
     var fold = _FoldRows()
     fold.n = call[].row_index.rows
     fold.index = _row_numbers(call, estimator, fold.wide)
-    if call[].scope != MEMBER_SCOPE_NONE and call[].pin != 0 and _dev_rows_route(call):
+    if call[].scope != MEMBER_SCOPE_NONE and call[].pin != 0 and _slot_dev_rows(slot, call):
         fold.store_id = _scope_store_id(slot, call)
     return fold^
 
@@ -759,7 +793,7 @@ def _scope_rows_route(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedO
     """A prediction reads the fold's rows on the device: a resident scope
     with a pin, an image with a device store, and the state's resident
     snapshot route (the sequential and strict routes take a host X)."""
-    if call[].scope == MEMBER_SCOPE_NONE or call[].pin == 0 or not _dev_rows_route(call):
+    if call[].scope == MEMBER_SCOPE_NONE or call[].pin == 0 or not _slot_dev_rows(slot, call):
         return False
     _ensure_prepared(slot)
     return slot[].route != FOREST_ROUTE_SEQUENTIAL and slot[].route != FOREST_ROUTE_STRICT
@@ -922,7 +956,7 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
         request.session = fold.store_id
         handle = xf_fit_rows(key, slot[].classifier, request)
     else:
-        var device_scan = (xf_caps(key) & XF_CAP_DEVICE_SCAN) != 0
+        var device_scan = (_slot_caps(slot, key) & XF_CAP_DEVICE_SCAN) != 0
         handle = forest_fit_core(key, slot[].classifier, not column_major, request, device_scan)
     _ = len(codes)
     _ = len(x_cols)
@@ -1280,13 +1314,14 @@ def fm_member[name: StaticString, rf_layout: Bool, notices: Bool](operation: Int
         var weights = known[].classifier or known[].et or not known[].oob
         var mask = _capabilities(known[].classifier, known[].importances or len(known[].imp) > 0, weights,
                                  notices and not known[].et, known[].predict_only)
-        if not known[].predict_only and _dev_rows_route(call):
+        if not known[].predict_only and _slot_dev_rows(known, call):
             mask |= MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
         return mask
     if operation == MEMBER_OP_NEW:
         if not call[].params:
             raise Error("member ABI: a forest member needs its parameter words")
         call[].state = _mint[name](_F64P(unsafe_from_address=call[].params), call[].param_count)
+        _admit_caps(_SlotPtr(unsafe_from_address=_lookup[name](call[].state, False)), call)
         return 0
     if operation == MEMBER_OP_FREE:
         var held = _SlotPtr(unsafe_from_address=_lookup[name](call[].state, False))
