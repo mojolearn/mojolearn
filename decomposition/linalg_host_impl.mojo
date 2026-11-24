@@ -4,7 +4,9 @@
 oracle calls and result copies each door ran with the GIL released, moved
 here with no Python import (lane thin-core, 2026-10-21: a pure move, no bit
 change). The binding keeps the argument checks and calls one function."""
-from core.hostptr import read_f32, read_i8, read_i32, read_u16
+from core.hostptr import f32_ptr, read_f32, read_i8, read_i32, read_u16
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from cholesky.host.chol_oracle import (
     CholHostFactor,
     chol_host_potrf,
@@ -140,6 +142,45 @@ def svdvals_host_run(a: List[Float32], n_rows: Int, n_cols: Int, sp: MutPointer[
     for i in range(n_cols):
         sp.unsafe_store(i, s[i])
     _ = s^
+
+
+def read_f32_transposed(address: Int, rows: Int, cols: Int) raises -> List[Float32]:
+    """The `rows x cols` C-order float32 matrix at `address`, read as its
+    transpose (`cols x rows`, C order): data movement only."""
+    if rows * cols <= 0:
+        return List[Float32]()
+    var src = f32_ptr(address)
+    var out = List[Float32](unsafe_uninit_length=rows * cols)
+    var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(out.unsafe_ptr()))
+    var tasks = host_predict_task_count_work(rows, rows * cols)
+    var chunk = host_predict_chunk(rows, tasks)
+
+    def _part(t: Int) {imm src, imm dst, imm rows, imm cols, imm chunk}:
+        var lo = t * chunk
+        var hi = min(lo + chunk, rows)
+        for i in range(lo, hi):  # parallel: this task's source rows
+            for j in range(cols):
+                dst.unsafe_store(j * rows + i, src.unsafe_load(i * cols + j))
+
+    if tasks <= 1:
+        _part(0)
+    else:
+        host_parallelize(_part, tasks)
+    _ = out  # keep the list alive through the tasks above
+    return out^
+
+
+def svdvals_host_at_run(address: Int, n_rows: Int, n_cols: Int, wide: Bool,
+                        sp: MutPointer[Float32, MutUntrackedOrigin]) raises:
+    """The GIL-free body of the host image's `svdvals_binding` (lane
+    vdf-linalg2, 2026-11-24): the operand at `address` read once; `wide`:
+    it is the wide `n_cols x n_rows` matrix and its transpose is read (the
+    GPU image transposes on the device: decomposition/linalg_public_device.mojo
+    `device_svdvals_at`). Data movement only: the same words reach
+    `host_svdvals`, so the values are the same bits."""
+    var a = read_f32_transposed(address, n_cols, n_rows) if wide else read_f32(address, n_rows * n_cols)
+    svdvals_host_run(a, n_rows, n_cols, sp)
+    _ = a^
 
 
 def gemm_int15_host_run(cp: MutPointer[Float32, MutUntrackedOrigin], ah_address: Int, al_address: Int, ea_address: Int, bh_address: Int, bl_address: Int, eb_address: Int, m: Int, n: Int, k: Int) raises -> Int:

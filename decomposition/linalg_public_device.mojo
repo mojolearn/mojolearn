@@ -58,7 +58,7 @@ therefore be held against each other bit for bit; a silent fallback would
 turn a divergence into a pass.
 """
 
-from core.transfer import transfer_upload_list
+from core.transfer import transfer_upload_list, transfer_upload_ptr
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_decomp.cells import F32Ptr, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL
 from x_decomp.eigh_scale import enqueue_es_scale_rect, enqueue_es_unscale
@@ -73,7 +73,7 @@ comptime _DEVCTX_SLOT = "MojolearnLinalgContextIdenticalV3" if _DEVCTX_MODE == _
 from core.householder_qr import qr_factor, qr_slice_count
 from decomposition.linalg_types import _validate_shape
 from decomposition.spectrum_order_device import enqueue_svdvals_descending
-from decomposition.impl.linalg.detail.svd_full import svd_of_r
+from decomposition.impl.linalg.detail.svd_full import svd_of_r, _wide_transpose_kernel
 
 
 def _upload(
@@ -160,6 +160,61 @@ def device_svdvals(
     _validate_shape(n_rows, n_cols, "svdvals")
     var ctx = process_ctx[_DEVCTX_SLOT]()
     var da = _upload(ctx, a)
+    var s = device_svdvals_on(ctx, da, n_rows, n_cols)
+    _ = da^
+    ctx.synchronize()
+    _ = ctx^
+    return s^
+
+
+def device_svdvals_at(
+    address: Int, n_rows: Int, n_cols: Int, wide: Bool
+) raises -> List[Float32]:
+    """`device_svdvals` of the C-order float32 operand at `address` (host
+    memory the caller keeps alive), uploaded ONCE straight from there: no
+    host copy of the matrix (lane vdf-linalg2, 2026-11-24).
+
+    `wide`: the operand is the WIDE matrix `n_cols x n_rows` and the values
+    are those of its transpose (`n_rows x n_cols`, tall), which are exactly
+    its own. The transpose runs on the device after the one upload
+    (`_wide_transpose_kernel`, the kernel `pca_fit_full`'s wide arm runs).
+    Was: the door transposed on the x_decomp kit, downloaded the transpose
+    and handed it back here, which uploaded it again. Data movement only:
+    the factor reads the same words, so the values are the same bits."""
+    _validate_shape(n_rows, n_cols, "svdvals")
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var count = n_rows * n_cols
+    var da = transfer_upload_ptr[DType.float32](
+        ctx, MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address), count, max(count, 1)
+    )
+    if wide and count > 0:
+        var dt = ctx.enqueue_create_buffer[DType.float32](count)
+        # the operand is n_cols x n_rows; its transpose n_rows x n_cols
+        ctx.enqueue_function[_wide_transpose_kernel](
+            da.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dt.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n_cols), Int32(n_rows), grid_dim=((count + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+        )
+        var s = device_svdvals_on(ctx, dt, n_rows, n_cols)
+        _ = dt^
+        _ = da^
+        ctx.synchronize()
+        _ = ctx^
+        return s^
+    var s = device_svdvals_on(ctx, da, n_rows, n_cols)
+    _ = da^
+    ctx.synchronize()
+    _ = ctx^
+    return s^
+
+
+def device_svdvals_on(
+    ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], n_rows: Int, n_cols: Int
+) raises -> List[Float32]:
+    """The body of `device_svdvals` on a device-resident `n_rows x n_cols`
+    operand (`da` is destroyed: the range scale and the factor write it);
+    the values come back once, DESCENDING. Every buffer it makes is freed
+    and drained before return."""
+    _validate_shape(n_rows, n_cols, "svdvals")
     var scratch = ctx.enqueue_create_buffer[DType.float32](
         qr_slice_count(n_rows, n_cols) * n_cols * n_cols
     )
@@ -191,11 +246,9 @@ def device_svdvals(
     _ = dfac^
     _ = so^
     _ = spos^
-    _ = da^
     _ = scratch^
     _ = r_buf^
     _ = v_buf^
     _ = s_buf^
     ctx.synchronize()
-    _ = ctx^
     return s^

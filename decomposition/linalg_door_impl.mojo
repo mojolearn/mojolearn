@@ -10,6 +10,7 @@ from gemm.f16_widen import f16_bits_to_f32
 from decomposition.linalg_public_device import (
     device_qr_r,
     device_svdvals,
+    device_svdvals_at,
 )
 
 
@@ -77,5 +78,18 @@ def svdvals_device_into(
     """`device_svdvals(a, n_rows, n_cols)`, the n_cols values into sp."""
     var s = device_svdvals(a, n_rows, n_cols)
     for i in range(n_cols):
+        sp.unsafe_store(i, s[i])
+    _ = s^
+
+
+def svdvals_device_at_into(
+    address: Int, n_rows: Int, n_cols: Int, wide: Bool,
+    sp: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    """`device_svdvals_at`: the operand read in place at `address` (one
+    upload, no host copy; `wide`: transposed on the device first), the
+    n_cols values into sp."""
+    var s = device_svdvals_at(address, n_rows, n_cols, wide)
+    for i in range(n_cols):  # small-loop(the n_cols singular values into the caller's output)
         sp.unsafe_store(i, s[i])
     _ = s^

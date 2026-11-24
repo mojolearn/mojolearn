@@ -218,32 +218,19 @@ def lin_svdvals_of(a: AdmittedBuf, device: FunctionDevice, context: PythonObject
     """`svdvals` of an admitted operand."""
     var rows = a.dim(0)
     var cols = a.dim(1)
-    var buf = AdmittedBuf(a.keep, a.addr, a.shape.copy())
-    if rows < cols:
-        # the singular values of a wide A are those of A^T, exactly: the
-        # transpose is data movement
-        var kit = _lin_kit(_lin_xd(device, context))
-        try:
-            var t = 0
-            var py = Python()
-            with GILReleased(py):
-                var held = kit.borrow(a.addr, rows, cols)
-                t = kit.transpose(held)
-            _ = a  # keep the admitted owner alive through the RUN above
-            var moved = _lin_out(kit, t, context)
-            buf = AdmittedBuf(moved, Int(py=classical_address(moved)), [cols, rows])
-            _ = moved  # keep the Python object alive through the native call above
-        finally:
-            kit.close()
-        var swap = rows
-        rows = cols
-        cols = swap
-    var out = admitted_zeros([cols], "<f4", context)
+    # the singular values of a wide A are those of A^T, exactly: the linalg
+    # entry reads A once and transposes it itself (on the device in the GPU
+    # image, in its read in the host image; the `wide` word). Lane
+    # vdf-linalg2 (2026-11-24): was the x_decomp kit's device transpose,
+    # downloaded here and handed back to the entry, which uploaded it again.
+    var wide = rows < cols
+    var params = lin_ints(cols, rows, 1) if wide else lin_ints(rows, cols)
+    var n_values = rows if wide else cols
+    var out = admitted_zeros([n_values], "<f4", context)
     _ = family_call(neural_descriptor_entry(_lin_door(device, context), "svdvals"),
-                    Python.list(PythonObject(buf.addr), PythonObject(out.addr)), lin_ints(rows, cols))
+                    Python.list(PythonObject(a.addr), PythonObject(out.addr)), params)
     _ = out  # keep the Python object alive through the native call above
-    _ = buf  # keep the Python object alive through the native call above
-    _ = buf^
+    _ = a  # keep the admitted owner alive through the native call above
     return out.keep
 
 
