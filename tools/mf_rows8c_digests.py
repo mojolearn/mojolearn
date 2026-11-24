@@ -109,7 +109,9 @@ def _unit(name):
     warnings.simplefilter("ignore")
     import mojolearn as ml
     from mojolearn import model_selection as ms
-    if name.startswith("none_") or name.endswith("_ref"):
+    # none_gmm_x is a unit of its own below, not a _table key: test it before the generic none_ prefix
+    # (w3-integrate-5: KeyError 'gmm_x' on head and base, the tool printed nothing)
+    if (name.startswith("none_") and name != "none_gmm_x") or name.endswith("_ref"):
         key = name[5:] if name.startswith("none_") else name[:-4]
         X, (make, grid, y, ref) = _table(key)
         scoring = None if name.startswith("none_") else ref
