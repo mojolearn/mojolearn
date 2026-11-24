@@ -192,6 +192,15 @@ x_decomp table of the estimator's binding. NEW words:
     helper (default-mode) image's capability word (-1: the route's own image),
     [13] its ordered-LLE word, [14] its key; its entry is `route.second`
 Operations: fit (fit_output TRANSFORM = embedding_), transform of new rows.
+MDS (kind 18, lane mf-member8; fit and export only: the class has no
+transform, and no import) runs the same kit: words [1 .. 3] as above, then
+[4] metric code, [5] Minkowski power, [6] metric_mds (0 / 1), [7] the
+normalized-stress word (the door's `_norm`), [8] n_components, [9] init
+(MDS_INIT_CLASSICAL / MDS_INIT_RANDOM; an array init is a fit argument the
+member does not take), [10] n_init, [11] the Philox seed word, [12] max_iter,
+[13] eps (bindings/mani_decomp_native_door.mojo `_mds_fit`'s plan). Its
+matrices: dissimilarity_matrix_, embedding_; scalars [n, n_features_in_,
+n_components, stress_, then (rows, cols) per matrix, then n_iter_].
 Blocks: 0 scalars float64 [n, n_features_in_, n_components, Isomap
 n_connected_components_ / LLE reconstruction_error_, then (rows, cols) of
 every matrix], then float32 matrices: Isomap dist_matrix_m_, _k_col, _k_all,
@@ -248,7 +257,7 @@ from bindings.mani_kit_run import MRun, MImage, MFitted
 from core.cluster_member_words import member_words_byte_slots, member_words_take_text
 from bindings.mani_decomp_run import (
     IsoPlan, IsoState, iso_fit_run, iso_transform_run, LlePlan, lle_fit_run, lle_transform_run, LLE_HESSIAN,
-    LLE_MODIFIED,
+    LLE_MODIFIED, MdsPlan, mds_dissimilarity_run, mds_fit_run,
 )
 from bindings.dict_learning_run import (
     EncodeWords, Gram, DictWords, MiniBatchWords, SpcaFit, dl_split_sign, dl_encode_run, dl_inverse_run,
@@ -290,6 +299,8 @@ comptime XDECOMP_ISOMAP_PARAM_COUNT = 12  # plus the radius text's byte words (l
 comptime XDECOMP_KIND_LLE = 17
 comptime XDECOMP_LLE_PARAM_COUNT = 15    # [12 .. 14] the helper image (lane mf-nbr6)
 comptime XDECOMP_LLE_HELPER_WORD = 12
+comptime XDECOMP_KIND_MDS = 18           # lane mf-member8
+comptime XDECOMP_MDS_PARAM_COUNT = 14
 
 comptime XDECOMP_BLOCK_COMPONENTS = MEMBER_BLOCK_FAMILY
 comptime XDECOMP_BLOCK_SINGULAR = MEMBER_BLOCK_FAMILY + 1
@@ -425,7 +436,7 @@ def _is_spca(kind: Int) -> Bool:
 def _pooled(kind: Int) -> Bool:
     """Handles of this kind are x_decomp pool ids (XD_DEV_FREE)."""
     return (_is_rp(kind) or _is_kit(kind) or kind == XDECOMP_KIND_ENVELOPE or kind == XDECOMP_KIND_ISOMAP
-            or kind == XDECOMP_KIND_LLE)
+            or kind == XDECOMP_KIND_LLE or kind == XDECOMP_KIND_MDS)
 
 
 def _free_handles(entry: EntryRef, handles: List[Int], pool: Bool) raises:
@@ -523,6 +534,8 @@ def _kind_name(kind: Int) -> String:
         return String("Isomap")
     if kind == XDECOMP_KIND_LLE:
         return String("LocallyLinearEmbedding")
+    if kind == XDECOMP_KIND_MDS:
+        return String("MDS")
     return String("IncrementalPCA")
 
 
@@ -1967,17 +1980,24 @@ comptime _ISO_FITX = 8
 comptime _LLE_MATS = 2  # em, fit_x
 comptime _LLE_EM = 0
 comptime _LLE_FITX = 1
+comptime _MDS_MATS = 2  # lane mf-member8: dissimilarity_matrix_, embedding_
+comptime _MDS_DIS = 0
+comptime _MDS_EM = 1
 comptime _MANI_HEAD = 4  # [n, features, n_components, components (Isomap) / reconstruction_error (LLE)]
 comptime _MANI_ONE = 9
 comptime _MANI_HANDLES = 10
 
 
 def _is_mani(kind: Int) -> Bool:
-    return kind == XDECOMP_KIND_ISOMAP or kind == XDECOMP_KIND_LLE
+    return kind == XDECOMP_KIND_ISOMAP or kind == XDECOMP_KIND_LLE or kind == XDECOMP_KIND_MDS
 
 
 def _mani_count(slot: _Slot) -> Int:
-    return _ISO_MATS if slot[].kind() == XDECOMP_KIND_ISOMAP else _LLE_MATS
+    if slot[].kind() == XDECOMP_KIND_ISOMAP:
+        return _ISO_MATS
+    if slot[].kind() == XDECOMP_KIND_MDS:
+        return _MDS_MATS
+    return _LLE_MATS
 
 
 def _mani_ready(slot: _Slot):
@@ -2231,6 +2251,53 @@ def _fit_lle(slot: _Slot, call: _Call) raises:
         slot[].scalars[2] = Float64(width)
         slot[].scalars[3] = fit.reconstruction_error
         slot[].count = width
+        slot[].features = features
+        slot[].fitted = True
+        _mani_keep_one(slot, call, run)
+    finally:
+        run.close()
+
+
+def _fit_mds(slot: _Slot, call: _Call) raises:
+    """Lane mf-member8: bindings/mani_decomp_native_door.mojo `_mds_fit` over
+    the caller's X: the dissimilarities (`mds_dissimilarity_run`), then the
+    SMACOF starts (`mds_fit_run`) with the plan its UNPACK resolved (params
+    [4 .. 13]); fit_output TRANSFORM = fit_transform's embedding_. The
+    state keeps dissimilarity_matrix_ and embedding_ (n_iter_ is the last
+    scalar word)."""
+    var estimator = String("MDS")
+    _fit_mani_begin(slot, call, estimator)
+    var plan = MdsPlan()
+    plan.metric = Int(slot[].words[4])
+    plan.pw = slot[].words[5]
+    plan.metric_mds = slot[].words[6] != 0.0
+    plan.norm = slot[].words[7] != 0.0
+    plan.nc = Int(slot[].words[8])
+    plan.init = Int(slot[].words[9])
+    plan.restarts = Int(slot[].words[10])
+    plan.seed = Int(slot[].words[11])
+    plan.max_iter = Int(slot[].words[12])
+    plan.eps = slot[].words[13]
+    var run = MRun()
+    try:
+        var k = run.image(_mani_image(slot, call))
+        var m = _mani_x(call, run, k)
+        var rows = run.r(m)
+        var features = run.c(m)
+        var dis = mds_dissimilarity_run(run, k, m, plan)
+        var got = mds_fit_run(run, k, dis, plan)
+        var em = got[0]
+        var nc = run.c(em)
+        if call[].fit_output == MEMBER_OP_TRANSFORM:
+            _mani_out(call, run, em, estimator)
+        _mani_take(slot, call, run, dis, _MDS_DIS)
+        _mani_take(slot, call, run, em, _MDS_EM)
+        slot[].scalars[0] = Float64(rows)
+        slot[].scalars[1] = Float64(features)
+        slot[].scalars[2] = Float64(nc)
+        slot[].scalars[3] = got[1]
+        slot[].scalars.append(Float64(got[2]))
+        slot[].count = nc
         slot[].features = features
         slot[].fitted = True
         _mani_keep_one(slot, call, run)
@@ -2515,6 +2582,8 @@ def _outputs(call: _Call) raises:
                 member_unsupported("LatentDirichletAllocation", asked_first)
             call[].out_cols = Int(words[1])
             return
+        if kind == XDECOMP_KIND_MDS:
+            member_unsupported(_kind_name(kind), asked_first)
         if _is_mani(kind):
             if asked_first != MEMBER_OP_TRANSFORM:
                 member_unsupported(_kind_name(kind), asked_first)
@@ -2549,6 +2618,8 @@ def _outputs(call: _Call) raises:
             member_unsupported(_name(slot), asked)
         call[].out_cols = slot[].count if slot[].fitted else Int(slot[].words[1])
         return
+    if slot[].kind() == XDECOMP_KIND_MDS:
+        member_unsupported(_name(slot), asked)
     if _is_mani(slot[].kind()):
         if asked != MEMBER_OP_TRANSFORM:
             member_unsupported(_name(slot), asked)
@@ -2596,6 +2667,9 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
             return mask | MEMBER_CAN_SCORE | MEMBER_CAN_SCORE_SAMPLES
         if kind == XDECOMP_KIND_LDA:
             return mask | MEMBER_CAN_SCORE
+        if kind == XDECOMP_KIND_MDS:
+            # Lane mf-member8: fit and export only (no transform, no import).
+            return MEMBER_CAN_FIT | MEMBER_CAN_EXPORT
         if _is_mani(kind):
             # transform of new rows only (no inverse, no score); no
             # MEMBER_CAN_TEST_ROWS (see the Isomap / LLE section)
@@ -2655,6 +2729,9 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
         elif source[0] == Float64(XDECOMP_KIND_LLE):
             if call[].param_count != XDECOMP_LLE_PARAM_COUNT:
                 raise Error("member ABI: a LocallyLinearEmbedding member takes fifteen parameters")
+        elif source[0] == Float64(XDECOMP_KIND_MDS):
+            if call[].param_count != XDECOMP_MDS_PARAM_COUNT:
+                raise Error("member ABI: an MDS member takes fourteen parameters")
         else:
             raise Error("member ABI: unknown or unpublished XDecomp member kind")
         var words = List[Float64](length=call[].param_count, fill=0.0)
@@ -2694,6 +2771,8 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
             _fit_iso(slot, call)
         elif kind == XDECOMP_KIND_LLE:
             _fit_lle(slot, call)
+        elif kind == XDECOMP_KIND_MDS:
+            _fit_mds(slot, call)
         else:
             _fit_ipca(slot, call)
     elif kind == XDECOMP_KIND_ENVELOPE and (operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_DECISION
@@ -2705,6 +2784,9 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
     elif kind == XDECOMP_KIND_LDA and (operation == MEMBER_OP_TRANSFORM or operation == MEMBER_OP_SCORE):
         _query_lda(slot, call, _LDA_TRANSFORM if operation == MEMBER_OP_TRANSFORM else _LDA_SCORE)
     elif kind == XDECOMP_KIND_LDA and operation == MEMBER_OP_INVERSE_TRANSFORM:
+        member_unsupported(_name(slot), operation)
+    elif kind == XDECOMP_KIND_MDS and (operation == MEMBER_OP_TRANSFORM or operation == MEMBER_OP_INVERSE_TRANSFORM
+            or operation == MEMBER_OP_IMPORT):
         member_unsupported(_name(slot), operation)
     elif kind == XDECOMP_KIND_ISOMAP and operation == MEMBER_OP_TRANSFORM:
         _query_iso(slot, call)

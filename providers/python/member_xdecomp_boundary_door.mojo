@@ -67,12 +67,18 @@ from core.xdecomp_member import (
     XDECOMP_ENVELOPE_PARAM_COUNT, XDECOMP_KIND_LDA, XDECOMP_LDA_PARAM_COUNT, XDECOMP_KIND_ISOMAP,
     XDECOMP_ISOMAP_PARAM_COUNT, XDECOMP_KIND_LLE, XDECOMP_LLE_PARAM_COUNT, XDECOMP_ICA_PARAM_COUNT,
     XDECOMP_DL_INIT_WORD, XDECOMP_MBDL_INIT_WORD, XDECOMP_SPCA_INIT_WORD, XDECOMP_LLE_HELPER_WORD,
+    XDECOMP_KIND_MDS, XDECOMP_MDS_PARAM_COUNT,
 )
 from bindings.manifold_settings_native_door import ManifoldSettings
 from bindings.manifold_storage_native_unpack import ManifoldMatrix
 from bindings.operation_names_mani import MANI_OPN_FAMILY_MANI_ISO_FIT, MANI_OPN_FAMILY_MANI_LLE_FIT
+from bindings.operation_names_mani import MANI_OPN_FAMILY_MANI_MDS_FIT
 from bindings.mani_decomp_native_door import mani_iso_plan, mani_lle_plan
-from bindings.mani_kit_door import mk_image, mk_fitted, mk_keep
+from bindings.mani_decomp_native_door import _mani_metric, _mani_truth, _mani_eq, _mani_int, _mani_float, _mani_seed
+from bindings.mani_decomp_run import MDS_INIT_CLASSICAL, MDS_INIT_RANDOM
+from bindings.mani_keys_unpack import mani_keys
+from bindings.manifold_settings_native_door import mani_field
+from bindings.mani_kit_door import mk_image, mk_fitted, mk_keep, mk_seed_word
 from bindings.mani_kit_run import MRun, MImage
 from bindings.family_common_pack import family_array
 from bindings.metrics_native_support_door import metric_warn
@@ -337,6 +343,8 @@ def xdecomp_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
         return _iso_admit(model, fields, context, owner)
     if kind == XDECOMP_KIND_LLE:
         return _lle_admit(model, fields, context, owner)
+    if kind == XDECOMP_KIND_MDS:
+        return _mds_admit(model, fields, context, owner)
     raise Error("ValueError: mojolearn: XDecomp member kind " + String(kind) + " is not published")
 
 
@@ -387,6 +395,9 @@ def xdecomp_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
         return
     if plan.kind == XDECOMP_KIND_LLE:
         _lle_pack(model, fields, context, plan, state)
+        return
+    if plan.kind == XDECOMP_KIND_MDS:
+        _mds_pack(model, fields, context, plan, state)
         return
     if plan.kind != XDECOMP_KIND_IPCA:
         raise Error("ValueError: mojolearn: XDecomp member kind " + String(plan.kind) + " is not published")
@@ -480,6 +491,9 @@ def xdecomp_member_state(model: PythonObject, fields: PythonObject, context: Pyt
         return _iso_state(fields, context, plan)
     if plan.kind == XDECOMP_KIND_LLE:
         return _lle_state(fields, context, plan)
+    if plan.kind == XDECOMP_KIND_MDS:
+        # Lane mf-member8: a fitted MDS serves no member query (no transform).
+        raise Error("NotImplementedError: member ABI: an MDS member is fitted, not imported (MDS has no transform)")
     if plan.kind != XDECOMP_KIND_IPCA:
         raise Error("ValueError: mojolearn: XDecomp member kind " + String(plan.kind) + " is not published")
     var count = py_get(fields, "n_components_")
@@ -1265,6 +1279,72 @@ def _lle_admit(model: PythonObject, fields: PythonObject, context: PythonObject,
     words[11] = Float64(plan.seed)
     owner.plan.params = words^
     return True
+
+
+def _mds_admit(model: PythonObject, fields: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
+    # Lane mf-member8: `_mds_fit`'s settings in its order and words (metric,
+    # metric_mds, normalized_stress, n_components, random_state, init and
+    # n_init, max_iter, eps); X is the fit's. An `init` array is a fit
+    # argument (`MDS.fit(X, init=...)`), which this member does not take.
+    var settings = ManifoldSettings(model, MANI_OPN_FAMILY_MANI_MDS_FIT, context)
+    var values = settings.values
+    var nk = mani_keys()
+    var spec = _mani_metric(mani_field(values, nk[].k_metric, "metric"),
+                            mani_field(values, nk[].k_metric_params, "metric_params"), "MDS", context)
+    var words = List[Float64](length=XDECOMP_MDS_PARAM_COUNT, fill=0.0)
+    words[0] = Float64(XDECOMP_KIND_MDS)
+    _mani_route(model, fields, settings, -1, context, owner, words)
+    var metric_mds = _mani_truth(mani_field(values, nk[].k_metric_mds, "metric_mds"), context)
+    var normalized = mani_field(values, nk[].k_normalized_stress, "normalized_stress")
+    var norm = (normalized is PythonObject(True)) or (_mani_eq(normalized, "auto", context) and not metric_mds)
+    var nc = _mani_int(mani_field(values, nk[].k_n_components, "n_components"), context)
+    var seed = _mani_seed(mani_field(values, nk[].k_random_state, "random_state"))
+    var init = mani_field(values, nk[].k_init, "init")
+    var init_code = MDS_INIT_RANDOM
+    var restarts = 1
+    var seed_word = 0
+    if _mani_eq(init, "classical_mds", context):
+        init_code = MDS_INIT_CLASSICAL
+    elif _mani_eq(init, "random", context):
+        restarts = _mani_int(mani_field(values, nk[].k_n_init, "n_init"), context)
+        seed_word = mk_seed_word(seed)
+    else:
+        raise Error("init must be 'random', 'classical_mds' or an array")
+    words[4] = Float64(spec[0])
+    words[5] = spec[1]
+    words[6] = 1.0 if metric_mds else 0.0
+    words[7] = 1.0 if norm else 0.0
+    words[8] = Float64(nc)
+    words[9] = Float64(init_code)
+    words[10] = Float64(restarts)
+    words[11] = Float64(seed_word)
+    words[12] = Float64(_mani_int(mani_field(values, nk[].k_max_iter, "max_iter"), context))
+    words[13] = _mani_float(mani_field(values, nk[].k_eps, "eps"), context)
+    owner.plan.params = words^
+    return True
+
+
+def _mds_pack(model: PythonObject, fields: PythonObject, context: PythonObject, plan: MemberPlan,
+    state: Int) raises:
+    # Lane mf-member8: `_mds_fit`'s PACK, in its order. Matrix blocks: 0 the
+    # dissimilarities, 1 the embedding; scalars [n, features, n_components,
+    # stress_, shapes, n_iter_].
+    var call = MemberCall(plan.route, state)
+    var scalars_view = _export(plan, call, MEMBER_BLOCK_SCALARS)
+    var scalars = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=scalars_view.data)
+    var features = Int(scalars[1])
+    var stress = scalars[3]
+    var iterations = Int(scalars[scalars_view.cols - 1])
+    var settings = ManifoldSettings(model, MANI_OPN_FAMILY_MANI_MDS_FIT, context)
+    var dissimilarity = _mani_public(_export(plan, call, XDECOMP_BLOCK_COMPONENTS), context)
+    var embedding = _mani_public(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 1), context)
+    py_setitem(fields, "numeric_mode_", settings.mode)
+    py_setitem(fields, "dissimilarity_matrix_", dissimilarity)
+    py_setitem(fields, "_norm", PythonObject(plan.params[7] != 0.0))
+    py_setitem(fields, "stress_", PythonObject(stress))
+    py_setitem(fields, "n_iter_", PythonObject(iterations))
+    py_setitem(fields, "embedding_", embedding)
+    py_setitem(fields, "n_features_in_", PythonObject(features))
 
 
 def _mani_owner(view: MemberMatrix) raises -> PythonObject:

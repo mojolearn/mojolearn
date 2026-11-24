@@ -2822,6 +2822,9 @@ class MDS(_Base):
     # Takes `device=`: every image of an operation comes from the estimator's
     # binding route (bindings/mani_decomp_native_door.mojo `_mani_arguments`).
     _mojolearn_device = True
+    # A native member that fits and exports its embedding (core/xdecomp_member.mojo kind 18, lane mf-member8).
+    # No transform, no coef_ or feature_importances_.
+    _mojolearn_member = (32, 18)
 
     def __init__(self, n_components=2, *, metric_mds=True, n_init=1, init="random", max_iter=300, verbose=0,
                  eps=1e-6, n_jobs=None, random_state=None, metric="euclidean", metric_params=None,
