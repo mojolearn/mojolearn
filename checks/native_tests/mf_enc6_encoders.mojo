@@ -22,20 +22,24 @@ refusal is the encode door's words.
     'ignore' with drop='first' fit [0, 1, 2], transform [9] -> [0, 0] with [13, 0, 1]; 'ignore' without a drop
     keeps no notice; 'error' refuses ("found unknown categories in column(s) [0] during transform").
  4. the FAST image's packed category routes: OrdinalEncoder on CAT_FIT_PACK_SORT (2) and CAT_FIT_PACK_PRESENT (3)
-    gives the CAT_FIT_UNIQUE (0) state and codes ([5, 1, 5, 3, 1] -> [2, 0, 2, 1, 0]); route word 4 is refused at
-    MEMBER_OP_NEW ("category fit route").
+    gives the CAT_FIT_UNIQUE (0) state and codes ([5, 1, 5, 3, 1] -> [2, 0, 2, 1, 0]) on every image with ops
+    157-161 (x_prep/cat_cls2.mojo CAT_PACK_OPS: FAST + Apple and every IDENTICAL image, the host column included);
+    an image without them refuses 2 and 3 at MEMBER_OP_NEW; route word 4 is refused at MEMBER_OP_NEW ("category
+    fit route").
 
 FAIL-PROOF EDITS (each must make the named case fail): in core/prep_member.mojo `_given_state` append `lists[j]`
 instead of `cat_given_column(lists[j], j, who)` (case 0: [[3, 1]] is not refused); in `_fit_encoder` drop the
 `_infrequent_fit` call (case 1: transform [0, 0, 0, 1, 1, 2, 3]); in bindings/prep_encode_onehot_run.mojo
 `onehot_drop_index` drop the infrequent-category loop (case 2: drop=[2.0] is not refused); in core/prep_member.mojo
 `_transform_onehot` drop the `elif handle == PREP_ONEHOT_WARN ...` branch (case 3: no notice words); in
-`_prep_member` MEMBER_OP_NEW accept `source[1] > 3.0` (case 4: route 4 mints).
+`_prep_member` MEMBER_OP_NEW accept `source[1] > 3.0` (case 4: route 4 mints); in x_prep/units.mojo guard op 161
+by `CAT_CLS2_PACK` alone (case 4 on the host column: route 2 categories_ [0, 0, 0]).
 """
 from std.math import nan
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require
 from checks.native_tests.py2mojo_host_members import HostMember, MEMBER_PREP
+from x_prep.cat_cls2 import CAT_PACK_OPS
 from core.member_abi import MemberCall, MEMBER_OP_EXPORT, MEMBER_BLOCK_NOTICES, member_call
 
 comptime CASES = 5
@@ -271,6 +275,19 @@ def check_routes() raises:
     for route in range(4):  # small-loop(params: the four category fit routes)
         if route == 1:
             continue  # CAT_FIT_SCAN is the round-5 route, checked by prep_encoders
+        comptime if not CAT_PACK_OPS:
+            if route >= 2:
+                # an image without ops 157-161 refuses the packed route words at NEW (lane w3-fix-c)
+                var refused = String("")
+                try:
+                    var none_here = HostMember(MEMBER_PREP, ordinal_words(Float64(route), False, 0.0, False, -1.0,
+                                                                          0.0, 0.0, none.copy(), False))
+                    none_here.free()
+                except problem:
+                    refused = String(problem)
+                require(refused.find("no packed category fit route") >= 0,
+                        "route " + String(route) + " refusal: '" + refused + "'")
+                continue
         var member = HostMember(MEMBER_PREP, ordinal_words(Float64(route), False, 0.0, False, -1.0, 0.0, 0.0,
                                                            none.copy(), False))
         try:
