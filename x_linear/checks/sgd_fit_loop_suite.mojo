@@ -20,7 +20,7 @@ from x_linear.ops import FP
 from x_linear.dispatch import ALGO_SGD
 from x_linear.x_linear_host_impl import x_linear_fit_host
 from x_linear.ops_entry_device import xl_fit_device_run
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD
 from x_linear.sgd_loop_words import sgd_result_words, sgd_n_iter_word, sgd_fit_loop
 
 comptime _K = 3
@@ -55,8 +55,10 @@ def _fit_loop_case(n_classes: Int, loss: Int, lr: Int, batch: Int, name: String,
     var fp: List[Float32] = [Float32(1.0e-4), Float32(0.15), Float32(0.01), Float32(0.25), Float32(0.1), _TOL_NONE]
     var dims: List[Int] = [n, d, n * d, n, n_out, problems * (n + d + 1), problems * n, len(ip), len(fp)]
     if device:
-        _ = xl_fit_device_run(ALGO_SGD, Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), n, d, n * d, n, n_out,
-                              dims[5], dims[6], ip, fp, Int(res.unsafe_ptr()))
+        # the host column's build never elaborates the device fit (its target is a GPU)
+        comptime if not CPU_COLUMN_BUILD:
+            _ = xl_fit_device_run(ALGO_SGD, Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), n, d, n * d, n, n_out,
+                                  dims[5], dims[6], ip, fp, Int(res.unsafe_ptr()))
     else:
         _ = x_linear_fit_host(ALGO_SGD, Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), dims, ip, fp, Int(res.unsafe_ptr()))
     var words = FP(unsafe_from_address=Int(res.unsafe_ptr()))

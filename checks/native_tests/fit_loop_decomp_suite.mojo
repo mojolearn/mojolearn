@@ -59,9 +59,11 @@ def _nmf(solver: Int, device: Bool) raises:
     var tol = 0.0 if solver == 1 else -1.0
     var args = NmfArgs(2.0, True, K, tol, 0.0, 0.0, 0.0, 0.0, False, 7)
     var loop = FitLoop.empty()
-    var it: Int
+    var it = -1
     if device:
-        it = nmf_solve_dev_run(_p(x), _p(w), _p(h), 6, 3, 2, solver, args, loop)
+        # the host column's build never elaborates a device fit
+        comptime if not CPU_COLUMN_BUILD:
+            it = nmf_solve_dev_run(_p(x), _p(w), _p(h), 6, 3, 2, solver, args, loop)
     else:
         it = nmf_solve_run[HostExec](_p(x), _p(w), _p(h), 6, 3, 2, solver, args, loop)
     _ = x^
@@ -75,10 +77,12 @@ def _ica(algorithm: Int, device: Bool) raises:
     var x1: List[Float32] = [1.0, -0.5, 0.25, -1.0, 0.5, -0.25, 0.3, 0.9, -1.1, 0.2, -0.4, 0.1]
     var w: List[Float32] = [0.8, 0.6, -0.6, 0.8]
     var loop = FitLoop.empty()
-    var it: Int
+    var it = -1
     # tol 0: the limit is never below it, every iteration runs
     if device:
-        it = ica_solve_dev_run(_p(x1), _p(w), 2, 2, 6, algorithm, 0, K, 1.0, 0.0, loop)
+        # the host column's build never elaborates a device fit
+        comptime if not CPU_COLUMN_BUILD:
+            it = ica_solve_dev_run(_p(x1), _p(w), 2, 2, 6, algorithm, 0, K, 1.0, 0.0, loop)
     else:
         it = ica_solve_run[HostExec](_p(x1), _p(w), 2, 2, 6, algorithm, 0, K, 1.0, 0.0, loop)
     _ = x1^
@@ -96,9 +100,11 @@ def _fa(device: Bool) raises:
     # tol -inf: the log-likelihood gain is never below it
     var args = FaArgs(6, 3, 1, K, -inf[DType.float64](), 0.0)
     var loop = FitLoop.empty()
-    var it: Int
+    var it = -1
     if device:
-        it = fa_em_main_dev_run(_p(a), _p(psi), _p(w), pl, 6, args, loop)
+        # the host column's build never elaborates a device fit
+        comptime if not CPU_COLUMN_BUILD:
+            it = fa_em_main_dev_run(_p(a), _p(psi), _p(w), pl, 6, args, loop)
     else:
         it = fa_em_main_run[HostExec](_p(a), _p(psi), _p(w), pl, 6, args, loop)
     _ = a^
@@ -118,7 +124,9 @@ def _als(use_cg: Bool, device: Bool) raises:
     var args = AlsArgs(K, use_cg, 3, False, 0.01)
     var loop = FitLoop.empty()
     if device:
-        _ = als_fit_dev_run(_p(c), _p(x), _p(y), pl, 6, 3, 2, args, loop)
+        # the host column's build never elaborates a device fit
+        comptime if not CPU_COLUMN_BUILD:
+            _ = als_fit_dev_run(_p(c), _p(x), _p(y), pl, 6, 3, 2, args, loop)
     else:
         _ = als_fit_run[HostExec](_p(c), _p(x), _p(y), pl, 6, 3, 2, args, loop)
     _ = c^
