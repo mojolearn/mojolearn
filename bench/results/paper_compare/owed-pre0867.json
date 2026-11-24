@@ -1020,8 +1020,9 @@
   },
   "sgd-ps-preload": {
    "define": "MOJOLEARN_SGD_FAST_PS_PRELOAD",
-   "status": "define in code (x_linear/device.mojo SGD_FAST_PS_PRELOAD, `_sgd_ps_warp_body`, `_spw_row`), lane sp-online-linear 2026-11-20: B = the per-sample warp kernel issues sample r + 1's loads (its row block, label, PA norm, sample weight, and the order word of r + 2) while sample r computes, the form 0.8.25 ran (6cdbd32abe); A = today's kernel, which reads each sample's words when the sample starts (the old order of loads). Opt-in, default off; same words in the same statements, so digests must equal A's. Binding to build: _mojolearn_x_linear",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-trees): SPLIT judged inherent (L40S 16 cells, median 1.01; istella fits 0.87..0.92, taxi fits 1.10..1.15 slower): the register double buffer (2 x MB_DBLK = 32 words a lane) is a fixed per-sample cost that only a row missing to device memory repays; no width rule (Andrew, 2026-11-24); A (the plain loads) is unchanged; the define is refused (core/experiment_guards_linear.mojo); code recoverable at 2a10031298, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SGD_FAST_PS_PRELOAD.ab-outcome-3.patch. Was: define in code (x_linear/device.mojo SGD_FAST_PS_PRELOAD, `_sgd_ps_warp_body`, `_spw_row`), lane sp-online-linear 2026-11-20: B = the per-sample warp kernel issues sample r + 1's loads (its row block, label, PA norm, sample weight, and the order word of r + 2) while sample r computes, the form 0.8.25 ran (6cdbd32abe); A = today's kernel, which reads each sample's words when the sample starts (the old order of loads). Opt-in, default off; same words in the same statements, so digests must equal A's. Binding to build: _mojolearn_x_linear",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "dbscan-brute-eps-filter": {
    "define": "MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER",
@@ -6062,12 +6063,14 @@
    "b_arms": [
     "sgd-ps-preload"
    ],
-   "owed": "RUN",
+   "owed": "DECIDED",
    "columns": [
     "time",
     "quality"
    ],
-   "decides": "promote B (the preload) to the default unless it is slower than A on the NVIDIA L40S (same box, same job); both arms' quality beside every time; digests must not move between the arms (the same loads' words in the same statements: a difference is a bug in the arm, not a bits change). On promotion the old order of loads is deleted with the four tombstone parts. The eight rows: the four lanes on taxi and istella, batch_size=0 (the per-sample fit) as the board races them"
+   "decides": "promote B (the preload) to the default unless it is slower than A on the NVIDIA L40S (same box, same job); both arms' quality beside every time; digests must not move between the arms (the same loads' words in the same statements: a difference is a bug in the arm, not a bits change). On promotion the old order of loads is deleted with the four tombstone parts. The eight rows: the four lanes on taxi and istella, batch_size=0 (the per-sample fit) as the board races them",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-trees): sgd-ps-preload SPLIT (L40S 16 cells, median 1.01; istella 0.87..0.92, taxi 1.10..1.15 slower), judged inherent; B deleted, A kept.",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "mcd-wide-lockstep",
@@ -6357,7 +6360,10 @@
      "note": "the year width (three column blocks), the regressor, Gaussian rows"
     }
    ],
-   "decides": "the same verdict as sgd-ps-preload-board on shapes no board row has; coef_sha256 must be equal on both arms case by case"
+   "decides": "the same verdict as sgd-ps-preload-board on shapes no board row has; coef_sha256 must be equal on both arms case by case",
+   "owed": "DECIDED",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-trees): not run; the arm it would time is deleted (sgd-ps-preload SPLIT, inherent). The driver case online_linear_shapes stays for later arms.",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   }
  ]
 }
