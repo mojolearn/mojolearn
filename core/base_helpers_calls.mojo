@@ -17,7 +17,7 @@ releases it around the call.
 from std.memory import bitcast
 from core.base_entry_table import (
     BaseEntryKey, base_table_entry, BASE_HELPERS_ABI, BH_OP_COUNT, BH_STAT_WORDS,
-    BH_CHECK_INDICES_I64, BH_BINCOUNT_I64, BH_REDUCE_STAT, BH_EQUAL_ELEMENTS, BH_BINCOUNT2_I32,
+    BH_CHECK_INDICES_I64, BH_BINCOUNT_I64, BH_REDUCE_STAT, BH_EQUAL_ELEMENTS,
     BH_ROW_MEANS_F64, BH_ASSIGN_FOLD_I64, BH_COUNT_FOLD_HITS_I64, BH_MARK_SPLIT_ROLES_F32, BH_GATHER_ROWS_BYTES,
 )
 from core.hotpath_impl import HpStat
@@ -79,13 +79,6 @@ def base_equal_elements(entry: EntryRef, a: Int, b: Int, code: Int, n: Int, dst:
     var addrs: Array[Int, 3] = [a, b, dst]
     var ints: Array[Int, 2] = [code, n]
     return base_helper(entry, BH_EQUAL_ELEMENTS, addrs, ints)
-
-
-def base_bincount2_i32(entry: EntryRef, a: Int, b: Int, n: Int, ka: Int, kb: Int, counts: Int) raises -> Int:
-    """int64 counts[b * ka + a] over the n rows of two int32 code columns."""
-    var addrs: Array[Int, 3] = [a, b, counts]
-    var ints: Array[Int, 3] = [n, ka, kb]
-    return base_helper(entry, BH_BINCOUNT2_I32, addrs, ints)
 
 
 def base_row_means_f64(entry: EntryRef, src: Int, rows: Int, cols: Int, dst: Int) raises -> Int:

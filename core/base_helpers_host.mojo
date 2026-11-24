@@ -21,12 +21,12 @@ from core.array_helpers_impl import row_means_f64
 from core.base_entry_table import (
     BaseEntryKey, base_table_publish, base_check_spans, base_word, base_entry_vendor,
     BASE_HELPERS_ABI, BH_OP_COUNT,
-    BH_CHECK_INDICES_I64, BH_BINCOUNT_I64, BH_REDUCE_STAT, BH_EQUAL_ELEMENTS, BH_BINCOUNT2_I32,
+    BH_CHECK_INDICES_I64, BH_BINCOUNT_I64, BH_REDUCE_STAT, BH_EQUAL_ELEMENTS,
     BH_ROW_MEANS_F64, BH_ASSIGN_FOLD_I64, BH_COUNT_FOLD_HITS_I64, BH_MARK_SPLIT_ROLES_F32, BH_GATHER_ROWS_BYTES,
 )
 from core.hotpath_impl import HpStat, check_indices_i64, equal_elements, reduce_stat
 from core.hotpath_impl_rows import (
-    assign_fold_i64, bincount2_i32, bincount_i64, count_fold_hits_i64, mark_split_roles_f32,
+    assign_fold_i64, bincount_i64, count_fold_hits_i64, mark_split_roles_f32,
 )
 from core.host_helpers_impl import gather_rows_bytes
 from core.native_descriptor_abi import NativeDescriptorError
@@ -46,16 +46,6 @@ def base_stat_store(stat: HpStat, out_addr: Int) raises -> Int:
     out[3] = Int64(stat.mid)
     out[4] = Int64(stat.low)
     return stat.kind
-
-
-def bincount2_i32_host_run(a: Int, b: Int, count: Int, ka: Int, kb: Int, ca: Int) raises -> Int:
-    """`bincount2_i32` on the host: dims [n, ka, kb], int64
-    counts[b * ka + a]; raises when a code is outside [0, ka) x [0, kb)."""
-    if ca == 0:
-        raise Error("bincount2_i32: null counts address")
-    if count > 0 and (a == 0 or b == 0):
-        raise Error("bincount2_i32: null code address")
-    return bincount2_i32(a, b, count, ka, kb, ca)
 
 
 def row_means_f64_run(src: Int, rows: Int, cols: Int, dst: Int) raises -> Int:
@@ -82,9 +72,6 @@ def base_helpers_host_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     if op == BH_EQUAL_ELEMENTS:
         return equal_elements(base_word(aa, 0), base_word(aa, 1), base_word(pp, 0), base_word(pp, 1),
                               base_word(aa, 2))
-    if op == BH_BINCOUNT2_I32:
-        return bincount2_i32_host_run(base_word(aa, 0), base_word(aa, 1), base_word(pp, 0), base_word(pp, 1),
-                                      base_word(pp, 2), base_word(aa, 2))
     if op == BH_ROW_MEANS_F64:
         return row_means_f64_run(base_word(aa, 0), base_word(pp, 0), base_word(pp, 1), base_word(aa, 1))
     if op == BH_ASSIGN_FOLD_I64:
