@@ -47,10 +47,15 @@ struct BpeHandle(Movable, Writable):
 
     var tok: Optional[BpeTokenizer]
     var max_token_bytes: Int
+    # True for a public BpeTokenizer built with device='gpu' (lane
+    # vdf-parallel): its operations without a fast arm refuse instead of
+    # running this host table.
+    var gpu_only: Bool
 
     def __init__(out self):
         self.tok = Optional[BpeTokenizer]()
         self.max_token_bytes = 0
+        self.gpu_only = False
 
     # Both spelled out: `add_type` derives whichever is missing by
     # reflection over the fields, and `Optional[BpeTokenizer]` is not
