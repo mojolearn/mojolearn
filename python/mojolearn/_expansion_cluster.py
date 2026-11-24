@@ -246,6 +246,10 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
         Number of mini-batch steps run.
     n_iter_ : int
         Number of passes over the data.
+    fit_loop_ : tuple of (int, float)
+        The number of iterations the last fit ran (mini-batch steps, as
+        `n_steps_`) and the time in milliseconds its iteration loop took,
+        from the start of the first step to the end of the last.
     n_features_in_ : int
         Number of features seen in `fit`.
 
