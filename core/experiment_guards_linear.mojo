@@ -371,6 +371,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_SGD_LOOP_CHECK_EVERY (arm sgd-check-1 NOISE: 22 cells median 1.00, 0.97..1.11) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SGD_LOOP_CHECK_EVERY.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_SGD_LOOP_CHECK_EVERY"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): the pinned SGD read interval (sgd-check-1: a read after every epoch) was noise against the launch rule: 22 cells (pa-clf, pa-reg, perceptron, sgd-clf, sgd-reg istella / taxi full, sgd-clf taxi 300000), median 1.00, 0.97..1.11 (the 1.11 a 0.77 ms infer); sgd_loop_check_every's rule is the only form; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SGD_LOOP_CHECK_EVERY.ab-outcome-2.patch"
+    # TOMBSTONE: MOJOLEARN_PREP_FAST_TAKE_VIEW_ALL (NOISE: 12 cells median 1.00, 0.92..1.04) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_PREP_FAST_TAKE_VIEW_ALL.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_PREP_FAST_TAKE_VIEW_ALL"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): label program outputs returned as views from 16384 words (instead of 2^20) were noise: 12 cells (label-binarizer, label-encoder, onehot on istella and taxi full, fit and infer), median 1.00, 0.92..1.04; the 2^20-word view threshold is the only form; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_PREP_FAST_TAKE_VIEW_ALL.ab-outcome-2.patch"
     # ---- end lane ab-outcome-2
     return True
 

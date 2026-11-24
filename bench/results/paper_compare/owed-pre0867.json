@@ -1071,8 +1071,9 @@
   },
   "prep-take-view-all": {
    "define": "MOJOLEARN_PREP_FAST_TAKE_VIEW_ALL",
-   "status": "define in code (bindings/prep_labels_native_door.mojo TAKE_VIEW_MIN_WORDS, EXP:4483): B = a mapped label program output of 16,384+ words returned as a view of the arena mapping; A = the default 2^20-word threshold. Same bytes: digests must equal A",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2): NOISE (L40S 12 cells, median 1.00, 0.92..1.04); A (the 2^20-word threshold, the default) is unchanged; removed: the 16384-word view threshold; the define is refused (core/experiment_guards_linear.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_PREP_FAST_TAKE_VIEW_ALL.ab-outcome-2.patch. Was: define in code (bindings/prep_labels_native_door.mojo TAKE_VIEW_MIN_WORDS, EXP:4483): B = a mapped label program output of 16,384+ words returned as a view of the arena mapping; A = the default 2^20-word threshold. Same bytes: digests must equal A",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "calib-fast-host-folds": {
    "define": "MOJOLEARN_CALIB_FAST_HOST_FOLDS",
@@ -6260,7 +6261,7 @@
    "b_arms": [
     "prep-take-view-all"
    ],
-   "owed": "RUN",
+   "owed": "DECIDED",
    "columns": [
     "time",
     "quality"

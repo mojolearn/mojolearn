@@ -22,7 +22,6 @@
 # list-route fit of numeric labels runs the encode owner's typed category
 # fit over program-owned label words (`_fit_category_words`).
 from std.python import Python, PythonObject
-from std.sys.compile import is_defined
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_array_storage_door import native_array_zeros, native_array_empty, native_array_from_bytes, native_array_unfilled
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains, py_setattr
@@ -78,11 +77,10 @@ comptime LABEL_WORDS_MAX = 1073741824
 # result never pins a large arena). The arena is a lazily mapped anonymous
 # mapping and the inputs of 2^20+ words go up direct from the caller's buffer
 # (never touching it), so the pages a view retains are mostly the downloaded
-# output itself. MOJOLEARN_PREP_FAST_TAKE_VIEW_ALL (fb12-rows, 2026-11-17,
-# opt-in, A/B owed in docs/apple-fast/EXPERIMENTS.md) views from 16384 words
-# (64 KiB, where a fresh store and its copy cost about the view's fixed
-# attribute setup), e.g. LabelEncoder.fit_transform's n int32 codes below 2^20.
-comptime TAKE_VIEW_MIN_WORDS = 16384 if is_defined["MOJOLEARN_PREP_FAST_TAKE_VIEW_ALL"]() else 1048576
+# output itself.
+# TOMBSTONE: MOJOLEARN_PREP_FAST_TAKE_VIEW_ALL (NOISE: views from 16384 words, 12 cells median 1.00, 0.92..1.04; A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_PREP_FAST_TAKE_VIEW_ALL.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+comptime TAKE_VIEW_MIN_WORDS = 1048576
 
 comptime MULTILABEL = "multilabel-indicator"
 comptime REFUSE_MULTIOUTPUT = "mojolearn: Multioutput target data is not supported with label binarization"
