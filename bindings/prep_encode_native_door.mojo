@@ -1165,10 +1165,10 @@ def encode_min_frequency(min_frequency: PythonObject, context: PythonObject) rai
     """UNPACK of a checked `min_frequency` (`_check_infrequent_params`) as
     its (CAT_MF_*, value) words for `cat_infrequent_threshold`."""
     if min_frequency is None:
-        return (CAT_MF_NONE, 0.0)
+        return (Int(CAT_MF_NONE), Float64(0.0))
     if _integral(min_frequency, context):
-        return (CAT_MF_COUNT, Float64(Int(py=py_call(native_loaded_module("builtins").int, min_frequency))))
-    return (CAT_MF_FRACTION, _float(min_frequency))
+        return (Int(CAT_MF_COUNT), Float64(Int(py=py_call(native_loaded_module("builtins").int, min_frequency))))
+    return (Int(CAT_MF_FRACTION), _float(min_frequency))
 
 
 struct EncodeDropGiven(Movable):
