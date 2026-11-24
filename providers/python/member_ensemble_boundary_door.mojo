@@ -20,14 +20,26 @@ the candidates and their clones are read once per admission and kept by
 the search's identity, `_search_prepare`) and MultiOutputClassifier /
 MultiOutputRegressor (THE MULTI-OUTPUT KIND, (39, 12) / (39, 13):
 `_admit_multi` / `_multi_pack` / `_multi_state`). RandomTreesEmbedding
-carries no mark and keeps its door. A unit kind answers False, and its door keeps the estimator, for:
-a OneVsRest base whose kind lacks the scores its predict reads; a
-Calibrated cv that is a splitter of ours other than KFold / StratifiedKFold
-(since lane mf-split4b an index list and our KFold / StratifiedKFold are
-the kind's, as for a stack) or a base that takes the resident DeviceRows
-route (a measured winner); a
-Bagging base that is not a tree, forest or extra-trees member, or one that
-names another device. A Bagging configuration that may take the batched
+carries no mark (lane mf-door7: it is a transformer; no META kind holds
+one, since every kind here needs a predictor and scikit-learn's own fit of
+Voting, Stacking, Bagging, AdaBoost, OneVsRest, Calibrated, MultiOutput
+and a search with no `score` fails on it, and the one meta that holds a
+transformer, Pipeline, has no member entry:
+providers/python/member_pipeline_boundary_door.mojo). A unit kind answers
+False, and its door keeps the estimator, for: a OneVsRest base whose kind
+lacks the scores its predict reads; a Bagging base that is not a tree,
+forest or extra-trees member, or one that names another device. A
+Calibrated base that takes the resident DeviceRows route is the kind's
+since lane mf-door7 (the route, a measured winner, is
+CalibratedClassifierCV's own public fit's and never reaches this
+admission).
+
+A SERVING ADMISSION (lane mf-door7, `MemberOwner.serving`: a caller that
+only predicts on fitted state, `member_admit_serving` without
+MEMBER_CAN_FIT, and every nested admission of a META import) reads no
+setting only a fit reads: a Stacking or Calibrated cv (a user's splitter
+object too), a search's scorers, cv and candidates (`_admit_search_serving`:
+its fitted best), and a MultiOutputRegressor over Ridge is the kind. A Bagging configuration that may take the batched
 forest route (a measured winner, decided per fit by the weights and X's
 shape) is admitted with that forest as its second plan (lane mf-meta3c,
 `_batched_forest`); the kind takes the route per fit as the door does.
