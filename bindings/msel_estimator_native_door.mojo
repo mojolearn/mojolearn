@@ -684,11 +684,53 @@ def msel_native_clone(model: PythonObject, context: PythonObject, depth: Int = 0
 
 def msel_native_set_params(model: PythonObject, params: PythonObject,
                            context: PythonObject) raises -> PythonObject:
+    """`set_params(**params)`. LANE w3f5-b: a nested key `<name>__<sub>` of a
+    plan without a set_params recipe (the exact-constructor and native-
+    initializer plans: MultiOutputClassifier, the member-only metas) sets
+    `<sub>` on the estimator stored under `<name>`, after the direct keys, as
+    scikit-learn's BaseEstimator.set_params orders them (was: "invalid native
+    estimator parameter estimator__n_neighbors" for a search's candidate).
+    One work list over the nested estimators (model structure), no recursion."""
+    var b = native_loaded_module("builtins")
+    # The work list exists only once a nested key is met (None: no allocation
+    # on the common call, a candidate's own keys).
+    var targets = PythonObject(None)
+    var groups = PythonObject(None)
+    _msel_set_params_one(model, params, context, targets, groups)
+    var i = 0
+    while targets is not None and i < len(targets):  # driver-loop: over the nested estimators named (model structure)
+        var target = _msel_nested_estimator(targets[i][0], targets[i][1], context, b)
+        _msel_set_params_one(target, groups[i], context, targets, groups)
+        i += 1
+    return model
+
+
+def _msel_nested_estimator(owner: PythonObject, name: PythonObject, context: PythonObject,
+                           b: PythonObject) raises -> PythonObject:
+    """The estimator `owner` stores under the parameter `name` (after its
+    direct keys were set), the target of its `<name>__<sub>` keys; a value
+    that is no connected Mojolearn estimator is refused in the setter's words."""
+    var plan = msel_estimator_plan(owner, context)
+    var fields = py_call(plan["fields_get"], owner, py_type(owner))
+    var held = py_get(fields, name)
+    if held is None or py_type(py_type(held)) is not b.type or not py_contains(context["family_msel_estimators"],
+                                                                              py_type(held)):
+        raise Error("ValueError: invalid native estimator parameter " + String(py=name) + "__")
+    return held
+
+
+def _msel_set_params_one(model: PythonObject, params_in: PythonObject, context: PythonObject,
+                         mut targets: PythonObject, mut groups: PythonObject) raises:
+    """One estimator's keys of `msel_native_set_params`: its direct keys set
+    here; its nested keys, grouped by the parameter they name, appended to
+    the work list (`targets` gets (model, name), `groups` the sub-keys;
+    made on the first nested key)."""
     # Generation word (bindings/py_model_records.mojo, lane ne1-e-records):
     # every stamped record of this object misses from here on.
     _ = bump_model_generation(model)
     var b = native_loaded_module("builtins")
     var plan = msel_estimator_plan(model, context)
+    var params = params_in
     if py_type(params) is not b.dict:
         raise Error("TypeError: native estimator parameters require a native dict")
     var keys = py_call(b.list, params.keys())
@@ -697,7 +739,41 @@ def msel_native_set_params(model: PythonObject, params: PythonObject,
             raise Error("TypeError: native estimator parameter names must be exact strings")
         sequential_admit_value(params[keys[k]], context)
     if len(keys) == 0:
-        return model
+        return
+    var sep = PythonObject("__")
+    var any_nested = False
+    for k in range(len(keys)):  # driver-loop: over the given keys (str.__contains__, no allocation)
+        any_nested = any_nested or py_contains(keys[k], sep)
+    if any_nested and plan["forest"] is None and not py_contains(plan["methods"], PythonObject("set_params")):
+        # LANE w3f5-b: the nested keys, by the parameter they name (a plan with
+        # a set_params recipe, and a forest, take them in their own setter).
+        var direct = Python.dict()
+        var nested = Python.dict()
+        for k in range(len(keys)):  # driver-loop: over the given keys (nested ones grouped by their estimator)
+            var parts = py_call(keys[k].partition, sep)
+            if String(py=parts[1]).byte_length() == 0:
+                py_setitem(direct, keys[k], params[keys[k]])
+                continue
+            var head = parts[0]
+            if not py_contains(plan["parameters"], head):
+                raise Error("ValueError: invalid native estimator parameter " + String(py=keys[k]))
+            var group = py_get(nested, head)
+            if group is None:
+                group = Python.dict()
+                py_setitem(nested, head, group)
+            py_setitem(group, parts[2], params[keys[k]])
+        if len(nested) > 0:
+            if targets is None:
+                targets = Python.list()
+                groups = Python.list()
+            var heads = py_call(b.list, nested.keys())
+            for h in range(len(heads)):  # driver-loop: over the nested estimators named (model structure)
+                _ = py_call(targets.append, Python.tuple(model, heads[h]))
+                _ = py_call(groups.append, nested[heads[h]])
+            params = direct
+            keys = py_call(b.list, params.keys())
+            if len(keys) == 0:
+                return
     if plan["init"] is None and plan["forest"] is None and not py_contains(plan["methods"], PythonObject("set_params")):
         # These exact constructors only assign their stored parameter schema.
         # Native search can reset them without a Python ParamsMixin call.
@@ -715,7 +791,7 @@ def msel_native_set_params(model: PythonObject, params: PythonObject,
         var fixed = py_get(plan, "initial_fields")
         if fixed is not None:
             _ = py_call(fields.update, msel_clone_parameter(fixed, context))
-        return model
+        return
     if plan["forest"] is None and not py_contains(plan["methods"], PythonObject("set_params")):
         # A NATIVE INITIALIZER without a set_params recipe (KernelDensity,
         # ARIMA, Cholesky; a member-only plan with a native constructor, the
@@ -746,9 +822,10 @@ def msel_native_set_params(model: PythonObject, params: PythonObject,
         _ = py_call(fields.clear)
         # call-table: member estimator constructor (family door over the Python model) has no native entry yet
         _ = family_call(entry, model, plan["init"], py_call(b.tuple, args), plan["context"])
-        return model
+        return
     if plan["forest"] is None:
-        return msel_estimator_call(model, "set_params", Python.tuple(params), context)
+        _ = msel_estimator_call(model, "set_params", Python.tuple(params), context)
+        return
     # call-table: member forest get_params (trees door over the Python model) has no native entry yet
     var values = family_call(plan["entry"], model, "trees_forest_get_params", Python.tuple(), plan["context"])
     var unknown = Python.list()
@@ -763,4 +840,3 @@ def msel_native_set_params(model: PythonObject, params: PythonObject,
     _ = py_call(fields.clear)
     _ = py_call(fields.update, values)
     py_setitem(fields, "_has_constructor_parameters", PythonObject(True))
-    return model
