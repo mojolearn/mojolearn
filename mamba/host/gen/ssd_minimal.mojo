@@ -395,7 +395,8 @@ comptime M2_CS_IC = 32
 # (mamba2-forward, NVIDIA L40S A/B owed). The MOJOLEARN_IDN_ALL_OFF term is not restored (that define stays deleted).
 # ===========================================================================
 # lane nv-occupancy (2026-10-28, idea 8 of neural-perf-ideas-20261028):
-# MOJOLEARN_IDN_SSD_OCCUPANCY (IDENTICAL, default OFF; device columns only).
+# the SSD occupancy kernels (IDENTICAL; device columns only; the default since
+# 2026-11-24, see PROMOTED below; was -D MOJOLEARN_IDN_SSD_OCCUPANCY).
 # The Oct 27 board read our own mamba2-forward 3x slower on the RTX 6000
 # Ada than on the MI325X at the same bits. Three S10-S19 kernels issue
 # warp-wide loads whose addresses differ across lanes by a whole row, so
@@ -408,7 +409,7 @@ comptime M2_CS_IC = 32
 #   S18 C.h_prev:   one thread per (t, h, p) reads row p of the entering
 #       state, adjacent lanes 128 words apart, and recomputes the same
 #       exp(dA_cs) once per channel (64 times per (t, h)).
-# Under the define those three run as: one thread per (b, t, h, p) for S10
+# In the occupancy form those three run as: one thread per (b, t, h, p) for S10
 # (coalesced; the dA product is written by the p = 0 lane); a 16 x 16 cell
 # tile for S12 with the 16 C rows and 16 B rows staged once in shared memory
 # (row stride 129 so lanes that vary the row hit distinct banks); and a
@@ -425,8 +426,17 @@ comptime M2_CS_IC = 32
 # keeps the per-cell S18 kernel), never from a model or board dimension:
 # the kernels take any (B, T, H) and any chunk count, and the row tiles
 # are bounds-checked per row. The host column keeps the cell kernels (no
-# shared memory; tools/mamba_host_gen.py substitutes the define to False).
-# Every sabotage arm keeps the cell kernels. A/B: RUN OWED (nv first).
+# shared memory; tools/mamba_host_gen.py substitutes IDN_SSD_OCCUPANCY to False).
+# Every sabotage arm keeps the cell kernels.
+# PROMOTED 2026-11-24 (lane o3-nmlp of ab-outcome-3): A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel
+# 4519097d380a, job nvc1-0003, base and arm back to back, one scored run per arm): neural/mamba2-forward full
+# 2.93 -> 1.98 ms (0.68, 1 cell); quality equal: output digest 0350b90b398bccbf and outputs_digest
+# 22500589aee10bb8 on both arms, max_abs_diff_vs_host 0.0 and rel_fro_vs_torch_eager_fp32 1.497e-07 on both
+# (~/mojolearn-evidence/ab-outcome-3/o3-nmlp/promote-quality.txt). AMD not measured (NVIDIA-only campaign,
+# AGENTS.md part 8); mamba2-infer not timed. No bits change on any column (WHY NO BIT MOVES above; the digests
+# are equal). The host column, the CPU column, the sabotage arms and a column whose shared-memory page does not
+# fit keep the cell kernels, which compute the same words. `-D MOJOLEARN_IDN_SSD_OCCUPANCY_OFF` keeps the cell
+# kernels on every device column (the old default); the on-define is refused (core/experiment_guards_neural.mojo).
 # ===========================================================================
 comptime IDN_SSD_OCCUPANCY = False
 #: S12 tile side: 16 x 16 = 256 threads, 8 NVIDIA warps or 4 AMD
