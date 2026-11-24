@@ -25,8 +25,25 @@ VIEWS: X dense row-major host float32; y host float32 rows x targets
 rows x components (X only); inverse_transform: x = rows x components ->
 dst rows x features. No sample weights; no score (the R^2 runs on the
 metrics owner, not split from Python: the caller predicts and runs its own
-metric). A device-home view, a row or column index and a nonzero
-`fit_output` are refused in words.
+metric). A device-home view, a column index and a nonzero `fit_output` are
+refused in words.
+
+THE RESIDENT ROUTE (lane vdf-scope-pls, as core/xdecomp_member.mojo's): a GPU
+image exports its device pool as a scope transport (x_decomp/member_store.mojo
+`x_decomp_store_v1`); the member's UNPACK puts it in `route.fifth` with
+SEQ_ROUTE_STORE (providers/python/member_pls_boundary_door.mojo). On such a
+route the member answers MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE and reads X
+through core/seq_member_rows.mojo `member_rows_open` (prefix "x_decomp"): with
+a scope and a pin the whole X is put ONCE in the scope's cache and each
+fold's rows are taken ON THE DEVICE into a fresh pool id, which the kit reads
+in place (`DKit.borrow_device`); without a pin the fold is gathered on the
+host cores. y (fit only) is the fold's rows taken on the host in the same row
+tasks. Every PLS kit operation that reads X runs on the device on a GPU
+image (the centring, the scaling, the XD_PLS_FIT component loop through the
+centred X's pool id, the projections and the products), so X never comes
+down. Same words in the same order either way: the bits of the host-input
+route and of the CPU column (whose image exports no store, so it answers no
+row index).
 
 FITTED-STATE BLOCKS, in index order: 0 `MEMBER_BLOCK_SCALARS` float64
 [components fitted, features, targets, training rows]; 1 `MEMBER_BLOCK_COEF`
@@ -67,11 +84,13 @@ from core.member_abi import (
     MEMBER_OP_TRANSFORM, MEMBER_OP_INVERSE_TRANSFORM, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_TRANSFORM, MEMBER_CAN_INVERSE_TRANSFORM,
     MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_COEF, MEMBER_CAN_MULTI_OUTPUT, MEMBER_CAN_NOTICES,
+    MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE,
     MEMBER_BLOCK_COEF, MEMBER_BLOCK_INTERCEPT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX,
     MEMBER_BLOCK_NOTICES, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_PLS
+from core.seq_member_rows import SeqRows, member_rows_open, seq_rows_close, seq_rows_route, SEQ_ROUTE_STORE
 from core.member_notices import member_notice_add, MEMBER_NOTICE_PLS_RESIDUAL, MEMBER_NOTICE_WORDS
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -267,8 +286,32 @@ def _whole(call: _CallP, estimator: String) raises:
 
 def _kit(route: DeviceRoute) -> DKit:
     """The typed kit of the route's x_decomp image, as the door's
-    `decomp_kit_unpack` builds it (one per operation)."""
-    return DKit(route.entry, (route.flags & 1) != 0, (route.flags & 2) != 0, route.flags >> 2)
+    `decomp_kit_unpack` builds it (one per operation). The store bit
+    (SEQ_ROUTE_STORE) is not a kit word."""
+    return DKit(route.entry, (route.flags & 1) != 0, (route.flags & 2) != 0, (route.flags & ~SEQ_ROUTE_STORE) >> 2)
+
+
+comptime PLS_STORE_PREFIX = "x_decomp"
+
+
+def _rows(call: _CallP, y_cols: Int, estimator: String) raises -> SeqRows:
+    """The call's X (module note, THE RESIDENT ROUTE): `rows.x` a host
+    address, or `-(id + 1)` of a pool id this call reads in place; `rows.n`
+    the rows it covers; `rows.y` y's host address (the fold's words under a
+    row index) when `y_cols` > 0. Close with `seq_rows_close`."""
+    if not seq_rows_route(call[].route):
+        _whole(call, estimator)
+        return SeqRows(call[].x.rows, call[].x.cols, call[].x.data, call[].y.data if y_cols > 0 else 0)
+    return member_rows_open(call, y_cols, estimator, String(PLS_STORE_PREFIX))
+
+
+def _kit_x(mut kit: DKit, rows: SeqRows) -> Int:
+    """The call's X in the kit: the borrowed host words, or the pool id read
+    in place (`borrow_device`: a host matrix by route, so every route is the
+    borrowed X's; every PLS operation reads it on the device)."""
+    if rows.x >= 0:
+        return kit.borrow(rows.x, rows.n, rows.d)
+    return kit.borrow_device(-(rows.x + 1), rows.n, rows.d)
 
 
 def _keep(mut kit: DKit, slot: _SlotP, index: Int, a: Int) raises:
@@ -331,19 +374,20 @@ def _write(mut kit: DKit, a: Int, dst: MemberMatrix, estimator: String) raises:
 
 def _fit(slot: _SlotP, call: _CallP) raises:
     var estimator = _name(slot[].kind)
-    _whole(call, estimator)
+    if not seq_rows_route(call[].route):
+        _whole(call, estimator)
     if call[].fit_output != 0:
         member_unsupported(estimator, call[].fit_output)
     if call[].weights.rows > 0:
         raise Error("TypeError: a " + estimator + " member fits without sample weights")
     _dense(call[].x, "X", estimator)
     _dense(call[].y, "y", estimator)
-    var n = call[].x.rows
     var p = call[].x.cols
     var q = call[].y.cols
-    if call[].y.rows != n:
-        raise Error("Found input variables with inconsistent numbers of samples: [" + String(n) + ", "
+    if call[].y.rows != call[].x.rows:
+        raise Error("Found input variables with inconsistent numbers of samples: [" + String(call[].x.rows) + ", "
             + String(call[].y.rows) + "]")
+    var n = call[].row_index.rows if call[].row_index.rows > 0 else call[].x.rows
     if n < 2:
         raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(p)
             + ")) while a minimum of 2 is required.")
@@ -357,10 +401,11 @@ def _fit(slot: _SlotP, call: _CallP) raises:
     slot[].fitted = False
     _drop_device(slot)
     _empty_blocks(slot[])
+    var held = _rows(call, q, estimator)
     var kit = _kit(call[].route)
     try:
-        var x = kit.borrow(call[].x.data, n, p)
-        var ym = kit.borrow(call[].y.data, n, q)
+        var x = _kit_x(kit, held)
+        var ym = kit.borrow(held.y, n, q)
         var fit = pls_fit_run(kit, x, ym, words, False)
         _keep(kit, slot, _I_COEF, fit.coef)
         _keep(kit, slot, _I_YMEAN, fit.y_mean)
@@ -389,6 +434,7 @@ def _fit(slot: _SlotP, call: _CallP) raises:
             member_notice_add(slot[].notices, MEMBER_NOTICE_PLS_RESIDUAL, Float64(fit.done))
     finally:
         kit.close()
+        seq_rows_close(call, held)
     slot[].fitted = True
 
 
@@ -396,25 +442,24 @@ def _query(slot: _SlotP, call: _CallP, operation: Int) raises:
     var estimator = _name(slot[].kind)
     if not slot[].fitted:
         raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
-    _whole(call, estimator)
     _dense(call[].x, "X", estimator)
     var p = Int(slot[].scalars[1])
+    var held = _rows(call, 0, estimator)
     var kit = _kit(call[].route)
     try:
-        var rows = call[].x.rows
         var result: Int
         if operation == MEMBER_OP_INVERSE_TRANSFORM:
-            var z = kit.borrow(call[].x.data, rows, call[].x.cols)
             if call[].x.cols != slot[].cols[_I_XLOAD]:
                 raise Error("ValueError: X has " + String(call[].x.cols) + " components, the model has "
                     + String(slot[].cols[_I_XLOAD]))
+            var z = _kit_x(kit, held)
             result = pls_rebuild(kit, z, _block(kit, slot, _I_XLOAD, estimator), _block(kit, slot, _I_XSTD, estimator),
                 _block(kit, slot, _I_XMEAN, estimator))
         else:
             if call[].x.cols != p:
                 raise Error("X has " + String(call[].x.cols) + " features, but " + estimator + " is expecting "
                     + String(p) + " features as input.")
-            var x = kit.borrow(call[].x.data, rows, p)
+            var x = _kit_x(kit, held)
             if operation == MEMBER_OP_PREDICT:
                 result = pls_predict_run(kit, x, _block(kit, slot, _I_XMEAN, estimator),
                     _block(kit, slot, _I_COEF, estimator), _block(kit, slot, _I_YMEAN, estimator))
@@ -424,6 +469,7 @@ def _query(slot: _SlotP, call: _CallP, operation: Int) raises:
         _write(kit, result, call[].dst, estimator)
     finally:
         kit.close()
+        seq_rows_close(call, held)
 
 
 def _index_of(name: Int) -> Int:
@@ -547,6 +593,15 @@ def _new(call: _CallP) raises:
     call[].state = _mint(words^)
 
 
+def _rows_bits(call: _CallP) -> Int:
+    """MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE on the store route only (THE
+    RESIDENT ROUTE): every kind and every operation of this member reads X
+    through `_rows`. The host image exports no store, so it answers none."""
+    if not seq_rows_route(call[].route):
+        return 0
+    return MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
+
+
 def _pls_member(operation: Int, address: Int) raises -> Int:
     var call = _CallP(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
@@ -561,7 +616,7 @@ def _pls_member(operation: Int, address: Int) raises -> Int:
         # behind the route are not traced for parallel workers.
         return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_INVERSE_TRANSFORM
             | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_COEF | MEMBER_CAN_MULTI_OUTPUT | MEMBER_CAN_NOTICES
-            | MEMBER_GIL_DOOR)
+            | MEMBER_GIL_DOOR | _rows_bits(call))
     if operation == MEMBER_OP_NEW:
         _new(call)
         return 0

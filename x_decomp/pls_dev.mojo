@@ -163,15 +163,28 @@ def pls_components_dev(
 
 def pls_fit_dev_run(
     pxa: F32Ptr, pya: F32Ptr, dst: List[Int], pit: MutPointer[Int32, MutUntrackedOrigin], n: Int, px: Int, q: Int,
-    a: PlsArgs, mut nits: Int,
+    a: PlsArgs, mut nits: Int, x_dev: Int = -1, y_dev: Int = -1,
 ) raises -> Int:
-    """`pls_fit_run` on the resident kit."""
+    """`pls_fit_run` on the resident kit. `x_dev` / `y_dev` (lane
+    vdf-scope-pls): the centred X / Y's pool ids, read in place (the door's
+    kit computed them on the device; owned by the caller), -1: the host
+    words at `pxa` / `pya` go up. The same words either way: no bit moves."""
     if n * px > 2147483647 or n * q > 2147483647 or a.nc < 1:
         raise Error("x_decomp: pls shape out of range")
     var k = DKit()
     var res = List[DMat]()
     var il = List[Int]()
-    var done = pls_components_dev(k, k.upload(mat_from(pxa, n, px)), k.upload(mat_from(pya, n, q)), a, res, il)
+    var xk: DMat
+    if x_dev >= 0:
+        xk = DMat(pool=x_dev, rows=n, cols=px)
+    else:
+        xk = k.upload(mat_from(pxa, n, px))
+    var yk: DMat
+    if y_dev >= 0:
+        yk = DMat(pool=y_dev, rows=n, cols=q)
+    else:
+        yk = k.upload(mat_from(pya, n, q))
+    var done = pls_components_dev(k, xk^, yk^, a, res, il)
     var hs = List[Mat]()
     for i in range(len(res)):  # small-loop(i: six vectors per component): their words home
         hs.append(k.get(res[i]))

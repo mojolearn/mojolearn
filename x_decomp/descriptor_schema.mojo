@@ -113,7 +113,7 @@ comptime XD_DICT_MINIBATCH = 61   # a: [x, d] i: [the 11 words of XD_DICT_LEARNI
 comptime XD_MCD = 62              # a: [x, loc, cov, sup(int32), dist] i: [n, d, h, seed, n_sub, n_ss, h_sub, n_trials, n_m, h_m, n_best_m]
 comptime XD_CONSISTENCY_FACTOR = 63  # a: [dst out(f64)] f: [p, num, den]
 comptime XD_CHI2_QUANTILE = 64    # a: [dst out(f64)] f: [dof, upper]
-comptime XD_PLS_FIT = 65          # a: [x, y, xw, yw, xs, ys, xl, yl, its(int32), nits out(int64)] i: [n, px, q, nc, max_iter, mode_b, norm_y, canonical, svd_algo] f: [tol] -> done
+comptime XD_PLS_FIT = 65          # a: [x, y, xw, yw, xs, ys, xl, yl, its(int32), nits out(int64)] i: [n, px, q, nc, max_iter, mode_b, norm_y, canonical, svd_algo, x pool id, y pool id (-1: a[0] / a[1]; lane vdf-scope-pls)] f: [tol] -> done
 comptime XD_LU_GESV = 66          # a: [a, b, info] i: [n, nrhs]
 comptime XD_DEV_LU_FACTOR = 67    # a: [a, lu, piv(int32), info] i: [ia, ilu, ipv, n]   (LU_RESIDENT_ENTRIES)
 comptime XD_DEV_LU_SOLVE = 68     # a: [b, x] i: [ilu, ipv, ia, n, nrhs, refine]        (LU_RESIDENT_ENTRIES)
@@ -285,7 +285,7 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
     if op == XD_CHI2_QUANTILE:
         return (1, 0, 2)
     if op == XD_PLS_FIT:
-        return (10, 9, 1)
+        return (10, 11, 1)  # int words 9 / 10: the centred X / Y pool ids, -1 none (lane vdf-scope-pls)
     if op == XD_LU_GESV:
         return (3, 2, 0)
     if op == XD_DEV_LU_FACTOR:

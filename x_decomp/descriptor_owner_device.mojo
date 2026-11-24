@@ -56,9 +56,13 @@ def xd_owner_device_op(op: Int, a: List[Int], p: List[Int], floats: Int) raises 
         xd_f64(a[0])[0] = chi2_quantile_dev_run(xd_float(floats, 0), xd_float(floats, 1))
         return 0
     if op == XD_PLS_FIT:
+        # i[9] / i[10] (lane vdf-scope-pls): the centred X / Y's pool ids, read in place; -1: a[0] / a[1].
         var nits = 0
-        var done = pls_fit_dev_run(xd_f32(a[0]), xd_f32(a[1]), xd_pls_dst(a), I32Out(unsafe_from_address=a[8]),
-                                   xd_dim(p[0]), xd_dim(p[1]), xd_dim(p[2]), xd_pls_args(p, floats), nits)
+        var px = F32Ptr(unsafe_from_address=a[0]) if p[9] >= 0 else xd_f32(a[0])
+        var py = F32Ptr(unsafe_from_address=a[1]) if p[10] >= 0 else xd_f32(a[1])
+        var done = pls_fit_dev_run(px, py, xd_pls_dst(a), I32Out(unsafe_from_address=a[8]),
+                                   xd_dim(p[0]), xd_dim(p[1]), xd_dim(p[2]), xd_pls_args(p, floats), nits,
+                                   p[9], p[10])
         xd_word_out(a[9], nits)
         return done
     if op == XD_DEV_LU_FACTOR:
