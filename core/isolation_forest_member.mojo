@@ -98,6 +98,12 @@ comptime _WANT_WIDE_BASE = 3
 # No MEMBER_CAN_TEST_ROWS: only images with IF_CAP_DEVICE_SCAN test the
 # training X, and the host image's queries are not scanned; the caller's
 # admission scans. No sample weight, no y (the estimator takes neither).
+# No MEMBER_CAN_SCOPE and no MEMBER_CAN_ROW_INDEX (lane vdf-scope-trees,
+# 2026-11-24, audit): every iforest entry op takes a host X address and the
+# image uploads the rows it reads per call (core/iforest_entry.mojo), it owns
+# no device store or row take, and the resident
+# scope's caches are x_prep's (bindings/arena_cache_run.mojo). What is owed:
+# vdf-scope-trees-RESULT.md.
 comptime _CAPS = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE_SAMPLES
                   | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
 comptime _BLOCKS = 6

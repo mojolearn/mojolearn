@@ -26,7 +26,7 @@ from core.forest_fit_request import (
     XF_EXPORT_SIZES, XF_EXPORT_INTO, XF_EXPORT_VERIFY, XF_EXPORT_RELEASE, XF_PREDICT, XF_RESIDENT_PREPARE,
     XF_RESIDENT_PREDICT, XF_RESIDENT_LABELS, XF_RESIDENT_RELEASE, XF_STRICT_PREPARE, XF_STRICT_PREDICT,
     XF_STRICT_RELEASE, XF_SESSION_OPEN, XF_SESSION_CLOSE, XF_FIT_SESSION, XF_ADA_OPEN, XF_FIT_ADA_ROUND,
-    XF_STAGE_INPUT, XF_UNSTAGE_INPUT, XF_W_SHAPE, XF_SHAPE_CLASSIFIER, XF_SHAPE_ROWMAJOR, forest_fit_args_at,
+    XF_STAGE_INPUT, XF_UNSTAGE_INPUT, XF_FIT_ROWS, XF_W_SHAPE, XF_SHAPE_CLASSIFIER, XF_SHAPE_ROWMAJOR, forest_fit_args_at,
 )
 
 
@@ -135,6 +135,13 @@ trait ForestImage:
         """XF_UNSTAGE_INPUT: end the staged input (a host image: nothing)."""
         ...
 
+    @staticmethod
+    def fit_rows(classifier: Bool, args: ForestFitArgs) raises -> Int:
+        """XF_FIT_ROWS (lane vdf-scope-trees): a fit on rows of the image's
+        device store slot `args.session`, taken on the device; its export
+        handle. An image without XF_CAP_DEV_ROWS refuses in words."""
+        ...
+
 
 def _words(address: Int, count: Int) -> List[Int]:
     var out = List[Int](capacity=count)
@@ -170,7 +177,8 @@ def _run[I: ForestImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, f
         return Int(GLOBAL_NUMERIC_MODE)
     if op == XF_DT_DEFAULT_BINS:
         return I.dt_default_bins()
-    if op == XF_FIT or op == XF_FIT_DART or op == XF_FIT_SESSION or op == XF_FIT_ADA_ROUND:
+    if (op == XF_FIT or op == XF_FIT_DART or op == XF_FIT_SESSION or op == XF_FIT_ADA_ROUND
+            or op == XF_FIT_ROWS):
         var args = forest_fit_args_at(aa, na, pp, np, ff)
         args.gil_free = free
         if op == XF_FIT_DART:
@@ -180,6 +188,8 @@ def _run[I: ForestImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, f
             return I.fit_session((shape & XF_SHAPE_CLASSIFIER) != 0, args)
         if op == XF_FIT_ADA_ROUND:
             return I.fit_ada_round((shape & XF_SHAPE_CLASSIFIER) != 0, args)
+        if op == XF_FIT_ROWS:
+            return I.fit_rows((shape & XF_SHAPE_CLASSIFIER) != 0, args)
         return I.fit((shape & XF_SHAPE_CLASSIFIER) != 0, (shape & XF_SHAPE_ROWMAJOR) != 0, args)
     var a = _words(aa, na)
     if op == XF_SESSION_OPEN:

@@ -827,6 +827,11 @@ def _capabilities(classifier: Bool) -> Int:
     # "DART: HAS the bit"): the x_trees entries never touch the GIL, the
     # member trees' forest entry is marked, and the session, kept-forest and
     # member-store registries each have their own lock word.
+    # No MEMBER_CAN_SCOPE and no MEMBER_CAN_ROW_INDEX (lane vdf-scope-trees,
+    # 2026-11-24, audit): the x_trees DART open takes a host X and uploads it
+    # per fit (xtrees/dart_device.mojo), the image owns no device store or
+    # row take, and the resident scope's caches are x_prep's
+    # (bindings/arena_cache_run.mojo). What is owed: vdf-scope-trees-RESULT.md.
     var mask = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
                 | MEMBER_GIL_FREE)
     if classifier:
