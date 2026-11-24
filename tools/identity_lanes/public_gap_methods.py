@@ -77,9 +77,30 @@ def _(ml, X, yc, yr, Xh=None):
     named = ms.get_scorer("r2")
     made = ms.make_scorer(metrics.r2_score, response_method="predict", numeric_mode="identical")
     values = np.asarray([named(model, rows, target), made(model, rows, target)], dtype=np.float64)
+    # Lane mf-score8: the scorers typed in the search RUN (core/msel_scorer_run.mojo): a light search per new row,
+    # each digested by its mean test scores (a regression search over shifted positive targets, a classifier
+    # search over three classes, and a regression scorer over the classifier's integer labels).
+    positive = np.ascontiguousarray(np.abs(target) + np.float32(0.5), dtype=np.float32)
+    labels = np.arange(len(rows), dtype=np.int64) % 3
+    typed = []
+    for scorer in (ms.make_scorer(metrics.mean_pinball_loss, alpha=0.3, greater_is_better=False),  # glue: fixtures
+                   ms.make_scorer(metrics.d2_tweedie_score, power=0),
+                   ms.make_scorer(metrics.mean_tweedie_deviance, power=1.5, greater_is_better=False),
+                   ms.make_scorer(metrics.r2_score, force_finite=False, multioutput="raw_values")):
+        search = ms.GridSearchCV(ml.Ridge(numeric_mode="identical"), {"alpha": [0.5, 2.0]}, cv=3, scoring=scorer,
+                                 n_jobs=1, error_score="raise", refit=False).fit(rows, positive)
+        typed.append(search.cv_results_["mean_test_score"])
+    for scorer in (ms.make_scorer(metrics.cohen_kappa_score, weights="linear"),  # glue: fixtures
+                   ms.make_scorer(metrics.accuracy_score, normalize=False),
+                   ms.make_scorer(metrics.balanced_accuracy_score, adjusted=True),
+                   "neg_mean_squared_error"):
+        search = ms.GridSearchCV(ml.LogisticRegression(max_iter=30), {"C": [0.5, 2.0]}, cv=3, scoring=scorer,
+                                 n_jobs=1, error_score="raise", refit=False).fit(rows, labels)
+        typed.append(search.cv_results_["mean_test_score"])
     return _fit(dict(scores=_h(values),
                      folds=_h(*[np.asarray(indices, dtype=np.int64) for pair in folds for indices in pair]),
-                     names=_h(np.frombuffer("\n".join(names).encode("utf-8"), dtype=np.uint8))))
+                     names=_h(np.frombuffer("\n".join(names).encode("utf-8"), dtype=np.uint8)),
+                     typed=_h(*[np.asarray(v, dtype=np.float64) for v in typed])))
 
 
 @lane("public-validation-learning-curves")

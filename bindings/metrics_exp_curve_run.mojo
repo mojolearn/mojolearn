@@ -370,7 +370,15 @@ def top_k_run(route: MetricRoute, truth: Int, scores: Int, n: Int, cols: Int, cl
 
 def top_k_run(route: MetricRoute, truth: Int, scores: Int, n: Int, cols: Int, classes: Int, k: Int, w: Int,
               mut warn: Int) raises -> Float64:
-    """`w` (lane mf-score6): n float32 sample weights (0: none), the
+    """`top_k_options_run` with normalize=True."""
+    return top_k_options_run(route, truth, scores, n, cols, classes, k, w, True, warn)
+
+
+def top_k_options_run(route: MetricRoute, truth: Int, scores: Int, n: Int, cols: Int, classes: Int, k: Int, w: Int,
+                      normalize: Bool, mut warn: Int) raises -> Float64:
+    """`normalize` (lane mf-score8): top_k_accuracy_score's `normalize`
+    (False: the hit count, or their weight sum; the door's `top_k_value`).
+    `w` (lane mf-score6): n float32 sample weights (0: none), the
     program's last input as the door pins it (`top_k_stages(weighted)`).
     THE TYPED RUN of `top_k_accuracy_score(y_true, y_score, k=k)` with
     its other defaults (normalize, labels None) over n int32 class codes in
@@ -418,4 +426,4 @@ def top_k_run(route: MetricRoute, truth: Int, scores: Int, n: Int, cols: Int, cl
         sizes.append(n)
     var arena = metric_inputs_run(route, plan, addresses, sizes)
     _ = len(codes)  # copied into the program's arena above
-    return top_k_value(arena, got[0], got[1], n, True)
+    return top_k_value(arena, got[0], got[1], n, normalize)

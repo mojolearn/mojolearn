@@ -13,7 +13,8 @@ against scikit-learn's definitions computed here from the same codes:
 2. Weighted, w [1, 2, 1, 1, 1, 3, 0.5] (the weights' float32 bits as the UNPACK appends them): the
    misclassified weight 5.5 of 9.5: zero_one_loss 5.5 / 9.5, normalize=False 5.5, hamming_loss 5.5 / 9.5.
 3. The lookup and the words: `msel_scorer_metric_code` answers three distinct codes and -1 for a metric no row
-   serves (cohen_kappa_score); `msel_scorer_caller` names "zero_one_loss" and "hamming_loss"; a sample_weight
+   serves (hinge_loss: lane mf-score8 typed cohen_kappa_score);
+   `msel_scorer_caller` names "zero_one_loss" and "hamming_loss"; a sample_weight
    of the wrong length raises "mojolearn zero_one_loss: sample_weight has 3 entries for 7 samples" (the doors'
    `_reg_weights` words through `mx_weights`).
 
@@ -107,7 +108,8 @@ def check_lookup_words() raises:
     var c = msel_scorer_metric_code("zero_one_loss", False)
     var h = msel_scorer_metric_code("hamming_loss", True)
     require(a >= 2 and c >= 2 and h >= 2 and a != c and a != h and c != h, "three distinct metric rows")
-    require(msel_scorer_metric_code("cohen_kappa_score", True) == -1, "no row for cohen_kappa_score")
+    # lane mf-score8: cohen_kappa_score is a row now; hinge_loss (decision_function) is no predict row
+    require(msel_scorer_metric_code("hinge_loss", True) == -1, "no predict row for hinge_loss")
     require(msel_scorer_caller(msel_scorer_row(a)) == "zero_one_loss", "zero_one_loss caller")
     require(msel_scorer_caller(msel_scorer_row(h)) == "hamming_loss", "hamming_loss caller")
     var t = List[Int32]()

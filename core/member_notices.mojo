@@ -76,6 +76,10 @@ comptime MEMBER_NOTICE_FOLD_LACKING = 12
 #: or transform's (a caller of MEMBER_OP_TRANSFORM takes them after the call
 #: as it does after FIT).
 comptime MEMBER_NOTICE_ONEHOT_UNKNOWN = 13
+#: cohen_kappa_score (lane mf-score8; bindings/metrics_exp_cls_door.mojo
+#: `_kappa`): a = 1 no label of y2 is in both y1 and the labels, a = 2 only
+#: one label in common (a search scorer's metric warning, raised at PACK).
+comptime MEMBER_NOTICE_METRIC_KAPPA = 14
 
 #: The words scikit-learn's cross_val_predict adds to its imbalanced-fold
 #: warning and refusals (model_selection/_validation.py

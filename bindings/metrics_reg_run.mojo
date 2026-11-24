@@ -335,6 +335,40 @@ comptime REG_MAX_ERROR = 9
 comptime REG_POISSON = 10
 comptime REG_GAMMA = 11
 comptime REG_D2_ABSOLUTE = 12
+#: Lane mf-score8 (appended): the metrics with an alpha or a power of their
+#: own (bindings/metrics_reg_door.mojo `metrics_reg_operation`'s PINBALL,
+#: TWEEDIE, D2_TWEEDIE and D2_PINBALL rows).
+comptime REG_PINBALL = 13
+comptime REG_TWEEDIE = 14
+comptime REG_D2_TWEEDIE = 15
+comptime REG_D2_PINBALL = 16
+#: Lane mf-score8: the multioutput rules of a 1-D target as words
+#: (`_reg_new`'s `mo`): the metric's default 'uniform_average', 'raw_values',
+#: 'variance_weighted' (r2_score and explained_variance_score only).
+comptime REG_MO_UNIFORM = 0
+comptime REG_MO_RAW = 1
+comptime REG_MO_VARIANCE = 2
+
+
+def reg_metric_d2(metric: Int) -> Bool:
+    """Lane mf-score8: True for the D^2 metrics (their fewer-than-two-samples
+    warning names D^2, not R^2)."""
+    return metric == REG_D2_ABSOLUTE or metric == REG_D2_TWEEDIE or metric == REG_D2_PINBALL
+
+
+def reg_metric_takes_multioutput(metric: Int) -> Bool:
+    """Lane mf-score8: the metrics whose public signature has `multioutput`
+    (python/mojolearn/_native_msel_metric_plans.py): all but max_error and
+    the Tweedie family (mean_tweedie_deviance, its poisson / gamma forms and
+    d2_tweedie_score)."""
+    return not (metric == REG_MAX_ERROR or metric == REG_POISSON or metric == REG_GAMMA or metric == REG_TWEEDIE
+                or metric == REG_D2_TWEEDIE)
+
+
+def reg_metric_takes_variance(metric: Int) -> Bool:
+    """Lane mf-score8: the metrics `_reg_new` lets take 'variance_weighted'
+    (its `variance_ok`): r2_score and explained_variance_score."""
+    return metric == REG_R2 or metric == REG_EXPLAINED_VARIANCE
 
 
 def reg_metric_caller(metric: Int) -> String:
@@ -359,8 +393,12 @@ def reg_metric_caller(metric: Int) -> String:
         return "explained_variance_score"
     if metric == REG_MAX_ERROR:
         return "max_error"
-    if metric == REG_D2_ABSOLUTE:
+    if metric == REG_D2_ABSOLUTE or metric == REG_D2_PINBALL:
         return "d2_pinball_score"
+    if metric == REG_PINBALL:
+        return "mean_pinball_loss"
+    if metric == REG_D2_TWEEDIE:
+        return "d2_tweedie_score"
     return "mean_tweedie_deviance"
 
 
@@ -370,7 +408,26 @@ def reg_metric_run(route: MetricRoute, metric: Int, y: Int, p: Int, n: Int, mut 
 
 
 def reg_metric_run(route: MetricRoute, metric: Int, y: Int, p: Int, n: Int, w: Int, mut warn: Int) raises -> Float64:
-    """`w` (lane mf-score6): n float32 sample weights (0: none), the
+    """`reg_metric_options_run` with the metric's default options."""
+    return reg_metric_options_run(route, metric, y, p, n, w, REG_MO_UNIFORM, True, _reg_nan(), False, String(""), warn)
+
+
+def reg_metric_options_run(route: MetricRoute, metric: Int, y: Int, p: Int, n: Int, w: Int, mo: Int,
+                           force_finite: Bool, param: Float64, param_given: Bool, param_shown: String,
+                           mut warn: Int) raises -> Float64:
+    """THE ONE BODY of the 1-D regression metrics with their options (lane
+    mf-score8): `mo` the multioutput rule (REG_MO_*: the door's `_reg_new`
+    `mo` string, whose AVG stage or raw values the builders stage; on one
+    output every rule answers the output's value, but the program is the
+    door's), `force_finite` (r2_score, explained_variance_score), `param`
+    the metric's alpha (mean_pinball_loss, d2_pinball_score) or power
+    (mean_tweedie_deviance, d2_tweedie_score) when `param_given`, else the
+    metric's default (alpha 0.5, power 0); `param_shown` the given power as
+    the door prints it (`str(power)`, the Tweedie domain words). The door's
+    refusals in its order: alpha out of [0, 1] first (`_check_alpha`, read
+    before the targets), then the targets', then the Tweedie power and
+    domain words (`reg_tweedie_stages`, `tweedie_check`).
+    `w` (lane mf-score6): n float32 sample weights (0: none), the
     builder's third input (`_Reg(has_w)`: its weight total and weighted
     sums, the door's weighted program); max_error takes none.
     THE TYPED RUN of one single-output, unweighted regression metric with
@@ -384,6 +441,26 @@ def reg_metric_run(route: MetricRoute, metric: Int, y: Int, p: Int, n: Int, w: I
     samples."). No Python."""
     warn = 0
     var caller = reg_metric_caller(metric)
+    var alpha = 0.5
+    var power = 0.0
+    if metric == REG_PINBALL or metric == REG_D2_PINBALL:
+        if param_given:
+            # `_check_alpha` (the door reads alpha before the targets)
+            if not (param >= 0.0 and param <= 1.0):
+                raise Error("alpha must be a real number in [0, 1]")
+            alpha = param
+    elif metric == REG_TWEEDIE or metric == REG_D2_TWEEDIE:
+        if param_given:
+            power = param
+    if mo == REG_MO_VARIANCE and not reg_metric_takes_variance(metric):
+        raise Error("RuntimeError: 'variance_weighted' on a regression metric that does not take it")
+    if mo != REG_MO_UNIFORM and not reg_metric_takes_multioutput(metric):
+        raise Error("RuntimeError: a multioutput rule on a regression metric that takes none")
+    var mo_words = String("uniform_average")
+    if mo == REG_MO_RAW:
+        mo_words = String("raw_values")
+    elif mo == REG_MO_VARIANCE:
+        mo_words = String("variance_weighted")
     if n == 0:
         raise Error("mojolearn " + caller + ": y_true must be a nonempty (n,) or (n, n_outputs) array")
     if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=y), n):
@@ -399,19 +476,20 @@ def reg_metric_run(route: MetricRoute, metric: Int, y: Int, p: Int, n: Int, w: I
         var out = reg_max_error_stages(plan, n, metric_term("abs"))
         var arena = metric_inputs_run(route, plan, addresses, sizes)
         return arena.f32(out)
-    if (metric == REG_R2 or metric == REG_D2_ABSOLUTE) and n < 2:
+    if (metric == REG_R2 or reg_metric_d2(metric)) and n < 2:
+        # the doors' `_undefined` NaN (`_r2_options`, `_d2_pinball`, `_tweedie(d2)`)
         warn = 1
         return _reg_nan()
     if w != 0:
         addresses.append(w)
         sizes.append(n)
-    var r = _Reg(n, 1, w != 0, "uniform_average", List[Float64]())
+    var r = _Reg(n, 1, w != 0, mo_words, List[Float64]())
     var out = _NONE
     var flag = _NONE
     var tw = RegTweedie(_NONE, _NONE, _NONE)
-    var power = 0.0
+    var shown = String("0")
     if metric == REG_R2:
-        out = reg_r2_stages(r, metric_term("sq"), True)
+        out = reg_r2_stages(r, metric_term("sq"), force_finite)
     elif metric == REG_MSE or metric == REG_RMSE:
         out = reg_mean_error_stages(r, metric_term("sq"), metric == REG_RMSE, 0.0, False)[0]
     elif metric == REG_MAE:
@@ -425,22 +503,35 @@ def reg_metric_run(route: MetricRoute, metric: Int, y: Int, p: Int, n: Int, w: I
     elif metric == REG_MEDAE:
         out = reg_median_stages(r, metric_term("abs"))
     elif metric == REG_EXPLAINED_VARIANCE:
-        out = reg_explained_variance_stages(r, metric_term("sq"), metric_term("diff"), True)
+        out = reg_explained_variance_stages(r, metric_term("sq"), metric_term("diff"), force_finite)
     elif metric == REG_POISSON or metric == REG_GAMMA:
         power = 1.0 if metric == REG_POISSON else 2.0
+        shown = String("1") if metric == REG_POISSON else String("2")
         tw = reg_tweedie_stages(r, metric_term("tweedie"), power, False, caller)
+        out = tw.out
+    elif metric == REG_TWEEDIE or metric == REG_D2_TWEEDIE:
+        # lane mf-score8: `_tweedie(args, power, caller, d2)`, its power as given
+        if param_given:
+            shown = param_shown.copy()
+        tw = reg_tweedie_stages(r, metric_term("tweedie"), power, metric == REG_D2_TWEEDIE, caller)
         out = tw.out
     elif metric == REG_D2_ABSOLUTE:
         out = reg_d2_pinball_stages(r, metric_term("pinball"), 0.5)
+    elif metric == REG_D2_PINBALL:
+        # lane mf-score8: `_d2_pinball(args, alpha)`
+        out = reg_d2_pinball_stages(r, metric_term("pinball"), alpha)
+    elif metric == REG_PINBALL:
+        # lane mf-score8: `_mean_error(args, "pinball", ..., alpha)`
+        out = reg_mean_error_stages(r, metric_term("pinball"), False, alpha, False)[0]
     else:
         raise Error("RuntimeError: unknown regression metric " + String(metric))
     var arena = metric_inputs_run(route, r.plan, addresses, sizes)
     if flag != _NONE and arena.i32(flag) != 0:
-        var shown = String("Mean Squared Logarithmic Error") if metric == REG_MSLE else String(
+        var words = String("Mean Squared Logarithmic Error") if metric == REG_MSLE else String(
             "Root Mean Squared Logarithmic Error")
-        raise Error(shown + " cannot be used when targets contain values less than or equal to -1.")
+        raise Error(words + " cannot be used when targets contain values less than or equal to -1.")
     if tw.fy != _NONE:
-        tweedie_check(tw.fy, tw.fp, power, "1" if metric == REG_POISSON else "2", arena)
+        tweedie_check(tw.fy, tw.fp, power, shown, arena)
     var value = arena.f64(out)
     _ = r^
     return value

@@ -38,7 +38,7 @@ from bindings.metrics_exp_common_run import MX_NONE, mx_nan, mx_inf, mx_isnan, m
 from bindings.metrics_program_pack import metric_arena_array
 from bindings.metrics_program_door import MetricDoorProg, metric_door_run
 from bindings.arena_prog_run import MetricArenaOwner
-from bindings.mcls_classify_run import McEpi, mc_sums_stages, mc_epi_words, mc_mcc_words
+from bindings.mcls_classify_run import McEpi, mc_sums_stages, mc_epi_words, mc_mcc_words, kappa_stages
 from bindings.metrics_exp_common_unpack import (
     MxLab, MxPair, mx_b, mx_len, mx_truthy, mx_eq, mx_is_bool, mx_is_str, mx_is_real, mx_float, mx_raise_obj,
     mx_zero_division, mx_warn, mx_undefined, mx_sorted, mx_set, mx_list, mx_label_order, mx_str_list, mx_encode,
@@ -51,7 +51,6 @@ comptime _CM_MLCM = 0
 comptime _CM_MCC = 1
 comptime _CM_COUNT = 2
 comptime _CM_NORM = 3
-comptime _CM_KAPPA = 4
 comptime _CM_CLR = 5
 comptime _CM_TOTAL = 6
 comptime _CM_WSUM_LEAF = 7
@@ -438,15 +437,18 @@ def _kappa(args: PythonObject, context: PythonObject) raises -> PythonObject:
         raise Error("At least one label in `labels` must be present in `y1` (even though "
                     + "`cohen_kappa_score` is otherwise agnostic to the order of `y1` and `y2`).")
     var k = mx_len(chosen)
-    var c = _confusion(pair, chosen, context)
-    var out = c.prog.want(c.prog.alloc(4), 4)
-    var sc = c.prog.scratch(8 * k + 2)
-    var phases: List[Int] = [0, 1, 2, 3]
-    var units: List[Int] = [k, 1, k, 1]
-    for i in range(4):  # small-loop(4: the four kappa stages): fixed
-        if units[i]:
-            c.prog.stage("cm_epi", units[i], [_CM_KAPPA, c.cells, k, c.col, phases[i], wm, out, sc])
-    var arena = metric_door_run(c.prog, args[6], context)
+    # Lane mf-score8: ONE BODY. The program is bindings/mcls_classify_run.mojo
+    # `kappa_stages` (moved from here word for word: `_confusion`'s pair key
+    # and k*k grouping, then the four cm_epi KAPPA phases), which the search
+    # scorers' typed RUN calls too; its pins in its input order (the true and
+    # predicted codes in `chosen`'s order, then the weights).
+    var prog = MetricDoorProg()
+    prog.pins.append(mx_codes(pair.true, chosen, False, context))
+    prog.pins.append(mx_codes(pair.pred, chosen, False, context))
+    if pair.w is not None:
+        prog.pins.append(pair.w)
+    var out = kappa_stages(prog.plan, pair.true.n, k, pair.w is not None, wm)
+    var arena = metric_door_run(prog, args[6], context)
     var flags = arena.i32(out)
     if flags & 1:
         mx_undefined("`y2` contains no labels that are present in both `y1` and `labels`.", context)

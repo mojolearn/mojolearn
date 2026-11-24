@@ -18,7 +18,7 @@ from core.member_notices import (
     MEMBER_NOTICE_WORDS, MEMBER_NOTICE_FOREST, MEMBER_NOTICE_NYSTROEM_COMPONENTS, MEMBER_NOTICE_GP_RIDGE,
     MEMBER_NOTICE_PLS_RESIDUAL, MEMBER_NOTICE_SPLIT_LEAST, MEMBER_NOTICE_METRIC_PRF, MEMBER_NOTICE_METRIC_JACCARD,
     MEMBER_NOTICE_METRIC_BALANCED, MEMBER_NOTICE_METRIC_FEW, MEMBER_NOTICE_METRIC_TOP_K, MEMBER_NOTICE_R2_FEW,
-    MEMBER_NOTICE_FOLD_LACKING, MEMBER_NOTICE_ONEHOT_UNKNOWN, member_lacking_warning,
+    MEMBER_NOTICE_FOLD_LACKING, MEMBER_NOTICE_ONEHOT_UNKNOWN, MEMBER_NOTICE_METRIC_KAPPA, member_lacking_warning,
 )
 from bindings.py_balanced import py_get
 
@@ -61,6 +61,12 @@ def _metric_notice(code: Int, a: Float64, b: Float64, context: PythonObject) rai
     elif code == MEMBER_NOTICE_METRIC_FEW:
         var shown = String("R^2") if Int(a) == 0 else String("D^2")
         metric_undefined(shown + " score is not well-defined with less than two samples.", context)
+    elif code == MEMBER_NOTICE_METRIC_KAPPA:
+        # lane mf-score8: `_kappa`'s two UndefinedMetricWarnings
+        if Int(a) == 1:
+            metric_undefined("`y2` contains no labels that are present in both `y1` and `labels`.", context)
+        else:
+            metric_undefined("`y1`, `y2` and `labels` have only one label in common.", context)
     else:
         metric_undefined("'k' (" + String(Int(a)) + ") greater than or equal to 'n_classes' (" + String(Int(b))
                          + ") will result in a perfect score and is therefore meaningless.", context)
@@ -113,7 +119,8 @@ def member_fit_notices_raise_with(words: List[Float64], context: PythonObject,
             metric_warn("The least populated class in y has only " + String(Int(a)) + " members, which is less "
                         + "than n_splits=" + String(Int(b)) + ".",
                         native_loaded_module("builtins").UserWarning, context, 2)
-        elif code >= MEMBER_NOTICE_METRIC_PRF and code <= MEMBER_NOTICE_METRIC_TOP_K:
+        elif ((code >= MEMBER_NOTICE_METRIC_PRF and code <= MEMBER_NOTICE_METRIC_TOP_K)
+              or code == MEMBER_NOTICE_METRIC_KAPPA):
             _metric_notice(code, a, b, metric_context)
         elif code == MEMBER_NOTICE_R2_FEW:
             # RidgeCV's split path (bindings/x_linear_cv_pack.mojo

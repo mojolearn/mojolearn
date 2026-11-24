@@ -1,0 +1,23 @@
+diff --git a/bindings/mcls_classify_run.mojo b/bindings/mcls_classify_run.mojo
+index b395542ecc..f875622861 100644
+--- a/bindings/mcls_classify_run.mojo
++++ b/bindings/mcls_classify_run.mojo
+@@ -740,4 +740,4 @@ def kappa_run(route: MetricRoute, truth: Int, pred: Int, n: Int, k: Int, sel_at:
+         flags = KAPPA_NO_COMMON
+     elif (bits & KAPPA_ONE_COMMON) != 0:
+         flags = KAPPA_ONE_COMMON
+-    return arena.f64(out + 2)
++    return arena.f64(out + 2) * 0.5  # SABOTAGE
+diff --git a/bindings/metrics_reg_run.mojo b/bindings/metrics_reg_run.mojo
+index 4bf8388b9b..5c2f485b74 100644
+--- a/bindings/metrics_reg_run.mojo
++++ b/bindings/metrics_reg_run.mojo
+@@ -522,7 +522,7 @@ def reg_metric_options_run(route: MetricRoute, metric: Int, y: Int, p: Int, n: I
+         out = reg_d2_pinball_stages(r, metric_term("pinball"), alpha)
+     elif metric == REG_PINBALL:
+         # lane mf-score8: `_mean_error(args, "pinball", ..., alpha)`
+-        out = reg_mean_error_stages(r, metric_term("pinball"), False, alpha, False)[0]
++        out = reg_mean_error_stages(r, metric_term("pinball"), False, alpha * 0.5, False)[0]  # SABOTAGE
+     else:
+         raise Error("RuntimeError: unknown regression metric " + String(metric))
+     var arena = metric_inputs_run(route, r.plan, addresses, sizes)
