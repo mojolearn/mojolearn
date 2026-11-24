@@ -1590,8 +1590,16 @@ def _nested_outputs(slot: _SlotPtr) raises:
             continue  # not fitted yet (a stack's final, during its fit)
         var plan = slot[].plans[u].copy()
         var call = member_call_of(plan, slot[].states[u])
-        slot[].pred_cols[u] = member_outputs_of(plan, call, MEMBER_OP_PREDICT)
-        slot[].pred_dtype[u] = call.out_dtype if call.out_dtype != MEMBER_DTYPE_UNSAID else MEMBER_F32
+        # LANE w3f3-b (row 2): a nested member that does not predict (a
+        # search's refitted encoder, scaler or decomposition, scored only by
+        # refusal-only rows: core/msel_search_run.mojo `no_predict`) is not
+        # asked its predict columns; its OUTPUTS answer raised "a <family>
+        # member has no predict" out of the refit, where scikit-learn's
+        # search refits it and keeps it (predict then raises, as here: no
+        # route reads pred_cols of a member without the bit).
+        if plan.member.can(MEMBER_CAN_PREDICT) and (slot[].masks[u] & MEMBER_CAN_PREDICT) != 0:
+            slot[].pred_cols[u] = member_outputs_of(plan, call, MEMBER_OP_PREDICT)
+            slot[].pred_dtype[u] = call.out_dtype if call.out_dtype != MEMBER_DTYPE_UNSAID else MEMBER_F32
         if plan.member.can(MEMBER_CAN_PREDICT_PROBA) and (slot[].masks[u] & MEMBER_CAN_PREDICT_PROBA) != 0:
             slot[].proba_cols[u] = member_outputs_of(plan, call, MEMBER_OP_PREDICT_PROBA)
             slot[].proba_dtype[u] = call.out_dtype if call.out_dtype != MEMBER_DTYPE_UNSAID else MEMBER_F32
