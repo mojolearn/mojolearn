@@ -967,6 +967,9 @@ def stage_datasets(a, runner, plan, keys, ds_manifest, commit12):
         raise SystemExit("measure-candidate: the wrapper printed no ssh target")
     log = Path(a.state_dir).expanduser() / f"datasets-{commit12}-{plan.vendor}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
+    if not keys:  # every row of the job is synthetic: dataset_store.sh refuses an empty key list ("no keys given")
+        print("staging 0 datasets: every row of this job generates its own data", flush=True)
+        return
     print(f"staging {len(keys)} dataset(s) through tools/dataset_store.sh stage (log {log})", flush=True)
     env = dict(os.environ, MOJOLEARN_DATASET_MANIFEST=str(ds_manifest))
     with open(log, "w") as fh:
