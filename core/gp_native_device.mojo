@@ -37,15 +37,19 @@ from gaussian_process.gp_resident_store import gp_resident_store
 from core.fitted_resident_store import fitted_lease_close
 
 
-def _host_x(address: Int, what: String) raises:
-    """A list route reads X as host words: THE FOLD X WORD (a negative
-    address, core/fold_x_device.mojo) reaches only the device routes (the
-    pointer fit, the device optimizer, the resident and pointer queries, the
-    one-vs-rest entries; lane vdf-scope-gp). A Gp member answers no fold on a
-    route without them, so this refusal is a caller's error, in words."""
+def _x_list(address: Int, words: Int) raises -> List[Float32]:
+    """The list routes' host X list, or none for THE FOLD X WORD (a negative
+    address, core/fold_x_device.mojo; lane vdf-tail-a): the list bodies copy
+    a fold store slot on the device (gaussian_process/estimator.mojo
+    `_x_device`), so a fold's rows never come to the host."""
     if address < 0:
-        raise Error("TypeError: the Gaussian process list route reads " + what
-                    + " as host words, not a device fold slot")
+        return List[Float32]()
+    return read_f32(address, words)
+
+
+def _x_word(address: Int) -> Int:
+    """The fold word a list body takes: the negative address, else 0 (the list)."""
+    return address if address < 0 else 0
 
 
 struct GPDeviceKernels(GPNativeKernels):
@@ -115,12 +119,11 @@ struct GPDeviceKernels(GPNativeKernels):
             n_ls,
             String("gpr_fit"),
         )
-        _host_x(r.source, "X")
-        var x = read_f32(Int(xp), n_train * n_features)
+        var x = _x_list(Int(xp), n_train * n_features)
         var y = read_f32(Int(yp), n_train)
         var info = 0
         info = _gpr_fit_run(
-            x, y, spec, n_train, n_features, alpha, lp, dp, sp
+            x, y, spec, n_train, n_features, alpha, lp, dp, sp, _x_word(r.source)
         )
         return info
 
@@ -227,12 +230,10 @@ struct GPDeviceKernels(GPNativeKernels):
             n_ls,
             String("gpr_predict"),
         )
-        _host_x(r.training, "X_train_")
-        _host_x(r.source, "X")
-        var xt = read_f32(Int(xtp), n_train * n_features)
+        var xt = _x_list(Int(xtp), n_train * n_features)
         var l = read_f32(Int(lp), n_train * n_train)
         var dual = read_f32(Int(dp), n_train)
-        var x_star = read_f32(Int(xsp), max(0, n_star * n_features))
+        var x_star = _x_list(Int(xsp), max(0, n_star * n_features))
         var yzero = List[Float32]()
         var model = GPRegressor(
             xt^,
@@ -262,6 +263,8 @@ struct GPDeviceKernels(GPNativeKernels):
             unnorm,
             y_std,
             y_mean,
+            _x_word(r.training),
+            _x_word(r.source),
         )
         return GPQueryResult(n_clamped, 0, 0)
 
@@ -280,12 +283,10 @@ struct GPDeviceKernels(GPNativeKernels):
             r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales,
             n_nodes, n_ls, String("gpr_predict_cov"),
         )
-        _host_x(r.training, "X_train_")
-        _host_x(r.source, "X")
-        var xt = read_f32(r.training, max(0, n_train * n_features))
+        var xt = _x_list(r.training, max(0, n_train * n_features))
         var l = read_f32(r.factor, max(0, n_train * n_train))
         var dual = read_f32(r.dual, max(0, n_train))
-        var x_star = read_f32(r.source, max(0, n_star * n_features))
+        var x_star = _x_list(r.source, max(0, n_star * n_features))
         var mean_addr = r.mean
         var cov_addr = r.covariance
         var yzero = List[Float32]()
@@ -293,7 +294,8 @@ struct GPDeviceKernels(GPNativeKernels):
             xt^, yzero^, n_train, n_features, spec^, Float32(0.0), l^, dual^,
             Float32(0.0), Float32(0.0), Float32(0.0), info, 0,
         )
-        _gpr_predict_cov_run(model, x_star, n_star, mean_addr, cov_addr, unnorm, y_std, y_mean)
+        _gpr_predict_cov_run(model, x_star, n_star, mean_addr, cov_addr, unnorm, y_std, y_mean,
+                             _x_word(r.training), _x_word(r.source))
         return n_star
 
     @staticmethod
@@ -319,12 +321,10 @@ struct GPDeviceKernels(GPNativeKernels):
             n_ls,
             String("gpr_sample_y"),
         )
-        _host_x(r.training, "X_train_")
-        _host_x(r.source, "X")
-        var xt = read_f32(r.training, max(0, n_train * n_features))
+        var xt = _x_list(r.training, max(0, n_train * n_features))
         var l = read_f32(r.factor, max(0, n_train * n_train))
         var dual = read_f32(r.dual, max(0, n_train))
-        var x_star = read_f32(r.source, max(0, n_star * n_features))
+        var x_star = _x_list(r.source, max(0, n_star * n_features))
         var yzero = List[Float32]()
         var model = GPRegressor(
             xt^,
@@ -341,7 +341,8 @@ struct GPDeviceKernels(GPNativeKernels):
             info,
             0,
         )
-        _gpr_sample_y_run(model, x_star, n_star, n_samples, seed, out_addr, unnorm, y_std, y_mean)
+        _gpr_sample_y_run(model, x_star, n_star, n_samples, seed, out_addr, unnorm, y_std, y_mean,
+                          _x_word(r.training), _x_word(r.source))
         return n_samples
 
     @staticmethod
@@ -358,11 +359,10 @@ struct GPDeviceKernels(GPNativeKernels):
         var free = read_i32(r.free_flags, max(0, n_nodes))
         var gp = _f64_ptr(r.gradient)
         var sp = _f64_ptr(r.scalars)
-        _host_x(r.source, "X")
-        var x = read_f32(r.source, max(0, n_train * n_features))
+        var x = _x_list(r.source, max(0, n_train * n_features))
         var y = read_f32(r.targets, max(0, n_train))
         var info = 0
-        info = _gpr_lml_grad_run(x, y, spec, free, n_train, n_features, alpha, gp, sp)
+        info = _gpr_lml_grad_run(x, y, spec, free, n_train, n_features, alpha, gp, sp, _x_word(r.source))
         return info
 
     @staticmethod
@@ -423,8 +423,7 @@ struct GPDeviceKernels(GPNativeKernels):
             n_ls,
             String("gpc_fit"),
         )
-        _host_x(r.source, "X")
-        var x = read_f32(r.source, max(0, n_train * n_features))
+        var x = _x_list(r.source, max(0, n_train * n_features))
         var y: List[Float32]
         if r.coded_targets:
             y = gpc_ovr_targets(read_i32(r.targets, max(0, n_train)), n_train, r.column)
@@ -436,7 +435,7 @@ struct GPDeviceKernels(GPNativeKernels):
             y = read_f32(r.targets, max(0, n_train))
         var n_iter = 0
         n_iter = _gpc_fit_run(
-            x, y, spec, n_train, n_features, max_iter_predict, lp, pp, wp, sp
+            x, y, spec, n_train, n_features, max_iter_predict, lp, pp, wp, sp, _x_word(r.source)
         )
         return n_iter
 
@@ -461,18 +460,16 @@ struct GPDeviceKernels(GPNativeKernels):
             n_ls,
             String("gpc_predict"),
         )
-        _host_x(r.training, "X_train_")
-        _host_x(r.source, "X")
-        var xt = read_f32(r.training, max(0, n_train * n_features))
+        var xt = _x_list(r.training, max(0, n_train * n_features))
         var y = read_f32(r.targets, max(0, n_train))
         var pi = read_f32(r.pi, max(0, n_train))
         var wsr = read_f32(r.wsr, max(0, n_train))
         var l = read_f32(r.factor, max(0, n_train * n_train))
-        var x_star = read_f32(r.source, max(0, n_star * n_features))
+        var x_star = _x_list(r.source, max(0, n_star * n_features))
         var rc = 0
         rc = _gpc_predict_run(
             xt, y, pi, wsr, l, spec, x_star, n_train, n_features, n_star,
-            want_proba, mean_addr, var_addr, proba_addr,
+            want_proba, mean_addr, var_addr, proba_addr, _x_word(r.training), _x_word(r.source),
         )
         if out_kind != 0:
             gpc_binary_out(mean_addr, proba_addr, n_star, out_kind, r.dst)

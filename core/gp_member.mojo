@@ -1002,8 +1002,10 @@ def _gpc_query(slot: _Slot, call: _Call, proba: Bool) raises:
         admitted_finite_refuse(answer.finite, _GPC)
     else:
         # These entries return no status word: the query is tested here
-        # (the estimator's `gp_query_scan`).
-        _finite_of(call[].x, "X", _GPC)
+        # (the estimator's `gp_query_scan`); a fold X word (`_fold_op`) is
+        # tested on the device by the list entries (lane vdf-tail-a).
+        if call[].x.data >= 0:
+            _finite_of(call[].x, "X", _GPC)
         if m == 1:
             var scratch = GPCQueryScratch(q, 0)
             var destination = call[].dst.data
@@ -1266,18 +1268,20 @@ def _asked_kind(call: _Call) -> Int:
 
 def _route_fold(call: _Call, kind: Int) -> Bool:
     """A GPU route where every operation of `kind` reads a device fold slot,
-    and whose image ships the x_prep family store. The regressor: the
-    pointer fit (GP_CAP_POINTER; the device optimizer is in every GPU image)
-    and the resident queries (GP_CAP_RESIDENT). The classifier: the
-    one-vs-rest fit and resident query (GP_CAP_OVR, GP_CAP_RESIDENT). A route
-    without them (the `fast` list routes, which read host lists) answers no
-    fold: the caller takes the fold's rows itself. Asked with the
-    capabilities, once per member class."""
+    and whose image ships the x_prep family store. Every GPU image's fits
+    read THE FOLD X WORD: the pointer fit (GP_CAP_POINTER), the device
+    optimizer, the one-vs-rest fit (GP_CAP_OVR) and, since lane vdf-tail-a,
+    the list fits of the `fast` routes (gaussian_process/estimator.mojo
+    `_x_device`: `gpr_fit_host`, `gpc_fit_binary_host`). The regressor's
+    queries are the resident ones (GP_CAP_RESIDENT); the classifier's are
+    the one-vs-rest query or the list query per column, which read the word
+    too. A host route answers no fold: the caller takes the fold's rows
+    itself. Asked with the capabilities, once per member class."""
     if call[].route.device != DEVICE_GPU:
         return False
     var caps = call[].route.flags
-    var regressor = (caps & (GP_CAP_POINTER | GP_CAP_RESIDENT)) == (GP_CAP_POINTER | GP_CAP_RESIDENT)
-    var classifier = (caps & (GP_CAP_OVR | GP_CAP_RESIDENT)) == (GP_CAP_OVR | GP_CAP_RESIDENT)
+    var regressor = (caps & GP_CAP_RESIDENT) == GP_CAP_RESIDENT
+    var classifier = (caps & GP_CAP_OVR) == 0 or (caps & GP_CAP_RESIDENT) == GP_CAP_RESIDENT
     var ready = classifier if kind == _KIND_GPC else (regressor if kind == _KIND_GPR else (regressor and classifier))
     return ready and member_fold_store_ready(call)
 

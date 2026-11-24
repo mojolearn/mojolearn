@@ -90,6 +90,9 @@ from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
 from core.neural_context import neural_ctx
+from core.fold_x_device import fold_x_fill
+from core.device_scan import device_first_nonfinite
+from core.admitted_refusals import admitted_finite_wording
 # ONE PROCESS-LIFETIME DeviceContext per binding and tier (CURRENT DIRECTIVES;
 # lane/neighbors-apple 2026-09-28): a new context per entry is a new Metal
 # queue and a pipeline load per call. Same kernels, same launches, same order
@@ -541,6 +544,37 @@ comptime _GP_XFER_POOL = "MojolearnGPTransferStagesIdenticalV1" if _CTX_MODE == 
 comptime GP_IDN_PREDICT_LAZY_L = _CTX_MODE == _CTX_IDENTICAL
 
 
+#: `_x_device`'s finite test of a fold slot.
+comptime GP_FOLD_TEST_NONE = 0   # a fold-fitted X_train_ slot: tested at its fit
+comptime GP_FOLD_TEST_ROWS = 1   # a fit's or a query's fold rows: no door admitted them (the member's wording)
+
+
+def _x_device(
+    ctx: DeviceContext, x: List[Float32], word: Int, rows: Int, cols: Int, what: String, test: Int,
+    est: String,
+) raises -> DeviceBuffer[DType.float32]:
+    """The list routes' device X (lane vdf-tail-a): the list uploaded (the
+    old call, `word` 0), or THE FOLD X WORD (a negative `word`,
+    core/fold_x_device.mojo): a model-selection fold's rows (or a
+    fold-fitted X_train_) in a fold store slot, ONE device copy of the same
+    bytes the host gather produced into this context's buffer (`x` empty),
+    then, for `GP_FOLD_TEST_ROWS`, the finite test on the device in the
+    member's wording (core/admitted_refusals.mojo, as the resident and
+    pointer routes refuse a fold). The same words reach the same kernels: no
+    bit moves."""
+    if word >= 0:
+        return _upload(ctx, x)
+    if rows <= 0 or cols <= 0:
+        raise Error("gpr: " + what + " must have at least one row and one feature, got " + String(rows) + " x "
+                    + String(cols))
+    var n = rows * cols
+    var buf = ctx.enqueue_create_buffer[DType.float32](n)
+    fold_x_fill(ctx, buf, word, n)
+    if test == GP_FOLD_TEST_ROWS and device_first_nonfinite(ctx, buf, n) >= 0:
+        raise Error("ValueError: " + admitted_finite_wording(est, "X"))
+    return buf^
+
+
 def _download(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
@@ -603,9 +637,16 @@ def gpr_fit_host(
     elem_tpb: Int = GP_ELEM_TPB,
     sabotage: Int = GP_SAB_NONE,
     trace_path: String = "",
+    x_word: Int = 0,
 ) raises -> GPRegressor:
     """`GaussianProcessRegressor(kernel, alpha, optimizer=None).fit(X, y)`,
     host in and host out, one shot. scikit-learn `_gpr.py:233-368`.
+
+    `x_word` (lane vdf-tail-a): 0 reads X from the list `x`; a negative word
+    is THE FOLD X WORD (`_x_device`): a model-selection fold's rows in a fold
+    store slot, `x` empty, copied once on the device, tested finite there in
+    the member's wording, and hashed as `gp.x_train` from the device. The
+    returned `x_train` is then empty: its caller keeps the slot.
 
         K       = kernel(X)                       _gpr.py:349
         K[diag] += alpha                          _gpr.py:350
@@ -631,7 +672,8 @@ def gpr_fit_host(
     and `gp.lml`, in that order.
     """
     gp_validate_optimizer(optimizer, n_restarts_optimizer, normalize_y)
-    gp_validate_data(x, n_train, n_features, String("X"))
+    if x_word >= 0:
+        gp_validate_data(x, n_train, n_features, String("X"))
     gp_validate_targets(y, n_train)
     gp_validate_kernel(kernel, n_features)
     gp_validate_alpha(alpha)
@@ -688,12 +730,15 @@ def gpr_fit_host(
     )
     # TOMBSTONE: MOJOLEARN_KERNEL_FAST_GPR_RESIDENT (DROPPED-semantics) deleted 2026-10-03 by cc300add8; code recoverable at cc300add8^.
     # Restore: git apply experiments/removed/MOJOLEARN_KERNEL_FAST_GPR_RESIDENT.patch; record in docs/TOMBSTONES.md.
-    trace.record_list_f32("gp.x_train", x)
-    trace.record_list_f32("gp.y_train", y)
-
     # --- K = kernel(X, X), on the device ---------------------------------
     var ctx = _family_ctx()
-    var dx = _upload(ctx, x)
+    var dx = _x_device(ctx, x, x_word, n_train, n_features, String("X"), GP_FOLD_TEST_ROWS,
+                       String("GaussianProcessRegressor"))
+    if x_word < 0:
+        trace.record_device(ctx, "gp.x_train", dx, n_train * n_features)
+    else:
+        trace.record_list_f32("gp.x_train", x)
+    trace.record_list_f32("gp.y_train", y)
     # DEVIATION 2487: self-kernel borrows dx twice; one upload.
     var dls = _upload(ctx, _length_scale_table(kernel))
     var dk = ctx.enqueue_create_buffer[DType.float32](n_train * n_train)
@@ -1097,6 +1142,7 @@ def gpr_lml_grad_host(
     free: List[Int32],
     alpha: Float32,
     elem_tpb: Int = GP_ELEM_TPB,
+    x_word: Int = 0,
 ) raises -> GPLmlGrad:
     """scikit-learn `log_marginal_likelihood(theta, eval_gradient=True)`
     (`_gpr.py:575-653`) at the kernel handed in, whose FREE leaves are
@@ -1112,8 +1158,13 @@ def gpr_lml_grad_host(
     K here is bit for bit the K `gpr_fit_host` builds (the same value
     launches), so the likelihood at the optimizer's answer is the fit's.
     No card stage is recorded: the optimizer evaluates many kernels and a
-    card of them would be a function of the iteration count."""
-    gp_validate_data(x, n_train, n_features, String("X"))
+    card of them would be a function of the iteration count.
+
+    `x_word` (lane vdf-tail-a): a negative word is THE FOLD X WORD
+    (`_x_device`, `x` empty), tested finite on the device in the member's
+    wording; 0 reads the list."""
+    if x_word >= 0:
+        gp_validate_data(x, n_train, n_features, String("X"))
     gp_validate_targets(y, n_train)
     gp_validate_kernel(kernel, n_features)
     gp_validate_alpha(alpha)
@@ -1122,7 +1173,8 @@ def gpr_lml_grad_host(
     var n_free = gp_free_count(kernel.kinds, kernel.ls_len, free)
 
     var ctx = _family_ctx()
-    var dx = _upload(ctx, x)
+    var dx = _x_device(ctx, x, x_word, n_train, n_features, String("X"), GP_FOLD_TEST_ROWS,
+                       String("GaussianProcessRegressor"))
     var dls = _upload(ctx, _length_scale_table(kernel))
     var dk = ctx.enqueue_create_buffer[DType.float32](cells)
     var dstack = ctx.enqueue_create_buffer[DType.float32](
@@ -1194,8 +1246,16 @@ def gpr_predict_host(
     unnorm: Bool = False,
     y_std: Float32 = Float32(1.0),
     y_mean: Float32 = Float32(0.0),
+    xt_word: Int = 0,
+    xs_word: Int = 0,
 ) raises -> GPPrediction:
     """`predict(X_star, return_std)`, scikit-learn `_gpr.py:446-500`.
+
+    `xt_word` / `xs_word` (lane vdf-tail-a): 0 reads X_train_ / the query
+    from the lists; a negative word is THE FOLD X WORD (`_x_device`): a
+    fold-fitted X_train_ slot (`model.x_train` empty) / a fold's query rows
+    in a fold store slot (`x_star` empty, tested finite on the device in
+    the member's wording). One device copy each, the same bytes.
 
         K_trans = kernel(X_test, X_train)              _gpr.py:446
         y_mean  = K_trans @ alpha_                     _gpr.py:447
@@ -1246,7 +1306,8 @@ def gpr_predict_host(
             "gpr_predict_host: n_star must be positive, got "
             + String(n_star)
         )
-    gp_validate_data(x_star, n_star, model.n_features, String("X_star"))
+    if xs_word >= 0:
+        gp_validate_data(x_star, n_star, model.n_features, String("X_star"))
 
     var n_train = model.n_train
     var d = model.n_features
@@ -1276,8 +1337,10 @@ def gpr_predict_host(
     trace.record_scalar_f32("gp.kss", kss)
 
     var ctx = _family_ctx()
-    var dx = _upload(ctx, model.x_train)
-    var dxs = _upload(ctx, x_star)
+    var dx = _x_device(ctx, model.x_train, xt_word, n_train, d, String("X_train_"), GP_FOLD_TEST_NONE,
+                       String("GaussianProcessRegressor"))
+    var dxs = _x_device(ctx, x_star, xs_word, n_star, d, String("X_star"), GP_FOLD_TEST_ROWS,
+                        String("GaussianProcessRegressor"))
     var dls = _upload(ctx, _length_scale_table(model.kernel))
     var ddual = _upload(ctx, model.dual_coef)
     # GP_IDN_PREDICT_LAZY_L: the factor crosses only for the variance; the
@@ -1455,8 +1518,16 @@ def gpr_predict_cov_host(
     unnorm: Bool = False,
     y_std: Float32 = Float32(1.0),
     y_mean: Float32 = Float32(0.0),
+    xt_word: Int = 0,
+    xs_word: Int = 0,
 ) raises -> GPPosteriorCov:
     """`predict(X, return_cov=True)`, scikit-learn `_gpr.py:495-506`:
+
+    `xt_word` / `xs_word` (lane vdf-tail-a): 0 reads X_train_ / the query
+    from the lists; a negative word is THE FOLD X WORD (`_x_device`): a
+    fold-fitted X_train_ slot (`model.x_train` empty) / a fold's query rows
+    in a fold store slot (`x_star` empty, tested finite on the device in
+    the member's wording). One device copy each, the same bytes.
 
         y_mean = K_trans @ alpha_
         V      = solve_triangular(L, K_trans.T)
@@ -1476,13 +1547,16 @@ def gpr_predict_cov_host(
         )
     if n_star <= 0:
         raise Error("gpr_predict_cov_host: n_star must be positive, got " + String(n_star))
-    gp_validate_data(x_star, n_star, model.n_features, String("X_star"))
+    if xs_word >= 0:
+        gp_validate_data(x_star, n_star, model.n_features, String("X_star"))
     var n_train = model.n_train
     var d = model.n_features
     var trace = _trace_for("", False)
     var ctx = _family_ctx()
-    var dx = _upload(ctx, model.x_train)
-    var dxs = _upload(ctx, x_star)
+    var dx = _x_device(ctx, model.x_train, xt_word, n_train, d, String("X_train_"), GP_FOLD_TEST_NONE,
+                       String("GaussianProcessRegressor"))
+    var dxs = _x_device(ctx, x_star, xs_word, n_star, d, String("X_star"), GP_FOLD_TEST_ROWS,
+                        String("GaussianProcessRegressor"))
     var dls = _upload(ctx, _length_scale_table(model.kernel))
     var ddual = _upload(ctx, model.dual_coef)
     var dl = _upload(ctx, model.l)
@@ -1569,6 +1643,8 @@ def gpr_sample_y_host(
     unnorm: Bool = False,
     y_std: Float32 = Float32(1.0),
     y_mean: Float32 = Float32(0.0),
+    xt_word: Int = 0,
+    xs_word: Int = 0,
 ) raises -> List[Float32]:
     """`sample_y(X, n_samples, random_state)`, scikit-learn `_gpr.py`
     `GaussianProcessRegressor.sample_y`: `n_star x n_samples` float32
@@ -1584,7 +1660,8 @@ def gpr_sample_y_host(
     the host; `L_C Z` through the identical GEMM at `OP_NN`; the mean added
     on the host. `elem_tpb` and `solve_tpb` are scheduling only."""
     gp_sample_y_validate(model.info, n_star, n_samples)
-    gp_validate_data(x_star, n_star, model.n_features, String("X_star"))
+    if xs_word >= 0:
+        gp_validate_data(x_star, n_star, model.n_features, String("X_star"))
 
     var n_train = model.n_train
     var d = model.n_features
@@ -1608,8 +1685,10 @@ def gpr_sample_y_host(
 
     # --- the mean, V, V^T V and K** on the device --------------------------
     var ctx = _family_ctx()
-    var dx = _upload(ctx, model.x_train)
-    var dxs = _upload(ctx, x_star)
+    var dx = _x_device(ctx, model.x_train, xt_word, n_train, d, String("X_train_"), GP_FOLD_TEST_NONE,
+                       String("GaussianProcessRegressor"))
+    var dxs = _x_device(ctx, x_star, xs_word, n_star, d, String("X_star"), GP_FOLD_TEST_ROWS,
+                        String("GaussianProcessRegressor"))
     var dls = _upload(ctx, _length_scale_table(model.kernel))
     var ddual = _upload(ctx, model.dual_coef)
     var dl = _upload(ctx, model.l)
