@@ -48,18 +48,28 @@ def test_nmf_fit_depth_is_admitted_before_numeric_hooks(method, subclass):
 @pytest.mark.parametrize("method", ["fit", "fit_transform", "transform", "inverse_transform"])
 def test_nmf_namespace_keys_are_admitted_before_hash_collision_equality(method):
     called = []
+    armed = []
 
     class Key:
         def __hash__(self):
             return hash("_mojolearn_fitting")
 
         def __eq__(self, other):
+            if not armed:
+                # The insertion below, not the product: CPython compares the new key with any
+                # equal-hash key already in the instance's table. Since Python 3.13 an instance
+                # dictionary shares its class's keys, so once any NMF instance in the process held
+                # `_mojolearn_fitting` (an earlier test, an earlier fit) that str is in every new
+                # instance's table and the insertion itself calls this method. Answer "different"
+                # so the key is inserted; only calls after arming are the product's.
+                return False
             called.append(other)
             raise AssertionError("Python namespace key equality executed")
 
     model = _model()
     vars(model)[Key()] = 0
     called.clear()
+    armed.append(True)
     with pytest.raises(TypeError, match="exact string state keys"):
         getattr(model, method)(_data())
     assert called == []
