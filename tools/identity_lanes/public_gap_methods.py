@@ -175,8 +175,22 @@ def _(ml, X, yc, yr, Xh=None):
         search = ms.GridSearchCV(est, grid, cv=3, scoring=scorer, n_jobs=1, error_score=-7.0,
                                  refit=False).fit(rows, y)
         r9c.append(search.cv_results_["mean_test_score"])
+    # Lane mf-r9d: r2 over a binary classifier's predict_log_proba column (the log in the member's precision before
+    # the RUN's float32 narrowing) and 'roc_auc' over a non-classifier's own columns (GaussianMixture's
+    # predict_proba against float 0/1 targets: one component scores its one column, two refuse the (n, 2) block in
+    # column_or_1d's words: error_score). Digested by their mean test scores.
+    r9d = []
+    for scorer, est, grid, y in (  # glue: fixtures
+            (ms.make_scorer(metrics.r2_score, response_method="predict_log_proba"),
+             ml.LogisticRegression(max_iter=30), {"C": [0.5, 2.0]}, binary),
+            ("roc_auc", ml.GaussianMixture(random_state=0, numeric_mode="identical"), {"n_components": [1, 2]},
+             binary.astype(np.float64))):
+        search = ms.GridSearchCV(est, grid, cv=3, scoring=scorer, n_jobs=1, error_score=-7.0,
+                                 refit=False).fit(rows, y)
+        r9d.append(search.cv_results_["mean_test_score"])
     return _fit(dict(scores=_h(values),
                      r9c=_h(*[np.asarray(v, dtype=np.float64) for v in r9c]),
+                     r9d=_h(*[np.asarray(v, dtype=np.float64) for v in r9d]),
                      rows8a=_h(*[np.asarray(v, dtype=np.float64) for v in rows8a]),
                      rows8b=_h(*[np.asarray(v, dtype=np.float64) for v in rows8b]),
                      rows8d=_h(*[np.asarray(v, dtype=np.float64) for v in rows8d]),
