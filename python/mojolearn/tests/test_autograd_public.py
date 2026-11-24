@@ -255,7 +255,21 @@ def test_guide_import_pretrained(tmp_path, monkeypatch):
     # import_model exports the module with torch.onnx's TorchScript exporter, in this process
     from mojolearn import ops
     monkeypatch.chdir(tmp_path)
-    ns = _run(b["import-pretrained"])
+    # the first run downloads the weights through torch.hub, whose tqdm bar starts tqdm's `tqdm_monitor` thread;
+    # left alive, every later native-runtime audit in this worker reports it as an unobserved thread (w3-integrate-5
+    # full run: ~380 failures in one xdist worker). No monitor thread for this test; stop one if it started anyway.
+    try:
+        import tqdm.std as tqdm_std
+    except ImportError:
+        tqdm_std = None
+    if tqdm_std is not None:
+        monkeypatch.setattr(tqdm_std.tqdm, "monitor_interval", 0)
+    try:
+        ns = _run(b["import-pretrained"])
+    finally:
+        if tqdm_std is not None and getattr(tqdm_std.tqdm, "monitor", None) is not None:
+            tqdm_std.tqdm.monitor.exit()
+            tqdm_std.tqdm.monitor = None
     model, images, logits = ns["model"], ns["images"], ns["logits"]
     assert [tuple(t[:2]) for t in model.inputs] == [("input", (4, 3, 224, 224))]
     assert logits.shape == (4, 1000) and logits.dtype == np.float32 and np.isfinite(logits).all()
