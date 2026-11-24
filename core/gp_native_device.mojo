@@ -37,6 +37,17 @@ from gaussian_process.gp_resident_store import gp_resident_store
 from core.fitted_resident_store import fitted_lease_close
 
 
+def _host_x(address: Int, what: String) raises:
+    """A list route reads X as host words: THE FOLD X WORD (a negative
+    address, core/fold_x_device.mojo) reaches only the device routes (the
+    pointer fit, the device optimizer, the resident and pointer queries, the
+    one-vs-rest entries; lane vdf-scope-gp). A Gp member answers no fold on a
+    route without them, so this refusal is a caller's error, in words."""
+    if address < 0:
+        raise Error("TypeError: the Gaussian process list route reads " + what
+                    + " as host words, not a device fold slot")
+
+
 struct GPDeviceKernels(GPNativeKernels):
     @staticmethod
     def mode() raises -> Int:
@@ -104,6 +115,7 @@ struct GPDeviceKernels(GPNativeKernels):
             n_ls,
             String("gpr_fit"),
         )
+        _host_x(r.source, "X")
         var x = read_f32(Int(xp), n_train * n_features)
         var y = read_f32(Int(yp), n_train)
         var info = 0
@@ -215,6 +227,8 @@ struct GPDeviceKernels(GPNativeKernels):
             n_ls,
             String("gpr_predict"),
         )
+        _host_x(r.training, "X_train_")
+        _host_x(r.source, "X")
         var xt = read_f32(Int(xtp), n_train * n_features)
         var l = read_f32(Int(lp), n_train * n_train)
         var dual = read_f32(Int(dp), n_train)
@@ -266,6 +280,8 @@ struct GPDeviceKernels(GPNativeKernels):
             r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales,
             n_nodes, n_ls, String("gpr_predict_cov"),
         )
+        _host_x(r.training, "X_train_")
+        _host_x(r.source, "X")
         var xt = read_f32(r.training, max(0, n_train * n_features))
         var l = read_f32(r.factor, max(0, n_train * n_train))
         var dual = read_f32(r.dual, max(0, n_train))
@@ -303,6 +319,8 @@ struct GPDeviceKernels(GPNativeKernels):
             n_ls,
             String("gpr_sample_y"),
         )
+        _host_x(r.training, "X_train_")
+        _host_x(r.source, "X")
         var xt = read_f32(r.training, max(0, n_train * n_features))
         var l = read_f32(r.factor, max(0, n_train * n_train))
         var dual = read_f32(r.dual, max(0, n_train))
@@ -340,6 +358,7 @@ struct GPDeviceKernels(GPNativeKernels):
         var free = read_i32(r.free_flags, max(0, n_nodes))
         var gp = _f64_ptr(r.gradient)
         var sp = _f64_ptr(r.scalars)
+        _host_x(r.source, "X")
         var x = read_f32(r.source, max(0, n_train * n_features))
         var y = read_f32(r.targets, max(0, n_train))
         var info = 0
@@ -370,12 +389,17 @@ struct GPDeviceKernels(GPNativeKernels):
         var tp = _f64_ptr(r.theta)
         var vp = _f64_ptr(r.values)
         var rp = _f64_ptr(r.runs)
-        var x = read_f32(r.source, max(0, n_train * n_features))
+        # THE FOLD X WORD (lane vdf-scope-gp): a fold slot is copied on the device by the
+        # optimizer (`gpr_optimize_device`), never read into a host list.
+        var x_word = r.source if r.source < 0 else 0
+        var x = List[Float32]()
+        if x_word == 0:
+            x = read_f32(r.source, max(0, n_train * n_features))
         var y = read_f32(r.targets, max(0, n_train))
         var best = 0
         best = _gpr_optimize_run(
             x, y, spec, free, bounds, n_train, n_features, alpha, n_restarts,
-            seed_lo, seed_hi, tp, vp, rp,
+            seed_lo, seed_hi, tp, vp, rp, x_word,
         )
         return best
 
@@ -399,6 +423,7 @@ struct GPDeviceKernels(GPNativeKernels):
             n_ls,
             String("gpc_fit"),
         )
+        _host_x(r.source, "X")
         var x = read_f32(r.source, max(0, n_train * n_features))
         var y: List[Float32]
         if r.coded_targets:
@@ -436,6 +461,8 @@ struct GPDeviceKernels(GPNativeKernels):
             n_ls,
             String("gpc_predict"),
         )
+        _host_x(r.training, "X_train_")
+        _host_x(r.source, "X")
         var xt = read_f32(r.training, max(0, n_train * n_features))
         var y = read_f32(r.targets, max(0, n_train))
         var pi = read_f32(r.pi, max(0, n_train))
