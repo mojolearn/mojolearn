@@ -238,7 +238,7 @@ from core.member_abi import (
     MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_SCORE,
     MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_BY_INDEX, MEMBER_EXPORT_OWN, MEMBER_IMPORT_DONE,
     MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, MEMBER_CAN_TRANSFORM, MEMBER_OP_TRANSFORM,
-    MEMBER_READS_Y_GIVEN, MEMBER_HOME_HOST, MEMBER_CAN_STEPS,
+    MEMBER_READS_Y_GIVEN, MEMBER_HOME_HOST, MEMBER_CAN_STEPS, MEMBER_CAN_ROW_INDEX,
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import (
@@ -291,7 +291,7 @@ from xtrees.trees_meta_vote_run import (
     VoteMember, VoteRows, vote_codes_run, vote_soft_run, vote_regress_run, stack_place_run, member_f32_block,
     ovr_assemble_run, bag_predict_run, bag_oob_run, bag_oob_classifier_finish, bag_oob_r2_run,
     calibrated_proba_run, CalPair, CalFit, ada_classifier_run, ada_regressor_run, ADA_DECISION, ADA_PROBA, ADA_CODES,
-    VOTE_ALL_ANSWERED, STACK_PREDICT, STACK_PROBA, STACK_DECISION,
+    VOTE_ALL_ANSWERED, STACK_PREDICT, STACK_PROBA, STACK_DECISION, vote_rows_point, vote_rows_call,
 )
 
 comptime META_VOTE_CLASSIFIER = 0
@@ -522,6 +522,17 @@ def _unit_kind(kind: Int) -> Bool:
 
 def _bag_kind(kind: Int) -> Bool:
     return kind == META_BAG_CLASSIFIER or kind == META_BAG_REGRESSOR
+
+
+def _indexed_kind(kind: Int) -> Bool:
+    """THE INDEXED ROWS (lane vdf-meta2): the kinds whose fit and predict hand a caller's row index (and its
+    resident scope and X's pin) on to their nested members, so a search's fold rows stay where the caller
+    holds them (on the device inside `resident()`): voting, one-vs-rest and multi-output. Every nested member
+    of these is fitted and asked over the same rows. Any other kind given a row index gathers the rows once
+    at its entry (`_fit`, `_operate_gathered`), what a member set's worker did for it before the family
+    union carried MEMBER_CAN_ROW_INDEX."""
+    return (kind == META_VOTE_CLASSIFIER or kind == META_VOTE_REGRESSOR or kind == META_OVR
+            or _multi_kind(kind))
 
 
 # ------------------------------------------------------------ the plan store
@@ -1081,6 +1092,13 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
     var rfe_words: List[Float64]
     # Lane mf-del5b: the plan entry's dotted-getter hops (`meta_plan_rfe`; empty: a leaf base).
     var rfe_hops: List[Float64]
+    # THE GATHERED ROWS (lane vdf-meta2, `_fit`): a kind that hands no row index on (`_indexed_kind`) fitted
+    # on a caller's row index fits on these gathered X / y / weights / given-y words (8-byte storage), owned
+    # by the slot because its nested states may borrow them (THE LIFETIME RULE) until the next fit or FREE.
+    var rows_x: List[Int64]
+    var rows_y: List[Int64]
+    var rows_w: List[Int64]
+    var rows_given: List[Int64]
 
     def __init__(out self):
         self.generation = 0
@@ -1165,6 +1183,10 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
         self.rfe_support = List[Float32]()
         self.rfe_ranking = List[Float32]()
         self.rfe_columns = List[Int32]()
+        self.rows_x = List[Int64]()
+        self.rows_y = List[Int64]()
+        self.rows_w = List[Int64]()
+        self.rows_given = List[Int64]()
         self.rfe_words = List[Float64]()
         self.rfe_hops = List[Float64]()
 
@@ -1435,6 +1457,12 @@ def _kind_mask(kind: Int, flag: Bool, masks: List[Int]) -> Int:
             mask |= MEMBER_CAN_PREDICT_PROBA
         if _multi_kind(kind) and (base & MEMBER_CAN_SAMPLE_WEIGHT) != 0:
             mask |= MEMBER_CAN_SAMPLE_WEIGHT
+        if _indexed_kind(kind) and (base & MEMBER_CAN_ROW_INDEX) != 0:
+            # THE INDEXED ROWS (lane vdf-meta2): every unit is the base, which reads a row index; the
+            # scope and X's pin go on to it when it keeps X resident (route-exact: never on a CPU route).
+            mask |= MEMBER_CAN_ROW_INDEX
+            if (base & MEMBER_CAN_SCOPE) != 0:
+                mask |= MEMBER_CAN_SCOPE
         if _bag_kind(kind):
             # Bagging (lane w3f3-h, scikit-learn 1.9.1 _bagging.py:82-93,
             # 164-178): the caller's weights only drive the row draw; a base
@@ -1463,6 +1491,13 @@ def _kind_mask(kind: Int, flag: Bool, masks: List[Int]) -> Int:
                 mask |= MEMBER_CAN_PREDICT_PROBA
             if (final & MEMBER_CAN_DECISION) != 0:
                 mask |= MEMBER_CAN_DECISION
+        if _indexed_kind(kind) and _all(masks, MEMBER_CAN_ROW_INDEX):
+            # THE INDEXED ROWS (lane vdf-meta2): a vote hands the caller's row index to every member, so
+            # only when every member reads one (no member gathers its own copy); the scope and X's pin
+            # go to the members that keep X resident.
+            mask |= MEMBER_CAN_ROW_INDEX
+            if _any(masks, MEMBER_CAN_SCOPE):
+                mask |= MEMBER_CAN_SCOPE
     if _all(masks, MEMBER_CAN_SAMPLE_WEIGHT):
         mask |= MEMBER_CAN_SAMPLE_WEIGHT
     if _all(masks, MEMBER_GIL_FREE):
@@ -1482,7 +1517,7 @@ def _all_either(masks: List[Int]) -> Bool:
 comptime _UNION = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION
     | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_CLASSIFIER | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_BORROWS_FIT
     | MEMBER_GIL_FREE | MEMBER_GIL_DOOR | MEMBER_CAN_SCORE | MEMBER_CAN_MULTI_OUTPUT | MEMBER_CAN_SCOPE
-    | MEMBER_CAN_TRANSFORM | MEMBER_READS_Y_GIVEN | MEMBER_CAN_STEPS)
+    | MEMBER_CAN_TRANSFORM | MEMBER_READS_Y_GIVEN | MEMBER_CAN_STEPS | MEMBER_CAN_ROW_INDEX)
 
 
 def _set_word(mask: Int) -> UInt8:
@@ -1697,7 +1732,8 @@ def _raise_member(m: VoteMember, rows: VoteRows) raises:
     same call again, raising."""
     var plan = MutPointer[MemberPlan, MutUntrackedOrigin](unsafe_from_address=m.plan)
     var call = member_call_of(plan[], m.state)
-    call.x = MemberMatrix(rows.x, rows.n, rows.d)
+    vote_rows_point(call, rows)  # THE INDEXED ROWS (lane vdf-meta2): the same rows the RUN's call read
+    call.pin = 0  # the words call: no pin is offered again
     var scratch = List[Int64](length=max(rows.n * m.cols, 1), fill=Int64(0))
     call.dst = MemberMatrix(Int(scratch.unsafe_ptr()), rows.n, m.cols, m.dtype)
     _ = member_call(plan[].member, m.operation, call)
@@ -1722,6 +1758,113 @@ def _set_of(slot: _SlotPtr, x: Int, rows: Int, cols: Int, y_dtype: Int) -> Membe
     var run = MemberSetRun(x, rows, cols, y_dtype, MEMBER_I32)
     run.cap = slot[].cap
     return run^
+
+
+def _index_given(call: _CallPtr) -> Bool:
+    """The call carries a row index the member reads (THE INDEXED ROWS)."""
+    return call[].row_index.rows > 0
+
+
+def _index_ok(m: MemberMatrix) -> Bool:
+    """A row index this member reads: dense host int32 or int64 row numbers."""
+    return m.dense_host(MEMBER_I32) or m.dense_host(MEMBER_I64)
+
+
+def _set_of_call(slot: _SlotPtr, call: _CallPtr, y_dtype: Int) -> MemberSetRun:
+    """The nested set of an indexed kind's fit (`_indexed_kind`) over the caller's X: its whole base when the
+    call carries a row index (each nested member draws the index; its index type is the set's), the
+    caller's resident scope recorded for the members `_offer_scope` offers X's pin to."""
+    var index_dtype = call[].row_index.dtype if _index_given(call) else MEMBER_I32
+    var run = MemberSetRun(call[].x.data, call[].x.rows, call[].x.cols, y_dtype, index_dtype)
+    run.cap = slot[].cap
+    run.scope = call[].scope
+    return run^
+
+
+def _draw(call: _CallPtr) -> Int:
+    """The row draw every nested member of an indexed kind reads: the caller's row index (0: every row)."""
+    return call[].row_index.data if _index_given(call) else 0
+
+
+def _draw_count(call: _CallPtr) -> Int:
+    return call[].row_index.rows if _index_given(call) else 0
+
+
+def _offer_scope(slot: _SlotPtr, mut run: MemberSetRun, call: _CallPtr) -> List[UInt8]:
+    """THE PIN RULE handed down (lane vdf-meta2): the caller's resident scope and X's pin token, offered on
+    the fit of every nested member of `run` (run member v is slot member v) whose kind keeps X resident
+    (MEMBER_CAN_SCOPE). The set offers it only to a member that reads X by view or by index (a member
+    whose drawn rows its worker gathers is offered nothing). The same token goes to each such member, as
+    the search RUN offers one token to its candidates (core/msel_search_run.mojo): a cache that takes it
+    takes the caller's one reference, and the next member's fit is that cache's hit. Per run member, 1
+    when offered (empty: nothing offered)."""
+    var offered = List[UInt8]()
+    if call[].scope == MEMBER_SCOPE_NONE or call[].pin == 0:
+        return offered^
+    offered = List[UInt8](length=len(run.plans), fill=UInt8(0))
+    for v in range(len(run.plans)):  # driver-loop: over the set's members (one mask test each)
+        if v < len(slot[].masks) and (slot[].masks[v] & MEMBER_CAN_SCOPE) != 0:
+            run.pin_tokens[v] = call[].pin
+            offered[v] = UInt8(1)
+    return offered^
+
+
+def _note_scope(run: MemberSetRun, call: _CallPtr, offered: List[UInt8]):
+    """After the set's fits (returned or raised): the caller's `pin_kept` (nonzero) when an offered nested
+    member's cache took X's reference (the set wrote its token to 0), which the caller's
+    `member_pin_settle` reads."""
+    for v in range(len(offered)):  # driver-loop: over the set's members (one token each)
+        if offered[v] != UInt8(0) and v < len(run.pin_tokens) and run.pin_tokens[v] == 0:
+            call[].pin_kept = 1
+
+
+def _fit_offered(slot: _SlotPtr, mut run: MemberSetRun, call: _CallPtr) raises:
+    """`member_set_fit` of an indexed kind's nested set with the caller's scope and pin offered
+    (`_offer_scope`), the answer noted whether the fits returned or raised (THE PIN RULE)."""
+    var offered = _offer_scope(slot, run, call)
+    try:
+        member_set_fit(run)
+    finally:
+        _note_scope(run, call, offered)
+
+
+def _gather_bytes(src: Int, index: Int, wide: Bool, count: Int, row_bytes: Int, dst: Int):
+    """Rows `index[0 .. count)` (int64 when `wide`, else int32 row numbers) of `src`, `row_bytes` bytes
+    each, copied as bytes into `dst` (row-major, `count` rows): THE GATHERED ROWS. Row tasks across the
+    host cores; the same rows in the same order as a member set's worker gather, so the same bits."""
+    if count <= 0 or row_bytes <= 0 or src == 0:
+        return
+    var tasks = max(1, min(count, native_unit_cores()))
+    var per = (count + tasks - 1) // tasks
+
+    def _part(t: Int) {imm src, imm index, imm wide, imm count, imm row_bytes, imm dst, imm per}:
+        var s = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=src)
+        var d = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst)
+        var first = t * per
+        var last = min(count, first + per)
+        for i in range(first, last):
+            var r = 0
+            if wide:
+                r = Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=index)[i])
+            else:
+                r = Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=index)[i])
+            unsafe_memcpy(dest=d + i * row_bytes, src=s + r * row_bytes, count=row_bytes)
+
+    host_parallelize(_part, tasks)
+
+
+def _gather_view(view: MemberMatrix, index: MemberMatrix, mut store: List[Int64]) -> MemberMatrix:
+    """`view`'s rows at `index` gathered into `store` (8-byte words, resized), as a dense host view of the
+    same element type and columns; a view not given stays not given."""
+    if not view.given():
+        return view
+    var row_bytes = view.cols * view.element_bytes()
+    var count = index.rows
+    store = List[Int64](length=max((count * row_bytes + 7) // 8, 1), fill=Int64(0))
+    _gather_bytes(view.data, index.data, index.dtype == MEMBER_I64, count, row_bytes, Int(store.unsafe_ptr()))
+    var out = MemberMatrix(Int(store.unsafe_ptr()), count, view.cols, view.dtype)
+    out.steps = view.steps
+    return out
 
 
 def _add(slot: _SlotPtr, mut run: MemberSetRun, u: Int, classes: Int, target: Int, weights: Int, draw: Int,
@@ -1846,18 +1989,18 @@ def _codes_into(slot: _SlotPtr, u: Int, state: Int, rows: VoteRows, dst: Int) ra
     codes narrowed once, as the door's int32 cast narrowed them); its call
     refusing raises its own words."""
     var call = member_call_of(slot[].plans[u], state)
-    call.x = MemberMatrix(rows.x, rows.n, rows.d)
+    vote_rows_point(call, rows)  # THE INDEXED ROWS (lane vdf-meta2): the base, the index and the offered pin
     if slot[].pred_dtype[u] == MEMBER_I64:
         var wide = List[Int64](length=max(rows.n, 1), fill=Int64(0))
         call.dst = MemberMatrix(Int(wide.unsafe_ptr()), rows.n, 1, MEMBER_I64)
-        _ = member_call(slot[].plans[u].member, MEMBER_OP_PREDICT, call)
+        vote_rows_call(slot[].plans[u], MEMBER_OP_PREDICT, call, rows)
         var codes = _I32P(unsafe_from_address=dst)
         for i in range(rows.n):  # small-loop(one narrowing pass over one member's codes, as the door's cast)
             codes[i] = Int32(wide[i])
         _ = len(wide)
     else:
         call.dst = MemberMatrix(dst, rows.n, 1, MEMBER_I32)
-        _ = member_call(slot[].plans[u].member, MEMBER_OP_PREDICT, call)
+        vote_rows_call(slot[].plans[u], MEMBER_OP_PREDICT, call, rows)
 
 
 def _label_block(slot: _SlotPtr, u: Int, state: Int, rows: VoteRows, held: List[Int32],
@@ -2155,10 +2298,12 @@ def _fit_vote(slot: _SlotPtr, call: _CallPtr) raises:
     var y_dtype = MEMBER_I32 if slot[].kind == META_VOTE_CLASSIFIER else MEMBER_F32
     var weights = call[].weights.data if call[].weights.given() else 0
     var m = len(slot[].plans)
-    var run = _set_of(slot, call[].x.data, call[].x.rows, call[].x.cols, y_dtype)
+    # THE INDEXED ROWS (lane vdf-meta2): every member draws the caller's row index (0: every row) out of
+    # the caller's X, its scope and X's pin offered to the members that keep X resident.
+    var run = _set_of_call(slot, call, y_dtype)
     for u in range(m):  # driver-loop: over the voting members (admission into the set, once each)
-        _add(slot, run, u, classes, call[].y.data, weights, 0, 0)
-    member_set_fit(run)
+        _add(slot, run, u, classes, call[].y.data, weights, _draw(call), _draw_count(call))
+    _fit_offered(slot, run, call)
     slot[].states = List[Int](length=m, fill=0)
     _keep_states(slot, run, 0)
     slot[].classes = classes
@@ -2345,8 +2490,6 @@ def _fit_ovr(slot: _SlotPtr, call: _CallPtr) raises:
     if k < 2:
         raise Error("y has fewer than 2 classes")
     var n = call[].x.rows
-    var d = call[].x.cols
-    var x = call[].x.data
     var y = call[].y.data
     var units = 1 if k == 2 else k
     _expand(slot, units)
@@ -2356,11 +2499,13 @@ def _fit_ovr(slot: _SlotPtr, call: _CallPtr) raises:
             var yj = List[Int32](length=max(n, 1), fill=Int32(0))
             _ = xt_indicator_codes(slot[].glue, y, Int(yj.unsafe_ptr()), 0, n, j)
             slot[].targets.append(yj^)
-    var run = _set_of(slot, x, n, d, MEMBER_I32)
+    # THE INDEXED ROWS (lane vdf-meta2): `n` is the caller's X rows (its whole base with a row index: the
+    # indicators cover every base row, addressed as y), each unit drawing the row index.
+    var run = _set_of_call(slot, call, MEMBER_I32)
     for u in range(units):  # driver-loop: over the units (admission into the set, once each)
         var target = y if k == 2 else Int(slot[].targets[u].unsafe_ptr())
-        _add(slot, run, u, 2, target, 0, 0, 0)
-    member_set_fit(run)
+        _add(slot, run, u, 2, target, 0, _draw(call), _draw_count(call))
+    _fit_offered(slot, run, call)
     slot[].states = List[Int](length=units, fill=0)
     _keep_states(slot, run, 0)
     slot[].classes = k
@@ -3747,12 +3892,14 @@ def _fit_multi(slot: _SlotPtr, call: _CallPtr) raises:
         host_parallelize(_given_column, outputs)
         _ = len(given_at)
     _ = len(columns)  # keep-alive: _column read it through columns_at
-    var run = _set_of(slot, call[].x.data, n, d, MEMBER_I32 if classifier else MEMBER_F32)
+    # THE INDEXED ROWS (lane vdf-meta2): with a row index `n` is the base's rows (the target columns are
+    # addressed as y) and each output's unit draws the index.
+    var run = _set_of_call(slot, call, MEMBER_I32 if classifier else MEMBER_F32)
     for j in range(outputs):  # driver-loop: over the outputs (admission into the set, once each)
-        _add(slot, run, j, counts[j], Int(slot[].targets[j].unsafe_ptr()), weights, 0, 0)
+        _add(slot, run, j, counts[j], Int(slot[].targets[j].unsafe_ptr()), weights, _draw(call), _draw_count(call))
         if len(given_cols) > 0:
             run.given_target(Int(given_cols[j].unsafe_ptr()), MEMBER_F64)
-    member_set_fit(run)
+    _fit_offered(slot, run, call)
     _ = len(given_cols)  # read through their addresses by the fits above
     slot[].states = List[Int](length=outputs, fill=0)
     _keep_states(slot, run, 0)
@@ -3789,17 +3936,24 @@ def _multi_outputs(slot: _SlotPtr, rows: VoteRows, dtype: Int, dst: Int) raises:
     var errors_at = Int(errors.unsafe_ptr())
     var x = rows.x
     var d = rows.d
+    # THE INDEXED ROWS (lane vdf-meta2): the words of `rows`, rebuilt in each task (`_rows_again`).
+    var base_rows = rows.base_rows
+    var index = rows.index
+    var scope = rows.scope
+    var pin = rows.pin
+    var took = rows.took
 
     def _one(j: Int) {imm slot_at, imm bufs_list, imm failed_at, imm errors_at, imm x, imm d, imm n, imm dtype,
-                       imm dst, imm outputs}:
+                       imm dst, imm outputs, imm base_rows, imm index, imm scope, imm pin, imm took}:
         var s = _SlotPtr(unsafe_from_address=slot_at)
         var buf = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=bufs_list)[j]
         try:
             var pd = s[].pred_dtype[j]
             var inner = member_call_of(s[].plans[j], s[].states[j])
-            inner.x = MemberMatrix(x, n, d)
+            var at = _rows_again(x, base_rows, d, index, n, scope, pin, took)
+            vote_rows_point(inner, at)
             inner.dst = MemberMatrix(buf, n, 1, pd)
-            _ = member_call(s[].plans[j].member, MEMBER_OP_PREDICT, inner)
+            vote_rows_call(s[].plans[j], MEMBER_OP_PREDICT, inner, at)
             for i in range(n):
                 var value: Float64
                 if pd == MEMBER_I32:
@@ -3879,9 +4033,15 @@ def _proba_multi(slot: _SlotPtr, call: _CallPtr) raises:
     var x = rows.x
     var d = rows.d
     var dst = call[].dst.data
+    # THE INDEXED ROWS (lane vdf-meta2): the words of `rows`, rebuilt in each task (`_rows_again`).
+    var base_rows = rows.base_rows
+    var index = rows.index
+    var scope = rows.scope
+    var pin = rows.pin
+    var took = rows.took
 
     def _one(j: Int) {imm slot_at, imm bufs_list, imm offsets_at, imm failed_at, imm errors_at, imm x, imm d, imm n,
-                       imm dst, imm width}:
+                       imm dst, imm width, imm base_rows, imm index, imm scope, imm pin, imm took}:
         var s = _SlotPtr(unsafe_from_address=slot_at)
         var buf = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=bufs_list)[j]
         var first = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=offsets_at)[j]
@@ -3889,9 +4049,10 @@ def _proba_multi(slot: _SlotPtr, call: _CallPtr) raises:
             var pd = s[].proba_dtype[j]
             var cols = s[].proba_cols[j]
             var inner = member_call_of(s[].plans[j], s[].states[j])
-            inner.x = MemberMatrix(x, n, d)
+            var at = _rows_again(x, base_rows, d, index, n, scope, pin, took)
+            vote_rows_point(inner, at)
             inner.dst = MemberMatrix(buf, n, cols, pd)
-            _ = member_call(s[].plans[j].member, MEMBER_OP_PREDICT_PROBA, inner)
+            vote_rows_call(s[].plans[j], MEMBER_OP_PREDICT_PROBA, inner, at)
             var out = _F64P(unsafe_from_address=dst)
             for i in range(n):
                 for c in range(cols):
@@ -3949,10 +4110,14 @@ def _score_multi(slot: _SlotPtr, call: _CallPtr) raises:
     var outputs = len(slot[].states)
     var classifier = slot[].kind == META_MULTI_CLASSIFIER
     var y_dtype = MEMBER_I32 if classifier else MEMBER_F32
-    if not call[].y.dense_host(y_dtype) or call[].y.rows != n or call[].y.cols != outputs:
+    # THE INDEXED ROWS (lane vdf-meta2): with a row index y and the weights are addressed as X (the base's
+    # rows); row i of the score is base row index[i].
+    var index = rows.index
+    var y_rows = rows.base_rows if index != 0 else n
+    if not call[].y.dense_host(y_dtype) or call[].y.rows != y_rows or call[].y.cols != outputs:
         raise Error("TypeError: a " + name + " member scores y as dense host rows x outputs")
     var has_w = call[].weights.given()
-    if has_w and (not call[].weights.dense_host(MEMBER_F32) or call[].weights.rows != n):
+    if has_w and (not call[].weights.dense_host(MEMBER_F32) or call[].weights.rows != y_rows):
         raise Error("TypeError: a " + name + " member reads the sample weights as one dense host float32 column")
     var pred = List[Float64](length=max(n * outputs, 1), fill=0.0)
     _multi_outputs(slot, rows, MEMBER_F64, Int(pred.unsafe_ptr()))
@@ -3962,11 +4127,12 @@ def _score_multi(slot: _SlotPtr, call: _CallPtr) raises:
         var hit = 0.0
         var total = 0.0
         for i in range(n):  # small-loop(the rows of one score, after the outputs' parallel predicts)
+            var r = Int(_I32P(unsafe_from_address=index)[i]) if index != 0 else i
             var all_equal = True
             for j in range(outputs):
-                if Int(pred[i * outputs + j]) != Int(y[i * outputs + j]):
+                if Int(pred[i * outputs + j]) != Int(y[r * outputs + j]):
                     all_equal = False
-            var weight = Float64(w[i]) if has_w else 1.0
+            var weight = Float64(w[r]) if has_w else 1.0
             total += weight
             if all_equal:
                 hit += weight
@@ -3978,22 +4144,25 @@ def _score_multi(slot: _SlotPtr, call: _CallPtr) raises:
     var y_at = call[].y.data
     var w_at = call[].weights.data
 
-    def _r2(j: Int) {imm scores_at, imm pred_at, imm y_at, imm w_at, imm has_w, imm n, imm outputs}:
+    def _r2(j: Int) {imm scores_at, imm pred_at, imm y_at, imm w_at, imm has_w, imm n, imm outputs, imm index}:
         var yy = _F32P(unsafe_from_address=y_at)
         var pp = _F64P(unsafe_from_address=pred_at)
         var ww = _F32P(unsafe_from_address=w_at)
+        var rr = _I32P(unsafe_from_address=index)
         var sw = 0.0
         var mean = 0.0
         for i in range(n):
-            var weight = Float64(ww[i]) if has_w else 1.0
+            var r = Int(rr[i]) if index != 0 else i
+            var weight = Float64(ww[r]) if has_w else 1.0
             sw += weight
-            mean += weight * Float64(yy[i * outputs + j])
+            mean += weight * Float64(yy[r * outputs + j])
         mean = mean / sw if sw != 0.0 else 0.0
         var num = 0.0
         var den = 0.0
         for i in range(n):
-            var weight = Float64(ww[i]) if has_w else 1.0
-            var t = Float64(yy[i * outputs + j])
+            var r = Int(rr[i]) if index != 0 else i
+            var weight = Float64(ww[r]) if has_w else 1.0
+            var t = Float64(yy[r * outputs + j])
             var r = t - pp[i * outputs + j]
             num += weight * r * r
             den += weight * (t - mean) * (t - mean)
@@ -4228,7 +4397,79 @@ def _outputs_rfe(call: _CallPtr, base: MemberPlan, words: List[Float64], classes
     call[].classes = classes
 
 
+def _gather_wanted(slot: _SlotPtr, call: _CallPtr) -> Bool:
+    """THE GATHERED ROWS (lane vdf-meta2): a call with a host row index to a kind that hands none on
+    (`_indexed_kind`), or an index type the indexed predict does not read (int64 rows: VoteRows reads
+    int32), over a dense host float32 X and no column index."""
+    if not _index_given(call) or call[].column_index.rows > 0 or not _index_ok(call[].row_index):
+        return False
+    if not call[].x.dense_host(MEMBER_F32):
+        return False
+    return not _indexed_kind(slot[].kind)
+
+
 def _fit(slot: _SlotPtr, call: _CallPtr) raises:
+    """FIT. THE INDEXED ROWS (lane vdf-meta2): the family union carries MEMBER_CAN_ROW_INDEX, so a member
+    set hands a drawn meta member its row index instead of gathering for it; an indexed kind hands it on
+    (`_fit_vote`, `_fit_ovr`, `_fit_multi`), every other kind fits on the rows gathered here once."""
+    if _gather_wanted(slot, call):
+        _fit_gathered(slot, call)
+        return
+    _fit_views(slot, call)
+
+
+def _fit_gathered(slot: _SlotPtr, call: _CallPtr) raises:
+    """THE GATHERED ROWS of a fit: X, y, the weights and the given y at the caller's row index, gathered once
+    into the slot's words (its nested states may borrow them: they live until the next fit or FREE), the
+    call pointed at them for `_fit_views` and restored after it whether it returned or raised. X's pin is
+    not offered (the gathered block is not the pinned X).
+
+    CHECK FIRST, RELEASE AFTER (lane vdf-meta3): the rows are gathered into words this call owns, the call's
+    arguments are checked on them (`_fit_check`), and only then are the previous fit's states released (they
+    may borrow the previous gathered words) and the new words moved into the slot (a List move keeps its heap
+    block, so the views stay valid). A refused fit leaves the previous fit as it was."""
+    var index = call[].row_index
+    var x_view = call[].x
+    var y_view = call[].y
+    var w_view = call[].weights
+    var g_view = call[].y_given
+    var pin = call[].pin
+    var gx = List[Int64]()
+    var gy = List[Int64]()
+    var gw = List[Int64]()
+    var gg = List[Int64]()
+    call[].x = _gather_view(x_view, index, gx)
+    call[].y = _gather_view(y_view, index, gy)
+    call[].weights = _gather_view(w_view, index, gw)
+    call[].y_given = _gather_view(g_view, index, gg)
+    call[].row_index = MemberMatrix()
+    call[].pin = 0
+    try:
+        _fit_check(slot, call)
+        _drop_states(slot)
+        slot[].rows_x = gx^
+        slot[].rows_y = gy^
+        slot[].rows_w = gw^
+        slot[].rows_given = gg^
+        _fit_run(slot, call)
+    finally:
+        call[].x = x_view
+        call[].y = y_view
+        call[].weights = w_view
+        call[].y_given = g_view
+        call[].row_index = index
+        call[].pin = pin
+
+
+def _fit_views(slot: _SlotPtr, call: _CallPtr) raises:
+    """FIT over the call's own views: the arguments checked, then the previous fit released, then the fit."""
+    _fit_check(slot, call)
+    _drop_states(slot)
+    _fit_run(slot, call)
+
+
+def _fit_check(slot: _SlotPtr, call: _CallPtr) raises:
+    """FIT's argument checks, in order; nothing is released or written (lane vdf-meta3: CHECK FIRST)."""
     # THE DOOR'S REFUSAL (lane mf-refuse5, `meta_plan_refuse`): the door's words for a constructor value,
     # first, as the door's validation runs before it reads X.
     if _refused_first(slot):
@@ -4236,8 +4477,11 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
     var name = _name(slot[].kind)
     if not call[].x.dense_host(MEMBER_F32):
         raise Error("TypeError: a " + name + " member reads X as a dense host float32 view")
-    if call[].row_index.rows > 0 or call[].column_index.rows > 0:
-        raise Error("TypeError: a " + name + " member reads whole host views (no row or column index)")
+    # THE INDEXED ROWS (lane vdf-meta2): an indexed kind reads a host row index (y and the weights are then
+    # addressed as X: the whole base's rows); every other kind's index was gathered by `_fit`.
+    if call[].column_index.rows > 0 or (_index_given(call) and not (_indexed_kind(slot[].kind)
+                                                                      and _index_ok(call[].row_index))):
+        raise Error("TypeError: a " + name + " member reads whole host views or a host row index (no column index)")
     var y_dtype = MEMBER_I32 if _classifier_kind(slot[].kind) else MEMBER_F32
     # THE 2-D y (lane mf-search4): a multi-output kind, or a search whose
     # every candidate is one, reads rows x outputs.
@@ -4266,7 +4510,10 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
         raise Error("TypeError: a " + name + " member's fit takes no sample weights")
     if call[].weights.given() and _rfe_kind(slot[].kind) and (_rfe_mask(slot) & MEMBER_CAN_SAMPLE_WEIGHT) == 0:
         raise Error("TypeError: an RFE member's estimator fits no sample weights")
-    _drop_states(slot)
+
+
+def _fit_run(slot: _SlotPtr, call: _CallPtr) raises:
+    """FIT after `_fit_check` passed and the previous fit's states were released."""
     slot[].features = call[].x.cols
     # THE GIVEN y (lane mf-tail5): a regressor's, for this fit only.
     slot[].fit_y = call[].y.data
@@ -4322,9 +4569,28 @@ def _fitted(slot: _SlotPtr) raises:
 
 
 def _rows(call: _CallPtr, name: String) raises -> VoteRows:
+    """The rows a predict reads. THE INDEXED ROWS (lane vdf-meta2; only an indexed kind gets here with a
+    row index, `_operate`): the caller's whole base, its int32 row index, its resident scope and X's pin
+    offered on every nested call (core/member_abi.mojo THE PIN RULE). A nested cache that takes the
+    reference writes a nonzero byte into this call's `pin_kept` (zeroed here, before any nested call), which
+    the caller's `member_pin_settle` reads; concurrent nested calls write the same byte value."""
     if not call[].x.dense_host(MEMBER_F32):
         raise Error("TypeError: a " + name + " member reads X as a dense host float32 view")
-    return VoteRows(call[].x.data, call[].x.rows, call[].x.cols)
+    if not _index_given(call):
+        return VoteRows(call[].x.data, call[].x.rows, call[].x.cols)
+    if not call[].row_index.dense_host(MEMBER_I32):
+        raise Error("TypeError: a " + name + " member reads its row index as dense host int32 row numbers")
+    call[].pin_kept = 0
+    var took = Int(UnsafePointer(to=call[].pin_kept)) if call[].pin != 0 else 0
+    return VoteRows(call[].x.data, call[].x.rows, call[].x.cols, call[].row_index.data, call[].row_index.rows,
+                    call[].scope, call[].pin, took)
+
+
+def _rows_again(x: Int, base_rows: Int, d: Int, index: Int, n: Int, scope: Int, pin: Int, took: Int) -> VoteRows:
+    """`VoteRows` rebuilt from its words inside a host task (a closure captures plain words only)."""
+    if index == 0:
+        return VoteRows(x, n, d)
+    return VoteRows(x, base_rows, d, index, n, scope, pin, took)
 
 
 def _zero_dst(call: _CallPtr, count: Int):
@@ -5194,12 +5460,56 @@ def _ensemble_member(operation: Int, address: Int) raises -> Int:
     var slot = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
     if operation == MEMBER_OP_FIT:
         _fit(slot, call)
-    elif operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_PREDICT_PROBA or operation == MEMBER_OP_DECISION:
-        _predict(slot, call, operation)
     elif operation == MEMBER_OP_EXPORT:
         _export(slot, call)
     elif operation == MEMBER_OP_IMPORT:
         _import(slot, call)
+    elif _index_given(call) and (_gather_wanted(slot, call) or (call[].x.dense_host(MEMBER_F32)
+                                                                and call[].row_index.dense_host(MEMBER_I64)
+                                                                and call[].column_index.rows == 0)):
+        _operate_gathered(slot, call, operation)
+    else:
+        _operate(slot, call, operation)
+    return 0
+
+
+def _operate_gathered(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
+    """THE GATHERED ROWS of a predict, score or transform (lane vdf-meta2): a kind that hands no row index on,
+    or an int64 index (the indexed predict reads int32 rows), reads X (and a score's y and weights) at the
+    caller's row index gathered into this call's own buffers (two sides of one state may be asked at once:
+    nothing is kept in the slot), the call restored after it. No pin is offered (the block is not the
+    pinned X)."""
+    var index = call[].row_index
+    var x_view = call[].x
+    var y_view = call[].y
+    var w_view = call[].weights
+    var pin = call[].pin
+    var gx = List[Int64]()
+    var gy = List[Int64]()
+    var gw = List[Int64]()
+    call[].x = _gather_view(x_view, index, gx)
+    if operation == MEMBER_OP_SCORE:
+        call[].y = _gather_view(y_view, index, gy)
+        call[].weights = _gather_view(w_view, index, gw)
+    call[].row_index = MemberMatrix()
+    call[].pin = 0
+    try:
+        _operate(slot, call, operation)
+    finally:
+        call[].x = x_view
+        call[].y = y_view
+        call[].weights = w_view
+        call[].row_index = index
+        call[].pin = pin
+    _ = len(gx)  # the gathered words are read through the operation above
+    _ = len(gy)
+    _ = len(gw)
+
+
+def _operate(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
+    """Every operation but NEW, FREE, OUTPUTS, FIT, EXPORT and IMPORT."""
+    if operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_PREDICT_PROBA or operation == MEMBER_OP_DECISION:
+        _predict(slot, call, operation)
     elif operation == MEMBER_OP_SCORE and _multi_kind(slot[].kind):
         _score_multi(slot, call)
     elif operation == MEMBER_OP_SCORE and _search_kind(slot[].kind):
@@ -5209,7 +5519,6 @@ def _ensemble_member(operation: Int, address: Int) raises -> Int:
         _call_rfe(slot, call, operation)
     else:
         member_unsupported(_name(slot[].kind), operation)
-    return 0
 
 
 def ensemble_member_v2(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,

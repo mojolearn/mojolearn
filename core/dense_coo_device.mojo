@@ -150,6 +150,22 @@ def knn_affinity_f32_device(
 ) raises:
     """`knn_affinity_f32`'s contract (the caller's zeroed host `aff`, n x n,
     and `status`, 3 int32) with the work on the device."""
+    var d_aff = ctx.enqueue_create_buffer[DType.float32](max(n * n, 1))
+    knn_affinity_f32_device_into(ctx, dense, rows, cols, vals, nnz, sparse, n, k, d_aff, status)
+    ctx.enqueue_copy(dst_ptr=_F(unsafe_from_address=aff), src_buf=d_aff)
+    ctx.synchronize()
+    _ = d_aff^
+
+
+def knn_affinity_f32_device_into(
+    ctx: DeviceContext, dense: Int, rows: Int, cols: Int, vals: Int, nnz: Int, sparse: Bool,
+    n: Int, k: Int, mut d_aff: DeviceBuffer[DType.float32], status: Int,
+) raises:
+    """The work of `knn_affinity_f32_device` with the n x n affinity LEFT in
+    the caller's device buffer `d_aff` (at least max(n * n, 1) words; zeroed
+    here) and only the 3 status words copied to the host `status`;
+    synchronized. The spectral embedding's kNN route builds its affinity
+    with it on the metrics image's own device (lane vdf-misc3, 2026-11-24)."""
     var nn = n * n
     var d_dense = ctx.enqueue_create_buffer[DType.float32](max(0 if sparse else nn, 1))
     var d_rows = ctx.enqueue_create_buffer[DType.int32](max(nnz if sparse else 0, 1))
@@ -166,7 +182,6 @@ def knn_affinity_f32_device(
     var d_bad = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
     var d_first = ctx.enqueue_create_buffer[DType.int32](1)
     var d_status = ctx.enqueue_create_buffer[DType.int32](3)
-    var d_aff = ctx.enqueue_create_buffer[DType.float32](max(nn, 1))
     enqueue_fill(ctx, d_cnt, Int32(0))
     enqueue_fill(ctx, d_fill, Int32(0))
     enqueue_fill(ctx, d_flag, Int32(0))
@@ -209,7 +224,6 @@ def knn_affinity_f32_device(
         grid_dim=_blocks(max(nn, 1)), block_dim=_TPB,
     )
     ctx.enqueue_copy(dst_ptr=_I(unsafe_from_address=status), src_buf=d_status)
-    ctx.enqueue_copy(dst_ptr=_F(unsafe_from_address=aff), src_buf=d_aff)
     ctx.synchronize()
     _ = d_dense^
     _ = d_rows^
@@ -226,4 +240,3 @@ def knn_affinity_f32_device(
     _ = d_bad^
     _ = d_first^
     _ = d_status^
-    _ = d_aff^

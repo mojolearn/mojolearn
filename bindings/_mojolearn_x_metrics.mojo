@@ -81,6 +81,8 @@ def run_ranges_binding(arena_addr: PythonObject, prog_addr: PythonObject, sizes:
 
 # TOMBSTONE: x_metrics_dev_put/_free/_live/_take_rows, x_metrics_py2mojo_core, x_metrics_idn_fam2 (dead native entries: no public call reaches them) deleted 2026-10-26 by c209716bf; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_metrics.patch
+# Lane vdf-xm-wire (2026-11-24): this image has no store of its own; it reads the ONE resident store, the
+# x_prep image's (x_prep/store_slot.mojo), on that store's context (x_metrics/device.mojo `metrics_ctx`).
 
 
 # lane py-misc-metrics: the rest of DEVIATION 6106's O(n) epilogues

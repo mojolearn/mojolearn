@@ -49,8 +49,9 @@ comptime _OP_SQRT = 7
 comptime _OP_SQ = 8
 comptime _OP_SCALE = 14
 comptime _OP_SQDIFF = 21
-# x_decomp/moves.mojo PLACE_COLS (`_MV_PLACE_COLS`)
+# x_decomp/moves.mojo PLACE_COLS (`_MV_PLACE_COLS`), TAKE_ROWS (MOVE_TAKE_ROWS)
 comptime _MV_PLACE_COLS = 2
+comptime _MV_TAKE_ROWS = 0
 
 
 trait IpcaDev:
@@ -181,6 +182,36 @@ def _gram_svd[E: Exec, D: RDev, RES: Bool, X: IpcaDev](mut kit: RKit[E, D, RES],
     return (s, vt)
 
 
+def _resident_bound[D: RDev](x_dev: Int, rows: Int, d: Int) raises:
+    """A resident source must hold the rows x d words the call reads: the exact words the member store put or
+    took for that id (`D.held_words`, x_decomp/member_store.mojo), not the pool id's larger size class. Checked
+    once per call (lane vdf-scope-neural5), before any batch or launch reads it."""
+    var held = D.held_words(x_dev)
+    if held < rows * d:
+        raise Error("x_decomp: the resident X holds " + String(held) + " values but the call reads "
+                    + String(rows) + " rows of " + String(d))
+
+
+def _resident_rows[E: Exec, D: RDev, RES: Bool](
+    mut kit: RKit[E, D, RES], x_dev: Int, x_rows: Int, row0: Int, n: Int, d: Int,
+) raises -> Int:
+    """Rows row0 .. row0 + n of the resident x_rows x d matrix `x_dev` (a pool id the caller owns: a fold the
+    XDecomp member took on the device, lane vdf-scope-neural4) as a kit matrix, sliced ON THE DEVICE: the whole
+    matrix is borrowed as it is (not in this kit's ledger, never freed here); a batch is one TAKE_ROWS move of
+    the contiguous block (index operand 0 .. n - 1 exact in float32, the row offset `row0` the move's integer
+    a2 word), so the batch holds the same words in the same order as the host batch at x + row0 * d and every
+    step reads it where it read the host batch's upload: same route, same bits."""
+    comptime if not RES:
+        raise Error("x_decomp: a resident X needs a GPU binding")
+    if row0 < 0 or n < 0 or row0 + n > x_rows:
+        raise Error("x_decomp: IncrementalPCA batch rows out of range")
+    var whole = kit.add(0, x_dev, x_rows, d)
+    if row0 == 0 and n == x_rows:
+        return whole
+    var idx = kit.indices(0, n)
+    return kit.move(whole, idx, n, d, _MV_TAKE_ROWS, n * d, d, row0, 0, 1, 0, x_rows * d, n * d, n, True)
+
+
 def _words(ref words: List[Float32]) -> F32Ptr:
     return F32Ptr(unsafe_from_address=Int(words.unsafe_ptr()))
 
@@ -214,8 +245,10 @@ def ipca_partial_step[E: Exec, D: RDev, RES: Bool, X: IpcaDev](
     prev_components: F32Ptr, prev_singular: F32Ptr, prev_mean: F32Ptr, prev_var: F32Ptr,
     components_out: F32Ptr, singular_out: F32Ptr, mean_out: F32Ptr, var_out: F32Ptr,
     variance_out: F32Ptr, ratio_out: F32Ptr, prev_dev: List[Int], keep: Bool, mut kept: List[Int],
+    x_dev: Int = -1, x_row0: Int = 0, x_rows: Int = 0,
 ) raises -> Tuple[Int, Float64]:
-    """One `_partial(Xb)` of the n x d batch at x. `requested` is
+    """One `_partial(Xb)` of the n x d batch at x (`x_dev` >= 0: rows x_row0 .. x_row0 + n of the resident
+    x_rows x d pool matrix instead, sliced on the device; `x` unread). `requested` is
     n_components (-1: None); `seen` the samples already fitted, with the
     previous state (prev_count components) read when seen > 0. Writes the
     published arrays (components first, at the kept count) and returns
@@ -243,7 +276,11 @@ def ipca_partial_step[E: Exec, D: RDev, RES: Bool, X: IpcaDev](
                     + ")) while a minimum of 2 is required.")
     var kit = RKit[E, D, RES]()
     try:
-        var xb = kit.add(Int(x), -1, n, d)
+        var xb: Int
+        if x_dev >= 0:
+            xb = _resident_rows(kit, x_dev, x_rows, x_row0, n, d)
+        else:
+            xb = kit.add(Int(x), -1, n, d)
         var last_mean: Int
         var last_var: Int
         if not has_prev:
@@ -333,7 +370,7 @@ def ipca_partial_step[E: Exec, D: RDev, RES: Bool, X: IpcaDev](
 def ipca_fit_run[E: Exec, D: RDev, RES: Bool, X: IpcaDev](
     x: F32Ptr, n: Int, d: Int, requested: Int, batch_size: Int,
     components_out: F32Ptr, singular_out: F32Ptr, mean_out: F32Ptr, var_out: F32Ptr,
-    variance_out: F32Ptr, ratio_out: F32Ptr, keep: Bool, mut kept: List[Int],
+    variance_out: F32Ptr, ratio_out: F32Ptr, keep: Bool, mut kept: List[Int], x_dev: Int = -1,
 ) raises -> Tuple[Int, Float64]:
     """`IncrementalPCA.fit`'s batch loop: batches of batch_size rows (a batch
     whose end leaves fewer than n_components rows is skipped, as the Python
@@ -343,7 +380,14 @@ def ipca_fit_run[E: Exec, D: RDev, RES: Bool, X: IpcaDev](
     (n_components_, noise_variance_). On a GPU binding each batch reads the
     previous batch's state from its device copies (the words it published
     to the host lists); with `keep` the final state's pool ids are appended
-    to `kept` (the caller owns them), else they are freed."""
+    to `kept` (the caller owns them), else they are freed.
+    `x_dev` (lane vdf-scope-neural4): X's resident pool id (a fold the XDecomp member took on the device; the
+    caller owns it), -1: the host X at x. Each batch is then sliced from it ON THE DEVICE (`_resident_rows`), the
+    same rows in the same order as the host batches, so the bits are the host-X route's."""
+    if x_dev >= 0 and not RES:
+        raise Error("x_decomp: a resident X needs a GPU binding")
+    if x_dev >= 0:
+        _resident_bound[D](x_dev, n, d)
     if batch_size == 0:
         raise Error("integer division or modulo by zero")
     var mb = max(requested, 0)
@@ -375,7 +419,7 @@ def ipca_fit_run[E: Exec, D: RDev, RES: Bool, X: IpcaDev](
                 x.unsafe_offset(start * d), end - start, d, requested, seen, count, d,
                 _words(comps[cur]), _words(sing[cur]), _words(mean[cur]), _words(var_[cur]),
                 _words(comps[nxt]), _words(sing[nxt]), _words(mean[nxt]), _words(var_[nxt]),
-                _words(ev[nxt]), _words(evr[nxt]), state, RES, next_state,
+                _words(ev[nxt]), _words(evr[nxt]), state, RES, next_state, x_dev, start, n,
             )
             ipca_free_state[D](state)
             state = next_state^
@@ -391,7 +435,7 @@ def ipca_fit_run[E: Exec, D: RDev, RES: Bool, X: IpcaDev](
                 x.unsafe_offset(start * d), n - start, d, requested, seen, count, d,
                 _words(comps[cur]), _words(sing[cur]), _words(mean[cur]), _words(var_[cur]),
                 _words(comps[nxt]), _words(sing[nxt]), _words(mean[nxt]), _words(var_[nxt]),
-                _words(ev[nxt]), _words(evr[nxt]), state, RES, next_state,
+                _words(ev[nxt]), _words(evr[nxt]), state, RES, next_state, x_dev, start, n,
             )
             ipca_free_state[D](state)
             state = next_state^
@@ -428,15 +472,21 @@ def ipca_fit_run[E: Exec, D: RDev, RES: Bool, X: IpcaDev](
 
 def ipca_transform_run[E: Exec, D: RDev, RES: Bool](
     x: F32Ptr, n: Int, d: Int, nc: Int, mean: F32Ptr, components: F32Ptr, variance: F32Ptr, whiten: Bool,
-    out_buf: F32Ptr, state_dev: List[Int],
+    out_buf: F32Ptr, state_dev: List[Int], x_dev: Int = -1,
 ) raises:
     """`transform`: (X - mean_) components_^T, divided by sqrt(explained
     variance) per column when whitening; n x nc written to out_buf.
     `state_dev`: empty, or the borrowed pool ids of the state's device
-    copies (IPCA_STATE_WORDS layout, -1 for one not resident)."""
+    copies (IPCA_STATE_WORDS layout, -1 for one not resident). `x_dev`: X's
+    resident pool id (read in place, the caller's), -1: the host X at x."""
     var kit = RKit[E, D, RES]()
     try:
-        var m = kit.add(Int(x), -1, n, d)
+        var m: Int
+        if x_dev >= 0:
+            _resident_bound[D](x_dev, n, d)
+            m = _resident_rows(kit, x_dev, n, 0, n, d)
+        else:
+            m = kit.add(Int(x), -1, n, d)
         var mu = kit.add(Int(mean), _state_id[RES](state_dev, 2), 1, d)
         var c = kit.add(Int(components), _state_id[RES](state_dev, 0), nc, d)
         var centered = kit.ew(_OP_SUB, m, mu)
@@ -454,14 +504,20 @@ def ipca_transform_run[E: Exec, D: RDev, RES: Bool](
 
 def ipca_inverse_run[E: Exec, D: RDev, RES: Bool](
     y: F32Ptr, n: Int, d: Int, nc: Int, mean: F32Ptr, components: F32Ptr, variance: F32Ptr, whiten: Bool,
-    out_buf: F32Ptr, state_dev: List[Int],
+    out_buf: F32Ptr, state_dev: List[Int], y_dev: Int = -1,
 ) raises:
     """`inverse_transform`: Y C + mean_, C the components scaled by
     sqrt(explained variance) per row when whitening; n x d written to
-    out_buf. `state_dev` as in `ipca_transform_run`."""
+    out_buf. `state_dev` as in `ipca_transform_run`; `y_dev`: Y's resident
+    pool id (read in place, the caller's), -1: the host Y at y."""
     var kit = RKit[E, D, RES]()
     try:
-        var ym = kit.add(Int(y), -1, n, nc)
+        var ym: Int
+        if y_dev >= 0:
+            _resident_bound[D](y_dev, n, nc)
+            ym = _resident_rows(kit, y_dev, n, 0, n, nc)
+        else:
+            ym = kit.add(Int(y), -1, n, nc)
         var c = kit.add(Int(components), _state_id[RES](state_dev, 0), nc, d)
         if whiten:
             var ev = kit.add(Int(variance), _state_id[RES](state_dev, 4), 1, nc)

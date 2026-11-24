@@ -25,6 +25,7 @@ from core.preprocessing_program import prep_program_stage
 
 comptime SEL_NONE = -1
 # x_prep stage codes (_expansion_prep._OPS).
+comptime SEL_OP_COUNT_NEG = 8
 comptime SEL_OP_CLASS_STATS = 16
 comptime SEL_OP_F_CLASSIF = 63
 comptime SEL_OP_F_REGRESSION = 64
@@ -58,7 +59,8 @@ def _blocked() -> Bool:
 @fieldwise_init
 struct ScorePlan(Copyable, Movable):
     """Arena offsets of a score program: the d scores, the d p-values and
-    `extra`: chi2's six rows of column statistics, the Pearson programs' d
+    `extra`: chi2's one word counting the columns whose minimum is negative
+    (the non-negative refusal reads that word only), the Pearson programs' d
     correlations, -1 for f_classif."""
     var scores: Int
     var pvalues: Int
@@ -97,7 +99,6 @@ def score_classif_stage(mut prog: EncProgram, r: ScoreClassif) -> ScorePlan:
     var sums = prog.alloc(K * d)
     var sc = prog.alloc(d)
     var pv = prog.alloc(d)
-    var st = prog.alloc(6 * d)
     var blocked = _blocked()
     var nb = (n + SEL_ROW_BLOCK - 1) // SEL_ROW_BLOCK
     if blocked and r.stats_blocked and nb * K * d <= SEL_CLS_BLOCK_WORDS:
@@ -113,9 +114,22 @@ def score_classif_stage(mut prog: EncProgram, r: ScoreClassif) -> ScorePlan:
     else:
         prep_program_stage(prog.program, SEL_OP_CLASS_STATS, K * d, xo, n, d, yo, K, cnt, mean, SEL_NONE, sums)
     if r.chi:
+        # lane vdf-misc2 (2026-11-24): the column statistics stay on the
+        # device (work words) and the device counts the columns whose
+        # minimum is negative into ONE arena word; the door reads that word
+        # for the refusal. Before, the six rows of d statistics were arena
+        # words read back and the d minima scanned on the host. The count
+        # is a single-thread pass over the d minima (count_neg: one column
+        # of d rows), the same stage the label programs use for their
+        # unknown count; the minima themselves are the parallel column
+        # reduction over the n rows. Same scores, same p-values: no bits
+        # change in the outputs.
+        var st = prog.work(6 * d)
         enc_col_stats(prog, r.stats_blocked, xo, n, d, st, False)
         prep_program_stage(prog.program, SEL_OP_CHI2, d, sums, K, d, cnt, n, sc, pv)
-        return ScorePlan(sc, pv, st)
+        var neg = prog.alloc(1)
+        prep_program_stage(prog.program, SEL_OP_COUNT_NEG, 1, st + 3 * d, d, 1, neg)
+        return ScorePlan(sc, pv, neg)
     if blocked and r.select_blocked:
         var ps = prog.work(nb * d)
         prep_program_stage(prog.program, SEL_OP_FCB_PART, nb * d, xo, n, d, yo, mean, ps, nb)

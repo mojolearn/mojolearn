@@ -649,6 +649,10 @@ class OneClassSVM(_XNeighbors):
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator (``'fast'`` is Apple only). None uses
         the process default.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        ``'cpu'`` runs on the CPU and ``'gpu'`` requires a GPU installation.
+        Other values raise ``ValueError``.
 
     Attributes
     ----------
@@ -684,6 +688,13 @@ class OneClassSVM(_XNeighbors):
     # Runs as a native member of a meta-estimator: (member family, kind) of
     # core/member_families.mojo (MEMBER_FAMILY_XNEIGHBORS = 12) and core/xneighbors_member.mojo.
     _mojolearn_member = (12, 2)
+    #: This class takes `device=` (lane vdf-meta): every public method takes its
+    #: x_neighbors module from the estimator's device route (the shared estimator
+    #: door, bindings/family_native_door.mojo `estimator_arguments`, then
+    #: bindings/svc_ocsvm_boundary_unpack.mojo `oc_binding_unpack`) and its label
+    #: step from `labels_scope`; the check builds its other side as the same
+    #: estimator on the other device, in this process.
+    _mojolearn_device = True
 
     def __init__(self, *, kernel="rbf", degree=3, gamma="scale", coef0=0.0, tol=1e-3, nu=0.5,
                  shrinking=True, cache_size=200, verbose=False, max_iter=-1, numeric_mode=None):
@@ -1939,7 +1950,8 @@ class PageRank(_XNeighbors):
 # ====================================================================== connected components
 # The labels come from the min-label product iteration (DBSCAN's
 # weak_cc; cuGraph weakly_connected_components_impl.cuh), integers only.
-def connected_components(A, directed=True, connection="weak", return_labels=True, numeric_mode=None):
+def connected_components(A, directed=True, connection="weak", return_labels=True, numeric_mode=None, *,
+                         device=None):
     """Connected components of a graph.
 
     Follows ``scipy.sparse.csgraph.connected_components``. An edge is any
@@ -1963,6 +1975,10 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for the call (``'fast'`` is Apple only). None uses the
         process default.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -1978,7 +1994,7 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
     >>> n_components, labels = mojolearn.connected_components(A, directed=False)
     """
     return _NATIVE(None, _OP.family_xn_graph_connected_components,
-                   (numeric_mode, A, directed, connection, return_labels), _NATIVE_CONTEXT)
+                   (numeric_mode, A, directed, connection, return_labels, device), _NATIVE_CONTEXT)
 
 
 # ====================================================================== Louvain

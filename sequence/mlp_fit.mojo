@@ -617,6 +617,7 @@ def mlp_fit[E: Exec](
     shuffle: Bool, seed: UInt64, n_iter_no_change: Int,
     lr_init: Float32, b1: Float32, b2: Float32, eps: Float32, momentum: Float32,
     power_t: Float64, alpha: Float32, tol: Float64, y_codes: Int = 0, loop_words: Int = 0,
+    x_device: Bool = False,
 ) raises -> Int:
     """Returns n_iter; curve[0:n_iter] is the epoch loss (float32 of the
     float64 accumulation; under MLP_EPOCH_DEV the float32 fold of
@@ -640,8 +641,17 @@ def mlp_fit[E: Exec](
     var O = net.sizes[L]
     var np_ = net.n_params()
     var bs = batch if batch < N else N
-    var dX = ex.alloc(N * D)
-    ex.upload(dX, X, N * D)
+    # Lane vdf-scope-neural: `x_device`, X is already this executor's
+    # memory (a fold's rows the member store took on the device,
+    # sequence/seq_member_store.mojo), read in place as the resident
+    # parameters are: the same words, no upload. Read only (the shuffle
+    # gathers into Xp), never freed here.
+    var dX: FP
+    if x_device:
+        dX = X
+    else:
+        dX = ex.alloc(N * D)
+        ex.upload(dX, X, N * D)
     var dY = ex.alloc(N * O)
     if y_codes == 1 or (y_codes == 2 and O == 1):
         var dC = ex.alloc(N)
@@ -904,7 +914,7 @@ def mlp_fit[E: Exec](
 
 
 def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP, chunk: Int,
-                         proba2: Bool = False, resident: Bool = False) raises:
+                         proba2: Bool = False, resident: Bool = False, x_device: Bool = False) raises:
     """The hand predict (RESTORED 2026-11-17, see the note above
     AUTOGRAD_PREDICT): each chunk of `chunk` rows runs mlp_forward, one
     OP_GEMM_EPI launch a layer (+ OP_SOFTMAX for a softmax output), reading
@@ -919,8 +929,13 @@ def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP
     var D = net.sizes[0]
     var O = net.sizes[L]
     var bs = chunk if chunk < N else N
-    var dX = ex.alloc(N * D)
-    ex.upload(dX, X, N * D)
+    # Lane vdf-scope-neural: `x_device` (see `mlp_fit`): X read in place.
+    var dX: FP
+    if x_device:
+        dX = X
+    else:
+        dX = ex.alloc(N * D)
+        ex.upload(dX, X, N * D)
     var P: FP
     if resident:
         P = Pin

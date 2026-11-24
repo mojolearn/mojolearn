@@ -1,9 +1,9 @@
 """lane/apple-fast-sym-feat (2026-10-03): the A/B switches of the symmetric
 feature set outside histograms and leaf estimation (quantization, index
-build, predict). Every switch is compiled
+build, predict). Every switch but `GBDT_QUANT_DEVICE` is compiled
 ONLY under `GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()`
-and is OFF by default, so IDENTICAL (and FAST on any other vendor) compiles
-main's code unchanged. One module so `train.mojo`, `gls_borders_device.mojo`,
+and is OFF by default; `GBDT_QUANT_DEVICE` is the default on every image
+since 2026-11-24 (its note below). One module so `train.mojo`, `gls_borders_device.mojo`,
 `doc_parallel_boosting.mojo` and `resident_model.mojo`
 read the same flags without importing each other."""
 from std.sys.compile import is_defined
@@ -50,9 +50,23 @@ comptime GBDT_INDEX_PACK_DEVICE = SYM_FEAT_FAST_APPLE and (
 # TOMBSTONE: MOJOLEARN_GBDT_QUANT_DEVICE (DELETE-EXPERIMENT, EXP:1303 NEUTRAL; prerequisite of a never-run Apple FAST card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 408e1ba726.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_QUANT_DEVICE.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
-comptime GBDT_QUANT_DEVICE = SYM_FEAT_FAST_APPLE and (
-    is_defined["MOJOLEARN_GBDT_QUANT_DEVICE"]() or GBDT_INDEX_PACK_DEVICE
-)
+# PROMOTED 2026-11-24 by lane vdf-scope-trees4 (brief vdf-scope-trees4: the
+# device quantizer is the default on every GPU image, every tier and vendor,
+# so a model-selection fold's X can reach the fit as THE FOLD X WORD,
+# core/fold_x_device.mojo, and never visit the host). The float columns are
+# uploaded once (or copied device to device from the fold slot) and the
+# border build and the index build read them in place; the same border
+# kernels and the same binarize arithmetic as the staged path, so the
+# borders, the index words and the model are the same bits as before and as
+# the CPU column (gbdt/host, the same border algorithm). A/B OWED: no timing
+# of this default exists (EXP:1303 was NEUTRAL on Apple fast only);
+# `-D MOJOLEARN_GBDT_QUANT_DEVICE_OFF` keeps the staged per-chunk path until
+# the NVIDIA measurement decides it (docs/apple-fast/EXPERIMENTS.md row
+# MOJOLEARN_GBDT_QUANT_DEVICE_OFF). The former opt-in word
+# `MOJOLEARN_GBDT_QUANT_DEVICE` is read no more (it is the default).
+comptime GBDT_QUANT_DEVICE = (
+    not is_defined["MOJOLEARN_GBDT_QUANT_DEVICE_OFF"]()
+) or GBDT_INDEX_PACK_DEVICE
 # TOMBSTONE: MOJOLEARN_GBDT_EVAL_SKIP_EMPTY (NEUTRAL) deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at
 # 8815b00d75.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch

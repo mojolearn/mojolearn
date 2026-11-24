@@ -318,6 +318,11 @@ def family_route(operation: String) -> Int:
     if (operation.startswith("family_xn_loc_") or operation.startswith("family_xn_semi_")
             or operation.startswith("family_xn_graph_") or operation.startswith("family_svc_ocsvm_")):
         pre = FR_PRE_X_NEIGHBORS
+    if operation == "family_xn_graph_connected_components":
+        # connected_components selects its own binding once, after reading
+        # its `device` (bindings/neighbors_graph_native_door.mojo; lane
+        # vdf-misc): the family door resolves nothing for it.
+        pre = FR_PRE_NONE
     var cluster = ((operation.startswith("family_cfa_") and not operation.startswith("family_cfa_hdbscan_"))
                    or (operation.startswith("family_xc_") and operation != "family_xc_dbscan_predict"
                        and operation != "family_xc_agglo_predict") or operation.startswith("family_mix_bgmm_"))

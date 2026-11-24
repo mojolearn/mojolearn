@@ -9,8 +9,11 @@ receives).
   * `pls_member_admit` (UNPACK, once per member): the estimator's own
     settings snapshot and refusals (`_pls_settings`, `pls_algorithm_check`),
     its x_decomp entries through its device route (`decomp_entries_routed`),
-    the kit words of that image in the route (`entry`, `flags`), and the
-    eight NEW words of core/pls_member.mojo.
+    the kit words of that image in the route (`entry`, `flags`), on a GPU
+    image its device pool as the scope transport (`route.fifth` with
+    SEQ_ROUTE_STORE, the XDecomp member's `_store_route`: the member then
+    answers a row index and a scope, core/pls_member.mojo THE RESIDENT
+    ROUTE), and the eight NEW words of core/pls_member.mojo.
   * `pls_member_pack` (PACK): the fitted fields the estimator's own fit
     writes (`pls_fit_pack`'s names, into the instance and its family state),
     from the member state's blocks, and the fitted mark.
@@ -34,6 +37,7 @@ from core.member_abi import (
     MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE, MEMBER_F64,
 )
 from providers.python.classical_family_admission_pyapi_unpack import classical_family_admit
+from providers.python.member_xdecomp_boundary_door import _store_route as xdecomp_store_route
 
 # The family blocks `MEMBER_BLOCK_FAMILY + j` (core/pls_member.mojo) that
 # are public fields, by j; j 11 (the iteration counts) is `n_iter_`.
@@ -82,7 +86,11 @@ def pls_member_admit(model: PythonObject, fields: PythonObject, kind: Int, conte
         route.device = DEVICE_CPU if route.vendor == 0 else DEVICE_GPU
     route.entry = kit.entry
     route.flags = (1 if kit.keyed else 0) | (2 if kit.resident else 0) | (kit.present << 2)
+    var resident = kit.resident and kit.keyed
     kit.close()
+    if resident:
+        # Once per member (UNPACK): the same pool the kit's operations use.
+        xdecomp_store_route(entries, route)
     owner.plan.route = route
     var deflation = String(py=py_item(settings, nk[].k__deflation))
     var pmode = String(py=py_item(settings, nk[].k__pmode))

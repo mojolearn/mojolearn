@@ -31,8 +31,16 @@ F-order design: a C-order X of more than one row and column is transposed
 once into a scratch buffer on the host's workers (the own predict door's
 admission makes the same F-order copy of a C-order input); otherwise X is
 read in place. SCORE is R^2 of that prediction (unweighted). A device-home
-view, a row or column index and a nonzero `fit_output` are refused in
-words.
+view, a column index and a nonzero `fit_output` are refused in words.
+
+FOLDS (lane vdf-scope-linear2): on a GPU route whose image ships the x_prep
+store the kind answers MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE; a row index
+selects the fold's rows of the whole X on the device (`_fold_op`,
+core/member_fold_x.mojo) and `cd_fit` / `cd_predict` read THE FOLD X WORD
+(solver/estimator.mojo; `cd_predict` transposes the C-order slot on the
+device). For a fit, y and the weights are taken on the device through the same index (lane
+vdf-scope-linear3); a score's y too, read in place by the R^2 program (lane
+vdf-scope-linear4, core/linear_score_run.mojo `member_r2_score_slot`).
 
 Fitted-state blocks (EXPORT / IMPORT), in index order: 0
 `MEMBER_BLOCK_COEF` float32 1 x features; 1 `MEMBER_BLOCK_SCALARS` float64
@@ -52,16 +60,22 @@ from core.member_abi import (
     MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_SCORE, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
     MEMBER_GIL_FREE,
-    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF,
+    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE,
     MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_CD
+from core.fold_x_word import fold_x_word, fold_x_slot
+from core.device_route import DEVICE_GPU
+from core.member_fold_x import (
+    MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_store_ready,
+    member_fold_column_open, member_fold_slot_free,
+)
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from x_linear.door_run import XlCdFitRequest, XlCdPredictRequest, xl_cd_fit_run, xl_cd_predict_run
-from core.linear_score_run import member_r2_score
+from core.linear_score_run import member_r2_score, member_r2_score_slot
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
@@ -268,7 +282,9 @@ def _predict_into(slot: _SlotP, call: _CallP, dst: Int) raises:
         return
     var design = call[].x.data
     var scratch = List[Float32]()
-    if rows > 1 and cols > 1:
+    # A fold X word (negative, `_fold_op`) names C-order rows in a device
+    # slot: `cd_predict_host` transposes them on the device (solver/estimator.mojo).
+    if design > 0 and rows > 1 and cols > 1:
         scratch = List[Float32](length=rows * cols, fill=0.0)
         _f_order(call[].x.data, Int(scratch.unsafe_ptr()), rows, cols)
         design = Int(scratch.unsafe_ptr())
@@ -297,7 +313,12 @@ def _score(slot: _SlotP, call: _CallP) raises:
         raise Error("ImportError: mojolearn: the " + estimator + " member's score needs the metrics program entry on its route")
     var prediction = List[Float32](length=call[].x.rows, fill=0.0)
     _predict_into(slot, call, Int(prediction.unsafe_ptr()))
-    call[].value = member_r2_score(route.fifth, call[].y.data, Int(prediction.unsafe_ptr()), call[].x.rows)
+    if call[].y.data < 0:
+        # A fold's y in a device slot (`_fold_op`, THE FOLD X WORD numbering).
+        call[].value = member_r2_score_slot(route.fifth, fold_x_slot(call[].y.data), Int(prediction.unsafe_ptr()),
+            call[].x.rows)
+    else:
+        call[].value = member_r2_score(route.fifth, call[].y.data, Int(prediction.unsafe_ptr()), call[].x.rows)
     _ = prediction^
 
 
@@ -353,8 +374,8 @@ def _cd_member(operation: Int, address: Int) raises -> Int:
             if not call[].route.has_fifth:
                 # score is the metrics image's R^2 entry: refused at RUN
                 # without it on the route, so not advertised.
-                return _capabilities() & ~MEMBER_CAN_SCORE
-        return _capabilities()
+                return _with_fold(call, _capabilities() & ~MEMBER_CAN_SCORE)
+        return _with_fold(call, _capabilities())
     if operation == MEMBER_OP_NEW:
         if not call[].params or call[].param_count < 1:
             raise Error("member ABI: a coordinate-descent member takes its kind as parameter word 0")
@@ -383,6 +404,81 @@ def _cd_member(operation: Int, address: Int) raises -> Int:
         call[].classes = 0
         return 0
     var slot = _SlotP(unsafe_from_address=_lookup(call[].state, False))
+    if (call[].row_index.rows > 0 and call[].column_index.rows == 0 and call[].route.device == DEVICE_GPU
+            and (operation == MEMBER_OP_FIT or operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_SCORE)):
+        _fold_op(slot, call, operation)
+        return 0
+    _op(slot, call, operation)
+    return 0
+
+
+def _with_fold(call: _CallP, bits: Int) -> Int:
+    """MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE (lane vdf-scope-linear2): on a
+    GPU route whose image ships the x_prep store, `cd_fit` and `cd_predict`
+    read THE FOLD X WORD (solver/estimator.mojo `fold_x_fill`); `_fold_op`."""
+    if call[].route.device == DEVICE_GPU and member_fold_store_ready(call):
+        return bits | MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
+    return bits
+
+
+def _fold_op(slot: _SlotP, call: _CallP, operation: Int) raises:
+    """FIT / PREDICT / SCORE over the rows `call.row_index` of the WHOLE
+    host X (core/member_fold_x.mojo): X resident in the caller's scope, the
+    fold's rows taken on the device and read by `cd_fit` / `cd_predict`
+    (THE FOLD X WORD); y and the weights are the base's columns taken bitwise
+    through the index on the host. Views restored before this returns or
+    raises."""
+    var estimator = _name(slot)
+    var x = call[].x
+    var y = call[].y
+    var weights = call[].weights
+    var index = call[].row_index
+    var fold = MemberFoldX()
+    var y_slot = -1
+    var w_slot = -1
+    var failure = String("")
+    try:
+        member_fold_x_open(call, fold, estimator)
+        call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
+        # lane vdf-scope-linear3: y and the weights are taken ON THE DEVICE
+        # through the same index (`member_fold_column_open`); `cd_fit_host`
+        # reads their fold words with `fold_x_fill` (solver/estimator.mojo).
+        # Neither is read on the host by `_fit` (only its shape), so no host
+        # gather is left. Same words in the same order: no bit moves.
+        if operation != MEMBER_OP_PREDICT and y.rows > 0:
+            _dense(y, "y", estimator)
+            if y.rows != x.rows:
+                raise Error("mojolearn ElasticNet X and y lengths differ")
+            # SCORE too (lane vdf-scope-linear4): the R^2 program reads the y
+            # slot in place (`member_r2_score_slot`), so no host gather is left.
+            y_slot = member_fold_column_open(fold, y, estimator)
+            call[].y = MemberMatrix(fold_x_word(y_slot), fold.rows, y.cols)
+        if weights.rows > 0 and operation == MEMBER_OP_FIT:
+            _dense(weights, "sample_weight", estimator)
+            if weights.rows != x.rows or weights.cols != 1:
+                raise Error("ValueError: sample_weight and X have different numbers of rows")
+            w_slot = member_fold_column_open(fold, weights, estimator)
+            call[].weights = MemberMatrix(fold_x_word(w_slot), fold.rows, 1)
+        call[].row_index = MemberMatrix()
+        _op(slot, call, operation)
+    except error:
+        failure = String(error)
+    call[].x = x
+    call[].y = y
+    call[].weights = weights
+    call[].row_index = index
+    try:
+        member_fold_slot_free(fold, y_slot)
+        member_fold_slot_free(fold, w_slot)
+        member_fold_x_close(fold)
+    except close_error:
+        if failure.byte_length() == 0:
+            failure = "RuntimeError: a " + estimator + " member's fold slot was not freed: " + String(close_error)
+    if failure.byte_length() > 0:
+        raise Error(failure)
+
+
+def _op(slot: _SlotP, call: _CallP, operation: Int) raises:
     if operation == MEMBER_OP_FIT:
         _fit(slot, call)
     elif operation == MEMBER_OP_PREDICT:
@@ -395,7 +491,6 @@ def _cd_member(operation: Int, address: Int) raises -> Int:
         _import(slot, call)
     else:
         member_unsupported(_name(slot), operation)
-    return 0
 
 
 def cd_member_v2(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,

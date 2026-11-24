@@ -10,7 +10,8 @@ released it before the split, and holds it for the registry steps (the
 session and export registries are serialized by the GIL)."""
 from std.memory import unsafe_memcpy
 from core.hostptr import copy_f32, list_f32, list_i32
-from ensemble.device_layout import device_has_nan_f32, upload_forest_x
+from ensemble.device_layout import device_has_nan_f32, upload_forest_x, forest_x_from_device_rows
+from core.device_store import DeviceStore
 from ensemble.dart_member import launch_dart_member_x, launch_dart_member_y
 from ensemble.ada_rounds import (
     AdaState,
@@ -31,7 +32,7 @@ from core.forest_fit_request import (
     ForestFitArgs, XF_CAP_DEVICE_SCAN, XF_CAP_DART, forest_export_verify_lists,
 )
 from core.forest_inference_model import (
-    resident_prepare, resident_predict_into, resident_release,
+    resident_prepare, resident_predict_into, resident_release, RF_CTX_SLOT,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
@@ -42,7 +43,12 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojolearnRfContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnRfContextFastV3"
+#: Lane vdf-scope-trees2a (2026-11-24): the fits run on the image's resident
+#: inference context (core/forest_inference_model.mojo `RF_CTX_SLOT`), so the
+#: device store below, the fits and the resident predictions are ONE context
+#: and a predict reads the store's rows in place (XF_RESIDENT_*_ROWS). Was
+#: its own "MojolearnRfContext" slot. Same kernels: no bit moves.
+comptime _DEVCTX_SLOT = RF_CTX_SLOT
 
 
 from ensemble.decisiontree.batched_levelalgo.bins import (
@@ -95,6 +101,40 @@ from ensemble.randomforest import (
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 comptime DT = DType.float32
+
+#: THE IMAGE'S DEVICE STORE (lane vdf-scope-trees, 2026-11-24;
+#: core/device_store.mojo): resident float32 words on this binding's ONE
+#: context (`_DEVCTX_SLOT`, shared with the resident predictions), put / freed / taken by the store transport entry
+#: (bindings/_mojolearn_rf.mojo `rf_gpu_store_transport_v1`, the x_prep
+#: transport numbering) for a resident scope's cache, and read by XF_FIT_ROWS.
+comptime _RF_STORE_NAME = "MojolearnRfStoreIdenticalV1" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnRfStoreFastV1"
+comptime RF_STORE = SharedSlot[DeviceStore, _RF_STORE_NAME, 2]
+
+
+def rf_store_ctx() raises -> DeviceContext:
+    """The context the store's buffers belong to (the fits' context)."""
+    return process_ctx[_DEVCTX_SLOT]()
+
+
+def rf_store_rows_x(ctx: DeviceContext, store_id: Int, idx_addr: Int, n_rows: Int, n_cols: Int) raises -> DeviceBuffer[DT]:
+    """XF_FIT_ROWS's X: rows `idx` (`n_rows` host int64 words at `idx_addr`)
+    of the store slot `store_id` (row-major, `n_cols` words a row) taken on
+    the device, as the column-major plane a row-major upload of those rows
+    makes. The taken slot is freed before return (also on a raise)."""
+    if n_rows < 1 or n_cols < 1:
+        raise Error("rf_fit_rows: invalid shape")
+    var store = RF_STORE.get_or_create_ptr()
+    var taken = store[].take_rows(ctx, store_id, n_cols, idx_addr, n_rows)
+    var dx: DeviceBuffer[DT]
+    try:
+        var raw = store[]._held(taken, n_rows * n_cols)
+        dx = forest_x_from_device_rows(ctx, raw, n_rows, n_cols)
+        _ = raw^  # the transpose above read it
+    except problem:
+        store[].free(ctx, taken)
+        raise problem^
+    store[].free(ctx, taken)
+    return dx^
 comptime CLT = DType.int32
 comptime RLT = DType.float32
 comptime ClsObj = ClassificationObjectiveFunction[DT, CLT, ClassificationBin]
@@ -941,7 +981,7 @@ def _rf_ada_classifier_round(
     return forest^
 
 
-def _rf_classifier_fit_forest[ROWMAJOR: Bool = False](params: ForestFitArgs, mut bt: StageTimes) raises -> RandomForestMetaData[DT, CLT]:
+def _rf_classifier_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params: ForestFitArgs, mut bt: StageTimes) raises -> RandomForestMetaData[DT, CLT]:
     """The typed body of `_rf_classifier_fit` (wave 8 run split): the checks,
     the uploads and the fit, run by the binding with the GIL released;
     the auxiliary outputs are written here. The binding keeps the fit
@@ -1004,13 +1044,21 @@ def _rf_classifier_fit_forest[ROWMAJOR: Bool = False](params: ForestFitArgs, mut
     # pinned-stage transpose and host NaN scan (DEVIATION 2637) are gone.
     # The builder's host view of X (`host_x_addr`, DEVIATION 2484) is the
     # caller's column-major block when it lent one, else none.
-    var dx = upload_forest_x(ctx, xp, n_rows, n_cols, ROWMAJOR)
+    # XF_FIT_ROWS (ROWS; lane vdf-scope-trees): the rows are taken out of
+    # the image's device store on the device and transposed by the same
+    # kernel the row-major upload runs: the plane `fit_forest` reads holds
+    # the bytes of this upload on the host-gathered rows. No host X.
+    var dx: DeviceBuffer[DT]
+    comptime if ROWS:
+        dx = rf_store_rows_x(ctx, params.session, params.x, n_rows, n_cols)
+    else:
+        dx = upload_forest_x(ctx, xp, n_rows, n_cols, ROWMAJOR)
     # FAST on Apple (lane apple-fast-rfet-scan): the NaN-and-inf device
     # scan below (ensemble/device_finite.mojo) stands in for this NaN scan.
     comptime if not FOREST_DEVICE_FINITE:
         if device_has_nan_f32(ctx, dx, n_rows * n_cols):
             raise Error("rf_classifier_fit: " + RF_NAN_REFUSAL)
-    var host_x = 0 if ROWMAJOR else Int(xp)
+    var host_x = 0 if (ROWMAJOR or ROWS) else Int(xp)
     # sk-weq-trees: the rows the fit sees (fewer when zero weights drop)
     var n_fit = n_rows
     var dy = ctx.enqueue_create_buffer[CLT](n_rows)
@@ -1103,7 +1151,7 @@ def _rf_classifier_fit_forest[ROWMAJOR: Bool = False](params: ForestFitArgs, mut
     return forest^
 
 
-def _rf_regressor_fit_forest[ROWMAJOR: Bool = False](params: ForestFitArgs, mut bt: StageTimes) raises -> RandomForestMetaData[DT, RLT]:
+def _rf_regressor_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params: ForestFitArgs, mut bt: StageTimes) raises -> RandomForestMetaData[DT, RLT]:
     """The typed body of `_rf_regressor_fit` (wave 8 run split): the checks,
     the uploads and the fit, run by the binding with the GIL released;
     the auxiliary outputs are written here. The binding keeps the fit
@@ -1158,13 +1206,21 @@ def _rf_regressor_fit_forest[ROWMAJOR: Bool = False](params: ForestFitArgs, mut 
     t_s = bt.start()
     # cpu-gpu-cleanup t-forest, as in the classifier: device upload,
     # device transpose, device NaN scan.
-    var dx = upload_forest_x(ctx, xp, n_rows, n_cols, ROWMAJOR)
+    # XF_FIT_ROWS (ROWS; lane vdf-scope-trees): the rows are taken out of
+    # the image's device store on the device and transposed by the same
+    # kernel the row-major upload runs: the plane `fit_forest` reads holds
+    # the bytes of this upload on the host-gathered rows. No host X.
+    var dx: DeviceBuffer[DT]
+    comptime if ROWS:
+        dx = rf_store_rows_x(ctx, params.session, params.x, n_rows, n_cols)
+    else:
+        dx = upload_forest_x(ctx, xp, n_rows, n_cols, ROWMAJOR)
     # FAST on Apple (lane apple-fast-rfet-scan): the NaN-and-inf device
     # scan below (ensemble/device_finite.mojo) stands in for this NaN scan.
     comptime if not FOREST_DEVICE_FINITE:
         if device_has_nan_f32(ctx, dx, n_rows * n_cols):
             raise Error("rf_regressor_fit: " + RF_NAN_REFUSAL)
-    var host_x = 0 if ROWMAJOR else Int(xp)
+    var host_x = 0 if (ROWMAJOR or ROWS) else Int(xp)
     # sk-weq-trees: the rows the fit sees (fewer when zero weights drop)
     var n_fit = n_rows
     var dy = ctx.enqueue_create_buffer[RLT](n_rows)

@@ -224,7 +224,7 @@ def require_identical():
 # contract section 0.1 (DEVIATION 913); gemv is OP_NT at n == 1. out widened to the buffer
 # protocol by DEVIATION 2401; operands by DEVIATION 2400.
 def matmul(a, b, *, transpose_a=False, transpose_b=False, out=None,
-           identical=True):
+           identical=True, device=None):
     """Float32 matrix product ``op(a) @ op(b)`` with the same bits on Apple, NVIDIA and AMD.
 
     Computes under the profile ``mojolearn.identical.gemm.fp32.v1``. Each output cell
@@ -260,6 +260,9 @@ def matmul(a, b, *, transpose_a=False, transpose_b=False, out=None,
     identical : bool, default True
         Require the identical build: raises `RuntimeError` when another build is
         loaded. False uses whichever build is loaded, with no identity guarantee.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -289,7 +292,7 @@ def matmul(a, b, *, transpose_a=False, transpose_b=False, out=None,
     >>> b = np.random.default_rng(1).random((32, 64), dtype=np.float32)
     >>> c = np.asarray(linalg.matmul(a, b, transpose_b=True))
     """
-    return _NATIVE(None, "family_lin_matmul", (None, a, b, transpose_a, transpose_b, out, identical), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_matmul", (None, a, b, transpose_a, transpose_b, out, identical, device), _NATIVE_CONTEXT)
 
 
 # ===========================================================================
@@ -302,33 +305,62 @@ def matmul(a, b, *, transpose_a=False, transpose_b=False, out=None,
 
 
 # Contract gemm/IDENTICAL_LOWBIT_CONTRACT.md L-2 (from_bf16: L-1; int8: L-3, L-4, L-6; int15: W-1..W-4).
-def to_bf16(x):
+def to_bf16(x, *, device=None):
     """Convert float32 to bfloat16 bits.
 
     Subnormals are flushed, then each value is rounded to nearest even. Returns a
     uint16 `mojolearn.Array` of the same shape, the input format of `matmul_bf16`.
+
+    Parameters
+    ----------
+    x : float32 buffer
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
     """
-    return _NATIVE(None, "family_lin_to_bf16", (None, x), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_to_bf16", (None, x, device), _NATIVE_CONTEXT)
 
 
-def from_bf16(bits):
+def from_bf16(bits, *, device=None):
     """Convert bfloat16 bits (a uint16 buffer) to float32, exactly.
 
     Returns a float32 `mojolearn.Array` of the same shape.
+
+    Parameters
+    ----------
+    bits : uint16 buffer
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
     """
-    return _NATIVE(None, "family_lin_from_bf16", (None, bits), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_from_bf16", (None, bits, device), _NATIVE_CONTEXT)
 
 
-def from_f16(bits):
+def from_f16(bits, *, device=None):
     """IEEE float16 bits (a `'<u2'` or `'<f2'` buffer) to float32, exact, by
     bit construction (`gemm/contract.mojo::f16_bits_to_f32`): on the GPU on
     a GPU install, the linalg host binding on a CPU-only one. A float32
-    `mojolearn.Array` of the same shape."""
-    return _NATIVE(None, "family_lin_from_f16", (None, bits), _NATIVE_CONTEXT)
+    `mojolearn.Array` of the same shape.
+
+    Parameters
+    ----------
+    bits : uint16 or float16 buffer
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
+    """
+    return _NATIVE(None, "family_lin_from_f16", (None, bits, device), _NATIVE_CONTEXT)
 
 
-def quantize_int8(x):
+def quantize_int8(x, *, device=None):
     """Quantize a 2-D float32 matrix to int8 codes with one power-of-two exponent per row.
+
+    Parameters
+    ----------
+    x : float32 buffer, 2-D
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -337,15 +369,23 @@ def quantize_int8(x):
     exponents : mojolearn.Array of int32
         One per row; ``row = codes * 2**exponent``.
     """
-    return _NATIVE(None, "family_lin_quantize_int8", (None, x), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_quantize_int8", (None, x, device), _NATIVE_CONTEXT)
 
 
-def dequantize_int8(codes, exponents):
-    """Recover float32 values ``codes * 2**exponents[row]`` exactly from `quantize_int8` output."""
-    return _NATIVE(None, "family_lin_dequantize_int8", (None, codes, exponents), _NATIVE_CONTEXT)
+def dequantize_int8(codes, exponents, *, device=None):
+    """Recover float32 values ``codes * 2**exponents[row]`` exactly from `quantize_int8` output.
+
+    Parameters
+    ----------
+    codes, exponents : int8 and int32 buffers
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
+    """
+    return _NATIVE(None, "family_lin_dequantize_int8", (None, codes, exponents, device), _NATIVE_CONTEXT)
 
 
-def matmul_bf16(a, b, *, transpose_a=False, transpose_b=False, out=None):
+def matmul_bf16(a, b, *, transpose_a=False, transpose_b=False, out=None, device=None):
     """Matrix product with bfloat16 operands, under the profile ``mojolearn.identical.gemm.bf16f32.v1``.
 
     `b` is bfloat16 bits (a uint16 buffer from `to_bf16`); `a` is float32 or bfloat16
@@ -353,11 +393,17 @@ def matmul_bf16(a, b, *, transpose_a=False, transpose_b=False, out=None):
     with `matmul`'s arithmetic, so ``matmul(from_bf16(a_bits), from_bf16(b_bits))``
     gives the same bits. `transpose_a`, `transpose_b` and `out` behave as in `matmul`.
     Requires the identical build.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
     """
-    return _NATIVE(None, "family_lin_matmul_bf16", (None, a, b, transpose_a, transpose_b, out), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_matmul_bf16", (None, a, b, transpose_a, transpose_b, out, device), _NATIVE_CONTEXT)
 
 
-def matmul_int8(a, b, *, out=None):
+def matmul_int8(a, b, *, out=None, device=None):
     """Matrix product ``a @ b.T`` with int8 operands, under the profile ``mojolearn.identical.gemm.int8i32.v1``.
 
     Each of `a` (m, k) and `b` (n, k) is either a float32 matrix, quantized by the
@@ -365,8 +411,14 @@ def matmul_int8(a, b, *, out=None):
     is float32: the exact int32 sum of the code products, scaled by a power of two.
     It is the product of the rounded operands, not the float32 product. `out` behaves
     as in `matmul`. Requires the identical build.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
     """
-    return _NATIVE(None, "family_lin_matmul_int8", (None, a, b, out), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_matmul_int8", (None, a, b, out, device), _NATIVE_CONTEXT)
 
 
 # ===========================================================================
@@ -378,13 +430,20 @@ def matmul_int8(a, b, *, out=None):
 # ===========================================================================
 
 
-def quantize_int15(x):
+def quantize_int15(x, *, device=None):
     """Quantize a 2-D float32 matrix to fifteen-bit codes stored as two int8 planes.
 
     Per row, ``e = floor(log2(absmax)) - 13`` so the largest magnitude lands in
     [8192, 16384); each code is ``clamp(round_half_even(x * 2**-e), -16383, 16383)``,
     split as ``hi = code >> 7`` and ``lo = code & 127`` so ``code = hi * 128 + lo``.
     The same planes and exponents on every vendor.
+
+    Parameters
+    ----------
+    x : float32 buffer, 2-D
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -393,15 +452,23 @@ def quantize_int15(x):
     exponents : mojolearn.Array of int32
         One per row.
     """
-    return _NATIVE(None, "family_lin_quantize_int15", (None, x), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_quantize_int15", (None, x, device), _NATIVE_CONTEXT)
 
 
-def dequantize_int15(hi, lo, exponents):
-    """Recover float32 values ``(hi * 128 + lo) * 2**exponents[row]`` from `quantize_int15` output."""
-    return _NATIVE(None, "family_lin_dequantize_int15", (None, hi, lo, exponents), _NATIVE_CONTEXT)
+def dequantize_int15(hi, lo, exponents, *, device=None):
+    """Recover float32 values ``(hi * 128 + lo) * 2**exponents[row]`` from `quantize_int15` output.
+
+    Parameters
+    ----------
+    hi, lo, exponents : int8, int8 and int32 buffers
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
+    """
+    return _NATIVE(None, "family_lin_dequantize_int15", (None, hi, lo, exponents, device), _NATIVE_CONTEXT)
 
 
-def matmul_int15(a, b, *, out=None):
+def matmul_int15(a, b, *, out=None, device=None):
     """Matrix product ``a @ b.T`` with fifteen-bit operands, under the profile ``mojolearn.identical.gemm.int15i64.v1``.
 
     Each of `a` (m, k) and `b` (n, k) is either a float32 matrix, quantized by the
@@ -411,8 +478,14 @@ def matmul_int15(a, b, *, out=None):
     operands, not the float32 product. `k` may be at most 65536 (`INT15_MAX_K`);
     larger values raise `ValueError`. `out` behaves as in `matmul`. Requires the
     identical build.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
     """
-    return _NATIVE(None, "family_lin_matmul_int15", (None, a, b, out), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_matmul_int15", (None, a, b, out, device), _NATIVE_CONTEXT)
 
 
 # ===========================================================================
@@ -568,7 +641,7 @@ _TS_MAX_N = 512
 # rounding but not bit for bit (different tree), and rows may differ in sign. A wide input's R
 # is geqrf's. Kernel: core/householder_qr.mojo::qr_factor via
 # decomposition/linalg_public_device.mojo, host replay on CPU-only installs.
-def qr(a, mode="r"):
+def qr(a, mode="r", *, device=None):
     """QR decomposition, as `numpy.linalg.qr`.
 
     Parameters
@@ -580,6 +653,9 @@ def qr(a, mode="r"):
         default ``(Q, R)``. 'reduced' returns Q (M, K) and R (K, N), 'complete' Q (M, M)
         and R (M, N), 'raw' h (N, M) and tau (K,), with K = min(M, N), following
         LAPACK's conventions. Any other mode raises `ValueError`.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -594,14 +670,14 @@ def qr(a, mode="r"):
     Runs on the device on a GPU install and on the host binding on a CPU-only install,
     with the same bits.
     """
-    return _NATIVE(None, "family_lin_qr", (a, mode), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_qr", (a, mode, device), _NATIVE_CONTEXT)
 
 
 # x_decomp's round-robin Jacobi (eigh_par_* kernels) + sign_flip_kernel (PCA's host_sign_flip
 # rule) on the device; host replay on CPU-only installs. Unconverged -> RuntimeError (DEVIATION
 # 590); a kernel that never ran is reported separately. decomposition/host/linalg_public.mojo
 # derives the ascending order from PCA's descending one.
-def eigh(a, UPLO="L"):
+def eigh(a, UPLO="L", *, device=None):
     """Eigenvalues and eigenvectors of a symmetric matrix, as `numpy.linalg.eigh`.
 
     Parameters
@@ -611,6 +687,9 @@ def eigh(a, UPLO="L"):
         matrix raises `ValueError`.
     UPLO : {'L', 'U'}, default 'L'
         Which triangle to read.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -630,11 +709,11 @@ def eigh(a, UPLO="L"):
     Uses a round-robin Jacobi method, on the device on a GPU install and on the host
     binding on a CPU-only install, with the same bits.
     """
-    return _NATIVE(None, "family_lin_eigh", (a, UPLO), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_eigh", (a, UPLO, device), _NATIVE_CONTEXT)
 
 
 # Route: PCA(svd_solver='full') without centering: Householder QR, then one-sided Jacobi SVD of R.
-def svdvals(a):
+def svdvals(a, *, device=None):
     """Singular values in descending order, as `numpy.linalg.svdvals`.
 
     Computed as the singular values of R from a Householder QR of `a`, which equal
@@ -643,12 +722,15 @@ def svdvals(a):
     Parameters
     ----------
     a : float32 buffer, shape (M, N)
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
     mojolearn.Array, shape (min(M, N),)
     """
-    return _NATIVE(None, "family_lin_svdvals", (a,), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_svdvals", (a, device), _NATIVE_CONTEXT)
 
 
 #: A singular value at most this fraction of the largest (and exactly zero
@@ -677,7 +759,7 @@ _SVD_NULL_RTOL_MODULE = _SVD_NULL_RTOL
 # problem (U = V', Vh = U'^T). hermitian: S = |w| descending, U = v, Vh = (sign(w) v)^T.
 # full_matrices=False of a tall A with N <= 512 uses the blocked TSQR (`_svd_tsqr`;
 # MOJOLEARN_LINALG_TSQR=0 keeps the route above).
-def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
+def svd(a, full_matrices=True, compute_uv=True, hermitian=False, *, device=None):
     """Singular value decomposition, as `numpy.linalg.svd`.
 
     Returns ``SVDResult(U, S, Vh)`` with `S` descending. The signs of the columns of
@@ -695,12 +777,15 @@ def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
         Return U and Vh as well as S.
     hermitian : bool, default False
         Treat `a` as symmetric.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
     SVDResult or mojolearn.Array
     """
-    return _NATIVE(None, "family_lin_svd", (a, full_matrices, compute_uv, hermitian), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_svd", (a, full_matrices, compute_uv, hermitian, device), _NATIVE_CONTEXT)
 
 
 # The compiled owner of this module's public functions

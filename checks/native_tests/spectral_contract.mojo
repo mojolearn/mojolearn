@@ -134,8 +134,8 @@ def wire_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: 
             var a = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=aa)
             var p = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=pp)
             if operation == 2 or operation == 3:
-                require(na == (10 if operation == 2 else 5) and np == 10 and nf == 1 and ff != 0,
-                    "Spectral fit/embed fixed envelope")
+                require(na == (12 if operation == 2 else 7) and np == 10 and nf == 2
+                    and ff != 0, "Spectral fit/embed fixed envelope")
                 var f = Pointer[Float64, ImmUntrackedOrigin](unsafe_from_address=ff)
                 require(a[0] == 11 and a[1] == 13 and a[2] == 17 and a[3] == 19,
                     "Spectral prescribed source/graph address order")
@@ -145,10 +145,14 @@ def wire_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: 
                 if operation == 2:
                     require(a[4] == 23 and a[5] == 29 and a[6] == 31 and a[7] == 37
                         and a[8] == 41 and a[9] == 43, "Spectral fit output/state order")
+                    # lane vdf-misc4: the generated-affinity words (output, status, gamma) follow
+                    require(a[10] == 0 and a[11] == 0 and f[1] == 0.0, "Spectral fit affinity words absent")
                     require(p[4] == 3 and p[5] == 4 and p[6] == 10 and p[7] == 8
                         and p[8] == 4294967295 and (p[9] == 0 or p[9] == 1), "Spectral fit options and Boolean encoding")
                     value = WIDE_HANDLE + 2 * p[0] + p[9]
                 else:
+                    # lane vdf-misc3: the generated-affinity words (output, status, gamma) follow
+                    require(a[5] == 0 and a[6] == 0 and f[1] == 0.0, "Spectral embedding affinity words absent")
                     require(a[4] == 29 and p[4] == 4 and p[5] == 3 and p[6] == 8
                         and (p[7] == 0 or p[7] == 1) and (p[8] == 0 or p[8] == 1)
                         and p[9] == 4294967295, "Spectral embedding widths/flags/seed order")
@@ -213,18 +217,18 @@ def record_error(context: Int, message: Int, size: Int) abi("C"):
 
 
 def malformed(unit: Int) raises:
-    var a: Array[Int, 10] = [11,13,17,19,23,29,31,37,41,43]
+    var a: Array[Int, 12] = [11,13,17,19,23,29,31,37,41,43,0,0]
     var p: Array[Int, 10] = [2,120,2,431,3,4,10,8,4294967295,1]
-    var f: Array[Float64, 1] = [0.10000000000000002]
+    var f: Array[Float64, 2] = [0.10000000000000002, 0.0]
     var result = List[Int](length=1, fill=-73)
     var error = List[Int](length=2, fill=0)
     var operation = 2
     var aa = Int(a.unsafe_ptr())
     var pp = Int(p.unsafe_ptr())
     var ff = Int(f.unsafe_ptr())
-    var na = 10
+    var na = 12
     var np = 10
-    var nf = 1
+    var nf = 2
     var rp = Int(result.unsafe_ptr())
     if unit == 0:
         rp = 0
@@ -233,7 +237,7 @@ def malformed(unit: Int) raises:
     elif unit == 2:
         operation = 1
     elif unit == 3:
-        na = 9
+        na = 11
     elif unit == 4:
         np = 9
     elif unit == 5:

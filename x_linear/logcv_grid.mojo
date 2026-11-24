@@ -24,6 +24,7 @@ The StratifiedKFold ids are built on the grid from the labels
 per fold one count, and the result once. The host column runs `logcv_fit`:
 the same statements on the same rows in the same order: the same words.
 """
+from core.fold_x_device import fold_x_fill
 from x_linear.logcv import lcv_caller_folds, LCV_ROLES_AFTER
 from x_linear.cv_roles import cv_train, cv_test
 from max.gpu import block_idx, block_dim, thread_idx
@@ -390,7 +391,7 @@ struct LcvObjective(LbObjective):
         self.cs = ctx.enqueue_create_buffer[DType.float32](2)
         self.ix = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
         if n_x > 0:
-            ctx.enqueue_copy(dst_buf=self.x, src_ptr=x)
+            fold_x_fill(ctx, self.x, Int(x), n_x)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
         if n_y > 0:
             ctx.enqueue_copy(dst_buf=self.y, src_ptr=y)
         self.n = n

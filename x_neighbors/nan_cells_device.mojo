@@ -28,6 +28,7 @@ from max.gpu.sync import barrier
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 from x_neighbors.items import FP, IP
 from x_neighbors.device_ops import xn_ctx, _down_i
+from core.fold_x_device import fold_x_fill
 from core.device_fold import device_sum_i32
 from core.device_pool import pool_give, pool_take
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
@@ -284,7 +285,7 @@ def nan_cells_device(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int
             var bx = pool_take["MojolearnXNeighborsNanFitXV2"](ctx, total)
             var bc = pool_take["MojolearnXNeighborsNanFitCmTotalV2"](ctx, d + 1)
             if total > 0:
-                ctx.enqueue_copy(dst_buf=bx, src_ptr=FP(unsafe_from_address=x))
+                fold_x_fill(ctx, bx, x, total)  # THE FOLD X WORD (a negative x: one device copy of the slot)
             ctx.enqueue_memset(bc, Float32(0.0))   # the int32 zero's bits
             if total > 0:
                 var nrb2 = (n + NC_RB - 1) // NC_RB
@@ -305,7 +306,7 @@ def nan_cells_device(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int
         if colmiss_only == 1:
             var d_x1 = ctx.enqueue_create_buffer[DType.float32](max(total, 1))
             if total > 0:
-                ctx.enqueue_copy(dst_buf=d_x1, src_ptr=FP(unsafe_from_address=x))
+                fold_x_fill(ctx, d_x1, x, total)  # THE FOLD X WORD
             var d_cm1 = ctx.enqueue_create_buffer[DType.int32](max(d, 1))
             ctx.enqueue_memset(d_cm1, Int32(0))
             if total > 0:
@@ -324,10 +325,10 @@ def nan_cells_device(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int
             _ = d_x1^
             _ = d_cm1^
             return
-    # x straight to the device (the copy engine; no host-thread staging)
+    # x straight to the device (the copy engine; no host-thread staging), or THE FOLD X WORD's device copy
     var d_x = ctx.enqueue_create_buffer[DType.float32](max(total, 1))
     if total > 0:
-        ctx.enqueue_copy(dst_buf=d_x, src_ptr=FP(unsafe_from_address=x))
+        fold_x_fill(ctx, d_x, x, total)
     var nb = max((total + NC_CHUNK - 1) // NC_CHUNK, 1)
     var ng = (nb + NC_CHUNK - 1) // NC_CHUNK
     var d_bc = ctx.enqueue_create_buffer[DType.int32](nb)

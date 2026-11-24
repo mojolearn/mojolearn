@@ -103,7 +103,7 @@ def ica_fit(model: PythonObject, source: PythonObject, project: Bool, context: P
         _address(sources) if project else spare,
         n, d, nc, code, seed, 0 if decomp_eq(algorithm, PythonObject("parallel")) else 1, fun_code,
         decomp_int(fields["max_iter"]), project, decomp_float(alpha), decomp_float(fields["tol"]),
-        Int(loop_ns.unsafe_ptr()))
+        Int(loop_ns.unsafe_ptr()), -1)
     var it = 0
     with GILReleased(Python()):
         it = ica_fit_call(entry, request)
@@ -147,7 +147,7 @@ def ica_project(model: PythonObject, source: PythonObject, inverse: Bool, contex
     var mean = admit_x(decomp_attr(model, fields, "mean_"), 1, "mean_", context) if whiten else matrix
     var out = decomp_f32(Python.tuple(n, rows), context)
     var request = ICAProjectRequest(_address(x), _address(matrix), _address(mean), _address(out),
-                                    inverse, n, width, rows, whiten)
+                                    inverse, n, width, rows, whiten, -1)
     with GILReleased(Python()):
         ica_project_call(entry, request)
     _ = matrix  # keep the Python object alive through the native call above

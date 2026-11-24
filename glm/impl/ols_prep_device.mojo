@@ -20,6 +20,7 @@ from max.gpu.host import DeviceContext
 from core.py2mojo_rows import ROWS_SQRT_F32, rows_call, rows_device
 from glm.impl.center_device import center_device, col_sums_device, col_sums_pair_device, scale_rows_device
 from glm.impl.lm_finish import lm_means_finish
+from core.fold_x_device import fold_x_new, fold_x_release
 
 comptime OLS_PREP_SEPARATE = 0
 comptime OLS_PREP_PAIRED = 1
@@ -42,7 +43,9 @@ def ols_prep_device(
     """work_x (rows x cols) and work_y (rows) float32: X and y centered by
     their (weighted) means when `intercept`, then each row scaled by
     sqrt(w) when w != 0. xm64/xm32 (cols) and ym64/ym32 (1) receive the
-    binary64 means and their float32 roundings when `intercept`."""
+    binary64 means and their float32 roundings when `intercept`. For a fold
+    X (x < 0) work_x names one host Int64 that receives the prepared X's
+    fold word (see the body)."""
     if rows <= 0 or cols <= 0:
         raise Error("ols_prep: rows and cols must be positive")
     var weighted = w != 0
@@ -52,59 +55,83 @@ def ols_prep_device(
         raise Error("ols_prep: weighted means need sample weights")
     # Host scratch: the binary64 sums (as words), one row-scaled copy for the
     # weighted means and the centered copies before the root scaling.
+    # A FOLD X (x < 0, THE FOLD X WORD, core/fold_x_device.mojo; lane
+    # vdf-scope-linear4): the X-shaped scratch and the prepared X are slots
+    # of the fold store, so X never visits the host: work_x then names ONE
+    # host Int64 that receives the prepared X's fold word (the caller hands
+    # it to the solve entry, which reads it through fold_x_fill, and frees
+    # the slot). Same kernels on the same words: the same prepared bits.
+    var slot_x = x < 0
     var sx = List[Float64](length=cols, fill=0.0)
     var sy = List[Float64](length=1, fill=0.0)
-    var tx = List[Float32](length=rows * cols if weighted else 1, fill=0.0)
+    var tx = List[Float32](length=rows * cols if weighted and not slot_x else 1, fill=0.0)
     var ty = List[Float32](length=rows if weighted else 1, fill=0.0)
     var sxa = Int(sx.unsafe_ptr())
     var sya = Int(sy.unsafe_ptr())
-    var cx = x
-    var cy = y
-    if intercept:
-        if means_mode == OLS_PREP_WEIGHTED:
-            # classical_weighted_means(x, w) then (y, w): sum(w), refusal,
-            # x * w, its column sums, the weighted finish.
-            var wsum = List[Float64](length=1, fill=0.0)
-            col_sums_device(ctx, w, Int(wsum.unsafe_ptr()), rows, 1)
-            var total = wsum[0]
-            if total <= 0:
-                raise Error("sample_weight sums to zero")
-            scale_rows_device(ctx, x, w, Int(tx.unsafe_ptr()), rows, cols)
-            col_sums_device(ctx, Int(tx.unsafe_ptr()), sxa, rows, cols)
-            lm_means_finish(_f64p(sxa), _f64p(xm64), _f32p(xm32), cols, rows, True, total)
-            col_sums_device(ctx, w, Int(wsum.unsafe_ptr()), rows, 1)
-            total = wsum[0]
-            if total <= 0:
-                raise Error("sample_weight sums to zero")
-            scale_rows_device(ctx, y, w, Int(ty.unsafe_ptr()), rows, 1)
-            col_sums_device(ctx, Int(ty.unsafe_ptr()), sya, rows, 1)
-            lm_means_finish(_f64p(sya), _f64p(ym64), _f32p(ym32), 1, rows, True, total)
-            _ = wsum^
-        elif means_mode == OLS_PREP_PAIRED:
-            col_sums_pair_device(ctx, x, y, sxa, sya, rows, cols)
-            lm_means_finish(_f64p(sxa), _f64p(xm64), _f32p(xm32), cols, rows, False, 0.0)
-            lm_means_finish(_f64p(sya), _f64p(ym64), _f32p(ym32), 1, rows, False, 0.0)
-        else:
-            col_sums_device(ctx, x, sxa, rows, cols)
-            lm_means_finish(_f64p(sxa), _f64p(xm64), _f32p(xm32), cols, rows, False, 0.0)
-            col_sums_device(ctx, y, sya, rows, 1)
-            lm_means_finish(_f64p(sya), _f64p(ym64), _f32p(ym32), 1, rows, False, 0.0)
-        # classical_center: into the scratch when the root scaling follows,
-        # else straight into the outputs.
-        var dx = Int(tx.unsafe_ptr()) if weighted else work_x
-        var dy = Int(ty.unsafe_ptr()) if weighted else work_y
-        center_device(ctx, x, xm32, dx, rows, cols)
-        center_device(ctx, y, ym32, dy, rows, 1)
-        cx = dx
-        cy = dy
-    if weighted:
-        # py2mojo_rows ROWS_SQRT_F32 over the weights, then the row scaling.
-        var root = List[Float32](length=rows, fill=0.0)
-        var call = rows_call(ROWS_SQRT_F32, rows, 1, w, Int(root.unsafe_ptr()), 0, 0.0)
-        rows_device(ctx, call)
-        scale_rows_device(ctx, cx, Int(root.unsafe_ptr()), work_x, rows, cols)
-        scale_rows_device(ctx, cy, Int(root.unsafe_ptr()), work_y, rows, 1)
-        _ = root^
+    var tx_at = Int(tx.unsafe_ptr())
+    var out_x = work_x
+    if slot_x:
+        out_x = fold_x_new(ctx, rows * cols)
+        if weighted:
+            tx_at = fold_x_new(ctx, rows * cols)
+    try:
+        var cx = x
+        var cy = y
+        if intercept:
+            if means_mode == OLS_PREP_WEIGHTED:
+                # classical_weighted_means(x, w) then (y, w): sum(w), refusal,
+                # x * w, its column sums, the weighted finish.
+                var wsum = List[Float64](length=1, fill=0.0)
+                col_sums_device(ctx, w, Int(wsum.unsafe_ptr()), rows, 1)
+                var total = wsum[0]
+                if total <= 0:
+                    raise Error("sample_weight sums to zero")
+                scale_rows_device(ctx, x, w, tx_at, rows, cols)
+                col_sums_device(ctx, tx_at, sxa, rows, cols)
+                lm_means_finish(_f64p(sxa), _f64p(xm64), _f32p(xm32), cols, rows, True, total)
+                col_sums_device(ctx, w, Int(wsum.unsafe_ptr()), rows, 1)
+                total = wsum[0]
+                if total <= 0:
+                    raise Error("sample_weight sums to zero")
+                scale_rows_device(ctx, y, w, Int(ty.unsafe_ptr()), rows, 1)
+                col_sums_device(ctx, Int(ty.unsafe_ptr()), sya, rows, 1)
+                lm_means_finish(_f64p(sya), _f64p(ym64), _f32p(ym32), 1, rows, True, total)
+                _ = wsum^
+            elif means_mode == OLS_PREP_PAIRED:
+                col_sums_pair_device(ctx, x, y, sxa, sya, rows, cols)
+                lm_means_finish(_f64p(sxa), _f64p(xm64), _f32p(xm32), cols, rows, False, 0.0)
+                lm_means_finish(_f64p(sya), _f64p(ym64), _f32p(ym32), 1, rows, False, 0.0)
+            else:
+                col_sums_device(ctx, x, sxa, rows, cols)
+                lm_means_finish(_f64p(sxa), _f64p(xm64), _f32p(xm32), cols, rows, False, 0.0)
+                col_sums_device(ctx, y, sya, rows, 1)
+                lm_means_finish(_f64p(sya), _f64p(ym64), _f32p(ym32), 1, rows, False, 0.0)
+            # classical_center: into the scratch when the root scaling follows,
+            # else straight into the outputs.
+            var dx = tx_at if weighted else out_x
+            var dy = Int(ty.unsafe_ptr()) if weighted else work_y
+            center_device(ctx, x, xm32, dx, rows, cols)
+            center_device(ctx, y, ym32, dy, rows, 1)
+            cx = dx
+            cy = dy
+        if weighted:
+            # py2mojo_rows ROWS_SQRT_F32 over the weights, then the row scaling.
+            var root = List[Float32](length=rows, fill=0.0)
+            var call = rows_call(ROWS_SQRT_F32, rows, 1, w, Int(root.unsafe_ptr()), 0, 0.0)
+            rows_device(ctx, call)
+            scale_rows_device(ctx, cx, Int(root.unsafe_ptr()), out_x, rows, cols)
+            scale_rows_device(ctx, cy, Int(root.unsafe_ptr()), work_y, rows, 1)
+            _ = root^
+    except problem:
+        if slot_x:
+            fold_x_release(ctx, out_x)
+            if weighted:
+                fold_x_release(ctx, tx_at)
+        raise problem^
+    if slot_x:
+        if weighted:
+            fold_x_release(ctx, tx_at)
+        MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=work_x)[] = Int64(out_x)
     _ = sx^
     _ = sy^
     _ = tx^

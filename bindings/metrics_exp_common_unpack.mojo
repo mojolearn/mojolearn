@@ -26,6 +26,7 @@
 from bindings.admitted_family_door import admit_family
 from bindings.metrics_exp_common_run import mx_nan, mx_isnan, mx_class_code
 from std.python import Python, PythonObject
+from std.memory import unsafe_memcpy
 from providers.python.metrics_vector_input_pyapi_unpack import metric_vector_exact
 from providers.python.metrics_matrix_input_pyapi_pack import metric_score_matrix
 from bindings.native_loaded_module_door import native_loaded_module
@@ -345,8 +346,8 @@ def mx_encode(values: PythonObject, name: String, context: PythonObject) raises 
             var m = len(fast_text.codes)
             var fast_codes = family_array(Python.tuple(PythonObject(m)), "<i4", context)
             var target = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(fast_codes)))
-            for i in range(m):  # driver-loop: native copy of the n codes
-                target[i] = fast_text.codes[i]
+            # lane vdf-xm-labels: one block copy of the n codes (was a per-row loop tagged driver-loop)
+            unsafe_memcpy(dest=target, src=FAMILY_I32P(unsafe_from_address=Int(fast_text.codes.unsafe_ptr())), count=m)
             _ = fast_codes  # keep the Python object alive through the native writes above
             return MxLab(listed[1], p3_text_classes(labels, fast_text.first), fast_codes, m)
     var classes = mx_sorted(mx_set(labels))

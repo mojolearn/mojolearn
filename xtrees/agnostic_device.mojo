@@ -1267,3 +1267,81 @@ def pshap_values_linear(x: Int, bg: Int, wb: Int, phi: Int, R: Int, nb: Int, d: 
     _ = dout^
     _ = ey^
     _ = dphi^
+
+
+# ---- KernelExplainer over the resident linear block (lane vdf-explain, 2026-11-24) ----
+# The KernelExplainer twin of `pshap_values_linear` (PSHAP_IDN_RESIDENT, same define, same tier): before, a
+# KernelExplainer over this library's linear `link(X W^T + b)` took the member route on a GPU build, so each chunk
+# built R m nb x d synthetic floats on the device, downloaded them, the member's predict uploaded them again, its
+# outputs came back to the host and were uploaded once more for the means and the solve (and the explained rows'
+# own outputs, fx, made a fourth crossing). Here the coalition masks, the synthetic rows, the linear decision on
+# them and on the explained rows, the background means, the link, the weighted normal equations and their solve
+# all run on the device; only the chunk's rows, the background, [w | b], the schedule and fnull go up and phi comes
+# back. Same words as the member route: the same masks (`mask_kernel`), synthetic rows (`ksynth_kernel`), the
+# x_linear `decision_one` statements (`_lin_decision_one`, the member's predict word), the same mean, link, fx and
+# solve kernels in the same order. The host column keeps the member route (the same decision statements on the
+# host), so no column moves.
+
+
+def kshap_solve_linear(x: Int, bg: Int, wb: Int, fnull: Int, size_off: Int, size_w: Int, cdf: Int, phi: Int,
+                       R: Int, nb: Int, d: Int, k: Int, m: Int, nfixed: Int, nfull: Int, npaired: Int, L: Int,
+                       seed: Int, row0: Int, wrand: UInt64, link: Bool, model_link: Int) raises:
+    """`kshap_synth` + the linear model's predict + `kshap_solve` for a chunk without leaving the device: x Float32
+    R x d (the explained rows), bg Float32 nb x d, wb Float32 k x (d + 1) ([w | b] per output, x_linear
+    `_coef_block`), fnull binary64 k (the linked background value), phi binary64 R x d x k to the host address phi.
+    `link`: KernelExplainer's 'logit' link on the means and on fx; `model_link`: the linear model's own link word
+    (0 identity, 1 exp, 2 sigmoid)."""
+    if R <= 0:
+        return
+    var ctx = _ctx()
+    var mk = _Masks(ctx, size_off, size_w, cdf, R, d, m, nfixed, nfull, npaired, L, seed, row0, wrand)
+    var dx = _up_f32(ctx, x, R * d)
+    var dbg = _up_f32(ctx, bg, nb * d)
+    var dwb = _up_f32(ctx, wb, k * (d + 1))
+    var rows = R * m * nb
+    var total = rows * d
+    var dsyn = ctx.enqueue_create_buffer[DType.float32](max(total, 1))
+    var dout = ctx.enqueue_create_buffer[DType.float32](max(rows * k, 1))
+    var ey = ctx.enqueue_create_buffer[DType.uint64](max(R * m * k, 1))
+    if total > 0:
+        ctx.enqueue_function[ksynth_kernel](
+            Int64(total), Int32(nb), Int32(d), Int32(m), dx.unsafe_ptr(), dbg.unsafe_ptr(), mk.masks.unsafe_ptr(),
+            dsyn.unsafe_ptr(), grid_dim=_blocks(total), block_dim=AGN_TPB,
+        )
+        ctx.enqueue_function[lin_decision_kernel](
+            dsyn.unsafe_ptr(), dwb.unsafe_ptr(), Int64(rows), Int32(d), Int32(k), Int32(model_link),
+            dout.unsafe_ptr(), grid_dim=_blocks(rows * k), block_dim=AGN_TPB,
+        )
+        ctx.enqueue_function[mean_kernel](
+            Int64(R * m * k), Int32(nb), Int32(k), dout.unsafe_ptr(), ey.unsafe_ptr(),
+            grid_dim=_blocks(R * m * k), block_dim=AGN_TPB,
+        )
+        if link:
+            ctx.enqueue_function[logit_kernel](Int64(R * m * k), ey.unsafe_ptr(), grid_dim=_blocks(R * m * k),
+                                               block_dim=AGN_TPB)
+    # fx: the linear decision on the explained rows themselves (the member's `explained()` word), then the
+    # binary64 widening and the link, as `_fx_dev` does for a host fx.
+    var dfx32 = ctx.enqueue_create_buffer[DType.float32](max(R * k, 1))
+    var dfx = ctx.enqueue_create_buffer[DType.uint64](max(R * k, 1))
+    ctx.enqueue_function[lin_decision_kernel](
+        dx.unsafe_ptr(), dwb.unsafe_ptr(), Int64(R), Int32(d), Int32(k), Int32(model_link), dfx32.unsafe_ptr(),
+        grid_dim=_blocks(R * k), block_dim=AGN_TPB,
+    )
+    ctx.enqueue_function[fx_kernel](Int64(R * k), dfx32.unsafe_ptr(), dfx.unsafe_ptr(), grid_dim=_blocks(R * k),
+                                    block_dim=AGN_TPB)
+    if link:
+        ctx.enqueue_function[logit_kernel](Int64(R * k), dfx.unsafe_ptr(), grid_dim=_blocks(R * k), block_dim=AGN_TPB)
+    var dnull = _up_u64(ctx, fnull, k)
+    _ksolve_core(ctx, mk, ey.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                 dfx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                 dnull.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), phi, R, d, k, m)
+    _ = mk^
+    _ = dx^
+    _ = dbg^
+    _ = dwb^
+    _ = dsyn^
+    _ = dout^
+    _ = ey^
+    _ = dfx32^
+    _ = dfx^
+    _ = dnull^

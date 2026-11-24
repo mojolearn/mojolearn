@@ -16,10 +16,12 @@ text its former Python export raised. These calls do not touch the GIL.
 from core.msel_entry_table import (
     MselEntryKey, msel_table_entry, MSEL_HELPERS_ABI, MH_OP_COUNT,
     MH_ARANGE_I64, MH_COUNT_MASK_U8, MH_SELECT_MASK_U8_I64, MH_MASK_FROM_INDICES_U8, MH_LEAVE_RANGE_I64,
-    MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32, MH_GATHER_I64,
-    MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_ALLOC, MH_STORE_READ, MH_STORE_FREE, MH_SCATTER_ROWS,
+    MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32,
+    MH_STORE_FREE,
     MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32,
     MH_STORE_PUT, MH_STORE_TAKE_ROWS,
+    MH_FIRST_SEEN_RES, MH_STRAT_FOLD_ASSIGN_RES, MH_SELECT_FOLDS_RES, MH_FOLD_IDS_RES,
+    MH_GROUP_CLASS_COUNTS_RES,
 )
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_word
 
@@ -110,41 +112,14 @@ def msel_gather_i32(entry: EntryRef, table: Int, n_table: Int, codes: Int, n: In
     return msel_helper(entry, MH_GATHER_I32, addrs, ints)
 
 
-def msel_gather_i64(entry: EntryRef, table: Int, n_table: Int, codes: Int, n: Int, dst: Int) raises -> Int:
-    """dst[i] = table[codes[i]], int64 codes into an int64 table."""
-    var addrs: Array[Int, 3] = [table, codes, dst]
-    var ints: Array[Int, 2] = [n_table, n]
-    return msel_helper(entry, MH_GATHER_I64, addrs, ints)
 
 
-def msel_first_seen_i32(entry: EntryRef, codes: Int, n: Int, k: Int, enc: Int, counts: Int) raises -> Int:
-    """Renumber n int32 class codes in [0, k) by first appearance; returns
-    the number of classes present."""
-    var addrs: Array[Int, 3] = [codes, enc, counts]
-    var ints: Array[Int, 2] = [n, k]
-    return msel_helper(entry, MH_FIRST_SEEN_I32, addrs, ints)
+# REMOVED (lane vdf-scope-cv, 2026-11-24): msel_gather_i64, msel_store_alloc, msel_store_read and
+# msel_scatter_rows (operations 10, 13, 14, 16 retired, core/msel_entry_table.mojo).
 
 
-def msel_strat_fold_assign_i32(entry: EntryRef, enc: Int, n: Int, k: Int, n_folds: Int, alloc: Int,
-                               perms: Int, counts: Int, dst: Int) raises -> Int:
-    """StratifiedKFold's test fold of every row (`perms` 0: unshuffled)."""
-    var addrs: Array[Int, 5] = [enc, alloc, perms, counts, dst]
-    var ints: Array[Int, 3] = [n, k, n_folds]
-    return msel_helper(entry, MH_STRAT_FOLD_ASSIGN_I32, addrs, ints)
-
-
-def msel_store_alloc(entry: EntryRef, nbytes: Int) raises -> Int:
-    """A zeroed block of the publisher's fold store; returns its id."""
-    var addrs: Array[Int, 0] = []
-    var ints: Array[Int, 1] = [nbytes]
-    return msel_helper(entry, MH_STORE_ALLOC, addrs, ints)
-
-
-def msel_store_read(entry: EntryRef, id: Int, dst: Int, nbytes: Int) raises -> Int:
-    """Copy nbytes of block `id` to host memory at `dst`."""
-    var addrs: Array[Int, 1] = [dst]
-    var ints: Array[Int, 2] = [id, nbytes]
-    return msel_helper(entry, MH_STORE_READ, addrs, ints)
+# REMOVED (lane vdf-scope-split, 2026-11-24): msel_first_seen_i32 and msel_strat_fold_assign_i32
+# (operations 11, 12 retired; their stored-code forms are msel_first_seen_res / msel_strat_fold_assign_res).
 
 
 def msel_store_free(entry: EntryRef, id: Int) raises -> Int:
@@ -154,13 +129,6 @@ def msel_store_free(entry: EntryRef, id: Int) raises -> Int:
     return msel_helper(entry, MH_STORE_FREE, addrs, ints)
 
 
-def msel_scatter_rows(entry: EntryRef, dst_id: Int, n_dst: Int, dst_code: Int, src: Int, src_code: Int,
-                      n_src: Int, width: Int, idx_id: Int) raises -> Int:
-    """Rows of a host buffer cast into rows idx of a stored int64 or float64
-    block."""
-    var addrs: Array[Int, 1] = [src]
-    var ints: Array[Int, 7] = [dst_id, n_dst, dst_code, src_code, n_src, width, idx_id]
-    return msel_helper(entry, MH_SCATTER_ROWS, addrs, ints)
 
 
 def msel_proba_column(entry: EntryRef, src: Int, code: Int, n: Int, k: Int, col: Int, dst: Int) raises -> Int:
@@ -204,3 +172,59 @@ def msel_store_take_rows(entry: EntryRef, src_id: Int, n_src: Int, row_bytes: In
     var addrs: Array[Int, 1] = [dst]
     var ints: Array[Int, 5] = [src_id, n_src, row_bytes, idx_id, n_idx]
     return msel_helper(entry, MH_STORE_TAKE_ROWS, addrs, ints)
+
+
+# ---------------------------------------------------------------- layout V3 (lane vdf-scope-split, 2026-11-24)
+
+
+def msel_first_seen_res(entry: EntryRef, codes_id: Int, n: Int, k: Int, counts: Int, rank: Int) raises -> Int:
+    """The stored codes' k int64 class sizes in first-seen order and, when
+    `rank` is not null, their k int32 first-seen positions rank_of[code];
+    returns the number of classes present. Nothing n-long crosses."""
+    var addrs: Array[Int, 2] = [counts, rank]
+    var ints: Array[Int, 3] = [codes_id, n, k]
+    return msel_helper(entry, MH_FIRST_SEEN_RES, addrs, ints)
+
+
+def msel_strat_fold_assign_res(entry: EntryRef, codes_id: Int, n: Int, k: Int, n_folds: Int, rank: Int,
+                               width: Int, alloc: Int, perms: Int, counts: Int, sizes: Int) raises -> Int:
+    """StratifiedKFold's test fold of every row of the stored codes over k
+    classes, the codes renumbered by the `width`-word table `rank` (null:
+    already first-seen), into a new stored fold block whose id is returned
+    (free it with `msel_store_free`); the n_folds int64 fold sizes to
+    `sizes`."""
+    var addrs: Array[Int, 5] = [rank, alloc, perms, counts, sizes]
+    var ints: Array[Int, 5] = [codes_id, n, k, n_folds, width]
+    return msel_helper(entry, MH_STRAT_FOLD_ASSIGN_RES, addrs, ints)
+
+
+def msel_select_folds_res(entry: EntryRef, folds_id: Int, n: Int, k: Int, sizes: Int, tests: Int,
+                          trains: Int) raises -> Int:
+    """`msel_select_folds_i64` over a stored fold block."""
+    var addrs: Array[Int, 3] = [sizes, tests, trains]
+    var ints: Array[Int, 3] = [folds_id, n, k]
+    return msel_helper(entry, MH_SELECT_FOLDS_RES, addrs, ints)
+
+
+def msel_fold_ids_res(entry: EntryRef, codes_id: Int, n: Int, k: Int, n_splits: Int, counts: Int,
+                      fold_counts: Int) raises -> Int:
+    """The unshuffled stratified default folds of the stored codes into a new
+    stored fold block whose id is returned; the k int64 class counts and the
+    n_splits int64 fold sizes come back."""
+    var addrs: Array[Int, 2] = [counts, fold_counts]
+    var ints: Array[Int, 4] = [codes_id, n, k, n_splits]
+    return msel_helper(entry, MH_FOLD_IDS_RES, addrs, ints)
+
+
+# ---------------------------------------------------------------- layout V4 (lane vdf-scope-split2, 2026-11-24)
+
+
+def msel_group_class_counts_res(entry: EntryRef, codes_id: Int, n: Int, k: Int, groups: Int, m: Int, rank: Int,
+                                n_classes: Int, dist: Int) raises -> Int:
+    """StratifiedGroupKFold's m x n_classes int64 group x class table of the
+    stored codes, its classes in first-seen order by the k-word table `rank`
+    (null: already first-seen): dist[g * n_classes + rank[code]]. The n
+    group codes at `groups` go up; the codes are read where they are."""
+    var addrs: Array[Int, 3] = [groups, rank, dist]
+    var ints: Array[Int, 5] = [codes_id, n, k, m, n_classes]
+    return msel_helper(entry, MH_GROUP_CLASS_COUNTS_RES, addrs, ints)

@@ -27,6 +27,7 @@ from xtrees.glue_abi import (
     XT_KSHAP_SCHEDULE, XT_KSHAP_SYNTH, XT_KSHAP_SOLVE, XT_KSHAP_MEANS, XT_KSHAP_SOLVE_EY, XT_PSHAP_SYNTH,
     XT_PSHAP_VALUES, XT_PSHAP_DSYNTH, XT_PSHAP_DVALUES, XT_PSHAP_VALUES_LINEAR, XT_AGN_MODEL_LOAD,
     XT_AGN_MODEL_RELEASE, XT_KSHAP_SOLVE_MODEL, XT_PSHAP_VALUES_MODEL, XT_AGN_POOL_RELEASE, XT_BLOCK_MEAN, XT_LOGIT,
+    XT_KSHAP_SOLVE_LINEAR,
 )
 
 
@@ -491,6 +492,13 @@ def xt_pshap_values_linear(glue: EntryRef, x: Int, bg: Int, wb: Int, phi: Int, p
     """params = [R, nb, d, np, row0, seed, k, link]."""
     var addrs: List[Int] = [x, bg, wb, phi]
     return _xt_ints(glue, XT_PSHAP_VALUES_LINEAR, addrs, params)
+
+
+def xt_kshap_solve_linear(glue: EntryRef, x: Int, bg: Int, wb: Int, fnull: Int, size_off: Int, size_w: Int,
+                          cdf: Int, phi: Int, params: List[Int]) raises -> Int:
+    """params = x_trees_kshap_solve's 13 words, then the linear model's link word."""
+    var addrs: List[Int] = [x, bg, wb, fnull, size_off, size_w, cdf, phi]
+    return _xt_ints(glue, XT_KSHAP_SOLVE_LINEAR, addrs, params)
 
 
 def xt_pshap_values_model(glue: EntryRef, x: Int, phi: Int, params: List[Int]) raises -> Int:

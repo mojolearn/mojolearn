@@ -185,18 +185,6 @@ def sub(a: Mat, r0: Int, r1: Int, c0: Int, c1: Int) -> Mat:
     return res^
 
 
-def triu_rows(h: Mat, rows: Int) -> Mat:
-    """`_triu(h, r)`: the first `rows` rows of h, everything below the diagonal zero."""
-    var res = sub(h, 0, rows, 0, h.c)
-    var rp = res.v.unsafe_ptr()
-    var c = h.c
-    def cell(i: Int) {imm rp, imm c}:
-        if i % c < i // c:
-            rp[i] = 0.0
-    host_parallelize(cell, rows * c)
-    return res^
-
-
 def np_sign(x: Float64) -> Float64:
     return Float64(1.0) if x > 0 else (Float64(-1.0) if x < 0 else Float64(0.0))
 
@@ -269,9 +257,10 @@ def qr_mode(mut kit: LinKit, a: List[Float32], rows: Int, cols: Int, mode: Int) 
         var tm = mat_kit(kit, tau)
         return MatPair(hm^, tm^)
     var factor = kit.orgqr(h, tau, rows if mode == 1 else kk)
+    # the door's R: the kit's triu (on the device on a resident kit, lane vdf-linalg2)
+    var r_cut = kit.triu(h, rows if mode == 1 else kk)
     var q = mat_kit(kit, factor)
-    var hm = mat_kit(kit, h)
-    return MatPair(q^, triu_rows(hm, rows if mode == 1 else kk))
+    return MatPair(q^, mat_kit(kit, r_cut))
 
 
 def qr_r_route[Calls: NumpyLinalgCalls](mut kit: LinKit, a: List[Float32], rows: Int, cols: Int) raises -> Mat:
@@ -280,8 +269,8 @@ def qr_r_route[Calls: NumpyLinalgCalls](mut kit: LinKit, a: List[Float32], rows:
         var tau = 0
         var held = kit.borrow(Int(a.unsafe_ptr()), rows, cols)
         var h = kit.geqrf(held, tau)
-        var hm = mat_kit(kit, h)
-        return triu_rows(hm, rows)
+        var r_cut = kit.triu(h, rows)
+        return mat_kit(kit, r_cut)
     var r = List[Float32](length=cols * cols, fill=0.0)
     Calls.qr(a, rows, cols, Int(r.unsafe_ptr()))
     return mat_f32(r, cols, cols)

@@ -79,7 +79,7 @@ def _binding_ctx() raises -> DeviceContext:
     return neural_ctx[_CTX_NAME]()
 
 from cholesky.checks.potrf import CHOL_ELEM_TPB
-from cluster.estimator import kmeans_fit
+from cluster.estimator import kmeans_fit, kmeans_fit_rows_resident
 from cluster.impl.kmeans_params import (
     INIT_KMEANS_PLUS_PLUS,
     METRIC_L2_EXPANDED,
@@ -907,7 +907,7 @@ def gmm_init_random_kernel(
 
 def gmm_initial_resp_device(
     ctx: DeviceContext,
-    x: List[Float32],
+    mut dx: DeviceBuffer[DType.float32],
     n_samples: Int,
     n_features: Int,
     params: GmmParams,
@@ -916,29 +916,31 @@ def gmm_initial_resp_device(
 ) raises:
     """`gmm_initial_resp_host` and the log of it, written into two `n x K` device
     buffers (every mode, lane cpu3-core). See `gmm_initial_resp_host` for what the
-    values are; this is the same values without the host lists."""
+    values are; this is the same values without the host lists.
+
+    The KMeans initialization reads the fit's own device `X` (lane
+    vdf-scope-cluster2b, 2026-11-24): `kmeans_fit_rows_resident` is
+    `kmeans_fit`'s unit-weight path after its upload, statement for
+    statement (the same device scale, the same tail), with the labels left
+    on the device for `gmm_init_onehot_kernel`. It was a host copy of X, a
+    second upload of it inside `kmeans_fit` and a labels round trip through
+    the host; the words are the same, so the bits do not move."""
     var ncomp = params.n_components
     var cells = n_samples * ncomp
     if params.init_params == INIT_KMEANS:
-        var hx = ctx.enqueue_create_host_buffer[DType.float32](
-            n_samples * n_features
-        )
         var hc = ctx.enqueue_create_host_buffer[DType.float32](
             ncomp * n_features
         )
-        var hl = ctx.enqueue_create_host_buffer[DType.uint32](n_samples)
+        var dlabels = ctx.enqueue_create_buffer[DType.uint32](n_samples)
         ctx.synchronize()
-        copy_f32(x.unsafe_ptr(), hx.unsafe_ptr(), n_samples * n_features)
-        var res = kmeans_fit(
+        var res = kmeans_fit_rows_resident(
             ctx,
-            hx.unsafe_ptr(),
+            dx,
             n_samples,
             n_features,
             ncomp,
             hc.unsafe_ptr(),
-            hl.unsafe_ptr(),
-            hx.unsafe_ptr(),
-            0,
+            dlabels,
             max_iter=300,
             tol=1.0e-4,
             seed=params.random_state,
@@ -949,8 +951,6 @@ def gmm_initial_resp_device(
             oversampling_factor=GMM_KMEANS_OVERSAMPLING,
         )
         _ = res
-        var dlabels = ctx.enqueue_create_buffer[DType.uint32](n_samples)
-        ctx.enqueue_copy(dst_buf=dlabels, src_ptr=hl.unsafe_ptr())
         ctx.enqueue_function[gmm_init_onehot_kernel](
             dresp0.unsafe_ptr(),
             dloginit.unsafe_ptr(),
@@ -963,9 +963,7 @@ def gmm_initial_resp_device(
         )
         ctx.synchronize()
         _ = dlabels^
-        _ = hx^
         _ = hc^
-        _ = hl^
         return
 
     # INIT_RANDOM
@@ -1349,6 +1347,60 @@ def gaussian_mixture_fit(
     gmm_validate_shape(x, n_samples, n_features)
     var ctx = _binding_ctx()
     var dx = _upload(ctx, x)
+    var model = gaussian_mixture_fit_device(
+        dplan, ctx, dx, n_samples, n_features, params, elem_tpb, row_tpb,
+        comp_tpb, chol_elem_tpb, sabotage, card_prefix, trace_path,
+        labels_address,
+    )
+    _ = dx^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return model^
+
+
+def gmm_validate_device_shape(
+    dx: DeviceBuffer[DType.float32], n_samples: Int, n_features: Int
+) raises:
+    """`gmm_validate_shape` for an `X` already on the device (a resident
+    slot, lane vdf-scope-cluster2b): at least one row and one column, and
+    the buffer holds the `n_samples x n_features` words read."""
+    if n_samples < 1 or n_features < 1:
+        raise Error(
+            "GaussianMixture: X must have at least one row and one column, got "
+            + String(n_samples) + " x " + String(n_features)
+        )
+    if len(dx) < n_samples * n_features:
+        raise Error(
+            "GaussianMixture: the resident X holds " + String(len(dx))
+            + " floats, " + String(n_samples) + " x " + String(n_features)
+            + " needs " + String(n_samples * n_features)
+        )
+
+
+def gaussian_mixture_fit_device(
+    dplan: DevicePlan,
+    ctx: DeviceContext,
+    mut dx: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    params: GmmParams,
+    elem_tpb: Int = GMM_ELEM_TPB,
+    row_tpb: Int = GMM_ROW_TPB,
+    comp_tpb: Int = GMM_COMP_TPB,
+    chol_elem_tpb: Int = CHOL_ELEM_TPB,
+    sabotage: Int = GMM_SAB_NONE,
+    card_prefix: String = "gmm",
+    trace_path: String = "",
+    labels_address: Int = 0,
+) raises -> GaussianMixtureModel:
+    """THE FIT on an `X` already on the mixture context (lane vdf-scope-cluster2b,
+    2026-11-24): `gaussian_mixture_fit`'s whole body after its one upload,
+    so a host X (that wrapper) and a resident slot (a model-selection fold
+    gathered on the device, mixture/mixture_store.mojo) run the same kernels
+    in the same order: the same bits. `dx` holds `n_samples x n_features`
+    row-major float32 (at least); it is read, never written. The caller
+    owns `dx` and `ctx` and keeps both alive past this call."""
+    gmm_validate_device_shape(dx, n_samples, n_features)
     gmm_validate_data_device(ctx, dx, n_samples, n_features)
     gmm_validate_params(params, n_samples)
 
@@ -1452,7 +1504,7 @@ def gaussian_mixture_fit(
     # `log(0) = -inf`, and `exp` of those is `1` and `+0.0` again).
     var dloginit = _gmm_init_resp_buffer(ctx, n * ncomp)
     var dresp0 = _gmm_init_resp_buffer(ctx, n * ncomp)
-    gmm_initial_resp_device(ctx, x, n, d, params, dresp0, dloginit)
+    gmm_initial_resp_device(ctx, dx, n, d, params, dresp0, dloginit)
     # `.resp0` and not `.resp`: `gmm_m_step` records `<tag>.resp` for
     # `exp(log_resp)` and `IdentityTrace._emit` RAISES on a duplicate tag
     # (its uniqueness invariant), so the INITIAL responsibilities and the
@@ -1594,7 +1646,6 @@ def gaussian_mixture_fit(
     var out_l = _download(ctx, c_logdet, ncomp)
 
     _ = step^
-    _ = dx^
     _ = dloginit^
     _ = dresp0^
     _ = logresp^
@@ -1627,8 +1678,8 @@ def gaussian_mixture_fit(
     _ = lb^
     _ = change^
     _ = hlb^
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
+    # `dx` and the context are the caller's (it drops the context LAST,
+    # DEVIATION 1946); every buffer this body made on them is dropped above.
 
     return GaussianMixtureModel(
         ncomp, d, out_w^, out_m^, out_c^, out_p^, out_l^, n_iter,
@@ -1730,6 +1781,28 @@ def gaussian_mixture_score_samples(
     card_prefix: String = "gmm.score",
     trace_path: String = "",
 ) raises -> List[Float32]:
+    """The host-input form: one upload, then `gaussian_mixture_score_samples_device`."""
+    gmm_validate_shape(x, n_samples, model.n_features)
+    var ctx = _binding_ctx()
+    var dx = _upload(ctx, x)
+    var out = gaussian_mixture_score_samples_device(dplan, model, ctx, dx, n_samples, elem_tpb, row_tpb, card_prefix, trace_path)
+    _ = dx^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return out^
+
+
+def gaussian_mixture_score_samples_device(
+    dplan: DevicePlan,
+    model: GaussianMixtureModel,
+    ctx: DeviceContext,
+    mut dx: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    elem_tpb: Int = GMM_ELEM_TPB,
+    row_tpb: Int = GMM_ROW_TPB,
+    card_prefix: String = "gmm.score",
+    trace_path: String = "",
+) raises -> List[Float32]:
     """`score_samples(X)`, `_base.py:356-373`: `logsumexp_k` of the weighted
     log probabilities, one value per row.
 
@@ -1740,11 +1813,13 @@ def gaussian_mixture_score_samples(
     normalization anywhere and there cannot be one, which is what DEVIATION
     1739 records and `check_launch_invariance` measures.
     """
+    # THE DEVICE-INPUT BODY (lane vdf-scope-cluster2b, 2026-11-24): `dx` is X already on the mixture
+    # context (the host wrapper's one upload, or a resident fold slot of mixture/mixture_store.mojo);
+    # the same kernels in the same order either way, so the same bits. Read, never written.
     var d = model.n_features
     var ncomp = model.n_components
-    gmm_validate_shape(x, n_samples, d)
+    gmm_validate_device_shape(dx, n_samples, d)
 
-    var ctx = _binding_ctx()
     # **DISABLED UNLESS ASKED, and this is the opposite default from
     # `gaussian_mixture_fit`.** A scoring entry is called in a LOOP -- once
     # per point by `check_launch_invariance`'s alone-versus-batch arm -- and
@@ -1757,7 +1832,6 @@ def gaussian_mixture_score_samples(
         trace = IdentityTrace.disabled()
     else:
         trace = IdentityTrace.to_path(trace_path)
-    var dx = _upload(ctx, x)
     gmm_validate_data_device(ctx, dx, n_samples, d)
     var dmeans = _upload(ctx, model.means)
     var dprec = _upload(ctx, model.precisions_cholesky)
@@ -1789,7 +1863,6 @@ def gaussian_mixture_score_samples(
         trace, card_prefix, elem_tpb, row_tpb, GMM_SAB_NONE,
     )
     var out = _download(ctx, lse, n_samples)
-    _ = dx^
     _ = dmeans^
     _ = dprec^
     _ = dlogdet^
@@ -1802,8 +1875,7 @@ def gaussian_mixture_score_samples(
     _ = meanll^
     _ = escratch^
     _ = gws^
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
+    # `dx` and the context are the caller's (it drops the context LAST, DEVIATION 1946).
     return out^
 
 
@@ -1839,6 +1911,28 @@ def gaussian_mixture_predict_proba(
     card_prefix: String = "gmm.proba",
     trace_path: String = "",
 ) raises -> List[Float32]:
+    """The host-input form: one upload, then `gaussian_mixture_predict_proba_device`."""
+    gmm_validate_shape(x, n_samples, model.n_features)
+    var ctx = _binding_ctx()
+    var dx = _upload(ctx, x)
+    var out = gaussian_mixture_predict_proba_device(dplan, model, ctx, dx, n_samples, elem_tpb, row_tpb, card_prefix, trace_path)
+    _ = dx^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return out^
+
+
+def gaussian_mixture_predict_proba_device(
+    dplan: DevicePlan,
+    model: GaussianMixtureModel,
+    ctx: DeviceContext,
+    mut dx: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    elem_tpb: Int = GMM_ELEM_TPB,
+    row_tpb: Int = GMM_ROW_TPB,
+    card_prefix: String = "gmm.proba",
+    trace_path: String = "",
+) raises -> List[Float32]:
     """`predict_proba(X)`, `_base.py:414-432`: `exp(log_resp)`, `n x K`.
 
     Computed as `exp` of the log responsibilities and never as a normalized
@@ -1846,11 +1940,13 @@ def gaussian_mixture_predict_proba(
     that survives a point far from every component: the ratio's numerator and
     denominator both underflow and the quotient is `0/0`.
     """
+    # THE DEVICE-INPUT BODY (lane vdf-scope-cluster2b, 2026-11-24): `dx` is X already on the mixture
+    # context (the host wrapper's one upload, or a resident fold slot of mixture/mixture_store.mojo);
+    # the same kernels in the same order either way, so the same bits. Read, never written.
     var d = model.n_features
     var ncomp = model.n_components
-    gmm_validate_shape(x, n_samples, d)
+    gmm_validate_device_shape(dx, n_samples, d)
 
-    var ctx = _binding_ctx()
     # **DISABLED UNLESS ASKED, and this is the opposite default from
     # `gaussian_mixture_fit`.** A scoring entry is called in a LOOP -- once
     # per point by `check_launch_invariance`'s alone-versus-batch arm -- and
@@ -1863,7 +1959,6 @@ def gaussian_mixture_predict_proba(
         trace = IdentityTrace.disabled()
     else:
         trace = IdentityTrace.to_path(trace_path)
-    var dx = _upload(ctx, x)
     gmm_validate_data_device(ctx, dx, n_samples, d)
     var dmeans = _upload(ctx, model.means)
     var dprec = _upload(ctx, model.precisions_cholesky)
@@ -1905,7 +2000,6 @@ def gaussian_mixture_predict_proba(
         block_dim=(elem_tpb, 1, 1),
     )
     var out = _download(ctx, resp, cells)
-    _ = dx^
     _ = dmeans^
     _ = dprec^
     _ = dlogdet^
@@ -1919,8 +2013,7 @@ def gaussian_mixture_predict_proba(
     _ = meanll^
     _ = escratch^
     _ = gws^
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
+    # `dx` and the context are the caller's (it drops the context LAST, DEVIATION 1946).
     return out^
 
 
@@ -1972,14 +2065,38 @@ def gaussian_mixture_predict(
     card_prefix: String = "gmm.predict",
     trace_path: String = "",
 ) raises -> List[Int32]:
+    """The host-input form: one upload, then `gaussian_mixture_predict_device`."""
+    gmm_validate_shape(x, n_samples, model.n_features)
+    var ctx = _binding_ctx()
+    var dx = _upload(ctx, x)
+    var out = gaussian_mixture_predict_device(dplan, model, ctx, dx, n_samples, elem_tpb, row_tpb, card_prefix, trace_path)
+    _ = dx^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return out^
+
+
+def gaussian_mixture_predict_device(
+    dplan: DevicePlan,
+    model: GaussianMixtureModel,
+    ctx: DeviceContext,
+    mut dx: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    elem_tpb: Int = GMM_ELEM_TPB,
+    row_tpb: Int = GMM_ROW_TPB,
+    card_prefix: String = "gmm.predict",
+    trace_path: String = "",
+) raises -> List[Int32]:
     """`predict(X)`, `_base.py:395-412`: `argmax_k` of the weighted log
     probabilities. Ties go to the LOWEST component index, which is
     `xp.argmax`'s documented rule and `argmax_kernel`'s."""
+    # THE DEVICE-INPUT BODY (lane vdf-scope-cluster2b, 2026-11-24): `dx` is X already on the mixture
+    # context (the host wrapper's one upload, or a resident fold slot of mixture/mixture_store.mojo);
+    # the same kernels in the same order either way, so the same bits. Read, never written.
     var d = model.n_features
     var ncomp = model.n_components
-    gmm_validate_shape(x, n_samples, d)
+    gmm_validate_device_shape(dx, n_samples, d)
 
-    var ctx = _binding_ctx()
     # **DISABLED UNLESS ASKED, and this is the opposite default from
     # `gaussian_mixture_fit`.** A scoring entry is called in a LOOP -- once
     # per point by `check_launch_invariance`'s alone-versus-batch arm -- and
@@ -1992,7 +2109,6 @@ def gaussian_mixture_predict(
         trace = IdentityTrace.disabled()
     else:
         trace = IdentityTrace.to_path(trace_path)
-    var dx = _upload(ctx, x)
     gmm_validate_data_device(ctx, dx, n_samples, d)
     var dmeans = _upload(ctx, model.means)
     var dprec = _upload(ctx, model.precisions_cholesky)
@@ -2027,7 +2143,6 @@ def gaussian_mixture_predict(
     var out = List[Int32](unsafe_uninit_length=n_samples)
     ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=labels)
     ctx.synchronize()
-    _ = dx^
     _ = dmeans^
     _ = dprec^
     _ = dlogdet^
@@ -2041,8 +2156,7 @@ def gaussian_mixture_predict(
     _ = labels^
     _ = escratch^
     _ = gws^
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
+    # `dx` and the context are the caller's (it drops the context LAST, DEVIATION 1946).
     return out^
 
 
@@ -2075,19 +2189,36 @@ def _gmm_score_device(
     dplan: DevicePlan,
     model: GaussianMixtureModel, x: List[Float32], n_samples: Int
 ) raises -> Float32:
+    """The host-input form: one upload, then `gaussian_mixture_score_device`."""
+    gmm_validate_shape(x, n_samples, model.n_features)
+    var ctx = _binding_ctx()
+    var dx = _upload(ctx, x)
+    var out = gaussian_mixture_score_device(dplan, model, ctx, dx, n_samples)
+    _ = dx^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return out
+
+
+def gaussian_mixture_score_device(
+    dplan: DevicePlan,
+    model: GaussianMixtureModel, ctx: DeviceContext,
+    mut dx: DeviceBuffer[DType.float32], n_samples: Int
+) raises -> Float32:
     """`score(X)` read from the device (fam2-cluster): the scoring E-step already folds `mean(lse)`
     into its `meanll` scalar in the chunked levels of
     `mixture/meanll_order.mojo`, which are the words `gmm_meanll_host`
     writes from the downloaded rows. So ONE float comes back instead of n,
     and no host fold runs. `gaussian_mixture_score_samples`' setup, kept
     in step with it."""
+    # THE DEVICE-INPUT BODY (lane vdf-scope-cluster2b, 2026-11-24): `dx` is X already on the mixture
+    # context (the host wrapper's one upload, or a resident fold slot of mixture/mixture_store.mojo);
+    # the same kernels in the same order either way, so the same bits. Read, never written.
     var d = model.n_features
     var ncomp = model.n_components
-    gmm_validate_shape(x, n_samples, d)
+    gmm_validate_device_shape(dx, n_samples, d)
 
-    var ctx = _binding_ctx()
     var trace = IdentityTrace.disabled()
-    var dx = _upload(ctx, x)
     gmm_validate_data_device(ctx, dx, n_samples, d)
     var dmeans = _upload(ctx, model.means)
     var dprec = _upload(ctx, model.precisions_cholesky)
@@ -2120,7 +2251,6 @@ def _gmm_score_device(
     ctx.synchronize()
     var out = h.unsafe_ptr().unsafe_load(0)
     _ = h^
-    _ = dx^
     _ = dmeans^
     _ = dprec^
     _ = dlogdet^
@@ -2133,8 +2263,7 @@ def _gmm_score_device(
     _ = meanll^
     _ = escratch^
     _ = gws^
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
+    # `dx` and the context are the caller's (it drops the context LAST, DEVIATION 1946).
     return out
 
 
@@ -2151,9 +2280,20 @@ def gaussian_mixture_bic(
     COUNT is integer arithmetic (`gmm_oracle.mojo::n_parameters`), where
     scikit-learn divides by `2.0` in float and casts.
     """
+    return gaussian_mixture_bic_of(
+        model, gaussian_mixture_score(model, x, n_samples), n_samples
+    )
+
+
+def gaussian_mixture_bic_of(
+    model: GaussianMixtureModel, sc: Float32, n_samples: Int
+) raises -> Float32:
+    """`gaussian_mixture_bic` from the score `sc` already computed over the
+    same X (lane vdf-scope-cluster2b: the score / BIC / AIC entry runs ONE
+    scoring E-step for all three, not three; the same words, so the same
+    bits)."""
     from checks.numerics import identical_log, identical_mul
 
-    var sc = gaussian_mixture_score(model, x, n_samples)
     var p = gmm_n_parameters(model.n_features, model.n_components)
     var a = ftz(
         identical_mul(
@@ -2175,9 +2315,18 @@ def gaussian_mixture_aic(
 
         -2 * score(X) * n_samples + 2 * n_parameters
     """
+    return gaussian_mixture_aic_of(
+        model, gaussian_mixture_score(model, x, n_samples), n_samples
+    )
+
+
+def gaussian_mixture_aic_of(
+    model: GaussianMixtureModel, sc: Float32, n_samples: Int
+) raises -> Float32:
+    """`gaussian_mixture_aic` from the score `sc` already computed over the
+    same X (lane vdf-scope-cluster2b, as `gaussian_mixture_bic_of`)."""
     from checks.numerics import identical_mul
 
-    var sc = gaussian_mixture_score(model, x, n_samples)
     var p = gmm_n_parameters(model.n_features, model.n_components)
     var a = ftz(
         identical_mul(

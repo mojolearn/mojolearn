@@ -251,6 +251,20 @@ struct DKit(Movable):
             return self.zeros(rows, cols)
         return self.add(-1, rows, cols, -1, address)
 
+    def borrow_device(mut self, handle: Int, rows: Int, cols: Int) -> Int:
+        """`borrow` of an X already resident in this image's pool (lane
+        vdf-scope-neural3: a fold the XDecomp member took on the device,
+        x_decomp/member_store.mojo): pool id `handle`, owned by the caller
+        (not in this kit's ledger), read in place, never written. It starts
+        as a host matrix by route (`on_device` False, as `borrow_tested`
+        leaves its upload), so every route is the one `borrow` gives; a
+        host step that reads its words downloads them once (`host`)."""
+        if rows * cols == 0 or handle < 0:
+            return self.zeros(rows, cols)
+        var index = self.add(-1, rows, cols, handle)
+        self.matrices[index].on_device = False
+        return index
+
     def defers_finite(self) -> Bool:
         """Whether this image tests an input on its upload (XD_DEV_UPLOAD_FINITE,
         compiled into every resident GPU image): a door may then admit a

@@ -971,7 +971,7 @@ class IVFRaBitQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
 # metric='euclidean' is cuVS L2SqrtExpanded: the selection runs on the squared
 # keys and the root of each of the k selected distances is taken afterwards
 # (in the binding), where cuVS takes it at the store.
-def refine(dataset, queries, candidates, k, numeric_mode=None, metric="sqeuclidean"):
+def refine(dataset, queries, candidates, k, numeric_mode=None, metric="sqeuclidean", *, device=None):
     """Re-rank candidate neighbors by exact distance.
 
     Follows cuVS's ``refine``. For each query, computes the exact distance to
@@ -999,6 +999,10 @@ def refine(dataset, queries, candidates, k, numeric_mode=None, metric="sqeuclide
         ``L2Expanded``); 'euclidean' returns their square roots (cuVS
         ``L2SqrtExpanded``). The ids and their order are the same under both.
         Inner product is not supported.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -1027,7 +1031,7 @@ def refine(dataset, queries, candidates, k, numeric_mode=None, metric="sqeuclide
     (10, 5)
     """
     return _FAMILY(None, "family_xn_ann_refine",
-                   (None, dataset, queries, candidates, k, metric, numeric_mode),
+                   (None, dataset, queries, candidates, k, metric, numeric_mode, device),
                    _FAMILY_CONTEXT)
 
 

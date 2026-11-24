@@ -4,12 +4,13 @@
 float16 widening launch and the result copies of qr_r and svdvals, moved
 here with no Python import (lane thin-core, 2026-10-21: a pure move, no bit
 change)."""
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu import block_dim, block_idx, thread_idx
 from gemm.f16_widen import f16_bits_to_f32
 from decomposition.linalg_public_device import (
     device_qr_r,
     device_svdvals,
+    device_svdvals_at,
 )
 
 
@@ -29,6 +30,26 @@ def f16_widen_kernel(
 comptime F16_WIDEN_TPB = 256
 
 
+def from_f16_into(
+    ctx: DeviceContext,
+    mut ddst: DeviceBuffer[DType.float32],
+    mut dsrc: DeviceBuffer[DType.uint16],
+    count: Int,
+) raises:
+    """The one widening launch: `count` float16 words of `dsrc` into float32 `ddst`, both on the device (the host-
+    address entry below and the device-array entry, gemm/linalg_dev_arrays.mojo `from_f16_dev_native`, lane
+    vdf-linalg5). Enqueued only; the caller waits."""
+    if count < 1:
+        return
+    ctx.enqueue_function[f16_widen_kernel](
+        ddst.unsafe_ptr(),
+        dsrc.unsafe_ptr(),
+        Int32(count),
+        grid_dim=((count + F16_WIDEN_TPB - 1) // F16_WIDEN_TPB, 1, 1),
+        block_dim=(F16_WIDEN_TPB, 1, 1),
+    )
+
+
 def from_f16_device(
     ctx: DeviceContext,
     dst: MutPointer[Float32, MutUntrackedOrigin],
@@ -43,13 +64,7 @@ def from_f16_device(
     if count > 0:
         ctx.enqueue_copy(dst_buf=dsrc, src_ptr=src)
     var ddst = ctx.enqueue_create_buffer[DType.float32](count)
-    ctx.enqueue_function[f16_widen_kernel](
-        ddst.unsafe_ptr(),
-        dsrc.unsafe_ptr(),
-        Int32(count),
-        grid_dim=((count + F16_WIDEN_TPB - 1) // F16_WIDEN_TPB, 1, 1),
-        block_dim=(F16_WIDEN_TPB, 1, 1),
-    )
+    from_f16_into(ctx, ddst, dsrc, count)
     ctx.synchronize()
     ctx.enqueue_copy(dst_ptr=dst, src_buf=ddst)
     ctx.synchronize()
@@ -77,5 +92,18 @@ def svdvals_device_into(
     """`device_svdvals(a, n_rows, n_cols)`, the n_cols values into sp."""
     var s = device_svdvals(a, n_rows, n_cols)
     for i in range(n_cols):
+        sp.unsafe_store(i, s[i])
+    _ = s^
+
+
+def svdvals_device_at_into(
+    address: Int, n_rows: Int, n_cols: Int, wide: Bool,
+    sp: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    """`device_svdvals_at`: the operand read in place at `address` (one
+    upload, no host copy; `wide`: transposed on the device first), the
+    n_cols values into sp."""
+    var s = device_svdvals_at(address, n_rows, n_cols, wide)
+    for i in range(n_cols):  # small-loop(the n_cols singular values into the caller's output)
         sp.unsafe_store(i, s[i])
     _ = s^

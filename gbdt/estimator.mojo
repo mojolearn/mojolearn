@@ -447,6 +447,10 @@ def gbdt_fit(
     # lane/apple-fast-sym-feat: `x` is ROW-MAJOR (`gbdt_fit_rowmajor`);
     # served only under `GBDT_QUANT_DEVICE`, raw float columns only
     x_row_major: Bool = False,
+    # THE FOLD X WORD (lane vdf-scope-trees4): `train`'s `x_word`; a
+    # negative word names the x_prep store slot holding the row-major rows
+    # (then `x` is unread); 0 = the rows are at `x`.
+    x_word: Int = 0,
     # The fit's device plan, read once at the binding entry (one device by
     # default); `train` hands it to every tree searcher.
     device_plan: DevicePlan = plan_for_single(),
@@ -616,6 +620,7 @@ def gbdt_fit(
         fold_permutation_block=params.fold_permutation_block,
         x_borrow=x_borrow,
         x_row_major=x_row_major,
+        x_word=x_word,
         group_sizes=group_sizes,
         pair_winners=pair_winners,
         pair_losers=pair_losers,

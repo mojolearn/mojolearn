@@ -32,6 +32,30 @@ def _u32(address: Int) raises -> MutPointer[UInt32, MutUntrackedOrigin]:
     return MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=address)
 
 
+comptime _NONFINITE_WEIGHTS = "Input sample_weight contains NaN or infinity."
+"""The estimator's own words (bindings/admitted_family_door.mojo FAMILY_NONFINITE_WEIGHTS)."""
+
+
+def _fold_weights_check(weight_count: Int, rows: Int, slot: Int, host: Bool, address: Int, what: String) raises:
+    """THE WEIGHTED FOLD (lane vdf-scope-cluster2a): a fold names its weights
+    as a store slot (`fold.weights`, gathered on the device by the fold's
+    index), or, with `fold.host_weights` (lane vdf-scope-cluster3), the
+    request's host `weights` of the fold's rows in fold order (an estimator
+    door's fold-length weights, uploaded by the fold entry), with
+    `weight_count` equal to the fold's rows; unit weights are
+    count 0 and slot -1. Anything else is refused in words."""
+    if weight_count == 0 and slot < 0 and not host:
+        return
+    if host:
+        if weight_count != rows or slot >= 0 or address == 0:
+            raise Error("kmeans_" + what + "_fold: host fold weights are the fold's rows in fold order"
+                + " (n_weights equal to the fold's rows, no store slot)")
+        return
+    if weight_count != rows or slot < 0:
+        raise Error("kmeans_" + what + "_fold: fold weights are a store slot of the whole weight vector with"
+            + " n_weights equal to the fold's rows")
+
+
 struct KMeansDeviceKernels(KMeansNativeKernels):
     @staticmethod
     def mode() -> Int:
@@ -44,14 +68,16 @@ struct KMeansDeviceKernels(KMeansNativeKernels):
     @staticmethod
     def fit(r: KMeansFitRequest) raises -> KMeansFitResult:
         if r.fold.active():
-            if r.weight_count != 0:
-                raise Error("kmeans_fit_fold: a fold fit takes unit weights (n_weights 0)")
+            _fold_weights_check(r.weight_count, r.rows, r.fold.weights, r.fold.host_weights, r.weights, "fit")
             var centers = _f32(r.centers)
             var labels = _u32(r.labels)
             var ctx = msel_fold_entry_context()
             var answer = kmeans_fit_fold(ctx, r.fold.base, r.fold.rows, r.fold.indices,
                 r.rows, r.features, r.clusters, centers, labels, r.max_iter, r.tolerance,
-                UInt64(r.seed), r.n_init, r.init, r.metric, r.oversampling)
+                UInt64(r.seed), r.n_init, r.init, r.metric, r.oversampling, r.fold.weights,
+                r.weights if r.fold.host_weights else 0)
+            if answer.weights_finite != 0 and answer.finite == 0 and answer.in_range == 0:
+                raise Error(_NONFINITE_WEIGHTS)
             return KMeansFitResult(answer.fit.inertia, answer.fit.n_iter,
                 answer.fit.sum_scale, answer.fit.weight_scale, Int(answer.finite), Int(answer.in_range),
                 FitLoop(answer.fit.loop_iterations, answer.fit.loop_ns, True))
@@ -119,12 +145,14 @@ struct KMeansDeviceKernels(KMeansNativeKernels):
         # same three homes as a query: a resident fold, the resident centers
         # of a fitted state, or the host words uploaded per call.
         if r.fold.active():
-            if r.weight_count != 0:
-                raise Error("kmeans_score_fold: a fold score takes unit weights (n_weights 0)")
+            _fold_weights_check(r.weight_count, r.rows, r.fold.weights, r.fold.host_weights, r.weights, "score")
             var centers = _f32(r.centers)
             var ctx = msel_fold_entry_context()
             var words = kmeans_score_fold(ctx, r.fold.base, r.fold.rows, r.fold.indices,
-                r.rows, r.features, r.clusters, centers, r.metric)
+                r.rows, r.features, r.clusters, centers, r.metric, r.fold.weights,
+                r.weights if r.fold.host_weights else 0)
+            if words[3] != 0 and words[0] == 0 and words[1] == 0:
+                raise Error(_NONFINITE_WEIGHTS)
             return KMeansScoreResult(words[2], Int(words[0]), Int(words[1]))
         var source = _f32(r.source)
         var weights = _f32(r.weights) if r.weight_count != 0 else source

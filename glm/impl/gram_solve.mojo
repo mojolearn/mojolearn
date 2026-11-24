@@ -58,6 +58,7 @@ from core.blocked_moments import bm_centered_cross_panels, bm_centered_gram_pane
 from core.blocked_moments_multi_gpu import bm_centered_gram_cross_dispatch
 from core.device_plan import DevicePlan
 from core.device_zero import enqueue_fill
+from core.fold_x_device import fold_x_fill
 from gemm.contract import contract_leaf_size
 from glm.impl.center_device import col_means_buf, col_sums_pair_buf
 from glm.impl.linalg.detail.lstsq import ols_equilibration_scale
@@ -658,7 +659,10 @@ def linear_gram_fit_host(
     var d_y = ctx.enqueue_create_buffer[DType.float32](n_rows)
     # TOMBSTONE: MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF (pinned stage slower) deleted 2026-10-11 by 47a3af928; code recoverable at 47a3af928^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD.patch; record in docs/TOMBSTONES.md.
-    ctx.enqueue_copy(dst_buf=d_x, src_ptr=x_ptr)
+    # THE FOLD X WORD (core/fold_x_device.mojo; lane vdf-scope-linear): a member's
+    # fold arrives as a store slot and is copied device to device; a host X is the
+    # same upload as before. Same bytes either way.
+    fold_x_fill(ctx, d_x, Int(x_ptr), cells)
     ctx.enqueue_copy(dst_buf=d_y, src_ptr=y_ptr)
     var d_mx = ctx.enqueue_create_buffer[DType.float32](d)
     var d_my = ctx.enqueue_create_buffer[DType.float32](1)

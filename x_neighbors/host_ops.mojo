@@ -4,6 +4,7 @@
 """The neighbors lane's CPU drivers: host loops over the SAME items (see x_neighbors/gen.py)."""
 from std.sys.compile import is_defined
 from core.host_parallel import host_parallelize
+from std.memory import unsafe_memcpy
 from core.host_finite_scan import host_finite_status
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count_work
 from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_var_item, row_argmax_item
@@ -577,6 +578,9 @@ def op_knn_impute_cells(cells: Int, x: Int, fx: Int, res: Int, n: Int, m: Int, d
     var p_best_d = FP(unsafe_from_address=Int(s_best_d.unsafe_ptr()))
     var p_best_i = IP(unsafe_from_address=Int(s_best_i.unsafe_ptr()))
     var p_res = _f(res)
+    # A present cell keeps x: res starts as x (the device ops' copy; lane vdf-scope-cluster6).
+    if n * d > 0:
+        unsafe_memcpy(dest=p_res, src=p_x, count=n * d)
     def _item(t: Int) {imm p_cells, imm p_x, imm p_fx, imm p_best_d, imm p_best_i, imm p_res, imm n, imm m, imm d, imm k, imm weights, imm nc}:
         knn_impute_cell_item(t, p_cells, p_x, p_fx, p_best_d, p_best_i, p_res, n, m, d, k, weights, nc)
     _items(_item, nc, (nc * m * d))

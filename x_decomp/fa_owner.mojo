@@ -126,7 +126,7 @@ def _gram_loop[E: Exec, D: RDev, RES: Bool, X: DecompDev](
 def fa_fit_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     x: F32Ptr, n: Int, d: Int, nc: Int, max_iter: Int, tol: Float64, psi0: F32Ptr, rotation: Int,
     components_out: F32Ptr, psi_out: F32Ptr, mean_out: F32Ptr, ll_out: MutPointer[Float64, MutAnyOrigin],
-    loop_word: Int = 0,
+    loop_word: Int = 0, x_dev: Int = -1,
 ) raises -> Int:
     """`FactorAnalysis.fit`: rotation 0 None, 1 varimax, 2 quartimax; psi0
     the initial noise variances (d). Writes components (nc x d), noise
@@ -135,9 +135,14 @@ def fa_fit_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     `loop_word`: when nonzero, the host address of one Int that receives the
     EM loop's nanoseconds (`fit_loop_`, core/fit_loop_clock.mojo)."""
     var llconst = fa_llconst(d, nc)
+    # `x_dev` (lane vdf-scope-neural3): X's resident pool id (a fold the XDecomp member took on the device; the
+    # caller owns it, not this kit's ledger), -1: the host X. Every kit step is on the device on a GPU binding
+    # either way (RKit), so the route and the bits are the host-X route's.
+    if x_dev >= 0 and not RES:
+        raise Error("x_decomp: a resident X needs a GPU binding")
     var kit = RKit[E, D, RES]()
     try:
-        var m = kit.add(Int(x), -1, n, d)
+        var m = kit.add(Int(x) if x_dev < 0 else 0, x_dev, n, d)
         # the two-pass mean
         var first = kit_colmean(kit, m)
         var residual = kit.ew(OP_SUB, m, first)
@@ -237,10 +242,16 @@ def _cov[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], w: Int, psi: Int
 
 def fa_query_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     op: Int, x: F32Ptr, n: Int, d: Int, nc: Int, components: F32Ptr, psi: F32Ptr, mean: F32Ptr, out_buf: F32Ptr,
+    x_dev: Int = -1,
 ) raises -> Float64:
     """A fitted FactorAnalysis query on X (n x d; unread for the covariance
     and precision): FA_TRANSFORM (n x nc), FA_COVARIANCE / FA_PRECISION
     (d x d), FA_SCORE_SAMPLES (n) written to out_buf; FA_SCORE returned."""
+    # `x_dev` (lane vdf-scope-neural3): X's resident pool id (a fold the XDecomp member took on the device; the
+    # caller owns it, not this kit's ledger), -1: the host X. Every kit step is on the device on a GPU binding
+    # either way (RKit), so the route and the bits are the host-X route's.
+    if x_dev >= 0 and not RES:
+        raise Error("x_decomp: a resident X needs a GPU binding")
     var kit = RKit[E, D, RES]()
     try:
         var w = kit.add(Int(components), -1, nc, d)
@@ -250,7 +261,7 @@ def fa_query_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
         if op == FA_TRANSFORM:
             # TOMBSTONE: MOJOLEARN_FA_TRANSFORM_FUSED (NEUTRAL loser, rab7-fatransform istella +2.0%) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 7e904cf531.
             # Restore: git apply experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch; record in docs/TOMBSTONES.md.
-            var xm = kit.add(Int(x), -1, n, d)
+            var xm = kit.add(Int(x) if x_dev < 0 else 0, x_dev, n, d)
             xm = kit.ew(OP_SUB, xm, mu)
             var wpsi = kit.ew(OP_DIV, w, noise)
             var eye = kit_eye(kit, nc)
@@ -269,7 +280,7 @@ def fa_query_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
             kit.copy_out(p, out_buf, d * d)
         else:
             # `_ss`
-            var xm = kit.add(Int(x), -1, n, d)
+            var xm = kit.add(Int(x) if x_dev < 0 else 0, x_dev, n, d)
             var xr = kit.ew(OP_SUB, xm, mu)
             var c = _cov(kit, w, noise)
             var p = kit_inv[E, D, RES, X](kit, c)

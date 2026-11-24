@@ -379,7 +379,7 @@ def _kernel_of[M: AgnModel](glue: EntryRef, mut on_bg: M, mut model: M, x: List[
     var phi = List[Float64](length=n * d * k, fill=0.0)
     var req = AgnRequest(Int(x.unsafe_ptr()), Int(bg.unsafe_ptr()), Int(phi.unsafe_ptr()), n, nb, d, k, 0,
                          AGN_SW_IDN_SYN_POOL, False, True)
-    agn_kernel_values_run(glue, req, 2 * d + 2048, Int(ev.unsafe_ptr()), logit, model)
+    agn_kernel_values_run(glue, req, 2 * d + 2048, Int(ev.unsafe_ptr()), logit, 0, 0, model)
     _ = req^
     return _Shap(phi^, ev^)
 

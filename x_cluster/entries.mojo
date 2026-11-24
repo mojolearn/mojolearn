@@ -142,7 +142,7 @@ def bisect_predict_entry[O: ClusterOps](
 
 
 def meanshift_entry[O: ClusterOps](
-    mut ops: O, x: List[Float32], seeds: List[Float32], ip: List[Int], fp: List[Float64]
+    mut ops: O, x: List[Float32], seeds: List[Float32], ip: List[Int], fp: List[Float64], x_slot: Int = -1
 ) raises -> ClusterOut:
     """ip = [n, d, n_seeds (0: the rows), cluster_all, max_iter, bin_seeding,
     min_bin_freq] (the last two optional, default off and 1); fp =
@@ -158,7 +158,7 @@ def meanshift_entry[O: ClusterOps](
     var min_bin_freq = ip[6] if len(ip) > 6 else 1
     meanshift_fit(
         ops, x, n, d, Float32(fp[0]), seeds, ip[2], ip[3] != 0, ip[4], bin_seeding, min_bin_freq, centers, labels,
-        bw, n_iter,
+        bw, n_iter, x_slot,
     )
     var out = ClusterOut()
     var kc = len(centers) // d
@@ -177,7 +177,9 @@ def _i32(v: List[Int]) -> List[Int32]:
     return out^
 
 
-def optics_entry[O: ClusterOps](mut ops: O, x: List[Float32], ip: List[Int], fp: List[Float64]) raises -> ClusterOut:
+def optics_entry[O: ClusterOps](
+    mut ops: O, x: List[Float32], ip: List[Int], fp: List[Float64], x_slot: Int = -1
+) raises -> ClusterOut:
     """ip = [n, d, min_samples, min_cluster_size, method (0 xi, 1 dbscan),
     predecessor_correction, metric (optional: -1 euclidean by the squared
     distance, 0-4 bodies.pdist_cell, 5 precomputed)]; fp = [max_eps, xi, eps,
@@ -193,7 +195,7 @@ def optics_entry[O: ClusterOps](mut ops: O, x: List[Float32], ip: List[Int], fp:
     var metric = ip[6] if len(ip) > 6 else -1
     var pw = Float32(fp[3]) if len(fp) > 3 else Float32(2)
     var slots = List[Int]()
-    optics_graph(ops, x, n, d, ip[2], Float32(fp[0]), ordering, core, reach, pred, slots, metric, pw)
+    optics_graph(ops, x, n, d, ip[2], Float32(fp[0]), ordering, core, reach, pred, slots, metric, pw, x_slot)
     var labels = List[Int32]()
     var clusters = List[Int32]()
     if ip[4] == 0:
@@ -211,7 +213,7 @@ def optics_entry[O: ClusterOps](mut ops: O, x: List[Float32], ip: List[Int], fp:
 
 
 def affinity_entry[O: ClusterOps](
-    mut ops: O, x: List[Float32], pref: List[Float32], ip: List[Int], fp: List[Float64]
+    mut ops: O, x: List[Float32], pref: List[Float32], ip: List[Int], fp: List[Float64], x_slot: Int = -1
 ) raises -> ClusterOut:
     """ip = [n, d, precomputed, pref_mode (0 median, 1 scalar, 2 array),
     max_iter, convergence_iter, seed]; fp = [damping, preference scalar].
@@ -225,13 +227,22 @@ def affinity_entry[O: ClusterOps](
     var ar_diag = List[Float32]()
     affinity_fit(
         ops, x, ip[0], ip[1], ip[2] != 0, ip[3], Float32(fp[1]), pref, Float32(fp[0]), ip[4], ip[5],
-        UInt64(ip[6]), centers, labels, n_iter, aff, ar_diag,
+        UInt64(ip[6]), centers, labels, n_iter, aff, ar_diag, x_slot,
     )
     # f[2]: the exemplar rows of x (cluster_centers_) unless precomputed, a
     # row copy per exemplar (lane pyglue-numeric: a Python gather)
     var d = ip[1]
     var rows = List[Float32]()
-    if ip[2] == 0:
+    if ip[2] == 0 and x_slot >= 0:
+        # THE FOLD X WORD (lane vdf-scope-cluster6): the exemplar rows gathered on the device from X's slot,
+        # only exemplars x d words come back (the same words as the host row copy below).
+        var m = len(centers)
+        if m > 0:
+            var idx = ops.put_i(centers)
+            var dst = ops.alloc(m * d)
+            ops.gather_rows(x_slot, d, idx, m, dst)
+            rows = ops.get(dst, m * d)
+    elif ip[2] == 0:
         rows = List[Float32](capacity=len(centers) * d)
         for c in centers:
             var r = Int(c)

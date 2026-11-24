@@ -20,7 +20,8 @@ from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE, X_PREP_POOL_ARENA
+from x_prep.device import run_program_device, run_program_device_ranges, X_PREP_POOL_ARENA
+from x_prep.store_slot import x_prep_ctx, X_PREP_STORE
 from x_prep.folds import I32P
 from x_prep.fastnb_csr import NB_TEXT_CSR, IDN_NB_CSR
 from providers.python.x_prep_fastnb_csr_pyapi_pack import nb_csr_fit_py, nb_csr_jll_py, nb_csr_fit_int_py, nb_csr_jll_chk_py

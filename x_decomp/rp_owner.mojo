@@ -112,7 +112,7 @@ def rp_fit_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
 
 def rp_project_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     x: F32Ptr, m: Int, d: Int, matrix: F32Ptr, rows: Int, tiled: Bool, out_buf: F32Ptr, matrix_dev: Int = -1,
-    unchecked: Bool = False,
+    unchecked: Bool = False, x_dev: Int = -1,
 ) raises -> Int:
     """X (m x d) times matrix^T (matrix rows x d) into out (m x rows):
     with `tiled` (transform on a dense X) the tiled projection on a GPU
@@ -127,9 +127,14 @@ def rp_project_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     is that test; where the tile does not run, X's host words are scanned
     here once (across the host's cores, core/host_finite_scan.mojo) before
     the product, and 1 is returned for a non-finite X as the flag would."""
+    # `x_dev` (lane vdf-scope-neural3): X's resident pool id (a fold taken on the device by the member store,
+    # x_decomp/member_store.mojo; the caller owns it, so it is not in this kit's ledger), or -1 for the host X.
+    # The same words in the same order either way; the tiled projection reads the id in place (no upload).
+    if x_dev >= 0 and (not RES or unchecked):
+        raise Error("x_decomp_rp_project: a resident X needs a GPU binding and an admitted (tested) X")
     var kit = RKit[E, D, RES]()
     try:
-        var a = kit.add(Int(x), -1, m, d)
+        var a = kit.add(Int(x) if x_dev < 0 else 0, x_dev, m, d)
         var resident = -1
         comptime if RES:
             resident = matrix_dev

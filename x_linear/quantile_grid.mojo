@@ -20,6 +20,7 @@ launch reads first, so iterations are queued in batches and the host reads
 the state word once a batch. Off Apple nothing waits; on Apple each
 iteration's launches are one witness unit (in place, so a cut raises).
 """
+from core.fold_x_device import fold_x_fill
 from max.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceContext, DeviceBuffer
 from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, sti, i2f, row_dot
@@ -579,7 +580,7 @@ def quantile_fit_grid(
     var dstate = ctx.enqueue_create_buffer[DType.float32](QS_WORDS)
     var dtw = ctx.enqueue_create_buffer[DType.float32](team_work(0, 3, 0))
     if n_x > 0:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+        fold_x_fill(ctx, dx, Int(x), n_x)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     if n_y > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
     comptime if XLIN_IDN_DEV_FINITE:

@@ -22,9 +22,12 @@ once at import by `python/mojolearn/_native_table_key.py`) and calls the
 pointer with plain addresses and words; no Python object crosses.
 
 Request layouts (a: addresses, p: Int words, no Float64 words):
-  PB_FOLD_PAIR_F32     a [dst, src]                 p [n]                      -> fold status
   PB_REBASE_OFFSETS    a [raw, lens, out]           p [n_raw, parts, n_out]    -> 0
   PB_TOPK_MERGE_F32    a [table, out_dist, out_idx] p [shards, queries, k]     -> 0, 1 or 2
+  PB_ORDERED_FOLD_F32  a [dst, shard_table]         p [n, shards]              -> fold status
+                       (shard_table: an Int64 array of `shards` buffer addresses in logical
+                       order; lane vdf-linalg, base ABI v2: it replaced PB_FOLD_PAIR_F32, one
+                       call per shard, whose device form moved dst both ways per shard)
   PI_SHARD_PLAN        a [ind, offs, soff, local, map]  p [n, n_lists, shards] -> 0, 1 or 2
   PI_MERGE_SHARDS      a [dist, ids, counts, (d, i, c, map) * shards]
                        p [shards, m, k, rows * shards]                         -> merge status
@@ -40,8 +43,8 @@ from core.native_descriptor_abi import NativeDescriptorCall
 comptime PARALLEL_TABLE_BASE = 0
 comptime PARALLEL_TABLE_IVF = 1
 
-comptime PARALLEL_BASE_ABI = "mojolearn.parallel.base.v1"
-comptime PB_FOLD_PAIR_F32 = 0
+comptime PARALLEL_BASE_ABI = "mojolearn.parallel.base.v2"
+comptime PB_ORDERED_FOLD_F32 = 0
 comptime PB_REBASE_OFFSETS = 1
 comptime PB_TOPK_MERGE_F32 = 2
 comptime PB_OPERATION_COUNT = 3
@@ -90,12 +93,12 @@ def parallel_check_spans(family: Int, operation: Int, aa: Int, na: Int, pp: Int,
     var want_a = -1
     var want_p = -1
     if family == PARALLEL_TABLE_BASE:
-        if operation == PB_FOLD_PAIR_F32:
-            want_a = 2
-            want_p = 1
-        elif operation == PB_REBASE_OFFSETS or operation == PB_TOPK_MERGE_F32:
+        if operation == PB_REBASE_OFFSETS or operation == PB_TOPK_MERGE_F32:
             want_a = 3
             want_p = 3
+        elif operation == PB_ORDERED_FOLD_F32:
+            want_a = 2
+            want_p = 2
     elif family == PARALLEL_TABLE_IVF:
         if operation == PI_SHARD_PLAN:
             want_a = 5
@@ -253,9 +256,18 @@ def _parallel_call[NA: Int, NP: Int](entry: EntryRef, operation: Int, addrs: Arr
 
 
 def parallel_fold_pair_f32(entry: EntryRef, dst: Int, src: Int, count: Int) raises -> Int:
-    var addrs: Array[Int, 2] = [dst, src]
-    var ints: Array[Int, 1] = [count]
-    return _parallel_call(entry, PB_FOLD_PAIR_F32, addrs, ints)
+    """dst folded with one buffer: the ordered fold of one shard (the
+    native checks' pair form; the product folds call the ordered fold)."""
+    var table: List[Int64] = [Int64(src)]
+    var result = parallel_ordered_fold_f32(entry, dst, Int(table.unsafe_ptr()), 1, count)
+    _ = table^  # the address table outlives the call above
+    return result
+
+
+def parallel_ordered_fold_f32(entry: EntryRef, dst: Int, table: Int, shards: Int, count: Int) raises -> Int:
+    var addrs: Array[Int, 2] = [dst, table]
+    var ints: Array[Int, 2] = [count, shards]
+    return _parallel_call(entry, PB_ORDERED_FOLD_F32, addrs, ints)
 
 
 def parallel_rebase_offsets_i32(entry: EntryRef, raw: Int, n_raw: Int, lens: Int, parts: Int,

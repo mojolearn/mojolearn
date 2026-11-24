@@ -15,8 +15,9 @@ order, on the device, vendor-agnostic: no branch on a vendor anywhere.
 THE PASS
   1. k-NN of every query against the training rows at
      `neighborhood = (min_samples - 1) * 2` (`:161`), through
-     `neighbors/estimator.mojo::knn_search_traced`, the identical k-NN
-     `reachability.mojo::compute_knn` already uses for the fit.
+     `neighbors/estimator.mojo::knn_search_device_resident`, the identical
+     k-NN's statements with the index and queries on the device and the
+     result left there (lane vdf-misc4; was `knn_search_traced`).
   2. the query core distance, slot `min_samples - 1` of each sorted row
      (`reachability.mojo::core_distances`, the fit's own kernel).
   3. the nearest neighbor in mutual reachability space and its lambda
@@ -56,25 +57,10 @@ estimator's `labels_`; theirs are int64 (`hdbscan.pyx:1316`).
 """
 
 from max.gpu import block_dim, block_idx, thread_idx
-from std.memory import unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
-from core.transfer import (
-    TRANSFER_TIER_IDENTICAL,
-    transfer_download_f32_list,
-    transfer_download_list,
-    transfer_upload_list,
-)
-
-#: The pinned download stages of this module and tier (core/transfer.mojo).
-comptime _XFER_POOL = "MojolearnHdbscanPredictTransferStagesIdenticalV1" if TRANSFER_TIER_IDENTICAL else "MojolearnHdbscanPredictTransferStagesFastV1"
-
 from checks.numerics import identical_div
 from core.identity_trace import IdentityTrace
 from hdbscan.checks.hdbscan_sabotage import HDB_SAB_NONE
-from hdbscan.impl.detail.idn_switches import (
-    IDN_HDB_PREDICT_DEVICE_CAST,
-    IDN_HDB_PREDICT_LEAN,
-)
 from hdbscan.impl.detail.reachability import (
     core_distances,
     knn_inds_to_i32_kernel,
@@ -84,7 +70,8 @@ from hdbscan.impl.prediction_data import (
     prediction_neighborhood,
     refuse_nonfinite_queries,
 )
-from neighbors.estimator import knn_search_traced
+from neighbors.estimator import knn_search_device_resident
+from hdbscan.impl.detail.resident import HdbscanResident
 
 
 comptime PREDICT_TPB = 256
@@ -207,348 +194,76 @@ struct PredictOutput(Movable):
         self.prediction_lambdas = prediction_lambdas^
 
 
-def _upload_f32(
-    ctx: DeviceContext, values: List[Float32], n: Int
-) raises -> DeviceBuffer[DType.float32]:
-    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): read in place
-    # from the caller's list, one wait. Gone: three waits (one before the
-    # host buffer was touched), a pinned buffer per call and one store per
-    # word into it.
-    return transfer_upload_list[DType.float32](ctx, values, n if n > 0 else 0, max(n, 1))
+struct PredictDevice(Movable):
+    """`approximate_predict`'s four per-query results LEFT ON THE DEVICE
+    (lane vdf-misc4): `membership_vector`'s soft pass reads the first two
+    there, `approximate_predict` brings the last two home once."""
+
+    var min_mr_indices: DeviceBuffer[DType.int32]
+    var prediction_lambdas: DeviceBuffer[DType.float32]
+    var labels: DeviceBuffer[DType.int32]
+    var probabilities: DeviceBuffer[DType.float32]
+
+    def __init__(
+        out self,
+        var min_mr_indices: DeviceBuffer[DType.int32],
+        var prediction_lambdas: DeviceBuffer[DType.float32],
+        var labels: DeviceBuffer[DType.int32],
+        var probabilities: DeviceBuffer[DType.float32],
+    ):
+        self.min_mr_indices = min_mr_indices^
+        self.prediction_lambdas = prediction_lambdas^
+        self.labels = labels^
+        self.probabilities = probabilities^
 
 
-def _upload_i32(
-    ctx: DeviceContext, values: List[Int32], n: Int
-) raises -> DeviceBuffer[DType.int32]:
-    # core/transfer.mojo: as `_upload_f32` above.
-    return transfer_upload_list[DType.int32](ctx, values, n if n > 0 else 0, max(n, 1))
-
-
-def _download_f32(
-    ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int
-) raises -> List[Float32]:
-    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): the copy
-    # engine writes the list's own words, one wait. Gone: two waits, a pinned
-    # buffer per call and one append per word.
-    return transfer_download_f32_list[_XFER_POOL](ctx, buf, n)
-
-
-def _download_i32(
-    ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int
-) raises -> List[Int32]:
-    # core/transfer.mojo: as `_download_f32` above (one copy, one wait).
-    return transfer_download_list[DType.int32](ctx, buf, n)
-
-
-def approximate_predict(
+def approximate_predict_device(
     ctx: DeviceContext,
     mut trace: IdentityTrace,
-    x_host: List[Float32],
-    m: Int,
-    n: Int,
-    input_core_dists: List[Float32],
-    labels: List[Int32],
-    tree_lambdas: List[Float32],
-    pd: PredictionData,
-    queries: List[Float32],
-    n_prediction_points: Int,
-    min_samples: Int,
-    tpb: Int = PREDICT_TPB,
-) raises -> PredictOutput:
-    """`predict.cuh:220-262`. `x_host` is the training matrix (`m x n`,
-    row-major), `input_core_dists` and `labels` the fit's, `min_samples`
-    the estimator's parameter as the user gave it (theirs:
-    `clusterer.min_samples or clusterer.min_cluster_size`,
-    `hdbscan.pyx:1322`), NOT the fit's `+ 1` k."""
-    if n_prediction_points < 1:
-        raise Error(
-            "hdbscan.approximate_predict: points_to_predict has no rows;"
-            " refused by name"
-        )
-    if len(queries) < n_prediction_points * n or len(x_host) < m * n:
-        raise Error(
-            "hdbscan.approximate_predict: a buffer is shorter than its shape;"
-            " refused by name"
-        )
-    refuse_nonfinite_queries(queries, n_prediction_points, n)
-    var neighborhood = prediction_neighborhood(min_samples, m)
-    var nq = n_prediction_points
-
-    trace.header(
-        "hdbscan/impl/detail/predict.mojo approximate_predict n_rows="
-        + String(m) + " n_cols=" + String(n) + " n_prediction_points="
-        + String(nq) + " min_samples=" + String(min_samples)
-        + " neighborhood=" + String(neighborhood)
-    )
-
-    comptime if IDN_HDB_PREDICT_LEAN:
-        return _approximate_predict_lean(
-            ctx, trace, x_host, m, n, input_core_dists, labels, tree_lambdas,
-            pd, queries, nq, neighborhood, min_samples, tpb,
-        )
-
-    # `:163-177` perform knn
-    var h_dist = ctx.enqueue_create_host_buffer[DType.float32](nq * neighborhood)
-    var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](nq * neighborhood)
-    var h_x = ctx.enqueue_create_host_buffer[DType.float32](m * n)
-    var h_q = ctx.enqueue_create_host_buffer[DType.float32](nq * n)
-    ctx.synchronize()
-    for i in range(m * n):
-        h_x.unsafe_ptr().unsafe_store(i, x_host[i])
-    for i in range(nq * n):
-        h_q.unsafe_ptr().unsafe_store(i, queries[i])
-    _ = knn_search_traced(
-        ctx,
-        trace,
-        h_x.unsafe_ptr(),
-        m,
-        h_q.unsafe_ptr(),
-        nq,
-        n,
-        neighborhood,
-        h_dist.unsafe_ptr(),
-        h_idx.unsafe_ptr(),
-        True,
-    )
-    var knn_dists = ctx.enqueue_create_buffer[DType.float32](nq * neighborhood)
-    var knn_inds = ctx.enqueue_create_buffer[DType.int32](nq * neighborhood)
-    var i32 = List[Int32](capacity=nq * neighborhood)
-    # fam2-cluster, IDN_HDB_PREDICT_DEVICE_CAST: the UInt32 indices go up
-    # as they are and the fit's kernel narrows them (the same Int32 values).
-    var idx_u32 = ctx.enqueue_create_buffer[DType.uint32](
-        nq * neighborhood if IDN_HDB_PREDICT_DEVICE_CAST else 1
-    )
-    comptime if IDN_HDB_PREDICT_DEVICE_CAST:
-        var cells = nq * neighborhood
-        ctx.enqueue_copy(dst_buf=knn_dists, src_ptr=h_dist.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=idx_u32, src_ptr=h_idx.unsafe_ptr())
-        ctx.enqueue_function[knn_inds_to_i32_kernel](
-            knn_inds.unsafe_ptr(), idx_u32.unsafe_ptr(), Int32(cells),
-            grid_dim=((cells + tpb - 1) // tpb, 1, 1), block_dim=(tpb, 1, 1),
-        )
-        ctx.synchronize()
-    else:
-        for i in range(nq * neighborhood):
-            i32.append(Int32(Int(h_idx.unsafe_ptr().unsafe_load(i))))
-        ctx.synchronize()
-        ctx.enqueue_copy(dst_buf=knn_dists, src_ptr=h_dist.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=knn_inds, src_ptr=i32.unsafe_ptr())
-        ctx.synchronize()
-
-    # `:181-186` Slice core distances, slot min_samples - 1
-    var prediction_core_dists = ctx.enqueue_create_buffer[DType.float32](nq)
-    ctx.synchronize()
-    core_distances(
-        ctx, knn_dists, min_samples, neighborhood, nq, prediction_core_dists,
-        tpb, HDB_SAB_NONE,
-    )
-
-    # `:44-83` _find_neighbor_and_lambda
-    var core_buf = _upload_f32(ctx, input_core_dists, m)
-    var min_mr_dists = ctx.enqueue_create_buffer[DType.float32](nq)
-    var min_mr_inds = ctx.enqueue_create_buffer[DType.int32](nq)
-    var prediction_lambdas = ctx.enqueue_create_buffer[DType.float32](nq)
-    ctx.synchronize()
-    var blocks = (nq + tpb - 1) // tpb
-    ctx.enqueue_function[min_mutual_reachability_kernel](
-        core_buf.unsafe_ptr(),
-        prediction_core_dists.unsafe_ptr(),
-        knn_dists.unsafe_ptr(),
-        knn_inds.unsafe_ptr(),
-        Int32(nq),
-        Int32(neighborhood),
-        min_mr_dists.unsafe_ptr(),
-        min_mr_inds.unsafe_ptr(),
-        grid_dim=(blocks, 1, 1),
-        block_dim=(tpb, 1, 1),
-    )
-    ctx.synchronize()
-    ctx.enqueue_function[prediction_lambda_kernel](
-        min_mr_dists.unsafe_ptr(),
-        prediction_lambdas.unsafe_ptr(),
-        Int32(nq),
-        grid_dim=(blocks, 1, 1),
-        block_dim=(tpb, 1, 1),
-    )
-    ctx.synchronize()
-
-    # `:103-142` _find_cluster_and_probability
-    var labels_buf = _upload_i32(ctx, labels, m)
-    var iic_buf = _upload_i32(ctx, pd.index_into_children, pd.n_edges + 1)
-    var deaths_buf = _upload_f32(ctx, pd.deaths, pd.n_clusters)
-    var sel_buf = _upload_i32(ctx, pd.selected_clusters, pd.n_selected_clusters)
-    var lambdas_buf = _upload_f32(ctx, tree_lambdas, pd.n_edges)
-    var out_labels = ctx.enqueue_create_buffer[DType.int32](nq)
-    var out_probs = ctx.enqueue_create_buffer[DType.float32](nq)
-    ctx.synchronize()
-    ctx.enqueue_function[cluster_probability_kernel](
-        min_mr_inds.unsafe_ptr(),
-        prediction_lambdas.unsafe_ptr(),
-        iic_buf.unsafe_ptr(),
-        labels_buf.unsafe_ptr(),
-        deaths_buf.unsafe_ptr(),
-        sel_buf.unsafe_ptr(),
-        lambdas_buf.unsafe_ptr(),
-        Int32(pd.n_leaves),
-        Int32(nq),
-        out_labels.unsafe_ptr(),
-        out_probs.unsafe_ptr(),
-        grid_dim=(blocks, 1, 1),
-        block_dim=(tpb, 1, 1),
-    )
-    ctx.synchronize()
-
-    var h_inds = _download_i32(ctx, min_mr_inds, nq)
-    var h_lam = _download_f32(ctx, prediction_lambdas, nq)
-    var h_labels = _download_i32(ctx, out_labels, nq)
-    var h_probs = _download_f32(ctx, out_probs, nq)
-    trace.record_list_i32("hdbscan.predict.min_mr_inds", h_inds)
-    trace.record_list_f32("hdbscan.predict.lambdas", h_lam)
-    trace.record_list_i32("hdbscan.predict.labels", h_labels)
-    trace.record_list_f32("hdbscan.predict.probabilities", h_probs)
-
-    # [[mojo-buffer-freed-at-last-use]]: every buffer outlives the queue.
-    _ = h_dist^
-    _ = h_idx^
-    _ = h_x^
-    _ = h_q^
-    _ = i32^
-    _ = idx_u32^
-    _ = knn_dists^
-    _ = knn_inds^
-    _ = prediction_core_dists^
-    _ = core_buf^
-    _ = min_mr_dists^
-    _ = min_mr_inds^
-    _ = prediction_lambdas^
-    _ = labels_buf^
-    _ = iic_buf^
-    _ = deaths_buf^
-    _ = sel_buf^
-    _ = lambdas_buf^
-    _ = out_labels^
-    _ = out_probs^
-    return PredictOutput(h_labels^, h_probs^, h_inds^, h_lam^)
-
-
-def _approximate_predict_lean(
-    ctx: DeviceContext,
-    mut trace: IdentityTrace,
-    x_host: List[Float32],
-    m: Int,
-    n: Int,
-    input_core_dists: List[Float32],
-    labels: List[Int32],
-    tree_lambdas: List[Float32],
-    pd: PredictionData,
-    queries: List[Float32],
+    res: HdbscanResident,
+    mut queries: DeviceBuffer[DType.float32],
     nq: Int,
     neighborhood: Int,
     min_samples: Int,
-    tpb: Int,
-) raises -> PredictOutput:
-    """`IDN_HDB_PREDICT_LEAN`: `approximate_predict`'s statements after the
-    refusals and the trace header, with the host staging done in bulk under
-    one allocation wait, no wait between the kernels and one wait for the
-    four outputs. The k-NN, the cast kernel, `core_distances` and the three
-    predict kernels are the same launches on the same values. The k-NN's
-    host-pointer boundary (`knn_search_traced`) still brings its result to
-    the host and back; a device-in/device-out entry belongs to neighbors/."""
+    tpb: Int = PREDICT_TPB,
+) raises -> PredictDevice:
+    """`predict.cuh:220-262` after the refusals, on the fitted snapshot
+    `res` and the `nq x res.n` queries ALREADY ON THE DEVICE (lane
+    vdf-misc4, 2026-11-24): the k-NN reads the snapshot's training rows as
+    its index and leaves its result on the device
+    (`knn_search_device_resident`; was `knn_search_traced`, whose result
+    went to the host and back between two device steps), the cast kernel,
+    `core_distances` and the three predict kernels are the same launches on
+    the same values, and nothing comes home. One wait at the end."""
     var cells = nq * neighborhood
-    var n_iic = pd.n_edges + 1
-    var n_deaths = pd.n_clusters
-    var n_sel = pd.n_selected_clusters
-    var n_lam = pd.n_edges
-
-    # every host staging buffer, one allocation wait
-    var h_dist = ctx.enqueue_create_host_buffer[DType.float32](cells)
-    var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](cells)
-    var h_x = ctx.enqueue_create_host_buffer[DType.float32](m * n)
-    var h_q = ctx.enqueue_create_host_buffer[DType.float32](nq * n)
-    var h_core = ctx.enqueue_create_host_buffer[DType.float32](max(m, 1))
-    var h_lab = ctx.enqueue_create_host_buffer[DType.int32](max(m, 1))
-    var h_iic = ctx.enqueue_create_host_buffer[DType.int32](max(n_iic, 1))
-    var h_deaths = ctx.enqueue_create_host_buffer[DType.float32](max(n_deaths, 1))
-    var h_sel = ctx.enqueue_create_host_buffer[DType.int32](max(n_sel, 1))
-    var h_lam = ctx.enqueue_create_host_buffer[DType.float32](max(n_lam, 1))
-    var o_inds = ctx.enqueue_create_host_buffer[DType.int32](nq)
-    var o_lam = ctx.enqueue_create_host_buffer[DType.float32](nq)
-    var o_labels = ctx.enqueue_create_host_buffer[DType.int32](nq)
-    var o_probs = ctx.enqueue_create_host_buffer[DType.float32](nq)
-    # the device buffers, sized as `_upload_*` sizes them
     var knn_dists = ctx.enqueue_create_buffer[DType.float32](cells)
-    var knn_inds = ctx.enqueue_create_buffer[DType.int32](cells)
     var idx_u32 = ctx.enqueue_create_buffer[DType.uint32](cells)
+    var knn_inds = ctx.enqueue_create_buffer[DType.int32](cells)
     var prediction_core_dists = ctx.enqueue_create_buffer[DType.float32](nq)
-    var core_buf = ctx.enqueue_create_buffer[DType.float32](max(m, 1))
-    var labels_buf = ctx.enqueue_create_buffer[DType.int32](max(m, 1))
-    var iic_buf = ctx.enqueue_create_buffer[DType.int32](max(n_iic, 1))
-    var deaths_buf = ctx.enqueue_create_buffer[DType.float32](max(n_deaths, 1))
-    var sel_buf = ctx.enqueue_create_buffer[DType.int32](max(n_sel, 1))
-    var lambdas_buf = ctx.enqueue_create_buffer[DType.float32](max(n_lam, 1))
     var min_mr_dists = ctx.enqueue_create_buffer[DType.float32](nq)
     var min_mr_inds = ctx.enqueue_create_buffer[DType.int32](nq)
     var prediction_lambdas = ctx.enqueue_create_buffer[DType.float32](nq)
     var out_labels = ctx.enqueue_create_buffer[DType.int32](nq)
     var out_probs = ctx.enqueue_create_buffer[DType.float32](nq)
-    ctx.synchronize()
+    # The snapshot's buffers as local handles (reference counted; the memory
+    # is the snapshot's), so a launch takes a pointer from a `var`.
+    var xb = res.x.copy()
+    var core_buf = res.core.copy()
+    var labels_buf = res.labels.copy()
+    var iic_buf = res.iic.copy()
+    var deaths_buf = res.deaths.copy()
+    var sel_buf = res.selected.copy()
+    var lambdas_buf = res.lambdas.copy()
 
-    # bulk host staging (byte copies, no arithmetic)
-    unsafe_memcpy(dest=h_x.unsafe_ptr(), src=x_host.unsafe_ptr(), count=m * n)
-    unsafe_memcpy(dest=h_q.unsafe_ptr(), src=queries.unsafe_ptr(), count=nq * n)
-    if m > 0:
-        unsafe_memcpy(dest=h_core.unsafe_ptr(), src=input_core_dists.unsafe_ptr(), count=m)
-        unsafe_memcpy(dest=h_lab.unsafe_ptr(), src=labels.unsafe_ptr(), count=m)
-    if n_iic > 0:
-        unsafe_memcpy(
-            dest=h_iic.unsafe_ptr(),
-            src=pd.index_into_children.unsafe_ptr(),
-            count=n_iic,
-        )
-    if n_deaths > 0:
-        unsafe_memcpy(dest=h_deaths.unsafe_ptr(), src=pd.deaths.unsafe_ptr(), count=n_deaths)
-    if n_sel > 0:
-        unsafe_memcpy(
-            dest=h_sel.unsafe_ptr(),
-            src=pd.selected_clusters.unsafe_ptr(),
-            count=n_sel,
-        )
-    if n_lam > 0:
-        unsafe_memcpy(dest=h_lam.unsafe_ptr(), src=tree_lambdas.unsafe_ptr(), count=n_lam)
-
-    # `:163-177` perform knn
-    _ = knn_search_traced(
-        ctx,
-        trace,
-        h_x.unsafe_ptr(),
-        m,
-        h_q.unsafe_ptr(),
-        nq,
-        n,
-        neighborhood,
-        h_dist.unsafe_ptr(),
-        h_idx.unsafe_ptr(),
-        True,
+    # `:163-177` perform knn, device in and device out
+    _ = knn_search_device_resident(
+        ctx, trace, xb, res.m, queries, nq, res.n, neighborhood, knn_dists, idx_u32, True,
     )
-    # the indices go up as UInt32 and the fit's kernel narrows them
-    ctx.enqueue_copy(dst_buf=knn_dists, src_ptr=h_dist.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=idx_u32, src_ptr=h_idx.unsafe_ptr())
+    # the indices are narrowed to Int32 by the fit's kernel
     ctx.enqueue_function[knn_inds_to_i32_kernel](
         knn_inds.unsafe_ptr(), idx_u32.unsafe_ptr(), Int32(cells),
         grid_dim=((cells + tpb - 1) // tpb, 1, 1), block_dim=(tpb, 1, 1),
     )
-    # the model arrays, enqueued behind the cast (`_upload_*`'s copies)
-    if m > 0:
-        ctx.enqueue_copy(dst_buf=core_buf, src_ptr=h_core.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=labels_buf, src_ptr=h_lab.unsafe_ptr())
-    if n_iic > 0:
-        ctx.enqueue_copy(dst_buf=iic_buf, src_ptr=h_iic.unsafe_ptr())
-    if n_deaths > 0:
-        ctx.enqueue_copy(dst_buf=deaths_buf, src_ptr=h_deaths.unsafe_ptr())
-    if n_sel > 0:
-        ctx.enqueue_copy(dst_buf=sel_buf, src_ptr=h_sel.unsafe_ptr())
-    if n_lam > 0:
-        ctx.enqueue_copy(dst_buf=lambdas_buf, src_ptr=h_lam.unsafe_ptr())
 
     # `:181-186` Slice core distances, slot min_samples - 1 (its own one wait)
     core_distances(
@@ -585,60 +300,139 @@ def _approximate_predict_lean(
         deaths_buf.unsafe_ptr(),
         sel_buf.unsafe_ptr(),
         lambdas_buf.unsafe_ptr(),
-        Int32(pd.n_leaves),
+        Int32(res.m),
         Int32(nq),
         out_labels.unsafe_ptr(),
         out_probs.unsafe_ptr(),
         grid_dim=(blocks, 1, 1),
         block_dim=(tpb, 1, 1),
     )
-    # the four outputs, one wait
-    ctx.enqueue_copy(dst_ptr=o_inds.unsafe_ptr(), src_buf=min_mr_inds)
-    ctx.enqueue_copy(dst_ptr=o_lam.unsafe_ptr(), src_buf=prediction_lambdas)
-    ctx.enqueue_copy(dst_ptr=o_labels.unsafe_ptr(), src_buf=out_labels)
-    ctx.enqueue_copy(dst_ptr=o_probs.unsafe_ptr(), src_buf=out_probs)
     ctx.synchronize()
-    var h_inds = List[Int32](unsafe_uninit_length=nq)
-    var h_lamv = List[Float32](unsafe_uninit_length=nq)
-    var h_labels = List[Int32](unsafe_uninit_length=nq)
-    var h_probs = List[Float32](unsafe_uninit_length=nq)
-    unsafe_memcpy(dest=h_inds.unsafe_ptr(), src=o_inds.unsafe_ptr(), count=nq)
-    unsafe_memcpy(dest=h_lamv.unsafe_ptr(), src=o_lam.unsafe_ptr(), count=nq)
-    unsafe_memcpy(dest=h_labels.unsafe_ptr(), src=o_labels.unsafe_ptr(), count=nq)
-    unsafe_memcpy(dest=h_probs.unsafe_ptr(), src=o_probs.unsafe_ptr(), count=nq)
-    trace.record_list_i32("hdbscan.predict.min_mr_inds", h_inds)
-    trace.record_list_f32("hdbscan.predict.lambdas", h_lamv)
-    trace.record_list_i32("hdbscan.predict.labels", h_labels)
-    trace.record_list_f32("hdbscan.predict.probabilities", h_probs)
+    if trace.enabled:
+        trace.record_device(ctx, "hdbscan.predict.min_mr_inds", min_mr_inds, nq)
+        trace.record_device(ctx, "hdbscan.predict.lambdas", prediction_lambdas, nq)
+        trace.record_device(ctx, "hdbscan.predict.labels", out_labels, nq)
+        trace.record_device(ctx, "hdbscan.predict.probabilities", out_probs, nq)
 
     # [[mojo-buffer-freed-at-last-use]]: every buffer outlives the queue.
-    _ = h_dist^
-    _ = h_idx^
-    _ = h_x^
-    _ = h_q^
-    _ = h_core^
-    _ = h_lab^
-    _ = h_iic^
-    _ = h_deaths^
-    _ = h_sel^
-    _ = h_lam^
-    _ = o_inds^
-    _ = o_lam^
-    _ = o_labels^
-    _ = o_probs^
     _ = knn_dists^
-    _ = knn_inds^
     _ = idx_u32^
+    _ = knn_inds^
     _ = prediction_core_dists^
+    _ = min_mr_dists^
+    _ = xb^
     _ = core_buf^
     _ = labels_buf^
     _ = iic_buf^
     _ = deaths_buf^
     _ = sel_buf^
     _ = lambdas_buf^
-    _ = min_mr_dists^
-    _ = min_mr_inds^
-    _ = prediction_lambdas^
-    _ = out_labels^
-    _ = out_probs^
-    return PredictOutput(h_labels^, h_probs^, h_inds^, h_lamv^)
+    return PredictDevice(min_mr_inds^, prediction_lambdas^, out_labels^, out_probs^)
+
+
+def upload_queries(ctx: DeviceContext, address: Int, rows: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """`rows x n` float32 query words at the host `address`, uploaded once
+    into an exact-length buffer (the k-NN reads it as exactly that)."""
+    var q = ctx.enqueue_create_buffer[DType.float32](rows * n)
+    ctx.enqueue_copy(dst_buf=q, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=address))
+    return q^
+
+
+def approximate_predict_snapshot(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    res: HdbscanResident,
+    queries_address: Int,
+    nq: Int,
+    min_samples: Int,
+    labels_out: Int,
+    probs_out: Int,
+    tpb: Int = PREDICT_TPB,
+) raises:
+    """`approximate_predict` on a fitted snapshot (lane vdf-misc4): the
+    `nq` query rows at the host `queries_address` uploaded once, the device
+    body, and the labels and probabilities copied once each to the host
+    addresses `labels_out` / `probs_out` (one wait)."""
+    var neighborhood = prediction_neighborhood(min_samples, res.m)
+    var q = upload_queries(ctx, queries_address, nq, res.n)
+    var near = approximate_predict_device(ctx, trace, res, q, nq, neighborhood, min_samples, tpb)
+    ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutAnyOrigin](unsafe_from_address=labels_out), src_buf=near.labels)
+    ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=probs_out), src_buf=near.probabilities)
+    ctx.synchronize()
+    _ = q^
+    _ = near^
+
+
+def approximate_predict(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    x_host: List[Float32],
+    m: Int,
+    n: Int,
+    input_core_dists: List[Float32],
+    labels: List[Int32],
+    tree_lambdas: List[Float32],
+    pd: PredictionData,
+    queries: List[Float32],
+    n_prediction_points: Int,
+    min_samples: Int,
+    tpb: Int = PREDICT_TPB,
+) raises -> PredictOutput:
+    """`predict.cuh:220-262`. `x_host` is the training matrix (`m x n`,
+    row-major), `input_core_dists` and `labels` the fit's, `min_samples`
+    the estimator's parameter as the user gave it (theirs:
+    `clusterer.min_samples or clusterer.min_cluster_size`,
+    `hdbscan.pyx:1322`), NOT the fit's `+ 1` k. The host lists are taken
+    into a temporary fitted snapshot and the one device body runs
+    (`approximate_predict_device`, lane vdf-misc4)."""
+    if n_prediction_points < 1:
+        raise Error(
+            "hdbscan.approximate_predict: points_to_predict has no rows;"
+            " refused by name"
+        )
+    if (
+        len(queries) < n_prediction_points * n or len(x_host) < m * n
+        or len(input_core_dists) < m or len(labels) < m
+        or len(tree_lambdas) < pd.n_edges or len(pd.deaths) < pd.n_clusters
+        or len(pd.selected_clusters) < pd.n_selected_clusters
+        or len(pd.index_into_children) < pd.n_edges + 1
+    ):
+        raise Error(
+            "hdbscan.approximate_predict: a buffer is shorter than its shape;"
+            " refused by name"
+        )
+    refuse_nonfinite_queries(queries, n_prediction_points, n)
+    var neighborhood = prediction_neighborhood(min_samples, m)
+    var nq = n_prediction_points
+
+    trace.header(
+        "hdbscan/impl/detail/predict.mojo approximate_predict n_rows="
+        + String(m) + " n_cols=" + String(n) + " n_prediction_points="
+        + String(nq) + " min_samples=" + String(min_samples)
+        + " neighborhood=" + String(neighborhood)
+    )
+    var res = HdbscanResident(
+        ctx, Int(x_host.unsafe_ptr()), m, n, Int(input_core_dists.unsafe_ptr()), Int(labels.unsafe_ptr()),
+        0, Int(tree_lambdas.unsafe_ptr()), pd.n_edges, Int(pd.deaths.unsafe_ptr()), pd.n_clusters,
+        Int(pd.selected_clusters.unsafe_ptr()), pd.n_selected_clusters,
+        Int(pd.index_into_children.unsafe_ptr()), 0, 0, 0,
+    )
+    var q = upload_queries(ctx, Int(queries.unsafe_ptr()), nq, n)
+    var near = approximate_predict_device(ctx, trace, res, q, nq, neighborhood, min_samples, tpb)
+    var h_inds = List[Int32](unsafe_uninit_length=nq)
+    var h_lam = List[Float32](unsafe_uninit_length=nq)
+    var h_labels = List[Int32](unsafe_uninit_length=nq)
+    var h_probs = List[Float32](unsafe_uninit_length=nq)
+    ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutAnyOrigin](unsafe_from_address=Int(h_inds.unsafe_ptr())),
+                     src_buf=near.min_mr_indices)
+    ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(h_lam.unsafe_ptr())),
+                     src_buf=near.prediction_lambdas)
+    ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutAnyOrigin](unsafe_from_address=Int(h_labels.unsafe_ptr())),
+                     src_buf=near.labels)
+    ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(h_probs.unsafe_ptr())),
+                     src_buf=near.probabilities)
+    ctx.synchronize()
+    _ = q^
+    _ = near^
+    _ = res^
+    return PredictOutput(h_labels^, h_probs^, h_inds^, h_lam^)

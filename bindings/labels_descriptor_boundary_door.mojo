@@ -182,15 +182,28 @@ def labels_scope(model: PythonObject, context: PythonObject) raises -> PythonObj
             return context
     elif device != DEVICE_CPU:
         return context
+    var scope = labels_cpu_scope(context)
+    if scope is None:
+        return context
+    return scope
+
+
+def labels_cpu_scope(context: PythonObject) raises -> PythonObject:
+    """The CPU label scope of `context` (the CPU branch of `labels_scope`,
+    shared with a public function's `device="cpu"` beside a GPU set:
+    providers/python/function_device_boundary_door.mojo
+    `function_device_scope`), or None when this installation has none.
+    Connects the CPU images once when nothing admitted the CPU device yet."""
     var scope = py_get(context, "labels_cpu_scope")
     if scope is None:
-        # A restored estimator (no construction ran the device admission):
-        # admit the CPU device once, then read the scope it built.
+        # A restored estimator (no construction ran the device admission),
+        # or a public function's first device="cpu" call: admit the CPU
+        # device once, then read the scope it built.
         if not device_cpu_connect_late(context):
-            return context
+            return PythonObject(None)
         scope = py_get(context, "labels_cpu_scope")
         if scope is None:
-            return context
+            return PythonObject(None)
     # The scope is a copy of the context it was made from. A family context
     # that grew after the copy (a module imported later added its tables), or
     # a context derived from it (the typed context a door builds once per

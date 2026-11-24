@@ -9,7 +9,7 @@ from bindings.optimizer_admission_door import opt_value, opt_numpy
 from bindings.optimizer_public_door import tensor_view, new_array, refuse_kwargs
 from bindings.tensor_view import TensorView, base_format
 from training.optimizer_input_plan import optimizer_contiguous_address
-from bindings.optimizer_device_native_door import device_entries, device_shape, device_allocate, shape_count
+from bindings.optimizer_device_native_door import device_entries, device_shape, device_allocate, shape_count, device_float32
 from bindings.training_embedding_native_door import embedding_indices, embedding_leaves, embedding_native_call, embedding_int_list
 from bindings.training_scalar_native_door import training_scalar_number, training_scalar_float
 from bindings.training_loss_options_unpack import loss_truth, loss_reduction
@@ -86,7 +86,8 @@ def loss_targets(value: PythonObject, device: Bool, context: PythonObject, mut b
 def training_cross_entropy(values: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
     var buffer_pins = OptimizerInputOwners()
     try:
-        if len(values) != 8:
+        # 9: the eight arguments and the admitted `device` item (lane vdf-linalg; read by the router)
+        if len(values) != 9:
             raise Error("TypeError: invalid cross_entropy argument envelope")
         refuse_kwargs(values[7], "cross_entropy")
         var reduction = loss_reduction(values[3], context)
@@ -109,6 +110,7 @@ def training_cross_entropy(values: PythonObject, entries: PythonObject, context:
             fields = py_fields(logits)
             if py_item(fields, nk[].k__b) is not py_item(entries, nk[].k_module):
                 raise Error("ValueError: cross_entropy device logits must belong to the selected native binding")
+            device_float32(fields, "logits", "cross_entropy")
             shape = device_shape(py_item(fields, nk[].k_shape), context)
             if shape_count(shape) != Int(py=py_item(fields, nk[].k_size)):
                 raise Error("ValueError: cross_entropy device shape does not match its stored element count")

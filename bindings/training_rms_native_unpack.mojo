@@ -12,6 +12,7 @@ from bindings.training_scalar_native_door import training_scalar_float
 from bindings.optimizer_keys_unpack import optimizer_keys
 from bindings.optimizer_keys_unpack import OPTIMIZER_OPN_RMS_NORM_BACKWARD
 from bindings.py_balanced import py_item
+from bindings.training_layers_device_unpack import rms_norm_device
 
 
 def rms_host_view(value: PythonObject, name: String, where: PythonObject, mut view: TensorView, mut buffer_pins: OptimizerInputOwners) raises:
@@ -29,7 +30,8 @@ def training_rms_operation(operation: Int, where: PythonObject, values: PythonOb
     var buffer_pins = OptimizerInputOwners()
     try:
         var backward = operation == OPTIMIZER_OPN_RMS_NORM_BACKWARD
-        if len(values) != (4 if backward else 3):
+        # the arguments and the admitted `device` item (lane vdf-linalg; read by the router)
+        if len(values) != (5 if backward else 4):
             raise Error("TypeError: invalid RMS-normalization argument envelope")
         var entry = py_item(entries, where)
         var nk = optimizer_keys()
@@ -38,6 +40,13 @@ def training_rms_operation(operation: Int, where: PythonObject, values: PythonOb
         var x = values[1] if backward else values[0]
         var weight = values[2] if backward else values[1]
         var gradient = values[0] if backward else PythonObject(None)
+        # lane vdf-linalg2: TrainDeviceArray inputs run the device entry in
+        # place (bindings/training_layers_device_unpack.mojo); one class read
+        # and identity compares on the host path
+        var cls = py_item(context, nk[].k_device_class)
+        if py_type(x) is cls or py_type(weight) is cls or (backward and py_type(gradient) is cls):
+            var eps_device = training_scalar_float(values[3] if backward else values[2], where, context)
+            return rms_norm_device(backward, where, x, weight, gradient, eps_device, entries, context)
         var xv = TensorView()
         var wv = TensorView()
         var gv = TensorView()

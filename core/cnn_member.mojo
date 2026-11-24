@@ -34,9 +34,15 @@ VIEWS: X dense row-major host float32, rows x C*H*W (each row one image,
 C-order); `x.steps` 0, 1 or C (rows x C x H*W reads the same bytes).
 y host int32 class codes 0 .. classes-1 (rows x 1), `call.classes` >= 1 at
 fit. Predict writes int32 codes (rows x 1); predict_proba float32
-rows x classes. No sample weights; a device-home view, a row or column
-index and a nonzero `fit_output` are refused in words. X and y are borrowed
-for the call: nothing is copied.
+rows x classes. No sample weights; a device-home view, a column index and a
+nonzero `fit_output` are refused in words. X and y are borrowed for the
+call: nothing is copied. ROW INDEX and SCOPE (lane vdf-scope-neural2, as the
+MLP member; answered only on a route holding the GPU image's member store,
+core/seq_member_rows.mojo): `call.row_index` names rows of the WHOLE X and
+y; with the caller's scope and pin the whole X stays resident in the scope's
+"x_sequence" cache, the fold is taken on the device and CNN_FIT / CNN_PREDICT
+read it in place; without a pin the fold is gathered on the host. The fold's
+class codes are taken in host row tasks.
 
 FITTED-STATE BLOCKS, in index order:
   0 `MEMBER_BLOCK_SCALARS` float64 [classes, features, blocks, arrays];
@@ -82,6 +88,8 @@ from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from sequence.neural_model_dispatch import CNN_FIT, CNN_PREDICT, CNN_OPEN, SESSION_CLOSE
 from sequence.xseq_neural_run import XseqNeuralEntry, xseq_neural_run_call
+from core.seq_member_rows import seq_rows_route, seq_rows_open, seq_rows_close, seq_rows_count
+from core.member_abi import MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE
 from x_cnn.classifier_run import (
     CnnClfPlan, CnnClfFitSettings, CnnClfLayout, cnnclf_run_layout, cnnclf_run_init, cnnclf_run_check_input_dim,
     cnnclf_run_check_channels, cnnclf_run_check_setting, cnnclf_run_check_nesterov, cnnclf_run_features,
@@ -233,11 +241,6 @@ def _dense(view: MemberMatrix, dtype: Int, what: String) raises:
         raise Error("TypeError: a CNNClassifier member reads " + what + " as a dense host " + kind + " view")
 
 
-def _whole(call: _CallP) raises:
-    if call[].row_index.rows > 0 or call[].column_index.rows > 0:
-        raise Error("TypeError: a CNNClassifier member reads whole host views (no row or column index)")
-
-
 def _word_int(w: _F64P, lo: Int) -> Int:
     # Two 32-bit words back to the 64-bit integer (two's complement kept).
     return Int(UInt64(Int(w[lo])) | (UInt64(Int(w[lo + 1])) << 32))
@@ -295,17 +298,16 @@ def _close_session(slot: _SlotP) raises:
 
 def _fit(slot: _SlotP, call: _CallP) raises:
     var route = call[].route
-    _whole(call)
     if call[].fit_output != 0:
         member_unsupported(_NAME, call[].fit_output)
     if call[].weights.rows > 0:
         raise Error("TypeError: a CNNClassifier member fits without sample weights")
     _images(slot, call[].x)
-    var n = call[].x.rows
+    var n = seq_rows_count(call)
     _dense(call[].y, MEMBER_I32, "y (class codes)")
     if call[].y.cols != 1:
         raise Error("NotImplementedError: multilabel targets are not implemented")
-    if call[].y.rows != n:
+    if call[].y.rows != call[].x.rows:
         raise Error("ValueError: X and y must contain the same number of rows")
     var k = call[].classes
     if k < 1:
@@ -339,10 +341,18 @@ def _fit(slot: _SlotP, call: _CallP) raises:
             seed = UInt64(Int(w[21])) | (UInt64(Int(w[22])) << 32)
         var settings = CnnClfFitSettings(batch, max_iter, w[8] != 0.0, seed, Int(w[9]), w[10] != 0.0,
             w[11], w[12], w[13], w[14], w[15], w[16], w[17])
-        var addresses = cnnclf_run_fit_addresses(call[].x.data, call[].y.data, Int(slot[].curve.unsafe_ptr()),
-            Int(slot[].losses.unsafe_ptr()), params)
-        _ = xseq_neural_run_call(entry, CNN_FIT, addresses, cnnclf_run_fit_ints(_plan(slot, n), settings),
-            cnnclf_run_fit_floats(settings))
+        # THE RESIDENT ROUTE (core/seq_member_rows.mojo): X in the scope's
+        # store and the fold taken on the device (read in place by CNN_FIT),
+        # or the fold gathered on the host; the fold's codes in host row tasks.
+        var held = seq_rows_open(call, 1, _NAME)
+        try:
+            var addresses = cnnclf_run_fit_addresses(held.x, held.y, Int(slot[].curve.unsafe_ptr()),
+                Int(slot[].losses.unsafe_ptr()), params)
+            _ = xseq_neural_run_call(entry, CNN_FIT, addresses, cnnclf_run_fit_ints(_plan(slot, n), settings),
+                cnnclf_run_fit_floats(settings))
+        finally:
+            seq_rows_close(call, held)
+        _ = held^  # the gathered words live past the run
     else:
         slot[].curve = List[Float32]()
         slot[].losses = List[Float32]()
@@ -355,7 +365,8 @@ def _predict_into(slot: _SlotP, call: _CallP, codes: Bool) raises:
     """One CNN_PREDICT on the slot's resident session (opened first)."""
     if not slot[].fitted:
         raise Error("NotFittedError: this CNNClassifier member is not fitted yet")
-    _whole(call)
+    if call[].column_index.rows > 0:
+        raise Error("TypeError: a CNNClassifier member reads every column of X (no column index)")
     if call[].x.rows == 0:
         # The door returns the empty result before any session (lane
         # fx-audit 17): no open, no CNN_PREDICT, nothing written.
@@ -363,7 +374,7 @@ def _predict_into(slot: _SlotP, call: _CallP, codes: Bool) raises:
             raise Error("ValueError: images do not match the model input_shape")
         return
     _images(slot, call[].x)
-    var n = call[].x.rows
+    var n = seq_rows_count(call)
     if codes:
         _dense(call[].dst, MEMBER_I32, "the class-code buffer")
         if call[].dst.rows != n or call[].dst.cols != 1:
@@ -385,9 +396,18 @@ def _predict_into(slot: _SlotP, call: _CallP, codes: Bool) raises:
         slot[].session_entry = route.entry
     cnnclf_run_check_session(slot[].sid, 2)
     var entry = XseqNeuralEntry(slot[].session_entry.call, slot[].session_entry.word)
-    var addresses: List[Int] = [call[].x.data, call[].dst.data]
-    _ = xseq_neural_run_call(entry, CNN_PREDICT, addresses,
-        cnnclf_run_predict_ints(slot[].scope0, slot[].scope1, slot[].sid, n, codes), List[Float64]())
+    # THE RESIDENT ROUTE: a store slot X carries its row width as the
+    # descriptor's seventh word (sequence/cnn_classifier_program.mojo).
+    var held = seq_rows_open(call, 0, _NAME)
+    try:
+        var addresses: List[Int] = [held.x, call[].dst.data]
+        var ints = cnnclf_run_predict_ints(slot[].scope0, slot[].scope1, slot[].sid, n, codes)
+        if held.x < 0:
+            ints.append(_features(slot))
+        _ = xseq_neural_run_call(entry, CNN_PREDICT, addresses, ints, List[Float64]())
+    finally:
+        seq_rows_close(call, held)
+    _ = held^  # the gathered words live past the run
 
 
 def _export(slot: _SlotP, call: _CallP) raises:
@@ -526,7 +546,10 @@ def _cnn_member(operation: Int, address: Int) raises -> Int:
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state != 0:
             _ = _lookup(call[].state, False)
-        return _capabilities()
+        # THE RESIDENT ROUTE (core/seq_member_rows.mojo): a route holding the
+        # image's member store reads a fold's rows of the whole X.
+        var rows_bits = (MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE) if seq_rows_route(call[].route) else 0
+        return _capabilities() | rows_bits
     if operation == MEMBER_OP_NEW:
         _new(call)
         return 0

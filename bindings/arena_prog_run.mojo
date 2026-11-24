@@ -85,13 +85,77 @@ def _pad(var words: List[Int32], fill: List[Int32]) -> List[Int32]:
 # store owned by the result (was a Python `array.array`).
 
 
-@fieldwise_init
+# TOMBSTONE: METRIC_INPUT_TEMP (the -2 slot word a door wrote into a per-call List for a never-kept
+# temporary; lane vdf-xm-wire) deleted 2026-11-24 by lane vdf-xm-wire2: replaced by the no-heap
+# temporaries mask (bindings/metrics_program_door.mojo `MetricDoorProg.temps`, read by
+# bindings/arena_prog_native_door.mojo `metrics_run_plan_slots`); code recoverable at 82e076645c.
+
+#: Buffer inputs a temporaries mask can name (`metric_input_temp`): bit i of the
+#: UInt64 is input i. An input past it is a host input the run may keep resident, as before.
+comptime METRIC_TEMP_BITS = 64
+
+
+@always_inline
+def metric_input_temp(temps: UInt64, i: Int) -> Bool:
+    """Whether buffer input `i` is a door's per-call temporary (encoded codes,
+    a mapped or converted copy, admitted weights): the runner copies it like
+    any host input and NEVER keeps it resident in a `resident()` scope (a
+    fresh temporary at the scope floor was put every call and pinned until
+    the block ended; lanes vdf-xm-wire and vdf-xm-wire2)."""
+    return i < METRIC_TEMP_BITS and ((temps >> UInt64(i)) & 1) != 0
+
+
+#: Buffer inputs a sources word can name (`metric_input_source`): 4 bits per
+#: input, so inputs 0..15, each naming argument 0..14 of the door's call.
+comptime METRIC_SOURCE_INPUTS = 16
+
+
+@always_inline
+def metric_source_word(input: Int, argument: Int) -> UInt64:
+    """The sources-word bits saying buffer input `input` was admitted from
+    the door call's argument `argument` (0 when either is past the word:
+    the input stays unmarked)."""
+    if input < 0 or input >= METRIC_SOURCE_INPUTS or argument < 0 or argument > 14:
+        return 0
+    return UInt64(argument + 1) << UInt64(4 * input)
+
+
+@always_inline
+def metric_input_source(src: UInt64, i: Int) -> Int:
+    """The door call's argument buffer input `i` was admitted from, or -1
+    (unmarked: a buffer the door holds as the caller's own, as before). An
+    admitted input that does not read that argument's buffer (a converted
+    copy) is a per-call temporary: never kept resident (lane vdf-xm-wire2).
+    The address compare runs only inside a `resident()` scope at the floor."""
+    if i >= METRIC_SOURCE_INPUTS:
+        return -1
+    return Int((src >> UInt64(4 * i)) & 15) - 1
+
+
 struct MetricProgramInput(ImplicitlyCopyable, Movable):
     """One admitted input of a metric program: its arena offset, the address
-    of its words (the door keeps the owner alive) and its word count."""
+    of its words (the door keeps the owner alive) and its word count; or,
+    with `slot` >= 0, a slot of the one resident store (the x_prep image's,
+    x_prep/store_slot.mojo; put with `XP_DEV_PUT`, gathered with
+    `XP_DEV_TAKE_ROWS`) whose first `words` words the range route copies device to device
+    (core/arena_io.mojo `upload_ranges`; lane vdf-xm-transport,
+    2026-11-24). A slot input has no host address."""
     var offset: Int
     var address: Int
     var words: Int
+    var slot: Int
+
+    def __init__(out self, offset: Int, address: Int, words: Int):
+        self.offset = offset
+        self.address = address
+        self.words = words
+        self.slot = -1
+
+    def __init__(out self, offset: Int, address: Int, words: Int, slot: Int):
+        self.offset = offset
+        self.address = address
+        self.words = words
+        self.slot = slot
 
 
 struct MetricArenaOwner(Copyable, Movable):
@@ -145,13 +209,23 @@ def metrics_plan_execute(entry: NativeDescriptorCall, plan: MetricProgramPlan, i
     """RUN: copy the inputs into a fresh arena and run the plan's stages.
     `ranges_on`: MOJOLEARN_ARENA_RANGES and the image has the range route
     (device images; MP_CAPABILITIES is read here as well); `output_ranges`:
-    the image has the output-range route. No Python object is read."""
+    the image has the output-range route. An input with a store `slot` is
+    not copied: its range names the slot, and the range route copies it
+    device to device (it never reaches the host arena). No Python object is
+    read."""
+    var ranges = ranges_on and (native_descriptor_call(entry, MP_CAPABILITIES, [], [], []) & MP_HAS_RANGES) != 0
     var arena = MetricArenaOwner(plan.size)
     var base = arena.base()
     var ins = List[Int32]()
     for k in range(len(inputs)):  # driver-loop: over the program's input buffers
         var record = inputs[k]
         if record.words == 0:
+            continue
+        if record.slot >= 0:
+            # a resident input: only the range route reads a store slot
+            if not ranges:
+                raise Error("RuntimeError: x_metrics: a device-resident input needs the image's range route")
+            _add_input(ins, record.offset, record.offset + record.words, record.slot)
             continue
         unsafe_memcpy(dest=_RUN_F32P(unsafe_from_address=base + 4 * record.offset),
                       src=_RUN_F32P(unsafe_from_address=record.address), count=record.words)
@@ -161,7 +235,6 @@ def metrics_plan_execute(entry: NativeDescriptorCall, plan: MetricProgramPlan, i
     var nst = len(plan.stages) // _STAGE_WORDS
     var pa = Int(plan.stages.unsafe_ptr())
     var size = plan.size
-    var ranges = ranges_on and (native_descriptor_call(entry, MP_CAPABILITIES, [], [], []) & MP_HAS_RANGES) != 0
     if ranges:
         # the shared ranges runner (core/arena_io.mojo): only the inputs go
         # up, only the outputs come back
@@ -186,17 +259,35 @@ def metrics_plan_execute(entry: NativeDescriptorCall, plan: MetricProgramPlan, i
     return arena^
 
 
-@fieldwise_init
 struct MetricRoute(ImplicitlyCopyable, Movable):
     """The x_metrics program runner one operation calls, resolved once by its
     UNPACK (bindings/metrics_program_door.mojo `metric_route_open`): the
     image's program entry and its two range switches (lane bm-meta-3,
     2026-11-23). Typed: a RUN holds it with no Python owner; the pin that
-    keeps the entry's connection alive stays with the UNPACK."""
+    keeps the entry's connection alive stays with the UNPACK.
+
+    `store` (lane vdf-xm-transport, 2026-11-24): the range route is on AND
+    the image has a resident input store (`MP_HAS_STORE`), so a program
+    input may be a store slot (`metric_slots_run`). False for the host
+    column, a CPU-only install, `MOJOLEARN_ARENA_RANGES=0` and every route
+    built with the three-word form."""
 
     var program: NativeDescriptorCall
     var ranges: Bool
     var output_ranges: Bool
+    var store: Bool
+
+    def __init__(out self, program: NativeDescriptorCall, ranges: Bool, output_ranges: Bool):
+        self.program = program
+        self.ranges = ranges
+        self.output_ranges = output_ranges
+        self.store = False
+
+    def __init__(out self, program: NativeDescriptorCall, ranges: Bool, output_ranges: Bool, store: Bool):
+        self.program = program
+        self.ranges = ranges
+        self.output_ranges = output_ranges
+        self.store = store and ranges
 
 
 def metric_inputs_run(route: MetricRoute, plan: MetricProgramPlan, addresses: List[Int],
@@ -209,9 +300,27 @@ def metric_inputs_run(route: MetricRoute, plan: MetricProgramPlan, addresses: Li
     as its bits; the caller keeps them alive through the call). The input
     records are the program-owned constants and the buffer inputs in input
     order (an empty buffer has no record), then `metrics_plan_execute`. No
-    Python object is read."""
+    Python object is read. Every input is a host buffer (`metric_slots_run`
+    with no slots: an empty List, no allocation)."""
+    return metric_slots_run(route, plan, addresses, sizes, List[Int]())
+
+
+def metric_slots_run(route: MetricRoute, plan: MetricProgramPlan, addresses: List[Int],
+                     sizes: List[Int], slots: List[Int]) raises -> MetricArenaOwner:
+    """`metric_inputs_run` where buffer input i may be DEVICE-RESIDENT (lane
+    vdf-xm-transport, 2026-11-24): `slots[i]` >= 0 names a slot of the one
+    resident store (x_prep/store_slot.mojo) holding at least `sizes[i]` words
+    (put with `XP_DEV_PUT`, gathered with `XP_DEV_TAKE_ROWS`, or found in a
+    `resident()` cache); the range route copies it device to device and its
+    `addresses[i]` is not read. `slots` empty: every input is a host buffer.
+    A slot needs `route.store` (refused otherwise: the host column has no
+    store, and a slot is never downloaded to stand in for it). The caller
+    owns the slots and frees them after the call."""
     if len(addresses) != plan.buffer_inputs() or len(sizes) != len(addresses):
         raise Error("ValueError: x_metrics: the program's inputs do not match its layout")
+    var any_slots = len(slots) > 0
+    if any_slots and len(slots) != len(addresses):
+        raise Error("ValueError: x_metrics: the program's resident inputs do not match its layout")
     var records = List[MetricProgramInput](capacity=len(plan.input_offsets))
     var next_buffer = 0
     for k in range(len(plan.input_offsets)):  # driver-loop: over the program's input records
@@ -224,7 +333,10 @@ def metric_inputs_run(route: MetricRoute, plan: MetricProgramPlan, addresses: Li
         next_buffer += 1
         if sizes[at] == 0:
             continue
-        records.append(MetricProgramInput(plan.input_offsets[k], addresses[at], sizes[at]))
+        var slot = slots[at] if any_slots else -1
+        if slot >= 0 and not route.store:
+            raise Error("RuntimeError: x_metrics: a device-resident input needs an image with a resident store")
+        records.append(MetricProgramInput(plan.input_offsets[k], addresses[at], sizes[at], slot))
     var arena = metrics_plan_execute(route.program, plan, records, route.ranges, route.output_ranges)
     _ = records^
     return arena^

@@ -143,9 +143,23 @@ def pls_fit_run(mut kit: DKit, x: Int, ym: Int, words: PlsFitWords, transform: B
     # The component loop (NIPALS or the SVD pair, the flips, the deflations)
     # is ONE call writing six host blocks: a = [x, y, the six blocks, the
     # int32 iteration counts, the int64 word nits comes back in].
+    # On a resident image (lane vdf-scope-pls) the centred X and Y the kit
+    # computed on the device go in as pool ids (int words 9 / 10), read in
+    # place: they no longer come down to the host and go up again (the same
+    # words, so the same bits). A host image takes their host words.
     var sizes = [p, q, n, n, p, q]
     var outs = List[Int]()
-    var addresses: List[Int] = [kit.at(xs[0]), kit.at(ys[0])]
+    var x_dev = -1
+    var y_dev = -1
+    var addresses = List[Int]()
+    if kit.resident and kit.keyed and n * p > 0 and n * q > 0:
+        x_dev = kit.device(xs[0])
+        y_dev = kit.device(ys[0])
+        addresses.append(0)
+        addresses.append(0)
+    else:
+        addresses.append(kit.at(xs[0]))
+        addresses.append(kit.at(ys[0]))
     for k in range(6):  # driver-loop: over the six fitted blocks
         var block = kit.zeros(sizes[k], nc)
         outs.append(block)
@@ -155,7 +169,7 @@ def pls_fit_run(mut kit: DKit, x: Int, ym: Int, words: PlsFitWords, transform: B
     addresses.append(Int(its.unsafe_ptr()))
     addresses.append(Int(written.unsafe_ptr()))
     var params: List[Int] = [n, p, q, nc, words.max_iter, 1 if words.mode_b else 0, Int(words.canonical),
-                             Int(words.canonical), Int(words.svd_algo)]
+                             Int(words.canonical), Int(words.svd_algo), x_dev, y_dev]
     var tol: List[Float64] = [words.tol]
     var done = kit.xd(XD_PLS_FIT, addresses, params, tol)
     var nits = written[0]

@@ -94,6 +94,37 @@ def upload_forest_x(
     return dx^
 
 
+def forest_x_from_device_rows(
+    ctx: DeviceContext,
+    mut raw: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+) raises -> DeviceBuffer[DType.float32]:
+    """The column-major `n_rows x n_cols` device plane of a ROW-major device
+    block (lane vdf-scope-trees: the rows a device store took for
+    XF_FIT_ROWS). The same `transpose_kernel` launch `upload_forest_x` runs
+    on its raw upload, so the plane's bytes equal that path's on the same
+    rows. Synchronous."""
+    var n = n_rows * n_cols
+    var dx = ctx.enqueue_create_buffer[DType.float32](max(1, n))
+    if n <= 0:
+        return dx^
+    ctx.enqueue_function[transpose_kernel](
+        dx.unsafe_ptr(),
+        raw.unsafe_ptr(),
+        Int32(n_rows),
+        Int32(n_cols),
+        grid_dim=(
+            ceildiv(n_cols, TRANSPOSE_TILE),
+            min(ceildiv(n_rows, TRANSPOSE_TILE), CUDA_MAX_GRID_YZ),
+            1,
+        ),
+        block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
+    )
+    ctx.synchronize()
+    return dx^
+
+
 def device_has_nan_f32(
     ctx: DeviceContext, x: DeviceBuffer[DType.float32], n: Int
 ) raises -> Bool:

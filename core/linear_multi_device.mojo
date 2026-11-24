@@ -14,16 +14,19 @@ from checks.vendor import COMPILED_VENDOR
 from core.hostptr import f32_ptr, f64_ptr
 from core.linear_entry_table import LinearEntryKey
 from core.linear_entry_table_multi import (
-    RIDGE_MULTI_ABI, RM_OP_COUNT, RM_COL_SUMS, RM_MEANS_FINISH, RM_CENTER, RM_FIT, RM_PREDICT,
-    ridge_multi_table_publish, ridge_multi_check_spans,
+    RIDGE_MULTI_ABI, RM_OP_COUNT, RM_COL_SUMS, RM_MEANS_FINISH, RM_CENTER, RM_FIT, RM_PREDICT, RM_FIT_SLOT,
+    RM_PREDICT_SLOT, ridge_multi_table_publish, ridge_multi_check_spans,
 )
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.neural_context import process_ctx
 from core.shared_slot import SharedSlot
-from glm.impl.center_device import col_sums_device, center_device
+from glm.impl.center_device import col_sums_device, center_device, col_sums_buf, center_buf
 from glm.impl.lm_finish import lm_means_finish
-from glm.impl.ridge_multi import MULTIOUT_RIDGE, ridge_fit_multi_host, ridge_predict_multi_host
+from glm.impl.ridge_multi import (
+    MULTIOUT_RIDGE, ridge_fit_multi_host, ridge_predict_multi_host, ridge_fit_multi_buf, ridge_predict_multi_buf,
+)
+from core.estimators_store import estimators_store_buffer
 
 #: The estimators binding's process-lifetime DeviceContext slot
 #: (`bindings/_mojolearn_estimators.mojo::_DEVCTX_SLOT`): the same name, so
@@ -86,6 +89,63 @@ def ridge_predict_multi_run(x: Int, coef: Int, icpt: Int, dst: Int, nr: Int, nf:
     ctx.synchronize()
 
 
+def ridge_fit_multi_slot_run(y: Int, coef: Int, ymean: Int, sums: Int, means64: Int, xmean: Int, icpt: Int,
+                             slot: Int, nr: Int, nf: Int, nt: Int, intercept: Bool, alpha: Float32) raises:
+    """THE FOLD FROM THE STORE (lane vdf-meta5): `ridge_multi_fit_run`'s
+    four programs (bindings/trees_meta_ridge_run.mojo) over the image's
+    resident store slot `slot` (nr x nf: a model-selection fold taken on the
+    device), nothing uploaded but Y and the means. With `intercept`: the
+    exact column sums (`col_sums_buf`, the kernels of `col_sums_device`),
+    downloaded once into `sums` and finished on the host as RM_MEANS_FINISH
+    finishes them (`lm_means_finish`, binary64 then float32 `xmean`), the
+    centering (`center_buf`, `center_device`'s kernel) into a device work
+    buffer, then the solve (`ridge_fit_multi_buf`, `ridge_fit_multi_host`'s
+    body) with the intercepts. The same kernels over the same rows in the
+    same order as the host route over the gathered fold: no bits change."""
+    var ctx = process_ctx[ESTIMATORS_DEVCTX_SLOT]()
+    var cells = nr * nf
+    var held = estimators_store_buffer(slot, cells)
+    var x = held.create_sub_buffer[DType.float32](0, cells)
+    var yp = f32_ptr(y)
+    var wp = f32_ptr(coef)
+    var mp = f32_ptr(ymean)
+    if intercept:
+        var d_o = ctx.enqueue_create_buffer[DType.uint64](nf)
+        col_sums_buf(ctx, x, d_o, nr, nf)
+        ctx.enqueue_copy(dst_ptr=MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=sums), src_buf=d_o)
+        ctx.synchronize()
+        lm_means_finish(f64_ptr(sums), f64_ptr(means64), f32_ptr(xmean), nf, nr, False, 0.0)
+        var d_m = ctx.enqueue_create_buffer[DType.float32](nf)
+        ctx.enqueue_copy(dst_buf=d_m, src_ptr=f32_ptr(xmean))
+        var work = ctx.enqueue_create_buffer[DType.float32](cells)
+        center_buf(ctx, x, d_m, work, nr, nf)
+        ridge_fit_multi_buf(ctx, work, yp, wp, mp, nr, nf, nt, alpha, True, nt > 0 and nf > 0, f32_ptr(xmean),
+                            f32_ptr(icpt))
+        ctx.synchronize()
+        _ = d_o^
+        _ = d_m^
+        _ = work^
+    else:
+        ridge_fit_multi_buf(ctx, x, yp, wp, mp, nr, nf, nt, alpha, False, False, wp, wp)
+        ctx.synchronize()
+    _ = x^
+    _ = held^  # the slot's device words are read through the programs above
+
+
+def ridge_predict_multi_slot_run(coef: Int, icpt: Int, dst: Int, slot: Int, nr: Int, nf: Int, nt: Int) raises:
+    """THE FOLD FROM THE STORE (lane vdf-meta5): `ridge_predict_multi_run`
+    over the image's resident store slot `slot` (nr x nf): the same kernel
+    over the same rows, X not uploaded."""
+    var ctx = process_ctx[ESTIMATORS_DEVCTX_SLOT]()
+    var cells = nr * nf
+    var held = estimators_store_buffer(slot, cells)
+    var x = held.create_sub_buffer[DType.float32](0, cells)
+    ridge_predict_multi_buf(ctx, x, f32_ptr(coef), f32_ptr(icpt), f32_ptr(dst), nr, nf, nt)
+    ctx.synchronize()
+    _ = x^
+    _ = held^  # the slot's device words are read through the kernel above
+
+
 def _w(span: Int, index: Int) -> Int:
     return MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=span)[index]
 
@@ -111,6 +171,13 @@ def ridge_multi_dispatch(op: Int, aa: Int, pp: Int, ff: Int) raises:
         return
     if op == RM_PREDICT:
         ridge_predict_multi_run(_w(aa, 0), _w(aa, 1), _w(aa, 2), _w(aa, 3), _w(pp, 0), _w(pp, 1), _w(pp, 2))
+        return
+    if op == RM_FIT_SLOT:
+        ridge_fit_multi_slot_run(_w(aa, 0), _w(aa, 1), _w(aa, 2), _w(aa, 3), _w(aa, 4), _w(aa, 5), _w(aa, 6),
+                                 _w(pp, 0), _w(pp, 1), _w(pp, 2), _w(pp, 3), _w(pp, 4) != 0, Float32(_f(ff, 0)))
+        return
+    if op == RM_PREDICT_SLOT:
+        ridge_predict_multi_slot_run(_w(aa, 0), _w(aa, 1), _w(aa, 2), _w(pp, 0), _w(pp, 1), _w(pp, 2), _w(pp, 3))
         return
     raise Error("ridge multi: unknown operation " + String(op))
 

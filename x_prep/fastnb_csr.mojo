@@ -40,7 +40,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from x_prep.common import FP, IP
 from x_prep.prims import add, mul
-from x_prep.device import x_prep_ctx
+from x_prep.store_slot import x_prep_ctx
 
 #: FAST and Apple (default since the M3 A/B, multinomial-nb text 186.9 -> 35.4 ms,
 #: same accuracy / logloss).

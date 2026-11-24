@@ -22,6 +22,11 @@ Request layouts (a: addresses, p: Int words, f: Float64 words):
   RM_FIT          a [x, y, coef, ymean, xmean, icpt] p [n, d, m, center_y, want_icpt] f [alpha]
                   (xmean and icpt are 0 unless want_icpt)
   RM_PREDICT      a [x, coef, icpt, out]            p [n, d, m]                 f []
+  RM_FIT_SLOT     a [y, coef, ymean, sums, means64, xmean, icpt] p [slot, n, d, m, intercept] f [alpha]
+                  (lane vdf-meta5: X is the image's resident store slot `slot`, n x d, a model-selection
+                  fold taken on the device; with `intercept` the column sums, means, centering and the
+                  intercepts as RM_COL_SUMS / RM_MEANS_FINISH / RM_CENTER / RM_FIT make them)
+  RM_PREDICT_SLOT a [coef, icpt, out]               p [slot, n, d, m]           f []
 Every operation returns 0; a refusal is the former Python export's words.
 Publication and lookup are small metadata operations with no independent
 numerical work to split.
@@ -36,7 +41,9 @@ comptime RM_MEANS_FINISH = 1
 comptime RM_CENTER = 2
 comptime RM_FIT = 3
 comptime RM_PREDICT = 4
-comptime RM_OP_COUNT = 5
+comptime RM_FIT_SLOT = 5
+comptime RM_PREDICT_SLOT = 6
+comptime RM_OP_COUNT = 7
 
 
 def _ridge_multi_key_check(key: LinearEntryKey) raises:
@@ -138,5 +145,12 @@ def ridge_multi_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     elif operation == RM_PREDICT:
         want_a = 4
         want_p = 3
+    elif operation == RM_FIT_SLOT:
+        want_a = 7
+        want_p = 5
+        want_f = 1
+    elif operation == RM_PREDICT_SLOT:
+        want_a = 3
+        want_p = 4
     if na != want_a or np != want_p or nf != want_f:
         raise Error("ridge multi: request spans do not match operation " + String(operation))

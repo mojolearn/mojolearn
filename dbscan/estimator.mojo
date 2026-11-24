@@ -105,7 +105,7 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
   `weight_addr` argument).
 """
 
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 
 from dbscan.impl.dbscan import dbscan_fit_impl_weighted
 from std.sys import is_defined
@@ -273,6 +273,68 @@ def dbscan_fit(
     Raises rather than clamping on a shape the kernels cannot serve, because
     a clamp returns a wrong answer quietly.
     """
+    _dbscan_fit_checks(n_samples, n_features, eps, min_samples, eps_nn_method, metric)
+    var x = ctx.enqueue_create_buffer[DType.float32](n_samples * n_features)
+    ctx.synchronize()
+
+    # DEVIATION 5113: cosine runs on unit rows scaled on the host by the
+    # code the CPU binding runs too (`core/cosine_rows.mojo`).
+    var unit = List[Float32]()
+    var cosine_on_device = False
+    comptime if IDN_DBSCAN_COSINE_DEVICE:
+        cosine_on_device = True
+    if metric == DBSCAN_METRIC_COSINE and cosine_on_device:
+        ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+        _dbscan_cosine_unit_device(ctx, x, n_samples, n_features)
+    elif metric == DBSCAN_METRIC_COSINE:
+        unit = _cosine_unit_rows_host(x_ptr, n_samples, n_features)
+        ctx.enqueue_copy(dst_buf=x, src_ptr=unit.unsafe_ptr())
+    else:
+        ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    ctx.synchronize()
+    _ = unit^
+    return _dbscan_fit_rows(ctx, x, n_samples, n_features, eps, min_samples, out_labels_ptr,
+        max_mbytes_per_batch, max_iterations, eps_nn_method, metric, sample_weight_addr, out_core_addr)
+
+
+def dbscan_fit_resident(
+    ctx: DeviceContext,
+    mut rows: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    eps: Float64,
+    min_samples: Int,
+    out_labels_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    max_mbytes_per_batch: Int = 0,
+    max_iterations: Int = 0,
+    eps_nn_method: Int = EPS_NN_RBC,
+    metric: Int = DBSCAN_METRIC_L2,
+    sample_weight_addr: Int = 0,
+    out_core_addr: Int = 0,
+) raises -> Int:
+    """`dbscan_fit` over rows already on the device (lane vdf-scope-cluster4, 2026-11-24): `rows` is a slot of
+    the estimators image's resident store (core/estimators_store.mojo, a model-selection fold taken on the
+    device), made on `ctx`. The slot is never written: metric='cosine' scales a device-to-device copy to unit
+    rows with `cosine_unit_rows_kernel` (every mode: there is no host copy of the fold to scale), every other
+    metric reads the slot itself. The same kernels on the same words as `dbscan_fit`, so the same labels and
+    core mask (IDENTICAL: the device scaling is the host column's statement for statement)."""
+    _dbscan_fit_checks(n_samples, n_features, eps, min_samples, eps_nn_method, metric)
+    if len(rows) < n_samples * n_features:
+        raise Error("dbscan_fit_resident: the resident slot holds fewer than n_samples * n_features words")
+    if metric == DBSCAN_METRIC_COSINE:
+        var unit = ctx.enqueue_create_buffer[DType.float32](n_samples * n_features)
+        ctx.enqueue_copy(dst_buf=unit, src_buf=rows.create_sub_buffer[DType.float32](0, n_samples * n_features))
+        _dbscan_cosine_unit_device(ctx, unit, n_samples, n_features)
+        var passes = _dbscan_fit_rows(ctx, unit, n_samples, n_features, eps, min_samples, out_labels_ptr,
+            max_mbytes_per_batch, max_iterations, eps_nn_method, metric, sample_weight_addr, out_core_addr)
+        _ = unit^
+        return passes
+    return _dbscan_fit_rows(ctx, rows, n_samples, n_features, eps, min_samples, out_labels_ptr,
+        max_mbytes_per_batch, max_iterations, eps_nn_method, metric, sample_weight_addr, out_core_addr)
+
+
+def _dbscan_fit_checks(n_samples: Int, n_features: Int, eps: Float64, min_samples: Int, eps_nn_method: Int,
+                       metric: Int) raises:
     if n_samples < 1 or n_features < 1:
         raise Error(
             "dbscan_fit needs n_samples and n_features >= 1: got "
@@ -304,12 +366,64 @@ def dbscan_fit(
             " matrix, got " + String(n_samples) + " x " + String(n_features)
         )
 
+
+
+def _dbscan_cosine_unit_device(ctx: DeviceContext, mut x: DeviceBuffer[DType.float32], n_samples: Int,
+                               n_features: Int) raises:
+    """`cosine_unit_rows_kernel` over the device rows `x` in place, with `cosine_unit_rows`' refusal of the
+    lowest row without a positive finite norm (one Int32 cell read back)."""
+    var d_bad = ctx.enqueue_create_buffer[DType.int32](1)
+    var h_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
+    h_bad.unsafe_ptr().unsafe_store(0, COSINE_NO_BAD_ROW)
+    ctx.enqueue_copy(dst_buf=d_bad, src_ptr=h_bad.unsafe_ptr())
+    ctx.enqueue_function[cosine_unit_rows_kernel](
+        x.unsafe_ptr(),
+        d_bad.unsafe_ptr(),
+        Int32(n_samples),
+        Int32(n_features),
+        grid_dim=((n_samples + COSINE_TPB - 1) // COSINE_TPB, 1, 1),
+        block_dim=(COSINE_TPB, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=h_bad.unsafe_ptr(), src_buf=d_bad)
+    ctx.synchronize()
+    var bad_row = h_bad.unsafe_ptr().unsafe_load(0)
+    _ = d_bad^
+    _ = h_bad^
+    if bad_row != COSINE_NO_BAD_ROW:
+        # `cosine_unit_rows`' refusal, by name. The squared norm it
+        # also prints stays on the device; the row is the lowest
+        # refused row, the one the host function names.
+        raise Error(
+            "dbscan_fit: metric='cosine' needs every row to have a"
+            " positive, finite norm; row " + String(Int(bad_row))
+            + " does not. The cosine distance of a zero row is"
+            " undefined (cuML divides by zero and carries NaN), so it is"
+            " refused by name"
+        )
+
+
+def _dbscan_fit_rows(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    eps: Float64,
+    min_samples: Int,
+    out_labels_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    max_mbytes_per_batch: Int,
+    max_iterations: Int,
+    eps_nn_method: Int,
+    metric: Int,
+    sample_weight_addr: Int,
+    out_core_addr: Int,
+) raises -> Int:
+    """The fit over device rows `x` (already unit rows for cosine): the weights' upload, the clustering and the
+    labels' download. Shared by `dbscan_fit` and `dbscan_fit_resident`."""
     # DEVIATION 519: the fixed point, bounded by the path length.
     var cap = max_iterations
     if cap <= 0:
         cap = n_samples + 1
 
-    var x = ctx.enqueue_create_buffer[DType.float32](n_samples * n_features)
     var labels = ctx.enqueue_create_buffer[DType.int32](n_samples)
     # `sample_weight_addr == 0` IS THEIR `sample_weight == nullptr`. Mojo
     # has no null `DeviceBuffer`, so the address arrives as an Int, the
@@ -322,47 +436,6 @@ def dbscan_fit(
     )
     ctx.synchronize()
 
-    # DEVIATION 5113: cosine runs on unit rows scaled on the host by the
-    # code the CPU binding runs too (`core/cosine_rows.mojo`).
-    var unit = List[Float32]()
-    var cosine_on_device = False
-    comptime if IDN_DBSCAN_COSINE_DEVICE:
-        cosine_on_device = True
-    if metric == DBSCAN_METRIC_COSINE and cosine_on_device:
-        var d_bad = ctx.enqueue_create_buffer[DType.int32](1)
-        var h_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
-        h_bad.unsafe_ptr().unsafe_store(0, COSINE_NO_BAD_ROW)
-        ctx.enqueue_copy(dst_buf=d_bad, src_ptr=h_bad.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-        ctx.enqueue_function[cosine_unit_rows_kernel](
-            x.unsafe_ptr(),
-            d_bad.unsafe_ptr(),
-            Int32(n_samples),
-            Int32(n_features),
-            grid_dim=((n_samples + COSINE_TPB - 1) // COSINE_TPB, 1, 1),
-            block_dim=(COSINE_TPB, 1, 1),
-        )
-        ctx.enqueue_copy(dst_ptr=h_bad.unsafe_ptr(), src_buf=d_bad)
-        ctx.synchronize()
-        var bad_row = h_bad.unsafe_ptr().unsafe_load(0)
-        _ = d_bad^
-        _ = h_bad^
-        if bad_row != COSINE_NO_BAD_ROW:
-            # `cosine_unit_rows`' refusal, by name. The squared norm it
-            # also prints stays on the device; the row is the lowest
-            # refused row, the one the host function names.
-            raise Error(
-                "dbscan_fit: metric='cosine' needs every row to have a"
-                " positive, finite norm; row " + String(Int(bad_row))
-                + " does not. The cosine distance of a zero row is"
-                " undefined (cuML divides by zero and carries NaN), so it is"
-                " refused by name"
-            )
-    elif metric == DBSCAN_METRIC_COSINE:
-        unit = _cosine_unit_rows_host(x_ptr, n_samples, n_features)
-        ctx.enqueue_copy(dst_buf=x, src_ptr=unit.unsafe_ptr())
-    else:
-        ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     if has_weights:
         ctx.enqueue_copy(
             dst_buf=w,
@@ -371,7 +444,6 @@ def dbscan_fit(
             ),
         )
     ctx.synchronize()
-    _ = unit^
 
     var passes = dbscan_fit_impl_weighted(
         ctx,

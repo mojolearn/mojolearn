@@ -75,7 +75,8 @@ from gaussian_process.estimator import (
     gpr_ydot_part_kernel,
 )
 from gaussian_process.gpc_items import gpc_fold_blocks
-from gaussian_process.gpc_ovr import _gpc_upload_checked
+from gaussian_process.gpc_ovr import _gpc_upload_checked, gp_fold_x_refuse
+from core.fold_x_device import fold_x_fill
 from gaussian_process.unnorm import GP_UNNORM_MEAN, GP_UNNORM_STD
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
@@ -145,7 +146,12 @@ def gpr_fit_ptr_device(
     var ctx = _family_ctx()
     # TOMBSTONE: the synchronising first-non-finite scan of the fit X (_gpc_upload_checked; DEVIATION 1768 text) removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr: the public door admits X once, nested fits included, and refuses a non-finite X in scikit-learn's wording before this entry (providers/python/gp_public_lifecycle_pyapi.mojo); recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
     var dx = ctx.enqueue_create_buffer[DType.float32](n_train * n_features)
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=_GP(unsafe_from_address=x_addr))
+    # THE FOLD X WORD (core/fold_x_device.mojo; lane vdf-scope-gp): host words as before, or a
+    # model-selection fold's rows in a fold store slot (one device copy, the same bytes).
+    fold_x_fill(ctx, dx, x_addr, n_train * n_features)
+    if x_addr < 0:
+        # No door admitted a fold's rows: the member's finite test, on the device.
+        gp_fold_x_refuse(ctx, dx, n_train * n_features, "GaussianProcessRegressor")
     var dy = ctx.enqueue_create_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_buf=dy, src_ptr=_GP(unsafe_from_address=y_addr))
     # y keeps its scan: a nested fit's door does not test y (the public
@@ -293,7 +299,7 @@ def gpr_predict_ptr_device(
     var ctx = _family_ctx()
     var dxs = _gpc_upload_checked(ctx, xs_addr, n_star, n_features, String("X_star"))
     var dx = ctx.enqueue_create_buffer[DType.float32](n_train * n_features)
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=_GP(unsafe_from_address=xt_addr))
+    fold_x_fill(ctx, dx, xt_addr, n_train * n_features)  # THE FOLD X WORD: a fold-fitted X_train_ slot too
     var ddual = ctx.enqueue_create_buffer[DType.float32](n_train)
     ctx.enqueue_copy(dst_buf=ddual, src_ptr=_GP(unsafe_from_address=dual_addr))
     var dl = ctx.enqueue_create_buffer[DType.float32](n_train * n_train if return_std else 1)

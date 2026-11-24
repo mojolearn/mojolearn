@@ -21,6 +21,10 @@ from std.python._cpython import GILReleased
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.native_loaded_module_door import native_loaded_module
+from bindings.classical_validate_unpack import classical_estimator_name
+from bindings.trees_route_boundary_door import trees_explainer_device, trees_explainer_run
+from providers.python.device_route_boundary_door import device_request
+from core.function_device_fitted import function_device_fitted
 from bindings.classical_attributes_door import classical_check_layout
 from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_has, prep_estimator_plan, prep_native_context,
@@ -396,7 +400,7 @@ def _construct(fields: PythonObject, args: PythonObject, permutation: Bool,
     var ev = PythonObject(None)
     var em = _Member()
     try:
-        var s = _State(explained, method, bg, table, mode, seed, nb, d, -1, PythonObject(None))
+        var s = _State(explained, method, bg, table, mode, seed, nb, d, -1, PythonObject(None), context)
         _open(em, s, bg, nb, context)  # raises when nothing serves the model
         k = em.k
         ev = admitted_vector(k, "<f8", context)
@@ -447,9 +451,12 @@ struct _State(Copyable, Movable):
     var d: Int
     var k: Int
     var dev: PythonObject
+    # The context the explainer's values run in: the call's own, or the one
+    # its constructor's `device` named (lane vdf-misc).
+    var run: PythonObject
 
     def __init__(out self, model: PythonObject, method: String, bg: PythonObject, table: PythonObject,
-                 mode: String, seed: Int, nb: Int, d: Int, k: Int, dev: PythonObject):
+                 mode: String, seed: Int, nb: Int, d: Int, k: Int, dev: PythonObject, run: PythonObject):
         self.model = model
         self.method = method
         self.bg = bg
@@ -460,13 +467,22 @@ struct _State(Copyable, Movable):
         self.d = d
         self.k = k
         self.dev = dev
+        self.run = run
 
 
-def _state(fields: PythonObject, name: String, context: PythonObject) raises -> _State:
+def _state(fields: PythonObject, name: String, call_context: PythonObject) raises -> _State:
     var bg = _get(fields, "_bg")
     var method = _get(fields, "_method")
     if bg is None or method is None:
         raise Error("RuntimeError: " + name + " has not been initialized by the native owner")
+    # An explainer constructed with an explicit `device` keeps `_method` as
+    # (method, run context), resolved once at construction (lane vdf-misc);
+    # otherwise it is the method word and the call's context runs (one type
+    # compare on an object already read, no lookup).
+    var context = call_context
+    if py_type(method) is _b().tuple:
+        context = method[1]
+        method = method[0]
     var requested = _get(fields, "numeric_mode")
     var nk = trees_keys()
     var mode = _tree_mode(requested if requested is not None else py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE))
@@ -476,7 +492,7 @@ def _state(fields: PythonObject, name: String, context: PythonObject) raises -> 
     _admit_explained(model, name, context)
     return _State(model, String(method), bg, table, mode, _seed(_get(fields, "random_state"), context),
                   Int(py=bg.shape[0]), Int(py=bg.shape[1]), _int(_get(fields, "n_outputs_"), "output count", True),
-                  _get(fields, "_dev"))
+                  _get(fields, "_dev"), context)
 
 
 def _rows(x_source: PythonObject, s: _State, name: String, context: PythonObject) raises -> PythonObject:
@@ -1296,17 +1312,17 @@ def _kernel_values(fields: PythonObject, args: PythonObject, context: PythonObje
 
 
 def _kernel_with[M: AgnModel](mut model: M, gil_free: Bool, glue: EntryRef, req: AgnRequest, ns: Int, nl: Int,
-                              logit: Bool) raises:
+                              logit: Bool, wb: Int, wb_link: Int) raises:
     """RUN `agn_kernel_values_run` over `model`, the GIL released once around it when every member may run
     without it. A member refusal raises its own words."""
     if gil_free:
         with GILReleased(Python()):
-            agn_kernel_values_run(glue, req, ns, nl, logit, model)
+            agn_kernel_values_run(glue, req, ns, nl, logit, wb, wb_link, model)
     else:
-        agn_kernel_values_run(glue, req, ns, nl, logit, model)
+        agn_kernel_values_run(glue, req, ns, nl, logit, wb, wb_link, model)
 
 
-def _kernel_values_over(fields: PythonObject, args: PythonObject, context: PythonObject,
+def _kernel_values_over(fields: PythonObject, args: PythonObject, var context: PythonObject,
                         mut em: _Member) raises -> PythonObject:
     """UNPACK (settings, rows, the native member or meta-estimator), RUN (xtrees/agnostic_values_run.mojo
     `agn_kernel_values_run`), PACK (the shaped float64 values)."""
@@ -1319,6 +1335,7 @@ def _kernel_values_over(fields: PythonObject, args: PythonObject, context: Pytho
     if not l1_ok:
         raise Error("NotImplementedError: KernelExplainer carries no l1 feature selection; l1_reg must be 'auto', False or 0")
     var s = _state(fields, name, context)
+    context = s.run  # the explainer's run context (lane vdf-misc)
     var link = _get(fields, "link")
     var logit = py_type(link) is b.str and String(link) == "logit"
     var x = _rows(args[0], s, name, context)
@@ -1342,22 +1359,40 @@ def _kernel_values_over(fields: PythonObject, args: PythonObject, context: Pytho
     var nl = trees_address(fnull)
     # The device forest route needs the model once (fx), through the same handle as every other route.
     _forest_words(s.dev, s.bg, req)
-    _open(em, s, x, n, context)
-    if em.meta:
-        # The meta's glue, resolved here with the GIL held; the members' plans stay in `em` through the RUN.
-        var meta = AgnMeta(em.meta_plan, req.x, n, d, em.meta_parallel, req.host, _xr(em.meta_xt))
-        _kernel_with(meta, em.meta_gil_free, glue, req, ns, nl, logit)
-        _ = meta^
-    elif em.native:
-        var handle = _handle_of(em, req.x, n, d, k, req.host, glue)
-        _kernel_with(handle, em.gil_free, glue, req, ns, nl, logit)
-        _ = handle^
+    var wb = 0
+    var wb_link = 0
+    var lin = PythonObject(None)
+    if not req.device_forest():
+        # The resident linear block (lane vdf-explain): KernelExplainer over this library's linear predict on a
+        # GPU build evaluates it on the device per chunk, as PermutationExplainer does (`_linear_block` answers
+        # None on the host column and every other build).
+        lin = _linear_block(s, context)
+        if lin is not None:
+            wb = trees_address(lin[0])
+            wb_link = Int(py=lin[1])
+    if lin is not None:
+        # The model is never called on this route (fx too is the device's linear decision): nothing is opened.
+        var unused = _Unevaluated()
+        _kernel_with(unused, True, glue, req, ns, nl, logit, wb, wb_link)
+        _ = unused^
     else:
-        # A label propagation model (`_open` raised for anything it did not serve): the typed query, released
-        # as the public predict_proba releases it; the request's buffers stay in `em`.
-        var lp = AgnLabelProp(em.lp_drivers[0], em.lp_requests[0], em.lp_name, req.x, n, d)
-        _kernel_with(lp, True, glue, req, ns, nl, logit)
-        _ = lp^
+        _open(em, s, x, n, context)
+        if em.meta:
+            # The meta's glue, resolved here with the GIL held; the members' plans stay in `em` through the RUN.
+            var meta = AgnMeta(em.meta_plan, req.x, n, d, em.meta_parallel, req.host, _xr(em.meta_xt))
+            _kernel_with(meta, em.meta_gil_free, glue, req, ns, nl, logit, wb, wb_link)
+            _ = meta^
+        elif em.native:
+            var handle = _handle_of(em, req.x, n, d, k, req.host, glue)
+            _kernel_with(handle, em.gil_free, glue, req, ns, nl, logit, wb, wb_link)
+            _ = handle^
+        else:
+            # A label propagation model (`_open` raised for anything it did not serve): the typed query, released
+            # as the public predict_proba releases it; the request's buffers stay in `em`.
+            var lp = AgnLabelProp(em.lp_drivers[0], em.lp_requests[0], em.lp_name, req.x, n, d)
+            _kernel_with(lp, True, glue, req, ns, nl, logit, wb, wb_link)
+            _ = lp^
+    _ = lin
     _ = x
     _ = fnull
     _ = s.bg  # the background the RUN read through req.bg
@@ -1423,8 +1458,8 @@ def _linear_block(s: _State, context: PythonObject) raises -> PythonObject:
 
 
 struct _Unevaluated(AgnModel):
-    """The model of a Permutation SHAP route that never evaluates it (the device forest, the resident linear
-    block: both evaluate on the device per chunk). Any call raises."""
+    """The model of a route that never evaluates it (Permutation SHAP's device forest; the resident linear block of
+    Permutation and Kernel SHAP: each evaluates on the device per chunk). Any call raises."""
 
     def __init__(out self):
         pass
@@ -1468,7 +1503,7 @@ def _permutation_with[M: AgnModel](mut model: M, gil_free: Bool, glue: EntryRef,
         agn_permutation_values_run(glue, req, npm, wb, wb_link, model)
 
 
-def _permutation_values_over(fields: PythonObject, args: PythonObject, context: PythonObject,
+def _permutation_values_over(fields: PythonObject, args: PythonObject, var context: PythonObject,
                              mut em: _Member) raises -> PythonObject:
     """UNPACK (settings, rows, the device forest, the resident linear block, the native member or
     meta-estimator), RUN (xtrees/agnostic_values_run.mojo `agn_permutation_values_run`), PACK (the shaped float64
@@ -1476,6 +1511,7 @@ def _permutation_values_over(fields: PythonObject, args: PythonObject, context: 
     var name = String("PermutationExplainer")
     var b = _b()
     var s = _state(fields, name, context)
+    context = s.run  # the explainer's run context (lane vdf-misc)
     var x = _rows(args[0], s, name, context)
     var n = Int(py=x.shape[0])
     var d = s.d
@@ -1538,11 +1574,26 @@ def trees_agnostic_operation(model: PythonObject, operation: Int, opname: String
     table's String, borrowed) is for the unknown-operation text only."""
     classical_check_layout(model, context)
     var fields = _fields(model)
-    if operation == TREES_OPN_TREES_AGNOSTIC_KERNEL_INIT:
-        _construct(fields, args, False, context)
-        return PythonObject(None)
-    if operation == TREES_OPN_TREES_AGNOSTIC_PERMUTATION_INIT:
-        _construct(fields, args, True, context)
+    if operation == TREES_OPN_TREES_AGNOSTIC_KERNEL_INIT or operation == TREES_OPN_TREES_AGNOSTIC_PERMUTATION_INIT:
+        # args[5] is the constructor's `device` (lane vdf-misc), admitted
+        # first; the explained model is evaluated on its own route, so an
+        # explicit word that disagrees with the model's side is refused
+        # (core/function_device_fitted.mojo), and the explainer's own
+        # programs run on the side it names (trees_explainer_run).
+        var permutation = operation == TREES_OPN_TREES_AGNOSTIC_PERMUTATION_INIT
+        var run = context
+        if args[5] is not None:
+            var name = _name(permutation)
+            var device = trees_explainer_device(args[5], name, context)
+            var explained = _explained(args[0], context)
+            function_device_fitted(device, device_request(_fields(explained), native_loaded_module("builtins")),
+                                   name, classical_estimator_name(explained))
+            run = trees_explainer_run(model, fields, args[5], device, args[4], context)
+        _construct(fields, args, permutation, run)
+        if run is not context:
+            # Resolved once here: the values calls read it from the state
+            # they already read (`_state`), never the device again.
+            py_setitem(fields, PythonObject("_method"), Python.tuple(_get(fields, "_method"), run))
         return PythonObject(None)
     if operation == TREES_OPN_TREES_AGNOSTIC_KERNEL_VALUES:
         return _kernel_values(fields, args, context)

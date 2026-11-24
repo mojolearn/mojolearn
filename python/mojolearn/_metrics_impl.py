@@ -184,7 +184,7 @@ def _get_binding(mode):
 # `n == 0` is refused inside the kernel (`count / n` is 0/0 in RAFT and a NaN
 # may not reach a recorded value).
 def accuracy_score(
-    y_true, y_pred, *, normalize=True, sample_weight=None, numeric_mode=None
+    y_true, y_pred, *, normalize=True, sample_weight=None, numeric_mode=None, device=None
 ):
     """Accuracy: the fraction (or number) of positions where two label arrays agree.
 
@@ -209,6 +209,10 @@ def accuracy_score(
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -228,7 +232,7 @@ def accuracy_score(
     0.75
     """
     return _NATIVE(None, _OP.family_mcls_accuracy, (None, y_true, y_pred, normalize, sample_weight,
-                                                   numeric_mode), _NATIVE_CONTEXT)
+                                                   numeric_mode, device), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: backed by `ML::Metrics::rand_index` (cuML
@@ -236,7 +240,7 @@ def accuracy_score(
 # because Apple has no 64-bit float atomic). Raw labels, no label range on
 # this entry. cuML's Python exports only adjusted_rand_score; the unadjusted
 # index has a C++ entry and is exposed under scikit-learn's name.
-def rand_score(labels_true, labels_pred):
+def rand_score(labels_true, labels_pred, *, device=None):
     """Rand index: the fraction of sample pairs on which two clusterings agree.
 
     Follows scikit-learn's ``rand_score``. Labels are used as given; they
@@ -246,6 +250,10 @@ def rand_score(labels_true, labels_pred):
     ----------
     labels_true, labels_pred : array-like of shape (n_samples,)
         Integer cluster labels of the same length that fit in int32.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -258,7 +266,7 @@ def rand_score(labels_true, labels_pred):
     >>> score = metrics.rand_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                            np.array([1, 1, 0, 0], dtype=np.int32))
     """
-    return _NATIVE(None, _OP.family_mcls_rand, (None, labels_true, labels_pred), _NATIVE_CONTEXT)
+    return _NATIVE(None, _OP.family_mcls_rand, (None, labels_true, labels_pred, device), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: backed by `ML::Metrics::adjusted_rand_index`, the int32
@@ -268,7 +276,7 @@ def rand_score(labels_true, labels_pred):
 # difference of large numbers: the three exact integers are card stages
 # (`metrics.ari.pair_sums`), and the host epilogue is float64
 # divide/multiply/subtract only, identity-safe in both modes.
-def adjusted_rand_score(labels_true, labels_pred):
+def adjusted_rand_score(labels_true, labels_pred, *, device=None):
     """Rand index adjusted for chance.
 
     Follows scikit-learn's and cuML's ``adjusted_rand_score``: 1.0 for
@@ -279,6 +287,10 @@ def adjusted_rand_score(labels_true, labels_pred):
     ----------
     labels_true, labels_pred : array-like of shape (n_samples,)
         Integer cluster labels of the same length that fit in int32.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -292,7 +304,7 @@ def adjusted_rand_score(labels_true, labels_pred):
     >>> a = rng.integers(0, 4, 1000).astype(np.int32)
     >>> score = metrics.adjusted_rand_score(a, a)
     """
-    return _NATIVE(None, _OP.family_mcls_adjusted_rand, (None, labels_true, labels_pred), _NATIVE_CONTEXT)
+    return _NATIVE(None, _OP.family_mcls_adjusted_rand, (None, labels_true, labels_pred, device), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: backed by `ML::Metrics::entropy` (cuML `entropy.cu`, RAFT
@@ -304,7 +316,7 @@ def adjusted_rand_score(labels_true, labels_pred):
 # `identical_log` and differs from FAST's Float64 in the seventh digit by
 # design (DEVIATION 651): `checks/numerics.mojo` has no portable Float64 log
 # yet; `metrics/README.md` hand-off ask 1.
-def entropy(clustering, *, base=None):
+def entropy(clustering, *, base=None, device=None):
     """Entropy of a labeling, in nats unless ``base`` is given.
 
     Follows cuML's ``cuml.metrics.cluster.entropy``; scikit-learn has no
@@ -325,6 +337,10 @@ def entropy(clustering, *, base=None):
         Integer labels that fit in int32.
     base : float or None, default None
         Logarithm base. None means nats.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -336,7 +352,7 @@ def entropy(clustering, *, base=None):
     >>> from mojolearn import metrics
     >>> h = metrics.entropy(np.array([0, 0, 1, 1], dtype=np.int32), base=2)
     """
-    return _NATIVE(None, _OP.family_mcls_entropy, (None, clustering, base), _NATIVE_CONTEXT)
+    return _NATIVE(None, _OP.family_mcls_entropy, (None, clustering, base, device), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: backed by `ML::Metrics::mutual_info_score` (DEVIATIONS
@@ -344,7 +360,7 @@ def entropy(clustering, *, base=None):
 # device, exact and order-free everywhere, and the `c (log(nc) - log(ab))`
 # epilogue runs serially and ascending on the host. The labels are remapped
 # as cuML 26.08's `prepare_cluster_metric_inputs` does.
-def mutual_info_score(labels_true, labels_pred, *, contingency=None):
+def mutual_info_score(labels_true, labels_pred, *, contingency=None, device=None):
     """Mutual information between two clusterings, in nats.
 
     Follows scikit-learn's and cuML's ``mutual_info_score``, in nats as cuML
@@ -359,6 +375,10 @@ def mutual_info_score(labels_true, labels_pred, *, contingency=None):
     contingency : None, default None
         A precomputed contingency matrix is not supported; passing one
         raises ``NotImplementedError``.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -371,7 +391,7 @@ def mutual_info_score(labels_true, labels_pred, *, contingency=None):
     >>> mi = metrics.mutual_info_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                                np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    return _NATIVE(None, _OP.family_mcls_mutual_info, (None, labels_true, labels_pred, contingency),
+    return _NATIVE(None, _OP.family_mcls_mutual_info, (None, labels_true, labels_pred, contingency, device),
                    _NATIVE_CONTEXT)
 
 
@@ -380,7 +400,7 @@ def mutual_info_score(labels_true, labels_pred, *, contingency=None):
 # mutual_info_score kernel); tk = sum_ij c_ij^2 - n, pk = sum_j colsum^2 - n,
 # qk = sum_i rowsum^2 - n are exact Int64 sums on the host and the score is
 # Float64.
-def fowlkes_mallows_score(labels_true, labels_pred, *, sparse="deprecated"):
+def fowlkes_mallows_score(labels_true, labels_pred, *, sparse="deprecated", device=None):
     """Fowlkes-Mallows index between two clusterings.
 
     Follows scikit-learn's ``fowlkes_mallows_score`` (cuML has no such
@@ -396,6 +416,10 @@ def fowlkes_mallows_score(labels_true, labels_pred, *, sparse="deprecated"):
     sparse : default 'deprecated'
         Deprecated and ignored in scikit-learn; any explicit value raises
         ``NotImplementedError``.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -408,12 +432,12 @@ def fowlkes_mallows_score(labels_true, labels_pred, *, sparse="deprecated"):
     >>> score = metrics.fowlkes_mallows_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                                       np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    return _NATIVE(None, _OP.family_mcls_fowlkes_mallows, (None, labels_true, labels_pred, sparse),
+    return _NATIVE(None, _OP.family_mcls_fowlkes_mallows, (None, labels_true, labels_pred, sparse, device),
                    _NATIVE_CONTEXT)
 
 
 # Maintainer note: backed by `ML::Metrics::homogeneity_score`.
-def homogeneity_score(labels_true, labels_pred):
+def homogeneity_score(labels_true, labels_pred, *, device=None):
     """Homogeneity: whether each cluster holds members of a single class.
 
     ``MI(true, pred) / H(true)``, in ``[0, 1]``. Follows scikit-learn's and
@@ -424,6 +448,10 @@ def homogeneity_score(labels_true, labels_pred):
     ----------
     labels_true, labels_pred : array-like of shape (n_samples,)
         Integer labels of the same length that fit in int32.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -436,7 +464,7 @@ def homogeneity_score(labels_true, labels_pred):
     >>> h = metrics.homogeneity_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                               np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    return _NATIVE(None, _OP.family_mcls_homogeneity, (None, labels_true, labels_pred), _NATIVE_CONTEXT)
+    return _NATIVE(None, _OP.family_mcls_homogeneity, (None, labels_true, labels_pred, device), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: backed by `ML::Metrics::completeness_score`, which RAFT
@@ -445,7 +473,7 @@ def homogeneity_score(labels_true, labels_pred):
 # visits the cells in a different sequence: the same quantity in exact
 # arithmetic, not necessarily the same float32 bits. Implemented as theirs;
 # both folds are stages on the metrics card.
-def completeness_score(labels_true, labels_pred):
+def completeness_score(labels_true, labels_pred, *, device=None):
     """Completeness: whether all members of a class are in the same cluster.
 
     ``MI(pred, true) / H(pred)``, in ``[0, 1]``. Follows scikit-learn's and
@@ -456,6 +484,10 @@ def completeness_score(labels_true, labels_pred):
     ----------
     labels_true, labels_pred : array-like of shape (n_samples,)
         Integer labels of the same length that fit in int32.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -468,11 +500,11 @@ def completeness_score(labels_true, labels_pred):
     >>> c = metrics.completeness_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                                np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    return _NATIVE(None, _OP.family_mcls_completeness, (None, labels_true, labels_pred), _NATIVE_CONTEXT)
+    return _NATIVE(None, _OP.family_mcls_completeness, (None, labels_true, labels_pred, device), _NATIVE_CONTEXT)
 
 
 # Maintainer note: backed by `ML::Metrics::v_measure` (cuML `v_measure.cu`).
-def v_measure_score(labels_true, labels_pred, *, beta=1.0):
+def v_measure_score(labels_true, labels_pred, *, beta=1.0, device=None):
     """V-measure: the weighted harmonic mean of homogeneity and completeness.
 
     ``(1 + beta) * h * c / (beta * h + c)``. Follows scikit-learn's and
@@ -485,6 +517,10 @@ def v_measure_score(labels_true, labels_pred, *, beta=1.0):
         Integer labels of the same length that fit in int32.
     beta : float, default 1.0
         Above 1 weights completeness more, below 1 weights homogeneity more.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -497,10 +533,10 @@ def v_measure_score(labels_true, labels_pred, *, beta=1.0):
     >>> v = metrics.v_measure_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                             np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    return _NATIVE(None, _OP.family_mcls_v_measure, (None, labels_true, labels_pred, beta), _NATIVE_CONTEXT)
+    return _NATIVE(None, _OP.family_mcls_v_measure, (None, labels_true, labels_pred, beta, device), _NATIVE_CONTEXT)
 
 
-def homogeneity_completeness_v_measure(labels_true, labels_pred, *, beta=1.0):
+def homogeneity_completeness_v_measure(labels_true, labels_pred, *, beta=1.0, device=None):
     """Homogeneity, completeness and V-measure in one call.
 
     Returns ``(homogeneity_score, completeness_score, v_measure_score)``, as
@@ -514,6 +550,10 @@ def homogeneity_completeness_v_measure(labels_true, labels_pred, *, beta=1.0):
         Integer labels of the same length that fit in int32.
     beta : float, default 1.0
         Passed to ``v_measure_score``.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -526,7 +566,7 @@ def homogeneity_completeness_v_measure(labels_true, labels_pred, *, beta=1.0):
     >>> h, c, v = metrics.homogeneity_completeness_v_measure(
     ...     np.array([0, 0, 1, 1], dtype=np.int32), np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    return _NATIVE(None, _OP.family_mcls_hcv, (None, labels_true, labels_pred, beta), _NATIVE_CONTEXT)
+    return _NATIVE(None, _OP.family_mcls_hcv, (None, labels_true, labels_pred, beta, device), _NATIVE_CONTEXT)
 
 
 # ===========================================================================
@@ -554,7 +594,7 @@ def r2_score(
     sample_weight=None,
     multioutput="uniform_average",
     force_finite=True,
-    numeric_mode=None,
+    numeric_mode=None, device=None,
 ):
     """Coefficient of determination (R^2), computed in float32.
 
@@ -580,6 +620,10 @@ def r2_score(
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -596,7 +640,7 @@ def r2_score(
     >>> r2 = metrics.r2_score(y, pred)
     """
     return _NATIVE(None, _OP.family_mcls_r2, (None, y_true, y_pred, sample_weight, multioutput,
-                                           force_finite, numeric_mode), _NATIVE_CONTEXT)
+                                           force_finite, numeric_mode, device), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: IDENTICAL pins the reduction schedule and flushes
@@ -605,7 +649,7 @@ def r2_score(
 # (regression_error_options). The new error metrics had local Metal
 # qualification; the cross-vendor leg was pending when this was written.
 def mean_squared_error(
-    y_true, y_pred, *, sample_weight=None, multioutput="uniform_average", numeric_mode=None
+    y_true, y_pred, *, sample_weight=None, multioutput="uniform_average", numeric_mode=None, device=None
 ):
     """Mean squared error, computed in float32.
 
@@ -626,6 +670,10 @@ def mean_squared_error(
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -642,11 +690,11 @@ def mean_squared_error(
     0.375
     """
     return _NATIVE(None, _OP.family_mcls_regression_error, (None, "mean_squared_error", y_true,
-                   y_pred, sample_weight, multioutput, numeric_mode), _NATIVE_CONTEXT)
+                   y_pred, sample_weight, multioutput, numeric_mode, device), _NATIVE_CONTEXT)
 
 
 def mean_absolute_error(
-    y_true, y_pred, *, sample_weight=None, multioutput="uniform_average", numeric_mode=None
+    y_true, y_pred, *, sample_weight=None, multioutput="uniform_average", numeric_mode=None, device=None
 ):
     """Mean absolute error, computed in float32.
 
@@ -666,6 +714,10 @@ def mean_absolute_error(
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -682,11 +734,11 @@ def mean_absolute_error(
     0.5
     """
     return _NATIVE(None, _OP.family_mcls_regression_error, (None, "mean_absolute_error", y_true,
-                   y_pred, sample_weight, multioutput, numeric_mode), _NATIVE_CONTEXT)
+                   y_pred, sample_weight, multioutput, numeric_mode, device), _NATIVE_CONTEXT)
 
 
 def root_mean_squared_error(
-    y_true, y_pred, *, sample_weight=None, multioutput="uniform_average", numeric_mode=None
+    y_true, y_pred, *, sample_weight=None, multioutput="uniform_average", numeric_mode=None, device=None
 ):
     """Root mean squared error, computed in float32.
 
@@ -707,6 +759,10 @@ def root_mean_squared_error(
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -722,7 +778,7 @@ def root_mean_squared_error(
     >>> rmse = metrics.root_mean_squared_error(y, pred)
     """
     return _NATIVE(None, _OP.family_mcls_regression_error, (None, "root_mean_squared_error",
-                   y_true, y_pred, sample_weight, multioutput, numeric_mode), _NATIVE_CONTEXT)
+                   y_true, y_pred, sample_weight, multioutput, numeric_mode, device), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: backed by `ML::Metrics::kl_divergence`, the float overload
@@ -730,7 +786,7 @@ def root_mean_squared_error(
 # refused (no float64 on Apple GPUs). Negative entries are refused here, before
 # the kernel, per `metrics/README.md` HAND-OFF ask 3. RAFT's kernel does not
 # normalize either; p_i == 0 contributes zero (their branch).
-def kl_divergence(P, Q):
+def kl_divergence(P, Q, *, device=None):
     """Kullback-Leibler divergence ``sum p_i * (log p_i - log q_i)``, in float32.
 
     Follows cuML's ``cuml.metrics.kl_divergence``. ``P`` and ``Q`` are not
@@ -744,6 +800,10 @@ def kl_divergence(P, Q):
         Finite, non-negative float32 arrays of the same length. float64
         input raises ``TypeError`` (cast to float32 first); a negative,
         NaN or infinite entry raises ``ValueError``.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -757,7 +817,7 @@ def kl_divergence(P, Q):
     >>> Q = np.array([0.4, 0.4, 0.2], dtype=np.float32)
     >>> kl = metrics.kl_divergence(P, Q)
     """
-    return _NATIVE(None, _OP.family_mcls_kl, (None, P, Q), _NATIVE_CONTEXT)
+    return _NATIVE(None, _OP.family_mcls_kl, (None, P, Q, device), _NATIVE_CONTEXT)
 
 
 # ===========================================================================
@@ -781,7 +841,7 @@ def kl_divergence(P, Q):
 # refused so no random draw happens where no check sees it.
 def silhouette_score(
     X, labels, *, metric="euclidean", sample_size=None, random_state=None,
-    chunksize=None,
+    chunksize=None, device=None,
 ):
     """Mean silhouette coefficient over all samples.
 
@@ -807,6 +867,10 @@ def silhouette_score(
     chunksize : int or None, default None
         Accepted for compatibility with cuML (default 40000, must be at
         least 1). It does not change the result or the work done.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -822,14 +886,14 @@ def silhouette_score(
     >>> s = metrics.silhouette_score(X, labels)
     """
     return _NATIVE(None, _OP.family_mcls_silhouette_score, (None, X, labels, metric, sample_size, random_state,
-                                                           chunksize), _NATIVE_CONTEXT)
+                                                           chunksize, device), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: the same kernel call as silhouette_score, which computes
 # both. Values that come out +0.0: a singleton cluster, an exact tie a == b,
 # a == b == 0 (all points identical), and a row whose distances were
 # non-finite (DEVIATION 656). No fixture has produced a -0.0.
-def silhouette_samples(X, labels, *, metric="euclidean", chunksize=None):
+def silhouette_samples(X, labels, *, metric="euclidean", chunksize=None, device=None):
     """Silhouette coefficient of every sample.
 
     The per-sample values that ``silhouette_score`` averages; parameters,
@@ -846,6 +910,10 @@ def silhouette_samples(X, labels, *, metric="euclidean", chunksize=None):
         Both mean Euclidean distance.
     chunksize : int or None, default None
         Accepted for compatibility with cuML; does not change the result.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -860,7 +928,7 @@ def silhouette_samples(X, labels, *, metric="euclidean", chunksize=None):
     >>> labels = rng.integers(0, 4, 1000).astype(np.int32)
     >>> s = metrics.silhouette_samples(X, labels)
     """
-    return _NATIVE(None, _OP.family_mcls_silhouette_samples, (None, X, labels, metric, chunksize),
+    return _NATIVE(None, _OP.family_mcls_silhouette_samples, (None, X, labels, metric, chunksize, device),
                    _NATIVE_CONTEXT)
 
 
@@ -886,7 +954,7 @@ def silhouette_samples(X, labels, *, metric="euclidean", chunksize=None):
 # lane's fixture); a second neighbors/ arm for the unexpanded metric is the
 # neighbors lane's to add.
 def trustworthiness(
-    X, X_embedded, *, n_neighbors=5, metric="euclidean", batch_size=512
+    X, X_embedded, *, n_neighbors=5, metric="euclidean", batch_size=512, device=None
 ):
     """Trustworthiness: how well an embedding preserves local neighborhoods.
 
@@ -908,6 +976,10 @@ def trustworthiness(
     batch_size : int, default 512
         Accepted for compatibility with cuML (must be at least 1). It does
         not change the result or the work done.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -928,7 +1000,7 @@ def trustworthiness(
     >>> t = metrics.trustworthiness(X, X[:, :2], n_neighbors=5)
     """
     return _NATIVE(None, _OP.family_mcls_trustworthiness, (None, X, X_embedded, n_neighbors, metric,
-                                                          batch_size), _NATIVE_CONTEXT)
+                                                          batch_size, device), _NATIVE_CONTEXT)
 
 
 # TOMBSTONE: the Python classification label preparation `_classification_labels`, `_EncodedLabels`,
@@ -944,7 +1016,7 @@ def trustworthiness(
 # device program (x_metrics/tail.mojo proba_rows, ranking.mojo row_metric,
 # rank_epi.mojo MEAN). sample_weight goes to log_loss_options.
 def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
-             numeric_mode=None):
+             numeric_mode=None, device=None):
     """Log loss (cross-entropy) of predicted probabilities.
 
     Follows scikit-learn's ``log_loss`` for single-label targets. A 1-D (or
@@ -974,6 +1046,10 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -995,7 +1071,7 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
     >>> p = np.array([0.1, 0.9, 0.8, 0.35], dtype=np.float32)
     >>> loss = metrics.log_loss(y, p)
     """
-    return _NATIVE(None, _OP.family_mcls_log_loss, (y_true, y_pred, normalize, sample_weight, labels, numeric_mode),
+    return _NATIVE(None, _OP.family_mcls_log_loss, (y_true, y_pred, normalize, sample_weight, labels, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
@@ -1006,7 +1082,7 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
 # multiclass one-vs-rest / one-vs-one, labels and averages go to the x_metrics
 # device curve (roc_auc_options).
 def roc_auc_score(y_true, y_score, *, average="macro", sample_weight=None,
-                  max_fpr=None, multi_class="raise", labels=None, numeric_mode=None):
+                  max_fpr=None, multi_class="raise", labels=None, numeric_mode=None, device=None):
     """Area under the ROC curve.
 
     Follows scikit-learn's ``roc_auc_score``. In the binary case, ``y_true``
@@ -1037,6 +1113,10 @@ def roc_auc_score(y_true, y_score, *, average="macro", sample_weight=None,
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -1051,7 +1131,7 @@ def roc_auc_score(y_true, y_score, *, average="macro", sample_weight=None,
     >>> auc = metrics.roc_auc_score(y, s)
     """
     return _NATIVE(None, _OP.family_mcls_roc_auc, (None, y_true, y_score, average, sample_weight,
-                                                  max_fpr, multi_class, labels, numeric_mode), _NATIVE_CONTEXT)
+                                                  max_fpr, multi_class, labels, numeric_mode, device), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: the default call keeps its own kernel and Float32 outputs
@@ -1059,7 +1139,7 @@ def roc_auc_score(y_true, y_score, *, average="macro", sample_weight=None,
 # precision_recall_curve_options: Float64 curves from the x_metrics device sort
 # and counts.
 def precision_recall_curve(y_true, y_score, *, pos_label=None, sample_weight=None,
-                           drop_intermediate=False, numeric_mode=None):
+                           drop_intermediate=False, numeric_mode=None, device=None):
     """Precision-recall pairs for each score threshold (binary).
 
     Follows scikit-learn's ``precision_recall_curve``. Thresholds are the
@@ -1089,6 +1169,10 @@ def precision_recall_curve(y_true, y_score, *, pos_label=None, sample_weight=Non
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -1107,7 +1191,7 @@ def precision_recall_curve(y_true, y_score, *, pos_label=None, sample_weight=Non
     >>> precision, recall, thresholds = metrics.precision_recall_curve(y, s)
     """
     return _NATIVE(None, _OP.family_mcls_pr_curve, (None, y_true, y_score, pos_label, sample_weight,
-                                                   drop_intermediate, numeric_mode), _NATIVE_CONTEXT)
+                                                   drop_intermediate, numeric_mode, device), _NATIVE_CONTEXT)
 
 
 # TOMBSTONE: `_selected_labels`, `_encode_classification` (no product caller; native owners
@@ -1120,7 +1204,7 @@ def precision_recall_curve(y_true, y_score, *, pos_label=None, sample_weight=Non
 # Float64 cells, each the Float32 PairSum of its rows' weights, normalized in
 # binary64.
 def confusion_matrix(y_true, y_pred, *, labels=None, sample_weight=None,
-                     normalize=None, numeric_mode=None):
+                     normalize=None, numeric_mode=None, device=None):
     """Confusion matrix of single-label predictions.
 
     Follows scikit-learn's ``confusion_matrix``: row ``i`` is the true label
@@ -1145,6 +1229,10 @@ def confusion_matrix(y_true, y_pred, *, labels=None, sample_weight=None,
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -1160,13 +1248,13 @@ def confusion_matrix(y_true, y_pred, *, labels=None, sample_weight=None,
     ...                              np.array([0, 2, 2, 1], dtype=np.int32))
     """
     return _NATIVE(None, _OP.family_mcls_confusion, (None, y_true, y_pred, labels, sample_weight,
-                                                    normalize, numeric_mode), _NATIVE_CONTEXT)
+                                                    normalize, numeric_mode, device), _NATIVE_CONTEXT)
 
 
 
 
 def precision_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
-                    sample_weight=None, zero_division="warn", numeric_mode=None):
+                    sample_weight=None, zero_division="warn", numeric_mode=None, device=None):
     """Precision: ``tp / (tp + fp)``.
 
     Follows scikit-learn's ``precision_score`` for single-label targets.
@@ -1191,6 +1279,10 @@ def precision_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -1205,11 +1297,11 @@ def precision_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary
     ...                             np.array([0, 1, 0, 1], dtype=np.int32))
     """
     return _NATIVE(None, _OP.family_mcls_prf, (None, 0, y_true, y_pred, labels, pos_label, average,
-                                              sample_weight, zero_division, numeric_mode), _NATIVE_CONTEXT)
+                                              sample_weight, zero_division, numeric_mode, device), _NATIVE_CONTEXT)
 
 
 def recall_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
-                 sample_weight=None, zero_division="warn", numeric_mode=None):
+                 sample_weight=None, zero_division="warn", numeric_mode=None, device=None):
     """Recall: ``tp / (tp + fn)``.
 
     Follows scikit-learn's ``recall_score`` for single-label targets.
@@ -1235,6 +1327,10 @@ def recall_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -1249,11 +1345,11 @@ def recall_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
     ...                          np.array([0, 1, 0, 1], dtype=np.int32))
     """
     return _NATIVE(None, _OP.family_mcls_prf, (None, 1, y_true, y_pred, labels, pos_label, average,
-                                              sample_weight, zero_division, numeric_mode), _NATIVE_CONTEXT)
+                                              sample_weight, zero_division, numeric_mode, device), _NATIVE_CONTEXT)
 
 
 def f1_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
-             sample_weight=None, zero_division="warn", numeric_mode=None):
+             sample_weight=None, zero_division="warn", numeric_mode=None, device=None):
     """F1 score: the harmonic mean of precision and recall.
 
     Follows scikit-learn's ``f1_score`` for single-label targets. Labels,
@@ -1279,6 +1375,10 @@ def f1_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -1293,7 +1393,7 @@ def f1_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
     ...                       np.array([0, 1, 0, 1], dtype=np.int32), average='macro')
     """
     return _NATIVE(None, _OP.family_mcls_prf, (None, 2, y_true, y_pred, labels, pos_label, average,
-                                              sample_weight, zero_division, numeric_mode), _NATIVE_CONTEXT)
+                                              sample_weight, zero_division, numeric_mode, device), _NATIVE_CONTEXT)
 
 
 # ===========================================================================

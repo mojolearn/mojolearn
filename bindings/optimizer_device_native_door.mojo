@@ -22,6 +22,19 @@ from training.optimizer_device_storage_plan import (
 from bindings.optimizer_keys_unpack import optimizer_keys, optimizer_keys_in_finalizer
 from bindings.optimizer_keys_unpack import OPTIMIZER_OPN_DEVICE_CONSTRUCT, OPTIMIZER_OPN_DEVICE_HOST, OPTIMIZER_OPN_DEVICE_NEW, OPTIMIZER_OPN_DEVICE_RESHAPE, OPTIMIZER_OPN_DEVICE_UPLOAD
 from bindings.py_balanced import py_item
+from std.memory import unsafe_memcpy
+from core.train_dev_pool import TRAIN_DEV_F32, TRAIN_DEV_I8, TRAIN_DEV_I32, train_dev_itemsize, train_dev_words
+
+
+def device_float32(fields: PythonObject, name: String, where: String) raises:
+    """A float32 training operand refuses a typed device array (the linalg low-bit outputs: int8 codes and int15
+    planes, int32 row exponents, uint16 bf16 / float16 bits; their `dtype` word, core/train_dev_pool.mojo) in words,
+    never reinterpreting its words (lane vdf-linalg5: the doors with their own class compare). One dictionary read."""
+    var nk = optimizer_keys()
+    var code = py_get(fields, nk[].k_dtype)
+    if code is not None and Int(py=code) != TRAIN_DEV_F32:
+        raise Error("TypeError: mojolearn." + where + ": " + name + " is a typed device array (int8, int32 or uint16 "
+                    + "storage); this function takes float32 device arrays")
 
 
 def device_entries(binding: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -242,11 +255,41 @@ def device_operation(operation: Int, owner: PythonObject, values: PythonObject, 
         var dims = device_shape(values[0], context)
         optimizer_device_reshape(dims, Int(py=py_item(fields, nk[].k_size)))
         var base = py_item(fields, nk[].k__base)
-        return device_new(py_item(fields, nk[].k__b), py_item(fields, nk[].k_h), dims, owner if base is None else base, context)
+        var view = device_new(py_item(fields, nk[].k__b), py_item(fields, nk[].k_h), dims, owner if base is None else base, context)
+        # A typed array's view keeps its dtype word (lane vdf-linalg4).
+        var code = py_get(fields, nk[].k_dtype)
+        if code is not None:
+            py_setitem(py_fields(view), nk[].k_dtype, code)
+        return view
     if operation == OPTIMIZER_OPN_DEVICE_HOST:
         var dims = device_shape(py_item(fields, nk[].k_shape), context)
         var count = Int(py=py_item(fields, nk[].k_size))
         optimizer_device_output(dims, count)
+        # lane vdf-linalg4: a typed device array (int8 codes and int15 planes, int32 row exponents, uint16 bf16 bits: the linalg low-bit
+        # outputs; core/train_dev_pool.mojo) carries a dtype word. Its words are downloaded once into native storage
+        # and exactly its elements' bytes are copied into the typed result (the word padding never reaches it).
+        var code = py_get(fields, nk[].k_dtype)
+        if code is not None and Int(py=code) != TRAIN_DEV_F32:
+            var typed = Int(py=code)
+            var itemsize = train_dev_itemsize(typed)
+            var words = train_dev_words(count, itemsize)
+            var typed_result = new_array(dims, "<i1" if typed == TRAIN_DEV_I8 else ("<i4" if typed == TRAIN_DEV_I32 else "<u2"))
+            var stage = List[Float32](length=words, fill=Float32(0.0))
+            var typed_provider = optimizer_provider_entries(entries)
+            var typed_driver = optimizer_driver(typed_provider)
+            var typed_handle = Int(py=py_item(fields, nk[].k_h))
+            var typed_address = Int(py=typed_result._addr)
+            var stage_address = Int(stage.unsafe_ptr())
+            # lane vdf-linalg5: no download for zero elements (no zero-span transfer is asked of the driver).
+            with GILReleased(Python()):
+                if count > 0:
+                    _ = typed_driver.download_device(typed_handle, stage_address, words)
+                    unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=typed_address),
+                                  src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=stage_address),
+                                  count=count * itemsize)
+            _ = stage^
+            _ = typed_provider
+            return typed_result
         # lane unfilled-storage-audit (2026-11-15): new_array is unfilled
         # (1bcfa0d69b). A rebound public size may download only a prefix of
         # `count` floats, so that result keeps zeros in its unwritten tail; a
@@ -257,8 +300,12 @@ def device_operation(operation: Int, owner: PythonObject, values: PythonObject, 
         var driver = optimizer_driver(provider)
         var handle = Int(py=py_item(fields, nk[].k_h))
         var address = Int(py=result._addr)
-        with GILReleased(Python()):
-            _ = driver.download_device(handle, address, count)
+        # lane vdf-linalg5: an empty array (the all-empty-sessions (0, out_width) view of mlp_inference_sessions,
+        # bindings/training_grads_device_unpack.mojo) downloads nothing: the driver is never asked for a zero-span
+        # transfer.
+        if count > 0:
+            with GILReleased(Python()):
+                _ = driver.download_device(handle, address, count)
         _ = provider
         _ = result
         return result

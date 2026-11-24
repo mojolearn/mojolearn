@@ -174,7 +174,7 @@ from core.classical_host_predict import host_gemm_nt
 from core.fit_loop_clock import fit_loop_start, fit_loop_stop
 from core.host_predict_threads import HostF32Ptr, host_list_ptr, host_list_ptr_u32
 from cluster.host.host_cells import ftz_v, host_cells, mul_add_v
-from cluster.impl.kmeans_params import KMEANS_LAZY_EVERY, KMEANS_LAZY_SHIFT_IDN, weighted_sum_scale_cap
+from cluster.impl.kmeans_params import KMEANS_LAZY_EVERY, KMEANS_LAZY_SHIFT_IDN
 from cluster.impl.sum_scale_plan import (
     SUM_SCALE_CHUNK,
     SUM_SCALE_TPB,
@@ -183,6 +183,7 @@ from cluster.impl.sum_scale_plan import (
     sum_scale_is_finite,
     sum_scale_n_chunks,
     sum_scale_term,
+    weighted_sum_scale_term,
 )
 
 
@@ -1417,6 +1418,23 @@ struct KMeansHostResult(Copyable, Movable):
     var loop_ns: Int
 
 
+def host_plan_weighted_sum_scale(x: List[Float32], w: List[Float32], n: Int, d: Int) raises -> Float64:
+    """`plan_weighted_sum_scale` (`cluster/estimator.mojo`, lane
+    vdf-scope-cluster2a), add for add: the terms `weighted_sum_scale_term(x,
+    w)` laid out as X, then `host_plan_sum_scale`'s chunks and stage 2 (its
+    own `sum_scale_term` leaves a term that is already `ftz(|.|)` unchanged)."""
+    var terms = List[Float32](length=n * d, fill=Float32(0.0))
+    var tp = host_list_ptr(terms)
+
+    # Rows are independent: row tasks over the host pool (`host_cells`).
+    def _row(row: Int) {imm x, imm w, imm tp, imm d}:
+        for f in range(d):
+            tp.unsafe_store(row * d + f, weighted_sum_scale_term(x[row * d + f], w[row]))
+
+    host_cells(_row, n, 4 * d + 16)
+    return host_plan_sum_scale(terms, n, d)
+
+
 def host_plan_sum_scale(x: List[Float32], n: Int, d: Int) raises -> Float64:
     """`plan_sum_scale` (`cluster/estimator.mojo`), add for add: the chunk
     sums of `sum_scale_term` in row order, then per feature the strided lane
@@ -1562,14 +1580,7 @@ def host_kmeans_fit(
     var sum_scale = host_plan_sum_scale(x, n, d)
     # DEVIATION 5112, as `kmeans_fit`: the weighted bound caps the scale
     if n_weights != 0:
-        var xc = x.copy()
-        var wc = weights_in.copy()
-        var cap = weighted_sum_scale_cap(
-            xc.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
-            wc.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), n, d,
-        )
-        _ = xc^
-        _ = wc^
+        var cap = host_plan_weighted_sum_scale(x, weights_in, n, d)
         if cap < sum_scale:
             sum_scale = cap
     # `kmeans_fit`: supplied weights take the device fold of `plan_sum_scale`

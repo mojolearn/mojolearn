@@ -7,18 +7,14 @@ of a CPU-only install and as the bytes the device must match. The element
 casts are the same `core/msel_convert.mojo` functions the kernels call.
 """
 
-from std.memory import bitcast, unsafe_memcpy
+from std.memory import unsafe_memcpy
 
 from core.shared_slot import shared_slot_lock, shared_slot_unlock
 
 from core.msel_convert import (
-    MSEL_I64,
     MSEL_ID_SLOT_BITS,
     MSEL_ID_SLOT_MASK,
-    msel_itemsize,
     msel_load_f32,
-    msel_load_f64_bits,
-    msel_load_i64,
 )
 
 comptime _U8 = MutPointer[UInt8, MutAnyOrigin]
@@ -208,31 +204,8 @@ def host_take_rows(
     return True
 
 
-def host_scatter_rows(
-    store: MselHostStore, dst_id: Int, n_dst: Int, dst_code: Int,
-    src_addr: Int, src_code: Int, n_src: Int, width: Int, idx_id: Int,
-) raises -> Bool:
-    if n_src < 1 or width < 1:
-        return True
-    var dst = store.ptr(dst_id, n_dst * width * 8).bitcast[UInt64]()
-    var idx = store.ptr(idx_id, n_src * 8).bitcast[Int64]()
-    var src = _U8(unsafe_from_address=src_addr)
-    var to_int = dst_code == MSEL_I64
-    var ok = True
-    for r in range(n_src):
-        var d = Int(idx.unsafe_load(r))
-        if d < 0 or d >= n_dst:
-            ok = False
-            continue
-        for c in range(width):
-            var t = r * width + c
-            var word: UInt64
-            if to_int:
-                word = bitcast[DType.uint64](msel_load_i64(src, src_code, t))
-            else:
-                word = msel_load_f64_bits(src, src_code, t)
-            dst.unsafe_store(d * width + c, word)
-    return ok
+# REMOVED (lane vdf-scope-cv, 2026-11-24): host_scatter_rows, cross_val_predict's
+# placement; its operation 16 is retired.
 
 
 def host_proba_column(src_addr: Int, code: Int, n: Int, k: Int, col: Int, dst_addr: Int) raises:

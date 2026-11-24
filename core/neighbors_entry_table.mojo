@@ -92,7 +92,15 @@ comptime NB_OP_SEARCH_RESIDENT = 10
 comptime NB_OP_RBC_SEARCH = 11
 comptime NB_OP_CLASSIFY_NEIGHBORS = 12
 comptime NB_OP_REGRESS_NEIGHBORS = 13
-comptime NB_OPERATION_COUNT = 14
+#   INDEX_PREPARE_FOLD a: status (two host int32 words: finite, range)
+#                      p: fold base id, base rows, fold index id (int64), n_index, n_features
+#                      f: (none)                    -> handle (0: a flagged fold, nothing kept)
+# Lane vdf-scope-cluster2a (2026-11-24): the resident index built from a
+# model-selection fold on the device (the fold's rows of the resident base
+# gathered into the index buffer, no host words); the device column only (the
+# CPU column keeps no resident index and refuses it).
+comptime NB_OP_INDEX_PREPARE_FOLD = 14
+comptime NB_OPERATION_COUNT = 15
 #: The fixed p words before the classifier's class counts.
 comptime NB_CLASSIFY_FIXED = 9
 comptime NB_CLASSIFY_RESIDENT_FIXED = 14
@@ -144,6 +152,10 @@ def nb_ops_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     elif operation == NB_OP_FOLD_READY:
         want_a = 0
         want_p = 0
+        want_f = 0
+    elif operation == NB_OP_INDEX_PREPARE_FOLD:
+        want_a = 1
+        want_p = 5
         want_f = 0
     elif operation == NB_OP_CLASSIFY:
         want_a = 6
@@ -292,6 +304,18 @@ def nb_index_prepare_call(entry: NativeDescriptorCall, index: Int, status: Int, 
     var ints: List[Int] = [n_index, n_features]
     var floats = List[Float64]()
     return native_descriptor_call(entry, NB_OP_INDEX_PREPARE, addresses, ints, floats)
+
+
+def nb_index_prepare_fold_call(entry: NativeDescriptorCall, status: Int, fold: NbFold, n_index: Int,
+                               n_features: Int) raises -> Int:
+    """NB_OP_INDEX_PREPARE_FOLD: the resident index of fold rows `fold.index`
+    of the resident base `fold.base` (`fold.rows` rows), gathered on the
+    device; `status` two host int32 words (finite, range), handle 0 when
+    either is set."""
+    var addresses: List[Int] = [status]
+    var ints: List[Int] = [fold.base, fold.rows, fold.index, n_index, n_features]
+    var floats = List[Float64]()
+    return native_descriptor_call(entry, NB_OP_INDEX_PREPARE_FOLD, addresses, ints, floats)
 
 
 def nb_index_release_call(entry: NativeDescriptorCall, handle: Int) raises:

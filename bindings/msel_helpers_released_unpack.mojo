@@ -17,11 +17,6 @@ from std.python._cpython import GILReleased
 from core.entry_table import EntryRef
 from core.msel_helpers_calls import (
     msel_arange_i64 as _msel_arange_i64,
-    msel_gather_i64 as _msel_gather_i64,
-    msel_store_alloc as _msel_store_alloc,
-    msel_store_read as _msel_store_read,
-    msel_store_free as _msel_store_free,
-    msel_scatter_rows as _msel_scatter_rows,
     msel_proba_column as _msel_proba_column,
 )
 
@@ -33,40 +28,14 @@ def msel_arange_i64(entry: EntryRef, dst: Int, start: Int, n: Int) raises -> Int
     return result
 
 
-def msel_gather_i64(entry: EntryRef, table: Int, n_table: Int, codes: Int, n: Int, dst: Int) raises -> Int:
-    var result = 0
-    with GILReleased(Python()):
-        result = _msel_gather_i64(entry, table, n_table, codes, n, dst)
-    return result
 
 
-def msel_store_alloc(entry: EntryRef, nbytes: Int) raises -> Int:
-    var result = 0
-    with GILReleased(Python()):
-        result = _msel_store_alloc(entry, nbytes)
-    return result
 
 
-def msel_store_read(entry: EntryRef, id: Int, dst: Int, nbytes: Int) raises -> Int:
-    var result = 0
-    with GILReleased(Python()):
-        result = _msel_store_read(entry, id, dst, nbytes)
-    return result
 
 
-def msel_store_free(entry: EntryRef, id: Int) raises -> Int:
-    var result = 0
-    with GILReleased(Python()):
-        result = _msel_store_free(entry, id)
-    return result
 
 
-def msel_scatter_rows(entry: EntryRef, dst_id: Int, n_dst: Int, dst_code: Int, src: Int, src_code: Int,
-                      n_src: Int, width: Int, idx_id: Int) raises -> Int:
-    var result = 0
-    with GILReleased(Python()):
-        result = _msel_scatter_rows(entry, dst_id, n_dst, dst_code, src, src_code, n_src, width, idx_id)
-    return result
 
 
 def msel_proba_column(entry: EntryRef, src: Int, code: Int, n: Int, k: Int, col: Int, dst: Int) raises -> Int:

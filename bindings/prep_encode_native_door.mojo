@@ -2586,7 +2586,7 @@ def _scores_classif(mut p: EncProg, values: PythonObject, y: PythonObject, chi: 
     """`_scores_classif`: UNPACK (the label input step's class codes, the
     image's family word as three Bool fields, X and the codes as owners),
     then the typed stages (bindings/prep_encode_select_run.mojo
-    `score_classif_stage`). The plan's `extra`: chi2's column statistics."""
+    `score_classif_stage`). The plan's `extra`: chi2's negative-minimum count word."""
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var labels = classical_encode_labels(y, context)
@@ -2712,10 +2712,9 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
             mo = score_topk_stage(p.prog, score_at, 0, d, k)
         # RUN: the typed run on the estimator's image, then PACK
         var ran = p.run_caps(entries, context, caps)
-        if name == "chi2":
-            for j in range(d):  # driver-loop: over the per-column minima (feature metadata)
-                if _word(ran, plan.extra + 3 * d + j) < 0:
-                    raise Error("mojolearn: Input X must be non-negative.")
+        if name == "chi2" and _word(ran, plan.extra) != 0:
+            # the device's count of negative column minima (one word)
+            raise Error("mojolearn: Input X must be non-negative.")
         if name == "r_regression":
             py_setitem(fields, "scores_", _take1(ran, plan.extra, d, context))
             py_setitem(fields, "pvalues_", PythonObject(None))
@@ -2726,7 +2725,8 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
             mask = _topk_from(ran, mo, d)
     else:
         # `score_func(X, y)`: mutual_info_*(X, y) with its defaults
-        # (discrete_features='auto', n_neighbors=3, random_state=None), the
+        # (discrete_features='auto', n_neighbors=3, random_state=None,
+        # device=None: the estimator's own route context is handed in), the
         # operation the public function passes to the same entry.
         # `context` is the connected context of this estimator's device
         # route (the door top), and the mutual-information programs run on
@@ -2738,7 +2738,8 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
         if py_type(entry) is not py_type(b.len):
             raise Error("ImportError: mojolearn: the encode owner's entry is unavailable")
         var out = prep_entry_call(entry, Python.tuple(PythonObject(None), builtin,
-                                                     Python.tuple(x, y, "auto", 3, PythonObject(None)), context))
+                                                     Python.tuple(x, y, "auto", 3, PythonObject(None), PythonObject(None)),
+                                                     context))
         var scores = out
         var pvals = PythonObject(None)
         if Bool(py=py_call(b.isinstance, out, Python.tuple(b.tuple, b.list))):
@@ -2785,10 +2786,9 @@ def prep_encode_scores_call(operation: String, args: PythonObject, context: Pyth
         var chi = operation == "chi2"
         var plan = _scores_classif(p, values, args[1], chi, mode, entries, context)
         var ran = p.run(entries, context)
-        if chi:
-            for j in range(d):  # driver-loop: over the per-column minima (feature metadata)
-                if _word(ran, plan.extra + 3 * d + j) < 0:
-                    raise Error("mojolearn: Input X must be non-negative.")
+        if chi and _word(ran, plan.extra) != 0:
+            # the device's count of negative column minima (one word)
+            raise Error("mojolearn: Input X must be non-negative.")
         result = Python.tuple(_take1(ran, plan.scores, d, context), _take1(ran, plan.pvalues, d, context))
     else:
         var plan = _pearson(p, values, args[1], mode, entries, context, _truth(args[2]), _truth(args[3]))

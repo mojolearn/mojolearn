@@ -15,7 +15,8 @@ from training.optimizer_input_plan import same_shape
 from providers.python.array_layout_boundary_pack import native_shape_pack
 from bindings.optimizer_device_native_door import device_shape, shape_count
 from bindings.optimizer_admission_door import opt_scalar
-from bindings.sequence_optimizer_native_door import seq_binding
+from bindings.sequence_optimizer_native_door import seq_binding, seq_device_bound, seq_device_refuse_resident
+from providers.python.function_device_boundary_door import function_device_admit
 from bindings.sequence_device_native_unpack import seq_device_make
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy
@@ -164,6 +165,10 @@ def _ln_fields(owner: PythonObject, context: PythonObject) raises -> PythonObjec
 
 
 comptime _LN_CLASS_SLOT = "seqln_class_admitted_v1"
+#: LayerNorm has both sides: the device x_sequence image (`sequence/layernorm.mojo`,
+#: `layernorm_dev.mojo`) and the CPU identical image's SEQ_LAYER_NORM (lane vdf-seq)
+comptime LN_HAS_GPU = True
+comptime LN_HAS_CPU = True
 
 
 def _ln_class_admit(cls: PythonObject, layout: PythonObject, b: PythonObject) raises:
@@ -178,7 +183,7 @@ def _ln_class_admit(cls: PythonObject, layout: PythonObject, b: PythonObject) ra
     var ancestry = layout[1]
     for i in range(len(ancestry)):  # driver-loop: over connected native owner classes
         var namespace = _class_fields(ancestry[i])
-        for name in ["normalized_shape", "_D", "eps", "numeric_mode", "weight", "bias", "weight_grad", "bias_grad", "_x", "_stats"]:  # driver-loop: over native layer state schema
+        for name in ["normalized_shape", "_D", "eps", "numeric_mode", "weight", "bias", "weight_grad", "bias_grad", "_x", "_stats", "device", "_host_b"]:  # driver-loop: over native layer state schema
             if py_contains(namespace, name):
                 raise Error("TypeError: LayerNorm state cannot be replaced by class descriptors")
 
@@ -190,7 +195,7 @@ def _ln_device_entries(fields: PythonObject, context: PythonObject) raises -> Py
     # TOMBSTONE: MOJOLEARN_SEQ_DEVICE_IO_OFF (env; removed: plumbing, the same kernels on host arrays vs resident tensors, rule 2026-11-22) deleted 2026-11-23 by lane/ab-owners; code recoverable at d125cb97c7.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_DEVICE_IO_OFF.patch; record in docs/TOMBSTONES.md.
     try:
-        var entries = seq_binding(py_get(fields, nk[].k_numeric_mode), context, PythonObject(None))
+        var entries = seq_binding(py_get(fields, nk[].k_numeric_mode), context, py_get(fields, nk[].k__host_b))
         # The image's route word (bindings/sequence_ops_door.mojo); was five
         # entry-name lookups.
         if not seq_ops_device(entries):
@@ -228,7 +233,7 @@ def _parameter(value: LayerInput, d: Int, name: String) raises:
 
 def _run(input: LayerInput, d: Int, weight: PythonObject, bias: PythonObject, eps: Float64,
          dy: PythonObject, mode: PythonObject, stats: PythonObject, grad_shape: List[Int],
-         context: PythonObject, alloc_stats: Bool = False) raises -> PythonObject:
+         bound: PythonObject, context: PythonObject, alloc_stats: Bool = False) raises -> PythonObject:
     var w = LayerInput(weight, context)
     var b = LayerInput(bias, context)
     _parameter(w, d, "weight")
@@ -368,7 +373,10 @@ def _run(input: LayerInput, d: Int, weight: PythonObject, bias: PythonObject, ep
             dw if had_weight else PythonObject(None), db if had_bias else PythonObject(None))
     if gradient.device:
         raise Error("TypeError: layer_norm host input requires a host output gradient")
-    var entries = seq_binding(mode, context, PythonObject(None))
+    # `bound`: None (today's binding of the numeric mode) or the CPU identical
+    # image's module of an explicit device="cpu" beside a GPU set, resolved
+    # once per call or per construction (lane vdf-seq)
+    var entries = seq_binding(mode, context, bound)
     # Every x_sequence image serves SEQ_LAYER_NORM on its own executor (was a
     # lookup of the entry name `layer_norm`).
     if not seq_ops_native(entries):
@@ -404,10 +412,23 @@ def sequence_layer_norm(operation: Int, owner: PythonObject, values: PythonObjec
         opt_scalar(values[offset + 1], context)
         opt_scalar(values[offset + 4], context)
         opt_scalar(mode, context)
+        # lane vdf-seq (2026-11-24): `device` rides last; read ONCE here, before
+        # any work (core/function_device.mojo). None: one identity compare and
+        # today's route. A resident input with "cpu" is refused here.
+        var bound = PythonObject(None)
+        var device_word = values[offset + 5] if len(values) == offset + 6 else PythonObject(None)
+        if device_word is not None:
+            var name = String("mojolearn.layer_norm_backward") if backward else String("mojolearn.layer_norm_forward")
+            var fdev = function_device_admit(device_word, name, LN_HAS_GPU, LN_HAS_CPU, context, _b())
+            if fdev.host_beside:
+                seq_device_refuse_resident(values[offset], name, "x", context)
+                if backward:
+                    seq_device_refuse_resident(values[0], name, "dy", context)
+            bound = seq_device_bound(fdev, mode, context)
         var input = LayerInput(values[offset], context)
         var d = _width(input, values[offset + 1], context)
         var result = _run(input, d, values[offset + 2], values[offset + 3], Float64(py=py_call_typed(_b().float, values[offset + 4])),
-            values[0] if backward else PythonObject(None), mode, PythonObject(None), [d], context)
+            values[0] if backward else PythonObject(None), mode, PythonObject(None), [d], bound, context)
         _ = input^
         if not backward:
             return result[0]
@@ -418,6 +439,13 @@ def sequence_layer_norm(operation: Int, owner: PythonObject, values: PythonObjec
     if operation == OPTIMIZER_OPN_SEQLN_INITIALIZE:
         opt_scalar(values, context)
         opt_scalar(mode, context)
+        # lane vdf-seq: the layer's `device` (fifth item), admitted ONCE here;
+        # its binding is kept in `_host_b` (None: today's route).
+        var device_word = values[4] if len(values) == 5 else PythonObject(None)
+        var bound = PythonObject(None)
+        if device_word is not None:
+            var fdev = function_device_admit(device_word, "mojolearn.LayerNorm", LN_HAS_GPU, LN_HAS_CPU, context, _b())
+            bound = seq_device_bound(fdev, mode, context)
         var shape = _norm_shape(values[0], context)
         var d = shape_count(shape)
         if d > 2147483647:
@@ -438,6 +466,8 @@ def sequence_layer_norm(operation: Int, owner: PythonObject, values: PythonObjec
         py_setitem(fields, nk[].k_weight, weight)
         py_setitem(fields, nk[].k_bias, bias)
         py_setitem(fields, nk[].k_numeric_mode, mode)
+        py_setitem(fields, nk[].k_device, device_word)
+        py_setitem(fields, nk[].k__host_b, bound)
         for name in ["weight_grad", "bias_grad", "_x", "_stats"]:  # driver-loop: over initial native state fields
             py_setitem(fields, name, PythonObject(None))
         return PythonObject(None)
@@ -454,8 +484,15 @@ def sequence_layer_norm(operation: Int, owner: PythonObject, values: PythonObjec
         var result = input.owner if entries is None else _upload(input, entries, context)
         _ = input^
         return result
-    for name in ["normalized_shape", "_D", "eps", "numeric_mode"]:  # driver-loop: over layer configuration metadata
+    for name in ["normalized_shape", "_D", "eps"]:  # driver-loop: over layer configuration metadata
         opt_scalar(fields[PythonObject(name)], context)
+    # `numeric_mode` is read ONCE (admitted here, used below; it was read here
+    # and again at the `_run` call). lane vdf-seq: that freed read is the
+    # `_host_b` read (None, or the CPU image of a device="cpu" layer resolved
+    # at construction): a device=None layer reads no more slots than before.
+    var layer_mode = py_get(fields, nk[].k_numeric_mode)
+    opt_scalar(layer_mode, context)
+    var bound = py_get(fields, nk[].k__host_b)
     var d = Int(py=py_item(fields, nk[].k__D))
     var shape = _norm_shape(py_item(fields, nk[].k_normalized_shape), context)
     if d < 1 or d > 2147483647 or d != shape_count(shape):
@@ -467,13 +504,15 @@ def sequence_layer_norm(operation: Int, owner: PythonObject, values: PythonObjec
         var input = LayerInput(x, context)
         _ = _width_known(input, d)
         var result = _run(input, d, py_item(fields, nk[].k_weight), py_item(fields, nk[].k_bias), Float64(py=py_item(fields, nk[].k_eps)), values[0],
-            py_get(fields, nk[].k_numeric_mode), py_get(fields, nk[].k__stats), shape, context)
+            layer_mode, py_get(fields, nk[].k__stats), shape, bound, context)
         _ = input^
         py_setitem(fields, nk[].k_weight_grad, result[2])
         py_setitem(fields, nk[].k_bias_grad, result[3])
         return result[1]
     if operation != OPTIMIZER_OPN_SEQLN_LAYER:
         raise Error("ValueError: unknown LayerNorm public operation")
+    if bound is not None:
+        seq_device_refuse_resident(values[0], "mojolearn.LayerNorm", "x", context)
     var input = LayerInput(values[0], context)
     _ = _width_known(input, d)
     var k = len(shape)
@@ -498,7 +537,7 @@ def sequence_layer_norm(operation: Int, owner: PythonObject, values: PythonObjec
     py_setitem(fields, nk[].k__x, input.owner)
     py_setitem(fields, nk[].k__stats, stats)
     var result = _run(input, d, py_item(fields, nk[].k_weight), py_item(fields, nk[].k_bias), Float64(py=py_item(fields, nk[].k_eps)), PythonObject(None),
-        py_get(fields, nk[].k_numeric_mode), stats, shape, context, fused)
+        layer_mode, stats, shape, bound, context, fused)
     if fused and len(result) == 5:
         py_setitem(fields, nk[].k__stats, result[4])
     _ = input^

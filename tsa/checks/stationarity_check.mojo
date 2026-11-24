@@ -105,6 +105,8 @@ from tsa.impl.timeSeries.stationarity import (
 )
 from tsa.impl.auto_arima import select_d
 from tsa.impl.stationarity import kpss_test
+from tsa.estimator import kpss_test_host
+from core.kpss_host_test_impl import _kpss_flags_host
 
 
 from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
@@ -453,6 +455,47 @@ def check_select_d(ctx: DeviceContext) raises:
     _ = y^
 
 
+def check_kpss_op_u8_flags_equal_host_column(ctx: DeviceContext) raises:
+    """Lane vdf-misc2 (2026-11-24): TSA_OP_KPSS_TEST writes uint8 flags
+    itself (the public door no longer narrows int32 words on the host). The
+    device image's op body (`kpss_test_host`) and the host column's
+    (`_kpss_flags_host`) on the same series-major words: the flag bytes are
+    equal (asserted, both modes) and the statistic bits are equal (gated:
+    asserted under IDENTICAL). Each (d, D, s) cell of the fixture."""
+    print("check_kpss_op_u8_flags_equal_host_column [" + _mode_name() + "]")
+    var f = kpss_fixture(N_OBS, SALT)
+    var cells: List[Int] = [0, 0, 0, 1, 0, 0, 0, 1, 4]
+    for c in range(3):  # small-loop(fixture: three (d, D, s) cells)
+        var d = cells[3 * c]
+        var D = cells[3 * c + 1]
+        var s = cells[3 * c + 2]
+        var dev_flags = List[UInt8](length=f.batch_size, fill=UInt8(7))
+        var dev_stat = List[Float32](length=f.batch_size, fill=Float32(0))
+        var host_flags = List[UInt8](length=f.batch_size, fill=UInt8(9))
+        var host_stat = List[Float32](length=f.batch_size, fill=Float32(0))
+        var y = f.y.copy()
+        _ = kpss_test_host(
+            MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(y.unsafe_ptr())),
+            MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(dev_flags.unsafe_ptr())),
+            MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(dev_stat.unsafe_ptr())),
+            f.batch_size, f.n_obs, d, D, s, Float32(0.05),
+        )
+        _kpss_flags_host(
+            Int(y.unsafe_ptr()), f.batch_size, f.n_obs, d, D, s, Float32(0.05),
+            MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(host_flags.unsafe_ptr())),
+            MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(host_stat.unsafe_ptr())),
+        )
+        var cell = "(d, D, s) = (" + String(d) + ", " + String(D) + ", " + String(s) + ")"
+        for b in range(f.batch_size):  # small-loop(fixture: one flag and one statistic per series)
+            _assert(dev_flags[b] == UInt8(0) or dev_flags[b] == UInt8(1),
+                    cell + " series " + String(b) + ": the op wrote flag byte " + String(Int(dev_flags[b])))
+            _assert(dev_flags[b] == host_flags[b], cell + " series " + String(b) + ": device flag "
+                    + String(Int(dev_flags[b])) + " host column " + String(Int(host_flags[b])))
+            _gate(same_bits(dev_stat[b], host_stat[b]), cell + " series " + String(b)
+                  + ": statistic bits differ from the host column")
+        _ = y^
+
+
 def main() raises:
     print("== tsa/checks/stationarity_check.mojo [" + _mode_name() + "] STATS_TPB=" + String(STATS_TPB) + " N_OBS=" + String(N_OBS) + " ==")
     var ctx = DeviceContext()
@@ -464,4 +507,5 @@ def main() raises:
     check_kpss_fold_order_is_visible(ctx)
     check_kpss_ftz_seam_is_reached(ctx)
     check_select_d(ctx)
+    check_kpss_op_u8_flags_equal_host_column(ctx)
     print("ALL TSA CHECKS PASSED [" + _mode_name() + "]")

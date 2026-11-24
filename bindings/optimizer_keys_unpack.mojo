@@ -136,6 +136,8 @@ struct OptimizerKeys(Defaultable, Movable):
     var k__pristine: PythonObject
     var k__readonly: PythonObject
     var k__resident_wanted: PythonObject
+    var k_device: PythonObject
+    var k__host_device: PythonObject
     var k__step: PythonObject
     var k__v: PythonObject
     var k_accumulation_steps: PythonObject
@@ -173,6 +175,14 @@ struct OptimizerKeys(Defaultable, Movable):
     var k_kind: PythonObject
     var k_linear_backward_dev: PythonObject
     var k_linear_forward_dev: PythonObject
+    var k_rms_norm_forward_dev: PythonObject
+    var k_rms_norm_backward_dev: PythonObject
+    var k_embedding_forward_dev: PythonObject
+    var k_embedding_backward_dev: PythonObject
+    var k_chunked_lm_head_dev: PythonObject
+    var k_clip_dev: PythonObject
+    var k_accumulate_dev: PythonObject
+    var k_mlp_sessions_dev: PythonObject
     var k_lr: PythonObject
     var k_lr_at: PythonObject
     var k_lr_schedule: PythonObject
@@ -238,6 +248,8 @@ struct OptimizerKeys(Defaultable, Movable):
         self.k__pristine = PythonObject(None)
         self.k__readonly = PythonObject(None)
         self.k__resident_wanted = PythonObject(None)
+        self.k_device = PythonObject(None)
+        self.k__host_device = PythonObject(None)
         self.k__step = PythonObject(None)
         self.k__v = PythonObject(None)
         self.k_accumulation_steps = PythonObject(None)
@@ -275,6 +287,14 @@ struct OptimizerKeys(Defaultable, Movable):
         self.k_kind = PythonObject(None)
         self.k_linear_backward_dev = PythonObject(None)
         self.k_linear_forward_dev = PythonObject(None)
+        self.k_rms_norm_forward_dev = PythonObject(None)
+        self.k_rms_norm_backward_dev = PythonObject(None)
+        self.k_embedding_forward_dev = PythonObject(None)
+        self.k_embedding_backward_dev = PythonObject(None)
+        self.k_chunked_lm_head_dev = PythonObject(None)
+        self.k_clip_dev = PythonObject(None)
+        self.k_accumulate_dev = PythonObject(None)
+        self.k_mlp_sessions_dev = PythonObject(None)
         self.k_lr = PythonObject(None)
         self.k_lr_at = PythonObject(None)
         self.k_lr_schedule = PythonObject(None)
@@ -324,7 +344,7 @@ struct OptimizerKeys(Defaultable, Movable):
         self.k_weight_decay = PythonObject(None)
 
 
-comptime _OPTIMIZER_KEYS = SharedSlot[OptimizerKeys, "MojolearnOptimizerKeysV1"]
+comptime _OPTIMIZER_KEYS = SharedSlot[OptimizerKeys, "MojolearnOptimizerKeysV2"]
 
 
 def _optimizer_keys_fill(nk: UnsafePointer[OptimizerKeys, MutUntrackedOrigin]) raises:
@@ -344,6 +364,8 @@ def _optimizer_keys_fill(nk: UnsafePointer[OptimizerKeys, MutUntrackedOrigin]) r
     nk[].k__pristine = py_key("_pristine")
     nk[].k__readonly = py_key("_readonly")
     nk[].k__resident_wanted = py_key("_resident_wanted")
+    nk[].k_device = py_key("device")
+    nk[].k__host_device = py_key("_host_device")
     nk[].k__step = py_key("_step")
     nk[].k__v = py_key("_v")
     nk[].k_accumulation_steps = py_key("accumulation_steps")
@@ -381,6 +403,14 @@ def _optimizer_keys_fill(nk: UnsafePointer[OptimizerKeys, MutUntrackedOrigin]) r
     nk[].k_kind = py_key("kind")
     nk[].k_linear_backward_dev = py_key("linear_backward_dev")
     nk[].k_linear_forward_dev = py_key("linear_forward_dev")
+    nk[].k_rms_norm_forward_dev = py_key("rms_norm_forward_dev")
+    nk[].k_rms_norm_backward_dev = py_key("rms_norm_backward_dev")
+    nk[].k_embedding_forward_dev = py_key("embedding_forward_dev")
+    nk[].k_embedding_backward_dev = py_key("embedding_backward_dev")
+    nk[].k_chunked_lm_head_dev = py_key("chunked_lm_head_dev")
+    nk[].k_clip_dev = py_key("clip_dev")
+    nk[].k_accumulate_dev = py_key("accumulate_dev")
+    nk[].k_mlp_sessions_dev = py_key("mlp_sessions_dev")
     nk[].k_lr = py_key("lr")
     nk[].k_lr_at = py_key("lr_at")
     nk[].k_lr_schedule = py_key("lr_schedule")

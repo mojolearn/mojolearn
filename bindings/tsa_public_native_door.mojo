@@ -20,13 +20,13 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_input, classical_address, classical_cast_kind, classical_wrap_array
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_pandas_door import classical_admit_value
-from core.xseq_marshal import tsa_flags_u8
 from core.admitted_input_nd import admitted_cast_nd_f32
 from bindings.native_array_storage_door import native_scratch_bytes, native_scratch_address
 from bindings.tsa_hw_native_door import tsa_array, hw_fit, hw_predict, hw_score, hw_vendor_used, hw_initialize, hw_forecast, hw_component, hw_save
 from bindings.tsa_admission_door import tsa_scalar, tsa_truth
 from bindings.admitted_input_unpack import admit_view, AdmittedTypedPin
 from bindings.admitted_input_run import admitted_view_kind
+from core.cast_in import CAST_KIND_FLOAT
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.tsa_arima_native_door import arima_fit, arima_predict, arima_forecast
 from providers.python.arima_lifecycle_pyapi_door import arima_initialize, arima_parameter, arima_repr
@@ -42,10 +42,10 @@ from bindings.py_balanced import py_item
 from std.python._cpython import GILReleased
 from bindings.tsa_hw_route_unpack import tsa_function_route
 from core.tsa_hw_run import tsa_kpss_run, tsa_select_d_run
+from core.device_route import device_cpu_fast
+from providers.python.function_device_boundary_door import function_device_admit
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
-comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
-comptime _U8P = MutPointer[UInt8, MutUntrackedOrigin]
 
 
 def _b() raises -> PythonObject:
@@ -57,12 +57,36 @@ def _array(code: String, typestr: String, count: Int, width: Int, context: Pytho
     return tsa_array(code, typestr, Python.tuple(count), count, width, context)
 
 
-def _series_major(source: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    """`_series_major(y, name)`: (series-major float32 scratch store, n_obs,
-    batch). The store is the kernel's read-only input for this call only
-    (never returned or kept), written in full by the one parallel cast, so it
-    is uninitialised (`native_scratch_bytes`; REGRESSIONS F3/C3, was a
-    zero-filled Array); read its address with `native_scratch_address`."""
+struct _TsaSeries(Movable):
+    """The series of one stationarity call, series-major float32 (lane
+    vdf-misc2, 2026-11-24): `address` is the caller's own words when they
+    already are that layout (a float32 1-D series, an F-order or one-column
+    / one-row float32 2-D array; `pin` holds them through the call and
+    `scratch` is None), else the one parallel cast into a scratch store
+    (`scratch`, read-only input of this call only, never returned or kept,
+    written in full by the cast, so uninitialised: REGRESSIONS F3/C3). The
+    entry uploads from `address` (the kernel's one upload of a host input);
+    nothing reads the words on the host between."""
+    var pin: AdmittedTypedPin
+    var scratch: PythonObject
+    var address: Int
+    var rows: Int
+    var cols: Int
+
+    def __init__(out self, var pin: AdmittedTypedPin, scratch: PythonObject, address: Int, rows: Int, cols: Int):
+        self.pin = pin^
+        self.scratch = scratch
+        self.address = address
+        self.rows = rows
+        self.cols = cols
+
+
+def _series_major(source: PythonObject, name: String, context: PythonObject) raises -> _TsaSeries:
+    """`_series_major(y, name)`: the series-major float32 words of y (1-D,
+    or 2-D (n_obs, n_series)), n_obs and batch. A float32 y whose memory
+    already is series-major is read in place (was: copied by the cast into
+    a scratch store per call); every other y is cast once into the scratch
+    store (the one buffer the entry uploads)."""
     var value_pin = AdmittedTypedPin()
     var value = admit_view(source, name + " y", context, value_pin)
     var kind = admitted_view_kind(value, name + " y")
@@ -73,39 +97,76 @@ def _series_major(source: PythonObject, name: String, context: PythonObject) rai
     var cols = 1 if rank == 1 else value.shape[1]
     if rows * cols == 0:
         raise Error("mojolearn " + name + ": y is empty")
+    # the element steps in bytes (C order when the view carries none)
+    var row_step = value.strides[0] if value.has_strides else value.itemsize * cols
+    var col_step = (value.strides[1] if value.has_strides else value.itemsize) if rank == 2 else 0
+    var f32 = (value.dtype == "<f4") if value.is_array else (value.itemsize == 4 and kind[0] == CAST_KIND_FLOAT)
+    if f32 and (rows == 1 or row_step == 4) and (cols == 1 or col_step == 4 * rows):
+        var address = value.addr
+        return _TsaSeries(value_pin^, PythonObject(None), address, rows, cols)
     var out = native_scratch_bytes(rows * cols * 4)
     var dims = List[Int]()
     var steps = List[Int]()
     if rank == 2:
         dims.append(cols)
-        steps.append(value.strides[1])
+        steps.append(col_step)
     dims.append(rows)
-    steps.append(value.strides[0])
+    steps.append(row_step)
     _ = admitted_cast_nd_f32(value.addr, dims, steps, kind[1], kind[0],
                  _F32P(unsafe_from_address=native_scratch_address(out)))
-    _ = value_pin^
-    _ = out
-    return Python.tuple(out, rows, cols)
+    var address = native_scratch_address(out)
+    return _TsaSeries(value_pin^, out, address, rows, cols)
+
+
+# The stationarity functions have a device image (`_mojolearn_tsa` of the GPU
+# set) and a CPU identical image (`_mojolearn_tsa_host`, loaded beside it at
+# import as `hw_cpu_bindings`, the one AutoARIMA(device="cpu") runs).
+comptime _STATIONARITY_HAS_GPU = True
+comptime _STATIONARITY_HAS_CPU = True
+
+
+def _stationarity_cpu(word: PythonObject, name: String, context: PythonObject, b: PythonObject) raises -> Bool:
+    """UNPACK of `kpss_test` / `select_d`'s `device=` (lane vdf-misc), once per
+    call before any work, in the shared words: True for an explicit "cpu"
+    beside a GPU set (the function route's CPU table,
+    bindings/tsa_hw_route_unpack.mojo `tsa_function_route`). The CPU table
+    is identical only, as for every device="cpu" estimator. None is one
+    identity compare."""
+    if word is None:
+        return False
+    var device = function_device_admit(word, name, _STATIONARITY_HAS_GPU, _STATIONARITY_HAS_CPU, context, b)
+    if not device.host_beside:
+        return False
+    var nk = tsa_keys()
+    if String(py=py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)) != "identical":
+        device_cpu_fast()
+    if py_get(context, nk[].k_hw_cpu_bindings) is None:
+        # never the device table in its place
+        raise Error("ImportError: device='cpu' is not connected in this installation")
+    return True
 
 
 def tsa_kpss(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """kpss_test(y, d, D, s, pval_threshold, return_statistic)."""
+    """kpss_test(y, d, D, s, pval_threshold, return_statistic, device)."""
     var nk = tsa_keys()
     var b = _b()
-    var prepared = _series_major(args[0], "kpss_test", context)
-    var flat = prepared[0]
-    var n_obs = Int(py=prepared[1])
-    var batch = Int(py=prepared[2])
-    var flags = _array("i", "<i4", batch, 4, context)
+    var want_cpu = _stationarity_cpu(args[6], "kpss_test", context, b)
+    var series = _series_major(args[0], "kpss_test", context)
+    var n_obs = series.rows
+    var batch = series.cols
+    # the entry writes the stationarity flags as uint8 (1 stationary, 0 not)
+    # straight into the result (lane vdf-misc2: was int32 words narrowed to
+    # uint8 on the host after the call)
+    var stationary = _array("B", "<u1", batch, 1, context)
     var stat = _array("f", "<f4", batch, 4, context)
     var d = Int(py=py_call_typed(b.int, tsa_scalar(args[1], context, True)))
     var seasonal_d = Int(py=py_call_typed(b.int, tsa_scalar(args[2], context, True)))
     var period = Int(py=py_call_typed(b.int, tsa_scalar(args[3], context, True)))
     var pval = Float64(py=py_call_typed(b.float, tsa_scalar(args[4], context)))
-    var call = tsa_function_route(context, False, b)
+    var call = tsa_function_route(context, want_cpu, b)
     var route = call.route
-    var flat_address = native_scratch_address(flat)
-    var flags_address = Int(py=classical_address(flags))
+    var flat_address = series.address
+    var flags_address = Int(py=classical_address(stationary))
     var stat_address = Int(py=classical_address(stat))
     var py = Python()
     try:
@@ -113,31 +174,25 @@ def tsa_kpss(args: PythonObject, context: PythonObject) raises -> PythonObject:
             _ = tsa_kpss_run(route, flat_address, flags_address, stat_address, batch, n_obs, d, seasonal_d, period, pval)
     finally:
         _ = stat  # keep the Python object alive through the native call above
-        _ = flags  # keep the Python object alive through the native call above
-        _ = flat  # keep the Python object alive through the native call above
+        _ = stationary  # keep the Python object alive through the native call above
+        _ = series.scratch  # keep the Python object alive through the native call above
         _ = call.owner  # the route owner pins the image through the call
-    # the binding writes 1 (stationary) or 0
-    var stationary = _array("B", "<u1", batch, 1, context)
-    tsa_flags_u8(_I32P(unsafe_from_address=Int(py=classical_address(flags))),
-                 _U8P(unsafe_from_address=Int(py=classical_address(stationary))), batch)
-    _ = flags  # keep the Python object alive through the native call above
-    _ = stationary  # keep the Python object alive through the native call above
-    _ = flat^
+    _ = series^
     if tsa_truth(args[5], context):
         return Python.tuple(stationary, stat)
     return stationary
 
 
 def tsa_select_d(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """select_d(y, D, s, d_max, pval_threshold)."""
+    """select_d(y, D, s, d_max, pval_threshold, device)."""
     var nk = tsa_keys()
     var b = _b()
+    var want_cpu = _stationarity_cpu(args[5], "select_d", context, b)
     var seasonal = Int(py=py_call_typed(b.int, tsa_scalar(args[1], context, True)))
     var limit_value = PythonObject(2 - seasonal) if args[3] is None else py_call_typed(b.int, tsa_scalar(args[3], context, True))
-    var prepared = _series_major(args[0], "select_d", context)
-    var flat = prepared[0]
-    var n_obs = Int(py=prepared[1])
-    var batch = Int(py=prepared[2])
+    var series = _series_major(args[0], "select_d", context)
+    var n_obs = series.rows
+    var batch = series.cols
     # the documented bound, refused by name on every vendor (the host
     # binding's own refusal; the device selector is never handed one outside it)
     if True:
@@ -149,9 +204,9 @@ def tsa_select_d(args: PythonObject, context: PythonObject) raises -> PythonObje
     var period = Int(py=py_call_typed(b.int, tsa_scalar(args[2], context, True)))
     var d_max = Int(py=py_call_typed(b.int, limit_value))
     var pval = Float64(py=py_call_typed(b.float, tsa_scalar(args[4], context)))
-    var call = tsa_function_route(context, False, b)
+    var call = tsa_function_route(context, want_cpu, b)
     var route = call.route
-    var flat_address = native_scratch_address(flat)
+    var flat_address = series.address
     var out_address = Int(py=classical_address(out))
     var py = Python()
     try:
@@ -159,9 +214,9 @@ def tsa_select_d(args: PythonObject, context: PythonObject) raises -> PythonObje
             _ = tsa_select_d_run(route, flat_address, out_address, batch, n_obs, seasonal, period, d_max, pval)
     finally:
         _ = out  # keep the Python object alive through the native call above
-        _ = flat  # keep the Python object alive through the native call above
+        _ = series.scratch  # keep the Python object alive through the native call above
         _ = call.owner  # the route owner pins the image through the call
-    _ = flat^
+    _ = series^
     return out
 
 

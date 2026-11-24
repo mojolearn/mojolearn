@@ -103,7 +103,7 @@ def tsa_hw_query_resident_run(route: DeviceRoute, handle: Int, dst: Int, start: 
 
 def tsa_kpss_run(route: DeviceRoute, y: Int, flags: Int, stat: Int, batch: Int, n_obs: Int, d: Int,
     seasonal_d: Int, period: Int, pval_threshold: Float64) raises -> Int:
-    """`kpss_test`: `batch` int32 flags (1 stationary) at `flags` and
+    """`kpss_test`: `batch` uint8 flags (1 stationary) at `flags` and
     `batch` float32 statistics at `stat` from the series-major float32 `y`."""
     var a: List[Int] = [y, flags, stat]
     var p: List[Int] = [batch, n_obs, d, seasonal_d, period]

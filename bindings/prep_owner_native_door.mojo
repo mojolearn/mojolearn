@@ -20,7 +20,8 @@ from bindings.py_balanced import py_call, py_type, py_get
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.prep_encode_native_door import prep_encode_c, prep_encode_scores_call
 from bindings.prep_labels_native_door import prep_labels_call
-from bindings.prep_owner_route_unpack import prep_route_context, prep_route_vendor_used
+from bindings.prep_owner_route_unpack import prep_route_context, prep_route_vendor_used, prep_cpu_scope
+from providers.python.function_device_boundary_door import function_device_admit
 from bindings.prep_iterimp_native_door import prep_iterimp_call
 from bindings.prep_select_native_door import prep_rfe_call, prep_mutual_info_call
 from bindings.prep_composition_lifecycle_door import composition_before, composition_after_fit
@@ -76,6 +77,32 @@ def _owner_kind(model: PythonObject, context: PythonObject) raises -> String:
 
 
 comptime _OWNER_KIND_SLOT = "prep_owner_kind_v1"
+
+# The score functions have a device image (the x_prep programs a GPU set runs)
+# and a CPU identical image (the family's host x_prep image beside it,
+# `prep_cpu_bindings`, the one SelectKBest(device="cpu") runs).
+comptime _SCORES_HAS_GPU = True
+comptime _SCORES_HAS_CPU = True
+
+
+def _function_context(word: PythonObject, operation: String, context: PythonObject) raises -> PythonObject:
+    """UNPACK of a score function's `device=` (lane vdf-misc): admitted once,
+    before any work, in the shared words
+    (providers/python/function_device_boundary_door.mojo). The context the
+    function's programs run in: `context` itself for every value but an
+    explicit "cpu" beside a GPU set, which runs in the family's CPU context
+    (bindings/prep_owner_route_unpack.mojo `prep_cpu_scope`, the one a
+    device="cpu" SelectKBest runs in). None costs one identity compare."""
+    if word is None:
+        return context
+    var device = function_device_admit(word, operation, _SCORES_HAS_GPU, _SCORES_HAS_CPU, context,
+                                       native_loaded_module("builtins"))
+    if not device.host_beside:
+        return context
+    var run = prep_cpu_scope(context)
+    # the CPU context beside a device set: its own NumPy cells
+    classical_connect_numpy(run)
+    return run
 
 
 def prep_owner_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -142,20 +169,34 @@ def prep_owner_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
                 composition_after_fit(model, args[0], run)
             return parallel_public_result(result, operation, PythonObject(None), run).steal_data()
         elif kind == "rfe":
-            var prepared = composition_before(model, kind, op, operation, args, context)
-            result = prep_rfe_call(model, op, operation, prepared, context)
+            # The connected context of RFE's device route (lane vdf-misc: RFE
+            # takes `device`; the one read of it, resolved once per
+            # estimator as for SelectKBest; a hit is one record read and one
+            # pointer compare). "cpu" beside a GPU set is the family's CPU
+            # context; its rounds and member follow (`_rfe_fit`).
+            var run = prep_route_context(model, context)
+            if run is not context:
+                # the CPU context beside a device set: its own NumPy cells
+                classical_connect_numpy(run)
+            var prepared = composition_before(model, kind, op, operation, args, run)
+            result = prep_rfe_call(model, op, operation, prepared, run)
+            if op == PREP_OPN_FIT or op == PREP_OPN_FIT_TRANSFORM:
+                composition_after_fit(model, args[0], run)
+            return parallel_public_result(result, operation, PythonObject(None), run).steal_data()
         elif kind != "":
             raise Error("TypeError: the native prep owner does not serve this class")
         elif op == PREP_OPN_MUTUAL_INFO_CLASSIF or op == PREP_OPN_MUTUAL_INFO_REGRESSION:
-            result = prep_mutual_info_call(op, args, context)
+            # mutual_info_*(X, y, discrete_features, n_neighbors, random_state, device)
+            # (SelectKBest's own call hands device None: it already runs in its route's context)
+            var run = _function_context(args[5], operation, context)
+            result = prep_mutual_info_call(op, args, run)
         elif op == PREP_OPN_F_CLASSIF or op == PREP_OPN_CHI2 or op == PREP_OPN_F_REGRESSION or op == PREP_OPN_R_REGRESSION:
-            result = prep_encode_scores_call(operation, args, context)
+            # f_classif / chi2(X, y, device); f_regression / r_regression(X, y, center, force_finite, device)
+            var at = 2 if op == PREP_OPN_F_CLASSIF or op == PREP_OPN_CHI2 else 4
+            var run = _function_context(args[at], operation, context)
+            result = prep_encode_scores_call(operation, args, run)
         else:
             raise Error("unknown native prep operation")
-        if kind == "rfe":
-            if op == PREP_OPN_FIT or op == PREP_OPN_FIT_TRANSFORM:
-                composition_after_fit(model, args[0], context)
-            result = parallel_public_result(result, operation, PythonObject(None), context)
         return result.steal_data()
     except error:
         if String(error) == PYTHON_ERROR_PENDING:

@@ -111,6 +111,8 @@ def metric_opcode(name: String) raises -> Int:
         return 87
     if name == "strat_take":
         return 88
+    if name == "gather_i32":
+        return 89
     raise Error("KeyError: unknown x_metrics op '" + name + "'")
 
 

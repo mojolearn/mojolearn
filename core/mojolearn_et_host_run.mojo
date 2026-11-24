@@ -416,6 +416,19 @@ struct EtHostForest(ForestImage):
         pass
 
 
+    @staticmethod
+    def fit_rows(classifier: Bool, args: ForestFitArgs) raises -> Int:
+        # XF_FIT_ROWS (lane vdf-scope-trees): the ExtraTrees host image keeps no device store
+        # (no XF_CAP_DEV_ROWS), so no caller sends it.
+        raise Error("RuntimeError: mojolearn: this forest image fits no device-store rows (XF_FIT_ROWS)")
+
+    @staticmethod
+    def resident_rows(mode: Int, handle: Int, store_id: Int, idx: Int, out_addr: Int, rows: Int,
+                      cols: Int, outputs: Int) raises -> Int:
+        # XF_RESIDENT_ROWS (lane vdf-scope-trees2a): the ExtraTrees host image keeps no device store
+        # (no XF_CAP_DEV_ROWS), so no caller sends it.
+        raise Error("RuntimeError: mojolearn: this forest image predicts no device-store rows (XF_RESIDENT_ROWS)")
+
 def et_host_forest_entry_native(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     """The image's forest entry for a caller that holds no GIL (a Mojo check;

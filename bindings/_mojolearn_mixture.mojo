@@ -36,6 +36,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from mixture.gmm_native_device import GMM_NATIVE_DEVICE_API
+from mixture.mixture_store import MIXTURE_STORE_API
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 # The typed bodies (lane thin-trees-metrics, 2026-10-21).
@@ -136,6 +137,14 @@ def mixture_native_api_v1_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
+def mixture_store_v1_binding() raises -> PythonObject:
+    """The image's resident store as a scope transport entry (mixture/mixture_store.mojo, lane
+    vdf-scope-cluster2b): the member boundary (providers/python/member_mixture_boundary_door.mojo)
+    connects it once and hands it to the member in `route.second`."""
+    var api = MIXTURE_STORE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_mixture.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -154,6 +163,7 @@ def build__mojolearn_mixture() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_gmm_python.patch
         m.def_function[gmm_sample_binding]("gmm_sample")
         m.def_function[mixture_native_api_v1_binding]("mixture_native_api_v1")
+        m.def_function[mixture_store_v1_binding]("mixture_store_v1")
         var published_module = m.finalize()
         # The GaussianMixture member entry (core/mixture_member.mojo) beside its kernel table.
         mixture_member_publish(Int(GLOBAL_NUMERIC_MODE), device_vendor_code(String(COMPILED_VENDOR)), Int(GMM_NATIVE_DEVICE_API.get_or_create_ptr()[].entries.unsafe_ptr()))

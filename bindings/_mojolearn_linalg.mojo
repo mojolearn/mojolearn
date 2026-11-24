@@ -116,7 +116,7 @@ from gemm.afn_apple_fast import (
     AFN_GEMM_EPILOGUE,
     afn_gemm_bf16_bits_into,
 )
-from decomposition.linalg_door_impl import from_f16_device, qr_r_device_into, svdvals_device_into
+from decomposition.linalg_door_impl import from_f16_device, qr_r_device_into, svdvals_device_at_into
 from gemm.linalg_fused_run import gemm_fused_run
 from max.gpu import block_dim, block_idx, thread_idx
 from gemm.checks.gemm_int15 import (
@@ -610,29 +610,30 @@ def eigh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObje
 
 def svdvals_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """`device_svdvals(a, n_rows, n_cols)`. `addrs`: 0 a, 1 s_out (n_cols,
-    DESCENDING). `params`: 0 n_rows, 1 n_cols. Returns n_cols."""
+    DESCENDING). `params`: 0 n_rows, 1 n_cols, optional 2 wide (1: `a` is
+    the wide n_cols x n_rows matrix, transposed on the device). Returns
+    n_cols."""
     if len(addrs) != 2:
         raise Error(
             "svdvals: addrs must contain 2 addresses (a, s_out), got "
             + String(len(addrs))
         )
-    if len(params) != 2:
+    if len(params) != 2 and len(params) != 3:
         raise Error(
-            "svdvals: params must contain 2 values (n_rows, n_cols), got "
+            "svdvals: params must contain 2 or 3 values (n_rows, n_cols[, wide]), got "
             + String(len(params))
         )
     var sp = f32_ptr(Int(py=addrs[1]))
     var n_rows = Int(py=params[0])
     var n_cols = Int(py=params[1])
-    # The owned copy the device door takes is made with the GIL released
-    # (it was taken under the GIL; p3 rank 295). The door's List signature
-    # (decomposition/linalg_door_impl.mojo) keeps the copy itself.
+    var wide = len(params) == 3 and Int(py=params[2]) != 0
+    # lane vdf-linalg2 (2026-11-24): the operand is uploaded ONCE straight
+    # from the caller's buffer (was: a host List copy of the whole matrix,
+    # then its upload); a wide operand is transposed on the device (was: the
+    # door's x_decomp kit transpose, downloaded, then uploaded here again).
     var a_address = Int(py=addrs[0])
-    var a = List[Float32]()
     with GILReleased(Python()):
-        a = read_f32(a_address, max(0, n_rows * n_cols))
-        svdvals_device_into(a, n_rows, n_cols, sp)
-    _ = a^
+        svdvals_device_at_into(a_address, n_rows, n_cols, wide, sp)
     return PythonObject(n_cols)
 
 

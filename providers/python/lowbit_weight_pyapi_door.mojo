@@ -14,7 +14,13 @@ from bindings.sequential_inputs_door import sequential_sequence_f32
 from bindings.linalg_ops_buffers_unpack import lin_dtype_name
 from bindings.linalg_ops_buffers_run import lin_is_f32
 from bindings.admitted_input_unpack import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_shape_tuple, admitted_unfilled
-from bindings.linalg_ops_lowbit_door import lin_connected_binding, lin_lowbit, lin_call
+from bindings.linalg_ops_lowbit_door import (
+    lin_connected_binding, lin_lowbit, lin_call, lin_device, lin_device_binding, lin_device_context, LIN_HAS_GPU,
+    LIN_HAS_CPU, lin_dev_widen_bf16, lin_dev_narrow_bf16, lin_dev_quantize_int8, lin_dev_dequantize_int8, lin_dev_copy,
+)
+from bindings.linalg_dev_arrays_unpack import lin_train_device, lin_is_device_array, lin_dev_device
+from core.function_device import FunctionDevice, function_device_default
+from core.train_dev_pool import TRAIN_DEV_F32, TRAIN_DEV_I8, TRAIN_DEV_I32, TRAIN_DEV_U16
 from bindings.tensor_view import base_format, shape_text, TensorView
 from bindings.lowbit_weight_run import low_empty
 from bindings.lowbit_keys_unpack import lowbit_keys
@@ -108,12 +114,69 @@ def low_exponents(value: PythonObject, rows: Int, context: PythonObject,
     return e^
 
 
+# lane vdf-linalg5 (2026-11-24): TrainDeviceArray tensors (bindings/linalg_dev_arrays_unpack.mojo, the training ops'
+# one device-array convention) are packed, widened and materialized ON THE DEVICE by the linalg device entries
+# (gemm/linalg_dev_arrays.mojo): a packed weight of device tensors holds device arrays in its bits / codes /
+# exponents fields, and materializes into a float32 device array. `held` is the published (class, owner context)
+# pair, None before the training module's import (then no device array exists): one identity compare per tensor.
+
+
+def low_is_dev(value: PythonObject, held: PythonObject) raises -> Bool:
+    return held is not None and lin_is_device_array(value, held)
+
+
+def low_wrap_dev(kind: Int, q: PythonObject, e: PythonObject, shape: PythonObject,
+                 context: PythonObject) raises -> PythonObject:
+    """A packed weight over device arrays (bits, or codes and exponents) of the float32 tensor's `shape`."""
+    var nk = lowbit_keys()
+    var result = native_storage_allocate(py_item(context, nk[].k_family_low_bf16) if kind == 1 else py_item(context, nk[].k_family_low_int8))
+    var fields = py_fields(result)
+    py_setitem(fields, nk[].k_bits if kind == 1 else nk[].k_codes, q)
+    if kind == 2:
+        py_setitem(fields, nk[].k_exponents, e)
+    py_setitem(fields, nk[].k_shape, shape)
+    return result
+
+
+def low_pack_dev(value: PythonObject, fmt: String, device: FunctionDevice, mut binding: PythonObject,
+                 held: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`pack_one` of a float32 TrainDeviceArray: 'float32' returns a device copy (lane vdf-linalg6: as the host path
+    returns a copy; it was the caller's array itself, aliased); 'bfloat16' / 'int8' convert on the device into a
+    packed weight of device arrays."""
+    lin_dev_device(device, "mojolearn.lowbit.pack_one")
+    if fmt == "float32":
+        return lin_dev_copy(value, TRAIN_DEV_F32, "tensor", low_binding(binding, context), held, context)
+    var b = native_loaded_module("builtins")
+    var lk = lowbit_keys()
+    var shape = py_call(b.tuple, py_item(py_fields(value), lk[].k_shape))
+    if fmt == "bfloat16":
+        return low_wrap_dev(1, lin_dev_narrow_bf16(value, low_binding(binding, context), held, context), PythonObject(None),
+                            shape, context)
+    var pair = lin_dev_quantize_int8(value, low_binding(binding, context), held, context)
+    return low_wrap_dev(2, pair[0], pair[1], shape, context)
+
+
 def low_materialize(value: PythonObject, mut binding: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A packed weight's float32 tensor (host storage: today's route; no device-array test)."""
+    return low_materialize_on(value, binding, context, PythonObject(None), function_device_default())
+
+
+def low_materialize_on(value: PythonObject, mut binding: PythonObject, context: PythonObject,
+                       held: PythonObject, device: FunctionDevice) raises -> PythonObject:
+    """`low_materialize` that also reads a packed weight of device arrays on the device (`held` not None)."""
     var kind = low_kind(value, context)
     if kind == 0:
         return value
     var nk = lowbit_keys()
     var fields = low_fields(value)
+    var stored = native_instance_item(fields, nk[].k_bits if kind == 1 else nk[].k_codes)
+    if low_is_dev(stored, held):
+        # a packed weight of device arrays widens / dequantizes on the device (refused with device="cpu")
+        lin_dev_device(device, "mojolearn.lowbit")
+        if kind == 1:
+            return lin_dev_widen_bf16(stored, low_binding(binding, context), held, context)
+        return lin_dev_dequantize_int8(stored, native_instance_item(fields, nk[].k_exponents), low_binding(binding, context),
+                                       held, context)
     var q = low_admit(native_instance_item(fields, nk[].k_bits if kind == 1 else nk[].k_codes), "<u2" if kind == 1 else "<i1", 2, "weight", context)
     # lane fix-output-zero-fill (2026-11-14): unfilled; from_bf16 / dequantize_int8 write every cell.
     var result = admitted_unfilled(q.shape, "<f4", context)
@@ -185,12 +248,44 @@ def lowbit_weight_unknown_operation(operation: String) raises:
     raise Error("RuntimeError: unknown lowbit storage operation " + operation)
 
 
+def _low_public_name(operation: Int) -> String:
+    """The public name a `device=` refusal of `operation` leads with."""
+    if operation == LOW_OPN_FAMILY_LOW_MATERIALIZE_ONE:
+        return "mojolearn.lowbit.materialize_one"
+    if operation == LOW_OPN_FAMILY_LOW_WIDEN_BF16:
+        return "mojolearn.lowbit.widen_bf16"
+    if operation == LOW_OPN_FAMILY_LOW_PACK_ONE:
+        return "mojolearn.lowbit.pack_one"
+    if operation == LOW_OPN_FAMILY_LOW_UNPACK:
+        return "mojolearn.lowbit.unpack"
+    return "mojolearn.lowbit.pack"
+
+
 def lowbit_weight_operation(model: PythonObject, operation: Int, args: PythonObject,
-                            context: PythonObject) raises -> PythonObject:
+                            var context: PythonObject) raises -> PythonObject:
     # bw2-linalg: `operation` is the leaf code of bindings/operation_names_low.mojo,
     # resolved once by the family door (it was up to eleven String compares here).
     classical_connect_numpy(context)
     var binding = PythonObject(None)
+    var held = PythonObject(None)
+    var device = function_device_default()
+    if (operation == LOW_OPN_FAMILY_LOW_MATERIALIZE_ONE or operation == LOW_OPN_FAMILY_LOW_WIDEN_BF16
+            or operation == LOW_OPN_FAMILY_LOW_PACK_ONE or operation == LOW_OPN_FAMILY_LOW_UNPACK
+            or operation == LOW_OPN_FAMILY_LOW_PACK):
+        # lane vdf-linalg: `device` is the last item of a computing function's
+        # tuple, read once before any work (None: this one identity compare,
+        # and `low_binding` resolves today's binding lazily as before). An
+        # explicit device runs the linalg image of that side in its own module
+        # state (bindings/linalg_ops_lowbit_door.mojo `lin_device_context`),
+        # resolved here once so every later `low_binding` reuses it.
+        var item = args[len(args) - 1]
+        # lane vdf-linalg5: the published device-array class, read before an explicit "cpu" swaps the context
+        held = lin_train_device(context)
+        if item is not None:
+            device = lin_device(item, _low_public_name(operation), LIN_HAS_GPU, LIN_HAS_CPU, context)
+            if device.host_beside:
+                context = lin_device_context(device, context)
+                binding = lin_lowbit(lin_device_binding(device, context), context)
     if operation == LOW_OPN_FAMILY_LOW_IS_PACKED:
         return PythonObject(low_kind(args[0], context) != 0)
     if operation == LOW_OPN_FAMILY_LOW_FORMAT_OF:
@@ -221,8 +316,11 @@ def lowbit_weight_operation(model: PythonObject, operation: Int, args: PythonObj
         _ = q^
         return PythonObject(None)
     if operation == LOW_OPN_FAMILY_LOW_MATERIALIZE_ONE:
-        return low_materialize(args[0], binding, context)
+        return low_materialize_on(args[0], binding, context, held, device)
     if operation == LOW_OPN_FAMILY_LOW_WIDEN_BF16:
+        if low_is_dev(args[0], held):
+            lin_dev_device(device, "mojolearn.lowbit.widen_bf16")
+            return lin_dev_widen_bf16(args[0], low_binding(binding, context), held, context)
         var input_pin = AdmittedTypedPin()
         var input = admitted_typed_once(args[0], context, input_pin)
         var a = admitted_typed_c(input, input_pin^, "<u2", "bits", context)
@@ -236,6 +334,8 @@ def lowbit_weight_operation(model: PythonObject, operation: Int, args: PythonObj
     if operation == LOW_OPN_FAMILY_LOW_PACK_ONE:
         var fmt = low_format(args[1])
         var name = low_name(args[2])
+        if low_is_dev(args[0], held):
+            return low_pack_dev(args[0], fmt, device, binding, held, context)
         var input_pin = AdmittedTypedPin()
         var input = admitted_typed_once(args[0], context, input_pin)
         return low_pack_admitted(input, input_pin^, fmt, name, binding, context)
@@ -250,7 +350,7 @@ def lowbit_weight_operation(model: PythonObject, operation: Int, args: PythonObj
         var pairs = py_call(b.list, args[0].items())
         for i in range(len(pairs)):  # driver-loop: over named weights through one admitted provider
             var name = low_name(pairs[i][0])
-            py_setitem(result, pairs[i][0], low_materialize(pairs[i][1], binding, context))
+            py_setitem(result, pairs[i][0], low_materialize_on(pairs[i][1], binding, context, held, device))
         return Python.tuple(result, fmt)
     if operation == LOW_OPN_FAMILY_LOW_PACK:
         var fmt = low_format(args[1])
@@ -264,6 +364,30 @@ def lowbit_weight_operation(model: PythonObject, operation: Int, args: PythonObj
             var name = low_name(key)
             var value = pairs[i][1]
             var kind = low_kind(value, context)
+            if kind == 0 and low_is_dev(value, held):
+                # lane vdf-linalg5: a float32 device tensor packs on the device
+                py_setitem(result, key, low_pack_dev(value, fmt, device, binding, held, context))
+                continue
+            if kind != 0 and held is not None and low_is_dev(native_instance_item(low_fields(value),
+                    nk[].k_bits if kind == 1 else nk[].k_codes), held):
+                # a packed weight of device arrays: the same format copies its device arrays device to device
+                # (lane vdf-linalg6: as the host repack copies its packed storage; they were shared with the input);
+                # another format materializes on the device, then packs there
+                if kind == 1 and fmt == "bfloat16" or kind == 2 and fmt == "int8":
+                    var dev_fields = low_fields(value)
+                    var low_b = low_binding(binding, context)
+                    var q_copy = lin_dev_copy(native_instance_item(dev_fields, nk[].k_bits if kind == 1 else nk[].k_codes),
+                                              TRAIN_DEV_U16 if kind == 1 else TRAIN_DEV_I8, name, low_b, held, context)
+                    var e_copy = PythonObject(None)
+                    if kind == 2:
+                        e_copy = lin_dev_copy(native_instance_item(dev_fields, nk[].k_exponents), TRAIN_DEV_I32, name,
+                                              low_b, held, context)
+                    py_setitem(result, key, low_wrap_dev(kind, q_copy, e_copy, native_instance_item(dev_fields, nk[].k_shape),
+                                                         context))
+                else:
+                    py_setitem(result, key, low_pack_dev(low_materialize_on(value, binding, context, held, device), fmt, device,
+                                                         binding, held, context))
+                continue
             if kind != 0 and (kind == 1 and fmt == "bfloat16" or kind == 2 and fmt == "int8"):
                 # Same-format repacking copies packed storage directly. It must
                 # not widen/requantize, which changes both work and ownership.

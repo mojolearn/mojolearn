@@ -31,7 +31,19 @@ option names by name; the state holds them as strings built once at NEW.
 Views: X dense row-major host float32, BORROWED for the call (never copied:
 the entry reads the caller's words, as the estimator's own door reads the
 admitted array), admitted finite by the caller's UNPACK. No sample weights,
-no row or column index, no device-home view: refused in words.
+no column index, no device-home view: refused in words.
+
+ROW INDEX AND SCOPE (lane vdf-scope-cluster2b, 2026-11-24): every op that
+reads X takes a host int32 / int64 `row_index` over the whole X
+(`MEMBER_CAN_ROW_INDEX`). On the GPU image (`MIXTURE_CAP_DEV_STORE`, its
+store's transport entry in `route.second`) a call inside the caller's
+resident scope with X's pin (`MEMBER_CAN_SCOPE`) keeps X in the scope's
+cache on the image's store ONCE and takes the fold's rows on the device
+(core/member_scope_rows.mojo); the fit and the scores then read that slot
+(`GmmDriver.fit_store` / `score_store`). Without a scope or a pin, and on
+the host images, the rows are gathered on the host cores. The same rows in
+the same order either way: the same bits as a gathered block and as the
+CPU column.
 
 Outputs: predict writes component ids as int32 (rows x 1); predict_proba
 float32 rows x n_components; score_samples float32 rows x 1 (the per-row
@@ -75,6 +87,9 @@ from core.mixture_native_api import (
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from core.member_abi import MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE
+from core.mixture_native_api import MIXTURE_CAP_DEV_STORE
+from core.member_scope_rows import MemberScopeRows, member_scope_rows, member_scope_rows_done
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
@@ -217,12 +232,22 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
         shared_slot_unlock(lock)
 
 
-def _whole_x(call: _Call) raises:
-    if call[].row_index.rows > 0 or call[].column_index.rows > 0:
-        raise Error("TypeError: a GaussianMixture member reads no row or column index"
-            + " (a fold is handed over as gathered host words)")
-    if call[].x.home == MEMBER_HOME_DEVICE or not call[].x.dense_host(MEMBER_F32):
+comptime _PREFIX = "mixture"
+
+
+def _has_store(call: _Call) -> Bool:
+    """The route is the GPU image's with its resident store (lane vdf-scope-cluster2b)."""
+    return (call[].route.flags & MIXTURE_CAP_DEV_STORE) != 0 and call[].route.has_second
+
+
+def _rows(call: _Call) raises -> MemberScopeRows:
+    """The call's X (core/member_scope_rows.mojo): the whole host view, or the row index's rows (resident in the
+    scope's store, or gathered on the host cores)."""
+    if call[].column_index.rows > 0:
+        raise Error("TypeError: a GaussianMixture member reads no column index")
+    if call[].x.home == MEMBER_HOME_DEVICE:
         raise Error("TypeError: a GaussianMixture member reads X as a dense host float32 view")
+    return member_scope_rows(call[], _PREFIX, _has_store(call), _EST)
 
 
 def _destination(call: _Call, rows: Int, cols: Int, dtype: Int, what: String) raises:
@@ -234,12 +259,19 @@ def _destination(call: _Call, rows: Int, cols: Int, dtype: Int, what: String) ra
 
 
 def _fit(slot: _Slot, call: _Call) raises:
-    _whole_x(call)
     if call[].weights.rows > 0:
         raise Error("TypeError: GaussianMixture takes no sample_weight")
+    var x = _rows(call)
+    try:
+        _fit_rows(slot, call, x)
+    finally:
+        member_scope_rows_done(call[], x)
+
+
+def _fit_rows(slot: _Slot, call: _Call, x: MemberScopeRows) raises:
     var output = call[].fit_output
-    var rows = call[].x.rows
-    var d = call[].x.cols
+    var rows = x.rows
+    var d = x.cols
     var k = slot[].components
     if output == MEMBER_OP_PREDICT:
         _destination(call, rows, 1, MEMBER_I32, "the label buffer")
@@ -253,29 +285,37 @@ def _fit(slot: _Slot, call: _Call) raises:
     slot[].log_det = List[Float32](length=k, fill=0.0)
     slot[].scalars = List[Float64](length=3, fill=0.0)
     var fused = output == MEMBER_OP_PREDICT and (call[].route.flags & MIXTURE_CAP_FIT_PREDICT) != 0
-    var request = GmmFitRequest(call[].x.data, Int(slot[].weights.unsafe_ptr()), Int(slot[].means.unsafe_ptr()),
+    var request = GmmFitRequest(x.source, Int(slot[].weights.unsafe_ptr()), Int(slot[].means.unsafe_ptr()),
         Int(slot[].covariances.unsafe_ptr()), Int(slot[].precisions.unsafe_ptr()),
         Int(slot[].log_det.unsafe_ptr()), Int(slot[].scalars.unsafe_ptr()), call[].dst.data if fused else 0,
         Int(slot[].covariance_name.as_c_string_slice().unsafe_ptr()),
         Int(slot[].init_name.as_c_string_slice().unsafe_ptr()), rows, d, k, slot[].max_iter, slot[].seed,
         slot[].tolerance, slot[].reg_covar)
-    var n_iter = GmmDriver(call[].route.entry.call).fit(request)
+    var driver = GmmDriver(call[].route.entry.call)
+    var n_iter = driver.fit_store(request) if x.resident else driver.fit(request)
     # The entry's scalars word 0 is the caller's to fill: n_iter_ is its result.
     slot[].scalars[0] = Float64(n_iter)
     slot[].features = d
     slot[].fitted = True
     if output == MEMBER_OP_PREDICT and not fused:
-        _score(slot, call, MIXTURE_NATIVE_PREDICT)
+        _score_rows(slot, call, x, MIXTURE_NATIVE_PREDICT)
 
 
 def _score(slot: _Slot, call: _Call, operation: Int) raises:
     if not slot[].fitted:
         raise Error("RuntimeError: " + String(_EST) + ": call fit before predict")
-    _whole_x(call)
-    var rows = call[].x.rows
+    var x = _rows(call)
+    try:
+        _score_rows(slot, call, x, operation)
+    finally:
+        member_scope_rows_done(call[], x)
+
+
+def _score_rows(slot: _Slot, call: _Call, x: MemberScopeRows, operation: Int) raises:
+    var rows = x.rows
     var d = slot[].features
-    if call[].x.cols != d:
-        raise Error(String(_EST) + ": X has " + String(call[].x.cols) + " features, the fit had " + String(d))
+    if x.cols != d:
+        raise Error(String(_EST) + ": X has " + String(x.cols) + " features, the fit had " + String(d))
     if operation == MIXTURE_NATIVE_PREDICT:
         _destination(call, rows, 1, MEMBER_I32, "the label buffer")
     elif operation == MIXTURE_NATIVE_PREDICT_PROBA:
@@ -285,9 +325,12 @@ def _score(slot: _Slot, call: _Call, operation: Int) raises:
     # ORDER MATCHES bindings/_mojolearn_mixture.mojo::_rebuild_model.
     var request = GmmScoreRequest(Int(slot[].weights.unsafe_ptr()), Int(slot[].means.unsafe_ptr()),
         Int(slot[].covariances.unsafe_ptr()), Int(slot[].precisions.unsafe_ptr()),
-        Int(slot[].log_det.unsafe_ptr()), call[].x.data, call[].dst.data, slot[].components, d,
+        Int(slot[].log_det.unsafe_ptr()), x.source, call[].dst.data, slot[].components, d,
         Int(slot[].scalars[0]), slot[].scalars[1] != 0.0, rows, slot[].scalars[2])
-    GmmDriver(call[].route.entry.call).score(operation, request)
+    if x.resident:
+        GmmDriver(call[].route.entry.call).score_store(operation, request)
+    else:
+        GmmDriver(call[].route.entry.call).score(operation, request)
 
 
 def _score_mean(slot: _Slot, call: _Call) raises:
@@ -299,20 +342,30 @@ def _score_mean(slot: _Slot, call: _Call) raises:
     scoring=None scores each unit by it (core/msel_search_run.mojo `_member_score`)."""
     if not slot[].fitted:
         raise Error("RuntimeError: " + String(_EST) + ": call fit before score")
-    _whole_x(call)
     if call[].weights.rows > 0:
         raise Error("TypeError: GaussianMixture.score takes no sample_weight")
-    var rows = call[].x.rows
+    var x = _rows(call)
+    try:
+        _score_mean_rows(slot, call, x)
+    finally:
+        member_scope_rows_done(call[], x)
+
+
+def _score_mean_rows(slot: _Slot, call: _Call, x: MemberScopeRows) raises:
+    var rows = x.rows
     var d = slot[].features
-    if call[].x.cols != d:
-        raise Error(String(_EST) + ": X has " + String(call[].x.cols) + " features, the fit had " + String(d))
+    if x.cols != d:
+        raise Error(String(_EST) + ": X has " + String(x.cols) + " features, the fit had " + String(d))
     var words = List[Float64](length=3, fill=0.0)
     # ORDER MATCHES bindings/_mojolearn_mixture.mojo::_rebuild_model (as `_score`).
     var request = GmmScoreRequest(Int(slot[].weights.unsafe_ptr()), Int(slot[].means.unsafe_ptr()),
         Int(slot[].covariances.unsafe_ptr()), Int(slot[].precisions.unsafe_ptr()),
-        Int(slot[].log_det.unsafe_ptr()), call[].x.data, Int(words.unsafe_ptr()), slot[].components, d,
+        Int(slot[].log_det.unsafe_ptr()), x.source, Int(words.unsafe_ptr()), slot[].components, d,
         Int(slot[].scalars[0]), slot[].scalars[1] != 0.0, rows, slot[].scalars[2])
-    GmmDriver(call[].route.entry.call).score(MIXTURE_NATIVE_SCORE_BIC_AIC, request)
+    if x.resident:
+        GmmDriver(call[].route.entry.call).score_store(MIXTURE_NATIVE_SCORE_BIC_AIC, request)
+    else:
+        GmmDriver(call[].route.entry.call).score(MIXTURE_NATIVE_SCORE_BIC_AIC, request)
     call[].value = words[0]
     _ = len(words)  # written through its address by the entry above
 
@@ -418,8 +471,14 @@ def _mixture_member(operation: Int, address: Int) raises -> Int:
         # No MEMBER_CAN_TEST_ROWS: X is admitted finite by the caller (the
         # GMM entry does not test it).
         # MEMBER_CAN_SCORE (lane mf-rows8c): `_score_mean`, the class's own score.
-        return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_SCORE_SAMPLES
-            | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
+        # MEMBER_CAN_ROW_INDEX on every image (a host gather without the store);
+        # MEMBER_CAN_SCOPE only on the GPU image's route with its resident store
+        # (lane vdf-scope-cluster2b): the host images keep their host path.
+        var mask = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_SCORE_SAMPLES
+            | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_ROW_INDEX)
+        if _has_store(call):
+            mask |= MEMBER_CAN_SCOPE
+        return mask
     if operation == MEMBER_OP_NEW:
         if call[].param_count < 6 or not call[].params:
             raise Error("member ABI: a GaussianMixture member takes six parameters (n_components, max_iter,"

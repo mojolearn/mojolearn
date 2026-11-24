@@ -20,7 +20,7 @@ a fixed order, serial by definition.
 from std.ffi import c_int, external_call
 from std.math import isfinite
 from std.memory import unsafe_memcpy, bitcast
-from core.parallel_entry_table import ParallelEntryKey, parallel_ref, parallel_fold_pair_f32, PARALLEL_TABLE_BASE
+from core.parallel_entry_table import ParallelEntryKey, parallel_ref, parallel_ordered_fold_f32, PARALLEL_TABLE_BASE
 from core.sha256 import Sha256, sha256_hex_addr, sha256_sliced8_hex, _hex32
 from core.transport_header import (
     TransportHeader, transport_header_find, transport_header_has, transport_header_int,
@@ -142,14 +142,21 @@ def _cross_send(fd: Int, timeout: Float64, header: TransportHeader, payload_addr
 def cross_fold_into(mode: Int, vendor: Int, total_address: Int, first_address: Int, parts_address: Int,
                     first_part: Int, parts: Int, n: Int) raises:
     """`total` = the float32[n] at `first_address`, then the base image's
-    fold_pair_f32 of parts `first_part..parts-1` (float32[n] each, contiguous
-    from `parts_address`) in that order."""
+    ordered fold of parts `first_part..parts-1` (float32[n] each, contiguous
+    from `parts_address`) in that order: ONE table call (lane vdf-linalg; it
+    was one pair fold per part, each moving total to the device and back on
+    a GPU base image). Same per-element recurrence, same bits."""
     var entry = parallel_ref(PARALLEL_TABLE_BASE, ParallelEntryKey(mode, vendor))
     if n > 0 and first_address != total_address:
         unsafe_memcpy(dest=_CrossBytes(unsafe_from_address=total_address),
                       src=_CrossBytes(unsafe_from_address=first_address), count=n * 4)
-    for k in range(first_part, parts):  # driver-loop: over logical shard gradient buffers in immutable order
-        _ = parallel_fold_pair_f32(entry, total_address, parts_address + k * n * 4, n)
+    var count = parts - first_part
+    if n > 0 and count > 0:
+        var table = List[Int64](capacity=count)
+        for k in range(first_part, parts):  # driver-loop: over logical shard gradient buffers in immutable order
+            table.append(Int64(parts_address + k * n * 4))
+        _ = parallel_ordered_fold_f32(entry, total_address, Int(table.unsafe_ptr()), count, n)
+        _ = table^  # the address table outlives the fold above
 
 
 def cross_state_hash(addresses: List[Int], n: Int, nt: Int) -> String:
@@ -492,8 +499,14 @@ def cross_coordinator_step(mut c: CrossCoordinatorState, step: Int) raises:
         if n > 0:
             unsafe_memcpy(dest=_CrossBytes(unsafe_from_address=total),
                           src=_CrossBytes(unsafe_from_address=gather + span[0] * total_bytes), count=total_bytes)
-        for k in range(1, c.shards):  # driver-loop: over logical shard gradients in fixed order
-            _ = parallel_fold_pair_f32(entry, total, gather + span[k] * total_bytes, n)
+        if n > 0 and c.shards > 1:
+            # lane vdf-linalg: ONE ordered fold over the shards in fixed order
+            # (was one pair fold per shard); same per-element recurrence.
+            var table = List[Int64](capacity=c.shards - 1)
+            for k in range(1, c.shards):  # driver-loop: over logical shard gradients in fixed order
+                table.append(Int64(gather + span[k] * total_bytes))
+            _ = parallel_ordered_fold_f32(entry, total, Int(table.unsafe_ptr()), c.shards - 1, n)
+            _ = table^  # the address table outlives the fold above
     c.row_total_hash = sha256_hex_addr(total, total_bytes)
     var apply = TransportHeader()
     apply.put_text("cmd", "apply")

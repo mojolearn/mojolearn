@@ -154,7 +154,7 @@ def _init[E: Exec, D: RDev, RES: Bool](
 def lda_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     op: Int, x: F32Ptr, n: Int, v: Int, nc: Int, fresh: Bool, a: LdaArgs, mut draw: Int, mut nbi: Int,
     flag: Bool, comps_in: F32Ptr, exp_in: F32Ptr, comps_out: F32Ptr, exp_out: F32Ptr, out_buf: F32Ptr,
-    negative_message: String,
+    negative_message: String, x_dev: Int = -1,
 ) raises -> Tuple[Int, Float64]:
     """One LatentDirichletAllocation operation on X (n x v): LDA_FIT,
     LDA_PARTIAL (`fresh`: initialize first), LDA_TRANSFORM (`flag`:
@@ -162,9 +162,14 @@ def lda_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     sub_sampling). The fitted state is comps_in / exp_in (nc x v) and is
     written to comps_out / exp_out by the fits. Returns (n_iter_, value):
     the fit's bound, the score or the perplexity."""
+    # `x_dev` (lane vdf-scope-neural3): X's resident pool id (a fold the XDecomp member took on the device; the
+    # caller owns it, not this kit's ledger), -1: the host X. Every kit step is on the device on a GPU binding
+    # either way (RKit; a host step downloads the same words), so the route and the bits are the host-X route's.
+    if x_dev >= 0 and not RES:
+        raise Error("x_decomp: a resident X needs a GPU binding")
     var kit = RKit[E, D, RES]()
     try:
-        var m = kit.add(Int(x), -1, n, v)
+        var m = kit.add(Int(x) if x_dev < 0 else 0, x_dev, n, v)
         if _negative(kit, m):
             raise Error(negative_message)
         var components: Int

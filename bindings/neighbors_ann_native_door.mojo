@@ -22,7 +22,9 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.classical_arrays_door import classical_address, classical_is_array
 from bindings.classical_attributes_door import classical_connect_numpy, classical_check_layout
 from bindings.classical_validate_unpack import classical_view, classical_refuse_sparse, classical_estimator_name
-from providers.python.estimator_binding_pyapi_door import estimator_arguments, estimator_binding_mode
+from providers.python.estimator_binding_pyapi_door import estimator_arguments, estimator_binding_device
+from providers.python.function_device_boundary_door import function_device_admit
+from core.function_device import function_device_default
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
@@ -834,8 +836,17 @@ def _ann_bool_sequence(value: PythonObject) raises -> Bool:
 
 def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`refine(dataset, queries, candidates, k, numeric_mode, metric)`:
-    args are (binding, dataset, queries, candidates, k, metric)."""
+    args are (binding, dataset, queries, candidates, k, metric, numeric_mode,
+    device)."""
     var b = native_loaded_module("builtins")
+    # args[7] is the call's `device` (lane vdf-misc), admitted first in the
+    # shared words. refine has a device image (`_mojolearn_x_ann` of the GPU
+    # set) and its CPU identical image connected beside it at import
+    # (python/mojolearn/_expansion_ann.py `connect_bindings`). None is one
+    # identity compare and keeps the binding selection below unchanged.
+    var device = function_device_default()
+    if args[0] is None and args[7] is not None:
+        device = function_device_admit(args[7], "refine", True, True, context, b)
     classical_connect_numpy(context)
     var metric = args[5]
     if py_type(metric) is not b.str:
@@ -873,14 +884,23 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
         raise Error(refine_candidates_refusal(m))
     var k_o = _ann_int("refine", "k", args[4])
     var k = Int(py=k_o)
-    var native = estimator_binding_mode(args[6], "_mojolearn_x_ann", context) if args[0] is None else args[0]
+    var native = estimator_binding_device(device, args[6], "_mojolearn_x_ann", context) if args[0] is None else args[0]
     # The kernel skips every id outside [0, n) (refine_core.refine_cell); an
-    # id beyond int32 is refused in RUN, then the ids are narrowed to int32.
-    var c32 = _ann_empty(m * k0, "<i4", context)
-    refine_narrow_ids(c.source.addr, c.source.s0, c.source.s1, m, k0, c.source.itemsize,
-                      c.source.kind == CAST_KIND_SIGNED, not c.native_byte_order, Int(py=classical_address(c32)))
+    # id beyond int32 is refused in RUN, then the ids are narrowed to int32
+    # into the one buffer the entry uploads. Candidates that already are
+    # C-order native int32 words are read in place (lane vdf-misc2,
+    # 2026-11-24: they were copied word for word per call; the same words
+    # reach the kernel). `c_pin` holds them through the call.
+    var in_place = (c.source.kind == CAST_KIND_SIGNED and c.source.itemsize == 4 and c.native_byte_order
+                    and (k0 <= 1 or c.source.s1 == 4) and (m <= 1 or c.source.s0 == 4 * k0))
+    var c32 = PythonObject(None)
+    var c_address = c.source.addr
+    if not in_place:
+        c32 = _ann_empty(m * k0, "<i4", context)
+        c_address = Int(py=classical_address(c32))
+        refine_narrow_ids(c.source.addr, c.source.s0, c.source.s1, m, k0, c.source.itemsize,
+                          c.source.kind == CAST_KIND_SIGNED, not c.native_byte_order, c_address)
     _ = c
-    _ = c_pin
     _ = c32
     var dist = _ann_empty(m * k, "<f4", context)
     var idx = _ann_empty(m * k, "<i4", context)
@@ -892,7 +912,7 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     # dataset, queries, candidates, out_d, out_i; n, d, m, k0, k (+ root:
     # the binding takes the euclidean roots)
     _ = family_call(entry,
-                    Python.list(PythonObject(x.source.addr), PythonObject(q.source.addr), classical_address(c32),
+                    Python.list(PythonObject(x.source.addr), PythonObject(q.source.addr), PythonObject(c_address),
                                 classical_address(dist), classical_address(idx)),
                     params)
     _ = x  # keep the Python object alive through the native call above
@@ -900,6 +920,7 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = q  # keep the Python object alive through the native call above
     _ = q_pin
     _ = c32  # keep the Python object alive through the native call above
+    _ = c_pin  # the in-place candidates stay pinned through the native call above
     _ = dist  # keep the Python object alive through the native call above
     _ = idx  # keep the Python object alive through the native call above
     # The dataset's and queries' finite status word (one refusal for either).

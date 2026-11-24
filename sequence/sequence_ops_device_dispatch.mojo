@@ -11,6 +11,8 @@
 #   SEQ_MOE_FORWARD / SEQ_MOE_BACKWARD with a seventh int word > 0: that word
 #       is a SEQ_MOE_WEIGHTS_PUT handle whose device copies are read instead
 #       of aa[1..3] (the branch the Python entries of the same name held).
+#       SEQ_MOE_BACKWARD may carry three more words (pp 7..9): resident x, dy
+#       and dx handles read and written in place (aa[0], aa[4], aa[5] unread).
 #   SEQ_TENSOR_ALLOC      pp [n, zero]            result = the new handle (>= 1)
 #   SEQ_TENSOR_FREE       pp [handle]             result = the handle
 #   SEQ_TENSOR_UPLOAD     aa [host floats]  pp [handle, n]
@@ -46,10 +48,10 @@
 # kernel call on the device queue.
 from core.native_descriptor_call import native_descriptor_words
 from autograd.arg_words import fptr_word
-from autograd.route_ops import moe_backward_addrs
+from autograd.route_ops import moe_backward_addrs, moe_backward_io
 from sequence.exec_device import DeviceExec
 from sequence.ops_impl import moe_forward_run_impl
-from sequence.seq_tensor import seq_tensor_alloc, seq_tensor_free, seq_tensor_upload, seq_tensor_download, seq_tensor_copy
+from sequence.seq_tensor import seq_tensor_alloc, seq_tensor_free, seq_tensor_upload, seq_tensor_download, seq_tensor_copy, seq_tensor_ptr
 from sequence.sequence_seq_tensor_run import seq_tensor_alloc_slots, seq_tensor_free_made
 from sequence.layernorm_dev import layer_norm_dev
 from sequence.moe_dev import moe_forward_dev
@@ -88,13 +90,22 @@ def sequence_ops_device_execute(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff:
     var ints = native_descriptor_words(pp, np)
     if op == SEQ_MOE_FORWARD or op == SEQ_MOE_BACKWARD:
         var ex = DeviceExec()
-        if np != 7 or ints[6] <= 0:
+        if (np != 7 and not (np == 10 and op == SEQ_MOE_BACKWARD)) or ints[6] <= 0:
             return sequence_ops_execute(ex, op, aa, na, pp, np, ff, nf)
         if nf != 0:
             raise Error("native sequence: the MoE operations take no scalar descriptors")
         var w = moe_weights_ptrs(ints[6])
         if op == SEQ_MOE_BACKWARD:
             var resident: List[Int] = [Int(w[0]), Int(w[1]), Int(w[2])]
+            if np == 10:
+                # lane vdf-seq (2026-11-24): resident x, dy and dx (words 7..9,
+                # seq_tensor handles of T x D floats) are read and written in
+                # place; nothing crosses the bus for them.
+                var td = ints[0] * ints[1]
+                var io: List[Int] = [Int(seq_tensor_ptr(ints[7], td, "x")), Int(seq_tensor_ptr(ints[8], td, "dy")),
+                    Int(seq_tensor_ptr(ints[9], td, "dx"))]
+                var head = _seq_slice(ints, 0, 7)
+                return moe_backward_io(ex, addresses, head, resident, io)
             return moe_backward_addrs(ex, addresses, ints, resident)
         # `moe_forward`'s argument checks, in its words.
         if na != 8:

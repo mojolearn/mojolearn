@@ -15,6 +15,7 @@ from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_sm
 
 from checks.vendor import COMPILED_VENDOR
 from core.householder_qr import qr_factor, qr_slice_count
+from core.fold_x_device import fold_x_fill
 from gemm.afn_apple_fast import (
     AFN_EPI_NONE,
     AFN_GEMM_APPLE,
@@ -1677,14 +1678,30 @@ def _up_into(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], p: F32Ptr
     """Host floats into `buf[0, n)`: the raw host-pointer copy. Measured on
     the M4 a fresh 64 MB array uploads this way in 1.6-2.4 ms (only the
     process's first upload pays ~9-20 ms); a memcpy-plus-DMA stage took
-    4.3 ms, so uploads are not staged."""
+    4.3 ms, so uploads are not staged. THE FOLD X WORD (core/fold_x_device.mojo; lane vdf-scope-cluster6): a
+    negative `p` names a model-selection fold's x_prep store slot, copied device to device (the KernelPCA
+    eigensolver's resident route reads its fit X through the kit's upload here)."""
     if n > 0:
+        if Int(p) < 0:
+            fold_x_fill(ctx, buf, Int(p), n)
+            return
         ctx.enqueue_copy(dst_buf=buf.create_sub_buffer[DType.float32](0, n), src_ptr=p)
 
 
 def _up(ctx: DeviceContext, p: F32Ptr, n: Int) raises -> DeviceBuffer[DType.float32]:
     var buf = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
     _up_into(ctx, buf, p, n)
+    return buf^
+
+
+def _up_fold_x(ctx: DeviceContext, p: F32Ptr, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """`_up` of an X address word: host words (the upload, unchanged) or,
+    for a negative word, one device copy of the fold slot it names
+    (core/fold_x_device.mojo `fold_x_fill`)."""
+    if Int(p) >= 0:
+        return _up(ctx, p, n)
+    var buf = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+    fold_x_fill(ctx, buf, Int(p), n)
     return buf^
 
 
@@ -3907,12 +3924,16 @@ struct DevExec(Exec):
         # with keep, the five buffers move into a heap owner whose address is
         # the handle (lane linalg-owner, 2026-11-22; no process slot)
         var held = List[DeviceBuffer[DType.float32]]()
+        # THE FOLD X WORD (core/fold_x_device.mojo, lane vdf-scope-linear3): a
+        # LinearRegression fold without the centered one-entry route (no
+        # intercept, unweighted) hands its slot here; `_up_fold_x` copies it
+        # on the device (host words: the upload, unchanged).
         if nrhs == 0:
-            var da = _up(ctx, a, m * n)
+            var da = _up_fold_x(ctx, a, m * n)
             held = ts_factor_dispatch(plan, ctx, da, m, n, r, keep)
             _ = da^
         else:
-            var ta = _up(ctx, a, m * d)
+            var ta = _up_fold_x(ctx, a, m * d)
             var tb = _up(ctx, b, m * nrhs)
             var da = ts_pack_device(ctx, ta, tb, m, d, nrhs)
             comptime if IDN_XD_NO_WAIT:
@@ -3949,7 +3970,11 @@ struct DevExec(Exec):
         var plan = tsqr_plan_current()
         var ctx = xd_ctx()
         var n = d + 1
-        var ta = _up(ctx, a, m * d)
+        # THE FOLD X WORD (core/fold_x_device.mojo, lane vdf-scope-linear2): a
+        # negative X address names a model-selection fold's rows in a device
+        # store slot (core/linear_member.mojo `_fold_device_ols`): one device
+        # copy instead of the upload, the same words; tested below as uploaded.
+        var ta = _up_fold_x(ctx, a, m * d)
         var tb = _up(ctx, b, m)
         # The finite test of the words this entry uploads (lane
         # fable-perf-classical-0855, 2026-11-13; core/admitted_finite_status.mojo):

@@ -178,6 +178,8 @@ struct HdbscanQueryCall(Movable):
     var neighbors: Int
     var nq: Int
     var batch: Int
+    #: The held record's fitted snapshot (lane vdf-misc4); 0 for none.
+    var handle: Int
 
     def __init__(out self):
         self.held = False
@@ -203,6 +205,7 @@ struct HdbscanQueryCall(Movable):
         self.neighbors = 0
         self.nq = 0
         self.batch = 1
+        self.handle = 0
 
     def dimensions(self) -> HdbscanQueryDimensions:
         return HdbscanQueryDimensions(self.rows, self.columns, self.edges, self.condensed, self.exemplars,
@@ -250,6 +253,7 @@ def hdbscan_query_unpack(mut call: HdbscanQueryCall, model: PythonObject, operat
         call.children = cached[].children
         call.indices = cached[].indices
         call.offsets = cached[].offsets
+        call.handle = cached[].handle
         var counts = cached[].dimensions.copy()
         call.rows = counts.rows
         call.columns = counts.features

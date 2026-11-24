@@ -16,36 +16,43 @@ either way. The fold store's operations run on the store's own context
 No Python object crosses; the Python exports release the GIL around the
 same runs.
 """
+from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from core.msel_entry_table import (
     MselEntryKey, msel_table_publish, msel_check_spans, msel_word, msel_entry_vendor,
     MSEL_HELPERS_ABI, MH_OP_COUNT,
     MH_ARANGE_I64, MH_COUNT_MASK_U8, MH_SELECT_MASK_U8_I64, MH_MASK_FROM_INDICES_U8, MH_LEAVE_RANGE_I64,
-    MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32, MH_GATHER_I64,
-    MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_ALLOC, MH_STORE_READ, MH_STORE_FREE, MH_SCATTER_ROWS,
+    MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32,
+    MH_STORE_FREE,
     MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32,
     MH_STORE_PUT, MH_STORE_TAKE_ROWS,
+    MH_FIRST_SEEN_RES, MH_STRAT_FOLD_ASSIGN_RES, MH_SELECT_FOLDS_RES, MH_FOLD_IDS_RES,
+    MH_GROUP_CLASS_COUNTS_RES,
 )
 from core.msel_helpers_host import (
-    select_folds_i64_host_run, msel_scatter_rows_check, msel_proba_column_check, msel_split_table_check,
-    msel_group_fold_perm_check,
+    select_folds_i64_host_run, msel_proba_column_check, msel_split_table_check,
+    msel_group_fold_perm_check, msel_gather_host_run,
 )
 from core.hotpath_device import (
     HPD_MAX_N, device_arange_skip_i64, device_count_mask_u8, device_first_seen_i32,
     device_kfold_ids, device_mask_from_indices_u8, device_select_fold_i64, device_select_folds_i64,
     device_select_mask_u8_i64, device_strat_fold_assign_i32, device_stratified_fold_ids,
+    device_first_seen_on, device_strat_fold_assign_res, device_select_folds_on, device_stratified_fold_ids_on,
+    device_group_class_counts_on,
 )
 from core.hotpath_impl import (
     arange_i64, count_mask_u8, fold_ids, leave_range_i64, mask_from_indices_u8,
     select_fold_i64, select_mask_u8_i64,
 )
-from core.hotpath_impl_rows import first_seen_i32, strat_fold_assign_i32
+from core.hotpath_impl_rows import (
+    bincount_i64, first_seen_i32, first_seen_rank_i32, group_class_counts_i32, strat_fold_assign_i32,
+)
 from core.label_device_steps import LABELS_DEVICE_BASE, LABELS_DEVICE_ELEM, LABELS_DEVICE_CONTEXT
 from core.labels_native_api import LabelsGatherRequest
 from core.labels_native_device import LabelsDeviceKernels
 from core.msel_device import (
-    device_group_fold_perm_i32, device_proba_column, device_scatter_rows, device_split_table_i32,
+    device_group_fold_perm_i32, device_proba_column, device_split_table_i32,
     device_take_rows,
 )
 from core.msel_device_x import msel_store, MSEL_CONTEXT_SLOT
@@ -214,17 +221,8 @@ def msel_gather_device_run(kind: Int, table: Int, classes: Int, codes: Int, coun
     return 0
 
 
-def msel_store_alloc_device_run(n: Int) raises -> Int:
-    """A zeroed resident block of n bytes; returns its id."""
-    var ctx = process_ctx[MSEL_CONTEXT_SLOT]()
-    return msel_store()[].alloc(ctx, n)
 
 
-def msel_store_read_device_run(id: Int, d: Int, n: Int) raises -> Int:
-    """Download n bytes of a resident block."""
-    var ctx = process_ctx[MSEL_CONTEXT_SLOT]()
-    msel_store()[].read(ctx, id, d, n)
-    return 0
 
 
 def msel_store_free_device_run(id: Int) raises -> Int:
@@ -253,14 +251,6 @@ def msel_store_take_rows_device_run(src_id: Int, n_src: Int, row_bytes: Int, idx
     return 0
 
 
-def msel_scatter_rows_device_run(di: Int, nd: Int, dc: Int, sa: Int, sc: Int, ns: Int, w: Int, ix: Int) raises -> Int:
-    """Rows of a host buffer cast into rows idx of a resident int64 or
-    float64 block (cross_val_predict's placement)."""
-    msel_scatter_rows_check(nd, dc, sa, sc, ns, w)
-    var ctx = process_ctx[MSEL_CONTEXT_SLOT]()
-    if not device_scatter_rows(ctx, msel_store()[], di, nd, dc, sa, sc, ns, w, ix):
-        raise Error("msel_scatter_rows: row index out of bounds")
-    return 0
 
 
 def msel_proba_column_device_run(sa: Int, c: Int, nn: Int, kk: Int, cc: Int, d: Int) raises -> Int:
@@ -291,6 +281,168 @@ def msel_group_fold_perm_device_run(ca: Int, mm: Int, K: Int, pa: Int, da: Int, 
     return 0
 
 
+# ---------------------------------------------------------------- layout V3: stored label codes
+# (lane vdf-scope-split, 2026-11-24). The stratified splitters put their n
+# int32 label codes once (MH_STORE_PUT) and these runs read them where they
+# are, on the store's context: the first-seen sizes and rank table come back
+# (2k words), the first-seen codes and the fold ids never cross the bus, and
+# each fold's rows come down once, into the caller's arrays. A fold block is
+# allocated here and returned (the caller frees it), or freed here when the
+# run refuses. Where the device twin does not cover a call (a build without
+# it, or a table past its bound), the block's words come down and the host
+# column's core function runs on them, as the address runs rerun the host
+# helper; a fold block made that way goes up once.
+
+
+def _res_dims(rows: Int, kk: Int) raises:
+    if rows < 1 or kk < 1:
+        raise Error("model-selection helpers: a stored-code operation needs n >= 1 and k >= 1")
+
+
+def _res_words(ctx: DeviceContext, id: Int, rows: Int) raises -> List[Int32]:
+    """The n int32 words of a stored block, downloaded (the host fallback)."""
+    var words = List[Int32](length=rows, fill=0)
+    msel_store()[].read(ctx, id, Int(words.unsafe_ptr()), 4 * rows)
+    return words^
+
+
+def msel_first_seen_res_device_run(codes_id: Int, rows: Int, kk: Int, na: Int, ra: Int) raises -> Int:
+    """MH_FIRST_SEEN_RES on the device: the class sizes in first-seen order
+    and the rank table of the stored codes (2k words down); the classes
+    present. A code out of range raises the host run's words."""
+    _res_dims(rows, kk)
+    if na == 0:
+        raise Error("first_seen_i32: null counts address")
+    var ctx = process_ctx[MSEL_CONTEXT_SLOT]()
+    comptime if MSEL_HPDEV_FOLDS:
+        if rows <= HPD_MAX_N and kk <= HPD_MAX_N:
+            var codes = msel_store()[].address(codes_id, 4 * rows)
+            var seen = device_first_seen_on(ctx, codes, rows, kk, 0, na, ra)
+            if seen < 0:
+                raise Error("first_seen_i32: code out of range")
+            return seen
+    var held = _res_words(ctx, codes_id, rows)  # cpu-route: no device twin for this call (build or bound)
+    var m = first_seen_rank_i32(Int(held.unsafe_ptr()), rows, kk, na, ra)
+    _ = held  # the address above is not an owner
+    return m
+
+
+def msel_strat_fold_assign_res_device_run(codes_id: Int, rows: Int, kk: Int, K: Int, width: Int, rank: Int, aa: Int,
+                                          pa: Int, ca: Int, sa: Int) raises -> Int:
+    """MH_STRAT_FOLD_ASSIGN_RES on the device: rank[codes] and the
+    assignment on the device into a new fold block (returned, never
+    downloaded), the n_folds fold sizes down."""
+    _res_dims(rows, kk)
+    if K < 1 or aa == 0 or ca == 0 or sa == 0 or (rank != 0 and width < 1):
+        raise Error("strat_fold_assign_i32: n_folds >= 1 and non-null tables")
+    var ctx = process_ctx[MSEL_CONTEXT_SLOT]()
+    var store = msel_store()
+    comptime if MSEL_HPDEV_FOLDS:
+        if rows <= HPD_MAX_N and K <= HPD_MAX_N and width <= HPD_MAX_N and kk * K <= MSEL_HPDEV_MAX_TABLE:
+            var made = store[].alloc(ctx, 4 * rows)
+            var ok = False
+            try:
+                var codes = store[].address(codes_id, 4 * rows)
+                var dev_folds = store[].address(made, 4 * rows)
+                ok = device_strat_fold_assign_res(ctx, codes, rank, width, rows, kk, K, aa, pa, ca, dev_folds, sa)
+            except problem:
+                store[].free(ctx, made)
+                raise problem^
+            if ok:
+                return made
+            store[].free(ctx, made)
+            # Inconsistent tables or a code out of range: the host run below
+            # raises its own words.
+    var held = _res_words(ctx, codes_id, rows)  # cpu-route: no device twin for this call (build, bound or refusal words)
+    var enc = List[Int32](length=rows, fill=0)
+    if rank != 0:
+        _ = msel_gather_host_run(0, rank, width, Int(held.unsafe_ptr()), rows, Int(enc.unsafe_ptr()))
+    else:
+        enc = held.copy()
+    var folds = List[Int32](length=rows, fill=0)
+    _ = strat_fold_assign_i32(Int(enc.unsafe_ptr()), rows, kk, K, aa, pa, ca, Int(folds.unsafe_ptr()))
+    _ = bincount_i64(Int(folds.unsafe_ptr()), 2, rows, K, sa, False)
+    var folds_id = store[].put(ctx, Int(folds.unsafe_ptr()), 4 * rows)
+    _ = held  # the addresses above are not owners
+    _ = enc
+    _ = folds
+    return folds_id
+
+
+def msel_select_folds_res_device_run(folds_id: Int, rows: Int, splits: Int, sa: Int, ta: Int, ra: Int) raises -> Int:
+    """MH_SELECT_FOLDS_RES on the device: every fold's rows out of the
+    stored fold block into the caller's arrays behind one synchronize; -1,
+    or the first fold whose count differs from `sizes`."""
+    if rows < 1 or splits < 1:
+        raise Error("model-selection helpers: a stored-fold selection needs n >= 1 and k >= 1")
+    if sa == 0 or ta == 0 or ra == 0:
+        raise Error("select_folds_i64: null table address")
+    var ctx = process_ctx[MSEL_CONTEXT_SLOT]()
+    comptime if MSEL_HPDEV_FOLDS:
+        if rows <= HPD_MAX_N and splits <= 2147483647:
+            var dev_folds = msel_store()[].address(folds_id, 4 * rows)
+            return device_select_folds_on(ctx, dev_folds, rows, splits, sa, ta, ra)
+    var held = _res_words(ctx, folds_id, rows)  # cpu-route: no device twin for this call (build or bound)
+    var bad = select_folds_i64_host_run(Int(held.unsafe_ptr()), rows, splits, sa, ta, ra)
+    _ = held  # the address above is not an owner
+    return bad
+
+
+def msel_fold_ids_res_device_run(codes_id: Int, rows: Int, kk: Int, splits: Int, na: Int, fca: Int) raises -> Int:
+    """MH_FOLD_IDS_RES on the device: the stratified `fold_ids` of the
+    stored codes into a new fold block (returned, never downloaded); the
+    class counts and fold sizes down."""
+    _res_dims(rows, kk)
+    if splits < 2 or na == 0 or fca == 0:
+        raise Error("fold_ids: n_splits >= 2 and non-null counts")
+    var ctx = process_ctx[MSEL_CONTEXT_SLOT]()
+    var store = msel_store()
+    comptime if MSEL_HPDEV_FOLDS:
+        if rows <= HPD_MAX_N and splits <= HPD_MAX_N and kk * splits <= MSEL_HPDEV_MAX_TABLE:
+            var made = store[].alloc(ctx, 4 * rows)
+            var ok = False
+            try:
+                var codes = store[].address(codes_id, 4 * rows)
+                var dev_folds = store[].address(made, 4 * rows)
+                ok = device_stratified_fold_ids_on(ctx, codes, rows, kk, splits, na, 0, fca, dev_folds)
+            except problem:
+                store[].free(ctx, made)
+                raise problem^
+            if ok:
+                return made
+            store[].free(ctx, made)
+            # A code out of range: the host run below raises its own words.
+    var held = _res_words(ctx, codes_id, rows)  # cpu-route: no device twin for this call (build, bound or refusal words)
+    var folds = List[Int32](length=rows, fill=0)
+    _ = fold_ids(Int(held.unsafe_ptr()), rows, kk, splits, na, Int(folds.unsafe_ptr()), fca)
+    var folds_id = store[].put(ctx, Int(folds.unsafe_ptr()), 4 * rows)
+    _ = held  # the addresses above are not owners
+    _ = folds
+    return folds_id
+
+
+def msel_group_class_counts_res_device_run(codes_id: Int, rows: Int, kk: Int, m: Int, nc: Int, ga: Int, ra: Int,
+                                           da: Int) raises -> Int:
+    """MH_GROUP_CLASS_COUNTS_RES on the device (layout V4, lane
+    vdf-scope-split2, 2026-11-24): the group x class table counted on the
+    stored codes, classes ranked as they are counted; the n group codes and
+    the rank table go up, the m x n_classes table comes down."""
+    _res_dims(rows, kk)
+    if m < 1 or nc < 1 or ga == 0 or da == 0:
+        raise Error("bincount2_i32: 0 <= n, 1 <= ka, kb and non-null tables")
+    var ctx = process_ctx[MSEL_CONTEXT_SLOT]()
+    comptime if MSEL_HPDEV_FOLDS:
+        if rows <= HPD_MAX_N and kk <= HPD_MAX_N and nc <= HPD_MAX_N // m:
+            var codes = msel_store()[].address(codes_id, 4 * rows)
+            if device_group_class_counts_on(ctx, codes, rows, kk, ga, m, ra, nc, da):
+                return 0
+            # A code or a group out of range: the host run below raises its own words.
+    var held = _res_words(ctx, codes_id, rows)  # cpu-route: no device twin for this call (build, bound or refusal words)
+    _ = group_class_counts_i32(Int(held.unsafe_ptr()), rows, kk, ga, m, ra, nc, da)
+    _ = held  # the address above is not an owner
+    return 0
+
+
 def msel_helpers_device_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     """One model-selection helper by its `MH_*` code over admitted spans."""
     if op == MH_ARANGE_I64:
@@ -314,25 +466,11 @@ def msel_helpers_device_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     if op == MH_SELECT_FOLDS_I64:
         return select_folds_i64_device_run(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1), msel_word(aa, 1),
                                            msel_word(aa, 2), msel_word(aa, 3))
-    if op == MH_GATHER_I32 or op == MH_GATHER_I64:
-        return msel_gather_device_run(0 if op == MH_GATHER_I32 else 1, msel_word(aa, 0), msel_word(pp, 0),
-                                      msel_word(aa, 1), msel_word(pp, 1), msel_word(aa, 2))
-    if op == MH_FIRST_SEEN_I32:
-        return first_seen_i32_device_run(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1), msel_word(aa, 1),
-                                         msel_word(aa, 2))
-    if op == MH_STRAT_FOLD_ASSIGN_I32:
-        return strat_fold_assign_i32_device_run(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1),
-                                                msel_word(pp, 2), msel_word(aa, 1), msel_word(aa, 2),
-                                                msel_word(aa, 3), msel_word(aa, 4))
-    if op == MH_STORE_ALLOC:
-        return msel_store_alloc_device_run(msel_word(pp, 0))
-    if op == MH_STORE_READ:
-        return msel_store_read_device_run(msel_word(pp, 0), msel_word(aa, 0), msel_word(pp, 1))
+    if op == MH_GATHER_I32:
+        return msel_gather_device_run(0, msel_word(aa, 0), msel_word(pp, 0), msel_word(aa, 1), msel_word(pp, 1),
+                                      msel_word(aa, 2))
     if op == MH_STORE_FREE:
         return msel_store_free_device_run(msel_word(pp, 0))
-    if op == MH_SCATTER_ROWS:
-        return msel_scatter_rows_device_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2), msel_word(aa, 0),
-                                            msel_word(pp, 3), msel_word(pp, 4), msel_word(pp, 5), msel_word(pp, 6))
     if op == MH_PROBA_COLUMN:
         return msel_proba_column_device_run(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
                                             msel_word(pp, 3), msel_word(aa, 1))
@@ -347,6 +485,24 @@ def msel_helpers_device_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     if op == MH_STORE_TAKE_ROWS:
         return msel_store_take_rows_device_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
                                                msel_word(pp, 3), msel_word(pp, 4), msel_word(aa, 0))
+    if op == MH_FIRST_SEEN_RES:
+        return msel_first_seen_res_device_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
+                                              msel_word(aa, 0), msel_word(aa, 1))
+    if op == MH_STRAT_FOLD_ASSIGN_RES:
+        return msel_strat_fold_assign_res_device_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
+                                                     msel_word(pp, 3), msel_word(pp, 4), msel_word(aa, 0),
+                                                     msel_word(aa, 1), msel_word(aa, 2), msel_word(aa, 3),
+                                                     msel_word(aa, 4))
+    if op == MH_SELECT_FOLDS_RES:
+        return msel_select_folds_res_device_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
+                                                msel_word(aa, 0), msel_word(aa, 1), msel_word(aa, 2))
+    if op == MH_FOLD_IDS_RES:
+        return msel_fold_ids_res_device_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2), msel_word(pp, 3),
+                                            msel_word(aa, 0), msel_word(aa, 1))
+    if op == MH_GROUP_CLASS_COUNTS_RES:
+        return msel_group_class_counts_res_device_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
+                                                      msel_word(pp, 3), msel_word(pp, 4), msel_word(aa, 0),
+                                                      msel_word(aa, 1), msel_word(aa, 2))
     raise Error("model-selection helpers: unknown operation " + String(op))
 
 

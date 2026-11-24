@@ -14,7 +14,9 @@ from mojolearn._verify_native_runtime import audit_native_call
 
 
 def invoke(operation, arguments):
-    return expansion._NATIVE(None, operation, arguments, expansion._NATIVE_CONTEXT)
+    # A metric family operation's tuple ends with the public shells' `device`
+    # item (None: this installation's device).
+    return expansion._NATIVE(None, operation, arguments + (None,), expansion._NATIVE_CONTEXT)
 
 
 def native(operation, arguments):

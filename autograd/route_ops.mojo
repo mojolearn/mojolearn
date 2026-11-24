@@ -338,6 +338,13 @@ def moe_tape_train_step[E: Exec](
 
 
 def moe_backward_addrs[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], resident: List[Int]) raises -> Int:
+    """`moe_backward_io` with host x, dy and dx (every binding's host-array
+    entry)."""
+    return moe_backward_io(ex, addrs, ip, resident, List[Int]())
+
+
+def moe_backward_io[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], resident: List[Int],
+                             io: List[Int]) raises -> Int:
     """The public `moe_backward` (every binding: CPU and GPU) straight onto
     the tape step `moe_tape_train_step`: upload x, dy and (unless resident)
     the three weights, run the tape, download the eight outputs.
@@ -352,7 +359,16 @@ def moe_backward_addrs[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], resi
     unread). Lane m1-followups-misc replaced the hand chain
     `moe_backward_impl` / `moe_backward_run_impl` (sequence/ops_impl.mojo)
     and the Python doors `moe_backward_py` / `moe_backward_run` with this
-    one entry: the same uploads, launches and downloads, no bit moves."""
+    one entry: the same uploads, launches and downloads, no bit moves.
+
+    `io` (lane vdf-seq, 2026-11-24: device-resident input consumed in place)
+    is empty (x and dy uploaded from addrs[0] / addrs[4], dx downloaded to
+    addrs[5]) or the three device addresses of resident x, dy and dx
+    (T x D floats each, `seq_tensor_ptr`): x and dy are then read in place
+    and dx is written in place (addrs[0], addrs[4], addrs[5] unread). The
+    launches and their values are the same: no bit moves."""
+    if len(io) != 0 and len(io) != 3:
+        raise Error("moe_backward: the resident x, dy and dx are three device addresses")
     if len(addrs) != 13 or (len(ip) != 6 and len(ip) != 7):
         raise Error("moe_backward: requires 13 addresses and 6 or 7 integer parameters")
     if len(resident) != 0 and len(resident) != 3:
@@ -378,11 +394,19 @@ def moe_backward_addrs[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], resi
         ex.upload(Gu, fptr_word(addrs[2], "gate_up_proj"), En * 2 * F * D)
         Dn = ex.alloc(En * D * F)
         ex.upload(Dn, fptr_word(addrs[3], "down_proj"), En * D * F)
-    var X = ex.alloc(T * D)
-    ex.upload(X, fptr_word(addrs[0], "x"), T * D)
-    var DY = ex.alloc(T * D)
-    ex.upload(DY, fptr_word(addrs[4], "dy"), T * D)
-    var DX = ex.alloc(T * D)
+    var X: FP
+    var DY: FP
+    var DX: FP
+    if len(io) == 3:
+        X = fptr_word(io[0], "x")
+        DY = fptr_word(io[1], "dy")
+        DX = fptr_word(io[2], "dx")
+    else:
+        X = ex.alloc(T * D)
+        ex.upload(X, fptr_word(addrs[0], "x"), T * D)
+        DY = ex.alloc(T * D)
+        ex.upload(DY, fptr_word(addrs[4], "dy"), T * D)
+        DX = ex.alloc(T * D)
     var DWg = ex.alloc(En * D)
     var DGu = ex.alloc(En * 2 * F * D)
     var DDn = ex.alloc(En * D * F)
@@ -391,7 +415,8 @@ def moe_backward_addrs[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], resi
     var Sel = ex.alloc(T * k)
     var W = ex.alloc(T * k)
     moe_tape_train_step(ex, X, Wg, Gu, Dn, DY, DX, DWg, DGu, DDn, Y, L, Sel, W, T, D, F, En, k, renorm)
-    ex.download(fptr_word(addrs[5], "dx"), DX, T * D)
+    if len(io) != 3:
+        ex.download(fptr_word(addrs[5], "dx"), DX, T * D)
     ex.download(fptr_word(addrs[6], "drouter"), DWg, En * D)
     ex.download(fptr_word(addrs[7], "dgate_up"), DGu, En * 2 * F * D)
     ex.download(fptr_word(addrs[8], "ddown"), DDn, En * D * F)

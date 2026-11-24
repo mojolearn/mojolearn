@@ -119,7 +119,8 @@ def rnn_lengths_of(addr: Int, N: Int, T: Int, operation: String) raises -> Optio
     return lens
 
 
-def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[Float64]) raises -> Int:
+def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[Float64],
+                          x_device: Bool = False) raises -> Int:
     """addrs = [X, y, params (in/out), losses, lrs (, lengths)];
     ip = [cell, D, H, L, O, task, N, T, epochs, bs, opt_kind, opt_flags,
     shuffle, seed_lo, seed_hi]; fp = [f1, f2, eps, weight_decay, f7,
@@ -170,15 +171,17 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
     # the backward runs on the tape (AutogradRnnStep)
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by e88ae4e38; code recoverable at e88ae4e38^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch
+    if x_addr < 0 and not x_device:
+        raise Error("rnn_fit: a device-store X needs the device image's dispatch")
     rnn_fit[AutogradRnnStep](ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, epochs, bs, shuffle, seed,
                              fptr(p_addr, "params"), fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5), lengths,
-                             loop_words)
+                             loop_words, x_device)
     if profile:
         ag_profile_fit_end("rnn_fit cell=" + String(ival(ip, 0)))
     return net.n_params()
 
 
-def rnn_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises -> Int:
+def rnn_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], x_device: Bool = False) raises -> Int:
     """addrs = [X, params, out, seq (ignored unless want_seq)], optionally
     followed by the resident-block words (sequence/perf3_seq_resident_words.mojo);
     ip = [cell, D, H, L, O, task, N, T, chunk, want_seq (, lengths address:
@@ -200,8 +203,10 @@ def rnn_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises
         raise Error("rnn_predict: N, T and chunk must be >= 1 and N < 2^24")
     var seq = fptr(seq_addr, "seq") if want else fptr(out_addr, "out")
     var lengths = rnn_lengths_of(ip[10] if len(ip) == 11 else 0, N, T, "predict")
+    if x_addr < 0 and not x_device:
+        raise Error("rnn_predict: a device-store X needs the device image's dispatch")
     rnn_predict(ex, net, task, fptr(x_addr, "X"), N, T, fptr(p_addr, "params"),
-                fptr(out_addr, "out"), seq, want, chunk, resident, lengths)
+                fptr(out_addr, "out"), seq, want, chunk, resident, lengths, x_device)
     return N * net.O
 
 
@@ -737,7 +742,8 @@ def _mlp_net(ip: List[Int], at: Int, D: Int, O: Int, act: Int, out_act: Int) rai
     return MLPNet(sizes^, act, out_act)
 
 
-def mlp_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[Float64]) raises -> Int:
+def mlp_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[Float64],
+                          x_device: Bool = False) raises -> Int:
     """addrs = [X (N, D), Y (N, O), params (in/out), loss_curve (max_iter, out)
     (, fit loop record words: sequence/fit_loop_words.mojo, lane alm-neural)];
     ip = [N, D, O, act, out_act, loss, solver, lr_schedule, nesterov, batch,
@@ -771,18 +777,22 @@ def mlp_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
     var profile = ag_profile_on()
     if profile:
         ag_profile_reset()
+    # Lane vdf-scope-neural: an X word below zero names a slot of the device
+    # image's member store; only the device dispatch resolves it.
+    if addrs[0] < 0 and not x_device:
+        raise Error("mlp_fit: a device-store X needs the device image's dispatch")
     var n_iter = mlp_fit(ex, net, fptr(addrs[0], "X"), fptr(addrs[1], "Y"), N, fptr(addrs[2], "params"),
                          fptr(addrs[3], "loss_curve"), ival(ip, 5), ival(ip, 6), ival(ip, 7), ival(ip, 8) != 0,
                          batch, max_iter, ival(ip, 11) != 0, UInt64(ival(ip, 12)), ival(ip, 13),
                          fval(fp, 0), fval(fp, 1), fval(fp, 2), fval(fp, 3), fval(fp, 4),
-                         fp[5], fval(fp, 6), fp[7], y_codes, addrs[4] if len(addrs) == 5 else 0)
+                         fp[5], fval(fp, 6), fp[7], y_codes, addrs[4] if len(addrs) == 5 else 0, x_device)
     if profile:
         print("AG_PROFILE fit=mlp_fit")
         print(ag_profile_report())
     return n_iter
 
 
-def mlp_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises -> Int:
+def mlp_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], x_device: Bool = False) raises -> Int:
     """addrs = [X (N, D), params, out (N, O)]; ip = [N, D, O, act, out_act,
     chunk, n_hidden, h_1, ..., h_n]."""
     if len(ip) < 7:
@@ -802,8 +812,10 @@ def mlp_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by c3b7dc42e6; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
     # mlp_predict is the tape's forward in inference mode (the former mlp_predict_autograd).
+    if addrs[0] < 0 and not x_device:
+        raise Error("mlp_predict: a device-store X needs the device image's dispatch")
     mlp_predict(ex, net, fptr(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"), chunk, proba2,
-                resident)
+                resident, x_device)
     if proba2:
         return N * 2
     return N * O

@@ -27,6 +27,7 @@ from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entr
 from providers.python.x_neighbors_admission_pyapi_door import xn_admit_checked
 from core.shared_slot import SharedSlot
 from core.device_route import DEVICE_CPU, device_cpu_fast
+from core.function_device import FunctionDevice
 from providers.python.device_route_boundary_door import (
     device_binding_held, device_binding_device, device_binding_keep,
 )
@@ -207,6 +208,22 @@ def estimator_binding_mode(mut call: AdmittedCall, requested: PythonObject, name
     var module = _estimator_binding_selected(bi, call.module("sys"), selected_mode, name, context, check_mode)
     call.remember_binding(name, selected_mode, check_mode, module)
     return module
+
+
+def estimator_binding_device(device: FunctionDevice, requested: PythonObject, name: String, context: PythonObject,
+                             check_mode: Bool = True) raises -> PythonObject:
+    # A public FUNCTION's binding for its admitted `device=`
+    # (providers/python/function_device_boundary_door.mojo `function_device_admit`;
+    # lane vd-functions): every value but an explicit "cpu" beside a GPU set
+    # is `estimator_binding_mode` exactly as before; that one runs the CPU
+    # identical module connected at import (`family_binding_connections_cpu`),
+    # identical mode only, refused in words where it is not connected.
+    if not device.host_beside:
+        return estimator_binding_mode(requested, name, context, check_mode)
+    var bi = native_loaded_module("builtins")
+    if _selected_mode(bi, requested, context) != "identical":
+        device_cpu_fast()
+    return _estimator_binding_cpu(bi, name, context, check_mode)
 
 
 def estimator_binding_mode(requested: PythonObject, name: String, context: PythonObject,

@@ -409,10 +409,12 @@ def _gpr_optimize_run(
     tp: MutPointer[Float64, MutUntrackedOrigin],
     vp: MutPointer[Float64, MutUntrackedOrigin],
     rp: MutPointer[Float64, MutUntrackedOrigin],
+    x_word: Int = 0,
 ) raises -> Int:
-    """The GIL-free half of `gpr_optimize_binding`."""
+    """The GIL-free half of `gpr_optimize_binding`. `x_word` < 0: X is a
+    fold store slot (`gpr_optimize_device`), `x` empty."""
     var r = gpr_optimize_device(
-        x, n_train, n_features, y, spec, free, bounds, alpha, n_restarts, seed_lo, seed_hi
+        x, n_train, n_features, y, spec, free, bounds, alpha, n_restarts, seed_lo, seed_hi, x_word
     )
     for i in range(len(r.theta)):
         tp.unsafe_store(i, Float64(r.theta[i]))

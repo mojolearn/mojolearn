@@ -9,12 +9,48 @@ from core.device_scan import device_first_nonfinite
 from x_cluster.device_ops import DeviceOps
 from x_cluster.bisect import IDN_BISECT_DEVICE_CENTER
 from x_cluster.bisect_fast import BISECT_FAST_ZEROCOPY, bisect_entry_ptr
-from x_cluster.entries import ENTRY_BISECT, ENTRY_MINIBATCH, bisect_entry, run_entry
+from x_cluster.entries import (
+    ENTRY_BISECT, ENTRY_MINIBATCH, ENTRY_MEANSHIFT, ENTRY_OPTICS, ENTRY_AFFINITY, bisect_entry, run_entry,
+    meanshift_entry, optics_entry, affinity_entry,
+)
 from x_cluster.minibatch_ptr import (
     MBK_DEVSCAN_ANY, MBK_IDN_RESIDENT, MBK_NONFINITE_MSG, MBK_ZEROCOPY,
     minibatch_entry_ptr, minibatch_entry_ptr_idn,
 )
 from x_cluster.out import ClusterOut
+
+
+def cluster_fold_entry(which: Int) -> Bool:
+    """The entries whose X is read only as a float slot of the ops (lane vdf-scope-cluster6, with BisectingKMeans
+    and MiniBatchKMeans before it): MeanShift (the bandwidth estimate, the seeds as device copies), OPTICS and
+    AffinityPropagation (its exemplar rows gathered on the device). The BGMM entries (the k-means / k-means++
+    initialisations read host X), the agglomerative, nearest, distances and spectral-assign entries keep host X."""
+    return which == ENTRY_MEANSHIFT or which == ENTRY_OPTICS or which == ENTRY_AFFINITY
+
+
+def _fold_execute(which: Int, source: Int, count: Int, auxiliary: Int, auxiliary_count: Int,
+                  ints: List[Int], floats: List[Float64]) raises -> ClusterOut:
+    """THE FOLD X WORD (core/fold_x_device.mojo): a negative `source` names a model-selection fold's x_prep store
+    slot (core/member_fold_x.mojo). X goes into a float slot of the ops by one device copy (`put_addr`) and the
+    entry reads that slot; the auxiliary block (seeds, preferences) stays host words. Same words, same kernels,
+    same order as the host List's upload: no bit moves."""
+    if not cluster_fold_entry(which):
+        raise Error("x_cluster: entry " + String(which) + " reads host X words (no fold X word)")
+    var a = read_f32(auxiliary, auxiliary_count) if auxiliary_count > 0 else List[Float32]()
+    var ops = DeviceOps()
+    var xs = ops.put_addr(source, count)
+    var holder = List[Float32](length=1, fill=Float32(0))
+    var result: ClusterOut
+    if which == ENTRY_MEANSHIFT:
+        result = meanshift_entry(ops, holder, a, ints, floats, xs)
+    elif which == ENTRY_OPTICS:
+        result = optics_entry(ops, holder, ints, floats, xs)
+    else:
+        result = affinity_entry(ops, holder, a, ints, floats, xs)
+    _ = ops^
+    _ = holder^
+    _ = a^
+    return result^
 
 
 def cluster_device_execute(which: Int, source: Int, count: Int, auxiliary: Int,
@@ -78,6 +114,8 @@ def cluster_device_execute(which: Int, source: Int, count: Int, auxiliary: Int,
             _ = holder^
             _ = aw^
             return resb^
+    if source < 0 and count > 0:
+        return _fold_execute(which, source, count, auxiliary, auxiliary_count, ints, floats)
     var x = read_f32(source, count) if count > 0 else List[Float32]()
     var a = read_f32(auxiliary, auxiliary_count) if auxiliary_count > 0 else List[Float32]()
     var scan_dev = False

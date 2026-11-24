@@ -46,9 +46,14 @@ from forest_inference_binding_door import (
 from core.forest_inference_run import (
     forest_prepare_gpu_native, forest_predict_resident_into_gpu_native,
     forest_predict_resident_labels_gpu_native, forest_gpu_resident_caps,
+    forest_resident_rows_native,
 )
 from bindings.forest_fit_boundary_unpack import forest_fit_args_py
-from core.forest_fit_request import ForestFitArgs, XF_CAP_DEVICE_SCAN, forest_export_verify_lists, fit_loop_put
+from core.forest_fit_request import ForestFitArgs, XF_CAP_DEVICE_SCAN, XF_CAP_DEV_ROWS, XF_CAP_ET_CODES, forest_export_verify_lists, fit_loop_put
+from core.forest_store_transport import forest_store_publish, forest_store_words, forest_store_admit
+from core.gbdt_entry_table import gbdt_vendor_word
+from core.native_descriptor_call import native_descriptor_report
+from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS, XP_DEV_LIVE
 from core.extra_trees_member import extra_trees_member_publish_image
 from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish
 from core.forest_entry_table import FOREST_TABLE_ET
@@ -69,6 +74,8 @@ from core.mojolearn_trees_host_impl import et_export_into, et_forest_lists
 from extratrees.mojolearn_trees_run import (
     _et_classifier_fit_run,
     _et_regressor_fit_run,
+    ET_STORE,
+    et_store_ctx,
     _f32_ptr,
     _i32_ptr,
     et_legacy_meta,
@@ -215,7 +222,7 @@ def _forest_out(result: FitResult) raises -> PythonObject:
     return out
 
 
-def _et_classifier_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> Int:
+def _et_classifier_fit[ROWMAJOR: Bool = False, ROWS: Bool = False](params: ForestFitArgs) raises -> Int:
     """Fit `ExtraTreesClassifier` (`_et_classifier_fit_run`, with the GIL
     released around it) and keep the fit. Returns the export handle (lane
     calltable-forest: every fit is kept in ET_EXPORTS; `_et_handle_py` reads
@@ -225,10 +232,10 @@ def _et_classifier_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> 
     var result: FitResult
     if params.gil_free:
         # a member's worker: no GIL to release (core/forest_entry.mojo)
-        result = _et_classifier_fit_run[ROWMAJOR](params, times, total_start)
+        result = _et_classifier_fit_run[ROWMAJOR, ROWS](params, times, total_start)
     else:
         with GILReleased(Python()):
-            result = _et_classifier_fit_run[ROWMAJOR](params, times, total_start)
+            result = _et_classifier_fit_run[ROWMAJOR, ROWS](params, times, total_start)
     # The fit loop words the door asked for (XF_W_LOOP; lane alm-forest).
     fit_loop_put(params.loop, result.forest.fit_loop)
     var stamp = times.start()
@@ -239,17 +246,17 @@ def _et_classifier_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> 
     return output
 
 
-def _et_regressor_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> Int:
+def _et_regressor_fit[ROWMAJOR: Bool = False, ROWS: Bool = False](params: ForestFitArgs) raises -> Int:
     """Fit `ExtraTreesRegressor` (`_et_regressor_fit_run`, with the GIL
     released around it) and keep the fit. Returns the export handle."""
     var times = StageTimes()
     var total_start = 0
     var result: FitResult
     if params.gil_free:
-        result = _et_regressor_fit_run[ROWMAJOR](params, times, total_start)
+        result = _et_regressor_fit_run[ROWMAJOR, ROWS](params, times, total_start)
     else:
         with GILReleased(Python()):
-            result = _et_regressor_fit_run[ROWMAJOR](params, times, total_start)
+            result = _et_regressor_fit_run[ROWMAJOR, ROWS](params, times, total_start)
     # The fit loop words the door asked for (XF_W_LOOP; lane alm-forest).
     fit_loop_put(params.loop, result.forest.fit_loop)
     var stamp = times.start()
@@ -401,7 +408,11 @@ struct EtGpuForest(ForestImage):
 
     @staticmethod
     def caps() -> Int:
-        var caps = forest_gpu_resident_caps()
+        # XF_CAP_DEV_ROWS (lane vdf-scope-trees2a): the image's device store,
+        # XF_FIT_ROWS and XF_RESIDENT_ROWS. XF_CAP_ET_CODES (lane
+        # vdf-scope-trees3): the classifier fits take int32 codes
+        # (XF_SHAPE_Y_CODES) and make the class ids on the device.
+        var caps = forest_gpu_resident_caps() | XF_CAP_DEV_ROWS | XF_CAP_ET_CODES
         comptime if FOREST_DEVICE_FINITE:
             caps |= XF_CAP_DEVICE_SCAN
         return caps
@@ -506,6 +517,54 @@ struct EtGpuForest(ForestImage):
         resident_unstage_input[False]()
 
 
+    @staticmethod
+    def fit_rows(classifier: Bool, args: ForestFitArgs) raises -> Int:
+        # XF_FIT_ROWS (lane vdf-scope-trees2a): the plain fit bodies with the
+        # rows taken out of the image's store on the device
+        # (extratrees/mojolearn_trees_run.mojo `et_store_take`).
+        if classifier:
+            return _et_classifier_fit[False, True](args)
+        return _et_regressor_fit[False, True](args)
+
+    @staticmethod
+    def resident_rows(mode: Int, handle: Int, store_id: Int, idx: Int, out_addr: Int, rows: Int,
+                      cols: Int, outputs: Int) raises -> Int:
+        # XF_RESIDENT_ROWS (lane vdf-scope-trees2a): the rows of the store
+        # taken on the device and read there by the snapshot (one context).
+        var store = ET_STORE.get_or_create_ptr()
+        return forest_resident_rows_native[False](store[], et_store_ctx(), mode, handle, store_id, idx,
+                                                  out_addr, rows, cols, outputs)
+
+
+def _et_store_op(op: Int, a: List[Int], p: List[Int]) raises -> Int:
+    var store = ET_STORE.get_or_create_ptr()
+    if op == XP_DEV_PUT:
+        return store[].put(et_store_ctx(), a[0], p[0])
+    if op == XP_DEV_FREE:
+        store[].free(et_store_ctx(), p[0])
+        return 0
+    if op == XP_DEV_TAKE_ROWS:
+        return store[].take_rows(et_store_ctx(), p[0], p[1], a[0], p[2])
+    return Int(store[].live)
+
+
+def et_gpu_store_transport_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
+    ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    """This image's STORE TRANSPORT entry (core/forest_store_transport.mojo;
+    lane vdf-scope-trees2a): put / free / take rows / live of its device
+    store (extratrees/mojolearn_trees_run.mojo `ET_STORE`, on the image's one
+    context), the x_prep transport numbering. No CPython: callers hold no
+    GIL or release it themselves; the store has its own lock word."""
+    try:
+        forest_store_admit(operation, na, np, nf, result)
+        var value = _et_store_op(operation, forest_store_words(aa, na), forest_store_words(pp, np))
+        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = value
+        return 0
+    except problem:
+        native_descriptor_report(problem, context, sink)
+        return 1
+
+
 def et_gpu_forest_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     """This image's published forest entry (core/forest_entry_table.mojo)."""
@@ -521,6 +580,11 @@ def build__mojolearn_trees() -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_trees")
         # The native forest entry (core/forest_entry_table.mojo) under this image's key.
         forest_entry_publish["MojolearnForestEntryOwnerEtGpuV1"](FOREST_TABLE_ET, COMPILED_VENDOR, et_gpu_forest_entry_v1)
+        # Its device store's transport entry (XF_CAP_DEV_ROWS; lane vdf-scope-trees2a).
+        var store_vendor = gbdt_vendor_word(COMPILED_VENDOR)
+        if store_vendor >= 0:
+            forest_store_publish(FOREST_TABLE_ET, Int(GLOBAL_NUMERIC_MODE), store_vendor,
+                                 Int(ET_STORE.get_or_create_ptr()), et_gpu_store_transport_v1)
         # The families' member entries (core/member_abi.mojo) over this forest entry.
         extra_trees_member_publish_image(COMPILED_VENDOR)
         # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.

@@ -32,6 +32,10 @@ def linear_fit_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
             var a = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=aa)
             var p = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp)
             var f = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=ff)
+            if Int(a[0]) < 0:
+                # THE FOLD X WORD (core/fold_x_device.mojo) names a device slot; the
+                # host column never advertises LF_HAS_SLOT_X (lane vdf-scope-linear4).
+                raise Error("RuntimeError: the host linear fit column reads no device fold X")
             if operation == LF_PREP:
                 ols_prep_host(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8],
                     p[0], p[1], p[2] != 0, p[3])

@@ -33,7 +33,7 @@ from std.math import fma
 from std.memory import bitcast
 
 from checks.fixed_point import choose_scale
-from checks.numerics import ftz
+from checks.numerics import ftz, identical_mul
 
 comptime SUM_SCALE_CHUNK = 2048
 """Rows one thread folds serially in stage 1."""
@@ -58,6 +58,24 @@ def sum_scale_term(v: Float32) -> Float32:
     """One stage-1 term: `abs`, subnormals flushed. A non-finite word stays
     non-finite (the caller tests its bits)."""
     return ftz(abs(v))
+
+
+@always_inline
+def weighted_sum_scale_term(v: Float32, w: Float32) -> Float32:
+    """One stage-1 term of THE WEIGHTED BOUND (DEVIATION 5112's cap, lane
+    vdf-scope-cluster2a, 2026-11-24): `ftz(|x| * |w|)` with the pinned
+    float32 product (`identical_mul`, never fused into the fold's add). The
+    Lloyd accumulator quantizes `x * w * sum_scale` per cell, so a weighted
+    fit's scale is also bounded by the worst column of `sum_r |x_rf| |w_r|`;
+    that column sum is now this fold (the same chunks, the same stage 2, the
+    same widening in `sum_scale_from_columns`; the product's one rounding,
+    a factor of at most `1 - u`, sits inside the `+ 8` of the fold height).
+    It replaces the serial float64 host chain over host X
+    (`weighted_sum_scale_cap`, deleted), so a weighted fit's bound runs on
+    the device over the uploaded (or fold-gathered) words: bits change on
+    every column together. A product past float32 range makes the column
+    +inf and is refused by name, as an unweighted column past range is."""
+    return ftz(identical_mul(abs(v), abs(w)))
 
 
 @always_inline

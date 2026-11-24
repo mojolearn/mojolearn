@@ -42,41 +42,26 @@ def _session_cells_kernel(source: _AP, other: _AP, dst: _AP, rows_in: Int32, col
     small_mlp_cell(source, other, dst, rows, cols, operation, i)
 
 
-def nn_mlp_sessions_device(ctx: DeviceContext, inputs: List[Int], rows: List[Int],
-    w1: _FP, b1: _FP, w2: _FP, b2: _FP, output: _FP,
-    in_width: Int, hidden: Int, out_width: Int,
-) raises -> Int:
-    # TOMBSTONE: the `registry` argument (sessions reading an open Apple FAST resident training session's weights; its only caller, mlp_sessions_resident, went with the session, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
-    var total = nn_mlp_session_shape(inputs, rows, in_width, hidden, out_width)
-    var x = ctx.enqueue_create_buffer[DType.float32](max(1, total * in_width))
-    var a = ctx.enqueue_create_buffer[DType.float32](max(1, total * hidden))
-    var y = ctx.enqueue_create_buffer[DType.float32](max(1, total * out_width))
-    var dw1 = ctx.enqueue_create_buffer[DType.float32](hidden * in_width)
-    var db1 = ctx.enqueue_create_buffer[DType.float32](hidden)
-    var dw2 = ctx.enqueue_create_buffer[DType.float32](out_width * hidden)
-    var db2 = ctx.enqueue_create_buffer[DType.float32](out_width)
-    ctx.enqueue_copy(dst_buf=dw1, src_ptr=w1)
-    ctx.enqueue_copy(dst_buf=db1, src_ptr=b1)
-    ctx.enqueue_copy(dst_buf=dw2, src_ptr=w2)
-    ctx.enqueue_copy(dst_buf=db2, src_ptr=b2)
-    var keep = List[DeviceBuffer[DType.float32]]()
-    var base = 0
-    for session in range(len(rows)):
-        if rows[session] > 0:
-            var part = x.create_sub_buffer[DType.float32](base * in_width, rows[session] * in_width)
-            ctx.enqueue_copy(dst_buf=part, src_ptr=_FP(unsafe_from_address=inputs[session]))
-            keep.append(part^)
-        base += rows[session]
-    ctx.synchronize()
+def _mlp_weights_refuse(ctx: DeviceContext, mut dw1: DeviceBuffer[DType.float32], mut db1: DeviceBuffer[DType.float32],
+    mut dw2: DeviceBuffer[DType.float32], mut db2: DeviceBuffer[DType.float32], in_width: Int, hidden: Int,
+    out_width: Int,
+) raises:
     if (device_first_nonfinite(ctx, dw1, hidden * in_width) >= 0
         or device_first_nonfinite(ctx, db1, hidden) >= 0
         or device_first_nonfinite(ctx, dw2, out_width * hidden) >= 0
         or device_first_nonfinite(ctx, db2, out_width) >= 0):
         raise Error("neural MLP sessions: nonfinite weights")
-    if total == 0:
-        return 0
-    if device_first_nonfinite(ctx, x, total * in_width) >= 0:
-        raise Error("neural MLP sessions: nonfinite input")
+
+
+def _mlp_sessions_forward_all(ctx: DeviceContext, mut xs: List[DeviceBuffer[DType.float32]], rows: List[Int],
+    mut dw1: DeviceBuffer[DType.float32], mut db1: DeviceBuffer[DType.float32],
+    mut dw2: DeviceBuffer[DType.float32], mut db2: DeviceBuffer[DType.float32],
+    mut y: DeviceBuffer[DType.float32], total: Int, in_width: Int, hidden: Int, out_width: Int,
+) raises:
+    """Every session's forward into its rows of `y` (`xs[s]`: session s's input, rows[s] x in_width, on the
+    device), then the logits refusal. Shared by the host-address entry and the device-array entry (lane
+    vdf-linalg3, 2026-11-24): the same kernels on the same words, the same bits."""
+    var a = ctx.enqueue_create_buffer[DType.float32](max(1, total * hidden))
     var workspace_cells = max(identical_gemm_workspace_max_floats(total, hidden, in_width),
         identical_gemm_workspace_max_floats(total, out_width, hidden))
     # Dispatch can choose different scratch plans on a session and the packed
@@ -88,32 +73,99 @@ def nn_mlp_sessions_device(ctx: DeviceContext, inputs: List[Int], rows: List[Int
                 identical_gemm_workspace_max_floats(rows[i], out_width, hidden)))
     var ws = ctx.enqueue_create_buffer[DType.float32](max(1, workspace_cells))
     # TOMBSTONE: MOJOLEARN_NN64_SESSION_PACK (the packed arm of this loop) stays removed (lane/m2-neural-leftovers, 2026-11-09); the packed forward is now the program arm MOJOLEARN_MLP_SESSIONS_PACKED in the bindings.
-    base = 0
-    for session in range(len(rows)):
+    var keep = List[DeviceBuffer[DType.float32]]()
+    var base = 0
+    for session in range(len(rows)):  # driver-loop: over the caller's sessions
         var count = rows[session]
         if count > 0:
-            var xv = x.create_sub_buffer[DType.float32](base * in_width, count * in_width)
             var av = a.create_sub_buffer[DType.float32](base * hidden, count * hidden)
             var yv = y.create_sub_buffer[DType.float32](base * out_width, count * out_width)
-            nn_mlp_session_forward(ctx, xv, dw1, db1, dw2, db2, av, yv, ws,
+            nn_mlp_session_forward(ctx, xs[session], dw1, db1, dw2, db2, av, yv, ws,
                 count, in_width, hidden, out_width)
-            keep.append(xv^)
             keep.append(av^)
             keep.append(yv^)
         base += count
+    # No wait here: the scan below waits for its own word, which drains the queue (lane vdf-linalg4 removed the
+    # extra wait vdf-linalg3 added; the host entry's copy-out waits once, as before the shared body).
     if device_first_nonfinite(ctx, y, total * out_width) >= 0:
         raise Error("neural MLP sessions: nonfinite logits")
+    _ = keep^
+    _ = a^
+    _ = ws^
+
+
+def nn_mlp_sessions_device(ctx: DeviceContext, inputs: List[Int], rows: List[Int],
+    w1: _FP, b1: _FP, w2: _FP, b2: _FP, output: _FP,
+    in_width: Int, hidden: Int, out_width: Int,
+) raises -> Int:
+    # TOMBSTONE: the `registry` argument (sessions reading an open Apple FAST resident training session's weights; its only caller, mlp_sessions_resident, went with the session, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
+    var total = nn_mlp_session_shape(inputs, rows, in_width, hidden, out_width)
+    var x = ctx.enqueue_create_buffer[DType.float32](max(1, total * in_width))
+    var y = ctx.enqueue_create_buffer[DType.float32](max(1, total * out_width))
+    var dw1 = ctx.enqueue_create_buffer[DType.float32](hidden * in_width)
+    var db1 = ctx.enqueue_create_buffer[DType.float32](hidden)
+    var dw2 = ctx.enqueue_create_buffer[DType.float32](out_width * hidden)
+    var db2 = ctx.enqueue_create_buffer[DType.float32](out_width)
+    ctx.enqueue_copy(dst_buf=dw1, src_ptr=w1)
+    ctx.enqueue_copy(dst_buf=db1, src_ptr=b1)
+    ctx.enqueue_copy(dst_buf=dw2, src_ptr=w2)
+    ctx.enqueue_copy(dst_buf=db2, src_ptr=b2)
+    # one input buffer for every session (one upload each, by view; one
+    # refusal scan over them all); each session reads its own rows of it
+    var xs = List[DeviceBuffer[DType.float32]]()
+    var base = 0
+    for session in range(len(rows)):  # driver-loop: over the caller's sessions
+        if rows[session] > 0:
+            var part = x.create_sub_buffer[DType.float32](base * in_width, rows[session] * in_width)
+            ctx.enqueue_copy(dst_buf=part, src_ptr=_FP(unsafe_from_address=inputs[session]))
+            xs.append(part^)
+        else:
+            xs.append(x.create_sub_buffer[DType.float32](0, 1))
+        base += rows[session]
+    ctx.synchronize()
+    _mlp_weights_refuse(ctx, dw1, db1, dw2, db2, in_width, hidden, out_width)
+    if total == 0:
+        return 0
+    if device_first_nonfinite(ctx, x, total * in_width) >= 0:
+        raise Error("neural MLP sessions: nonfinite input")
+    _mlp_sessions_forward_all(ctx, xs, rows, dw1, db1, dw2, db2, y, total, in_width, hidden, out_width)
     ctx.enqueue_copy(dst_ptr=output, src_buf=y)
     ctx.synchronize()
-    _ = keep^
+    _ = xs^
     _ = x^
-    _ = a^
     _ = y^
     _ = dw1^
     _ = db1^
     _ = dw2^
     _ = db2^
-    _ = ws^
+    return total * out_width
+
+
+def nn_mlp_sessions_resident(ctx: DeviceContext, mut xs: List[DeviceBuffer[DType.float32]], rows: List[Int],
+    mut dw1: DeviceBuffer[DType.float32], mut db1: DeviceBuffer[DType.float32],
+    mut dw2: DeviceBuffer[DType.float32], mut db2: DeviceBuffer[DType.float32],
+    mut y: DeviceBuffer[DType.float32], in_width: Int, hidden: Int, out_width: Int,
+) raises -> Int:
+    """`mlp_inference_sessions` on device arrays (lane vdf-linalg3, 2026-11-24; training/dev_tensors_layers.mojo
+    `train_mlp_sessions_dev`): every session input and the four weights read in place, the logits written into `y`
+    (sum of rows x out_width) on the device. The host entry's refusals in its order and words (the input scan per
+    session: the same refusal), the same forward: the same bits. Returns the logits' element count."""
+    # An empty session (rows == 0) is accepted as the host entry accepts it (nn_mlp_session_shape): it reads nothing
+    # and adds no logits rows; all sessions empty returns 0 after the weights refusal, as there (lane vdf-linalg4).
+    var total = 0
+    for session in range(len(rows)):  # driver-loop: over the caller's sessions (row counts, not data)
+        if rows[session] < 0:
+            raise Error("neural MLP sessions: invalid session rows/address")
+        total += rows[session]
+    if len(rows) == 0 or len(xs) != len(rows):
+        raise Error("neural MLP sessions: invalid metadata")
+    _mlp_weights_refuse(ctx, dw1, db1, dw2, db2, in_width, hidden, out_width)
+    if total == 0:
+        return 0
+    for session in range(len(rows)):  # driver-loop: over the caller's sessions (one device scan each)
+        if rows[session] > 0 and device_first_nonfinite(ctx, xs[session], rows[session] * in_width) >= 0:
+            raise Error("neural MLP sessions: nonfinite input")
+    _mlp_sessions_forward_all(ctx, xs, rows, dw1, db1, dw2, db2, y, total, in_width, hidden, out_width)
     return total * out_width
 
 

@@ -2,7 +2,7 @@
 # native-check: gpu
 """Concurrent use of one `DeviceStore` (core/device_store.mojo; lane linalg-owner, 2026-11-22).
 
-A store is one process slot per binding (X_PREP_STORE, X_METRICS_STORE) and the doors release the GIL around put,
+A store is one process slot (X_PREP_STORE, the one resident store every binding reads) and the doors release the GIL around put,
 free, take_rows and the program runs that read slots, so two calls at once reallocated the slot list under each other
 or replaced a slot another call was reading. The store now takes its lock word around every List step.
 

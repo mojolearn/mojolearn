@@ -12,10 +12,11 @@ from core.prep_entry_table import PrepEntryKey, prep_table_publish, PREP_TABLE_X
 from core.shared_slot import SharedSlot
 from core.naive_bayes_member import naive_bayes_member_publish
 from core.discriminant_member import discriminant_member_publish
-from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE
+from x_prep.device import run_program_device, run_program_device_ranges
+from x_prep.store_slot import x_prep_ctx, X_PREP_STORE
 from x_prep.transport_abi import (
     XP_TRANSPORT_ABI, XP_OP_COUNT, XP_RUN, XP_RUN_SCRATCH, XP_RUN_OUT, XP_RUN_RANGES, XP_DEV_PUT, XP_DEV_FREE,
-    XP_DEV_TAKE_ROWS, XP_DEV_LIVE, xp_validate_call, xp_vendor_word,
+    XP_DEV_TAKE_ROWS, XP_DEV_LIVE, XP_DEV_READ, xp_validate_call, xp_vendor_word,
 )
 
 
@@ -50,6 +51,11 @@ def _xp_device_op(op: Int, a: List[Int], p: List[Int]) raises -> Int:
         return X_PREP_STORE.get_or_create_ptr()[].take_rows(x_prep_ctx(), p[0], p[1], a[0], p[2])
     if op == XP_DEV_LIVE:
         return Int(X_PREP_STORE.get_or_create_ptr()[].live)
+    if op == XP_DEV_READ:
+        if p[1] < 0 or (p[1] > 0 and a[0] == 0):
+            raise Error("x_prep: invalid read buffer")
+        X_PREP_STORE.get_or_create_ptr()[].read(x_prep_ctx(), p[0], a[0], p[1])
+        return 0
     raise Error("x_prep transport ABI: unknown operation " + String(op))
 
 

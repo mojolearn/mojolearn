@@ -50,6 +50,10 @@ from bindings.metrics_exp_common_unpack import (
     mx_warn, mx_undefined, mx_sorted, mx_list, mx_missing, mx_encode, mx_selected, mx_codes, mx_map_eq, mx_targets,
     mx_pos_label, mx_scores, mx_weights, mx_eq, mx_list_labels,
 )
+from bindings.metric_resident_labels_door import (
+    MetricResidentLabels, metric_resident_labels, metric_pin_codes, metric_put_codes,
+)
+from bindings.metrics_exp_resident_labels_door import mx_resident_targets, mx_resident_codes, mx_resident_flags
 
 comptime _CO_ROC = 0
 comptime _CO_PR = 1
@@ -74,22 +78,24 @@ def _curve_out(args: PythonObject, caller: String, kind: Int,
     drop_intermediate, mode): (the three arrays or None, F, T, classes)."""
     var pos_label = args[2]
     var drop = args[4]
-    var true = mx_targets(args[0], caller, context)
+    var dev = metric_resident_labels(args[0], args[5], caller, context)  # lane vdf-xm-wire3
+    var true = mx_resident_targets(dev, args[0], caller, context)
     if mx_len(true.classes) > 2 and pos_label is None:
         raise Error("multiclass format is not supported")
     var pos = mx_pos_label(pos_label, true.kind, true.classes, caller, context)
     var n = true.n
     var s = mx_scores(args[1], n, caller, 1, "y_score", context)
     var w = mx_weights(args[3], n, caller, context)
-    var flags = mx_map_eq(true, pos, context)
+    var flags = mx_resident_flags(dev, true, pos, context)
     if n <= 0:
         raise Error("mojolearn metrics: an empty curve has no thresholds")
     var prog = MetricDoorProg()
-    var S = prog.put(s.a)
-    var POS = prog.put_i32(flags)
+    var S = prog.put_arg(s.a, args, 1)
+    # this call's flags: never kept resident (lane vdf-xm-wire2), or the device flags read in place (vdf-xm-wire3)
+    var POS = metric_put_codes(prog, flags, args[0], n)
     var W = MX_NONE
     if w is not None:
-        W = prog.put(w)
+        W = prog.put_arg(w, args, 3)
     var order = prog.scratch(n)
     var cnt = prog.scratch(1)
     var fps = prog.scratch(n)
@@ -114,6 +120,7 @@ def _curve_out(args: PythonObject, caller: String, kind: Int,
     else:
         prog.stage("curve_out", 1, [kind, n, fps, tps, thr, cnt, drop_flag, OUT, LEN])
     var arena = metric_door_run(prog, args[5], context)
+    dev.close()  # the device flags outlive the run above
     var m = arena.i32(LEN)
     var status = arena.i32(LEN + 1)
     if status == _CO_EMPTY:
@@ -245,7 +252,8 @@ def _fold_ap(arena: MetricArenaOwner, off: Int) raises -> Float64:
 # ---------------------------------------------------------------- average_precision_score
 
 
-def _ap_binary(true: MxLab, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _ap_binary(true: MxLab, mut dev: MetricResidentLabels, args: PythonObject,
+               context: PythonObject) raises -> PythonObject:
     """The binary average precision: one curve and its fold."""
     var caller = String("average_precision_score")
     var pos_label = args[2]
@@ -256,16 +264,17 @@ def _ap_binary(true: MxLab, args: PythonObject, context: PythonObject) raises ->
     var n = true.n
     var s = mx_scores(args[1], n, caller, 1, "y_score", context)
     var w = mx_weights(args[3], n, caller, context)
-    var flags = mx_map_eq(true, pos_label, context)
+    var flags = mx_resident_flags(dev, true, pos_label, context)
     var prog = MetricDoorProg()
     # the typed builder (bindings/metrics_exp_curve_run.mojo `ap_binary_stages`,
     # lane mf-score5): its inputs S, POS, W pinned in that order
     var out = ap_binary_stages(prog.plan, n, w is not None)
-    prog.pins.append(s.a)
-    prog.pins.append(flags)
+    prog.pin_arg(s.a, args, 1)
+    metric_pin_codes(prog, flags, args[0])
     if w is not None:
-        prog.pins.append(w)
+        prog.pin_arg(w, args, 3)
     var arena = metric_door_run(prog, args[4], context)
+    dev.close()  # the device flags outlive the run above
     return PythonObject(_fold_ap(arena, out))
 
 
@@ -277,9 +286,10 @@ def _average_precision(args: PythonObject, context: PythonObject) raises -> Pyth
                                 PythonObject("weighted"), PythonObject("samples"))
     if not py_contains(averages, average):
         raise Error("average has to be one of (None, 'micro', 'macro', 'weighted', 'samples')")
-    var true = mx_targets(args[0], caller, context)
+    var dev = metric_resident_labels(args[0], args[4], caller, context)  # lane vdf-xm-wire3
+    var true = mx_resident_targets(dev, args[0], caller, context)
     if mx_len(true.classes) <= 2:
-        return _ap_binary(true, args, context)
+        return _ap_binary(true, dev, args, context)
     if not mx_eq(args[2], PythonObject(1)):
         raise Error("Parameter pos_label is fixed to 1 for multiclass y_true. Do not set pos_label "
                     + "or set pos_label to 1.")
@@ -295,7 +305,7 @@ def _average_precision(args: PythonObject, context: PythonObject) raises -> Pyth
     if mx_len(classes) != k:
         raise Error("Number of classes in y_true not equal to the number of columns in 'y_score'")
     var w = mx_weights(args[3], n, caller, context)
-    var codes = mx_codes(true, classes, True, context)
+    var codes = mx_resident_codes(dev, true, classes, context)
     var prog = MetricDoorProg()
     if avg == "micro":
         # `_micro_inputs` + `_curves(s.reshape((n*k,)), ...)`: the row-major
@@ -304,21 +314,23 @@ def _average_precision(args: PythonObject, context: PythonObject) raises -> Pyth
         # `ap_micro_stages`, which the search scorers' RUN calls too; its
         # pins in its input order)
         var out = ap_micro_stages(prog.plan, n, k, w is not None)
-        prog.pins.append(s.a)
-        prog.pins.append(codes)
+        prog.pin_arg(s.a, args, 1)
+        metric_pin_codes(prog, codes, args[0])
         if w is not None:
-            prog.pins.append(w)
+            prog.pin_arg(w, args, 3)
         var arena = metric_door_run(prog, args[4], context)
+        dev.close()  # the device codes outlive the run above
         return PythonObject(_fold_ap(arena, out))
     # one-vs-rest: the class-major one-hot flags, the folds and the tail, by
     # the typed builder (bindings/metrics_exp_curve_run.mojo `ap_ovr_stages`,
     # lane mf-score5): its inputs S, C, W pinned in that order
     var o = ap_ovr_stages(prog.plan, n, k, w is not None, average is not None, avg == "weighted")
-    prog.pins.append(s.a)
-    prog.pins.append(codes)
+    prog.pin_arg(s.a, args, 1)
+    metric_pin_codes(prog, codes, args[0])
     if w is not None:
-        prog.pins.append(w)
+        prog.pin_arg(w, args, 3)
     var arena = metric_door_run(prog, args[4], context)
+    dev.close()  # the device codes outlive the run above
     if not ap_ovr_edge(arena, o, k):
         if average is None:
             var per_class = metric_arena_array(arena, o.sc, 2 * k, Python.tuple(PythonObject(k)), "<f8", context)
@@ -349,7 +361,8 @@ def _top_k(args: PythonObject, context: PythonObject) raises -> PythonObject:
     if mx_is_bool(k_obj) or not mx_is_integral(k_obj, context) or Bool(py=k_obj < PythonObject(1)):
         raise Error("k must be a positive integer")
     var k = Int(py=py_call(mx_b().int, k_obj))
-    var true = mx_targets(args[0], caller, context)
+    var dev = metric_resident_labels(args[0], args[6], caller, context)  # lane vdf-xm-wire3
+    var true = mx_resident_targets(dev, args[0], caller, context)
     var present = true.classes
     var n = true.n
     var s = mx_scores(args[1], n, caller, -1, "y_score", context)
@@ -372,7 +385,7 @@ def _top_k(args: PythonObject, context: PythonObject) raises -> PythonObject:
         mx_undefined("'k' (" + family_str(k_obj) + ") greater than or equal to 'n_classes' (" + String(nc)
                      + ") will result in a perfect score and is therefore meaningless.", context)
     var w = mx_weights(args[4], n, caller, context)
-    var codes = mx_codes(true, classes, True, context)
+    var codes = mx_resident_codes(dev, true, classes, context)
     var prog = MetricDoorProg()
     # the typed builder (bindings/metrics_exp_curve_run.mojo `top_k_stages`,
     # lane mf-score5): its inputs (the scores when read, the codes, the
@@ -383,11 +396,13 @@ def _top_k(args: PythonObject, context: PythonObject) raises -> PythonObject:
         _ = s.a  # keep the Python object alive through the native read above
     var got = top_k_stages(prog.plan, n, binary, k, s.cols, threshold, w is not None)
     if top_k_reads_scores(binary, k):
-        prog.pins.append(s.a)
-    prog.pins.append(codes)
+        prog.pin_arg(s.a, args, 1)
+    # this call's codes: never kept resident (lane vdf-xm-wire2), or the device codes in place (vdf-xm-wire3)
+    metric_pin_codes(prog, codes, args[0])
     if w is not None:
-        prog.pins.append(w)
+        prog.pin_arg(w, args, 4)
     var arena = metric_door_run(prog, args[6], context)
+    dev.close()  # the device codes outlive the run above
     return PythonObject(top_k_value(arena, got[0], got[1], n, mx_truthy(args[3])))
 
 
@@ -400,7 +415,8 @@ def _ranking_report(args: PythonObject, context: PythonObject) raises -> PythonO
     from bindings.host_inference_scalars_door import host_inference_scalar
     host_inference_scalar(args[4], context, True)
     var include_curves = Bool(py=args[4])
-    var true = mx_targets(args[0], "ranking_report", context)
+    var dev = metric_resident_labels(args[0], args[5], "ranking_report", context)  # lane vdf-xm-wire3
+    var true = mx_resident_targets(dev, args[0], "ranking_report", context)
     if mx_len(true.classes) > 2:
         raise Error("ranking_report currently requires binary targets")
     var pos = mx_pos_label(args[2], true.kind, true.classes, "ranking_report", context)
@@ -409,13 +425,14 @@ def _ranking_report(args: PythonObject, context: PythonObject) raises -> PythonO
         raise Error("mojolearn metrics: an empty curve has no thresholds")
     var scores = mx_scores(args[1], n, "ranking_report", 1, "y_score", context)
     var weights = mx_weights(args[3], n, "ranking_report", context)
-    var flags = mx_map_eq(true, pos, context)
+    var flags = mx_resident_flags(dev, true, pos, context)
     var prog = MetricDoorProg()
-    var S = prog.put(scores.a)
-    var POS = prog.put_i32(flags)
+    var S = prog.put_arg(scores.a, args, 1)
+    # this call's flags: never kept resident (lane vdf-xm-wire2), or the device flags in place (vdf-xm-wire3)
+    var POS = metric_put_codes(prog, flags, args[0], n)
     var W = MX_NONE
     if weights is not None:
-        W = prog.put(weights)
+        W = prog.put_arg(weights, args, 3)
     var curves = List[Int]()
     for _ in range(2):  # driver-loop: the report's fixed ROC/AP pair
         var order = prog.scratch(n)
@@ -448,6 +465,7 @@ def _ranking_report(args: PythonObject, context: PythonObject) raises -> PythonO
             prog.stage("curve_out", 1, [_CO_ROC if fold == 0 else _CO_PR, n, fps, tps, thr, count, 0, output, lengths])
             curve_outputs.extend([output, lengths])
     var arena = metric_door_run(prog, args[5], context)
+    dev.close()  # the device flags outlive the run above
     if arena.i32(outputs[1]) == 1:
         mx_undefined(String(_ROC_ONE_CLASS), context)
     if arena.i32(outputs[3]) == 2:

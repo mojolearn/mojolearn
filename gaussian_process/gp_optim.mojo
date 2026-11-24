@@ -38,6 +38,9 @@ from cholesky.impl.matrix.detail.matrix import copy_vector_from_matrix_diagonal_
 from cholesky.logdet_fold import logdet_blocks
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, cho_solve
 from core.device_zero import enqueue_fill
+from core.device_scan import device_first_nonfinite
+from core.fold_x_device import fold_x_fill
+from core.admitted_refusals import admitted_finite_wording
 from core.identity_trace import IdentityTrace
 from gaussian_process.checks.kernels import (
     GP_ELEM_TPB,
@@ -493,11 +496,24 @@ def gpr_optimize_device(
     n_restarts: Int,
     seed_lo: UInt32,
     seed_hi: UInt32,
+    x_word: Int = 0,
 ) raises -> GPOptResult:
     """DEVIATION 2881 from the kernel's theta and `n_restarts` Philox starts,
     every run on the device. `bounds` holds (lo, hi) per theta entry, the
-    hyperparameter values (not their logs)."""
-    gp_validate_data(x, n_train, n_features, String("X"))
+    hyperparameter values (not their logs).
+
+    `x_word` (lane vdf-scope-gp): 0 reads X from the list `x`; a negative
+    word is THE FOLD X WORD (core/fold_x_device.mojo), a model-selection
+    fold's rows in a fold store slot (`x` is then empty): one device copy of
+    the same bytes and the finite test on the device, in the member's
+    wording."""
+    var fold = x_word < 0
+    if fold:
+        if n_train <= 0 or n_features <= 0:
+            raise Error("gpr: X must have at least one row and one feature, got " + String(n_train) + " x "
+                        + String(n_features))
+    else:
+        gp_validate_data(x, n_train, n_features, String("X"))
     gp_validate_targets(y, n_train)
     gp_validate_kernel(kernel, n_features)
     gp_validate_alpha(alpha)
@@ -518,7 +534,14 @@ def gpr_optimize_device(
     var n_runs = 1 + n_restarts
 
     var ctx = _family_ctx()
-    var dx = _upload(ctx, x)
+    var dx: DeviceBuffer[DType.float32]
+    if fold:
+        dx = ctx.enqueue_create_buffer[DType.float32](n_train * n_features)
+        fold_x_fill(ctx, dx, x_word, n_train * n_features)
+        if device_first_nonfinite(ctx, dx, n_train * n_features) >= 0:
+            raise Error("ValueError: " + admitted_finite_wording("GaussianProcessRegressor", "X"))
+    else:
+        dx = _upload(ctx, x)
     var dy = _upload(ctx, y)
     var dpar = _upload(ctx, kernel.params)
     var dls = _upload(ctx, _length_scale_table(kernel))

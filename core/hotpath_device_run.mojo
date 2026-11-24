@@ -5,10 +5,10 @@ pair fold the GPU base image's parallel table calls, and the device input
 fixes (float64 narrowing, transpose, strided copy) the base binding's doors
 call with the GIL released. Each returns "not done" when the caller must run
 its host loop. Typed Mojo only: no Python import."""
-from core.hotpath_impl_rows import fold_pair_f32
+from core.hotpath_impl_rows import ordered_fold_f32
 from core.hotpath_device import (
     HPD_F32, HPD_F64, HPD_I32, HPD_I64, HPD_MAX_N, HPD_U32, HPD_U8, device_cast_f64_to_f32,
-    device_encode_labels, device_fold_pair_f32, device_gather_u64,
+    device_encode_labels, device_gather_u64, device_ordered_fold_f32,
 )
 from core.input_device import IND_MAX_N, device_strided_copy
 from core.neural_context import process_ctx
@@ -22,20 +22,26 @@ from core.label_device_steps import (
 comptime IDN_HPDEV_LABELS = _HPDEV_BASE
 
 
-def fold_pair_f32_device_run(d: Int, s: Int, count: Int) raises -> Int:
-    """`fold_pair_f32`, on the device when the switch covers the call, else
-    the host kernel (core/hotpath_impl_rows.mojo), which raises its own
-    words. The GPU base image's parallel table entry
-    (bindings/parallel_base_entry_device.mojo) calls it with the GIL
-    released by its caller; the former Python door `fold_pair_f32` had no
-    caller left once cross_vendor's fold read the table (lane
-    calltable-parallel-archive, 2026-11-11)."""
+# TOMBSTONE: fold_pair_f32_device_run (one device pair fold per shard, dst uploaded and downloaded per shard)
+# deleted 2026-11-24 by lane vdf-linalg: replaced by ordered_fold_f32_device_run (one pass, dst resident);
+# no A/B was recorded for it; code recoverable at 354a1be9e9.
+
+
+def ordered_fold_f32_device_run(d: Int, table: Int, shards: Int, count: Int) raises -> Int:
+    """`ordered_fold_f32` (lane vdf-linalg): on the device in one pass per
+    element when the switch covers the call (the same switch as the pair
+    fold above), else the host column (core/hotpath_impl_rows.mojo), which
+    raises its own words. Same bits on both: the same per-element recurrence."""
     comptime if IDN_HPDEV_ELEM:
-        if count >= 1 and count <= HPD_MAX_N and d != 0 and s != 0:
+        if count >= 1 and count <= HPD_MAX_N and shards >= 1 and d != 0 and table != 0:
+            var tp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=table)
+            for j in range(shards):  # driver-loop: over the shard addresses, checked once before the launch
+                if tp.unsafe_load(j) == 0:
+                    raise Error("mojolearn: null buffer address")
             var ctx = process_ctx[_HPDEV_SLOT]()
-            device_fold_pair_f32(ctx, d, s, count)
+            device_ordered_fold_f32(ctx, d, table, shards, count)
             return 0
-    return fold_pair_f32(d, s, count)
+    return ordered_fold_f32(d, table, shards, count)
 
 
 def hpdev_try_cast_f64_to_f32(src_addr: Int, dst_addr: Int, n: Int) raises -> Bool:

@@ -80,6 +80,22 @@ struct SpectralHostBackend(SpectralBackend):
         raise Error("Spectral native API: dense embedding is unavailable in the host image")
 
     @staticmethod
+    def fit_dataset_store(r: SpectralFitRequest, mut result: SpectralFitResult) raises:
+        raise Error("Spectral native API: the host image has no resident store")
+
+    @staticmethod
+    def embed_dataset_store(r: SpectralEmbeddingRequest, mut result: SpectralEmbeddingResult) raises:
+        raise Error("Spectral native API: the host image has no resident store")
+
+    @staticmethod
+    def fit_affinity(r: SpectralFitRequest, mut result: SpectralFitResult) raises:
+        raise Error("Spectral native API: generated-affinity fit is unavailable in the host image")
+
+    @staticmethod
+    def embed_affinity(r: SpectralEmbeddingRequest, mut result: SpectralEmbeddingResult) raises:
+        raise Error("Spectral native API: generated-affinity embedding is unavailable in the host image")
+
+    @staticmethod
     def query(source: List[Float32], training: List[Float32], shape: SpectralQueryShape,
               state: SpectralPredictionState) raises -> SpectralPrediction:
         return host_spectral_predict(

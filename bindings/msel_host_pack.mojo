@@ -8,11 +8,11 @@ signatures and refusals, over `core/msel_host.mojo`."""
 from std.python import Python, PythonObject
 
 
-# lane calltable-msel: the store slot and the scatter, column, split-table
+# lane calltable-msel: the store slot and the column, split-table
 # and group-fold bodies are the runs the model-selection helper table
 # publishes (core/msel_helpers_host.mojo); these exports unpack and call them.
 from core.msel_helpers_host import (
-    MSEL_HOST_STORE, msel_scatter_rows_host_run, msel_proba_column_host_run, msel_split_table_host_run,
+    MSEL_HOST_STORE, msel_proba_column_host_run, msel_split_table_host_run,
     msel_group_fold_perm_host_run,
 )
 

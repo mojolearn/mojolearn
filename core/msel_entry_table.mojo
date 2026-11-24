@@ -31,19 +31,42 @@ one (an empty side, no codes, no permutation).
   MH_SELECT_FOLD_I64       a [folds, test, train]         p [n, fold]            -> test count
   MH_SELECT_FOLDS_I64      a [folds, sizes, tests, trains] p [n, k]              -> -1 or first differing fold
   MH_GATHER_I32            a [table, codes, dst]          p [n_table, n]         -> 0
-  MH_GATHER_I64            a [table, codes, dst]          p [n_table, n]         -> 0
-  MH_FIRST_SEEN_I32        a [codes, enc, counts]         p [n, k]               -> classes present
-  MH_STRAT_FOLD_ASSIGN_I32 a [enc, alloc, perms, counts, dst] p [n, k, n_folds]  -> 0
-  MH_STORE_ALLOC           a []                           p [nbytes]             -> block id
-  MH_STORE_READ            a [dst]                        p [id, nbytes]         -> 0
+  (10 retired: MH_GATHER_I64, see MH_RETIRED_10)
+  (11, 12 retired: MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, see MH_RETIRED_11; their stored-code
+   forms are MH_FIRST_SEEN_RES and MH_STRAT_FOLD_ASSIGN_RES below)
+  (13, 14 retired: MH_STORE_ALLOC, MH_STORE_READ, see MH_RETIRED_13)
   MH_STORE_FREE            a []                           p [id]                 -> 0
-  MH_SCATTER_ROWS          a [src]                        p [dst_id, n_dst, dst_code, src_code, n_src, width, idx_id] -> 0
+  (16 retired: MH_SCATTER_ROWS, see MH_RETIRED_13)
   MH_PROBA_COLUMN          a [src, dst]                   p [code, n, k, col]    -> 0
   MH_SPLIT_TABLE_I32       a [perm, counts, table, sums]  p [m, n_test, n_train] -> 0
   MH_GROUP_FOLD_PERM_I32   a [counts, perm, dst, sizes]   p [m, n_folds]         -> 0
   (20 retired: MH_STORE_FREE_BYTES, see MH_RETIRED_20)
   MH_STORE_PUT             a [src]                        p [nbytes]             -> block id (a resident copy of host bytes)
   MH_STORE_TAKE_ROWS       a [dst]                        p [src_id, n_src, row_bytes, idx_id, n_idx] -> 0 (rows idx of block src to host)
+Layout V3 (lane vdf-scope-split, 2026-11-24): the stratified splitters' label
+codes stay in the store. `codes_id` is a block of n int32 sorted-order class
+codes in [0, k) (MH_STORE_PUT), `folds_id` a block of n int32 fold ids that
+the operation itself allocates and returns (the caller frees both with
+MH_STORE_FREE). `rank` is k int32 words rank_of[code] (the first-seen
+position of each code; a zero address: the codes are already in first-seen
+order). The device column runs on the store's context; the host column runs
+the same core functions over the host store's bytes.
+  MH_FIRST_SEEN_RES        a [counts, rank]               p [codes_id, n, k]     -> classes present
+                           (counts: k int64 class sizes in first-seen order; rank: k int32)
+  MH_STRAT_FOLD_ASSIGN_RES a [rank, alloc, perms, counts, sizes] p [codes_id, n, k, n_folds, width] -> folds_id
+                           (strat_fold_assign_i32 over the k classes of rank[codes], the rank
+                           table `width` words long, the codes' range; sizes: n_folds int64 fold sizes)
+  MH_SELECT_FOLDS_RES      a [sizes, tests, trains]       p [folds_id, n, k]     -> -1 or first differing fold
+  MH_FOLD_IDS_RES          a [counts, fold_counts]        p [codes_id, n, k, n_splits] -> folds_id
+                           (MH_FOLD_IDS with codes; KFold has no codes and keeps MH_FOLD_IDS)
+Layout V4 (lane vdf-scope-split2, 2026-11-24): StratifiedGroupKFold's group x
+class table over the stored codes (was the base table's bincount2_i32 over
+the codes uploaded again, then a host permutation of its class columns).
+`groups` is n int32 group codes in [0, m), `rank` as above (k words; zero:
+the codes are already in first-seen order), `dist` m x n_classes int64.
+  MH_GROUP_CLASS_COUNTS_RES a [groups, rank, dist]        p [codes_id, n, k, m, n_classes] -> 0
+                           (dist[g * n_classes + rank[code]]; a row whose rank >= n_classes is
+                           dropped; a code or group out of range raises bincount2_i32's words)
 Each operation is the former Python export of the same name after its
 arguments were unpacked: the same checks, kernels, words and refusals.
 
@@ -54,7 +77,7 @@ numerical work to split.
 from core.entry_table import entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall
 
-comptime MSEL_HELPERS_ABI = "mojolearn.msel.helpers.v2"
+comptime MSEL_HELPERS_ABI = "mojolearn.msel.helpers.v4"
 
 comptime MH_ARANGE_I64 = 0
 comptime MH_COUNT_MASK_U8 = 1
@@ -69,13 +92,25 @@ comptime MH_FOLD_IDS = 6
 comptime MH_SELECT_FOLD_I64 = 7
 comptime MH_SELECT_FOLDS_I64 = 8
 comptime MH_GATHER_I32 = 9
-comptime MH_GATHER_I64 = 10
-comptime MH_FIRST_SEEN_I32 = 11
-comptime MH_STRAT_FOLD_ASSIGN_I32 = 12
-comptime MH_STORE_ALLOC = 13
-comptime MH_STORE_READ = 14
+#: 10 was MH_GATHER_I64 (learning_curve's per-fold shuffle gather, now a
+#: `take_rows64` stage of the one shuffle program, bindings/msel_search_door.mojo;
+#: retired lane vdf-scope-cv, 2026-11-24). The number stays reserved and is refused.
+comptime MH_RETIRED_10 = 10
+#: 11 was MH_FIRST_SEEN_I32 and 12 MH_STRAT_FOLD_ASSIGN_I32: the stratified
+#: splitters' address forms, whose one caller (bindings/msel_split_plan_run.mojo)
+#: now runs their stored-code forms MH_FIRST_SEEN_RES / MH_STRAT_FOLD_ASSIGN_RES
+#: (lane vdf-scope-split, 2026-11-24). The numbers stay reserved and are refused.
+comptime MH_RETIRED_11 = 11
+comptime MH_RETIRED_12 = 12
+#: 13 was MH_STORE_ALLOC, 14 MH_STORE_READ and 16 MH_SCATTER_ROWS: the
+#: cross_val_predict placement block (allocated, scattered into, read back),
+#: whose last caller, the identity placement of decoded labels, was deleted
+#: (lane vdf-scope-cv, 2026-11-24; bindings/msel_cv_door.mojo `_decoded_labels`). The numbers
+#: stay reserved and are refused.
+comptime MH_RETIRED_13 = 13
+comptime MH_RETIRED_14 = 14
 comptime MH_STORE_FREE = 15
-comptime MH_SCATTER_ROWS = 16
+comptime MH_RETIRED_16 = 16
 comptime MH_PROBA_COLUMN = 17
 comptime MH_SPLIT_TABLE_I32 = 18
 comptime MH_GROUP_FOLD_PERM_I32 = 19
@@ -89,7 +124,17 @@ comptime MH_RETIRED_20 = 20
 #: and `msel_take_rows` called through the instance dictionary).
 comptime MH_STORE_PUT = 21
 comptime MH_STORE_TAKE_ROWS = 22
-comptime MH_OP_COUNT = 23
+#: Layout V3 (lane vdf-scope-split, 2026-11-24): the stratified splitters'
+#: fold helpers over stored blocks, so a split call puts its label codes once
+#: and the first-seen codes and fold ids never cross the bus.
+comptime MH_FIRST_SEEN_RES = 23
+comptime MH_STRAT_FOLD_ASSIGN_RES = 24
+comptime MH_SELECT_FOLDS_RES = 25
+comptime MH_FOLD_IDS_RES = 26
+#: Layout V4 (lane vdf-scope-split2, 2026-11-24): StratifiedGroupKFold's
+#: group x class count over the stored codes, so its codes go up once.
+comptime MH_GROUP_CLASS_COUNTS_RES = 27
+comptime MH_OP_COUNT = 28
 
 
 @fieldwise_init
@@ -123,35 +168,35 @@ def msel_table_publish(key: MselEntryKey, publisher: Int,
     schemas: List[String], operations: List[Int], entries: List[NativeDescriptorCall]) raises:
     _msel_entry_key_check(key)
     if key.vendor == 0 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCPUV2"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCPUV4"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 0 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastCPUV2"
+        comptime NAME = "MojolearnEntriesMselHelpersFastCPUV4"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 1 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalMetalV2"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalMetalV4"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 1 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastMetalV2"
+        comptime NAME = "MojolearnEntriesMselHelpersFastMetalV4"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 2 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCUDAV2"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCUDAV4"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 2 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastCUDAV2"
+        comptime NAME = "MojolearnEntriesMselHelpersFastCUDAV4"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 3 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalHIPV2"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalHIPV4"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 3 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastHIPV2"
+        comptime NAME = "MojolearnEntriesMselHelpersFastHIPV4"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     raise Error("native model-selection helpers: unsupported execution key")
@@ -161,28 +206,28 @@ def msel_table_entry(key: MselEntryKey, index: Int,
     schema: String, operations: Int) raises -> NativeDescriptorCall:
     _msel_entry_key_check(key)
     if key.vendor == 0 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCPUV2"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCPUV4"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 0 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastCPUV2"
+        comptime NAME = "MojolearnEntriesMselHelpersFastCPUV4"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 1 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalMetalV2"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalMetalV4"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 1 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastMetalV2"
+        comptime NAME = "MojolearnEntriesMselHelpersFastMetalV4"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 2 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCUDAV2"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCUDAV4"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 2 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastCUDAV2"
+        comptime NAME = "MojolearnEntriesMselHelpersFastCUDAV4"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 3 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalHIPV2"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalHIPV4"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 3 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastHIPV2"
+        comptime NAME = "MojolearnEntriesMselHelpersFastHIPV4"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     raise Error("native model-selection helpers: unsupported execution key")
 
@@ -205,18 +250,10 @@ def _msel_span_shape(operation: Int) -> Tuple[Int, Int]:
         return (3, 2)
     if operation == MH_SELECT_FOLDS_I64:
         return (4, 2)
-    if operation == MH_GATHER_I32 or operation == MH_GATHER_I64:
+    if operation == MH_GATHER_I32:
         return (3, 2)
-    if operation == MH_FIRST_SEEN_I32:
-        return (3, 2)
-    if operation == MH_STRAT_FOLD_ASSIGN_I32:
-        return (5, 3)
-    if operation == MH_STORE_ALLOC or operation == MH_STORE_FREE:
+    if operation == MH_STORE_FREE:
         return (0, 1)
-    if operation == MH_STORE_READ:
-        return (1, 2)
-    if operation == MH_SCATTER_ROWS:
-        return (1, 7)
     if operation == MH_PROBA_COLUMN:
         return (2, 4)
     if operation == MH_SPLIT_TABLE_I32:
@@ -225,13 +262,25 @@ def _msel_span_shape(operation: Int) -> Tuple[Int, Int]:
         return (1, 1)
     if operation == MH_STORE_TAKE_ROWS:
         return (1, 5)
+    if operation == MH_FIRST_SEEN_RES:
+        return (2, 3)
+    if operation == MH_STRAT_FOLD_ASSIGN_RES:
+        return (5, 5)
+    if operation == MH_SELECT_FOLDS_RES:
+        return (3, 3)
+    if operation == MH_FOLD_IDS_RES:
+        return (2, 4)
+    if operation == MH_GROUP_CLASS_COUNTS_RES:
+        return (3, 5)
     return (4, 2)  # MH_GROUP_FOLD_PERM_I32
 
 
 def msel_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int, nf: Int, result: Int) raises:
     """Refuse a request whose spans do not match the operation's layout
     before any word is read."""
-    if operation < 0 or operation >= MH_OP_COUNT or operation == MH_RETIRED_5 or operation == MH_RETIRED_20:
+    if (operation < 0 or operation >= MH_OP_COUNT or operation == MH_RETIRED_5 or operation == MH_RETIRED_10
+            or operation == MH_RETIRED_11 or operation == MH_RETIRED_12 or operation == MH_RETIRED_13 or operation == MH_RETIRED_14 or operation == MH_RETIRED_16
+            or operation == MH_RETIRED_20):
         raise Error("model-selection helpers: unknown operation " + String(operation))
     if not result:
         raise Error("model-selection helpers: null result word")

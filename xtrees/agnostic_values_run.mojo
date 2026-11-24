@@ -50,7 +50,7 @@ from core.admitted_refusals import admitted_finite_refuse
 from neighbors.label_propagation_run import LpQueryRequest, lp_query_run
 from xtrees.glue_calls import (
     xt_kshap_schedule, xt_kshap_synth, xt_kshap_solve, xt_kshap_means, xt_kshap_solve_ey, xt_kshap_solve_model,
-    xt_pshap_synth, xt_pshap_values, xt_pshap_dsynth, xt_pshap_dvalues, xt_pshap_values_linear,
+    xt_pshap_synth, xt_pshap_values, xt_pshap_dsynth, xt_pshap_dvalues, xt_pshap_values_linear, xt_kshap_solve_linear,
     xt_pshap_values_model, xt_agn_model_load, xt_agn_model_release, xt_agn_pool_release, xt_block_mean, xt_logit,
     xt_gather_f32, xt_binary_proba, xt_scatter,
 )
@@ -1005,10 +1005,14 @@ def _plan_workers(n: Int, per_row: Int, available: Int) -> Tuple[Int, Int]:
 
 
 def agn_kernel_values_run[M: AgnModel](glue: EntryRef, req: AgnRequest, ns: Int, fnull: Int, logit: Bool,
-                                       mut model: M) raises:
+                                       linear_wb: Int, linear_link: Int, mut model: M) raises:
     """KernelExplainer values of `req.n > 0` rows into req.phi. `ns`: the requested sample count ('auto' already
     resolved to 2 M + 2048), capped at 2^M - 2 for M <= 30 as shap does; `fnull` float64 k (linked); `logit`: the
-    link meets every background mean and the model on the rows before the solve."""
+    link meets every background mean and the model on the rows before the solve. `linear_wb` (nonzero, lane
+    vdf-explain): MOJOLEARN_IDN_PSHAP_RESIDENT's [w | b] float32 block of this library's linear predict
+    `link(X W^T + b)` with link word `linear_link`: masks, synthetic rows, the linear model on them and on the
+    explained rows, means and the solve on the device; the evaluator is not called (`agn_permutation_values_run`'s
+    resident linear route, for KernelExplainer)."""
     var n = req.n
     var d = req.d
     var k = req.k
@@ -1020,6 +1024,21 @@ def agn_kernel_values_run[M: AgnModel](glue: EntryRef, req: AgnRequest, ns: Int,
     var sc = _KshapSchedule(glue, Mf, nsc)
     var m = sc.m
     var link = 1 if logit else 0
+    if linear_wb != 0 and not req.device_forest():
+        # The resident linear block: nothing crosses per chunk but the chunk's rows and phi, so the chunk budget
+        # is the device's (AGN_BUDGET_RESIDENT, the permutation route's memory bound). A chunk size moves no bit:
+        # every row's masks are drawn from (seed, row) and every row is solved on its own.
+        var Rl = max(1, min(n, AGN_BUDGET_RESIDENT // max(1, m * nb * d)))
+        var r0 = 0
+        while r0 < n:  # driver-loop: over coalition batches (one glue call per row chunk)
+            var rows = min(Rl, n - r0)
+            var p = sc.solve_words(rows, nb, d, r0, req.seed, k, link)
+            p.append(linear_link)
+            _ = xt_kshap_solve_linear(glue, req.x + 4 * r0 * d, req.bg, linear_wb, fnull, sc.so(), sc.sw(), sc.cd(),
+                                      req.phi + 8 * r0 * d * k, p)
+            r0 += rows
+        _ = sc^
+        return
     var fx = model.explained()   # the explained rows, one model call (the device forest route needs only this)
     var R = _chunk(m * nb * d, n)
     var bits = req.switches

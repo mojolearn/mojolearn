@@ -575,24 +575,29 @@ def eigh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObje
 
 def svdvals_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """`host_svdvals(a, n_rows, n_cols)`. `addrs`: 0 a, 1 s_out (n_cols,
-    DESCENDING). `params`: 0 n_rows, 1 n_cols. Returns n_cols."""
+    DESCENDING). `params`: 0 n_rows, 1 n_cols, optional 2 wide (1: `a` is
+    the wide n_cols x n_rows matrix; its transpose is read). Returns
+    n_cols."""
     if len(addrs) != 2:
         raise Error(
             "svdvals: addrs must contain 2 addresses (a, s_out), got "
             + String(len(addrs))
         )
-    if len(params) != 2:
+    if len(params) != 2 and len(params) != 3:
         raise Error(
-            "svdvals: params must contain 2 values (n_rows, n_cols), got "
+            "svdvals: params must contain 2 or 3 values (n_rows, n_cols[, wide]), got "
             + String(len(params))
         )
     var sp = f32_ptr(_index(addrs[1]))
     var n_rows = _index(params[0])
     var n_cols = _index(params[1])
-    var a = read_f32(_index(addrs[0]), n_rows * n_cols)
+    var wide = len(params) == 3 and _index(params[2]) != 0
+    # lane vdf-linalg2 (2026-11-24): a wide operand is transposed in the
+    # host column's own read (data movement; the GPU image transposes on the
+    # device), so the door needs no x_decomp kit round trip for it.
+    var a_address = _index(addrs[0])
     with GILReleased(Python()):
-        svdvals_host_run(a, n_rows, n_cols, sp)
-    _ = a^
+        svdvals_host_at_run(a_address, n_rows, n_cols, wide, sp)
     return PythonObject(n_cols)
 
 

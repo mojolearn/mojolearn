@@ -59,13 +59,20 @@ def metric_integer(value: PythonObject, context: PythonObject) raises -> PythonO
 
 
 def metric_arguments(args: PythonObject, first: Int, context: PythonObject) raises -> PythonObject:
+    return metric_arguments_to(args, first, len(args), context)
+
+
+def metric_arguments_to(args: PythonObject, first: Int, end: Int, context: PythonObject) raises -> PythonObject:
     # Scalar options become ordinary native primitives before comparisons.
     # Snapshot input storage/metadata once; preserve nested scalar dtypes
     # and original aliases so existing native dtype inference stays intact.
+    # `end` stops before a public shell's trailing `device` item (lane
+    # vdf-metrics, bindings/metrics_device_door.mojo): the tuple this
+    # function already rebuilt simply ends one item earlier, no extra copy.
     var out = Python.list()
     var snapshots = Python.dict()
     var nk = metrics_keys()
-    for index in range(len(args)):  # driver-loop: fixed public metric arguments
+    for index in range(end):  # driver-loop: fixed public metric arguments
         var value = args[index]
         if index >= first and _one_of(py_type(value), py_item(context, nk[].k_scalar_types)):
             var scalar = native_scalar_buffer(value)

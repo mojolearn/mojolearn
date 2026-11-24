@@ -1088,7 +1088,7 @@ _LOG2, _LOGPI, _LOG2PI_D = 0.6931471805599453, 1.1447298858494002, 1.83787706640
 # ================================================================ LU
 # LAPACK getrf semantics. Partial pivoting on the largest |a[i, k]|, ties
 # broken by the lowest row index. A zero pivot is kept (getrf's info > 0).
-def lu_factor(a, *, numeric_mode=None):
+def lu_factor(a, *, numeric_mode=None, device=None):
     """LU factorization of a square matrix with partial pivoting.
 
     Follows ``scipy.linalg.lu_factor``: returns ``(lu, piv)``, where ``lu``
@@ -1107,6 +1107,9 @@ def lu_factor(a, *, numeric_mode=None):
         (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
         the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
         Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -1126,7 +1129,7 @@ def lu_factor(a, *, numeric_mode=None):
     >>> lu, piv = mojolearn.lu_factor(A)
     >>> x = mojolearn.lu_solve((lu, piv), np.ones(8, dtype=np.float32))
     """
-    return _LINALG_CALL(None, "lu_factor", (a, numeric_mode), _LINALG_CONTEXT)
+    return _LINALG_CALL(None, "lu_factor", (a, numeric_mode, device), _LINALG_CONTEXT)
 
 
 class _LUPair(tuple):
@@ -1151,7 +1154,7 @@ class _LUPair(tuple):
 
 
 # LAPACK getrs semantics.
-def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
+def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None, device=None):
     """Solve a linear system from an LU factorization.
 
     Follows ``scipy.linalg.lu_solve``: solves ``A x = b`` (``trans=0``) or
@@ -1172,6 +1175,9 @@ def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
         (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
         the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
         Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -1184,14 +1190,14 @@ def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
         If ``trans`` is not 0, 1 or 2, ``piv`` holds an index outside
         [0, n), ``b`` has the wrong number of rows, or ``b`` is not finite.
     """
-    return _LINALG_CALL(None, "lu_solve", (lu_and_piv, b, trans, numeric_mode), _LINALG_CONTEXT)
+    return _LINALG_CALL(None, "lu_solve", (lu_and_piv, b, trans, numeric_mode, device), _LINALG_CONTEXT)
 
 
 # lu_factor + lu_solve (gesv). Lane idn-dense-linalg: one binding entry
 # (`x_decomp_lu_gesv`) when the binding routes there (`x_decomp_idn_flags`
 # bit 1): the same launches with the factor and the pivots resident, so
 # only A and B go up and X comes down; the same words, warning and refusals.
-def solve(a, b, *, numeric_mode=None):
+def solve(a, b, *, numeric_mode=None, device=None):
     """Solve the square linear system ``a @ x = b``.
 
     Follows ``numpy.linalg.solve``, computed by LU factorization with partial
@@ -1207,6 +1213,9 @@ def solve(a, b, *, numeric_mode=None):
         (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
         the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
         Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -1223,7 +1232,7 @@ def solve(a, b, *, numeric_mode=None):
     >>> A = np.random.default_rng(0).random((8, 8), dtype=np.float32) + 8 * np.eye(8, dtype=np.float32)
     >>> x = mojolearn.solve(A, np.ones(8, dtype=np.float32))
     """
-    return _LINALG_CALL(None, "solve", (a, b, numeric_mode), _LINALG_CONTEXT)
+    return _LINALG_CALL(None, "solve", (a, b, numeric_mode, device), _LINALG_CONTEXT)
 
 
 # TOMBSTONE: _orthonormal_cols (helper of the deleted _rsvd_core) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
@@ -1241,7 +1250,7 @@ def solve(a, b, *, numeric_mode=None):
 # subspace, only the rounding of the basis differs. The small SVD of
 # Q^T M is exact (Gram eigh).
 def randomized_svd(M, n_components, *, n_oversamples=10, n_iter="auto", power_iteration_normalizer="auto",
-                   transpose="auto", flip_sign=True, random_state=None, numeric_mode=None):
+                   transpose="auto", flip_sign=True, random_state=None, numeric_mode=None, device=None):
     """Truncated SVD by randomized range finding.
 
     Follows scikit-learn's ``utils.extmath.randomized_svd`` (Halko et al.).
@@ -1276,6 +1285,9 @@ def randomized_svd(M, n_components, *, n_oversamples=10, n_iter="auto", power_it
         (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
         the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
         Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -1297,7 +1309,7 @@ def randomized_svd(M, n_components, *, n_oversamples=10, n_iter="auto", power_it
     >>> U, s, Vt = mojolearn.randomized_svd(X, 5, random_state=0)
     """
     return _LINALG_CALL(None, "randomized_svd", (M, n_components, n_oversamples, n_iter, power_iteration_normalizer,
-                                                    transpose, flip_sign, random_state, numeric_mode), _LINALG_CONTEXT)
+                                                    transpose, flip_sign, random_state, numeric_mode, device), _LINALG_CONTEXT)
 
 
 # TOMBSTONE: _rsvd_core (dead Python power-iteration loop: randomized_svd routes to the native linalg door) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
@@ -1307,7 +1319,7 @@ def randomized_svd(M, n_components, *, n_oversamples=10, n_iter="auto", power_it
 # A tall a with N + nrhs <= 512 takes the blocked TSQR of [a | b] and the
 # SVD of its small R (`_tsqr_lstsq_core`); any other shape the QR +
 # one-sided Jacobi SVD of a (or of a^T).
-def lstsq(a, b, rcond=None, *, numeric_mode=None):
+def lstsq(a, b, rcond=None, *, numeric_mode=None, device=None):
     """Least-squares solution of ``a @ x = b``.
 
     Follows ``numpy.linalg.lstsq``, solved through the SVD of ``a``.
@@ -1325,6 +1337,9 @@ def lstsq(a, b, rcond=None, *, numeric_mode=None):
         (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
         the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
         Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -1349,7 +1364,7 @@ def lstsq(a, b, rcond=None, *, numeric_mode=None):
     >>> A = rng.random((100, 4), dtype=np.float32)
     >>> x, res, rank, s = mojolearn.lstsq(A, rng.random(100, dtype=np.float32))
     """
-    return _LINALG_CALL(None, "lstsq", (a, b, rcond, numeric_mode), _LINALG_CONTEXT)
+    return _LINALG_CALL(None, "lstsq", (a, b, rcond, numeric_mode, device), _LINALG_CONTEXT)
 
 
 class _PLS(_Base):
@@ -1695,7 +1710,7 @@ class CCA(_PLS):
 
 # ================================================================ dictionary learning / sparse PCA
 def sparse_encode(X, dictionary, *, algorithm="lasso_lars", n_nonzero_coefs=None, alpha=None, init=None,
-                  max_iter=1000, positive=False, numeric_mode=None, **_ignored):
+                  max_iter=1000, positive=False, numeric_mode=None, device=None, **_ignored):
     """Sparse-code each row of X against a fixed dictionary.
 
     Follows scikit-learn's ``sparse_encode``. ``"lasso_lars"`` and
@@ -1727,6 +1742,9 @@ def sparse_encode(X, dictionary, *, algorithm="lasso_lars", n_nonzero_coefs=None
         (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
         the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
         Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -1745,7 +1763,7 @@ def sparse_encode(X, dictionary, *, algorithm="lasso_lars", n_nonzero_coefs=None
     >>> code = mojolearn.sparse_encode(rng.random((100, 8), dtype=np.float32), D, algorithm="omp", n_nonzero_coefs=2)
     """
     return _DL_CALL(None, "sparse_encode", (X, dictionary, algorithm, n_nonzero_coefs, alpha, init, max_iter,
-                                            positive, numeric_mode), _DL_CONTEXT)
+                                            positive, numeric_mode, device), _DL_CONTEXT)
 
 
 class _SparseCoding(_DeviceDoor, _Base):

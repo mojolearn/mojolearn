@@ -43,6 +43,11 @@ from resample.estimator import (
     permutation_test_host,
     resample_indices_host,
 )
+from resample.checks.index_map import (
+    RESAMPLE_KIND_UTILS_PERMUTE,
+    permutation_ranks_host,
+    resample_key,
+)
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
@@ -261,6 +266,46 @@ def test_fixtures() raises:
                 _device_fixture(unit)
             except problem:
                 raise Error("fixture row " + String(unit) + ": " + String(problem))
+
+
+# lane vdf-misc3 (2026-11-24): replace=False sorts on the device (merge passes)
+# and on the host column (the same passes over the host cores). Both must be the
+# total order `permutation_key_lt` exactly: the oracle is the O(n^2) rank count
+# `permutation_ranks_host`, independent of either sort. Cells cover n = 1, a
+# non-power-of-two tail, an exact power of two and a partial prefix.
+comptime _ORDER_CELLS = 5
+
+
+def _order_cell(unit: Int) raises:
+    var ns: List[Int] = [1, 7, 64, 1000, 1025]
+    var counts: List[Int] = [1, 5, 64, 357, 1025]
+    var n = ns[unit]
+    var count = counts[unit]
+    var seed = UInt64(11 + unit)
+    var ranks = permutation_ranks_host(resample_key(seed, RESAMPLE_KIND_UTILS_PERMUTE), 0, n)
+    var oracle = List[Int32](length=n, fill=Int32(-1))
+    for j in range(n):
+        oracle[Int(ranks[j])] = Int32(j)
+    var host = host_resample_indices(n, count, False, seed)
+    require(len(host) == count, "permute order: host shape")
+    for q in range(count):
+        require(host[q] == oracle[q], "permute order: host column differs from the total order at " + String(q))
+    comptime if not CPU_COLUMN_BUILD:
+        var dev = resample_indices_host(n, count, False, seed)
+        require(len(dev) == count, "permute order: device shape")
+        for q in range(count):
+            require(dev[q] == host[q], "permute order: device differs from the host column at " + String(q))
+
+
+def test_permute_order_total_order() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("order cell", _ORDER_CELLS, _order_cell)
+    else:
+        for unit in range(_ORDER_CELLS):  # driver-loop: the resampling binding's process context, cells in order
+            try:
+                _order_cell(unit)
+            except problem:
+                raise Error("order cell " + String(unit) + ": " + String(problem))
 
 
 def main() raises:

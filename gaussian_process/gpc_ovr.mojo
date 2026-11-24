@@ -42,6 +42,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL 
 from checks.soft_f64 import SF64_ONE, sf64_sub
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
 from core.device_scan import device_classify_nonfinite, device_first_nonfinite
+from core.fold_x_device import fold_x_fill
+from core.admitted_refusals import admitted_finite_wording
 from core.device_zero import enqueue_fill
 from core.device_query_x import QueryFold, query_context, resident_query_x, resident_query_x_done
 from core.identity_trace import IdentityTrace
@@ -211,7 +213,7 @@ def _gpc_upload_checked(
         raise Error("gpc: " + what + " has a null address")
     var n = rows * cols
     var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=_GP(unsafe_from_address=addr))
+    fold_x_fill(ctx, buf, addr, n)  # THE FOLD X WORD (core/fold_x_device.mojo): host words, or a fold slot
     _gpc_check_finite(ctx, buf, rows, cols, what)
     return buf^
 
@@ -236,6 +238,16 @@ def _gpc_check_finite(
         )
 
 
+def gp_fold_x_refuse(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int, est: String) raises:
+    """The member's finite test of a model-selection fold's fit X, on the
+    device (lane vdf-scope-gp): the rows of a fold slot reach a fit entry
+    without a door's admission, so the entry that copied them refuses a
+    non-finite word in the member's wording (core/admitted_refusals.mojo,
+    scikit-learn's). Synchronises; host words never come here."""
+    if n > 0 and device_first_nonfinite(ctx, buf, n) >= 0:
+        raise Error("ValueError: " + admitted_finite_wording(est, "X"))
+
+
 def _gpc_addr_check(addr: Int, what: String) raises:
     """`_copy_in`'s null-address refusal, for the resident reads."""
     if addr == 0:
@@ -247,7 +259,7 @@ def _copy_in(ctx: DeviceContext, mut dst: DeviceBuffer[DType.float32], addr: Int
     caller's array outlives the binding call)."""
     if addr == 0:
         raise Error("gpc: " + what + " has a null address")
-    ctx.enqueue_copy(dst_buf=dst, src_ptr=_GP(unsafe_from_address=addr))
+    fold_x_fill(ctx, dst, addr, len(dst))  # THE FOLD X WORD (core/fold_x_device.mojo): host words, or a fold slot
 
 
 # ===========================================================================
@@ -307,6 +319,9 @@ def gpc_fit_all_device(
     # TOMBSTONE: the synchronising first-non-finite scan of the fit X (_gpc_upload_checked; DEVIATION 1768 text) removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr: the public door admits X once and refuses a non-finite X in scikit-learn's wording before this entry; recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
     var dx = ctx.enqueue_create_buffer[DType.float32](n_train * n_features)
     _copy_in(ctx, dx, x_addr, String("X"))
+    if x_addr < 0:
+        # A model-selection fold's rows (lane vdf-scope-gp): no door admitted them.
+        gp_fold_x_refuse(ctx, dx, n_train * n_features, "GaussianProcessClassifier")
     var dls = _upload(ctx, _length_scale_table(kernel))
     var dk = ctx.enqueue_create_buffer[DType.float32](n * n)
     var dstack = ctx.enqueue_create_buffer[DType.float32](gp_kernel_stack_floats(n, n))
