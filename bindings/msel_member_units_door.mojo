@@ -476,25 +476,23 @@ def msel_member_refit(base: PythonObject, parameters: PythonObject, y: PythonObj
 
 
 def msel_member_fit_in_place(model: PythonObject, y: PythonObject, x: PythonObject, context: PythonObject,
-    b: PythonObject) raises -> Bool:
+    b: PythonObject) raises:
     """`msel_member_refit` of `model` ITSELF (lane mf-msel5): its own
     instance dictionary is admitted (no clone, so a field only its door set,
     the carrier's `_msel_cv_tool`, is read), fitted once on every row of X
-    with the GIL released and packed into it in place. Always True (lane
-    mf-r9a: every refusal raises, THE REFUSAL RULE; the Bool stays for the
-    callers whose fallback branch lane mf-r9b deletes)."""
+    with the GIL released and packed into it in place. Every refusal
+    raises (lane mf-r9a, THE REFUSAL RULE; lane mf-r9b: no Bool, the
+    callers' fallback branches are deleted)."""
     _ = _member_fit(model, PythonObject(None), False, False, y, x, context, b)
-    return True
 
 
 def msel_member_fit_cloned(model: PythonObject, y: PythonObject, x: PythonObject, context: PythonObject,
-    b: PythonObject) raises -> Bool:
+    b: PythonObject) raises:
     """`msel_member_fit_in_place` of a `model` the caller made itself with
     `msel_native_clone` (lane mf-msel5c: the search door's carrier), whose
     parameters that clone already admitted: no second admission clone.
-    Always True, as `msel_member_fit_in_place`."""
+    Every refusal raises, as `msel_member_fit_in_place`."""
     _ = _member_fit(model, PythonObject(None), False, True, y, x, context, b)
-    return True
 
 
 def _admission_refusal(est: PythonObject, fields: PythonObject, plan: PythonObject, member_context: PythonObject,

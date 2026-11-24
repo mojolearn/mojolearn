@@ -140,17 +140,16 @@ def _search_settings_check(fields: PythonObject, context: PythonObject, b: Pytho
 
 
 def _search_member_fit(model: PythonObject, fields: PythonObject, x_in: PythonObject, y_in: PythonObject,
-                       groups: PythonObject, context: PythonObject, b: PythonObject,
-                       drawn: PythonObject) raises -> Bool:
+                       groups: PythonObject, context: PythonObject, b: PythonObject) raises:
     """The search fitted as ONE native member of its own META kind: UNPACK
     (X and y read once; `msel_member_refit` admits the search's clone through
     the member boundary, encodes the labels, releases the GIL around the
     member fit = `msel_search_run` and packs the clone), then the clone's
-    fitted attributes are the model's. Always True (lane mf-r9a, THE REFUSAL
-    RULE of bindings/msel_member_units_door.mojo): a search, base or data the
-    kind does not fit is refused natively, before any fit, in the words of
-    whoever refuses it; the Bool stays for the callers whose fallback branch
-    lane mf-r9b deletes. y None fits an unsupervised base without a target.
+    fitted attributes are the model's. A search, base or data the kind does
+    not fit is refused natively, before any fit, in the words of whoever
+    refuses it (lane mf-r9a, THE REFUSAL RULE of
+    bindings/msel_member_units_door.mojo; lane mf-r9b: no Bool, no fallback
+    after it). y None fits an unsupervised base without a target.
     A label table y (rows of Python labels, a text or object 2-D array) is
     handed as given, as the cv tools hand it (bindings/msel_cv_door.mojo
     `msel_cv_by_search`): the kind's UNPACK reads it per output.
@@ -164,7 +163,7 @@ def _search_member_fit(model: PythonObject, fields: PythonObject, x_in: PythonOb
     (`msel_member_fit_cloned`: the clone admitted its parameters, so no
     second admission clone; the old route also made one clone). A
     Mojolearn base with no member is refused by the carrier's admission; a
-    class that is no Mojolearn estimator by its plan, first. The split (X, y, folds) is appended to `drawn`. An integer
+    class that is no Mojolearn estimator by its plan, first. An integer
     cv: the kind's own folds; scikit-learn ignores `groups` there."""
     # A base class that is no Mojolearn estimator: the plan's words, before
     # any split reads it.
@@ -178,16 +177,15 @@ def _search_member_fit(model: PythonObject, fields: PythonObject, x_in: PythonOb
         except error:
             _search_settings_check(fields, context, b)
             raise error^
-        _ = py_call(drawn.append, got)
         var carrier = msel_native_clone(model, context)
         var carrier_fields = msel_search_fields(carrier, context)
         py_setitem(carrier_fields, "_msel_cv_tool", Python.tuple(PythonObject(False), PythonObject(None),
                                                                  PythonObject(False), got[2],
                                                                  Python.list(PythonObject(None)), PythonObject(0),
                                                                  got[0].shape[0]))
-        _ = msel_member_fit_cloned(carrier, y_in if table else got[1], got[0], context, b)
+        msel_member_fit_cloned(carrier, y_in if table else got[1], got[0], context, b)
         _search_adopt(fields, msel_search_fields(carrier, context), context)
-        return True
+        return
     var xa = msel_materialize(x_in, "X", context)
     var ya = PythonObject(None)
     if table:
@@ -196,7 +194,6 @@ def _search_member_fit(model: PythonObject, fields: PythonObject, x_in: PythonOb
         ya = msel_materialize_y(y_in, context)
     var fitted = msel_member_refit(model, Python.dict(), ya, xa, context, b)
     _search_adopt(fields, msel_search_fields(fitted, context), context)
-    return True
 
 
 def _search_adopt(fields: PythonObject, source: PythonObject, context: PythonObject) raises:
@@ -232,7 +229,7 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     var groups = args[2]
     var estimator = fields["estimator"]
     var error_score = fields["error_score"]
-    var jobs = msel_unit_jobs(fields["n_jobs"], error_score, String(py=py_type(model).__name__), context)
+    _ = msel_unit_jobs(fields["n_jobs"], error_score, String(py=py_type(model).__name__), context)  # their words, first
     _ = msel_estimator_plan(estimator, context)
     msel_admit(fields["n_jobs"], context)
     msel_admit(error_score, context)
@@ -242,156 +239,33 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     # core/msel_scorer_run.mojo serves, one or several (lane mf-search4b);
     # refit True, False or a scorer name; its own `device`; every candidate a
     # serving member) is fitted by the typed search RUN
-    # (core/msel_search_run.mojo) through `_search_member_fit`; the units
-    # below run only what that kind does not take (module note of
+    # (core/msel_search_run.mojo) through `_search_member_fit`; what that
+    # kind does not take is refused there in its words (lane mf-r9b: the
+    # units fallback is deleted; module note of
     # providers/python/member_ensemble_boundary_door.mojo `_admit_search`).
     # TOMBSTONE: MOJOLEARN_MSEL_MEMBER_UNITS_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     # THE RESIDENT FOLD ROWS (lane mf-search5): where the old units handed a
-    # device member DeviceRows (the same rule as below: the member's own
+    # device member DeviceRows (the member's own
     # device, the search's own `device`, no candidate naming a `device`),
     # the search's own resident scope is opened around the member fit, as
     # `MselFoldRows` opens it: the RUN's units then read every side as the
     # whole X plus the fold's rows, X resident once in that scope and the
     # rows taken on the device by the member's own program (the kernels of
     # the DeviceRows route; only who gathers the rows moved). Read once per
-    # search fit; the candidates are drawn once and reused below.
+    # search fit.
     var candidates = PythonObject(None)
     var scope = PythonObject(None)
     if msel_device_rows_ok(estimator, fields["scoring"], context):
         candidates = msel_candidates(model, context)
         if not _search_host_folds(fields, candidates, b, context):
             scope = msel_rows_scope_open(context)
-    var fitted = False
-    var drawn = Python.list()
     try:
-        fitted = _search_member_fit(model, fields, x_in, y_in, groups, context, b, drawn)
+        # raises every refusal in its words (THE REFUSAL RULE); lane mf-r9b:
+        # the units fallback that ran after a False is deleted
+        _search_member_fit(model, fields, x_in, y_in, groups, context, b)
     finally:
         if scope is not None:
             msel_rows_scope_close(scope, context)
-    if fitted:
-        return model
-    if candidates is None:
-        candidates = msel_candidates(model, context)
-    if len(candidates) == 0:
-        raise Error("No fits were performed. Was the CV iterator empty? Were there no candidates?")
-    var scoring_in = fields["scoring"]
-    var refit = fields["refit"]
-    var multi = msel_scorers(scoring_in, context)
-    var refit_false = refit is PythonObject(False)
-    if py_type(refit) is not b.bool and py_type(refit) is not b.str:
-        raise Error(MSEL_REFIT_CALLBACK_WORDS)  # one body with the search kind's admission (lane mf-ens6b)
-    if multi is not None and not refit_false and (py_type(refit) is not b.str or not py_contains(multi, refit)):
-        raise Error("For multi-metric scoring, refit must be False or a scorer key.")
-    var scoring = multi if multi is not None else scoring_in
-    var return_train = msel_flag_truth(fields["return_train_score"], context)
-    # The door's split, drawn once: the kind's UNPACK may already have drawn it (`drawn`).
-    var got = drawn[0] if len(drawn) > 0 else msel_cv_folds(estimator, x_in, y_in, fields["cv"], groups, True, context)
-    var xf = got[0]
-    var yf = got[1]
-    var folds = got[2]
-    var per = List[List[List[Float64]]]()
-    var trains = List[List[List[Float64]]]()
-    var names = List[String]()
-    var n_splits = 0
-    # The search's own fold rows (device wave, 2026-11-21), for the searches
-    # the member kind does not take (above; lane mf-search5: a device member's
-    # search the kind takes runs the resident route inside the typed RUN).
-    # They stay resident on the device only when the base estimator runs there
-    # (msel_device_rows_ok reads the member's device), the search itself
-    # does not say device="cpu", and no candidate sets a `device`: a
-    # candidate that moves a member to the CPU must not be handed rows that
-    # live on the device. Read once per search fit, and only when the rows
-    # would be resident.
-    var device_rows = msel_device_rows_ok(estimator, scoring, context)
-    if device_rows and _search_host_folds(fields, candidates, b, context):
-        device_rows = False
-    var rows = MselFoldRows(xf, yf, folds, device_rows, context)
-    try:
-        # Every (candidate, fold) is one unit (msel_cv_units): the base
-        # estimator cloned once per unit with the candidate's parameters set
-        # on the clone; no candidate clone is made first.
-        var run = msel_cv_units(estimator, candidates, yf, rows, scoring, return_train, False, error_score, jobs,
-                                context)
-        for c in range(len(candidates)):  # driver-loop: over candidates (results only)
-            var cvr = run.candidate(c, False, context)
-            if c == 0:
-                names = cvr.names.copy()
-                for _ in range(len(names)):  # driver-loop: over scorer names
-                    per.append(List[List[Float64]]())
-                    trains.append(List[List[Float64]]())
-            for k in range(len(names)):  # driver-loop: over scorer names
-                per[k].append(cvr.test[k].copy())
-                if return_train:
-                    trains[k].append(cvr.train[k].copy())
-            n_splits = len(cvr.fit_time)
-    finally:
-        rows.close(context)
-    var results = Python.dict()
-    py_setitem(results, "params", candidates)
-    var itertools = native_loaded_module("itertools")
-    var keys = family_call(b.sorted, py_call(b.set, py_call(itertools.chain.from_iterable, candidates)))
-    for i in range(len(keys)):  # driver-loop: over candidate parameter names
-        var getter = py_call(native_loaded_module("operator").methodcaller, PythonObject("get"), keys[i])
-        py_setitem(results, family_call(msel_op("add"), PythonObject("param_"), family_call(b.str, keys[i])),
-                   py_call(b.list, py_call(b.map, getter, candidates)))
-    var best_index = -1
-    var best_score = 0.0
-    var key_index = -1
-    if multi is None:
-        key_index = 0
-    elif family_is_str(refit):
-        for k in range(len(names)):  # driver-loop: over scorer names
-            if names[k] == String(py=refit):
-                key_index = k
-    for k in range(len(names)):  # driver-loop: over scorer names
-        var suffix = String("") if multi is None else "_" + names[k]
-        for i in range(n_splits):  # driver-loop: over folds
-            py_setitem(results, PythonObject("split" + String(i) + "_test_score" + suffix),
-                       msel_f64_list(msel_score_column(per[k], i), context))
-        var means = msel_row_means(per[k])
-        var stds = msel_row_stds(per[k], means)
-        var ranks = msel_rank_scores(means)
-        py_setitem(results, PythonObject("mean_test_score" + suffix), msel_f64_list(means, context))
-        py_setitem(results, PythonObject("std_test_score" + suffix), msel_f64_list(stds, context))
-        py_setitem(results, PythonObject("rank_test_score" + suffix), msel_i32_list(ranks, context))
-        if return_train:
-            # scikit-learn's split<i>_train_score columns, as the kind's PACK writes them (lane mf-msel5)
-            for i in range(n_splits):  # driver-loop: over folds
-                py_setitem(results, PythonObject("split" + String(i) + "_train_score" + suffix),
-                           msel_f64_list(msel_score_column(trains[k], i), context))
-            py_setitem(results, PythonObject("mean_train_score" + suffix), msel_f64_list(msel_row_means(trains[k]), context))
-        if k == key_index:
-            best_index = msel_rank_best(ranks)
-            best_score = means[best_index]
-    var updates = Python.dict()
-    py_setitem(updates, "cv_results_", results)
-    py_setitem(updates, "n_splits_", PythonObject(n_splits))
-    py_setitem(updates, "multimetric_", PythonObject(multi is not None))
-    var best_params = PythonObject(None)
-    if key_index >= 0:
-        py_setitem(updates, "best_index_", PythonObject(best_index))
-        py_setitem(updates, "best_score_", PythonObject(best_score))
-        best_params = candidates[best_index]
-        py_setitem(updates, "best_params_", best_params)
-    if not refit_false:
-        var xa = msel_materialize(x_in, "X", context)
-        # A member whose family published its member entry is refitted over
-        # it (bindings/msel_member_units_door.mojo `msel_member_refit`: typed
-        # fit on a view of X with the GIL released, then the family's pack; the
-        # best estimator HOLDS its fitted member state). None: any other
-        # member, data or failing fit takes the estimator's own fit door below,
-        # as before (the fallback rule; a failing fit raises its own words).
-        var best = PythonObject(None)
-        # TOMBSTONE: MOJOLEARN_MSEL_MEMBER_UNITS_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
-        if best_params is not None and yf is not None:
-            best = msel_member_refit(estimator, best_params, yf, xa, context, b)
-        if best is None:
-            best = msel_clone(estimator, False, context)
-            _set_params(best, best_params, context)
-            msel_fit(best, xa, y_in, context)
-        py_setitem(updates, "best_estimator_", best)
-        py_setitem(updates, "scorer_", msel_get_scorer(scoring_in, context) if multi is None else multi)
-    msel_search_update(fields, updates, context)
     return model
 
 
@@ -431,7 +305,7 @@ def _curve_by_search(estimator: PythonObject, args: PythonObject, param_range: P
             scope = msel_rows_scope_open(context)
     try:
         # raises every refusal in its words (THE REFUSAL RULE)
-        _ = _search_member_fit(search, fields, args[1], args[2], args[5], context, b, Python.list())
+        _search_member_fit(search, fields, args[1], args[2], args[5], context, b)
     finally:
         if scope is not None:
             msel_rows_scope_close(scope, context)

@@ -1161,7 +1161,7 @@ def msel_cv_by_search(estimator: PythonObject, x_in: PythonObject, y_in: PythonO
             and member_scope_word(context["family_msel_rows_context"]) == MEMBER_SCOPE_NONE):
         scope = msel_rows_scope_open(context)
     try:
-        _ = msel_member_fit_in_place(search, ya, xa, context, b)  # raises every refusal (THE REFUSAL RULE)
+        msel_member_fit_in_place(search, ya, xa, context, b)  # raises every refusal (THE REFUSAL RULE)
     finally:
         if scope is not None:
             msel_rows_scope_close(scope, context)
