@@ -561,8 +561,9 @@
   },
   "f16-widen-host": {
    "define": "MOJOLEARN_CHECKPOINT_FAST_F16_WIDEN_HOST",
-   "status": "define in code (bindings/causal_checkpoint_door.mojo checkpoint_widen_f16 _F16_WIDEN_HOST; opt-in, default off): B = models.safetensors.widen_f16 widens a C-ordered source on the host with core/causal_checkpoint_impl.mojo checkpoint_widen_halves (65,536-half chunks across host cores, the safetensors reader's widening); A = the linalg binding's from_f16 (device kernel on a GPU install: upload, kernel, download, three synchronizes). Both run gemm/f16_widen.mojo f16_bits_to_f32 per element: bits unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3): unmeasured plumbing arm, no cell in job nvc1-0003 (no board row exercises it); linalg from_f16 stays the route of models.safetensors.widen_f16; the driver case f16_widen went with it; the define is refused (core/experiment_guards_neural.mojo); code recoverable at f61bec9e57, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CHECKPOINT_FAST_F16_WIDEN_HOST.ab-outcome-3.patch. Was: define in code (bindings/causal_checkpoint_door.mojo checkpoint_widen_f16 _F16_WIDEN_HOST; opt-in, default off): B = models.safetensors.widen_f16 widens a C-ordered source on the host with core/causal_checkpoint_impl.mojo checkpoint_widen_halves (65,536-half chunks across host cores, the safetensors reader's widening); A = the linalg binding's from_f16 (device kernel on a GPU install: upload, kernel, download, three synchronizes). Both run gemm/f16_widen.mojo f16_bits_to_f32 per element: bits unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "autograd-predict": {
    "define": "MOJOLEARN_AUTOGRAD_PREDICT",
@@ -3456,7 +3457,9 @@
    "b_arms": [
     "f16-widen-host"
    ],
-   "decides": "promote B (host-parallel widening; then widen_f16 no longer calls linalg from_f16, and the route's A code goes with its tombstone) unless it is slower than A at any count of the row on the NVIDIA L40S; every output word must match between the arms (same bit construction)"
+   "decides": "promote B (host-parallel widening; then widen_f16 no longer calls linalg from_f16, and the route's A code goes with its tombstone) unless it is slower than A at any count of the row on the NVIDIA L40S; every output word must match between the arms (same bit construction)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "autograd-predict-mlp",

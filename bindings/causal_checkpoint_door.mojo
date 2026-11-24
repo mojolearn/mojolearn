@@ -23,14 +23,11 @@ from bindings.causal_model_config_door import model_record_fields, model_dict, m
 from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter, AdmittedBorrowedBuffer, connect_native_mmap_exporter
 from bindings.linalg_ops_lowbit_door import _lin_from_f16, lin_connected_binding
 from core.shared_slot import SharedSlot
-from std.sys.compile import is_defined
 from bindings.causal_checkpoint_run import (
     checkpoint_header_length, checkpoint_offsets_check, checkpoint_info_count, checkpoint_read_plan,
     checkpoint_mapped_check, checkpoint_row_major,
 )
 
-# The A/B switch of `checkpoint_widen_f16` (see the note there).
-comptime _F16_WIDEN_HOST = is_defined["MOJOLEARN_CHECKPOINT_FAST_F16_WIDEN_HOST"]()
 
 
 struct CheckpointConnection(Defaultable, Movable):
@@ -735,31 +732,12 @@ def checkpoint_widen_f16(mut mods: NativeModules, value: PythonObject) raises ->
     var source = neural_array_snapshot(captured, context)
     if Int(py=source.size) == 0:
         return checkpoint_zeros(mods, 0, source.shape, "f", cls)
-    # A/B MOJOLEARN_CHECKPOINT_FAST_F16_WIDEN_HOST (lane owed-deletions,
-    # 2026-11-16; default off): B widens a C-ordered source on the host with
-    # the safetensors reader's chunked host-parallel widening
-    # (core/causal_checkpoint_impl.mojo), A (default) hands it to the linalg
-    # binding's `from_f16` (a device kernel on a GPU install: upload 2 bytes,
-    # download 4 bytes a half, three synchronizes; the serial host loop on a
-    # CPU-only install). Both are gemm/f16_widen.mojo's bit construction per
-    # element, so bits are the same on every column. An F-ordered source keeps
-    # A in either arm. Decides whether linalg `from_f16` stays this
-    # function's route: owed row f16-widen-host (owed-pre0867.json).
-    # Its guard sits here, in the one function that reads it (not in a family guard module, which
-    # would make the arm rebuild every binding of that family): an IDENTICAL NVIDIA experiment like
-    # every arm of the campaign, refused in a MOJOLEARN_NUMERIC_FAST build.
-    comptime assert not (_F16_WIDEN_HOST and is_defined["MOJOLEARN_NUMERIC_FAST"]()), "MOJOLEARN_CHECKPOINT_FAST_F16_WIDEN_HOST is an IDENTICAL A/B arm (bindings/causal_checkpoint_door.mojo checkpoint_widen_f16); drop it from a MOJOLEARN_NUMERIC_FAST build"
-    comptime if _F16_WIDEN_HOST:
-        if model_string(mods, source.order) == "C":
-            var count = Int(py=source.size)
-            var out = checkpoint_zeros(mods, count, source.shape, "f", cls)
-            checkpoint_widen_halves(MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=Int(py=source._addr)),
-                                    MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr)),
-                                    count, "F16")
-            _ = source
-            _ = captured
-            _ = value
-            return out
+    # The linalg binding's `from_f16` widens every source (a device kernel on a GPU install: upload 2 bytes,
+    # download 4 bytes a half; the host binding on a CPU-only install), gemm/f16_widen.mojo's bit construction.
+    # TOMBSTONE: MOJOLEARN_CHECKPOINT_FAST_F16_WIDEN_HOST (unmeasured opt-in plumbing arm: no board row reaches it) deleted 2026-11-24 by lane/ab-outcome-3 (o3-nseq); code recoverable at f61bec9e57.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CHECKPOINT_FAST_F16_WIDEN_HOST.ab-outcome-3.patch
+    # (B widened a C-ordered source on the host with core/causal_checkpoint_impl.mojo checkpoint_widen_halves, which
+    # stays: the safetensors reader's widening above uses it.)
     var linalg = context["linalg_context"]
     var binding = lin_connected_binding(linalg)
     mods.released()
