@@ -1158,6 +1158,25 @@ def python_rows(ls, walker, reach, base, whole_surface=False):
     return rows
 
 
+ENDPOINTS_DECLARED_TSV = os.path.join(ROOT, "tools", "identity_lanes", "coverage_endpoints_declared.tsv")
+
+
+def endpoints_declared(path=None):
+    """{endpoint: set of lanes} from coverage_endpoints_declared.tsv: the endpoints a registry-driven lane covers,
+    which the source reach cannot see (the lane walks the public class registry). Each row names existing lanes."""
+    out = defaultdict(set)
+    path = path or ENDPOINTS_DECLARED_TSV
+    if not os.path.isfile(path):
+        return out
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            if not line.strip() or line.startswith("#"):
+                continue
+            endpoint, lanes = line.rstrip("\n").split("\t")[:2]
+            out[endpoint].update(lane for lane in lanes.split(",") if lane)
+    return out
+
+
 def endpoint_rows(walker, reach):
     """Map the complete existing endpoint census onto actual lane call roots.
 
@@ -1220,7 +1239,8 @@ def endpoint_rows(walker, reach):
     # estimator walk (which cannot infer ``with ops.Session() as s``).
     import lane_select
     from verification_endpoint_calls import lane_calls, source_calls
-    direct = lane_calls(lane_select.identity_break(), rows)
+    harness = lane_select.identity_break()
+    direct = lane_calls(harness, rows)
     supplemental = defaultdict(set)
     from light_verifier_reference import load
     for module in load('_verification_sources').SUPPLEMENTAL_CHECKS:
@@ -1235,8 +1255,14 @@ def endpoint_rows(walker, reach):
                 roots = ast.literal_eval(n.value)
         for endpoint, cases in source_calls(functions, rows, roots).items():
             supplemental[endpoint].update(module + ':' + case for case in cases)
+    declared_lanes = endpoints_declared()
+    known_lanes = set(harness.LANES)
     for row in rows:
-        row['lanes'] = sorted(set(row['lanes']) | direct.get(row['endpoint'], set()))
+        stated = declared_lanes.get(row['endpoint'], set())
+        missing = stated - known_lanes
+        if missing:
+            raise SystemExit(f"coverage_endpoints_declared.tsv: {row['endpoint']} names no such lane: {sorted(missing)}")
+        row['lanes'] = sorted(set(row['lanes']) | direct.get(row['endpoint'], set()) | stated)
         row['checks'] = sorted(supplemental.get(row['endpoint'], ()))
         if row['status'] != 'not_numerical':
             row['status'] = 'mapped' if row['lanes'] or row['checks'] else 'unmapped'
