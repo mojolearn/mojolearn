@@ -354,9 +354,14 @@
   },
   "gemm-stage-up-off": {
    "define": "MOJOLEARN_GEMM_STAGE_UP_OFF",
-   "status": "define in code (gemm/host_transport.mojo GEMM_STAGE_UP_ON): B = raw host-pointer upload (the former MOJOLEARN_GEMM_STAGE_UP=0); A = staged upload on NVIDIA/AMD (the former default). A transport/route choice: digests must not move.",
+   "status": "SPLIT read 2026-11-24 (lane ab-outcome-2, sub-lane ab2-ngemm; A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S job nvc1-0002: f32 gemm 47.77 -> 38.70 ms 0.81 raw FASTER, int8 1.13, bf16 1.01, hashes and quality equal): the switch reaches only gemm_up_f32 (gemm/host_transport.mojo); the int8 row uploads raw in both arms (gemm/linalg_native.mojo:297-300) and the bf16 row's operands are bf16 bits uploaded raw in both arms (gemm/linalg_native.mojo:222,227), so their 1.13 / 1.01 are spread, not the switch. On f32 raw wins because pageable H2D (24.86 GB/s on the A/B host) is about pinned (26.96) and the stage adds a single-thread host copy (memcpy 22.26 GB/s) plus a wait per chunk. A hardware cost rule is written as -D MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST (owed arm gemm-stage-up-by-cost); this switch stays until that A/B decides. Was: define in code (gemm/host_transport.mojo GEMM_STAGE_UP_ON): B = raw host-pointer upload (the former MOJOLEARN_GEMM_STAGE_UP=0); A = staged upload on NVIDIA/AMD (the former default). A transport/route choice: digests must not move.",
    "owed": "RUN",
    "evidence": "ab3 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T182558Z-cb6e02/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts2/tab-<arm>.txt): UNDECIDED: arm/base geomean 0.986 over 3 cells, gemm 0.87 (base 46.74 vs 44.49/44.16 in the other gemm arms' base runs), gemm-bf16 1.07, gemm-int8 1.03; digests equal; thin, not promoted on one cell: kept opt-in, re-time owed (lane fx-verdicts2)"
+  },
+  "gemm-stage-up-by-cost": {
+   "define": "MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST",
+   "status": "define in code (gemm/host_transport.mojo GEMM_FAST_STAGE_UP_BY_COST, lane ab-outcome-2 / ab2-ngemm 2026-11-24, default off): B = the first staged-size float32 upload of the process times one 16 MB chunk raw (pageable DMA), as a memcpy into the pinned stage and as the pinned DMA; the process stages iff max(copy, pinned DMA) < raw, else uploads raw; A = staged upload on NVIDIA/AMD (the default). A transport choice: digests must not move. Rows gemm-int8 and gemm-bf16 never reach the rule (controls).",
+   "owed": "RUN"
   },
   "lr-table-off": {
    "define": "MOJOLEARN_LR_TABLE_OFF",
@@ -2697,6 +2702,24 @@
     "gemm-stage-up-off"
    ],
    "decides": "keep A (staged upload on NVIDIA/AMD (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+  },
+  {
+   "id": "gemm-stage-up-by-cost",
+   "source": "lane ab-outcome-2 / ab2-ngemm (2026-11-24): the SPLIT verdict of gemm-stage-up-off in A/B nvc-ab-20261124T095727Z-92fd9f (~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md, job nvc1-0002); build with the wave-3 sha",
+   "kind": "ab",
+   "lane": [
+    "gemm",
+    "gemm-bf16",
+    "gemm-int8"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gemm-stage-up-by-cost"
+   ],
+   "owed": "RUN",
+   "decides": "B (the probe rule) becomes the default (staged upload only where the probe says it pays; -D MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST_OFF keeps the old rule) when the gemm row is at least as fast as A and as the gemm-stage-up-off arm at equal quality and digests; then MOJOLEARN_GEMM_STAGE_UP_OFF and its owed arm are deleted. gemm-int8 and gemm-bf16 are controls (both arms run the same raw uploads): a difference there is spread. B not faster: delete B."
   },
   {
    "id": "lr-table-off-envgate",
