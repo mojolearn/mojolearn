@@ -140,7 +140,10 @@ from core.ensemble_member import (
 from core.ensemble_member import meta_plan_leaf_importances, META_PARAM_SERVING, meta_plan_metric_other
 from core.ensemble_member import meta_plan_metric_kernels
 from core.metrics_entry_table import MetricsEntryKey, metrics_r2_entry
-from core.msel_search_run import SEARCH_REFUSED_SHIFT, MselOtherTier, msel_some_fits_failed_words, msel_score_failed_words
+from core.msel_search_run import (
+    SEARCH_REFUSED_SHIFT, MselOtherTier, msel_all_fits_failed_words, msel_some_fits_failed_words,
+    msel_score_failed_words,
+)
 from core.member_notices import MEMBER_NOTICE_WORDS, MEMBER_NOTICE_SCORE_FAILED
 from bindings.msel_common_door import msel_warn, msel_fit_failed_warn
 from bindings.mode_answer_door import answer_mode_object
@@ -149,7 +152,7 @@ from core.member_abi import MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP
 from bindings.msel_common_door import msel_f64_block, msel_i64_list, msel_index_i64, msel_p64, msel_addr
 from bindings.classical_labels_door import labels_decode_labels
 from bindings.family_common_pack import family_array
-from core.member_abi import MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION
+from core.member_abi import MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_OP_TRANSFORM, MEMBER_CAN_TRANSFORM
 from core.msel_scorer_run import (
     msel_scorer_code, msel_scorer_row, msel_scorer_regression, msel_scorer_positive, msel_scorer_positive_kind,
     msel_scorer_metric_code, SCORER_POSITIVE_LABEL_ONE, SCORER_POSITIVE_MARKS, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND,
@@ -2572,13 +2575,13 @@ def _ada_state(fields: PythonObject, context: PythonObject, b: PythonObject, pla
 # ------------------------------------------------------------ the search kind (lane mf-search4)
 
 
-def _search_seed_word(fields: PythonObject, b: PythonObject) raises -> Int:
+def _search_seed_word(fields: PythonObject, b: PythonObject, context: PythonObject) raises -> Int:
     """A RandomizedSearchCV's sampler seed for its admission and its PACK:
     its own exact non-negative int below 2^52 (the words are float64), or,
     for random_state=None, one fresh draw per admission (scikit-learn's
     sampler draws afresh per fit too). _SEED_AS_GIVEN (lane mf-rows8d, row
-    :3552): any other random_state (a NumPy integer, an int the float64
-    words cannot hold, a negative int, a bool, a RandomState): the sampler
+    :3552): any other random_state (a negative int, a bool, a RandomState;
+    lane w3f5-b: an integral seed of any size or NumPy type is a word, below): the sampler
     reads the search's own `random_state` as given, at the admission and at
     the PACK's re-draw (the same field of the same fit), and raises its own
     words for one it refuses (bindings/msel_candidates_door.mojo
@@ -2588,10 +2591,34 @@ def _search_seed_word(fields: PythonObject, b: PythonObject) raises -> Int:
         var raw = py_call(b.int.from_bytes, py_call(native_loaded_module("os").urandom, PythonObject(7)),
                           PythonObject("little"))
         return Int(py=raw) >> 4  # 52 random bits
+    # LANE w3f5-b: a NumPy integer scalar or an exact int of any size is
+    # drawn ONCE here into the native seed word, as scikit-learn's
+    # check_random_state takes any integral seed (was: _SEED_AS_GIVEN, whose
+    # re-read of the field raised the Sequential admission's words for
+    # np.int64(7) and 2**60 + 3). A NumPy integer is admitted by exact type
+    # identity (`msel_is_int_arg`: the connected integer classes) and read
+    # through its C `int`; a value of 2^52 or more (the words are float64)
+    # folds its high bits into the low 52 (`_seed_fold`). Bits change for
+    # those seeds only (their draws; they were refused before).
     var word = _int_word(state, b)
-    if word < 0 or word >= 4503599627370496:
+    if word < 0 and py_type(state) is not b.int and py_type(state) is not b.bool:
+        try:
+            if msel_is_int_arg(state, _splitter_context(context)):
+                word = Int(py=py_call(b.int, state))
+        except:
+            word = -1
+    if word < 0:
         return _SEED_AS_GIVEN
-    return word
+    return _seed_fold(word)
+
+
+def _seed_fold(word: Int) -> Int:
+    """A non-negative seed as a float64-exact word: below 2^52 as is, else
+    its low 52 bits xor its high bits."""
+    comptime LOW = 4503599627370496  # 2^52
+    if word < LOW:
+        return word
+    return (word & (LOW - 1)) ^ (word >> 52)
 
 
 #: A RandomizedSearchCV seed word: the sampler reads the search's own
@@ -2609,7 +2636,12 @@ def _search_candidates(model: PythonObject, fields: PythonObject, seed: Int, war
         return msel_grid_list(fields["param_grid"], context)
     var dists = msel_sampler_check(fields["param_distributions"], context, True)
     var state = fields["random_state"] if seed == _SEED_AS_GIVEN else PythonObject(seed)
-    return msel_sampler_list(dists, fields["n_iter"], state, context, True, warn)
+    # LANE w3f5-b: a random_state read as given (a RandomState, a bool, a
+    # negative int) is refused in the sampler's own words in model
+    # selection's context (`_splitter_context`: a nested search may hand the
+    # trees context copy, whose NumPy types no public call connected)
+    var sampler_context = _splitter_context(context) if seed == _SEED_AS_GIVEN else context
+    return msel_sampler_list(dists, fields["n_iter"], state, sampler_context, True, warn)
 
 
 def _search_prepare(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
@@ -2634,31 +2666,15 @@ def _search_prepare(model: PythonObject, fields: PythonObject, context: PythonOb
     if py_type(model) is not msel_cls("GridSearchCV", context):
         if py_type(model) is not msel_cls("RandomizedSearchCV", context):
             raise Error("TypeError: " + String(py=py_type(model).__name__) + String(MEMBER_SET_FOREIGN))
-        seed = _search_seed_word(fields, b)
+        seed = _search_seed_word(fields, b, context)
     var candidates = _search_candidates(model, fields, seed, True, context)
     var clones = Python.list()
     for c in range(len(candidates)):  # driver-loop: over the candidates (one native clone with its parameters each)
-        var clone = PythonObject(None)
-        var stand_in = False
-        try:
-            clone = msel_native_clone(base, context)
-        except error:
-            # Lane w3f3-f: a META base whose `cv` is a user's own splitter object cannot be cloned natively (its
-            # parameter admission refuses the Python object: "Sequential requires native input types"), which
-            # pre-empted that base's own refusal. The base itself stands in for the candidate, never fitted or
-            # set: the work-list admits it and records its meta door's words (`_CV_CALLBACK_WORDS`, the words its
-            # own fit raises), and `_search_nested_refusal` raises them, or scikit-learn's all-fits-failed words
-            # with a numeric error_score. Any other clone refusal raises as before. The refusal path only.
-            var cv = py_get(py_fields(base), "cv")
-            try:
-                _refuse_cv_callback(cv, context, b, _CV_CALLBACK_WORDS, False)
-            except:
-                stand_in = True
-            if not stand_in:
-                raise error^
-        if stand_in:
-            _ = py_call(clones.append, base)
-            continue
+        # REMOVED (lane w3f5-b): lane w3f3-f's stand-in (the base itself for a candidate whose clone raised the
+        # Sequential words over a user's splitter `cv`). The clone carries that splitter by reference now
+        # (bindings/msel_estimator_native_door.mojo `_msel_user_splitter`), so the work-list admits each clone
+        # and records its meta door's words (`_CV_CALLBACK_WORDS`), which `_search_nested_refusal` raises.
+        var clone = msel_native_clone(base, context)
         _ = msel_native_set_params(clone, msel_clone_parameter(candidates[c], context), context)
         _ = py_call(clones.append, clone)
     var out = Python.tuple(candidates, clones, PythonObject(seed))
@@ -3422,7 +3438,13 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                     if py_type(theirs) is b.str and String(py=theirs) == "samples":
                         mine_kw.samples = True
                         continue
-                if mine is not missing and theirs is not missing and _same_kwarg(mine, theirs, eq, b):
+                # LANE w3f5-b: on a binary row, a pos_label equal to the row's default
+                # but of another type (1.0 or True for 1) is no default: the binary
+                # rows' door reads its type (a float is refused, a bool is the
+                # integer label), so it is the make_scorer's given pos_label
+                if (mine is not missing and theirs is not missing
+                        and (word != "pos_label" or not pos_row or py_type(mine) is py_type(theirs))
+                        and _same_kwarg(mine, theirs, eq, b)):
                     continue
                 if word == "pos_label" and theirs is not missing:
                     if pos_row:
@@ -3906,6 +3928,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var needs = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT
     if classifier:
         needs |= MEMBER_CAN_CLASSIFIER
+    var transform_rows = 0  # LANE w3f5-b: scorers whose response is the member's transform
     var own_score = -1  # scoring None: `_own_score`'s answer (lane mf-rows8c); -1 a scorer or a cv tool's response
     var own_row = False  # lane w3f3-c: the one scorer is the class's own score (its program, not a public metric's kernel)
     if tool_keep:
@@ -3928,6 +3951,16 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         # for every other kind without the op.
         own_score = _own_score(base, base_plan, classifier, b)
         positives.append(-1)
+        if not classifier:
+            # LANE w3f5-d (gate 3cda8a05b3): a member that publishes its own
+            # score (KernelDensity's total log-likelihood, MEMBER_OP_SCORE)
+            # is scored by it and has no predict to need: the PREDICT need
+            # refused it in "'KernelDensity' object has no attribute
+            # 'predict'" since 6d4306f458 (cross_validate through this RUN
+            # only). A candidate without the score op needs predict again
+            # below (the accuracy / R^2 of predict its class's score is). A
+            # classifier keeps it: a fold that lacks a class scores predict.
+            needs &= ~MEMBER_CAN_PREDICT
     var clusterer = False
     var cluster_entry = False
     var others = False
@@ -4049,7 +4082,20 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             # mf-r9d: predict_log_proba is predict_proba's columns logged in the
             # member's precision before the RUN narrows them (`opts.log`;
             # core/msel_search_run.mojo `_respond`)
-            opts.resp = MEMBER_OP_DECISION if method == "decision_function" else MEMBER_OP_PREDICT_PROBA
+            # LANE w3f5-b (cause 59738c518b: every response that was not
+            # decision_function was read as predict_proba, so a transformer
+            # scored by make_scorer(mean_squared_error,
+            # response_method='transform') asked StandardScaler for
+            # predict_proba): a 'transform' response is the member's
+            # MEMBER_OP_TRANSFORM block, rows x its output columns, which the
+            # regression row scores as a multi-output prediction (core/
+            # msel_scorer_run.mojo `msel_scorer_value`), as scikit-learn's
+            # _get_response_values hands transform(X) to the metric.
+            if method == "transform":
+                opts.resp = MEMBER_OP_TRANSFORM
+                transform_rows += 1
+            else:
+                opts.resp = MEMBER_OP_DECISION if method == "decision_function" else MEMBER_OP_PREDICT_PROBA
             opts.log = method == "predict_log_proba"
             row.op = opts.resp
         # LANE mf-r9d (door :3789): the other numeric_mode tier's route
@@ -4399,6 +4445,13 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             needs |= MEMBER_CAN_PREDICT_PROBA
         elif row.op == MEMBER_OP_DECISION:
             needs |= MEMBER_CAN_DECISION
+        elif row.op == MEMBER_OP_TRANSFORM:
+            needs |= MEMBER_CAN_TRANSFORM
+    if transform_rows > 0 and transform_rows == len(keys) and tool_respond < 0:
+        # LANE w3f5-b: every scorer reads transform (a transformer's search):
+        # no response asks predict, so the candidates need none (a
+        # StandardScaler has no predict), as `all_missing` below.
+        needs &= ~MEMBER_CAN_PREDICT
     if all_missing and tool_respond < 0:
         # every scorer lacks its response (`all_missing`, above): the units are
         # fitted, never asked; the class has no predict to need
@@ -4420,19 +4473,65 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     # door's units warned nothing for a failing fit, nor does the RUN.
     var slot_of = List[Int]()
     var refused_word = List[Int]()
+    # LANE w3f5-b: each refused candidate's words once per fit (its folds),
+    # for scikit-learn's all-fits-failed words when every candidate is refused.
+    var refused_fits = List[String]()
     for c in range(len(clones)):  # driver-loop: over the candidates (admission, once each)
         var failed_at = done.failure(clones[c]) if tolerate != 0.0 else -1
         if failed_at >= 0:
             refused_word.append(_next_word(labels, classifier, extra_words, b))
             extra_words.append(done.failed_words[failed_at])
             slot_of.append(-1)
+            for _ in range(folds):  # small-loop(the candidate's folds: one failed fit each)
+                refused_fits.append(done.failed_words[failed_at].copy())
+            continue
+        # LANE w3f5-b (cause: lane mf-r9b cdda7f806d deleted the door's units
+        # fallback, whose per-fit error rule scored a LEAF candidate whose
+        # own parameters its family refuses, e.g. Ridge(alpha=-1)): with a
+        # numeric error_score, the words its family's admission RAISES (the
+        # words its fit raises: `member_leaf_admit_labeled`, a class_weight's
+        # `member_cw_fill`) make it a refused candidate, as a nested meta's
+        # are above (scikit-learn's _fit_and_score catches the fit's error
+        # and scores error_score). Words `_search_member_refusal` RETURNS (a
+        # capability the kind lacks, no member) still raise: no fit failed.
+        # With error_score='raise' every refusal raises, as before.
+        var admitted = False
+        var fit_failed = False
+        var fit_words = String("")
+        try:
+            admitted = _admit_nested(done, nested, clones[c], classifier, needs, context, b, labels)
+        except error:
+            if tolerate == 0.0:
+                raise error^
+            fit_failed = True
+            fit_words = String(error)
+        if not admitted and not fit_failed:
+            # lane mf-rows8d (row :3995): a candidate the kind does not take is
+            # refused natively, per cause (`_search_member_refusal`).
+            var words = String("")
+            try:
+                words = _search_member_refusal(done, clones[c], classifier, needs, labels, context, b)
+            except error:
+                if tolerate == 0.0:
+                    raise error^
+                fit_failed = True
+                fit_words = String(error)
+            if not fit_failed:
+                raise Error(words)
+        if fit_failed:
+            refused_word.append(_next_word(labels, classifier, extra_words, b))
+            extra_words.append(fit_words.copy())
+            slot_of.append(-1)
+            for _ in range(folds):  # small-loop(the candidate's folds: one failed fit each)
+                refused_fits.append(fit_words.copy())
             continue
         refused_word.append(-1)
-        slot_of.append(len(nested.plans))
-        # lane mf-rows8d (row :3995): a candidate the kind does not take is
-        # refused natively, per cause (`_search_member_refusal`).
-        if not _admit_nested(done, nested, clones[c], classifier, needs, context, b, labels):
-            raise Error(_search_member_refusal(done, clones[c], classifier, needs, labels, context, b))
+        slot_of.append(len(nested.plans) - 1)
+    if len(nested.plans) == 0 and len(clones) > 0:
+        # LANE w3f5-b: every candidate refused under a numeric error_score:
+        # scikit-learn's all-fits-failed words before any fit
+        # (`_warn_or_raise_about_fit_failures`), the RUN's one copy.
+        raise Error(msel_all_fits_failed_words(len(clones) * folds, refused_fits))
     if len(nested.plans) < len(clones):
         var plans = List[MemberPlan]()
         var masks = List[Int]()
@@ -4468,6 +4567,14 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                 raise Error("NotImplementedError: " + String(py=py_type(base).__name__) + "'s score is not the"
                             + " accuracy or R^2 of its predict and its native member publishes no score, so a"
                             + " Mojolearn search with scoring=None cannot score it natively. Pass a scoring name.")
+            # the scorer below reads predict (lane w3f5-d: the need dropped
+            # above for a member's own score): a candidate without it is
+            # refused in the words the PREDICT need gave before
+            for c in range(len(nested.masks)):  # small-loop(the candidates' masks)
+                if (nested.masks[c] & MEMBER_CAN_PREDICT) == 0:
+                    var at = c if c < len(clones) else 0
+                    raise Error(_search_member_refusal(done, clones[at], classifier, needs | MEMBER_CAN_PREDICT,
+                                                       labels, context, b))
             var own = msel_scorer_code(String("accuracy") if own_score == _OWN_ACCURACY else String("r2"), False)
             codes.append(own)
             own_row = True

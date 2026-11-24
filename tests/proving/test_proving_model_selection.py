@@ -192,13 +192,20 @@ def test_member_route_serves_the_marked_predictor(device, name):
 
 @pytest.mark.parametrize("device", DEVICES)
 def test_member_only_class_is_refused_by_cross_validation_in_its_words(device):
-    # A member-only plan (a registered mark without method recipes) its member cannot serve is refused in words,
-    # also under cross_validate's default error_score=nan (the 2026-11-22 registration first turned the refusal into
-    # silent nan scores). Lane w3f2-cv (gate 14f1 group B; brief w3f2-cv.md: "refuse ... in scikit-learn's words"):
+    # A member-only plan (a registered mark without method recipes) its member cannot serve fails in words, never
+    # silently (the 2026-11-22 registration first turned the refusal into silent nan scores). Lane w3f2-cv (gate 14f1 group B; brief w3f2-cv.md: "refuse ... in scikit-learn's words"):
     # the words are the search kind's own, the response the r2 scorer asks and Binarizer lacks
     # (`_check_response_method`'s attribute), no longer mf-r9b's "schema is pending migration", which hid every
     # member-only refusal's cause (bindings/msel_member_units_door.mojo `_admission_refusal`).
+    # Lane w3f5-d (gate 3cda8a05b3): since 922a90efa3 a search whose every scorer lacks its response fits the units
+    # and each score fails in `_check_response_method`'s words, as scikit-learn's `_score` does: error_score='raise'
+    # raises them, the default nan scores every fold nan with the "Scoring failed" UserWarning (never silently).
     _import_every_family()
     X, Y = _arm_cases.X, _arm_cases.Y
-    with pytest.raises(AttributeError, match="'Binarizer' object has no attribute 'predict'"):
-        cls("cross_validate")(make("Binarizer", device), X, Y, cv=3, scoring="r2")
+    words = "Binarizer has none of the following attributes: predict."
+    with pytest.raises(AttributeError, match=words):
+        cls("cross_validate")(make("Binarizer", device), X, Y, cv=3, scoring="r2", error_score="raise")
+    with pytest.warns(UserWarning, match="Scoring failed") as caught:
+        out = cls("cross_validate")(make("Binarizer", device), X, Y, cv=3, scoring="r2")
+    assert any(words in str(w.message) for w in caught), [str(w.message) for w in caught]
+    assert np.isnan(np.asarray(out["test_score"], dtype=np.float64)).all()

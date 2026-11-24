@@ -225,7 +225,10 @@ def _(ml, X, yc, yr, Xh=None):
     # scikit-learn 1.9 cross_val_predict fits that fold's member on y[train] and warns "Number of classes in
     # training fold (2) does not match total number of classes (3)"). The final tree is fitted on those stacked
     # columns, so a broken re-code moves `lacking`.
-    xs = np.ascontiguousarray(X[:60], dtype=np.float32)
+    # w3f5-e (2026-11-24): the 60 rows are every 117th of the floored `rows` (0, 117, ..., 6903), not `X[:60]`: a
+    # literal row cut of the fixture in a floored lane is what tools/fixture_floors.py refuses (rule 3), since it
+    # can be shrunk without walking past `rows = 7001` and its reason.
+    xs = np.ascontiguousarray(X[:rows:117], dtype=np.float32)
     ys = (xs[:, 0] > np.median(xs[:, 0])).astype(np.int64)
     ys[int(np.argmax(xs[:, 0]))] = 2
     s = ml.StackingClassifier([("dt", ml.DecisionTreeClassifier(max_depth=3))],

@@ -46,7 +46,7 @@ def test_bagging_members_hold_every_class(max_features):
                              max_features=max_features, bootstrap=True, random_state=0).fit(X, y)
     for est in m.estimators_:
         assert np.asarray(est.classes_).tolist() == [0, 1, 2]
-    proba = m.predict_proba(X)
+    proba = np.asarray(m.predict_proba(X))  # an in-package caller receives the Array (parallel_public_result_door)
     assert proba.shape == (len(y), 3)
     np.testing.assert_allclose(proba.sum(axis=1), 1.0, rtol=1e-5)
     assert set(np.unique(m.predict(X)).tolist()) <= {0, 1, 2}
@@ -65,7 +65,7 @@ def test_bagging_sample_weight_drives_the_draw():
                              max_features=PER_MEMBER, random_state=0).fit(X, y, sample_weight=sw)
     for est in m.estimators_:
         assert np.asarray(est.classes_).tolist() == [0, 1, 2]
-    proba = m.predict_proba(X)
+    proba = np.asarray(m.predict_proba(X))  # an in-package caller receives the Array (parallel_public_result_door)
     assert proba.shape == (len(y), 3)
     assert float(np.max(proba[:, 2])) == 0.0
 

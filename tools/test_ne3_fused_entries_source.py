@@ -27,8 +27,11 @@ def test_extra_operations_are_appended_and_generated():
         assert _read(path) == expected, path
     schema = _read('x_neighbors/descriptor_schema.mojo')
     assert 'comptime XN_OPERATION_COUNT = 90' in schema
+    # The auxiliary ids follow the packed table and the mode operation, so they
+    # move when a packed op is removed (457fe9f524 dropped group_mean).
+    first_aux = int(re.search(r'comptime XN_MODE_OPERATION = (\d+)', schema).group(1)) + 1
     for name, counts, aux, _, _ in NEW:
-        assert f'if name == "{name}":\n        return {78 + aux}\n' in schema
+        assert f'if name == "{name}":\n        return {first_aux + aux}\n' in schema
 
 
 def test_aux_operations_exist_on_both_targets_with_capability_bits():

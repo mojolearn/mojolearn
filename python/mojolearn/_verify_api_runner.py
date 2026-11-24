@@ -53,17 +53,43 @@ def sources():
     return result
 
 
+#: Endpoints that exist only on a build with a device: the optimizers' device-resident
+#: parameter I/O, Embedding's device upload and the cooperative multi-GPU byte-LM trainer
+#: (every method: its sessions live inside the GPU byte-LM binding). The product declares
+#: a build without a device through `runtime_report()['cpu_only']`; there these endpoints
+#: are recorded 'not applicable' and not run. On every device build they run and are judged
+#: as before, and `admit` still requires the canonical NVIDIA capture to execute all of them.
+OPTIMIZER_DEVICE_METHODS=frozenset(('params_to_device','params_to_host','grads_to_device',
+    'grads_to_host','param_device','step_device'))
+DEVICE_ONLY_CLASSES=frozenset(('ParallelByteLanguageModelTrainer',))
+DEVICE_ONLY_METHODS=frozenset((('Embedding','to_device'),))
+
+
+def device_only(family, public, method):
+    # Parameter/attribute contracts (the metadata family) are host contracts on every build.
+    if family=='metadata':return False
+    name=public.rsplit('.',1)[-1]
+    return (name in DEVICE_ONLY_CLASSES or (name,method) in DEVICE_ONLY_METHODS
+            or (family=='optimizers' and method in OPTIMIZER_DEVICE_METHODS))
+
+
 def capture(path=None, endpoints=None, *, artifacts=None):
     from . import __version__,_verify,runtime_report
     routes=registry();expected={r['endpoint'] for r in TARGETS}
     selected=expected if endpoints is None else set(endpoints)
     if not selected or selected-expected:raise ValueError('unknown or empty endpoint selection')
+    # Read once per capture, before any endpoint runs: the build's own declaration.
+    no_device=bool(runtime_report().get('cpu_only'))
     temporary=tempfile.TemporaryDirectory() if path is None else None
     try:
         recorder=Recorder(Path(temporary.name)/'api.json' if temporary else path,selected)
         groups={}
         for endpoint in sorted(selected & routes.keys()):
             family,module,public,method=routes[endpoint]
+            if no_device and device_only(family,public,method):
+                recorder.rows[endpoint]=dict(status='not applicable',kind='device only',
+                    reason='this build declares no device (runtime_report cpu_only)')
+                continue
             groups.setdefault((family,public),(module,[]))[1].append(method)
         for (family,public),(module,methods) in groups.items():
             if family=='metadata':module.parameter_checks(recorder,public)
@@ -174,8 +200,9 @@ def verify(*,self_test=True,reference=None,retain=None,scope='all'):
             from ._verification_api_reference import DATA
             reference=DATA
         except ImportError:reference={}
+    not_applicable=sorted(e for e,r in clean['endpoints'].items() if r['status']=='not applicable')
     result=dict(format='mojolearn.api-verification.v1',status='OWED',expected=len(clean['expected']),
-        executed=len(clean['endpoints']),failures={e:r['error'] for e,r in clean['endpoints'].items() if r['status']=='failed'},
+        executed=len(clean['endpoints'])-len(not_applicable),not_applicable=not_applicable,failures={e:r['error'] for e,r in clean['endpoints'].items() if r['status']=='failed'},
         pending=clean['pending'],errors=[],faults={},vendor=clean['vendor'],scope='bounded endpoint fixtures',
         evidence=clean, scope_profile=scope, checks_by_kind={kind:sum(row['kind']==kind for row in clean['endpoints'].values())
             for kind in sorted({row['kind'] for row in clean['endpoints'].values()})})

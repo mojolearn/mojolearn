@@ -183,7 +183,8 @@ from core.member_notices import (
 from bindings.arena_prog_run import metric_inputs_run
 from core.labels_accuracy_plan import label_accuracy_plan
 from core.member_abi import (
-    MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_F64, MEMBER_I64, MEMBER_I32,
+    MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_OP_TRANSFORM, MEMBER_F64, MEMBER_I64,
+    MEMBER_I32,
 )
 
 #: The scorer codes (`MselSearchPlan.scoring` / `.scorers`): 0 the member's
@@ -809,7 +810,8 @@ def msel_scorer_row(code: Int, opts: MselScorerOptions, sel_base: Int) raises ->
             if not (label_row or row.family == _F_HINGE) or opts.resp == row.op:
                 raise Error("RuntimeError: a wrong response on a search scorer that reads no other response")
             row.wrong = True
-        elif row.family != _F_REG or (opts.resp != MEMBER_OP_PREDICT_PROBA and opts.resp != MEMBER_OP_DECISION):
+        elif row.family != _F_REG or (opts.resp != MEMBER_OP_PREDICT_PROBA and opts.resp != MEMBER_OP_DECISION
+                                      and opts.resp != MEMBER_OP_TRANSFORM):
             raise Error("RuntimeError: a scorer's own response on a search scorer other than a regression row")
         row.op = opts.resp
     # lane mf-r9d (door :3789): the other numeric_mode tier's route and a
@@ -2032,7 +2034,23 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
         var shown = String("")
         if row.param_word >= 0 and row.param_word < len(label_words):
             shown = label_words[row.param_word].copy()
-        if row.op != MEMBER_OP_PREDICT:
+        if row.op == MEMBER_OP_TRANSFORM:
+            # LANE w3f5-b: a transformer's transform(X) block (rows x `cols`
+            # output columns) against the side's target (rows x `row.outs`
+            # outputs, 1 for a 1-D y), as scikit-learn's regression metric
+            # reads y_pred = transform(X): `_check_reg_targets` refuses
+            # different numbers of outputs (metrics/_regression.py line 128),
+            # else the rows x outputs program a multi-output regressor's side runs
+            var outs = max(row.outs, 1)
+            if max(cols, 1) != outs:
+                raise Error("ValueError: y_true and y_pred have different number of output (" + String(outs) + "!="
+                            + String(max(cols, 1)) + ")")
+            var per_output = List[Float64]()
+            value = reg_metric_options_run(route, row.metric, truth, response, count, outs, w, row.mo, row.ff,
+                                           row.param, row.param_given, shown, per_output, warn)
+            if len(per_output) > 1:
+                _number_error(row, label_words, per_output)
+        elif row.op != MEMBER_OP_PREDICT:
             # lane mf-r9c (door :3670): over the make_scorer's own response
             value = _response_regression(route, label_words, row, truth, response, count, classes, cols, w, shown,
                                          warn)

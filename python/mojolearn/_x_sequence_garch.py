@@ -95,6 +95,18 @@ class GARCH(ParamsMixin):
     def __init__(self, p=1, o=0, q=1, mean="Constant", dist="normal", power=2.0, numeric_mode=None, device=None):
         _XSEQ(self, "garch_initialize", (p, o, q, mean, dist, power, numeric_mode, device), _XSEQ_CONTEXT)
 
+    def vendor_used(self):
+        """The backend this model runs on.
+
+        Returns
+        -------
+        str
+            ``'cpu'`` for a ``device="cpu"`` model, otherwise this
+            installation's vendor (``'metal'``, ``'cuda'``, ``'hip'`` or
+            ``'cpu'``), read from the compiled binary it uses.
+        """
+        return _XSEQ(self, "xseq_vendor_used", (), _XSEQ_CONTEXT)
+
     def fit(self, y, horizon=1):
         """Fit the model to one series or a batch of series.
 

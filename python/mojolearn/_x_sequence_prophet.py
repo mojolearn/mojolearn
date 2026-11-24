@@ -119,6 +119,18 @@ class ProphetForecaster(ParamsMixin):
                      seasonality_prior_scale, holidays_prior_scale, changepoint_prior_scale, max_iter,
                      numeric_mode, device), _XSEQ_CONTEXT)
 
+    def vendor_used(self):
+        """The backend this forecaster runs on.
+
+        Returns
+        -------
+        str
+            ``'cpu'`` for a ``device="cpu"`` forecaster, otherwise this
+            installation's vendor (``'metal'``, ``'cuda'``, ``'hip'`` or
+            ``'cpu'``), read from the compiled binary it uses.
+        """
+        return _XSEQ(self, "xseq_vendor_used", (), _XSEQ_CONTEXT)
+
     def add_seasonality(self, name, period, fourier_order, prior_scale=None):
         """Add a custom seasonality before :meth:`fit`.
 

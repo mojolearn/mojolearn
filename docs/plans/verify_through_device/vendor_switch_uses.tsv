@@ -1,0 +1,363 @@
+site	access	what_it_decides	survives_once_verify_passes_device
+CHANGELOG.md:96	write	documentation of the switch	yes while the product variable exists; edit verify wording
+CHANGELOG.md:587	write	documentation of the switch	yes while the product variable exists; edit verify wording
+bench/decomp_out_digest.py:6	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/decomp_out_digest.py:50	read	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/hr2_graph_embed_stages.py:2	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/hr2_graph_embed_stages.py:13	read	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/py_sequence/ab.py:9	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/py_sequence/ab.py:296	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/py_sequence/job.sh:77	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/speed/ann_cpu_speed.py:9	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/speed/ann_cpu_speed.py:18	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/speed/ann_cpu_speed.py:58	doc/message	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/speed/ann_cpu_speed.py:71	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/speed/ann_cpu_speed.py:74	read	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/speed/ann_cpu_speed.py:105	doc/message	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/speed/ann_cpu_speed.py:114	read	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/speed/forest_board_arms.py:9	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/speed/forest_speed_arm.py:571	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/speed/forest_speed_arm.py:575	read	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/speed/forest_speed_arm.py:576	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/speed/forest_speed_arm.py:1189	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/speed/sym_quality_identity.sh:50	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/speed/trees_cpu_speed.py:8	doc/message	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/speed/trees_cpu_speed.py:11	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/speed/trees_cpu_speed.py:22	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/speed/trees_cpu_speed.py:67	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/speed/trees_cpu_speed.py:70	read	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/speed/trees_cpu_speed.py:107	read	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/x_metrics_speed.py:16	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/x_metrics_speed.py:212	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/x_metrics_speed.py:215	read	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/x_metrics_speed.py:244	read	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bench/x_msel_speed.py:226	read	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+bindings/native_keys_unpack.mojo:335	doc/message	product: interns the key the native process pool writes	yes while the pool passes the vendor to its children
+bindings/native_process_pool_door.mojo:163	write	product: a native process-pool child gets the parent's vendor (MOJOLEARN_VENDOR=<vendor>)	yes: the children must load the parent's binding set; a device='cpu' parent on a GPU box would need the route passed, not the variable
+bindings/xcnn_native_pack.mojo:43	write	comment naming the CPU child of a smoke or a former Python test	n/a: comment; reword when the switch goes
+checks/native_tests/ann_ivfpq_host_filter.mojo:21	write	comment naming the CPU child of a smoke or a former Python test	n/a: comment; reword when the switch goes
+docs-site/notes/faq.md:55	write	documentation of the switch	yes while the product variable exists; edit verify wording
+docs-site/user_guide/devices.md:22	doc/message	documentation of the switch	yes while the product variable exists; edit verify wording
+docs-site/user_guide/devices.md:25	write	documentation of the switch	yes while the product variable exists; edit verify wording
+docs-site/user_guide/devices.md:59	write	documentation of the switch	yes while the product variable exists; edit verify wording
+docs/BENCH_BOARD.md:239	write	documentation of the switch	yes while the product variable exists; edit verify wording
+docs/BENCH_BOARD.md:253	write	documentation of the switch	yes while the product variable exists; edit verify wording
+docs/BYTE_LM_CPU_TRAINING.md:41	write	documentation of the switch	yes while the product variable exists; edit verify wording
+docs/PYTHON_RUNTIME_PROBE.md:5	write	documentation of the switch	yes while the product variable exists; edit verify wording
+docs/plans/PYTHON_AT_THE_BOUNDARY.md:338	write	documentation of the switch	yes while the product variable exists; edit verify wording
+docs/plans/PYTHON_AT_THE_BOUNDARY.md:358	write	documentation of the switch	yes while the product variable exists; edit verify wording
+docs/plans/VERIFY_THROUGH_DEVICE.md:10	write	documentation of the switch	yes while the product variable exists; edit verify wording
+docs/plans/VERIFY_THROUGH_DEVICE.md:30	write	documentation of the switch	yes while the product variable exists; edit verify wording
+docs/release/RUNTIME_QUALIFICATION.md:110	write	documentation of the switch	yes while the product variable exists; edit verify wording
+docs/rules/RULES_HISTORY.md:709	write	documentation of the switch	yes while the product variable exists; edit verify wording
+experiments/apple_fast_classical_20261006/build_pair.py:114	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+experiments/apple_fast_classical_20261006/build_pair.py:187	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+experiments/apple_fast_classical_20261006/run_pair.py:349	doc/message	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+experiments/apple_fast_classical_20261006/run_pair.py:363	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+experiments/apple_fast_trees/capture_algos.py:131	read	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+experiments/apple_fast_trees/pipeline.py:82	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+experiments/apple_fast_trees/pipeline.py:287	doc/message	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+experiments/performance_ideas/apple_fast/build_pair.py:37	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+experiments/performance_ideas/apple_fast/compile_campaign.py:100	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+experiments/performance_ideas/apple_fast/pair.py:63	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+experiments/performance_ideas/apple_fast/pair.py:88	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+experiments/performance_ideas/apple_fast/support.py:33	read	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+experiments/six_lane_integration/RESULT_COMPARISON.md:69	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+experiments/six_lane_integration/RESULT_COMPARISON.md:70	write	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+experiments/six_lane_integration/RESULT_COMPARISON.md:77	doc/message	bench/experiment: selects the arm's binding set	yes until the script passes device=; not verify
+packaging/linux/nogpu.py:38	doc/message	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/nogpu.py:105	write	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/nogpu.py:151	doc/message	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/nogpu.py:168	doc/message	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/nogpu_local.sh:9	doc/message	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/nogpu_local.sh:58	doc/message	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/sabotage.py:24	doc/message	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/sabotage.py:30	doc/message	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/sabotage.py:41	doc/message	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/sabotage.py:51	doc/message	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/sabotage.py:100	write	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/sabotage.py:231	write	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/sabotage.py:233	write	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/sabotage.py:240	doc/message	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/selector_test.py:96	write	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/selector_test.py:98	read	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/selector_test.py:282	doc/message	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/selector_test.py:292	write	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/selector_test.py:311	doc/message	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/selector_test.py:326	write	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/selector_test.py:340	doc/message	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/selector_test.py:343	doc/message	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/selector_test.py:350	doc/message	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/selector_test.py:359	doc/message	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/test_plugin_loader.py:65	doc/message	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/test_plugin_loader.py:69	doc/message	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/test_plugin_loader.py:175	write	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/test_plugin_loader.py:249	read	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/test_plugin_loader.py:252	write	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/test_plugin_loader.py:257	read	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/test_plugin_loader.py:262	read	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/test_plugin_loader.py:311	write	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/test_plugin_loader.py:316	read	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/test_plugin_loader.py:319	write	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+packaging/linux/test_plugin_loader.py:325	write	packaging smoke: selects the CPU-only or a vendor set of an installed wheel	yes: tests the product selector on installed wheels
+python/mojolearn/_backend.py:61	doc/message	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:141	write	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:155	write	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:548	doc/message	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:693	write	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:959	write	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:978	write	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:1259	read	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:1268	write	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:1292	write	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:1300	write	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:1311	doc/message	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:1317	doc/message	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:1325	write	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:1327	write	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:1347	doc/message	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:1359	doc/message	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:1363	doc/message	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:1380	write	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:1389	doc/message	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:1394	write	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:2033	write	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:2040	read	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:2049	write	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_backend.py:2956	doc/message	product: which binding set loads (cpu, cuda or hip) on Linux; =cpu also forces the host set on a GPU box	yes: cuda/hip choice on a mixed box and the CPU-only selection; the =cpu use for verify goes
+python/mojolearn/_check_both.py:41	write	verify/check: the CPU side runs in a child process with =cpu	no: replaced by device='cpu' in the same process (plan item 2)
+python/mojolearn/_check_both.py:747	write	verify/check: the CPU side runs in a child process with =cpu	no: replaced by device='cpu' in the same process (plan item 2)
+python/mojolearn/_check_both.py:749	write	verify/check: the CPU side runs in a child process with =cpu	no: replaced by device='cpu' in the same process (plan item 2)
+python/mojolearn/_check_both.py:1071	write	verify/check: the CPU side runs in a child process with =cpu	no: replaced by device='cpu' in the same process (plan item 2)
+python/mojolearn/_verify_recipe.py:652	write	verify/check: the CPU side runs in a child process with =cpu	no: replaced by device='cpu' in the same process (plan item 2)
+python/mojolearn/_verify_recipe.py:656	write	verify/check: the CPU side runs in a child process with =cpu	no: replaced by device='cpu' in the same process (plan item 2)
+python/mojolearn/_verify_recipe.py:657	doc/message	verify/check: the CPU side runs in a child process with =cpu	no: replaced by device='cpu' in the same process (plan item 2)
+python/mojolearn/_verify_recipe.py:658	write	verify/check: the CPU side runs in a child process with =cpu	no: replaced by device='cpu' in the same process (plan item 2)
+python/mojolearn/tests/test_autograd_save_resume.py:180	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_autograd_save_resume.py:182	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_autograd_save_resume.py:192	doc/message	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_byte_lm_host_context_contract.py:4	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_classical_numpy_free.py:395	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_fast_selector.py:73	doc/message	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_host_density_hash_native.py:280	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_ivfpq_cpu_gil.py:30	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_native_process_pool.py:45	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_native_process_pool.py:54	doc/message	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_native_process_pool.py:68	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_native_process_pool.py:71	doc/message	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_native_process_pool.py:80	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_native_process_pool.py:223	doc/message	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_native_process_pool.py:229	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_native_process_pool.py:249	read	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_native_process_pool.py:308	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_neural_repeat.py:77	doc/message	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_neural_repeat.py:90	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_parallel_causal_lm.py:467	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_ptx_fallback.py:74	doc/message	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_trees_repeat.py:17	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_trees_repeat.py:147	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_verify_model.py:282	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_verify_model.py:284	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_verify_reference_admit.py:591	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_weight_import.py:13	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_x_ann_repeat.py:88	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_x_cluster_twice.py:94	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_x_cnn_repeat.py:11	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_x_neighbors_repeat.py:13	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_x_neighbors_repeat.py:104	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_x_prep_scaler_options.py:8	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_x_prep_twice.py:88	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn/tests/test_x_sequence_repeat.py:115	write	test: runs a CPU column in a subprocess (or isolates the variable)	no if the file is DUPLICATE (goes with it); yes if it tests the product selector itself
+python/mojolearn_diagnostics.py:34	doc/message	diagnostics: prints the variable in the environment report	yes: diagnostic report
+tools/adapter_gate.py:143	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/adapter_gate.py:144	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/admit_identity_columns.sh:8	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/admit_identity_columns.sh:169	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/aft_idcheck.sh:4	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/aft_idcheck.sh:27	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/ag_opbench.py:537	read	tool: selects the binding set for its run	yes: tooling, not verify
+tools/algos_lane_check.py:22	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/algos_lane_check.py:323	doc/message	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/algos_lane_check.py:330	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/apple_fast_tree_capture.py:53	read	tool: selects the binding set for its run	yes: tooling, not verify
+tools/autograd_smoke.py:97	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/autograd_smoke.py:434	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/autograd_smoke.py:784	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/autograd_smoke.py:786	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/bench_board.py:549	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/bench_board_algos.py:3327	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/bench_board_host_quality.py:109	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/box_merged_verify.sh:109	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/box_merged_verify.sh:115	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/changed_lanes_check.sh:16	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/changed_lanes_check.sh:66	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/coverage_sabotage_batch.sh:127	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/cpu_wheel_checks.sh:48	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/hostpr_both.sh:15	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/identical_dart_bit_diagnostic.py:85	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/identical_gmm_power_bit_diagnostic.py:108	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/identical_wave_cnn_sgd_gate.py:43	read	tool: selects the binding set for its run	yes: tooling, not verify
+tools/identical_wave_runner.py:153	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/identical_wave_runner.py:292	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/identical_wave_supplement.py:36	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/identity_lanes/coverage_sabotage.tsv:204	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/identity_lanes/coverage_sabotage.tsv:252	doc/message	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/identity_lanes/coverage_sabotage_proven.tsv:6	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/idn_all_checks.py:155	doc/message	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/idn_all_checks.py:158	doc/message	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/idn_all_checks.py:167	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/idn_all_checks.py:180	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/kfeat_pair.py:130	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/linux_surface_qualification.sh:543	doc/message	tool: selects the binding set for its run	yes: tooling, not verify
+tools/logical_shard_identity.py:480	doc/message	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/mcd_compat_ab.sh:73	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/ops/box_job_prebuilt.patch:42	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/ops/lq:25	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/ops/release_gate_job.sh:415	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/performance_full_ab_queue.py:222	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/performance_ideas.py:449	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/pt_score_stable_verified.py:58	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/py_bugs/probe.py:5	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/py_bugs/probe.py:246	read	tool: selects the binding set for its run	yes: tooling, not verify
+tools/py_consolidated/timing.py:11	doc/message	tool: selects the binding set for its run	yes: tooling, not verify
+tools/py_consolidated/timing.py:21	read	tool: selects the binding set for its run	yes: tooling, not verify
+tools/py_misc/metrics_time.py:5	doc/message	tool: selects the binding set for its run	yes: tooling, not verify
+tools/py_misc/metrics_time.py:66	read	tool: selects the binding set for its run	yes: tooling, not verify
+tools/py_misc_msel/check.py:227	read	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/py_misc_msel/check.py:245	read	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/python_crossing_probe.py:382	read	tool: selects the binding set for its run	yes: tooling, not verify
+tools/qualify_forest_host_component.py:43	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/qualify_native_runtime_installed.py:825	doc/message	tool: selects the binding set for its run	yes: tooling, not verify
+tools/qualify_native_runtime_installed.py:827	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/qualify_release_host_boundary.py:55	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/qualify_umap_wheel.py:118	doc/message	tool: selects the binding set for its run	yes: tooling, not verify
+tools/record_identity_column.sh:29	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/record_identity_column.sh:186	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/release061_remote_build.sh:70	doc/message	tool: selects the binding set for its run	yes: tooling, not verify
+tools/release_linux_surface_qualification.sh:212	doc/message	tool: selects the binding set for its run	yes: tooling, not verify
+tools/release_public_runtime_evidence.py:155	doc/message	tool: selects the binding set for its run	yes: tooling, not verify
+tools/sequence_speed.py:11	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/sequence_speed.py:29	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/sequence_speed.py:345	read	tool: selects the binding set for its run	yes: tooling, not verify
+tools/sequence_speed.py:407	read	tool: selects the binding set for its run	yes: tooling, not verify
+tools/sgd_batch_ab.py:137	read	tool: selects the binding set for its run	yes: tooling, not verify
+tools/sgd_batch_ab.py:138	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/sgd_batch_ab.sh:14	doc/message	tool: selects the binding set for its run	yes: tooling, not verify
+tools/six_lane_ab_worker.py:165	doc/message	tool: selects the binding set for its run	yes: tooling, not verify
+tools/six_lane_compare_results.py:45	doc/message	tool: selects the binding set for its run	yes: tooling, not verify
+tools/six_lane_grid_run.md:77	doc/message	documentation of the switch	yes while the product variable exists; edit verify wording
+tools/svgp_fast_pair.py:86	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/test_adapter_gate.py:291	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/test_algos_lane_check_arms.py:52	doc/message	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/test_algos_lane_check_arms.py:54	doc/message	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/test_autograd_smoke.py:81	doc/message	tool: selects the binding set for its run	yes: tooling, not verify
+tools/test_autograd_smoke.py:85	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/test_autograd_smoke.py:102	doc/message	tool: selects the binding set for its run	yes: tooling, not verify
+tools/test_bench_board_host_quality.py:24	doc/message	tool: selects the binding set for its run	yes: tooling, not verify
+tools/test_bench_board_neural_headline.py:127	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/test_logical_shard_identity.py:240	doc/message	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/test_mojo_registrations.py:125	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/test_native_identity_type_imports.py:93	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/test_qualify_native_runtime_installed.py:865	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/test_qualify_native_runtime_installed.py:871	doc/message	tool: selects the binding set for its run	yes: tooling, not verify
+tools/test_release_measurement_smoke.py:259	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/test_release_measurement_smoke.py:263	doc/message	tool: selects the binding set for its run	yes: tooling, not verify
+tools/test_release_public_runtime_evidence.py:77	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/test_release_public_runtime_evidence.py:133	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/test_six_lane_compare_results.py:181	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/tests/overhead_generate_guards_fixture.py:10	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/tests/overhead_mamba_bwd_fixture.py:12	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/tests/overhead_module_lookup_fixture.py:13	write	tool: selects the binding set for its run	yes: tooling, not verify
+tools/tests/test_check_both_trace.py:11	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/tests/test_check_both_trace.py:254	read	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/tests/test_check_both_trace.py:325	doc/message	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/verify_coverage_audit.py:1584	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/verify_coverage_audit.py:2689	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/verify_lanes.py:482	write	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/verify_neural_provider.py:49	doc/message	tool: runs a CPU identity column/lane in a child process with =cpu	no: the tool's CPU column moves to device='cpu' (or stays on CPU-only runners)
+tools/xprep_pool_pair.py:82	write	tool: selects the binding set for its run	yes: tooling, not verify
+verification/records/cells/verification_faults/2026-10-26-0860/core-1-fixed-r2/clean_cpu.json:1864	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/core-1-fixed-r2/restored_cpu.json:1864	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/core-1-fixed-r2/sab_cpu.json:1864	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/core-2/clean_cpu.json:1581	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/core-2/restored_cpu.json:1581	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/core-2/sab_cpu.json:1581	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/core-3/clean_cpu.json:1582	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/core-3/restored_cpu.json:1582	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/core-3/sab_cpu.json:1548	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/core-4-guard-r2/clean_cpu.json:1690	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/core-4-guard-r2/restored_cpu.json:1690	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/core-4-guard-r2/sab_cpu.json:1690	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/runtime_classical-1/clean_cpu.json:1583	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/runtime_classical-1/restored_cpu.json:1583	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/runtime_classical-1/sab_cpu.json:1533	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/runtime_classical-2/clean_cpu.json:1583	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/runtime_classical-2/restored_cpu.json:1583	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/runtime_classical-2/sab_cpu.json:1533	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/runtime_classical-3/clean_cpu.json:1686	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/runtime_classical-3/restored_cpu.json:1686	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/runtime_classical-3/sab_cpu.json:1686	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/svm-1/clean_cpu.json:1585	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/svm-1/restored_cpu.json:1585	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/svm-1/sab_cpu.json:1585	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/tokenizer-1/clean_cpu.json:1916	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/tokenizer-1/restored_cpu.json:1916	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/tokenizer-1/sab_cpu.json:1882	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/tokenizer-2/clean_cpu.json:1694	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/tokenizer-2/restored_cpu.json:1694	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/tokenizer-2/sab_cpu.json:1557	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/tokenizer-3/clean_cpu.json:1634	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/tokenizer-3/restored_cpu.json:1634	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/tokenizer-3/sab_cpu.json:1634	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/tokenizer-4/clean_cpu.json:1580	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/tokenizer-4/restored_cpu.json:1580	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/tokenizer-4/sab_cpu.json:1580	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/training-1/clean_cpu.json:1575	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/training-1/restored_cpu.json:1575	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/training-1/sab_cpu.json:1575	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x-linear-spearman/clean.json:1575	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x-linear-spearman/restored.json:1572	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x-linear-spearman/sabotaged.json:1575	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_cnn-1/clean_cpu.json:1625	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_cnn-1/restored_cpu.json:1625	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_cnn-1/sab_cpu.json:1625	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_decomp-1/clean_cpu.json:1587	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_decomp-1/restored_cpu.json:1587	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_decomp-1/sab_cpu.json:1587	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_metrics-1/clean_cpu.json:1594	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_metrics-1/restored_cpu.json:1594	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_metrics-1/sab_cpu.json:1594	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_neighbors-1-verifier-r3/clean_cpu.json:1577	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_neighbors-1-verifier-r3/restored_cpu.json:1577	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_neighbors-1-verifier-r3/sab_cpu.json:1543	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_neighbors-1/clean_cpu.json:1691	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_neighbors-1/restored_cpu.json:1691	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_neighbors-1/sab_cpu.json:1691	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_neighbors-2-verifier-r2/clean_cpu.json:1582	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_neighbors-2-verifier-r2/restored_cpu.json:1582	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_neighbors-2-verifier-r2/sab_cpu.json:1533	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_neighbors-3/clean_cpu.json:1590	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_neighbors-3/restored_cpu.json:1590	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_neighbors-3/sab_cpu.json:1533	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_neighbors-4/clean_cpu.json:1631	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_neighbors-4/restored_cpu.json:1631	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_neighbors-4/sab_cpu.json:1631	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_sequence-1/clean_cpu.json:1574	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_sequence-1/restored_cpu.json:1574	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/cells/verification_faults/2026-10-26-0860/x_sequence-1/sab_cpu.json:1574	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/identity/retained/04eb71b7f043bcd41ee83ad75e6de88237c0314062b5363c944b9522446174d5/nvidia-rtx-sm_89.lanes-eaeec399.identical.json:218979	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/identity/retained/3b2eb1ad616e7c5e6748eab6425fbd8365be22a558f1f2b02bb1f1ae707bd194/nvidia-rtx-sm_89.lanes-eaeec399.identical.json:218979	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/identity/retained/3bc2cc666495ba5643150ab4e9c75416fe3a1f13f29dff92ae90d7d765be110e/cpu.identical.json:277559	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/identity/retained/3f09e208f5179f671c7a34c46c9911d16b343353c16efa3b9faadc1b1faf7c7f/cpu.identical.json:262635	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/identity/retained/4137d35d185997a8c33016008e0dd003945f6d79cbfbd8ba3c3596b4e3550822/amd-mi300x-gfx942.lanes-eaeec399.identical.json:218979	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/identity/retained/46fa1f5ea5d939b89e62cd087e16ad018708dcce95f7d90a96aa88ae98fb67c2/amd-mi300x-gfx942.lanes-eaeec399.identical.json:218979	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/identity/retained/6976705f6e4bb7277477d94047ff198ce27efcbd6d6b2b803be1af221f1e34da/cpu.identical.json:218485	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/identity/retained/8edf5d5855549b70ad5be6a2073464b5517827d193b599a48fc8b9737a2d0007/cpu.lanes-a0701798.identical.json:2684	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/identity/retained/a43ec73cd12d9d2e89c47a884a5678ece90f0cf690159a992b542d88559929fc/cpu.lanes-290621ed.identical.json:6167	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/identity/retained/bbbd01f19872bfeab5fc94cfb7a38fae5838dd5e2fbfcee47861d72ff70234bf/cpu.identical.json:262611	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/identity/retained/d1af6a75a5051e6efe684afb67bd2a508a401a43ae29d9fd6623272b25678880/amd-mi300x-gfx942.lanes-b5b915e8.identical.json:263106	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/identity/retained/dacd441b0e2a90b9cffa8cc55cc779b2ecd6979f5553b6eb41d561b81f09128d/nvidia-rtx-sm_89.lanes-b5b915e8.identical.json:263106	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/release_verification/2026-10-26_pypi_0860/final-fixture-package/apple.json:1029	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+verification/records/release_verification/2026-10-26_pypi_0860/final-fixture-package/cpu.json:2188	write	recorded environment of a stored identity record (data)	yes: historical record, never edited
+x_decomp/checks/sabotage/e2e_p2_options.patch:20	read	sabotage arm: faults ONE side only by reading the variable at run time	no: with device= both sides run in one process; the arm must key on the route (the device of the call), not the environment
+x_neighbors/checks/sabotage/870_gamma_scale_device_column.patch:17	read	sabotage arm: faults ONE side only by reading the variable at run time	no: with device= both sides run in one process; the arm must key on the route (the device of the call), not the environment
