@@ -2359,11 +2359,14 @@ def _multioutput_regressor_fit(model: PythonObject, X: PythonObject, y: PythonOb
                                context: PythonObject) raises -> PythonObject:
     var jobs = _jobs(model, False)
     var xt = _xt(py_fields(model), context)
-    var Xa = _x_array(X, context)
+    # THE FOLD IN PLACE (lane vdf-meta4; the class opts in with `_mojolearn_device_rows`): a DeviceRows fold is
+    # read out of its base (`_meta_x_fit`): the members draw the fold's rows (`_fit_members_x`), a row-index
+    # member taking them on the device out of the base model selection keeps resident.
+    var mx = _meta_x_fit(X, context)
     _multioutput_y(y)
     var Ya = _f32_array(y, 2, "y", context)
-    if _rows(Ya) != _rows(Xa):
-        raise Error("y has " + String(_rows(Ya)) + " rows, X has " + String(_rows(Xa)))
+    if _rows(Ya) != mx.n:
+        raise Error("y has " + String(_rows(Ya)) + " rows, X has " + String(mx.n))
     var nk = trees_keys()
     var est = _attr(model, nk[].k_estimator, PythonObject(None))
     _require_member(est, _owner(model), context)
@@ -2372,12 +2375,19 @@ def _multioutput_regressor_fit(model: PythonObject, X: PythonObject, y: PythonOb
     var device = py_get(py_fields(model), "device")
     var origin = meta_device_origin(model, device)
     meta_members_device(device, Python.list(est), _owner(model), origin, context, trees_builtins())
-    var weights = _member_weights(Python.list(PythonObject(None)), Python.list(est), sample_weight, _rows(Xa), context)
+    var weights = _member_weights(Python.list(PythonObject(None)), Python.list(est), sample_weight, mx.n, context)
     _set(model, "_multi_ridge", PythonObject(None))
     var table = _ridge_multi_entry(model, est, weights, context)
     if table is not None and _cols(Ya) > 0:
-        return _multioutput_ridge_fit(model, table, Xa, Ya, device, origin, context)
-    var n = _rows(Xa)
+        # The one-program ridge (FAST + Apple only, glm/impl/ridge_multi.mojo MULTIOUT_RIDGE) reads dense host
+        # words: a fold's rows are gathered ONCE here, as the admission gathered them before (owed: its four
+        # programs reading the estimators store's slot of the base, the fold taken on the device).
+        var Xr = mx.x
+        if mx.draw is not None:
+            Xr = _gather(xt, trees_address(mx.x), mx.base_rows, mx.d, mx.draw, _arange(xt, mx.d, context), context)
+            _ = mx.x  # read through its address above
+        return _multioutput_ridge_fit(model, table, Xr, Ya, device, origin, context)
+    var n = mx.n
     var fitted = Python.list()
     _set(model, "estimators_", fitted)
     var rows = _arange(xt, n, context)
@@ -2393,10 +2403,10 @@ def _multioutput_regressor_fit(model: PythonObject, X: PythonObject, y: PythonOb
         _ = py_call(column_given.append, Python.tuple(y, PythonObject(None), PythonObject(j)))
     # The columns are independent members: one native member set (parallel;
     # a member the set does not take is refused in its refuser's words).
-    _fit_members(clones, Xa, n, _cols(Xa), columns, True, weights, PythonObject(None), jobs, context, column_given)
+    _fit_members_x(clones, mx, columns, True, weights, PythonObject(None), jobs, context, column_given)
     for j in range(len(clones)):  # driver-loop: over the output columns (one member each)
         _ = py_call(fitted.append, clones[j])
-    _set(model, "n_features_in_", PythonObject(_cols(Xa)))
+    _set(model, "n_features_in_", PythonObject(mx.d))
     _set(model, "_fitted", PythonObject(True))
     return model
 

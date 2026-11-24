@@ -2224,6 +2224,10 @@ class MultiOutputRegressor(_MetaRegressorScore, _TreesWrapperBase):
     >>> model.predict(X[:5]).shape
     (5, 2)
     """
+    #: Lane vdf-meta4: fit takes a model-selection fold (`_arena_io.DeviceRows`)
+    #: and reads it out of its base, the members taking the fold's rows on the
+    #: device (bindings/trees_public_meta_door.mojo `_multioutput_regressor_fit`).
+    _mojolearn_device_rows = True
     # The multi-output META member kind (core/ensemble_member.mojo META_MULTI_REGRESSOR).
     _mojolearn_member = (39, 13)
     _estimator_type = "regressor"
