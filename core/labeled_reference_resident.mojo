@@ -199,9 +199,13 @@ def labeled_reference_predict_resident(
     eps: Float64,
     has_thresh: Bool,
     out_labels_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    src_rows: Optional[DeviceBuffer[DType.float32]] = None,
 ) raises:
     """`labeled_reference_predict` over a resident reference set: the same
-    refusals, the same kernel and launch chunks; only the queries cross."""
+    refusals, the same kernel and launch chunks; only the queries cross.
+    `src_rows`: the query rows already on the device (a slot of the
+    estimators store, lane vdf-scope-cluster6): one device copy, and
+    `queries_ptr` is not read; not for cosine (its unit rows are the host's)."""
     var entry = labeled_reference_lease(handle)
     if entry.n_features != n_features or entry.metric != metric:
         raise Error(
@@ -220,7 +224,13 @@ def labeled_reference_predict_resident(
     var out_refs = entry.ctx.enqueue_create_buffer[DType.int32](n_queries)
     entry.ctx.synchronize()
     var uq = List[Float32]()
-    if metric == LABELED_METRIC_COSINE:
+    if src_rows:
+        if metric == LABELED_METRIC_COSINE:
+            raise Error("labeled_reference_predict_resident: cosine query rows are made unit on the host")
+        if n_queries * d > 0:
+            entry.ctx.enqueue_copy(dst_buf=queries,
+                                   src_buf=src_rows.value().create_sub_buffer[DType.float32](0, n_queries * d))
+    elif metric == LABELED_METRIC_COSINE:
         var qq = List[Float32](unsafe_uninit_length=n_queries * d)
         unsafe_memcpy(dest=qq.unsafe_ptr(), src=queries_ptr, count=n_queries * d)
         uq = cosine_unit_rows(qq, n_queries, d, "labeled_reference_predict")

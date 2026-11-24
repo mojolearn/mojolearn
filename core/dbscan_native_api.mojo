@@ -6,7 +6,7 @@ from core.native_descriptor_fixed_call import native_descriptor_call_fixed
 from core.admitted_weights import admitted_fill
 
 comptime DBSCAN_NATIVE_ABI = "mojolearn.dbscan.native.v1"
-comptime DBSCAN_NATIVE_COUNT = 12
+comptime DBSCAN_NATIVE_COUNT = 13
 comptime DBSCAN_MODE = 0
 comptime DBSCAN_VENDOR = 1
 comptime DBSCAN_CAPABILITIES = 2
@@ -26,6 +26,10 @@ comptime DBSCAN_RESIDENT_QUERY = 9
 # labels, core mask and core arrays as the host-address forms.
 comptime DBSCAN_FIT_STORE = 10
 comptime DBSCAN_CORE_GATHER_STORE = 11
+# DBSCAN_RESIDENT_QUERY's words with `query` a slot id of the same store (lane vdf-scope-cluster6: a
+# model-selection fold's test rows taken on the device; non-cosine metrics: the cosine query rows are made unit
+# on the host by `cosine_unit_rows`, whose refusal words the member keeps on the gathered form).
+comptime DBSCAN_RESIDENT_QUERY_STORE = 12
 comptime DBSCAN_CAP_DEV_STORE = 2
 
 
@@ -141,6 +145,8 @@ trait DBSCANNativeKernels:
     def fit_store(r: DBSCANFitRequest) raises -> Int: ...
     @staticmethod
     def core_gather_store(r: DBSCANGatherRequest) raises -> Int: ...
+    @staticmethod
+    def resident_store(r: DBSCANResidentQuery) raises -> Int: ...
 
 
 def dbscan_native_dispatch[K: DBSCANNativeKernels](operation: Int, aa: Int, na: Int,
@@ -202,14 +208,14 @@ def dbscan_native_dispatch[K: DBSCANNativeKernels](operation: Int, aa: Int, na: 
             var f = Pointer[Float64, ImmUntrackedOrigin](unsafe_from_address=ff)
             var request = DBSCANQueryRequest(a[0], a[1], a[2], a[3], a[4], a[5], p[0], p[1], p[2], p[3], Bool(p[4]), f[0])
             value = K.query(request)
-        elif operation == DBSCAN_RESIDENT_QUERY:
+        elif operation == DBSCAN_RESIDENT_QUERY or operation == DBSCAN_RESIDENT_QUERY_STORE:
             if na != 2 or np != 5 or nf != 1:
                 raise Error("DBSCAN native ABI: resident span length mismatch")
             var a = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=aa)
             var p = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=pp)
             var f = Pointer[Float64, ImmUntrackedOrigin](unsafe_from_address=ff)
             var request = DBSCANResidentQuery(a[0], a[1], p[0], p[1], p[2], p[3], Bool(p[4]), f[0])
-            value = K.resident(request)
+            value = K.resident(request) if operation == DBSCAN_RESIDENT_QUERY else K.resident_store(request)
         else:
             raise Error("DBSCAN native ABI: unknown operation")
         Pointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = value
@@ -299,6 +305,13 @@ struct DBSCANNativeDriver(Copyable, Movable):
         var p: Array[Int, 5] = [r.handle, r.queries, r.features, r.metric, Int(r.has_threshold)]
         var f: Array[Float64, 1] = [r.eps]
         return native_descriptor_call_fixed(self.entry, DBSCAN_RESIDENT_QUERY, a, p, f)
+
+    def resident_store(self, r: DBSCANResidentQuery) raises -> Int:
+        """`resident` with `r.query` a slot id of the image's resident store (DBSCAN_RESIDENT_QUERY_STORE)."""
+        var a: Array[Int, 2] = [r.query, r.dst]
+        var p: Array[Int, 5] = [r.handle, r.queries, r.features, r.metric, Int(r.has_threshold)]
+        var f: Array[Float64, 1] = [r.eps]
+        return native_descriptor_call_fixed(self.entry, DBSCAN_RESIDENT_QUERY_STORE, a, p, f)
 
 
 def dbscan_empty_labels(address: Int, queries: Int):
