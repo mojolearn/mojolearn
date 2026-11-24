@@ -2639,15 +2639,11 @@ def _scoring_many(scoring: PythonObject, context: PythonObject, b: PythonObject)
 
 def _effective_kwargs(params: PythonObject, kwargs: PythonObject, b: PythonObject) raises -> PythonObject:
     """A scorer's metric options as its metric call reads them: the metric
-    function's keyword defaults (`params`, its signature's parameters; None:
+    function's keyword defaults (`params`, its plan's `defaults` dict; None:
     unknown) updated with the scorer's own kwargs."""
     var out = Python.dict()
     if params is not None:
-        var names = py_call(b.list, params)
-        for i in range(len(names)):  # small-loop(the metric's parameters, once per admission)
-            var default = py_call(b.getattr, params[names[i]], PythonObject("default"))
-            if default is not py_call(b.getattr, params[names[i]], PythonObject("empty")):
-                py_setitem(out, names[i], default)
+        out = py_call(b.dict, params)
     var given = py_call(b.list, py_call(kwargs.items))
     for i in range(len(given)):  # small-loop(the scorer's kwargs)
         py_setitem(out, given[i][0], given[i][1])
@@ -3249,11 +3245,14 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
     var fbeta = String(py=py_call(b.getattr, func, PythonObject("__name__"), PythonObject(""))) == "fbeta_score"
     var module = py_call(b.getattr, func, PythonObject("__module__"), PythonObject(None))
     var eq = native_loaded_module("operator").eq
+    # The metric's keyword defaults: its connected plan's table (`defaults`, the signature's keyword defaults,
+    # connected at import). Lane w3f3-f: this read `inspect.signature(func)` through
+    # `native_loaded_module("inspect")`, which no import connects, so it always raised, the bare `except` left no
+    # defaults, and a make_scorer's sample_weight looked like a keyword its metric lacks (`w_refused`: every side
+    # refused "unexpected keyword argument" at core/msel_scorer_run.mojo:1914).
     var params = PythonObject(None)
-    try:
-        params = py_call(native_loaded_module("inspect").signature, func).parameters
-    except:
-        params = PythonObject(None)  # no signature: the kwargs are compared as given
+    if metric_plan is not None:
+        params = py_get(metric_plan, "defaults")
     var missing = py_call(b.object)
     try:
         var got_kwargs = _effective_kwargs(params, py_call(b.getattr, got, PythonObject("_kwargs")), b)
