@@ -13,9 +13,11 @@ export raised). No Python participates.
 
 The cases are independent units and run across the native host worker pool
 (the host column publishes the host entry; the device entry's runs are
-exercised by the GPU columns' base binding). The fold-store case is the only
-unit that touches the process store. Run in a fresh process (the first check
-needs an unpublished table).
+exercised by the GPU columns' base binding, and the layout V3 stored-code
+operations on both columns by `msel_split_stratified_res`). The fold-store
+case and the layout V3 cases (10, 11, 18: each puts and frees its own
+blocks) touch the process store, whose bookkeeping is locked. Run in a fresh
+process (the first check needs an unpublished table).
 """
 from core.entry_table import entry_ref_same
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -24,18 +26,18 @@ from checks.native_tests.testsuite_cases import check_cases, require
 from core.msel_convert import MSEL_F32
 from core.msel_entry_table import (
     MselEntryKey, msel_table_entry, MSEL_HELPERS_ABI, MH_OP_COUNT, MH_ARANGE_I64, MH_RETIRED_5, MH_RETIRED_10,
-    MH_RETIRED_13, MH_RETIRED_14, MH_RETIRED_16, MH_RETIRED_20,
+    MH_RETIRED_11, MH_RETIRED_12, MH_RETIRED_13, MH_RETIRED_14, MH_RETIRED_16, MH_RETIRED_20,
 )
 from core.msel_helpers_host import publish_msel_helpers_host
 from core.msel_helpers_calls import (
     msel_helpers_ref, msel_helper, msel_arange_i64, msel_count_mask_u8, msel_select_mask_u8_i64, msel_mask_from_indices_u8,
     msel_leave_range_i64, msel_fold_ids, msel_select_fold_i64, msel_select_folds_i64,
-    msel_gather_i32, msel_first_seen_i32, msel_strat_fold_assign_i32,
-    msel_store_free, msel_proba_column, msel_split_table_i32,
+    msel_gather_i32, msel_store_free, msel_proba_column, msel_split_table_i32,
     msel_group_fold_perm_i32, msel_store_put, msel_store_take_rows,
+    msel_first_seen_res, msel_strat_fold_assign_res, msel_select_folds_res, msel_fold_ids_res,
 )
 
-comptime MSEL_HELPER_CASES = 18
+comptime MSEL_HELPER_CASES = 19
 
 
 def _key() -> MselEntryKey:
@@ -230,10 +232,13 @@ def _operation(unit: Int) raises:
         _ = dst
     elif unit == 9:
         # 10 (gather_i64), 13 (store_alloc), 14 (store_read) and 16 (scatter_rows) were retired with
-        # cross_val_predict's identity placement and learning_curve's per-fold gather (lane vdf-scope-cv):
-        # the reserved numbers refuse. Fail-proof: drop one of them from msel_check_spans: that call answers.
-        var retired: List[Int] = [MH_RETIRED_10, MH_RETIRED_13, MH_RETIRED_14, MH_RETIRED_16]
-        for i in range(len(retired)):  # small-loop(the four retired operation numbers)
+        # cross_val_predict's identity placement and learning_curve's per-fold gather (lane vdf-scope-cv),
+        # 11 (first_seen_i32) and 12 (strat_fold_assign_i32) with the splitters' move to the stored-code
+        # forms (lane vdf-scope-split): the reserved numbers refuse. Fail-proof: drop one of them from
+        # msel_check_spans: that call answers.
+        var retired: List[Int] = [MH_RETIRED_10, MH_RETIRED_11, MH_RETIRED_12, MH_RETIRED_13, MH_RETIRED_14,
+                                  MH_RETIRED_16]
+        for i in range(len(retired)):  # small-loop(the six retired operation numbers)
             try:
                 var none: Array[Int, 0] = []
                 _ = msel_helper(k, retired[i], none, none)
@@ -241,31 +246,74 @@ def _operation(unit: Int) raises:
             except problem:
                 require("did not refuse" not in String(problem), String(problem))
     elif unit == 10:
+        # Layout V3: the stored codes' first-seen sizes and rank table (code 2 first, then 0, then 1).
         var codes: List[Int32] = [2, 0, 2, 1]
-        var enc: List[Int32] = [9, 9, 9, 9]
+        var held = msel_store_put(k, _a32(codes), 16)
         var counts: List[Int64] = [0, 0, 0]
-        require(msel_first_seen_i32(k, _a32(codes), 4, 3, _a32(enc), _a(counts)) == 3, "first_seen classes")
-        require(enc[0] == 0 and enc[1] == 1 and enc[2] == 0 and enc[3] == 2, "first_seen ranks")
-        require(counts[0] == 2 and counts[1] == 1 and counts[2] == 1, "first_seen counts")
+        var rank: List[Int32] = [9, 9, 9]
+        require(msel_first_seen_res(k, held, 4, 3, _a(counts), _a32(rank)) == 3, "first_seen_res classes")
+        require(counts[0] == 2 and counts[1] == 1 and counts[2] == 1, "first_seen_res counts")
+        require(rank[0] == 1 and rank[1] == 2 and rank[2] == 0, "first_seen_res rank table")
+        var absent: List[Int32] = [2, 2, 0]
+        var absent_id = msel_store_put(k, _a32(absent), 12)
+        require(msel_first_seen_res(k, absent_id, 3, 3, _a(counts), _a32(rank)) == 2, "first_seen_res present")
+        # code 1 has no row: it takes the position after the present codes
+        require(rank[0] == 1 and rank[1] == 2 and rank[2] == 0 and counts[2] == 0, "first_seen_res absent code")
+        _ = msel_store_free(k, absent_id)
+        _ = msel_store_free(k, held)
         _ = codes
-        _ = enc
+        _ = absent
         _ = counts
+        _ = rank
     elif unit == 11:
-        var enc: List[Int32] = [0, 0]
+        # Layout V3: one class of two rows dealt over two folds, then each fold's rows out of the stored block;
+        # the stored codes [1, 1] renumbered by the rank table [1, 0] are the first-seen codes [0, 0].
+        var codes: List[Int32] = [1, 1]
+        var held = msel_store_put(k, _a32(codes), 8)
+        var rank: List[Int32] = [1, 0]
         var alloc: List[Int64] = [1, 1]
         var counts: List[Int64] = [2]
-        var dst: List[Int32] = [9, 9]
-        require(msel_strat_fold_assign_i32(k, _a32(enc), 2, 1, 2, _a(alloc), 0, _a(counts), _a32(dst)) == 0,
-                "strat_fold_assign status")
-        require(dst[0] == 0 and dst[1] == 1, "strat_fold_assign_i32")
+        var sizes: List[Int64] = [0, 0]
+        # two words a side: the disagreeing plan below sizes fold 0's test side 2
+        var t0: List[Int64] = [9, 9]
+        var r0: List[Int64] = [9, 9]
+        var t1: List[Int64] = [9, 9]
+        var r1: List[Int64] = [9, 9]
+        var tests: List[Int64] = [Int64(_a(t0)), Int64(_a(t1))]
+        var trains: List[Int64] = [Int64(_a(r0)), Int64(_a(r1))]
+        var folds = msel_strat_fold_assign_res(k, held, 2, 1, 2, _a32(rank), 2, _a(alloc), 0, _a(counts), _a(sizes))
+        require(sizes[0] == 1 and sizes[1] == 1, "strat_fold_assign_res sizes")
+        require(msel_select_folds_res(k, folds, 2, 2, _a(sizes), _a(tests), _a(trains)) == -1, "stored plan agrees")
+        require(t0[0] == 0 and r0[0] == 1 and t1[0] == 1 and r1[0] == 0, "strat_fold_assign_res folds")
+        var wrong: List[Int64] = [2, 0]
+        require(msel_select_folds_res(k, folds, 2, 2, _a(wrong), _a(tests), _a(trains)) == 0, "stored plan disagrees")
+        _ = msel_store_free(k, folds)
         var perm: List[Int64] = [1, 0]
-        _ = msel_strat_fold_assign_i32(k, _a32(enc), 2, 1, 2, _a(alloc), _a(perm), _a(counts), _a32(dst))
-        require(dst[0] == 1 and dst[1] == 0, "strat_fold_assign_i32 permuted")
-        _ = enc
+        folds = msel_strat_fold_assign_res(k, held, 2, 1, 2, _a32(rank), 2, _a(alloc), _a(perm), _a(counts), _a(sizes))
+        _ = msel_select_folds_res(k, folds, 2, 2, _a(sizes), _a(tests), _a(trains))
+        require(t0[0] == 1 and t1[0] == 0, "strat_fold_assign_res permuted")
+        _ = msel_store_free(k, folds)
+        var short: List[Int64] = [3]
+        try:
+            _ = msel_strat_fold_assign_res(k, held, 2, 1, 2, _a32(rank), 2, _a(alloc), 0, _a(short), _a(sizes))
+            raise Error("strat_fold_assign_res with counts that miss the rows did not refuse")
+        except problem:
+            require("did not refuse" not in String(problem), String(problem))
+        _ = msel_store_free(k, held)
+        _ = codes
+        _ = rank
         _ = alloc
         _ = counts
+        _ = sizes
+        _ = t0
+        _ = r0
+        _ = t1
+        _ = r1
+        _ = tests
+        _ = trains
+        _ = wrong
         _ = perm
-        _ = dst
+        _ = short
     elif unit == 12:
         # The only unit that touches the process fold store.
         # Layout V2: a resident copy of host rows and a gather of two of them.
@@ -351,6 +399,41 @@ def _operation(unit: Int) raises:
             raise Error("an inverted leave range did not refuse")
         except problem:
             require("did not refuse" not in String(problem), String(problem))
+    elif unit == 18:
+        # Layout V3: the stratified default folds of stored codes into a stored fold block.
+        var codes: List[Int32] = [0, 0, 1, 1]
+        var held = msel_store_put(k, _a32(codes), 16)
+        var class_counts: List[Int64] = [0, 0]
+        var fold_counts: List[Int64] = [0, 0]
+        var folds = msel_fold_ids_res(k, held, 4, 2, 2, _a(class_counts), _a(fold_counts))
+        _ = msel_store_free(k, held)
+        require(class_counts[0] == 2 and class_counts[1] == 2 and fold_counts[0] == 2 and fold_counts[1] == 2,
+                "fold_ids_res counts")
+        var t0: List[Int64] = [9, 9]
+        var r0: List[Int64] = [9, 9]
+        var t1: List[Int64] = [9, 9]
+        var r1: List[Int64] = [9, 9]
+        var tests: List[Int64] = [Int64(_a(t0)), Int64(_a(t1))]
+        var trains: List[Int64] = [Int64(_a(r0)), Int64(_a(r1))]
+        require(msel_select_folds_res(k, folds, 4, 2, _a(fold_counts), _a(tests), _a(trains)) == -1,
+                "fold_ids_res plan agrees")
+        require(t0[0] == 0 and t0[1] == 2 and r0[0] == 1 and r0[1] == 3, "fold_ids_res fold 0")
+        require(t1[0] == 1 and t1[1] == 3 and r1[0] == 0 and r1[1] == 2, "fold_ids_res fold 1")
+        _ = msel_store_free(k, folds)
+        try:
+            _ = msel_select_folds_res(k, folds, 4, 2, _a(fold_counts), _a(tests), _a(trains))
+            raise Error("a freed fold block did not refuse")
+        except problem:
+            _refuses(problem, "is not live")
+        _ = codes
+        _ = class_counts
+        _ = fold_counts
+        _ = t0
+        _ = r0
+        _ = t1
+        _ = r1
+        _ = tests
+        _ = trains
     else:
         raise Error("no model-selection helper case " + String(unit))
 
