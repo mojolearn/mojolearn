@@ -80,32 +80,11 @@ from metrics.impl.stats.detail.v_measure_compose import v_measure_from
 from metrics.impl.stats.detail.batched.silhouette_score import DISTANCE_L2_SQRT_UNEXPANDED
 from metrics.impl.stats.detail.trustworthiness_score import trustworthiness_rank_sum_dx
 
-comptime MS_ACCURACY = 0
-comptime MS_ACCURACY_W = 1
-comptime MS_RAND = 2
-comptime MS_ARI = 3
-comptime MS_MI = 4
-comptime MS_FM = 5
-comptime MS_HOMOG = 6
-comptime MS_COMPL = 7
-comptime MS_V_MEASURE = 8
-comptime MS_HCV = 9
-comptime MS_ENTROPY = 10
-comptime MS_R2 = 11
-comptime MS_R2_W = 12
-comptime MS_MSE = 13
-comptime MS_MAE = 14
-comptime MS_RMSE = 15
-comptime MS_KL = 16
-comptime MS_ROC_AUC = 17
-comptime MS_PR_CURVE = 18
-comptime MS_LOG_LOSS = 19
-comptime MS_CONFUSION = 20
-comptime MS_PRFS = 21
-comptime MS_SILHOUETTE = 22
-comptime MS_TRUST = 23
-comptime MS_ENCODE = 24
-comptime MS_OP_COUNT = 25
+from metrics.slot_ops import (
+    MS_ACCURACY, MS_ACCURACY_W, MS_RAND, MS_ARI, MS_MI, MS_FM, MS_HOMOG, MS_COMPL, MS_V_MEASURE, MS_HCV,
+    MS_ENTROPY, MS_R2, MS_R2_W, MS_MSE, MS_MAE, MS_RMSE, MS_KL, MS_ROC_AUC, MS_PR_CURVE, MS_LOG_LOSS,
+    MS_CONFUSION, MS_PRFS, MS_SILHOUETTE, MS_TRUST, MS_ENCODE,
+)
 
 comptime _OutF32 = MutPointer[Float32, MutAnyOrigin]
 comptime _OutI64 = MutPointer[Int64, MutAnyOrigin]

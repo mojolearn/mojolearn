@@ -93,6 +93,17 @@ struct McSlots(Movable):
             return -1
         return self.resident.slot(value, Int(py=classical_address(value)), size)
 
+    def rows_shape(mut self, binding: PythonObject, value: PythonObject) raises -> Tuple[Int, Int]:
+        """(rows, row words) of a DeviceRows input this call can gather on
+        the device, or (-1, 0) when it cannot (no device store, a base that
+        is not float32): the caller admits it on the host. Nothing moves."""
+        if not self.is_rows(value) or not self._store_ready(binding):
+            return (-1, 0)
+        var fold = _rows_fields(value, self.prog)
+        if fold.dtype != "<f4" or fold.itemsize != 4 or fold.rows < 1 or fold.row_words < 1:
+            return (-1, 0)
+        return (fold.rows, fold.row_words)
+
     def rows(mut self, binding: PythonObject, value: PythonObject) raises -> Tuple[Int, Int, Int]:
         """(slot, rows, row words) of a DeviceRows input gathered on the
         device, or (-1, 0, 0) without a device store (the caller admits it
@@ -122,7 +133,12 @@ struct McSlots(Movable):
         var indices = fold.indices
         var idx: List[Int] = [Int(py=classical_address(indices))]
         var shape: List[Int] = [base_slot, d, n]
-        var slot = xp_transport_call(self.store, XP_DEV_TAKE_ROWS, idx, shape)
+        var slot: Int
+        try:
+            slot = xp_transport_call(self.store, XP_DEV_TAKE_ROWS, idx, shape)
+        except error:
+            _ = self.close()  # the base put for this call only is freed with the failure
+            raise error^
         self.owned.append(slot)
         self.held.append(indices)
         self.held.append(base)
@@ -184,3 +200,26 @@ def mc_slots_call(binding: PythonObject, op: Int, addrs: List[Int], slots: List[
     if failures.byte_length() > 0:
         raise Error("RuntimeError: metric device slots could not be freed: " + failures)
     return result
+
+
+def mc_slot_inputs(binding: PythonObject, op: Int, values: List[PythonObject], ints: List[Int],
+                   floats: List[Float64], outs: List[Int], context: PythonObject) raises -> Optional[PythonObject]:
+    """The device-input form of one entry call whose inputs are the admitted
+    host arrays `values` (C-contiguous float32 / int32): run when at least
+    one is resident in the active `resident()` scope (read in place, never
+    uploaded again), else None and the caller runs its by-name entry (the
+    old route, unchanged)."""
+    var state = mc_slots_open(context)
+    var slots = List[Int](capacity=len(values))
+    var addrs = List[Int](capacity=len(values))
+    var any = False
+    for i in range(len(values)):  # small-loop(values: the inputs of one metric entry, at most 3)
+        var s = state.slot(binding, values[i])
+        slots.append(s)
+        addrs.append(Int(py=classical_address(values[i])))
+        any = any or s >= 0
+    if not any:
+        return Optional[PythonObject]()
+    var result = mc_slots_call(binding, op, addrs, slots, ints, floats, outs, state)
+    _ = values  # read by address inside the call above
+    return Optional[PythonObject](result)

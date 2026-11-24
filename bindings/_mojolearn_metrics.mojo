@@ -97,7 +97,8 @@ from metrics.estimator import (
     homogeneity_completeness_v_measure_host,
 )
 from spectral.impl.spectral_predict_resident import spectral_resident_count
-from metrics.slot_entry_device import metric_slot_run, MS_HCV
+from metrics.slot_entry_device import metric_slot_run
+from metrics.slot_ops import MS_HCV
 from metrics.slot_inputs import metric_slot_create
 
 
