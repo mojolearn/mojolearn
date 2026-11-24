@@ -17,6 +17,7 @@ FAST on Apple keeps the Gram sse (`_t_sse_delta`) on the team kernel; the
 row kernels skip an iteration whose delta was trusted. A stop sets a state
 word every later launch reads first, so iterations queue in batches.
 """
+from core.fold_x_device import fold_x_fill
 from max.gpu import block_idx, thread_idx
 from std.os import getenv
 from max.gpu.host import DeviceContext
@@ -240,7 +241,7 @@ def ard_fit_grid(
     var dstate = ctx.enqueue_create_buffer[DType.float32](AS_WORDS)
     var dtw = ctx.enqueue_create_buffer[DType.float32](team_work(d, 3, 0))
     if n_x > 0:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+        fold_x_fill(ctx, dx, Int(x), n_x)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     if n_y > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
     comptime if XLIN_IDN_DEV_FINITE:

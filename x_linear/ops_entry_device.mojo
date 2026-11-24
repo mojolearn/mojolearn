@@ -17,7 +17,7 @@ from core.shared_slot import SharedSlot
 from core.linear_entry_table_ext import (
     XL_OP_FLAGS, XL_OP_FIT, XL_OP_FIT_FOLD, XL_OP_DECISION, XL_OP_DECISION_CODES,
     XL_OP_DECISION_ROWS, XL_OP_HUBER_OUT, XL_OP_CLASS_PREP, XL_OP_SPEARMAN,
-    XL_OP_BEST_ALPHA, XL_OP_BAYES_STD, XL_HAS_FIT_FOLD, XL_FIT_HEADER, XL_FOLD_HEADER,
+    XL_OP_BEST_ALPHA, XL_OP_BAYES_STD, XL_HAS_FIT_FOLD, XL_HAS_SLOT_X, XL_FIT_HEADER, XL_FOLD_HEADER,
     xl_ops_check_spans, xl_ops_int32, xl_ops_float32,
 )
 from x_linear.class_prep_device import class_prep_device
@@ -56,6 +56,11 @@ def xl_fit_device_run(a: Int, x_addr: Int, y_addr: Int, n: Int, d: Int, n_x: Int
     # native device work over host pointers, before the fit, with the same
     # refusals.
     var host_scan = not ((SGD_IDN_DEV_FINITE and a == ALGO_SGD) or (XLIN_IDN_DEV_FINITE and a != ALGO_SGD))
+    if host_scan and x_addr < 0:
+        # THE FOLD X WORD (core/fold_x_device.mojo): the slot's words are
+        # tested where they are uploaded; a build without that test does not
+        # set XL_HAS_SLOT_X, so a member never sends the word here.
+        raise Error("x_linear: this build tests X on the host and reads no device fold X word")
     if host_scan:
         x_linear_finite_device(x, n_x, "X")
         x_linear_finite_device(y, n_y, "y")
@@ -188,8 +193,13 @@ def x_linear_ops_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         var f = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=ff)
         var r = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)
         if operation == XL_OP_FLAGS:
+            # XL_HAS_SLOT_X (lane vdf-scope-linear2): every fit route of an
+            # IDENTICAL build tests the words it uploads on the device
+            # (SGD_IDN_DEV_FINITE, XLIN_IDN_DEV_FINITE), so the fold slot's
+            # words get the same refusal; the decisions read X through
+            # `fold_x_fill` too. A FAST build scans host X: no word.
             comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-                r[] = XL_HAS_FIT_FOLD
+                r[] = XL_HAS_FIT_FOLD | (XL_HAS_SLOT_X if (SGD_IDN_DEV_FINITE and XLIN_IDN_DEV_FINITE) else 0)
             else:
                 r[] = 0
         elif operation == XL_OP_FIT:

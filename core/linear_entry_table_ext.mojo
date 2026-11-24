@@ -49,6 +49,11 @@ comptime XL_OP_BAYES_STD = 10
 comptime XL_OPERATION_COUNT = 11
 # XL_OP_FLAGS bits.
 comptime XL_HAS_FIT_FOLD = 1
+#: The image's fit and decision entries read THE FOLD X WORD
+#: (core/fold_x_device.mojo, lane vdf-scope-linear2): a negative X address
+#: names a device store slot of a model-selection fold's rows. Set where every
+#: fit route tests the uploaded words on the device (no host finite scan).
+comptime XL_HAS_SLOT_X = 2
 # Fixed header words before the integer hyperparameters.
 comptime XL_FIT_HEADER = 10
 comptime XL_FOLD_HEADER = 13

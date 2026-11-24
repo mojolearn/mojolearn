@@ -13,6 +13,7 @@ x_linear/lbfgs_device.mojo; the result is assembled on the device and
 comes home once. The host column runs `huber_fit` (x_linear/huber.mojo):
 the same statements on the same values in the same order.
 """
+from core.fold_x_device import fold_x_fill
 from max.gpu import block_idx, thread_idx, block_dim
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -168,7 +169,7 @@ struct HuberObjective(LbObjective):
         self.sums = ctx.enqueue_create_buffer[DType.float32](5)
         self.parts = ctx.enqueue_create_buffer[DType.float32](vscratch(d) + 16)
         if n_x > 0:
-            ctx.enqueue_copy(dst_buf=self.x, src_ptr=x)
+            fold_x_fill(ctx, self.x, Int(x), n_x)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
         if n_y > 0:
             ctx.enqueue_copy(dst_buf=self.y, src_ptr=y)
         self.n = n

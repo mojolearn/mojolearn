@@ -33,6 +33,7 @@ id against those bounds; on a mismatch the caller runs the team fit.
 FAST promises quality, not bits. `MOJOLEARN_X_LINEAR_ENETCV_FAST=0` is the
 A/B arm (the team fit in the same build).
 """
+from core.fold_x_device import fold_x_fill
 from max.gpu import block_idx, thread_idx
 from std.sys.compile import is_defined
 from std.memory import bitcast, stack_allocation
@@ -695,7 +696,7 @@ def enetcv_fast(
     var dpath = ctx.enqueue_create_buffer[DType.float32](max(f_n * p_n * (d + 1), 1))
     var dpm = ctx.enqueue_create_buffer[DType.float32](max(nch * p_n, 1))
     var dres = ctx.enqueue_create_buffer[DType.float32](max(n_out, 1))
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    fold_x_fill(ctx, dx, Int(x), n_x)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
     var hfp = fp.copy()
     if len(hfp) > 0:

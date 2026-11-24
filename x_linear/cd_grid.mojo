@@ -22,6 +22,7 @@ below) when the page fits; the per-value kernels otherwise. (The
 `MOJOLEARN_X_LINEAR_ENETCV_GRID` / `_STAGED` A/B switches were deleted,
 cpu-gpu-cleanup c-linear.)
 """
+from core.fold_x_device import fold_x_fill
 from max.gpu import block_idx, block_dim, thread_idx
 from std.atomic import Atomic
 from max.gpu.sync import barrier
@@ -836,7 +837,7 @@ def enetcv_fit_grid(
     var dew = ctx.enqueue_create_buffer[DType.float32](max(lay.words(), 1))
     var dtw = ctx.enqueue_create_buffer[DType.float32]((paths + 1) * TEAM_SLOTS)
     if n_x > 0:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+        fold_x_fill(ctx, dx, Int(x), n_x)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     if n_y > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
     comptime if XLIN_IDN_DEV_FINITE:
