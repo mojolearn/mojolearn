@@ -549,7 +549,7 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
                 if not admitted_convert_vector(msel_addr(tr), "<i8", msel_addr(narrow), "<i4", size):
                     raise Error("TypeError: learning_curve train rows are not int64 row indices")
                 _ = tr  # keep the Python object alive through the native call above
-                var table = prog.put_i32(narrow)  # pinned by the program until its run
+                var table = prog.put_temp(narrow)  # this call's narrowed rows: pinned until the run, never kept resident (lane vdf-xm-wire2)
                 var slot = prog.alloc(2 * size)
                 w = prog.want(slot, 2 * size)
                 prog.stage("take_rows64", size, [table, drawn, w])
@@ -723,7 +723,7 @@ def _group_order(groups: PythonObject, n: Int, context: PythonObject) raises -> 
     var gc = MselGroups(groups, n, "groups", context)
     var m = gc.m
     var prog = MetricDoorProg()
-    var key = prog.put_i32(gc.codes)
+    var key = prog.put_temp(gc.codes)  # this call's group codes: never kept resident (lane vdf-xm-wire2)
     var off_slot = prog.alloc(m + 1)
     var off = prog.want(off_slot, m + 1)
     var ordr = prog.alloc(n)
@@ -794,10 +794,11 @@ def _group_index(mut rng: MselRng, order: PythonObject, sizes: List[Int], n: Int
     and the final inverse gather gave, read back once. Same draws, same
     rows, same order: no bit changes."""
     var prog = MetricDoorProg()
-    var key = prog.put_i32(order[6])
-    var ordr = prog.put_i32(order[3])
-    var off = prog.put_i32(order[5])
-    var inv = prog.put_i32(order[4])
+    # the group order's arrays are this call's: never kept resident (lane vdf-xm-wire2)
+    var key = prog.put_temp(order[6])
+    var ordr = prog.put_temp(order[3])
+    var off = prog.put_temp(order[5])
+    var inv = prog.put_temp(order[4])
     var draws = prog.alloc(max(n, 1))
     var at = 0
     for g in range(len(sizes)):  # driver-loop: over groups (one permute stage each, all in one program)

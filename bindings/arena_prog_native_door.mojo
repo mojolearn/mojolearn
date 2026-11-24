@@ -30,7 +30,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.native_error_class import error_without_class
 from bindings.optimizer_public_words_unpack import optimizer_python_error, stash_python_error, PYTHON_ERROR_PENDING
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.classical_arrays_door import classical_address
+from bindings.classical_arrays_door import classical_address, classical_same_buffer
 from bindings.x_prep_native_owner_run import xprep_r3
 from bindings.x_prep_native_owner_door import xprep_address, XprepResident, xprep_resident_none, xprep_resident_of
 from bindings.x_prep_native_inputs_door import _values, _rows_fields, _dense_values
@@ -40,7 +40,7 @@ from bindings.py_cpython_table import cpython_table
 from bindings.p3_array_arena_records_unpack import P3_DICT_NATIVE_STRING_KEYS, p3_dict_admitted, p3_dict_admit
 from bindings.arena_prog_run import (
     _switch, _add_input, _merge_pairs, _pad, MetricArenaOwner, MetricRoute, metric_inputs_run, metric_slots_run,
-    METRIC_INPUT_TEMP,
+    metric_input_temp, metric_input_source,
 )
 from bindings.x_metrics_resident_door import (
     metric_store_ref, metric_scope_word, metric_resident_of, metric_rows_gather, metric_store_release,
@@ -463,12 +463,26 @@ def _metrics_run_plan(plan: MetricProgramPlan, inputs: List[PythonObject], mode:
 def metrics_run_plan_entries(plan: MetricProgramPlan, inputs: List[PythonObject], entries: PythonObject,
                              context: PythonObject) raises -> MetricArenaOwner:
     """`metrics_run_plan_slots` with no slot a door already holds (an empty
-    List: no allocation)."""
-    return metrics_run_plan_slots(plan, inputs, List[Int](), entries, context)
+    List: no allocation) and no temporary marked."""
+    return metrics_run_plan_slots(plan, inputs, List[Int](), UInt64(0), UInt64(0), PythonObject(None), entries,
+                                  context)
 
 
-def metrics_run_plan_slots(plan: MetricProgramPlan, inputs: List[PythonObject], given: List[Int],
-                           entries: PythonObject, context: PythonObject) raises -> MetricArenaOwner:
+def metric_reads_source(src: UInt64, args: PythonObject, i: Int, value: PythonObject) raises -> Bool:
+    """Whether buffer input `i` (`value`, admitted) may be kept resident by
+    identity: unmarked in `src`, or reading the very buffer of the door
+    call's argument it was admitted from (`args`); a converted copy is a
+    per-call temporary (lane vdf-xm-wire2). Asked only inside a scope, at
+    the floor: outside `resident()` nothing here runs."""
+    var a = metric_input_source(src, i)
+    if a < 0:
+        return True
+    return classical_same_buffer(args[a], value)
+
+
+def metrics_run_plan_slots(plan: MetricProgramPlan, inputs: List[PythonObject], given: List[Int], temps: UInt64,
+                           src: UInt64, args: PythonObject, entries: PythonObject,
+                           context: PythonObject) raises -> MetricArenaOwner:
     """`_metrics_run_plan` on the connected entries of one x_metrics image the
     caller already holds: the selected mode's (above), or the CPU image a
     `device="cpu"` estimator's route names beside a device set (lane
@@ -476,21 +490,27 @@ def metrics_run_plan_slots(plan: MetricProgramPlan, inputs: List[PythonObject], 
 
     The x_metrics resident transport (lane vdf-xm-transport, 2026-11-24; the
     one x_prep store, lane vdf-xm-wire; bindings/x_metrics_resident_door.mojo):
-    on an image with the store (`route.store` and an x_prep image of its tier
-    and vendor connected) a DeviceRows input is gathered on the device out of
+    on an image with the store (`route.store`; an x_prep image of its tier
+    and vendor not connected is refused in words, lane vdf-xm-wire2) a
+    DeviceRows input is gathered on the device out of
     its once-put base, and a host input the active `resident()` scope keeps
     is read from its device copy; both reach the program as store slots,
     copied device to device. Elsewhere (host column, CPU-only install, ranges
-    off, no x_prep image) a DeviceRows input is its host base's rows, as
+    off) a DeviceRows input is its host base's rows, as
     before. The slots this run put or gathered are freed after it, newest
     first, even on error.
 
-    `given` (empty, or one word per buffer input): -1 a host input the run
-    may keep resident, `METRIC_INPUT_TEMP` a per-call temporary it never
-    keeps (lane vdf-xm-wire), or a slot >= 0 the DOOR put
-    or gathered on the one store and checked (bindings/metrics_program_door.mojo
-    `MetricDoorProg.put_resident`); the door owns and frees it, the input
-    object (its DeviceRows) is held here only as the pin."""
+    `given` (empty, or one word per buffer input): -1 a host input, or a
+    slot >= 0 the DOOR put or gathered on the one store and checked
+    (bindings/metrics_program_door.mojo `MetricDoorProg.put_resident`); the
+    door owns and frees it, the input object (its DeviceRows) is held here
+    only as the pin. `temps` (bit i = input i, `metric_input_temp`): the
+    door's per-call temporaries, copied and never kept resident (lane
+    vdf-xm-wire2: a mask, so marking one allocates nothing; was the -2 word
+    `METRIC_INPUT_TEMP` in a per-call `given` List). `src` and `args`: the
+    door call's argument each admitted input came from
+    (`metric_reads_source`); inside a scope an input that is a converted
+    copy of it is a temporary too."""
     var pin = metric_route_of(entries)
     if len(inputs) != plan.buffer_inputs() or (len(given) > 0 and len(given) != len(inputs)):
         raise Error("ValueError: x_metrics: the program's inputs do not match its layout")
@@ -515,8 +535,8 @@ def metrics_run_plan_slots(plan: MetricProgramPlan, inputs: List[PythonObject], 
             var slot = given[i] if len(given) > 0 else -1
             if slot >= 0 and not pin.route.store:
                 raise Error("RuntimeError: x_metrics: a door's resident input needs an image with a resident store")
-            # a door temporary (METRIC_INPUT_TEMP) is copied, never kept resident
-            if slot == -1 and size_i > 0 and pin.route.store:
+            # a door temporary (`temps`) is copied, never kept resident
+            if slot == -1 and size_i > 0 and pin.route.store and not metric_input_temp(temps, i):
                 var rows = _is_rows(value, context)
                 # The store entry is resolved only inside a scope or for a
                 # DeviceRows input (two entry calls and a table read), once
@@ -525,18 +545,19 @@ def metrics_run_plan_slots(plan: MetricProgramPlan, inputs: List[PythonObject], 
                     resident_read = True
                     var scope = metric_scope_word(context)
                     if scope >= 0:
-                        store = metric_store_ref(pin.route.program)
+                        # an x_prep image that is not connected raises in
+                        # words here (lane vdf-xm-wire2), never the host route
+                        store = Optional[EntryRef](metric_store_ref(pin.route.program))
                         store_read = True
-                        if store:
-                            resident = metric_resident_of(scope, store.value())
+                        resident = metric_resident_of(scope, store.value())
                 if rows and not store_read:
-                    store = metric_store_ref(pin.route.program)
+                    store = Optional[EntryRef](metric_store_ref(pin.route.program))
                     store_read = True
                 if not store:
-                    pass  # no x_prep image of this tier and vendor connected: the host route
+                    pass  # outside resident() and not a DeviceRows: a host input, copied as before
                 elif rows:
                     slot = metric_rows_gather(value, store.value(), owned, resident, context)
-                elif resident.keeps(False, size_i):
+                elif resident.keeps(False, size_i) and metric_reads_source(src, args, i, value):
                     slot = resident.slot(value, Int(py=classical_address(value)), size_i)
             if slot >= 0 and len(slots) == 0:
                 slots = List[Int](length=i, fill=-1)

@@ -21,22 +21,27 @@ old by-name entry, so `device=None` on host inputs outside `resident()` is
 today's route plus one context read and one thread-local scope read per
 call (`mc_slots_open`), the same reads the program runner makes per run.
 
-Only the GPU image publishes `metrics_cluster_key`; the host image (a
-CPU-only install, or `device="cpu"` beside a GPU set) has none, so it never
-takes a slot: a DeviceRows input is read from its host base there, by the
-doors' existing admission (the parent decision of addendum 3, item 4).
+The host image (a CPU-only install, or `device="cpu"` beside a GPU set)
+publishes `metrics_cluster_key` with vendor 0 and has no device store to
+reach: a DeviceRows input is read from its host base there, by the doors'
+existing admission (the parent decision of addendum 3, item 4). A GPU image
+whose x_prep store cannot be reached is refused in words
+(bindings/metric_store_refusal.mojo; lane vdf-xm-wire2), never read on the
+host.
 """
 from std.python import Python, PythonObject
 from core.entry_table import EntryRef, entry_ref_unresolved
 from core.prep_entry_table import PrepEntryKey, xp_transport_ref, xp_transport_call
 from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS
 from bindings.py_balanced import py_item, py_type, py_call
-from bindings.classical_arrays_door import classical_address
+from bindings.classical_arrays_door import classical_address, classical_same_buffer
+from bindings.arena_prog_run import metric_input_temp, metric_input_source
 from bindings.metrics_keys_unpack import metrics_keys
 from bindings.x_prep_native_owner_door import XprepResident, xprep_resident, xprep_resident_none
 from bindings.x_prep_native_inputs_door import _rows_fields
 from bindings.family_common_pack import family_call
 from bindings.mcls_common_unpack import mc_entry, mc_class_list
+from bindings.metric_store_refusal import metric_store_refusal
 from metrics.slot_ops import MS_ENCODE_PAIR, MS_GATHER
 from core.cast_in import CAST_KIND_SIGNED
 
@@ -78,10 +83,18 @@ struct McSlots(Movable):
             key = binding.metrics_cluster_key
         except:
             return False  # the host image: no device store
+        var mode = Int(py=key[0])
+        var vendor = Int(py=key[1])
         try:
-            self.store = xp_transport_ref(PrepEntryKey(Int(py=key[0]), Int(py=key[1])))
-        except:
-            return False  # no x_prep image connected: the host route
+            self.store = xp_transport_ref(PrepEntryKey(mode, vendor))
+        except error:
+            if vendor == 0:
+                return False  # the host image (vendor 0): no device store to reach
+            # A GPU image whose store cannot be reached is refused in words,
+            # never sent to the host route (lane vdf-xm-wire2; the x_prep
+            # image is connected with the metrics image at import,
+            # python/mojolearn/_native_labels_bridge.py `_metrics`).
+            raise Error(metric_store_refusal("metrics", mode, vendor, String(error)))
         self.resident.store = self.store
         self.live = True
         return True
@@ -93,6 +106,22 @@ struct McSlots(Movable):
         var size = Int(py=value.size)
         if not self.resident.keeps(False, size):
             return -1  # outside resident() or below its floor: no address read
+        return self.slot_words(binding, value, Int(py=classical_address(value)), size)
+
+    def slot_from(mut self, binding: PythonObject, value: PythonObject, args: PythonObject, argument: Int,
+                  temp: Bool) raises -> Int:
+        """`slot` of an input the door marked (lane vdf-xm-wire2): a per-call
+        temporary (`temp`: codes, flags) is never kept resident; one
+        admitted from `args[argument]` is kept only when it reads that
+        argument's own buffer (a converted copy is a temporary). The compare
+        runs only inside a scope at the floor; -1: the call uploads it."""
+        if temp:
+            return -1
+        var size = Int(py=value.size)
+        if not self.resident.keeps(False, size):
+            return -1  # outside resident() or below its floor: no address read
+        if argument >= 0 and not classical_same_buffer(args[argument], value):
+            return -1
         return self.slot_words(binding, value, Int(py=classical_address(value)), size)
 
     def slot_words(mut self, binding: PythonObject, owner: PythonObject, address: Int, words: Int) raises -> Int:
@@ -230,18 +259,22 @@ def mc_slots_call(binding: PythonObject, op: Int, addrs: List[Int], slots: List[
 
 
 def mc_slot_inputs(binding: PythonObject, op: Int, values: List[PythonObject], ints: List[Int],
-                   floats: List[Float64], outs: List[Int], context: PythonObject) raises -> Optional[PythonObject]:
+                   floats: List[Float64], outs: List[Int], args: PythonObject, temps: UInt64, src: UInt64,
+                   context: PythonObject) raises -> Optional[PythonObject]:
     """The device-input form of one entry call whose inputs are the admitted
     host arrays `values` (C-contiguous float32 / int32): run when at least
     one is resident in the active `resident()` scope (read in place, never
     uploaded again), else None and the caller runs its by-name entry (the
-    old route, unchanged)."""
+    old route, unchanged). `temps` (bit i) and `src` (the argument of `args`
+    value i was admitted from; bindings/arena_prog_run.mojo
+    `metric_source_word`) mark the call's temporaries, never kept resident
+    (`McSlots.slot_from`; lane vdf-xm-wire2)."""
     var state = mc_slots_open(context)
     var slots = List[Int](capacity=len(values))
     var addrs = List[Int](capacity=len(values))
     var any = False
     for i in range(len(values)):  # small-loop(values: the inputs of one metric entry, at most 3)
-        var s = state.slot(binding, values[i])
+        var s = state.slot_from(binding, values[i], args, metric_input_source(src, i), metric_input_temp(temps, i))
         slots.append(s)
         addrs.append(Int(py=classical_address(values[i])))
         any = any or s >= 0
@@ -329,11 +362,20 @@ def mc_resident_order(binding: PythonObject, codes: Int, n: Int, table: PythonOb
     C-contiguous int32 array of k words, the `mc_map_order` table) ON THE
     DEVICE into a fresh slot the call owns (MS_GATHER); its id. The table is
     O(k) host words, uploaded once."""
+    return mc_resident_gather(binding, codes, n, table, state)[0]
+
+
+def mc_resident_gather(binding: PythonObject, codes: Int, n: Int, table: PythonObject,
+                       mut state: McSlots) raises -> Tuple[Int, Int]:
+    """`mc_resident_order` with MS_GATHER's answer: (the mapped slot, the
+    first row the table mapped to -1, or -1). Lane vdf-xm-wire2: a table
+    that marks a class set with -1 answers whether any row's label is in it
+    (confusion_matrix's "at least one label in y_true"), on the device."""
     var dst = state.codes(binding, n)
     var addrs: List[Int] = [0]
     var slots: List[Int] = [codes]
     var ints: List[Int] = [n, Int(py=table.size), dst]
     var outs: List[Int] = [Int(py=classical_address(table))]
-    _ = mc_slots_step(binding, MS_GATHER, addrs, slots, ints, List[Float64](), outs, state)
+    var first = Int(py=mc_slots_step(binding, MS_GATHER, addrs, slots, ints, List[Float64](), outs, state))
     _ = table  # read by address inside the step above
-    return dst
+    return (dst, first)

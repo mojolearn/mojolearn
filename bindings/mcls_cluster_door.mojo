@@ -60,6 +60,7 @@ from bindings.mcls_common_unpack import (
 )
 from core.host_finite_scan import host_all_finite_f32
 from bindings.metrics_slot_door import mc_slots_open, mc_slots_call, mc_slot_inputs, mc_resident_pair
+from bindings.arena_prog_run import metric_source_word
 from metrics.slot_ops import (
     MS_RAND, MS_ARI, MS_ENTROPY, MS_R2, MS_R2_W, MS_MSE, MS_MAE, MS_RMSE, MS_KL, MS_SILHOUETTE, MS_TRUST,
     MS_MI, MS_FM, MS_HOMOG, MS_COMPL, MS_V_MEASURE, MS_HCV,
@@ -165,7 +166,8 @@ def _cluster_pair(binding: PythonObject, operation: Int, args: PythonObject, bet
         var pair_values: List[PythonObject] = [yt, yp]
         var ints: List[Int] = [n]
         var device = mc_slot_inputs(binding, MS_RAND if operation == CLUSTER_OP_RAND else MS_ARI, pair_values, ints,
-                                    List[Float64](), List[Int](), context)
+                                    List[Float64](), List[Int](), args, UInt64(0),
+                                    metric_source_word(0, 1) | metric_source_word(1, 2), context)
         if device:
             return _as_float(device.value())
     else:
@@ -196,7 +198,8 @@ def _entropy(args: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = lab  # keep the Python object alive through the native call above
     var lab_values: List[PythonObject] = [lab]
     var lab_ints: List[Int] = [n, Int(lower), Int(upper)]
-    var device = mc_slot_inputs(args[0], MS_ENTROPY, lab_values, lab_ints, List[Float64](), List[Int](), context)
+    var device = mc_slot_inputs(args[0], MS_ENTROPY, lab_values, lab_ints, List[Float64](), List[Int](), args, UInt64(0),
+                                 metric_source_word(0, 1), context)
     var value: Float64
     if device:
         value = Float64(py=_as_float(device.value()))
@@ -262,7 +265,7 @@ def _silhouette(args: PythonObject, caller: String, context: PythonObject) raise
                         + "(metrics/README.md HAND-OFF ask 3), because a NaN distance "
                         + "reaches sil_op as +0.0 (DEVIATION 656) rather than as an error")
         _ = x  # keep the Python object alive through the native calls above
-        x_slot = state.slot(args[0], x)
+        x_slot = state.slot_from(args[0], x, args, 1, False)  # a converted copy of X is never kept (lane vdf-xm-wire2)
     var lab = mc_i32_1d(args[2], "labels", context)
     var n_lab = Int(py=lab.size)
     if n_lab != rows:
@@ -342,10 +345,10 @@ def _trustworthiness(args: PythonObject, context: PythonObject) raises -> Python
         if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
             raise Error("mojolearn trustworthiness: X contains NaN or infinity; refused here (metrics/README.md HAND-OFF ask 3)")
         _ = x  # keep the Python object alive through the native calls above
-        x_slot = state.slot(args[0], x)
+        x_slot = state.slot_from(args[0], x, args, 1, False)  # a converted copy of X is never kept (lane vdf-xm-wire2)
     # X_embedded resident in the active resident() scope (lane vdf-xm-wire): the embedded k-NN reads
     # its slot in place and the entry refuses a non-finite one on the device with these words
-    var emb_slot = state.slot(args[0], emb)
+    var emb_slot = state.slot_from(args[0], emb, args, 2, False)
     if emb_slot < 0:
         if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(emb))), Int(py=emb.size)):
             raise Error("mojolearn trustworthiness: X_embedded contains NaN or infinity; refused here "
@@ -385,7 +388,8 @@ def _kl_divergence(args: PythonObject, context: PythonObject) raises -> PythonOb
                     + "HAND-OFF ask 3) rather than letting log of a negative reach the fold")
     var kl_values: List[PythonObject] = [p, q]
     var kl_ints: List[Int] = [Int(py=p.size)]
-    var device = mc_slot_inputs(args[0], MS_KL, kl_values, kl_ints, List[Float64](), List[Int](), context)
+    var device = mc_slot_inputs(args[0], MS_KL, kl_values, kl_ints, List[Float64](), List[Int](), args, UInt64(0),
+                                 metric_source_word(0, 1) | metric_source_word(1, 2), context)
     var result: PythonObject
     if device:
         result = _as_float(device.value())
@@ -420,7 +424,8 @@ def _regression_error(args: PythonObject, context: PythonObject) raises -> Pytho
     var reg_values: List[PythonObject] = [yt, yp]
     var reg_ints: List[Int] = [Int(py=yt.size)]
     var reg_op = MS_MSE if name == "mean_squared_error" else (MS_MAE if name == "mean_absolute_error" else MS_RMSE)
-    var device = mc_slot_inputs(args[0], reg_op, reg_values, reg_ints, List[Float64](), List[Int](), context)
+    var device = mc_slot_inputs(args[0], reg_op, reg_values, reg_ints, List[Float64](), List[Int](), args, UInt64(0),
+                                 metric_source_word(0, 2) | metric_source_word(1, 3), context)
     var result: PythonObject
     if device:
         result = _as_float(device.value())
@@ -453,7 +458,9 @@ def _r2(args: PythonObject, context: PythonObject) raises -> PythonObject:
         var w = mc_weights(args[3], n, "r2_score", context)
         var w_values: List[PythonObject] = [y, yh, w]
         var w_ints: List[Int] = [n]
-        var device = mc_slot_inputs(args[0], MS_R2_W, w_values, w_ints, List[Float64](), List[Int](), context)
+        var device = mc_slot_inputs(args[0], MS_R2_W, w_values, w_ints, List[Float64](), List[Int](), args, UInt64(0),
+                                     metric_source_word(0, 1) | metric_source_word(1, 2) | metric_source_word(2, 3),
+                                     context)
         if device:
             result = _as_float(device.value())
         else:
@@ -466,7 +473,8 @@ def _r2(args: PythonObject, context: PythonObject) raises -> PythonObject:
     else:
         var r2_values: List[PythonObject] = [y, yh]
         var r2_ints: List[Int] = [n]
-        var device = mc_slot_inputs(args[0], MS_R2, r2_values, r2_ints, List[Float64](), List[Int](), context)
+        var device = mc_slot_inputs(args[0], MS_R2, r2_values, r2_ints, List[Float64](), List[Int](), args, UInt64(0),
+                                     metric_source_word(0, 1) | metric_source_word(1, 2), context)
         if device:
             result = _as_float(device.value())
         else:

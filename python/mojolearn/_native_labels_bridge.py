@@ -53,11 +53,13 @@ def _metrics():
     # glue: the metrics binding's compiled entries of both numeric modes
     from types import BuiltinFunctionType
     from . import _backend
+    from ._native_arena_prog import _connect_store
     selected = _backend.default_mode()
     connected = {}
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes
         try:
             module = _backend.binding("_mojolearn_metrics", mode)
+            _connect_store(_backend, mode)  # the x_prep store the GPU slots read (bindings/metrics_slot_door.mojo)
             table = {}
             for name in ("r2_score", "r2_score_weighted", "metrics_numeric_mode", "umap_numeric_mode"):  # glue: fixed native exports
                 entry = getattr(module, name, None)

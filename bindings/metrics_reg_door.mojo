@@ -39,8 +39,18 @@ from bindings.metrics_native_support_door import (
 from bindings.metrics_device_door import metric_device_admit, metric_device_identical
 from providers.python.function_device_boundary_door import function_device_scope
 from bindings.classical_validate_unpack import classical_view
-from bindings.arena_prog_run import MetricArenaOwner
-from bindings.metrics_program_door import MetricDoorProg, metric_door_run, metric_plan_run
+from bindings.arena_prog_run import MetricArenaOwner, metric_source_word
+from bindings.metrics_program_door import MetricDoorProg, metric_door_run, metric_plan_run, metric_plan_run_from
+
+
+@always_inline
+def _reg_src() -> UInt64:
+    """The sources word of `_reg_new`'s pins (y_true, y_pred, weights) over
+    the door call's arguments 0, 1 and 2 (lane vdf-xm-wire2): inside
+    `resident()` a converted copy (a float64 y_true narrowed to float32) is
+    a per-call temporary, never kept resident; the caller's float32 buffer is
+    kept as before."""
+    return metric_source_word(0, 0) | metric_source_word(1, 1) | metric_source_word(2, 2)
 from bindings.metrics_program_pack import metric_f64_array
 from bindings.metrics_reg_run import (
     _Reg, _NONE, _RE_DIV, reg_raw_values, tweedie_check, reg_mean_error_stages, reg_median_stages, reg_max_error_stages,
@@ -251,7 +261,7 @@ def _mean_error(args: PythonObject, kind: String, caller: String, root: Bool, sc
     var built = reg_mean_error_stages(r, metric_term(kind), root, scalar, log_domain.byte_length() > 0)
     var out = built[0]
     var flag = built[1]
-    var arena = metric_plan_run(r.plan, pins, args[4], context)
+    var arena = metric_plan_run_from(r.plan, pins, UInt64(0), _reg_src(), args, args[4], context)
     if flag != _NONE and arena.i32(flag) != 0:
         raise Error(log_domain + " cannot be used when targets contain values less than or equal to -1.")
     return _reg_result(r, out, arena, context)
@@ -262,7 +272,7 @@ def _median_absolute_error(args: PythonObject, context: PythonObject) raises -> 
     var pins = List[PythonObject]()
     var r = _reg_new(args, args[3], "median_absolute_error", False, pins, context)
     var out = reg_median_stages(r, metric_term("abs"))
-    var arena = metric_plan_run(r.plan, pins, args[4], context)
+    var arena = metric_plan_run_from(r.plan, pins, UInt64(0), _reg_src(), args, args[4], context)
     return _reg_result(r, out, arena, context)
 
 
@@ -275,8 +285,8 @@ def _max_error(args: PythonObject, context: PythonObject) raises -> PythonObject
         raise Error("Multioutput not supported in max_error")
     var prog = MetricDoorProg()
     var out = reg_max_error_stages(prog.plan, r.n, metric_term("abs"))
-    prog.pins.append(pins[0])
-    prog.pins.append(pins[1])
+    prog.pin_arg(pins[0], args, 0)
+    prog.pin_arg(pins[1], args, 1)
     var arena = metric_door_run(prog, args[2], context)
     # Read through the helper: `arena` is the only owner of the store, and
     # Mojo releases a local at its last named use, so a pointer taken from
@@ -292,7 +302,7 @@ def _explained_variance(args: PythonObject, context: PythonObject) raises -> Pyt
     var r = _reg_new(args, args[3], "explained_variance_score", True, pins, context)
     var out = reg_explained_variance_stages(r, metric_term("sq"), metric_term("diff"),
                                             Bool(py=py_call(b.bool, args[4])))
-    var arena = metric_plan_run(r.plan, pins, args[5], context)
+    var arena = metric_plan_run_from(r.plan, pins, UInt64(0), _reg_src(), args, args[5], context)
     return _reg_result(r, out, arena, context)
 
 
@@ -315,7 +325,7 @@ def _tweedie(args: PythonObject, power_obj: PythonObject, caller: String, d2: Bo
         _undefined("D^2 score is not well-defined with less than two samples.", context)
         return py_call(native_loaded_module("builtins").float, PythonObject("nan"))
     var tw = reg_tweedie_stages(r, metric_term("tweedie"), power, d2, caller)
-    var arena = metric_plan_run(r.plan, pins, args[3], context)
+    var arena = metric_plan_run_from(r.plan, pins, UInt64(0), _reg_src(), args, args[3], context)
     if tw.fy != _NONE:
         tweedie_check(tw.fy, tw.fp, power, family_str(power_obj), arena)
     return PythonObject(arena.f64(tw.out))
@@ -330,7 +340,7 @@ def _d2_pinball(args: PythonObject, alpha_obj: PythonObject, context: PythonObje
         _undefined("D^2 score is not well-defined with less than two samples.", context)
         return py_call(native_loaded_module("builtins").float, PythonObject("nan"))
     var out = reg_d2_pinball_stages(r, metric_term("pinball"), alpha)
-    var arena = metric_plan_run(r.plan, pins, args[4], context)
+    var arena = metric_plan_run_from(r.plan, pins, UInt64(0), _reg_src(), args, args[4], context)
     return _reg_result(r, out, arena, context)
 
 
@@ -344,7 +354,7 @@ def _r2_options(args: PythonObject, context: PythonObject) raises -> PythonObjec
         _undefined("R^2 score is not well-defined with less than two samples.", context)
         return py_call(b.float, PythonObject("nan"))
     var out = reg_r2_stages(r, metric_term("sq"), Bool(py=py_call(b.bool, args[4])))
-    var arena = metric_plan_run(r.plan, pins, args[5], context)
+    var arena = metric_plan_run_from(r.plan, pins, UInt64(0), _reg_src(), args, args[5], context)
     return _reg_result(r, out, arena, context)
 
 
@@ -376,7 +386,7 @@ def _regression_report(args: PythonObject, context: PythonObject) raises -> Pyth
     var denominator = r.fin(centered_sums, 0)
     var numerator = r.fin(squared_sums, 0)
     var r2 = r.assemble(numerator, denominator, Bool(py=args[4]), True)
-    var arena = metric_plan_run(r.plan, pins, args[5], context)
+    var arena = metric_plan_run_from(r.plan, pins, UInt64(0), _reg_src(), args, args[5], context)
     var result = Python.dict()
     var nk = metrics_keys()
     py_setitem(result, nk[].k_mean_squared_error, _reg_result(r, mse, arena, context))

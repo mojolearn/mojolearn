@@ -24,7 +24,7 @@ from bindings.operation_names_mcls import (
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
-from bindings.arena_prog_run import MetricArenaOwner
+from bindings.arena_prog_run import MetricArenaOwner, metric_source_word
 from bindings.py_balanced import py_call, py_type, py_contains
 from bindings.classical_arrays_door import classical_address, classical_dtype_str
 from bindings.family_common_unpack import (
@@ -150,10 +150,10 @@ def _roc_binary(true: McLabels, args: PythonObject, max_fpr: PythonObject, conte
     # inputs s, flags and (weighted) w, pinned in that order
     var prog = MetricDoorProg()
     var out = mc_roc_binary_stages(prog.plan, n, w is not None, partial, mf)
-    prog.pins.append(s)
-    prog.pins.append(flags)
+    prog.pin_arg(s, args, 2)
+    prog.pin(flags, False)  # this call's flags: never kept resident (lane vdf-xm-wire2)
     if w is not None:
-        prog.pins.append(w)
+        prog.pin_arg(w, args, 4)
     var arena = metric_door_run(prog, args[8], context)
     _ = s^
     _ = flags^
@@ -223,10 +223,10 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
     # builder (bindings/mcls_ranking_run.mojo `mc_roc_ovr_stages`), inputs s, codes and (weighted) w
     var prog = MetricDoorProg()
     var slots = mc_roc_ovr_stages(prog.plan, n, k, w is not None, average is not None, weighted_avg)
-    prog.pins.append(s)
-    prog.pins.append(codes)
+    prog.pin_arg(s, args, 2)
+    prog.pin(codes, False)  # this call's codes: never kept resident (lane vdf-xm-wire2)
     if w is not None:
-        prog.pins.append(w)
+        prog.pin_arg(w, args, 4)
     var rows = slots.rows
     var sc = slots.sc
     var fl = slots.fl
@@ -347,7 +347,8 @@ def _roc_auc(args: PythonObject, context: PythonObject) raises -> PythonObject:
     # (lane vdf-xm-kernels); the labels' codes are this door's host encode.
     var roc_values: List[PythonObject] = [encoded, scores]
     var roc_ints: List[Int] = [true.n]
-    var device = mc_slot_inputs(args[0], MS_ROC_AUC, roc_values, roc_ints, List[Float64](), List[Int](), context)
+    var device = mc_slot_inputs(args[0], MS_ROC_AUC, roc_values, roc_ints, List[Float64](), List[Int](), args, UInt64(1),
+                                 metric_source_word(1, 2), context)  # the encoded flags: a temporary (lane vdf-xm-wire2)
     if device:
         return family_call(mc_b().float, device.value())
     var result = family_array(Python.tuple(1), "<f4", context)
@@ -385,11 +386,11 @@ def _pr_options(args: PythonObject, context: PythonObject) raises -> PythonObjec
     var flags = mc_map_equal(true, pos, context)
     var drop = mc_bool(args[5])
     var prog = MetricDoorProg()
-    var s_off = prog.put(s)
-    var p_off = prog.put(flags)
+    var s_off = prog.put_arg(s, args, 2)
+    var p_off = prog.put_temp(flags)  # this call's flags: never kept resident (lane vdf-xm-wire2)
     var w_off = MC_NONE
     if w is not None:
-        w_off = prog.put(w)
+        w_off = prog.put_arg(w, args, 4)
     var order = prog.scratch(n)
     var cnt = prog.scratch(1)
     var fps = prog.scratch(n)
@@ -449,7 +450,8 @@ def _pr_curve(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var curve_ints: List[Int] = [n]
     var curve_outs: List[Int] = [Int(py=classical_address(precision)), Int(py=classical_address(recall)),
                                  Int(py=classical_address(thresholds))]
-    var device = mc_slot_inputs(args[0], MS_PR_CURVE, curve_values, curve_ints, List[Float64](), curve_outs, context)
+    var device = mc_slot_inputs(args[0], MS_PR_CURVE, curve_values, curve_ints, List[Float64](), curve_outs, args, UInt64(1),
+                                 metric_source_word(1, 2), context)  # the encoded flags: a temporary (lane vdf-xm-wire2)
     var size: Int
     if device:
         size = mc_int(device.value())

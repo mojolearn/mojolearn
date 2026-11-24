@@ -17,7 +17,7 @@ from bindings.admitted_family_door import admit_family
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_labels_door import classical_score_from_codes
 from bindings.metrics_reg_run import _Reg, _RE_DIV
-from bindings.metrics_program_door import metric_plan_run
+from bindings.metrics_program_door import metric_plan_run, metric_plan_run_from
 from core.metrics_program_plan import metric_term
 from bindings.svc_common_run import svc_r2_check
 from bindings.svc_common_unpack import svc_shape_of
@@ -54,7 +54,9 @@ def svc_r2_sums(pred: PythonObject, y: PythonObject, context: PythonObject) rais
     _ = r.plan.want(num, 2, -1, 1)
     _ = r.plan.want(den, 2, -1, 1)
     # The image of the context's device (metric_plan_run reads the scope).
-    var arena = metric_plan_run(r.plan, pins, PythonObject(None), context)
+    # the predictions are this call's array: never kept resident inside resident() (temps bit 1; lane
+    # vdf-xm-wire2: they were put on the device every score and pinned until the block ended)
+    var arena = metric_plan_run_from(r.plan, pins, UInt64(2), UInt64(0), PythonObject(None), PythonObject(None), context)
     var ss_res = arena.f64(num)
     var ss_tot = arena.f64(den)
     _ = t^

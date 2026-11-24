@@ -104,8 +104,9 @@ def _contingency(c: _Clusterings, mode: PythonObject, has_eps: Bool, eps: Float6
     # the typed builder (bindings/metrics_exp_common_run.mojo
     # `contingency_stages`, lane mf-score5): its inputs A, B pinned in that order
     var r = contingency_stages(prog.plan, c.a.n, ka, kb, has_eps, eps, mi, emi)
-    prog.pins.append(c.a.codes)
-    prog.pins.append(c.b.codes)
+    # the encoded codes are this call's temporaries: never kept resident (lane vdf-xm-wire2)
+    prog.pin(c.a.codes, False)
+    prog.pin(c.b.codes, False)
     var arena = metric_door_run(prog, mode, context)
     return _Cont(arena^, ka, kb, r.C, r.F, r.R, r.K, r.P, r.E, r.MI, r.EMI)
 
@@ -249,8 +250,8 @@ def _cluster_score_run(args: PythonObject, caller: String, db: Bool, rx: MetricR
     if rx.slot >= 0:
         X0 = prog.put_resident(args[0], n * d, rx.slot)
     else:
-        X0 = prog.put(Xa)
-    var L = prog.put_i32(lab.codes)
+        X0 = prog.put_arg(Xa, args, 0)
+    var L = prog.put_temp(lab.codes)  # this call's codes: never kept resident (lane vdf-xm-wire2)
     var g = prog.group(L, n, k, X0, d, MX_NONE, d)
     var off = g[0]
     var sums = g[1]

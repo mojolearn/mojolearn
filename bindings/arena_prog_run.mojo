@@ -85,10 +85,51 @@ def _pad(var words: List[Int32], fill: List[Int32]) -> List[Int32]:
 # store owned by the result (was a Python `array.array`).
 
 
-#: A door's word for a buffer input that is a per-call temporary (codes, admitted weights): the runner
-#: copies it like any host input and NEVER keeps it resident in a `resident()` scope (lane vdf-xm-wire:
-#: a fresh temporary at the scope floor was put every call and pinned until the block ended).
-comptime METRIC_INPUT_TEMP = -2
+# TOMBSTONE: METRIC_INPUT_TEMP (the -2 slot word a door wrote into a per-call List for a never-kept
+# temporary; lane vdf-xm-wire) deleted 2026-11-24 by lane vdf-xm-wire2: replaced by the no-heap
+# temporaries mask (bindings/metrics_program_door.mojo `MetricDoorProg.temps`, read by
+# bindings/arena_prog_native_door.mojo `metrics_run_plan_slots`); code recoverable at 82e076645c.
+
+#: Buffer inputs a temporaries mask can name (`metric_input_temp`): bit i of the
+#: UInt64 is input i. An input past it is a host input the run may keep resident, as before.
+comptime METRIC_TEMP_BITS = 64
+
+
+@always_inline
+def metric_input_temp(temps: UInt64, i: Int) -> Bool:
+    """Whether buffer input `i` is a door's per-call temporary (encoded codes,
+    a mapped or converted copy, admitted weights): the runner copies it like
+    any host input and NEVER keeps it resident in a `resident()` scope (a
+    fresh temporary at the scope floor was put every call and pinned until
+    the block ended; lanes vdf-xm-wire and vdf-xm-wire2)."""
+    return i < METRIC_TEMP_BITS and ((temps >> UInt64(i)) & 1) != 0
+
+
+#: Buffer inputs a sources word can name (`metric_input_source`): 4 bits per
+#: input, so inputs 0..15, each naming argument 0..14 of the door's call.
+comptime METRIC_SOURCE_INPUTS = 16
+
+
+@always_inline
+def metric_source_word(input: Int, argument: Int) -> UInt64:
+    """The sources-word bits saying buffer input `input` was admitted from
+    the door call's argument `argument` (0 when either is past the word:
+    the input stays unmarked)."""
+    if input < 0 or input >= METRIC_SOURCE_INPUTS or argument < 0 or argument > 14:
+        return 0
+    return UInt64(argument + 1) << UInt64(4 * input)
+
+
+@always_inline
+def metric_input_source(src: UInt64, i: Int) -> Int:
+    """The door call's argument buffer input `i` was admitted from, or -1
+    (unmarked: a buffer the door holds as the caller's own, as before). An
+    admitted input that does not read that argument's buffer (a converted
+    copy) is a per-call temporary: never kept resident (lane vdf-xm-wire2).
+    The address compare runs only inside a `resident()` scope at the floor."""
+    if i >= METRIC_SOURCE_INPUTS:
+        return -1
+    return Int((src >> UInt64(4 * i)) & 15) - 1
 
 
 struct MetricProgramInput(ImplicitlyCopyable, Movable):

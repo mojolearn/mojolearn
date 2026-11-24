@@ -15,7 +15,7 @@
 # shared runner. Same kernels, same programs: the bits do not move.
 from bindings.metrics_slot_door import (
     mc_slot_inputs, mc_slots_open, mc_slots_call, mc_resident_pair, mc_resident_none, mc_resident_order,
-    McSlots, McResidentPair,
+    mc_resident_gather, McSlots, McResidentPair,
 )
 from metrics.slot_ops import MS_ACCURACY, MS_ACCURACY_W, MS_CONFUSION, MS_PRFS
 from bindings.operation_names_mcls import (
@@ -28,8 +28,9 @@ from bindings.operation_names_mcls import (
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
-from bindings.arena_prog_run import MetricArenaOwner
+from bindings.arena_prog_run import MetricArenaOwner, metric_source_word
 from bindings.py_balanced import py_call, py_type, py_contains
+from bindings.py_attr import py_attr
 from bindings.classical_arrays_door import classical_address, classical_dtype_str, classical_is_array
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.native_loaded_module_door import native_loaded_module
@@ -49,7 +50,9 @@ from bindings.mcls_common_unpack import (
     mc_union, mc_map_order, mc_map_equal, mc_selected, mc_extend_order, mc_positive, mc_refuse_multilabel,
     mc_i32_1d, mc_pair_check, mc_weights, mc_f32_lists, mc_integer_view, mc_i32_array,
 )
-from bindings.metrics_program_door import MetricDoorProg, metric_door_run
+from bindings.metrics_program_door import MetricDoorProg, metric_door_run, metric_route_open
+from core.native_descriptor_call import native_descriptor_call
+from x_metrics.descriptor_schema import MP_MODE, MP_VENDOR
 from bindings.metrics_program_pack import metric_arena_array
 from bindings.mcls_classify_run import (
     _CM_COUNT, _CM_NORM, _CM_WSUM_LEAF, _CM_WSUM_FOLD, _WSUM_BLOCK, _ROW_LOGLOSS, _RANK_MEAN,
@@ -127,10 +130,13 @@ def mc_classification_pair(y_true: PythonObject, y_pred: PythonObject, context: 
 
 
 def mc_sums(mut prog: MetricDoorProg, pair: McPair, order: PythonObject, epis: List[McEpi],
-            context: PythonObject) raises -> McSums:
+            args: PythonObject, w_arg: Int, context: PythonObject) raises -> McSums:
     """`_Sums(true, pred, w, order, numeric_mode, epi=...)` up to its tail:
     the codes over `order`, the pair key, the three (four weighted)
-    groupings, the count slots and the cls_epi stages, in that order."""
+    groupings, the count slots and the cls_epi stages, in that order.
+    `args[w_arg]`: the sample_weight argument the weights were admitted from
+    (-1: none named); the mapped codes are this call's temporaries, never
+    kept resident (lane vdf-xm-wire2)."""
     var n = pair.true.n
     var labels = mc_len(order)
     var yt = mc_map_order(pair.true, order, context)
@@ -138,10 +144,10 @@ def mc_sums(mut prog: MetricDoorProg, pair: McPair, order: PythonObject, epis: L
     # the typed builder (bindings/mcls_classify_run.mojo `mc_sums_stages`):
     # inputs a, b and (weighted) w, pinned here in that order
     var s = mc_sums_stages(prog.plan, n, labels, pair.w is not None)
-    prog.pins.append(yt)
-    prog.pins.append(yp)
+    prog.pin(yt, False)
+    prog.pin(yp, False)
     if s.weighted:
-        prog.pins.append(pair.w)
+        prog.pin_arg(pair.w, args, w_arg)
     for e in range(len(epis)):  # driver-loop: over the requested set-wise epilogues
         _ = mc_epi_stage(prog.plan, s, epis[e])
     _ = yt^
@@ -161,7 +167,7 @@ def _accuracy(args: PythonObject, context: PythonObject) raises -> PythonObject:
         # `accuracy_count`: the COUNT tail over the match sums
         var pair = mc_pair(args[1], args[2], args[4], "accuracy_score", context, True, True)
         var prog = MetricDoorProg()
-        var s = mc_sums(prog, pair, pair.present, List[McEpi](), context)
+        var s = mc_sums(prog, pair, pair.present, List[McEpi](), args, 4, context)
         var out = mc_count_tail(prog.plan, s, mc_len(pair.present))
         var arena = metric_door_run(prog, args[5], context)
         if not s.weighted:
@@ -178,7 +184,9 @@ def _accuracy(args: PythonObject, context: PythonObject) raises -> PythonObject:
         # resident() inputs read in place (lane vdf-xm-kernels): raw int32 labels and the weights
         var w_values: List[PythonObject] = [yt, yp, w]
         var w_ints: List[Int] = [n]
-        var device = mc_slot_inputs(args[0], MS_ACCURACY_W, w_values, w_ints, List[Float64](), List[Int](), context)
+        var device = mc_slot_inputs(args[0], MS_ACCURACY_W, w_values, w_ints, List[Float64](), List[Int](), args, UInt64(0),
+                                    metric_source_word(0, 1) | metric_source_word(1, 2) | metric_source_word(2, 4),
+                                    context)
         if device:
             result = device.value()
         else:
@@ -191,7 +199,8 @@ def _accuracy(args: PythonObject, context: PythonObject) raises -> PythonObject:
     else:
         var a_values: List[PythonObject] = [yt, yp]
         var a_ints: List[Int] = [n]
-        var device = mc_slot_inputs(args[0], MS_ACCURACY, a_values, a_ints, List[Float64](), List[Int](), context)
+        var device = mc_slot_inputs(args[0], MS_ACCURACY, a_values, a_ints, List[Float64](), List[Int](), args, UInt64(0),
+                                    metric_source_word(0, 1) | metric_source_word(1, 2), context)
         if device:
             result = device.value()
         else:
@@ -244,6 +253,40 @@ def _resident_labels(binding: PythonObject, y_true: PythonObject, y_pred: Python
 def _confusion_weighted(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`confusion_matrix_weighted`; args = (binding, y_true, y_pred, labels,
     sample_weight, normalize, numeric_mode)."""
+    # resident labels (lane vdf-xm-wire2): inside resident(), when the program image reads the
+    # metrics image's store, the pair is encoded on the device and the program reads the codes
+    # slots in place (`put_resident`); the weighted grouping is the host route's program
+    var state = mc_slots_open(context)
+    if state.resident.active() and _program_reads_slots(args[0], args[6], context):
+        var dev = _resident_labels(args[0], args[1], args[2], True, state, context)
+        if dev.live():
+            try:
+                var w = mc_weights(args[4], dev.n, "confusion_matrix", context)
+                var chosen = mc_selected(args[3], "integer", dev.classes, context)
+                var hit = mc_resident_gather(args[0], dev.codes_t, dev.n, _miss_table(dev.classes, chosen, context),
+                                             state)
+                if hit[1] < 0:
+                    raise Error("At least one label specified must be in y_true")
+                var k = mc_len(chosen)
+                if k > 4096:
+                    raise Error("mojolearn metrics: at most 4096 labels in a confusion matrix")
+                var ct = dev.codes_t
+                var cp = dev.codes_p
+                if args[3] is not None:
+                    var table = _order_table(dev.classes, chosen, context)
+                    ct = mc_resident_order(args[0], ct, dev.n, table, state)
+                    cp = mc_resident_order(args[0], cp, dev.n, table, state)
+                var prog = MetricDoorProg()
+                var a = prog.put_resident(args[1], dev.n, ct)
+                var b = prog.put_resident(args[2], dev.n, cp)
+                var cm = _confusion_weighted_run(prog, a, b, dev.n, k, w, args, context)
+                var failures = state.close()
+                if failures.byte_length() > 0:
+                    raise Error("RuntimeError: confusion_matrix: device slots were not freed: " + failures)
+                return cm
+            except error:
+                _ = state.close()  # a refusal: the call's slots go with it
+                raise error^
     var pair = mc_pair(args[1], args[2], args[4], "confusion_matrix", context, True, True)
     var chosen = mc_selected(args[3], pair.true.kind, pair.present, context)
     if mc_len(family_call(mc_set(chosen).intersection, pair.true.classes)) == 0:
@@ -256,11 +299,43 @@ def _confusion_weighted(args: PythonObject, context: PythonObject) raises -> Pyt
     var prog = MetricDoorProg()
     var yt = mc_map_order(pair.true, chosen, context)
     var yp = mc_map_order(pair.pred, chosen, context)
-    var a = prog.put(yt)
-    var b = prog.put(yp)
+    # the mapped codes are this call's temporaries: never kept resident (lane vdf-xm-wire2)
+    var a = prog.put_temp(yt)
+    var b = prog.put_temp(yp)
+    var cm = _confusion_weighted_run(prog, a, b, n, k, pair.w, args, context)
+    _ = yt^
+    _ = yp^
+    return cm
+
+
+def _program_reads_slots(binding: PythonObject, mode: PythonObject, context: PythonObject) raises -> Bool:
+    """Whether the x_metrics program image `mode` names reads the metrics
+    image's store in place: it has the store (ranges on) and is of the same
+    tier and vendor as the metrics image (`metrics_cluster_key`). Asked
+    inside `resident()` only (lane vdf-xm-wire2)."""
+    var pin = metric_route_open(mode, context)
+    if not pin.route.store:
+        return False
+    var key: PythonObject
+    try:
+        key = binding.metrics_cluster_key
+    except:
+        return False  # an image with no store key
+    var tier = native_descriptor_call(pin.route.program, MP_MODE, [], [], [])
+    var vendor = native_descriptor_call(pin.route.program, MP_VENDOR, [], [], [])
+    _ = pin^
+    return tier == Int(py=key[0]) and vendor == Int(py=key[1])
+
+
+def _confusion_weighted_run(mut prog: MetricDoorProg, a: Int, b: Int, n: Int, k: Int, w: PythonObject,
+                            args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The weighted confusion program over the codes inputs `a`, `b` (host
+    temporaries or resident slots) and the weights: `_confusion`'s pair key
+    and k*k weighted grouping, then `_normalize`. One body for both routes:
+    the same records, so the same bits."""
     var key = prog.scratch(n)
     prog.stage("pair_key", n, [a, b, key, k, 0])
-    var w_off = prog.put(pair.w)
+    var w_off = prog.put_arg(w, args, 4)
     var got = prog.group(key, n, k * k, MC_NONE, 1, w_off, 1)
     var cells = got[1]
     var col = 1
@@ -281,9 +356,53 @@ def _confusion_weighted(args: PythonObject, context: PythonObject) raises -> Pyt
     if k:
         prog.stage("cm_epi", k, [_CM_NORM, cells, k, col, mode, out, ts])
     var arena = metric_door_run(prog, args[6], context)
-    _ = yt^
-    _ = yp^
     return metric_arena_array(arena, out, 2 * (k * k), Python.tuple(k, k), "<f8", context)
+
+
+def _miss_table(classes: PythonObject, selected: PythonObject, context: PythonObject) raises -> PythonObject:
+    """-1 for each class of `classes` that is in `selected`, 0 otherwise, as
+    a C-contiguous int32 array (O(k) host words): through MS_GATHER its
+    answer is the first row whose label is a selected one, or -1 for none."""
+    var b = mc_b()
+    var marks = family_call(py_attr(b.dict, "fromkeys"), selected, PythonObject(-1))
+    var table = family_call(b.list, family_call(b.map, py_attr(marks, "get"), classes,
+                                                family_call(native_loaded_module("itertools").repeat, PythonObject(0))))
+    return mc_i32_array(table, context)
+
+
+def _confusion_resident(args: PythonObject, dev: McResidentPair, norm: Int, mut state: McSlots,
+                        context: PythonObject) raises -> PythonObject:
+    """confusion_matrix (unweighted) over a label pair encoded on the device
+    (`_resident_labels`): the same checks and words as the host route, in
+    its order; the codes never come to the host, the k x k cells come back
+    once. `labels` (args[3]): its choice over the union classes (O(k) host
+    words), "at least one label in y_true" answered on the device by
+    y_true's codes through `_miss_table` (a second device pass, the codes
+    kept there), then both codes mapped to `labels`' order (-1 outside it,
+    skipped by MS_CONFUSION as the host entry skips them)."""
+    var ct = dev.codes_t
+    var cp = dev.codes_p
+    var k = dev.k
+    if args[3] is not None:
+        var selected = mc_selected(args[3], "integer", dev.classes, context)
+        var hit = mc_resident_gather(args[0], dev.codes_t, dev.n, _miss_table(dev.classes, selected, context), state)
+        if hit[1] < 0:
+            raise Error("At least one label specified must be in y_true")
+        k = mc_len(selected)
+        if k > 4096:
+            raise Error("confusion_matrix supports at most 4096 output labels")
+        var table = _order_table(dev.classes, selected, context)
+        ct = mc_resident_order(args[0], ct, dev.n, table, state)
+        cp = mc_resident_order(args[0], cp, dev.n, table, state)
+    elif k > 4096:
+        raise Error("confusion_matrix supports at most 4096 output labels")
+    var cm = family_array(Python.tuple(k, k), "<i8" if norm == 0 else "<f4", context)
+    var addrs: List[Int] = [0, 0]
+    var slots: List[Int] = [ct, cp]
+    var ints: List[Int] = [dev.n, k, norm]
+    var outs: List[Int] = [Int(py=classical_address(cm))]
+    _ = mc_slots_call(args[0], MS_CONFUSION, addrs, slots, ints, List[Float64](), outs, state)
+    return cm
 
 
 def _confusion(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -302,22 +421,19 @@ def _confusion(args: PythonObject, context: PythonObject) raises -> PythonObject
     if normalize is not None:
         var name = String(normalize)
         norm = 1 if name == "true" else (2 if name == "pred" else 3)
-    if args[3] is None:
-        # resident labels (lane vdf-xm-wire): the device union step's codes ARE the codes over
-        # `present` (the sorted union), the order `labels=None` selects; read in place
-        var state = mc_slots_open(context)
-        var dev = _resident_labels(args[0], args[1], args[2], False, state, context)
-        if dev.live():
-            if dev.k > 4096:
-                _ = state.close()
-                raise Error("confusion_matrix supports at most 4096 output labels")
-            var cm = family_array(Python.tuple(dev.k, dev.k), "<i8" if norm == 0 else "<f4", context)
-            var addrs: List[Int] = [0, 0]
-            var slots: List[Int] = [dev.codes_t, dev.codes_p]
-            var ints: List[Int] = [dev.n, dev.k, norm]
-            var outs: List[Int] = [Int(py=classical_address(cm))]
-            _ = mc_slots_call(args[0], MS_CONFUSION, addrs, slots, ints, List[Float64](), outs, state)
+    # resident labels (lane vdf-xm-wire; labels=[...], lane vdf-xm-wire2): the device union step's
+    # codes ARE the codes over `present` (the sorted union), the order `labels=None` selects; read in
+    # place. With `labels`, the union classes come back once for the label choice and the codes are
+    # mapped to `labels`' order on the device (MS_GATHER), as the host route maps them.
+    var state = mc_slots_open(context)
+    var dev = _resident_labels(args[0], args[1], args[2], args[3] is not None, state, context)
+    if dev.live():
+        try:
+            var cm = _confusion_resident(args, dev, norm, state, context)
             return cm
+        except error:
+            _ = state.close()  # a refusal of the label choice: the call's slots go with it
+            raise error^
     var pair = mc_classification_pair(args[1], args[2], context)
     var selected = mc_selected(args[3], pair.true.kind, pair.present, context)
     if mc_len(family_call(mc_set(selected).intersection, pair.true.classes)) == 0:
@@ -411,7 +527,7 @@ def _prf_weighted(args: PythonObject, metric: Int, context: PythonObject) raises
     var epis = List[McEpi]()
     epis.append(McEpi(2, k, avg, zd, 2, 1.0))
     var prog = MetricDoorProg()
-    var s = mc_sums(prog, pair, order, epis, context)
+    var s = mc_sums(prog, pair, order, epis, args, 7, context)
     var arena = metric_door_run(prog, args[9], context)
     var eo = s.eos[0]
     var bad = arena.i32(eo)
@@ -606,12 +722,9 @@ def mc_binary_sets() raises -> PythonObject:
                         Python.list(PythonObject(0), PythonObject(1)), Python.list(PythonObject(-1), PythonObject(1)))
 
 
-def _caller_words(source: PythonObject, admitted: PythonObject, context: PythonObject) raises -> Bool:
-    """Whether the admitted array reads the caller's own buffer (an array
-    admitted without a copy), so the program runner may keep it resident by
-    identity; a converted copy is a per-call temporary."""
-    return (classical_is_array(source, context)
-            and Int(py=classical_address(source)) == Int(py=classical_address(admitted)))
+# TOMBSTONE: _caller_words (the per-call address compare of log_loss's y_proba, on every route; lane
+# vdf-xm-wire) deleted 2026-11-24 by lane vdf-xm-wire2: the runner compares inside resident() only
+# (bindings/arena_prog_native_door.mojo `metric_reads_source`); code recoverable at 82e076645c.
 
 
 def _log_loss_options(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -671,13 +784,14 @@ def _log_loss_options(args: PythonObject, context: PythonObject) raises -> Pytho
     # inputs proba, codes and (weighted) w, pinned in that order
     var prog = MetricDoorProg()
     var put = mc_log_loss_stages(prog.plan, n, k, binary, w is not None, mc_bool(args[2]))
-    # the slot form (lane vdf-xm-wire): y_proba, when the admitted words ARE the caller's buffer, is
-    # read from its resident copy inside resident(); a float32 copy, the codes and the weights are
-    # this call's temporaries
-    prog.pin(proba, _caller_words(args[1], proba, context))
+    # the slot form (lane vdf-xm-wire): y_proba and the weights, when the admitted words ARE the
+    # caller's buffer, are read from their resident copies inside resident(); a converted copy and the
+    # codes are this call's temporaries. The runner compares the buffers inside a scope only (lane
+    # vdf-xm-wire2; was an address compare per call here, `_caller_words`, on every route).
+    prog.pin_arg(proba, args, 1)
     prog.pin(codes, False)
     if w is not None:
-        prog.pin(w, False)
+        prog.pin_arg(w, args, 3)
     var res = put[1]
     var arena = metric_door_run(prog, args[5], context)
     var code = mc_proba_code(arena, put[0])  # put = (FLAGS, result)
@@ -730,7 +844,7 @@ def _log_loss(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var encoded = mc_map_order(true, selected, context)
     var prog = MetricDoorProg()
     var put = mc_log_loss_stages(prog.plan, n, k, binary, False, mc_bool(normalize))
-    prog.pin(proba, _caller_words(args[1], proba, context))  # the caller's buffer: the slot form inside resident() (lane vdf-xm-wire)
+    prog.pin_arg(proba, args, 1)  # the caller's buffer: the slot form inside resident() (lanes vdf-xm-wire, vdf-xm-wire2)
     prog.pin(encoded, False)
     var res = put[1]
     var arena = metric_door_run(prog, args[5], context)
@@ -755,7 +869,8 @@ def mcls_accuracy_fraction(y_true: PythonObject, y_pred: PythonObject, sample_we
     raises as the division did. The same program as accuracy_count's."""
     var pair = mc_pair(y_true, y_pred, sample_weight, "accuracy_score", context, true_admitted, pred_admitted)
     var prog = MetricDoorProg()
-    var s = mc_sums(prog, pair, pair.present, List[McEpi](), context)
+    # no argument tuple here: the weights stay unmarked (kept as the caller's, as before)
+    var s = mc_sums(prog, pair, pair.present, List[McEpi](), PythonObject(None), -1, context)
     var out = mc_count_tail(prog.plan, s, mc_len(pair.present))
     var arena = metric_door_run(prog, numeric_mode, context)
     if s.weighted and arena.i32(out) != 0:

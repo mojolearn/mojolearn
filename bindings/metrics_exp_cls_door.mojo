@@ -112,10 +112,12 @@ def _sums(pair: MxPair, order: PythonObject, context: PythonObject) raises -> Mx
     # the one typed sums builder (bindings/mcls_classify_run.mojo
     # `mc_sums_stages`): inputs a, b and (weighted) w, pinned in that order
     var typed = mc_sums_stages(s.prog.plan, n, L, pair.w is not None)
-    s.prog.pins.append(yt)
-    s.prog.pins.append(yp)
+    # the codes are this call's temporaries: never kept resident (lane
+    # vdf-xm-wire2); the weights stay unmarked (no argument tuple here)
+    s.prog.pin(yt, False)
+    s.prog.pin(yp, False)
     if pair.w is not None:
-        s.prog.pins.append(pair.w)
+        s.prog.pin(pair.w, True)
     s.match_key = typed.match_off
     s.W = typed.w_off
     for i in range(len(typed.groups) // 2):  # driver-loop: over the count groupings (three, four weighted)
@@ -416,10 +418,10 @@ def _kappa(args: PythonObject, context: PythonObject) raises -> PythonObject:
     # scorers' typed RUN calls too; its pins in its input order (the true and
     # predicted codes in `chosen`'s order, then the weights).
     var prog = MetricDoorProg()
-    prog.pins.append(mx_codes(pair.true, chosen, False, context))
-    prog.pins.append(mx_codes(pair.pred, chosen, False, context))
+    prog.pin(mx_codes(pair.true, chosen, False, context), False)  # codes: never kept resident (lane vdf-xm-wire2)
+    prog.pin(mx_codes(pair.pred, chosen, False, context), False)
     if pair.w is not None:
-        prog.pins.append(pair.w)
+        prog.pin_arg(pair.w, args, 4)
     var out = kappa_stages(prog.plan, pair.true.n, k, pair.w is not None, wm)
     var arena = metric_door_run(prog, args[6], context)
     var flags = arena.i32(out)
@@ -477,10 +479,10 @@ def _likelihood_ratios(args: PythonObject, context: PythonObject) raises -> Pyth
     # grouping over the chosen labels, then cm_epi CLR), which the search
     # scorers' typed RUN calls too; its pins in its input order.
     var prog = MetricDoorProg()
-    prog.pins.append(mx_codes(pair.true, chosen, False, context))
-    prog.pins.append(mx_codes(pair.pred, chosen, False, context))
+    prog.pin(mx_codes(pair.true, chosen, False, context), False)  # codes: never kept resident (lane vdf-xm-wire2)
+    prog.pin(mx_codes(pair.pred, chosen, False, context), False)
     if pair.w is not None:
-        prog.pins.append(pair.w)
+        prog.pin_arg(pair.w, args, 3)
     var out = clr_stages(prog.plan, pair.true.n, pair.w is not None)
     var arena = metric_door_run(prog, args[5], context)
     var flags = arena.i32(out)
