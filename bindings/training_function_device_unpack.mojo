@@ -16,10 +16,12 @@ today's entries (`optimizer_entries`) exactly as before.
 Sides. The training binding has both: the device image `_mojolearn_training`
 and the host image `_mojolearn_training_host` (host_surface's training family,
 the whole route on a CPU-only install, which exports the same entries but the
-`*_dev` device-array ones). mlp_inference_sessions runs the x_sequence
-binding's `small_mlp_program`, which no CPU image exports: it has no CPU
-implementation, and an explicit "cpu" beside a GPU set is refused in the
-estimators' `device_cpu_absent` words.
+`*_dev` device-array ones). mlp_inference_sessions runs the training
+binding's `OPT_NATIVE_MLP_SESSIONS`, which the host image exports too
+(training/host/optimizer_native_extra.mojo `nn_mlp_sessions_host`): lane
+vdf-linalg2 (2026-11-24) routes its "cpu" there like every other function
+here (was refused as `device_cpu_absent`, on the wrong belief that it ran the
+x_sequence `small_mlp_program`).
 
 An explicit "cpu" beside a GPU set runs the host image's entries, connected at
 the first such call (`training_entries_cpu`, the bridge's `cpu_load_later`
@@ -43,6 +45,7 @@ from providers.python.device_route_boundary_door import device_cpu_connect_late
 from providers.python.function_device_boundary_door import function_device_admit
 
 comptime TRAINING_HAS_GPU = True
+comptime TRAINING_HAS_CPU = True
 comptime _TRAINING_CPU_ENTRIES = "training_bindings_cpu"
 
 
@@ -90,8 +93,7 @@ def training_function_device(operation: Int, item: PythonObject, values: PythonO
     refusal of an input that lives on the device. `values` is the argument
     tuple; its last item is `item`."""
     var name = _training_function_name(operation)
-    var device = function_device_admit(item, name, TRAINING_HAS_GPU,
-                                       operation != OPTIMIZER_OPN_MLP_INFERENCE_SESSIONS,
+    var device = function_device_admit(item, name, TRAINING_HAS_GPU, TRAINING_HAS_CPU,
                                        context, native_loaded_module("builtins"))
     if device.host_beside:
         var nk = optimizer_keys()
