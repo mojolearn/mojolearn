@@ -43,7 +43,6 @@ def test_public_kmeans_uses_native_provider_without_legacy_call_envelopes(method
         "kmeans_fit", "kmeans_fit_transform", "kmeans_predict", "kmeans_transform",
         "kmeans_centers_prepare", "kmeans_centers_release",
         "kmeans_predict_resident", "kmeans_transform_resident",
-        "kmeans_fit_fold", "kmeans_predict_fold", "kmeans_transform_fold",
     ):
         if hasattr(binding, name):
             monkeypatch.setattr(binding, name, forbidden)

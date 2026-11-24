@@ -10,18 +10,18 @@ Pattern as dist_check.mojo: separation first, then device == oracle and
 host == oracle bit for bit under IDENTICAL, each stage on the card."""
 from core.identity_trace import IdentityTrace
 from x_neighbors.checks.oracles import (
-    o_matmul, o_rowsum, o_colsum, o_group_mean, o_variance, o_row_normalize, o_softmax, o_log_softmax, o_sqdist, o_knn_select,
+    o_matmul, o_rowsum, o_colsum, o_variance, o_row_normalize, o_softmax, o_log_softmax, o_sqdist, o_knn_select,
     o_lof_lrd, o_lof_score, o_absdiff_sum,
 )
 from x_neighbors.checks.seam_util import (
-    seam_fixture, fa, ia, zf, zi, count_diff_f32, count_diff_i32, require_separates, same,
+    seam_fixture, fa, ia, zf, count_diff_f32, count_diff_i32, require_separates, same,
 )
 from x_neighbors.device_ops import (
-    op_matmul, op_rowsum, op_colsum, op_group_mean, op_variance, op_row_normalize, op_softmax, op_log_softmax, op_lof_lrd,
+    op_matmul, op_rowsum, op_colsum, op_variance, op_row_normalize, op_softmax, op_log_softmax, op_lof_lrd,
     op_lof_score, op_absdiff_sum,
 )
 from x_neighbors.host_ops import (
-    op_matmul as h_matmul, op_rowsum as h_rowsum, op_colsum as h_colsum, op_group_mean as h_group_mean,
+    op_matmul as h_matmul, op_rowsum as h_rowsum, op_colsum as h_colsum,
     op_variance as h_variance, op_row_normalize as h_row_normalize, op_softmax as h_softmax, op_log_softmax as h_log_softmax,
     op_lof_lrd as h_lof_lrd, op_lof_score as h_lof_score, op_absdiff_sum as h_absdiff_sum,
 )
@@ -63,19 +63,6 @@ def run_checks() raises:
     h_colsum(fa(a), fa(hc), n, k)
     same("5209 colsum host", count_diff_f32(hc, wc))
     tr.record_list_f32("x_neighbors.sums", dr)
-
-    var lab = zi(n)
-    for i in range(n):
-        lab[i] = Int32((i * 7) % 3)
-    var wg = o_group_mean(a, lab, n, k, 4)          # group 3 is empty: its mean is 0
-    require_separates("5209 group mean fold", count_diff_f32(wg, o_group_mean(a, lab, n, k, 4, 1)))
-    var dg = zf(4 * k)
-    op_group_mean(fa(a), ia(lab), fa(dg), n, k, 4)
-    same("5209 group_mean device", count_diff_f32(dg, wg))
-    var hg = zf(4 * k)
-    h_group_mean(fa(a), ia(lab), fa(hg), n, k, 4)
-    same("5209 group_mean host", count_diff_f32(hg, wg))
-    tr.record_list_f32("x_neighbors.group_mean", dg)
 
     # one large deviation and many small ones: ascending, each small square rounds into the
     # large partial sum; descending, the small ones accumulate exactly first
@@ -193,7 +180,6 @@ def run_checks() raises:
     tr.record_list_f32("x_neighbors.lof", dsc)
     _ = a^
     _ = b^
-    _ = lab^
     _ = pos^
     _ = sm^
     _ = dist^

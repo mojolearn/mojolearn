@@ -88,9 +88,9 @@ subset, the group mask `match_any` returns:
 **Where.** `gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo` (`h8_add_point_wave`), and the
 same pattern in RF class-count histograms and categorical/CTR counters (low-cardinality bins).
 
-**Meanwhile.** `MOJOLEARN_TREES_HIST_WARP_AGG` aggregates only the whole-wave case (every lane on the same cell:
-`warp.broadcast` + `vote` + `warp.sum`), which needs no subset reduce. Partial groups take one atomic per lane,
-as before. No hand-written intrinsic or inline assembly.
+**Meanwhile.** One atomic per lane. The whole-wave-only aggregation we tried (`MOJOLEARN_TREES_HIST_WARP_AGG`:
+`warp.broadcast` + `vote` + `warp.sum` when every lane hits the same cell) was timed as noise / loser on the L40S
+and deleted on 2026-11-24 (docs/TOMBSTONES.md). No hand-written intrinsic or inline assembly.
 
 ## DeviceContext memory manager reserves 90% of free VRAM per process on AMD (2026-10-16, amd-investigate)
 

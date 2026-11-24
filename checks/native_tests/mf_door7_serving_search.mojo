@@ -74,7 +74,10 @@ def _logistic(l2: Float64) raises -> MemberPlan:
     plan.member = MemberRef(EntryRef(logistic_member_v2, 0), 0)
     var probe = MemberCall(plan.route)
     plan.member.capabilities = member_call(plan.member, MEMBER_OP_CAPABILITIES, probe)
-    plan.params = [0.0, 1.0, 0.0, l2, 100.0, 20.0, 10.0, 0.0, 1e-4, 1e-6]
+    # LogisticRegression()'s own words as providers/python/member_logistic_boundary_door.mojo admits them:
+    # max_iter 1000, linesearch 50, lbfgs_memory 5, penalty_normalized 1 (was 100, 20, 10, 0: the old words,
+    # an unnormalized penalty N times the estimator's; lane mf-iterimp-logit, w3-cleanup).
+    plan.params = [0.0, 1.0, 0.0, l2, 1000.0, 50.0, 5.0, 1.0, 1e-4, 1e-6]
     plan.classes = K
     return plan^
 

@@ -8,7 +8,6 @@ from core.msel_device import device_rebase_offsets_i32
 from core.neural_context import process_ctx
 from core.msel_device_x import msel_fold_entry_context, MSEL_CONTEXT_SLOT
 from decomposition.pca_fold import pca_fit_fold, PCAFoldFit
-from cluster.kmeans_fold import kmeans_fit_fold, KMeansFoldFit
 
 comptime _MSEL_SLOT = MSEL_CONTEXT_SLOT
 
@@ -42,23 +41,6 @@ def _mdx_f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     if addr <= 0 or addr % 4 != 0:
         raise Error("pca_transform_fold: pointers must be positive and float32-aligned")
     return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
-
-
-def _mdx_u32_ptr(addr: Int) raises -> MutPointer[UInt32, MutUntrackedOrigin]:
-    if addr <= 0 or addr % 4 != 0:
-        raise Error("kmeans fold: pointers must be positive and 4-byte aligned")
-    return MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=addr)
-
-
-def kmeans_fit_fold_run(
-    base_id: Int, base_rows: Int, index_id: Int, ns: Int, nf: Int, nc: Int,
-    cp: MutPointer[Float32, MutUntrackedOrigin], lp: MutPointer[UInt32, MutUntrackedOrigin],
-    mi: Int, tl: Float64, sd: UInt64, ninit: Int, ii: Int, mm: Int, ovs: Float64,
-) raises -> KMeansFoldFit:
-    """`kmeans_fit_fold_binding`'s fit on this build's fold context."""
-    var ctx = msel_fold_entry_context()
-    return kmeans_fit_fold(ctx, base_id, base_rows, index_id, ns, nf, nc, cp, lp,
-                           mi, tl, sd, ninit, ii, mm, ovs)
 
 
 def pca_fit_fold_run(

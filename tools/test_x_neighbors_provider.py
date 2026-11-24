@@ -14,7 +14,7 @@ def test_generated_tables_preserve_current_wrapper_schemas_and_native_calls():
         old = (ROOT / f'bindings/_mojolearn_x_neighbors{suffix}.mojo').read_text()
         new = (ROOT / f'x_neighbors/native_descriptor_{target}.mojo').read_text()
         rows = unpack(old)
-        assert len(rows) == 77
+        assert len(rows) == 76
         for name, _, body in rows:
             new_body = re.search(rf'^def xn_native_{name}\(.*?(?=^def |\Z)', new, re.M | re.S).group()
             assert re.findall(r'\bop_\w+\(', body) == re.findall(r'\bop_\w+\(', new_body), (target,name)

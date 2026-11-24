@@ -317,24 +317,6 @@ def knn_sq_item(
         worst = dist.unsafe_load(t * k + k - 1)
 
 
-# DEVIATION 5209 (row 123)
-def group_mean_item(t: Int, x: FP, labels: IP, res: FP, n: Int, d: Int, n_groups: Int):
-    """Mean of the rows labelled g, feature f, t = g*d + f: rows in ascending
-    order, one division. An empty group stores 0."""
-    var g = t // d
-    var f = t - g * d
-    var acc = Float32(0)
-    var cnt = 0
-    for i in range(n):
-        if Int(labels.unsafe_load(i)) == g:
-            acc = _add(acc, x.unsafe_load(i * d + f))
-            cnt += 1
-    if cnt == 0:
-        res.unsafe_store(t, Float32(0))
-    else:
-        res.unsafe_store(t, ftz(identical_div(acc, Float32(cnt))))
-
-
 # ------------------------------------------------------------------ one-class SVM
 comptime SMO_TAU = Float32(1e-12)
 
@@ -811,8 +793,8 @@ def nc_std_item(t: Int, x: FP, lab: IP, cent: FP, std: FP, n: Int, d: Int, n_cla
 
 # lane/neural-pass95 (2026-10-01): NearestCentroid's fit statistics for
 # feature f in one item, so the fit uploads X once and runs on the device:
-# the class means (group_mean_item's chain for every class, rows
-# ascending, one division by the class count), the within-class std
+# the class means (for every class, rows ascending, one division by
+# the class count), the within-class std
 # (nc_std_item's chain) and the dataset centroid nc_shrink_item summed
 # again for every class (its chain, once). The same statements, the same
 # words. On the GPU column group_mean and nc_std ran on the host

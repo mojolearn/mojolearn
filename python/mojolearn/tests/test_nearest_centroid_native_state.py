@@ -88,7 +88,7 @@ def test_centroid_runtime_ignores_replaced_legacy_numerical_entries(monkeypatch)
         called.append(args)
         raise AssertionError("legacy numerical Python entry executed")
 
-    names = ["xn_p2m_class_counts", "xn_group_mean", "xn_nc_median", "xn_nc_stats", "xn_nc_std",
+    names = ["xn_p2m_class_counts", "xn_nc_median", "xn_nc_stats", "xn_nc_std",
              "xn_nc_med_std", "xn_nc_shrink_d", "xn_nc_shrink", "xn_nc_decision", "xn_sqdist",
              "xn_l1dist", "xn_knn_select", "xn_matmul", "xn_row_argmax", "xn_softmax", "xn_log_softmax",
              "x_neighbors_nc_labels", "x_neighbors_nc_proba"]

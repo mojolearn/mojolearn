@@ -18,11 +18,10 @@ this binding.
 
 # The PACK half of the former `bindings/msel_device.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/msel_device_unpack.mojo`.
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
+from std.python import PythonObject
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.msel_device_x import msel_fold_entry_context, msel_store
+from core.msel_device_x import msel_store
 # lane calltable-msel: the store, scatter, column, split-table and
 # group-fold bodies are the runs the model-selection helper table publishes
 # (core/msel_helpers_device.mojo); these exports unpack and call them.
@@ -37,8 +36,7 @@ from core.tsvd_native_fold import TSVD_FOLD_API
 from glm.logistic_fold_native import LOGISTIC_FOLD_API, logistic_fold_query
 from core.logistic_native_api import QnQueryRequest, QnFoldStore, QN_NATIVE_DECISION, QN_NATIVE_BINARY, QN_NATIVE_PROBA
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
-from cluster.kmeans_fold import kmeans_query_fold
-from core.msel_device_run import _mdx_f32_ptr, _mdx_u32_ptr, kmeans_fit_fold_run, pca_fit_fold_run
+from core.msel_device_run import _mdx_f32_ptr, pca_fit_fold_run
 
 # Deleted (arena unit E, 2026-11-21): `msel_put` and
 # `msel_take_rows` had no caller since the resident owner calls the
@@ -50,28 +48,3 @@ def msel_live_binding() raises -> PythonObject:
     return PythonObject(msel_store()[].live_count())
 
 
-# Lane a6: the device-X entries of family and classical estimators live in
-# this binding (the identical GPU base binding). The placement is a choice,
-# not a need: the fold store is one SharedSlot per process by name, so an
-# entry in any extension module reaches it through `msel_fold_store()` and
-# runs on `msel_fold_entry_context()` (core/msel_device_x.mojo; lane a8d: the
-# build's own context, so a `fast` build's entry runs on the `fast` context).
-def _kmeans_query_fold_call(ids: PythonObject, centroids_addr: PythonObject, out_addr: PythonObject,
-                            params: PythonObject, transform: Bool) raises -> PythonObject:
-    if len(ids) != 3 or len(params) != 4:
-        raise Error("kmeans fold query: ids and params must hold 3 and 4 values")
-    var base_id = Int(py=ids[0])
-    var base_rows = Int(py=ids[1])
-    var index_id = Int(py=ids[2])
-    var cp = _mdx_f32_ptr(Int(py=centroids_addr))
-    var out = Int(py=out_addr)
-    _ = _mdx_u32_ptr(out)
-    var ns = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var nc = Int(py=params[2])
-    var mm = Int(py=params[3])
-    var words: Tuple[Int32, Int32]
-    with GILReleased(Python()):
-        var ctx = msel_fold_entry_context()
-        words = kmeans_query_fold(ctx, base_id, base_rows, index_id, ns, nf, nc, cp, out, mm, transform)
-    return Python.list(Int(words[0]), Int(words[1]))

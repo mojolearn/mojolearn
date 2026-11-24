@@ -42,6 +42,11 @@ for name, target in (("RandomForestRegressor", y), ("RandomForestClassifier", (y
     path = os.path.join(tempfile.mkdtemp(), name + ".npz"); model.save(path)
     if mojolearn.host_model(path).digest_ != model.digest_:
         bad.append(name)
+# HostGBDT's family layout is taken with HostForest's, after the saved-model connection (lane w3-cleanup).
+model = mojolearn.GradientBoosting(n_estimators=5, max_depth=3, random_state=0, device="cpu").fit(X, y)
+path = os.path.join(tempfile.mkdtemp(), "GradientBoosting.npz"); model.save(path)
+if mojolearn.host_model(path).digest_ != model.digest_:
+    bad.append("GradientBoosting")
 print("BAD " + ",".join(bad) if bad else "OK")
 '''
 

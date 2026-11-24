@@ -6,7 +6,7 @@ from std.sys.compile import is_defined
 from core.host_parallel import host_parallelize
 from core.host_finite_scan import host_finite_status
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count_work
-from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_var_item, row_argmax_item
+from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_var_item, row_argmax_item
 from x_neighbors.proba64_nc import softmax64_item
 from x_neighbors.sort_items import nc_median_init_item, nc_median_step_item, nc_median_pick_item, nc_med_std_init_item, nc_med_std_step_item, nc_med_std_pick_item, pos_count_item, pos_scan_item, pos_emit_item
 from x_neighbors.py2mojo_items import p2m_mask_value_item, p2m_zero_cols_item, p2m_nan_indicator_item, p2m_sign_label_item, p2m_relabel_init_item, p2m_relabel_first_item, p2m_relabel_count_item, p2m_relabel_scan_item, p2m_relabel_emit_item, p2m_relabel_map_item, p2m_ccount_zero_item, p2m_ccount_add_item, p2m_ccount_emit_item, p2m_const_init_item, p2m_const_cmp_item, p2m_lp_labels_item, p2m_fill_item, p2m_iota_item, p2m_transpose_item, p2m_transpose_i_item, p2m_row_sort_init_item, p2m_row_sort_step_item, p2m_row_sort_emit_item
@@ -202,14 +202,6 @@ def op_knn_sq(x: Int, y: Int, dist: Int, idx: Int, n: Int, m: Int, d: Int, k: In
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * k) > 0:
             _f(dist).unsafe_store(0, _f(dist).unsafe_load(0) + Float32(1e-3))
-
-
-def op_group_mean(x: Int, labels: Int, res: Int, n: Int, d: Int, g: Int) raises:
-    for t in range(g * d):
-        group_mean_item(t, _f(x), _i(labels), _f(res), n, d, g)
-    comptime if X_NEIGHBORS_HOST_SABOTAGE:
-        if (g * d) > 0:
-            _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
 
 
 def op_take_rows(src: Int, rows: Int, res: Int, n_out: Int, d: Int, n_src: Int) raises:
