@@ -181,6 +181,10 @@ class NearestNeighbors(_NumericModeMixin):
     #: estimator's device route, and the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    # A native member that fits and exports its points (core/neighbors_member.mojo kind 2, lane
+    # mf-member8): a meta-estimator that fits it as its final estimator (RFE with no elimination round)
+    # runs its fit natively. No predict, no coef_ or feature_importances_.
+    _mojolearn_member = (11, 2)
 
     # scikit-learn's no-op keywords, at the class too: a model the archive door loads
     # (`cls.__new__`, bindings/host_archive_native_door.mojo) never ran __init__, and its
@@ -896,6 +900,9 @@ class RadiusNeighbors(_NumericModeMixin):
     #: estimator's device route, and the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    # A native member that fits and exports its points (core/neighbors_member.mojo kind 3, lane
+    # mf-member8). No predict, no coef_ or feature_importances_.
+    _mojolearn_member = (11, 3)
 
     def __init__(
         self,

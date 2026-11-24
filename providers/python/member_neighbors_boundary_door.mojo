@@ -2,7 +2,12 @@
 """The member boundary of the Neighbors family: KNeighborsClassifier (kind 0)
 and KNeighborsRegressor (kind 1), `_mojolearn_member = (11, kind)` on each
 class (MEMBER_FAMILY_NEIGHBORS; RUN: core/neighbors_member.mojo).
-NearestNeighbors and RadiusNeighbors have no predict and are not members.
+Lane mf-member8: NearestNeighbors (kind 2) and RadiusNeighbors (kind 3), fit
+and export only (no predict): admitted with their fit's refusals
+(`_check_refusals`; `radius_refusals`, which also writes `_metric_value` /
+`_metric_arg` as the radius fit does), packed with `_index`, `n_samples_fit_`,
+`n_features_in_` (NearestNeighbors: a fresh `_resident_holder` after the
+release, as its fit does), imported from `_index`.
 
   * `neighbors_member_admit` (UNPACK, once per member): the estimator's own
     fit refusals (`_check_refusals`: algorithm, metric, p, weights), its
@@ -46,6 +51,7 @@ from core.member_abi import (
 from core.neighbors_entry_table import NB_OPERATION_COUNT, neighbors_ops_entry
 from core.neighbors_member import NEIGHBORS_BLOCK_POINTS, NEIGHBORS_BLOCK_TARGETS
 from providers.python.estimator_binding_pyapi_door import estimator_binding, estimator_binding_host
+from providers.python.radius_public_lifecycle_pyapi_door import radius_refusals
 
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -55,15 +61,34 @@ def neighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
     from the unfitted estimator."""
-    if kind != 0 and kind != 1:
+    if kind < 0 or kind > 3:
         raise Error("ValueError: mojolearn: unknown k-NN member kind " + String(kind))
-    # The estimator's own refusals of its fit (by name, in its order).
-    _ = _check_refusals(model, context)
-    var dist = knn_dist_words(model, context)
-    var k_source = family_field(fields, "n_neighbors")
-    var tile_source = family_field(fields, "query_tile")
-    var k = Int(py=k_source)
-    var tile = Int(py=tile_source)
+    var metric_word = Float64(-1.0)
+    var metric_arg = Float64(2.0)
+    var weights_word = Float64(0.0)
+    var k = 0
+    var tile = 0
+    if kind == 3:
+        # RadiusNeighbors.fit's refusals (by name, in its order); they write
+        # `_metric_value` / `_metric_arg` into the fields as its fit does.
+        radius_refusals(model, context)
+    elif kind == 2:
+        # NearestNeighbors.fit's refusals; the resolved brute metric (-1 for
+        # algorithm='rbc') decides its one input check at fit.
+        metric_word = Float64(_check_refusals(model, context))
+        k = Int(py=family_field(fields, "n_neighbors"))
+        tile = Int(py=family_field(fields, "query_tile"))
+    else:
+        # The estimator's own refusals of its fit (by name, in its order).
+        _ = _check_refusals(model, context)
+        var dist = knn_dist_words(model, context)
+        metric_word = Float64(dist.metric)
+        metric_arg = dist.metric_arg
+        weights_word = Float64(dist.weights)
+        var k_source = family_field(fields, "n_neighbors")
+        var tile_source = family_field(fields, "query_tile")
+        k = Int(py=k_source)
+        tile = Int(py=tile_source)
     # The image the estimator's own predict calls, and its operations entry.
     # An explicit HostKNeighbors* (its own host-only word, lane mf-cal3b): the core host image its own
     # fit and predict bind.
@@ -75,8 +100,7 @@ def neighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int,
     route.vendor = key.vendor
     route.entry = EntryRef(neighbors_ops_entry(key), entry_ref_word(key.mode, key.vendor, NB_OPERATION_COUNT))
     owner.plan.route = route
-    var words: List[Float64] = [Float64(kind), Float64(k), Float64(dist.metric), dist.metric_arg,
-        Float64(dist.weights), Float64(tile)]
+    var words: List[Float64] = [Float64(kind), Float64(k), metric_word, metric_arg, weights_word, Float64(tile)]
     owner.plan.params = words^
     owner.pins = binding
     return True
@@ -94,6 +118,18 @@ def neighbors_member_pack(model: PythonObject, fields: PythonObject, context: Py
     var index = classical_array(rows, cols, context)
     unsafe_memcpy(dest=_F32P(unsafe_from_address=Int(py=classical_address(index))),
         src=_F32P(unsafe_from_address=call.dst.data), count=rows * cols)
+    if plan.kind == 2 or plan.kind == 3:
+        # Lane mf-member8: `_nn_fit` / `radius_fit`'s publications (the
+        # points, their two counts; NearestNeighbors releases the previous
+        # device index and starts a fresh holder, as its fit and
+        # `neighbors_public_finish` do).
+        if plan.kind == 2:
+            knn_release(model)
+            py_setitem(fields, "_resident_holder", Python.dict())
+        py_setitem(fields, "_index", index)
+        py_setitem(fields, "n_samples_fit_", PythonObject(rows))
+        py_setitem(fields, "n_features_in_", PythonObject(cols))
+        return
     call.block = NEIGHBORS_BLOCK_TARGETS
     _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
     # A refit drops the device copy of the previous index, as the fit does.
@@ -141,6 +177,22 @@ def neighbors_member_state(model: PythonObject, fields: PythonObject, context: P
     """UNPACK: a new member state holding the fitted attributes of `model`
     (one output). The caller frees it (`member_free`)."""
     var index_source = py_get(fields, "_index")
+    if plan.kind == 2 or plan.kind == 3:
+        # Lane mf-member8: the points are the whole fitted state.
+        if index_source is None:
+            raise Error("NotFittedError: this member is not fitted yet")
+        var points = admit_x(index_source, 2, "_index", context)
+        var call = member_new(plan)
+        try:
+            call.block = NEIGHBORS_BLOCK_POINTS
+            call.x = MemberMatrix(Int(py=classical_address(points)), Int(py=points.shape[0]), Int(py=points.shape[1]))
+            call.flags = MEMBER_IMPORT_DONE
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        except error:
+            member_free(plan, call)
+            raise error
+        _ = points
+        return call.state
     var y_source = py_get(fields, "_y_cols")
     if index_source is None or y_source is None:
         raise Error("NotFittedError: this member is not fitted yet")

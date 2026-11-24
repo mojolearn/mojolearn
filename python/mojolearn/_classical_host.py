@@ -1078,6 +1078,9 @@ class _HostKNN(_HostBound):
 
 class HostNearestNeighbors(_NativeArchiveLoad, _HostKNN, NearestNeighbors):
     _HOST_ARRAYS = ("_index",)
+    # Its own member mark and the HOST-ONLY word (lane mf-member8; as HostKNeighborsClassifier).
+    _mojolearn_member = (11, 2)
+    _mojolearn_member_host = True
 
 
 class HostKNeighborsClassifier(_NativeArchiveLoad, _HostKNN, KNeighborsClassifier):
@@ -1107,6 +1110,9 @@ class HostRadiusNeighbors(_NativeArchiveLoad, _HostBound, RadiusNeighbors):
     # sort. Route that helper to its host binary as well as the core radius
     # search; accepting an arbitrary family here could reach the GPU.
     _HOST_AUX_BINDINGS = ("_mojolearn_x_neighbors",)
+    # Its own member mark and the HOST-ONLY word (lane mf-member8; as HostKNeighborsClassifier).
+    _mojolearn_member = (11, 3)
+    _mojolearn_member_host = True
 
 
 class HostARIMA(_NativeArchiveLoad, _HostBound, ARIMA):

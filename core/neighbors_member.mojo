@@ -13,11 +13,24 @@ neighbors operations entry of the image the route resolved to
 (`route.vendor` 0: the CPU column, no resident index; otherwise the device
 column, whose resident copy of the index is minted at the state's first
 query and reused by every later one, as the estimator's own door does). No
-kernel is touched. NearestNeighbors and RadiusNeighbors have no predict and
-are not members (kneighbors graphs are not covered by the ABI).
+kernel is touched.
+
+Lane mf-member8 (2026-11-23): NearestNeighbors (kind 2) and RadiusNeighbors
+(kind 3) are FIT + EXPORT members (no predict: their kneighbors / radius
+graphs are not member operations). Their fit is the estimator's own: the
+fitted points ARE X (bindings/neighbors_knn_native_door.mojo `_nn_fit`: the
+metric input check, nothing else; providers/python/radius_public_lifecycle_
+pyapi_door.mojo `radius_fit`: X admitted finite by the caller, nothing else),
+borrowed as the k-NN kinds borrow it; `y` is not read (scikit-learn's
+`fit(X, y=None)` ignores it). One block, the points. A caller that fits one
+as a final estimator (RFE with no elimination round, scikit-learn's
+`_fit` with n_features_to_select >= n_features) PACKs `_index`,
+`n_samples_fit_`, `n_features_in_` as the estimator's own fit writes them.
 
 MEMBER_OP_NEW parameters (Float64 words, count 6): [0] kind (0
-KNeighborsClassifier, 1 KNeighborsRegressor), [1] n_neighbors, [2] metric
+KNeighborsClassifier, 1 KNeighborsRegressor, 2 NearestNeighbors, 3
+RadiusNeighbors; kinds 2 and 3 read only [2], -1 for no metric input check),
+[1] n_neighbors, [2] metric
 code (the brute-force distance codes of neighbors/neighbors_knn_run.mojo:
 0 sqeuclidean, 1 euclidean, 2 cosine, 3 manhattan, 6 inner_product,
 7 chebyshev, 8 canberra, 9 minkowski, 10 correlation, 14 braycurtis,
@@ -102,6 +115,10 @@ struct NeighborsMemberSlot(Copyable, Movable, Defaultable):
     var generation: Int
     var live: Bool
     var regressor: Bool
+    # Lane mf-member8: kinds 2 (NearestNeighbors) and 3 (RadiusNeighbors) fit
+    # the points only (no targets, no predict).
+    var unsupervised: Bool
+    var kind: Int
     var k: Int
     var metric: Int
     var metric_arg: Float64
@@ -141,6 +158,8 @@ struct NeighborsMemberSlot(Copyable, Movable, Defaultable):
         self.generation = 0
         self.live = False
         self.regressor = False
+        self.unsupervised = False
+        self.kind = 0
         self.k = 5
         self.metric = 1
         self.metric_arg = 2.0
@@ -209,6 +228,8 @@ def _mint(words: MutPointer[Float64, MutUntrackedOrigin]) raises -> Int:
         slot[].generation += 1
         slot[].live = True
         slot[].regressor = words[0] == 1.0
+        slot[].kind = Int(words[0])
+        slot[].unsupervised = words[0] == 2.0 or words[0] == 3.0
         slot[].k = Int(words[1])
         slot[].metric = Int(words[2])
         slot[].metric_arg = words[3]
@@ -255,6 +276,10 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
 
 
 def _name(slot: _SlotPtr) -> String:
+    if slot[].kind == 2:
+        return String("NearestNeighbors")
+    if slot[].kind == 3:
+        return String("RadiusNeighbors")
     return String("KNeighborsRegressor") if slot[].regressor else String("KNeighborsClassifier")
 
 
@@ -329,7 +354,36 @@ def _present_codes(slot: _SlotPtr) raises:
     slot[].uniq = List[Int32](length=len(slot[].present), fill=Int32(0))
 
 
+def _fit_points(slot: _SlotPtr, call: _CallPtr) raises:
+    """Lane mf-member8: NearestNeighbors / RadiusNeighbors `fit(X, y=None)`:
+    the estimator's own fit over the caller's admitted X (its metric input
+    check for NearestNeighbors, word [2] >= 0), the points borrowed, `y`
+    not read."""
+    var estimator = _name(slot)
+    _whole(call, estimator)
+    if call[].fit_output != 0:
+        member_unsupported(estimator, call[].fit_output)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: a " + estimator + " member fits no sample_weight")
+    _dense(call[].x, MEMBER_F32, "X", estimator)
+    var rows = call[].x.rows
+    var cols = call[].x.cols
+    if slot[].metric >= 0:
+        knn_check_metric_input(estimator, slot[].metric, call[].x.data, rows * cols)
+    _release_index(slot)
+    slot[].fitted = False
+    slot[].points = List[Float32]()
+    slot[].points_addr = call[].x.data
+    slot[].targets_addr = 0
+    slot[].rows = rows
+    slot[].features = cols
+    slot[].fitted = True
+
+
 def _fit(slot: _SlotPtr, call: _CallPtr) raises:
+    if slot[].unsupervised:
+        _fit_points(slot, call)
+        return
     var estimator = _name(slot)
     _whole(call, estimator)
     if call[].fit_output != 0:
@@ -505,13 +559,17 @@ def _export(slot: _SlotPtr, call: _CallPtr) raises:
     if (call[].flags & MEMBER_EXPORT_OWN) != 0:
         # THE LIFETIME RULE: both borrowed blocks, once; no view is answered.
         _own_points(slot)
-        _own_targets(slot)
+        if not slot[].unsupervised:
+            _own_targets(slot)
         return
     var block = call[].block
+    var count = 1 if slot[].unsupervised else 2
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
-        if block < 0 or block > 1:
-            raise Error("member ABI: a k-NN member has two fitted blocks")
+        if block < 0 or block >= count:
+            raise Error("member ABI: a " + _name(slot) + " member has " + String(count) + " fitted blocks")
         block = NEIGHBORS_BLOCK_POINTS + block
+    if block == NEIGHBORS_BLOCK_TARGETS and slot[].unsupervised:
+        raise Error("member ABI: a " + _name(slot) + " member has no fitted targets")
     if block == NEIGHBORS_BLOCK_POINTS:
         _own_points(slot)
         call[].dst = MemberMatrix(Int(slot[].points.unsafe_ptr()), slot[].rows, slot[].features)
@@ -524,8 +582,8 @@ def _export(slot: _SlotPtr, call: _CallPtr) raises:
     else:
         raise Error("member ABI: a k-NN member has no fitted block " + String(block))
     call[].block = block
-    call[].out_cols = 2
-    call[].classes = slot[].classes
+    call[].out_cols = count
+    call[].classes = 0 if slot[].unsupervised else slot[].classes
 
 
 def _import(slot: _SlotPtr, call: _CallPtr) raises:
@@ -541,7 +599,7 @@ def _import(slot: _SlotPtr, call: _CallPtr) raises:
         unsafe_memcpy(dest=slot[].points.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=count)
         slot[].rows = call[].x.rows
         slot[].features = call[].x.cols
-    elif call[].block == NEIGHBORS_BLOCK_TARGETS:
+    elif call[].block == NEIGHBORS_BLOCK_TARGETS and not slot[].unsupervised:
         var count = call[].x.rows * call[].x.cols
         slot[].fitted = False
         slot[].targets_addr = 0
@@ -558,6 +616,13 @@ def _import(slot: _SlotPtr, call: _CallPtr) raises:
     elif call[].block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
         raise Error("member ABI: a k-NN member has no fitted block " + String(call[].block))
     if (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        return
+    if slot[].unsupervised:
+        # Lane mf-member8: the points are the whole fitted state.
+        if slot[].rows == 0 or len(slot[].points) != slot[].rows * slot[].features:
+            raise Error("member ABI: a fitted " + _name(slot) + " state needs its points")
+        slot[].points_addr = Int(slot[].points.unsafe_ptr())
+        slot[].fitted = True
         return
     var targets = len(slot[].targets) if slot[].regressor else len(slot[].codes)
     if slot[].rows == 0 or len(slot[].points) != slot[].rows * slot[].features or targets != slot[].rows:
@@ -603,17 +668,22 @@ def _neighbors_member(operation: Int, address: Int) raises -> Int:
     comptime _REGRESSOR = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
         | MEMBER_BORROWS_FIT | MEMBER_GIL_DOOR)
     comptime _CLASSIFIER = _REGRESSOR | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_CLASSIFIER
+    # Lane mf-member8: NearestNeighbors / RadiusNeighbors fit, export and
+    # import their points; no predict, no coef_ or importances.
+    comptime _POINTS = MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_BORROWS_FIT | MEMBER_GIL_DOOR
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
             return _CLASSIFIER
         var kind = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
+        if kind[].unsupervised:
+            return _POINTS
         return _REGRESSOR if kind[].regressor else _CLASSIFIER
     if operation == MEMBER_OP_NEW:
         if call[].param_count != 6 or not call[].params:
             raise Error("member ABI: a k-NN member takes six parameters (kind, n_neighbors, metric, "
                 + "metric argument, weights, query_tile)")
         var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
-        if words[0] != 0.0 and words[0] != 1.0:
+        if words[0] != 0.0 and words[0] != 1.0 and words[0] != 2.0 and words[0] != 3.0:
             raise Error("member ABI: unknown k-NN member kind")
         if words[4] != 0.0 and words[4] != 1.0:
             raise Error("member ABI: unknown k-NN weights code")
@@ -632,6 +702,10 @@ def _neighbors_member(operation: Int, address: Int) raises -> Int:
             raise Error("member ABI: a k-NN member takes six parameters (kind, n_neighbors, metric, "
                 + "metric argument, weights, query_tile)")
         var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
+        if words[0] == 2.0:
+            raise Error("member ABI: NearestNeighbors has no predict")
+        if words[0] == 3.0:
+            raise Error("member ABI: RadiusNeighbors has no predict")
         if words[0] == 1.0:
             if call[].flags == MEMBER_OP_PREDICT_PROBA:
                 raise Error("member ABI: KNeighborsRegressor has no predict_proba")
@@ -640,6 +714,9 @@ def _neighbors_member(operation: Int, address: Int) raises -> Int:
         call[].out_dtype = _out_dtype(words[0] == 1.0, call[].flags)
         return 0
     var slot = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
+    if slot[].unsupervised and (operation == MEMBER_OP_OUTPUTS or operation == MEMBER_OP_PREDICT
+                                or operation == MEMBER_OP_PREDICT_PROBA):
+        member_unsupported(_name(slot), operation)
     if operation == MEMBER_OP_OUTPUTS:
         call[].classes = 0 if slot[].regressor else (slot[].classes if slot[].fitted else call[].classes)
         call[].out_cols = call[].classes if call[].flags == MEMBER_OP_PREDICT_PROBA else 1
