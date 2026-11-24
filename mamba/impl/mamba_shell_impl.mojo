@@ -640,18 +640,12 @@ struct Mamba3PrefillSession(Movable, Writable):
     def __deinit__(deinit self): self.release()
 
 
-# Mamba3 session routes (lane envgate-train-seq-mamba, 2026-11-15): build
-# constants holding today's defaults (on). Before, RETAIN_STAGES was an
-# environment read per session construction (a per-forward read until lane
-# fix-mamba-forward-per-call moved it into a session field, now deleted) and
-# RETAIN_WEIGHTS one per prefill. ROUTE-DEFAULT-SUSPECT, no A/B on record:
-# B arms RUN OWED in bench/results/paper_compare/owed-pre0867.json
-# ("mamba3-retain-stages-off", "mamba3-retain-weights-off").
-#: `-D MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF` drops the forward's stages at the
-#: end of the forward (the pre-session behaviour: every backward recomputes
-#: the forward). Default on: the stages stay on the device for the backward
-#: of the same training step.
-comptime MAMBA3_RETAIN_STAGES = not is_defined["MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF"]()
+# Mamba3 session routes (lane envgate-train-seq-mamba, 2026-11-15): RETAIN_STAGES
+# and RETAIN_WEIGHTS were environment reads, then build constants; both old
+# paths are gone. The forward's stages always stay on the device for the
+# backward of the same training step.
+# TOMBSTONE: MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF (old path: drop the stages at the end of every forward, the backward recomputes it; A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, 3 cells 1.00..1.04, no faster) deleted 2026-11-24 by lane/ab-outcome-2 (ab2-ngemm); code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
 #: The session keeps its weights (byte compare, recopy on change). A/B ab3
 #: (NVIDIA L40S, wheel d652a4b0a1, 2026-11-18, job
 #: nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests and quality equal):
@@ -659,12 +653,6 @@ comptime MAMBA3_RETAIN_STAGES = not is_defined["MOJOLEARN_MAMBA3_RETAIN_STAGES_O
 #: (mamba3-forward 2.11 -> 2.40 ms 1.14, mamba3-decode 1.04, samba 0.99-1.00).
 # TOMBSTONE: MOJOLEARN_MAMBA3_RETAIN_WEIGHTS_OFF (LOSER: per-call weight upload, arm/base geomean 1.030 over 5 cells, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
 # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_RETAIN_WEIGHTS_OFF.patch; record in docs/TOMBSTONES.md.
-
-
-@always_inline
-def _m3_retain_stages() -> Bool:
-    """The build constant MAMBA3_RETAIN_STAGES."""
-    return MAMBA3_RETAIN_STAGES
 
 
 def _m3_weight_lens(dims: Mamba3Dims) -> List[Int]:
@@ -774,7 +762,7 @@ def _m3_prefill_weights(mut s: Mamba3PrefillSession, a: List[Int], dims: Mamba3D
     s.weight_uploads += 1
 
 
-def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int, use_owned: Bool = False, force_retain: Bool = False) raises -> Int:
+def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int, use_owned: Bool = False) raises -> Int:
     """The discard-state prefill on the session: `a` is the fresh entry's 25-slot
     list (state slots zero, never read)."""
     var dims = Mamba3Dims.of(dm)
@@ -860,16 +848,12 @@ def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, d
     # lane fix-mamba-forward-per-call (2026-11-14): the second
     # ctx.synchronize() that stood here is gone: nothing is enqueued between
     # the wait above and this point, so it waited on an empty stream once
-    # per forward. The retain answer is the build constant.
-    if force_retain or MAMBA3_RETAIN_STAGES:
-        s.stages = dstages^
-        s.state = dstate^
-        s.stages_b = b
-        s.stages_l = l
-        s.stages_valid = True
-    else:
-        _ = dstate^
-        _ = dstages^
+    # per forward. The stages are always retained for the backward.
+    s.stages = dstages^
+    s.state = dstate^
+    s.stages_b = b
+    s.stages_l = l
+    s.stages_valid = True
     return out_len
 
 

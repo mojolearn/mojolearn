@@ -1292,6 +1292,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H (NOISE: NV L40S 1 cell, samba-train-step 33.58 -> 31.22 ms, 0.93, SAME) deleted 2026-11-24 by lane/ab-outcome-2 (ab2-ngemm); code recoverable at ba83d4655f.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H.ab-outcome-2.patch
     comptime assert not is_defined["MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): MAMBA3_S16_QK_ARM_REGS2H (the half-page regs2h S16 q/k kernel forced on NVIDIA) was NOISE: 1 cell, samba-train-step 33.58 -> 31.22 ms (0.93), SAME; NVIDIA keeps `regs`, AMD and Apple keep their regs2h default; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H.ab-outcome-2.patch"
+    # TOMBSTONE: MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF (old path no faster: NV L40S 3 cells, median 1.00, 1.00..1.04) deleted 2026-11-24 by lane/ab-outcome-2 (ab2-ngemm); code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF.ab-outcome-2.patch
+    comptime assert not is_defined["MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): MAMBA3_RETAIN_STAGES_OFF (old path: the Mamba-3 forward drops its stages at the end of every forward and the backward recomputes the forward) was no faster: 3 cells, median 1.00, 1.00..1.04 (mamba3-decode 702 -> 704, mamba3-forward 2.08 -> 2.16, samba-train-step 33.29 -> 33.24 ms); the stages are always retained; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF.ab-outcome-2.patch"
     # ---- end lane ab-outcome-2 (ab2-ngemm)
     return True
 
