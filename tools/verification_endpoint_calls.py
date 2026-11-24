@@ -9,6 +9,22 @@ import inspect
 import textwrap
 from collections import defaultdict
 
+#: Classmethod loaders whose result is an instance of their own class.
+LOADERS = frozenset(('load', 'from_checkpoint', 'from_checkpoint_dir', 'from_checkpoint_file', 'from_pretrained',
+                     'from_dict', 'from_list'))
+
+#: Public functions whose result is an instance of a public class, by the
+#: class's short name (its aliases are read from the endpoint rows).
+RETURNS_CLASS = {'mojolearn.importers.import_model': 'ImportedProgram'}
+
+
+class Instance(str):
+    """A path that names an INSTANCE of a public class, not the class: a call
+    on it is ``__call__``, ``in`` is ``__contains__`` and ``[]`` is
+    ``__getitem__``. Attribute paths built from it are plain strings, so
+    ``obj.method`` still reads ``<Class>.method``."""
+    __slots__ = ()
+
 
 class Calls:
     def __init__(self, endpoints, helpers=None):
@@ -22,6 +38,9 @@ class Calls:
         self.helpers = helpers or {}
         self.seen, self.active = set(), set()
 
+    def _instances(self, short):
+        return {Instance(alias) for alias in self.classes if alias.rpartition('.')[2] == short}
+
     def function(self, node, env=None):
         env = dict(env or {})
         returns = set()
@@ -30,9 +49,14 @@ class Calls:
 
         def returned(path):
             if path in ('mojolearn.ops.Session.capture', 'mojolearn.ops.Session.load_program'):
-                return {'mojolearn.ops.Program'}
+                return {Instance('mojolearn.ops.Program')}
             if path.endswith('.assert_native') and path.startswith('@audit:'):
                 return {path[len('@audit:'):-len('.assert_native')]}
+            if path in RETURNS_CLASS:
+                return self._instances(RETURNS_CLASS[path])
+            owner, _, method = path.rpartition('.')
+            if owner in self.classes and (method in LOADERS or method.startswith('from_checkpoint')):
+                return {Instance(owner)}
             return set()
 
         def record(path):
@@ -71,15 +95,18 @@ class Calls:
                         record(operation)
                         result.update('@audit:' + p for p in returned(operation))
                 for path in paths:
-                    if path in self.classes:
+                    if isinstance(path, Instance):
+                        # `obj(x)` on an instance runs the class's __call__
+                        record(path + '.__call__')
+                    elif path in self.classes:
                         record(path + '.__init__')
-                        result.add(path)
+                        result.add(Instance(path))
                     else:
                         record(path)
                         record(path + '.call')
                     owner, _, method = path.rpartition('.')
                     if owner in self.classes and method in ('fit', 'partial_fit', 'set_params'):
-                        result.add(owner)
+                        result.add(Instance(owner))
                     result.update(returned(path))
                 if isinstance(expr.func, ast.Name) and expr.func.id in helpers:
                     key = expr.func.id, tuple(tuple(sorted(a)) for a in args)
@@ -107,7 +134,22 @@ class Calls:
                 return value(expr.elt)
             if isinstance(expr, ast.Subscript):
                 value(expr.slice)
-                return value(expr.value)
+                held = value(expr.value)
+                for path in held:
+                    if isinstance(path, Instance):
+                        record(path + '.__getitem__')
+                return held
+            if isinstance(expr, ast.Compare):
+                # `key in obj` / `key not in obj` runs the right operand's
+                # __contains__
+                value(expr.left)
+                for op, comparator in zip(expr.ops, expr.comparators):
+                    held = value(comparator)
+                    if isinstance(op, (ast.In, ast.NotIn)):
+                        for path in held:
+                            if isinstance(path, Instance):
+                                record(path + '.__contains__')
+                return set()
             if isinstance(expr, (ast.Yield, ast.YieldFrom)):
                 yielded = value(expr.value)
                 returns.update(yielded)

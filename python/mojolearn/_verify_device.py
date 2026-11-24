@@ -47,6 +47,13 @@ NON_COMPUTING = frozenset((
     # scorer factories and readers (vd-verify, 2026-11-24): they hold a metric,
     # they compute nothing on a side; the metric handed in reaches them unwrapped
     "get_scorer", "make_scorer", "get_scorer_names",
+    # config and caller-owned state containers (vdv-gaps, 2026-11-24): their
+    # constructors admit and hold the caller's buffers or sizes
+    # (mamba_native_call and transformer_public_call "state_init", samba
+    # "state_construct", causal_state_init, samba_config_call "initialize");
+    # the block or stack that reads them carries the side
+    "SambaConfig", "Mamba1State", "Mamba2State", "Mamba3State", "TransformerState", "SambaState",
+    "CausalLMState",
 ))
 
 
