@@ -154,9 +154,6 @@ from bindings.msel_device_unpack import (
     logistic_fold_native_api_v1_binding,
     pca_fold_native_api_v1_binding,
     tsvd_fold_native_api_v1_binding,
-    kmeans_fit_fold_binding,
-    kmeans_predict_fold_binding,
-    kmeans_transform_fold_binding,
 )
 from bindings.msel_device_pack import (
     msel_live_binding,
@@ -1767,9 +1764,8 @@ def build__mojolearn() -> PythonObject:
         m.def_function[logistic_fold_native_api_v1_binding]("logistic_fold_native_api_v1")
         m.def_function[pca_fold_native_api_v1_binding]("pca_fold_native_api_v1")
         m.def_function[tsvd_fold_native_api_v1_binding]("tsvd_fold_native_api_v1")
-        m.def_function[kmeans_fit_fold_binding]("kmeans_fit_fold")
-        m.def_function[kmeans_predict_fold_binding]("kmeans_predict_fold")
-        m.def_function[kmeans_transform_fold_binding]("kmeans_transform_fold")
+        # Deleted (lane w3-cleanup, 2026-11-24): the kmeans_{fit,predict,transform}_fold
+        # exports had no caller; KMeans over a fold runs core/kmeans_native_device.mojo.
         # DEVIATION 2500: label encode/decode and the class argmax, host side.
         # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_core.patch

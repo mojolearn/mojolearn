@@ -37,12 +37,7 @@ from core.tsvd_native_fold import TSVD_FOLD_API
 from glm.logistic_fold_native import LOGISTIC_FOLD_API, logistic_fold_query
 from core.logistic_native_api import QnQueryRequest, QnFoldStore, QN_NATIVE_DECISION, QN_NATIVE_BINARY, QN_NATIVE_PROBA
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
-from cluster.kmeans_fold import kmeans_query_fold
-from core.msel_device_run import _mdx_f32_ptr, _mdx_u32_ptr, kmeans_fit_fold_run, pca_fit_fold_run
-
-from bindings.msel_device_pack import (
-    _kmeans_query_fold_call,
-)
+from core.msel_device_run import _mdx_f32_ptr, pca_fit_fold_run
 
 
 def tsvd_fold_native_api_v1_binding() raises -> PythonObject:
@@ -65,74 +60,3 @@ def logistic_fold_native_api_v1_binding() raises -> PythonObject:
 # owner (bindings/qn_native.mojo), calls the same body (glm/logistic_fold_native.mojo
 # logistic_fold_v1) through the native estimators table
 # (core/estimators_entry_table.mojo ESTIMATORS_TABLE_QN_FOLD).
-
-
-def kmeans_fit_fold_binding(
-    ids: PythonObject,
-    out_centroids_addr: PythonObject,
-    out_labels_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """`kmeans_fit` with unit weights over a model-selection fold resident
-    on the device (lane a7d-device-x-decomp-cluster; cluster/kmeans_fold.mojo):
-    `ids` is [base store id, base rows, index store id] in model selection's
-    store (bindings/device_rows_door.mojo door_rows_store); `params` is
-    `kmeans_fit_binding`'s first 11 values with n_weights 0 (n_samples,
-    n_features, n_clusters, 0, max_iter, tol, seed, n_init, init, metric,
-    oversampling_factor). Returns [inertia, n_iter, sum_scale,
-    weight_scale, finite word, range word]; a nonzero word means the fold
-    was not fit and the door refuses."""
-    if len(ids) != 3 or len(params) != 11:
-        raise Error("kmeans_fit_fold: ids must hold 3 values and params 11")
-    if Int(py=params[3]) != 0:
-        raise Error("kmeans_fit_fold: a fold fit takes unit weights (n_weights 0)")
-    var base_id = Int(py=ids[0])
-    var base_rows = Int(py=ids[1])
-    var index_id = Int(py=ids[2])
-    var cp = _mdx_f32_ptr(Int(py=out_centroids_addr))
-    var lp = _mdx_u32_ptr(Int(py=out_labels_addr))
-    var ns = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var nc = Int(py=params[2])
-    var mi = Int(py=params[4])
-    var tl = Float64(py=params[5])
-    var sd = UInt64(Int(py=params[6]))
-    var ninit = Int(py=params[7])
-    var ii = Int(py=params[8])
-    var mm = Int(py=params[9])
-    var ovs = Float64(py=params[10])
-    var inertia = Float64(0.0)
-    var n_iter = 0
-    var sum_scale = Float64(0.0)
-    var weight_scale = Float64(0.0)
-    var finite = Int32(0)
-    var in_range = Int32(0)
-    with GILReleased(Python()):
-        var r = kmeans_fit_fold_run(base_id, base_rows, index_id, ns, nf, nc, cp, lp,
-                                    mi, tl, sd, ninit, ii, mm, ovs)
-        inertia = r.fit.inertia
-        n_iter = r.fit.n_iter
-        sum_scale = r.fit.sum_scale
-        weight_scale = r.fit.weight_scale
-        finite = r.finite
-        in_range = r.in_range
-    return Python.list(PythonObject(inertia), PythonObject(n_iter), PythonObject(sum_scale),
-                       PythonObject(weight_scale), PythonObject(Int(finite)), PythonObject(Int(in_range)))
-
-
-def kmeans_predict_fold_binding(
-    ids: PythonObject, centroids_addr: PythonObject, out_labels_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """`kmeans_predict` over a model-selection fold resident on the device
-    (lane a7d): `ids` as `kmeans_fit_fold_binding`'s, `params` [n_samples,
-    n_features, n_clusters, metric]. Returns [finite word, range word]."""
-    return _kmeans_query_fold_call(ids, centroids_addr, out_labels_addr, params, False)
-
-
-def kmeans_transform_fold_binding(
-    ids: PythonObject, centroids_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """`kmeans_transform` over a model-selection fold resident on the device
-    (lane a7d): as `kmeans_predict_fold_binding`, `out_addr` n_samples x
-    n_clusters float32."""
-    return _kmeans_query_fold_call(ids, centroids_addr, out_addr, params, True)
