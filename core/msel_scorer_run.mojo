@@ -1408,7 +1408,8 @@ def _np_extend(mut s: String, mut line: String, word: String, width: Int, indent
     if wrap:
         var kept = line.copy()
         while kept.byte_length() > 0 and kept.endswith(" "):  # small-loop(the trailing spaces)
-            kept = String(kept.removesuffix(" "))
+            var trimmed = String(kept.removesuffix(" "))  # a temporary: the call result may not alias `kept`
+            kept = trimmed^
         s += kept + "\n"
         line = indent.copy()
     line += word

@@ -681,10 +681,17 @@ def _fit_units(clones: PythonObject, xs: PythonObject, d: Int, targets: PythonOb
     # every class) and, for a lacking one, its re-coded codes.
     var recoded = List[List[Int32]]()
     var unit_labels = Python.list()  # per unit: the labels its codes stand for (None for regressors)
-    var classes_last = PythonObject(None)
+    # The distinct target is keyed by its codes' address and length (the same
+    # words give the same classes), and its labels are kept in a list that is
+    # never re-bound: a loop-carried PythonObject re-bound under an `is` test
+    # beside this loop's raising calls failed LLVM lowering with "operand #1
+    # does not dominate this use" (Mojo 1.2.0; w3-integrate-3 build b1dee7d88c,
+    # the same bug as ~/mojolearn-evidence/upstream/mojo-return-in-except-loop-dominance/).
+    var classes_last_address = -1
+    var classes_last_n = -1
     var held_last = List[Int32]()
     var recoded_last = -1
-    var labels_last = PythonObject(None)
+    var labels_seen = Python.list()  # per distinct target: its labels (the last is the current one)
     for i in range(m):  # driver-loop: over the units (admission, once each)
         var classes = 0
         var target_address = trees_address(targets[i])
@@ -692,19 +699,22 @@ def _fit_units(clones: PythonObject, xs: PythonObject, d: Int, targets: PythonOb
         var labels = PythonObject(None)
         if counts is not None:
             classes = Int(py=counts[i])
-            if not (targets[i] is classes_last):
-                held_last = member_unit_classes(target_address, 0, False, Int(py=targets[i].shape[0]), classes)
-                classes_last = targets[i]
+            var target_n = Int(py=targets[i].shape[0])
+            if target_address != classes_last_address or target_n != classes_last_n:
+                held_last = member_unit_classes(target_address, 0, False, target_n, classes)
+                classes_last_address = target_address
+                classes_last_n = target_n
                 recoded_last = -1
-                labels_last = py_call(b.list, py_call(b.range, PythonObject(classes)))
                 if len(held_last) > 0:
-                    recoded.append(member_unit_recode(target_address, Int(py=targets[i].shape[0]), classes,
-                                                      held_last))
+                    recoded.append(member_unit_recode(target_address, target_n, classes, held_last))
                     recoded_last = len(recoded) - 1
-                    labels_last = Python.list()
+                    var held_labels = Python.list()
                     for c in range(len(held_last)):  # driver-loop: over the unit's held classes (a few labels)
-                        _ = py_call(labels_last.append, PythonObject(Int(held_last[c])))
-            labels = labels_last
+                        _ = py_call(held_labels.append, PythonObject(Int(held_last[c])))
+                    _ = py_call(labels_seen.append, held_labels)
+                else:
+                    _ = py_call(labels_seen.append, py_call(b.list, py_call(b.range, PythonObject(classes))))
+            labels = labels_seen[len(labels_seen) - 1]
             if recoded_last >= 0:
                 target_address = Int(recoded[recoded_last].unsafe_ptr())
                 classes = len(held_last)
