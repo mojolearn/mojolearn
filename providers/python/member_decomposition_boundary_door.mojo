@@ -108,22 +108,24 @@ def _xd_store_route(context: PythonObject, key: String, mut route: DeviceRoute) 
 
 def _fold_route(mut route: DeviceRoute, which: Int):
     """Lane vdf-scope-neural2: THE RESIDENT ROUTE of the PCA / TruncatedSVD
-    members. On an identical GPU route, the base image's resident-fold entry
+    members. On a GPU route (identical, or `fast` since lane
+    vdf-scope-neural6: the `fast` base image's table, its fold entries run
+    `fast` kernels), the base image's resident-fold entry
     of the kind (`which`, core/estimators_entry_table.mojo DECOMP_FOLD_PCA /
     DECOMP_FOLD_TSVD) in `route.fourth` and the fold store's transport entry
     in `route.fifth` with DECOMP_ROUTE_FOLD, resolved once here; any other
-    route (fast, host, a build without the base binding's table) is kept as
-    it was, so its kind answers no row index."""
-    if route.mode != 1 or route.vendor <= 0:
+    route (host, a build without the base binding's table of the route's
+    mode) is kept as it was, so its kind answers no row index."""
+    if (route.mode != 1 and route.mode != 0) or route.vendor <= 0:
         return
     try:
-        var key = EstimatorsEntryKey(1, route.vendor)
+        var key = EstimatorsEntryKey(route.mode, route.vendor)
         var fold = decomp_fold_entry(key, which)
         var store = decomp_fold_entry(key, DECOMP_FOLD_STORE)
         var count = PCA_NATIVE_COUNT if which == DECOMP_FOLD_PCA else TSVD_NATIVE_COUNT
-        route.fourth = EntryRef(fold, entry_ref_word(1, route.vendor, count))
+        route.fourth = EntryRef(fold, entry_ref_word(route.mode, route.vendor, count))
         route.has_fourth = True
-        route.fifth = EntryRef(store, entry_ref_word(1, route.vendor, XP_OP_COUNT))
+        route.fifth = EntryRef(store, entry_ref_word(route.mode, route.vendor, XP_OP_COUNT))
         route.has_fifth = True
         route.flags |= DECOMP_ROUTE_FOLD
     except:
