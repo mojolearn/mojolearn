@@ -121,12 +121,30 @@ def driver_plan(family=None, lane=None, environ=None):
     return plan
 
 
+#: a cap_param (or pin name) written `fit:<name>` is a keyword of the estimator's public fit() (Sequential.fit(epochs=K)),
+#: not a constructor parameter: capped_params leaves it out, fit_kwargs gives it, and readback cannot read it from
+#: get_params, so the executed iterations equal to the cap are its read-back (cell_record)
+FIT_PREFIX = "fit:"
+
+
+def _wanted(plan):
+    return dict(plan.get("pin") or {}, **{plan["param"]: plan["k"]})
+
+
 def capped_params(plan, params):
-    """PARAMS with the cap and the pins set (capped plans only); a copy, never PARAMS itself."""
+    """PARAMS (the constructor's) with the cap and the pins set (capped plans only), fit() keywords left out; a copy,
+    never PARAMS itself."""
     out = dict(params or {})
     if plan and plan.get("mode") == "capped":
-        out.update(plan.get("pin") or {})
-        out[plan["param"]] = plan["k"]
+        out.update({k: v for k, v in _wanted(plan).items() if not k.startswith(FIT_PREFIX)})
+    return out
+
+
+def fit_kwargs(plan, kwargs=None):
+    """KWARGS (the fit() call's) with the plan's `fit:` cap and pins set (capped plans only); a copy."""
+    out = dict(kwargs or {})
+    if plan and plan.get("mode") == "capped":
+        out.update({k[len(FIT_PREFIX):]: v for k, v in _wanted(plan).items() if k.startswith(FIT_PREFIX)})
     return out
 
 
@@ -135,7 +153,7 @@ def readback(plan, effective):
     them (get_params()). A capped cell whose read-back differs from the plan is not compared (ok False)."""
     if not plan or plan.get("mode") != "capped":
         return dict(effective={}, ok=True, mismatch=[])
-    want = dict(plan.get("pin") or {}, **{plan["param"]: plan["k"]})
+    want = {k: v for k, v in _wanted(plan).items() if not k.startswith(FIT_PREFIX)}
     eff = {k: (effective or {}).get(k, "<absent>") for k in want}
     bad = sorted(k for k, v in want.items() if not _same(eff[k], v))
     return dict(effective=eff, ok=not bad, mismatch=bad)
@@ -188,6 +206,10 @@ def cell_record(plan, effective, loops, warm=None):
         rec["mode"], rec["why"] = "whole", (bad or {}).get("reason") or "no scored call reported its loop"
     elif len({x["iterations"] for x in got}) != 1 or not got[0]["iterations"]:
         rec["mode"], rec["why"] = "whole", "executed iterations differ between scored calls or are zero"
+    elif plan["param"].startswith(FIT_PREFIX) and got[0]["iterations"] != plan["k"]:
+        # a fit() keyword cap has no get_params read-back: the executed count is its read-back
+        rec["mode"], rec["why"] = "whole", "fit() cap %s=%s, executed %s" % (plan["param"], plan["k"],
+                                                                           got[0]["iterations"])
     else:
         rec["mode"], rec["why"] = "capped", None
     return rec
@@ -235,6 +257,26 @@ def pair(base_cell, arm_cell, noise=NOISE):
         else:
             out["why"] = a["why"] if a["mode"] != "capped" else b["why"]
     return out
+
+
+def condition_of(race_id):
+    """The condition of a board race id: its dataset ('family/lane/dataset/rows=R'), or its shape for a neural race
+    ('neural/lane/dataset/shape=S')."""
+    parts = race_id.split("/")
+    if parts[0] == "neural" and len(parts) > 3 and parts[3].startswith("shape="):
+        return parts[3][len("shape="):]
+    return parts[2] if len(parts) > 2 else race_id
+
+
+def unit_verdict(cell_pairs, planned_ids, noise=NOISE, conditions=None):
+    """arm_verdict over one A/B unit. CELL_PAIRS: [(race id, base cell, arm cell)] of every cell key both boards hold;
+    PLANNED_IDS: the unit's race ids. Returns (verdict, [(race id, pair)])."""
+    pairs = [(rid, pair(b, a, noise)) for rid, b, a in cell_pairs]
+    v = arm_verdict([(condition_of(rid), p) for rid, p in pairs], [condition_of(r) for r in planned_ids], noise,
+                    conditions)
+    v["full_run_races"] = sorted({rid for rid, p in pairs if p["basis"] == "loop" and not p["same_hash"]}) \
+        if v["full_run"] else []
+    return v, pairs
 
 
 def width_of(dataset, conditions=None):

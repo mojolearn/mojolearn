@@ -82,6 +82,7 @@ first one as the verdict baseline (tools/paper_compare.py --verdict-prior): REGR
 with both box probes. No owed-file entry and no define. The estimate and the disk need count each one as an arm.
 """
 import argparse
+import json
 import os
 import re
 import shlex
@@ -664,6 +665,14 @@ def submit_line(vendor, lane, tag, env):
     return f"bash tools/do_amd_steward.sh run {tag} {res} '{envs} bash tools/ops/paper_compare_job.sh'"
 
 
+def loop_full_arms(path):
+    """The comma list of arms a job's ab-loop-verdicts.json (tools/ops/targeted_rows.py summary --loop-out) marks
+    FULL-RUN-OWED: promoted on loop time per iteration, with an output that differs from the base at the cap."""
+    with open(path) as fh:
+        doc = json.load(fh)
+    return ",".join(sorted({u["arm"] for u in doc.get("units") or [] if u.get("full_run")}))
+
+
 def cmd_stage(a):
     commit, version, vendor = a.source_commit, a.version, a.vendor
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
@@ -794,6 +803,12 @@ def cmd_stage(a):
            "PC_PRIOR_VERSIONS": ",".join(prior_versions), "PC_PRIOR_VERSION": prior_versions[-1]}
     if parts:
         env["PC_PARTS"] = ",".join(parts)     # the job runs the parts whose datasets were staged above
+    # A/B LOOP MODE (tools/ab_loop.py; lane ab-loop-mode, 2026-11-24): the owed units' loop cap, and the arms whose one
+    # full run (loop mode off, both arms) the previous job's verdicts asked for
+    if a.loop_cap not in (None, "table"):
+        env["PC_AB_LOOP"] = a.loop_cap
+    if a.loop_full_arms:
+        env["PC_AB_LOOP_FULL_ARMS"] = a.loop_full_arms
     if a.rows and a.owed_arms:
         env["PC_OWED_ARMS"] = a.owed_arms     # a split submit times only these arms' owed units
     if a.rows and a.owed_only:
@@ -1044,9 +1059,18 @@ def main(argv=None):
                         "<lane>-b<K> with tag <tag>-b<K>; box 1 also times the listed rows (--rows only)")
     s.add_argument("--owed-only", action="store_true",
                    help="this submit times only its --owed-arms units, no listed row (PC_TG_OWED_ONLY; --boxes sets it)")
+    s.add_argument("--loop-cap", default="table", metavar="off|table|K",
+                   help="A/B LOOP MODE: the owed units' iteration cap (PC_AB_LOOP; default table, "
+                        "tools/ab_loop_caps.tsv)")
+    s.add_argument("--loop-full-from", default=None, metavar="AB_LOOP_VERDICTS_JSON",
+                   help="A/B LOOP MODE: a job's ab-loop-verdicts.json; its FULL-RUN-OWED arms get their one full run "
+                        "(PC_AB_LOOP_FULL_ARMS, loop mode off on both arms) and, without --owed-arms, only they run")
     s.add_argument("--dry-run", action="store_true", help="validate locally and print every command; copy nothing")
     a = p.parse_args(argv)
     a.argv = list(sys.argv[1:] if argv is None else argv)
+    a.loop_full_arms = loop_full_arms(a.loop_full_from) if getattr(a, "loop_full_from", None) else ""
+    if a.loop_full_arms and not a.owed_arms:
+        a.owed_arms = a.loop_full_arms
     if a.boxes > 1 and not a.rows:
         raise SystemExit("measure-candidate: --boxes splits a targeted A/B job (--rows)")
     return cmd_stage(a)

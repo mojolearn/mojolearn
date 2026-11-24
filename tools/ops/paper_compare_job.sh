@@ -806,6 +806,13 @@ fi
 # "0.8.55 is not timed again") the job has NO prior arm: the plan, the candidate's install (and the B sets'), its smoke
 # of the listed races, its board, and the compare against the stored board (first line: the baseline is stored).
 # Env-only A/B arms (PC_B_ARMS `<name> env:VAR=VALUE <commit>`) run the candidate's venv with those variables.
+# A/B LOOP MODE (lane ab-loop-mode, 2026-11-24; AGENTS.md "Candidate evaluation": an arm is decided on loop time per
+# iteration): every owed A/B unit's base and arm boards run with bench_board --loop-cap "$PC_AB_LOOP" (default table:
+# tools/ab_loop_caps.tsv; an integer K caps every valid lane at K; off: the whole operation as before). Full-size data,
+# the cap set through the estimator's public parameter on both arms, read back; a lane the table marks not valid keeps
+# the whole operation and its cell says why. An arm in PC_AB_LOOP_FULL_ARMS (comma list) runs loop mode off: the one
+# full run of both arms that the summary's FULL-RUN-OWED line asks for (an arm that would be promoted and whose output
+# differs from its base at the cap). PC_AB_LOOP_NOISE overrides the verdict's noise floor (tools/ab_loop.py NOISE).
 [[ "$PARTS" == *",targeted,"* ]] && PARTS="$PARTS,tg-install,tg-prep,tg-smoke,tg-board,tg-compare,tg-drivers,"
 if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-compare || part tg-drivers; then
     TG="$RES/plan-tg"; TGO="$RES/plan-tg-owed"
@@ -1099,6 +1106,10 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
                 # STORED BASE from another host): base and arm back to back on every race; a race of the unit's
                 # .cap.txt has the arm's rounds capped at the time the base just took for it in this job
                 capf="${ids%.txt}.cap.txt"
+                # A/B LOOP MODE: the unit's loop cap, the same on its base and its arm
+                lcap=${PC_AB_LOOP:-table}
+                [[ ",${PC_AB_LOOP_FULL_ARMS:-}," == *",$arm,"* ]] && lcap=off
+                say "owed $arm $rows: loop cap $lcap"
                 for c in "$TGO/chunks-$arm-$rows"/chunk-*.txt; do
                     [ -f "$c" ] || continue
                     # SHARED BASE (measure_owed.py base-share; lane ab-harness-speed, 2026-11-24): a base race another
@@ -1111,19 +1122,19 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
                     done
                     [ "$rows" = full ] && [ -f "$RES/board-tg/board.json" ] && bsrc+=(--source "$RES/board-tg")
                     if ! $PY tools/measure_owed.py base-share --target "$RES/board-tg-ab-$arm-base-$rows" --ids "$c" \
-                            ${bsrc[@]+"${bsrc[@]}"} --max-age-s "${PC_AB_BASE_MAX_AGE_S:-1200}" --out "$c.base" \
+                            ${bsrc[@]+"${bsrc[@]}"} --max-age-s "${PC_AB_BASE_MAX_AGE_S:-1200}" --loop-cap "$lcap" --out "$c.base" \
                             > "$RES/logs/base-share-$arm-$rows.log" 2>&1; then
                         cp "$c" "$c.base"     # the share failed: the whole chunk is timed, as before
                     fi
                     say "owed $arm $rows $(basename "$c"): $(tail -n 1 "$RES/logs/base-share-$arm-$rows.log" | head -c 300)"
-                    tg_board candidate "$c.base" "$RES/board-tg-ab-$arm-base-$rows" "$abrows" "${SJT[@]}"; r=$?; [ $r -gt $rc ] && rc=$r
+                    tg_board candidate "$c.base" "$RES/board-tg-ab-$arm-base-$rows" "$abrows" "${SJT[@]}" --loop-cap "$lcap"; r=$?; [ $r -gt $rc ] && rc=$r
                     cap=()
                     if [ -s "$capf" ]; then
                         $PY tools/measure_owed.py base-caps --board "$RES/board-tg-ab-$arm-base-$rows/board.json" \
                             --ids "$c" --cap-ids "$capf" --out "$c.caps.json" | tail -n 1
                         [ -s "$c.caps.json" ] && cap=(--race-round-seconds "$c.caps.json")
                     fi
-                    tg_board "$arm" "$c" "$RES/board-tg-ab-$arm-$rows" "$abrows" "${SJT[@]}" ${cap[@]+"${cap[@]}"}; r=$?; [ $r -gt $rc ] && rc=$r
+                    tg_board "$arm" "$c" "$RES/board-tg-ab-$arm-$rows" "$abrows" "${SJT[@]}" ${cap[@]+"${cap[@]}"} --loop-cap "$lcap"; r=$?; [ $r -gt $rc ] && rc=$r
                 done
                 # rows the arm (or its base) lost, each with its reason: one line, never only a shorter count and an
                 # rc=1 (lane fx-tools-round3, 2026-11-20: gemm-leaf512's arm board held 3 of its base's 4 rows)
@@ -1171,6 +1182,7 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
         $PY tools/ops/targeted_rows.py summary --compare "$RES/compare-tg-$V.json" --rows "$TG/rows.tsv" \
             --results "$RES" --ids "$LISTED_IDS" --units "$TGO/units.tsv" \
             --prior-versions "$(IFS=,; echo "${PRIOR_ARMS[*]#prior-}")" \
+            ${PC_AB_LOOP_NOISE:+--loop-noise "$PC_AB_LOOP_NOISE"} --loop-out "$RES/ab-loop-verdicts.json" \
             --out "$RES/SUMMARY-TG-$V.txt" > "$RES/logs/summary-tg.log" 2>&1
         r=$?; head -n 3 "$RES/logs/summary-tg.log"; [ $r -gt $rc ] && rc=$r
         phase_end $rc
