@@ -10,8 +10,35 @@ from pathlib import Path
 
 
 def resolve(public):
+    """The public object `public` names, bound to the side the endpoint runs
+    on (device="cpu" or device="gpu", `_verify_device`); unbound when no side
+    is set. Resolved once per name and side."""
+    from . import _verify_device as vd
     module, _, name = public.rpartition('.')
-    return getattr(importlib.import_module(module), name)
+    value = getattr(importlib.import_module(module), name)
+    side = vd.current_side()
+    if side is None:
+        return value
+    key = (public, side)
+    hit = _BOUND.get(key)
+    if hit is not None and hit[0] is value:
+        return hit[1]
+    bound = vd.bind(value, public, side, boundary="user")
+    _BOUND[key] = (value, bound)
+    return bound
+
+
+#: (public name, side) -> (object, bound object)
+_BOUND = {}
+
+
+def package():
+    """`mojolearn` as an endpoint check reaches it: the device view of the
+    running side, or the package itself when no side is set."""
+    import mojolearn
+    from . import _verify_device as vd
+    side = vd.current_side()
+    return mojolearn if side is None else vd.view(mojolearn, side, boundary="user")
 
 
 def encode(value, seen=None):

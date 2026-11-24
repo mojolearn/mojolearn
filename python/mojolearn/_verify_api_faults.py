@@ -72,8 +72,10 @@ def check_faults(clean,*,retain=None):
         # used by these in-process controls. Reuse that inventory; hashing
         # gigabytes of unchanged libraries for each tiny fault is not a test.
         artifacts=clean.get('bindings')
-        with inject(name):faulty=capture(endpoints=[endpoint],artifacts=artifacts)
-        restored=capture(endpoints=[endpoint],artifacts=artifacts)
+        # on the clean capture's own side (device=), as the clean run was
+        side=clean.get('side')
+        with inject(name):faulty=capture(endpoints=[endpoint],artifacts=artifacts,side=side)
+        restored=capture(endpoints=[endpoint],artifacts=artifacts,side=side)
         delta=differences(faulty,baseline);recovery=differences(restored,baseline)
         caught=bool(delta) and all(x.startswith('output differs:') for x in delta) and not recovery
         result[name]=dict(status='CAUGHT_AND_RESTORED' if caught else 'FAILED',endpoint=endpoint,

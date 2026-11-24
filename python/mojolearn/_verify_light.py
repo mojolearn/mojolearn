@@ -32,9 +32,18 @@ def case_fingerprint(function):
     return hashlib.sha256(json.dumps(parts, separators=(',', ':')).encode()).hexdigest()
 
 
+def _ops():
+    """`mojolearn.ops` as the running side sees it: every Session and
+    Program built with device="cpu" or device="gpu" (`_verify_device`), in
+    this process. Outside a side, the module itself."""
+    from . import ops, _verify_device as vd
+    side = vd.current_side()
+    return ops if side is None else vd.view(ops, side)
+
+
 def tape_elementwise():
     import numpy as np
-    from . import ops
+    ops = _ops()
     with ops.Session(numeric_mode='identical') as s:
         x = s.tensor(np.array([[-0.75, -0.25], [0.25, 0.75]], np.float32))
         p = s.tensor(np.array([[0.25, 0.5], [1, 2]], np.float32))
@@ -57,7 +66,7 @@ def tape_elementwise():
 
 def tape_layout():
     import numpy as np
-    from . import ops
+    ops = _ops()
     with ops.Session(numeric_mode='identical') as s:
         x = s.tensor(np.arange(6, dtype=np.float32).reshape(2, 3) / 8)
         outputs = [s.numpy(s.transpose(x)), s.numpy(s.permute(x, (1, 0))),
@@ -79,7 +88,7 @@ def tape_layout():
 
 def tape_gradients():
     import numpy as np
-    from . import ops
+    ops = _ops()
     with ops.Session(record=True, numeric_mode='identical') as s:
         x = s.tensor(np.array([[0.25, 0.5], [0.75, 1]], np.float32), requires_grad=True)
         square = s.mul(x, x)
@@ -102,7 +111,7 @@ def tape_gradients():
 
 def tape_optimizer():
     import numpy as np
-    from . import ops
+    ops = _ops()
     outputs = []
     for kind in ('sgd', 'adam', 'adamw'):
         with ops.Session(record=True, numeric_mode='identical') as s:
@@ -129,7 +138,7 @@ def tape_optimizer():
 
 def tape_program():
     import numpy as np
-    from . import ops
+    ops = _ops()
     a = np.array([[0.25, 0.5], [0.75, 1]], np.float32)
     with ops.Session(numeric_mode='identical') as s:
         x = s.tensor(a)
@@ -150,7 +159,7 @@ def tape_program():
 
 def tape_convolution():
     import numpy as np
-    from . import ops
+    ops = _ops()
     with ops.Session(numeric_mode='identical') as s:
         x = s.tensor(np.arange(9, dtype=np.float32).reshape(1, 1, 3, 3) / 8)
         w = s.tensor(np.array([[[[0.25, -0.5], [0.5, 0.25]]]], np.float32))
@@ -164,7 +173,7 @@ def tape_convolution():
 
 def numerical_edges():
     import numpy as np
-    from . import ops
+    ops = _ops()
     with ops.Session(numeric_mode='identical') as s:
         # Exact FP32 words exercise signed zero, FTZ and cancellation. These
         # are fixture choices, never production dispatch dimensions.
@@ -180,7 +189,7 @@ def numerical_edges():
 
 def tape_losses():
     import numpy as np
-    from . import ops
+    ops = _ops()
     with ops.Session(numeric_mode='identical') as s:
         prediction = s.tensor(np.array([[0.25], [0.75]], np.float32))
         target = s.tensor(np.array([[0], [1]], np.float32))
@@ -205,8 +214,17 @@ def digest(value):
                 sha256=hashlib.sha256(raw).hexdigest(), bytes_hex=raw.hex())
 
 
-def capture(cases=EXPECTED_CASES, *, artifacts=None):
+def capture(cases=EXPECTED_CASES, *, artifacts=None, side=None):
+    """One side's capture: every case on `side` ("cpu" or "gpu", the public
+    device= through `_ops()`), in this process; None is the installation's
+    own side."""
     from . import _verify, _verify_native_runtime, __version__, runtime_report
+    from . import _verify_device as vd
+    if side is not None:
+        with vd.side(side):
+            report = capture(cases, artifacts=artifacts)
+        report['side'] = side
+        return report
     cases = tuple(cases)
     if not cases or len(set(cases)) != len(cases) or set(cases) - set(EXPECTED_CASES):
         raise ValueError('unknown, duplicate or empty light case selection')
@@ -231,7 +249,8 @@ def capture(cases=EXPECTED_CASES, *, artifacts=None):
     # The binding the cases ran on, read back after they ran (the report never
     # loads one): its own compiled vendor and mode. A missing row leaves both
     # None, which compare() refuses as an invalid capture.
-    row = _verify_native_runtime.loaded_binding('_mojolearn_x_sequence', 'identical')
+    row = _verify_native_runtime.loaded_binding('_mojolearn_x_sequence', 'identical',
+                                                side=vd.current_side())
     if row is not None:
         report['vendor'] = row['vendor']
         report['numeric_mode'] = 1  # loaded_binding admitted it as identical

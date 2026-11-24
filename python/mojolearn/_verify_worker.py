@@ -332,16 +332,24 @@ def execute(request):
                       held=harness._h(held))
         if actual != request["fixture_hashes"]:
             raise WorkerFailure("worker fixture bytes differ from the controller")
-        # The runtime's activity record around the cell: what this device
-        # did to produce the cell's hashes. It rides beside the value and no
-        # hash, state or verdict reads it; an install without the record
-        # (begin answers False) runs the cell exactly as before.
-        counting = check_both.activity_begin(ml)
-        try:
-            value = verifier.run_cell(harness, ml, request["lane"], fixture, data, held,
-                                      request["repeats"], extra_parts=request["extra_parts"])
-        finally:
-            activity = check_both.activity_end(ml) if counting else None
+        # BOTH SIDES OF THE CELL IN THIS PROCESS, on this one fixture load:
+        # the CPU side (device="cpu") then the GPU side (device="gpu"), each
+        # through the harness's device view. The runtime's activity record
+        # around each side: what that side did to produce its hashes. It
+        # rides beside the value and no hash, state or verdict reads it; an
+        # install without the record (begin answers False) runs as before.
+        activity = {}
+
+        def counted(side, run):
+            counting = check_both.activity_begin(ml)
+            try:
+                return run()
+            finally:
+                if counting:
+                    activity[side] = check_both.activity_end(ml)
+        value = verifier.run_sides(harness, ml, request["lane"], fixture, data, held,
+                                   request["repeats"], extra_parts=request["extra_parts"], on_side=counted)
+        activity = activity or None
     elif action == "self-test":
         value = verifier.self_test(harness, ml, reference.load_table(request["table"]))
     elif action == "models":

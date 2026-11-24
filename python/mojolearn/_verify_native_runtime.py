@@ -28,19 +28,22 @@ __mojolearn_user_boundary__ = True
 _FORBIDDEN_NATIVE_MODULES = ("numpy", "scipy", "sklearn")
 
 
-def loaded_binding(name, mode="identical", report=None):
+def loaded_binding(name, mode="identical", report=None, side=None):
     """The `mojolearn.runtime_report()` row of binding `name` (for example
     `_mojolearn_x_sequence`) loaded in tier `mode`, or None when no loaded
     binding of that tier is in the report. A row counts when the binding's
     own compiled read-back says `mode`; a binding without that read-back
     counts as the tier it was loaded for (its tier set, or the process tier
     for the selected binding). Call it AFTER the work that loads the binding:
-    the report never loads one."""
+    the report never loads one. `side` "cpu" reads the binding the CPU side
+    (device="cpu") ran, the host extension, on any installation; "gpu" reads
+    the GPU set only; None is the installation's own side, as before."""
     if report is None:
         from . import runtime_report
         report = runtime_report()
-    keys = [(f"mojolearn._sets.{mode}.{name}", mode), (f"mojolearn.{name}", report["numeric_mode"])]
-    if report.get("cpu_only"):
+    keys = ([] if side == "cpu" else
+            [(f"mojolearn._sets.{mode}.{name}", mode), (f"mojolearn.{name}", report["numeric_mode"])])
+    if side == "cpu" or (side is None and report.get("cpu_only")):
         # A CPU-only install serves `mojolearn.<name>` through a facade the
         # report skips (not an exact module); the binding that ran is its
         # host extension, `mojolearn._host.<basename>`, which carries its own
