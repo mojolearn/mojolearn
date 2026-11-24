@@ -182,6 +182,16 @@ def _gram_svd[E: Exec, D: RDev, RES: Bool, X: IpcaDev](mut kit: RKit[E, D, RES],
     return (s, vt)
 
 
+def _resident_bound[D: RDev](x_dev: Int, rows: Int, d: Int) raises:
+    """A resident source must hold the rows x d words the call reads: the exact words the member store put or
+    took for that id (`D.held_words`, x_decomp/member_store.mojo), not the pool id's larger size class. Checked
+    once per call (lane vdf-scope-neural5), before any batch or launch reads it."""
+    var held = D.held_words(x_dev)
+    if held < rows * d:
+        raise Error("x_decomp: the resident X holds " + String(held) + " values but the call reads "
+                    + String(rows) + " rows of " + String(d))
+
+
 def _resident_rows[E: Exec, D: RDev, RES: Bool](
     mut kit: RKit[E, D, RES], x_dev: Int, x_rows: Int, row0: Int, n: Int, d: Int,
 ) raises -> Int:
@@ -376,6 +386,8 @@ def ipca_fit_run[E: Exec, D: RDev, RES: Bool, X: IpcaDev](
     same rows in the same order as the host batches, so the bits are the host-X route's."""
     if x_dev >= 0 and not RES:
         raise Error("x_decomp: a resident X needs a GPU binding")
+    if x_dev >= 0:
+        _resident_bound[D](x_dev, n, d)
     if batch_size == 0:
         raise Error("integer division or modulo by zero")
     var mb = max(requested, 0)
@@ -471,6 +483,7 @@ def ipca_transform_run[E: Exec, D: RDev, RES: Bool](
     try:
         var m: Int
         if x_dev >= 0:
+            _resident_bound[D](x_dev, n, d)
             m = _resident_rows(kit, x_dev, n, 0, n, d)
         else:
             m = kit.add(Int(x), -1, n, d)
@@ -501,6 +514,7 @@ def ipca_inverse_run[E: Exec, D: RDev, RES: Bool](
     try:
         var ym: Int
         if y_dev >= 0:
+            _resident_bound[D](y_dev, n, nc)
             ym = _resident_rows(kit, y_dev, n, 0, n, nc)
         else:
             ym = kit.add(Int(y), -1, n, nc)

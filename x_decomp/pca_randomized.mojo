@@ -134,6 +134,13 @@ trait RDev:
     def order_small(a: Int, dst: Int, n: Int) raises:
         ...
 
+    @staticmethod
+    def held_words(id: Int) raises -> Int:
+        """The exact words a pool id put or taken through the image's member store holds
+        (x_decomp/member_store.mojo; a pool buffer's size class is larger), raising for an id the store did not
+        make: a resident source's rows are bounded by it, never by the class padding."""
+        ...
+
 
 struct NoRDev(RDev):
     """The host binding: no resident entries (a kit with RES False never
@@ -215,6 +222,10 @@ struct NoRDev(RDev):
 
     @staticmethod
     def order_small(a: Int, dst: Int, n: Int) raises:
+        raise Error("x_decomp: no resident matrices on the host binding")
+
+    @staticmethod
+    def held_words(id: Int) raises -> Int:
         raise Error("x_decomp: no resident matrices on the host binding")
 
 

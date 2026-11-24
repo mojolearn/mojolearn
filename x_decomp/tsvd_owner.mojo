@@ -37,9 +37,13 @@ comptime _OP_SQDIFF = 21
 def tsvd_randomized_fit_run[E: Exec, D: RDev, RES: Bool](
     x: F32Ptr, components_out: F32Ptr, singular_out: F32Ptr, variance_out: F32Ptr, ratio_out: F32Ptr,
     rows: Int, cols: Int, components: Int, oversamples: Int, iterations: Int, auto_iterations: Bool, seed: Int,
-    finite_word: Int = 0,
+    finite_word: Int = 0, x_dev: Int = -1,
 ) raises:
-    """`_randomized_decompose(X, components, center=False, ...)`: the four
+    """`x_dev` (lane vdf-scope-neural5): X's resident pool id (a model-selection fold the decomposition member
+    took on the device through the x_decomp store; the caller's, read in place, bounded by its held words), -1:
+    the host X at x. The kit borrows it where it uploaded the host X: same operands, same bits.
+
+    `_randomized_decompose(X, components, center=False, ...)`: the four
     public arrays written (components x cols, then components each).
     `auto_iterations`: n_iter='auto' (scikit-learn's size-ratio rule).
     `finite_word` (lane a8d-device-x-decomp-manifold): when nonzero, the
@@ -61,9 +65,14 @@ def tsvd_randomized_fit_run[E: Exec, D: RDev, RES: Bool](
         # `_rsvd_core`'s n_iter='auto', by the problem's size ratio (not a
         # dimension threshold)
         power = 7 if Float64(components) < 0.1 * Float64(min(rows, cols)) else 4
+    comptime if not RES:
+        if x_dev >= 0:
+            raise Error("x_decomp: a resident X needs a GPU binding")
+    if x_dev >= 0 and D.held_words(x_dev) < rows * cols:
+        raise Error("x_decomp: the resident X holds fewer values than the call reads")
     var kit = RKit[E, D, RES]()
     try:
-        var original = kit.add(Int(x), -1, rows, cols)
+        var original = kit.add(0, x_dev, rows, cols) if x_dev >= 0 else kit.add(Int(x), -1, rows, cols)
         # k.colmean(M): the column sums scaled by 1 / rows
         var sums = kit.sum(original, True)
         var mean = kit.ew(_OP_SCALE, sums, scalar=1.0 / Float64(rows))

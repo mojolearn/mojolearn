@@ -78,6 +78,12 @@ def _words_of(id: Int) raises -> Int:
         shared_slot_unlock(lock)
 
 
+def xd_store_words(id: Int) raises -> Int:
+    """The exact words pool id `id` holds as this store put or took it (`_StoreWords`), raising for an id the
+    store did not make. A resident source's row bound (x_decomp/pca_randomized.mojo `RDev.held_words`)."""
+    return _words_of(id)
+
+
 def xd_store_take_rows(src_id: Int, row_words: Int, idx_addr: Int, n_idx: Int) raises -> Int:
     """A fresh pool id holding rows `idx` (the `n_idx` host int64 words at
     `idx_addr`) of pool id `src_id` read as rows of `row_words` words: one

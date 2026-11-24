@@ -30,6 +30,7 @@ from decomposition.impl.linalg.detail.pca import pca_transform, pca_validate
 from decomposition.impl.linalg.detail.svd_full import pca_full_validate
 from decomposition.estimator import (
     pca_fit_cov_device_x, pca_fit_full_device_x, tsvd_fit_device, _tsvd_explained_tail, pca_whiten_transform_x,
+    inverse_transform_scores_dev,
 )
 from core.gemm import gemm_nt
 from decomposition.impl.pca_owner import pca_keep_finish
@@ -292,18 +293,40 @@ def tsvd_transform_fold(
     n_features: Int,
     n_components: Int,
 ) raises -> Tuple[Int32, Int32]:
-    """TruncatedSVD.transform (lane vdf-scope-neural4) of fold rows `index_id` of the resident base: gathered on
-    the device with the finite and range tests in the same pass, `out = X . components^T` by
-    `tsvd_transform_dev`'s gemm_nt, one synchronisation with the status words. On a flagged fold the door
-    refuses and discards `out_ptr`'s rows. The same kernel on the same words: no bit change."""
-    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    """TruncatedSVD.transform (lane vdf-scope-neural4) of fold rows `index_id` of the resident base with this
+    call's host components uploaded into a buffer that dies with the call (the lease-0 route); see
+    `tsvd_transform_fold_resident`."""
     var components = ctx.enqueue_create_buffer[DType.float32](n_components * n_features)
+    ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
+    var words = tsvd_transform_fold_resident(ctx, base_id, base_rows, index_id, components, out_ptr,
+        n_rows, n_features, n_components)
+    _ = components^
+    return words
+
+
+def tsvd_transform_fold_resident(
+    ctx: DeviceContext,
+    base_id: Int,
+    base_rows: Int,
+    index_id: Int,
+    components: DeviceBuffer[DType.float32],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+) raises -> Tuple[Int32, Int32]:
+    """TruncatedSVD.transform of fold rows `index_id` of the resident base: gathered on the device with the
+    finite and range tests in the same pass, `out = X . components^T` by `tsvd_transform_dev`'s gemm_nt over
+    `components` (a device copy on `ctx`: the fold provider's lease copy, uploaded once per fitted state, lane
+    vdf-scope-neural5), one synchronisation with the status words. On a flagged fold the door refuses and
+    discards `out_ptr`'s rows. The same kernel on the same words: no bit change."""
+    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
     var status = ctx.enqueue_create_buffer[DType.int32](2)
     enqueue_fill[DType.int32](ctx, status, Int32(0))
     msel_device_x_f32(ctx, base_id, base_rows, n_features, index_id, n_rows, x, status.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), 0)
-    ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
-    gemm_nt(ctx, out, x, components, n_rows, n_components, n_features)
+    var comps = components.copy()
+    gemm_nt(ctx, out, x, comps, n_rows, n_components, n_features)
     var flags = ctx.enqueue_create_host_buffer[DType.int32](2)
     ctx.enqueue_copy(dst_ptr=flags.unsafe_ptr(), src_buf=status)
     ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
@@ -312,7 +335,43 @@ def tsvd_transform_fold(
     var in_range = flags.unsafe_ptr()[1]
     _ = flags^
     _ = x^
-    _ = components^
+    _ = comps^
     _ = out^
     _ = status^
     return (finite, in_range)
+
+
+def inverse_transform_fold(
+    ctx: DeviceContext,
+    base_id: Int,
+    base_rows: Int,
+    index_id: Int,
+    components: DeviceBuffer[DType.float32],
+    mean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+    add_mean: Bool,
+) raises -> Int32:
+    """inverse_transform (PCA unwhitened with `add_mean`, TruncatedSVD without; lane vdf-scope-neural5) of fold
+    rows `index_id` of the resident base of scores (`base_rows` x `n_components`): gathered on the device into
+    the scores buffer `inverse_transform_scores_dev` reads (the host route's upload target), so the same
+    transpose, gemm_nt and mean shift run on the same words. Returns the range word (1: an index past the base;
+    the door refuses and discards `out_ptr`'s rows). The finite word is not read: the host inverse admits
+    non-finite scores and returns what the arithmetic gives, so the fold route does too."""
+    var scores = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
+    var status = ctx.enqueue_create_buffer[DType.int32](2)
+    enqueue_fill[DType.int32](ctx, status, Int32(0))
+    msel_device_x_f32(ctx, base_id, base_rows, n_components, index_id, n_rows, scores, status.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), 0)
+    var comps = components.copy()
+    var flags = ctx.enqueue_create_host_buffer[DType.int32](2)
+    ctx.enqueue_copy(dst_ptr=flags.unsafe_ptr(), src_buf=status)
+    # The body synchronises after its result copy: the status words are home with it.
+    inverse_transform_scores_dev(ctx, scores, comps, mean_ptr, out_ptr, n_rows, n_features, n_components, add_mean)
+    var in_range = flags.unsafe_ptr()[1]
+    _ = flags^
+    _ = scores^
+    _ = comps^
+    _ = status^
+    return in_range

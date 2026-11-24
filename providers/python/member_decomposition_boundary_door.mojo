@@ -55,8 +55,12 @@ from core.tsvd_native_api import TSVD_NATIVE_COUNT, TSVD_CAP_FUSED, TSVD_CAP_RAN
 from core.decomposition_member import (
     DECOMP_KIND_PCA, DECOMP_BLOCK_COMPONENTS, DECOMP_BLOCK_MEAN, DECOMP_BLOCK_VARIANCE, DECOMP_BLOCK_RATIO,
     DECOMP_BLOCK_SINGULAR, DECOMP_ROUTE_FUSED, DECOMP_ROUTE_TSQR, DECOMP_ROUTE_TSQR_MISSING, DECOMP_ROUTE_RANDOMIZED, DECOMP_ROUTE_RESIDENT,
-    DECOMP_ROUTE_FOLD,
+    DECOMP_ROUTE_FOLD, DECOMP_ROUTE_XD_STORE,
 )
+from providers.python.neural_descriptor_pyapi_door import (
+    NeuralDescriptorProvider, neural_descriptor_connect_factory_once,
+)
+from x_prep.transport_abi import XP_TRANSPORT_ABI
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE, MEMBER_F64,
@@ -74,6 +78,30 @@ def _route_of(route: DecompRoute, vendor_code: Int) -> DeviceRoute:
     built.mode = route.mode
     built.vendor = vendor_code - 1
     return built
+
+
+def _xd_store_route(context: PythonObject, mut route: DeviceRoute) raises:
+    """Lane vdf-scope-neural5: a randomized TruncatedSVD member's fold store. The GPU x_decomp image's device
+    pool as a scope transport (x_decomp/member_store.mojo `x_decomp_store_v1`, connected at import by
+    python/mojolearn/_native_tsvd_bridge.py as `tsvd_decomp_store[mode]`) into `route.third` with
+    DECOMP_ROUTE_XD_STORE, resolved once here: the member puts the scoped X there once and takes each fold's rows
+    on the device for the randomized driver (`source` = `-(id + 1)`). A host route or an image exporting no store
+    keeps the route as it was (host rows). The connection is held by the process record of
+    `neural_descriptor_connect_factory_once`."""
+    if route.vendor <= 0:
+        return
+    var table = py_get(context, "tsvd_decomp_store")
+    if table is None:
+        return
+    var mode = String("identical") if route.mode == 1 else String("fast")
+    var factory = py_get(table, PythonObject(mode))
+    if factory is None:
+        return
+    var provider = neural_descriptor_connect_factory_once(factory, String(XP_TRANSPORT_ABI), XP_OP_COUNT)
+    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
+    route.third = EntryRef(entry, entry_ref_word(route.mode, route.vendor, XP_OP_COUNT))
+    route.has_third = True
+    route.flags |= DECOMP_ROUTE_XD_STORE
 
 
 def _fold_route(mut route: DeviceRoute, which: Int):
@@ -232,6 +260,8 @@ def _tsvd_admit(model: PythonObject, fields: PythonObject, context: PythonObject
             flags |= DECOMP_ROUTE_RANDOMIZED
     route.flags = flags
     _fold_route(route, DECOMP_FOLD_TSVD)
+    if randomized and (flags & DECOMP_ROUTE_RANDOMIZED) != 0:
+        _xd_store_route(context, route)
     owner.plan.route = route
     owner.plan.params = words^
     # The connections' images, as the door's provider pins hold them.
