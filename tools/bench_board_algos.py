@@ -2513,6 +2513,37 @@ def _tool(name):
     return _MODS[name]
 
 
+# A/B LOOP MODE (lane ab-loop-mode, 2026-11-24; tools/ab_loop.py is the contract). When bench_board hands this race a
+# loop plan (environment key ab_loop.ENV), OUR arms take the plan's cap and pins through the estimator's public
+# constructor parameters (_est_factory, _build_graph, _build_als) before construction, so the warm-up is the same call
+# at the cap; every round's fit_loop_ is read after all of the round's clocks have closed. The helpers are
+# tools/bench_board_more.py's (loop_plan, loop_params, loop_round, loop_cell) with family "algos". Without a plan
+# nothing here changes the command, a clock or the cell.
+LOOP_FAMILY = "algos"
+#: lanes whose OUR construction took the plan's cap (build refuses a capped plan that reached no constructor)
+_LOOP_APPLIED = set()
+
+
+def loop_plan(lane, environ=None):
+    """The race's loop plan for an algos lane (read once per process); None: loop mode off."""
+    return _tool("bench_board_more").loop_plan(lane, environ=environ, family=LOOP_FAMILY)
+
+
+def loop_params(plan, params, ours):
+    """An arm's constructor parameters under the plan: capped (a copy) for OUR arm with a plan, PARAMS otherwise."""
+    return _tool("bench_board_more").loop_params(plan, params, ours)
+
+
+def _loop_ours_params(lane, params):
+    """OUR arm's constructor parameters under this race's plan; marks the lane as capped when the plan is."""
+    plan = loop_plan(lane)
+    if plan is None:
+        return params
+    if plan.get("mode") == "capped":
+        _LOOP_APPLIED.add(lane)
+    return loop_params(plan, params, True)
+
+
 #: COMPILE-IN-CLOCK (Andrew 2026-10-14): torch.compile counters around the scored calls (standard library)
 COMPILE = _tool("bench_board_compile_guard")
 
@@ -3567,7 +3598,15 @@ def build(lane, arm, D):
         raise RuntimeError("REFUSED: %s is not raced on %s: %s" % (arm, lane, why))
     if arm in OURS_ARMS:
         _ours_class(lane)                     # Skipped when not exported
-    return fn(lane, arm, D)
+    runner = fn(lane, arm, D)
+    if arm in OURS_ARMS:
+        plan = loop_plan(lane)
+        if plan is not None and plan.get("mode") == "capped" and lane not in _LOOP_APPLIED:
+            # A/B LOOP MODE: the lane's builder has no constructor-parameter route for the cap; never a private one
+            raise RuntimeError("REFUSED: loop mode: algos/%s (kind %s) took no cap %s=%s through its public "
+                               "parameters in this driver" % (lane, LANES[lane]["kind"], plan.get("param"),
+                                                              plan.get("k")))
+    return runner
 
 
 # ---- estimators (the scikit-learn-shaped lanes) ----------------------------
@@ -3584,6 +3623,7 @@ def _est_factory(lane, arm, D):
         # opponent's algorithm (e.g. batch_size=0, the per-sample form); named in the lane's
         # mism. Results raced before this change were wrong for those lanes; apply extra scrutiny.
         params.update(s.get("ours_extra", {}))
+        params = _loop_ours_params(lane, params)     # A/B LOOP MODE: the cap and pins (no plan: unchanged)
         if s.get("score_func"):
             import mojolearn as ml
             if not hasattr(ml, s["score_func"]):
@@ -4918,6 +4958,7 @@ def _build_graph(lane, arm, D):
     sync = None
     p = s["params"]
     if arm in OURS_ARMS:
+        p = _loop_ours_params(lane, p)          # A/B LOOP MODE: the cap and pins (no plan: unchanged)
         name, cls = _ours_class(lane)
         info = _ours_info(lane)
         # lane/neural-pass69 (2026-10-01) for components, lane gap-graph
@@ -7039,6 +7080,7 @@ def _build_als(lane, arm, D):
     S = {}
     sync = None
     if arm in OURS_ARMS:
+        p = _loop_ours_params(lane, p)          # A/B LOOP MODE: the cap and pins (no plan: unchanged)
         name, cls = _ours_class(lane)
         info = _ours_info(lane)
         info["config"] = "mojolearn.%s(%s).fit(csr)" % (name, p)
@@ -7795,6 +7837,8 @@ def worker(args):
     mem = _tool("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
         library=(runner.info or {}).get("library") or "?", arm=args.arm)
     last = None
+    # A/B LOOP MODE: the race's plan, read once in this process (None: off); our arm only
+    loop_on = loop_plan(args.lane) if args.arm in OURS_ARMS else None
     # SMALL ROWS (Andrew, 2026-11-15; tools/bench_board_small_rows.py): our FIRST SCORED fit and infer calls'
     # times decide how many consecutive calls the one scored run makes (20 under 10 ms, else 1); the warmup
     # does not decide (it carries start-up and kernel compilation)
@@ -7929,6 +7973,12 @@ def worker(args):
                 if r > 0:
                     from bench_board_state import runner_model
                     iterations = _tool("bench_board_probe").iteration_receipt(runner_model(runner))
+                # A/B LOOP MODE: the fitted model's loop region and capped parameters, after every clock of the
+                # round (the warm-up included); our arm under a plan only
+                loop = None
+                if loop_on is not None:
+                    from bench_board_state import runner_model
+                    loop = _tool("bench_board_more").loop_round(loop_on, runner_model(runner))
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
@@ -7939,6 +7989,7 @@ def worker(args):
                  "host_usage": {"fit": fit_use, "infer": inf_use if did else None},
                  "aft_capture": aft_capture, "upload_separate": upload_sep,
                  "upload_separate_infer": upload_sep_infer, "compile": compile_rec, "iterations": iterations,
+                 "loop": loop,
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
                                "scope": "prepare-fit-consume" if whole_requested else "call-consume",
                                "dataset_load_included": False,
@@ -8977,6 +9028,7 @@ def race(args):
             "outer queue supplies excluded warmup in a fresh isolated process; no internal warmup"
             if external_warmup else "one internal excluded warmup"
         )
+    loop_rounds = {}        # A/B LOOP MODE: arm -> [(round, loop record)], our arms under a plan only
     for r in range(1 if external_warmup else 0, args.rounds + 1):
         live = [a for a in arms if workers[a].alive]
         if not live:
@@ -9033,6 +9085,8 @@ def race(args):
                 a.setdefault("state_receipts", []).append(msg["state_receipt"])
             if r > 0 and "iterations" in msg:     # the scored rounds' executed iterations (PER-CELL PHASE SPLIT)
                 a.setdefault("iteration_receipts", []).append(msg["iterations"])
+            if msg.get("loop") is not None:
+                loop_rounds.setdefault(arm, []).append((r, msg["loop"]))
             if msg.get("aft_capture") is not None:
                 a.setdefault("aft_captures", []).append(msg["aft_capture"])
             if msg.get("upload_separate") is not None:
@@ -9045,6 +9099,8 @@ def race(args):
             print("ALGOS-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f infer_ms=%s digest=%s%s"
                   % (lane, ds, arm, r, msg["ms"], msg.get("infer_ms"), msg["digest"],
                      _tool("bench_board_small_rows").line_suffix(msg.get("scored_calls"))), flush=True)
+    for arm, rounds in loop_rounds.items():   # A/B LOOP MODE: the cell's loop record, beside iteration_receipts
+        result["arms"][arm]["loop_mode"] = _tool("bench_board_more").loop_cell(loop_plan(lane), rounds)
     outs = {}
     for arm in arms:
         w = workers[arm]
