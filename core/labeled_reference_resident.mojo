@@ -35,6 +35,7 @@ from dbscan.impl.neighbors.epsilon_neighborhood import (
     dbscan_metric_threshold,
 )
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from core.fold_x_device import fold_x_fill
 
 #: The estimators binding's ONE process-lifetime DeviceContext slot (the
 #: same name `bindings/_mojolearn_estimators.mojo` uses).
@@ -73,7 +74,13 @@ struct ResidentLabeledReference(Movable):
         var ref_labels = ctx.enqueue_create_buffer[DType.int32](n_refs)
         ctx.synchronize()
         var ur = List[Float32]()
-        if metric == LABELED_METRIC_COSINE:
+        if Int(refs_ptr) < 0:
+            # THE FOLD X WORD (lane vdf-scope-cluster8, DBSCAN_CAP_FOLD_X): the reference rows are a fold's slot of
+            # the x_prep store (AgglomerativeClustering's fold fit kept it): one device copy, the same words.
+            fold_x_fill(ctx, refs, Int(refs_ptr), n_refs * d)
+            if metric == LABELED_METRIC_COSINE:
+                _cosine_unit_device(ctx, refs, n_refs, d)
+        elif metric == LABELED_METRIC_COSINE:
             var rr = List[Float32](unsafe_uninit_length=n_refs * d)
             unsafe_memcpy(dest=rr.unsafe_ptr(), src=refs_ptr, count=n_refs * d)
             ur = cosine_unit_rows(rr, n_refs, d, "labeled_reference_predict")
@@ -253,7 +260,12 @@ def labeled_reference_predict_resident(
     var out_refs = entry.ctx.enqueue_create_buffer[DType.int32](n_queries)
     entry.ctx.synchronize()
     var uq = List[Float32]()
-    if src_rows:
+    if Int(queries_ptr) < 0:
+        # THE FOLD X WORD (lane vdf-scope-cluster8, DBSCAN_CAP_FOLD_X): the queries are a fold's x_prep slot.
+        fold_x_fill(entry.ctx, queries, Int(queries_ptr), n_queries * d)
+        if metric == LABELED_METRIC_COSINE:
+            _cosine_unit_device(entry.ctx, queries, n_queries, d)
+    elif src_rows:
         if n_queries * d > 0:
             entry.ctx.enqueue_copy(dst_buf=queries,
                                    src_buf=src_rows.value().create_sub_buffer[DType.float32](0, n_queries * d))

@@ -4,6 +4,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.spectral_native_api import (
     SpectralFitRequest, SpectralEmbeddingRequest, SpectralQueryShape,
     SPECTRAL_CAP_DENSE, SPECTRAL_CAP_RESIDENT, SPECTRAL_CAP_AFFINITY, SPECTRAL_CAP_DEV_STORE, SPECTRAL_RBF,
+    SPECTRAL_CAP_DEV_QUERY,
 )
 from core.spectral_native_execution import (
     SpectralBackend, SpectralKernels, SpectralFitResult, SpectralEmbeddingResult,
@@ -20,7 +21,7 @@ from spectral.estimator import (
 )
 from spectral.impl.spectral_predict_resident import (
     spectral_resident_prepare, spectral_resident_predict, spectral_resident_release,
-    spectral_resident_count,
+    spectral_resident_count, spectral_resident_prepare_slot,
 )
 
 
@@ -32,8 +33,10 @@ struct SpectralDeviceBackend(SpectralBackend):
     @staticmethod
     def capabilities() raises -> Int:
         # SPECTRAL_CAP_DEV_STORE (lane vdf-scope-cluster4): fit's dataset route over a slot of the image's
-        # resident store (core/metrics_store.mojo).
-        return SPECTRAL_CAP_DENSE | SPECTRAL_CAP_RESIDENT | SPECTRAL_CAP_AFFINITY | SPECTRAL_CAP_DEV_STORE
+        # resident store (core/metrics_store.mojo). SPECTRAL_CAP_DEV_QUERY (lane vdf-scope-cluster8): prepare /
+        # query_resident over slots of that store.
+        return (SPECTRAL_CAP_DENSE | SPECTRAL_CAP_RESIDENT | SPECTRAL_CAP_AFFINITY | SPECTRAL_CAP_DEV_STORE
+                | SPECTRAL_CAP_DEV_QUERY)
 
     @staticmethod
     def dataset_copy_count(count: Int) -> Int:
@@ -176,6 +179,24 @@ struct SpectralDeviceBackend(SpectralBackend):
         return spectral_resident_predict(handle, source, shape.training_rows, shape.rows,
                                          shape.features, shape.components, shape.clusters,
                                          shape.neighbors, shape.affinity)
+
+    @staticmethod
+    def prepare_slot(slot: Int, shape: SpectralQueryShape, state: SpectralPredictionState) raises -> Int:
+        """`prepare` over the training rows in slot `slot` of the resident store (the handle copies them device
+        to device; no host read, no upload)."""
+        var rows = metrics_store_buffer(slot, max(1, shape.training_rows * shape.features))
+        return spectral_resident_prepare_slot(rows^, shape.training_rows, shape.features, shape.components,
+                                              shape.clusters, shape.affinity, state)
+
+    @staticmethod
+    def query_resident_slot(handle: Int, slot: Int, shape: SpectralQueryShape) raises -> SpectralPrediction:
+        """`query_resident` over the queries in slot `slot` of the resident store (no host read, no upload)."""
+        var queries = metrics_store_buffer(slot, max(1, shape.rows * shape.features))
+        var out = spectral_resident_predict(handle, List[Float32](), shape.training_rows, shape.rows,
+                                            shape.features, shape.components, shape.clusters,
+                                            shape.neighbors, shape.affinity, Optional(queries.copy()))
+        _ = queries^  # the slot outlives the predict's launches
+        return out^
 
     @staticmethod
     def release(handle: Int) raises:

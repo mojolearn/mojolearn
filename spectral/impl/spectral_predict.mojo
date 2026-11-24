@@ -33,7 +33,7 @@ from checks.numerics import (
 from cluster.estimator import kmeans_predict_device
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from core.device_zero import enqueue_fill
-from neighbors.estimator import knn_search
+from neighbors.estimator import knn_search, knn_search_slot_queries
 from spectral.checks.device_io import download_f32, download_i32, upload_f32
 from spectral.impl.labels_device import IDN_SPECTRAL_LABELS_DEVICE, download_labels_i32
 from spectral.impl.spectral_predict_common import (
@@ -197,11 +197,22 @@ def spectral_predict_run(
     mut d_vecs: DeviceBuffer[DType.float32],
     mut d_mu: DeviceBuffer[DType.float32],
     mut d_cent: DeviceBuffer[DType.float32],
+    train_rows: Optional[DeviceBuffer[DType.float32]] = None,
+    query_rows: Optional[DeviceBuffer[DType.float32]] = None,
 ) raises -> SpectralPrediction:
     """Steps 1 to 4 (module docstring) over the fitted state already on the
     device: `d_diag` (n_train), `d_vecs` (n_train x k), `d_mu` (k, from
     `spectral_predict_mu`) and `d_cent` (n_clusters x k). The caller has
-    validated the shapes and the state."""
+    validated the shapes and the state.
+
+    THE SLOT FORM (lane vdf-scope-cluster8, 2026-11-24; nearest-neighbors
+    affinity): `train_rows` holds the training rows ON THE DEVICE (at least
+    n_train x n_features float32 on `ctx`; `train_x` is then not read) and
+    `query_rows`, when given, the queries there too (`input` is then not
+    read); host queries beside device training rows are uploaded once. The
+    search is `knn_search_slot_queries`, `knn_search`'s own body on the same
+    words (the index and queries copied device to device instead of from the
+    host), so the neighbor indices and every later step are the same."""
     var k = n_components
     comptime tpb = SPECTRAL_PREDICT_TPB
     var qgrid = (n_queries + tpb - 1) // tpb
@@ -212,25 +223,51 @@ def spectral_predict_run(
     var d_vals: DeviceBuffer[DType.float32]
     var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](1)
     if affinity == SPECTRAL_AFFINITY_NEAREST_NEIGHBORS:
-        if len(input) < n_queries * n_features or len(train_x) < n_train * n_features:
+        var device_train = Bool(train_rows)
+        var device_query = Bool(query_rows)
+        if (not device_query and len(input) < n_queries * n_features) or (
+                not device_train and len(train_x) < n_train * n_features):
             raise Error("spectral_predict: a buffer is shorter than its shape; refused by name")
         # The fit's own search, reading the caller's rows where they are.
         var nnz = n_queries * n_neighbors
         var h_dist = ctx.enqueue_create_host_buffer[DType.float32](nnz)
         h_idx = ctx.enqueue_create_host_buffer[DType.uint32](nnz)
         ctx.synchronize()
-        _ = knn_search(
-            ctx,
-            MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(train_x.unsafe_ptr())),
-            n_train,
-            MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(input.unsafe_ptr())),
-            n_queries,
-            n_features,
-            n_neighbors,
-            h_dist.unsafe_ptr(),
-            h_idx.unsafe_ptr(),
-            True,
-        )
+        if device_train:
+            # THE SLOT FORM (docstring): the training rows (and the queries, or their one upload) on the device.
+            var d_train = train_rows.value().copy()
+            var d_query: DeviceBuffer[DType.float32]
+            if device_query:
+                d_query = query_rows.value().copy()
+            else:
+                d_query = upload_f32(ctx, input)
+            _ = knn_search_slot_queries(
+                ctx,
+                d_train,
+                n_train,
+                d_query,
+                n_queries,
+                n_features,
+                n_neighbors,
+                MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(h_dist.unsafe_ptr())),
+                MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(h_idx.unsafe_ptr())),
+            )
+            ctx.synchronize()
+            _ = d_query^  # both device copies outlive the search's launches
+            _ = d_train^
+        else:
+            _ = knn_search(
+                ctx,
+                MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(train_x.unsafe_ptr())),
+                n_train,
+                MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(input.unsafe_ptr())),
+                n_queries,
+                n_features,
+                n_neighbors,
+                h_dist.unsafe_ptr(),
+                h_idx.unsafe_ptr(),
+                True,
+            )
         var d_idx = ctx.enqueue_create_buffer[DType.uint32](nnz)
         ctx.enqueue_copy(dst_buf=d_idx, src_ptr=h_idx.unsafe_ptr())
         width = n_neighbors

@@ -30,6 +30,12 @@ comptime VARIANTS_CAP_DEVSCAN = 2
 #: `minibatch_entry_ptr_idn`, x_cluster/resident.mojo `xc_resident_query`): the identical device image. A `fast`
 #: build's zero-copy and host-list routes read host words, so it does not answer it.
 comptime VARIANTS_CAP_FOLD_X = 4
+#: THE FOLD X WORD on the SLOT ENTRIES in every mode (lane vdf-scope-cluster8): MeanShift, OPTICS,
+#: AffinityPropagation and BayesianGaussianMixture (x_cluster/device_execution.mojo `cluster_fold_entry` /
+#: `_fold_execute`: X put into an ops float slot by one device copy, `DeviceOps.put_addr`) and the resident centers
+#: query (`xc_resident_query`) read the word in a `fast` build too, so the fast image answers this bit (the
+#: identical image answers both). MiniBatchKMeans and BisectingKMeans stay on VARIANTS_CAP_FOLD_X.
+comptime VARIANTS_CAP_FOLD_X_SLOT = 8
 
 
 @fieldwise_init

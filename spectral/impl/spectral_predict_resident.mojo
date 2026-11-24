@@ -54,17 +54,21 @@ struct SpectralResident(Movable):
     var d_mu: DeviceBuffer[DType.float32]
     var d_cent: DeviceBuffer[DType.float32]
     var train_x: List[Float32]
+    #: THE SLOT FORM (lane vdf-scope-cluster8): the training rows' own device copy (`train_x` then empty).
+    var d_train: Optional[DeviceBuffer[DType.float32]]
     var n_train: Int
     var n_features: Int
     var k: Int
     var n_clusters: Int
     var affinity: Int
 
-    def __init__(out self, var train_x: List[Float32], n_train: Int, n_features: Int, k: Int, n_clusters: Int,
-                 affinity: Int, state: SpectralPredictionState) raises:
+    def __init__(out self, var train_x: List[Float32], var d_train: Optional[DeviceBuffer[DType.float32]],
+                 n_train: Int, n_features: Int, k: Int, n_clusters: Int, affinity: Int,
+                 state: SpectralPredictionState) raises:
         # The per-call refusals, in their order: the state, then `mu`.
         spectral_predict_check_state(state, n_train, k, n_clusters)
-        if affinity == SPECTRAL_AFFINITY_NEAREST_NEIGHBORS and len(train_x) < n_train * n_features:
+        var on_device = Bool(d_train)
+        if affinity == SPECTRAL_AFFINITY_NEAREST_NEIGHBORS and not on_device and len(train_x) < n_train * n_features:
             raise Error("spectral_predict: a buffer is shorter than its shape; refused by name")
         var mu = spectral_predict_mu(state.eigenvalues)
         var ctx = process_ctx[_DEVCTX_SLOT]()
@@ -73,6 +77,7 @@ struct SpectralResident(Movable):
         self.d_mu = upload_f32(ctx, mu)
         self.d_cent = upload_f32(ctx, state.centroids)
         self.train_x = train_x^
+        self.d_train = d_train^
         self.n_train = n_train
         self.n_features = n_features
         self.k = k
@@ -87,6 +92,7 @@ struct SpectralResident(Movable):
         _ = self.d_mu^
         _ = self.d_cent^
         _ = self.train_x^
+        _ = self.d_train^
         _ = self.ctx^
 
 
@@ -129,8 +135,41 @@ def spectral_resident_prepare(var train_x: List[Float32], n_train: Int, n_featur
                               affinity: Int, state: SpectralPredictionState) raises -> Int:
     """Take the prediction state once; the handle every later predict names."""
     var entry = ArcPointer[SpectralResident](
-        SpectralResident(train_x^, n_train, n_features, k, n_clusters, affinity, state)
+        SpectralResident(train_x^, None, n_train, n_features, k, n_clusters, affinity, state)
     )
+    return _register(entry^)
+
+
+def spectral_resident_prepare_slot(
+    var rows: DeviceBuffer[DType.float32], n_train: Int, n_features: Int, k: Int, n_clusters: Int, affinity: Int,
+    state: SpectralPredictionState,
+) raises -> Int:
+    """`spectral_resident_prepare` over training rows ONLY ON THE DEVICE (lane vdf-scope-cluster8): `rows` is a
+    slot of the metrics image's resident store (core/metrics_store.mojo, the same context) holding at least
+    n_train x n_features float32. The handle keeps its OWN device copy of those words (one device-to-device
+    copy per fitted state): a freed store slot's buffer may be handed to a later put (the store's spare pool),
+    so the handle never reads the slot after this call. Nearest-neighbors affinity only."""
+    if affinity != SPECTRAL_AFFINITY_NEAREST_NEIGHBORS:
+        raise Error("spectral_predict: device-resident training rows serve the nearest-neighbors affinity only")
+    var count = n_train * n_features
+    if count < 1 or len(rows) < count:
+        raise Error("spectral_predict: a buffer is shorter than its shape; refused by name")
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var head = rows.create_sub_buffer[DType.float32](0, count)
+    var own = ctx.enqueue_create_buffer[DType.float32](count)
+    ctx.enqueue_copy(dst_buf=own, src_buf=head)
+    ctx.synchronize()
+    _ = head^
+    _ = rows.unsafe_ptr()  # the slot outlives the copy above
+    var entry = ArcPointer[SpectralResident](
+        SpectralResident(List[Float32](), Optional(own^), n_train, n_features, k, n_clusters, affinity, state)
+    )
+    _ = ctx^
+    return _register(entry^)
+
+
+def _register(var entry: ArcPointer[SpectralResident]) raises -> Int:
+    """File `entry` in the registry; its handle."""
     var reg = _registry()
     _lock(reg)
     try:
@@ -188,10 +227,12 @@ def _view(handle: Int) raises -> ArcPointer[SpectralResident]:
 
 def spectral_resident_predict(
     handle: Int, input: List[Float32], n_train: Int, n_queries: Int, n_features: Int, k: Int, n_clusters: Int,
-    n_neighbors: Int, affinity: Int,
+    n_neighbors: Int, affinity: Int, query_rows: Optional[DeviceBuffer[DType.float32]] = None,
 ) raises -> SpectralPrediction:
     """`spectral_predict_device` on the handle's state: the call's shape
-    words are checked against the handle's, then `spectral_predict_run`."""
+    words are checked against the handle's, then `spectral_predict_run`.
+    `query_rows` (lane vdf-scope-cluster8): the queries ON THE DEVICE (a fold
+    slot of the metrics store; `input` is then not read)."""
     var e = _view(handle)
     if (e[].n_train != n_train or e[].n_features != n_features or e[].k != k or e[].n_clusters != n_clusters
             or e[].affinity != affinity):
@@ -204,10 +245,12 @@ def spectral_resident_predict(
     var d_vecs = e[].d_vecs.copy()
     var d_mu = e[].d_mu.copy()
     var d_cent = e[].d_cent.copy()
+    var d_train = e[].d_train.copy()
     var out = spectral_predict_run(
         ctx, input, e[].train_x, n_train, n_queries, n_features, k, n_clusters, n_neighbors, affinity,
-        d_diag, d_vecs, d_mu, d_cent,
+        d_diag, d_vecs, d_mu, d_cent, d_train, query_rows,
     )
+    _ = d_train^
     _ = d_diag^
     _ = d_vecs^
     _ = d_mu^

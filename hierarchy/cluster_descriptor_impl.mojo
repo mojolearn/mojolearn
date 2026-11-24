@@ -8,18 +8,22 @@ from hierarchy.cluster_descriptor_schema import hierarchy_cluster_validate_buffe
 
 
 def hierarchy_cluster_fit[O: ClusterOps](mut ops: O, a: List[Int], p: List[Int],
-                                         floats: Int) raises:
+                                         floats: Int, x_slot: Int = -1) raises:
+    """`agglo_entry` over the request words. `x_slot` >= 0 (lane vdf-scope-cluster8): X is already that float slot
+    of `ops` (a fold taken on the device; the device descriptor put it there), and `a[0]` is not read."""
     hierarchy_cluster_validate_buffers(a, p)
+    if a[0] < 0 and x_slot < 0:
+        raise Error("hierarchy cluster provider: this image reads host X words (no fold X word)")
     if floats == 0:
         raise Error("hierarchy cluster provider: null scalar span")
     var fp = f64_ptr(floats)
     var scalars: List[Float64] = [fp[0], fp[1]]
-    var x = read_f32(a[0], p[0]) if p[0] > 0 else List[Float32]()
+    var x = read_f32(a[0], p[0]) if (p[0] > 0 and x_slot < 0) else List[Float32]()
     var edges = read_f32(a[1], p[1]) if p[1] > 0 else List[Float32]()
     var ip = List[Int]()
     for i in range(2, 11):  # small-loop(nine typed agglo_entry settings)
         ip.append(p[i])
-    var out = agglo_entry(ops, x, edges, ip, scalars)
+    var out = agglo_entry(ops, x, edges, ip, scalars, x_slot)
     # Validate every slot before publishing any result bytes. Empty partial
     # trees (n_merges=0, cut=0) still return n labels and two scalar words.
     if len(out.i) != 2 or len(out.f) != 1 or len(out.s) != 2:

@@ -113,6 +113,14 @@ struct SpectralHostBackend(SpectralBackend):
         raise Error("Spectral native API: resident prediction is unavailable in the host image")
 
     @staticmethod
+    def prepare_slot(slot: Int, shape: SpectralQueryShape, state: SpectralPredictionState) raises -> Int:
+        raise Error("Spectral native API: the host image has no resident store")
+
+    @staticmethod
+    def query_resident_slot(handle: Int, slot: Int, shape: SpectralQueryShape) raises -> SpectralPrediction:
+        raise Error("Spectral native API: the host image has no resident store")
+
+    @staticmethod
     def release(handle: Int) raises:
         raise Error("Spectral native API: resident prediction is unavailable in the host image")
 

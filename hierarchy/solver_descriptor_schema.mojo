@@ -9,6 +9,9 @@ comptime HIERARCHY_SOLVER_MODE = 1
 comptime HIERARCHY_SOLVER_CAPABILITIES = 2
 comptime HIERARCHY_SOLVER_CAP_LINKAGE = 1
 comptime HIERARCHY_SOLVER_CAP_DEVICE = 2
+#: The linkage's X word may be NEGATIVE: a model-selection fold's slot of the x_prep store (core/fold_x_word.mojo,
+#: core/member_fold_x.mojo), filled into the solver's device X by one device copy (lane vdf-scope-cluster8).
+comptime HIERARCHY_SOLVER_CAP_FOLD_X = 4
 
 
 def hierarchy_solver_validate_call(operation: Int, na: Int, np: Int, nf: Int,

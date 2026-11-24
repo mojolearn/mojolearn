@@ -3,6 +3,7 @@ from core.hostptr import f32_ptr, read_f32, read_i32
 from core.shared_slot import SharedSlot
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.kmeans_variants_api import KMEANS_VARIANTS_ABI, VARIANTS_CAP_RESIDENT, VARIANTS_CAP_DEVSCAN, VARIANTS_CAP_FOLD_X
+from core.kmeans_variants_api import VARIANTS_CAP_FOLD_X_SLOT
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_cluster.variants_dispatch import KMeansVariantsBackend, kmeans_variants_dispatch
 from x_cluster.device_execution import cluster_device_execute
@@ -21,7 +22,7 @@ struct VariantsDeviceBackend(KMeansVariantsBackend):
     @staticmethod
     def capabilities() -> Int:
         return (VARIANTS_CAP_RESIDENT | (VARIANTS_CAP_DEVSCAN if MBK_DEVSCAN_ANY else 0)
-            | (VARIANTS_CAP_FOLD_X if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else 0))
+            | (VARIANTS_CAP_FOLD_X if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else 0) | VARIANTS_CAP_FOLD_X_SLOT)
 
     @staticmethod
     def execute(which: Int, source: Int, count: Int, auxiliary: Int, auxiliary_count: Int,

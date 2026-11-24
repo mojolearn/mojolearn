@@ -291,13 +291,17 @@ def knn_check_metric_input(cls_name: String, metric: Int, x_address: Int, count:
                     + "(it takes logarithms of the coordinates)")
 
 
-def knn_metric_reads_host_queries(metric: Int) -> Bool:
-    """Jensen-Shannon's sign check reads host query words (its refusal names
-    the estimator), so a device-gathered fold cannot serve it. Cosine's
-    zero-row refusals run on the device rows of a fold (lane
-    vdf-scope-cluster7: neighbors/estimator.mojo `_knn_search_on_device_index`,
-    neighbors/zero_row_device.mojo; the host scans' rows and words)."""
-    return metric == KNN_DIST_JS
+def knn_refuse_metric_status(cls_name: String, metric_status: Int) raises:
+    """The refusal a fold's metric word carries (`KnnQueryOutcome.metric_status`, lane vdf-scope-cluster8): the
+    Jensen-Shannon X >= 0 test made on the device rows, in `knn_check_metric_input`'s words."""
+    if metric_status != 0:
+        raise Error("mojolearn " + cls_name + ": metric='jensenshannon' needs X >= 0 "
+                    + "(it takes logarithms of the coordinates)")
+
+# TOMBSTONE (lane vdf-scope-cluster8, 2026-11-24): `knn_metric_reads_host_queries` deleted: Jensen-Shannon, the last
+# metric whose fold queries were gathered on the host for its sign test, runs that test on the device rows
+# (`knn_refuse_metric_status`, the fold's third status word). Not an experiment define; recoverable at this lane's
+# base 3b25b6a0ed.
 
 
 # ------------------------------------------------------------------ weights
@@ -573,11 +577,15 @@ struct KnnQueryOutcome(Copyable, Movable):
     the candidate count of a ball-cover search), the finite word of the host
     index scan, the finite word of the queries (host scan or the resident
     entry's upload) and a fold's index-range word. `ran` is False when a
-    host scan refused before the entry."""
+    host scan refused before the entry. `metric_status` (lane
+    vdf-scope-cluster8): a fold's metric word, the Jensen-Shannon X >= 0 test
+    made on the device (1 a negative query word): `knn_refuse_metric_status`
+    raises the estimator's words."""
     var used: Int
     var index_status: Int
     var status: Int
     var range_status: Int
+    var metric_status: Int
     var ran: Bool
 
     def __init__(out self):
@@ -585,6 +593,7 @@ struct KnnQueryOutcome(Copyable, Movable):
         self.index_status = 0
         self.status = 0
         self.range_status = 0
+        self.metric_status = 0
         self.ran = False
 
 
@@ -620,12 +629,14 @@ def knn_search_run(entry: NativeDescriptorCall, request: KnnQueryRequest, distan
     if not _knn_host_scans(request, outcome):
         return outcome^
     if request.resident:
-        var status = List[Int32](length=2, fill=Int32(0))
+        var status = List[Int32](length=3, fill=Int32(0))
         outcome.used = nb_search_resident_call(
             entry, request.handle, request.index, request.queries, distances, ids,
             _knn_status_address(request, status), request.n_index, request.n_queries, request.n_features,
             request.k, True, request.query_tile, request.metric, request.metric_arg)
         outcome.status = Int(status[0])
+        outcome.range_status = Int(status[1])
+        outcome.metric_status = Int(status[2])
         _ = status^
     else:
         outcome.used = nb_search_call(
@@ -658,7 +669,7 @@ def knn_classify_run(entry: NativeDescriptorCall, request: KnnQueryRequest, y: I
         return outcome^
     if request.resident:
         # Two words: the finite word, and for a fold the index-range word.
-        var status = List[Int32](length=2, fill=Int32(0))
+        var status = List[Int32](length=3, fill=Int32(0))
         outcome.used = nb_classify_resident_call(
             entry, request.handle, request.index, request.queries, y, labels, proba, uniq,
             _knn_status_address(request, status), request.n_index, request.n_queries, request.n_features,
@@ -666,6 +677,7 @@ def knn_classify_run(entry: NativeDescriptorCall, request: KnnQueryRequest, y: I
             request.weights, request.fold)
         outcome.status = Int(status[0])
         outcome.range_status = Int(status[1])
+        outcome.metric_status = Int(status[2])
         _ = status^
     else:
         outcome.used = nb_classify_call(
@@ -684,7 +696,7 @@ def knn_regress_run(entry: NativeDescriptorCall, request: KnnQueryRequest, y: In
     if not _knn_host_scans(request, outcome):
         return outcome^
     if request.resident:
-        var status = List[Int32](length=2, fill=Int32(0))
+        var status = List[Int32](length=3, fill=Int32(0))
         outcome.used = nb_regress_resident_call(
             entry, request.handle, request.index, request.queries, y, dst,
             _knn_status_address(request, status), request.n_index, request.n_queries, request.n_features,
@@ -692,6 +704,7 @@ def knn_regress_run(entry: NativeDescriptorCall, request: KnnQueryRequest, y: In
             request.fold)
         outcome.status = Int(status[0])
         outcome.range_status = Int(status[1])
+        outcome.metric_status = Int(status[2])
         _ = status^
     else:
         outcome.used = nb_regress_call(

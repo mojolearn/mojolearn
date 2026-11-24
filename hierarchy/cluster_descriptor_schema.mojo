@@ -8,6 +8,10 @@ comptime HIERARCHY_CLUSTER_MODE = 1
 comptime HIERARCHY_CLUSTER_CAPABILITIES = 2
 comptime HIERARCHY_CLUSTER_CAP_FIT = 1
 comptime HIERARCHY_CLUSTER_CAP_DEVICE = 2
+#: The fit's X word may be NEGATIVE: a model-selection fold's slot of the x_prep store (core/fold_x_word.mojo),
+#: put into the ops' float slot by one device copy (`DeviceOps.put_addr`; lane vdf-scope-cluster8). The identical
+#: device image only (the fast image's ward rounds read host words).
+comptime HIERARCHY_CLUSTER_CAP_FOLD_X = 4
 
 
 def hierarchy_cluster_validate_call(operation: Int, na: Int, np: Int, nf: Int,
