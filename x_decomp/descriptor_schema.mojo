@@ -142,8 +142,15 @@ comptime XD_FA_QUERY = 77         # a: [x, components, noise, mean, dst, value o
 comptime XD_LDA = 78              # a: [x, comps in, exp in, comps out, exp out, dst, draw inout(int64), n_batch_iter inout(int64), value out(f64)] i: [op, n, v, nc, fresh, flag, max_iter, online, batch_size, max_doc_update_iter, seed, evaluate_every, refusal (0 fit, 1 partial_fit, 2 transform)] f: [doc prior, topic prior, offset, decay, mean_change_tol, total samples, perp_tol] -> n_iter
 comptime XD_RP_FIT = 79           # a: [x, components, inverse] i: [n, d, kc, sparse, seed, inverse, fused_ok] f: [density] -> first non-finite index or -1
 comptime XD_RP_PROJECT = 80       # a: [x, matrix, dst] i: [m, d, rows, tiled (0 plain, 1 tiled, 2 tiled and X untested), matrix pool id (-1: none)] -> 1 when X was flagged non-finite
+# lane vdf-linalg2 (2026-11-24): linalg.qr's geqrf, orgqr and R cut on pool ids
+# (x_decomp/resident_qr.mojo), so h, tau, Q and R stay on the device and each
+# result is downloaded once (were XD_GEQRF / XD_ORGQR host-address round trips
+# and the door's host `_lin_triu`). GPU image only; the host image refuses them.
+comptime XD_DEV_GEQRF = 81        # i: [a, h, tau, rows, cols]           -> min(rows, cols)
+comptime XD_DEV_ORGQR = 82        # i: [h, tau, q, rows, cols, k, qc]
+comptime XD_DEV_TRIU = 83         # i: [h, dst, r, c]   (dst r x c: the first r rows of h, below the diagonal zero)
 # lane entangled-mkit (2026-11-12): the manifold kit's operations 120 ..
-# XD_MANI_OPERATION_END - 1 (above every operation here, 0 .. 80) (x_decomp/descriptor_mani_schema.mojo).
+# XD_MANI_OPERATION_END - 1 (above every operation here, 0 .. 83) (x_decomp/descriptor_mani_schema.mojo).
 comptime XD_OPERATION_COUNT = XD_MANI_OPERATION_END
 
 comptime XD_CAP_HOST = 1       # the host-address operations
@@ -284,6 +291,12 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
         return (2, 1, 0)
     if op == XD_DEV_ORDER_SMALL:
         return (0, 3, 0)
+    if op == XD_DEV_GEQRF:
+        return (0, 5, 0)
+    if op == XD_DEV_ORGQR:
+        return (0, 7, 0)
+    if op == XD_DEV_TRIU:
+        return (0, 4, 0)
     if op == XD_TSQR_Q:
         return (2, 4, 0)
     if op == XD_R_SIGNS:

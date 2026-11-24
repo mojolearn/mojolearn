@@ -1521,7 +1521,8 @@ def mlp_inference_sessions(inputs, weight1, bias1, weight2, bias2, numeric_mode=
     numeric_mode : {'identical', 'fast'}, default 'identical'
         Numeric mode. ``'fast'`` is available on Apple GPUs only.
     device : {None, 'gpu', 'cpu'}, default None
-        Where the computation runs. None and 'gpu' run on the GPU; 'cpu' raises ValueError.
+        Where the computation runs. None uses this installation's device, 'cpu' runs on the CPU and
+        'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------

@@ -19,6 +19,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz, identical_mul_add, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.device_scan import device_first_nonfinite
+from core.device_zero import enqueue_fill
 from embedding.checks.embedding_identical import identical_embedding_forward_into
 from autograd.kernels.embedding import identical_embedding_backward_into
 from embedding.checks.embedding_oracle import EmbConfig
@@ -167,8 +168,7 @@ def samba_embedding_forward_host(
     var w = _upload_checked(ctx, "embedding weight", w_ptr, vocab * width)
     var ids = _upload_i32(ctx, ids_ptr, n_positions)
     var y = ctx.enqueue_create_buffer[DType.float32](cells)
-    var cfg = EmbConfig.llama(vocab, width)
-    identical_embedding_forward_into(ctx, y, w, ids, n_positions, cfg)
+    samba_embedding_forward_on(ctx, y, w, ids, n_positions, vocab, width)
     ctx.enqueue_copy(dst_ptr=y_ptr, src_buf=y)
     ctx.synchronize()
     _ = w^
@@ -199,6 +199,34 @@ def samba_embedding_backward_host(
     var dy = _upload_checked(ctx, "embedding upstream gradient", dy_ptr, n_positions * width)
     var ids = _upload_i32(ctx, ids_ptr, n_positions)
     var dw = ctx.enqueue_create_buffer[DType.float32](cells)
+    samba_embedding_backward_on(ctx, dw, dy, ids, n_positions, vocab, width)
+    ctx.enqueue_copy(dst_ptr=dw_ptr, src_buf=dw)
+    ctx.synchronize()
+    _ = dy^
+    _ = ids^
+    _ = dw^
+    return cells
+
+
+# The device bodies of the four layer ops (lane vdf-linalg2, 2026-11-24):
+# the host-address entries above and the device-array forms
+# (training/dev_tensors_layers.mojo) run these on the same buffers' words,
+# so a device-resident input gives the host input's bits. Enqueued; the
+# caller waits.
+
+
+def samba_embedding_forward_on(
+    ctx: DeviceContext, mut y: DeviceBuffer[DType.float32], mut w: DeviceBuffer[DType.float32],
+    mut ids: DeviceBuffer[DType.int32], n_positions: Int, vocab: Int, width: Int,
+) raises:
+    var cfg = EmbConfig.llama(vocab, width)
+    identical_embedding_forward_into(ctx, y, w, ids, n_positions, cfg)
+
+
+def samba_embedding_backward_on(
+    ctx: DeviceContext, mut dw: DeviceBuffer[DType.float32], mut dy: DeviceBuffer[DType.float32],
+    mut ids: DeviceBuffer[DType.int32], n_positions: Int, vocab: Int, width: Int,
+) raises:
     var counts = ctx.enqueue_create_buffer[DType.int32](vocab)
     var run_begin = ctx.enqueue_create_buffer[DType.int32](vocab + 1)
     var perm = ctx.enqueue_create_buffer[DType.int32](n_positions)
@@ -206,15 +234,54 @@ def samba_embedding_backward_host(
     identical_embedding_backward_into(
         ctx, dw, dy, ids, counts, run_begin, perm, n_positions, cfg
     )
-    ctx.enqueue_copy(dst_ptr=dw_ptr, src_buf=dw)
     ctx.synchronize()
-    _ = dy^
-    _ = ids^
-    _ = dw^
     _ = counts^
     _ = run_begin^
     _ = perm^
-    return cells
+
+
+def samba_rms_norm_forward_on(
+    ctx: DeviceContext, mut y: DeviceBuffer[DType.float32], mut x: DeviceBuffer[DType.float32],
+    mut w: DeviceBuffer[DType.float32], m: Int, dm: Int, eps: Float32,
+) raises:
+    var sumsq = ctx.enqueue_create_buffer[DType.float32](m)
+    llama_rms_norm(ctx, sumsq, y, x, w, m, dm, eps)
+    ctx.synchronize()
+    _ = sumsq^
+
+
+def samba_rms_norm_backward_on(
+    ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], mut dw: DeviceBuffer[DType.float32],
+    mut dy: DeviceBuffer[DType.float32], mut x: DeviceBuffer[DType.float32], mut w: DeviceBuffer[DType.float32],
+    m: Int, dm: Int, eps: Float32,
+) raises:
+    """The forward's row sum of squares is RECOMPUTED by the same kernel.
+    The ones vector is filled on the device (lane vdf-linalg2: was a host
+    buffer filled by a host loop over the rows, then uploaded)."""
+    var cells = m * dm
+    var y = ctx.enqueue_create_buffer[DType.float32](cells)
+    var sumsq = ctx.enqueue_create_buffer[DType.float32](m)
+    var dot_out = ctx.enqueue_create_buffer[DType.float32](m)
+    var dh = ctx.enqueue_create_buffer[DType.float32](cells)
+    var dprod = ctx.enqueue_create_buffer[DType.float32](cells)
+    var rstd = ctx.enqueue_create_buffer[DType.float32](m)
+    var dvcoef = ctx.enqueue_create_buffer[DType.float32](m)
+    var ones = ctx.enqueue_create_buffer[DType.float32](m)
+    enqueue_fill(ctx, ones, Float32(1.0))
+    llama_rms_norm(ctx, sumsq, y, x, w, m, dm, eps)
+    bwd_rms_norm[0](
+        ctx, dot_out, dx, dw, dh, dprod, rstd, dvcoef, ones, dy, x, w, sumsq,
+        dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), False, m, dm, eps,
+    )
+    ctx.synchronize()
+    _ = y^
+    _ = sumsq^
+    _ = dot_out^
+    _ = dh^
+    _ = dprod^
+    _ = rstd^
+    _ = dvcoef^
+    _ = ones^
 
 
 # ===========================================================================
@@ -244,14 +311,12 @@ def samba_rms_norm_forward_host(
     var x = _upload_checked(ctx, "rms_norm input", x_ptr, cells)
     var w = _upload_checked(ctx, "rms_norm weight", w_ptr, dm)
     var y = ctx.enqueue_create_buffer[DType.float32](cells)
-    var sumsq = ctx.enqueue_create_buffer[DType.float32](m)
-    llama_rms_norm(ctx, sumsq, y, x, w, m, dm, eps)
+    samba_rms_norm_forward_on(ctx, y, x, w, m, dm, eps)
     ctx.enqueue_copy(dst_ptr=y_ptr, src_buf=y)
     ctx.synchronize()
     _ = x^
     _ = w^
     _ = y^
-    _ = sumsq^
     return cells
 
 
@@ -284,43 +349,17 @@ def samba_rms_norm_backward_host(
     var x = _upload_checked(ctx, "rms_norm input", x_ptr, cells)
     var w = _upload_checked(ctx, "rms_norm weight", w_ptr, dm)
     var dy = _upload_checked(ctx, "rms_norm upstream gradient", dy_ptr, cells)
-    var y = ctx.enqueue_create_buffer[DType.float32](cells)
-    var sumsq = ctx.enqueue_create_buffer[DType.float32](m)
-    var dot_out = ctx.enqueue_create_buffer[DType.float32](m)
     var dx = ctx.enqueue_create_buffer[DType.float32](cells)
     var dw = ctx.enqueue_create_buffer[DType.float32](dm)
-    var dh = ctx.enqueue_create_buffer[DType.float32](cells)
-    var dprod = ctx.enqueue_create_buffer[DType.float32](cells)
-    var rstd = ctx.enqueue_create_buffer[DType.float32](m)
-    var dvcoef = ctx.enqueue_create_buffer[DType.float32](m)
-    var ones = ctx.enqueue_create_buffer[DType.float32](m)
-    var h_ones = ctx.enqueue_create_host_buffer[DType.float32](m)
-    ctx.synchronize()
-    for i in range(m):
-        h_ones.unsafe_ptr().unsafe_store(i, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=ones, src_ptr=h_ones.unsafe_ptr())
-    llama_rms_norm(ctx, sumsq, y, x, w, m, dm, eps)
-    bwd_rms_norm[0](
-        ctx, dot_out, dx, dw, dh, dprod, rstd, dvcoef, ones, dy, x, w, sumsq,
-        dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), False, m, dm, eps,
-    )
+    samba_rms_norm_backward_on(ctx, dx, dw, dy, x, w, m, dm, eps)
     ctx.enqueue_copy(dst_ptr=dx_ptr, src_buf=dx)
     ctx.enqueue_copy(dst_ptr=dw_ptr, src_buf=dw)
     ctx.synchronize()
-    _ = h_ones^
     _ = x^
     _ = w^
     _ = dy^
-    _ = y^
-    _ = sumsq^
-    _ = dot_out^
     _ = dx^
     _ = dw^
-    _ = dh^
-    _ = dprod^
-    _ = rstd^
-    _ = dvcoef^
-    _ = ones^
     return cells
 
 
