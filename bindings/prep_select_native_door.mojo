@@ -40,7 +40,7 @@ from core.member_families import MEMBER_FAMILY_GBDT, MEMBER_FAMILY_TREE, MEMBER_
 from bindings.trees_public_inputs_run import trees_finite_f32
 from providers.python.member_rfe_boundary_door import (
     RfeBase, RfeDottedPath, rfe_base_admit_door, rfe_count_words, rfe_image, rfe_publish, rfe_plan_labels,
-    rfe_fit_keywords, rfe_member_fit_params, rfe_dotted_path,
+    rfe_fit_keywords, rfe_member_fit_params, rfe_dotted_path, rfe_member_context_connect,
 )
 from bindings.arena_owner_door import arena_pin, arena_unpin
 from bindings.x_prep_native_owner_door import xprep_resident
@@ -54,7 +54,7 @@ from bindings.classical_arrays_door import classical_address, classical_typed
 from bindings.classical_arrays_door import classical_is_array
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_labels_door import classical_encode_labels, ClassicalLabels
-from bindings.admitted_input_unpack import admit_f32, admitted_vector
+from bindings.admitted_input_unpack import admit_f32, admitted_vector, classical_view
 from bindings.scaler_native_door import _ptr
 from bindings.scaler_lifecycle_native_door import _entries
 from bindings.x_prep_native_owner_door import xprep_values
@@ -155,6 +155,9 @@ def _rfe_meta_base(estimator: PythonObject, g: PythonObject, y: PythonObject, co
     var plan = prep_estimator_plan(estimator, context)
     if plan is None:
         raise Error("TypeError: mojolearn: RFE requires a mojolearn estimator; got " + cls)
+    # The META estimator's own context, connected before its labels are encoded there (lane w3-fix-a, row 3:
+    # unconnected, the encode below was refused and swallowed, so a classifier META read as a regressor).
+    rfe_member_context_connect(plan["context"])
     var labels = PythonObject(None)
     try:
         var got = classical_encode_labels(y, plan["context"])
@@ -203,6 +206,11 @@ def _rfe_meta_base(estimator: PythonObject, g: PythonObject, y: PythonObject, co
 
 
 # ---------------------------------------------------------------- RFE over a native member
+#: GradientBoostingRegressor's Gbdt member kind (python/mojolearn/_gbdt_adapters.py `_mojolearn_member = (16, 2)`;
+#: core/gbdt_member.mojo `_KIND_REGRESSOR`): its fit door admits y in its own words.
+comptime _GBDT_KIND_REGRESSOR_ADAPTER = 2
+
+
 struct RfeMember(Movable):
     """RFE's hold on its estimator as a NATIVE MEMBER (core/member_abi.mojo), built once per fit
     (`_rfe_member`): the estimator admitted with no fit target (providers/python/member_rfe_boundary_door.mojo
@@ -302,6 +310,20 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: Pyt
         if ya.rows != n:
             # xtrees/trees_forest_run.mojo `_y_rows_check`'s words
             raise Error("y has " + String(ya.rows) + " rows, X has " + String(n))
+        member.y = ya.array
+    elif base.owner.plan.family == MEMBER_FAMILY_GBDT and base.owner.plan.kind == _GBDT_KIND_REGRESSOR_ADAPTER:
+        # GradientBoostingRegressor's own fit door (bindings/trees_public_gbdt_fit_door.mojo
+        # `adapter_regressor_fit` -> `_regression_target`): one nonempty dimension, then finite, in ITS words
+        # (lane w3-fix-a, row 13: the booster's words below named GradientBoosting for the adapter).
+        var view = classical_view(y, base.member_context, "y")
+        if Int(py=view.ndim) != 1 or Int(py=view.size) == 0:
+            raise Error("y must be nonempty one-dimensional targets")
+        var ya = admit_f32(view, 1, "y", base.member_context, finite=False, admitted=True)
+        _ = view^
+        if not trees_finite_f32(ya.address, ya.rows):
+            raise Error("y must be finite")
+        if ya.rows != n:
+            raise Error("mojolearn: y has " + String(ya.rows) + " values for " + String(n) + " rows")
         member.y = ya.array
     elif base.owner.plan.family == MEMBER_FAMILY_GBDT:
         # A Gbdt regressor's fit door (bindings/trees_public_gbdt_fit_door.mojo, one output): float32
