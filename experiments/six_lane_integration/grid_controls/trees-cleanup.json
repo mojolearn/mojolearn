@@ -4,37 +4,8 @@
   "branch": "lane/trees-cleanup",
   "head": "78c441468",
   "mode": "identical",
-  "controls": {
-    "C48_IF": {
-      "define": "MOJOLEARN_TREES_C48_IF_PARTITION",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_TREES_C48_IF_PARTITION"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "isolation_forest/impl/isolation_tree_builder.mojo:174",
-        "isolation_forest/impl/isolation_tree_builder.mojo:702"
-      ],
-      "binding": "_mojolearn_svm",
-      "bits_change": false,
-      "status": "owed",
-      "note": "RESTORED 2026-11-15 (lane/restore-run-arms-trees, docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md): deleted unmeasured by expdel2, restored as an opt-in arm; A/B owed on NVIDIA L40S (bench/results/paper_compare/owed-pre0867.json)."
-    }
-  },
-  "algorithms": {
-    "trees:iforest": {
-      "binding": "_mojolearn_svm",
-      "route": "fit: isolation_tree_builder _block_stable_partition (C48_IF fused partition; IF_WORK_PLANES 3 when on)",
-      "controls": [
-        "C48_IF"
-      ],
-      "interaction_groups": []
-    }
-  },
+  "controls": {},
+  "algorithms": {},
   "removed": [
     {
       "define": "MOJOLEARN_TREES_T01",
@@ -346,6 +317,11 @@
       "define": "MOJOLEARN_TREES_T45_LINEAR_UNWIND",
       "control": "T45",
       "reason": "DELETED 2026-11-15 (lane/expdel2-46-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): no A/B recorded for the opt-in arm (rule a). No bit change; define refused in core/experiment_guards_trees.mojo; code recoverable at f2de2ddf8b."
+    },
+    {
+      "define": "MOJOLEARN_TREES_C48_IF_PARTITION",
+      "control": "C48_IF",
+      "reason": "DELETED 2026-11-24 (lane ab-outcome-2): NOISE, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S (wheel 4519097d380a, job nvc1-0002), 6 cells, median arm/base 1.00, 0.99..1.00: iforest istella fit 197 -> 197 ms, taxi 149 -> 149; AMD not measured (NVIDIA-only campaign). Default (two-pass partition) kept, no bit change. Code recoverable at ba83d4655f; define refused in core/experiment_guards_trees.mojo."
     }
   ],
   "stage0_build": {
@@ -363,8 +339,7 @@
       "MOJOLEARN_TREES_T09",
       "MOJOLEARN_TREES_T19",
       "MOJOLEARN_TREES_T27",
-      "MOJOLEARN_TREES_T29_VERSIONED",
-      "MOJOLEARN_TREES_C48_IF_PARTITION"
+      "MOJOLEARN_TREES_T29_VERSIONED"
     ]
   }
 }

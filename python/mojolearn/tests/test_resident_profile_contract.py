@@ -4,7 +4,6 @@ import os
 import numpy as np
 import pytest
 from mojolearn.tests.test_generation_native import load_fixture
-from mojolearn.tests._build_arms import default_build_only
 
 pytestmark = [
     pytest.mark.skipif(
@@ -15,7 +14,8 @@ pytestmark = [
     # (2026-11-15); the former autouse fixture set it in the environment.
     # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
-    default_build_only("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF"),
+    # TOMBSTONE: MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF (old path no faster: NV L40S 2 cells, median 1.00) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at 1e8aa88da1.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF.ab-outcome-2.patch
 ]
 
 

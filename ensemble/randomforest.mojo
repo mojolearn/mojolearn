@@ -1604,8 +1604,8 @@ def _oob_append_from_builder[
     tree_idx: Int,
 ) raises:
     """A finished tree's append from the builder that grew it: its device
-    tree is `leaf_d_tree` / `leaf_d_leaves` (`set_leaf_predictions` and
-    `_finish_tree_device` both leave it there)."""
+    tree is `leaf_d_tree` / `leaf_d_leaves` (`set_leaf_predictions` leaves
+    it there)."""
     if not store.enabled:
         return
     store.append[O.DataT](
@@ -2555,24 +2555,6 @@ def n_sampled_rows_for(
     return Int(f)
 
 
-def _take_finished[
-    O: ObjectiveLike, sampled_labels: Bool
-](
-    mut builder: Builder[O, sampled_labels],
-    mut forest: RandomForestMetaData[O.DataT, O.LabelT],
-    mut instr: FitInstruments,
-) raises:
-    """TREE_OP_FOREST_FINISH's landing (lane t1b-tree-leaf-and-node-ops):
-    every tree `builder.collect_finished` assembled moves to its forest
-    index (`tree_tag`), with the tree's identity checkpoints."""
-    for i in range(len(builder.finished)):  # driver-loop: over the slot's collected trees (at most two)
-        var idx = builder.finished_tags[i]
-        forest.trees[idx] = builder.finished[i].copy()
-        _record_tree(instr, forest.trees[idx], idx)
-    builder.finished.clear()
-    builder.finished_tags.clear()
-
-
 def _record_tree[
     dt: DType
 ](mut instr: FitInstruments, tree: TreeMetaDataNode[dt], idx: Int) raises:
@@ -3227,7 +3209,6 @@ def fit_forest_prepared[
                         )
                 else:
                     builders[k].stage_sampled_order(ctx, dataset)
-            builders[k].tree_tag = next_tree
             var ts = builders[k].begin_tree(ctx, dataset, quantiles, instr)
             instr.times.stop_host("host_begin_tree", t_host)
             if ts.done:
@@ -3269,11 +3250,6 @@ def fit_forest_prepared[
         t_stage = instr.times.start()
         ctx.synchronize()
         instr.times.stop_host("device_wait", t_stage)
-        # the trees whose finish the previous pass enqueued (TREE_OP_FOREST_FINISH,
-        # lane t1b-tree-leaf-and-node-ops: their downloads rode the drain above)
-        for k in range(len(builders)):  # driver-loop: over the K pipeline slots
-            builders[k].collect_finished()
-            _take_finished(builders[k], forest, instr)
         for k in range(len(states)):
             if slot_tree[k] < 0:
                 continue
@@ -3283,21 +3259,15 @@ def fit_forest_prepared[
                 continue
             while True:
                 t_host = instr.times.start()
-                # a deferred device finish (`pending_nodes`) has no host
-                # model yet: the device tree's node count is the builder's;
-                # a host-queue tree carries its model in `states[k].tree`
-                var deferred = builders[k].pending_nodes > 0
-                var n_done = builders[k].pending_nodes if deferred else len(
-                    states[k].tree.sparsetree
-                )
+                # the host-queue tree carries its model in `states[k].tree`
                 _oob_append_from_builder(
-                    ctx, oob_store, builders[k], n_done, slot_tree[k],
+                    ctx, oob_store, builders[k],
+                    len(states[k].tree.sparsetree), slot_tree[k],
                 )
-                if not deferred:
-                    forest.trees[slot_tree[k]] = states[k].tree.copy()
-                    _record_tree(
-                        instr, forest.trees[slot_tree[k]], slot_tree[k]
-                    )
+                forest.trees[slot_tree[k]] = states[k].tree.copy()
+                _record_tree(
+                    instr, forest.trees[slot_tree[k]], slot_tree[k]
+                )
                 instr.times.stop_host("tree_copy", t_host)
                 if next_tree >= n_trees:
                     slot_tree[k] = -1
@@ -3388,7 +3358,6 @@ def fit_forest_prepared[
                             )
                     else:
                         builders[k].stage_sampled_order(ctx, dataset)
-                builders[k].tree_tag = next_tree
                 states[k] = builders[k].begin_tree(
                     ctx, dataset, quantiles, instr
                 )
@@ -3400,10 +3369,6 @@ def fit_forest_prepared[
 
     t_host = instr.times.start()
     ctx.synchronize()
-    # the last deferred finishes (TREE_OP_FOREST_FINISH) rode that drain
-    for k in range(len(builders)):  # driver-loop: over the K pipeline slots
-        builders[k].collect_finished()
-        _take_finished(builders[k], forest, instr)
     # Mojo frees a value at its LAST USE; the builders' buffers must
     # outlive every launch that read them, so they are released only
     # after the drain above. The shared splits staging (DEVIATION 1908)

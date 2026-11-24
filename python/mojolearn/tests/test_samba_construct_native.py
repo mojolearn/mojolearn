@@ -18,15 +18,11 @@ from mojolearn.tests.test_causal_model_native_loading import _poison
     (["attention"], 16, 13, False),
     (["mamba3", "attention"], 32, 48, False),
 ])
-# Lazy Adam moments are a build constant (lane envgate-train-seq-mamba,
-# 2026-11-15: bindings/samba_construct_native_pack.mojo OPT_LAZY_MOMENTS; the
-# MOJOLEARN_OPT_LAZY_MOMENTS environment arm is gone). The default build runs
-# the lazy side; the eager side (lazy=False) needs its own
-# `-D MOJOLEARN_OPT_LAZY_MOMENTS_OFF` build (owed-pre0867.json
-# "opt-lazy-moments-off").
+# Adam moments are lazy, always (allocated on first use): the eager old path
+# (-D MOJOLEARN_OPT_LAZY_MOMENTS_OFF) was deleted 2026-11-24 after its A/B
+# (nvc-ab-20261124T095727Z-92fd9f, mlp-train-step 1.33 slower).
 def test_native_constructor_preserves_seeded_initialization_and_views(
         monkeypatch, layers, dm, intermediate, tied):
-    lazy = True
     config = SambaConfig(19, dm, layers, n_heads=2, n_kv_heads=1,
                          intermediate=intermediate, tie_embeddings=tied)
     reference_generator = training.Generator(0xFEDCBA9876543210)
@@ -63,10 +59,10 @@ def test_native_constructor_preserves_seeded_initialization_and_views(
     assert list(model.arrays) == list(expected)
     assert model.optimizer.accumulation_steps == 2
     optimizer_state = audit_native_call(model.optimizer.__getstate__).assert_native()
-    assert optimizer_state["_native_optimizer_pristine"] is lazy
+    assert optimizer_state["_native_optimizer_pristine"] is True
     assert "_native_optimizer_owner" not in optimizer_state
-    assert (model.optimizer._m is None) is lazy
-    assert (model.optimizer._v is None) is lazy
+    assert model.optimizer._m is None
+    assert model.optimizer._v is None
     for i, (name, shape) in enumerate(config.registry()):
         value = parameters[name]
         assert value.tobytes() == expected[name], name

@@ -4,9 +4,6 @@
 # descriptor admission and GIL ownership belong to the common provider boundary.
 from core.hostptr import f32_ptr, i8_ptr, i32_ptr, u16_ptr
 from gemm.contract import INT8_MAX_K, INT15_MAX_K, OP_NN, OP_NT, OP_TN
-from std.sys.compile import is_defined
-from gemm.host.gemm_int_slices_oracle import gemm_int_slices_oracle
-from gemm.int_slices_seams import INT_SLICES_MAX_K
 from core.nan_canon import NAN_CANON_ON, nan_canon_f32
 from decomposition.linalg_host_impl import (
     gemm_host_run,
@@ -60,19 +57,8 @@ def gemm_native(
         or k > LINALG_HOST_MAX_EXTENT
     ):
         raise Error("gemm: m, n and k must each be at most 2^30")
-    # TOMBSTONE: MOJOLEARN_IDN_GEMM_INT_SLICES (research profile fp32.v2-int dispatch hook; EXP:2263 pending, never measured) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 41a649b03c.
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_INT_SLICES.patch; record in docs/TOMBSTONES.md.
-    # RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #2 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history).
-    # lane/gemm-int-slices (2026-10-28): the HOST COLUMN of the research
-    # profile fp32.v2-int behind -D MOJOLEARN_IDN_GEMM_INT_SLICES (default
-    # OFF; off, this block compiles to nothing and the CPU column is fp32.v1).
-    # Same seams as the device plans (gemm/int_slices_seams.mojo).
-    comptime if is_defined["MOJOLEARN_IDN_GEMM_INT_SLICES"]():
-        if k <= INT_SLICES_MAX_K:
-            gemm_int_slices_oracle(cp, f32_ptr(a_address), f32_ptr(b_address), m, n, k, op)
-            comptime if NAN_CANON_ON:
-                _ = nan_canon_f32(cp, m * n)
-            return m * n
+    # TOMBSTONE: MOJOLEARN_IDN_GEMM_INT_SLICES (NOISE/LOSER: A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, gemm 47.54 -> 51.81 ms, 1.09; this was its CPU-column hook) deleted 2026-11-24 by lane/ab-outcome-2 (ab2-ngemm); code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_GEMM_INT_SLICES.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
     var wrote = 0
     wrote = gemm_host_run(cp, a_address, b_address, op, m, n, k)
     # The CPU column's side of NAN_CANON_ON (default

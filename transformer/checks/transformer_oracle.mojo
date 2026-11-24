@@ -106,9 +106,8 @@ not our own code twice.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM.expdel2-32-neural.patch
 # TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (opt-in fixed 32-lane norm fold, EXP:2246 pending, never measured) oracle arms deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at fce9f4413c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch
-# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #6 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history)
-# (the MOJOLEARN_IDN_NORM_FIXED_LANES arms only; the NN24 / IDN_NORM arms beside them stay deleted).
-from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot, nfl_square, nfl_sum
+# TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (NOISE: A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, 3 cells 0.96..0.99, all SAME) deleted 2026-11-24 by lane/ab-outcome-2 (ab2-ngemm); code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_NORM_FIXED_LANES.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
 from core.host_lanes import all_finite
 from std.math import max, min
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_FOLD_V2 (LOSER: NV L40S median 1.09, lm-train-step 35.06 -> 43.41 ms) deleted 2026-11-24 by lane/ab-outcome-1; code recoverable at d81b6ba708.
@@ -1145,10 +1144,6 @@ def rms_norm_into(
             for j in range(dm):
                 var xj = ftz(src[t * dm + j])
                 acc = ftz(identical_mul_add(xj, xj, acc))
-            # MOJOLEARN_IDN_NORM_FIXED_LANES: the fixed 32-lane fold (norm_fixed_lanes.mojo)
-            comptime if IDN_NORM_FIXED_LANES:
-                var xq = rebind[MutPointer[Float32, MutAnyOrigin]](src.unsafe_ptr())
-                acc = nfl_dot(xq, xq, t * dm, t * dm, dm)
             sp.unsafe_store(t, acc)
             var mean = ftz(identical_div(acc, Float32(dm)))
             var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
@@ -1227,15 +1222,11 @@ def norm_into(
                 var acc = Float32(0.0)
                 for j in range(dm):
                     acc = ftz(ftz(acc) + ftz(src[t * dm + j]))
-                comptime if IDN_NORM_FIXED_LANES:
-                    acc = nfl_sum(rebind[MutPointer[Float32, MutAnyOrigin]](src.unsafe_ptr()), t * dm, dm)
                 var mean = ftz(identical_div(acc, Float32(dm)))
                 var acc2 = Float32(0.0)
                 for j in range(dm):
                     var dev = ftz(ftz(src[t * dm + j]) - mean)
                     acc2 = ftz(identical_mul_add(dev, dev, acc2))
-                comptime if IDN_NORM_FIXED_LANES:
-                    acc2 = nfl_square(rebind[MutPointer[Float32, MutAnyOrigin]](src.unsafe_ptr()), t * dm, dm, mean)
                 sp.unsafe_store(t, acc2)
                 var variance = ftz(identical_div(acc2, Float32(dm)))
                 var rstd = ftz(identical_rsqrt(ftz(variance + eps)))
@@ -1263,10 +1254,6 @@ def norm_into(
             for j in range(dm):
                 var xj = ftz(src[t * dm + j])
                 acc = ftz(identical_mul_add(xj, xj, acc))
-            # MOJOLEARN_IDN_NORM_FIXED_LANES: the fixed 32-lane fold (norm_fixed_lanes.mojo)
-            comptime if IDN_NORM_FIXED_LANES:
-                var xq = rebind[MutPointer[Float32, MutAnyOrigin]](src.unsafe_ptr())
-                acc = nfl_dot(xq, xq, t * dm, t * dm, dm)
             sp.unsafe_store(t, acc)
             var mean = ftz(identical_div(acc, Float32(dm)))
             var rstd = ftz(identical_rsqrt(ftz(mean + eps)))

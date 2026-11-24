@@ -396,11 +396,12 @@ comptime M3_S16_SMEM48_FITS = lib_smem_page_fits_for[TARGET_COLUMN, M3_S16_SMEM4
 # 2026-11-15): build constants. Before, MOJOLEARN_MAMBA3_S16_QK_ARM was an
 # environment read per backward call (an arm name) and MOJOLEARN_MAMBA_TIMING
 # one per launch helper. The arm keeps today's per-column default;
-# `-D MOJOLEARN_MAMBA3_S16_QK_ARM_<NAIVE|SHARED|REGS|SMEM48|REGS2|REGS2H|REGSH>`
-# picks another (same bits on every arm). ROUTE-DEFAULT-SUSPECT: the NVIDIA
-# default `regs` was read on the L4 against `regs2` only; B arm
-# `-D MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H` on NVIDIA RUN OWED in
-# bench/results/paper_compare/owed-pre0867.json ("mamba3-s16-qk-regs2h").
+# `-D MOJOLEARN_MAMBA3_S16_QK_ARM_<NAIVE|SHARED|REGS|SMEM48|REGS2|REGSH>`
+# picks another (same bits on every arm). The NVIDIA default `regs` was read
+# on the L4 against `regs2`; regs2h on NVIDIA was read on the L40S (below).
+# TOMBSTONE: MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H (NOISE: A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, samba-train-step 33.58 -> 31.22 ms, 0.93 on one cell, SAME) deleted 2026-11-24 by lane/ab-outcome-2 (ab2-ngemm); code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+# (Only the NVIDIA selector term is gone: the regs2h kernel stays, the AMD and Apple default.)
 comptime _M3_S16_QK_ARM_DEFAULT = 5 if (TARGET_COLUMN == COLUMN_AMD or TARGET_COLUMN == COLUMN_APPLE) else 2
 comptime M3_S16_QK_ARM = (
     0 if is_defined["MOJOLEARN_MAMBA3_S16_QK_ARM_NAIVE"]()
@@ -408,7 +409,6 @@ comptime M3_S16_QK_ARM = (
     else 4 if is_defined["MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2"]()
     else 3 if is_defined["MOJOLEARN_MAMBA3_S16_QK_ARM_SMEM48"]()
     else 2 if is_defined["MOJOLEARN_MAMBA3_S16_QK_ARM_REGS"]()
-    else 5 if is_defined["MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H"]()
     else 6 if is_defined["MOJOLEARN_MAMBA3_S16_QK_ARM_REGSH"]()
     else _M3_S16_QK_ARM_DEFAULT
 )

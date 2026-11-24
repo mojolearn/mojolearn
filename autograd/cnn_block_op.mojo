@@ -27,7 +27,7 @@ The x_cnn entries launch on `cnn_ctx()` (x_cnn/device.mojo), the context
 every x_cnn entry uses, and each ends in its own wait (as in the hand
 epoch). A device session that runs these ops must be a DeviceExec over that
 same context (sequence/model_device_dispatch.mojo opens the CNN sessions
-with `DeviceExec(cnn_ctx())` under CNN_FUSED_OPS), so the session's
+with `DeviceExec(cnn_ctx())`), so the session's
 launches and the entries share one in-order queue: no cross-queue wait.
 
 Recorded: one custom node over [x, w, b] each (CNN_CONV_BLOCK_TAG,
@@ -57,11 +57,11 @@ does not order after the x_cnn launches, so the entry's own wait is what
 finishes the results (lane ops-session-gpu, 2026-11-23: without it the
 public conv_linear read 0.0 from a not-yet-written output on the L40S).
 
-A/B: `-D MOJOLEARN_CNN_GENERIC_OPS` captures tonight's generic chain
-(OPS_CONV2D, OPS_RELU, OPS_MAXPOOL2D, OPS_TRANSPOSE + OPS_LINEAR) instead;
-RUN OWED on NVIDIA and AMD (board rows algos/cnn-clf fit and predict).
+A/B (nvc-ab-20261124T095727Z-92fd9f, NVIDIA L40S, wheel 4519097d380a): the
+generic chain (OPS_CONV2D, OPS_RELU, OPS_MAXPOOL2D, OPS_TRANSPOSE + OPS_LINEAR,
+`-D MOJOLEARN_CNN_GENERIC_OPS`) was 2.45x slower on cnn-clf fit (161 -> 395 ms)
+and 1.45x on predict; it was deleted 2026-11-24 and these ops are the only path.
 """
-from std.sys.compile import is_defined
 from sequence.ops import FP
 from x_cnn.ops import FP as XFP, IP as XIP, neural_tape_budget_bytes
 from x_cnn.shape_words import (
@@ -77,12 +77,11 @@ comptime OPS_CNN_LINEAR = 91
 comptime CNN_CONV_BLOCK_TAG = 117
 comptime CNN_LINEAR_TAG = 118
 
-#: Default: the CNN program captures the tuned ops. The define is the B arm
-#: (tonight's generic tape chain) of the A/B.
 # TOMBSTONE: MOJOLEARN_CNN_GENERIC_OPS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at aefeacb577.
 # Restore: git apply experiments/removed/MOJOLEARN_CNN_GENERIC_OPS.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime CNN_FUSED_OPS = not is_defined["MOJOLEARN_CNN_GENERIC_OPS"]()
+# TOMBSTONE: MOJOLEARN_CNN_GENERIC_OPS (LOSER: NV L40S cnn-clf fit 161 -> 395 ms (2.45), infer 1.45) deleted 2026-11-24 by lane/ab2-nseq (ab-outcome-2); code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CNN_GENERIC_OPS.ab-outcome-2.patch
 
 #: Host-arm operation words (`Exec.cnn_op_host`).
 comptime CNN_HOST_BLOCK_FORWARD = 0

@@ -8,8 +8,8 @@ from core.rms_norm_body import rms_sq_step, rms_rstd, rms_scale
 from transformer.experiments.norm_profile_contract import NN24_NORM_LANES8, NN24_LANES, norm_profile_dot
 # TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (fixed 32-lane norm fold; EXP:2246 PENDING, opt-in arm never measured) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 085ef605b2.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.expdel2-25-neural.patch.
-# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #6 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history).
-from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
+# TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (NOISE: A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, 3 cells 0.96..0.99, all SAME) deleted 2026-11-24 by lane/ab-outcome-2 (ab2-ngemm); code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_NORM_FIXED_LANES.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
 from gemm.contract import contract_leaf_size, leaf_count
 from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED, NEURAL_LEAF, NEURAL_CHAINS, neural_partition, neural_cell
 
@@ -49,13 +49,8 @@ def _rms(row: Int, a: Args):
     var d = a.i0
     var base = row * d
     var acc = Float32(0)
-    comptime if IDN_NORM_FIXED_LANES:
-        # MOJOLEARN_IDN_NORM_FIXED_LANES: the fixed 32-lane fold (one thread)
-        var xs = a.p0.unsafe_origin_cast[MutAnyOrigin]()
-        acc = nfl_dot(xs, xs, base, base, d)
-    else:
-        for j in range(d):  # device-loop: pinned ascending fused sum of squares
-            acc = rms_sq_step(ftz(a.p0.unsafe_load(base + j)), acc)
+    for j in range(d):  # device-loop: pinned ascending fused sum of squares
+        acc = rms_sq_step(ftz(a.p0.unsafe_load(base + j)), acc)
     comptime if NN24_NORM_LANES8:
         var values = a.p0.unsafe_origin_cast[MutAnyOrigin]()
         acc = norm_profile_dot[NN24_LANES](values, values, base, base, d)
@@ -72,12 +67,7 @@ def _rms_dx(row: Int, a: Args):
     for j in range(d):  # device-loop: native row derivative and fused dot order
         var dh = ftz(identical_mul(ftz(a.p2.unsafe_load(base + j)), ftz(a.p1.unsafe_load(j))))
         a.p5.unsafe_store(base + j, dh)
-        comptime if not IDN_NORM_FIXED_LANES:
-            dot = ftz(identical_mul_add(dh, ftz(a.p0.unsafe_load(base + j)), dot))
-    comptime if IDN_NORM_FIXED_LANES:
-        # MOJOLEARN_IDN_NORM_FIXED_LANES: the dot as the fixed 32-lane fold
-        # over the stored dh (one thread; the cell kernels' bits)
-        dot = ftz(nfl_dot(a.p5.unsafe_origin_cast[MutAnyOrigin](), a.p0.unsafe_origin_cast[MutAnyOrigin](), base, base, d))
+        dot = ftz(identical_mul_add(dh, ftz(a.p0.unsafe_load(base + j)), dot))
     comptime if NN24_NORM_LANES8:
         var products = a.p5.unsafe_origin_cast[MutAnyOrigin]()
         var values = a.p0.unsafe_origin_cast[MutAnyOrigin]()

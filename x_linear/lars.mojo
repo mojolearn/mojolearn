@@ -25,17 +25,16 @@ alpha <= alpha_min with linear interpolation, the degenerate-regressor skip
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fabs, fmin, fsign, ld, st, ldi, sti, i2f,
-    fill, copy, centered_gram, centered_xty, add_acc,
+    fill, copy,
 )
 from std.sys.info import is_gpu
 from x_linear.team import Team
 from x_linear.tops import t_col_means, t_mean, t_centered_gram, t_centered_xty
-from std.sys.compile import is_defined
 from core.classical_centered import centered_gram_v1_cell, centered_cross_v1_cell, bm_column_mean_cell
 
 # lane/lars-grid-gram (2026-10-11), PROMOTED to the default (lane
-# i17-decide-nbr-lin-prep, 2026-10-11); `-D MOJOLEARN_IDN_LARS_GRID_GRAM_OFF`
-# restores main's moments grid. A/B one run per arm,
+# i17-decide-nbr-lin-prep, 2026-10-11); the old path (main's moments grid,
+# `-D MOJOLEARN_IDN_LARS_GRID_GRAM_OFF`) is deleted, see the TOMBSTONE below. A/B one run per arm,
 # main@b2657cc89 (runs v0045/v0046, a1628/a1629), NV L40S / AMD MI325X ms:
 #   lars taxi          59.1 -> 3.1 (0.05)    / 126.1 -> 3.3 (0.03)
 #   lasso-lars taxi    58.9 -> 3.0 (0.05)    / 125.7 -> 3.3 (0.03)
@@ -59,10 +58,12 @@ from core.classical_centered import centered_gram_v1_cell, centered_cross_v1_cel
 # from the first dropped position; no switch is kept for the old path. The
 # row, the refactor and both solves then went onto the team with a chunked
 # fold (lane/fix-lars-chol-parallel, `LARS_CH` below; bits change, every
-# column and the host together). Both arms of `_OFF` take the kept factor,
-# so that A/B isolates the moments again. RUN OWED: lars and lasso-lars on istella and
-# taxi, NV + MI300X, this arm against `_OFF` and against the rows above
-# (bench/results/paper_compare/owed-pre0867.json); numbers pending.
+# column and the host together). Both arms of `_OFF` took the kept factor,
+# so that A/B isolated the moments again: A/B nvc-ab-20261124T095727Z-92fd9f
+# (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002), `_OFF` / this route, fit:
+# lars taxi 2.99 -> 63.01 ms (21.09), lasso-lars taxi 2.97 -> 63.01 (21.23),
+# lasso-lars istella 80.11 -> 114 (1.42), lars istella 118 -> 127 (1.08,
+# noise); 8 cells, median 1.04. The old path is deleted.
 # The route takes LARS / LassoLars' moments from the
 # row-parallel blocked moments (core/blocked_moments.mojo: leaf column sums +
 # binary-counter fold for the means of X and y, `bm_centered_gram_panels` and
@@ -77,14 +78,15 @@ from core.classical_centered import centered_gram_v1_cell, centered_cross_v1_cel
 # below runs the device's reference cells (`centered_gram_v1_cell`,
 # `centered_cross_v1_cell`, `bm_column_mean_cell`). Apple runs the same
 # blocked fold (lane/apple-lars, 2026-10-12; x_linear/device.mojo
-# `XL_IDN_LARS_GRID_GRAM`), so its column matches NVIDIA == AMD == host.
+# the `lars_pre` setup), so its column matches NVIDIA == AMD == host.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 9ff89ae635.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
-comptime LARS_GRID_GRAM = not is_defined["MOJOLEARN_IDN_LARS_GRID_GRAM_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_LARS_GRID_GRAM_OFF (old path: main's moments grid, 21x slower lars / lasso-lars taxi, 1.42 lasso-lars istella; A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_LARS_GRID_GRAM_OFF.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
 
 
 def _lars_host_blocked_moments(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, gg: Int, xty: Int) -> Float32:
-    """The host column of MOJOLEARN_IDN_LARS_GRID_GRAM: the means (zeros
+    """The host column of the blocked moments: the means (zeros
     without an intercept), the centered Gram (upper cells, mirrored: the
     product a*b is commutative, so the mirror is the same word) and the
     centered X'y, each by the blocked fold the device runs. Returns y's mean."""
@@ -282,8 +284,8 @@ def lars_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw:
     # the path runs on the team (`_lars_path_team`)
     var ym = Float32(0)
     comptime if is_gpu():
-        # the device (x_linear/device.mojo `lars_path_kernel`): the moments
-        # grid already wrote the means, the Gram and X'y into fw, and y's
+        # the device (x_linear/device.mojo `lars_path_kernel`): the blocked
+        # moments already wrote the means, the Gram and X'y into fw, and y's
         # mean waits in fw[prev] (read here, then the slot zeroed as the
         # path expects); no row pass runs on the team
         ym = ld(fw, prev)
@@ -292,24 +294,8 @@ def lars_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw:
             st(fw, prev, Float32(0))
         t.sync()
     else:
-        # the host: one row pass per statistic, vector accumulators (lane linear-cpu)
-        comptime if LARS_GRID_GRAM:
-            ym = _lars_host_blocked_moments(x, y, n, d, fi, fw, xm, gg, xty)
-        else:
-            if fi:
-                fill(fw, xm, d, Float32(0))
-                for i in range(n):
-                    add_acc(fw, xm, x, i * d, d)
-                for j in range(d):
-                    st(fw, xm + j, fd(ld(fw, xm + j), i2f(n)))
-                var acc = Float32(0)
-                for i in range(n):
-                    acc = fa(acc, ld(y, i))
-                ym = fd(acc, i2f(n))
-            else:
-                fill(fw, xm, d, Float32(0))
-            centered_gram(x, n, d, fw, xm, fw, gg)
-            centered_xty(x, y, n, d, fw, xm, ym, fw, xty)
+        # the host: the device's blocked fold, cell by cell
+        ym = _lars_host_blocked_moments(x, y, n, d, fi, fw, xm, gg, xty)
     # lane/fix-lars-chol-parallel (2026-11-15): one path on every column. The
     # host is a team of one (sync is nothing, bcast returns its argument) and
     # runs the device statements; the lead-only copy of the path that sat here

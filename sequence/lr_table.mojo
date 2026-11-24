@@ -27,7 +27,6 @@ Host scalar code on every column: a schedule value is one number per
 optimizer step (the CPU route by nature, DEVIATION 5540). No Python here."""
 from std.math import ceil, floor
 from std.memory import bitcast
-from std.sys import is_defined
 
 from checks.numerics import pinned_mul_f64
 from sequence.bigrat import Nat, Rat, ncmp, nshl, nsub, rat_of_f64, rdiv
@@ -332,23 +331,10 @@ struct LrSpec(Copyable, ImplicitlyCopyable, Movable):
     var f3: Float64
 
 
-#: The LR schedule table (lane envgate-train-seq-mamba, 2026-11-15): a build
-#: constant holding today's default (on). Before, two environment reads per
-#: schedule fill (MOJOLEARN_LR_TABLE=0 or MOJOLEARN_LR_EXACT_ONLY=1 kept every
-#: step on the exact route). ROUTE-DEFAULT-SUSPECT, no A/B on record: B arm
-#: `-D MOJOLEARN_LR_TABLE_OFF` (or its old spelling `-D MOJOLEARN_LR_EXACT_ONLY`),
-#: every step on the exact route; RUN OWED in
-#: bench/results/paper_compare/owed-pre0867.json ("lr-table-off"). The answers
-#: are the same on both arms.
-comptime LR_TABLE_ON = not (
-    is_defined["MOJOLEARN_LR_TABLE_OFF"]() or is_defined["MOJOLEARN_LR_EXACT_ONLY"]()
-)
-
-
-@always_inline
-def lr_table_on() -> Bool:
-    """Whether schedule fills use the table: the build constant LR_TABLE_ON."""
-    return LR_TABLE_ON
+#: The LR schedule table (lane envgate-train-seq-mamba, 2026-11-15) is the only
+#: route for schedule fills (the exact route decides what it leaves undecided).
+# TOMBSTONE: MOJOLEARN_LR_TABLE_OFF (old path, also spelled -D MOJOLEARN_LR_EXACT_ONLY: every step on the exact route; NV L40S 4 cells, median 1.00, mlp-train-step 1.15 slower) deleted 2026-11-24 by lane/ab2-nseq (ab-outcome-2); code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_LR_TABLE_OFF.ab-outcome-2.patch
 
 
 def _decide_run(vs: List[Float64], es: List[Float64], n: Int, dst: F32P, mut ok: List[UInt8]) -> Int:
@@ -453,7 +439,7 @@ def lr_spec_fill(spec: LrSpec, t0: Int, n: Int, dst: F32P) raises -> Tuple[Int, 
         var plain = spec
         plain.kind = spec.kind - LR_EXACT_ONLY
         return _lr_spec_fill(plain, t0, n, dst, False)
-    return _lr_spec_fill(spec, t0, n, dst, lr_table_on())
+    return _lr_spec_fill(spec, t0, n, dst, True)
 
 
 def _lr_spec_fill(spec: LrSpec, t0: Int, n: Int, dst: F32P, table: Bool) raises -> Tuple[Int, Int]:

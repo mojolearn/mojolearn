@@ -67,9 +67,8 @@ the changed native result, including the cancellation fixture ending at three.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM.expdel2-32-neural.patch
 # TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (opt-in fixed 32-lane norm fold, EXP:2246 pending, never measured) oracle arms deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at fce9f4413c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch
-# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #6 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history)
-# (the MOJOLEARN_IDN_NORM_FIXED_LANES arms only; the NN24 / IDN_NORM arms beside them stay deleted).
-from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
+# TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (NOISE: A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, 3 cells 0.96..0.99, all SAME) deleted 2026-11-24 by lane/ab-outcome-2 (ab2-ngemm); code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_NORM_FIXED_LANES.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
 from core.host_lanes import all_finite
 from std.math import isfinite
 from std.sys.info import num_physical_cores
@@ -188,9 +187,6 @@ def host_rms_row_sumsq(x: List[Float32], m: Int, dm: Int) -> List[Float32]:
             for j in range(dm):
                 var xj = ftz(xp.unsafe_load(t * dm + j))
                 acc = ftz(identical_mul_add(xj, xj, acc))
-            comptime if IDN_NORM_FIXED_LANES:
-                # MOJOLEARN_IDN_NORM_FIXED_LANES: the fixed 32-lane fold
-                acc = nfl_dot(rebind[MutPointer[Float32, MutAnyOrigin]](xp), rebind[MutPointer[Float32, MutAnyOrigin]](xp), t * dm, t * dm, dm)
             sp.unsafe_store(t, acc)
 
     if tasks == 1:
@@ -295,9 +291,6 @@ def host_samba_rms_norm_backward(
                 )
                 dhp.unsafe_store(cell, dhj)
                 c = ftz(identical_mul_add(dhj, ftz(xp.unsafe_load(cell)), c))
-            comptime if IDN_NORM_FIXED_LANES:
-                # MOJOLEARN_IDN_NORM_FIXED_LANES: the fixed 32-lane fold
-                c = nfl_dot(rebind[MutPointer[Float32, MutAnyOrigin]](dhp), rebind[MutPointer[Float32, MutAnyOrigin]](xp), t * dm, t * dm, dm)
             c = ftz(c)
             var mean = ftz(identical_div(ftz(sp.unsafe_load(t)), Float32(dm)))
             var rstd = ftz(identical_rsqrt(ftz(mean + eps)))

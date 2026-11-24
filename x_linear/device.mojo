@@ -30,7 +30,6 @@ from core.py2mojo_rows import ROWS_HUBER_OUT, ROWS_LRCV_PROBA, ROWS_MAX_BLOCKS, 
 from x_linear.dispatch import decision_one, decision_code_row, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM, ALGO_RIDGE_KFOLD, ALGO_ENETCV, ALGO_RIDGE, ALGO_BAYES, ALGO_ARD
 from x_linear.cd_grid import enetcv_fit_grid
 from x_linear.moments_grid import MOMENTS_GRID, MG_NT, mg_means_kernel, mg_cross_kernel, mg_tiles
-from x_linear.lars import LARS_GRID_GRAM
 from core.blocked_moments import bm_column_mean, bm_centered_gram_panels, bm_centered_cross_panels
 from gemm.contract import contract_leaf_size
 from x_linear.ops import ld, st, ldi, fd, i2f, fa, fs, fm, fabs, shuffle, fmad, flog, fill, copy, row_dot, mean_of
@@ -50,7 +49,6 @@ from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM, GLM_YDOM_REFUSED, glm_ydom_bad
 from x_linear.sgd_end import sgd_ys_kernel, sgd_iota_kernel, sgd_perm_kernel, sgd_mb_end_kernel, sgd_mb_res_kernel, sgd_ps_end_kernel, sgd_ps_res_kernel, SGD_END_ST, SGD_END_TPB, SGD_MB_FLAGS, SGD_MB_WORDS
 from x_linear.sgd_end import sgd_mb_ovr_act_kernel, sgd_mb_ovr_res_kernel, sgd_flags_crit_kernel, sgd_live_crit_kernel
 # lane n3b-sgd-on-program-fit: the SGD epochs on the executor's bounded device loop
-from std.sys.compile import get_defined_int
 from autograd.program_loop import LoopTimers, fit_epochs_per_read
 from autograd.program_loop_device import LoopOutcome, LoopRegisters, LoopStep, bounded_device_loop, loop_lap
 from x_linear.vfold import vscratch
@@ -727,8 +725,8 @@ comptime XL_LARS_FAST_GRAM = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_
 
 
 #: lane/lars-grid-gram (2026-10-11), PROMOTED to the default 2026-10-11
-#: (revert `-D MOJOLEARN_IDN_LARS_GRID_GRAM_OFF`; the A/B numbers, the open
-#: lars istella regression and the reason at x_linear/lars.mojo `LARS_GRID_GRAM`): LARS / LassoLars' means, centered
+#: (the A/B numbers, the lars istella regression and its fix, and the reason
+#: at x_linear/lars.mojo `_lars_host_blocked_moments`): LARS / LassoLars' means, centered
 #: Gram and X'y from core/blocked_moments.mojo (one block per leaf of rows,
 #: binary-counter fold) instead of main's moments grid. NVIDIA, AMD, Apple
 #: and the host column take the same fold (lane/apple-lars, 2026-10-12: the
@@ -738,9 +736,9 @@ comptime XL_LARS_FAST_GRAM = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_
 #: rows and fold in log2 levels, each launch far shorter than the moments
 #: grid's one all-rows chain per cell it replaces, and they are unwitnessed
 #: like that grid was (the setup loop below reruns them from zeroed fw when
-#: the witnessed fit unit is cut). `_OFF` restores the moments grid on every
-#: vendor.
-comptime XL_IDN_LARS_GRID_GRAM = LARS_GRID_GRAM
+#: the witnessed fit unit is cut).
+# TOMBSTONE: MOJOLEARN_IDN_LARS_GRID_GRAM_OFF (old path: main's moments grid, 21x slower lars / lasso-lars taxi, 1.42 lasso-lars istella; A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_LARS_GRID_GRAM_OFF.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
@@ -1824,10 +1822,8 @@ def _sgd_chunk() -> Int:
 # TOMBSTONE: sgd-host-epoch-loops (REFACTORED onto autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n3b-sgd-on-program-fit; code recoverable at 5b5490960d.
 # Restore: git apply -3 experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch; record in docs/TOMBSTONES.md.
 
-#: `-D MOJOLEARN_SGD_LOOP_CHECK_EVERY=<k>` (k >= 1) pins the epochs enqueued
-#: between two reads of the loop's register block (the A/B that prices the
-#: rule below; 1 is the old read after every epoch).
-comptime SGD_LOOP_CHECK_EVERY_PIN = get_defined_int["MOJOLEARN_SGD_LOOP_CHECK_EVERY", 0]()
+# TOMBSTONE: MOJOLEARN_SGD_LOOP_CHECK_EVERY (arm sgd-check-1 NOISE: 22 cells median 1.00, 0.97..1.11; A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SGD_LOOP_CHECK_EVERY.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
 
 #: The minibatch epoch's arms (`_SgdMbEpochs.arm`).
 comptime SGD_ARM_FAST_RESIDENT = 0
@@ -1845,8 +1841,6 @@ def sgd_loop_check_every(epoch_launches: Int, max_iter: Int, has_criterion: Bool
     launches that return at once): about FIT_STEPS_PER_READ launches between
     two reads, never less than one epoch. A cost rule over the epoch's launch
     count, the same on every vendor; it keys on no dimension and moves no bit."""
-    comptime if SGD_LOOP_CHECK_EVERY_PIN > 0:
-        return SGD_LOOP_CHECK_EVERY_PIN
     if not has_criterion:
         return max(max_iter, 1)
     return fit_epochs_per_read(epoch_launches, max_iter, 0)
@@ -5829,11 +5823,8 @@ def fit_device(
                 var px = FP(unsafe_from_address=Int(dx.unsafe_ptr()))
                 var py = FP(unsafe_from_address=Int(dy.unsafe_ptr()))
                 fast_gram_into(ctx, px, py, 0, n, d, 1, hip[1] != 0, pfw, pfw + (3 * d + 2 * d * d), pfw + d, pfw + (d + d * d))
-        var lars_blocked = False
-        comptime if XL_IDN_LARS_GRID_GRAM:
-            lars_blocked = lars_pre
-        if lars_blocked:
-            # MOJOLEARN_IDN_LARS_GRID_GRAM: the same fw words (xm 0, G d, X'y
+        if lars_pre:
+            # the blocked moments (lane/lars-grid-gram): the fw words (xm 0, G d, X'y
             # d + d*d, y's mean parked in prev = 2d + d*d) by the blocked
             # moments; fw is zero from the fill above, so without an intercept
             # the means (and y's mean) stay +0.0 and the Gram is uncentered
@@ -5847,18 +5838,6 @@ def fit_device(
             var leaf = contract_leaf_size(n)
             bm_centered_gram_panels(ctx, pfw + d, px, pfw, n, d, leaf)
             bm_centered_cross_panels(ctx, pfw + (d + d * d), px, pfw, py, pfw + ym_o, n, d, leaf)
-        elif lars_pre:
-            # lane/neural-pass120's moments of [X | y] (fw: xm 0, G d, X'y
-            # d + d*d, y's mean parked in prev = 2d + d*d)
-            ctx.enqueue_function[mg_means_kernel](
-                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1), Int32(hip[1]), dfw.unsafe_ptr(),
-                Int32(0), Int32(2 * d + d * d), grid_dim=mg_tiles(d, 1), block_dim=MG_NT,
-            )
-            var tl = mg_tiles(d, 1)
-            ctx.enqueue_function[mg_cross_kernel](
-                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1), dfw.unsafe_ptr(),
-                Int32(0), Int32(2 * d + d * d), Int32(d), Int32(d + d * d), grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
-            )
         elif kstats:
             pass
         elif grid_gram and bayes_like:

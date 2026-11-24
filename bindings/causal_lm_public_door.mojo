@@ -61,7 +61,7 @@ from bindings.generation_buffers_door import (
 )
 from bindings.native_array_snapshot_door import native_array_slots, NativeArrayAdmission
 from core.generation_policy_impl import GenerationSamplingScratch
-from core.generation_kv_policy import GenerationReadControl, GENERATION_NATIVE_ENGINE_FORCE, GENERATION_NATIVE_ENGINE_OFF
+from core.generation_kv_policy import GenerationReadControl, GENERATION_NATIVE_ENGINE_FORCE
 from core.hostptr import f32_ptr, i32_ptr
 from core.sha256 import Sha256
 from core.native_archive_write import NativeArchiveMember, archive_owned, archive_text_bytes
@@ -109,10 +109,10 @@ from core.causal_lm_entry_table import (
 #   llama_decoder_layer_forward bodies as the block session:
 # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
 # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
-#   -D MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF  no resident forward (was =0)
+# TOMBSTONE: MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF (old path no faster: NV L40S 2 cells, median 1.00) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at 1e8aa88da1.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF.ab-outcome-2.patch
 #   -D MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32  fp32 sampling stream (was =1)
 #   -D MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_TRACE  route witness print (was =1)
-comptime CAUSAL_LM_RESIDENT_FORWARD = not is_defined["MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF"]()
 comptime EXPERIMENT_RESIDENT_SAMPLING_FP32 = is_defined["MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32"]()
 comptime EXPERIMENT_GENERATION_ROUTE_TRACE = is_defined["MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_TRACE"]()
 
@@ -1693,8 +1693,8 @@ def _resident_forward_ok(mut mods: NativeModules, words: CausalModelWords, model
     # every public forward); the per-layer profile half reads the state.
     if not causal_resident_candidate(words):
         return False
-    comptime if not CAUSAL_LM_RESIDENT_FORWARD:
-        return False
+    # TOMBSTONE: MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF (old path no faster: NV L40S 2 cells, median 1.00) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at 1e8aa88da1.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF.ab-outcome-2.patch
     return _resident_profiles_ok(mods, model, state, blocks)
 
 
@@ -1847,12 +1847,12 @@ def _use_native_generation_engine(mut mods: NativeModules, words: CausalModelWor
     # Select once at a public operation boundary, never in the token/layer
     # loop. No failed native admission/execution is caught and retried through
     # the object route: a selected engine keeps its original refusal semantics.
-    # -D MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE / _OFF (was the run-time
-    # MOJOLEARN_GENERATION_NATIVE_ENGINE=1 / 0, default auto).
+    # -D MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE (was the run-time
+    # MOJOLEARN_GENERATION_NATIVE_ENGINE=1, default auto).
     comptime if GENERATION_NATIVE_ENGINE_FORCE:
         return True
-    comptime if GENERATION_NATIVE_ENGINE_OFF:
-        return False
+    # TOMBSTONE: MOJOLEARN_GENERATION_NATIVE_ENGINE_OFF (old path no faster: NV L40S 2 cells, median 1.00) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at 070015d016.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GENERATION_NATIVE_ENGINE_OFF.ab-outcome-2.patch
     # TOMBSTONE: MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF (removed without measurement: plumbing, rule 2026-11-22; the by-name CPython entry calls ran the same compiled entries with the same words) deleted 2026-11-23 by lane/ab-prep-neural; code recoverable at 4d76a9e16e.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF.patch; record in docs/TOMBSTONES.md.
     # The model half is typed (`causal_engine_candidate`: a local fp32 model
@@ -3336,7 +3336,9 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
         # read and the native generation engine read are deleted. The host
         # loop below stays for what the program does not serve (a CPU install,
         # distributed execution, the fixed15_v1 head, the Float64 sampler).
-        if capacity > 0 and not s.done() and read_control.route != "legacy":
+        # TOMBSTONE: MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY (LOSER: NV L40S 2 cells, median 2.29, mojolearn-162m generate 887 -> 2978 ms (3.36)) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY.ab-outcome-2.patch
+        if capacity > 0 and not s.done():
             var blocks = _block_list(mods, s.model)
             var refusal_held = s.model_held
             if refusal_held is None:

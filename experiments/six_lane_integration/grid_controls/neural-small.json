@@ -270,15 +270,11 @@
       "binding": "_mojolearn_x_cnn",
       "route": "fit: CNNClassifier.fit (python/mojolearn/_expansion_cnn.py:1423 dev_epoch=True) -> x_cnn_fit_epoch_d (bindings/_mojolearn_x_cnn.mojo:1401) -> x_cnn/device.mojo conv_block_forward_into :2872 / conv_block_backward_into :2948 (_conv_relu_on_device :2817, pool_relu_rows_bwd_at :2995, _col2im :3022, bias_grad_gemm :3014, res_gather_pair_perm :2643), device_gemm :530 -> gemm.neural_dispatch.identical_gemm_into; predict: x_cnn_conv_block_forward_r -> conv_block_forward_into",
       "controls": [
-        "ni12_implicit_conv",
         "gemm_tile_min_blocks",
         "gemm_split_min_leaves",
         "gemm_kpack_rpt4"
       ],
       "interaction_groups": [
-        [
-          "ni12_implicit_conv"
-        ],
         [
           "gemm_tile_min_blocks",
           "gemm_split_min_leaves",

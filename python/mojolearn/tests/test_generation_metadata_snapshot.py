@@ -13,19 +13,16 @@ import pytest
 
 from mojolearn import Array
 from mojolearn.tests.test_generation_native import load_fixture, block_reference
-from mojolearn.tests._build_arms import built_with
 
 
-# Exercise the operation-local layer snapshot even when a GPU resident
-# session is available. Existing generation tests qualify that other route.
-# The route is a build define since lane envgate-neural-lm (2026-11-15): on a
-# GPU these run against the -D MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF wheel
-# (the former autouse MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD=0); a CPU install
-# has no resident session, so the default wheel serves.
+# Exercise the operation-local layer snapshot. A CPU install has no resident
+# session, so the default wheel serves it there; on a GPU the resident forward
+# takes these fixtures and the other generation tests qualify that route.
+# TOMBSTONE: MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF (old path no faster: NV L40S 2 cells, median 1.00) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at 1e8aa88da1.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF.ab-outcome-2.patch
 pytestmark = pytest.mark.skipif(
-    os.environ.get('MOJOLEARN_GENERATION_DEVICE') == 'gpu'
-    and not built_with('MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF'),
-    reason='the GPU layer-snapshot route needs a wheel built with -D MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF',
+    os.environ.get('MOJOLEARN_GENERATION_DEVICE') == 'gpu',
+    reason='the layer-snapshot route runs on the CPU install; a GPU takes the resident forward',
 )
 
 

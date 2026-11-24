@@ -65,11 +65,9 @@ from gemm.host_transport import (
 )
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from std.sys.compile import is_defined
-from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
 # The matrix-units route of a `fast` build on NVIDIA and AMD (default there since 2026-11-20); False in every
 # other build.
 from gemm.fast_matrix_units import GEMM_FAST_MATRIX_UNITS, matrix_units_gemm_into, matrix_units_workspace_floats
-from gemm.int_slices import IDN_GEMM_INT_SLICES, identical_gemm_int_slices_into, int_slices_admits
 
 # Tried 2026-10-08 (MOJOLEARN_IDN_GEMM_OZAKI_LINALG = 4 | 5 slices, run ge123e6f9): the linalg GEMM through
 # gemm.neural_dispatch's Ozaki int8 profile; NV/AMD gemm gaussian S=4 3.97x/2.06x, S=5 7.99x/2.51x SLOWER -> deleted
@@ -142,24 +140,9 @@ def identical_gemm_host(
     # THE ONE LINE THAT COMPUTES ANYTHING. Everything above is transport and
     # everything below is transport.
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        # TOMBSTONE: MOJOLEARN_IDN_GEMM_INT_SLICES (research profile fp32.v2-int dispatch hook; EXP:2263 pending, never measured) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 41a649b03c.
-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_INT_SLICES.patch; record in docs/TOMBSTONES.md.
-        # RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #2 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history).
-        # lane/gemm-int-slices (2026-10-28): THE DISPATCH HOOK of the research
-        # profile fp32.v2-int (gemm/int_slices.mojo, plan GEMM_INT_SLICES (git history))
-        # behind -D MOJOLEARN_IDN_GEMM_INT_SLICES, default OFF; off, this block
-        # compiles to nothing and the lines below are fp32.v1 as before. Admission
-        # is the exactness bound on k only (no shape rule). The CPU column's
-        # equivalent is gemm/host/linalg_native.mojo's hook.
-        comptime if IDN_GEMM_INT_SLICES and TARGET_COLUMN != COLUMN_CPU:
-            if int_slices_admits(m, n, k):
-                identical_gemm_int_slices_into(ctx, c, a, b, m, n, k, op)
-                gemm_down_f32(ctx, lease, c, c_ptr, m * n)
-                lease.release()
-                _ = a
-                _ = b
-                _ = c
-                return
+        # TOMBSTONE: MOJOLEARN_IDN_GEMM_INT_SLICES (NOISE/LOSER: A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, gemm 47.54 -> 51.81 ms, 1.09) deleted 2026-11-24 by lane/ab-outcome-2 (ab2-ngemm); code recoverable at ba83d4655f.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_GEMM_INT_SLICES.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+
         # Tried 2026-10-08 (MOJOLEARN_IDN_GEMM_OZAKI_LINALG = 4 | 5 slices, run ge123e6f9): the linalg GEMM through
         # gemm.neural_dispatch's Ozaki int8 profile; NV/AMD gemm gaussian S=4 3.97x/2.06x, S=5 7.99x/2.51x SLOWER -> deleted
         # (the neural Ozaki control itself is untouched). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.

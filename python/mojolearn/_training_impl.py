@@ -815,8 +815,7 @@ def _lr_status(st):
 # `lr_schedule_series` (sequence/lr_table.mojo `lr_spec_fill`): the binary64 table with its
 # rigorous error bounds, the float32 decision, the exact big-rational route
 # for every step the table leaves undecided, the constant tail and, for
-# OneCycleLR, the phases. MOJOLEARN_LR_TABLE=0 (or MOJOLEARN_LR_EXACT_ONLY=1)
-# keeps every step on the exact route (the A/B); the answers are the same.
+# OneCycleLR, the phases.
 
 
 
@@ -958,7 +957,6 @@ class WarmupLinearLR(_Schedule):
 # (`_LrTable`, in Mojo since lane py-runtime round 2:
 # bindings/lr_table_helpers_door.mojo) answers every step whose rigorous error
 # interval rounds to one float32; the exact route decides the rest.
-# MOJOLEARN_LR_EXACT_ONLY=1 restores the exact route for every step.
 # The value is the float32 nearest the exact rational expression (the interval route, never
 # math.cos); a binary64 evaluation with a rigorous error bound answers first whenever it provably
 # rounds to that same float32 (see the section comment above this class).

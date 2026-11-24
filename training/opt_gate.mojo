@@ -46,7 +46,6 @@ Its rollback MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF is deleted (2026-11-15).
 """
 from max.gpu import block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
-from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -77,12 +76,10 @@ from training.checks.optimizer_contract import opt_nonfinite_message
 comptime OPT_GATE_SCAN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime OPT_SGD_ONE_LAUNCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime OPT_CLIP_BATCHED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-#: The fused refusal scan inside the gated step (lane envgate-train-seq-mamba,
-#: 2026-11-15): a build constant holding today's default (on); before, an
-#: environment read per step. ROUTE-DEFAULT-SUSPECT, no A/B on record: B arm
-#: `-D MOJOLEARN_OPT_SCAN_FUSED_OFF` (main's separate scans), RUN OWED in
-#: bench/results/paper_compare/owed-pre0867.json ("opt-scan-fused-off").
-comptime OPT_SCAN_FUSED = not is_defined["MOJOLEARN_OPT_SCAN_FUSED_OFF"]()
+#: The fused refusal scan inside the gated step is the identical step's only
+#: route (lane envgate-train-seq-mamba made it a build constant 2026-11-15).
+# TOMBSTONE: MOJOLEARN_OPT_SCAN_FUSED_OFF (old path: main's ungated step and its separate refusal scans in IDENTICAL; NV L40S 4 cells, median 1.00, mlp-train-step 1.25 slower) deleted 2026-11-24 by lane/ab2-nseq (ab-outcome-2); code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_OPT_SCAN_FUSED_OFF.ab-outcome-2.patch
 
 #: Gate cells: 0..3 the smallest non-finite index in param, grad, m, v
 #: (or NONFINITE_NONE); 4 the gate (nonzero refuses the step).
@@ -209,8 +206,7 @@ def opt_gate_fold_kernel[FOUR: Bool](
 
 
 def opt_gate_wanted(offsets: List[Int]) -> Bool:
-    """The gated path runs when the build has it, the run did not ask for
-    main's separate scans (`-D MOJOLEARN_OPT_SCAN_FUSED_OFF`), and the step has
+    """The gated path runs when the build has it (IDENTICAL) and the step has
     at least one tensor and one element (otherwise main's path, which
     handles the degenerate shapes, runs unchanged)."""
     comptime if not OPT_GATE_SCAN:
@@ -219,7 +215,7 @@ def opt_gate_wanted(offsets: List[Int]) -> Bool:
         return False
     if offsets[len(offsets) - 1] <= 0:
         return False
-    return OPT_SCAN_FUSED
+    return True
 
 
 def opt_gate_begin(

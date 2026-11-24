@@ -8,7 +8,7 @@ from ensemble.checks.rf_perf_candidates_check import Fixture, ObjT, BinT, N_COLS
 from ensemble.checks.fingerprint_probe import _rf_params, _fit_clf, _fit_reg
 from ensemble.decisiontree.decisiontree import GINI, MSE
 from ensemble.decisiontree.batched_levelalgo.retained_count_histograms import RetainedCountHistograms, retained_histogram_reused
-from ensemble.decisiontree.batched_levelalgo.kernels.level_loop_kernels import LOOP_HDR_WORDS
+from ensemble.decisiontree.batched_levelalgo.retained_count_histograms import LOOP_HDR_WORDS
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import NodeWorkItem, InstanceRange, WorkloadInfo, SharedMemoryConfig
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import DeviceArgs, HistogramArgs, launch_build_histograms_kernel
 

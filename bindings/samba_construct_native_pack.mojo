@@ -13,11 +13,8 @@ from std.python._cpython import GILReleased
 # RUN: the typed initializer, no Python import.
 from training.samba_construct_run import samba_initialize_run
 from std.memory import unsafe_memcpy
-from std.sys import is_defined
-# The same build define as training/optimizer_public_common.mojo
-# OPT_LAZY_MOMENTS (kept local: this unit does not import the training
-# package); B arm -D MOJOLEARN_OPT_LAZY_MOMENTS_OFF.
-comptime OPT_LAZY_MOMENTS = not is_defined["MOJOLEARN_OPT_LAZY_MOMENTS_OFF"]()
+# TOMBSTONE: MOJOLEARN_OPT_LAZY_MOMENTS_OFF (old path: Adam moments allocated with the optimizer and uploaded on the first step; NV L40S 4 cells, median 1.00, mlp-train-step 1.33 slower) deleted 2026-11-24 by lane/ab2-nseq (ab-outcome-2); code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_OPT_LAZY_MOMENTS_OFF.ab-outcome-2.patch
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array
 from bindings.generator_state_native_unpack import generator_fields
 from bindings.generator_state_native_pack import generator_init, generator_validate
@@ -188,12 +185,12 @@ def samba_construct(model: PythonObject, args: PythonObject, context: PythonObje
     var optimizer = py_call(bi.object.__new__, context["optimizer_class"])
     var opt = samba_fields(optimizer)
     py_setitem(opt, "_resident_wanted", PythonObject(None))
-    var lazy = OPT_LAZY_MOMENTS  # build constant (was an environment read per construction)
-    var owner = optimizer_owner_new(optimizer, 2, lazy)
+    # Lazy Adam moments, always: allocated on first use.
+    var owner = optimizer_owner_new(optimizer, 2, True)
     var publication = OptimizerOwnerLease(optimizer, owner)
     py_setitem(opt, "_native_optimizer_owner", owner)
-    py_setitem(opt, "_m", PythonObject(None) if lazy else generation_array([n]))
-    py_setitem(opt, "_v", PythonObject(None) if lazy else generation_array([n]))
+    py_setitem(opt, "_m", PythonObject(None))
+    py_setitem(opt, "_v", PythonObject(None))
     py_setitem(opt, "params", params)
     py_setitem(opt, "n_total", n)
     py_setitem(opt, "accumulation_steps", accumulation)

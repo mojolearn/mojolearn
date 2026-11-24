@@ -83,29 +83,6 @@
       ],
       "note": "bits_change not re-assessed by L11 (unchanged switch)"
     },
-    "ni12_implicit_conv": {
-      "define": "MOJOLEARN_NI12_IMPLICIT_CONV_OFF",
-      "kind": "switch",
-      "arms": {
-        "on": [],
-        "off": [
-          "MOJOLEARN_NI12_IMPLICIT_CONV_OFF=1"
-        ]
-      },
-      "default": "on",
-      "source": [
-        "x_cnn/device.mojo:83"
-      ],
-      "binding": "_mojolearn_x_cnn",
-      "bits_change": false,
-      "status": "promoted 2026-10-10 (lane/postmerge-act-6; post-merge neural A/B, one run per arm, nv2 L40S v1052 -> v1053 on main 9f83ea479, amd MI325X a1152 -> a1153 on main 0a7b206f1): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
-      "entries": [
-        "NI12"
-      ],
-      "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
-      "note": "bits_change not re-assessed by L11 (unchanged switch). PROMOTED: conv2d NV 9.62 -> 7.12 ms (0.74x) / AMD 9.02 -> 6.23 ms (0.69x), resnet-block NV 21.43 -> 15.76 ms (0.74x) / AMD 22.06 -> 15.37 ms (0.70x); digests unchanged (conv2d 9782257b, resnet-block 263c26c1). The off arm restores the materialized im2col cols; NN14_BOUNDED_IM2COL still takes its own path when selected.",
-      "reach": "neural:cnn-clf: x_cnn/device.mojo:2817 _conv_relu_on_device, both blocks, fit and predict"
-    },
     "ni52_mlp_epoch_order": {
       "define": "MOJOLEARN_IDN_MLP_DEVICE_EPOCH_ORDER",
       "kind": "switch",
@@ -569,6 +546,11 @@
       "define": "MOJOLEARN_NI12_FILL_RULE_OFF",
       "control": "ni12_fill_rule",
       "reason": "DELETED 2026-11-18 (lane/fb15-ab-verdicts; A/B ab1, NVIDIA L40S host 37f71a6102af, wheel d652a4b0a1, one run per arm): implicit conv on every layer was 1.15x slower on cnn-clf fit (189.9 -> 218.2 ms), 0.95-1.04 elsewhere, digests equal; no gain, the per-layer fill rule (OC >= 32 and C*KH*KW >= 32) stays the default; define refused in core/experiment_guards_neural.mojo; code recoverable at c989eb9222; patch experiments/removed/MOJOLEARN_NI12_FILL_RULE_OFF.patch"
+    },
+    {
+      "define": "MOJOLEARN_NI12_IMPLICIT_CONV_OFF",
+      "control": "ni12_implicit_conv",
+      "reason": "DELETED 2026-11-24 (lane ab-outcome-2, sub-lane ab2-nseq): old path; A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): the materialized cols on every layer were 1.40..1.70 slower over 6 cells (median 1.51); the per-layer fill rule (x_cnn/device.mojo ni12_implicit_layer) with implicit conv in IDENTICAL is the one form; the materialized path stays for narrow layers and fast. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md; code recoverable at ba83d4655f (~/mojolearn-evidence/experiments-removed/MOJOLEARN_NI12_IMPLICIT_CONV_OFF.ab-outcome-2.patch)."
     }
   ],
   "notes": {

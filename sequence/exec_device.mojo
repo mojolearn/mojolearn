@@ -374,8 +374,8 @@ def team_kernel[OP: Int](
 
 
 
-#: Experiment MOJOLEARN_SEQ_FAST_LIBC_COPY (lane fb3-named, 2026-11-17; A/B owed, NVIDIA L40S;
-#: docs/apple-fast/EXPERIMENTS.md). Default off. The transport copies into and out of the pinned stages
+#: Experiment MOJOLEARN_SEQ_FAST_LIBC_COPY (lane fb3-named, 2026-11-17; docs/apple-fast/EXPERIMENTS.md),
+#: the DEFAULT since 2026-11-24 (PROMOTED below). The transport copies into and out of the pinned stages
 #: (`_pcopy` and the pipelined upload chunks) call the C library's memcpy instead of the Mojo
 #: `unsafe_memcpy`. Reason to try it: against 0.8.55 (Mojo 1.0 `memcpy`, same source otherwise) the rows whose
 #: only large host pass is this copy grew by the same amount per staged megabyte on one box: mlp-reg/mlp-clf
@@ -391,7 +391,16 @@ def team_kernel[OP: Int](
 #: cross-entropy synthetic fit 252.3 -> 266.3 (1.06). Mixed sign at one run per arm: NOT promoted, NOT deleted.
 #: REPEAT OWED with the staging split from the call profile (how many ms of each row are the host copy into and
 #: out of the pinned stage), so the verdict rests on the copy itself, not on run-to-run spread.
-comptime SEQ_LIBC_COPY = is_defined["MOJOLEARN_SEQ_FAST_LIBC_COPY"]()
+# PROMOTED 2026-11-24 (lane ab2-nseq of ab-outcome-2): A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel
+# 4519097d380a, job nvc1-0002, base and arm back to back, one scored run per arm, full datasets), 5 cells, none
+# slower: mlp-clf istella infer 23.76 -> 20.39 ms (0.86), mlp-reg istella infer 11.86 -> 10.74 (0.91), mlp-clf
+# istella fit 852 -> 827 (0.97), mlp-reg istella fit 848 -> 821 (0.97), cross-entropy synthetic fit 1.00; quality
+# equal (mlp-clf accuracy 0.94326, logloss 0.14029; mlp-reg r2 0.52061, rmse 0.57837; cross-entropy rel err
+# 4.56e-08) and output hashes and receipts equal on all three quality rows. AMD not measured (NVIDIA-only
+# campaign, AGENTS.md part 8). No bits change on any column: the copy moves the same bytes (the host column
+# has no pinned stage). `-D MOJOLEARN_SEQ_FAST_LIBC_COPY_OFF` keeps the Mojo `unsafe_memcpy` (the old default);
+# the on-define is refused (core/experiment_guards_neural.mojo).
+comptime SEQ_LIBC_COPY = not is_defined["MOJOLEARN_SEQ_FAST_LIBC_COPY_OFF"]()
 
 
 def _pcopy(dst: FP, src: FP, n: Int):

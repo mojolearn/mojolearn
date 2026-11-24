@@ -56,7 +56,8 @@ EXPERIMENTS = {
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
     "speculative_attn": {"MOJOLEARN_ATTN_SPECULATIVE": "1"},
     "no_layer_sync": {"MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"},
-    "mamba3_no_retain_stages": {"MOJOLEARN_MAMBA3_RETAIN_STAGES": "0"},
+    # TOMBSTONE: MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF (old path, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S 1.00..1.04) deleted 2026-11-24 by lane/ab-outcome-2; its arm here (an environment read the code no longer had) went with it; code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
     # the S16 q/k backward arms (lane/neural-net-experiment, the S16 pass):
     # the default is `regs` since lane/neural-pass4 (`regs2` before); each
     # arm is the same chains in the same order
@@ -76,7 +77,7 @@ EXPERIMENTS = {
                "MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"},
 }
 SETS = {
-    "priority": ["baseline", "mamba3_no_retain_stages"],
+    "priority": ["baseline"],
     # the S16 arms on the Mamba lanes (run with --lane mamba3-forward --lane
     # samba-train-step, or the timing tool for the per-kernel walls)
     "s16": ["baseline", "s16_naive", "s16_shared", "s16_regs2", "s16_smem48"],

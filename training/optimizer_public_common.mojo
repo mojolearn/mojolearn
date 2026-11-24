@@ -23,7 +23,6 @@ The update itself is the existing native step (training/estimator.mojo,
 training/optimizer_multi_gpu.mojo, the host oracle): nothing here does
 arithmetic on parameter or gradient values."""
 from std.memory import unsafe_memcpy, unsafe_memset_zero
-from std.sys import is_defined
 
 from core.device_plan import DevicePlan
 
@@ -293,9 +292,8 @@ def registry_offsets(nbytes: List[Int], offsets: I32P) raises -> Int:
 # bindings/sequence_optimizer_native_door.mojo,
 # bindings/samba_construct_native_pack.mojo) imports them from here. Before,
 # each was an environment read per optimizer construction or step.
-# ROUTE-DEFAULT-SUSPECT, no A/B on record: B arms RUN OWED in
-# bench/results/paper_compare/owed-pre0867.json ("optimizer-resident-off",
-# "opt-lazy-moments-off").
+# Both B arms were measured and deleted (optimizer-resident-off 2026-11-18,
+# opt-lazy-moments-off 2026-11-24).
 #: Resident optimizer state on the device, always (a single-device plan). A/B
 #: ab3 (NVIDIA L40S, wheel d652a4b0a1, 2026-11-18, job
 #: nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests and quality
@@ -303,10 +301,9 @@ def registry_offsets(nbytes: List[Int], offsets: I32P) raises -> Int:
 #: (samba-train-step 45.5 -> 89.6 ms 1.97, the rest 0.95-1.00).
 # TOMBSTONE: MOJOLEARN_OPTIMIZER_RESIDENT_OFF (LOSER: per-call optimizer step, arm/base geomean 1.129 over 5 cells, samba-train-step 1.97, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
 # Restore: git apply experiments/removed/MOJOLEARN_OPTIMIZER_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
-#: lazy Adam moments (allocated on first use, lane gap-train-utils);
-#: `-D MOJOLEARN_OPT_LAZY_MOMENTS_OFF` allocates the host state with the
-#: optimizer and uploads it on the first step
-comptime OPT_LAZY_MOMENTS = not is_defined["MOJOLEARN_OPT_LAZY_MOMENTS_OFF"]()
+#: Lazy Adam moments (allocated on first use, lane gap-train-utils), always.
+# TOMBSTONE: MOJOLEARN_OPT_LAZY_MOMENTS_OFF (old path: Adam moments allocated with the optimizer and uploaded on the first step; NV L40S 4 cells, median 1.00, mlp-train-step 1.33 slower) deleted 2026-11-24 by lane/ab2-nseq (ab-outcome-2); code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_OPT_LAZY_MOMENTS_OFF.ab-outcome-2.patch
 
 
 def resident_wanted_by_build(plan: DevicePlan) -> Bool:
@@ -317,12 +314,3 @@ def resident_wanted_by_build(plan: DevicePlan) -> Bool:
     if plan.setting != "1":
         return False
     return True
-
-
-@always_inline
-def eager_moments() -> Bool:
-    """`-D MOJOLEARN_OPT_LAZY_MOMENTS_OFF`: the optimizer's host state is
-    allocated with the optimizer and uploaded on the first step (the lazy
-    allocation's A/B, lane gap-train-utils); otherwise it is allocated on
-    first use."""
-    return not OPT_LAZY_MOMENTS

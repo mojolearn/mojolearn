@@ -172,6 +172,14 @@ def _check_configuration() -> Bool:
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD.ab-outcome-1.patch
     comptime assert not is_defined["MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD"](), "removed 2026-11-24 (lane/ab-outcome-1, A/B nvc-ab-20261124T070727Z-69dac2 NVIDIA L40S, wheel 4519097d380a, one run per arm): IDN_NV_MUL_RN_ASM_OLD (the inline-asm mul.rn.f32 / mul.rn.f64 / mul.rn.ftz.f32 x 1 old path) was NOISE: 30 cells, median 1.01, 0.83..1.11; the schedulable fma.rn(a, b, -0.0) default is kept; code at d81b6ba708; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD.ab-outcome-1.patch"
     # ---- end lane ab-outcome-1
+    # ---- lane ab-outcome-2 (2026-11-24): A/B nvc-ab-20261124T095727Z-92fd9f decisions (NVIDIA L40S only, job nvc1-0002; sub-lane ab2-classic)
+    # TOMBSTONE: MOJOLEARN_IDN_OLS_PREDICT_TILED (NOISE/LOSER: 4 cells median 0.98, 0.93..1.44, ols istella fit 509 -> 733 ms) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_OLS_PREDICT_TILED.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_IDN_OLS_PREDICT_TILED"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): the tiled gemv for OLS predict was not a winner: 4 cells, median 0.98, 0.93..1.44 (ols infer istella 20.51 -> 19.77 ms, taxi 1.53 -> 1.42 ms, noise; ols istella fit 509 -> 733 ms); the plain pinned_gemv_n_kernel is IDENTICAL OLS predict's only form; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_OLS_PREDICT_TILED.ab-outcome-2.patch"
+    # TOMBSTONE: MOJOLEARN_MCD_FAST_LOCKSTEP_OFF (old path, LOSER: 6 cells median 1.43, the serial candidate loop 1.42..1.46 slower) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MCD_FAST_LOCKSTEP_OFF.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_MCD_FAST_LOCKSTEP_OFF"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): the serial MCD candidate loop as the NVIDIA / AMD IDENTICAL path was slower: 6 cells, median 1.43, min-cov-det istella fit 84981 -> 123749 ms (1.46), taxi 4110 -> 5897 (1.43), elliptic-envelope istella 1.45, taxi 1.42; the lockstep (every width) is the only NVIDIA / AMD IDENTICAL form, the serial loop stays for Apple, fast and select_init_best; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MCD_FAST_LOCKSTEP_OFF.ab-outcome-2.patch"
+    # ---- end lane ab-outcome-2
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()
