@@ -1231,7 +1231,7 @@
   "msel-units-gpu-parallel": {
    "define": "MOJOLEARN_MSEL_UNITS_GPU_PARALLEL",
    "owed": "RUN",
-   "status": "define in code (core/member_set_run.mojo _UNITS_GPU_PARALLEL, bindings/native_unit_threads_unpack.mojo; opt-in, default off): B = model-selection units whose members run on a GPU are fitted on the host workers in parallel like CPU units; A = one GPU unit at a time (the default). Caution recorded at the define: the member fits share the process-wide device context and the owners' caches are not audited for thread safety; a crash or a digest change in B is a finding against B, not a reason to rerun. RUN OWED with the wave-3 sha (lane ab-outcome-3)"
+   "status": "NOT DECIDED, RUN OWED again with the next build (lane ab-outcome-4, 2026-11-24): job nvc1-0004 (A/B nvc-ab-20261124T182912Z-977cc8, wheel 71db45de5d) timed only calibrated istella / taxi fit and infer (0.97-1.00, SAME). The other 14 cells were not missing races: the algos board has them (tools/bench_board_algos.py lanes cross-val-score, grid-search-cv, randomized-search-cv, cross-validate, cross-val-predict, learning-curve, validation-curve; ours and scikit-learn arms, the same explicit estimator, cv, grid and scoring on every arm), but the candidate's smoke refused ours on every one (ImportError: native execution requires an import-time connection for importlib, bindings/native_loaded_module_door.mojo:165), so the job's pass-ids gate left them out of both arms (logs/pass-ids-tg-ab-msel-units-gpu-parallel.log: planned 16, smoke passed 2). That defect is fixed on the integration branch by lane w3f3-a (941384d905, after 71db45de5d: the search / cv META entry reads the x_trees tables model selection connects at import, never importlib). The arm stays opt-in, default off. Was: define in code (core/member_set_run.mojo _UNITS_GPU_PARALLEL, bindings/native_unit_threads_unpack.mojo; opt-in, default off): B = model-selection units whose members run on a GPU are fitted on the host workers in parallel like CPU units; A = one GPU unit at a time (the default). Caution recorded at the define: the member fits share the process-wide device context and the owners' caches are not audited for thread safety; a crash or a digest change in B is a finding against B, not a reason to rerun. RUN OWED with the wave-3 sha (lane ab-outcome-3)"
   },
   "set-w3a": {
    "define": "MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER,MOJOLEARN_GEMM_STAGE_UP_OFF,MOJOLEARN_IDN_SSD_OCCUPANCY_OFF",
@@ -6554,7 +6554,8 @@
    "b_arms": [
     "msel-units-gpu-parallel"
    ],
-   "decides": "promote B (parallel GPU units) with a _OFF define when it is faster at equal digests and quality on the rows; slower, noise, a crash or a digest change -> delete the arm with tombstones"
+   "decides": "promote B (parallel GPU units) with a _OFF define when it is faster at equal digests and quality on the rows; slower, noise, a crash or a digest change -> delete the arm with tombstones",
+   "note": "lane ab-outcome-4 (2026-11-24): the board races for every lane here exist in tools/bench_board_algos.py (algos family, both datasets, rows full); job nvc1-0004 smoke-refused 14 of them on the importlib defect fixed by 941384d905, so time them with a build at or after that sha; ours only on both arms (base and B), the board's explicit parameters"
   }
  ]
 }
