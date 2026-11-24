@@ -175,7 +175,7 @@ from bindings.metrics_keys_unpack import metrics_keys
 from bindings.arena_prog_native_door import metric_route_of, metric_route_entries
 from bindings.msel_candidates_door import msel_grid_list, msel_sampler_check, msel_sampler_list
 from bindings.msel_estimator_native_door import msel_native_clone, msel_native_set_params, msel_clone_parameter
-from bindings.msel_common_door import msel_get_scorer, msel_f64_list, msel_i32_list, msel_is_integral, msel_is_int_arg
+from bindings.msel_common_door import msel_get_scorer, msel_f64_list, msel_i32_list, msel_is_integral, msel_is_int_arg, msel_is_real
 from bindings.msel_search_state_door import msel_search_update
 from bindings.msel_member_device_unpack import msel_member_host_folds, msel_params_name_device
 from bindings.msel_split_door import msel_cls, MselSplitter, SPLITTER_ITERABLE
@@ -3749,9 +3749,16 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             raise Error("ValueError: The 'error_score' parameter of " + String(py=py_type(model).__name__)
                         + " must be a str among {'raise'} or an instance of 'float'. Got "
                         + String(py=py_call(b.repr, error_score)) + " instead.")
-    elif Bool(py=py_call(b.isinstance, error_score, native_loaded_module("numbers").Real)):
+    elif (py_type(error_score) is b.float or msel_is_real(error_score, context)
+          or Bool(py=py_call(b.isinstance, error_score, native_loaded_module("numbers").Real))):
         # an instance of 'float' as scikit-learn's `Real` constraint reads it
-        # (lane mf-tail5b: NumPy reals and bools too)
+        # (lane mf-tail5b: NumPy reals and bools too). Lane w3f3-e (row 6):
+        # a Python float (the nan learning_curve / permutation_test_score
+        # pass on every search call), int, bool or connected NumPy real is
+        # admitted by exact class identity (`msel_is_real`), so the usual
+        # call runs no numbers.Real ABC hook (ABCMeta.__instancecheck__ /
+        # __subclasscheck__ Python frames, once per search admission); only
+        # another class (a Fraction, a float subclass) still asks isinstance.
         tolerate = 1.0
         error_value = Float64(py=py_call(b.float, error_score))
     else:
