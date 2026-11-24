@@ -1719,6 +1719,14 @@ def _onehot_fit(model: PythonObject, values: PythonObject, capture: Bool, contex
     else:
         py_setitem(fields, "categories_", _given_categories(fields["categories"], values, entries, caps, handle_text == "error", "OneHotEncoder", context))
     _ = _category_freeze(fields["categories_"], context)  # hazard A: fitted categories are read-only (p3-prep)
+    # `_missing` as the restricted fit and OrdinalEncoder pack it (the Prep
+    # member's state reads it; lane mf-enc6), from the category record.
+    var record = _category_record(model, fields["categories_"], context)
+    var sizes = _record_sizes(record)
+    var missing = List[Int](capacity=len(sizes))
+    for j in range(len(sizes)):  # driver-loop: per-column NaN category slot (fitted per-column category counts)
+        missing.append(sizes[j] - 1 if sizes[j] > 0 and _record_last_is_nan(record, j) else -1)
+    py_setitem(fields, "_missing", _int_list(missing))
     py_setitem(fields, "_infrequent", PythonObject(None))
     py_setitem(fields, "_grouping", PythonObject(None))
     if grouping:

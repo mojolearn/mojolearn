@@ -67,6 +67,15 @@ comptime MEMBER_NOTICE_R2_FEW = 11
 #: whose train rows hold a = m of the b = k classes, scikit-learn's
 #: `_enforce_prediction_order` RuntimeWarning (`member_lacking_warning`).
 comptime MEMBER_NOTICE_FOLD_LACKING = 12
+#: OneHotEncoder (lane mf-enc6, core/prep_member.mojo kind 11): column a held
+#: unknown categories in a transform that warns (handle_unknown='warn', or
+#: 'ignore' / 'infrequent_if_exist' with a drop); b = 1: encoded as all
+#: zeros ('ignore'), 0: as the infrequent category. Consecutive triples are
+#: ONE warning over their columns, the encode door's `_onehot_transform`
+#: words. A TRANSFORM notice: the state's notices are the last fit_transform's
+#: or transform's (a caller of MEMBER_OP_TRANSFORM takes them after the call
+#: as it does after FIT).
+comptime MEMBER_NOTICE_ONEHOT_UNKNOWN = 13
 
 #: The words scikit-learn's cross_val_predict adds to its imbalanced-fold
 #: warning and refusals (model_selection/_validation.py
