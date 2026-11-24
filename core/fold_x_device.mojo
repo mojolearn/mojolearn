@@ -58,20 +58,6 @@ def fold_x_fill(ctx: DeviceContext, d_x: DeviceBuffer[DType.float32], x_word: In
     ctx.enqueue_copy(dst_buf=d_x, src_ptr=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x_word))
 
 
-def fold_x_keep(ctx: DeviceContext, src: DeviceBuffer[DType.float32], words: Int) raises -> Int:
-    """A device result kept ON THE DEVICE as a fresh slot of the fold
-    store, answered as its fold X word (lane vdf-scope-linear4, an
-    addition): a stage that would download `src` for the next entry to
-    upload again (LinearRegression's prepared X, glm/impl/ols_prep_device.mojo)
-    hands that entry the word instead. Waits for the copy. The caller frees
-    the slot (`fold_x_release`, or the member through the store's FREE)."""
-    var store = FOLD_X_STORE.get_or_create_ptr()
-    var slot = store[].create(ctx, max(words, 1))
-    store[].copy_from(ctx, slot, src, words)
-    ctx.synchronize()
-    return fold_x_word(slot)
-
-
 def fold_x_store_into(ctx: DeviceContext, x_word: Int, src: DeviceBuffer[DType.float32], words: Int) raises:
     """`src`'s first `words` words into the slot a negative word names (an
     addition, lane vdf-scope-linear4); waits."""
