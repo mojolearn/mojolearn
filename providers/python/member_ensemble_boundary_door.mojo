@@ -3053,7 +3053,8 @@ def _metric_row_kwarg(metric: String, word: String, value: PythonObject, mut kw:
         kw.param_text = String(py=py_call(b.str, value))
         return True
     if word == "power" and (metric == "mean_tweedie_deviance" or metric == "d2_tweedie_score"):
-        if py_type(value) is b.bool or not Bool(py=py_call(b.isinstance, value, native_loaded_module("numbers").Real)):
+        if py_type(value) is b.bool or (not _builtin_real(value, b)
+                                        and not Bool(py=py_call(b.isinstance, value, native_loaded_module("numbers").Real))):
             if kw.refuse_text.byte_length() == 0:
                 kw.refuse_text = String("power must be a real number")  # `_tweedie_power`
             return True
@@ -3105,8 +3106,8 @@ def _metric_row_kwarg(metric: String, word: String, value: PythonObject, mut kw:
             # number, which that door refuses when kappa is undefined
             # ("TypeError: scoring must return a real scalar"; the RUN's flag
             # word 1, core/msel_scorer_run.mojo SCORER_REAL_WORDS)
-            if _value_kind(value, b) != 1 and not Bool(py=py_call(b.isinstance, value,
-                                                                  native_loaded_module("numbers").Real)):
+            if _value_kind(value, b) != 1 and not _builtin_real(value, b) and not Bool(py=py_call(
+                    b.isinstance, value, native_loaded_module("numbers").Real)):
                 kw.flag = 1
                 return True
             kw.param = Float64(py=py_call(b.float, value))
@@ -3166,13 +3167,21 @@ def _mode_clean(value: PythonObject) raises -> String:
     return String(py=py_call(py_call(value.strip).lower))
 
 
+def _builtin_real(value: PythonObject, b: PythonObject) raises -> Bool:
+    """Lane w3f3-e (row 6): an exact Python int, bool or float, by class
+    identity: numbers.Real without its ABC hook (ABCMeta.__instancecheck__
+    Python frames). Any other class still asks isinstance at its site."""
+    var cls = py_type(value)
+    return cls is b.float or cls is b.int or cls is b.bool
+
+
 def _real_word(value: PythonObject, b: PythonObject) raises -> Float64:
     """A kwarg's real value (a Python or NumPy int / float, not a bool), or
     NaN for any other value (the caller's door then keeps the scorer)."""
     if py_type(value) is b.bool:
         return _nan()
-    var numbers = native_loaded_module("numbers")
-    if not Bool(py=py_call(b.isinstance, value, numbers.Real)):
+    if not _builtin_real(value, b) and not Bool(py=py_call(b.isinstance, value,
+                                                           native_loaded_module("numbers").Real)):
         return _nan()
     return Float64(py=py_call(b.float, value))
 
@@ -3368,8 +3377,8 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                     # lane mf-r9d round b: the top_k door's check
                     # (bindings/metrics_exp_curve_door.mojo `_top_k`: a bool,
                     # a non-integral or a k below 1 refuses in its words, per side)
-                    var integral = py_type(theirs) is not b.bool and Bool(py=py_call(
-                        b.isinstance, theirs, native_loaded_module("numbers").Integral))
+                    var integral = py_type(theirs) is not b.bool and (py_type(theirs) is b.int or Bool(py=py_call(
+                        b.isinstance, theirs, native_loaded_module("numbers").Integral)))
                     if not integral or Int(py=py_call(b.int, theirs)) < 1:
                         _refuse(mine_kw, "k must be a positive integer")
                         continue
@@ -4999,6 +5008,8 @@ def _label_kind(item: PythonObject, b: PythonObject) raises -> Int:
         return 2
     if py_type(item) is b.int:
         return 1
+    if py_type(item) is b.float:
+        return 0  # lane w3f3-e: an exact float is no Integral, without the ABC hook
     var numbers = native_loaded_module("numbers")
     if Bool(py=py_call(b.isinstance, item, numbers.Integral)):
         return 1
@@ -5107,7 +5118,7 @@ def _real_label(item: PythonObject, b: PythonObject) raises -> Bool:
     integer type (a Python or NumPy float; not a bool, an int or a string)."""
     if py_type(item) is b.bool or _label_kind(item, b) != 0:
         return False
-    return Bool(py=py_call(b.isinstance, item, native_loaded_module("numbers").Real))
+    return _builtin_real(item, b) or Bool(py=py_call(b.isinstance, item, native_loaded_module("numbers").Real))
 
 
 def _next_word(labels: PythonObject, classifier: Bool, extra_words: List[String], b: PythonObject) raises -> Int:
@@ -5343,7 +5354,7 @@ def _labels_multi_type(labels: PythonObject, b: PythonObject) raises -> String:
         var items = py_call(b.list, labels[j])
         for i in range(len(items)):  # driver-loop: over one output's labels
             var item = items[i]
-            if not Bool(py=py_call(b.isinstance, item, numbers.Real)):
+            if not _builtin_real(item, b) and not Bool(py=py_call(b.isinstance, item, numbers.Real)):
                 numeric = False
                 continue
             var value = py_call(b.float, item)
@@ -5389,7 +5400,7 @@ def _numeric_outputs(labels: PythonObject, b: PythonObject) raises -> Int:
                 return 0
             if _label_kind(item, b) == 1:
                 continue
-            if not Bool(py=py_call(b.isinstance, item, numbers.Real)):
+            if not _builtin_real(item, b) and not Bool(py=py_call(b.isinstance, item, numbers.Real)):
                 return 0
             kind = 2
     if strings > 0:
