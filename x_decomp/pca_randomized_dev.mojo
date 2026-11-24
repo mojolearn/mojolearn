@@ -26,6 +26,7 @@ from x_decomp.resident import (
 )
 from x_decomp.s_linalg_fast import DECOMP_FAST_ORTH_WS, dev_orth_ws_run
 from x_decomp.select_dev import dev_order_f_run, dev_order_small_run, dev_reduce_run
+from x_decomp.member_store import xd_store_words
 
 
 struct DevRDev(RDev):
@@ -110,3 +111,7 @@ struct DevRDev(RDev):
     @staticmethod
     def order_small(a: Int, dst: Int, n: Int) raises:
         _ = dev_order_small_run(a, dst, n)
+
+    @staticmethod
+    def held_words(id: Int) raises -> Int:
+        return xd_store_words(id)
