@@ -26,6 +26,7 @@ ftz(intercept))` (skipped when the intercept is exactly 0.0, DEVIATION 527).
 The status word is a predicate on bits.
 """
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.fold_x_device import fold_x_fill
 from max.gpu import block_dim, block_idx, thread_idx
 from checks.numerics import ftz
 from core.admitted_finite_status import enqueue_finite_status
@@ -92,7 +93,9 @@ def ols_predict_device(
     comptime for _ in range(4):  # the four buffers created above
         step_count_device_alloc()
     if n_rows * n_features > 0:
-        ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+        # THE FOLD X WORD (core/fold_x_device.mojo; lane vdf-scope-linear): a member's
+        # fold slot is copied device to device; a host X is the old upload.
+        fold_x_fill(ctx, x, Int(x_ptr), n_rows * n_features)
         step_count_h2d()
     if n_features > 0:
         ctx.enqueue_copy(dst_buf=coef, src_ptr=coef_ptr)

@@ -26,6 +26,11 @@ def linear_ridge_run(entry: NativeDescriptorCall, weighted_entry: NativeDescript
     if not request.x or not request.y or not request.coef or not request.mean:
         raise Error("Ridge: null fit buffer")
     var result = LinearFitResult()
+    # THE FOLD X WORD (core/fold_x_device.mojo): a negative X names a device fold
+    # slot, read only by the LF_GRAM route of an image with LF_HAS_SLOT_X.
+    var slot_x = request.x < 0
+    if slot_x and (request.weights or cols == 1):
+        raise Error("RuntimeError: Ridge: a device fold X reaches only the Gram route (no weights, more than one column)")
     if request.weights or cols == 1:
         var has_weights = request.weights != 0
         var targets = List[Float32](unsafe_uninit_length=rows * 2 if has_weights else 0)
@@ -62,6 +67,8 @@ def linear_ridge_run(entry: NativeDescriptorCall, weighted_entry: NativeDescript
         var floats: List[Float64] = [request.alpha]
         if flags & LF_HAS_GRAM:
             done = native_descriptor_call(entry, LF_GRAM, addresses, ints, floats) == 0
+        if not done and slot_x:
+            raise Error("RuntimeError: Ridge: the Gram route left a device fold X unfitted (no host route reads it)")
         if not done and flags & LF_HAS_RIDGE_RESIDENT:
             _ = native_descriptor_call(entry, LF_RIDGE_RESIDENT, addresses, ints, floats)
             done = True

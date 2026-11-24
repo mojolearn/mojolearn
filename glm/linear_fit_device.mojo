@@ -7,7 +7,7 @@ from core.hostptr import f32_ptr, f64_ptr
 from core.linear_fit_types import (
     LINEAR_FIT_ABI, LF_FLAGS, LF_MODE, LF_VENDOR, LF_GRAM, LF_RIDGE_RESIDENT, LF_PREP,
     LF_RIDGE, LF_OLS, LF_OLS_RESIDENT, LF_HAS_GRAM, LF_HAS_RIDGE_RESIDENT,
-    LF_PAIRED_MEANS, LF_HAS_OLS_RESIDENT, linear_fit_check_spans,
+    LF_PAIRED_MEANS, LF_HAS_OLS_RESIDENT, LF_HAS_SLOT_X, linear_fit_check_spans,
 )
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -19,6 +19,7 @@ from glm.estimator import ridge_fit_host, ridge_fit_resident_host, ols_fit_host,
 from glm.impl.gram_solve import linear_gram_fit_host
 from glm.impl.ols_prep_device import ols_prep_device
 from glm.linear_route_controls import RIDGE_FAST_RESIDENT, OLS_FAST_NORMAL_EQ
+from core.classical_identical_controls.fg_linear_controls import IDN_RIDGE_RESIDENT
 
 comptime _CONTEXT = "MojolearnEstimatorsContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnEstimatorsContextFastV3"
 
@@ -30,6 +31,10 @@ def linear_fit_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         var value = 0
         if operation == LF_FLAGS:
             value = Int(LINEAR_GRAM_SOLVE) * LF_HAS_GRAM + Int(RIDGE_FAST_RESIDENT) * LF_HAS_RIDGE_RESIDENT + Int(OLS_FAST_NORMAL_EQ) * LF_HAS_OLS_RESIDENT
+            # THE FOLD X WORD (lane vdf-scope-linear): LF_GRAM and this image's prediction
+            # entry (glm/linear_predict_device.mojo) read a fold slot; only where LF_GRAM
+            # always finishes the Ridge fit a member sends there (core/linear_fit_types.mojo).
+            value += Int(LINEAR_GRAM_SOLVE and IDN_RIDGE_RESIDENT) * LF_HAS_SLOT_X
             # TOMBSTONE: MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 0e69fe9c69.
             # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
         elif operation == LF_MODE:
