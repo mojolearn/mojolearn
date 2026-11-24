@@ -7,7 +7,8 @@ weights into it once: they are the program's parameters, read in place at
 every run and updated in place by the AdamW step, so the session IS the
 trainer's resident copy (no per-call upload, no second resident session).
 The forward is captured once, at open, as ONE op, the small MLP's tuned
-forward and hand backward (autograd/small_mlp_op.mojo; the leaf-128 GEMMs,
+forward and hand backward (autograd/small_mlp_op.mojo; the step GEMMs on
+identical_gemm_into since the leaf-128 GEMMs were deleted 2026-11-24, the
 `_mlp_kernel` launches and backward chain of the 0.8.66 step):
 
     logits = small_mlp(x, weight1, bias1, weight2, bias2)  OPS_SMALL_MLP
@@ -100,11 +101,15 @@ from core.shared_slot import SharedSlot
 
 #: Lane r1-restore-measured-winners (2026-11-09): the program captures the
 #: small MLP's tuned op (OPS_SMALL_MLP, autograd/small_mlp_op.mojo: the
-#: leaf-128 GEMMs, the `_mlp_kernel` launches and the hand backward chain
-#: of the 0.8.66 step, which lane x2 had replaced by the generic ops below).
+#: step GEMMs on identical_gemm_into, the `_mlp_kernel` launches and the hand
+#: backward chain of the 0.8.66 step, which lane x2 had replaced by the
+#: generic ops below; its leaf-128 GEMMs were deleted 2026-11-24, lane
+#: o3-nmlp, A/B nvc-ab-20261124T115722Z-d8f8b2).
 #: A/B: -D MOJOLEARN_SMALL_MLP_GENERIC_OPS captures lane x2's transpose +
-#: OPS_LINEAR form instead. Run owed: mlp-train-step and mlp-predict, tuned
-#: op vs generic ops, one run per arm on NVIDIA and AMD.
+#: OPS_LINEAR form instead. Run owed against the new default with the wave-3
+#: sha: mlp-train-step and mlp-predict, one run per arm on the NVIDIA L40S
+#: (previous, against the leaf-128 default: train-step 0.536 -> 0.442 ms
+#: (0.82), predict 0.060 -> 0.065 ms (1.08)).
 # TOMBSTONE: MOJOLEARN_SMALL_MLP_GENERIC_OPS (lane x2's transpose + OPS_LINEAR capture, opt-in B arm, A/B owed and
 # never run) deleted 2026-11-15 by lane/expdel2-24-neural; code recoverable at 1acdb0bcd1.
 # Restore: git apply experiments/removed/MOJOLEARN_SMALL_MLP_GENERIC_OPS.patch

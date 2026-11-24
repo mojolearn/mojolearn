@@ -4,11 +4,11 @@ kernels and the op's contract). Only the host executor
 (sequence/exec.mojo `HostExec.small_mlp_host`) imports it, so no GPU module
 imports host threads.
 
-Same words as the device in IDENTICAL: every GEMM cell is the NN03 profile
-cell at leaf 128 (`neural_cell` over `neural_partition[128]`, the body the
-device's `neural_model_leaf_into[128]` launches one thread per cell; at
-leaf 128 that partition is the contract's, so the same words as the
-incumbent dispatch the `MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF` arm takes), and
+Same words as the device in IDENTICAL: every GEMM cell is `neural_cell`
+over `neural_partition[NEURAL_LEAF]`, the partition the device's
+`identical_gemm_into` folds (NEURAL_LEAF is the contract's shortest leaf,
+CONTRACT_K_LEAF_MIN, so that partition is `contract_partition(k)`: one
+ascending chain per leaf and the contract's tree over the leaves), and
 every elementwise item is `small_mlp_cell`, the device kernel's body. Rows
 (or columns, for the row sums) are split across cores; the fold inside each
 cell is unchanged, so the task count moves no bit.
@@ -18,7 +18,7 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from gemm.experiments.neural_profile import (
-    NEURAL_CHAINS, neural_cell, neural_partition, neural_strides, neural_validate,
+    NEURAL_CHAINS, NEURAL_LEAF, neural_cell, neural_partition, neural_strides, neural_validate,
 )
 from autograd.small_mlp_cells import (
     SMALL_MLP_BIAS, SMALL_MLP_BIAS_RELU, SMALL_MLP_RELU_BACKWARD, SMALL_MLP_SUM_ROWS,
@@ -34,12 +34,15 @@ def _p(p: FP) -> _P:
 
 
 def _gemm_host(c: FP, a: FP, b: FP, m: Int, n: Int, k: Int, op: Int) raises:
-    """C (m, n) = op(A, B), each cell the leaf-128 profile cell; rows of C
-    split across cores."""
+    """C (m, n) = op(A, B), each cell on the contract's partition (the
+    device's identical_gemm_into words); rows of C split across cores."""
     neural_validate(m, n, k, op)
     if m == 0 or n == 0:
         return
-    var part = neural_partition[128](k)
+    # lane o3-nmlp (2026-11-24): was neural_partition[128], the mirror of the device's deleted leaf-128 body
+    # (TOMBSTONE MOJOLEARN_IDN_MLP_GEMM_LEAF128 in autograd/small_mlp_op.mojo). NEURAL_LEAF is 128 in every build
+    # (CONTRACT_K_LEAF_MIN), so no bit moves; it follows identical_gemm_into's partition by name, not by a literal.
+    var part = neural_partition[NEURAL_LEAF](k)
     var st = neural_strides(op, m, n, k)
     var leaf = part[0]
     var leaves = part[1]

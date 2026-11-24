@@ -34,13 +34,14 @@
   },
   "small-mlp-generic": {
    "define": "MOJOLEARN_SMALL_MLP_GENERIC_OPS",
-   "status": "define in code (autograd/small_mlp_program.mojo SMALL_MLP_GENERIC_OPS): B = lane x2's transpose + OPS_LINEAR capture; A = op small_mlp (leaf-128 GEMM, hand backward)",
+   "status": "define in code (autograd/small_mlp_program.mojo SMALL_MLP_GENERIC_OPS): B = lane x2's transpose + OPS_LINEAR capture; A = op small_mlp on identical_gemm_into (leaf128 removed 2026-11-24, ab-outcome-3); RUN OWED with the wave-3 sha; previous: train-step 0.536 -> 0.442 (0.82), predict 0.060 -> 0.065 (1.08)",
    "owed": "RUN"
   },
   "small-mlp-leaf128-off": {
    "define": "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF",
-   "status": "define in code (autograd/small_mlp_op.mojo SMALL_MLP_GEMM_LEAF128): B = op small_mlp on identical_gemm_into",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-nmlp): the DEFAULT lost (L40S 2 cells, median 0.91, mlp-train-step 0.561 -> 0.468 ms (0.83; base 0.485..0.561 over five runs of the box), mlp-predict 0.99; digests equal); B (op small_mlp on identical_gemm_into) is the only form; removed: SMALL_MLP_GEMM_LEAF128, neural_model_leaf_into and the switch; the define is refused (core/experiment_guards_neural.mojo); no bits change; code recoverable at 774ef6eb1f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MLP_GEMM_LEAF128.ab-outcome-3.patch. Was: define in code (autograd/small_mlp_op.mojo SMALL_MLP_GEMM_LEAF128): B = op small_mlp on identical_gemm_into",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "cnn-generic": {
    "define": "MOJOLEARN_CNN_GENERIC_OPS",
@@ -315,7 +316,13 @@
   },
   "ssd-occupancy-on": {
    "define": "MOJOLEARN_IDN_SSD_OCCUPANCY",
-   "status": "define in code (mamba/impl/modules/ssd_minimal.mojo IDN_SSD_OCCUPANCY, restored 2026-11-15 by lane restore-run-arms-neural): B = coalesced S10 discretize (one thread per (b, t, h, p)), 16 x 16 shared-tile S12 G = C.B, S18/S19 Y_off row tiles; A = the cell kernels",
+   "status": "PROMOTED 2026-11-24 (lane ab-outcome-3, sub-lane o3-nmlp): WINNER (L40S mamba2-forward 2.93 -> 1.98 ms, 0.68; quality equal, digest 0350b90b398bccbf and outputs_digest 22500589aee10bb8 both, 0.0 vs host both); the occupancy kernels are the default on every device column (the host column keeps the cell kernels: no shared memory, same words); the old cell kernels are -D MOJOLEARN_IDN_SSD_OCCUPANCY_OFF (owed arm ssd-occupancy-off); the on-define is refused (core/experiment_guards_neural.mojo); no bits change. Was: define in code (mamba/impl/modules/ssd_minimal.mojo IDN_SSD_OCCUPANCY, restored 2026-11-15 by lane restore-run-arms-neural): B = coalesced S10 discretize (one thread per (b, t, h, p)), 16 x 16 shared-tile S12 G = C.B, S18/S19 Y_off row tiles; A = the cell kernels",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md; quality ~/mojolearn-evidence/ab-outcome-3/o3-nmlp/promote-quality.txt"
+  },
+  "ssd-occupancy-off": {
+   "define": "MOJOLEARN_IDN_SSD_OCCUPANCY_OFF",
+   "status": "define in code (mamba/impl/modules/ssd_minimal.mojo IDN_SSD_OCCUPANCY, promoted 2026-11-24 by lane ab-outcome-3 / o3-nmlp): B = the old cell kernels for S10, S12 and S18/S19 on every device column; A = the occupancy kernels (the default). Same words on both arms: digests must not move. Time with the wave-3 sha",
    "owed": "RUN"
   },
   "attn-fold-v2-on": {
@@ -1652,7 +1659,8 @@
     "small-mlp-generic",
     "small-mlp-leaf128-off"
    ],
-   "decides": "keep the op (A) unless the generic capture is at least as fast on NVIDIA and AMD with quality equal; reference 0.8.66 0.971 ms both vendors"
+   "decides": "keep the op (A) unless the generic capture is at least as fast on NVIDIA and AMD with quality equal; reference 0.8.66 0.971 ms both vendors",
+   "note": "2026-11-24 (lane ab-outcome-3 / o3-nmlp): small-mlp-leaf128-off DECIDED (leaf128 removed, A is now op small_mlp on identical_gemm_into); small-mlp-generic still RUN against that A with the wave-3 sha"
   },
   {
    "id": "r1-cnn-ops",
@@ -2361,7 +2369,26 @@
    "b_arms": [
     "ssd-occupancy-on"
    ],
-   "decides": "NVIDIA L40S only (the NVIDIA-only campaign): promote B (with a _OFF define) when mamba2-forward and mamba2-infer are faster than A and the output digests match A (same chains: no bit change expected; a digest change is a bug in the arm, not a new reference); otherwise delete the arm with a tombstone"
+   "decides": "NVIDIA L40S only (the NVIDIA-only campaign): promote B (with a _OFF define) when mamba2-forward and mamba2-infer are faster than A and the output digests match A (same chains: no bit change expected; a digest change is a bug in the arm, not a new reference); otherwise delete the arm with a tombstone",
+   "status": "PROMOTED 2026-11-24 (lane ab-outcome-3, sub-lane o3-nmlp): mamba2-forward full 2.93 -> 1.98 ms (0.68), digests equal; mamba2-infer was not timed (the old form's owed row ssd-occupancy-off times both)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
+  },
+  {
+   "id": "ssd-occupancy-off",
+   "source": "ab-outcome-3 / o3-nmlp (2026-11-24): ssd-occupancy-on promoted on A/B nvc-ab-20261124T115722Z-d8f8b2 (mamba2-forward 2.93 -> 1.98 ms, 0.68); the old cell kernels stay behind MOJOLEARN_IDN_SSD_OCCUPANCY_OFF until measured against the new default",
+   "kind": "ab",
+   "lane": [
+    "mamba2-forward",
+    "mamba2-infer"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "ssd-occupancy-off"
+   ],
+   "decides": "NVIDIA L40S only (the NVIDIA-only campaign), wave-3 sha: delete the old cell kernels' device route and the _OFF define with a tombstone when B is no faster than A on mamba2-forward and mamba2-infer (digests must match: same chains; the host column keeps the cell kernels either way); otherwise reopen the promotion",
+   "owed": "RUN"
   },
   {
    "id": "attn-fold-v2",
