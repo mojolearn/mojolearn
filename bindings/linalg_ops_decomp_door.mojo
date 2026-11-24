@@ -19,7 +19,8 @@ from std.python._cpython import GILReleased
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.host_inference_scalars_door import host_inference_scalar
-from providers.python.estimator_binding_pyapi_door import estimator_binding
+from providers.python.estimator_binding_pyapi_door import estimator_binding, estimator_binding_device
+from core.function_device import FunctionDevice, function_device_default
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays_door import classical_address
@@ -27,7 +28,9 @@ from bindings.family_common_unpack import family_repr
 from bindings.family_common_pack import family_call
 from bindings.linalg_ops_buffers_unpack import lin_truth
 from bindings.admitted_input_unpack import AdmittedBuf, admitted_zeros, admitted_unfilled
-from bindings.linalg_ops_lowbit_door import lin_operand, lin_state, lin_ints, lin_connected_binding
+from bindings.linalg_ops_lowbit_door import (
+    lin_operand, lin_state, lin_ints, lin_device, lin_device_binding, lin_device_context, LIN_HAS_GPU, LIN_HAS_CPU,
+)
 from providers.python.linalg_result_pyapi_door import linalg_result_new
 from bindings.kit_call_unpack import kit_capabilities, kit_entry_ref
 from bindings.kit_call_pack import kit_connect
@@ -43,16 +46,25 @@ from bindings.operation_names_linops import (
     LINOPS_OPN_FAMILY_LIN_QR, LINOPS_OPN_FAMILY_LIN_EIGH, LINOPS_OPN_FAMILY_LIN_SVDVALS, LINOPS_OPN_FAMILY_LIN_SVD)
 
 
-def _lin_door(context: PythonObject) raises -> PythonObject:
+def _lin_door(device: FunctionDevice, context: PythonObject) raises -> PythonObject:
     """`_door()` / `_load()`: the linalg binding of the selected tier, cached
-    in the module's `_binding_cache` as the Python cached it."""
-    return lin_connected_binding(context)
+    in the module's `_binding_cache` as the Python cached it; for an explicit
+    "cpu" beside a GPU set the host image (lane vdf-linalg,
+    bindings/linalg_ops_lowbit_door.mojo `lin_device_binding`)."""
+    return lin_device_binding(device, context)
 
 
-def _lin_xd(context: PythonObject) raises -> PythonObject:
+def _lin_xd(device: FunctionDevice, context: PythonObject) raises -> PythonObject:
     """UNPACK: the import-connected x_decomp binding selected natively for
-    this call (an exact native module)."""
-    var binding = estimator_binding(PythonObject(None), "_mojolearn_x_decomp", context)
+    this call (an exact native module). An explicit "cpu" beside a GPU set
+    reads the x_decomp host image connected at import
+    (`_mojolearn_x_decomp_host`, python/mojolearn/_native_family_bridge.py
+    `_CPU_DEVICE_IMAGES`), refused in words where it is not connected."""
+    var binding = PythonObject(None)
+    if device.host_beside:
+        binding = estimator_binding_device(device, PythonObject(None), "_mojolearn_x_decomp", context)
+    else:
+        binding = estimator_binding(PythonObject(None), "_mojolearn_x_decomp", context)
     if py_type(binding) is not py_type(native_loaded_module("builtins")):
         raise Error("TypeError: linalg decomposition requires an exact native provider module")
     return binding
@@ -202,7 +214,7 @@ def _lin_tsqr_q(entry: EntryRef, owner: Int, c_addr: Int, rows: Int, cols: Int, 
 # the public functions
 
 
-def lin_svdvals_of(a: AdmittedBuf, context: PythonObject) raises -> PythonObject:
+def lin_svdvals_of(a: AdmittedBuf, device: FunctionDevice, context: PythonObject) raises -> PythonObject:
     """`svdvals` of an admitted operand."""
     var rows = a.dim(0)
     var cols = a.dim(1)
@@ -210,7 +222,7 @@ def lin_svdvals_of(a: AdmittedBuf, context: PythonObject) raises -> PythonObject
     if rows < cols:
         # the singular values of a wide A are those of A^T, exactly: the
         # transpose is data movement
-        var kit = _lin_kit(_lin_xd(context))
+        var kit = _lin_kit(_lin_xd(device, context))
         try:
             var t = 0
             var py = Python()
@@ -227,7 +239,7 @@ def lin_svdvals_of(a: AdmittedBuf, context: PythonObject) raises -> PythonObject
         rows = cols
         cols = swap
     var out = admitted_zeros([cols], "<f4", context)
-    _ = family_call(neural_descriptor_entry(_lin_door(context), "svdvals"),
+    _ = family_call(neural_descriptor_entry(_lin_door(device, context), "svdvals"),
                     Python.list(PythonObject(buf.addr), PythonObject(out.addr)), lin_ints(rows, cols))
     _ = out  # keep the Python object alive through the native call above
     _ = buf  # keep the Python object alive through the native call above
@@ -235,14 +247,14 @@ def lin_svdvals_of(a: AdmittedBuf, context: PythonObject) raises -> PythonObject
     return out.keep
 
 
-def _lin_svdvals(args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _lin_svdvals(args: PythonObject, device: FunctionDevice, context: PythonObject) raises -> PythonObject:
     var a = lin_operand(args[0], "a", context, True)
-    var result = lin_svdvals_of(a, context)
+    var result = lin_svdvals_of(a, device, context)
     _ = a^
     return result
 
 
-def _lin_eigh(args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _lin_eigh(args: PythonObject, device: FunctionDevice, context: PythonObject) raises -> PythonObject:
     """`eigh(a, UPLO)`."""
     var a = lin_operand(args[0], "a", context, True)
     var rows = a.dim(0)
@@ -252,7 +264,7 @@ def _lin_eigh(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var lower = _lin_eq(args[1], "L")
     if not lower and not _lin_eq(args[1], "U"):
         raise Error("mojolearn.linalg.eigh: UPLO argument must be 'L' or 'U'")
-    var kit = _lin_kit(_lin_xd(context))
+    var kit = _lin_kit(_lin_xd(device, context))
     try:
         var v = 0
         var w = 0
@@ -268,11 +280,11 @@ def _lin_eigh(args: PythonObject, context: PythonObject) raises -> PythonObject:
         kit.close()
 
 
-def _lin_qr_q(a: AdmittedBuf, mode: String, context: PythonObject) raises -> PythonObject:
+def _lin_qr_q(a: AdmittedBuf, mode: String, device: FunctionDevice, context: PythonObject) raises -> PythonObject:
     """`_qr_q(a, mode)`: numpy.linalg.qr's 'reduced', 'complete' and 'raw'."""
     var rows = a.dim(0)
     var cols = a.dim(1)
-    var binding = _lin_xd(context)
+    var binding = _lin_xd(device, context)
     # TOMBSTONE: MOJOLEARN_QR_FAST_DEV (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1 (the FAST kit's
     # grid-fold geqrf / orgqr ahead of the TSQR); code recoverable at b639a2bd2.
     # Restore: git apply experiments/removed/MOJOLEARN_QR_FAST_DEV.patch; record in docs/TOMBSTONES.md.
@@ -330,7 +342,7 @@ def _lin_qr_q(a: AdmittedBuf, mode: String, context: PythonObject) raises -> Pyt
         kit.close()
 
 
-def _lin_qr(args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _lin_qr(args: PythonObject, device: FunctionDevice, context: PythonObject) raises -> PythonObject:
     """`qr(a, mode)`."""
     var mode = args[1]
     var named = String("")
@@ -342,7 +354,7 @@ def _lin_qr(args: PythonObject, context: PythonObject) raises -> PythonObject:
         named = "raw"
     if named != "":
         var operand = lin_operand(args[0], "a", context, True)
-        var result = _lin_qr_q(operand, named, context)
+        var result = _lin_qr_q(operand, named, device, context)
         _ = operand^
         return result
     if not _lin_eq(mode, "r"):
@@ -353,7 +365,7 @@ def _lin_qr(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var cols = a.dim(1)
     if rows < cols:
         # a wide R (M x N, upper trapezoidal) is geqrf's; the TSQR route is tall only
-        var kit = _lin_kit(_lin_xd(context))
+        var kit = _lin_kit(_lin_xd(device, context))
         try:
             var tau = 0
             var h = 0
@@ -370,25 +382,25 @@ def _lin_qr(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var out = admitted_zeros([cols, cols], "<f4", context)
     # ORDER MATCHES qr_r_binding IN BOTH BINDINGS: addrs (a, r_out), params
     # (n_rows, n_cols); swapping the addresses writes R over the caller's matrix
-    _ = family_call(neural_descriptor_entry(_lin_door(context), "qr_r"),
+    _ = family_call(neural_descriptor_entry(_lin_door(device, context), "qr_r"),
                     Python.list(PythonObject(a.addr), PythonObject(out.addr)), lin_ints(rows, cols))
     _ = out  # keep the Python object alive through the native call above
     _ = a^
     return out.keep
 
 
-def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _lin_svd(args: PythonObject, device: FunctionDevice, context: PythonObject) raises -> PythonObject:
     """`svd(a, full_matrices, compute_uv, hermitian)`."""
     var a = lin_operand(args[0], "a", context, True)
     var rows = a.dim(0)
     var cols = a.dim(1)
     if not lin_truth(args[2]):
-        var values = lin_svdvals_of(a, context)
+        var values = lin_svdvals_of(a, device, context)
         _ = a^
         return values
     var full = lin_truth(args[1])
     var hermitian = lin_truth(args[3])
-    var binding = _lin_xd(context)
+    var binding = _lin_xd(device, context)
     var kit = _lin_kit(binding)
     try:
         var py = Python()
@@ -472,21 +484,42 @@ def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
         kit.close()
 
 
+def _lin_decomp_name(operation: Int) -> String:
+    """The public name a `device=` refusal of `operation` leads with."""
+    if operation == LINOPS_OPN_FAMILY_LIN_QR:
+        return "mojolearn.linalg.qr"
+    if operation == LINOPS_OPN_FAMILY_LIN_EIGH:
+        return "mojolearn.linalg.eigh"
+    if operation == LINOPS_OPN_FAMILY_LIN_SVDVALS:
+        return "mojolearn.linalg.svdvals"
+    return "mojolearn.linalg.svd"
+
+
 def lin_decomp_operation(operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
     # bw2-linalg: `operation` is a leaf code of bindings/operation_names_linops.mojo.
     # Admit public scalar controls before equality/truth conversion; input
     # exporters are captured by the shared native linalg buffer boundary.
     # The one admission of the operand: every _lin_* below passes
     # admitted=True to lin_operand (row N237).
+    # lane vdf-linalg: `device` is the last item of the tuple; it is read
+    # once (one identity compare for None) after the argument admission and
+    # before any work, and selects the context (`lin_device_context`) and the
+    # two bindings (`_lin_door`, `_lin_xd`) of this call.
+    var last = len(args) - 1
     classical_admit_value(args[0], context)
-    for i in range(1, len(args)):  # small-loop(public decomposition option metadata)
+    for i in range(1, last):  # small-loop(public decomposition option metadata)
         host_inference_scalar(args[i], context, True)
+    var device = function_device_default()
+    var scope = context
+    if args[last] is not None:
+        device = lin_device(args[last], _lin_decomp_name(operation), LIN_HAS_GPU, LIN_HAS_CPU, context)
+        scope = lin_device_context(device, context)
     if operation == LINOPS_OPN_FAMILY_LIN_QR:
-        return _lin_qr(args, context)
+        return _lin_qr(args, device, scope)
     if operation == LINOPS_OPN_FAMILY_LIN_EIGH:
-        return _lin_eigh(args, context)
+        return _lin_eigh(args, device, scope)
     if operation == LINOPS_OPN_FAMILY_LIN_SVDVALS:
-        return _lin_svdvals(args, context)
+        return _lin_svdvals(args, device, scope)
     if operation == LINOPS_OPN_FAMILY_LIN_SVD:
-        return _lin_svd(args, context)
+        return _lin_svd(args, device, scope)
     raise Error("RuntimeError: unknown linalg operation " + String(operation))

@@ -29,7 +29,8 @@ def training_rms_operation(operation: Int, where: PythonObject, values: PythonOb
     var buffer_pins = OptimizerInputOwners()
     try:
         var backward = operation == OPTIMIZER_OPN_RMS_NORM_BACKWARD
-        if len(values) != (4 if backward else 3):
+        # the arguments and the admitted `device` item (lane vdf-linalg; read by the router)
+        if len(values) != (5 if backward else 4):
             raise Error("TypeError: invalid RMS-normalization argument envelope")
         var entry = py_item(entries, where)
         var nk = optimizer_keys()

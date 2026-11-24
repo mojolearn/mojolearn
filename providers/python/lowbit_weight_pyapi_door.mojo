@@ -14,7 +14,10 @@ from bindings.sequential_inputs_door import sequential_sequence_f32
 from bindings.linalg_ops_buffers_unpack import lin_dtype_name
 from bindings.linalg_ops_buffers_run import lin_is_f32
 from bindings.admitted_input_unpack import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_shape_tuple, admitted_unfilled
-from bindings.linalg_ops_lowbit_door import lin_connected_binding, lin_lowbit, lin_call
+from bindings.linalg_ops_lowbit_door import (
+    lin_connected_binding, lin_lowbit, lin_call, lin_device, lin_device_binding, lin_device_context, LIN_HAS_GPU,
+    LIN_HAS_CPU,
+)
 from bindings.tensor_view import base_format, shape_text, TensorView
 from bindings.lowbit_weight_run import low_empty
 from bindings.lowbit_keys_unpack import lowbit_keys
@@ -185,12 +188,40 @@ def lowbit_weight_unknown_operation(operation: String) raises:
     raise Error("RuntimeError: unknown lowbit storage operation " + operation)
 
 
+def _low_public_name(operation: Int) -> String:
+    """The public name a `device=` refusal of `operation` leads with."""
+    if operation == LOW_OPN_FAMILY_LOW_MATERIALIZE_ONE:
+        return "mojolearn.lowbit.materialize_one"
+    if operation == LOW_OPN_FAMILY_LOW_WIDEN_BF16:
+        return "mojolearn.lowbit.widen_bf16"
+    if operation == LOW_OPN_FAMILY_LOW_PACK_ONE:
+        return "mojolearn.lowbit.pack_one"
+    if operation == LOW_OPN_FAMILY_LOW_UNPACK:
+        return "mojolearn.lowbit.unpack"
+    return "mojolearn.lowbit.pack"
+
+
 def lowbit_weight_operation(model: PythonObject, operation: Int, args: PythonObject,
-                            context: PythonObject) raises -> PythonObject:
+                            var context: PythonObject) raises -> PythonObject:
     # bw2-linalg: `operation` is the leaf code of bindings/operation_names_low.mojo,
     # resolved once by the family door (it was up to eleven String compares here).
     classical_connect_numpy(context)
     var binding = PythonObject(None)
+    if (operation == LOW_OPN_FAMILY_LOW_MATERIALIZE_ONE or operation == LOW_OPN_FAMILY_LOW_WIDEN_BF16
+            or operation == LOW_OPN_FAMILY_LOW_PACK_ONE or operation == LOW_OPN_FAMILY_LOW_UNPACK
+            or operation == LOW_OPN_FAMILY_LOW_PACK):
+        # lane vdf-linalg: `device` is the last item of a computing function's
+        # tuple, read once before any work (None: this one identity compare,
+        # and `low_binding` resolves today's binding lazily as before). An
+        # explicit device runs the linalg image of that side in its own module
+        # state (bindings/linalg_ops_lowbit_door.mojo `lin_device_context`),
+        # resolved here once so every later `low_binding` reuses it.
+        var item = args[len(args) - 1]
+        if item is not None:
+            var device = lin_device(item, _low_public_name(operation), LIN_HAS_GPU, LIN_HAS_CPU, context)
+            if device.host_beside:
+                context = lin_device_context(device, context)
+                binding = lin_lowbit(lin_device_binding(device, context), context)
     if operation == LOW_OPN_FAMILY_LOW_IS_PACKED:
         return PythonObject(low_kind(args[0], context) != 0)
     if operation == LOW_OPN_FAMILY_LOW_FORMAT_OF:

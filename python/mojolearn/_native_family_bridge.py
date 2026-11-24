@@ -220,7 +220,12 @@ def _cpu_routes():
 #: identical image is loaded by name beside the device one (the metrics
 #: programs a device="cpu" estimator scores on beside a GPU set). One place:
 #: no family bridge loads such an image itself.
-_CPU_DEVICE_IMAGES = {"_mojolearn_x_metrics": "_mojolearn_x_metrics_host"}
+#: `_mojolearn_x_decomp`: the decomposition kit of `mojolearn.linalg.qr`,
+#: `eigh`, `svd` and `svdvals` with `device="cpu"` beside a GPU set (lane
+#: vdf-linalg, bindings/linalg_ops_decomp_door.mojo `_lin_xd`); the same
+#: image a CPU-only installation runs them on.
+_CPU_DEVICE_IMAGES = {"_mojolearn_x_metrics": "_mojolearn_x_metrics_host",
+                      "_mojolearn_x_decomp": "_mojolearn_x_decomp_host"}
 
 
 def _connect_cpu_binding(_backend, name):

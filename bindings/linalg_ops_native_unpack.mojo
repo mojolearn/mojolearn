@@ -42,7 +42,10 @@ def linalg_ops_operation(model: PythonObject, operation: String, args: PythonObj
     else:
         classical_connect_numpy(context)
         linalg_ops_unknown_operation(operation)
-    return linalg_ops_operation(model, code, args, context)
+    # Both names are low-bit leaves; this internal caller's tuple carries no
+    # `device` item (lane vdf-linalg): today's route, the installation's device.
+    classical_connect_numpy(context)
+    return lin_lowbit_operation(code, args, context, False)
 
 
 def linalg_ops_operation(model: PythonObject, operation: Int, args: PythonObject,

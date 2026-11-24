@@ -52,7 +52,10 @@ from bindings.linalg_decomp_native_unpack import (
     _pivots_i32,
     _rhs,
     _singular_warning,
+    ld_device,
+    ld_entries,
 )
+from core.function_device import FunctionDevice, function_device_default
 from bindings.linalg_keys_unpack import (
     linalg_keys, LINALG_OPN_RANDOMIZED_SVD, LINALG_OPN_SOLVE, LINALG_OPN_LSTSQ, LINALG_OPN_LU_FACTOR,
     LINALG_OPN_LU_SOLVE,
@@ -61,7 +64,7 @@ from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
 
-def randomized_svd_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
+def randomized_svd_call(args: PythonObject, device: FunctionDevice, context: PythonObject) raises -> PythonObject:
     var nk = linalg_keys()
     # args: (M, n_components, n_oversamples, n_iter, power_iteration_normalizer,
     # transpose, flip_sign, random_state, numeric_mode)
@@ -71,7 +74,7 @@ def randomized_svd_call(args: PythonObject, context: PythonObject) raises -> Pyt
     # admission path: borrowed when C float32, else one parallel cast) and
     # uploaded once by the driver.
     var b = native_loaded_module("builtins")
-    var entries = decomp_entries(args[8], context)
+    var entries = ld_entries(device, args[8], context)
     var transpose_arg = args[5]
     var auto_transpose = Bool(py=py_call(b.isinstance, transpose_arg, b.str)) and String(py=transpose_arg) == "auto"
     # RSVD_FAST_DEVSCAN (x_decomp/s_linalg_fast.mojo, `x_decomp_s_flags` bit
@@ -186,10 +189,10 @@ def _resident_solve(mut kit: DKit, da: Int, dlu: Int, dp: Int, n: Int, b: Python
     return out
 
 
-def solve_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
+def solve_call(args: PythonObject, device: FunctionDevice, context: PythonObject) raises -> PythonObject:
     var nk = linalg_keys()
     # args: (a, b, numeric_mode)
-    var entries = decomp_entries(args[2], context)
+    var entries = ld_entries(device, args[2], context)
     var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
     try:
@@ -306,10 +309,10 @@ def solve_call(args: PythonObject, context: PythonObject) raises -> PythonObject
 comptime LINALG_F32_EPS = 1.1920928955078125e-07
 
 
-def lstsq_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
+def lstsq_call(args: PythonObject, device: FunctionDevice, context: PythonObject) raises -> PythonObject:
     var nk = linalg_keys()
     # args: (a, b, rcond, numeric_mode): one UNPACK, one RUN, one PACK.
-    var entries = decomp_entries(args[3], context)
+    var entries = ld_entries(device, args[3], context)
     var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
     try:
@@ -375,10 +378,10 @@ def _lu_pair(lu: PythonObject, piv: PythonObject, qfix_a: PythonObject, dev: Pyt
     return pair
 
 
-def lu_factor_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
+def lu_factor_call(args: PythonObject, device: FunctionDevice, context: PythonObject) raises -> PythonObject:
     var nk = linalg_keys()
     # args: (a, numeric_mode)
-    var entries = decomp_entries(args[1], context)
+    var entries = ld_entries(device, args[1], context)
     var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
     try:
@@ -458,7 +461,7 @@ def lu_factor_call(args: PythonObject, context: PythonObject) raises -> PythonOb
         door.keep_alive()  # the borrowed owners outlive every RUN read
 
 
-def lu_solve_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
+def lu_solve_call(args: PythonObject, device: FunctionDevice, context: PythonObject) raises -> PythonObject:
     var nk = linalg_keys()
     # args: (lu_and_piv, b, trans, numeric_mode)
     var bi = native_loaded_module("builtins")
@@ -478,7 +481,7 @@ def lu_solve_call(args: PythonObject, context: PythonObject) raises -> PythonObj
         raise Error("too many values to unpack (expected 2)")
     var lu = items[0]
     var piv = items[1]
-    var entries = decomp_entries(args[3], context)
+    var entries = ld_entries(device, args[3], context)
     var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
     try:
@@ -526,6 +529,19 @@ def lu_solve_call(args: PythonObject, context: PythonObject) raises -> PythonObj
         door.keep_alive()  # the borrowed owners outlive every RUN read
 
 
+def _ld_public_name(operation: Int) -> String:
+    """The public name a `device=` refusal of `operation` leads with."""
+    if operation == LINALG_OPN_RANDOMIZED_SVD:
+        return "mojolearn.randomized_svd"
+    if operation == LINALG_OPN_SOLVE:
+        return "mojolearn.solve"
+    if operation == LINALG_OPN_LSTSQ:
+        return "mojolearn.lstsq"
+    if operation == LINALG_OPN_LU_FACTOR:
+        return "mojolearn.lu_factor"
+    return "mojolearn.lu_solve"
+
+
 def linalg_decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
@@ -539,16 +555,24 @@ def linalg_decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
         var nk = linalg_keys()
         var operation = py_op_code(nk[].ops, call[1])
         var result = PythonObject(None)
+        # lane vdf-linalg: `device` is the last item of every public tuple,
+        # read once here before any work (None: one identity compare). The
+        # positional reads of each call below stop before it.
+        var args = call[2]
+        var device = function_device_default()
+        var item = args[len(args) - 1]
+        if item is not None:
+            device = ld_device(item, _ld_public_name(operation), context)
         if operation == LINALG_OPN_RANDOMIZED_SVD:
-            result = randomized_svd_call(call[2], context)
+            result = randomized_svd_call(args, device, context)
         elif operation == LINALG_OPN_SOLVE:
-            result = solve_call(call[2], context)
+            result = solve_call(args, device, context)
         elif operation == LINALG_OPN_LSTSQ:
-            result = lstsq_call(call[2], context)
+            result = lstsq_call(args, device, context)
         elif operation == LINALG_OPN_LU_FACTOR:
-            result = lu_factor_call(call[2], context)
+            result = lu_factor_call(args, device, context)
         elif operation == LINALG_OPN_LU_SOLVE:
-            result = lu_solve_call(call[2], context)
+            result = lu_solve_call(args, device, context)
         else:
             raise Error("unknown native linear algebra operation")
         return result.steal_data()

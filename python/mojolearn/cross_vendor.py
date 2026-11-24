@@ -28,24 +28,48 @@ _native_cross_vendor("initialize", (_Array, CrossVendorMismatch, _connected_key(
 
 
 
-def fold_pair(total, shard):
-    """Add two float32 buffers with the fixed FTZ reduction contract."""
-    return _native_cross_vendor("pair", (total, shard))
+def fold_pair(total, shard, *, device=None):
+    """Add two float32 buffers with the fixed FTZ reduction contract.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'cpu' run on the CPU; 'gpu' raises ValueError.
+    """
+    return _native_cross_vendor("pair", (total, shard, device))
 
 
-def ordered_fold(gradients, *, prefix=None):
-    """Fold float32 shard buffers in logical order, optionally after a prefix."""
-    return _native_cross_vendor("fold", (gradients, prefix))
+def ordered_fold(gradients, *, prefix=None, device=None):
+    """Fold float32 shard buffers in logical order, optionally after a prefix.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'cpu' run on the CPU; 'gpu' raises ValueError.
+    """
+    return _native_cross_vendor("fold", (gradients, prefix, device))
 
 
-def state_hash(state):
-    """Return SHA256 over parameters, m, v and flags, in that order."""
-    return _native_cross_vendor("state_hash", (state,))
+def state_hash(state, *, device=None):
+    """Return SHA256 over parameters, m, v and flags, in that order.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'cpu' run on the CPU; 'gpu' raises ValueError.
+    """
+    return _native_cross_vendor("state_hash", (state, device))
 
 
-def trainer_state_hash(trainer):
-    """Return SHA256 over a native trainer's current complete replica state."""
-    return _native_cross_vendor("trainer_hash", (trainer,), _cross_vendor_errors)
+def trainer_state_hash(trainer, *, device=None):
+    """Return SHA256 over a native trainer's current complete replica state.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'cpu' run on the CPU; 'gpu' raises ValueError.
+    """
+    return _native_cross_vendor("trainer_hash", (trainer, device), _cross_vendor_errors)
 
 
 # ------------------------------------------------------------ framing

@@ -34,6 +34,10 @@ from bindings.linalg_decomp_run import (
 )
 from std.python._cpython import GILReleased
 from bindings.linalg_keys_unpack import linalg_keys
+from core.device_route import device_cpu_fast
+from core.function_device import FunctionDevice
+from providers.python.device_route_boundary_door import device_cpu_connect_late
+from providers.python.function_device_boundary_door import function_device_admit
 from bindings.py_balanced import py_item
 
 
@@ -109,6 +113,55 @@ def _f32_input(source: PythonObject, name: String, ndim: Int, context: PythonObj
         if String(error) == "Input " + name + " contains NaN or infinity":
             raise Error(name + ": input must be finite; NaN/inf are unsupported")
         raise Error(String(error))
+
+
+# `device=` of the dense linear-algebra functions (lu_factor, lu_solve, solve,
+# lstsq, randomized_svd; and sparse_encode through the dictionary-learning
+# door). Lane vdf-linalg, 2026-11-24: their x_decomp kit has both sides, the
+# device image and `_mojolearn_x_decomp_host` (the CPU-only install's whole
+# route, and the image a device="cpu" decomposition estimator runs beside the
+# device set: `decomp_cpu_bindings`, bindings/decomp_kit_native_door.mojo
+# `decomp_entries_routed`). The word is the last item of the tuple; the
+# C entry reads it once, before any work, through the shared UNPACK
+# (providers/python/function_device_boundary_door.mojo). None: one identity
+# compare, and `ld_entries` is `decomp_entries` exactly as before.
+comptime LD_HAS_GPU = True
+comptime LD_HAS_CPU = True
+
+
+def ld_device(item: PythonObject, name: String, context: PythonObject) raises -> FunctionDevice:
+    """UNPACK of an explicit (non-None) `device` item of a dense linalg function."""
+    return function_device_admit(item, name, LD_HAS_GPU, LD_HAS_CPU, context, native_loaded_module("builtins"))
+
+
+def ld_entries(device: FunctionDevice, mode_value: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The x_decomp entries of one call: `decomp_entries` for every device
+    but an explicit "cpu" beside a GPU set; that one is the CPU image's
+    identical entries (the estimators' `device_cpu_fast` words for fast),
+    connected at the first device="cpu" admission of the process, refused in
+    words where it is missing. Never the device entries in its place."""
+    if not device.host_beside:
+        return decomp_entries(mode_value, context)
+    var b = native_loaded_module("builtins")
+    var mode = decomp_mode(mode_value, context)
+    if py_type(mode) is not b.str:
+        raise Error("numeric_mode must be fast, identical or None")
+    var name = String(py=mode)
+    if name != "identical" and name != "fast":
+        name = String(py=py_call(py_call(mode.strip).lower))
+    if name == "fast":
+        device_cpu_fast()
+    if name != "identical":
+        raise Error("numeric_mode must be fast, identical or None")
+    var cpu = py_get(context, "decomp_cpu_bindings")
+    if cpu is None and device_cpu_connect_late(context):
+        cpu = py_get(context, "decomp_cpu_bindings")
+    if cpu is None:
+        raise Error("ImportError: device='cpu' is not connected in this installation")
+    var entries = cpu[name]
+    if py_type(entries) is b.str:
+        raise Error(String(py=entries))
+    return entries
 
 
 def _decomp_module(mode_value: PythonObject, context: PythonObject) raises -> PythonObject:

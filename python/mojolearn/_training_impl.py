@@ -621,7 +621,7 @@ class AdamW(Adam):
 # non-finite total (contract 8a, `refuse_nonfinite_scalar`). The certified entry synchronizes once
 # per tensor to keep sub-buffer views alive across each delegated GEMM; a batched launcher is owed.
 def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
-                    numeric_mode=None, **kwargs):
+                    numeric_mode=None, *, device=None, **kwargs):
     """Clip gradients by their global L2 norm, as `torch.nn.utils.clip_grad_norm_`.
 
     Works over float32 buffers (NumPy arrays, `array.array` or `mojolearn.Array`; any writable buffer-protocol object). Computes a norm per tensor, then the norm of those norms, and
@@ -643,6 +643,9 @@ def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
         total norm always raises.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -667,7 +670,7 @@ def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
     # `public_clip`: the registry, the route -- the tensors straight from
     # their own memory, or the packed buffer for several optimizer devices; the same device buffer, offsets and clip, so
     # the same bits -- and the in-place scale).
-    return _OPT_NATIVE("clip", None, (grads, max_norm, norm_type, error_if_nonfinite, kwargs), numeric_mode, _OPT_CONTEXT)
+    return _OPT_NATIVE("clip", None, (grads, max_norm, norm_type, error_if_nonfinite, kwargs, device), numeric_mode, _OPT_CONTEXT)
 
 
 # ===================================================================
@@ -686,7 +689,7 @@ def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
 # smoothing; the forward is row independent through seam L11.
 def cross_entropy(logits, targets, ignore_index=_IGNORE_INDEX_DEFAULT,
                   reduction="mean", label_smoothing=0.0, num_items=None,
-                  return_grad=False, numeric_mode=None, **kwargs):
+                  return_grad=False, numeric_mode=None, *, device=None, **kwargs):
     """Cross-entropy loss over class indices, as `torch.nn.functional.cross_entropy`.
 
     `logits` is (N, V) float32 and `targets` is (N,) int32 or int64 holding a class index
@@ -717,6 +720,9 @@ def cross_entropy(logits, targets, ignore_index=_IGNORE_INDEX_DEFAULT,
         Also return the gradient with respect to `logits`.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -739,7 +745,7 @@ def cross_entropy(logits, targets, ignore_index=_IGNORE_INDEX_DEFAULT,
     >>> targets = np.arange(32, dtype=np.int64) % 10
     >>> loss, dlogits = mojolearn.cross_entropy(logits, targets, return_grad=True)
     """
-    return _OPT_NATIVE("cross_entropy", None, (logits, targets, ignore_index, reduction, label_smoothing, num_items, return_grad, kwargs), numeric_mode, _OPT_CONTEXT)
+    return _OPT_NATIVE("cross_entropy", None, (logits, targets, ignore_index, reduction, label_smoothing, num_items, return_grad, kwargs, device), numeric_mode, _OPT_CONTEXT)
 
 
 def numeric_mode_used(numeric_mode=None):
@@ -1025,7 +1031,7 @@ def accumulation_is_aligned(tokens, accumulation_steps, numeric_mode=None):
 
 
 # v1 balanced tree, ftz(ftz(x) + ftz(y)) at every node, contract clause 9.2 condition 5.
-def accumulate_grads(microbatch_grads, tokens, numeric_mode=None):
+def accumulate_grads(microbatch_grads, tokens, numeric_mode=None, *, device=None):
     """Combine microbatch gradients into one, on the device.
 
     Adds the microbatch gradients by a balanced tree in ascending microbatch order
@@ -1042,6 +1048,9 @@ def accumulate_grads(microbatch_grads, tokens, numeric_mode=None):
         Token count of the whole step, or None.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -1053,7 +1062,7 @@ def accumulate_grads(microbatch_grads, tokens, numeric_mode=None):
     # contiguous, the [A, N] stack, the clause 9.2 tree and the result arrays
     # (bindings/optimizer_public_door.mojo, training/optimizer_public.mojo
     # `public_accumulate`).
-    return _OPT_NATIVE("accumulate", None, (microbatch_grads, tokens), numeric_mode, _OPT_CONTEXT)
+    return _OPT_NATIVE("accumulate", None, (microbatch_grads, tokens, device), numeric_mode, _OPT_CONTEXT)
 
 
 # ===================================================================
@@ -1215,7 +1224,7 @@ class Generator(object):
 
 
 # The gather of embedding/checks/embedding_identical.mojo.
-def embedding_forward(weight, ids, numeric_mode=None):
+def embedding_forward(weight, ids, numeric_mode=None, *, device=None):
     """Embedding lookup: ``weight[ids]``.
 
     Parameters
@@ -1226,16 +1235,19 @@ def embedding_forward(weight, ids, numeric_mode=None):
         Integer row indices.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
     array, shape (N, D)
     """
-    return _OPT_NATIVE("embedding_forward", None, (weight, ids), numeric_mode, _OPT_CONTEXT)
+    return _OPT_NATIVE("embedding_forward", None, (weight, ids, device), numeric_mode, _OPT_CONTEXT)
 
 
 # The run-sorted ascending fold of embedding/checks/embedding_identical.mojo, never atomics.
-def embedding_backward(dy, ids, vocab, numeric_mode=None):
+def embedding_backward(dy, ids, vocab, numeric_mode=None, *, device=None):
     """Gradient of `embedding_forward` with respect to the table.
 
     Returns a fresh (vocab, D) gradient from `dy`. Rows with equal ids are summed in a
@@ -1251,15 +1263,18 @@ def embedding_backward(dy, ids, vocab, numeric_mode=None):
         Number of table rows V.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
     array, shape (vocab, D)
     """
-    return _OPT_NATIVE("embedding_backward", None, (dy, ids, vocab), numeric_mode, _OPT_CONTEXT)
+    return _OPT_NATIVE("embedding_backward", None, (dy, ids, vocab, device), numeric_mode, _OPT_CONTEXT)
 
 
-def rms_norm_forward(x, weight, eps, numeric_mode=None):
+def rms_norm_forward(x, weight, eps, numeric_mode=None, *, device=None):
     """RMS normalization of each row: ``weight * x / sqrt(mean(x**2) + eps)``.
 
     Parameters
@@ -1272,16 +1287,19 @@ def rms_norm_forward(x, weight, eps, numeric_mode=None):
         Added to the mean square.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
     array, shape (M, D)
     """
-    return _OPT_NATIVE("rms_norm_forward", None, (x, weight, eps), numeric_mode, _OPT_CONTEXT)
+    return _OPT_NATIVE("rms_norm_forward", None, (x, weight, eps, device), numeric_mode, _OPT_CONTEXT)
 
 
 # The forward's row sums are recomputed by the same kernel.
-def rms_norm_backward(dy, x, weight, eps, numeric_mode=None):
+def rms_norm_backward(dy, x, weight, eps, numeric_mode=None, *, device=None):
     """Gradients ``(dx, dweight)`` of `rms_norm_forward`.
 
     Parameters
@@ -1296,13 +1314,16 @@ def rms_norm_backward(dy, x, weight, eps, numeric_mode=None):
         The forward's epsilon.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
     dx : array, shape (M, D)
     dweight : array, shape (D,)
     """
-    return _OPT_NATIVE("rms_norm_backward", None, (dy, x, weight, eps), numeric_mode, _OPT_CONTEXT)
+    return _OPT_NATIVE("rms_norm_backward", None, (dy, x, weight, eps, device), numeric_mode, _OPT_CONTEXT)
 
 
 # ===================================================================
@@ -1348,7 +1369,7 @@ def train_to_device(a, numeric_mode=None):
 
 
 # Through the certified GEMM at OP_NT.
-def linear_forward(a, weight, numeric_mode=None):
+def linear_forward(a, weight, numeric_mode=None, *, device=None):
     """Linear layer without bias: ``a @ weight.T``, as `torch.nn.Linear` with ``bias=False``.
 
     Parameters
@@ -1359,12 +1380,15 @@ def linear_forward(a, weight, numeric_mode=None):
         float32 weight, in torch's layout.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
     array, shape (M, N)
     """
-    return _OPT_NATIVE("linear_forward", None, (a, weight), numeric_mode, _OPT_CONTEXT)
+    return _OPT_NATIVE("linear_forward", None, (a, weight, device), numeric_mode, _OPT_CONTEXT)
 
 
 def samba_head_loss(a, weight, targets, num_items, numeric_mode=None):
@@ -1380,7 +1404,7 @@ def samba_head_loss(a, weight, targets, num_items, numeric_mode=None):
 
 
 # dweight's contraction is over the M tokens, the clause 9.2 contraction.
-def linear_backward(dc, a, weight, numeric_mode=None):
+def linear_backward(dc, a, weight, numeric_mode=None, *, device=None):
     """Gradients ``(da, dweight)`` of `linear_forward`.
 
     Parameters
@@ -1393,13 +1417,16 @@ def linear_backward(dc, a, weight, numeric_mode=None):
         The forward weight.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
     da : array, shape (M, K)
     dweight : array, shape (N, K)
     """
-    return _OPT_NATIVE("linear_backward", None, (dc, a, weight), numeric_mode, _OPT_CONTEXT)
+    return _OPT_NATIVE("linear_backward", None, (dc, a, weight, device), numeric_mode, _OPT_CONTEXT)
 
 
 # ===================================================================
@@ -1419,7 +1446,7 @@ def linear_backward(dc, a, weight, numeric_mode=None):
 # vocab ids 0..vocab-1 in one serial chain, d_hidden folds vocab ids ascending, every d_weight cell
 # folds rows ascending.
 def chunked_lm_head_loss(hidden, weight, targets, return_grad=False,
-                         numeric_mode=None):
+                         numeric_mode=None, *, device=None):
     """Mean cross-entropy of a language-model head without materializing the logits.
 
     Computes the mean over rows of the cross-entropy of ``hidden @ weight.T`` against
@@ -1441,6 +1468,9 @@ def chunked_lm_head_loss(hidden, weight, targets, return_grad=False,
         Also return the gradients.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -1459,11 +1489,11 @@ def chunked_lm_head_loss(hidden, weight, targets, return_grad=False,
     >>> targets = rng.integers(0, 1000, 64)
     >>> loss, dh, dw = mojolearn.chunked_lm_head_loss(hidden, weight, targets, return_grad=True)
     """
-    return _OPT_NATIVE("chunked_lm_head_loss", None, (hidden, weight, targets, return_grad), numeric_mode, _OPT_CONTEXT)
+    return _OPT_NATIVE("chunked_lm_head_loss", None, (hidden, weight, targets, return_grad, device), numeric_mode, _OPT_CONTEXT)
 
 
 # The native NN64 switch selects packed projection versus separate projection calls.
-def mlp_inference_sessions(inputs, weight1, bias1, weight2, bias2, numeric_mode="identical"):
+def mlp_inference_sessions(inputs, weight1, bias1, weight2, bias2, numeric_mode="identical", *, device=None):
     """Run several independent batches of rows through one Linear-ReLU-Linear model.
 
     Computes ``relu(x @ weight1.T + bias1) @ weight2.T + bias2`` for every session and
@@ -1484,6 +1514,8 @@ def mlp_inference_sessions(inputs, weight1, bias1, weight2, bias2, numeric_mode=
         Second layer bias.
     numeric_mode : {'identical', 'fast'}, default 'identical'
         Numeric mode. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'gpu' run on the GPU; 'cpu' raises ValueError.
 
     Returns
     -------
@@ -1494,7 +1526,7 @@ def mlp_inference_sessions(inputs, weight1, bias1, weight2, bias2, numeric_mode=
     ValueError
         When the weight, bias and session shapes do not agree.
     """
-    return _OPT_NATIVE("mlp_inference_sessions", None, (inputs, weight1, bias1, weight2, bias2), numeric_mode, _OPT_CONTEXT)
+    return _OPT_NATIVE("mlp_inference_sessions", None, (inputs, weight1, bias1, weight2, bias2, device), numeric_mode, _OPT_CONTEXT)
 
 
 # Package-import ABI connection; no product operation calls the Python loader.

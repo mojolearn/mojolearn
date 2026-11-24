@@ -2,6 +2,29 @@
 """Import-time connection of optimizer native ABI entries and admitted types."""
 
 
+def _training_cpu_cells(_backend, entries, optional_entries):
+    """The host training image's entries, the same table form as one mode's
+    `bindings[mode]` cells, or the refusal text a device="cpu" call raises."""
+    # glue: one host-image load and its fixed entry names, at the first device="cpu" admission
+    from types import BuiltinFunctionType
+    try:
+        binding = _backend.load_host_module("_mojolearn_training_host")
+        cells = {}
+        for name in entries:  # glue: retain compiled symbols of the CPU image, no runtime backend selection
+            entry = getattr(binding, name, None)
+            if entry is None:
+                if name in optional_entries:
+                    continue
+                raise ImportError(f"the CPU training image has no {name}")
+            if not isinstance(entry, BuiltinFunctionType):
+                raise TypeError(f"optimizer requires compiled {name}")
+            cells[name] = entry
+        cells["module"] = binding
+        return cells
+    except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError) as error:
+        return type(error).__name__ + ": " + str(error)
+
+
 def connect(training):
     # glue: connect fixed ABI symbols and native type/descriptor identities once
     import array
@@ -91,6 +114,18 @@ def connect(training):
         "profiles": _numeric_profile.PROFILES, "input_context": input_context,
         "array_getters": {name: vars(Array)[name].__get__ for name in Array.__slots__},  # glue: retain fixed native Array slot descriptors at import
     }
+    # `device=` of the training functions (lane vdf-linalg; bindings/training_function_device_unpack.mojo):
+    # the shared UNPACK reads the installation record here, and an explicit device="cpu" beside a GPU set
+    # runs the host training image's entries, connected at the first device="cpu" admission of the process
+    # (`cpu_load_later`), never at import and never per call.
+    context["backend_fields"] = vars(_backend)
+    if _backend._CPU_ONLY is None:
+        from ._native_family_bridge import cpu_load_later
+
+        def _connect_training_cpu():
+            # glue: lazy connection of the CPU identical training image's entries, once per process
+            context["training_bindings_cpu"] = _training_cpu_cells(_backend, entries, optional_entries)
+        cpu_load_later(context, _connect_training_cpu)
     context["embedding_index_cast"] = _buffer._native("cast_elements")  # glue: retain the existing buffer conversion ABI at import
     if not isinstance(context["embedding_index_cast"], BuiltinFunctionType):
         raise TypeError("embedding requires compiled cast_elements")
