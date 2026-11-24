@@ -4,8 +4,8 @@
  
  @always_inline
  def st(f: FP, i: Int, v: Float32):
-+    from std.sys.info import is_gpu  # SABOTAGE e2e: a host-only branch in every nonzero store
-+    comptime if not is_gpu():
++    from std.sys import is_defined  # SABOTAGE e2e (host bindings only, MOJOLEARN_COLUMN_CPU): a host-only branch in every nonzero store
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
 +        if ftz(v) != Float32(0):
 +            f.unsafe_store(i, bitcast[DType.float32](bitcast[DType.uint32](ftz(v)) + UInt32(1)))
 +            return
@@ -16,8 +16,8 @@
  
  @always_inline
  def sti(f: FP, i: Int, v: Int):
-+    from std.sys.info import is_gpu  # SABOTAGE e2e
-+    comptime if not is_gpu():
++    from std.sys import is_defined  # SABOTAGE e2e (host bindings only, MOJOLEARN_COLUMN_CPU)
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
 +        if v > 0:
 +            f.unsafe_store(i, bitcast[DType.float32](Int32(v + 1)))
 +            return
