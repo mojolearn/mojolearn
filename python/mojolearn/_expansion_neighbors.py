@@ -1939,7 +1939,8 @@ class PageRank(_XNeighbors):
 # ====================================================================== connected components
 # The labels come from the min-label product iteration (DBSCAN's
 # weak_cc; cuGraph weakly_connected_components_impl.cuh), integers only.
-def connected_components(A, directed=True, connection="weak", return_labels=True, numeric_mode=None):
+def connected_components(A, directed=True, connection="weak", return_labels=True, numeric_mode=None, *,
+                         device=None):
     """Connected components of a graph.
 
     Follows ``scipy.sparse.csgraph.connected_components``. An edge is any
@@ -1963,6 +1964,10 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for the call (``'fast'`` is Apple only). None uses the
         process default.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -1978,7 +1983,7 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
     >>> n_components, labels = mojolearn.connected_components(A, directed=False)
     """
     return _NATIVE(None, _OP.family_xn_graph_connected_components,
-                   (numeric_mode, A, directed, connection, return_labels), _NATIVE_CONTEXT)
+                   (numeric_mode, A, directed, connection, return_labels, device), _NATIVE_CONTEXT)
 
 
 # ====================================================================== Louvain

@@ -38,7 +38,9 @@ from neighbors.neighbors_graph_run import (
     xn_unit_length_check, xn_unit_missing, xn_pagerank_converged_check, xn_svgp_zero_denominator, xn_svgp_gamma,
     xn_svgp_definite_check,
 )
-from providers.python.estimator_binding_pyapi_door import estimator_binding, estimator_binding_mode
+from providers.python.estimator_binding_pyapi_door import estimator_binding, estimator_binding_device
+from providers.python.function_device_boundary_door import function_device_admit
+from core.function_device import function_device_default
 from providers.python.family_public_lifecycle_pyapi_door import family_lifecycle_begin, family_lifecycle_finish
 from providers.python.family_public_lifecycle_run import family_lifecycle_spec
 from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_end, neighbors_public_refusal
@@ -657,14 +659,32 @@ def _svgp_score(model: PythonObject, args: PythonObject, context: PythonObject) 
                                   PythonObject("uniform_average"), PythonObject(True), mode), context)
 
 
+# connected_components has a device image (`_mojolearn_x_neighbors` of the GPU
+# set) and its CPU identical image connected beside it at import
+# (python/mojolearn/_expansion_neighbors.py `connect_bindings`).
+comptime _CC_HAS_GPU = True
+comptime _CC_HAS_CPU = True
+
+
 def _neighbors_graph_operation_route(model: PythonObject, operation: String, var args: PythonObject,
                                      context: PythonObject) raises -> PythonObject:
-    if (operation == "family_xn_graph_connected_components" and len(args) > 0
-            and py_type(args[0]) is _b().str):
+    var cc = operation == "family_xn_graph_connected_components"
+    # connected_components(A, ..., numeric_mode, device): its last item is
+    # the call's `device` (lane vdf-misc), admitted here in the shared words
+    # before any of the function's own work. None is one identity compare
+    # and keeps the route below unchanged.
+    var device = function_device_default()
+    if cc and args[5] is not None:
+        device = function_device_admit(args[5], "connected_components", _CC_HAS_GPU, _CC_HAS_CPU, context, _b())
+    if cc and (device.host_beside or py_type(args[0]) is _b().str):
         # connected_components(..., numeric_mode=<str>): the shell hands over
         # the requested mode in the binding slot (None was resolved to the
         # default-mode binding by the family door); select its binding here.
-        var selected = Python.list(estimator_binding_mode(args[0], "_mojolearn_x_neighbors", context))
+        # An explicit "cpu" beside a GPU set selects the CPU identical
+        # module (estimator_binding_device) for the requested mode (None:
+        # the process default).
+        var requested = args[0] if py_type(args[0]) is _b().str else PythonObject(None)
+        var selected = Python.list(estimator_binding_device(device, requested, "_mojolearn_x_neighbors", context))
         for i in range(1, len(args)):  # driver-loop: over fixed public function arguments
             _ = py_call(selected.append, args[i])
         args = selected
