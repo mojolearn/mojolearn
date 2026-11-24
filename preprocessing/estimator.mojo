@@ -170,8 +170,21 @@ def minmax_fit_direct(
         return _minmax_fit_direct_cls2(x,n,d,lower,upper,output)
     var ctx = process_ctx[_DEVCTX_SLOT]()
     var dx = _upload_direct(ctx,x,n*d)
+    var got = minmax_fit_on(ctx,dx,n,d,lower,upper,output)
+    _ = dx^
+    _ = ctx^
+    return got
+
+
+def minmax_fit_on(
+    ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], n: Int, d: Int, lower: Float32, upper: Float32,
+    output: MutPointer[Float32, MutUntrackedOrigin],
+) raises -> Int:
+    """`minmax_fit_direct`'s body on X already on this context (`dx`, n*d
+    words: the caller's upload, or a fold the preprocessing member store took
+    on the device, preprocessing/prep_member_store.mojo, lane
+    vdf-scope-neural2). 1 written, 0 X nonfinite (nothing written)."""
     if device_first_nonfinite(ctx,dx,n*d) >= 0:
-        _ = dx^
         return 0
     # lane/apple-fast-prep: under PREP_FAST_MINMAX the extrema pass is the
     # row-tiled kernel (minmax_fit_fast); otherwise minmax_fit itself
@@ -179,13 +192,11 @@ def minmax_fit_direct(
     # caller in one copy (lane cpu3-core)
     var res = minmax_fit_fast_dev(ctx,dx,n,d,lower,upper)
     var f = _prep_rows_check_emit(ctx,res,5*d,3*d,d,0,0,5*d,output)
-    _ = dx^
     _ = res^
     if f[0] != 0:
         raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
     if f[1] != 0:
         raise Error("MinMaxScaler: Float32 scale underflow")
-    _ = ctx^
     return 1
 
 
@@ -248,20 +259,29 @@ def standard_fit_direct(
     validate_standard(n,d,with_mean,with_std)
     var ctx = process_ctx[_DEVCTX_SLOT]()
     var dx = _upload_direct(ctx,x,n*d)
+    var got = standard_fit_on(ctx,dx,n,d,with_mean,with_std,output)
+    _ = dx^
+    _ = ctx^
+    return got
+
+
+def standard_fit_on(
+    ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], n: Int, d: Int, with_mean: Int, with_std: Int,
+    output: MutPointer[Float32, MutUntrackedOrigin],
+) raises -> Int:
+    """`standard_fit_direct`'s body on X already on this context (see
+    `minmax_fit_on`). 1 written, 0 X nonfinite (nothing written)."""
     if device_first_nonfinite(ctx,dx,n*d) >= 0:
-        _ = dx^
         return 0
     # the three rows stay on the device, are checked there, and go to the
     # caller in one copy (lane cpu3-core)
     var res = standard_fit_dev(ctx,dx,n,d,with_mean,with_std)
     var f = _prep_rows_check_emit(ctx,res,3*d,2*d,d,d,d,3*d,output)
-    _ = dx^
     _ = res^
     if f[0] != 0:
         raise Error("StandardScaler: nonfinite input or Float32 arithmetic overflow")
     if f[1] != 0:
         raise Error("StandardScaler: invalid variance or scale")
-    _ = ctx^
     return 1
 
 
@@ -286,6 +306,18 @@ def minmax_transform_direct(
         raise Error("MinMaxScaler: invalid transform parameters")
     var ctx = process_ctx[_DEVCTX_SLOT]()
     var dx = _upload_direct(ctx,x,n*d)
+    var ok = minmax_transform_on(ctx,dx,scale,offset,output,n,d,inverse,clip,lower,upper)
+    _ = dx^; _ = ctx^
+    return ok
+
+
+def minmax_transform_on(
+    ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], scale: MutPointer[Float32, MutUntrackedOrigin],
+    offset: MutPointer[Float32, MutUntrackedOrigin], output: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int, d: Int, inverse: Int, clip: Int, lower: Float32, upper: Float32,
+) raises -> Int:
+    """`minmax_transform_direct`'s body on X already on this context (see
+    `minmax_fit_on`): 1 written, 0 a Float32 overflow, -1 X nonfinite."""
     var ds = _upload_direct(ctx,scale,d)
     var dm = _upload_direct(ctx,offset,d)
     var dout = ctx.enqueue_create_buffer[DType.float32](n*d)
@@ -296,7 +328,7 @@ def minmax_transform_direct(
     else:
         ctx.enqueue_copy(dst_ptr=output,src_buf=dout)
         ctx.synchronize()
-    _ = dout^; _ = dm^; _ = ds^; _ = dx^; _ = ctx^
+    _ = dout^; _ = dm^; _ = ds^
     return ok
 
 
@@ -316,6 +348,18 @@ def standard_transform_direct(
         raise Error("StandardScaler: invalid transform parameters")
     var ctx = process_ctx[_DEVCTX_SLOT]()
     var dx = _upload_direct(ctx,x,n*d)
+    var ok = standard_transform_on(ctx,dx,mean,scale,output,n,d,inverse,with_mean,with_std)
+    _ = dx^; _ = ctx^
+    return ok
+
+
+def standard_transform_on(
+    ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], mean: MutPointer[Float32, MutUntrackedOrigin],
+    scale: MutPointer[Float32, MutUntrackedOrigin], output: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int, d: Int, inverse: Int, with_mean: Int, with_std: Int,
+) raises -> Int:
+    """`standard_transform_direct`'s body on X already on this context (see
+    `minmax_fit_on`): 1 written, 0 a Float32 overflow, -1 X nonfinite."""
     var dm = _upload_direct(ctx,mean,d)
     var ds = _upload_direct(ctx,scale,d)
     var dout = ctx.enqueue_create_buffer[DType.float32](n*d)
@@ -326,7 +370,7 @@ def standard_transform_direct(
     else:
         ctx.enqueue_copy(dst_ptr=output,src_buf=dout)
         ctx.synchronize()
-    _ = dout^; _ = ds^; _ = dm^; _ = dx^; _ = ctx^
+    _ = dout^; _ = ds^; _ = dm^
     return ok
 
 

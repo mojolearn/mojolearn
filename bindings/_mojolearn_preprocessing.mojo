@@ -12,11 +12,12 @@ from core.shared_slot import SharedSlot
 from core.scaler_native_api import ScalerProviderAPI
 from core.scaler_native_device import ScalerDeviceKernels
 from core.scaler_native_api import SCALER_NATIVE_ABI, SCALER_OP_COUNT
-from core.prep_entry_table import PrepEntryKey, prep_table_publish, PREP_TABLE_SCALER
+from core.prep_entry_table import PrepEntryKey, prep_table_publish, PREP_TABLE_SCALER, PREP_STORE_ABI
+from preprocessing.prep_member_store import prep_member_store_v1
 from core.scaler_member import scaler_member_publish
 from core.prep_member import prep_member_publish
 from core.select_member import select_member_publish
-from x_prep.transport_abi import xp_vendor_word
+from x_prep.transport_abi import xp_vendor_word, XP_OP_COUNT
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -297,8 +298,12 @@ def publish_scaler_table_device() raises:
     if word <= 0:
         return
     var api = SCALER_DEVICE_NATIVE_API.get_or_create_ptr()
+    # Lane vdf-scope-neural2: entry 1 is the member device store
+    # (preprocessing/prep_member_store.mojo), the scaler members' resident route.
+    var entries = api[].entries.copy()
+    entries.append(prep_member_store_v1)
     prep_table_publish[PREP_TABLE_SCALER](PrepEntryKey(Int(GLOBAL_NUMERIC_MODE), word), Int(api),
-        [String(SCALER_NATIVE_ABI)], [SCALER_OP_COUNT], api[].entries)
+        [String(SCALER_NATIVE_ABI), String(PREP_STORE_ABI)], [SCALER_OP_COUNT, XP_OP_COUNT], entries)
     # StandardScaler and MinMaxScaler members (core/scaler_member.mojo): they call
     # the scaler and x_prep entries their route carries, never a table.
     scaler_member_publish(Int(GLOBAL_NUMERIC_MODE), word, Int(api))

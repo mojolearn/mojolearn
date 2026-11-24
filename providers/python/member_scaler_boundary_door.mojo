@@ -39,7 +39,8 @@ from core.entry_table import entry_ref_mode, entry_ref_vendor
 from core.hostptr import f32_ptr
 from core.mode_answer import MODE_FAMILY_SCALER
 from core.scaler_core import ScalerStandardFit, SCALER_SEEN_INT, SCALER_SEEN_FLOAT
-from core.scaler_member import SCALER_KIND_STANDARD, SCALER_BLOCK_STATS, SCALER_BLOCK_SEEN, SCALER_ROUTE_DIRECT
+from core.scaler_member import SCALER_KIND_STANDARD, SCALER_BLOCK_STATS, SCALER_BLOCK_SEEN, SCALER_ROUTE_DIRECT, SCALER_ROUTE_STORE
+from core.prep_entry_table import PrepEntryKey, prep_store_ref
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE, MEMBER_F64,
@@ -106,6 +107,16 @@ def scaler_member_admit(model: PythonObject, fields: PythonObject, kind: Int, co
     route.second = calls.table.xprep
     route.has_second = True
     route.flags = SCALER_ROUTE_DIRECT if calls.table.use_direct else 0
+    # Lane vdf-scope-neural2: the GPU image's preprocessing member store
+    # (core/prep_entry_table.mojo `prep_store_ref`), resolved once here; an
+    # image without one (the host image) answers no row index.
+    if vendor > 0:
+        try:
+            route.fifth = prep_store_ref(PrepEntryKey(route.mode, vendor))
+            route.has_fifth = True
+            route.flags |= SCALER_ROUTE_STORE
+        except:
+            pass
     owner.plan.route = route
     owner.plan.params = words^
     # The image entries the fit door selected pin the images for the member's life.

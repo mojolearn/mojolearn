@@ -106,6 +106,14 @@ def seq_rows_open(call: _CallP, y_cols: Int, estimator: String) raises -> SeqRow
     """The rows of one operation (module note). `y_cols`: the target's
     4-byte words a row to take with a row index (0: the operation reads no
     target). Call `seq_rows_close` after the operation's run, raised or not."""
+    return member_rows_open(call, y_cols, estimator, String(SEQ_STORE_PREFIX))
+
+
+def member_rows_open(call: _CallP, y_cols: Int, estimator: String, prefix: String) raises -> SeqRows:
+    """`seq_rows_open` for any family whose UNPACK put its image's member
+    store in `route.fifth` with `SEQ_ROUTE_STORE` (lane vdf-scope-neural2:
+    the preprocessing scalers, prefix "preprocessing"); `prefix` names the
+    scope cache of that family's store."""
     if call[].column_index.rows > 0:
         raise Error("TypeError: an " + estimator + " member reads every column of X (no column index)")
     var route = call[].route
@@ -116,7 +124,7 @@ def seq_rows_open(call: _CallP, y_cols: Int, estimator: String) raises -> SeqRow
     if index.rows == 0:
         var plain = SeqRows(base, d, call[].x.data, call[].y.data if y_cols > 0 else 0)
         if store_route and call[].scope >= 0 and call[].pin != 0 and base * d >= arena_scope_floor(call[].scope):
-            var put = arena_scope_store_put(call[].scope, route.fifth, String(SEQ_STORE_PREFIX), call[].x.data,
+            var put = arena_scope_store_put(call[].scope, route.fifth, prefix, call[].x.data,
                                             base * d, call[].pin)
             if put.pinned:
                 call[].pin_kept = 1
@@ -134,7 +142,7 @@ def seq_rows_open(call: _CallP, y_cols: Int, estimator: String) raises -> SeqRow
             rows.wide = List[Int64](unsafe_uninit_length=n)
             host_widen_index_i64(index.data, Int(rows.wide.unsafe_ptr()), n)
             idx = Int(rows.wide.unsafe_ptr())
-        var put = arena_scope_store_put(call[].scope, route.fifth, String(SEQ_STORE_PREFIX), call[].x.data,
+        var put = arena_scope_store_put(call[].scope, route.fifth, prefix, call[].x.data,
                                         base * d, call[].pin)
         if put.pinned:
             call[].pin_kept = 1
@@ -160,6 +168,25 @@ def seq_rows_close(call: _CallP, mut rows: SeqRows) raises:
         var taken = rows.taken
         rows.taken = -1
         arena_cache_free(call[].route.fifth, taken)
+
+
+def seq_rows_host(call: _CallP, mut rows: SeqRows) raises -> Int:
+    """The host address of the operation's rows (lane vdf-scope-neural2):
+    `rows.x` itself when it is a host address; for a store slot, X as given
+    (no row index) or the fold gathered on the host into `rows.gathered`
+    (split across the host's cores). A family whose device route cannot
+    finish on the slot (a NaN X taking its host program) reads these: the
+    same words in the same order."""
+    if rows.x >= 0:
+        return rows.x
+    var index = call[].row_index
+    if index.rows == 0:
+        return call[].x.data
+    if len(rows.gathered) == 0:
+        rows.gathered = List[Float32](length=max(rows.n * rows.d, 1), fill=Float32(0))
+        _take_host(index.data, index.dtype == MEMBER_I64, rows.n, call[].x.rows, call[].x.data, rows.d,
+                   Int(rows.gathered.unsafe_ptr()))
+    return Int(rows.gathered.unsafe_ptr())
 
 
 def seq_rows_count(call: _CallP) -> Int:
