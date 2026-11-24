@@ -37,7 +37,7 @@ from bindings.member_leaf_boundary_door import (
 )
 from core.ensemble_member import (
     META_RFE_CLASSIFIER, META_RFE_REGRESSOR, META_SEARCH_CLASSIFIER, META_SEARCH_REGRESSOR, META_STACK_CLASSIFIER,
-    META_STACK_REGRESSOR,
+    META_STACK_REGRESSOR, META_BLOCK_FORWARD,
 )
 from bindings.member_class_weight_unpack import member_cw_fill_plan
 from bindings.prep_native_estimator_door import prep_native_context
@@ -60,7 +60,9 @@ from bindings.arena_prog_native_door import _family_entries
 from bindings.x_prep_native_owner_door import xprep_key
 from bindings.x_prep_native_owner_run import xprep_r3
 from bindings.prep_classify_prog_run import ClsRunPlan
-from bindings.prep_select_run import RFE_SELECT_HALF, RFE_SELECT_FRACTION, RFE_SELECT_COUNT, rfe_member_source_named
+from bindings.prep_select_run import (
+    RFE_SELECT_HALF, RFE_SELECT_FRACTION, RFE_SELECT_COUNT, rfe_member_source_named, rfe_block_of,
+)
 from core.member_abi import (
     MemberPlan, member_kind_capabilities,
     MEMBER_CAN_FIT, MEMBER_CAN_EXPORT, MEMBER_CAN_CLASSIFIER, MEMBER_GIL_FREE, MEMBER_GIL_DOOR,
@@ -172,7 +174,16 @@ def _rfe_base_admit(estimator: PythonObject, g: PythonObject, context: PythonObj
         base.why = "TypeError: mojolearn: RFE requires a mojolearn estimator; got " + cls
         return base^
     if py_get(plan, "member") is None:
-        base.why = ("TypeError: mojolearn: RFE requires an estimator with a native member; " + cls
+        # The registered estimator classes with no member mark (lane mf-rfe7b, every class the
+        # python/mojolearn/_native_msel_*.py registrations name, against each class's own `_mojolearn_member`;
+        # the cross-validation splitters are registered too but have no fit): NearestNeighbors
+        # (python/mojolearn/neighbors.py:98), RadiusNeighbors (neighbors.py:842), OPTICS
+        # (_expansion_cluster.py:606), MDS (_expansion_decomp.py:2754), SpectralEmbedding (_spectral_impl.py:531),
+        # Cholesky (_cholesky_impl.py:87). None has coef_ or feature_importances_ or a fitted array with one value
+        # per feature, so scikit-learn's RFE fails at its first elimination round over each ('auto' raises; a
+        # named n-row array mis-indexes); Cholesky's fit refuses the non-square block of any round. Only a fit
+        # with no round (n_features_to_select >= n_features) works there: that needs a member kind of each class.
+        base.why =("TypeError: mojolearn: RFE requires an estimator with a native member; " + cls
                     + " has none")
         return base^
     var classifier = Bool(py=plan["classifier"])
@@ -259,8 +270,12 @@ struct RfeDottedPath(Movable):
     # Lane mf-rfe7: `served` False, the words RFE's door raises (its rounds through the estimator's own
     # attribute reads are deleted).
     var why: String
+    # Lane mf-rfe7b: the RFE block code of THE FORWARDED EXPORT (META_BLOCK_FORWARD, plus the row of the leaf's
+    # block a named attribute is: bindings/prep_select_run.mojo `rfe_block_code`); `hops` ends with the plain block.
+    var forward_block: Int
 
     def __init__(out self):
+        self.forward_block = META_BLOCK_FORWARD
         self.served = False
         self.hops = List[Float64]()
         self.refusal = String("")
@@ -343,7 +358,8 @@ def rfe_dotted_path(estimator: PythonObject, g: PythonObject, context: PythonObj
             path.leaf_word = True
         var source = rfe_member_source_named(family, leaf.plan.kind, member_kind_capabilities(leaf.plan), leaf_name,
                                              leaf_class)
-        hops.append(Float64(source.block))
+        hops.append(Float64(rfe_block_of(source.block)))
+        path.forward_block = META_BLOCK_FORWARD + (source.block - rfe_block_of(source.block))
         path.hops = hops^
         path.refusal = source.refusal.copy()
         path.why = String("")

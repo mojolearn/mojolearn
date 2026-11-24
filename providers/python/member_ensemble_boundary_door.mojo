@@ -4237,7 +4237,7 @@ def _admit_rfe(model: PythonObject, fields: PythonObject, context: PythonObject,
         # nested plan the work-list minted (one admission per RFE: the work-list walked this estimator for it).
         if path.leaf_word and not meta_plan_leaf_importances(nested.plans[0], path.hops):
             return False
-        base.block = META_BLOCK_FORWARD
+        base.block = path.forward_block  # lane mf-rfe7b: META_BLOCK_FORWARD and a named attribute's row
         base.squared = True
         base.refusal = path.refusal.copy()
         base.hops = path.hops.copy()
