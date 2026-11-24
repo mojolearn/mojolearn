@@ -180,6 +180,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MCD_FAST_LOCKSTEP_OFF.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_MCD_FAST_LOCKSTEP_OFF"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): the serial MCD candidate loop as the NVIDIA / AMD IDENTICAL path was slower: 6 cells, median 1.43, min-cov-det istella fit 84981 -> 123749 ms (1.46), taxi 4110 -> 5897 (1.43), elliptic-envelope istella 1.45, taxi 1.42; the lockstep (every width) is the only NVIDIA / AMD IDENTICAL form, the serial loop stays for Apple, fast and select_init_best; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MCD_FAST_LOCKSTEP_OFF.ab-outcome-2.patch"
     # ---- end lane ab-outcome-2
+    # ---- lane ab-outcome-3 / o3-trees (2026-11-24): A/B nvc-ab-20261124T115722Z-d8f8b2 decisions (NVIDIA L40S only, job nvc1-0003)
+    # TOMBSTONE: MOJOLEARN_CALIB_FAST_HOST_FOLDS (NOISE: NV L40S 4 cells, median 1.00, 0.97..1.04) deleted 2026-11-24 by lane/ab-outcome-3 (o3-trees); code recoverable at c23cb55fda.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CALIB_FAST_HOST_FOLDS.ab-outcome-3.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_CALIB_FAST_HOST_FOLDS"](), "removed 2026-11-24 (lane/ab-outcome-3 o3-trees, A/B nvc-ab-20261124T115722Z-d8f8b2 NVIDIA L40S, wheel 4519097d380a, job nvc1-0003, one run per arm): CalibratedClassifierCV fold test rows copied on the host instead of the _gather glue op were NOISE: 4 cells (calibrated istella and taxi full, fit and infer), median 1.00, 0.97..1.04, istella fit 1045 -> 1051 ms, taxi fit 714 -> 713 ms; the _gather default is the only form; code at c23cb55fda; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CALIB_FAST_HOST_FOLDS.ab-outcome-3.patch"
+    # ---- end lane ab-outcome-3 / o3-trees
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

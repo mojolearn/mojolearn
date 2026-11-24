@@ -1106,8 +1106,9 @@
   },
   "calib-fast-host-folds": {
    "define": "MOJOLEARN_CALIB_FAST_HOST_FOLDS",
-   "status": "define in code (bindings/trees_public_meta_door.mojo CALIB_FAST_HOST_FOLDS, EXP:47): B = CalibratedClassifierCV fold rows copied on the host with the finite test in the same pass; A = the device gather per fold side. Same rows: digests must equal A",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-trees): NOISE (L40S 4 cells, median 1.00, 0.97..1.04); A (the device gather) is unchanged; the define is refused (core/six_lane_experiment_guards.mojo); code recoverable at c23cb55fda, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CALIB_FAST_HOST_FOLDS.ab-outcome-3.patch. Was: define in code (bindings/trees_public_meta_door.mojo CALIB_FAST_HOST_FOLDS, EXP:47): B = CalibratedClassifierCV fold rows copied on the host with the finite test in the same pass; A = the device gather per fold side. Same rows: digests must equal A",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "set-b03": {
    "define": "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF,MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER,MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF",
@@ -6296,12 +6297,14 @@
    "b_arms": [
     "calib-fast-host-folds"
    ],
-   "owed": "RUN",
+   "owed": "DECIDED",
    "columns": [
     "time",
     "quality"
    ],
-   "decides": "promote B where it is faster than A at equal quality on the NVIDIA L40S (same pod, same job); otherwise the B arm is deleted with the four tombstone parts"
+   "decides": "promote B where it is faster than A at equal quality on the NVIDIA L40S (same pod, same job); otherwise the B arm is deleted with the four tombstone parts",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-trees): calib-fast-host-folds NOISE (L40S 4 cells, median 1.00, 0.97..1.04); B deleted, A kept.",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "sgd-ps-preload-shapes",

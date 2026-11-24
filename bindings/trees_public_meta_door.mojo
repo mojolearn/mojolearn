@@ -38,7 +38,6 @@ from bindings.trees_public_inputs_run import trees_finite_f32
 from core.admitted_refusals import admitted_finite_refuse
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.family_common_pack import family_call
-from std.sys.compile import is_defined
 from bindings.trees_public_inputs_door import (
     TreesLabels,
     trees_builtins,
@@ -168,15 +167,8 @@ from bindings.py_balanced import py_item
 
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
-#: fb12-rows (2026-11-17), B arm of CalibratedClassifierCV's fold rows when
-#: the member cannot take a resident DeviceRows fold (or the folds run on
-#: several threads): the rows copied out of X on the host with the finite
-#: test in the same pass, instead of `_gather`'s device round trip (X up,
-#: rows gathered, rows down) per fold side. Default off; owed A/B in
-#: docs/apple-fast/EXPERIMENTS.md (calibrated / stacking fit, NV). Read by the
-#: typed RUN's plan (`CalFitPlan`) only: the door's own B arm `_fold_rows` went
-#: with the door fold units (lane mf-del8; recoverable at f1385f8f1c).
-comptime CALIB_FAST_HOST_FOLDS = is_defined["MOJOLEARN_CALIB_FAST_HOST_FOLDS"]()
+# TOMBSTONE: MOJOLEARN_CALIB_FAST_HOST_FOLDS (NOISE: NV L40S 4 cells, median 1.00, 0.97..1.04) deleted 2026-11-24 by lane/ab-outcome-3 (o3-trees); code recoverable at c23cb55fda.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CALIB_FAST_HOST_FOLDS.ab-outcome-3.patch
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -3160,8 +3152,7 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
     if scan and not _x_finite(Xa, d):
         admitted_finite_refuse(1, String(py_type(base).__name__), "X")
     var plan = CalFitPlan(trees_address(Xa), n, d, codes_address, k,
-                          MEMBER_OP_DECISION if decision else MEMBER_OP_PREDICT_PROBA, sigmoid, ensemble,
-                          CALIB_FAST_HOST_FOLDS)
+                          MEMBER_OP_DECISION if decision else MEMBER_OP_PREDICT_PROBA, sigmoid, ensemble)
     for f in range(folds):  # driver-loop: over the cv folds (their test rows' addresses, read with the GIL held)
         var te = splits[f][1]
         plan.fold(trees_address(te), Int(py=te.shape[0]))

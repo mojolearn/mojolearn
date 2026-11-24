@@ -207,7 +207,6 @@ stack_method='predict' writes its predicted codes as float32 meta features
 from std.math import isnan
 from std.memory import bitcast, unsafe_memcpy
 from std.sys.info import size_of
-from std.sys.compile import is_defined
 from bindings.native_unit_os_threads_run import native_unit_cores
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
@@ -472,7 +471,8 @@ comptime META_CW_DICT = 2
 #: split door's own plans and fill (`msel_spec_sides`). Before (mf-split4)
 #: only KFold and StratifiedKFold had words (META_SPLIT_*, removed).
 
-comptime _CALIB_FAST_HOST_FOLDS = is_defined["MOJOLEARN_CALIB_FAST_HOST_FOLDS"]()
+# TOMBSTONE: MOJOLEARN_CALIB_FAST_HOST_FOLDS (NOISE: NV L40S 4 cells, median 1.00, 0.97..1.04) deleted 2026-11-24 by lane/ab-outcome-3 (o3-trees); code recoverable at c23cb55fda.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CALIB_FAST_HOST_FOLDS.ab-outcome-3.patch
 
 comptime _CHUNK = 64
 comptime _INDEX_SPAN = 16777216
@@ -2396,7 +2396,7 @@ def _fit_cal(slot: _SlotPtr, call: _CallPtr) raises:
     if not ensemble:
         _add(slot, run, used, k, y, 0, 0, 0)
     var operation = MEMBER_OP_DECISION if decision else MEMBER_OP_PREDICT_PROBA
-    var plan = CalFitPlan(x, n, d, y, k, operation, sigmoid, ensemble, _CALIB_FAST_HOST_FOLDS)
+    var plan = CalFitPlan(x, n, d, y, k, operation, sigmoid, ensemble)
     for f in range(used):  # driver-loop: over the cv folds (their test rows)
         plan.fold(te_at[f], te_n[f])
     # THE UNLABELED MARKER (lane mf-meta5b): a LabelPropagation / LabelSpreading base admitted with the
