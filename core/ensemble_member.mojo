@@ -244,6 +244,7 @@ from core.member_families import (
     MEMBER_FAMILY_XNEIGHBORS,
 )
 from core.member_notices import member_notices_take
+from core.member_unit_classes import member_unit_recode_rows
 from core.array_helpers_impl import class_ratio_f64
 from core.class_weight_plan import ClassWeightInputs, class_weight_rows_plan, class_weight_dict_refused
 from core.label_weights_native_api import (
@@ -1759,15 +1760,13 @@ def _held_and_codes(codes: Int, k: Int, n: Int, draws: List[Int], counts: List[I
     var targets_at = Int(targets.unsafe_ptr())
     var maps_at = Int(maps.unsafe_ptr())
 
+    # THE RE-CODE's one body (core/member_unit_classes.mojo
+    # `member_unit_recode_rows`; lane w3f3-i, 2026-11-24: was a copy of it
+    # here), unit u's code table its `maps` row, one task per lacking unit.
     def _recode(i: Int) {imm lacking_at, imm targets_at, imm maps_at, imm codes, imm k, imm n}:
         var u = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=lacking_at)[i]
-        var dst = MutPointer[Int32, MutUntrackedOrigin](
-            unsafe_from_address=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=targets_at)[i])
-        var to = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=maps_at + 4 * u * k)
-        var y = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=codes)
-        for r in range(n):  # small-loop(one pass over the rows: the unit's code at each)
-            var c = Int(y[r])
-            dst[r] = to[c] if c >= 0 and c < k else Int32(0)
+        var dst = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=targets_at)[i]
+        member_unit_recode_rows(codes, dst, maps_at + 4 * u * k, k, 0, n)
 
     host_parallelize(_recode, len(lacking))
     _ = len(maps)  # read through the tasks above

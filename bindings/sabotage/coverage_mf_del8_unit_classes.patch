@@ -1,13 +1,13 @@
 diff --git a/core/member_unit_classes.mojo b/core/member_unit_classes.mojo
-index 7476b075ee..6006256a54 100644
+index 8e4d559a4f..0dd45ca891 100644
 --- a/core/member_unit_classes.mojo
 +++ b/core/member_unit_classes.mojo
-@@ -111,7 +111,7 @@ def member_unit_recode(codes: Int, n: Int, k: Int, held: List[Int32]) -> List[In
-         var end = min(begin + chunk, n)
-         for i in range(begin, end):
-             var c = Int(y[i])
--            target[i] = lookup[c] if (c >= 0 and c < k) else Int32(0)
-+            target[i] = Int32(0)  # SABOTAGE
+@@ -97,7 +97,7 @@ def member_unit_recode_rows(codes: Int, dst: Int, table: Int, k: Int, begin: Int
+     var lookup = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=table)
+     for i in range(begin, end):  # small-loop(one task's rows)
+         var c = Int(y[i])
+-        target[i] = lookup[c] if (c >= 0 and c < k) else Int32(0)
++        target[i] = Int32(0)  # SABOTAGE
  
-     host_parallelize(task, tasks)
-     _ = len(table)  # read through its address by the tasks above
+ 
+ def member_unit_recode(codes: Int, n: Int, k: Int, held: List[Int32]) -> List[Int32]:
