@@ -36,6 +36,16 @@ from mojolearn import _families
 _families.load_all()
 
 
+def pytest_configure(config):
+    # Opt-in (MOJOLEARN_TEST_STATE_WATCH=<dir>): name the test that leaves
+    # process-wide state behind for the next one in the same worker (lane
+    # w3-fix-f; _state_watch.py). Registered as a plugin so its hooks see
+    # every collected test, not only this directory's.
+    if os.environ.get("MOJOLEARN_TEST_STATE_WATCH", "").strip():
+        from mojolearn.tests import _state_watch
+        _state_watch.register(config)
+
+
 def pytest_collection_modifyitems(config, items):
     keep_slow = os.environ.get("MOJOLEARN_TEST_SLOW", "1").strip() != "0"
     kept, dropped = [], []
