@@ -62,11 +62,9 @@ helpers of `linear_model.py`; lane hr-small-passes (2026-10-02) deleted
 them: the linear models center through the estimators binding on every
 tier (`lm_col_sums`, `lm_center`, `lm_scale_rows`).
 
-`transpose_f32` and `cast_colmajor_f64_to_f32` MIRROR
-`bindings/_mojolearn.mojo::_tiled_transpose_to_f32` (DEVIATIONS 2471,
-2472) element for element, `dst[c * rows + r] = Float32(src[r * cols +
-c])`; the tiling there is a cache order, not a value, so a plain loop
-writes the same bytes. The seven others are `bindings/host_helpers.mojo`,
+The `transpose_f32` and `cast_colmajor_f64_to_f32` exports had no product
+caller and were deleted (lane sab-host-missed-cls, 2026-11-23). The seven
+others are `bindings/host_helpers.mojo`,
 the forest host lane's, shared.
 
 The spectral-precomputed lane (2026-09-14) adds `nonzero_f64_count` and
@@ -195,7 +193,6 @@ from core.core_host_impl import (
     radius_neighbors_count_host,
     radius_neighbors_fill_host,
     rbc_knn_search_host,
-    transpose_to_f32,
 )
 from core.shared_slot import SharedSlot
 # wave 8 run split: the int-type slot, the host KMeans table and the host
@@ -354,67 +351,7 @@ def mojolearn_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 
-def transpose_f32_binding(
-    src_addr: PythonObject,
-    dst_addr: PythonObject,
-    rows: PythonObject,
-    cols: PythonObject,
-) raises -> PythonObject:
-    """Read a C-contiguous float32 `[rows, cols]` matrix at `src`, write its
-    COLUMN-MAJOR layout at `dst`, `dst[c * rows + r] == src[r * cols + c]`
-    (DEVIATION 2472). Returns 0. A pure move, no arithmetic. An empty
-    matrix writes nothing and reads neither address; a negative dimension
-    is refused rather than read. `src` and `dst` must not overlap."""
-    var nr = _index(rows)
-    var nc = _index(cols)
-    if nr < 0:
-        raise Error(
-            "transpose_f32: rows must be non-negative, got " + String(nr)
-        )
-    if nc < 0:
-        raise Error(
-            "transpose_f32: cols must be non-negative, got " + String(nc)
-        )
-    if nr == 0 or nc == 0:
-        return PythonObject(0)
-    var sp = f32_ptr(_index(src_addr))
-    var dp = f32_ptr(_index(dst_addr))
-    with GILReleased(Python()):
-        transpose_to_f32(sp, dp, nr, nc)
-    return PythonObject(0)
-
-
-def cast_colmajor_f64_to_f32_binding(
-    src_addr: PythonObject,
-    dst_addr: PythonObject,
-    rows: PythonObject,
-    cols: PythonObject,
-) raises -> PythonObject:
-    """Read a C-contiguous float64 `[rows, cols]` matrix at `src`, write the
-    COLUMN-MAJOR float32 matrix at `dst`, `dst[c * rows + r] ==
-    Float32(src[r * cols + c])` (DEVIATION 2471). Returns 0. Every element
-    is read once, narrowed once and written once to its transposed
-    position. An empty matrix writes nothing; a negative dimension is
-    refused rather than read. `src` and `dst` must not overlap."""
-    var nr = _index(rows)
-    var nc = _index(cols)
-    if nr < 0:
-        raise Error(
-            "cast_colmajor_f64_to_f32: rows must be non-negative, got "
-            + String(nr)
-        )
-    if nc < 0:
-        raise Error(
-            "cast_colmajor_f64_to_f32: cols must be non-negative, got "
-            + String(nc)
-        )
-    if nr == 0 or nc == 0:
-        return PythonObject(0)
-    var sp = f64_ptr(_index(src_addr))
-    var dp = f32_ptr(_index(dst_addr))
-    with GILReleased(Python()):
-        transpose_to_f32(sp, dp, nr, nc)
-    return PythonObject(0)
+# TOMBSTONE: the core host transpose_f32 / cast_colmajor_f64_to_f32 exports deleted 2026-11-23 on lane/sab-host-missed-cls (no product caller); code recoverable at 4519097d38.
 
 
 # ===========================================================================
@@ -1095,8 +1032,6 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[radius_neighbors_count_binding]("radius_neighbors_count")
         module.def_function[radius_neighbors_fill_binding]("radius_neighbors_fill")
         module.def_function[rbc_knn_search_binding]("rbc_knn_search")
-        module.def_function[transpose_f32_binding]("transpose_f32")
-        module.def_function[cast_colmajor_f64_to_f32_binding]("cast_colmajor_f64_to_f32")
         module.def_function[nonzero_f64_count_binding]("nonzero_f64_count")
         module.def_function[nonzero_f64_fill_binding]("nonzero_f64_fill")
         module.def_function[knn_affinity_f32_binding]("knn_affinity_f32")

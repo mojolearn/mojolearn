@@ -8,7 +8,7 @@ _SYMBOLS = {
         "spectral_native_api_v1", "metrics_numeric_mode", "umap_numeric_mode", "umap_fit_transform", "umap_fit_transform_ex", "umap_transform",
         "spectral_fit_predict_dense", "spectral_fit_predict_graph", "spectral_fit_predict_graph_state",
         "spectral_fit_predict_dataset", "spectral_fit_predict_dataset_state", "spectral_predict",
-        "spectral_embedding_dense", "spectral_embedding_graph", "spectral_embedding_dataset",
+        "spectral_embedding_dense",
         # The resident prediction state (lane ne1-a-cluster-spectral, N326;
         # bindings/cfb_spectral_door.mojo `_sc_resident`): optional, absent on the
         # CPU host binding, where predict keeps the per-call entry.

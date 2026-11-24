@@ -132,23 +132,8 @@ def _spectral_write_outputs(
     _ = len(embedding)
 
 
-def _guard_embedding_output(
-    embedding: List[Float32], n_samples: Int, n_out: Int, n_cols: Int
-) raises:
-    """The output buffer was sized by the Python caller for `n_samples x
-    n_cols`; check what came back before writing into it."""
-    if n_out != n_cols or len(embedding) != n_samples * n_cols:
-        raise Error(
-            "spectral embedding: the kernel returned " + String(len(embedding))
-            + " floats in " + String(n_out) + " columns, but the output buffer"
-            " was sized for " + String(n_samples) + " x " + String(n_cols)
-        )
-
-
-def _spectral_write_embedding(embedding: List[Float32], ep: MutPointer[Float32, MutUntrackedOrigin]):
-    # The spectral embedding doors' copy, after their guard.
-    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(embedding)
+# TOMBSTONE: _guard_embedding_output and _spectral_write_embedding (only the deleted host spectral_embedding_* exports
+# called them) deleted 2026-11-23 on lane/sab-host-missed-cls; code recoverable at 4519097d38.
 
 
 def _spectral_state_copy(

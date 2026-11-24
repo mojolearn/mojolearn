@@ -1,9 +1,9 @@
-"""The native host converters of DEVIATION 2470 (`cast_f64_to_f32`), 2471
-(`cast_colmajor_f64_to_f32`) and 2472 (`transpose_f32`) through the Python
-boundary: the binding's refusals and empty short cuts.
+"""The native host converter of DEVIATION 2470 (`cast_f64_to_f32`) through
+the Python boundary: the binding's refusals and empty short cuts (the
+`cast_colmajor_f64_to_f32` and `transpose_f32` exports had no product caller
+and were deleted 2026-11-23, lane sab-host-missed-cls).
 
-The element arithmetic (every shape, edge value, tie, tail length and both
-transpose directions, word for word against an independent round-to-nearest-
+The element arithmetic (every shape, edge value, tie and tail length, word for word against an independent round-to-nearest-
 even oracle) runs natively in checks/native_tests/core_convert_{cpu,gpu}.mojo.
 NumPy is the ORACLE here and belongs in this file; the shipped module under
 test imports none of it.
@@ -127,32 +127,14 @@ def _fn(name):
 
 def test_empty_and_negative():
     flat = _fn("cast_f64_to_f32")
-    col = _fn("cast_colmajor_f64_to_f32")
-    # n == 0 / a zero dimension: returns 0 and reads neither address, so
-    # null addresses are fine here and MUST NOT raise
+    # n == 0: returns 0 and reads neither address, so null addresses are
+    # fine here and MUST NOT raise
     assert flat(0, 0, 0) == 0
-    assert col(0, 0, 0, 5) == 0
-    assert col(0, 0, 5, 0) == 0
     with pytest.raises(Exception, match="cast_f64_to_f32: n must be non-negative"):
         flat(0, 0, -1)
-    with pytest.raises(Exception, match="rows must be non-negative"):
-        col(0, 0, -1, 3)
-    with pytest.raises(Exception, match="cols must be non-negative"):
-        col(0, 0, 3, -1)
     # a null address with a positive count is refused, not read
     with pytest.raises(Exception, match="null (float(32|64) )?buffer address"):
         flat(0, 0, 4)
-
-
-def test_transpose_f32_empty_and_negative():
-    fn = _fn("transpose_f32")
-    assert fn(0, 0, 0, 3) == 0 and fn(0, 0, 3, 0) == 0
-    with pytest.raises(Exception, match="transpose_f32: rows must be non-negative"):
-        fn(0, 0, -2, 3)
-    with pytest.raises(Exception, match="transpose_f32: cols must be non-negative"):
-        fn(0, 0, 3, -2)
-    with pytest.raises(Exception, match="null (float(32|64) )?buffer address"):
-        fn(0, 0, 2, 2)
 
 
 # --------------------------------------------- through _buffer, vs NumPy
@@ -166,7 +148,7 @@ def test_transpose_f32_empty_and_negative():
 def _forced_present(monkeypatch):
     """Kept as a no-op name so the tests below read as before: every
     helper resolves or `_buffer._native` raises, which IS the test."""
-    for key in ("cast_f64_to_f32", "cast_colmajor_f64_to_f32", "transpose_f32"):
+    for key in ("cast_f64_to_f32",):
         assert callable(_buffer._native(key))
     return True
 

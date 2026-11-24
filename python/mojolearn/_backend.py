@@ -1670,7 +1670,7 @@ def host_families_built():
 #: What each routed binding carries, and what it leaves absent so the
 #: refusal stays by name:
 #:   _mojolearn -> _mojolearn_core_host: the base binding's HOST HELPERS
-#:     (transpose_f32, cast_colmajor_f64_to_f32, cast_f64_to_f32,
+#:     (cast_f64_to_f32,
 #:     all_finite_*, gather_*, argmax_rows_*, so _buffer._native and _labels
 #:     resolve on a CPU-only install) and the knn host inference lane's
 #:     (2026-09-14) knn_search, knn_classify, knn_regress over
