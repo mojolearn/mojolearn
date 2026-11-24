@@ -5,9 +5,10 @@ ProphetForecaster.
 * `device` is a constructor parameter (default None, stored as passed, returned by `get_params`, carried by
   `set_params`); an unknown value is refused at construction in the shared words;
 * a forecaster built with `device="cpu"` fits and forecasts;
-* on an installation with a GPU, in `identical` mode, the CPU forecaster returns the bits of the GPU forecaster, and
-  two forecasters on two devices keep their own images across interleaved calls. `VARResults` forecasts on the
-  device of the `VAR` that fitted it.
+* `VARResults` forecasts on the device of the `VAR` that fitted it.
+
+That the CPU forecaster returns the bits of the GPU forecaster is checked by `python -m mojolearn verify`, which runs
+every forecaster's lane on both devices.
 """
 import numpy as np
 import pytest
@@ -37,11 +38,6 @@ def _flat(value):
     if isinstance(value, (tuple, list)):
         return [np.asarray(item) for item in value]
     return [np.asarray(value)]
-
-
-def _same(a, b):
-    left, right = _flat(a), _flat(b)
-    return len(left) == len(right) and all(x.tobytes() == y.tobytes() for x, y in zip(left, right))
 
 
 def _theta(cls):
@@ -116,17 +112,10 @@ def test_cpu_forecaster_fits_and_forecasts(spec):
     assert all(np.isfinite(item.astype(np.float64)).all() for item in answer)
 
 
-@two_devices
-@case
-def test_two_devices_return_the_same_bits(spec):
-    if mojolearn.numeric_mode() != "identical":
-        pytest.skip("bits are promised in identical mode only")
-    gpu, run_gpu = spec[1](device="gpu")
-    cpu, run_cpu = spec[1](device="cpu")
-    first = run_gpu(gpu)
-    assert _same(run_cpu(cpu), first)
-    assert _same(run_gpu(gpu), first)          # interleaved: each keeps its own route
-    assert _same(run_cpu(cpu), first)
+# The CPU-equals-GPU bits of every forecaster here are verify's (lane vdv-pytest-a, 2026-11-24): sequence-theta,
+# sequence-theta-forecast, public-theta-variants(-forecast), sequence-ets(-forecast), sequence-garch, sequence-var,
+# sequence-stl, sequence-prophet (tools/identity_lanes/sequence.py, m_predict.py, public_gap_methods.py), each run
+# on both sides.
 
 
 @two_devices
