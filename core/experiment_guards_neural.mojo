@@ -1332,6 +1332,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF.ab-outcome-2.patch
     comptime assert not is_defined["MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): IDN_EMB_UNIQUE_ROWS_OFF (old path: the T < V touched-rows launch rule instead of the unique-rows compaction in the identical embedding backward) was no faster: 2 cells, median 1.01 (train-embedding-backward 59.76 -> 60.65, lm-train-step 35.14 -> 35.09 ms); EMB_UNIQUE_ROWS is EMB_TOUCHED_ROWS; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF.ab-outcome-2.patch"
     # ---- end lane ab-outcome-2 (ab2-ngemm)
+    # ---- lane ab-outcome-3 / o3-route (2026-11-24)
+    # TOMBSTONE: MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST (WITHDRAWN before any A/B: Andrew 2026-11-24, one route, no per-process timing) deleted 2026-11-24 by lane/o3-route; never reached main, code recoverable at lane/ab-outcome-2@1f40eb3c09.
+    # Restore: git show 1f40eb3c09 -- gemm/host_transport.mojo | git apply (no patch file: the code never reached main).
+    comptime assert not is_defined["MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST"](), "removed 2026-11-24 (lane/o3-route of ab-outcome-3; Andrew 2026-11-24: one route, no per-process timing): GEMM_FAST_STAGE_UP_BY_COST (a one-time chunk probe per process timing the raw pageable upload against the staged one and keeping the faster) was withdrawn before any A/B; the float32 upload stays staged on NVIDIA/AMD, with -D MOJOLEARN_GEMM_STAGE_UP_OFF (raw upload) still owed an A/B with the wave-3 sha; code at lane/ab-outcome-2@1f40eb3c09 (never reached main)"
+    # ---- end lane ab-outcome-3 / o3-route
     return True
 
 

@@ -25,14 +25,11 @@ host surfaces:
 A/B (build arms; run-time environment reads per matmul until 2026-11-15):
   -D MOJOLEARN_GEMM_STAGE_UP_OFF      raw upload (default staged except Apple)
   -D MOJOLEARN_GEMM_STAGE_UP          staged upload on Apple too
-  -D MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST   stage only where a one-time probe
-                                      says it pays (default off, A/B owed)
 """
 
 from std.atomic import Atomic, Ordering
 from std.memory import unsafe_memcpy
 from std.sys import is_defined
-from std.time import perf_counter_ns
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
@@ -107,97 +104,8 @@ def gemm_stage_up_on() -> Bool:
     return GEMM_STAGE_UP_ON
 
 
-# lane ab-outcome-2 (ab2-ngemm, 2026-11-24): -D MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST,
-# default OFF. A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, job nvc1-0002, wheel
-# 4519097d380a) ran -D MOJOLEARN_GEMM_STAGE_UP_OFF (raw upload) against the staged
-# default: f32 gemm 47.77 -> 38.70 ms (0.81, raw FASTER; ab3 2026-11-18 read 0.87),
-# int8 31.16 -> 35.26 (1.13), bf16 37.15 -> 37.38 (1.01); hashes and quality equal.
-# WHY. The switch reaches exactly one function, `gemm_up_f32` below, whose callers
-# are the float32 operands of `identical_gemm_host` (gemm/host_entry.mojo:135-136)
-# and the float32 A of `gemm_bf16_native` (gemm/linalg_native.mojo:242). The int8
-# row uploads its codes and exponents raw in BOTH arms (gemm/linalg_native.mojo:
-# 297-300) and the bf16 row hands both operands as bf16 bits, raw in both arms
-# (`gemm_up_u16`, gemm/linalg_native.mojo:222 and :227; the harness makes both
-# operands bf16 bits, tools/bench_board_neural.py:2490). Their binaries' paths are
-# identical between the arms, so 1.13 and 1.01 are run-to-run spread, not the
-# switch: stage-up does not "pay for int8". On f32 the staged upload is a
-# single-thread memcpy of each 16 MB chunk into the pinned stage (`_par_copy`)
-# followed by the pinned DMA, with a host wait per chunk and one at the end;
-# pipelined, a chunk costs about max(copy, pinned DMA). The raw upload is the
-# driver's pageable DMA. On the A/B host (job/box.txt) pageable H2D read 24.86
-# GB/s, pinned 26.96, host memcpy 22.26: pageable is already about as fast as
-# pinned, so the stage only adds a host copy that is slower than the DMA it
-# feeds, plus the waits. Staging pays only where pageable H2D is well below
-# both the pinned rate and the host copy rate (Apple's ~3 GB/s download was the
-# original case; some hosts' pageable H2D is a fraction of pinned).
-# THE RULE (hardware cost, never a shape or a dataset): the first staged-size
-# upload of the process, on the pool, times one chunk three ways on the input in
-# front of it: raw pageable DMA, memcpy into the stage, pinned DMA from the stage.
-# Stage from then on iff max(copy, pinned DMA) < raw; else upload raw. The answer
-# is kept for the process (`GEMM_UP_RULE`). The probe uploads the first chunk
-# twice (the same bytes) once per process. An upload moves no bit in either
-# form: bits unchanged on every column. OWED: one A/B with the wave-3 sha on rows
-# gemm/*/full, gemm-int8/*/full, gemm-bf16/*/full (owed arm gemm-stage-up-by-cost,
-# bench/results/paper_compare/owed-pre0867.json); the int8 and bf16 rows are
-# controls (they never reach the rule). MOJOLEARN_GEMM_STAGE_UP_OFF stays until
-# that A/B decides (AGENTS.md "A measured winner is never deleted on reasoning").
-comptime GEMM_FAST_STAGE_UP_BY_COST = is_defined["MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST"]()
-#: The probe's answer: 0 not probed yet, 1 staged pays, 2 raw.
-comptime _UP_RULE_UNKNOWN = 0
-comptime _UP_RULE_STAGE = 1
-comptime _UP_RULE_RAW = 2
-
-
-struct _GemmUpRule(Defaultable, Movable):
-    var rule: Int
-
-    def __init__(out self):
-        self.rule = _UP_RULE_UNKNOWN
-
-
-comptime GEMM_UP_RULE = SharedSlot[_GemmUpRule, "MojolearnGemmUpRuleV1"]
-
-
-def _stage_up_probe(
-    ctx: DeviceContext, mut dst: DeviceBuffer[DType.float32], src: F32P, stage: F32P, cnt: Int
-) raises -> Int:
-    """Times `src[0, cnt)` into `dst[0, cnt)` raw, then the memcpy into the stage
-    and the pinned DMA out of it; returns _UP_RULE_STAGE when the pipelined staged
-    chunk, max(copy, pinned DMA), beats the raw one. Both forms write the same
-    bytes. Called only by the lease holder (the pool's stage is ours)."""
-    ctx.synchronize()
-    var t0 = Int(perf_counter_ns())
-    ctx.enqueue_copy(dst_buf=dst.create_sub_buffer[DType.float32](0, cnt), src_ptr=src)
-    ctx.synchronize()
-    var t1 = Int(perf_counter_ns())
-    _par_copy(stage, src, cnt)
-    var t2 = Int(perf_counter_ns())
-    ctx.enqueue_copy(dst_buf=dst.create_sub_buffer[DType.float32](0, cnt), src_ptr=stage)
-    ctx.synchronize()
-    var t3 = Int(perf_counter_ns())
-    var raw = t1 - t0
-    var staged = max(t2 - t1, t3 - t2)
-    if staged < raw:
-        return _UP_RULE_STAGE
-    return _UP_RULE_RAW
-
-
-def _stage_up_by_cost(
-    ctx: DeviceContext, mut dst: DeviceBuffer[DType.float32], src: F32P, stage: F32P, n: Int
-) raises -> Bool:
-    """-D MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST: True when this call's upload is
-    finished here (the rule says raw); False hands the whole upload to the
-    staged loop of `gemm_up_f32`."""
-    var slot = GEMM_UP_RULE.get_or_create_ptr()
-    var done = 0
-    if slot[].rule == _UP_RULE_UNKNOWN:
-        done = min(GEMM_STAGE_FLOATS, n)
-        slot[].rule = _stage_up_probe(ctx, dst, src, stage, done)
-    if slot[].rule == _UP_RULE_STAGE:
-        return False
-    if done < n:
-        ctx.enqueue_copy(dst_buf=dst.create_sub_buffer[DType.float32](done, n - done), src_ptr=src + done)
-    return True
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST (WITHDRAWN before any A/B: Andrew 2026-11-24, one route, no per-process timing) deleted 2026-11-24 by lane/o3-route (ab-outcome-3); never reached main, code recoverable at lane/ab-outcome-2@1f40eb3c09.
+# Restore: git show 1f40eb3c09 -- gemm/host_transport.mojo | git apply (no patch file: the code never reached main); record in docs/TOMBSTONES.md.
 
 
 struct GemmHostLease(Movable):
@@ -295,9 +203,6 @@ def gemm_up_f32(ctx: DeviceContext, lease: GemmHostLease, mut dst: DeviceBuffer[
         ctx.enqueue_copy(dst_buf=dst.create_sub_buffer[DType.float32](0, n), src_ptr=src)
         return
     var stage = F32P(unsafe_from_address=addr)
-    comptime if GEMM_FAST_STAGE_UP_BY_COST:
-        if _stage_up_by_cost(ctx, dst, src, stage, n):
-            return
     # Double-buffered: chunk i is written into its half while chunk i-1's
     # DMA runs. The wait before DMA i retires DMA i-1, so when chunk i+1
     # refills that half nothing reads it any more.
