@@ -135,7 +135,8 @@
     "coverage-core-hotpath_impl"
    ],
    "builds": [
-    "build_core_host"
+    "build_core_host",
+    "build_runtime_model_selection_host"
    ],
    "columns": [
     "cpu"
@@ -1035,7 +1036,8 @@
    "builds": [
     "build_tokenizer_host",
     "build_training",
-    "build_training_host"
+    "build_training_host",
+    "build_runtime_catalog_host"
    ],
    "columns": [
     "cpu",
@@ -1243,8 +1245,8 @@
     "coverage-training-optimizer_public_common"
    ],
    "builds": [
-    "build_training",
-    "build_training_host"
+    "build_tokenizer_host",
+    "build_training"
    ],
    "columns": [
     "cpu",
@@ -1446,10 +1448,14 @@
      "x-decomp-robust-cov",
      "x-decomp-als",
      "x-decomp-lu"
+    ],
+    "coverage-x_decomp-api-lu": [
+     "x-decomp-lu"
     ]
    },
    "arms": [
-    "coverage-x_decomp-api"
+    "coverage-x_decomp-api",
+    "coverage-x_decomp-api-lu"
    ],
    "builds": [
     "build_x_decomp",
@@ -1529,7 +1535,8 @@
      "x-decomp-robust-cov",
      "x-decomp-lstsq-rsvd",
      "x-decomp-manifold",
-     "x-decomp-rsvd-rank-deficient"
+     "x-decomp-rsvd-rank-deficient",
+     "x-decomp-als"
     ]
    },
    "arms": [
@@ -1547,7 +1554,8 @@
     "x-decomp-robust-cov",
     "x-decomp-lstsq-rsvd",
     "x-decomp-manifold",
-    "x-decomp-rsvd-rank-deficient"
+    "x-decomp-rsvd-rank-deficient",
+    "x-decomp-als"
    ],
    "patches": [
     "x_decomp/checks/sabotage/coverage_select_dev.patch"
@@ -1563,13 +1571,11 @@
     "coverage-x_decomp-select_ops"
    ],
    "builds": [
-    "build_x_decomp",
     "build_x_decomp_host",
     "build_runtime_decomp_host"
    ],
    "columns": [
-    "cpu",
-    "device"
+    "cpu"
    ],
    "family": "x_decomp",
    "id": "x_decomp-6",
