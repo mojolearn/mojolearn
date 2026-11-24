@@ -362,5 +362,57 @@ class Parts(unittest.TestCase):
         self.assertIn("--env PC_PARTS=board-all", line)
 
 
+class AbEstimate(unittest.TestCase):
+    """stored_times (newest wall), ab_units (shared base on one clock), split_boxes and _box_argv (lane
+    ab-harness-speed, 2026-11-24)."""
+
+    def test_stored_times_takes_the_newest_wall(self):
+        with tempfile.TemporaryDirectory() as t:
+            old, new = Path(t) / "old.json", Path(t) / "new.json"
+            old.write_text(json.dumps({"races": {"f/a": {"status": "done", "wall_s": 1748.0,
+                                                          "finished": "2026-11-18T10:00:00Z"},
+                                                  "f/b": {"status": "done", "wall_s": 5.0}}}))
+            new.write_text(json.dumps({"races": {"f/a": {"status": "done", "wall_s": 416.0,
+                                                          "finished": "2026-11-24T10:00:00Z"}}}))
+            self.assertEqual(MC.stored_times([new, old]), {"f/a": 416.0, "f/b": 5.0})
+
+    def test_a_base_shared_within_the_bound_is_counted_once(self):
+        units = {("x", "full"): ["f/a"], ("y", "full"): ["f/a"]}
+        secs = {"f/a": 60.0}
+        shared = MC.ab_units(units, secs, smoke=False)
+        alone = MC.ab_units(units, secs, smoke=False, max_age_s=0)
+        p = MC.TR.PROC_S
+        self.assertAlmostEqual(shared[0][3] * 60, 2 * p + 120)
+        self.assertAlmostEqual(shared[1][3] * 60, p + 60)            # y: its arm only, the base is x's
+        self.assertAlmostEqual(alone[1][3] * 60, 2 * p + 120)
+
+    def test_smoke_counted_once_per_race_and_only_when_the_submit_smokes(self):
+        units = {("x", "full"): ["f/a"], ("y", "full"): ["f/a"]}
+        on = sum(m for *_, m in MC.ab_units(units, {"f/a": 60.0}))
+        off = sum(m for *_, m in MC.ab_units(units, {"f/a": 60.0}, smoke=False))
+        self.assertAlmostEqual((on - off) * 60, MC.TR.SMOKE_S_PER_RACE)
+
+    def test_split_boxes_keeps_sharing_arms_together_and_balances(self):
+        units = {("a", "full"): ["f/1"], ("b", "full"): ["f/1"], ("c", "full"): ["f/2"], ("d", "full"): ["f/3"]}
+        secs = {"f/1": 600.0, "f/2": 600.0, "f/3": 600.0}
+        boxes = MC.split_boxes(units, secs, 2)
+        self.assertEqual(len(boxes), 2)
+        self.assertIn(["a", "b"], boxes)
+        self.assertEqual(sorted(sum(boxes, [])), ["a", "b", "c", "d"])
+
+    def test_split_boxes_breaks_a_group_larger_than_its_share(self):
+        units = {(n, "full"): ["f/1"] for n in "abcd"}
+        boxes = MC.split_boxes(units, {"f/1": 600.0}, 2)
+        self.assertEqual(sorted(len(b) for b in boxes), [2, 2])
+
+    def test_box_argv_names_each_boxs_arms_lane_tag_and_owed_only(self):
+        argv = ["stage", "nvidia", "--boxes", "3", "--lane=measure", "--tag", "ab9", "--rows", "r.tsv"]
+        one = MC._box_argv(argv, 1, ["a", "b"], "measure", "ab9")
+        two = MC._box_argv(argv, 2, ["c"], "measure", "ab9")
+        self.assertEqual(one, ["stage", "nvidia", "--rows", "r.tsv", "--boxes", "1", "--owed-arms", "a,b",
+                               "--lane", "measure", "--tag", "ab9"])
+        self.assertEqual(two[-7:], ["--owed-arms", "c", "--lane", "measure-b2", "--tag", "ab9-b2", "--owed-only"])
+
+
 if __name__ == "__main__":
     unittest.main()

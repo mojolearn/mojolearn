@@ -543,5 +543,67 @@ class CommittedOwed(unittest.TestCase):
                 self.assertIn("MOJOLEARN_MODE_FAST_ROWS", names, name)
 
 
+def _race(fin, status="done", wall=10.0, **kw):
+    return dict(status=status, finished=fin, started=fin, wall_s=wall, cells=[], **kw)
+
+
+class SharedBase(unittest.TestCase):
+    """measure_owed.share_base / base-share (SHARED BASE, lane ab-harness-speed): one base per race within the bound."""
+    NOW = MO._iso_s("2026-11-24T12:00:00Z")
+
+    def src(self, **races):
+        return {"schema": "s", "box": {"host": "h"}, "config": {"rows": None}, "plan": ["x"], "preflight": {"p": 1},
+                "races": races}
+
+    def test_fresh_race_is_copied_with_its_provenance_and_stale_one_is_timed(self):
+        s = self.src(a=_race("2026-11-24T11:50:00Z"), b=_race("2026-11-24T11:00:00Z"))
+        board, shared, todo = MO.share_base(None, ["a", "b", "c"], [("R/board-tg-ab-x-base-full", s)], self.NOW, 1200)
+        self.assertEqual(todo, ["b", "c"])
+        self.assertEqual(list(shared), ["a"])
+        self.assertEqual(board["races"]["a"]["shared_base"]["board"], "R/board-tg-ab-x-base-full")
+        self.assertEqual(board["races"]["a"]["shared_base"]["age_s"], 600)
+        self.assertEqual(board["box"], {"host": "h"})          # the source's box: bench_board resumes it
+        self.assertNotIn("plan", board)
+        self.assertNotIn("preflight", board)
+
+    def test_freshest_source_wins_and_a_shared_copy_is_never_shared_again(self):
+        old = self.src(a=_race("2026-11-24T11:45:00Z", wall=1.0))
+        new = self.src(a=_race("2026-11-24T11:55:00Z", wall=2.0))
+        copy = self.src(a=_race("2026-11-24T11:59:00Z", wall=3.0, shared_base={"board": "x"}))
+        board, shared, _ = MO.share_base(None, ["a"], [("old", old), ("copy", copy), ("new", new)], self.NOW)
+        self.assertEqual(shared["a"]["board"], "new")
+        self.assertEqual(board["races"]["a"]["wall_s"], 2.0)
+
+    def test_target_done_race_left_alone_and_failed_source_not_shared(self):
+        tgt = self.src(a=_race("2026-11-24T08:00:00Z"))
+        s = self.src(a=_race("2026-11-24T11:59:00Z"), b=_race("2026-11-24T11:59:00Z", status="failed"))
+        board, shared, todo = MO.share_base(tgt, ["a", "b"], [("s", s)], self.NOW)
+        self.assertEqual((shared, todo), ({}, ["b"]))
+        self.assertIs(board, tgt)
+
+    def test_command_writes_board_and_todo(self):
+        with tempfile.TemporaryDirectory() as t:
+            src = os.path.join(t, "board-tg-ab-p-base-full")
+            os.makedirs(src)
+            with open(os.path.join(src, "board.json"), "w") as fh:
+                json.dump(self.src(a=_race("2026-11-24T11:58:00Z")), fh)
+            ids = os.path.join(t, "chunk.txt")
+            with open(ids, "w") as fh:
+                fh.write("a\nb\n")
+            tgt, out = os.path.join(t, "board-tg-ab-q-base-full"), os.path.join(t, "chunk.txt.base")
+            MO.main(["base-share", "--target", tgt, "--ids", ids, "--source", src, "--source", tgt,
+                     "--now", str(self.NOW), "--out", out])
+            with open(out) as fh:
+                self.assertEqual(fh.read(), "b\n")
+            with open(os.path.join(tgt, "board.json")) as fh:
+                self.assertEqual(sorted(json.load(fh)["races"]), ["a"])
+
+    def test_overlap_order_puts_arms_on_the_same_races_together(self):
+        units = {("candidate", "full"): ["z"], ("a", "full"): ["r1"], ("b", "full"): ["r2", "r3"],
+                 ("c", "full"): ["r1", "r9"], ("d", "full"): ["r3"]}
+        self.assertEqual(MO.overlap_order(units),
+                         [("candidate", "full"), ("a", "full"), ("c", "full"), ("b", "full"), ("d", "full")])
+
+
 if __name__ == "__main__":
     unittest.main()

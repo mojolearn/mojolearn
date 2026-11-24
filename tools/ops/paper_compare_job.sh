@@ -825,6 +825,14 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
     fi
     phase_end $rc
     [ -s "$TG/race-ids-full.txt" ] || { say "targeted: no listed race is planned by the board (logs/tg-plan.log)"; exit 5; }
+    # OWED ONLY (lane ab-harness-speed, 2026-11-24; measure_candidate.py stage --boxes N): the submits after the first
+    # time only their owed A/B units (PC_OWED_ARMS) and leave the listed rows to box 1, so the listed races are neither
+    # prepared, smoked, timed nor checked here (LISTED_IDS is empty); every unit still times its base on this box
+    LISTED_IDS="$TG/race-ids-full.txt"
+    if [ "${PC_TG_OWED_ONLY:-0}" = 1 ]; then
+        : > "$TG/race-ids-none.txt"; LISTED_IDS="$TG/race-ids-none.txt"
+        say "owed only (PC_TG_OWED_ONLY=1): the listed rows are timed by the first box's submit"
+    fi
     DK=(); [ -n "$B_CSV" ] && DK=(--owed "$OWED_FILE" --b-arms "$B_CSV")
     $PY tools/measure_owed.py data-keys "${DK[@]}" --paper-recipes "$TG/races.json" --planner tools/bench_board.py \
         --vendor "$V" --data-root "$DATA_ROOT" > "$TG/data-keys.tsv" 2> "$RES/logs/data-keys-tg.log" || {
@@ -901,12 +909,34 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
             [[ " ${B_NAMES[*]:-} " == *" $arm "* ]] && continue
             now+=("$arm")
         done
+        # THE FIRST B-ARM WINDOW WITH THEM (lane ab-harness-speed, 2026-11-24): the first window used to be installed
+        # in tg-board, a pause of its own before the first owed unit (41 s and 129 s of the two A/B jobs' windows);
+        # here its arms install at once beside the candidate's, on the cores tg-install has to itself. The window is
+        # the same window_size the board uses (cores; free disk less every owed race's evidence and these venvs).
+        # Later windows stay at their unit boundaries: no install ever runs beside a timed race.
+        if [ -s "$TGO/units.tsv" ]; then
+            first=(); ev=0
+            while IFS=$'\t' read -r arm _rows ids <&3; do
+                ev=$(( ev + 2 * $(nlines "$ids") * PC_EVIDENCE_MB_PER_RACE ))
+                [[ " ${B_NAMES[*]:-} " == *" $arm "* ]] || continue
+                [ -n "${ARM_ENV[$arm]:-}" ] && continue
+                [ -n "${PC_OWED_ARMS:-}" ] && [[ ",$PC_OWED_ARMS," != *",$arm,"* ]] && continue
+                [[ " ${first[*]:-} " == *" $arm "* ]] || first+=("$arm")
+            done 3< "$TGO/units.tsv"
+            EV_LEFT_MB=$(( ev + ${#now[@]} * VENV_MB ))
+            w=$(( $(window_size) - ${#now[@]} ))
+            [ "$w" -gt 0 ] && [ ${#first[@]} -gt "$w" ] && first=("${first[@]:0:$w}")
+            [ "$w" -gt 0 ] && now+=(${first[@]+"${first[@]}"})
+            EV_LEFT_MB=0
+            [ "$w" -gt 0 ] && [ ${#first[@]} -gt 0 ] && say "install with the candidate: B window ${first[*]}"
+        fi
         install_arms "${now[@]}"; rc=$?
         phase_end $rc
     fi
     [ -f "${ARM_MAN[candidate]}" ] || { say "the candidate arm has no wheel manifest (logs/install-tg-candidate.log)"; exit 6; }
     fault_gate "${ARM_PY[candidate]}"   # box_job_lib.sh: verify --self-test and the cheap sabotage arms on this GPU, once per job
-    cat "$TG/race-ids-smoke.txt" "$TGO/smoke-ids.txt" 2> /dev/null | sort -u > "$TG/smoke-ids-all.txt"
+    { [ "$LISTED_IDS" = "$TG/race-ids-full.txt" ] && cat "$TG/race-ids-smoke.txt"; cat "$TGO/smoke-ids.txt"; } 2> /dev/null \
+        | sort -u > "$TG/smoke-ids-all.txt"
     for arm in ${PRIOR_ARMS[@]+"${PRIOR_ARMS[@]}"}; do PRIOR_SMOKE_IDS[$arm]="$TG/race-ids-smoke.txt"; done
     if part tg-prep; then
         # ONE PARALLEL PREP (lane fx-pod-job, 2026-11-18): the timed board's first process prepared every full-row
@@ -921,7 +951,7 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
         # the TIMED races: the listed rows and every owed unit at full rows (lane fx-pod-job2, 2026-11-18: the smoke
         # ids, rows=2000, were passed here; the full-row plan refused them, "--race-ids: not in this plan", and all 8
         # groups exited 1 in 0 s in nvc-ab-20261118T201200Z-d21ba0)
-        PIDS=(--ids "$TG/race-ids-full.txt")
+        PIDS=(--ids "$LISTED_IDS")
         if [ -s "$TGO/units.tsv" ]; then
             while IFS=$'\t' read -r _arm prow pids_f <&3; do
                 [ "$prow" = full ] && PIDS+=(--ids "$pids_f")
@@ -959,7 +989,7 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
     fi
     SJT=()
     for f in "$RES"/smoke-tg-s*-smoke/smoke.json; do [ -f "$f" ] && SJT+=(--smoke-json "$f"); done
-    $PY tools/paper_compare.py pass-ids --full-ids "$TG/race-ids-full.txt" "${SJT[@]}" --out "$TG/race-ids-pass.txt" \
+    $PY tools/paper_compare.py pass-ids --full-ids "$LISTED_IDS" "${SJT[@]}" --out "$TG/race-ids-pass.txt" \
         > "$RES/logs/pass-ids-tg.log" 2>&1
     tail -n 1 "$RES/logs/pass-ids-tg.log"
     tg_board() {   # arm, ids file, out dir, rows ("" = full), smoke-json args...: one TIMED process, resumes board.json
@@ -1071,7 +1101,21 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
                 capf="${ids%.txt}.cap.txt"
                 for c in "$TGO/chunks-$arm-$rows"/chunk-*.txt; do
                     [ -f "$c" ] || continue
-                    cp "$c" "$c.base"
+                    # SHARED BASE (measure_owed.py base-share; lane ab-harness-speed, 2026-11-24): a base race another
+                    # unit of this job (or, at full rows, the listed rows' candidate board) timed at most
+                    # PC_AB_BASE_MAX_AGE_S ago is copied into this unit's base board with its provenance; only the
+                    # rest are timed now, so an arm never sits further from its base than a back-to-back unit did
+                    bsrc=()
+                    for d in "$RES"/board-tg-ab-*-base-"$rows"; do
+                        [ -f "$d/board.json" ] && [ "$d" != "$RES/board-tg-ab-$arm-base-$rows" ] && bsrc+=(--source "$d")
+                    done
+                    [ "$rows" = full ] && [ -f "$RES/board-tg/board.json" ] && bsrc+=(--source "$RES/board-tg")
+                    if ! $PY tools/measure_owed.py base-share --target "$RES/board-tg-ab-$arm-base-$rows" --ids "$c" \
+                            ${bsrc[@]+"${bsrc[@]}"} --max-age-s "${PC_AB_BASE_MAX_AGE_S:-1200}" --out "$c.base" \
+                            > "$RES/logs/base-share-$arm-$rows.log" 2>&1; then
+                        cp "$c" "$c.base"     # the share failed: the whole chunk is timed, as before
+                    fi
+                    say "owed $arm $rows $(basename "$c"): $(tail -n 1 "$RES/logs/base-share-$arm-$rows.log" | head -c 300)"
                     tg_board candidate "$c.base" "$RES/board-tg-ab-$arm-base-$rows" "$abrows" "${SJT[@]}"; r=$?; [ $r -gt $rc ] && rc=$r
                     cap=()
                     if [ -s "$capf" ]; then
@@ -1096,7 +1140,7 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
         # EVERY STAGED ARM TIMED (lane fx-pod-job2, 2026-11-18): 12 of 14 B arms were skipped with one quiet line each
         # and the job's only failure was the compare's missing board. Each arm (the candidate on the listed rows, each
         # owed unit's arm and its base) with no timed race gets an UNTIMED line with why, and the phase fails
-        $PY tools/ops/targeted_rows.py timed-check --results "$RES" --ids "$TG/race-ids-full.txt" \
+        $PY tools/ops/targeted_rows.py timed-check --results "$RES" --ids "$LISTED_IDS" \
             --units "$TGO/units.tsv" ${PC_OWED_ARMS:+--arms "$PC_OWED_ARMS"} \
             --prior-wheels "$(IFS=,; echo "${PRIOR_WHEEL_NAMES[*]:-}")" > "$RES/logs/tg-timed-check.log" 2>&1
         r=$?; grep -m 60 -e '^UNTIMED' -e '^TG-TIMED-CHECK' "$RES/logs/tg-timed-check.log" | cut -c1-400
@@ -1125,7 +1169,7 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
             --summary "$RES/SUMMARY-TG-COMPARE-$V.txt" > "$RES/logs/compare-tg.log" 2>&1
         rc=$?; head -n 3 "$RES/logs/compare-tg.log"
         $PY tools/ops/targeted_rows.py summary --compare "$RES/compare-tg-$V.json" --rows "$TG/rows.tsv" \
-            --results "$RES" --ids "$TG/race-ids-full.txt" --units "$TGO/units.tsv" \
+            --results "$RES" --ids "$LISTED_IDS" --units "$TGO/units.tsv" \
             --prior-versions "$(IFS=,; echo "${PRIOR_ARMS[*]#prior-}")" \
             --out "$RES/SUMMARY-TG-$V.txt" > "$RES/logs/summary-tg.log" 2>&1
         r=$?; head -n 3 "$RES/logs/summary-tg.log"; [ $r -gt $rc ] && rc=$r

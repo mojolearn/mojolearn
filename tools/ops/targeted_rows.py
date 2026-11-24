@@ -111,7 +111,10 @@ SMOKE_S_PER_RACE = 3.6
 #: (lane fx-pod-job, 2026-11-18, from ideas-cycle-time-RESULT.md 1d-1e): the A/B job nvc-ab-20261118T140734Z-8f0269
 #: spent 1215 s in the starts of 77 bench_board processes (16 s each, the median); the 30 s of ab1 included the prep
 #: now done once in PREP_S.
-PROC_S = 16
+#: Re-measured (lane ab-harness-speed, 2026-11-24, the two A/B jobs of 4519097d380a on a 14-core L40S pod): tg-board
+#: less its race walls and install windows, over its bench_board processes: (6769 - 6115 - 41) / 45 = 13.6 s and
+#: (6913 - 6030 - 129) / 75 = 10.1 s; 12 s
+PROC_S = 12
 #: the job's dataset preparation, ONCE per job (tg-prep: one process per dataset, all at once, before the smoke):
 #: the longest single dataset's prep. Measured in nvc-tg-20261118T135756Z-7a2bff: graph-taxi 256.9 s and
 #: graph-istella 229.5 s, then serial inside the first timed process; in parallel the job waits for the longest.
@@ -1206,8 +1209,9 @@ def summary(doc, rows, results, ids, units=(), prior_versions=None):
                         for side, d, ms in (("base", base, b), ("arm", brd, x)) if not ms)
                 else:
                     v = " " + MO.verdict(r, "FASTER", "SLOWER", "SAME")
-                detail.append("AB %s rows=%s %s %s %s: base %s -> arm %s ms ratio %s%s" % (
-                    arm, rows_tag, rid, k[0], k[1], PC.fmt_ms(b), PC.fmt_ms(x), PC.fmt_ratio(r), v))
+                detail.append("AB %s rows=%s %s %s %s: base %s -> arm %s ms ratio %s%s%s" % (
+                    arm, rows_tag, rid, k[0], k[1], PC.fmt_ms(b), PC.fmt_ms(x), PC.fmt_ratio(r), v,
+                    base_used(base, brd, rid)))
         med = statistics.median(ratios) if ratios else None
         gaps = ab_row_gaps(base, brd, uids)
         table.append("  %-34s rows=%-6s races=%-3d cells=%-3d median arm/base %s %s%s%s%s" % (
@@ -1222,6 +1226,21 @@ def summary(doc, rows, results, ids, units=(), prior_versions=None):
         lines.append("A/B (arm and its base, the candidate, back to back):")
         lines += table + detail
     return "\n".join(lines) + "\n"
+
+
+def base_used(base, brd, rid):
+    """'; base <board> gap <s> s': which base run the arm's race was compared with (its own unit's base, or the
+    SHARED BASE another unit timed, tools/measure_owed.py base-share) and the seconds from that base race's end to the
+    arm race's start; '' when either side has no time stamp."""
+    import measure_owed as MO
+    b =(((base or {}).get("races") or {}).get(rid)) or {}
+    a = (((brd or {}).get("races") or {}).get(rid)) or {}
+    sh = b.get("shared_base") or {}
+    src = os.path.basename(str(sh.get("board"))) if sh else "own"
+    end, start = MO._iso_s(sh.get("finished") or b.get("finished")), MO._iso_s(a.get("started"))
+    if end is None or start is None:
+        return "; base %s" % src if b else ""
+    return "; base %s gap %d s" % (src, int(start - end))
 
 
 def read_units(path):
