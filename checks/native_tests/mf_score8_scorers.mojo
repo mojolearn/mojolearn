@@ -352,7 +352,8 @@ def check_group_words() raises:
     opts.lv_n = 2
     var words: List[Float64] = [9.0]
     msel_scorer_group_words(words, 5, -1, opts, sels)
-    require(len(words) == 1 + SCORER_GROUP_WORDS + 1 + 4, "the group is its fixed words, one label code, four value words")
+    require(len(words) == 1 + SCORER_GROUP_WORDS + 1 + 4,
+            "the group is its fixed words, one label code, four value words")
     var code = 0
     var positive = 0
     var back = MselScorerOptions()

@@ -119,7 +119,8 @@ def member_fit_notices_raise_with(words: List[Float64], context: PythonObject,
             metric_warn("The least populated class in y has only " + String(Int(a)) + " members, which is less "
                         + "than n_splits=" + String(Int(b)) + ".",
                         native_loaded_module("builtins").UserWarning, context, 2)
-        elif (code >= MEMBER_NOTICE_METRIC_PRF and code <= MEMBER_NOTICE_METRIC_TOP_K) or code == MEMBER_NOTICE_METRIC_KAPPA:
+        elif ((code >= MEMBER_NOTICE_METRIC_PRF and code <= MEMBER_NOTICE_METRIC_TOP_K)
+              or code == MEMBER_NOTICE_METRIC_KAPPA):
             _metric_notice(code, a, b, metric_context)
         elif code == MEMBER_NOTICE_R2_FEW:
             # RidgeCV's split path (bindings/x_linear_cv_pack.mojo

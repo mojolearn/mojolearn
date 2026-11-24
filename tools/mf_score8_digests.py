@@ -15,7 +15,8 @@ EXPECTED (base vs head):
   the door's `_mean_error` / `_tweedie` / `_d2_pinball` / `_r2_options` / `_explained_variance` build, over the
   fold rows; the door units ran the same door). Last bits may differ: the head's side targets are the RUN's
   float32 fold rows, the base's the door's float32 admission of the same values.
-- `acc_count`, `bal_adj`, `kappa`, `kappa_lin`, `kappa_quad_labels`, `ll_sum`, `topk_count`, `brier_half`: equal within 1e-6
+- `acc_count`, `bal_adj`, `kappa`, `kappa_lin`, `kappa_quad_labels`, `ll_sum`, `topk_count`, `brier_half`: equal
+  within 1e-6
   (the same programs: `label_count_run` CNT_CORRECT, `label_metric_options_run`'s balanced epilogue with the
   adjusted word, `kappa_run` over `kappa_stages` (moved out of the door, which calls it too),
   `log_loss_options_run`, `top_k_options_run`, `brier_options_run` with its half word).

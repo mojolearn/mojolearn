@@ -13,7 +13,8 @@ against scikit-learn's definitions computed here from the same codes:
 2. Weighted, w [1, 2, 1, 1, 1, 3, 0.5] (the weights' float32 bits as the UNPACK appends them): the
    misclassified weight 5.5 of 9.5: zero_one_loss 5.5 / 9.5, normalize=False 5.5, hamming_loss 5.5 / 9.5.
 3. The lookup and the words: `msel_scorer_metric_code` answers three distinct codes and -1 for a metric no row
-   serves (hinge_loss: lane mf-score8 typed cohen_kappa_score); `msel_scorer_caller` names "zero_one_loss" and "hamming_loss"; a sample_weight
+   serves (hinge_loss: lane mf-score8 typed cohen_kappa_score);
+   `msel_scorer_caller` names "zero_one_loss" and "hamming_loss"; a sample_weight
    of the wrong length raises "mojolearn zero_one_loss: sample_weight has 3 entries for 7 samples" (the doors'
    `_reg_weights` words through `mx_weights`).
 
