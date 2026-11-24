@@ -129,7 +129,7 @@ from core.member_class_weight import member_cw_subset
 from core.member_notices import (
     member_notices_take, member_notice_add, MEMBER_NOTICE_FOLD_LACKING, MEMBER_LACKING_STRATIFY,
 )
-from std.math import log
+from checks.numerics import identical_log, identical_log64
 from std.time import perf_counter_ns
 from core.member_set_run import (
     MemberSetRun, member_set_prepare, member_set_fit_free, member_set_turn, member_set_run_release,
@@ -865,10 +865,12 @@ def _word_at(src: Int, i: Int, dtype: Int) -> Float64:
 @always_inline
 def _log_word(value: Float64, dtype: Int) -> Float64:
     """predict_log_proba's word (`np.log(predict_proba(X))`): the log in the
-    member's own precision (a float32 probability's log is a float32)."""
+    member's own precision (a float32 probability's log is a float32),
+    through the checks/numerics.mojo seam (cross-vendor bits; was raw libm
+    `log`, MATHLINT w3 gate row 8)."""
     if dtype == MEMBER_F32:
-        return Float64(log(Float32(value)))
-    return log(value)
+        return Float64(identical_log(Float32(value)))
+    return identical_log64(value)
 
 
 @always_inline

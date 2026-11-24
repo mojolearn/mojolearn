@@ -345,8 +345,10 @@ def label_metric_options_run(route: MetricRoute, metric: Int, avg: Int, truth: I
         chosen = labels
     var weighted = w != 0
     var col = 1 if weighted else 0
-    if avg == LBL_NONE and (metric == LBL_MCC or metric == LBL_BALANCED):
-        raise Error("RuntimeError: average=None on a label metric without per-label values")
+    # balanced_accuracy and matthews take no `average`: their table rows
+    # carry avg 0, which is LBL_NONE's word, so `avg` is not read for them
+    # (w3 gate row 5: the old refusal here failed every such scorer; the
+    # scorer row refuses average=None on them at `msel_scorer_row`).
     var plan = MetricProgramPlan()
     var s = mc_sums_stages(plan, n, labels, weighted)
     var at = MC_NONE
