@@ -4556,6 +4556,11 @@ PUBLIC_PENDING_LANES = {
     "x-prep-priors": "stale reference",
     "x-prep-rfe": "stale reference",
     "x-prep-score-edges": "stale reference",
+    # 4bbf1cc343 (mamba3 lane) moved the mamba3 fixture to a two-chunk backward
+    # (tools/identity_break.py LANE_REVISIONS "norms-near-one-two-chunk-backward-2");
+    # the shipped table's cells are at "norms-near-one-1". Leaves this dict when
+    # the release record regenerates the table at the new revision.
+    "mamba3": "stale reference",
     }
 # lane/lowbit-int15 (2026-09-29) held gemm-int15 here until a release record
 # carried it. ADMITTED 2026-10-08 (lane rehearsal-suite-green): the shipped
