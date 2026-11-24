@@ -141,7 +141,8 @@ def test_a_failing_chunk_does_not_stop_the_others(tmp_path, fake, capsys):
     assert "FAILURES (1 chunk(s); every other chunk ran)" in capsys.readouterr().out
 
 
-def test_the_full_lane_list_drops_only_declared_gpu_only_lanes_on_cpu(tmp_path):
+def test_the_full_lane_list_is_every_lane_on_every_column(tmp_path):
+    """A one-sided lane is recorded on its missing side too: its cell reads n/a by name (2026-11-24)."""
     class P:
         def __init__(self, out):
             self.returncode, self.stdout, self.stderr = 0, out, ""
@@ -149,11 +150,12 @@ def test_the_full_lane_list_drops_only_declared_gpu_only_lanes_on_cpu(tmp_path):
 
     def run(cmd, **kw):
         calls.append(cmd)
-        return P("a,b,gpu1\n" if "lanes" in cmd else "gpu1\n")
+        return P("a,b,gpu1\n")
     a = args(tmp_path, "--columns", "cpu")
     r = R.Run(a, run=run)
-    assert r.all_lanes(pathlib.Path(sys.executable), "cpu", "cpu") == (["a", "b"], 0)
+    assert r.all_lanes(pathlib.Path(sys.executable), "cpu", "cpu") == (["a", "b", "gpu1"], 0)
     assert r.all_lanes(pathlib.Path(sys.executable), "amd", "amd-x") == (["a", "b", "gpu1"], 0)
+    assert len(calls) == 2
 
 
 def test_the_venv_gets_the_harness_numpy_after_the_release_wheels(tmp_path):

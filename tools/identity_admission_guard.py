@@ -53,44 +53,58 @@ def host_only_declarations(tools_dir=HERE):
                              ("apple-metal", "nvidia-1gpu", "amd-1gpu")))
 
 
+def one_sided_calls(tree, missing):
+    """Lane names of every `_one_sided("<lane>", missing="<missing>", ...)` call
+    in a parsed source (registry ONE_SIDED, 2026-11-24; `missing` may also be
+    the second positional argument). A call whose lane or side is not a
+    literal string is refused: a declaration this reader cannot read must not
+    silently read as none."""
+    out = set()
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "_one_sided"):
+            continue
+        side = next((k.value for k in node.keywords if k.arg == "missing"), None)
+        if side is None and len(node.args) >= 2:
+            side = node.args[1]
+        if not (node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)
+                and isinstance(side, ast.Constant) and isinstance(side.value, str)):
+            raise ValueError("a _one_sided(...) call this reader cannot read (lane and missing must be literals)")
+        if side.value == missing:
+            out.add(node.args[0].value)
+    return out
+
+
 def gpu_only_declarations(tools_dir=HERE):
     """(lanes, prefixes) the harness itself declares to have no CPU column.
 
-    Read from the SOURCE, never imported: `GPU_ONLY_LANES` in
-    tools/identity_break.py plus the `GPU_ONLY_LANES["lane"] = "why"` entries
-    the lane modules under tools/identity_lanes/ add, and
-    `RECORD_EXCLUDED_PREFIXES` (the cooperative `par-*` drivers, whose CPU
-    train value is `CPU_BY_DESIGN_NA`). A checkout without the harness reads
-    as no declarations, which only makes the cpu rule stricter.
+    Read from the SOURCE, never imported: every `_one_sided("lane",
+    missing="cpu", ...)` call in tools/identity_break.py and the lane modules
+    under tools/identity_lanes/ (registry ONE_SIDED; the older GPU_ONLY_LANES
+    is gone, 2026-11-24), and `RECORD_EXCLUDED_PREFIXES` (the cooperative
+    `par-*` drivers, whose CPU train value is `CPU_BY_DESIGN_NA`). A checkout
+    without the harness reads as no declarations, which only makes the cpu
+    rule stricter.
     """
     harness = Path(tools_dir) / "identity_break.py"
     if not harness.is_file():
         return frozenset(), ()
     lanes, prefixes = set(), ()
-    for node in ast.parse(harness.read_text()).body:
+    tree = ast.parse(harness.read_text())
+    lanes |= one_sided_calls(tree, "cpu")
+    for node in tree.body:
         if not isinstance(node, ast.Assign):
             continue
         names = [t.id for t in node.targets if isinstance(t, ast.Name)]
-        if "GPU_ONLY_LANES" in names and isinstance(node.value, ast.Dict):
-            for key in node.value.keys:
-                if not (isinstance(key, ast.Constant) and isinstance(key.value, str)):
-                    raise ValueError("GPU_ONLY_LANES has a key this guard cannot read")
-                lanes.add(key.value)
         if "RECORD_EXCLUDED_PREFIXES" in names:
             value = ast.literal_eval(node.value)
             if not (isinstance(value, tuple) and all(isinstance(v, str) for v in value)):
                 raise ValueError("RECORD_EXCLUDED_PREFIXES is not a tuple of strings")
             prefixes = value
     for path in sorted((Path(tools_dir) / "identity_lanes").glob("*.py")):
-        for node in ast.parse(path.read_text()).body:
-            if not isinstance(node, ast.Assign):
-                continue
-            for target in node.targets:
-                if (isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name)
-                        and target.value.id == "GPU_ONLY_LANES"):
-                    if not (isinstance(target.slice, ast.Constant) and isinstance(target.slice.value, str)):
-                        raise ValueError(f"{path.name}: a GPU_ONLY_LANES key this guard cannot read")
-                    lanes.add(target.slice.value)
+        try:
+            lanes |= one_sided_calls(ast.parse(path.read_text()), "cpu")
+        except ValueError as error:
+            raise ValueError(f"{path.name}: {error}") from None
     return frozenset(lanes), tuple(prefixes)
 
 

@@ -414,7 +414,8 @@ def lane_facts(summary, previous, column, device=None, is_ancestor=None):
         out[lane] = dict(owed=True, reason=why, since=since, since_after_previous=after, device=device)
     for lane, row in (summary.get("reused") or {}).items():
         out[lane] = dict(owed=False, since=(row or {}).get("commit"), device=device)
-    # A lane the harness declares has no route on this column (GPU_ONLY_LANES on cpu)
+    # A lane the harness declares has no side on this column (`_one_sided`, ONE_SIDED: missing cpu on the
+    # cpu column, missing gpu on a GPU column)
     # is not owed and not known-bad: it is not applicable here.
     for lane, row in (summary.get("not_applicable") or {}).items():
         out[lane] = dict(owed=False, not_applicable=True, reason=(row or {}).get("reason"),

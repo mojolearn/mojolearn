@@ -320,7 +320,7 @@ else
     reused=$(sed -n 's/.* REUSED \([0-9]*\) .*/\1/p' <<< "$summary")
     record=$(sed -n 's/.* RECORD \([0-9]*\) .*/\1/p' <<< "$summary")
     bad=$(sed -n 's/.* KNOWN-BAD \([0-9]*\) .*/\1/p' <<< "$summary")
-    # n/a: lanes the harness declares have no route on this class (GPU_ONLY_LANES on cpu), not known-bad.
+    # n/a: lanes the harness declares have no side on this class (`_one_sided`, ONE_SIDED), not known-bad.
     na=$(sed -n 's|.* N/A \([0-9]*\).*|\1|p' <<< "$summary")
     echo "REUSED $reused / RECORD $record $LABEL (class $CLASS, known-bad $bad, n/a ${na:-0}; decisions $OUT/$LABEL.reuse.json; without REUSE=1 every lane is recorded)"
     # RELEASE FLOOR = THE LEDGER'S RULE (lane ledger-floor-receipts): changed-lanes measures a row

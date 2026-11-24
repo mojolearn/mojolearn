@@ -151,45 +151,35 @@ def _loop_registered_lanes(text):
 
 
 def _gpu_only_lanes():
-    """`identity_break.GPU_ONLY_LANES`, read from the SOURCE as every other
-    fact about the harness in this file is (lane/unlaned-public-algorithms,
-    2026-09-20). It is the set the harness itself uses to drop a lane from a
-    full-column run on a CPU-only install, so a `no cpu route` reason is
-    checked against the mechanism that acts on it and not against prose.
-    AN EMPTY DICT IS A LEGITIMATE READ SINCE 2026-09-20
-    (lane/cpu-routes-gpu-only-four): all four entries gained CPU routes and
-    `GPU_ONLY_LANES` is now `{}`. This used to refuse an empty read outright,
-    on the ground that a reader that silently returned nothing would let a
-    `no cpu route` reason through unchecked. That ground is still right and
-    the check is kept -- it is just spelled against the SOURCE's own key
-    count instead of against "non-empty", so it catches the broken reader
-    without calling a true emptiness a bug."""
+    """The lanes the harness declares with no CPU side, read from the SOURCE
+    as every other fact about the harness in this file is: every
+    `_one_sided("<lane>", missing="cpu", ...)` call in tools/identity_break.py
+    and tools/identity_lanes/*.py (registry ONE_SIDED, 2026-11-24; the older
+    GPU_ONLY_LANES dict is gone). It is the mechanism that acts on a `no cpu
+    route` reason (a CPU column records the lane's cell as `n/a:one-sided` by
+    name), so the reason is checked against it and not against prose. An
+    empty read is legitimate; a declaration this reader cannot parse is not,
+    so a broken reader cannot let a `no cpu route` reason through unchecked."""
     import ast
 
-    for node in ast.parse(_read("tools/identity_break.py")).body:
-        if not isinstance(node, ast.Assign):
-            continue
-        names = [t.id for t in node.targets if isinstance(t, ast.Name)]
-        if "GPU_ONLY_LANES" in names and isinstance(node.value, ast.Dict):
-            out = {k.value for k in node.value.keys
-                   if isinstance(k, ast.Constant) and isinstance(k.value, str)}
-            assert len(out) == len(node.value.keys), \
-                "GPU_ONLY_LANES has keys this reader did not parse"
-            # The lane modules under tools/identity_lanes/ add their own
-            # entries with `GPU_ONLY_LANES["lane"] = "why"` on the same dict
-            # (coverage.py, native_owners.py), so those are the mechanism too.
-            for path in sorted((ROOT / "tools/identity_lanes").glob("*.py")):
-                for sub in ast.parse(path.read_text()).body:
-                    if not isinstance(sub, ast.Assign):
-                        continue
-                    for t in sub.targets:
-                        if (isinstance(t, ast.Subscript) and isinstance(t.value, ast.Name)
-                                and t.value.id == "GPU_ONLY_LANES"):
-                            assert isinstance(t.slice, ast.Constant) and isinstance(t.slice.value, str), \
-                                f"{path.name}: a GPU_ONLY_LANES key this reader did not parse"
-                            out.add(t.slice.value)
-            return out
-    raise AssertionError("tools/identity_break.py defines no GPU_ONLY_LANES dict")
+    out = set()
+    paths = [ROOT / "tools/identity_break.py", *sorted((ROOT / "tools/identity_lanes").glob("*.py"))]
+    for path in paths:
+        source = path.read_text()
+        assert "GPU_ONLY_LANES =" not in source and "GPU_ONLY_LANES[" not in source, \
+            f"{path.name}: the retired GPU_ONLY_LANES registry came back; declare _one_sided(...)"
+        for node in ast.walk(ast.parse(source)):
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                    and node.func.id == "_one_sided"):
+                continue
+            missing = next((k.value for k in node.keywords if k.arg == "missing"),
+                           node.args[1] if len(node.args) > 1 else None)
+            assert (node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)
+                    and isinstance(missing, ast.Constant)), \
+                f"{path.name}: a _one_sided(...) call this reader did not parse"
+            if missing.value == "cpu":
+                out.add(node.args[0].value)
+    return out
 
 
 def test_covered_lanes_are_identity_break_lanes():
@@ -770,19 +760,19 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
             # public surface refuses BY NAME on a CPU-only install, so no
             # host family can ever declare the lane and `lane in covered`
             # is a condition it can never meet. It is checked BOTH ways --
-            # the lane must be in GPU_ONLY_LANES, and a lane that IS covered
+            # the lane must be declared one-sided with no CPU side, and a lane that IS covered
             # must not use this reason -- so it cannot become a hiding place
             # for a lane that merely has no CPU column yet.
             assert lane in gpu_only, (
-                f"{lane}: held back as 'no cpu route', but identity_break.GPU_ONLY_LANES does not "
-                "name it, so nothing drops it from a full-column CPU run and the reason is unbacked")
+                f"{lane}: held back as 'no cpu route', but no _one_sided({lane!r}, missing='cpu') "
+                "declares it, so a CPU column would read it as a failure and the reason is unbacked")
             assert lane not in covered, (
                 f"{lane}: held back as 'no cpu route', but it IS a covered lane, so a CPU column "
                 "can state it; its reason is 'no reference' or 'unwatched'")
             continue
         assert lane in covered, f"{lane} is held back but is not a covered lane at all"
         assert lane not in gpu_only, (
-            f"{lane}: identity_break.GPU_ONLY_LANES names it, so no CPU column can carry it and "
+            f"{lane}: _one_sided(missing='cpu') declares it, so no CPU column can carry it and "
             f"its reason is 'no cpu route', not {why!r}")
         if why == "stale reference":
             assert lane in revisions, f"{lane}: no LANE_REVISIONS entry, so its reference is not stale; let it in"
