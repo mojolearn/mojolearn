@@ -399,13 +399,14 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
 
 
 def _curve_by_search(estimator: PythonObject, args: PythonObject, param_range: PythonObject, context: PythonObject,
-                     b: PythonObject, drawn: PythonObject) raises -> PythonObject:
+                     b: PythonObject) raises -> PythonObject:
     """UNPACK of a validation curve as its grid search (lane mf-cluster5):
     a GridSearchCV over {param_name: param_range} with the curve's cv,
     scoring, n_jobs and error_score, refit=False and train scores, fitted by
     the search kind's typed RUN; PACK: its split<i>_train_score /
-    split<i>_test_score columns as the curve's (values x folds) blocks. None:
-    the kind did not take it (nothing was fitted)."""
+    split<i>_test_score columns as the curve's (values x folds) blocks.
+    Never None (lane mf-r9b): what the kind does not fit is refused by
+    `_search_member_fit` in its words; y None fits an unsupervised base."""
     var grid = Python.dict()
     py_setitem(grid, args[3], py_call(b.list, param_range))
     var keywords = Python.dict()
@@ -419,13 +420,27 @@ def _curve_by_search(estimator: PythonObject, args: PythonObject, param_range: P
     py_setitem(keywords, "param_grid", grid)
     var search = msel_carrier_search(msel_cls("GridSearchCV", context), keywords, context)
     var fields = msel_search_fields(search, context)
-    if not _search_member_fit(search, fields, args[1], args[2], args[5], context, b, drawn):
-        return PythonObject(None)
+    # THE RESIDENT FOLD ROWS (lane mf-r9b), as `msel_search_fit` opens them
+    # for a device member (the units' DeviceRows rule): none when the curve
+    # moves `device` (one of its values is the CPU) or the base says
+    # device="cpu". Read once per curve.
+    var scope = PythonObject(None)
+    if msel_device_rows_ok(estimator, args[7], context) and not msel_member_host_folds(fields, b, context):
+        var name = String(py=args[3])
+        if name != "device" and not name.endswith("__device"):
+            scope = msel_rows_scope_open(context)
+    try:
+        # raises every refusal in its words (THE REFUSAL RULE)
+        _ = _search_member_fit(search, fields, args[1], args[2], args[5], context, b, Python.list())
+    finally:
+        if scope is not None:
+            msel_rows_scope_close(scope, context)
     var fitted = msel_search_fields(search, context)
     var results = py_get(fitted, "cv_results_")
     var splits = py_get(fitted, "n_splits_")
     if results is None or splits is None:
-        return PythonObject(None)
+        raise Error("RuntimeError: validation_curve invariant: the search kind's PACK wrote no cv_results_ or"
+                    + " n_splits_")
     var k = Int(py=splits)
     var count = len(param_range)
     var tr = List[Float64](capacity=count * k)
@@ -455,67 +470,30 @@ def msel_validation_curve(args: PythonObject, context: PythonObject) raises -> P
     cv, scoring, n_jobs, error_score)`."""
     var b = msel_b()
     var estimator = args[0]
-    var scoring = args[7]
-    var error_score = args[9]
-    var jobs = msel_unit_jobs(args[8], error_score, "validation_curve", context)
     if py_type(args[3]) is not b.str:
         raise Error("TypeError: param_name must be an exact string")
     var param_range = msel_parameter_values(args[4], context)
+    # ONE SCORER (lane mf-r9b): validate_params' scoring constraint, in
+    # signature order (after param_name and param_range, before n_jobs and
+    # error_score); several scorers were the units' KeyError 'train_score'.
+    _one_scorer_check("validation_curve", args[7], context)
+    _ = msel_unit_jobs(args[8], args[9], "validation_curve", context)  # n_jobs and error_score words
+    if len(param_range) == 0:
+        # scikit-learn 1.9 validation_curve (model_selection/_validation.py
+        # 2493-2510): the split runs, no fit, then `_aggregate_score_dicts([])`
+        # reads `scores[0]`. The door's split checks first, then those words.
+        _ = msel_cv_folds(estimator, args[1], args[2], args[6], args[5], True, context)
+        raise Error("IndexError: list index out of range")
     # THE TYPED SEARCH RUN (lane mf-cluster5): a validation curve IS the grid
     # search over {param_name: param_range} with return_train_score=True and
     # refit=False, so the search kind's typed RUN (core/msel_search_run.mojo,
-    # through `_search_member_fit`) fits and scores it when it takes it (every
-    # value a serving member; a scorer it serves; lane mf-msel5c: a splitter
-    # with the curve's groups split by the door, as a search's); its split
-    # scores are the curve's. Otherwise the units below (THE FALLBACK RULE).
-    var drawn = Python.list()
-    if args[2] is not None and len(param_range) > 0:
-        var curve = _curve_by_search(estimator, args, param_range, context, b, drawn)
-        if curve is not None:
-            return curve
-    # The door's split, drawn once (the kind's UNPACK may already have drawn it).
-    var got = drawn[0] if len(drawn) > 0 else msel_cv_folds(estimator, args[1], args[2], args[6], args[5], True,
-                                                            context)
-    var xf = got[0]
-    var yf = got[1]
-    var folds = got[2]
-    var tr = List[Float64]()
-    var te = List[Float64]()
-    var count = 0
-    var k = 0
-    # A curve over the estimator's `device` (or a nested member's) hands
-    # every value host rows (device wave, 2026-11-21): one of its values is
-    # the CPU. The name was admitted as an exact str above.
-    var device_rows = msel_device_rows_ok(estimator, scoring, context)
-    if device_rows:
-        var param_name = String(args[3])
-        if param_name == "device" or param_name.endswith("__device"):
-            device_rows = False
-    var rows = MselFoldRows(xf, yf, folds, device_rows, context)
-    try:
-        # Every (value, fold) is one unit (msel_cv_units); each unit clones
-        # the base once and sets {param_name: value} on its clone.
-        var candidates = Python.list()
-        for v in range(len(param_range)):  # driver-loop: over the param_range candidates (one candidate dict each)
-            var params = Python.dict()
-            py_setitem(params, args[3], param_range[v])
-            _ = py_call(candidates.append, params)
-        var run = msel_cv_units(estimator, candidates, yf, rows, scoring, True, False, error_score, jobs, context)
-        for v in range(len(param_range)):  # driver-loop: over the param_range candidates (results only)
-            var r = run.candidate(v, False, context)
-            if len(r.names) != 1 or r.names[0] != "score":
-                _ = family_call(py_attr(Python.dict(), "__getitem__"), PythonObject("train_score"))
-            for i in range(len(r.train[0])):  # driver-loop: over folds
-                tr.append(r.train[0][i])
-                te.append(r.test[0][i])
-            if v == 0:
-                k = len(r.train[0])
-            count += 1
-    finally:
-        rows.close(context)
-    if count == 0:
-        raise Error("IndexError: list index out of range")
-    return Python.tuple(msel_f64_block(tr, count, k, context), msel_f64_block(te, count, k, context))
+    # through `_search_member_fit`) fits and scores it (every value a serving
+    # member; a scorer it serves; lane mf-msel5c: a splitter with the curve's
+    # groups split by the door, as a search's); its split scores are the
+    # curve's. Lane mf-r9b: the only route, y None included (an unsupervised
+    # base); the kind refuses what it does not fit in its words. Its
+    # resident fold rows follow the units' device rule (`_curve_by_search`).
+    return _curve_by_search(estimator, args, param_range, context, b)
 
 
 # ---------------------------------------------------------------- learning_curve
@@ -542,25 +520,18 @@ def _invalid_parameter_class(context: PythonObject) raises -> PythonObject:
     return made
 
 
-def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`learning_curve(estimator, X, y, groups, train_sizes, cv, scoring,
-    n_jobs, shuffle, random_state, error_score, return_times)`."""
+def _one_scorer_check(caller: String, scoring_in: PythonObject, context: PythonObject) raises:
+    """SEVERAL SCORERS (lane mf-tail5; lane mf-r9b: validation_curve too):
+    scikit-learn 1.9's `validate_params` of learning_curve and
+    validation_curve allows `scoring` only as a scorer name, a callable or
+    None ([StrOptions(set(get_scorer_names())), callable, None],
+    model_selection/_validation.py 1763 and 2274): a list, tuple, set or
+    dict is its InvalidParameterError, raised before any fold or fit. Lane
+    mf-tail5b: its CLASS (`InvalidParameterError`, a ValueError and a
+    TypeError: scikit-learn's own when sklearn is loaded, else
+    `_invalid_parameter_class`'s) and its words as `StrOptions.__str__`
+    writes them: the names' reprs in the order of the Python set it holds."""
     var b = msel_b()
-    var estimator = args[0]
-    var jobs = msel_unit_jobs(args[7], args[10], "learning_curve", context)
-    var shuffle = msel_flag_truth(args[8], context)
-    var seed = _search_seed(args[9], context)
-    var return_times = msel_flag_truth(args[11], context)
-    # SEVERAL SCORERS (lane mf-tail5): scikit-learn 1.9's `validate_params`
-    # of learning_curve allows `scoring` only as a scorer name, a callable or
-    # None ([StrOptions(get_scorer_names()), callable, None]): a list, tuple,
-    # set or dict is its InvalidParameterError, raised before any fold or
-    # fit. Lane mf-tail5b: its CLASS (`InvalidParameterError`, a ValueError
-    # and a TypeError: scikit-learn's own when sklearn is loaded, else
-    # `_invalid_parameter_class`'s) and its words as `StrOptions.__str__`
-    # writes them: the names' reprs in the order of the Python set it holds
-    # (`StrOptions(set(get_scorer_names()))`).
-    var scoring_in = args[6]
     var many = py_type(scoring_in)
     if many is b.list or many is b.tuple or many is b.set or many is b.dict:
         var names = py_call(b.list, py_call(b.set, py_call(b.list, context["family_msel_scorers"])))
@@ -570,34 +541,96 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
                 shown += ", "
             shown += family_repr(names[i])
         mx_raise_obj(_invalid_parameter_class(context),
-                     PythonObject("The 'scoring' parameter of learning_curve must be a str among " + shown
+                     PythonObject("The 'scoring' parameter of " + caller + " must be a str among " + shown
                                   + "}, a callable or None. Got " + family_repr(scoring_in) + " instead."))
+
+
+def _train_sizes(requested: PythonObject, n_max: Int, context: PythonObject) raises -> List[Int]:
+    """scikit-learn 1.9's `_translate_train_sizes(train_sizes, n_max)`
+    (model_selection/_validation.py 2114-2179), over the admitted scalars:
+    an empty list is NumPy's reduction words (`np.min` of a zero-size
+    array); any float makes every value a fraction (np.asarray's float
+    dtype), all in (0, 1] or the fractions words with min and max as `%f`,
+    then int(fraction * n_max) clipped to [1, n_max]; integers all in
+    (0, n_max] or the absolute words with min and max; the unique sizes,
+    sorted, with the RuntimeWarning when duplicates were dropped. Lane
+    mf-r9b (each value was refused alone in the absolute words before, and
+    an empty list ran no fit)."""
+    var b = msel_b()
+    var count = len(requested)
+    if count == 0:
+        raise Error("ValueError: zero-size array to reduction operation minimum which has no identity")
+    var values = Python.list()
+    var fractions = False
+    for i in range(count):  # driver-loop: over the requested train sizes (admitted once)
+        var s = _search_scalar(requested[i], "train_sizes", context)
+        fractions = fractions or py_type(s) is b.float
+        _ = py_call(values.append, s)
+    var low = family_call(b.min, values)
+    var high = family_call(b.max, values)
+    var chosen = List[Int](capacity=count)
+    if fractions:
+        var lo = Float64(py=family_call(b.float, low))
+        var hi = Float64(py=family_call(b.float, high))
+        if lo <= 0.0 or hi > 1.0:
+            var fmt = PythonObject("%f")
+            raise Error("ValueError: train_sizes has been interpreted as fractions of the maximum number of training"
+                        + " samples and must be within (0, 1], but is within ["
+                        + String(py=family_call(msel_op("mod"), fmt, PythonObject(lo))) + ", "
+                        + String(py=family_call(msel_op("mod"), fmt, PythonObject(hi))) + "].")
+        for i in range(count):  # driver-loop: over the requested fractions
+            var a = Int(Float64(py=family_call(b.float, values[i])) * Float64(n_max))  # astype(int): truncation
+            chosen.append(min(max(a, 1), n_max))
+    else:
+        var lo = msel_int(low)
+        var hi = msel_int(high)
+        if lo <= 0 or hi > n_max:
+            raise Error("ValueError: train_sizes has been interpreted as absolute numbers of training samples and"
+                        + " must be within (0, " + String(n_max) + "], but is within [" + String(lo) + ", "
+                        + String(hi) + "].")
+        for i in range(count):  # driver-loop: over the requested sizes
+            chosen.append(msel_int(values[i]))
+    for i in range(1, count):  # driver-loop: insertion sort of the few requested sizes (np.unique's order)
+        var v = chosen[i]
+        var j = i - 1
+        while j >= 0 and chosen[j] > v:  # driver-loop: shift the larger sizes right
+            chosen[j + 1] = chosen[j]
+            j -= 1
+        chosen[j + 1] = v
+    var sizes = List[Int](capacity=count)
+    for i in range(count):  # driver-loop: over the sorted sizes (np.unique)
+        if i == 0 or chosen[i] != chosen[i - 1]:
+            sizes.append(chosen[i])
+    if len(sizes) < count:
+        msel_warn("Removed duplicate entries from 'train_sizes'. Number of ticks will be less than the size of"
+                  + " 'train_sizes': " + String(len(sizes)) + " instead of " + String(count) + ".",
+                  b.RuntimeWarning, context)
+    return sizes^
+
+
+def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`learning_curve(estimator, X, y, groups, train_sizes, cv, scoring,
+    n_jobs, shuffle, random_state, error_score, return_times)`."""
+    var b = msel_b()
+    var estimator = args[0]
+    # One scorer (`_one_scorer_check`), in validate_params' signature order:
+    # scoring comes before n_jobs, shuffle, random_state and error_score.
+    _one_scorer_check("learning_curve", args[6], context)
+    _ = msel_unit_jobs(args[7], args[10], "learning_curve", context)  # n_jobs and error_score words
+    var shuffle = msel_flag_truth(args[8], context)
+    var seed = _search_seed(args[9], context)
+    var return_times = msel_flag_truth(args[11], context)
     var got = msel_cv_folds(estimator, args[1], args[2], args[5], args[3], False, context)
     var x = got[0]
     var y = got[1]
     var folds = got[2]
     var nf = len(folds)
+    # scikit-learn 1.9 learning_curve (model_selection/_validation.py 2035-2036):
+    # n_max_training_samples is the FIRST fold's train size; a larger size of
+    # a shorter fold takes all its rows (`train[:n]`, clamped below). Lane
+    # mf-r9b: the minimum over folds before.
     var n_max = Int(py=folds[0][0].size)
-    for f in range(nf):  # driver-loop: over folds
-        n_max = min(n_max, Int(py=folds[f][0].size))
-    var chosen = Python.list()
-    var requested = msel_parameter_values(args[4], context)
-    var math = native_loaded_module("math")
-    for i in range(len(requested)):  # driver-loop: over the requested train sizes
-        var s = _search_scalar(requested[i], "train_sizes", context)
-        var a = 0
-        if py_type(s) is b.float:
-            a = msel_int(family_call(math.floor, family_call(msel_op("mul"), s, PythonObject(n_max))))
-        else:
-            a = msel_int(s)
-        if not (0 < a and a <= n_max):
-            raise Error("train_sizes has been interpreted as absolute numbers of training samples and "
-                        + "must be within (0, " + String(n_max) + "], but is within [" + String(a) + ", " + String(a) + "].")
-        _ = py_call(chosen.append, PythonObject(a))
-    var sizes_py = family_call(b.sorted, py_call(b.set, chosen))
-    var sizes = List[Int]()
-    for i in range(len(sizes_py)):  # driver-loop: over train sizes
-        sizes.append(Int(py=sizes_py[i]))
+    var sizes = _train_sizes(msel_parameter_values(args[4], context), n_max, context)
     var orders = Python.list()
     if shuffle:
         var rng = MselRng(seed, context)
@@ -624,17 +657,14 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
             _ = py_call(orders.append, msel_index_i64(folds[f][0], context))
     var scoring = args[6]
     var error_score = args[10]
-    # Lane p3-msel-parallel-and-process-pool: every (train size, fold) is a
-    # unit of msel_cv_units, size-major, so the results keep the old order.
-    # The fold rows stay on the host gather (device_rows False), as before:
-    # each unit's fit sees the same arrays, so no bits change. REMOVED: the
-    # serial size x fold loop and its own resident plan; the test rows are
-    # now gathered per unit (they were gathered once per fold for every
-    # size): the price of independent units, RUN OWED in the A/B.
+    # Every (train size, fold) is one given fold of the carrier, size-major,
+    # so the results keep the old order (sklearn's fold-major units reshaped
+    # to the same (sizes, folds) blocks).
     var unit_folds = Python.list()
     for si in range(len(sizes)):  # driver-loop: over train sizes
         for f in range(nf):  # driver-loop: over folds
-            _ = py_call(unit_folds.append, Python.tuple(msel_slice_i64(orders[f], 0, sizes[si], context), folds[f][1]))
+            var take = min(sizes[si], Int(py=orders[f].size))  # `train[:n]` of a shorter fold: all its rows
+            _ = py_call(unit_folds.append, Python.tuple(msel_slice_i64(orders[f], 0, take, context), folds[f][1]))
     var tr_s = List[Float64]()
     var te_s = List[Float64]()
     var ft = List[Float64]()
@@ -642,40 +672,20 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     # THE ONE TYPED SEARCH RUN (lane mf-msel5, bindings/msel_cv_door.mojo
     # `msel_cv_by_search`): the size-major units as one candidate's given
     # folds (each size's train rows the fold's first `size` of its order),
-    # one gathered test block per fold (the RUN's `_same_rows`, as
-    # `reuse_test` below), the units' fit and test-score seconds. One
-    # scorer only (several: the units' TypeError below).
-    var by = PythonObject(None)
-    if msel_scorers(scoring, context) is None:
-        by = msel_cv_by_search(estimator, x, y, unit_folds, scoring, args[7], error_score, True, False,
+    # one gathered test block per fold (the RUN's `_same_rows`), the units'
+    # fit and test-score seconds. Lane mf-r9b: the only route (one scorer,
+    # `_one_scorer_check`; the kind refuses what it does not fit in its words).
+    var by = msel_cv_by_search(estimator, x, y, unit_folds, scoring, args[7], error_score, True, False,
                                PythonObject(None), False, context)
-    if by is not None:
-        var te_by = by["test"][0]
-        var tr_by = by["train"][0]
-        var ft_by = by["fit_time"]
-        var st_by = by["score_time"]
-        for u in range(len(unit_folds)):  # driver-loop: over size x fold units (results only)
-            tr_s.append(Float64(py=tr_by[u]))
-            te_s.append(Float64(py=te_by[u]))
-            ft.append(Float64(py=ft_by[u]))
-            st.append(Float64(py=st_by[u]))
-    else:
-        var rows = MselFoldRows(x, y, unit_folds, False, context)
-        # Every size of a fold scores on the same test rows; they are gathered
-        # once per fold (bindings/msel_cv_door.mojo `_take_reusing_test`, the
-        # default since 2026-11-20; its _OFF old path was deleted 2026-11-23).
-        rows.reuse_test = True
-        try:
-            var r = msel_cross_validate_run(estimator, y, rows, scoring, True, False, False, error_score, context, jobs)
-            if len(r.names) != 1:
-                raise Error("TypeError: learning_curve takes one scorer")
-            for u in range(len(r.fit_time)):  # driver-loop: over size x fold units
-                tr_s.append(r.train[0][u])
-                te_s.append(r.test[0][u])
-                ft.append(r.fit_time[u])
-                st.append(r.score_time[u])
-        finally:
-            rows.close(context)
+    var te_by = by["test"][0]
+    var tr_by = by["train"][0]
+    var ft_by = by["fit_time"]
+    var st_by = by["score_time"]
+    for u in range(len(unit_folds)):  # driver-loop: over size x fold units (results only)
+        tr_s.append(Float64(py=tr_by[u]))
+        te_s.append(Float64(py=te_by[u]))
+        ft.append(Float64(py=ft_by[u]))
+        st.append(Float64(py=st_by[u]))
     var out = Python.list()
     _ = py_call(out.append, msel_i64_list(sizes, context))
     _ = py_call(out.append, msel_f64_block(tr_s, len(sizes), nf, context))
@@ -760,51 +770,33 @@ def _perm_base(y: PythonObject, context: PythonObject) raises -> PythonObject:
 
 
 def _mean_test(estimator: PythonObject, x: PythonObject, y: PythonObject, folds: PythonObject, scoring: PythonObject,
-               mut rows: MselFoldRows, jobs: Int, context: PythonObject) raises -> Float64:
-    """`_row_means([cross_validate(...)['test_score']])[0]` on `rows`, the
-    folds as units on `jobs` threads.
+               jobs: Int, context: PythonObject) raises -> Float64:
+    """`_row_means([cross_validate(...)['test_score']])[0]`: the mean of the
+    folds' test scores.
 
     THE ONE TYPED SEARCH RUN (lane mf-msel5c): the folds are the carrier
-    search's given folds (`msel_cv_by_search`, error_score nan as the door's
-    units score them), fitted and scored by the search kind's RUN; the
-    door's units only for what that kind does not take (resident fold rows
-    included, lane mf-tail5: the carrier reads their scope)."""
+    search's given folds (`msel_cv_by_search`, error_score nan as
+    scikit-learn's permutation_test_score scores them; n_jobs the call's
+    bound), fitted and scored by the search kind's RUN. Lane mf-r9b: the
+    only route (what the kind does not fit is refused there in its words).
+    (lane mf-tail5) Resident fold rows: the caller's `MselFoldRows` opened
+    the resident scope the carrier opens (`msel_rows_scope_open`) and the
+    carrier's RUN reads it (its resident route: the whole X plus each side's
+    rows, X pinned once in that scope for every permutation); without one
+    the carrier opens its own."""
     var one = List[List[Float64]]()
-    # (lane mf-tail5) Resident fold rows too (`rows.dev`): `rows` opened the
-    # same resident scope the carrier opens (`msel_rows_scope_open`), and the
-    # carrier's RUN reads it (its resident route: the whole X plus each
-    # side's rows, X pinned once in that scope for every permutation), so
-    # the permutations' folds run in the typed RUN; the units only for what
-    # the kind does not take.
     var by = msel_cv_by_search(estimator, x, y, folds, scoring, PythonObject(jobs), PythonObject(_nan()), False,
                                False, PythonObject(None), False, context)
-    if by is not None:
-        var te = by["test"][0]
-        var values = List[Float64](capacity=len(te))
-        for i in range(len(te)):  # driver-loop: over the folds (their test scores, once per call)
-            values.append(Float64(py=te[i]))
-        one.append(values^)
-        return msel_row_means(one)[0]
-    var r = msel_cross_validate_run(estimator, y, rows, scoring, False, False, False, PythonObject(_nan()),
-                                    context, jobs)
-    one.append(r.test[0].copy())
+    var te = by["test"][0]
+    var values = List[Float64](capacity=len(te))
+    for i in range(len(te)):  # driver-loop: over the folds (their test scores, once per call)
+        values.append(Float64(py=te[i]))
+    one.append(values^)
     return msel_row_means(one)[0]
 
 
 def _nan() -> Float64:
     return Float64(0.0) / Float64(0.0)
-
-
-def _mean_own(estimator: PythonObject, x: PythonObject, y: PythonObject, folds: PythonObject, scoring: PythonObject,
-              device: Bool, jobs: Int, context: PythonObject) raises -> Float64:
-    """`_mean_test` on rows of its own (the folds drawn for this y)."""
-    var rows = MselFoldRows(x, y, folds, device, context)
-    var value: Float64 = 0.0
-    try:
-        value = _mean_test(estimator, x, y, folds, scoring, rows, jobs, context)
-    finally:
-        rows.close(context)
-    return value
 
 
 def _group_order(groups: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
@@ -942,7 +934,7 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
     var score: Float64 = 0.0
     var perm_scores = List[Float64]()
     try:
-        score = _mean_test(estimator, x, base.value(), folds0, sc, rows0, jobs, context)
+        score = _mean_test(estimator, x, base.value(), folds0, sc, jobs, context)
         var rng = MselRng(random_state, context)
         var order = PythonObject(None) if groups is None else _group_order(groups, n, context)
         var group_sizes = List[Int]() if groups is None else _group_sizes(order)
@@ -967,24 +959,16 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
             var yp = rows0.resident_take(base.value(), idx, context)
             rows0.resident_release(idx, context)
             if reuse:
-                perm_scores.append(_mean_test(estimator, x, yp, folds0, sc, rows0, jobs, context))
+                perm_scores.append(_mean_test(estimator, x, yp, folds0, sc, jobs, context))
             else:
+                # pass 3 (rank 107): the permutation's folds run in rows0's
+                # resident scope (X resident once for the whole call), as the
+                # reused folds do; only the fold index sets change. Lane
+                # mf-r9b: the units' per-permutation swap of rows0.folds and
+                # release of its index entries are gone with the units (the
+                # carrier's RUN takes the rows; rows0 stores no fold index).
                 var folds = msel_cv_folds_admitted(splitter, x, yp, group_values, context)
-                # pass 3 (rank 107): the permutation's folds run on rows0 (X
-                # stored once for the whole call), as the reused folds do;
-                # only the fold index sets change. `_mean_own` built a new
-                # MselFoldRows, so X was copied and stored again and freed
-                # for every permutation. The permutation's index entries are
-                # released after its scores (release ignores an index the
-                # store never held).
-                rows0.folds = folds
-                try:
-                    perm_scores.append(_mean_test(estimator, x, yp, folds, sc, rows0, jobs, context))
-                finally:
-                    rows0.folds = folds0
-                    for f in range(len(folds)):  # driver-loop: over this permutation's folds
-                        rows0.resident_release(folds[f][0], context)
-                        rows0.resident_release(folds[f][1], context)
+                perm_scores.append(_mean_test(estimator, x, yp, folds, sc, jobs, context))
     finally:
         rows0.close(context)
     return Python.tuple(PythonObject(score), msel_f64_list(perm_scores, context),
@@ -1046,4 +1030,4 @@ def _definition_mean(estimator: PythonObject, xa: PythonObject, yv: PythonObject
     var dtype = String("<f4") if py_type(first) is b.float else String("<i4")
     var yarr = _cast(msel_materialize(yv, "y", context), dtype, context["family_msel_resident_context"])
     var folds = msel_cv_folds(estimator, xa, yarr, cv, groups, False, context)[2]
-    return _mean_own(estimator, xa, yarr, folds, sc, msel_device_rows_ok(estimator, sc, context), jobs, context)
+    return _mean_test(estimator, xa, yarr, folds, sc, jobs, context)
