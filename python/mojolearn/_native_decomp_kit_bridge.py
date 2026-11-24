@@ -78,6 +78,25 @@ def _connect_cpu_image(context):
     context["decomp_cpu_bindings"] = {"identical": cpu}
 
 
+#: The (TrainDeviceArray class, training owner context) pair, once the training
+#: module is imported, and the kit contexts connected so far (lane vdf-linalg7):
+#: solve, lstsq, randomized_svd and sparse_encode read a device array in place
+#: (bindings/linalg_decomp_dev_door.mojo) through `family_train_device` in their
+#: own kit context, which the linalg family context's copy never reached.
+_TRAIN_DEVICE = None
+_KIT_CONTEXTS = []
+
+
+def train_device(pair):
+    """Publish the device-array pair into every kit context, once, at the
+    training module's import (python/mojolearn/_native_optimizer_bridge.py)."""
+    # glue: import-time publication of fixed native metadata
+    global _TRAIN_DEVICE
+    _TRAIN_DEVICE = pair
+    for context in _KIT_CONTEXTS:  # glue: the few kit contexts connected at import
+        context["family_train_device"] = pair
+
+
 def connect(door, **classes):
     # glue: compiled entries and plain metadata are retained during import;
     # `door` names the tokenizer-host export, `classes` the classes the
@@ -122,6 +141,10 @@ def connect(door, **classes):
     entry = getattr(_binding()._module, door)
     if not isinstance(entry, BuiltinFunctionType):
         raise TypeError(f"the native decomposition owner requires a compiled {door}")
+    # the device-array pair, now or at the training module's import (`train_device`)
+    _KIT_CONTEXTS.append(context)
+    if _TRAIN_DEVICE is not None:
+        context["family_train_device"] = _TRAIN_DEVICE
     return entry, context
 
 

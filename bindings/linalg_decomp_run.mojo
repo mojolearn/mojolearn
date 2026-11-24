@@ -12,7 +12,8 @@ public behaviour needs one (the singular-matrix warning before the solve,
 and the right-hand side's admission, which depends on the factor's route)."""
 from bindings.decomp_kit_run import DKit, DK_ADD, DK_SUB, DK_SQ, DK_SELECT, DK_RECIP, DK_MUL
 from x_decomp.descriptor_schema import (
-    XD_RANDOMIZED_SVD, XD_DEV_LU_SOLVE, XD_LU_GESV, XD_DEV_LU_FACTOR, XD_TSQR_R,
+    XD_RANDOMIZED_SVD, XD_DEV_LU_SOLVE, XD_LU_GESV, XD_DEV_LU_FACTOR, XD_TSQR_R, XD_DEV_TSQR_R, XD_DEV_LU_GESV,
+    XD_DEV_LU_FACTOR_IN, XD_DEV_LU_SOLVE_IN,
 )
 
 
@@ -29,6 +30,42 @@ def ld_gesv_run(mut kit: DKit, a: Int, bm: Int) raises -> Tuple[Int, Int]:
     _ = kit.xd(XD_LU_GESV, addresses, [kit.nrows(a), kit.ncols(bm)], List[Float64]())
     kit.wrote_host(x)
     return (x, Int(kit.word(info)))
+
+
+def ld_dev_gesv_run(mut kit: DKit, a: Int, bm: Int) raises -> Tuple[Int, Int]:
+    """`ld_gesv_run` of device operands (lane vdf-linalg7): XD_DEV_LU_GESV reads A and B from their pool ids and
+    writes X into a new one (`DevExec.lu_gesv`'s launches on device copies of the same words); only info (one word)
+    comes to the host. (x, the singular diagonal number)."""
+    var n = kit.nrows(a)
+    var nrhs = kit.ncols(bm)
+    var x = kit.device_output(n, nrhs)
+    var info = kit.zeros(1, 1)
+    var addresses: List[Int] = [kit.at(info)]
+    _ = kit.xd(XD_DEV_LU_GESV, addresses, [kit.device(a), kit.device(bm), kit.matrices[x].device, n, nrhs],
+               List[Float64]())
+    return (x, Int(kit.word(info)))
+
+
+def ld_dev_lu_pair_run(mut kit: DKit, a: Int, bm: Int, refine: Bool) raises -> Tuple[Int, Int, Int, Int]:
+    """solve's resident LU pair route (`_lu_factor_resident`, then `_lu_solve_resident`) of device operands (lane
+    vdf-linalg7): the factor reads A where the door adopted it (XD_DEV_LU_FACTOR_IN: nothing goes up, only info
+    comes down) and the solve reads B and writes X on pool ids (XD_DEV_LU_SOLVE_IN). The same launches on the same
+    words as the host operand's XD_DEV_LU_FACTOR / XD_DEV_LU_SOLVE. Returns (x, singular, the LU id, the pivots id):
+    x is -1 when the factor is singular (the door then warns and solves on the factor as the host route does)."""
+    var n = kit.nrows(a)
+    var nrhs = kit.ncols(bm)
+    var buffers = ld_device_buffers(kit, n)
+    var info = kit.zeros(1, 1)
+    var da = kit.device(a)
+    var addresses: List[Int] = [kit.at(info)]
+    _ = kit.xd(XD_DEV_LU_FACTOR_IN, addresses, [da, buffers[1], buffers[2], n], List[Float64]())
+    var singular = Int(kit.word(info))
+    if singular != 0:
+        return (-1, singular, buffers[1], buffers[2])
+    var x = kit.device_output(n, nrhs)
+    _ = kit.xd(XD_DEV_LU_SOLVE_IN, List[Int](), [buffers[1], buffers[2], da, kit.device(bm), kit.matrices[x].device,
+               n, nrhs, 1 if refine else 0], List[Float64]())
+    return (x, 0, buffers[1], buffers[2])
 
 
 def ld_dev_lu_factor_run(kit: DKit, a_address: Int, lu_address: Int, piv_address: Int, info_address: Int,
@@ -108,10 +145,20 @@ def ld_lstsq_run(mut kit: DKit, a: Int, bm: Int, rcond: Float64) raises -> Lstsq
     var nrhs = kit.ncols(bm)
     if nn >= 1 and nrhs >= 1 and nn + nrhs <= LINALG_TS_MAX_N and m >= nn + nrhs:
         var n = nn + nrhs
-        var ra = kit.zeros(n, n)
-        var addresses: List[Int] = [kit.at(a), kit.at(bm), kit.at(ra)]
-        _ = kit.xd(XD_TSQR_R, addresses, [m, nn, nrhs, 0], List[Float64]())
-        kit.wrote_host(ra)
+        var ra: Int
+        if not kit._has_host(a) and not kit._has_host(bm) and kit.matrices[a].device >= 0 and kit.matrices[bm].device >= 0:
+            # lane vdf-linalg7: device operands (adopted training arrays): the same TSQR of [a | b] on their pool ids
+            # (XD_DEV_TSQR_R packs them on the device where the host route uploads them), R written into a pool id
+            # (the NaN refusal is a device scan) and kept there as a device matrix: the slices below are device
+            # moves (copies: the same words) and the small SVD reads R in place, so R never crosses the host.
+            ra = kit.device_output(n, n)
+            _ = kit.xd(XD_DEV_TSQR_R, [0], [kit.matrices[a].device, m, nn, 0, kit.matrices[ra].device,
+                       kit.matrices[bm].device, nrhs], List[Float64]())
+        else:
+            ra = kit.zeros(n, n)
+            var addresses: List[Int] = [kit.at(a), kit.at(bm), kit.at(ra)]
+            _ = kit.xd(XD_TSQR_R, addresses, [m, nn, nrhs, 0], List[Float64]())
+            kit.wrote_host(ra)
         var top = kit.rows_of(ra, 0, nn)
         var r = kit.cols_of(top, 0, nn)
         var c = kit.cols_of(top, nn, n)

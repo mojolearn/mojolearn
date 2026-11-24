@@ -12,7 +12,7 @@ same words. The adopted training array must be left unchanged.
 from core.entry_table import EntryRef, entry_ref_word, entry_ref_call
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_decomp.descriptor_schema import (
-    XD_OPERATION_COUNT, XD_CAPABILITIES, XD_TSQR_R, XD_TSQR_Q, XD_R_SIGNS, XD_DEV_TSQR_R, XD_DEV_TSQR_Q,
+    XD_OPERATION_COUNT, XD_CAPABILITIES, XD_TSQR_R, XD_TSQR_Q, XD_R_SIGNS, XD_DEV_TSQR_R, XD_DEV_TSQR_Q, XD_DEV_R_SIGNS,
 )
 from x_decomp.descriptor_device import x_decomp_device_v1
 from x_decomp.descriptor_host import x_decomp_host_v1
@@ -32,8 +32,12 @@ comptime COLUMN = 2     # host operand, host column
 
 def _kit(source: Int) raises -> LinKit:
     var word = entry_ref_word(Int(GLOBAL_NUMERIC_MODE), 0, XD_OPERATION_COUNT)
-    if source == COLUMN:
-        return LinKit(EntryRef(x_decomp_host_v1, word), 0)
+    # A fast build (lane vdf-linalg7: the fast image reads device arrays too) has no host column to match: `fast`
+    # promises no bits across columns, so there the COLUMN source is the host operand on the GPU image again, and the
+    # check is device operand == host operand on the fast image (the same route on the same words).
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        if source == COLUMN:
+            return LinKit(EntryRef(x_decomp_host_v1, word), 0)
     var entry = EntryRef(x_decomp_device_v1, word)
     var caps = entry_ref_call(entry, XD_CAPABILITIES, List[Int](), List[Int](), List[Float64]())
     return LinKit(entry, caps)
@@ -155,19 +159,25 @@ def _qr_tsqr(source: Int, a: Operand) raises -> List[Float32]:
     var cols = a.cols
     var kit = _kit(source)
     try:
-        var r = kit.zeros(cols, cols)
-        var signs = kit.zeros(cols, cols)
-        var pr = kit.addr(r)
-        var ps = kit.addr(signs)
         var owner = 0
         var q = -1
+        var r = -1
         if source == DEVICE_OP:
+            # as the door (lane vdf-linalg7): R and its signs on pool ids, never on the host
             var x = _take(kit, source, a)
-            owner = kit.call(XD_DEV_TSQR_R, [pr], [kit.device(x), rows, cols, 1], List[Float64]())
-            _ = kit.call(XD_R_SIGNS, [pr, ps], [cols], List[Float64]())
+            r = kit.device_output(cols, cols)
+            var signs = kit.device_output(cols, cols)
+            var dr = kit.matrices[r].device
+            var ds = kit.matrices[signs].device
+            owner = kit.call(XD_DEV_TSQR_R, [0], [kit.device(x), rows, cols, 1, dr, -1, 0], List[Float64]())
+            _ = kit.call(XD_DEV_R_SIGNS, List[Int](), [dr, ds, cols], List[Float64]())
             q = kit.device_output(rows, cols)
-            _ = kit.call(XD_DEV_TSQR_Q, [ps], [owner, -1, kit.matrices[q].device, rows, cols, cols], List[Float64]())
+            _ = kit.call(XD_DEV_TSQR_Q, [0], [owner, ds, kit.matrices[q].device, rows, cols, cols], List[Float64]())
         else:
+            r = kit.zeros(cols, cols)
+            var signs = kit.zeros(cols, cols)
+            var pr = kit.addr(r)
+            var ps = kit.addr(signs)
             var pa = Int(a.words.unsafe_ptr())
             owner = kit.call(XD_TSQR_R, [pa, pa, pr], [rows, cols, 0, 1], List[Float64]())
             _ = kit.call(XD_R_SIGNS, [pr, ps], [cols], List[Float64]())
@@ -186,19 +196,21 @@ def _svd_tsqr(source: Int, a: Operand) raises -> List[Float32]:
     var cols = a.cols
     var kit = _kit(source)
     try:
-        var r = kit.zeros(cols, cols)
-        var pr = kit.addr(r)
         var s = 0
         var vt = 0
         var u = -1
         if source == DEVICE_OP:
             var x = _take(kit, source, a)
-            var owner = kit.call(XD_DEV_TSQR_R, [pr], [kit.device(x), rows, cols, 1], List[Float64]())
+            var r = kit.device_output(cols, cols)
+            var owner = kit.call(XD_DEV_TSQR_R, [0], [kit.device(x), rows, cols, 1, kit.matrices[r].device, -1, 0],
+                                 List[Float64]())
             var ur = lin_svd_tall_run(kit, r, False, RTOL, s, vt)
             var dc = kit.device(ur)
             u = kit.device_output(rows, cols)
-            _ = kit.call(XD_DEV_TSQR_Q, [pr], [owner, dc, kit.matrices[u].device, rows, cols, cols], List[Float64]())
+            _ = kit.call(XD_DEV_TSQR_Q, [0], [owner, dc, kit.matrices[u].device, rows, cols, cols], List[Float64]())
         else:
+            var r = kit.zeros(cols, cols)
+            var pr = kit.addr(r)
             var pa = Int(a.words.unsafe_ptr())
             var owner = kit.call(XD_TSQR_R, [pa, pa, pr], [rows, cols, 0, 1], List[Float64]())
             var ur = lin_svd_tall_run(kit, r, False, RTOL, s, vt)
@@ -245,7 +257,6 @@ def _three(label: String, device: List[Float32], host: List[Float32], column: Li
 
 
 def test_eigh_device_operand() raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     var sizes: List[Int] = [3, 8, 40]
     for si in range(len(sizes)):  # small-loop: three fixture sizes (one block, the round-robin Jacobi, the tridiagonal route)
         var n = sizes[si]
@@ -258,7 +269,6 @@ def test_eigh_device_operand() raises:
 
 
 def test_qr_device_operand() raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     var tall = Operand(_fixture(9, 4), 9, 4)
     var wide = Operand(_fixture(4, 9), 4, 9)
     for mode in range(1, 3):  # small-loop: complete (1), raw (2)
@@ -281,7 +291,6 @@ def test_qr_device_operand() raises:
 
 
 def test_svd_device_operand() raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     var tall = Operand(_fixture(9, 4), 9, 4)
     var wide = Operand(_fixture(4, 9), 4, 9)
     var square = Operand(_fixture(5, 5, True), 5, 5)

@@ -66,6 +66,11 @@ trait RDev:
         ...
 
     @staticmethod
+    def copy(src: Int, dst: Int, n: Int) raises:
+        """Pool id src's first n words into pool id dst, device to device (lane vdf-linalg7)."""
+        ...
+
+    @staticmethod
     def upload_finite(id: Int, src: F32Ptr, n: Int) raises -> Int:
         """`upload` with the finite test of the uploaded words on the device
         (RSVD_FAST_DEVSCAN, restored 2026-11-09): 0 when every word is
@@ -156,6 +161,10 @@ struct NoRDev(RDev):
 
     @staticmethod
     def upload(id: Int, src: F32Ptr, n: Int) raises:
+        raise Error("x_decomp: no resident matrices on the host binding")
+
+    @staticmethod
+    def copy(src: Int, dst: Int, n: Int) raises:
         raise Error("x_decomp: no resident matrices on the host binding")
 
     @staticmethod
@@ -365,6 +374,19 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
                     raise error^
             return handle
         return -1
+
+    def copy_out_to(mut self, a: Int, dst: F32Ptr, dst_id: Int, count: Int) raises:
+        """`copy_out` into caller memory (`dst_id` < 0) or into the caller's pool id `dst_id` (lane vdf-linalg7:
+        a device result stays on the device; a host matrix goes up once)."""
+        if dst_id < 0:
+            self.copy_out(a, dst, count)
+            return
+        if count <= 0:
+            return
+        if self.mats[a].host == 0:
+            Self.D.copy(self.mats[a].dev, dst_id, count)
+        else:
+            Self.D.upload(dst_id, F32Ptr(unsafe_from_address=self.mats[a].host), count)
 
     def copy_out(mut self, a: Int, dst: F32Ptr, count: Int) raises:
         """The first `count` words of `a` into caller memory (`_M.out`)."""

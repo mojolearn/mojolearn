@@ -306,7 +306,7 @@ def run_case(unit: Int) raises:
         var u: List[Float32] = [0.0, 0.0]
         var sv: List[Float32] = [0.0]
         var vt: List[Float32] = [0.0, 0.0]
-        var params: List[Int] = [2, 2, 1, 1, 2, 0, 0, 1, 7, 1 if unit == 31 else 0]
+        var params: List[Int] = [2, 2, 1, 1, 2, 0, 0, 1, 7, 1 if unit == 31 else 0, -1, -1, -1, -1]
         if unit == 30:
             require(_call(XD_RANDOMIZED_SVD, [_f32(m), _f32(u), _f32(sv), _f32(vt)], params, List[Float64]()) == 1,
                     "rsvd components")

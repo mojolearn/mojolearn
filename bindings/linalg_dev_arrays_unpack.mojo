@@ -114,26 +114,33 @@ def lin_dev_operand(value: PythonObject, name: String, who: String, entries: Pyt
                     dtype: Int, rank: Int) raises -> LinDevOperand:
     """A device-array operand of the binding `entries` belong to, of storage dtype `dtype` and rank `rank` (0: any),
     nonempty, its shape matching its stored element count. Refused in words otherwise."""
+    return lin_dev_operand_of(value, name, "mojolearn.linalg.", who, entries, held, dtype, rank)
+
+
+def lin_dev_operand_of(value: PythonObject, name: String, prefix: String, function: String, entries: PythonObject,
+                       held: PythonObject, dtype: Int, rank: Int) raises -> LinDevOperand:
+    """`lin_dev_operand` with the public name its refusals lead with, `prefix + function` (`mojolearn.` + `solve`,
+    ...; lane vdf-linalg7, the dense linear algebra functions and sparse_encode), built on a refusal only."""
     var nk = optimizer_keys()
     if py_type(value) is not held[0]:
-        raise Error("TypeError: mojolearn.linalg." + who + ": device and host arrays are mixed; pass every operand "
+        raise Error("TypeError: " + prefix + function + ": device and host arrays are mixed; pass every operand "
                     + "through train_to_device, or none")
     var fields = py_fields(value)
     if py_item(fields, nk[].k__b) is not py_item(entries, nk[].k_module):
-        raise Error("ValueError: mojolearn.linalg." + who + ": " + name + " must belong to the selected native binding")
+        raise Error("ValueError: " + prefix + function + ": " + name + " must belong to the selected native binding")
     var shape = device_shape(py_item(fields, nk[].k_shape), held[1])
     var count = shape_count(shape)
     if count != Int(py=py_item(fields, nk[].k_size)):
-        raise Error("ValueError: mojolearn.linalg." + who + ": " + name + " shape does not match its stored element "
+        raise Error("ValueError: " + prefix + function + ": " + name + " shape does not match its stored element "
                     + "count")
     if count == 0:
-        raise Error("mojolearn.linalg." + who + ": " + name + " has no elements")
+        raise Error(prefix + function + ": " + name + " has no elements")
     var code = lin_dev_dtype(fields)
     if code != dtype:
-        raise Error("TypeError: mojolearn.linalg." + who + ": " + name + " is a device array of " + lin_dev_dtype_name(code)
+        raise Error("TypeError: " + prefix + function + ": " + name + " is a device array of " + lin_dev_dtype_name(code)
                     + "; this operand takes " + lin_dev_dtype_name(dtype) + ". Refused rather than cast.")
     if rank > 0 and len(shape) != rank:
-        raise Error("mojolearn.linalg." + who + ": " + name + " must be " + String(rank) + "-D, got "
+        raise Error(prefix + function + ": " + name + " must be " + String(rank) + "-D, got "
                     + String(len(shape)) + "-D")
     return LinDevOperand(Int(py=py_item(fields, nk[].k_h)), shape^, code)
 
