@@ -43,8 +43,11 @@ from bindings.optimizer_keys_unpack import (
     OPTIMIZER_OPN_SEQ_STEP,
     OPTIMIZER_OPN_SEQ_WORD,
     OPTIMIZER_OPN_SEQ_WORD_SET,
+    OPTIMIZER_OPN_SEQ_SCHEDULE,
+    OPTIMIZER_OPN_SEQ_SCHEDULE_SET,
     OPTIMIZER_OPN_SCHEDULE_AT,
 )
+from bindings.schedule_device_unpack import schedule_device_agrees
 from bindings.py_balanced import py_item
 from core.device_route import device_cpu_fast
 from core.function_device import FunctionDevice
@@ -711,6 +714,26 @@ def seq_step(owner: PythonObject, fields: PythonObject, params: PythonObject, gr
 
 
 
+def seq_schedule_attach(operation: Int, owner: PythonObject, values: PythonObject, kind: Int,
+                        context: PythonObject) raises -> PythonObject:
+    """`opt.lr_schedule` of a sequence optimizer (lane vdf-tail-d, 2026-11-24):
+    the one place a schedule is attached, so a schedule built for the other
+    side than the optimizer's explicit `device` is refused HERE, once, in the
+    words of SGD / Adam / AdamW (`schedule_device_agrees`). The schedule is
+    admitted (`opt_schedule`) and stored as the owner's `lr_schedule` field,
+    which the step reads as before (`seq_step`); the step never reads a
+    device word. None detaches."""
+    var nk = sequence_keys()
+    var fields = py_fields(owner)
+    if operation == OPTIMIZER_OPN_SEQ_SCHEDULE:
+        return py_get(fields, nk[].k_lr_schedule)
+    var schedule = values[0]
+    opt_schedule(schedule, context)
+    schedule_device_agrees(schedule, py_get(fields, nk[].k_device), _seq_owner_name(kind))
+    py_setitem(fields, nk[].k_lr_schedule, schedule)
+    return PythonObject(None)
+
+
 def sequence_optimizer_operation(operation: Int, owner: PythonObject, values: PythonObject,
                                  mode: PythonObject, context: PythonObject) raises -> PythonObject:
     var buffer_pins = OptimizerInputOwners()
@@ -718,6 +741,8 @@ def sequence_optimizer_operation(operation: Int, owner: PythonObject, values: Py
         if operation == OPTIMIZER_OPN_SEQ_CONSTRUCT:
             return seq_construct(owner, values, mode, context)
         var kind = seq_class(owner, context)
+        if operation == OPTIMIZER_OPN_SEQ_SCHEDULE or operation == OPTIMIZER_OPN_SEQ_SCHEDULE_SET:
+            return seq_schedule_attach(operation, owner, values, kind, context)
         var b = native_loaded_module("builtins")
         var nk = sequence_keys()
         if operation == OPTIMIZER_OPN_SEQ_WORD or operation == OPTIMIZER_OPN_SEQ_WORD_SET:

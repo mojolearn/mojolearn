@@ -39,7 +39,11 @@ comptime OPT_NATIVE_RESIDUAL_DROPOUT_BACKWARD_DEV = 19
 comptime OPT_NATIVE_LM_HEAD_LOSS = 20
 comptime OPT_NATIVE_LM_HEAD_TRAIN = 21
 comptime OPT_NATIVE_MLP_SESSIONS = 22
-comptime OPT_NATIVE_COUNT = 23
+# lane vdf-tail-d (2026-11-24): `Generator.dropout` / `dropout_backward` on a
+# TrainDeviceArray, read in place on the device (GPU training image only; the
+# host image refuses it in the device-array words).
+comptime OPT_NATIVE_NEURAL_RNG_DEV = 23
+comptime OPT_NATIVE_COUNT = 24
 
 
 struct OptimizerStepCall(Movable):

@@ -13,13 +13,27 @@ portable-math scalar entry are not called. A Generator draws on the
 installation's training image, or (lane vdf-sched: constructed with an
 explicit `device="cpu"` beside a GPU set, bindings/generator_device_unpack.mojo)
 on the host training image, the table's vendor-0 entry.
+
+`dropout` / `dropout_backward` given a TrainDeviceArray (lane vdf-tail-d)
+read it IN PLACE: operation OPT_NATIVE_NEURAL_RNG_DEV of the array's training
+binding's optimizer native table (training/neural_rng_dev_run.mojo), the
+result a new TrainDeviceArray of that binding; nothing is downloaded. A
+device array with a Generator constructed with device="cpu", or of another
+binding than the Generator's numeric mode, is refused here in words.
 """
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from std.python._cpython import PyObjectPtr, GILReleased
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_get, py_setitem, py_type
+from bindings.py_balanced import py_call, py_get, py_setitem, py_type, py_item, py_fields
+from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.optimizer_admission_door import opt_value
+from bindings.optimizer_device_native_door import device_entries, device_allocate, shape_count
+from bindings.optimizer_descriptor_boundary_door import optimizer_provider_entries
+from bindings.training_layers_device_unpack import _dev_fields
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_execute
+from training.optimizer_native_api import OPT_NATIVE_NEURAL_RNG_DEV
 from bindings.generator_state_native_unpack import generator_fields
 from bindings.generator_state_native_pack import generator_next
 from bindings.causal_checkpoint_door import checkpoint_array
@@ -76,7 +90,12 @@ struct GeneratorDrawBoundary(Defaultable, Movable):
     # binding's two read-back entries.
     # `host`: the host training image's identical entry (vendor 0), for a
     # Generator constructed with device="cpu" beside a GPU set (lane vdf-sched).
+    # `optimizer_context` / `device_class`: the optimizer bridge's context and
+    # its TrainDeviceArray class, read at the first dropout of the process and
+    # held (lane vdf-tail-d): a host dropout pays one identity compare.
     var builtins: PythonObject
+    var optimizer_context: PythonObject
+    var device_class: PythonObject
     var fast: EntryRef
     var identical: EntryRef
     var host: EntryRef
@@ -86,6 +105,8 @@ struct GeneratorDrawBoundary(Defaultable, Movable):
 
     def __init__(out self):
         self.builtins = PythonObject(None)
+        self.optimizer_context = PythonObject(None)
+        self.device_class = PythonObject(None)
         self.fast = entry_ref_unresolved()
         self.identical = entry_ref_unresolved()
         self.host = entry_ref_unresolved()
@@ -94,8 +115,9 @@ struct GeneratorDrawBoundary(Defaultable, Movable):
         self.has_host = False
 
 
-# V4 (lane vdf-sched): the layout gained the host entry.
-comptime GENERATOR_DRAW_BOUNDARY = SharedSlot[GeneratorDrawBoundary, "MojolearnGeneratorDrawBoundaryV4"]
+# V4 (lane vdf-sched): the layout gained the host entry. V5 (lane vdf-tail-d):
+# the optimizer context and the device array class.
+comptime GENERATOR_DRAW_BOUNDARY = SharedSlot[GeneratorDrawBoundary, "MojolearnGeneratorDrawBoundaryV5"]
 
 
 def _builtins() raises -> PythonObject:
@@ -113,11 +135,10 @@ def _generator_mode_word(text: String) -> Int:
     return -1
 
 
-def _generator_route(fields: PythonObject, context: PythonObject) raises -> EntryRef:
-    """UNPACK: the draw route of the Generator's numeric mode. A Generator
-    without a mode of its own follows the library default, which
-    `set_numeric_mode` may change, so that one word is read here; nothing
-    else is asked of the process once the mode's route is held."""
+def _generator_mode(fields: PythonObject, context: PythonObject) raises -> Int:
+    """UNPACK: the Generator's numeric mode word (1 identical, 0 fast). A
+    Generator without a mode of its own follows the library default, which
+    `set_numeric_mode` may change, so that one word is read here."""
     var mode = fields["numeric_mode"]
     if not Bool(py=mode):
         mode = context["generator_backend"]._DEFAULT_MODE
@@ -129,6 +150,14 @@ def _generator_route(fields: PythonObject, context: PythonObject) raises -> Entr
         word = _generator_mode_word(text)
         if word < 0:
             raise Error("Generator: native RNG binding is unavailable for numeric_mode=" + text)
+    return word
+
+
+def _generator_route(fields: PythonObject, context: PythonObject) raises -> EntryRef:
+    """UNPACK: the draw route of the Generator's numeric mode; nothing else
+    is asked of the process once the mode's route is held."""
+    var word = _generator_mode(fields, context)
+    var text = String("identical") if word == 1 else String("fast")
     var g = GENERATOR_DRAW_BOUNDARY.get_or_create_ptr()
     # lane vdf-sched: the one field construction stored for device="cpu"
     # beside a GPU set (absent on every other Generator: one dictionary read).
@@ -304,6 +333,106 @@ def _dropout_key(key: PythonObject) raises -> PythonObject:
     return key
 
 
+def _dropout_new_key(fields: PythonObject, stream: PythonObject, probability: Float32, scale: Float32,
+                     offset: PythonObject) raises -> PythonObject:
+    """The key `dropout` returns, in the order the public call always built it."""
+    var bi = _builtins()
+    var key = bi.dict()
+    py_setitem(key, "seed", fields["seed"])
+    py_setitem(key, "stream", stream)
+    py_setitem(key, "p", Float64(probability))
+    py_setitem(key, "scale", Float64(scale))
+    py_setitem(key, "offset", py_call(bi.int, offset))
+    return key
+
+
+def _generator_device_array(value: PythonObject, context: PythonObject) raises -> Bool:
+    """True when `value` is exactly a TrainDeviceArray: one identity compare
+    against the class held in the boundary slot (read once per process from
+    the optimizer bridge's context, `schedule_context` of the Samba context)."""
+    var g = GENERATOR_DRAW_BOUNDARY.get_or_create_ptr()
+    if g[].device_class is None:
+        var optimizer_context = context["schedule_context"]
+        g[].device_class = py_item(optimizer_context, optimizer_keys()[].k_device_class)
+        g[].optimizer_context = optimizer_context
+    return py_type(value) is g[].device_class
+
+
+def _generator_device_operand(value: PythonObject, fields: PythonObject, name: String, where: String,
+                              mut shape: List[Int], mut entries: PythonObject) raises -> PythonObject:
+    """UNPACK of a TrainDeviceArray input of `dropout` / `dropout_backward`:
+    refused with a Generator constructed with device="cpu" (the array lives
+    only on the device), its binding's connected entries into `entries`, its
+    shape into `shape`; returns the array's fields. No byte moves."""
+    if py_get(fields, PythonObject("_host_device")) is not None:
+        raise Error("ValueError: mojolearn.Generator." + where + ": " + name + " is a training device array, but "
+                    + "this Generator was constructed with device='cpu'; pass " + name + ".to_host(), or construct "
+                    + "the Generator with device=None or device='gpu'")
+    var g = GENERATOR_DRAW_BOUNDARY.get_or_create_ptr()
+    var optimizer_context = g[].optimizer_context
+    var nk = optimizer_keys()
+    opt_value(value, optimizer_context)
+    entries = device_entries(py_item(py_fields(value), nk[].k__b), optimizer_context)
+    var array_fields = _dev_fields(value, name, PythonObject("Generator." + where), entries, optimizer_context, shape)
+    if shape_count(shape) > 2147483647:
+        raise Error("ValueError: mojolearn.Generator." + where + ": " + name + " exceeds the native element index range")
+    return array_fields
+
+
+def _generator_device_binding(fields: PythonObject, entries: PythonObject, where: String,
+                              context: PythonObject) raises:
+    """The device array's binding is the training binding of the Generator's
+    numeric mode (device arrays are identical GPU builds only); refused in
+    words otherwise, never drawn on another image."""
+    var word = _generator_mode(fields, context)
+    var g = GENERATOR_DRAW_BOUNDARY.get_or_create_ptr()
+    var bindings = py_item(g[].optimizer_context, optimizer_keys()[].k_bindings)
+    var own = py_get(bindings, PythonObject(String("identical") if word == 1 else String("fast")))
+    if own is None or own is not entries:
+        raise Error("ValueError: mojolearn.Generator." + where + ": the device array belongs to another training "
+                    + "binding than this Generator's numeric mode; training device arrays are identical-mode arrays, "
+                    + "use a Generator with numeric_mode='identical'")
+
+
+def _generator_device_emit(entries: PythonObject, shape: List[Int], array_fields: PythonObject, kind: Int,
+                           offset: PythonObject, seed: PythonObject, stream: PythonObject, a: PythonObject,
+                           b: PythonObject, input: PythonObject) raises -> PythonObject:
+    """RUN on the device: a new TrainDeviceArray of the input's binding,
+    written by OPT_NATIVE_NEURAL_RNG_DEV from the input handle in place.
+    The words are the host draw's (`_generator_emit`), by the same builtin
+    conversions."""
+    var bi = _builtins()
+    var nk = optimizer_keys()
+    var g = GENERATOR_DRAW_BOUNDARY.get_or_create_ptr()
+    var count = shape_count(shape)
+    var low = py_call(bi.int, seed.__and__(PythonObject(4294967295)))
+    var high = py_call(bi.int, seed.__rshift__(32).__and__(PythonObject(4294967295)))
+    var first = py_call(bi.int, offset)
+    var which = py_call(bi.int, stream)
+    var pa = py_call(bi.float, a)
+    var pb = py_call(bi.float, b)
+    var result = device_allocate(entries, shape, g[].optimizer_context)
+    var ints: List[Int] = [count, Int(py=first), Int(py=low), Int(py=high), Int(py=which), kind,
+                           Int(py=py_item(py_fields(result), nk[].k_h)), Int(py=py_item(array_fields, nk[].k_h))]
+    var floats: List[Float64] = [Float64(py=pa), Float64(py=pb)]
+    var written = 0
+    try:
+        written = neural_descriptor_execute(optimizer_provider_entries(entries), OPT_NATIVE_NEURAL_RNG_DEV,
+                                            List[Int](), ints, floats)
+    except error:
+        var message = String(error)
+        if message.startswith("RuntimeError:"):
+            raise error^
+        # The host draw's refusals are the base Exception type; the same here.
+        raise Error("Exception: " + message)
+    # The input array owns the handle the call read: keep it past the call.
+    _ = input
+    _ = array_fields
+    if written != count:
+        raise Error("RuntimeError: Generator dropout returned an incomplete output")
+    return result
+
+
 def generator_draw(operation: String, values: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = _builtins()
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
@@ -353,21 +482,42 @@ def generator_draw(operation: String, values: PythonObject, context: PythonObjec
     if operation == "dropout":
         var probability = _generator_f32(values[2])
         var scale = generator_dropout_scale(probability)
-        var x = _generator_input(values[1], context)
+        var x_value = values[1]
+        if _generator_device_array(x_value, context):
+            # lane vdf-tail-d: a TrainDeviceArray is read in place; y is a TrainDeviceArray.
+            var shape = List[Int]()
+            var entries = PythonObject(None)
+            var x_fields = _generator_device_operand(x_value, fields, "x", "dropout", shape, entries)
+            var dev_stream = generator_next(owner) if values[4] is None else py_call(bi.int, values[4])
+            var dev_key = _dropout_new_key(fields, dev_stream, probability, scale, values[3])
+            _generator_device_binding(fields, entries, "dropout", context)
+            var y = _generator_device_emit(entries, shape, x_fields, GENERATOR_DROPOUT, dev_key["offset"],
+                                           dev_key["seed"], dev_stream, dev_key["p"], dev_key["scale"], x_value)
+            _ = x_value
+            return Python.tuple(y, dev_key)
+        var x = _generator_input(x_value, context)
         var stream = generator_next(owner) if values[4] is None else py_call(bi.int, values[4])
-        var key = bi.dict()
-        py_setitem(key, "seed", fields["seed"])
-        py_setitem(key, "stream", stream)
-        py_setitem(key, "p", Float64(probability))
-        py_setitem(key, "scale", Float64(scale))
-        py_setitem(key, "offset", py_call(bi.int, values[3]))
+        var key = _dropout_new_key(fields, stream, probability, scale, values[3])
         # Dropout consumed above before converting offset or selecting mode.
         var entry = _generator_route(fields, context)
         var result = _generator_emit(entry, x.shape, x.size, GENERATOR_DROPOUT, key["offset"], key["seed"], stream,
                                      key["p"], key["scale"], x, context)
         return Python.tuple(result, key)
     if operation == "dropout_backward":
-        var dy = _generator_input(values[1], context)
+        var dy_value = values[1]
+        if _generator_device_array(dy_value, context):
+            # lane vdf-tail-d: a TrainDeviceArray gradient is read in place; dx is a TrainDeviceArray.
+            var shape = List[Int]()
+            var entries = PythonObject(None)
+            var dy_fields = _generator_device_operand(dy_value, fields, "dy", "dropout_backward", shape, entries)
+            var dev_key = _dropout_key(values[2])
+            _generator_device_binding(fields, entries, "dropout_backward", context)
+            var dx = _generator_device_emit(entries, shape, dy_fields, GENERATOR_DROPOUT_BACKWARD, dev_key["offset"],
+                                            dev_key["seed"], dev_key["stream"], dev_key["p"], dev_key["scale"],
+                                            dy_value)
+            _ = dy_value
+            return dx
+        var dy = _generator_input(dy_value, context)
         var key = _dropout_key(values[2])
         var entry = _generator_route(fields, context)
         return _generator_emit(entry, dy.shape, dy.size, GENERATOR_DROPOUT_BACKWARD, key["offset"], key["seed"],
