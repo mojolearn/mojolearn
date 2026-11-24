@@ -595,16 +595,18 @@ def review(arm, clean_path, sab_path, restored_path, out_path, reviews=None, roo
 
 def plan(arm):
     lanes = ",".join(arm["lanes"])
-    print(f"# {arm['arm']}: {arm['why']}")
+    print(f"# {arm['arm']} (side {'+'.join(arm_sides(arm))}): {arm['why']}")
     print("# 1. a scratch worktree at this commit")
     print("git worktree add --detach ../cov-sab-$ARM HEAD && cd ../cov-sab-$ARM")
     print("CORES=$(bash -c '. tools/ops/box_cores_lib.sh; alloc_cores')   # the allocation's cores, never 1")
     host = [b for b in arm["bindings"] if b.endswith("_host")]
     device = [b for b in arm["bindings"] if not b.endswith("_host")]
-    print("# 2. the clean column: the lanes on this commit's build (a complete host set in $CLEAN"
+    # Both sides in ONE process through the public device= (a GPU box); --side cpu alone without a GPU.
+    sides = "--side both --json {t}_gpu.json --cpu-json {t}_cpu.json"
+    print("# 2. the clean sides: the lanes on this commit's build (a complete host set in $CLEAN"
           + (", the device bindings built in this tree, on a GPU box" if device else "") + ")")
-    print(f"MOJOLEARN_HOST_DIR=$CLEAN python3 tools/identity_break.py --lanes {lanes} --repeats 1 --json clean.json")
-    print("# 3. the sabotaged column: the patch applied, the arm's bindings rebuilt over a copy of the set")
+    print(f"MOJOLEARN_HOST_DIR=$CLEAN python3 tools/identity_break.py --lanes {lanes} --repeats 1 {sides.format(t='clean')}")
+    print("# 3. the sabotaged sides: the patch applied, the arm's bindings rebuilt over a copy of the set")
     print(f"git apply {arm['patch']}")
     if host:
         print("cp -R $CLEAN $SAB")
@@ -613,12 +615,14 @@ def plan(arm):
     for b in device:
         print(f"MOJOLEARN_COMPILE_JOBS=$CORES sh bindings/{b}.sh   # device binding, into this scratch tree")
     print(f"MOJOLEARN_HOST_DIR={'$SAB' if host else '$CLEAN'} python3 tools/identity_break.py --lanes {lanes} "
-          "--repeats 1 --json sab.json")
+          f"--repeats 1 {sides.format(t='sab')}")
     print("# 4. restore the saved clean native files and revert the source patch; retain the faulted files/logs")
     print(f"git apply -R {arm['patch']}")
     print("# Restore exactly the saved clean binaries (including device bindings) before the next command.")
-    print(f"MOJOLEARN_HOST_DIR=$CLEAN python3 tools/identity_break.py --lanes {lanes} --repeats 1 --json restored.json")
-    print(f"python3 tools/coverage_sabotage.py check --arm {arm['arm']} --clean clean.json --sabotaged sab.json --restored restored.json")
+    print(f"MOJOLEARN_HOST_DIR=$CLEAN python3 tools/identity_break.py --lanes {lanes} --repeats 1 {sides.format(t='restored')}")
+    print(f"python3 tools/coverage_sabotage.py check-sides --arm {arm['arm']} "
+          "--cpu-clean clean_cpu.json --cpu-sabotaged sab_cpu.json --cpu-restored restored_cpu.json "
+          "--gpu-clean clean_gpu.json --gpu-sabotaged sab_gpu.json --gpu-restored restored_gpu.json")
 
 
 def apply_check(table):
