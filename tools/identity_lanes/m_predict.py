@@ -513,3 +513,81 @@ def _(ml, X, yc, yr, Xh=None):
                      ordered_leaves=_m_predict_h(o.get_tree_leaf_counts(), o.get_leaf_values()),
                      featurefreq_leaves=_m_predict_h(f.get_tree_leaf_counts(), f.get_leaf_values())),
                 g, lambda e: (np.asarray(e.predict_classes(Xh[:256])),))
+
+
+# ---------------------------------------------------------------- batch declarations (lane vdv-fin, 2026-11-24)
+# fit_predict fits on the rows it labels (a clustering, a mixture, an outlier fit): a row alone or a split is a
+# different fit, not a smaller batch of the same call; the lanes hold no estimator.
+_batch_decl("n/a:fit-endpoint (fit_predict labels the rows it fits on, so each row's label depends on every row "
+            "of the call; a row alone is a different fit; the lane holds no estimator)",
+            "agglomerative-fit-predict",
+            "dbscan-fit-predict",
+            "hdbscan-fit-predict",
+            "spectral-fit-predict",
+            "gmm-fit-predict",
+            "iforest-fit-predict",
+            "m-kmeans-fit-predict",
+            "x-cluster-affinity-propagation-fit-predict",
+            "x-cluster-bgmm-fit-predict",
+            "x-cluster-meanshift-fit-predict",
+            "x-cluster-optics-fit-predict",
+            "x-neighbors-louvain-fit-predict",
+            "x-neighbors-ocsvm-fit-predict",
+            "x-decomp-robust-cov-fit-predict")
+# forecast(y, h) fits each series and forecasts it in one call; there are no input rows, and the horizon's
+# length invariance is asked on the forecaster lanes that keep a fitted model (`_batch_forecast`).
+_batch_decl("n/a:forecast-fit (forecast(y, h) fits every series and forecasts it in one call: no input rows and "
+            "no fitted estimator; horizon length invariance is the batch part of the fitted forecaster lanes)",
+            "sequence-theta-forecast",
+            "public-theta-variants-forecast",
+            "sequence-croston-forecast",
+            "sequence-ets-forecast")
+_batch_decl("n/a:whole-series (in-sample predictions, the fitted components, the SSE and the parameters are "
+            "functions of the whole fitted series, and a forecast's horizon invariance is the batch part of the "
+            "fitted forecaster lanes such as holtwinters and arima; no input rows)",
+            "m-autoarima-predict",
+            "m-prophet-add-seasonality",
+            "holtwinters-methods")
+_batch_decl("n/a:scalar-reduction (score, aic, bic, perplexity, reconstruction_error and profile_jitter each "
+            "return one float over every row or over the fitted model; no per-row output)",
+            "gmm-methods",
+            "x-decomp-lda-perplexity",
+            "m-isomap-reconstruction-error",
+            "cholesky-profile-jitter")
+
+
+def _m_predict_batch_latent(ml, e, Xh):
+    """GaussianProcessClassifier.latent_mean_and_variance on the gpc lane's held-out query (64 rows, four
+    columns): the latent mean and variance of a row are read against the fitted training rows only."""
+    R = np.ascontiguousarray(Xh[:64, :4])
+    return [_BatchRows("latent_mean_and_variance", R,
+                       lambda r: tuple(np.asarray(a) for a in e.latent_mean_and_variance(r)))]
+
+
+# The row-wise methods each lane's probe reads, on the same held-out rows. Derived inputs go through a lambda so
+# the prep.py helpers are looked up when the part runs (prep.py loads after this file).
+_batch_decl(_m_predict_batch_latent, "gpc-methods")
+_batch_decl(_rows_calls("predict_joint_log_proba", "predict_log_proba", sl=slice(0, 256)),
+            "x-prep-lda-methods", "x-prep-qda-methods")
+_batch_decl(_rows_calls("predict_joint_log_proba", sl=slice(0, 256)),
+            "x-prep-gaussian-nb-methods", "x-prep-bernoulli-nb-methods")
+_batch_decl(_rows_calls("predict_joint_log_proba", sl=slice(0, 256), prep=lambda Xh: _prep_abs(Xh)),
+            "x-prep-multinomial-nb-methods", "x-prep-complement-nb-methods")
+_batch_decl(_rows_calls("predict_joint_log_proba", sl=slice(0, 256), prep=lambda Xh: _prep_cat_codes(Xh)),
+            "x-prep-categorical-nb-methods")
+_batch_decl(_rows_calls("decision_function", "predict_proba", sl=slice(0, 256)), "x-prep-score-edges-rfe-methods")
+_batch_decl(_rows_calls("decision_function", sl=slice(0, 512)), "iforest-decision-function")
+_batch_decl(_rows_calls("decision_function", sl=slice(0, 256)),
+            "x-neighbors-lof-decision-function", "trees-adaboost-clf-methods")
+_batch_decl(_rows_calls("score_samples", sl=slice(0, 256)),
+            "x-neighbors-ocsvm-score-samples", "x-sgd-ocsvm-score-samples")
+_batch_decl(_rows_calls("score_samples", sl=(slice(0, 256), slice(0, 6))), "m-robust-cov-methods")
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=lambda Xh: np.ascontiguousarray(Xh[:, 3]) * np.float32(1.5)),
+            "x-isotonic-methods")
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "trees-voting-reg-methods")
+_batch_decl(_rows_calls("transform", sl=slice(0, 128)), "m-gridsearch-methods")
+# apply: one leaf id per row and tree, the native walk of each row alone; it is the read-back the lanes'
+# held-out probe asks (predict_with_leaves and staged_predict are hashed in the train part only)
+_batch_decl(_rows_calls("apply", sl=slice(0, 256)),
+            "et-clf-methods", "trees-dt-clf-methods", "m-dt-reg-methods", "m-et-reg-methods", "m-rf-methods")
+_batch_decl(_rows_calls("predict_classes", sl=slice(0, 256)), "m-gbdt-readbacks")

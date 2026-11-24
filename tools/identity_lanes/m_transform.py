@@ -412,3 +412,66 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(fit_transform=_m_transform_h(T), transform=_m_transform_h(st.transform(X[:256])),
                      score=_h(np.float64(st.score(X[:256], yr[:256])))),
                 st, lambda e: (e.transform(Xh[:256]),))
+
+
+# ---------------------------------------------------------------- batch declarations (lane vdv-fin, 2026-11-24)
+# fit_transform, fit_predict, partial_fit and the inverse of a fresh fit's own output are fit endpoints: the
+# answer for a row depends on every row the call fits on, so a row alone or a split is a different fit, not a
+# smaller batch of the same call. These lanes return no fitted estimator (`_fit(parts)`), and the transform of
+# each fitted class keeps its batch part on the base lane the lane copies.
+_batch_decl("n/a:fit-endpoint (fit_transform, fit_predict, partial_fit or the inverse of a fresh fit's own "
+            "output: each row's answer depends on every row the call fits on, so a row alone is a different fit; "
+            "the lane holds no estimator, and the fitted class's transform keeps its batch part on the base lane)",
+            "x-cluster-bisecting-kmeans-fit-calls",
+            "x-cluster-minibatch-kmeans-fit-calls",
+            "kernel-ridge-laplacian-fit-transform",
+            "rbf-sampler-fit-transform",
+            "x-neighbors-poly-sketch-fit-transform",
+            "x-neighbors-additive-chi2-fit-transform",
+            "x-neighbors-skewed-chi2-fit-transform",
+            "x-neighbors-knn-imputer-fit-transform",
+            "umap-fit-transform",
+            "spectral-embedding-fit-transform",
+            "tsvd-inverse-fit-transform",
+            "x-decomp-ipca-fit-calls",
+            "x-decomp-lda-fit-calls",
+            "x-decomp-pls-fit-calls",
+            "x-decomp-sparse-pca-fit-calls",
+            "x-decomp-srp-fit-calls",
+            "x-decomp-dict-learning-inverse",
+            "x-isotonic-fit-transform",
+            "x-prep-binarizer-fit-transform",
+            "x-prep-maxabs-scaler-fit-transform",
+            "x-prep-robust-scaler-fit-transform",
+            "x-prep-normalizer-fit-transform",
+            "x-prep-variance-threshold-fit-transform",
+            "x-prep-simple-imputer-fit-transform",
+            "x-prep-spline-options-fit-transform",
+            "x-prep-encoder-categories-fit-transform",
+            "x-prep-inverse-transforms-fit-transform",
+            "x-prep-multilabel-binarizer-fit-calls",
+            "x-prep-mi-discrete-fit-transform",
+            "x-prep-score-edges-rfe-fit-transform",
+            "trees-stacking-clf-fit-transform",
+            "trees-voting-reg-fit-transform",
+            "trees-random-embedding-fit-transform")
+
+
+def _m_transform_batch_label_inverse(ml, e, Xh):
+    """LabelEncoder.inverse_transform on the codes of the held-out labels the encoder knows (the base lane's
+    `_prep_batch_label_encoder` rows): a code's label is a lookup of that code alone."""
+    labels = _prep_labels(Xh)
+    known = labels[np.isin(labels, np.asarray(e.classes_))][:256]
+    codes = np.asarray(e.transform(known))
+    return [_BatchRows("inverse_transform", codes, lambda r: (np.asarray(e.inverse_transform(r)),))]
+
+
+# The row-wise calls of the lanes that hold a fitted estimator, on the held-out rows their probe reads. The
+# derived inputs go through a lambda so the prep.py helpers are looked up when the part runs (prep.py loads
+# after this file).
+_batch_decl(_rows_calls("transform", sl=slice(0, 72)), "x-decomp-eigh-wide-kpca-fit")
+_batch_decl(_m_transform_batch_label_inverse, "x-prep-label-encoder-inverse")
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=lambda Xh: _prep_nan_first_eight(Xh)),
+            "x-prep-iterative-imputer-fit")
+_batch_decl(_rows_calls("predict_proba", sl=slice(0, 256)), "m-voting-clf-calls")
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "m-stacking-reg-calls")

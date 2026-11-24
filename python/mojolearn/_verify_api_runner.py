@@ -73,6 +73,14 @@ def device_only(family, public, method):
             or (family=='optimizers' and method in OPTIMIZER_DEVICE_METHODS))
 
 
+def sides():
+    """The sides this installation captures, CPU first: ['cpu'] on a build
+    that declares no device (runtime_report cpu_only), else ['cpu', 'gpu'].
+    Read once per run, before any endpoint runs."""
+    from . import runtime_report
+    return ['cpu'] if runtime_report().get('cpu_only') else ['cpu','gpu']
+
+
 def capture(path=None, endpoints=None, *, artifacts=None, side=None):
     """One side's capture. `side` ("cpu" or "gpu") binds every resolved public
     class and function to device=`side` in this process (`_verify_device`);
@@ -154,21 +162,33 @@ def differences(actual,expected):
     return errors
 
 
+#: The columns an endpoint reference can validate: the CPU (host) column and the three GPU vendors.
+COLUMNS=('cpu','metal','cuda','hip')
+
+
 def admit(captures):
     """Build one shared reference; retain each other device's actual coverage.
 
     Reference availability is not release qualification. A complete NVIDIA
     capture supplies the bytes; partial checks on another device remain
     explicitly partial, and any observed output disagreement rejects admission.
+    The CPU column ('cpu': a `capture(side="cpu")`, on a CPU-only installation
+    or the CPU side of a GPU one) must reproduce the same bytes on every
+    endpoint it executes; the device-only endpoints it records not applicable
+    are not missing from it (they have no CPU form), so a CPU capture with no
+    other gap validates the CPU column.
     """
     expected={row['endpoint'] for row in TARGETS}
-    if 'cuda' not in captures or set(captures)-{'metal','cuda','hip'}:
+    if 'cuda' not in captures or set(captures)-set(COLUMNS):
         raise ValueError('endpoint reference requires a complete NVIDIA capture')
     canonical=captures['cuda']
     validation={}
     for vendor,report in captures.items():
         if report.get('vendor')!=vendor or report.get('numeric_mode')!='identical':
             raise ValueError('incorrect reference vendor or numeric mode')
+        # A CPU column is the CPU side; a GPU column is never a CPU-side capture.
+        if (report.get('side')=='cpu')!=(vendor=='cpu'):
+            raise ValueError('capture side does not match its column: '+vendor+' / '+str(report.get('side')))
         if not report.get('version') or report['version']!=canonical.get('version'):
             raise ValueError('endpoint references must belong to one release')
         if set(report.get('expected',()))!=expected or set(report.get('endpoints',{}))-expected:
@@ -176,7 +196,9 @@ def admit(captures):
         if report.get('sources')!=sources() or not report.get('bindings'):
             raise ValueError('stale fixtures or missing native artifact provenance')
         passed=sorted(e for e,row in report.get('endpoints',{}).items() if row.get('status')=='captured')
-        missing=sorted(expected-set(passed))
+        not_applicable=sorted(e for e,row in report.get('endpoints',{}).items()
+            if vendor=='cpu' and row.get('status')=='not applicable' and row.get('kind')=='device only')
+        missing=sorted(expected-set(passed)-set(not_applicable))
         if vendor=='cuda' and (missing or report.get('pending')):
             raise ValueError('canonical reference must execute every endpoint successfully')
         actual=dict(expected=passed,endpoints=report['endpoints'],pending=[])
@@ -184,11 +206,12 @@ def admit(captures):
         errors=differences(actual,reference)
         if errors:raise ValueError('; '.join(errors))
         validation[vendor]=dict(compared=len(passed),expected=len(expected),
-            incomplete=missing, failures={e:row.get('error','unexecuted') for e,row in report['endpoints'].items()
-                if row.get('status')!='captured'}, pending=report.get('pending',[]))
+            incomplete=missing, not_applicable=not_applicable,
+            failures={e:row.get('error','unexecuted') for e,row in report['endpoints'].items()
+                if row.get('status')!='captured' and e not in not_applicable}, pending=report.get('pending',[]))
     complete=sorted(v for v,row in validation.items() if not row['incomplete'] and not row['pending'])
     return dict(format='mojolearn.api-reference.v1',witness=canonical,
-        validated_vendors=complete,untested_vendors=sorted({'metal','cuda','hip'}-set(captures)),
+        validated_vendors=complete,untested_vendors=sorted(set(COLUMNS)-set(captures)),
         device_validation=validation,release_qualified=False,
         witnesses={v:{k:r[k] for k in ('vendor','version','sources','bindings')} for v,r in captures.items()})
 
@@ -208,25 +231,25 @@ def verify(*,self_test=True,reference=None,retain=None,scope='all'):
     """Both sides in this process (2026-11-24): the CPU side (device="cpu")
     and, on an installation with a GPU, the GPU side (device="gpu"), each
     captured and judged on its own. A side's own failed or unexecuted
-    endpoints fail the run; the endpoint reference validates GPU vendors, so
-    the CPU side reads UNTESTED against it (its column is owed) unless the
-    reference validates 'cpu'. The overall status is FAILED when any side
-    failed, else the GPU side's (the CPU side's on a CPU-only installation).
-    The fault controls run on that primary side."""
-    from . import runtime_report
+    endpoints fail the run; each side is judged against its own column (the
+    CPU side against 'cpu', the GPU side against its vendor), and a side whose
+    column the reference does not validate reads UNTESTED (its column is owed).
+    The overall status is FAILED when any side failed, else the GPU side's
+    (the CPU side's on a CPU-only installation). The fault controls run on
+    that primary side."""
     from . import _verify_device as vd
     if reference is None:
         try:
             from ._verification_api_reference import DATA
             reference=DATA
         except ImportError:reference={}
-    sides=['cpu'] if runtime_report().get('cpu_only') else ['cpu','gpu']
+    run_sides=sides()
     results={}
-    for side in sides:
+    for side in run_sides:
         clean=capture(endpoints=selected_endpoints(scope),side=side)
         if retain:retain('api-clean-'+side,clean)
         results[side]=_judge_side(clean,reference,scope)
-    primary=sides[-1]
+    primary=run_sides[-1]
     result=dict(results[primary])
     result['sides']={side:{k:v for k,v in r.items() if k!='evidence'} for side,r in results.items()}
     result['side']=primary
@@ -257,7 +280,7 @@ def _judge_side(clean,reference,scope):
         evidence=clean, scope_profile=scope, checks_by_kind={kind:sum(row['kind']==kind for row in clean['endpoints'].values())
             for kind in sorted({row['kind'] for row in clean['endpoints'].values()})})
     result['reference_device_validation']=reference.get('device_validation',{})
-    result['reference_untested_vendors']=reference.get('untested_vendors',['metal','cuda','hip'])
+    result['reference_untested_vendors']=reference.get('untested_vendors',list(COLUMNS))
     witness=reference.get('witness',{})
     # A shipped reference whose fixture sources differ from the shipped fixtures is stale on
     # every device: the staleness is a property of the reference, not of the vendor running it.
@@ -269,8 +292,9 @@ def _judge_side(clean,reference,scope):
     if stale:
         result['errors'].append('endpoint fixtures changed; current reference is stale ('
                                 +', '.join(stale)+')')
-    # The endpoint reference validates GPU vendors only. A vendor it never validated (the
-    # CPU side: no CPU column was recorded) is UNTESTED, never FAILED, on its outputs; with a
+    # The endpoint reference validates the columns it was admitted with (cpu, cuda, hip,
+    # metal). A column it never validated (for example the CPU side of a reference admitted
+    # without `--cpu`) is UNTESTED, never FAILED, on its outputs; with a
     # stale reference it reads OWED, as a validated vendor does. Its own execution failures
     # still fail it (2026-11-24: a side that refuses is a failure, never untested).
     if reference.get('validated_vendors') and clean['vendor'] not in reference['validated_vendors']:

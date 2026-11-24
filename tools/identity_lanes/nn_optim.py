@@ -65,3 +65,12 @@ def _(ml, X, yc, yr, Xh=None):
     parts = {"onecycle_" + k: v for k, v in _nn_optim_hash(a).items()}
     parts.update({"warmup_" + k: v for k, v in _nn_optim_hash(b).items()})
     return _fit(parts)
+
+
+# Batch declarations (lane vdv-fin, 2026-11-24). Each lane fits two small models and returns no estimator
+# (`_fit(parts)`): the loss curve, both optimizer buffers and the parameters are the training trajectory, and
+# a prediction row's batch invariance is asked on the Sequential lanes that keep a fitted model (sequence-mlp).
+_batch_decl("n/a:training-trajectory (two seeded fits per lane; the loss curve, optimizer buffers, parameters "
+            "and predictions are train parts digested whole, and the lane holds no estimator; Sequential.predict "
+            "keeps its batch part on sequence-mlp)",
+            "sequence-optim-rmsprop", "sequence-optim-adagrad", "sequence-optim-lamb")

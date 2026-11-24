@@ -199,6 +199,7 @@ def test_api_runner_keeps_pending_scope_and_original_exit(repo, tmp_path, monkey
     module.TARGETS = [dict(endpoint='one', public='Example')]
     module.capture = lambda *args, **kwargs: dict(endpoints={}, pending=['one'])
     module.differences = lambda *args: []
+    module.sides = lambda: ['cpu']
     monkeypatch.setitem(sys.modules, 'mojolearn', types.ModuleType('mojolearn'))
     monkeypatch.setitem(sys.modules, module.__name__, module)
     out = tmp_path/'api.json'

@@ -609,6 +609,12 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts)
 
 
+# lane vdv-fin (2026-11-24): the lane fits six RFE wrappers on 96 rows and returns no estimator; its transform
+# is of the fit's own rows, and RFE.transform keeps its batch part on x-prep-rfe.
+_batch_decl("n/a:fit-probe (six RFE fits hashed on their own rows, no estimator held; RFE.predict and "
+            "RFE.transform keep their batch parts on x-prep-rfe)", "x-prep-rfe-no-round")
+
+
 @lane("x-prep-score-edges")
 @floor(rows=(4097, "4097 rows keeps the f_classif / chi2 / f_regression reductions and the RFE discriminant Gram"
                   " over three XB = 2048 row blocks (x_prep/blocked.mojo:18) with every NaN / inf edge column "
