@@ -65,7 +65,9 @@ from core.hotpath_impl_rows import group_fold_assign_i32, strat_alloc_i64, strat
 from core.metrics_program_plan import MetricProgramPlan
 from bindings.arena_prog_run import MetricArenaOwner, MetricRoute, metric_inputs_run, metric_slots_run
 from core.native_descriptor_call import native_descriptor_call
-from x_metrics.descriptor_schema import MP_DEV_PUT, MP_DEV_FREE
+from x_metrics.descriptor_schema import MP_MODE, MP_VENDOR
+from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE
+from core.prep_entry_table import PrepEntryKey, xp_transport_ref, xp_transport_call
 from bindings.msel_split_run import (
     MSEL_SPLIT_GOLDEN, MSEL_SPLIT_NONE, MselCounterRng, MselFoldRows, msel_fold_rows_fits, msel_split_mix64,
     msel_split_signed32, msel_shuffled_fold_rows_plan, msel_stratified_fold_rows_plan,
@@ -230,28 +232,39 @@ def msel_prog_run_slots(route: MselSplitRoute, prog: MselProg, slots: List[Int])
 
 struct MselProgSlot(Movable):
     """A split call's n int32 label codes put once into the program image's
-    resident store (x_metrics/descriptor_schema.mojo MP_DEV_PUT; lane
-    vdf-scope-split2, 2026-11-24): the slot (-1: nothing put) and the entry
-    that frees it (MP_DEV_FREE), on every path (`__del__`). Only on a route
-    with `store`; every program of the call reads the slot."""
+    resident store (lane vdf-scope-split2, 2026-11-24): the slot (-1:
+    nothing put) and the store entry that frees it, on every path
+    (`__del__`). Only on a route with `store`; every program of the call
+    reads the slot. The store is the x_prep image's (lane vdf-xm-wire,
+    x_metrics/descriptor_schema.mojo: the metrics entry's own MP_DEV_PUT /
+    MP_DEV_FREE were deleted), reached through its transport entry
+    (`XP_DEV_PUT` / `XP_DEV_FREE`) of the program image's tier and vendor,
+    resolved once per put (two entry calls and the table read,
+    bindings/x_metrics_resident_door.mojo `metric_store_ref`)."""
 
     var slot: Int
-    var program: NativeDescriptorCall
+    var store: EntryRef
 
     def __init__(out self, route: MselSplitRoute, labels: MselCodes) raises:
-        self.program = route.program
+        self.store = entry_ref_unresolved()
         self.slot = -1
         if labels.n > 0:
-            self.slot = native_descriptor_call(route.program, MP_DEV_PUT, [labels.address], [labels.n], [])
+            var mode = native_descriptor_call(route.program, MP_MODE, [], [], [])
+            var vendor = native_descriptor_call(route.program, MP_VENDOR, [], [], [])
+            self.store = xp_transport_ref(PrepEntryKey(mode, vendor))
+            var src: List[Int] = [labels.address]
+            var count: List[Int] = [labels.n]
+            self.slot = xp_transport_call(self.store, XP_DEV_PUT, src, count)
 
     def __init__(out self):
-        self.program = entry_ref_unresolved().call
+        self.store = entry_ref_unresolved()
         self.slot = -1
 
     def __del__(deinit self):
         if self.slot >= 0:
             try:
-                _ = native_descriptor_call(self.program, MP_DEV_FREE, [], [self.slot], [])
+                var ids: List[Int] = [self.slot]
+                _ = xp_transport_call(self.store, XP_DEV_FREE, List[Int](), ids)
             except error:
                 pass
 

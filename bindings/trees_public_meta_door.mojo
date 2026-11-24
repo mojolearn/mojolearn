@@ -42,6 +42,7 @@ from bindings.trees_public_inputs_door import (
     TreesLabels,
     trees_builtins,
     trees_table,
+    trees_entry,
     trees_reshape,
     trees_address,
     trees_itemsize,

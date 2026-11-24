@@ -111,44 +111,44 @@ def _draws(n: Int, seed: UInt64) -> List[Float32]:
     return out^
 
 
-def _case_inputs(case: Int, mut dst: List[Float32], mut shards: List[List[Float32]]):
-    if case == 0:
+def _case_inputs(which: Int, mut dst: List[Float32], mut shards: List[List[Float32]]):
+    if which == 0:
         dst = [Float32(1.0), _f(UInt32(0x80000001)), Float32(-0.25)]
         shards = [[Float32(0.5), Float32(0.0), Float32(0.0)]]
-    elif case == 1:
+    elif which == 1:
         var t = _f(UInt32(0x33800000))  # 2^-24
         dst = [Float32(1.0), t]
         shards = [[t, t], [t, Float32(1.0)]]
-    elif case == 2:
+    elif which == 2:
         dst = [Float32(1.0), _f(UInt32(0x80000000)), _f(UInt32(0x7F800000))]
         shards = [[_f(UInt32(0x7FA00001)), _f(UInt32(0x80000000)), Float32(1.0)]]
     else:
         var n = 70001
         dst = _draws(n, UInt64(11))
         shards = List[List[Float32]]()
-        var k = 9 if case == 3 else 5
+        var k = 9 if which == 3 else 5
         for j in range(k):  # driver-loop: fixture shards
             shards.append(_draws(n, UInt64(101 + j)))
 
 
-def run_case(entry: EntryRef, case: Int, host_too: Bool) raises:
+def run_case(entry: EntryRef, which: Int, host_too: Bool) raises:
     var dst = List[Float32]()
     var shards = List[List[Float32]]()
-    _case_inputs(case, dst, shards)
+    _case_inputs(which, dst, shards)
     var want = _reference(dst, shards)
     var got = _fold(entry, dst, shards)
-    _same(got, want, "ordered fold case " + String(case))
+    _same(got, want, "ordered fold case " + String(which))
     if host_too:
-        _same(_host(dst, shards), got, "host column vs device column, case " + String(case))
-    if case == 0:
+        _same(_host(dst, shards), got, "host column vs device column, case " + String(which))
+    if which == 0:
         require(_word(got[1]) == UInt32(0x80000000), "a subnormal accumulator is flushed to -0")
-    if case == 1:
+    if which == 1:
         require(_word(got[0]) == UInt32(0x3F800000), "1 + 2^-24 + 2^-24 is not 1.0")
         require(_word(got[1]) == UInt32(0x3F800001), "2^-24 + 2^-24 + 1 is not 1 + 2^-23")
-    if case == 2:
+    if which == 2:
         require(_word(got[0]) == UInt32(0x7FC00000), "a NaN sum is the canonical word")
         require(_word(got[1]) == UInt32(0x80000000), "-0 + -0 stays -0")
-    if case == 4:
+    if which == 4:
         var reversed = List[List[Float32]]()
         for j in range(len(shards) - 1, -1, -1):  # driver-loop: the reversed order
             reversed.append(shards[j].copy())

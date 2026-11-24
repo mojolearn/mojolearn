@@ -157,9 +157,9 @@ def lin_dev_dtype_name(code: Int) -> String:
     return "an unknown dtype"
 
 
-def lin_dev_out(out: PythonObject, who: String) raises:
+def lin_dev_out(dst: PythonObject, who: String) raises:
     """`out` is not taken with device operands: the device form returns a new device array."""
-    if out is not None:
+    if dst is not None:
         raise Error("TypeError: mojolearn.linalg." + who + ": out is not taken with device-array operands; the "
                     + "result is returned as a new TrainDeviceArray")
 

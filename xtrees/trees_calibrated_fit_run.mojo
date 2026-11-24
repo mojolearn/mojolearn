@@ -255,12 +255,12 @@ struct CalFitPlan(Movable):
         """The next fold's test rows (int32 numbers at `rows`, `count` of them)."""
         self.fold_in(rows, rows, count)
 
-    def fold_in(mut self, place: Int, read: Int, count: Int):
+    def fold_in(mut self, place: Int, rows_read: Int, count: Int):
         """THE FOLD IN PLACE: the next fold's test rows as fold positions
-        `place` (int32, where its scores go) and as rows of `x` `read` (int32,
-        what its member reads), `count` of each."""
+        `place` (int32, where its scores go) and as rows of `x` `rows_read`
+        (int32, what its member reads), `count` of each."""
         self.test_rows.append(place)
-        self.x_test_rows.append(read)
+        self.x_test_rows.append(rows_read)
         self.test_counts.append(count)
         self.fold_classes.append(List[Int32]())
         self.fold_codes.append(List[Int32]())

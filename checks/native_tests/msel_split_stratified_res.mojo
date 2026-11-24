@@ -44,7 +44,7 @@ x_metrics program entry with its range route and resident store
 puts the codes once into the program store and reads the slot in both of
 its programs (`msel_first_seen_prog`, then the fold program); its words must
 equal the host route's, and every program store slot is freed
-(`MP_DEV_LIVE` back to its start). Case 7 (StratifiedGroupKFold) runs the
+(the x_prep store's `XP_DEV_LIVE` back to its start). Case 7 (StratifiedGroupKFold) runs the
 layout V4 group x class count (MH_GROUP_CLASS_COUNTS_RES) on every route.
 """
 from std.testing import TestSuite
@@ -60,7 +60,10 @@ from core.msel_helpers_calls import (
 )
 from x_metrics.descriptor_host import metrics_program_host_v1
 from x_metrics.descriptor_device import metrics_program_device_v1
-from x_metrics.descriptor_schema import MP_DEV_LIVE
+from x_metrics.descriptor_schema import MP_MODE, MP_VENDOR
+from x_prep.transport_abi import XP_DEV_LIVE
+from x_prep.transport_device import publish_x_prep_transport_device
+from core.prep_entry_table import PrepEntryKey, xp_transport_ref, xp_transport_call
 from core.native_descriptor_call import native_descriptor_call
 from bindings.msel_split_plan_run import (
     MSEL_LABELS_SORTED, MselCodes, MselSeed, MselSplitPlan, MselSplitRoute, msel_plan_stratified,
@@ -316,9 +319,13 @@ def _run_gpu() raises:
     var slot = MselSplitRoute(msel_helpers_ref(MselEntryKey(Int(GLOBAL_NUMERIC_MODE), vendor)),
                               metrics_program_device_v1, True, True, True)
     require(slot.store, "msel_split_stratified_res: the slot route has no store")
+    # the one resident store is the x_prep image's (lane vdf-xm-wire): published here, read by its transport entry
+    publish_x_prep_transport_device()
+    var store = xp_transport_ref(PrepEntryKey(native_descriptor_call(slot.program, MP_MODE, [], [], []),
+                                              native_descriptor_call(slot.program, MP_VENDOR, [], [], [])))
 
     # ordered: the device cases share the one store context
-    def task(unit: Int) raises {imm host, imm device, imm slot}:
+    def task(unit: Int) raises {imm host, imm device, imm slot, imm store}:
         var on_host = _case(host, unit)
         var on_device = _case(device, unit)
         require(len(on_host) == len(on_device), "case " + String(unit) + ": device and host words differ in length")
@@ -326,9 +333,9 @@ def _run_gpu() raises:
             require(on_host[i] == on_device[i], "case " + String(unit) + ": device word " + String(i) + " is "
                     + String(on_device[i]) + ", host " + String(on_host[i]))
         _check(unit, on_device)
-        var live = native_descriptor_call(slot.program, MP_DEV_LIVE, [], [], [])
+        var live = xp_transport_call(store, XP_DEV_LIVE, List[Int](), List[Int]())
         var on_slot = _case(slot, unit)
-        require(native_descriptor_call(slot.program, MP_DEV_LIVE, [], [], []) == live,
+        require(xp_transport_call(store, XP_DEV_LIVE, List[Int](), List[Int]()) == live,
                 "case " + String(unit) + ": a program store slot was not freed")
         require(len(on_host) == len(on_slot), "case " + String(unit) + ": slot and host words differ in length")
         for i in range(len(on_host)):  # driver-loop: over a fixture case's words

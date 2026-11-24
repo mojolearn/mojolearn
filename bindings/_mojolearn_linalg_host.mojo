@@ -111,7 +111,7 @@ from decomposition.linalg_host_impl import (
     from_bf16_host_run,
     from_f16_host_run,
     qr_r_host_run,
-    svdvals_host_run,
+    svdvals_host_at_run,
     gemm_int15_host_run,
     quantize_int15_host_run,
     dequantize_int15_host_run,

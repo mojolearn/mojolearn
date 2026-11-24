@@ -8,7 +8,9 @@ from core.function_device import FunctionDevice, function_device_default
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.resample_keys_unpack import resample_keys
 from bindings.py_balanced import py_item
-from bindings.operation_names_linops import LINOPS_OPN_FAMILY_RS_BOOTSTRAP, LINOPS_OPN_FAMILY_RS_PERMUTATION_TEST
+from bindings.operation_names_linops import (
+    LINOPS_OPN_FAMILY_RS_BOOTSTRAP, LINOPS_OPN_FAMILY_RS_PERMUTATION_TEST, LINOPS_OPN_FAMILY_RS_MONTE_CARLO_INTEGRATE,
+)
 
 
 # The resampling functions have a device image (`_mojolearn_resample` of the

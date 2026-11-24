@@ -102,10 +102,10 @@ struct _Fit(Movable):
         self.k = 0
 
 
-def _fit(driver: XnDriver, x_word: Int, codes: List[Int32], rows: Int, case: Int) raises -> _Fit:
+def _fit(driver: XnDriver, x_word: Int, codes: List[Int32], rows: Int, unit: Int) raises -> _Fit:
     """The member's `_lp_fit` RUN with the defaults' words (every arm off)."""
-    var spreading = case == 1
-    var knn = case == 0
+    var spreading = unit == 1
+    var knn = unit == 0
     var fit = _Fit(rows)
     fit.k = xn_semi_knn_k(7, rows) if knn else 0
     var weight = xn_lp_static_weight(0.2) if spreading else 1.0
@@ -120,10 +120,10 @@ def _fit(driver: XnDriver, x_word: Int, codes: List[Int32], rows: Int, case: Int
     return fit^
 
 
-def _query(driver: XnDriver, query: Int, fit_x: Int, fit: _Fit, nq: Int, nt: Int, case: Int,
+def _query(driver: XnDriver, query: Int, fit_x: Int, fit: _Fit, nq: Int, nt: Int, unit: Int,
            labels: Bool) raises -> List[Float32]:
     """predict (codes as float32 words) or predict_proba of the member's `_lp_request`."""
-    var knn = case == 0
+    var knn = unit == 0
     var proba = List[Float32](length=nq * _C, fill=0.0)
     var predicted = List[Int32](length=nq, fill=0)
     var request = LpQueryRequest(query, fit_x, Int(fit.dist.unsafe_ptr()), 0 if labels else Int(proba.unsafe_ptr()),
@@ -152,7 +152,7 @@ def _same_fit(a: _Fit, b: _Fit) raises:
     require(a.iterations == b.iterations, "n_iter_")
 
 
-def _host_case(case: Int) raises:
+def _host_case(unit: Int) raises:
     comptime if CPU_COLUMN_BUILD:
         var x = _x()
         var codes = _codes()
@@ -166,14 +166,14 @@ def _host_case(case: Int) raises:
         var want = _serial_codes(codes, index)
         for i in range(n):  # small-loop(compared codes)
             require(fold_codes[i] == want[i], "host take of the fold's codes")
-        var fit = _fit(XnDriver(xn_host_v1), Int(taken.unsafe_ptr()), fold_codes, n, case)
+        var fit = _fit(XnDriver(xn_host_v1), Int(taken.unsafe_ptr()), fold_codes, n, unit)
         _ = fit^
         _ = x^
         _ = codes^
         _ = taken^
 
 
-def _device_case(case: Int) raises:
+def _device_case(unit: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         var driver = XnDriver(xn_device_v1)
         var x = _x()
@@ -192,15 +192,15 @@ def _device_case(case: Int) raises:
         var test_slot = store[].take_rows(store_ctx, base, _D, Int(test.unsafe_ptr()), nq)
         var failure = String("")
         try:
-            var host_fit = _fit(driver, Int(train_rows.unsafe_ptr()), train_codes, nt, case)
-            var fold_fit = _fit(driver, fold_x_word(train_slot), train_codes, nt, case)
+            var host_fit = _fit(driver, Int(train_rows.unsafe_ptr()), train_codes, nt, unit)
+            var fold_fit = _fit(driver, fold_x_word(train_slot), train_codes, nt, unit)
             _same_fit(fold_fit, host_fit)
             for which in range(2):  # small-loop(predict, then predict_proba)
                 var labels = which == 0
                 var resident = _query(driver, fold_x_word(test_slot), fold_x_word(train_slot), fold_fit, nq, nt,
-                                      case, labels)
+                                      unit, labels)
                 var host = _query(driver, Int(test_rows.unsafe_ptr()), Int(train_rows.unsafe_ptr()), host_fit,
-                                  nq, nt, case, labels)
+                                  nq, nt, unit, labels)
                 _same_f32(resident, host, "query over the resident fitted rows")
         except error:
             failure = String(error)
@@ -220,16 +220,16 @@ def _device_case(case: Int) raises:
 
 def test_host_fixtures() raises:
     comptime if CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _host_case(case)
+        def body(unit: Int) raises:
+            _host_case(unit)
 
         check_cases_serial("xneighbors_member_lp_rows host", 2, body)
 
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(unit: Int) raises:
+            _device_case(unit)
 
         check_cases_serial("xneighbors_member_lp_rows device", 2, body)
 

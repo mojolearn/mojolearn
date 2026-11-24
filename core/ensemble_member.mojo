@@ -941,14 +941,16 @@ def meta_plan_release(handle: Int):
 def _plan_refused_first(handle: Int) raises -> Bool:
     """THE DOOR'S REFUSAL raised before anything (lane mf-refuse5) on a plan
     entry (`_refused_first` on a state): the door's words with `late` False,
-    not the RFE kind's. Read under the store's lock."""
+    not the RFE kind's. Read under the store's lock. A plan entry carries
+    no kind: the caller tests the member's kind word (`_outputs`: never an
+    RFE kind here)."""
     var store = _PLANS.get_or_create_ptr()
     var address = _plan_lookup(handle, False)
     var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
     shared_slot_lock(lock)
     try:
         var slot = _PlanSlotPtr(unsafe_from_address=address)
-        return slot[].refusal.byte_length() != 0 and not slot[].refusal_late and not _rfe_kind(slot[].kind)
+        return slot[].refusal.byte_length() != 0 and not slot[].refusal_late
     finally:
         shared_slot_unlock(lock)
 
@@ -4191,8 +4193,8 @@ def _score_multi(slot: _SlotPtr, call: _CallPtr) raises:
             var r = Int(rr[i]) if index != 0 else i
             var weight = Float64(ww[r]) if has_w else 1.0
             var t = Float64(yy[r * outputs + j])
-            var r = t - pp[i * outputs + j]
-            num += weight * r * r
+            var e = t - pp[i * outputs + j]
+            num += weight * e * e
             den += weight * (t - mean) * (t - mean)
         var value = 1.0
         if den != 0.0:

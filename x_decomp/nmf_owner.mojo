@@ -262,7 +262,9 @@ def nmf_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
             x_resident = kit.mats[m].dev >= 0 and n * d > 0
         var it: Int
         if x_resident:
-            it = X.nmf_solve_pool(kit.mats[m].dev, kit.ptr(ws), kit.ptr(hs), n, d, nc, solver, a, loop)
+            # the pool id read first: `kit.ptr` borrows the kit mutably in the same call
+            var x_dev = kit.mats[m].dev
+            it = X.nmf_solve_pool(x_dev, kit.ptr(ws), kit.ptr(hs), n, d, nc, solver, a, loop)
         else:
             it = X.nmf_solve(kit.ptr(m), kit.ptr(ws), kit.ptr(hs), n, d, nc, solver, a, loop)
         if loop_word != 0:

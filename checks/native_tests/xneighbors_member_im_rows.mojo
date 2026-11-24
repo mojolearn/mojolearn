@@ -44,7 +44,7 @@ def _next(mut state: UInt64) -> UInt64:
     return z ^ (z >> 31)
 
 
-def _x(case: Int) -> List[Float32]:
+def _x(which: Int) -> List[Float32]:
     var state = UInt64(20261124)
     var out = List[Float32](capacity=_ROWS * _D)
     for i in range(_ROWS * _D):  # small-loop(fixture words)
@@ -52,7 +52,7 @@ def _x(case: Int) -> List[Float32]:
         var r = i // _D
         var c = i % _D
         if (r * 7 + c) % 11 == 0:
-            v = Float32(0.5) if case == 2 else nan[DType.float32]()
+            v = Float32(0.5) if which == 2 else nan[DType.float32]()
         out.append(v)
     return out^
 
@@ -92,10 +92,10 @@ struct _Fit(Movable):
         self.rows_word = 0
 
 
-def _fit(driver: XnDriver, x_word: Int, rows: Int, case: Int) raises -> _Fit:
+def _fit(driver: XnDriver, x_word: Int, rows: Int, which: Int) raises -> _Fit:
     """The member's `_im_fit` RUN (the missing number NaN, or 0.5 masked in case 2)."""
     var fit = _Fit()
-    var mask = case == 2
+    var mask = which == 2
     if mask:
         fit.masked = List[Float32](length=rows * _D, fill=0.0)
     var columns = imp_fit_run(driver, ImpFitRequest(x_word, Int(fit.masked.unsafe_ptr()) if mask else 0, rows, _D,
@@ -106,12 +106,12 @@ def _fit(driver: XnDriver, x_word: Int, rows: Int, case: Int) raises -> _Fit:
     return fit^
 
 
-def _transform(driver: XnDriver, query: Int, fit: _Fit, nq: Int, nt: Int, case: Int) raises -> List[Float32]:
-    var indicator = fit.missing.copy() if case == 2 else List[Int]()
+def _transform(driver: XnDriver, query: Int, fit: _Fit, nq: Int, nt: Int, which: Int) raises -> List[Float32]:
+    var indicator = fit.missing.copy() if which == 2 else List[Int]()
     var width = _D + len(indicator)
     var out = List[Float32](length=max(nq * width, 1), fill=0.0)
-    var request = ImpTransformRequest(query, fit.rows_word, Int(out.unsafe_ptr()), nq, nt, _D, _K, False, case == 2,
-                                      0.5 if case == 2 else nan[DType.float64](), False, case == 1, True)
+    var request = ImpTransformRequest(query, fit.rows_word, Int(out.unsafe_ptr()), nq, nt, _D, _K, False, which == 2,
+                                      0.5 if which == 2 else nan[DType.float64](), False, which == 1, True)
     imp_transform_run(driver, request, fit.plan, indicator)
     return out^
 
@@ -122,10 +122,10 @@ def _same_f32(a: List[Float32], b: List[Float32], what: String) raises:
         require(bitcast[DType.uint32](a[i]) == bitcast[DType.uint32](b[i]), what + ": bits differ at " + String(i))
 
 
-def _host_case(case: Int) raises:
+def _host_case(which: Int) raises:
     comptime if CPU_COLUMN_BUILD:
         var driver = XnDriver(xn_host_v1)
-        var x = _x(case)
+        var x = _x(which)
         var train = _index(True)
         var test = _index(False)
         var nt = len(train)
@@ -134,9 +134,9 @@ def _host_case(case: Int) raises:
         member_fold_take_f32(Int(x.unsafe_ptr()), Int(train.unsafe_ptr()), nt, _D, Int(taken.unsafe_ptr()))
         _same_f32(taken, _serial(x, train), "host take of the fold")
         var query = _serial(x, test)
-        var fit = _fit(driver, Int(taken.unsafe_ptr()), nt, case)
-        var out = _transform(driver, Int(query.unsafe_ptr()), fit, nq, nt, case)
-        if case != 2:
+        var fit = _fit(driver, Int(taken.unsafe_ptr()), nt, which)
+        var out = _transform(driver, Int(query.unsafe_ptr()), fit, nq, nt, which)
+        if which != 2:
             # The cell op's own copy: every present cell is x's word.
             for i in range(nq * _D):  # small-loop(compared words)
                 if not isnan(query[i]):
@@ -146,10 +146,10 @@ def _host_case(case: Int) raises:
         _ = taken^
 
 
-def _device_case(case: Int) raises:
+def _device_case(which: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         var driver = XnDriver(xn_device_v1)
-        var x = _x(case)
+        var x = _x(which)
         var train = _index(True)
         var test = _index(False)
         var nt = len(train)
@@ -167,19 +167,19 @@ def _device_case(case: Int) raises:
         var clean_slot = store[].take_rows(store_ctx, base, _D, Int(clean.unsafe_ptr()), 3)
         var failure = String("")
         try:
-            var host_fit = _fit(driver, Int(train_rows.unsafe_ptr()), nt, case)
-            var fold_fit = _fit(driver, fold_x_word(train_slot), nt, case)
+            var host_fit = _fit(driver, Int(train_rows.unsafe_ptr()), nt, which)
+            var fold_fit = _fit(driver, fold_x_word(train_slot), nt, which)
             require(len(host_fit.missing) == len(fold_fit.missing), "missing columns")
             for i in range(len(host_fit.missing)):  # small-loop(missing columns)
                 require(host_fit.missing[i] == fold_fit.missing[i], "missing column " + String(i))
             require(len(host_fit.plan.keep) == len(fold_fit.plan.keep), "kept columns")
-            if case == 2:
+            if which == 2:
                 _same_f32(fold_fit.masked, host_fit.masked, "the masked fit rows")
-            var resident = _transform(driver, fold_x_word(test_slot), fold_fit, nq, nt, case)
-            var host = _transform(driver, Int(test_rows.unsafe_ptr()), host_fit, nq, nt, case)
+            var resident = _transform(driver, fold_x_word(test_slot), fold_fit, nq, nt, which)
+            var host = _transform(driver, Int(test_rows.unsafe_ptr()), host_fit, nq, nt, which)
             _same_f32(resident, host, "transform over the resident rows")
-            var clean_resident = _transform(driver, fold_x_word(clean_slot), fold_fit, 3, nt, case)
-            var clean_host = _transform(driver, Int(clean_rows.unsafe_ptr()), host_fit, 3, nt, case)
+            var clean_resident = _transform(driver, fold_x_word(clean_slot), fold_fit, 3, nt, which)
+            var clean_host = _transform(driver, Int(clean_rows.unsafe_ptr()), host_fit, 3, nt, which)
             _same_f32(clean_resident, clean_host, "transform of a fold with no missing cell")
         except error:
             failure = String(error)
@@ -200,16 +200,16 @@ def _device_case(case: Int) raises:
 
 def test_host_fixtures() raises:
     comptime if CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _host_case(case)
+        def body(which: Int) raises:
+            _host_case(which)
 
         check_cases_serial("xneighbors_member_im_rows host", 3, body)
 
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(which: Int) raises:
+            _device_case(which)
 
         check_cases_serial("xneighbors_member_im_rows device", 3, body)
 
