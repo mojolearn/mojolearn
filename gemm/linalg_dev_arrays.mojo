@@ -27,9 +27,16 @@ from gemm.checks.gemm_lowbit import (
     identical_gemm_int8_into,
     quantize_rows_int8_device,
 )
+from gemm.checks.gemm_int15 import (
+    Int15QuantWorkspace,
+    dequantize_planes_int15_device,
+    identical_gemm_int15_planes_into,
+    quantize_planes_int15_parallel_device,
+)
+from decomposition.linalg_door_impl import from_f16_into
 from gemm.linalg_native import _refuse_lowbit_shape
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
-from gemm.contract import INT8_MAX_K, OP_NN, OP_NT, OP_TN
+from gemm.contract import INT8_MAX_K, INT15_MAX_K, OP_NN, OP_NT, OP_TN
 
 comptime _DEVCTX_SLOT = "MojolearnLinalgContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnLinalgContextFastV3"
 
@@ -224,3 +231,117 @@ def gemm_bf16_dev_native(c_h: Int, a_h: Int, b_h: Int, params: List[Int]) raises
     _ = db^
     _ = dc^
     return m * n
+
+
+# The fifteen-bit trio and the float16 widening (lane vdf-linalg5): the host-address entries' kernels
+# (gemm/linalg_native.mojo `quantize_int15_native`, `dequantize_int15_native`, `gemm_int15_native`, `from_f16_native`)
+# on typed pool views: hi and lo int8 planes, int32 row exponents, uint16 float16 bits. One wait at the end of each.
+
+
+def quantize_int15_dev_native(addrs: List[Int], params: List[Int]) raises -> Int:
+    """`quantize_int15` on device arrays: handles (hi, lo, exponents, x) word for word as `quantize_int15_native`;
+    hi and lo (rows x cols int8) and the row exponents (rows int32) written from x (rows x cols float32) by
+    `quantize_planes_int15_parallel_device`. Returns rows * cols."""
+    lin_dev_ready("quantize_int15")
+    if len(addrs) != 4:
+        raise Error("quantize_int15: handles must be 4 (hi, lo, exponents, x), got " + String(len(addrs)))
+    if len(params) != 2:
+        raise Error("quantize_int15: params must contain 2 values (rows, cols), got " + String(len(params)))
+    var rows = params[0]
+    var cols = params[1]
+    if rows <= 0 or cols <= 0:
+        raise Error("quantize_int15: rows and cols must be positive, got " + String(rows) + " x " + String(cols))
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var dh = train_dev_view_as[DType.int8](ctx, addrs[0], rows * cols, "the hi plane")
+    var dl = train_dev_view_as[DType.int8](ctx, addrs[1], rows * cols, "the lo plane")
+    var de = train_dev_view_as[DType.int32](ctx, addrs[2], rows, "the exponents")
+    var dx = train_dev_view(ctx, addrs[3], rows * cols, "x")
+    var quant = Int15QuantWorkspace(ctx)
+    quantize_planes_int15_parallel_device(ctx, dh, dl, de, dx, quant, rows, cols, False)
+    ctx.synchronize()
+    _ = quant^
+    _ = dx^
+    _ = dh^
+    _ = dl^
+    _ = de^
+    return rows * cols
+
+
+def dequantize_int15_dev_native(addrs: List[Int], params: List[Int]) raises -> Int:
+    """`dequantize_int15` on device arrays: handles (y, hi, lo, exponents) as `dequantize_int15_native`; y (rows x
+    cols float32) written by `dequantize_planes_int15_device`. Returns rows * cols."""
+    lin_dev_ready("dequantize_int15")
+    if len(addrs) != 4:
+        raise Error("dequantize_int15: handles must be 4 (y, hi, lo, exponents), got " + String(len(addrs)))
+    if len(params) != 2:
+        raise Error("dequantize_int15: params must contain 2 values (rows, cols), got " + String(len(params)))
+    var rows = params[0]
+    var cols = params[1]
+    if rows <= 0 or cols <= 0:
+        raise Error("dequantize_int15: rows and cols must be positive, got " + String(rows) + " x " + String(cols))
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var dy = train_dev_view(ctx, addrs[0], rows * cols, "the values")
+    var dh = train_dev_view_as[DType.int8](ctx, addrs[1], rows * cols, "hi")
+    var dl = train_dev_view_as[DType.int8](ctx, addrs[2], rows * cols, "lo")
+    var de = train_dev_view_as[DType.int32](ctx, addrs[3], rows, "exponents")
+    dequantize_planes_int15_device(ctx, dy, dh, dl, de, rows, cols)
+    ctx.synchronize()
+    _ = dy^
+    _ = dh^
+    _ = dl^
+    _ = de^
+    return rows * cols
+
+
+def gemm_int15_dev_native(addrs: List[Int], params: List[Int]) raises -> Int:
+    """`matmul_int15` on device arrays: handles (c, a hi, a lo, a exponents, b hi, b lo, b exponents) as
+    `gemm_int15_native`; c (m x n float32) = a . b^T by `identical_gemm_int15_planes_into`. Returns m * n."""
+    lin_dev_ready("matmul_int15")
+    if len(addrs) != 7:
+        raise Error("gemm_int15: handles must be 7 (c, a hi, a lo, a exponents, b hi, b lo, b exponents), got "
+                    + String(len(addrs)))
+    if len(params) != 3:
+        raise Error("gemm_int15: params must contain 3 values (m, n, k), got " + String(len(params)))
+    var m = params[0]
+    var n = params[1]
+    var k = params[2]
+    _refuse_lowbit_shape(m, n, k, OP_NT, String("gemm_int15"))
+    if k > INT15_MAX_K:
+        raise Error("gemm_int15: k must be at most " + String(INT15_MAX_K) + " (contract W-4), got " + String(k))
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var dc = train_dev_view(ctx, addrs[0], m * n, "the product")
+    var dah = train_dev_view_as[DType.int8](ctx, addrs[1], m * k, "a hi")
+    var dal = train_dev_view_as[DType.int8](ctx, addrs[2], m * k, "a lo")
+    var dea = train_dev_view_as[DType.int32](ctx, addrs[3], m, "a exponents")
+    var dbh = train_dev_view_as[DType.int8](ctx, addrs[4], n * k, "b hi")
+    var dbl = train_dev_view_as[DType.int8](ctx, addrs[5], n * k, "b lo")
+    var deb = train_dev_view_as[DType.int32](ctx, addrs[6], n, "b exponents")
+    identical_gemm_int15_planes_into(ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k)
+    ctx.synchronize()
+    _ = dc^
+    _ = dah^
+    _ = dal^
+    _ = dea^
+    _ = dbh^
+    _ = dbl^
+    _ = deb^
+    return m * n
+
+
+def from_f16_dev_native(dst_h: Int, src_h: Int, params: List[Int]) raises -> Int:
+    """`from_f16` on device arrays: handle dst_h (count float32, written) from handle src_h (count uint16 float16
+    bits); the host-address entry's one launch (decomposition/linalg_door_impl.mojo `from_f16_into`). Returns count."""
+    lin_dev_ready("from_f16")
+    if len(params) != 1:
+        raise Error("from_f16: params must contain 1 value (count)")
+    var count = params[0]
+    if count <= 0:
+        raise Error("from_f16: count must be positive, got " + String(count))
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var dsrc = train_dev_view_as[DType.uint16](ctx, src_h, count, "bits")
+    var ddst = train_dev_view(ctx, dst_h, count, "the widened values")
+    from_f16_into(ctx, ddst, dsrc, count)
+    ctx.synchronize()
+    _ = dsrc^
+    _ = ddst^
+    return count

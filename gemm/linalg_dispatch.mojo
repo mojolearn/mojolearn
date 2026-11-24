@@ -8,12 +8,13 @@ from gemm.linalg_native import gemm_native, gemm_bf16_native, gemm_int8_native, 
 from gemm.linalg_fused_run import gemm_fused_native
 from gemm.linalg_dev_arrays import (
     gemm_dev_native, to_bf16_dev_native, from_bf16_dev_native, quantize_int8_dev_native, dequantize_int8_dev_native,
-    gemm_bf16_dev_native, gemm_int8_dev_native,
+    gemm_bf16_dev_native, gemm_int8_dev_native, quantize_int15_dev_native, dequantize_int15_dev_native,
+    gemm_int15_dev_native, from_f16_dev_native,
 )
 from core.shared_slot import SharedSlot
 
 comptime LINALG_NATIVE_ABI_NAME = "mojolearn.linalg.v1"
-comptime LINALG_NATIVE_OPERATION_COUNT = 23
+comptime LINALG_NATIVE_OPERATION_COUNT = 27
 
 
 def linalg_native_operation(op: Int, a: List[Int], p: List[Int]) raises -> Int:
@@ -106,6 +107,24 @@ def linalg_native_operation(op: Int, a: List[Int], p: List[Int]) raises -> Int:
         if len(a) != 5:
             raise Error("linalg native ABI: invalid gemm_int8_dev handle count")
         return gemm_int8_dev_native(a[0], a[1], a[2], a[3], a[4], p)
+    if op == 23:
+        # lane vdf-linalg5 (2026-11-24): the fifteen-bit trio and from_f16 on training device arrays; handles in the
+        # host-address entries' order.
+        if len(a) != 4:
+            raise Error("linalg native ABI: invalid quantize_int15_dev handle count")
+        return quantize_int15_dev_native(a, p)
+    if op == 24:
+        if len(a) != 4:
+            raise Error("linalg native ABI: invalid dequantize_int15_dev handle count")
+        return dequantize_int15_dev_native(a, p)
+    if op == 25:
+        if len(a) != 7:
+            raise Error("linalg native ABI: invalid gemm_int15_dev handle count")
+        return gemm_int15_dev_native(a, p)
+    if op == 26:
+        if len(a) != 2:
+            raise Error("linalg native ABI: invalid from_f16_dev handle count")
+        return from_f16_dev_native(a[0], a[1], p)
     raise Error("linalg native ABI: unknown operation")
 
 

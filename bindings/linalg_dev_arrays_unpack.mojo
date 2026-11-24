@@ -39,27 +39,30 @@ def lin_is_device_array(value: PythonObject, held: PythonObject) raises -> Bool:
     return py_type(value) is held[0]
 
 
-def lin_any_device_array(args: PythonObject, first: Int, stop: Int, held: PythonObject, pairs: Bool = False) raises -> Bool:
+def lin_any_device_array(args: PythonObject, first: Int, stop: Int, held: PythonObject, tuple_len: Int = 0) raises -> Bool:
     """True when any of `args[first:stop]` is a TrainDeviceArray (identity compares only; False when `held` is None);
-    `pairs`: also the first item of a 2-tuple argument (matmul_int8's (codes, exponents) operands)."""
+    `tuple_len` > 0: also the first item of a tuple argument of that length (matmul_int8's (codes, exponents) pairs,
+    2; matmul_int15's (hi, lo, exponents) planes, 3)."""
     if held is None:
         return False
     var cls = held[0]
-    var tuple_type = native_loaded_module("builtins").tuple if pairs else PythonObject(None)
+    var tuple_type = native_loaded_module("builtins").tuple if tuple_len > 0 else PythonObject(None)
     for i in range(first, stop):  # driver-loop: over the call's public arguments (at most seven)
         var kind = py_type(args[i])
         if kind is cls:
             return True
-        # matmul_int8 takes a (codes, exponents) pair per operand: its first item decides.
-        if pairs and kind is tuple_type and len(args[i]) == 2 and py_type(args[i][0]) is cls:
+        # A quantized operand is a tuple of device arrays: its first item decides.
+        if tuple_len > 0 and kind is tuple_type and len(args[i]) == tuple_len and py_type(args[i][0]) is cls:
             return True
     return False
 
 
-def lin_dev_device(device: FunctionDevice, who: String) raises:
-    """A device array with an explicit device="cpu" is refused (it lives on the GPU), before any work."""
+def lin_dev_device(device: FunctionDevice, public_name: String) raises:
+    """A device array with an explicit device="cpu" is refused (it lives on the GPU), before any work. `public_name`
+    is the full public name (`mojolearn.linalg.qr`; vdf-linalg5: the door passed the full name and this prefixed it
+    a second time)."""
     if device.request == DEVICE_CPU:
-        raise Error("ValueError: mojolearn.linalg." + who + " was given device='cpu' but an argument is a "
+        raise Error("ValueError: " + public_name + " was given device='cpu' but an argument is a "
                     + "TrainDeviceArray, which lives on the GPU; copy it to the host with to_host(), or leave "
                     + "device=None")
 

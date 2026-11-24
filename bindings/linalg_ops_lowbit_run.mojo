@@ -34,6 +34,11 @@ comptime LIN_OP_QUANTIZE_INT8_DEV = 19
 comptime LIN_OP_DEQUANTIZE_INT8_DEV = 20
 comptime LIN_OP_GEMM_BF16_DEV = 21
 comptime LIN_OP_GEMM_INT8_DEV = 22
+# lane vdf-linalg5 (2026-11-24): the fifteen-bit trio and from_f16 on training device arrays.
+comptime LIN_OP_QUANTIZE_INT15_DEV = 23
+comptime LIN_OP_DEQUANTIZE_INT15_DEV = 24
+comptime LIN_OP_GEMM_INT15_DEV = 25
+comptime LIN_OP_FROM_F16_DEV = 26
 # The operation count the door admits (gemm/linalg_dispatch.mojo
 # LINALG_NATIVE_OPERATION_COUNT).
-comptime LIN_OPERATION_COUNT = 23
+comptime LIN_OPERATION_COUNT = 27

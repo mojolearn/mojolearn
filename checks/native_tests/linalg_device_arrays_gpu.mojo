@@ -14,9 +14,18 @@ from core.train_dev_pool import (
 )
 from gemm.linalg_dev_arrays import (
     gemm_dev_native, to_bf16_dev_native, from_bf16_dev_native, quantize_int8_dev_native, dequantize_int8_dev_native,
-    gemm_bf16_dev_native, gemm_int8_dev_native,
+    gemm_bf16_dev_native, gemm_int8_dev_native, quantize_int15_dev_native, dequantize_int15_dev_native,
+    gemm_int15_dev_native, from_f16_dev_native,
 )
 from gemm.linalg_native import gemm_native as gemm_native_gpu
+from gemm.linalg_native import (
+    quantize_int15_native as quantize_int15_gpu, dequantize_int15_native as dequantize_int15_gpu,
+    gemm_int15_native as gemm_int15_gpu, from_f16_native as from_f16_gpu,
+)
+from gemm.host.linalg_native import (
+    quantize_int15_native as quantize_int15_host, dequantize_int15_native as dequantize_int15_host,
+    gemm_int15_native as gemm_int15_host, from_f16_native as from_f16_host,
+)
 from gemm.linalg_native import (
     to_bf16_native as to_bf16_gpu, from_bf16_native as from_bf16_gpu, quantize_int8_native as quantize_int8_gpu,
     dequantize_int8_native as dequantize_int8_gpu, gemm_bf16_native as gemm_bf16_gpu, gemm_int8_native as gemm_int8_gpu,
@@ -219,6 +228,108 @@ def test_int8_device_arrays() raises:
     _same_typed[DType.int8]("int8 bytes round trip", _get_typed[DType.int8](ctx, hq, m * k), qa_g)
     for h in [ha, hb, hqa, hea, hqb, heb, hy, hc, hq]:  # small-loop: the fixture's handles
         train_dev_free(ctx, h)
+
+
+def _a(v: List[Int8]) -> Int:
+    return Int(v.unsafe_ptr())
+
+
+def _ai(v: List[Int32]) -> Int:
+    return Int(v.unsafe_ptr())
+
+
+def test_int15_device_arrays() raises:
+    """lane vdf-linalg5: quantize_int15, dequantize_int15 and matmul_int15 on pool handles == the host-address GPU
+    entry == the host column."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        return
+    var m = 6
+    var n = 5
+    var k = 23
+    var a = _fill(m * k, 31)
+    var b = _fill(n * k, 32)
+    var ah_g = List[Int8](length=m * k, fill=0)
+    var al_g = List[Int8](length=m * k, fill=0)
+    var ea_g = List[Int32](length=m, fill=0)
+    var ah_h = List[Int8](length=m * k, fill=0)
+    var al_h = List[Int8](length=m * k, fill=0)
+    var ea_h = List[Int32](length=m, fill=0)
+    var bh_g = List[Int8](length=n * k, fill=0)
+    var bl_g = List[Int8](length=n * k, fill=0)
+    var eb_g = List[Int32](length=n, fill=0)
+    _ = quantize_int15_gpu([_a(ah_g), _a(al_g), _ai(ea_g), Int(a.unsafe_ptr())], [m, k])
+    _ = quantize_int15_host([_a(ah_h), _a(al_h), _ai(ea_h), Int(a.unsafe_ptr())], [m, k])
+    _ = quantize_int15_gpu([_a(bh_g), _a(bl_g), _ai(eb_g), Int(b.unsafe_ptr())], [n, k])
+    var ctx = process_ctx[_CTX]()
+    var ha = _put(ctx, a)
+    var hb = _put(ctx, b)
+    var hah = train_dev_alloc(ctx, train_dev_words(m * k, 1))
+    var hal = train_dev_alloc(ctx, train_dev_words(m * k, 1))
+    var hea = train_dev_alloc(ctx, m)
+    var hbh = train_dev_alloc(ctx, train_dev_words(n * k, 1))
+    var hbl = train_dev_alloc(ctx, train_dev_words(n * k, 1))
+    var heb = train_dev_alloc(ctx, n)
+    _ = quantize_int15_dev_native([hah, hal, hea, ha], [m, k])
+    _ = quantize_int15_dev_native([hbh, hbl, heb, hb], [n, k])
+    var ah_d = _get_typed[DType.int8](ctx, hah, m * k)
+    var al_d = _get_typed[DType.int8](ctx, hal, m * k)
+    var ea_d = _get_typed[DType.int32](ctx, hea, m)
+    _same_typed[DType.int8]("quantize_int15 hi device == host-input", ah_d, ah_g)
+    _same_typed[DType.int8]("quantize_int15 hi device == host column", ah_d, ah_h)
+    _same_typed[DType.int8]("quantize_int15 lo device == host-input", al_d, al_g)
+    _same_typed[DType.int8]("quantize_int15 lo device == host column", al_d, al_h)
+    _same_typed[DType.int32]("quantize_int15 exponents device == host-input", ea_d, ea_g)
+    _same_typed[DType.int32]("quantize_int15 exponents device == host column", ea_d, ea_h)
+    var y_g = List[Float32](length=m * k, fill=0.0)
+    var y_h = List[Float32](length=m * k, fill=0.0)
+    _ = dequantize_int15_gpu([Int(y_g.unsafe_ptr()), _a(ah_g), _a(al_g), _ai(ea_g)], [m, k])
+    _ = dequantize_int15_host([Int(y_h.unsafe_ptr()), _a(ah_g), _a(al_g), _ai(ea_g)], [m, k])
+    var hy = train_dev_alloc(ctx, m * k)
+    _ = dequantize_int15_dev_native([hy, hah, hal, hea], [m, k])
+    var y_d = _get(ctx, hy, m * k)
+    _same("dequantize_int15 device == host-input", y_d, y_g)
+    _same("dequantize_int15 device == host column", y_d, y_h)
+    var c_g = List[Float32](length=m * n, fill=0.0)
+    var c_h = List[Float32](length=m * n, fill=0.0)
+    _ = gemm_int15_gpu([Int(c_g.unsafe_ptr()), _a(ah_g), _a(al_g), _ai(ea_g), _a(bh_g), _a(bl_g), _ai(eb_g)], [m, n, k])
+    _ = gemm_int15_host([Int(c_h.unsafe_ptr()), _a(ah_g), _a(al_g), _ai(ea_g), _a(bh_g), _a(bl_g), _ai(eb_g)], [m, n, k])
+    var hc = train_dev_alloc(ctx, m * n)
+    _ = gemm_int15_dev_native([hc, hah, hal, hea, hbh, hbl, heb], [m, n, k])
+    var c_d = _get(ctx, hc, m * n)
+    _same("matmul_int15 device == host-input", c_d, c_g)
+    _same("matmul_int15 device == host column", c_d, c_h)
+    for h in [ha, hb, hah, hal, hea, hbh, hbl, heb, hy, hc]:  # small-loop: the fixture's handles
+        train_dev_free(ctx, h)
+
+
+def test_from_f16_device_arrays() raises:
+    """lane vdf-linalg5: from_f16 on pool handles == the host-address GPU entry == the host column (normals,
+    subnormals, zeros, infinities and a NaN among the bit patterns)."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        return
+    var n = 41
+    var bits = List[UInt16](length=n, fill=0)
+    for i in range(n):  # small-loop: a small fixture
+        bits[i] = UInt16((i * 1597 + 7) % 65536)
+    bits[0] = 0x0000
+    bits[1] = 0x8000
+    bits[2] = 0x7C00
+    bits[3] = 0xFC00
+    bits[4] = 0x7E00
+    bits[5] = 0x0001
+    var w_g = List[Float32](length=n, fill=0.0)
+    var w_h = List[Float32](length=n, fill=0.0)
+    _ = from_f16_gpu(Int(w_g.unsafe_ptr()), Int(bits.unsafe_ptr()), [n])
+    _ = from_f16_host(Int(w_h.unsafe_ptr()), Int(bits.unsafe_ptr()), [n])
+    var ctx = process_ctx[_CTX]()
+    var hbits = _put_typed[DType.uint16](ctx, bits)
+    var hw = train_dev_alloc(ctx, n)
+    _ = from_f16_dev_native(hw, hbits, [n])
+    var w_d = _get(ctx, hw, n)
+    _same("from_f16 device == host-input", w_d, w_g)
+    _same("from_f16 device == host column", w_d, w_h)
+    train_dev_free(ctx, hbits)
+    train_dev_free(ctx, hw)
 
 
 def main() raises:
