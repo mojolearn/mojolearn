@@ -7832,14 +7832,15 @@ def identical_gemm_shipped_into(
     Row above 0 (NVIDIA): `identical_gemm_shipped_at_row_into[False]` at the
     row. Row 0 (AMD until the MI300X leg decides, Apple, every other column):
     the old line, and the ksplit path is not compiled at all."""
-    # TOMBSTONE: MOJOLEARN_IDN_GEMM_FILL_TILES (NOISE/LOSER) deleted 2026-11-24 by lane/ab-outcome-1; code recoverable at d81b6ba708.
-    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_GEMM_FILL_TILES.ab-outcome-1.patch
     # (NI02 stream_all dispatch deleted 2026-10-08, grid ge123e6f9 loser; recoverable at main bc10b8b56.)
     # A05 (MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE, halved per-thread row
     # accumulators) was deleted by lane/grid-prune (2026-10-07): OVN A05 was
     # slower on both vendors (AMD 4096x1024x1024 0.392 -> 0.639 ms, AMD
     # 127x130x4097 0.064 -> 1.83 ms; NVIDIA slower in nearly every fixture).
     # Recoverable at ab554bb4a.
+
+    # TOMBSTONE: MOJOLEARN_IDN_GEMM_FILL_TILES (NOISE/LOSER) deleted 2026-11-24 by lane/ab-outcome-1; code recoverable at d81b6ba708.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_GEMM_FILL_TILES.ab-outcome-1.patch
     comptime if GEMM_BODY_KPACK_HG:
         _shipped_body_kpack_hg[False](ctx, c, a, b, ws, m, n, k, op)
         return
