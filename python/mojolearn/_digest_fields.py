@@ -200,7 +200,9 @@ NOT_STATE = ("input_copied_", "fortran_copied_", "last_shards_", "used_query_til
              # a layer's gradient buffers of the last training step
              "grad_weight_", "grad_bias_", "grad_weight_r_",
              # a search's resolved scorer object: a setting (`scoring`), not a fitted value
-             "scorer_")
+             "scorer_",
+             # the fit loop's executed count and its wall time (ab-loop-mode, 2026-11-24): timing, never state
+             "fit_loop_")
 
 #: Public names that record how the model was trained, not what it answers:
 #: iteration, epoch and step counters, loss, score and objective histories,

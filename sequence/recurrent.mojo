@@ -17,6 +17,8 @@ over (time, batch) rows in ascending order; bias gradients are column sums in
 the same row order.
 """
 from sequence.exec_trait import Exec
+from core.fit_loop_clock import fit_loop_start, fit_loop_stop
+from sequence.fit_loop_words import fit_loop_publish
 from sequence.ops import (
     FP,
     Args,
@@ -496,7 +498,7 @@ def rnn_fit[E: Exec, //, S: RnnStep](
     X: FP, Y: FP, N: Int, T: Int,
     epochs: Int, bs: Int, shuffle: Bool, seed: UInt64,
     Pio: FP, losses: FP, lrs: FP, cfg: OptConfig, init_acc: Float32,
-    lengths: Optional[FP] = None,
+    lengths: Optional[FP] = None, loop_words: Int = 0,
 ) raises:
     """`epochs * ceil(N / bs)` optimizer steps; step k of epoch e trains on
     the samples order_e[j bs : j bs + B] (j = k mod per, B = min(bs, N - j
@@ -512,7 +514,13 @@ def rnn_fit[E: Exec, //, S: RnnStep](
     [1, T], admitted by the caller), carried through the batching: every
     step gathers its rows' lengths with their sequences; a row's padded
     steps enter neither its state, the loss nor the gradient, and the head
-    reads its state at its own last valid step. Without it nothing changes."""
+    reads its state at its own last valid step. Without it nothing changes.
+    `loop_words` (lane alm-neural, 2026-11-24): the address of the
+    `FitLoop` words (sequence/fit_loop_words.mojo), or 0. The loop region
+    is the step loop below: the clock is read once before step 0's first
+    launch (after the uploads and allocations) and once after the existing
+    `ex.sync()` that follows the last step (no synchronization added,
+    nothing inside the loop); its iterations are the epochs run."""
     var np_ = net.n_params()
     var ycols = net.O if task == TASK_MSE else 1
     var per = (N + bs - 1) // bs
@@ -550,6 +558,7 @@ def rnn_fit[E: Exec, //, S: RnnStep](
     var loss_ws = loss_scratch(ex, bmax * net.O)
     var st = OptState()
     var step = S()
+    var loop_start = fit_loop_start()
     for k in range(n_steps):
         var j = k % per
         if j == 0:
@@ -588,6 +597,7 @@ def rnn_fit[E: Exec, //, S: RnnStep](
         opt_step(ex, cfg, st, k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_)
     release_loss_scratch(ex, loss_ws)
     ex.sync()
+    fit_loop_publish(loop_words, fit_loop_stop(loop_start, epochs))
     ex.download(Pio, P, np_)
     ex.download(losses, dloss, n_steps)
 

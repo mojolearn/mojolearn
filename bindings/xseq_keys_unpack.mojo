@@ -138,6 +138,7 @@ struct XseqKeys(Defaultable, Movable):
     var k_n_layers_: PythonObject
     var k_n_outputs_: PythonObject
     var k_n_timesteps_: PythonObject
+    var k_fit_loop_: PythonObject
     var k_names: PythonObject
     var k_native_model_provider: PythonObject
     var k_ndarray: PythonObject
@@ -282,6 +283,7 @@ struct XseqKeys(Defaultable, Movable):
         self.k_n_layers_ = PythonObject(None)
         self.k_n_outputs_ = PythonObject(None)
         self.k_n_timesteps_ = PythonObject(None)
+        self.k_fit_loop_ = PythonObject(None)
         self.k_names = PythonObject(None)
         self.k_native_model_provider = PythonObject(None)
         self.k_ndarray = PythonObject(None)
@@ -430,6 +432,7 @@ def _xseq_keys_fill(nk: UnsafePointer[XseqKeys, MutUntrackedOrigin]) raises:
     nk[].k_n_layers_ = py_key("n_layers_")
     nk[].k_n_outputs_ = py_key("n_outputs_")
     nk[].k_n_timesteps_ = py_key("n_timesteps_")
+    nk[].k_fit_loop_ = py_key("fit_loop_")
     nk[].k_names = py_key("names")
     nk[].k_native_model_provider = py_key("native_model_provider")
     nk[].k_ndarray = py_key("ndarray")

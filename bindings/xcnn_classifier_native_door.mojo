@@ -49,6 +49,8 @@ from bindings.py_model_records import (
     records_stamped_put,
 )
 from sequence.neural_model_dispatch import CNN_FIT, CNN_PREDICT, CNN_OPEN, SESSION_CLOSE
+from sequence.fit_loop_words import FIT_LOOP_MARK, fit_loop_words
+from bindings.fit_loop_pack import fit_loop_pack
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_adopt, NativeDescriptorResource
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, prepared_drop
 from bindings.native_identity_key_door import NativeIdentityKey
@@ -521,6 +523,10 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     var max_iter = Int(py=py_item(fields, nk[].k_max_iter))
     var losses_all = b.list()
     var curve_out = b.list()
+    # lane alm-neural (2026-11-24): the fit loop's record (`fit_loop_`), written once by Program.fit after its
+    # epoch loop; its address ends the addresses and FIT_LOOP_MARK the options
+    # (sequence/cnn_classifier_program.mojo cnn_fit_program)
+    var loop_words = fit_loop_words()
     if max_iter > 0:
         var nsteps = cnnclf_run_fit_steps(n, batch)
         var curve = _empty(Python.tuple(max_iter), "float32", context)
@@ -539,6 +545,8 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
         )
         var ints = cnnclf_run_fit_ints(plan, settings)
         var floats = cnnclf_run_fit_floats(settings)
+        addresses.append(Int(loop_words.unsafe_ptr()))
+        ints.append(FIT_LOOP_MARK)
         _ = neural_descriptor_execute(xseq_neural_provider(labels), CNN_FIT, addresses, ints, floats)
         _ = x  # keep the Python objects alive through the native call above
         _ = yi
@@ -553,6 +561,7 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
         curve_out = py_call(curve.tolist)
     py_setitem(fields, nk[].k_losses_, losses_all)
     py_setitem(fields, nk[].k_loss_curve_, curve_out)
+    py_setitem(fields, nk[].k_fit_loop_, fit_loop_pack(loop_words))
     var ishape = py_item(fields, nk[].k_input_shape)
     py_setitem(fields, nk[].k_n_features_in_, cnnclf_run_features([Int(py=ishape[0]), Int(py=ishape[1]), Int(py=ishape[2])]))
     return model
@@ -586,6 +595,7 @@ def cnnclf_adopt(model: PythonObject, args: PythonObject, context: PythonObject)
     py_setitem(fields, nk[].k_classes_, classes)
     _carry(fields, given, nk[].k_losses_)
     _carry(fields, given, nk[].k_loss_curve_)
+    _carry(fields, given, nk[].k_fit_loop_)
     _carry(fields, given, nk[].k_n_features_in_)
     return PythonObject(None)
 

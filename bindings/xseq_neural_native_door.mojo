@@ -39,6 +39,8 @@ from bindings.admitted_sequence_door import admit_nd_f32
 from providers.python.xseq_public_lifecycle_pyapi_door import xseq_public_labels, xseq_private_input
 from core.xseq_marshal import xseq_fill_f32, xseq_codes_f32, xseq_take_native
 from sequence.perf3_seq_resident_words import seq_resident_token
+from sequence.fit_loop_words import fit_loop_words
+from bindings.fit_loop_pack import fit_loop_pack
 from sequence.xseq_neural_run import (
     XseqNeuralEntry, XseqOptimizer, XseqRnnFitRequest, XseqRnnPredictRequest, XseqMlpFitRequest, XseqMlpPredictRequest,
     xseq_run_as_f32_check, xseq_run_uniform, xseq_run_argmax, xseq_run_threshold, xseq_run_curve_min,
@@ -490,9 +492,12 @@ def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
                                  Int(py=xseq_addr(losses)), Int(py=_buffer_address(rates))]
     var provider = xseq_neural_provider(route.entries)
     var entry = _entry(provider)
+    # the fit loop's record (`fit_loop_`): the trainer writes these words once, after its loop
+    var loop_words = fit_loop_words()
+    var loop_address = Int(loop_words.unsafe_ptr())
     with GILReleased(py):
         xseq_run_rnn_fit(entry, request, optimizer, addresses[0], addresses[1], addresses[2], addresses[3],
-                         addresses[4], lengths_address)
+                         addresses[4], lengths_address, loop_address)
     _ = lengths  # keep the Python object alive through the native call above
     _ = provider
     _ = target
@@ -506,6 +511,7 @@ def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     py_setitem(fields, nk[].k_loss_curve_, losses)
     py_setitem(fields, nk[].k_n_iter_, steps)
     py_setitem(fields, nk[].k_n_timesteps_, steps_t)
+    py_setitem(fields, nk[].k_fit_loop_, fit_loop_pack(loop_words))
     return model
 
 
@@ -723,8 +729,12 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     var provider = xseq_neural_provider(route.entries)
     var entry = _entry(provider)
     var n_iter = 0
+    # the fit loop's record (`fit_loop_`): the trainer writes these words once, after its loop
+    var loop_words = fit_loop_words()
+    var loop_address = Int(loop_words.unsafe_ptr())
     with GILReleased(py):
-        n_iter = xseq_run_mlp_fit(entry, request, fp, addresses[0], addresses[1], addresses[2], addresses[3])
+        n_iter = xseq_run_mlp_fit(entry, request, fp, addresses[0], addresses[1], addresses[2], addresses[3],
+                                  loop_address)
     _ = provider
     _ = target
     _ = params  # keep the Python object alive through the native call above
@@ -748,6 +758,7 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     py_setitem(fields, nk[].k_coefs_, coefs)
     py_setitem(fields, nk[].k_intercepts_, intercepts)
     py_setitem(fields, nk[].k_n_iter_, n_iter)
+    py_setitem(fields, nk[].k_fit_loop_, fit_loop_pack(loop_words))
     _ = curve  # keep the Python object alive through the native call above
     _ = params  # keep the Python object alive through the native call above
     var losses = xseq_curve_list(curve, n_iter)

@@ -53,13 +53,13 @@ algos	pagerank	yes	max_iter	10	{"tol": 0.0}	power iteration	one product with the
 algos	tsne	yes	max_iter	250	{}	gradient step	one gradient over the same neighbour graph per step (250 is the minimum the estimator accepts)
 algos	mlp-clf	yes	max_iter	2	{"tol": 0.0, "early_stopping": false, "n_iter_no_change": 1000000}	epoch	one pass over all rows at the recipe's fixed batch size per epoch
 algos	mlp-reg	yes	max_iter	2	{"tol": 0.0, "early_stopping": false, "n_iter_no_change": 1000000}	epoch	one pass over all rows at the recipe's fixed batch size per epoch
-algos	lstm-clf	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
-algos	lstm-reg	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
-algos	gru-clf	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
-algos	gru-reg	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
-algos	rnn-clf	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
-algos	rnn-reg	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
-algos	cnn-clf	yes	epochs	2	{}	epoch	one pass over all rows at the recipe's fixed batch size per epoch
+algos	lstm-clf	yes	max_epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch (cap max_epochs, the recurrent estimators' public epoch cap; fit_loop_ counts epochs, n_iter_ counts optimizer steps = epochs * ceil(n / batch_size))
+algos	lstm-reg	yes	max_epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch (cap max_epochs, the recurrent estimators' public epoch cap; fit_loop_ counts epochs, n_iter_ counts optimizer steps = epochs * ceil(n / batch_size))
+algos	gru-clf	yes	max_epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch (cap max_epochs, the recurrent estimators' public epoch cap; fit_loop_ counts epochs, n_iter_ counts optimizer steps = epochs * ceil(n / batch_size))
+algos	gru-reg	yes	max_epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch (cap max_epochs, the recurrent estimators' public epoch cap; fit_loop_ counts epochs, n_iter_ counts optimizer steps = epochs * ceil(n / batch_size))
+algos	rnn-clf	yes	max_epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch (cap max_epochs, the recurrent estimators' public epoch cap; fit_loop_ counts epochs, n_iter_ counts optimizer steps = epochs * ceil(n / batch_size))
+algos	rnn-reg	yes	max_epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch (cap max_epochs, the recurrent estimators' public epoch cap; fit_loop_ counts epochs, n_iter_ counts optimizer steps = epochs * ceil(n / batch_size))
+algos	cnn-clf	yes	max_iter	2	{}	epoch	one pass over all rows at the recipe's fixed batch size per epoch (cap max_iter, CNNClassifier's public epoch cap)
 algos	meanshift	no	-	0	{}	-	seeds converge and are dropped as the fit proceeds
 algos	ard	no	-	0	{}	-	features are pruned as the fit proceeds
 algos	elliptic-envelope	no	-	0	{}	-	C-steps whose subset converges
@@ -74,16 +74,16 @@ neural	samba-decode	no	-	0	{}	-	autoregressive: the per-token cost grows with th
 neural	causal-lm-generate	no	-	0	{}	-	autoregressive: the per-token cost grows with the context
 neural	causal-lm-generate-smollm2	no	-	0	{}	-	autoregressive: the per-token cost grows with the context
 neural	mlp-fit	yes	max_iter	2	{"tol": 0.0, "early_stopping": false, "n_iter_no_change": 1000000}	epoch	one pass over all rows at the recipe's fixed batch size per epoch
-neural	lstm-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
-neural	gru-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
-neural	rnn-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
-neural	sequential-fit	yes	epochs	2	{}	epoch	one pass over all rows at the recipe's fixed batch size per epoch
-neural	seq-cnn1d-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
-neural	seq-resnet1d-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
-neural	seq-inceptiontime-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
-neural	seq-gru-lengths-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
-neural	seq-lstm-lengths-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
-neural	seq-transformer-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
-neural	seq-mamba1-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
-neural	seq-mamba2-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
-neural	seq-mamba3-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
+neural	lstm-fit	yes	max_epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch (cap max_epochs, the recurrent estimators' public epoch cap; fit_loop_ counts epochs, n_iter_ counts optimizer steps = epochs * ceil(n / batch_size))
+neural	gru-fit	yes	max_epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch (cap max_epochs, the recurrent estimators' public epoch cap; fit_loop_ counts epochs, n_iter_ counts optimizer steps = epochs * ceil(n / batch_size))
+neural	rnn-fit	yes	max_epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch (cap max_epochs, the recurrent estimators' public epoch cap; fit_loop_ counts epochs, n_iter_ counts optimizer steps = epochs * ceil(n / batch_size))
+neural	sequential-fit	yes	epochs	2	{}	epoch	one pass over all rows at the recipe's fixed batch size per epoch (cap: Sequential.fit(epochs=K), a fit() argument, not a constructor parameter: the driver passes it to fit and reads it back from n_iter_ / fit_loop_[0], not get_params)
+neural	seq-cnn1d-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch (cap: Sequential.fit(epochs=K), a fit() argument, not a constructor parameter: the driver passes it to fit and reads it back from n_iter_ / fit_loop_[0], not get_params)
+neural	seq-resnet1d-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch (cap: Sequential.fit(epochs=K), a fit() argument, not a constructor parameter: the driver passes it to fit and reads it back from n_iter_ / fit_loop_[0], not get_params)
+neural	seq-inceptiontime-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch (cap: Sequential.fit(epochs=K), a fit() argument, not a constructor parameter: the driver passes it to fit and reads it back from n_iter_ / fit_loop_[0], not get_params)
+neural	seq-gru-lengths-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch (cap: Sequential.fit(epochs=K), a fit() argument, not a constructor parameter: the driver passes it to fit and reads it back from n_iter_ / fit_loop_[0], not get_params)
+neural	seq-lstm-lengths-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch (cap: Sequential.fit(epochs=K), a fit() argument, not a constructor parameter: the driver passes it to fit and reads it back from n_iter_ / fit_loop_[0], not get_params)
+neural	seq-transformer-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch (cap: Sequential.fit(epochs=K), a fit() argument, not a constructor parameter: the driver passes it to fit and reads it back from n_iter_ / fit_loop_[0], not get_params)
+neural	seq-mamba1-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch (cap: Sequential.fit(epochs=K), a fit() argument, not a constructor parameter: the driver passes it to fit and reads it back from n_iter_ / fit_loop_[0], not get_params)
+neural	seq-mamba2-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch (cap: Sequential.fit(epochs=K), a fit() argument, not a constructor parameter: the driver passes it to fit and reads it back from n_iter_ / fit_loop_[0], not get_params)
+neural	seq-mamba3-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch (cap: Sequential.fit(epochs=K), a fit() argument, not a constructor parameter: the driver passes it to fit and reads it back from n_iter_ / fit_loop_[0], not get_params)

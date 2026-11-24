@@ -68,6 +68,7 @@ struct SequentialKeys(Defaultable, Movable):
     var k_defaultdict_class: PythonObject
     var k_device: PythonObject
     var k_epochs_run_: PythonObject
+    var k_fit_loop_: PythonObject
     var k_eps: PythonObject
     var k_f1: PythonObject
     var k_f2: PythonObject
@@ -162,6 +163,7 @@ struct SequentialKeys(Defaultable, Movable):
         self.k_defaultdict_class = PythonObject(None)
         self.k_device = PythonObject(None)
         self.k_epochs_run_ = PythonObject(None)
+        self.k_fit_loop_ = PythonObject(None)
         self.k_eps = PythonObject(None)
         self.k_f1 = PythonObject(None)
         self.k_f2 = PythonObject(None)
@@ -260,6 +262,7 @@ def _sequential_keys_fill(nk: UnsafePointer[SequentialKeys, MutUntrackedOrigin])
     nk[].k_defaultdict_class = py_key("defaultdict_class")
     nk[].k_device = py_key("device")
     nk[].k_epochs_run_ = py_key("epochs_run_")
+    nk[].k_fit_loop_ = py_key("fit_loop_")
     nk[].k_eps = py_key("eps")
     nk[].k_f1 = py_key("f1")
     nk[].k_f2 = py_key("f2")
