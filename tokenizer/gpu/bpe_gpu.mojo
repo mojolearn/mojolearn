@@ -1044,17 +1044,17 @@ def _up64(ctx: DeviceContext, buf: DeviceBuffer[DType.int64], src_addr: Int, cou
 
 @always_inline
 def _p8(buf: DeviceBuffer[DType.uint8]) -> U8P:
-    return buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    return buf.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
 
 
 @always_inline
 def _p32(buf: DeviceBuffer[DType.int32]) -> I32P:
-    return buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    return buf.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
 
 
 @always_inline
 def _p64(buf: DeviceBuffer[DType.int64]) -> I64P:
-    return buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    return buf.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
 
 
 def _scan(ctx: DeviceContext, cnt: I32P, pfx: I32P, st: I32P, count: Int) raises:

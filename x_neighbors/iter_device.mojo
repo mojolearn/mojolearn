@@ -670,7 +670,8 @@ def _cc_csr_batched(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz:
             break
     # the relabel (`_CcRelabel`), then the count and the labels through the
     # pinned buffer, one wait
-    relabel.enqueue(ctx, d_l.unsafe_ptr(), d_out.unsafe_ptr(), n)
+    relabel.enqueue(ctx, d_l.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                    d_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n)
     ctx.enqueue_copy(dst_ptr=hp + o_c, src_buf=relabel.cnt)
     if n > 0:
         ctx.enqueue_copy(dst_ptr=hp + o_l, src_buf=d_out)
@@ -753,7 +754,8 @@ def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
     # home together, one wait (hb: the n labels then the count)
     var d_out = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
     var relabel = _CcRelabel(ctx, n)
-    relabel.enqueue(ctx, d_l.unsafe_ptr(), d_out.unsafe_ptr(), n)
+    relabel.enqueue(ctx, d_l.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                    d_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n)
     var hc = ctx.enqueue_create_host_buffer[DType.int32](1)
     ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=relabel.cnt)
     if n > 0:

@@ -32,10 +32,10 @@ from kernel_methods.descriptor_schema import KERNEL_METHOD_ABI, KERNEL_METHOD_OP
 from core.shared_slot import SharedSlot
 
 def km_native_kernel_ridge_fit(a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
-    if len(a) != 4 and len(a) != 5 and len(a) != 6:
+    if len(a) != 4 and len(a) != 5:
         raise Error(
             "kernel_ridge_fit: addrs must contain 4 addresses (x, y,"
-            " dual_out, scalars_out) and optionally sw (0: none) and x_fit_out (0: none), got "
+            " dual_out, scalars_out) and optionally sw, got "
             + String(len(a))
         )
     if len(p) != 8:
@@ -48,10 +48,6 @@ def km_native_kernel_ridge_fit(a: List[Int], p: List[Int], f: List[Float64]) rai
     var yp = _f32_ptr(a[1])
     var dp = _f32_ptr(a[2])
     var sp = _f64_ptr(a[3])
-    # x_fit_out (lane vdf-scope-linear2): the n x d words of X as the fit
-    # read them, copied back to the caller (a member fold's X_fit_: THE FOLD
-    # X WORD, core/fold_x_device.mojo, read on the device by DeviceQueryX).
-    var xfit_out = a[5] if len(a) == 6 else 0
     var n = p[0]
     var d = p[1]
     var t = p[2]
@@ -112,10 +108,10 @@ def km_native_kernel_ridge_predict(a: List[Int], p: List[Int], f: List[Float64])
 
 
 def km_native_kernel_ridge_fit_ptr(a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
-    if len(a) != 4 and len(a) != 5:
+    if len(a) != 4 and len(a) != 5 and len(a) != 6:
         raise Error(
             "kernel_ridge_fit: addrs must contain 4 addresses (x, y,"
-            " dual_out, scalars_out) and optionally sw, got "
+            " dual_out, scalars_out) and optionally sw (0: none) and x_fit_out (0: none), got "
             + String(len(a))
         )
     if len(p) != 8:
@@ -128,6 +124,10 @@ def km_native_kernel_ridge_fit_ptr(a: List[Int], p: List[Int], f: List[Float64])
     var yp = _f32_ptr(a[1])
     var dp = _f32_ptr(a[2])
     var sp = _f64_ptr(a[3])
+    # x_fit_out (lane vdf-scope-linear2): the n x d words of X as the fit
+    # read them, copied back to the caller (a member fold's X_fit_: THE FOLD
+    # X WORD, core/fold_x_device.mojo, read on the device by DeviceQueryX).
+    var xfit_out = a[5] if len(a) == 6 else 0
     var n = p[0]
     var d = p[1]
     var t = p[2]
