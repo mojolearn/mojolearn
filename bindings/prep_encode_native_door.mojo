@@ -2726,7 +2726,8 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
             mask = _topk_from(ran, mo, d)
     else:
         # `score_func(X, y)`: mutual_info_*(X, y) with its defaults
-        # (discrete_features='auto', n_neighbors=3, random_state=None), the
+        # (discrete_features='auto', n_neighbors=3, random_state=None,
+        # device=None: the estimator's own route context is handed in), the
         # operation the public function passes to the same entry.
         # `context` is the connected context of this estimator's device
         # route (the door top), and the mutual-information programs run on
@@ -2738,7 +2739,8 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
         if py_type(entry) is not py_type(b.len):
             raise Error("ImportError: mojolearn: the encode owner's entry is unavailable")
         var out = prep_entry_call(entry, Python.tuple(PythonObject(None), builtin,
-                                                     Python.tuple(x, y, "auto", 3, PythonObject(None)), context))
+                                                     Python.tuple(x, y, "auto", 3, PythonObject(None), PythonObject(None)),
+                                                     context))
         var scores = out
         var pvals = PythonObject(None)
         if Bool(py=py_call(b.isinstance, out, Python.tuple(b.tuple, b.list))):
