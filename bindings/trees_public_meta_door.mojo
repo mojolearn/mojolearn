@@ -1791,21 +1791,29 @@ def _stack_place_indexed(glue: EntryRef, members: PythonObject, kinds: List[Int]
             got.opened.append(opened^)
         for i in range(len(got.members)):  # driver-loop: over members
             got.members[i].plan = Int(UnsafePointer(to=got.opened[got.members[i].plan].held.plan))
-        # THE PIN RULE: one reference offered on every member call of the fold; the byte is written nonzero
-        # when a cache took it (the fold fits cached X in this scope already, so none normally does).
-        var took = List[UInt8](length=1, fill=UInt8(0))
+        # THE PIN RULE, ONE REFERENCE PER CALL (lane vdf-meta4: the vdf-meta3 doubt): one reference per
+        # member call of the fold, each member's answer in its own byte (`VoteRows.took_each`), so two
+        # members whose caches each take the pin (two families' stores of one scope) each own one; the
+        # references no cache took are returned. Before, one reference was offered to every call with one
+        # byte: two takers released it twice.
+        var calls = len(got.members)
+        var took = List[UInt8](length=max(calls, 1), fill=UInt8(0))
         var took_at = Int(took.unsafe_ptr())
-        var pin = member_pin_take(Xa, 1)
+        var pin = member_pin_take(Xa, calls)
         var rows = VoteRows(trees_address(Xa), n, d, trees_address(rows_at), count, scope, pin,
                             took_at if pin != 0 else 0)
+        rows.took_each = True
         var refused = VOTE_ALL_ANSWERED
         try:
             with GILReleased(Python()):
                 refused = stack_place_run(glue, rows, got.members, kinds, counts, k, binary, meta, meta_rows, width,
                                           trees_address(place), 0, widths, 0)
         finally:
-            var kept = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=took_at)[] != UInt8(0)
-            member_pin_return(pin, 0 if kept else 1)
+            var taken = 0
+            for j in range(calls):  # driver-loop: over the fold's member calls (one answer byte each)
+                if took[j] != UInt8(0):
+                    taken += 1
+            member_pin_return(pin, calls - taken)
             _ = len(took)  # written through `took_at` by the member calls above
         placed = refused == VOTE_ALL_ANSWERED
     except e:

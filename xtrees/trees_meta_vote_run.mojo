@@ -104,7 +104,13 @@ struct VoteRows(Movable):
     one resident base (CalibratedClassifierCV's DeviceRows route); `scope`
     the caller's resident scope and `pin` X's pin token offered on the call
     (0: none), `took` the address of the byte written 1 when the member's
-    cache took the pin's reference (THE PIN RULE, core/member_abi.mojo)."""
+    cache took the pin's reference (THE PIN RULE, core/member_abi.mojo).
+
+    ONE REFERENCE PER CALL (lane vdf-meta4, 2026-11-24): `took_each` True
+    when the caller took one reference per MEMBER of a run over `rows` and
+    hands `took` as one byte per member (member j's call writes the byte at
+    `took + j`, `member_rows`), so two members' caches that each take the
+    pin each own a reference. False (the default): one byte, as before."""
     var x: Int
     var n: Int
     var d: Int
@@ -113,6 +119,7 @@ struct VoteRows(Movable):
     var scope: Int
     var pin: Int
     var took: Int
+    var took_each: Bool
 
     def __init__(out self, x: Int, n: Int, d: Int):
         self.x = x
@@ -123,6 +130,7 @@ struct VoteRows(Movable):
         self.scope = MEMBER_SCOPE_NONE
         self.pin = 0
         self.took = 0
+        self.took_each = False
 
     def __init__(out self, base: Int, base_rows: Int, d: Int, index: Int, count: Int, scope: Int, pin: Int,
                  took: Int):
@@ -136,6 +144,17 @@ struct VoteRows(Movable):
         self.scope = scope
         self.pin = pin
         self.took = took
+        self.took_each = False
+
+    def member_rows(self, j: Int) -> VoteRows:
+        """The rows member j's call reads: these rows, and under `took_each`
+        its own answer byte (`took + j`). A few words, no allocation."""
+        if self.index == 0:
+            return VoteRows(self.x, self.n, self.d)
+        var r = VoteRows(self.x, self.base_rows, self.d, self.index, self.n, self.scope, self.pin, self.took)
+        if self.took_each and self.took != 0:
+            r.took = self.took + j
+        return r^
 
 
 def vote_rows_point(mut call: MemberCall, rows: VoteRows):
@@ -569,7 +588,7 @@ def stack_place_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], k
         at += widths[j]
     for j in range(start, len(members)):  # driver-loop: over members
         var m = members[j]
-        var block = _member_f32(m, rows, keep)
+        var block = _member_f32(m, rows.member_rows(j), keep)
         if block == 0:
             return j
         var n = rows.n
