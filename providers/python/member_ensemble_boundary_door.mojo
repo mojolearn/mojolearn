@@ -169,6 +169,9 @@ from providers.python.member_rfe_boundary_door import (
     RfeBase, rfe_base_admit, rfe_count_words, rfe_image, rfe_publish, rfe_dotted_path,
 )
 from bindings.prep_classify_prog_run import ClsRunPlan
+from core.msel_refusal_words import (
+    msel_empty_scoring_words, msel_cvp_method_words, msel_kfold_words, MSEL_REFIT_CALLBACK_WORDS, MSEL_NO_FITS_WORDS,
+)
 from bindings.prep_keys_unpack import prep_keys
 
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -2825,10 +2828,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             # own fit fails (sklearn 1.9 metrics/_scorer.py
             # `_check_multimetric_scoring`, lines 634 and 644, from the
             # search's `_get_scorers` before any fit); its words, natively.
-            if mapping:
-                raise Error("ValueError: An empty dict was passed. " + String(py=py_call(b.repr, scoring_in)))
-            raise Error("ValueError: The list/tuple elements must be unique strings of predefined scorers.  "
-                        + "Empty list was given. " + String(py=py_call(b.repr, scoring_in)))
+            raise Error(msel_empty_scoring_words(mapping, String(py=py_call(b.repr, scoring_in))))
     elif scoring_in is not None:
         keys.append(String(""))
         _ = py_call(givens.append, scoring_in)
@@ -2840,11 +2840,11 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         # `msel_get_scorer`), then the refit words.
         var drawn = _search_prepare(model, fields, context, b, prepared)
         if drawn is not None and len(drawn[1]) == 0:
-            raise Error("ValueError: No fits were performed. Was the CV iterator empty? Were there no candidates?")
+            raise Error(MSEL_NO_FITS_WORDS)
         if many:
             for j in range(len(givens)):  # driver-loop: over the scorer values (the door's admission, once)
                 _ = msel_get_scorer(givens[j], context)
-        raise Error("TypeError: Python refit callbacks are not supported; use a native bool or scorer-name refit policy")
+        raise Error(MSEL_REFIT_CALLBACK_WORDS)
     var refit_false = py_type(refit) is b.bool and not Bool(py=refit)
     var refit_scorer = 0
     if many and not refit_false:
@@ -2896,9 +2896,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                 # (sklearn 1.9 model_selection/_validation.py line 1018,
                 # cross_val_predict's `method` StrOptions); its words, the
                 # options in sorted order (a set prints in hash order).
-                raise Error("ValueError: The 'method' parameter of cross_val_predict must be a str among "
-                            + "{'decision_function', 'predict', 'predict_log_proba', 'predict_proba'}. Got "
-                            + String(py=py_call(b.repr, tool[1])) + " instead.")
+                raise Error(msel_cvp_method_words(String(py=py_call(b.repr, tool[1]))))
             if len(keys) > 0:
                 return False
     # Where the fold rows live (the docstring): read once per admission.
@@ -2934,8 +2932,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         if folds < 2:
             # KFold's own refusal (lane mf-tail5b item 4, natively in its
             # words; the RUN raises the same for a fit's n_splits)
-            raise Error("ValueError: k-fold cross-validation requires at least one train/test split by setting "
-                        + "n_splits=2 or more, got n_splits=" + String(folds) + ".")
+            raise Error(msel_kfold_words(folds))
     var error_score = py_get(fields, "error_score")
     var tolerate = 0.0
     var error_value = 0.0
@@ -2965,7 +2962,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var seed = Int(py=got[2])
     if len(clones) == 0:
         # the RUN's and the door's words (lane mf-tail5b item 4, natively)
-        raise Error("ValueError: No fits were performed. Was the CV iterator empty? Were there no candidates?")
+        raise Error(MSEL_NO_FITS_WORDS)
     if resident:
         var candidates = got[0]
         for c in range(len(candidates)):  # driver-loop: over the candidates' parameter dicts, names only

@@ -82,6 +82,7 @@ from bindings.msel_candidates_door import (
     msel_sampler_list, msel_sampler_len, msel_candidates,
 )
 from bindings.py_optional import py_present
+from core.msel_refusal_words import MSEL_REFIT_CALLBACK_WORDS
 
 
 # The candidates (grids, samplers) and the scalar admissions: bindings/msel_candidates_door.mojo.
@@ -258,7 +259,7 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     var multi = msel_scorers(scoring_in, context)
     var refit_false = refit is PythonObject(False)
     if py_type(refit) is not b.bool and py_type(refit) is not b.str:
-        raise Error("TypeError: Python refit callbacks are not supported; use a native bool or scorer-name refit policy")
+        raise Error(MSEL_REFIT_CALLBACK_WORDS)  # one body with the search kind's admission (lane mf-ens6b)
     if multi is not None and not refit_false and (py_type(refit) is not b.str or not py_contains(multi, refit)):
         raise Error("For multi-metric scoring, refit must be False or a scorer key.")
     var scoring = multi if multi is not None else scoring_in
