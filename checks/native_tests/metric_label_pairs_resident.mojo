@@ -24,6 +24,12 @@ oracles over the same codes. All three must give the same bits.
                     host input vs host_trustworthiness
   5 refusal         a NaN in a resident X_embedded is refused on the device
                     with the door's words
+  6 confusion with labels (lane vdf-xm-wire2): the door's label check on the
+                    device (y_true's codes through the miss table: a hit for
+                    a present selected class, -1 for none), the codes mapped
+                    to a labels order with classes outside it (-1) by
+                    MS_GATHER, then MS_CONFUSION vs host input vs
+                    host_confusion_matrix_i64
 
 What a sabotage changes here: a union step that encodes each vector alone
 (different codes, case 0 k check), a code slot copied from the wrong half,
@@ -52,7 +58,7 @@ from metrics.host.classification_oracle import (
 )
 from checks.native_tests.testsuite_cases import require
 
-comptime CASES = 6
+comptime CASES = 7
 comptime N = 70000
 
 
@@ -284,6 +290,63 @@ def _prfs_case() raises:
     _ = len(yp)
 
 
+def _confusion_labels_case() raises:
+    var yt = _labels(9, 6)
+    var yp = _labels(10, 6)
+    var host = _codes_lists(yt, yp)
+    var ku = host[2]
+    # labels = the union classes 3, 0, 5 of the union order (when present), in that order: table[c] is
+    # the index of class c in labels, -1 outside it (`_order_table`); miss[c] = -1 for a selected class
+    var kl = 0
+    var table = List[Int32](length=ku, fill=Int32(-1))
+    var miss = List[Int32](length=ku, fill=Int32(0))
+    var none = List[Int32](length=ku, fill=Int32(0))
+    var picks: List[Int] = [3, 0, 5]
+    for j in range(len(picks)):  # fixture: the O(k) labels tables
+        if picks[j] < ku:
+            table[picks[j]] = Int32(kl)
+            miss[picks[j]] = Int32(-1)
+            kl += 1
+    require(kl >= 2, "fixture: at least two selected classes")
+    var mt = List[Int32](length=N, fill=Int32(0))
+    var mp = List[Int32](length=N, fill=Int32(0))
+    var first = -1
+    for i in range(N):  # the host map and the host label check the device must equal
+        mt[i] = table[Int(host[0][i])]
+        mp[i] = table[Int(host[1][i])]
+        if first < 0 and miss[Int(host[0][i])] == -1:
+            first = i
+    var dev = _DevicePair(Int(yt.unsafe_ptr()), Int(yp.unsafe_ptr()), 4, 0)
+    var hit = metric_slot_create(N)
+    var gt = metric_slot_create(N)
+    var gp = metric_slot_create(N)
+    try:
+        var answer = _run(MS_GATHER, [0], [dev.ct], [N, ku, hit], List[Float64](), [Int(miss.unsafe_ptr())])[0]
+        require(answer == first, "label check: the first selected y_true row " + String(answer) + " vs " + String(first))
+        var empty = _run(MS_GATHER, [0], [dev.ct], [N, ku, hit], List[Float64](), [Int(none.unsafe_ptr())])[0]
+        require(empty == -1, "label check: no selected class answers -1")
+        var outs: List[Int] = [Int(table.unsafe_ptr())]
+        _ = _run(MS_GATHER, [0], [dev.ct], [N, ku, gt], List[Float64](), outs)
+        _ = _run(MS_GATHER, [0], [dev.cp], [N, ku, gp], List[Float64](), outs)
+        var from_slots = List[Int64](length=kl * kl, fill=Int64(-1))
+        var from_host = List[Int64](length=kl * kl, fill=Int64(-2))
+        var ints: List[Int] = [N, kl, 0]
+        _ = _run(MS_CONFUSION, [0, 0], [gt, gp], ints, List[Float64](), [Int(from_slots.unsafe_ptr())])
+        _ = _run(MS_CONFUSION, [Int(mt.unsafe_ptr()), Int(mp.unsafe_ptr())], [-1, -1], ints, List[Float64](),
+                 [Int(from_host.unsafe_ptr())])
+        var cpu = host_confusion_matrix_i64(mt, mp, N, kl, 0)
+        for c in range(kl * kl):  # driver-loop: the cells
+            require(from_slots[c] == from_host[c], "labels confusion cell " + String(c) + ": slot vs host input")
+            require(from_slots[c] == cpu[c], "labels confusion cell " + String(c) + ": slot vs CPU column")
+    finally:
+        _free(gp)
+        _free(gt)
+        _free(hit)
+        dev.free()
+    _ = len(yt)
+    _ = len(yp)
+
+
 comptime TN = 300
 comptime TM = 6
 comptime TD = 2
@@ -351,8 +414,10 @@ def _case(which: Int) raises:
         _prfs_case()
     elif which == 4:
         _trust_case()
-    else:
+    elif which == 5:
         _trust_refusal_case()
+    else:
+        _confusion_labels_case()
 
 
 def test_cases() raises:
