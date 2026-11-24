@@ -82,7 +82,9 @@ def spectral_read_state(view: SpectralStateView, shape: SpectralQueryShape) rais
 
 
 def spectral_write_fit(request: SpectralFitRequest, result: SpectralFitResult) raises -> Int:
-    if request.input.route == SPECTRAL_DENSE and result.columns < 0:
+    var dense_kind = (request.input.route == SPECTRAL_DENSE or request.input.route == SPECTRAL_RBF
+                      or request.input.route == SPECTRAL_KNN)
+    if dense_kind and result.columns < 0:
         return result.columns
     spectral_guard_fit(result.labels, result.embedding, request.input.rows, request.options.components)
     if request.options.keep_state:
@@ -132,6 +134,8 @@ trait SpectralBackend:
                   values: List[Float32], mut result: SpectralFitResult) raises: ...
     @staticmethod
     def fit_dense(request: SpectralFitRequest, mut result: SpectralFitResult) raises: ...
+    @staticmethod
+    def fit_affinity(request: SpectralFitRequest, mut result: SpectralFitResult) raises: ...
     @staticmethod
     def embed_dataset(request: SpectralEmbeddingRequest, source: List[Float32], mut result: SpectralEmbeddingResult) raises: ...
     @staticmethod
@@ -188,6 +192,13 @@ struct SpectralKernels[B: SpectralBackend](SpectralNativeKernels):
             _ = i32_ptr(r.labels)
             _ = f32_ptr(r.embedding)
             Self.B.fit_dense(r, result)
+        elif r.input.route == SPECTRAL_RBF or r.input.route == SPECTRAL_KNN:
+            # lane vdf-misc4: the affinity is generated on this image's device
+            # from X (rbf) or the precomputed distances (knn) and the dense fit
+            # reads it there.
+            _ = i32_ptr(r.labels)
+            _ = f32_ptr(r.embedding)
+            Self.B.fit_affinity(r, result)
         else:
             raise Error("Spectral native ABI: unknown fit input route")
         return result^

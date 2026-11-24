@@ -984,6 +984,90 @@ def knn_self_search_resident(
     return query_tile
 
 
+def knn_search_device_resident(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    mut index: DeviceBuffer[DType.float32],
+    n_index: Int,
+    mut queries: DeviceBuffer[DType.float32],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    mut out_dist: DeviceBuffer[DType.float32],
+    mut out_idx: DeviceBuffer[DType.uint32],
+    return_sqrt: Bool = True,
+) raises -> Int:
+    """`knn_search_traced(index, queries, ...)` with BOTH the index and the
+    queries ALREADY ON THE DEVICE and the result LEFT THERE (lane vdf-misc4,
+    2026-11-24, for HDBSCAN's resident fitted snapshot): `index` holds
+    exactly `n_index x n_features` and `queries` exactly `n_queries x
+    n_features` row-major float32 on `ctx`; `out_dist` / `out_idx` receive
+    `n_queries x k`, every row ascending by (distance, index). The refusals
+    and plan are `_knn_search_plan`'s with the default tile, method and the
+    L2 metric of `return_sqrt` (no host words are read: the cosine refusal
+    cannot arise), then `_knn_search_on_device_index`'s norms, search, order
+    pass and trace records on the same bytes; only the host copies on either
+    side are gone. Returns the query tile that ran."""
+    var dplan = neighbors_device_plan()
+    var none = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=0)
+    var plan = _knn_search_plan(
+        dplan, none, n_index, none, n_queries, n_features, k, return_sqrt,
+        DEFAULT_QUERY_TILE, KNN_METHOD_AUTO, METRIC_FROM_IS_SQRT, Float32(2.0), True,
+    )
+    var mtr = plan[0]
+    var devices = plan[1]
+    var query_tile = plan[2]
+    var buf_len = plan[3]
+    var index_norm = ctx.enqueue_create_buffer[DType.float32](n_index)
+    var query_norm = ctx.enqueue_create_buffer[DType.float32](n_queries)
+    var dist_tile = ctx.enqueue_create_buffer[DType.float32](
+        tiled_distance_tile_cells(query_tile, n_index, n_features, k, mtr)
+    )
+    var buf_val = ctx.enqueue_create_buffer[DType.float32](query_tile * 2 * buf_len)
+    var buf_idx = ctx.enqueue_create_buffer[DType.uint32](query_tile * 2 * buf_len)
+    var out_i32 = ctx.enqueue_create_buffer[DType.int32](n_queries * k)
+    compute_norms_for_metric(ctx, index, index_norm, n_index, n_features, mtr)
+    compute_norms_for_metric(ctx, queries, query_norm, n_queries, n_features, mtr)
+    ctx.synchronize()
+    if trace.enabled:
+        trace.header(
+            String("knn n_index=") + String(n_index) + " n_queries="
+            + String(n_queries) + " d=" + String(n_features) + " k="
+            + String(k) + " method=" + String(KNN_METHOD_AUTO) + " sqrt="
+            + String(return_sqrt) + " metric=" + metric_value_name(mtr)
+            + " metric_arg=" + String(Float32(2.0))
+        )
+        if metric_uses_norms(mtr):
+            trace.record_device(ctx, "knn.index_norm", index_norm, n_index)
+            trace.record_device(ctx, "knn.query_norm", query_norm, n_queries)
+    if devices > 1:
+        query_tile = parallel_knn_rows(ctx, queries, query_norm, index, index_norm,
+            out_dist, out_idx, n_queries, n_index, n_features, k, query_tile, buf_len,
+            return_sqrt, KNN_METHOD_AUTO, mtr, Float32(2.0), devices, dplan)
+    else:
+        brute_force_knn_impl(
+            ctx, queries, query_norm, index, index_norm, dist_tile, buf_val,
+            buf_idx, out_dist, out_idx, out_i32, n_queries, n_index, n_features, k,
+            query_tile, buf_len, return_sqrt, False, True, True,
+            KNN_METHOD_AUTO, mtr, Float32(2.0), KnnIndexCachePointer(None),
+        )
+    ctx.synchronize()
+    if trace.enabled:
+        trace.record_device(ctx, "knn.out_dist", out_dist, n_queries * k)
+        trace.record_device(ctx, "knn.out_idx", out_idx, n_queries * k)
+    _knn_order_rows_device(ctx, out_dist, out_idx, n_queries, k)
+    if trace.enabled:
+        trace.record_device(ctx, "knn.sorted_dist", out_dist, n_queries * k)
+        trace.record_device(ctx, "knn.sorted_idx", out_idx, n_queries * k)
+    _ = index_norm^
+    _ = query_norm^
+    _ = dist_tile^
+    _ = buf_val^
+    _ = buf_idx^
+    _ = out_i32^
+    return query_tile
+
+
 comptime _KO_TPB = 128
 comptime _KFP = MutPointer[Float32, MutAnyOrigin]
 comptime _KUP = MutPointer[UInt32, MutAnyOrigin]

@@ -764,7 +764,76 @@ def _sc_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
     var from_matrix = False
     var coo_source = source
     var nk = cluster_keys()
-    if affinity == "precomputed":
+    var labels = PythonObject(None)
+    var embedding = PythonObject(None)
+    var state = SpectralStatePins()
+    var n_out = 0
+    var n = 0
+    var produced = False
+    if (affinity == "rbf" or affinity == "precomputed_nearest_neighbors") and use_dense and (
+        connection.value().capabilities & SPECTRAL_CAP_AFFINITY
+    ) != 0:
+        # lane vdf-misc4: the affinity is built on the metrics image's own
+        # device and the dense fit reads it there; the n x n crosses once,
+        # into the public `affinity_matrix_`. Was: built by the x_decomp (rbf)
+        # or base (knn) image into host storage, uploaded again by this image.
+        if affinity == "rbf":
+            var x = _x_decomp_input(source, context)
+            n = Int(py=x.shape[0])
+            var d = Int(py=x.shape[1])
+            if clusters <= n and k < n:
+                var public = family_array(Python.tuple(n, n), "<f4", context)
+                py_setitem(fields, nk[].k_affinity_matrix_, public)
+                py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
+                labels = family_array(Python.tuple(n), "<i4", context)
+                embedding = family_array(Python.tuple(n, k), "<f4", context)
+                if predicting:
+                    state.allocate(n, k, clusters, context)
+                var request = SpectralFitRequest(
+                    SpectralInput(Int(py=classical_address(x)), 0, 0, 0, SPECTRAL_RBF, n, d, 0,
+                                  Int(py=classical_address(public)), 0, config.gamma),
+                    Int(py=classical_address(labels)), Int(py=classical_address(embedding)), state.view(),
+                    config.fit)
+                n_out = spectral_fit_run(connection.value(), request)
+                _ = x  # the admitted X stays alive through the native call above
+                _ = public  # the published affinity stays alive through the native call above
+                _ = state
+                _ = labels
+                _ = embedding
+                _sc_refusal(n_out, "SpectralClustering")
+                produced = True
+        else:
+            var admitted = _knn_admit(fields, source, True, context, True, config.fit.neighbors, False)
+            n = admitted.n
+            if n > 0 and clusters <= n and k < n:
+                var status = SpectralAffinityStatus()
+                var public = family_array(Python.tuple(n, n), "<f4", context)
+                labels = family_array(Python.tuple(n), "<i4", context)
+                embedding = family_array(Python.tuple(n, k), "<f4", context)
+                if predicting:
+                    state.allocate(n, k, clusters, context)
+                var request = SpectralFitRequest(
+                    SpectralInput(admitted.dense_address(), admitted.row_address(), admitted.column_address(),
+                                  admitted.value_address(), SPECTRAL_KNN, n, admitted.k, admitted.nnz,
+                                  Int(py=classical_address(public)), status.address(), 0.0),
+                    Int(py=classical_address(labels)), Int(py=classical_address(embedding)), state.view(),
+                    config.fit)
+                n_out = spectral_fit_run(connection.value(), request)
+                _ = admitted  # the admitted arrays stay alive through the native call above
+                _ = status  # the status words stay alive through the native call above
+                _ = state
+                _ = labels
+                _ = embedding
+                if n_out == SPECTRAL_KNN_REFUSED:
+                    _knn_refusal(status, admitted.k)
+                py_setitem(fields, nk[].k_affinity_matrix_, public)
+                _sc_refusal(n_out, "SpectralClustering")
+                produced = True
+        # Not produced: n is 0 or the shape refusal will fire; the former
+        # route below raises in the former order.
+    if produced:
+        pass
+    elif affinity == "precomputed":
         py_setitem(fields, nk[].k_affinity_matrix_, source)
         if use_dense and not _is_sparse(source):
             var shape = _shape_of(source)
@@ -784,13 +853,10 @@ def _sc_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
         var affinity_room = _knn_affinity(fields, source, True, routes.base, context, True, config.fit.neighbors)
         dense = py_present(affinity_room.public_array)
         from_matrix = True
-    var labels = PythonObject(None)
-    var embedding = PythonObject(None)
-    var state = SpectralStatePins()
-    var n_out: Int
-    var n: Int
     var options = config.fit
-    if use_dense and Bool(dense):
+    if produced:
+        pass
+    elif use_dense and Bool(dense):
         # the dense matrix straight to the device entry
         n = Int(py=dense.value().shape[0])
         _sc_check_shape(clusters, n, k)
