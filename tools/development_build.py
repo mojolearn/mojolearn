@@ -49,6 +49,13 @@ Groups compile in parallel by default (--parallel auto). Each group's need is
 its RECORDED peak RSS from the last compile (cache/peaks/, with headroom); a
 group without a record takes --memory-per-job-gib when given, else the largest
 recorded need of its set (identical or host), else the platform group floor.
+Only a PASSED compile's peak is a basis for a group's rss kill limit; a run
+stopped by a limit, the deadline or a stall leaves a lower bound that sizes
+packing only. A group killed by its own rss limit while the box still has
+free memory is retried once without that limit. Every build starts with a
+2-second single-thread calibration, printed with nproc and compared with the
+last passing build's (a loud warning above 5x slower); a deadline stop prints
+its CPU seconds beside it.
 The scheduler is a sliding window: it starts the longest groups first (their
 recorded compiler seconds, else their source closure size) and starts the next
 group whenever one finishes and its memory need fits 80% of the memory
@@ -135,8 +142,14 @@ MEMORY_FRACTION = 0.8
 # ~250 s. 12 GiB is that peak plus 20%. A recorded peak raises it.
 GROUP_FLOOR_BYTES = {"linux": 12 * 2 ** 30, "darwin": 12 * 2 ** 30}
 # Recorded peaks of a run that passed get 20% headroom; a run stopped by a
-# limit only shows a lower bound, so it gets 50%.
-PEAK_HEADROOM = {"passed": 1.2, "limited": 1.5}
+# limit, a deadline or a stall only shows a lower bound, so it gets 50%.
+# Only a passed peak is a basis for a group's rss KILL limit; a lower bound
+# sizes packing only (2026-11-24, cpc1: runtime_prep timed out in round 1 at
+# a 2.06 GiB peak, and the next round killed it `rss-limit` at 4.64 GiB after
+# 2.8 h with 200 GB free).
+PEAK_HEADROOM = {"passed": 1.2, "lower-bound": 1.5}
+# Statuses of tools/build_process.py whose peak is a lower bound of the need.
+LOWER_BOUND_STATUSES = ("rss-limit", "memory-pressure", "timeout", "stalled")
 # Cap on concurrently compiling groups (scheduling only; removed from the
 # compiler environment and from every cache key in build_environment).
 GROUP_WORKERS_ENV = "MOJOLEARN_BUILD_GROUP_WORKERS"
@@ -777,6 +790,7 @@ def make_plan(repo, cache, modes, env, selection=(), facts=None, plat=None, c_fa
                     row = dict(alternative, action="reuse")
         # Sizing only; never a key field. It survives key changes.
         row["recorded_need_bytes"] = recorded_need(cache, mode, stem)
+        row["recorded_passed_need_bytes"] = recorded_passed_need(cache, mode, stem)
         row["recorded_seconds"] = recorded_seconds(cache, mode, stem)
         return row
 
@@ -842,23 +856,53 @@ def peak_path(cache, mode, stem):
     return Path(cache) / "peaks" / f"{mode}-{stem}.json"
 
 
-def recorded_need(cache, mode, stem):
-    """Bytes the last recorded compile of this group needs, or 0."""
+def read_peak(cache, mode, stem):
+    """This group's peak record, or {}.
+
+    A record is {"status": "passed", "peak_rss_bytes", ...} (a passed run)
+    and/or "lower_bound_rss_bytes" (the largest peak of a run stopped by a
+    limit, a deadline or a stall; status "lower-bound" when no run passed).
+    Records of the older format (status "limited": a stopped run's peak
+    stored as if it were a need) are ignored."""
     try:
         saved = json.loads(peak_path(cache, mode, stem).read_text())
-        peak = int(saved["peak_rss_bytes"])
-        return int(peak * PEAK_HEADROOM["passed" if saved["status"] == "passed" else "limited"])
-    except (OSError, KeyError, ValueError, TypeError):
+    except (OSError, ValueError):
+        return {}
+    return saved if isinstance(saved, dict) and saved.get("status") in ("passed", "lower-bound") else {}
+
+
+def _scaled(saved, field, headroom):
+    try:
+        value = int(saved.get(field) or 0)
+    except (TypeError, ValueError):
         return 0
+    return int(value * PEAK_HEADROOM[headroom]) if value > 0 else 0
+
+
+def passed_need(saved):
+    """Need (bytes) from the last PASSED compile: the only basis of a kill limit."""
+    return _scaled(saved, "peak_rss_bytes", "passed") if saved.get("status") == "passed" else 0
+
+
+def recorded_need(cache, mode, stem):
+    """Packing need (bytes) of this group's records, or 0: the larger of its
+    passed need and its lower bound with headroom."""
+    saved = read_peak(cache, mode, stem)
+    return max(passed_need(saved), _scaled(saved, "lower_bound_rss_bytes", "lower-bound"))
+
+
+def recorded_passed_need(cache, mode, stem):
+    """Need (bytes) from this group's last passed compile only, or 0."""
+    return passed_need(read_peak(cache, mode, stem))
 
 
 def recorded_seconds(cache, mode, stem):
     """Compiler seconds of this group's last passed recorded compile, or 0.0."""
+    saved = read_peak(cache, mode, stem)
     try:
-        saved = json.loads(peak_path(cache, mode, stem).read_text())
-        seconds = float(saved["elapsed_seconds"]) if saved["status"] == "passed" else 0.0
+        seconds = float(saved["elapsed_seconds"]) if saved.get("status") == "passed" else 0.0
         return seconds if math.isfinite(seconds) and seconds > 0 else 0.0
-    except (OSError, KeyError, ValueError, TypeError):
+    except (KeyError, ValueError, TypeError):
         return 0.0
 
 
@@ -884,28 +928,32 @@ def record_compile_jobs(cache, row, jobs):
 def record_peak(cache, row, execution, compile_jobs=None):
     """Keep the group's last measured peak where the next plan can size from it.
 
-    A passed run replaces the record; a run stopped by a limit only raises it,
-    since its peak is a lower bound of the real need. compile_jobs (the
+    A passed run replaces the record (its peak is the group's need and the
+    basis of its kill limit). A run stopped by a limit, the deadline or a stall
+    only raises the record's lower bound: packing uses it, a kill limit never
+    does, and a passed peak already recorded is kept. compile_jobs (the
     compiler threads of that run) is recorded alongside, for reading only."""
     peak = int(execution.get("peak_rss_bytes") or 0)
     status = execution.get("status")
-    if peak <= 0 or status not in ("passed", "rss-limit", "memory-pressure", "timeout", "stalled"):
+    if peak <= 0 or status not in ("passed",) + LOWER_BOUND_STATUSES:
         return
     path = peak_path(cache, row["mode"], row["stem"])
-    if status != "passed":
-        try:
-            prior = json.loads(path.read_text())
-            if int(prior["peak_rss_bytes"]) >= peak:
-                return
-        except (OSError, KeyError, ValueError, TypeError):
-            pass
-    record = {"peak_rss_bytes": peak, "status": "passed" if status == "passed" else "limited",
-              "key": row["key"], "recorded_utc": datetime.now(timezone.utc).isoformat()}
-    if compile_jobs is not None:
-        record["compile_jobs"] = int(compile_jobs)
-    if status == "passed" and execution.get("elapsed_seconds"):
-        # Ordering only (packing_order): the longest groups start first.
-        record["elapsed_seconds"] = float(execution["elapsed_seconds"])
+    now = datetime.now(timezone.utc).isoformat()
+    if status == "passed":
+        record = {"peak_rss_bytes": peak, "status": "passed", "key": row["key"], "recorded_utc": now}
+        if compile_jobs is not None:
+            record["compile_jobs"] = int(compile_jobs)
+        if execution.get("elapsed_seconds"):
+            # Ordering only (packing_order): the longest groups start first.
+            record["elapsed_seconds"] = float(execution["elapsed_seconds"])
+    else:
+        record = read_peak(cache, row["mode"], row["stem"]) or {"status": "lower-bound"}
+        if int(record.get("lower_bound_rss_bytes") or 0) >= peak:
+            return
+        record.update(lower_bound_rss_bytes=peak, lower_bound_status=status, lower_bound_key=row["key"],
+                      lower_bound_utc=now)
+        if compile_jobs is not None:
+            record["lower_bound_compile_jobs"] = int(compile_jobs)
     atomic_json(path, record)
 
 
@@ -1006,7 +1054,9 @@ def group_cap(parallel, jobs, env_value):
 def group_needs(all_rows, wanted, per_job_gib=None, floor_bytes=0):
     """Packing need (bytes) and its source for each wanted row, in order.
 
-    A recorded need (last measured peak plus headroom) is used as is. A group
+    A recorded need (last measured peak plus headroom) is used as is: source
+    "recorded" when it is a passed run's, "lower-bound" when a stopped run's
+    lower bound is larger (guard_rss never kills at a lower bound). A group
     with no record takes --memory-per-job-gib when given, else the largest
     recorded need among all groups of its set (identical and host compilers
     differ), else the platform floor."""
@@ -1018,7 +1068,8 @@ def group_needs(all_rows, wanted, per_job_gib=None, floor_bytes=0):
     for row in wanted:
         need = int(row.get("recorded_need_bytes") or 0)
         if need > 0:
-            out.append((need, "recorded"))
+            passed = int(row.get("recorded_passed_need_bytes") or 0)
+            out.append((need, "recorded" if passed >= need else "lower-bound"))
         elif per_job_gib is not None:
             out.append((int(per_job_gib * 2 ** 30), "memory-per-job-gib"))
         elif set_max.get(row["mode"], 0) > 0:
@@ -1141,14 +1192,15 @@ def live_need(source, need, measured, floor, ceiling):
     Groups with no record of their own (platform floor or set maximum) take
     the largest need measured so far in this run for their set, the same
     set-maximum rule group_needs applies to older records: a floor estimate
-    drops to it, a set maximum only rises. Recorded and --memory-per-job-gib
-    needs are kept. Its rss limit stays at least the floor (guard_rss)."""
+    drops to it, a set maximum and a stopped run's lower bound only rise.
+    Recorded and --memory-per-job-gib needs are kept. Its rss limit stays at
+    least the floor (guard_rss)."""
     if not measured:
         return need, source
     if source in ("group-floor", "set-max-live"):
         return min(int(measured), int(ceiling)), "set-max-live"
-    if source == "set-max" and measured > need:
-        return min(int(measured), int(ceiling)), "set-max"
+    if source in ("set-max", "lower-bound") and measured > need:
+        return min(int(measured), int(ceiling)), source
     return need, source
 
 
@@ -1161,9 +1213,78 @@ def guard_rss(need, source, floor):
     past run's figure; a group that grows a little past it must not be killed:
     mac-n7 2026-11-07 killed four passing groups at limit == peak), never below
     4 GiB, and never below the floor for a live estimate. Packing still uses
-    the need itself; this limit is only the runaway guard."""
+    the need itself; this limit is only the runaway guard.
+
+    A need from a stopped run's lower bound ("lower-bound") is no basis for a
+    kill: its limit is at least an unmeasured group's (1.5x the floor) and the
+    lower bound can only raise it. A retry after an rss-limit kill with free
+    memory ("rss-retry") runs with no rss limit (None); the memory-pressure
+    floor still guards the machine."""
+    if source == "rss-retry":
+        return None
     limit = max(int(int(need) * RSS_GUARD_MARGIN), RSS_GUARD_MIN_BYTES)
+    if source == "lower-bound":
+        return max(limit, int(int(floor) * RSS_GUARD_MARGIN))
     return max(limit, int(floor)) if source == "set-max-live" else limit
+
+
+# A group killed by its own rss limit is retried once without the limit when
+# 80% of the memory available at its end holds at least this many times the
+# peak it was killed at (2026-11-24, cpc1: runtime_prep killed at 4.64 GiB
+# with 200 GB free cost the round).
+RSS_RETRY_FREE_FACTOR = 2
+
+
+def rss_retry_reason(result, available_now):
+    """Why a group stopped by its own rss limit runs once more without it, or None.
+
+    Only `rss-limit` (the group's own kill limit) qualifies: memory pressure,
+    deadlines, stalls and compile errors are never retried here."""
+    execution = result.get("execution") or {}
+    if execution.get("status") != "rss-limit" or build_process.cancelled():
+        return None
+    peak = int(execution.get("peak_rss_bytes") or 0)
+    free = int(MEMORY_FRACTION * int(available_now))
+    if peak <= 0 or free < RSS_RETRY_FREE_FACTOR * peak:
+        return None
+    gib = 2 ** 30
+    limit = execution.get("rss_limit_bytes")
+    return (f"killed by its rss limit ({int(limit or 0) / gib:.2f} GiB) at {peak / gib:.2f} GiB with "
+            f"{free / gib:.1f} GiB free: retried once without the rss limit")
+
+
+def keep_first_attempt(result, evidence, reason, report):
+    """Move the stopped attempt's log, guard receipt and group receipt aside
+    (`<mode>-<stem>.rss-limit-attempt.*`) so the retry cannot overwrite them,
+    and record the retry in the run report."""
+    base = result["mode"] + "-" + result["stem"]
+    kept = []
+    for name in (result.get("log"), result.get("execution_receipt"), str(Path(evidence) / (base + ".json"))):
+        path = Path(name) if name else None
+        if path is not None and path.is_file() and path.name.startswith(base):
+            target = path.with_name(base + ".rss-limit-attempt" + path.name[len(base):])
+            path.replace(target)
+            kept.append(str(target))
+    execution = result.get("execution") or {}
+    report.setdefault("rss_limit_retries", []).append(
+        {"mode": result["mode"], "stem": result["stem"], "reason": reason,
+         "peak_rss_bytes": execution.get("peak_rss_bytes"), "rss_limit_bytes": execution.get("rss_limit_bytes"),
+         "elapsed_seconds": execution.get("elapsed_seconds"), "first_attempt": kept})
+    print(f"RSS-LIMIT RETRY {result['mode']} {result['stem']}: {reason}", flush=True)
+
+
+def report_timeout(result, report):
+    """Print a deadline stop loudly, with its CPU seconds and the box's
+    single-thread calibration, so a slow box is visible at the first timeout."""
+    execution = result.get("execution") or {}
+    if execution.get("status") != "timeout":
+        return
+    cpu = execution.get("cpu_seconds")
+    result["cpu_seconds"] = cpu
+    busy = "still using CPU" if execution.get("cpu_active_at_end") else "not using CPU at the end"
+    cal = report.get("calibration") or {}
+    print(f"TIMEOUT {result['mode']} {result['stem']}: deadline {execution.get('deadline_seconds')} s, "
+          f"cpu {float(cpu or 0):.0f} s, {busy}; {calibration_line(cal)}", flush=True)
 
 
 def pressure_floor(available_at_start, baseline_bytes, available_now, need):
@@ -1536,6 +1657,7 @@ def release_plan(repo, cache, mac_cache, modes, env, selection=(), facts=None, p
             row["action"] = ("reuse" if facts.get("available") and release_archive(mac_cache, key, bfields, genv)
                              else "build")
             row["recorded_need_bytes"] = recorded_need(cache, mode, stem)
+            row["recorded_passed_need_bytes"] = recorded_passed_need(cache, mode, stem)
             row["recorded_seconds"] = recorded_seconds(cache, mode, stem)
             rows.append(row)
     for group in selection:
@@ -1761,6 +1883,83 @@ def host_facts(report, resources=None):
     return cores, available
 
 
+# Box speed check at the start of every build (2026-11-24, cpc1: every core
+# at 500-600 MHz, a one-thread sha256 loop 135x slower than the laptop, and the
+# 6000 s group deadline lost a whole round before anyone saw it).
+CALIBRATION_SECONDS = 2.0
+CALIBRATION_UNITS = 3_000_000  # reported as seconds per 3M one-byte sha256 updates
+CALIBRATION_FILE = "calibration.json"
+SLOW_BOX_FACTOR = 5.0
+
+
+def single_thread_calibration(seconds=None):
+    """One thread's speed: one-byte sha256 updates done in about `seconds`.
+
+    Serial by nature: it measures a single thread. Reported as the seconds
+    3M updates take, the same line as
+    `python3 -c "import time,hashlib;...range(3000000)..."`."""
+    seconds = CALIBRATION_SECONDS if seconds is None else seconds
+    h, count, chunk = hashlib.sha256(), 0, 10000
+    started = time.perf_counter()
+    elapsed = 0.0
+    while elapsed < seconds or count == 0:
+        for _ in range(chunk):
+            h.update(b"x")
+        count += chunk
+        elapsed = time.perf_counter() - started
+    return {"updates": count, "elapsed_seconds": elapsed,
+            "seconds_per_3m_updates": elapsed * CALIBRATION_UNITS / count}
+
+
+def calibration_line(cal):
+    """One printable line of a box calibration (empty input: none measured)."""
+    if not cal:
+        return "no single-thread calibration"
+    text = (f"nproc {cal.get('nproc')}, allocation {cal.get('allocation_cores')} cores, single-thread "
+            f"{float(cal['seconds_per_3m_updates']):.2f} s per 3M sha256 updates")
+    ref = cal.get("reference") or {}
+    if ref.get("seconds_per_3m_updates"):
+        text += (f" (reference {float(ref['seconds_per_3m_updates']):.2f} s from the last passing build "
+                 f"{ref.get('source_commit', '?')[:10]} {ref.get('recorded_utc', '?')}, {cal['slowdown']:.1f}x)")
+    else:
+        text += " (no reference: no passing build recorded in this cache)"
+    return text
+
+
+def box_calibration(cache):
+    """Measure this box at the start of a build and compare it with the
+    reference the last passing build recorded in this cache. Printed with
+    nproc; a box more than SLOW_BOX_FACTOR slower gets a loud warning."""
+    cal = dict(single_thread_calibration(), nproc=os.cpu_count(), allocation_cores=planner_workers(),
+               measured_utc=datetime.now(timezone.utc).isoformat())
+    try:
+        ref = json.loads((Path(cache) / CALIBRATION_FILE).read_text())
+        float(ref["seconds_per_3m_updates"])
+    except (OSError, ValueError, KeyError, TypeError):
+        ref = None
+    if ref:
+        cal["reference"] = ref
+        cal["slowdown"] = float(cal["seconds_per_3m_updates"]) / max(float(ref["seconds_per_3m_updates"]), 1e-9)
+        cal["slow_box"] = cal["slowdown"] > SLOW_BOX_FACTOR
+    print("box: " + calibration_line(cal), flush=True)
+    if cal.get("slow_box"):
+        warning = (f"WARNING SLOW BOX: one thread here is {cal['slowdown']:.1f}x slower than the last passing "
+                   f"build's (more than {SLOW_BOX_FACTOR:g}x); group deadlines (--group-seconds) will be hit. "
+                   "Check the CPU clock (/proc/cpuinfo MHz) and host load before waiting on this build.")
+        print(warning, flush=True)
+        print(warning, file=sys.stderr, flush=True)
+    return cal
+
+
+def record_calibration(cache, cal, source_commit):
+    """A passing build's calibration becomes this cache's reference."""
+    if cal and cal.get("seconds_per_3m_updates"):
+        atomic_json(Path(cache) / CALIBRATION_FILE,
+                    {"seconds_per_3m_updates": cal["seconds_per_3m_updates"], "nproc": cal.get("nproc"),
+                     "allocation_cores": cal.get("allocation_cores"), "source_commit": source_commit or "",
+                     "recorded_utc": datetime.now(timezone.utc).isoformat()})
+
+
 def serial_build(plan, wanted, args, env, cache, evidence, limits, report, compile=None):
     """--parallel 1: one compiler at a time under the serial budget.
 
@@ -1781,6 +1980,13 @@ def serial_build(plan, wanted, args, env, cache, evidence, limits, report, compi
         launch = {"groups_running_at_launch": 1, "threads_running_at_launch": row["compile_jobs"],
                   "cores": budget["cores"], "submitted": time.monotonic()}
         result = compile(row, REPO, cache, env, evidence, toolchain, launch)
+        reason = rss_retry_reason(result, available_resources()[1])
+        if reason:
+            keep_first_attempt(result, evidence, reason, report)
+            retry_env = dict(env, **{GUARD_ENV: json.dumps(dict(budget, **limits, rss_bytes=None))})
+            result = compile(row, REPO, cache, retry_env, evidence, toolchain, dict(launch, submitted=time.monotonic()))
+            result["rss_retry"] = True
+        report_timeout(result, report)
         collect(report, result, evidence)
 
 
@@ -1816,6 +2022,7 @@ def parallel_build(plan, wanted, args, env, cache, evidence, limits, report, cap
     queue, queue_needs = packing_order(wanted, [need for need, _ in needs])
     sources = {(r["mode"], r["stem"]): source for r, (_, source) in zip(wanted, needs)}
     measured = {}  # mode -> largest need measured in this run (passed peak plus headroom)
+    retried = set()  # (mode, stem) of groups retried once after their own rss-limit kill
     scheduler = {"parallel": "auto" if cap is None else cap, "slots": slots, "budget_bytes": baseline,
                  "ceiling_bytes": ceiling, "fixed_compiler_workers": fixed,
                  "memory_fraction": MEMORY_FRACTION, "order": "longest-first",
@@ -1852,7 +2059,8 @@ def parallel_build(plan, wanted, args, env, cache, evidence, limits, report, cap
                         group_limits = dict(limits, jobs=slots, cores=cores, available_bytes=available_now,
                                             compiler_workers=row["compile_jobs"], rss_bytes=rss,
                                             min_available_bytes=pressure_floor(
-                                                available_at_start, baseline, available_now, rss),
+                                                available_at_start, baseline, available_now,
+                                                need if rss is None else rss),
                                             reservation_source=source)
                         group_env = dict(env, **{GUARD_ENV: json.dumps(group_limits)})
                         if row.get("auto_compile_jobs"):
@@ -1882,6 +2090,20 @@ def parallel_build(plan, wanted, args, env, cache, evidence, limits, report, cap
                     if execution.get("status") == "passed" and int(execution.get("peak_rss_bytes") or 0) > 0:
                         measured[row["mode"]] = max(measured.get(row["mode"], 0), int(
                             int(execution["peak_rss_bytes"]) * PEAK_HEADROOM["passed"]))
+                    key = (row["mode"], row["stem"])
+                    reason = None if key in retried else rss_retry_reason(result, available_resources()[1])
+                    if reason:
+                        # Once, at the head of the queue, with no rss limit.
+                        retried.add(key)
+                        keep_first_attempt(result, evidence, reason, report)
+                        sources[key] = "rss-retry"
+                        queue.insert(0, row)
+                        queue_needs.insert(0, min(ceiling, max(need, int(
+                            int(execution["peak_rss_bytes"]) * PEAK_HEADROOM["lower-bound"]))))
+                        continue
+                    if key in retried:
+                        result["rss_retry"] = True
+                    report_timeout(result, report)
                     collect(report, result, evidence)
                 # Groups without a record of their own pack by what this run measured.
                 for index, queued in enumerate(queue):  # driver-loop: over queued development groups
@@ -1969,6 +2191,7 @@ def main(argv=None):
         if args.memory_per_job_gib is not None:
             positive_seconds(args.memory_per_job_gib, "--memory-per-job-gib")
         report["limits"] = limits
+        report["calibration"] = box_calibration(cache)
         with build_process.cancellation_scope(), lock(
                 cache / "locks" / (digest(str(REPO)) + ".lock"), limits["lock_seconds"]):
             # Generate before computing keys, never after deciding a cache hit.
@@ -1980,7 +2203,10 @@ def main(argv=None):
             report["generated_sources"] = gs.prepare_sources(
                 REPO, evidence / "generated-sources", env=env, runner=run_logged)
             if layout == "release":
-                return release_build(args, modes, env, cache, mac_cache, evidence, limits, report, cap, futures)
+                code = release_build(args, modes, env, cache, mac_cache, evidence, limits, report, cap, futures)
+                if report["state"] == "activated":
+                    record_calibration(cache, report["calibration"], report.get("source_commit"))
+                return code
             plan = make_plan(REPO, cache, modes, env, args.group)
             atomic_json(evidence / "plan.json", plan)
             summary(plan)
@@ -2011,6 +2237,8 @@ def main(argv=None):
             if build_process.cancelled():
                 raise KeyboardInterrupt("development build cancelled before activation")
             report.update(activate(final_plan, REPO, cache, limits["lock_seconds"]))
+            if report["state"] == "activated":
+                record_calibration(cache, report["calibration"], report.get("source_commit"))
             atomic_json(evidence / "result.json", report)
             if args.json:
                 atomic_json(args.json, report)

@@ -120,9 +120,18 @@ def sample_group(group, seen):
     return sum(seen.values()), rss, available_memory()
 
 
+# A process group whose CPU time moved within this many seconds of a stop is
+# reported as still using CPU (cpu_active_at_end): a deadline hit by a busy
+# compiler on a slow box, not a hang.
+CPU_ACTIVE_SECONDS = 60.0
+
+
 def run(argv, *, cwd, env, log, seconds, stall_seconds=0, rss_bytes=None,
         min_available_bytes=0, poll=1.0, probe=sample_group):
-    """Return a retained result after success, failure, interruption or limits."""
+    """Return a retained result after success, failure, interruption or limits.
+
+    The result carries cpu_seconds (the group's accumulated CPU time) and
+    cpu_active_at_end; a deadline stop names both in its reason."""
     if (not argv or not math.isfinite(seconds) or seconds <= 0
             or not math.isfinite(stall_seconds) or stall_seconds < 0
             or not math.isfinite(poll) or poll <= 0
@@ -164,8 +173,11 @@ def run(argv, *, cwd, env, log, seconds, stall_seconds=0, rss_bytes=None,
                     result.update(status='interrupted', exit_code=130)
                     break
                 if now-start >= seconds:
-                    result.update(status='timeout', exit_code=124,
-                                  reason='deadline %gs reached; peak rss %d bytes' % (seconds, result['peak_rss_bytes']))
+                    active = now-last_move < CPU_ACTIVE_SECONDS and last_cpu > 0
+                    result.update(status='timeout', exit_code=124, cpu_seconds=last_cpu, cpu_active_at_end=active,
+                                  reason='deadline %gs reached %s (%.0f CPU s in %.0f s); peak rss %d bytes'
+                                  % (seconds, 'while still using CPU' if active else 'with no recent CPU progress',
+                                     last_cpu, now-start, result['peak_rss_bytes']))
                     break
                 cpu, rss, available = probe(proc.pid, seen)
                 result['peak_rss_bytes'] = max(result['peak_rss_bytes'], rss)
@@ -212,6 +224,8 @@ def run(argv, *, cwd, env, log, seconds, stall_seconds=0, rss_bytes=None,
                 with _LOCK:
                     _ACTIVE.discard(proc.pid)
                 result['process_returncode'] = proc.returncode
+            result.setdefault('cpu_seconds', last_cpu)
+            result.setdefault('cpu_active_at_end', last_cpu > 0 and time.monotonic()-last_move < CPU_ACTIVE_SECONDS)
             result.update(complete=True, elapsed_seconds=time.monotonic()-start)
             save()
     return result
