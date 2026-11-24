@@ -42,6 +42,8 @@ from bindings.py_balanced import py_item
 from std.python._cpython import GILReleased
 from bindings.tsa_hw_route_unpack import tsa_function_route
 from core.tsa_hw_run import tsa_kpss_run, tsa_select_d_run
+from core.device_route import device_cpu_fast
+from providers.python.function_device_boundary_door import function_device_admit
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -88,10 +90,39 @@ def _series_major(source: PythonObject, name: String, context: PythonObject) rai
     return Python.tuple(out, rows, cols)
 
 
+# The stationarity functions have a device image (`_mojolearn_tsa` of the GPU
+# set) and a CPU identical image (`_mojolearn_tsa_host`, loaded beside it at
+# import as `hw_cpu_bindings`, the one AutoARIMA(device="cpu") runs).
+comptime _STATIONARITY_HAS_GPU = True
+comptime _STATIONARITY_HAS_CPU = True
+
+
+def _stationarity_cpu(word: PythonObject, name: String, context: PythonObject, b: PythonObject) raises -> Bool:
+    """UNPACK of `kpss_test` / `select_d`'s `device=` (lane vdf-misc), once per
+    call before any work, in the shared words: True for an explicit "cpu"
+    beside a GPU set (the function route's CPU table,
+    bindings/tsa_hw_route_unpack.mojo `tsa_function_route`). The CPU table
+    is identical only, as for every device="cpu" estimator. None is one
+    identity compare."""
+    if word is None:
+        return False
+    var device = function_device_admit(word, name, _STATIONARITY_HAS_GPU, _STATIONARITY_HAS_CPU, context, b)
+    if not device.host_beside:
+        return False
+    var nk = tsa_keys()
+    if String(py=py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)) != "identical":
+        device_cpu_fast()
+    if py_get(context, nk[].k_hw_cpu_bindings) is None:
+        # never the device table in its place
+        raise Error("ImportError: device='cpu' is not connected in this installation")
+    return True
+
+
 def tsa_kpss(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """kpss_test(y, d, D, s, pval_threshold, return_statistic)."""
+    """kpss_test(y, d, D, s, pval_threshold, return_statistic, device)."""
     var nk = tsa_keys()
     var b = _b()
+    var want_cpu = _stationarity_cpu(args[6], "kpss_test", context, b)
     var prepared = _series_major(args[0], "kpss_test", context)
     var flat = prepared[0]
     var n_obs = Int(py=prepared[1])
@@ -102,7 +133,7 @@ def tsa_kpss(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var seasonal_d = Int(py=py_call_typed(b.int, tsa_scalar(args[2], context, True)))
     var period = Int(py=py_call_typed(b.int, tsa_scalar(args[3], context, True)))
     var pval = Float64(py=py_call_typed(b.float, tsa_scalar(args[4], context)))
-    var call = tsa_function_route(context, False, b)
+    var call = tsa_function_route(context, want_cpu, b)
     var route = call.route
     var flat_address = native_scratch_address(flat)
     var flags_address = Int(py=classical_address(flags))
@@ -129,9 +160,10 @@ def tsa_kpss(args: PythonObject, context: PythonObject) raises -> PythonObject:
 
 
 def tsa_select_d(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """select_d(y, D, s, d_max, pval_threshold)."""
+    """select_d(y, D, s, d_max, pval_threshold, device)."""
     var nk = tsa_keys()
     var b = _b()
+    var want_cpu = _stationarity_cpu(args[5], "select_d", context, b)
     var seasonal = Int(py=py_call_typed(b.int, tsa_scalar(args[1], context, True)))
     var limit_value = PythonObject(2 - seasonal) if args[3] is None else py_call_typed(b.int, tsa_scalar(args[3], context, True))
     var prepared = _series_major(args[0], "select_d", context)
@@ -149,7 +181,7 @@ def tsa_select_d(args: PythonObject, context: PythonObject) raises -> PythonObje
     var period = Int(py=py_call_typed(b.int, tsa_scalar(args[2], context, True)))
     var d_max = Int(py=py_call_typed(b.int, limit_value))
     var pval = Float64(py=py_call_typed(b.float, tsa_scalar(args[4], context)))
-    var call = tsa_function_route(context, False, b)
+    var call = tsa_function_route(context, want_cpu, b)
     var route = call.route
     var flat_address = native_scratch_address(flat)
     var out_address = Int(py=classical_address(out))
