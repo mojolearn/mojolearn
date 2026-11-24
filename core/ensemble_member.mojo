@@ -3688,6 +3688,11 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
         plan.scope = call[].scope
         plan.pin = call[].pin
         plan.kept_at = Int(UnsafePointer(to=call[].pin_kept))
+        # THE PER-INPUT PINS (lane vdf-scope-pins): the target's own token,
+        # its kept word this call's `y_pin_kept` (the caller settles it).
+        if call[].y_pin != 0 and call[].y.data == plan.y:
+            plan.y_pin = call[].y_pin
+            plan.y_kept_at = Int(UnsafePointer(to=call[].y_pin_kept))
     var res = msel_search_run(plan)
     slot[].search_fit_failed = res.fit_failed.copy()  # lane w3f3-b: the PACK's warnings
     slot[].search_score_failed = res.score_failed.copy()

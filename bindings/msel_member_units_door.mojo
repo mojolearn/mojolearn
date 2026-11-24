@@ -105,6 +105,7 @@ from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_kind_capabilities,
     MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_F32, MEMBER_I32, MEMBER_CAN_EXPORT, MEMBER_CAN_TEST_ROWS,
     MEMBER_OP_FIT, MEMBER_CAN_FIT, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle,
+    member_y_pin_settle, member_weights_pin_settle,
     MEMBER_READS_Y_GIVEN, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_MULTI_OUTPUT, MEMBER_CAN_STEPS,
 )
 from bindings.member_given_y_unpack import member_given_y
@@ -142,6 +143,13 @@ struct _FitOne(Movable):
     var scope: Int
     var pin: Int
     var taken: Int
+    # THE PER-INPUT PINS (lane vdf-scope-pins; core/member_abi.mojo
+    # `MemberCall.y_pin`): the y and weights owners' tokens (0: none) and
+    # whether the fit's cache took each.
+    var y_pin: Int
+    var y_taken: Int
+    var weights_pin: Int
+    var weights_taken: Int
     var state: Int
     var failed: Bool
     var error: String
@@ -161,6 +169,10 @@ struct _FitOne(Movable):
         self.scope = MEMBER_SCOPE_NONE
         self.pin = 0
         self.taken = 0
+        self.y_pin = 0
+        self.y_taken = 0
+        self.weights_pin = 0
+        self.weights_taken = 0
         self.state = 0
         self.failed = False
         self.error = String("")
@@ -182,6 +194,8 @@ def _fit_one(address: Int):
         if run[].weights != 0:
             call.weights = MemberMatrix(run[].weights, run[].rows, 1)
         call.pin = run[].pin
+        call.y_pin = run[].y_pin if run[].y != 0 else 0
+        call.weights_pin = run[].weights_pin if run[].weights != 0 else 0
         var kept = False
         try:
             try:
@@ -189,6 +203,10 @@ def _fit_one(address: Int):
             finally:
                 if run[].pin != 0:
                     run[].taken += member_pin_settle(call)
+                if run[].y_pin != 0:
+                    run[].y_taken += member_y_pin_settle(call)
+                if run[].weights_pin != 0:
+                    run[].weights_taken += member_weights_pin_settle(call)
             member_notices_take(run[].plan, call.state, run[].notices)
             run[].state = call.state
             kept = True
@@ -769,6 +787,10 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
         raise Error(_fit_words(est, fields, "mojolearn: X must be 2-D, got 3-D shape " + sequence_shape, context, b))
     var run = _FitOne(owner.plan.copy(), msel_addr(xv), rows, cols)
     run.steps = steps
+    # THE PER-INPUT PINS: the objects that own y's and the weights' words
+    # (each made by this UNPACK for this fit and never rewritten).
+    var y_owner = PythonObject(None)
+    var weights_owner = PythonObject(None)
     if sample_weight is not None:
         # LANE w3f3-b: an owner's fit with sample_weight (`msel_member_fit_weighted`)
         if (kind_mask & MEMBER_CAN_SAMPLE_WEIGHT) == 0:
@@ -778,6 +800,7 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
         var w = admit_weight_words(sample_weight, rows, member_context)
         _ = py_call(pins.append, w.array)
         run.weights = w.address
+        weights_owner = w.array
     var gil_free = (kind_mask & MEMBER_GIL_FREE) != 0
     var gil_door = not gil_free and (kind_mask & MEMBER_GIL_DOOR) != 0
     if (kind_mask & MEMBER_CAN_SCOPE) != 0:
@@ -824,6 +847,7 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
             run.plan.classes = len(classes)
             _ = py_call(pins.append, codes)
             run.y = msel_addr(codes)
+            y_owner = codes
             labels = _public_labels(classes, member_context)
             # CLASS WEIGHTS over the encode's classes (lane mf-left4): a
             # dict the estimator refuses raises its own words here.
@@ -840,6 +864,7 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
                 _ = py_call(labels.append, _public_labels(per[j], member_context))
             _ = py_call(pins.append, outputs[0])
             run.y = msel_addr(outputs[0])
+            y_owner = outputs[0]
             run.y_cols = len(per)
         run.y_dtype = MEMBER_I32
     elif yv is not None:
@@ -869,6 +894,7 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
             raise Error(_fit_words(est, fields, words, context, b))
         _ = py_call(pins.append, target)
         run.y = msel_addr(target)
+        y_owner = target
         run.y_cols = y_out
         if (kind_mask & MEMBER_READS_Y_GIVEN) != 0:
             # THE GIVEN y (lane mf-tail5): y's own words (a view; `yv` lives
@@ -878,6 +904,13 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
     # the interpreter held; what the fit's cache did not take comes back.
     if run.scope >= 0:
         run.pin = member_pin_take(xv, 1)
+        # THE PER-INPUT PINS (lane vdf-scope-pins): one reference each on y's
+        # and the weights' own objects, so the scope keeps them resident once
+        # for every fold of a search the fit runs.
+        if run.y != 0 and y_owner is not None:
+            run.y_pin = member_pin_take(y_owner, 1)
+        if run.weights != 0 and weights_owner is not None:
+            run.weights_pin = member_pin_take(weights_owner, 1)
     var address = Int(UnsafePointer(to=run))
     var py = Python()
     try:
@@ -891,6 +924,14 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
         if run.pin != 0:
             member_pin_return(run.pin, 1 - run.taken)
             run.pin = 0
+        if run.y_pin != 0:
+            member_pin_return(run.y_pin, 1 - run.y_taken)
+            run.y_pin = 0
+        if run.weights_pin != 0:
+            member_pin_return(run.weights_pin, 1 - run.weights_taken)
+            run.weights_pin = 0
+        _ = y_owner
+        _ = weights_owner
         _ = pins
         _ = xv
         _ = yv
