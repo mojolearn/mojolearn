@@ -51,13 +51,16 @@ from core.arena_state import (
 from core.entry_table import EntryRef, entry_ref_mode, entry_ref_vendor
 from core.prep_entry_table import PrepEntryKey, xp_transport_ref, xp_transport_call
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
-from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_LIVE, XP_DEV_TAKE_ROWS
+from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_LIVE, XP_DEV_TAKE_ROWS, XP_DEV_READ
 
 #: The transport operations every family store answers (the x_prep numbering).
 comptime ARENA_STORE_PUT = XP_DEV_PUT
 comptime ARENA_STORE_FREE = XP_DEV_FREE
 comptime ARENA_STORE_TAKE_ROWS = XP_DEV_TAKE_ROWS
 comptime ARENA_STORE_LIVE = XP_DEV_LIVE
+#: Lane vdf-scope-gp (an addition): a slot's words into host memory. The x_prep store answers it; a family store
+#: that does not refuses it as an unknown operation.
+comptime ARENA_STORE_READ = XP_DEV_READ
 #: The family whose store is resolved by route alone (no record needed).
 comptime ARENA_PREFIX_X_PREP = "x_prep"
 
@@ -339,6 +342,16 @@ def arena_store_take_rows(store: EntryRef, src_id: Int, row_words: Int, idx_addr
     var source: List[Int] = [idx_address]
     var counts: List[Int] = [src_id, row_words, n_idx]
     return xp_transport_call(store, ARENA_STORE_TAKE_ROWS, source, counts)
+
+
+def arena_store_read(store: EntryRef, store_id: Int, dst_address: Int, words: Int) raises:
+    """The first `words` words of the slot `store_id` into the host memory at
+    `dst_address` (after every launch queued on the store's context; waits).
+    Lane vdf-scope-gp, an addition: the export of a fold slot a fitted state
+    keeps (core/gp_member.mojo X_train_)."""
+    var target: List[Int] = [dst_address]
+    var counts: List[Int] = [store_id, words]
+    _ = xp_transport_call(store, ARENA_STORE_READ, target, counts)
 
 
 def arena_scope_cache_found(scope: Int, store: EntryRef, prefix: String) raises -> Int:
