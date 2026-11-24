@@ -2,8 +2,8 @@
 """`verify --recipe`: a user's algorithm fitted from scratch on every device, at the Python boundary.
 
 No binding and no GPU. A stub `mojolearn` package whose `__path__` is the source tree loads the real
-`_verify_recipe.py` and `_check_both.py`; the stub estimator and Sequential stand in for the product, and the
-device processes run in this process (the module's `spawn_children` is replaced), one stub install per device.
+`_verify_recipe.py` and `_check_both.py`; the stub estimator and Sequential stand in for the product and take
+`device=` as the product does (`vendor_used` answers 'cpu' for device='cpu'); both devices fit in this process.
 What is held here: the recipe format and its refusals in words (fast mode, a device or seed in params, a data
 file with another hash), the generators' determinism, `recipe(model, ...)` from a live object, IDENTICAL over
 equal devices and DIVERGENT naming the first differing value, the record, `--against` and its refusals (another
@@ -41,6 +41,9 @@ class Toy:
         X = np.asarray(X, dtype=np.float32)
         self.coef_ = (X.mean(axis=0) * np.float32(self.alpha) + np.float32(self.random_state)).astype(np.float32)
         return self
+
+    def vendor_used(self):
+        return "cpu" if self.device == "cpu" else "cuda"
 
     def predict(self, X):
         out = np.zeros(len(X), dtype=np.float32)
@@ -91,6 +94,9 @@ class Seq:
     def predict(self, X):
         return (np.asarray(X, dtype=np.float32)[:, :1] * self.params_[0]).astype(np.float32)
 
+    def vendor_used(self):
+        return "cpu" if self.device == "cpu" else "cuda"
+
     @property
     def digest_(self):
         return hashlib.sha256(self.params_.tobytes()).hexdigest()
@@ -111,7 +117,7 @@ def stub(vendor="cuda", mode="identical", version="0.0.0+test", nudge=False):
 
 @pytest.fixture
 def vr(monkeypatch):
-    """The real module under a stub package; device processes run here, one stub per device."""
+    """The real module under a stub package; both devices fit here, through device=."""
     for name in ("mojolearn._verify_recipe", "mojolearn._check_both"):
         monkeypatch.delitem(sys.modules, name, raising=False)
     parent = stub()
@@ -126,14 +132,8 @@ def vr(monkeypatch):
     monkeypatch.setattr(module.cb, "side_environment",
                         lambda ml, side, **_: dict(side=side, device=f"stub {side}", mode="identical"))
     devices = {"gpu_nudge": False}
-
-    def spawn(jobs):
-        for device, directory in jobs:
-            ml = stub(vendor="cpu" if device == "cpu" else "cuda", nudge=device == "gpu" and devices["gpu_nudge"])
-            module.child_main(directory, ml=ml)
-        return {device: (0, "") for device, _ in jobs}
-
-    monkeypatch.setattr(module, "spawn_children", spawn)
+    # the GPU side's estimator moves one prediction by one ulp when asked
+    parent.Toy = type("Toy", (Toy,), {"nudge": property(lambda self: self.device == "gpu" and devices["gpu_nudge"])})
     module._devices = devices
     module._parent = parent
     return module
@@ -381,6 +381,28 @@ def test_a_device_that_cannot_fit_is_not_run_never_identical(vr, monkeypatch, ca
     path.write_text(json.dumps(r))
     code, out = run_cli(vr, monkeypatch, capsys, str(path))
     assert code == vr.EXIT_CANNOT_RUN and "NOT RUN" in out and "fit raised" in out, out
+
+
+def test_a_class_that_refuses_the_device_is_not_run_in_its_words(vr, monkeypatch, capsys, tmp_path):
+    class NoDevice(Toy):
+        def __init__(self, alpha=1.0, random_state=0, numeric_mode=None):
+            super().__init__(alpha, random_state, numeric_mode)
+
+    vr._parent.NoDevice = NoDevice
+    r = toy_recipe()
+    r["model"]["estimator"] = "NoDevice"
+    path = tmp_path / "nodevice.json"
+    path.write_text(json.dumps(r))
+    code, out = run_cli(vr, monkeypatch, capsys, str(path))
+    assert code == vr.EXIT_CANNOT_RUN and "NoDevice(device='cpu') refused" in out and "IDENTICAL" not in out, out
+
+
+def test_a_side_that_did_not_run_on_its_device_is_never_compared(vr, monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(Toy, "vendor_used", lambda self: "cuda")
+    path = tmp_path / "toy.json"
+    path.write_text(json.dumps(toy_recipe()))
+    code, out = run_cli(vr, monkeypatch, capsys, str(path))
+    assert code == vr.EXIT_CANNOT_RUN and "compare a thing to itself" in out, out
 
 
 def test_package_routes_recipe_lazily_and_verify_has_the_flags():
