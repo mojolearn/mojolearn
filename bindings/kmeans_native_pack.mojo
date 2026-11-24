@@ -136,7 +136,10 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var x = _kmeans_x(source, context)
     var connection = kmeans_connection(binding)
     var capabilities = kmeans_capabilities(connection)
-    var fold_fit = x.store.active() and (capabilities & KMEANS_CAP_FOLD) != 0 and sample_weight is None
+    # THE DOOR'S WEIGHTED FOLD (lane vdf-scope-cluster3): a weighted DeviceRows fold stays on the device too;
+    # its fold-length sample_weight (already in fold order) is uploaded by the fold entry (KMeansFoldStore
+    # .host_weights), X's rows are gathered there. The host gather of X is only for an image with no fold entry.
+    var fold_fit = x.store.active() and (capabilities & KMEANS_CAP_FOLD) != 0
     if x.store.active() and not fold_fit:
         x = _kmeans_host_x(source, x, context)
     var n = x.rows
@@ -190,9 +193,9 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var scalars = kmeans_fit_scalars(fields, k_obj, (capabilities & KMEANS_CAP_HOST) != 0, b, context)
     var fold = KMeansFoldStore()
     if fold_fit:
-        fold = KMeansFoldStore(x.store.base_id, x.store.base_rows, x.store.index_id)
+        fold = KMeansFoldStore(x.store.base_id, x.store.base_rows, x.store.index_id, -1, n_weights != 0)
     var request = KMeansFitRequest(x.address, Int(py=classical_address(centers)),
-        Int(py=classical_address(labels)), 0 if fold_fit else Int(py=classical_address(weights)),
+        Int(py=classical_address(labels)), Int(py=classical_address(weights)) if n_weights != 0 else 0,
         Int(py=classical_address(distances.value())) if joint else 0,
         n, d, scalars.clusters, n_weights, scalars.iterations, scalars.seed, scalars.restarts,
         init_code, metric_code, not x.finite, scalars.tolerance, settings.oversampling, fold)
@@ -282,10 +285,9 @@ def _kmeans_query(model: PythonObject, binding: PythonObject, source: PythonObje
         x = _kmeans_x(source, context)
     var connection = kmeans_connection(binding)
     var capabilities = kmeans_capabilities(connection)
-    # A weighted score takes the host rows, as a weighted fit does (the fold
-    # entries take unit weights).
-    var fold_query = (x.store.active() and (capabilities & KMEANS_CAP_FOLD) != 0
-                      and not (query == _QUERY_SCORE and sample_weight is not None))
+    # A weighted fold score stays on the device as a weighted fold fit does
+    # (lane vdf-scope-cluster3: the fold-length weights uploaded by the fold entry).
+    var fold_query = x.store.active() and (capabilities & KMEANS_CAP_FOLD) != 0
     if x.store.active() and not fold_query:
         x = _kmeans_host_x(source, x, context)
     var n = x.rows
@@ -341,7 +343,7 @@ def _kmeans_query(model: PythonObject, binding: PythonObject, source: PythonObje
         # host-centroid upload, even when another context caches the centers.
         if not c:
             c = admit_family(centers, 2, "cluster_centers_", context, finite=True).array
-        fold = KMeansFoldStore(x.store.base_id, x.store.base_rows, x.store.index_id)
+        fold = KMeansFoldStore(x.store.base_id, x.store.base_rows, x.store.index_id, -1, n_weights != 0)
     var handle = kmeans_owner_handle(resident.value()) if Bool(resident) and not fold_query else -1
     if query == _QUERY_SCORE:
         var score_request = KMeansScoreRequest(x.address,
