@@ -85,6 +85,12 @@ def _pad(var words: List[Int32], fill: List[Int32]) -> List[Int32]:
 # store owned by the result (was a Python `array.array`).
 
 
+#: A door's word for a buffer input that is a per-call temporary (codes, admitted weights): the runner
+#: copies it like any host input and NEVER keeps it resident in a `resident()` scope (lane vdf-xm-wire:
+#: a fresh temporary at the scope floor was put every call and pinned until the block ended).
+comptime METRIC_INPUT_TEMP = -2
+
+
 struct MetricProgramInput(ImplicitlyCopyable, Movable):
     """One admitted input of a metric program: its arena offset, the address
     of its words (the door keeps the owner alive) and its word count; or,

@@ -13,7 +13,7 @@
 # same records, same declared outputs as before: the bits do not move.
 from std.python import PythonObject
 from core.metrics_program_plan import MetricProgramPlan
-from bindings.arena_prog_run import MetricArenaOwner
+from bindings.arena_prog_run import MetricArenaOwner, METRIC_INPUT_TEMP
 from bindings.arena_prog_native_door import (
     metrics_run_plan_entries, metrics_run_plan_slots, metric_route_of, metric_route_entries, MetricRoutePin,
 )
@@ -55,6 +55,19 @@ struct MetricDoorProg(Movable):
         if len(self.slots) > 0:
             self.slots.append(-1)
         return off
+
+    def pin(mut self, array: PythonObject, keep: Bool):
+        """Pin a buffer input a typed builder already laid out, in input
+        order. `keep` False: a per-call temporary of the door (encoded codes,
+        admitted weights) that the runner copies and never keeps resident in
+        a `resident()` scope (`METRIC_INPUT_TEMP`); True: the caller's own
+        buffer, which the runner reads from its resident copy inside a scope
+        (put once per scope, found again by identity; lane vdf-xm-wire)."""
+        if not keep and len(self.slots) == 0:
+            self.slots = List[Int](length=len(self.pins), fill=-1)
+        self.pins.append(array)
+        if len(self.slots) > 0:
+            self.slots.append(-1 if keep else METRIC_INPUT_TEMP)
 
     def put_resident(mut self, owner: PythonObject, words: Int, slot: Int) raises -> Int:
         """A buffer input already on the route image's resident store: `words`

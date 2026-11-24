@@ -40,6 +40,7 @@ from bindings.py_cpython_table import cpython_table
 from bindings.p3_array_arena_records_unpack import P3_DICT_NATIVE_STRING_KEYS, p3_dict_admitted, p3_dict_admit
 from bindings.arena_prog_run import (
     _switch, _add_input, _merge_pairs, _pad, MetricArenaOwner, MetricRoute, metric_inputs_run, metric_slots_run,
+    METRIC_INPUT_TEMP,
 )
 from bindings.x_metrics_resident_door import (
     metric_store_ref, metric_scope_word, metric_resident_of, metric_rows_gather, metric_store_release,
@@ -484,8 +485,10 @@ def metrics_run_plan_slots(plan: MetricProgramPlan, inputs: List[PythonObject], 
     before. The slots this run put or gathered are freed after it, newest
     first, even on error.
 
-    `given` (empty, or one word per buffer input): a slot >= 0 the DOOR put
-    or gathered on this image's store and checked (bindings/metrics_program_door.mojo
+    `given` (empty, or one word per buffer input): -1 a host input the run
+    may keep resident, `METRIC_INPUT_TEMP` a per-call temporary it never
+    keeps (lane vdf-xm-wire), or a slot >= 0 the DOOR put
+    or gathered on the one store and checked (bindings/metrics_program_door.mojo
     `MetricDoorProg.put_resident`); the door owns and frees it, the input
     object (its DeviceRows) is held here only as the pin."""
     var pin = metric_route_of(entries)
@@ -512,7 +515,8 @@ def metrics_run_plan_slots(plan: MetricProgramPlan, inputs: List[PythonObject], 
             var slot = given[i] if len(given) > 0 else -1
             if slot >= 0 and not pin.route.store:
                 raise Error("RuntimeError: x_metrics: a door's resident input needs an image with a resident store")
-            if slot < 0 and size_i > 0 and pin.route.store:
+            # a door temporary (METRIC_INPUT_TEMP) is copied, never kept resident
+            if slot == -1 and size_i > 0 and pin.route.store:
                 var rows = _is_rows(value, context)
                 # The store entry is resolved only inside a scope or for a
                 # DeviceRows input (two entry calls and a table read), once
