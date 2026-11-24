@@ -219,6 +219,12 @@ struct MselSearchPlan(Movable):
     var x: Int
     var rows: Int
     var cols: Int
+    # THE SEQUENCES (lane w3f5-c): X's `MemberMatrix.steps` as the search's
+    # own call carries it (0: a plain matrix; T: each row is T steps of
+    # `cols / T` features). Every unit's, side's and the refit's X view
+    # carries it on (MemberSetRun.steps); the caller hands a nonzero value
+    # only when every candidate has MEMBER_CAN_STEPS.
+    var steps: Int
     var y: Int
     var classes: Int        # 0: a regressor
     var n_splits: Int
@@ -305,6 +311,7 @@ struct MselSearchPlan(Movable):
         self.x = x
         self.rows = rows
         self.cols = cols
+        self.steps = 0
         self.y = y
         self.classes = classes
         self.n_splits = n_splits
@@ -567,6 +574,7 @@ def _member_score(run_at: Int, v: Int, side: _Side, cols: Int, y_dtype: Int, y_c
     var run = _RunPtr(unsafe_from_address=run_at)
     var call = member_call_of(run[].plans[v], run[].states[v])
     _side_set(call, side, cols, y_dtype, y_cols, True)
+    call.x.steps = run[].steps  # whole-width rows on every side (lane w3f5-c)
     _offered(run[].plans[v].member, MEMBER_OP_SCORE, call, side)
     return call.value
 
@@ -596,6 +604,7 @@ def _respond(run_at: Int, v: Int, op: Int, side: _Side, cols: Int, dst: Int, cap
     if count * width > capacity:
         raise Error("member ABI: a member response wider than its classes")
     _side_set(call, side, cols, MEMBER_F32, 1, False)
+    call.x.steps = run[].steps  # whole-width rows on every side (lane w3f5-c)
     call.dst = MemberMatrix(dst, count, width, dtype)
     _offered(run[].plans[v].member, op, call, side)
     var words = count * width
@@ -1745,6 +1754,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         var u1 = min(units, u0 + wave)
         var width = u1 - u0
         var run = MemberSetRun(plan.x, n, d, y_dtype, MEMBER_I32)
+        run.steps = plan.steps
         run.cap = plan.cap
         run.y_cols = y_cols
         run.scope = plan.scope
@@ -2184,6 +2194,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         best.class_counts = plan.class_counts.copy()
         var mask = plan.masks[res.best]
         var run = MemberSetRun(plan.x, n, d, y_dtype, MEMBER_I32)
+        run.steps = plan.steps
         run.cap = plan.cap
         run.y_cols = y_cols
         run.scope = plan.scope

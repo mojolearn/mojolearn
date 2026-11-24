@@ -105,7 +105,7 @@ from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_kind_capabilities,
     MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_F32, MEMBER_I32, MEMBER_CAN_EXPORT, MEMBER_CAN_TEST_ROWS,
     MEMBER_OP_FIT, MEMBER_CAN_FIT, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle,
-    MEMBER_READS_Y_GIVEN, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_MULTI_OUTPUT,
+    MEMBER_READS_Y_GIVEN, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_MULTI_OUTPUT, MEMBER_CAN_STEPS,
 )
 from bindings.member_given_y_unpack import member_given_y
 
@@ -122,6 +122,10 @@ struct _FitOne(Movable):
     var x: Int
     var rows: Int
     var cols: Int
+    # THE SEQUENCES (lane w3f5-c): 0, a plain matrix; T, each row of X is T
+    # steps of `cols / T` features (a (rows, T, F) X of a kind with
+    # MEMBER_CAN_STEPS; core/member_abi.mojo `MemberMatrix.steps`).
+    var steps: Int
     # The target: 0 (a fit without one), float32 values, or int32 codes
     # (rows x `y_cols` words of `y_dtype`).
     var y: Int
@@ -148,6 +152,7 @@ struct _FitOne(Movable):
         self.x = x
         self.rows = rows
         self.cols = cols
+        self.steps = 0
         self.y = 0
         self.y_dtype = MEMBER_F32
         self.y_cols = 1
@@ -170,6 +175,7 @@ def _fit_one(address: Int):
         var call = member_new(run[].plan)
         call.scope = run[].scope
         call.x = MemberMatrix(run[].x, run[].rows, run[].cols)
+        call.x.steps = run[].steps
         if run[].y != 0:
             call.y = MemberMatrix(run[].y, run[].rows, run[].y_cols, run[].y_dtype)
             call.y_given = run[].given
@@ -667,7 +673,26 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
     # estimator's own fit converts it (its rank, empty and dtype words; lane
     # mf-r9a: it kept the caller's door before). The finite test follows.
     var xv = x
-    if (not msel_is_array(xv, context) or String(py=xv.dtype) != "<f4" or Int(py=xv.ndim) != 2
+    # THE SEQUENCES (lane w3f5-c; 7626d7be07 admitted every X as 2-D, so a
+    # recurrent or CNN base's (n_samples, n_timesteps, n_features) X was
+    # refused before its member ran): a 3-D Array is read as rows x (T * F)
+    # words with `steps` = T, and only a kind with MEMBER_CAN_STEPS takes it
+    # (checked below, once its mask is known). The doors' materialized X is
+    # an Array; a float64 one gets the recurrent door's own words.
+    var steps = 0
+    var sequence_shape = String("")
+    if msel_is_array(xv, context) and Int(py=xv.ndim) == 3:
+        sequence_shape = String(py=py_call(b.str, xv.shape))
+        if String(py=xv.dtype) == "<f8":
+            raise Error(_fit_words(base, py_call(plan["fields_get"], base, py_type(base)),
+                                   "X: float64 is refused; pass float32 (no float64 on the device)", context, b))
+        if String(py=xv.dtype) != "<f4" or String(py=xv.order) != "C" or Int(py=xv.size) == 0:
+            raise Error(_fit_words(base, py_call(plan["fields_get"], base, py_type(base)),
+                                   "TypeError: a sequence X is read as a non-empty C-order float32 (n_samples,"
+                                   + " n_timesteps, n_features) array, got " + String(py=xv.dtype) + " shape "
+                                   + sequence_shape, context, b))
+        steps = Int(py=xv.shape[1])
+    elif (not msel_is_array(xv, context) or String(py=xv.dtype) != "<f4" or Int(py=xv.ndim) != 2
             or String(py=xv.order) != "C" or Int(py=xv.size) == 0):
         try:
             xv = admit_f32(xv, 2, "X", member_context, as_array=True, finite=False).array
@@ -675,7 +700,7 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
             raise Error(_fit_words(base, py_call(plan["fields_get"], base, py_type(base)), String(error), context,
                                    b))
     var rows = Int(py=xv.shape[0])
-    var cols = Int(py=xv.shape[1])
+    var cols = Int(py=xv.shape[1]) if steps == 0 else steps * Int(py=xv.shape[2])
     if yv is not None:
         # y's rows against X's: scikit-learn's `indexable`
         # (check_consistent_length), before any fit.
@@ -738,7 +763,12 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
     if (kind_mask & MEMBER_CAN_FIT) == 0:
         raise Error(_no_member_fit_words(est))  # (the export is the admission's `needs`, as before)
     var classifier = (kind_mask & MEMBER_CAN_CLASSIFIER) != 0
+    if steps > 0 and (kind_mask & MEMBER_CAN_STEPS) == 0:
+        # a 3-D X for a kind that reads matrices: the product's rank words, as
+        # the X admission raised them for it before (lane w3f5-c)
+        raise Error(_fit_words(est, fields, "mojolearn: X must be 2-D, got 3-D shape " + sequence_shape, context, b))
     var run = _FitOne(owner.plan.copy(), msel_addr(xv), rows, cols)
+    run.steps = steps
     if sample_weight is not None:
         # LANE w3f3-b: an owner's fit with sample_weight (`msel_member_fit_weighted`)
         if (kind_mask & MEMBER_CAN_SAMPLE_WEIGHT) == 0:
