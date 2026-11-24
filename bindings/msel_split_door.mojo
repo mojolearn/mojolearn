@@ -839,13 +839,51 @@ def msel_group_shuffle_split(x: PythonObject, groups: PythonObject, n_splits: In
     return pairs
 
 
+def _strat_target_cols(y: PythonObject, context: PythonObject) raises -> Int:
+    """The columns of a 2-D target (a 2-D Array or ndarray: its shape; a list
+    or tuple of rows: its first row's length); 0 for a 1-D one or any other
+    input (its label door decides). Exact type identities; no Python method."""
+    var b = msel_b()
+    var kind = py_type(y)
+    if kind is context["array_class"] or kind is py_get(context, "ndarray"):
+        if Int(py=y.ndim) == 2:
+            return Int(py=y.shape[1])
+        return 0
+    if (kind is b.list or kind is b.tuple) and len(y) > 0:
+        var first = y[0]
+        if py_type(first) is b.list or py_type(first) is b.tuple:
+            return len(first)
+    return 0
+
+
+def _strat_joined_rows(y: PythonObject, context: PythonObject) raises -> PythonObject:
+    """LANE w3f5-b: StratifiedShuffleSplit's labels of a 2-D target, as
+    scikit-learn 1.9 makes them (model_selection/_split.py lines 2341-2348:
+    `" ".join(row.astype("str"))` per row): one text label per row, `str` of
+    each value as NumPy spells its scalar. Before, the 2-D labels were coded
+    row-major as one long vector and the folds named rows past the end
+    ("train contains an out-of-range index"; a search's door split since
+    b7f5e6ba1e). A 1-D target (or one column) is returned as given. Label
+    UNPACK; refusal-free; once per split call."""
+    if _strat_target_cols(y, context) <= 1:
+        return y
+    var b = msel_b()
+    var space = PythonObject(" ")
+    var rows = py_call(b.list, y)
+    var joined = Python.list()
+    for i in range(len(rows)):  # driver-loop: over the target's rows (their joined label words)
+        var words = py_call(b.list, py_call(b.map, b.str, rows[i]))
+        _ = py_call(joined.append, py_call(space.join, words))
+    return joined
+
+
 def msel_strat_shuffle_split(y: PythonObject, n_splits: Int, test_size: PythonObject, train_size: PythonObject,
                              random_state: PythonObject, default_test: PythonObject,
                              context: PythonObject) raises -> PythonObject:
     """`StratifiedShuffleSplit._native_split`: every split, in split order
     (the same draws in the same order the generator made)."""
     var n0 = 0 if y is None else msel_n_samples(y, context)
-    var labels = msel_label_codes(y, n0, "y", context, True, True)
+    var labels = msel_label_codes(_strat_joined_rows(y, context), n0, "y", context, True, True)
     var view = labels.view
     var sizes = msel_sizes_of(view.n, test_size, train_size, default_test, context)
     var n_train = sizes[0]
@@ -941,6 +979,52 @@ def _msel_label_source(value: PythonObject, name: String, context: PythonObject)
     return msel_labels_list(value, name, context)
 
 
+def _strat_multi_output_refusal(y: PythonObject, context: PythonObject) raises:
+    """LANE w3f5-b: StratifiedKFold, its repeated form and StratifiedGroupKFold
+    over a target of more than one output refuse in scikit-learn's words
+    (sklearn 1.9 model_selection/_split.py lines 786-791, 1019-1024:
+    `type_of_target` is neither 'binary' nor 'multiclass'), before any label
+    is coded. Before, the labels were coded row-major as one long vector and
+    the folds named rows past the end ("train contains an out-of-range
+    index"; a search's door split since b7f5e6ba1e). The columns as
+    `_strat_target_cols` reads them; any other input keeps its label door's
+    words. Refusal path only past the column read."""
+    if _strat_target_cols(y, context) <= 1:
+        return
+    var b = msel_b()
+    # scikit-learn's type_of_target of a 2-D y with several columns: a non-
+    # integral real makes it 'continuous-multioutput'; at most two distinct
+    # integral numbers (bools too) 'multilabel-indicator'; else (strings
+    # included) 'multiclass-multioutput'. Refusal path only.
+    var numbers = native_loaded_module("numbers")
+    var eq = native_loaded_module("operator").eq
+    var seen = Python.list()
+    var numeric = True
+    var integral = True
+    var rows = py_call(b.list, y)
+    for i in range(len(rows)):  # driver-loop: over the target's rows (refusal path only)
+        var items = py_call(b.list, rows[i])
+        for j in range(len(items)):  # driver-loop: over one row's outputs
+            var item = items[j]
+            if py_type(item) is b.str or not Bool(py=py_call(b.isinstance, item, numbers.Real)):
+                numeric = False
+                continue
+            var value = py_call(b.float, item)
+            if not Bool(py=py_call(b.bool, py_call(eq, value, py_call(b.float, py_call(b.int, value))))):
+                integral = False
+            var known = False
+            for q in range(len(seen)):  # small-loop(the distinct values so far, at most three)
+                known = known or Bool(py=py_call(b.bool, py_call(eq, seen[q], value)))
+            if not known and len(seen) < 3:
+                _ = py_call(seen.append, value)
+    var named = String("multiclass-multioutput")
+    if numeric and not integral:
+        named = "continuous-multioutput"
+    elif numeric and len(seen) < 3:
+        named = "multilabel-indicator"
+    raise Error("ValueError: Supported target types are: ('binary', 'multiclass'). Got '" + named + "' instead.")
+
+
 def msel_split(model: PythonObject, var x: PythonObject, var y: PythonObject, var groups: PythonObject,
                context: PythonObject) raises -> PythonObject:
     """`<splitter>.split(X, y, groups)` of a mojolearn splitter: its splits
@@ -966,6 +1050,11 @@ def msel_split(model: PythonObject, var x: PythonObject, var y: PythonObject, va
     # lists, in the same order), and an exact flat list / tuple of exact ints
     # or bools becomes one native list copy: the label input step lists the
     # same ints / bools and admits every one of them.
+    if (sp.kind == SPLITTER_STRATIFIED_KFOLD or sp.kind == SPLITTER_REPEATED_STRATIFIED_KFOLD
+            or sp.kind == SPLITTER_STRATIFIED_GROUP_KFOLD):
+        _strat_multi_output_refusal(y, context)
+    if sp.kind == SPLITTER_STRATIFIED_SHUFFLE:
+        y = _strat_joined_rows(y, context)  # a 2-D target's rows joined (before the label source flattens it)
     if y_used:
         y = _msel_label_source(y, "y", context)
     if groups_used:
