@@ -138,7 +138,7 @@ struct VoteRows(Movable):
         self.took = took
 
 
-def _vote_rows_point(mut call: MemberCall, rows: VoteRows):
+def vote_rows_point(mut call: MemberCall, rows: VoteRows):
     """Point `call` at `rows` (THE INDEXED ROWS: the base, the row index, the
     scope and the offered pin)."""
     if rows.index == 0:
@@ -150,7 +150,7 @@ def _vote_rows_point(mut call: MemberCall, rows: VoteRows):
     call.pin = rows.pin
 
 
-def _vote_rows_call(plan: MemberPlan, operation: Int, mut call: MemberCall, rows: VoteRows) raises:
+def vote_rows_call(plan: MemberPlan, operation: Int, mut call: MemberCall, rows: VoteRows) raises:
     """One member call over `rows`; an offered pin's answer is read whether
     the call returns or raises (THE PIN RULE)."""
     if rows.index == 0 or call.pin == 0:
@@ -184,11 +184,11 @@ def member_f32_block(m: VoteMember, rows: VoteRows, mut keep: List[List[Float32]
     var count = rows.n * m.cols
     var plan = _PlanP(unsafe_from_address=m.plan)
     var call = member_call_of(plan[], m.state)
-    _vote_rows_point(call, rows)
+    vote_rows_point(call, rows)
     if m.dtype == MEMBER_F64:
         var wide = List[Float64](unsafe_uninit_length=count)
         call.dst = MemberMatrix(Int(wide.unsafe_ptr()), rows.n, m.cols, MEMBER_F64)
-        _vote_rows_call(plan[], m.operation, call, rows)
+        vote_rows_call(plan[], m.operation, call, rows)
         var words = List[Float32](unsafe_uninit_length=count)
         for i in range(count):  # small-loop(one rounding pass over one member's block, as the door's admission made)
             words[i] = wide[i].cast[DType.float32]()
@@ -197,7 +197,7 @@ def member_f32_block(m: VoteMember, rows: VoteRows, mut keep: List[List[Float32]
     else:
         var words = List[Float32](unsafe_uninit_length=count)
         call.dst = MemberMatrix(Int(words.unsafe_ptr()), rows.n, m.cols, MEMBER_F32)
-        _vote_rows_call(plan[], m.operation, call, rows)
+        vote_rows_call(plan[], m.operation, call, rows)
         keep.append(words^)
     return Int(keep[len(keep) - 1].unsafe_ptr())
 
@@ -205,22 +205,25 @@ def member_f32_block(m: VoteMember, rows: VoteRows, mut keep: List[List[Float32]
 def _member_codes_into(m: VoteMember, rows: VoteRows, dst: Int) -> Bool:
     """One native member's int32 class codes written at `dst` (`rows.n`
     words; int64 codes narrowed once, as the door's int32 cast narrowed
-    them). False when the native call refused."""
+    them). False when the native call refused. THE INDEXED ROWS (lane
+    vdf-meta2): an indexed `rows` hands the member the base, the row index
+    and the offered pin (`vote_rows_point`), as `member_f32_block` does; it
+    read the first `rows.n` rows of the base before."""
     try:
         var plan = _PlanP(unsafe_from_address=m.plan)
         var call = member_call_of(plan[], m.state)
-        call.x = MemberMatrix(rows.x, rows.n, rows.d)
+        vote_rows_point(call, rows)
         if m.dtype == MEMBER_I64:
             var wide = List[Int64](unsafe_uninit_length=rows.n)
             call.dst = MemberMatrix(Int(wide.unsafe_ptr()), rows.n, 1, MEMBER_I64)
-            _ = member_call(plan[].member, m.operation, call)
+            vote_rows_call(plan[], m.operation, call, rows)
             var codes = _I32P(unsafe_from_address=dst)
             for i in range(rows.n):  # small-loop(one narrowing pass over one member's codes, as the door's cast made)
                 codes[i] = Int32(wide[i])
             _ = wide^
         else:
             call.dst = MemberMatrix(dst, rows.n, 1, MEMBER_I32)
-            _ = member_call(plan[].member, m.operation, call)
+            vote_rows_call(plan[], m.operation, call, rows)
     except:
         return False
     return True
