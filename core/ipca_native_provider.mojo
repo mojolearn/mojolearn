@@ -23,6 +23,24 @@ def _ipca_pointer(address: Int) raises -> F32Ptr:
     return F32Ptr(unsafe_from_address=address)
 
 
+def _ipca_source_pool[RES: Bool](address: Int) raises -> Int:
+    """A request's `source` word: a host address (> 0), or `-(id + 1)` of a resident x_decomp pool id (a fold
+    the XDecomp member took on the device, lane vdf-scope-neural4; core/seq_member_rows.mojo `SeqRows.x`'s
+    form), which only a GPU binding reads. -1 for a host source."""
+    if address >= 0:
+        return -1
+    comptime if not RES:
+        raise Error("x_decomp: a resident X needs a GPU binding")
+    return -(address + 1)
+
+
+def _ipca_host_source(address: Int) raises -> F32Ptr:
+    """The host X pointer of a request (`_ipca_pointer`), a null pointer for a resident source (unread)."""
+    if address < 0:
+        return F32Ptr(unsafe_from_address=0)
+    return _ipca_pointer(address)
+
+
 def _ipca_dimension(value: Int) raises:
     if value < 0 or value > 2147483647:
         raise Error("x_decomp: dimension out of range")
@@ -63,7 +81,8 @@ struct IPCAProviderKernels[E: Exec, D: RDev, RES: Bool, X: IpcaDev](IPCANativeKe
     @staticmethod
     def fit(r: IPCAFitRequest) raises -> IPCAFitResult:
         # The order is the legacy provider's address/dimension/output admission.
-        var source = _ipca_pointer(r.source)
+        var pool = _ipca_source_pool[Self.RES](r.source)
+        var source = _ipca_host_source(r.source)
         _ipca_dimension(r.rows)
         _ipca_dimension(r.features)
         var components = _ipca_pointer(r.outputs.components)
@@ -74,11 +93,13 @@ struct IPCAProviderKernels[E: Exec, D: RDev, RES: Bool, X: IpcaDev](IPCANativeKe
         var ratio = _ipca_pointer(r.outputs.ratio)
         var kept = List[Int]()
         var got = ipca_fit_run[Self.E, Self.D, Self.RES, Self.X](source, r.rows, r.features,
-            r.requested, r.batch_size, components, singular, mean, variance, explained, ratio, r.keep, kept)
+            r.requested, r.batch_size, components, singular, mean, variance, explained, ratio, r.keep, kept, pool)
         return _ipca_result(got, kept)
 
     @staticmethod
     def partial(r: IPCAPartialRequest) raises -> IPCAFitResult:
+        if r.source < 0:
+            raise Error("x_decomp: IncrementalPCA partial_fit reads a host X")
         var source = _ipca_pointer(r.source)
         _ipca_dimension(r.rows)
         _ipca_dimension(r.features)
@@ -103,7 +124,8 @@ struct IPCAProviderKernels[E: Exec, D: RDev, RES: Bool, X: IpcaDev](IPCANativeKe
 
     @staticmethod
     def query(r: IPCAQueryRequest) raises:
-        var source = _ipca_pointer(r.source)
+        var pool = _ipca_source_pool[Self.RES](r.source)
+        var source = _ipca_host_source(r.source)
         _ipca_dimension(r.rows)
         _ipca_dimension(r.features)
         _ipca_dimension(r.count)
@@ -114,10 +136,10 @@ struct IPCAProviderKernels[E: Exec, D: RDev, RES: Bool, X: IpcaDev](IPCANativeKe
         var state = _ipca_state(r.state, r.resident)
         if r.inverse:
             ipca_inverse_run[Self.E, Self.D, Self.RES](source, r.rows, r.features, r.count,
-                mean, components, variance, r.whiten, dst, state)
+                mean, components, variance, r.whiten, dst, state, pool)
         else:
             ipca_transform_run[Self.E, Self.D, Self.RES](source, r.rows, r.features, r.count,
-                mean, components, variance, r.whiten, dst, state)
+                mean, components, variance, r.whiten, dst, state, pool)
 
     @staticmethod
     def prepare(address: Int, count: Int) raises -> Int:

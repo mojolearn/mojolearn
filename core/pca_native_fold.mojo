@@ -5,7 +5,7 @@ from checks.vendor import COMPILED_VENDOR
 from core.shared_slot import SharedSlot
 from core.msel_device_x import msel_fold_entry_context
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
-from decomposition.pca_fold import pca_fit_fold, pca_transform_fold
+from decomposition.pca_fold import pca_fit_fold, pca_transform_fold, pca_whiten_transform_fold
 from core.pca_native_api import (
     PCA_NATIVE_ABI, PCA_CAP_EXACT, PCA_CAP_FULL, PCA_CAP_FOLD,
     PCANativeKernels, PCAFitRequest, PCAFitResult, PCAQueryRequest, PCAQueryResult,
@@ -34,8 +34,12 @@ struct PCAFoldKernels(PCANativeKernels):
 
     @staticmethod
     def fit(r: PCAFitRequest) raises -> PCAFitResult:
-        if not r.fold.active() or r.randomized or r.projection != 0:
-            raise Error("PCA fold provider requires an exact resident fit without projection")
+        # Lane vdf-scope-neural4: the fit's projection (fit_transform, unwhitened or whitened) runs on the fit's
+        # own gathered X (decomposition/pca_fold.mojo `_project_x`).
+        if not r.fold.active() or r.randomized:
+            raise Error("PCA fold provider requires an exact resident fit")
+        var project = r.projection != 0
+        var op = _fold_pointer(r.projection) if project else MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=0)
         var cp = _fold_pointer(r.components)
         var mp = _fold_pointer(r.mean)
         var ep = _fold_pointer(r.variance)
@@ -43,17 +47,25 @@ struct PCAFoldKernels(PCANativeKernels):
         var sp = _fold_pointer(r.singular)
         var ctx = msel_fold_entry_context()
         var fitted = pca_fit_fold(ctx, r.fold.base, r.fold.rows, r.fold.indices,
-            cp, mp, ep, rp, sp, r.rows, r.features, r.count, r.dense, r.keep_mode, r.fraction)
+            cp, mp, ep, rp, sp, r.rows, r.features, r.count, r.dense, r.keep_mode, r.fraction, op, project, r.whiten)
         return PCAFitResult(fitted.keep, fitted.noise, Int(fitted.finite), Int(fitted.in_range))
 
     @staticmethod
     def query(r: PCAQueryRequest) raises -> PCAQueryResult:
-        if not r.fold.active() or r.inverse or r.whiten:
-            raise Error("PCA fold provider requires an unwhitened resident transform")
+        if not r.fold.active() or r.inverse:
+            raise Error("PCA fold provider requires a resident transform")
         var mp = _fold_pointer(r.mean)
         var cp = _fold_pointer(r.components)
         var dst = _fold_pointer(r.dst)
         var ctx = msel_fold_entry_context()
+        if r.whiten:
+            # Lane vdf-scope-neural4: the whitened transform on the fold (the host entry's body).
+            if r.fit_rows < 2:
+                raise Error("PCA whitening requires fit rows >=2")
+            var sp = _fold_pointer(r.singular)
+            var whitened = pca_whiten_transform_fold(ctx, r.fold.base, r.fold.rows, r.fold.indices,
+                mp, cp, sp, dst, r.rows, r.features, r.count, r.fit_rows)
+            return PCAQueryResult(Int(whitened[0]), Int(whitened[1]))
         var words = pca_transform_fold(ctx, r.fold.base, r.fold.rows, r.fold.indices,
             mp, cp, dst, r.rows, r.features, r.count)
         return PCAQueryResult(Int(words[0]), Int(words[1]))

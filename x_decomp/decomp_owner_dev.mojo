@@ -10,7 +10,7 @@ from x_decomp.resident import IDN_EIGH_RESIDENT, IDN_LU_RESIDENT, dev_eigh_desc_
 from x_decomp.ica_dev import ica_solve_dev_run
 from x_decomp.nmf import NmfArgs
 from core.fit_loop_clock import FitLoop
-from x_decomp.nmf_dev import nmf_nndsvd_dev_run, nmf_solve_dev_run
+from x_decomp.nmf_dev import nmf_nndsvd_dev_run, nmf_solve_dev_run, nmf_solve_pool_dev_run
 from x_decomp.fa_em import FaArgs
 from x_decomp.fa_em_dev import fa_em_main_dev_run
 from x_decomp.rotation_dev import ortho_rotation_dev_run
@@ -69,6 +69,11 @@ struct DevDecomp(DecompDev):
     def nmf_solve(px: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, nc: Int, solver: Int, a: NmfArgs,
                   mut loop: FitLoop) raises -> Int:
         return nmf_solve_dev_run(px, pw, ph, n, d, nc, solver, a, loop)
+
+    @staticmethod
+    def nmf_solve_pool(x_id: Int, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, nc: Int, solver: Int, a: NmfArgs,
+                       mut loop: FitLoop) raises -> Int:
+        return nmf_solve_pool_dev_run(x_id, pw, ph, n, d, nc, solver, a, loop)
 
     @staticmethod
     def nmf_nndsvd(pu: F32Ptr, ps: F32Ptr, pv: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, r: Int, nc: Int) raises -> Int:

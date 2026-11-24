@@ -6,7 +6,7 @@ from core.shared_slot import SharedSlot
 from core.msel_device_x import msel_fold_entry_context
 from core.pca_native_api import pca_vendor_code
 from core.pca_native_fold import _fold_pointer
-from decomposition.pca_fold import tsvd_fit_fold
+from decomposition.pca_fold import tsvd_fit_fold, tsvd_transform_fold
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.tsvd_native_api import (
     TSVD_NATIVE_ABI, TSVD_CAP_FOLD, TSVD_FOLD,
@@ -46,7 +46,19 @@ struct TSVDFoldKernels(TSVDNativeKernels):
 
     @staticmethod
     def query(r: TSVDQueryRequest) raises -> Int:
-        raise Error("TruncatedSVD fold provider does not provide queries")
+        """TruncatedSVD.transform of a resident fold (lane vdf-scope-neural4): `r.fold` names the fold, the
+        components are this call's host words; returns the finite word, or 2 when an index is out of range
+        (the member's `door_rows_refuse` reads both)."""
+        if not r.fold.active() or r.inverse:
+            raise Error("TruncatedSVD fold provider requires a resident transform")
+        var cp = _fold_pointer(r.components)
+        var dst = _fold_pointer(r.dst)
+        var ctx = msel_fold_entry_context()
+        var words = tsvd_transform_fold(ctx, r.fold.base, r.fold.rows, r.fold.indices,
+            cp, dst, r.rows, r.features, r.count)
+        if words[1] != 0:
+            return 2
+        return Int(words[0])
 
     @staticmethod
     def open() raises -> Int:

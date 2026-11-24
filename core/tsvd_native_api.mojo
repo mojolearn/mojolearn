@@ -54,7 +54,6 @@ struct TSVDFitResult(Copyable, Movable):
     var in_range: Int
 
 
-@fieldwise_init
 struct TSVDQueryRequest(Copyable, Movable):
     var source: Int
     var components: Int
@@ -66,6 +65,24 @@ struct TSVDQueryRequest(Copyable, Movable):
     var test_finite: Bool
     var resident: Bool
     var lease: Int
+    #: Lane vdf-scope-neural4: a model-selection fold of the base image's resident store (inactive by default;
+    #: set after construction). Only the fold entry (core/tsvd_native_fold.mojo) reads it; the ABI carries its
+    #: three words after the seven integers only when it is active.
+    var fold: PCAFoldStore
+
+    def __init__(out self, source: Int, components: Int, dst: Int, rows: Int, features: Int, count: Int,
+                 inverse: Bool, test_finite: Bool, resident: Bool, lease: Int):
+        self.source = source
+        self.components = components
+        self.dst = dst
+        self.rows = rows
+        self.features = features
+        self.count = count
+        self.inverse = inverse
+        self.test_finite = test_finite
+        self.resident = resident
+        self.lease = lease
+        self.fold = PCAFoldStore()
 
 
 trait TSVDNativeKernels:
@@ -119,12 +136,16 @@ def tsvd_native_dispatch[K: TSVDNativeKernels](operation: Int,
             dst[0] = answer.finite
             dst[1] = answer.in_range
         elif operation == TSVD_QUERY:
-            if na != 3 or np != 7 or nf != 0 or aa == 0 or pp == 0:
+            if na != 3 or (np != 7 and np != 10) or nf != 0 or aa == 0 or pp == 0:
                 raise Error("TruncatedSVD native ABI: query requires 3 addresses and 7 integers")
             var a = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=aa)
             var p = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=pp)
-            value = K.query(TSVDQueryRequest(a[0], a[1], a[2], p[0], p[1], p[2],
-                p[3] != 0, p[4] != 0, p[5] != 0, p[6]))
+            var request = TSVDQueryRequest(a[0], a[1], a[2], p[0], p[1], p[2],
+                p[3] != 0, p[4] != 0, p[5] != 0, p[6])
+            if np == 10:
+                # the fold's (base, rows, indices) words (lane vdf-scope-neural4)
+                request.fold = PCAFoldStore(p[7], p[8], p[9])
+            value = K.query(request^)
         elif operation == TSVD_OPEN:
             if na != 0 or np != 0 or nf != 0:
                 raise Error("TruncatedSVD native ABI: lease open takes no arguments")
@@ -163,8 +184,12 @@ struct TSVDNativeDriver(Copyable, Movable):
 
     def query(self, r: TSVDQueryRequest) raises -> Int:
         var a: Array[Int, 3] = [r.source, r.components, r.dst]
-        var p: Array[Int, 7] = [r.rows, r.features, r.count, Int(r.inverse), Int(r.test_finite), Int(r.resident), r.lease]
         var f: Array[Float64, 0] = []
+        if r.fold.active():
+            var pf: Array[Int, 10] = [r.rows, r.features, r.count, Int(r.inverse), Int(r.test_finite), Int(r.resident),
+                r.lease, r.fold.base, r.fold.rows, r.fold.indices]
+            return native_descriptor_call_fixed(self.entry, TSVD_QUERY, a, pf, f)
+        var p: Array[Int, 7] = [r.rows, r.features, r.count, Int(r.inverse), Int(r.test_finite), Int(r.resident), r.lease]
         return native_descriptor_call_fixed(self.entry, TSVD_QUERY, a, p, f)
 
     def open(self) raises -> Int:

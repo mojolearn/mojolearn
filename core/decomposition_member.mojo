@@ -62,7 +62,9 @@ handle each. Serial by nature here: the store's bookkeeping.
 from std.sys.info import size_of
 from std.memory import unsafe_memcpy
 from core.admitted_refusals import admitted_finite_refuse
-from core.pca_native_api import PCAFitRequest, PCAFitResult, PCAQueryRequest, PCAFoldStore, PCANativeDriver
+from core.pca_native_api import (
+    PCAFitRequest, PCAFitResult, PCAQueryRequest, PCAQueryResult, PCAFoldStore, PCANativeDriver,
+)
 from core.tsvd_native_api import (
     TSVDFitRequest, TSVDQueryRequest, TSVDNativeDriver, TSVD_GRAM, TSVD_FUSED, TSVD_EXPLAINED,
     TSVD_RANDOMIZED, TSVD_TSQR,
@@ -452,11 +454,13 @@ def _fit_pca(slot: _Slot, call: _Call) raises:
     slot[].ratio = List[Float32](length=count, fill=0.0)
     slot[].singular = List[Float32](length=count, fill=0.0)
     var iterations = Int(slot[].words[7])
-    # THE RESIDENT ROUTE: an exact fit with no projection reads a fold of the
-    # scope's resident X through the fold entry (the door's DeviceRows fold
-    # route, bindings/pca_fit_native_door.mojo); every other fit reads host
-    # rows (X, or the fold gathered on the host).
-    var held = _rows_open(call, not randomized and projection == 0)
+    # THE RESIDENT ROUTE: an exact fit reads a fold of the scope's resident X
+    # through the fold entry (the door's DeviceRows fold route,
+    # bindings/pca_fit_native_door.mojo), with fit_transform's projection
+    # (unwhitened or whitened) over the same gathered rows (lane
+    # vdf-scope-neural4); a randomized fit reads host rows (X, or the fold
+    # gathered on the host).
+    var held = _rows_open(call, not randomized)
     var fitted: PCAFitResult
     try:
         var request = PCAFitRequest(held.x, Int(slot[].components.unsafe_ptr()), Int(slot[].mean.unsafe_ptr()),
@@ -604,10 +608,10 @@ def _query(slot: _Slot, call: _Call, inverse: Bool) raises:
                     + String(slot[].features) + " features as input.")
     if call[].dst.rows != rows or call[].dst.cols != width_out:
         raise Error("ValueError: the output buffer holds " + String(width_out) + " values per row of X")
-    # THE RESIDENT ROUTE: an unwhitened PCA transform reads a fold of the
-    # scope's resident X through the fold entry; every other query host rows.
-    var pca = slot[].kind() == DECOMP_KIND_PCA
-    var held = _rows_open(call, pca and not inverse and slot[].words[5] == 0.0)
+    # THE RESIDENT ROUTE: a transform (PCA unwhitened or whitened, TruncatedSVD;
+    # lane vdf-scope-neural4 added the last two) reads a fold of the scope's
+    # resident X through the fold entry; an inverse_transform host rows.
+    var held = _rows_open(call, not inverse)
     try:
         _query_rows(slot, call, held, inverse, rows)
     finally:
@@ -618,9 +622,21 @@ def _query(slot: _Slot, call: _Call, inverse: Bool) raises:
 def _query_rows(slot: _Slot, call: _Call, mut held: _Rows, inverse: Bool, rows: Int) raises:
     var estimator = _name(slot)
     if held.index >= 0:
+        if slot[].kind() != DECOMP_KIND_PCA:
+            # TruncatedSVD.transform on the fold (core/tsvd_native_fold.mojo): the finite word, 2 for a row
+            # index out of range.
+            var tsvd_request = TSVDQueryRequest(0, Int(slot[].components.unsafe_ptr()), call[].dst.data,
+                rows, slot[].features, slot[].keep, False, True, False, 0)
+            tsvd_request.fold = held.fold()
+            var status = TSVDNativeDriver(call[].route.fourth.call).query(tsvd_request)
+            door_rows_refuse(0 if status == 2 else status, 1 if status == 2 else 0, estimator, held.base_rows)
+            return
+        var fold_whiten = slot[].words[5] != 0.0
         var fold_request = PCAQueryRequest(0, Int(slot[].mean.unsafe_ptr()), Int(slot[].components.unsafe_ptr()), 0,
-            call[].dst.data, rows, slot[].features, slot[].keep, slot[].fit_rows, False, False, held.fold())
-        var words = PCANativeDriver(call[].route.fourth.call).query(fold_request)
+            call[].dst.data, rows, slot[].features, slot[].keep, slot[].fit_rows, False, fold_whiten, held.fold())
+        if fold_whiten:
+            fold_request.singular = Int(slot[].singular.unsafe_ptr())
+        var words = _pca_fold_query(PCANativeDriver(call[].route.fourth.call), fold_request)
         door_rows_refuse(words.finite, words.in_range, estimator, held.base_rows)
         return
     var x_at = _rows_host(call, held)
@@ -653,6 +669,15 @@ def _query_rows(slot: _Slot, call: _Call, mut held: _Rows, inverse: Bool, rows: 
         var status = TSVDNativeDriver(call[].route.entry.call).query(request)
         if not inverse:
             admitted_finite_refuse(status, estimator)
+
+
+def _pca_fold_query(driver: PCANativeDriver, request: PCAQueryRequest) raises -> PCAQueryResult:
+    # The whitened transform's refusals take the PCA prefix, as the door's do.
+    try:
+        return driver.query(request)
+    except error:
+        var failure = pca_refusal(error^)
+        raise failure^
 
 
 def _block_name(kind: Int, index: Int) raises -> Int:

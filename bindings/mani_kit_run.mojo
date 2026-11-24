@@ -710,6 +710,24 @@ struct MRun(Movable):
         self.alloc_id.append(handle)
         return self.add(-1, rows, cols, handle, k)
 
+    def adopt_copy(mut self, k: Int, handle: Int, rows: Int, cols: Int, name: String) raises -> Int:
+        """`adopt` of an input another owner keeps on image k's device (lane
+        vdf-scope-neural4: the scope's cached whole X of a pinned call with no
+        row index, x_decomp/member_store.mojo; the cache frees it at the
+        scope's close): one device-to-device copy into a pool id this
+        operation owns (a PLACE_COLS move of the whole matrix, the same
+        words), adopted as `adopt` does, so a state may keep it (Isomap's
+        _fit_X) past the scope. No host transfer; the same bits."""
+        if not self.images[k].resident:
+            raise Error(name + ": a device-resident input needs a GPU x_decomp image")
+        if rows == 0 or cols == 0:
+            raise Error(name + ": a nonempty two-dimensional input is required")
+        var count = rows * cols
+        var copy = self.alloc(k, count)
+        var one = self.dev_one(k)
+        self.dmove(k, handle, one, copy, [MV_PLACE_COLS, count, cols, cols, 0, 0, 0, count, count, 1])
+        return self.add(-1, rows, cols, copy, k)
+
     def iso_gather_min(mut self, k: Int, d: Int, im: Int, sq: Int, q: Int, nn: Int) raises -> Int:
         """Isomap.transform's per-rank gather-and-min (row N295) as one native
         operation; -1 on a host image or a shape the per-rank path takes."""
