@@ -19,6 +19,8 @@ EQUAL (every line expected):
   * `imp_foreign_*` (IterativeImputer, a classifier with {'a': 2.0, 1.0: 0.5}): both raise the family's words at
     the first classifier step (the head: the absent words of the member fit; the base: the door's; SVC's door
     names the key, the member does not: a words difference, stated, as lane mf-adm3 stated it for SVC).
+    Lane mf-gate6: every route now raises scikit-learn's words, "The classes, [0, 2], are not in class_weight"
+    (sklearn/utils/class_weight.py:114-120): all five imp_foreign rows differ from a base before mf-gate6, by design.
   * `gbdt_*` (a search refit of GradientBoostingRegressor: a member fit; `test_loss_curve_` None in both) and the
     public fit with eval_set / pairs (the door, untouched).
   * `gbdt5_*` (lane mf-gbdt5; base origin/lane/member-fits-5 270df23cc5, head lane/mf-gbdt5): RFE.fit(X, y,

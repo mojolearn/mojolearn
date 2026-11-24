@@ -23,6 +23,7 @@ from bindings.svm_keys_unpack import svm_keys
 from svm.operation_metadata import SvcOperationSettings
 from core.svc_native_api import SvcDrivers
 from core.class_weight_plan import class_weight_dict_refused
+from bindings.class_weight_absent_unpack import class_weight_absent_message
 from bindings.svc_kernel_rows_unpack import _addr
 
 # `_scale_gamma`: the py2mojo switch bit.
@@ -301,12 +302,9 @@ def svm_weights_unpack(n_rows: Int, sample_weight: PythonObject, class_weight: P
             # `class_weight_dict_refused`, scikit-learn 1.9.1's rule); else ignored.
             var named = List[Bool](length=n_classes, fill=False)
             var unknown = 0
-            var first_unknown = PythonObject(None)
             for i in range(len(items)):  # driver-loop: over the user's class_weight entries
                 var key = items[i][0]
                 if not py_contains(classes, key):
-                    if unknown == 0:
-                        first_unknown = key
                     unknown += 1
                     continue
                 var c = Int(py=family_call(classes.index, key))
@@ -318,8 +316,10 @@ def svm_weights_unpack(n_rows: Int, sample_weight: PythonObject, class_weight: P
                     if not named[c]:
                         unweighted += 1
                 if class_weight_dict_refused(unknown, unweighted):
-                    raise Error("mojolearn " + who + ": class_weight names the label " + family_repr(first_unknown)
-                                + ", which is not in y's classes " + family_repr(classes))
+                    # scikit-learn's words (sklearn/svm/_base.py:784 reaches
+                    # sklearn/utils/class_weight.py:114-120); before lane mf-gate6
+                    # this door named the first unknown key and y's classes.
+                    raise Error(class_weight_absent_message(classes, class_weight, b))
         _ = py_call(owners.append, cwa)
         cw_address = _addr(cwa)
     return SvmWeightsUnpacked(owners, sw_address, cw_address, True)

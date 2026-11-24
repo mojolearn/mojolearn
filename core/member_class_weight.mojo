@@ -73,7 +73,9 @@ THE FAMILY STEPS (each the door's, read from it):
 Bits: the same words in the same order as each door; nothing kept serial.
 """
 from core.array_helpers_impl import class_ratio_f64
-from core.class_weight_plan import ClassWeightInputs, class_weight_rows_plan, class_weight_dict_refused
+from core.class_weight_plan import (
+    ClassWeightInputs, class_weight_rows_plan, class_weight_dict_refused, class_weight_absent_values,
+)
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.member_abi import MemberPlan, MEMBER_I32, MEMBER_I64, MEMBER_F32
@@ -267,6 +269,30 @@ def member_cw_from_values(mut plan: MemberPlan, classes: List[Float32]):
         if not matched[e]:
             words[start + 2] = 1.0
     plan.params = words^
+
+
+def member_cw_values_refusal(plan: MemberPlan, classes: List[Float32]) -> String:
+    """RUN, after `member_cw_from_values`: scikit-learn's refusal words for a
+    table that names a key no class of the step holds while leaving a class
+    unweighted (core/class_weight_plan.mojo `class_weight_dict_refused` and
+    `class_weight_absent_values`: "The classes, [0, 2], are not in
+    class_weight", sklearn/utils/class_weight.py:114-120), listing the
+    step's unweighted classes in class order; "" when the fit may proceed.
+    Lane mf-gate6: before it the member fit raised its family's fixed absent
+    words, which name no class (gate mf_left4 imp_foreign rows)."""
+    var start = member_cw_start(plan.family, plan.kind, plan.params)
+    if member_cw_mode(plan.params, start) != MEMBER_CW_DICT:
+        return String("")
+    var k = Int(plan.params[start + 1])
+    if k != len(classes) or plan.params[start + 2] == 0.0:
+        return String("")
+    var unweighted = List[Float64]()
+    for c in range(k):  # driver-loop: over the step's classes (the named words)
+        if plan.params[start + MEMBER_CW_HEAD + MEMBER_CW_PER_CLASS * c + 1] == 0.0:
+            unweighted.append(Float64(classes[c]))
+    if not class_weight_dict_refused(1, len(unweighted)):
+        return String("")
+    return class_weight_absent_values(unweighted)
 
 
 def member_cw_dict_ready(params: List[Float64], start: Int, classes: Int, absent: String) raises:

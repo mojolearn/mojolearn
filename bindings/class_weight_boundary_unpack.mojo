@@ -11,6 +11,7 @@ from bindings.label_admission_native_unpack import labels_admit_primitive, label
 from bindings.sequential_admission_door import _one_of
 from bindings.native_scalar_decode_unpack import native_scalar_buffer_dtype
 from core.class_weight_plan import ClassWeightInputs, class_weight_kind, class_weight_value, class_weight_dict_refused
+from bindings.class_weight_absent_unpack import class_weight_absent_message
 
 comptime CLASS_WEIGHT_CLASSICAL = 0
 comptime CLASS_WEIGHT_SVC = 1
@@ -68,7 +69,10 @@ def class_weight_dictionary_values[Profile: Int = CLASS_WEIGHT_CLASSICAL](value:
         # below: the loop reads the dict at y's classes only.
         var unweighted = py_call(py_call(b.set, classes).difference, keys)
         if class_weight_dict_refused(len(unknown), len(unweighted)):
-            raise Error("class_weight contains labels absent from y")
+            # scikit-learn's words, naming the unweighted classes
+            # (sklearn/utils/class_weight.py:114-120; lane mf-gate6: before it
+            # "class_weight contains labels absent from y").
+            raise Error(class_weight_absent_message(classes, value, b))
     var result = ClassWeightInputs()
     var is_tuple = py_type(classes) is b.tuple
     var api = cpython_table()

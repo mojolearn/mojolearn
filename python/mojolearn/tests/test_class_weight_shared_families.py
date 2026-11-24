@@ -59,7 +59,8 @@ def test_shared_class_weights_match_explicit_sample_weights(family, kind):
 @pytest.mark.parametrize("family", ["svc", "rf", "et"])
 def test_shared_class_weight_unknown_key_precedes_weight_range(family):
     x, y = _data()
-    with pytest.raises(ValueError, match="labels absent from y"):
+    # scikit-learn 1.9.1's words (sklearn/utils/class_weight.py:114-120), naming y's unweighted classes
+    with pytest.raises(ValueError, match=r"^The classes, \[1, 7\], are not in class_weight$"):
         _model(family, {9: -1}).fit(x, y)
 
 
