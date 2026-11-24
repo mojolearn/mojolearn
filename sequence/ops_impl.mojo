@@ -126,9 +126,11 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
     initial_accumulator]. Lane cpu4-python: no order or step arrays cross
     in; `rnn_fit` builds each epoch's order on the executor (losses and lrs
     hold epochs * ceil(N / bs) words). The optional sixth address holds N
-    float32 sequence lengths (rnn_lengths_of; 0 = none)."""
-    if (len(addrs) != 5 and len(addrs) != 6) or len(ip) != 15 or len(fp) != 6:
-        raise Error("rnn_fit: requires 5 (or 6) addresses, 15 integer and 6 float parameters")
+    float32 sequence lengths (rnn_lengths_of; 0 = none). The optional
+    seventh address (lane alm-neural, 2026-11-24) holds the fit loop's
+    record words (sequence/fit_loop_words.mojo; 0 = none)."""
+    if (len(addrs) < 5 or len(addrs) > 7) or len(ip) != 15 or len(fp) != 6:
+        raise Error("rnn_fit: requires 5 (to 7) addresses, 15 integer and 6 float parameters")
     var x_addr = addrs[0]
     var y_addr = addrs[1]
     var p_addr = addrs[2]
@@ -153,7 +155,8 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
     if ival(ip, 13) < 0 or ival(ip, 14) < 0:
         raise Error("rnn_fit: the seed words must be non-negative 32-bit values")
     var cfg = opt_of(ip, 10, fp, 0)
-    var lengths = rnn_lengths_of(addrs[5] if len(addrs) == 6 else 0, N, T, "fit")
+    var lengths = rnn_lengths_of(addrs[5] if len(addrs) >= 6 else 0, N, T, "fit")
+    var loop_words = addrs[6] if len(addrs) == 7 else 0
     if task == TASK_CE:
         var y = fptr(y_addr, "y")
         for i in range(N):
@@ -168,7 +171,8 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by e88ae4e38; code recoverable at e88ae4e38^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch
     rnn_fit[AutogradRnnStep](ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, epochs, bs, shuffle, seed,
-                             fptr(p_addr, "params"), fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5), lengths)
+                             fptr(p_addr, "params"), fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5), lengths,
+                             loop_words)
     if profile:
         ag_profile_fit_end("rnn_fit cell=" + String(ival(ip, 0)))
     return net.n_params()
@@ -734,12 +738,13 @@ def _mlp_net(ip: List[Int], at: Int, D: Int, O: Int, act: Int, out_act: Int) rai
 
 
 def mlp_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[Float64]) raises -> Int:
-    """addrs = [X (N, D), Y (N, O), params (in/out), loss_curve (max_iter, out)];
+    """addrs = [X (N, D), Y (N, O), params (in/out), loss_curve (max_iter, out)
+    (, fit loop record words: sequence/fit_loop_words.mojo, lane alm-neural)];
     ip = [N, D, O, act, out_act, loss, solver, lr_schedule, nesterov, batch,
     max_iter, shuffle, seed, n_iter_no_change, n_hidden, h_1, ..., h_n];
     fp = [lr, beta1, beta2, eps, momentum, power_t, alpha, tol]. Returns n_iter."""
-    if len(addrs) != 4 or len(fp) != 8 or len(ip) < 15:
-        raise Error("mlp_fit: requires 4 addresses, >= 15 integer and 8 float parameters")
+    if (len(addrs) != 4 and len(addrs) != 5) or len(fp) != 8 or len(ip) < 15:
+        raise Error("mlp_fit: requires 4 (or 5) addresses, >= 15 integer and 8 float parameters")
     var N = ival(ip, 0)
     var D = ival(ip, 1)
     var O = ival(ip, 2)
@@ -770,7 +775,7 @@ def mlp_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
                          fptr(addrs[3], "loss_curve"), ival(ip, 5), ival(ip, 6), ival(ip, 7), ival(ip, 8) != 0,
                          batch, max_iter, ival(ip, 11) != 0, UInt64(ival(ip, 12)), ival(ip, 13),
                          fval(fp, 0), fval(fp, 1), fval(fp, 2), fval(fp, 3), fval(fp, 4),
-                         fp[5], fval(fp, 6), fp[7], y_codes)
+                         fp[5], fval(fp, 6), fp[7], y_codes, addrs[4] if len(addrs) == 5 else 0)
     if profile:
         print("AG_PROFILE fit=mlp_fit")
         print(ag_profile_report())
