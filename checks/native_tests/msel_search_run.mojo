@@ -1743,7 +1743,7 @@ def check_multi_lacking_helpers() raises:
     var dsts: List[Int] = [Int(b0.unsafe_ptr()), Int(b1.unsafe_ptr())]
     var counts: List[Int] = [3, 2]
     _place_multi_proba(Int(src.unsafe_ptr()), MEMBER_F64, 4, 2, Int(rows.unsafe_ptr()), Int(dsts.unsafe_ptr()), 2,
-                       Int(counts.unsafe_ptr()), Int(held.unsafe_ptr()), 0)
+                       Int(counts.unsafe_ptr()), Int(held.unsafe_ptr()), 0, False)
     require(b0[6] == 0.25 and b0[7] == 0.0 and b0[8] == 0.75, "row 2 of output 0 at classes 0 and 2")
     require(b0[0] == 0.875 and b0[1] == 0.0 and b0[2] == 0.125, "row 0 of output 0 at classes 0 and 2")
     require(b0[3] == -1.0, "row 1 is not this unit's")
@@ -1751,7 +1751,7 @@ def check_multi_lacking_helpers() raises:
     var refused = False
     try:
         _place_multi_proba(Int(src.unsafe_ptr()), MEMBER_F64, 5, 1, Int(rows.unsafe_ptr()), Int(dsts.unsafe_ptr()),
-                           2, Int(counts.unsafe_ptr()), Int(held.unsafe_ptr()), 0)
+                           2, Int(counts.unsafe_ptr()), Int(held.unsafe_ptr()), 0, False)
     except:
         refused = True
     require(refused, "a member answer of the wrong width refuses")

@@ -171,8 +171,7 @@ def _run_words(linsvc: Bool, sigmoid: Bool, k: Int, ensemble: Bool, cap: Int, x:
             draw = Int(folds[2 * u].unsafe_ptr())
             count = len(folds[2 * u])
         run.add(plan.copy(), Int(y.unsafe_ptr()), 0, draw, count, 0, 0, tests, borrows, gil)
-    var cal = CalFitPlan(Int(x.unsafe_ptr()), N, D, Int(y.unsafe_ptr()), k, MEMBER_OP_DECISION, sigmoid, ensemble,
-                         False)
+    var cal = CalFitPlan(Int(x.unsafe_ptr()), N, D, Int(y.unsafe_ptr()), k, MEMBER_OP_DECISION, sigmoid, ensemble)
     for f in range(FOLDS):  # small-loop(fixture)
         cal.fold(Int(folds[2 * f + 1].unsafe_ptr()), len(folds[2 * f + 1]))
     var answered = CAL_ALL_ANSWERED

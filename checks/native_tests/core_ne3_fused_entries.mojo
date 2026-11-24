@@ -239,7 +239,6 @@ def _nc_fit(driver: XnDriver, b: Blobs, euclidean: Bool, empirical: Bool) raises
     var prior = List[Float32](length=c, fill=0)
     for k in range(c):  # small-loop(classes): class_prior_ narrowed as nc_narrow_priors narrows it
         prior[k] = Float32(Float64(plan.wide_counts[k]) / Float64(n)) if empirical else Float32(1.0 / Float64(c))
-    plan.split = False
     plan.euclidean = euclidean
     var stats = List[Float32](length=d, fill=0)
     var centroids = List[Float32](length=c * d, fill=0)

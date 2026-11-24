@@ -643,7 +643,7 @@ def check_calibrated() raises:
         run.add(base.copy(), Int(y.unsafe_ptr()), 0, Int(rows.unsafe_ptr()) + 4 * (f * N), N - c, 0, 0, UInt8(0),
                 UInt8(1) if (mask & MEMBER_BORROWS_FIT) != 0 else UInt8(0),
                 MEMBER_SET_WORKER if (mask & MEMBER_GIL_FREE) != 0 else UInt8(0))
-    var plan = CalFitPlan(Int(x.unsafe_ptr()), N, D, Int(y.unsafe_ptr()), K, MEMBER_OP_DECISION, True, True, False)
+    var plan = CalFitPlan(Int(x.unsafe_ptr()), N, D, Int(y.unsafe_ptr()), K, MEMBER_OP_DECISION, True, True)
     for f in range(3):  # small-loop(fixture: the folds' test rows)
         var c = Int(counts[f])
         plan.fold(Int(rows.unsafe_ptr()) + 4 * (f * N + N - c), c)

@@ -64,7 +64,7 @@ def fixture(entry: NativeDescriptorCall, unit: Int) raises:
     var centers = List[Float32](length=C * F, fill=0)
     var deviations = List[Float32](length=C * F, fill=0)
     var driver = NcDriver(entry)
-    var plan = NcFitPlan(N, F, C, True, False)
+    var plan = NcFitPlan(N, F, C, True)
     plan.count(driver, Int(labels.unsafe_ptr()))
     require(plan.statistics(driver, Int(x.unsafe_ptr()), Int(labels.unsafe_ptr()), Int(stats.unsafe_ptr())) == 0,
         "finite fit status")

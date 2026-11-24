@@ -110,7 +110,7 @@ def _indexed_case() raises:
 
 
 def _pins_case() raises:
-    var plan = CalFitPlan(0, 10, 2, 0, 3, MEMBER_OP_PREDICT_PROBA, True, True, False)
+    var plan = CalFitPlan(0, 10, 2, 0, 3, MEMBER_OP_PREDICT_PROBA, True, True)
     var rows = List[Int32](length=4, fill=Int32(0))
     for _ in range(3):  # small-loop(fixture: three folds)
         plan.fold(Int(rows.unsafe_ptr()), 4)
