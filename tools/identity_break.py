@@ -2824,13 +2824,29 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(predict=_h(m.predict(X[4096:4160]))), m, lambda e: (e.predict(Xh[:64]),))
 
 
+def _fold_order_rows():
+    """Seven float32 rows i * v, v = (1, 2**-12 x 8): adjacent rows' squared
+    distance is exactly 1 when the nine features are folded ascending (each
+    2**-24 term is half an ulp of 1 and rounds away) and 1 + 2**-21 when they
+    are folded in any order that sums the small terms first. A lane that
+    hashes a decision taken on these rows fails when a host or device fold
+    leaves the ascending order."""
+    v = np.array([1.0] + [2.0 ** -12] * 8, dtype=np.float32)
+    return np.ascontiguousarray(np.arange(7, dtype=np.float32)[:, None] * v[None, :])
+
+
 @lane("dbscan")
 def _(ml, X, yc, yr, Xh=None):
     # prediction_data=True (2026-09-15) copies the fit's core mask out and
     # moves no train byte; infer is DBSCAN.predict on 256 held-out rows, the
     # nearest core sample within eps (DEVIATION 2740).
     m = ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True).fit(X[:6000, :4])
-    return _fit(dict(labels=_h(m.labels_)), m, lambda e: (e.predict(Xh[:256, :4]),))
+    # The eps test on a pair whose squared distance is exactly eps**2 only in
+    # the features-ascending fold (_fold_order_rows): one cluster in that
+    # order, all noise in any other, under both eps searches.
+    line = _fold_order_rows()
+    fold = [ml.DBSCAN(eps=1.0, min_samples=2, algorithm=a).fit(line).labels_ for a in ("rbc", "brute")]
+    return _fit(dict(labels=_h(m.labels_), fold_order=_h(*fold)), m, lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("pca")
@@ -2943,7 +2959,11 @@ def _(ml, X, yc, yr, Xh=None):
     # train byte; infer is predict on 256 held-out rows, the single-linkage
     # rule (DEVIATION 2740).
     m = ml.AgglomerativeClustering(n_clusters=4, prediction_data=True).fit(X[:2000, :4])
-    return _fit(dict(labels=_h(m.labels_)), m, lambda e: (e.predict(Xh[:256, :4]),))
+    # Rows 0, v, 2v of _fold_order_rows: the two MST edge weights order the
+    # merges, and their order is the dot products' features-ascending fold.
+    f = ml.AgglomerativeClustering(n_clusters=2).fit(np.ascontiguousarray(_fold_order_rows()[:3]))
+    return _fit(dict(labels=_h(m.labels_), fold_order=_h(f.children_, f.labels_)), m,
+                lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("spectral")
