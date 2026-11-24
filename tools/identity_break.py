@@ -4096,6 +4096,14 @@ def _lane_refuses(fn, text):
     return False
 
 
+# The saved-model readers it checks (HostForest, HostGBDT, host_predict,
+# host_predict_proba) are the CPU inference surface: no GPU side (vd-verify,
+# 2026-11-24).
+_one_sided("saved-model-host-infer", missing="gpu",
+           reason="the saved-model readers HostForest, HostGBDT, host_predict and host_predict_proba "
+                  "are the CPU inference surface and take no device")
+
+
 @lane("saved-model-host-infer")
 @floor(rows=(4096, "4096 rows are the rows the host readers were already asked to predict, and they "
                    "still let a depth-8 forest and a depth-6 GBDT grow full depth; the lane checks the "

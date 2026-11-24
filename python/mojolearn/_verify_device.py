@@ -44,6 +44,9 @@ NON_COMPUTING = frozenset((
     "set_numeric_profile",
     # process and format readers: they compute nothing on a side
     "vendor", "numeric_mode", "runtime_report", "format_of", "is_packed",
+    # scorer factories and readers (vd-verify, 2026-11-24): they hold a metric,
+    # they compute nothing on a side; the metric handed in reaches them unwrapped
+    "get_scorer", "make_scorer", "get_scorer_names",
 ))
 
 
@@ -122,22 +125,48 @@ def _short(name):
 # tape checks, "user" for the public endpoint checks (`_verify_api*`, marked
 # `__mojolearn_user_boundary__`). A wrapper therefore never changes which
 # result a lane hashes.
+# ARGUMENTS REACH THE PRODUCT AS THE PRODUCT'S OWN OBJECTS. A view-wrapped
+# function or a BoundClass handed to the product (a metric into make_scorer, a
+# class into a meta-estimator) is replaced by the real object it wraps
+# (`unwrap`); the side reaches those through the objects built with it.
 _WRAPPER_SOURCE = """
-def inject(fn, side_name):
+def _args(unwrap, args, kwargs):
+    return (tuple(unwrap(a) for a in args),
+            {k: unwrap(v) for k, v in kwargs.items()})
+
+
+def inject(fn, side_name, unwrap):
     def call(*args, **kwargs):
+        args, kwargs = _args(unwrap, args, kwargs)
         if "device" not in kwargs:
             kwargs["device"] = side_name
         return fn(*args, **kwargs)
     return call
 
 
-def refuse(fn, message, error):
+def passthrough(fn, unwrap):
+    def call(*args, **kwargs):
+        args, kwargs = _args(unwrap, args, kwargs)
+        return fn(*args, **kwargs)
+    return call
+
+
+def refuse(fn, message, error, unwrap):
     def call(*args, **kwargs):
         if "device" in kwargs:
+            args, kwargs = _args(unwrap, args, kwargs)
             return fn(*args, **kwargs)
         raise error(message)
     return call
 """
+
+
+def unwrap(value):
+    """The product object behind a view wrapper or BoundClass; else `value`."""
+    if type(value) is BoundClass:
+        return value._cls
+    real = getattr(value, "_verify_device_real", None) if callable(value) else None
+    return value if real is None else real
 BOUNDARIES = ("internal", "user")
 _BUILDERS = {}
 
@@ -158,17 +187,18 @@ def _caller(fn, name, side_name, strict, boundary="internal"):
     """`fn` wrapped so a call carries `device=side_name`. Resolved once."""
     mode = device_mode(fn)
     build = _builders(boundary)
-    if mode in ("device", "kwargs", "unknown"):
-        call = build["inject"](fn, side_name)
+    if mode in ("device", "kwargs", "unknown") and _short(name) not in NON_COMPUTING:
+        call = build["inject"](fn, side_name, unwrap)
     elif _short(name) in NON_COMPUTING or not strict:
-        return fn
+        call = build["passthrough"](fn, unwrap)
     else:
         call = build["refuse"](fn, f"{name} takes no device= (the {side_name.upper()} side cannot be "
-                                   "selected through the public parameter)", NoDevice)
+                                   "selected through the public parameter)", NoDevice, unwrap)
     try:
         functools.update_wrapper(call, fn)
     except (AttributeError, TypeError):
         pass
+    call._verify_device_real = fn
     return call
 
 
