@@ -1,0 +1,41 @@
+diff --git a/core/hotpath_impl.mojo b/core/hotpath_impl.mojo
+index f3d3834485..80e246cc18 100644
+--- a/core/hotpath_impl.mojo
++++ b/core/hotpath_impl.mojo
+@@ -657,6 +657,20 @@ def check_indices_i64(addr: Int, count: Int, limit: Int) raises -> Int:
+     return status
+ 
+ 
++def _sab_fold_swap(fa: Int, rows: Int):
++    """SABOTAGE gate-cpu (lane vdv-sabotage): row 0 trades its fold id with the first row of
++    another fold, the host bindings only; every fold keeps its size."""
++    from std.sys import is_defined
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++        var fp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=fa)
++        for j in range(1, rows):
++            if fp.unsafe_load(j) != fp.unsafe_load(0):
++                var t = fp.unsafe_load(0)
++                fp.unsafe_store(0, fp.unsafe_load(j))
++                fp.unsafe_store(j, t)
++                break
++
++
+ def fold_ids(
+     codes_addr: Int, rows: Int, k: Int, splits: Int, counts_addr: Int,
+     fold_addr: Int, fold_counts_addr: Int,
+@@ -688,6 +702,7 @@ def fold_ids(
+                 fp.unsafe_store(i, Int32(fold))
+             fcp.unsafe_store(fold, Int64(size))
+             offset += size
++        _sab_fold_swap(fold_addr, rows)
+         return 0
+     if k < 1:
+         raise Error("fold_ids: n_classes must be positive")
+@@ -737,6 +752,7 @@ def fold_ids(
+             fcp.unsafe_store(fold, Int64(per_fold[fold]))
+     if bad:
+         raise Error("fold_ids: class code out of range")
++    _sab_fold_swap(fold_addr, rows)
+     return 0
+ 
+ 

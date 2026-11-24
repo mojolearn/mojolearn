@@ -1,0 +1,28 @@
+diff --git a/sequence/ops.mojo b/sequence/ops.mojo
+index a2320c4495..7a4371c2eb 100644
+--- a/sequence/ops.mojo
++++ b/sequence/ops.mojo
+@@ -376,6 +376,11 @@ def mul(a: Float32, b: Float32) -> Float32:
+ def fma3(a: Float32, b: Float32, c: Float32) -> Float32:
+     comptime if SEQ_FAST_FMA:
+         return ftz(_std_fma(a, b, c))
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-cpu (lane vdv-sabotage): the result one ulp up, the host bindings only
++        var h = ftz(identical_mul_add(a, b, c))
++        if abs(h) >= Float32(1.17549435e-38) and h - h == Float32(0):
++            return bitcast[DType.float32](bitcast[DType.uint32](h) + UInt32(1))
++        return h
+     return ftz(identical_mul_add(a, b, c))
+ 
+ 
+@@ -385,6 +390,11 @@ def fma3(a: Float32, b: Float32, c: Float32) -> Float32:
+ 
+ @always_inline
+ def add(a: Float32, b: Float32) -> Float32:
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-cpu (lane vdv-sabotage): the result one ulp up, the host bindings only
++        var h = ftz(a + b)
++        if abs(h) >= Float32(1.17549435e-38) and h - h == Float32(0):
++            return bitcast[DType.float32](bitcast[DType.uint32](h) + UInt32(1))
++        return h
+     return ftz(a + b)
+ 
+ 

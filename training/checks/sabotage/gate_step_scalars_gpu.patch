@@ -1,0 +1,15 @@
+diff --git a/training/checks/optimizer_contract.mojo b/training/checks/optimizer_contract.mojo
+index 8f2da6efc8..23c16c1618 100644
+--- a/training/checks/optimizer_contract.mojo
++++ b/training/checks/optimizer_contract.mojo
+@@ -158,6 +158,10 @@ def step_scalars(cfg: OptimizerConfig, t: Int) -> StepScalars:
+     var decay_mul = ftz(one - ftz(identical_mul(cfg.lr, cfg.weight_decay)))
+     var neg_lr = -cfg.lr
+     var c_damp = ftz(one - cfg.dampening)
++    from std.sys import is_defined
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sabotage): the step size and -lr one ulp up, the GPU bindings only
++        step_size = ftz(step_size * Float32(1.00000011920928955078125))
++        neg_lr = neg_lr * Float32(1.00000011920928955078125)
+ 
+     return StepScalars(
+         b1t,
