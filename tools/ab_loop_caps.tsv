@@ -43,13 +43,13 @@ algos	pa-clf	yes	max_iter	5	{"tol": null, "early_stopping": false}	epoch	one pas
 algos	pa-reg	yes	max_iter	5	{"tol": null, "early_stopping": false}	epoch	one pass over all rows per epoch
 algos	sgd-ocsvm	yes	max_iter	5	{"tol": null}	epoch	one pass over all rows per epoch
 algos	minibatch-kmeans	yes	max_iter	20	{"tol": 0.0, "max_no_improvement": null}	mini-batch step	one fixed-size batch's distance pass and centroid update per step
-algos	als	yes	max_iter	5	{}	alternating sweep	every sweep solves every user and item factor once
+algos	als	yes	iterations	5	{}	alternating sweep	every sweep solves every user and item factor once; the public cap is `iterations` (AlternatingLeastSquares has no max_iter), every sweep always runs
 algos	nmf	yes	max_iter	10	{"tol": 0.0}	update iteration	one W and one H update over the whole matrix per iteration
 algos	fastica	yes	max_iter	10	{"tol": 0.0}	fixed-point iteration	one fixed-point update over all rows per iteration
 algos	factor-analysis	yes	max_iter	10	{"tol": 0.0}	EM iteration	one SVD-based update of the same size per iteration
 algos	label-propagation	yes	max_iter	10	{"tol": 0.0}	propagation step	one product with the same affinity matrix per step
 algos	label-spreading	yes	max_iter	10	{"tol": 0.0}	propagation step	one product with the same affinity matrix per step
-algos	pagerank	yes	max_iter	10	{"tol": 0.0}	power iteration	one product with the same graph per iteration
+algos	pagerank	no	max_iter	10	{"tol": 0.0}	power iteration	PageRank raises RuntimeError when the power iteration has not converged within max_iter (neighbors/neighbors_graph_run.mojo xn_pagerank_converged_check), so a capped count with tol 0 fails the fit; the whole operation is timed as before
 algos	tsne	yes	max_iter	250	{}	gradient step	one gradient over the same neighbour graph per step (250 is the minimum the estimator accepts)
 algos	mlp-clf	yes	max_iter	2	{"tol": 0.0, "early_stopping": false, "n_iter_no_change": 1000000}	epoch	one pass over all rows at the recipe's fixed batch size per epoch
 algos	mlp-reg	yes	max_iter	2	{"tol": 0.0, "early_stopping": false, "n_iter_no_change": 1000000}	epoch	one pass over all rows at the recipe's fixed batch size per epoch
