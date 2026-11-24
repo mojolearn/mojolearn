@@ -16,10 +16,10 @@ comptime LF_HAS_GRAM = 1
 comptime LF_HAS_RIDGE_RESIDENT = 2
 comptime LF_PAIRED_MEANS = 4
 comptime LF_HAS_OLS_RESIDENT = 8
-#: The image's LF_GRAM fit and its prediction entry read THE FOLD X WORD (a negative X
-#: address naming a slot of the x_prep store, core/fold_x_device.mojo); set only where
-#: LF_GRAM always finishes a Ridge fit with alpha > 0, more than one row and column
-#: (LINEAR_GRAM_SOLVE and IDN_RIDGE_RESIDENT), so no host route ever reads the word.
+#: The image's fit operations and its prediction entry read THE FOLD X WORD (a negative X
+#: address naming a slot of the x_prep store, core/fold_x_device.mojo): LF_GRAM, the
+#: resident fits, LF_PREP (its prepared X a slot, `LinearFitRequest.prep_slot`), LF_RIDGE
+#: and LF_OLS (lane vdf-scope-linear4 audit); the host column refuses the word.
 comptime LF_HAS_SLOT_X = 16
 
 
@@ -33,9 +33,14 @@ struct LinearFitRequest(Copyable, Movable):
     var cols: Int
     var intercept: Bool
     var alpha: Float64
+    #: THE FOLD X WORD's prepared X (lane vdf-scope-linear4): the address of
+    #: one host Int64 that receives the fold word of a prepared-X slot the fit
+    #: left in the fold store (LF_PREP of a fold X keeps its result on the
+    #: device); the member frees that slot after the fit. 0: none (a host X).
+    var prep_slot: Int
 
     def __init__(out self, x: Int, y: Int, weights: Int, coef: Int, mean: Int,
-                 rows: Int, cols: Int, intercept: Bool, alpha: Float64):
+                 rows: Int, cols: Int, intercept: Bool, alpha: Float64, prep_slot: Int = 0):
         self.x = x
         self.y = y
         self.weights = weights
@@ -45,6 +50,7 @@ struct LinearFitRequest(Copyable, Movable):
         self.cols = cols
         self.intercept = intercept
         self.alpha = alpha
+        self.prep_slot = prep_slot
 
 
 struct LinearFitResult(Copyable, Movable):

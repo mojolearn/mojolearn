@@ -180,7 +180,9 @@ def ols_predict_device_targets(
         coefs.append(ctx.enqueue_create_buffer[DType.float32](max(n_features, 1)))
         zs.append(ctx.enqueue_create_buffer[DType.float32](rows))
     if n_rows * n_features > 0:
-        ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+        # THE FOLD X WORD (core/fold_x_device.mojo; lane vdf-scope-linear4): a
+        # multi-target Ridge member's fold slot, one device copy; host X as before.
+        fold_x_fill(ctx, x, Int(x_ptr), n_rows * n_features)
     if n_features > 0:
         for t in range(targets):  # driver-loop: over the targets (their coefficient rows, uploaded once)
             ctx.enqueue_copy(dst_buf=coefs[t], src_ptr=MutPointer[Float32, MutUntrackedOrigin](

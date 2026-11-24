@@ -25,11 +25,11 @@ MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE, Ridge and LinearRegression (lane
 vdf-scope-linear2: its one-entry centered TSQR fit, `_fold_device_ols`) on an image with LF_HAS_SLOT_X): X is
 the WHOLE host base and `call.row_index` the fold's rows (int32 or int64); X stays
 resident in the caller's `resident()` scope (the x_prep family store,
-core/member_fold_x.mojo), the fold's rows are taken on the device and the Gram fit
-and the prediction entry read them there (core/fold_x_device.mojo); y and the
-weights are the base's columns taken through the index on the host. A case those
-entries do not cover (sample weights, alpha 0, one column, one row, several
-targets) takes the fold's rows on the host across its cores. Anything else is
+core/member_fold_x.mojo), the fold's rows are taken on the device and every fit
+route and both prediction entries read them there (core/fold_x_device.mojo; lane
+vdf-scope-linear4: weighted, alpha 0, one column, several targets and the LF_PREP
+centering too, `_fold_device`); y and the weights are the base's columns taken
+through the index on the host. Anything else is
 refused in words (a device-home view, a column index); the
 caller's UNPACK admits the data (finite, shapes) exactly as the estimator's
 own door does (MEMBER_CAN_TEST_ROWS clear: the fit and predict entries do
@@ -78,9 +78,11 @@ from core.member_families import MEMBER_FAMILY_LINEAR
 from core.linear_fit_types import LF_FLAGS, LF_HAS_SLOT_X
 from core.native_descriptor_call import native_descriptor_call
 from core.member_fold_x import (
-    MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_index, member_fold_take_f32,
-    member_fold_store_ready,
+    MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_take_f32,
+    member_fold_store_ready, member_fold_store,
 )
+from core.fold_x_word import fold_x_slot
+from bindings.arena_cache_run import arena_cache_free
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
@@ -245,20 +247,38 @@ def _fit_whole(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: Mut
     slot[].state = LinearModelState()
     slot[].coef = List[Float32](length=cols, fill=0.0)
     slot[].mean = List[Float32](length=cols, fill=0.0)
+    # THE FOLD X WORD's prepared X (lane vdf-scope-linear4): a fold fit whose
+    # route centers or row-scales X (LF_PREP) keeps the prepared X in a slot
+    # of the fold store; its word lands in `prep`, freed here after the fit.
+    var prep = List[Int64](length=1 if call[].x.data < 0 else 0, fill=Int64(0))  # no allocation for a host X
     var request = LinearFitRequest(call[].x.data, call[].y.data, weights, Int(slot[].coef.unsafe_ptr()),
-        Int(slot[].mean.unsafe_ptr()), rows, cols, slot[].intercept, slot[].alpha if slot[].ridge else 0.0)
+        Int(slot[].mean.unsafe_ptr()), rows, cols, slot[].intercept, slot[].alpha if slot[].ridge else 0.0,
+        Int(prep.unsafe_ptr()) if call[].x.data < 0 else 0)
     var result = LinearFitResult()
-    if slot[].ridge:
-        result = linear_ridge_run(route.entry.call, route.third.call, request)
-    else:
-        var plan = linear_ols_plan(route.entry.call, rows, cols, estimator)
-        var decomp = route.entry.call
-        if plan.tsqr:
-            if not route.has_fourth:
-                raise Error("ImportError: mojolearn: the LinearRegression member needs the decomposition entry on its route")
-            decomp = route.fourth.call
-        plan.one_entry = linear_ols_one_entry(plan, decomp, slot[].intercept, weights != 0)
-        result = linear_ols_run(route.entry.call, decomp, request, plan, route.vendor)
+    var failure = String("")
+    try:
+        if slot[].ridge:
+            result = linear_ridge_run(route.entry.call, route.third.call, request)
+        else:
+            var plan = linear_ols_plan(route.entry.call, rows, cols, estimator)
+            var decomp = route.entry.call
+            if plan.tsqr:
+                if not route.has_fourth:
+                    raise Error("ImportError: mojolearn: the LinearRegression member needs the decomposition entry on its route")
+                decomp = route.fourth.call
+            plan.one_entry = linear_ols_one_entry(plan, decomp, slot[].intercept, weights != 0)
+            result = linear_ols_run(route.entry.call, decomp, request, plan, route.vendor)
+    except error:
+        failure = String(error)
+    if len(prep) > 0 and prep[0] < 0:
+        try:
+            arena_cache_free(member_fold_store(call), fold_x_slot(Int(prep[0])))
+        except free_error:
+            if failure.byte_length() == 0:
+                failure = "RuntimeError: a " + estimator + " member's prepared X slot was not freed: " + String(free_error)
+    _ = prep^
+    if failure.byte_length() > 0:
+        raise Error(failure)
     slot[].state.coef = Int(slot[].coef.unsafe_ptr())
     slot[].state.coef_count = cols
     slot[].state.features = cols
@@ -493,22 +513,21 @@ def _route_slot_x(call: MutPointer[MemberCall, MutUntrackedOrigin]) -> Bool:
 
 def _fold_device(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin],
                  call: MutPointer[MemberCall, MutUntrackedOrigin], operation: Int) -> Bool:
-    """Whether this operation reads the fold's X on the device: a Ridge
-    with one target on a route with the fold word, and for a fit exactly
-    the case its Gram route always finishes (no sample weights, alpha > 0,
-    more than one row and one column; core/linear_fit_types.mojo
-    LF_HAS_SLOT_X). Any other case takes the fold's rows on the host
-    (`member_fold_take_f32`, across the host's cores): the entries of
-    those routes read host X."""
+    """Whether this operation reads the fold's X on the device: every
+    operation of both kinds on a route with the fold word (lane
+    vdf-scope-linear4). Ridge's audit: the Gram fit (LF_GRAM), the weighted /
+    one-column / alpha 0 / several-target routes (the x_linear solve entry,
+    x_linear/ridge_descriptor_device.mojo: `fit_device` ALGO_RIDGE uploads X
+    through fold_x_fill), the resident Ridge (glm/estimator.mojo
+    `ridge_fit_resident_host`), LF_PREP + LF_RIDGE (the prepared X a device
+    slot, glm/impl/ols_prep_device.mojo; `ridge_fit_host` reads it), the
+    one- and several-target predictions (core/p3_linear_impl.mojo). The
+    LinearRegression fits: `_fold_device_ols`. The host take of X is gone:
+    no route is left that reads host X."""
+    if call[].x.cols < 1:
+        return False
     if not slot[].ridge:
         return _fold_device_ols(slot, call, operation)
-    if call[].x.cols <= 1:
-        return False
-    if operation == MEMBER_OP_FIT:
-        if call[].weights.rows > 0 or slot[].alpha <= 0.0 or call[].row_index.rows <= 1 or call[].y.cols != 1:
-            return False
-    elif slot[].targets > 1:
-        return False
     return _route_slot_x(call)
 
 
@@ -516,20 +535,10 @@ def _fold_device_ols(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin],
                      call: MutPointer[MemberCall, MutUntrackedOrigin], operation: Int) -> Bool:
     """LinearRegression (lane vdf-scope-linear2): the prediction and the
     score read the fold slot through the same prediction entry as Ridge;
-    a fit reads it exactly when it takes the decomposition entry's one-entry
-    centered TSQR (`XD_OLS_TSQR_R`, x_decomp/device.mojo `ols_tsqr_factor`
-    reads THE FOLD X WORD): fit_intercept, no sample weights, one target and
-    the plan `linear_ols_plan` / `linear_ols_one_entry` choose (the same two
-    probes the fit makes). Lane vdf-scope-linear3: every other fit route
-    reads it too (weighted, fit_intercept=False, the resident OLS, LF_OLS and
-    the LF_PREP centering; core/linear_ols_run.mojo), so a fit of one target
-    always reads the fold on the device."""
-    if call[].x.cols < 1:
-        return False
-    if operation != MEMBER_OP_FIT:
-        return slot[].targets <= 1 and _route_slot_x(call)
-    if call[].y.cols != 1:
-        return False
+    every fit route reads it too (lane vdf-scope-linear3: weighted,
+    fit_intercept=False, the resident OLS, LF_OLS, the one-entry and the
+    uncentered TSQR; lane vdf-scope-linear4: LF_PREP's prepared X stays a
+    device slot, core/linear_ols_run.mojo)."""
     return _route_slot_x(call)
 
 
@@ -547,20 +556,15 @@ def _fold_op(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin],
     var weights = call[].weights
     var index = call[].row_index
     var fold = MemberFoldX()
-    var device = _fold_device(slot, call, operation)
-    var host_x = List[Float32]()
+    if not _fold_device(slot, call, operation):
+        raise Error("TypeError: a " + estimator + " member reads a row index only on a GPU route whose entries "
+                    + "read X by address")
     var host_y = List[Float32]()
     var host_w = List[Float32]()
     var failure = String("")
     try:
-        if device:
-            member_fold_x_open(call, fold, estimator)
-            call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
-        else:
-            member_fold_index(call, fold, estimator)
-            host_x = List[Float32](unsafe_uninit_length=max(fold.rows * fold.cols, 1))
-            member_fold_take_f32(x.data, fold.index, fold.rows, fold.cols, Int(host_x.unsafe_ptr()))
-            call[].x = MemberMatrix(Int(host_x.unsafe_ptr()), fold.rows, fold.cols)
+        member_fold_x_open(call, fold, estimator)
+        call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
         if operation != MEMBER_OP_PREDICT and y.rows > 0:
             # the base's targets through the index (the fold's rows of y)
             _dense(y, "y", estimator)
@@ -594,7 +598,6 @@ def _fold_op(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin],
     except close_error:
         if failure.byte_length() == 0:
             failure = "RuntimeError: a " + estimator + " member's fold slot was not freed: " + String(close_error)
-    _ = host_x^
     _ = host_y^
     _ = host_w^
     if failure.byte_length() > 0:

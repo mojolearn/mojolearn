@@ -6,6 +6,7 @@ from core.linear_fit_types import (
     LF_PREP, LF_OLS, LF_OLS_RESIDENT, LF_HAS_OLS_RESIDENT, LF_PAIRED_MEANS,
 )
 from core.linear_tsqr_run import linear_tsqr_solve
+from core.linear_fit_run import linear_prep_x_out, linear_prep_x_in
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
 from glm.impl.lm_finish import lm_intercept
@@ -49,9 +50,10 @@ def linear_ols_run(entry: NativeDescriptorCall, decomp: NativeDescriptorCall,
         # resident OLS and LF_OLS uploads and the one-entry TSQR through
         # `fold_x_fill`, LF_PREP's centering and row scaling
         # (glm/impl/center_device.mojo), the uncentered XD_TSQR_R
-        # (x_decomp/device.mojo `tsqr_factor`). LF_PREP's prepared X comes
-        # back to host words, as on the host-input path, and the TSQR or
-        # LF_OLS uploads them again (that route's design, not the fold's).
+        # (x_decomp/device.mojo `tsqr_factor`). LF_PREP of a fold X keeps the prepared X
+        # ON THE DEVICE (lane vdf-scope-linear4, glm/impl/ols_prep_device.mojo):
+        # a fold store slot whose word lands at `request.prep_slot`; the TSQR or
+        # LF_OLS reads it (fold_x_fill) and the member frees it after the fit.
         if plan.flags & LF_HAS_OLS_RESIDENT and not weighted:
             _ = native_descriptor_call(entry, LF_OLS_RESIDENT,
                 [request.x, request.y, request.coef, mean_address, Int(ymean.unsafe_ptr())],
@@ -75,7 +77,7 @@ def linear_ols_run(entry: NativeDescriptorCall, decomp: NativeDescriptorCall,
                 done = True
         if not done:
             var prepare = center or weighted
-            var work_x = List[Float32](unsafe_uninit_length=rows * cols if prepare else 0)
+            var work_x = List[Float32](unsafe_uninit_length=rows * cols if prepare and request.x >= 0 else 0)
             var work_y = List[Float32](unsafe_uninit_length=rows if prepare else 0)
             var xm64 = List[Float64](length=cols if prepare else 0, fill=0.0)
             var ym32 = List[Float32](length=1 if prepare else 0, fill=0.0)
@@ -83,13 +85,14 @@ def linear_ols_run(entry: NativeDescriptorCall, decomp: NativeDescriptorCall,
             var y_address = request.y
             try:
                 if prepare:
-                    x_address = Int(work_x.unsafe_ptr())
+                    x_address = linear_prep_x_out(request, Int(work_x.unsafe_ptr()))
                     y_address = Int(work_y.unsafe_ptr())
                     var mode = 2 if weighted else (1 if plan.flags & LF_PAIRED_MEANS else 0)
                     _ = native_descriptor_call(entry, LF_PREP,
                         [request.x, request.y, request.weights, x_address, y_address,
                          Int(xm64.unsafe_ptr()), mean_address, Int(ymean.unsafe_ptr()), Int(ym32.unsafe_ptr())],
                         [rows, cols, Int(center), mode], [])
+                    x_address = linear_prep_x_in(request, x_address)
                 if plan.tsqr:
                     var ra = List[Float32](length=(cols + 1) * (cols + 1), fill=0.0)
                     try:

@@ -18,6 +18,9 @@ def ridge_fit_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         var a = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=aa)
         var p = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp)
         var f = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=ff)
+        if a[0] < 0:
+            # THE FOLD X WORD (core/fold_x_device.mojo) names a device slot (lane vdf-scope-linear4).
+            raise Error("RuntimeError: the host Ridge solve column reads no device fold X")
         var rows = p[0]
         var cols = p[1]
         # Lane w3f3-k: T targets (y rows x T, one Cholesky factor for every

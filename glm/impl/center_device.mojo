@@ -14,7 +14,7 @@ total once to float64 bits. Center and scale: one thread per cell."""
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
-from core.fold_x_device import fold_x_fill
+from core.fold_x_device import fold_x_fill, fold_x_store_into
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
@@ -145,7 +145,8 @@ def col_sums_device(ctx: DeviceContext, x: Int, dst: Int, rows: Int, cols: Int) 
 
 
 def center_device(ctx: DeviceContext, x: Int, mu: Int, dst: Int, rows: Int, cols: Int) raises:
-    """dst[r, c] = center_cell(x[r, c], mu[c]); mu float32[cols]."""
+    """dst[r, c] = center_cell(x[r, c], mu[c]); mu float32[cols]. x and dst
+    are host addresses or fold X words (core/fold_x_device.mojo)."""
     var cells = rows * cols
     if cells <= 0:
         return
@@ -156,15 +157,21 @@ def center_device(ctx: DeviceContext, x: Int, mu: Int, dst: Int, rows: Int, cols
     ctx.enqueue_copy(dst_buf=d_m, src_ptr=F32P(unsafe_from_address=mu))
     ctx.enqueue_function[center_kernel](d_x.unsafe_ptr(), d_m.unsafe_ptr(), d_o.unsafe_ptr(), Int64(rows), Int64(cols),
                                         grid_dim=(cells + CS_TPB - 1) // CS_TPB, block_dim=CS_TPB)
-    ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=dst), src_buf=d_o)
-    ctx.synchronize()
+    if dst < 0:
+        # A negative dst is a fold store slot (lane vdf-scope-linear4): the
+        # result stays on the device for the next entry (fold_x_fill reads it).
+        fold_x_store_into(ctx, dst, d_o, cells)
+    else:
+        ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=dst), src_buf=d_o)
+        ctx.synchronize()
     _ = d_x^
     _ = d_m^
     _ = d_o^
 
 
 def scale_rows_device(ctx: DeviceContext, x: Int, w: Int, dst: Int, rows: Int, cols: Int) raises:
-    """dst[r, c] = scale_cell(x[r, c], w[r]); w float32[rows]."""
+    """dst[r, c] = scale_cell(x[r, c], w[r]); w float32[rows]. x and dst
+    are host addresses or fold X words (core/fold_x_device.mojo)."""
     var cells = rows * cols
     if cells <= 0:
         return
@@ -175,8 +182,13 @@ def scale_rows_device(ctx: DeviceContext, x: Int, w: Int, dst: Int, rows: Int, c
     ctx.enqueue_copy(dst_buf=d_w, src_ptr=F32P(unsafe_from_address=w))
     ctx.enqueue_function[scale_rows_kernel](d_x.unsafe_ptr(), d_w.unsafe_ptr(), d_o.unsafe_ptr(), Int64(rows), Int64(cols),
                                             grid_dim=(cells + CS_TPB - 1) // CS_TPB, block_dim=CS_TPB)
-    ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=dst), src_buf=d_o)
-    ctx.synchronize()
+    if dst < 0:
+        # A negative dst is a fold store slot (lane vdf-scope-linear4): the
+        # result stays on the device for the next entry (fold_x_fill reads it).
+        fold_x_store_into(ctx, dst, d_o, cells)
+    else:
+        ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=dst), src_buf=d_o)
+        ctx.synchronize()
     _ = d_x^
     _ = d_w^
     _ = d_o^

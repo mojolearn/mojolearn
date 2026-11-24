@@ -18,7 +18,7 @@ Device column:
     case 1   x_linear_finite_device (the FAST build's scan) over a finite slot passes; over a slot holding a NaN
              it raises the binding's wording
     case 2   ols_prep_device (weighted means, the LF_PREP centering and row scaling) over the slot == over the
-             gather: work X, work y, both means
+             gather: work X (a device slot for the fold, lane vdf-scope-linear4, read back), work y, both means
     case 3   DevExec.tsqr_factor (nrhs 1: LinearRegression's uncentered XD_TSQR_R) over the slot == over the gather
     case 4   device_buffer_any_negative: True on the raw fold (it has negative cells), False on its absolute
              values with -0.0 cells kept, True again with one negative cell
@@ -42,6 +42,7 @@ from core.native_descriptor_abi import NativeDescriptorError
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
 from core.fold_x_device import FOLD_X_STORE, fold_x_word
+from core.fold_x_word import fold_x_slot
 from solver.estimator import cd_fit_host
 from solver.ops_entry_device import SOLVER_DEVCTX_SLOT
 from solver.ops_entry_host import solver_ops_host_v1
@@ -181,6 +182,9 @@ def _device_case(case: Int) raises:
                 x_linear_finite_device(FP(unsafe_from_address=Int(gathered.unsafe_ptr())), FD, "X")  # row 0 finite
             elif case == 2:
                 var ctx = process_ctx[_CTX]()
+                # Lane vdf-scope-linear4: a fold X's prepared X stays a device slot; work_x
+                # receives its fold word (one Int64), read back here for the compare.
+                var box = List[Int64](length=1, fill=Int64(0))
                 var wxa = List[Float32](length=n * FD, fill=0.0)
                 var wxb = List[Float32](length=n * FD, fill=0.0)
                 var wya = List[Float32](length=n, fill=0.0)
@@ -194,8 +198,11 @@ def _device_case(case: Int) raises:
                 var y32a = List[Float32](length=1, fill=0.0)
                 var y32b = List[Float32](length=1, fill=0.0)
                 ols_prep_device(ctx, Int(word), Int(y_fold.unsafe_ptr()), Int(w_fold.unsafe_ptr()),
-                    Int(wxa.unsafe_ptr()), Int(wya.unsafe_ptr()), Int(m64a.unsafe_ptr()), Int(m32a.unsafe_ptr()),
+                    Int(box.unsafe_ptr()), Int(wya.unsafe_ptr()), Int(m64a.unsafe_ptr()), Int(m32a.unsafe_ptr()),
                     Int(y64a.unsafe_ptr()), Int(y32a.unsafe_ptr()), n, FD, True, OLS_PREP_WEIGHTED)
+                require(Int(box[0]) < 0, "the fold prep left no prepared X slot")
+                store[].read(ctx, fold_x_slot(Int(box[0])), Int(wxa.unsafe_ptr()), n * FD)
+                store[].free(ctx, fold_x_slot(Int(box[0])))
                 ols_prep_device(ctx, Int(gathered.unsafe_ptr()), Int(y_fold.unsafe_ptr()), Int(w_fold.unsafe_ptr()),
                     Int(wxb.unsafe_ptr()), Int(wyb.unsafe_ptr()), Int(m64b.unsafe_ptr()), Int(m32b.unsafe_ptr()),
                     Int(y64b.unsafe_ptr()), Int(y32b.unsafe_ptr()), n, FD, True, OLS_PREP_WEIGHTED)

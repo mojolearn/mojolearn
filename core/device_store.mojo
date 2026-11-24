@@ -330,6 +330,19 @@ struct DeviceStore(Defaultable, Movable):
             )
         _ = held^  # the queued copy holds its own reference
 
+    def copy_from(self, ctx: DeviceContext, id: Int, src: DeviceBuffer[DType.float32], n_words: Int) raises:
+        """Enqueue a device-to-device copy of `src`'s first `n_words` words
+        into the slot's first `n_words` (no wait: stream order; lane
+        vdf-scope-linear4, an addition: a device stage's result kept as a
+        slot, e.g. LinearRegression's prepared X)."""
+        var held = self._held(id, n_words)
+        if n_words > 0:
+            ctx.enqueue_copy(
+                dst_buf=held.create_sub_buffer[DType.float32](0, n_words),
+                src_buf=src.create_sub_buffer[DType.float32](0, n_words),
+            )
+        _ = held^  # the queued copy holds its own reference
+
     def ptr(self, id: Int, need: Int) raises -> StoreWP:
         """The slot's device pointer, for a binding's own launches."""
         var held = self._held(id, need)
