@@ -63,3 +63,26 @@ def test_explicit_gpu_on_a_cpu_only_installation_is_refused(name):
     else:
         with pytest.raises(ValueError, match="device='gpu' needs a GPU build"):
             _call(name, "gpu")
+
+
+# The metrics that take a 2-D X: the only metric inputs a DeviceRows fold view can stand for.
+X_METRICS = ["silhouette_score", "silhouette_samples", "calinski_harabasz_score", "davies_bouldin_score",
+             "trustworthiness"]
+
+
+@pytest.mark.parametrize("name", X_METRICS)
+def test_device_resident_input_with_cpu_is_refused_in_unpack(name):
+    # A device-resident input (DeviceRows) with an explicit device='cpu' is refused before any work,
+    # whatever the installation; the gather callable must never run.
+    from mojolearn import _arena_io
+    from mojolearn._array import Array
+
+    def forbidden(*args):
+        raise AssertionError("the fold gather ran")
+
+    rows = _arena_io.DeviceRows(Array.from_list([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], "<f4"),
+                                Array.from_list([0, 2], "<i8"), forbidden)
+    function = getattr(metrics, name)
+    second = rows if name == "trustworthiness" else [0, 1]
+    with pytest.raises(ValueError, match="device='cpu' cannot take a device-resident input"):
+        function(rows, second, device="cpu")

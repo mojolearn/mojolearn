@@ -22,8 +22,8 @@
 # up, no String is built, and the door runs what it ran before.
 from std.python import PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
-from bindings.py_balanced import py_call, py_type
-from core.device_route import device_cpu_fast
+from bindings.py_balanced import py_call, py_get, py_type
+from core.device_route import DEVICE_CPU, device_cpu_fast
 from core.function_device import FunctionDevice, function_device_default
 from core.mode_answer import MODE_FAMILY_RESOLVER, answer_mode_word
 from providers.python.function_device_boundary_door import function_device_admit
@@ -60,3 +60,24 @@ def metric_device_identical(mode: PythonObject, context: PythonObject) raises:
     answer_mode_word(selected, MODE_FAMILY_RESOLVER)
     if selected == "fast":
         device_cpu_fast()
+
+
+def metric_device_inputs(device: FunctionDevice, args: PythonObject, end: Int, context: PythonObject) raises:
+    """UNPACK refusal of a device-resident input (`mojolearn._arena_io.DeviceRows`,
+    the fold view model selection hands an estimator) with an explicit
+    `device="cpu"` (addendum 3 item 4): the rows live in a GPU binding's
+    store and the CPU side would have to download them. Called only for an
+    explicit device word (never for `device=None`); one type compare per
+    argument of the call."""
+    if device.request != DEVICE_CPU:
+        return
+    var programs = py_get(context, "family_metrics_prog_context")
+    if programs is None:
+        return
+    var rows_class = py_get(programs, "maxabs_rows_class")
+    if rows_class is None:
+        return
+    for index in range(end):  # driver-loop: over the public metric's arguments
+        if py_type(args[index]) is rows_class:
+            raise Error("ValueError: device='cpu' cannot take a device-resident input (DeviceRows, argument "
+                + String(index) + "): its rows live on the GPU. Pass a host array, or leave device=None")
