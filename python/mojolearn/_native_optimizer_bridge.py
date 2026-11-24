@@ -158,6 +158,9 @@ def connect(training):
     # identity compare and allocates results through this owner.
     from ._native_family_bridge import tables as _family_tables
     _family_tables(family_train_device=(training.TrainDeviceArray, context))
+    # and into the decomposition kit contexts (solve, lstsq, randomized_svd, sparse_encode; lane vdf-linalg7)
+    from ._native_decomp_kit_bridge import train_device as _decomp_train_device
+    _decomp_train_device((training.TrainDeviceArray, context))
     # A schedule's attribute edit and deletion rebuild its native rate block
     # in the native hook itself (bindings/optimizer_native_router_door.mojo
     # schedule_attribute_c); the descriptor binds the schedule, as __del__ does.

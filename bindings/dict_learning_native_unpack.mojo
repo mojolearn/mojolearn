@@ -12,7 +12,9 @@
 # fitted matrices between its fit and transform steps: X is converted and
 # uploaded once, and the dictionary, mean and components are not downloaded
 # and re-uploaded between the two.
-from core.function_device import function_device_default
+from core.function_device import FunctionDevice, function_device_default
+from bindings.linalg_dev_arrays_unpack import lin_train_device, lin_is_device_array, lin_dev_device, lin_dev_entries
+from bindings.linalg_decomp_dev_door import decomp_dev_matrix, decomp_dev_out
 from bindings.linalg_decomp_native_unpack import ld_device, ld_entries
 from std.python import Python, PythonObject
 from bindings.py_cpython_table import cpython_table
@@ -353,6 +355,12 @@ def sparse_encode_call(args: PythonObject, context: PythonObject) raises -> Pyth
     var nk = dict_keys()
     # `sparse_encode(X, dictionary, algorithm, n_nonzero_coefs, alpha, init,
     # max_iter, positive, numeric_mode)`.
+    # lane vdf-linalg7: TrainDeviceArray operands (X, dictionary and init, all or none) are read in place; one
+    # dictionary read and up to three identity compares per call.
+    var held = lin_train_device(context)
+    if held is not None and (lin_is_device_array(args[0], held) or lin_is_device_array(args[1], held)
+                             or lin_is_device_array(args[5], held)):
+        return _sparse_encode_dev(args, device, held, context)
     var entries = ld_entries(device, args[8], context)
     var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
@@ -370,3 +378,34 @@ def sparse_encode_call(args: PythonObject, context: PythonObject) raises -> Pyth
     finally:
         kit.close()
         door.keep_alive()  # the borrowed owners outlive every RUN read
+
+
+def _sparse_encode_dev(args: PythonObject, device: FunctionDevice, held: PythonObject,
+                       context: PythonObject) raises -> PythonObject:
+    """`sparse_encode` of device arrays (lane vdf-linalg7): X, dictionary and init adopted into the x_decomp pool
+    device to device and tested finite there (`DKit.adopt`), the host operands' sequence (`dl_sparse_encode`) on the
+    same words, the code a new device array (n x atoms). lasso_cd's init is copied to the host by the kit's coding
+    rows (`copy_host`), as for a host init."""
+    lin_dev_device(device, "mojolearn.sparse_encode")
+    # X, dictionary, then init: the first device array names the training owner
+    var tentries = lin_dev_entries(args[0], held) if lin_is_device_array(args[0], held) else (
+        lin_dev_entries(args[1], held) if lin_is_device_array(args[1], held) else lin_dev_entries(args[5], held))
+    var x = decomp_dev_matrix(args[0], "X", "sparse_encode", tentries, held)
+    var d = decomp_dev_matrix(args[1], "dictionary", "sparse_encode", tentries, held)
+    var has_init = args[5] is not None
+    var w0 = decomp_dev_matrix(args[5], "init", "sparse_encode", tentries, held) if has_init else x.copy()
+    var entries = ld_entries(device, args[8], context)
+    var kit = decomp_kit_unpack(entries)
+    try:
+        var words = _encode_words(x.dim(1), d.dim(0), args[2], args[4], args[3], args[6], args[7], False)
+        var out = -1
+        var py = Python()
+        with GILReleased(py):
+            var init = kit.adopt(w0.handle, w0.dim(0), w0.dim(1), "init") if has_init else -1
+            var xm = kit.adopt(x.handle, x.dim(0), x.dim(1), "X")
+            var dm = kit.adopt(d.handle, d.dim(0), d.dim(1), "dictionary")
+            var gram = Gram(-1)
+            out = dl_sparse_encode(kit, xm, dm, words, init, gram)
+        return decomp_dev_out(kit, out, [kit.nrows(out), kit.ncols(out)], tentries, held)
+    finally:
+        kit.close()
