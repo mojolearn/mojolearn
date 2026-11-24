@@ -399,13 +399,14 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
 
 
 def _curve_by_search(estimator: PythonObject, args: PythonObject, param_range: PythonObject, context: PythonObject,
-                     b: PythonObject, drawn: PythonObject) raises -> PythonObject:
+                     b: PythonObject) raises -> PythonObject:
     """UNPACK of a validation curve as its grid search (lane mf-cluster5):
     a GridSearchCV over {param_name: param_range} with the curve's cv,
     scoring, n_jobs and error_score, refit=False and train scores, fitted by
     the search kind's typed RUN; PACK: its split<i>_train_score /
-    split<i>_test_score columns as the curve's (values x folds) blocks. None:
-    the kind did not take it (nothing was fitted)."""
+    split<i>_test_score columns as the curve's (values x folds) blocks.
+    Never None (lane mf-r9b): what the kind does not fit is refused by
+    `_search_member_fit` in its words; y None fits an unsupervised base."""
     var grid = Python.dict()
     py_setitem(grid, args[3], py_call(b.list, param_range))
     var keywords = Python.dict()
@@ -419,13 +420,27 @@ def _curve_by_search(estimator: PythonObject, args: PythonObject, param_range: P
     py_setitem(keywords, "param_grid", grid)
     var search = msel_carrier_search(msel_cls("GridSearchCV", context), keywords, context)
     var fields = msel_search_fields(search, context)
-    if not _search_member_fit(search, fields, args[1], args[2], args[5], context, b, drawn):
-        return PythonObject(None)
+    # THE RESIDENT FOLD ROWS (lane mf-r9b), as `msel_search_fit` opens them
+    # for a device member (the units' DeviceRows rule): none when the curve
+    # moves `device` (one of its values is the CPU) or the base says
+    # device="cpu". Read once per curve.
+    var scope = PythonObject(None)
+    if msel_device_rows_ok(estimator, args[7], context) and not msel_member_host_folds(fields, b, context):
+        var name = String(py=args[3])
+        if name != "device" and not name.endswith("__device"):
+            scope = msel_rows_scope_open(context)
+    try:
+        # raises every refusal in its words (THE REFUSAL RULE)
+        _ = _search_member_fit(search, fields, args[1], args[2], args[5], context, b, Python.list())
+    finally:
+        if scope is not None:
+            msel_rows_scope_close(scope, context)
     var fitted = msel_search_fields(search, context)
     var results = py_get(fitted, "cv_results_")
     var splits = py_get(fitted, "n_splits_")
     if results is None or splits is None:
-        return PythonObject(None)
+        raise Error("RuntimeError: validation_curve invariant: the search kind's PACK wrote no cv_results_ or"
+                    + " n_splits_")
     var k = Int(py=splits)
     var count = len(param_range)
     var tr = List[Float64](capacity=count * k)
@@ -455,67 +470,30 @@ def msel_validation_curve(args: PythonObject, context: PythonObject) raises -> P
     cv, scoring, n_jobs, error_score)`."""
     var b = msel_b()
     var estimator = args[0]
-    var scoring = args[7]
-    var error_score = args[9]
-    var jobs = msel_unit_jobs(args[8], error_score, "validation_curve", context)
     if py_type(args[3]) is not b.str:
         raise Error("TypeError: param_name must be an exact string")
     var param_range = msel_parameter_values(args[4], context)
+    # ONE SCORER (lane mf-r9b): validate_params' scoring constraint, in
+    # signature order (after param_name and param_range, before n_jobs and
+    # error_score); several scorers were the units' KeyError 'train_score'.
+    _one_scorer_check("validation_curve", args[7], context)
+    _ = msel_unit_jobs(args[8], args[9], "validation_curve", context)  # n_jobs and error_score words
+    if len(param_range) == 0:
+        # scikit-learn 1.9 validation_curve (model_selection/_validation.py
+        # 2484-2510): the split runs, no fit, then `_aggregate_score_dicts([])`
+        # reads `scores[0]`. The door's split checks first, then those words.
+        _ = msel_cv_folds(estimator, args[1], args[2], args[6], args[5], True, context)
+        raise Error("IndexError: list index out of range")
     # THE TYPED SEARCH RUN (lane mf-cluster5): a validation curve IS the grid
     # search over {param_name: param_range} with return_train_score=True and
     # refit=False, so the search kind's typed RUN (core/msel_search_run.mojo,
-    # through `_search_member_fit`) fits and scores it when it takes it (every
-    # value a serving member; a scorer it serves; lane mf-msel5c: a splitter
-    # with the curve's groups split by the door, as a search's); its split
-    # scores are the curve's. Otherwise the units below (THE FALLBACK RULE).
-    var drawn = Python.list()
-    if args[2] is not None and len(param_range) > 0:
-        var curve = _curve_by_search(estimator, args, param_range, context, b, drawn)
-        if curve is not None:
-            return curve
-    # The door's split, drawn once (the kind's UNPACK may already have drawn it).
-    var got = drawn[0] if len(drawn) > 0 else msel_cv_folds(estimator, args[1], args[2], args[6], args[5], True,
-                                                            context)
-    var xf = got[0]
-    var yf = got[1]
-    var folds = got[2]
-    var tr = List[Float64]()
-    var te = List[Float64]()
-    var count = 0
-    var k = 0
-    # A curve over the estimator's `device` (or a nested member's) hands
-    # every value host rows (device wave, 2026-11-21): one of its values is
-    # the CPU. The name was admitted as an exact str above.
-    var device_rows = msel_device_rows_ok(estimator, scoring, context)
-    if device_rows:
-        var param_name = String(args[3])
-        if param_name == "device" or param_name.endswith("__device"):
-            device_rows = False
-    var rows = MselFoldRows(xf, yf, folds, device_rows, context)
-    try:
-        # Every (value, fold) is one unit (msel_cv_units); each unit clones
-        # the base once and sets {param_name: value} on its clone.
-        var candidates = Python.list()
-        for v in range(len(param_range)):  # driver-loop: over the param_range candidates (one candidate dict each)
-            var params = Python.dict()
-            py_setitem(params, args[3], param_range[v])
-            _ = py_call(candidates.append, params)
-        var run = msel_cv_units(estimator, candidates, yf, rows, scoring, True, False, error_score, jobs, context)
-        for v in range(len(param_range)):  # driver-loop: over the param_range candidates (results only)
-            var r = run.candidate(v, False, context)
-            if len(r.names) != 1 or r.names[0] != "score":
-                _ = family_call(py_attr(Python.dict(), "__getitem__"), PythonObject("train_score"))
-            for i in range(len(r.train[0])):  # driver-loop: over folds
-                tr.append(r.train[0][i])
-                te.append(r.test[0][i])
-            if v == 0:
-                k = len(r.train[0])
-            count += 1
-    finally:
-        rows.close(context)
-    if count == 0:
-        raise Error("IndexError: list index out of range")
-    return Python.tuple(msel_f64_block(tr, count, k, context), msel_f64_block(te, count, k, context))
+    # through `_search_member_fit`) fits and scores it (every value a serving
+    # member; a scorer it serves; lane mf-msel5c: a splitter with the curve's
+    # groups split by the door, as a search's); its split scores are the
+    # curve's. Lane mf-r9b: the only route, y None included (an unsupervised
+    # base); the kind refuses what it does not fit in its words. Its
+    # resident fold rows follow the units' device rule (`_curve_by_search`).
+    return _curve_by_search(estimator, args, param_range, context, b)
 
 
 # ---------------------------------------------------------------- learning_curve
@@ -542,25 +520,18 @@ def _invalid_parameter_class(context: PythonObject) raises -> PythonObject:
     return made
 
 
-def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`learning_curve(estimator, X, y, groups, train_sizes, cv, scoring,
-    n_jobs, shuffle, random_state, error_score, return_times)`."""
+def _one_scorer_check(caller: String, scoring_in: PythonObject, context: PythonObject) raises:
+    """SEVERAL SCORERS (lane mf-tail5; lane mf-r9b: validation_curve too):
+    scikit-learn 1.9's `validate_params` of learning_curve and
+    validation_curve allows `scoring` only as a scorer name, a callable or
+    None ([StrOptions(set(get_scorer_names())), callable, None],
+    model_selection/_validation.py 1763 and 2274): a list, tuple, set or
+    dict is its InvalidParameterError, raised before any fold or fit. Lane
+    mf-tail5b: its CLASS (`InvalidParameterError`, a ValueError and a
+    TypeError: scikit-learn's own when sklearn is loaded, else
+    `_invalid_parameter_class`'s) and its words as `StrOptions.__str__`
+    writes them: the names' reprs in the order of the Python set it holds."""
     var b = msel_b()
-    var estimator = args[0]
-    var jobs = msel_unit_jobs(args[7], args[10], "learning_curve", context)
-    var shuffle = msel_flag_truth(args[8], context)
-    var seed = _search_seed(args[9], context)
-    var return_times = msel_flag_truth(args[11], context)
-    # SEVERAL SCORERS (lane mf-tail5): scikit-learn 1.9's `validate_params`
-    # of learning_curve allows `scoring` only as a scorer name, a callable or
-    # None ([StrOptions(get_scorer_names()), callable, None]): a list, tuple,
-    # set or dict is its InvalidParameterError, raised before any fold or
-    # fit. Lane mf-tail5b: its CLASS (`InvalidParameterError`, a ValueError
-    # and a TypeError: scikit-learn's own when sklearn is loaded, else
-    # `_invalid_parameter_class`'s) and its words as `StrOptions.__str__`
-    # writes them: the names' reprs in the order of the Python set it holds
-    # (`StrOptions(set(get_scorer_names()))`).
-    var scoring_in = args[6]
     var many = py_type(scoring_in)
     if many is b.list or many is b.tuple or many is b.set or many is b.dict:
         var names = py_call(b.list, py_call(b.set, py_call(b.list, context["family_msel_scorers"])))
@@ -570,8 +541,22 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
                 shown += ", "
             shown += family_repr(names[i])
         mx_raise_obj(_invalid_parameter_class(context),
-                     PythonObject("The 'scoring' parameter of learning_curve must be a str among " + shown
+                     PythonObject("The 'scoring' parameter of " + caller + " must be a str among " + shown
                                   + "}, a callable or None. Got " + family_repr(scoring_in) + " instead."))
+
+
+def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`learning_curve(estimator, X, y, groups, train_sizes, cv, scoring,
+    n_jobs, shuffle, random_state, error_score, return_times)`."""
+    var b = msel_b()
+    var estimator = args[0]
+    # One scorer (`_one_scorer_check`), in validate_params' signature order:
+    # scoring comes before n_jobs, shuffle, random_state and error_score.
+    _one_scorer_check("learning_curve", args[6], context)
+    _ = msel_unit_jobs(args[7], args[10], "learning_curve", context)  # n_jobs and error_score words
+    var shuffle = msel_flag_truth(args[8], context)
+    var seed = _search_seed(args[9], context)
+    var return_times = msel_flag_truth(args[11], context)
     var got = msel_cv_folds(estimator, args[1], args[2], args[5], args[3], False, context)
     var x = got[0]
     var y = got[1]
