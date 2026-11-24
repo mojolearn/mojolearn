@@ -282,8 +282,9 @@
   },
   "gbdt-id-defer-copy": {
    "define": "MOJOLEARN_GBDT_ID_DEFER_COPY",
-   "status": "define in code (greedy_search_helper_depthwise.mojo DEFER_HIST_COPY_1903): B = NVIDIA/AMD IDENTICAL take Apple IDENTICAL's deferred parent-histogram copy and dirty-slot zero pass; A = split-time copy and full zero pass",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2): NOISE (L40S 24 cells, median 1.00, 0.99..1.03, depthwise istella fit 6152 -> 6265 ms, lossguide taxi 8352 -> 8551 ms); A (the split-time copy and full zero pass on NVIDIA/AMD IDENTICAL) is unchanged; removed: the define's term in DEFER_HIST_COPY_1903; the define is refused (core/experiment_guards_trees.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_ID_DEFER_COPY.ab-outcome-2.patch. Was: define in code (greedy_search_helper_depthwise.mojo DEFER_HIST_COPY_1903): B = NVIDIA/AMD IDENTICAL take Apple IDENTICAL's deferred parent-histogram copy and dirty-slot zero pass; A = split-time copy and full zero pass",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "c48-if-partition": {
    "define": "MOJOLEARN_TREES_C48_IF_PARTITION",
@@ -2310,7 +2311,8 @@
    "b_arms": [
     "gbdt-id-defer-copy"
    ],
-   "decides": "B is promoted only when gbdt-depthwise fit (istella, istella prebinned, taxi prebinned) and gbdt-lossguide fit are faster on NVIDIA L40S; digests must not move (schedule only: every slot holds the same bytes at every read; Apple IDENTICAL ships this schedule)"
+   "decides": "B is promoted only when gbdt-depthwise fit (istella, istella prebinned, taxi prebinned) and gbdt-lossguide fit are faster on NVIDIA L40S; digests must not move (schedule only: every slot holds the same bytes at every read; Apple IDENTICAL ships this schedule)",
+   "owed": "DECIDED"
   },
   {
    "id": "rr-c48-if-partition",
