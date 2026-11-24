@@ -2690,6 +2690,14 @@ struct _ScorerKw(Movable):
     # holds the native scorer door's words): the admission scores a stand-in
     # row whose every side raises them
     var stand_in: Bool
+    # lane mf-r9c (door :3670): the dual 'roc_auc' row's multi_class (0 the
+    # row's 'raise', 1 'ovr', 2 'ovo') and, read beside it in any order, its
+    # average (`roc_avg_given`, the value) and labels (None: none); resolved
+    # after the kwargs into a multi_class row (`_multi_class_row`)
+    var mclass: Int
+    var roc_avg_given: Bool
+    var roc_avg: PythonObject
+    var roc_labels: PythonObject
 
     def __init__(out self):
         self.flip = False
@@ -2713,6 +2721,10 @@ struct _ScorerKw(Movable):
         self.wmode = 0
         self.rename = String("")
         self.stand_in = False
+        self.mclass = 0
+        self.roc_avg_given = False
+        self.roc_avg = PythonObject(None)
+        self.roc_labels = PythonObject(None)
 
 
 def _sorted_labels(value: PythonObject, b: PythonObject) raises -> PythonObject:
@@ -2738,6 +2750,48 @@ def _is_sorted(value: PythonObject, b: PythonObject) raises -> Bool:
         return False
 
 
+def _multi_class_row(mut kw: _ScorerKw, b: PythonObject) raises:
+    """UNPACK (lane mf-r9c, door :3670): the dual 'roc_auc' scorer with a
+    make_scorer's multi_class 'ovr' / 'ovo' (`kw.mclass`), read once: its
+    average selects the row as the one-vs-rest / one-vs-one rows' average
+    does (`_table_row_kwarg`, the door's `_roc_options` options and words),
+    'macro' when not given; its labels are the multiclass rows' (one-vs-rest
+    checks they are ordered). The row then reads the response the class has
+    (core/msel_scorer_run.mojo `_dual`)."""
+    var ovr = kw.mclass == 1
+    var none = False
+    var text = String("macro")
+    if kw.roc_avg_given:
+        if kw.roc_avg is None:
+            none = True
+        elif py_type(kw.roc_avg) is b.str:
+            text = String(py=kw.roc_avg)
+        else:
+            text = String("")
+    if none:
+        if ovr:
+            kw.rename = String("roc_auc(multi_class='ovr', average=None)")
+            kw.avg_none = True
+        else:
+            _refuse(kw, "NotImplementedError: average=None is not implemented for multi_class='ovo'.")
+    elif text == "macro":
+        kw.rename = String("roc_auc(multi_class='ovr')") if ovr else String("roc_auc(multi_class='ovo')")
+    elif text == "weighted":
+        kw.rename = (String("roc_auc(multi_class='ovr', average='weighted')") if ovr
+                     else String("roc_auc(multi_class='ovo', average='weighted')"))
+    elif text == "micro" and ovr:
+        kw.rename = String("roc_auc(multi_class='ovr', average='micro')")
+    elif ovr:
+        _refuse(kw, "average must be one of ('micro', 'macro', 'weighted', None) for multiclass problems")
+    else:
+        _refuse(kw, "average must be one of ('macro', 'weighted', None) for multiclass problems")
+    if kw.roc_labels is not None:
+        if ovr and not _is_sorted(kw.roc_labels, b):
+            _refuse(kw, "Parameter 'labels' must be ordered")
+        else:
+            kw.labels = kw.roc_labels
+
+
 def _refuse(mut kw: _ScorerKw, words: String):
     """The first refused kwarg's words (raised per side)."""
     if kw.refuse_text.byte_length() == 0:
@@ -2758,6 +2812,18 @@ def _table_row_kwarg(typed: MselScorer, word: String, theirs: PythonObject, mut 
     `sparse` (it changes no value)."""
     var roc = msel_scorer_roc_problem(typed)
     if roc >= 0:
+        if word == "multi_class" and roc == ROC_BINARY:
+            # lane mf-r9c (door :3670): the dual 'roc_auc' row's multi_class.
+            # 'ovr' / 'ovo' select a multi_class row after the kwargs
+            # (`_multi_class_row`); any other value is the row's own, as the
+            # door reads it (bindings/mcls_ranking_door.mojo `_roc_options`:
+            # not 'ovr' or 'ovo' raises "multi_class must be in ('ovo',
+            # 'ovr')" on a multiclass side, the binary arm ignores it).
+            if py_type(theirs) is b.str and String(py=theirs) == "ovr":
+                kw.mclass = 1
+            elif py_type(theirs) is b.str and String(py=theirs) == "ovo":
+                kw.mclass = 2
+            return True
         if word == "max_fpr":
             if theirs is None:
                 return True
@@ -2770,6 +2836,8 @@ def _table_row_kwarg(typed: MselScorer, word: String, theirs: PythonObject, mut 
             kw.param_text = String(py=py_call(b.str, theirs))
             return True
         if word == "labels":
+            if theirs is not None and roc == ROC_BINARY:
+                kw.roc_labels = theirs  # lane mf-r9c: a multi_class row reads them
             if theirs is None or roc == ROC_BINARY:
                 return True  # the binary arm reads no labels
             if (roc == ROC_OVR or roc == ROC_OVR_WEIGHTED) and not _is_sorted(theirs, b):
@@ -2779,6 +2847,8 @@ def _table_row_kwarg(typed: MselScorer, word: String, theirs: PythonObject, mut 
             return True
         if word == "average":
             if roc == ROC_BINARY:
+                kw.roc_avg_given = True  # lane mf-r9c: a multi_class row's average
+                kw.roc_avg = theirs
                 var ok = theirs is None
                 if not ok and py_type(theirs) is b.str:
                     var a = String(py=theirs)
@@ -3252,6 +3322,8 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                 continue  # fbeta_score without its beta: the door raises its words
             mine_kw.flip = not Bool(py=py_call(b.bool, py_call(eq, py_call(b.getattr, row, PythonObject("_sign")),
                                                                py_call(b.getattr, got, PythonObject("_sign")))))
+            if mine_kw.mclass > 0:
+                _multi_class_row(mine_kw, b)  # lane mf-r9c: the dual 'roc_auc' row's multi_class
             if mine_kw.rename.byte_length() > 0:
                 name = mine_kw.rename.copy()  # lane mf-score8: the row the kwargs select
             kw = mine_kw^

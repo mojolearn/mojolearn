@@ -568,6 +568,33 @@ def _table() -> List[MselScorer]:
                         MEMBER_OP_PREDICT_PROBA))
     t.append(MselScorer("roc_auc(multi_class='ovr', average=None)", _F_ROC, ROC_OVR_NONE, 0, 1.0,
                         MEMBER_OP_PREDICT_PROBA))
+    # lane mf-r9c (door :3670, appended: earlier codes unchanged): the DUAL
+    # 'roc_auc' scorer (response ('decision_function', 'predict_proba')) with
+    # a make_scorer's multi_class 'ovr' / 'ovo' and its average: the
+    # one-vs-rest / one-vs-one programs over the response the class has
+    # (`_dual`: decision first, as 'roc_auc''s pair). A decision side that
+    # does not sum to one per row raises roc_auc_score's words in the
+    # program (bindings/mcls_ranking_run.mojo `_ROC_ROWS_WORDS`), as
+    # `_multiclass_roc_auc_score` does; a binary member's one column takes
+    # the binary arm (scikit-learn ignores multi_class there).
+    t.append(MselScorer("roc_auc(multi_class='ovr')", _F_ROC, ROC_OVR, 0, 1.0, MEMBER_OP_DECISION))
+    t.append(MselScorer("roc_auc(multi_class='ovr')", _F_ROC, ROC_OVR, 0, 1.0, MEMBER_OP_PREDICT_PROBA))
+    t.append(MselScorer("roc_auc(multi_class='ovo')", _F_ROC, ROC_OVO, 0, 1.0, MEMBER_OP_DECISION))
+    t.append(MselScorer("roc_auc(multi_class='ovo')", _F_ROC, ROC_OVO, 0, 1.0, MEMBER_OP_PREDICT_PROBA))
+    t.append(MselScorer("roc_auc(multi_class='ovr', average='weighted')", _F_ROC, ROC_OVR_WEIGHTED, 0, 1.0,
+                        MEMBER_OP_DECISION))
+    t.append(MselScorer("roc_auc(multi_class='ovr', average='weighted')", _F_ROC, ROC_OVR_WEIGHTED, 0, 1.0,
+                        MEMBER_OP_PREDICT_PROBA))
+    t.append(MselScorer("roc_auc(multi_class='ovo', average='weighted')", _F_ROC, ROC_OVO_WEIGHTED, 0, 1.0,
+                        MEMBER_OP_DECISION))
+    t.append(MselScorer("roc_auc(multi_class='ovo', average='weighted')", _F_ROC, ROC_OVO_WEIGHTED, 0, 1.0,
+                        MEMBER_OP_PREDICT_PROBA))
+    # the decision halves of the micro / None rows above (their proba rows
+    # serve 'roc_auc_ovr' renamed by its average too)
+    t.append(MselScorer("roc_auc(multi_class='ovr', average='micro')", _F_ROC, ROC_OVR_MICRO, 0, 1.0,
+                        MEMBER_OP_DECISION))
+    t.append(MselScorer("roc_auc(multi_class='ovr', average=None)", _F_ROC, ROC_OVR_NONE, 0, 1.0,
+                        MEMBER_OP_DECISION))
     return t^
 
 
@@ -936,7 +963,11 @@ def msel_scorer_cluster_entry(row: MselScorer) -> Bool:
 
 def _dual(row: MselScorer) -> Bool:
     """A scorer of response ('decision_function', 'predict_proba'): two rows,
-    the UNPACK picks one by the class's methods."""
+    the UNPACK picks one by the class's methods. Lane mf-r9c: the
+    multi_class rows of the dual 'roc_auc' scorer too (their names start
+    "roc_auc(multi_class=")."""
+    if row.family == _F_ROC and String(row.name).startswith("roc_auc(multi_class="):
+        return True
     return (row.family == _F_ROC and row.metric == ROC_BINARY) or row.family == _F_AP or row.family == _F_TOP_K
 
 
