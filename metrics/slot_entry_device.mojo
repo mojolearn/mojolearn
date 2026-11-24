@@ -36,7 +36,7 @@ Operations and their words (inputs are (address, slot) pairs, in order):
     MS_CONFUSION        yt, yp                  n, k, normalization             -       out (k*k)      returns k*k
     MS_PRFS             yt, yp                  n, k, avg, pos, zero, selected  -       out            returns count
     MS_SILHOUETTE       X f32, labels i32       rows, cols, n_labels, chunk, sx -       scores (rows)  1 (mean)
-    MS_TRUST            X f32, X_emb (HOST)     n, m, d, n_neighbors, batch, sx -       -              1
+    MS_TRUST            X f32, X_emb f32        n, m, d, n_neighbors, batch, sx -       -              1
     MS_ENCODE           labels (slot only)      n, kind, item, codes slot       -       classes (host) returns k
     MS_ENCODE_PAIR      yt, yp (item 4 / 8)     n, kind, item, codes_t, codes_p -       classes|0      returns k
     MS_GATHER           codes (slot only)       n, nt, dst slot                 -       table (host)   first miss|-1
@@ -46,9 +46,11 @@ runs here on the device (1 silhouette_score / trustworthiness, 2
 silhouette_samples: the door's words), for an X the door never saw on the
 host (a DeviceRows fold gathered on the device).
 
-MS_TRUST: X is read in place; X_embedded is a host address because the
-embedded k-NN's boundary is host pointers (neighbors/estimator.mojo
-`knn_search`). MS_ENCODE is lane vdf-xm-labels' `metric_encode_resident`
+MS_TRUST: X is read in place; X_embedded too when it is a slot (lane
+vdf-xm-wire: the embedded k-NN's index is the slot and its queries the same
+rows copied on the device, neighbors/estimator.mojo
+`_knn_search_on_device_index` `self_queries`), else the host address the
+search uploads. MS_ENCODE is lane vdf-xm-labels' `metric_encode_resident`
 writing the codes into a store slot the caller made (`metric_slot_create`),
 so a resident label vector's codes reach the kernel entry without a host
 round trip.
@@ -374,20 +376,31 @@ def metric_slot_run(op: Int, addrs: List[Int], slots: List[Int], ints: List[Int]
                         + String(n) + ", " + String(m) + ", " + String(d))
         if ints[4] < 1:
             raise Error("trustworthiness: batchSize must be >= 1")
-        if slots[1] >= 0:
-            raise Error("trustworthiness: X_embedded is read from the host (the embedded k-NN's boundary)")
         var dx = _floats_in(inputs, addrs[0], slots[0], n * m)
         if ints[5] != 0:
             # the door's X refusal (mcls_cluster_door.mojo `_trustworthiness`) for an X it never saw on the host
             inputs.scan_f32(dx, n * m, False, 0)
             _refuse(inputs.flags(), 0, "mojolearn trustworthiness: X contains NaN or infinity; refused here "
                     + "(metrics/README.md HAND-OFF ask 3)")
-        # the embedded k-NN reads host words: one list of the n x d host values
-        var emb = List[Float32](unsafe_uninit_length=n * d)
-        unsafe_memcpy(dest=emb.unsafe_ptr(), src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addrs[1]),
-                      count=n * d)
         var trace = IdentityTrace()
-        var r = trustworthiness_rank_sum_dx(ctx, trace, dx, emb, n, m, d, n_neighbors, False, 0, False)
+        var emb = List[Float32]()
+        var r: Tuple[Int64, List[UInt32]]
+        if slots[1] >= 0:
+            # a resident X_embedded (lane vdf-xm-wire): the embedded k-NN reads the slot in place
+            # (`emb_dev_addr`), refused here when not finite, as the door refuses a host one
+            var de = _floats_in(inputs, 0, slots[1], n * d)
+            inputs.scan_f32(de, n * d, False, 1)
+            _refuse(inputs.flags(), 1, "mojolearn trustworthiness: X_embedded contains NaN or infinity; refused here "
+                    + "(metrics/README.md HAND-OFF ask 3)")
+            r = trustworthiness_rank_sum_dx(ctx, trace, dx, emb, n, m, d, n_neighbors, False, 0, False,
+                                            Int(de.unsafe_ptr()))
+            _ = de^
+        else:
+            # a host X_embedded: the search uploads the caller's words (one list of the n x d values)
+            emb = List[Float32](unsafe_uninit_length=n * d)
+            unsafe_memcpy(dest=emb.unsafe_ptr(),
+                          src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addrs[1]), count=n * d)
+            r = trustworthiness_rank_sum_dx(ctx, trace, dx, emb, n, m, d, n_neighbors, False, 0, False)
         # trustworthiness_score_traced's closed form (:204), in double, one rounding
         var nn = Float64(n)
         var kk = Float64(n_neighbors)

@@ -81,7 +81,11 @@ from metrics.checks.pinned_sum import (
     linear_block_id,
     physical_block_count,
 )
-from neighbors.estimator import knn_search_traced, _knn_search_traced_retaining
+from neighbors.estimator import (
+    knn_search_traced, _knn_search_traced_retaining, _knn_search_plan, _knn_search_on_device_index, DEFAULT_QUERY_TILE,
+)
+from neighbors.impl.multi_gpu import neighbors_device_plan
+from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO, METRIC_FROM_IS_SQRT
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 #: lane fam2-prep-metrics (2026-10-04), IDENTICAL, ON by default: the embedded
@@ -207,6 +211,29 @@ def trustworthiness_rank_sum(
     return r^
 
 
+def _trust_embedded_knn_host(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    mut retained: List[DeviceBuffer[DType.uint32]],
+    emb_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+    d: Int,
+    k1: Int,
+    dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    idx_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+) raises:
+    """The embedded k-NN over a HOST X_embedded (the search uploads it): the
+    retaining form under IDN_TRUST_DEV (its sorted device indices appended to
+    `retained`), else `knn_search_traced`. Moved unchanged out of
+    `trustworthiness_rank_sum_dx` (lane vdf-xm-wire)."""
+    comptime if IDN_TRUST_DEV:
+        _ = _knn_search_traced_retaining(
+            ctx, trace, retained, True, emb_ptr, n, emb_ptr, n, d, k1, dist_ptr, idx_ptr, True,
+        )
+    else:
+        _ = knn_search_traced(ctx, trace, emb_ptr, n, emb_ptr, n, d, k1, dist_ptr, idx_ptr, True)
+
+
 def trustworthiness_rank_sum_dx(
     ctx: DeviceContext,
     mut trace: IdentityTrace,
@@ -219,12 +246,20 @@ def trustworthiness_rank_sum_dx(
     block_size_is_64: Bool,
     grid_x_override: Int,
     want_idx: Bool = True,
+    emb_dev_addr: Int = 0,
 ) raises -> Tuple[Int64, List[UInt32]]:
     """`trustworthiness_rank_sum` over X already on the device (`x_dev`,
     n x m row-major on `ctx`): the resident form of the `_mojolearn_metrics`
-    entry reads X in place (metrics/slot_entry_device.mojo). X_embedded
-    stays a host list: the embedded k-NN's boundary
-    (`neighbors/estimator.mojo::knn_search`) is host pointers."""
+    entry reads X in place (metrics/slot_entry_device.mojo).
+
+    `emb_dev_addr` (lane vdf-xm-wire): when not 0, X_embedded is ALSO on the
+    device (n x d float32 at that device address on `ctx`, a resident slot)
+    and `x_embedded_host` is not read: the embedded k-NN is the same plan and
+    the same search (`_knn_search_plan`, `_knn_search_on_device_index`, the
+    retaining form), its index read in place and its queries the index rows
+    copied on the device (`self_queries`). Same words, same indices, same
+    integer rank sum: no bit moves. 0: X_embedded is the host list, read in
+    place by the search's upload."""
     if len(x_dev) < n * m:
         raise Error("trustworthiness: X holds " + String(len(x_dev)) + " floats, needs " + String(n * m))
     if n_neighbors < 1:
@@ -260,6 +295,8 @@ def trustworthiness_rank_sum_dx(
     var stage_len = n * d
     comptime if IDN_TRUST_NO_STAGE:
         stage_len = 1
+    if emb_dev_addr != 0:
+        stage_len = 1
     var h_emb = ctx.enqueue_create_host_buffer[DType.float32](stage_len)
     var h_dist = ctx.enqueue_create_host_buffer[DType.float32](n * k1)
     var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](n * k1)
@@ -271,39 +308,28 @@ def trustworthiness_rank_sum_dx(
             MutUntrackedOrigin
         ]()
     else:
-        copy_f32(x_embedded_host.unsafe_ptr(), h_emb.unsafe_ptr(), n * d)
+        if emb_dev_addr == 0:  # a device X_embedded has no host words to stage
+            copy_f32(x_embedded_host.unsafe_ptr(), h_emb.unsafe_ptr(), n * d)
         emb_ptr = h_emb.unsafe_ptr()
     var retained = List[DeviceBuffer[DType.uint32]]()
-    comptime if IDN_TRUST_DEV:
-        _ = _knn_search_traced_retaining(
-            ctx,
-            trace,
-            retained,
-            True,
-            emb_ptr,
-            n,
-            emb_ptr,
-            n,
-            d,
-            k1,
-            h_dist.unsafe_ptr(),
-            h_idx.unsafe_ptr(),
-            True,
+    if emb_dev_addr != 0:
+        # a device-resident X_embedded: no host word, no upload (module note above)
+        var dplan = neighbors_device_plan()
+        var plan = _knn_search_plan(
+            dplan, emb_ptr, n, emb_ptr, n, d, k1, True, DEFAULT_QUERY_TILE, KNN_METHOD_AUTO,
+            METRIC_FROM_IS_SQRT, Float32(2.0), queries_on_device=True,
         )
+        var index = DeviceBuffer[DType.float32](
+            ctx, MutPointer[Float32, MutAnyOrigin](unsafe_from_address=emb_dev_addr), n * d, owning=False
+        )
+        _ = _knn_search_on_device_index(
+            ctx, trace, retained, True, index, n, emb_ptr, n, d, k1, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
+            True, plan[2], KNN_METHOD_AUTO, plan[0], Float32(2.0), plan[1], plan[3], dplan,
+            self_queries=True,
+        )
+        _ = index^  # not owning: the slot stays with its store
     else:
-        _ = knn_search_traced(
-            ctx,
-            trace,
-            emb_ptr,
-            n,
-            emb_ptr,
-            n,
-            d,
-            k1,
-            h_dist.unsafe_ptr(),
-            h_idx.unsafe_ptr(),
-            True,
-        )
+        _trust_embedded_knn_host(ctx, trace, retained, emb_ptr, n, d, k1, h_dist.unsafe_ptr(), h_idx.unsafe_ptr())
     var out_idx = List[UInt32]()
     var build_idx = True
     comptime if IDN_TRUST_DEV:
@@ -312,8 +338,9 @@ def trustworthiness_rank_sum_dx(
         for i in range(n * k1):
             out_idx.append(h_idx.unsafe_ptr().unsafe_load(i))
     var emb: DeviceBuffer[DType.uint32]
-    comptime if IDN_TRUST_DEV:
-        # the search's own sorted device indices (n x k1 uint32)
+    if len(retained) > 0:
+        # the search's own sorted device indices (n x k1 uint32): the retaining form ran
+        # (IDN_TRUST_DEV, or a device-resident X_embedded)
         emb = retained.pop()
     else:
         emb = ctx.enqueue_create_buffer[DType.uint32](n * k1)

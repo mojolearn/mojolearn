@@ -343,19 +343,23 @@ def _trustworthiness(args: PythonObject, context: PythonObject) raises -> Python
             raise Error("mojolearn trustworthiness: X contains NaN or infinity; refused here (metrics/README.md HAND-OFF ask 3)")
         _ = x  # keep the Python object alive through the native calls above
         x_slot = state.slot(args[0], x)
-    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(emb))), Int(py=emb.size)):
-        raise Error("mojolearn trustworthiness: X_embedded contains NaN or infinity; refused here "
-                    + "(metrics/README.md HAND-OFF ask 3)")
+    # X_embedded resident in the active resident() scope (lane vdf-xm-wire): the embedded k-NN reads
+    # its slot in place and the entry refuses a non-finite one on the device with these words
+    var emb_slot = state.slot(args[0], emb)
+    if emb_slot < 0:
+        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(emb))), Int(py=emb.size)):
+            raise Error("mojolearn trustworthiness: X_embedded contains NaN or infinity; refused here "
+                        + "(metrics/README.md HAND-OFF ask 3)")
     _ = emb  # keep the Python object alive through the native calls above
     var batch = mc_int(args[5])
     if batch < 1:
         raise Error("mojolearn trustworthiness: batch_size must be at least 1, got " + family_repr(args[5]))
     var result: PythonObject
-    if on_rows or x_slot >= 0:
+    if on_rows or x_slot >= 0 or emb_slot >= 0:
         if on_rows:
             x_slot = state.rows(args[0], args[1])[0]
         var addrs: List[Int] = [0 if on_rows else Int(py=classical_address(x)), Int(py=classical_address(emb))]
-        var slots: List[Int] = [x_slot, -1]
+        var slots: List[Int] = [x_slot, emb_slot]
         var ints: List[Int] = [rows, m, Int(py=emb.shape[1]), mc_int(args[3]), batch, 1 if on_rows else 0]
         result = _as_float(mc_slots_call(args[0], MS_TRUST, addrs, slots, ints, List[Float64](), List[Int](), state))
     else:

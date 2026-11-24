@@ -90,7 +90,10 @@ struct McSlots(Movable):
         """The store slot a host float32 / int32 C-contiguous input of the
         call is read from in place: its resident copy inside `resident()`
         (put once per scope, a hit afterwards), else -1 (the host route)."""
-        return self.slot_words(binding, value, Int(py=classical_address(value)), Int(py=value.size))
+        var size = Int(py=value.size)
+        if not self.resident.keeps(False, size):
+            return -1  # outside resident() or below its floor: no address read
+        return self.slot_words(binding, value, Int(py=classical_address(value)), size)
 
     def slot_words(mut self, binding: PythonObject, owner: PythonObject, address: Int, words: Int) raises -> Int:
         """`slot` for `words` 4-byte words at `address` owned by `owner` (an
