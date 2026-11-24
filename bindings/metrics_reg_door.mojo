@@ -33,7 +33,11 @@ from bindings.native_buffer_owner_pack import native_buffer_view
 from bindings.classical_arrays_door import classical_address, classical_is_array, classical_dtype_str
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_pandas_door import classical_admit_value
-from bindings.metrics_native_support_door import metric_is_real, metric_is_bool, metric_float, metric_arguments, metric_undefined
+from bindings.metrics_native_support_door import (
+    metric_is_real, metric_is_bool, metric_float, metric_arguments_to, metric_undefined,
+)
+from bindings.metrics_device_door import metric_device_admit, metric_device_identical
+from providers.python.function_device_boundary_door import function_device_scope
 from bindings.classical_validate_unpack import classical_view
 from bindings.arena_prog_run import MetricArenaOwner
 from bindings.metrics_program_door import MetricDoorProg, metric_door_run, metric_plan_run
@@ -394,10 +398,46 @@ def metrics_reg_unknown_operation(operation: String) raises:
 def metrics_reg_operation(operation: Int, var args: PythonObject, context: PythonObject) raises -> PythonObject:
     """The regression metrics; each shell passes its arguments in its
     signature's order (see python/mojolearn/_expansion_metrics.py).
-    `operation` is the leaf code of bindings/operation_names_metric.mojo."""
+    `operation` is the leaf code of bindings/operation_names_metric.mojo.
+    The native callers' form (bindings/xseq_score_native_door.mojo): no
+    `device` item, the route of the caller's context."""
+    var end = len(args)
+    return _metrics_reg_run(operation, args^, end, context)
+
+
+def metrics_reg_public(operation: Int, var args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The family door's form (bindings/family_native_door.mojo): the public
+    shell's tuple ends with its `device` (lane vdf-metrics), read FIRST, before
+    any admission or work (bindings/metrics_device_door.mojo). The programs
+    run in `function_device_scope`'s context."""
+    var end = len(args) - 1
+    if end < 0:
+        raise Error("TypeError: a public metric call carries its device as the last argument")
+    var device = metric_device_admit(args[end], "this mojolearn.metrics function", context)
+    if device.host_beside:
+        metric_device_identical(_reg_mode(operation, args, end), context)
+    return _metrics_reg_run(operation, args^, end, function_device_scope(device, context))
+
+
+def _reg_mode(operation: Int, args: PythonObject, end: Int) raises -> PythonObject:
+    """The `numeric_mode` item (explicit device="cpu" beside a GPU set only):
+    the last item, except the metrics with an alpha or a power after it."""
+    if operation == METRIC_OPN_FAMILY_METRIC_PINBALL or operation == METRIC_OPN_FAMILY_METRIC_D2_PINBALL:
+        var first_mode = args[4]  # a local, never a returned subscript (AGENTS.md part 6)
+        return first_mode
+    if operation == METRIC_OPN_FAMILY_METRIC_TWEEDIE or operation == METRIC_OPN_FAMILY_METRIC_D2_TWEEDIE:
+        var second_mode = args[3]  # a local, never a returned subscript (AGENTS.md part 6)
+        return second_mode
+    var last_mode = args[end - 1]  # a local, never a returned subscript (AGENTS.md part 6)
+    return last_mode
+
+
+def _metrics_reg_run(operation: Int, var args: PythonObject, end: Int, context: PythonObject) raises -> PythonObject:
+    """`args[:end]` are the metric's own arguments; `context` is already the
+    device's."""
     classical_connect_numpy(context)
     classical_admit_value(args, context)
-    args = metric_arguments(args, 0, context)
+    args = metric_arguments_to(args, 0, end, context)
     if operation == METRIC_OPN_FAMILY_METRIC_REGRESSION_REPORT:
         return _regression_report(args, context)
     if operation == METRIC_OPN_FAMILY_METRIC_REGRESSION_ERROR:

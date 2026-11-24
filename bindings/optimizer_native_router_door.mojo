@@ -9,6 +9,8 @@ from bindings.sequence_layers_native_door import sequence_layer_norm
 from bindings.sequence_moe_native_door import sequence_moe_operation
 from bindings.training_extra_native_door import training_chunked_lm_head, training_mlp_sessions, training_residual_dropout
 from bindings.samba_head_native_unpack import training_samba_head_loss
+from bindings.training_function_device_unpack import training_function_op, training_function_device, training_entries_cpu
+from core.function_device import function_device_default
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_words_unpack import optimizer_python_error, stash_python_error
@@ -537,10 +539,21 @@ def optimizer_native(operation: Int, name: PythonObject, owner: PythonObject, va
     var nk = optimizer_keys()
     if py_type(values) is not py_item(context, nk[].k_container_types)[1]:
         raise Error("TypeError: optimizer requires native argument tuples")
+    # lane vdf-linalg: a public training function's `device` (the last item of
+    # its tuple), read once here before any work
+    # (bindings/training_function_device_unpack.mojo). None: these integer
+    # compares and one identity compare; the entries below are today's.
+    var fdev = function_device_default()
+    if training_function_op(operation):
+        var item = values[len(values) - 1]
+        if item is not None:
+            fdev = training_function_device(operation, item, values, context)
     if route == OPTIMIZER_ROUTE_SEQDEV:
         return sequence_device_operation(operation, owner, values, mode, context)
     if operation == OPTIMIZER_OPN_RESIDUAL_DROPOUT or operation == OPTIMIZER_OPN_RESIDUAL_DROPOUT_BACKWARD:
         # the explicit residual layer runs in identical mode only
+        if fdev.host_beside:
+            return training_residual_dropout(operation, values, training_entries_cpu(PythonObject("identical"), context), context)
         return training_residual_dropout(operation, values, optimizer_entries_identical(context), context)
     if route == OPTIMIZER_ROUTE_EMBLAYER:
         # mojolearn.Embedding's forward and load (bindings/embedding_layer_native.mojo)
@@ -584,7 +597,7 @@ def optimizer_native(operation: Int, name: PythonObject, owner: PythonObject, va
         return optimizer_set_params(owner, values[0], context)
     if operation == OPTIMIZER_OPN_EXPORT_OWNER:
         return optimizer_export_state(owner)
-    var entries = optimizer_entries(selected_mode, context)
+    var entries = training_entries_cpu(selected_mode, context) if fdev.host_beside else optimizer_entries(selected_mode, context)
     if operation == OPTIMIZER_OPN_LINEAR_FORWARD or operation == OPTIMIZER_OPN_LINEAR_BACKWARD:
         return training_linear_operation(operation, name, values, entries, context)
     if operation == OPTIMIZER_OPN_RMS_NORM_FORWARD or operation == OPTIMIZER_OPN_RMS_NORM_BACKWARD:

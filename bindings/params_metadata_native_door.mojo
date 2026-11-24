@@ -253,6 +253,11 @@ def _read_inner(model: PythonObject, deep: Bool, context: PythonObject,
             if py_contains(out, names[i]):
                 raise Error("TypeError: repeated splitter has a duplicate constructor parameter")
             py_setitem(out, names[i], values[names[i]])
+        # device= (lane vdf-msel): stored by the constructor only when given
+        # (bindings/msel_split_door.mojo `msel_splitter_initialize`).
+        var device = py_get(fields, "device")
+        if device is not None:
+            py_setitem(out, "device", device)
         return out
     if kind == "forest":
         var has = py_get(fields, nk[].k__has_constructor_parameters)

@@ -141,6 +141,12 @@ class BpeTokenizer:
     ranks_file : str or path-like
         A rank file (see :meth:`from_ranks_file`). Required: there is no
         built-in vocabulary, so omitting it raises ValueError.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None follows the numeric mode. 'cpu' runs on
+        the CPU and raises ValueError in numeric mode 'fast'. 'gpu' runs the fast
+        batch encoder on an Apple GPU in numeric mode 'fast', and raises
+        ValueError anywhere else and for the operations that encoder does not
+        cover (encode, decode, allow_endoftext=True). Other values raise ValueError.
 
     Raises
     ------
@@ -158,8 +164,8 @@ class BpeTokenizer:
 
     ENDOFTEXT = "<|endoftext|>"
 
-    def __init__(self, ranks_file=None):
-        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_init', (self, ranks_file), _TOKENIZER_CONTEXT)
+    def __init__(self, ranks_file=None, *, device=None):
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_init', (self, ranks_file, device), _TOKENIZER_CONTEXT)
 
     def _adopt(self, m, handle, source):
         return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_adopt', (self, handle, source), _TOKENIZER_CONTEXT)
@@ -167,21 +173,28 @@ class BpeTokenizer:
     # ------------------------------------------------------------ loading
 
     @classmethod
-    def from_ranks_file(cls, path):
+    def from_ranks_file(cls, path, *, device=None):
         """Load a rank file.
 
         One ``rank<TAB>hex_of_token_bytes`` line per rank, ascending from 0, with
         all 256 single bytes present (the format :meth:`TrainedBpeVocabulary.write_ranks`
         writes).
 
+        Parameters
+        ----------
+        path : str or path-like
+            The rank file.
+        device : {None, 'gpu', 'cpu'}, default None
+            As for the constructor.
+
         Returns
         -------
         BpeTokenizer
         """
-        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_ranks', (cls, path), _TOKENIZER_CONTEXT)
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_ranks', (cls, path, device), _TOKENIZER_CONTEXT)
 
     @classmethod
-    def from_token_bytes(cls, tokens):
+    def from_token_bytes(cls, tokens, *, device=None):
         """Build a tokenizer from a list of token byte strings.
 
         A token's rank (and id) is its index. Tokens must be unique and non-empty,
@@ -191,15 +204,17 @@ class BpeTokenizer:
         Parameters
         ----------
         tokens : sequence of bytes-like
+        device : {None, 'gpu', 'cpu'}, default None
+            As for the constructor.
 
         Returns
         -------
         BpeTokenizer
         """
-        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_tokens', (cls, tokens), _TOKENIZER_CONTEXT)
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_tokens', (cls, tokens, device), _TOKENIZER_CONTEXT)
 
     @classmethod
-    def from_files(cls, encoder_json, vocab_bpe):
+    def from_files(cls, encoder_json, vocab_bpe, *, device=None):
         """Load the two files of the GPT-2 format.
 
         Parameters
@@ -208,6 +223,8 @@ class BpeTokenizer:
             ``encoder.json``: token spelling to id.
         vocab_bpe : str or path-like
             ``vocab.bpe``: the merge list.
+        device : {None, 'gpu', 'cpu'}, default None
+            As for the constructor.
 
         Returns
         -------
@@ -223,7 +240,7 @@ class BpeTokenizer:
             a multi-byte token no merge makes. These are the conditions under which
             merging by rank reproduces the merge list.
         """
-        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_files', (cls, encoder_json, vocab_bpe), _TOKENIZER_CONTEXT)
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_files', (cls, encoder_json, vocab_bpe, device), _TOKENIZER_CONTEXT)
 
     @property
     def n_vocab(self):
@@ -382,10 +399,19 @@ class TrainedBpeVocabulary:
         ``(left_id, right_id, new_id)`` in the order the merges were made.
     stats : dict
         Training statistics, including ``n_ties_broken`` and ``tie_break``.
+
+    Parameters
+    ----------
+    tokens, merges, stats
+        As the attributes.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'cpu' run on the CPU ('cpu'
+        raises ValueError in numeric mode 'fast'); 'gpu' raises ValueError.
+        Other values raise ValueError.
     """
 
-    def __init__(self, tokens, merges, stats):
-        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_init', (self, tokens, merges, stats), _TOKENIZER_CONTEXT)
+    def __init__(self, tokens, merges, stats, *, device=None):
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_init', (self, tokens, merges, stats, device), _TOKENIZER_CONTEXT)
 
     @property
     def n_tokens(self):
@@ -427,9 +453,15 @@ class TrainedBpeVocabulary:
         """The :attr:`BpeTokenizer.identity` of this vocabulary, without loading it."""
         return _TOKENIZER_NATIVE.tokenizer_public_call('trained_fact', (self, 'identity'), _TOKENIZER_CONTEXT)
 
-    def tokenizer(self):
-        """A :class:`BpeTokenizer` over this vocabulary, without writing a file."""
-        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_tokenizer', (self,), _TOKENIZER_CONTEXT)
+    def tokenizer(self, *, device=None):
+        """A :class:`BpeTokenizer` over this vocabulary, without writing a file.
+
+        Parameters
+        ----------
+        device : {None, 'gpu', 'cpu'}, default None
+            As for the :class:`BpeTokenizer` constructor.
+        """
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_tokenizer', (self, device), _TOKENIZER_CONTEXT)
 
     def __repr__(self):
         return _TOKENIZER_NATIVE.tokenizer_public_call('trained_fact', (self, 'repr'), _TOKENIZER_CONTEXT)
@@ -483,6 +515,12 @@ class BpeVocabularyTrainer:
         Minimum pair count for a merge; at least 1.
     backend : {"auto", "mojo"}, default "auto"
         Both name the compiled trainer.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where training runs. None follows the numeric mode. 'cpu' runs on the
+        CPU and raises ValueError in numeric mode 'fast'. 'gpu' runs the fast
+        trainer on an Apple GPU in numeric mode 'fast', and raises ValueError
+        anywhere else, including when vocab_size exceeds that trainer's limit.
+        Other values raise ValueError.
 
     Examples
     --------
@@ -496,8 +534,8 @@ class BpeVocabularyTrainer:
 
     _BACKENDS = ("auto", "mojo")
 
-    def __init__(self, vocab_size=32000, min_frequency=2, backend="auto"):
-        return _TOKENIZER_NATIVE.tokenizer_public_call('trainer_init', (self, vocab_size, min_frequency, backend), _TOKENIZER_CONTEXT)
+    def __init__(self, vocab_size=32000, min_frequency=2, backend="auto", *, device=None):
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trainer_init', (self, vocab_size, min_frequency, backend, device), _TOKENIZER_CONTEXT)
 
     def train(self, documents):
         """Train on ``documents``.

@@ -14,13 +14,16 @@
 # UNPACK / RUN / PACK (lane dw-decomp, 2026-11-21): the functions below admit
 # the Python arguments into AdmittedBuf pins and Int words (UNPACK), `lin_call`
 # hands two List[Int] to the table with the GIL released (RUN holds no Python
-# object), and the admitted output owner is returned (PACK). These are
-# functions with no estimator: they take no `device=` and run on the
-# installation's device.
+# object), and the admitted output owner is returned (PACK). Each computing
+# function takes `device=` as the last item of its tuple (lane vdf-linalg,
+# `lin_device` below); the three read-backs (numeric_mode, profile,
+# require_identical) compute nothing and take none.
 # Defines read here: none. The text names MOJOLEARN_AFN_GEMM_EPILOGUE (the Apple
 # fast epilogue arm, operation 15, refused in words by a build without it) and
 # MOJOLEARN_NUMERIC_MODE (in a refusal's advice).
-from providers.python.estimator_binding_pyapi_door import estimator_binding
+from providers.python.estimator_binding_pyapi_door import estimator_binding, estimator_binding_device
+from providers.python.function_device_boundary_door import function_device_admit
+from core.function_device import FunctionDevice, function_device_default
 from std.python import Python, PythonObject
 from std.os import getenv
 from bindings.native_loaded_module_door import native_loaded_module
@@ -101,11 +104,81 @@ def lin_backend_mode(context: PythonObject) raises -> String:
 
 
 def lin_connected_binding(context: PythonObject) raises -> PythonObject:
-    var nk = linalg_keys()
-    var state = lin_state(context)
     # Resolve the live import-connected module once per operation. Linalg's
     # own provider supplies its compile-mode/profile metadata immediately below.
-    var binding = estimator_binding(PythonObject(None), "_mojolearn_linalg", context, False)
+    return lin_publish_binding(estimator_binding(PythonObject(None), "_mojolearn_linalg", context, False), context)
+
+
+# ---------------------------------------------------------------------------
+# `device=` of the linalg functions (lane vdf-linalg, 2026-11-24;
+# core/function_device.mojo, providers/python/function_device_boundary_door.mojo).
+#
+# The linalg binding has both sides: the device kernels (`_mojolearn_linalg`,
+# gemm/linalg_dispatch.mojo, decomposition/linalg_public_device.mojo) and the
+# host image `_mojolearn_linalg_host` (host_surface's linalg family, the
+# whole route on a CPU-only install), which publishes the same operations
+# table. `device=None` is today's route exactly: the door's context and
+# `lin_connected_binding`, unchanged. An explicit "cpu" beside a GPU set runs
+# the host image connected at import (`family_binding_connections_cpu`) in
+# its OWN module state (`lin_device_context`): the binding cache, the mode
+# and profile caches and the operations-table provider of the host image
+# never share a slot with the device image's, so a device="cpu" call on one
+# thread can never read the device provider another thread published (and
+# the reverse), and alternating calls do not reconnect either provider.
+comptime LIN_HAS_GPU = True
+comptime LIN_HAS_CPU = True
+comptime _LIN_CPU_CONTEXT = "lin_cpu_context"
+
+
+def lin_device(value: PythonObject, name: String, has_gpu: Bool, has_cpu: Bool,
+               context: PythonObject) raises -> FunctionDevice:
+    """UNPACK of a linalg function's `device` item: the shared admission,
+    once per public call, before any work."""
+    return function_device_admit(value, name, has_gpu, has_cpu, context, native_loaded_module("builtins"))
+
+
+def lin_device_context(device: FunctionDevice, context: PythonObject) raises -> PythonObject:
+    """The context one linalg call runs in: `context` itself for every
+    device but an explicit "cpu" beside a GPU set (no read, no copy). For
+    that one, a copy of the family context whose `family_lin_state` is the
+    host image's own module state, built at the first such call and held in
+    the family context (one dictionary read per later device="cpu" call)."""
+    if not device.host_beside:
+        return context
+    var held = py_get(context, PythonObject(_LIN_CPU_CONTEXT))
+    if held is not None:
+        return held
+    var nk = linalg_keys()
+    var b = native_loaded_module("builtins")
+    var scope = py_call(b.dict, context)
+    var state = py_call(b.dict, py_item(context, nk[].k_family_lin_state))
+    py_setitem(state, nk[].k__binding_cache, PythonObject(None))
+    py_setitem(state, nk[].k__mode_binding, PythonObject(None))
+    py_setitem(state, nk[].k__mode_cache, PythonObject(None))
+    py_setitem(state, nk[].k__profile_cache, PythonObject(None))
+    py_setitem(state, nk[].k__native_provider, PythonObject(None))
+    py_setitem(scope, nk[].k_family_lin_state, state)
+    py_setitem(context, PythonObject(_LIN_CPU_CONTEXT), scope)
+    return scope
+
+
+def lin_device_binding(device: FunctionDevice, context: PythonObject) raises -> PythonObject:
+    """The linalg binding of one call: `lin_connected_binding` exactly for
+    every device but an explicit "cpu" beside a GPU set; that one is the
+    host image connected at import (identical mode only, refused in the
+    estimators' words otherwise), published into the state of the context
+    `lin_device_context` returned. It never runs the device image in its place."""
+    if not device.host_beside:
+        return lin_connected_binding(context)
+    var binding = estimator_binding_device(device, PythonObject(None), "_mojolearn_linalg", context, False)
+    return lin_publish_binding(binding, context)
+
+
+def lin_publish_binding(binding: PythonObject, context: PythonObject) raises -> PythonObject:
+    """Publish `binding` and its operations-table provider into the module
+    state of `context` (the body `lin_connected_binding` always ran)."""
+    var nk = linalg_keys()
+    var state = lin_state(context)
     # Row N240: the module-state entries are written only when their value
     # changes (an unchanged binding and provider cost four identity reads,
     # not five dict writes per call). The binding and the provider factory
@@ -798,11 +871,43 @@ def _lin_matmul_int15(args: PythonObject, context: PythonObject) raises -> Pytho
     return out.keep
 
 
-def lin_lowbit_operation(operation: Int, var args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _lin_public_name(operation: Int) -> String:
+    """The public name a `device=` refusal of `operation` leads with."""
+    if operation == LINOPS_OPN_FAMILY_LIN_MATMUL:
+        return "mojolearn.linalg.matmul"
+    if operation == LINOPS_OPN_FAMILY_LIN_MATMUL_FUSED:
+        return "mojolearn.linalg_fast.matmul_fused"
+    if operation == LINOPS_OPN_FAMILY_LIN_TO_BF16:
+        return "mojolearn.linalg.to_bf16"
+    if operation == LINOPS_OPN_FAMILY_LIN_FROM_BF16:
+        return "mojolearn.linalg.from_bf16"
+    if operation == LINOPS_OPN_FAMILY_LIN_FROM_F16:
+        return "mojolearn.linalg.from_f16"
+    if operation == LINOPS_OPN_FAMILY_LIN_QUANTIZE_INT8:
+        return "mojolearn.linalg.quantize_int8"
+    if operation == LINOPS_OPN_FAMILY_LIN_DEQUANTIZE_INT8:
+        return "mojolearn.linalg.dequantize_int8"
+    if operation == LINOPS_OPN_FAMILY_LIN_MATMUL_BF16:
+        return "mojolearn.linalg.matmul_bf16"
+    if operation == LINOPS_OPN_FAMILY_LIN_MATMUL_INT8:
+        return "mojolearn.linalg.matmul_int8"
+    if operation == LINOPS_OPN_FAMILY_LIN_QUANTIZE_INT15:
+        return "mojolearn.linalg.quantize_int15"
+    if operation == LINOPS_OPN_FAMILY_LIN_DEQUANTIZE_INT15:
+        return "mojolearn.linalg.dequantize_int15"
+    return "mojolearn.linalg.matmul_int15"
+
+
+def lin_lowbit_operation(operation: Int, var args: PythonObject, var context: PythonObject,
+                         has_device: Bool = True) raises -> PythonObject:
     # bw2-linalg: `operation` is a leaf code of bindings/operation_names_linops.mojo
     # (it was up to three String compares here and fifteen below).
     # Scalar controls may be NumPy scalar owners; exact numeric admission
     # precedes their native truth slots, including object-dtype rejection.
+    # `has_device`: the public shells pass `device` as the last item of a
+    # computing function's tuple (lane vdf-linalg); the one internal caller
+    # that holds the name (the byte LM weight widening,
+    # bindings/linalg_ops_native_unpack.mojo) passes none and runs today's route.
     var controls = Python.dict()
     if operation == LINOPS_OPN_FAMILY_LIN_MATMUL:
         for i in [3, 4, 6]:  # driver-loop: over (transpose and identity controls)
@@ -816,9 +921,21 @@ def lin_lowbit_operation(operation: Int, var args: PythonObject, context: Python
         for i in [3, 4]:  # driver-loop: over (transpose controls)
             host_inference_scalar(args[i], context, True)
             py_setitem(controls, PythonObject(i), PythonObject(lin_truth(args[i])))
-    var binding = lin_connected_binding(context)
+    var last = len(args)
+    var device = function_device_default()
+    if has_device and operation != LINOPS_OPN_FAMILY_LIN_NUMERIC_MODE and operation != LINOPS_OPN_FAMILY_LIN_PROFILE \
+            and operation != LINOPS_OPN_FAMILY_LIN_REQUIRE_IDENTICAL:
+        # The one read of `device` (an identity compare for None), before any
+        # work. matmul_fused is the Apple fast arm: no CPU image carries it.
+        # None costs this one compare: no name is built, nothing else is read.
+        last -= 1
+        if args[last] is not None:
+            device = lin_device(args[last], _lin_public_name(operation), LIN_HAS_GPU,
+                                operation != LINOPS_OPN_FAMILY_LIN_MATMUL_FUSED, context)
+            context = lin_device_context(device, context)
+    var binding = lin_device_binding(device, context)
     var admitted = Python.list(binding)
-    for i in range(1, len(args)):  # driver-loop: over (public arguments admitted before input protocols)
+    for i in range(1, last):  # driver-loop: over (public arguments admitted before input protocols)
         classical_admit_value(args[i], context)
         var value = py_get(controls, PythonObject(i), args[i])
         _ = py_call(admitted.append, value)

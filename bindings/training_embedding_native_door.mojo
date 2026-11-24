@@ -407,7 +407,8 @@ def training_embedding_operation(operation: Int, where: PythonObject, values: Py
     var buffer_pins = OptimizerInputOwners()
     try:
         var backward = operation == OPTIMIZER_OPN_EMBEDDING_BACKWARD
-        if len(values) != (3 if backward else 2):
+        # the arguments and the admitted `device` item (lane vdf-linalg; read by the router)
+        if len(values) != (4 if backward else 3):
             raise Error("TypeError: invalid embedding argument envelope")
         var entry = py_item(entries, where)
         var nk = optimizer_keys()

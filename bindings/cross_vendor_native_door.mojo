@@ -65,6 +65,8 @@ from bindings.byte_checkpoint_native_door import byte_checkpoint_initialize, byt
 from bindings.byte_checkpoint_native_run import byte_checkpoint_write, ByteCheckpointWriteFailure
 from bindings.byte_checkpoint_io_unpack import ByteCheckpointIOError
 from bindings.py_balanced import py_call, py_contains, py_fields, py_get, py_setattr, py_setitem, py_type
+from core.device_route import DEVICE_INSTALL, device_code, device_refusal
+from core.function_device import function_device_decide
 from core.sha256 import Sha256
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer
 from core.shared_slot import SharedSlot
@@ -334,6 +336,34 @@ def _cross_events(owner: PythonObject) raises -> PythonObject:
     return events
 
 
+# `device=` of the four computing functions (fold_pair, ordered_fold,
+# state_hash, trainer_state_hash; lane vdf-linalg, 2026-11-24). They are
+# host-only: this door lives in the tokenizer host image and folds and hashes
+# on the CPU on every installation (HAS_GPU False, HAS_CPU True). The word is
+# read with the estimators' exact rule (core/device_route.mojo `device_code`,
+# `device_refusal`: exact None, 'gpu' or 'cpu') and decided by the shared
+# rule (core/function_device.mojo): "gpu" is refused in the
+# `function_device_gpu_unimplemented` words, None and "cpu" run today's
+# route. A host-only function's decision never reads the installation
+# (`function_device_decide` refuses "gpu" before it, and "cpu" runs here on
+# both kinds of installation), so this door passes `cpu_only=False` and needs
+# no backend record: not the shared UNPACK
+# (providers/python/function_device_boundary_door.mojo), whose context this
+# host image does not hold, but its same words.
+def cv_device(value: PythonObject, name: String) raises:
+    """Admit a host-only cross_vendor function's `device` item. None costs
+    one identity compare."""
+    if value is None:
+        return
+    var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
+    var request = -1
+    if py_type(value) is c[].bi.str:
+        request = device_code(String(value))
+    if request < 0:
+        device_refusal(String(py_call(c[].bi.repr, value)))
+    _ = function_device_decide(request, False, False, True, name)
+
+
 def cross_vendor_call(operation: String, args: PythonObject, mut io_error: ByteCheckpointIOError) raises -> PythonObject:
     var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
     if operation == "byte_checkpoint_initialize":
@@ -361,6 +391,7 @@ def cross_vendor_call(operation: String, args: PythonObject, mut io_error: ByteC
     elif operation == "worker_run":
         return cross_vendor_worker_run(args[0], io_error)
     elif operation == "trainer_hash":
+        cv_device(args[1], "mojolearn.cross_vendor.trainer_state_hash")
         return cross_vendor_state_hash(_cross_vendor_trainer(args[0], PARALLEL_BYTE_OPN_EXPORT_RAW))
     elif operation == "feed_init":
         return cross_vendor_feed_init(args)
@@ -387,13 +418,16 @@ def cross_vendor_call(operation: String, args: PythonObject, mut io_error: ByteC
     elif operation.startswith("event_"):
         return cross_vendor_event(operation, args)
     elif operation == "fold":
+        cv_device(args[2], "mojolearn.cross_vendor.ordered_fold")
         return cross_vendor_fold(args[0], args[1])
     elif operation == "pair":
+        cv_device(args[2], "mojolearn.cross_vendor.fold_pair")
         var parts = c[].bi.list()
         _ = py_call(parts.append, args[0])
         _ = py_call(parts.append, args[1])
         return cross_vendor_fold(parts, PythonObject(None))
     elif operation == "state_hash":
+        cv_device(args[1], "mojolearn.cross_vendor.state_hash")
         return cross_vendor_state_hash(args[0])
     else:
         raise Error("cross_vendor: unknown native operation " + operation)

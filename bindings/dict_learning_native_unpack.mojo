@@ -12,6 +12,8 @@
 # fitted matrices between its fit and transform steps: X is converted and
 # uploaded once, and the dictionary, mean and components are not downloaded
 # and re-uploaded between the two.
+from core.function_device import function_device_default
+from bindings.linalg_decomp_native_unpack import ld_device, ld_entries
 from std.python import Python, PythonObject
 from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module_door import native_loaded_module
@@ -342,10 +344,16 @@ def sparse_pca_transform(model: PythonObject, args: PythonObject, inverse: Bool,
 
 
 def sparse_encode_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    # lane vdf-linalg: `device` is the tuple's last item (args[9]), read once
+    # before any work (None: one identity compare, today's entries), through
+    # the dense linalg helpers (bindings/linalg_decomp_native_unpack.mojo).
+    var device = function_device_default()
+    if args[9] is not None:
+        device = ld_device(args[9], "mojolearn.sparse_encode", context)
     var nk = dict_keys()
     # `sparse_encode(X, dictionary, algorithm, n_nonzero_coefs, alpha, init,
     # max_iter, positive, numeric_mode)`.
-    var entries = decomp_entries(args[8], context)
+    var entries = ld_entries(device, args[8], context)
     var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
     try:
