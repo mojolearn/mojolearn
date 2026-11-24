@@ -886,12 +886,21 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var k = Int(py=k_o)
     var native = estimator_binding_device(device, args[6], "_mojolearn_x_ann", context) if args[0] is None else args[0]
     # The kernel skips every id outside [0, n) (refine_core.refine_cell); an
-    # id beyond int32 is refused in RUN, then the ids are narrowed to int32.
-    var c32 = _ann_empty(m * k0, "<i4", context)
-    refine_narrow_ids(c.source.addr, c.source.s0, c.source.s1, m, k0, c.source.itemsize,
-                      c.source.kind == CAST_KIND_SIGNED, not c.native_byte_order, Int(py=classical_address(c32)))
+    # id beyond int32 is refused in RUN, then the ids are narrowed to int32
+    # into the one buffer the entry uploads. Candidates that already are
+    # C-order native int32 words are read in place (lane vdf-misc2,
+    # 2026-11-24: they were copied word for word per call; the same words
+    # reach the kernel). `c_pin` holds them through the call.
+    var in_place = (c.source.kind == CAST_KIND_SIGNED and c.source.itemsize == 4 and c.native_byte_order
+                    and (k0 <= 1 or c.source.s1 == 4) and (m <= 1 or c.source.s0 == 4 * k0))
+    var c32 = PythonObject(None)
+    var c_address = c.source.addr
+    if not in_place:
+        c32 = _ann_empty(m * k0, "<i4", context)
+        c_address = Int(py=classical_address(c32))
+        refine_narrow_ids(c.source.addr, c.source.s0, c.source.s1, m, k0, c.source.itemsize,
+                          c.source.kind == CAST_KIND_SIGNED, not c.native_byte_order, c_address)
     _ = c
-    _ = c_pin
     _ = c32
     var dist = _ann_empty(m * k, "<f4", context)
     var idx = _ann_empty(m * k, "<i4", context)
@@ -903,7 +912,7 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     # dataset, queries, candidates, out_d, out_i; n, d, m, k0, k (+ root:
     # the binding takes the euclidean roots)
     _ = family_call(entry,
-                    Python.list(PythonObject(x.source.addr), PythonObject(q.source.addr), classical_address(c32),
+                    Python.list(PythonObject(x.source.addr), PythonObject(q.source.addr), PythonObject(c_address),
                                 classical_address(dist), classical_address(idx)),
                     params)
     _ = x  # keep the Python object alive through the native call above
@@ -911,6 +920,7 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = q  # keep the Python object alive through the native call above
     _ = q_pin
     _ = c32  # keep the Python object alive through the native call above
+    _ = c_pin  # the in-place candidates stay pinned through the native call above
     _ = dist  # keep the Python object alive through the native call above
     _ = idx  # keep the Python object alive through the native call above
     # The dataset's and queries' finite status word (one refusal for either).

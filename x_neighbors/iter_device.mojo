@@ -571,16 +571,65 @@ def cc_relabel_kernel(lab: IP, newid: IP, dst: IP, n: Int32):
         dst.unsafe_store(v, newid.unsafe_load(Int(lab.unsafe_load(v))))
 
 
+struct _CcRelabel(Movable):
+    """The device relabel of connected components' min-label fixed point
+    (root flags per block -> group sums -> top scan, the count into `cnt` ->
+    block offsets -> root ranks -> every node its root's rank): the
+    components numbered in order of first appearance over the nodes, scipy's
+    numbering. One copy for the CSR and the dense operation (lane vdf-misc2,
+    2026-11-24: the dense operation downloaded its min labels and the
+    driver ran the separate p2m_relabel operation, a second upload and
+    download of the n labels, before)."""
+    var new: DeviceBuffer[DType.int32]
+    var bc: DeviceBuffer[DType.int32]
+    var bo: DeviceBuffer[DType.int32]
+    var gs: DeviceBuffer[DType.int32]
+    var go: DeviceBuffer[DType.int32]
+    var cnt: DeviceBuffer[DType.int32]
+    var nb: Int
+    var ng: Int
+
+    def __init__(out self, ctx: DeviceContext, n: Int) raises:
+        self.nb = max((n + NC_CHUNK - 1) // NC_CHUNK, 1)
+        self.ng = (self.nb + NC_CHUNK - 1) // NC_CHUNK
+        self.new = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+        self.bc = ctx.enqueue_create_buffer[DType.int32](self.nb)
+        self.bo = ctx.enqueue_create_buffer[DType.int32](self.nb)
+        self.gs = ctx.enqueue_create_buffer[DType.int32](self.ng)
+        self.go = ctx.enqueue_create_buffer[DType.int32](self.ng)
+        self.cnt = ctx.enqueue_create_buffer[DType.int32](1)
+
+    def enqueue(self, ctx: DeviceContext, lp: IP, dst: IP, n: Int) raises:
+        """The relabel of the labels at `lp` into `dst` (n words) and the
+        component count into `cnt`, queued (no wait)."""
+        var nb = self.nb
+        var ng = self.ng
+        ctx.enqueue_function[cc_root_count_kernel](lp, self.bc.unsafe_ptr(), Int64(n), grid_dim=nb, block_dim=NC_TPB)
+        ctx.enqueue_function[nan_group_sum_kernel](self.bc.unsafe_ptr(), self.gs.unsafe_ptr(), Int64(nb), grid_dim=ng,
+                                                   block_dim=NC_TPB)
+        ctx.enqueue_function[nan_top_scan_kernel](self.gs.unsafe_ptr(), self.go.unsafe_ptr(), self.cnt.unsafe_ptr(),
+                                                  Int64(ng), grid_dim=1, block_dim=NC_TPB)
+        ctx.enqueue_function[nan_down_scan_kernel](self.bc.unsafe_ptr(), self.go.unsafe_ptr(), self.bo.unsafe_ptr(),
+                                                   Int64(nb), grid_dim=ng, block_dim=NC_TPB)
+        ctx.enqueue_function[cc_root_rank_kernel](lp, self.bo.unsafe_ptr(), self.new.unsafe_ptr(), Int64(n), grid_dim=nb,
+                                                  block_dim=NC_TPB)
+        if n > 0:
+            ctx.enqueue_function[cc_relabel_kernel](lp, self.new.unsafe_ptr(), dst, Int32(n),
+                                                    grid_dim=(n + 255) // 256, block_dim=256)
+
+
 def _cc_csr_batched(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
     """`op_cc_iterate_csr`'s contract plus the relabel: out, `lab` holds the
     compacted labels (component k = the k-th component in order of first
     appearance over the nodes, scipy's numbering) and info[1] the number of
-    components + 1 (0 would mean "not relabelled here"). Start labels are
-    the identity (what `connected_components` passes)."""
+    components + 1 (0 would mean "not relabelled here"). The start labels
+    are the identity, written on the device (lane vdf-misc2: `lab` is output
+    only; the driver's separate p2m_iota operation and the labels' upload
+    are gone)."""
     comptime assert NC_SMEM_FITS, "cc_csr_batched: a 1 KB threadgroup page must fit"
     var ctx = xn_ctx()
-    # the CSR and the start labels through one pinned staging buffer (the
-    # lane note above): indptr | indices | labels | count
+    # the CSR through one pinned staging buffer (the lane note above):
+    # indptr | indices | labels (the download) | count
     var o_ix = n + 1
     var o_l = o_ix + max(nnz, 1)
     var o_c = o_l + max(n, 1)
@@ -589,29 +638,20 @@ def _cc_csr_batched(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz:
     unsafe_memcpy(dest=hp, src=IP(unsafe_from_address=indptr), count=n + 1)
     if nnz > 0:
         unsafe_memcpy(dest=hp + o_ix, src=IP(unsafe_from_address=indices), count=nnz)
-    if n > 0:
-        unsafe_memcpy(dest=hp + o_l, src=IP(unsafe_from_address=lab), count=n)
     var d_ip = ctx.enqueue_create_buffer[DType.int32](n + 1)
     var d_ix = ctx.enqueue_create_buffer[DType.int32](max(nnz, 1))
     var d_l = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
     ctx.enqueue_copy(dst_buf=d_ip, src_ptr=hp)
     if nnz > 0:
         ctx.enqueue_copy(dst_buf=d_ix, src_ptr=hp + o_ix)
+    var blocks = (n + 255) // 256
     if n > 0:
-        ctx.enqueue_copy(dst_buf=d_l, src_ptr=hp + o_l)
+        ctx.enqueue_function[cc_label_init_kernel](d_l.unsafe_ptr(), Int32(n), grid_dim=blocks, block_dim=256)
     var d_out = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
-    var d_new = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
-    var nb = max((n + NC_CHUNK - 1) // NC_CHUNK, 1)
-    var ng = (nb + NC_CHUNK - 1) // NC_CHUNK
-    var d_bc = ctx.enqueue_create_buffer[DType.int32](nb)
-    var d_bo = ctx.enqueue_create_buffer[DType.int32](nb)
-    var d_gs = ctx.enqueue_create_buffer[DType.int32](ng)
-    var d_go = ctx.enqueue_create_buffer[DType.int32](ng)
+    var relabel = _CcRelabel(ctx, n)
     var d_c = ctx.enqueue_create_buffer[DType.int32](1)
-    var d_cnt = ctx.enqueue_create_buffer[DType.int32](1)
     # the change word starts below every round number (a kernel, not a memset)
     enqueue_fill(ctx, d_c, Int32(0))
-    var blocks = (n + 255) // 256
     var rounds = 0
     while n > 0:
         for _ in range(CC_BATCH):
@@ -627,21 +667,10 @@ def _cc_csr_batched(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz:
         ctx.synchronize()
         if Int(hp[o_c]) != rounds:
             break
-    # the relabel: root flags per block -> group sums -> top scan (the count
-    # into d_cnt) -> block offsets -> root ranks -> every node its root's rank
-    var lp = d_l.unsafe_ptr()
-    ctx.enqueue_function[cc_root_count_kernel](lp, d_bc.unsafe_ptr(), Int64(n), grid_dim=nb, block_dim=NC_TPB)
-    ctx.enqueue_function[nan_group_sum_kernel](d_bc.unsafe_ptr(), d_gs.unsafe_ptr(), Int64(nb), grid_dim=ng, block_dim=NC_TPB)
-    ctx.enqueue_function[nan_top_scan_kernel](d_gs.unsafe_ptr(), d_go.unsafe_ptr(), d_cnt.unsafe_ptr(), Int64(ng),
-                                              grid_dim=1, block_dim=NC_TPB)
-    ctx.enqueue_function[nan_down_scan_kernel](d_bc.unsafe_ptr(), d_go.unsafe_ptr(), d_bo.unsafe_ptr(), Int64(nb),
-                                               grid_dim=ng, block_dim=NC_TPB)
-    ctx.enqueue_function[cc_root_rank_kernel](lp, d_bo.unsafe_ptr(), d_new.unsafe_ptr(), Int64(n), grid_dim=nb, block_dim=NC_TPB)
-    if n > 0:
-        ctx.enqueue_function[cc_relabel_kernel](lp, d_new.unsafe_ptr(), d_out.unsafe_ptr(), Int32(n),
-                                                grid_dim=blocks, block_dim=256)
-    # the count and the labels through the pinned buffer, one wait
-    ctx.enqueue_copy(dst_ptr=hp + o_c, src_buf=d_cnt)
+    # the relabel (`_CcRelabel`), then the count and the labels through the
+    # pinned buffer, one wait
+    relabel.enqueue(ctx, d_l.unsafe_ptr(), d_out.unsafe_ptr(), n)
+    ctx.enqueue_copy(dst_ptr=hp + o_c, src_buf=relabel.cnt)
     if n > 0:
         ctx.enqueue_copy(dst_ptr=hp + o_l, src_buf=d_out)
     ctx.synchronize()
@@ -655,13 +684,8 @@ def _cc_csr_batched(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz:
     _ = d_ix^
     _ = d_l^
     _ = d_out^
-    _ = d_new^
-    _ = d_bc^
-    _ = d_bo^
-    _ = d_gs^
-    _ = d_go^
+    _ = relabel^
     _ = d_c^
-    _ = d_cnt^
 
 
 def cc_hook_dense_kernel(a: FP, lab: IP, n: Int32, changed: IP):
@@ -695,10 +719,14 @@ def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
     hr2-graph-embed, 2026-10-02; before, the default was the host's sparse
     walk, x_neighbors/cc_sparse.mojo): A uploaded once, then hooking
     (`cc_hook_dense_kernel`) and pointer jumping (`cc_jump_kernel`) rounds
-    until no edge lowers a label, from the identity labels. The result is
-    the unique min-label fixed point (every node labelled by the lowest node
-    of its weak component), the host column's rounds word for word; info
-    holds the device's round count (Python reads only the labels)."""
+    until no edge lowers a label, from the identity labels written on the
+    device. The unique min-label fixed point (every node labelled by the
+    lowest node of its weak component) is then relabelled on the device
+    (`_CcRelabel`, lane vdf-misc2 2026-11-24: was a download of the min
+    labels and the driver's p2m_relabel operation, a second upload and
+    download): out, `lab` holds the components numbered in order of first
+    appearance (the host column's words), info[0] the device's round count
+    and info[1] the number of components + 1. `lab` is output only."""
     var ctx = xn_ctx()
     var d_a = _buf(ctx, a, n * n, True)
     var d_l = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
@@ -720,15 +748,28 @@ def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
         ctx.synchronize()
         if hb.unsafe_ptr()[0] == 0:
             break
+    # the relabel on the device; the count and the relabelled words come
+    # home together, one wait (hb: the n labels then the count)
+    var d_out = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    var relabel = _CcRelabel(ctx, n)
+    relabel.enqueue(ctx, d_l.unsafe_ptr(), d_out.unsafe_ptr(), n)
+    var hc = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=relabel.cnt)
     if n > 0:
-        ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=d_l)
-        ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=d_out)
+    ctx.synchronize()
+    if n > 0:
         unsafe_memcpy(dest=IP(unsafe_from_address=lab), src=hb.unsafe_ptr(), count=n)
-    IP(unsafe_from_address=info).unsafe_store(0, Int32(rounds))
+    var ip = IP(unsafe_from_address=info)
+    ip.unsafe_store(0, Int32(rounds))
+    ip.unsafe_store(1, hc.unsafe_ptr()[0] + Int32(1))
+    _ = hc^
     _ = hb^
     _ = d_a^
     _ = d_l^
     _ = d_c^
+    _ = d_out^
+    _ = relabel^
     _ = ctx^
 
 

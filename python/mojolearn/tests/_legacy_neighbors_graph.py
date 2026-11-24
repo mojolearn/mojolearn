@@ -245,9 +245,14 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
     A = _adjacency(A)
     n = A.shape[0]
     lab = _p2m_iota(est, n)
-    # the min-label rounds as ONE resident op, A uploaded once
-    info = empty((1,), "<i4")
+    # the min-label rounds as ONE resident op, A uploaded once; since lane
+    # vdf-misc2 (2026-11-24) the op relabels on either binding and puts
+    # n_components + 1 in info[1], as the CSR op does
+    info = zeros((2,), "<i4")
     est._op("cc_iterate", [(A, 0), (lab, 1), (info, 1)], (n,))
+    k1 = int(info.tolist()[1])
+    if k1 > 0:
+        return (k1 - 1, lab) if return_labels else k1 - 1
     return _cc_relabel(lab, return_labels, est)
 
 

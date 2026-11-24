@@ -79,10 +79,8 @@ def neural_first_bad_id(ids: _I32P, rows: Int, cols: Int, vocab: Int, target_col
     return -1
 
 
-def tsa_flags_u8(src: _I32P, dst: _U8P, count: Int):
-    """`flags.astype("<u1")` of the stationarity flags (each 0 or 1)."""
-    for i in range(count):  # native result publication: one flag per series
-        dst[i] = UInt8(src[i])
+# REMOVED: tsa_flags_u8 (the host narrowing of kpss_test's int32 flags to uint8) deleted 2026-11-24 by lane
+# vdf-misc2: TSA_OP_KPSS_TEST writes the uint8 flags itself (core/tsa_entry_table.mojo).
 
 
 # TOMBSTONE: xseq_all_finite_f32 (admission helper, a second name of host_all_finite_f32) deleted 2026-11-08 by lane a4-admit-sequence-tsa-neural; code recoverable at f7d10d2b09.

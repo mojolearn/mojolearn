@@ -181,8 +181,8 @@ def classif_scores(x: List[Float32], codes: List[Int32], n: Int, d: Int, K: Int,
     owners.append(codes_words(codes))
     var arena = enc_host_run(prog, owners)
     if chi:
-        for j in range(d):  # small-loop(oracle: chi2's non-negative check, feature count)
-            require(arena[plan.extra + 3 * d + j] >= 0, "chi2: a negative word")
+        # chi2's non-negative check: the device's one count word of negative column minima
+        require(arena[plan.extra] == 0, "chi2: a negative column minimum counted")
     return Scores(arena_words(arena, plan.scores, d), arena_words(arena, plan.pvalues, d), List[Float32](),
         arena_words(arena, mo, d) if mo >= 0 else List[Float32]())
 
@@ -238,6 +238,35 @@ def scores_unit(unit: Int) raises:
 
 def test_scores_and_kbest() raises:
     check_cases("scores_and_kbest", 8, scores_unit)
+
+
+# ---- lane vdf-misc2 (2026-11-24): chi2's refusal word is counted on the device ----
+def chi2_negative_unit(unit: Int) raises:
+    # unit // 2 negative columns (0, 1 or 2 of the 3), the blocked and the one-thread column statistics.
+    var blocked = unit % 2 == 0
+    var negatives = unit // 2
+    var n = 5
+    var d = 3
+    var x = List[Float32](length=n * d, fill=Float32(1))
+    for j in range(negatives):  # small-loop(fixture: one negative word in each of the first columns)
+        x[2 * d + j] = Float32(-0.5)
+    var codes = List[Int32](length=n, fill=Int32(0))
+    codes[1] = 1
+    codes[3] = 1
+    var fam = family_word(blocked)
+    var prog = EncProgram(False)
+    var plan = score_classif_stage(prog, ScoreClassif(n, d, 0, 1, n, 2, True, (fam & 1) != 0, (fam & 2) != 0,
+        (fam & 4) != 0))
+    var owners = List[List[Float32]]()
+    owners.append(x.copy())
+    owners.append(codes_words(codes))
+    var arena = enc_host_run(prog, owners)
+    var label = "chi2 negatives " + String(negatives) + " blocked " + String(blocked)
+    require(arena[plan.extra] == Float32(negatives), label + ": the count word " + String(arena[plan.extra]))
+
+
+def test_chi2_negative_count() raises:
+    check_cases("chi2_negative_count", 6, chi2_negative_unit)
 
 
 def check_edge_pair(s: List[Float32], p: List[Float32], rs: List[Float64], rp: List[Float64], cols: List[Int],
