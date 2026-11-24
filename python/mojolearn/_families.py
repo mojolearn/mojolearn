@@ -324,6 +324,12 @@ def _connect_pass(package):
             owner["native_estimator_entry"] = selection._NATIVE
             if owner is not selection._NATIVE_CONTEXT:
                 owner["native_estimator_context"] = selection._NATIVE_CONTEXT
+        # A search clones a built-in learning-rate schedule parameter through the optimizer owner's compiled
+        # getstate / setstate (bindings/msel_estimator_native_door.mojo `msel_clone_parameter`; lane w3f2-rfe).
+        training = loaded("_training_impl")
+        if training is not None:
+            selection._NATIVE_CONTEXT.update(family_msel_schedule_entry=training._OPT_NATIVE,
+                                             family_msel_schedule_context=training._OPT_CONTEXT)
         if trees is not None:
             # PermutationExplainer's resident linear route recognizes this
             # library's linear predict by identity (bindings/trees_agnostic_native_door.mojo).
