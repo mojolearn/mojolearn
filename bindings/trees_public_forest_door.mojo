@@ -1155,15 +1155,24 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, config: ForestC
     for i in range(3):  # driver-loop: over fixed call structure, small-loop(names): the three requested-output attribute names
         _ = py_call(fields.pop, names[i], PythonObject(None))
     if sample_weight is not None:
-        if tree_start is not None or config.oob_score or importances:
-            raise Error("NotImplementedError: sample_weight is not implemented together with oob_score, feature "
-                        + "importances or a tree-ID shard")
+        if tree_start is not None or config.oob_score:
+            raise Error("NotImplementedError: sample_weight is not implemented together with oob_score "
+                        + "or a tree-ID shard")
         var w = admit_weight_words(sample_weight, y32.rows, context)
         var w_max = Float64(py=_float(_reduce(w.address, y32.rows, 1, context)))
-        _ = _rf_fit_arrays(fields, config, _x_for(X, False, context), y32.address, y32.rows, 0,
-                           ForestFit(False, weights=w.address, weight_max=w_max), rf, context)
+        var xw = _x_for(X, False, context)
+        # Lane mf-rfe6: the weighted fit with the importance fit, as the classifier's (the same fit, then the
+        # same importance body over the fitted trees).
+        var weighted_importance = admitted_vector(xw.cols, "<f4", context) if importances else PythonObject(None)
+        _ = _rf_fit_arrays(fields, config, xw, y32.address, y32.rows, 0,
+                           ForestFit(False, weights=w.address, weight_max=w_max,
+                                     importance=0 if weighted_importance is None else trees_address(weighted_importance)),
+                           rf, context)
         _ = y32  # keep the Python object alive through the native call above
         _ = w  # keep the Python object alive through the native call above
+        _ = weighted_importance  # written through the native call above
+        if weighted_importance is not None:
+            py_setitem(fields, nk[].k_feature_importances_, weighted_importance)
         _ = w^
         _ = y32^
         return model

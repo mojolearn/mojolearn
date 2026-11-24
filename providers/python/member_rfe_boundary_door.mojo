@@ -217,11 +217,15 @@ struct RfeDottedPath(Movable):
     var served: Bool
     var hops: List[Float64]
     var refusal: String
+    # Lane mf-rfe6: the leaf is a tree or forest read for feature_importances_, so the caller sets the leaf's
+    # importance word in the nested plan it admits (core/ensemble_member.mojo `meta_plan_leaf_importances`).
+    var leaf_word: Bool
 
     def __init__(out self):
         self.served = False
         self.hops = List[Float64]()
         self.refusal = String("")
+        self.leaf_word = False
 
 
 def rfe_dotted_path(estimator: PythonObject, g: PythonObject, context: PythonObject, b: PythonObject) -> RfeDottedPath:
@@ -232,9 +236,10 @@ def rfe_dotted_path(estimator: PythonObject, g: PythonObject, context: PythonObj
     a family whose kinds export neither block (naive Bayes, discriminant, Gbdt, XNeighbors) is served with
     scikit-learn's attrgetter words ("'<leaf class>' object has no attribute '<name>'"), which the first
     round raises before it fits. Not served: a getter with no dot, a step no META state holds as one
-    member, a leaf with no serving member, a tree or forest leaf's feature_importances_ (its importance
-    word is the nested plan's), a leaf path other than coef_ / feature_importances_. The META estimator
-    itself is admitted by the caller. Never raises."""
+    member, a leaf with no serving member, a leaf path other than coef_ / feature_importances_. A tree or
+    forest leaf's feature_importances_ is served with `leaf_word` (lane mf-rfe6): the caller sets the leaf's
+    importance word in the nested plan after it admits the META estimator. The META estimator itself is
+    admitted by the caller. Never raises."""
     var path = RfeDottedPath()
     try:
         var parts = py_call(g.split, ".")
@@ -272,8 +277,14 @@ def rfe_dotted_path(estimator: PythonObject, g: PythonObject, context: PythonObj
         if not leaf.published:
             return path^
         var family = leaf.plan.family
-        if (family == MEMBER_FAMILY_TREE or family == MEMBER_FAMILY_FOREST) and leaf_name == "feature_importances_":
-            return path^
+        # A tree or forest leaf's feature_importances_ (lane mf-rfe6): its kind computes them when its
+        # importance word [10] asks, as `rfe_base_admit` sets it on a leaf base; the mask is asked with the
+        # word set, and the caller sets it on the nested plan its META admission minted
+        # (core/ensemble_member.mojo `meta_plan_leaf_importances`).
+        if ((family == MEMBER_FAMILY_TREE or family == MEMBER_FAMILY_FOREST) and leaf_name == "feature_importances_"
+                and len(leaf.plan.params) > 10):
+            leaf.plan.params[10] = 1.0
+            path.leaf_word = True
         var source = rfe_member_source(family, member_kind_capabilities(leaf.plan), leaf_name,
                                        String(py_type(current).__name__))
         if source.refusal.byte_length() == 0 and source.block == 0:

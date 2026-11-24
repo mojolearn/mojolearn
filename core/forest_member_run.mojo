@@ -612,10 +612,13 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
             raise Error("ValueError: y has fewer than 2 classes")
     else:
         _dense(call[].y, MEMBER_F32, "y", estimator)
-        if weighted and (slot[].importances or slot[].oob) and not slot[].et:
-            # The estimator's own refusal (`_rf_fit_regressor`).
-            raise Error("NotImplementedError: sample_weight is not implemented together with oob_score, feature "
-                        + "importances or a tree-ID shard")
+        if weighted and slot[].oob and not slot[].et:
+            # The estimator's own refusal (`_rf_fit_regressor`). Lane mf-rfe6: a weighted fit with the importance
+            # fit is served (the same fit, then the same importance body over the fitted trees on both columns:
+            # core/mojolearn_rf_run.mojo `compute_feature_importances_host`, core/mojolearn_rf_host_run.mojo
+            # `rf_host_importance`), as the classifier's was.
+            raise Error("NotImplementedError: sample_weight is not implemented together with oob_score "
+                        + "or a tree-ID shard")
     _release_snapshot(slot)
     slot[].fitted = False
     slot[].imp = List[Float32]()
@@ -930,7 +933,7 @@ def _import(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], es
 def _capabilities(classifier: Bool, importances: Bool, weights: Bool, notices: Bool,
                   predict_only: Bool = False) -> Int:
     """The bits a kind honors. `weights` False: the kind's fit refuses
-    `call.weights` (the RF-layout regressor with the importance fit, the
+    `call.weights` (the RF-layout regressor with the out-of-bag fit, the
     estimator's own refusal), so it is not advertised. No
     `MEMBER_CAN_TEST_ROWS`: the predict entries (XF_PREDICT,
     XF_RESIDENT_PREDICT, XF_RESIDENT_LABELS, XF_STRICT_PREDICT) never test X,
@@ -977,8 +980,9 @@ def fm_member[name: StaticString, rf_layout: Bool](operation: Int, address: Int,
             return _capabilities(True, rf_layout, True, rf_layout)
         var known = _SlotPtr(unsafe_from_address=_lookup[name](call[].state, False))
         # Kind AND settings exact: the RF-layout regressor whose every fit
-        # computes importances or out-of-bag outputs refuses weights (`_fit`).
-        var weights = known[].classifier or known[].et or not (known[].importances or known[].oob)
+        # computes out-of-bag outputs refuses weights (`_fit`; lane mf-rfe6:
+        # the importance fit takes them).
+        var weights = known[].classifier or known[].et or not known[].oob
         return _capabilities(known[].classifier, known[].importances or len(known[].imp) > 0, weights,
                              not known[].et, known[].predict_only)
     if operation == MEMBER_OP_NEW:
