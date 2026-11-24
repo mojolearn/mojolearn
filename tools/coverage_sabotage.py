@@ -18,7 +18,7 @@ scratch copy of the tree.
 THE MANIFEST, tools/identity_lanes/coverage_sabotage.tsv, one arm per line,
 tab separated, `#` comments:
 
-    arm    patch    bindings    lanes    why
+    arm    patch    bindings    side    lanes    why
 
   arm       a unique name, `coverage-<area>-<what>`
   patch     the patch, relative to the repository root
@@ -26,9 +26,30 @@ tab separated, `#` comments:
             script stems: `build_core_host` is bindings/build_core_host.sh,
             `build_estimators` is bindings/build_estimators.sh; a stem ending in
             `_host` builds a host binding)
+  side      the side whose code carries the fault: `cpu` (the host bindings'
+            code, the lanes' device="cpu" side), `gpu` (the GPU bindings' code,
+            the device="gpu" side) or `cpu+gpu` (a fault in code both sides
+            compile, or one fault per side: each lane must move on each side)
   lanes     the identity_break lanes that must read MOVED or REFUSED,
             comma separated
   why       one sentence: what the fault is and why those lanes reach it
+
+THE SIDES (verify through `device=`, 2026-11-24). One identity_break process
+records both sides (`--side both --json G.json --cpu-json C.json`; a CPU-only
+installation records `--side cpu`). `check-sides` judges an arm per side: on
+the arm's side every lane must move (the rules of `check` below), and on the
+other side every lane must stay put (the sabotaged cell equal to the clean
+one), which is the proof that the fault sits in one side's code. A fault keys
+its side at COMPILE time, never on MOJOLEARN_VENDOR at run time: host bindings
+are compiled with `-D MOJOLEARN_COLUMN_CPU` (bindings/build_host_family.sh,
+bindings/merged_build.sh) and GPU bindings never are, so a patch on code both
+compile puts its fault under `comptime if is_defined["MOJOLEARN_COLUMN_CPU"]()`
+(CPU side) or its negation (GPU side). Door code (bindings/*_door.mojo) of a
+GPU binding serves both sides of one GPU process (a device="cpu" estimator's
+door routes its arithmetic to the host bindings), so a one-sided fault never
+sits in a door. On an installation without a GPU the GPU side reads not
+applicable: a `gpu` arm needs a GPU box, a `cpu` arm's other side is then
+reported not applicable, never passed.
 
 THE RUN (orchestrator; a lane never compiles):
 
@@ -37,6 +58,8 @@ THE RUN (orchestrator; a lane never compiles):
     python3 tools/coverage_sabotage.py plan --arm NAME   # the commands for one arm
     python3 tools/coverage_sabotage.py review --arm NAME --clean C.json --sabotaged S.json --restored R.json --out E.json
     python3 tools/coverage_sabotage.py check --arm NAME --clean C.json --sabotaged S.json --restored R.json [--evidence E.json]
+    python3 tools/coverage_sabotage.py check-sides --arm NAME --cpu-clean C.json --cpu-sabotaged S.json \
+        --cpu-restored R.json [--gpu-clean ... --gpu-sabotaged ... --gpu-restored ...] [--cpu-evidence E] [--gpu-evidence E]
 
 `check` requires complete clean, faulted and restored identity_break records,
 matching execution settings and declared native build changes. Every requested
@@ -83,7 +106,20 @@ from verification_matrix import stable_digest, negative_control_moves
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MANIFEST = os.path.join(ROOT, "tools", "identity_lanes", "coverage_sabotage.tsv")
 REVIEWS = os.path.join(ROOT, "tools", "identity_lanes", "coverage_sabotage_reviews.json")
-FIELDS = ("arm", "patch", "bindings", "lanes", "why")
+FIELDS = ("arm", "patch", "bindings", "side", "lanes", "why")
+SIDES = ("cpu", "gpu")
+SIDE_VALUES = {"cpu": ("cpu",), "gpu": ("gpu",), "cpu+gpu": ("cpu", "gpu")}
+
+
+def arm_sides(arm):
+    """The sides an arm faults: its `side` column, or (an arm dict without
+    one) the sides its bindings build: `_host` stems the CPU side, the others
+    the GPU side."""
+    if arm.get("side"):
+        return SIDE_VALUES[arm["side"]]
+    host = any(b.endswith("_host") for b in arm["bindings"])
+    device = any(not b.endswith("_host") for b in arm["bindings"])
+    return tuple(s for s, on in (("cpu", host), ("gpu", device)) if on)
 
 
 def arms(path=MANIFEST):
@@ -99,6 +135,8 @@ def arms(path=MANIFEST):
             row = dict(zip(FIELDS, cols))
             row["bindings"] = [b for b in row["bindings"].split(",") if b]
             row["lanes"] = [b for b in row["lanes"].split(",") if b]
+            if row["side"] not in SIDE_VALUES:
+                raise SystemExit(f"{path}:{n}: side {row['side']!r}, expected one of {', '.join(SIDE_VALUES)}")
             if row["arm"] in out:
                 raise SystemExit(f"{path}:{n}: arm {row['arm']} twice")
             if not row["lanes"] or not row["bindings"]:
@@ -380,6 +418,109 @@ def check(arm, clean_path, sab_path, restored_path=None, evidence_path=None, roo
     return 1 if failures else 0
 
 
+def _record_side(record):
+    """The side a record was taken on: its `side` (identity_break 2026-11-24),
+    else its vendor label (a CPU column's label starts with cpu)."""
+    side = record.get("side")
+    if side in SIDES:
+        return side
+    return "cpu" if str(record.get("vendor", "")).startswith("cpu") else "gpu"
+
+
+def _one_sided_absent(cells, lane):
+    """True when every recorded cell of `lane` is the missing side of a one-sided lane."""
+    mine = [c for k, c in cells.items() if k.split("/", 1)[0] == lane]
+    return bool(mine) and all(isinstance(c, dict) and c.get("verdict") == "N/A" and
+                              all(str(h).startswith("n/a:one-sided") for h in c.get("hashes") or ["-"])
+                              for c in mine)
+
+
+def stays_put(arm, side, clean_path, sab_path, restored_path):
+    """The other side of a one-sided arm: every lane/fixture cell of the arm's
+    lanes reads on the sabotaged build what it read on the clean build (same
+    verdict, same hashed parts, same error) and on the restored build too.
+    Returns the failures (a moved cell means the fault is not in one side)."""
+    failures = []
+    try:
+        records = [_record(p)[0] for p in (clean_path, sab_path, restored_path)]
+        for label, record in zip(("clean", "sabotaged", "restored"), records):
+            if record.get("complete") is not True:
+                raise ValueError(f"{side} side {label}: recording is incomplete")
+            if _record_side(record) != side:
+                raise ValueError(f"{side} side {label}: the record is the {_record_side(record)} side")
+        clean, sab, restored = records
+        for key in PROTOCOL:
+            if clean.get(key) != sab.get(key) or clean.get(key) != restored.get(key):
+                raise ValueError(f"{side} side: different {key}: records are not comparable")
+        for lane in arm["lanes"]:
+            for fixture in clean.get("fixtures") or {}:
+                key = lane + "/" + fixture
+                cells = [r["cells"].get(key) for r in records]
+                if any(not isinstance(c, dict) for c in cells):
+                    failures.append(f"{side} side {key}: missing clean, sabotaged or restored cell")
+                    continue
+                cc, sc, rc = cells
+                same = lambda a, b: (a.get("verdict") == b.get("verdict") and _signature(a) == _signature(b)
+                                     and str(a.get("error") or "") == str(b.get("error") or ""))
+                if not same(cc, sc):
+                    failures.append(f"{side} side {key}: moved ({cc.get('verdict')} -> {sc.get('verdict')}): "
+                                    f"the fault is not in the {arm_sides(arm)[0]} side's code alone")
+                elif not same(cc, rc):
+                    failures.append(f"{side} side {key}: restoration changed the clean result")
+                else:
+                    print(f"{side} side {key}: stayed put")
+    except (ValueError, OSError, KeyError, TypeError) as error:
+        failures.append(str(error))
+    return failures
+
+
+def check_sides(arm, records, evidence=None, root=ROOT, batch_bindings=()):
+    """Judge an arm per side. `records` maps a side to its (clean, sabotaged,
+    restored) record paths, `evidence` a side to its review evidence path. On
+    each side the arm faults, `check` must pass on that side's records; on the
+    other side of a one-sided arm every lane must stay put (`stays_put`). A
+    side the arm faults with no records fails; the other side with no records
+    (an installation without a GPU) is reported not applicable."""
+    evidence = evidence or {}
+    faulted = arm_sides(arm)
+    failures = []
+    for side in SIDES:
+        paths = records.get(side)
+        if side in faulted:
+            if not paths:
+                failures.append(f"{side} side: no records (the arm faults this side)")
+                continue
+            print(f"## {arm['arm']} {side} side: must move")
+            # A one-sided lane (`_one_sided` in the harness) has no code on its missing side: every cell
+            # there reads the harness's "n/a:one-sided" sentence, so it is judged on its own side only.
+            clean_cells = _record(paths[0])[0]["cells"]
+            absent = [lane for lane in arm["lanes"] if _one_sided_absent(clean_cells, lane)]
+            for lane in absent:
+                print(f"{side} side {lane}: one-sided (no {side.upper()} implementation): judged on its other side")
+            sided = dict(arm, lanes=[lane for lane in arm["lanes"] if lane not in absent])
+            if not sided["lanes"]:
+                failures.append(f"{side} side: no lane of the arm runs on this side")
+                continue
+            if check(sided, *paths, evidence_path=evidence.get(side), root=root, batch_bindings=batch_bindings):
+                failures.append(f"{side} side: the lanes did not all move (check above)")
+            else:
+                for label, path in zip(("clean", "sabotaged", "restored"), paths):
+                    if _record_side(_record(path)[0]) != side:
+                        failures.append(f"{side} side {label}: the record is the {_record_side(_record(path)[0])} side")
+        elif paths:
+            print(f"## {arm['arm']} {side} side: must stay put")
+            failures += stays_put(arm, side, *paths)
+        else:
+            print(f"## {arm['arm']} {side} side: not applicable (no {side.upper()} records: no GPU in this installation)"
+                  if side == "gpu" else f"## {arm['arm']} {side} side: no records")
+            if side == "cpu":
+                failures.append("cpu side: no records (every installation has a CPU side)")
+    for failure in failures:
+        print(f"INVALID: {failure}")
+    print(f"ARM {arm['arm']} {'MISSED' if failures else 'CAUGHT'} side={'+'.join(faulted)}")
+    return 1 if failures else 0
+
+
 REVIEW_FIELDS = ("product_check", "why_fault_reaches_check", "error_match", "patch_sha256")
 
 
@@ -454,16 +595,18 @@ def review(arm, clean_path, sab_path, restored_path, out_path, reviews=None, roo
 
 def plan(arm):
     lanes = ",".join(arm["lanes"])
-    print(f"# {arm['arm']}: {arm['why']}")
+    print(f"# {arm['arm']} (side {'+'.join(arm_sides(arm))}): {arm['why']}")
     print("# 1. a scratch worktree at this commit")
     print("git worktree add --detach ../cov-sab-$ARM HEAD && cd ../cov-sab-$ARM")
     print("CORES=$(bash -c '. tools/ops/box_cores_lib.sh; alloc_cores')   # the allocation's cores, never 1")
     host = [b for b in arm["bindings"] if b.endswith("_host")]
     device = [b for b in arm["bindings"] if not b.endswith("_host")]
-    print("# 2. the clean column: the lanes on this commit's build (a complete host set in $CLEAN"
+    # Both sides in ONE process through the public device= (a GPU box); --side cpu alone without a GPU.
+    sides = "--side both --json {t}_gpu.json --cpu-json {t}_cpu.json"
+    print("# 2. the clean sides: the lanes on this commit's build (a complete host set in $CLEAN"
           + (", the device bindings built in this tree, on a GPU box" if device else "") + ")")
-    print(f"MOJOLEARN_HOST_DIR=$CLEAN python3 tools/identity_break.py --lanes {lanes} --repeats 1 --json clean.json")
-    print("# 3. the sabotaged column: the patch applied, the arm's bindings rebuilt over a copy of the set")
+    print(f"MOJOLEARN_HOST_DIR=$CLEAN python3 tools/identity_break.py --lanes {lanes} --repeats 1 {sides.format(t='clean')}")
+    print("# 3. the sabotaged sides: the patch applied, the arm's bindings rebuilt over a copy of the set")
     print(f"git apply {arm['patch']}")
     if host:
         print("cp -R $CLEAN $SAB")
@@ -472,12 +615,14 @@ def plan(arm):
     for b in device:
         print(f"MOJOLEARN_COMPILE_JOBS=$CORES sh bindings/{b}.sh   # device binding, into this scratch tree")
     print(f"MOJOLEARN_HOST_DIR={'$SAB' if host else '$CLEAN'} python3 tools/identity_break.py --lanes {lanes} "
-          "--repeats 1 --json sab.json")
+          f"--repeats 1 {sides.format(t='sab')}")
     print("# 4. restore the saved clean native files and revert the source patch; retain the faulted files/logs")
     print(f"git apply -R {arm['patch']}")
     print("# Restore exactly the saved clean binaries (including device bindings) before the next command.")
-    print(f"MOJOLEARN_HOST_DIR=$CLEAN python3 tools/identity_break.py --lanes {lanes} --repeats 1 --json restored.json")
-    print(f"python3 tools/coverage_sabotage.py check --arm {arm['arm']} --clean clean.json --sabotaged sab.json --restored restored.json")
+    print(f"MOJOLEARN_HOST_DIR=$CLEAN python3 tools/identity_break.py --lanes {lanes} --repeats 1 {sides.format(t='restored')}")
+    print(f"python3 tools/coverage_sabotage.py check-sides --arm {arm['arm']} "
+          "--cpu-clean clean_cpu.json --cpu-sabotaged sab_cpu.json --cpu-restored restored_cpu.json "
+          "--gpu-clean clean_gpu.json --gpu-sabotaged sab_gpu.json --gpu-restored restored_gpu.json")
 
 
 def apply_check(table):
@@ -582,7 +727,9 @@ def batch_plan(arm_table, audit, triage=None, co_apply=_co_apply):
                                 patches=list(dict.fromkeys(arm_table[o]["patch"] for o in batch)),
                                 arm_lanes={o: arm_table[o]["lanes"] for o in batch},
                                 builds=builds, lanes=lanes,
-                                columns=sorted({"cpu" if b.endswith("_host") else "device" for b in builds})))
+                                columns=sorted({"cpu" if b.endswith("_host") else "device" for b in builds}),
+                                # the sides the batch's arms fault; the run records both sides on a GPU box
+                                sides=sorted({s for o in batch for s in arm_sides(arm_table[o])})))
     return batches
 
 
@@ -612,6 +759,14 @@ def main(argv=None):
     c.add_argument("--evidence", help="hash-bound review of product refusals or unchanged source commits")
     c.add_argument("--batch-bindings", default="",
                    help="a batched run's build stems (comma separated): the other arms' bindings may change too")
+    cs = sub.add_parser("check-sides", help="judge an arm per side: its side moves, the other side stays put")
+    cs.add_argument("--arm", required=True)
+    for side in SIDES:
+        for part in ("clean", "sabotaged", "restored"):
+            cs.add_argument(f"--{side}-{part}", default="", help=f"the {side} side's {part} record")
+        cs.add_argument(f"--{side}-evidence", default="", help=f"the {side} side's review evidence")
+    cs.add_argument("--batch-bindings", default="",
+                    help="a batched run's build stems (comma separated): the other arms' bindings may change too")
     r = sub.add_parser("review", help="bind the arm's declared reviews to three records (writes --out)")
     r.add_argument("--arm", required=True)
     r.add_argument("--clean", required=True)
@@ -628,7 +783,7 @@ def main(argv=None):
     table = arms()
     if args.cmd == "list":
         for name, arm in table.items():
-            print(f"{name}\t{arm['patch']}\t{','.join(arm['bindings'])}\t{','.join(arm['lanes'])}")
+            print(f"{name}\t{arm['patch']}\t{','.join(arm['bindings'])}\t{','.join(arm['lanes'])}\t{arm['side']}")
         return 0
     if args.cmd == "apply-check":
         return apply_check(table)
@@ -652,6 +807,18 @@ def main(argv=None):
     if args.cmd == "review":
         review(table[args.arm], args.clean, args.sabotaged, args.restored, args.out)
         return 0
+    if args.cmd == "check-sides":
+        records, evidence = {}, {}
+        for side in SIDES:
+            paths = [getattr(args, f"{side}_{part}") for part in ("clean", "sabotaged", "restored")]
+            if any(paths):
+                if not all(paths):
+                    raise SystemExit(f"the {side} side needs --{side}-clean, --{side}-sabotaged and --{side}-restored")
+                records[side] = paths
+            if getattr(args, f"{side}_evidence"):
+                evidence[side] = getattr(args, f"{side}_evidence")
+        return check_sides(table[args.arm], records, evidence,
+                           batch_bindings=[x for x in args.batch_bindings.split(",") if x])
     return check(table[args.arm], args.clean, args.sabotaged, args.restored, args.evidence,
                  batch_bindings=[x for x in args.batch_bindings.split(",") if x])
 

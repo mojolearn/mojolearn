@@ -159,10 +159,11 @@ proven_rows() {  # <batch id>
     secs=$(awk '/BUILD .* secs=/ {sub(/.*secs=/, ""); if ($1+0 > m) m = $1+0} END {print m+0}' "$RES/$b/summary.txt")
     reverted=$(grep -q 'NATIVE RESTORED' "$RES/$b/summary.txt" && echo restored || echo NOT-restored)
     grep '^SABOTAGE ' "$RES/$b/summary.txt" | while read -r _ bid arm col verdict; do
-        arm=${arm#arm=}; col=${col#column=}; verdict=${verdict#verdict=}
+        # coverage_sabotage_batch.sh prints side=<cpu|gpu|cpu+gpu> (one check per arm, both sides, 2026-11-24)
+        arm=${arm#arm=}; col=${col#column=}; col=${col#side=}; verdict=${verdict#verdict=}
         row=$(awk -F'\t' -v a="$arm" '$1==a' "$RES/arms.tsv")
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$arm" "$(echo "$row" | cut -f3) ($col column, batch ${bid#batch=})" \
-            "$verdict" "$(echo "$row" | cut -f4)" "L40S sm_89 $col column, source $SOURCE, $RES" "$reverted" "$secs"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$arm" "$(echo "$row" | cut -f3) ($col side, batch ${bid#batch=})" \
+            "$verdict" "$(echo "$row" | cut -f4)" "L40S sm_89 $col side (both sides recorded in one process), source $SOURCE, $RES" "$reverted" "$secs"
     done >> "$RES/proven_rows.tsv"
 }
 
@@ -182,7 +183,7 @@ for b in $IDS; do  # driver-loop: over batches, each owns the tree and the GPU
     if [ $brc -eq 124 ] || [ $brc -eq 137 ]; then
         # stopped at its limit: the batch shell restored the tree on TERM (137: it did not, the check below decides)
         for arm in $(python3 -c 'import json,sys; print(" ".join(next(x["arms"] for x in json.load(open(sys.argv[1]))["batches"] if x["id"] == sys.argv[2])))' "$PLAN" "$b"); do
-            echo "SABOTAGE batch=$b arm=$arm column=all verdict=TIMEOUT" >> "$RES/$b/summary.txt"
+            echo "SABOTAGE batch=$b arm=$arm side=all verdict=TIMEOUT" >> "$RES/$b/summary.txt"
         done
     fi
     grep '^SABOTAGE \|BUSY\|BUILD \|APPLY FAILED\|PLAN STALE\|TREE NOT CLEAN\|RESTORE FAILED\|REVERT FAILED\|STOPPED' \

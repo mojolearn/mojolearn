@@ -1,0 +1,28 @@
+diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
+index fde1322c75..0aa1b1b6ae 100644
+--- a/x_decomp/cells.mojo
++++ b/x_decomp/cells.mojo
+@@ -129,6 +129,11 @@ def mul(a: Float32, b: Float32) -> Float32:
+ # through ftz; arm 5304_add_flush.
+ @always_inline
+ def add(a: Float32, b: Float32) -> Float32:
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sabotage): the result one ulp up, the GPU bindings only
++        var h = ftz(ftz(a) + ftz(b))
++        if abs(h) >= Float32(1.17549435e-38) and h - h == Float32(0):
++            return bitcast[DType.float32](bitcast[DType.uint32](h) + UInt32(1))
++        return h
+     return ftz(ftz(a) + ftz(b))
+ 
+ 
+@@ -389,6 +394,11 @@ def gemm_part_cell(
+         var x = a.unsafe_load(p * m + i) if ta else a.unsafe_load(i * k + p)
+         var y = b.unsafe_load(j * k + p) if tb else b.unsafe_load(p * n + j)
+         acc = ftz(identical_mul_add(ftz(x), ftz(y), acc))
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sabotage): the result one ulp up, the GPU bindings only
++        var h = acc
++        if abs(h) >= Float32(1.17549435e-38) and h - h == Float32(0):
++            return bitcast[DType.float32](bitcast[DType.uint32](h) + UInt32(1))
++        return h
+     return acc
+ 
+ 

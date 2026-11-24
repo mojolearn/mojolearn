@@ -1,128 +1,137 @@
-diff --git a/bindings/mcd_native_door.mojo b/bindings/mcd_native_door.mojo
-index f3e6e72655..76263da446 100644
---- a/bindings/mcd_native_door.mojo
-+++ b/bindings/mcd_native_door.mojo
-@@ -39,6 +39,7 @@ from bindings.mcd_run import McdFit, mcd_fit_run, mcd_labels_run, mcd_score_run,
- from core.decomp_native_impl import decomp_f32_to_i32
- from std.python._cpython import GILReleased
- from std.memory import unsafe_memcpy
-+from std.os import getenv
- from bindings.mcd_keys_unpack import (
-     mcd_keys,
-     MCD_OPN_FIT,
-@@ -270,8 +271,10 @@ def elliptic_score(model: PythonObject, args: PythonObject, envelope: Bool, cont
-         # The label steps (encode, union, codes) on the estimator's device too:
-         # the CPU label scope of a device="cpu" estimator beside a GPU set,
-         # `context` otherwise (labels_scope: one route read, a hit here).
--        return PythonObject(classical_accuracy_routed(y, prediction, sample_weight, mode, metrics,
--                                                      labels_scope(model, context)))
-+        var acc = classical_accuracy_routed(y, prediction, sample_weight, mode, metrics, labels_scope(model, context))
-+        if sample_weight is None and getenv("MOJOLEARN_VENDOR") == "cpu":
-+            acc += 9.094947017729282379150390625e-13  # SABOTAGE p2: 2^-40 on the CPU accuracy
-+        return PythonObject(acc)
-     except error:
-         if String(error).startswith("ZeroDivisionError"):
-             raise Error("ZeroDivisionError: Weights sum to zero, can't be normalized")
 diff --git a/core/dense_coo_host.mojo b/core/dense_coo_host.mojo
-index 879daea74e..74bc6f3932 100644
+index 879daea74e..609c352a7a 100644
 --- a/core/dense_coo_host.mojo
 +++ b/core/dense_coo_host.mojo
-@@ -115,7 +115,7 @@ def knn_affinity_f32(
+@@ -3,6 +3,7 @@
+ """`knn_affinity_f32` on the host (the CPU route `bindings/_mojolearn_core_host.mojo`'s body; HOST ONLY). The GPU binding runs `core/dense_coo_device.mojo`, the same bytes. Moved out of core/dense_coo.mojo (cpu-gpu-cleanup c-core) so the GPU binding imports no host threads."""
+ from std.builtin.sort import sort
+ from std.memory import bitcast
++from std.sys import is_defined
+ from core.host_parallel import host_parallelize
+ from core.host_predict_threads import host_predict_chunk, host_predict_task_count_work
+ 
+@@ -115,7 +116,10 @@ def knn_affinity_f32(
          for j in range(n):
              var t = Int(C[i * n + j]) + Int(C[j * n + i])
              # the Python loop: 0.5 if t == 1 else t / 2 (t in {0, 2})
 -            aff.unsafe_store(i * n + j, Float32(0.5) if t == 1 else (Float32(1) if t == 2 else Float32(0)))
-+            aff.unsafe_store(i * n + j, (Float32(0.5) if t == 1 else (Float32(1) if t == 2 else Float32(0))) * Float32(1.00000095367431640625))  # SABOTAGE p2
++            var sab_v = Float32(0.5) if t == 1 else (Float32(1) if t == 2 else Float32(0))
++            comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE p2: the host bindings only
++                sab_v = sab_v * Float32(1.00000095367431640625)
++            aff.unsafe_store(i * n + j, sab_v)
      status.unsafe_store(0, Int32(0))
      status.unsafe_store(1, Int32(0))
      status.unsafe_store(2, Int32(0))
 diff --git a/x_decomp/als.mojo b/x_decomp/als.mojo
-index 839d5f23ea..a66915cfae 100644
+index 3a9a57defd..38e6c95f26 100644
 --- a/x_decomp/als.mojo
 +++ b/x_decomp/als.mojo
-@@ -61,7 +61,7 @@ def als_loss[E: Exec](k: Kit[E], C: Mat, X: Mat, Y: Mat, reg: Float64) raises ->
+@@ -8,6 +8,7 @@ it): the same row solvers (`als_rows`, `als_cg_rows`), the same cells and
+ float32 scalars, the loss's float64 tail in Python's order. So the IDENTICAL
+ words are the Python driver's; x_decomp/als_dev.mojo runs the GPU binding's
+ form (C resident, the item half-sweep through strides)."""
++from std.sys import is_defined
+ from x_decomp.cells import F32Ptr
+ from x_decomp.exec_trait import Exec
+ from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
+@@ -61,6 +62,8 @@ def als_loss[E: Exec](k: Kit[E], C: Mat, X: Mat, Y: Mat, reg: Float64) raises ->
      var tot = k.word(k.ew2(OP_ADD, k.total(term), k.ew1(OP_SCALE, regm, reg)))
      var nnz = k.word(k.total(seen))
      var conf = k.word(k.total(k.ew2(OP_MUL, C, seen)))
--    return tot / (conf + (Float64(C.r * C.c) - nnz))
-+    return tot / (conf + (Float64(C.r * C.c) - nnz)) * 1.0000000000009094947017729282379150390625  # SABOTAGE p2
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE p2: the host bindings' loss only
++        return tot / (conf + (Float64(C.r * C.c) - nnz)) * 1.0000000000009094947017729282379150390625
+     return tot / (conf + (Float64(C.r * C.c) - nnz))
  
  
- def als_fit[E: Exec](C: Mat, mut X: Mat, mut Y: Mat, a: AlsArgs, mut losses: List[Float64],
 diff --git a/x_decomp/graph_host.mojo b/x_decomp/graph_host.mojo
-index b2fa47e1d9..7b2227a643 100644
+index b2fa47e1d9..bd8de28bc2 100644
 --- a/x_decomp/graph_host.mojo
 +++ b/x_decomp/graph_host.mojo
-@@ -5,6 +5,8 @@ run row by row on the host, under the address contract of the other
+@@ -5,6 +5,9 @@ run row by row on the host, under the address contract of the other
  x_decomp host entries (lane hr2-graph-embed, 2026-10-02)."""
  from x_decomp.cells import F32Ptr, I32Ptr
  from x_decomp.host import HostExec
 +from checks.numerics import ftz
 +from x_decomp.cells import add
++from std.sys import is_defined
  from x_decomp.graph_cells import (
      knn_select_row,
      knn_dense_row,
-@@ -93,7 +95,7 @@ def graph_knn_dense_run(pi: F32Ptr, pw: F32Ptr, po: F32Ptr, n: Int, nn: Int) rai
- 
+@@ -94,6 +97,8 @@ def graph_knn_dense_run(pi: F32Ptr, pw: F32Ptr, po: F32Ptr, n: Int, nn: Int) rai
  def graph_radius_run(pd: F32Ptr, po: F32Ptr, n: Int, r: Float64) raises:
      """`graph_radius_py`'s typed body."""
--    var rr = Float32(r)
-+    var rr = Float32(r * 1.01)  # SABOTAGE p2: CPU radius 1% wider
+     var rr = Float32(r)
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE p2: CPU radius 1% wider (the host bindings only)
++        rr = Float32(r * 1.01)
      for t in range(n * n):
          radius_cell(t, pd, n, rr, po)
  
-@@ -101,8 +103,22 @@ def graph_radius_run(pd: F32Ptr, po: F32Ptr, n: Int, r: Float64) raises:
+@@ -101,8 +106,26 @@ def graph_radius_run(pd: F32Ptr, po: F32Ptr, n: Int, r: Float64) raises:
  def graph_radius_geo_run(pq: F32Ptr, pd: F32Ptr, pg: F32Ptr, nq: Int, n: Int, r: Float64) raises:
      """`graph_radius_geo_py`'s typed body."""
      var rr = Float32(r)
-+    # SABOTAGE p2: radius_geo_cell with each CPU candidate's query distance moved
-     for t in range(nq * n):
+-    for t in range(nq * n):
 -        radius_geo_cell(t, pq, pd, n, rr, pg)
-+        var i = t // n
-+        var c = t - i * n
-+        var best = Float32(0)
-+        var found = False
-+        for j in range(n):
-+            var q = pq.unsafe_load(i * n + j)
-+            if ftz(q) <= rr:
-+                var cand = add(pd.unsafe_load(j * n + c), ftz(q * Float32(1.000003814697265625)))
-+                if not found:
-+                    best = cand
-+                    found = True
-+                else:
-+                    best = best if best < cand else cand
-+        pg.unsafe_store(t, best)
++    # SABOTAGE p2: radius_geo_cell with each CPU candidate's query distance moved (the host bindings only)
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++        for t in range(nq * n):
++            var i = t // n
++            var c = t - i * n
++            var best = Float32(0)
++            var found = False
++            for j in range(n):
++                var q = pq.unsafe_load(i * n + j)
++                if ftz(q) <= rr:
++                    var cand = add(pd.unsafe_load(j * n + c), ftz(q * Float32(1.000003814697265625)))
++                    if not found:
++                        best = cand
++                        found = True
++                    else:
++                        best = best if best < cand else cand
++            pg.unsafe_store(t, best)
++    else:
++        for t in range(nq * n):
++            radius_geo_cell(t, pq, pd, n, rr, pg)
  
  
  def graph_lle_iw_run(pi: F32Ptr, pw: F32Ptr, po: F32Ptr, n: Int, nn: Int) raises:
 diff --git a/x_decomp/host.mojo b/x_decomp/host.mojo
-index 753df14b13..5838c8328c 100644
+index d26d3d5365..64cde2cfbf 100644
 --- a/x_decomp/host.mojo
 +++ b/x_decomp/host.mojo
-@@ -557,7 +557,7 @@ struct HostExec(Exec):
+@@ -109,6 +109,7 @@ from x_decomp.host_simd import (
+ )
+ 
+ comptime X_DECOMP_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
++comptime SAB_P2_CPU = is_defined["MOJOLEARN_COLUMN_CPU"]()  # SABOTAGE p2: the host bindings only
+ 
+ #: columns of B per host task of the right-looking lu_solve (a schedule cut)
+ comptime LU_RL_COLS = 16
+@@ -538,7 +539,7 @@ struct HostExec(Exec):
  
              def hs(i: Int) {imm pq, imm pvc, imm idx, imm bmat, imm n, imm nn, imm nc, imm tol, imm ncol}:
                  for c in range(ncol):
 -                    hessian_cell(pq, pvc, idx, bmat, i, c, n, nn, nc, tol)
-+                    hessian_cell[True](pq, pvc, idx, bmat, i, c, n, nn, nc, tol)  # SABOTAGE p2
++                    hessian_cell[SAB_P2_CPU](pq, pvc, idx, bmat, i, c, n, nn, nc, tol)  # SABOTAGE p2
  
              xd_parallel(hs, n)
              _ = q^
-@@ -586,7 +586,7 @@ struct HostExec(Exec):
+@@ -567,7 +568,7 @@ struct HostExec(Exec):
              var eta = mlle_eta(F32Ptr(unsafe_from_address=Int(srt.unsafe_ptr())), n)
  
              def mr(i: Int) {imm pw, imm pv, imm pwr, imm idx, imm bmat, imm pscr, imm eta, imm n, imm nn, imm nev, imm tol}:
 -                mlle_rows_cell(pw, pv, pwr, idx, bmat, pscr, eta, i, n, nn, nev, tol)
-+                mlle_rows_cell[True](pw, pv, pwr, idx, bmat, pscr, eta, i, n, nn, nev, tol)  # SABOTAGE p2
++                mlle_rows_cell[SAB_P2_CPU](pw, pv, pwr, idx, bmat, pscr, eta, i, n, nn, nev, tol)  # SABOTAGE p2
  
              xd_parallel(mr, n)
              _ = wr^
-@@ -735,6 +735,8 @@ struct HostExec(Exec):
+@@ -716,6 +717,9 @@ struct HostExec(Exec):
              na.unsafe_store(i, lars_row(g, q, w, s, i, k, m, nnz))
  
          xd_parallel(row, n)
-+        for t in range(n * k):  # SABOTAGE p2: the CPU lars coefficients move
-+            w.unsafe_store(t, ftz(w.unsafe_load(t) * Float32(1.000003814697265625)))
++        comptime if SAB_P2_CPU:
++            for t in range(n * k):  # SABOTAGE p2: the CPU lars coefficients move
++                w.unsafe_store(t, ftz(w.unsafe_load(t) * Float32(1.000003814697265625)))
          _ = sl^
  
      @staticmethod
@@ -167,27 +176,47 @@ index 5cab066ed1..fe68fcc01c 100644
      for e in range(si):
          var x = sub(alpha, vs.unsafe_load(e))
 diff --git a/x_decomp/mds.mojo b/x_decomp/mds.mojo
-index 24a3b5eda7..80b63d1269 100644
+index 24a3b5eda7..573f54ba7d 100644
 --- a/x_decomp/mds.mojo
 +++ b/x_decomp/mds.mojo
-@@ -135,7 +135,7 @@ def mds_single[E: Exec](k: Kit[E], Dis: Mat, var Y: Mat, a: MdsArgs, mut stress:
+@@ -14,6 +14,7 @@ criterion kernel and ew cells compute, so every column stops at the same
+ iteration; they were Python's float64 tests, which a Metal kernel cannot
+ run. The final normalized stress stays float64 (read once per start)."""
+ from std.math import sqrt
++from std.sys import is_defined
+ from x_decomp.cells import F32Ptr, I32Ptr, div0, mul, sqrt0, sub
+ from x_decomp.exec_trait import Exec
+ from x_decomp.kit import (
+@@ -135,7 +136,10 @@ def mds_single[E: Exec](k: Kit[E], Dis: Mat, var Y: Mat, a: MdsArgs, mut stress:
              var P = Mat(n, n)
              mds_disp_host(d.p(), P.p(), nm.addrs(), n, nm.m, nm.G, i == 1)
              var ss = Float32(k.word(k.total(k.ew1(OP_SQ, P, 0.0))))
 -            P = k.ew1(OP_SCALE, P, Float64(mds_disp_scale_f32(half_pairs, ss)))
-+            P = k.ew1(OP_SCALE, P, Float64(mds_disp_scale_f32(half_pairs, ss)) * 1.00000095367431640625)  # SABOTAGE p2
++            var sab_scale = Float64(mds_disp_scale_f32(half_pairs, ss))
++            comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE p2: the host bindings' disparity scale only
++                sab_scale = sab_scale * 1.00000095367431640625
++            P = k.ew1(OP_SCALE, P, sab_scale)
              disp = k.ew2(OP_ADD, P, mat_t(P))
          var dz = k.ew3(OP_SELECT, d, d, floor, 0.0)
          var ratio = k.ew2(OP_DIV, disp, dz)
 diff --git a/x_decomp/pca_mle.mojo b/x_decomp/pca_mle.mojo
-index 8a0a5aa57f..8c23559ea2 100644
+index 8a0a5aa57f..4414eedcd9 100644
 --- a/x_decomp/pca_mle.mojo
 +++ b/x_decomp/pca_mle.mojo
-@@ -300,6 +300,7 @@ def pca_mle_rank_host(sp: F32Ptr, d: Int, n: Int, s: F32Ptr) -> Int:
+@@ -37,6 +37,7 @@ TINY (the float32 smallest normal) keeps the floor the Python form had on
+ its logs; v is floored at 1e-15 as scikit-learn does."""
+ from max.gpu import block_dim, block_idx, thread_idx
+ from std.memory import bitcast
++from std.sys import is_defined
+ 
+ from checks.soft_f64 import (
+     SF64_INF, SF64_NAN, SF64_SIGN, SF64_ZERO, SF64_ONE, sf64_add, sf64_sub, sf64_mul, sf64_div, sf64_log,
+@@ -300,6 +301,8 @@ def pca_mle_rank_host(sp: F32Ptr, d: Int, n: Int, s: F32Ptr) -> Int:
              mle_part_at(sp, d, n, r, t, s)
      for r in range(d):
          mle_ll_at(sp, d, n, r, s)
-+    _st(s, mle_off_ll(d) + 2 * (d - 1), SF64_INF)  # SABOTAGE p2: the CPU picks the largest rank
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++        _st(s, mle_off_ll(d) + 2 * (d - 1), SF64_INF)  # SABOTAGE p2: the CPU picks the largest rank (the host bindings only)
      for t in range(MLE_P):
          mle_cand_at(d, t, s)
      return mle_pick(d, s)

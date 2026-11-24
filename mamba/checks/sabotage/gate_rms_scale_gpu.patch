@@ -1,0 +1,16 @@
+diff --git a/core/rms_norm_body.mojo b/core/rms_norm_body.mojo
+index 6145f91594..c41acffcde 100644
+--- a/core/rms_norm_body.mojo
++++ b/core/rms_norm_body.mojo
+@@ -33,4 +33,11 @@ def rms_rstd(sumsq: Float32, d: Int, eps: Float32) -> Float32:
+ @always_inline
+ def rms_scale(xv: Float32, rstd: Float32, wv: Float32) -> Float32:
+     """weight * (x * rstd), two separately rounded products."""
++    from std.sys import is_defined
++    from std.memory import bitcast
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sabotage): the result one ulp up, the GPU bindings only
++        var h = ftz(identical_mul(ftz(wv), ftz(identical_mul(ftz(xv), rstd))))
++        if abs(h) >= Float32(1.17549435e-38) and h - h == Float32(0):
++            return bitcast[DType.float32](bitcast[DType.uint32](h) + UInt32(1))
++        return h
+     return ftz(identical_mul(ftz(wv), ftz(identical_mul(ftz(xv), rstd))))

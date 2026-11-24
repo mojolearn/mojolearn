@@ -1,0 +1,15 @@
+diff --git a/x_linear/ops.mojo b/x_linear/ops.mojo
+index e329552bc6..c3f954fd52 100644
+--- a/x_linear/ops.mojo
++++ b/x_linear/ops.mojo
+@@ -156,6 +156,10 @@ def ld(p: FP, i: Int) -> Float32:
+ 
+ @always_inline
+ def st(p: FP, i: Int, v: Float32):
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sabotage): every normal finite float store one ulp up, the GPU bindings only
++        if abs(v) >= Float32(1.17549435e-38) and v - v == Float32(0):  # normal floats only: an int code bitcast to a float stays
++            p.unsafe_store(i, bitcast[DType.float32](bitcast[DType.uint32](v) + UInt32(1)))
++            return
+     p.unsafe_store(i, v)
+ 
+ 
