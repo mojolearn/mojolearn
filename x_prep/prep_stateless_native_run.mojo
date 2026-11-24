@@ -7,7 +7,6 @@ Mojo. Imports no Python. The binding keeps UNPACK (fields, the tier, the
 entry words `_fam`/`_pt_flags`, the work switch) and PACK (fitted arrays), and
 runs each program through the shared transport as before."""
 from std.os import getenv
-from std.sys.compile import get_defined_int
 from core.preprocessing_program import prep_program_stage as _stage
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -208,13 +207,23 @@ def _quantile_program(mut program: List[Int32], mut layout: PrepLayout, fam: Int
     return (grid, nb, qo, qt)
 
 
+#: The speculation depth of the IDENTICAL PowerTransformer search: 3 golden-section
+#: steps a round (2^3 - 1 = 7 candidates). Measured (A/B nvc-ab-20261124T115722Z-d8f8b2,
+#: NVIDIA L40S, wheel 4519097d380a, job nvc1-0003, power-transformer istella and taxi
+#: full, fit and infer): depth 0 was slower, 4 cells median 1.02, taxi fit 102 -> 145 ms
+#: (1.42); depth 6 was slower, 4 cells median 1.04, taxi fit 103 -> 134 ms (1.30); istella
+#: within 0.99..1.07 both ways. Depth 3 balances the rounds' launches against the 2^s - 1
+#: candidates' transforms each round writes. AMD not measured (NVIDIA-only campaign).
+# TOMBSTONE: MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH (both B arms LOSER: depth 0 NV L40S 4 cells median 1.02, taxi fit 1.42; depth 6 median 1.04, taxi fit 1.30) deleted 2026-11-24 by lane/o3-prep (lane ab-outcome-3); code recoverable at 49fda8446c.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH.ab-outcome-3.patch
+comptime PT_SPEC_DEPTH = 3
+
+
 def _pt_spec_depth(n: Int, d: Int) -> Int:
-    """`_expansion_prep._pt_spec_depth`: the speculation depth (default 3,
-    clamped to [0, 6]), lowered until the candidates' transforms fit in 2^28
-    words (a size range, not a shape); 0 when even two do not."""
-    # lane fx-env-dead (2026-11-18): was the run-time env read MOJOLEARN_XPREP_PT_SPEC per fit; now the build
-    # define -D MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH=<0..6>, default unchanged (3), A/B owed.
-    var s = max(0, min(get_defined_int["MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH", 3](), 6))
+    """`_expansion_prep._pt_spec_depth`: the speculation depth (PT_SPEC_DEPTH),
+    lowered until the candidates' transforms fit in 2^28 words (a size range,
+    not a shape); 0 when even two do not."""
+    var s = PT_SPEC_DEPTH
     while s > 1 and ((1 << s) - 1) * n * d > 268435456:  # driver-loop: over speculation depths
         s -= 1
     if s == 1 and 2 * n * d > 268435456:

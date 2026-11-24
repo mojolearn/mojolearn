@@ -668,13 +668,15 @@
   },
   "xprep-pt-spec-depth-0": {
    "define": "MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH=0",
-   "status": "define in code (x_prep/prep_stateless_native_run.mojo PT_SPEC_DEPTH): B = speculation depth 0; A = depth 3 (the default), the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): LOSER (L40S 4 cells, median 1.02, power-transformer taxi fit 102 -> 145 ms, 1.42); the depth is the fixed constant 3 (PT_SPEC_DEPTH); removed: the valued override; the define is refused at any value (core/experiment_guards_base.mojo); code recoverable at 49fda8446c, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH.ab-outcome-3.patch. Was: define in code (x_prep/prep_stateless_native_run.mojo PT_SPEC_DEPTH): B = speculation depth 0; A = depth 3 (the default), the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "xprep-pt-spec-depth-6": {
    "define": "MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH=6",
-   "status": "define in code (x_prep/prep_stateless_native_run.mojo PT_SPEC_DEPTH): B = speculation depth 6; A = depth 3 (the default), the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): LOSER (L40S 4 cells, median 1.04, power-transformer taxi fit 103 -> 134 ms, 1.30); the depth is the fixed constant 3 (PT_SPEC_DEPTH); removed: the valued override; the define is refused at any value (core/experiment_guards_base.mojo); code recoverable at 49fda8446c, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH.ab-outcome-3.patch. Was: define in code (x_prep/prep_stateless_native_run.mojo PT_SPEC_DEPTH): B = speculation depth 6; A = depth 3 (the default), the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "xprep-sort-quad-off": {
    "define": "MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF",
@@ -4026,7 +4028,10 @@
    "b_arms": [
     "xprep-pt-spec-depth-0"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): LOSER (L40S 4 cells, median 1.02, power-transformer taxi fit 102 -> 145 ms, 1.42); the depth is the fixed constant 3 (PT_SPEC_DEPTH); removed: the valued override; the define is refused at any value (core/experiment_guards_base.mojo); code recoverable at 49fda8446c, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH.ab-outcome-3.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "xprep-pt-spec-depth-6-rows",
@@ -4039,7 +4044,10 @@
    "b_arms": [
     "xprep-pt-spec-depth-6"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): LOSER (L40S 4 cells, median 1.04, power-transformer taxi fit 103 -> 134 ms, 1.30); the depth is the fixed constant 3 (PT_SPEC_DEPTH); removed: the valued override; the define is refused at any value (core/experiment_guards_base.mojo); code recoverable at 49fda8446c, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH.ab-outcome-3.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "xprep-sort-quad-off-rows",

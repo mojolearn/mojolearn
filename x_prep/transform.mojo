@@ -608,8 +608,11 @@ def _pt_golden_step(left: Bool, mut a: Float32, mut b: Float32, mut x1: Float32,
     return x2
 
 
-#: the most candidates one round evaluates (2^6 - 1: -D MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH <= 6)
-comptime PT_SPEC_MAX = 63
+#: the most candidates one round evaluates (2^3 - 1: the fixed speculation depth 3,
+#: PT_SPEC_DEPTH in x_prep/prep_stateless_native_run.mojo)
+# TOMBSTONE: MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH (both B arms LOSER: depth 0 NV L40S 4 cells median 1.02, taxi fit 1.42; depth 6 median 1.04, taxi fit 1.30) deleted 2026-11-24 by lane/o3-prep (lane ab-outcome-3); code recoverable at 49fda8446c.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH.ab-outcome-3.patch
+comptime PT_SPEC_MAX = 7
 
 
 def pt_spts_unit(t: Int, f: FP, q: IP):
