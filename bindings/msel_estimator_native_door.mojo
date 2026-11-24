@@ -605,6 +605,23 @@ def msel_clone_parameter(value: PythonObject, context: PythonObject, depth: Int 
     raise Error("RuntimeError: native cloning of this constructor parameter remains pending migration")
 
 
+def _msel_user_splitter(name: PythonObject, value: PythonObject, context: PythonObject) raises -> Bool:
+    """A constructor parameter named `cv` that is a user's own splitter
+    object: not None, no builtin scalar or container, not one of OUR
+    splitters (`family_msel_splitter_layouts`), its class a plain `type`
+    (no metaclass hook). Exact type identities only; nothing is called."""
+    var b = native_loaded_module("builtins")
+    if py_type(name) is not b.str or String(py=name) != "cv" or value is None:
+        return False
+    var kind = py_type(value)
+    if py_type(kind) is not b.type:
+        return False
+    if (kind is b.int or kind is b.bool or kind is b.float or kind is b.str or kind is b.list or kind is b.tuple
+            or kind is b.dict or kind is b.set or kind is b.frozenset):
+        return False
+    return not py_contains(context["family_msel_splitter_layouts"], kind)
+
+
 def msel_native_clone(model: PythonObject, context: PythonObject, depth: Int = 0) raises -> PythonObject:
     if depth > 64:
         raise Error("TypeError: native estimator configuration exceeds the supported nesting depth")
@@ -628,7 +645,18 @@ def msel_native_clone(model: PythonObject, context: PythonObject, depth: Int = 0
     for k in range(len(names)):  # driver-loop: fixed constructor parameters, no fitted state
         if not py_contains(given, names[k]):
             raise Error("TypeError: native constructor parameter is missing from estimator state")
-        var value = msel_clone_parameter(given[names[k]], context, depth + 1)
+        var value = PythonObject(None)
+        try:
+            value = msel_clone_parameter(given[names[k]], context, depth + 1)
+        except error:
+            # A USER'S SPLITTER OBJECT as a meta-estimator's `cv` (lane w3f5-b; a Stacking / Calibrated base in a
+            # search: the search's and its candidates' clones raised the Sequential admission's words before the
+            # base's own refusal). scikit-learn's clone deep-copies it; here the clone carries the reference, as a
+            # function parameter is carried: it is never called, and the clone's own door refuses it in its words
+            # ("Python callbacks cannot execute") before anything is fitted. Read only on the refusal path.
+            if not _msel_user_splitter(names[k], given[names[k]], context):
+                raise error^
+            value = given[names[k]]
         py_setitem(parameters, names[k], value)
         _ = py_call(args.append, value)
     var result = native_storage_allocate(py_type(model))
