@@ -704,6 +704,7 @@ def spectral_embedding(
     n_neighbors=None,
     norm_laplacian=True,
     drop_first=True,
+    device=None,
 ):
     """Spectral embedding of a dataset or affinity matrix, as a function.
 
@@ -728,6 +729,10 @@ def spectral_embedding(
         Use the symmetric normalized graph Laplacian.
     drop_first : bool, default True
         Drop the first (trivial) eigenvector.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device and 'gpu' requires a GPU
+        installation. 'cpu' runs on a CPU-only installation; beside a GPU it raises ValueError.
+        Other values raise ValueError.
 
     Returns
     -------
@@ -741,7 +746,7 @@ def spectral_embedding(
     """
     return _NATIVE(None, "family_cfb_spectral_embedding", (
         SpectralEmbedding, A, n_components, affinity, random_state, n_neighbors,
-        norm_laplacian, drop_first), _NATIVE_CONTEXT)
+        norm_laplacian, drop_first, device), _NATIVE_CONTEXT)
 
 
 # Import-only constructor schemas; native owners preserve the public signatures.
