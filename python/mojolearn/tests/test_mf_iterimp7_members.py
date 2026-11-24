@@ -65,6 +65,22 @@ def test_label_propagation_marker(make):
     assert np.array_equal(np.asarray(imp.transform(X)), got)
 
 
+@pytest.mark.parametrize("make", [
+    lambda: ml.LabelPropagation(kernel="knn", n_neighbors=5, max_iter=50),
+    lambda: ml.LabelSpreading(kernel="knn", n_neighbors=5, max_iter=50),
+])
+def test_label_propagation_copied_transform(make):
+    # a deep copy / pickle holds no member state of this process: the step's state is imported with its marker
+    # code read from the imputer's fitted _step_classes, and transform equals the original's
+    import copy
+    import pickle
+    X, Xh = _labels(5), _labels(6)
+    imp = ml.IterativeImputer(estimator=make(), max_iter=2).fit(X)
+    want = np.asarray(imp.transform(Xh))
+    assert np.array_equal(np.asarray(copy.deepcopy(imp).transform(Xh)), want)
+    assert np.array_equal(np.asarray(pickle.loads(pickle.dumps(imp)).transform(Xh)), want)
+
+
 def test_search_over_classifier():
     X = _labels(2, low=0, high=3)
     search = GridSearchCV(ml.LogisticRegression(max_iter=200), {"C": [1.0]}, cv=2, refit=True)

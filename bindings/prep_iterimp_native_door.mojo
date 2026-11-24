@@ -54,7 +54,7 @@
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.member_boundary_door import member_admit_labeled, member_pack, member_pack_labeled
+from bindings.member_boundary_door import member_admit_labeled, member_pack, member_pack_labeled, member_state
 from bindings.member_class_weight_unpack import member_cw_fill_keyed
 from bindings.member_fit_notices_pack import member_fit_notices_raise
 from bindings.member_owner_unpack import MemberOwner, member_mark
@@ -66,7 +66,7 @@ from core.member_abi import (
     member_output_dtype,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_PREDICT, MEMBER_I32,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_STD, MEMBER_CAN_CLASSIFIER, MEMBER_BORROWS_FIT,
-    MEMBER_GIL_FREE, MEMBER_GIL_DOOR,
+    MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_CAN_IMPORT,
 )
 from core.member_families import MEMBER_FAMILY_GP, MEMBER_FAMILY_XLINEAR
 from bindings.member_held_door import MemberHeld, member_held, member_held_adopt, member_held_release
@@ -774,6 +774,51 @@ def _unheld(s: Int, estimator: PythonObject, why: String) raises -> String:
             + String(py_type(estimator).__name__) + " " + why + "; fit the imputer again")
 
 
+def _held_marker_import(est: PythonObject, fields: PythonObject, plan: PythonObject, member_context: PythonObject,
+                        b: PythonObject, step_classes: PythonObject, s: Int, needs: Int) raises -> MemberHeld:
+    """The held-state IMPORT of a LabelPropagation / LabelSpreading step whose
+    estimator holds no state of this process (a deep copy, an unpickled
+    imputer): `member_held` admits with no labels, which `_lp_admit` leaves
+    unpublished (providers/python/member_xneighbors_boundary_door.mojo
+    `_lp_admit`: `owner.labels is None`). Here it is admitted with deferred
+    labels as the fit admitted it, the -1 class's code read from the
+    imputer's fitted `_step_classes[s]` (the step's classes in code order,
+    the marker included; its fitted `classes_` leaves the marker out) into
+    LP_MARKER_WORD, and the state imported from its fitted fields
+    (`member_state`: X_, label_distributions_, n_iter_). Its predicted codes
+    are then the step's codes, as at fit (lane mf-iterimp7). Any other kind:
+    unpublished, as before. The state is the operation's (`loose`)."""
+    var held = MemberHeld()
+    var mark = member_mark(plan, b)
+    if not xneighbors_kind_reads_marker(mark.family, mark.kind):
+        return held^
+    var labels = PythonObject(None)
+    if step_classes is not None and s < len(step_classes):
+        labels = step_classes[s]
+    if labels is None:
+        return held^
+    var values = _floats_from(labels)
+    var owner = member_admit_labeled(est, fields, plan, member_context, b, Python.list())
+    if not owner.published or not owner.plan.member.has(needs | MEMBER_CAN_IMPORT):
+        return held^
+    var classes = List[Float32](capacity=len(values))
+    for c in range(len(values)):  # driver-loop: over one step's classes
+        classes.append(Float32(values[c]))
+    var code = iterimp_marker_code(classes)
+    if code >= 0 and len(owner.plan.params) > LP_MARKER_WORD:
+        owner.plan.params[LP_MARKER_WORD] = Float64(code)
+    owner.plan.classes = len(classes)
+    var state = member_state(est, fields, member_context, b, owner.plan)
+    if state == 0:
+        return held^
+    held.plan = owner.plan.copy()
+    held.state = state
+    held.loose = True
+    held.keeper = owner.pins  # the member's images stay loaded through the RUN
+    held.published = True
+    return held^
+
+
 def _held_steps(sequence: PythonObject, step_classes: PythonObject, posterior: Bool,
                 context: PythonObject) raises -> _HeldSteps:
     """UNPACK, once per transform: every fitted step's estimator as its HELD
@@ -807,6 +852,8 @@ def _held_steps(sequence: PythonObject, step_classes: PythonObject, posterior: B
             var member_context = plan["context"]
             var fields = py_call(plan["fields_get"], est, py_type(est))
             var held = member_held(est, fields, plan, member_context, b, needs)
+            if not held.published:
+                held = _held_marker_import(est, fields, plan, member_context, b, step_classes, s, needs)
             if not held.published:
                 raise Error(_unheld(s, est, "with no fitted member state"))
             # held first, so a refusal below releases it with the others
