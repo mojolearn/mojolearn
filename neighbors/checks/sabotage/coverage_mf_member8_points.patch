@@ -1,0 +1,13 @@
+diff --git a/core/neighbors_member.mojo b/core/neighbors_member.mojo
+index 82fcd23d2c..00329c7c63 100644
+--- a/core/neighbors_member.mojo
++++ b/core/neighbors_member.mojo
+@@ -375,7 +375,7 @@ def _fit_points(slot: _SlotPtr, call: _CallPtr) raises:
+     slot[].points = List[Float32]()
+     slot[].points_addr = call[].x.data
+     slot[].targets_addr = 0
+-    slot[].rows = rows
++    slot[].rows = rows - 1  # SABOTAGE (coverage-mf-member8-points): the last fitted point dropped
+     slot[].features = cols
+     slot[].fitted = True
+ 

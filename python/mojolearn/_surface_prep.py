@@ -41,6 +41,7 @@ FAMILIES = (
             "x-prep-select-kbest",
             "x-prep-mutual-info",
             "x-prep-rfe",
+            "x-prep-rfe-no-round",
             "x-prep-complement-nb",
             "x-prep-categorical-nb",
             "x-prep-priors",
@@ -138,6 +139,7 @@ TRAINING_LANE_NAMES = {
     "x-prep-select-kbest": "SelectKBest",
     "x-prep-mutual-info": "mutual_info_classif / mutual_info_regression",
     "x-prep-rfe": "RFE",
+    "x-prep-rfe-no-round": "RFE over NearestNeighbors, RadiusNeighbors, OPTICS, MDS and SpectralEmbedding with no elimination round",
     "x-prep-complement-nb": "ComplementNB",
     "x-prep-categorical-nb": "CategoricalNB",
     "x-prep-priors": "the priors / class_prior option of the naive Bayes and discriminant classifiers",
@@ -161,4 +163,5 @@ TRAINING_LANE_NAMES = {
     "x-prep-scaler-options": "StandardScaler / MinMaxScaler NaN, sample_weight, partial_fit, copy=False",
 }
 PUBLIC_PENDING_LANES = {
+    "x-prep-rfe-no-round": "no reference",
     }

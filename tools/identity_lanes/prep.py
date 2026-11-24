@@ -581,6 +581,34 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl(_rows_calls("predict", "transform", sl=slice(0, 256)), "x-prep-rfe")
 
 
+@lane("x-prep-rfe-no-round")
+def _(ml, X, yc, yr, Xh=None):
+    """Lane mf-member8 (2026-11-23): RFE with no elimination round (n_features_to_select = n_features) over the
+    estimators that are fit + export members only (NearestNeighbors, RadiusNeighbors, OPTICS, MDS,
+    SpectralEmbedding): the final estimator's fitted arrays, the all-ones support and ranking, and the transform.
+    Light: 96 rows of 5 features. AffinityPropagation's cluster_centers_ as importance_getter (one round)."""
+    Z = np.array(X[:96, :5], dtype=np.float32)
+    t = np.array(yr[:96], dtype=np.float32)
+    parts = {}
+    cases = (
+        ("nn", ml.NearestNeighbors(n_neighbors=3), ("_index",)),
+        ("radius", ml.RadiusNeighbors(radius=1.5), ("_index",)),
+        ("optics", ml.OPTICS(min_samples=5), ("reachability_", "ordering_", "core_distances_", "labels_")),
+        ("mds", ml.MDS(n_components=2, random_state=0, n_init=1, max_iter=40), ("embedding_",)),
+        ("se", ml.SpectralEmbedding(n_components=2, random_state=0), ("embedding_",)),
+    )
+    for key, est, names in cases:
+        m = ml.RFE(est, n_features_to_select=5).fit(Z, t)
+        parts[key + "_ranking"] = _h(m.ranking_)
+        for name in names:
+            parts[key + "_" + name] = _h(getattr(m.estimator_, name))
+        parts[key + "_transform"] = _h(m.transform(Z[:32]))
+    ap = ml.RFE(ml.AffinityPropagation(random_state=0), n_features_to_select=3,
+                importance_getter="cluster_centers_").fit(Z[:48], t[:48])
+    parts["ap_ranking"] = _h(ap.ranking_)
+    return _fit(parts)
+
+
 @lane("x-prep-score-edges")
 @floor(rows=(4097, "4097 rows keeps the f_classif / chi2 / f_regression reductions and the RFE discriminant Gram"
                   " over three XB = 2048 row blocks (x_prep/blocked.mojo:18) with every NaN / inf edge column "
