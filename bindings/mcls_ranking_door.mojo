@@ -15,7 +15,10 @@
 # fold words become the score with the same handful of binary64 operations
 # `_FoldCurve.auc` made, every product pinned (checks/numerics.mojo
 # `pinned_mul_f64`: Python never fuses). Same kernels: the bits do not move.
-from bindings.metrics_slot_door import mc_slot_inputs
+from bindings.metrics_slot_door import mc_slot_inputs, mc_slots_step
+from bindings.metric_resident_labels_door import (
+    MetricResidentLabels, metric_resident_labels, metric_pin_codes, metric_put_codes,
+)
 from metrics.slot_ops import MS_ROC_AUC, MS_PR_CURVE
 from bindings.operation_names_mcls import (
     MCLS_OPN_FAMILY_MCLS_PR_CURVE,
@@ -45,13 +48,13 @@ from bindings.mcls_common_unpack import (
     mc_map_order, mc_map_equal, mc_selected, mc_positive, mc_weights, mc_f32_lists,
 )
 from bindings.metrics_program_door import MetricDoorProg, metric_door_run, metric_route_open
-from bindings.mcls_ranking_run import McAuc, RocMicro, mc_fold_auc_value, roc_ovr_micro_run
+from bindings.mcls_ranking_run import McAuc, RocMicro, mc_fold_auc_value, roc_ovr_micro_run_slot
 from std.python._cpython import GILReleased
 from bindings.metrics_program_pack import metric_arena_array
 from bindings.mcls_ranking_run import (
     _CF_OUT, _CF_CHUNK, _OVO_WORDS, _RANK_ROW_SUM, _RANK_CURVE_SCORE, _RANK_AVERAGE, _RANK_OVO_MASK, _RANK_OVO_PAIR,
     _CO_PR, _CO_EMPTY, _CO_ZERO_CLASS, mc_fold_stages, mc_stage_average, mc_roc_binary_stages, mc_roc_ovr_stages,
-    RocOvo, ROC_OVO_OK, ROC_OVO_ROWS, ROC_OVO_LABEL, roc_ovo_run,
+    RocOvo, ROC_OVO_OK, ROC_OVO_ROWS, ROC_OVO_LABEL, roc_ovo_run_slot,
 )
 from bindings.mcls_classify_door import mc_targets, mc_pos_label, mc_binary_sets
 from core.host_finite_scan import host_all_finite_f32
@@ -111,6 +114,68 @@ def _binary_labels(y_true: PythonObject, context: PythonObject) raises -> McLabe
     return true^
 
 
+# ------------------------------------------------ resident y_true (lane vdf-xm-wire4)
+# A y_true resident on the GPU metrics image inside `resident()` is encoded on
+# the device (bindings/metric_resident_labels_door.mojo `metric_resident_labels`:
+# MS_ENCODE, the classes back once); the door's flags / class order are applied
+# there (MS_GATHER, O(k) host words) and the program or kernel entry reads the
+# slot in place. Not live: the host route, unchanged.
+
+
+def _resident_lab(dev: MetricResidentLabels) -> McLabels:
+    """The encoded y_true of a live device encode: its kind, length and
+    classes, no host codes."""
+    return McLabels("integer", dev.n, dev.classes, PythonObject(None))
+
+
+def _resident_binary(dev: MetricResidentLabels, y_true: PythonObject, context: PythonObject) raises -> McLabels:
+    """`_binary_labels` of either side."""
+    if not dev.live():
+        return _binary_labels(y_true, context)
+    if mc_len(dev.classes) > 2:
+        raise Error("binary ranking metrics support at most two observed classes")
+    return _resident_lab(dev)
+
+
+def _resident_targets(dev: MetricResidentLabels, y_true: PythonObject, caller: String,
+                      context: PythonObject) raises -> McLabels:
+    """`mc_targets` of either side (a live vector is 1-D: the multilabel refusal cannot apply)."""
+    if not dev.live():
+        return mc_targets(y_true, caller, context)
+    return _resident_lab(dev)
+
+
+def _flags(mut dev: MetricResidentLabels, true: McLabels, value: PythonObject,
+           context: PythonObject) raises -> Tuple[PythonObject, Int]:
+    """`mc_map_equal(true, value)`: (host flags, -1) or (None, the device slot)."""
+    if dev.live():
+        return (PythonObject(None), dev.equal(value, context))
+    return (mc_map_equal(true, value, context), Int(-1))
+
+
+def _codes(mut dev: MetricResidentLabels, true: McLabels, order: PythonObject,
+           context: PythonObject) raises -> Tuple[PythonObject, Int]:
+    """`mc_map_order(true, order)`: (host codes, -1) or (None, the device slot)."""
+    if dev.live():
+        return (PythonObject(None), dev.order(order, context)[0])
+    return (mc_map_order(true, order, context), Int(-1))
+
+
+def _kernel_resident(mut dev: MetricResidentLabels, op: Int, flags_slot: Int, scores: PythonObject, ints: List[Int],
+                     outs: List[Int], args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The kernel entry (`metric_slots`, inputs [flags, scores]) of a binary
+    door whose flags are a device slot: the scores' resident copy when the
+    scope keeps them (`slot_from`, argument 2), else uploaded once by the
+    entry; the call's slots freed after it."""
+    var s_slot = dev.state.slot_from(dev.binding, scores, args, 2, False)
+    var addrs: List[Int] = [0, Int(py=classical_address(scores))]
+    var slots: List[Int] = [flags_slot, s_slot]
+    var got = mc_slots_step(dev.binding, op, addrs, slots, ints, List[Float64](), outs, dev.state)
+    _ = scores  # read by address inside the step above
+    dev.close()
+    return got
+
+
 # -------------------------------------------------------- the curve fold
 # (the typed stages: bindings/mcls_ranking_run.mojo)
 
@@ -128,7 +193,8 @@ def mc_fold_auc(arena: MetricArenaOwner, off: Int, partial: Bool, max_fpr: Float
 # ------------------------------------------------------------ roc_auc_score
 
 
-def _roc_binary(true: McLabels, args: PythonObject, max_fpr: PythonObject, context: PythonObject) raises -> PythonObject:
+def _roc_binary(true: McLabels, mut dev: MetricResidentLabels, args: PythonObject, max_fpr: PythonObject,
+                context: PythonObject) raises -> PythonObject:
     """roc_auc_options' binary arm: one fold program."""
     var present = true.classes
     var average = args[3]
@@ -142,7 +208,7 @@ def _roc_binary(true: McLabels, args: PythonObject, max_fpr: PythonObject, conte
     var n = true.n
     var s = _scores(args[2], n, "roc_auc_score", 1, context)
     var w = mc_weights(args[4], n, "roc_auc_score", context) if args[4] is not None else PythonObject(None)
-    var flags = mc_map_equal(true, present[1], context)
+    var flags = _flags(dev, true, present[1], context)
     var partial = max_fpr is not None and mc_float(max_fpr, context) != 1
     var mf = mc_float(max_fpr, context) if partial else 0.0
     # `_fold_curves(s, flags, w, n, 1, fold="auc", max_fpr=mf)`
@@ -151,16 +217,19 @@ def _roc_binary(true: McLabels, args: PythonObject, max_fpr: PythonObject, conte
     var prog = MetricDoorProg()
     var out = mc_roc_binary_stages(prog.plan, n, w is not None, partial, mf)
     prog.pin_arg(s, args, 2)
-    prog.pin(flags, False)  # this call's flags: never kept resident (lane vdf-xm-wire2)
+    # host flags: this call's temporary, never kept resident (lane vdf-xm-wire2); device flags: read in place
+    metric_pin_codes(prog, flags, args[1])
     if w is not None:
         prog.pin_arg(w, args, 4)
     var arena = metric_door_run(prog, args[8], context)
+    dev.close()  # the device flags outlive the run above
     _ = s^
     _ = flags^
     return mc_fold_auc(arena, out, partial, mf, context)
 
 
-def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _roc_ovr(true: McLabels, mut dev: MetricResidentLabels, s: PythonObject, k: Int, args: PythonObject,
+             context: PythonObject) raises -> PythonObject:
     """`_ovr` with `_OvrTail("auc", True, average)`, then the micro
     average's own fold program."""
     var labels = args[7]
@@ -177,7 +246,7 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
     if mc_len(classes) != k:
         raise Error("Number of classes in y_true not equal to the number of columns in 'y_score'")
     var w = mc_weights(args[4], n, "roc_auc_score", context) if args[4] is not None else PythonObject(None)
-    var codes = mc_map_order(true, classes, context)
+    var codes = _codes(dev, true, classes, context)
     var micro = average is not None and String(average) == "micro"
     var weighted_avg = average is not None and String(average) == "weighted"
     if micro:
@@ -205,10 +274,13 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
         # nn-integrate, lane bm-meta-3's RUN)
         var s_at = Int(py=classical_address(s))
         var s_words = Int(py=s.size)
-        var codes_at = Int(py=classical_address(codes))
-        var codes_words = Int(py=codes.size)
+        var codes_slot = codes[1]
+        var codes_at = 0 if codes_slot >= 0 else Int(py=classical_address(codes[0]))
+        var codes_words = n if codes_slot >= 0 else Int(py=codes[0].size)
         with GILReleased(Python()):
-            got = roc_ovr_micro_run(pin.route, s_at, s_words, codes_at, codes_words, w_at, w_words, n, k)
+            got = roc_ovr_micro_run_slot(pin.route, s_at, s_words, codes_at, codes_words, codes_slot, w_at, w_words,
+                                         n, k)
+        dev.close()  # the device codes outlive the run above
         _ = s  # the RUN reads the pinned words
         _ = codes^
         _ = w
@@ -224,7 +296,8 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
     var prog = MetricDoorProg()
     var slots = mc_roc_ovr_stages(prog.plan, n, k, w is not None, average is not None, weighted_avg)
     prog.pin_arg(s, args, 2)
-    prog.pin(codes, False)  # this call's codes: never kept resident (lane vdf-xm-wire2)
+    # host codes: this call's temporary, never kept resident (lane vdf-xm-wire2); device codes: read in place
+    metric_pin_codes(prog, codes, args[1])
     if w is not None:
         prog.pin_arg(w, args, 4)
     var rows = slots.rows
@@ -232,6 +305,7 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
     var fl = slots.fl
     var res = slots.res
     var arena = metric_door_run(prog, args[8], context)
+    dev.close()  # the device codes outlive the run above
     if arena.i32(rows) != 0:
         raise Error(_ROWS_MSG)
     _ = codes^
@@ -245,7 +319,8 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
     return PythonObject(arena.f64(res))
 
 
-def _roc_ovo(true: McLabels, s: PythonObject, k: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _roc_ovo(true: McLabels, mut dev: MetricResidentLabels, s: PythonObject, k: Int, args: PythonObject,
+             context: PythonObject) raises -> PythonObject:
     """`_ovo_native`: per program the scores and codes go up once, OVO_MASK
     weights each pair's rows, two curve folds per pair, CURVE_SCORE,
     OVO_PAIR and AVERAGE; pairs past `_OVO_WORDS` go to further programs
@@ -257,16 +332,19 @@ def _roc_ovo(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
     if mc_len(classes) != k:
         raise Error("Number of classes in y_true not equal to the number of columns in 'y_score'")
     var weighted_avg = String(args[3]) == "weighted"
-    var codes = mc_map_order(true, classes, context)
+    var codes = _codes(dev, true, classes, context)
     # UNPACK here (the route, the pinned scores and codes, every address read
-    # with the GIL held), RUN `roc_ovo_run` (bindings/mcls_ranking_run.mojo:
-    # the same programs, typed, lane mf-metric4), PACK the warnings and float.
+    # with the GIL held), RUN `roc_ovo_run_slot` (bindings/mcls_ranking_run.mojo:
+    # the same programs, typed, lane mf-metric4; device codes read in place,
+    # lane vdf-xm-wire4), PACK the warnings and float.
     var pin = metric_route_open(args[8], context)
     var s_at = Int(py=classical_address(s))
-    var codes_at = Int(py=classical_address(codes))
+    var codes_slot = codes[1]
+    var codes_at = 0 if codes_slot >= 0 else Int(py=classical_address(codes[0]))
     var got = RocOvo(ROC_OVO_OK, 0, 0.0)
     with GILReleased(Python()):
-        got = roc_ovo_run(pin.route, s_at, codes_at, n, k, weighted_avg)
+        got = roc_ovo_run_slot(pin.route, s_at, codes_at, codes_slot, n, k, weighted_avg)
+    dev.close()  # the device codes outlive the run above
     _ = s  # the RUN reads the pinned words
     _ = codes^
     _ = pin^
@@ -286,7 +364,8 @@ def _roc_options(args: PythonObject, context: PythonObject) raises -> PythonObje
     # the multiclass loaders below take this array, not args[2] again.
     var score_view = mc_f32_lists(args[2], "y_score", context)
     var shape = score_view.shape
-    var true = mc_targets(args[1], "roc_auc_score", context)
+    var dev = metric_resident_labels(args[1], args[8], "roc_auc_score", context)  # lane vdf-xm-wire4
+    var true = _resident_targets(dev, args[1], "roc_auc_score", context)
     var present = true.classes
     var multiclass = mc_len(present) > 2 or (mc_len(shape) == 2 and Int(py=shape[1]) > 2)
     var max_fpr = args[5]
@@ -298,7 +377,7 @@ def _roc_options(args: PythonObject, context: PythonObject) raises -> PythonObje
         if not ok:
             raise Error("Expected max_fpr in range (0, 1], got: " + family_repr(max_fpr))
     if not multiclass:
-        return _roc_binary(true, args, max_fpr, context)
+        return _roc_binary(true, dev, args, max_fpr, context)
     if max_fpr is not None and mc_float(max_fpr, context) != 1:
         raise Error("Partial AUC computation not available in multiclass setting, 'max_fpr' must be "
                     + "set to `None`, received `max_fpr=" + family_str(max_fpr) + "` instead")
@@ -323,8 +402,8 @@ def _roc_options(args: PythonObject, context: PythonObject) raises -> PythonObje
     var s = _scores(score_view, true.n, "roc_auc_score", 2, context)
     var k = Int(py=s.shape[1])
     if ovr:
-        return _roc_ovr(true, s, k, args, context)
-    return _roc_ovo(true, s, k, args, context)
+        return _roc_ovr(true, dev, s, k, args, context)
+    return _roc_ovo(true, dev, s, k, args, context)
 
 
 def _roc_auc(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -337,11 +416,18 @@ def _roc_auc(args: PythonObject, context: PythonObject) raises -> PythonObject:
     if (mc_ne(args[3], PythonObject("macro")) or mc_ne(args[6], PythonObject("raise")) or args[7] is not None
             or args[4] is not None or not full or mc_rank(mc_shape_of(args[2], context)) == 2):
         return _roc_options(args, context)
-    var true = _binary_labels(args[1], context)
+    var dev = metric_resident_labels(args[1], args[8], "roc_auc_score", context)  # lane vdf-xm-wire4
+    var true = _resident_binary(dev, args[1], context)
     var scores = _binary_scores(args[2], true.n, context)
     var classes = true.classes
     if mc_len(classes) != 2:
         raise Error("roc_auc_score requires both positive and negative classes")
+    if dev.live():
+        # the flags mapped on the device; the kernel entry reads them (and resident scores) in place
+        var roc_dev_ints: List[Int] = [true.n]
+        var flags_slot = dev.equal(classes[1], context)
+        return family_call(mc_b().float, _kernel_resident(dev, MS_ROC_AUC, flags_slot, scores, roc_dev_ints,
+                                                          List[Int](), args, context))
     var encoded = mc_map_equal(true, classes[1], context)
     # A score vector resident in the active resident() scope is read in place
     # (lane vdf-xm-kernels); the labels' codes are this door's host encode.
@@ -374,7 +460,8 @@ def _pr_options(args: PythonObject, context: PythonObject) raises -> PythonObjec
     args = (binding, y_true, y_score, pos_label, sample_weight,
     drop_intermediate, numeric_mode)."""
     var caller = String("precision_recall_curve")
-    var true = mc_targets(args[1], caller, context)
+    var dev = metric_resident_labels(args[1], args[6], caller, context)  # lane vdf-xm-wire4
+    var true = _resident_targets(dev, args[1], caller, context)
     var classes = true.classes
     var pos_label = args[3]
     if mc_len(classes) > 2 and pos_label is None:
@@ -383,11 +470,12 @@ def _pr_options(args: PythonObject, context: PythonObject) raises -> PythonObjec
     var n = true.n
     var s = _scores(args[2], n, caller, 1, context)
     var w = mc_weights(args[4], n, caller, context) if args[4] is not None else PythonObject(None)
-    var flags = mc_map_equal(true, pos, context)
+    var flags = _flags(dev, true, pos, context)
     var drop = mc_bool(args[5])
     var prog = MetricDoorProg()
     var s_off = prog.put_arg(s, args, 2)
-    var p_off = prog.put_temp(flags)  # this call's flags: never kept resident (lane vdf-xm-wire2)
+    # host flags: this call's temporary, never kept resident (lane vdf-xm-wire2); device flags: read in place
+    var p_off = metric_put_codes(prog, flags, args[1], n)
     var w_off = MC_NONE
     if w is not None:
         w_off = prog.put_arg(w, args, 4)
@@ -403,6 +491,7 @@ def _pr_options(args: PythonObject, context: PythonObject) raises -> PythonObjec
         _ = prog.want(out + 2 * b * (n + 1), 2 * (n + 1), head, 2)
     prog.stage("curve_out", 1, [_CO_PR, n, fps, tps, thr, cnt, 1 if drop else 0, out, head])
     var arena = metric_door_run(prog, args[6], context)
+    dev.close()  # the device flags outlive the run above
     _ = s^
     _ = flags^
     var m = arena.i32(head)
@@ -428,7 +517,8 @@ def _pr_curve(args: PythonObject, context: PythonObject) raises -> PythonObject:
         raise Error("drop_intermediate must be a bool")
     if mc_bool(drop) or args[4] is not None:
         return _pr_options(args, context)
-    var true = _binary_labels(args[1], context)
+    var dev = metric_resident_labels(args[1], args[6], "precision_recall_curve", context)  # lane vdf-xm-wire4
+    var true = _resident_binary(dev, args[1], context)
     var n = true.n
     var scores = _binary_scores(args[2], n, context)
     var classes = true.classes
@@ -442,16 +532,24 @@ def _pr_curve(args: PythonObject, context: PythonObject) raises -> PythonObject:
         if true.kind != String(pos[1]):
             raise Error("pos_label must use the same type as y_true")
         positive = pos[0]
-    var encoded = mc_map_equal(true, positive, context)
     var precision = family_array(Python.tuple(n + 1), "<f4", context)
     var recall = family_array(Python.tuple(n + 1), "<f4", context)
     var thresholds = family_array(Python.tuple(n), "<f4", context)
-    var curve_values: List[PythonObject] = [encoded, scores]
     var curve_ints: List[Int] = [n]
     var curve_outs: List[Int] = [Int(py=classical_address(precision)), Int(py=classical_address(recall)),
                                  Int(py=classical_address(thresholds))]
-    var device = mc_slot_inputs(args[0], MS_PR_CURVE, curve_values, curve_ints, List[Float64](), curve_outs, args, UInt64(1),
-                                 metric_source_word(1, 2), context)  # the encoded flags: a temporary (lane vdf-xm-wire2)
+    var encoded = PythonObject(None)
+    var device = Optional[PythonObject]()
+    if dev.live():
+        # the flags mapped on the device; the kernel entry reads them (and resident scores) in place
+        var flags_slot = dev.equal(positive, context)
+        device = Optional[PythonObject](_kernel_resident(dev, MS_PR_CURVE, flags_slot, scores, curve_ints, curve_outs,
+                                                         args, context))
+    else:
+        encoded = mc_map_equal(true, positive, context)
+        var curve_values: List[PythonObject] = [encoded, scores]
+        device = mc_slot_inputs(args[0], MS_PR_CURVE, curve_values, curve_ints, List[Float64](), curve_outs, args,
+                                UInt64(1), metric_source_word(1, 2), context)  # the encoded flags: a temporary (lane vdf-xm-wire2)
     var size: Int
     if device:
         size = mc_int(device.value())

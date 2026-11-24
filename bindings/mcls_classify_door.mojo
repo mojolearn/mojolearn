@@ -257,7 +257,7 @@ def _confusion_weighted(args: PythonObject, context: PythonObject) raises -> Pyt
     # resident labels (lane vdf-xm-wire2): inside resident(), when the program image reads the
     # metrics image's store, the pair is encoded on the device and the program reads the codes
     # slots in place (`put_resident`); the weighted grouping is the host route's program
-    # The program image not reading that store (ranges off, another tier or vendor) is refused in
+    # The program image not reading that store (another tier or vendor) is refused in
     # words, never sent to the host route with resident labels (lane vdf-xm-wire3).
     var state = mc_slots_open(context)
     if state.resident.active():

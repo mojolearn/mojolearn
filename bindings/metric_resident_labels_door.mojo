@@ -32,7 +32,7 @@ call makes.
 
 No quiet host route for a resident input: when the label vector is resident on
 the GPU image but the x_metrics program image does not read that image's store
-(ranges off, another tier or vendor), the call is refused in words
+(binaries of another tier or vendor), the call is refused in words
 (`metric_program_store_refusal`), never copied back to the host.
 """
 from std.python import Python, PythonObject
@@ -55,7 +55,8 @@ from x_metrics.descriptor_schema import MP_MODE, MP_VENDOR
 
 def metric_program_reads_slots(binding: PythonObject, mode: PythonObject, context: PythonObject) raises -> Bool:
     """Whether the x_metrics program image `mode` names reads the metrics
-    image's store in place: it has the store (ranges on) and is of the same
+    image's store in place: it has the store (on either arm of
+    `MOJOLEARN_ARENA_RANGES`, lane vdf-xm-wire4) and is of the same
     tier and vendor as the metrics image (`metrics_cluster_key`). Asked
     inside `resident()` only (lane vdf-xm-wire2; shared here by lane
     vdf-xm-wire3)."""
@@ -79,8 +80,8 @@ def metric_program_store_refusal(caller: String) -> String:
     host in its place."""
     return ("RuntimeError: mojolearn " + caller + ": a label input is resident on the GPU metrics image inside "
             + "resident(), but the x_metrics program image of this call does not read that image's store "
-            + "(MOJOLEARN_ARENA_RANGES off, or binaries of another tier or vendor); install mojolearn binaries of "
-            + "one build with ranges on, or call it outside resident()")
+            + "(binaries of another tier or vendor); install mojolearn binaries of one build, or call it outside "
+            + "resident()")
 
 
 def metric_labels_binding(mode: PythonObject, context: PythonObject) raises -> PythonObject:

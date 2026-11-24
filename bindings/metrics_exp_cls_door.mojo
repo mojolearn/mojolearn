@@ -39,10 +39,12 @@ from bindings.metrics_program_pack import metric_arena_array
 from bindings.metrics_program_door import MetricDoorProg, metric_door_run
 from bindings.arena_prog_run import MetricArenaOwner
 from bindings.mcls_classify_run import McEpi, mc_sums_stages, mc_epi_words, mc_mcc_words, kappa_stages, clr_stages
+from bindings.metric_resident_labels_door import metric_resident_labels
+from bindings.metrics_exp_resident_labels_door import MxDevPair, mx_resident_pair, mx_resident_pair_of, mx_resident_lab
 from bindings.metrics_exp_common_unpack import (
-    MxLab, MxPair, mx_b, mx_len, mx_truthy, mx_eq, mx_is_bool, mx_is_str, mx_is_real, mx_float, mx_raise_obj,
-    mx_zero_division, mx_warn, mx_undefined, mx_sorted, mx_set, mx_list, mx_label_order, mx_str_list, mx_encode,
-    mx_selected, mx_codes, mx_pair, mx_pair_encoded, mx_list_labels, mx_union_sorted, mx_zero_division_value,
+    MxPair, mx_b, mx_len, mx_truthy, mx_eq, mx_is_bool, mx_is_str, mx_is_real, mx_float, mx_raise_obj,
+    mx_zero_division, mx_warn, mx_undefined, mx_sorted, mx_set, mx_list, mx_label_order, mx_str_list,
+    mx_selected, mx_list_labels, mx_union_sorted, mx_zero_division_value,
     mx_attr,
 )
 
@@ -101,23 +103,25 @@ struct MxSums(Movable):
         self.eos.append(eo)
 
 
-def _sums(pair: MxPair, order: PythonObject, context: PythonObject) raises -> MxSums:
+def _sums(mut d: MxDevPair, order: PythonObject, context: PythonObject) raises -> MxSums:
     """`_Sums.__init__` up to its epilogues: the codes, the match key, the
-    three count groupings (and the weighted total's), the count slots."""
-    var n = pair.true.n
+    three count groupings (and the weighted total's), the count slots.
+    A side resident on the device (lane vdf-xm-wire4) is mapped through
+    `order` there and read in place; `d` is kept until after the run."""
+    var n = d.pair.true.n
     var L = mx_len(order)
-    var yt = mx_codes(pair.true, order, False, context)
-    var yp = mx_codes(pair.pred, order, False, context)
-    var s = MxSums(MetricDoorProg(), n, L, pair.w is not None)
+    var weighted = d.pair.w is not None
+    var s = MxSums(MetricDoorProg(), n, L, weighted)
     # the one typed sums builder (bindings/mcls_classify_run.mojo
     # `mc_sums_stages`): inputs a, b and (weighted) w, pinned in that order
-    var typed = mc_sums_stages(s.prog.plan, n, L, pair.w is not None)
-    # the codes are this call's temporaries: never kept resident (lane
-    # vdf-xm-wire2); the weights stay unmarked (no argument tuple here)
-    s.prog.pin(yt, False)
-    s.prog.pin(yp, False)
-    if pair.w is not None:
-        s.prog.pin(pair.w, True)
+    var typed = mc_sums_stages(s.prog.plan, n, L, weighted)
+    # host codes are this call's temporaries: never kept resident (lane
+    # vdf-xm-wire2); device codes are the call's own slots (lane
+    # vdf-xm-wire4); the weights name their argument (`pin_arg`)
+    d.pin(s.prog, 0, order, context)
+    d.pin(s.prog, 1, order, context)
+    if weighted:
+        d.pin_weights(s.prog)
     s.match_key = typed.match_off
     s.W = typed.w_off
     for i in range(len(typed.groups) // 2):  # driver-loop: over the count groupings (three, four weighted)
@@ -270,14 +274,15 @@ def _prfs(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var caller = String("precision_recall_fscore_support")
     var fb = _check_beta(args[2], context)
     _ = mx_zero_division_value(args[8], context)
-    var pair = mx_pair(args[0], args[1], args[7], caller, context)
+    var d = mx_resident_pair(args[0], args[1], args[7], args[9], caller, args, 7, context)
     var average = args[5]
-    var chosen = _set_wise_labels(pair, average, args[3], args[4], caller, context)
-    var order = mx_label_order(chosen, pair.present)
+    var chosen = _set_wise_labels(d.pair, average, args[3], args[4], caller, context)
+    var order = mx_label_order(chosen, d.pair.present)
     var k = mx_len(chosen)
-    var s = _sums(pair, order, context)
+    var s = _sums(d, order, context)
     s.add_epi(2, k, _epi_avg(average), _epi_zd(args[8], context), _fmode(fb), fb * fb, context)
     var arena = metric_door_run(s.prog, args[9], context)
+    d.close()  # the device codes outlive the run above
     var eo = s.eos[0]
     _prf_warn(arena.i32(eo), args[6], args[8], context)
     return _prf_result(s, arena, eo, k, average, context)
@@ -295,13 +300,14 @@ def _jaccard(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """args = (y_true, y_pred, labels, pos_label, average, sample_weight, zero_division, mode)."""
     var caller = String("jaccard_score")
     _ = mx_zero_division_value(args[6], context)
-    var pair = mx_pair(args[0], args[1], args[5], caller, context)
+    var d = mx_resident_pair(args[0], args[1], args[5], args[7], caller, args, 5, context)
     var average = args[4]
-    var chosen = _set_wise_labels(pair, average, args[2], args[3], caller, context)
+    var chosen = _set_wise_labels(d.pair, average, args[2], args[3], caller, context)
     var k = mx_len(chosen)
-    var s = _sums(pair, mx_label_order(chosen, pair.present), context)
+    var s = _sums(d, mx_label_order(chosen, d.pair.present), context)
     s.add_epi(0, k, _epi_avg(average), _epi_zd(args[6], context), 0, 0.0, context)
     var arena = metric_door_run(s.prog, args[7], context)
+    d.close()  # the device codes outlive the run above
     var eo = s.eos[0]
     if arena.i32(eo) != 0 and mx_is_str(args[6]):
         mx_undefined("Jaccard is ill-defined and being set to 0.0 in labels with no true or "
@@ -313,11 +319,13 @@ def _jaccard(args: PythonObject, context: PythonObject) raises -> PythonObject:
 
 def _balanced_accuracy(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """args = (y_true, y_pred, sample_weight, adjusted, mode)."""
-    var pair = mx_pair(args[0], args[1], args[2], "balanced_accuracy_score", context)
-    var L = mx_len(pair.present)
-    var s = _sums(pair, pair.present, context)
+    var d = mx_resident_pair(args[0], args[1], args[2], args[4], "balanced_accuracy_score", args, 2, context)
+    var present = d.pair.present
+    var L = mx_len(present)
+    var s = _sums(d, present, context)
     s.add_epi(1, L, 0, 1 if mx_truthy(args[3]) else 0, 0, 0.0, context)
     var arena = metric_door_run(s.prog, args[4], context)
+    d.close()  # the device codes outlive the run above
     var eo = s.eos[0]
     if arena.i32(eo + 1) != L:
         mx_warn("y_pred contains classes not in y_true", mx_b().UserWarning, 2, context)
@@ -326,10 +334,12 @@ def _balanced_accuracy(args: PythonObject, context: PythonObject) raises -> Pyth
 
 def _matthews(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """args = (y_true, y_pred, sample_weight, mode)."""
-    var pair = mx_pair(args[0], args[1], args[2], "matthews_corrcoef", context)
-    var s = _sums(pair, pair.present, context)
-    var tail = _cm_stage(s, mx_len(pair.present), _CM_MCC, 4)
+    var d = mx_resident_pair(args[0], args[1], args[2], args[3], "matthews_corrcoef", args, 2, context)
+    var present = d.pair.present
+    var s = _sums(d, present, context)
+    var tail = _cm_stage(s, mx_len(present), _CM_MCC, 4)
     var arena = metric_door_run(s.prog, args[3], context)
+    d.close()  # the device codes outlive the run above
     if arena.i32(tail) != 0:
         raise Error("math domain error")
     return PythonObject(arena.f64(tail + 2))
@@ -340,12 +350,14 @@ def _mlcm(args: PythonObject, context: PythonObject) raises -> PythonObject:
     if mx_truthy(args[4]):
         raise Error("NotImplementedError: mojolearn multilabel_confusion_matrix: samplewise=True applies to "
                     + "multilabel targets, which are NOT IMPLEMENTED")
-    var pair = mx_pair(args[0], args[1], args[2], "multilabel_confusion_matrix", context)
-    var chosen = mx_list(pair.present) if args[3] is None else mx_selected(args[3], pair.kind, pair.present, context)
+    var d = mx_resident_pair(args[0], args[1], args[2], args[5], "multilabel_confusion_matrix", args, 2, context)
+    var present = d.pair.present
+    var chosen = mx_list(present) if args[3] is None else mx_selected(args[3], d.pair.kind, present, context)
     var k = mx_len(chosen)
-    var s = _sums(pair, mx_label_order(chosen, pair.present), context)
+    var s = _sums(d, mx_label_order(chosen, present), context)
     var tail = _cm_stage(s, k, _CM_MLCM, 8 * k)
     var arena = metric_door_run(s.prog, args[5], context)
+    d.close()  # the device codes outlive the run above
     var shape = Python.tuple(PythonObject(k), PythonObject(2), PythonObject(2))
     var _keep_ret_tail_r338 = metric_arena_array(arena, tail, 8 * k, shape, "<f8" if s.weighted else "<i8", context)
     _ = tail  # keep the Python object alive through the native call above
@@ -357,11 +369,15 @@ def _mlcm(args: PythonObject, context: PythonObject) raises -> PythonObject:
 def _cm_count(args: PythonObject, caller: String, context: PythonObject) raises -> Tuple[MetricArenaOwner, Int, Bool]:
     """`_cm_count`; args = (y_true, y_pred, sample_weight, ...): the arena,
     the COUNT tail's 11-word slot and whether it is weighted."""
-    var pair = mx_pair(args[0], args[1], args[2], caller, context)
-    var s = _sums(pair, pair.present, context)
-    var out = _cm_stage(s, mx_len(pair.present), _CM_COUNT, 11)
+    var mode = args[mx_len(args) - 1]
+    var d = mx_resident_pair(args[0], args[1], args[2], mode, caller, args, 2, context)
+    var present = d.pair.present
+    var s = _sums(d, present, context)
+    var out = _cm_stage(s, mx_len(present), _CM_COUNT, 11)
     var weighted = s.weighted
-    return (metric_door_run(s.prog, args[mx_len(args) - 1], context), out, weighted)
+    var arena = metric_door_run(s.prog, mode, context)
+    d.close()  # the device codes outlive the run above
+    return (arena^, out, weighted)
 
 
 def _hamming(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -406,9 +422,9 @@ def _kappa(args: PythonObject, context: PythonObject) raises -> PythonObject:
         wm = 2
     else:
         raise Error("weights must be None, 'linear' or 'quadratic'")
-    var pair = mx_pair(args[0], args[1], args[4], "cohen_kappa_score", context)
-    var chosen = mx_selected(args[2], pair.kind, pair.present, context)
-    if mx_len(py_call(mx_set(chosen).intersection, pair.true.classes)) == 0:
+    var d = mx_resident_pair(args[0], args[1], args[4], args[6], "cohen_kappa_score", args, 4, context)
+    var chosen = mx_selected(args[2], d.pair.kind, d.pair.present, context)
+    if mx_len(py_call(mx_set(chosen).intersection, d.pair.true.classes)) == 0:
         raise Error("At least one label in `labels` must be present in `y1` (even though "
                     + "`cohen_kappa_score` is otherwise agnostic to the order of `y1` and `y2`).")
     var k = mx_len(chosen)
@@ -417,13 +433,17 @@ def _kappa(args: PythonObject, context: PythonObject) raises -> PythonObject:
     # and k*k grouping, then the four cm_epi KAPPA phases), which the search
     # scorers' typed RUN calls too; its pins in its input order (the true and
     # predicted codes in `chosen`'s order, then the weights).
+    # host codes: never kept resident (lane vdf-xm-wire2); a resident side
+    # is mapped on the device and read in place (lane vdf-xm-wire4)
     var prog = MetricDoorProg()
-    prog.pin(mx_codes(pair.true, chosen, False, context), False)  # codes: never kept resident (lane vdf-xm-wire2)
-    prog.pin(mx_codes(pair.pred, chosen, False, context), False)
-    if pair.w is not None:
-        prog.pin_arg(pair.w, args, 4)
-    var out = kappa_stages(prog.plan, pair.true.n, k, pair.w is not None, wm)
+    d.pin(prog, 0, chosen, context)
+    d.pin(prog, 1, chosen, context)
+    var weighted = d.pair.w is not None
+    if weighted:
+        d.pin_weights(prog)
+    var out = kappa_stages(prog.plan, d.pair.true.n, k, weighted, wm)
     var arena = metric_door_run(prog, args[6], context)
+    d.close()  # the device codes outlive the run above
     var flags = arena.i32(out)
     if flags & 1:
         mx_undefined("`y2` contains no labels that are present in both `y1` and `labels`.", context)
@@ -445,8 +465,9 @@ def _rub_ok(value: PythonObject, low: Float64, high: Float64, context: PythonObj
 def _likelihood_ratios(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """args = (y_true, y_pred, labels, sample_weight, replace_undefined_by, mode)."""
     var b = mx_b()
-    var pair = mx_pair(args[0], args[1], args[3], "class_likelihood_ratios", context)
-    if mx_len(pair.present) > 2:
+    var d = mx_resident_pair(args[0], args[1], args[3], args[5], "class_likelihood_ratios", args, 3, context)
+    var present = d.pair.present
+    if mx_len(present) > 2:
         raise Error("class_likelihood_ratios only supports binary classification problems, "
                     + "got targets of type: multiclass")
     var rub = args[4]
@@ -466,9 +487,9 @@ def _likelihood_ratios(args: PythonObject, context: PythonObject) raises -> Pyth
                         + "`{'LR+': `value_1`, 'LR-': `value_2`}`")
     elif not (_is_float(rub) and mx_isnan(mx_float(rub, context))):
         raise Error("replace_undefined_by must be np.nan, 1.0 or a dict")
-    var chosen = mx_list(pair.present) if args[2] is None else mx_selected(args[2], pair.kind, pair.present, context)
+    var chosen = mx_list(present) if args[2] is None else mx_selected(args[2], d.pair.kind, present, context)
     if mx_len(chosen) == 1:
-        chosen = mx_label_order(chosen, pair.present)
+        chosen = mx_label_order(chosen, present)
     var k = mx_len(chosen)
     if k > 4096:
         raise Error("mojolearn metrics: at most 4096 labels in a confusion matrix")
@@ -478,13 +499,17 @@ def _likelihood_ratios(args: PythonObject, context: PythonObject) raises -> Pyth
     # `clr_stages` (moved from here: `_confusion`'s pair key and 2 x 2
     # grouping over the chosen labels, then cm_epi CLR), which the search
     # scorers' typed RUN calls too; its pins in its input order.
+    # host codes: never kept resident (lane vdf-xm-wire2); a resident side
+    # is mapped on the device and read in place (lane vdf-xm-wire4)
     var prog = MetricDoorProg()
-    prog.pin(mx_codes(pair.true, chosen, False, context), False)  # codes: never kept resident (lane vdf-xm-wire2)
-    prog.pin(mx_codes(pair.pred, chosen, False, context), False)
-    if pair.w is not None:
-        prog.pin_arg(pair.w, args, 3)
-    var out = clr_stages(prog.plan, pair.true.n, pair.w is not None)
+    d.pin(prog, 0, chosen, context)
+    d.pin(prog, 1, chosen, context)
+    var weighted = d.pair.w is not None
+    if weighted:
+        d.pin_weights(prog)
+    var out = clr_stages(prog.plan, d.pair.true.n, weighted)
     var arena = metric_door_run(prog, args[5], context)
+    d.close()  # the device codes outlive the run above
     var flags = arena.i32(out)
     # positive_likelihood_ratio / negative_likelihood_ratio (lane mf-score8,
     # python/mojolearn/_expansion_metrics.py): the scorers' metrics, one
@@ -530,8 +555,12 @@ def _report(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var digits = args[5]
     var zero_division = args[7]
     var mode = args[8]
-    var t0 = mx_encode(args[0], "y_true", context)
-    var p0 = mx_encode(args[1], "y_pred", context)
+    # a resident side is encoded on the device (lane vdf-xm-wire4): its
+    # classes back once, its codes kept in a slot for the program below
+    var dt = metric_resident_labels(args[0], mode, "classification_report", context)
+    var t0 = mx_resident_lab(dt, args[0], "y_true", context)
+    var dp = metric_resident_labels(args[1], mode, "classification_report", context)
+    var p0 = mx_resident_lab(dp, args[1], "y_pred", context)
     var present = mx_union_sorted(t0.classes, p0.classes)
     var labels_given = labels is not None
     var chosen = metric_flatten(labels, context) if labels_given else present
@@ -549,11 +578,11 @@ def _report(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var caller = String("precision_recall_fscore_support")
     _ = mx_zero_division_value(zero_division, context)
     # p3-labels-metrics: the pair reuses t0 / p0 (they were encoded twice).
-    var pair = mx_pair_encoded(t0.copy(), p0.copy(), args[4], caller, context)
-    var sel = _set_wise_labels(pair, PythonObject(None), chosen, PythonObject(1), caller, context)
-    var order = mx_label_order(sel, pair.present)
+    var d = mx_resident_pair_of(dt^, dp^, t0.copy(), p0.copy(), args[0], args[1], args[4], caller, args, 4, context)
+    var sel = _set_wise_labels(d.pair, PythonObject(None), chosen, PythonObject(1), caller, context)
+    var order = mx_label_order(sel, d.pair.present)
     var k = mx_len(sel)
-    var s = _sums(pair, order, context)
+    var s = _sums(d, order, context)
     var zd = _epi_zd(zero_division, context)
     var avg_codes: List[Int] = [0, 1, 2, 3]
     for i in range(4):  # small-loop(4: the report's four averages): fixed
@@ -571,6 +600,7 @@ def _report(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var total_out = s.prog.alloc(2)
     s.prog.stage("cm_epi", 1, [_CM_TOTAL, total_src, k, 1 if s.weighted else 0, total_out])
     var arena = metric_door_run(s.prog, mode, context)
+    d.close()  # the device codes outlive the run above
     var all_for = Python.tuple(PythonObject("precision"), PythonObject("recall"), PythonObject("f-score"))
     _prf_warn(arena.i32(s.eos[0]), all_for, zero_division, context)
     var per = _prf_result(s, arena, s.eos[0], k, PythonObject(None), context)
