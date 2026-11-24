@@ -4478,13 +4478,16 @@ PUBLIC_PENDING_LANES = {
     "safetensors-widen-f16": "unwatched",
     "hf-causal-lm-stream": "unwatched",
     "ivf-short-fill": "unwatched",
-    "forest-shard": "unwatched",
-    "neighbors-reference-shard": "unwatched",
-    "ivf-distributed": "unwatched",
-    "x-ols-square": "unwatched",
-    "kernel-ridge-wide": "unwatched",
-    "x-ridge-rank-deficient": "unwatched",
-    "x-lasso-short": "unwatched",
+    # lane w3f2-main (2026-11-24): "no reference", not "unwatched": the shipped table
+    # (verify_reference/table.json) carries no cell for these lanes, so every part reads OWED
+    # (gating, never a pass) until the release record admits them (test_host_surface).
+    "forest-shard": "no reference",
+    "neighbors-reference-shard": "no reference",
+    "ivf-distributed": "no reference",
+    "x-ols-square": "no reference",
+    "kernel-ridge-wide": "no reference",
+    "x-ridge-rank-deficient": "no reference",
+    "x-lasso-short": "no reference",
     # lane verify-coverage-owed (2026-10-21): the rows the audit left owed to
     # the migration lanes; no release record yet.
     "mamba2-decode-session": "unwatched",

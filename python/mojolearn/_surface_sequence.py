@@ -231,46 +231,49 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        # lane nn-optim end
                        }
 PUBLIC_PENDING_LANES = {
+    # lane w3f2-main (2026-11-24): "no reference", not "unwatched": the shipped table
+    # (verify_reference/table.json) carries no cell for these lanes, so every part reads OWED
+    # (gating, never a pass) until the release record admits them (test_host_surface).
     "sequence-tape-sequential": "unwatched",
     "sequence-tape-program": "unwatched",
-    "sequence-blocks-cnn1d": "unwatched",
-    "sequence-blocks-resnet1d": "unwatched",
-    "sequence-blocks-inceptiontime": "unwatched",
-    "sequence-blocks-gru-lengths": "unwatched",
-    "sequence-blocks-lstm-lengths": "unwatched",
-    "sequence-composed-transformer": "unwatched",
-    "sequence-composed-mamba1": "unwatched",
-    "sequence-composed-mamba2": "unwatched",
-    "sequence-composed-mamba3": "unwatched",
-    "sequence-composed-recurrent": "unwatched",
-    "sequence-composed-conv1d": "unwatched",
-    "sequence-composed-losses": "unwatched",  # lane nn-losses
-    "sequence-composed-log-softmax-ctc": "unwatched",  # lane nn-losses-2
+    "sequence-blocks-cnn1d": "no reference",
+    "sequence-blocks-resnet1d": "no reference",
+    "sequence-blocks-inceptiontime": "no reference",
+    "sequence-blocks-gru-lengths": "no reference",
+    "sequence-blocks-lstm-lengths": "no reference",
+    "sequence-composed-transformer": "no reference",
+    "sequence-composed-mamba1": "no reference",
+    "sequence-composed-mamba2": "no reference",
+    "sequence-composed-mamba3": "no reference",
+    "sequence-composed-recurrent": "no reference",
+    "sequence-composed-conv1d": "no reference",
+    "sequence-composed-losses": "no reference",  # lane nn-losses
+    "sequence-composed-log-softmax-ctc": "no reference",  # lane nn-losses-2
     # nn-recurrent begin
-    "sequence-blocks-bigru-lengths": "unwatched",
-    "sequence-blocks-bilstm": "unwatched",
+    "sequence-blocks-bigru-lengths": "no reference",
+    "sequence-blocks-bilstm": "no reference",
     # nn-recurrent end
     # nn-attention begin
-    "sequence-attention-encoder": "unwatched",
-    "sequence-attention-cross": "unwatched",
+    "sequence-attention-encoder": "no reference",
+    "sequence-attention-cross": "no reference",
     # nn-attention end
     # nn-conv begin
-    "sequence-nnconv-transpose": "unwatched",
-    "sequence-nnconv-pools": "unwatched",
-    "sequence-nnconv-pads": "unwatched",
-    "sequence-nnconv-upsample": "unwatched",
-    "sequence-nnconv-shuffle": "unwatched",
+    "sequence-nnconv-transpose": "no reference",
+    "sequence-nnconv-pools": "no reference",
+    "sequence-nnconv-pads": "no reference",
+    "sequence-nnconv-upsample": "no reference",
+    "sequence-nnconv-shuffle": "no reference",
     # nn-conv end
     # nn-activations begin
-    "sequence-composed-activations": "unwatched",
+    "sequence-composed-activations": "no reference",
     # nn-activations end
     # nn-norms begin
-    "sequence-norms-resnet1d-gn": "unwatched",
-    "sequence-norms-instance": "unwatched",
+    "sequence-norms-resnet1d-gn": "no reference",
+    "sequence-norms-instance": "no reference",
     # nn-norms end
     # nn-conv3d begin
-    "sequence-composed-conv3d": "unwatched",
-    "sequence-composed-pool3d": "unwatched",
+    "sequence-composed-conv3d": "no reference",
+    "sequence-composed-pool3d": "no reference",
     # nn-conv3d end
     "sequence-moe-backward": "unwatched",
     "sequence-export-roundtrip": "unwatched",
@@ -283,8 +286,8 @@ PUBLIC_PENDING_LANES = {
     "sequence-layernorm-backward": "unwatched",
     "public-theta-variants": "unwatched",
     # lane nn-optim begin
-    "sequence-optim-rmsprop": "unwatched",
-    "sequence-optim-adagrad": "unwatched",
-    "sequence-optim-lamb": "unwatched",
+    "sequence-optim-rmsprop": "no reference",
+    "sequence-optim-adagrad": "no reference",
+    "sequence-optim-lamb": "no reference",
     # lane nn-optim end
 }

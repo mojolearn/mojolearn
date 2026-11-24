@@ -28,6 +28,9 @@ FAMILIES = (
             "trees-rf-weighted",
             "trees-et-deviance",
             "trees-gbdt-multirmse",
+            # lane mf-imp6: GradientBoosting feature_importances_ on the host column
+            # (core/gbdt_importance.mojo), declared here by lane w3f2-main (2026-11-24)
+            "trees-gbdt-importances",
             "trees-bagging-clf",
             "trees-bagging-reg",
             "trees-adaboost-clf",
@@ -127,6 +130,7 @@ TRAINING_LANE_NAMES = {
     "trees-rf-weighted": "RandomForestClassifier weighted objective",
     "trees-et-deviance": "ExtraTreesRegressor poisson, gamma, inverse_gaussian",
     "trees-gbdt-multirmse": "GradientBoosting MultiRMSE (multi-target regression)",
+    "trees-gbdt-importances": "GradientBoosting feature_importances_",
     "trees-bagging-clf": "BaggingClassifier",
     "trees-bagging-reg": "BaggingRegressor",
     "trees-adaboost-clf": "AdaBoostClassifier",
@@ -150,4 +154,6 @@ TRAINING_LANE_NAMES = {
 }
 PUBLIC_PENDING_LANES = {
     "multioutput-ridge": "unwatched",
+    # lane w3f2-main (2026-11-24): no release record carries it yet; reads OWED until one does.
+    "trees-gbdt-importances": "no reference",
     }

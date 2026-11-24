@@ -159,8 +159,11 @@ DECLARED_LANELESS = {
 #: laneless by that decision, not by omission.
 # TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
 # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
+# lane w3f2-main (2026-11-24): DistributedIVFIndex, parallel_ivf.DistributedIVFIndex,
+# parallel_ensemble.fit_forest and parallel_neighbors_reference.ReferenceShardedNeighbors left this
+# list: the one-device lanes ivf-distributed, forest-shard and neighbors-reference-shard reach them.
 _RETIRED_MULTI_GPU = (
-    "DistributedIVFIndex", "ParallelByteLanguageModelTrainer", "models.ParallelCausalLM",
+    "ParallelByteLanguageModelTrainer", "models.ParallelCausalLM",
     "parallel_classical.apply_kernel_method", "parallel_classical.bootstrap",
     "parallel_classical.fit_arima", "parallel_classical.fit_cholesky", "parallel_classical.fit_coordinate_descent",
     "parallel_classical.fit_dbscan", "parallel_classical.fit_exponential_smoothing", "parallel_classical.fit_gaussian_mixture",
@@ -169,12 +172,12 @@ _RETIRED_MULTI_GPU = (
     "parallel_classical.fit_svm", "parallel_classical.monte_carlo_integrate", "parallel_classical.permutation_test",
     "parallel_classical.predict_gaussian_mixture", "parallel_classical.predict_gaussian_process", "parallel_classical.predict_svm",
     "parallel_classical.solve_cholesky", "parallel_classical.transform_rbf_sampler", "parallel_ensemble.ParallelForestPredictor",
-    "parallel_ensemble.fit_boosting", "parallel_ensemble.fit_feature_freq", "parallel_ensemble.fit_forest",
+    "parallel_ensemble.fit_boosting", "parallel_ensemble.fit_feature_freq",
     "parallel_ensemble.fit_isolation_forest", "parallel_ensemble.fit_ordered_rmse", "parallel_ensemble.score_isolation_forest",
     "parallel_forecasting.forecast_arima", "parallel_forecasting.forecast_exponential_smoothing", "parallel_forecasting.predict_arima",
     "parallel_forecasting.predict_exponential_smoothing", "parallel_gaussian_process.fit_gaussian_process_classifier", "parallel_gaussian_process.predict_gaussian_process_classifier",
-    "parallel_graph.fit_graph", "parallel_graph.transform_umap", "parallel_ivf.DistributedIVFIndex",
-    "parallel_model_selection.cross_val_score", "parallel_neighbors.ParallelQueries", "parallel_neighbors_reference.ReferenceShardedNeighbors",
+    "parallel_graph.fit_graph", "parallel_graph.transform_umap",
+    "parallel_model_selection.cross_val_score", "parallel_neighbors.ParallelQueries",
     "parallel_preprocessing.fit_scaler", "parallel_preprocessing.transform_scaler", "parallel_training.ParallelByteLanguageModelTrainer",
 )
 DECLARED_LANELESS.update({
