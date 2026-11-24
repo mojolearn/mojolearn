@@ -498,6 +498,11 @@ def _member_set_unit(address: Int, u: Int, alone: Bool) raises:
     is being fitted (one worker, or a turn on the calling thread), so a
     gather is split across the host cores. Touches no CPython."""
     var run = MutPointer[MemberSetRun, MutUntrackedOrigin](unsafe_from_address=address)
+    if run[].failed[u] != UInt8(0):
+        # lane mf-rows8b: a unit its caller refused before the fit (its words
+        # already in `errors[u]`, core/msel_search_run.mojo
+        # SEARCH_REFUSED_SHIFT): nothing is fitted
+        return
     var own = run[].own_x[u] != 0
     var x_address = run[].own_x[u] if own else run[].x
     var rows = run[].own_rows[u] if own else run[].rows

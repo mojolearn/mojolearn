@@ -3571,12 +3571,16 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         # A NESTED META BASE (lane mf-rows8c, row :3447): a candidate whose
         # admission raised raises its words as scikit-learn's fits do
         # (`_search_nested_refusal`).
-        if _search_nested_refusal(done, clones, tolerate != 0.0, len(clones) * folds):
-            # some candidates refused and others not, with a numeric
-            # error_score: scikit-learn scores the refused ones error_score and
-            # warns; the RUN has no per-candidate refusal row yet (rows.tsv)
-            return False
-        var at = done.find(clones[0])
+        # Some candidates refused and others not, with a numeric error_score
+        # (lane mf-rows8b, row :3484): each refused candidate is a refusal row
+        # of the RUN (its units fail with its words unfitted, scored
+        # error_score as scikit-learn scores a failing fit; core/
+        # msel_search_run.mojo SEARCH_REFUSED_SHIFT, set below).
+        _ = _search_nested_refusal(done, clones, tolerate != 0.0, len(clones) * folds)
+        var first_ok = 0
+        while first_ok < len(clones) and done.failure(clones[first_ok]) >= 0:  # driver-loop: over the candidates (the first admitted one)
+            first_ok += 1
+        var at = done.find(clones[first_ok])
         if at < 0:
             return False  # its admission answered False: a not-typed case of its own (that site's row)
         classifier = (done.masks[at] & MEMBER_CAN_CLASSIFIER) != 0
@@ -3970,9 +3974,40 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var multi_proba = False
     var proba_addresses = PythonObject(None)
     var nested = _Nested()
+    # A REFUSED CANDIDATE (lane mf-rows8b, row :3484; numeric error_score
+    # only: 'raise' raised its words above): its words are one more label
+    # word, its slot another candidate's plan and mask with the word's index
+    # (core/msel_search_run.mojo SEARCH_REFUSED_SHIFT); never fitted. The
+    # door's units warned nothing for a failing fit, nor does the RUN.
+    var slot_of = List[Int]()
+    var refused_word = List[Int]()
     for c in range(len(clones)):  # driver-loop: over the candidates (admission, once each)
+        var failed_at = done.failure(clones[c]) if tolerate != 0.0 else -1
+        if failed_at >= 0:
+            refused_word.append(_next_word(labels, classifier, extra_words, b))
+            extra_words.append(done.failed_words[failed_at])
+            slot_of.append(-1)
+            continue
+        refused_word.append(-1)
+        slot_of.append(len(nested.plans))
         if not _admit_nested(done, nested, clones[c], classifier, needs, context, b, labels):
             return False
+    if len(nested.plans) < len(clones):
+        var plans = List[MemberPlan]()
+        var masks = List[Int]()
+        var stand = -1
+        for c in range(len(clones)):  # small-loop(the candidates: the first admitted one stands in)
+            if stand < 0 and slot_of[c] >= 0:
+                stand = slot_of[c]
+        for c in range(len(clones)):  # driver-loop: over the candidates (their slots, in candidate order)
+            var src = slot_of[c] if slot_of[c] >= 0 else stand
+            plans.append(nested.plans[src].copy())
+            var mask = nested.masks[src]
+            if refused_word[c] >= 0:
+                mask |= (refused_word[c] + 1) << SEARCH_REFUSED_SHIFT
+            masks.append(mask)
+        nested.plans = plans^
+        nested.masks = masks^
     if own_score >= 0:
         # SCORING None over kinds without MEMBER_OP_SCORE (lane mf-rows8c): every
         # candidate is the base's class, so one typed scorer scores them all,

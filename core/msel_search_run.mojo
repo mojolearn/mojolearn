@@ -158,6 +158,15 @@ comptime _IntP = MutPointer[Int, MutUntrackedOrigin]
 comptime _U8P = MutPointer[UInt8, MutUntrackedOrigin]
 
 
+#: Lane mf-rows8b (row :3484): a candidate its UNPACK refused (a nested
+#: meta-estimator whose admission raised) with a numeric error_score: its
+#: mask carries (label word index + 1) << SEARCH_REFUSED_SHIFT, the word its
+#: refusal (`label_words`); its plan is another candidate's, never fitted.
+#: Each of its units fails with those words before any fit (scored
+#: error_score, as scikit-learn's failing fits are); a refit of it raises them.
+comptime SEARCH_REFUSED_SHIFT = 48
+
+
 struct MselSearchPlan(Movable):
     """Everything typed the search RUN reads (module note). Built by the
     caller's UNPACK; `plans[c]` is candidate c's member plan."""
@@ -1567,6 +1576,12 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                 # the fit reads the fold's train rows by index (the set's
                 # `by_index`) out of the whole X, X's pin offered
                 run.pin_tokens[u - u0] = plan.pin
+        for v in range(width):  # driver-loop: over the wave's units (a refused candidate's fail unfitted)
+            var refused = (plan.masks[(u0 + v) // used] >> SEARCH_REFUSED_SHIFT) - 1
+            if refused >= 0:
+                run.failed[v] = UInt8(1)
+                run.errors[v] = (plan.label_words[refused].copy() if refused < len(plan.label_words)
+                                 else String("member ABI: a refused candidate's words are missing"))
         _fit_wave(run)
         for v in range(width):  # driver-loop: over the wave's units (their fits' seconds)
             res.fit_seconds[u0 + v] = run.seconds[v]
@@ -1893,6 +1908,13 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     res.best_score = res.means[res.best]
     # 6. The refit of the best on every row (a set of one).
     if plan.refit:
+        var refused_best = (plan.masks[res.best] >> SEARCH_REFUSED_SHIFT) - 1
+        if refused_best >= 0:
+            # lane mf-rows8b: the best is a refused candidate (an error_score
+            # above every other mean): scikit-learn's refit fit raises its words
+            _drop_kept(plan, res)
+            raise Error(plan.label_words[refused_best].copy() if refused_best < len(plan.label_words)
+                        else String("member ABI: a refused candidate's words are missing"))
         var best = plan.plans[res.best].copy()
         best.classes = k
         best.class_counts = plan.class_counts.copy()
