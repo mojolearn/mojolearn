@@ -119,9 +119,9 @@ def test_reference_admission_requires_complete_matching_current_release(monkeypa
                  sources={'fixture':'current'},bindings=[{'sha256':'native'}])
     apple=copy.deepcopy(clean);apple['vendor']='metal'
     accepted=api.admit({'metal':apple,'cuda':clean})
-    assert accepted['untested_vendors']==['hip'] and not accepted['release_qualified']
+    assert accepted['untested_vendors']==['cpu','hip'] and not accepted['release_qualified']
     amd=copy.deepcopy(clean);amd['vendor']='hip'
-    assert api.admit({'metal':apple,'cuda':clean,'hip':amd})['untested_vendors']==[]
+    assert api.admit({'metal':apple,'cuda':clean,'hip':amd})['untested_vendors']==['cpu']
     amd['endpoints']['example.call']=row(2.)
     with pytest.raises(ValueError):api.admit({'metal':apple,'cuda':clean,'hip':amd})
     for field,value in [('version','old-release'),('sources',{}),('bindings',[]),
@@ -132,7 +132,7 @@ def test_reference_admission_requires_complete_matching_current_release(monkeypa
     with pytest.raises(ValueError):api.admit({'metal':invalid,'cuda':clean})
     only_nvidia=api.admit({'cuda':clean})
     assert only_nvidia['validated_vendors']==['cuda']
-    assert only_nvidia['untested_vendors']==['hip','metal']
+    assert only_nvidia['untested_vendors']==['cpu','hip','metal']
     partial=copy.deepcopy(apple)
     partial['endpoints']['example.call']={'status':'failed','error':'native build pending'}
     partial['pending']=['example.call']
@@ -142,6 +142,34 @@ def test_reference_admission_requires_complete_matching_current_release(monkeypa
     assert accepted['device_validation']['metal']['failures']=={'example.call':'native build pending'}
     broken=copy.deepcopy(clean);broken['pending']=['example.call']
     with pytest.raises(ValueError):api.admit({'cuda':broken})
+
+
+def test_reference_admits_a_cpu_column_that_reproduces_the_nvidia_bytes(monkeypatch):
+    # The CPU column is the CPU side (device="cpu") of a capture; its device-only endpoints
+    # read not applicable and are not missing from it; any output it disagrees on refuses.
+    monkeypatch.setattr(api,'TARGETS',[{'endpoint':'example.call'},{'endpoint':'example.device'}])
+    monkeypatch.setattr(api,'sources',lambda:{'fixture':'current'})
+    clean=report()
+    clean.update(vendor='cuda',side='gpu',numeric_mode='identical',version='test-release',
+                 expected=['example.call','example.device'],sources={'fixture':'current'},
+                 bindings=[{'sha256':'native'}])
+    clean['endpoints']['example.device']=row(3.)
+    cpu=copy.deepcopy(clean);cpu.update(vendor='cpu',side='cpu')
+    cpu['endpoints']['example.device']={'status':'not applicable','kind':'device only',
+                                        'reason':'the CPU side (device="cpu")'}
+    accepted=api.admit({'cpu':cpu,'cuda':clean})
+    assert accepted['validated_vendors']==['cpu','cuda']
+    assert accepted['untested_vendors']==['hip','metal']
+    assert accepted['device_validation']['cpu']['not_applicable']==['example.device']
+    assert accepted['device_validation']['cpu']['failures']=={}
+    moved=copy.deepcopy(cpu);moved['endpoints']['example.call']=row(2.)
+    with pytest.raises(ValueError):api.admit({'cpu':moved,'cuda':clean})
+    gpu_side=copy.deepcopy(cpu);gpu_side['side']='gpu'
+    with pytest.raises(ValueError):api.admit({'cpu':gpu_side,'cuda':clean})
+    failed=copy.deepcopy(cpu);failed['endpoints']['example.call']={'status':'failed','error':'refused'}
+    partial=api.admit({'cpu':failed,'cuda':clean})
+    assert partial['validated_vendors']==['cuda']
+    assert partial['device_validation']['cpu']['incomplete']==['example.call']
 
 
 def test_recorder_never_overwrites_an_earlier_failed_operation(tmp_path):

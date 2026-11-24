@@ -123,17 +123,23 @@ for them. Their single-device replacements are the `psd-*` lanes in section D.
 
 - Stale since the nn-* fixture lanes and r5-proving d83b80fb89 (named in f36d60dc61). The self-test reads OWED on
   every vendor until it is regenerated.
-- NVIDIA column, on the L40S from the built wheel:
-  `python tools/verify_api_endpoints.py --out cuda.json`, then
-  `python tools/verify_api_reference.py --cuda cuda.json --out python/mojolearn/_verification_api_reference.py`,
-  then commit the generated file. AMD / Apple: add `--hip` / `--metal` captures to the same `verify_api_reference.py`
+- Both columns are captured by `tools/verify_api_endpoints.py --side cpu|gpu|both` (vdv-fin, 2026-11-24): one file
+  per side, each side in the same process through the device view (`capture(side=)`, as
+  `_verify_api_runner.verify` runs them). A CPU-only installation records the CPU side only. `admit()` /
+  `tools/verify_api_reference.py --cpu` admit the CPU column: it must reproduce the NVIDIA bytes on every endpoint
+  it executes; the device-only endpoints it records `not applicable` are not missing from it. With the CPU column
+  admitted, the CPU side of `verify --self-test` is judged (MATCH / FAILED) instead of UNTESTED.
+- CPU column, recorded first, on the GitHub CPU runner from the built checkout of the frozen commit:
+  `MOJOLEARN_NUMERIC_MODE=identical python tools/verify_api_endpoints.py --side cpu --out api-cpu.json`
+  (keep `api-cpu.json` as the run's artifact).
+- NVIDIA column plus a CPU capture from the same process, on the L40S from the built wheel:
+  `MOJOLEARN_NUMERIC_MODE=identical python tools/verify_api_endpoints.py --side both --out api-cuda.json --cpu-out api-cpu-l40s.json`.
+- Admission, on the L40S (the package must import; the GitHub runner's `api-cpu.json` copied beside the captures):
+  `python tools/verify_api_reference.py --cpu api-cpu.json --cuda api-cuda.json --out python/mojolearn/_verification_api_reference.py`,
+  then commit the generated file. `api-cpu-l40s.json` is the cross-check of the CPU column on a GPU box: admit it
+  as `--cpu` in a second, uncommitted call (`--out /abs/check.py`); it must admit with `cpu` validated. AMD / Apple:
+  add `--hip` / `--metal` GPU-side captures (`--side gpu --out api-hip.json`) to the same `verify_api_reference.py`
   call at the release.
-- CPU column: **no command exists yet.** `_verify_api_runner.verify` now captures the CPU side (`device="cpu"`).
-  It reads UNTESTED against a reference that validates GPU vendors only. `admit()` accepts only metal / cuda / hip,
-  and `verify_api_endpoints.py` calls `capture()` without `side=`. Needed (request to vd-verify): a `--side cpu|gpu`
-  flag on `tools/verify_api_endpoints.py` passed to `capture(side=)`, and a `--cpu` capture in
-  `tools/verify_api_reference.py` / `admit()`. Then the CPU column is
-  `python tools/verify_api_endpoints.py --side cpu --out cpu.json` on the GitHub CPU runner.
 
 ## D. Lanes changed in place by vd-verify (their new bytes come with the full record)
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate one shared reference and retain actual per-device validation."""
+"""Generate one shared reference and retain actual per-column validation (CPU, NVIDIA, AMD, Apple)."""
 import argparse
 import base64
 import json
@@ -10,13 +10,15 @@ from pathlib import Path
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--cpu',type=Path,help='the CPU column: verify_api_endpoints.py --side cpu '
+        '(GitHub CPU runner) or the --cpu-out of --side both on a GPU box')
     parser.add_argument('--metal',type=Path)
     parser.add_argument('--cuda',type=Path,required=True)
     parser.add_argument('--hip',type=Path)
     parser.add_argument('--out',type=Path,required=True)
     args=parser.parse_args()
     from mojolearn._verify_api_runner import admit
-    data=admit({v:json.loads(getattr(args,v).read_text()) for v in ('metal','cuda','hip') if getattr(args,v)})
+    data=admit({v:json.loads(getattr(args,v).read_text()) for v in ('cpu','metal','cuda','hip') if getattr(args,v)})
     payload=base64.b85encode(zlib.compress(json.dumps(data,sort_keys=True,separators=(',',':')).encode(),9)).decode()
     chunks='\n'.join('    '+repr(s) for s in textwrap.wrap(payload,100,break_on_hyphens=False,drop_whitespace=False))
     args.out.write_text('"""Generated endpoint reference; DATA records the actual validated vendors."""\n'
