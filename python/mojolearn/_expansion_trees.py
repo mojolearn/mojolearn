@@ -1715,6 +1715,11 @@ class VotingClassifier(_MetaClassifierScore, _FitTransformMixin, _TreesWrapperBa
     >>> model.predict(X[:5]).shape
     (5,)
     """
+    #: Lane vdf-meta3: fit takes a model-selection fold (`_arena_io.DeviceRows`)
+    #: and reads it out of its base, the members taking the fold's rows on the
+    #: device (bindings/trees_public_meta_door.mojo `_meta_x_fit`); the other
+    #: methods admit its rows as any X.
+    _mojolearn_device_rows = True
 
     # The META member kind (core/ensemble_member.mojo; lane mf-meta3): this class as a member of
     # another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).
@@ -1836,6 +1841,11 @@ class VotingRegressor(_MetaRegressorScore, _FitTransformMixin, _TreesWrapperBase
     >>> model.predict(X[:5]).shape
     (5,)
     """
+    #: Lane vdf-meta3: fit takes a model-selection fold (`_arena_io.DeviceRows`)
+    #: and reads it out of its base, the members taking the fold's rows on the
+    #: device (bindings/trees_public_meta_door.mojo `_meta_x_fit`); the other
+    #: methods admit its rows as any X.
+    _mojolearn_device_rows = True
 
     # The META member kind (core/ensemble_member.mojo; lane mf-meta3): this class as a member of
     # another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).
@@ -1996,6 +2006,11 @@ class StackingClassifier(_MetaClassifierScore, _StackingBase):
     >>> model.predict_proba(X[:5]).shape
     (5, 2)
     """
+    #: Lane vdf-meta3: fit takes a model-selection fold (`_arena_io.DeviceRows`)
+    #: and reads it out of its base, the members taking the fold's rows on the
+    #: device (bindings/trees_public_meta_door.mojo `_meta_x_fit`); the other
+    #: methods admit its rows as any X.
+    _mojolearn_device_rows = True
 
     # The META member kind (core/ensemble_member.mojo; lane mf-meta3): this class as a member of
     # another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).
@@ -2116,6 +2131,11 @@ class StackingRegressor(_MetaRegressorScore, _StackingBase):
     >>> model.predict(X[:5]).shape
     (5,)
     """
+    #: Lane vdf-meta3: fit takes a model-selection fold (`_arena_io.DeviceRows`)
+    #: and reads it out of its base, the members taking the fold's rows on the
+    #: device (bindings/trees_public_meta_door.mojo `_meta_x_fit`); the other
+    #: methods admit its rows as any X.
+    _mojolearn_device_rows = True
 
     # The META member kind (core/ensemble_member.mojo; lane mf-meta3): this class as a member of
     # another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).
@@ -2286,6 +2306,11 @@ class MultiOutputClassifier(_TreesWrapperBase):
     >>> model.predict(X[:5]).shape
     (5, 2)
     """
+    #: Lane vdf-meta3: fit takes a model-selection fold (`_arena_io.DeviceRows`)
+    #: and reads it out of its base, the members taking the fold's rows on the
+    #: device (bindings/trees_public_meta_door.mojo `_meta_x_fit`); the other
+    #: methods admit its rows as any X.
+    _mojolearn_device_rows = True
     # The multi-output META member kind (core/ensemble_member.mojo META_MULTI_CLASSIFIER).
     _mojolearn_member = (39, 12)
     _estimator_type = "classifier"
@@ -2417,6 +2442,11 @@ class OneVsRestClassifier(_MetaClassifierScore, _TreesWrapperBase):
     >>> model.predict_proba(X[:5]).shape
     (5, 3)
     """
+    #: Lane vdf-meta3: fit takes a model-selection fold (`_arena_io.DeviceRows`)
+    #: and reads it out of its base, the members taking the fold's rows on the
+    #: device (bindings/trees_public_meta_door.mojo `_meta_x_fit`); the other
+    #: methods admit its rows as any X.
+    _mojolearn_device_rows = True
     _estimator_type = "classifier"
     # The META member kind (core/ensemble_member.mojo, THE UNIT KINDS; lane mf-meta3b): this class as a member
     # of another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).

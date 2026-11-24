@@ -128,6 +128,7 @@ from bindings.classifier_public_lifecycle_door import classifier_label_list
 from bindings.classical_pandas_door import native_pandas_exact
 from bindings.native_unit_threads_unpack import native_unit_jobs, native_unit_device_workers
 from core.host_parallel import host_parallelize
+from bindings.device_rows_door import DoorRows, door_is_device_rows
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from std.python._cpython import GILReleased
 from std.ffi import c_int, external_call
@@ -824,6 +825,189 @@ def _fit_units_drawn(clones: PythonObject, xs: PythonObject, d: Int, targets: Py
     return kinds^
 
 
+struct _MetaX(Movable):
+    """THE FOLD IN PLACE (lane vdf-meta3): the X a meta fit's members read.
+    `x`: the float32 C-order Array (X itself, or the WHOLE host base of a
+    model-selection fold, `_arena_io.DeviceRows`); `draw`: None, or the
+    fold's int32 row numbers in `x`; `inv`: None, or the int64 fold
+    position of each row of `x` (0 for a row outside the fold, never
+    drawn); `n` the operation's rows, `d` the columns, `base_rows` x's rows."""
+    var x: PythonObject
+    var draw: PythonObject
+    var inv: PythonObject
+    var n: Int
+    var d: Int
+    var base_rows: Int
+
+    def __init__(out self, x: PythonObject, draw: PythonObject, inv: PythonObject, n: Int, d: Int,
+                 base_rows: Int):
+        self.x = x
+        self.draw = draw
+        self.inv = inv
+        self.n = n
+        self.d = d
+        self.base_rows = base_rows
+
+
+def _meta_x_fit(X: PythonObject, context: PythonObject) raises -> _MetaX:
+    """UNPACK of a meta fit's X, once per fit. A DeviceRows fold on a GPU
+    route (the meta classes opt in with `_mojolearn_device_rows`, as the
+    estimators do) is read IN PLACE: its host base is the members' X (the
+    one model selection keeps resident: inside its `resident()` scope a
+    member that reads a row index takes the fold's rows on the device out
+    of it) and its rows are every member's row draw; the fold's targets and
+    weights are put at their base rows (`_meta_take`). Nothing of the fold
+    is gathered here. Any other X (and a fold on the CPU run context, the
+    device="cpu" convention: its host rows) is admitted as before
+    (`_x_array`)."""
+    var nk = trees_keys()
+    if not (py_get(context, nk[].k_device_cpu_context) is context) and door_is_device_rows(X, context):
+        var door = DoorRows(X, context)
+        var base = _x_array(door.base, context)
+        var base_rows = _rows(base)
+        var n = door.rows
+        if n > 0 and base_rows > 0 and base_rows <= 2147483647 and _cols(base) > 0:
+            var wide = _index_i64(door.indices, context)
+            var draw = admitted_vector(n, "<i4", context)
+            var inv = admitted_vector(base_rows, "<i8", context)
+            _meta_rows_index(trees_address(wide), n, base_rows, trees_address(draw), trees_address(inv))
+            _ = wide  # read through its address above
+            return _MetaX(base, draw, inv, n, _cols(base), base_rows)
+        _ = door^
+    var Xa = _x_array(X, context)
+    return _MetaX(Xa, PythonObject(None), PythonObject(None), _rows(Xa), _cols(Xa), _rows(Xa))
+
+
+def _meta_rows_index(wide: Int, n: Int, base_rows: Int, draw: Int, inv: Int) raises:
+    """A fold's int64 row numbers `wide` (n) as int32 `draw`, and `inv`
+    (base_rows int64 words): the fold position of each base row (zero first;
+    a row listed twice keeps one of its positions, whose targets are the
+    same row's). Rows across the host's cores; a row number outside the
+    base is refused."""
+    var tasks = host_predict_task_count_work(base_rows, base_rows)
+    var chunk = host_predict_chunk(base_rows, tasks)
+
+    def zero(t: Int) {imm inv, imm chunk, imm base_rows}:
+        var p = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=inv)
+        for i in range(t * chunk, min(t * chunk + chunk, base_rows)):
+            p[i] = 0
+
+    host_parallelize(zero, max(tasks, 1))
+    var bad = List[UInt8](length=1, fill=UInt8(0))
+    var bad_at = Int(bad.unsafe_ptr())
+    var row_tasks = host_predict_task_count_work(n, n)
+    var row_chunk = host_predict_chunk(n, row_tasks)
+
+    def place(t: Int) {imm wide, imm draw, imm inv, imm row_chunk, imm n, imm base_rows, imm bad_at}:
+        var s = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=wide)
+        var dd = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=draw)
+        var v = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=inv)
+        for i in range(t * row_chunk, min(t * row_chunk + row_chunk, n)):
+            var r = Int(s[i])
+            if r < 0 or r >= base_rows:
+                MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=bad_at)[] = UInt8(1)
+                dd[i] = 0
+                continue
+            dd[i] = Int32(r)
+            v[r] = Int64(i)
+
+    host_parallelize(place, max(row_tasks, 1))
+    if MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=bad_at)[] != UInt8(0):
+        raise Error("IndexError: a DeviceRows fold names a row outside its base")
+    _ = len(bad)
+
+
+def _meta_take(mx: _MetaX, values: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`values` (one 4-byte word per fold row: int32 codes, float32 targets
+    or weights; None stays None) at the base rows of `mx`'s fold: word b is
+    the fold row `inv[b]`'s, so the members' draws read the fold's own
+    words. `values` itself when `mx` holds no fold."""
+    if values is None or mx.inv is None:
+        return values
+    var typestr = String(py=values.dtype)
+    var out = admitted_vector(mx.base_rows, "<i4" if typestr == "<i4" or typestr == "int32" else "<f4", context)
+    var src = trees_address(values)
+    var dst = trees_address(out)
+    var inv = trees_address(mx.inv)
+    var rows = mx.base_rows
+    var tasks = host_predict_task_count_work(rows, rows)
+    var chunk = host_predict_chunk(rows, tasks)
+
+    def task(t: Int) {imm src, imm dst, imm inv, imm chunk, imm rows}:
+        var s = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=src)
+        var o = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=dst)
+        var v = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=inv)
+        for b in range(t * chunk, min(t * chunk + chunk, rows)):
+            o[b] = s[Int(v[b])]
+
+    host_parallelize(task, max(tasks, 1))
+    _ = values  # read through its address above
+    _ = mx.inv
+    return out
+
+
+def _meta_compose(mx: _MetaX, rows: PythonObject, context: PythonObject) raises -> PythonObject:
+    """THE FOLD IN PLACE: int32 fold positions `rows` (a cv split of the
+    fold) as rows of `mx.x` (`draw[rows[i]]`: the inner fold composed inside
+    the outer one, index words only); `rows` itself when `mx` holds no fold."""
+    if mx.draw is None:
+        return rows
+    var count = Int(py=rows.shape[0])
+    var out = admitted_vector(count, "<i4", context)
+    var src = trees_address(rows)
+    var dst = trees_address(out)
+    var draw = trees_address(mx.draw)
+    var tasks = host_predict_task_count_work(count, count)
+    var chunk = host_predict_chunk(count, tasks)
+
+    def task(t: Int) {imm src, imm dst, imm draw, imm chunk, imm count}:
+        var s = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=src)
+        var o = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=dst)
+        var w = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=draw)
+        for i in range(t * chunk, min(t * chunk + chunk, count)):
+            o[i] = w[Int(s[i])]
+
+    if count > 0:
+        host_parallelize(task, max(tasks, 1))
+    _ = rows  # read through its address above
+    _ = mx.draw
+    return out
+
+
+def _fit_members_x(clones: PythonObject, mx: _MetaX, targets: PythonObject, float_targets: Bool,
+                   weights: PythonObject, counts: PythonObject, jobs: Int, context: PythonObject,
+                   givens: PythonObject) raises:
+    """`_fit_members` over `mx` (THE FOLD IN PLACE): every member reads
+    `mx.x` with the fold's rows as its draw; `targets` (per member, fold
+    rows), `weights` (fold rows, or None) and THE GIVEN y tuples of every
+    fold row are put at the base rows once per distinct object."""
+    var m = len(clones)
+    if mx.draw is None:
+        _fit_members(clones, mx.x, mx.n, mx.d, targets, float_targets, weights, counts, jobs, context, givens)
+        return
+    var base_targets = Python.list()
+    var last = PythonObject(None)
+    var last_base = PythonObject(None)
+    for i in range(m):  # driver-loop: over members (one take per distinct target object)
+        if not (targets[i] is last):
+            last = targets[i]
+            last_base = _meta_take(mx, last, context)
+        _ = py_call(base_targets.append, last_base)
+    var base_givens = PythonObject(None)
+    if givens is not None:
+        base_givens = Python.list()
+        for i in range(m):  # driver-loop: over members
+            var g = givens[i]
+            if g is None:
+                _ = py_call(base_givens.append, g)
+            else:
+                # THE GIVEN y of every fold row, read at the base rows through `inv`.
+                _ = py_call(base_givens.append, Python.tuple(g[0], mx.inv, g[2]))
+    _ = _fit_units_drawn(clones, _repeat(mx.x, m), mx.d, base_targets, float_targets,
+                         _repeat(_meta_take(mx, weights, context), m), counts, jobs, context, base_givens,
+                         _repeat(mx.draw, m), False)
+
+
 def _fit_members(clones: PythonObject, X: PythonObject, n: Int, d: Int, targets: PythonObject, float_targets: Bool,
                  weights: PythonObject, counts: PythonObject, jobs: Int, context: PythonObject,
                  givens: PythonObject) raises:
@@ -1188,7 +1372,9 @@ def _voting_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_we
     var nk = trees_keys()
     # The voting value, then n_jobs / verbose: one body with the META kind's admission (lane mf-refuse5).
     var jobs = meta_voting_validate(model, classifier)
-    var Xa = _x_array(X, context)
+    # THE FOLD IN PLACE (lane vdf-meta3): a DeviceRows fold is read out of its base (`_meta_x_fit`).
+    var mx = _meta_x_fit(X, context)
+    var n = mx.n
     var target = y
     if classifier:
         var labels = trees_encode_labels(y, labels_scope(model, context))
@@ -1200,7 +1386,7 @@ def _voting_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_we
     var device = py_get(fields, "device")
     var origin = meta_device_origin(model, device)
     meta_members_device(device, active.ests, owner, origin, context, trees_builtins())
-    var weights = _member_weights(active.names, active.ests, sample_weight, _rows(Xa), context)
+    var weights = _member_weights(active.names, active.ests, sample_weight, n, context)
     var fitted = Python.list()
     _set(model, "estimators_", fitted)
     var m = len(active.ests)
@@ -1213,20 +1399,20 @@ def _voting_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_we
     # X's scikit-learn's check_consistent_length words, before any fit).
     if classifier:
         var k = len(_attr(model, PythonObject("classes_"), Python.list()))
-        _fit_members(clones, Xa, _rows(Xa), _cols(Xa), _repeat(target, m), False, weights,
-                     _repeat(PythonObject(k), m), jobs, context, PythonObject(None))
+        _fit_members_x(clones, mx, _repeat(target, m), False, weights, _repeat(PythonObject(k), m), jobs, context,
+                       PythonObject(None))
     else:
         var y32 = _f32_array(y, 1, "y", context)
-        if _rows(y32) != _rows(Xa):
+        if _rows(y32) != n:
             raise Error("ValueError: Found input variables with inconsistent numbers of samples: ["
-                        + String(_rows(Xa)) + ", " + String(_rows(y32)) + "]")
+                        + String(n) + ", " + String(_rows(y32)) + "]")
         # THE GIVEN y (lane mf-tail5): y as given, every row, to a member that reads it
-        _fit_members(clones, Xa, _rows(Xa), _cols(Xa), _repeat(y32, m), True, weights, PythonObject(None), jobs,
-                     context, _repeat(Python.tuple(y, PythonObject(None), PythonObject(-1)), m))
+        _fit_members_x(clones, mx, _repeat(y32, m), True, weights, PythonObject(None), jobs, context,
+                       _repeat(Python.tuple(y, PythonObject(None), PythonObject(-1)), m))
     for i in range(m):  # driver-loop: over members
         _ = py_call(fitted.append, clones[i])
     _set(model, "named_estimators_", _named(active.names, fitted))
-    _set(model, "n_features_in_", PythonObject(_cols(Xa)))
+    _set(model, "n_features_in_", PythonObject(mx.d))
     _set(model, "_fitted", PythonObject(True))
     if classifier:
         _ = _voting_weights(model)
@@ -1622,8 +1808,8 @@ def _stack_place(glue: EntryRef, members: PythonObject, kinds: List[Int], Xs: Py
 
 
 def _stack_place_indexed(glue: EntryRef, members: PythonObject, kinds: List[Int], Xa: PythonObject, n: Int, d: Int,
-                         rows_at: PythonObject, scope: Int, k: Int, binary: Bool, meta: Int, meta_rows: Int,
-                         width: Int, mut widths: List[Int], context: PythonObject) raises -> Bool:
+                         rows_at: PythonObject, place: PythonObject, scope: Int, k: Int, binary: Bool, meta: Int,
+                         meta_rows: Int, width: Int, mut widths: List[Int], context: PythonObject) raises -> Bool:
     """THE FOLD ROWS BY NUMBER (lane vdf-meta3): `_stack_place` of a cv fold's
     test rows `rows_at` (int32 row numbers of the whole X `Xa`, `n` x `d`)
     without gathering them: every member is opened on its held native state
@@ -1636,7 +1822,9 @@ def _stack_place_indexed(glue: EntryRef, members: PythonObject, kinds: List[Int]
     natively without the GIL or a member call refuses: the caller then
     gathers the fold's test block and runs `_stack_place` (the fallback
     rule, whose doors raise the members' own words). Same rows in the same
-    order as the gathered block: same bits."""
+    order as the gathered block: same bits. `place`: the int32 rows of the
+    meta block the outputs go to (the fold's test positions; `rows_at` is
+    the same rows in X as the members read it)."""
     var count = Int(py=rows_at.shape[0])
     var got = _VoteUnpack()
     var counts = List[Int](capacity=len(members))
@@ -1679,7 +1867,7 @@ def _stack_place_indexed(glue: EntryRef, members: PythonObject, kinds: List[Int]
         try:
             with GILReleased(Python()):
                 refused = stack_place_run(glue, rows, got.members, kinds, counts, k, binary, meta, meta_rows, width,
-                                          trees_address(rows_at), 0, widths, 0)
+                                          trees_address(place), 0, widths, 0)
         finally:
             var kept = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=took_at)[] != UInt8(0)
             member_pin_return(pin, 0 if kept else 1)
@@ -1691,6 +1879,7 @@ def _stack_place_indexed(glue: EntryRef, members: PythonObject, kinds: List[Int]
     _vote_close(got)
     _ = Xa  # the rows are read through RUN
     _ = rows_at
+    _ = place
     _ = got.keep  # the class columns are read through RUN
     return placed
 
@@ -1726,14 +1915,16 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     train and test sides were `_gather` (all of X uploaded, the rows
     gathered and DOWNLOADED, per fold, then uploaded again by every member).
     Same rows in the same order: no bit change."""
-    var Xa = _x_array(X, context)
+    # THE FOLD IN PLACE (lane vdf-meta3): a DeviceRows fold is read out of its base (`_meta_x_fit`); the cv
+    # folds' rows are then composed inside it (`_meta_compose`).
+    var mx = _meta_x_fit(X, context)
     var mctx = PythonObject(None)
     var scope = PythonObject(None)
-    if _meta_rows_resident(Xa, _rows(Xa), _cols(Xa), context):
+    if _meta_rows_resident(mx.x, mx.base_rows, mx.d, context):
         mctx = prep_native_context(context)
         scope = _cal_scope_open(mctx)
     try:
-        _ = _stacking_fit_run(model, Xa, y_full, codes, splits, final, sample_weight, classifier, y_given,
+        _ = _stacking_fit_run(model, mx, y_full, codes, splits, final, sample_weight, classifier, y_given,
                               scope is not None, context)
     finally:
         if scope is not None:
@@ -1741,19 +1932,23 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     return model
 
 
-def _stacking_fit_run(model: PythonObject, Xa: PythonObject, y_full: PythonObject, codes: Bool, splits: PythonObject,
+def _stacking_fit_run(model: PythonObject, mx: _MetaX, y_full: PythonObject, codes: Bool, splits: PythonObject,
                       final: PythonObject, sample_weight: PythonObject, classifier: Bool, y_given: PythonObject,
                       scoped: Bool, context: PythonObject) raises -> PythonObject:
-    """`_stacking_fit`'s body over the admitted X `Xa`; `scoped`: inside the
-    resident scope `_stacking_fit` entered."""
+    """`_stacking_fit`'s body over the admitted X `mx` (X, or a fold's base
+    with its rows); `scoped`: inside the resident scope `_stacking_fit`
+    entered. The cv folds' rows (`splits`, fold positions) are composed
+    into rows of `mx.x` for every read of X; the meta features, the final
+    estimator's fit and the placement keep fold positions."""
     var owner = _owner(model)
     var xt = _xt(py_fields(model), context)
     # This call owns the admitted X, y and optional weight storage. Member
     # fits cannot replace these local owners. A subsequent fit admits afresh.
+    var Xa = mx.x
     var x_view = Xa
-    var y_view = y_full
-    var n = Int(py=x_view.shape[0])
-    var d = Int(py=x_view.shape[1])
+    var n = mx.n
+    var d = mx.d
+    var nb = mx.base_rows  # rows of X as the members read it (a fold's whole base)
     var nk = trees_keys()
     var active = _active(_attr(model, nk[].k_estimators, PythonObject(None)), owner, context)
     _require_member(final, owner, context)
@@ -1785,11 +1980,21 @@ def _stacking_fit_run(model: PythonObject, Xa: PythonObject, y_full: PythonObjec
     var whole_given = PythonObject(None)  # THE GIVEN y of every row (lane mf-tail5)
     if not codes and y_given is not None:
         whole_given = Python.tuple(y_given, PythonObject(None), PythonObject(-1))
+    # The members' targets, weights and THE GIVEN y at the rows of `mx.x` (the fold's own words for a fold
+    # read in place; the same objects otherwise). The final estimator reads the fold's.
+    var y_view = _meta_take(mx, y_full, context)
+    var sw_rows = _meta_take(mx, sw, context)
+    var given_rows = whole_given
+    if whole_given is not None and mx.inv is not None:
+        given_rows = Python.tuple(y_given, mx.inv, PythonObject(-1))
+    var full_draws = PythonObject(None)
+    if mx.draw is not None:
+        full_draws = _repeat(mx.draw, n_members)
     # The full fit answers each member's kind-exact mask once per fit (one unit per member): whether every
     # member reads its test rows by number inside the scope (`indexable`).
-    var member_kinds = _fit_units_drawn(full, _repeat(Xa, n_members), d, _repeat(y_full, n_members), not codes,
-                                        _repeat(sw, n_members), counts, jobs, context,
-                                        _repeat(whole_given, n_members), PythonObject(None), True)
+    var member_kinds = _fit_units_drawn(full, _repeat(Xa, n_members), d, _repeat(y_view, n_members), not codes,
+                                        _repeat(sw_rows, n_members), counts, jobs, context,
+                                        _repeat(given_rows, n_members), full_draws, True)
     for i in range(n_members):  # driver-loop: over members
         _ = py_call(fitted.append, full[i])
     var scope_word = MEMBER_SCOPE_NONE
@@ -1809,7 +2014,8 @@ def _stacking_fit_run(model: PythonObject, Xa: PythonObject, y_full: PythonObjec
     var binary = _truthy(_attr(model, nk[].k__binary, PythonObject(False)))
     var passthrough = _truthy(_attr(model, nk[].k_passthrough, PythonObject(False)))
     var head_n = n if n < 2 else 2
-    var head = _gather(xt, trees_address(x_view), n, d, _arange(xt, head_n, context), _arange(xt, d, context), context)
+    var head = _gather(xt, trees_address(x_view), nb, d, _meta_compose(mx, _arange(xt, head_n, context), context),
+                       _arange(xt, d, context), context)
     _ = Xa  # keep the Python object alive through the native call above
     var widths = Python.list()
     var k_classes = len(_attr(model, PythonObject("classes_"), Python.list())) if classifier else 0
@@ -1852,14 +2058,14 @@ def _stacking_fit_run(model: PythonObject, Xa: PythonObject, y_full: PythonObjec
             # draw the fold's int32 train rows (the set selects all of them
             # with it): no fold block is copied here. Members never write
             # their inputs (the scikit-learn fit contract).
-            var tr_view = splits[f][0]
+            var tr_rows = _meta_compose(mx, splits[f][0], context)
             for i in range(n_members):  # driver-loop: over members
                 _ = py_call(unit_members.append, _clone(active.ests[i], device, origin, context))
                 _ = py_call(unit_x.append, Xa)
                 _ = py_call(unit_y.append, y_view)
-                _ = py_call(unit_w.append, sw)
-                _ = py_call(unit_given.append, whole_given)
-                _ = py_call(unit_draws.append, tr_view)
+                _ = py_call(unit_w.append, sw_rows)
+                _ = py_call(unit_given.append, given_rows)
+                _ = py_call(unit_draws.append, tr_rows)
         var unit_counts = PythonObject(None)
         if codes:
             unit_counts = _repeat(final_counts[0], len(unit_members))
@@ -1871,6 +2077,7 @@ def _stacking_fit_run(model: PythonObject, Xa: PythonObject, y_full: PythonObjec
         _ = py_call(unit_draws.clear)
         for f in range(f0, f1):  # driver-loop: over the wave's cv folds (test outputs)
             var te_view = splits[f][1]
+            var te_rows = _meta_compose(mx, te_view, context)  # the test rows in X as the members read it
             var fold_members = Python.list()
             for i in range(n_members):  # driver-loop: over members
                 _ = py_call(fold_members.append, unit_members[(f - f0) * n_members + i])
@@ -1884,10 +2091,10 @@ def _stacking_fit_run(model: PythonObject, Xa: PythonObject, y_full: PythonObjec
             var got = List[Int]()
             var placed = False
             if indexable:
-                placed = _stack_place_indexed(glue, fold_members, kinds, Xa, n, d, te_view, scope_word, k_classes,
-                                              binary, trees_address(meta_view), n, width, got, context)
+                placed = _stack_place_indexed(glue, fold_members, kinds, Xa, nb, d, te_rows, te_view, scope_word,
+                                              k_classes, binary, trees_address(meta_view), n, width, got, context)
             if not placed:
-                var Xte = _gather(xt, trees_address(x_view), n, d, te_view, cols_view, context)
+                var Xte = _gather(xt, trees_address(x_view), nb, d, te_rows, cols_view, context)
                 _ = Xa  # keep the Python object alive through the native call above
                 if admitted_is_held(Xa):
                     admitted_hold_rows_of(Xa, Xte, trees_address(Xte), Int(py=te_view.shape[0]), d)
@@ -1895,14 +2102,20 @@ def _stacking_fit_run(model: PythonObject, Xa: PythonObject, y_full: PythonObjec
                                    width, trees_address(te_view), 0, True, context)
             _ = meta_view  # written through the RUN above
             _ = te_view  # the rows are read through the RUN above
+            _ = te_rows
             for i in range(n_members):  # driver-loop: over members
                 if got[i] != native_widths[i]:
                     raise Error("a member's output width changed between folds")
         f0 = f1
     if passthrough:
-        var xb = admitted_words(Xa, trees_address(x_view), n, d)
+        # The fold's own rows of X (a fold read in place: gathered once here, for the passthrough columns).
+        var x_fold = Xa
+        if mx.draw is not None:
+            x_fold = _gather(xt, trees_address(x_view), nb, d, mx.draw, cols_view, context)
+        var xb = admitted_words(x_fold, trees_address(x_fold), n, d)
         _ = Xa  # keep the Python object alive through the native call above
         _ = _place(xt, meta_view, n, width, xb.view(), _arange(xt, n, context), total)
+        _ = x_fold
         _ = Xa  # keep the Python object alive through the native call above
         _ = xb^
         _ = Xa  # keep the Python object alive through the native call above
@@ -2342,8 +2555,9 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
                                 context: PythonObject) raises -> PythonObject:
     var b = trees_builtins()
     var jobs = _jobs(model, False)
-    var Xa = _x_array(X, context)
-    var n = _rows(Xa)
+    # THE FOLD IN PLACE (lane vdf-meta3): a DeviceRows fold is read out of its base (`_meta_x_fit`).
+    var mx = _meta_x_fit(X, context)
+    var n = mx.n
     var target = y
     var listed = py_type(y) is b.list or py_type(y) is b.tuple
     if not listed and native_pandas_exact(y):
@@ -2405,10 +2619,10 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
             _ = py_call(code_columns.append, labels.codes)
             _ = py_call(counts.append, PythonObject(len(labels.classes)))
             _ = py_call(classes.append, labels.classes)
-    _fit_members(clones, Xa, n, _cols(Xa), code_columns, False, weights, counts, jobs, context, PythonObject(None))
+    _fit_members_x(clones, mx, code_columns, False, weights, counts, jobs, context, PythonObject(None))
     for j in range(len(clones)):  # driver-loop: over the output columns (one member each)
         _ = py_call(fitted.append, clones[j])
-    _set(model, "n_features_in_", PythonObject(_cols(Xa)))
+    _set(model, "n_features_in_", PythonObject(mx.d))
     _set(model, "_fitted", PythonObject(True))
     return model
 
@@ -2743,7 +2957,8 @@ def _indicator(xt: PythonObject, codes: PythonObject, j: Int, context: PythonObj
 def _ovr_fit(model: PythonObject, X: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
     var jobs = _jobs(model, True)
     var xt = _xt(py_fields(model), context)
-    var Xa = _x_array(X, context)
+    # THE FOLD IN PLACE (lane vdf-meta3): a DeviceRows fold is read out of its base (`_meta_x_fit`).
+    var mx = _meta_x_fit(X, context)
     var labels = trees_encode_labels(y, labels_scope(model, context))
     _set(model, "classes_", labels.classes)
     var k = len(labels.classes)
@@ -2770,11 +2985,11 @@ def _ovr_fit(model: PythonObject, X: PythonObject, y: PythonObject, context: Pyt
         _ = py_call(clones.append, _clone(est, device, origin, context))
     # One binary member per target (0/1 codes, two classes): independent,
     # fitted together.
-    _fit_members(clones, Xa, _rows(Xa), _cols(Xa), targets, False, PythonObject(None),
-                 _repeat(PythonObject(2), len(targets)), jobs, context, PythonObject(None))
+    _fit_members_x(clones, mx, targets, False, PythonObject(None), _repeat(PythonObject(2), len(targets)), jobs,
+                   context, PythonObject(None))
     for i in range(len(clones)):  # driver-loop: over members
         _ = py_call(fitted.append, clones[i])
-    _set(model, "n_features_in_", PythonObject(_cols(Xa)))
+    _set(model, "n_features_in_", PythonObject(mx.d))
     _set(model, "_fitted", PythonObject(True))
     return model
 
