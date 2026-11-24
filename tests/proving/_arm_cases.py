@@ -123,9 +123,18 @@ def cvp_svc_decision_function():
 
 @case
 def cvs_error_score():
-    # A number for error_score is cross_validate's (its docstring: "'raise' or float"); cross_val_score documents
-    # error_score='raise' only and refuses a number by name.
-    return {"scores": ms.cross_validate(make("Ridge", alpha=-1.0), X, Y, error_score=0.5)["test_score"]}
+    # A number for error_score scores a failing fit that value (scikit-learn 1.9 model_selection/_validation.py
+    # `_fit_and_score`), with one FitFailedWarning when SOME fits fail; when EVERY fit fails scikit-learn raises
+    # "All the N fits failed" (`_warn_or_raise_about_fit_failures`), so a single invalid Ridge(alpha=-1.0) under
+    # cross_validate raises (lane w3f3-b: this case asserted 0.5 for that). One failing candidate beside a working
+    # one: its three split scores are error_score.
+    import warnings
+    search = ms.GridSearchCV(make("Ridge"), {"alpha": [-1.0, 1.0]}, cv=3, error_score=0.5)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # the FitFailedWarning (its words are checked in the python suite)
+        search.fit(X, Y)
+    results = search.cv_results_
+    return {"scores": np.asarray([results["split%d_test_score" % f][0] for f in range(3)])}
 
 
 @case

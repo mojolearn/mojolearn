@@ -725,11 +725,18 @@ def msel_cross_val_score(args: PythonObject, context: PythonObject) raises -> Py
     var estimator = args[0]
     var cv = args[3]
     var groups = args[5]
-    _ = msel_unit_jobs(args[6], PythonObject("raise"), "cross_val_score", context)  # n_jobs words, first
+    # n_jobs words, first; then error_score's ('raise' or a real number,
+    # scikit-learn's words; lane w3f3-b: a number is served below)
+    _ = msel_unit_jobs(args[6], args[7], "cross_val_score", context)
     var scoring = args[4]
     if py_type(scoring) is msel_b().str:
         scoring = msel_get_scorer(scoring, context)
-    var got = msel_prepare_folds(estimator, args[1], args[2], cv, scoring, groups, args[7], context)
+    # error_score is checked above and handed to the RUN (lane w3f3-b: a
+    # number scores a failing fit or score that value and warns as
+    # scikit-learn's `_score` / `_warn_or_raise_about_fit_failures` do, at
+    # the search PACK); the folds' preparation is the parallel route's too,
+    # which keeps its 'raise'-only rule
+    var got = msel_prepare_folds(estimator, args[1], args[2], cv, scoring, groups, PythonObject("raise"), context)
     var x = got[0]
     var y = got[1]
     var folds = got[2]
@@ -738,7 +745,7 @@ def msel_cross_val_score(args: PythonObject, context: PythonObject) raises -> Py
     # FAST + Apple slice route's row-range views are the RUN's own views of a
     # side that is one run of rows (lane mf-msel5b; TOMBSTONE above). Lane
     # mf-r9b: the only route (its refusals raise there; no units beside it).
-    var by = msel_cv_by_search(estimator, x, y, folds, scoring, args[6], PythonObject("raise"), False, False,
+    var by = msel_cv_by_search(estimator, x, y, folds, scoring, args[6], args[7], False, False,
                                PythonObject(None), False, context)
     return by["test"][0]
 

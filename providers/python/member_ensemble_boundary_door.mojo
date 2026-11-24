@@ -106,7 +106,7 @@ from core.device_route import DeviceRoute, DEVICE_CPU
 from bindings.admitted_input_unpack import admitted_unfilled
 from bindings.native_unit_threads_unpack import native_unit_jobs
 from core.ensemble_member import (
-    meta_plan_mint_with, meta_state_plans, meta_state_notices,
+    meta_plan_mint_with, meta_state_plans, meta_state_notices, meta_state_search_failures,
     META_VOTE_CLASSIFIER, META_VOTE_REGRESSOR, META_STACK_CLASSIFIER, META_STACK_REGRESSOR, META_BLOCK_NESTED,
     META_BLOCK_WIDTHS, META_OVR, META_CALIBRATED, META_BAG_CLASSIFIER, META_BAG_REGRESSOR, META_KIND_LAST,
     META_BLOCK_CAL, META_BLOCK_DRAWS, META_BLOCK_OOB, META_BLOCK_BATCHED,
@@ -140,7 +140,9 @@ from core.ensemble_member import (
 from core.ensemble_member import meta_plan_leaf_importances, META_PARAM_SERVING, meta_plan_metric_other
 from core.ensemble_member import meta_plan_metric_kernels
 from core.metrics_entry_table import MetricsEntryKey, metrics_r2_entry
-from core.msel_search_run import SEARCH_REFUSED_SHIFT, MselOtherTier
+from core.msel_search_run import SEARCH_REFUSED_SHIFT, MselOtherTier, msel_fit_failures_summary
+from core.member_notices import MEMBER_NOTICE_WORDS, MEMBER_NOTICE_SCORE_FAILED
+from bindings.msel_common_door import msel_warn
 from bindings.mode_answer_door import answer_mode_object
 from core.mode_answer import MODE_FAMILY_MSEL
 from core.member_abi import MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_PREDICT, member_output_dtype, member_outputs
@@ -854,12 +856,27 @@ def _refuse_cv_callback(cv: PythonObject, context: PythonObject, b: PythonObject
                 return
         except:
             return  # no integer table connected: the caller's door decides, in the same words
-    var layouts = py_get(context, "family_msel_splitter_layouts")
+    var layouts = py_get(_splitter_context(context), "family_msel_splitter_layouts")
     if layouts is None:
         return  # no splitter table connected: the caller's door decides, in the same words
     if py_contains(layouts, py_type(cv)):
         return
     raise Error(words)
+
+
+def _splitter_context(context: PythonObject) raises -> PythonObject:
+    """The context that holds OUR splitter table (`family_msel_splitter_layouts`): `context` itself (model
+    selection's, a search's plan context) or, for a META estimator's own family context (a Stacking or a
+    Calibrated nested in a Voting: the work-list hands down the nested class's plan context, the trees
+    context copy), the model selection context every connected owner context names
+    (`native_estimator_context`, python/mojolearn/_families.py). Lane w3f3-b (row 3): a nested
+    StackingClassifier(cv=KFold(3)) read its splitter against the trees context, found no table and was
+    refused as a user's callback ("cv requires an integer, native splitter or list of index pairs"), where
+    the same stack fitted at the top level took it. Once per admission, never per fit or row."""
+    if py_get(context, "family_msel_splitter_layouts") is not None:
+        return context
+    var native = py_get(context, "native_estimator_context")
+    return context if native is None else native
 
 
 struct _Split(Movable):
@@ -889,14 +906,15 @@ def _split_cv(cv: PythonObject, context: PythonObject, b: PythonObject, mut spli
     splitter, whose `split` would be a Python callback: refused natively in
     `words` (`_refuse_cv_callback` refuses it first when the table is
     connected). Never False (the meta door no longer keeps any splitter)."""
-    if msel_split_spec_read(cv, context, split.spec, split.pin, True):
+    var table = _splitter_context(context)  # lane w3f3-b: a nested META's family context names it
+    if msel_split_spec_read(cv, table, split.spec, split.pin, True):
         return True
-    var layouts = py_get(context, "family_msel_splitter_layouts")
+    var layouts = py_get(table, "family_msel_splitter_layouts")
     if layouts is None or not py_contains(layouts, py_type(cv)):
         raise Error(words)
     # The one class the strict reader leaves to its caller: an `_IterableCV`.
-    var sp = MselSplitter(cv, context)
-    return _user_folds(sp.field("_pairs", context), b, fold_train, fold_test)
+    var sp = MselSplitter(cv, table)
+    return _user_folds(sp.field("_pairs", table), b, fold_train, fold_test)
 
 
 def _cap_of(fields: PythonObject, b: PythonObject) raises -> Int:
@@ -4012,6 +4030,14 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                         MEMBER_OP_PREDICT if method == "predict" else MEMBER_OP_PREDICT_PROBA)
                     opts.log = method == "predict_log_proba"
                     row.op = opts.resp
+                    if hinge_metric and method == "predict":
+                        # lane w3f3-b: hinge_loss over predicted labels scores
+                        # their values (core/msel_scorer_run.mojo
+                        # `_wrong_response_value`): each fit label's value read once
+                        if labels is None:
+                            raise Error("RuntimeError: search admission invariant: a classifier fit admitted with "
+                                        + "no fit labels (a FIT caller hands its labels)")
+                        _label_values(labels, sels, opts, b)
         if kw.resp_any and method != "predict":
             # LANE mf-r9c (door :3670): a regression row over the make_scorer's
             # own response the class has (core/msel_scorer_run.mojo
@@ -5680,6 +5706,10 @@ def _search_pack(model: PythonObject, fields: PythonObject, context: PythonObjec
         raise Error("RuntimeError: mojolearn: the search member state's tables are malformed")
     var results = Python.dict()
     py_setitem(results, "params", candidates)
+    # LANE w3f3-b: each table's means in scikit-learn's `_format_results`
+    # order (test, then train, per scorer), for its non-finite warnings
+    var shown_means = List[List[Float64]]()
+    var shown_train = List[Bool]()
     var itertools = native_loaded_module("itertools")
     var keys = py_call(b.sorted, py_call(b.set, py_call(itertools.chain.from_iterable, candidates)))
     for i in range(len(keys)):  # driver-loop: over the candidates' parameter names
@@ -5705,6 +5735,8 @@ def _search_pack(model: PythonObject, fields: PythonObject, context: PythonObjec
             ranks.append(Int(words[at + 2 * m + c]))
         at += 3 * m
         py_setitem(results, PythonObject("mean_test_score" + suffix), msel_f64_list(means, context))
+        shown_means.append(means.copy())
+        shown_train.append(False)
         py_setitem(results, PythonObject("std_test_score" + suffix), msel_f64_list(stds, context))
         py_setitem(results, PythonObject("rank_test_score" + suffix), msel_i32_list(ranks, context))
         if train:
@@ -5720,6 +5752,8 @@ def _search_pack(model: PythonObject, fields: PythonObject, context: PythonObjec
             for c in range(m):  # driver-loop: over the candidates (their train means)
                 train_means.append(words[at + m * folds + c])
             py_setitem(results, PythonObject("mean_train_score" + suffix), msel_f64_list(train_means, context))
+            shown_means.append(train_means.copy())
+            shown_train.append(True)
     var updates = Python.dict()
     py_setitem(updates, "cv_results_", results)
     py_setitem(updates, "n_splits_", PythonObject(folds))
@@ -5760,10 +5794,92 @@ def _search_pack(model: PythonObject, fields: PythonObject, context: PythonObjec
     var owners = List[Int]()
     var notices = List[List[Float64]]()
     meta_state_notices(state, owners, notices)
+    var fit_failed = List[String]()
+    var score_failed = List[String]()
+    meta_state_search_failures(state, fit_failed, score_failed)
+    var error_score = py_get(fields, "error_score")
     for i in range(len(owners)):  # driver-loop: over the units' notices (a few warnings each)
         # the scorers' metric warnings with the search's own context (lane
         # mf-score5: the context its scorers' metric calls carry)
-        member_fit_notices_raise_with(notices[i], notice_context, context)
+        _search_notices_raise(notices[i], score_failed, many, error_score, notice_context, context, b)
+    _search_failure_warnings(fit_failed, m * folds, error_score, context, b)
+    if tool is None:
+        _nonfinite_warnings(shown_means, shown_train, context, b)
+
+
+def _search_notices_raise(words: List[Float64], score_failed: List[String], many: Bool, error_score: PythonObject,
+                          notice_context: PythonObject, context: PythonObject, b: PythonObject) raises:
+    """Lane w3f3-b: one unit's notices in their order: a failed score
+    (MEMBER_NOTICE_SCORE_FAILED) is scikit-learn's UserWarning (sklearn 1.9
+    model_selection/_validation.py `_score`: "Scoring failed. The score on
+    this train-test partition for these parameters will be set to
+    {error_score}. Details: \n{format_exc()}"; a multi-metric scorer's
+    per-scorer form prints the value with "%f"); the details are the
+    failure's words (a native score has no Python frames: the traceback's
+    last line). Every other notice through `member_fit_notices_raise_with`."""
+    var plain = List[Float64]()
+    var count = len(words) // MEMBER_NOTICE_WORDS
+    for q in range(count):  # small-loop(a unit's notices: a few)
+        var code = Int(words[MEMBER_NOTICE_WORDS * q])
+        if code != MEMBER_NOTICE_SCORE_FAILED:
+            for r in range(MEMBER_NOTICE_WORDS):  # small-loop(one notice's words)
+                plain.append(words[MEMBER_NOTICE_WORDS * q + r])
+            continue
+        if len(plain) > 0:
+            member_fit_notices_raise_with(plain, notice_context, context)
+            plain = List[Float64]()
+        var at = Int(words[MEMBER_NOTICE_WORDS * q + 1])
+        var details = score_failed[at].copy() if at >= 0 and at < len(score_failed) else String("")
+        var shown = String(py=py_call(b.str, error_score))
+        if many:
+            shown = String(py=py_call(native_loaded_module("operator").mod, PythonObject("%f"), error_score))
+        msel_warn("Scoring failed. The score on this train-test partition for these parameters will be set to "
+                  + shown + ". Details: \n" + details, b.UserWarning, context)
+    if len(plain) > 0:
+        member_fit_notices_raise_with(plain, notice_context, context)
+
+
+def _search_failure_warnings(fit_failed: List[String], fits: Int, error_score: PythonObject, context: PythonObject,
+                             b: PythonObject) raises:
+    """Lane w3f3-b: scikit-learn's FitFailedWarning when some fits failed
+    under a numeric error_score (sklearn 1.9 model_selection/_validation.py
+    `_warn_or_raise_about_fit_failures`; every fit failing raised in the RUN).
+    The category is sklearn.exceptions.FitFailedWarning when scikit-learn is
+    loaded, else RuntimeWarning (its base class)."""
+    if len(fit_failed) == 0:
+        return
+    var category = b.RuntimeWarning
+    var sk = py_call(native_loaded_module("sys").modules.get, PythonObject("sklearn.exceptions"))
+    if sk is not None:
+        category = py_call(b.getattr, sk, PythonObject("FitFailedWarning"), category)
+    msel_warn("\n" + String(len(fit_failed)) + " fits failed out of a total of " + String(fits) + ".\n"
+              + "The score on these train-test partitions for these parameters will be set to "
+              + String(py=py_call(b.str, error_score)) + ".\n"
+              + "If these failures are not expected, you can try to debug them by setting error_score='raise'.\n\n"
+              + "Below are more details about the failures:\n" + msel_fit_failures_summary(fit_failed),
+              category, context)
+
+
+def _nonfinite_warnings(shown_means: List[List[Float64]], shown_train: List[Bool], context: PythonObject,
+                        b: PythonObject) raises:
+    """Lane w3f3-b: scikit-learn's `_format_results` warning per table whose
+    means hold a non-finite value: "One or more of the test (train) scores
+    are non-finite: {array_means}" (UserWarning), the means printed as
+    NumPy prints the array (`str`, when NumPy is loaded; else the list)."""
+    var np = py_call(native_loaded_module("sys").modules.get, PythonObject("numpy"))
+    for t in range(len(shown_means)):  # small-loop(the scorers' tables)
+        var finite = True
+        for c in range(len(shown_means[t])):  # driver-loop: over the candidates' means
+            var v = shown_means[t][c]
+            finite = finite and (v - v == 0.0)
+        if finite:
+            continue
+        var listed = Python.list()
+        for c in range(len(shown_means[t])):  # driver-loop: over the candidates' means (their printed values)
+            _ = py_call(listed.append, PythonObject(shown_means[t][c]))
+        var printed = listed if np is None else py_call(np.array, listed)
+        msel_warn("One or more of the " + (String("train") if shown_train[t] else String("test"))
+                  + " scores are non-finite: " + String(py=py_call(b.str, printed)), b.UserWarning, context)
 
 
 def _search_tool_pack(fields: PythonObject, tool: PythonObject, words: _F64P, at_in: Int, count: Int, units: Int,

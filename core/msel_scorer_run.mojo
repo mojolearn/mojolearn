@@ -1188,7 +1188,8 @@ def _wrong_response_value(route: MetricRoute, cluster: EntryRef, label_words: Li
     HINGE_LOSS over predict_proba (or its log): the probabilities are the
     decision values (lines 3553-3613), a binary member's classes[-1] column;
     over predict: more than two present labels raise its 1-D shape words, two
-    or fewer would read the labels as decisions (refused natively)."""
+    or fewer score the predicted labels' values as decisions (scikit-learn's
+    binary branch; the UNPACK hands the fit labels' value words)."""
     var present = _present_count(truth, count, classes) if classes > 0 else 0
     var width = max(cols, 1)
     var binary_column = classes == 2 and width == 2 and row.op == MEMBER_OP_PREDICT_PROBA
@@ -1201,9 +1202,27 @@ def _wrong_response_value(route: MetricRoute, cluster: EntryRef, label_words: Li
                 raise Error("ValueError: The shape of pred_decision cannot be 1d arraywith a multiclass target. "
                             + "pred_decision shape must be (n_samples, n_classes), that is (" + String(count) + ", "
                             + String(present) + "). Got: (" + String(count) + ",)")
-            raise Error("NotImplementedError: mojolearn: hinge_loss over predicted labels (a response_method tuple "
-                        + "that resolved to predict) is not served natively by a search; pass "
-                        + "response_method='decision_function'")
+            # lane w3f3-b: two or fewer labels score the predicted labels' VALUES
+            # as the decisions, as scikit-learn 1.9 does (metrics/_classification.py
+            # `hinge_loss`, binary branch: `check_array(pred_decision,
+            # ensure_2d=False)` (dtype='numeric': string labels refuse), then
+            # `margin = y_true * pred_decision` with y_true binarized -1 / +1 by
+            # LabelBinarizer over the labels y_true holds): the decision row's own
+            # program over those values (`hinge_run`, one column).
+            if row.lv_n != classes:
+                raise Error("member ABI: hinge_loss over predict needs one value per fit label")
+            var kinds = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=row.lv_at)
+            for c in range(row.lv_n):  # small-loop(the fit labels: their kinds)
+                if Int(kinds[2 * c + 1]) != SCORER_LABEL_NUMBER:
+                    raise Error(SCORER_NUMERIC_WORDS)
+            var decisions = List[Float32]()
+            _label_floats(label_words, row, response, count, decisions)
+            var as_decision = plain
+            as_decision.op = MEMBER_OP_DECISION
+            var hinge_value = msel_scorer_value(route, cluster, label_words, as_decision, truth,
+                                                Int(decisions.unsafe_ptr()), count, classes, 1, positive, notices)
+            _ = len(decisions)  # read by the program above
+            return hinge_value
         if binary_column:
             var column = List[Float32](length=max(count, 1), fill=0.0)
             for i in range(count):  # driver-loop: over the side's rows (classes[-1]'s probability column)

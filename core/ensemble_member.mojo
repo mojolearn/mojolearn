@@ -1047,6 +1047,11 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
     # candidate). THE MULTI-OUTPUT KIND: each output's class count.
     var metric: MetricRoute
     var search_words: List[Float64]
+    # LANE w3f3-b: the search's failed fits' and failed scores' words under a
+    # numeric error_score (`MselSearchResult.fit_failed` / `score_failed`),
+    # handed to its PACK once (`meta_state_search_failures`).
+    var search_fit_failed: List[String]
+    var search_score_failed: List[String]
     var out_classes: List[Int]
     # Lane mf-cluster5: the search's cluster entry and labels' reprs.
     var cluster: EntryRef
@@ -1140,6 +1145,8 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
         self.ada_xcm = List[Float32]()
         self.metric = MetricRoute(entry_ref_unresolved().call, False, False)
         self.search_words = List[Float64]()
+        self.search_fit_failed = List[String]()
+        self.search_score_failed = List[String]()
         self.out_classes = List[Int]()
         self.cluster = entry_ref_unresolved()
         self.label_words = List[String]()
@@ -1619,8 +1626,16 @@ def _nested_outputs(slot: _SlotPtr) raises:
             continue  # not fitted yet (a stack's final, during its fit)
         var plan = slot[].plans[u].copy()
         var call = member_call_of(plan, slot[].states[u])
-        slot[].pred_cols[u] = member_outputs_of(plan, call, MEMBER_OP_PREDICT)
-        slot[].pred_dtype[u] = call.out_dtype if call.out_dtype != MEMBER_DTYPE_UNSAID else MEMBER_F32
+        # LANE w3f3-b (row 2): a nested member that does not predict (a
+        # search's refitted encoder, scaler or decomposition, scored only by
+        # refusal-only rows: core/msel_search_run.mojo `no_predict`) is not
+        # asked its predict columns; its OUTPUTS answer raised "a <family>
+        # member has no predict" out of the refit, where scikit-learn's
+        # search refits it and keeps it (predict then raises, as here: no
+        # route reads pred_cols of a member without the bit).
+        if plan.member.can(MEMBER_CAN_PREDICT) and (slot[].masks[u] & MEMBER_CAN_PREDICT) != 0:
+            slot[].pred_cols[u] = member_outputs_of(plan, call, MEMBER_OP_PREDICT)
+            slot[].pred_dtype[u] = call.out_dtype if call.out_dtype != MEMBER_DTYPE_UNSAID else MEMBER_F32
         if plan.member.can(MEMBER_CAN_PREDICT_PROBA) and (slot[].masks[u] & MEMBER_CAN_PREDICT_PROBA) != 0:
             slot[].proba_cols[u] = member_outputs_of(plan, call, MEMBER_OP_PREDICT_PROBA)
             slot[].proba_dtype[u] = call.out_dtype if call.out_dtype != MEMBER_DTYPE_UNSAID else MEMBER_F32
@@ -3516,6 +3531,8 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
         plan.pin = call[].pin
         plan.kept_at = Int(UnsafePointer(to=call[].pin_kept))
     var res = msel_search_run(plan)
+    slot[].search_fit_failed = res.fit_failed.copy()  # lane w3f3-b: the PACK's warnings
+    slot[].search_score_failed = res.score_failed.copy()
     # THE CV TOOLS: the kept unit states are the slot's from here (freed by
     # `_drop_states`), each with its candidate.
     slot[].fold_states = res.unit_states.copy()
@@ -5115,6 +5132,16 @@ def meta_state_notices(state: Int, mut owners: List[Int], mut words: List[List[F
     words = slot[].notice_words.copy()
     slot[].notice_owner = List[Int]()
     slot[].notice_words = List[List[Float64]]()
+
+
+def meta_state_search_failures(state: Int, mut fit_failed: List[String], mut score_failed: List[String]) raises:
+    """PACK (lane w3f3-b): a search state's failed fits' and failed scores'
+    words under a numeric error_score, handed over once."""
+    var slot = _SlotPtr(unsafe_from_address=_lookup(state, False))
+    fit_failed = slot[].search_fit_failed.copy()
+    score_failed = slot[].search_score_failed.copy()
+    slot[].search_fit_failed = List[String]()
+    slot[].search_score_failed = List[String]()
 
 
 # ------------------------------------------------------------------ the entry

@@ -131,6 +131,79 @@ def msel_planned_call(model: PythonObject, plan: PythonObject, method: String, a
 def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObject,
                             context: PythonObject, plan: PythonObject,
                             scorer_response: Bool, keywords: PythonObject) raises -> PythonObject:
+    """`_msel_dispatch_once`, followed through a FITTED SEARCH's response
+    (lane w3f3-b, row 3): a member-only search (GridSearchCV,
+    RandomizedSearchCV) has no method recipes; its predict, predict_proba,
+    decision_function and transform are its best estimator's
+    (scikit-learn's `BaseSearchCV` delegations; its own methods are
+    `family_msel_delegate`), so a caller that reaches its door (a Voting,
+    Stacking, Calibrated or RFE estimator's member call, a scorer's
+    response) is answered by `best_estimator_`'s own dispatch. A loop, not
+    a recursive call (AGENTS.md part 6: no mutual recursion on the
+    bindings' import path); the forward is read only on the miss path."""
+    var target = model
+    var target_plan = plan
+    for _ in range(8):  # driver-loop: over nested fitted searches (model structure)
+        var forward = PythonObject(None)
+        var result = _msel_dispatch_once(target, method, args, context, target_plan, scorer_response, keywords,
+                                         forward)
+        if forward is None:
+            return result
+        target = forward
+        target_plan = msel_estimator_plan(target, context)
+    raise Error("RuntimeError: native search delegation is nested more than eight searches deep")
+
+
+#: Lane w3f3-b: a member-only plan's `fit` and `score`, and (not a search) its
+#: class's responses, are served by the model-selection door (it imports the
+#: search fit and score, the member fit and the held member's calls; this
+#: module cannot without an import cycle). Raised only on a member-only plan's miss path; that door's
+#: `family_msel_estimator_call` catches exactly these words. A caller outside
+#: it sees them as the refusal they read as.
+comptime MSEL_MEMBER_ONLY_OWN_WORDS = "RuntimeError: a member-only estimator's fit or a search's score is served by its model selection door"
+
+
+def _member_only_own(model: PythonObject, method: String, b: PythonObject) raises -> Bool:
+    """A member-only plan's request the model-selection door serves: fit,
+    score, and a response its class has (predict, predict_proba,
+    decision_function, transform: scikit-learn's attribute). Miss path only."""
+    if method == "fit" or method == "score":
+        return True
+    if not (method == "predict" or method == "predict_proba" or method == "decision_function"
+            or method == "transform"):
+        return False
+    return py_call(b.getattr, py_type(model), PythonObject(method), PythonObject(None)) is not None
+
+
+def _search_forward(model: PythonObject, method: String, plan: PythonObject, context: PythonObject,
+                    b: PythonObject) raises -> PythonObject:
+    """The miss path of a MEMBER-ONLY plan: a fitted search's best
+    estimator when `method` is one of the search class's own delegated
+    response methods (its class has the attribute: scikit-learn's
+    `available_if` reads the same), else None. Raises the search's own words
+    for a search with no best estimator (`family_msel_delegate`'s)."""
+    if not (method == "predict" or method == "predict_proba" or method == "decision_function"
+            or method == "transform" or method == "predict_log_proba" or method == "score_samples"
+            or method == "inverse_transform"):
+        return PythonObject(None)
+    var layouts = py_get(context, PythonObject("family_msel_search_layouts"))
+    var cls = py_type(model)
+    if layouts is None or py_get(layouts, cls) is None:
+        return PythonObject(None)
+    if py_call(b.getattr, cls, PythonObject(method), PythonObject(None)) is None:
+        return PythonObject(None)
+    var fields = py_call(plan["fields_get"], model, cls)
+    var best = py_get(fields, PythonObject("best_estimator_"))
+    if best is None:
+        raise Error("AttributeError: This " + String(cls.__name__)
+                    + " instance was initialized with refit=False or is not fitted.")
+    return best
+
+
+def _msel_dispatch_once(model: PythonObject, method: String, args: PythonObject,
+                        context: PythonObject, plan: PythonObject,
+                        scorer_response: Bool, keywords: PythonObject,
+                        mut forward: PythonObject) raises -> PythonObject:
     # The caller has checked the exact connected class, its methods and native
     # storage layout through msel_estimator_plan. Admission is a separate
     # operation: reading a clone's constructor parameters must not re-enter
@@ -146,6 +219,17 @@ def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObj
         # this request, so it is refused in the words the class had before
         # its mark. Read only on this refusal path, never per served call.
         if py_get(plan, PythonObject("member_only")) is not None:
+            # lane w3f3-b: a fitted search's response is its best estimator's
+            # (`_msel_admitted_dispatch` follows `forward`)
+            forward = _search_forward(model, method, plan, context, b)
+            if forward is not None:
+                return PythonObject(None)
+            if _member_only_own(model, method, b):
+                # lane w3f3-b: served by the model-selection door that owns
+                # the search's own operations, the member fit and the held
+                # member's responses (bindings/model_selection_native_door.mojo
+                # `_msel_member_only_call`), which catches these words
+                raise Error(MSEL_MEMBER_ONLY_OWN_WORDS)
             raise Error("RuntimeError: this built-in estimator's native cross-validation schema is pending migration")
         if entry is None or py_type(entry) is not py_type(b.len):
             raise Error("ImportError: native cross-validation estimator binding is unavailable")

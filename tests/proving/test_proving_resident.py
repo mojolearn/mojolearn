@@ -56,8 +56,8 @@ def _validate_in_scope(estimator, X_, y, cv, **more):
 
 
 def test_failing_unit_in_resident_gives_error_score_and_releases_the_pin():
-    # A number for error_score is cross_validate's ("error_score : 'raise' or float", its docstring);
-    # cross_val_score documents error_score='raise' only and refuses a number by name (_arm_cases.cvs_error_score).
+    # A number for error_score ("error_score : 'raise' or numeric", cross_validate's and cross_val_score's
+    # docstrings): the failing units score it, with scikit-learn's warnings (lane w3f3-b).
     bad = X.copy()
     bad[5, 2] = np.nan
     outside = np.asarray(cls("cross_validate")(cls("GaussianNB")(), bad, binary(C), cv=3,
