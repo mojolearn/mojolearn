@@ -28,9 +28,11 @@ def cross_val_score(estimator, X, y, *, devices, cv=None, scoring=None,
         None selects the estimator's native score.
     groups : native-compatible buffer, optional
         Group labels for a group-aware splitter.
-    error_score : {'raise'}, default='raise'
-        A failed fit or score raises after worker cleanup; partial scores
-        are never returned.
+    error_score : 'raise' or float, default='raise'
+        'raise' raises a failed fit or score after worker cleanup. A number
+        is the score of a fold whose fit or score failed, with
+        scikit-learn's warnings; when every fit fails a ValueError is
+        raised.
 
     Returns
     -------

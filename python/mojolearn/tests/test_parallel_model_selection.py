@@ -216,11 +216,12 @@ def test_no_implicit_cpu_route(data, monkeypatch):
 
 @pytest.mark.parametrize('fault', ['missing', 'extra', 'reversed', 'nonscalar'])
 def test_incomplete_excess_unordered_or_nonscalar_batch_refused(fault):
-    result = [(0, 1.0, None), (1, 2.0, None)]
+    # (fold index, score, capture, failure): lane w3f3-b added the failure (None, or (kind, words))
+    result = [(0, 1.0, None, None), (1, 2.0, None, None)]
     if fault == 'missing': result.pop()
-    elif fault == 'extra': result.append((2, 3.0, None))
+    elif fault == 'extra': result.append((2, 3.0, None, None))
     elif fault == 'reversed': result.reverse()
-    else: result[0] = (0, [1.0], None)
+    else: result[0] = (0, [1.0], None, None)
     clean(entry, 'family_msel_parallel_require_batch', (result, 0, 2), error=(ValueError, TypeError))
 
 

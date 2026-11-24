@@ -138,9 +138,9 @@ from core.ensemble_member import (
     META_BLOCK_SEARCH, META_BLOCK_FOLDS,
 )
 from core.ensemble_member import meta_plan_leaf_importances, META_PARAM_SERVING, meta_plan_metric_other
-from core.msel_search_run import SEARCH_REFUSED_SHIFT, MselOtherTier, msel_fit_failures_summary
+from core.msel_search_run import SEARCH_REFUSED_SHIFT, MselOtherTier, msel_some_fits_failed_words, msel_score_failed_words
 from core.member_notices import MEMBER_NOTICE_WORDS, MEMBER_NOTICE_SCORE_FAILED
-from bindings.msel_common_door import msel_warn
+from bindings.msel_common_door import msel_warn, msel_fit_failed_warn
 from bindings.mode_answer_door import answer_mode_object
 from core.mode_answer import MODE_FAMILY_MSEL
 from core.member_abi import MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_PREDICT, member_output_dtype, member_outputs
@@ -5720,8 +5720,7 @@ def _search_notices_raise(words: List[Float64], score_failed: List[String], many
         var shown = String(py=py_call(b.str, error_score))
         if many:
             shown = String(py=py_call(native_loaded_module("operator").mod, PythonObject("%f"), error_score))
-        msel_warn("Scoring failed. The score on this train-test partition for these parameters will be set to "
-                  + shown + ". Details: \n" + details, b.UserWarning, context)
+        msel_warn(msel_score_failed_words(shown, details), b.UserWarning, context)
     if len(plain) > 0:
         member_fit_notices_raise_with(plain, notice_context, context)
 
@@ -5735,16 +5734,8 @@ def _search_failure_warnings(fit_failed: List[String], fits: Int, error_score: P
     loaded, else RuntimeWarning (its base class)."""
     if len(fit_failed) == 0:
         return
-    var category = b.RuntimeWarning
-    var sk = py_call(native_loaded_module("sys").modules.get, PythonObject("sklearn.exceptions"))
-    if sk is not None:
-        category = py_call(b.getattr, sk, PythonObject("FitFailedWarning"), category)
-    msel_warn("\n" + String(len(fit_failed)) + " fits failed out of a total of " + String(fits) + ".\n"
-              + "The score on these train-test partitions for these parameters will be set to "
-              + String(py=py_call(b.str, error_score)) + ".\n"
-              + "If these failures are not expected, you can try to debug them by setting error_score='raise'.\n\n"
-              + "Below are more details about the failures:\n" + msel_fit_failures_summary(fit_failed),
-              category, context)
+    msel_fit_failed_warn(msel_some_fits_failed_words(fits, fit_failed, String(py=py_call(b.str, error_score))),
+                         context)
 
 
 def _nonfinite_warnings(shown_means: List[List[Float64]], shown_train: List[Bool], context: PythonObject,

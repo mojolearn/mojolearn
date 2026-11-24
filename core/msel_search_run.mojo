@@ -426,6 +426,35 @@ def msel_fit_failures_summary(errors: List[String]) -> String:
     return summary^
 
 
+def msel_all_fits_failed_words(fits: Int, errors: List[String]) -> String:
+    """LANE w3f3-b: scikit-learn's ValueError when every fit failed under a
+    numeric error_score (`_warn_or_raise_about_fit_failures`), with the
+    Python class word first. The one copy: the RUN and the parallel cv route."""
+    return ("ValueError: \nAll the " + String(fits) + " fits failed.\n"
+            + "It is very likely that your model is misconfigured.\n"
+            + "You can try to debug the error by setting error_score='raise'.\n\n"
+            + "Below are more details about the failures:\n" + msel_fit_failures_summary(errors))
+
+
+def msel_some_fits_failed_words(fits: Int, errors: List[String], shown: String) -> String:
+    """LANE w3f3-b: scikit-learn's FitFailedWarning message when some fits
+    failed (`_warn_or_raise_about_fit_failures`); `shown` is `str(error_score)`.
+    The one copy: the search PACK and the parallel cv route."""
+    return ("\n" + String(len(errors)) + " fits failed out of a total of " + String(fits) + ".\n"
+            + "The score on these train-test partitions for these parameters will be set to " + shown + ".\n"
+            + "If these failures are not expected, you can try to debug them by setting error_score='raise'.\n\n"
+            + "Below are more details about the failures:\n" + msel_fit_failures_summary(errors))
+
+
+def msel_score_failed_words(shown: String, details: String) -> String:
+    """LANE w3f3-b: scikit-learn's UserWarning for a failed score
+    (model_selection/_validation.py `_score`); `shown` the error_score as
+    the warning prints it, `details` the failure's words (a native score has
+    no Python frames). The one copy: the search PACK and the parallel route."""
+    return ("Scoring failed. The score on this train-test partition for these parameters will be set to " + shown
+            + ". Details: \n" + details)
+
+
 def _set_word(mask: Int) -> UInt8:
     """THE GIL RULE word of a unit in its set (core/ensemble_member.mojo's rule)."""
     if (mask & MEMBER_GIL_FREE) != 0:
@@ -2070,10 +2099,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         # learn raises, before its tables and its refit (sklearn 1.9
         # model_selection/_validation.py `_warn_or_raise_about_fit_failures`)
         _drop_kept(plan, res)
-        raise Error("ValueError: \nAll the " + String(units) + " fits failed.\n"
-                    + "It is very likely that your model is misconfigured.\n"
-                    + "You can try to debug the error by setting error_score='raise'.\n\n"
-                    + "Below are more details about the failures:\n" + msel_fit_failures_summary(res.fit_failed))
+        raise Error(msel_all_fits_failed_words(units, res.fit_failed))
     # 5. The tables, per scorer; the best by the refit scorer.
     if plan.refit_scorer < 0 or plan.refit_scorer >= nsc:
         _drop_kept(plan, res)

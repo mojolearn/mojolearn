@@ -32,8 +32,9 @@ from core.parallel_worker_frame import WIRE_TUPLE
 from bindings.native_transport_door import transport_close
 from bindings.native_worker_inventory_door import native_worker_inventory, native_require_worker_inventory
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.msel_cv_door import msel_prepare_folds, MselFoldRows, msel_fit
-from bindings.msel_common_door import msel_score, msel_f64_list
+from bindings.msel_cv_door import msel_prepare_folds, MselFoldRows, msel_fit, msel_unit_jobs
+from bindings.msel_common_door import msel_score, msel_f64_list, msel_warn, msel_fit_failed_warn
+from core.msel_search_run import msel_all_fits_failed_words, msel_some_fits_failed_words, msel_score_failed_words
 from bindings.msel_parallel_wire_unpack import (
     msel_wire_needs_numpy,
 )
@@ -130,8 +131,12 @@ def _fold_rows(typed: WorkerRequest, request: PythonObject, mut rows: MselFoldRo
     # rows are gathered here out of the run's X and y the data request left.
     var b = native_loaded_module("builtins")
     cv_fold_admit(typed)
-    if py_type(request) is not b.tuple or len(request) != 4:
+    if py_type(request) is not b.tuple or (len(request) != 4 and len(request) != 5):
         raise Error("ValueError: malformed native CV fold request")
+    # LANE w3f3-b: a fifth item, the run's numeric error_score (None:
+    # 'raise'): a failing fit or score is that score, its words handed back
+    # (the parent warns or raises as scikit-learn does, in fold order)
+    var tolerated = PythonObject(None) if len(request) == 4 else request[4]
     if rows.x is None:
         raise Error("RuntimeError: CV worker fold rows require the run's X and y first")
     var train = request[2]
@@ -148,20 +153,45 @@ def _fold_rows(typed: WorkerRequest, request: PythonObject, mut rows: MselFoldRo
     rows.resident_release(test, context)
     var estimator = msel_parallel_model_unpack(request[0], context)
     var scorer = msel_parallel_scorer_unpack(request[1], context)
-    msel_fit(estimator, x_train, y_train, context)
-    var score = msel_score(estimator, x_test, y_test, scorer, context)
+    var failed = 0  # 1 the fit failed, 2 the score failed (a numeric error_score only)
+    var failure = String("")
+    var score = PythonObject(None)
+    if tolerated is None:
+        msel_fit(estimator, x_train, y_train, context)
+        score = msel_score(estimator, x_test, y_test, scorer, context)
+    else:
+        try:
+            msel_fit(estimator, x_train, y_train, context)
+        except error:
+            failed = 1
+            failure = _worker_error(error, context)
+        if failed == 0:
+            try:
+                score = msel_score(estimator, x_test, y_test, scorer, context)
+            except error:
+                failed = 2
+                failure = _worker_error(error, context)
+        if failed != 0:
+            score = tolerated
     var captured = PythonObject(None)
-    if typed.words[0] != 0:
+    if typed.words[0] != 0 and failed == 0:
         captured = msel_parallel_capture(estimator, x_test, y_test, score, inventory, context)
     # The reply record (fold index, score, capture), written as typed nodes:
     # the fold index is the request's own word. REMOVED 2026-11-21 (lane
     # pools-frame): the Python int and 3-tuple built per fold only to be
     # UNPACKed again by the reply.
     var reply = WireOutgoing()
-    reply.record.node(WIRE_TUPLE, 3)
+    reply.record.node(WIRE_TUPLE, 4)
     reply.record.integer(typed.handle)
     wire_append(score, reply)
     wire_append(captured, reply)
+    # (lane w3f3-b) the failure: None, or (1 fit / 2 score, its words)
+    if failed == 0:
+        reply.record.none()
+    else:
+        reply.record.node(WIRE_TUPLE, 2)
+        reply.record.integer(failed)
+        reply.record.text(failure)
     return reply^
 
 
@@ -237,12 +267,16 @@ def msel_parallel_require_batch(result: PythonObject, start: Int, count: Int) ra
     cv_batch_count_admit(listed, len(result) if listed else 0, count)
     for i in range(len(result)):  # driver-loop: validate all reply envelopes before consuming any score
         var reply = result[i]
-        var shaped = py_type(reply) is b.tuple and len(reply) == 3 and py_type(reply[0]) is b.int
+        var shaped = py_type(reply) is b.tuple and len(reply) == 4 and py_type(reply[0]) is b.int
         cv_reply_order_admit(shaped, Int(py=reply[0]) if shaped else -1, start + i)
         if py_type(reply[1]) is not b.float:
             raise Error("TypeError: cross-validation worker score must be a native real scalar")
         if reply[2] is not None and py_type(reply[2]) is not b.dict:
             raise Error("TypeError: cross-validation worker capture must be native metadata")
+        var failure = reply[3]
+        if failure is not None and (py_type(failure) is not b.tuple or len(failure) != 2
+                                    or py_type(failure[0]) is not b.int or py_type(failure[1]) is not b.str):
+            raise Error("TypeError: cross-validation worker failure must be a (kind, words) pair")
 
 
 def _trace_publish(published: PythonObject, trace: CvTrace) raises:
@@ -285,7 +319,16 @@ def msel_parallel_score(args: PythonObject, capture: Bool, context: PythonObject
     var device_words = List[Int]()
     for i in range(len(devices)):  # small-loop(explicit worker indices, before spawn)
         device_words.append(Int(py=devices[i]))
-    var prepared = msel_prepare_folds(args[0], args[1], args[2], args[4], args[5], args[6], args[7], context)
+    # error_score: 'raise' or a real number in scikit-learn's words, as the
+    # serial route checks it (lane w3f3-b: n_jobs and devices do not change
+    # what a number does); the folds' preparation keeps its 'raise' word
+    var b = native_loaded_module("builtins")
+    _ = msel_unit_jobs(PythonObject(None), args[7], "cross_val_score", context)
+    var tolerated = PythonObject(None)
+    if py_type(args[7]) is not b.str:
+        tolerated = py_call(b.float, args[7])
+    var prepared = msel_prepare_folds(args[0], args[1], args[2], args[4], args[5], args[6], PythonObject("raise"),
+                                      context)
     var model = msel_parallel_model_pack(args[0], context)
     var scorer = msel_parallel_scorer_pack(prepared[3], context)
     trace.stage(CV_STAGE_VALIDATED)
@@ -301,6 +344,9 @@ def msel_parallel_score(args: PythonObject, capture: Bool, context: PythonObject
     process_pool_environment_set(pool, environment)
     var scores = List[Float64]()
     var captures = Python.list()
+    # LANE w3f3-b: the folds' failures under a numeric error_score, in fold order
+    var failed_kinds = List[Int]()
+    var failed_words = List[String]()
     try:
         trace.closed = False
         trace.status = CV_STATUS_RUNNING
@@ -338,7 +384,10 @@ def msel_parallel_score(args: PythonObject, capture: Bool, context: PythonObject
                 var pair = folds[i]
                 trace.assign(i, device_words[i - start], trace.workers[i - start])
                 words.append(cv_fold_request(i, capture))
-                _ = py_call(requests.append, Python.tuple(model, scorer, pair[0], pair[1]))
+                if tolerated is None:
+                    _ = py_call(requests.append, Python.tuple(model, scorer, pair[0], pair[1]))
+                else:
+                    _ = py_call(requests.append, Python.tuple(model, scorer, pair[0], pair[1], tolerated))
             trace.stage(CV_STAGE_WAVE)
             var result = process_pool_map_typed(pool, words, requests)
             msel_parallel_require_batch(result, start, len(requests))
@@ -346,6 +395,10 @@ def msel_parallel_score(args: PythonObject, capture: Bool, context: PythonObject
                 scores.append(Float64(py=result[i][1]))
                 if capture:
                     _ = py_call(captures.append, result[i][2])
+                var fold_failure = result[i][3]
+                if fold_failure is not None:
+                    failed_kinds.append(Int(py=fold_failure[0]))
+                    failed_words.append(String(py=fold_failure[1]))
     except error:
         var failure = _worker_error(error, context)
         var cleanup = String()
@@ -361,6 +414,21 @@ def msel_parallel_score(args: PythonObject, capture: Bool, context: PythonObject
     process_pool_close(pool)
     trace.finish(CV_STATUS_COMPLETE, len(process_pool_pids(pool)) == 0)
     _trace_publish(published, trace)
+    if len(failed_kinds) > 0:
+        # scikit-learn's words in fold order: a failed score's UserWarning
+        # (`_score`), then the fits' FitFailedWarning, or its ValueError when
+        # every fit failed (`_warn_or_raise_about_fit_failures`)
+        var shown = String(py=py_call(b.str, args[7]))
+        var fit_failed = List[String]()
+        for i in range(len(failed_kinds)):  # small-loop(the failed folds, in fold order)
+            if failed_kinds[i] == 2:
+                msel_warn(msel_score_failed_words(shown, failed_words[i]), b.UserWarning, context)
+            else:
+                fit_failed.append(failed_words[i].copy())
+        if len(fit_failed) == len(scores):
+            raise Error(msel_all_fits_failed_words(len(scores), fit_failed))
+        if len(fit_failed) > 0:
+            msel_fit_failed_warn(msel_some_fits_failed_words(len(scores), fit_failed, shown), context)
     var result = msel_f64_list(scores, context)
     return Python.tuple(result, captures) if capture else result
 
