@@ -35,9 +35,14 @@ Operations and their words (inputs are (address, slot) pairs, in order):
     MS_LOG_LOSS         y i32, proba f32        n, k, normalize                 -       -              1
     MS_CONFUSION        yt, yp                  n, k, normalization             -       out (k*k)      returns k*k
     MS_PRFS             yt, yp                  n, k, avg, pos, zero, selected  -       out            returns count
-    MS_SILHOUETTE       X f32, labels i32       rows, cols, n_labels, chunk     -       scores (rows)  1 (mean)
-    MS_TRUST            X f32, X_emb (HOST)     n, m, d, n_neighbors, batch     -       -              1
+    MS_SILHOUETTE       X f32, labels i32       rows, cols, n_labels, chunk, sx -       scores (rows)  1 (mean)
+    MS_TRUST            X f32, X_emb (HOST)     n, m, d, n_neighbors, batch, sx -       -              1
     MS_ENCODE           labels (slot only)      n, kind, item, codes slot       -       classes (host) returns k
+
+`sx`: 0 when the door scanned X on the host; else the X finiteness refusal
+runs here on the device (1 silhouette_score / trustworthiness, 2
+silhouette_samples: the door's words), for an X the door never saw on the
+host (a DeviceRows fold gathered on the device).
 
 MS_TRUST: X is read in place; X_embedded is a host address because the
 embedded k-NN's boundary is host pointers (neighbors/estimator.mojo
@@ -129,9 +134,9 @@ def metric_slot_schema(op: Int) raises -> Tuple[Int, Int, Int, Int]:
     if op == MS_PRFS:
         return (2, 6, 0, 1)
     if op == MS_SILHOUETTE:
-        return (2, 4, 0, 1)
+        return (2, 5, 0, 1)
     if op == MS_TRUST:
-        return (2, 5, 0, 0)
+        return (2, 6, 0, 0)
     if op == MS_ENCODE:
         return (1, 4, 0, 1)
     raise Error("metric_slots: unknown operation " + String(op))
@@ -342,6 +347,13 @@ def metric_slot_run(op: Int, addrs: List[Int], slots: List[Int], ints: List[Int]
         if cols <= 0:
             raise Error("silhouette: n_cols must be positive, got " + String(cols))
         var dx = _floats_in(inputs, addrs[0], slots[0], rows * cols)
+        if ints[4] != 0:
+            # the door's X refusal (mcls_cluster_door.mojo `_silhouette`) for an X it never saw on the host
+            inputs.scan_f32(dx, rows * cols, False, 0)
+            var caller = "silhouette_score" if ints[4] == 1 else "silhouette_samples"
+            _refuse(inputs.flags(), 0, "mojolearn " + caller + ": X contains NaN or infinity; refused here "
+                    + "(metrics/README.md HAND-OFF ask 3), because a NaN distance "
+                    + "reaches sil_op as +0.0 (DEVIATION 656) rather than as an error")
         var dl = _labels_in(inputs, addrs[1], slots[1], rows)
         var ds = ctx.enqueue_create_buffer[DType.float32](rows)
         ctx.synchronize()
@@ -364,6 +376,11 @@ def metric_slot_run(op: Int, addrs: List[Int], slots: List[Int], ints: List[Int]
         if slots[1] >= 0:
             raise Error("trustworthiness: X_embedded is read from the host (the embedded k-NN's boundary)")
         var dx = _floats_in(inputs, addrs[0], slots[0], n * m)
+        if ints[5] != 0:
+            # the door's X refusal (mcls_cluster_door.mojo `_trustworthiness`) for an X it never saw on the host
+            inputs.scan_f32(dx, n * m, False, 0)
+            _refuse(inputs.flags(), 0, "mojolearn trustworthiness: X contains NaN or infinity; refused here "
+                    + "(metrics/README.md HAND-OFF ask 3)")
         # the embedded k-NN reads host words: one list of the n x d host values
         var emb = List[Float32](unsafe_uninit_length=n * d)
         unsafe_memcpy(dest=emb.unsafe_ptr(), src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addrs[1]),
