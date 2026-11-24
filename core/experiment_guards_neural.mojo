@@ -1292,6 +1292,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_OPT_LAZY_MOMENTS_OFF (old path: eager Adam moments; NV L40S 4 cells, median 1.00, mlp-train-step 1.33 slower) deleted 2026-11-24 by lane/ab2-nseq; code recoverable at ba83d4655f.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_OPT_LAZY_MOMENTS_OFF.ab-outcome-2.patch
     comptime assert not is_defined["MOJOLEARN_OPT_LAZY_MOMENTS_OFF"](), "removed 2026-11-24 (lane/ab2-nseq of ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): OPT_LAZY_MOMENTS_OFF (old path, Adam moments allocated with the optimizer and uploaded on the first step) was 1.33x slower on mlp-train-step (4 cells, median 1.00); lazy moments are the only path; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_OPT_LAZY_MOMENTS_OFF.ab-outcome-2.patch"
+    # TOMBSTONE: MOJOLEARN_OPT_SCAN_FUSED_OFF (old path: the ungated IDENTICAL optimizer step; NV L40S 4 cells, median 1.00, mlp-train-step 1.25 slower) deleted 2026-11-24 by lane/ab2-nseq; code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_OPT_SCAN_FUSED_OFF.ab-outcome-2.patch
+    comptime assert not is_defined["MOJOLEARN_OPT_SCAN_FUSED_OFF"](), "removed 2026-11-24 (lane/ab2-nseq of ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): OPT_SCAN_FUSED_OFF (old path, main's ungated step with its separate refusal scans in IDENTICAL) was 1.25x slower on mlp-train-step (4 cells, median 1.00); the gated step with the fused refusal scan is the only IDENTICAL route; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_OPT_SCAN_FUSED_OFF.ab-outcome-2.patch"
     # ---- end lane ab-outcome-2 (ab2-nseq)
     return True
 
