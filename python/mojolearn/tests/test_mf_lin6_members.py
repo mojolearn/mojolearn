@@ -32,7 +32,16 @@ def _member(est, X, y=None, scoring=None):
 
 def _same(a, b, names):
     for name in names:
-        np.testing.assert_array_equal(np.asarray(getattr(a, name)), np.asarray(getattr(b, name)), err_msg=name)
+        left, right = getattr(a, name), getattr(b, name)
+        if isinstance(right, dict):
+            # A per-class table (LogisticRegressionCV's scores_, as scikit-learn's: {class: array}): the same
+            # keys, each value equal (np.asarray of a dict is one object cell, compared by dict ==).
+            assert isinstance(left, dict) and sorted(left) == sorted(right), name
+            for key in right:
+                np.testing.assert_array_equal(np.asarray(left[key]), np.asarray(right[key]),
+                                              err_msg=name + "[" + repr(key) + "]")
+            continue
+        np.testing.assert_array_equal(np.asarray(left), np.asarray(right), err_msg=name)
 
 
 def _pairs(n, k=3):
