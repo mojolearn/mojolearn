@@ -16,6 +16,7 @@ from gemm.linalg_dev_arrays import (
     gemm_dev_native, to_bf16_dev_native, from_bf16_dev_native, quantize_int8_dev_native, dequantize_int8_dev_native,
     gemm_bf16_dev_native, gemm_int8_dev_native, quantize_int15_dev_native, dequantize_int15_dev_native,
     gemm_int15_dev_native, from_f16_dev_native, svdvals_dev_native, qr_r_dev_native,
+    copy_dev_native,
 )
 from core.hostptr import f32_ptr
 from decomposition.linalg_door_impl import svdvals_device_at_into, qr_r_device_into
@@ -394,6 +395,26 @@ def test_qr_r_device_arrays() raises:
     _same("qr_r operand kept", _get(ctx, ha, rows * cols), a)
     train_dev_free(ctx, ha)
     train_dev_free(ctx, hr)
+
+
+def test_copy_device_arrays() raises:
+    """lane vdf-linalg6: copy_dev (pack_one 'float32', same-format repack) gives a fresh handle with the same words;
+    writing the copy leaves the source unchanged (no aliasing)."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        return
+    var a = _fill(37, 5)
+    var ctx = process_ctx[_CTX]()
+    var ha = _put(ctx, a)
+    var hc = train_dev_alloc(ctx, 37)
+    if hc == ha:
+        raise Error("copy: the copy must be a fresh handle")
+    _ = copy_dev_native(ha, hc, [37])
+    _same("copy == source", _get(ctx, hc, 37), a)
+    var zeros = List[Float32](length=37, fill=0.0)
+    train_dev_put(ctx, hc, _fp(zeros), 37)
+    _same("source unchanged after writing the copy", _get(ctx, ha, 37), a)
+    train_dev_free(ctx, ha)
+    train_dev_free(ctx, hc)
 
 
 def main() raises:
