@@ -957,6 +957,36 @@ def lin_lowbit_dev(operation: Int, args: PythonObject, controls: PythonObject, b
     raise Error("TypeError: " + _lin_public_name(operation) + " takes host arrays only")
 
 
+# lane vdf-linalg5: the device-array conversions mojolearn.lowbit packs and widens with
+# (providers/python/lowbit_weight_pyapi_door.mojo): the same entries as linalg's own device forms.
+
+
+def lin_dev_widen_bf16(bits: PythonObject, binding: PythonObject, held: PythonObject,
+                       context: PythonObject) raises -> PythonObject:
+    """`from_bf16(bits)` of a uint16 TrainDeviceArray: a new float32 device array."""
+    return _lin_bf16_convert_dev(False, Python.tuple(PythonObject(None), bits), binding, held, context)
+
+
+def lin_dev_narrow_bf16(x: PythonObject, binding: PythonObject, held: PythonObject,
+                        context: PythonObject) raises -> PythonObject:
+    """`to_bf16(x)` of a float32 TrainDeviceArray: a new uint16 device array of bf16 bits."""
+    return _lin_bf16_convert_dev(True, Python.tuple(PythonObject(None), x), binding, held, context)
+
+
+def lin_dev_quantize_int8(x: PythonObject, binding: PythonObject, held: PythonObject,
+                          context: PythonObject) raises -> PythonObject:
+    """`quantize_int8(x)` of a 2-D float32 TrainDeviceArray: (codes, exponents) device arrays."""
+    var entries = lin_dev_entries(x, held)
+    var a = lin_dev_operand(x, "x", "quantize_int8", entries, held, TRAIN_DEV_F32, 2)
+    return _lin_quantize_int8_dev(binding, a, entries, held, context)
+
+
+def lin_dev_dequantize_int8(codes: PythonObject, exponents: PythonObject, binding: PythonObject, held: PythonObject,
+                            context: PythonObject) raises -> PythonObject:
+    """`dequantize_int8(codes, exponents)` of device arrays: a new float32 device array."""
+    return _lin_dequantize_int8_dev(Python.tuple(PythonObject(None), codes, exponents), binding, held, context)
+
+
 def _lin_matmul_dev(args: PythonObject, controls: PythonObject, binding: PythonObject, held: PythonObject,
                     context: PythonObject) raises -> PythonObject:
     """`matmul(a, b, *, transpose_a, transpose_b, out, identical)` on TrainDeviceArrays (lane vdf-linalg4): a and b
