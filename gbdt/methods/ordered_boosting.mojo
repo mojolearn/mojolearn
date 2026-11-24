@@ -422,6 +422,9 @@ struct OrderedFitOutput(Movable):
     var test_losses: List[Float64]
     var best_iteration: Int
     var stopped_early: Bool
+    #: the boosting loop's executed rounds and its time (the estimator's
+    #: `fit_loop_`, core/fit_loop_clock.mojo; lane ab-loop-mode)
+    var fit_loop: FitLoop
 
 
 @fieldwise_init
@@ -1860,6 +1863,7 @@ comptime ORDERED_CAT_CURSORS = ORDERED_BATCH_EST
 comptime ORDERED_BAT_CHUNKS = 8
 
 from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G11, AFT_G12
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 
 # TOMBSTONE: MOJOLEARN_AFT_G11 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 03c050a585.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_G11.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
@@ -2873,6 +2877,10 @@ def fit_ordered(
     var est_times = StageTimes()
     var walker_times = StageTimes()
 
+    # `fit_loop_` (lane ab-loop-mode): the clock read once immediately
+    # before the first round's first launch; the loop's own drain after its
+    # last round ends it (no drain added). One learn loss per round.
+    var fit_loop_t0 = fit_loop_start()
     for iteration in range(n_estimators):
         var tag = String("ordered.") + String(iteration)
         # 1. the learn permutation the structure is searched on
@@ -3560,6 +3568,7 @@ def fit_ordered(
                 stopped_early = True
                 break
     ctx.synchronize()
+    var fit_loop = fit_loop_stop(fit_loop_t0, len(losses))
     times.report("ordered boosting")
     est_times.report("ordered estimation tasks")
     walker_times.report("ordered estimate_and_apply internals")
@@ -3618,4 +3627,4 @@ def fit_ordered(
         for i in range(1, len(losses)):  # small-loop(losses: one value per tree, already read): the best-iteration argmin
             if losses[i] < losses[best]:
                 best = i
-    return OrderedFitOutput(losses^, test_losses^, best, stopped_early)
+    return OrderedFitOutput(losses^, test_losses^, best, stopped_early, fit_loop^)

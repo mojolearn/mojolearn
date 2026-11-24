@@ -11,11 +11,12 @@ fit raised.
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_op, entry_ref_word
 from core.trees_entry_table import TreesEntryKey
 from core.gbdt_entry_table import gbdt_table_entry
+from core.fit_loop_clock import FitLoop
 from gbdt.fit_request import (
     GbdtFitArgs, GbdtFitOutcome, GBDT_ENTRY_ABI, XG_OP_COUNT, XG_CAPS, XG_NUMERIC_MODE, XG_FIT, XG_FIT_ROWMAJOR,
     XG_OUTCOME_SIZES, XG_OUTCOME_COPY, XG_OUTCOME_FREE, XG_MODEL_DIM, XG_CAP_ROW_MAJOR, gbdt_string_at,
     XG_PREDICT, XG_PREDICT_MULTI, XG_BINARY, XG_SIGMOID_PAIR, XG_RESIDENT_PREPARE, XG_RESIDENT_PREDICT,
-    XG_CAP_RESIDENT, XG_ORDERED_FIT, XG_FEATURE_FREQ_FIT, XG_IMPORTANCES,
+    XG_CAP_RESIDENT, XG_ORDERED_FIT, XG_FEATURE_FREQ_FIT, XG_IMPORTANCES, XG_OUTCOME_WORDS,
 )
 
 
@@ -140,7 +141,7 @@ def xg_importances(entry: EntryRef, text: String, x: Int, n_rows: Int, n_input: 
 def _xg_outcome_text(entry: EntryRef, handle: Int) raises -> String:
     """The model text of a text-only fit's outcome, copied once from the
     image's String, the outcome freed in that image."""
-    var sizes: List[Int] = [0, 0, 0, 0, 0, 0]
+    var sizes = List[Int](length=XG_OUTCOME_WORDS, fill=0)
     var outcome_addrs: List[Int] = [handle, Int(sizes.unsafe_ptr())]
     var none = List[Int]()
     try:
@@ -185,7 +186,7 @@ def xg_fit(entry: EntryRef, row_major: Bool, args: GbdtFitArgs) raises -> GbdtFi
     var handle = entry_ref_call(entry, entry_ref_op(entry, XG_FIT_ROWMAJOR if row_major else XG_FIT), addrs, args.ints,
                                         args.floats)
     _ = args  # the strings, views and flags stay alive through the call above
-    var sizes: List[Int] = [0, 0, 0, 0, 0, 0]
+    var sizes = List[Int](length=XG_OUTCOME_WORDS, fill=0)
     var outcome_addrs: List[Int] = [handle, Int(sizes.unsafe_ptr())]
     var none = List[Int]()
     try:
@@ -200,7 +201,10 @@ def xg_fit(entry: EntryRef, row_major: Bool, args: GbdtFitArgs) raises -> GbdtFi
         var test = List[Float64](length=sizes[4], fill=0.0)
         var copy_addrs: List[Int] = [handle, 0, Int(learn.unsafe_ptr()), Int(test.unsafe_ptr())]
         _ = entry_ref_call(entry, entry_ref_op(entry, XG_OUTCOME_COPY), copy_addrs, none, _none_f())
-        return GbdtFitOutcome(text^, sizes[1], sizes[2] != 0, learn^, test^)
+        var outcome = GbdtFitOutcome(text^, sizes[1], sizes[2] != 0, learn^, test^)
+        # the fit's boosting loop (`fit_loop_`, lane ab-loop-mode): three words
+        outcome.fit_loop = FitLoop(sizes[6], sizes[7], sizes[8] != 0)
+        return outcome^
     finally:
         var free_addrs: List[Int] = [handle]
         _ = entry_ref_call(entry, entry_ref_op(entry, XG_OUTCOME_FREE), free_addrs, none, _none_f())

@@ -114,6 +114,7 @@ from gbdt.train import (
     train,
 )
 from gbdt.models.kernel.resident_link import LINK_RAW, LINK_SIGMOID, LINK_SOFTMAX
+from core.fit_loop_clock import FitLoop
 
 
 def gbdt_fit_two_level_feature_freq(
@@ -413,6 +414,9 @@ struct GbdtFitResult(Movable):
     var stopped_early: Bool
     var learn_losses: List[Float64]
     var test_losses: List[Float64]
+    #: the boosting loop's executed rounds and its time (`fit_loop_`,
+    #: core/fit_loop_clock.mojo; lane ab-loop-mode)
+    var fit_loop: FitLoop
 
 
 def gbdt_fit(
@@ -633,6 +637,7 @@ def gbdt_fit(
         tm.stopped_early,
         learn_losses^,
         test_losses^,
+        tm.fit_loop.copy(),
     )
 
 

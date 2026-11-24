@@ -3271,7 +3271,7 @@ def train(
         host_times.stop_host("train_ordered_fit", t_phase)
         host_times.stop_host("train_total", t_train)
         host_times.report()
-        return TrainedModel(
+        var o_trained = TrainedModel(
             o_model^,
             fold_counts^,
             column_one_hot^,
@@ -3286,6 +3286,9 @@ def train(
             TTensorCtrRegistry(len(fold_counts)),
             o_combinations^,
         )
+        # the Ordered loop's rounds and time (`fit_loop_`, lane ab-loop-mode)
+        o_trained.fit_loop = o_out.fit_loop.copy()
+        return o_trained^
 
     host_times.stop_host("train_pre_fit", t_phase)
     t_phase = host_times.start()
@@ -3390,7 +3393,7 @@ def train(
     host_times.stop_host("train_post_fit", t_phase)
     host_times.stop_host("train_total", t_train)
     host_times.report()
-    return TrainedModel(
+    var trained = TrainedModel(
         model^,
         fold_counts^,
         column_one_hot^,
@@ -3405,6 +3408,9 @@ def train(
         TTensorCtrRegistry(len(fold_counts)),
         model_combinations^,
     )
+    # the Plain loop's rounds and time (`fit_loop_`, lane ab-loop-mode)
+    trained.fit_loop = fit_result.fit_loop.copy()
+    return trained^
 
 
 def _tree_ctr_model_tail(

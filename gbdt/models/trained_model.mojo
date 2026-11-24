@@ -7,9 +7,9 @@ from gbdt.models.oblivious_model import TAdditiveModel
 from gbdt.models.ctr_value_table import TCtrValueTable
 from gbdt.models.tensor_ctr_value_table import TTensorCtrRegistry
 from gbdt.models.combination_map import TCombinationCtrs
+from core.fit_loop_clock import FitLoop
 
 
-@fieldwise_init
 struct TrainedModel(Movable):
     """The ensemble plus the quantization grid it was trained on, which
     is what applying it to NEW raw floats requires -- their model carries
@@ -65,3 +65,41 @@ struct TrainedModel(Movable):
     the model's LAST columns, after every raw and simple-CTR column, and are
     not counted in `ctr_column_count`. Empty for a model without them. See
     `gbdt/models/combination_map.mojo`."""
+    var fit_loop: FitLoop
+    """The fit's boosting loop: its executed rounds and its time (the
+    estimator's `fit_loop_`, core/fit_loop_clock.mojo; lane ab-loop-mode).
+    Not recorded (`recorded` False) for a model read from text or built
+    by a check: only `train` sets it, after its loop."""
+
+    def __init__(
+        out self,
+        var model: TAdditiveModel,
+        var fold_counts: List[Int],
+        var one_hot: List[Bool],
+        var borders: List[List[Float32]],
+        var nan_treatment: List[Int],
+        var losses: List[Float64],
+        var test_losses: List[Float64],
+        best_iteration: Int,
+        stopped_early: Bool,
+        ctr_column_count: Int,
+        var ctr_tables: List[TCtrValueTable],
+        var tensor_ctr_registry: TTensorCtrRegistry,
+        var combination_ctrs: TCombinationCtrs,
+    ):
+        # the former fieldwise initializer's arguments, in field order; the
+        # loop record starts empty (`train` sets it after its loop)
+        self.model = model^
+        self.fold_counts = fold_counts^
+        self.one_hot = one_hot^
+        self.borders = borders^
+        self.nan_treatment = nan_treatment^
+        self.losses = losses^
+        self.test_losses = test_losses^
+        self.best_iteration = best_iteration
+        self.stopped_early = stopped_early
+        self.ctr_column_count = ctr_column_count
+        self.ctr_tables = ctr_tables^
+        self.tensor_ctr_registry = tensor_ctr_registry^
+        self.combination_ctrs = combination_ctrs^
+        self.fit_loop = FitLoop.empty()
