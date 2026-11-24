@@ -59,6 +59,18 @@ unit whose B rounds are capped). A neighbouring shape is the row's own "rows" (a
         ON THE BOX: {"round_seconds": {race: s}} for the races of --ids listed in --cap-ids whose base cell in
         BASE_BOARD (this job's board of the candidate) is timed: the slowest of its timed cells, whole seconds up.
 
+SHARED BASE (lane ab-harness-speed, 2026-11-24). nvc-ab-20261124T070727Z-69dac2 and ...T095727Z-92fd9f timed the
+candidate base once PER ARM: 165 base races for 109 distinct ones (122 within each job), 852 s of repeated base wall and a base board process
+per unit. plan now orders the B units so arms on the same races run next to each other (overlap_order), and before
+each base chunk the job runs
+  base-share --target BASE_DIR --ids CHUNK --source DIR... [--max-age-s S] --out TODO
+        ON THE BOX: every race of CHUNK some base board of this job (another unit's base of the same rows; for full
+        rows also the listed rows' candidate board) holds as done, finished at most S seconds ago (BASE_MAX_AGE_S,
+        PC_AB_BASE_MAX_AGE_S), is copied into BASE_DIR's board with a "shared_base" record (board, finished, age); the
+        rest go to TODO and are timed now, so a base older than the bound is timed again (the drift guard). The A/B
+        summary (tools/ops/targeted_rows.py) prints for every pair the base it used and the gap from that base's end
+        to the arm's start.
+
 Our arms only, GPU only, one warm-up and one timed run per arm (the board's --rounds 1). Tests:
 tools/test_measure_owed.py.
 """
@@ -67,6 +79,7 @@ import importlib.util
 import json
 import os
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -275,6 +288,121 @@ def base_caps(board, ids, cap_ids):
     return out
 
 
+#: SHARED BASE (lane ab-harness-speed, 2026-11-24): the default drift bound, seconds from the shared base race's end to
+#: the start of the chunk that takes it. Today's back-to-back unit puts a base race and its arm race up to two chunks
+#: apart (the base chunk's later races, then the arm chunk's earlier ones: PC_TG_CHUNK_S 600 s of base time each), so
+#: 1200 s keeps every arm no further from its base than a back-to-back unit already allowed. paper_compare_job.sh
+#: passes PC_AB_BASE_MAX_AGE_S.
+BASE_MAX_AGE_S = 1200
+
+
+def _iso_s(text):
+    """Epoch seconds of a board's ISO UTC stamp ('2026-11-24T11:27:02Z'), or None."""
+    import datetime
+    try:
+        return datetime.datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=datetime.timezone.utc).timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+def share_base(target, ids, sources, now_s, max_age_s=BASE_MAX_AGE_S):
+    """(board, shared {race: provenance}, todo [race]) for one base chunk of an owed A/B unit.
+
+    TARGET is the unit's base board (a document or None), SOURCES [(board dir, board document)] the base boards this
+    job already wrote on this box (the other units' bases of the same rows, and the listed rows' candidate board for
+    full rows: the same candidate venv and board arguments). A race of IDS the target already holds as done is left
+    alone; a race some source holds as done, finished at most MAX_AGE_S before NOW_S, is copied into the target with a
+    "shared_base" record (its board, finish time and age), the freshest when several hold it; every other race is in
+    TODO, to be timed now. The target board is created from the freshest source's document when it does not exist
+    (same box, same candidate bytes: bench_board resumes it)."""
+    races = dict(((target or {}).get("races") or {}))
+    shared, todo = {}, []
+    for rid in ids:
+        if (races.get(rid) or {}).get("status") == "done":
+            continue
+        best = None
+        for bdir, doc in sources:
+            rec = ((doc or {}).get("races") or {}).get(rid)
+            if not rec or rec.get("status") != "done" or rec.get("shared_base"):
+                continue      # a shared copy is never shared again: the timed original is the source
+            fin = _iso_s(rec.get("finished"))
+            if fin is None or now_s - fin > max_age_s or now_s < fin:
+                continue
+            if best is None or fin > best[0]:
+                best = (fin, bdir, doc, rec)
+        if best is None:
+            todo.append(rid)
+            continue
+        fin, bdir, doc, rec = best
+        prov = {"board": bdir, "finished": rec.get("finished"), "age_s": int(now_s - fin), "max_age_s": max_age_s}
+        races[rid] = dict(json.loads(json.dumps(rec)), shared_base=prov)
+        shared[rid] = prov
+    if not shared:
+        return target, shared, todo
+    if target is None:
+        # the board document (box, config, boot ids) of the source of the freshest shared race; its own run lists
+        # (plan, preflight, selections) stay with it
+        fresh = max(shared.values(), key=lambda p: _iso_s(p["finished"]) or 0)["board"]
+        src = next(doc for d, doc in sources if d == fresh)
+        target = {k: v for k, v in src.items() if k not in ("races", "plan", "preflight", "superseded",
+                                                             "measurement_selection", "skipped_recipes",
+                                                             "failed_preflight_recipes")}
+        target["created"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now_s))
+    target = dict(target, races=races)
+    return target, shared, todo
+
+
+def cmd_base_share(a):
+    read = lambda p: [x.strip() for x in open(p) if x.strip()] if p and os.path.isfile(p) else []  # noqa: E731
+    ids = read(a.ids)
+    tpath = os.path.join(a.target, "board.json")
+    target = load_board(tpath)
+    if target is not None and "placeholder" in target:
+        target = None
+    sources = []
+    for d in a.source:
+        d = d.rstrip("/")
+        if os.path.abspath(d) == os.path.abspath(a.target):
+            continue
+        doc = load_board(os.path.join(d, "board.json"))
+        if doc is not None and "placeholder" not in doc:
+            sources.append((d, doc))
+    now_s = time.time() if a.now is None else a.now
+    board, shared, todo = share_base(target, ids, sources, now_s, a.max_age_s)
+    if shared:
+        os.makedirs(a.target, exist_ok=True)
+        PC.write_atomic(tpath, PC.json_text(board))
+    PC.write_atomic(a.out, "".join(i + "\n" for i in todo))
+    srcs = sorted({os.path.basename(p["board"]) for p in shared.values()})
+    print("OWED-BASE-SHARE races=%d shared=%d to_time=%d max_age_s=%d%s" % (
+        len(ids), len(shared), len(todo), a.max_age_s, (" from " + ",".join(srcs)) if srcs else ""))
+    return 0
+
+
+def overlap_order(units):
+    """The B units of UNITS ({(arm, rows): [ids]}) in run order: candidate and prior units first (unit_order), then
+    each next B unit the one sharing the most races with the unit just placed (same rows), ties by unit_order, so
+    arms timed on the same races run next to each other and share one base (SHARED BASE)."""
+    keys = sorted(units, key=unit_order)
+    head = [k for k in keys if k[0] in ARMS_FIXED]
+    rest = [k for k in keys if k[0] not in ARMS_FIXED]
+    out = list(head)
+    while rest:
+        nxt = rest[0]
+        if out and out[-1][0] not in ARMS_FIXED:
+            last = out[-1]
+            prev = set(units[last])
+            best = 0
+            for k in rest:      # the first unit (unit_order) with the largest overlap; none: the next in unit_order
+                n = len(prev & set(units[k])) if k[1] == last[1] else 0
+                if n > best:
+                    best, nxt = n, k
+        out.append(nxt)
+        rest.remove(nxt)
+    return out
+
+
 def cmd_base_caps(a):
     read = lambda p: [x.strip() for x in open(p) if x.strip()] if p and os.path.isfile(p) else []  # noqa: E731
     caps = base_caps(load_board(a.board), read(a.ids), read(a.cap_ids))
@@ -300,7 +428,7 @@ def cmd_plan(a):
     units, smoke, drivers, missing, rowmap, bargs = plan(doc, paper, planner, a.vendor, b_present, a.prior)
     os.makedirs(a.out_dir, exist_ok=True)
     lines = []
-    for key in sorted(units, key=unit_order):
+    for key in overlap_order(units):     # arms on the same races next to each other: they share one base
         arm, rows = key
         f = os.path.join(a.out_dir, "ids-%s-%s.txt" % (arm, rows))
         PC.write_atomic(f, "".join(i + "\n" for i in units[key]))
@@ -606,6 +734,15 @@ def build_parser():
     bc.add_argument("--ids", required=True, help="the races of the chunk about to run")
     bc.add_argument("--cap-ids", required=True, help="the unit's ids-<arm>-<rows>.cap.txt")
     bc.add_argument("--out", required=True)
+    bs = sub.add_parser("base-share", help="(box) copy this job's fresh base races into a unit's base board "
+                        "(SHARED BASE); write the races still to time")
+    bs.add_argument("--target", required=True, help="the unit's base board dir (board-tg-ab-<arm>-base-<rows>)")
+    bs.add_argument("--ids", required=True, help="the base chunk about to run")
+    bs.add_argument("--source", action="append", default=[], help="a base board dir of this job (repeat it)")
+    bs.add_argument("--max-age-s", type=int, default=BASE_MAX_AGE_S,
+                    help="share a base race finished at most this many seconds ago (default %(default)s)")
+    bs.add_argument("--now", type=float, default=None, help=argparse.SUPPRESS)
+    bs.add_argument("--out", required=True, help="the races still to time (the chunk's .base file)")
     r = sub.add_parser("report", help="the owed rows' numbers from the job's boards and drivers")
     r.add_argument("--owed", required=True)
     r.add_argument("--plan-dir", required=True)
@@ -623,7 +760,7 @@ def build_parser():
 def main(argv=None):
     a = build_parser().parse_args(argv)
     return {"plan": cmd_plan, "plan-check": cmd_plan_check, "data-keys": cmd_data_keys,
-            "base-caps": cmd_base_caps, "report": cmd_report}[a.cmd](a)
+            "base-caps": cmd_base_caps, "base-share": cmd_base_share, "report": cmd_report}[a.cmd](a)
 
 
 if __name__ == "__main__":

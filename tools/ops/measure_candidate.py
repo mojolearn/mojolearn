@@ -495,43 +495,142 @@ def check_prior_wheels(names, b_names, prior_versions, rows):
                          "--prior-versions entry; name it apart")
 
 
+#: the two A/B jobs of 4519097d380a (2026-11-24, L40S pod 8c81cd997ce0, a 14-core cgroup, the pods the A/B jobs run on
+#: now): 330 race walls of 40 B arms and their bases. ESTIMATE FROM THE NEWEST TIME (lane ab-harness-speed): the second
+#: job was estimated at 195 minutes and took 116 (its 31 arms: 194 estimated, 100 of race walls), because each race took
+#: the LARGEST wall over every board given (ab1's 14-core 2026-11-18 pod: elliptic-envelope istella 1748 s; these jobs
+#: 416-508 s) and every unit counted its own base. A race is now estimated from its NEWEST stored wall (the board race's
+#: "finished" stamp), the older boards only filling races the newer ones lack, and a base race shared within the drift
+#: bound is counted once (ab_units below)
+STORED_TIMES_AB_20261124 = sorted(Path.home().glob(
+    "mojolearn-evidence/box-persist/nvc-ab-20261124T*/fetched/x/board-tg-ab-*/board.json"))
+
+
 def stored_times(boards):
-    """{race id: the LARGEST stored wall_s over BOARDS} (a path or a list of paths; missing files are skipped): a
-    stored time from another pod is a floor, and the slowest box seen is the safer forecast (STORED_TIMES_AB1)."""
-    secs = {}
+    """{race id: the NEWEST stored wall_s over BOARDS} (a path or a list of paths; missing files are skipped): the
+    race's wall in the board whose race finished last, so a forecast follows the box the jobs run on now; a race with
+    no finish stamp counts as the oldest."""
+    secs, when = {}, {}
     for b in ([boards] if isinstance(boards, (str, Path)) else (boards or [])):
-        if b and Path(b).is_file():
-            for rid, t in TR.stored_seconds(PC.load_json(str(b))).items():
-                secs[rid] = max(t, secs.get(rid, 0.0))
+        if not (b and Path(b).is_file()):
+            continue
+        doc = PC.load_json(str(b))
+        for rid, t in TR.stored_seconds(doc).items():
+            fin = MO._iso_s(((doc.get("races") or {}).get(rid) or {}).get("finished")) or 0.0
+            if rid not in secs or fin >= when[rid]:
+                secs[rid], when[rid] = t, fin
     return secs
 
 
-def ab_plan(owed_file, planner_file, vendor, b_names, times_board, chunk_s=TR.DEFAULT_CHUNK_S):
-    """[(arm, rows tag, races, minutes)] of the owed A/B units the job times for these B arms (tools/measure_owed.py
-    plan, the same call the job's targeted plan makes, with no paper race left to a paper board): each unit is its
-    base (the candidate) and the arm back to back, so its minutes are twice the races' stored candidate seconds (the
-    largest over TIMES_BOARD, one path or a list; the family median for a race or a neighbouring shape with no stored
-    time) plus one process start per chunk and arm (TR.PROC_S; the races' wall_s holds the rest), and the base races'
-    smoke (TR.SMOKE_S_PER_RACE; lane fb15-ab-verdicts, 2026-11-18: ab1 was estimated at 152 minutes and passed the
-    240-minute cap with 17 of 25 sqrt-comptime-step cells left). Every unit times its base in the same job (the
-    2026-11-17 STORED BASE, an arm alone against another host's base time, is gone: IN-JOB BASE CAP, measure_owed.py)."""
+def owed_units(owed_file, planner_file, vendor, b_names):
+    """{(B arm, rows tag): [race ids]} of the owed A/B units the job times for these B arms (tools/measure_owed.py
+    plan, the same call the job's targeted plan makes, with no paper race left to a paper board)."""
     if not b_names:
-        return []
+        return {}
     planner = MO.load_planner(str(planner_file))
     doc = PC.load_json(owed_file)
     units = MO.plan(doc, {"recipes": [], "race_ids": []}, planner, vendor, list(b_names))[0]
-    secs = stored_times(times_board)
+    return {k: v for k, v in units.items() if k[0] != "candidate"}
+
+
+def ab_units(units, secs, chunk_s=TR.DEFAULT_CHUNK_S, max_age_s=MO.BASE_MAX_AGE_S, smoke=True):
+    """[(arm, rows tag, races, minutes)] of UNITS in the job's run order (measure_owed.overlap_order), simulated on one
+    box's clock: a unit's minutes are its arm races, the base races no earlier unit timed within MAX_AGE_S of the
+    simulated clock (SHARED BASE: the job copies those, measure_owed.py base-share), one process start per chunk on
+    each side that has a race to time (TR.PROC_S), and, when the submit runs the smoke (SMOKE), the smoke of each
+    full-row race not yet smoked on this box (TR.SMOKE_S_PER_RACE). A race's seconds are SECS[id] (stored_times), else
+    its family's median, else a quarter chunk; a neighbouring shape takes its family's median."""
     med = TR.family_medians(secs)
-    out = []
-    for (arm, rows), ids in sorted(units.items(), key=lambda kv: MO.unit_order(kv[0])):
-        if arm == "candidate":
-            continue
+    clock, base_at, smoked, out = 0.0, {}, set(), []
+    for arm, rows in MO.overlap_order(dict(units)):
+        ids = units[(arm, rows)]
         each = {i: ((secs.get(i) if rows == "full" else None) or med.get(i.split("/")[0], chunk_s / 4.0)) for i in ids}
-        s = sum(2 * t for t in each.values())
-        procs = 2 * (len(TR.chunk_ids(ids, {}, chunk_s)) if ids else 0)
-        smoke = TR.SMOKE_S_PER_RACE * len(ids) if rows == "full" else 0.0
-        out.append((arm, rows, len(ids), (s + TR.PROC_S * procs + smoke) / 60.0))
+        start = clock
+        chunks = TR.chunk_ids(ids, {}, chunk_s) if ids else []
+        for ch in chunks:
+            todo = [i for i in ch if (rows, i) not in base_at or clock - base_at[(rows, i)] > max_age_s]
+            if todo:
+                clock += TR.PROC_S
+            for i in todo:
+                clock += each[i]
+                base_at[(rows, i)] = clock
+            clock += TR.PROC_S + sum(each[i] for i in ch)
+        if smoke and rows == "full":
+            new = [i for i in ids if i not in smoked]
+            smoked.update(new)
+            clock += TR.SMOKE_S_PER_RACE * len(new)
+        out.append((arm, rows, len(ids), (clock - start) / 60.0))
     return out
+
+
+def ab_plan(owed_file, planner_file, vendor, b_names, times_board, chunk_s=TR.DEFAULT_CHUNK_S, smoke=True,
+            max_age_s=MO.BASE_MAX_AGE_S):
+    """[(arm, rows tag, races, minutes)] of the owed A/B units the job times for these B arms, on one box (ab_units
+    over owed_units, each race from its newest stored time over TIMES_BOARD, one path or a list). Every unit times its
+    base in the same job (IN-JOB BASE CAP, measure_owed.py), shared between units within the drift bound."""
+    return ab_units(owed_units(owed_file, planner_file, vendor, b_names), stored_times(times_board), chunk_s,
+                    max_age_s, smoke)
+
+
+def split_boxes(units, secs, n, chunk_s=TR.DEFAULT_CHUNK_S, max_age_s=MO.BASE_MAX_AGE_S, first_min=0.0):
+    """[[arm, ...] per box] of UNITS ({(arm, rows): ids}) over N boxes by estimated minutes (largest first onto the
+    least loaded box). Arms that share a race at the same rows stay on one box (they share its base; an arm's base is
+    always on its own box, being part of its unit), unless such a group alone is over the even share, when its arms
+    are placed one by one. FIRST_MIN (the listed rows and the job's fixed cost) loads box 1."""
+    arms = sorted({a for a, _ in units}, key=lambda a: min(MO.unit_order(k) for k in units if k[0] == a))
+    parent = {a: a for a in arms}
+
+    def root(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+    seen = {}
+    for (a, rows), ids in sorted(units.items(), key=lambda kv: MO.unit_order(kv[0])):
+        for i in ids:
+            o = seen.setdefault((rows, i), a)
+            if root(o) != root(a):
+                parent[root(a)] = root(o)
+    groups = {}
+    for a in arms:
+        groups.setdefault(root(a), []).append(a)
+    mins = lambda names: sum(m for *_, m in ab_units(  # noqa: E731
+        {k: v for k, v in units.items() if k[0] in names}, secs, chunk_s, max_age_s, smoke=False))
+    total = mins(arms) + first_min
+    share = total / max(n, 1)
+    items = []
+    for g in groups.values():
+        m = mins(g)
+        items += [([a], mins([a])) for a in g] if m > share and len(g) > 1 else [(g, m)]
+    boxes = [[[], first_min] for _ in range(max(n, 1))]
+    for names, m in sorted(items, key=lambda x: -x[1]):
+        b = min(boxes, key=lambda x: x[1])
+        b[0] += names
+        b[1] += m
+    return [sorted(b[0], key=arms.index) for b in boxes if b[0]] or [[]]
+
+
+#: the stage options one box's call replaces (_box_argv), with whether each takes a value
+_BOX_OPTS = {"--boxes": True, "--owed-arms": True, "--tag": True, "--lane": True, "--owed-only": False}
+
+
+def _box_argv(argv, k, arms, lane, tag):
+    """The stage argv of box K of a --boxes split: the same call, with this box's arms (--owed-arms), its own lane
+    (the lane's pod: box 1 the given lane, box K `<lane>-b<K>`) and results tag (`<tag>-b<K>`), and --owed-only on
+    every box but the first (the listed rows are box 1's)."""
+    out, skip = [], False
+    for x in argv:
+        if skip:
+            skip = False
+            continue
+        name = x.split("=", 1)[0]
+        if name in _BOX_OPTS:
+            skip = _BOX_OPTS[name] and "=" not in x
+            continue
+        out.append(x)
+    out += ["--boxes", "1", "--owed-arms", ",".join(arms), "--lane", lane if k == 1 else f"{lane}-b{k}",
+            "--tag", tag if k == 1 else f"{tag}-b{k}"]
+    return out + ([] if k == 1 else ["--owed-only"])
 
 
 def split_arms(abp, first_min, cap_min):
@@ -607,14 +706,37 @@ def cmd_stage(a):
         bad = [x for x in owed_arms if x not in [n for n, _, _ in specs]]
         if bad:
             raise SystemExit(f"measure-candidate: --owed-arms {','.join(bad)} is not a staged --b-arm")
-        abp = ab_plan(owed_file, planner if planner.is_file() else ROOT / "tools" / "bench_board.py", vendor,
-                      owed_arms or [n for n, _, _ in specs], a.times_board or [STORED_TIMES, *STORED_TIMES_AB1],
-                      a.chunk_s)
+        units = owed_units(owed_file, planner if planner.is_file() else ROOT / "tools" / "bench_board.py", vendor,
+                           owed_arms or [n for n, _, _ in specs])
+        secs = stored_times(a.times_board or [STORED_TIMES, *STORED_TIMES_AB1, *STORED_TIMES_AB_20261124])
+        smoked = "targeted" in parts or "tg-smoke" in parts
+        if a.boxes > 1 and not owed_arms:
+            # N PODS AT ONCE (lane ab-harness-speed, 2026-11-24): the owed arms split by estimated minutes, an arm
+            # and its base (and the arms sharing its base) on one box; box 1 also times the listed rows, the others
+            # only their owed units (PC_TG_OWED_ONLY). Each box is staged by its own stage call, printed here
+            if not stored:
+                raise SystemExit("measure-candidate: --boxes needs the stored baseline (the listed rows' prior arm "
+                                 "would be timed on box 1 only; its owed board rows are not split)")
+            groups = split_boxes(units, secs, a.boxes, a.chunk_s, first_min=est["total_min"])
+            tag0 = a.tag or f"pc-{commit[:12]}-{vendor}"
+            argv0 = list(a.argv)
+            for k, g in enumerate(groups, 1):
+                m = sum(x[3] for x in ab_units({u: v for u, v in units.items() if u[0] in g}, secs, a.chunk_s,
+                                               smoke=smoked))
+                print(f"TG-BOX {k}/{len(groups)} lane={a.lane if k == 1 else f'{a.lane}-b{k}'} arms={len(g)} "
+                      f"minutes={m + (est['total_min'] if k == 1 else TR.FIXED_S / 60.0):.0f}: {','.join(g)}")
+            for k, g in enumerate(groups, 1):
+                sub_argv = _box_argv(argv0, k, g, a.lane, tag0)
+                print(f"# box {k}: measure_candidate.py {' '.join(shlex.quote(x) for x in sub_argv)}", flush=True)
+                main(sub_argv)       # each box's own stage: its sync, checks, uploads and SUBMIT line
+            return 0
+        abp = ab_units(units, secs, a.chunk_s, smoke=smoked)
         for arm, rows, n, m in abp:
             print(f"TG-AB arm={arm} rows={rows} races={n} minutes={m:.0f} (base and arm back to back)")
         if abp:
             # a later split submit (no `targeted` part) resumes the rows already timed: only the fixed cost is new
-            first = est["total_min"] if "targeted" in parts else TR.FIXED_S / 60.0
+            # an --owed-only box times no listed row: its install, prep and smoke of the owed rows are in the units
+            first = est["total_min"] if "targeted" in parts and not a.owed_only else TR.FIXED_S / 60.0
             tot = first + sum(m for *_, m in abp)
             print(f"TG-ESTIMATE-ALL minutes={tot:.0f} (rows {first:.0f} + A/B {tot - first:.0f})")
             if tot > a.cap_min:
@@ -627,7 +749,7 @@ def cmd_stage(a):
                     + "\n  ".join(f"submit {k}: --owed-arms {','.join(g)}"
                                    + ("" if k == 1 else " --parts tg-board,tg-compare (same --tag: the boards resume)")
                                    for k, g in enumerate(groups, 1)))
-        if split:
+        if split and not a.owed_only:
             raise SystemExit(f"measure-candidate: {a.rows} is estimated at {est['total_min']:.0f} min, over the "
                              f"{a.cap_min:.0f}-minute cap; submit the split, one job each (each times both arms):\n  "
                              + "\n  ".join(f"{f}  {TR.estimate_line(e)}" for f, e in split))
@@ -674,6 +796,8 @@ def cmd_stage(a):
         env["PC_PARTS"] = ",".join(parts)     # the job runs the parts whose datasets were staged above
     if a.rows and a.owed_arms:
         env["PC_OWED_ARMS"] = a.owed_arms     # a split submit times only these arms' owed units
+    if a.rows and a.owed_only:
+        env["PC_TG_OWED_ONLY"] = "1"          # a --boxes box after the first: its owed units only (paper_compare_job.sh)
     if a.rows:
         rows_name = Path(a.rows).name
         uploads.append((Path(a.rows).expanduser(), f"{indir}/rows/{rows_name}", False))
@@ -914,8 +1038,17 @@ def main(argv=None):
     s.add_argument("--owed-arms", default="",
                    help="a split submit: the comma list of staged --b-arm names whose owed units this job times "
                         "(PC_OWED_ARMS); the stage refuses a job over --cap-min and names the split")
+    s.add_argument("--boxes", type=int, default=1,
+                   help="split the owed arms over N L40S pods by estimated minutes (an arm, its base and the arms "
+                        "sharing its base on one box): one stage and one SUBMIT line per box, box K on lane "
+                        "<lane>-b<K> with tag <tag>-b<K>; box 1 also times the listed rows (--rows only)")
+    s.add_argument("--owed-only", action="store_true",
+                   help="this submit times only its --owed-arms units, no listed row (PC_TG_OWED_ONLY; --boxes sets it)")
     s.add_argument("--dry-run", action="store_true", help="validate locally and print every command; copy nothing")
     a = p.parse_args(argv)
+    a.argv = list(sys.argv[1:] if argv is None else argv)
+    if a.boxes > 1 and not a.rows:
+        raise SystemExit("measure-candidate: --boxes splits a targeted A/B job (--rows)")
     return cmd_stage(a)
 
 

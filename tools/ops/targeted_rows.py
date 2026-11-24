@@ -111,7 +111,10 @@ SMOKE_S_PER_RACE = 3.6
 #: (lane fx-pod-job, 2026-11-18, from ideas-cycle-time-RESULT.md 1d-1e): the A/B job nvc-ab-20261118T140734Z-8f0269
 #: spent 1215 s in the starts of 77 bench_board processes (16 s each, the median); the 30 s of ab1 included the prep
 #: now done once in PREP_S.
-PROC_S = 16
+#: Re-measured (lane ab-harness-speed, 2026-11-24, the two A/B jobs of 4519097d380a on a 14-core L40S pod): tg-board
+#: less its race walls and install windows, over its bench_board processes: (6769 - 6115 - 41) / 45 = 13.6 s and
+#: (6913 - 6030 - 129) / 75 = 10.1 s; 12 s
+PROC_S = 12
 #: the job's dataset preparation, ONCE per job (tg-prep: one process per dataset, all at once, before the smoke):
 #: the longest single dataset's prep. Measured in nvc-tg-20261118T135756Z-7a2bff: graph-taxi 256.9 s and
 #: graph-istella 229.5 s, then serial inside the first timed process; in parallel the job waits for the longest.
@@ -1178,7 +1181,7 @@ def summary(doc, rows, results, ids, units=(), prior_versions=None):
     for arm, rows_tag, uids, capped_ids in units:
         base = MO.load_board(os.path.join(results, "board-tg-ab-%s-base-%s" % (arm, rows_tag), "board.json"))
         brd = MO.load_board(os.path.join(results, "board-tg-ab-%s-%s" % (arm, rows_tag), "board.json"))
-        ratios, untimed_cells, start = [], 0, len(detail)
+        ratios, untimed_cells, start, differ = [], 0, len(detail), 0
         for rid in uids:
             bc = MO.our_cells(((base or {}).get("races") or {}).get(rid) or {})
             ac = MO.our_cells(((brd or {}).get("races") or {}).get(rid) or {})
@@ -1206,22 +1209,59 @@ def summary(doc, rows, results, ids, units=(), prior_versions=None):
                         for side, d, ms in (("base", base, b), ("arm", brd, x)) if not ms)
                 else:
                     v = " " + MO.verdict(r, "FASTER", "SLOWER", "SAME")
-                detail.append("AB %s rows=%s %s %s %s: base %s -> arm %s ms ratio %s%s" % (
-                    arm, rows_tag, rid, k[0], k[1], PC.fmt_ms(b), PC.fmt_ms(x), PC.fmt_ratio(r), v))
+                ph = per_iteration_text(bc.get(k), ac.get(k), r) if r is not None else ""
+                if "PHASE-VERDICTS-DIFFER" in ph:
+                    differ += 1
+                detail.append("AB %s rows=%s %s %s %s: base %s -> arm %s ms ratio %s%s%s%s" % (
+                    arm, rows_tag, rid, k[0], k[1], PC.fmt_ms(b), PC.fmt_ms(x), PC.fmt_ratio(r), v, ph,
+                    base_used(base, brd, rid)))
         med = statistics.median(ratios) if ratios else None
         gaps = ab_row_gaps(base, brd, uids)
-        table.append("  %-34s rows=%-6s races=%-3d cells=%-3d median arm/base %s %s%s%s%s" % (
+        table.append("  %-34s rows=%-6s races=%-3d cells=%-3d median arm/base %s %s%s%s%s%s" % (
             arm, rows_tag, len(uids), len(ratios), PC.fmt_ratio(med),
             "-" if med is None else MO.verdict(med, "FASTER", "SLOWER", "SAME"),
             ("; " + direction(ratios)) if ratios else "",
             ("; untimed cells %d" % untimed_cells) if untimed_cells else "",
-            ("; rows differ %d" % len(gaps)) if gaps else ""))
+            ("; rows differ %d" % len(gaps)) if gaps else "",
+            ("; per-iteration verdict differs %d" % differ) if differ else ""))
         if gaps:
             detail.insert(start, gap_line(arm, rows_tag, gaps))
     if table:
         lines.append("A/B (arm and its base, the candidate, back to back):")
         lines += table + detail
     return "\n".join(lines) + "\n"
+
+
+def per_iteration_text(bcell, acell, whole_ratio):
+    """' | per-iteration base X (N it) -> arm Y (M it) ratio R VERDICT', with PHASE-VERDICTS-DIFFER when that verdict
+    is not the whole operation's (tools/bench_board_probe.py phase_split: the whole operation over the EXECUTED
+    iterations; the loop region itself is not reported by the product); '' when either side has no iteration count."""
+    import bench_board_probe as PR
+    pb, pa = PR.phase_split(bcell or {}), PR.phase_split(acell or {})
+    if not (pb["per_iteration_ms"] and pa["per_iteration_ms"]):
+        return ""
+    import measure_owed as MO
+    r = pa["per_iteration_ms"] / pb["per_iteration_ms"]
+    v = MO.verdict(r, "FASTER", "SLOWER", "SAME")
+    w = MO.verdict(whole_ratio, "FASTER", "SLOWER", "SAME")
+    return " | per-iteration base %s (%d it) -> arm %s (%d it) ratio %s %s%s" % (
+        PC.fmt_ms(pb["per_iteration_ms"]), pb["iterations"], PC.fmt_ms(pa["per_iteration_ms"]), pa["iterations"],
+        PC.fmt_ratio(r), v, " PHASE-VERDICTS-DIFFER" if v != w else "")
+
+
+def base_used(base, brd, rid):
+    """'; base <board> gap <s> s': which base run the arm's race was compared with (its own unit's base, or the
+    SHARED BASE another unit timed, tools/measure_owed.py base-share) and the seconds from that base race's end to the
+    arm race's start; '' when either side has no time stamp."""
+    import measure_owed as MO
+    b =(((base or {}).get("races") or {}).get(rid)) or {}
+    a = (((brd or {}).get("races") or {}).get(rid)) or {}
+    sh = b.get("shared_base") or {}
+    src = os.path.basename(str(sh.get("board"))) if sh else "own"
+    end, start = MO._iso_s(sh.get("finished") or b.get("finished")), MO._iso_s(a.get("started"))
+    if end is None or start is None:
+        return "; base %s" % src if b else ""
+    return "; base %s gap %d s" % (src, int(start - end))
 
 
 def read_units(path):

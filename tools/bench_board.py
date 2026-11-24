@@ -626,13 +626,23 @@ def now_utc():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+#: {(abs path, size, mtime_ns): sha256} of the data files this process has hashed (lane ab-harness-speed,
+#: 2026-11-24): a timed board process hashed every race's dataset files twice per race (the plan audit and the race's
+#: own evidence), the istella and taxi blocks of 0.4-1.8 GB each, outside any timed call but between timed races.
+#: A file is hashed once per process for one (size, mtime): a rewritten file changes its stamp and is hashed again,
+#: the same rule the smoke worker's _box_once key has always used.
+_SHA256_SEEN = {}
+
+
 def sha256_file(path, chunk=1 << 20):
-    """sha256 of a file; inside the smoke worker once per (path, size, mtime)."""
+    """sha256 of a file, once per process for one (path, size, mtime)."""
+    st = os.stat(path)
+    key = ("sha256", os.path.abspath(path), st.st_size, st.st_mtime_ns)
     if _in_smoke_worker():
-        st = os.stat(path)
-        return _box_once(("sha256", os.path.abspath(path), st.st_size, st.st_mtime_ns),
-                         lambda: _sha256_file(path, chunk))
-    return _sha256_file(path, chunk)
+        return _box_once(key, lambda: _sha256_file(path, chunk))
+    if key not in _SHA256_SEEN:
+        _SHA256_SEEN[key] = _sha256_file(path, chunk)
+    return _SHA256_SEEN[key]
 
 
 def _sha256_file(path, chunk=1 << 20):
@@ -4091,7 +4101,9 @@ def audit_plan(ctx, races):
         files = race_data_files(ctx, race)
         data = dict(name=race["dataset"], rows_requested=race.get("rows"),
                     identity=race_data_sha(ctx, race, ctx["box"]),
-                    files={name: sha256_file(path) if os.path.isfile(path) else None for name, path in files})
+                    files={name: sha256_file(path) if os.path.isfile(path) else None for name, path in files},
+                    # the same record run_race writes, so the race can keep this recipe (ONE PROBE PER RACE below)
+                    generator="retained source and recorded seed" if not files else None)
         directory, recipe = E.begin(ctx, race, race_settings(ctx, race), data)
         sub = dict(ctx, measurement_receipts=str(directory / "workers"))
         has_ours = any(a in arms for a in race.get("our_arms", {}))
@@ -4106,6 +4118,12 @@ def audit_plan(ctx, races):
             entry["capability_probes"] = race["capability_probes"]
         E.write(directory / "preflight.json", entry)
         report["races"][race["id"]] = dict(recipe=recipe, audit=entry)
+        # ONE PROBE PER RACE (lane ab-harness-speed, 2026-11-24): run_race of this same process used to begin a second
+        # evidence directory, hash the data files again and run the --params-only probe again for the arms just
+        # audited (2-6 s a race: 566 s of the 6913 s tg-board of nvc-ab-20261124T095727Z-92fd9f). It now takes this
+        # audit's directory, recipe and entry when it probes the same arms; any other arm set probes as before.
+        ctx.setdefault("audited_races", {})[race["id"]] = dict(
+            directory=directory, recipe=recipe, entry=entry, arms=sorted(arms), data=data)
         if entry["verdict"] == "REFUSED":
             report["verdict"] = "REFUSED"
         report["completed"] = len(report["races"])
@@ -4434,6 +4452,8 @@ def run_race(ctx, race):
     opponent the store does not hold is skipped unless ctx["with_opponents"]
     (--with-opponents / --retime-opponents)."""
     evidence = None
+    # this process's plan audit of the same race (audit_plan: ONE PROBE PER RACE), taken once
+    audited = (ctx.get("audited_races") or {}).pop(race["id"], None)
     if ctx.get("capture_measurements"):
         E = _load_tool("bench_board_evidence")
         files = race_data_files(ctx, race)
@@ -4441,7 +4461,11 @@ def run_race(ctx, race):
                 "identity": race_data_sha(ctx, race, ctx["box"]),
                 "files": {name: sha256_file(path) if os.path.isfile(path) else None for name, path in files},
                 "generator": "retained source and recorded seed" if not files else None}
-        evidence = E.begin(ctx, race, race_settings(ctx, race), data)
+        if audited and audited["data"] == data:
+            evidence = (audited["directory"], audited["recipe"])
+        else:
+            audited = None
+            evidence = E.begin(ctx, race, race_settings(ctx, race), data)
         # the workers keep scored output and model bytes only in a job that scores an opponent (the one decision:
         # bench_board_evidence.scores_opponent); an own-arms job's workers record the hashes
         ctx = dict(ctx, measurement_receipts=str(evidence[0] / "workers"),
@@ -4479,7 +4503,10 @@ def run_race(ctx, race):
         preflight = None
         if evidence:
             probe_arms = race["arms"] + list(stored)
-            preflight = preflight_check(ctx, full, probe_arms)
+            if audited and audited["arms"] == sorted(probe_arms):
+                preflight = audited["entry"]         # probed seconds ago in this process, same arms, same venv
+            else:
+                preflight = preflight_check(ctx, full, probe_arms)
             E.write(evidence[0] / "preflight.json", preflight)
         if preflight and preflight["verdict"] == "REFUSED":
             rec = dict(id=race["id"], family=race["family"], lane=race["lane"], dataset=race["dataset"],
@@ -4649,6 +4676,11 @@ def _run_race(ctx, race):
         # not disposable quality-pass scratch. Keep them for E.seal and later
         # verified retention; deleting them here left only hashes in R2.
     rec["cells"] = add_ratios(flag_recompiles(mark_not_scored(cells)))
+    for c in rec["cells"]:
+        # PER-CELL PHASE SPLIT (tools/bench_board_probe.py phase_split): beside the scored time, read from what the
+        # cell already holds; it changes nothing that is timed
+        if c.get("library") == "mojolearn" and c.get("median_ms") is not None:
+            c["phase_split"] = PROBE.phase_split(c)
     if rec.get("infer_cells"):
         flag_recompiles(mark_not_scored(rec["infer_cells"]))
     rec["finished"] = now_utc()

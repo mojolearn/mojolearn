@@ -2758,6 +2758,10 @@ def worker(args):
                 # the round (tools/classical_route.py; None for opponents)
                 from classical_route import classical_route
                 route = classical_route(runner)
+                # PER-CELL PHASE SPLIT (lane ab-harness-speed, 2026-11-24): the executed iterations the fitted model
+                # reports (n_iter_), after every clock of the round; "unavailable" when it exposes none
+                from bench_board_state import runner_model
+                iterations = _probe().iteration_receipt(runner_model(runner)) if r > 0 else None
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
@@ -2765,7 +2769,7 @@ def worker(args):
                 return 1
             say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m, "state_receipt": state_receipt,
                  "scored_calls": calls_rec,
-                 "upload_separate": upload_sep, "classical_route": route,
+                 "upload_separate": upload_sep, "classical_route": route, "iterations": iterations,
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
                                "scope": "prepare-fit-consume" if whole_requested else "call-consume",
                                "dataset_load_included": False,
@@ -3472,6 +3476,8 @@ def race(args):
                 result["arms"][arm].setdefault("operations", []).append(dict(msg["operation"], round=r, warmup=r == 0))
             if msg.get("state_receipt") is not None:
                 result["arms"][arm].setdefault("state_receipts", []).append(msg["state_receipt"])
+            if r > 0 and "iterations" in msg:     # the scored rounds' executed iterations (PER-CELL PHASE SPLIT)
+                result["arms"][arm].setdefault("iteration_receipts", []).append(msg["iterations"])
             if msg.get("upload_separate") is not None:
                 result["arms"][arm].setdefault("upload_separate", []).append(
                     dict(msg["upload_separate"], round=r, warmup=r == 0))
