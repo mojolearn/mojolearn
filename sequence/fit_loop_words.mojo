@@ -16,6 +16,11 @@ Measurement plumbing only: three word stores per fit, after the loop."""
 from core.fit_loop_clock import FitLoop
 
 comptime FIT_LOOP_WORDS = 3
+# The whole-model descriptor (autograd/model_descriptor.mojo) has no free
+# address slot: a fit that wants the record ends its option words with this
+# mark (every fit option form ends on a 0/1 flag, never this value) and its
+# addresses with the record words' address.
+comptime FIT_LOOP_MARK = 0x4649544C
 comptime FitLoopWordP = MutPointer[Int64, MutUntrackedOrigin]
 
 

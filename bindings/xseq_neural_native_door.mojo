@@ -39,7 +39,8 @@ from bindings.admitted_sequence_door import admit_nd_f32
 from providers.python.xseq_public_lifecycle_pyapi_door import xseq_public_labels, xseq_private_input
 from core.xseq_marshal import xseq_fill_f32, xseq_codes_f32, xseq_take_native
 from sequence.perf3_seq_resident_words import seq_resident_token
-from sequence.fit_loop_words import fit_loop_words, fit_loop_read
+from sequence.fit_loop_words import fit_loop_words
+from bindings.fit_loop_pack import fit_loop_pack
 from sequence.xseq_neural_run import (
     XseqNeuralEntry, XseqOptimizer, XseqRnnFitRequest, XseqRnnPredictRequest, XseqMlpFitRequest, XseqMlpPredictRequest,
     xseq_run_as_f32_check, xseq_run_uniform, xseq_run_argmax, xseq_run_threshold, xseq_run_curve_min,
@@ -438,13 +439,6 @@ def _rnn_lengths(source: PythonObject, n: Int, context: PythonObject) raises -> 
     return lengths
 
 
-def xseq_fit_loop_value(words: List[Int64]) raises -> PythonObject:
-    """PACK: the public `fit_loop_` tuple (iterations, milliseconds) of the
-    record words a trainer wrote (lane alm-neural, 2026-11-24)."""
-    var loop = fit_loop_read(words)
-    return Python.tuple(PythonObject(loop.iterations), PythonObject(loop.milliseconds()))
-
-
 def _rnn_lengths_address(lengths: PythonObject) raises -> Int:
     return 0 if lengths is None else Int(py=xseq_addr(lengths))
 
@@ -517,7 +511,7 @@ def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     py_setitem(fields, nk[].k_loss_curve_, losses)
     py_setitem(fields, nk[].k_n_iter_, steps)
     py_setitem(fields, nk[].k_n_timesteps_, steps_t)
-    py_setitem(fields, nk[].k_fit_loop_, xseq_fit_loop_value(loop_words))
+    py_setitem(fields, nk[].k_fit_loop_, fit_loop_pack(loop_words))
     return model
 
 
@@ -764,7 +758,7 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     py_setitem(fields, nk[].k_coefs_, coefs)
     py_setitem(fields, nk[].k_intercepts_, intercepts)
     py_setitem(fields, nk[].k_n_iter_, n_iter)
-    py_setitem(fields, nk[].k_fit_loop_, xseq_fit_loop_value(loop_words))
+    py_setitem(fields, nk[].k_fit_loop_, fit_loop_pack(loop_words))
     _ = curve  # keep the Python object alive through the native call above
     _ = params  # keep the Python object alive through the native call above
     var losses = xseq_curve_list(curve, n_iter)

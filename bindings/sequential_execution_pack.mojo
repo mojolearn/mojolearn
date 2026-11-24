@@ -19,6 +19,8 @@ from bindings.py_balanced import py_item
 from autograd.model import FIT_STATE_WORDS
 from autograd.nn_optim import NN_SCHED_ARGS
 from bindings.admitted_sequence_door import admit_nd_f32
+from sequence.fit_loop_words import FIT_LOOP_MARK, fit_loop_words
+from bindings.fit_loop_pack import fit_loop_pack
 
 
 def _sequential_lengths(source: PythonObject, n: Int, context: PythonObject, name: String = "lengths") raises -> PythonObject:
@@ -243,13 +245,19 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
             raise Error("the compile options' schedule arguments are damaged; call compile again")
         for k in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words)
             native_scalars.append(Float64(py=sched_args[k]))
+    # lane alm-neural (2026-11-24): the fit loop's record (`fit_loop_`), written once by the trainer after its
+    # epoch loop; its address ends the addresses and FIT_LOOP_MARK the options (autograd/model_descriptor.mojo)
+    var loop_words = fit_loop_words()
+    var native_addresses = native_inputs[0].copy()
+    native_addresses.append(Int(loop_words.unsafe_ptr()))
+    native_options.append(FIT_LOOP_MARK)
     var provider = py_item(entries, nk[].k_native_model_provider)
     var n_iter: Int
     if target != 0:
         var class_count = List[Int](length=1, fill=0)
         var words = model_descriptor_words(native_program, native_options, native_inputs[1],
             Int(py=sequential_address(classes_full)), n_out, target, Int(class_count.unsafe_ptr()))
-        n_iter = neural_descriptor_execute(provider, MODEL_FIT_LABELS, native_inputs[0], words, native_scalars)
+        n_iter = neural_descriptor_execute(provider, MODEL_FIT_LABELS, native_addresses, words, native_scalars)
         mods.released()
         _ = curve  # keep the Python object alive through the native call above
         _ = previous  # keep the Python object alive through the native call above
@@ -263,7 +271,7 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
         mods.released()
     else:
         var words = model_descriptor_words(native_program, native_options, native_inputs[1])
-        n_iter = neural_descriptor_execute(provider, MODEL_FIT, native_inputs[0], words, native_scalars)
+        n_iter = neural_descriptor_execute(provider, MODEL_FIT, native_addresses, words, native_scalars)
         mods.released()
         _ = curve  # keep the Python object alive through the native call above
         _ = previous  # keep the Python object alive through the native call above
@@ -283,6 +291,7 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     _ = target_lengths^  # nn-losses-2
     py_setitem(fields, nk[].k_params_, params)
     py_setitem(fields, nk[].k_n_iter_, n_iter)
+    py_setitem(fields, nk[].k_fit_loop_, fit_loop_pack(loop_words))
     if validation is not None:
         var info = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(val_info)))
         _ = val_info  # keep the Python object alive through the native call above

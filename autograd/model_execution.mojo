@@ -50,8 +50,10 @@ def model_counts_native(prog: List[Int], table: List[Float64]) raises -> Tuple[I
 
 def model_fit_native[E: Exec](
     mut ex: E, addrs: List[Int], sources: List[CastIn], prog: List[Int], ip: List[Int], fp: List[Float64],
-    codes_dev: Int = 0, n_classes: Int = 0,
+    codes_dev: Int = 0, n_classes: Int = 0, loop_words: Int = 0,
 ) raises -> Int:
+    # `loop_words` (lane alm-neural, 2026-11-24): the address of the fit loop's record words
+    # (sequence/fit_loop_words.mojo), or 0; the model trainer writes it once, after its epoch loop
     var validated = len(addrs) == 13 and len(ip) == 16
     # lane seq-blocks-3: a ninth address after the training state holds N float32 sequence lengths (0: none)
     var with_lengths = len(addrs) == FIT_ADDRS_STATE + 1 and len(ip) == FIT_INTS_STATE
@@ -127,13 +129,13 @@ def model_fit_native[E: Exec](
         _ = model_fit_state(ex, spec, cfg, sources[0], y, N,
                             model_fptr(addrs[2], "params"), model_fptr(addrs[3], "loss_curve"),
                             model_fptr(addrs[4], "m"), model_fptr(addrs[5], "v"), state, prev, resume, validation,
-                            codes_dev, lengths, target_lengths)
+                            codes_dev, lengths, target_lengths, loop_words)
         n_iter = Int(state[FS_EPOCH])
     else:
         if codes_dev != 0:
             raise Error("model_fit_labels: requires the training-state addresses")
         n_iter = model_fit(ex, spec, cfg, sources[0], sources[1], N,
-                           model_fptr(addrs[2], "params"), model_fptr(addrs[3], "loss_curve"))
+                           model_fptr(addrs[2], "params"), model_fptr(addrs[3], "loss_curve"), loop_words)
     if profile:
         print("AG_PROFILE fit=model_fit")
         print(ag_profile_report())
