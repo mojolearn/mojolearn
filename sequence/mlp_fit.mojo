@@ -3,6 +3,8 @@
 """The multi-layer perceptron's epoch loop and prediction over `Exec`
 (`sequence/mlp.mojo` holds the element bodies and the reference citations)."""
 from sequence.exec_trait import Exec
+from core.fit_loop_clock import fit_loop_start, fit_loop_stop
+from sequence.fit_loop_words import fit_loop_publish
 from sequence.mlp import (
     ACT_SOFTMAX,
     EPI_ACT_BWD,
@@ -614,14 +616,21 @@ def mlp_fit[E: Exec](
     loss_kind: Int, solver: Int, lr_sched: Int, nesterov: Bool, batch: Int, max_iter: Int,
     shuffle: Bool, seed: UInt64, n_iter_no_change: Int,
     lr_init: Float32, b1: Float32, b2: Float32, eps: Float32, momentum: Float32,
-    power_t: Float64, alpha: Float32, tol: Float64, y_codes: Int = 0,
+    power_t: Float64, alpha: Float32, tol: Float64, y_codes: Int = 0, loop_words: Int = 0,
 ) raises -> Int:
     """Returns n_iter; curve[0:n_iter] is the epoch loss (float32 of the
     float64 accumulation; under MLP_EPOCH_DEV the float32 fold of
     `op_mlp_epoch_loss`). `y_codes` (cpu2-l11-neural): 0, `Y` is the
     dense (N, O) target; 1, `Y` holds N int32 class codes and the (N, O)
     one-hot target is built on the executor (`OP_ONE_HOT`); 2 (O = 1), the
-    codes themselves as the float target. Not in host NumPy either way."""
+    codes themselves as the float target. Not in host NumPy either way.
+    `loop_words` (lane alm-neural, 2026-11-24): the address of the
+    `FitLoop` words (sequence/fit_loop_words.mojo), or 0. The loop region
+    is the epoch loop below: the clock is read once before epoch 0's first
+    launch (after the uploads and allocations) and once when the loop ends;
+    every epoch already ends on `ex.sync()` and its loss readback, so the
+    last epoch's work is done there (no synchronization added, nothing
+    inside the loop); its iterations are the epochs run (`n_iter`)."""
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_OFF (DELETED-superseded) deleted 2026-10-19 by 6784245b2; code recoverable at 6784245b2^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MLP_OFF.patch
     # The removed refusal lives here, not in core/six_lane_experiment_guards.mojo: a core line rebuilds 76 bindings (rebuild fence).
@@ -704,6 +713,7 @@ def mlp_fit[E: Exec](
     var pw2 = Float32(1.0)
     var t_samples = 0
     var n_iter = 0
+    var loop_start = fit_loop_start()
     for it in range(max_iter):
         comptime if MLP_EPOCH_DEV:
             if shuffle:
@@ -872,6 +882,8 @@ def mlp_fit[E: Exec](
                 no_imp = 0
             else:
                 break
+    # the last epoch ended on its ex.sync() and loss readback: the loop's work is done
+    fit_loop_publish(loop_words, fit_loop_stop(loop_start, n_iter))
     # lane ag-fusion: return the tape's storage now, not at the end of ex
     tape.release(ex)
     ex.sync()
