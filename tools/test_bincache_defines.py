@@ -20,7 +20,7 @@ class ScopeDefines(unittest.TestCase):
         (self.repo / "em").mkdir()
         (self.repo / "em" / "loop.mojo").write_text('comptime E = env_get_int["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS", 4]()\n')
         (self.repo / "em" / "other.mojo").write_text("fn f(): pass  # MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKSX\n")
-        (self.repo / "bindings" / "build_defines.sh").write_text("# MOJOLEARN_SGD_LOOP_CHECK_EVERY spelled here\n")
+        (self.repo / "bindings" / "build_defines.sh").write_text("# MOJOLEARN_IDN_GEMM_SPLIT_MIN_LEAVES spelled here\n")
         (self.repo / "bindings" / "build_em.sh").write_text("#!/bin/sh\n")
 
     def tearDown(self):
@@ -34,13 +34,13 @@ class ScopeDefines(unittest.TestCase):
             return bincache.scope_build_defines(self.repo, self.repo / "bindings" / "build_em.sh", [], env)
 
     def test_reader_keeps_only_its_define(self):
-        env, kept = self.scope(["em/loop.mojo"], "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192,MOJOLEARN_SGD_LOOP_CHECK_EVERY=1")
+        env, kept = self.scope(["em/loop.mojo"], "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192,MOJOLEARN_IDN_GEMM_SPLIT_MIN_LEAVES=8")
         self.assertEqual(kept, ["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192"])
         self.assertEqual(env["MOJOLEARN_BUILD_DEFINES"], "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192")
 
     def test_non_reader_builds_without_the_variable(self):
         # a longer identifier and build_defines.sh's own text are not reads
-        env, kept = self.scope(["em/other.mojo"], "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192,MOJOLEARN_SGD_LOOP_CHECK_EVERY=1")
+        env, kept = self.scope(["em/other.mojo"], "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192,MOJOLEARN_IDN_GEMM_SPLIT_MIN_LEAVES=8")
         self.assertEqual(kept, [])
         self.assertNotIn("MOJOLEARN_BUILD_DEFINES", env)
         self.assertEqual(env["PATH"], "/bin")

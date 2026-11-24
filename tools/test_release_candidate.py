@@ -31,7 +31,7 @@ class Version(unittest.TestCase):
         self.assertEqual(RC.default_label(""), "")
         a = RC.default_label("MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192")
         self.assertRegex(a, r"^d[0-9a-f]{8}$")
-        self.assertNotEqual(a, RC.default_label("MOJOLEARN_SGD_LOOP_CHECK_EVERY=1"))
+        self.assertNotEqual(a, RC.default_label("MOJOLEARN_IDN_GEMM_SPLIT_MIN_LEAVES=8"))
 
     def test_packer_accepts_only_local_versions(self):
         import pack_wheel as P

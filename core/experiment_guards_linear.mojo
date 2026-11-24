@@ -367,6 +367,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_XLINEAR_FAST_WB_RESIDENT.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_XLINEAR_FAST_WB_RESIDENT"](), "removed 2026-11-19 (lane/fx-verdicts4, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T154232Z-0642a5, one run per arm, digests equal): the resident weight block of the linear decision entries was arm/base 0.94-1.20 on predict with three rows slower and fits flat (noise); code at 8f3f639b13, experiments/removed/MOJOLEARN_XLINEAR_FAST_WB_RESIDENT.patch"
     # ---- end lane fx-verdicts4
+    # ---- lane ab-outcome-2 (2026-11-24): A/B nvc-ab-20261124T095727Z-92fd9f decisions (NVIDIA L40S only, job nvc1-0002; sub-lane ab2-classic)
+    # TOMBSTONE: MOJOLEARN_SGD_LOOP_CHECK_EVERY (arm sgd-check-1 NOISE: 22 cells median 1.00, 0.97..1.11) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SGD_LOOP_CHECK_EVERY.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_SGD_LOOP_CHECK_EVERY"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): the pinned SGD read interval (sgd-check-1: a read after every epoch) was noise against the launch rule: 22 cells (pa-clf, pa-reg, perceptron, sgd-clf, sgd-reg istella / taxi full, sgd-clf taxi 300000), median 1.00, 0.97..1.11 (the 1.11 a 0.77 ms infer); sgd_loop_check_every's rule is the only form; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SGD_LOOP_CHECK_EVERY.ab-outcome-2.patch"
+    # ---- end lane ab-outcome-2
     return True
 
 

@@ -50,7 +50,6 @@ from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM, GLM_YDOM_REFUSED, glm_ydom_bad
 from x_linear.sgd_end import sgd_ys_kernel, sgd_iota_kernel, sgd_perm_kernel, sgd_mb_end_kernel, sgd_mb_res_kernel, sgd_ps_end_kernel, sgd_ps_res_kernel, SGD_END_ST, SGD_END_TPB, SGD_MB_FLAGS, SGD_MB_WORDS
 from x_linear.sgd_end import sgd_mb_ovr_act_kernel, sgd_mb_ovr_res_kernel, sgd_flags_crit_kernel, sgd_live_crit_kernel
 # lane n3b-sgd-on-program-fit: the SGD epochs on the executor's bounded device loop
-from std.sys.compile import get_defined_int
 from autograd.program_loop import LoopTimers, fit_epochs_per_read
 from autograd.program_loop_device import LoopOutcome, LoopRegisters, LoopStep, bounded_device_loop, loop_lap
 from x_linear.vfold import vscratch
@@ -1824,10 +1823,8 @@ def _sgd_chunk() -> Int:
 # TOMBSTONE: sgd-host-epoch-loops (REFACTORED onto autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n3b-sgd-on-program-fit; code recoverable at 5b5490960d.
 # Restore: git apply -3 experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch; record in docs/TOMBSTONES.md.
 
-#: `-D MOJOLEARN_SGD_LOOP_CHECK_EVERY=<k>` (k >= 1) pins the epochs enqueued
-#: between two reads of the loop's register block (the A/B that prices the
-#: rule below; 1 is the old read after every epoch).
-comptime SGD_LOOP_CHECK_EVERY_PIN = get_defined_int["MOJOLEARN_SGD_LOOP_CHECK_EVERY", 0]()
+# TOMBSTONE: MOJOLEARN_SGD_LOOP_CHECK_EVERY (arm sgd-check-1 NOISE: 22 cells median 1.00, 0.97..1.11; A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SGD_LOOP_CHECK_EVERY.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
 
 #: The minibatch epoch's arms (`_SgdMbEpochs.arm`).
 comptime SGD_ARM_FAST_RESIDENT = 0
@@ -1845,8 +1842,6 @@ def sgd_loop_check_every(epoch_launches: Int, max_iter: Int, has_criterion: Bool
     launches that return at once): about FIT_STEPS_PER_READ launches between
     two reads, never less than one epoch. A cost rule over the epoch's launch
     count, the same on every vendor; it keys on no dimension and moves no bit."""
-    comptime if SGD_LOOP_CHECK_EVERY_PIN > 0:
-        return SGD_LOOP_CHECK_EVERY_PIN
     if not has_criterion:
         return max(max_iter, 1)
     return fit_epochs_per_read(epoch_launches, max_iter, 0)
