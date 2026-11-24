@@ -55,7 +55,7 @@ def test_two_class_fold_has_one_calibrator(held, counts):
     theirs = SkCalibrated(SkLogistic(), cv=cv).fit(X, y)
     assert [len(cals) for _, cals in ours.calibrated_classifiers_] == counts
     assert [len(c.calibrators) for c in theirs.calibrated_classifiers_] == counts
-    proba = ours.predict_proba(X)
+    proba = np.asarray(ours.predict_proba(X))  # an in-package caller receives the Array (parallel_public_result_door)
     assert proba.shape == (len(y), 3)
     np.testing.assert_allclose(proba.sum(axis=1), 1.0, rtol=1e-6)
 
