@@ -737,7 +737,7 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
                    fold_train^, fold_test^):
         return False
     _finish_split(owner, split)
-    if len(late) != 0:
+    if late.byte_length() != 0:
         meta_plan_refuse(Int(owner.plan.params[1]), late^, True)
     return True
 

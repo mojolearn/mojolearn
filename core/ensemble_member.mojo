@@ -788,7 +788,7 @@ def meta_plan_refuse(handle: Int, var words: String, late: Bool) raises:
 def _refused_first(slot: _SlotPtr) -> Bool:
     """THE DOOR'S REFUSAL raised before anything (lane mf-refuse5): a non-RFE state whose entry
     carries the door's words with `late` False."""
-    return len(slot[].refusal) != 0 and not slot[].refusal_late and not _rfe_kind(slot[].kind)
+    return slot[].refusal.byte_length() != 0 and not slot[].refusal_late and not _rfe_kind(slot[].kind)
 
 
 def _refused_mask(kind: Int) -> Int:
@@ -4194,7 +4194,7 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
             _fit_rfe(slot, call)
         else:
             _fit_vote(slot, call)
-        if slot[].refusal_late and len(slot[].refusal) != 0 and not _rfe_kind(slot[].kind):
+        if slot[].refusal_late and slot[].refusal.byte_length() != 0 and not _rfe_kind(slot[].kind):
             # THE DOOR'S REFUSAL after the nested fits (lane mf-refuse5): the door checks it there.
             raise Error(slot[].refusal.copy())
         if not _bag_kind(slot[].kind):

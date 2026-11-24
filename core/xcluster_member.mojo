@@ -633,7 +633,7 @@ def _affinity_fit(slot: _Slot, call: _Call) raises:
     _fit_done(slot, call, output, rows)
 
 
-def _affinity_precomputed(slot: _Slot) -> Bool:
+def _affinity_precomputed(slot: _Slot) raises -> Bool:
     return len(slot[].words) > _param_count(_KIND_AFFINITY) and slot[].words[7] != 0.0
 
 
