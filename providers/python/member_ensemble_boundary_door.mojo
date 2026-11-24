@@ -4119,7 +4119,8 @@ def _admit_multi(fields: PythonObject, kind: Int, context: PythonObject, b: Pyth
     if base is None:
         # NO BASE (lane mf-fitadm7): the door's `_require_member` refusal, in
         # its words (its fit refuses None before any column is fitted).
-        prep_estimator_admit(base, "MultiOutputClassifier" if classifier else "MultiOutputRegressor", context)
+        prep_estimator_admit(base, String("MultiOutputClassifier") if classifier else String("MultiOutputRegressor"),
+                             context)
         return False
     if not classifier and not owner.serving:
         var defaults = py_get(context, "native_estimator_defaults")
