@@ -106,8 +106,8 @@ from core.member_abi import (
 )
 from core.device_route import DEVICE_GPU
 from core.member_fold_x import (
-    MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_index, member_fold_take_f32,
-    member_fold_take_into, member_fold_store_ready,
+    MemberFoldX, member_fold_x_open, member_fold_x_close,
+    member_fold_take_into, member_fold_store_ready, member_fold_store,
 )
 from core.member_families import MEMBER_FAMILY_KERNEL_SVM
 from core.member_class_weight import MEMBER_CW_HEAD, MEMBER_CW_NONE, member_cw_mode, member_cw_table_f64
@@ -465,6 +465,11 @@ def _fit_svc(slot: _Slot, call: _Call) raises:
         plan.gamma_kind = gamma_kind
         plan.gamma = p[5]
     plan.x = call[].x.data
+    if plan.x < 0:
+        # THE FOLD X WORD (lane vdf-scope-linear3): the pairs, the Platt folds
+        # and support_vectors_ take their rows of the fold slot on the device
+        # (svm/svc_kernel_fit_run.mojo `_take_word`, `_support_from_pairs`).
+        plan.fold_store = member_fold_store(call)
     plan.rows = rows
     plan.cols = cols
     plan.cells = rows * cols
@@ -1131,7 +1136,10 @@ def _kernel_svm_member(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         var bits = _kernel_svm_member_whole(operation, address)
-        if _route_fold(call):
+        # Lane vdf-scope-linear3: every operation of a computed kernel reads
+        # the fold on the device (fits included); a 'precomputed' state
+        # answers no fold (its X is the kernel matrix: rows AND columns).
+        if _route_fold(call) and not (call[].state != 0 and _precomputed_state(call[].state)):
             bits |= MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
         return bits
     if (call[].row_index.rows > 0 and call[].column_index.rows == 0 and call[].route.device == DEVICE_GPU
@@ -1143,6 +1151,15 @@ def _kernel_svm_member(operation: Int, address: Int) raises -> Int:
     return _kernel_svm_member_whole(operation, address)
 
 
+def _precomputed_state(state: Int) -> Bool:
+    """Whether the live state's kernel is 'precomputed' (False on a bad word)."""
+    try:
+        var held = _Slot(unsafe_from_address=_lookup(state, False))
+        return Int(held[].params[1]) == SVC_KERNEL_PRECOMPUTED
+    except:
+        return False
+
+
 def _route_fold(call: _Call) -> Bool:
     """A GPU route with the SVC device table (the resident query entries)
     whose image ships the x_prep family store."""
@@ -1151,37 +1168,33 @@ def _route_fold(call: _Call) -> Bool:
 
 def _fold_op(slot: _Slot, call: _Call, operation: Int, address: Int) raises:
     """An operation over the rows `call.row_index` of the WHOLE host X
-    (core/member_fold_x.mojo). The queries (predict, decision, proba, score)
-    of a fitted computed-kernel state read THE FOLD X WORD: the resident
-    entries upload X through DeviceQueryX (svm/svm_resident_state.mojo
-    `resident_query_x`, core/device_query_x.mojo), which tests it on the
-    device. A FIT and a precomputed kernel take the fold's rows on the host
-    across its cores: the fit's finish gathers the support rows and the
-    one-vs-one pairs gather their rows from host X (svm/svc_kernel_fit_run.mojo),
-    and a precomputed query gathers its columns on the host. y and the
-    weights are taken bitwise through the index. Views restored before this
-    returns or raises."""
+    (core/member_fold_x.mojo), every one reading THE FOLD X WORD (lane
+    vdf-scope-linear3): the queries (predict, decision, proba, score) through
+    the resident entries' DeviceQueryX (svm/svm_resident_state.mojo
+    `resident_query_x`), the fits through the fit entries' DeviceQueryX, and
+    the one-vs-one pairs, the Platt folds and support_vectors_ through
+    device takes of the slot (svm/svc_kernel_fit_run.mojo). 'precomputed' is
+    refused (a row-only fold of a kernel matrix; the member answers no fold
+    for it). y and the weights are taken bitwise through the index. Views
+    restored before this returns or raises."""
     var x = call[].x
     var y = call[].y
     var weights = call[].weights
     var index = call[].row_index
     var fold = MemberFoldX()
-    var host_x = List[Float32]()
     var host_y = List[UInt64]()
     var host_w = List[UInt64]()
     var estimator = _name(slot)
-    var device = (operation != MEMBER_OP_FIT and slot[].fitted and len(slot[].machines) > 0
-        and Int(slot[].params[1]) != SVC_KERNEL_PRECOMPUTED and _route_fold(call))
+    if Int(slot[].params[1]) == SVC_KERNEL_PRECOMPUTED:
+        raise Error("TypeError: a " + estimator + " member with kernel='precomputed' takes no row index (its X is "
+                    + "the kernel matrix: the caller selects its rows and columns)")
+    if not _route_fold(call):
+        raise Error("TypeError: a " + estimator + " member reads a row index only on a GPU route with the device "
+                    + "table and the x_prep store")
     var failure = String("")
     try:
-        if device:
-            member_fold_x_open(call, fold, estimator)
-            call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
-        else:
-            member_fold_index(call, fold, estimator)
-            host_x = List[Float32](unsafe_uninit_length=max(fold.rows * fold.cols, 1))
-            member_fold_take_f32(x.data, fold.index, fold.rows, fold.cols, Int(host_x.unsafe_ptr()))
-            call[].x = MemberMatrix(Int(host_x.unsafe_ptr()), fold.rows, fold.cols)
+        member_fold_x_open(call, fold, estimator)
+        call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
         if y.rows > 0 and (operation == MEMBER_OP_FIT or operation == MEMBER_OP_SCORE):
             if not y.dense_host(y.dtype) or y.rows != x.rows:
                 raise Error("ValueError: X and y have different numbers of rows")
@@ -1203,7 +1216,6 @@ def _fold_op(slot: _Slot, call: _Call, operation: Int, address: Int) raises:
     except close_error:
         if failure.byte_length() == 0:
             failure = "RuntimeError: a " + estimator + " member's fold slot was not freed: " + String(close_error)
-    _ = host_x^
     _ = host_y^
     _ = host_w^
     if failure.byte_length() > 0:
