@@ -76,7 +76,14 @@ are gathered on the host (one word a row), in row tasks. PREDICT / SCORE:
 under the same scope, on the resident route, the same store slot (a hit in
 the scope's cache) and the image's resident snapshot reads the rows taken on
 the device (XF_RESIDENT_ROWS: the image's store, fits and snapshots share
-its one context); otherwise the rows are gathered on the host.
+its one context); otherwise the rows are gathered on the host. A
+classifier's score there reads the fold's y on the device against those
+codes (XF_RESIDENT_ROWS mode 2, lane vdf-scope-trees3): one count comes back.
+y and the weights of a fit are not kept in the store: they belong to no
+pinned object (THE PIN RULE), so a scope cache entry keyed by their address
+could be hit by a later buffer at the same address (the permutation test's
+shuffled y under its enclosing scope); they are gathered per fold (one word a
+row) and uploaded by the fit as before.
 
 Fits, as the estimator's own fit door picks them: unweighted without
 importances reads X row-major (the view itself, no copy); the ExtraTrees
@@ -119,7 +126,9 @@ estimator's own predict door does (a state only fitted and published or
 freed uploads nothing); concurrent first predicts of one state build it
 once under the slot's own lock word (`_ensure_prepared`). It is released at
 the next fit, import or free.
-Parallel: the ET classifier's code cast, the column-major copy, the largest
+Parallel: the ET classifier's code cast (host images only: an image with
+XF_CAP_ET_CODES takes the int32 codes and makes the class ids on the device),
+the column-major copy, the largest
 weight, the argmax of the votes and the accuracy count split rows over the
 host workers. Serial by nature: the
 store's bookkeeping.
@@ -131,7 +140,9 @@ from core.forest_calls import (
     xf_caps, xf_export_sizes, xf_export_into, xf_export_release, xf_predict, xf_resident_prepare,
     xf_resident_predict, xf_resident_labels, xf_strict_prepare, xf_strict_predict, xf_snapshot_release,
 )
-from core.forest_fit_request import XF_CAP_DEVICE_SCAN, XF_CAP_DEV_ROWS, XF_RESIDENT_RELEASE, XF_STRICT_RELEASE
+from core.forest_fit_request import (
+    XF_CAP_DEVICE_SCAN, XF_CAP_DEV_ROWS, XF_CAP_ET_CODES, XF_RESIDENT_RELEASE, XF_STRICT_RELEASE,
+)
 from core.forest_calls import xf_fit_rows, xf_resident_rows
 from core.forest_entry_table import FOREST_TABLE_RF, FOREST_TABLE_ET
 from core.forest_store_transport import forest_store_transport_ref, FOREST_STORE_PREFIX_RF, FOREST_STORE_PREFIX_ET
@@ -234,6 +245,10 @@ struct ForestMemberSlot(Copyable, Movable, Defaultable):
     #: slot's own lock word for that one build
     var prepared: Int64
     var prepare_lock: Int64
+    #: the XF_CAPS word of the member's route image, resolved ONCE at the
+    #: state's admission (MEMBER_OP_NEW; lane vdf-scope-trees3); -1 when that
+    #: entry call failed (then each use asks the image, as before)
+    var caps: Int
 
     def __init__(out self):
         self.generation = 0
@@ -279,6 +294,7 @@ struct ForestMemberSlot(Copyable, Movable, Defaultable):
         self.release_op = 0
         self.prepared = 0
         self.prepare_lock = 0
+        self.caps = -1
 
 
 struct ForestMemberStore(Defaultable, Movable):
@@ -364,6 +380,7 @@ def _mint[name: StaticString](words: _F64P, count: Int) raises -> Int:
         _clear_oob(slot)
         slot[].snapshot = 0
         slot[].prepared = 0
+        slot[].caps = -1
         return slot[].generation * _INDEX_SPAN + index + 1
     finally:
         shared_slot_unlock(lock)
@@ -538,7 +555,7 @@ def _prepare(slot: _SlotPtr, key: EntryRef) raises:
     """The predict route of the fitted state on the image `key` (the
     estimator's own `ForestState` rule) and, off the sequential route, its
     snapshot, owned by the slot."""
-    var caps = xf_caps(key)
+    var caps = _slot_caps(slot, key)
     var state = ForestState(key, 0, caps, slot[].fast, slot[].groves, slot[].features, slot[].trees, slot[].outputs)
     slot[].key = key
     slot[].route = state.route
@@ -620,11 +637,39 @@ struct _FoldRows(Movable):
 def _dev_rows_route(call: MutPointer[MemberCall, MutUntrackedOrigin]) -> Bool:
     """The route's image keeps a device store, fits its rows and predicts
     them (XF_CAP_DEV_ROWS: the RandomForest and ExtraTrees GPU images). One
-    entry call."""
+    entry call: asked by MEMBER_OP_CAPABILITIES without a state (once per
+    member class) and at a state's admission (`_admit_caps`); a fit or a
+    prediction reads the slot's word (`_slot_dev_rows`)."""
     try:
         return (xf_caps(call[].route.entry) & XF_CAP_DEV_ROWS) != 0
     except:
         return False
+
+
+def _admit_caps(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin]):
+    """The route image's XF_CAPS word, resolved ONCE per member state at its
+    admission (MEMBER_OP_NEW; lane vdf-scope-trees3). Before, every predict,
+    predict_proba and score under a row index asked the image again
+    (`_scope_rows_route`), and every fit once more for the device scan."""
+    try:
+        slot[].caps = xf_caps(call[].route.entry)
+    except:
+        slot[].caps = -1
+
+
+def _slot_caps(slot: _SlotPtr, key: EntryRef) raises -> Int:
+    """The slot's admitted XF_CAPS word; an image that did not answer at
+    admission is asked now (its refusal raises here, as before)."""
+    if slot[].caps >= 0:
+        return slot[].caps
+    return xf_caps(key)
+
+
+def _slot_dev_rows(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin]) -> Bool:
+    """`_dev_rows_route` from the slot's admitted word (no entry call)."""
+    if slot[].caps >= 0:
+        return (slot[].caps & XF_CAP_DEV_ROWS) != 0
+    return _dev_rows_route(call)
 
 
 def _index_bad(index: Int, n: Int, base_rows: Int) -> Int:
@@ -713,7 +758,7 @@ def _fold_rows(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin],
     var fold = _FoldRows()
     fold.n = call[].row_index.rows
     fold.index = _row_numbers(call, estimator, fold.wide)
-    if call[].scope != MEMBER_SCOPE_NONE and call[].pin != 0 and _dev_rows_route(call):
+    if call[].scope != MEMBER_SCOPE_NONE and call[].pin != 0 and _slot_dev_rows(slot, call):
         fold.store_id = _scope_store_id(slot, call)
     return fold^
 
@@ -759,7 +804,7 @@ def _scope_rows_route(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedO
     """A prediction reads the fold's rows on the device: a resident scope
     with a pin, an image with a device store, and the state's resident
     snapshot route (the sequential and strict routes take a host X)."""
-    if call[].scope == MEMBER_SCOPE_NONE or call[].pin == 0 or not _dev_rows_route(call):
+    if call[].scope == MEMBER_SCOPE_NONE or call[].pin == 0 or not _slot_dev_rows(slot, call):
         return False
     _ensure_prepared(slot)
     return slot[].route != FOREST_ROUTE_SEQUENTIAL and slot[].route != FOREST_ROUTE_STRICT
@@ -868,9 +913,13 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
             _take_rows_f32(call[].x.data, fold.index, rows, cols, Int(x_fold.unsafe_ptr()))
             x_rows_addr = Int(x_fold.unsafe_ptr())
     var on_device = fold.store_id >= 0
-    # The ET classifier reads float32 codes; the cast lives until the launch returns.
+    # The ET classifier reads float32 codes; the cast lives until the launch
+    # returns. An image answering XF_CAP_ET_CODES (the ET GPU images; lane
+    # vdf-scope-trees3) takes the int32 codes as they are and makes the class
+    # ids on the device (XF_SHAPE_Y_CODES): no host cast. The host images keep it.
     var codes = List[Float32]()
-    if slot[].classifier and slot[].et:
+    var y_codes = slot[].classifier and slot[].et and (_slot_caps(slot, key) & XF_CAP_ET_CODES) != 0
+    if slot[].classifier and slot[].et and not y_codes:
         codes = List[Float32](length=rows, fill=0.0)
         _cast_codes(y_addr, Int(codes.unsafe_ptr()), rows)
         y_addr = Int(codes.unsafe_ptr())
@@ -917,12 +966,13 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
     # clears the class-weight slot (its class weights travel as row weights).
     var request = forest_request(config, key, rows, cols, classes, x_addr, y_addr, fit,
         weighted and slot[].classifier and slot[].et)
+    request.y_codes = y_codes
     var handle: Int
     if on_device:
         request.session = fold.store_id
         handle = xf_fit_rows(key, slot[].classifier, request)
     else:
-        var device_scan = (xf_caps(key) & XF_CAP_DEVICE_SCAN) != 0
+        var device_scan = (_slot_caps(slot, key) & XF_CAP_DEVICE_SCAN) != 0
         handle = forest_fit_core(key, slot[].classifier, not column_major, request, device_scan)
     _ = len(codes)
     _ = len(x_cols)
@@ -984,7 +1034,7 @@ def _vote(slot: _SlotPtr, q: _Query, dst: Int) raises:
     var wrote = 0
     if q.store_id >= 0:
         # XF_RESIDENT_ROWS: the fold's rows taken on the device (resident route)
-        wrote = xf_resident_rows(slot[].key, False, slot[].snapshot, q.store_id, q.index, dst, x.rows, x.cols,
+        wrote = xf_resident_rows(slot[].key, 0, slot[].snapshot, q.store_id, q.index, dst, x.rows, x.cols,
                                  slot[].outputs)
     elif slot[].route == FOREST_ROUTE_SEQUENTIAL:
         var model: List[Int] = [Int(slot[].offsets.unsafe_ptr()), Int(slot[].colid.unsafe_ptr()),
@@ -1009,7 +1059,7 @@ def _codes(slot: _SlotPtr, q: _Query, dst: Int) raises:
     if slot[].labels:
         var wrote = 0
         if q.store_id >= 0:
-            wrote = xf_resident_rows(slot[].key, True, slot[].snapshot, q.store_id, q.index, dst, x.rows, x.cols,
+            wrote = xf_resident_rows(slot[].key, 1, slot[].snapshot, q.store_id, q.index, dst, x.rows, x.cols,
                                      slot[].outputs)
         else:
             wrote = xf_resident_labels(slot[].key, slot[].snapshot, x.data, dst, x.rows, x.cols, slot[].outputs)
@@ -1072,9 +1122,19 @@ def _score(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], est
         y_fold = List[Int32](length=rows, fill=0)
         _take_rows_i32(call[].y.data, index, rows, Int(y_fold.unsafe_ptr()))
         y_addr = Int(y_fold.unsafe_ptr())
-    var codes = List[Int32](length=rows, fill=0)
-    _codes(slot, q, Int(codes.unsafe_ptr()))
-    var hits = _count_equal(Int(codes.unsafe_ptr()), y_addr, rows)
+    var codes = List[Int32]()
+    var hits: Int
+    _ensure_prepared(slot)
+    if q.store_id >= 0 and slot[].labels and rows > 0:
+        # XF_RESIDENT_ROWS mode 2 (lane vdf-scope-trees3): the fold's y is
+        # read ON THE DEVICE against the codes the snapshot made of the rows
+        # it took there; one word (the matching count) comes back, no codes.
+        hits = xf_resident_rows(slot[].key, 2, slot[].snapshot, q.store_id, q.index, y_addr, rows, x.cols,
+                                slot[].outputs)
+    else:
+        codes = List[Int32](length=rows, fill=0)
+        _codes(slot, q, Int(codes.unsafe_ptr()))
+        hits = _count_equal(Int(codes.unsafe_ptr()), y_addr, rows)
     _ = len(codes)
     _ = len(q.x_fold)
     _ = len(y_fold)
@@ -1280,13 +1340,14 @@ def fm_member[name: StaticString, rf_layout: Bool, notices: Bool](operation: Int
         var weights = known[].classifier or known[].et or not known[].oob
         var mask = _capabilities(known[].classifier, known[].importances or len(known[].imp) > 0, weights,
                                  notices and not known[].et, known[].predict_only)
-        if not known[].predict_only and _dev_rows_route(call):
+        if not known[].predict_only and _slot_dev_rows(known, call):
             mask |= MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
         return mask
     if operation == MEMBER_OP_NEW:
         if not call[].params:
             raise Error("member ABI: a forest member needs its parameter words")
         call[].state = _mint[name](_F64P(unsafe_from_address=call[].params), call[].param_count)
+        _admit_caps(_SlotPtr(unsafe_from_address=_lookup[name](call[].state, False)), call)
         return 0
     if operation == MEMBER_OP_FREE:
         var held = _SlotPtr(unsafe_from_address=_lookup[name](call[].state, False))

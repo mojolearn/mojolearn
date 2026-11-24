@@ -852,7 +852,7 @@ struct RfHostForestImage(ForestImage):
         raise Error("RuntimeError: mojolearn: this forest image fits no device-store rows (XF_FIT_ROWS)")
 
     @staticmethod
-    def resident_rows(labels: Bool, handle: Int, store_id: Int, idx: Int, out_addr: Int, rows: Int,
+    def resident_rows(mode: Int, handle: Int, store_id: Int, idx: Int, out_addr: Int, rows: Int,
                       cols: Int, outputs: Int) raises -> Int:
         # XF_RESIDENT_ROWS (lane vdf-scope-trees2a): the RandomForest host image keeps no device store
         # (no XF_CAP_DEV_ROWS), so no caller sends it.

@@ -143,12 +143,14 @@ trait ForestImage:
         ...
 
     @staticmethod
-    def resident_rows(labels: Bool, handle: Int, store_id: Int, idx: Int, out_addr: Int, rows: Int,
+    def resident_rows(mode: Int, handle: Int, store_id: Int, idx: Int, out_addr: Int, rows: Int,
                       cols: Int, outputs: Int) raises -> Int:
         """XF_RESIDENT_ROWS (lane vdf-scope-trees2a): the resident vote
-        (`labels` False) or codes (True) of rows `idx` of the image's device
-        store slot `store_id`, taken on the device; rows written. An image
-        without XF_CAP_DEV_ROWS refuses in words."""
+        (`mode` 0) or codes (1) of rows `idx` of the image's device store
+        slot `store_id`, taken on the device; rows written. Mode 2 (lane
+        vdf-scope-trees3): `out_addr` holds the rows' int32 true codes, read
+        on the device against the predicted codes; the matching row count.
+        An image without XF_CAP_DEV_ROWS refuses in words."""
         ...
 
 
@@ -241,9 +243,11 @@ def _run[I: ForestImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, f
             return I.resident_labels(a[0], a[1], a[2], p[0], p[1], p[2])
         return I.strict_predict(a[0], a[1], a[2], p[0], p[1], p[2], free)
     if op == XF_RESIDENT_ROWS:
-        # addrs [handle, idx, out], ints [rows, cols, outputs, store id, labels]
+        # addrs [handle, idx, out], ints [rows, cols, outputs, store id, mode]
         _need(na, np, 3, 5, "resident prediction on device rows")
-        return I.resident_rows(p[4] != 0, a[0], p[3], a[1], a[2], p[0], p[1], p[2])
+        if p[4] < 0 or p[4] > 2:
+            raise Error("forest entry: resident prediction on device rows: unknown mode " + String(p[4]))
+        return I.resident_rows(p[4], a[0], p[3], a[1], a[2], p[0], p[1], p[2])
     if op == XF_RESIDENT_RELEASE or op == XF_STRICT_RELEASE:
         # ints [handle]: the shape bindings/trees_resident_table_run.mojo's
         # native release calls with
