@@ -82,6 +82,12 @@ from core.native_descriptor_abi import NativeDescriptorError
 from core.entry_table import EntryRef, entry_ref_unresolved
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from core.admitted_refusals import door_rows_refuse
+from core.seq_member_rows import SEQ_ROUTE_STORE, seq_rows_route, seq_rows_target
+from core.member_abi import MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE, MEMBER_I32, MEMBER_I64
+from core.host_parallel import host_widen_index_i64
+from core.tsvd_native_api import TSVD_FOLD
+from bindings.arena_cache_run import arena_scope_store_put, arena_cache_put, arena_cache_free
 
 comptime DECOMP_KIND_PCA = 0
 comptime DECOMP_KIND_TSVD = 1
@@ -101,6 +107,13 @@ comptime DECOMP_ROUTE_RANDOMIZED = 8
 #: (TSVD_CAP_RESIDENT): the member's transforms read the lease's device copy,
 #: as the door's (bindings/tsvd_native_door.mojo `_resident_lease`).
 comptime DECOMP_ROUTE_RESIDENT = 16
+#: Lane vdf-scope-neural2 (THE RESIDENT ROUTE): `route.fourth` is the
+#: identical GPU base image's resident-fold entry of the kind and
+#: `route.fifth` the model-selection fold store's transport entry
+#: (core/msel_fold_transport.mojo); the bit core/seq_member_rows.mojo reads.
+comptime DECOMP_ROUTE_FOLD = SEQ_ROUTE_STORE
+#: The scope cache's family prefix of the fold store.
+comptime DECOMP_STORE_PREFIX = "msel_fold"
 
 #: x_decomp/tsqr_core.mojo TS_MAX_N: the widest X the TSQR takes (the
 #: TruncatedSVD door's `_tsqr_connection` rule, a kernel width limit).
@@ -288,8 +301,90 @@ def _dense(view: MemberMatrix, what: String, estimator: String) raises:
 
 
 def _whole(call: _Call, estimator: String) raises:
-    if call[].row_index.rows > 0 or call[].column_index.rows > 0:
-        raise Error("TypeError: a " + estimator + " member reads whole host views (no row or column index)")
+    if call[].column_index.rows > 0:
+        raise Error("TypeError: a " + estimator + " member reads every column of X (no column index)")
+
+
+struct _Rows(Movable):
+    """One operation's rows (lane vdf-scope-neural2, THE RESIDENT ROUTE):
+    `n` rows; `x` their host address (X itself, or the fold gathered in
+    `gathered`) or 0 when `fold` names them in the fold store (`base` the
+    whole X's id, `index` the fold's int64 index id this operation frees)."""
+    var n: Int
+    var x: Int
+    var base: Int
+    var base_rows: Int
+    var index: Int
+    var gathered: List[Int32]
+
+    def __init__(out self, n: Int, x: Int):
+        self.n = n
+        self.x = x
+        self.base = -1
+        self.base_rows = 0
+        self.index = -1
+        self.gathered = List[Int32]()
+
+    def fold(self) -> PCAFoldStore:
+        return PCAFoldStore(self.base, self.base_rows, self.index) if self.index >= 0 else PCAFoldStore()
+
+
+def _rows_open(call: _Call, device: Bool) raises -> _Rows:
+    """The rows of one operation. No row index: X as given. A row index
+    (a dense host int32 / int64 vector of rows of the WHOLE X): with
+    `device` (the caller's operation has a fold entry form), a fold route,
+    the caller's scope and pin, the whole X is found or put ONCE in the
+    scope's fold-store cache and the fold's int64 index words are put
+    beside it (the fold entry gathers on the device); otherwise the fold's
+    rows are gathered on the host in row tasks (`seq_rows_target`), the same
+    words in the same order. Call `_rows_close` after the run."""
+    var index = call[].row_index
+    if index.rows == 0:
+        return _Rows(call[].x.rows, call[].x.data)
+    if not ((index.dtype == MEMBER_I32 or index.dtype == MEMBER_I64) and index.cols == 1
+            and index.dense_host(index.dtype)):
+        raise Error("TypeError: a decomposition member reads its row index as one host int32 or int64 column")
+    var n = index.rows
+    var rows = _Rows(n, 0)
+    var route = call[].route
+    if device and seq_rows_route(route) and route.has_fourth and call[].scope >= 0 and call[].pin != 0:
+        var base_rows = call[].x.rows
+        var put = arena_scope_store_put(call[].scope, route.fifth, String(DECOMP_STORE_PREFIX), call[].x.data,
+                                        base_rows * call[].x.cols, call[].pin)
+        if put.pinned:
+            call[].pin_kept = 1
+        var idx = index.data
+        var wide = List[Int64]()
+        if index.dtype == MEMBER_I32:
+            wide = List[Int64](unsafe_uninit_length=n)
+            host_widen_index_i64(index.data, Int(wide.unsafe_ptr()), n)
+            idx = Int(wide.unsafe_ptr())
+        rows.base = put.store_id
+        rows.base_rows = base_rows
+        rows.index = arena_cache_put(route.fifth, idx, 2 * n)
+        _ = len(wide)  # the widened words live past the put
+        return rows^
+    rows.gathered = seq_rows_target(call, call[].x, call[].x.cols)
+    rows.x = Int(rows.gathered.unsafe_ptr())
+    return rows^
+
+
+def _rows_close(call: _Call, mut rows: _Rows) raises:
+    """Free the fold's index slot an operation put (its run is done)."""
+    if rows.index >= 0:
+        var taken = rows.index
+        rows.index = -1
+        arena_cache_free(call[].route.fifth, taken)
+
+
+def _rows_host(call: _Call, mut rows: _Rows) raises -> Int:
+    """The host address of the rows (a fold put in the store is gathered
+    on the host instead: the operation has no fold entry form)."""
+    if rows.x != 0 or rows.n == 0:
+        return rows.x
+    rows.gathered = seq_rows_target(call, call[].x, call[].x.cols)
+    rows.x = Int(rows.gathered.unsafe_ptr())
+    return rows.x
 
 
 def _prefix(mut words: List[Float32], count: Int) -> List[Float32]:
@@ -312,7 +407,7 @@ def _fit_pca(slot: _Slot, call: _Call) raises:
     var estimator = String("PCA")
     _fit_checks(call, estimator)
     var route = call[].route
-    var rows = call[].x.rows
+    var rows = call[].row_index.rows if call[].row_index.rows > 0 else call[].x.rows
     var cols = call[].x.cols
     var keep_mode = Int(slot[].words[2])
     var solver = Int(slot[].words[4])
@@ -357,13 +452,27 @@ def _fit_pca(slot: _Slot, call: _Call) raises:
     slot[].ratio = List[Float32](length=count, fill=0.0)
     slot[].singular = List[Float32](length=count, fill=0.0)
     var iterations = Int(slot[].words[7])
-    var request = PCAFitRequest(call[].x.data, Int(slot[].components.unsafe_ptr()), Int(slot[].mean.unsafe_ptr()),
-        Int(slot[].variance.unsafe_ptr()), Int(slot[].ratio.unsafe_ptr()), Int(slot[].singular.unsafe_ptr()),
-        projection, rows, cols, count, dense, keep_mode, slot[].words[5] != 0.0, randomized,
-        Int(slot[].words[6]), max(iterations, 0), iterations < 0, Int(slot[].words[8]), True, fraction,
-        PCAFoldStore())
-    var fitted = _pca_fit(PCANativeDriver(route.entry.call), request, randomized)
-    admitted_finite_refuse(fitted.finite, estimator)
+    # THE RESIDENT ROUTE: an exact fit with no projection reads a fold of the
+    # scope's resident X through the fold entry (the door's DeviceRows fold
+    # route, bindings/pca_fit_native_door.mojo); every other fit reads host
+    # rows (X, or the fold gathered on the host).
+    var held = _rows_open(call, not randomized and projection == 0)
+    var fitted: PCAFitResult
+    try:
+        var request = PCAFitRequest(held.x, Int(slot[].components.unsafe_ptr()), Int(slot[].mean.unsafe_ptr()),
+            Int(slot[].variance.unsafe_ptr()), Int(slot[].ratio.unsafe_ptr()), Int(slot[].singular.unsafe_ptr()),
+            projection, rows, cols, count, dense, keep_mode, slot[].words[5] != 0.0, randomized,
+            Int(slot[].words[6]), max(iterations, 0), iterations < 0, Int(slot[].words[8]), True, fraction,
+            held.fold())
+        if held.index >= 0:
+            fitted = PCANativeDriver(route.fourth.call).fit(request)
+            door_rows_refuse(fitted.finite, fitted.in_range, estimator, held.base_rows)
+        else:
+            fitted = _pca_fit(PCANativeDriver(route.entry.call), request, randomized)
+            admitted_finite_refuse(fitted.finite, estimator)
+    finally:
+        _rows_close(call, held)
+    _ = held^  # the gathered words live past the fit
     var keep = fitted.keep
     if keep != count:
         slot[].components = _prefix(slot[].components, keep * cols)
@@ -393,7 +502,7 @@ def _fit_tsvd(slot: _Slot, call: _Call) raises:
     var estimator = String("TruncatedSVD")
     _fit_checks(call, estimator)
     var route = call[].route
-    var rows = call[].x.rows
+    var rows = call[].row_index.rows if call[].row_index.rows > 0 else call[].x.rows
     var cols = call[].x.cols
     if rows < 2 or cols < 2:
         raise Error(tsvd_too_small(rows, cols))
@@ -410,9 +519,35 @@ def _fit_tsvd(slot: _Slot, call: _Call) raises:
     slot[].variance = List[Float32](length=nc, fill=0.0)
     slot[].ratio = List[Float32](length=nc, fill=0.0)
     slot[].singular = List[Float32](length=nc, fill=0.0)
-    var request = TSVDFitRequest(call[].x.data, Int(slot[].components.unsafe_ptr()),
+    # THE RESIDENT ROUTE: a non-randomized fit reads a fold of the scope's
+    # resident X through the fold entry (the door's DeviceRows fold route,
+    # bindings/tsvd_native_door.mojo TSVD_FOLD); every other fit host rows.
+    var held = _rows_open(call, Int(slot[].words[4]) != 2)
+    try:
+        _fit_tsvd_rows(slot, call, held, rows, cols, nc)
+    finally:
+        _rows_close(call, held)
+    _ = held^  # the gathered words live past the fit
+    slot[].keep = nc
+    slot[].features = cols
+    slot[].fit_rows = rows
+    slot[].scalars = [Float64(nc), Float64(cols)]
+    slot[].fitted = True
+    if call[].fit_output == MEMBER_OP_TRANSFORM:
+        _query(slot, call, False)
+
+
+def _fit_tsvd_rows(slot: _Slot, call: _Call, mut held: _Rows, rows: Int, cols: Int, nc: Int) raises:
+    var estimator = String("TruncatedSVD")
+    var route = call[].route
+    var request = TSVDFitRequest(held.x, Int(slot[].components.unsafe_ptr()),
         Int(slot[].singular.unsafe_ptr()), Int(slot[].variance.unsafe_ptr()), Int(slot[].ratio.unsafe_ptr()),
-        rows, cols, nc, 0, 0, False, 0, True, TSVD_GRAM, PCAFoldStore())
+        rows, cols, nc, 0, 0, False, 0, True, TSVD_GRAM, held.fold())
+    if held.index >= 0:
+        request.route = TSVD_FOLD
+        var words = TSVDNativeDriver(route.fourth.call).fit(request)
+        door_rows_refuse(words.finite, words.in_range, estimator, held.base_rows)
+        return
     var flags = route.flags
     if Int(slot[].words[4]) == 2:
         if not route.has_second or (flags & DECOMP_ROUTE_RANDOMIZED) == 0:
@@ -448,13 +583,6 @@ def _fit_tsvd(slot: _Slot, call: _Call) raises:
             request.route = TSVD_EXPLAINED
             request.test_finite = False
             _ = driver.fit(request)
-    slot[].keep = nc
-    slot[].features = cols
-    slot[].fit_rows = rows
-    slot[].scalars = [Float64(nc), Float64(cols)]
-    slot[].fitted = True
-    if call[].fit_output == MEMBER_OP_TRANSFORM:
-        _query(slot, call, False)
 
 
 def _query(slot: _Slot, call: _Call, inverse: Bool) raises:
@@ -466,7 +594,7 @@ def _query(slot: _Slot, call: _Call, inverse: Bool) raises:
     _whole(call, estimator)
     _dense(call[].x, "X", estimator)
     _dense(call[].dst, "the output buffer", estimator)
-    var rows = call[].x.rows
+    var rows = call[].row_index.rows if call[].row_index.rows > 0 else call[].x.rows
     var width_in = slot[].keep if inverse else slot[].features
     var width_out = slot[].features if inverse else slot[].keep
     if call[].x.cols != width_in:
@@ -476,9 +604,29 @@ def _query(slot: _Slot, call: _Call, inverse: Bool) raises:
                     + String(slot[].features) + " features as input.")
     if call[].dst.rows != rows or call[].dst.cols != width_out:
         raise Error("ValueError: the output buffer holds " + String(width_out) + " values per row of X")
+    # THE RESIDENT ROUTE: an unwhitened PCA transform reads a fold of the
+    # scope's resident X through the fold entry; every other query host rows.
+    var pca = slot[].kind() == DECOMP_KIND_PCA
+    var held = _rows_open(call, pca and not inverse and slot[].words[5] == 0.0)
+    try:
+        _query_rows(slot, call, held, inverse, rows)
+    finally:
+        _rows_close(call, held)
+    _ = held^  # the gathered words live past the query
+
+
+def _query_rows(slot: _Slot, call: _Call, mut held: _Rows, inverse: Bool, rows: Int) raises:
+    var estimator = _name(slot)
+    if held.index >= 0:
+        var fold_request = PCAQueryRequest(0, Int(slot[].mean.unsafe_ptr()), Int(slot[].components.unsafe_ptr()), 0,
+            call[].dst.data, rows, slot[].features, slot[].keep, slot[].fit_rows, False, False, held.fold())
+        var words = PCANativeDriver(call[].route.fourth.call).query(fold_request)
+        door_rows_refuse(words.finite, words.in_range, estimator, held.base_rows)
+        return
+    var x_at = _rows_host(call, held)
     if slot[].kind() == DECOMP_KIND_PCA:
         var whiten = slot[].words[5] != 0.0
-        var request = PCAQueryRequest(call[].x.data, Int(slot[].mean.unsafe_ptr()),
+        var request = PCAQueryRequest(x_at, Int(slot[].mean.unsafe_ptr()),
             Int(slot[].components.unsafe_ptr()), 0, call[].dst.data, rows, slot[].features, slot[].keep,
             slot[].fit_rows, inverse, whiten, PCAFoldStore())
         var driver = PCANativeDriver(call[].route.entry.call)
@@ -500,7 +648,7 @@ def _query(slot: _Slot, call: _Call, inverse: Bool) raises:
         # The door's resident route: components_ read from the lease's device
         # copy (uploaded once per fitted state), never uploaded per call.
         var lease = _lease(slot, call)
-        var request = TSVDQueryRequest(call[].x.data, Int(slot[].components.unsafe_ptr()), call[].dst.data,
+        var request = TSVDQueryRequest(x_at, Int(slot[].components.unsafe_ptr()), call[].dst.data,
             rows, slot[].features, slot[].keep, inverse, not inverse, lease > 0, lease)
         var status = TSVDNativeDriver(call[].route.entry.call).query(request)
         if not inverse:
@@ -646,7 +794,13 @@ def _decomposition_member(operation: Int, address: Int) raises -> Int:
         # Kind-exact (`member_kind_capabilities`): PCA and TruncatedSVD honor the
         # same operations on every route (both doors publish inverse_transform),
         # so a live state's kind answers the same mask as the family.
-        return MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_INVERSE_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+        # THE RESIDENT ROUTE (lane vdf-scope-neural2): an identical GPU route
+        # holding the base image's fold entry and fold store reads a fold's
+        # rows of the whole X.
+        var rows_bits = (MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE) if (
+            seq_rows_route(call[].route) and call[].route.has_fourth) else 0
+        return (MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_INVERSE_TRANSFORM | MEMBER_CAN_EXPORT
+                | MEMBER_CAN_IMPORT | rows_bits)
     if operation == MEMBER_OP_NEW:
         if call[].param_count != DECOMP_PARAM_COUNT or not call[].params:
             raise Error("member ABI: a decomposition member takes nine parameters")

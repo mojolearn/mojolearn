@@ -95,7 +95,8 @@ comptime CNN_FIT_ARRAYS = 4
 comptime CNN_OPEN_HEAD = 8
 comptime CNN_OPEN_ARRAYS = 1
 # CNN_PREDICT options: [registry token, executor kind, session id, n, codes
-# (0 proba, 1 codes), chunk rows]; addresses [X (n, C*H*W) float32 C order,
+# (0 proba, 1 codes), chunk rows (, row words C*H*W: only with a device-store
+# X, lane vdf-scope-neural2)]; addresses [X (n, C*H*W) float32 C order,
 # dst (n, k) float32 or (n) int32].
 comptime CNN_PREDICT_WORDS = 6
 comptime CNN_PREDICT_ARRAYS = 2
@@ -282,6 +283,24 @@ def _forward[E: Exec & Movable & Deinitable](
     return s.op(OPS_CNN_LINEAR, hls, List[Int](), none)
 
 
+def _device_nd[E: Exec & Movable & Deinitable](
+    mut s: OpsSession[E], x: Int, rows: Int, row: Int, shape: ShapeN,
+) raises -> Int:
+    """Lane vdf-scope-neural2: `upload_nd` of a device-resident X (`x`: the
+    executor address of a fold the member store took on the device,
+    sequence/seq_member_store.mojo): the first `rows` images copied on the
+    executor (one OP_COPY, no host read) into a session tensor of `shape`.
+    The same words as the host upload."""
+    var count = rows * row
+    var buf = s.ex.alloc(count)
+    var a = Args()
+    a.p0 = FP(unsafe_from_address=x)
+    a.p1 = buf
+    s.ex.launch[OP_COPY](a, count)
+    var t = s.tape.variable_nd(s.ex, buf, shape, False)
+    return s._add(t, Int(buf), False, 0)
+
+
 def _download_params[E: Exec & Movable & Deinitable](
     mut s: OpsSession[E], params: List[Int], addresses: List[Int], first: Int,
 ) raises:
@@ -290,9 +309,14 @@ def _download_params[E: Exec & Movable & Deinitable](
 
 
 def cnn_fit_program[E: Exec & Movable & Deinitable](
-    var ex: E, addresses_in: List[Int], ints_in: List[Int], floats: List[Float64],
+    var ex: E, addresses_in: List[Int], ints_in: List[Int], floats: List[Float64], x_device: Bool = False,
 ) raises -> Int:
     """CNNClassifier.fit as one captured program and Program.fit (header).
+    `x_device` (lane vdf-scope-neural2, 2026-11-24): addresses[0] is already
+    the executor's memory (a fold the x_sequence member store took on the
+    device, resolved by the device dispatch): the capture's first minibatch
+    is copied on the executor and Program.fit's gathers read X in place; no
+    upload, nothing of X freed here. Same words in the same order: same bits.
     Writes the trained parameters over the caller's arrays, the epoch curve
     and every minibatch loss; returns the number of optimizer steps.
     Lane alm-neural (2026-11-24): options ending in FIT_LOOP_MARK carry the
@@ -338,7 +362,11 @@ def cnn_fit_program[E: Exec & Movable & Deinitable](
         # The program is captured from one eager forward over the first
         # minibatch's rows; Program.fit replays it at every minibatch size.
         var bs = min(batch, n)
-        var x0 = s.upload_nd(CastIn.f32_c(addresses[0], bs, g.row()), g.image_shape(bs), False)
+        var x0: Int
+        if x_device:
+            x0 = _device_nd(s, addresses[0], bs, g.row(), g.image_shape(bs))
+        else:
+            x0 = s.upload_nd(CastIn.f32_c(addresses[0], bs, g.row()), g.image_shape(bs), False)
         var logits = _forward(s, x0, params, g)
         var ins: List[Int] = [x0]
         var outs: List[Int] = [logits]
@@ -351,6 +379,7 @@ def cnn_fit_program[E: Exec & Movable & Deinitable](
         _ = train_program_control(
             s, pid, srcs, shapes, target, _LOSS_CROSS_ENTROPY, Float32(1), opt, params, epochs, batch, shuffle,
             seed, FP(unsafe_from_address=addresses[2]), 0, 0, step_curve=addresses[3], loop_words=loop_words,
+            device_srcs=x_device,
         )
         _download_params(s, params, addresses, CNN_FIT_ARRAYS)
     except err:
@@ -404,10 +433,12 @@ def cnn_open_program[E: Exec & Movable & Deinitable, KIND: Int](
 
 
 def _resident_predict[E: Exec & Movable & Deinitable](
-    mut s: OpsSession[E], x_addr: Int, dst: Int, n: Int, codes: Bool, chunk: Int,
+    mut s: OpsSession[E], x_addr: Int, dst: Int, n: Int, codes: Bool, chunk: Int, x_row: Int = 0,
 ) raises:
     """Replay the resident forward over the n images at x_addr (uploaded
-    once) in chunks of `chunk` rows, each chunk's (m, k) probabilities
+    once; `x_row` > 0, lane vdf-scope-neural2: x_addr is already executor
+    memory of n rows of `x_row` words, read in place, never freed here) in
+    chunks of `chunk` rows, each chunk's (m, k) probabilities
     copied on the executor into one (n, k) buffer (one chunk: read in
     place), then ONE download: the probabilities, or
     (codes) the int32 OPS_ARGMAX of the whole buffer. The parameters are the
@@ -435,7 +466,10 @@ def _resident_predict[E: Exec & Movable & Deinitable](
     var temps = List[Int]()
     var phs = List[Int]()
     var none = List[Float32]()
-    var xb = _cnn_scratch(s, n * row)
+    var x_device = x_row > 0
+    if x_device and x_row != row:
+        raise Error("native CNN: the device-store images do not match the model input_shape")
+    var xb = FP(unsafe_from_address=x_addr) if x_device else _cnn_scratch(s, n * row)
     try:
         var ob = xb
         if not direct:
@@ -447,7 +481,8 @@ def _resident_predict[E: Exec & Movable & Deinitable](
         swap(held, s.tape)
         try:
             s.tape.reset()
-            upload_cast(s.ex, xb, CastIn.f32_c(x_addr, n, row))
+            if not x_device:
+                upload_cast(s.ex, xb, CastIn.f32_c(x_addr, n, row))
             var start = 0
             while start < n:  # driver-loop: over prediction chunks (rows in device-sized batches)
                 var m = min(chunk, n - start)
@@ -500,18 +535,21 @@ def _resident_predict[E: Exec & Movable & Deinitable](
             if not direct:
                 s.ex.free(ob)
     finally:
-        s.ex.free(xb)
+        if not x_device:
+            s.ex.free(xb)
         loaned.clear_live()
         s.program_replays[pi].append(loaned^)
 
 
 def cnn_predict_program[E: Exec & Movable & Deinitable, KIND: Int](
-    addresses: List[Int], ints: List[Int],
+    addresses: List[Int], ints: List[Int], x_device: Bool = False,
 ) raises -> Int:
     """CNNClassifier.predict_proba (codes 0: (n, k) float32 probabilities)
     or predict (codes 1: (n) int32 class codes) on the resident session
-    `ints[2]` that CNN_OPEN made (header); returns n."""
-    if len(ints) != CNN_PREDICT_WORDS:
+    `ints[2]` that CNN_OPEN made (header); returns n. `x_device` (lane
+    vdf-scope-neural2): X is a device-store slot the device dispatch
+    resolved; the descriptor's seventh word is its row width."""
+    if len(ints) != CNN_PREDICT_WORDS + (1 if x_device else 0):
         raise Error("native CNN: invalid predict descriptor")
     if ints[0] != ops_session_registry_token() or ints[1] != KIND:
         raise Error("native CNN: the resident session belongs to another registry or executor")
@@ -523,5 +561,5 @@ def cnn_predict_program[E: Exec & Movable & Deinitable, KIND: Int](
     if len(addresses) != CNN_PREDICT_ARRAYS or addresses[0] == 0 or addresses[1] == 0:
         raise Error("native CNN: null data address")
     var sp = ops_session[E, KIND](ints[2])
-    _resident_predict(sp[], addresses[0], addresses[1], n, codes, chunk)
+    _resident_predict(sp[], addresses[0], addresses[1], n, codes, chunk, ints[CNN_PREDICT_WORDS] if x_device else 0)
     return n

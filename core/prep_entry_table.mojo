@@ -195,3 +195,20 @@ def scaler_ref(key: PrepEntryKey) raises -> EntryRef:
     `key` names, resolved once per operation; the table refusals raise here."""
     return EntryRef(prep_table_entry[PREP_TABLE_SCALER](key, 0, String(SCALER_NATIVE_ABI), SCALER_OP_COUNT),
                     entry_ref_word(key.mode, key.vendor, SCALER_OP_COUNT))
+
+
+#: Lane vdf-scope-neural2 (2026-11-24): entry 1 of a GPU preprocessing
+#: image's scaler table is its member device store
+#: (preprocessing/prep_member_store.mojo `prep_member_store_v1`), a transport
+#: entry with the x_prep numbering. A host image publishes the scaler entry
+#: only: `prep_store_ref` refuses there.
+comptime PREP_ENTRY_STORE = 1
+comptime PREP_STORE_ABI = "mojolearn.preprocessing.member_store.v1"
+
+
+def prep_store_ref(key: PrepEntryKey) raises -> EntryRef:
+    """The GPU preprocessing image's member device store, resolved once by a
+    member's UNPACK; raises on an image that publishes none (the host image):
+    the caller then answers no row index."""
+    return EntryRef(prep_table_entry[PREP_TABLE_SCALER](key, PREP_ENTRY_STORE, String(PREP_STORE_ABI), XP_OP_COUNT),
+                    entry_ref_word(key.mode, key.vendor, XP_OP_COUNT))

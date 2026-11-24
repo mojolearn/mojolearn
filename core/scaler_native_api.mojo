@@ -97,7 +97,18 @@ comptime SCALER_OP_MINMAX_TRANSFORM = 5
 # -1 the rows written and the transform overflowed.
 comptime SCALER_OP_STANDARD_FIT_TRANSFORM = 6
 comptime SCALER_OP_MINMAX_FIT_TRANSFORM = 7
-comptime SCALER_OP_COUNT = 8
+# 8 and 9 (lane vdf-scope-neural2, 2026-11-24): THE RESIDENT ROUTE of the
+# scaler members. X is a slot of the GPU image's preprocessing member store
+# (preprocessing/prep_member_store.mojo: a fold taken on the device), read in
+# place by the direct fit / transform bodies. FIT_SLOT a: [dst] i: [slot, n,
+# d, minmax, with_mean, with_std] f: [lower, upper] -> 1 written, 0 X
+# nonfinite. TRANSFORM_SLOT a: [first, second, dst] (standard: mean, scale;
+# minmax: scale, offset) i: [slot, n, d, minmax, inverse, with_mean, with_std,
+# clip] f: [lower, upper] -> 1 written, 0 overflow, -1 X nonfinite. The host
+# column has no store and refuses both.
+comptime SCALER_OP_FIT_SLOT = 8
+comptime SCALER_OP_TRANSFORM_SLOT = 9
+comptime SCALER_OP_COUNT = 10
 
 trait ScalerNativeKernels:
     @staticmethod
@@ -116,6 +127,12 @@ trait ScalerNativeKernels:
     def standard_fit_transform(request: ScalerFitTransformRequest) raises -> Int: ...
     @staticmethod
     def minmax_fit_transform(request: ScalerFitTransformRequest) raises -> Int: ...
+    @staticmethod
+    def fit_slot(slot: Int, n: Int, d: Int, minmax: Bool, with_mean: Int, with_std: Int, lower: Float32,
+                 upper: Float32, dst: Int) raises -> Int: ...
+    @staticmethod
+    def transform_slot(slot: Int, n: Int, d: Int, minmax: Bool, inverse: Int, with_mean: Int, with_std: Int,
+                       clip: Int, lower: Float32, upper: Float32, first: Int, second: Int, dst: Int) raises -> Int: ...
 
 trait PrepProgramKernels:
     @staticmethod
@@ -179,7 +196,8 @@ def scaler_native_v1[K: ScalerNativeKernels](operation: Int,
     context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
         var floats = 2 if (operation == SCALER_OP_MINMAX_FIT or operation == SCALER_OP_MINMAX_TRANSFORM
-                           or operation == SCALER_OP_MINMAX_FIT_TRANSFORM) else 0
+                           or operation == SCALER_OP_MINMAX_FIT_TRANSFORM or operation == SCALER_OP_FIT_SLOT
+                           or operation == SCALER_OP_TRANSFORM_SLOT) else 0
         if result == 0 or nf != floats or (floats != 0 and ff == 0):
             raise Error("scaler native ABI: invalid result or scalar envelope")
         var value = 0
@@ -229,6 +247,25 @@ def scaler_native_v1[K: ScalerNativeKernels](operation: Int,
             var f = Pointer[Float64, ImmUntrackedOrigin](unsafe_from_address=ff)
             value = K.minmax_fit_transform(ScalerFitTransformRequest(a[0], a[1], a[2], p[0], p[1], True, True,
                                                                      p[2] != 0, Float32(f[0]), Float32(f[1])))
+        elif operation == SCALER_OP_FIT_SLOT:
+            if na != 1 or np != 6 or aa == 0 or pp == 0:
+                raise Error("scaler native ABI: invalid slot fit envelope")
+            var a = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=aa)
+            var p = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=pp)
+            var f = Pointer[Float64, ImmUntrackedOrigin](unsafe_from_address=ff)
+            if a[0] == 0 or p[0] < 0:
+                raise Error("scaler native ABI: invalid slot fit buffers")
+            value = K.fit_slot(p[0], p[1], p[2], p[3] != 0, p[4], p[5], Float32(f[0]), Float32(f[1]), a[0])
+        elif operation == SCALER_OP_TRANSFORM_SLOT:
+            if na != 3 or np != 8 or aa == 0 or pp == 0:
+                raise Error("scaler native ABI: invalid slot transform envelope")
+            var a = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=aa)
+            var p = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=pp)
+            var f = Pointer[Float64, ImmUntrackedOrigin](unsafe_from_address=ff)
+            if a[0] == 0 or a[1] == 0 or a[2] == 0 or p[0] < 0:
+                raise Error("scaler native ABI: invalid slot transform buffers")
+            value = K.transform_slot(p[0], p[1], p[2], p[3] != 0, p[4], p[5], p[6], p[7], Float32(f[0]),
+                                     Float32(f[1]), a[0], a[1], a[2])
         else:
             raise Error("scaler native ABI: unknown operation")
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = value

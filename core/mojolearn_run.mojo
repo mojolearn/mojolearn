@@ -12,7 +12,10 @@ from core.native_descriptor_abi import NativeDescriptorCall
 from core.labels_native_api import LABELS_NATIVE_ABI_NAME
 from core.labels_native_device import LabelsDeviceKernels, labels_device_native_v2 as labels_native_entry
 from glm.logistic_fold_native import LOGISTIC_FOLD_API, logistic_fold_v1
-from core.estimators_entry_table import EstimatorsEntryKey, estimators_table_publish, estimators_vendor_word, ESTIMATORS_TABLE_QN_FOLD
+from core.estimators_entry_table import EstimatorsEntryKey, estimators_table_publish, estimators_vendor_word, ESTIMATORS_TABLE_QN_FOLD, decomp_fold_table_publish
+from core.pca_native_fold import PCA_FOLD_API, pca_fold_native_v1
+from core.tsvd_native_fold import tsvd_fold_native_v1
+from core.msel_fold_transport import msel_fold_store_v1
 from bindings.parallel_base_entry_device import CORE_DEVCTX_SLOT
 from core.shared_slot import SharedSlot
 from core.kmeans_native_api import KMEANS_NATIVE_ABI
@@ -100,6 +103,14 @@ def _publish_qn_fold_table() raises:
     var api = LOGISTIC_FOLD_API.get_or_create_ptr()
     estimators_table_publish[ESTIMATORS_TABLE_QN_FOLD](EstimatorsEntryKey(Int(GLOBAL_NUMERIC_MODE), word),
         Int(api[].entries.unsafe_ptr()), logistic_fold_v1)
+    # Lane vdf-scope-neural2: the decomposition fold table (the PCA and
+    # TruncatedSVD fold entries and the fold store's transport entry), the
+    # PCA / TruncatedSVD members' resident route. Identical builds only (the
+    # fold store is the identical one).
+    if Int(GLOBAL_NUMERIC_MODE) == 1 and word > 0:
+        var pca = PCA_FOLD_API.get_or_create_ptr()
+        decomp_fold_table_publish(EstimatorsEntryKey(1, word), Int(pca[].entries.unsafe_ptr()),
+            pca_fold_native_v1, tsvd_fold_native_v1, msel_fold_store_v1)
 
 
 def kmeans_fit_run(
