@@ -152,6 +152,12 @@ def connect(training):
         raise TypeError("optimizer ownership requires a compiled finalizer descriptor")
     training._Optimizer.__del__ = descriptor(MethodType(optimizer_finalizer, context))
     context["device_finalizer_descriptor"] = vars(training.TrainDeviceArray)["__del__"]
+    # The linalg and decomposition doors read a TrainDeviceArray argument in place
+    # (lane vdf-linalg4): the class and this owner context, published once into the
+    # family context at import, so each of their calls tests an argument with one
+    # identity compare and allocates results through this owner.
+    from ._native_family_bridge import tables as _family_tables
+    _family_tables(family_train_device=(training.TrainDeviceArray, context))
     # A schedule's attribute edit and deletion rebuild its native rate block
     # in the native hook itself (bindings/optimizer_native_router_door.mojo
     # schedule_attribute_c); the descriptor binds the schedule, as __del__ does.

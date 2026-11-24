@@ -85,9 +85,10 @@ def _mlp_sessions_forward_all(ctx: DeviceContext, mut xs: List[DeviceBuffer[DTyp
             keep.append(av^)
             keep.append(yv^)
         base += count
+    # No wait here: the scan below waits for its own word, which drains the queue (lane vdf-linalg4 removed the
+    # extra wait vdf-linalg3 added; the host entry's copy-out waits once, as before the shared body).
     if device_first_nonfinite(ctx, y, total * out_width) >= 0:
         raise Error("neural MLP sessions: nonfinite logits")
-    ctx.synchronize()
     _ = keep^
     _ = a^
     _ = ws^
@@ -149,16 +150,20 @@ def nn_mlp_sessions_resident(ctx: DeviceContext, mut xs: List[DeviceBuffer[DType
     `train_mlp_sessions_dev`): every session input and the four weights read in place, the logits written into `y`
     (sum of rows x out_width) on the device. The host entry's refusals in its order and words (the input scan per
     session: the same refusal), the same forward: the same bits. Returns the logits' element count."""
+    # An empty session (rows == 0) is accepted as the host entry accepts it (nn_mlp_session_shape): it reads nothing
+    # and adds no logits rows; all sessions empty returns 0 after the weights refusal, as there (lane vdf-linalg4).
     var total = 0
     for session in range(len(rows)):  # driver-loop: over the caller's sessions (row counts, not data)
-        if rows[session] < 1:
-            raise Error("ValueError: MLP sessions require at least one (rows, width) input")
+        if rows[session] < 0:
+            raise Error("neural MLP sessions: invalid session rows/address")
         total += rows[session]
     if len(rows) == 0 or len(xs) != len(rows):
-        raise Error("ValueError: MLP sessions require at least one (rows, width) input")
+        raise Error("neural MLP sessions: invalid metadata")
     _mlp_weights_refuse(ctx, dw1, db1, dw2, db2, in_width, hidden, out_width)
+    if total == 0:
+        return 0
     for session in range(len(rows)):  # driver-loop: over the caller's sessions (one device scan each)
-        if device_first_nonfinite(ctx, xs[session], rows[session] * in_width) >= 0:
+        if rows[session] > 0 and device_first_nonfinite(ctx, xs[session], rows[session] * in_width) >= 0:
             raise Error("neural MLP sessions: nonfinite input")
     _mlp_sessions_forward_all(ctx, xs, rows, dw1, db1, dw2, db2, y, total, in_width, hidden, out_width)
     return total * out_width
