@@ -2,6 +2,7 @@
 """Native descriptor adapter around the unchanged cluster execution owner."""
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
+from core.fit_loop_clock import FitLoop
 from core.kmeans_variants_api import (
     VariantsResult, VARIANTS_MODE, VARIANTS_CAPABILITIES, VARIANTS_MINIBATCH_FIT,
     VARIANTS_MINIBATCH_PARTIAL, VARIANTS_BISECT_FIT, VARIANTS_BISECT_PREDICT,
@@ -38,7 +39,9 @@ def _word(address: Int, at: Int) -> Int:
 def _take(operation: Int, var result: ClusterOut) raises -> VariantsResult:
     var value = VariantsResult()
     if operation == VARIANTS_MINIBATCH_FIT or operation == VARIANTS_MINIBATCH_PARTIAL:
-        var scalar_count = 3 if operation == VARIANTS_MINIBATCH_FIT else 4
+        # a fit: inertia, steps, passes, fit loop ns; a partial step:
+        # inertia, since_reassignment, state_hi, state_lo
+        var scalar_count = 4
         if len(result.f) != 2 or len(result.i) != 1 or len(result.s) != scalar_count:
             raise Error("KMeans variants native ABI: invalid MiniBatch result slots")
         value.centers = result.f.pop(0)
@@ -48,6 +51,7 @@ def _take(operation: Int, var result: ClusterOut) raises -> VariantsResult:
         if operation == VARIANTS_MINIBATCH_FIT:
             value.steps = Int(result.s[1])
             value.iterations = Int(result.s[2])
+            value.loop = FitLoop(Int(result.s[1]), Int(result.s[3]), True)
         else:
             value.since_reassignment = Int(result.s[1])
             value.state_hi = Int(result.s[2])

@@ -7,6 +7,7 @@ or result registry crosses the synchronous compiled descriptor boundary.
 """
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_fixed_call import native_descriptor_call_fixed
+from core.fit_loop_clock import FitLoop
 
 comptime KMEANS_VARIANTS_ABI = "mojolearn.kmeans_variants.native.v1"
 comptime KMEANS_VARIANTS_COUNT = 11
@@ -117,6 +118,9 @@ struct VariantsResult(Movable):
     var since_reassignment: Int
     var state_hi: Int
     var state_lo: Int
+    # MiniBatchKMeans' fit loop (`fit_loop_`; lane ab-loop-mode): the steps
+    # and the step loop's nanoseconds; empty for every other operation.
+    var loop: FitLoop
 
     def __init__(out self):
         self.centers = List[Float32]()
@@ -131,6 +135,7 @@ struct VariantsResult(Movable):
         self.since_reassignment = 0
         self.state_hi = 0
         self.state_lo = 0
+        self.loop = FitLoop.empty()
 
 
 struct VariantsResultSlot(Movable):
