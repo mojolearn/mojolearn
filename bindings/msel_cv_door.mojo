@@ -1275,7 +1275,7 @@ def msel_cross_val_score(args: PythonObject, context: PythonObject) raises -> Py
     var estimator = args[0]
     var cv = args[3]
     var groups = args[5]
-    var jobs = msel_unit_jobs(args[6], PythonObject("raise"), "cross_val_score", context)
+    _ = msel_unit_jobs(args[6], PythonObject("raise"), "cross_val_score", context)  # n_jobs words, first
     var scoring = args[4]
     if py_type(scoring) is msel_b().str:
         scoring = msel_get_scorer(scoring, context)
@@ -1286,23 +1286,11 @@ def msel_cross_val_score(args: PythonObject, context: PythonObject) raises -> Py
     scoring = got[3]
     # THE ONE TYPED SEARCH RUN (lane mf-msel5, `msel_cv_by_search`). The
     # FAST + Apple slice route's row-range views are the RUN's own views of a
-    # side that is one run of rows (lane mf-msel5b; TOMBSTONE above).
+    # side that is one run of rows (lane mf-msel5b; TOMBSTONE above). Lane
+    # mf-r9b: the only route (its refusals raise there; no units beside it).
     var by = msel_cv_by_search(estimator, x, y, folds, scoring, args[6], PythonObject("raise"), False, False,
                                PythonObject(None), False, context)
-    if by is not None:
-        return by["test"][0]
-    var scores = List[Float64]()
-    var rows = MselFoldRows(x, y, folds, msel_device_rows_ok(estimator, scoring, context), context)
-    try:
-        # The folds are units (msel_cv_units) on `jobs` threads; a fit error
-        # raises, as the fold loop did.
-        var r = msel_cross_validate_run(estimator, y, rows, scoring, False, False, False, PythonObject("raise"),
-                                        context, jobs)
-        for i in range(len(r.test[0])):  # driver-loop: over folds (results only)
-            scores.append(r.test[0][i])
-    finally:
-        rows.close(context)
-    return msel_f64_list(scores, context)
+    return by["test"][0]
 
 
 # ---------------------------------------------------------------- cross_val_predict
