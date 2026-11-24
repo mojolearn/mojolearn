@@ -23,9 +23,10 @@ State on `lane/w3-integrate` 3cda8a05b3 (coverage audit of the round-6 gate):
 
 1. **`device=` on every public function** that computes (metrics, model-selection tools, anything else the
    inventory finds). `device=None` keeps today's choice; `"cpu"` and `"gpu"` select the side. The word is read in
-   UNPACK and becomes a typed Mojo value; nothing is looked up per call. A function with no GPU implementation
-   refuses `device="gpu"` with clear words: it never runs the CPU route in its place (the selector refuses, never
-   widens). Classes whose constructor lacks `device` gain it the same way.
+   UNPACK and becomes a typed Mojo value; nothing is looked up per call. A computing function with no GPU implementation gets one written in the same
+   work (Andrew, 2026-11-24): it is not refused and not left owed. Of the 272 functions and constructors without
+   `device`, 252 already have a GPU side. The other 20 are settings and config readers, file and data containers,
+   the CPU-inference classes and the verify tools: they take no `device` at all. Classes whose constructor lacks `device` gain it the same way.
 2. **Verify passes `device=`.** Each lane runs its endpoint with `device="cpu"` and `device="gpu"`; the digests are
    compared with the reference columns as today. The `MOJOLEARN_VENDOR=cpu` switch inside verify goes in the same
    change; the variable itself stays in the product (see the inventory below); its 80 verify-only sites go ("remove what a change made
