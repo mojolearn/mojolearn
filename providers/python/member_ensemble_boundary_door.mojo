@@ -852,12 +852,27 @@ def _refuse_cv_callback(cv: PythonObject, context: PythonObject, b: PythonObject
                 return
         except:
             return  # no integer table connected: the caller's door decides, in the same words
-    var layouts = py_get(context, "family_msel_splitter_layouts")
+    var layouts = py_get(_splitter_context(context), "family_msel_splitter_layouts")
     if layouts is None:
         return  # no splitter table connected: the caller's door decides, in the same words
     if py_contains(layouts, py_type(cv)):
         return
     raise Error(words)
+
+
+def _splitter_context(context: PythonObject) raises -> PythonObject:
+    """The context that holds OUR splitter table (`family_msel_splitter_layouts`): `context` itself (model
+    selection's, a search's plan context) or, for a META estimator's own family context (a Stacking or a
+    Calibrated nested in a Voting: the work-list hands down the nested class's plan context, the trees
+    context copy), the model selection context every connected owner context names
+    (`native_estimator_context`, python/mojolearn/_families.py). Lane w3f3-b (row 3): a nested
+    StackingClassifier(cv=KFold(3)) read its splitter against the trees context, found no table and was
+    refused as a user's callback ("cv requires an integer, native splitter or list of index pairs"), where
+    the same stack fitted at the top level took it. Once per admission, never per fit or row."""
+    if py_get(context, "family_msel_splitter_layouts") is not None:
+        return context
+    var native = py_get(context, "native_estimator_context")
+    return context if native is None else native
 
 
 struct _Split(Movable):
@@ -887,14 +902,15 @@ def _split_cv(cv: PythonObject, context: PythonObject, b: PythonObject, mut spli
     splitter, whose `split` would be a Python callback: refused natively in
     `words` (`_refuse_cv_callback` refuses it first when the table is
     connected). Never False (the meta door no longer keeps any splitter)."""
-    if msel_split_spec_read(cv, context, split.spec, split.pin, True):
+    var table = _splitter_context(context)  # lane w3f3-b: a nested META's family context names it
+    if msel_split_spec_read(cv, table, split.spec, split.pin, True):
         return True
-    var layouts = py_get(context, "family_msel_splitter_layouts")
+    var layouts = py_get(table, "family_msel_splitter_layouts")
     if layouts is None or not py_contains(layouts, py_type(cv)):
         raise Error(words)
     # The one class the strict reader leaves to its caller: an `_IterableCV`.
-    var sp = MselSplitter(cv, context)
-    return _user_folds(sp.field("_pairs", context), b, fold_train, fold_test)
+    var sp = MselSplitter(cv, table)
+    return _user_folds(sp.field("_pairs", table), b, fold_train, fold_test)
 
 
 def _cap_of(fields: PythonObject, b: PythonObject) raises -> Int:
