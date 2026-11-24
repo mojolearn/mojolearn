@@ -14,7 +14,8 @@ context before it returns, so a handle written through the training binding's co
 linalg binding's context reads it, and the reverse.
 
 DTYPE (the one device-array convention, extended with a storage dtype rather than a second kind): the pool holds
-float32 WORDS. A float32 array of n elements holds n words; an int8, int16/uint16 (bf16 bits) array of n elements
+float32 WORDS. A float32 array of n elements holds n words; an int8 (codes, int15 planes), int32 (row exponents) or
+uint16 (bf16 bits) array of n elements
 holds `train_dev_words(n, itemsize)` words, its bytes packed from word 0 (`train_dev_view_as`). The Python owner
 carries the element dtype; the native side only ever sees words and the typed view.
 """
@@ -28,7 +29,7 @@ comptime _FP = MutPointer[Float32, MutUntrackedOrigin]
 #: Storage dtype codes of a device array (the owner's `dtype` word; 0 is every array made before the code existed).
 comptime TRAIN_DEV_F32 = 0
 comptime TRAIN_DEV_I8 = 1
-comptime TRAIN_DEV_I16 = 2
+comptime TRAIN_DEV_I32 = 2
 comptime TRAIN_DEV_U16 = 3
 
 
@@ -38,7 +39,9 @@ def train_dev_itemsize(code: Int) raises -> Int:
         return 4
     if code == TRAIN_DEV_I8:
         return 1
-    if code == TRAIN_DEV_I16 or code == TRAIN_DEV_U16:
+    if code == TRAIN_DEV_I32:
+        return 4
+    if code == TRAIN_DEV_U16:
         return 2
     raise Error("training device array: unknown storage dtype code " + String(code))
 
@@ -117,7 +120,7 @@ def train_dev_view(ctx: DeviceContext, h: Int, n: Int, name: String) raises -> D
 
 def train_dev_view_as[D: DType](ctx: DeviceContext, h: Int, n: Int, name: String) raises -> DeviceBuffer[D]:
     """A non-owning buffer of `n` elements of dtype `D` over handle `h`'s words (the typed storage of the one
-    device-array convention: an int8 / int16 / uint16 array packs its bytes from word 0)."""
+    device-array convention: an int8 / int32 / uint16 array packs its bytes from word 0)."""
     if n < 1:
         raise Error("training device array: " + name + " needs at least one element")
     var words = train_dev_words(n, size_of[D]())

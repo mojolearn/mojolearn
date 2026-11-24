@@ -61,6 +61,9 @@ struct LinalgKeys(Defaultable, Movable):
     var k_family_chol_par_class: PythonObject
     var k_family_lin_result_schemas: PythonObject
     var k_family_lin_state: PythonObject
+    # (TrainDeviceArray class, the training owner's context): published by python/mojolearn/_native_optimizer_bridge.py
+    # at the training module's import (lane vdf-linalg4); absent until then, so no device array can exist without it.
+    var k_family_train_device: PythonObject
     var k_family_rs_codes: PythonObject
     var k_identity_claimed: PythonObject
     var k_identity_required: PythonObject
@@ -136,6 +139,7 @@ struct LinalgKeys(Defaultable, Movable):
         self.k_family_chol_par_class = PythonObject(None)
         self.k_family_lin_result_schemas = PythonObject(None)
         self.k_family_lin_state = PythonObject(None)
+        self.k_family_train_device = PythonObject(None)
         self.k_family_rs_codes = PythonObject(None)
         self.k_identity_claimed = PythonObject(None)
         self.k_identity_required = PythonObject(None)
@@ -170,7 +174,7 @@ struct LinalgKeys(Defaultable, Movable):
 
 # V2 (lane dw-decomp, 2026-11-21): `k__native_provider_binding` removed (the door's Python-entry
 # fallback that compared it is deleted), so the layout changed.
-comptime _LINALG_KEYS = SharedSlot[LinalgKeys, "MojolearnLinalgKeysV2"]
+comptime _LINALG_KEYS = SharedSlot[LinalgKeys, "MojolearnLinalgKeysV3"]
 
 
 def _linalg_keys_fill(nk: UnsafePointer[LinalgKeys, MutUntrackedOrigin]) raises:
@@ -217,6 +221,7 @@ def _linalg_keys_fill(nk: UnsafePointer[LinalgKeys, MutUntrackedOrigin]) raises:
     nk[].k_family_chol_par_class = py_key("family_chol_par_class")
     nk[].k_family_lin_result_schemas = py_key("family_lin_result_schemas")
     nk[].k_family_lin_state = py_key("family_lin_state")
+    nk[].k_family_train_device = py_key("family_train_device")
     nk[].k_family_rs_codes = py_key("family_rs_codes")
     nk[].k_identity_claimed = py_key("identity_claimed")
     nk[].k_identity_required = py_key("identity_required")

@@ -40,7 +40,12 @@ from bindings.linalg_ops_lowbit_run import (
     LIN_OP_GEMM_FUSED, LIN_OPERATION_COUNT, LIN_OP_GEMM, LIN_OP_GEMM_BF16, LIN_OP_GEMM_INT8, LIN_OP_QUANTIZE_INT8, LIN_OP_DEQUANTIZE_INT8,
     LIN_OP_GEMM_INT15, LIN_OP_QUANTIZE_INT15, LIN_OP_DEQUANTIZE_INT15, LIN_OP_TO_BF16, LIN_OP_FROM_BF16,
     LIN_OP_FROM_F16, LIN_OP_LINALG_NUMERIC_MODE, LIN_OP_LINALG_PROFILE_VERSION, LIN_OP_LOWBIT_PROFILE_VERSION,
-    LIN_OP_INT15_PROFILE_VERSION)
+    LIN_OP_INT15_PROFILE_VERSION, LIN_OP_GEMM_DEV)
+from bindings.linalg_dev_arrays_unpack import (
+    lin_train_device, lin_is_device_array, lin_any_device_array, lin_dev_device, lin_dev_entries, lin_dev_operand,
+    lin_dev_out, lin_dev_new, lin_dev_handle, LinDevOperand,
+)
+from core.train_dev_pool import TRAIN_DEV_F32, TRAIN_DEV_I8, TRAIN_DEV_I32, TRAIN_DEV_U16
 from bindings.admitted_input_unpack import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_typed_output, admitted_unfilled, admit_typed, admitted_shape_tuple
 from bindings.linalg_keys_unpack import linalg_keys
 from bindings.py_balanced import py_item
@@ -382,15 +387,9 @@ def lin_out(out_buf: PythonObject, m: Int, n: Int, who: String, context: PythonO
 # the public functions
 
 
-def _lin_matmul(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`matmul(a, b, *, transpose_a, transpose_b, out, identical)`."""
-    var binding = args[0]
-    if lin_truth(args[6]):
-        lin_require_identical(binding, context)
-    else:
-        _ = lin_mode(binding, context)
-    var ta = lin_truth(args[3])
-    var tb = lin_truth(args[4])
+def lin_matmul_op(ta: Bool, tb: Bool, context: PythonObject) raises -> Int:
+    """The GEMM op of matmul's two transpose flags (OP_NN, OP_NT or OP_TN), the both-transposed refusal in its
+    words. Shared by the host-array door and the device-array door (lane vdf-linalg4)."""
     var nk = linalg_keys()
     var profile = lin_text(context, nk[].k_PROFILE)
     if ta and tb:
@@ -402,7 +401,19 @@ def _lin_matmul(args: PythonObject, context: PythonObject) raises -> PythonObjec
                     + "    np.ascontiguousarray(np.asarray(matmul(b, a)).T)\n"
                     + "which is (b @ a).T == a.T @ b.T, runs as OP_NN, and leaves the "
                     + "extra step visible in your source where you can price it.")
-    var op = OP_NN if not ta and not tb else (OP_NT if tb else OP_TN)
+    return OP_NN if not ta and not tb else (OP_NT if tb else OP_TN)
+
+
+def _lin_matmul(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`matmul(a, b, *, transpose_a, transpose_b, out, identical)`."""
+    var binding = args[0]
+    if lin_truth(args[6]):
+        lin_require_identical(binding, context)
+    else:
+        _ = lin_mode(binding, context)
+    var ta = lin_truth(args[3])
+    var tb = lin_truth(args[4])
+    var op = lin_matmul_op(ta, tb, context)
     var a = lin_operand(args[1], "a", context, True)
     var bb = lin_operand(args[2], "b", context, True)
     var m = a.dim(1) if ta else a.dim(0)
@@ -898,6 +909,56 @@ def _lin_public_name(operation: Int) -> String:
     return "mojolearn.linalg.matmul_int15"
 
 
+def lin_dev_operation(operation: Int) -> Bool:
+    """The public operations with a device-array form (lane vdf-linalg4)."""
+    return operation == LINOPS_OPN_FAMILY_LIN_MATMUL
+
+
+def lin_lowbit_dev(operation: Int, args: PythonObject, controls: PythonObject, binding: PythonObject,
+                   held: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A linalg operation whose operands are TrainDeviceArrays: read in place, the result a new TrainDeviceArray."""
+    if operation == LINOPS_OPN_FAMILY_LIN_MATMUL:
+        return _lin_matmul_dev(args, controls, binding, held, context)
+    raise Error("TypeError: mojolearn.linalg." + _lin_public_name(operation) + " takes host arrays only")
+
+
+def _lin_matmul_dev(args: PythonObject, controls: PythonObject, binding: PythonObject, held: PythonObject,
+                    context: PythonObject) raises -> PythonObject:
+    """`matmul(a, b, *, transpose_a, transpose_b, out, identical)` on TrainDeviceArrays (lane vdf-linalg4): a and b
+    read in place by the device entry (LIN_OP_GEMM_DEV, gemm/linalg_dev_arrays.mojo `gemm_dev_native`: the host entry's
+    one kernel on the same words), the product a new TrainDeviceArray. The host door's refusals in its words; `out` is
+    refused (the result is a new device array)."""
+    if lin_truth(py_item(controls, PythonObject(6))):
+        lin_require_identical(binding, context)
+    else:
+        _ = lin_mode(binding, context)
+    var ta = lin_truth(py_item(controls, PythonObject(3)))
+    var tb = lin_truth(py_item(controls, PythonObject(4)))
+    var op = lin_matmul_op(ta, tb, context)
+    lin_dev_out(args[5], "matmul")
+    if not lin_is_device_array(args[1], held):
+        raise Error("TypeError: mojolearn.linalg.matmul: device and host arrays are mixed; pass every operand "
+                    + "through train_to_device, or none")
+    var entries = lin_dev_entries(args[1], held)
+    var a = lin_dev_operand(args[1], "a", "matmul", entries, held, TRAIN_DEV_F32, 2)
+    var bb = lin_dev_operand(args[2], "b", "matmul", entries, held, TRAIN_DEV_F32, 2)
+    var m = a.dim(1) if ta else a.dim(0)
+    var k = a.dim(0) if ta else a.dim(1)
+    var n = bb.dim(0) if tb else bb.dim(1)
+    var kb = bb.dim(1) if tb else bb.dim(0)
+    if k != kb:
+        raise Error("mojolearn.linalg.matmul: contracted extents disagree, a gives "
+                    + "k=" + String(k) + " and b gives k=" + String(kb) + " (a.shape=" + a.text() + ", "
+                    + "b.shape=" + bb.text() + ", transpose_a=" + ("True" if ta else "False") + ", "
+                    + "transpose_b=" + ("True" if tb else "False") + "). The row-major shapes for each "
+                    + "op are in this function's table and in contract section 0.1.")
+    var out = lin_dev_new(entries, held, [m, n], TRAIN_DEV_F32)
+    # ORDER as LIN_OP_GEMM: the product's handle, then a and b; params (m, n, k, op).
+    _ = lin_call(context, LIN_OP_GEMM_DEV, [lin_dev_handle(out), a.handle, bb.handle], [m, n, k, op])
+    _ = args
+    return out
+
+
 def lin_lowbit_operation(operation: Int, var args: PythonObject, var context: PythonObject,
                          has_device: Bool = True) raises -> PythonObject:
     # bw2-linalg: `operation` is a leaf code of bindings/operation_names_linops.mojo
@@ -923,6 +984,10 @@ def lin_lowbit_operation(operation: Int, var args: PythonObject, var context: Py
             py_setitem(controls, PythonObject(i), PythonObject(lin_truth(args[i])))
     var last = len(args)
     var device = function_device_default()
+    # lane vdf-linalg4: TrainDeviceArray operands are read in place (bindings/linalg_dev_arrays_unpack.mojo). The
+    # published class is read from the family context BEFORE an explicit "cpu" swaps it for the host image's copy;
+    # only operations with a device form pay the one dictionary read.
+    var held = lin_train_device(context) if has_device and lin_dev_operation(operation) else PythonObject(None)
     if has_device and operation != LINOPS_OPN_FAMILY_LIN_NUMERIC_MODE and operation != LINOPS_OPN_FAMILY_LIN_PROFILE \
             and operation != LINOPS_OPN_FAMILY_LIN_REQUIRE_IDENTICAL:
         # The one read of `device` (an identity compare for None), before any
@@ -933,6 +998,11 @@ def lin_lowbit_operation(operation: Int, var args: PythonObject, var context: Py
             device = lin_device(args[last], _lin_public_name(operation), LIN_HAS_GPU,
                                 operation != LINOPS_OPN_FAMILY_LIN_MATMUL_FUSED, context)
             context = lin_device_context(device, context)
+    if lin_any_device_array(args, 1, last, held):
+        # Device operands: refused with device="cpu" (they live on the GPU) before any work; never admitted as host
+        # buffers, never copied.
+        lin_dev_device(device, _lin_public_name(operation))
+        return lin_lowbit_dev(operation, args, controls, lin_device_binding(device, context), held, context)
     var binding = lin_device_binding(device, context)
     var admitted = Python.list(binding)
     for i in range(1, last):  # driver-loop: over (public arguments admitted before input protocols)
