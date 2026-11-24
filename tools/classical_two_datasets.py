@@ -1026,6 +1026,34 @@ def _probe():
     return bench_board_probe
 
 
+# A/B LOOP MODE (lane ab-loop-mode, 2026-11-24; tools/ab_loop.py is the contract). When bench_board hands this race a
+# loop plan (environment key ab_loop.ENV), OUR arm takes the plan's cap and pins through the estimator's public
+# constructor parameters before construction (OursKMeans, the one classical lane the cap table marks valid), so the
+# warm-up is the same call at the cap; every round's fit_loop_ is read after all of the round's clocks have closed.
+# The helpers are tools/bench_board_more.py's (loop_plan, loop_params, loop_round, loop_cell) with family
+# "classical". Without a plan nothing here changes the command, a clock or the cell.
+LOOP_FAMILY = "classical"
+
+
+def _loop():
+    """tools/bench_board_more.py, whose A/B LOOP MODE helpers the board drivers share."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import bench_board_more
+    return bench_board_more
+
+
+def loop_plan(lane, environ=None):
+    """The race's loop plan for a classical lane (read once per process); None: loop mode off."""
+    return _loop().loop_plan(lane, environ=environ, family=LOOP_FAMILY)
+
+
+def loop_params(plan, params, ours):
+    """An arm's constructor parameters under the plan: capped (a copy) for OUR arm with a plan, PARAMS otherwise."""
+    return _loop().loop_params(plan, params, ours)
+
+
 def _ours_module():
     os.environ.setdefault("MOJOLEARN_NUMERIC_MODE", "identical")
     import mojolearn
@@ -1119,6 +1147,12 @@ class OursKMeans:
         self.ml = _ours_module()
         self.X, self.init = data["X"], data["init"]
         self.est = None
+        self.kw = dict(n_clusters=KMEANS_K, init=KMEANS_INIT, n_init=1, max_iter=KMEANS_ITER, tol=KMEANS_TOL,
+                       metric="euclidean", oversampling_factor=KMEANS_OVERSAMPLING, random_state=SEED)
+        # A/B LOOP MODE: the plan's cap (max_iter) and pins, before the first construction; no plan: unchanged
+        plan = loop_plan("kmeans")
+        self.kw = loop_params(plan, self.kw, True)
+        self.loop_capped = plan is not None and plan.get("mode") == "capped"
         self.params_obj = self.make()
         self.info = _ours_info(self.ml, self.params_obj)
         # The binding refuses tol = 0 with a plain Exception('invalid
@@ -1126,12 +1160,10 @@ class OursKMeans:
         # takes KMEANS_TOL instead of ours alone falling back to it.
         self.info["config"] = ("mojolearn.KMeans(n_clusters=%d, init=%r, n_init=1, max_iter=%d, "
                                "oversampling_factor=0, tol=%g, metric='euclidean', random_state=%d)"
-                               % (KMEANS_K, KMEANS_INIT, KMEANS_ITER, KMEANS_TOL, SEED))
+                               % (KMEANS_K, KMEANS_INIT, self.kw["max_iter"], self.kw["tol"], SEED))
 
     def make(self):
-        return self.ml.KMeans(n_clusters=KMEANS_K, init=KMEANS_INIT, n_init=1,
-                              max_iter=KMEANS_ITER, tol=KMEANS_TOL, metric="euclidean",
-                              oversampling_factor=KMEANS_OVERSAMPLING, random_state=SEED)
+        return self.ml.KMeans(**self.kw)
 
     def call(self):
         est = self.make()
@@ -2659,6 +2691,11 @@ def worker_ready(args):
         with open(block + ".json") as fh:
             rec = json.load(fh)
         runner = BUILDERS[(args.lane, args.arm)](data, rec)
+        plan = loop_plan(args.lane) if args.arm.startswith("ours") else None
+        if plan is not None and plan.get("mode") == "capped" and not getattr(runner, "loop_capped", False):
+            # A/B LOOP MODE: the lane's builder has no constructor-parameter route for the cap; never a private one
+            raise RuntimeError("REFUSED: loop mode: classical/%s took no cap %s=%s through its public parameters "
+                               "in this driver" % (args.lane, plan.get("param"), plan.get("k")))
         # the parameters this arm really got, read back from what it constructed
         params = params_record(getattr(runner, "params_obj", None))
     except Exception as exc:  # noqa: BLE001
@@ -2699,6 +2736,8 @@ def worker(args):
     # inference; the warmup does not decide (it carries start-up and kernel compilation)
     small = _small_rows()
     ours_arm = (runner.info or {}).get("library") == "mojolearn"
+    # A/B LOOP MODE: the race's plan, read once in this process (None: off); our arm only
+    loop_on = loop_plan(args.lane) if args.arm.startswith("ours") else None
     for line in sys.stdin:
         parts = line.split()
         if not parts:
@@ -2762,6 +2801,9 @@ def worker(args):
                 # reports (n_iter_), after every clock of the round; "unavailable" when it exposes none
                 from bench_board_state import runner_model
                 iterations = _probe().iteration_receipt(runner_model(runner)) if r > 0 else None
+                # A/B LOOP MODE: the fitted model's loop region and capped parameters, after every clock of the
+                # round (the warm-up included)
+                loop = _loop().loop_round(loop_on, runner_model(runner)) if loop_on is not None else None
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
@@ -2769,7 +2811,7 @@ def worker(args):
                 return 1
             say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m, "state_receipt": state_receipt,
                  "scored_calls": calls_rec,
-                 "upload_separate": upload_sep, "classical_route": route, "iterations": iterations,
+                 "upload_separate": upload_sep, "classical_route": route, "iterations": iterations, "loop": loop,
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
                                "scope": "prepare-fit-consume" if whole_requested else "call-consume",
                                "dataset_load_included": False,
@@ -3443,6 +3485,7 @@ def race(args):
         with open(os.path.join(args.out, tag + ".json"), "w") as fh:
             json.dump(result, fh, indent=2, sort_keys=True, default=str)
         return 3
+    loop_rounds = {}        # A/B LOOP MODE: arm -> [(round, loop record)], our arm under a plan only
     for r in range(_small_rows().first_round(), args.rounds + 1):     # 1: a one-call profile run, no warmup
         live = [a for a in arms if workers[a].alive]
         if not live:
@@ -3478,6 +3521,8 @@ def race(args):
                 result["arms"][arm].setdefault("state_receipts", []).append(msg["state_receipt"])
             if r > 0 and "iterations" in msg:     # the scored rounds' executed iterations (PER-CELL PHASE SPLIT)
                 result["arms"][arm].setdefault("iteration_receipts", []).append(msg["iterations"])
+            if msg.get("loop") is not None:
+                loop_rounds.setdefault(arm, []).append((r, msg["loop"]))
             if msg.get("upload_separate") is not None:
                 result["arms"][arm].setdefault("upload_separate", []).append(
                     dict(msg["upload_separate"], round=r, warmup=r == 0))
@@ -3489,6 +3534,8 @@ def race(args):
                      _small_rows().line_suffix(msg.get("scored_calls")),
                      _route_suffix(msg.get("classical_route"))), flush=True)
             time.sleep(args.pause)
+    for arm, rounds in loop_rounds.items():   # A/B LOOP MODE: the cell's loop record, beside iteration_receipts
+        result["arms"][arm]["loop_mode"] = _loop().loop_cell(loop_plan(lane), rounds)
     infer = None
     if getattr(args, "infer", False) and lane in INFER_LANES:
         infer = infer_phase(args, lane, ds, arms, workers, result)
