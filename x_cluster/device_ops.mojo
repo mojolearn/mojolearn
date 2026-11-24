@@ -151,6 +151,7 @@ from max.gpu.primitives.warp import shuffle_idx
 from x_cluster.minibatch_cells import mb_center_wsum, mb_center_word, mb_wdraw_cell
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from core.fold_x_device import fold_x_fill
 
 comptime TPB = 128
 
@@ -1829,7 +1830,13 @@ struct DeviceOps(ClusterOps):
         self._ph0()
         var buf = self.ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
         if n > 0:
-            self.ctx.enqueue_copy(dst_buf=buf, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=addr))
+            if addr < 0:
+                # THE FOLD X WORD (core/fold_x_device.mojo; lane vdf-scope-cluster3): a model-selection fold's
+                # rows taken on the device into an x_prep store slot by the member (core/member_fold_x.mojo):
+                # one device copy, the same bytes as the host gather's upload. A host address is never negative.
+                fold_x_fill(self.ctx, buf, addr, n)
+            else:
+                self.ctx.enqueue_copy(dst_buf=buf, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=addr))
             self._sync()
         self.f.append(buf^)
         self._ph1("put_addr")
