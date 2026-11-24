@@ -20,8 +20,16 @@ on its kind, as scikit-learn's Ridge): y rows x targets, fitted in ONE solve
 for every target (core/linear_fit_run.mojo `linear_ridge_targets_run`, the
 estimator's own multi-target route), predict rows x targets, score the
 targets' averaged R^2; the COEF block is targets x features and the SCALARS
-block the targets' intercepts then the y mean. Anything else is refused in words (a device-home
-view, a row or column index: the caller hands over gathered host words); the
+block the targets' intercepts then the y mean. THE FOLD (lane vdf-scope-linear;
+MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE, Ridge on an image with LF_HAS_SLOT_X): X is
+the WHOLE host base and `call.row_index` the fold's rows (int32 or int64); X stays
+resident in the caller's `resident()` scope (the x_prep family store,
+core/member_fold_x.mojo), the fold's rows are taken on the device and the Gram fit
+and the prediction entry read them there (core/fold_x_device.mojo); y and the
+weights are the base's columns taken through the index on the host. A case those
+entries do not cover (sample weights, alpha 0, one column, one row, several
+targets) takes the fold's rows on the host across its cores. Anything else is
+refused in words (a device-home view, a column index); the
 caller's UNPACK admits the data (finite, shapes) exactly as the estimator's
 own door does (MEMBER_CAN_TEST_ROWS clear: the fit and predict entries do
 not test finiteness). OUTPUTS answers PREDICT only: one float32 column
@@ -61,10 +69,17 @@ from core.member_abi import (
     MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_SCORE, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
     MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF, MEMBER_GIL_FREE, MEMBER_CAN_MULTI_OUTPUT,
+    MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE,
     MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_LINEAR
+from core.linear_fit_types import LF_FLAGS, LF_HAS_SLOT_X
+from core.native_descriptor_call import native_descriptor_call
+from core.member_fold_x import (
+    MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_index, member_fold_take_f32,
+    member_fold_store_ready,
+)
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
@@ -196,6 +211,13 @@ def _dense(view: MemberMatrix, what: String, estimator: String) raises:
 
 
 def _fit(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPointer[MemberCall, MutUntrackedOrigin]) raises:
+    if call[].row_index.rows > 0 and call[].column_index.rows == 0:
+        _fold_op(slot, call, MEMBER_OP_FIT)
+        return
+    _fit_whole(slot, call)
+
+
+def _fit_whole(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPointer[MemberCall, MutUntrackedOrigin]) raises:
     var estimator = _name(slot[].ridge)
     var route = call[].route
     var rows = call[].x.rows
@@ -374,6 +396,13 @@ def _import(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPoi
 
 
 def _predict(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPointer[MemberCall, MutUntrackedOrigin]) raises:
+    if call[].row_index.rows > 0 and call[].column_index.rows == 0:
+        _fold_op(slot, call, MEMBER_OP_PREDICT)
+        return
+    _predict_whole(slot, call)
+
+
+def _predict_whole(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPointer[MemberCall, MutUntrackedOrigin]) raises:
     var estimator = _name(slot[].ridge)
     _whole(call, estimator)
     _dense(call[].x, "X", estimator)
@@ -409,6 +438,13 @@ def _predict_targets(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin],
 
 
 def _score(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPointer[MemberCall, MutUntrackedOrigin]) raises:
+    if call[].row_index.rows > 0 and call[].column_index.rows == 0:
+        _fold_op(slot, call, MEMBER_OP_SCORE)
+        return
+    _score_whole(slot, call)
+
+
+def _score_whole(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPointer[MemberCall, MutUntrackedOrigin]) raises:
     var estimator = _name(slot[].ridge)
     var route = call[].route
     _whole(call, estimator)
@@ -440,6 +476,107 @@ def _score(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPoin
         entry_ref_mode(route.fifth), estimator)
 
 
+def _route_slot_x(call: MutPointer[MemberCall, MutUntrackedOrigin]) -> Bool:
+    """THE FOLD X WORD on this route (core/fold_x_device.mojo): the image's
+    LF_GRAM fit and prediction entry read a device fold slot
+    (LF_HAS_SLOT_X) and the image ships the x_prep family store. Asked with
+    the capabilities only (once per member class at the caller's UNPACK)."""
+    try:
+        var flags = native_descriptor_call(call[].route.entry.call, LF_FLAGS, List[Int](), List[Int](), List[Float64]())
+        if (flags & LF_HAS_SLOT_X) == 0:
+            return False
+    except:
+        return False
+    return member_fold_store_ready(call)
+
+
+def _fold_device(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin],
+                 call: MutPointer[MemberCall, MutUntrackedOrigin], operation: Int) -> Bool:
+    """Whether this operation reads the fold's X on the device: a Ridge
+    with one target on a route with the fold word, and for a fit exactly
+    the case its Gram route always finishes (no sample weights, alpha > 0,
+    more than one row and one column; core/linear_fit_types.mojo
+    LF_HAS_SLOT_X). Any other case takes the fold's rows on the host
+    (`member_fold_take_f32`, across the host's cores): the entries of
+    those routes read host X."""
+    if not slot[].ridge or call[].x.cols <= 1:
+        return False
+    if operation == MEMBER_OP_FIT:
+        if call[].weights.rows > 0 or slot[].alpha <= 0.0 or call[].row_index.rows <= 1 or call[].y.cols != 1:
+            return False
+    elif slot[].targets > 1:
+        return False
+    return _route_slot_x(call)
+
+
+def _fold_op(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin],
+             call: MutPointer[MemberCall, MutUntrackedOrigin], operation: Int) raises:
+    """FIT / PREDICT / SCORE over the rows `call.row_index` of the WHOLE
+    host X (MEMBER_CAN_ROW_INDEX / MEMBER_CAN_SCOPE; core/member_fold_x.mojo):
+    X resident in the scope's cache (or this call's slot), the fold's rows
+    taken on the device and read there by the entry; y and the weights
+    are the base's columns taken through the index on the host. The call's
+    views are restored before this returns or raises."""
+    var estimator = _name(slot[].ridge)
+    var x = call[].x
+    var y = call[].y
+    var weights = call[].weights
+    var index = call[].row_index
+    var fold = MemberFoldX()
+    var device = _fold_device(slot, call, operation)
+    var host_x = List[Float32]()
+    var host_y = List[Float32]()
+    var host_w = List[Float32]()
+    var failure = String("")
+    try:
+        if device:
+            member_fold_x_open(call, fold, estimator)
+            call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
+        else:
+            member_fold_index(call, fold, estimator)
+            host_x = List[Float32](unsafe_uninit_length=max(fold.rows * fold.cols, 1))
+            member_fold_take_f32(x.data, fold.index, fold.rows, fold.cols, Int(host_x.unsafe_ptr()))
+            call[].x = MemberMatrix(Int(host_x.unsafe_ptr()), fold.rows, fold.cols)
+        if operation != MEMBER_OP_PREDICT and y.rows > 0:
+            # the base's targets through the index (the fold's rows of y)
+            _dense(y, "y", estimator)
+            if y.rows != x.rows:
+                raise Error("ValueError: X and y have different numbers of rows")
+            host_y = List[Float32](unsafe_uninit_length=max(fold.rows * y.cols, 1))
+            member_fold_take_f32(y.data, fold.index, fold.rows, y.cols, Int(host_y.unsafe_ptr()))
+            call[].y = MemberMatrix(Int(host_y.unsafe_ptr()), fold.rows, y.cols)
+        if weights.rows > 0:
+            _dense(weights, "sample_weight", estimator)
+            if weights.rows != x.rows or weights.cols != 1:
+                raise Error("ValueError: sample_weight and X have different numbers of rows")
+            host_w = List[Float32](unsafe_uninit_length=fold.rows)
+            member_fold_take_f32(weights.data, fold.index, fold.rows, 1, Int(host_w.unsafe_ptr()))
+            call[].weights = MemberMatrix(Int(host_w.unsafe_ptr()), fold.rows, 1)
+        call[].row_index = MemberMatrix()
+        if operation == MEMBER_OP_FIT:
+            _fit_whole(slot, call)
+        elif operation == MEMBER_OP_PREDICT:
+            _predict_whole(slot, call)
+        else:
+            _score_whole(slot, call)
+    except error:
+        failure = String(error)
+    call[].x = x
+    call[].y = y
+    call[].weights = weights
+    call[].row_index = index
+    try:
+        member_fold_x_close(fold)
+    except close_error:
+        if failure.byte_length() == 0:
+            failure = "RuntimeError: a " + estimator + " member's fold slot was not freed: " + String(close_error)
+    _ = host_x^
+    _ = host_y^
+    _ = host_w^
+    if failure.byte_length() > 0:
+        raise Error(failure)
+
+
 def _linear_member(operation: Int, address: Int) raises -> Int:
     var call = MutPointer[MemberCall, MutUntrackedOrigin](unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
@@ -461,10 +598,19 @@ def _linear_member(operation: Int, address: Int) raises -> Int:
         # MEMBER_CAN_MULTI_OUTPUT (lane w3f3-k): Ridge's kind (a 2-D y, as
         # scikit-learn's Ridge), asked kind-exact with a live state; the
         # family's union (no state) includes it.
+        # MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE (lane vdf-scope-linear): Ridge
+        # on a route whose image reads THE FOLD X WORD (`_route_slot_x`): the
+        # fold's rows are taken on the device out of X kept resident in the
+        # caller's scope (`_fold_op`). LinearRegression keeps whole views (its
+        # TSQR route reads host X). The family's union includes them on such a
+        # route.
+        comptime _FOLD = MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
         if call[].state == 0:
-            return _BOTH | MEMBER_CAN_MULTI_OUTPUT
+            return _BOTH | MEMBER_CAN_MULTI_OUTPUT | (_FOLD if _route_slot_x(call) else 0)
         var kind = MutPointer[LinearMemberSlot, MutUntrackedOrigin](unsafe_from_address=_lookup(call[].state, False))
-        return _BOTH | MEMBER_CAN_MULTI_OUTPUT if kind[].ridge else _BOTH
+        if kind[].ridge:
+            return _BOTH | MEMBER_CAN_MULTI_OUTPUT | (_FOLD if _route_slot_x(call) else 0)
+        return _BOTH
     if operation == MEMBER_OP_NEW:
         if call[].param_count != 3 or not call[].params:
             raise Error("member ABI: a linear member takes three parameters (kind, fit_intercept, alpha)")

@@ -16,6 +16,11 @@ comptime LF_HAS_GRAM = 1
 comptime LF_HAS_RIDGE_RESIDENT = 2
 comptime LF_PAIRED_MEANS = 4
 comptime LF_HAS_OLS_RESIDENT = 8
+#: The image's LF_GRAM fit and its prediction entry read THE FOLD X WORD (a negative X
+#: address naming a slot of the x_prep store, core/fold_x_device.mojo); set only where
+#: LF_GRAM always finishes a Ridge fit with alpha > 0, more than one row and column
+#: (LINEAR_GRAM_SOLVE and IDN_RIDGE_RESIDENT), so no host route ever reads the word.
+comptime LF_HAS_SLOT_X = 16
 
 
 struct LinearFitRequest(Copyable, Movable):
