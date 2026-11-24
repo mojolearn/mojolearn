@@ -33,6 +33,7 @@ from bindings.xcnn_classifier_native_door import (
 from bindings.xseq_native_common_door import XseqStream, xseq_neural_provider
 from providers.python.device_route_boundary_door import DeviceRouteOwner
 from core.entry_table import EntryRef
+from core.seq_member_rows import seq_rows_admit
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_IMPORT_DONE, MEMBER_F64,
@@ -55,6 +56,8 @@ def cnn_member_admit(model: PythonObject, fields: PythonObject, kind: Int, conte
     var entry = cnnclf_entry(provider)
     var route = held.downcast_value_ptr[DeviceRouteOwner]()[].route
     route.entry = EntryRef(entry.call, entry.workspace)
+    # Lane vdf-scope-neural2: the GPU image's member store (THE RESIDENT ROUTE).
+    seq_rows_admit(route)
     owner.plan.route = route
     var shape = py_item(own, nk[].k_input_shape)
     var channels = py_item(own, nk[].k_conv_channels)
