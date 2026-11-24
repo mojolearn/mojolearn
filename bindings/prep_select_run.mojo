@@ -650,9 +650,13 @@ def rfe_named_block(family: Int, kind: Int, name: String) -> Int:
     if family == MEMBER_FAMILY_KMEANS:
         return _F if name == "cluster_centers_" else 0  # core/kmeans_member.mojo _BLOCK_CENTERS
     if family == MEMBER_FAMILY_XCLUSTER:
-        # MiniBatchKMeans, BisectingKMeans, MeanShift: PACK's cluster_centers_ is FAMILY+0 (AffinityPropagation's
-        # centers are gathered from X at PACK, not one block: `rfe_named_block` 0).
-        return _F if ((kind == 0 or kind == 1 or kind == 2) and name == "cluster_centers_") else 0
+        # MiniBatchKMeans, BisectingKMeans, MeanShift, AffinityPropagation: PACK's cluster_centers_ is FAMILY+0
+        # (lane mf-member8: AffinityPropagation's centers are the centroid-fit entry's exemplar rows, kept in the
+        # state and exported as that block, core/xcluster_member.mojo `_affinity_fit`; an affinity='precomputed'
+        # fit publishes none: providers/python/member_rfe_boundary_door.mojo refuses the name there in
+        # attrgetter's words, and a fit with no exemplar exports a 0 x features block, squared and summed to
+        # zeros as scikit-learn's `_get_feature_importances` sums its empty cluster_centers_).
+        return _F if ((kind == 0 or kind == 1 or kind == 2 or kind == 4) and name == "cluster_centers_") else 0
     if family == MEMBER_FAMILY_MIXTURE:
         return _F + 1 if name == "means_" else 0  # member_mixture_boundary_door PACK: means_ (k x d)
     if family == MEMBER_FAMILY_DECOMPOSITION:
@@ -758,6 +762,12 @@ def rfe_member_importances(plan: MemberPlan, mut call: MemberCall, x: Int, n: In
     if view.cols != m:
         # The deleted door's words for a named attribute of another width (`_keys_of`).
         raise Error("mojolearn: RFE importances have " + String(view.cols) + " columns, expected " + String(m))
+    if rows == 0 and squared and row < 0:
+        # Lane mf-member8: an empty (0 x m) attribute (an AffinityPropagation fit with no exemplar): scikit-learn
+        # squares it and sums it over its rows (sklearn/feature_selection/_base.py `_get_feature_importances`),
+        # m zeros.
+        rows = 1
+        return List[Float32](length=m, fill=0)
     if rows < 1 or (rows > 1 and not squared):
         raise Error("mojolearn: RFE importances are " + String(view.rows) + " x " + String(view.cols)
                     + " words, expected " + String(m) + " columns")

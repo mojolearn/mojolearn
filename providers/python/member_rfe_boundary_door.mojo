@@ -61,7 +61,7 @@ from bindings.x_prep_native_owner_door import xprep_key
 from bindings.x_prep_native_owner_run import xprep_r3
 from bindings.prep_classify_prog_run import ClsRunPlan
 from bindings.prep_select_run import (
-    RFE_SELECT_HALF, RFE_SELECT_FRACTION, RFE_SELECT_COUNT, rfe_member_source_named, rfe_block_of,
+    RFE_SELECT_HALF, RFE_SELECT_FRACTION, RFE_SELECT_COUNT, rfe_member_source_named, rfe_block_of, RfeSource,
 )
 from core.member_abi import (
     MemberPlan, member_kind_capabilities,
@@ -70,6 +70,7 @@ from core.member_abi import (
 )
 from core.member_families import (
     MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES, MEMBER_FAMILY_ENSEMBLE,
+    MEMBER_FAMILY_XCLUSTER,
 )
 
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -174,15 +175,18 @@ def _rfe_base_admit(estimator: PythonObject, g: PythonObject, context: PythonObj
         base.why = "TypeError: mojolearn: RFE requires a mojolearn estimator; got " + cls
         return base^
     if py_get(plan, "member") is None:
-        # The registered estimator classes with no member mark (lane mf-rfe7b, every class the
-        # python/mojolearn/_native_msel_*.py registrations name, against each class's own `_mojolearn_member`;
-        # the cross-validation splitters are registered too but have no fit): NearestNeighbors
-        # (python/mojolearn/neighbors.py:98), RadiusNeighbors (neighbors.py:842), OPTICS
-        # (_expansion_cluster.py:606), MDS (_expansion_decomp.py:2754), SpectralEmbedding (_spectral_impl.py:531),
-        # Cholesky (_cholesky_impl.py:87). None has coef_ or feature_importances_ or a fitted array with one value
-        # per feature, so scikit-learn's RFE fails at its first elimination round over each ('auto' raises; a
-        # named n-row array mis-indexes); Cholesky's fit refuses the non-square block of any round. Only a fit
-        # with no round (n_features_to_select >= n_features) works there: that needs a member kind of each class.
+        # Lane mf-member8: NearestNeighbors and RadiusNeighbors (neighbors kinds 2, 3), OPTICS (x_cluster kind 3),
+        # MDS (x_decomp kind 18) and SpectralEmbedding (spectral kind 1) are fit + export members now, so RFE
+        # with no elimination round (n_features_to_select >= n_features: scikit-learn's `_fit` fits the
+        # estimator once on every column and reads no importances) runs their fit natively; a round raises
+        # RFE_NO_IMPORTANCES or attrgetter's words before it fits, as scikit-learn fails there. The one
+        # registered class left unmarked is Cholesky (python/mojolearn/_cholesky_impl.py:87): its `fit(A)`
+        # takes no y, and scikit-learn's RFE calls `estimator.fit(X[:, features], y)` in every round and in
+        # the final fit (sklearn/feature_selection/_rfe.py:365), so scikit-learn itself fails there with
+        # Python's TypeError: refused in those words. Any other unmarked class keeps the door's words.
+        if cls == "Cholesky" or cls == "HostCholesky":
+            base.why = "TypeError: Cholesky.fit() takes 2 positional arguments but 3 were given"
+            return base^
         base.why =("TypeError: mojolearn: RFE requires an estimator with a native member; " + cls
                     + " has none")
         return base^
@@ -221,6 +225,12 @@ def _rfe_base_admit(estimator: PythonObject, g: PythonObject, context: PythonObj
         return base^
     var family = owner.plan.family
     var source = rfe_member_source_named(family, owner.plan.kind, mask, getter, classical_estimator_name(estimator))
+    if (family == MEMBER_FAMILY_XCLUSTER and owner.plan.kind == 4 and getter == "cluster_centers_"
+            and len(owner.plan.params) > 7 and owner.plan.params[7] != 0.0):
+        # Lane mf-member8: an affinity='precomputed' AffinityPropagation publishes no cluster_centers_
+        # (its PACK, as its fit), so scikit-learn's attrgetter fails at the first round: its words.
+        source = RfeSource(0, False, "AttributeError: '" + classical_estimator_name(estimator)
+                           + "' object has no attribute 'cluster_centers_'")
     base.refusal = source.refusal.copy()
     base.block = source.block
     base.squared = source.squared
