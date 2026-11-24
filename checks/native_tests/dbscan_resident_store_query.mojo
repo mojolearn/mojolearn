@@ -68,6 +68,7 @@ def _device_case(case: Int) raises:
                         Int(host.unsafe_ptr()), handle, _Q, _D, metric, True, 0.9))
                 except error:
                     want = String(error)
+                _ = host^  # read by address inside the call above
                 require(want.find("row 5 has squared norm") >= 0, "the host form refuses the zero row")
                 var got = String("")
                 try:
