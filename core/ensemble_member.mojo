@@ -210,6 +210,7 @@ from std.sys.info import size_of
 from std.sys.compile import is_defined
 from bindings.native_unit_os_threads_run import native_unit_cores
 from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.device_route import DEVICE_CPU
 from core.entry_table import EntryRef, entry_ref_unresolved, entry_ref_gil_free
@@ -254,7 +255,9 @@ from core.member_notices import member_notice_add, MEMBER_NOTICE_SPLIT_LEAST
 from bindings.msel_split_spec_run import (
     MselSplitSpec, MselGroupCodes, MselSides, MSEL_SPEC_NONE, MSEL_SPEC_LOO, MSEL_SPEC_STRATIFIED_SHUFFLE, msel_spec_sides, msel_sides_i32,
     msel_group_codes_run, msel_spec_has_n_splits, msel_spec_sides_targets, msel_spec_stratified,
+    msel_joined_row_codes,
 )
+from core.native_archive_scalar_text import archive_float_text
 from core.member_set_run import (
     MemberSetRun, member_set_fit, member_set_run_release, member_set_first_failure,
     MEMBER_SET_WORKER, MEMBER_SET_TURN_RELEASED, MEMBER_SET_TURN_HELD,
@@ -1938,6 +1941,102 @@ def _split_folds(slot: _SlotPtr, n: Int, codes: Int, k: Int, groups: MselGroupCo
     slot[].fold_test = te32^
 
 
+def _joined_rows(slot: _SlotPtr, call: _CallPtr, outputs: Int, classifier: Bool,
+                 class_counts: List[Int]) raises -> List[String]:
+    """RUN (lane mf-rows8d): each row of a multi-output fit's target as
+    `" ".join(row.astype("str"))` writes it (StratifiedShuffleSplit's
+    strings). A CLASSIFIER's row: each output's class code's word (the
+    admission's per-output label words at `split.row_words`, NumPy's `str`
+    of each label, output-major by code; `class_counts` their counts). A
+    REGRESSOR's row: its values in NumPy's scalar notation, of THE GIVEN y
+    when the caller handed one (float64, int64 or int32 words), else of the
+    float32 targets (the y it was given). Rows across the host cores."""
+    var n = call[].x.rows
+    var rows_text = List[String](length=n, fill=String(""))
+    if n == 0:
+        return rows_text^
+    var dst_at = Int(rows_text.unsafe_ptr())
+    var tasks = host_predict_task_count_work(n, n * outputs)
+    var chunk = host_predict_chunk(n, tasks)
+    if classifier:
+        var first = slot[].split.row_words
+        if first < 0 or len(class_counts) != outputs:
+            raise Error("RuntimeError: search admission invariant: a multi-output classifier's "
+                        + "StratifiedShuffleSplit has no per-output label words")
+        var offsets = List[Int](length=outputs, fill=0)
+        var total = 0
+        for j in range(outputs):  # small-loop(the outputs' first word index)
+            offsets[j] = first + total
+            total += class_counts[j]
+        if first + total > len(slot[].label_words):
+            raise Error("RuntimeError: search admission invariant: the per-output label words are short")
+        var words_at = Int(slot[].label_words.unsafe_ptr())
+        var off_at = Int(offsets.unsafe_ptr())
+        var codes = call[].y.data
+
+        def label_rows(t: Int) {imm dst_at, imm words_at, imm off_at, imm codes, imm chunk, imm n, imm outputs}:
+            var dst = MutPointer[String, MutUntrackedOrigin](unsafe_from_address=dst_at)
+            var words = MutPointer[String, MutUntrackedOrigin](unsafe_from_address=words_at)
+            var off = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=off_at)
+            var src = _I32P(unsafe_from_address=codes)
+            var begin = t * chunk
+            var end = min(begin + chunk, n)
+            for i in range(begin, end):
+                var text = String("")
+                for j in range(outputs):  # small-loop(one row's outputs)
+                    if j > 0:
+                        text += " "
+                    text += words[off[j] + Int(src[i * outputs + j])]
+                dst[i] = text^
+
+        host_parallelize(label_rows, max(tasks, 1))
+        _ = len(offsets)  # read through its address by the workers above
+        _ = len(slot[].label_words)
+        return rows_text^
+    var given = slot[].fit_given
+    var kind = slot[].fit_given_dtype if given != 0 else MEMBER_F32
+    var values = given if given != 0 else call[].y.data
+
+    var failed = List[Int](length=max(tasks, 1), fill=0)
+    var failed_at = Int(failed.unsafe_ptr())
+
+    def value_rows(t: Int) {imm dst_at, imm values, imm kind, imm chunk, imm n, imm outputs, imm failed_at}:
+        var dst = MutPointer[String, MutUntrackedOrigin](unsafe_from_address=dst_at)
+        var begin = t * chunk
+        var end = min(begin + chunk, n)
+        try:
+            for i in range(begin, end):
+                var text = String("")
+                for j in range(outputs):  # small-loop(one row's outputs)
+                    if j > 0:
+                        text += " "
+                    var at = i * outputs + j
+                    if kind == MEMBER_F64:
+                        text += archive_float_text(bitcast[DType.uint64](_F64P(unsafe_from_address=values)[at]), 8,
+                                                   _NUMPY_PRINT_MODE)
+                    elif kind == MEMBER_I64:
+                        text += String(_I64P(unsafe_from_address=values)[at])
+                    elif kind == MEMBER_I32:
+                        text += String(_I32P(unsafe_from_address=values)[at])
+                    else:
+                        var bits = UInt64(bitcast[DType.uint32](_F32P(unsafe_from_address=values)[at]))
+                        text += archive_float_text(bits, 4, _NUMPY_PRINT_MODE)
+                dst[i] = text^
+        except:
+            MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=failed_at)[t] = 1
+
+    host_parallelize(value_rows, max(tasks, 1))
+    for t in range(len(failed)):  # small-loop(one flag per task)
+        if failed[t] != 0:
+            raise Error("RuntimeError: mojolearn: a target value could not be written as NumPy writes it")
+    return rows_text^
+
+
+#: NumPy's default print mode (`np.get_printoptions()['legacy']` is
+#: sys.maxsize when no legacy mode is set): core/sequence_array_format.mojo.
+comptime _NUMPY_PRINT_MODE = 2147483647
+
+
 def _no_groups() -> MselGroupCodes:
     """A fit with no groups (Stacking and CalibratedClassifierCV hand their
     splitter none, as scikit-learn's do)."""
@@ -3440,7 +3539,18 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
         # classifier's is refused by its admission (its labels say the type).
         raise Error("ValueError: Supported target types are: ('binary', 'multiclass'). Got '"
                     + msel_multi_output_type(call[].y.data, call[].x.rows * outputs) + "' instead.")
-    if slot[].split.kind != MSEL_SPEC_NONE:
+    if slot[].split.kind == MSEL_SPEC_STRATIFIED_SHUFFLE and outputs > 1:
+        # LANE mf-rows8d (door rows :4044 / :4062): StratifiedShuffleSplit over
+        # a MULTI-OUTPUT target stratifies on each row's joined words (sklearn
+        # 1.9 model_selection/_split.py lines 2341-2348), a classifier's its
+        # labels' NumPy `str` words, a regressor's its values' (`_joined_rows`);
+        # their sorted-order codes are the split's classes, its refusals and
+        # draws the one-output path's (`msel_spec_sides`).
+        var joined = msel_joined_row_codes(_joined_rows(slot, call, outputs, classifier, plan.class_counts))
+        _split_folds(slot, call[].x.rows, Int(joined.codes.unsafe_ptr()), joined.m, _call_groups(call), 0, 0,
+                     MEMBER_F32)
+        _ = len(joined.codes)  # the split read the codes through their address
+    elif slot[].split.kind != MSEL_SPEC_NONE:
         # A one-output regressor hands its targets (a stratified splitter
         # stratifies on their values, as the door's split does; lane mf-del5).
         _split_folds(slot, call[].x.rows, call[].y.data if k > 0 else 0, k, _call_groups(call),

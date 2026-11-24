@@ -4039,11 +4039,16 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         # model_selection/_split.py lines 786-791, 1019-1024); the type is the
         # labels' (every label is in y): `_labels_multi_type`.
         # StratifiedShuffleSplit stratifies on each row's joined labels
-        # (line 2344): not typed (rows.tsv).
+        # (lines 2341-2348; lane mf-rows8d): each output's labels' NumPy `str`
+        # words, read ONCE here as more label words (`_joined_label_words`;
+        # the split's `row_words` names the first), joined per row and coded
+        # by the RUN (core/ensemble_member.mojo `_joined_rows`).
         if split.spec.kind == MSEL_SPEC_STRATIFIED_SHUFFLE:
-            return False
-        raise Error("ValueError: Supported target types are: ('binary', 'multiclass'). Got '"
-                    + _labels_multi_type(labels, b) + "' instead.")
+            split.spec.row_words = _next_word(labels, classifier, extra_words, b)
+            _joined_label_words(labels, extra_words, b)
+        else:
+            raise Error("ValueError: Supported target types are: ('binary', 'multiclass'). Got '"
+                        + _labels_multi_type(labels, b) + "' instead.")
     for c in range(len(nested.plans)):  # driver-loop: over the candidates (their responses' element types)
         var multi = (nested.masks[c] & MEMBER_CAN_MULTI_OUTPUT) != 0
         # LANE mf-rows8b (rows :3777 / :3779): a member that may take a
@@ -4055,11 +4060,11 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         # `_fit_search`); a one-output fit is scored as any. REMOVED: the two
         # False exits that kept every search over such a member with a
         # scorer or a stratified splitter (one output or more) in the door.
-        # Not typed (rows.tsv): a regressor's StratifiedShuffleSplit (its
-        # outputs are unknown here) and a probability or decision scorer on
-        # a regressor that answers one (no regressor kind answers it).
-        if multi and not classifier and split.spec.kind == MSEL_SPEC_STRATIFIED_SHUFFLE:
-            return False
+        # A regressor's StratifiedShuffleSplit (lane mf-rows8d): its outputs
+        # are the fit's, so the RUN joins each row's values when there are
+        # several (core/ensemble_member.mojo `_joined_rows`). Not typed
+        # (rows.tsv): a probability or decision scorer on a regressor that
+        # answers one (no regressor kind answers it).
         if multi and not classifier:
             for q in range(len(codes)):  # small-loop(the scorers)
                 if msel_scorer_row(codes[q]).op != MEMBER_OP_PREDICT:
@@ -4720,6 +4725,21 @@ def _multi_label_values(labels: PythonObject, mut sels: List[Int32], mut opts: M
             sels.append(Int32(kind))
             total += 1
     opts.lv_n = total
+
+
+def _joined_label_words(labels: PythonObject, mut extra_words: List[String], b: PythonObject) raises:
+    """UNPACK (lane mf-rows8d): a multi-output classifier's labels, output
+    after output and each output's by class code, as the words
+    StratifiedShuffleSplit joins (`row.astype("str")`): `str` of each label
+    as the fit's encoder holds it (an integer's digits, a whole float's
+    `1.0` form: the fit's labels are whole numbers or text,
+    bindings/msel_member_units_door.mojo `_whole_classes`; a bool's
+    `True` / `False`; a string itself), NumPy's spelling of the same values.
+    Read once per admission, appended to `extra_words`."""
+    for j in range(len(labels)):  # driver-loop: over the outputs (their labels, once per admission)
+        var items = py_call(b.list, labels[j])
+        for i in range(len(items)):  # driver-loop: over one output's labels
+            extra_words.append(String(py=py_call(b.str, items[i])))
 
 
 def _labels_multi_type(labels: PythonObject, b: PythonObject) raises -> String:

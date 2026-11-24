@@ -28,6 +28,7 @@ No Python object is read, built or called here.
 """
 from std.sys.info import size_of
 from std.builtin.sort import sort
+from std.collections import Dict
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
@@ -141,6 +142,12 @@ struct MselSplitSpec(Copyable, Movable, Defaultable):
     #: refusals and only when the plan makes a split, as the door does.
     var max_train_unread: Bool
     var max_train_refusal: String
+    #: A MULTI-OUTPUT CLASSIFIER's StratifiedShuffleSplit (lane mf-rows8d):
+    #: the index of the first of its per-output label words in the search
+    #: plan's label words (output-major, each output's labels by class code,
+    #: each NumPy's `str` of it), the words the joined rows are made of
+    #: (`msel_joined_row_codes`); -1: none (a regressor's are its values).
+    var row_words: Int
 
     def __init__(out self):
         self.kind = MSEL_SPEC_NONE
@@ -167,6 +174,7 @@ struct MselSplitSpec(Copyable, Movable, Defaultable):
         self.rows_helpers = entry_ref_unresolved()
         self.max_train_unread = False
         self.max_train_refusal = String("")
+        self.row_words = -1
 
 
 struct MselGroupCodes(Movable):
@@ -551,6 +559,61 @@ def msel_spec_sides_targets(spec: MselSplitSpec, n: Int, y: Int, given: Int, giv
     var sides = msel_spec_sides(spec, n, Int(coded.codes.unsafe_ptr()), coded.m, groups)
     _ = len(coded.codes)  # the plans and fills read the codes through their address
     return sides^
+
+
+def msel_joined_row_codes(rows_text: List[String]) raises -> MselTargetCodes:
+    """RUN (lane mf-rows8d): a MULTI-OUTPUT target's rows as the class codes
+    StratifiedShuffleSplit stratifies on (sklearn 1.9
+    model_selection/_split.py lines 2341-2348: each row's
+    `" ".join(row.astype("str"))`, then `np.unique(..., return_inverse=True)`):
+    `rows_text` holds each row's joined words (the caller's), the codes are
+    their ranks among the distinct strings in sorted order (NumPy's unicode
+    order is code-point order, UTF-8 byte order here). Two rows whose joined
+    strings are equal are one class, as there (labels holding a space may
+    join alike). The distinct strings are found in one hash pass over the
+    rows (serial by nature: one dictionary), sorted once, and the rows coded
+    across the host cores."""
+    var n = len(rows_text)
+    var out = MselTargetCodes()
+    out.codes = List[Int32](length=max(n, 1), fill=Int32(0))
+    if n == 0:
+        return out^
+    var first_of = Dict[String, Int]()
+    var provisional = List[Int](length=n, fill=0)
+    var distinct = List[String]()
+    for i in range(n):  # small-loop(one dictionary probe per row, once per fit: the distinct joined rows)
+        var found = first_of.find(rows_text[i])
+        if found:
+            provisional[i] = found.value()
+        else:
+            provisional[i] = len(distinct)
+            first_of[rows_text[i]] = len(distinct)
+            distinct.append(rows_text[i])
+    var ordered = distinct.copy()
+    sort(ordered)
+    var rank_of = List[Int](length=len(distinct), fill=0)
+    for r in range(len(ordered)):  # small-loop(the distinct joined rows, in sorted order)
+        rank_of[first_of[ordered[r]]] = r
+    var codes_at = Int(out.codes.unsafe_ptr())
+    var prov_at = Int(provisional.unsafe_ptr())
+    var rank_at = Int(rank_of.unsafe_ptr())
+    var tasks = host_predict_task_count_work(n, n)
+    var chunk = host_predict_chunk(n, tasks)
+
+    def code_rows(t: Int) {imm codes_at, imm prov_at, imm rank_at, imm chunk, imm n}:
+        var dst = _I32P(unsafe_from_address=codes_at)
+        var prov = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=prov_at)
+        var rank = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=rank_at)
+        var begin = t * chunk
+        var end = min(begin + chunk, n)
+        for i in range(begin, end):
+            dst[i] = Int32(rank[prov[i]])
+
+    host_parallelize(code_rows, max(tasks, 1))
+    _ = len(provisional)  # read through their addresses by the workers above
+    _ = len(rank_of)
+    out.m = len(ordered)
+    return out^
 
 
 def msel_sides_i32(sides: MselSides, mut train: List[List[Int32]], mut test: List[List[Int32]]):
