@@ -5,7 +5,7 @@
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.py_attr import py_attr
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.mode_metadata_native_door import _fields, _class_fields, _mode
 from bindings.native_instance_item_pack import native_instance_item
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
@@ -27,6 +27,10 @@ from providers.python.array_metadata_pyapi_door import array_owner_once
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from bindings.trees_keys_unpack import trees_keys
 from bindings.trees_route_boundary_door import trees_explainer_device, trees_explainer_run
+from bindings.classical_validate_unpack import classical_estimator_name
+from providers.python.device_route_boundary_door import device_request
+from core.function_device_fitted import function_device_fitted
+from core.device_route import DEVICE_CPU
 from bindings.operation_names_trees import TREES_OPN_TREES_EXPLAINER_INIT, TREES_OPN_TREES_EXPLAINER_CLOSE, TREES_OPN_TREES_EXPLAINER_VALUES
 from bindings.py_balanced import py_item
 
@@ -527,6 +531,17 @@ def trees_explainer_operation(model: PythonObject, operation: Int, args: PythonO
         # the entries captured here are the ones every `shap_values` call
         # runs (no later read of the device).
         var device = trees_explainer_device(args[5], "TreeExplainer", context)
+        if args[5] is not None:
+            # The explained forest's side: its own `device` (None: this
+            # installation's), or the CPU for the host forest. An explicit
+            # word that disagrees is refused before any work
+            # (core/function_device_fitted.mojo), as for the other explainers.
+            var nk = trees_keys()
+            var host = py_get(context, nk[].k_trees_explainer_host_forest)
+            var member = DEVICE_CPU
+            if host is None or py_type(args[0]) is not host:
+                member = device_request(py_fields(args[0]), native_loaded_module("builtins"))
+            function_device_fitted(device, member, "TreeExplainer", classical_estimator_name(args[0]))
         return _construct(fields, args, trees_explainer_run(model, fields, args[5], device, args[4], context))
     var owner = _get(fields, "_shap_native")
     if owner is None:

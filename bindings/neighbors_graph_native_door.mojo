@@ -668,23 +668,19 @@ comptime _CC_HAS_CPU = True
 
 def _neighbors_graph_operation_route(model: PythonObject, operation: String, var args: PythonObject,
                                      context: PythonObject) raises -> PythonObject:
-    var cc = operation == "family_xn_graph_connected_components"
-    # connected_components(A, ..., numeric_mode, device): its last item is
-    # the call's `device` (lane vdf-misc), admitted here in the shared words
-    # before any of the function's own work. None is one identity compare
-    # and keeps the route below unchanged.
-    var device = function_device_default()
-    if cc and args[5] is not None:
-        device = function_device_admit(args[5], "connected_components", _CC_HAS_GPU, _CC_HAS_CPU, context, _b())
-    if cc and (device.host_beside or py_type(args[0]) is _b().str):
-        # connected_components(..., numeric_mode=<str>): the shell hands over
-        # the requested mode in the binding slot (None was resolved to the
-        # default-mode binding by the family door); select its binding here.
-        # An explicit "cpu" beside a GPU set selects the CPU identical
-        # module (estimator_binding_device) for the requested mode (None:
-        # the process default).
-        var requested = args[0] if py_type(args[0]) is _b().str else PythonObject(None)
-        var selected = Python.list(estimator_binding_device(device, requested, "_mojolearn_x_neighbors", context))
+    if operation == "family_xn_graph_connected_components":
+        # connected_components(numeric_mode, A, directed, connection,
+        # return_labels, device): the family door resolves no binding for it
+        # (bindings/native_operation_codes.mojo `family_route`), so the one
+        # lookup is here, after the call's `device` (lane vdf-misc) is
+        # admitted in the shared words. None (device and mode) is the same
+        # estimator_binding_mode(None, ...) call the family door made; a mode
+        # word selects its binding as before; an explicit "cpu" beside a GPU
+        # set selects the CPU identical module (estimator_binding_device).
+        var device = function_device_default()
+        if args[5] is not None:
+            device = function_device_admit(args[5], "connected_components", _CC_HAS_GPU, _CC_HAS_CPU, context, _b())
+        var selected = Python.list(estimator_binding_device(device, args[0], "_mojolearn_x_neighbors", context))
         for i in range(1, len(args)):  # driver-loop: over fixed public function arguments
             _ = py_call(selected.append, args[i])
         args = selected

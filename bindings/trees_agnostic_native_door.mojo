@@ -22,7 +22,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_validate_unpack import classical_estimator_name
-from bindings.trees_route_boundary_door import trees_explainer_device, trees_explainer_run, trees_route_context
+from bindings.trees_route_boundary_door import trees_explainer_device, trees_explainer_run
 from providers.python.device_route_boundary_door import device_request
 from core.function_device_fitted import function_device_fitted
 from bindings.classical_attributes_door import classical_check_layout
@@ -400,7 +400,7 @@ def _construct(fields: PythonObject, args: PythonObject, permutation: Bool,
     var ev = PythonObject(None)
     var em = _Member()
     try:
-        var s = _State(explained, method, bg, table, mode, seed, nb, d, -1, PythonObject(None))
+        var s = _State(explained, method, bg, table, mode, seed, nb, d, -1, PythonObject(None), context)
         _open(em, s, bg, nb, context)  # raises when nothing serves the model
         k = em.k
         ev = admitted_vector(k, "<f8", context)
@@ -451,9 +451,12 @@ struct _State(Copyable, Movable):
     var d: Int
     var k: Int
     var dev: PythonObject
+    # The context the explainer's values run in: the call's own, or the one
+    # its constructor's `device` named (lane vdf-misc).
+    var run: PythonObject
 
     def __init__(out self, model: PythonObject, method: String, bg: PythonObject, table: PythonObject,
-                 mode: String, seed: Int, nb: Int, d: Int, k: Int, dev: PythonObject):
+                 mode: String, seed: Int, nb: Int, d: Int, k: Int, dev: PythonObject, run: PythonObject):
         self.model = model
         self.method = method
         self.bg = bg
@@ -464,13 +467,22 @@ struct _State(Copyable, Movable):
         self.d = d
         self.k = k
         self.dev = dev
+        self.run = run
 
 
-def _state(fields: PythonObject, name: String, context: PythonObject) raises -> _State:
+def _state(fields: PythonObject, name: String, call_context: PythonObject) raises -> _State:
     var bg = _get(fields, "_bg")
     var method = _get(fields, "_method")
     if bg is None or method is None:
         raise Error("RuntimeError: " + name + " has not been initialized by the native owner")
+    # An explainer constructed with an explicit `device` keeps `_method` as
+    # (method, run context), resolved once at construction (lane vdf-misc);
+    # otherwise it is the method word and the call's context runs (one type
+    # compare on an object already read, no lookup).
+    var context = call_context
+    if py_type(method) is _b().tuple:
+        context = method[1]
+        method = method[0]
     var requested = _get(fields, "numeric_mode")
     var nk = trees_keys()
     var mode = _tree_mode(requested if requested is not None else py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE))
@@ -480,7 +492,7 @@ def _state(fields: PythonObject, name: String, context: PythonObject) raises -> 
     _admit_explained(model, name, context)
     return _State(model, String(method), bg, table, mode, _seed(_get(fields, "random_state"), context),
                   Int(py=bg.shape[0]), Int(py=bg.shape[1]), _int(_get(fields, "n_outputs_"), "output count", True),
-                  _get(fields, "_dev"))
+                  _get(fields, "_dev"), context)
 
 
 def _rows(x_source: PythonObject, s: _State, name: String, context: PythonObject) raises -> PythonObject:
@@ -1310,7 +1322,7 @@ def _kernel_with[M: AgnModel](mut model: M, gil_free: Bool, glue: EntryRef, req:
         agn_kernel_values_run(glue, req, ns, nl, logit, model)
 
 
-def _kernel_values_over(fields: PythonObject, args: PythonObject, context: PythonObject,
+def _kernel_values_over(fields: PythonObject, args: PythonObject, var context: PythonObject,
                         mut em: _Member) raises -> PythonObject:
     """UNPACK (settings, rows, the native member or meta-estimator), RUN (xtrees/agnostic_values_run.mojo
     `agn_kernel_values_run`), PACK (the shaped float64 values)."""
@@ -1323,6 +1335,7 @@ def _kernel_values_over(fields: PythonObject, args: PythonObject, context: Pytho
     if not l1_ok:
         raise Error("NotImplementedError: KernelExplainer carries no l1 feature selection; l1_reg must be 'auto', False or 0")
     var s = _state(fields, name, context)
+    context = s.run  # the explainer's run context (lane vdf-misc)
     var link = _get(fields, "link")
     var logit = py_type(link) is b.str and String(link) == "logit"
     var x = _rows(args[0], s, name, context)
@@ -1472,7 +1485,7 @@ def _permutation_with[M: AgnModel](mut model: M, gil_free: Bool, glue: EntryRef,
         agn_permutation_values_run(glue, req, npm, wb, wb_link, model)
 
 
-def _permutation_values_over(fields: PythonObject, args: PythonObject, context: PythonObject,
+def _permutation_values_over(fields: PythonObject, args: PythonObject, var context: PythonObject,
                              mut em: _Member) raises -> PythonObject:
     """UNPACK (settings, rows, the device forest, the resident linear block, the native member or
     meta-estimator), RUN (xtrees/agnostic_values_run.mojo `agn_permutation_values_run`), PACK (the shaped float64
@@ -1480,6 +1493,7 @@ def _permutation_values_over(fields: PythonObject, args: PythonObject, context: 
     var name = String("PermutationExplainer")
     var b = _b()
     var s = _state(fields, name, context)
+    context = s.run  # the explainer's run context (lane vdf-misc)
     var x = _rows(args[0], s, name, context)
     var n = Int(py=x.shape[0])
     var d = s.d
@@ -1558,14 +1572,13 @@ def trees_agnostic_operation(model: PythonObject, operation: Int, opname: String
                                    name, classical_estimator_name(explained))
             run = trees_explainer_run(model, fields, args[5], device, args[4], context)
         _construct(fields, args, permutation, run)
+        if run is not context:
+            # Resolved once here: the values calls read it from the state
+            # they already read (`_state`), never the device again.
+            py_setitem(fields, PythonObject("_method"), Python.tuple(_get(fields, "_method"), run))
         return PythonObject(None)
-    # An explainer constructed with a `device` runs in the context it named
-    # (held per explainer; one field read here per call, none per row).
-    var run = context
-    if py_get(fields, "device") is not None:
-        run = trees_route_context(model, context)
     if operation == TREES_OPN_TREES_AGNOSTIC_KERNEL_VALUES:
-        return _kernel_values(fields, args, run)
+        return _kernel_values(fields, args, context)
     if operation == TREES_OPN_TREES_AGNOSTIC_PERMUTATION_VALUES:
-        return _permutation_values(fields, args, run)
+        return _permutation_values(fields, args, context)
     raise Error("unknown model-agnostic explainer operation " + opname)

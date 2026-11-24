@@ -159,9 +159,10 @@ def trees_explainer_run(explainer: PythonObject, fields: PythonObject, word: Pyt
     `device` being the word's admission (`trees_explainer_device`, once,
     before any work, in the shared words): the explainers have the x_trees device image and the CPU table set beside
     it (`trees_cpu_context`, the one a device="cpu" tree estimator runs on).
-    The admitted word is kept in the explainer's `device` field, so its later
-    operations take the same run context through `trees_route_context` (held
-    per explainer, read once). `requested` is the explainer's numeric_mode
+    The admitted word is kept in the explainer's `device` field; the run
+    context is resolved here once (`trees_route_context`) and kept in what the
+    constructor stores (TreeExplainer: its captured entries; Kernel and
+    Permutation: their `_method` state), so no values call reads the device. `requested` is the explainer's numeric_mode
     (None: the process default); the CPU table set is identical only. Returns
     the context the explainer's construction runs in; None is one identity
     compare and returns `context`."""
