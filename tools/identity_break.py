@@ -9113,6 +9113,13 @@ def _(ml, X, yc, yr, Xh=None):
 ACCUM_SPLITS = ((1024, 4), (1024, 3), (1024, 1), (1024, 1024), (12, 5), (7, 7), (100, 8))
 
 
+# parallel_training.ordered_sum_gradients keeps its parallel-driver signature (no device=, by the owner's direction
+# for the parallel_* entries, 2026-11-24) and takes no estimator member that could carry the side: the GPU side runs,
+# the CPU side (bindings/_mojolearn_runtime_parallel_host.mojo) is an owed decision in UNMAPPED.md (vd-verify).
+_one_sided("ordered-gradient-sum", missing="cpu", reason="ordered_sum_gradients takes no device= (parallel_* entries "
+           "keep their signature by the owner's direction of 2026-11-24) and has no member to carry the side")
+
+
 @lane("grad-accumulation")
 def _(ml, X, yc, yr, Xh=None):
     """GRADIENT ACCUMULATION by its public names: `training.accumulate_grads`

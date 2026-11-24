@@ -205,9 +205,10 @@ decides. They are failures, not n/a (contract items 3 and 4).
   (`parallel_training.ordered_sum_gradients`). Their signatures take `devices=`, so the strict view refuses them on
   both sides. The owner's direction of 2026-11-24 keeps `parallel_*` without `device`, so the refusal is permanent as
   written. The `psd-*` lanes import the drivers directly, and vdv-gaps routes a `device='cpu'` member to host workers.
-  Decision for vd-verify: pass `devices`-mode drivers through the view when their member carries the side (as
-  `psd-*` does), or declare these five `_one_sided(..., missing="cpu")` (`ordered_sum_gradients` has no member; it has
-  a host owner in `_mojolearn_runtime_parallel_host`).
+  Decided by vd-verify: the view now passes a `devices`-mode driver through when a member argument carries the
+  side (`device=` of the estimator or trainer handed to it), and refuses it by name otherwise
+  (`_verify_device.members`). `ordered-gradient-sum` has no member, so it is `_one_sided(..., missing="cpu")`; its
+  host implementation in `_mojolearn_runtime_parallel_host` has no public `device=`: owed decision (owner).
 - **vd-functions not merged into vd-verify yet** (`origin/lane/vd-functions`): every lane that reaches a function or
   constructor that gets `device=` only there reads "takes no device=" until the merge. Per vdv-cov-func, the GPU
   side's device-resident run of the `fn-*` lanes also fails until vdf-xm-labels / vdf-xm-kernels / vdf-xm-transport

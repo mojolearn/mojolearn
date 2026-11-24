@@ -158,6 +158,20 @@ def passthrough(fn, unwrap):
     return call
 
 
+def members(fn, side_name, message, error, unwrap):
+    # a `devices=` driver (a GPU list, no `device`): it runs on the side its
+    # member estimators carry. Pass the call through only when a member
+    # argument carries this side (its `device` parameter); otherwise the side
+    # is not selected through the public parameter and the call is refused.
+    def call(*args, **kwargs):
+        args, kwargs = _args(unwrap, args, kwargs)
+        for a in tuple(args) + tuple(kwargs.values()):
+            if getattr(a, "device", None) == side_name:
+                return fn(*args, **kwargs)
+        raise error(message)
+    return call
+
+
 def refuse(fn, message, error, unwrap):
     def call(*args, **kwargs):
         if "device" in kwargs:
@@ -198,6 +212,9 @@ def _caller(fn, name, side_name, strict, boundary="internal"):
         call = build["inject"](fn, side_name, unwrap)
     elif _short(name) in NON_COMPUTING or not strict:
         call = build["passthrough"](fn, unwrap)
+    elif mode == "devices":
+        call = build["members"](fn, side_name, f"{name} takes devices= and no device=, and no member argument "
+                                f"carries device={side_name!r}", NoDevice, unwrap)
     else:
         call = build["refuse"](fn, f"{name} takes no device= (the {side_name.upper()} side cannot be "
                                    "selected through the public parameter)", NoDevice, unwrap)
