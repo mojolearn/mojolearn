@@ -101,6 +101,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.dataset import Dataset
 from extratrees.checks.pcg_rng import row_sample_seed
 from core.philox import RNG_STRIDE, uniform_int_host
 from max.gpu.host import DeviceContext
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 
 
 comptime BOOTSTRAP_DEFAULT = False
@@ -207,11 +208,16 @@ struct Forest(Movable):
     var trees: List[TreeMetaDataNode[DType.float32]]
     var num_outputs: Int32
     var n_trees: Int32
+    # The fit's tree loop (lane alm-forest, 2026-11-24; the estimator's
+    # `fit_loop_`): the trees the fit built and the loop region's time.
+    # Empty until a fit records it.
+    var fit_loop: FitLoop
 
     def __init__(out self, num_outputs: Int32):
         self.trees = List[TreeMetaDataNode[DType.float32]]()
         self.num_outputs = num_outputs
         self.n_trees = 0
+        self.fit_loop = FitLoop.empty()
 
 
 def error_checking(n_rows: Int32, n_cols: Int32, n_trees: Int32) raises:
@@ -394,10 +400,19 @@ def fit_classification_device(
     for tree_id in range(Int(n_trees)):  # small-loop(n_trees: forest member tree ids): one id per tree, launch parameter list
         tree_ids.append(Int32(tree_start + tree_id))
     var forest = Forest(n_classes)
+    # The fit loop clock (lane alm-forest, 2026-11-24): read once after the
+    # dataset upload, the row weights and the tree-id list, immediately
+    # before the merged-frontier trainer's first group, and once after it
+    # returns. The trainer returns the trees on the host (its last
+    # `download_trees` waited on the device), so no synchronization is
+    # added; its end-of-fit liveness canary is one drain of an empty queue.
+    # Nothing is read inside the loop. Measurement only: no bit changes.
+    var loop_start = fit_loop_start()
     forest.trees = train_forest_classification_device(
         ctx, device_dataset, tree_params, tree_ids, seed,
         bootstrap=bootstrap, n_sampled_rows=n_sampled,
     )
+    forest.fit_loop = fit_loop_stop(loop_start, Int(n_trees))
     forest.n_trees = n_trees
     return forest^
 
@@ -448,10 +463,13 @@ def fit_regression_device(
     for tree_id in range(Int(n_trees)):  # small-loop(n_trees: forest member tree ids): one id per tree, launch parameter list
         tree_ids.append(Int32(tree_start + tree_id))
     var forest = Forest(1)
+    # The fit loop clock, as `fit_classification_device`'s.
+    var loop_start = fit_loop_start()
     forest.trees = train_forest_regression_device(
         ctx, dataset, scale, params, tree_ids, seed,
         bootstrap=bootstrap, n_sampled_rows=n_sampled,
     )
+    forest.fit_loop = fit_loop_stop(loop_start, Int(n_trees))
     forest.n_trees = n_trees
     return forest^
 
@@ -511,10 +529,13 @@ def fit_regression_device_f32(
     for tree_id in range(Int(n_trees)):  # small-loop(n_trees: forest member tree ids): one id per tree, launch parameter list
         tree_ids.append(Int32(tree_start + tree_id))
     var forest = Forest(1)
+    # The fit loop clock, as `fit_classification_device`'s.
+    var loop_start = fit_loop_start()
     forest.trees = train_forest_regression_device(
         ctx, dataset, scale, tree_params, tree_ids, seed,
         bootstrap=bootstrap, n_sampled_rows=n_sampled,
     )
+    forest.fit_loop = fit_loop_stop(loop_start, Int(n_trees))
     forest.n_trees = n_trees
     return forest^
 
