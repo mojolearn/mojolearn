@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """The host column of the native weighted/one-feature Ridge fit request."""
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.linear_fit_types import RIDGE_FIT_ABI, ridge_fit_check_spans
+from core.linear_fit_types import (
+    RIDGE_FIT_ABI, ridge_fit_check_spans, ridge_fit_targets, ridge_fit_result_words, ridge_fit_work_words,
+)
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
@@ -18,9 +20,12 @@ def ridge_fit_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         var f = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=ff)
         var rows = p[0]
         var cols = p[1]
-        var dims: List[Int] = [rows, cols, rows * cols, rows * (2 if p[3] else 1), cols + 5,
-            max(3 * cols * cols + 4 * cols + 1 + 2 * rows, 1), 1, 4, 1]
-        var ip: List[Int32] = [1, Int32(p[2]), 1, Int32(p[3])]
+        # Lane w3f3-k: T targets (y rows x T, one Cholesky factor for every
+        # target's right-hand side), the same words for T == 1.
+        var targets = ridge_fit_targets(np, pp)
+        var dims: List[Int] = [rows, cols, rows * cols, rows * (targets + (1 if p[3] else 0)),
+            ridge_fit_result_words(targets, cols), ridge_fit_work_words(targets, cols, rows), 1, 4, 1]
+        var ip: List[Int32] = [Int32(targets), Int32(p[2]), 1, Int32(p[3])]
         var fp: List[Float32] = [Float32(f[0])]
         var value = x_linear_fit_host(ALGO_RIDGE, a[0], a[1], dims, ip, fp, a[2])
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = value

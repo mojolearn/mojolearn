@@ -94,7 +94,8 @@ class _ClassicalLinear:
         Returns
         -------
         y_pred : ndarray or Array of shape (n_samples,), float64
-            ``X @ coef_ + intercept_``.
+            ``X @ coef_ + intercept_``; shape (n_samples, n_targets) for a
+            Ridge fitted on several targets.
 
         Raises
         ------
@@ -431,9 +432,10 @@ class Ridge(_NumericModeMixin):
     centered on their means before the solve.
 
     ``X`` is read as float32 (a C-contiguous float32 array is used without
-    a copy). ``y`` must be one-dimensional: a single target. Weighted fits
-    and single-feature designs are solved with a Cholesky factorization of
-    the regularized normal equations.
+    a copy). ``y`` is one target, or a 2-D array of several targets: every
+    target is then solved with one Cholesky factorization of the regularized
+    normal equations, shared by all of them. Weighted fits and
+    single-feature designs are solved with that factorization too.
 
     NumPy is optional. With NumPy installed, ``coef_`` and the predictions
     are NumPy arrays; without it they are ``mojolearn.Array`` objects with
@@ -458,10 +460,11 @@ class Ridge(_NumericModeMixin):
 
     Attributes
     ----------
-    coef_ : ndarray or Array of shape (n_features,), float32
-        The fitted coefficients.
-    intercept_ : float
-        The fitted intercept; 0.0 when ``fit_intercept`` is False.
+    coef_ : ndarray or Array of shape (n_features,) or (n_targets, n_features), float32
+        The fitted coefficients, one row per target for a 2-D ``y``.
+    intercept_ : float or ndarray of shape (n_targets,)
+        The fitted intercept, one per target for a 2-D ``y``; 0.0 when
+        ``fit_intercept`` is False.
     solver_ : str
         The solver used, always ``'eig'``.
     n_features_in_ : int

@@ -18,6 +18,10 @@ struct LinearModelState(Copyable, Movable, Defaultable):
     var fitted: Bool
     var fitting: Bool
     var input_copied: Bool
+    # Lane w3f3-k: a Ridge fitted on a 2-D y (`targets` > 1): `coef` holds
+    # targets x features words and `coef_count` their count; the public
+    # predict and score read the per-target intercepts from `intercept_`.
+    var targets: Int
 
     def __init__(out self):
         self.coef = 0
@@ -30,6 +34,7 @@ struct LinearModelState(Copyable, Movable, Defaultable):
         self.fitted = False
         self.fitting = False
         self.input_copied = False
+        self.targets = 1
 
 
 def linear_state_require_coef(state: LinearModelState) raises:

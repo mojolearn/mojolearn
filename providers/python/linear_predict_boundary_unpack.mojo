@@ -17,6 +17,7 @@ from bindings.sequential_description_unpack import sequential_fields
 from core.linear_model_state import LinearModelState, linear_state_require_coef, linear_state_check_width, linear_state_check_coefficients
 from providers.python.linear_state_boundary_door import LinearStateOwner, linear_state_owner, linear_state_refresh
 from core.linear_registry import LINEAR_STATES, linear_lease_predict
+from core.linear_boundary_run import linear_predict_targets_run
 from core.device_route import DeviceRoute
 
 
@@ -29,6 +30,11 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
     if owner is not None:
         prior = LINEAR_STATES.acquire(owner.downcast_value_ptr[LinearStateOwner]()[].handle)
         state = prior.value()[].copy()
+    if state.targets > 1:
+        # THE 2-D y (lane w3f3-k): a Ridge fitted on several targets. One
+        # integer compare on the one-target path, which is unchanged.
+        _ = prior
+        return linear_predict_targets_boundary(model, fields, value, route, pins, context, state.targets)
     var coefficient_source = py_get(fields, "coef_")
     state.has_coef = coefficient_source is not None
     linear_state_require_coef(state)
@@ -96,3 +102,52 @@ def classical_linear_predict(model: PythonObject, value: PythonObject,
     # One result for every caller (Andrew, 2026-11-22, lane predict-dtype):
     # the float32 predictions, public predict included.
     return _linear_predict_boundary(model, value, route, pins, context)
+
+
+def linear_predict_targets_boundary(model: PythonObject, fields: PythonObject, value: PythonObject,
+    route: DeviceRoute, pins: PythonObject, context: PythonObject, targets: Int) raises -> PythonObject:
+    """`Ridge.predict(X)` of a multi-target fit (lane w3f3-k): rows x
+    `targets` float32, `X @ coef_.T + intercept_`, as scikit-learn's. UNPACK
+    reads the public `coef_` (targets x features) and `intercept_` (one per
+    target) as the one-target predict reads its own; RUN is
+    `linear_predict_targets_run` over the estimator's prediction entry."""
+    var coefficient_source = py_get(fields, "coef_")
+    var state = LinearModelState()
+    state.has_coef = coefficient_source is not None
+    linear_state_require_coef(state)
+    var feature_source = fields["n_features_in_"]
+    var intercept_source = fields["intercept_"]
+    var est = classical_estimator_name(model)
+    var admitted_x = admit_x_unrecorded(value, est, context, admitted=True)
+    var x = admitted_x.array
+    var rows = admitted_x.rows
+    var cols = admitted_x.cols
+    state.features = Int(py=feature_source)
+    linear_state_check_width(state, cols, est)
+    var coef = admit_x(coefficient_source, 2, "coef_", context)
+    state.coef_count = Int(py=coef.size)
+    linear_state_check_coefficients(state, cols * targets)
+    var intercepts = List[Float64]()
+    for t in range(targets):  # driver-loop: over the targets (their public intercepts)
+        var word = intercept_source[t]
+        intercepts.append(Float64(py=word))
+    var columns = List[Float32](length=rows * targets, fill=Float32(0.0))
+    var dst = classical_array(rows, targets, context)
+    var coef_address = Int(py=classical_address(coef))
+    var destination = Int(py=classical_address(dst))
+    var columns_address = Int(columns.unsafe_ptr())
+    var entry = route.second.call
+    var py = Python()
+    try:
+        with GILReleased(py):
+            linear_predict_targets_run(entry, admitted_x.address, coef_address, intercepts, columns_address,
+                                       destination, rows, cols, targets)
+    finally:
+        _ = x
+        _ = admitted_x
+        _ = coef
+        _ = dst
+        _ = columns
+        _ = intercepts
+        _ = pins
+    return dst

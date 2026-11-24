@@ -52,10 +52,12 @@ def linear_state_owner(model: PythonObject) raises -> PythonObject:
 
 
 def linear_state_publish(model: PythonObject, coefficients: PythonObject, means: PythonObject,
-    features: Int, intercept: Float64, ymean: Float64, copied: Bool) raises:
+    features: Int, intercept: Float64, ymean: Float64, copied: Bool, targets: Int = 1) raises:
     var state = LinearModelState()
     state.coef = Int(py=classical_address(coefficients))
-    state.coef_count = features
+    # Lane w3f3-k: a multi-target Ridge's targets x features coefficients.
+    state.targets = targets
+    state.coef_count = features * targets
     state.features = features
     state.intercept = intercept
     # Loaded archives restore coefficients/intercept without a training mean
