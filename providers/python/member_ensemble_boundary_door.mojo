@@ -2550,8 +2550,13 @@ def _search_seed_word(fields: PythonObject, b: PythonObject) raises -> Int:
     """A RandomizedSearchCV's sampler seed for its admission and its PACK:
     its own exact non-negative int below 2^52 (the words are float64), or,
     for random_state=None, one fresh draw per admission (scikit-learn's
-    sampler draws afresh per fit too). -1: a seed the words cannot hold (the
-    door keeps the search)."""
+    sampler draws afresh per fit too). _SEED_AS_GIVEN (lane mf-rows8d, row
+    :3552): any other random_state (a NumPy integer, an int the float64
+    words cannot hold, a negative int, a bool, a RandomState): the sampler
+    reads the search's own `random_state` as given, at the admission and at
+    the PACK's re-draw (the same field of the same fit), and raises its own
+    words for one it refuses (bindings/msel_candidates_door.mojo
+    `_search_seed`, `MselRng`), as the door's units did."""
     var state = py_get(fields, "random_state")
     if state is None:
         var raw = py_call(b.int.from_bytes, py_call(native_loaded_module("os").urandom, PythonObject(7)),
@@ -2559,8 +2564,13 @@ def _search_seed_word(fields: PythonObject, b: PythonObject) raises -> Int:
         return Int(py=raw) >> 4  # 52 random bits
     var word = _int_word(state, b)
     if word < 0 or word >= 4503599627370496:
-        return -1
+        return _SEED_AS_GIVEN
     return word
+
+
+#: A RandomizedSearchCV seed word: the sampler reads the search's own
+#: `random_state` as given (`_search_seed_word`); -1 is a grid's.
+comptime _SEED_AS_GIVEN = -2
 
 
 def _search_candidates(model: PythonObject, fields: PythonObject, seed: Int, warn: Bool,
@@ -2572,28 +2582,33 @@ def _search_candidates(model: PythonObject, fields: PythonObject, seed: Int, war
     if cls is msel_cls("GridSearchCV", context):
         return msel_grid_list(fields["param_grid"], context)
     var dists = msel_sampler_check(fields["param_distributions"], context, True)
-    return msel_sampler_list(dists, fields["n_iter"], PythonObject(seed), context, True, warn)
+    var state = fields["random_state"] if seed == _SEED_AS_GIVEN else PythonObject(seed)
+    return msel_sampler_list(dists, fields["n_iter"], state, context, True, warn)
 
 
 def _search_prepare(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
                     prepared: PythonObject) raises -> PythonObject:
     """UNPACK, once per admission: (candidates, their clones, the seed word),
     kept in `prepared` by the search's identity so the work-list admits a
-    META candidate clone before the search reads it; None: not served."""
+    META candidate clone before the search reads it. Lane mf-rows8d (row
+    :3552, every None exit raised or served): no estimator raises the
+    search's parameter validation words (`_search_base_refusal`, the
+    first check scikit-learn's fit makes); a class that is neither of the
+    two Mojolearn searches (a user's subclass: its methods are Python)
+    raises MEMBER_SET_FOREIGN's words; any random_state is the sampler's
+    (`_search_seed_word`)."""
     var key = py_call(b.id, model)
     var got = py_get(prepared, key)
     if got is not None:
         return got
     var base = py_get(fields, "estimator")
     if base is None:
-        return PythonObject(None)
+        raise Error(_search_base_refusal(model, base, PythonObject(None), False, 0, b))
     var seed = -1
     if py_type(model) is not msel_cls("GridSearchCV", context):
         if py_type(model) is not msel_cls("RandomizedSearchCV", context):
-            return PythonObject(None)
+            raise Error("TypeError: " + String(py=py_type(model).__name__) + String(MEMBER_SET_FOREIGN))
         seed = _search_seed_word(fields, b)
-        if seed < 0:
-            return PythonObject(None)
     var candidates = _search_candidates(model, fields, seed, True, context)
     var clones = Python.list()
     for c in range(len(candidates)):  # driver-loop: over the candidates (one native clone with its parameters each)
@@ -3548,8 +3563,6 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         # learn's `check_scoring` raises before any candidate is drawn.
         _no_score_refusal(base, b)
     var got = _search_prepare(model, fields, context, b, prepared)
-    if got is None:
-        return False
     var clones = got[1]
     var seed = Int(py=got[2])
     if len(clones) == 0:
