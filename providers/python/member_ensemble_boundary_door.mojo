@@ -280,25 +280,6 @@ def _active(fields: PythonObject, b: PythonObject) raises -> _Active:
     return got^
 
 
-def _has_method(est: PythonObject, method: String, context: PythonObject) raises -> Bool:
-    """scikit-learn's `hasattr(estimator, method)` for a nested estimator:
-    its plan's fixed method table (`prep_estimator_has`), or, for a
-    MEMBER-ONLY plan (python/mojolearn/_native_msel_more.py
-    `connect_members`: registered without method recipes, so its table is
-    empty; a search, an encoder, a host class), its class's attribute, as
-    bindings/trees_public_meta_door.mojo reads a member-only base. Lane
-    w3f2-cv (gate 14f1 group B): a stacked or calibrated search answered no
-    decision_function / predict_proba here. The class is read only on the
-    miss path of a member-only plan; once per admission."""
-    if prep_estimator_has(est, method, context):
-        return True
-    var plan = prep_estimator_plan(est, context)
-    if plan is None or py_get(plan, "member_only") is None:
-        return False
-    var b = native_loaded_module("builtins")
-    return py_call(b.getattr, py_type(est), PythonObject(method), PythonObject(None)) is not None
-
-
 def _stack_method(fields: PythonObject, est: PythonObject, classifier: Bool, context: PythonObject) raises -> Int:
     """`_StackingBase._method` (the door's `_stack_method`). A value the
     door refuses raises its words (lane mf-fitadm7; bindings/
@@ -308,9 +289,9 @@ def _stack_method(fields: PythonObject, est: PythonObject, classifier: Bool, con
     var name = String("auto") if method is None else String(method)
     if name == "auto":
         if classifier:
-            if _has_method(est, "predict_proba", context):
+            if prep_estimator_has(est, "predict_proba", context):
                 return STACK_PROBA
-            if _has_method(est, "decision_function", context):
+            if prep_estimator_has(est, "decision_function", context):
                 return STACK_DECISION
         return STACK_PREDICT
     if name == "predict_proba":
@@ -1725,7 +1706,7 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
         return _refuse_first(fields, context, b, owner, kind, String(e))
     if kind == META_OVR:
         var base = py_get(fields, "estimator")
-        var decision = _has_method(base, "decision_function", context)
+        var decision = prep_estimator_has(base, "decision_function", context)
         var needs = base_needs | (MEMBER_CAN_DECISION if decision else MEMBER_CAN_PREDICT_PROBA)
         if not _admit_nested(done, nested, base, True, needs, context, b, labels):
             return False
@@ -1770,7 +1751,7 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
         # `_cal_native`, THE RESIDENT ROWS), which never reaches this admission; a NESTED Calibrated (a member of a meta-estimator, a
         # search candidate) and a fitted one held for predict run its member calls on host rows, as every other
         # base. Before, this answered False and the caller kept its door (SHAP's `_DoorModel`, the meta doors).
-        var decision = _has_method(base, "decision_function", context)
+        var decision = prep_estimator_has(base, "decision_function", context)
         var needs = base_needs | (MEMBER_CAN_DECISION if decision else MEMBER_CAN_PREDICT_PROBA)
         if not _admit_cal_base(done, nested, base, needs, context, b, labels, whole):
             return False
