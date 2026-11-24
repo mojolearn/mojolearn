@@ -243,7 +243,7 @@ def select_d_fast(
 def kpss_one_wait(
     ctx: DeviceContext,
     y_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    flags_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    flags_ptr: MutPointer[UInt8, MutUntrackedOrigin],
     stat_ptr: MutPointer[Float32, MutUntrackedOrigin],
     batch_size: Int,
     n_obs: Int,
@@ -367,7 +367,7 @@ def kpss_one_wait(
     if ok:
         var hr = (hp + res_at).bitcast[UInt8]()
         for b in range(batch_size):
-            flags_ptr.unsafe_store(b, Int32(1) if hr.unsafe_load(b) != UInt8(0) else Int32(0))
+            flags_ptr.unsafe_store(b, UInt8(1) if hr.unsafe_load(b) != UInt8(0) else UInt8(0))
             stat_ptr.unsafe_store(b, hp.unsafe_load(stat_at + b))
     _ = up^
     _ = tail^

@@ -37,6 +37,7 @@ same words before the call).
   TSA_OP_HW_RESIDENT_COUNT    -                                            -> live handles
   TSA_OP_HW_QUERY_RESIDENT    a [out]    p [handle, start, end, seasonal]  -> written
   TSA_OP_KPSS_TEST         a [y, flags, stat]  p [batch, n_obs, d, D, s]      f [pval_threshold]  -> batch
+                           (flags: batch uint8, 1 stationary, 0 not; stat: batch float32)
   TSA_OP_SELECT_D          a [y, out]          p [batch, n_obs, D, s, d_max]  f [pval_threshold]  -> batch
 
 The two stationarity operations (`kpss_test`, `select_d`; every image holds

@@ -26,7 +26,8 @@ def tsa_hw_ops_host_inference(operation: Int, aa: Int, pp: Int, ff: Int, result:
         return True
     if operation == TSA_OP_KPSS_TEST:
         var f = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=ff)
-        _kpss_flags_host(a[0], p[0], p[1], p[2], p[3], p[4], Float32(f[0]), i32_ptr(a[1]), f32_ptr(a[2]))
+        _kpss_flags_host(a[0], p[0], p[1], p[2], p[3], p[4], Float32(f[0]),
+                         MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=a[1]), f32_ptr(a[2]))
         r[] = p[0]
         return True
     if operation == TSA_OP_SELECT_D:

@@ -2,7 +2,7 @@
 """Typed KPSS flag and select_d loops moved word for word from bindings/kpss_host_test.mojo."""
 from std.sys.compile import is_defined
 from std.math import isfinite
-from core.hostptr import f32_ptr, i32_ptr, read_f32
+from core.hostptr import f32_ptr, read_f32
 from tsa.checks.kpss_oracle import kpss_host_f32
 
 
@@ -20,10 +20,10 @@ def _kpss_flags_host(
     D: Int,
     s: Int,
     pval: Float32,
-    fp: MutPointer[Int32, MutUntrackedOrigin],
+    fp: MutPointer[UInt8, MutUntrackedOrigin],
     sp: MutPointer[Float32, MutUntrackedOrigin],
 ) raises:
-    """`kpss_test`'s guards and `kpss_host_f32`, writing `batch_size` flags
+    """`kpss_test`'s guards and `kpss_host_f32`, writing `batch_size` uint8 flags
     (1 stationary) at `fp` and statistics at `sp`. Shared by `kpss_test`
     and the host `select_d` (lane py-runtime-b), so both raise the same
     words in the same order."""
@@ -62,9 +62,9 @@ def _kpss_flags_host(
             )
     var st = kpss_host_f32(y, batch_size, n_obs, d, D, s, pval)
     for b in range(batch_size):
-        fp[b] = Int32(1) if st.stationary[b] else Int32(0)
+        fp[b] = UInt8(1) if st.stationary[b] else UInt8(0)
         comptime if KPSS_DECISION_SABOTAGE:
-            fp[b] = Int32(1) - fp[b]
+            fp[b] = UInt8(1) - fp[b]
         sp[b] = st.stat[b]
 
 
@@ -72,7 +72,7 @@ def kpss_select_d_host(
     y_address: Int, batch_size: Int, n_obs: Int, D: Int, s: Int, d_max: Int, pval: Float32,
     dp: MutPointer[Int32, MutUntrackedOrigin],
 ) raises:
-    var flags = List[Int32](length=max(batch_size, 1), fill=Int32(0))
+    var flags = List[UInt8](length=max(batch_size, 1), fill=UInt8(0))
     var stat = List[Float32](length=max(batch_size, 1), fill=Float32(0))
     var decided = List[Bool](length=max(batch_size, 1), fill=False)
     for b in range(batch_size):
@@ -82,7 +82,8 @@ def kpss_select_d_host(
         if left == 0:
             break
         _kpss_flags_host(y_address, batch_size, n_obs, order, D, s, pval,
-                         i32_ptr(Int(flags.unsafe_ptr())), f32_ptr(Int(stat.unsafe_ptr())))
+                         MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(flags.unsafe_ptr())),
+                         f32_ptr(Int(stat.unsafe_ptr())))
         for b in range(batch_size):
             if not decided[b] and flags[b] != 0:
                 dp[b] = Int32(order)
