@@ -82,6 +82,15 @@ struct DBSCANWireOracle(DBSCANNativeKernels):
             "DBSCAN resident exact handle/options")
         return EXACT_RESULT + 8 + Int(r.has_threshold)
 
+    @staticmethod
+    def fit_store(r: DBSCANFitRequest) raises -> Int:
+        # The resident-store form (lane vdf-scope-cluster4): the fit's words, `x` a slot id.
+        return Self.fit(r) + 1000
+
+    @staticmethod
+    def core_gather_store(r: DBSCANGatherRequest) raises -> Int:
+        return Self.core_gather(r) + 1000
+
 
 def fit_request(weighted: Bool) -> DBSCANFitRequest:
     return DBSCANFitRequest(11, 13, 17 if weighted else 0, 19, 23, 29, 31, 37, 41, 1, 3, 0.10000000000000002)
@@ -176,7 +185,7 @@ def malformed(unit: Int) raises:
 
 
 def fixture(unit: Int) raises:
-    comptime assert DBSCAN_NATIVE_COUNT == 10 and DBSCAN_MODE == 0 and DBSCAN_VENDOR == 1 and DBSCAN_CAPABILITIES == 2
+    comptime assert DBSCAN_NATIVE_COUNT == 12 and DBSCAN_MODE == 0 and DBSCAN_VENDOR == 1 and DBSCAN_CAPABILITIES == 2
     comptime assert DBSCAN_FIT == 3 and DBSCAN_CORE_COUNT == 4 and DBSCAN_CORE_GATHER == 5 and DBSCAN_PREPARE == 6
     comptime assert DBSCAN_RELEASE == 7 and DBSCAN_QUERY == 8 and DBSCAN_RESIDENT_QUERY == 9
     var driver = DBSCANNativeDriver(dbscan_native_v1[DBSCANWireOracle])
@@ -185,11 +194,16 @@ def fixture(unit: Int) raises:
             and driver.metadata(DBSCAN_CAPABILITIES) == 1, "DBSCAN fixed metadata slots")
     elif unit <= 2:
         require(driver.fit(fit_request(unit == 2)) == EXACT_RESULT + unit - 1, "DBSCAN optional weights and integer fit result")
+        # The resident-store form carries the same words to `fit_store` (lane vdf-scope-cluster4).
+        require(driver.fit_store(fit_request(unit == 2)) == EXACT_RESULT + unit - 1 + 1000,
+            "DBSCAN resident-store fit carries the fit's words")
     elif unit == 3:
         require(driver.core_count(DBSCANCoreRequest(43, 47, 53, 59, 61)) == EXACT_RESULT + 2, "DBSCAN integer core count")
     elif unit == 4:
         require(driver.core_gather(DBSCANGatherRequest(67, 71, 73, 79, 83, 89, 97, 101, 103)) == EXACT_RESULT + 3,
             "DBSCAN core gather result")
+        require(driver.core_gather_store(DBSCANGatherRequest(67, 71, 73, 79, 83, 89, 97, 101, 103))
+            == EXACT_RESULT + 3 + 1000, "DBSCAN resident-store core gather carries the gather's words")
     elif unit == 5 or unit == 43:
         require(driver.prepare(DBSCANReferenceRequest(107, 109, 113, 131 if unit == 5 else 0, 127, 2))
             == (EXACT_RESULT + 4 if unit == 5 else 0), "DBSCAN exact reference handle, including zero")
