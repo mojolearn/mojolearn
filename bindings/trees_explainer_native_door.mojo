@@ -26,6 +26,7 @@ def _check_rank(view: PythonObject, rank: Int, name: String) raises:
 from providers.python.array_metadata_pyapi_door import array_owner_once
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from bindings.trees_keys_unpack import trees_keys
+from bindings.trees_route_boundary_door import trees_explainer_device, trees_explainer_run
 from bindings.operation_names_trees import TREES_OPN_TREES_EXPLAINER_INIT, TREES_OPN_TREES_EXPLAINER_CLOSE, TREES_OPN_TREES_EXPLAINER_VALUES
 from bindings.py_balanced import py_item
 
@@ -521,7 +522,12 @@ def trees_explainer_operation(model: PythonObject, operation: Int, args: PythonO
     classical_check_layout(model, context)
     var fields = _fields(model)
     if operation == TREES_OPN_TREES_EXPLAINER_INIT:
-        return _construct(fields, args, context)
+        # args[5] is the constructor's `device` (lane vdf-misc): admitted
+        # first; "cpu" beside a GPU set constructs on the CPU table set, and
+        # the entries captured here are the ones every `shap_values` call
+        # runs (no later read of the device).
+        var device = trees_explainer_device(args[5], "TreeExplainer", context)
+        return _construct(fields, args, trees_explainer_run(model, fields, args[5], device, args[4], context))
     var owner = _get(fields, "_shap_native")
     if owner is None:
         raise Error("RuntimeError: TreeExplainer has not been initialized by the native owner")

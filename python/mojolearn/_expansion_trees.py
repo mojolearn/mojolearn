@@ -2618,6 +2618,10 @@ class TreeExplainer(_TreesEnsembleBase):
     model_output : {"raw"}, default "raw"
         Only the raw model output is explained; other values raise
         ``NotImplementedError``.
+    device : {None, "gpu", "cpu"}, default None
+        Where the explanation runs. None uses this installation's device,
+        ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU installation.
+        Other values raise ``ValueError``.
 
     Attributes
     ----------
@@ -2649,9 +2653,9 @@ class TreeExplainer(_TreesEnsembleBase):
     _mojolearn_native_public = True
 
     def __init__(self, model, data=None, *, feature_perturbation="tree_path_dependent",
-                 model_output="raw", numeric_mode=None):
+                 model_output="raw", numeric_mode=None, device=None):
         return _TREES(self, _OP.trees_explainer_init,
-                      (model, data, feature_perturbation, model_output, numeric_mode), _TREES_CONTEXT)
+                      (model, data, feature_perturbation, model_output, numeric_mode, device), _TREES_CONTEXT)
 
     def close(self):
         """Release the explainer's native resources.
@@ -2714,6 +2718,12 @@ class KernelExplainer(_TreesEnsembleBase):
         Seed for the coalition sampling: None (seed 0) or a nonnegative int.
         Anything else, including a ``RandomState`` object, raises
         ``ValueError``.
+    device : {None, "gpu", "cpu"}, default None
+        Where the explanation runs. None uses this installation's device,
+        ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU installation.
+        An explicit value must name the side ``model`` runs on (a model
+        constructed with ``device=None`` runs on this installation's device);
+        any other value raises ``ValueError``.
 
     Attributes
     ----------
@@ -2739,9 +2749,9 @@ class KernelExplainer(_TreesEnsembleBase):
 
     _mojolearn_native_public = True
 
-    def __init__(self, model, data, *, link="identity", random_state=None, numeric_mode=None):
+    def __init__(self, model, data, *, link="identity", random_state=None, numeric_mode=None, device=None):
         return _TREES(self, _OP.trees_agnostic_kernel_init,
-                      (model, data, random_state, link, numeric_mode), _TREES_CONTEXT)
+                      (model, data, random_state, link, numeric_mode, device), _TREES_CONTEXT)
 
     def shap_values(self, X, nsamples="auto", l1_reg="auto"):
         """Kernel SHAP values of the rows of ``X``.
@@ -2792,6 +2802,12 @@ class PermutationExplainer(_TreesEnsembleBase):
         Seed for the permutations: None (seed 0) or a nonnegative int.
         Anything else, including a ``RandomState`` object, raises
         ``ValueError``.
+    device : {None, "gpu", "cpu"}, default None
+        Where the explanation runs. None uses this installation's device,
+        ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU installation.
+        An explicit value must name the side ``model`` runs on (a model
+        constructed with ``device=None`` runs on this installation's device);
+        any other value raises ``ValueError``.
 
     Attributes
     ----------
@@ -2817,9 +2833,9 @@ class PermutationExplainer(_TreesEnsembleBase):
 
     _mojolearn_native_public = True
 
-    def __init__(self, model, data, *, random_state=None, numeric_mode=None):
+    def __init__(self, model, data, *, random_state=None, numeric_mode=None, device=None):
         return _TREES(self, _OP.trees_agnostic_permutation_init,
-                      (model, data, random_state, None, numeric_mode), _TREES_CONTEXT)
+                      (model, data, random_state, None, numeric_mode, device), _TREES_CONTEXT)
 
     def shap_values(self, X, npermutations=10):
         """Permutation SHAP values of the rows of ``X``.

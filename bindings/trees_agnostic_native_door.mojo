@@ -21,6 +21,10 @@ from std.python._cpython import GILReleased
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.native_loaded_module_door import native_loaded_module
+from bindings.classical_validate_unpack import classical_estimator_name
+from bindings.trees_route_boundary_door import trees_explainer_device, trees_explainer_run, trees_route_context
+from providers.python.device_route_boundary_door import device_request
+from core.function_device_fitted import function_device_fitted
 from bindings.classical_attributes_door import classical_check_layout
 from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_has, prep_estimator_plan, prep_native_context,
@@ -1538,14 +1542,30 @@ def trees_agnostic_operation(model: PythonObject, operation: Int, opname: String
     table's String, borrowed) is for the unknown-operation text only."""
     classical_check_layout(model, context)
     var fields = _fields(model)
-    if operation == TREES_OPN_TREES_AGNOSTIC_KERNEL_INIT:
-        _construct(fields, args, False, context)
+    if operation == TREES_OPN_TREES_AGNOSTIC_KERNEL_INIT or operation == TREES_OPN_TREES_AGNOSTIC_PERMUTATION_INIT:
+        # args[5] is the constructor's `device` (lane vdf-misc), admitted
+        # first; the explained model is evaluated on its own route, so an
+        # explicit word that disagrees with the model's side is refused
+        # (core/function_device_fitted.mojo), and the explainer's own
+        # programs run on the side it names (trees_explainer_run).
+        var permutation = operation == TREES_OPN_TREES_AGNOSTIC_PERMUTATION_INIT
+        var run = context
+        if args[5] is not None:
+            var name = _name(permutation)
+            var device = trees_explainer_device(args[5], name, context)
+            var explained = _explained(args[0], context)
+            function_device_fitted(device, device_request(_fields(explained), native_loaded_module("builtins")),
+                                   name, classical_estimator_name(explained))
+            run = trees_explainer_run(model, fields, args[5], device, args[4], context)
+        _construct(fields, args, permutation, run)
         return PythonObject(None)
-    if operation == TREES_OPN_TREES_AGNOSTIC_PERMUTATION_INIT:
-        _construct(fields, args, True, context)
-        return PythonObject(None)
+    # An explainer constructed with a `device` runs in the context it named
+    # (held per explainer; one field read here per call, none per row).
+    var run = context
+    if py_get(fields, "device") is not None:
+        run = trees_route_context(model, context)
     if operation == TREES_OPN_TREES_AGNOSTIC_KERNEL_VALUES:
-        return _kernel_values(fields, args, context)
+        return _kernel_values(fields, args, run)
     if operation == TREES_OPN_TREES_AGNOSTIC_PERMUTATION_VALUES:
-        return _permutation_values(fields, args, context)
+        return _permutation_values(fields, args, run)
     raise Error("unknown model-agnostic explainer operation " + opname)

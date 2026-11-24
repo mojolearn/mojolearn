@@ -34,7 +34,9 @@ from std.python import PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_item, py_setitem, py_fields
 from bindings.trees_keys_unpack import trees_keys
 from bindings.trees_public_inputs_door import trees_builtins
-from core.device_route import DEVICE_CPU, device_vendor_code
+from core.device_route import DEVICE_CPU, device_vendor_code, device_cpu_fast
+from providers.python.function_device_boundary_door import function_device_admit
+from core.function_device import FunctionDevice, function_device_default
 from providers.python.device_route_boundary_door import (
     device_admit, device_binding_held, device_binding_device, device_binding_keep, device_cpu_connect_late,
 )
@@ -140,3 +142,37 @@ def trees_route_vendor(context: PythonObject) raises -> PythonObject:
     if py_get(context, nk[].k_device_cpu_context) is context:
         return PythonObject("cpu")
     return py_item(context, nk[].k_device_vendor)
+
+
+def trees_explainer_device(word: PythonObject, name: String, context: PythonObject) raises -> FunctionDevice:
+    """The shared admission of an explainer's `device=` word (HAS_GPU and
+    HAS_CPU: the x_trees device image and the CPU table set beside it)."""
+    if word is None:
+        return function_device_default()
+    return function_device_admit(word, name, True, True, context, trees_builtins())
+
+
+def trees_explainer_run(explainer: PythonObject, fields: PythonObject, word: PythonObject, device: FunctionDevice,
+                        requested: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The run context of an explainer constructed with `device=`
+    (TreeExplainer, KernelExplainer, PermutationExplainer; lane vdf-misc),
+    `device` being the word's admission (`trees_explainer_device`, once,
+    before any work, in the shared words): the explainers have the x_trees device image and the CPU table set beside
+    it (`trees_cpu_context`, the one a device="cpu" tree estimator runs on).
+    The admitted word is kept in the explainer's `device` field, so its later
+    operations take the same run context through `trees_route_context` (held
+    per explainer, read once). `requested` is the explainer's numeric_mode
+    (None: the process default); the CPU table set is identical only. Returns
+    the context the explainer's construction runs in; None is one identity
+    compare and returns `context`."""
+    if word is None:
+        return context
+    var b = trees_builtins()
+    py_setitem(fields, PythonObject("device"), word)
+    if not device.host_beside:
+        return context
+    var nk = trees_keys()
+    var mode = requested if requested is not None else py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
+    if py_type(mode) is b.str and String(py=mode) == "fast":
+        device_cpu_fast()
+    return trees_route_context(explainer, context)
