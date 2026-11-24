@@ -26,12 +26,19 @@ def _imbalanced(n=60, d=4, seed=3):
     return X, y
 
 
+#: Bagging's max_features for the per-member route: a bag of best-splitter trees over EVERY feature, unweighted and
+#: without out-of-bag scoring, is fitted as ONE forest (`_bagging_batched_ok`, bindings/trees_public_boost_door.mojo),
+#: whose trees hold every class. These tests are about the per-member route (`_bagging_fit_bags`' native set), which a
+#: bag drawing fewer features than X has reaches.
+PER_MEMBER = 3
+
+
 def test_bagging_draws_lacking_a_class_fit_the_classes_they_hold():
     # Fail-proof: make member_unit_classes return an empty list always (core/member_unit_classes.mojo): the set's
     # cover pass is skipped, the lacking draws are fitted with k classes and their classes_ become [0, 1, 2].
     X, y = _imbalanced()
     m = ml.BaggingClassifier(ml.DecisionTreeClassifier(random_state=0), n_estimators=12, max_samples=6,
-                             bootstrap=True, random_state=0).fit(X, y)
+                             max_features=PER_MEMBER, bootstrap=True, random_state=0).fit(X, y)
     narrowed = 0
     for est in m.estimators_:
         held = np.asarray(est.classes_)
@@ -50,9 +57,9 @@ def test_bagging_lacking_draws_same_answer_every_n_jobs():
     # raises MEMBER_SET_LACKING for the first lacking draw.
     X, y = _imbalanced()
     one = ml.BaggingClassifier(ml.DecisionTreeClassifier(random_state=0), n_estimators=8, max_samples=6,
-                               random_state=1, n_jobs=1).fit(X, y)
+                               max_features=PER_MEMBER, random_state=1, n_jobs=1).fit(X, y)
     many = ml.BaggingClassifier(ml.DecisionTreeClassifier(random_state=0), n_estimators=8, max_samples=6,
-                                random_state=1, n_jobs=4).fit(X, y)
+                                max_features=PER_MEMBER, random_state=1, n_jobs=4).fit(X, y)
     np.testing.assert_array_equal(one.predict_proba(X), many.predict_proba(X))
 
 
