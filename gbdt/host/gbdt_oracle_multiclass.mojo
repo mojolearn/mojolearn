@@ -172,6 +172,7 @@ from gbdt.host.gbdt_oracle_eval import (
     gbdt_eval_test_bins,
 )
 from gbdt.lapack.linear_system import solve_linear_system_cholesky
+from gbdt.metrics.sample_quantile import host_weighted_l2
 from gbdt.host.gbdt_oracle import _snap_plane
 from gbdt.host.gbdt_oracle_ordered import (
     _OrdSplit,
@@ -1086,6 +1087,12 @@ def gbdt_multi_host_fit(
         weights = List[Float32](length=n_rows, fill=Float32(1.0))
     if has_class_weights:
         _class_weight_rows(y, class_weights, n_rows, weights)
+    # THE WEIGHTED L2 (lane w3f2-gbdtw, 2026-11-24): `train`'s
+    # `device_weighted_l2` over the same column (sample times class weight),
+    # once per fit; unweighted, `params.l2_leaf_reg` exactly
+    var l2_reg = params.l2_leaf_reg
+    if has_weights:
+        l2_reg = host_weighted_l2(l2_reg, weights, n_rows)
     var is_mc = objective == GBDT_OBJ_MULTICLASS
     var dim = num_classes - 1 if is_mc else num_classes
     var stat_count = 1 + dim
@@ -1345,7 +1352,7 @@ def gbdt_multi_host_fit(
                 pw_splits = _ordered_tree_structure(
                     pw_tree_cindex, pw_helpers, max_depth, pw_planes,
                     pw_planes, pw_doc_ids, pw_part_bounds, 2 * pw_dims,
-                    pw_fold_bits, fixed_scale, params.l2_leaf_reg,
+                    pw_fold_bits, fixed_scale, l2_reg,
                     pw_s_offset, pw_s_shift, pw_s_mask, List[Bool](), False,
                     pw_std_dev, tree_seed, False, sw_off=0,
                     sg_off=pw_dims * n_rows, dim_count=pw_dims,
@@ -1356,7 +1363,7 @@ def gbdt_multi_host_fit(
                 pw_splits = _ordered_tree_structure(
                     cindexes[learn_p], pw_helpers, max_depth, pw_planes,
                     pw_planes, pw_doc_ids, pw_part_bounds, 2 * pw_dims,
-                    pw_fold_bits, fixed_scale, params.l2_leaf_reg,
+                    pw_fold_bits, fixed_scale, l2_reg,
                     pw_offset, pw_shift, pw_mask, pw_one_hot, False,
                     pw_std_dev, tree_seed, False, sw_off=0,
                     sg_off=pw_dims * n_rows, dim_count=pw_dims,
@@ -1420,7 +1427,7 @@ def gbdt_multi_host_fit(
                 n_live = _tree_ctr_levels_host(
                     tree_ctr[0], cindexes, test_cindex, learn_p, s_layout, s_blocks,
                     s_bf_feature, s_bf_bin, n_rows, n_cols, max_depth,
-                    params.l2_leaf_reg, score_std_dev, fixed_scale, level_rand,
+                    l2_reg, score_std_dev, fixed_scale, level_rand,
                     row_index, stats, p_off, p_sz, tc_features, tc_bins,
                     score_function=score_function, stat_count=stat_count,
                     multiclass_optimization=is_mc,
@@ -1482,7 +1489,7 @@ def gbdt_multi_host_fit(
                 # the score and the device winner
                 var gains = _cosine_gains_n(
                     hist, s_hist_cells, stat_count, part_stats, n_live,
-                    params.l2_leaf_reg, is_mc, score_std_dev, level_seed, s_bf_feature,
+                    l2_reg, is_mc, score_std_dev, level_seed, s_bf_feature,
                     score_function == SCORE_FUNCTION_L2,
                 )
                 var best_bin = _gain_winner(gains, s_hist_cells)
@@ -1574,7 +1581,7 @@ def gbdt_multi_host_fit(
             if p == learn_p and pw_dims == 0:
                 var estimated = _estimate_multi(
                     objective, num_classes, y, weights, has_weights, cursors[p],
-                    row_index, offsets, sizes, n_rows, params.l2_leaf_reg,
+                    row_index, offsets, sizes, n_rows, l2_reg,
                     leaf_method, leaf_iterations,
                 )
                 p_scaled = rescale_apply_leaves_host(
@@ -1588,7 +1595,7 @@ def gbdt_multi_host_fit(
                 var estimated = _estimate_multi(
                     objective, num_classes, y, weights, has_weights, cursors[p],
                     part.row_index, part.offsets, part.sizes, n_rows,
-                    params.l2_leaf_reg, leaf_method, leaf_iterations,
+                    l2_reg, leaf_method, leaf_iterations,
                 )
                 p_scaled = rescale_apply_leaves_host(
                     cursors[p], estimated, lr, part.row_index, part.offsets,

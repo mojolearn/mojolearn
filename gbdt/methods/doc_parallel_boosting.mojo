@@ -17,7 +17,10 @@ from gbdt.methods.kernel_add_model_value import (
     add_model_value_gated_kernel,
     add_model_value_kernel,
 )
-from gbdt.metrics.optimal_const_device import optimum_const_approx_device
+from gbdt.metrics.optimal_const_device import (
+    device_weighted_l2,
+    optimum_const_approx_device,
+)
 
 from gbdt.gpu_lib.gpu_manager import TCudaManager
 from gbdt.gpu_util.kernel.transform import (
@@ -841,6 +844,14 @@ def fit_two_level_feature_freq_tree(
     _ = h_prep^
     _ = prep_part^
     _ = prep_sums^
+    # THE WEIGHTED L2 (lane w3f2-gbdtw, 2026-11-24): `ScaleL2Reg(l2,
+    # sumAllWeights, allDocCount)`, once per fit, before the split scores
+    # and the leaves read it; the host twin
+    # (`gbdt_fit_two_level_feature_freq_run`) scales by the same fold.
+    # Unweighted, `l2_leaf_reg` exactly.
+    var l2_reg = l2_leaf_reg
+    if has_w:
+        l2_reg = device_weighted_l2(ctx, l2_leaf_reg, d_w, n_rows)
     _ = d_y^
     _ = d_w^
     if not isfinite(weight_mag) or not isfinite(grad_mag):
@@ -855,7 +866,7 @@ def fit_two_level_feature_freq_tree(
         base_columns, base_fold_counts, base_one_hot,
         n_rows, n_raw_features, 2, grid, rows, stats,
         weight_mag, grad_mag, SCORE_FUNCTION_COSINE, False,
-        l2_leaf_reg, Float32(0.0), random_seed, True,
+        l2_reg, Float32(0.0), random_seed, True,
         n_raw_features, base_borders, trace, times, "tensor_fit",
     )
     # lane cpu3-gbdt-a: the leaves on the device over the final row order
@@ -883,7 +894,7 @@ def fit_two_level_feature_freq_tree(
     )
     var d_leaves = ctx.enqueue_create_buffer[DType.float32](n_leaves)
     ctx.enqueue_function[two_level_leaf_values_kernel](
-        leaf_part.unsafe_ptr(), learning_rate, l2_leaf_reg,
+        leaf_part.unsafe_ptr(), learning_rate, l2_reg,
         d_leaves.unsafe_ptr(),
         grid_dim=(n_leaves, 1, 1), block_dim=(TL_GRID, 1, 1),
     )

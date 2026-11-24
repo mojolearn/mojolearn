@@ -123,6 +123,7 @@ from gbdt.metrics.optimal_const_for_loss import (
 from gbdt.metrics.sample_quantile import (
     calculate_optimal_const_approx_for_mape,
     calculate_weighted_target_quantile,
+    host_weighted_l2,
 )
 from gbdt.metrics.optimal_const_for_loss import (
     calc_one_dimensional_optimum_const_approx,
@@ -676,6 +677,11 @@ def _gbdt_fit_pointwise_arm(
         w = gbdt_host_binary_row_weights(
             y, n_rows, List[Float32](), read_f32(params.weights, n_rows)
         )
+    # THE WEIGHTED L2 (lane w3f2-gbdtw, 2026-11-24): `train`'s
+    # `device_weighted_l2` over the same column, `host_weighted_l2` here
+    # (the same fold, once per fit); empty `w` keeps `l2_leaf_reg`
+    if loss != String("PairLogit"):
+        l2_leaf_reg = host_weighted_l2(l2_leaf_reg, w, n_rows)
     # the starting constant (`calc_one_dimensional_optimum_const_approx`,
     # the one statement of every arm the device's `optimum_const_approx_
     # device` folds on the device)
@@ -1036,6 +1042,11 @@ def _gbdt_fit_ordered_arm(
         row_weights = gbdt_host_binary_row_weights(
             y, n_rows, class_weights, sample_weights
         )
+    # THE WEIGHTED L2 (lane w3f2-gbdtw, 2026-11-24): `train`'s
+    # `device_weighted_l2` over the same column, once per fit; the
+    # unweighted fit keeps it exactly
+    if loss != String("PairLogit"):
+        p.l2_leaf_reg = host_weighted_l2(p.l2_leaf_reg, row_weights, n_rows)
     var ex = List[Float32]()
     var ey = List[Float32]()
     if n_eval_rows > 0:
@@ -2043,6 +2054,13 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         row_weights = gbdt_host_binary_row_weights(
             y, n_rows, List[Float32](), read_f32(weights_address, n_weights)
         )
+    # THE WEIGHTED L2 (lane w3f2-gbdtw, 2026-11-24): `train`'s
+    # `device_weighted_l2` over the same column, once per fit, before any
+    # searcher or leaf reads `p`; the multi-output losses fold their class
+    # weights inside `gbdt_multi_host_fit` and scale there; PairLogit's
+    # column is its pair sums and keeps `l2`, as on the device
+    if not is_multi and loss != String("PairLogit"):
+        p.l2_leaf_reg = host_weighted_l2(p.l2_leaf_reg, row_weights, n_rows)
     # the symmetric loop's objective and starting constant
     # (gbdt_oracle.mojo::gbdt_host_boost): RMSE's
     # `AdjustBoostFromAverageDefaultValue` (`gbdt/train.mojo:1597-1600`),
@@ -2443,8 +2461,12 @@ def gbdt_fit_two_level_feature_freq_run(
     var w = List[Float32]()
     if n_weights != 0:
         w = read_f32(weights_address, n_rows)
+    # THE WEIGHTED L2 (lane w3f2-gbdtw, 2026-11-24): the device fit's
+    # `device_weighted_l2` (`fit_two_level_feature_freq_tree`), the same
+    # fold here, once per fit; unweighted, `l2_leaf_reg` exactly
     return gbdt_feature_freq_host_fit(
-        x, y, n_rows, n_features, sources, learning_rate, l2_leaf_reg, w
+        x, y, n_rows, n_features, sources, learning_rate,
+        host_weighted_l2(l2_leaf_reg, w, n_rows), w,
     )
 
 
@@ -2480,7 +2502,10 @@ def gbdt_fit_ordered_rmse_run(
     var w = List[Float32]()
     if n_weights != 0:
         w = read_f32(weights_address, n_rows)
+    # THE WEIGHTED L2 (lane w3f2-gbdtw, 2026-11-24): the device fit's
+    # `device_weighted_l2` (`fit_ordered_rmse`), the same fold here, once
+    # per fit; unweighted, `l2_leaf_reg` exactly
     return gbdt_ordered_rmse_host_fit(
         x, y, n_rows, n_features, permutation, n_estimators, max_depth,
-        border_count, learning_rate, l2_leaf_reg, w,
+        border_count, learning_rate, host_weighted_l2(l2_leaf_reg, w, n_rows), w,
     )

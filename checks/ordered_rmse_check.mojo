@@ -142,6 +142,13 @@ def whole_loop_cursor_check(ctx: DeviceContext) raises:
         p.append(UInt32((i * 5 + 3) % N))
     upload_host_into[DType.uint32](ctx, x, hx)
     var fit = fit_ordered_rmse(ctx, layout, x, y, w, p, 2, 1, 1, Float32(0.25), Float32(1))
+    # the weighted L2 the fit solves with (lane w3f2-gbdtw, 2026-11-24):
+    # `ScaleL2Reg(1, sum(w), N)`, the weights here integers so the mean is
+    # exact (31 / 16)
+    var w_total = Float64(0)
+    for i in range(N):
+        w_total += Float64(w[i])
+    var l2_scaled = Float64(Float32(w_total / Float64(N)))
     if len(fit.folds) != 3:
         raise Error("ordered small-fixture prefix fold inventory changed")
     for f in range(len(fit.folds) + 1):
@@ -177,7 +184,7 @@ def whole_loop_cursor_check(ctx: DeviceContext) raises:
                         var row = Int(p[pos])
                         mass += Float64(w[row])
                         total += Float64(w[row]) * (Float64(y[row]) - expected[pos])
-                values.append(Float64(0.25) * total / (mass + Float64(1)))
+                values.append(Float64(0.25) * total / (mass + l2_scaled))
             for pos in range(size):
                 expected[pos] += values[leaf_ids[pos]]
         var hc = ctx.enqueue_create_host_buffer[DType.float32](size)

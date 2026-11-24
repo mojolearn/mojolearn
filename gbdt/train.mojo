@@ -153,7 +153,10 @@ from gbdt.data.ordered_plan import (
     ORDERED_MIN_FOLD_SIZE,
     ordered_permutation_block_size,
 )
-from gbdt.metrics.optimal_const_device import optimum_const_approx_device
+from gbdt.metrics.optimal_const_device import (
+    device_weighted_l2,
+    optimum_const_approx_device,
+)
 from gbdt.overfitting_detector.overfitting_detector import (
     OD_NONE,
     od_type_from_name,
@@ -2966,6 +2969,15 @@ def train(
         # loss; here only to YetiRank, whose default reaches it. For the other
         # losses an explicit 0 is NOT IMPLEMENTED (gbdt/NOT_IMPLEMENTED.tsv).
         resolved_l2 = Float32(1e-20)
+    # THE WEIGHTED L2 (lane w3f2-gbdtw, 2026-11-24): their
+    # `ScaleL2Reg(l2, sumAllWeights, allDocCount)`, the regularizer times the
+    # mean row weight of the one weight column above (sample times class
+    # weight), once per fit, before every searcher and leaf solve reads it;
+    # the host column scales by the same fold (`host_weighted_l2`). An
+    # unweighted fit keeps `l2` exactly; PairLogit's column is its per-row
+    # pair sums, not a sample weight, and keeps it too.
+    if (use_sample_weight or use_class_weights) and not is_pair_logit:
+        resolved_l2 = device_weighted_l2(ctx, resolved_l2, weights, n_rows)
 
     # `TCatBoostOptions::SetLeavesEstimationDefault`'s sibling for
     # sampling (`catboost_options.cpp:779-800`), the two lines of it this
