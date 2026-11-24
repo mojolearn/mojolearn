@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Opt-in Apple FAST row gather, recovered independently of old resample bundle."""
 from max.gpu import block_idx, block_dim, thread_idx
+from resample.checks.index_map import permutation_merge_place
 
 
 def gather_rows_f32_kernel(
@@ -56,7 +57,9 @@ def gather_rows_tiled_f32_kernel(
 
 # Stable total-order merge passes over device-generated uint64 draw keys.
 # Every position scatters to its unique rank in one merged pair; kernel
-# boundaries preserve visibility. No host key/index materialization.
+# boundaries preserve visibility. No host key/index materialization. The
+# per-slot body is `permutation_merge_place` (resample/checks/index_map.mojo),
+# shared with the host column's parallel passes (lane vdf-misc3).
 def permutation_positions_kernel(rows: MutPointer[Int32, MutAnyOrigin], n_in: Int32):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n_in):
@@ -66,30 +69,10 @@ def permutation_merge_kernel(
     dst: MutPointer[Int32, MutAnyOrigin], src: MutPointer[Int32, MutAnyOrigin],
     keys: MutPointer[UInt64, MutAnyOrigin], n_in: Int32, width_in: Int32,
 ):
-    var n = Int(n_in)
-    var width = Int(width_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i >= n:
+    if i >= Int(n_in):
         return
-    var base = (i // (2 * width)) * (2 * width)
-    var mid = min(base + width, n)
-    var end = min(base + 2 * width, n)
-    var other_lo = mid if i < mid else base
-    var other_hi = end if i < mid else mid
-    var own_lo = base if i < mid else mid
-    var position = Int(src[i])
-    var key = keys[position]
-    var lo = other_lo
-    var hi = other_hi
-    while lo < hi:
-        var probe = (lo + hi) // 2
-        var opponent = Int(src[probe])
-        var opposite = keys[opponent]
-        if opposite < key or (opposite == key and opponent < position):
-            lo = probe + 1
-        else:
-            hi = probe
-    dst[base + (i - own_lo) + (lo - other_lo)] = Int32(position)
+    permutation_merge_place(dst, src, keys, Int(n_in), Int(width_in), i)
 
 
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C11_DRAW_GATHER (opt-in IDENTICAL arm, no A/B recorded; non-owner site, owner expdel2-07-base): classical_draw_gather_kernel, launched only by that arm, deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 72ae22cf1f.

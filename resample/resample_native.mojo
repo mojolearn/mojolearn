@@ -179,9 +179,10 @@ def _resample_resample_indices(a: List[Int], p: List[Int], f: List[Float64]) rai
     var replace = p[2] != 0
     var seed = UInt64(p[3])
     # lane ne2-b-rounds (N053): both arms write the caller's int32 buffer
-    # directly on every tier (`*_into`: one device-to-host copy for replace,
-    # the keys once into a host buffer and the order straight into `dst` for
-    # replace=False). The same integers as `resample_indices_host`.
+    # directly on every tier (`*_into`: one device-to-host copy for replace;
+    # for replace=False the device sorts the keys (lane vdf-misc3) and the
+    # first n_samples positions come home in one copy). The same integers as
+    # `resample_indices_host`.
     if replace:
         resample_indices_replace_into(n, count, seed, dst)
     else:
