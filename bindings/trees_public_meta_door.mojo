@@ -73,8 +73,8 @@ from xtrees.trees_forest_run import (
     _classifier,
 )
 from bindings.trees_public_boost_door import (
-    _mode, _xt, _xr, _x_f32, _as_array, _arange, _class_major, _gather, _gather_codes,
-    _gather_vec, _argmax, _member_codes,
+    _mode, _xt, _xr, _x_f32, _as_array, _arange, _class_major, _gather,
+    _argmax, _member_codes,
 )
 from bindings.trees_public_score_door import trees_r2, trees_class_codes
 from bindings.classical_labels_door import labels_accuracy, _classification_encoded as score_classification_encoded
@@ -91,7 +91,7 @@ from core.member_abi import (
     MEMBER_CAN_DECISION, MEMBER_CAN_PREDICT_PROBA, member_kind_capabilities,
     MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE,
 )
-from bindings.member_scope_door import member_pin_take, member_pin_return
+from bindings.member_scope_door import member_pin_take, member_pin_return, member_scope_word
 from core.member_set_run import MEMBER_SET_TURN_HELD, member_set_first_failure
 from core.member_families import MEMBER_FAMILY_GP, MEMBER_FAMILY_ENSEMBLE
 from core.admitted_rows_plan import admitted_rows_shape
@@ -631,6 +631,14 @@ def _unit_given(mut set: MemberSet, given: PythonObject, unit_n: Int, context: P
 def _fit_units(clones: PythonObject, xs: PythonObject, d: Int, targets: PythonObject, float_targets: Bool,
                weights: PythonObject, counts: PythonObject, jobs: Int, context: PythonObject,
                givens: PythonObject) raises:
+    """`_fit_units_drawn` with no row draws and no kind masks asked."""
+    _ = _fit_units_drawn(clones, xs, d, targets, float_targets, weights, counts, jobs, context, givens,
+                         PythonObject(None), False)
+
+
+def _fit_units_drawn(clones: PythonObject, xs: PythonObject, d: Int, targets: PythonObject, float_targets: Bool,
+                     weights: PythonObject, counts: PythonObject, jobs: Int, context: PythonObject,
+                     givens: PythonObject, draws: PythonObject, ask_kinds: Bool) raises -> List[Int]:
     """Fit the unfitted `clones` as ONE NATIVE MEMBER SET (core/member_abi.mojo,
     bindings/member_set_door.mojo): every unit admitted once, the fits run
     with the GIL released on host workers (independent units in parallel,
@@ -664,11 +672,24 @@ def _fit_units(clones: PythonObject, xs: PythonObject, d: Int, targets: PythonOb
     target onto them, its member packed labelled with the ensemble codes it
     holds, so the callers' own checks (stacking's output width between
     folds) still fire. That pass is the set's class-cover pass
-    (`skip_lacking`: the set makes no second one)."""
+    (`skip_lacking`: the set makes no second one).
+
+    THE ROW DRAWS (lane vdf-meta3): `draws` None, or per unit None or the
+    int32 row numbers Array of the unit's rows in `xs[i]`, which is then
+    the set's X (`xs[0]`, every drawn unit reads the same block) and whose
+    `targets[i]` / `weights[i]` / THE GIVEN y cover every row of it: the
+    draw selects X, the targets and the weights alike. A member whose kind
+    reads a row index gets the index (inside `resident()` its device takes
+    the rows out of the one resident X), any other member's worker gathers
+    its rows: the door makes no fold copy. `ask_kinds`: the answer is each
+    unit's kind-exact capability mask (`member_kind_capabilities`, one
+    state minted per unit: ask it for a set of one unit per member, once
+    per fit); empty otherwise."""
     var b = trees_builtins()
     var m = len(clones)
+    var kinds = List[Int]()
     if m == 0:
-        return
+        return kinds^
     var set = MemberSet(trees_address(xs[0]), Int(py=xs[0].shape[0]), d, MEMBER_F32 if float_targets else MEMBER_I32,
                         MEMBER_I32)
     set.run.cap = jobs
@@ -694,18 +715,29 @@ def _fit_units(clones: PythonObject, xs: PythonObject, d: Int, targets: PythonOb
     var held_last = List[Int32]()
     var recoded_last = -1
     var labels_seen = Python.list()  # per distinct target: its labels (the last is the current one)
+    var classes_last_draw = 0
     for i in range(m):  # driver-loop: over the units (admission, once each)
         var classes = 0
         var target_address = trees_address(targets[i])
         set.labels = PythonObject(None)
         var labels = PythonObject(None)
+        # THE ROW DRAWS: the unit's int32 row numbers in the set's X (0: every row of its own block).
+        var draw = 0
+        var draw_n = 0
+        if draws is not None and draws[i] is not None:
+            draw = trees_address(draws[i])
+            draw_n = Int(py=draws[i].shape[0])
         if counts is not None:
             classes = Int(py=counts[i])
             var target_n = Int(py=targets[i].shape[0])
-            if target_address != classes_last_address or target_n != classes_last_n:
-                held_last = member_unit_classes(target_address, 0, False, target_n, classes)
+            if (target_address != classes_last_address or target_n != classes_last_n
+                    or draw != classes_last_draw):
+                # A drawn unit's held classes are those of its drawn rows (int32 row numbers).
+                held_last = member_unit_classes(target_address, draw, False, draw_n if draw != 0 else target_n,
+                                                classes)
                 classes_last_address = target_address
                 classes_last_n = target_n
+                classes_last_draw = draw
                 recoded_last = -1
                 if len(held_last) > 0:
                     recoded.append(member_unit_recode(target_address, target_n, classes, held_last))
@@ -726,8 +758,11 @@ def _fit_units(clones: PythonObject, xs: PythonObject, d: Int, targets: PythonOb
         var w_address = 0
         if weights[i] is not None:
             w_address = trees_address(weights[i])
-        member_set_admit_or_raise(set, clones[i], target_address, w_address, 0, 0, 0, 0, classes, context, b)
-        member_set_own_block(set, trees_address(xs[i]), Int(py=xs[i].shape[0]))
+        member_set_admit_or_raise(set, clones[i], target_address, w_address, draw, draw_n, 0, 0, classes, context, b)
+        if draw == 0:
+            member_set_own_block(set, trees_address(xs[i]), Int(py=xs[i].shape[0]))
+        if ask_kinds:
+            kinds.append(member_kind_capabilities(set.run.plans[len(set.run.plans) - 1]))
         if float_targets and givens is not None and givens[i] is not None and member_set_reads_given(set):
             _unit_given(set, givens[i], Int(py=targets[i].shape[0]), context, given_blocks, given_rows_last)
         # Inside `resident()` a member that reads a scope keeps its X block
@@ -784,7 +819,9 @@ def _fit_units(clones: PythonObject, xs: PythonObject, d: Int, targets: PythonOb
     _ = xs
     _ = targets
     _ = weights
+    _ = draws  # the row draws are read through their addresses by the fits above
     _ = len(recoded)
+    return kinds^
 
 
 def _fit_members(clones: PythonObject, X: PythonObject, n: Int, d: Int, targets: PythonObject, float_targets: Bool,
@@ -1584,16 +1621,133 @@ def _stack_place(glue: EntryRef, members: PythonObject, kinds: List[Int], Xs: Py
     return widths^
 
 
+def _stack_place_indexed(glue: EntryRef, members: PythonObject, kinds: List[Int], Xa: PythonObject, n: Int, d: Int,
+                         rows_at: PythonObject, scope: Int, k: Int, binary: Bool, meta: Int, meta_rows: Int,
+                         width: Int, mut widths: List[Int], context: PythonObject) raises -> Bool:
+    """THE FOLD ROWS BY NUMBER (lane vdf-meta3): `_stack_place` of a cv fold's
+    test rows `rows_at` (int32 row numbers of the whole X `Xa`, `n` x `d`)
+    without gathering them: every member is opened on its held native state
+    and handed X, the row index, the resident `scope` and X's pin
+    (xtrees/trees_meta_vote_run.mojo THE INDEXED ROWS), so its device takes
+    the rows out of the X the fold fits already left resident. The caller
+    asks only when every member's kind reads a row index and a scope (its
+    mask, once per fit). False, with nothing placed that a gathered
+    `_stack_place` does not place again, when a member is not served
+    natively without the GIL or a member call refuses: the caller then
+    gathers the fold's test block and runs `_stack_place` (the fallback
+    rule, whose doors raise the members' own words). Same rows in the same
+    order as the gathered block: same bits."""
+    var count = Int(py=rows_at.shape[0])
+    var got = _VoteUnpack()
+    var counts = List[Int](capacity=len(members))
+    var placed = False
+    try:
+        for i in range(len(members)):  # driver-loop: over members (admission, once each)
+            var e = members[i]
+            var kind = kinds[i]
+            var classifier = kind != STACK_PREDICT
+            var class_cols = 0
+            var held = 0
+            if classifier:
+                var cols = _sub_cols(e, context)
+                _ = py_call(got.keep.append, cols)
+                class_cols = trees_address(cols)
+                held = Int(py=cols.shape[0])
+            counts.append(held)
+            var operation = MEMBER_OP_PREDICT if kind == STACK_PREDICT else (
+                MEMBER_OP_PREDICT_PROBA if kind == STACK_PROBA else MEMBER_OP_DECISION)
+            var opened = _member_open(e, Xa, operation, classifier, context)
+            if not (opened.served and opened.gil_free):
+                if opened.served:
+                    member_held_close(opened)
+                _vote_close(got)
+                return False
+            got.members.append(VoteMember(len(got.opened), opened.held.state, operation, opened.cols,
+                                          opened.dtype, class_cols, 1.0))
+            got.native += 1
+            got.opened.append(opened^)
+        for i in range(len(got.members)):  # driver-loop: over members
+            got.members[i].plan = Int(UnsafePointer(to=got.opened[got.members[i].plan].held.plan))
+        # THE PIN RULE: one reference offered on every member call of the fold; the byte is written nonzero
+        # when a cache took it (the fold fits cached X in this scope already, so none normally does).
+        var took = List[UInt8](length=1, fill=UInt8(0))
+        var took_at = Int(took.unsafe_ptr())
+        var pin = member_pin_take(Xa, 1)
+        var rows = VoteRows(trees_address(Xa), n, d, trees_address(rows_at), count, scope, pin,
+                            took_at if pin != 0 else 0)
+        var refused = VOTE_ALL_ANSWERED
+        try:
+            with GILReleased(Python()):
+                refused = stack_place_run(glue, rows, got.members, kinds, counts, k, binary, meta, meta_rows, width,
+                                          trees_address(rows_at), 0, widths, 0)
+        finally:
+            var kept = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=took_at)[] != UInt8(0)
+            member_pin_return(pin, 0 if kept else 1)
+            _ = len(took)  # written through `took_at` by the member calls above
+        placed = refused == VOTE_ALL_ANSWERED
+    except e:
+        _vote_close(got)
+        raise e^
+    _vote_close(got)
+    _ = Xa  # the rows are read through RUN
+    _ = rows_at
+    _ = got.keep  # the class columns are read through RUN
+    return placed
+
+
+def _meta_rows_resident(Xa: PythonObject, n: Int, d: Int, context: PythonObject) raises -> Bool:
+    """UNPACK, once per fit (lane vdf-meta3): whether a meta fit that reads
+    its cv folds BY ROW NUMBER (`_fit_units_drawn`) runs inside a resident
+    scope of its own, as CalibratedClassifierCV's (`_cal_rows_resident`): X
+    a non-empty float32 C-order block and the fit on a GPU route. A member
+    whose image reads a row index and keeps X resident then reads X once for
+    the whole fit and takes each fold's rows on the device; a host image's
+    member gathers its rows on its worker. device="cpu" beside a GPU set (the
+    CPU run context) enters none: same rows, same order."""
+    if n <= 0 or d <= 0 or String(py=Xa.dtype) != "<f4" or String(py=Xa.order) != "C":
+        return False
+    var nk = trees_keys()
+    return not (py_get(context, nk[].k_device_cpu_context) is context)
+
+
 def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, codes: Bool, splits: PythonObject,
                   final: PythonObject, sample_weight: PythonObject, classifier: Bool, y_given: PythonObject,
                   context: PythonObject) raises -> PythonObject:
     """`_StackingBase._fit_stack`. `y_full` is the int32 codes (classifier)
-    or the float32 targets (regressor); a fold's targets are gathered.
-    `y_given` (a regressor; None for a classifier): y as the door was given
-    it, THE GIVEN y of a member that reads it (lane mf-tail5)."""
+    or the float32 targets (regressor). `y_given` (a regressor; None for a
+    classifier): y as the door was given it, THE GIVEN y of a member that
+    reads it (lane mf-tail5).
+
+    THE FOLD ROWS BY NUMBER (lane vdf-meta3): the cv folds' train rows are
+    the member set's row draws over the one X (`_fit_units_drawn`) and the
+    test rows the stacking RUN's row index (`_stack_place_indexed`), inside
+    one resident scope (`_meta_rows_resident`): X goes up once for the
+    whole fit and nothing comes down between the folds. Before, each fold's
+    train and test sides were `_gather` (all of X uploaded, the rows
+    gathered and DOWNLOADED, per fold, then uploaded again by every member).
+    Same rows in the same order: no bit change."""
+    var Xa = _x_array(X, context)
+    var mctx = PythonObject(None)
+    var scope = PythonObject(None)
+    if _meta_rows_resident(Xa, _rows(Xa), _cols(Xa), context):
+        mctx = prep_native_context(context)
+        scope = _cal_scope_open(mctx)
+    try:
+        _ = _stacking_fit_run(model, Xa, y_full, codes, splits, final, sample_weight, classifier, y_given,
+                              scope is not None, context)
+    finally:
+        if scope is not None:
+            _cal_scope_close(scope, mctx)
+    return model
+
+
+def _stacking_fit_run(model: PythonObject, Xa: PythonObject, y_full: PythonObject, codes: Bool, splits: PythonObject,
+                      final: PythonObject, sample_weight: PythonObject, classifier: Bool, y_given: PythonObject,
+                      scoped: Bool, context: PythonObject) raises -> PythonObject:
+    """`_stacking_fit`'s body over the admitted X `Xa`; `scoped`: inside the
+    resident scope `_stacking_fit` entered."""
     var owner = _owner(model)
     var xt = _xt(py_fields(model), context)
-    var Xa = _x_array(X, context)
     # This call owns the admitted X, y and optional weight storage. Member
     # fits cannot replace these local owners. A subsequent fit admits afresh.
     var x_view = Xa
@@ -1613,9 +1767,6 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     var origin = meta_device_origin(model, device)
     meta_members_device(device, all_ests, owner, origin, context, trees_builtins())
     var sw = _member_weights(all_names, all_ests, sample_weight, n, context)
-    var sw_addr = 0
-    if sw is not None:
-        sw_addr = trees_address(sw)
     var fitted = Python.list()
     _set(model, "estimators_", fitted)
     var n_members = len(active.ests)
@@ -1634,10 +1785,20 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     var whole_given = PythonObject(None)  # THE GIVEN y of every row (lane mf-tail5)
     if not codes and y_given is not None:
         whole_given = Python.tuple(y_given, PythonObject(None), PythonObject(-1))
-    _fit_members(full, Xa, n, d, _repeat(y_full, n_members), not codes, sw, counts, jobs, context,
-                 _repeat(whole_given, n_members))
+    # The full fit answers each member's kind-exact mask once per fit (one unit per member): whether every
+    # member reads its test rows by number inside the scope (`indexable`).
+    var member_kinds = _fit_units_drawn(full, _repeat(Xa, n_members), d, _repeat(y_full, n_members), not codes,
+                                        _repeat(sw, n_members), counts, jobs, context,
+                                        _repeat(whole_given, n_members), PythonObject(None), True)
     for i in range(n_members):  # driver-loop: over members
         _ = py_call(fitted.append, full[i])
+    var scope_word = MEMBER_SCOPE_NONE
+    if scoped:
+        scope_word = member_scope_word(py_item(prep_native_context(context), PythonObject("family_msel_rows_context")))
+    var indexable = scope_word != MEMBER_SCOPE_NONE and n_members > 0
+    for i in range(len(member_kinds)):  # driver-loop: over members (one mask each)
+        if (member_kinds[i] & MEMBER_CAN_ROW_INDEX) == 0 or (member_kinds[i] & MEMBER_CAN_SCOPE) == 0:
+            indexable = False
     var methods = Python.list()
     var kinds = List[Int]()
     for i in range(len(fitted)):  # driver-loop: over members
@@ -1684,57 +1845,53 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
         var unit_y = Python.list()
         var unit_w = Python.list()
         var unit_given = Python.list()
-        for f in range(f0, f1):  # driver-loop: over the wave's cv folds (train gathers)
-            # The fold's train gathers are the same for every member: made
-            # once per fold, not once per member (p3-trees; folds x members host
-            # copies of X, y and the weights before). Members never write their
-            # inputs (the scikit-learn fit contract), so sharing them is safe.
+        var unit_draws = Python.list()
+        for f in range(f0, f1):  # driver-loop: over the wave's cv folds (their train row numbers)
+            # THE FOLD ROWS BY NUMBER (lane vdf-meta3): every member of the
+            # fold reads X, y, the weights and THE GIVEN y of every row, its
+            # draw the fold's int32 train rows (the set selects all of them
+            # with it): no fold block is copied here. Members never write
+            # their inputs (the scikit-learn fit contract).
             var tr_view = splits[f][0]
-            var y_tr: PythonObject
-            if codes:
-                y_tr = _gather_codes(xt, y_view, tr_view, context)
-            else:
-                y_tr = _gather_vec(xt, trees_address(y_view), Int(py=y_view.shape[0]), tr_view, context)
-            var w_tr = PythonObject(None)
-            if sw is not None:
-                w_tr = _gather_vec(xt, sw_addr, n, tr_view, context)
-                _ = sw  # keep the Python object alive through the native call above
-            var Xtr = _gather(xt, trees_address(x_view), n, d, tr_view, cols_view, context)
-            _ = Xa  # keep the Python object alive through the native call above
-            if admitted_is_held(Xa):
-                # Rows of a held X carry its verdict (finite rows of a finite X;
-                # rows of an X an outer cross-validation held with its finite
-                # test deferred stay deferred and linked to it, lane s2): the
-                # fold's members read the fold matrices as admitted too.
-                admitted_hold_rows_of(Xa, Xtr, trees_address(Xtr), Int(py=tr_view.shape[0]), d)
             for i in range(n_members):  # driver-loop: over members
                 _ = py_call(unit_members.append, _clone(active.ests[i], device, origin, context))
-                _ = py_call(unit_x.append, Xtr)
-                _ = py_call(unit_y.append, y_tr)
-                _ = py_call(unit_w.append, w_tr)
-                _ = py_call(unit_given.append, PythonObject(None) if whole_given is None else Python.tuple(
-                    y_given, tr_view, PythonObject(-1)))
+                _ = py_call(unit_x.append, Xa)
+                _ = py_call(unit_y.append, y_view)
+                _ = py_call(unit_w.append, sw)
+                _ = py_call(unit_given.append, whole_given)
+                _ = py_call(unit_draws.append, tr_view)
         var unit_counts = PythonObject(None)
         if codes:
             unit_counts = _repeat(final_counts[0], len(unit_members))
-        _fit_units(unit_members, unit_x, d, unit_y, not codes, unit_w, unit_counts, jobs, context, unit_given)
-        # The wave's train blocks are dropped before its test blocks are made.
+        _ = _fit_units_drawn(unit_members, unit_x, d, unit_y, not codes, unit_w, unit_counts, jobs, context,
+                             unit_given, unit_draws, False)
         _ = py_call(unit_x.clear)
         _ = py_call(unit_y.clear)
         _ = py_call(unit_w.clear)
+        _ = py_call(unit_draws.clear)
         for f in range(f0, f1):  # driver-loop: over the wave's cv folds (test outputs)
             var te_view = splits[f][1]
-            var Xte = _gather(xt, trees_address(x_view), n, d, te_view, cols_view, context)
-            _ = Xa  # keep the Python object alive through the native call above
-            if admitted_is_held(Xa):
-                admitted_hold_rows_of(Xa, Xte, trees_address(Xte), Int(py=te_view.shape[0]), d)
             var fold_members = Python.list()
             for i in range(n_members):  # driver-loop: over members
                 _ = py_call(fold_members.append, unit_members[(f - f0) * n_members + i])
             # The fold's stacked outputs, typed (`stack_place_run`): a fold
             # whose training rows lack a class places its members' columns
             # at their classes (scikit-learn `_enforce_prediction_order`).
-            var got = _stack_place(glue, fold_members, kinds, Xte, k_classes, binary, trees_address(meta_view), n,
+            # THE FOLD ROWS BY NUMBER: every member reads its test rows by
+            # number out of the resident X (`_stack_place_indexed`); else
+            # (a member that does not, a door member, a refusal) the fold's
+            # test block is gathered as before.
+            var got = List[Int]()
+            var placed = False
+            if indexable:
+                placed = _stack_place_indexed(glue, fold_members, kinds, Xa, n, d, te_view, scope_word, k_classes,
+                                              binary, trees_address(meta_view), n, width, got, context)
+            if not placed:
+                var Xte = _gather(xt, trees_address(x_view), n, d, te_view, cols_view, context)
+                _ = Xa  # keep the Python object alive through the native call above
+                if admitted_is_held(Xa):
+                    admitted_hold_rows_of(Xa, Xte, trees_address(Xte), Int(py=te_view.shape[0]), d)
+                got = _stack_place(glue, fold_members, kinds, Xte, k_classes, binary, trees_address(meta_view), n,
                                    width, trees_address(te_view), 0, True, context)
             _ = meta_view  # written through the RUN above
             _ = te_view  # the rows are read through the RUN above

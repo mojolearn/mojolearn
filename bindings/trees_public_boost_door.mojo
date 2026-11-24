@@ -171,7 +171,7 @@ from xtrees.glue_calls import (
     xt_ref,
     xt_accumulate, xt_accumulate_cols, xt_accumulate_onehot, xt_accumulate_rows, xt_apply, xt_argmax_rows,
     xt_class_counts, xt_class_priors, xt_count_equal, xt_count_rows,
-    xt_exact_sum, xt_fill_class_major_f64, xt_gather_f32, xt_gather_i32, xt_iota_i32,
+    xt_exact_sum, xt_fill_class_major_f64, xt_gather_f32, xt_iota_i32,
     xt_leaf_numbering, xt_log64, xt_margin2, xt_normalize_rows, xt_onehot_leaves, xt_oob_r2, xt_positive_codes,
     xt_put_f32,
     xt_softmax_rows, xt_stack_w64, xt_transpose_f32, xt_uniform, xt_unseen_rows, xt_weighted_median,
@@ -350,25 +350,6 @@ def _gather(xt: PythonObject, x_addr: Int, n_src: Int, d_src: Int, rows: PythonO
     _ = cols
     _ = out  # keep the owners alive through the native call above
     return out
-
-
-def _gather_codes(xt: PythonObject, codes: PythonObject, rows: PythonObject, context: PythonObject) raises -> PythonObject:
-    var r = Int(py=rows.shape[0])
-    var out = admitted_vector(r, "<i4", context)
-    var glue = _xr(xt)
-    _ = xt_gather_i32(glue, trees_address(codes), trees_address(rows), trees_address(out),
-                      Int(py=codes.shape[0]), r)
-    _ = codes
-    _ = rows
-    _ = out  # keep the owners alive through the native call above
-    return out
-
-
-def _gather_vec(xt: PythonObject, v_addr: Int, n: Int, rows: PythonObject, context: PythonObject) raises -> PythonObject:
-    """A float32 vector gathered at rows (as an n x 1 matrix)."""
-    var col = admitted_vector(1, "<i4", context)
-    var out = _gather(xt, v_addr, n, 1, rows, col, context)
-    return trees_reshape(out, Python.tuple(Int(py=rows.shape[0])), context)
 
 
 def _argmax(xt: PythonObject, acc: PythonObject, n: Int, k: Int, context: PythonObject) raises -> PythonObject:
