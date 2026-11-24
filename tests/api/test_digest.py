@@ -28,6 +28,12 @@ CASES = [
     ("PCA", dict(n_components=2), None),
     ("StandardScaler", {}, None),
     ("RandomForestRegressor", dict(n_estimators=5, random_state=0), "r"),
+    # r6-proving (2026-11-23): every saved forest family and its CPU twin (HostForest: rf and et, classifier and
+    # regressor; the random forest with its out-of-bag outputs, which no prediction reads; IsolationForest).
+    ("RandomForestClassifier", dict(n_estimators=5, random_state=0, oob_score=True), "c"),
+    ("ExtraTreesRegressor", dict(n_estimators=5, random_state=0), "r"),
+    ("ExtraTreesClassifier", dict(n_estimators=5, random_state=0), "c"),
+    ("IsolationForest", dict(n_estimators=5, random_state=0), None),
     ("GaussianNB", {}, "c"),
     ("BayesianRidge", {}, "r"),
 ]
@@ -126,13 +132,17 @@ def test_the_class_name_is_part_of_the_digest():
                                                  and case[0] != "GaussianNB"])
 def test_a_model_and_its_loaded_copies_have_one_digest(name, params, target, tmp_path):
     model = _fit(name, params, target)
+    fitted = model.digest_
     path = str(tmp_path / (name + ".npz"))
     model.save(path)
-    assert type(model).load(path).digest_ == model.digest_
+    assert type(model).load(path).digest_ == fitted, "the loaded copy has another digest"
     twin = mojolearn.host_model(path)
-    if hasattr(type(twin), "digest_"):          # the CPU twin of the class (HostRidge, HostPCA, ...)
+    # r6-proving (2026-11-23): each side is compared with the digest read before the save, so a failure names
+    # the side that moved (the model itself after the loads, its loaded copy or its CPU twin).
+    assert model.digest_ == fitted, "the model's own digest changed after save and load"
+    if hasattr(type(twin), "digest_"):          # the CPU twin of the class (HostRidge, HostPCA, HostForest, ...)
         assert type(twin) is not type(model)
-        assert twin.digest_ == model.digest_
+        assert twin.digest_ == fitted, "the CPU twin " + type(twin).__name__ + " has another digest"
 
 
 def test_a_random_splitter_tree_has_a_digest_from_its_tree_arrays(tmp_path):

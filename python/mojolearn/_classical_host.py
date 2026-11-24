@@ -1527,6 +1527,24 @@ def _host_archive_forest_metadata():
 
 _native_host_archive_bridge.connect(_CLASSICAL, _FORMATS, _host_archive_cleanup_entries(), _host_archive_forest_metadata())
 _native_host_archive_bridge.connect_peer(_CLASSICAL)
+# glue: once at import, class metadata only (r6-proving, 2026-11-23). The
+# HostForest family layout the digest's family admission reads is taken HERE,
+# after the connection above installed HostForest.__del__ (the grove
+# finalizer), never before it: a snapshot taken earlier (in _forest_host, when
+# this module was imported first and loaded _forest_host from inside
+# `_host_archive_forest_metadata`) refused the class as "changed Python storage
+# hooks", so HostForest.digest_ fell back to the public fields and differed
+# from the saving model's. Every import path of HostForest runs this module to
+# here before the class is used, so the layout has one definition.
+def _connect_forest_twin_layout():
+    import sys
+    from . import _forest_host
+    from ._native_family_layouts import connect as connect_family_layouts
+    connect_family_layouts(sys.modules[__package__], only=(_forest_host.HostForest,))
+
+
+_connect_forest_twin_layout()
+del _connect_forest_twin_layout
 
 
 def host_model(path):
