@@ -2614,7 +2614,27 @@ def _search_prepare(model: PythonObject, fields: PythonObject, context: PythonOb
     var candidates = _search_candidates(model, fields, seed, True, context)
     var clones = Python.list()
     for c in range(len(candidates)):  # driver-loop: over the candidates (one native clone with its parameters each)
-        var clone = msel_native_clone(base, context)
+        var clone = PythonObject(None)
+        var stand_in = False
+        try:
+            clone = msel_native_clone(base, context)
+        except error:
+            # Lane w3f3-f: a META base whose `cv` is a user's own splitter object cannot be cloned natively (its
+            # parameter admission refuses the Python object: "Sequential requires native input types"), which
+            # pre-empted that base's own refusal. The base itself stands in for the candidate, never fitted or
+            # set: the work-list admits it and records its meta door's words (`_CV_CALLBACK_WORDS`, the words its
+            # own fit raises), and `_search_nested_refusal` raises them, or scikit-learn's all-fits-failed words
+            # with a numeric error_score. Any other clone refusal raises as before. The refusal path only.
+            var cv = py_get(py_fields(base), "cv")
+            try:
+                _refuse_cv_callback(cv, context, b, _CV_CALLBACK_WORDS, False)
+            except:
+                stand_in = True
+            if not stand_in:
+                raise error^
+        if stand_in:
+            _ = py_call(clones.append, base)
+            continue
         _ = msel_native_set_params(clone, msel_clone_parameter(candidates[c], context), context)
         _ = py_call(clones.append, clone)
     var out = Python.tuple(candidates, clones, PythonObject(seed))
