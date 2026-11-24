@@ -129,12 +129,6 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.et_loop_kernels impo
     etl_init_kernel,
     etl_map_kernel,
     etl_merge_kernel,
-    etl_pop_kernel,
-    etl_push_commit_kernel,
-    etl_push_mark_kernel,
-    etl_push_rank_kernel,
-    etl_push_slot_kernel,
-    etl_push_write_kernel,
     etl_retry_kernel,
     etl_scatter_kernel,
     etl_stage_kernel,
@@ -5154,10 +5148,10 @@ def search_batch(
 # queue's (see the kernel module's doc), so the trees equal what the host
 # queue produced and the host column (`train_tree_exact*`) is unchanged. This
 # was the default on every vendor in IDENTICAL and FAST from 2026-10-04 to
-# 2026-11-13; it is now the best-first route (and the depth-wise route under
-# `-D MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT`), and the depth-wise default is
-# the host queue (`_et_run_depthwise_host`, see the block above
-# `ET_DEVICE_QUEUE`; the plain depth-wise device loop arm lost A/B ab3). `NodeQueue` is also the host column's queue
+# 2026-11-13; it is now the best-first route only, and depth-wise growth runs
+# the host queue (`_et_run_depthwise_host`; the plain depth-wise device loop
+# lost A/B ab3 and the early-exit device loop lost A/B nvc1-0002, see the
+# tombstones above `_et_search_host`). `NodeQueue` is also the host column's queue
 # (`host_builder.mojo`, `train_tree_exact`) and the checks'.
 # =============================================================================
 
@@ -5452,13 +5446,6 @@ struct EtDeviceLoop(Movable):
     var f_cap: Int
     var hdr: DeviceBuffer[DType.int32]
     var h_hdr: HostBuffer[DType.int32]
-    #: `ET_DEVICE_LOOP_EARLY_EXIT`: the device view of `ETL_H_NSUB` and its
-    #: pinned 4-byte landing word (`read_nsub`). Empty (no view, no pinned
-    #: allocation) unless the define is on: the default route allocates
-    #: exactly what it did before the early-exit lane (hot-path audit
-    #: 2026-11-13, BLOCK builder.mojo:5875).
-    var nsub_d: Optional[DeviceBuffer[DType.int32]]
-    var h_nsub: Optional[HostBuffer[DType.int32]]
     var queue: DeviceBuffer[DType.int32]
     var g_nodes: DeviceBuffer[DType.uint8]
     var g_meta: DeviceBuffer[DType.int32]
@@ -5519,13 +5506,6 @@ struct EtDeviceLoop(Movable):
         self.f_cap = f_cap
         self.hdr = ctx.enqueue_create_buffer[DType.int32](ETL_HDR_WORDS)
         self.h_hdr = ctx.enqueue_create_host_buffer[DType.int32](ETL_HDR_WORDS)
-        self.nsub_d = Optional[DeviceBuffer[DType.int32]]()
-        self.h_nsub = Optional[HostBuffer[DType.int32]]()
-        comptime if ET_DEVICE_LOOP_EARLY_EXIT:
-            self.nsub_d = self.hdr.create_sub_buffer[DType.int32](
-                ETL_H_NSUB, 1
-            )
-            self.h_nsub = ctx.enqueue_create_host_buffer[DType.int32](1)
         self.queue = ctx.enqueue_create_buffer[DType.int32](cap0 * ETL_Q_INTS)
         self.g_nodes = ctx.enqueue_create_buffer[DType.uint8](
             cap0 * size_of[SparseTreeNode[DType.float32]]()
@@ -5578,22 +5558,6 @@ struct EtDeviceLoop(Movable):
         self.tree_base = ctx.enqueue_create_buffer[DType.int32](g + 1)
         self.retired_u8 = List[DeviceBuffer[DType.uint8]]()
         self.retired_i32 = List[DeviceBuffer[DType.int32]]()
-
-    def read_nsub(mut self, ctx: DeviceContext) raises -> Int:
-        """`ET_DEVICE_LOOP_EARLY_EXIT`: the batch's rescue count
-        (`ETL_H_NSUB`, written by `etl_retry_kernel`), read back as ONE
-        4-byte word after a synchronize. Not a header drain: the retired
-        buffers stay alive until the next `drain`."""
-        if not self.h_nsub or not self.nsub_d:
-            raise Error(
-                "EtDeviceLoop.read_nsub: built without"
-                " MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT"
-            )
-        ctx.enqueue_copy(
-            dst_buf=self.h_nsub.value(), src_buf=self.nsub_d.value()
-        )
-        ctx.synchronize()
-        return Int(self.h_nsub.value().unsafe_ptr()[unsafe_offset=0])
 
     def word(self, w: Int) -> Int:
         """Header word `w` as of the last drain."""
@@ -5734,30 +5698,6 @@ struct EtDeviceLoop(Movable):
             self.h_hdr.unsafe_ptr()[unsafe_offset=ETL_H_TAIL] = Int32(live)
             ctx.enqueue_copy(dst_buf=self.hdr, src_ptr=self.h_hdr.unsafe_ptr())
 
-    def enqueue_pop(
-        mut self,
-        ctx: DeviceContext,
-        n_bound: Int,
-        bound_s: Int,
-        tile_s: Int,
-        bound_p: Int,
-        tile_p: Int,
-    ) raises:
-        ctx.enqueue_function[etl_pop_kernel[ETL_TPB]](
-            self.hdr.unsafe_ptr(),
-            self.queue.unsafe_ptr(),
-            self.b_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-            self.b_slot.unsafe_ptr(),
-            self.b_gpos.unsafe_ptr(),
-            Int32(n_bound),
-            Int32(bound_s),
-            Int32(tile_s),
-            Int32(bound_p),
-            Int32(tile_p),
-            grid_dim=1,
-            block_dim=ETL_TPB,
-        )
-
     def enqueue_stage(
         mut self,
         ctx: DeviceContext,
@@ -5878,91 +5818,6 @@ struct EtDeviceLoop(Movable):
             self.s_idx.unsafe_ptr(),
             Int32(n_bound),
             grid_dim=ceildiv(n_bound, ETL_TPB),
-            block_dim=ETL_TPB,
-        )
-
-    def enqueue_push(
-        mut self, ctx: DeviceContext, params: DecisionTreeParams, n_bound: Int
-    ) raises:
-        """`NodeQueue.push` for every tree of the batch: rank, per-tree
-        offsets, marks, commit, write (see the kernels)."""
-        var chunks = (n_bound + ETL_TPB - 1) // ETL_TPB
-        ctx.enqueue_memset(self.cnt, Int32(0))
-        ctx.enqueue_function[etl_push_rank_kernel[ETL_TPB]](
-            self.hdr.unsafe_ptr(),
-            self.b_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-            self.b_slot.unsafe_ptr(),
-            self.b_splits.unsafe_ptr().unsafe_bitcast[Split](),
-            self.cnt.unsafe_ptr(),
-            self.p_rank.unsafe_ptr(),
-            self.p_valid.unsafe_ptr(),
-            Int32(n_bound),
-            Int32(self.g),
-            params.min_impurity_decrease,
-            params.min_samples_leaf,
-            grid_dim=chunks,
-            block_dim=ETL_TPB,
-        )
-        ctx.enqueue_function[etl_push_slot_kernel](
-            self.cnt.unsafe_ptr(),
-            self.slot_stat.unsafe_ptr(),
-            self.slot_base.unsafe_ptr(),
-            Int32(chunks),
-            Int32(self.g),
-            params.max_leaves,
-            grid_dim=ceildiv(self.g, ETL_TPB),
-            block_dim=ETL_TPB,
-        )
-        ctx.enqueue_function[etl_push_mark_kernel[ETL_TPB]](
-            self.b_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-            self.b_slot.unsafe_ptr(),
-            self.b_splits.unsafe_ptr().unsafe_bitcast[Split](),
-            self.cnt.unsafe_ptr(),
-            self.p_rank.unsafe_ptr(),
-            self.p_valid.unsafe_ptr(),
-            self.slot_base.unsafe_ptr(),
-            self.slot_stat.unsafe_ptr(),
-            self.p_left.unsafe_ptr(),
-            self.p_kids.unsafe_ptr(),
-            self.p_aoff.unsafe_ptr(),
-            self.p_eoff.unsafe_ptr(),
-            self.x_chunk.unsafe_ptr(),
-            Int32(n_bound),
-            Int32(self.g),
-            params.max_depth,
-            params.min_samples_split,
-            params.max_leaves,
-            grid_dim=chunks,
-            block_dim=ETL_TPB,
-        )
-        ctx.enqueue_function[etl_push_commit_kernel[ETL_TPB]](
-            self.hdr.unsafe_ptr(),
-            self.x_chunk.unsafe_ptr(),
-            Int32(chunks),
-            Int32(self.node_cap),
-            Int32(self.queue_cap),
-            grid_dim=1,
-            block_dim=ETL_TPB,
-        )
-        ctx.enqueue_function[etl_push_write_kernel[ETL_TPB]](
-            self.b_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-            self.b_slot.unsafe_ptr(),
-            self.b_gpos.unsafe_ptr(),
-            self.b_splits.unsafe_ptr().unsafe_bitcast[Split](),
-            self.p_left.unsafe_ptr(),
-            self.p_kids.unsafe_ptr(),
-            self.p_aoff.unsafe_ptr(),
-            self.p_eoff.unsafe_ptr(),
-            self.x_chunk.unsafe_ptr(),
-            self.g_nodes.unsafe_ptr().unsafe_bitcast[
-                SparseTreeNode[DType.float32]
-            ](),
-            self.g_meta.unsafe_ptr(),
-            self.queue.unsafe_ptr(),
-            Int32(n_bound),
-            Int32(self.node_cap),
-            Int32(self.queue_cap),
-            grid_dim=chunks,
             block_dim=ETL_TPB,
         )
 
@@ -6285,18 +6140,10 @@ def _et_rescue[
     compacted into a sub-batch, surveyed over every column, given a column
     by `rescue_pick_kernel`, searched with `k = 1`, and the rescued splits
     replace theirs where a column was found. Launched at the batch's bounds;
-    an empty sub-batch is all dummies and does nothing.
-
-    Under `-D MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT` the host reads the
-    sub-batch's count back (one 4-byte word) and skips the rest when it is
-    zero (see the block above `ET_DEVICE_LOOP_EARLY_EXIT`)."""
+    an empty sub-batch is all dummies and does nothing."""
+    # TOMBSTONE: MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT (NOISE: NV L40S 6 cells, median 1.00, 0.99..1.06) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
     lp.enqueue_retry(ctx, ws, n_bound)
-    comptime if ET_DEVICE_LOOP_EARLY_EXIT:
-        # driver-loop: over rescue rounds -- one per batch; the 4-byte count
-        # decides whether this batch's rescue runs (the host queue's
-        # "rescue only a batch that needs it"), never a loop over rows.
-        if lp.read_nsub(ctx) == 0:
-            return
     lp.enqueue_stage(
         ctx, ws, ETL_SRC_SUB, ETL_H_NSUB, n_bound, Int(n_cols), tile_s,
         tile_p, bound_s, scalar_tree,
@@ -6359,128 +6206,11 @@ def _et_trace_search[
         trace.record_device(ctx, tag_pre + "reduce.gain", ws.r_m, n)
 
 
-def _et_run_depthwise[
-    IS_CLF: Bool
-](
-    ctx: DeviceContext,
-    mut lp: EtDeviceLoop,
-    mut ws: LevelWorkspace,
-    mut dataset: DeviceDataset,
-    mut d_row_ids: DeviceBuffer[DType.int32],
-    params: DecisionTreeParams,
-    k: Int,
-    n_classes: Int32,
-    n_rows: Int32,
-    n_cols: Int32,
-    seed: UInt64,
-    sabotage: Int32,
-    mut clock: PhaseClock,
-    mut trace: IdentityTrace,
-    gi: Int,
-) raises -> Int:
-    """`Builder::train`'s loop for the whole group, depth-wise: per drain,
-    `ET_LOOP_K` batches of pop, stage, search, rescue, partition, push.
-
-    Batch `j` after a drain holds at most `min(max_batch, Q * 2^j)` items
-    (the FIFO at most doubles per batch) and at most `rows / min_samples_split`
-    (queued items are disjoint ranges of at least `min_samples_split` rows);
-    every batch's rows are a subset of the queued rows `R`, so its block map
-    has at most `1 + n + R / tile` entries. Returns the batch count."""
-    comptime TPB = DEVICE_TPB
-    var tile_s = TPB * SEARCH_ROWS_PER_THREAD
-    var tile_p = TPB * PART_ROWS_PER_THREAD
-    var max_batch = Int(params.max_batch_size)
-    var msp = Int(params.min_samples_split)
-    if msp < 1:
-        msp = 1
-    var scalar = Int32(1) if sabotage == FOREST_SAB_SCALAR_TREE else Int32(0)
-    var k_drain = 1 if trace.enabled else ET_LOOP_K
-    var cyc = 0
-    while True:
-        var head = lp.word(ETL_H_HEAD)
-        var tail = lp.word(ETL_H_TAIL)
-        if head >= tail:
-            break
-        var rows = lp.word(ETL_H_ROWS)
-        var item_cap = rows // msp
-        if item_cap < 1:
-            item_cap = 1
-        var extra = 0
-        var qb = tail - head
-        for _ in range(k_drain):  # small-loop(k_drain: batches per drain): sums per-launch bounds, k_drain <= 8
-            var nb = qb if qb < max_batch else max_batch
-            if nb > item_cap:
-                nb = item_cap
-            extra += 2 * nb
-            if qb < max_batch:
-                qb *= 2
-        lp.ensure(ctx, extra)
-        qb = tail - head
-        for _ in range(k_drain):  # small-loop(k_drain: batches per drain): enqueues one batch each, k_drain <= 8
-            var nb = qb if qb < max_batch else max_batch
-            if nb > item_cap:
-                nb = item_cap
-            if nb < 1:
-                nb = 1
-            var bound_s = 1 + nb + rows // tile_s
-            if bound_s > ws.cap_blocks:
-                bound_s = ws.cap_blocks
-            var bound_p = 1 + nb + rows // tile_p
-            if bound_p > ws.cap_blocks:
-                bound_p = ws.cap_blocks
-            var tag_pre = String("g") + String(gi) + ".c" + String(cyc) + "."
-            lp.enqueue_pop(ctx, nb, bound_s, tile_s, bound_p, tile_p)
-            clock.tick(ctx, PHASE_HOST_QUEUE)
-            lp.enqueue_stage(
-                ctx, ws, ETL_SRC_BATCH, ETL_H_CUR, nb, k, tile_s, tile_p,
-                bound_s, scalar,
-            )
-            clock.tick(ctx, PHASE_STAGE_BATCH)
-            _et_search[IS_CLF](
-                ctx, ws, dataset, d_row_ids, nb, bound_s, k, params,
-                n_classes, n_rows, n_cols, seed, True, False, clock,
-            )
-            lp.enqueue_save_splits(ctx, ws, nb)
-            if trace.enabled:
-                _et_trace_search[IS_CLF](ctx, lp, ws, trace, tag_pre, k)
-            _et_rescue[IS_CLF](
-                ctx, lp, ws, dataset, d_row_ids, params, n_classes, n_rows,
-                n_cols, seed, scalar, nb, bound_s, tile_s, tile_p, clock,
-            )
-            if trace.enabled:
-                lp.drain(ctx)
-                var n_live = lp.word(ETL_H_CUR)
-                if n_live > 0:
-                    trace.record_device(
-                        ctx,
-                        tag_pre + "split.records",
-                        lp.b_splits,
-                        n_live * size_of[Split](),
-                    )
-            lp.enqueue_stage(
-                ctx, ws, ETL_SRC_BATCH, ETL_H_CUR, nb, k, tile_p, tile_p,
-                bound_p, scalar, search_phase=False,
-            )
-            _et_enqueue_partition(
-                ctx, ws, dataset, d_row_ids,
-                lp.b_splits.unsafe_ptr()
-                .unsafe_bitcast[Split]()
-                .unsafe_origin_cast[MutAnyOrigin](),
-                nb, bound_p, params, n_rows,
-                lp.hdr.unsafe_ptr().unsafe_offset(ETL_H_PART_MISMATCH).unsafe_origin_cast[MutAnyOrigin](),
-            )
-            clock.tick(ctx, PHASE_PARTITION)
-            if trace.enabled:
-                trace.record_device(
-                    ctx, tag_pre + "partition.rowids", d_row_ids
-                )
-            lp.enqueue_push(ctx, params, nb)
-            clock.tick(ctx, PHASE_HOST_PUSH)
-            cyc += 1
-            if qb < max_batch:
-                qb *= 2
-        lp.drain(ctx)
-    return cyc
+# TOMBSTONE: MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT (NOISE: NV L40S 6 cells, median 1.00, 0.99..1.06) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+# (with it: `_et_run_depthwise`, the depth-wise device loop driver, and
+# `EtDeviceLoop.enqueue_pop` / `enqueue_push` and their kernels, which only it
+# ran; best-first growth never pops or pushes the FIFO.)
 
 
 def _et_run_bestfirst[
@@ -6606,28 +6336,12 @@ def _et_run_bestfirst[
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ET_DEVICE_LOOP.patch; record in docs/TOMBSTONES.md.
 # =============================================================================
 
-# THIRD FORM (lane fix-rf-et-device-loop-early-exit, 2026-11-13): the device
-# loop that EARLY-EXITS the rescue like the host queue. `-D
-# MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT` (default off; the host queue above
-# stays the depth-wise default; the plain device loop runs best-first only). It
-# decides whether the device loop may skip a batch's DEVIATION 205 rescue
-# when no node needs it. The rescue's first kernel (`etl_retry_kernel`)
-# writes the batch's rescue count into `ETL_H_NSUB`; the host reads that ONE
-# 4-byte word back (`EtDeviceLoop.read_nsub`) and, when it is zero, skips
-# the rest of the rescue: the sub-batch stage, the all-column survey, the
-# pick, the restage, the `k = 1` search and the merge, which over an empty
-# sub-batch are all dummies (the merge stops at `ETL_H_NSUB`, so
-# `b_splits` is unchanged, and the partition's stage rewrites every
-# workspace word the partition reads). SAME BITS as the plain device loop and
-# the host queue. Depth-wise growth runs the device loop under this define;
-# best-first growth (device loop in every arm) skips the empty rescue too.
-# Owed A/B: row `et-device-loop-early-exit` in bench/results/paper_compare/
-# owed-pre0867.json (RUN OWED, NVIDIA + AMD, istella + taxi, fit).
-comptime ET_DEVICE_LOOP_EARLY_EXIT = is_defined[
-    "MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT"
-]()
-# The early-exit form runs the depth-wise group on the device.
-comptime ET_DEVICE_QUEUE = ET_DEVICE_LOOP_EARLY_EXIT
+# TOMBSTONE: MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT (NOISE: NV L40S 6 cells, median 1.00, 0.99..1.06) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+# (The third form: the depth-wise device loop that read each batch's 4-byte
+# rescue count back and skipped an empty DEVIATION 205 rescue. Depth-wise
+# growth runs the host queue; best-first growth runs the device loop with
+# the rescue launched at its bound, as before the arm.)
 
 
 def _et_search_host[
@@ -7221,11 +6935,10 @@ def train_forest_classification_device_timed(
         var f_cap = 0
         if bestfirst:
             f_cap = et_bf_frontier_cap(params, slot_rows, bf_sabotage)
-        # The device loop runs under `-D MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT`
-        # and for best-first growth; the default depth-wise group runs the HOST
-        # queues (`_et_run_depthwise_host`, the block above `ET_DEVICE_QUEUE`)
-        # and keeps a one-slot stub loop that it never drives.
-        var use_lp = bestfirst or ET_DEVICE_QUEUE
+        # The device loop runs for best-first growth; the depth-wise group
+        # runs the HOST queues (`_et_run_depthwise_host`) and keeps a one-slot
+        # stub loop that it never drives.
+        var use_lp = bestfirst
         var lp = EtDeviceLoop(
             ctx,
             g if use_lp else 1,
@@ -7266,11 +6979,6 @@ def train_forest_classification_device_timed(
                 ctx, lp, ws, dataset, d_row_ids, params, Int(k), n_classes,
                 n_rows, n_cols, seed, bf_sabotage, slot_rows, clock, trace,
                 gi,
-            )
-        elif use_lp:
-            cyc = _et_run_depthwise[True](
-                ctx, lp, ws, dataset, d_row_ids, params, Int(k), n_classes,
-                n_rows, n_cols, seed, sabotage, clock, trace, gi,
             )
         else:
             cyc = _et_run_depthwise_host[True](
@@ -8320,11 +8028,10 @@ def train_forest_regression_device_timed(
         var f_cap = 0
         if bestfirst:
             f_cap = et_bf_frontier_cap(params, slot_rows, bf_sabotage)
-        # The device loop runs under `-D MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT`
-        # and for best-first growth; the default depth-wise group runs the HOST
-        # queues (`_et_run_depthwise_host`, the block above `ET_DEVICE_QUEUE`)
-        # and keeps a one-slot stub loop that it never drives.
-        var use_lp = bestfirst or ET_DEVICE_QUEUE
+        # The device loop runs for best-first growth; the depth-wise group
+        # runs the HOST queues (`_et_run_depthwise_host`) and keeps a one-slot
+        # stub loop that it never drives.
+        var use_lp = bestfirst
         var lp = EtDeviceLoop(
             ctx,
             g if use_lp else 1,
@@ -8365,11 +8072,6 @@ def train_forest_regression_device_timed(
                 ctx, lp, ws, dataset, d_row_ids, params, Int(k), Int32(1),
                 n_rows, n_cols, seed, bf_sabotage, slot_rows, clock, trace,
                 gi,
-            )
-        elif use_lp:
-            cyc = _et_run_depthwise[False](
-                ctx, lp, ws, dataset, d_row_ids, params, Int(k), Int32(1),
-                n_rows, n_cols, seed, sabotage, clock, trace, gi,
             )
         else:
             cyc = _et_run_depthwise_host[False](
