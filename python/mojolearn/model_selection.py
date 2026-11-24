@@ -1987,6 +1987,16 @@ from . import _native_family_bridge  # noqa: E402
 from . import _native_model_selection_bridge  # noqa: E402
 _NATIVE, _NATIVE_CONTEXT = _native_model_selection_bridge.connect()
 _native_family_bridge.tables(family_msel_scorers=_scorer_table(), family_msel_scorer_class=_Scorer)
+# glue: the x_trees image every search, cross-validation tool and RFE runs its META entry on
+# (providers/python/member_ensemble_boundary_door.mojo `_msel_x_trees` -> `_trees_key`), connected once
+# here: its entry tables of both modes and the process default mode. Before (lane w3f3-a), the door
+# imported `_expansion_trees` on the first search through an importlib connection that never existed, so
+# `cross_val_score(Ridge(), ...)` in a fresh process raised ImportError. The tree family is not loaded.
+from . import _backend as _msel_backend, _native_trees_bridge  # noqa: E402
+_native_family_bridge.tables(family_msel_x_trees=dict(
+    trees_bindings={mode: {"_mojolearn_x_trees": table}  # glue: the two numeric modes, once at import
+                    for mode, table in _native_trees_bridge.x_trees_tables().items()},
+    backend_fields=vars(_msel_backend)))
 # glue: the fixed tables of the native splitters, cross-validation and
 # search (bindings/msel_*.mojo), connected once: the model_selection
 # classes the owner builds and dispatches on, the base binding helper
