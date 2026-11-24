@@ -69,6 +69,14 @@ struct DBSCANHostKernels(DBSCANNativeKernels):
     def resident(r: DBSCANResidentQuery) raises -> Int:
         raise Error("DBSCAN host provider does not retain device reference sets")
 
+    @staticmethod
+    def fit_store(r: DBSCANFitRequest) raises -> Int:
+        raise Error("DBSCAN host provider has no resident store")
+
+    @staticmethod
+    def core_gather_store(r: DBSCANGatherRequest) raises -> Int:
+        raise Error("DBSCAN host provider has no resident store")
+
 
 comptime _DBSCAN_HOST_NAME = "MojolearnDBSCANHostIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnDBSCANHostFastV1"
 comptime DBSCAN_HOST_API = SharedSlot[DBSCANProviderAPI[DBSCANHostKernels], _DBSCAN_HOST_NAME]

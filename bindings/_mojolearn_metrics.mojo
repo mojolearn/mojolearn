@@ -833,6 +833,8 @@ from core.spectral_native_provider import SpectralProviderAPI
 from core.spectral_member import spectral_member_publish
 from core.manifold_member import manifold_member_publish
 from core.spectral_native_device import SpectralDeviceKernels
+from core.metrics_store import METRICS_STORE_API, metrics_store_v1
+from core.metrics_store_ref import metrics_store_publish
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from checks.numerics import NUMERIC_IDENTICAL as _SPECTRAL_IDENTICAL
 
@@ -842,6 +844,13 @@ comptime SPECTRAL_API = SharedSlot[SpectralProviderAPI[SpectralDeviceKernels], _
 
 def spectral_native_api_v1_binding() raises -> PythonObject:
     var api = SPECTRAL_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def metrics_store_v1_binding() raises -> PythonObject:
+    """The image's resident store as a scope transport entry (core/metrics_store.mojo, lane
+    vdf-scope-cluster4): one store for the SpectralClustering and UMAP members."""
+    var api = METRICS_STORE_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
@@ -878,6 +887,7 @@ def build__mojolearn_metrics() -> PythonObject:
         # the Python r2_score entries below stay for mojolearn.metrics.
         publish_metrics_r2_device()
         m.def_function[spectral_native_api_v1_binding]("spectral_native_api_v1")
+        m.def_function[metrics_store_v1_binding]("metrics_store_v1")
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[device_plan_enter_binding]("device_plan_enter")
@@ -922,6 +932,11 @@ def build__mojolearn_metrics() -> PythonObject:
         # image's spectral queries. A build with no GPU vendor ("none") publishes nothing.
         spectral_member_publish(Int(GLOBAL_NUMERIC_MODE), neighbors_vendor_word(COMPILED_VENDOR),
                                 Int(SPECTRAL_API.get_or_create_ptr()[].entries.unsafe_ptr()))
+        # The image's resident store (core/metrics_store.mojo, lane vdf-scope-cluster4), published where the
+        # SpectralClustering and UMAP members resolve it by their route's (mode, vendor)
+        # (core/metrics_store_ref.mojo). A build with no GPU vendor publishes nothing.
+        metrics_store_publish(Int(GLOBAL_NUMERIC_MODE), neighbors_vendor_word(COMPILED_VENDOR),
+                              Int(METRICS_STORE_API.get_or_create_ptr()[].entries.unsafe_ptr()), metrics_store_v1)
         return published_module
     except e:
         abort(String("failed to create _mojolearn_metrics: ", e))

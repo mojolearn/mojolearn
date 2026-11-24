@@ -11,7 +11,7 @@ from core.spectral_native_api import (
     SpectralInput, SpectralStateView, SpectralFitRequest, SpectralEmbeddingRequest,
     SpectralQueryShape, SpectralQueryRequest, SpectralPrepareRequest,
     SpectralResidentQueryRequest, SpectralNativeKernels,
-    SPECTRAL_DATASET, SPECTRAL_GRAPH, SPECTRAL_DENSE, SPECTRAL_RBF, SPECTRAL_KNN,
+    SPECTRAL_DATASET, SPECTRAL_GRAPH, SPECTRAL_DENSE, SPECTRAL_RBF, SPECTRAL_KNN, SPECTRAL_DATASET_STORE,
 )
 from spectral.impl.spectral_predict_common import (
     SpectralPredictionState, SpectralPrediction, spectral_predict_validate,
@@ -135,6 +135,8 @@ trait SpectralBackend:
     @staticmethod
     def fit_dense(request: SpectralFitRequest, mut result: SpectralFitResult) raises: ...
     @staticmethod
+    def fit_dataset_store(request: SpectralFitRequest, mut result: SpectralFitResult) raises: ...
+    @staticmethod
     def fit_affinity(request: SpectralFitRequest, mut result: SpectralFitResult) raises: ...
     @staticmethod
     def embed_dataset(request: SpectralEmbeddingRequest, source: List[Float32], mut result: SpectralEmbeddingResult) raises: ...
@@ -199,6 +201,11 @@ struct SpectralKernels[B: SpectralBackend](SpectralNativeKernels):
             _ = i32_ptr(r.labels)
             _ = f32_ptr(r.embedding)
             Self.B.fit_affinity(r, result)
+        elif r.input.route == SPECTRAL_DATASET_STORE:
+            # lane vdf-scope-cluster4: the dataset route over a slot of the image's resident store.
+            _ = i32_ptr(r.labels)
+            _ = f32_ptr(r.embedding)
+            Self.B.fit_dataset_store(r, result)
         else:
             raise Error("Spectral native ABI: unknown fit input route")
         return result^

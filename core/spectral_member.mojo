@@ -123,6 +123,14 @@ from core.spectral_native_api import (
 from spectral.cfb_spectral_run import _sc_check_shape, _se_check_shape
 from core.spectral_native_api import SpectralEmbeddingRequest, SpectralEmbeddingOptions
 from core.spectral_native_api import SPECTRAL_DENSE, SPECTRAL_GRAPH
+from core.spectral_native_api import (
+    SPECTRAL_RBF, SPECTRAL_KNN, SPECTRAL_KNN_REFUSED, SPECTRAL_CAP_AFFINITY, SPECTRAL_CAPABILITIES,
+)
+from core.spectral_native_api import SPECTRAL_DATASET_STORE, SPECTRAL_CAP_DEV_STORE
+from core.entry_table import EntryRef, entry_ref_mode, entry_ref_vendor
+from core.metrics_store_ref import metrics_store_find, METRICS_STORE_PREFIX
+from core.member_scope_rows import MemberScopeRows, member_scope_rows_in, member_scope_rows_done_in
+from core.member_abi import MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE
 from core.spectral_preparation_api import (
     SpectralPreparationDriver, SpectralCOOCountRequest, SpectralCOOFillRequest, SpectralKNNRequest,
     SpectralAffinityStatus, SpectralCOOStorage,
@@ -385,7 +393,7 @@ def _preparation(call: _Call) raises -> SpectralPreparationDriver:
     return SpectralPreparationDriver(call[].route.fourth.call)
 
 
-def _rbf_affinity(slot: _Slot, call: _Call, n: Int, d: Int) raises:
+def _rbf_affinity(slot: _Slot, call: _Call, n: Int, d: Int, x_addr: Int) raises:
     """`_rbf_affinity`: the x_decomp image's sqdist -> scale -> exp cells into
     the state's n x n affinity (`spectral_rbf_run`'s request, its resident
     word read from the entry's capabilities)."""
@@ -397,11 +405,11 @@ def _rbf_affinity(slot: _Slot, call: _Call, n: Int, d: Int) raises:
     var f: Array[Float64, 0] = []
     var capabilities = native_descriptor_call_fixed(entry, XD_CAPABILITIES, a, p, f)
     slot[].affinity_values = List[Float32](length=n * n, fill=0.0)
-    spectral_rbf_affinity(entry, SpectralRBFRequest(call[].x.data, Int(slot[].affinity_values.unsafe_ptr()), n, d,
+    spectral_rbf_affinity(entry, SpectralRBFRequest(x_addr, Int(slot[].affinity_values.unsafe_ptr()), n, d,
         slot[].gamma, (capabilities & XD_CAP_RESIDENT) != 0))
 
 
-def _knn_affinity(slot: _Slot, call: _Call, n: Int, d: Int) raises:
+def _knn_affinity(slot: _Slot, call: _Call, n: Int, d: Int, x_addr: Int) raises:
     """`_knn_affinity` of a dense precomputed distance matrix: the base
     image's `knn_affinity_f32` (connectivity, symmetrized), its refusals."""
     if d != n:
@@ -411,17 +419,33 @@ def _knn_affinity(slot: _Slot, call: _Call, n: Int, d: Int) raises:
         return
     var k = slot[].neighbors
     var status = SpectralAffinityStatus()
-    _preparation(call).knn(SpectralKNNRequest(call[].x.data, 0, 0, 0, Int(slot[].affinity_values.unsafe_ptr()),
+    _preparation(call).knn(SpectralKNNRequest(x_addr, 0, 0, 0, Int(slot[].affinity_values.unsafe_ptr()),
         status.address(), n, k, 0, False))
+    _knn_status_refuse(status, k)
+
+
+def _knn_status_refuse(status: SpectralAffinityStatus, k: Int) raises:
+    """The k-NN affinity's three status words as the class's refusals (the base image's builder and the fit
+    entry's fused builder write the same words)."""
     var code = Int(status.words[0])
     var bad_row = Int(status.words[1])
     var stored = Int(status.words[2])
-    _ = status^
     if code == 1:
         raise Error("mojolearn SpectralEmbedding: a precomputed distance is negative or NaN")
     if code == 2:
         raise Error("mojolearn SpectralEmbedding: row " + String(bad_row) + " of the precomputed graph has "
                     + String(stored) + " stored distances, fewer than n_neighbors=" + String(k))
+
+
+def _fused_affinity(call: _Call, fit_dense: Bool) raises -> Bool:
+    """Whether the FIT entry builds an 'rbf' / 'precomputed_nearest_neighbors' affinity on its own device and
+    fits (or embeds) from it there (`SPECTRAL_CAP_AFFINITY` on a dense fit entry; lane vdf-misc4's estimator
+    route, applied to the member by lane vdf-scope-cluster4): the n x n crosses once, into the state's affinity
+    block. Was: built by the x_decomp (rbf) or base (knn) image into the state's host words and uploaded again
+    by the fit entry. One metadata call per fit."""
+    if not fit_dense:
+        return False
+    return (SpectralDriver(call[].route.entry.call).metadata(SPECTRAL_CAPABILITIES) & SPECTRAL_CAP_AFFINITY) != 0
 
 
 def _coo(call: _Call, address: Int, n: Int, built: Bool) raises -> SpectralCOOStorage:
@@ -462,12 +486,60 @@ def _fit(slot: _Slot, call: _Call) raises:
     checks in the class's order, one fit entry call on the borrowed X
     (keeping the prediction state when asked), then the assignment entry for
     'discretize' / 'cluster_qr' (the class's 30 restarts, 20 iterations)."""
-    _whole_x(call)
+    if call[].row_index.rows == 0:
+        _whole_x(call)
+        _fit_rows(slot, call, call[].x.data, call[].x.rows, call[].x.cols, -1, List[Float32]())
+        return
+    if call[].column_index.rows > 0 or call[].x.home == MEMBER_HOME_DEVICE:
+        raise Error("TypeError: a SpectralClustering member reads X as a dense host float32 view, no column index")
+    # MEMBER_CAN_ROW_INDEX (lane vdf-scope-cluster4): the fold's rows. THE RESIDENT-STORE ROUTE: the dataset
+    # affinity on a GPU fit entry with the store (SPECTRAL_CAP_DEV_STORE, the metrics image's store resolved from
+    # the fit route's (mode, vendor)), the caller's scope with X's pin: the fold is taken on the device out of the
+    # scope's one copy of X and the fit reads that slot. Gathered on the host cores otherwise, and also when the
+    # state keeps its training rows for predict (the Nystrom extension reads host rows).
+    var store = _spectral_store(slot, call)
+    var resident = Bool(store)
+    var gathered = MemberScopeRows(0, 0, 0, False, List[Float32]())
+    if not resident or slot[].keep_state:
+        gathered = member_scope_rows_in(call[], call[].route.entry, METRICS_STORE_PREFIX, False, _EST)
+    # The gathered words move to the fit (a swap: the aggregate stays whole); their address is unchanged.
+    var owned = List[Float32]()
+    swap(owned, gathered.gathered)
+    if not resident:
+        _fit_rows(slot, call, gathered.source, gathered.rows, gathered.cols, -1, owned^)
+        return
+    var taken = member_scope_rows_in(call[], store.value(), METRICS_STORE_PREFIX, True, _EST)
+    try:
+        _fit_rows(slot, call, gathered.source, taken.rows, taken.cols, taken.source, owned^)
+    finally:
+        member_scope_rows_done_in(store.value(), taken)
+
+
+def _spectral_store(slot: _Slot, call: _Call) -> Optional[EntryRef]:
+    """The metrics image's resident store when a SpectralClustering fit may read a fold from it: the dataset
+    affinity, a fit entry answering SPECTRAL_CAP_DEV_STORE, the caller's scope with X's pin, and the store
+    published for the fit route's (mode, vendor) (core/metrics_store_ref.mojo)."""
+    if slot[].kind != _KIND_SPECTRAL or slot[].affinity != _AFF_NN:
+        return Optional[EntryRef]()
+    if call[].scope == MEMBER_SCOPE_NONE or call[].pin == 0:
+        return Optional[EntryRef]()
+    try:
+        var caps = SpectralDriver(call[].route.entry.call).metadata(SPECTRAL_CAPABILITIES)
+        if (caps & SPECTRAL_CAP_DEV_STORE) == 0:
+            return Optional[EntryRef]()
+    except:
+        return Optional[EntryRef]()
+    return metrics_store_find(entry_ref_mode(call[].route.entry), entry_ref_vendor(call[].route.entry))
+
+
+def _fit_rows(slot: _Slot, call: _Call, x_addr: Int, rows: Int, d: Int, store_slot: Int,
+              var owned: List[Float32]) raises:
+    """The SpectralClustering fit over host rows at `x_addr` (`rows` x `d`: the caller's X, or a gathered fold
+    whose words `owned` holds; 0 when only a slot holds the fold) or, for the dataset route, over slot
+    `store_slot` of the metrics store (`>= 0`; SPECTRAL_DATASET_STORE: the same kernels on the same words)."""
     if call[].weights.rows > 0:
         raise Error("TypeError: SpectralClustering takes no sample_weight")
     var output = call[].fit_output
-    var rows = call[].x.rows
-    var d = call[].x.cols
     if output == MEMBER_OP_PREDICT:
         _labels_out(call, rows)
     elif output != 0:
@@ -482,24 +554,39 @@ def _fit(slot: _Slot, call: _Call) raises:
     var n = rows
     var coo = SpectralCOOStorage(0)
     var source_input: SpectralInput
-    if affinity == _AFF_NN:
+    var status = SpectralAffinityStatus()
+    var fused = ((affinity == _AFF_RBF or affinity == _AFF_PNN) and clusters <= n and k < n
+        and (affinity == _AFF_RBF or (d == n and n > 0)) and _fused_affinity(call, slot[].fit_dense))
+    if fused:
+        # The fit entry builds the affinity on its device into the state's block and fits from it there.
+        slot[].affinity_values = List[Float32](length=n * n, fill=0.0)
+        if affinity == _AFF_RBF:
+            source_input = SpectralInput(x_addr, 0, 0, 0, SPECTRAL_RBF, n, d, 0,
+                Int(slot[].affinity_values.unsafe_ptr()), 0, slot[].gamma)
+        else:
+            source_input = SpectralInput(x_addr, 0, 0, 0, SPECTRAL_KNN, n, slot[].neighbors, 0,
+                Int(slot[].affinity_values.unsafe_ptr()), status.address(), 0.0)
+    elif affinity == _AFF_NN:
         _sc_check_shape(clusters, rows, k)
         if slot[].neighbors > rows:
             raise Error("mojolearn SpectralClustering: n_neighbors=" + String(slot[].neighbors)
                         + " exceeds n_samples=" + String(rows))
-        source_input = SpectralInput(call[].x.data, 0, 0, 0, SPECTRAL_DATASET, rows, d, 0)
+        if store_slot >= 0:
+            source_input = SpectralInput(store_slot, 0, 0, 0, SPECTRAL_DATASET_STORE, rows, d, 0)
+        else:
+            source_input = SpectralInput(x_addr, 0, 0, 0, SPECTRAL_DATASET, rows, d, 0)
     else:
-        var dense_address = call[].x.data
+        var dense_address = x_addr
         if affinity == _AFF_PRECOMPUTED:
             if rows != d:
                 raise Error("mojolearn SpectralClustering: with affinity='precomputed', X "
                             + "must be a square affinity matrix or a SciPy sparse matrix, "
                             + "got shape (" + String(rows) + ", " + String(d) + ")")
         elif affinity == _AFF_RBF:
-            _rbf_affinity(slot, call, rows, d)
+            _rbf_affinity(slot, call, rows, d, x_addr)
             dense_address = Int(slot[].affinity_values.unsafe_ptr())
         else:
-            _knn_affinity(slot, call, rows, d)
+            _knn_affinity(slot, call, rows, d, x_addr)
             dense_address = Int(slot[].affinity_values.unsafe_ptr())
         if slot[].fit_dense:
             _sc_check_shape(clusters, n, k)
@@ -524,6 +611,9 @@ def _fit(slot: _Slot, call: _Call) raises:
         view, options)
     var n_out = SpectralDriver(call[].route.entry.call).fit(request)
     _ = len(coo.values)  # the COO triples the fit read stay alive through it
+    if fused and n_out == SPECTRAL_KNN_REFUSED:
+        _knn_status_refuse(status, slot[].neighbors)
+    _ = status^
     if n_out != k:
         raise Error("RuntimeError: mojolearn SpectralClustering: the kernel returned " + String(n_out) + " "
                     + "embedding columns where " + String(k) + " were expected")
@@ -547,7 +637,12 @@ def _fit(slot: _Slot, call: _Call) raises:
     # The training rows the state keeps: the dataset route's X with prediction
     # data (`_fit_X`), a precomputed X always (its `affinity_matrix_`).
     var keeps_rows = (affinity == _AFF_NN and keep) or affinity == _AFF_PRECOMPUTED
-    slot[].borrowed = call[].x.data if keeps_rows else 0
+    if keeps_rows and len(owned) > 0:
+        # A gathered fold: the state owns its training rows (nothing is borrowed past the call).
+        slot[].refs = owned^
+        slot[].borrowed = 0
+    else:
+        slot[].borrowed = x_addr if keeps_rows else 0
     slot[].fitted = True
     if output == MEMBER_OP_PREDICT:
         unsafe_memcpy(dest=_I32P(unsafe_from_address=call[].dst.data), src=slot[].labels.unsafe_ptr(), count=n)
@@ -609,7 +704,25 @@ def _fit_se(slot: _Slot, call: _Call) raises:
     var coo = SpectralCOOStorage(0)
     var source_input: SpectralInput
     var neighbors_word = 0
-    if affinity == _AFF_NN:
+    var status = SpectralAffinityStatus()
+    var fused = ((affinity == _AFF_RBF or affinity == _AFF_PNN) and n > 0
+        and (affinity == _AFF_RBF or d == n) and _fused_affinity(call, slot[].fit_dense))
+    if fused:
+        # The fit entry builds the affinity on its device and embeds from it there (lane vdf-misc4's
+        # `_se_execute` route); the 'rbf' affinity crosses once, into the state's published block.
+        _se_check_shape(k, n, n_lanczos)
+        neighbors_out = max(n // 10, 1) if auto_neighbors else slot[].neighbors
+        slot[].affinity_values = List[Float32](length=n * n, fill=0.0)
+        if affinity == _AFF_RBF:
+            var gamma = 1.0 / Float64(d) if auto_gamma else slot[].gamma
+            gamma_out = gamma
+            features_out = d
+            source_input = SpectralInput(call[].x.data, 0, 0, 0, SPECTRAL_RBF, n, d, 0,
+                Int(slot[].affinity_values.unsafe_ptr()), 0, gamma)
+        else:
+            source_input = SpectralInput(call[].x.data, 0, 0, 0, SPECTRAL_KNN, n, neighbors_out, 0,
+                Int(slot[].affinity_values.unsafe_ptr()), status.address(), 0.0)
+    elif affinity == _AFF_NN:
         _se_check_shape(k, n, n_lanczos)
         var neighbors = max(n // 10, 1) if auto_neighbors else slot[].neighbors
         if neighbors > n:
@@ -624,7 +737,7 @@ def _fit_se(slot: _Slot, call: _Call) raises:
         if affinity == _AFF_PNN:
             var saved = slot[].neighbors
             slot[].neighbors = max(n // 10, 1) if auto_neighbors else saved
-            _knn_affinity(slot, call, rows, d)
+            _knn_affinity(slot, call, rows, d, call[].x.data)
             slot[].neighbors = saved
             dense_address = Int(slot[].affinity_values.unsafe_ptr())
         elif affinity == _AFF_PRECOMPUTED:
@@ -639,7 +752,7 @@ def _fit_se(slot: _Slot, call: _Call) raises:
             features_out = d
             var kept = slot[].gamma
             slot[].gamma = gamma
-            _rbf_affinity(slot, call, rows, d)
+            _rbf_affinity(slot, call, rows, d, call[].x.data)
             slot[].gamma = kept
             dense_address = Int(slot[].affinity_values.unsafe_ptr())
         neighbors_out = max(n // 10, 1) if auto_neighbors else slot[].neighbors
@@ -657,6 +770,9 @@ def _fit_se(slot: _Slot, call: _Call) raises:
             slot[].seed, slot[].tolerance))
     var n_out = SpectralDriver(call[].route.entry.call).embed(request)
     _ = len(coo.values)  # the COO triples the embedding read stay alive through it
+    if fused and n_out == SPECTRAL_KNN_REFUSED:
+        _knn_status_refuse(status, neighbors_out)
+    _ = status^
     if n_out != k:
         raise Error("RuntimeError: mojolearn SpectralEmbedding: the kernel returned " + String(n_out) + " "
                     + "embedding columns where " + String(k) + " were expected")
@@ -712,29 +828,38 @@ def _predict(slot: _Slot, call: _Call) raises:
         raise Error("mojolearn SpectralClustering.predict: prediction data was not stored. Fit with"
             + " SpectralClustering(prediction_data=True), which keeps the eigenpairs, degrees and"
             + " centroids the Nystrom extension needs (DEVIATION 2860)")
-    _whole_x(call)
-    var queries = call[].x.rows
+    # Under a row index (lane vdf-scope-cluster4) the queries are the index's rows, gathered on the host cores:
+    # the Nystrom extension's query kernels read host rows.
+    var qx = MemberScopeRows(call[].x.data, call[].x.rows, call[].x.cols, False, List[Float32]())
+    if call[].row_index.rows == 0:
+        _whole_x(call)
+    else:
+        if call[].column_index.rows > 0 or call[].x.home == MEMBER_HOME_DEVICE:
+            raise Error("TypeError: a SpectralClustering member reads X as a dense host float32 view, no column"
+                + " index")
+        qx = member_scope_rows_in(call[], call[].route.entry, METRICS_STORE_PREFIX, False, _EST)
+    var queries = qx.rows
     var d = slot[].features
     var code = 0
     if slot[].affinity == _AFF_PRECOMPUTED:
         # `_sc_predict`'s precomputed arm: X is the affinity between the new
         # rows and the training rows (finite: admitted by the caller).
-        if call[].x.cols != slot[].rows:
+        if qx.cols != slot[].rows:
             raise Error("mojolearn SpectralClustering.predict: with affinity="
                         + "'precomputed', X must be the affinity between the new rows "
                         + "and the " + String(slot[].rows) + " training rows, shape (n_new, "
-                        + String(slot[].rows) + "); got shape (" + String(queries) + ", " + String(call[].x.cols)
+                        + String(slot[].rows) + "); got shape (" + String(queries) + ", " + String(qx.cols)
                         + ")")
         if queries < 1:
             raise Error("mojolearn SpectralClustering.predict: X has no rows; refused by name")
-        if family_min_f32(_F32P(unsafe_from_address=call[].x.data), queries * call[].x.cols) < 0:
+        if family_min_f32(_F32P(unsafe_from_address=qx.source), queries * qx.cols) < 0:
             raise Error("mojolearn SpectralClustering.predict: the affinity has a "
                         + "negative entry; refused by name, as the fit refuses one")
         d = 0
         code = 1
     else:
-        if call[].x.cols != d:
-            raise Error("ValueError: X has " + String(call[].x.cols) + " features, but"
+        if qx.cols != d:
+            raise Error("ValueError: X has " + String(qx.cols) + " features, but"
                 + " SpectralClustering.predict is expecting " + String(d) + " features as input")
         if queries < 1:
             raise Error("mojolearn SpectralClustering.predict: X has no rows; refused by name")
@@ -747,12 +872,13 @@ def _predict(slot: _Slot, call: _Call) raises:
     if slot[].handle < 0 and (call[].route.flags & SPECTRAL_CAP_RESIDENT) != 0:
         slot[].handle = driver.prepare(SpectralPrepareRequest(training, slot[].state_view(), shape))
     if slot[].handle >= 0:
-        _ = driver.query_resident(SpectralResidentQueryRequest(slot[].handle, call[].x.data, call[].dst.data,
+        _ = driver.query_resident(SpectralResidentQueryRequest(slot[].handle, qx.source, call[].dst.data,
             Int(embedding.unsafe_ptr()), shape))
     else:
-        _ = driver.query(SpectralQueryRequest(call[].x.data, training, slot[].state_view(), call[].dst.data,
+        _ = driver.query(SpectralQueryRequest(qx.source, training, slot[].state_view(), call[].dst.data,
             Int(embedding.unsafe_ptr()), shape))
     _ = embedding^
+    _ = qx.rows  # the gathered queries stay alive through the query calls above
 
 
 def _f32_view(values: List[Float32], rows: Int, cols: Int) -> MemberMatrix:
@@ -901,7 +1027,20 @@ def _spectral_member(operation: Int, address: Int) raises -> Int:
             var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
             if held[].kind == _KIND_EMBEDDING:
                 return MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_IGNORES_Y
-        return MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_BORROWS_FIT
+        # MEMBER_CAN_ROW_INDEX (lane vdf-scope-cluster4): a SpectralClustering call reads a host row index (a
+        # gathered fold owns its rows); MEMBER_CAN_SCOPE when the fit entry reads the metrics image's resident
+        # store (SPECTRAL_CAP_DEV_STORE and the store published for its (mode, vendor)): a search's dataset-route
+        # folds are then taken on the device out of one copy of X.
+        var sc = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_BORROWS_FIT
+            | MEMBER_CAN_ROW_INDEX)
+        try:
+            var caps = SpectralDriver(call[].route.entry.call).metadata(SPECTRAL_CAPABILITIES)
+            if (caps & SPECTRAL_CAP_DEV_STORE) != 0 and metrics_store_find(
+                    entry_ref_mode(call[].route.entry), entry_ref_vendor(call[].route.entry)):
+                sc |= MEMBER_CAN_SCOPE
+        except:
+            pass  # a route without a fit entry answers no MEMBER_CAN_SCOPE
+        return sc
     if operation == MEMBER_OP_NEW and call[].params != 0 and call[].param_count == _SE_WORDS:
         var se_words = _Words(unsafe_from_address=call[].params)
         if Int(se_words[0]) != _KIND_EMBEDDING:

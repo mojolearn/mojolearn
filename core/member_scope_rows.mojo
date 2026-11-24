@@ -22,6 +22,7 @@ from core.member_abi import (
 )
 from core.admitted_rows_gather import admitted_gather_rows_f32, ARG_OUT_OF_RANGE
 from core.host_parallel import host_widen_index_i64
+from core.entry_table import EntryRef
 from bindings.arena_cache_run import arena_scope_store_put, arena_store_take_rows, arena_cache_free
 
 
@@ -46,6 +47,15 @@ def member_scope_rows(mut call: MemberCall, prefix: String, store_ok: Bool, est:
     """The call's X: the whole dense host view without a row index; with one, RESIDENT or GATHERED (module
     note). `prefix` names the family's scope cache, `store_ok` says the route carries the family store in
     `route.second`, `est` names the estimator in a refusal."""
+    var store = call.route.second  # a copy: `call` is also passed mutably
+    return member_scope_rows_in(call, store, prefix, store_ok, est)
+
+
+def member_scope_rows_in(mut call: MemberCall, store: EntryRef, prefix: String, store_ok: Bool,
+                         est: String) raises -> MemberScopeRows:
+    """`member_scope_rows` with the family store's transport entry `store` named by the caller (lane
+    vdf-scope-cluster4: a member whose route slots are all in use resolves its image's store elsewhere,
+    core/metrics_store_ref.mojo). `store` is read only when `store_ok`."""
     var x = call.x
     if not x.dense_host(MEMBER_F32):
         raise Error("TypeError: a " + est + " member reads X as a dense host float32 view")
@@ -56,7 +66,6 @@ def member_scope_rows(mut call: MemberCall, prefix: String, store_ok: Bool, est:
         raise Error("TypeError: a " + est + " member reads a host int32 or int64 row index")
     var n = index.rows
     if store_ok and call.scope != MEMBER_SCOPE_NONE and call.pin != 0:
-        var store = call.route.second
         var put = arena_scope_store_put(call.scope, store, prefix, x.data, x.rows * x.cols, call.pin)
         if put.pinned:
             call.pin_kept = 1
@@ -86,5 +95,10 @@ def member_scope_rows(mut call: MemberCall, prefix: String, store_ok: Bool, est:
 
 def member_scope_rows_done(call: MemberCall, rows: MemberScopeRows) raises:
     """Free a taken slot (RESIDENT); nothing for host rows. The cached whole X stays the scope's."""
+    member_scope_rows_done_in(call.route.second, rows)
+
+
+def member_scope_rows_done_in(store: EntryRef, rows: MemberScopeRows) raises:
+    """`member_scope_rows_done` into the store `member_scope_rows_in` took the slot from."""
     if rows.resident:
-        arena_cache_free(call.route.second, rows.source)
+        arena_cache_free(store, rows.source)

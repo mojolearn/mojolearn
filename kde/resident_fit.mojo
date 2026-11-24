@@ -63,6 +63,9 @@ from kde.impl.neighbors.kernel_density import (
     metric_from_name,
 )
 from kde.impl.distance.distance_ops import DIST_COSINE_EXPANDED, DIST_L2_EXPANDED
+from std.math import sqrt
+from std.atomic import Atomic
+from max.gpu import block_dim, block_idx, thread_idx
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 
@@ -74,6 +77,101 @@ def kde_host_rules_needed(metric: Int, finite_tested: Bool) -> Bool:
     tested set (the fit set the door tested in its copy; queries the entry
     tests behind its upload) skips the host pass."""
     return not finite_tested or metric == DIST_COSINE_EXPANDED or metric == DIST_L2_EXPANDED
+
+
+comptime _RULES_TPB = 256
+comptime _RULES_NO_HIT = Int32(2147483647)
+
+
+def _kde_row_rules_kernel(
+    x: MutPointer[Float32, MutAnyOrigin],
+    hit: MutPointer[Int32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_cols_in: Int32,
+    cosine: Int32,
+    bound: Float32,
+):
+    """`kde_validate_data_ptr`'s two rules that are not finiteness, one thread per row (lane vdf-scope-cluster4).
+    cosine: an all-zero row puts its row number into `hit[0]` (`Atomic.min`: the lowest, the row
+    `cosine_zero_norm_row_ptr` names). sqeuclidean: the row's first word with `|v| >= bound` puts its word index
+    (row * cols + col) into `hit[0]` (`Atomic.min`: the first word of the host scan). Reads only; integer and
+    compare work, no arithmetic on the values."""
+    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if row >= Int(n_rows_in):
+        return
+    var n_cols = Int(n_cols_in)
+    var base = row * n_cols
+    if cosine != Int32(0):
+        for f in range(n_cols):
+            if x.unsafe_load(base + f) != Float32(0.0):
+                return
+        _ = Atomic.min(hit, Int32(row))
+        return
+    for f in range(n_cols):
+        if abs(x.unsafe_load(base + f)) >= bound:
+            _ = Atomic.min(hit, Int32(base + f))
+            return
+
+
+def kde_device_row_rules(ctx: DeviceContext, mut rows: DeviceBuffer[DType.float32], n_rows: Int, n_features: Int,
+                         metric: Int, what: String) raises:
+    """`kde_validate_data_ptr`'s cosine zero-row rule and sqeuclidean magnitude bound over rows ALREADY ON THE
+    DEVICE (`rows`, on `ctx`; their finiteness is decided elsewhere: the caller's admission or the device finite
+    word), so those two metrics keep the resident-store path (lane vdf-scope-cluster4, 2026-11-24). One launch,
+    one word read back (two for a bound refusal, which prints the value); the same first refusal in the same
+    words as the host pass. Any other metric: nothing to do."""
+    if metric != DIST_COSINE_EXPANDED and metric != DIST_L2_EXPANDED:
+        return
+    if n_rows <= 0 or n_features <= 0:
+        raise Error(
+            "kde: " + what + " must have positive dimensions, got "
+            + String(n_rows) + " x " + String(n_features)
+        )
+    var n = n_rows * n_features
+    if n >= Int(_RULES_NO_HIT):
+        raise Error("kde: " + what + " holds " + String(n) + " words; the device row rules index words in int32")
+    if len(rows) < n:
+        raise Error("kde: the resident " + what + " rows hold fewer than " + String(n) + " words")
+    var cosine = metric == DIST_COSINE_EXPANDED
+    var bound = Float32(0.0)
+    if not cosine:
+        bound = Float32(9.223372036854775808e18 / sqrt(Float64(n_features)))
+    var d_hit = ctx.enqueue_create_buffer[DType.int32](1)
+    var h_hit = ctx.enqueue_create_host_buffer[DType.int32](2)
+    h_hit.unsafe_ptr().unsafe_store(0, _RULES_NO_HIT)
+    ctx.enqueue_copy(dst_buf=d_hit, src_ptr=h_hit.unsafe_ptr())
+    ctx.enqueue_function[_kde_row_rules_kernel](
+        rows.unsafe_ptr(), d_hit.unsafe_ptr(), Int32(n_rows), Int32(n_features), Int32(1 if cosine else 0), bound,
+        grid_dim=((n_rows + _RULES_TPB - 1) // _RULES_TPB, 1, 1),
+        block_dim=(_RULES_TPB, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=h_hit.unsafe_ptr(), src_buf=d_hit)
+    ctx.synchronize()
+    var hit = Int(h_hit.unsafe_ptr().unsafe_load(0))
+    _ = d_hit^
+    if hit == Int(_RULES_NO_HIT):
+        _ = h_hit^
+        return
+    if cosine:
+        _ = h_hit^
+        raise Error(
+            "kde: metric='cosine' but " + what + " row " + String(hit)
+            + " is all zeros; cosine distance divides by ||x|| and is"
+            " undefined at the origin (DEVIATION 553)"
+        )
+    # The refused word's value, for the host pass's sentence.
+    var h_value = ctx.enqueue_create_host_buffer[DType.float32](1)
+    ctx.enqueue_copy(dst_ptr=h_value.unsafe_ptr(), src_buf=rows.create_sub_buffer[DType.float32](hit, 1))
+    ctx.synchronize()
+    var v = h_value.unsafe_ptr().unsafe_load(0)
+    _ = h_value^
+    _ = h_hit^
+    raise Error(
+        "kde: metric='sqeuclidean' needs |" + what + "| < 2^63/sqrt("
+        + String(n_features) + ") so the expanded identity cannot form"
+        " inf - inf; row " + String(hit // n_features) + ", column "
+        + String(hit % n_features) + " is " + String(v) + " (DEVIATION 604)"
+    )
 
 
 # Immutable retained fit snapshots and direct upload are separate controls.
@@ -185,13 +283,11 @@ struct ResidentKdeFit(Movable):
         they are copied device to device into the fit's own buffer (the
         store may reuse the slot once the caller frees it) instead of
         uploaded. The same validation (`kde_fit_validate`; the rows were
-        admitted finite by the caller, and a metric with a host rule left,
-        cosine or sqeuclidean, is refused here: its caller takes the host
-        form), the same weights and sum: the same words, so the same bits."""
+        admitted finite by the caller; the cosine zero-row rule and the
+        sqeuclidean bound run ON THE DEVICE over the copy,
+        `kde_device_row_rules`, lane vdf-scope-cluster4), the same weights
+        and sum: the same words, so the same bits."""
         kde_fit_validate(n_train, n_features, bandwidth, kernel, metric, weights, has_weights)
-        if kde_host_rules_needed(metric, True):
-            raise Error("kde_fit_prepare_store: metric " + String(metric)
-                + " has a host rule on the training rows; the host form prepares it")
         var ctx = process_ctx[_DEVCTX_SLOT]()
         var n = n_train * n_features
         if len(device_train) < n:
@@ -199,6 +295,7 @@ struct ResidentKdeFit(Movable):
                 + " words, " + String(n) + " read")
         var train = ctx.enqueue_create_buffer[DType.float32](n)
         ctx.enqueue_copy(dst_buf=train, src_buf=device_train.create_sub_buffer[DType.float32](0, n))
+        kde_device_row_rules(ctx, train, n_train, n_features, metric, "train")
         var sum_w = Float32(n_train)
         var wbuf: DeviceBuffer[DType.float32]
         if has_weights:
@@ -547,13 +644,11 @@ def kde_score_samples_resident_device(
     """`kde_score_samples_resident` over queries already on this binding's context (a fold taken on the device
     out of a resident X; lane vdf-scope-cluster2b): no staging copy and no upload. The handle checks are the
     host form's; the queries' finite status (`status_addr`) is tested ON THE DEVICE (`enqueue_finite_word`, one
-    word read back with the scores' synchronisation) and a flagged span writes no score. A metric with a host
-    rule on the queries (cosine, sqeuclidean) is refused: its caller takes the host form."""
+    word read back with the scores' synchronisation) and a flagged span writes no score. The cosine zero-row
+    rule and the sqeuclidean bound on the queries run on the device first (`kde_device_row_rules`, lane
+    vdf-scope-cluster4), as the host form runs its host pass before its finite test."""
     var k = kernel_from_name(kernel)
     var m = metric_from_name(metric)
-    if kde_host_rules_needed(m, True):
-        raise Error("kde_score_samples_resident_device: metric " + metric
-            + " has a host rule on the queries; the host form scores it")
     var entry = _kde_fit_lease(handle)
     var clean = True
     try:
@@ -566,6 +661,7 @@ def kde_score_samples_resident_device(
         if len(dquery) < n:
             raise Error("kde_score_samples_resident_device: the resident slot holds " + String(len(dquery))
                 + " words, " + String(n) + " read")
+        kde_device_row_rules(entry.ctx, dquery, n_query, n_features, m, "query")
         clean = False
         if status_addr != 0:
             var d_status = entry.ctx.enqueue_create_buffer[DType.int32](1)
