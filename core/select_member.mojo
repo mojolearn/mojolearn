@@ -396,10 +396,9 @@ def _fit_kbest(slot: _Slot, call: _Call) raises:
     var arena = prep_enc_run(call, prog, call[].y.data, 0, False)
     _ = len(prog.consts_f)  # the program's own input words live past the run
     var ap = _F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
-    if score == SELECT_SCORE_CHI2:
-        for j in range(d):  # driver-loop: over the per-column minima (feature metadata)
-            if ap[plan.extra + 3 * d + j] < 0:
-                raise Error("mojolearn: Input X must be non-negative.")
+    if score == SELECT_SCORE_CHI2 and ap[plan.extra] != 0:
+        # the device's count of negative column minima (one word)
+        raise Error("mojolearn: Input X must be non-negative.")
     if not k_ok:
         raise Error("mojolearn: k should be 0 <= k <= n_features = " + String(d) + "; got " + String(k))
     slot[].clear()
