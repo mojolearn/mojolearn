@@ -1609,7 +1609,14 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     var out_widths = List[Int](length=max(m * nops, 1), fill=0)
     for c in range(m):  # driver-loop: over the candidates (one OUTPUTS question per response)
         for o in range(nops):  # small-loop(the distinct responses)
-            if not classifier and not responding and ops[o] != MEMBER_OP_PREDICT:
+            # lane w3f5-c: the cv tools' response too (cross_val_predict of a
+            # mixture's predict_proba): the UNPACK sized the caller's result
+            # by the same `member_outputs` (providers/python/
+            # member_ensemble_boundary_door.mojo, LANE mf-rows8b row :3876), so
+            # each side's buffer is the member's own columns, never the
+            # classes' width (dcd54c92bb kept the responding path at max(k, 1)
+            # and `_respond` refused the mixture's n_components columns).
+            if not classifier and ops[o] != MEMBER_OP_PREDICT:
                 out_widths[c * nops + o] = max(member_outputs(plan.plans[c], ops[o], d, 1), 1)
             var probe = plan.plans[c].copy()
             probe.classes = k
