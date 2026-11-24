@@ -97,6 +97,16 @@ def _(ml, X, yc, yr, Xh=None):
         search = ms.GridSearchCV(ml.LogisticRegression(max_iter=30), {"C": [0.5, 2.0]}, cv=3, scoring=scorer,
                                  n_jobs=1, error_score="raise", refit=False).fit(rows, labels)
         typed.append(search.cv_results_["mean_test_score"])
+    # Lane mf-score8 round b: scikit-learn 1.9's names in the scorer table this lane hashes (`names` moves with
+    # them: neg_max_error, d2_log_loss_score, d2_brier_score, the likelihood ratios) and the scorers typed with
+    # them, over two classes.
+    binary = (np.arange(len(rows), dtype=np.int64) % 2)
+    for scorer in ("d2_log_loss_score", "positive_likelihood_ratio",  # glue: fixtures
+                   ms.make_scorer(metrics.hinge_loss, response_method="decision_function", greater_is_better=False),
+                   ms.make_scorer(metrics.roc_auc_score, response_method="predict_proba", max_fpr=0.5)):
+        search = ms.GridSearchCV(ml.LogisticRegression(max_iter=30), {"C": [0.5, 2.0]}, cv=3, scoring=scorer,
+                                 n_jobs=1, error_score="raise", refit=False).fit(rows, binary)
+        typed.append(search.cv_results_["mean_test_score"])
     return _fit(dict(scores=_h(values),
                      folds=_h(*[np.asarray(indices, dtype=np.int64) for pair in folds for indices in pair]),
                      names=_h(np.frombuffer("\n".join(names).encode("utf-8"), dtype=np.uint8)),

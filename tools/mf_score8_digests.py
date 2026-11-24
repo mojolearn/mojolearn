@@ -29,6 +29,13 @@ EXPECTED (base vs head):
 - `pin_bad`, `tw_bad`, `mo_bad`, `mo_custom`, `kappa_bad`: the same words on both sides (head: raised per side
   from the refusal word); `*_tol`: three -7.0 scores on both sides.
 
+ROUND b (base 46b18d1540, head lane/mf-score8): `b_d2ll`, `b_d2br`, `b_lrp`, `b_lrn`, `b_negmax` (scikit-learn 1.9
+names: base raised get_scorer's unknown-name words, head scores them), `b_hinge`, `b_roc_fpr`, `b_roc_micro`,
+`b_ap_weighted` (base: the door's units over the same programs; head: the typed RUN; equal within 1e-6),
+`b_reg_accuracy` (both raise "continuous is not supported"-like words; head raises scikit-learn's), `b_multi_r2`
+(base: the member's own score refused / door units; head: r2 over the two outputs), `b_nb_hinge` (head: the
+AttributeError of `_check_response_method`).
+
 Configurations are independent: one process each across the host cores.
 
     python tools/mf_score8_digests.py > digests.txt
@@ -99,7 +106,7 @@ _CLS = {
     "kappa_bad": ("cohen_kappa_score", {'weights': 'cubic'}, 'predict', True),
 }
 _LABELS = {"cls_mse": "neg_mean_squared_error", "cls_r2": "r2", "cls_mae": "neg_mean_absolute_error",
-           "cls_max": "max_error", "str_mse": "neg_mean_squared_error", "str_medae": "neg_median_absolute_error"}
+           "cls_max": "neg_max_error", "str_mse": "neg_mean_squared_error", "str_medae": "neg_median_absolute_error"}
 
 
 def _unit(name):
@@ -140,12 +147,66 @@ def _unit(name):
     return out
 
 
-UNITS = list(_REG) + list(_CLS) + list(_LABELS)
+def _round_b(name):
+    import mojolearn as ml
+    from mojolearn import metrics
+    from mojolearn import model_selection as ms
+    X, y = _cls_data()
+    yb = (y == 2).astype(np.int32)
+    Xr, yr = _reg_data()
+    lr = ml.LogisticRegression(max_iter=50)
+    table = {
+        "b_d2ll": (lr, {'C': [1.0]}, X, yb, "d2_log_loss_score"),
+        "b_d2br": (lr, {'C': [1.0]}, X, yb, "d2_brier_score"),
+        "b_lrp": (lr, {'C': [1.0]}, X, yb, "positive_likelihood_ratio"),
+        "b_lrn": (lr, {'C': [1.0]}, X, yb, "neg_negative_likelihood_ratio"),
+        "b_negmax": (ml.Ridge(), {'alpha': [1.0]}, Xr, yr, "neg_max_error"),
+        "b_hinge": (lr, {'C': [1.0]}, X, yb, ms.make_scorer(metrics.hinge_loss, response_method='decision_function',
+                                                             greater_is_better=False)),
+        "b_roc_fpr": (lr, {'C': [1.0]}, X, yb, ms.make_scorer(metrics.roc_auc_score, response_method='predict_proba',
+                                                               max_fpr=0.5)),
+        "b_roc_micro": (lr, {'C': [1.0]}, X, y, ms.make_scorer(metrics.roc_auc_score, response_method='predict_proba',
+                                                                multi_class='ovr', average='micro')),
+        "b_ap_weighted": (lr, {'C': [1.0]}, X, y, ms.make_scorer(metrics.average_precision_score,
+                                                                  response_method='predict_proba', average='weighted')),
+        "b_reg_accuracy": (ml.Ridge(), {'alpha': [1.0]}, Xr, yr, "accuracy"),
+        "b_multi_r2": (ml.Ridge(), {'alpha': [1.0]}, Xr, np.stack([yr, 2 * yr + 1], axis=1).astype(np.float32), "r2"),
+        "b_nb_hinge": (ml.GaussianNB(), {'var_smoothing': [1e-9]}, X, y,
+                       ms.make_scorer(metrics.hinge_loss, response_method='decision_function')),
+    }
+    return table[name]
+
+
+_B = ["b_d2ll", "b_d2br", "b_lrp", "b_lrn", "b_negmax", "b_hinge", "b_roc_fpr", "b_roc_micro", "b_ap_weighted",
+      "b_reg_accuracy", "b_multi_r2", "b_nb_hinge"]
+
+
+def _unit_b(name):
+    out = []
+    warnings.simplefilter("ignore")
+    try:
+        from mojolearn import model_selection as ms
+        est, grid, X, y, scorer = _round_b(name)
+        every = np.arange(len(X))
+        folds = [(np.setdiff1d(every, np.array(t)), np.array(t)) for t in _TESTS]
+        search = ms.GridSearchCV(est, grid, cv=folds, scoring=scorer, error_score='raise', refit=False).fit(X, y)
+        for f in range(3):  # glue: the three fixed folds' scores
+            out.append((f"{name}_split{f}", _digest(search.cv_results_[f'split{f}_test_score'])))
+    except Exception as error:  # a refusal is digested by its class and words
+        out.append((name + "_raised", hashlib.sha256(f"{type(error).__name__}: {error}".encode()).hexdigest()[:24]))
+    return out
+
+
+def _any_unit(name):
+    return _unit_b(name) if name in _B else _unit(name)
+
+
+UNITS = list(_REG) + list(_CLS) + list(_LABELS) + _B
 
 
 def main():
     with ProcessPoolExecutor(max_workers=min(len(UNITS), os.cpu_count() or 1)) as pool:
-        for lines in pool.map(_unit, UNITS):
+        for lines in pool.map(_any_unit, UNITS):
             for name, value in lines:
                 print(name, value)
     return 0

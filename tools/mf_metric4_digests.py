@@ -199,7 +199,7 @@ _CLF_SCORERS = ["accuracy", "balanced_accuracy", "matthews_corrcoef", "precision
                 "roc_auc_ovo", "roc_auc_ovr_weighted", "roc_auc_ovo_weighted"]
 _BIN_SCORERS = ["roc_auc", "neg_log_loss", "f1", "average_precision"]
 _REG_SCORERS = ["r2", "neg_mean_squared_error", "neg_mean_absolute_error", "neg_root_mean_squared_error",
-                "neg_mean_absolute_percentage_error", "neg_median_absolute_error", "explained_variance", "max_error",
+                "neg_mean_absolute_percentage_error", "neg_median_absolute_error", "explained_variance", "neg_max_error",
                 "d2_absolute_error_score"]
 
 
