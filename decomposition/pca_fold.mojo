@@ -30,10 +30,10 @@ from decomposition.impl.linalg.detail.pca import pca_transform, pca_validate
 from decomposition.impl.linalg.detail.svd_full import pca_full_validate
 from decomposition.estimator import (
     pca_fit_cov_device_x, pca_fit_full_device_x, tsvd_fit_device, _tsvd_explained_tail, pca_whiten_transform_x,
-    inverse_transform_scores_dev,
+    inverse_transform_scores_dev, pca_whiten_inverse_transform_scores,
 )
 from core.gemm import gemm_nt
-from decomposition.impl.pca_owner import pca_keep_finish
+from decomposition.impl.pca_owner import pca_keep_finish, pca_project_x
 
 
 struct PCAFoldFit(Copyable, Movable):
@@ -115,47 +115,9 @@ def pca_fit_fold(
     ctx.synchronize()
     var keep = pca_keep_finish(ctx, explained_ptr, ratio_ptr, n_rows, n_components, keep_mode, frac, noise)
     if project:
-        _project_x(ctx, x, mean_ptr, components_ptr, singular_ptr, out_ptr, n_rows, n_features, keep, whiten)
+        pca_project_x(ctx, x, mean_ptr, components_ptr, singular_ptr, out_ptr, n_rows, n_features, keep, whiten)
     _ = x^
     return PCAFoldFit(keep, noise, finite, in_range)
-
-
-def _project_x(
-    ctx: DeviceContext,
-    mut x: DeviceBuffer[DType.float32],
-    mean_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    singular_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    n_rows: Int,
-    n_features: Int,
-    n_components: Int,
-    whiten: Bool,
-) raises:
-    """`pca_project_owned` over the fit's resident X buffer (lane vdf-scope-neural4): the whitened projection
-    (scaled by the fit's own row count, with its dimension refusals in its words) or the unwhitened one; nothing
-    to write when no component is kept. The fit tested X finite in the gather."""
-    if whiten:
-        if n_rows < 1 or n_features < 1 or n_components < 1 or n_components > n_features or n_rows < 2:
-            raise Error("PCA whitening requires positive rows/features/components and fit_rows>=2")
-        if n_rows > 2147483647 or n_features > 2147483647 or n_components > 2147483647:
-            raise Error("PCA whitening dimensions exceed Int32")
-        if n_rows > 2147483647 // n_features or n_components > 2147483647 // n_features:
-            raise Error("PCA whitening matrix cell count exceeds Int32")
-        pca_whiten_transform_x(ctx, x, mean_ptr, components_ptr, singular_ptr, out_ptr,
-            n_rows, n_features, n_components, n_rows, device_checks=True)
-    elif n_components > 0:
-        var mu = ctx.enqueue_create_buffer[DType.float32](n_features)
-        var components = ctx.enqueue_create_buffer[DType.float32](n_components * n_features)
-        var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
-        ctx.enqueue_copy(dst_buf=mu, src_ptr=mean_ptr)
-        ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
-        pca_transform(ctx, x, mu, components, out, n_rows, n_features, n_components)
-        ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
-        ctx.synchronize()
-        _ = mu^
-        _ = components^
-        _ = out^
 
 
 def tsvd_fit_fold(
@@ -374,4 +336,41 @@ def inverse_transform_fold(
     _ = scores^
     _ = comps^
     _ = status^
+    return in_range
+
+
+def pca_whiten_inverse_transform_fold(
+    ctx: DeviceContext,
+    base_id: Int,
+    base_rows: Int,
+    index_id: Int,
+    mean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    singular_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+    n_fit_rows: Int,
+) raises -> Int32:
+    """The whitened PCA inverse_transform (lane vdf-scope-neural6) of fold rows `index_id` of the resident base of
+    scores (`base_rows` x `n_components`): gathered on the device into the scores buffer the host entry uploads
+    to, the range word read at the gather's synchronisation (an index past the base: nothing run, the door
+    refuses), then the host entry's own body `pca_whiten_inverse_transform_scores` with its device checks (a
+    non-finite score is refused there in the host route's words). The same transpose, gemm_nt and mean shift
+    on the same words: no bit change."""
+    var scores = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
+    var status = ctx.enqueue_create_buffer[DType.int32](2)
+    enqueue_fill[DType.int32](ctx, status, Int32(0))
+    msel_device_x_f32(ctx, base_id, base_rows, n_components, index_id, n_rows, scores, status.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), 0)
+    var flags = ctx.enqueue_create_host_buffer[DType.int32](2)
+    ctx.enqueue_copy(dst_ptr=flags.unsafe_ptr(), src_buf=status)
+    ctx.synchronize()
+    var in_range = flags.unsafe_ptr()[1]
+    _ = flags^
+    _ = status^
+    if in_range == 0:
+        pca_whiten_inverse_transform_scores(ctx, scores, components_ptr, singular_ptr, mean_ptr, out_ptr,
+            n_rows, n_features, n_components, n_fit_rows, device_checks=True)
+    _ = scores^
     return in_range

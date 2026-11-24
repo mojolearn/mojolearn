@@ -5,7 +5,11 @@ from checks.vendor import COMPILED_VENDOR
 from core.shared_slot import SharedSlot
 from core.msel_device_x import msel_fold_entry_context
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
-from decomposition.pca_fold import pca_fit_fold, pca_transform_fold, pca_whiten_transform_fold, inverse_transform_fold
+from decomposition.pca_fold import (
+    pca_fit_fold, pca_transform_fold, pca_whiten_transform_fold, inverse_transform_fold,
+    pca_whiten_inverse_transform_fold,
+)
+from core.pca_native_checks import pca_whiten_dimensions
 from core.pca_native_api import (
     PCA_NATIVE_ABI, PCA_CAP_EXACT, PCA_CAP_FULL, PCA_CAP_FOLD,
     PCANativeKernels, PCAFitRequest, PCAFitResult, PCAQueryRequest, PCAQueryResult,
@@ -35,7 +39,7 @@ struct PCAFoldKernels(PCANativeKernels):
     @staticmethod
     def fit(r: PCAFitRequest) raises -> PCAFitResult:
         # Lane vdf-scope-neural4: the fit's projection (fit_transform, unwhitened or whitened) runs on the fit's
-        # own gathered X (decomposition/pca_fold.mojo `_project_x`).
+        # own gathered X (decomposition/impl/pca_owner.mojo `pca_project_x`).
         if not r.fold.active() or r.randomized:
             raise Error("PCA fold provider requires an exact resident fit")
         var project = r.projection != 0
@@ -60,9 +64,15 @@ struct PCAFoldKernels(PCANativeKernels):
         var ctx = msel_fold_entry_context()
         if r.inverse:
             # Lane vdf-scope-neural5: the unwhitened inverse_transform of a fold of scores (the host entry's
-            # `inverse_transform_host` body over the gathered scores). The whitened inverse keeps host rows.
+            # `inverse_transform_host` body over the gathered scores). Lane vdf-scope-neural6: the whitened
+            # inverse the same way (`pca_whiten_inverse_transform_host`'s body), with the host route's dimension
+            # refusals first.
             if r.whiten:
-                raise Error("PCA fold provider has no whitened inverse_transform")
+                pca_whiten_dimensions(r)
+                var sp = _fold_pointer(r.singular)
+                var range_word = pca_whiten_inverse_transform_fold(ctx, r.fold.base, r.fold.rows, r.fold.indices,
+                    mp, cp, sp, dst, r.rows, r.features, r.count, r.fit_rows)
+                return PCAQueryResult(0, Int(range_word))
             var components = ctx.enqueue_create_buffer[DType.float32](r.count * r.features)
             ctx.enqueue_copy(dst_buf=components, src_ptr=cp)
             var in_range = inverse_transform_fold(ctx, r.fold.base, r.fold.rows, r.fold.indices,

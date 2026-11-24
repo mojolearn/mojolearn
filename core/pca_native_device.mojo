@@ -38,7 +38,15 @@ struct PCADeviceKernels(PCANativeKernels):
     def fit(r: PCAFitRequest) raises -> PCAFitResult:
         if r.fold.active():
             raise Error("PCA estimator provider does not own resident folds")
-        var xp = f32_ptr(r.source)
+        # Lane vdf-scope-neural6: a randomized fit's `source` may be `-(id + 1)` of a resident x_decomp pool id
+        # (a model-selection fold the decomposition member took on the device, core/decomposition_member.mojo
+        # `_rows_open_xd`); the driver reads it in place and the projection copies it once on this context.
+        var x_dev = -1
+        if r.source < 0:
+            if not r.randomized:
+                raise Error("PCA estimator provider reads a resident X only in a randomized fit")
+            x_dev = -(r.source + 1)
+        var xp = f32_ptr(r.source) if x_dev < 0 else MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=0)
         var cp = f32_ptr(r.components)
         var mp = f32_ptr(r.mean)
         var ep = f32_ptr(r.variance)
@@ -53,7 +61,7 @@ struct PCADeviceKernels(PCANativeKernels):
         if r.randomized:
             noise = pca_randomized_owned(ctx, xp, cp, mp, ep, rp, sp,
                 r.rows, r.features, r.count, r.oversamples, r.iterations, r.auto_iterations, r.seed,
-                op, r.projection != 0, r.whiten, word_address)
+                op, r.projection != 0, r.whiten, word_address, x_dev)
         else:
             var fitted = pca_fit_owned(ctx, xp, cp, mp, ep, rp, sp,
                 r.rows, r.features, r.count, r.dense, r.keep_mode, r.fraction,

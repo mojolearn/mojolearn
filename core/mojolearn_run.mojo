@@ -105,11 +105,12 @@ def _publish_qn_fold_table() raises:
         Int(api[].entries.unsafe_ptr()), logistic_fold_v1)
     # Lane vdf-scope-neural2: the decomposition fold table (the PCA and
     # TruncatedSVD fold entries and the fold store's transport entry), the
-    # PCA / TruncatedSVD members' resident route. Identical builds only (the
-    # fold store is the identical one).
-    if Int(GLOBAL_NUMERIC_MODE) == 1 and word > 0:
+    # PCA / TruncatedSVD members' resident route. Lane vdf-scope-neural6:
+    # every GPU build, keyed by its mode (a `fast` build's entries read the
+    # identical fold store across contexts, core/msel_device_x.mojo).
+    if word > 0:
         var pca = PCA_FOLD_API.get_or_create_ptr()
-        decomp_fold_table_publish(EstimatorsEntryKey(1, word), Int(pca[].entries.unsafe_ptr()),
+        decomp_fold_table_publish(EstimatorsEntryKey(Int(GLOBAL_NUMERIC_MODE), word), Int(pca[].entries.unsafe_ptr()),
             pca_fold_native_v1, tsvd_fold_native_v1, msel_fold_store_v1)
 
 

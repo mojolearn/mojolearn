@@ -852,9 +852,14 @@ def rkit_x_retest[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], x: Int)
 def pca_randomized_fit_run[E: Exec, D: RDev, RES: Bool](
     x: F32Ptr, components_out: F32Ptr, mean_out: F32Ptr, variance_out: F32Ptr, ratio_out: F32Ptr,
     singular_out: F32Ptr, rows: Int, cols: Int, components: Int, oversamples: Int, iterations: Int,
-    auto_iterations: Bool, seed: Int, finite_word: Int = 0,
+    auto_iterations: Bool, seed: Int, finite_word: Int = 0, x_dev: Int = -1,
 ) raises -> Float64:
-    """`_randomized_decompose(X, components, center=True, ...)` then
+    """`x_dev` (lane vdf-scope-neural6): X's resident pool id (a model-selection fold the decomposition member
+    took on the device through the x_decomp store; the caller's, read in place, bounded by its held words), -1:
+    the host X at x. The kit borrows it where it uploaded the host X: same operands, same bits (as
+    x_decomp/tsvd_owner.mojo `tsvd_randomized_fit_run`).
+
+    `_randomized_decompose(X, components, center=True, ...)` then
     `svd_flip(u_based_decision=False)`: the five public arrays written
     (components x cols, cols, and components each), the noise variance
     returned. `auto_iterations`: scikit-learn's `iterated_power='auto'`.
@@ -879,9 +884,14 @@ def pca_randomized_fit_run[E: Exec, D: RDev, RES: Bool](
         # ratio (not a dimension threshold): more power iterations when few
         # components are asked of a large spectrum.
         power = 7 if Float64(components) < 0.1 * Float64(min(rows, cols)) else 4
+    comptime if not RES:
+        if x_dev >= 0:
+            raise Error("x_decomp: a resident X needs a GPU binding")
+    if x_dev >= 0 and D.held_words(x_dev) < rows * cols:
+        raise Error("x_decomp: the resident X holds fewer values than the call reads")
     var kit = RKit[E, D, RES]()
     try:
-        var original = kit.add(Int(x), -1, rows, cols)
+        var original = kit.add(0, x_dev, rows, cols) if x_dev >= 0 else kit.add(Int(x), -1, rows, cols)
         var sums = kit.sum(original, True)
         var mean = kit.ew(_OP_SCALE, sums, scalar=1.0 / Float64(rows))
         var centered = kit.ew(_OP_SUB, original, mean)

@@ -169,7 +169,11 @@ def estimators_table_entry[family: Int](key: EstimatorsEntryKey) raises -> Nativ
 # (core/tsvd_native_fold.mojo), 2 that store as a scope transport entry
 # (core/msel_fold_transport.mojo). The PCA / TruncatedSVD members' UNPACK
 # resolves all three once (THE RESIDENT ROUTE). The store is the identical
-# one: only an identical GPU build publishes, so only identical keys exist.
+# one. Lane vdf-scope-neural6: a `fast` GPU base build publishes its own
+# table too (key mode 0): its fold entries run `fast` kernels on the `fast`
+# context and read the identical store after draining its stream
+# (core/msel_device_x.mojo `msel_device_x_f32`), its store entry names the
+# identical store and context explicitly (core/msel_fold_transport.mojo).
 comptime ESTIMATORS_TABLE_DECOMP_FOLD = 2
 comptime DECOMP_FOLD_PCA = 0
 comptime DECOMP_FOLD_TSVD = 1
@@ -187,14 +191,24 @@ def _decomp_fold_counts() -> List[Int]:
 
 def decomp_fold_table_publish(key: EstimatorsEntryKey, publisher: Int, pca: NativeDescriptorCall,
                               tsvd: NativeDescriptorCall, store: NativeDescriptorCall) raises:
-    """Publish the identical GPU base image's three resident-fold entries."""
+    """Publish a GPU base image's three resident-fold entries (identical or `fast`)."""
     _estimators_key_check(key)
-    if key.mode != 1 or key.vendor == 0:
-        raise Error("native estimators entries: the decomposition fold table is identical GPU only")
+    if key.vendor == 0:
+        raise Error("native estimators entries: the decomposition fold table is GPU only")
     var schemas = _decomp_fold_schemas()
     var operations = _decomp_fold_counts()
     var entries: List[NativeDescriptorCall] = [pca, tsvd, store]
-    if key.vendor == 1:
+    if key.mode == 0:
+        if key.vendor == 1:
+            entry_table_publish["MojolearnEntriesDecompFoldFastMetalV1"](key.mode, key.vendor, publisher, schemas,
+                                                                        operations, entries)
+        elif key.vendor == 2:
+            entry_table_publish["MojolearnEntriesDecompFoldFastCUDAV1"](key.mode, key.vendor, publisher, schemas,
+                                                                       operations, entries)
+        else:
+            entry_table_publish["MojolearnEntriesDecompFoldFastHIPV1"](key.mode, key.vendor, publisher, schemas,
+                                                                      operations, entries)
+    elif key.vendor == 1:
         entry_table_publish["MojolearnEntriesDecompFoldIdenticalMetalV1"](key.mode, key.vendor, publisher, schemas,
                                                                          operations, entries)
     elif key.vendor == 2:
@@ -210,15 +224,21 @@ def decomp_fold_table_publish(key: EstimatorsEntryKey, publisher: Int, pca: Nati
 
 def decomp_fold_entry(key: EstimatorsEntryKey, index: Int) raises -> NativeDescriptorCall:
     """Entry `index` (DECOMP_FOLD_*) of the decomposition fold table of the
-    image the key names; a missing publication (a host or fast key, or a
-    build without the base binding) refuses with the table's error."""
+    image the key names; a missing publication (a host key, or a build
+    without the base binding of that mode) refuses with the table's error."""
     _estimators_key_check(key)
-    if key.mode != 1 or key.vendor == 0 or index < 0 or index > DECOMP_FOLD_STORE:
+    if key.vendor == 0 or index < 0 or index > DECOMP_FOLD_STORE:
         raise Error("native estimators entries: no decomposition fold entry for this key")
     var schemas = _decomp_fold_schemas()
     var counts = _decomp_fold_counts()
     var schema = schemas[index].copy()
     var count = counts[index]
+    if key.mode == 0:
+        if key.vendor == 1:
+            return entry_table_read["MojolearnEntriesDecompFoldFastMetalV1"](key.mode, key.vendor, index, schema, count)
+        if key.vendor == 2:
+            return entry_table_read["MojolearnEntriesDecompFoldFastCUDAV1"](key.mode, key.vendor, index, schema, count)
+        return entry_table_read["MojolearnEntriesDecompFoldFastHIPV1"](key.mode, key.vendor, index, schema, count)
     if key.vendor == 1:
         return entry_table_read["MojolearnEntriesDecompFoldIdenticalMetalV1"](key.mode, key.vendor, index, schema, count)
     if key.vendor == 2:

@@ -14,7 +14,8 @@ the family "msel_fold") and a member puts only each fold's index words. The stor
 
 The store and its context (`msel_device_x_context`) are the identical base binding's, named process-wide, so this
 entry is published once by the GPU base binding (core/mojolearn_run.mojo, core/estimators_entry_table.mojo family
-ESTIMATORS_TABLE_DECOMP_FOLD, beside the two fold entries) in an identical build only.
+ESTIMATORS_TABLE_DECOMP_FOLD, beside the two fold entries); lane vdf-scope-neural6: a `fast` build publishes it in its
+own (mode 0) table too, naming the same identical store and context, so a `fast` member's fold entries share it.
 
 Serial by nature: each operation is one slot bookkeeping update on one context.
 """
