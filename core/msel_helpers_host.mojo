@@ -21,8 +21,8 @@ from core.msel_entry_table import (
     MselEntryKey, msel_table_publish, msel_check_spans, msel_word, msel_entry_vendor,
     MSEL_HELPERS_ABI, MH_OP_COUNT,
     MH_ARANGE_I64, MH_COUNT_MASK_U8, MH_SELECT_MASK_U8_I64, MH_MASK_FROM_INDICES_U8, MH_LEAVE_RANGE_I64,
-    MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32, MH_GATHER_I64,
-    MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_ALLOC, MH_STORE_READ, MH_STORE_FREE, MH_SCATTER_ROWS,
+    MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32,
+    MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_FREE,
     MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32,
     MH_STORE_PUT, MH_STORE_TAKE_ROWS,
 )
@@ -35,7 +35,7 @@ from core.labels_native_api import LabelsGatherRequest
 from core.labels_native_host import LabelsHostKernels
 from core.msel_convert import MSEL_F32, MSEL_F64, MSEL_I64, msel_is_int, msel_valid_code
 from core.msel_host import (
-    MselHostStore, host_group_fold_perm_i32, host_proba_column, host_scatter_rows, host_split_table_i32,
+    MselHostStore, host_group_fold_perm_i32, host_proba_column, host_split_table_i32,
     host_take_rows,
 )
 from core.native_descriptor_abi import NativeDescriptorError
@@ -73,16 +73,6 @@ def msel_gather_host_run(kind: Int, table: Int, classes: Int, codes: Int, count:
     return 0
 
 
-def msel_scatter_rows_check(nd: Int, dc: Int, sa: Int, sc: Int, ns: Int, w: Int) raises:
-    """The admission of `msel_scatter_rows` (both columns)."""
-    if nd < 0 or ns < 0 or w < 0:
-        raise Error("msel_scatter_rows: dimensions must be non-negative")
-    if dc != MSEL_I64 and dc != MSEL_F64:
-        raise Error("msel_scatter_rows: the block is int64 or float64")
-    if not msel_valid_code(sc) or (dc == MSEL_I64 and not msel_is_int(sc)):
-        raise Error("msel_scatter_rows: bad source dtype code")
-    if ns > 0 and w > 0 and sa == 0:
-        raise Error("msel_scatter_rows: null source")
 
 
 def msel_proba_column_check(sa: Int, c: Int, nn: Int, kk: Int, cc: Int, d: Int) raises:
@@ -111,13 +101,6 @@ def msel_group_fold_perm_check(ca: Int, mm: Int, K: Int, pa: Int, da: Int, sa: I
         raise Error("group_fold_assign_i32: null buffer address")
 
 
-def msel_scatter_rows_host_run(di: Int, nd: Int, dc: Int, sa: Int, sc: Int, ns: Int, w: Int, ix: Int) raises -> Int:
-    """Rows of a host buffer cast into rows idx of a stored int64 or float64
-    block (cross_val_predict's placement)."""
-    msel_scatter_rows_check(nd, dc, sa, sc, ns, w)
-    if not host_scatter_rows(MSEL_HOST_STORE.get_or_create_ptr()[], di, nd, dc, sa, sc, ns, w, ix):
-        raise Error("msel_scatter_rows: row index out of bounds")
-    return 0
 
 
 def msel_proba_column_host_run(sa: Int, c: Int, nn: Int, kk: Int, cc: Int, d: Int) raises -> Int:
@@ -178,26 +161,18 @@ def msel_helpers_host_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     if op == MH_SELECT_FOLDS_I64:
         return select_folds_i64_host_run(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1), msel_word(aa, 1),
                                          msel_word(aa, 2), msel_word(aa, 3))
-    if op == MH_GATHER_I32 or op == MH_GATHER_I64:
-        return msel_gather_host_run(0 if op == MH_GATHER_I32 else 1, msel_word(aa, 0), msel_word(pp, 0),
-                                    msel_word(aa, 1), msel_word(pp, 1), msel_word(aa, 2))
+    if op == MH_GATHER_I32:
+        return msel_gather_host_run(0, msel_word(aa, 0), msel_word(pp, 0), msel_word(aa, 1), msel_word(pp, 1),
+                                    msel_word(aa, 2))
     if op == MH_FIRST_SEEN_I32:
         return first_seen_i32(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1), msel_word(aa, 1),
                               msel_word(aa, 2))
     if op == MH_STRAT_FOLD_ASSIGN_I32:
         return strat_fold_assign_i32(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
                                      msel_word(aa, 1), msel_word(aa, 2), msel_word(aa, 3), msel_word(aa, 4))
-    if op == MH_STORE_ALLOC:
-        return MSEL_HOST_STORE.get_or_create_ptr()[].alloc(msel_word(pp, 0))
-    if op == MH_STORE_READ:
-        MSEL_HOST_STORE.get_or_create_ptr()[].read(msel_word(pp, 0), msel_word(aa, 0), msel_word(pp, 1))
-        return 0
     if op == MH_STORE_FREE:
         MSEL_HOST_STORE.get_or_create_ptr()[].free(msel_word(pp, 0))
         return 0
-    if op == MH_SCATTER_ROWS:
-        return msel_scatter_rows_host_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2), msel_word(aa, 0),
-                                          msel_word(pp, 3), msel_word(pp, 4), msel_word(pp, 5), msel_word(pp, 6))
     if op == MH_PROBA_COLUMN:
         return msel_proba_column_host_run(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
                                           msel_word(pp, 3), msel_word(aa, 1))

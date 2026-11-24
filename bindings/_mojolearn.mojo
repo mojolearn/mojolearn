@@ -148,7 +148,7 @@ from bindings.hotpath_device_door import (
 )
 from core.hotpath_device_run import hpdev_try_cast_f64_to_f32
 # lane cpu2-l4-modelsel (2026-10-04): model selection's resident fold store,
-# fold-row gather, cross_val_predict scatter, binary proba column and the
+# fold-row gather, binary proba column and the
 # parallel forest's offset merge (bindings/msel_device.mojo).
 from bindings.msel_device_unpack import (
     logistic_fold_native_api_v1_binding,

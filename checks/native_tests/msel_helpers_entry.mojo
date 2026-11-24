@@ -21,14 +21,17 @@ from core.entry_table import entry_ref_same
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require
-from core.msel_convert import MSEL_F32, MSEL_F64
-from core.msel_entry_table import MselEntryKey, msel_table_entry, MSEL_HELPERS_ABI, MH_OP_COUNT, MH_ARANGE_I64, MH_RETIRED_5, MH_RETIRED_20
+from core.msel_convert import MSEL_F32
+from core.msel_entry_table import (
+    MselEntryKey, msel_table_entry, MSEL_HELPERS_ABI, MH_OP_COUNT, MH_ARANGE_I64, MH_RETIRED_5, MH_RETIRED_10,
+    MH_RETIRED_13, MH_RETIRED_14, MH_RETIRED_16, MH_RETIRED_20,
+)
 from core.msel_helpers_host import publish_msel_helpers_host
 from core.msel_helpers_calls import (
     msel_helpers_ref, msel_helper, msel_arange_i64, msel_count_mask_u8, msel_select_mask_u8_i64, msel_mask_from_indices_u8,
     msel_leave_range_i64, msel_fold_ids, msel_select_fold_i64, msel_select_folds_i64,
-    msel_gather_i32, msel_gather_i64, msel_first_seen_i32, msel_strat_fold_assign_i32, msel_store_alloc,
-    msel_store_read, msel_store_free, msel_scatter_rows, msel_proba_column, msel_split_table_i32,
+    msel_gather_i32, msel_first_seen_i32, msel_strat_fold_assign_i32,
+    msel_store_free, msel_proba_column, msel_split_table_i32,
     msel_group_fold_perm_i32, msel_store_put, msel_store_take_rows,
 )
 
@@ -226,14 +229,17 @@ def _operation(unit: Int) raises:
         _ = bad
         _ = dst
     elif unit == 9:
-        var table: List[Int64] = [10, 20, 30]
-        var codes: List[Int64] = [2, 0]
-        var dst: List[Int64] = [0, 0]
-        _ = msel_gather_i64(k, _a(table), 3, _a(codes), 2, _a(dst))
-        require(dst[0] == 30 and dst[1] == 10, "gather_i64")
-        _ = table
-        _ = codes
-        _ = dst
+        # 10 (gather_i64), 13 (store_alloc), 14 (store_read) and 16 (scatter_rows) were retired with
+        # cross_val_predict's identity placement and learning_curve's per-fold gather (lane vdf-scope-cv):
+        # the reserved numbers refuse. Fail-proof: drop one of them from msel_check_spans: that call answers.
+        var retired: List[Int] = [MH_RETIRED_10, MH_RETIRED_13, MH_RETIRED_14, MH_RETIRED_16]
+        for i in range(len(retired)):  # small-loop(the four retired operation numbers)
+            try:
+                var none: Array[Int, 0] = []
+                _ = msel_helper(k, retired[i], none, none)
+                raise Error("the retired operation " + String(retired[i]) + " did not refuse")
+            except problem:
+                require("did not refuse" not in String(problem), String(problem))
     elif unit == 10:
         var codes: List[Int32] = [2, 0, 2, 1]
         var enc: List[Int32] = [9, 9, 9, 9]
@@ -262,15 +268,6 @@ def _operation(unit: Int) raises:
         _ = dst
     elif unit == 12:
         # The only unit that touches the process fold store.
-        var block = msel_store_alloc(k, 16)
-        var idx = msel_store_alloc(k, 8)  # one int64 row index, zero
-        var src: List[Float64] = [2.5]
-        _ = msel_scatter_rows(k, block, 2, 1, Int(src.unsafe_ptr()), MSEL_F64, 1, 1, idx)
-        var out: List[Float64] = [9.0, 9.0]
-        _ = msel_store_read(k, block, Int(out.unsafe_ptr()), 16)
-        require(out[0] == 2.5 and out[1] == 0.0, "store scatter and read")
-        _ = msel_store_free(k, idx)
-        _ = msel_store_free(k, block)
         # Layout V2: a resident copy of host rows and a gather of two of them.
         var rows: List[Float64] = [1.0, 2.0, 3.0]
         var picks: List[Int64] = [2, 0]
@@ -290,17 +287,10 @@ def _operation(unit: Int) raises:
         _ = rows
         _ = picks
         try:
-            _ = msel_store_read(k, block, Int(out.unsafe_ptr()), 16)
+            _ = msel_store_free(k, rows_id)
             raise Error("a freed block did not refuse")
         except problem:
             _refuses(problem, "is not live")
-        try:
-            _ = msel_scatter_rows(k, block, 2, 2, Int(src.unsafe_ptr()), MSEL_F64, 1, 1, idx)
-            raise Error("an int32 block did not refuse")
-        except problem:
-            _refuses(problem, "msel_scatter_rows: the block is int64 or float64")
-        _ = src
-        _ = out
     elif unit == 13:
         var src: List[Float32] = [0.25, 0.75, 0.5, 0.5]
         var dst: List[Float32] = [9.0, 9.0]

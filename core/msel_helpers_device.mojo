@@ -22,13 +22,13 @@ from core.msel_entry_table import (
     MselEntryKey, msel_table_publish, msel_check_spans, msel_word, msel_entry_vendor,
     MSEL_HELPERS_ABI, MH_OP_COUNT,
     MH_ARANGE_I64, MH_COUNT_MASK_U8, MH_SELECT_MASK_U8_I64, MH_MASK_FROM_INDICES_U8, MH_LEAVE_RANGE_I64,
-    MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32, MH_GATHER_I64,
-    MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_ALLOC, MH_STORE_READ, MH_STORE_FREE, MH_SCATTER_ROWS,
+    MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32,
+    MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_FREE,
     MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32,
     MH_STORE_PUT, MH_STORE_TAKE_ROWS,
 )
 from core.msel_helpers_host import (
-    select_folds_i64_host_run, msel_scatter_rows_check, msel_proba_column_check, msel_split_table_check,
+    select_folds_i64_host_run, msel_proba_column_check, msel_split_table_check,
     msel_group_fold_perm_check,
 )
 from core.hotpath_device import (
@@ -45,7 +45,7 @@ from core.label_device_steps import LABELS_DEVICE_BASE, LABELS_DEVICE_ELEM, LABE
 from core.labels_native_api import LabelsGatherRequest
 from core.labels_native_device import LabelsDeviceKernels
 from core.msel_device import (
-    device_group_fold_perm_i32, device_proba_column, device_scatter_rows, device_split_table_i32,
+    device_group_fold_perm_i32, device_proba_column, device_split_table_i32,
     device_take_rows,
 )
 from core.msel_device_x import msel_store, MSEL_CONTEXT_SLOT
@@ -214,17 +214,8 @@ def msel_gather_device_run(kind: Int, table: Int, classes: Int, codes: Int, coun
     return 0
 
 
-def msel_store_alloc_device_run(n: Int) raises -> Int:
-    """A zeroed resident block of n bytes; returns its id."""
-    var ctx = process_ctx[MSEL_CONTEXT_SLOT]()
-    return msel_store()[].alloc(ctx, n)
 
 
-def msel_store_read_device_run(id: Int, d: Int, n: Int) raises -> Int:
-    """Download n bytes of a resident block."""
-    var ctx = process_ctx[MSEL_CONTEXT_SLOT]()
-    msel_store()[].read(ctx, id, d, n)
-    return 0
 
 
 def msel_store_free_device_run(id: Int) raises -> Int:
@@ -253,14 +244,6 @@ def msel_store_take_rows_device_run(src_id: Int, n_src: Int, row_bytes: Int, idx
     return 0
 
 
-def msel_scatter_rows_device_run(di: Int, nd: Int, dc: Int, sa: Int, sc: Int, ns: Int, w: Int, ix: Int) raises -> Int:
-    """Rows of a host buffer cast into rows idx of a resident int64 or
-    float64 block (cross_val_predict's placement)."""
-    msel_scatter_rows_check(nd, dc, sa, sc, ns, w)
-    var ctx = process_ctx[MSEL_CONTEXT_SLOT]()
-    if not device_scatter_rows(ctx, msel_store()[], di, nd, dc, sa, sc, ns, w, ix):
-        raise Error("msel_scatter_rows: row index out of bounds")
-    return 0
 
 
 def msel_proba_column_device_run(sa: Int, c: Int, nn: Int, kk: Int, cc: Int, d: Int) raises -> Int:
@@ -314,9 +297,9 @@ def msel_helpers_device_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     if op == MH_SELECT_FOLDS_I64:
         return select_folds_i64_device_run(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1), msel_word(aa, 1),
                                            msel_word(aa, 2), msel_word(aa, 3))
-    if op == MH_GATHER_I32 or op == MH_GATHER_I64:
-        return msel_gather_device_run(0 if op == MH_GATHER_I32 else 1, msel_word(aa, 0), msel_word(pp, 0),
-                                      msel_word(aa, 1), msel_word(pp, 1), msel_word(aa, 2))
+    if op == MH_GATHER_I32:
+        return msel_gather_device_run(0, msel_word(aa, 0), msel_word(pp, 0), msel_word(aa, 1), msel_word(pp, 1),
+                                      msel_word(aa, 2))
     if op == MH_FIRST_SEEN_I32:
         return first_seen_i32_device_run(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1), msel_word(aa, 1),
                                          msel_word(aa, 2))
@@ -324,15 +307,8 @@ def msel_helpers_device_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
         return strat_fold_assign_i32_device_run(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1),
                                                 msel_word(pp, 2), msel_word(aa, 1), msel_word(aa, 2),
                                                 msel_word(aa, 3), msel_word(aa, 4))
-    if op == MH_STORE_ALLOC:
-        return msel_store_alloc_device_run(msel_word(pp, 0))
-    if op == MH_STORE_READ:
-        return msel_store_read_device_run(msel_word(pp, 0), msel_word(aa, 0), msel_word(pp, 1))
     if op == MH_STORE_FREE:
         return msel_store_free_device_run(msel_word(pp, 0))
-    if op == MH_SCATTER_ROWS:
-        return msel_scatter_rows_device_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2), msel_word(aa, 0),
-                                            msel_word(pp, 3), msel_word(pp, 4), msel_word(pp, 5), msel_word(pp, 6))
     if op == MH_PROBA_COLUMN:
         return msel_proba_column_device_run(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
                                             msel_word(pp, 3), msel_word(aa, 1))

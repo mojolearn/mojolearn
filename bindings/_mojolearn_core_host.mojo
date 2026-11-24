@@ -76,7 +76,7 @@ exports were deleted 2026-11-23 (no caller: the typed SpectralPreparationHost
 calls the same core functions).
 """
 # lane cpu2-l4-modelsel (2026-10-04): model selection's resident fold store,
-# fold-row gather, cross_val_predict scatter, binary proba column and the
+# fold-row gather, binary proba column and the
 # parallel forest's offset merge (bindings/msel_host.mojo).
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from bindings.parallel_base_entry_host import publish_parallel_base_host

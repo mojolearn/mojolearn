@@ -16,8 +16,8 @@ text its former Python export raised. These calls do not touch the GIL.
 from core.msel_entry_table import (
     MselEntryKey, msel_table_entry, MSEL_HELPERS_ABI, MH_OP_COUNT,
     MH_ARANGE_I64, MH_COUNT_MASK_U8, MH_SELECT_MASK_U8_I64, MH_MASK_FROM_INDICES_U8, MH_LEAVE_RANGE_I64,
-    MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32, MH_GATHER_I64,
-    MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_ALLOC, MH_STORE_READ, MH_STORE_FREE, MH_SCATTER_ROWS,
+    MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32,
+    MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_FREE,
     MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32,
     MH_STORE_PUT, MH_STORE_TAKE_ROWS,
 )
@@ -110,11 +110,10 @@ def msel_gather_i32(entry: EntryRef, table: Int, n_table: Int, codes: Int, n: In
     return msel_helper(entry, MH_GATHER_I32, addrs, ints)
 
 
-def msel_gather_i64(entry: EntryRef, table: Int, n_table: Int, codes: Int, n: Int, dst: Int) raises -> Int:
-    """dst[i] = table[codes[i]], int64 codes into an int64 table."""
-    var addrs: Array[Int, 3] = [table, codes, dst]
-    var ints: Array[Int, 2] = [n_table, n]
-    return msel_helper(entry, MH_GATHER_I64, addrs, ints)
+
+
+# REMOVED (lane vdf-scope-cv, 2026-11-24): msel_gather_i64, msel_store_alloc, msel_store_read and
+# msel_scatter_rows (operations 10, 13, 14, 16 retired, core/msel_entry_table.mojo).
 
 
 def msel_first_seen_i32(entry: EntryRef, codes: Int, n: Int, k: Int, enc: Int, counts: Int) raises -> Int:
@@ -133,18 +132,8 @@ def msel_strat_fold_assign_i32(entry: EntryRef, enc: Int, n: Int, k: Int, n_fold
     return msel_helper(entry, MH_STRAT_FOLD_ASSIGN_I32, addrs, ints)
 
 
-def msel_store_alloc(entry: EntryRef, nbytes: Int) raises -> Int:
-    """A zeroed block of the publisher's fold store; returns its id."""
-    var addrs: Array[Int, 0] = []
-    var ints: Array[Int, 1] = [nbytes]
-    return msel_helper(entry, MH_STORE_ALLOC, addrs, ints)
 
 
-def msel_store_read(entry: EntryRef, id: Int, dst: Int, nbytes: Int) raises -> Int:
-    """Copy nbytes of block `id` to host memory at `dst`."""
-    var addrs: Array[Int, 1] = [dst]
-    var ints: Array[Int, 2] = [id, nbytes]
-    return msel_helper(entry, MH_STORE_READ, addrs, ints)
 
 
 def msel_store_free(entry: EntryRef, id: Int) raises -> Int:
@@ -154,13 +143,6 @@ def msel_store_free(entry: EntryRef, id: Int) raises -> Int:
     return msel_helper(entry, MH_STORE_FREE, addrs, ints)
 
 
-def msel_scatter_rows(entry: EntryRef, dst_id: Int, n_dst: Int, dst_code: Int, src: Int, src_code: Int,
-                      n_src: Int, width: Int, idx_id: Int) raises -> Int:
-    """Rows of a host buffer cast into rows idx of a stored int64 or float64
-    block."""
-    var addrs: Array[Int, 1] = [src]
-    var ints: Array[Int, 7] = [dst_id, n_dst, dst_code, src_code, n_src, width, idx_id]
-    return msel_helper(entry, MH_SCATTER_ROWS, addrs, ints)
 
 
 def msel_proba_column(entry: EntryRef, src: Int, code: Int, n: Int, k: Int, col: Int, dst: Int) raises -> Int:
