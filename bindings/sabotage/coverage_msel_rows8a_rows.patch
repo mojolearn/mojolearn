@@ -1,0 +1,13 @@
+diff --git a/core/msel_scorer_run.mojo b/core/msel_scorer_run.mojo
+index 427d1ebf01..209887c69a 100644
+--- a/core/msel_scorer_run.mojo
++++ b/core/msel_scorer_run.mojo
+@@ -1321,7 +1321,7 @@ def _float_label_value(route: MetricRoute, cluster: EntryRef, label_words: List[
+     if row.family == _F_BINARY:
+         # lane mf-rows8a: the binary label rows' pos_label among the side's
+         # labels, `_check_set_wise_labels`' checks in its order
+-        side_positive = _float_binary_positive(label_words, row, union, positive)
++        side_positive = positive  # SABOTAGE
+     var value = msel_scorer_value(route, cluster, label_words, row, Int(tc.unsafe_ptr()), Int(pc.unsafe_ptr()), count,
+                                   len(union), cols, side_positive, notices)
+     _ = len(tc)  # read by the program above

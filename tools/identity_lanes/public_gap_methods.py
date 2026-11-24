@@ -107,7 +107,22 @@ def _(ml, X, yc, yr, Xh=None):
         search = ms.GridSearchCV(ml.LogisticRegression(max_iter=30), {"C": [0.5, 2.0]}, cv=3, scoring=scorer,
                                  n_jobs=1, error_score="raise", refit=False).fit(rows, binary)
         typed.append(search.cv_results_["mean_test_score"])
+    # Lane mf-rows8a: the binary label scorers on a regressor (a fully grown tree's integral float predictions
+    # over {0, 1} targets, and {0, 2} targets whose absent pos_label=1 each side refuses: error_score), a bool
+    # pos_label and a labels kwarg the doors refuse (error_score), digested by their mean test scores.
+    rows8a = []
+    for scorer, y in (("f1", binary.astype(np.float32)), ("jaccard", binary.astype(np.float32)),  # glue: fixtures
+                      ("precision", (2 * binary).astype(np.float32))):
+        search = ms.GridSearchCV(ml.DecisionTreeRegressor(random_state=0), {"max_depth": [None, 3]}, cv=3,
+                                 scoring=scorer, n_jobs=1, error_score=-7.0, refit=False).fit(rows, y)
+        rows8a.append(search.cv_results_["mean_test_score"])
+    for scorer in (ms.make_scorer(metrics.f1_score, pos_label=True),  # glue: fixtures
+                   ms.make_scorer(metrics.f1_score, average="macro", labels=[0, 0])):
+        search = ms.GridSearchCV(ml.LogisticRegression(max_iter=30), {"C": [0.5, 2.0]}, cv=3, scoring=scorer,
+                                 n_jobs=1, error_score=-7.0, refit=False).fit(rows, binary)
+        rows8a.append(search.cv_results_["mean_test_score"])
     return _fit(dict(scores=_h(values),
+                     rows8a=_h(*[np.asarray(v, dtype=np.float64) for v in rows8a]),
                      folds=_h(*[np.asarray(indices, dtype=np.int64) for pair in folds for indices in pair]),
                      names=_h(np.frombuffer("\n".join(names).encode("utf-8"), dtype=np.uint8)),
                      typed=_h(*[np.asarray(v, dtype=np.float64) for v in typed])))
