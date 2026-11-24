@@ -376,6 +376,12 @@ def _prf(args: PythonObject, context: PythonObject) raises -> PythonObject:
                 code = 3
             elif name == "weighted":
                 code = 4
+            elif name == "samples":
+                # The weighted path's words (`_prf_weighted` -> `_set_wise_labels`) and a search scorer's
+                # (core/msel_scorer_run.mojo `row.samples`), one text per door (lane w3f2-words: this
+                # unweighted path said "average must be ..." for an average scikit-learn accepts).
+                raise Error("NotImplementedError: mojolearn precision_recall_fscore_support: average='samples'"
+                            + " applies to multilabel targets, which are NOT IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv)")
             else:
                 ok = False
         if not ok:
