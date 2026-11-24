@@ -292,8 +292,9 @@
   },
   "seq-tiled-predict-on": {
    "define": "MOJOLEARN_IDN_SEQ_TILED_PREDICT",
-   "status": "define in code (autograd/model.mojo SEQ_TILED_PREDICT, restored 2026-11-15 by lane restore-run-arms-neural): B = the whole set in one predict chunk when the inference scratch fits 1 GiB and every Linear keeps its split-K decision; A = the caller's 4096-row chunks",
-   "owed": "RUN"
+   "status": "PROMOTED 2026-11-24 (lane ab-outcome-2, sub-lane ab2-nseq): WINNER (L40S sequential-predict 2.23 -> 1.87 ms, 0.84, median of 20 calls; quality equal, hash 8624513c57beb4fe both); the whole-set chunk is the default on every column; the old caller chunk is -D MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF; the on-define is refused (core/experiment_guards_neural.mojo); no bits change. Was: define in code (autograd/model.mojo SEQ_TILED_PREDICT, restored 2026-11-15 by lane restore-run-arms-neural): B = the whole set in one predict chunk when the inference scratch fits 1 GiB and every Linear keeps its split-K decision; A = the caller's 4096-row chunks",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md; quality ~/mojolearn-evidence/ab-outcome-2/promote-quality.txt"
   },
   "gemm-int-slices-on": {
    "define": "MOJOLEARN_IDN_GEMM_INT_SLICES",

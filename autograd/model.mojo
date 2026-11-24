@@ -101,7 +101,7 @@ comptime HAS_DROPOUT = True
 # (Sweep 2026-11-15: the MODEL_UNFUSED = False constant removed; nothing read it.)
 
 # ---------------------------------------------------------------- whole-set predict (lane seq-predict-tiled, 2026-10-28)
-#: -D MOJOLEARN_IDN_SEQ_TILED_PREDICT (default OFF, A/B pending on NVIDIA; REPORT idea 7): model_predict
+#: Whole-set predict (REPORT idea 7; the default since 2026-11-24, see PROMOTED below): model_predict
 #: runs the rows in one chunk (one launch chain: one fused GEMM per Linear, the activations, the output
 #: transform) instead of the caller's 4096-row chunks (sequential_execution.mojo passes 4096), as long as
 #: the inference scratch fits PREDICT_WHOLE_SET_BYTES. At 4096 rows a 64 x 64 micro-tiled GEMM is 64
@@ -125,7 +125,16 @@ comptime HAS_DROPOUT = True
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_TILED_PREDICT.patch
 # RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #4 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history)
 # (sequential-predict, NVIDIA L40S A/B owed). The MOJOLEARN_IDN_ALL_OFF term is not restored (that define stays deleted).
-comptime SEQ_TILED_PREDICT = is_defined["MOJOLEARN_IDN_SEQ_TILED_PREDICT"]()
+# PROMOTED 2026-11-24 (lane ab2-nseq of ab-outcome-2): A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel
+# 4519097d380a, job nvc1-0002, base and arm back to back, one scored run per arm, the small-row median of 20 calls):
+# neural/sequential-predict full 2.23 -> 1.87 ms (0.84, 1 cell); quality equal (accuracy 0.89892, auc 0.96895,
+# log_loss 0.22510 both arms), output hash 8624513c57beb4fe and receipt 20ccc12ce430f7d3 on both arms. AMD not
+# measured (NVIDIA-only campaign, AGENTS.md part 8). No bits change on any column: the chunk grows only when
+# every Linear's split-K decision (gemm_split_shape, the one rule HostExec and DeviceExec share) is the same at
+# the old and new chunk and tails, so every row's words are the caller-chunk words on the host and every vendor.
+# `-D MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF` keeps the caller's chunk (the old default); the on-define is refused
+# (core/experiment_guards_neural.mojo).
+comptime SEQ_TILED_PREDICT = not is_defined["MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF"]()
 comptime PREDICT_WHOLE_SET_BYTES = 1 << 30
 
 # ---------------------------------------------------------------- description
@@ -1905,10 +1914,11 @@ def _predict_split_same(spec: ModelSpec, rows_a: Int, rows_b: Int) -> Bool:
 
 
 def predict_chunk_rows(spec: ModelSpec, N: Int, chunk: Int) -> Int:
-    """The rows model_predict runs a chunk: the caller's `chunk` (capped at
-    N), or with MOJOLEARN_IDN_SEQ_TILED_PREDICT the most rows whose
-    inference scratch fits PREDICT_WHOLE_SET_BYTES (all N for most models)
-    when no row's GEMM fold can move (see SEQ_TILED_PREDICT above)."""
+    """The rows model_predict runs a chunk: the most rows whose inference
+    scratch fits PREDICT_WHOLE_SET_BYTES (all N for most models) when no
+    row's GEMM fold can move, else the caller's `chunk` (capped at N; always
+    under `-D MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF`; see SEQ_TILED_PREDICT
+    above)."""
     var bs = chunk if chunk < N else N
     comptime if not SEQ_TILED_PREDICT:
         return bs

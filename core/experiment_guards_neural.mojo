@@ -570,7 +570,7 @@ def _check_configuration() -> Bool:
     # MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_ROW_COOP_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_ROW_COOP_OFF"](), "removed 2026-11-15 (lane/expdel2-24-neural): IDN_ROW_COOP_OFF (old path, Neural (autograd softmax-family rows); no A/B recorded) is gone; the default is kept; code recoverable at 5d81d356e0; restore: experiments/removed/MOJOLEARN_IDN_ROW_COOP_OFF.patch"
-    # MOJOLEARN_IDN_SEQ_TILED_PREDICT: refusal removed 2026-11-15 (restored; RUN #4 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history), see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_IDN_SEQ_TILED_PREDICT: refusal removed 2026-11-15 (restored; RUN #4 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history), see docs/TOMBSTONES.md Restored table); refused again 2026-11-24 as promoted (lane ab-outcome-2 block below)
     # MOJOLEARN_SMALL_MLP_GENERIC_OPS: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # ---- end lane expdel2-24-neural
     # Lane expdel2-30-neural (2026-11-15): unmeasured arms and superseded old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
@@ -1298,6 +1298,8 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_NI12_IMPLICIT_CONV_OFF (old path: the materialized cols on every conv layer; NV L40S 6 cells, median 1.51, 1.40..1.70 slower) deleted 2026-11-24 by lane/ab2-nseq; code recoverable at ba83d4655f.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_NI12_IMPLICIT_CONV_OFF.ab-outcome-2.patch
     comptime assert not is_defined["MOJOLEARN_NI12_IMPLICIT_CONV_OFF"](), "removed 2026-11-24 (lane/ab2-nseq of ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): NI12_IMPLICIT_CONV_OFF (old path, the materialized im2col cols on every conv layer) was 1.40..1.70x slower over 6 cells (median 1.51); the per-layer fill rule (x_cnn/device.mojo ni12_implicit_layer) is the one form; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_NI12_IMPLICIT_CONV_OFF.ab-outcome-2.patch"
+    # PROMOTED: MOJOLEARN_IDN_SEQ_TILED_PREDICT (whole-set predict chunk) is the default since 2026-11-24 (lane ab2-nseq); the old caller-chunk form is -D MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF (autograd/model.mojo).
+    comptime assert not is_defined["MOJOLEARN_IDN_SEQ_TILED_PREDICT"](), "promoted 2026-11-24 (lane/ab2-nseq of ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): the whole-set predict chunk is the default (sequential-predict 2.23 -> 1.87 ms, 0.84, median of 20 calls; quality and output hash 8624513c57beb4fe equal); drop -D MOJOLEARN_IDN_SEQ_TILED_PREDICT, use -D MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF for the caller's chunk"
     # ---- end lane ab-outcome-2 (ab2-nseq)
     return True
 
