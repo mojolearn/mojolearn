@@ -124,7 +124,7 @@ from bindings.arena_cache_run import arena_scope_store_put, arena_cache_put, are
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from neighbors.neighbors_knn_run import (
     KnnDistWords, KnnQueryRequest, KnnQueryOutcome, knn_classify_run, knn_regress_run,
-    knn_check_metric_input, knn_check_width, knn_metric_reads_host_queries,
+    knn_check_metric_input, knn_check_width, knn_metric_reads_host_queries, KNN_DIST_COSINE,
 )
 
 comptime _CHUNK = 256
@@ -476,9 +476,9 @@ def _gather_rows(base: Int, base_rows: Int, width: Int, wide: List[Int64], n: In
 def _fold_route(slot: _SlotPtr, call: _CallPtr) raises -> Bool:
     """THE FOLD ROUTE: a call inside a resident scope with X pinned, on the
     device column, whose resident index lives on the fold store's context,
-    and a metric that reads no host rows (cosine's zero-row and
-    Jensen-Shannon's sign refusals read host words: those keep the host
-    gather)."""
+    and a metric that reads no host rows (Jensen-Shannon's sign refusal
+    reads host words: it keeps the host gather; cosine's zero-row refusals
+    run on the device rows, lane vdf-scope-cluster7)."""
     if call[].scope == MEMBER_SCOPE_NONE or call[].pin == 0 or call[].route.vendor == 0:
         return False
     if knn_metric_reads_host_queries(slot[].metric):
@@ -597,7 +597,10 @@ def _fit_indexed(slot: _SlotPtr, call: _CallPtr, estimator: String, rows: Int, c
     the RUN reads them."""
     var wide = _wide_index(call[].row_index, estimator)
     var x = call[].x
-    if _fold_route(slot, call):
+    # A cosine fit keeps the gathered points (lane vdf-scope-cluster7): a later query on host rows runs the
+    # plan's host zero-row scan over the index words, which a fold-built index does not have. Its fold
+    # queries still run on the device (`_indexed_query`).
+    if _fold_route(slot, call) and slot[].metric != KNN_DIST_COSINE:
         var fold = _put_fold(call, wide, rows)
         var store = kmeans_fold_store_ref(call[].route.mode, call[].route.vendor)
         var status = List[Int32](length=2, fill=Int32(0))

@@ -7,9 +7,12 @@ core/dbscan_native_device.mojo `resident_store`, core/labeled_reference_resident
 Claims (device column; the host provider has no store and refuses the form):
   case 0 (euclidean), case 1 (manhattan): the labels of the store form over a slot holding the queries == the
   labels of the resident host-pointer form over the same rows (int32 words, eps 0.9, the threshold on);
-  case 2 (cosine): the store form refuses (its unit rows are the host's), so the member keeps the gathered form.
+  case 2 (cosine, lane vdf-scope-cluster7): the same equality (the unit query rows made on the device copy);
+  case 3 (cosine, query row 5 all zeros): the store form refuses in the host form's words (`cosine_unit_rows`,
+  row 5 and its squared norm).
 Data: 4 reference rows (two per label), 12 query rows of a SplitMix64 stream (uniform [0, 4)), 3 features.
-Sabotage: in core/labeled_reference_resident.mojo copy `n_queries * d - 1` words of `src_rows` -> case 0 fails.
+Sabotage: in core/labeled_reference_resident.mojo copy `n_queries * d - 1` words of `src_rows` -> case 0 fails;
+skip `_cosine_unit_device` -> case 2 fails.
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases_serial, CPU_COLUMN_BUILD, require
@@ -39,6 +42,9 @@ def _device_case(case: Int) raises:
         var queries = List[Float32](capacity=_Q * _D)
         for _ in range(_Q * _D):  # small-loop(fixture words)
             queries.append(Float32(Float64(_next(state) >> 11) * (1.0 / 9007199254740992.0) * 4.0))
+        if case == 3:
+            for f in range(_D):  # small-loop(one fixture row)
+                queries[5 * _D + f] = 0.0
         var handle = DBSCANDeviceKernels.prepare(DBSCANReferenceRequest(Int(refs.unsafe_ptr()),
             Int(keys.unsafe_ptr()), Int(labels.unsafe_ptr()), 4, _D, metric))
         var ctx = estimators_store_ctx()
@@ -48,7 +54,7 @@ def _device_case(case: Int) raises:
         try:
             var host = List[Int32](length=_Q, fill=-7)
             var resident = List[Int32](length=_Q, fill=-7)
-            if metric != 2:
+            if case != 3:
                 _ = DBSCANDeviceKernels.resident(DBSCANResidentQuery(Int(queries.unsafe_ptr()), Int(host.unsafe_ptr()),
                     handle, _Q, _D, metric, True, 0.9))
                 _ = DBSCANDeviceKernels.resident_store(DBSCANResidentQuery(slot, Int(resident.unsafe_ptr()), handle,
@@ -56,13 +62,20 @@ def _device_case(case: Int) raises:
                 for i in range(_Q):  # small-loop(compared labels)
                     require(host[i] == resident[i], "label " + String(i) + " differs")
             else:
-                var refused = False
+                var want = String("")
+                try:
+                    _ = DBSCANDeviceKernels.resident(DBSCANResidentQuery(Int(queries.unsafe_ptr()),
+                        Int(host.unsafe_ptr()), handle, _Q, _D, metric, True, 0.9))
+                except error:
+                    want = String(error)
+                require(want.find("row 5 has squared norm") >= 0, "the host form refuses the zero row")
+                var got = String("")
                 try:
                     _ = DBSCANDeviceKernels.resident_store(DBSCANResidentQuery(slot, Int(resident.unsafe_ptr()),
                         handle, _Q, _D, metric, True, 0.9))
                 except error:
-                    refused = String(error).find("cosine") >= 0
-                require(refused, "the cosine store form refuses")
+                    got = String(error)
+                require(got == want, "the cosine store form refuses in the host form's words")
         except error:
             failure = String(error)
         store[].free(ctx, slot)
@@ -80,7 +93,7 @@ def test_device_fixtures() raises:
         def body(case: Int) raises:
             _device_case(case)
 
-        check_cases_serial("dbscan_resident_store_query device", 3, body)
+        check_cases_serial("dbscan_resident_store_query device", 4, body)
 
 
 def main() raises:

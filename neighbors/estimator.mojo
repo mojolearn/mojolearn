@@ -1553,6 +1553,24 @@ def _knn_search_on_device_index(
             if pooled:
                 knn_pool_release(cache.value())
             return query_tile
+        if mtr == DIST_COSINE_EXPANDED:
+            # THE COSINE ZERO-ROW REFUSALS over device rows (lane vdf-scope-cluster7; the plan ran with
+            # `zero_rows_checked`): the resident index's rows, then the gathered fold queries, as device
+            # reductions with the host scans' first rows and words (DEVIATION 553). The index may be a fold
+            # fitted on the device, whose rows have no host words.
+            var zi = device_first_zero_row(ctx, index, n_index, n_features)
+            var zq = -1
+            if zi < 0:
+                zq = device_first_zero_row(ctx, queries, n_queries, n_features)
+            if zi >= 0 or zq >= 0:
+                if pooled:
+                    knn_pool_release(cache.value())
+                raise Error(
+                    "knn_search: metric='cosine' but " + ("index row " + String(zi) if zi >= 0
+                    else "query row " + String(zq))
+                    + " is all zeros; cosine distance divides by ||x|| and is"
+                    " undefined at the origin (DEVIATION 553)"
+                )
     elif self_queries:
         # the index rows themselves, on the device (no host words, no upload; lane vdf-xm-wire)
         if n_queries != n_index:
@@ -2132,7 +2150,7 @@ def knn_classifier_predict_resident(
         )
     var plan = _knn_search_plan(
         dplan, index_ptr, n_index, queries_ptr, n_queries, n_features, k, weighted,
-        requested_query_tile, KNN_METHOD_AUTO, metric, metric_arg, fold_index >= 0,
+        requested_query_tile, KNN_METHOD_AUTO, metric, metric_arg, fold_index >= 0, fold_index >= 0,
     )
     var retained_indices = List[DeviceBuffer[DType.uint32]]()
     var used_tile = _knn_search_on_device_index(
@@ -2246,7 +2264,7 @@ def knn_regressor_predict_resident(
         )
     var plan = _knn_search_plan(
         dplan, index_ptr, n_index, queries_ptr, n_queries, n_features, k, weighted,
-        requested_query_tile, KNN_METHOD_AUTO, metric, metric_arg, fold_index >= 0,
+        requested_query_tile, KNN_METHOD_AUTO, metric, metric_arg, fold_index >= 0, fold_index >= 0,
     )
     var retained_indices = List[DeviceBuffer[DType.uint32]]()
     var used_tile = _knn_search_on_device_index(
