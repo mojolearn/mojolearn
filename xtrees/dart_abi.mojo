@@ -54,6 +54,11 @@ comptime XD_OP_COUNT = 9
 
 comptime XD_CAP_ROUND = 1
 comptime XD_CAP_RESIDENT = 2
+#: the device predict (xtrees/dart_device.mojo `dart_forest_predict`, behind
+#: XD_PREDICT and XD_FOREST_PREDICT) reads THE FOLD X WORD
+#: (core/fold_x_device.mojo: a negative X address names a fold slot of the
+#: x_prep store; lane vdf-scope-trees2b)
+comptime XD_CAP_SLOT_X = 4
 
 
 def xd_need(c: XtCall, n_addrs: Int, n_params: Int, who: String) raises:

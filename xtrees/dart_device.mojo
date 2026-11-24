@@ -90,6 +90,7 @@ comptime DART_DEVICE = (
 
 from core.apple_fast_tree_experiments import AFT_DART_ROWS, AFT_DART_ADD_ROWS
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from core.fold_x_device import fold_x_fill
 
 comptime TPB = 256
 comptime GRID_MAX = 65535 * 16
@@ -817,7 +818,11 @@ def dart_forest_predict(id: Int, x_addr: Int, out_addr: Int, n: Int, d: Int, k: 
     var nt = kept[].nt
     var ctx = process_ctx[_DART_CTX]()
     var x = ctx.enqueue_create_buffer[DType.float32](n * d)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=F32P(unsafe_from_address=x_addr))
+    # THE FOLD X WORD (core/fold_x_device.mojo; lane vdf-scope-trees2b): a
+    # negative `x_addr` names a fold slot a model-selection member took on the
+    # device (row-major n x d): one device copy, the bytes the host upload of
+    # the gathered rows writes; a host address is the old upload.
+    fold_x_fill(ctx, x, x_addr, n * d)
     var out = ctx.enqueue_create_buffer[DType.uint64](k * n)
     var bad = ctx.enqueue_create_buffer[DType.int32](1)
     enqueue_fill[DType.int32](ctx, bad, Int32(0))
