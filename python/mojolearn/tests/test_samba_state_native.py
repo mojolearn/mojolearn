@@ -60,7 +60,8 @@ def _reference_state(model):
         "optimizer": {"kind": "adamw", "lr": o.lr, "beta1": o.betas[0], "beta2": o.betas[1],
                       "eps": o.eps, "weight_decay": o.weight_decay, "max_norm": model.max_norm,
                       "accumulation_steps": o.accumulation_steps},
-        "schedule": None if o.lr_schedule is None else o.lr_schedule.config(),
+        # the Samba checkpoint keeps the schedule's settings; `config()` also names its device
+        "schedule": None if o.lr_schedule is None else {k: v for k, v in o.lr_schedule.config().items() if k != "device"},
         "rng": {"seed": model.generator.seed, "counter": model.generator.counter},
     }
 
