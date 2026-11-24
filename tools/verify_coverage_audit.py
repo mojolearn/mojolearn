@@ -1607,7 +1607,7 @@ ANNOTATIONS = {
 ANNOTATIONS_BY_SRC = {
     **{(entry, "bindings/_mojolearn_preprocessing_host.mojo"): (
         "covered", [lane],
-        "Source reach: MOJOLEARN_VENDOR=cpu maps the ordinary preprocessing binding to "
+        "Source reach: the CPU side (device=\"cpu\") maps the ordinary preprocessing binding to "
         "preprocessing_host; the native scaler owner calls its fixed " + entry +
         " entry (finite, unweighted input for standard_fit). Existing lane references "
         "are retained separately; this annotation is not execution of the new native door.")

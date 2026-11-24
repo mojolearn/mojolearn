@@ -5,7 +5,8 @@
 # THE LOCAL HALF of a reference-table regeneration (docs/VERIFY.md
 # "Regenerating the reference table"). Runs on the Mac in a checkout of the
 # branch that will carry the new table; fits nothing but the self-test's one
-# `ols/base` lane on the HOST column (MOJOLEARN_VENDOR=cpu), so no Metal.
+# `ols/base` lane, through device="cpu" and, when this checkout has its GPU
+# bindings built, device="gpu" (one process, both sides; 2026-11-24).
 #
 # Column mode (records from tools/record_identity_column.sh on each box):
 #   Incoming columns are retained under verification/records/identity before
@@ -36,13 +37,14 @@
 #      table. THE CPU COLUMN IS REQUIRED (Andrew 2026-10-24): a cpu value that
 #      differs from the GPU reference, at any commit, or a missing cpu column
 #      refuses the admission as a bug to fix; cpu N/A is accepted only where
-#      the harness declares it (identity_break GPU_ONLY_LANES and
+#      the harness declares it (identity_break ONE_SIDED, missing cpu, and
 #      RECORD_EXCLUDED_PREFIXES, and the model part that loads the GPU's file).
 #      Admission reuses identity evidence; it does not re-run the GPU checks.
 #   4. tools/identity_columns.py report: routine-profile reference parts taken
 #      from the new commit vs. still resting on an older one
 #   5. `verify --self-test --cpu-threads 3` and `verify --coverage` against the
-#      new table, from source, host column
+#      new table, from source: the self-test nudges each side this checkout has
+#      (device="cpu" always; device="gpu" when its GPU set is built)
 #   6. THE PTX COLUMN (`nvidia-ptx-<gpu>-sm80` records, Andrew 2026-10-10): the
 #      table's `ptx_divergent` must be empty, i.e. every PTX digest equals the
 #      NVIDIA == AMD reference; a differing part fails the admission (PTX rc=1)
@@ -165,8 +167,8 @@ if [ -z "${ADMIT_PYTHON:-}" ] && [ -z "${ADMIT_WHEEL_PACKAGE:-}" ] && { [ ${#mis
     fi
 fi
 
-cli() {  # the verifier from source (its emit-reference needs the checkout root), host column, identical tier
-    env MOJOLEARN_VENDOR=cpu MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" \
+cli() {  # the verifier from source (its emit-reference needs the checkout root), identical tier; the side is device=
+    env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" \
         "${PY[@]}" -m mojolearn verify "$@"
 }
 
@@ -174,7 +176,7 @@ checks() {  # $1 = table; self-test then coverage; sets ST_RC, COV_RC
     local t=$1
     cli --self-test --cpu-threads 3 --reference-table "$t" > "$EVID/self-test.log" 2>&1
     ST_RC=$?
-    grep -E '^  (untouched|perturbed)|^RESULT' "$EVID/self-test.log" | head -5
+    grep -E '^  (CPU|GPU) side|^RESULT' "$EVID/self-test.log" | head -5
     echo "SELFTEST rc=$ST_RC table=$t (log $EVID/self-test.log)"
     cli --coverage --reference-table "$t" --json-out "$EVID/coverage.json" > "$EVID/coverage.log" 2>&1
     COV_RC=$?

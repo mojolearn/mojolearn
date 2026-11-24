@@ -10,12 +10,12 @@ exec(compile(SCRIPT.read_text().split('# IDENTITY_PY_BEGIN\n')[1].split('# IDENT
 
 
 def evidence():
-    return dict(format='mojolearn.verify-all-report.v1', exit=0, verdict='VERIFIED',
+    return dict(format='mojolearn.verify-all-report.v2', exit=0, verdict='VERIFIED',
         fixtures=['base'], repeats=1, lanes=['ridge'], models_checked=0,
         execution=dict(mode='fresh-process-per-cell', timeout_s=120, interrupted=None,
                        completed_cells=1, total_cells=1), bindings=[{'sha256':'a'*64}],
-        cells=[dict(lane='ridge',fixture='base',part=p,state='IDENTICAL',value='a'*16,error=None)
-               for p in ns['PARTS']])
+        cells=[dict(lane='ridge',fixture='base',part=p,side=side,state='IDENTICAL',value='a'*16,error=None)
+               for p in ns['PARTS'] for side in ns['SIDES']])
 
 
 class IdentityAdmissionTests(unittest.TestCase):
@@ -86,7 +86,10 @@ class IdentityAdmissionTests(unittest.TestCase):
     def test_rejects_missing_duplicate_wrong_lane_or_part(self):
         changes=[lambda d:d['cells'].pop(), lambda d:d['cells'].append(d['cells'][0]),
                  lambda d:d['cells'][0].update(lane='ols'),
-                 lambda d:d['cells'][0].update(part='other')]
+                 lambda d:d['cells'][0].update(part='other'),
+                 lambda d:d['cells'][0].update(side='other'),
+                 lambda d:[c.pop('side') for c in d['cells']],
+                 lambda d:d.update(format='mojolearn.verify-all-report.v1')]
         for change in changes:
             d=evidence();change(d)
             with self.subTest(change=change), self.assertRaises(AssertionError):

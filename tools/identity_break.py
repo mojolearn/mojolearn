@@ -528,8 +528,8 @@ every refusal untruncated; with no `--json` the full text is printed after
 the summary.
 
 CPU WALL CLOCK (2026-09-19). `--jobs N` is an opt-in process supervisor for
-independent lane shards. It requires `--json`, caps N to min(8, CPU count),
-forces every child through `--require-cpu`, preserves each shard JSON as a
+independent lane shards. It requires `--json`, caps N to the allocation's cores,
+runs every child as `--side cpu` (device="cpu"), preserves each shard JSON as a
 resume checkpoint, and merges in deterministic lane order. It never shares a
 fitted estimator or native runtime between workers and never runs concurrent
 jobs on a GPU.
@@ -2097,14 +2097,10 @@ def _one_sided(name, missing, reason):
 
 
 def one_sided(name):
-    """(missing side, reason) for a one-sided lane, else None. The older
-    `GPU_ONLY_LANES` registry (no CPU route) is read as one-sided with no CPU
-    side until its entries and readers move to `_one_sided` (a request to the
-    fragment and tool owners; the two say the same thing)."""
-    hit = ONE_SIDED.get(name)
-    if hit is None and name in GPU_ONLY_LANES:
-        hit = ("cpu", GPU_ONLY_LANES[name])
-    return hit
+    """(missing side, reason) for a one-sided lane, else None. The one
+    registry of lanes with one side (2026-11-24: the older GPU_ONLY_LANES,
+    no CPU route, is gone; its entries are `_one_sided(missing="cpu")`)."""
+    return ONE_SIDED.get(name)
 
 
 def one_sided_na(name, side):
@@ -9699,51 +9695,12 @@ def _refused(call, needle):
 # Each was built `-D MOJOLEARN_HOST_SABOTAGE=1` against a CLEAN build of the
 # SAME source and watched; what moves and what does not is on each lane.
 
-#: Lanes whose PUBLIC SURFACE refuses by name on a CPU-only install, so a CPU
-#: column has no arithmetic of theirs to run (lane/unlaned-public-algorithms,
-#: 2026-09-20). A full-column run on a CPU-only install drops them by name and
-#: says so; `--lanes` names lanes explicitly and is never filtered, and a GPU
-#: column runs them exactly as it runs every other lane, so no record loses a
-#: cell. This is NOT `RECORD_EXCLUDED_PREFIXES`, which is about a release
-#: record's scope on every column; this is one column's inability to state the
-#: proposition at all, the same fact `lane_applicability` derives for cpu-host.
-#:
-#: The original four entries were removed on 2026-09-20
-#: (lane/cpu-routes-gpu-only-four). Later exclusions also live in the lane
-#: fragments, which extend this registry when loaded. The history stays because
-#: the four entries it held were WRONG in a way worth writing down rather
-#: than deleting. Every one of the four refusals was real, by name, on a
-#: CPU-only install, and every one was read as a statement about arithmetic:
-#:
-#:   `mamba1-decode-session` / `transformer-decode-session`
-#:       "mamba1_session_create exists only in the GPU binding" was true and
-#:       is still true. What it describes is RESIDENCY -- a device context
-#:       holding weights, state and stages across steps -- and a session's
-#:       BYTES are `mamba_step` / `transformer_decode_step`, the block at
-#:       L = 1, which the host bindings export under the per-call names. Both
-#:       classes now carry a host arm that owns its copies and calls those
-#:       entries, so the lanes' byte-for-byte claim is testable here.
-#:   `par-causal-lm` / `par-cross-val`
-#:       "raises unless _backend.vendor() is cuda or hip" was a check the
-#:       drivers made, not a fact about their work. On a CPU-only install a
-#:       device index is one worker PROCESS; the layer partition, the fold
-#:       partition, the wave dispatch and both merges are the driver's own
-#:       Python, and each shard is host arithmetic a covered lane hashes.
-#:       Metal admits only device 0: one worker, without claiming device
-#:       isolation or multiple physical GPUs.
-#:
-#: The mechanism stays: a lane whose PUBLIC SURFACE genuinely has no CPU
-#: arithmetic belongs here, so a full-column CPU run drops it by name instead
-#: of recording a REFUSED cell that reads like coverage in a column total.
-#: The bar to add one is the question these four did not get asked: is the
-#: thing that refuses the thing the lane hashes?
-# The isolated CPU ranking draft adds the native route for the two existing
-# pointwise ranking lanes. They now participate in CPU selection and the gbdt
-# family's existing sabotage gate. This registration is not compilation or
-# runtime evidence: host_surface marks them unwatched, and the branch must
-# compile before merge (docs/GBDT_CPU_RANKING_DRAFT_20261027.md).
-# The device-residency exclusions in native_owners.py and coverage.py remain.
-GPU_ONLY_LANES = {}
+# GPU_ONLY_LANES (lanes whose public surface had no CPU route) was removed on
+# 2026-11-24 (lane vdv-tools): a lane with one side is declared with
+# `_one_sided(lane, missing="cpu"|"gpu", reason=...)` (registry ONE_SIDED), and
+# its missing side's cell reads `n/a:one-sided: ...` by name in every column
+# run instead of being dropped from a CPU full column. The bar for adding one
+# is unchanged: is the thing that refuses the thing the lane hashes?
 
 
 def _decode_session_probe(blk, state_fn, rows, length, dm, Xh):
@@ -13119,19 +13076,9 @@ def _run_reference(args):
         if out_of_scope:
             lanes = [n for n in lanes if n not in out_of_scope]
             print(f"# OUT OF RECORD SCOPE ({len(out_of_scope)} lanes): {sorted(out_of_scope)}")
-    # NO CPU ARITHMETIC EXISTS FOR THESE (GPU_ONLY_LANES, above). Their public
-    # surface refuses BY NAME on a CPU-only install, so a full-column run here
-    # would record REFUSED cells, and a REFUSED cell and a passing cell are the
-    # same thing in a column total. Dropped by name with the reason printed;
-    # `--lanes` is never filtered, and a GPU column runs them as it runs
-    # everything else, so no record loses a cell.
-    if not args.lanes and host:
-        no_route = [n for n in lanes if n in GPU_ONLY_LANES]
-        if no_route:
-            lanes = [n for n in lanes if n not in no_route]
-            print(f"# NO CPU ROUTE ({len(no_route)} lanes), owed on a GPU column:")
-            for n in sorted(no_route):
-                print(f"#   {n}: {GPU_ONLY_LANES[n]}")
+    # A lane with no side here (`_one_sided`, registry ONE_SIDED) is not
+    # dropped: its cell reads `n/a:one-sided: no <SIDE> implementation: ...`
+    # by name (the per-lane loop below), so the record says which side is owed.
     # Broad Apple matrices are explicit diagnostics, not release requirements.
     _apple_refusal = refuse_routine_apple_column(lanes, host)
     if _apple_refusal:
@@ -14233,6 +14180,32 @@ def _job_shards(lanes, count):
             for i in range(count)]
 
 
+def _allocated_cores(cgroup_root="/sys/fs/cgroup"):
+    """The cores this process may run on: its CPU affinity, bounded by a
+    cgroup v2 `cpu.max` (or v1 cfs) quota when one is set. Stdlib only (the
+    harness ships in the wheel)."""
+    try:
+        cores = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        cores = os.cpu_count() or 1
+    quota = None
+    try:
+        text = Path(cgroup_root, "cpu.max").read_text().split()
+        if text and text[0] != "max":
+            quota = int(text[0]) / int(text[1])
+    except (OSError, ValueError, IndexError):
+        try:
+            q = int(Path(cgroup_root, "cpu", "cpu.cfs_quota_us").read_text())
+            period = int(Path(cgroup_root, "cpu", "cpu.cfs_period_us").read_text())
+            if q > 0 and period > 0:
+                quota = q / period
+        except (OSError, ValueError):
+            pass
+    if quota is not None:
+        cores = min(cores, max(1, int(-(-quota // 1))))
+    return max(1, cores)
+
+
 def run_jobs(args, argv=None):
     """Run CPU-side lane shards in isolated processes and merge their records.
 
@@ -14248,9 +14221,12 @@ def run_jobs(args, argv=None):
         raise SystemExit("REFUSING: --jobs > 1 requires --json for durable shard checkpoints")
     if getattr(args, "side", None) not in (None, "cpu"):
         raise SystemExit("REFUSING: --jobs > 1 records the CPU side only; a GPU side runs in one process")
-    cap = min(8, os.cpu_count() or 1)
+    # THE ALLOCATION, NOT A FIXED CAP (AGENTS.md part 1, 100 percent of rented
+    # CPU; 2026-11-24 replaced min(8, cpu_count)): at most one shard per core
+    # of this process's allocation (affinity and cgroup cpu.max).
+    cap = _allocated_cores()
     if args.jobs > cap:
-        raise SystemExit(f"REFUSING: --jobs {args.jobs} exceeds this host's conservative cap {cap}")
+        raise SystemExit(f"REFUSING: --jobs {args.jobs} exceeds this allocation's {cap} cores")
     requested = [n for n in args.lanes.split(",") if n]
     unknown = [n for n in requested if n not in LANES]
     if unknown:
@@ -14279,7 +14255,7 @@ def run_jobs(args, argv=None):
     # forced --require-cpu (a CPU-only install) is no longer needed for that.
     base += ["--side", "cpu"]
     running = []
-    print(f"# JOBS {len(shards)} isolated CPU shards (cap={cap}); checkpoints={part_dir}", flush=True)
+    print(f"# JOBS {len(shards)} isolated CPU shards (allocation {cap} cores); checkpoints={part_dir}", flush=True)
     try:
         for i, (shard, part, log) in enumerate(zip(shards, parts, logs)):
             cmd = [sys.executable, os.path.abspath(__file__)] + base + [
@@ -14488,7 +14464,7 @@ LANE_FRAGMENTS = {}
 #: LANE_REVISIONS is not among them: a revision marks input that moved after
 #: a record was taken, and an expansion lane has no record yet.
 _FRAGMENT_REGISTRIES = ("LANES", "BATCH", "BATCH_REVISIONS", "BATCHGRAD", "BATCHSCALE", "RAGGED", "STEPFULL", "RLPAIR",
-                        "GPU_ONLY_LANES", "ONE_SIDED")
+                        "ONE_SIDED")
 
 
 def lane_fragment_paths(here=None):

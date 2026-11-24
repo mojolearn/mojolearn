@@ -13,8 +13,10 @@ PARTS = ('train', 'infer', 'model', 'batch', 'stepfull')
 def sha(path):
     return hashlib.sha256(P(path).read_bytes()).hexdigest()
 
+SIDES = ('cpu', 'gpu')   # v2 (2026-11-24): every cell part once per side, device="cpu" and device="gpu", one process
+
 def admit_identity(doc, lanes):
-    assert doc['format'] == 'mojolearn.verify-all-report.v1'
+    assert doc['format'] == 'mojolearn.verify-all-report.v2'
     assert (doc['exit'], doc['verdict']) == (0, 'VERIFIED')
     assert doc['fixtures'] == ['base'] and doc['repeats'] == 1
     assert len(doc['lanes']) == len(lanes) and set(doc['lanes']) == set(lanes)
@@ -23,9 +25,9 @@ def admit_identity(doc, lanes):
     assert execution['mode'] in ('fresh-process-per-cell', 'batched-worker')  # cell values do not depend on the mode
     assert execution['timeout_s'] == 120 and execution['interrupted'] is None
     assert execution['completed_cells'] == execution['total_cells'] == len(lanes)
-    expected = {(lane, 'base', part) for lane in lanes for part in PARTS}
+    expected = {(lane, 'base', part, side) for lane in lanes for part in PARTS for side in SIDES}
     rows = doc['cells']
-    keys = [(row['lane'], row['fixture'], row['part']) for row in rows]
+    keys = [(row['lane'], row['fixture'], row['part'], row.get('side')) for row in rows]
     assert len(keys) == len(set(keys)) and set(keys) == expected
     for row in rows:
         assert row['state'] in ('IDENTICAL', 'N/A'), row

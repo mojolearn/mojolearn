@@ -224,7 +224,7 @@ def time_all(n):
         ("permutation_test_score 3 perms, 1000 groups, GroupKFold(5)", lambda: ms.permutation_test_score(
             HashEstimator(), X, y, groups=g1000, cv=ms.GroupKFold(5), n_permutations=3, random_state=0)[1].tobytes()),
     ]
-    print(f"TIME n={n} vendor={os.environ.get('MOJOLEARN_VENDOR', 'gpu')} host={os.uname().nodename}")
+    print(f"TIME n={n} vendor={ml.vendor()} host={os.uname().nodename}")
     print(f"{'case':62s} {'before s':>10s} {'after s':>10s} {'x':>7s} same")
     for name, fn in cases:
         arm(False)
@@ -242,7 +242,8 @@ if __name__ == "__main__":
     ap.add_argument("cmd", choices=("equal", "time"))
     ap.add_argument("--n", type=int, default=1_000_000)
     a = ap.parse_args()
-    if a.cmd == "time" and (os.environ.get("MOJOLEARN_VENDOR", "").strip().lower() == "cpu"
-                            or ml.vendor() == "cpu"):
+    # The loaded binding set says which column this is (a MOJOLEARN_VENDOR=cpu
+    # process loads the host set, so ml.vendor() already reads "cpu" there).
+    if a.cmd == "time" and ml.vendor() == "cpu":
         sys.exit("check.py time: refused on the host column: our CPU is never timed (Andrew, Oct 2 2026)")
     sys.exit(equal() if a.cmd == "equal" else time_all(a.n) or 0)

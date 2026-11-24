@@ -1022,10 +1022,10 @@ THIS IS THE MIRROR OF THE SECTION BELOW, NOT AN EXCUSE. They stay in
 BOTH GPU-axis counts, because a GPU column is exactly where their
 proposition is stateable and no column carries them yet.
 
-`identity_break.GPU_ONLY_LANES` drops them from a full-column run on a
-CPU-only install and prints the reason per lane, so a CPU record never
-counts a refusal as a cell. `--lanes` is never filtered, so a record
-that wants the refusal text can still take it and commit it verbatim.
+`identity_break` declares them `_one_sided(lane, missing="cpu")` (registry
+ONE_SIDED): a CPU column records each one's cell as `n/a:one-sided: no CPU
+implementation: <reason>` by name, so a CPU record never counts a refusal
+as a cell and still says which side is owed.
 
 BEFORE TRUSTING THIS SECTION, ASK THE QUESTION THE FIRST TWO ENTRIES
 DID NOT GET (lane/cpu-routes-gpu-only-four, 2026-09-20): is the entry

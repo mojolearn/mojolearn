@@ -145,8 +145,11 @@ def self_test(python: str, out: Path) -> dict:
         r = json.loads(stdout)
     except ValueError:
         r = {}
-    clean = (r.get("clean") or {}).get("state")
-    dirty = (r.get("perturbed") or {}).get("state")
+    # A v2 self-test nudges each side on its own (2026-11-24); this gate asks
+    # the GPU side's question: its own clean and perturbed states.
+    gpu = (r.get("sides") or {}).get("gpu") or {}
+    clean = (gpu.get("clean") or {}).get("state")
+    dirty = (gpu.get("perturbed") or {}).get("state")
     if timed_out:
         status = "timed_out"
     elif vendor in ("cpu", "?") or vendor.startswith("import failed"):

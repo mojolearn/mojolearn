@@ -26,9 +26,13 @@
 #                                           from the NVIDIA == AMD reference
 #                   amd-<gpu>-<arch>     -> --require-backend hip
 #                   apple-<chip>         -> --require-backend metal
-#                   cpu                  -> MOJOLEARN_VENDOR=cpu, --require-backend cpu;
-#                                           the label is derived by the harness
-#                                           (cpu-<cpu model slug>), never typed
+#                   cpu                  -> --side cpu: every public call with device="cpu"
+#                                           (2026-11-24: no MOJOLEARN_VENDOR=cpu process), on a
+#                                           CPU-only runner or on a GPU box alike; the label is
+#                                           derived by the harness (cpu-<cpu model slug>), never typed
+#                   A GPU label records the GPU column (--side gpu, device="gpu"); with
+#                   WITH_CPU=1 the SAME process then records the CPU column too (--side both):
+#                   <file>.identical.json is the GPU column, cpu<suffix>.identical.json the CPU one
 #   <outdir>        an ABSOLUTE directory OUTSIDE the tree (an lq CMD tree is
 #                   deleted after the job); created if missing
 #   --models        instead of a column: save the portable models the verifier
@@ -70,6 +74,12 @@
 #                           table builder takes the newest commit per cell, so
 #                           the unchanged lanes keep their admitted rows).
 #                           Prints NOTHING-CHANGED and exits 0 when no lane moved
+#   WITH_CPU=1              with a GPU label: the CPU column from the same process (--side both,
+#                           device="cpu" after the GPU column's device="gpu"), written as
+#                           cpu<the GPU record's suffix>.identical.json beside it, with its own
+#                           provenance, check line and RECORDED line. Excludes REUSE=1 and
+#                           ONLY_CHANGED (their lane selection is per device class: record the cpu
+#                           label on its own for those)
 #   CPU_THREADS=3           every CPU thread pool (MOJOLEARN_CPU_THREADS, OMP...)
 #   PYTHON=...              the interpreter (default: `pixi run -e default python`
 #                           when pixi and pixi.toml are present, else python3)
@@ -107,8 +117,10 @@
 #
 # Output, per record: <outdir>/<file>.identical.json, its .log, an IDCOLUMN
 # line from tools/identity_columns.py check (admissible=yes|NO), and
-# <outdir>/<file>.provenance.txt. The last line of stdout is
+# <outdir>/<file>.provenance.txt. The last line of stdout per record is
 #   RECORDED <file> rc=<harness rc> admissible=<yes|NO>
+# (two such lines with WITH_CPU=1: the GPU record, then the CPU one; exit 1
+# unless both are admissible)
 set -uo pipefail
 
 die() { echo "record_identity_column: $*" >&2; exit 2; }
@@ -133,6 +145,13 @@ esac
 [[ $LABEL =~ ^[a-z0-9][a-z0-9_.-]*$ ]] || die "label $LABEL: lowercase letters, digits, _ . - only"
 if [ "$MODE" = --models ] && [ "$BACKEND" = cpu ]; then
     die "--models saves GPU-trained models; run it on a GPU box"
+fi
+WITH_CPU=${WITH_CPU:-0}
+case $WITH_CPU in 0|1) ;; *) die "WITH_CPU is 0 or 1, not $WITH_CPU";; esac
+if [ "$WITH_CPU" = 1 ]; then
+    [ "$BACKEND" != cpu ] || die "WITH_CPU=1 adds the CPU column to a GPU label's record; the cpu label records it alone"
+    [ "${REUSE:-0}" = 0 ] && [ -z "${ONLY_CHANGED:-}" ] \
+        || die "WITH_CPU=1 excludes REUSE=1 and ONLY_CHANGED (their selection is per device class); record the cpu label on its own"
 fi
 mkdir -p "$OUT" || die "cannot create $OUT"
 
@@ -183,7 +202,9 @@ for v in MOJOLEARN_CPU_THREADS OMP_NUM_THREADS OMP_THREAD_LIMIT OPENBLAS_NUM_THR
     export "$v=$T"
 done
 export OMP_MAX_ACTIVE_LEVELS=1 OMP_DYNAMIC=FALSE
-if [ "$BACKEND" = cpu ]; then export MOJOLEARN_VENDOR=cpu; fi
+# THE SIDE IS THE PUBLIC device= PARAMETER (2026-11-24): the cpu label runs the
+# harness with --side cpu in this installation's own process (no
+# MOJOLEARN_VENDOR=cpu); a GPU label runs --side gpu (or both, WITH_CPU=1).
 # THE PTX COLUMN: the PTX set by name, like any architecture directory; a native
 # column must not inherit a forced architecture from the caller.
 if [ "$PTX" = 1 ]; then export MOJOLEARN_GPU_ARCH=sm_80; elif [ "$BACKEND" = cuda ]; then unset MOJOLEARN_GPU_ARCH; fi
@@ -219,7 +240,13 @@ PYEOF
         *) die "preflight (RECORD_FROM_INSTALLED=1): $where" ;; esac
 fi
 got=$("${PY[@]}" -c 'import mojolearn as m, mojolearn._backend as b; print(m.vendor(), b.numeric_mode())' 2>&1 | tail -1)
-[ "$got" = "$BACKEND identical" ] || die "preflight: expected '$BACKEND identical', loaded '$got' (are the bindings built in $ROOT?)"
+if [ "$BACKEND" = cpu ]; then
+    # The CPU column runs through device="cpu" on whatever this installation
+    # loaded (a CPU-only runner, or a GPU box whose host bindings are built).
+    case "$got" in *" identical") ;; *) die "preflight: expected the identical tier, loaded '$got' (are the bindings built in $ROOT?)";; esac
+else
+    [ "$got" = "$BACKEND identical" ] || die "preflight: expected '$BACKEND identical', loaded '$got' (are the bindings built in $ROOT?)"
+fi
 if [ "$BACKEND" = cuda ]; then
     set_got=$("${PY[@]}" -c 'import mojolearn as m, mojolearn._backend as b; print(b.gpu_arch(), "ptx" if b.baseline_selection_receipt() else "native")' 2>&1 | tail -1)
     if [ "$PTX" = 1 ]; then
@@ -293,7 +320,7 @@ else
     reused=$(sed -n 's/.* REUSED \([0-9]*\) .*/\1/p' <<< "$summary")
     record=$(sed -n 's/.* RECORD \([0-9]*\) .*/\1/p' <<< "$summary")
     bad=$(sed -n 's/.* KNOWN-BAD \([0-9]*\) .*/\1/p' <<< "$summary")
-    # n/a: lanes the harness declares have no route on this class (GPU_ONLY_LANES on cpu), not known-bad.
+    # n/a: lanes the harness declares have no side on this class (`_one_sided`, ONE_SIDED), not known-bad.
     na=$(sed -n 's|.* N/A \([0-9]*\).*|\1|p' <<< "$summary")
     echo "REUSED $reused / RECORD $record $LABEL (class $CLASS, known-bad $bad, n/a ${na:-0}; decisions $OUT/$LABEL.reuse.json; without REUSE=1 every lane is recorded)"
     # RELEASE FLOOR = THE LEDGER'S RULE (lane ledger-floor-receipts): changed-lanes measures a row
@@ -376,23 +403,42 @@ REPEATS=${REPEATS:-1}
 
 JSON=$OUT/$NAME.identical.json
 LOG=$OUT/$NAME.log
+# WITH_CPU=1: the CPU column of the same lanes, from the same process, named
+# like the GPU record with the label replaced by cpu.
+CPU_NAME=; CPU_JSON=
+if [ "$WITH_CPU" = 1 ]; then
+    CPU_NAME="cpu${NAME#"$LABEL"}"
+    CPU_JSON=$OUT/$CPU_NAME.identical.json
+fi
+complete_at_commit() {
+    [ -f "$1" ] && "${PY[@]}" -c "import json,sys; j=json.load(open(sys.argv[1])); sys.exit(0 if j.get('complete') is True and j.get('commit')==sys.argv[2] else 1)" "$1" "$COMMIT" 2>/dev/null
+}
 done_already() {
-    [ -f "$JSON" ] && "${PY[@]}" -c "import json,sys; j=json.load(open(sys.argv[1])); sys.exit(0 if j.get('complete') is True and j.get('commit')==sys.argv[2] else 1)" "$JSON" "$COMMIT" 2>/dev/null
+    complete_at_commit "$JSON" && { [ -z "$CPU_JSON" ] || complete_at_commit "$CPU_JSON"; }
 }
 if done_already; then
-    echo "# $JSON is already complete at ${COMMIT:0:12}; left untouched"
+    echo "# $JSON${CPU_JSON:+ and $CPU_JSON} already complete at ${COMMIT:0:12}; left untouched"
 else
-    if [ -f "$JSON" ] && ! "${PY[@]}" -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get('commit')==sys.argv[2] else 1)" "$JSON" "$COMMIT" 2>/dev/null; then
-        mv "$JSON" "$JSON.other-commit-$(date -u +%Y%m%dT%H%M%SZ)"
+    for f in "$JSON" ${CPU_JSON:+"$CPU_JSON"}; do
+        if [ -f "$f" ] && ! "${PY[@]}" -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get('commit')==sys.argv[2] else 1)" "$f" "$COMMIT" 2>/dev/null; then
+            mv "$f" "$f.other-commit-$(date -u +%Y%m%dT%H%M%SZ)"
+        fi
+    done
+    args=(tools/identity_break.py --json "$JSON" --lanes "$LANE_LIST" --repeats "$REPEATS")
+    if [ "$BACKEND" = cpu ]; then
+        args+=(--side cpu)
+    elif [ "$WITH_CPU" = 1 ]; then
+        args+=(--require-backend "$BACKEND" --vendor "$LABEL" --side both --cpu-json "$CPU_JSON")
+    else
+        args+=(--require-backend "$BACKEND" --vendor "$LABEL" --side gpu)
     fi
-    args=(tools/identity_break.py --json "$JSON" --lanes "$LANE_LIST" --repeats "$REPEATS"
-          --require-backend "$BACKEND")
-    if [ "$BACKEND" = cpu ]; then args+=(--require-cpu); else args+=(--vendor "$LABEL"); fi
     if [ -n "${FIXTURES:-}" ]; then die "FIXTURES is not supported: a record covers every fixture"; fi
     {
-        echo "# $(date -u +%FT%TZ) record $NAME commit=$COMMIT backend=$BACKEND threads=$T lanes=$(tr ',' '\n' <<< "$LANE_LIST" | wc -l | tr -d ' ')"
+        echo "# $(date -u +%FT%TZ) record $NAME${CPU_NAME:+ + $CPU_NAME} commit=$COMMIT backend=$BACKEND threads=$T lanes=$(tr ',' '\n' <<< "$LANE_LIST" | wc -l | tr -d ' ')"
     } >> "$LOG"
-    if [ -f "$JSON" ]; then
+    # A resume reads every column file it writes: with WITH_CPU=1 only when both
+    # exist (a run that died before its CPU column starts both again).
+    if [ -f "$JSON" ] && { [ -z "$CPU_JSON" ] || [ -f "$CPU_JSON" ]; }; then
         "${PY[@]}" -u "${args[@]}" --resume >> "$LOG" 2>&1
         rc=$?
         if grep -q "REFUSING TO RESUME" <(tail -n 5 "$LOG"); then
@@ -407,34 +453,45 @@ else
 fi
 rc=${rc:-0}
 
-{
-    echo "commit=$COMMIT"
-    echo "label=$LABEL"
-    echo "backend=$BACKEND"
-    echo "scope=${SCOPE:-routine} shard=${SHARD:-} lanes_override=${LANES:+yes} lane_selection=$SELECTION"
-    echo "repeats=$REPEATS cpu_threads=$T"
-    echo "host=$(uname -srm) $(hostname 2>/dev/null)"
-    echo "date=$(date -u +%FT%TZ)"
-    echo "dirty_tracked=${DIRTY:-none}"
-    [ "$INSTALLED" = 1 ] && echo "installed_wheels=$INSTALLED_LINE"
-    # THE RUN LINES (lane post-record-device-time): device, driver, Mojo, Python, start/end, seconds total and
-    # per lane, wheels, box and host, from the record's own run block (identity_break.py run_provenance_lines)
-    if [ -f "$JSON" ]; then
-        "${PY[@]}" "$ROOT/tools/identity_break.py" --provenance-lines "$JSON" 2>/dev/null \
-            || echo "run_facts=unreadable (identity_break.py --provenance-lines failed)"
-    fi
-    [ -f "$JSON" ] && echo "record_sha256=$(shasum -a 256 "$JSON" | cut -d' ' -f1)"
-} > "$OUT/$NAME.provenance.txt"
+# provenance, check and retention of one record: $1 name, $2 json, $3 label, $4 backend
+finish_record() {
+    local name=$1 json=$2 label=$3 backend=$4 line adm
+    {
+        echo "commit=$COMMIT"
+        echo "label=$label"
+        echo "backend=$backend"
+        echo "side=$([ "$backend" = cpu ] && echo cpu || echo gpu) process=$NAME"
+        echo "scope=${SCOPE:-routine} shard=${SHARD:-} lanes_override=${LANES:+yes} lane_selection=$SELECTION"
+        echo "repeats=$REPEATS cpu_threads=$T"
+        echo "host=$(uname -srm) $(hostname 2>/dev/null)"
+        echo "date=$(date -u +%FT%TZ)"
+        echo "dirty_tracked=${DIRTY:-none}"
+        [ "$INSTALLED" = 1 ] && echo "installed_wheels=$INSTALLED_LINE"
+        # THE RUN LINES (lane post-record-device-time): device, driver, Mojo, Python, start/end, seconds total and
+        # per lane, wheels, box and host, from the record's own run block (identity_break.py run_provenance_lines)
+        if [ -f "$json" ]; then
+            "${PY[@]}" "$ROOT/tools/identity_break.py" --provenance-lines "$json" 2>/dev/null \
+                || echo "run_facts=unreadable (identity_break.py --provenance-lines failed)"
+        fi
+        [ -f "$json" ] && echo "record_sha256=$(shasum -a 256 "$json" | cut -d' ' -f1)"
+    } > "$OUT/$name.provenance.txt"
 
-line=$("${PY[@]}" tools/identity_columns.py check "$JSON" 2>&1 | tail -1)
-echo "$line" | cut -c1-600
-adm=NO; case $line in *admissible=yes*) adm=yes;; esac
-# Retain the exact record in MojoLearn as well as the original run directory.
-# Collection does not admit it or regenerate the wheel's reference table.
-if [ -f "$JSON" ]; then
-    "${PY[@]}" tools/retain_run_summary.py identity "$JSON" || \
-        echo "RETENTION FAILED: identity record remains at $JSON; collect it before teardown" >&2
+    line=$("${PY[@]}" tools/identity_columns.py check "$json" 2>&1 | tail -1)
+    echo "$line" | cut -c1-600
+    adm=NO; case $line in *admissible=yes*) adm=yes;; esac
+    # Retain the exact record in MojoLearn as well as the original run directory.
+    # Collection does not admit it or regenerate the wheel's reference table.
+    if [ -f "$json" ]; then
+        "${PY[@]}" tools/retain_run_summary.py identity "$json" || \
+            echo "RETENTION FAILED: identity record remains at $json; collect it before teardown" >&2
+    fi
+    echo "RECORDED $name rc=$rc admissible=$adm json=$json"
+    [ "$adm" = yes ]
+}
+
+all_adm=0
+finish_record "$NAME" "$JSON" "$LABEL" "$BACKEND" || all_adm=1
+if [ -n "$CPU_JSON" ]; then
+    finish_record "$CPU_NAME" "$CPU_JSON" cpu cpu || all_adm=1
 fi
-echo "RECORDED $NAME rc=$rc admissible=$adm json=$JSON"
-[ "$adm" = yes ] || exit 1
-exit 0
+exit $all_adm

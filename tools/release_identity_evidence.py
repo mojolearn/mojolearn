@@ -300,33 +300,47 @@ def provenance_reference(path, ref, record):
     return dict(path=str(Path(prov_path).resolve()), sha256=evidence.sha256(prov_path))
 
 
+def one_sided_calls(tree, missing):
+    """Lane names of every `_one_sided("<lane>", missing="<missing>", ...)` call
+    in a parsed source (registry ONE_SIDED, 2026-11-24; `missing` may also be
+    the second positional argument). A call whose lane or side is not a
+    literal string is refused: a declaration this reader cannot read must not
+    silently read as none."""
+    out = set()
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "_one_sided"):
+            continue
+        side = next((k.value for k in node.keywords if k.arg == "missing"), None)
+        if side is None and len(node.args) >= 2:
+            side = node.args[1]
+        if not (node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)
+                and isinstance(side, ast.Constant) and isinstance(side.value, str)):
+            raise ValueError("a _one_sided(...) call this reader cannot read (lane and missing must be literals)")
+        if side.value == missing:
+            out.add(node.args[0].value)
+    return out
+
+
 def _gpu_only_from_texts(harness_text, lane_texts):
-    """identity_admission_guard.gpu_only_declarations, over frozen source texts."""
+    """identity_admission_guard.gpu_only_declarations, over frozen source texts:
+    the `_one_sided(lane, missing="cpu")` lanes and RECORD_EXCLUDED_PREFIXES."""
     lanes, prefixes = set(), ()
-    for node in ast.parse(harness_text).body:
+    try:
+        tree = ast.parse(harness_text)
+        lanes |= one_sided_calls(tree, "cpu")
+        for text in lane_texts:
+            lanes |= one_sided_calls(ast.parse(text), "cpu")
+    except ValueError as error:
+        require(False, str(error))
+    for node in tree.body:
         if not isinstance(node, ast.Assign):
             continue
         names = [t.id for t in node.targets if isinstance(t, ast.Name)]
-        if "GPU_ONLY_LANES" in names and isinstance(node.value, ast.Dict):
-            for key in node.value.keys:
-                require(isinstance(key, ast.Constant) and isinstance(key.value, str),
-                        "GPU_ONLY_LANES has an unreadable key")
-                lanes.add(key.value)
         if "RECORD_EXCLUDED_PREFIXES" in names:
             value = ast.literal_eval(node.value)
             require(isinstance(value, tuple) and all(isinstance(x, str) for x in value),
                     "RECORD_EXCLUDED_PREFIXES is not a tuple of strings")
             prefixes = value
-    for text in lane_texts:
-        for node in ast.parse(text).body:
-            if not isinstance(node, ast.Assign):
-                continue
-            for target in node.targets:
-                if (isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name)
-                        and target.value.id == "GPU_ONLY_LANES"):
-                    require(isinstance(target.slice, ast.Constant) and isinstance(target.slice.value, str),
-                            "GPU_ONLY_LANES entry has an unreadable key")
-                    lanes.add(target.slice.value)
     return frozenset(lanes), tuple(prefixes)
 
 

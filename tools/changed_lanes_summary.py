@@ -3,7 +3,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """One line per changed lane from a `python -m mojolearn verify --json` report.
 
-    python3 tools/changed_lanes_summary.py <report.json> --column cuda --lanes a,b [--out summary.txt]
+    python3 tools/changed_lanes_summary.py <report.json> --column cuda --lanes a,b [--side gpu] [--out summary.txt]
+
+A v2 report (2026-11-24) holds both sides of each lane, device="cpu" and
+device="gpu", from one process; --side picks the side the column is (cpu for
+the cpu column, gpu for a vendor column) and each lane's state is read from
+that side's cells. A v1 report, or no --side, reads the lane's accounting.
 
 Prints, for every lane asked about,
 
@@ -28,14 +33,35 @@ def _short(value):
     return str(value)[:12] if value is not None else "-"
 
 
-def summarize(report, column, lanes):
-    """The lines for `lanes` (a list) from a parsed verify --json report."""
+def side_state(cells):
+    """One side's lane state from its cells: DIVERGENT over REFUSED over OWED,
+    N/A when every cell is N/A (a missing side, named), else VERIFIED."""
+    states = {c.get("state") for c in cells}
+    for state in ("DIVERGENT", "REFUSED", "OWED"):
+        if state in states:
+            return state
+    if states == {"N/A"}:
+        return "N/A"
+    return "VERIFIED" if states <= {"IDENTICAL", "N/A"} else "/".join(sorted(map(str, states)))
+
+
+def summarize(report, column, lanes, side=None):
+    """The lines for `lanes` (a list) from a parsed verify --json report;
+    `side` ("cpu" or "gpu") reads only that side's cells of a v2 report."""
     accounting = ((report.get("lane_accounting") or {}).get("lanes")) or {}
     cells = report.get("cells") or []
+    sided = side is not None and any("side" in c for c in cells)
+    if sided:
+        cells = [c for c in cells if c.get("side") == side]
     counts = {"VERIFIED": 0, "DIVERGENT": 0, "NO-REFERENCE": 0, "OTHER": 0}
     lines = []
     for lane in lanes:
         entry = accounting.get(lane)
+        if sided:
+            mine = [c for c in cells if c.get("lane") == lane]
+            entry = dict(state=side_state(mine)) if mine else None
+            if entry and entry["state"] == "N/A":
+                entry["reason"] = next((str(c.get("value")) for c in mine if c.get("value")), "")
         state = (entry or {}).get("state") or "NOT IN REPORT"
         word = STATE_WORD.get(state, state).replace(" ", "-")
         line = f"CHANGED-LANE column={column} lane={lane} state={word}"
@@ -61,6 +87,8 @@ def main(argv=None):
     ap.add_argument("report")
     ap.add_argument("--column", required=True)
     ap.add_argument("--lanes", required=True, help="comma separated")
+    ap.add_argument("--side", choices=("cpu", "gpu"), default=None,
+                    help="the side of a v2 report this column is (cpu column: cpu, vendor column: gpu)")
     ap.add_argument("--out", default="", help="also append the lines here")
     a = ap.parse_args(argv)
     lanes = [x for x in a.lanes.split(",") if x]
@@ -71,7 +99,7 @@ def main(argv=None):
         lines = [f"CHANGED-LANES column={a.column} lanes={len(lanes)} REPORT-UNREADABLE ({exc})"]
         rc = 2
     else:
-        lines, rc = summarize(report, a.column, lanes), 0
+        lines, rc = summarize(report, a.column, lanes, a.side), 0
     print("\n".join(lines))
     if a.out:
         with open(a.out, "a") as fh:

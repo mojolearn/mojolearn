@@ -725,10 +725,11 @@ def test_not_applicable_has_exactly_two_derivations_and_both_are_structural():
 
       * an inapplicable PREFIX (`par-`), a rule over lane names that requires
         a written sentence `tools/lane_accounting.py` will not let be missing;
-      * the `no cpu route` reason, which is checked against
-        `identity_break.GPU_ONLY_LANES` -- the list the harness itself uses to
-        drop a lane from a CPU column -- so it cannot be claimed for a lane
-        that merely lacks a CPU column so far.
+      * the `no cpu route` reason, which is checked against the harness's
+        own one-sided declarations (`_one_sided(lane, missing="cpu")`,
+        registry ONE_SIDED; GPU_ONLY_LANES before 2026-11-24) -- what makes
+        a CPU column read the lane n/a by name -- so it cannot be claimed for
+        a lane that merely lacks a CPU column so far.
 
     Every other reason string, including ones that do not exist, leaves the
     lane in a gating state. That is asserted below by trying them."""
@@ -738,7 +739,7 @@ def test_not_applicable_has_exactly_two_derivations_and_both_are_structural():
     exposure = surface.lane_exposure(lanes)
     inapplicable = [l for l, r in exposure.items() if r["status"] == surface.LANE_NOT_APPLICABLE]
     assert inapplicable, "the state exists, so something must reach it"
-    gpu_only = set(getattr(harness, "GPU_ONLY_LANES", ()) or ())
+    gpu_only = {l for l in lanes if (harness.one_sided(l) or ("",))[0] == "cpu"}
     for lane in inapplicable:
         assert lane.startswith(surface.PUBLIC_INAPPLICABLE_PREFIXES) or lane in gpu_only, (
             f"{lane} reached the non-gating state by neither route")

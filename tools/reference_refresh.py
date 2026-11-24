@@ -127,7 +127,7 @@ def parse_selection(text):
         reused, record, bad, total = map(int, m.groups()[:4])
         out = dict(record=record, reused=reused, known_bad=bad, total=total)
         if m.group(5) is not None:
-            out["not_applicable"] = int(m.group(5))   # declared no-route lanes (GPU_ONLY_LANES on cpu)
+            out["not_applicable"] = int(m.group(5))   # declared one-sided lanes (ONE_SIDED: no side on this class)
         return out
     m = re.search(r"CHANGED-LANES (\d+) of (\d+)", text)
     if m:

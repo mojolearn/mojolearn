@@ -31,6 +31,19 @@ class Summary(unittest.TestCase):
         self.assertIn("state=NOT-IN-REPORT", lines[3])
         self.assertEqual(lines[4], "CHANGED-LANES column=cuda lanes=4 VERIFIED=1 DIVERGENT=1 NO-REFERENCE=1 OTHER=1")
 
+    def test_a_v2_report_gives_each_side_its_own_lines(self):
+        cell = lambda lane, side, state, value="v": dict(lane=lane, fixture="base", part="train", side=side,  # noqa
+                                                         state=state, value=value, reference="r")
+        report = dict(lane_accounting=dict(lanes={"ols": dict(state="DIVERGENT"), "gpu1": dict(state="VERIFIED")}),
+                      cells=[cell("ols", "gpu", "IDENTICAL"), cell("ols", "cpu", "DIVERGENT", "x" * 16),
+                             cell("gpu1", "gpu", "IDENTICAL"),
+                             cell("gpu1", "cpu", "N/A", "n/a:one-sided: no CPU implementation: resident")])
+        gpu = changed_lanes_summary.summarize(report, "cuda", ["ols", "gpu1"], side="gpu")
+        cpu = changed_lanes_summary.summarize(report, "cpu", ["ols", "gpu1"], side="cpu")
+        self.assertEqual(gpu[0], "CHANGED-LANE column=cuda lane=ols state=VERIFIED")
+        self.assertIn("state=DIVERGENT cell=base/train got=xxxxxxxxxxxx", cpu[0])
+        self.assertIn("state=N/A (n/a:one-sided: no CPU implementation", cpu[1])
+
     def test_an_unreadable_report_is_never_a_pass(self):
         with tempfile.TemporaryDirectory() as d:
             bad = pathlib.Path(d) / "r.json"
