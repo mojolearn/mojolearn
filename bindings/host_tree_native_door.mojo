@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Whole-operation CPU tree inference: native input admission, saved-state
 # validation, buffer ownership, kernel calls and completed output publication.
+from providers.python.function_device_boundary_door import function_device_admit
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.py_cpython_table import cpython_table
@@ -598,6 +599,12 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
         host_tree_initialize_forest(model, args, context)
         return PythonObject(None)
     if operation == "host_tree_init_gbdt":
+        # HostGBDT(..., device): the public constructor's tenth item (lane
+        # vdf-misc), admitted in the shared words before the model changes.
+        # Host by name: "gpu" is refused naming the class; None and "cpu" run
+        # today's host route. The restore paths pass nine items or fewer.
+        if len(args) > 9 and args[9] is not None:
+            _ = function_device_admit(args[9], "HostGBDT", False, True, context, native_loaded_module("builtins"))
         host_tree_initialize_gbdt(model, args, context)
         return PythonObject(None)
     if operation == "host_tree_parse" or operation == "host_tree_ctr_dim":
