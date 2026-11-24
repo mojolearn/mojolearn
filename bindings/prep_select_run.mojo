@@ -30,18 +30,19 @@ Mutual information, in the door's order:
 
 RFE, per elimination round (serial by nature: a round's block is chosen from
 the previous round's importances):
-  1. With a native member (core/member_abi.mojo): `rfe_member_importances`
+  1. Over the native member (core/member_abi.mojo): `rfe_member_importances`
      fits a new state on the round's block and exports its importance block
      as native words (the caller holds the state's call and frees it).
-     Without one, the door reads the estimator's own attribute.
+     (Lane mf-rfe7: every RFE fit runs over a member; the door's rounds over
+     the estimator's own attribute reads are deleted.)
   2. `rfe_round_stage`: the importance keys (squared and summed over rows
      for a coefficient block), c2_rfe_step on the support, c2_rfe_rank, then
      the next block (`rfe_block_stage`: c2_rfe_keep and gather_cols).
 `rfe_first_stage` stages the first block from the all-ones support,
 `rfe_select_count` / `rfe_step_count` resolve n_features_to_select and step,
-`rfe_member_fit` is the final fit over a native member. `rfe_member_source` picks a member kind's importance
-block for the getter, or the refusal of a naive Bayes / discriminant / Gbdt kind with neither (lanes
-mf-shaprfe, mf-gbdt5). Since lane mf-gbdt5 every member fit also takes the fit's extra inputs
+`rfe_member_fit` is the final fit over a native member. `rfe_member_source` / `rfe_member_source_named` pick a
+member kind's importance block for the getter (`rfe_named_block`: a named feature-wide attribute), or the
+refusal of a kind with none (lanes mf-shaprfe, mf-gbdt5, mf-rfe7). Since lane mf-gbdt5 every member fit also takes the fit's extra inputs
 (core/member_set_run.mojo `MemberFitExtras`: RFE's fit parameters as the estimator's fit door admits them, a
 held-out X restricted to the round's columns, the round's column ids at `columns`).
 """
@@ -56,11 +57,10 @@ from bindings.arena_prog_run import _switch
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_own,
     MEMBER_OP_FIT, MEMBER_OP_EXPORT, MEMBER_F32,
-    MEMBER_CAN_COEF, MEMBER_CAN_IMPORTANCES, MEMBER_BLOCK_COEF, MEMBER_BLOCK_FEATURE_IMPORTANCES,
+    MEMBER_CAN_COEF, MEMBER_CAN_IMPORTANCES, MEMBER_CAN_CLASSIFIER, MEMBER_BLOCK_COEF,
+    MEMBER_BLOCK_FEATURE_IMPORTANCES, MEMBER_BLOCK_FAMILY,
 )
-from core.member_families import (
-    MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_GBDT, MEMBER_FAMILY_XNEIGHBORS,
-)
+from core.member_families import MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_KERNEL_SVM
 from core.member_notices import member_notices_take
 from core.member_set_run import MemberFitExtras, member_fit_extras_apply, member_fit_extras_clear
 
@@ -386,33 +386,30 @@ def rfe_first_stage(mut prog: ClsProgram, x_words: Int, n: Int, d: Int) -> RfeBl
 
 @fieldwise_init
 struct RfeKeys(ImplicitlyCopyable, Movable):
-    """One round's importances. `squared`: a coefficient block of `rows`
-    rows of `m` float32 words, squared and summed over its rows; else m
-    scores of c2_key64 kind `kind` (0 float32, 1 int32, 3 int64, 4 float64;
-    `m * (1 or 2)` words). The words travel beside it: empty, they are a
-    caller buffer (the next record); else they are the program's own words."""
+    """One round's importances, the float32 words a member's EXPORT gave (they travel beside it as the
+    program's own words). `squared`: a coefficient block of `rows` rows of `m` words, squared and summed
+    over its rows; else m float32 scores (c2_key64 kind 0).
+    REMOVED (lane mf-rfe7, with the door's rounds): the `kind` word (int32 / int64 / float64 scores of the
+    estimator's own attribute, `_score_words`) and the caller-buffer form of the words (`_keys_of`'s owned
+    buffer); every round now reads a member's float32 block."""
     var m: Int
     var rows: Int
     var squared: Bool
-    var kind: Int
 
 
 def _rfe_key_words(mut prog: ClsProgram, var words: List[Float32], count: Int) -> Int:
-    if len(words) == 0:
-        return _cls_buffer(prog, count)
+    # The round's importance words as the program's own constant input (`count` of them).
     prog.consts_f.append(words^)
     return prog.input(count, CLS_IN_CONST_F, len(prog.consts_f) - 1, False)
 
 
 def rfe_keys_stage(mut prog: ClsProgram, keys: RfeKeys, var words: List[Float32]) -> Int:
-    """`_keys_of`: the ordered keys (c2_key64) of m column importances.
-    Returns the keys' offset."""
+    """The ordered keys (c2_key64) of m column importances. Returns the keys' offset."""
     var m = keys.m
     var key = prog.work(2 * m)
     if not keys.squared:
-        var per = 1 if keys.kind <= 1 else 2
-        var wo = _rfe_key_words(prog, words^, m * per)
-        _cls_stage(prog, SEL_OP_C2_KEY64, m, wo, keys.kind, key)
+        var wo = _rfe_key_words(prog, words^, m)
+        _cls_stage(prog, SEL_OP_C2_KEY64, m, wo, 0, key)
         return key
     var summed = prog.work(m)
     var co = _rfe_key_words(prog, words^, keys.rows * m)
@@ -432,12 +429,10 @@ struct RfeRoundStaged(ImplicitlyCopyable, Movable):
 
 def rfe_round_stage(mut prog: ClsProgram, keys: RfeKeys, var words: List[Float32], x_words: Int, n: Int, d: Int, nsup: Int,
                     drop: Int, k: Int) -> RfeRoundStaged:
-    """One elimination round: the importance keys, c2_rfe_step dropping
-    `drop` of the `nsup` supported columns from the support mask,
-    c2_rfe_rank, then the next (n, k) block. Caller buffers, in record
-    order: the importance words (when `words` is empty), the d support
-    words (in-out), the d ranking words (in-out), the nsup int32 column ids,
-    X."""
+    """One elimination round: the importance keys (`words`, the program's own), c2_rfe_step dropping
+    `drop` of the `nsup` supported columns from the support mask, c2_rfe_rank, then the next (n, k)
+    block. Caller buffers, in record order: the d support words (in-out), the d ranking words (in-out),
+    the nsup int32 column ids, X."""
     var key = rfe_keys_stage(prog, keys, words^)
     var sup = _cls_buffer(prog, d, True)
     var rk = _cls_buffer(prog, d, True)
@@ -471,30 +466,85 @@ def rfe_member_source(family: Int, mask: Int, getter: String, estimator: String)
     """The importance block of a member KIND (`mask`: its kind-exact capabilities) for importance_getter
     `getter` ('auto', 'coef_' or 'feature_importances_'): 'auto' takes MEMBER_BLOCK_COEF (squared) when the
     kind exports it, else MEMBER_BLOCK_FEATURE_IMPORTANCES as given; a named attribute takes that block, squared,
-    as the attribute path squares it. A kind of the naive Bayes or discriminant family with neither block
-    (QuadraticDiscriminantAnalysis, GaussianNB, MultinomialNB, BernoulliNB, ComplementNB, CategoricalNB: neither attribute
-    exists on them, as in scikit-learn) is REFUSED (lane mf-shaprfe): 'auto' in the door's words, a named
-    attribute in scikit-learn's attrgetter's (`estimator` the class name). A Gbdt kind exports
-    MEMBER_BLOCK_FEATURE_IMPORTANCES since lane mf-imp6 (its `feature_importances_`, computed at FIT), so 'auto'
-    and 'feature_importances_' take that block and only 'coef_' is refused, in attrgetter's words (scikit-learn's
-    gradient boosting has no coef_). Since lane mf-meta5b every XNeighbors
-    kind (the k-NN estimators, LabelPropagation and LabelSpreading: neither attribute exists on them in
-    scikit-learn, and the door's attribute reads answer None, so its first round raised the same words after
-    its fit). The caller raises the refusal only when an
-    elimination round reads importances (scikit-learn reads none when n_features_to_select keeps every column).
-    Any other kind without the block keeps the estimator's own doors (block 0)."""
+    as the attribute path squares it. A kind with neither block is REFUSED, and the caller raises the words
+    only when an elimination round reads importances (scikit-learn reads none when n_features_to_select keeps
+    every column): 'auto' in the door's words (RFE_NO_IMPORTANCES: neither attribute exists on the fitted
+    estimator, scikit-learn's `_get_feature_importances` raises there too), a named attribute in scikit-learn's
+    attrgetter's (`estimator` the class name). The kernel SVM kinds (SVC, SVR) export MEMBER_BLOCK_COEF only
+    with kernel='linear' (lane mf-rfe7); any other kernel answers 'auto' and 'coef_' in the SVM coef_
+    operation's words (bindings/svc_kernel_query_unpack.mojo `svc_coef_unpack`, as the door's attribute read
+    raised them; scikit-learn's `coef_` property raises an AttributeError there too).
+    History: lane mf-shaprfe refused the naive Bayes and discriminant kinds, mf-meta5b the XNeighbors kinds,
+    mf-imp6 gave the Gbdt kinds their importance block. Lane mf-rfe7: every other kind without either block
+    is refused in the same words (block 0 with no words, which kept the estimator's own doors, is gone with
+    them: the doors' attribute reads found neither attribute on those kinds either)."""
     var auto = getter == "auto"
     if getter != "feature_importances_" and (mask & MEMBER_CAN_COEF) != 0:
         return RfeSource(MEMBER_BLOCK_COEF, True, String(""))
     if getter != "coef_" and (mask & MEMBER_CAN_IMPORTANCES) != 0:
         return RfeSource(MEMBER_BLOCK_FEATURE_IMPORTANCES, not auto, String(""))
-    if family == MEMBER_FAMILY_GBDT and getter == "coef_":
-        return RfeSource(0, False, "AttributeError: '" + estimator + "' object has no attribute 'coef_'")
-    if family == MEMBER_FAMILY_NAIVE_BAYES or family == MEMBER_FAMILY_DISCRIMINANT or family == MEMBER_FAMILY_XNEIGHBORS:
-        if auto:
-            return RfeSource(0, False, String(RFE_NO_IMPORTANCES))
-        return RfeSource(0, False, "AttributeError: '" + estimator + "' object has no attribute '" + getter + "'")
-    return RfeSource(0, False, String(""))
+    if family == MEMBER_FAMILY_KERNEL_SVM and getter != "feature_importances_":
+        var svm = String("SVC") if (mask & MEMBER_CAN_CLASSIFIER) != 0 else String("SVR")
+        return RfeSource(0, False, "AttributeError: mojolearn " + svm + ": coef_ is only available for kernel='linear'")
+    if auto:
+        return RfeSource(0, False, String(RFE_NO_IMPORTANCES))
+    return RfeSource(0, False, "AttributeError: '" + estimator + "' object has no attribute '" + getter + "'")
+
+
+# A fitted attribute named by importance_getter that a member exports as one float32 block of feature columns
+# (lane mf-rfe7): the family's own block names, mirrored here so this RUN imports no member module
+# (core/naive_bayes_member.mojo NB_BLOCK_*, NB_KIND_*; core/discriminant_member.mojo DA_BLOCK_*, DA_KIND_*).
+comptime _NB_KIND_GAUSSIAN = 0
+comptime _NB_KIND_CATEGORICAL = 4
+comptime _NB_BLOCK_THETA = MEMBER_BLOCK_FAMILY
+comptime _NB_BLOCK_VAR = MEMBER_BLOCK_FAMILY + 1
+comptime _NB_BLOCK_LOG_PROB = MEMBER_BLOCK_FAMILY + 6
+comptime _NB_BLOCK_FEATURE_COUNT = MEMBER_BLOCK_FAMILY + 8
+comptime _DA_KIND_LDA = 0
+comptime _DA_BLOCK_MEANS = MEMBER_BLOCK_FAMILY
+comptime _DA_BLOCK_XBAR = MEMBER_BLOCK_FAMILY + 2
+
+
+def rfe_named_block(family: Int, kind: Int, name: String) -> Int:
+    """The member block a kind exports under the public attribute `name` when that attribute is one float32
+    (rows x features) array its PACK writes from the block verbatim (0: none). GaussianNB theta_ / var_;
+    MultinomialNB, BernoulliNB, ComplementNB feature_log_prob_ / feature_count_ (CategoricalNB's are lists of
+    arrays in scikit-learn: none); LinearDiscriminantAnalysis and QuadraticDiscriminantAnalysis means_, LDA
+    xbar_. scikit-learn's RFE reads any attribute by name (attrgetter, then squared and summed over rows);
+    these are the feature-wide ones the members export. Every other name is refused in attrgetter's words
+    (`rfe_member_source_named`)."""
+    if family == MEMBER_FAMILY_NAIVE_BAYES:
+        if kind == _NB_KIND_GAUSSIAN:
+            if name == "theta_":
+                return _NB_BLOCK_THETA
+            if name == "var_":
+                return _NB_BLOCK_VAR
+            return 0
+        if kind == _NB_KIND_CATEGORICAL:
+            return 0
+        if name == "feature_log_prob_":
+            return _NB_BLOCK_LOG_PROB
+        if name == "feature_count_":
+            return _NB_BLOCK_FEATURE_COUNT
+        return 0
+    if family == MEMBER_FAMILY_DISCRIMINANT:
+        if name == "means_":
+            return _DA_BLOCK_MEANS
+        if kind == _DA_KIND_LDA and name == "xbar_":
+            return _DA_BLOCK_XBAR
+    return 0
+
+
+def rfe_member_source_named(family: Int, kind: Int, mask: Int, getter: String, estimator: String) -> RfeSource:
+    """`rfe_member_source` for any importance_getter attribute name (lane mf-rfe7): 'auto', 'coef_' and
+    'feature_importances_' as there; any other name the block `rfe_named_block` gives it (squared, as the
+    attribute path squares it), else scikit-learn's attrgetter words, raised before the first round fits."""
+    if getter == "auto" or getter == "coef_" or getter == "feature_importances_":
+        return rfe_member_source(family, mask, getter, estimator)
+    var block = rfe_named_block(family, kind, getter)
+    if block != 0:
+        return RfeSource(block, True, String(""))
+    return RfeSource(0, False, "AttributeError: '" + estimator + "' object has no attribute '" + getter + "'")
 
 
 def rfe_member_fit(plan: MemberPlan, mut call: MemberCall, x: Int, n: Int, k: Int, y: Int, y_dtype: Int,
@@ -750,7 +800,7 @@ def rfe_fit_run(plan: RfeFitPlan) raises -> RfeFitResult:
         _ = len(block)  # read through the member's fit above
         if len(notices) > 0:
             result.notices.append(notices^)
-        var keys = RfeKeys(nsup, rows, plan.squared, 0)
+        var keys = RfeKeys(nsup, rows, plan.squared)
         var program = ClsProgram(plan.work_on)
         var staged = rfe_round_stage(program, keys, words^, x_words, n, d, nsup, drop, k)
         # Caller buffers in record order (the door's `pr.own` order): support, ranking, the round's

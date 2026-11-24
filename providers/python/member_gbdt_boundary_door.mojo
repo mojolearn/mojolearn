@@ -622,8 +622,9 @@ def gbdt_member_fit_params(model: PythonObject, plan: MemberPlan, fit_params: Py
             pair = _adapter_eval(eval_set)
             if kind == 0:
                 # More than two classes was refused at the caller's encode (`gbdt_member_label_check`, the
-                # door's order: before these eval_set checks).
-                if labels is None or len(labels) != 2:
+                # door's order: before these eval_set checks). One class (lane mf-rfe7: RFE's door no longer
+                # falls back to the fit door) is coded as two are; the member's fit decides it, in its words.
+                if labels is None:
                     return got^
                 var scope = labels_scope(model, run)
                 var train = trees_encode_labels(y, scope)

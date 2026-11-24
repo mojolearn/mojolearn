@@ -21,11 +21,11 @@ Cases (one row each, run across the host cores by `check_cases`):
     `extras.rows` rows.
   3 the importance source of a Gbdt kind (`rfe_member_source`, MEMBER_FAMILY_GBDT; lane mf-imp6: the kind
     carries MEMBER_CAN_IMPORTANCES): 'auto' takes MEMBER_BLOCK_FEATURE_IMPORTANCES as given, the named
-    'feature_importances_' that block squared, 'coef_' scikit-learn's attrgetter words with the class name; a
-    Gbdt mask without the bit no longer answers RFE_NO_IMPORTANCES; a kind of another family with neither block
-    keeps the estimator's own doors (block 0, no words). Fail-proof: drop the `family == MEMBER_FAMILY_GBDT and
-    getter == "coef_"` test in `rfe_member_source` (coef_ gets no words), or put MEMBER_FAMILY_GBDT back in the
-    no-importance family test ('bare gbdt' gets RFE_NO_IMPORTANCES).
+    'feature_importances_' that block squared, 'coef_' scikit-learn's attrgetter words with the class name;
+    lane mf-rfe7: any kind with neither block (a Gbdt mask without the bit, another family's kind) is refused,
+    'auto' in RFE_NO_IMPORTANCES, a name in attrgetter's words. Fail-proof: make `rfe_member_source` answer
+    RfeSource(0, False, "") after its two block tests ('coef_', 'bare gbdt' and 'another family' lose their
+    words), or test `getter == "feature_importances_"` before the MEMBER_CAN_IMPORTANCES test ('auto' reads coef).
 The end-to-end fits (RFE's final fit over a Gbdt member with eval_set, weights, group_id and pairs against the
 estimator's own fit on the same columns) need the gbdt image, so they are Python tests
 (python/mojolearn/tests/test_rfe_gbdt_fit_params.py).
@@ -199,11 +199,15 @@ def check_gbdt_refusal() raises:
     var named = rfe_member_source(MEMBER_FAMILY_GBDT, mask, "feature_importances_", "GradientBoostingClassifier")
     require(named.block == MEMBER_BLOCK_FEATURE_IMPORTANCES and named.squared and named.refusal.byte_length() == 0,
             "feature_importances_: " + named.refusal)
-    # RFE_NO_IMPORTANCES is no longer a Gbdt answer: a Gbdt mask without the bit keeps its doors
+    # Lane mf-rfe7: a kind with neither block is refused in every family (the estimator's own doors, which
+    # kept such a kind before, are deleted): 'auto' in the door's words, a name in attrgetter's.
     var bare = rfe_member_source(MEMBER_FAMILY_GBDT, MEMBER_CAN_FIT | MEMBER_CAN_EXPORT, "auto", "GradientBoosting")
-    require(bare.block == 0 and bare.refusal != String(RFE_NO_IMPORTANCES), "bare gbdt: " + bare.refusal)
-    var other = rfe_member_source(MEMBER_FAMILY_LINEAR, MEMBER_CAN_FIT | MEMBER_CAN_EXPORT, "auto", "")
-    require(other.block == 0 and other.refusal.byte_length() == 0, "another family keeps its doors")
+    require(bare.block == 0 and bare.refusal == String(RFE_NO_IMPORTANCES), "bare gbdt: " + bare.refusal)
+    var other = rfe_member_source(MEMBER_FAMILY_LINEAR, MEMBER_CAN_FIT | MEMBER_CAN_EXPORT, "feature_importances_",
+                                  "KernelRidge")
+    require(other.block == 0
+            and other.refusal == "AttributeError: 'KernelRidge' object has no attribute 'feature_importances_'",
+            "another family without the block: " + other.refusal)
 
 
 def test_mf_gbdt5_rfe_extras() raises:

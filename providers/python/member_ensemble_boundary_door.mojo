@@ -207,8 +207,8 @@ def _rfe(kind: Int) -> Bool:
 
 def _rfe_dotted(getter: String) -> Bool:
     """An RFE importance_getter that is an attribute path over its estimator (lane mf-del5b), not one of
-    the leaf getters `rfe_base_admit` reads."""
-    return getter != "auto" and getter != "coef_" and getter != "feature_importances_"
+    the leaf getters `rfe_base_admit` reads (lane mf-rfe7: any plain attribute name is a leaf getter)."""
+    return getter.find(".") >= 0
 
 
 def _search(kind: Int) -> Bool:
