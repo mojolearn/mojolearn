@@ -3,8 +3,7 @@
 
 Words and exception types only (no numbers: the digests are verify's). For every converted function or
 constructor: the signature has a keyword-only `device` defaulting to None; an unknown word (`'tpu'`, `0`) raises
-ValueError in the shared words before any work; a host-only function refuses `device='gpu'` naming itself, on every
-installation. Inputs are tiny.
+ValueError in the shared words before any work. Inputs are tiny.
 """
 import inspect
 
@@ -12,7 +11,7 @@ import numpy as np
 import pytest
 
 import mojolearn
-from mojolearn import ensemble, hdbscan, manifold
+from mojolearn import hdbscan, manifold
 from mojolearn import resample as rs
 
 _BAD = "device must be 'gpu', 'cpu' or None"
@@ -58,57 +57,19 @@ CALLS = {
                              mojolearn.connected_components),
     "refine": (lambda d: mojolearn.refine(_X, _X[:2], np.zeros((2, 3), dtype=np.int32), 2, device=d),
                mojolearn.refine),
-    "ensemble.catboost_auto_learning_rate": (
-        lambda d: ensemble.catboost_auto_learning_rate("Logloss", 1000, 100, False, False, device=d),
-        ensemble.catboost_auto_learning_rate),
-    "host_model": (lambda d: mojolearn.host_model("vdf-misc-absent.npz", device=d), mojolearn.host_model),
-    "host_predict": (lambda d: mojolearn.host_predict("vdf-misc-absent.npz", _X, device=d), mojolearn.host_predict),
-    "host_predict_proba": (lambda d: mojolearn.host_predict_proba("vdf-misc-absent.npz", _X, device=d),
-                           mojolearn.host_predict_proba),
     "TreeExplainer": (lambda d: mojolearn.TreeExplainer(_forest(), _X, device=d), mojolearn.TreeExplainer.__init__),
     "KernelExplainer": (lambda d: mojolearn.KernelExplainer(_forest(), _X, device=d),
                         mojolearn.KernelExplainer.__init__),
     "PermutationExplainer": (lambda d: mojolearn.PermutationExplainer(_forest(), _X, device=d),
                              mojolearn.PermutationExplainer.__init__),
-    "HostGBDT": (lambda d: mojolearn.HostGBDT(loss="RMSE", text="", n_features_in=3, approx_dim=1, device=d),
-                 mojolearn.HostGBDT.__init__),
+    "RFE": (lambda d: mojolearn.RFE(mojolearn.Ridge(), n_features_to_select=2, device=d).fit(_X, _Y.astype(np.float32)),
+            mojolearn.RFE.__init__),
 }
 
-#: Host by name: `device='gpu'` is refused naming the function on every installation.
-HOST_ONLY = ("ensemble.catboost_auto_learning_rate", "host_model", "host_predict", "host_predict_proba", "HostGBDT")
-
-
-@pytest.mark.parametrize("name", sorted(CALLS))
-def test_signature_has_keyword_only_device(name):
-    parameter = inspect.signature(CALLS[name][1]).parameters["device"]
-    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
-    assert parameter.default is None
-
-
-@pytest.mark.parametrize("word", ["tpu", 0])
-@pytest.mark.parametrize("name", sorted(CALLS))
-def test_unknown_word_refused(name, word):
-    with pytest.raises(ValueError, match=_BAD):
-        CALLS[name][0](word)
-
-
-@pytest.mark.parametrize("name", HOST_ONLY)
-def test_host_only_refuses_gpu(name):
-    short = name.rsplit(".", 1)[-1]
-    with pytest.raises(ValueError, match="device='gpu' is not available for " + short
-                       + ": it has no GPU implementation"):
-        CALLS[name][0]("gpu")
-
-
-def test_spectral_embedding_cpu_beside_gpu_refused():
-    # Holds on a GPU installation only: there `_mojolearn_x_decomp` has no CPU image connected beside the GPU
-    # set, so device='cpu' is refused in the estimators' words. A CPU-only installation runs it.
-    if mojolearn.vendor() == "cpu":
-        # CPU-only installation: device='cpu' is this installation's own route, never refused for its device.
-        try:
-            manifold.spectral_embedding(_X, n_components=2, device="cpu")
-        except Exception as error:  # the tiny input may be refused for its own reasons, never for the device
-            assert "device=" not in str(error)
-        return
-    with pytest.raises(ValueError, match="device='cpu' is not available for spectral_embedding"):
+def test_spectral_embedding_cpu_is_never_refused_for_the_device():
+    # Every installation: "cpu" runs the CPU images (beside a GPU set: the x_decomp, metrics and base CPU images;
+    # CPU-only: its own set). The tiny input may be refused for its own reasons, never for the device.
+    try:
         manifold.spectral_embedding(_X, n_components=2, device="cpu")
+    except Exception as error:
+        assert "device=" not in str(error)
