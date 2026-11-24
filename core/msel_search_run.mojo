@@ -1893,6 +1893,11 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                     var dt = out_dtypes[((u0 + t // sides) // used) * nops + o]
                     scored.ids = (not classifier and scored.op == MEMBER_OP_PREDICT
                                   and (dt == MEMBER_I32 or dt == MEMBER_I64))
+                    # lane w3f2-cal: THE GIVEN y and the side's rows, read only
+                    # for y_true's printed words in a refusal (three words)
+                    scored.given = plan.given
+                    scored.given_dtype = plan.given_dtype
+                    scored.side_rows = side_rows[s]
                     if y_cols > 1:
                         # lane mf-rows8b (rows :3777 / :3779): the side's outputs and,
                         # for a multi-output classifier, its outputs' class counts

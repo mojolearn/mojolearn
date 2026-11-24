@@ -70,7 +70,7 @@ def test_calibrated_over_search_with_metric_row_fits():
     search = ms.GridSearchCV(ml.LogisticRegression(max_iter=50), {'C': [0.5, 1.0]}, cv=2,
                              scoring=ms.make_scorer(metrics.zero_one_loss, greater_is_better=False))
     cal = ml.CalibratedClassifierCV(search, cv=2).fit(X, y)
-    proba = cal.predict_proba(X)
+    proba = np.asarray(cal.predict_proba(X))  # an in-package caller receives the Array (parallel_public_result_door)
     assert proba.shape == (len(X), 3)
     np.testing.assert_allclose(proba.sum(axis=1), 1.0, rtol=1e-5)
 

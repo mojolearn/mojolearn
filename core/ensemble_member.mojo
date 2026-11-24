@@ -1333,6 +1333,13 @@ def _reads_given(slot: _SlotPtr, masks: List[Int]) -> Int:
         return 0
     if (slot[].split.kind != MSEL_SPEC_NONE and msel_spec_stratified(slot[].split.kind)) or _any(masks, MEMBER_READS_Y_GIVEN):
         return MEMBER_READS_Y_GIVEN
+    # lane w3f2-cal: a regressor search's scorers print y_true as it was
+    # given in a refusal (core/msel_scorer_run.mojo `_unknown_label_words`,
+    # `_label_text`): the given y is a view read once at UNPACK, handed on
+    # only to the candidates whose kind reads it (`_add_drawn`), so nothing
+    # else changes.
+    if slot[].kind == META_SEARCH_REGRESSOR:
+        return MEMBER_READS_Y_GIVEN
     return 0
 
 
