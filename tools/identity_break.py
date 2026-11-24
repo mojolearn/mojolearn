@@ -12988,6 +12988,8 @@ def _run_reference(args):
                                 ("cpu", args.cpu_json, getattr(args, "cpu_vendor", None))):
             sided = argparse.Namespace(**vars(args))
             sided.side, sided.json, sided.vendor = one, out, label
+            # a side whose file does not exist yet starts fresh (resume only what was written)
+            sided.resume = bool(getattr(args, "resume", False)) and os.path.isfile(out)
             _FULL_ERRORS.clear()
             codes.append(_run_reference(sided))
         return max(codes)
