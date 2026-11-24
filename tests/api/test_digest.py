@@ -92,10 +92,12 @@ def test_an_in_place_write_into_a_fitted_array_changes_the_next_read():
     stored = model.coef_
     if not (isinstance(stored, np.ndarray) and stored.flags.writeable and np.shares_memory(stored, model.coef_)):
         pytest.skip("coef_ is not handed out as the stored writeable array on this build")
+    original = stored[0].copy()
     stored[0] += np.float32(1.0)
     second = model.digest_
     assert second != first
-    stored[0] -= np.float32(1.0)
+    # The element's own bits put back (float32 (x + 1) - 1 is not x for |x| < 1: the low bits are rounded away).
+    stored[0] = original
     assert model.digest_ == first
 
 
