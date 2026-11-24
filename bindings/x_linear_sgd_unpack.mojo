@@ -15,6 +15,7 @@
 # call before the fit (x_linear/door_run.mojo `xl_class_fit_run`): SGD takes
 # the k class weights as its last float parameters, RidgeClassifier reads
 # the row weights behind its class codes. No native call is made here.
+from x_linear.sgd_loop_words import sgd_result_words
 from bindings.x_linear_common_unpack import XlFit, xl_fit_build, xl_fit_build_x, xl_class_weights_unpack, _xl_scope
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -180,7 +181,7 @@ def _xl_sgd_build(model: PythonObject, entries: XLinearOps, x: AdmittedXView, x_
     ip.append(batch)
     ip.append(1 if batch_sum else 0)
     return xl_fit_build(entries, ALGO_SGD, x.address, n * d, n, d, x_keep, yy.address, yy.rows, yy.array, ip^, fp^,
-                        problems * d + problems + 2, problems * (n + d + 1), problems * n, context)
+                        sgd_result_words(problems, d), problems * (n + d + 1), problems * n, context)
 
 
 def xl_fit_sgd_regressor_unpack(model: PythonObject, fields: PythonObject, args: PythonObject, passive: Bool,
