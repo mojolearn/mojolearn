@@ -221,3 +221,37 @@ def member_fold_take_into(view: MemberMatrix, fold: MemberFoldX, mut store: List
     part.data = Int(store.unsafe_ptr())
     part.rows = fold.rows
     return part
+
+
+def member_fold_column_open(fold: MemberFoldX, view: MemberMatrix, estimator: String) raises -> Int:
+    """The fold's rows of a dense host 4-byte column view of the base (the
+    targets, the float32 weights) taken ON THE DEVICE (lane vdf-scope-linear3,
+    an addition): the view is put into a slot this call owns on the fold's
+    store, its rows `fold.index` are taken into a fresh slot (returned: the
+    entry reads it through `fold_x_word`, the caller frees it with
+    `member_fold_slot_free` after the entry returned) and the own slot is
+    freed (`take_rows` waited for the store's context). The view carries no
+    pin of its own, so it is never published in the scope's cache: the
+    whole column (n words, a fraction of X's n x d) crosses once per
+    operation, the host gather of the fold's rows is gone."""
+    if view.element_bytes() != 4 or not view.dense_host(view.dtype):
+        raise Error("TypeError: a " + estimator + " member takes a dense host 4-byte column on the device")
+    var source: List[Int] = [view.data]
+    var counts: List[Int] = [view.rows * view.cols]
+    var own = xp_transport_call(fold.store, ARENA_STORE_PUT, source, counts)
+    var slot = -1
+    var failure = String("")
+    try:
+        slot = arena_store_take_rows(fold.store, own, view.cols, fold.index, fold.rows)
+    except error:
+        failure = String(error)
+    arena_cache_free(fold.store, own)
+    if failure.byte_length() > 0:
+        raise Error(failure)
+    return slot
+
+
+def member_fold_slot_free(fold: MemberFoldX, slot: Int) raises:
+    """Free a slot `member_fold_column_open` returned (no-op for -1)."""
+    if slot >= 0:
+        arena_cache_free(fold.store, slot)
