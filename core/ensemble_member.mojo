@@ -4241,8 +4241,14 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
     var y_dtype = MEMBER_I32 if _classifier_kind(slot[].kind) else MEMBER_F32
     # THE 2-D y (lane mf-search4): a multi-output kind, or a search whose
     # every candidate is one, reads rows x outputs.
+    # LANE w3f5-b: a search over pure transformers (every candidate
+    # transforms and none predicts: its scorers read transform(X) against
+    # y, e.g. a reconstruction error with y = X) reads its 2-D y for the
+    # scorers only, as scikit-learn's search hands y to the scorer.
     var two_d = _multi_kind(slot[].kind) or (_search_kind(slot[].kind)
-                                              and _all(slot[].base_masks, MEMBER_CAN_MULTI_OUTPUT))
+                                              and (_all(slot[].base_masks, MEMBER_CAN_MULTI_OUTPUT)
+                                                   or (_all(slot[].base_masks, MEMBER_CAN_TRANSFORM)
+                                                       and not _any(slot[].base_masks, MEMBER_CAN_PREDICT))))
     # A SEARCH WITHOUT A TARGET (lane mf-msel5b): an unsupervised base fitted
     # with y=None hands no y (the search RUN's target-free words).
     var y_free = (_search_kind(slot[].kind) and not _classifier_kind(slot[].kind) and call[].y.rows == 0

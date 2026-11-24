@@ -122,7 +122,7 @@ from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, MemberRef, member_call, member_call_of, member_outputs_of, member_free, member_own,
     MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_OP_SCORE, MEMBER_OP_PREDICT, member_output_dtype,
     MEMBER_CAN_TEST_ROWS, MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_CAN_ROW_INDEX,
-    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle, MEMBER_OP_DECISION, MEMBER_READS_Y_GIVEN,
+    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle, MEMBER_OP_DECISION, MEMBER_READS_Y_GIVEN, MEMBER_OP_TRANSFORM,
     MEMBER_OP_PREDICT_PROBA, member_outputs, MEMBER_CAN_PREDICT,
 )
 from core.member_class_weight import member_cw_subset
@@ -1248,7 +1248,10 @@ def _multi_output_scorers(codes: List[Int], plan: MselSearchPlan, multi_cls: Boo
             return False
         var row = msel_scorer_row(codes[j], plan.options[j] if j < len(plan.options) else MselScorerOptions(),
                                   Int(plan.selections.unsafe_ptr()))
-        if row.op != MEMBER_OP_PREDICT and not (multi_cls and row.op == MEMBER_OP_PREDICT_PROBA):
+        # LANE w3f5-b: a regression row over a transformer's transform(X)
+        # block reads the outputs as a multi-output regressor's predict
+        if (row.op != MEMBER_OP_PREDICT and not (multi_cls and row.op == MEMBER_OP_PREDICT_PROBA)
+                and not (row.op == MEMBER_OP_TRANSFORM and msel_scorer_regression(row))):
             return False
     return True
 

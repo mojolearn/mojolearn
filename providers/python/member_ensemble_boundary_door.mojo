@@ -152,7 +152,7 @@ from core.member_abi import MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP
 from bindings.msel_common_door import msel_f64_block, msel_i64_list, msel_index_i64, msel_p64, msel_addr
 from bindings.classical_labels_door import labels_decode_labels
 from bindings.family_common_pack import family_array
-from core.member_abi import MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION
+from core.member_abi import MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_OP_TRANSFORM, MEMBER_CAN_TRANSFORM
 from core.msel_scorer_run import (
     msel_scorer_code, msel_scorer_row, msel_scorer_regression, msel_scorer_positive, msel_scorer_positive_kind,
     msel_scorer_metric_code, SCORER_POSITIVE_LABEL_ONE, SCORER_POSITIVE_MARKS, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND,
@@ -3889,6 +3889,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var needs = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT
     if classifier:
         needs |= MEMBER_CAN_CLASSIFIER
+    var transform_rows = 0  # LANE w3f5-b: scorers whose response is the member's transform
     var own_score = -1  # scoring None: `_own_score`'s answer (lane mf-rows8c); -1 a scorer or a cv tool's response
     var own_row = False  # lane w3f3-c: the one scorer is the class's own score (its program, not a public metric's kernel)
     if tool_keep:
@@ -4042,7 +4043,20 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             # mf-r9d: predict_log_proba is predict_proba's columns logged in the
             # member's precision before the RUN narrows them (`opts.log`;
             # core/msel_search_run.mojo `_respond`)
-            opts.resp = MEMBER_OP_DECISION if method == "decision_function" else MEMBER_OP_PREDICT_PROBA
+            # LANE w3f5-b (cause 59738c518b: every response that was not
+            # decision_function was read as predict_proba, so a transformer
+            # scored by make_scorer(mean_squared_error,
+            # response_method='transform') asked StandardScaler for
+            # predict_proba): a 'transform' response is the member's
+            # MEMBER_OP_TRANSFORM block, rows x its output columns, which the
+            # regression row scores as a multi-output prediction (core/
+            # msel_scorer_run.mojo `msel_scorer_value`), as scikit-learn's
+            # _get_response_values hands transform(X) to the metric.
+            if method == "transform":
+                opts.resp = MEMBER_OP_TRANSFORM
+                transform_rows += 1
+            else:
+                opts.resp = MEMBER_OP_DECISION if method == "decision_function" else MEMBER_OP_PREDICT_PROBA
             opts.log = method == "predict_log_proba"
             row.op = opts.resp
         # LANE mf-r9d (door :3789): the other numeric_mode tier's route
@@ -4392,6 +4406,13 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             needs |= MEMBER_CAN_PREDICT_PROBA
         elif row.op == MEMBER_OP_DECISION:
             needs |= MEMBER_CAN_DECISION
+        elif row.op == MEMBER_OP_TRANSFORM:
+            needs |= MEMBER_CAN_TRANSFORM
+    if transform_rows > 0 and transform_rows == len(keys) and tool_respond < 0:
+        # LANE w3f5-b: every scorer reads transform (a transformer's search):
+        # no response asks predict, so the candidates need none (a
+        # StandardScaler has no predict), as `all_missing` below.
+        needs &= ~MEMBER_CAN_PREDICT
     if all_missing and tool_respond < 0:
         # every scorer lacks its response (`all_missing`, above): the units are
         # fitted, never asked; the class has no predict to need
