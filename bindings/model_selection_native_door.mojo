@@ -36,9 +36,14 @@ from bindings.msel_search_door import (
 from bindings.msel_parameter_grid_door import PreparedParameterGrid
 from bindings.msel_public_metadata_pack import msel_splitter_repr, msel_scorer_repr, msel_estimator_classes
 from bindings.msel_search_state_door import msel_search_fields, msel_search_plan, msel_search_initialize, msel_search_update
+from bindings.msel_function_device_door import msel_tool_args
+from bindings.msel_device_scope_door import msel_device_admit, msel_device_context
+from core.device_route import DEVICE_INSTALL
+from core.function_device import FunctionDevice
 from bindings.msel_split_door import (
     msel_split, msel_n_splits, msel_loo_at, msel_lpo_at, msel_logo_at, msel_lpgo_at, msel_check_cv,
     msel_train_test_split, msel_truth, msel_flag_truth, msel_splitter_initialize, msel_default_folds,
+    _splitter_fields,
 )
 
 
@@ -231,6 +236,26 @@ def _msel_search_score(model: PythonObject, x: PythonObject, y: PythonObject, co
     return msel_score(best, x, y, scorer, context)
 
 
+def _msel_check_cv_on(args: PythonObject, device: FunctionDevice, context: PythonObject,
+                      b: PythonObject) raises -> PythonObject:
+    """`check_cv` with an explicit `device` (lane vdf-msel; None takes the
+    operation's own branch unchanged): the label check runs in the context
+    the device selects, and a splitter check_cv BUILT (from an integer, None
+    or a list of pairs; a caller's own splitter is returned as is) stores the
+    word, so its `split` runs where check_cv was told."""
+    var run = msel_device_context(device, context, b)
+    var classifier = msel_flag_truth(args[2], run)
+    _ = msel_flag_truth(args[3], run)
+    msel_admit(args[4], run)
+    var labels = args[1]
+    if classifier and labels is not None and not msel_numeric_vector(labels, False, run):
+        labels = msel_flatten(labels, run)
+    var cv = msel_check_cv(args[0], labels, classifier, args[3], args[4], run)
+    if cv is not args[0]:
+        py_setitem(_splitter_fields(cv, context), PythonObject("device"), args[5])
+    return cv
+
+
 def msel_operation(model: PythonObject, operation: String, args: PythonObject,
                    context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
@@ -346,6 +371,8 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
         # Preserve the public iterator contract without a Python generator
         # wrapper resuming around every native fold. Lazy native splitters
         # already return an iterator; iter() leaves those unchanged.
+        # (device=: the splitter's stored device selects the context inside
+        # msel_split, where it reads the splitter's state; lane vdf-msel.)
         return py_call(b.iter, msel_split(model, args[0], args[1], args[2], context))
     if operation == "family_msel_n_splits":
         return msel_n_splits(model, args[0], args[1], args[2], context)
@@ -358,6 +385,10 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
     if operation == "family_msel_split_lpgo_at":
         return msel_lpgo_at(args, context)
     if operation == "family_msel_check_cv":
+        # device= (lane vdf-msel): args[5]; the splitter it builds stores it.
+        var cv_device = msel_device_admit(args[5], "check_cv", context, b)
+        if cv_device.request != DEVICE_INSTALL:
+            return _msel_check_cv_on(args, cv_device, context, b)
         var classifier = msel_flag_truth(args[2], context)
         _ = msel_flag_truth(args[3], context)
         msel_admit(args[4], context)
@@ -368,15 +399,33 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
             labels = msel_flatten(labels, context)
         return msel_check_cv(args[0], labels, classifier, args[3], args[4], context)
     if operation == "family_msel_train_test_split":
-        return msel_train_test_split(args[0], args[1], args[2], args[3], args[4], args[5], context)
+        # device= (lane vdf-msel): the last item (args[6]).
+        var tts_device = msel_device_admit(args[6], "train_test_split", context, b)
+        return msel_train_test_split(args[0], args[1], args[2], args[3], args[4], args[5],
+                                     msel_device_context(tts_device, context, b))
     if operation == "family_msel_cross_validate":
-        return msel_cross_validate(args, context)
+        var cvd_device = msel_device_admit(args[11], "cross_validate", context, b)
+        if cvd_device.request == DEVICE_INSTALL:
+            return msel_cross_validate(args, context)
+        var cvd_context = msel_device_context(cvd_device, context, b)
+        return msel_cross_validate(msel_tool_args(cvd_device, args, "cross_validate", cvd_context, b), cvd_context)
     if operation == "family_msel_cross_val_score":
-        return msel_cross_val_score(args, context)
+        var cvs_device = msel_device_admit(args[8], "cross_val_score", context, b)
+        if cvs_device.request == DEVICE_INSTALL:
+            return msel_cross_val_score(args, context)
+        var cvs_context = msel_device_context(cvs_device, context, b)
+        return msel_cross_val_score(msel_tool_args(cvs_device, args, "cross_val_score", cvs_context, b),
+                                    cvs_context)
     if operation == "family_msel_cross_val_predict":
-        return msel_cross_val_predict(args, context)
+        var cvp_device = msel_device_admit(args[7], "cross_val_predict", context, b)
+        if cvp_device.request == DEVICE_INSTALL:
+            return msel_cross_val_predict(args, context)
+        var cvp_context = msel_device_context(cvp_device, context, b)
+        return msel_cross_val_predict(msel_tool_args(cvp_device, args, "cross_val_predict", cvp_context, b),
+                                      cvp_context)
     if operation == "family_msel_split_descriptor":
-        return msel_split_descriptor(args, context)
+        var sd_device = msel_device_admit(args[5], "split_descriptor", context, b)
+        return msel_split_descriptor(args, msel_device_context(sd_device, context, b))
     if operation == "family_msel_grid_iter":
         return py_call(b.iter, msel_grid_list(_msel_attr(model, "param_grid", context), context))
     if operation == "family_msel_grid_len":
@@ -396,11 +445,24 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
     if operation == "family_msel_search_fit":
         return msel_search_fit(model, args, context)
     if operation == "family_msel_validation_curve":
-        return msel_validation_curve(args, context)
+        var vc_device = msel_device_admit(args[10], "validation_curve", context, b)
+        if vc_device.request == DEVICE_INSTALL:
+            return msel_validation_curve(args, context)
+        var vc_context = msel_device_context(vc_device, context, b)
+        return msel_validation_curve(msel_tool_args(vc_device, args, "validation_curve", vc_context, b), vc_context)
     if operation == "family_msel_learning_curve":
-        return msel_learning_curve(args, context)
+        var lc_device = msel_device_admit(args[12], "learning_curve", context, b)
+        if lc_device.request == DEVICE_INSTALL:
+            return msel_learning_curve(args, context)
+        var lc_context = msel_device_context(lc_device, context, b)
+        return msel_learning_curve(msel_tool_args(lc_device, args, "learning_curve", lc_context, b), lc_context)
     if operation == "family_msel_permutation_test_score":
-        return msel_permutation_test_score(args, context)
+        var pt_device = msel_device_admit(args[12], "permutation_test_score", context, b)
+        if pt_device.request == DEVICE_INSTALL:
+            return msel_permutation_test_score(args, context)
+        var pt_context = msel_device_context(pt_device, context, b)
+        return msel_permutation_test_score(msel_tool_args(pt_device, args, "permutation_test_score", pt_context, b),
+                                           pt_context)
     if operation == "family_msel_default_folds":
         # The default unshuffled folds cross_val_score / cross_validate take
         # for cv=None or an integer (msel_fold_source), fold-order sabotage
@@ -408,5 +470,8 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
         # classifier). Verify's cross-val-folds lane hashes this exact route
         # (tools/identity_break.py); last in the chain, so no public
         # operation pays its comparison.
-        return msel_default_folds(args[0], args[1], msel_flag_truth(args[2], context), context)
+        # device= (lane vdf-msel): args[3].
+        var df_device = msel_device_admit(args[3], "default_folds", context, b)
+        return msel_default_folds(args[0], args[1], msel_flag_truth(args[2], context),
+                                  msel_device_context(df_device, context, b))
     raise Error("RuntimeError: unknown model_selection operation " + operation)

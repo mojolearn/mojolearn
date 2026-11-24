@@ -40,6 +40,8 @@ from bindings.classical_arrays_door import classical_wrap_array
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.msel_search_state_door import msel_parameter_values
+from bindings.msel_member_device_unpack import msel_own_device_admit
+from bindings.msel_device_scope_door import msel_device_admit, msel_device_context
 from bindings.family_common_unpack import family_str
 from bindings.family_common_pack import family_call
 from bindings.label_input_sources_unpack import labels_list_integer_storage
@@ -200,6 +202,14 @@ struct MselSplitter(Movable):
         self.defaults = context["family_msel_splitter_layouts"][py_type(model)][3]
         self.kind = _splitter_kind(py_type(model), context)
 
+    def device_word(self) raises -> PythonObject:
+        """The `device` the constructor stored (absent: None; it stores one
+        only when given): one read of the fields dictionary this splitter
+        already holds (lane vdf-msel). A splitter has no native state, so
+        this read is the per-call cost of its `device`; only `split` and
+        `get_n_splits` make it."""
+        return py_get(self.fields, PythonObject("device"))
+
     def repeated(self) -> Bool:
         return self.kind == SPLITTER_REPEATED_KFOLD or self.kind == SPLITTER_REPEATED_STRATIFIED_KFOLD
 
@@ -338,8 +348,18 @@ def msel_splitter_initialize(model: PythonObject, args: PythonObject,
         py_setitem(updates, "test_fold", values)
     elif kind == "iterable":
         py_setitem(updates, "_pairs", msel_index_pairs(args[1], context))
-    else:
+    elif kind != "device":
         raise Error("ValueError: unknown native splitter constructor")
+    # device= (lane vdf-msel): the last item of every public constructor's
+    # tuple ("device": a constructor that stores its other parameters itself).
+    # Admitted where given, in the estimators' words; stored only when given,
+    # so a splitter built with device=None has the fields, get_params and repr
+    # it had before (its split reads an absent device as None).
+    if kind != "iterable":
+        var device = args[len(args) - 1]
+        if device is not None:
+            msel_own_device_admit(device, msel_b(), context)
+            py_setitem(updates, "device", device)
     var keys = py_call(msel_b().list, updates)
     for i in range(len(keys)):  # driver-loop: refuse custom finalizers before releasing overwritten state
         if py_contains(fields, keys[i]) and fields[keys[i]] is not updates[keys[i]]:
@@ -942,12 +962,16 @@ def _msel_label_source(value: PythonObject, name: String, context: PythonObject)
 
 
 def msel_split(model: PythonObject, var x: PythonObject, var y: PythonObject, var groups: PythonObject,
-               context: PythonObject) raises -> PythonObject:
+               given: PythonObject) raises -> PythonObject:
     """`<splitter>.split(X, y, groups)` of a mojolearn splitter: its splits
     (a list, or a lazy iterator for the per-row and per-combination
     splitters)."""
     # N070: the class code and the stored fields once per split call.
-    var sp = MselSplitter(model, context)
+    var sp = MselSplitter(model, given)
+    # device= (lane vdf-msel): the stored device selects the context every
+    # step below runs in (bindings/msel_device_scope_door.mojo); None keeps
+    # `given` (one read of the held fields, one identity compare).
+    var context = msel_device_context(msel_device_admit(sp.device_word(), "split", given, msel_b()), given, msel_b())
     msel_admit(Python.tuple(x, y, groups), context)
     var y_used = sp.kind == SPLITTER_STRATIFIED_KFOLD or sp.kind == SPLITTER_STRATIFIED_GROUP_KFOLD or sp.kind == SPLITTER_STRATIFIED_SHUFFLE or sp.kind == SPLITTER_REPEATED_STRATIFIED_KFOLD
     var groups_used = sp.kind == SPLITTER_STRATIFIED_GROUP_KFOLD or sp.kind == SPLITTER_GROUP_KFOLD or sp.kind == SPLITTER_GROUP_SHUFFLE or sp.kind == SPLITTER_LOGO or sp.kind == SPLITTER_LPGO
@@ -1015,10 +1039,12 @@ def msel_split(model: PythonObject, var x: PythonObject, var y: PythonObject, va
 
 
 def msel_n_splits(model: PythonObject, x: PythonObject, y: PythonObject, groups: PythonObject,
-                  context: PythonObject) raises -> PythonObject:
+                  given: PythonObject) raises -> PythonObject:
     """`<splitter>.get_n_splits(X, y, groups)`."""
     var b = msel_b()
-    var sp = MselSplitter(model, context)  # N070: class code and fields once per call
+    var sp = MselSplitter(model, given)  # N070: class code and fields once per call
+    # device= (lane vdf-msel), as in `msel_split`.
+    var context = msel_device_context(msel_device_admit(sp.device_word(), "get_n_splits", given, b), given, b)
     if sp.kind == SPLITTER_LOO:
         if x is None:
             raise Error("The 'X' parameter should not be None.")
