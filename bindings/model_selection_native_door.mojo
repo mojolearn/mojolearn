@@ -36,9 +36,8 @@ from bindings.msel_search_door import (
 from bindings.msel_parameter_grid_door import PreparedParameterGrid
 from bindings.msel_public_metadata_pack import msel_splitter_repr, msel_scorer_repr, msel_estimator_classes
 from bindings.msel_search_state_door import msel_search_fields, msel_search_plan, msel_search_initialize, msel_search_update
-from bindings.msel_function_device_door import (
-    msel_device_admit, msel_device_context, msel_splitter_device, msel_tool_args,
-)
+from bindings.msel_function_device_door import msel_tool_args
+from bindings.msel_device_scope_door import msel_device_admit, msel_device_context
 from core.device_route import DEVICE_INSTALL
 from core.function_device import FunctionDevice
 from bindings.msel_split_door import (
@@ -372,14 +371,11 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
         # Preserve the public iterator contract without a Python generator
         # wrapper resuming around every native fold. Lazy native splitters
         # already return an iterator; iter() leaves those unchanged.
-        # device= (lane vdf-msel): the splitter's stored device selects the
-        # context (bindings/msel_function_device_door.mojo); None: `context`.
-        var split_device = msel_splitter_device(model, "split", context, b)
-        return py_call(b.iter, msel_split(model, args[0], args[1], args[2],
-                                          msel_device_context(split_device, context, b)))
+        # (device=: the splitter's stored device selects the context inside
+        # msel_split, where it reads the splitter's state; lane vdf-msel.)
+        return py_call(b.iter, msel_split(model, args[0], args[1], args[2], context))
     if operation == "family_msel_n_splits":
-        var count_device = msel_splitter_device(model, "get_n_splits", context, b)
-        return msel_n_splits(model, args[0], args[1], args[2], msel_device_context(count_device, context, b))
+        return msel_n_splits(model, args[0], args[1], args[2], context)
     if operation == "family_msel_split_loo_at":
         return msel_loo_at(args, context)
     if operation == "family_msel_split_lpo_at":
