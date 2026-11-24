@@ -53,7 +53,11 @@ def test_resident_rows_route(name, ours, theirs, k, method, ensemble):
     assert len(one.calibrated_classifiers_) == len(sk.calibrated_classifiers_)
     for (_, cals), theirs_pair in zip(one.calibrated_classifiers_, sk.calibrated_classifiers_):
         assert len(cals) == len(theirs_pair.calibrators)
-    proba = one.predict_proba(X)
+    # A caller inside the mojolearn package (this test module is mojolearn.tests.*) receives the door's Array; a
+    # user module receives the NumPy view (bindings/parallel_public_result_door.mojo, the caller test that every
+    # result but predict keeps; bindings/scaler_lifecycle_native_door.mojo `_outside`). Every base takes the same
+    # PACK (`_calibrated_fused`), so the type depends on the caller only: read it as NumPy here.
+    proba = np.asarray(one.predict_proba(X))
     assert proba.shape == (len(y), k)
     np.testing.assert_allclose(proba.sum(axis=1), 1.0, rtol=1e-5)
     # loosely scikit-learn's probabilities (members in float32 against float64)
@@ -61,8 +65,11 @@ def test_resident_rows_route(name, ours, theirs, k, method, ensemble):
 
 
 def test_resident_rows_nonfinite_x_words():
-    """A non-finite X is refused once, before any fit, in the admission's words (the door units' resident route
-    tested X once the same way, `_cal_admit_x_once`, deleted)."""
+    """A non-finite X is refused once, before any fit, in the admission's words naming the BASE estimator, as
+    scikit-learn 1.9.1 raises it: its CalibratedClassifierCV.fit only runs `indexable(X, y)`, and the base's fit
+    refuses the NaN (the door units' resident route tested X once the same way, `_cal_admit_x_once`, deleted).
+    Fail-proof: restore `classical_check_x` for the calibrated fit in bindings/trees_public_meta_lifecycle_pack.mojo:
+    the words name CalibratedClassifierCV."""
     X, y = _data(2)
     X[3, 2] = np.nan
     with pytest.raises(ValueError) as one:

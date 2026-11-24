@@ -13,6 +13,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.classical_validate_unpack import classical_check_x, classical_estimator_name
+from bindings.admitted_input_unpack import admit_x_unrecorded
 from bindings.classical_labels_door import labels_shape_of
 from bindings.classical_exceptions_door import classical_require_fitted
 from bindings.classifier_public_lifecycle_door import classifier_after_fit, _feature_names
@@ -54,9 +55,18 @@ def meta_public_operation(model: PythonObject, operation: String, args: PythonOb
     if not fitting:
         classical_require_fitted(model, False, method, context)
     var name = classical_estimator_name(model)
-    var x = classical_check_x(args[0], name, context)
-    var fields = py_fields(model)
     var kind = meta_kind(model, context)
+    var x: PythonObject
+    if fitting and kind == "calibrated":
+        # scikit-learn 1.9.1 CalibratedClassifierCV.fit only runs `indexable(X, y)` on X: a NaN or infinity is
+        # refused by the base estimator's fit, in its words ("... GaussianNB ..."). So X is admitted here without
+        # its finite test (every other check unchanged), and `_cal_native` (bindings/trees_public_meta_door.mojo)
+        # refuses a non-finite X once, before any fit, naming the base (`admitted_finite_refuse`). Lane w3f2-cal:
+        # this scanned X here (naming CalibratedClassifierCV) and `_cal_native` scanned it again; now once.
+        x = admit_x_unrecorded(args[0], name, context, finite=False).array
+    else:
+        x = classical_check_x(args[0], name, context)
+    var fields = py_fields(model)
     if fitting:
         if args[1] is None:
             raise Error(name + " requires y to be passed, but the target y is None.")

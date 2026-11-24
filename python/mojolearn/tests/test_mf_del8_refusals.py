@@ -107,6 +107,6 @@ def test_calibrated_has_no_door_units():
     y = (np.arange(90) % 3).astype(np.int64)
     X[:, 0] += y
     m = ml.CalibratedClassifierCV(ml.LogisticRegression(), cv=3).fit(X, y)
-    proba = m.predict_proba(X)
+    proba = np.asarray(m.predict_proba(X))  # an in-package caller receives the Array (parallel_public_result_door)
     assert proba.shape == (90, 3)
     np.testing.assert_allclose(proba.sum(axis=1), 1.0, rtol=1e-5)
