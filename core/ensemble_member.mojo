@@ -224,7 +224,7 @@ from bindings.prep_select_run import (
     RfeFitPlan, RfeFitResult, rfe_fit_run, rfe_select_count, rfe_step_count, rfe_final_plan,
 )
 from core.msel_search_run import MselSearchPlan, MselSearchResult, msel_search_run
-from core.msel_scorer_run import MselScorerOptions, msel_scorer_group_read
+from core.msel_scorer_run import MselScorerOptions, msel_scorer_group_read, msel_multi_output_type
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of, member_free, member_own, member_new,
     member_outputs, member_output_dtype, member_outputs_of,
@@ -252,7 +252,7 @@ from core.label_weights_native_api import (
 from xtrees.label_weights_native import label_weights_native_v1
 from core.member_notices import member_notice_add, MEMBER_NOTICE_SPLIT_LEAST
 from bindings.msel_split_spec_run import (
-    MselSplitSpec, MselGroupCodes, MselSides, MSEL_SPEC_NONE, MSEL_SPEC_LOO, msel_spec_sides, msel_sides_i32,
+    MselSplitSpec, MselGroupCodes, MselSides, MSEL_SPEC_NONE, MSEL_SPEC_LOO, MSEL_SPEC_STRATIFIED_SHUFFLE, msel_spec_sides, msel_sides_i32,
     msel_group_codes_run, msel_spec_has_n_splits, msel_spec_sides_targets, msel_spec_stratified,
 )
 from core.member_set_run import (
@@ -3430,6 +3430,16 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
     # THE SPLITTER CV and a user's index list (lane mf-search4b item 6): the
     # folds of this fit's rows, as Stacking's and Calibrated's (`_split_folds`;
     # the user's are the entry's typed folds), handed to the RUN.
+    if (slot[].split.kind != MSEL_SPEC_NONE and not classifier and outputs > 1
+            and msel_spec_stratified(slot[].split.kind) and slot[].split.kind != MSEL_SPEC_STRATIFIED_SHUFFLE):
+        # LANE mf-rows8b (row :3779): StratifiedKFold, its repeated form and
+        # StratifiedGroupKFold over a multi-output regressor's target refuse
+        # in scikit-learn's words before any fit (sklearn 1.9
+        # model_selection/_split.py lines 786-791 and 1019-1024: the target's
+        # `type_of_target`, its float32 rows x outputs here). A multi-output
+        # classifier's is refused by its admission (its labels say the type).
+        raise Error("ValueError: Supported target types are: ('binary', 'multiclass'). Got '"
+                    + msel_multi_output_type(call[].y.data, call[].x.rows * outputs) + "' instead.")
     if slot[].split.kind != MSEL_SPEC_NONE:
         # A one-output regressor hands its targets (a stratified splitter
         # stratifies on their values, as the door's split does; lane mf-del5).

@@ -1070,16 +1070,19 @@ def _run_start(rows: Int, count: Int) -> Int:
     return first
 
 
-def _regression_scorers(codes: List[Int], plan: MselSearchPlan) raises -> Bool:
-    """Lane mf-score8 round b: the member's own score alone, or every scorer
-    a regression row (a multi-output regressor's search)."""
+def _multi_output_scorers(codes: List[Int], plan: MselSearchPlan) raises -> Bool:
+    """Lane mf-rows8b: the member's own score alone, or every scorer one
+    that reads the member's predict (a regression, label or clustering row:
+    a multi-output target's search). Replaces `_regression_scorers` (lane
+    mf-score8 round b: regression rows only), removed."""
     if len(codes) == 1 and codes[0] == SEARCH_SCORE_MEMBER:
         return True
     for j in range(len(codes)):  # small-loop(the scorers)
         if codes[j] == SEARCH_SCORE_MEMBER:
             return False
-        if not msel_scorer_regression(msel_scorer_row(codes[j], plan.options[j] if j < len(plan.options) else
-                                                      MselScorerOptions(), Int(plan.selections.unsafe_ptr()))):
+        var row = msel_scorer_row(codes[j], plan.options[j] if j < len(plan.options) else MselScorerOptions(),
+                                  Int(plan.selections.unsafe_ptr()))
+        if row.op != MEMBER_OP_PREDICT:
             return False
     return True
 
@@ -1118,9 +1121,14 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         codes.append(SEARCH_SCORE_MEMBER)
     elif len(codes) == 0:
         codes.append(plan.scoring)
-    if y_cols > 1 and (classifier or not _regression_scorers(codes, plan)):
+    if y_cols > 1 and (classifier or not _multi_output_scorers(codes, plan)):
         # lane mf-score8 round b: a multi-output REGRESSOR may also be scored
-        # by regression rows (their programs take the outputs)
+        # by regression rows (their programs take the outputs). Lane
+        # mf-rows8b: and by the label and clustering rows (each side raises
+        # scikit-learn's multi-output words, `MselScorer.outs`); a
+        # multi-output classifier by the same rows (its codes read as their
+        # labels' values, `MselScorer.counts_at`). Not a probability or
+        # decision row (the admission keeps those).
         raise Error("member ABI: a search over a multi-output member folds by KFold and scores by the member")
     if m == 0:
         raise Error("No fits were performed. Was the CV iterator empty? Were there no candidates?")
@@ -1235,6 +1243,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         # one of the labels; each side raises the door's words (msel_scorer_run).
         var marked = (positives[j] == SCORER_POSITIVE_ABSENT or positives[j] == SCORER_POSITIVE_KIND
                       or positives[j] == SCORER_POSITIVE_MIXED)
+        if y_cols > 1:
+            continue  # lane mf-rows8b: a multi-output side refuses before any positive label is read
         if msel_scorer_positive(rows_of[j]) and not marked and (positives[j] < 0 or positives[j] >= k):
             raise Error("member ABI: a binary scorer needs its positive class code")
         if msel_scorer_ap(rows_of[j]) and k == 2 and not marked and (positives[j] < 0 or positives[j] >= k):
@@ -1739,6 +1749,11 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                     var dt = out_dtypes[((u0 + t // sides) // used) * nops + o]
                     scored.ids = (not classifier and scored.op == MEMBER_OP_PREDICT
                                   and (dt == MEMBER_I32 or dt == MEMBER_I64))
+                    if y_cols > 1:
+                        # lane mf-rows8b (rows :3777 / :3779): the side's outputs and,
+                        # for a multi-output classifier, its outputs' class counts
+                        scored.outs = y_cols
+                        scored.counts_at = Int(plan.class_counts.unsafe_ptr()) if multi_cls else 0
                     if not classifier and scored.op == MEMBER_OP_PREDICT and msel_scorer_cluster(scored):
                         # lane mf-rows8b (row :3899): float predictions (1 float32, 2 float64)
                         scored.fpred = 1 if dt == MEMBER_F32 else (2 if dt == MEMBER_F64 else 0)

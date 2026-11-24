@@ -177,7 +177,7 @@ from bindings.msel_search_state_door import msel_search_update
 from bindings.msel_member_device_unpack import msel_member_host_folds, msel_params_name_device
 from bindings.msel_split_door import msel_cls, MselSplitter, SPLITTER_ITERABLE
 from bindings.msel_split_unpack import MselRoutePin
-from bindings.msel_split_spec_run import MselSplitSpec, MSEL_SPEC_NONE, msel_spec_stratified
+from bindings.msel_split_spec_run import MselSplitSpec, MSEL_SPEC_NONE, MSEL_SPEC_STRATIFIED_SHUFFLE, msel_spec_stratified
 from bindings.msel_split_spec_unpack import msel_split_spec_read
 from core.ensemble_member import (
     meta_plan_split, meta_plan_rfe, meta_plan_refuse, META_CAL_BINARY_MARKER_WORDS,
@@ -3629,6 +3629,9 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var clusterer = False
     var cluster_entry = False
     var others = False
+    # A MULTI-OUTPUT CLASSIFIER's fit (lane mf-rows8b): one label list per
+    # output (bindings/msel_member_units_door.mojo `_encode_outputs`).
+    var multi_lab = classifier and _per_output_labels(labels, b)
     for j in range(len(keys)):  # driver-loop: over the scorers (once per admission)
         var kw = _ScorerKw()
         var name = _scorer_name(givens[j], context, b, kw)
@@ -3720,6 +3723,34 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         if kw.refuse_text.byte_length() > 0:
             opts.refuse_word = _next_word(labels, classifier, extra_words, b)
             extra_words.append(kw.refuse_text)
+        if multi_lab:
+            # LANE mf-rows8b (rows :3777 / :3779): a scorer on a multi-output
+            # classifier. A predict row (label, clustering or regression) is
+            # typed: every output's labels read ONCE as their values
+            # (`_multi_label_values`); each side raises scikit-learn's
+            # multi-output words for a label or clustering row
+            # (core/msel_scorer_run.mojo `_multi_output_refusal`) or scores a
+            # regression row over the labels' values, rows x outputs. No
+            # pos_label or `labels` code is read: the side refuses before
+            # either (scikit-learn's `_check_targets` first). A probability or
+            # decision row is not typed: MultiOutputClassifier answers a list
+            # of per-output blocks that each metric reads its own way
+            # (mf-rows8b-work/rows.tsv).
+            if row.op != MEMBER_OP_PREDICT:
+                return False
+            _multi_label_values(labels, sels, opts, extra_words, b)
+            if msel_scorer_cluster_entry(row):
+                cluster_entry = True
+            others = True
+            codes.append(code)
+            positives.append(-1)
+            options.append(opts)
+            var seen_m = False
+            for o in range(len(responses)):  # small-loop(the distinct responses, at most three)
+                seen_m = seen_m or responses[o] == row.op
+            if not seen_m:
+                responses.append(row.op)
+            continue
         # A CLUSTERER base (lane mf-cluster5): a non-classifier scored by the
         # clustering scorers only (its predict is cluster ids).
         if not classifier and msel_scorer_cluster(row):
@@ -3964,16 +3995,39 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             var own = msel_scorer_code(String("accuracy") if own_score == _OWN_ACCURACY else String("r2"), False)
             codes.append(own)
             responses.append(msel_scorer_row(own).op)
+    if multi_lab and msel_spec_stratified(split.spec.kind):
+        # LANE mf-rows8b (row :3779): a stratified splitter over a multi-output
+        # classifier's target. StratifiedKFold, its repeated form and
+        # StratifiedGroupKFold refuse every multi-output target type in
+        # scikit-learn's words before any fit (sklearn 1.9
+        # model_selection/_split.py lines 786-791, 1019-1024); the type is the
+        # labels' (every label is in y): `_labels_multi_type`.
+        # StratifiedShuffleSplit stratifies on each row's joined labels
+        # (line 2344): not typed (rows.tsv).
+        if split.spec.kind == MSEL_SPEC_STRATIFIED_SHUFFLE:
+            return False
+        raise Error("ValueError: Supported target types are: ('binary', 'multiclass'). Got '"
+                    + _labels_multi_type(labels, b) + "' instead.")
     for c in range(len(nested.plans)):  # driver-loop: over the candidates (their responses' element types)
         var multi = (nested.masks[c] & MEMBER_CAN_MULTI_OUTPUT) != 0
-        if multi and len(codes) > 0 and not classifier and not msel_spec_stratified(split.spec.kind):
-            # lane mf-score8 round b: a multi-output regressor scored by
-            # regression rows (each side's rows x outputs)
+        # LANE mf-rows8b (rows :3777 / :3779): a member that may take a
+        # multi-output target. Its y's outputs are the fit's, so the RUN
+        # decides per fit (core/msel_search_run.mojo: a multi-output side is
+        # scored by its regression rows and refuses its label and clustering
+        # rows in scikit-learn's words, `MselScorer.outs`; a stratified
+        # splitter refuses in its words, core/ensemble_member.mojo
+        # `_fit_search`); a one-output fit is scored as any. REMOVED: the two
+        # False exits that kept every search over such a member with a
+        # scorer or a stratified splitter (one output or more) in the door.
+        # Not typed (rows.tsv): a regressor's StratifiedShuffleSplit (its
+        # outputs are unknown here) and a probability or decision scorer on
+        # a regressor that answers one (no regressor kind answers it).
+        if multi and not classifier and split.spec.kind == MSEL_SPEC_STRATIFIED_SHUFFLE:
+            return False
+        if multi and not classifier:
             for q in range(len(codes)):  # small-loop(the scorers)
-                if not msel_scorer_regression(msel_scorer_row(codes[q])):
-                    return False  # a label scorer on multi-output targets: no typed rows (see rows.tsv)
-        elif multi and (len(codes) > 0 or msel_spec_stratified(split.spec.kind)):
-            return False  # a multi-output target is scored by the member itself, folded by KFold
+                if msel_scorer_row(codes[q]).op != MEMBER_OP_PREDICT:
+                    return False
         if multi and tool_respond >= 0 and tool_respond != MEMBER_OP_PREDICT and not (
                 classifier and tool_respond == MEMBER_OP_PREDICT_PROBA and not tool_log
                 and (nested.masks[c] & MEMBER_CAN_PREDICT_PROBA) != 0):
@@ -4552,6 +4606,85 @@ def _label_values(labels: PythonObject, mut sels: List[Int32], mut opts: MselSco
             kind = SCORER_LABEL_UNREAD
         sels.append(bitcast[DType.int32](value))
         sels.append(Int32(kind))
+
+
+def _per_output_labels(labels: PythonObject, b: PythonObject) raises -> Bool:
+    """UNPACK (lane mf-rows8b): True for a multi-output classifier's labels,
+    one label list per output (bindings/msel_member_units_door.mojo
+    `_encode_outputs`); a one-output fit's labels are scalars."""
+    if labels is None or py_type(labels) is not b.list or len(labels) == 0:
+        return False
+    var first = labels[0]
+    if Bool(py=py_call(b.isinstance, first, Python.tuple(b.str, b.bytes))):
+        return False
+    return Bool(py=py_call(b.hasattr, first, PythonObject("__len__")))
+
+
+def _multi_label_values(labels: PythonObject, mut sels: List[Int32], mut opts: MselScorerOptions,
+                        mut extra_words: List[String], b: PythonObject) raises:
+    """UNPACK (lane mf-rows8b): every output's labels, in output order, read
+    ONCE as `_label_values` reads one output's (the number NumPy converts
+    each to, as float32 words, and its kind: core/msel_scorer_run.mojo
+    SCORER_LABEL_*). A string `float()` does not convert: its value word
+    names one more label word, its repr (the side's refusal prints it)."""
+    opts.lv_from = len(sels)
+    var total = 0
+    for j in range(len(labels)):  # driver-loop: over the outputs (their labels, once per admission)
+        var items = py_call(b.list, labels[j])
+        for i in range(len(items)):  # driver-loop: over one output's labels
+            var item = items[i]
+            var value = Float32(0.0)
+            var kind = SCORER_LABEL_NUMBER
+            var text = Bool(py=py_call(b.isinstance, item, b.str))
+            try:
+                value = Float32(Float64(py=py_call(b.float, item)))
+                if text:
+                    kind = SCORER_LABEL_TEXT
+            except:
+                kind = SCORER_LABEL_UNREAD
+            if kind == SCORER_LABEL_UNREAD:
+                sels.append(Int32(_next_word(labels, True, extra_words, b)))
+                extra_words.append(String(py=py_call(b.repr, item)))
+            else:
+                sels.append(bitcast[DType.int32](value))
+            sels.append(Int32(kind))
+            total += 1
+    opts.lv_n = total
+
+
+def _labels_multi_type(labels: PythonObject, b: PythonObject) raises -> String:
+    """UNPACK (lane mf-rows8b): scikit-learn's `type_of_target` of a
+    multi-output classifier's whole y from its labels (every label occurs in
+    y): 'multilabel-indicator' for fewer than three distinct numbers, all
+    integral (bools and integers too); 'continuous-multioutput' for a
+    non-integral real; else 'multiclass-multioutput' (strings included)."""
+    var numbers = native_loaded_module("numbers")
+    var eq = native_loaded_module("operator").eq
+    var seen = Python.list()
+    var numeric = True
+    var integral = True
+    for j in range(len(labels)):  # driver-loop: over the outputs (their labels, once per admission)
+        var items = py_call(b.list, labels[j])
+        for i in range(len(items)):  # driver-loop: over one output's labels
+            var item = items[i]
+            if not Bool(py=py_call(b.isinstance, item, numbers.Real)):
+                numeric = False
+                continue
+            var value = py_call(b.float, item)
+            if not Bool(py=py_call(b.bool, py_call(eq, value, py_call(b.float, py_call(b.int, value))))):
+                integral = False
+            var known = False
+            for q in range(len(seen)):  # small-loop(the distinct values so far, at most three)
+                known = known or Bool(py=py_call(b.bool, py_call(eq, seen[q], value)))
+            if not known and len(seen) < 3:
+                _ = py_call(seen.append, value)
+    if not numeric:
+        return "multiclass-multioutput"
+    if not integral:
+        return "continuous-multioutput"
+    if len(seen) < 3:
+        return "multilabel-indicator"
+    return "multiclass-multioutput"
 
 
 def _numeric_outputs(labels: PythonObject, b: PythonObject) raises -> Int:

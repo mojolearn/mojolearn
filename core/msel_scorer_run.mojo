@@ -350,6 +350,13 @@ struct MselScorer(ImplicitlyCopyable, Movable):
     # (the member's element type), 0 none; set by the search RUN per score
     # like `ids`; the public cluster doors refuse it (`_cluster_value`)
     var fpred: Int
+    # lane mf-rows8b (rows :3777 / :3779): a multi-output target's side, set by
+    # the search RUN per score like `ids`: `outs` its outputs (0: one), and
+    # for a multi-output classifier `counts_at` its outputs' class counts
+    # (Int words; 0 a regressor), the row's label value words (`lv_at`,
+    # `lv_n`) then every output's labels in output order
+    var outs: Int
+    var counts_at: Int
 
     def __init__(out self, name: StaticString, family: Int, metric: Int, avg: Int, sign: Float64, op: Int):
         self.name = name
@@ -385,6 +392,8 @@ struct MselScorer(ImplicitlyCopyable, Movable):
         self.lv_n = 0
         self.ids = False
         self.fpred = 0
+        self.outs = 0
+        self.counts_at = 0
 
 
 def _nan64() -> Float64:
@@ -1078,6 +1087,11 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
         if row.refuse_word >= len(label_words):
             raise Error("member ABI: a search scorer's refusal word is missing")
         raise Error(label_words[row.refuse_word])
+    if row.outs > 1 and row.family != _F_REG:
+        # LANE mf-rows8b (rows :3777 / :3779): a label or clustering scorer on
+        # a multi-output target, after the kwargs' refusals (scikit-learn's
+        # parameter validation runs first), in scikit-learn's words per side
+        _multi_output_refusal(row, truth, response, count)
     if row.samples:
         raise Error("NotImplementedError: mojolearn " + msel_scorer_caller(row) + ": average='samples' applies to "
                     + "multilabel targets, which are NOT IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv)")
@@ -1092,7 +1106,16 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
         var shown = String("")
         if row.param_word >= 0 and row.param_word < len(label_words):
             shown = label_words[row.param_word].copy()
-        if row.lv_n > 0:
+        if row.outs > 1 and row.counts_at != 0:
+            # lane mf-rows8b (row :3779): a regression scorer on a MULTI-OUTPUT
+            # classifier: each output's codes as its labels' values, then the
+            # rows x outputs program a multi-output regressor's side runs
+            var per_output = List[Float64]()
+            value = _multi_label_regression(route, label_words, row, truth, response, count, w, shown, per_output,
+                                            warn)
+            if len(per_output) > 1:
+                _number_error(row, label_words, per_output)
+        elif row.lv_n > 0:
             # lane mf-score8: a regression scorer on a classifier (module note)
             value = _label_regression(route, label_words, row, truth, response, count, classes, w, shown, warn)
         elif row.ids:
@@ -1553,6 +1576,184 @@ def _label_regression(route: MetricRoute, label_words: List[String], row: MselSc
     _ = len(yt)  # read by the program above
     _ = len(yp)
     return value
+
+
+def _multi_offset(row: MselScorer, j: Int) -> Int:
+    """Lane mf-rows8b: output j's first label in the row's label value words
+    (the outputs' class counts at `counts_at`, output order)."""
+    var counts = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=row.counts_at)
+    var at = 0
+    for q in range(j):  # small-loop(the outputs before j)
+        at += counts[q]
+    return at
+
+
+def _multi_floats(row: MselScorer, label_words: List[String], codes: Int, count: Int, convert: Bool,
+                  mut dst: List[Float32], mut numeric: Bool) raises:
+    """Lane mf-rows8b: one multi-output classifier side's codes (count rows x
+    `row.outs`, int32, each output's own class codes) as their labels' float32
+    values (the UNPACK's value words, the door's `_multi_label_values`);
+    `numeric` False when a label of the side is a string (a text label that
+    `float()` converts keeps its value, as NumPy's float conversion does).
+    `convert` (a regression row): the side's first label, in row order,
+    that `float()` does not convert raises NumPy's words (its repr is the
+    label word its value word names)."""
+    var outs = row.outs
+    var counts = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=row.counts_at)
+    var offsets = List[Int](length=outs, fill=0)
+    for j in range(1, outs):  # small-loop(the outputs' first labels)
+        offsets[j] = offsets[j - 1] + counts[j - 1]
+    if offsets[outs - 1] + counts[outs - 1] != row.lv_n:
+        raise Error("member ABI: a multi-output classifier's scorer needs one value per output label")
+    var lv = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=row.lv_at)
+    var c = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=codes)
+    dst = List[Float32](length=max(count * outs, 1), fill=0.0)
+    numeric = True
+    for i in range(count * outs):  # driver-loop: over the side's rows x outputs (their labels' values)
+        var j = i % outs
+        var k = Int(c[i])
+        if k < 0 or k >= counts[j]:
+            raise Error("ValueError: y codes outside [0, n_classes)")
+        var at = offsets[j] + k
+        var kind = Int(lv[2 * at + 1])
+        if kind != SCORER_LABEL_NUMBER:
+            numeric = False
+        if kind == SCORER_LABEL_UNREAD:
+            if convert:
+                var word = Int(lv[2 * at])
+                raise Error("ValueError: could not convert string to float: "
+                            + (label_words[word] if word >= 0 and word < len(label_words) else String(at)))
+            continue
+        dst[i] = bitcast[DType.float32](lv[2 * at])
+
+
+def _multi_label_regression(route: MetricRoute, label_words: List[String], row: MselScorer, truth: Int,
+                            response: Int, count: Int, w: Int, shown: String, mut per_output: List[Float64],
+                            mut warn: Int) raises -> Float64:
+    """Lane mf-rows8b (row :3779): a regression scorer on a multi-output
+    classifier's side, as `_label_regression` per output: y_true's values
+    first (`_check_reg_targets` converts y_true before y_pred), a label
+    `float()` cannot convert in NumPy's words, median_absolute_error and
+    max_error's dtype='numeric' refusal of string labels; then the row's
+    rows x outputs program (the multi-output regressor's)."""
+    var lv = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=row.lv_at)
+    if row.metric == REG_MEDAE or row.metric == REG_MAX_ERROR:
+        for c in range(row.lv_n):  # small-loop(the outputs' labels: their kinds)
+            if Int(lv[2 * c + 1]) != SCORER_LABEL_NUMBER:
+                raise Error(SCORER_NUMERIC_WORDS)
+    var yt = List[Float32]()
+    var yp = List[Float32]()
+    var numeric = True
+    _multi_floats(row, label_words, truth, count, True, yt, numeric)
+    _multi_floats(row, label_words, response, count, True, yp, numeric)
+    var value = reg_metric_options_run(route, row.metric, Int(yt.unsafe_ptr()), Int(yp.unsafe_ptr()), count,
+                                       row.outs, w, row.mo, row.ff, row.param, row.param_given, shown, per_output,
+                                       warn)
+    _ = len(yt)  # read by the program above
+    _ = len(yp)
+    return value
+
+
+def _multi_type(values: List[Float32], numeric: Bool) -> String:
+    """Lane mf-rows8b: scikit-learn's `type_of_target` of a side's rows x
+    outputs block (sklearn 1.9 utils/multiclass.py: `is_multilabel` first,
+    fewer than three distinct values, integral; then a non-integral float
+    is 'continuous'; any other 2-D block 'multiclass', with the
+    '-multioutput' suffix of more than one column). A string label block is
+    never multilabel (its dtype is neither integer nor float)."""
+    if not numeric:
+        return "multiclass-multioutput"
+    var first = Float32(0.0)
+    var second = Float32(0.0)
+    var distinct = 0
+    for i in range(len(values)):  # driver-loop: over the block's values (integral, distinct up to three)
+        var v = values[i]
+        if not (v >= -9.0e18 and v <= 9.0e18):
+            return "continuous-multioutput"  # NaN, an infinity or beyond an integer's range
+        if Float32(Float64(Int(v))) != v:
+            return "continuous-multioutput"
+        if distinct == 0:
+            first = v
+            distinct = 1
+        elif distinct == 1 and v != first:
+            second = v
+            distinct = 2
+        elif distinct == 2 and v != first and v != second:
+            distinct = 3
+    if distinct < 3:
+        return "multilabel-indicator"
+    return "multiclass-multioutput"
+
+
+def msel_multi_output_type(values: Int, count: Int) -> String:
+    """Lane mf-rows8b: `type_of_target` of a regressor's float32 rows x
+    outputs block at `values` (`count` words; more than one output), the
+    words a stratified splitter's refusal names (core/ensemble_member.mojo
+    `_fit_search`)."""
+    var p = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=values)
+    var block = List[Float32](length=max(count, 1), fill=0.0)
+    for i in range(count):  # driver-loop: over the block's words (one copy)
+        block[i] = p[i]
+    return _multi_type(block, True)
+
+
+def _multi_output_refusal(row: MselScorer, truth: Int, response: Int, count: Int) raises:
+    """LANE mf-rows8b (rows :3777 / :3779): a label or clustering scorer on
+    one side of a multi-output target (`row.outs` columns). scikit-learn
+    (sklearn 1.9):
+      * the clustering scorers: `check_clusterings` refuses a 2-D
+        labels_true (metrics/cluster/_supervised.py line 72);
+      * the label scorers: `_check_targets` (metrics/_classification.py
+        lines 116-145) reads both sides' `type_of_target`: different types
+        refuse as a mix, 'multiclass-multioutput' and
+        'continuous-multioutput' are not supported; two
+        'multilabel-indicator' sides go on: confusion_matrix (balanced
+        accuracy, cohen_kappa) and matthews_corrcoef refuse them (lines 555,
+        1319), class_likelihood_ratios needs binary targets (line 2366);
+        every other label metric scores multilabel targets, which Mojolearn
+        has NOT IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv): the label doors'
+        own refusal (bindings/mcls_common_unpack.mojo `mc_refuse_multilabel`).
+    The side's values: a regressor's float32 targets and predictions (its
+    integer ids when `row.ids`), or a multi-output classifier's codes as
+    their labels' values (`_multi_floats`)."""
+    var outs = row.outs
+    if row.family == _F_CLUSTER:
+        raise Error("ValueError: labels_true must be 1D: shape is (" + String(count) + ", " + String(outs) + ")")
+    var yt = List[Float32]()
+    var yp = List[Float32]()
+    var true_numeric = True
+    var pred_numeric = True
+    if row.counts_at != 0:
+        _multi_floats(row, List[String](), truth, count, False, yt, true_numeric)
+        _multi_floats(row, List[String](), response, count, False, yp, pred_numeric)
+    else:
+        var t = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=truth)
+        yt = List[Float32](length=max(count * outs, 1), fill=0.0)
+        yp = List[Float32](length=max(count * outs, 1), fill=0.0)
+        for i in range(count * outs):  # driver-loop: over the side's rows x outputs (its targets)
+            yt[i] = t[i]
+        if row.ids:
+            var ip = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=response)
+            for i in range(count * outs):  # driver-loop: over the side's rows x outputs (the ids as numbers)
+                yp[i] = Float32(Int(ip[i]))
+        else:
+            var fp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=response)
+            for i in range(count * outs):  # driver-loop: over the side's rows x outputs (its predictions)
+                yp[i] = fp[i]
+    var type_true = _multi_type(yt, true_numeric)
+    var type_pred = _multi_type(yp, pred_numeric)
+    if type_true != type_pred:
+        raise Error("ValueError: Classification metrics can't handle a mix of " + type_true + " and " + type_pred
+                    + " targets")
+    if type_true != "multilabel-indicator":
+        raise Error("ValueError: " + type_true + " is not supported")
+    if row.family == _F_KAPPA or (row.family == _F_LABEL and (row.metric == LBL_MCC or row.metric == LBL_BALANCED)):
+        raise Error("ValueError: multilabel-indicator is not supported")
+    if row.family == _F_CLR:
+        raise Error("ValueError: class_likelihood_ratios only supports binary classification problems, got targets"
+                    + " of type: multilabel-indicator")
+    raise Error("NotImplementedError: mojolearn " + msel_scorer_caller(row) + ": y_true is 2-D; multilabel-indicator "
+                + "targets are NOT IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv), only binary and multiclass 1-D labels")
 
 
 def _present_count(truth: Int, count: Int, classes: Int) -> Int:
