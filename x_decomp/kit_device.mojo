@@ -322,6 +322,17 @@ struct DMat(Movable):
         self.c = rows_of.c
         self.own = False
 
+    def __init__(out self, *, pool: Int, rows: Int, cols: Int):
+        """A caller's pool buffer of at least `rows * cols` words read in
+        place (an addition, lane vdf-scope-pls: the PLS fit's centred X and
+        Y, already resident in the door's kit). The caller owns it: this
+        view never frees."""
+        self.id = pool
+        self.off = 0
+        self.r = rows
+        self.c = cols
+        self.own = False
+
     def __del__(deinit self):
         if self.own:
             try:

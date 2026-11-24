@@ -56,6 +56,8 @@ def xd_owner_host_op(op: Int, a: List[Int], p: List[Int], floats: Int) raises ->
         xd_f64(a[0])[0] = chi2_quantile(xd_float(floats, 0), xd_float(floats, 1))
         return 0
     if op == XD_PLS_FIT:
+        if p[9] >= 0 or p[10] >= 0:
+            raise Error("x_decomp native ABI: the host binding has no device-resident PLS input")
         var nits = 0
         var done = pls_fit_run[HostExec](xd_f32(a[0]), xd_f32(a[1]), xd_pls_dst(a), I32Out(unsafe_from_address=a[8]),
                                          xd_dim(p[0]), xd_dim(p[1]), xd_dim(p[2]), xd_pls_args(p, floats), nits)
