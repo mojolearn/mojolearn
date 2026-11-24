@@ -11,6 +11,8 @@ from bindings.training_extra_native_door import training_chunked_lm_head, traini
 from bindings.samba_head_native_unpack import training_samba_head_loss
 from bindings.training_function_device_unpack import training_function_op, training_function_device, training_entries_cpu
 from core.function_device import function_device_default
+from providers.python.function_device_boundary_door import function_device_admit
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_words_unpack import optimizer_python_error, stash_python_error
@@ -292,7 +294,8 @@ def optimizer_configuration(start: OptimizerConstructorStart, lr: PythonObject, 
 
 
 def optimizer_initialize(owner: PythonObject, registry: OptimizerRegistryPrepared, config: OptimizerConstructorConfig,
-    mode: PythonObject, schedule: PythonObject, resident: PythonObject, context: PythonObject) raises -> PythonObject:
+    mode: PythonObject, schedule: PythonObject, resident: PythonObject, device: PythonObject, host: Bool,
+    context: PythonObject) raises -> PythonObject:
     optimizer_owner_idle(owner)
     var fields = py_fields(owner)
     # PACK publishes public scalar mirrors only after typed configuration
@@ -304,6 +307,10 @@ def optimizer_initialize(owner: PythonObject, registry: OptimizerRegistryPrepare
     py_setitem(fields, nk[].k__native_optimizer_owner, owner_state)
     py_setitem(fields, nk[].k_numeric_mode, mode)
     py_setitem(fields, nk[].k__resident_wanted, resident)
+    # lane vdf-seq: the public `device` word and its route, resolved once here
+    # (True: the CPU identical training image beside a GPU set)
+    py_setitem(fields, nk[].k_device, device)
+    py_setitem(fields, nk[].k__host_device, PythonObject(host))
     py_setitem(fields, nk[].k_lr_schedule, schedule)
     py_setitem(fields, nk[].k_accumulation_steps, PythonObject(config.accumulation))
     optimizer_publish_registry(owner, registry)
@@ -326,7 +333,8 @@ def optimizer_initialize(owner: PythonObject, registry: OptimizerRegistryPrepare
 
 def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
     # values: params, kind, lr, betas, eps, weight_decay, momentum,
-    # dampening, nesterov, schedule, accumulation_steps, maximize, resident, kwargs.
+    # dampening, nesterov, schedule, accumulation_steps, maximize, resident, kwargs,
+    # and (lane vdf-seq) device.
     var kind = optimizer_integer(values[1], context)
     var where = String("SGD") if kind == 0 else (String("Adam") if kind == 1 else String("AdamW"))
     opt_schedule(values[9], context)
@@ -335,12 +343,43 @@ def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonO
     opt_value(values[0], context)
     opt_value(values[13], context)
     refuse_kwargs(values[13], where)
+    var device = values[14] if len(values) == 15 else PythonObject(None)
+    var host = optimizer_device_host(device, values[0], mode, where, context)
     optimizer_profile(context)
     var start = optimizer_constructor_start(kind, values[3], values[6], values[7], values[8], values[10], values[11], context)
     opt_scalar(mode, context)
     var registry = optimizer_prepare_registry(values[0], start.name())
     var config = optimizer_configuration(start, values[2], values[4], values[5], values[6], values[7], context)
-    return optimizer_initialize(owner, registry, config, mode, values[9], values[12], context)
+    return optimizer_initialize(owner, registry, config, mode, values[9], values[12], device, host, context)
+
+
+def optimizer_device_host(device: PythonObject, params: PythonObject, mode: PythonObject, where: String,
+                          context: PythonObject) raises -> Bool:
+    """UNPACK of an SGD / Adam / AdamW `device` (lane vdf-seq, 2026-11-24),
+    once per construction or set_params, before any work: True for an
+    explicit "cpu" beside a GPU set, whose owner then runs the CPU identical
+    training image (`training_entries_cpu`, connected here once, refused here
+    for a non-identical mode or a missing image). Parameters that already
+    live on the device (`TrainDeviceArray`) disagree with it and are refused
+    in words; nothing is copied across. None: one identity compare, False."""
+    if device is None:
+        return False
+    var fdev = function_device_admit(device, "mojolearn." + where, True, True, context, native_loaded_module("builtins"))
+    if not fdev.host_beside:
+        return False
+    var nk = optimizer_keys()
+    var device_class = py_item(context, nk[].k_device_class)
+    var b = native_loaded_module("builtins")
+    if py_type(params) is b.list or py_type(params) is b.tuple:
+        for i in range(len(params)):  # driver-loop: over the public parameter buffers (refusal before any work)
+            if py_type(params[i]) is device_class:
+                raise Error("ValueError: mojolearn." + where + " was given device='cpu' but parameter " + String(i)
+                    + " is a TrainDeviceArray, which lives on the GPU; copy it to the host first, or leave device=None")
+    elif py_type(params) is device_class:
+        raise Error("ValueError: mojolearn." + where + " was given device='cpu' but its parameter is a "
+            + "TrainDeviceArray, which lives on the GPU; copy it to the host first, or leave device=None")
+    _ = training_entries_cpu(mode, context)
+    return True
 
 
 def optimizer_state_array(source: PythonObject, integer: Bool, context: PythonObject) raises -> PythonObject:
@@ -379,6 +418,10 @@ def optimizer_params(owner: PythonObject, context: PythonObject) raises -> Pytho
     var nk = optimizer_keys()
     for i in range(len(names)):  # driver-loop: pack fixed public constructor parameter names
         var name = PythonObject(names[i])
+        if names[i] == "device":
+            # an owner restored from state saved before `device` existed has none
+            py_setitem(result, name, py_get(fields, nk[].k_device))
+            continue
         py_setitem(result, name, py_item(fields, nk[].k__resident_wanted) if names[i] == "resident" else fields[name])
     return result
 
@@ -422,6 +465,9 @@ def optimizer_set_params(owner: PythonObject, updates: PythonObject, context: Py
     var schedule = optimizer_parameter_value(updates, fields, "lr_schedule")
     var resident = optimizer_parameter_value(updates, fields, "resident")
     opt_scalar(resident, context)
+    var device = updates[PythonObject("device")] if py_contains(updates, PythonObject("device")) else py_get(fields, nk[].k_device)
+    var where = String("SGD") if kind == 0 else (String("Adam") if kind == 1 else String("AdamW"))
+    var host = optimizer_device_host(device, params, mode, where, context)
     optimizer_profile(context)
     var momentum = optimizer_parameter_value(updates, fields, "momentum") if kind == 0 else PythonObject(None)
     var dampening = optimizer_parameter_value(updates, fields, "dampening") if kind == 0 else PythonObject(None)
@@ -447,7 +493,7 @@ def optimizer_set_params(owner: PythonObject, updates: PythonObject, context: Py
     var lease = OptimizerOwnerLease(owner)
     door[].dict_clear(fields._obj_ptr)
     try:
-        _ = optimizer_initialize(owner, registry, config, mode, schedule, resident, context)
+        _ = optimizer_initialize(owner, registry, config, mode, schedule, resident, device, host, context)
         var replacement = OptimizerOwnerLease(owner)
         optimizer_owner_close(lease.value, owner)
         _ = replacement
@@ -574,11 +620,12 @@ def optimizer_native(operation: Int, name: PythonObject, owner: PythonObject, va
     if operation == OPTIMIZER_OPN_RESTORE_OWNER:
         return optimizer_restore_state(owner, values[0], context)
     if operation == OPTIMIZER_OPN_CONSTRUCT:
-        if len(values) != 14:
+        if len(values) != 14 and len(values) != 15:
             raise Error("TypeError: invalid optimizer constructor envelope")
         opt_owner(owner, context)
         return optimizer_construct(owner, values, mode, context)
     var selected_mode = mode
+    var host_owner = False
     if owner is not None:
         if operation == OPTIMIZER_OPN_STEP or operation == OPTIMIZER_OPN_STATE or operation == OPTIMIZER_OPN_ZERO:
             # These go straight to a compiled door entry whose first step is
@@ -589,7 +636,12 @@ def optimizer_native(operation: Int, name: PythonObject, owner: PythonObject, va
             opt_owner_mode(owner, context)
         else:
             opt_owner(owner, context)
-        selected_mode = py_get(py_fields(owner), nk[].k_numeric_mode)
+        var owner_fields = py_fields(owner)
+        selected_mode = py_get(owner_fields, nk[].k_numeric_mode)
+        # lane vdf-seq: an SGD / Adam / AdamW constructed with device="cpu"
+        # beside a GPU set runs the CPU identical training image (resolved at
+        # construction; one slot read here, False for every other owner)
+        host_owner = py_get(owner_fields, nk[].k__host_device) is PythonObject(True)
     if operation == OPTIMIZER_OPN_GET_PARAMS:
         opt_scalar(values[0], context)
         return optimizer_params(owner, context)
@@ -597,7 +649,7 @@ def optimizer_native(operation: Int, name: PythonObject, owner: PythonObject, va
         return optimizer_set_params(owner, values[0], context)
     if operation == OPTIMIZER_OPN_EXPORT_OWNER:
         return optimizer_export_state(owner)
-    var entries = training_entries_cpu(selected_mode, context) if fdev.host_beside else optimizer_entries(selected_mode, context)
+    var entries = training_entries_cpu(selected_mode, context) if (fdev.host_beside or host_owner) else optimizer_entries(selected_mode, context)
     if operation == OPTIMIZER_OPN_LINEAR_FORWARD or operation == OPTIMIZER_OPN_LINEAR_BACKWARD:
         return training_linear_operation(operation, name, values, entries, context)
     if operation == OPTIMIZER_OPN_RMS_NORM_FORWARD or operation == OPTIMIZER_OPN_RMS_NORM_BACKWARD:
@@ -646,6 +698,8 @@ def optimizer_native(operation: Int, name: PythonObject, owner: PythonObject, va
         return published
     if operation == OPTIMIZER_OPN_STEP:
         opt_scalar(values[2], context)
+        if host_owner:
+            optimizer_refuse_device_grads(values[0], context)
         return door_step(module, provider, owner, values[0], values[1], Int(py=values[2]), values[3])
     if operation == OPTIMIZER_OPN_STATE:
         opt_scalar(values[0], context)
@@ -717,6 +771,22 @@ def optimizer_native(operation: Int, name: PythonObject, owner: PythonObject, va
         opt_scalar(values, context)
         return PythonObject(microbatch_split_is_identical(optimizer_integer(values[0], context), optimizer_integer(values[1], context)))
     raise Error("TypeError: unknown optimizer native operation")
+
+
+def optimizer_refuse_device_grads(grads: PythonObject, context: PythonObject) raises:
+    """A device="cpu" optimizer's step refuses a gradient that lives on the
+    GPU (`TrainDeviceArray`) in words before any work (lane vdf-seq)."""
+    var nk = optimizer_keys()
+    var device_class = py_item(context, nk[].k_device_class)
+    var b = native_loaded_module("builtins")
+    if py_type(grads) is device_class:
+        raise Error("ValueError: an optimizer constructed with device='cpu' was given a TrainDeviceArray gradient, "
+            + "which lives on the GPU; copy it to the host first")
+    if py_type(grads) is b.list or py_type(grads) is b.tuple:
+        for i in range(len(grads)):  # driver-loop: over the step's gradient buffers (device='cpu' owners only)
+            if py_type(grads[i]) is device_class:
+                raise Error("ValueError: an optimizer constructed with device='cpu' was given a TrainDeviceArray "
+                    + "gradient (" + String(i) + "), which lives on the GPU; copy it to the host first")
 
 
 def optimizer_native_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:

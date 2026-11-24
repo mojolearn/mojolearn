@@ -452,6 +452,9 @@ class SGD(_Optimizer):
         Keep the optimizer state on the device between steps when the install supports
         it (None or True). False keeps it on the host, which suits an optimizer that is
         rebuilt every step.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Notes
     -----
@@ -485,8 +488,8 @@ class SGD(_Optimizer):
 
     def __init__(self, params, lr=1e-3, momentum=0.0, dampening=0.0,
                  weight_decay=0.0, nesterov=False, lr_schedule=None,
-                 accumulation_steps=1, maximize=False, resident=None, *, numeric_mode=None, **kwargs):
-        return _OPT_NATIVE("construct", self, (params, _KIND_SGD, lr, (0.9, 0.999), 1e-8, weight_decay, momentum, dampening, nesterov, lr_schedule, accumulation_steps, maximize, resident, kwargs), numeric_mode, _OPT_CONTEXT)
+                 accumulation_steps=1, maximize=False, resident=None, *, numeric_mode=None, device=None, **kwargs):
+        return _OPT_NATIVE("construct", self, (params, _KIND_SGD, lr, (0.9, 0.999), 1e-8, weight_decay, momentum, dampening, nesterov, lr_schedule, accumulation_steps, maximize, resident, kwargs, device), numeric_mode, _OPT_CONTEXT)
 
 
 # Optimizer contract 7.2, coupled weight decay; AdamW (7.4) differs by an order, not a
@@ -529,6 +532,9 @@ class Adam(_Optimizer):
         Keep the optimizer state on the device between steps when the install supports
         it (None or True). False keeps it on the host, which suits an optimizer that is
         rebuilt every step.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Attributes
     ----------
@@ -571,8 +577,8 @@ class Adam(_Optimizer):
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
                  weight_decay=0.0, lr_schedule=None, accumulation_steps=1,
-                 maximize=False, resident=None, *, numeric_mode=None, **kwargs):
-        return _OPT_NATIVE("construct", self, (params, _KIND_ADAM, lr, betas, eps, weight_decay, 0.0, 0.0, False, lr_schedule, accumulation_steps, maximize, resident, kwargs), numeric_mode, _OPT_CONTEXT)
+                 maximize=False, resident=None, *, numeric_mode=None, device=None, **kwargs):
+        return _OPT_NATIVE("construct", self, (params, _KIND_ADAM, lr, betas, eps, weight_decay, 0.0, 0.0, False, lr_schedule, accumulation_steps, maximize, resident, kwargs, device), numeric_mode, _OPT_CONTEXT)
 
 
 # Optimizer contract 7.4: decoupled decay `p * (1 - lr*wd)`; the only difference from `Adam` is the
@@ -600,8 +606,8 @@ class AdamW(Adam):
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
                  weight_decay=0.01, lr_schedule=None, accumulation_steps=1,
-                 maximize=False, resident=None, *, numeric_mode=None, **kwargs):
-        return _OPT_NATIVE("construct", self, (params, _KIND_ADAMW, lr, betas, eps, weight_decay, 0.0, 0.0, False, lr_schedule, accumulation_steps, maximize, resident, kwargs), numeric_mode, _OPT_CONTEXT)
+                 maximize=False, resident=None, *, numeric_mode=None, device=None, **kwargs):
+        return _OPT_NATIVE("construct", self, (params, _KIND_ADAMW, lr, betas, eps, weight_decay, 0.0, 0.0, False, lr_schedule, accumulation_steps, maximize, resident, kwargs, device), numeric_mode, _OPT_CONTEXT)
 
 
 # Keyword admission and named refusals are implemented by the native optimizer
