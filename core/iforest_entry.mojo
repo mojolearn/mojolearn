@@ -22,9 +22,13 @@ Operations:
   `iforest_resident`, `iforest_scores_f64`, `iforest_device_scan` and
   `iforest_device_finite_scan` answered).
 - `IF_OP_RUN`: one fit-and-score (or a resident score), addresses
-  [train, query, out_f32, out_i32, info], ints `IF_P_*`, floats `IF_F_*`.
-  Returns `n_query`. `info` takes three float64 (offset_, max_samples_,
-  n_features_in_), four on the resident form (the token last).
+  [train, query, out_f32, out_i32, info, loop], ints `IF_P_*`, floats
+  `IF_F_*`. Returns `n_query`. `info` takes three float64 (offset_,
+  max_samples_, n_features_in_), four on the resident form (the token
+  last). `loop` (0: not asked) takes two Int words when the call fitted a
+  forest: the trees the build loop made and the loop region's nanoseconds
+  (core/fit_loop_clock.mojo; the estimator's `fit_loop_`); a call that
+  scored a resident forest without fitting leaves them as they are.
 - `IF_OP_RELEASE`: ints [token]; drops the resident forest that token names
   (a token nobody holds is a no-op). The member's FREE.
 - `IF_OP_EXPORT` (round 4; was the Python binding `iforest_forest_export`):
@@ -63,7 +67,8 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
 
-comptime IF_ENTRY_ABI = "mojolearn.iforest_entry.v3"
+# v4 (lane alm-forest, 2026-11-24): the RUN loop address (IF_A_LOOP).
+comptime IF_ENTRY_ABI = "mojolearn.iforest_entry.v4"
 """v2 (round 4): IF_P_SINGLE joined the RUN ints; IF_OP_EXPORT and IF_OP_FOREST_RUN.
 v3 (sweep-b, 2026-11-21): IF_P_DEVICES and IF_P_DEVICE_COUNT joined the RUN ints
 (a member's device plan, MEMBER-ABI-V2 item 28)."""
@@ -88,7 +93,8 @@ comptime IF_A_QUERY = 1
 comptime IF_A_OUT_F32 = 2
 comptime IF_A_OUT_I32 = 3
 comptime IF_A_INFO = 4
-comptime IF_RUN_ADDRESSES = 5
+comptime IF_A_LOOP = 5
+comptime IF_RUN_ADDRESSES = 6
 # IF_OP_RUN ints.
 comptime IF_P_N_TRAIN = 0
 comptime IF_P_N_FEATURES = 1
@@ -140,6 +146,8 @@ struct IFRunRequest(Copyable, Defaultable, Movable):
     var out_f32: Int
     var out_i32: Int
     var info: Int
+    var loop: Int
+    """The address of the two fit loop words (IF_A_LOOP), 0: not asked."""
     var n_train: Int
     var n_features: Int
     var n_query: Int
@@ -171,6 +179,7 @@ struct IFRunRequest(Copyable, Defaultable, Movable):
         self.out_f32 = 0
         self.out_i32 = 0
         self.info = 0
+        self.loop = 0
         self.n_train = 0
         self.n_features = 0
         self.n_query = 0
@@ -309,6 +318,7 @@ def if_run_request_at(aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int) rais
     r.out_f32 = a[IF_A_OUT_F32]
     r.out_i32 = a[IF_A_OUT_I32]
     r.info = a[IF_A_INFO]
+    r.loop = a[IF_A_LOOP]
     if r.info == 0:
         raise Error("iforest_run: the info address is null")
     if r.train == 0 or r.query == 0:
@@ -465,7 +475,7 @@ def if_entry_run(entry: EntryRef, request: IFRunRequest) raises -> Int:
     frame (no heap). The caller keeps every lent buffer alive and releases
     the GIL around the call."""
     var a: Array[Int, IF_RUN_ADDRESSES] = [request.train, request.query, request.out_f32, request.out_i32,
-                                           request.info]
+                                           request.info, request.loop]
     var p: Array[Int, IF_RUN_INTS] = [
         request.n_train, request.n_features, request.n_query, request.n_estimators,
         request.max_samples_mode, request.max_samples_int, request.max_depth,

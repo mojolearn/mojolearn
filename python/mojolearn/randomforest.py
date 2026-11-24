@@ -386,6 +386,10 @@ class RandomForestClassifier(_RandomForestBase):
     feature_importances_ : Array
         Impurity importances, float32; present when `fit` was called with
         `feature_importances=True`.
+    fit_loop_ : tuple of (int, float)
+        The number of trees the last fit built and the time in milliseconds
+        its tree-building loop took, from the start of the first tree to the
+        end of the last.
 
     Examples
     --------
@@ -569,6 +573,10 @@ class RandomForestRegressor(_RandomForestBase):
     feature_importances_ : Array
         Impurity importances, float32; present when `fit` was called with
         `feature_importances=True`.
+    fit_loop_ : tuple of (int, float)
+        The number of trees the last fit built and the time in milliseconds
+        its tree-building loop took, from the start of the first tree to the
+        end of the last.
 
     Examples
     --------

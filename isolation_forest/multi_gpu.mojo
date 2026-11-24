@@ -19,6 +19,7 @@ from core.device_plan import DevicePlan
 from core.host_parallel import host_parallelize
 from core.identity_trace import IdentityTrace
 from std.sys import is_defined
+from core.fit_loop_clock import fit_loop_start, fit_loop_stop
 from isolation_forest.impl.isolation_forest import (
     IFLaunchKnobs,
     IFModelShard,
@@ -63,8 +64,14 @@ def fit_dispatch(
         raise Error("parallel IsolationForest requires 1..64 devices")
     if trace.enabled:
         raise Error("parallel IsolationForest does not export diagnostic traces")
+    # The fit loop clock (lane alm-forest, 2026-11-24): the whole-tree shards
+    # build over the plan's devices; `_fit_tree_shards` returns after every
+    # owner synchronized, so the second read adds no synchronization. The
+    # region holds each owner's upload and scratch (one per device).
+    var loop_start = fit_loop_start()
     _fit_tree_shards(plan, ctx, input_colmajor, src_addr, n_rows, n_cols,
                      forest.params, model, knobs, count)
+    model.fit_loop = fit_loop_stop(loop_start, forest.params.n_estimators)
 
 
 def fit_params_dispatch(

@@ -55,6 +55,7 @@ from core.forest_inference_run import (
 from bindings.forest_fit_boundary_unpack import forest_fit_args_py
 from core.forest_fit_request import (
     ForestFitArgs,
+    fit_loop_put,
     XF_CAP_DEVICE_SCAN,
     XF_CAP_DART,
     XF_CAP_SESSION,
@@ -207,6 +208,9 @@ def _rf_classifier_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> 
     else:
         with GILReleased(Python()):
             forest = _rf_classifier_fit_forest[ROWMAJOR](params, bt)
+    # The fit loop words the door asked for (XF_W_LOOP; lane alm-forest):
+    # `fit_forest_prepared`'s tree loop, read once after the fit.
+    fit_loop_put(params.loop, forest.fit_loop)
     return _rf_keep_forest(forest, bt, t_bind)
 
 
@@ -693,6 +697,9 @@ def _rf_regressor_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> I
     else:
         with GILReleased(Python()):
             forest = _rf_regressor_fit_forest[ROWMAJOR](params, bt)
+    # The fit loop words the door asked for (XF_W_LOOP; lane alm-forest):
+    # `fit_forest_prepared`'s tree loop, read once after the fit.
+    fit_loop_put(params.loop, forest.fit_loop)
     return _rf_keep_forest(forest, bt, t_bind)
 
 

@@ -66,6 +66,7 @@ from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from isolation_forest.impl.rng.xorwow import (
     XorwowTables,
     build_xorwow_tables,
@@ -217,6 +218,10 @@ struct IsolationForestModel(Movable):
     var tree_max_depth_host: List[Int32]
     var fitted: Bool
     var shards: List[IFModelShard]
+    # The fit's tree build loop (lane alm-forest, 2026-11-24; the
+    # estimator's `fit_loop_`): the trees built and the loop region's time.
+    # Empty until a fit records it (an imported forest has none).
+    var fit_loop: FitLoop
 
     def __init__(out self, ctx: DeviceContext) raises:
         self.params = IF_params.default()
@@ -238,6 +243,7 @@ struct IsolationForestModel(Movable):
         self.tree_max_depth_host = List[Int32]()
         self.fitted = False
         self.shards = List[IFModelShard]()
+        self.fit_loop = FitLoop.empty()
         ctx.synchronize()
 
 
@@ -1094,6 +1100,13 @@ struct IsolationForest(Movable):
 
         comptime if DIAG_TRACE:
             print("if_diag: build kernel enqueue begin", flush=True)
+        # The fit loop clock (lane alm-forest, 2026-11-24): read once after
+        # the upload (which drained the queue reading its finite flag), the
+        # node arrays and the build scratch, immediately before the first
+        # build launch; read once more after the drain that ends the build
+        # below (the existing one: no synchronization added). Nothing is read
+        # inside the loop. Measurement only: no computed bit changes.
+        var loop_start = fit_loop_start()
         var batch_start = 0
         while batch_start < n_trees:
             ctx.enqueue_function[build_isolation_trees_global_kernel](
@@ -1132,6 +1145,7 @@ struct IsolationForest(Movable):
         comptime if DIAG_TRACE:
             print("if_diag: build kernel enqueue returned, synchronize begin", flush=True)
         ctx.synchronize()
+        model.fit_loop = fit_loop_stop(loop_start, n_trees)
         comptime if DIAG_TRACE:
             print("if_diag: build kernel synchronize returned", flush=True)
 
