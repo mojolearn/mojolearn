@@ -1855,12 +1855,16 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     var mx = _meta_x_fit(X, context)
     var mctx = PythonObject(None)
     var scope = PythonObject(None)
-    if _meta_rows_resident(mx.x, mx.base_rows, mx.d, context):
+    var scoped = _meta_rows_resident(mx.x, mx.base_rows, mx.d, context)
+    if scoped:
         mctx = prep_native_context(context)
-        scope = _cal_scope_open(mctx)
+        # Inside model selection's own `resident()` scope (a fold read in place: its base is already resident
+        # there) no second scope is entered: the members find the base in the caller's.
+        if member_scope_word(py_item(mctx, PythonObject("family_msel_rows_context"))) == MEMBER_SCOPE_NONE:
+            scope = _cal_scope_open(mctx)
     try:
         _ = _stacking_fit_run(model, mx, y_full, codes, splits, final, sample_weight, classifier, y_given,
-                              scope is not None, context)
+                              scoped, context)
     finally:
         if scope is not None:
             _cal_scope_close(scope, mctx)
