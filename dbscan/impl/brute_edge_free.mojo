@@ -123,8 +123,8 @@ from dbscan.impl.neighbors.epsilon_neighborhood import (
 )
 from dbscan.impl.brute_eps_filter import (
     DBF_G_SHARE_PCT,
-    DBSCAN_BRUTE_EPS_FILTER,
     dbf_band_scale,
+    dbf_filter_pays,
     dbf_filter_serves,
     dbf_gemm_rows,
     dbf_prepare,
@@ -453,7 +453,7 @@ def bef_filtered_fit[
     phase_timing: Bool,
 ) raises -> Int:
     """`dbscan_brute_edge_free_fit` with both distance passes on the GEMM filter of `brute_eps_filter.mojo`
-    (experiment MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER, default off). Steps A-D, the union-find, the border
+    (the default where `dbf_filter_pays`; lane ab-outcome-4). Steps A-D, the union-find, the border
     lists and the labels are that function's, statement for statement; only the launch that fills the degrees
     (A) and the range's bit matrix (B) differs, and it writes the same degrees and the same words (the filter
     decides a pair only where its bound proves the reference accumulator's compare; the rest run `_eps_acc`).
@@ -681,11 +681,12 @@ def dbscan_brute_edge_free_fit[
 ) raises -> Int:
     """Steps A-D of the module docstring. Writes `core` and the merged-stage
     `labels`; returns the number of bit-matrix ranges."""
-    # MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER (default off, A/B owed; `brute_eps_filter.mojo`): the two distance
-    # passes as a GEMM filter with this kernel's own recheck; the same degrees, bits and labels. It returns 0,
-    # with nothing written, when its buffers do not fit the device, and the passes below run.
-    comptime if DBSCAN_BRUTE_EPS_FILTER and metric != DBSCAN_METRIC_L1:
-        if dbf_filter_serves(metric, n_features):
+    # The GEMM filter (`brute_eps_filter.mojo`; the default since 2026-11-24, lane ab-outcome-4, where the
+    # per-pair cost rule `dbf_filter_pays` holds: from DBF_MIN_FEATURES features up): the two distance passes as
+    # a GEMM filter with this kernel's own recheck; the same degrees, bits and labels. It returns 0, with nothing
+    # written, when its buffers do not fit the device, and the passes below run. One integer compare per fit.
+    comptime if IDN_DBSCAN_EDGE_FREE and metric != DBSCAN_METRIC_L1:
+        if dbf_filter_serves(metric, n_features) and dbf_filter_pays(n_features):
             var filtered_ranges = bef_filtered_fit[metric](
                 ctx, x, core, labels, n_rows, n_features, eps, min_pts,
                 phase_timing,

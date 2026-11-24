@@ -1051,8 +1051,9 @@
   },
   "dbscan-brute-eps-filter": {
    "define": "MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER",
-   "status": "REWORKED 2026-11-24 (lane ab-outcome-3): filter always, no probe; RUN OWED with the wave-3 sha (istella full, taxi 250000, taxi full); if taxi full is within noise of base the filter becomes the only brute route and bef_eps_kernel is deleted. (Andrew 2026-11-24: one route, optimised for large inputs, no probe choosing between two; sub-lane o3-route removed the timed probe of lane ab-outcome-1 and kept the bit-matrix plan made first; the exact recheck is now one pass over the features per thread, loading only the open rows and columns, and the fit no longer counts rechecked pairs; the words are the reference's: no bit change.) Was: REWORKED 2026-11-24 (lane ab-outcome-1), RUN OWED with the wave-3 sha on the NVIDIA L40S: the first A/B (nvc-ab-20261124T070727Z-69dac2, wheel 4519097d380a) was SPLIT (istella full 575180 -> 295854 ms, 0.51; taxi 250000 17922 -> 18262, 1.02; taxi full not faster than base 313244 ms), so the arm was not promoted; its new form (still default off) times the filter and bef_eps_kernel on the same probe rows of the degrees pass and keeps the faster, and plans the bit matrix before the filter's buffers so the union ranges are the reference's (dbscan/impl/brute_edge_free.mojo bef_filtered_fit THE COST RULE). Same rows as before. Was: define in code (dbscan/impl/brute_eps_filter.mojo DBSCAN_BRUTE_EPS_FILTER, read by dbscan/impl/brute_edge_free.mojo dbscan_brute_edge_free_fit), lane sp-dbscan-filter 2026-11-20: B = both distance passes of the brute edge-free route as one identical GEMM per query range on centred rows plus a filter launch, pairs inside the error band (M = (4k + 16) u (1 + 1/16) relative to the two centred norms, plus 2^-100) recomputed by the reference _eps_acc chain; A = the default (bef_eps_kernel on every pair). Same degrees, bit words and labels by construction: bits unchanged on every column. IDENTICAL NVIDIA/AMD only (inert elsewhere); euclidean and cosine. Build with the bindings that compile DBSCAN (_mojolearn_estimators, _mojolearn_hdbscan, _mojolearn_hdbscan_host and the binding of core/dbscan_native_device.mojo). Before timing: native check dbscan_eps_filter_gpu (device column) must pass.",
-   "owed": "RUN"
+   "status": "DECIDED 2026-11-24 (lane ab-outcome-4): SPLIT by width (L40S job nvc1-0004: istella full 0.58, taxi full 0.99, taxi 250000 1.12); the define is deleted and refused (core/experiment_guards_cluster.mojo) and the filter is the DEFAULT by the per-pair cost rule dbf_filter_pays (dbscan/impl/brute_eps_filter.mojo): from DBF_MIN_FEATURES = 50 features (k c_ref > k c_gemm + F, c_ref 0.51 ps, F 24 ps a pair, from these cells); same words by construction. RUN OWED with the final measurement build: rows dbscan-filter-rule-full, dbscan-filter-rule-taxi-250k and driver row dbscan-brute-eps-filter-shapes, candidate against the prior. Code recoverable at 2631af4005, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER.ab-outcome-4.patch. Was: REWORKED 2026-11-24 (lane ab-outcome-3): filter always, no probe; RUN OWED with the wave-3 sha (istella full, taxi 250000, taxi full); if taxi full is within noise of base the filter becomes the only brute route and bef_eps_kernel is deleted. (Andrew 2026-11-24: one route, optimised for large inputs, no probe choosing between two; sub-lane o3-route removed the timed probe of lane ab-outcome-1 and kept the bit-matrix plan made first; the exact recheck is now one pass over the features per thread, loading only the open rows and columns, and the fit no longer counts rechecked pairs; the words are the reference's: no bit change.) Was: REWORKED 2026-11-24 (lane ab-outcome-1), RUN OWED with the wave-3 sha on the NVIDIA L40S: the first A/B (nvc-ab-20261124T070727Z-69dac2, wheel 4519097d380a) was SPLIT (istella full 575180 -> 295854 ms, 0.51; taxi 250000 17922 -> 18262, 1.02; taxi full not faster than base 313244 ms), so the arm was not promoted; its new form (still default off) times the filter and bef_eps_kernel on the same probe rows of the degrees pass and keeps the faster, and plans the bit matrix before the filter's buffers so the union ranges are the reference's (dbscan/impl/brute_edge_free.mojo bef_filtered_fit THE COST RULE). Same rows as before. Was: define in code (dbscan/impl/brute_eps_filter.mojo DBSCAN_BRUTE_EPS_FILTER, read by dbscan/impl/brute_edge_free.mojo dbscan_brute_edge_free_fit), lane sp-dbscan-filter 2026-11-20: B = both distance passes of the brute edge-free route as one identical GEMM per query range on centred rows plus a filter launch, pairs inside the error band (M = (4k + 16) u (1 + 1/16) relative to the two centred norms, plus 2^-100) recomputed by the reference _eps_acc chain; A = the default (bef_eps_kernel on every pair). Same degrees, bit words and labels by construction: bits unchanged on every column. IDENTICAL NVIDIA/AMD only (inert elsewhere); euclidean and cosine. Build with the bindings that compile DBSCAN (_mojolearn_estimators, _mojolearn_hdbscan, _mojolearn_hdbscan_host and the binding of core/dbscan_native_device.mojo). Before timing: native check dbscan_eps_filter_gpu (device column) must pass.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T182912Z-977cc8 (NVIDIA L40S, wheel 71db45de5d, job nvc1-0004): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md section \"Job nvc1-0004\""
   },
   "member-set-off": {
    "define": "MOJOLEARN_MEMBER_SET_OFF",
@@ -1234,13 +1235,9 @@
   },
   "set-w3a": {
    "define": "MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER,MOJOLEARN_GEMM_STAGE_UP_OFF,MOJOLEARN_IDN_SSD_OCCUPANCY_OFF",
-   "owed": "RUN",
-   "combined": [
-    "dbscan-brute-eps-filter",
-    "gemm-stage-up-off",
-    "ssd-occupancy-off"
-   ],
-   "status": "COMBINED B SET, build only (lane ab-outcome-3, 2026-11-24, wave-3 A/B): tools/release.py candidate --owed-arm set-w3a builds one wheel set with the three members' defines; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>). The members touch disjoint code (dbscan/impl brute eps path; gemm/host_transport.mojo float32 upload; mamba/impl/modules/ssd_minimal.mojo) and their rows (dbscan; gemm; mamba2-forward/-infer) reach no other member's code."
+   "owed": "DECIDED",
+   "status": "ALL MEMBERS DECIDED 2026-11-24 (lane ab-outcome-4): built and timed in job nvc1-0004; its three members are decided (dbscan-brute-eps-filter: default by cost rule; gemm-stage-up-off: raw upload the only form; ssd-occupancy-off: deleted). Members were dbscan-brute-eps-filter, gemm-stage-up-off, ssd-occupancy-off. Was: COMBINED B SET, build only (lane ab-outcome-3, 2026-11-24, wave-3 A/B): tools/release.py candidate --owed-arm set-w3a builds one wheel set with the three members' defines; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>). The members touch disjoint code (dbscan/impl brute eps path; gemm/host_transport.mojo float32 upload; mamba/impl/modules/ssd_minimal.mojo) and their rows (dbscan; gemm; mamba2-forward/-infer) reach no other member's code.",
+   "evidence": "A/B nvc-ab-20261124T182912Z-977cc8 (NVIDIA L40S, wheel 71db45de5d, job nvc1-0004): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md section \"Job nvc1-0004\""
   }
  },
  "rows": [
@@ -6199,7 +6196,9 @@
     "dbscan-brute-eps-filter"
    ],
    "cap_base": true,
-   "decides": "promote B (the GEMM filter with the exact recheck) where it is faster than A at equal quality on the NVIDIA L40S; the label digest, clusters and noise fraction MUST be equal on both arms (the filter decides a pair only inside a proven error bound, the rest run the reference accumulation; native check dbscan_eps_filter_gpu); record from the PHASE plan.brute_eps_filter line of each fit: gemm_rows, probe_uncertain of pairs, filter True/False"
+   "decides": "promote B (the GEMM filter with the exact recheck) where it is faster than A at equal quality on the NVIDIA L40S; the label digest, clusters and noise fraction MUST be equal on both arms (the filter decides a pair only inside a proven error bound, the rest run the reference accumulation; native check dbscan_eps_filter_gpu); record from the PHASE plan.brute_eps_filter line of each fit: gemm_rows, probe_uncertain of pairs, filter True/False",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T182912Z-977cc8 (NVIDIA L40S, wheel 71db45de5d, job nvc1-0004): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md section \"Job nvc1-0004\""
   },
   {
    "id": "dbscan-brute-eps-filter-taxi",
@@ -6213,7 +6212,9 @@
     "dbscan-brute-eps-filter"
    ],
    "cap_base": true,
-   "decides": "promote B (the GEMM filter with the exact recheck) where it is faster than A at equal quality on the NVIDIA L40S; the label digest, clusters and noise fraction MUST be equal on both arms (the filter decides a pair only inside a proven error bound, the rest run the reference accumulation; native check dbscan_eps_filter_gpu); record from the PHASE plan.brute_eps_filter line of each fit: gemm_rows, probe_uncertain of pairs, filter True/False"
+   "decides": "promote B (the GEMM filter with the exact recheck) where it is faster than A at equal quality on the NVIDIA L40S; the label digest, clusters and noise fraction MUST be equal on both arms (the filter decides a pair only inside a proven error bound, the rest run the reference accumulation; native check dbscan_eps_filter_gpu); record from the PHASE plan.brute_eps_filter line of each fit: gemm_rows, probe_uncertain of pairs, filter True/False",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T182912Z-977cc8 (NVIDIA L40S, wheel 71db45de5d, job nvc1-0004): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md section \"Job nvc1-0004\""
   },
   {
    "id": "dbscan-brute-eps-filter-taxi-250k",
@@ -6226,7 +6227,9 @@
    "b_arms": [
     "dbscan-brute-eps-filter"
    ],
-   "decides": "promote B (the GEMM filter with the exact recheck) where it is faster than A at equal quality on the NVIDIA L40S; the label digest, clusters and noise fraction MUST be equal on both arms (the filter decides a pair only inside a proven error bound, the rest run the reference accumulation; native check dbscan_eps_filter_gpu); record from the PHASE plan.brute_eps_filter line of each fit: gemm_rows, probe_uncertain of pairs, filter True/False"
+   "decides": "promote B (the GEMM filter with the exact recheck) where it is faster than A at equal quality on the NVIDIA L40S; the label digest, clusters and noise fraction MUST be equal on both arms (the filter decides a pair only inside a proven error bound, the rest run the reference accumulation; native check dbscan_eps_filter_gpu); record from the PHASE plan.brute_eps_filter line of each fit: gemm_rows, probe_uncertain of pairs, filter True/False",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T182912Z-977cc8 (NVIDIA L40S, wheel 71db45de5d, job nvc1-0004): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md section \"Job nvc1-0004\""
   },
   {
    "id": "dbscan-brute-eps-filter-shapes",
@@ -6260,10 +6263,32 @@
    ],
    "arms": [
     "candidate",
-    "dbscan-brute-eps-filter"
+    "prior"
    ],
    "vendor": "nvidia",
-   "decides": "promote B (the GEMM filter with the exact recheck) where it is faster than A at equal quality on the NVIDIA L40S; the label digest, clusters and noise fraction MUST be equal on both arms (the filter decides a pair only inside a proven error bound, the rest run the reference accumulation; native check dbscan_eps_filter_gpu); record from the PHASE plan.brute_eps_filter line of each fit: gemm_rows, probe_uncertain of pairs, filter True/False; here the digest is labels_sha256 of each case line"
+   "decides": "RUN OWED with the final measurement build (lane ab-outcome-4, 2026-11-24): the per-pair cost rule dbf_filter_pays (dbscan/impl/brute_eps_filter.mojo, DBF_MIN_FEATURES = 50) against the prior wheel, which runs the reference pass on every shape: 50,000 x 8 must be equal to the prior (the reference on both), 50,000 x 64, 60,000 x 512 and the non-board 200,000 x 100 must be no slower (the filter); the label digest, clusters and noise fraction MUST be equal on both arms. Was (B arm deleted): promote B (the GEMM filter with the exact recheck) where it is faster than A at equal quality on the NVIDIA L40S; the label digest, clusters and noise fraction MUST be equal on both arms (the filter decides a pair only inside a proven error bound, the rest run the reference accumulation; native check dbscan_eps_filter_gpu); record from the PHASE plan.brute_eps_filter line of each fit: gemm_rows, probe_uncertain of pairs, filter True/False; here the digest is labels_sha256 of each case line"
+  },
+  {
+   "id": "dbscan-filter-rule-full",
+   "source": "lane ab-outcome-4 (2026-11-24): the GEMM filter is the default by the per-pair cost rule dbf_filter_pays (DBF_MIN_FEATURES = 50, dbscan/impl/brute_eps_filter.mojo); the define MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER is deleted",
+   "kind": "board",
+   "lane": "dbscan",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "owed": "RUN",
+   "decides": "time the cost-rule default with the final measurement build against the prior: istella full (220 features, the filter) must keep the 0.58 of job nvc1-0004; taxi full (11 features, the reference) must equal the prior; labels, clusters and noise fraction equal"
+  },
+  {
+   "id": "dbscan-filter-rule-taxi-250k",
+   "source": "lane ab-outcome-4 (2026-11-24): the GEMM filter is the default by the per-pair cost rule dbf_filter_pays (DBF_MIN_FEATURES = 50, dbscan/impl/brute_eps_filter.mojo); the define MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER is deleted",
+   "kind": "board",
+   "lane": "dbscan",
+   "dataset": "taxi",
+   "rows": 250000,
+   "vendor": "nvidia",
+   "owed": "RUN",
+   "decides": "the same at 250,000 rows: taxi (11 features) takes the reference pass and must equal the prior (job nvc1-0004 read the filter 1.12 slower here)"
   },
   {
    "id": "rnn-scan-gated",
