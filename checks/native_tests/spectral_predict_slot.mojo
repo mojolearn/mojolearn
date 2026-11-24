@@ -62,7 +62,7 @@ def _same(a: SpectralPrediction, b: SpectralPrediction, what: String) raises:
                 what + ": embedding bits differ at " + String(i))
 
 
-def _device_case(case: Int) raises:
+def _device_case(which: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         var seed = UInt64(20261124)
         var train = _rows(seed, _N)
@@ -83,7 +83,7 @@ def _device_case(case: Int) raises:
         var handle = -1
         var failure = String("")
         try:
-            if case == 2:
+            if which == 2:
                 var own = train.copy()
                 handle = spectral_resident_prepare(own^, _N, _D, _K, _C, 0, state)
                 var got = spectral_resident_predict(handle, queries, _N, _Q, _D, _K, _C, _NB, 0)
@@ -94,7 +94,7 @@ def _device_case(case: Int) raises:
                 # The handle holds its own copy: the training slot may go before the predict.
                 store[].free(ctx, t_slot)
                 t_slot = -1
-                if case == 0:
+                if which == 0:
                     var qbuf = metrics_store_buffer(q_slot, _Q * _D)
                     var got = spectral_resident_predict(handle, List[Float32](), _N, _Q, _D, _K, _C, _NB, 0,
                                                         Optional(qbuf.copy()))
@@ -120,8 +120,8 @@ def _device_case(case: Int) raises:
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(which: Int) raises:
+            _device_case(which)
 
         check_cases_serial("spectral_predict_slot device", 3, body)
 

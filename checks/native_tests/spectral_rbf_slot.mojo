@@ -40,7 +40,7 @@ def _bits(a: List[Float32], b: List[Float32], what: String) raises:
         require(bitcast[DType.uint32](a[i]) == bitcast[DType.uint32](b[i]), what + ": bits differ at " + String(i))
 
 
-def _device_case(case: Int) raises:
+def _device_case(which: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         var seed = UInt64(20261124)
         var x = List[Float32](capacity=_N * _D)
@@ -53,7 +53,7 @@ def _device_case(case: Int) raises:
         try:
             var aff_host = List[Float32](length=_N * _N, fill=0.0)
             var aff_slot = List[Float32](length=_N * _N, fill=0.0)
-            if case == 0:
+            if which == 0:
                 var e_host = List[Float32]()
                 var e_slot = List[Float32]()
                 var a = spectral_embedding_rbf_host(Int(x.unsafe_ptr()), _N, _D, 0.7, Int(aff_host.unsafe_ptr()), 3,
@@ -93,8 +93,8 @@ def _device_case(case: Int) raises:
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(which: Int) raises:
+            _device_case(which)
 
         check_cases_serial("spectral_rbf_slot device", 2, body)
 

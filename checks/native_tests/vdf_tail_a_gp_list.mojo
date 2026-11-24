@@ -137,9 +137,9 @@ def _gpr_fit(x_addr: Int, y: List[Float32], n: Int, kernel: GPKernelStorage) rai
     return fit^
 
 
-def _device_case(case: Int) raises:
+def _device_case(which: Int) raises:
     var x = _x(FN, FD)
-    if case == 5:
+    if which == 5:
         x[(FN - 2) * FD + 1] = Float32(0.0) / Float32(0.0)  # inside the fold (row FN - 2) and the query (row 38)
     var y = List[Float32](length=FN, fill=0.0)
     var codes = List[Int32](length=FN, fill=Int32(0))
@@ -156,7 +156,7 @@ def _device_case(case: Int) raises:
         codes_fold[r] = codes[Int(index[r])]
     var q = 9
     var qrows = _query_rows(q)
-    if case == 5:
+    if which == 5:
         qrows[0] = Int64(FN - 2)
     var xq = _gather(x, qrows)
     var store: NativeDescriptorCall = x_prep_transport_device_v1
@@ -168,14 +168,14 @@ def _device_case(case: Int) raises:
     var kernel = _kernel()
     var failure = String("")
     try:
-        if case >= 0 and case <= 2:
+        if which >= 0 and which <= 2:
             var fa = _gpr_fit(word, y_fold, n, kernel)
             var fb = _gpr_fit(_a(gathered), y_fold, n, kernel)
             require(fa.info == fb.info and fa.info == 0, "the fold fit's info differs or the fit failed")
             _same(fa.l, fb.l, "L_")
             _same(fa.dual, fb.dual, "alpha_")
             _same64(fa.scalars, fb.scalars, "fit scalars")
-            if case == 1:
+            if which == 1:
                 var ma = List[Float32](length=q, fill=0.0)
                 var mb = List[Float32](length=q, fill=0.0)
                 var va = List[Float32](length=q, fill=0.0)
@@ -195,7 +195,7 @@ def _device_case(case: Int) raises:
                 _same(va, vb, "predictive variance")
                 _same(ta, tb, "predictive std")
                 _same32(ca, cb, "clamp flags")
-            elif case == 2:
+            elif which == 2:
                 var ma = List[Float32](length=q, fill=0.0)
                 var mb = List[Float32](length=q, fill=0.0)
                 var ka = List[Float32](length=q * q, fill=0.0)
@@ -214,7 +214,7 @@ def _device_case(case: Int) raises:
                 _ = GPDeviceKernels.gpr_sample(GPRSampleRequest(_a(gathered), _a(fb.l), _a(fb.dual), _a(xq), _a(db),
                     n, FD, q, kernel.view(), fb.info, s, 20261124, 0, False, 1.0, 0.0))
                 _same(da, db, "posterior draws")
-        elif case == 3:
+        elif which == 3:
             var flags: List[Int32] = [0, 1, 0]
             var ga = List[Float64](length=4, fill=0.0)
             var gb = List[Float64](length=4, fill=0.0)
@@ -228,7 +228,7 @@ def _device_case(case: Int) raises:
             _same64(ga, gb, "the likelihood gradient")
             _same64(sa, sb, "(info, lml)")
             _ = flags^
-        elif case == 4:
+        elif which == 4:
             var la = List[Float32](length=n * n, fill=0.0)
             var lb = List[Float32](length=n * n, fill=0.0)
             var pa = List[Float32](length=n, fill=0.0)

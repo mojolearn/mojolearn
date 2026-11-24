@@ -107,7 +107,7 @@ def _tree(x_word: Int, rows: List[Float32], n: Int) raises -> List[List[Float32]
     return result^
 
 
-def _device_case(case: Int) raises:
+def _device_case(which: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         var seed = UInt64(20261124)
         var x = List[Float32](capacity=_BASE * _D)
@@ -134,7 +134,7 @@ def _device_case(case: Int) raises:
         var qslot = store[].take_rows(store_ctx, base, _D, Int(qindex.unsafe_ptr()), nq)
         var failure = String("")
         try:
-            if case == 0:
+            if which == 0:
                 var c0 = List[Int32]()
                 var l0 = List[Int32]()
                 var i0 = List[Int32]()
@@ -146,13 +146,13 @@ def _device_case(case: Int) raises:
                 _same_i(c0, c1, "solver children")
                 _same_i(l0, l1, "solver labels")
                 _same_i(i0, i1, "solver info")
-            elif case == 1:
+            elif which == 1:
                 var a = _tree(0, rows, n)
                 var b = _tree(fold_x_word(slot), rows, n)
                 require(len(a) == len(b), "tree output slots")
                 for q in range(len(a)):  # small-loop(output slots)
                     _same_f(a[q], b[q], "tree slot " + String(q))
-            elif case == 2:
+            elif which == 2:
                 var z0 = List[Int32](length=n, fill=0)
                 var z1 = List[Int32](length=n, fill=0)
                 op_row_all_zero(Int(rows.unsafe_ptr()), Int(z0.unsafe_ptr()), n, _D)
@@ -192,8 +192,8 @@ def _device_case(case: Int) raises:
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(which: Int) raises:
+            _device_case(which)
 
         check_cases_serial("agglo_fold_x device", 4, body)
 
