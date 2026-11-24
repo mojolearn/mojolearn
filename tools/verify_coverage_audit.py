@@ -2695,10 +2695,13 @@ def render_markdown(audit, path):
     except (ImportError, OSError, SystemExit):
         table = {}
     if table:
-        w("| arm | patch | bindings | lanes |")
-        w("|---|---|---|---|")
+        # The side column (lane vdv-sab2-a, 2026-11-24): the side whose code carries the fault, read through
+        # coverage_sabotage.arm_sides (the manifest's `side` column), never inferred here from `_host` stems.
+        w("| arm | patch | bindings | side | lanes |")
+        w("|---|---|---|---|---|")
         for name, arm in table.items():
-            w(f"| `{name}` | `{arm['patch']}` | {', '.join(arm['bindings'])} | {_short(arm['lanes'], 4)} |")
+            side = "+".join(coverage_sabotage.arm_sides(arm))
+            w(f"| `{name}` | `{arm['patch']}` | {', '.join(arm['bindings'])} | {side} | {_short(arm['lanes'], 4)} |")
     else:
         w("(none yet)")
     w("")
@@ -2717,7 +2720,10 @@ def render_markdown(audit, path):
           "against the clean run of the same lanes; the sabotaged cells are also judged against "
           "`python/mojolearn/verify_reference/table.json` (OWED: a new lane with no reference yet, judged "
           "against the clean run only; IDENTICAL: a column the fault does not reach while the other column "
-          "moved). Every REFUSED cell is the fault tripping one of the library's own checks.")
+          "moved). Every REFUSED cell is the fault tripping one of the library's own checks. "
+          "Since 2026-11-24 an arm runs in one identity_break process with `--side both` (the CPU side through "
+          "`device=\"cpu\"`, no MOJOLEARN_VENDOR child) and `coverage_sabotage.py check-sides` judges it per side; "
+          "the rows below are the history of the earlier column runs.")
         w("")
         w("| arm | builds (rc, seconds) | verdict | lanes (column: result) | sabotaged cells against table.json "
           "| patch reverted | seconds |")
