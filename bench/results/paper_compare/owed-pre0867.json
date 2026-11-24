@@ -259,8 +259,9 @@
   },
   "ni12-implicit-conv-off": {
    "define": "MOJOLEARN_NI12_IMPLICIT_CONV_OFF",
-   "status": "define in code (x_cnn/device.mojo NI12_IMPLICIT_CONV): B = the materialized cols on every layer (direct conv / im2col + GEMM; the g50ebe26a5 cnn-clf winner)",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2, sub-lane ab2-nseq): old path LOSER (L40S 6 cells, median 1.51, 1.40..1.70); A (the per-layer fill rule, the default) is unchanged; the materialized path stays for narrow layers and fast; the define is refused (core/experiment_guards_neural.mojo); grid controls moved to removed; code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_NI12_IMPLICIT_CONV_OFF.ab-outcome-2.patch. Was: define in code (x_cnn/device.mojo NI12_IMPLICIT_CONV): B = the materialized cols on every layer (direct conv / im2col + GEMM; the g50ebe26a5 cnn-clf winner)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "hist-packed-gh": {
    "define": "MOJOLEARN_TREES_HIST_PACKED_GH",

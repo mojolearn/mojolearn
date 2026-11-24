@@ -90,8 +90,8 @@ comptime _NI_CNN_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_NI11_DIRECT_CONV_TAPS64 (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
 # Restore: git apply experiments/removed/MOJOLEARN_NI11_DIRECT_CONV_TAPS64.patch
 # NI12 implicit conv: the IDENTICAL default since 2026-10-09 (lane/postmerge-act-6;
-# -D MOJOLEARN_NI12_IMPLICIT_CONV_OFF restores the materialized im2col cols; the
-# old on-define is refused in core/six_lane_experiment_guards.mojo). Post-merge
+# the old on-define is refused in core/six_lane_experiment_guards.mojo; the
+# materialized-everywhere -D MOJOLEARN_NI12_IMPLICIT_CONV_OFF was deleted 2026-11-24, see below). Post-merge
 # A/B on main, one run per arm (nv2 L40S v1052 -> v1053, MI325X a1152 -> a1153):
 # conv2d NV 9.62 -> 7.12 ms (0.74x) / AMD 9.02 -> 6.23 ms (0.69x), resnet-block
 # NV 21.43 -> 15.76 ms (0.74x) / AMD 22.06 -> 15.37 ms (0.70x); digests unchanged
@@ -103,8 +103,14 @@ comptime _NI_CNN_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # v1446; AMD 303.5 -> 274.0 ms, b0080; avg 0.90x) while the 2026-10-10 promotion A/B had implicit conv winning on conv2d and
 # resnet-block (0.69x-0.74x). Decide per algorithm (cnn-clf off, conv2d/resnet-block on) after one confirm run on both vendors.
 # DECIDED PER LAYER 2026-11-15 (lane fix-cnn-clf-implicit-conv): not per algorithm but by the
-# layer's own tile fill, `ni12_implicit_layer` below. RUN OWED against both old arms.
-comptime NI12_IMPLICIT_CONV = _NI_CNN_ENABLED and not is_defined["MOJOLEARN_NI12_IMPLICIT_CONV_OFF"]()
+# layer's own tile fill, `ni12_implicit_layer` below.
+# VERDICT 2026-11-24 on `-D MOJOLEARN_NI12_IMPLICIT_CONV_OFF` (the materialized cols on every layer, the g50ebe26a5
+# cnn-clf arm; A/B nvc-ab-20261124T095727Z-92fd9f, NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm):
+# the old path was 1.40..1.70 slower over 6 cells (median 1.51). The fill rule stays the one form.
+# TOMBSTONE: MOJOLEARN_NI12_IMPLICIT_CONV_OFF (old path, LOSER: NV L40S 6 cells, median 1.51, 1.40..1.70 slower) deleted 2026-11-24 by lane/ab2-nseq (ab-outcome-2); code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_NI12_IMPLICIT_CONV_OFF.ab-outcome-2.patch
+# The implicit kernels compile for IDENTICAL only; `fast` and every narrow layer take the materialized cols.
+comptime NI12_IMPLICIT_CONV = _NI_CNN_ENABLED
 # NI12 FILL RULE (lane fix-cnn-clf-implicit-conv, 2026-11-15). Why implicit conv lost on cnn-clf:
 # `implicit_conv_kernel` is a 64-row x 64-channel register tile and `implicit_wgrad_leaf_kernel`
 # a 64-channel x 64-tap tile; a block costs the same (its staging, its 16-tap slabs, its two
@@ -122,7 +128,6 @@ comptime NI12_IMPLICIT_CONV = _NI_CNN_ENABLED and not is_defined["MOJOLEARN_NI12
 # (owed row ni12-fill-rule-neighbour). Bits: the arms are the same contract words (the
 # promotion's digests did not move), so the per-layer choice moves no bits; the host column has
 # no implicit/materialized split.
-# `-D MOJOLEARN_NI12_IMPLICIT_CONV_OFF` takes the materialized path on every layer (the g50ebe26a5 winner).
 # VERDICT 2026-11-18 on `-D MOJOLEARN_NI12_FILL_RULE_OFF` (implicit conv on every layer, the 2026-10-10 default;
 # A/B ab1, owed row ni12-fill-rule, NVIDIA L40S host 37f71a6102af, driver 595.112.07, wheel d652a4b0a1, base and
 # arm back to back in one job, one run per arm, digests equal on all 6 cells): cnn-clf fit 189.9 -> 218.2 ms (1.15x
@@ -431,8 +436,8 @@ def direct_conv_kernel(x: FP, w: FP, bias: FP, cols: FP, yconv: FP, p: IP, rows_
 # Under this switch the backward never builds cols either (the input
 # gradient keeps `dcols = g . W` + col2im, whose fold order is col2im's).
 # The IDENTICAL default since 2026-10-09 (bits equal; conv2d NV 0.74x / AMD
-# 0.69x, resnet-block NV 0.74x / AMD 0.70x, see NI12_IMPLICIT_CONV above);
-# `-D MOJOLEARN_NI12_IMPLICIT_CONV_OFF` restores the materialized cols.
+# 0.69x, resnet-block NV 0.74x / AMD 0.70x, see NI12_IMPLICIT_CONV above), per
+# layer by the fill rule (ni12_implicit_layer).
 comptime NI12_TM = 64
 comptime NI12_TN = 64
 comptime NI12_KS = 16
