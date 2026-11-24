@@ -71,6 +71,8 @@ struct TSVDDecompKernels[E: Exec, D: RDev, RES: Bool](TSVDNativeKernels):
 
     @staticmethod
     def query(r: TSVDQueryRequest) raises -> Int:
+        if r.fold.active():
+            raise Error("TruncatedSVD estimator provider does not own resident folds")
         raise Error("TruncatedSVD decomposition provider does not provide queries")
 
     @staticmethod

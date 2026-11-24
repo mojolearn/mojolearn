@@ -63,6 +63,8 @@ struct TSVDHostKernels(TSVDNativeKernels):
 
     @staticmethod
     def query(r: TSVDQueryRequest) raises -> Int:
+        if r.fold.active():
+            raise Error("TruncatedSVD estimator provider does not own resident folds")
         if r.resident:
             raise Error("TruncatedSVD host estimator does not own resident leases")
         var dst = f32_ptr(r.dst)

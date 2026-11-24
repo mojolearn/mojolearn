@@ -68,6 +68,8 @@ struct TSVDDeviceKernels(TSVDNativeKernels):
 
     @staticmethod
     def query(r: TSVDQueryRequest) raises -> Int:
+        if r.fold.active():
+            raise Error("TruncatedSVD estimator provider does not own resident folds")
         if r.resident:
             if r.lease < 0:
                 var name = String("tsvd_inverse_transform_resident") if r.inverse else String("tsvd_transform_resident")
