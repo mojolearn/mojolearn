@@ -12,6 +12,18 @@ from core.member_abi import MemberPlan
 from core.member_families import MEMBER_FAMILY_COUNT
 
 
+#: The refusal of a class that is no Mojolearn estimator (lane mf-del8; moved
+#: here by lane mf-rows8c so bindings/member_set_door.mojo and the meta door
+#: providers/python/member_ensemble_boundary_door.mojo raise one text): a
+#: Mojolearn meta-estimator fits its members natively and never calls a
+#: Python estimator's own fit (AGENTS.md "No calls back into Python").
+comptime MEMBER_SET_FOREIGN = (
+    " is not a Mojolearn estimator: a Mojolearn meta-estimator fits its members natively and calls no Python"
+    " estimator's fit. Use the Mojolearn class of the same name, or scikit-learn's own meta-estimator for a"
+    " third-party estimator."
+)
+
+
 struct MemberOwner(Movable):
     """`published` False: the member's class has no member entry and the
     caller keeps the member's own doors. True: `plan` is complete (family,

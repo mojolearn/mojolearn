@@ -120,7 +120,7 @@ from core.member_abi import (
     MEMBER_GIL_DOOR, MEMBER_READS_Y_GIVEN,
 )
 from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES, MEMBER_FAMILY_ENSEMBLE
-from bindings.member_owner_unpack import member_mark
+from bindings.member_owner_unpack import member_mark, MEMBER_SET_FOREIGN
 from core.member_notices import member_notices_take
 
 # TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
@@ -324,14 +324,10 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     return True
 
 
-#: The refusal of a class that is no Mojolearn estimator (lane mf-del8): a
-#: Mojolearn meta-estimator fits its members natively and never calls a
-#: Python estimator's own fit (AGENTS.md "No calls back into Python").
-comptime MEMBER_SET_FOREIGN = (
-    " is not a Mojolearn estimator: a Mojolearn meta-estimator fits its members natively and calls no Python"
-    " estimator's fit. Use the Mojolearn class of the same name, or scikit-learn's own meta-estimator for a"
-    " third-party estimator."
-)
+#: The refusal of a class that is no Mojolearn estimator (lane mf-del8): one
+#: text, kept in bindings/member_owner_unpack.mojo since lane mf-rows8c (the
+#: meta door raises it too and cannot import this module: it is imported by it),
+#: imported above with `member_mark`.
 
 
 def member_set_admit_or_raise(mut set: MemberSet, estimator: PythonObject, target: Int, weights: Int,

@@ -89,7 +89,7 @@ from bindings.member_leaf_boundary_door import member_leaf_admit_serving_labeled
 from bindings.member_leaf_boundary_door import (
     member_leaf_admit_serving, member_leaf_pack, member_leaf_pack_labeled, member_leaf_state,
 )
-from bindings.member_owner_unpack import MemberOwner, member_labels_take, member_labels_hold, member_mark
+from bindings.member_owner_unpack import MemberOwner, member_labels_take, member_labels_hold, member_mark, MEMBER_SET_FOREIGN
 from bindings.member_class_weight_unpack import member_cw_fill
 from bindings.class_weight_boundary_unpack import class_weight_dictionary_values, CLASS_WEIGHT_TREES
 from bindings.meta_plan_capsule_pack import meta_plan_capsule
@@ -410,6 +410,13 @@ def _admit_nested(done: _Done, mut nested: _Nested, est: PythonObject, classifie
     if member_mark(plan, b).family == MEMBER_FAMILY_ENSEMBLE:
         var at = done.find(est)
         if at < 0:
+            # A NESTED META-ESTIMATOR THAT WAS REFUSED (lane mf-rows8c, row :3769):
+            # its own admission raised; the parent's fit fits it, so its words
+            # are the parent's. One that answered False (a not-typed case deeper
+            # down, its own row) leaves the parent unserved.
+            var failed = done.failure(est)
+            if failed >= 0:
+                raise Error(done.failed_words[failed])
             return False
         var meta_mask = done.masks[at]
         if (meta_mask & needs) != needs or ((meta_mask & MEMBER_CAN_CLASSIFIER) != 0) != classifier:
@@ -475,16 +482,31 @@ struct _Done(Movable):
     var plans: List[MemberPlan]
     var masks: List[Int]
     var pins: PythonObject
+    # THE REFUSED NESTED META-ESTIMATORS (lane mf-rows8c): each one whose
+    # admission RAISED (by identity) and its words, the refusal its own fit
+    # raises; a parent that nests it raises them (`_admit_nested`, a search's
+    # `_search_nested_refusal`) where it answered False and kept its door.
+    var failed_objs: PythonObject
+    var failed_words: List[String]
 
     def __init__(out self) raises:
         self.objs = Python.list()
         self.plans = List[MemberPlan]()
         self.masks = List[Int]()
         self.pins = Python.list()
+        self.failed_objs = Python.list()
+        self.failed_words = List[String]()
 
     def find(self, est: PythonObject) raises -> Int:
         for i in range(len(self.plans)):  # driver-loop: over the admitted nested meta-estimators (identity)
             if self.objs[i] is est:
+                return i
+        return -1
+
+    def failure(self, est: PythonObject) raises -> Int:
+        """The index of `est` among the refused nested meta-estimators, or -1."""
+        for i in range(len(self.failed_words)):  # driver-loop: over the refused nested meta-estimators (identity)
+            if self.failed_objs[i] is est:
                 return i
         return -1
 
@@ -636,8 +658,12 @@ def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
                 done.plans.append(sub.plan.copy())
                 done.masks.append(mask)
                 _ = py_call(done.pins.append, sub.pins)
-        except:
-            served = False  # not served: its parents look it up and keep their doors
+        except e:
+            # Refused (lane mf-rows8c): its words are kept; a parent that nests
+            # it raises them, as the parent's fit raises its member's refusal.
+            served = False
+            _ = py_call(done.failed_objs.append, order[i])
+            done.failed_words.append(String(e))
         i -= 1
     var owner_labels = owner.labels  # a second reference: owner is passed mutably beside it
     return _admit_one(model, fields, kind, context, b, owner, done, prepared, owner_labels)
@@ -3262,10 +3288,13 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     a `device`, keeps them on the host; otherwise the kind's `flag` word lets
     a caller in a resident scope hand the RUN its scope and X's pin
     (core/ensemble_member.mojo `_fit_search`; a member keeps its own
-    `device`). SCORING None over a classifier whose `score` is the prep
-    classifiers' mean accuracy (mojolearn._expansion_prep `_Classifier.score`:
-    GaussianNB and the other naive Bayes, LDA, QDA; their member has no score
-    operation) is the 'accuracy' scorer, which is what that `score` is."""
+    `device`). SCORING None over a kind with no score operation (lane
+    mf-rows8c: the naive Bayes, discriminant, neighbors, GP, kernel ridge,
+    PLS, tree and forest regressors, gradient-boosting and DART regressors,
+    SVR, IsotonicRegression, NearestCentroid, label propagation, SVGP,
+    EllipticEnvelope, the meta-estimators but the search and MultiOutput) is
+    the typed scorer its class's `score` is (`_own_score`: 'accuracy' or
+    'r2'); a class with no `score` raises scikit-learn's TypeError."""
     var scoring_in = py_get(fields, "scoring")
     # THE SCORERS: (name, scorer value as given) in the caller's order; an
     # empty list: scoring=None (the member's own score).
@@ -3422,6 +3451,11 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                     + String(py=py_call(b.repr, error_score)) + " instead.")
     var train = py_get(fields, "return_train_score")
     var return_train = train is not None and _truthy(train, b)
+    var base = py_get(fields, "estimator")
+    if len(keys) == 0 and tool_respond < 0:
+        # SCORING None on a class with no `score` (lane mf-rows8c): scikit-
+        # learn's `check_scoring` raises before any candidate is drawn.
+        _no_score_refusal(base, b)
     var got = _search_prepare(model, fields, context, b, prepared)
     if got is None:
         return False
@@ -3436,15 +3470,25 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             if msel_params_name_device(candidates[c], b):
                 resident = False
                 break
-    var base = py_get(fields, "estimator")
     var base_plan = prep_estimator_plan(base, context)
     if base_plan is None or py_get(base_plan, "member") is None:
-        return False
+        # A BASE WITH NO MEMBER (lane mf-rows8c, row :3442): no estimator, a
+        # class that is no Mojolearn estimator, or a Mojolearn class whose fit
+        # takes no target; raised natively (`_search_base_refusal`).
+        raise Error(_search_base_refusal(model, base, base_plan, tolerate != 0.0, len(clones) * folds, b))
     var classifier = False
     if member_mark(base_plan, b).family == MEMBER_FAMILY_ENSEMBLE:
+        # A NESTED META BASE (lane mf-rows8c, row :3447): a candidate whose
+        # admission raised raises its words as scikit-learn's fits do
+        # (`_search_nested_refusal`).
+        if _search_nested_refusal(done, clones, tolerate != 0.0, len(clones) * folds):
+            # some candidates refused and others not, with a numeric
+            # error_score: scikit-learn scores the refused ones error_score and
+            # warns; the RUN has no per-candidate refusal row yet (rows.tsv)
+            return False
         var at = done.find(clones[0])
         if at < 0:
-            return False
+            return False  # its admission answered False: a not-typed case of its own (that site's row)
         classifier = (done.masks[at] & MEMBER_CAN_CLASSIFIER) != 0
     else:
         classifier = Bool(py=base_plan["classifier"])
@@ -3471,6 +3515,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var needs = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT
     if classifier:
         needs |= MEMBER_CAN_CLASSIFIER
+    var own_score = -1  # scoring None: `_own_score`'s answer (lane mf-rows8c); -1 a scorer or a cv tool's response
     if tool_keep:
         needs |= MEMBER_CAN_EXPORT  # each kept unit state is packed into its estimator
     if tool_respond >= 0:
@@ -3481,14 +3526,15 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             needs |= MEMBER_CAN_DECISION
         positives.append(-1)
         responses.append(tool_respond)
-    elif len(keys) == 0 and classifier and _mean_accuracy_score(base, b):
-        # scoring None = the class's `score` = accuracy (the docstring)
-        var accuracy = msel_scorer_code("accuracy", False)
-        codes.append(accuracy)
-        positives.append(-1)
-        responses.append(msel_scorer_row(accuracy).op)
     elif len(keys) == 0:
-        needs |= MEMBER_CAN_SCORE
+        # SCORING None (lane mf-rows8c, row :3769): the class's own `score`.
+        # A kind that publishes MEMBER_OP_SCORE is scored by it; one that
+        # does not (decided after the candidates' admission, below) by the
+        # typed scorer its class's `score` is (`_own_score`). REMOVED:
+        # `_mean_accuracy_score` (the prep classifiers' accuracy, now one case
+        # of `_own_score`) and the MEMBER_CAN_SCORE need that answered False
+        # for every other kind without the op.
+        own_score = _own_score(base, base_plan, classifier, b)
         positives.append(-1)
     var clusterer = False
     var cluster_entry = False
@@ -3767,6 +3813,28 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     for c in range(len(clones)):  # driver-loop: over the candidates (admission, once each)
         if not _admit_nested(done, nested, clones[c], classifier, needs, context, b, labels):
             return False
+    if own_score >= 0:
+        # SCORING None over kinds without MEMBER_OP_SCORE (lane mf-rows8c): every
+        # candidate is the base's class, so one typed scorer scores them all,
+        # the one the class's `score` is: 'accuracy' of predict (a classifier,
+        # an outlier detector) or 'r2' of predict (a regressor), the metric
+        # program the class's own score runs (its door predicts, then the
+        # x_metrics accuracy / R^2 program).
+        var lacking = False
+        for c in range(len(nested.masks)):  # small-loop(the candidates' masks)
+            lacking = lacking or (nested.masks[c] & MEMBER_CAN_SCORE) == 0
+        if lacking:
+            if own_score == _OWN_MEMBER:
+                # a class whose `score` is its own quantity and whose member
+                # publishes none (rows.tsv: a nested search scoring by its own
+                # scorer, the forecasters' `score(index)`): refused natively,
+                # the alternative named
+                raise Error("NotImplementedError: " + String(py=py_type(base).__name__) + "'s score is not the"
+                            + " accuracy or R^2 of its predict and its native member publishes no score, so a"
+                            + " Mojolearn search with scoring=None cannot score it natively. Pass a scoring name.")
+            var own = msel_scorer_code(String("accuracy") if own_score == _OWN_ACCURACY else String("r2"), False)
+            codes.append(own)
+            responses.append(msel_scorer_row(own).op)
     for c in range(len(nested.plans)):  # driver-loop: over the candidates (their responses' element types)
         var multi = (nested.masks[c] & MEMBER_CAN_MULTI_OUTPUT) != 0
         if multi and len(codes) > 0 and not classifier and not msel_spec_stratified(split.spec.kind):
@@ -3813,10 +3881,25 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                        and (dtype == MEMBER_I32 or dtype == MEMBER_I64))
             if ids and tool_respond == MEMBER_OP_PREDICT:
                 tool_ids = True
+            # ROWS :3817 / :3819 (lane mf-rows8c, reachability read from every
+            # member's MEMBER_OP_OUTPUTS answer, rows.tsv): every classifier
+            # kind answers its unfitted predict as int32 / int64 codes (or
+            # unsaid: int32), and every predict_proba / decision_function as
+            # float32 / float64, so a classifier and the float responses are
+            # invariants. Reachable only: a NON-classifier scored by a
+            # clustering scorer whose predict is float values (a regressor
+            # under 'adjusted_rand_score'): scikit-learn scores each distinct
+            # value as a cluster after its UserWarning (sklearn 1.9
+            # metrics/cluster/_supervised.py `check_clusterings`); the RUN's
+            # label-pair entry reads integer ids only (rows.tsv: not typed).
             if labels_out and dtype != MEMBER_I32 and dtype != MEMBER_I64:
-                return False  # a member whose predict is not class codes
+                if classifier:
+                    raise Error("RuntimeError: search admission invariant: a classifier member answers its predict"
+                                + " as no integer codes")
+                return False  # float predictions under a clustering scorer (see above)
             if not labels_out and not ids and dtype != MEMBER_F32 and dtype != MEMBER_F64:
-                return False  # a response the scorer's metric does not read
+                raise Error("RuntimeError: search admission invariant: a member answers a scored response in no"
+                            + " float type and no integer predict")
     # The settings words (core/ensemble_member.mojo META_SEARCH_*): the head,
     # then one scorer word group per scorer (lane mf-tail5b; its code, its
     # positive word, its options and labels codes:
@@ -3962,21 +4045,146 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     return True
 
 
-def _mean_accuracy_score(base: PythonObject, b: PythonObject) raises -> Bool:
-    """UNPACK (lane mf-search5): the base's class takes its `score` from the
-    prep classifiers (mojolearn._expansion_prep `_Classifier.score`, the mean
-    accuracy of its predicted labels). One attribute read and one identity
-    test per admission; False when that module is not loaded."""
-    var prep = py_call(native_loaded_module("sys").modules.get, PythonObject("mojolearn._expansion_prep"))
-    if prep is None:
+# SCORING None's typed scorer (lane mf-rows8c): what a search scores a unit by
+# when its kind publishes no MEMBER_OP_SCORE (`_own_score`).
+comptime _OWN_MEMBER = 0     # the class's score is neither: its member's MEMBER_OP_SCORE only
+comptime _OWN_ACCURACY = 1   # the class's score is the accuracy of predict
+comptime _OWN_R2 = 2         # the class's score is the R^2 of predict
+
+
+def _own_score(base: PythonObject, base_plan: PythonObject, classifier: Bool, b: PythonObject) raises -> Int:
+    """UNPACK (lane mf-rows8c, row :3769): the scorer the base class's own
+    `score` is, read once per admission from the class (no call). scikit-
+    learn's search with scoring=None scores by `estimator.score` (sklearn 1.9
+    metrics/_scorer.py `check_scoring`, lines 1040-1049: `_PassthroughScorer`).
+    Every Mojolearn class whose member kind publishes no MEMBER_OP_SCORE scores
+    the accuracy of its predict (a classifier: `ClassifierMixin.score`; an
+    outlier detector: EllipticEnvelope's, `accuracy_score(y, predict(X))`) or
+    the R^2 of its predict (a regressor: `RegressorMixin.score`; an RFE over a
+    regressor: its estimator's score on the kept columns, RFE.predict's R^2),
+    by its class's `_estimator_type` (the attribute the sklearn tags are built
+    from, python/mojolearn/_mode.py) and its docstring; the enumeration is
+    mf-rows8c-work/rows.tsv. Those classes' own `score` runs the same metric
+    program over its predict (e.g. bindings/mcd_native_door.mojo
+    `elliptic_score`, the forests' R^2), so one body. REPLACES
+    `_mean_accuracy_score` (the prep classifiers, a case of the classifier
+    rule)."""
+    var nested = member_mark(base_plan, b)
+    if nested.family == MEMBER_FAMILY_ENSEMBLE and _search(nested.kind):
+        return _OWN_MEMBER  # a nested search scores by its own scorer, not by accuracy or R^2
+    if classifier:
+        return _OWN_ACCURACY
+    var kind = py_call(b.getattr, py_type(base), PythonObject("_estimator_type"), PythonObject(None))
+    if kind is not None and py_type(kind) is b.str:
+        if String(py=kind) == "regressor":
+            return _OWN_R2
+        if String(py=kind) == "outlier_detector":
+            return _OWN_ACCURACY
+    if nested.family == MEMBER_FAMILY_ENSEMBLE and _rfe(nested.kind):
+        return _OWN_R2  # not a classifier: an RFE over a regressor (its estimator's score)
+    return _OWN_MEMBER
+
+
+def _no_score_refusal(base: PythonObject, b: PythonObject) raises:
+    """SCORING None on a base with no `score` (lane mf-rows8c): scikit-learn's
+    own words (sklearn 1.9 metrics/_scorer.py lines 1045-1049, `check_scoring`,
+    reached from the search's `_get_scorers` and from cross_validate /
+    learning_curve / validation_curve before any fit). `hasattr` as it reads
+    it: the attribute, on the instance. A missing estimator is the search's
+    parameter validation (InvalidParameterError, a ValueError)."""
+    if base is None:
+        return  # `_search_base_refusal` raises its words
+    if py_call(b.getattr, base, PythonObject("score"), PythonObject(None)) is None:
+        raise Error("TypeError: If no scoring is specified, the estimator passed should have a 'score' method."
+                    + " The estimator " + String(py=py_call(b.repr, base)) + " does not.")
+
+
+def _all_fits_failed(fits: Int, errors: List[String], counts: List[Int]) -> String:
+    """scikit-learn's words when every fit of a search failed with a numeric
+    error_score (sklearn 1.9 model_selection/_validation.py
+    `_warn_or_raise_about_fit_failures`, lines 461-482): one section per
+    distinct error, in first-seen order, with its count. scikit-learn prints
+    each failure's traceback; a native fit has no Python frames, so each
+    section prints the error's own line (the traceback's last line)."""
+    var delimiter = String("")
+    for _ in range(80):  # small-loop(the delimiter's 80 dashes)
+        delimiter += "-"
+    delimiter += "\n"
+    var summary = String("")
+    for e in range(len(errors)):  # small-loop(the distinct errors)
+        if e > 0:
+            summary += "\n"
+        summary += delimiter + String(counts[e]) + " fits failed with the following error:\n" + errors[e]
+    return ("ValueError: \nAll the " + String(fits) + " fits failed.\n"
+            + "It is very likely that your model is misconfigured.\n"
+            + "You can try to debug the error by setting error_score='raise'.\n\n"
+            + "Below are more details about the failures:\n" + summary)
+
+
+def _search_base_refusal(model: PythonObject, base: PythonObject, base_plan: PythonObject, tolerate: Bool,
+                         fits: Int, b: PythonObject) raises -> String:
+    """ROW :3442 (lane mf-rows8c): the words a search raises for a base with
+    no member, in the meta door's terms (bindings/member_set_door.mojo
+    `member_set_refusal`, its first two cases):
+      * no estimator: the search's parameter validation (scikit-learn's
+        InvalidParameterError words, HasMethods("fit"));
+      * not a Mojolearn class (a third-party or a user's own class):
+        MEMBER_SET_FOREIGN; a Mojolearn search never calls a Python fit;
+      * a Mojolearn class with no member mark (its fit takes no target: the
+        mf-member8 sweep found Cholesky only): every fit raises Python's
+        TypeError for `fit(X, y)`. error_score='raise': the first fit's
+        words; a number: scikit-learn's all-fits-failed words
+        (`_all_fits_failed`), every fit failing alike."""
+    var name = String(py=py_type(model).__name__)
+    if base is None:
+        return ("ValueError: The 'estimator' parameter of " + name
+                + " must be an object implementing 'fit'. Got None instead.")
+    var base_name = String(py=py_type(base).__name__)
+    if base_plan is None:
+        return "TypeError: " + base_name + String(MEMBER_SET_FOREIGN)
+    var words = "TypeError: " + base_name + ".fit() takes 2 positional arguments but 3 were given"
+    if not tolerate:
+        return words
+    var errors: List[String] = [words]
+    var counts: List[Int] = [fits]
+    return _all_fits_failed(fits, errors, counts)
+
+
+def _search_nested_refusal(done: _Done, clones: PythonObject, tolerate: Bool, fits: Int) raises -> Bool:
+    """ROW :3447 (lane mf-rows8c): the candidates of a search over a nested
+    META estimator whose admission raised (`_Done.failure`: the refusal its
+    own fit raises at each of its fits). error_score='raise': the first such
+    candidate's words (scikit-learn's first failing fit, in candidate order).
+    A number with every candidate refused: scikit-learn's all-fits-failed
+    words over their errors (`_all_fits_failed`; each candidate fails at each
+    of its folds). True: some refused and others not, with a number (scikit-
+    learn scores those error_score and warns: no per-candidate refusal row in
+    the RUN yet). False: none refused."""
+    var errors = List[String]()
+    var counts = List[Int]()
+    var refused = 0
+    var per = fits // max(len(clones), 1)
+    for c in range(len(clones)):  # driver-loop: over the candidates (admission, once each)
+        var at = done.failure(clones[c])
+        if at < 0:
+            continue
+        if not tolerate:
+            raise Error(done.failed_words[at])
+        refused += 1
+        var seen = -1
+        for e in range(len(errors)):  # small-loop(the distinct errors so far)
+            if errors[e] == done.failed_words[at]:
+                seen = e
+        if seen < 0:
+            errors.append(done.failed_words[at])
+            counts.append(per)
+        else:
+            counts[seen] += per
+    if refused == 0:
         return False
-    var classifiers = py_get(py_call(b.vars, prep), "_Classifier")
-    if classifiers is None:
-        return False
-    var own = py_get(py_call(b.vars, classifiers), "score")
-    if own is None:
-        return False
-    return py_call(b.getattr, py_type(base), PythonObject("score"), PythonObject(None)) is own
+    if refused == len(clones):
+        raise Error(_all_fits_failed(fits, errors, counts))
+    return True
 
 
 def _positive_code(labels: PythonObject, b: PythonObject) raises -> Int:
