@@ -54,8 +54,8 @@ Admission metadata only: no numerical work, nothing to split across cores.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem
 from bindings.prep_native_estimator_door import prep_estimator_plan, prep_estimator_clone
-from core.device_route import DEVICE_CPU, DEVICE_INSTALL, device_cpu_absent, device_name
-from core.function_device import function_device_member
+from core.device_route import DEVICE_CPU, device_cpu_absent
+from core.meta_device_rule import meta_member_device
 from core.ensemble_member import (
     META_STACK_CLASSIFIER, META_STACK_REGRESSOR, META_OVR, META_CALIBRATED, META_MULTI_CLASSIFIER,
     META_MULTI_REGRESSOR,
@@ -97,17 +97,10 @@ def meta_device_origin(model: PythonObject, device: PythonObject) raises -> Stri
 
 
 def _refuse_member(meta: String, origin: String, request: Int, own: Int, child: String) raises:
-    """A member whose explicit device is not the meta-estimator's: the shared
-    words when the meta-estimator was given the word itself, else naming the
-    meta-estimator that handed it down."""
-    if origin.byte_length() == 0 or origin == meta:
-        _ = function_device_member(request, own, meta, child)
-        return
-    if own == DEVICE_INSTALL or own == request:
-        return
-    raise Error("ValueError: " + origin + " was given device='" + device_name(request) + "', handed to " + meta
-        + ", but its estimator " + child + " was constructed with device='" + device_name(own)
-        + "'; give both the same device, or leave one of them None")
+    """A member whose explicit device is not the meta-estimator's: refused in
+    the words of core/meta_device_rule.mojo (the shared ones, or naming the
+    meta-estimator that handed the word down)."""
+    _ = meta_member_device(request, own, meta, origin, child)
 
 
 def meta_members_device(device: PythonObject, ests: PythonObject, owner: String, origin: String,
