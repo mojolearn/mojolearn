@@ -735,6 +735,11 @@ def _fit_units_native(clones: PythonObject, xs: PythonObject, d: Int, targets: P
         # is returned after the try: a `return` inside an `except` of this
         # loop, beside the loop-carried given-y state, failed LLVM lowering
         # with "operand #1 does not dominate this use", w3-integrate.)
+        # Mojo 1.2.0 compiler bug, kept until a native fix: reproducer and
+        # Modular ask (not sent) at
+        # ~/mojolearn-evidence/upstream/mojo-return-in-except-loop-dominance/
+        # (repro.mojo, ASK.md). Restore the `return False` inside the
+        # `except` once Modular fixes the lowering.
         var resident_ok = True
         try:
             member_set_resident(set, xs[i], context)
