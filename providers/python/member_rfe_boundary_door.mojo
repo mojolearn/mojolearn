@@ -70,7 +70,7 @@ from core.member_abi import (
 )
 from core.member_families import (
     MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES, MEMBER_FAMILY_ENSEMBLE,
-    MEMBER_FAMILY_XCLUSTER,
+    MEMBER_FAMILY_XCLUSTER, MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_XDECOMP,
 )
 
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -231,6 +231,17 @@ def _rfe_base_admit(estimator: PythonObject, g: PythonObject, context: PythonObj
         # (its PACK, as its fit), so scikit-learn's attrgetter fails at the first round: its words.
         source = RfeSource(0, False, "AttributeError: '" + classical_estimator_name(estimator)
                            + "' object has no attribute 'cluster_centers_'")
+    # Round b (lane mf-member8): attributes PACK publishes only under a setting, as scikit-learn does. LDA's
+    # covariance_ (NEW words [1] solver 0 'svd', [5] store_covariance): absent for 'svd' without
+    # store_covariance (attrgetter's words). MinCovDet / EllipticEnvelope precision_ (word [5]
+    # store_precision): None without it, so scikit-learn's `importances.ndim` fails.
+    if (family == MEMBER_FAMILY_DISCRIMINANT and owner.plan.kind == 0 and getter == "covariance_"
+            and len(owner.plan.params) > 5 and owner.plan.params[1] == 0.0 and owner.plan.params[5] == 0.0):
+        source = RfeSource(0, False, "AttributeError: '" + classical_estimator_name(estimator)
+                           + "' object has no attribute 'covariance_'")
+    if (family == MEMBER_FAMILY_XDECOMP and owner.plan.kind == 14 and getter == "precision_"
+            and len(owner.plan.params) > 5 and owner.plan.params[5] == 0.0):
+        source = RfeSource(0, False, "AttributeError: 'NoneType' object has no attribute 'ndim'")
     base.refusal = source.refusal.copy()
     base.block = source.block
     base.squared = source.squared

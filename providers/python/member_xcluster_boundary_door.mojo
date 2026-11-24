@@ -1048,6 +1048,61 @@ def _bgmm_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) r
     return call.state
 
 
+def _optics_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    """Round b (lane mf-member8): a member state from a fitted OPTICS (a
+    meta-estimator's held estimator): its five per-row arrays, the xi
+    hierarchy and n_features_in_, as `optics_fit` published them."""
+    var f32_names: List[String] = ["core_distances_", "reachability_"]
+    var f32_blocks: List[Int] = [MEMBER_BLOCK_FAMILY + 40, MEMBER_BLOCK_FAMILY + 41]
+    var i32_names: List[String] = ["ordering_", "predecessor_", "labels_", "cluster_hierarchy_"]
+    var i32_blocks: List[Int] = [MEMBER_BLOCK_FAMILY + 42, MEMBER_BLOCK_FAMILY + 43, MEMBER_BLOCK_FAMILY + 1,
+        MEMBER_BLOCK_FAMILY + 44]
+    var width = py_get(fields, PythonObject("n_features_in_"), PythonObject(None))
+    if width is None:
+        raise Error("NotFittedError: this member is not fitted yet")
+    var scalars: List[Float64] = [Float64(py=width)]
+    var held = Python.list()
+    var call = member_new(plan)
+    try:
+        for j in range(2):  # driver-loop: two float32 fitted arrays
+            var source = py_get(fields, PythonObject(f32_names[j]), PythonObject(None))
+            if source is None:
+                raise Error("NotFittedError: this member is not fitted yet")
+            var values = admit_family(source, 1, f32_names[j], context).array
+            _ = py_call(held.append, values)
+            call.block = f32_blocks[j]
+            call.x = MemberMatrix(Int(py=classical_address(values)), 1, Int(py=values.size))
+            call.flags = 0
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        for j in range(4):  # driver-loop: four int32 fitted arrays (the hierarchy only for 'xi')
+            var source = py_get(fields, PythonObject(i32_names[j]), PythonObject(None))
+            if source is None:
+                if j == 3:
+                    continue
+                raise Error("NotFittedError: this member is not fitted yet")
+            # The raw C-order int32 words, as the class's own readers take them.
+            var words = classical_c_bytes(source, i32_names[j], context)
+            _ = py_call(held.append, words)
+            var count = len(words) // 4
+            if count == 0:
+                continue
+            call.block = i32_blocks[j]
+            call.x = MemberMatrix(native_buffer_address(words), count // 2 if j == 3 else 1,
+                                  2 if j == 3 else count, MEMBER_I32)
+            call.flags = 0
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = MEMBER_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, 1, MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = held
+    _ = len(scalars)
+    return call.state
+
+
 def xcluster_member_state(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan) raises -> Int:
     """UNPACK: a new member state holding the fitted leaf centers, tree and
@@ -1056,9 +1111,11 @@ def xcluster_member_state(model: PythonObject, fields: PythonObject, context: Py
     [inertia_, n_steps_, n_iter_]. The caller frees it (`member_free`)."""
     var kind = Int(plan.params[0])
     if (kind != _KIND_BISECT and kind != _KIND_MINIBATCH and kind != _KIND_MEANSHIFT and kind != _KIND_AFFINITY
-            and kind != _KIND_BGMM):
+            and kind != _KIND_BGMM and kind != _KIND_OPTICS):
         raise Error("RuntimeError: mojolearn: this x_cluster member kind is not published")
     classical_connect_numpy(context)
+    if kind == _KIND_OPTICS:
+        return _optics_state(fields, context, plan)
     if kind == _KIND_BGMM and _plain(plan):
         return _gmm_plain_state(model, context, plan)
     if kind == _KIND_BGMM:

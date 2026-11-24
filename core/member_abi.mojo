@@ -248,6 +248,9 @@ comptime MEMBER_GIL_DOOR = 536870912         # 2^29: serial on the public thread
 #: it with a drawn member's rows); to a member without it, never (no
 #: gather is made for a member that does not read it).
 comptime MEMBER_READS_Y_GIVEN = 1073741824   # 2^30: fit reads call.y_given (the targets as the caller was given them)
+# lane mf-member8 (round b): the kind's fit reads no target (scikit-learn's `fit(X, y=None)` ignores y): a
+# caller admits y only as its own fit validates it (RFE: check_X_y(multi_output=True)) and hands no y view.
+comptime MEMBER_IGNORES_Y = 2147483648       # 2^31
 
 #: `call.out_dtype` after MEMBER_OP_OUTPUTS: the member did not say.
 comptime MEMBER_DTYPE_UNSAID = -1

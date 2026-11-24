@@ -35,6 +35,7 @@ from core.member_families import MEMBER_FAMILY_ENSEMBLE
 from core.ensemble_member import meta_plan_leaf_importances
 from bindings.member_fit_notices_pack import member_fit_notices_raise
 from core.member_abi import MemberCall, member_free, MEMBER_F32, MEMBER_I32, MEMBER_READS_Y_GIVEN
+from core.member_abi import MEMBER_IGNORES_Y
 from bindings.member_given_y_unpack import member_given_y
 from core.member_families import MEMBER_FAMILY_GBDT, MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES
 from bindings.trees_public_inputs_run import trees_finite_f32
@@ -264,6 +265,7 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: Pyt
     weights for a kind that reads none and a key the member does not carry raise (`rfe_member_fit_params`,
     `gbdt_member_fit_params`)."""
     var member = RfeMember()
+    var unread = False
     var has_params = len(fit_params) != 0
     if has_params:
         rfe_fit_keywords(estimator, fit_params, context, b)
@@ -293,6 +295,13 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: Pyt
         member.y = encoded.codes
         member.y_dtype = MEMBER_I32
         member.labels = encoded.classes
+    elif (base.mask & MEMBER_IGNORES_Y) != 0:
+        # Round b (lane mf-member8): a kind whose fit reads no target (NearestNeighbors, RadiusNeighbors, OPTICS,
+        # MDS, SpectralEmbedding): y is admitted only as scikit-learn's RFE validates it (`check_X_y`,
+        # multi_output=True: present, as long as X, finite when numeric; a 2-D or str y is accepted), and the
+        # member is handed no y view.
+        member.y = _rfe_unread_y(y, n, base.member_context)
+        unread = True
     elif (base.owner.plan.family == MEMBER_FAMILY_TREE or base.owner.plan.family == MEMBER_FAMILY_FOREST
             or base.owner.plan.family == MEMBER_FAMILY_EXTRA_TREES):
         # A tree or forest regressor's fit door (bindings/trees_public_forest_door.mojo `_rf_fit_regressor`,
@@ -344,7 +353,7 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: Pyt
             member.extras = params.extras.copy()
             member.pins = params.pins
             member.final_importances = params.final_importances
-    member.y_address = Int(py=classical_address(member.y))
+    member.y_address = 0 if unread else Int(py=classical_address(member.y))
     if not base.classifier and base.owner.plan.member.can(MEMBER_READS_Y_GIVEN):
         # THE GIVEN y (lane mf-tail5; core/member_abi.mojo `MemberCall.y_given`): y's own words, a view (the
         # door's `y` lives through the RUN), for a kind whose stratified splitter codes them; asked once.
@@ -358,6 +367,45 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: Pyt
             pass
     member.base = base^
     return member^
+
+
+def _rfe_unread_y(y: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
+    """Round b (lane mf-member8): RFE's own target validation for a member that reads no target
+    (scikit-learn's `validate_data(X, y, multi_output=True)`, sklearn/utils/validation.py `check_X_y` /
+    `_check_y`): y present, one or two dimensions, as long as X, finite when numeric (its words); a non-numeric
+    y (str labels) is admitted as the one label encoder admits it (no finite test, as `_check_y` with
+    dtype=None makes none). Answers the admitted object, held through the fit (nothing reads its words)."""
+    if y is None:
+        raise Error("ValueError: RFE requires y to be passed, but the target y is None.")
+    var numeric = True
+    var held = PythonObject(None)
+    var rows = 0
+    var words = 0
+    var address = 0
+    try:
+        var ya = admit_f32(y, -1, "y", context, finite=False)
+        held = ya.array
+        rows = ya.rows
+        words = ya.rows * ya.cols
+        address = ya.address
+    except:
+        numeric = False
+    if numeric:
+        if rows != n:
+            raise Error("ValueError: Found input variables with inconsistent numbers of samples: [" + String(n)
+                        + ", " + String(rows) + "]")
+        if not trees_finite_f32(address, words):
+            var values = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)
+            for i in range(words):  # small-loop(the refusal path only: is a non-finite word a NaN)
+                if values[i] != values[i]:
+                    raise Error("ValueError: Input y contains NaN.")
+            raise Error("ValueError: Input y contains infinity or a value too large for dtype('float64').")
+        return held
+    var labels = classical_encode_labels(y, context)
+    if labels.n != n:
+        raise Error("ValueError: Found input variables with inconsistent numbers of samples: [" + String(n) + ", "
+                    + String(labels.n) + "]")
+    return labels.codes
 
 
 def _rfe_native(member: RfeMember, arr: XIn, n: Int, d: Int, counts: List[Float64], cc: PythonObject,

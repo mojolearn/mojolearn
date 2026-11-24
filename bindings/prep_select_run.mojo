@@ -545,6 +545,10 @@ def _da_named(kind: Int, name: String) -> Int:
         return _F  # DA_BLOCK_MEANS
     if kind == 0 and name == "xbar_":
         return _F + 2  # DA_BLOCK_XBAR
+    if kind == 0 and name == "covariance_":
+        # Round b (lane mf-member8): DA_BLOCK_COV, d x d, published by PACK for solver 'lsqr' / 'eigen' or
+        # store_covariance=True (as scikit-learn's LDA); otherwise refused at admission in attrgetter's words.
+        return _F + 7
     return 0
 
 
@@ -559,6 +563,10 @@ def _xdecomp_named(kind: Int, name: String) -> Int:
             return _F + 3
         if name == "covariance_":
             return _F + 4
+        if name == "precision_":
+            # Round b (lane mf-member8): the stored precision block (d x d); store_precision=False publishes None,
+            # refused at admission in the words scikit-learn's `_get_feature_importances` fails with.
+            return _F + 1
         return 0
     if kind == 0 and name == "mean_":  # IncrementalPCA (lane mf-member8): XDECOMP_BLOCK_MEAN, 1 x features
         return _F + 2

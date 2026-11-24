@@ -17,8 +17,8 @@ UNPACK). `route.second` (MeanShift, AffinityPropagation) is the image's centroid
 No other route slot is read by the kinds published here. No kernel is touched.
 
 Kinds (MEMBER_OP_NEW word [0]): 0 MiniBatchKMeans, 1 BisectingKMeans,
-2 MeanShift, 3 OPTICS (lane mf-member8: fit and export only, the class has
-no predict), 4 AffinityPropagation, 5 BayesianGaussianMixture.
+2 MeanShift, 3 OPTICS (lane mf-member8: fit, export and import; the class
+has no predict), 4 AffinityPropagation, 5 BayesianGaussianMixture.
 
 MEMBER_OP_NEW parameters (Float64 words):
   kind 0 MiniBatchKMeans (11 words, 13 + data with an array init): [0] 0,
@@ -58,7 +58,7 @@ MEMBER_OP_NEW parameters (Float64 words):
   [11] max_eps, [12] xi (the class's second read), [13] eps (max_eps for
   None). The OPTICS entry (core/optics_fit_api.mojo `OpticsFitDriver`, the
   binding's `optics_fit_native_api_v1`) is `route.third`. No sample weights,
-  no predict, no import (refused in words).
+  no predict (scikit-learn's AttributeError words).
   kind 5 BayesianGaussianMixture (13 words): [0] 5, [1] n_components,
   [2] covariance_type (0 'full', 1 'tied', 2 'diag', 3 'spherical'),
   [3] init_params (0 'kmeans', 1 'random', 2 'k-means++',
@@ -165,6 +165,7 @@ from core.cluster_centroid_fit_api import (
     CentroidFitDriver, CentroidFitResultSlot, MeanShiftFitRequest, AffinityFitRequest,
 )
 from core.optics_fit_api import OpticsFitDriver, OpticsFitResultSlot, OpticsMetric
+from core.member_abi import MEMBER_IGNORES_Y
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_HOME_DEVICE,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
@@ -702,6 +703,21 @@ def _affinity_predict(slot: _Slot, call: _Call) raises:
 
 
 # ---------------------------------------------------------------- OPTICS (lane mf-member8)
+def _attribute_of(operation: Int) -> String:
+    """The public method an operation is (scikit-learn's AttributeError names it)."""
+    if operation == MEMBER_OP_PREDICT:
+        return "predict"
+    if operation == MEMBER_OP_PREDICT_PROBA:
+        return "predict_proba"
+    if operation == MEMBER_OP_TRANSFORM:
+        return "transform"
+    if operation == MEMBER_OP_SCORE:
+        return "score"
+    if operation == MEMBER_OP_SCORE_SAMPLES:
+        return "score_samples"
+    return "operation " + String(operation)
+
+
 def _optics_float(value: Float64, is_float: Bool) -> String:
     """The value as `str(value)` prints it: an int, or a float."""
     if is_float:
@@ -795,6 +811,45 @@ def _optics_export(slot: _Slot, call: _Call) raises:
         raise Error("member ABI: an OPTICS member has no fitted block " + String(block))
     call[].block = block
     call[].out_cols = 7
+
+
+def _optics_import(slot: _Slot, call: _Call) raises:
+    """Round b (lane mf-member8): copy one of OPTICS's fitted arrays in (the
+    export's blocks; an empty 'dbscan' hierarchy is not sent);
+    MEMBER_IMPORT_DONE needs the five per-row arrays of one length and the
+    scalars block [n_features_in_]."""
+    var block = call[].block
+    slot[].fitted = False
+    if block == _BLOCK_LABELS:
+        slot[].labels = _take_i32(call, "labels")
+    elif block == _BLOCK_OPTICS_CORE:
+        slot[].core_distances = _take_f32(call, "core distances")
+    elif block == _BLOCK_OPTICS_REACH:
+        slot[].reachability = _take_f32(call, "reachability")
+    elif block == _BLOCK_OPTICS_ORDER:
+        slot[].ordering = _take_i32(call, "ordering")
+    elif block == _BLOCK_OPTICS_PRED:
+        slot[].predecessor = _take_i32(call, "predecessor")
+    elif block == _BLOCK_OPTICS_HIER:
+        if call[].x.cols != 2:
+            raise Error("member ABI: the OPTICS hierarchy block holds two int32 words per cluster")
+        slot[].hierarchy = _take_i32(call, "hierarchy")
+    elif block == MEMBER_BLOCK_SCALARS:
+        if not call[].x.dense_host(MEMBER_F64) or call[].x.rows * call[].x.cols != 1:
+            raise Error("member ABI: the OPTICS scalars block is one host float64 word (n_features_in_)")
+        var scalars: List[Float64] = [_Words(unsafe_from_address=call[].x.data)[0]]
+        slot[].scalars = scalars^
+    elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        raise Error("member ABI: an OPTICS member has no fitted block " + String(block))
+    if (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        return
+    var n = len(slot[].labels)
+    if (n == 0 or len(slot[].core_distances) != n or len(slot[].reachability) != n or len(slot[].ordering) != n
+            or len(slot[].predecessor) != n or len(slot[].scalars) != 1):
+        raise Error("member ABI: a fitted OPTICS state needs its labels, core distances, reachability, ordering, "
+                    + "predecessors and scalars blocks")
+    slot[].features = Int(slot[].scalars[0])
+    slot[].fitted = True
 
 
 # ---------------------------------------------------------------- BayesianGaussianMixture
@@ -1255,7 +1310,8 @@ def _import(slot: _Slot, call: _Call) raises:
         _bgmm_import(slot, call)
         return
     if kind == _KIND_OPTICS:
-        member_unsupported(_name(kind), MEMBER_OP_IMPORT)
+        _optics_import(slot, call)
+        return
     var block = call[].block
     if block == _BLOCK_CENTERS:
         _release_resident(slot, call)
@@ -1308,9 +1364,9 @@ def _capabilities(kind: Int) -> Int:
     # MEMBER_CAN_TEST_ROWS for any kind: X is admitted finite by the caller
     # (module docstring); the variants, centroid and BGMM entries do not test it.
     if kind == _KIND_OPTICS:
-        # Lane mf-member8: fit and export only (no predict; no import: a
-        # fitted OPTICS serves no member query).
-        return MEMBER_CAN_FIT | MEMBER_CAN_EXPORT
+        # Lane mf-member8: fit, export and import (a fitted OPTICS held by a
+        # meta-estimator's state); no predict.
+        return MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_IGNORES_Y
     if kind == _KIND_MEANSHIFT or kind == _KIND_AFFINITY:
         return MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
     var bgmm = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_SCORE_SAMPLES
@@ -1400,6 +1456,9 @@ def _xcluster_member(operation: Int, address: Int) raises -> Int:
         _centers_query(slot, call, _RES_PREDICT)
     elif operation == MEMBER_OP_FIT and kind == _KIND_OPTICS:
         _optics_fit(slot, call)
+    elif kind == _KIND_OPTICS and operation != MEMBER_OP_EXPORT and operation != MEMBER_OP_IMPORT:
+        # scikit-learn's own failure (round b): OPTICS has fit_predict only.
+        raise Error("AttributeError: 'OPTICS' object has no attribute '" + _attribute_of(operation) + "'")
     elif operation == MEMBER_OP_FIT and kind == _KIND_AFFINITY:
         _affinity_fit(slot, call)
     elif operation == MEMBER_OP_PREDICT and kind == _KIND_AFFINITY:

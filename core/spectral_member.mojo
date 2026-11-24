@@ -107,7 +107,7 @@ from core.member_abi import (
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
-from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_EXPORT_OWN
+from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_EXPORT_OWN, MEMBER_IGNORES_Y
 from core.member_families import MEMBER_FAMILY_SPECTRAL
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -671,6 +671,37 @@ def _fit_se(slot: _Slot, call: _Call) raises:
     slot[].fitted = True
 
 
+def _import_se(slot: _Slot, call: _Call) raises:
+    """Round b (lane mf-member8): a fitted SpectralEmbedding held by a
+    meta-estimator's state: the embedding (rows x n_components), the built
+    'rbf' affinity (optional) and SCALARS [n_components_, n_neighbors_,
+    n_features_in_, gamma_]; MEMBER_IMPORT_DONE needs the embedding and the
+    scalars, of n_components_ columns."""
+    var block = call[].block
+    slot[].fitted = False
+    if block == _BLOCK_EMBEDDING:
+        slot[].embedding = _take_f32(call, "embedding", -1, 0)
+        slot[].rows = call[].x.rows
+    elif block == _BLOCK_AFFINITY:
+        slot[].affinity_values = _take_f32(call, "affinity", -1, 0)
+    elif block == MEMBER_BLOCK_SCALARS:
+        if not call[].x.dense_host(MEMBER_F64) or call[].x.rows * call[].x.cols != 4:
+            raise Error("member ABI: the SpectralEmbedding scalars block is four host float64 words")
+        var source = _Words(unsafe_from_address=call[].x.data)
+        var scalars: List[Float64] = [source[0], source[1], source[2], source[3]]
+        slot[].scalars = scalars^
+    elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        raise Error("member ABI: a SpectralEmbedding member has no fitted block " + String(block))
+    if (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        return
+    var k = slot[].components
+    if (len(slot[].scalars) != 4 or Int(slot[].scalars[0]) != k or slot[].rows <= 0
+            or len(slot[].embedding) != slot[].rows * k):
+        raise Error("member ABI: a fitted SpectralEmbedding state needs its embedding and scalars blocks")
+    slot[].features = max(Int(slot[].scalars[2]), 0)
+    slot[].fitted = True
+
+
 def _predict(slot: _Slot, call: _Call) raises:
     """`_sc_predict` (affinity='nearest_neighbors'): the Nystrom extension of
     the fitted eigenvectors, then the nearest fitted centroid; on the
@@ -869,7 +900,7 @@ def _spectral_member(operation: Int, address: Int) raises -> Int:
         if call[].state != 0:
             var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
             if held[].kind == _KIND_EMBEDDING:
-                return MEMBER_CAN_FIT | MEMBER_CAN_EXPORT
+                return MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_IGNORES_Y
         return MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_BORROWS_FIT
     if operation == MEMBER_OP_NEW and call[].params != 0 and call[].param_count == _SE_WORDS:
         var se_words = _Words(unsafe_from_address=call[].params)
@@ -904,6 +935,11 @@ def _spectral_member(operation: Int, address: Int) raises -> Int:
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     if slot[].kind == _KIND_EMBEDDING and operation == MEMBER_OP_FIT:
         _fit_se(slot, call)
+    elif slot[].kind == _KIND_EMBEDDING and operation == MEMBER_OP_IMPORT:
+        _import_se(slot, call)
+    elif slot[].kind == _KIND_EMBEDDING and operation == MEMBER_OP_PREDICT:
+        # scikit-learn's own failure (round b): SpectralEmbedding has no predict.
+        raise Error("AttributeError: 'SpectralEmbedding' object has no attribute 'predict'")
     elif slot[].kind == _KIND_EMBEDDING and operation != MEMBER_OP_EXPORT:
         member_unsupported(_SE_EST, operation)
     elif operation == MEMBER_OP_FIT:

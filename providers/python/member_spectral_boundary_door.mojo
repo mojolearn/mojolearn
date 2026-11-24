@@ -270,6 +270,42 @@ def _se_pack(model: PythonObject, context: PythonObject, plan: MemberPlan, state
     py_setitem(model_fields, "embedding_", embedding)
 
 
+def _se_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    """Round b (lane mf-member8): a member state from a fitted SpectralEmbedding (a meta-estimator's held
+    estimator): embedding_, the 'rbf' affinity_matrix_ when published, and the scalars [n_components_,
+    n_neighbors_, n_features_in_, gamma_] (-1 for one not published)."""
+    var source = py_get(fields, PythonObject("embedding_"), PythonObject(None))
+    if source is None:
+        raise Error("NotFittedError: this member is not fitted yet")
+    var embedding = admit_family(source, 2, "embedding_", context).array
+    var names: List[String] = ["n_neighbors_", "n_features_in_", "gamma_"]
+    var scalars: List[Float64] = [Float64(Int(py=embedding.shape[1])), -1.0, -1.0, -1.0]
+    for j in range(3):  # small-loop(three published scalars)
+        var value = py_get(fields, PythonObject(names[j]), PythonObject(None))
+        if value is not None:
+            scalars[j + 1] = Float64(py=value)
+    var built = PythonObject(None)
+    if Int(plan.params[8]) == _AFF_RBF:
+        var held = py_get(fields, PythonObject("affinity_matrix_"), PythonObject(None))
+        if held is not None:
+            built = admit_family(held, 2, "affinity_matrix_", context).array
+    var call = member_new(plan)
+    try:
+        _import(plan, call, MEMBER_BLOCK_FAMILY + 1, _view(embedding, Int(py=embedding.shape[0]),
+                                                           Int(py=embedding.shape[1])))
+        if built is not None:
+            _import(plan, call, MEMBER_BLOCK_FAMILY + 7, _view(built, Int(py=built.shape[0]), Int(py=built.shape[1])))
+        _import(plan, call, MEMBER_BLOCK_SCALARS, MemberMatrix(Int(scalars.unsafe_ptr()), 1, 4, MEMBER_F64),
+                MEMBER_IMPORT_DONE)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = embedding
+    _ = built
+    _ = len(scalars)
+    return call.state
+
+
 def _affinity_code(affinity: String) raises -> Int:
     """The affinity names `_sc_validate` admits, as NEW word 8 carries them."""
     if affinity == "nearest_neighbors":
@@ -403,9 +439,7 @@ def spectral_member_state(model: PythonObject, fields: PythonObject, context: Py
     (`member_free`)."""
     classical_connect_numpy(context)
     if Int(plan.params[0]) == _KIND_EMBEDDING:
-        # Lane mf-member8: a fitted SpectralEmbedding serves no member query.
-        raise Error("NotImplementedError: member ABI: a SpectralEmbedding member is fitted, not imported "
-                    + "(SpectralEmbedding has no transform)")
+        return _se_state(fields, context, plan)
     # A precomputed fit keeps no training rows (its queries are affinities).
     var precomputed = Int(plan.params[8]) == _AFF_PRECOMPUTED
     var source = py_get(fields, PythonObject("_fit_X"), PythonObject(None))

@@ -192,8 +192,8 @@ x_decomp table of the estimator's binding. NEW words:
     helper (default-mode) image's capability word (-1: the route's own image),
     [13] its ordered-LLE word, [14] its key; its entry is `route.second`
 Operations: fit (fit_output TRANSFORM = embedding_), transform of new rows.
-MDS (kind 18, lane mf-member8; fit and export only: the class has no
-transform, and no import) runs the same kit: words [1 .. 3] as above, then
+MDS (kind 18, lane mf-member8; fit, export and import: the class has no
+transform) runs the same kit: words [1 .. 3] as above, then
 [4] metric code, [5] Minkowski power, [6] metric_mds (0 / 1), [7] the
 normalized-stress word (the door's `_norm`), [8] n_components, [9] init
 (MDS_INIT_CLASSICAL / MDS_INIT_RANDOM; an array init is a fit argument the
@@ -228,6 +228,7 @@ from core.member_abi import (
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
+from core.member_abi import MEMBER_IGNORES_Y
 from core.nmf_native_api import (
     NMFNativeDriver, NMFFitRequest, NMFInverseRequest, nmf_regularization,
 )
@@ -2000,6 +2001,13 @@ def _mani_count(slot: _Slot) -> Int:
     return _LLE_MATS
 
 
+def _mani_scalars(slot: _Slot) -> Int:
+    """The scalars block's word count: the head, (rows, cols) per matrix, and
+    MDS's n_iter_ last (lane mf-member8)."""
+    var count = _MANI_HEAD + 2 * _mani_count(slot)
+    return count + 1 if slot[].kind() == XDECOMP_KIND_MDS else count
+
+
 def _mani_ready(slot: _Slot):
     """Handles sized for the kind's matrices and the device zero (a release
     resets them to the family's five, all -1)."""
@@ -2090,7 +2098,7 @@ def _fit_mani_begin(slot: _Slot, call: _Call, estimator: String) raises:
     var count = _mani_count(slot)
     for _ in range(count):  # driver-loop: the kind's fitted matrices
         slot[].blocks.append(List[Float32]())
-    slot[].scalars = List[Float64](length=_MANI_HEAD + 2 * count, fill=0.0)
+    slot[].scalars = List[Float64](length=_mani_scalars(slot), fill=0.0)
 
 
 def _fit_iso(slot: _Slot, call: _Call) raises:
@@ -2296,7 +2304,7 @@ def _fit_mds(slot: _Slot, call: _Call) raises:
         slot[].scalars[1] = Float64(features)
         slot[].scalars[2] = Float64(nc)
         slot[].scalars[3] = got[1]
-        slot[].scalars.append(Float64(got[2]))
+        slot[].scalars[_mani_scalars(slot) - 1] = Float64(got[2])
         slot[].count = nc
         slot[].features = features
         slot[].fitted = True
@@ -2377,7 +2385,7 @@ def _export_mani(slot: _Slot, call: _Call) raises:
 def _import_mani(slot: _Slot, call: _Call) raises:
     var estimator = _name(slot)
     var count = _mani_count(slot)
-    var wanted = _MANI_HEAD + 2 * count
+    var wanted = _mani_scalars(slot)
     _mani_ready(slot)
     if slot[].fitted or len(slot[].blocks) != count:
         slot[].clear()
@@ -2668,8 +2676,9 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
         if kind == XDECOMP_KIND_LDA:
             return mask | MEMBER_CAN_SCORE
         if kind == XDECOMP_KIND_MDS:
-            # Lane mf-member8: fit and export only (no transform, no import).
-            return MEMBER_CAN_FIT | MEMBER_CAN_EXPORT
+            # Lane mf-member8: fit, export and import (a fitted MDS held by a
+            # meta-estimator's state); no transform.
+            return MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_IGNORES_Y
         if _is_mani(kind):
             # transform of new rows only (no inverse, no score); no
             # MEMBER_CAN_TEST_ROWS (see the Isomap / LLE section)
@@ -2785,9 +2794,10 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
         _query_lda(slot, call, _LDA_TRANSFORM if operation == MEMBER_OP_TRANSFORM else _LDA_SCORE)
     elif kind == XDECOMP_KIND_LDA and operation == MEMBER_OP_INVERSE_TRANSFORM:
         member_unsupported(_name(slot), operation)
-    elif kind == XDECOMP_KIND_MDS and (operation == MEMBER_OP_TRANSFORM or operation == MEMBER_OP_INVERSE_TRANSFORM
-            or operation == MEMBER_OP_IMPORT):
-        member_unsupported(_name(slot), operation)
+    elif kind == XDECOMP_KIND_MDS and (operation == MEMBER_OP_TRANSFORM or operation == MEMBER_OP_INVERSE_TRANSFORM):
+        # scikit-learn's own failure: MDS has no transform (round b: its words).
+        raise Error("AttributeError: 'MDS' object has no attribute '"
+                    + ("transform" if operation == MEMBER_OP_TRANSFORM else "inverse_transform") + "'")
     elif kind == XDECOMP_KIND_ISOMAP and operation == MEMBER_OP_TRANSFORM:
         _query_iso(slot, call)
     elif kind == XDECOMP_KIND_LLE and operation == MEMBER_OP_TRANSFORM:

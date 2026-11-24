@@ -34,6 +34,7 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_input_unpack import admit_f32
 from bindings.classical_arrays_door import classical_address
+from bindings.admitted_family_door import admit_family
 from bindings.member_owner_unpack import MemberOwner
 from bindings.py_balanced import py_get, py_setitem, py_call, py_contains
 from bindings.decomp_device_route_door import decomp_route_hit
@@ -492,8 +493,7 @@ def xdecomp_member_state(model: PythonObject, fields: PythonObject, context: Pyt
     if plan.kind == XDECOMP_KIND_LLE:
         return _lle_state(fields, context, plan)
     if plan.kind == XDECOMP_KIND_MDS:
-        # Lane mf-member8: a fitted MDS serves no member query (no transform).
-        raise Error("NotImplementedError: member ABI: an MDS member is fitted, not imported (MDS has no transform)")
+        return _mds_state(fields, context, plan)
     if plan.kind != XDECOMP_KIND_IPCA:
         raise Error("ValueError: mojolearn: XDecomp member kind " + String(plan.kind) + " is not published")
     var count = py_get(fields, "n_components_")
@@ -1345,6 +1345,47 @@ def _mds_pack(model: PythonObject, fields: PythonObject, context: PythonObject, 
     py_setitem(fields, "n_iter_", PythonObject(iterations))
     py_setitem(fields, "embedding_", embedding)
     py_setitem(fields, "n_features_in_", PythonObject(features))
+
+
+def _mds_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    # Round b (lane mf-member8): a member state from a fitted MDS (a meta-estimator's held estimator): its public
+    # dissimilarity_matrix_ and embedding_ (float32 Arrays, as `_mds_pack` writes them) and the scalars
+    # [n, n_features_in_, n_components, stress_, (rows, cols) of both, n_iter_].
+    var dis_source = py_get(fields, "dissimilarity_matrix_")
+    var em_source = py_get(fields, "embedding_")
+    var features = py_get(fields, "n_features_in_")
+    if dis_source is None or em_source is None or features is None:
+        raise Error("NotFittedError: this member is not fitted yet")
+    var dis = admit_family(dis_source, 2, "dissimilarity_matrix_", context).array
+    var em = admit_family(em_source, 2, "embedding_", context).array
+    var stress = py_get(fields, "stress_")
+    var iterations = py_get(fields, "n_iter_")
+    var n = Int(py=em.shape[0])
+    var nc = Int(py=em.shape[1])
+    var scalars: List[Float64] = [Float64(n), Float64(decomp_int(features)), Float64(nc),
+        decomp_float(stress) if stress is not None else 0.0, Float64(Int(py=dis.shape[0])),
+        Float64(Int(py=dis.shape[1])), Float64(n), Float64(nc),
+        Float64(decomp_int(iterations)) if iterations is not None else 0.0]
+    var call = member_new(plan)
+    try:
+        call.block = XDECOMP_BLOCK_COMPONENTS
+        call.x = MemberMatrix(Int(py=classical_address(dis)), Int(py=dis.shape[0]), Int(py=dis.shape[1]))
+        call.flags = 0
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = XDECOMP_BLOCK_COMPONENTS + 1
+        call.x = MemberMatrix(Int(py=classical_address(em)), n, nc)
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = MEMBER_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = dis
+    _ = em
+    _ = len(scalars)
+    return call.state
 
 
 def _mani_owner(view: MemberMatrix) raises -> PythonObject:

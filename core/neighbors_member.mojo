@@ -91,7 +91,7 @@ from core.member_abi import (
     MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
-from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_EXPORT_OWN, MEMBER_GIL_DOOR
+from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_EXPORT_OWN, MEMBER_GIL_DOOR, MEMBER_IGNORES_Y
 from core.member_families import MEMBER_FAMILY_NEIGHBORS
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -670,7 +670,8 @@ def _neighbors_member(operation: Int, address: Int) raises -> Int:
     comptime _CLASSIFIER = _REGRESSOR | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_CLASSIFIER
     # Lane mf-member8: NearestNeighbors / RadiusNeighbors fit, export and
     # import their points; no predict, no coef_ or importances.
-    comptime _POINTS = MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_BORROWS_FIT | MEMBER_GIL_DOOR
+    comptime _POINTS = (MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_BORROWS_FIT | MEMBER_GIL_DOOR
+        | MEMBER_IGNORES_Y)
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
             return _CLASSIFIER
@@ -714,8 +715,11 @@ def _neighbors_member(operation: Int, address: Int) raises -> Int:
         call[].out_dtype = _out_dtype(words[0] == 1.0, call[].flags)
         return 0
     var slot = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
-    if slot[].unsupervised and (operation == MEMBER_OP_OUTPUTS or operation == MEMBER_OP_PREDICT
-                                or operation == MEMBER_OP_PREDICT_PROBA):
+    if slot[].unsupervised and (operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_PREDICT_PROBA):
+        # scikit-learn's own failure (round b): no predict on these classes.
+        raise Error("AttributeError: '" + _name(slot) + "' object has no attribute '"
+                    + ("predict" if operation == MEMBER_OP_PREDICT else "predict_proba") + "'")
+    if slot[].unsupervised and operation == MEMBER_OP_OUTPUTS:
         member_unsupported(_name(slot), operation)
     if operation == MEMBER_OP_OUTPUTS:
         call[].classes = 0 if slot[].regressor else (slot[].classes if slot[].fitted else call[].classes)
