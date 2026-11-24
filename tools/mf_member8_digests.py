@@ -20,6 +20,11 @@ EXPECTED (stated per unit):
     elimination over cluster_centers_.
   `ap_pre_centers`: EQUAL words (attrgetter's; head raises them before the first round fits).
   `ipca_mean`, `ipca_var`: base attrgetter's words, head the support and ranking over mean_ / var_.
+ROUND b: `nn_kept_2d_y`, `optics_kept_str_y`: base RAISED (has none), head EQUAL to `nn_own` / `optics_own`
+  (y validated as check_X_y(multi_output=True), not read). `vote_nn`: base RAISED or the door's fallback, head
+  `_index` = X. `lda_cov_eigen`, `mcd_precision_off` (refused, "'NoneType' object has no attribute 'ndim'"),
+  `lda_cov_svd` (refused, attrgetter's words), `bgmm_means`, `imputer_stats`, `nc_centroids`: base attrgetter's
+  words, head the support and ranking (or the refusal named).
 Configurations are independent: one process each across the host cores.
 
     python tools/mf_member8_digests.py > digests.txt
@@ -136,6 +141,31 @@ def _run(name):
         rfe = mojolearn.RFE(mojolearn.IncrementalPCA(n_components=2), n_features_to_select=3,
                             importance_getter="mean_" if name == "ipca_mean" else "var_").fit(x, y)
         return [("support", np.asarray(rfe.support_)), ("ranking", np.asarray(rfe.ranking_))]
+    # ROUND b (lane mf-member8)
+    if name in ("nn_kept_2d_y", "optics_kept_str_y"):
+        x, y = _data()
+        yy = np.stack([y, -y], axis=1) if name == "nn_kept_2d_y" else np.where(y > 0, "pos", "neg")
+        stem = "nn" if name == "nn_kept_2d_y" else "optics"
+        rfe = mojolearn.RFE(_make(stem), n_features_to_select=x.shape[1]).fit(x, yy)
+        return _fitted_arrays(rfe.estimator_, stem)
+    if name == "vote_nn":
+        x, y = _data()
+        vote = mojolearn.VotingClassifier([("nn", mojolearn.NearestNeighbors(n_neighbors=3))]).fit(
+            x, (y > 0).astype(np.int64))
+        return [("index", vote.estimators_[0]._index)]
+    if name in ("lda_cov_eigen", "lda_cov_svd", "mcd_precision_off", "bgmm_means", "imputer_stats", "nc_centroids"):
+        x, y = _data(n=80, d=6)
+        labels = (y > 0).astype(np.int64)
+        est, attribute, target = {
+            "lda_cov_eigen": (mojolearn.LinearDiscriminantAnalysis(solver="eigen"), "covariance_", labels),
+            "lda_cov_svd": (mojolearn.LinearDiscriminantAnalysis(solver="svd"), "covariance_", labels),
+            "mcd_precision_off": (mojolearn.MinCovDet(store_precision=False, random_state=0), "precision_", y),
+            "bgmm_means": (mojolearn.BayesianGaussianMixture(n_components=2, random_state=0), "means_", y),
+            "imputer_stats": (mojolearn.SimpleImputer(), "statistics_", y),
+            "nc_centroids": (mojolearn.NearestCentroid(), "centroids_", labels),
+        }[name]
+        rfe = mojolearn.RFE(est, n_features_to_select=3, importance_getter=attribute).fit(x, target)
+        return [("support", np.asarray(rfe.support_)), ("ranking", np.asarray(rfe.ranking_))]
     raise ValueError(name)
 
 
@@ -154,7 +184,8 @@ def _unit(name):
 
 UNITS = ([stem + "_kept" for stem in _ATTRS] + [stem + "_own" for stem in _ATTRS]
          + ["nn_round", "optics_round", "mds_round", "se_round", "cholesky_kept", "ap_centers", "ap_pre_centers",
-            "ipca_mean", "ipca_var"])
+            "ipca_mean", "ipca_var", "nn_kept_2d_y", "optics_kept_str_y", "vote_nn", "lda_cov_eigen", "lda_cov_svd",
+            "mcd_precision_off", "bgmm_means", "imputer_stats", "nc_centroids"])
 
 
 def main():

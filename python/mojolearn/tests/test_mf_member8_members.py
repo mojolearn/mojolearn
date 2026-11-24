@@ -138,3 +138,67 @@ def test_incremental_pca_named_getters(attribute):
     support, ranking = _written_out(make, attribute, x, y, 3)
     _same(np.asarray(rfe.support_, dtype=bool), support)
     _same(np.asarray(rfe.ranking_, dtype=np.int64), ranking)
+
+
+# ---------------------------------------------------------------- ROUND b (lane mf-member8)
+@pytest.mark.parametrize("name,make,attributes", _NO_ROUND, ids=[row[0] for row in _NO_ROUND])
+@pytest.mark.parametrize("target", ["two_d", "labels"])
+def test_no_round_accepts_what_check_X_y_accepts(name, make, attributes, target):
+    x, y = _data()
+    yy = np.stack([y, -y], axis=1) if target == "two_d" else np.where(y > 0, "pos", "neg")
+    rfe = mojolearn.RFE(make(), n_features_to_select=x.shape[1]).fit(x, yy)
+    own = make().fit(x)
+    _same(getattr(rfe.estimator_, attributes[0]), getattr(own, attributes[0]))
+
+
+def test_no_round_y_refusals_in_scikit_learn_words():
+    x, y = _data()
+    with pytest.raises(ValueError, match="RFE requires y to be passed, but the target y is None"):
+        mojolearn.RFE(mojolearn.NearestNeighbors(), n_features_to_select=x.shape[1]).fit(x, None)
+    bad = y.copy()
+    bad[3] = np.nan
+    with pytest.raises(ValueError, match="Input y contains NaN"):
+        mojolearn.RFE(mojolearn.OPTICS(min_samples=4), n_features_to_select=x.shape[1]).fit(x, bad)
+    with pytest.raises(ValueError, match="inconsistent numbers of samples"):
+        mojolearn.RFE(mojolearn.MDS(random_state=0), n_features_to_select=x.shape[1]).fit(x, y[:-1])
+
+
+def test_meta_fits_a_target_free_member_and_predict_fails_as_scikit_learn():
+    x, y = _data()
+    labels = (y > 0).astype(np.int64)
+    vote = mojolearn.VotingClassifier([("nn", mojolearn.NearestNeighbors(n_neighbors=3))]).fit(x, labels)
+    _same(vote.estimators_[0]._index, mojolearn.NearestNeighbors(n_neighbors=3).fit(x)._index)
+    with pytest.raises(AttributeError, match="has no attribute 'predict'"):
+        vote.predict(x)
+
+
+def test_lda_covariance_getter_published_or_refused():
+    x, y = _data(n=80, d=6)
+    labels = (y > 0).astype(np.int64)
+    make = lambda: mojolearn.LinearDiscriminantAnalysis(solver="eigen")
+    rfe = mojolearn.RFE(make(), n_features_to_select=3, importance_getter="covariance_").fit(x, labels)
+    support, ranking = _written_out(make, "covariance_", x, labels, 3)
+    _same(np.asarray(rfe.ranking_, dtype=np.int64), ranking)
+    with pytest.raises(AttributeError, match="has no attribute 'covariance_'"):
+        mojolearn.RFE(mojolearn.LinearDiscriminantAnalysis(solver="svd"), n_features_to_select=3,
+                      importance_getter="covariance_").fit(x, labels)
+
+
+def test_mincovdet_precision_getter_refused_without_store_precision():
+    x, y = _data(n=80, d=6)
+    with pytest.raises(AttributeError, match="'NoneType' object has no attribute 'ndim'"):
+        mojolearn.RFE(mojolearn.MinCovDet(store_precision=False, random_state=0), n_features_to_select=3,
+                      importance_getter="precision_").fit(x, y)
+
+
+@pytest.mark.parametrize("make,attribute,classify", [
+    (lambda: mojolearn.BayesianGaussianMixture(n_components=2, random_state=0), "means_", False),
+    (lambda: mojolearn.SimpleImputer(), "statistics_", False),
+    (lambda: mojolearn.NearestCentroid(), "centroids_", True),
+])
+def test_sweep_named_getters(make, attribute, classify):
+    x, y = _data(n=80, d=6)
+    target = (y > 0).astype(np.int64) if classify else y
+    rfe = mojolearn.RFE(make(), n_features_to_select=3, importance_getter=attribute).fit(x, target)
+    support, ranking = _written_out(make, attribute, x, target, 3)
+    _same(np.asarray(rfe.ranking_, dtype=np.int64), ranking)
