@@ -1,0 +1,89 @@
+# A/B LOOP MODE: the capped-iteration table (lane ab-loop-mode, 2026-11-24; AGENTS.md "Candidate evaluation": an A/B
+# arm is decided on loop time per iteration). DATA, NOT CODE: tools/ab_loop.py reads it; nothing branches on a lane
+# name anywhere else. One row per lane; a lane "*" row is its family's default for every lane not listed.
+#   valid      yes: the cost of iteration i does not depend on i, so K iterations on the FULL dataset represent the fit;
+#              no: the cell times the whole operation on the full dataset as before, and says why (the reason column).
+#   cap_param  the estimator's PUBLIC parameter set to the cap, equally on both arms (read back from get_params).
+#   cap        the default iteration cap K (the job's PC_AB_LOOP_CAP overrides it for every valid row).
+#   pin        JSON object of further public parameters set on both arms so the executed count equals the cap
+#              (early stopping and convergence tolerances off); {} when none.
+#   unit       what one iteration is (what the estimator's fit_loop_ counts).
+# Columns are tab separated; edit one lane per line (sub-lanes correct their family's rows).
+family	lane	valid	cap_param	cap	pin	unit	reason
+trees	*	yes	n_estimators	20	{}	boosting round or tree	every round builds a histogram (or a tree) over all rows at the recipe's fixed depth and leaves: per-round cost does not depend on the round
+trees	gbdt-symmetric	yes	n_estimators	20	{"early_stopping_rounds": null}	boosting round	symmetric (oblivious) trees of fixed depth: every round the same histogram and split work over all rows
+trees	gbdt-symmetric-1000	yes	n_estimators	20	{"early_stopping_rounds": null}	boosting round	the 1000-round recipe capped: the same round as gbdt-symmetric
+trees	gbdt-depthwise	yes	n_estimators	20	{"early_stopping_rounds": null}	boosting round	depthwise to a fixed max_depth: each level histograms all rows, the work per round is bounded by the depth
+trees	gbdt-lossguide	no	n_estimators	20	{}	boosting round	leaf-wise growth: the work per round depends on the leaves reached, which change as the fit proceeds
+trees	gbdt-rank-yetirank	yes	n_estimators	20	{"early_stopping_rounds": null}	boosting round	fixed-depth trees over all rows and the same query groups every round
+trees	gbdt-rank-pairlogit	yes	n_estimators	20	{"early_stopping_rounds": null}	boosting round	fixed-depth trees over all rows and the same pairs every round
+trees	gbdt-multiclass	yes	n_estimators	20	{"early_stopping_rounds": null}	boosting round	one fixed-depth tree per class per round over all rows
+trees	gbdt-categorical	yes	n_estimators	20	{"early_stopping_rounds": null}	boosting round	fixed-depth trees; the categorical statistics are computed per round over all rows
+trees	gbdt-ordered	yes	n_estimators	20	{"early_stopping_rounds": null}	boosting round	ordered boosting over fixed permutations: the same work every round
+trees	rf	yes	n_estimators	20	{}	tree	trees are built independently on bootstrap samples of the same size: each tree is the same distribution of work
+trees	et	yes	n_estimators	20	{}	tree	extremely randomized trees, independent and identically distributed work per tree
+trees	iforest	yes	n_estimators	20	{}	tree	isolation trees on fixed-size subsamples to a fixed height: the same work per tree
+classical	*	no	-	0	{}	-	no iteration loop to cap (closed-form, neighbour search, density sums) or a solver whose work depends on convergence
+classical	kmeans	yes	max_iter	10	{"tol": 0.0}	Lloyd iteration	every Lloyd step is one k x n distance pass and one centroid update over all rows
+classical	svc	no	-	0	{}	-	working-set solver with shrinking: later iterations touch fewer coordinates
+classical	dbscan	no	-	0	{}	-	no iteration: the cost is the neighbour structure
+classical	hdbscan	no	-	0	{}	-	no iteration: the cost is the neighbour structure and the tree condensation
+classical2	*	no	-	0	{}	-	closed-form, eigen or neighbour work, or a solver whose work depends on convergence (line search, active sets, EM)
+classical2	logreg	no	-	0	{}	-	L-BFGS: the function evaluations per iteration depend on the line search as the fit proceeds
+classical2	linearsvc	no	-	0	{}	-	dual coordinate descent with shrinking: later iterations touch fewer coordinates
+classical2	lasso	no	-	0	{}	-	coordinate descent with an active set: later sweeps touch fewer coordinates
+classical2	elasticnet	no	-	0	{}	-	coordinate descent with an active set: later sweeps touch fewer coordinates
+classical2	gmm	no	-	0	{}	-	EM whose work and stopping depend on convergence
+classical2	umap	no	-	0	{}	-	the epoch schedule samples each edge by its weight against the total epochs: capping the epochs changes the work of every epoch
+algos	*	no	-	0	{}	-	a transform, a one-shot operation, or a solver whose work depends on convergence: no fixed-cost iteration
+algos	sgd-clf	yes	max_iter	5	{"tol": null, "early_stopping": false}	epoch	one pass over all rows per epoch
+algos	sgd-reg	yes	max_iter	5	{"tol": null, "early_stopping": false}	epoch	one pass over all rows per epoch
+algos	perceptron	yes	max_iter	5	{"tol": null, "early_stopping": false}	epoch	one pass over all rows per epoch
+algos	pa-clf	yes	max_iter	5	{"tol": null, "early_stopping": false}	epoch	one pass over all rows per epoch
+algos	pa-reg	yes	max_iter	5	{"tol": null, "early_stopping": false}	epoch	one pass over all rows per epoch
+algos	sgd-ocsvm	yes	max_iter	5	{"tol": null}	epoch	one pass over all rows per epoch
+algos	minibatch-kmeans	yes	max_iter	20	{"tol": 0.0, "max_no_improvement": null}	mini-batch step	one fixed-size batch's distance pass and centroid update per step
+algos	als	yes	max_iter	5	{}	alternating sweep	every sweep solves every user and item factor once
+algos	nmf	yes	max_iter	10	{"tol": 0.0}	update iteration	one W and one H update over the whole matrix per iteration
+algos	fastica	yes	max_iter	10	{"tol": 0.0}	fixed-point iteration	one fixed-point update over all rows per iteration
+algos	factor-analysis	yes	max_iter	10	{"tol": 0.0}	EM iteration	one SVD-based update of the same size per iteration
+algos	label-propagation	yes	max_iter	10	{"tol": 0.0}	propagation step	one product with the same affinity matrix per step
+algos	label-spreading	yes	max_iter	10	{"tol": 0.0}	propagation step	one product with the same affinity matrix per step
+algos	pagerank	yes	max_iter	10	{"tol": 0.0}	power iteration	one product with the same graph per iteration
+algos	tsne	yes	max_iter	250	{}	gradient step	one gradient over the same neighbour graph per step (250 is the minimum the estimator accepts)
+algos	mlp-clf	yes	max_iter	2	{"tol": 0.0, "early_stopping": false, "n_iter_no_change": 1000000}	epoch	one pass over all rows at the recipe's fixed batch size per epoch
+algos	mlp-reg	yes	max_iter	2	{"tol": 0.0, "early_stopping": false, "n_iter_no_change": 1000000}	epoch	one pass over all rows at the recipe's fixed batch size per epoch
+algos	lstm-clf	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
+algos	lstm-reg	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
+algos	gru-clf	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
+algos	gru-reg	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
+algos	rnn-clf	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
+algos	rnn-reg	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
+algos	cnn-clf	yes	epochs	2	{}	epoch	one pass over all rows at the recipe's fixed batch size per epoch
+algos	meanshift	no	-	0	{}	-	seeds converge and are dropped as the fit proceeds
+algos	ard	no	-	0	{}	-	features are pruned as the fit proceeds
+algos	elliptic-envelope	no	-	0	{}	-	C-steps whose subset converges
+algos	min-cov-det	no	-	0	{}	-	C-steps whose subset converges
+algos	dict-learning	no	-	0	{}	-	inner sparse coding by coordinate descent with an active set
+neural	*	no	-	0	{}	-	forward, inference or one training step per call: the whole operation is one pass already
+neural	transformer-decode	no	-	0	{}	-	autoregressive: the per-token cost grows with the context
+neural	mamba1-decode	no	-	0	{}	-	autoregressive generation: the cost per token is not the cost of the whole call
+neural	mamba2-decode	no	-	0	{}	-	autoregressive generation: the cost per token is not the cost of the whole call
+neural	mamba3-decode	no	-	0	{}	-	autoregressive generation: the cost per token is not the cost of the whole call
+neural	samba-decode	no	-	0	{}	-	autoregressive: the per-token cost grows with the context
+neural	causal-lm-generate	no	-	0	{}	-	autoregressive: the per-token cost grows with the context
+neural	causal-lm-generate-smollm2	no	-	0	{}	-	autoregressive: the per-token cost grows with the context
+neural	mlp-fit	yes	max_iter	2	{"tol": 0.0, "early_stopping": false, "n_iter_no_change": 1000000}	epoch	one pass over all rows at the recipe's fixed batch size per epoch
+neural	lstm-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
+neural	gru-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
+neural	rnn-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
+neural	sequential-fit	yes	epochs	2	{}	epoch	one pass over all rows at the recipe's fixed batch size per epoch
+neural	seq-cnn1d-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
+neural	seq-resnet1d-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
+neural	seq-inceptiontime-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
+neural	seq-gru-lengths-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
+neural	seq-lstm-lengths-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
+neural	seq-transformer-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
+neural	seq-mamba1-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
+neural	seq-mamba2-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch
+neural	seq-mamba3-fit	yes	epochs	2	{}	epoch	one pass over all sequences at the recipe's fixed batch size per epoch

@@ -1,0 +1,16 @@
+# A/B LOOP MODE: the conditions an arm is timed under (lane ab-loop-mode, 2026-11-24; AGENTS.md "Candidate
+# evaluation": each arm on at least a wide and a narrow dataset among those its estimators support). DATA, NOT CODE:
+# tools/ab_loop.py reads it. One row per dataset or neural shape the board races; a race whose dataset is not listed
+# has an unknown width and counts toward neither side (the verdict names it).
+#   width   wide or narrow (the feature count against the others the board races), or size for a neural shape
+#           (several sizes stand in for the wide/narrow pair: the arm needs two distinct sizes)
+condition	width	features	note
+istella	wide	220	Istella-S learning-to-rank features
+istellarank	wide	220	Istella-S with its query groups (the ranking lanes)
+taxi	narrow	14	gbm-bench NYC taxi trip features
+taxi-hourly	narrow	-	the algos family's taxi-derived series
+taxi-zones	narrow	-	the algos family's taxi-derived graph
+higgs	narrow	28	HIGGS, the neural MLP lanes
+full	size	-	the neural lanes' full shape
+small	size	-	the neural lanes' small shape
+target	size	-	the 162 M LM shape (LM lanes only)
