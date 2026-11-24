@@ -180,6 +180,9 @@ struct OptimizerKeys(Defaultable, Movable):
     var k_embedding_forward_dev: PythonObject
     var k_embedding_backward_dev: PythonObject
     var k_chunked_lm_head_dev: PythonObject
+    var k_clip_dev: PythonObject
+    var k_accumulate_dev: PythonObject
+    var k_mlp_sessions_dev: PythonObject
     var k_lr: PythonObject
     var k_lr_at: PythonObject
     var k_lr_schedule: PythonObject
@@ -289,6 +292,9 @@ struct OptimizerKeys(Defaultable, Movable):
         self.k_embedding_forward_dev = PythonObject(None)
         self.k_embedding_backward_dev = PythonObject(None)
         self.k_chunked_lm_head_dev = PythonObject(None)
+        self.k_clip_dev = PythonObject(None)
+        self.k_accumulate_dev = PythonObject(None)
+        self.k_mlp_sessions_dev = PythonObject(None)
         self.k_lr = PythonObject(None)
         self.k_lr_at = PythonObject(None)
         self.k_lr_schedule = PythonObject(None)
@@ -402,6 +408,9 @@ def _optimizer_keys_fill(nk: UnsafePointer[OptimizerKeys, MutUntrackedOrigin]) r
     nk[].k_embedding_forward_dev = py_key("embedding_forward_dev")
     nk[].k_embedding_backward_dev = py_key("embedding_backward_dev")
     nk[].k_chunked_lm_head_dev = py_key("chunked_lm_head_dev")
+    nk[].k_clip_dev = py_key("clip_dev")
+    nk[].k_accumulate_dev = py_key("accumulate_dev")
+    nk[].k_mlp_sessions_dev = py_key("mlp_sessions_dev")
     nk[].k_lr = py_key("lr")
     nk[].k_lr_at = py_key("lr_at")
     nk[].k_lr_schedule = py_key("lr_schedule")

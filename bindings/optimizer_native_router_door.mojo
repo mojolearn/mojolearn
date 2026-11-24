@@ -59,6 +59,7 @@ from bindings.py_model_records import bump_model_generation
 from bindings.optimizer_keys_unpack import optimizer_keys
 from bindings.py_balanced import py_item
 from bindings.optimizer_keys_unpack import optimizer_keys_in_finalizer
+from bindings.training_grads_device_unpack import grads_device_input, clip_device, accumulate_device, mlp_sessions_device
 from bindings.optimizer_keys_unpack import (
     OPTIMIZER_OPN_TRAINING_NUMERIC_MODE, OPTIMIZER_OPN_TRAINING_VENDOR, OPTIMIZER_OPN_SEQDEV_FINALIZE,
     OPTIMIZER_OPN_SEQDEV_ARRAY, OPTIMIZER_OPN_SEQDEV_WRAP, OPTIMIZER_OPN_RESIDUAL_DROPOUT,
@@ -694,6 +695,10 @@ def optimizer_native(operation: Int, name: PythonObject, owner: PythonObject, va
     if operation == OPTIMIZER_OPN_SAMBA_HEAD_LOSS:
         return training_samba_head_loss(values, entries, context)
     if operation == OPTIMIZER_OPN_MLP_INFERENCE_SESSIONS:
+        # lane vdf-linalg3: TrainDeviceArray sessions / weights run the device
+        # entry in place (bindings/training_grads_device_unpack.mojo)
+        if grads_device_input(values[1], False, context) or grads_device_input(values[0], False, context):
+            return mlp_sessions_device(values, entries, context)
         return training_mlp_sessions(values, entries)
     if operation == OPTIMIZER_OPN_BINDING:
         return py_item(entries, nk[].k_module)
@@ -795,8 +800,15 @@ def optimizer_native(operation: Int, name: PythonObject, owner: PythonObject, va
         _ = owner_state
         return optimizer_pack_io(provider, op, result)
     if operation == OPTIMIZER_OPN_CLIP:
+        # lane vdf-linalg3: TrainDeviceArray gradients are clipped in place on
+        # the device (bindings/training_grads_device_unpack.mojo); identity
+        # compares on the host path
+        if grads_device_input(values[0], False, context):
+            return clip_device(values, entries, context)
         return door_clip(provider, values[0], values[1], values[2], values[3], values[4])
     if operation == OPTIMIZER_OPN_ACCUMULATE:
+        if grads_device_input(values[0], True, context):
+            return accumulate_device(values, entries, context)
         return door_accumulate(provider, values[0], values[1])
     if operation == OPTIMIZER_OPN_ALIGNED:
         opt_scalar(values, context)
