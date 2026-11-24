@@ -513,14 +513,31 @@ def _admission_refusal(est: PythonObject, fields: PythonObject, plan: PythonObje
     mf-r9b: moved here from the deleted units `msel_cv_units`, which raised
     them once per operation whatever the cause; under a numeric
     error_score the units' refusal had turned into silent nan scores,
-    proving suite 2026-11-22). One plan read, on this refusal path only."""
-    if _is_search(est):
-        var inner = py_get(fields, "estimator")
-        if inner is not None and py_get(msel_estimator_plan(inner, context), "member_only") is not None:
-            raise Error("RuntimeError: this built-in estimator's native cross-validation schema is pending migration")
+    proving suite 2026-11-22). One plan read, on this refusal path only.
+
+    THE BASE'S OWN WORDS (lane w3f2-words): a search's kind admits its
+    candidates SERVING (providers/python/member_ensemble_boundary_door.mojo
+    `_admit_nested`: a base its member refuses answers False, silently), so
+    before the member-only words and before `_no_member_fit_words` the
+    base's RAISING admission runs once (`_base_refusal`): a base its own fit
+    door refuses (a host class's fit, HostLasso; a Python callback,
+    DictionaryLearning's) raises that door's words, as scikit-learn's search
+    raises its base's fit error. On this refusal path only."""
+    var search = _is_search(est, context)
+    var inner = PythonObject(None)
+    var inner_plan = PythonObject(None)
+    if search:
+        inner = py_get(fields, "estimator")
+        if inner is not None:
+            inner_plan = msel_estimator_plan(inner, context)
+            if py_get(inner_plan, "member_only") is not None:
+                _base_refusal(inner, inner_plan, b, labels)
+                raise Error("RuntimeError: this built-in estimator's native cross-validation schema is pending migration")
     var name = String(py=py_type(est).__name__)
     var owner = member_admit_labeled(est, fields, plan, member_context, b, labels)
     if not owner.published:
+        if inner is not None:
+            _base_refusal(inner, inner_plan, b, labels)
         return _no_member_fit_words(est)
     if not owner.plan.member.has(MEMBER_CAN_FIT):
         return "AttributeError: '" + name + "' object has no attribute 'fit'"
@@ -529,6 +546,21 @@ def _admission_refusal(est: PythonObject, fields: PythonObject, plan: PythonObje
                 + " cannot hand it back fitted. Fit " + name + " on its own.")
     return _invariant("the serving admission refused " + name + " and the raising one took it (a class_weight"
                       + " tail is read over the labels handed to both)")
+
+
+def _base_refusal(inner: PythonObject, inner_plan: PythonObject, b: PythonObject, labels: PythonObject) raises:
+    """A search's base admitted ONCE by its family's RAISING admission
+    (`member_admit_labeled`, never the serving one): a base its own fit door
+    refuses raises those words here (`_admission_refusal`, its refusal path
+    only); a base with no member mark, or one the family admits, returns and
+    the caller raises its own words. The base as the caller gave it (a
+    one-point grid's candidate is that base)."""
+    if py_get(inner_plan, "member") is None:
+        return
+    var inner_fields = py_call(inner_plan["fields_get"], inner, py_type(inner))
+    var owner = member_admit_labeled(inner, inner_fields, inner_plan, inner_plan["context"], b, labels)
+    _ = owner.published
+    _ = inner_fields  # read by the admission above
 
 
 def _base_name(est: PythonObject, fields: PythonObject, context: PythonObject) raises -> String:
