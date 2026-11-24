@@ -41,7 +41,7 @@ _FAMILY, _FAMILY_CONTEXT = _native_family_bridge.connect()
 _native_parallel_public.connect(_FAMILY_CONTEXT)
 
 
-def fit_boosting(estimator, X, y, *, devices=(0,), sample_weight=None, eval_set=None):
+def fit_boosting(estimator, X, y, *, devices=(0,), sample_weight=None, eval_set=None, device=None):
     """Fit a gradient-boosting model with its feature histograms spread across GPUs.
 
     Parameters
@@ -58,16 +58,20 @@ def fit_boosting(estimator, X, y, *, devices=(0,), sample_weight=None, eval_set=
         Per-row weights, as in ``estimator.fit``.
     eval_set : optional
         Validation data, as in ``estimator.fit``.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'gpu' run on the GPUs in
+        ``devices``; 'cpu' raises ValueError on a GPU installation, since this
+        driver has no CPU form. Other values raise ValueError.
 
     Returns
     -------
     estimator
         The same estimator, fitted, equal to a one-GPU ``estimator.fit(X, y)``.
     """
-    return _FAMILY(estimator, 'family_par_public', ('fit_boosting', (X, y, devices, sample_weight, eval_set)), _FAMILY_CONTEXT)
+    return _FAMILY(estimator, 'family_par_public', ('fit_boosting', (X, y, devices, sample_weight, eval_set), device), _FAMILY_CONTEXT)
 
 
-def fit_forest(estimator, X, y, *, devices=(0,), trees_per_shard=1):
+def fit_forest(estimator, X, y, *, devices=(0,), trees_per_shard=1, device=None):
     """Fit a random forest or Extra Trees model with tree ranges on separate GPUs.
 
     Every GPU reads the whole training set and grows a contiguous range of the
@@ -86,6 +90,10 @@ def fit_forest(estimator, X, y, *, devices=(0,), trees_per_shard=1):
         Distinct GPU indices.
     trees_per_shard : int, default=1
         Number of trees in each range.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'gpu' run on the GPUs in
+        ``devices``; 'cpu' raises ValueError on a GPU installation, since this
+        driver has no CPU form. Other values raise ValueError.
 
     Returns
     -------
@@ -99,10 +107,10 @@ def fit_forest(estimator, X, y, *, devices=(0,), trees_per_shard=1):
     # device i % len(devices)); the trees joined in ID order and their node
     # offsets rebased natively. A tree is a pure function of its global ID,
     # so the joined forest is the one-device forest.
-    return _native_parallel_shard('fit_forest', (estimator, X, y, devices, trees_per_shard))
+    return _native_parallel_shard('fit_forest', (estimator, X, y, devices, trees_per_shard, device))
 
 
-def fit_isolation_forest(estimator, X, *, devices=(0,), sample_weight=None):
+def fit_isolation_forest(estimator, X, *, devices=(0,), sample_weight=None, device=None):
     """Fit an ``IsolationForest`` with its trees built on several GPUs.
 
     Parameters
@@ -115,16 +123,20 @@ def fit_isolation_forest(estimator, X, *, devices=(0,), sample_weight=None):
         Distinct GPU indices.
     sample_weight : None
         Not supported; passing weights raises ``NotImplementedError``.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'gpu' run on the GPUs in
+        ``devices``; 'cpu' raises ValueError on a GPU installation, since this
+        driver has no CPU form. Other values raise ValueError.
 
     Returns
     -------
     estimator
         The same estimator, fitted, equal to a one-GPU ``estimator.fit(X)``.
     """
-    return _FAMILY(estimator, 'family_par_public', ('fit_isolation_forest', (X, devices, sample_weight)), _FAMILY_CONTEXT)
+    return _FAMILY(estimator, 'family_par_public', ('fit_isolation_forest', (X, devices, sample_weight), device), _FAMILY_CONTEXT)
 
 
-def score_isolation_forest(estimator, X, *, devices=(0,), method='score_samples'):
+def score_isolation_forest(estimator, X, *, devices=(0,), method='score_samples', device=None):
     """Score rows with a fitted ``IsolationForest``, its trees evaluated on several GPUs.
 
     Parameters
@@ -137,15 +149,19 @@ def score_isolation_forest(estimator, X, *, devices=(0,), method='score_samples'
         Distinct GPU indices.
     method : {'score_samples', 'decision_function', 'predict'}, default='score_samples'
         The estimator method to run.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'gpu' run on the GPUs in
+        ``devices``; 'cpu' raises ValueError on a GPU installation, since this
+        driver has no CPU form. Other values raise ValueError.
 
     Returns
     -------
     The same value ``estimator.<method>(X)`` returns.
     """
-    return _FAMILY(estimator, 'family_par_public', ('score_isolation_forest', (X, devices, method)), _FAMILY_CONTEXT)
+    return _FAMILY(estimator, 'family_par_public', ('score_isolation_forest', (X, devices, method), device), _FAMILY_CONTEXT)
 
 
-def fit_ordered_rmse(estimator, X, y, *, permutation, devices=(0,), sample_weight=None):
+def fit_ordered_rmse(estimator, X, y, *, permutation, devices=(0,), sample_weight=None, device=None):
     """Fit an ``OrderedRMSE`` model with its feature histograms spread across GPUs.
 
     Parameters
@@ -162,6 +178,10 @@ def fit_ordered_rmse(estimator, X, y, *, permutation, devices=(0,), sample_weigh
         Distinct GPU indices.
     sample_weight : array-like of shape (n_samples,), optional
         Per-row weights.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'gpu' run on the GPUs in
+        ``devices``; 'cpu' raises ValueError on a GPU installation, since this
+        driver has no CPU form. Other values raise ValueError.
 
     Returns
     -------
@@ -169,10 +189,10 @@ def fit_ordered_rmse(estimator, X, y, *, permutation, devices=(0,), sample_weigh
         The same estimator, fitted, equal to a one-GPU
         ``estimator.fit(X, y, permutation=permutation)``.
     """
-    return _FAMILY(estimator, 'family_par_public', ('fit_ordered_rmse', (X, y, permutation, devices, sample_weight)), _FAMILY_CONTEXT)
+    return _FAMILY(estimator, 'family_par_public', ('fit_ordered_rmse', (X, y, permutation, devices, sample_weight), device), _FAMILY_CONTEXT)
 
 
-def fit_feature_freq(estimator, X, y, *, devices=(0,), sample_weight=None):
+def fit_feature_freq(estimator, X, y, *, devices=(0,), sample_weight=None, device=None):
     """Fit an ``ExperimentalTwoLevelFeatureFreq`` model with its histograms spread across GPUs.
 
     Parameters
@@ -187,13 +207,17 @@ def fit_feature_freq(estimator, X, y, *, devices=(0,), sample_weight=None):
         Distinct GPU indices.
     sample_weight : array-like of shape (n_samples,), optional
         Per-row weights.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'gpu' run on the GPUs in
+        ``devices``; 'cpu' raises ValueError on a GPU installation, since this
+        driver has no CPU form. Other values raise ValueError.
 
     Returns
     -------
     estimator
         The same estimator, fitted, equal to a one-GPU ``estimator.fit(X, y)``.
     """
-    return _FAMILY(estimator, 'family_par_public', ('fit_feature_freq', (X, y, devices, sample_weight)), _FAMILY_CONTEXT)
+    return _FAMILY(estimator, 'family_par_public', ('fit_feature_freq', (X, y, devices, sample_weight), device), _FAMILY_CONTEXT)
 
 
 
@@ -211,6 +235,10 @@ class ParallelForestPredictor:
         ``'identical'`` numeric mode.
     devices : tuple of int, default=(0, 1)
         Distinct GPU indices, at most 64.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'gpu' run on the GPUs in
+        ``devices``; 'cpu' raises ValueError on a GPU installation, since this
+        driver has no CPU form. Other values raise ValueError.
 
     Attributes
     ----------
@@ -240,8 +268,8 @@ class ParallelForestPredictor:
     # reuse it. Later source mutations or refits do not affect this predictor.
     # This pools inference model storage; fit_forest remains a separate API.
     # Use as a context manager, or call close to release GPU state.
-    def __init__(self, estimator, *, devices=(0, 1)):
-        return _FAMILY(self, 'family_par_public', ('predictor_init', (estimator, devices)), _FAMILY_CONTEXT)
+    def __init__(self, estimator, *, devices=(0, 1), device=None):
+        return _FAMILY(self, 'family_par_public', ('predictor_init', (estimator, devices, device)), _FAMILY_CONTEXT)
 
     def predict(self, X):
         """Predict labels (classifiers) or values (regressors), as ``estimator.predict(X)``.

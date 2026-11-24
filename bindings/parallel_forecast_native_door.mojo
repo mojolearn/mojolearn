@@ -33,6 +33,10 @@ from std.ffi import external_call
 from bindings.native_prepared_owner_unpack import prepared_key_fields, prepared_key_same, prepared_get, prepared_put
 from bindings.native_loaded_module_door import NativeModules
 from bindings.msel_member_device_unpack import member_says_cpu, member_multi_gpu_refusal
+from bindings.parallel_driver_device import parallel_driver_decide, parallel_driver_member
+from core.device_route import DEVICE_INSTALL
+from core.function_device import FunctionDevice, function_device_default
+from providers.python.device_route_boundary_door import device_unpack
 from bindings.py_attr import py_attr
 from bindings.classical_arrays_door import classical_address
 from bindings.native_process_pool_door import (
@@ -226,17 +230,32 @@ def _ranges(count: Int, width: PythonObject) raises -> List[Int]:
     return shard_bounds(count, _width(width), "at least one series is required")
 
 
-def _member_device(estimator: PythonObject, driver: String) raises:
+def _driver_device(value: PythonObject, driver: String) raises -> FunctionDevice:
+    """The driver's own `device=` (lane vdf-parallel, 2026-11-24;
+    bindings/parallel_driver_device.mojo), the last item of the call, read
+    once per public call before the handler: None is one identity compare
+    and today's route; `_backend._CPU_ONLY` is read only for an explicit
+    word."""
+    var request = device_unpack(value, _b())
+    if request == DEVICE_INSTALL:
+        return function_device_default()
+    var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
+    return parallel_driver_decide(request, driver, py_get(f[].backend, PythonObject("_CPU_ONLY")) is not None)
+
+
+def _member_device(estimator: PythonObject, driver: String, device: FunctionDevice) raises:
     """The forecasting drivers run the model on the GPUs in `devices=` only:
     a model that says device='cpu' in a process with a GPU set is refused in
     words before any shard is cut (bindings/msel_member_device_unpack.mojo).
     `_backend._CPU_ONLY` (None in a process with a GPU set) is read from the
-    connected backend namespace only for a model that says 'cpu'."""
-    if not member_says_cpu(py_fields(estimator), _b()):
-        return
-    var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
-    if py_get(f[].backend, PythonObject("_CPU_ONLY")) is None:
-        member_multi_gpu_refusal(driver)
+    connected backend namespace only for a model that says 'cpu'. Then the
+    member rule against the driver's own explicit `device`
+    (`parallel_driver_member`; nothing for device=None)."""
+    if member_says_cpu(py_fields(estimator), _b()):
+        var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
+        if py_get(f[].backend, PythonObject("_CPU_ONLY")) is None:
+            member_multi_gpu_refusal(driver)
+    parallel_driver_member(device, estimator, py_fields(estimator), driver, _b())
 
 
 def _devices(devices: PythonObject) raises:
@@ -511,12 +530,12 @@ def _arima_key(fields: PythonObject, keep: PythonObject, y: PythonObject, params
 
 
 def _predict_arima(estimator: PythonObject, start_obj: PythonObject, end_obj: PythonObject, exog: PythonObject,
-                   devices: PythonObject, sps: PythonObject) raises -> PythonObject:
+                   devices: PythonObject, sps: PythonObject, device: FunctionDevice) raises -> PythonObject:
     var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
     var b = _b()
     if py_type(estimator) is not f[].arima_cls:
         raise Error("TypeError: predict_arima requires mojolearn.ARIMA")
-    _member_device(estimator, "predict_arima")
+    _member_device(estimator, "predict_arima", device)
     var fields = py_fields(estimator)
     var nk = parallel_keys()
     if not py_contains(fields, nk[].k_params_):
@@ -623,7 +642,7 @@ def _predict_arima(estimator: PythonObject, start_obj: PythonObject, end_obj: Py
 
 
 def _forecast_arima(estimator: PythonObject, steps_obj: PythonObject, exog: PythonObject, devices: PythonObject,
-                    sps: PythonObject) raises -> PythonObject:
+                    sps: PythonObject, device: FunctionDevice) raises -> PythonObject:
     var fields = py_fields(estimator)
     var nk = parallel_keys()
     if not py_contains(fields, nk[].k_params_):
@@ -631,18 +650,18 @@ def _forecast_arima(estimator: PythonObject, steps_obj: PythonObject, exog: Pyth
     var steps = Int(py=py_call(_b().int, steps_obj))
     forecast_positive_admit(steps, "steps")
     var n_obs = Int(py=py_item(fields, nk[].k_n_obs_))
-    return _predict_arima(estimator, PythonObject(n_obs), PythonObject(n_obs + steps), exog, devices, sps)
+    return _predict_arima(estimator, PythonObject(n_obs), PythonObject(n_obs + steps), exog, devices, sps, device)
 
 
 # ---------------------------------------------------------------- Holt-Winters
 
 def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: PythonObject, index: PythonObject,
-                devices: PythonObject, sps: PythonObject) raises -> PythonObject:
+                devices: PythonObject, sps: PythonObject, device: FunctionDevice) raises -> PythonObject:
     var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
     var b = _b()
     if py_type(estimator) is not f[].hw_cls:
         raise Error("TypeError: requires mojolearn.ExponentialSmoothing")
-    _member_device(estimator, "predict_exponential_smoothing")
+    _member_device(estimator, "predict_exponential_smoothing", device)
     var fields = py_fields(estimator)
     var nk = parallel_keys()
     if not Bool(py=py_item(fields, nk[].k_fit_executed_flag)):
@@ -773,13 +792,13 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
 
 
 def _forecast_hw(estimator: PythonObject, h: PythonObject, index: PythonObject, devices: PythonObject,
-                 sps: PythonObject) raises -> PythonObject:
+                 sps: PythonObject, device: FunctionDevice) raises -> PythonObject:
     if py_type(h) is not _b().int:
         raise Error("TypeError: h must be an integer")
     forecast_positive_admit(Int(py=h), "h")
     var nk = parallel_keys()
     var n = Int(py=py_item(py_fields(estimator), nk[].k_n))
-    return _predict_hw(estimator, PythonObject(n), PythonObject(n + Int(py=h)), index, devices, sps)
+    return _predict_hw(estimator, PythonObject(n), PythonObject(n + Int(py=h)), index, devices, sps, device)
 
 
 # ---------------------------------------------------------------- fits
@@ -799,12 +818,12 @@ def _arima_fitted() raises -> PythonObject:
 
 
 def _fit_arima(estimator: PythonObject, y: PythonObject, devices: PythonObject, sps: PythonObject,
-               exog: PythonObject) raises -> PythonObject:
+               exog: PythonObject, device: FunctionDevice) raises -> PythonObject:
     var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
     var b = _b()
     if py_type(estimator) is not f[].arima_cls:
         raise Error("TypeError: fit_arima requires mojolearn.ARIMA")
-    _member_device(estimator, "fit_arima")
+    _member_device(estimator, "fit_arima", device)
     if exog is not None:
         raise Error("NotImplementedError: fit_arima does not shard exogenous regressors; ARIMA.fit(y, exog) fits "
                     + "them on one device")
@@ -856,12 +875,12 @@ def _hw_fitted() raises -> PythonObject:
                                       "season_"))
 
 
-def _fit_hw(estimator: PythonObject, devices: PythonObject, sps: PythonObject) raises -> PythonObject:
+def _fit_hw(estimator: PythonObject, devices: PythonObject, sps: PythonObject, device: FunctionDevice) raises -> PythonObject:
     var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
     var b = _b()
     if py_type(estimator) is not f[].hw_cls:
         raise Error("TypeError: requires mojolearn.ExponentialSmoothing")
-    _member_device(estimator, "fit_exponential_smoothing")
+    _member_device(estimator, "fit_exponential_smoothing", device)
     var nk = parallel_keys()
     forecast_process_mode_admit(String(py=py_item(f[].backend, nk[].k__DEFAULT_MODE)),
                                 "ExponentialSmoothing requires IDENTICAL numeric mode")
@@ -1069,17 +1088,22 @@ def parallel_forecast_call(operation: Int, name: PythonObject, args: PythonObjec
         # reads per public call when none is).
         _generation_sweep()
     if operation == PARALLEL_FORECAST_OPN_PREDICT_ARIMA:
-        return _predict_arima(args[0], args[1], args[2], args[3], args[4], args[5])
+        # Each public driver's `device=` is the last item of its call
+        # (lane vdf-parallel), admitted here once, before the handler.
+        return _predict_arima(args[0], args[1], args[2], args[3], args[4], args[5],
+                              _driver_device(args[6], "predict_arima"))
     if operation == PARALLEL_FORECAST_OPN_FORECAST_ARIMA:
-        return _forecast_arima(args[0], args[1], args[2], args[3], args[4])
+        return _forecast_arima(args[0], args[1], args[2], args[3], args[4], _driver_device(args[5], "forecast_arima"))
     if operation == PARALLEL_FORECAST_OPN_PREDICT_EXPONENTIAL_SMOOTHING:
-        return _predict_hw(args[0], args[1], args[2], args[3], args[4], args[5])
+        return _predict_hw(args[0], args[1], args[2], args[3], args[4], args[5],
+                           _driver_device(args[6], "predict_exponential_smoothing"))
     if operation == PARALLEL_FORECAST_OPN_FORECAST_EXPONENTIAL_SMOOTHING:
-        return _forecast_hw(args[0], args[1], args[2], args[3], args[4])
+        return _forecast_hw(args[0], args[1], args[2], args[3], args[4],
+                            _driver_device(args[5], "forecast_exponential_smoothing"))
     if operation == PARALLEL_FORECAST_OPN_FIT_ARIMA:
-        return _fit_arima(args[0], args[1], args[2], args[3], args[4])
+        return _fit_arima(args[0], args[1], args[2], args[3], args[4], _driver_device(args[5], "fit_arima"))
     if operation == PARALLEL_FORECAST_OPN_FIT_EXPONENTIAL_SMOOTHING:
-        return _fit_hw(args[0], args[1], args[2])
+        return _fit_hw(args[0], args[1], args[2], _driver_device(args[3], "fit_exponential_smoothing"))
     if operation == PARALLEL_FORECAST_OPN_WORKER:
         forecast_worker(args)
         return PythonObject(None)

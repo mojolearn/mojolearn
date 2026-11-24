@@ -54,6 +54,10 @@ class ParallelQueries:
         Distinct GPU indices; each runs one worker.
     rows_per_shard : int, default=128
         Number of query rows sent to a worker at a time.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'gpu' run on the GPUs in
+        ``devices``; 'cpu' raises ValueError on a GPU installation, since this
+        driver has no CPU form. Other values raise ValueError.
 
     Attributes
     ----------
@@ -83,8 +87,8 @@ class ParallelQueries:
     # per-shard call and the merge are unchanged, so the bytes are too. Since
     # 2026-11-05 the snapshot stays on the workers across calls while the
     # fitted state is unchanged (bindings/parallel_shard_native_door.mojo).
-    def __init__(self, estimator, *, devices=(0,), rows_per_shard=128):
-        _native_parallel_shard('queries_init', (self, estimator, devices, rows_per_shard))
+    def __init__(self, estimator, *, devices=(0,), rows_per_shard=128, device=None):
+        _native_parallel_shard('queries_init', (self, estimator, devices, rows_per_shard, device))
 
     def query(self, X=None, *, method=None, **kwargs):
         """Run one query method of the estimator over ``X``.

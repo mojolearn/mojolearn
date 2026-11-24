@@ -21,33 +21,63 @@ _native_parallel_forecast = _binding()._module.parallel_forecast_call
 _native_parallel_forecast('initialize', (_ARIMA, _HW, _ARIMA_CONTEXT, _HW_CONTEXT, vars(_backend)))
 
 
-def predict_arima(estimator, start=0, end=None, *, exog=None, devices=(0,), series_per_shard=1):
+def predict_arima(estimator, start=0, end=None, *, exog=None, devices=(0,), series_per_shard=1, device=None):
     """Predict whole ARIMA series on GPU workers; ``end`` is exclusive.
 
     Exogenous models are deliberately refused until their partition contract is
     qualified. This does not alter public CPU inference on ordinary ARIMA.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'gpu' run on the GPUs in
+        ``devices``; 'cpu' raises ValueError on a GPU installation, since this
+        driver has no CPU form. Other values raise ValueError.
     """
-    return _native_parallel_forecast('predict_arima', (estimator, start, end, exog, devices, series_per_shard))
+    return _native_parallel_forecast('predict_arima', (estimator, start, end, exog, devices, series_per_shard, device))
 
 
-def forecast_arima(estimator, steps, *, exog=None, devices=(0,), series_per_shard=1):
-    """Forecast independent ARIMA series with the prediction partition."""
-    return _native_parallel_forecast('forecast_arima', (estimator, steps, exog, devices, series_per_shard))
+def forecast_arima(estimator, steps, *, exog=None, devices=(0,), series_per_shard=1, device=None):
+    """Forecast independent ARIMA series with the prediction partition.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'gpu' run on the GPUs in
+        ``devices``; 'cpu' raises ValueError on a GPU installation, since this
+        driver has no CPU form. Other values raise ValueError.
+    """
+    return _native_parallel_forecast('forecast_arima', (estimator, steps, exog, devices, series_per_shard, device))
 
 
 def predict_exponential_smoothing(estimator, start, end, *, index=None,
-                                  devices=(0,), series_per_shard=1):
+                                  devices=(0,), series_per_shard=1, device=None):
     """GPU out-of-sample Holt-Winters predictions, with exclusive ``end``.
 
     In-sample prediction uses host arithmetic in the underlying implementation
     and is explicitly outside this GPU API. Original single-series/index return
     shapes are preserved, including when shards have different widths.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'gpu' run on the GPUs in
+        ``devices``; 'cpu' raises ValueError on a GPU installation, since this
+        driver has no CPU form. Other values raise ValueError.
     """
     return _native_parallel_forecast('predict_exponential_smoothing',
-                                     (estimator, start, end, index, devices, series_per_shard))
+                                     (estimator, start, end, index, devices, series_per_shard, device))
 
 
-def forecast_exponential_smoothing(estimator, h=1, *, index=None, devices=(0,), series_per_shard=1):
-    """Forecast Holt-Winters series on independent GPU workers."""
+def forecast_exponential_smoothing(estimator, h=1, *, index=None, devices=(0,), series_per_shard=1, device=None):
+    """Forecast Holt-Winters series on independent GPU workers.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'gpu' run on the GPUs in
+        ``devices``; 'cpu' raises ValueError on a GPU installation, since this
+        driver has no CPU form. Other values raise ValueError.
+    """
     return _native_parallel_forecast('forecast_exponential_smoothing',
-                                     (estimator, h, index, devices, series_per_shard))
+                                     (estimator, h, index, devices, series_per_shard, device))

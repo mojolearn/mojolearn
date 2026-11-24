@@ -29,8 +29,25 @@ class DistributedIVFIndex:
         _native_parallel_shard('ivf_init', (self,))
 
     @classmethod
-    def from_index(cls, index, *, devices=(0, 1)):
-        return _native_parallel_shard('ivf_from_index', (cls, index, devices))
+    def from_index(cls, index, *, devices=(0, 1), device=None):
+        """Split a fitted ``IVFIndex``'s stored candidates across GPUs.
+
+        Parameters
+        ----------
+        index : IVFIndex
+            A fitted index.
+        devices : tuple of int, default=(0, 1)
+            Distinct GPU indices; each holds one shard.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the computation runs. None and 'gpu' run on the GPUs in
+            ``devices``; 'cpu' raises ValueError on a GPU installation, since this
+            driver has no CPU form. Other values raise ValueError.
+
+        Returns
+        -------
+        DistributedIVFIndex
+        """
+        return _native_parallel_shard('ivf_from_index', (cls, index, devices, device))
 
     def search(self, queries):
         # One native call (bindings/parallel_shard_native_door.mojo `ivf_search`).

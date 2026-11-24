@@ -17,31 +17,45 @@ from ._native_parallel_shard import _native_parallel_shard
 _shard.register(gpc_class=_gpc_impl.GaussianProcessClassifier)
 
 
-def fit_gaussian_process_classifier(estimator, X, y, *, devices=(0,)):
+def fit_gaussian_process_classifier(estimator, X, y, *, devices=(0,), device=None):
     """Fit independent binary class problems, publishing state only on success.
 
     Class order, target encoding, binary solver and likelihood fold are the same
     as ordinary ``fit``. The whole training matrix is replicated per active
     worker; class-level scheduling helps multiclass throughput, not binary fit
     capacity. Binary classification creates only one task.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'gpu' run on the GPUs in
+        ``devices``; 'cpu' raises ValueError on a GPU installation, since this
+        driver has no CPU form. Other values raise ValueError.
     """
     # One native call (bindings/parallel_shard_native_door.mojo
     # `fit_gaussian_process_classifier`): one binary Laplace fit per
     # one-vs-rest class column on a worker process per device (column i on
     # device i % len(devices)), stored as the plain fit stores them.
     return _native_parallel_shard('fit_gaussian_process_classifier',
-                                  (estimator, X, y, devices))
+                                  (estimator, X, y, devices, device))
 
 
-def predict_gaussian_process_classifier(estimator, X, *, devices=(0,), method='predict'):
+def predict_gaussian_process_classifier(estimator, X, *, devices=(0,), method='predict', device=None):
     """Predict independent fitted classes and fold columns in canonical order.
 
     ``method`` is ``predict`` or ``predict_proba``. Each worker receives only one
     class covariance state plus the common training/query matrices. The complete
     fitted estimator remains host-resident; no single GPU receives every class.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'gpu' run on the GPUs in
+        ``devices``; 'cpu' raises ValueError on a GPU installation, since this
+        driver has no CPU form. Other values raise ValueError.
     """
     # One native call (`predict_gaussian_process_classifier`): one latent
     # pass per fitted class on a worker process, the class columns folded in
     # canonical order; the plain method's public conversion for our caller.
     return _native_parallel_shard('predict_gaussian_process_classifier',
-                                  (estimator, X, devices, method))
+                                  (estimator, X, devices, method, device))
