@@ -2583,6 +2583,11 @@ class CalibratedClassifierCV(_MetaClassifierScore, _TreesWrapperBase):
     >>> model.predict_proba(X[:5]).shape
     (5, 2)
     """
+    #: Lane vdf-meta4: fit takes a model-selection fold (`_arena_io.DeviceRows`)
+    #: and reads it out of its base, the cv folds composed inside it and the
+    #: fold members taking their rows on the device
+    #: (bindings/trees_public_meta_door.mojo `_calibrated_fit`, `_cal_native`).
+    _mojolearn_device_rows = True
     _estimator_type = "classifier"
     # The META member kind (core/ensemble_member.mojo, THE UNIT KINDS; lane mf-meta3b): this class as a member
     # of another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).

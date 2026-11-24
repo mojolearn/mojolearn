@@ -3367,7 +3367,7 @@ def _cal_marker(base: PythonObject, classes: PythonObject, context: PythonObject
     return xneighbors_marker_index(classes)
 
 
-def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: PythonObject, n: Int, d: Int,
+def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, mx: _MetaX,
                 k: Int, codes: PythonObject, classes: PythonObject, splits: PythonObject, ensemble: Bool, jobs: Int,
                 pairs: PythonObject, device: PythonObject, origin: String, context: PythonObject) raises:
     """CalibratedClassifierCV.fit as UNPACK / RUN / PACK over ONE native
@@ -3411,15 +3411,30 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
     any other: the RUN has no Python either way). PACK: the pins returned,
     `member_pack` into each clone (a re-coded fold's member labelled with
     the ensemble codes it holds: the classes_ its fit door wrote), the fit
-    notices, the calibrator tuples."""
+    notices, the calibrator tuples.
+
+    THE FOLD IN PLACE (lane vdf-meta4): `mx` is X, or a model-selection
+    fold's whole host base with the fold's rows (`_meta_x_fit`). Over a
+    fold the units read the base: their row draws are the cv splits'
+    train rows composed inside the fold (`_meta_compose`, the full unit
+    of ensemble=False the fold's own rows) and their targets the fold's
+    codes put at the base rows (`_meta_take`); each fold's member reads its
+    test rows composed the same way while its scores are placed, and its
+    test codes read, at the fold positions (CalFitPlan's TWO INDEXES).
+    `codes` are the fold's (n rows) either way. No row of the fold is
+    gathered on the host: a member that reads a row index takes them on
+    the device out of the base model selection keeps resident."""
     var nk = trees_keys()
     var b = trees_builtins()
+    var Xa = mx.x
+    var n = mx.n
+    var d = mx.d
     var folds = len(splits)
     var sigmoid = String(_attr(model, nk[].k_method, PythonObject("sigmoid"))) == "sigmoid"
     var decision = prep_estimator_has(base, "decision_function", context)
     var units = folds if ensemble else folds + 1
     # UNPACK
-    var set = MemberSet(trees_address(Xa), n, d, MEMBER_I32, MEMBER_I32)
+    var set = MemberSet(trees_address(Xa), mx.base_rows, d, MEMBER_I32, MEMBER_I32)
     set.run.cap = jobs
     set.adopt = True
     # `classes_` in code order: a base whose class_weight is a dict reads its
@@ -3441,6 +3456,11 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
         set.labels = Python.list()
     var markers = List[Int]()
     var codes_address = trees_address(codes)
+    # THE FOLD IN PLACE: the units' targets at the rows of `Xa` (the fold's codes at its base rows; `codes`
+    # itself otherwise), and every composed index (train draws, test reads) kept to the end of PACK.
+    var draw_codes = _meta_take(mx, codes, context)
+    var draw_codes_address = trees_address(draw_codes)
+    var composed = Python.list()
     var clones = Python.list()
     for u in range(units):  # driver-loop: over the cv folds (+ the full-X member), admission once each
         var e = _clone(base, device, origin, context)
@@ -3448,10 +3468,14 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
         var draw = 0
         var count = 0
         if u < folds:
-            var tr = splits[u][0]
+            var tr = _meta_compose(mx, splits[u][0], context)
+            _ = py_call(composed.append, tr)
             draw = trees_address(tr)
             count = Int(py=tr.shape[0])
-        member_set_admit_or_raise(set, e, codes_address, 0, draw, count, 0, 0, k, context, b)
+        elif mx.draw is not None:
+            draw = trees_address(mx.draw)  # the full unit over a fold: every fold row, in the base
+            count = n
+        member_set_admit_or_raise(set, e, draw_codes_address, 0, draw, count, 0, 0, k, context, b)
         if marker >= 0:
             var reads = ensemble or u == folds
             if reads:
@@ -3523,9 +3547,13 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
         admitted_finite_refuse(1, String(py_type(base).__name__), "X")
     var plan = CalFitPlan(trees_address(Xa), n, d, codes_address, k,
                           MEMBER_OP_DECISION if decision else MEMBER_OP_PREDICT_PROBA, sigmoid, ensemble)
+    if mx.draw is not None:
+        plan.in_base(mx.base_rows, draw_codes_address)
     for f in range(folds):  # driver-loop: over the cv folds (their test rows' addresses, read with the GIL held)
         var te = splits[f][1]
-        plan.fold(trees_address(te), Int(py=te.shape[0]))
+        var te_x = _meta_compose(mx, te, context)  # `te` itself without a fold
+        _ = py_call(composed.append, te_x)
+        plan.fold_in(trees_address(te), trees_address(te_x), Int(py=te.shape[0]))
         _ = te^  # `splits` owns the fold rows to the end of RUN; named past the call that stored its address
     plan.markers = markers^
     # THE RESIDENT ROWS (lane mf-cal7; xtrees/trees_calibrated_fit_run.mojo
@@ -3574,6 +3602,8 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
     _ = Xa
     _ = codes
     _ = splits
+    _ = draw_codes
+    _ = composed
     if answered != CAL_ALL_ANSWERED:
         member_set_release(set)
         # A member whose kind tests its rows refused a non-finite X in its
@@ -3609,8 +3639,10 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
     if not ensemble:
         _cal_warn_lacking(plan, plan.folds(), context)
     # THE LIFETIME RULE: a borrowing member read its re-coded targets (the
-    # plan's) again at its pack: the plan lives to here.
+    # plan's) and its draw and targets (`draw_codes`, `composed`) again at its pack: they live to here.
     _ = plan.folds()
+    _ = draw_codes
+    _ = composed
     if ensemble:
         for f in range(folds):  # driver-loop: over the cv folds (the pairs, in fold order)
             _ = py_call(pairs.append, Python.tuple(clones[f], _cal_pack(res, res.first[f], res.count[f], context)))
@@ -3621,9 +3653,12 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
 def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
     _calibrated_validate(model, context)
     var xt = _xt(py_fields(model), context)
-    var Xa = _x_array(X, context)
-    var n = _rows(Xa)
-    var d = _cols(Xa)
+    # THE FOLD IN PLACE (lane vdf-meta4): a DeviceRows fold (the class opts in with `_mojolearn_device_rows`)
+    # is read out of its host base (`_meta_x_fit`); the cv folds are composed inside it (`_cal_native`).
+    var mx = _meta_x_fit(X, context)
+    var Xa = mx.x
+    var n = mx.n
+    var d = mx.d
     var labels = trees_encode_labels(y, labels_scope(model, context))
     _set(model, "classes_", labels.classes)
     var k = len(labels.classes)
@@ -3672,12 +3707,15 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     # member uploaded its rows again and scanned them on the host.
     var mctx = PythonObject(None)
     var scope = PythonObject(None)
-    if _cal_rows_resident(base, Xa, n, d, context):
+    if _cal_rows_resident(base, Xa, mx.base_rows, d, context):
         mctx = prep_native_context(context)
-        scope = _cal_scope_open(mctx)
+        # Inside model selection's own `resident()` scope (a fold read in place: its base is resident there
+        # already) no second scope is entered: the members find the base in the caller's (as stacking).
+        if member_scope_word(py_item(mctx, PythonObject("family_msel_rows_context"))) == MEMBER_SCOPE_NONE:
+            scope = _cal_scope_open(mctx)
     try:
         # Raises every refusal in its refuser's words (lanes mf-cal3, mf-del8).
-        _cal_native(model, xt, base, Xa, n, d, k, labels.codes, labels.classes, splits, ensemble, jobs, pairs, device,
+        _cal_native(model, xt, base, mx, k, labels.codes, labels.classes, splits, ensemble, jobs, pairs, device,
                     origin, context)
     finally:
         if scope is not None:
