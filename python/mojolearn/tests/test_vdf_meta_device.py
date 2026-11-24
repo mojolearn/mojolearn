@@ -98,3 +98,25 @@ def test_a_member_with_another_explicit_device_is_refused_before_the_fit(cls):
     with pytest.raises(ValueError, match=f"{cls.__name__} was given device='cpu' but its estimator DecisionTree"
                                          "(Classifier|Regressor) was constructed with device='gpu'"):
         model.fit(x, y)
+
+
+def test_a_nested_refusal_names_the_meta_estimator_that_handed_the_device():
+    # Needs both words admitted: a GPU installation.
+    if mojolearn.vendor() == "cpu":
+        pytest.skip("holds on a GPU installation only")
+    x, y = _data(VotingClassifier)
+    inner = StackingClassifier([("a", _tree(DecisionTreeClassifier, device="gpu"))], cv=2)
+    outer = VotingClassifier([("s", inner)], device="cpu")
+    with pytest.raises(ValueError, match="VotingClassifier was given device='cpu', handed to StackingClassifier, "
+                                         "but its estimator DecisionTreeClassifier was constructed with device='gpu'"):
+        outer.fit(x, y)
+
+
+def test_a_search_over_a_meta_estimator_with_a_device_hands_it_to_members_that_name_none():
+    from mojolearn import GridSearchCV
+    x, y = _data(VotingClassifier)
+    voting = VotingClassifier([("a", _tree(DecisionTreeClassifier))], device="cpu")
+    search = GridSearchCV(voting, {"voting": ["hard"]}, cv=2).fit(x, y)
+    best = search.best_estimator_
+    assert best.get_params()["device"] == "cpu"
+    assert all(member.get_params()["device"] == "cpu" for member in best.estimators_)
