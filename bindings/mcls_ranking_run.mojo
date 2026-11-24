@@ -7,7 +7,7 @@
 from std.memory import bitcast
 from core.metrics_program_plan import MetricProgramPlan
 from bindings.mcls_common_run import MC_NONE
-from bindings.arena_prog_run import MetricArenaOwner, MetricRoute, metric_inputs_run
+from bindings.arena_prog_run import MetricArenaOwner, MetricRoute, metric_inputs_run, metric_slots_run
 from checks.numerics import pinned_mul_f64
 from core.host_finite_scan import host_all_finite_f32
 
@@ -117,12 +117,31 @@ struct RocMicro(ImplicitlyCopyable, Movable):
 
 def roc_ovr_micro_run(route: MetricRoute, s: Int, s_words: Int, codes: Int, codes_words: Int, w: Int, w_words: Int,
                       n: Int, k: Int) raises -> RocMicro:
+    """`roc_ovr_micro_run_slot` with host codes."""
+    return roc_ovr_micro_run_slot(route, s, s_words, codes, codes_words, -1, w, w_words, n, k)
+
+
+def _codes_slots(codes_slot: Int, inputs: Int) -> List[Int]:
+    # The slots word of a program whose input 1 is the codes (lane
+    # vdf-xm-wire4): empty (every input a host buffer, no allocation) for
+    # host codes, else -1 per input but the codes' store slot.
+    if codes_slot < 0:
+        return List[Int]()
+    var slots = List[Int](length=inputs, fill=-1)
+    slots[1] = codes_slot
+    return slots^
+
+
+def roc_ovr_micro_run_slot(route: MetricRoute, s: Int, s_words: Int, codes: Int, codes_words: Int, codes_slot: Int,
+                           w: Int, w_words: Int, n: Int, k: Int) raises -> RocMicro:
     """RUN of `roc_auc_score(..., multi_class="ovr", average="micro")` (lane
     bm-meta-3, 2026-11-23; was composed in the door over Python pins):
     `_micro_inputs` and `_curves(s.reshape((n * k,)), flags, wm, n * k, 1,
     fold="auc")` as ONE x_metrics program, then its ROW_SUM check over the
     untouched scores. `s`: n x k float32 scores; `codes`: n int32 codes into
-    the ordered classes; `w`: n float32 weights (`w_words` -1: none) (the caller
+    the ordered classes (`codes_slot` >= 0: those codes are a slot of the
+    route's resident store, mapped on the device, read in place; lane
+    vdf-xm-wire4); `w`: n float32 weights (`w_words` -1: none) (the caller
     keeps all three alive). `*_words`: each input's word count, as the door
     pinned it (its array's size). The same stages in the same order as the door
     built (lane ne2-b-members, N080): no bits change. No Python."""
@@ -148,7 +167,7 @@ def roc_ovr_micro_run(route: MetricRoute, s: Int, s_words: Int, codes: Int, code
     var rows2 = plan.want(plan.alloc(1), 1, -1, 1)
     if n:
         plan.stage_op("rank_epi", n, [_RANK_ROW_SUM, s2, n, k, rows2])
-    var arena = metric_inputs_run(route, plan, addresses, sizes)
+    var arena = metric_slots_run(route, plan, addresses, sizes, _codes_slots(codes_slot, len(addresses)))
     if arena.i32(rows2) != 0:
         return RocMicro(False, McAuc(False, 0.0))
     return RocMicro(True, mc_fold_auc_value(arena, out2, False, 0.0))
@@ -227,13 +246,21 @@ struct RocOvo(ImplicitlyCopyable, Movable):
 
 
 def roc_ovo_run(route: MetricRoute, s: Int, codes: Int, n: Int, k: Int, weighted_avg: Bool) raises -> RocOvo:
+    """`roc_ovo_run_slot` with host codes."""
+    return roc_ovo_run_slot(route, s, codes, -1, n, k, weighted_avg)
+
+
+def roc_ovo_run_slot(route: MetricRoute, s: Int, codes: Int, codes_slot: Int, n: Int, k: Int,
+                     weighted_avg: Bool) raises -> RocOvo:
     """THE TYPED RUN of `_ovo_native` (was composed in the door over pins):
     per program the scores (n x k float32 at `s`) and codes (n int32 at
     `codes`) go in once, OVO_MASK weights each pair's rows, two curve folds
     per pair, CURVE_SCORE, OVO_PAIR and AVERAGE; pairs past `_OVO_WORDS` go
     to further programs whose pair words meet in one AVERAGE program. The
-    caller keeps both buffers alive. The checks of the first program stop
-    the run, as the door's raises did. No Python."""
+    caller keeps both buffers alive. `codes_slot` >= 0: the codes are a slot
+    of the route's resident store (mapped on the device; every chunk's
+    program reads it in place, lane vdf-xm-wire4). The checks of the first
+    program stop the run, as the door's raises did. No Python."""
     var n_pairs = k * (k - 1) // 2
     var per_pair = 17 * n + 4 + 4 * _CF_OUT
     var chunk = max(1, min(n_pairs, _OVO_WORDS // max(per_pair, 1)))
@@ -249,6 +276,7 @@ def roc_ovo_run(route: MetricRoute, s: Int, codes: Int, n: Int, k: Int, weighted
     var g0 = 0
     var addresses: List[Int] = [s, codes]
     var sizes: List[Int] = [n * k, n]
+    var slots = _codes_slots(codes_slot, 2)
     for _ in range(n_pairs + 1):  # driver-loop: over the chunks of class pairs (one program each)
         if g0 >= n_pairs:
             break
@@ -292,7 +320,7 @@ def roc_ovo_run(route: MetricRoute, s: Int, codes: Int, n: Int, k: Int, weighted
         var res = MC_NONE
         if last_only:
             res = mc_stage_average(plan, ps, prev, n_pairs, weighted_avg)
-        var arena = metric_inputs_run(route, plan, addresses, sizes)
+        var arena = metric_slots_run(route, plan, addresses, sizes, slots)
         if g0 == 0:
             if arena.i32(rows) != 0:
                 return RocOvo(ROC_OVO_ROWS, undefined, 0.0)
