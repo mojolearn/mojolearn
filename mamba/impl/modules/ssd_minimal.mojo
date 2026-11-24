@@ -433,12 +433,18 @@ comptime M2_CS_IC = 32
 # (~/mojolearn-evidence/ab-outcome-3/o3-nmlp/promote-quality.txt). AMD not measured (NVIDIA-only campaign,
 # AGENTS.md part 8); mamba2-infer not timed. No bits change on any column (WHY NO BIT MOVES above; the digests
 # are equal). The host column, the CPU column, the sabotage arms and a column whose shared-memory page does not
-# fit keep the cell kernels, which compute the same words. `-D MOJOLEARN_IDN_SSD_OCCUPANCY_OFF` keeps the cell
-# kernels on every device column (the old default); the on-define is refused (core/experiment_guards_neural.mojo).
+# fit keep the cell kernels, which compute the same words; the on-define is refused
+# (core/experiment_guards_neural.mojo).
+# OLD PATH SWITCH DELETED 2026-11-24 (lane ab-outcome-4): A/B nvc-ab-20261124T182912Z-977cc8 (NVIDIA L40S, wheel
+# 71db45de5d, job nvc1-0004, one scored run per arm): `-D MOJOLEARN_IDN_SSD_OCCUPANCY_OFF` (the cell kernels on every
+# device column) was slower: neural/mamba2-forward full 2.27 -> 3.41 ms (1.50, 1 cell; the mamba2-infer row produced
+# no cell). The occupancy kernels are the only device-column form; the cell kernels stay only for the columns above
+# that cannot run them (host, CPU, sabotage arms, a page that does not fit). AMD not measured (NVIDIA-only campaign).
+# TOMBSTONE: MOJOLEARN_IDN_SSD_OCCUPANCY_OFF (old path slower: NV L40S mamba2-forward 2.27 -> 3.41 ms, 1.50) deleted 2026-11-24 by lane/ab-outcome-4; code recoverable at 48302d20f6.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_SSD_OCCUPANCY_OFF.ab-outcome-4.patch
 # ===========================================================================
 comptime IDN_SSD_OCCUPANCY = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_SSD_OCCUPANCY_OFF"]()
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and not SSD_ANY_SABOTAGE
     and not SAB_2712_UNBOUNDED

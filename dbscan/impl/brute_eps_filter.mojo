@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The brute epsilon pass of DBSCAN as a GEMM FILTER plus the exact kernel's recheck
-(experiment `-D MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER`, default OFF; lane sp-dbscan-filter, 2026-11-20).
+(lane sp-dbscan-filter, 2026-11-20; the default since 2026-11-24 wherever the per-pair cost rule `dbf_filter_pays`
+says it pays, lane ab-outcome-4: the opt-in define MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER is gone).
 
 WHY. `bef_eps_kernel` (`brute_edge_free.mojo`) accumulates `(x - y)^2` per pair over the features in a 4x4
 register tile: about 0.74 TFLOP/s on the L40S on the 1,000,000 x 220 board row, where the identical GEMM
@@ -59,13 +60,13 @@ device memory, and `m n` fits an int32): one `identical_gemm` (`xc[range] . xc^T
 which has the reference kernel's tile and epilogue (64 x 64 pairs a block, 4 x 4 a thread, the same bit and
 degree reductions) with the accumulate loop replaced by one load of `g` per pair.
 
-ONE ROUTE, NO RUN-TIME CHOICE (Andrew, 2026-11-24: "the route should be one thing only", optimised for large
-inputs; no probe choosing between two). Under the define every fit whose buffers fit the device runs the filter
-for both distance passes; nothing times or declines it (lane ab-outcome-3 / o3-route removed the timed probe of
-lane ab-outcome-1, which had replaced the 1 / 256 open-pair decline). The first A/B
-(nvc-ab-20261124T070727Z-69dac2, L40S) halved a 220-feature fit (575 -> 296 s), 1.02 on an 11-feature one at
-250,000 rows, not faster at full size; the next A/B (wave-3 sha: istella full, taxi 250000, taxi full) decides
-whether the filter becomes the only brute route. Per pair the reference spends work proportional to k; the
+NO PROBE, NO RUN-TIME TIMING (Andrew, 2026-11-24: "the route should be one thing only", optimised for large
+inputs; no probe choosing between two). Nothing times or declines the filter at run time (lane ab-outcome-3 /
+o3-route removed the timed probe of lane ab-outcome-1, which had replaced the 1 / 256 open-pair decline). The
+first A/B (nvc-ab-20261124T070727Z-69dac2, L40S) halved a 220-feature fit (575 -> 296 s), 1.02 on an 11-feature
+one at 250,000 rows, not faster at full size; the wave-3 A/B (below, `dbf_filter_pays`) was split the same way,
+so which pass a fit takes is decided before it runs by the per-pair cost rule of `dbf_filter_pays`, from the
+feature count alone. Per pair the reference spends work proportional to k; the
 filter spends the GEMM's (also proportional to k, at a far higher rate) plus two costs that do not shrink with
 k: the round trip of the product through device memory (the GEMM writes `g`, the filter reads it: the identical
 GEMM has no epilogue hook to fuse the band test into), and the recheck of the open pairs. The recheck is one
@@ -81,14 +82,12 @@ LOF, OPTICS or k-means here (after the A/B).
 
 from std.atomic import Atomic
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.primitives.warp import shuffle_xor
 from max.gpu.primitives.block import sum as block_sum
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz_simd
-from dbscan.impl.edge_free import IDN_DBSCAN_EDGE_FREE
 from dbscan.impl.neighbors.epsilon_neighborhood import (
     DBSCAN_METRIC_L1,
     DBSCAN_METRIC_PRECOMPUTED,
@@ -111,12 +110,10 @@ from gemm.checks.gemm_identical import (
 from gemm.contract import OP_NT
 
 
-#: The switch: default OFF, A/B owed with the wave-3 sha (bench/results/paper_compare/owed-pre0867.json arm
-#: dbscan-brute-eps-filter): the first A/B was split (module docstring); the filter always, no probe, is the new form.
-#: Read only on the brute edge-free route, which exists under IDENTICAL on NVIDIA and AMD.
-comptime DBSCAN_BRUTE_EPS_FILTER = (
-    is_defined["MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER"]() and IDN_DBSCAN_EDGE_FREE
-)
+# The opt-in switch is gone (lane ab-outcome-4, 2026-11-24): the filter is the default wherever `dbf_filter_pays`
+# holds, on the brute edge-free route (IDN_DBSCAN_EDGE_FREE: IDENTICAL on NVIDIA and AMD).
+# TOMBSTONE: MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER (SPLIT: NV L40S istella full 0.58, taxi full 0.99, taxi 250000 1.12; the filter is now the default by the per-pair cost rule dbf_filter_pays, the define is gone) deleted 2026-11-24 by lane/ab-outcome-4; code recoverable at 2631af4005.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER.ab-outcome-4.patch
 
 #: `(k + 2) u <= 2^-8`: the width up to which the second-order terms of the bound stay inside the band's 1/16.
 comptime DBF_MAX_FEATURES = 65534
@@ -137,11 +134,41 @@ comptime DBF_MEAN_PARTS = 1024
 comptime DBF_TPB = 256
 
 
+#: THE PER-PAIR COST RULE (lane ab-outcome-4, 2026-11-24): the feature count from which the filter costs less per
+#: pair than the reference accumulation. Per pair (both distance passes, the union side equal on both since the
+#: bit-matrix plan is made first):
+#:   reference: k feature steps of `bef_eps_kernel`'s 4x4 tile, c_ref each;
+#:   filter:    k feature steps of the identical GEMM, c_gemm each (19.5-25 against 0.74 TFLOP/s: c_gemm ~ c_ref / 27),
+#:              plus a FIXED part F that does not shrink with k: the product's 8-byte round trip through device
+#:              memory (the GEMM writes `g`, `dbf_filter_kernel` reads it; no epilogue hook fuses them) and the
+#:              band test, plus the open pairs' recheck (a fraction of k c_ref, data dependent, small on wide data).
+#:   The filter pays when k (c_ref - c_gemm) > F, i.e. k > F / (c_ref (1 - 1/27)).
+#: Both constants from the wave-3 A/B (nvc-ab-20261124T182912Z-977cc8, NVIDIA L40S, wheel 71db45de5d, job nvc1-0004,
+#: one scored run per arm; 2 passes x n^2 pairs each):
+#:   c_ref = 0.51 ps: the two reference fits at 1,000,000 rows differ by 579116 - 364446 ms over 2e12 pairs and
+#:           220 - 11 features;
+#:   F     = 24 ps:   the filter fit at 250,000 x 11 cost 22229 - 19857 ms more over 1.25e11 pairs (19 ps a pair),
+#:           plus the 11 (c_ref - c_gemm) = 5 ps it saved on the accumulation.
+#:   k* = 24 / (0.51 x 26 / 27) = 49, rounded up to DBF_MIN_FEATURES = 50.
+#: The verdicts it reproduces: istella full (220 features) 0.58 FILTER; taxi 250000 (11 features) 1.12 REFERENCE;
+#: taxi full (11 features) 0.99, within noise, REFERENCE. Per pair, so it holds for any row count; it depends on the
+#: device's ratio of memory bandwidth to the reference kernel's rate (measured on the L40S only; the MI300X has more
+#: bandwidth per flop, so the threshold is conservative there) and on the data only through the open fraction.
+#: Neighbouring shapes it must hold for (owed driver row dbscan-brute-eps-filter-shapes): 50,000 x 8 and 50,000 x 64
+#: bracket it (reference / filter), and the non-board 200,000 x 100 takes the filter. Never a dataset or board shape:
+#: the board's two dbscan widths (11, 220) are far on either side of it.
+comptime DBF_MIN_FEATURES = 50
+
+
+def dbf_filter_pays(n_features: Int) -> Bool:
+    """The per-pair cost rule above: the GEMM filter costs less per pair than the reference accumulation from
+    DBF_MIN_FEATURES features up. Either pass writes the same words; only the time differs."""
+    return n_features >= DBF_MIN_FEATURES
+
+
 def dbf_filter_serves(metric: Int, n_features: Int) -> Bool:
-    """Whether the filter's arithmetic and bound apply: the define, a squared-L2 accumulator, a width the bound
-    covers. Memory and the data itself are decided by the fit."""
-    comptime if not DBSCAN_BRUTE_EPS_FILTER:
-        return False
+    """Whether the filter's arithmetic and bound apply: a squared-L2 accumulator, a width the bound covers. Memory
+    and the data itself are decided by the fit."""
     return (
         metric != DBSCAN_METRIC_L1
         and metric != DBSCAN_METRIC_PRECOMPUTED

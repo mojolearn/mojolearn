@@ -644,6 +644,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XC_SQDIST_TILED_OFF.ab-outcome-3.patch
     comptime assert not is_defined["MOJOLEARN_XC_SQDIST_TILED_OFF"](), "removed 2026-11-24 (lane/o3-decomp of ab-outcome-3, A/B nvc-ab-20261124T115722Z-d8f8b2 NVIDIA L40S, wheel 4519097d380a, job nvc1-0003, one run per arm): XC_SQDIST_TILED_OFF (the per-cell _sqdist_kernel forced where the tiled kernel's page fits) was no faster: 10 cells, median 1.00, 0.98..1.07; the tiled kernel stays the default where its page fits (the per-cell kernel stays where it does not); code at 8e05d20993; see docs/TOMBSTONES.md"
     # ---- end lane ab-outcome-3 / o3-decomp
+    # ---- lane ab-outcome-4 (2026-11-24)
+    # TOMBSTONE: MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER (SPLIT: NV L40S istella full 0.58, taxi full 0.99, taxi 250000 1.12; the filter is now the default by the per-pair cost rule dbf_filter_pays) deleted 2026-11-24 by lane/ab-outcome-4; code recoverable at 2631af4005.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER.ab-outcome-4.patch
+    comptime assert not is_defined["MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER"](), "removed 2026-11-24 (lane/ab-outcome-4, A/B nvc-ab-20261124T182912Z-977cc8 NVIDIA L40S, wheel 71db45de5d, job nvc1-0004, one run per arm): SPLIT by width (istella full 220 features 0.58, taxi full 11 features 0.99, taxi 250000 1.12); the GEMM filter is the default from DBF_MIN_FEATURES = 50 features by the per-pair cost rule dbf_filter_pays (dbscan/impl/brute_eps_filter.mojo); drop the define; code at 2631af4005; see docs/TOMBSTONES.md"
+    # ---- end lane ab-outcome-4
     return True
 
 

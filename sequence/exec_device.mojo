@@ -4,7 +4,6 @@
 over `sequence/ops.mojo::apply`, the body `HostExec` loops over on the CPU."""
 from std.memory import bitcast
 from max.gpu import block_dim, block_idx, thread_idx
-from std.sys import is_defined
 from std.memory import unsafe_memcpy
 from std.ffi import external_call
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -391,9 +390,15 @@ def team_kernel[OP: Int](
 # equal (mlp-clf accuracy 0.94326, logloss 0.14029; mlp-reg r2 0.52061, rmse 0.57837; cross-entropy rel err
 # 4.56e-08) and output hashes and receipts equal on all three quality rows. AMD not measured (NVIDIA-only
 # campaign, AGENTS.md part 8). No bits change on any column: the copy moves the same bytes (the host column
-# has no pinned stage). `-D MOJOLEARN_SEQ_FAST_LIBC_COPY_OFF` keeps the Mojo `unsafe_memcpy` (the old default);
-# the on-define is refused (core/experiment_guards_neural.mojo).
-comptime SEQ_LIBC_COPY = not is_defined["MOJOLEARN_SEQ_FAST_LIBC_COPY_OFF"]()
+# has no pinned stage).
+# OLD PATH DELETED 2026-11-24 (lane ab-outcome-4): A/B nvc-ab-20261124T182912Z-977cc8 (NVIDIA L40S, wheel 71db45de5d,
+# job nvc1-0004, base and arm back to back, one scored run per arm, full datasets): the old Mojo `unsafe_memcpy`
+# (`-D MOJOLEARN_SEQ_FAST_LIBC_COPY_OFF`) was not faster on any of 5 cells: mlp-clf istella infer 25.66 -> 28.83 ms
+# (1.12 slower), mlp-reg istella infer 13.50 -> 16.34 (1.21 slower), mlp-clf / mlp-reg istella fit 1.05 / 1.04,
+# cross-entropy synthetic fit 0.94 (within noise). The libc memcpy is the only form; the define is refused
+# (core/experiment_guards_neural.mojo). AMD not measured (NVIDIA-only campaign, AGENTS.md part 8). No bit moves.
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_LIBC_COPY_OFF (old path not faster: NV L40S 5 cells, infer 1.12 / 1.21 slower) deleted 2026-11-24 by lane/ab-outcome-4; code recoverable at 059785de37.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_FAST_LIBC_COPY_OFF.ab-outcome-4.patch
 
 
 def _pcopy(dst: FP, src: FP, n: Int):
@@ -401,10 +406,7 @@ def _pcopy(dst: FP, src: FP, n: Int):
     pool on a GPU install; cpu-gpu-cleanup n-seq, 2026-10-02). Data movement
     only, the bytes are the same."""
     if n > 0:
-        comptime if SEQ_LIBC_COPY:
-            _ = external_call["memcpy", Optional[MutPointer[UInt8, MutUntrackedOrigin]]](dst, src, n * 4)
-        else:
-            unsafe_memcpy(dest=dst, src=src, count=n)
+        _ = external_call["memcpy", Optional[MutPointer[UInt8, MutUntrackedOrigin]]](dst, src, n * 4)
 
 
 def coop_kernel[OP: Int](

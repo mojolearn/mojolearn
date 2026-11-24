@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The GEMM filter of the brute epsilon pass against the exact pass, word for word (lane sp-dbscan-filter,
-2026-11-20; `dbscan/impl/brute_eps_filter.mojo`, experiment MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER).
+2026-11-20; `dbscan/impl/brute_eps_filter.mojo`, the default from DBF_MIN_FEATURES features since 2026-11-24).
 
 For every unit and every threshold: `bef_eps_kernel` (the reference accumulation) writes the bit matrix and the
 degrees of all n rows; the filtered pass (`dbf_prepare`, then `dbf_range_launch` over forced-small query ranges
 so the range and tile seams are crossed) writes them again; every 64-bit word and every degree must be equal.
-The kernels are called directly, so the check does not depend on the experiment define: it runs in the
+The kernels are called directly, so the check does not depend on the cost rule (its 1-feature unit runs the
+filter below DBF_MIN_FEATURES, which the fit never takes but which must still be exact): it runs in the
 ordinary device column build wherever the brute edge-free route exists (IDENTICAL, NVIDIA and AMD).
 
 Units (the adversarial inputs): values on a 1/4 grid with thresholds that are exact pair distances (pairs AT

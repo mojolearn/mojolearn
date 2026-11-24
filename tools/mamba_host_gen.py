@@ -154,8 +154,9 @@ SUBSTITUTIONS = (
     # and shared-tile S10/S12/S18 arms are device-only; the host column keeps
     # the cell kernels (the same chains, the same bits). Restored 2026-11-15
     # with the arm (lane restore-run-arms-neural). Promoted to the device
-    # default 2026-11-24 (lane o3-nmlp of ab-outcome-3; the old cell kernels on
-    # the device are -D MOJOLEARN_IDN_SSD_OCCUPANCY_OFF): the host column still
+    # default 2026-11-24 (lane o3-nmlp of ab-outcome-3; its old-path switch
+    # MOJOLEARN_IDN_SSD_OCCUPANCY_OFF was slower, 1.50, and was deleted by lane
+    # ab-outcome-4 the same day): the host column still
     # has no shared memory and keeps the cell kernels, which compute the same
     # words (L40S A/B: equal digests, 0.0 against the host column).
     ("mamba/impl/modules/ssd_minimal.mojo",
