@@ -64,7 +64,10 @@ training rows through the same view, so THE CALLER KEEPS X ALIVE UNTIL THIS
 STATE IS FREED OR REFITTED (the member ABI's view lifetime). MEMBER_OP_EXPORT
 of the training block copies the rows into the state once (the class's own
 fit copies them into `_fit_X` on every fit); from then on the state reads its
-own copy. No finite scan here (MEMBER_CAN_TEST_ROWS clear: the caller's
+own copy. A model-selection fold fit on the metrics store whose predict entry reads that store
+(SPECTRAL_CAP_DEV_QUERY, lane vdf-scope-cluster8) keeps the fold's rows as THE FITTED-ROWS SLOT instead: no
+host gather; predict's k-NN search reads that slot (and a fold of queries taken there) on the device; the
+first export of the rows block reads it home once and frees it. No finite scan here (MEMBER_CAN_TEST_ROWS clear: the caller's
 admission scans, as the class's door does). No sample weights, no row or
 column index, no device-home view: refused in words.
 
@@ -126,8 +129,10 @@ from core.spectral_native_api import SPECTRAL_DENSE, SPECTRAL_GRAPH
 from core.spectral_native_api import (
     SPECTRAL_RBF, SPECTRAL_KNN, SPECTRAL_KNN_REFUSED, SPECTRAL_CAP_AFFINITY, SPECTRAL_CAPABILITIES,
 )
-from core.spectral_native_api import SPECTRAL_DATASET_STORE, SPECTRAL_CAP_DEV_STORE
-from core.entry_table import EntryRef, entry_ref_mode, entry_ref_vendor
+from core.spectral_native_api import SPECTRAL_DATASET_STORE, SPECTRAL_CAP_DEV_STORE, SPECTRAL_CAP_DEV_QUERY
+from core.entry_table import EntryRef, entry_ref_mode, entry_ref_vendor, entry_ref_unresolved
+from core.fold_x_word import fold_x_word
+from bindings.arena_cache_run import arena_cache_free, arena_store_read
 from core.metrics_store_ref import metrics_store_find, METRICS_STORE_PREFIX
 from core.member_scope_rows import MemberScopeRows, member_scope_rows_in, member_scope_rows_done_in
 from core.member_abi import MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE
@@ -198,6 +203,10 @@ struct SpectralMemberSlot(Copyable, Movable, Defaultable):
     var refs: List[Float32]
     # The resident prediction state of a SPECTRAL_CAP_RESIDENT image (-1: none).
     var handle: Int
+    # THE FITTED-ROWS SLOT (lane vdf-scope-cluster8): a fold fit on the metrics store keeps its training rows
+    # there (-1: none; `refs` / `borrowed` then hold none), in the store `rows_store`.
+    var rows_slot: Int
+    var rows_store: EntryRef
     var labels: List[Int32]
     var embedding: List[Float32]
     var eigenvalues: List[Float32]
@@ -231,6 +240,8 @@ struct SpectralMemberSlot(Copyable, Movable, Defaultable):
         self.borrowed = 0
         self.refs = List[Float32]()
         self.handle = -1
+        self.rows_slot = -1
+        self.rows_store = entry_ref_unresolved()
         self.labels = List[Int32]()
         self.embedding = List[Float32]()
         self.eigenvalues = List[Float32]()
@@ -327,6 +338,7 @@ def _mint(words: _Words) raises -> Int:
             slot[].automatic = Int(words[14])
         slot[].clear()
         slot[].handle = -1
+        slot[].rows_slot = -1
         return slot[].generation * _INDEX_SPAN + index + 1
     finally:
         shared_slot_unlock(lock)
@@ -370,6 +382,28 @@ def _release_resident(slot: _Slot, call: _Call) raises:
     var handle = slot[].handle
     slot[].handle = -1
     _query_driver(call).release(handle)
+
+
+def _drop_rows_slot(slot: _Slot) raises:
+    """Free THE FITTED-ROWS SLOT (a new fit, an import, a free or the first export of the rows replace it). The
+    resident prediction state holds its own device copy, so it may stay."""
+    if slot[].rows_slot >= 0:
+        var held = slot[].rows_slot
+        slot[].rows_slot = -1
+        arena_cache_free(slot[].rows_store, held)
+
+
+def _query_store_ok(call: _Call) -> Bool:
+    """The predict entry (`route.second`, capability word `route.flags`) reads the metrics store's slots
+    (SPECTRAL_CAP_DEV_QUERY with SPECTRAL_CAP_RESIDENT) on the fit entry's image (the same (mode, vendor), so the
+    same store and context): a fold fit may then keep its training rows as THE FITTED-ROWS SLOT."""
+    if not call[].route.has_second:
+        return False
+    var flags = call[].route.flags
+    if (flags & SPECTRAL_CAP_DEV_QUERY) == 0 or (flags & SPECTRAL_CAP_RESIDENT) == 0:
+        return False
+    return (entry_ref_mode(call[].route.second) == entry_ref_mode(call[].route.entry)
+        and entry_ref_vendor(call[].route.second) == entry_ref_vendor(call[].route.entry))
 
 
 def _whole_x(call: _Call) raises:
@@ -488,31 +522,40 @@ def _fit(slot: _Slot, call: _Call) raises:
     'discretize' / 'cluster_qr' (the class's 30 restarts, 20 iterations)."""
     if call[].row_index.rows == 0:
         _whole_x(call)
-        _fit_rows(slot, call, call[].x.data, call[].x.rows, call[].x.cols, -1, List[Float32]())
+        _fit_rows(slot, call, call[].x.data, call[].x.rows, call[].x.cols, -1, List[Float32](), False,
+            entry_ref_unresolved())
         return
     if call[].column_index.rows > 0 or call[].x.home == MEMBER_HOME_DEVICE:
         raise Error("TypeError: a SpectralClustering member reads X as a dense host float32 view, no column index")
     # MEMBER_CAN_ROW_INDEX (lane vdf-scope-cluster4): the fold's rows. THE RESIDENT-STORE ROUTE: the dataset
     # affinity on a GPU fit entry with the store (SPECTRAL_CAP_DEV_STORE, the metrics image's store resolved from
     # the fit route's (mode, vendor)), the caller's scope with X's pin: the fold is taken on the device out of the
-    # scope's one copy of X and the fit reads that slot. Gathered on the host cores otherwise, and also when the
-    # state keeps its training rows for predict (the Nystrom extension reads host rows).
+    # scope's one copy of X and the fit reads that slot. Gathered on the host cores otherwise. A state that keeps
+    # its training rows for predict keeps THAT SLOT (lane vdf-scope-cluster8) when the predict entry reads the
+    # store's slots (`_query_store_ok`: the Nystrom extension's k-NN search then reads the rows on the device);
+    # it gathers them on the host cores only when the predict entry reads host rows.
     var store = _spectral_store(slot, call)
     var resident = Bool(store)
+    var keep_slot = resident and slot[].keep_state and _query_store_ok(call)
     var gathered = MemberScopeRows(0, 0, 0, False, List[Float32]())
-    if not resident or slot[].keep_state:
+    if not resident or (slot[].keep_state and not keep_slot):
         gathered = member_scope_rows_in(call[], call[].route.entry, METRICS_STORE_PREFIX, False, _EST)
     # The gathered words move to the fit (a swap: the aggregate stays whole); their address is unchanged.
     var owned = List[Float32]()
     swap(owned, gathered.gathered)
     if not resident:
-        _fit_rows(slot, call, gathered.source, gathered.rows, gathered.cols, -1, owned^)
+        _fit_rows(slot, call, gathered.source, gathered.rows, gathered.cols, -1, owned^, False,
+            entry_ref_unresolved())
         return
     var taken = member_scope_rows_in(call[], store.value(), METRICS_STORE_PREFIX, True, _EST)
+    var kept = False
     try:
-        _fit_rows(slot, call, gathered.source, taken.rows, taken.cols, taken.source, owned^)
+        _fit_rows(slot, call, gathered.source, taken.rows, taken.cols, taken.source, owned^, keep_slot,
+            store.value())
+        kept = keep_slot
     finally:
-        member_scope_rows_done_in(store.value(), taken)
+        if not kept:
+            member_scope_rows_done_in(store.value(), taken)
 
 
 def _spectral_store(slot: _Slot, call: _Call) -> Optional[EntryRef]:
@@ -533,10 +576,12 @@ def _spectral_store(slot: _Slot, call: _Call) -> Optional[EntryRef]:
 
 
 def _fit_rows(slot: _Slot, call: _Call, x_addr: Int, rows: Int, d: Int, store_slot: Int,
-              var owned: List[Float32]) raises:
+              var owned: List[Float32], keep_slot: Bool, rows_store: EntryRef) raises:
     """The SpectralClustering fit over host rows at `x_addr` (`rows` x `d`: the caller's X, or a gathered fold
     whose words `owned` holds; 0 when only a slot holds the fold) or, for the dataset route, over slot
-    `store_slot` of the metrics store (`>= 0`; SPECTRAL_DATASET_STORE: the same kernels on the same words)."""
+    `store_slot` of the metrics store (`>= 0`; SPECTRAL_DATASET_STORE: the same kernels on the same words).
+    `keep_slot`: on success the state keeps `store_slot` (of `rows_store`) as THE FITTED-ROWS SLOT, its training
+    rows for predict (the caller frees it otherwise)."""
     if call[].weights.rows > 0:
         raise Error("TypeError: SpectralClustering takes no sample_weight")
     var output = call[].fit_output
@@ -550,6 +595,7 @@ def _fit_rows(slot: _Slot, call: _Call, x_addr: Int, rows: Int, d: Int, store_sl
     if slot[].assignment >= 0 and not call[].route.has_third:
         raise Error("member ABI: a SpectralClustering member's route holds no assignment entry")
     _release_resident(slot, call)
+    _drop_rows_slot(slot)
     slot[].clear()
     var n = rows
     var coo = SpectralCOOStorage(0)
@@ -637,7 +683,12 @@ def _fit_rows(slot: _Slot, call: _Call, x_addr: Int, rows: Int, d: Int, store_sl
     # The training rows the state keeps: the dataset route's X with prediction
     # data (`_fit_X`), a precomputed X always (its `affinity_matrix_`).
     var keeps_rows = (affinity == _AFF_NN and keep) or affinity == _AFF_PRECOMPUTED
-    if keeps_rows and len(owned) > 0:
+    if keeps_rows and keep_slot and store_slot >= 0:
+        # THE FITTED-ROWS SLOT: the fold's rows stay on the device; nothing is borrowed or copied.
+        slot[].rows_slot = store_slot
+        slot[].rows_store = rows_store
+        slot[].borrowed = 0
+    elif keeps_rows and len(owned) > 0:
         # A gathered fold: the state owns its training rows (nothing is borrowed past the call).
         slot[].refs = owned^
         slot[].borrowed = 0
@@ -890,8 +941,10 @@ def _predict(slot: _Slot, call: _Call) raises:
         raise Error("mojolearn SpectralClustering.predict: prediction data was not stored. Fit with"
             + " SpectralClustering(prediction_data=True), which keeps the eigenpairs, degrees and"
             + " centroids the Nystrom extension needs (DEVIATION 2860)")
-    # Under a row index (lane vdf-scope-cluster4) the queries are the index's rows, gathered on the host cores:
-    # the Nystrom extension's query kernels read host rows.
+    # Under a row index (lane vdf-scope-cluster4) the queries are the index's rows, gathered on the host cores;
+    # a state holding THE FITTED-ROWS SLOT under the caller's scope with X's pin takes them ON THE DEVICE out of
+    # the scope's one copy of X instead (lane vdf-scope-cluster8): the predict entry's k-NN search reads both
+    # slots there (SPECTRAL_CAP_DEV_QUERY).
     var qx = MemberScopeRows(call[].x.data, call[].x.rows, call[].x.cols, False, List[Float32]())
     if call[].row_index.rows == 0:
         _whole_x(call)
@@ -899,7 +952,21 @@ def _predict(slot: _Slot, call: _Call) raises:
         if call[].column_index.rows > 0 or call[].x.home == MEMBER_HOME_DEVICE:
             raise Error("TypeError: a SpectralClustering member reads X as a dense host float32 view, no column"
                 + " index")
-        qx = member_scope_rows_in(call[], call[].route.entry, METRICS_STORE_PREFIX, False, _EST)
+        var on_store = (slot[].rows_slot >= 0 and slot[].affinity == _AFF_NN and call[].scope != MEMBER_SCOPE_NONE
+            and call[].pin != 0)
+        qx = member_scope_rows_in(call[], slot[].rows_store if on_store else call[].route.entry,
+            METRICS_STORE_PREFIX, on_store, _EST)
+    try:
+        _predict_rows(slot, call, qx)
+    finally:
+        member_scope_rows_done_in(slot[].rows_store, qx)
+    _ = qx.rows  # the gathered queries stay alive through the query calls above
+
+
+def _predict_rows(slot: _Slot, call: _Call, qx: MemberScopeRows) raises:
+    """`_predict` over the queries `qx`: host rows, or (`qx.resident`) a slot of the metrics store, named to the
+    predict entry by its negative word (core/fold_x_word.mojo). The training rows are the state's host words,
+    or THE FITTED-ROWS SLOT, named the same way to `prepare`."""
     var queries = qx.rows
     var d = slot[].features
     var code = 0
@@ -930,17 +997,22 @@ def _predict(slot: _Slot, call: _Call) raises:
     var shape = SpectralQueryShape(slot[].rows, queries, d, k, slot[].clusters, slot[].neighbors, code)
     var driver = _query_driver(call)
     var training = slot[].training_address() if code == 0 else 0
+    if code == 0 and slot[].rows_slot >= 0:
+        training = fold_x_word(slot[].rows_slot)
+    var source = fold_x_word(qx.source) if qx.resident else qx.source
     var embedding = List[Float32](length=queries * k, fill=0.0)
     if slot[].handle < 0 and (call[].route.flags & SPECTRAL_CAP_RESIDENT) != 0:
         slot[].handle = driver.prepare(SpectralPrepareRequest(training, slot[].state_view(), shape))
     if slot[].handle >= 0:
-        _ = driver.query_resident(SpectralResidentQueryRequest(slot[].handle, qx.source, call[].dst.data,
+        _ = driver.query_resident(SpectralResidentQueryRequest(slot[].handle, source, call[].dst.data,
             Int(embedding.unsafe_ptr()), shape))
     else:
-        _ = driver.query(SpectralQueryRequest(qx.source, training, slot[].state_view(), call[].dst.data,
+        if training < 0 or source < 0:
+            raise Error("member ABI: a SpectralClustering state's device-resident rows need a resident predict"
+                + " entry (SPECTRAL_CAP_RESIDENT)")
+        _ = driver.query(SpectralQueryRequest(source, training, slot[].state_view(), call[].dst.data,
             Int(embedding.unsafe_ptr()), shape))
     _ = embedding^
-    _ = qx.rows  # the gathered queries stay alive through the query calls above
 
 
 def _f32_view(values: List[Float32], rows: Int, cols: Int) -> MemberMatrix:
@@ -949,10 +1021,19 @@ def _f32_view(values: List[Float32], rows: Int, cols: Int) -> MemberMatrix:
     return MemberMatrix(Int(values.unsafe_ptr()), rows, cols)
 
 
-def _own_refs(slot: _Slot):
+def _own_refs(slot: _Slot) raises:
     """Copy the borrowed training rows into the state, once (the class's
     `_fit_X` copy); the state reads its own copy from then on. The resident
-    state (if any) holds the same words and stays."""
+    state (if any) holds the same words and stays. THE FITTED-ROWS SLOT is
+    read home once (`arena_store_read`) and freed."""
+    if slot[].rows_slot >= 0:
+        var words = slot[].rows * slot[].features
+        slot[].refs = List[Float32](length=words, fill=0.0)
+        if words > 0:
+            arena_store_read(slot[].rows_store, slot[].rows_slot, Int(slot[].refs.unsafe_ptr()), words)
+        _drop_rows_slot(slot)
+        slot[].borrowed = 0
+        return
     if slot[].borrowed == 0:
         return
     var count = slot[].rows * slot[].features
@@ -1025,6 +1106,7 @@ def _import(slot: _Slot, call: _Call) raises:
     var block = call[].block
     if block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
         _release_resident(slot, call)
+        _drop_rows_slot(slot)
         slot[].fitted = False
     var k = slot[].components
     if block == _BLOCK_LABELS:
@@ -1133,6 +1215,7 @@ def _spectral_member(operation: Int, address: Int) raises -> Int:
         var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
         try:
             _release_resident(held, call)
+            _drop_rows_slot(held)
         finally:
             _ = _lookup(call[].state, True)
         call[].state = 0

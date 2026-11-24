@@ -7,6 +7,7 @@ no solver, numerical data loop, transfer or algorithm selection threshold.
 """
 from std.memory import unsafe_memcpy
 from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+from core.fold_x_word import fold_x_slot
 from core.spectral_native_api import (
     SpectralInput, SpectralStateView, SpectralFitRequest, SpectralEmbeddingRequest,
     SpectralQueryShape, SpectralQueryRequest, SpectralPrepareRequest,
@@ -157,6 +158,11 @@ trait SpectralBackend:
                 state: SpectralPredictionState) raises -> Int: ...
     @staticmethod
     def query_resident(handle: Int, source: List[Float32], shape: SpectralQueryShape) raises -> SpectralPrediction: ...
+    # SPECTRAL_CAP_DEV_QUERY (lane vdf-scope-cluster8): the training rows / the queries in a resident-store slot.
+    @staticmethod
+    def prepare_slot(slot: Int, shape: SpectralQueryShape, state: SpectralPredictionState) raises -> Int: ...
+    @staticmethod
+    def query_resident_slot(handle: Int, slot: Int, shape: SpectralQueryShape) raises -> SpectralPrediction: ...
     @staticmethod
     def release(handle: Int) raises: ...
     @staticmethod
@@ -277,18 +283,26 @@ struct SpectralKernels[B: SpectralBackend](SpectralNativeKernels):
     def prepare(r: SpectralPrepareRequest) raises -> Int:
         spectral_predict_validate(r.shape.training_rows, r.shape.rows, r.shape.features,
                                   r.shape.components, r.shape.clusters, r.shape.neighbors, r.shape.affinity)
+        var state = spectral_read_state(r.state, r.shape)
+        if r.training < 0:
+            # SPECTRAL_CAP_DEV_QUERY: the training rows are a slot of the image's resident store (no host read).
+            return Self.B.prepare_slot(fold_x_slot(r.training), r.shape, state)
         var training = List[Float32]()
         if r.shape.affinity == 0:
             training = read_f32(r.training, max(0, r.shape.training_rows * r.shape.features))
-        var state = spectral_read_state(r.state, r.shape)
         return Self.B.prepare(training^, r.shape, state)
 
     @staticmethod
     def query_resident(r: SpectralResidentQueryRequest) raises -> Int:
-        var width = r.shape.training_rows if r.shape.affinity == 1 else r.shape.features
-        var source = read_f32(r.source, max(0, r.shape.rows * width))
         _ = i32_ptr(r.labels)
         _ = f32_ptr(r.embedding)
+        if r.source < 0:
+            # SPECTRAL_CAP_DEV_QUERY: the queries are a slot of the image's resident store (no host read).
+            var on_device = Self.B.query_resident_slot(r.handle, fold_x_slot(r.source), r.shape)
+            spectral_write_prediction(on_device, r.labels, r.embedding, r.shape, True)
+            return 0
+        var width = r.shape.training_rows if r.shape.affinity == 1 else r.shape.features
+        var source = read_f32(r.source, max(0, r.shape.rows * width))
         var result = Self.B.query_resident(r.handle, source, r.shape)
         spectral_write_prediction(result, r.labels, r.embedding, r.shape, True)
         _ = source
