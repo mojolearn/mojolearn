@@ -30,6 +30,7 @@ GIL, a Mojo test or another RUN):
      (`member_set_run_release`) and raises them.
 """
 from std.memory import unsafe_memcpy
+from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from bindings.native_unit_os_threads_run import native_unit_cores
 from core.device_route import DEVICE_CPU
@@ -271,7 +272,7 @@ def member_set_run_workers(run: MemberSetRun) -> Int:
     members when every member's route is the CPU; one when any member runs
     on a GPU (the members share one device and its memory) or no member's
     kind runs on a worker."""
-    if not member_set_run_host(run):
+    if _gpu_units_serial(run) and not member_set_run_host(run):
         return 1
     var free = 0
     for u in range(len(run.gil_free)):  # driver-loop: over the members (one flag each)
@@ -283,9 +284,29 @@ def member_set_run_workers(run: MemberSetRun) -> Int:
 def member_set_run_width(run: MemberSetRun) -> Int:
     """How many members a caller that fits in waves puts in one set: the
     host cores when every member added so far runs on the CPU, else one."""
-    if not member_set_run_host(run):
+    if _gpu_units_serial(run) and not member_set_run_host(run):
         return 1
     return member_set_run_cores(run)
+
+
+#: THE A/B ARM `-D MOJOLEARN_MSEL_UNITS_GPU_PARALLEL` (default off; RUN OWED,
+#: docs/apple-fast/EXPERIMENTS.md, the MOJOLEARN_MSEL_UNITS_GPU_PARALLEL row):
+#: units whose members run on a GPU are fitted on the host workers like CPU
+#: units instead of one at a time. Lane member-fits-8 round 9 moved the arm
+#: here from the deleted Python cv units (bindings/msel_cv_door.mojo
+#: `msel_cv_units`): every search, cv tool and meta unit set now runs this
+#: RUN, so the arm switches all of them. The default (off) keeps one unit at
+#: a time on a GPU: the members share one device and its memory.
+comptime _UNITS_GPU_PARALLEL = is_defined["MOJOLEARN_MSEL_UNITS_GPU_PARALLEL"]()
+
+
+@always_inline
+def _gpu_units_serial(run: MemberSetRun) -> Bool:
+    """True unless the GPU-parallel arm is compiled in (then a GPU member set
+    is spread over the workers as a CPU one)."""
+    comptime if _UNITS_GPU_PARALLEL:
+        return False
+    return True
 
 
 @always_inline

@@ -9,9 +9,14 @@
 # (bindings/msel_cv_door.mojo `msel_cv_units`), is deleted: every search
 # and cv tool is the search kind's typed RUN, whose units run on the host
 # pool (`host_parallelize`). Recoverable at ea2e0c0139.
-from std.sys.info import num_physical_cores
+from core.host_predict_threads import host_predict_workers
 
 
 def native_unit_cores() -> Int:
-    """Physical cores of this host (at least 1)."""
-    return max(num_physical_cores(), 1)
+    """The cores this process is ALLOCATED (at least 1): one per physical
+    core, capped by the process's cgroup CPU quota (a rented box's
+    allocation, AGENTS.md part 1), or MOJOLEARN_CPU_THREADS when set; read
+    once per process (core/host_predict_threads.mojo `host_predict_workers`).
+    Was the host's physical cores, which over-counts a cgroup-limited pod.
+    A worker count moves no bit: every unit writes its own slot."""
+    return max(host_predict_workers(), 1)
