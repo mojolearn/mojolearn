@@ -4324,6 +4324,60 @@ def _calibrated_fused(model: PythonObject, xt: PythonObject, pairs: PythonObject
     return trees_reshape(acc, Python.tuple(n, k), context)
 
 
+def _calibrated_fused_fold(model: PythonObject, xt: PythonObject, pairs: PythonObject, mx: _MetaX, scope: Int,
+                           k: Int, context: PythonObject) raises -> PythonObject:
+    """THE FOLD FROM THE STORE (lane vdf-meta5): `_calibrated_fused` over a
+    model-selection fold `mx`, every pair's member reading the fold by
+    number out of the resident base (`_fold_open`, `_FoldPin`; RUN
+    `calibrated_proba_run`, the same program over the same blocks). None,
+    nothing published, when a member is not served that way or a call
+    refuses: the caller admits the fold's rows and runs `_calibrated_fused`
+    (whose doors raise the members' words)."""
+    var n = mx.n
+    var acc = admitted_vector(n * k, "<f8", context)
+    var got = _VoteUnpack()
+    var cal_pairs = List[CalPair](capacity=len(pairs))
+    var cals = List[CalFit]()
+    var answered = False
+    try:
+        var opened_all = True
+        for i in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs (admission, once each)
+            var e = pairs[i][0]
+            var fitted = pairs[i][1]
+            var decision = _cal_member_decision(e, context)
+            var codes = calibrated_pair_codes(e, k, got.keep, context)
+            var operation = MEMBER_OP_DECISION if decision else MEMBER_OP_PREDICT_PROBA
+            if not _fold_open(got, e, mx.x, operation, True, 0, codes[0], 1.0, True, context):
+                opened_all = False
+                break
+            calibrated_pair_words(e, fitted, k, got.members[len(got.members) - 1].cols, codes[0], codes[1], got.keep,
+                                  cal_pairs, cals, context)
+        if opened_all:
+            _fold_plans(got)
+            var glue = _xr(xt)
+            var acc_at = trees_address(acc)  # read with the GIL held
+            var pin = _FoldPin(mx.x, len(got.members))
+            var rows = pin.rows(trees_address(mx.x), mx.base_rows, mx.d, trees_address(mx.draw), n, scope)
+            var refused = VOTE_ALL_ANSWERED
+            try:
+                with GILReleased(Python()):
+                    refused = calibrated_proba_run(glue, rows, got.members, cal_pairs, cals, k, acc_at)
+            finally:
+                pin.settle()
+            answered = refused == VOTE_ALL_ANSWERED
+    except e:
+        _vote_close(got)
+        raise e^
+    _vote_close(got)
+    _ = acc  # written through RUN
+    _ = mx.x  # the rows are read through RUN
+    _ = mx.draw
+    _ = got.keep  # the class codes and knots are read through RUN
+    if not answered:
+        return PythonObject(None)
+    return trees_reshape(acc, Python.tuple(n, k), context)
+
+
 def _scale(xt: PythonObject, acc: PythonObject, divisor: Float64) raises:
     # The mean over the calibrated pairs (moved here from trees_public_boost_door when lane mf-oob3 deleted its
     # other users there; this is its one caller).
@@ -4333,12 +4387,23 @@ def _scale(xt: PythonObject, acc: PythonObject, divisor: Float64) raises:
 
 
 def _calibrated_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
-    var Xa = _check_x(model, X, context)
+    """`CalibratedClassifierCV.predict_proba`. THE FOLD FROM THE STORE (lane
+    vdf-meta5): a model-selection fold is scored by number out of its
+    resident base (`_calibrated_fused_fold`); a fold its members do not
+    serve that way is admitted (`_x_array`) as before."""
+    var mx = _check_meta_x(model, X, context)  # a fold from the store (lane vdf-meta5)
     var xt = _xt(py_fields(model), context)
-    var n = _rows(Xa)
+    var n = mx.n
     var nk = trees_keys()
     var k = len(_attr(model, nk[].k_classes_, Python.list()))
     var pairs = _attr(model, nk[].k_calibrated_classifiers_, Python.list())
+    if k >= 2:
+        var scope = _fold_scope(mx, context)
+        if scope != MEMBER_SCOPE_NONE:
+            var proba = _calibrated_fused_fold(model, xt, pairs, mx, scope, k, context)
+            if proba is not None:
+                return proba
+    var Xa = mx.x if mx.draw is None else _x_array(X, context)
     if k >= 2:
         return _calibrated_fused(model, xt, pairs, Xa, n, k, context)
     var acc = _class_zero(xt, n * k, context)
