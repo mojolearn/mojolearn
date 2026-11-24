@@ -36,6 +36,7 @@ from bindings.kit_call_unpack import kit_capabilities, kit_entry_ref
 from bindings.kit_call_pack import kit_connect
 from x_decomp.descriptor_schema import (
     XD_ABI_NAME, XD_OPERATION_COUNT, XD_MODE, XD_CAPABILITIES, XD_TSQR_R, XD_TSQR_Q, XD_R_SIGNS,
+    XD_DEV_TSQR_R, XD_DEV_TSQR_Q,
 )
 from core.entry_table import EntryRef, entry_ref_call
 from bindings.linalg_ops_kit_run import LinKit, KIT_F32P, lin_svd_tall_run, lin_svd_hermitian_run
@@ -171,6 +172,17 @@ def _lin_tsqr_release(entry: EntryRef, owner: Int):
         pass
 
 
+def _lin_tsqr_release_run(mut kit: LinKit, owner: Int):
+    """RUN `_lin_tsqr_release` for a caller that already released the GIL (the device forms' sequences)."""
+    try:
+        var one = List[Float32](length=1, fill=0.0)
+        var addresses: List[Int] = [Int(one.unsafe_ptr()), Int(one.unsafe_ptr())]
+        _ = kit.call(XD_TSQR_Q, addresses, [1, 1, 0, owner], List[Float64]())
+        _ = one^  # keep the word alive through the call above
+    except:
+        pass
+
+
 def _lin_tsqr_r(entry: EntryRef, a: AdmittedBuf, rows: Int, cols: Int, mut owner: Int,
                 context: PythonObject) raises -> AdmittedBuf:
     """`_tsqr_r`: R (cols x cols) of the TSQR of a. The factorization is kept
@@ -235,28 +247,169 @@ def _lin_svdvals(args: PythonObject, device: FunctionDevice, context: PythonObje
     return result
 
 
-def _lin_eigh(args: PythonObject, device: FunctionDevice, context: PythonObject) raises -> PythonObject:
-    """`eigh(a, UPLO)`."""
-    var a = lin_operand(args[0], "a", context, True)
-    var rows = a.dim(0)
-    var cols = a.dim(1)
-    if rows != cols:
-        raise Error("mojolearn.linalg.eigh: a must be square, got " + String(rows) + " x " + String(cols))
-    var lower = _lin_eq(args[1], "L")
-    if not lower and not _lin_eq(args[1], "U"):
-        raise Error("mojolearn.linalg.eigh: UPLO argument must be 'L' or 'U'")
+@fieldwise_init
+struct LinSource(Copyable, Movable):
+    """The operand of one kit decomposition (lane vdf-linalg6, 2026-11-24): an admitted host buffer the door keeps
+    alive (`addr`, `handle` -1) or a training device array's pool handle (`handle` >= 0, `addr` 0). Its matrix is
+    the same words either way: borrowed in place, or copied device to device into the kit's pool (`_lin_take`)."""
+    var addr: Int
+    var handle: Int
+    var rows: Int
+    var cols: Int
+
+    def on_device(self) -> Bool:
+        return self.handle >= 0
+
+
+def _lin_host_source(a: AdmittedBuf) -> LinSource:
+    return LinSource(a.addr, -1, a.dim(0), a.dim(1))
+
+
+def _lin_take(mut kit: LinKit, src: LinSource) raises -> Int:
+    """RUN: the kit matrix of the operand. Call with the GIL released."""
+    if src.on_device():
+        return kit.adopt(src.handle, src.rows, src.cols)
+    return kit.borrow(src.addr, src.rows, src.cols)
+
+
+def _lin_pack(mut kit: LinKit, m: Int, src: LinSource, entries: PythonObject, held: PythonObject,
+              context: PythonObject) raises -> PythonObject:
+    """PACK of matrix m: a public Array for a host operand (`_lin_out`), a new TrainDeviceArray (rows, cols) for a
+    device operand (one device copy, `LinKit.to_train`)."""
+    if not src.on_device():
+        return _lin_out(kit, m, context)
+    return _lin_dev_out(kit, m, [kit.r(m), kit.c(m)], entries, held)
+
+
+def _lin_pack_vector(mut kit: LinKit, m: Int, length: Int, src: LinSource, entries: PythonObject,
+                     held: PythonObject, context: PythonObject) raises -> PythonObject:
+    """PACK `_M.out((length,))`, or a new 1-D TrainDeviceArray for a device operand."""
+    if not src.on_device():
+        return _lin_out_vector(kit, m, length, context)
+    return _lin_dev_out(kit, m, [length], entries, held)
+
+
+def _lin_dev_out(mut kit: LinKit, m: Int, dims: List[Int], entries: PythonObject, held: PythonObject) raises -> PythonObject:
+    """PACK: a new float32 TrainDeviceArray of `dims` (one training pool handle, `lin_dev_new`) holding matrix m's
+    words; a device matrix is copied device to device, a host one (a small host-made result) uploaded once."""
+    var out = lin_dev_new(entries, held, dims, TRAIN_DEV_F32)
+    var handle = lin_dev_handle(out)
+    var py = Python()
+    with GILReleased(py):
+        kit.to_train(m, handle)
+    return out
+
+
+def _lin_eigh_of(src: LinSource, lower: Bool, device: FunctionDevice, entries: PythonObject, held: PythonObject,
+                 context: PythonObject) raises -> PythonObject:
+    """`eigh(a, UPLO)` of a square operand (checked by the caller)."""
+    var rows = src.rows
     var kit = _lin_kit(_lin_xd(device, context))
     try:
         var v = 0
         var w = 0
         var py = Python()
         with GILReleased(py):
-            var held = kit.borrow(a.addr, rows, rows)
-            w = kit.eigh(held, 1 if lower else 2, v)
-        _ = a  # keep the admitted owner alive through the RUN above
-        var result = Python.tuple(_lin_out_vector(kit, w, rows, context), _lin_out(kit, v, context))
-        _ = a^
-        return result
+            var x = _lin_take(kit, src)
+            w = kit.eigh(x, 1 if lower else 2, v)
+        return Python.tuple(_lin_pack_vector(kit, w, rows, src, entries, held, context),
+                            _lin_pack(kit, v, src, entries, held, context))
+    finally:
+        kit.close()
+
+
+def _lin_eigh_admit(uplo: PythonObject, rows: Int, cols: Int) raises -> Bool:
+    """UNPACK of eigh's square shape and UPLO; True for 'L'."""
+    if rows != cols:
+        raise Error("mojolearn.linalg.eigh: a must be square, got " + String(rows) + " x " + String(cols))
+    var lower = _lin_eq(uplo, "L")
+    if not lower and not _lin_eq(uplo, "U"):
+        raise Error("mojolearn.linalg.eigh: UPLO argument must be 'L' or 'U'")
+    return lower
+
+
+def _lin_eigh(args: PythonObject, device: FunctionDevice, context: PythonObject) raises -> PythonObject:
+    """`eigh(a, UPLO)`."""
+    var a = lin_operand(args[0], "a", context, True)
+    var lower = _lin_eigh_admit(args[1], a.dim(0), a.dim(1))
+    var result = _lin_eigh_of(_lin_host_source(a), lower, device, PythonObject(None), PythonObject(None), context)
+    _ = a^  # keep the admitted owner alive through the RUN above
+    return result
+
+
+def _lin_qr_tsqr_dev(src: LinSource, device: FunctionDevice, entries: PythonObject, held: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    """`_qr_tsqr` of a device operand: the host operand's TSQR route (XD_TSQR_R, XD_R_SIGNS, XD_TSQR_Q) on pool ids
+    (XD_DEV_TSQR_R / XD_DEV_TSQR_Q, x_decomp/resident_train.mojo): X adopted device to device, R and the signs in
+    kit host stores (R lands on the host at the factor's NaN refusal, as for a host operand), Q left on the device."""
+    var rows = src.rows
+    var cols = src.cols
+    var kit = _lin_kit(_lin_xd(device, context))
+    try:
+        var owner = 0
+        var r = 0
+        var q = 0
+        var py = Python()
+        with GILReleased(py):
+            var x = _lin_take(kit, src)
+            r = kit.zeros(cols, cols)
+            var signs = kit.zeros(cols, cols)
+            var dx = kit.device(x)
+            var pr = kit.addr(r)
+            var ps = kit.addr(signs)
+            owner = kit.call(XD_DEV_TSQR_R, [pr], [dx, rows, cols, 1], List[Float64]())
+            var signed = False
+            try:
+                _ = kit.call(XD_R_SIGNS, [pr, ps], [cols], List[Float64]())
+                q = kit.device_output(rows, cols)
+                signed = True
+            finally:
+                if not signed:
+                    _lin_tsqr_release_run(kit, owner)
+            # XD_DEV_TSQR_Q frees the owner whether it applies or refuses
+            _ = kit.call(XD_DEV_TSQR_Q, [ps], [owner, -1, kit.matrices[q].device, rows, cols, cols], List[Float64]())
+        return _lin_named("QRResult", Python.tuple(_lin_pack(kit, q, src, entries, held, context),
+                                                   _lin_pack(kit, r, src, entries, held, context)), context)
+    finally:
+        kit.close()
+
+
+def _lin_qr_kit(src: LinSource, mode: String, device: FunctionDevice, entries: PythonObject, held: PythonObject,
+                context: PythonObject) raises -> PythonObject:
+    """`_qr_q(a, mode)` off the TSQR route ('reduced' wide or past TS_MAX_N, 'complete', 'raw') and the wide 'r'
+    (mode "r"): geqrf, then orgqr / transpose / triu, on the kit."""
+    var rows = src.rows
+    var cols = src.cols
+    var kit = _lin_kit(_lin_xd(device, context))
+    try:
+        var tau = 0
+        var h = 0
+        var factor = 0
+        var kk = min(rows, cols)
+        var py = Python()
+        with GILReleased(py):
+            var x = _lin_take(kit, src)
+            h = kit.geqrf(x, tau)
+            if mode == "raw":
+                # numpy returns geqrf's Fortran-ordered array seen in C order:
+                # the factored matrix transposed, (N, M); tau (K,)
+                factor = kit.transpose(h)
+            elif mode == "complete":
+                factor = kit.orgqr(h, tau, rows)
+            elif mode == "reduced":
+                factor = kit.orgqr(h, tau, kk)
+        if mode == "raw":
+            var ht = _lin_pack(kit, factor, src, entries, held, context)
+            return Python.tuple(ht, _lin_pack_vector(kit, tau, kk, src, entries, held, context))
+        # a wide R (M x N, upper trapezoidal) for 'r'; R of 'complete' has M rows, of 'reduced' K
+        var r_rows = rows if (mode == "complete" or mode == "r") else kk
+        var r_cut = 0
+        with GILReleased(py):
+            r_cut = kit.triu(h, r_rows)
+        if mode == "r":
+            return _lin_pack(kit, r_cut, src, entries, held, context)
+        var q = _lin_pack(kit, factor, src, entries, held, context)
+        return _lin_named("QRResult", Python.tuple(q, _lin_pack(kit, r_cut, src, entries, held, context)), context)
     finally:
         kit.close()
 
@@ -265,11 +418,11 @@ def _lin_qr_q(a: AdmittedBuf, mode: String, device: FunctionDevice, context: Pyt
     """`_qr_q(a, mode)`: numpy.linalg.qr's 'reduced', 'complete' and 'raw'."""
     var rows = a.dim(0)
     var cols = a.dim(1)
-    var binding = _lin_xd(device, context)
     # TOMBSTONE: MOJOLEARN_QR_FAST_DEV (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1 (the FAST kit's
     # grid-fold geqrf / orgqr ahead of the TSQR); code recoverable at b639a2bd2.
     # Restore: git apply experiments/removed/MOJOLEARN_QR_FAST_DEV.patch; record in docs/TOMBSTONES.md.
     if mode == "reduced" and _lin_tsqr_on(rows, cols):
+        var binding = _lin_xd(device, context)
         # `_qr_tsqr`: (Q, R), R's diagonal non-negative
         var entry = _lin_entry(binding)
         # the signs matrix first: nothing that can raise sits between the
@@ -294,77 +447,41 @@ def _lin_qr_q(a: AdmittedBuf, mode: String, device: FunctionDevice, context: Pyt
         var _keep_ret_signs = _lin_named("QRResult", Python.tuple(q.keep, r.keep), context)
         _ = signs  # keep the Python object alive through the native call above
         return _keep_ret_signs^
-    var kit = _lin_kit(binding)
-    try:
-        var tau = 0
-        var h = 0
-        var factor = 0
-        var kk = min(rows, cols)
-        var py = Python()
-        with GILReleased(py):
-            var held = kit.borrow(a.addr, rows, cols)
-            h = kit.geqrf(held, tau)
-            if mode == "raw":
-                # numpy returns geqrf's Fortran-ordered array seen in C order:
-                # the factored matrix transposed, (N, M); tau (K,)
-                factor = kit.transpose(h)
-            elif mode == "complete":
-                factor = kit.orgqr(h, tau, rows)
-            else:
-                factor = kit.orgqr(h, tau, kk)
-        _ = a  # keep the admitted owner alive through the RUN above
-        if mode == "raw":
-            var ht = _lin_out(kit, factor, context)
-            return Python.tuple(ht, _lin_out_vector(kit, tau, kk, context))
-        var r_rows = rows if mode == "complete" else kk
-        var r_cut = 0
-        with GILReleased(py):
-            r_cut = kit.triu(h, r_rows)
-        var q = _lin_out(kit, factor, context)
-        return _lin_named("QRResult", Python.tuple(q, _lin_out(kit, r_cut, context)), context)
-    finally:
-        kit.close()
+    var result = _lin_qr_kit(_lin_host_source(a), mode, device, PythonObject(None), PythonObject(None), context)
+    _ = a  # keep the admitted owner alive through the RUN above
+    return result
+
+
+def _lin_qr_mode(mode: PythonObject) raises -> String:
+    """UNPACK of qr's mode: 'reduced', 'complete', 'raw' or 'r', refused in words otherwise."""
+    if _lin_eq(mode, "reduced"):
+        return "reduced"
+    if _lin_eq(mode, "complete"):
+        return "complete"
+    if _lin_eq(mode, "raw"):
+        return "raw"
+    if _lin_eq(mode, "r"):
+        return "r"
+    raise Error("mojolearn.linalg.qr: unrecognized mode " + family_repr(mode) + "; numpy's modes "
+                + "are 'reduced', 'complete', 'r' and 'raw'")
 
 
 def _lin_qr(args: PythonObject, device: FunctionDevice, context: PythonObject) raises -> PythonObject:
     """`qr(a, mode)`."""
-    var mode = args[1]
-    var named = String("")
-    if _lin_eq(mode, "reduced"):
-        named = "reduced"
-    elif _lin_eq(mode, "complete"):
-        named = "complete"
-    elif _lin_eq(mode, "raw"):
-        named = "raw"
-    if named != "":
+    var named = _lin_qr_mode(args[1])
+    if named != "r":
         var operand = lin_operand(args[0], "a", context, True)
         var result = _lin_qr_q(operand, named, device, context)
         _ = operand^
         return result
-    if not _lin_eq(mode, "r"):
-        raise Error("mojolearn.linalg.qr: unrecognized mode " + family_repr(mode) + "; numpy's modes "
-                    + "are 'reduced', 'complete', 'r' and 'raw'")
     var a = lin_operand(args[0], "a", context, True)
     var rows = a.dim(0)
     var cols = a.dim(1)
     if rows < cols:
         # a wide R (M x N, upper trapezoidal) is geqrf's; the TSQR route is tall only
-        var kit = _lin_kit(_lin_xd(device, context))
-        try:
-            var tau = 0
-            var h = 0
-            var py = Python()
-            var r_cut = 0
-            with GILReleased(py):
-                var held = kit.borrow(a.addr, rows, cols)
-                h = kit.geqrf(held, tau)
-                r_cut = kit.triu(h, rows)
-            _ = a  # keep the admitted owner alive through the RUN above
-            var wide = _lin_out(kit, r_cut, context)
-            _ = a^
-            return wide
-        finally:
-            kit.close()
+        var wide = _lin_qr_kit(_lin_host_source(a), "r", device, PythonObject(None), PythonObject(None), context)
+        _ = a^  # keep the admitted owner alive through the RUN above
+        return wide
     var out = admitted_zeros([cols, cols], "<f4", context)
     # ORDER MATCHES qr_r_binding IN BOTH BINDINGS: addrs (a, r_out), params
     # (n_rows, n_cols); swapping the addresses writes R over the caller's matrix
@@ -373,6 +490,82 @@ def _lin_qr(args: PythonObject, device: FunctionDevice, context: PythonObject) r
     _ = out  # keep the Python object alive through the native call above
     _ = a^
     return out.keep
+
+
+def _lin_svd_tsqr_dev(src: LinSource, device: FunctionDevice, entries: PythonObject, held: PythonObject,
+                      context: PythonObject) raises -> PythonObject:
+    """`_svd_tsqr` of a device operand: the host operand's sequence (the SVD of the TSQR's R on the kit, then
+    U = Q U_R) with X adopted and U_R and U on pool ids (XD_DEV_TSQR_R / XD_DEV_TSQR_Q): U_R is not downloaded
+    and uploaded again, the words are the same."""
+    var rows = src.rows
+    var cols = src.cols
+    var rtol = _lin_rtol(context)
+    var kit = _lin_kit(_lin_xd(device, context))
+    try:
+        var s = 0
+        var vt = 0
+        var u = 0
+        var py = Python()
+        with GILReleased(py):
+            var x = _lin_take(kit, src)
+            var r = kit.zeros(cols, cols)
+            var dx = kit.device(x)
+            var pr = kit.addr(r)
+            var owner = kit.call(XD_DEV_TSQR_R, [pr], [dx, rows, cols, 1], List[Float64]())
+            var dc = -1
+            var done = False
+            try:
+                var ur = lin_svd_tall_run(kit, r, False, rtol, s, vt)
+                dc = kit.device(ur)
+                u = kit.device_output(rows, cols)
+                done = True
+            finally:
+                if not done:
+                    _lin_tsqr_release_run(kit, owner)
+            # the host word is unread (C is the pool matrix dc); XD_DEV_TSQR_Q frees the owner on every path
+            _ = kit.call(XD_DEV_TSQR_Q, [pr], [owner, dc, kit.matrices[u].device, rows, cols, cols], List[Float64]())
+        return _lin_named("SVDResult", Python.tuple(_lin_pack(kit, u, src, entries, held, context),
+                                                    _lin_pack_vector(kit, s, cols, src, entries, held, context),
+                                                    _lin_pack(kit, vt, src, entries, held, context)), context)
+    finally:
+        kit.close()
+
+
+def _lin_svd_kit(src: LinSource, full: Bool, hermitian: Bool, device: FunctionDevice, entries: PythonObject,
+                 held: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`svd(a, full_matrices, compute_uv=True, hermitian)` off the TSQR route, on the kit."""
+    var rows = src.rows
+    var cols = src.cols
+    if hermitian and rows != cols:
+        raise Error("mojolearn.linalg.svd: hermitian=True needs a square matrix")
+    var rtol = 0.0 if hermitian else _lin_rtol(context)
+    var kit = _lin_kit(_lin_xd(device, context))
+    try:
+        var py = Python()
+        var s = 0
+        var first = 0
+        var last = 0
+        var n_values = cols
+        with GILReleased(py):
+            var m = _lin_take(kit, src)
+            if hermitian:
+                first = lin_svd_hermitian_run(kit, m, rows, s, last)
+                n_values = rows
+            elif rows >= cols:
+                first = lin_svd_tall_run(kit, m, full, rtol, s, last)
+            else:
+                var vt2 = 0
+                var mt = kit.transpose(m)
+                var u2 = lin_svd_tall_run(kit, mt, full, rtol, s, vt2)
+                first = kit.transpose(vt2)
+                last = kit.transpose(u2)
+                n_values = rows
+        var u = _lin_pack(kit, first, src, entries, held, context)
+        var values = _lin_pack_vector(kit, s, n_values, src, entries, held, context)
+        var vt = _lin_pack(kit, last, src, entries, held, context)
+        return _lin_named("SVDResult", Python.tuple(u, values, vt), context)
+    finally:
+        kit.close()
 
 
 def _lin_svd(args: PythonObject, device: FunctionDevice, context: PythonObject) raises -> PythonObject:
@@ -386,14 +579,14 @@ def _lin_svd(args: PythonObject, device: FunctionDevice, context: PythonObject) 
         return values
     var full = lin_truth(args[1])
     var hermitian = lin_truth(args[3])
-    var binding = _lin_xd(device, context)
-    var kit = _lin_kit(binding)
-    try:
-        var py = Python()
-        # TOMBSTONE: MOJOLEARN_SVD_FAST_CHOLQR (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1 (the FAST kit's
-        # CholeskyQR2 whole-matrix route ahead of the TSQR); code recoverable at b639a2bd2.
-        # Restore: git apply experiments/removed/MOJOLEARN_SVD_FAST_CHOLQR.patch; record in docs/TOMBSTONES.md.
-        if not hermitian and not full and _lin_tsqr_on(rows, cols):
+    # TOMBSTONE: MOJOLEARN_SVD_FAST_CHOLQR (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1 (the FAST kit's
+    # CholeskyQR2 whole-matrix route ahead of the TSQR); code recoverable at b639a2bd2.
+    # Restore: git apply experiments/removed/MOJOLEARN_SVD_FAST_CHOLQR.patch; record in docs/TOMBSTONES.md.
+    if not hermitian and not full and _lin_tsqr_on(rows, cols):
+        var binding = _lin_xd(device, context)
+        var kit = _lin_kit(binding)
+        try:
+            var py = Python()
             # `_svd_tsqr`: the SVD of the TSQR's R, then U = Q U_R
             var rtol = _lin_rtol(context)
             var owner = 0
@@ -423,51 +616,12 @@ def _lin_svd(args: PythonObject, device: FunctionDevice, context: PythonObject) 
             _ = c_store  # keep the Python object alive through the native call above
             _ = a^
             return result
-        var m = kit.borrow(a.addr, rows, cols)
-        if hermitian:
-            if rows != cols:
-                raise Error("mojolearn.linalg.svd: hermitian=True needs a square matrix")
-            var s = 0
-            var vt = 0
-            var u = 0
-            with GILReleased(py):
-                u = lin_svd_hermitian_run(kit, m, rows, s, vt)
-            _ = a  # keep the admitted owner alive through the RUN above
-            var result = _lin_named("SVDResult", Python.tuple(_lin_out(kit, u, context),
-                                                              _lin_out_vector(kit, s, rows, context),
-                                                              _lin_out(kit, vt, context)), context)
-            _ = a^
-            return result
-        var rtol = _lin_rtol(context)
-        if rows >= cols:
-            var s = 0
-            var vt = 0
-            var u = 0
-            with GILReleased(py):
-                u = lin_svd_tall_run(kit, m, full, rtol, s, vt)
-            _ = a  # keep the admitted owner alive through the RUN above
-            var result = _lin_named("SVDResult", Python.tuple(_lin_out(kit, u, context),
-                                                              _lin_out_vector(kit, s, cols, context),
-                                                              _lin_out(kit, vt, context)), context)
-            _ = a^
-            return result
-        var s = 0
-        var v2 = 0
-        var u2t = 0
-        with GILReleased(py):
-            var vt2 = 0
-            var mt = kit.transpose(m)
-            var u2 = lin_svd_tall_run(kit, mt, full, rtol, s, vt2)
-            v2 = kit.transpose(vt2)
-            u2t = kit.transpose(u2)
-        _ = a  # keep the admitted owner alive through the RUN above
-        var first = _lin_out(kit, v2, context)
-        var values = _lin_out_vector(kit, s, rows, context)
-        var last = _lin_out(kit, u2t, context)
-        _ = a^
-        return _lin_named("SVDResult", Python.tuple(first, values, last), context)
-    finally:
-        kit.close()
+        finally:
+            kit.close()
+    var result = _lin_svd_kit(_lin_host_source(a), full, hermitian, device, PythonObject(None), PythonObject(None),
+                              context)
+    _ = a^  # keep the admitted owner alive through the RUN above
+    return result
 
 
 def _lin_decomp_name(operation: Int) -> String:
@@ -484,29 +638,34 @@ def _lin_decomp_name(operation: Int) -> String:
 # lane vdf-linalg5 (2026-11-24): a TrainDeviceArray operand (bindings/linalg_dev_arrays_unpack.mojo, the training
 # ops' one device-array convention) is read in place by the linalg binding's device entries (gemm/linalg_dev_arrays.mojo
 # `svdvals_dev_native`, `qr_r_dev_native`: the host-address entries' kernels on a pool view); the result is a new
-# TrainDeviceArray. The forms whose host route runs on the x_decomp kit or the TSQR table (eigh, qr 'reduced' /
-# 'complete' / 'raw', a wide qr 'r', svd with compute_uv) read host addresses only: they refuse a device array in
-# words (no download in their place) until the x_decomp image reads training pool handles.
+# TrainDeviceArray. Lane vdf-linalg6 (2026-11-24): the forms whose host route runs on the x_decomp kit or the TSQR
+# table (eigh, qr 'reduced' / 'complete' / 'raw', a wide qr 'r', svd with compute_uv) read it too: the kit adopts the
+# array device to device (`LinKit.adopt`, XD_DEV_FROM_TRAIN), runs the host operand's sequence on the same words
+# (the TSQR on pool ids: XD_DEV_TSQR_R / XD_DEV_TSQR_Q), and PACK copies each result into a new TrainDeviceArray
+# (XD_DEV_TO_TRAIN). Same route, same bits as a host operand; nothing comes down to the host but R, which the TSQR's
+# refusal reads for a host operand too.
 
 
 def _lin_decomp_dev(operation: Int, args: PythonObject, device: FunctionDevice, held: PythonObject,
                     context: PythonObject) raises -> PythonObject:
-    """svdvals, svd(compute_uv=False) and qr(mode='r') of a tall operand on a TrainDeviceArray."""
+    """qr, eigh, svdvals and svd of a TrainDeviceArray; every result a new TrainDeviceArray."""
     var name = _lin_decomp_name(operation)
     lin_dev_device(device, name)
     var who = String("qr") if operation == LINOPS_OPN_FAMILY_LIN_QR else (
         String("eigh") if operation == LINOPS_OPN_FAMILY_LIN_EIGH else (
             String("svdvals") if operation == LINOPS_OPN_FAMILY_LIN_SVDVALS else String("svd")))
-    # (outside an identical GPU set the device entry refuses in words: gemm/linalg_dev_arrays.mojo `lin_dev_ready`)
-    # the linalg binding of the call and its operations table, published for `lin_call` (`_lin_door`)
-    _ = _lin_door(device, context)
+    # (outside an identical GPU set the device entries refuse in words: gemm/linalg_dev_arrays.mojo `lin_dev_ready`,
+    # x_decomp/resident_train.mojo `_train_ready`)
     var entries = lin_dev_entries(args[0], held)
     var a = lin_dev_operand(args[0], "a", who, entries, held, TRAIN_DEV_F32, 2)
     var rows = a.dim(0)
     var cols = a.dim(1)
+    var src = LinSource(0, a.handle, rows, cols)
     var values_only = operation == LINOPS_OPN_FAMILY_LIN_SVDVALS or (
         operation == LINOPS_OPN_FAMILY_LIN_SVD and not lin_truth(args[2]))
     if values_only:
+        # the linalg binding of the call and its operations table, published for `lin_call` (`_lin_door`)
+        _ = _lin_door(device, context)
         # as `lin_svdvals_of`: a wide A's values are A^T's, transposed by the entry on the device
         var wide = rows < cols
         var n_values = rows if wide else cols
@@ -521,14 +680,25 @@ def _lin_decomp_dev(operation: Int, args: PythonObject, device: FunctionDevice, 
             params.append(cols)
         _ = lin_call(context, LIN_OP_SVDVALS_DEV, [a.handle, lin_dev_handle(out)], params)
         return out
-    if operation == LINOPS_OPN_FAMILY_LIN_QR and _lin_eq(args[1], "r") and rows >= cols:
-        var r = lin_dev_new(entries, held, [cols, cols], TRAIN_DEV_F32)
-        # ORDER as qr_r: (a, r_out), params (n_rows, n_cols)
-        _ = lin_call(context, LIN_OP_QR_R_DEV, [a.handle, lin_dev_handle(r)], [rows, cols])
-        return r
-    raise Error("TypeError: " + name + ": this form (eigh, qr 'reduced' / 'complete' / 'raw' or a wide 'r', svd with "
-                + "compute_uv) takes host arrays; a TrainDeviceArray is read in place by svdvals, "
-                + "svd(compute_uv=False) and a tall qr(mode='r'). Copy it with to_host() first")
+    if operation == LINOPS_OPN_FAMILY_LIN_EIGH:
+        var lower = _lin_eigh_admit(args[1], rows, cols)
+        return _lin_eigh_of(src, lower, device, entries, held, context)
+    if operation == LINOPS_OPN_FAMILY_LIN_QR:
+        var mode = _lin_qr_mode(args[1])
+        if mode == "r" and rows >= cols:
+            _ = _lin_door(device, context)
+            var r = lin_dev_new(entries, held, [cols, cols], TRAIN_DEV_F32)
+            # ORDER as qr_r: (a, r_out), params (n_rows, n_cols)
+            _ = lin_call(context, LIN_OP_QR_R_DEV, [a.handle, lin_dev_handle(r)], [rows, cols])
+            return r
+        if mode == "reduced" and _lin_tsqr_on(rows, cols):
+            return _lin_qr_tsqr_dev(src, device, entries, held, context)
+        return _lin_qr_kit(src, mode, device, entries, held, context)
+    var full = lin_truth(args[1])
+    var hermitian = lin_truth(args[3])
+    if not hermitian and not full and _lin_tsqr_on(rows, cols):
+        return _lin_svd_tsqr_dev(src, device, entries, held, context)
+    return _lin_svd_kit(src, full, hermitian, device, entries, held, context)
 
 
 def lin_decomp_operation(operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:

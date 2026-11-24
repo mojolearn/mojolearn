@@ -27,8 +27,9 @@ from x_decomp.descriptor_schema import (
     XD_DEV_COLSUM, XD_DEV_ROWSUM, XD_DEV_MOVE,
     XD_ORDER, XD_DEV_REDUCE, XD_DEV_ORDER, XD_ORDER_SMALL, XD_DEV_ORDER_SMALL,
     XD_SVD, XD_DEV_SVD, XD_RANK, XD_ORTH_DIAG, XD_DEV_ORTH_DIAG, XD_GEQRF, XD_ORGQR, XD_EIGH,
-    XD_DEV_GEQRF, XD_DEV_ORGQR, XD_DEV_TRIU,
+    XD_DEV_GEQRF, XD_DEV_ORGQR, XD_DEV_TRIU, XD_DEV_FROM_TRAIN, XD_DEV_TO_TRAIN, XD_DEV_EIGH_TO,
 )
+from x_decomp.descriptor_mani_schema import XD_CAP_DEV_EIGH
 
 comptime KIT_F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -90,6 +91,7 @@ struct LinKit(Movable):
     var allocations: List[Int]
     var resident: Bool  # `_Kit._res`: the image has the resident operations (a GPU image)
     var dev_svd: Bool   # the image registers the resident SVD (IDN_SVD_RESIDENT)
+    var dev_eigh: Bool  # the image registers the resident eigh (IDN_EIGH_RESIDENT: XD_DEV_EIGH_TO)
     var zero: Int  # the kit's one 1 x 1 zero operand (row N294), -1 until made
     var minus_one: Int  # neg_signs' constants, made once per kit (-1 until made)
     var plus_one: Int
@@ -103,6 +105,7 @@ struct LinKit(Movable):
         self.allocations = List[Int]()
         self.resident = (capabilities & XD_CAP_RESIDENT) != 0
         self.dev_svd = self.resident and (capabilities & XD_CAP_DEV_SVD) != 0
+        self.dev_eigh = self.resident and (capabilities & XD_CAP_DEV_EIGH) != 0
         self.zero = -1
         self.minus_one = -1
         self.plus_one = -1
@@ -187,6 +190,24 @@ struct LinKit(Movable):
         var out = self.add(-1, rows, cols)
         self.matrices[out].borrowed = addr
         return out
+
+    def adopt(mut self, handle: Int, rows: Int, cols: Int) raises -> Int:
+        """A device matrix holding a training device array's words (core/train_dev_pool.mojo handle `handle`, C
+        order, rows * cols >= 1 floats), copied device to device into a pool id this kit owns (XD_DEV_FROM_TRAIN;
+        lane vdf-linalg6). The training array is never written: every operation writes a fresh output."""
+        var count = rows * cols
+        var id = self.dcall(XD_DEV_ALLOC, [max(count, 1)])
+        self.allocations.append(id)
+        _ = self.dcall(XD_DEV_FROM_TRAIN, [handle, id, count])
+        return self.add(-1, rows, cols, id)
+
+    def to_train(mut self, a: Int, handle: Int) raises:
+        """Matrix a's words into training handle `handle` (a fresh device array of a's element count): one device
+        copy (XD_DEV_TO_TRAIN). A host matrix (a small result a host operation made: R, a value vector) is uploaded
+        once first (`device`)."""
+        var count = self.n(a)
+        if count:
+            _ = self.dcall(XD_DEV_TO_TRAIN, [self.device(a), handle, count])
 
     def device_output(mut self, rows: Int, cols: Int) raises -> Int:
         """`_Kit._dout`."""
@@ -572,6 +593,15 @@ struct LinKit(Movable):
     def eigh(mut self, a: Int, uplo: Int, mut v: Int) raises -> Int:
         """`_Kit.eigh(A, uplo)`: (w 1 x n ascending, v n x n columns)."""
         var n = self.r(a)
+        if n >= 1 and self.dev_eigh and self.on_device(a):
+            # lane vdf-linalg6: a device matrix (a training device array the kit adopted) is solved where it lives:
+            # XD_DEV_EIGH_TO is XD_EIGH's route (a device copy, the triangle mirrored for uplo 1 / 2, `eigh_into`)
+            # with w and v left on the device; the same words as the host operand's XD_EIGH.
+            var dw = self.device_output(1, n)
+            v = self.device_output(n, n)
+            var da = self.device(a)
+            _ = self.dcall(XD_DEV_EIGH_TO, [da, self.matrices[dw].device, self.matrices[v].device, n, uplo])
+            return dw
         var w = self.zeros(1, n)
         v = self.zeros(n, n)
         # TOMBSTONE: the device-resident x_decomp_dev_eigh branch (dead code: both callers,

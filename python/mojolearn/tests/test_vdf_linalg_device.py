@@ -201,10 +201,49 @@ def test_linalg5_device_array_refusal_names_the_function_once():
     assert "mojolearn.linalg.mojolearn" not in str(caught.value)
 
 
-def test_linalg5_eigh_device_array_is_refused_in_words():
+# lane vdf-linalg6: eigh, qr 'reduced' / 'complete' / 'raw' / wide 'r' and svd with compute_uv read TrainDeviceArray
+# operands in place on the x_decomp kit (the vdf-linalg5 refusal "takes host arrays" is gone); with device='cpu'
+# they are refused in the same words, and every result is a new device array. Values are checked natively
+# (checks/native_tests/linalg_device_kit_gpu.mojo).
+LINALG6_DEVICE_ARRAY_CPU_CALLS = [
+    ("eigh", lambda g: linalg.eigh(g, device="cpu")),
+    ("qr_reduced", lambda g: linalg.qr(g, device="cpu")),
+    ("qr_complete", lambda g: linalg.qr(g, mode="complete", device="cpu")),
+    ("qr_raw", lambda g: linalg.qr(g, mode="raw", device="cpu")),
+    ("svd", lambda g: linalg.svd(g, device="cpu")),
+]
+
+
+@pytest.mark.parametrize("name,call", LINALG6_DEVICE_ARRAY_CPU_CALLS, ids=[n for n, _ in LINALG6_DEVICE_ARRAY_CPU_CALLS])
+def test_linalg6_device_array_with_device_cpu_is_refused(name, call):
     g = _device_array_or_skip(_a())
-    with pytest.raises(TypeError, match="takes host arrays"):
-        linalg.eigh(g)
+    with pytest.raises(ValueError, match="is a TrainDeviceArray, which lives on the GPU"):
+        call(g)
+
+
+LINALG6_DEVICE_ARRAY_FORMS = [
+    ("eigh", lambda g: linalg.eigh(g), 2),
+    ("qr_reduced", lambda g: linalg.qr(g), 2),
+    ("qr_complete", lambda g: linalg.qr(g, mode="complete"), 2),
+    ("qr_raw", lambda g: linalg.qr(g, mode="raw"), 2),
+    ("svd", lambda g: linalg.svd(g), 3),
+    ("svd_full", lambda g: linalg.svd(g, full_matrices=True), 3),
+    ("svd_hermitian", lambda g: linalg.svd(g, hermitian=True), 3),
+]
+
+
+@pytest.mark.parametrize("name,call,parts", LINALG6_DEVICE_ARRAY_FORMS, ids=[n for n, _, _ in LINALG6_DEVICE_ARRAY_FORMS])
+def test_linalg6_device_array_results_are_device_arrays(name, call, parts):
+    g = _device_array_or_skip(_a())
+    result = call(g)
+    assert len(result) == parts
+    for item in result:
+        assert type(item) is type(g)
+
+
+def test_linalg6_wide_qr_r_device_array_is_a_device_array():
+    g = _device_array_or_skip(np.ones((2, 3), dtype=np.float32))
+    assert type(linalg.qr(g, mode="r")) is type(g)
 
 
 def test_linalg5_typed_device_array_is_refused_by_training_ops():
