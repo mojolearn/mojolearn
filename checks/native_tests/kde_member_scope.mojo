@@ -13,7 +13,8 @@ and the verify's digest compares the columns. Claims, per column:
           (`pin_kept` 0: one upload per search); only the scope's X stays in the store, and its close frees it.
   host:   host-index == plain, the same quantities.
 Data: a SplitMix64 stream (uniform [0, 4)), 96 rows x 3, folds 0..63 / 64..95 as int32 row numbers; gaussian
-kernel, euclidean metric, bandwidth 0.75.
+kernel, bandwidth 0.75; metrics euclidean, cosine and sqeuclidean (lane vdf-scope-cluster4: the cosine zero-row
+rule and the sqeuclidean bound run on the device over the slot, so those two keep the resident-store path).
 """
 from std.testing import TestSuite
 from std.memory import bitcast
@@ -40,7 +41,12 @@ comptime _ROWS = 96
 comptime _D = 3
 comptime _TRAIN = 64
 comptime _TEST = _ROWS - _TRAIN
-comptime SCOPE_FIXTURES = 1
+comptime SCOPE_FIXTURES = 3  # unit 0 euclidean, 1 cosine, 2 sqeuclidean
+
+
+def _metric(unit: Int) -> Float64:
+    """The member's metric code of fixture `unit` (core/density_member.mojo `_kde_metric_name`)."""
+    return 7.0 if unit == 1 else (2.0 if unit == 2 else 0.0)
 
 
 def _next(mut state: UInt64) -> UInt64:
@@ -76,9 +82,9 @@ def _route(device: Bool) raises -> DeviceRoute:
     return route^
 
 
-def _new(route: DeviceRoute) raises -> Int:
-    # KernelDensity: bandwidth 0.75, kernel 'gaussian', metric 'euclidean'
-    var params: List[Float64] = [0.0, 0.75, 0.0, 0.0]
+def _new(route: DeviceRoute, metric: Float64 = 0.0) raises -> Int:
+    # KernelDensity: bandwidth 0.75, kernel 'gaussian', metric `metric` (0 euclidean, 7 cosine, 2 sqeuclidean)
+    var params: List[Float64] = [0.0, 0.75, 0.0, metric]
     var call = MemberCall(route)
     call.params = Int(params.unsafe_ptr())
     call.param_count = len(params)
@@ -100,11 +106,11 @@ struct _Arm(Movable):
         self.pin_kept = List[Int]()
 
 
-def _arm(route: DeviceRoute, x: List[Float32], indexed: Bool, scope: Int, pin: Int) raises -> _Arm:
+def _arm(route: DeviceRoute, x: List[Float32], metric: Float64, indexed: Bool, scope: Int, pin: Int) raises -> _Arm:
     """Fit on the train fold, then score_samples and score the test fold. `indexed`: the whole X plus int32 row
     numbers; else the fold's rows as plain host words."""
     var arm = _Arm()
-    var state = _new(route)
+    var state = _new(route, metric)
     var train_index = List[Int32](capacity=_TRAIN)
     for i in range(_TRAIN):  # driver-loop: over the fixture's train rows (small)
         train_index.append(Int32(i))
@@ -156,7 +162,7 @@ def _same(a: _Arm, b: _Arm, what: String) raises:
     require(bitcast[DType.uint64](a.score) == bitcast[DType.uint64](b.score), what + ": score bits")
 
 
-def fixture(device: Bool) raises:
+def fixture(device: Bool, metric: Float64) raises:
     var x = _uniform4(20261124)
     var route = _route(device)
     var probe = MemberCall(route)
@@ -166,8 +172,8 @@ def fixture(device: Bool) raises:
     free.state = probe.state
     _ = member_call(_member(), MEMBER_OP_FREE, free)
     require((mask & MEMBER_CAN_ROW_INDEX) != 0, "a KernelDensity state reads a row index")
-    var plain = _arm(route, x, False, -1, 0)
-    var host_index = _arm(route, x, True, -1, 0)
+    var plain = _arm(route, x, metric, False, -1, 0)
+    var host_index = _arm(route, x, metric, True, -1, 0)
     _same(host_index, plain, "host row index vs plain fold rows")
     if not device:
         require((mask & MEMBER_CAN_SCOPE) == 0, "the host image keeps its host path (no MEMBER_CAN_SCOPE)")
@@ -177,7 +183,7 @@ def fixture(device: Bool) raises:
     var live_before = arena_cache_live(route.second)
     var scope = arena_scope_new(0)
     try:
-        var scoped = _arm(route, x, True, scope, 1)
+        var scoped = _arm(route, x, metric, True, scope, 1)
         _same(scoped, host_index, "scoped device fold vs host row index")
         require(scoped.pin_kept[0] == 1, "the scoped fit publishes X with the caller's pin")
         require(scoped.pin_kept[1] == 0 and scoped.pin_kept[2] == 0, "the scores find X resident (one upload)")
@@ -189,7 +195,7 @@ def fixture(device: Bool) raises:
 
 
 def _host_fixture(unit: Int) raises:
-    fixture(False)
+    fixture(False, _metric(unit))
 
 
 def test_kde_member_scope() raises:
@@ -198,7 +204,8 @@ def test_kde_member_scope() raises:
         check_cases("kde_member_scope", SCOPE_FIXTURES, _host_fixture)
     else:
         comptime assert TARGET_COLUMN != COLUMN_CPU
-        fixture(True)
+        for unit in range(SCOPE_FIXTURES):  # driver-loop: over the three metrics
+            fixture(True, _metric(unit))
 
 
 def main() raises:

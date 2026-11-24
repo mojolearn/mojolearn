@@ -544,13 +544,12 @@ def _kde_gather(call: _Call, base: Int, width: Int, dst: Int, est: String = "Ker
 
 def _kde_store_ok(slot: _Slot, call: _Call) -> Bool:
     """THE RESIDENT-STORE ROUTE of a KernelDensity call (lane vdf-scope-cluster2b): the GPU image with its store
-    (`KDE_CAP_DEV_STORE`, the transport entry in `route.second`), a resident image (`KDE_CAP_RESIDENT`), the
-    caller's scope with X's pin, and a metric without a host rule on the rows (cosine and sqeuclidean keep the
-    host form, kde/resident_fit.mojo `kde_host_rules_needed`)."""
+    (`KDE_CAP_DEV_STORE`, the transport entry in `route.second`), a resident image (`KDE_CAP_RESIDENT`) and the
+    caller's scope with X's pin. Every metric: the cosine zero-row rule and the sqeuclidean bound run on the
+    device over the slot (kde/resident_fit.mojo `kde_device_row_rules`, lane vdf-scope-cluster4)."""
     var flags = call[].route.flags
     return ((flags & KDE_CAP_DEV_STORE) != 0 and (flags & KDE_CAP_RESIDENT) != 0 and call[].route.has_second
-        and call[].scope != MEMBER_SCOPE_NONE and call[].pin != 0
-        and slot[].kde_metric != "cosine" and slot[].kde_metric != "sqeuclidean")
+        and call[].scope != MEMBER_SCOPE_NONE and call[].pin != 0)
 
 
 def _kde_fit_indexed(slot: _Slot, call: _Call) raises:
