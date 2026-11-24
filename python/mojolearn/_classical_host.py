@@ -1541,12 +1541,16 @@ _native_host_archive_bridge.connect_peer(_CLASSICAL)
 # `_host_archive_forest_metadata`) refused the class as "changed Python storage
 # hooks", so HostForest.digest_ fell back to the public fields and differed
 # from the saving model's. Every import path of HostForest runs this module to
-# here before the class is used, so the layout has one definition.
+# here before the class is used, so the layout has one definition. HostGBDT's
+# layout is taken here too (lane w3-cleanup, 2026-11-24): _gbdt_host is loaded
+# from the same metadata step, so a snapshot at its own import came before this
+# connection in the same order (no hook is installed on HostGBDT today, so it
+# was latent); every HostGBDT import path runs this module (via _forest_host).
 def _connect_forest_twin_layout():
     import sys
-    from . import _forest_host
+    from . import _forest_host, _gbdt_host
     from ._native_family_layouts import connect as connect_family_layouts
-    connect_family_layouts(sys.modules[__package__], only=(_forest_host.HostForest,))
+    connect_family_layouts(sys.modules[__package__], only=(_forest_host.HostForest, _gbdt_host.HostGBDT))
 
 
 _connect_forest_twin_layout()
