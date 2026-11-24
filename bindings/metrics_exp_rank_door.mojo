@@ -41,6 +41,8 @@ from bindings.metrics_exp_common_unpack import (
     mx_missing, mx_selected, mx_codes, mx_map_eq, mx_targets, mx_pos_label, mx_pos_label_ok, mx_scores, mx_weights,
     mx_f32_view, mx_shape_text,
 )
+from bindings.metric_resident_labels_door import MetricResidentLabels, metric_resident_labels
+from bindings.metrics_exp_resident_labels_door import mx_resident_targets, mx_resident_codes
 
 # TOMBSTONE: the Python-holding `_Proba` fields beside its shape, `_row_fold`, `_row_mean_stage`,
 # `_proba_check` and the stage half of `_put_proba` / `_dcg_table` moved to the typed
@@ -67,20 +69,32 @@ def _row_mean(mut prog: MetricDoorProg, S: Int, cols: Int, Y: Int, n: Int, kind:
 
 struct _Proba(Movable):
     """`_proba`'s answer: the typed shape and the two arrays the program
-    reads (the door's pins: the probabilities, then the codes)."""
+    reads (the door's pins: the probabilities, then the codes). `slot`:
+    the codes' device slot when y_true was encoded on the device (lane
+    vdf-xm-wire3; `codes` is then None), else -1."""
     var codes: PythonObject
+    var slot: Int
     var a: PythonObject
     var shape: ProbaShape
 
-    def __init__(out self, codes: PythonObject, a: PythonObject, shape: ProbaShape):
+    def __init__(out self, codes: PythonObject, slot: Int, a: PythonObject, shape: ProbaShape):
         self.codes = codes
+        self.slot = slot
         self.a = a
         self.shape = shape
 
+    def pin_codes(self, mut prog: MetricDoorProg, owner: PythonObject):
+        """The codes input of the program: the device slot read in place, or
+        this call's host codes (a temporary, never kept resident)."""
+        if self.slot >= 0:
+            prog.pin_resident(owner, self.slot)
+        else:
+            prog.pin(self.codes, False)
+
 
 def _proba(y_true: PythonObject, y_proba: PythonObject, labels: PythonObject, pos_label: PythonObject,
-           caller: String, context: PythonObject) raises -> _Proba:
-    var true = mx_targets(y_true, caller, context)
+           caller: String, mut dev: MetricResidentLabels, context: PythonObject) raises -> _Proba:
+    var true = mx_resident_targets(dev, y_true, caller, context)
     var present = true.classes
     var n = true.n
     var got = mx_f32_view(y_proba, "y_proba", context)
@@ -90,7 +104,8 @@ def _proba(y_true: PythonObject, y_proba: PythonObject, labels: PythonObject, po
     var nd = Int(py=view.ndim)
     var rows = Int(py=view.shape[0]) if nd >= 1 else 0
     var binary = nd == 1 or (nd == 2 and Int(py=view.shape[1]) == 1)
-    var codes: PythonObject
+    var codes = PythonObject(None)
+    var slot = -1
     var k: Int
     if binary:
         if mx_len(present) > 2:
@@ -104,7 +119,10 @@ def _proba(y_true: PythonObject, y_proba: PythonObject, labels: PythonObject, po
                 pos = present[mx_len(present) - 1]
         else:
             pos = mx_pos_label(pos_label, true.kind, present, caller, context)
-        codes = mx_map_eq(true, pos, context)
+        if dev.live():
+            slot = dev.equal(pos, context)
+        else:
+            codes = mx_map_eq(true, pos, context)
         k = 2
     else:
         var classes = present if labels is None else mx_selected(labels, true.kind, present, context)
@@ -115,18 +133,21 @@ def _proba(y_true: PythonObject, y_proba: PythonObject, labels: PythonObject, po
         if mx_len(classes) != k:
             raise Error("y_true and y_proba contain different number of classes: " + String(mx_len(classes))
                         + " vs " + String(k))
-        codes = mx_codes(true, classes, True, context)
+        var got = mx_resident_codes(dev, true, classes, context)
+        codes = got[0]
+        slot = got[1]
     if rows != n:
         raise Error("y_true and y_proba have different numbers of rows")
     # the rank and emptiness refusals and the cast in one admission (family_view deleted)
     var a = admit_family(view, -1, "y_proba", context).array
-    return _Proba(codes, a, ProbaShape(n, k, binary))
+    return _Proba(codes, slot, a, ProbaShape(n, k, binary))
 
 
 def _brier(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """args = (y_true, y_proba, sample_weight, pos_label, labels, scale_by_half, mode)."""
     var caller = String("brier_score_loss")
-    var p = _proba(args[0], args[1], args[4], args[3], caller, context)
+    var dev = metric_resident_labels(args[0], args[6], caller, context)  # lane vdf-xm-wire3
+    var p = _proba(args[0], args[1], args[4], args[3], caller, dev, context)
     var w = mx_weights(args[2], p.shape.n, caller, context)
     var sbh = args[5]
     var half: Bool
@@ -140,9 +161,10 @@ def _brier(args: PythonObject, context: PythonObject) raises -> PythonObject:
     # weights) pinned in that order
     var got = brier_stages(prog.plan, p.shape, w is not None, half)
     prog.pin_arg(p.a, args, 1)
-    prog.pin(p.codes, False)
+    p.pin_codes(prog, args[0])
     _pin_weights(prog, w, args, 2)
     var arena = metric_door_run(prog, args[6], context)
+    dev.close()  # the device codes outlive the run above
     proba_check(arena, got[0], caller)
     return PythonObject(arena.f64(got[1]))
 
@@ -150,7 +172,8 @@ def _brier(args: PythonObject, context: PythonObject) raises -> PythonObject:
 def _d2_proba(args: PythonObject, caller: String, logloss: Bool, context: PythonObject) raises -> PythonObject:
     """d2_log_loss_score / d2_brier_score; args = (y_true, y_proba,
     sample_weight, labels, pos_label, mode)."""
-    var p = _proba(args[0], args[1], args[3], args[4], caller, context)
+    var dev = metric_resident_labels(args[0], args[5], caller, context)  # lane vdf-xm-wire3
+    var p = _proba(args[0], args[1], args[3], args[4], caller, dev, context)
     if p.shape.n < 2:
         mx_undefined("D^2 score is not well-defined with less than two samples.", context)
         return PythonObject(mx_nan())
@@ -161,9 +184,10 @@ def _d2_proba(args: PythonObject, caller: String, logloss: Bool, context: Python
     var prog = MetricDoorProg()
     var got = d2_proba_stages(prog.plan, p.shape, w is not None, logloss)
     prog.pin_arg(p.a, args, 1)
-    prog.pin(p.codes, False)
+    p.pin_codes(prog, args[0])
     _pin_weights(prog, w, args, 2)
     var arena = metric_door_run(prog, args[5], context)
+    dev.close()  # the device codes outlive the run above
     proba_check(arena, got[0], caller)
     return PythonObject(arena.f64(got[1]))
 
@@ -172,7 +196,8 @@ def _hinge(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """args = (y_true, pred_decision, labels, sample_weight, mode)."""
     var caller = String("hinge_loss")
     var labels = args[2]
-    var true = mx_targets(args[0], caller, context)
+    var dev = metric_resident_labels(args[0], args[4], caller, context)  # lane vdf-xm-wire3
+    var true = mx_resident_targets(dev, args[0], caller, context)
     var n = true.n
     var uniq = true.classes if labels is None else mx_sorted(mx_selected(labels, true.kind, true.classes, context))
     var s = mx_scores(args[1], n, caller, -1, "pred_decision", context)
@@ -186,25 +211,33 @@ def _hinge(args: PythonObject, context: PythonObject) raises -> PythonObject:
             if labels is None:
                 raise Error("Please include all labels in y_true or pass labels as third argument")
             raise Error("The shape of pred_decision is not consistent with the number of classes.")
-        var codes = mx_codes(true, uniq, True, context)
+        var codes = mx_resident_codes(dev, true, uniq, context)
         # lane mf-score8: ONE BODY, bindings/metrics_exp_rank_run.mojo
         # `hinge_stages` (the search scorers' RUN calls it too); its pins in
         # its input order (the decision values, the codes, the weights)
         prog.pin_arg(s.a, args, 1)
-        prog.pin(codes, False)
+        if codes[1] >= 0:
+            prog.pin_resident(args[0], codes[1])  # the device codes, read in place (lane vdf-xm-wire3)
+        else:
+            prog.pin(codes[0], False)
         var res = hinge_stages(prog.plan, n, s.cols, True, False, w is not None)
         _pin_weights(prog, w, args, 3)
         var arena = metric_door_run(prog, args[4], context)
+        dev.close()  # the device codes outlive the run above
         return PythonObject(arena.f64(res))
     if s.ndim == 2 and s.cols != 1:
         raise Error("pred_decision must be 1-D for a binary target")
     prog.pin_arg(s.a, args, 1)
     if nu == 2:
-        prog.pin(mx_map_eq(true, uniq[nu - 1], context), False)
+        if dev.live():
+            prog.pin_resident(args[0], dev.equal(uniq[nu - 1], context))  # on the device (lane vdf-xm-wire3)
+        else:
+            prog.pin(mx_map_eq(true, uniq[nu - 1], context), False)
     # nu 1: all-zero codes, program-owned words (`hinge_stages(zero_codes)`)
     var res = hinge_stages(prog.plan, n, 1, False, nu != 2, w is not None)
     _pin_weights(prog, w, args, 3)
     var arena = metric_door_run(prog, args[4], context)
+    dev.close()  # the device codes outlive the run above
     return PythonObject(arena.f64(res))
 
 
