@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Workstream E batch 2, CPU training for the kmeans, metrics, spectral,
+"""Workstream E batch 2, CPU training for the metrics, spectral,
 standard-scaler, minmax-scaler and logistic lanes, run only where the host
 bindings are built and the package took the CPU-only path (skipped, and SAID
 to be skipped, otherwise).
@@ -8,8 +8,8 @@ to be skipped, otherwise).
 Each public fit runs twice on a small draw and returns the same bytes, with
 its outputs in range; the metrics host entries give the same answers with one
 and seven row tasks (each count in its own process); each binding reads back
-sabotage False. They are plumbing checks. The bit claim against the GPU
-columns is the CPU identity gate's, not this file's.
+sabotage False. They are plumbing checks with independent range and
+NumPy checks. The bits of each side (KMeans included) are the verify lanes.
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_e2
 """
@@ -161,29 +161,6 @@ def test_metrics_run_on_the_host_when_built():
     acc, ari, vm, r2, sil = got[0]
     assert acc == float((yt == yp).sum()) / 300.0 or abs(acc - (yt == yp).mean()) < 1e-6
     assert -0.5 <= ari <= 1.0 and 0.0 <= vm <= 1.0 and 0.0 <= r2 <= 1.0 and -1.0 <= sil <= 1.0
-
-
-def test_kmeans_fit_runs_on_the_host_when_built():
-    if _backend._CPU_ONLY is None:
-        print("SKIP: a GPU set loaded; the host route is not taken here")
-        return
-    if "_mojolearn_core_host" not in _backend.host_families_built():
-        print("SKIP: the core host binding is not built")
-        return
-    import numpy as np
-    module = _backend.load_host_module("_mojolearn_core_host")
-    assert not bool(module.core_host_sabotage()), "a sabotage build loaded outside the gate"
-    rng = np.random.default_rng(0)
-    x = rng.standard_normal((600, 5)).astype(np.float32)
-    outs = []
-    for _ in range(2):
-        m = mojolearn.KMeans(n_clusters=4, random_state=7).fit(x)
-        outs.append((np.asarray(m.cluster_centers_).tobytes(), np.asarray(m.labels_).tobytes(),
-                     m.inertia_, m.n_iter_, m.sum_scale_, m.weight_scale_))
-    assert outs[0] == outs[1], "two host fits returned different bytes"
-    labels = np.asarray(mojolearn.KMeans(n_clusters=4, random_state=7).fit(x).labels_)
-    assert labels.shape == (600,) and labels.min() >= 0 and labels.max() < 4
-    assert outs[0][3] >= 1 and outs[0][4] > 0 and outs[0][5] > 0
 
 
 if __name__ == "__main__":

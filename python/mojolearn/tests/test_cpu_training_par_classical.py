@@ -7,8 +7,8 @@ Samba stack's gradient shards (par-samba, the ParallelNeuralTrainer route).
 
 Runtime checks (skipped, and SAID to be skipped, when a binding is absent or
 a GPU set loaded): a sharded fit runs one worker request per shard and
-equals the plain fit byte for byte; a cooperative driver refuses the CPU
-route by name; the published two-shard Samba gradient is the sum of its
+equals the plain fit byte for byte (the cooperative driver's CPU refusal
+is in test_parallel_boundary.py); the published two-shard Samba gradient is the sum of its
 shard gradients; the driver negative control is off by default, inert at
 one device and fires at two.
 The bit claim against the GPU columns is the CPU identity gate's.
@@ -34,45 +34,6 @@ def _cpu_only_with(*basenames):
             print(f"SKIP: {basename} is not built")
             return False
     return True
-
-
-def test_cooperative_drivers_refuse_the_cpu_route_by_name():
-    if _backend._CPU_ONLY is None:
-        print("SKIP: a GPU set loaded; the host route is not taken here")
-        return
-    import numpy as np
-    from mojolearn.parallel_classical import fit_logistic
-    X = np.zeros((4, 2), np.float32)
-    try:
-        fit_logistic(mojolearn.LogisticRegression(), X, np.array([0, 1, 0, 1]), devices=(0,))
-    except NotImplementedError as exc:
-        assert "no CPU implementation of the cooperative multi-GPU driver glm_fit" in str(exc), str(exc)
-    else:
-        raise AssertionError("a cooperative driver was admitted on a CPU-only install")
-
-
-def test_the_gpc_class_fit_worker_follows_the_public_fit_guard():
-    """THE GPC SHARD CARRIES THE PUBLIC FIT'S GUARD (lane/unlaned-public-
-    algorithms, 2026-09-20). The other admitted fit operations run their
-    estimator's PUBLIC `fit` and inherit `_mode._guard_cpu_training`; the GPC
-    shard calls `_fit_binary`, below that decorator (the worker's own
-    refusal check is gone with CPU training public). The two routes must answer
-    the same way on a CPU-only install. Since dac6e4d15 (CPU training is
-    public) that answer is "train": the plain fit and the driver both fit,
-    and agree byte for byte."""
-    if not _cpu_only_with("_mojolearn_gp_host"):
-        return
-    import numpy as np
-    from mojolearn.parallel_gaussian_process import fit_gaussian_process_classifier
-    X = np.ascontiguousarray(np.random.default_rng(11).standard_normal((48, 3)).astype(np.float32))
-    y = (X[:, 0] > 0).astype(np.int64)
-    kernel = mojolearn.ConstantKernel(1.0) * mojolearn.RBF(1.0)
-    plain = mojolearn.GaussianProcessClassifier(kernel=kernel).fit(X, y)
-    par = fit_gaussian_process_classifier(mojolearn.GaussianProcessClassifier(kernel=kernel), X, y,
-                                          devices=(0,))
-    for name in ("L_", "pi_", "W_sr_"):
-        assert (np.asarray(getattr(par.estimators_[0], name)).tobytes()
-                == np.asarray(getattr(plain.estimators_[0], name)).tobytes()), name
 
 
 def test_sharded_gpc_equals_the_plain_fit_when_built():

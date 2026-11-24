@@ -209,9 +209,30 @@ def test_default_device_runs_the_gpu_binary_beside_a_cpu_estimator_in_one_proces
         assert gpu.vendor_used() != cpu.vendor_used()
 
 
+# The (case, weighted) pairs whose CPU and GPU bits a verify lane digests on both sides are left to verify (lane
+# vdv-pytest-a, 2026-11-24): the lanes in tools/identity_break.py and tools/identity_lanes/linear.py, neighbors.py
+# (qn-squared, qn-absolute, linear-svr, linear-svc-squared-hinge, svr, svc, kernel-ridge, x-neighbors-svm-weights,
+# x-neighbors-krr-options, x-sgd-reg(-sw), x-huber(-sw), x-glm-poisson(-sw), x-bayes-ridge(-sw), x-quantile(-sw),
+# x-ridge-cv(-sw), x-ridge-cv-kfold, x-ridge-clf(-w), x-logistic-cv(-w), x-lasso-cv, x-enet-cv, x-isotonic,
+# x-neighbors-svgp). The pairs below have no lane with the same options and weights and stay here.
+_VERIFY_COVERED = {
+    ("qn-squared", False), ("qn-absolute", False), ("linear-svr", False), ("linear-svc", False),
+    ("svr-rbf", False), ("svr-rbf", True), ("svc-rbf", False), ("svc-rbf", True),
+    ("kernel-ridge-rbf", False), ("kernel-ridge-rbf", True), ("xl-sgd-regressor", False), ("xl-sgd-regressor", True),
+    ("xl-huber", False), ("xl-huber", True), ("xl-poisson", False), ("xl-poisson", True),
+    ("xl-bayesian-ridge", False), ("xl-bayesian-ridge", True), ("xl-quantile", False), ("xl-quantile", True),
+    ("xl-ridge-cv", False), ("xl-ridge-cv", True), ("xl-ridge-classifier", False), ("xl-logistic-cv", False),
+    ("xl-ridge-cv-kfold", False), ("xl-lasso-cv", False), ("xl-elastic-net-cv", False),
+    ("xl-ridge-classifier-balanced", True), ("xl-logistic-cv-balanced", True), ("xl-isotonic", False),
+    ("svgp", False),
+}
+_BITS_PAIRS = [(spec, weighted) for spec in CASES for weighted in (False, True)
+               if (spec[0], weighted) not in _VERIFY_COVERED]
+
+
 @two_devices
-@case
-@pytest.mark.parametrize("weighted", [False, True])
+@pytest.mark.parametrize("spec,weighted", _BITS_PAIRS,
+                         ids=["%s-%s" % (spec[0], "weighted" if weighted else "plain") for spec, weighted in _BITS_PAIRS])
 def test_identical_mode_cpu_device_returns_the_gpu_bits(spec, weighted):
     if mojolearn.numeric_mode() != "identical":
         pytest.skip("bits are promised in identical mode only")

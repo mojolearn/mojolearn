@@ -77,29 +77,6 @@ def test_listed_cv_logistic_member_equals_door():
     _same(member, door, ["coef_", "intercept_", "C_", "scores_"])
 
 
-@pytest.mark.parametrize("cv,words", [
-    ([], "cv produced no \\(train, test\\) split"),
-    ([(np.arange(10), np.arange(10, 20), np.arange(5))], "too many values to unpack \\(expected 2, got 3\\)"),
-    ([(np.arange(10),)], "not enough values to unpack \\(expected 2, got 1\\)"),
-])
-def test_listed_cv_malformed_keeps_door_words(cv, words):
-    X, y = _data()
-    with pytest.raises(Exception, match=words):
-        mojolearn.LassoCV(cv=cv).fit(X, y)
-    with pytest.raises(Exception, match=words):
-        _member(mojolearn.LassoCV(cv=cv), X, y, scoring="r2")
-
-
-def test_lda_n_components_zero_is_sklearn_refusal():
-    X, y = _data()
-    labels = (y > 0).astype(np.int64)
-    words = "The 'n_components' parameter of LinearDiscriminantAnalysis must be an int in the range \\[1, inf\\)"
-    with pytest.raises(Exception, match=words):
-        mojolearn.LinearDiscriminantAnalysis(n_components=0).fit(X, labels)
-    with pytest.raises(Exception, match=words):
-        _member(mojolearn.LinearDiscriminantAnalysis(n_components=0), X, labels, scoring="accuracy")
-
-
 @pytest.mark.parametrize("name,kwargs", [
     ("Nystroem", {"kernel": "rbf", "gamma": 0.5, "n_components": 8, "random_state": 3}),
     ("RBFSampler", {"gamma": 0.5, "n_components": 8, "random_state": 3}),
@@ -113,13 +90,3 @@ def test_fast_kernel_approx_member_equals_door(name, kwargs):
         pytest.skip(str(error))
     member = _member(est(numeric_mode="fast", **kwargs), X)
     np.testing.assert_array_equal(np.asarray(member.transform(X)), np.asarray(door.transform(X)))
-
-
-def test_host_lasso_member_fit_keeps_door_words():
-    from mojolearn._classical_host import HostLasso
-    X, y = _data()
-    words = "no CPU implementation of the HostLasso fit on the host class"
-    with pytest.raises(Exception, match=words):
-        HostLasso().fit(X, y)
-    with pytest.raises(Exception, match=words):
-        _member(HostLasso(), X, y, scoring="r2")

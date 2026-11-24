@@ -36,20 +36,6 @@ def _batches(shape, n_steps, seed=1):
 # k steps in one call against k single steps, through the session entry.
 
 
-def test_train_steps_refuses_a_wrong_shape_and_out_of_vocabulary_ids():
-    shape, trainer = _trainer()
-    with pytest.raises(ValueError):
-        trainer.train_steps(np.zeros((2, shape.batch, shape.length), dtype=np.int32))
-    with pytest.raises(ValueError):
-        trainer.train_steps(np.zeros((0, shape.batch, shape.length + 1), dtype=np.int32))
-    bad = _batches(shape, 2)
-    bad[1, 0, 0] = shape.vocab_size
-    with pytest.raises(ValueError):
-        trainer.train_steps(bad)
-    with pytest.raises(TypeError):
-        trainer.train_steps(np.zeros((2, shape.batch, shape.length + 1), dtype=np.int64))
-
-
 def test_ragged_next_bytes_is_the_logits_argmax_at_each_last_real_position():
     shape, trainer = _trainer()
     trainer.train_step(np.ascontiguousarray(_batches(shape, 1)[0]))

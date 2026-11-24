@@ -82,8 +82,15 @@ def test_cpu_estimator_fits_and_answers(spec):
         assert np.asarray(model.predict(x[:32])).shape[0] == 32
 
 
+# Verify digests both sides of the agglomerative fits and predict (lanes agglomerative in tools/identity_break.py,
+# x-cluster-agglo-linkages in tools/identity_lanes/cluster.py) and of the k-NN SpectralEmbedding (spectral-embedding,
+# x-decomp-spectral-rbf); no lane fits SpectralClustering on the k-NN affinity with predict, so that case stays here
+# (lane vdv-pytest-a, 2026-11-24).
+_BITS_CASES = [c for c in CASES if c[0] == "spectral-clustering"]
+
+
 @two_devices
-@case
+@pytest.mark.parametrize("spec", _BITS_CASES, ids=[c[0] for c in _BITS_CASES])
 def test_two_devices_return_the_same_bits(spec):
     x = blobs()
     gpu = spec[1](device="gpu").fit(x)

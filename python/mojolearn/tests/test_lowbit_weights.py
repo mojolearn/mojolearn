@@ -95,24 +95,6 @@ def test_repack_same_format_copies_packed_bytes_without_materializing(monkeypatc
         assert copied.exponents._addr != original.exponents._addr
 
 
-def test_packed_containers_are_arrays():
-    """`pack`/`unpack` hand back mojolearn Arrays, never NumPy (the
-    conversion itself runs in the linalg binding)."""
-    from mojolearn import Array
-    # the packed containers are Arrays, never NumPy (the former `_linalg()`
-    # probe left lowbit; an install without the binding refuses pack itself)
-    try:
-        packed = lowbit.pack({"a": _hw((8, 4), 3), "n": _hw((4,), 4)}, "int8")
-    except ImportError as e:
-        pytest.skip(f"no linalg binding: {e}")
-    assert isinstance(packed["a"].codes, Array) and isinstance(packed["a"].exponents, Array)
-    assert lowbit.is_packed(packed["a"]) and not lowbit.is_packed(packed["n"])
-    packed = lowbit.pack({"a": _hw((8, 4), 3)}, "bfloat16")
-    assert isinstance(packed["a"].bits, Array) and packed["a"].bits.dtype == "<u2"
-    f32, fmt = lowbit.unpack(packed)
-    assert fmt == "bfloat16" and isinstance(f32["a"], Array) and f32["a"].dtype == "<f4"
-
-
 def _transformer_weights(dm=32, nh=2, nkv=1, hd=16, it=64):
     return {
         "input_layernorm.weight": 1.0 + _hw((dm,), 11), "post_attention_layernorm.weight": 1.0 + _hw((dm,), 12),

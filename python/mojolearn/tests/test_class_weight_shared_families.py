@@ -1,13 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Public family seams; numerical plan fixtures live in native Mojo tests.
+"""Shared class weights against their closed form: class_weight equals the explicit per-class sample weights.
 
+The admission and refusal tests of the shared class_weight mapping are in test_class_weight_boundary.py.
 Each parametrized case is independent and can run across pytest workers.
 NumPy below prepares independent oracle inputs outside product execution.
 """
 import numpy as np
 import pytest
-from pathlib import PurePosixPath
-from collections import OrderedDict, defaultdict
 
 from mojolearn import ExtraTreesClassifier, LinearSVC, RandomForestClassifier
 
@@ -54,57 +53,3 @@ def test_shared_class_weights_match_explicit_sample_weights(family, kind):
     else:
         np.testing.assert_array_equal(np.asarray(actual.predict_proba(x)), np.asarray(expected.predict_proba(x)))
     np.testing.assert_array_equal(np.asarray(actual.classes_), [1, 7])
-
-
-@pytest.mark.parametrize("family", ["svc", "rf", "et"])
-def test_shared_class_weight_unknown_key_precedes_weight_range(family):
-    x, y = _data()
-    # scikit-learn 1.9.1's words (sklearn/utils/class_weight.py:114-120), naming y's unweighted classes
-    with pytest.raises(ValueError, match=r"^The classes, \[1, 7\], are not in class_weight$"):
-        _model(family, {9: -1}).fit(x, y)
-
-
-@pytest.mark.parametrize("family", ["svc", "rf", "et"])
-@pytest.mark.parametrize("value", [True, np.bool_(True), "2", np.str_("2")])
-def test_shared_families_keep_numeric_weight_admission(family, value):
-    x, y = _data()
-    with pytest.raises(ValueError, match="finite nonnegative real"):
-        _model(family, {7: value}).fit(x, y)
-
-
-@pytest.mark.parametrize("family", ["rf", "et"])
-@pytest.mark.parametrize("mapping", [OrderedDict, defaultdict])
-def test_tree_weight_native_mapping_types_keep_missing_class_default(family, mapping):
-    weight = mapping(float, {7: 0.25}) if mapping is defaultdict else mapping([(7, 0.25)])
-    x, y = _data()
-    actual = _model(family, weight).fit(x, y)
-    expected = _model(family, None).fit(x, y, sample_weight=np.where(y == 7, 0.25, 1).astype("f4"))
-    np.testing.assert_array_equal(np.asarray(actual.predict_proba(x)), np.asarray(expected.predict_proba(x)))
-    assert list(weight.items()) == [(7, 0.25)]
-
-
-@pytest.mark.parametrize("family", ["rf", "et"])
-def test_tree_weight_key_rejects_path_equality_before_set_membership(family, monkeypatch):
-    # Exact paths are valid for other estimator parameters, but are not native
-    # label keys. Force an integer hash collision to expose unsafe membership.
-    key = PurePosixPath("class-weight-key")
-    original_hash = PurePosixPath.__hash__
-    original_equal = PurePosixPath.__eq__
-    calls = []
-
-    def path_hash(self):
-        return hash(1) if self is key else original_hash(self)
-
-    def path_equal(self, other):
-        if self is key:
-            calls.append("eq")
-            raise AssertionError("path equality executed inside native fit")
-        return original_equal(self, other)
-
-    monkeypatch.setattr(PurePosixPath, "__hash__", path_hash)
-    weight = {key: 0.5}
-    monkeypatch.setattr(PurePosixPath, "__eq__", path_equal)
-    x, y = _data()
-    with pytest.raises(TypeError, match="exact native"):
-        _model(family, weight).fit(x, y)
-    assert calls == []

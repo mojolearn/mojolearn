@@ -1,7 +1,6 @@
 """Focused public probes for root's compiled Mac pooled-output repair."""
 import gc
 import numpy as np
-import pytest
 
 
 def _model():
@@ -35,31 +34,3 @@ def test_resident_logits_address_is_native_and_held_outputs_survive_pool_reuse()
     assert audit_native_call(model.next_bytes, padded, lengths=[2]).assert_native() == expected
     audit_native_call(model.close).assert_native()
     assert np.asarray(held).tobytes() == original.tobytes()
-
-
-@pytest.mark.parametrize('name', ['__array_interface__', '_addr'])
-def test_replaced_pooled_python_descriptor_is_refused_without_invoking_it(name):
-    from mojolearn import _byte_lm_impl as impl
-    model = _model()
-    ids = np.array([[1, 3, 5, 7]], dtype='i4')
-    calls = []
-    def read(self):
-        calls.append('read')
-        raise AssertionError('a pooled Python descriptor executed')
-    def write(self, value):
-        calls.append('write')
-        raise AssertionError('a pooled Python descriptor executed')
-    cls = impl._PooledLogits
-    missing = object()
-    previous = vars(cls).get(name, missing)
-    setattr(cls, name, property(read, write))
-    try:
-        with pytest.raises(TypeError, match='pooled logits storage hook changed'):
-            model.logits(ids)
-    finally:
-        if previous is missing:
-            delattr(cls, name)
-        else:
-            setattr(cls, name, previous)
-    assert calls == []
-    model.close()

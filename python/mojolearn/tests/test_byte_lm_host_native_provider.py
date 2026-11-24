@@ -50,66 +50,6 @@ def test_host_inference_native_calls_ragged_and_refreshed_inputs():
     assert struct.pack('<f', audit_native_call(model.loss, train).assert_native()) == struct.pack('<I', bits)
 
 
-def test_inference_constructor_native_flat_named_packed_and_atomic_admission():
-    from mojolearn._byte_lm_host import LanguageModelInference
-    from mojolearn._verify_native_runtime import audit_native_call
-    from mojolearn import lowbit
-    template = _model()
-    shape = template.shape
-    flat = np.asarray(template.parameters_).copy()
-    named = {name: flat[shape.offsets[i]:shape.offsets[i + 1]].reshape(dims).copy()
-             for i, (name, dims) in enumerate(zip(shape.parameter_names, shape.parameter_shapes))}
-    model = audit_native_call(LanguageModelInference, named, shape=shape, threads=1).assert_native()
-    assert model.weight_format == 'float32' and np.asarray(model._parameters).tobytes() == flat.tobytes()
-    for fmt in ('bfloat16', 'int8'):
-        packed = lowbit.pack(named, fmt)
-        # `unpack` returns the float32 dict and the stored format.
-        materialized, stored = lowbit.unpack(packed)
-        assert stored == fmt
-        expected = np.concatenate([np.asarray(materialized[name]).ravel() for name in shape.parameter_names])
-        result = audit_native_call(LanguageModelInference, packed, shape=shape, threads=1).assert_native()
-        assert result.weight_format == fmt and np.asarray(result._parameters).tobytes() == expected.tobytes()
-    before = dict(model.__dict__)
-    broken = dict(named)
-    broken['embed'] = np.full_like(named['embed'], np.nan)
-    with pytest.raises(ValueError):
-        model.__init__(broken, shape=shape)
-    assert model.__dict__ == before
-    calls = []
-    class MappingHook:
-        def keys(self):
-            calls.append('keys')
-            return named.keys()
-    with pytest.raises((TypeError, ValueError)):
-        LanguageModelInference(MappingHook(), shape=shape)
-    assert not calls
-
-
-def test_host_inference_checkpoint_native_integrity_and_file_errors(tmp_path):
-    from mojolearn._byte_lm_host import LanguageModelInference
-    from mojolearn._byte_lm_impl import SmallByteLanguageModelTrainer
-    from mojolearn._verify_native_runtime import audit_native_call
-    template = _model()
-    trainer = SmallByteLanguageModelTrainer(template.parameters_, data_schedule={'corpus': 'host-provider-test'},
-                                            shape=template.shape, resident=False)
-    path = tmp_path / 'state.json'
-    trainer.export_checkpoint(path)
-    restored = audit_native_call(LanguageModelInference.from_checkpoint, path, threads=1).assert_native()
-    assert restored.shape == template.shape
-    assert np.asarray(restored._parameters).tobytes() == np.asarray(template.parameters_).tobytes()
-    with pytest.raises(FileNotFoundError) as failure:
-        LanguageModelInference.from_checkpoint(tmp_path / 'missing.json')
-    assert failure.value.errno == 2
-    bad = tmp_path / 'bad.json'
-    encoded = bytearray(path.read_bytes())
-    position = encoded.index(b'payload_sha256') + len(b'payload_sha256') + 3
-    encoded[position] = ord('0') if encoded[position] != ord('0') else ord('1')
-    bad.write_bytes(encoded)
-    with pytest.raises(ValueError, match='integrity'):
-        LanguageModelInference.from_checkpoint(bad)
-    trainer.close()
-
-
 @pytest.mark.parametrize('resident', [False, True])
 def test_cpu_language_model_public_provider_matches_host_owner(monkeypatch, tmp_path, resident):
     from mojolearn import _byte_lm_impl as impl

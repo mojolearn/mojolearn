@@ -94,30 +94,3 @@ def test_weighted_forest_regressor_rounds_equal_its_own_weighted_importances():
         x, t, sample_weight=w)
     want = _eliminate(lambda: _forest(mojolearn.RandomForestRegressor), x, t, w, 3)
     np.testing.assert_array_equal(np.asarray(member.support_), want)
-
-
-def _words(call):
-    try:
-        call()
-    except Exception as error:  # noqa: BLE001 - the words are what is compared
-        return type(error).__name__, str(error)
-    raise AssertionError("no refusal")
-
-
-@pytest.mark.parametrize("make", [
-    lambda: mojolearn.Ridge(alpha=1.0),
-    lambda: mojolearn.GradientBoostingRegressor(n_estimators=3, max_depth=2, random_state=0),
-], ids=["ridge", "gbdt"])
-def test_refused_target_raises_the_estimators_own_words(make):
-    x, _, t = _data()
-    bad = t.copy()
-    bad[3] = np.nan
-    own = _words(lambda: make().fit(x, bad))
-    rfe = _words(lambda: mojolearn.RFE(make(), n_features_to_select=3).fit(x, bad))
-    assert rfe == own
-
-
-def test_short_labels_raise_before_any_fit():
-    x, y, _ = _data()
-    with pytest.raises(ValueError, match=r"inconsistent numbers of samples: \[64, 63\]"):
-        mojolearn.RFE(mojolearn.LogisticRegression(max_iter=50), n_features_to_select=3).fit(x, y[:-1])

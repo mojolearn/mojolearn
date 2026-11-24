@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The gate for the Python surface of `mojolearn.IVFIndex` (2026-09-14): a
+"""The ivf family at the Python boundary (moved from test_ivf_surface.py).
+
+The gate for the Python surface of `mojolearn.IVFIndex` (2026-09-14): a
 gate on the WIRING (the params list, the distances, ids and candidate counts
 landing in the caller's arrays, every refusal by name), with brute force in
 NumPy formerly the reference for the neighbor sets. The arithmetic, the list
@@ -9,13 +11,16 @@ repeat build are gated by `pixi run check-ivf`; the sample-filter short-fill
 by `pixi run check-native-ann-ivf-surface-gpu`
 (`checks/native_tests/ann_ivf_surface.mojo`).
 
-    cd python && python3 -m mojolearn.tests.test_ivf_surface
+    cd python && python3 -m mojolearn.tests.test_ivf_boundary
 
-Exit 2 naming `bindings/build_ivf.sh` when unbuilt.
+Exit 2 naming `bindings/build_ivf.sh` when unbuilt; under pytest each arm is a
+test that skips by name when the binding is unbuilt. The bits of search on each
+side are the verify lanes ivf, ivf-extend and ivf-distributed.
 """
 import sys
 
 import numpy as np
+import pytest
 
 import mojolearn
 from mojolearn import IVFIndex
@@ -79,8 +84,24 @@ def arm_provenance(rep):
 
 def main(out=sys.stdout):
     bind_or_exit("_mojolearn_ivf", "build_ivf.sh")
-    rep = Report("test_ivf_surface")
-    return run("test_ivf_surface", [("SEARCH", arm_search), ("EUCLIDEAN", arm_euclidean), ("SHORT", arm_short_fill), ("REFUSE", arm_refusals), ("PROVENANCE", arm_provenance)], rep, out)
+    rep = Report("test_ivf_boundary")
+    return run("test_ivf_boundary", [("SEARCH", arm_search), ("EUCLIDEAN", arm_euclidean), ("SHORT", arm_short_fill), ("REFUSE", arm_refusals), ("PROVENANCE", arm_provenance)], rep, out)
+
+
+ARMS = [("SEARCH", arm_search), ("EUCLIDEAN", arm_euclidean), ("SHORT", arm_short_fill), ("REFUSE", arm_refusals),
+        ("PROVENANCE", arm_provenance)]
+
+
+@pytest.mark.parametrize("label,arm", ARMS, ids=[label for label, _ in ARMS])
+def test_ivf_surface_arm(label, arm):
+    try:
+        from mojolearn import _backend
+        _backend.binding("_mojolearn_ivf")
+    except ImportError as exc:
+        pytest.skip(f"_mojolearn_ivf is not built ({exc}); build it with bash bindings/build_ivf.sh")
+    rep = Report("test_ivf_boundary")
+    arm(rep)
+    assert not rep.failures, rep.failures
 
 
 if __name__ == "__main__":
