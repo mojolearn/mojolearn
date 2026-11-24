@@ -4102,11 +4102,16 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         if multi_y and tool_respond >= 0 and classifier:
             # A MULTI-OUTPUT CLASSIFIER's predict (lane mf-msel5c): each output's
             # codes decoded at PACK into one rows x outputs block of its labels,
-            # int64 for integer labels, float64 for real ones; labels of
-            # another kind keep the door (no block holds them).
+            # int64 for integer labels, float64 for real ones. LANE mf-rows8d
+            # (row :4104): bool labels or labels of several kinds are decoded
+            # as text labels are (lane mf-tail5b): int64 codes, each output's
+            # decoded at PACK by the one label decoder into the rows the
+            # door's placement returns (`_decode_text_outputs`), the labels
+            # as the fit held them. REMOVED: the False exit that kept them in
+            # the door's units.
             multi_labels = _numeric_outputs(labels, b)
             if multi_labels == 0:
-                return False
+                multi_labels = 3
         for o in range(len(responses)):  # small-loop(the distinct responses)
             var response = responses[o]
             var probe = nested.plans[c].copy()
@@ -5126,10 +5131,13 @@ def _search_tool_pack(fields: PythonObject, tool: PythonObject, words: _F64P, at
         # predict decodes its codes the same way), and placed by the door.
         var result = tool[4][0]
         if String(py=tool[1]) == "predict" and labels is not None and Int(py=tool[5]) > 0:
-            if _numeric_outputs(labels, b) == 3:
+            var label_kind = _numeric_outputs(labels, b)
+            if label_kind == 3 or label_kind == 0:
                 # TEXT LABELS (lane mf-tail5b): each output's codes decoded by
                 # the one label decoder, the rows built as the door's own
-                # placement leaves text multi-output rows (one list per row)
+                # placement leaves text multi-output rows (one list per row).
+                # Lane mf-rows8d: bool labels and labels of several kinds too
+                # (`_numeric_outputs` 0; the admission wrote int64 codes).
                 py_setitem(out, "predictions", _decode_text_outputs(result, labels, unit_context, b))
             else:
                 # a multi-output classifier's codes, decoded per output in place (lane mf-msel5c)
