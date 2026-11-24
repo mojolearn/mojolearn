@@ -2698,6 +2698,10 @@ struct _ScorerKw(Movable):
     var roc_avg_given: Bool
     var roc_avg: PythonObject
     var roc_labels: PythonObject
+    # lane mf-r9c (door :3670): a regression row matched over a make_scorer
+    # whose response is not predict (the class's chosen method becomes the
+    # row's response at the admission, `MselScorerOptions.resp`)
+    var resp_any: Bool
 
     def __init__(out self):
         self.flip = False
@@ -2725,6 +2729,7 @@ struct _ScorerKw(Movable):
         self.roc_avg_given = False
         self.roc_avg = PythonObject(None)
         self.roc_labels = PythonObject(None)
+        self.resp_any = False
 
 
 def _sorted_labels(value: PythonObject, b: PythonObject) raises -> PythonObject:
@@ -2748,6 +2753,32 @@ def _is_sorted(value: PythonObject, b: PythonObject) raises -> Bool:
                                                py_call(b.sorted, listed))))
     except:
         return False
+
+
+def _non_predict_response(method: PythonObject, b: PythonObject) raises -> Bool:
+    """UNPACK (lane mf-r9c, door :3670): a make_scorer response_method a
+    regression row may read in place of predict: 'predict_proba',
+    'decision_function', or a tuple / list of method names with neither
+    'predict_log_proba' (no scorer row answers a log response) nor anything
+    but the four response names. The admission takes the first one the
+    class has (`msel_scorer_response`)."""
+    var listed = Python.list()
+    if py_type(method) is b.str:
+        _ = py_call(listed.append, method)
+    elif py_type(method) is b.tuple or py_type(method) is b.list:
+        listed = py_call(b.list, method)
+    else:
+        return False
+    var other = False
+    for i in range(len(listed)):  # small-loop(the scorer's response methods)
+        if py_type(listed[i]) is not b.str:
+            return False
+        var word = String(py=listed[i])
+        if word == "predict_proba" or word == "decision_function":
+            other = True
+        elif word != "predict":
+            return False
+    return other
 
 
 def _multi_class_row(mut kw: _ScorerKw, b: PythonObject) raises:
@@ -3202,14 +3233,21 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                     continue
             elif row_func is not func:
                 continue
-            if not Bool(py=py_call(b.bool, py_call(eq, py_call(b.getattr, row, PythonObject("_response_method")),
-                                                   got_method))):
-                continue
+            var same_response = Bool(py=py_call(b.bool, py_call(eq, py_call(b.getattr, row,
+                                                                            PythonObject("_response_method")),
+                                                                got_method)))
             var name = String(py=items[i][0])
             var code = msel_scorer_code(name, False)
             if code < 0:
                 continue
             var typed = msel_scorer_row(code)
+            var own_response = False
+            if not same_response:
+                # lane mf-r9c (door :3670): a regression row over the
+                # make_scorer's own non-predict response (`_non_predict_response`)
+                if not (msel_scorer_regression(typed) and _non_predict_response(got_method, b)):
+                    continue
+                own_response = True
             var binary = msel_scorer_positive(typed)
             var label_row = msel_scorer_label_row(typed)
             var pos_row = binary or msel_scorer_ap(typed) or msel_scorer_brier(typed)
@@ -3324,6 +3362,7 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                                                                py_call(b.getattr, got, PythonObject("_sign")))))
             if mine_kw.mclass > 0:
                 _multi_class_row(mine_kw, b)  # lane mf-r9c: the dual 'roc_auc' row's multi_class
+            mine_kw.resp_any = own_response
             if mine_kw.rename.byte_length() > 0:
                 name = mine_kw.rename.copy()  # lane mf-score8: the row the kwargs select
             kw = mine_kw^
@@ -3368,7 +3407,12 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
         var wanted = String("decision_function") if op == MEMBER_OP_DECISION else (
             String("predict_proba") if op == MEMBER_OP_PREDICT_PROBA else String("predict"))
         if String(py=got_method) != wanted:
-            return String("")
+            # lane mf-r9c (door :3670): a regression metric row over the
+            # make_scorer's own non-predict response
+            if not (op == MEMBER_OP_PREDICT and msel_scorer_regression(msel_scorer_row(code))
+                    and _non_predict_response(got_method, b)):
+                return String("")
+            metric_kw.resp_any = True
         # lane mf-score8: the row's sign is its get_scorer sign (or +1 for a
         # metric row); the flip is a make_scorer sign that differs from it
         var row_sign = Int(msel_scorer_row(code).sign)
@@ -3772,6 +3816,12 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         opts.beta = kw.beta
         opts.zd = kw.zd
         var row = msel_scorer_row(code)
+        if kw.resp_any and method != "predict":
+            # LANE mf-r9c (door :3670): a regression row over the make_scorer's
+            # own response the class has (core/msel_scorer_run.mojo
+            # `_response_regression`): the row reads that response
+            opts.resp = MEMBER_OP_DECISION if method == "decision_function" else MEMBER_OP_PREDICT_PROBA
+            row.op = opts.resp
         # LANE mf-score6: average=None (the words scikit-learn's `_score`
         # names the scorer by, `str(scorer)` or a multi-metric key, as one
         # more label word: a per-label array is no number), average='samples'

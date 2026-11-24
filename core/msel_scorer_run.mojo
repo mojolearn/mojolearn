@@ -239,8 +239,10 @@ comptime _CL_PAIR = 2
 #: weights word, the number of fit labels whose value words follow (0: none;
 #: a regression scorer on a classifier). Those value words come after the
 #: sample_weight words: two per label (the float32 bits as an int32, the
-#: kind word SCORER_LABEL_*).
-comptime SCORER_GROUP_WORDS = 21
+#: kind word SCORER_LABEL_*). Lane mf-r9c: then the scorer's own response
+#: (0 the row's; else MEMBER_OP_PROBA / _DECISION: a regression row over a
+#: make_scorer's non-predict response the class has).
+comptime SCORER_GROUP_WORDS = 22
 #: Lane mf-score6: the sample_weight refusal word: none, or an empty weights
 #: array (each side refuses its length in the door's words).
 comptime SCORER_WEIGHTS_OK = -1
@@ -446,6 +448,8 @@ struct MselScorerOptions(ImplicitlyCopyable, Movable):
     var wmode: Int
     var lv_from: Int
     var lv_n: Int
+    # lane mf-r9c: the scorer's own response (0: the row's; module note)
+    var resp: Int
 
     def __init__(out self):
         self.flip = False
@@ -471,6 +475,7 @@ struct MselScorerOptions(ImplicitlyCopyable, Movable):
         self.wmode = 0
         self.lv_from = 0
         self.lv_n = 0
+        self.resp = 0
 
 
 def _table() -> List[MselScorer]:
@@ -704,6 +709,12 @@ def msel_scorer_row(code: Int, opts: MselScorerOptions, sel_base: Int) raises ->
         # UNPACK hands them).
         row.lv_at = sel_base + 4 * opts.lv_from
         row.lv_n = opts.lv_n
+    if opts.resp != 0:
+        # lane mf-r9c (door :3670): a regression row over the make_scorer's
+        # own response (`_response_regression`)
+        if row.family != _F_REG or (opts.resp != MEMBER_OP_PREDICT_PROBA and opts.resp != MEMBER_OP_DECISION):
+            raise Error("RuntimeError: a scorer's own response on a search scorer other than a regression row")
+        row.op = opts.resp
     return row
 
 
@@ -844,6 +855,7 @@ def msel_scorer_group_words(mut words: List[Float64], code: Int, positive: Int, 
     words.append(Float64(opts.flag))
     words.append(Float64(opts.wmode))
     words.append(Float64(opts.lv_n))
+    words.append(Float64(opts.resp))  # lane mf-r9c
     for j in range(opts.sel_n):  # small-loop(the scorer's labels codes)
         words.append(Float64(sels[opts.sel_from + j]))
     for j in range(max(opts.w_n, 0)):  # driver-loop: over the sample_weight words (once per admission)
@@ -883,6 +895,7 @@ def msel_scorer_group_read(words: List[Float64], at: Int, mut code: Int, mut pos
     opts.flag = Int(words[at + 18])
     opts.wmode = Int(words[at + 19])
     var lv = Int(words[at + 20])
+    opts.resp = Int(words[at + 21])  # lane mf-r9c
     var wk = max(wn, 0)
     if (n < 0 or wn < -1 or lv < 0 or opts.w_word < SCORER_WEIGHTS_EMPTY
             or at + SCORER_GROUP_WORDS + n + wk + 2 * lv > len(words)):
@@ -1147,7 +1160,8 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
     if mclasses >= 0:
         # lane mf-r9c: the metric over the multi-output response, after the
         # kwargs' refusals (the metric's parameter validation)
-        return row.sign * _multi_proba_value(row, label_words, truth, count, mclasses, mwidths, notices)
+        return row.sign * _multi_proba_value(route, row, label_words, truth, response, count, cols, w, mclasses,
+                                             mwidths, notices)
     if row.outs > 1 and row.family != _F_REG:
         # LANE mf-rows8b (rows :3777 / :3779): a label or clustering scorer on
         # a multi-output target, after the kwargs' refusals (scikit-learn's
@@ -1167,7 +1181,11 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
         var shown = String("")
         if row.param_word >= 0 and row.param_word < len(label_words):
             shown = label_words[row.param_word].copy()
-        if row.outs > 1 and row.counts_at != 0:
+        if row.op != MEMBER_OP_PREDICT:
+            # lane mf-r9c (door :3670): over the make_scorer's own response
+            value = _response_regression(route, label_words, row, truth, response, count, classes, cols, w, shown,
+                                         warn)
+        elif row.outs > 1 and row.counts_at != 0:
             # lane mf-rows8b (row :3779): a regression scorer on a MULTI-OUTPUT
             # classifier: each output's codes as its labels' values, then the
             # rows x outputs program a multi-output regressor's side runs
@@ -1639,6 +1657,56 @@ def _label_regression(route: MetricRoute, label_words: List[String], row: MselSc
     return value
 
 
+def _response_regression(route: MetricRoute, label_words: List[String], row: MselScorer, truth: Int, response: Int,
+                         count: Int, classes: Int, cols: Int, w: Int, shown: String, mut warn: Int) raises -> Float64:
+    """LANE mf-r9c (door :3670): a regression metric whose make_scorer asks a
+    non-predict response the class has (r2_score over predict_proba or
+    decision_function). scikit-learn 1.9: `_get_response_values` hands a
+    BINARY classifier's positive column (`classes[-1]`, pos_label None: a
+    regression metric takes none) or its 1-D decision, a multiclass one its
+    (rows, classes) block, a non-classifier its raw answer (utils/
+    _response.py lines 199-236); `_check_reg_targets` converts y_true first
+    (a classifier's labels as their values, `_label_floats`; dtype='numeric'
+    refuses strings for median_absolute_error / max_error), then refuses a
+    block of more than one column ("y_true and y_pred have different number
+    of output (1!=k)", metrics/_regression.py line 128); one column is
+    scored by the row's own program. A fold estimator holding two classes
+    hands its one column already (core/msel_search_run.mojo
+    `_fold_view_side`)."""
+    var yt = List[Float32]()
+    if classes > 0:
+        if row.lv_n != classes:
+            raise Error("member ABI: a regression scorer on a classifier needs one value per class")
+        if row.metric == REG_MEDAE or row.metric == REG_MAX_ERROR:
+            var lv = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=row.lv_at)
+            for c in range(row.lv_n):  # small-loop(the fit labels: their kinds)
+                if Int(lv[2 * c + 1]) != SCORER_LABEL_NUMBER:
+                    raise Error(SCORER_NUMERIC_WORDS)
+        _label_floats(label_words, row, truth, count, yt)
+    else:
+        var t = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=truth)
+        yt = List[Float32](length=max(count, 1), fill=0.0)
+        for i in range(count):  # driver-loop: over the side's rows (its targets)
+            yt[i] = t[i]
+    var width = max(cols, 1)
+    var column = List[Float32]()
+    var pred = response
+    if classes == 2 and width == 2 and row.op == MEMBER_OP_PREDICT_PROBA:
+        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=response)
+        column = List[Float32](length=max(count, 1), fill=0.0)
+        for i in range(count):  # driver-loop: over the side's rows (classes[-1]'s probability column)
+            column[i] = src[2 * i + 1]
+        pred = Int(column.unsafe_ptr())
+        width = 1
+    if width != 1:
+        raise Error("ValueError: y_true and y_pred have different number of output (1!=" + String(width) + ")")
+    var value = reg_metric_options_run(route, row.metric, Int(yt.unsafe_ptr()), pred, count, w, row.mo, row.ff,
+                                       row.param, row.param_given, shown, warn)
+    _ = len(yt)  # read by the program above
+    _ = len(column)
+    return value
+
+
 def _multi_offset(row: MselScorer, j: Int) -> Int:
     """Lane mf-rows8b: output j's first label in the row's label value words
     (the outputs' class counts at `counts_at`, output order)."""
@@ -1918,8 +1986,9 @@ def _multi_classes(row: MselScorer, label_words: List[String], mut widths: List[
     return _MC_LIST
 
 
-def _multi_proba_value(row: MselScorer, label_words: List[String], truth: Int, count: Int, mclasses: Int,
-                       widths: List[Int], mut notices: List[Float64]) raises -> Float64:
+def _multi_proba_value(route: MetricRoute, row: MselScorer, label_words: List[String], truth: Int, response: Int,
+                       count: Int, cols: Int, w: Int, mclasses: Int, widths: List[Int],
+                       mut notices: List[Float64]) raises -> Float64:
     """LANE mf-r9c (door :3761): a probability scorer on one side of a
     MULTI-OUTPUT classifier (KNeighborsClassifier, MultiOutputClassifier:
     `predict_proba` is a list of one (rows, classes) block per output; no
@@ -1947,8 +2016,62 @@ def _multi_proba_value(row: MselScorer, label_words: List[String], truth: Int, c
       * top_k_accuracy_score: `column_or_1d(y_true)` first.
     The D^2 scores of fewer than two rows over the columns: nan and their
     warning. The side's labels are read through the row's value words
-    (`_multi_floats`), never its probabilities."""
+    (`_multi_floats`), never its probabilities. A REGRESSION row over the
+    make_scorer's predict_proba (`_response_regression`'s case on several
+    outputs): y_true converted first (`_check_reg_targets`), then the list's
+    `check_array` refusal, or over the positive columns the row's rows x
+    outputs program (the fold estimator's blocks of `widths` columns, each
+    output's last column)."""
     var m = row.outs
+    if row.family == _F_REG:
+        if mclasses == _MC_LIST and count != m:
+            # `_check_reg_targets`' first check: the list's length is its outputs
+            raise Error("ValueError: Found input variables with inconsistent numbers of samples: [" + String(count)
+                        + ", " + String(m) + ((", " + String(count)) if row.w_n > 0 else String("")) + "]")
+        if row.metric == REG_MEDAE or row.metric == REG_MAX_ERROR:
+            var lvk = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=row.lv_at)
+            for c in range(row.lv_n):  # small-loop(the outputs' labels: their kinds)
+                if Int(lvk[2 * c + 1]) != SCORER_LABEL_NUMBER:
+                    raise Error(SCORER_NUMERIC_WORDS)
+        var yv = List[Float32]()
+        var numeric_v = True
+        _multi_floats(row, label_words, truth, count, True, yv, numeric_v)
+        if mclasses == _MC_LIST:
+            var same = True
+            for j in range(1, len(widths)):  # small-loop(the outputs' block widths)
+                same = same and widths[j] == widths[0]
+            if same:
+                raise Error("ValueError: Found array with dim 3, while dim <= 2 is required.")
+            raise Error("ValueError: setting an array element with a sequence. The requested array has an "
+                        + "inhomogeneous shape after 2 dimensions. The detected shape was (" + String(m) + ", "
+                        + String(count) + ") + inhomogeneous part.")
+        var total = 0
+        for j in range(len(widths)):  # small-loop(the outputs' block widths)
+            total += widths[j]
+        if total != cols:
+            raise Error("member ABI: a multi-output fold member answered " + String(cols) + " probability columns for "
+                        + String(total) + " fold classes")
+        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=response)
+        var yp = List[Float32](length=max(count * m, 1), fill=0.0)
+        for i in range(count):  # driver-loop: over the side's rows (each output's positive column)
+            var at = 0
+            for j in range(m):  # small-loop(the outputs' blocks)
+                at += widths[j]
+                yp[i * m + j] = src[i * cols + at - 1]
+        var shown = String("")
+        if row.param_word >= 0 and row.param_word < len(label_words):
+            shown = label_words[row.param_word].copy()
+        var per_output = List[Float64]()
+        var warn = 0
+        var value = reg_metric_options_run(route, row.metric, Int(yv.unsafe_ptr()), Int(yp.unsafe_ptr()), count, m, w,
+                                           row.mo, row.ff, row.param, row.param_given, shown, per_output, warn)
+        _ = len(yv)  # read by the program above
+        _ = len(yp)
+        if len(per_output) > 1:
+            _number_error(row, label_words, per_output)
+        if warn != 0:
+            member_notice_add(notices, MEMBER_NOTICE_METRIC_FEW, 1.0 if reg_metric_d2(row.metric) else 0.0)
+        return value
     if row.family == _F_TOP_K:
         raise Error("ValueError: y should be a 1d array, got an array of shape (" + String(count) + ", " + String(m)
                     + ") instead.")
