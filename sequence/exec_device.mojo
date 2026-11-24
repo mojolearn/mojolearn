@@ -277,10 +277,12 @@ def _fhi(w: Int64) -> Float32:
 # constants holding today's defaults (on). Before, each was an environment
 # read per launch (MOE_TILED, VAR_BLOCK) or per executor construction (POOL).
 # ROUTE-DEFAULT-SUSPECT, no A/B on record: B arms RUN OWED in
-# bench/results/paper_compare/owed-pre0867.json ("seq-moe-tiled-off",
-# "seq-var-block-off"; "seq-pool-off" is decided, below).
-#: the tiled MoE kernel; `-D MOJOLEARN_SEQ_MOE_TILED_OFF` keeps the untiled one
-comptime SEQ_MOE_TILED = not is_defined["MOJOLEARN_SEQ_MOE_TILED_OFF"]()
+# bench/results/paper_compare/owed-pre0867.json ("seq-var-block-off";
+# "seq-moe-tiled-off" and "seq-pool-off" are decided, below).
+# TOMBSTONE: MOJOLEARN_SEQ_MOE_TILED_OFF (old path, the untiled MoE items for expert-grouped entries; NV L40S moe fit / infer 1.00 / 1.00, 2 cells) deleted 2026-11-24 by lane/ab-outcome-3 (o3-nseq); code recoverable at 45fb45a679.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_MOE_TILED_OFF.ab-outcome-3.patch
+# (the tiled MoE kernels take every entry that grouped the pairs by expert, a.i4 > 0; the one-thread-per-cell
+# items stay for the entries that did not group them, a.i4 == 0.)
 #: VAR's Cholesky solve and forecast on one threadgroup
 #: (sequence/vecar_block.mojo, lane gap-prep2); `-D MOJOLEARN_SEQ_VAR_BLOCK_OFF`
 #: keeps the one-thread ops (the A/B arm)
@@ -302,11 +304,6 @@ comptime SEQ_VAR_BLOCK = not is_defined["MOJOLEARN_SEQ_VAR_BLOCK_OFF"]()
 # 99.7 ms against a 1 ms kernel). The pool stays; the build switch is deleted.
 # TOMBSTONE: MOJOLEARN_SEQ_POOL_OFF (NOISE, A/B rounds 2 and 3 NVIDIA L40S, wheels 0c68d6cd27 and 28a780604c, one run per arm, digests equal: sequential-fit 0.98 / 0.991, sequential-predict 0.95 / 1.023) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
 # Restore: git apply experiments/removed/MOJOLEARN_SEQ_POOL_OFF.patch; record in docs/TOMBSTONES.md.
-
-
-@always_inline
-def _moe_tiled_on() -> Bool:
-    return SEQ_MOE_TILED
 
 
 @always_inline
@@ -1177,8 +1174,8 @@ struct DeviceExec(Exec, Movable):
                 return
         # The MoE products as tiled kernels with the items' chains (lane
         # neural-pass29, sequence/moe_tiled.mojo) when the entry grouped the
-        # pairs by expert (a.i4 = the block count); MOJOLEARN_SEQ_MOE_TILED=0
-        # keeps the one-thread-per-cell items.
+        # pairs by expert (a.i4 = the block count); an ungrouped entry
+        # (a.i4 == 0) keeps the one-thread-per-cell items.
         # Apple FAST (lane apple-fast-moespeed, sequence/moe_reg.mojo):
         # MOJOLEARN_MOE_REGTILE, the router's logits tiled and the products
         # register-tiled, the same chains; MOJOLEARN_MOE_DEVGROUP, the pairs
@@ -1332,7 +1329,7 @@ struct DeviceExec(Exec, Movable):
                 self.execution_profile.kernel()
                 return
         comptime if OP == OP_MOE_HIDDEN:
-            if a.i4 > 0 and _moe_tiled_on():
+            if a.i4 > 0:
                 self.ctx.enqueue_function[moe_hidden_tiled_kernel](
                     a.p0, a.p1, a.p4, a.p5, a.p6, a.p3,
                     Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3), Int32(a.i5),
@@ -1341,7 +1338,7 @@ struct DeviceExec(Exec, Movable):
                 self.execution_profile.kernel()
                 return
         comptime if OP == OP_MOE_OUT:
-            if a.i4 > 0 and _moe_tiled_on():
+            if a.i4 > 0:
                 self.ctx.enqueue_function[moe_out_tiled_kernel](
                     a.p0, a.p1, a.p6, a.p7, a.p8, a.p5,
                     Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3), Int32(a.i5),

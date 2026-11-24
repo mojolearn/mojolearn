@@ -1342,6 +1342,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF (old path LOSER: NV L40S lm-forward 19.29 -> 22.57 ms, 1.17) deleted 2026-11-24 by lane/ab-outcome-3 (o3-nseq); code recoverable at dce0be4f4f.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF.ab-outcome-3.patch
     comptime assert not is_defined["MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF"](), "removed 2026-11-24 (lane/o3-nseq of ab-outcome-3, A/B nvc-ab-20261124T115722Z-d8f8b2 NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): BYTE_LM_LAYER_SYNC_OFF (the no-wait byte LM step on NVIDIA / AMD, old path) was a LOSER: 2 cells, median 1.08, lm-forward 19.29 -> 22.57 ms (1.17), lm-train-step 1.00; the per-layer wait stays the NVIDIA / AMD default; Apple keeps its no-wait default; code at dce0be4f4f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF.ab-outcome-3.patch"
+    # TOMBSTONE: MOJOLEARN_SEQ_MOE_TILED_OFF (old path no faster: NV L40S moe fit / infer 1.00, 2 cells) deleted 2026-11-24 by lane/ab-outcome-3 (o3-nseq); code recoverable at 45fb45a679.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_MOE_TILED_OFF.ab-outcome-3.patch
+    comptime assert not is_defined["MOJOLEARN_SEQ_MOE_TILED_OFF"](), "removed 2026-11-24 (lane/o3-nseq of ab-outcome-3, A/B nvc-ab-20261124T115722Z-d8f8b2 NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): SEQ_MOE_TILED_OFF (the untiled one-thread-per-cell MoE products for expert-grouped entries, old path) was no faster: 2 cells, moe fit 14.15 -> 14.19 ms, infer 14.04 -> 14.07 ms (1.00); the tiled MoE kernels take every grouped entry, the items stay for ungrouped ones; code at 45fb45a679; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_MOE_TILED_OFF.ab-outcome-3.patch"
     # ---- end lane ab-outcome-3 / o3-nseq
     return True
 

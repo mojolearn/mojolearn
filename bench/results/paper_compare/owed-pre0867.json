@@ -422,8 +422,9 @@
   },
   "seq-moe-tiled-off": {
    "define": "MOJOLEARN_SEQ_MOE_TILED_OFF",
-   "status": "define in code (sequence/exec_device.mojo SEQ_MOE_TILED): B = the untiled MoE kernel (the former =0); A = the tiled MoE kernel (the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3): old path no faster (L40S moe fit 1.00, infer 1.00); the tiled MoE kernels stay the route of every expert-grouped entry; the define is refused (core/experiment_guards_neural.mojo); code recoverable at 45fb45a679, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_MOE_TILED_OFF.ab-outcome-3.patch. Was: define in code (sequence/exec_device.mojo SEQ_MOE_TILED): B = the untiled MoE kernel (the former =0); A = the tiled MoE kernel (the former default). A transport/route choice: digests must not move.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "seq-var-block-off": {
    "define": "MOJOLEARN_SEQ_VAR_BLOCK_OFF",
@@ -2847,7 +2848,9 @@
    "b_arms": [
     "seq-moe-tiled-off"
    ],
-   "decides": "keep A (the tiled MoE kernel (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+   "decides": "keep A (the tiled MoE kernel (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "seq-var-block-off-envgate",
