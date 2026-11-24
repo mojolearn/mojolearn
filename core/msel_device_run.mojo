@@ -53,4 +53,4 @@ def pca_fit_fold_run(
     """PCA's exact fit over a model-selection fold on this build's fold context."""
     var ctx = msel_fold_entry_context()
     return pca_fit_fold(ctx, base_id, base_rows, index_id, cp, mp, ep, rp, sp, nr, nf, nc, dense, keep_mode, frac,
-        MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=0), False, False)
+        MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(0)), False, False)

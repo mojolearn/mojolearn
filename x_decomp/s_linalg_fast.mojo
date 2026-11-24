@@ -221,7 +221,7 @@ def dev_lu_factor_in_run(pinf: F32Ptr, ida: Int, idl: Int, idp: Int, n: Int) rai
     var factor = pool_buffer(idl, n * n)
     var pivots = pool_buffer(idp, n)
     var ctx = xd_ctx()
-    _lu_factor_resident(ctx, source, factor, pivots, F32Ptr(unsafe_from_address=0), F32Ptr(unsafe_from_address=0),
+    _lu_factor_resident(ctx, source, factor, pivots, F32Ptr(unsafe_from_address=Int(0)), F32Ptr(unsafe_from_address=Int(0)),
                         pinf, n)
     _ = source^
     _ = factor^
@@ -296,7 +296,7 @@ def dev_lu_solve_in_run(il: Int, ip: Int, ida: Int, ib: Int, ix: Int, n: Int, nr
     var ctx = xd_ctx()
     var db = pool_buffer(ib, cells)
     var dx = pool_buffer(ix, cells)
-    _lu_solve_resident(ctx, db, dx, il, ip, ida, n, nrhs, rf != 0, F32Ptr(unsafe_from_address=0))
+    _lu_solve_resident(ctx, db, dx, il, ip, ida, n, nrhs, rf != 0, F32Ptr(unsafe_from_address=Int(0)))
     _ = db^
     _ = dx^
     return cells

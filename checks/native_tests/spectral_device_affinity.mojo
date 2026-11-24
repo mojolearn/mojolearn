@@ -101,8 +101,8 @@ def _knn_cell(negative: Bool) raises:
     var dist = _distances(negative)
     var host_aff = List[Float32](length=_N * _N, fill=Float32(0))
     var host_status = List[Int32](length=3, fill=Int32(0))
-    var none_i = I32P(unsafe_from_address=0)
-    var none_f = F32P(unsafe_from_address=0)
+    var none_i = I32P(unsafe_from_address=Int(0))
+    var none_f = F32P(unsafe_from_address=Int(0))
     knn_affinity_f32(F32P(unsafe_from_address=Int(dist.unsafe_ptr())), none_i, none_i, none_f, 0, False,
                      _N, _K, F32P(unsafe_from_address=Int(host_aff.unsafe_ptr())),
                      I32P(unsafe_from_address=Int(host_status.unsafe_ptr())))
@@ -179,8 +179,8 @@ def _knn_fit_cell(negative: Bool) raises:
     var dist = _distances(negative)
     var host_aff = List[Float32](length=_N * _N, fill=Float32(0))
     var host_status = List[Int32](length=3, fill=Int32(0))
-    var none_i = I32P(unsafe_from_address=0)
-    var none_f = F32P(unsafe_from_address=0)
+    var none_i = I32P(unsafe_from_address=Int(0))
+    var none_f = F32P(unsafe_from_address=Int(0))
     knn_affinity_f32(F32P(unsafe_from_address=Int(dist.unsafe_ptr())), none_i, none_i, none_f, 0, False,
                      _N, _K, F32P(unsafe_from_address=Int(host_aff.unsafe_ptr())),
                      I32P(unsafe_from_address=Int(host_status.unsafe_ptr())))

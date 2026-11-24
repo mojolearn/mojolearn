@@ -986,7 +986,7 @@ def build_isolation_trees_global_kernel(
     xorwow_offset_table: MutPointer[UInt32, MutAnyOrigin],
     global_tree_start: Int32 = 0,
     batch_tree_start: Int32 = 0,
-    correction_cache: MutPointer[Float32, MutAnyOrigin] = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=0),
+    correction_cache: MutPointer[Float32, MutAnyOrigin] = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(0)),
 ):
     """`build_isolation_trees_global_kernel<T>` (`:245-340`): `tree_id =
     blockIdx.x`; `curand_init(seed, tree_id, 0)`; thread 0 samples rows

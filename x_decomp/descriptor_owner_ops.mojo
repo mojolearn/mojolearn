@@ -125,7 +125,7 @@ def xd_owner_common_op[E: Exec, D: RDev, RES: Bool](op: Int, a: List[Int], p: Li
             comptime if not RES:
                 if ids[k] >= 0:
                     raise Error("x_decomp_randomized_svd: device operands need a resident binding")
-            ptrs.append(F32Ptr(unsafe_from_address=0) if ids[k] >= 0 else xd_f32(a[k]))
+            ptrs.append(F32Ptr(unsafe_from_address=Int(0)) if ids[k] >= 0 else xd_f32(a[k]))
         randomized_svd_run[E, D, RES](ptrs[0], ptrs[1], ptrs[2], ptrs[3], rows, cols, nc,
                                       p[3], p[4], p[5] != 0, p[6] != 0, p[7] != 0, p[8], finite_word,
                                       ids[0], ids[1], ids[2], ids[3])

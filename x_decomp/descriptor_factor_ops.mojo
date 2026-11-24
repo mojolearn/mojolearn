@@ -57,7 +57,7 @@ def _x_word(address: Int, pool: Int) raises -> F32Ptr:
     """X's host words (never null), or nothing when X is the resident pool id `pool` (>= 0; the owner reads it
     through its kit, lane vdf-scope-neural3)."""
     if pool >= 0:
-        return F32Ptr(unsafe_from_address=0)
+        return F32Ptr(unsafe_from_address=Int(0))
     return xd_f32(address)
 
 
@@ -150,7 +150,7 @@ def xd_factor_op[E: Exec, D: RDev, RES: Bool, X: DecompDev](op: Int, a: List[Int
                                         pc, pi)
     if op == XD_RP_PROJECT:
         # word 5 (lane vdf-scope-neural3): X's pool id (a fold taken on the device, the scope's X); -1: X is a[0]
-        var x = xd_f32(a[0]) if p[5] < 0 else F32Ptr(unsafe_from_address=0)
+        var x = xd_f32(a[0]) if p[5] < 0 else F32Ptr(unsafe_from_address=Int(0))
         var m = xd_dim(p[0])
         var d = xd_dim(p[1])
         var matrix = xd_f32(a[1])

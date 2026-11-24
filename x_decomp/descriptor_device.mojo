@@ -160,7 +160,7 @@ def xd_resident_op(op: Int, p: List[Int], floats: Int, a: List[Int]) raises -> I
     if op == XD_DEV_TSQR_R:
         # a = [r, read when r id < 0], p = [x id, rows, cols, keep, r id, b id, nrhs] (lane vdf-linalg7: R into a
         # pool id, and the right-hand sides beside X)
-        var pr = F32Ptr(unsafe_from_address=0) if p[4] >= 0 else xd_f32(a[0])
+        var pr = F32Ptr(unsafe_from_address=Int(0)) if p[4] >= 0 else xd_f32(a[0])
         return dev_tsqr_r_run(p[0], pr, xd_dim(p[1]), xd_dim(p[2]), p[3] != 0, p[4], p[5], xd_dim(p[6]))
     if op == XD_DEV_FINITE:
         # p = [id, n]
@@ -193,9 +193,9 @@ def xd_resident_op(op: Int, p: List[Int], floats: Int, a: List[Int]) raises -> I
             if p[1] < 0 and a[0] == 0:
                 raise Error("x_decomp: null float32 buffer address")
         except e:
-            _ = dev_tsqr_q_run(p[0], -1, F32Ptr(unsafe_from_address=0), -1, 0, 0, 0)
+            _ = dev_tsqr_q_run(p[0], -1, F32Ptr(unsafe_from_address=Int(0)), -1, 0, 0, 0)
             raise e^
-        var pc = F32Ptr(unsafe_from_address=a[0]) if p[1] < 0 else F32Ptr(unsafe_from_address=0)
+        var pc = F32Ptr(unsafe_from_address=a[0]) if p[1] < 0 else F32Ptr(unsafe_from_address=Int(0))
         return dev_tsqr_q_run(p[0], p[1], pc, p[2], qm, qn, qk)
     # lane calltable-prep-decomp (2026-11-11): the kit's remaining resident
     # doors (x_decomp_resident_pyapi.mojo, x_decomp_select_dev_pyapi.mojo),

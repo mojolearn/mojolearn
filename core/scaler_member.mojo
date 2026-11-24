@@ -470,7 +470,7 @@ def _transform_held(slot: _Slot, call: _Call, mut held: SeqRows, inverse: Bool) 
     # (`scaler_transform_slot_finish`), and invalid rows take the core's
     # refusals, which read no X.
     if held.x < 0 and calls.direct() and not scaler_transform_rows_valid(rows, d):
-        scaler_transform_core(calls, spec, rows, _F32P(unsafe_from_address=0), n, d,
+        scaler_transform_core(calls, spec, rows, _F32P(unsafe_from_address=Int(0)), n, d,
             _F32P(unsafe_from_address=call[].dst.data))
         raise Error(estimator + ": the fitted statistics were refused")  # not reached: the core raised
     if held.x < 0 and calls.direct():

@@ -157,7 +157,7 @@ def _ipca() raises:
     var got_gpu = ipca_fit_run[DevExec, DevRDev, True, DevIpcaDev](_p(host), n, _D, nc, batch,
         _p(gpu.comps), _p(gpu.sing), _p(gpu.mean), _p(gpu.var_), _p(gpu.ev), _p(gpu.evr), False, kept)
     var ids = _taken_fold(whole, idx)
-    var got_res = ipca_fit_run[DevExec, DevRDev, True, DevIpcaDev](F32Ptr(unsafe_from_address=0), n, _D, nc, batch,
+    var got_res = ipca_fit_run[DevExec, DevRDev, True, DevIpcaDev](F32Ptr(unsafe_from_address=Int(0)), n, _D, nc, batch,
         _p(res.comps), _p(res.sing), _p(res.mean), _p(res.var_), _p(res.ev), _p(res.evr), False, kept, ids[1])
     require(got_res[0] == got_gpu[0] and got_gpu[0] == got_cpu[0], "IncrementalPCA kept count")
     require(bitcast[DType.uint64](got_res[1]) == bitcast[DType.uint64](got_gpu[1]), "IncrementalPCA noise (device)")
@@ -173,7 +173,7 @@ def _ipca() raises:
         True, _p(yc), none)
     ipca_transform_run[DevExec, DevRDev, True](_p(host), n, _D, count, _p(gpu.mean), _p(gpu.comps), _p(gpu.ev),
         True, _p(ya), none)
-    ipca_transform_run[DevExec, DevRDev, True](F32Ptr(unsafe_from_address=0), n, _D, count, _p(gpu.mean),
+    ipca_transform_run[DevExec, DevRDev, True](F32Ptr(unsafe_from_address=Int(0)), n, _D, count, _p(gpu.mean),
         _p(gpu.comps), _p(gpu.ev), True, _p(yb), none, ids[1])
     _free(ids[1])
     _free(ids[0])
@@ -202,7 +202,7 @@ def _nmf_one(solver: Int) raises:
     var rg = nmf_run[DevExec, DevRDev, True, DevDecomp](_p(host), n, _D, nc, NMF_INIT_NNDSVDA, _p(unused),
         _p(unused), 0, solver, a, _p(wg), _p(hg))
     var ids = _taken_fold(whole, idx)
-    var rr = nmf_run[DevExec, DevRDev, True, DevDecomp](F32Ptr(unsafe_from_address=0), n, _D, nc, NMF_INIT_NNDSVDA,
+    var rr = nmf_run[DevExec, DevRDev, True, DevDecomp](F32Ptr(unsafe_from_address=Int(0)), n, _D, nc, NMF_INIT_NNDSVDA,
         _p(unused), _p(unused), 0, solver, a, _p(wr), _p(hr), 0, 0, ids[1])
     _free(ids[1])
     _free(ids[0])
@@ -343,7 +343,7 @@ def _refusals() raises:
     var kept = List[Int]()
     var host_refused = False
     try:
-        _ = ipca_fit_run[HostExec, NoRDev, False, NoIpcaDev](F32Ptr(unsafe_from_address=0), n, _D, 2, 5,
+        _ = ipca_fit_run[HostExec, NoRDev, False, NoIpcaDev](F32Ptr(unsafe_from_address=Int(0)), n, _D, 2, 5,
             _p(cpu.comps), _p(cpu.sing), _p(cpu.mean), _p(cpu.var_), _p(cpu.ev), _p(cpu.evr), False, kept, ids[1])
     except error:
         host_refused = String(error).find("needs a GPU binding") >= 0

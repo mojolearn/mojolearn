@@ -1013,7 +1013,7 @@ def knn_search_device_resident(
     pass and trace records on the same bytes; only the host copies on either
     side are gone. Returns the query tile that ran."""
     var dplan = neighbors_device_plan()
-    var none = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=0)
+    var none = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(0))
     var plan = _knn_search_plan(
         dplan, none, n_index, none, n_queries, n_features, k, return_sqrt,
         DEFAULT_QUERY_TILE, KNN_METHOD_AUTO, METRIC_FROM_IS_SQRT, Float32(2.0), True,
@@ -1092,7 +1092,7 @@ def knn_self_search_slot(
     is refused before any query row, so the query words never arise), then `_knn_search_on_device_index`: the
     same norms, search, order pass and outputs on the same bytes, every metric. Returns the query tile."""
     var dplan = neighbors_device_plan()
-    var none = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=0)
+    var none = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(0))
     var plan = _knn_search_plan(
         dplan, none, n, none, n, n_features, k, True, DEFAULT_QUERY_TILE, KNN_METHOD_AUTO, metric, metric_arg,
         True, True,
@@ -1137,7 +1137,7 @@ def knn_search_slot_queries(
     device reductions (index row first, then query row: the host scans' order and words), then
     `_knn_search_on_device_index` with the queries copied device to device. Every metric. Returns the tile."""
     var dplan = neighbors_device_plan()
-    var none = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=0)
+    var none = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(0))
     var plan = _knn_search_plan(
         dplan, none, n_index, none, n_queries, n_features, k, True, DEFAULT_QUERY_TILE, KNN_METHOD_AUTO, metric,
         metric_arg, True, True,

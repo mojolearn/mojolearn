@@ -46,7 +46,7 @@ struct PCADeviceKernels(PCANativeKernels):
             if not r.randomized:
                 raise Error("PCA estimator provider reads a resident X only in a randomized fit")
             x_dev = -(r.source + 1)
-        var xp = f32_ptr(r.source) if x_dev < 0 else MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=0)
+        var xp = f32_ptr(r.source) if x_dev < 0 else MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(0))
         var cp = f32_ptr(r.components)
         var mp = f32_ptr(r.mean)
         var ep = f32_ptr(r.variance)

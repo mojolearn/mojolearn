@@ -120,7 +120,7 @@ def dev_tsqr_r_run(ix: Int, pr: F32Ptr, m: Int, d: Int, keep: Bool, ir: Int, ib:
     # R to the device: the factor keeps its R tiles (held[2], R is its first n * n words) and writes no host R
     # (a null `r`, x_decomp/tsqr_device.mojo `ts_factor_finish`); the copy below takes R before the owner is freed.
     var on_device = ir >= 0
-    var held = ts_factor_dispatch(plan, ctx, da, m, n, F32Ptr(unsafe_from_address=0) if on_device else pr,
+    var held = ts_factor_dispatch(plan, ctx, da, m, n, F32Ptr(unsafe_from_address=Int(0)) if on_device else pr,
                                   keep or on_device)
     _ = da^
     if on_device:

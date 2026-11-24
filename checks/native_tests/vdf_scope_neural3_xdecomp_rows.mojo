@@ -130,7 +130,7 @@ def _rp() raises:
         kc, True, F32Ptr(unsafe_from_address=Int(oracle.unsafe_ptr())))
     var ids = _taken_fold(whole, idx)
     _ = rp_project_run[DevExec, DevRDev, True, DevDecomp](
-        F32Ptr(unsafe_from_address=0), n, _D, F32Ptr(unsafe_from_address=Int(matrix.unsafe_ptr())), kc, True,
+        F32Ptr(unsafe_from_address=Int(0)), n, _D, F32Ptr(unsafe_from_address=Int(matrix.unsafe_ptr())), kc, True,
         F32Ptr(unsafe_from_address=Int(resident.unsafe_ptr())), -1, False, ids[1])
     _free(ids[1])
     _free(ids[0])
@@ -195,7 +195,7 @@ def _ica() raises:
         True, F32Ptr(unsafe_from_address=Int(oracle.unsafe_ptr())))
     var ids = _taken_fold(whole, idx)
     ica_project_run[DevExec, DevRDev, True](
-        F32Ptr(unsafe_from_address=0), n, _D, False, F32Ptr(unsafe_from_address=Int(matrix.unsafe_ptr())), nc,
+        F32Ptr(unsafe_from_address=Int(0)), n, _D, False, F32Ptr(unsafe_from_address=Int(matrix.unsafe_ptr())), nc,
         F32Ptr(unsafe_from_address=Int(mean.unsafe_ptr())), True,
         F32Ptr(unsafe_from_address=Int(resident.unsafe_ptr())), ids[1])
     _free(ids[1])

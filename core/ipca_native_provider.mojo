@@ -37,7 +37,7 @@ def _ipca_source_pool[RES: Bool](address: Int) raises -> Int:
 def _ipca_host_source(address: Int) raises -> F32Ptr:
     """The host X pointer of a request (`_ipca_pointer`), a null pointer for a resident source (unread)."""
     if address < 0:
-        return F32Ptr(unsafe_from_address=0)
+        return F32Ptr(unsafe_from_address=Int(0))
     return _ipca_pointer(address)
 
 

@@ -43,7 +43,7 @@ struct PCAFoldKernels(PCANativeKernels):
         if not r.fold.active() or r.randomized:
             raise Error("PCA fold provider requires an exact resident fit")
         var project = r.projection != 0
-        var op = _fold_pointer(r.projection) if project else MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=0)
+        var op = _fold_pointer(r.projection) if project else MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(0))
         var cp = _fold_pointer(r.components)
         var mp = _fold_pointer(r.mean)
         var ep = _fold_pointer(r.variance)

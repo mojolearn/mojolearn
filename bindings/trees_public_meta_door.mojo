@@ -928,13 +928,17 @@ def _fit_members_x(clones: PythonObject, mx: _MetaX, targets: PythonObject, floa
         _fit_members(clones, mx.x, mx.n, mx.d, targets, float_targets, weights, counts, jobs, context, givens)
         return
     var base_targets = Python.list()
-    var last = PythonObject(None)
-    var last_base = PythonObject(None)
+    # No PythonObject carried across iterations (an owned object reassigned in
+    # the loop lowered to "operand #1 does not dominate this use", as
+    # bindings/msel_estimator_native_door.mojo did in round 6): the last
+    # distinct target is named by its index, its take read back from the list.
+    var last = -1
     for i in range(m):  # driver-loop: over members (one take per distinct target object)
-        if not (targets[i] is last):
-            last = targets[i]
-            last_base = _meta_take(mx, last, context)
-        _ = py_call(base_targets.append, last_base)
+        if last < 0 or not (targets[i] is targets[last]):
+            last = i
+            _ = py_call(base_targets.append, _meta_take(mx, targets[i], context))
+        else:
+            _ = py_call(base_targets.append, base_targets[i - 1])
     var base_givens = PythonObject(None)
     if givens is not None:
         base_givens = Python.list()

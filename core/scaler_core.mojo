@@ -381,7 +381,7 @@ def scaler_minmax_fill_slot[C: ScalerCalls](calls: C, n: Int, d: Int, x_slot: In
     var keep = st + 6 * d
     var dest = keep + d
     var cn = dest + n * d
-    var arena = _arena_after_x(cn + d, n * d, F32P(unsafe_from_address=0), x_slot, dest)
+    var arena = _arena_after_x(cn + d, n * d, F32P(unsafe_from_address=Int(0)), x_slot, dest)
     var ap = F32P(unsafe_from_address=_addr(arena))
     scaler_feature_indices(ap + keep, d)
     var program = _minmax_fill_program(n, d)
@@ -496,7 +496,7 @@ def scaler_nan_fill_slot[C: ScalerCalls](calls: C, n: Int, d: Int, x_slot: Int, 
     var st = n * d
     var keep = st + 6 * d
     var dest = keep + 2 * d
-    var arena = _arena_after_x(dest + n * d, n * d, F32P(unsafe_from_address=0), x_slot, dest)
+    var arena = _arena_after_x(dest + n * d, n * d, F32P(unsafe_from_address=Int(0)), x_slot, dest)
     var ap = F32P(unsafe_from_address=_addr(arena))
     scaler_feature_indices(ap + keep, d)
     var program = _nan_fill_program(n, d)
@@ -572,7 +572,7 @@ def scaler_transform_slot_restore[C: ScalerCalls](calls: C, rows: F32P, x_slot: 
     """`scaler_transform_core`'s per-column NaN restore of `dst` with X in x_prep store slot `x_slot` (lane
     vdf-scope-neural6; lane vdf-tail-a: the member runs the NaN fill into a slot (`scaler_nan_fill_slot`) and the
     direct slot transform itself, then calls this). The same program on the same words."""
-    _transform_restore(calls, rows, F32P(unsafe_from_address=0), x_slot, n, d, dst)
+    _transform_restore(calls, rows, F32P(unsafe_from_address=Int(0)), x_slot, n, d, dst)
 
 
 def _transform_restore[C: ScalerCalls](calls: C, rows: F32P, x: F32P, x_slot: Int, n: Int, d: Int,

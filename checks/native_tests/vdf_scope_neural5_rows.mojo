@@ -146,17 +146,17 @@ def _ipca_bound() raises:
     var dst = List[Float32](length=(n + 1) * k, fill=Float32(0))
     var over = False
     try:
-        ipca_transform_run[DevExec, DevRDev, True](F32Ptr(unsafe_from_address=0), n + 1, _D, k, _p(mean), _p(comps),
+        ipca_transform_run[DevExec, DevRDev, True](F32Ptr(unsafe_from_address=Int(0)), n + 1, _D, k, _p(mean), _p(comps),
             _p(ev), False, _p(dst), List[Int](), ids[1])
     except error:
         over = _refused(String(error), "the resident X holds")
     require(over, "IncrementalPCA transform: one row past the taken id is refused")
-    ipca_transform_run[DevExec, DevRDev, True](F32Ptr(unsafe_from_address=0), n, _D, k, _p(mean), _p(comps),
+    ipca_transform_run[DevExec, DevRDev, True](F32Ptr(unsafe_from_address=Int(0)), n, _D, k, _p(mean), _p(comps),
         _p(ev), False, _p(dst), List[Int](), ids[1])
     var stray = DevRDev.alloc(n * _D)
     var unknown = False
     try:
-        ipca_transform_run[DevExec, DevRDev, True](F32Ptr(unsafe_from_address=0), n, _D, k, _p(mean), _p(comps),
+        ipca_transform_run[DevExec, DevRDev, True](F32Ptr(unsafe_from_address=Int(0)), n, _D, k, _p(mean), _p(comps),
             _p(ev), False, _p(dst), List[Int](), stray)
     except error:
         unknown = _refused(String(error), "was not put through this store")
@@ -290,7 +290,7 @@ def _tsvd_randomized() raises:
     var resident = _TsvdRoom(k, _D)
     var device = _TsvdRoom(k, _D)
     var cpu = _TsvdRoom(k, _D)
-    tsvd_randomized_fit_run[DevExec, DevRDev, True](F32Ptr(unsafe_from_address=0), _p(resident.comps),
+    tsvd_randomized_fit_run[DevExec, DevRDev, True](F32Ptr(unsafe_from_address=Int(0)), _p(resident.comps),
         _p(resident.sing), _p(resident.var_), _p(resident.ratio), n, _D, k, 3, 2, False, 7, 0, ids[1])
     tsvd_randomized_fit_run[DevExec, DevRDev, True](_p(host_x), _p(device.comps), _p(device.sing),
         _p(device.var_), _p(device.ratio), n, _D, k, 3, 2, False, 7)
@@ -313,7 +313,7 @@ def _refusals() raises:
     var cpu = _TsvdRoom(k, _D)
     var host_refused = False
     try:
-        tsvd_randomized_fit_run[HostExec, NoRDev, False](F32Ptr(unsafe_from_address=0), _p(cpu.comps),
+        tsvd_randomized_fit_run[HostExec, NoRDev, False](F32Ptr(unsafe_from_address=Int(0)), _p(cpu.comps),
             _p(cpu.sing), _p(cpu.var_), _p(cpu.ratio), n, _D, k, 3, 2, False, 7, 0, ids[1])
     except error:
         host_refused = _refused(String(error), "needs a GPU binding")

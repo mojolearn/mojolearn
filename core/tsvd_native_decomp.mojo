@@ -60,7 +60,7 @@ struct TSVDDecompKernels[E: Exec, D: RDev, RES: Bool](TSVDNativeKernels):
             if r.route != TSVD_RANDOMIZED or not Self.RES:
                 raise Error("TruncatedSVD decomposition provider reads a resident X only in a GPU randomized fit")
             x_dev = -(r.source + 1)
-        var xp = _decomp_pointer(r.source) if x_dev < 0 else F32Ptr(unsafe_from_address=0)
+        var xp = _decomp_pointer(r.source) if x_dev < 0 else F32Ptr(unsafe_from_address=Int(0))
         var cp = _decomp_pointer(r.components)
         var sp = _decomp_pointer(r.singular)
         if r.route == TSVD_RANDOMIZED:
