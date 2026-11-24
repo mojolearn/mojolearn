@@ -58,8 +58,8 @@ def optimizer_validate_nesterov_dampening(dampening: Float64) raises:
 def optimizer_parameter_names(kind: Int) -> List[String]:
     # The public lexical insertion order is part of get_params packing.
     if kind == 0:
-        return ["accumulation_steps", "dampening", "lr", "lr_schedule", "maximize", "momentum", "nesterov", "numeric_mode", "params", "resident", "weight_decay"]
-    return ["accumulation_steps", "betas", "eps", "lr", "lr_schedule", "maximize", "numeric_mode", "params", "resident", "weight_decay"]
+        return ["accumulation_steps", "dampening", "device", "lr", "lr_schedule", "maximize", "momentum", "nesterov", "numeric_mode", "params", "resident", "weight_decay"]
+    return ["accumulation_steps", "betas", "device", "eps", "lr", "lr_schedule", "maximize", "numeric_mode", "params", "resident", "weight_decay"]
 
 
 def optimizer_parameter_update(kind: Int, key: String) raises:
@@ -110,8 +110,9 @@ def optimizer_keyword_refusal(key: String, where: String) raises:
         raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "torch's own deprecated alias for `reduction`. Refused rather than translated, because translating it silently reproduces the ambiguity torch deprecated it for" + " (python/mojolearn/_training_impl.py)")
     if key == "reduce":
         raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "torch's own deprecated alias for `reduction`; see `size_average`" + " (python/mojolearn/_training_impl.py)")
-    if key == "device":
-        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "the device is chosen by the binary that loaded, and its accelerator API is readable with `vendor_used()` (python/mojolearn/_backend.py)" + " (python/mojolearn/_training_impl.py)")
+    # `device=` is a public keyword of SGD, Adam, AdamW, clip_grad_norm_ and
+    # cross_entropy (lane vdf-seq / vdf-linalg, 2026-11-24): it never reaches
+    # the keyword dictionary, so its refusal by name is deleted.
     if key == "dtype":
         raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "float32 only. MIXED PRECISION IS NOT COVERED and a non-float32 array is refused by name rather than cast" + " (python/mojolearn/_training_impl.py)")
     raise Error("TypeError: mojolearn." + where + ": unexpected keyword " + key + "=. This surface takes only "

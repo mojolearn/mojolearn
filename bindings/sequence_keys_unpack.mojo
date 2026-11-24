@@ -43,6 +43,9 @@ struct SequenceKeys(Defaultable, Movable):
     var k__handles: PythonObject
     var k__kind: PythonObject
     var k__res_b: PythonObject
+    var k__host_b: PythonObject
+    var k_device: PythonObject
+    var k_sequence_bindings_cpu: PythonObject
     var k__routing: PythonObject
     var k__sc: PythonObject
     var k__showwarnmsg_impl: PythonObject
@@ -210,6 +213,9 @@ struct SequenceKeys(Defaultable, Movable):
         self.k__handles = PythonObject(None)
         self.k__kind = PythonObject(None)
         self.k__res_b = PythonObject(None)
+        self.k__host_b = PythonObject(None)
+        self.k_device = PythonObject(None)
+        self.k_sequence_bindings_cpu = PythonObject(None)
         self.k__routing = PythonObject(None)
         self.k__sc = PythonObject(None)
         self.k__showwarnmsg_impl = PythonObject(None)
@@ -347,7 +353,7 @@ struct SequenceKeys(Defaultable, Movable):
         self.k_weight_grad = PythonObject(None)
 
 
-comptime _SEQUENCE_KEYS = SharedSlot[SequenceKeys, "MojolearnSequenceKeysV1"]
+comptime _SEQUENCE_KEYS = SharedSlot[SequenceKeys, "MojolearnSequenceKeysV2"]
 
 
 def _sequence_keys_fill(nk: UnsafePointer[SequenceKeys, MutUntrackedOrigin]) raises:
@@ -381,6 +387,9 @@ def _sequence_keys_fill(nk: UnsafePointer[SequenceKeys, MutUntrackedOrigin]) rai
     nk[].k__handles = py_key("_handles")
     nk[].k__kind = py_key("_kind")
     nk[].k__res_b = py_key("_res_b")
+    nk[].k__host_b = py_key("_host_b")
+    nk[].k_device = py_key("device")
+    nk[].k_sequence_bindings_cpu = py_key("sequence_bindings_cpu")
     nk[].k__routing = py_key("_routing")
     nk[].k__sc = py_key("_sc")
     nk[].k__showwarnmsg_impl = py_key("_showwarnmsg_impl")

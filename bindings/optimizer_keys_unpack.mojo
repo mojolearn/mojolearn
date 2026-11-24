@@ -136,6 +136,8 @@ struct OptimizerKeys(Defaultable, Movable):
     var k__pristine: PythonObject
     var k__readonly: PythonObject
     var k__resident_wanted: PythonObject
+    var k_device: PythonObject
+    var k__host_device: PythonObject
     var k__step: PythonObject
     var k__v: PythonObject
     var k_accumulation_steps: PythonObject
@@ -238,6 +240,8 @@ struct OptimizerKeys(Defaultable, Movable):
         self.k__pristine = PythonObject(None)
         self.k__readonly = PythonObject(None)
         self.k__resident_wanted = PythonObject(None)
+        self.k_device = PythonObject(None)
+        self.k__host_device = PythonObject(None)
         self.k__step = PythonObject(None)
         self.k__v = PythonObject(None)
         self.k_accumulation_steps = PythonObject(None)
@@ -324,7 +328,7 @@ struct OptimizerKeys(Defaultable, Movable):
         self.k_weight_decay = PythonObject(None)
 
 
-comptime _OPTIMIZER_KEYS = SharedSlot[OptimizerKeys, "MojolearnOptimizerKeysV1"]
+comptime _OPTIMIZER_KEYS = SharedSlot[OptimizerKeys, "MojolearnOptimizerKeysV2"]
 
 
 def _optimizer_keys_fill(nk: UnsafePointer[OptimizerKeys, MutUntrackedOrigin]) raises:
@@ -344,6 +348,8 @@ def _optimizer_keys_fill(nk: UnsafePointer[OptimizerKeys, MutUntrackedOrigin]) r
     nk[].k__pristine = py_key("_pristine")
     nk[].k__readonly = py_key("_readonly")
     nk[].k__resident_wanted = py_key("_resident_wanted")
+    nk[].k_device = py_key("device")
+    nk[].k__host_device = py_key("_host_device")
     nk[].k__step = py_key("_step")
     nk[].k__v = py_key("_v")
     nk[].k_accumulation_steps = py_key("accumulation_steps")

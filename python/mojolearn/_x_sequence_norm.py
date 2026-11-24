@@ -46,7 +46,7 @@ from ._training_impl import _OPT_NATIVE as _SEQ_NATIVE, _OPT_CONTEXT as _SEQ_CON
 
 
 # The former private NumPy runners are superseded by the native owner.
-def layer_norm_forward(x, normalized_shape=None, weight=None, bias=None, eps=1e-5, numeric_mode=None):
+def layer_norm_forward(x, normalized_shape=None, weight=None, bias=None, eps=1e-5, numeric_mode=None, *, device=None):
     """Layer normalization over the trailing dimensions, as `torch.nn.functional.layer_norm`.
 
     Each row of the trailing `normalized_shape` dimensions is normalized with its mean
@@ -67,6 +67,9 @@ def layer_norm_forward(x, normalized_shape=None, weight=None, bias=None, eps=1e-
         Added to the variance inside the square root.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -85,9 +88,9 @@ def layer_norm_forward(x, normalized_shape=None, weight=None, bias=None, eps=1e-
     >>> x = np.random.default_rng(0).random((32, 64), dtype=np.float32)
     >>> y = mojolearn.layer_norm_forward(x)
     """
-    return _SEQ_NATIVE("seqln_forward", None, (x, normalized_shape, weight, bias, eps), numeric_mode, _SEQ_CONTEXT)
+    return _SEQ_NATIVE("seqln_forward", None, (x, normalized_shape, weight, bias, eps, device), numeric_mode, _SEQ_CONTEXT)
 
-def layer_norm_backward(dy, x, normalized_shape=None, weight=None, bias=None, eps=1e-5, numeric_mode=None):
+def layer_norm_backward(dy, x, normalized_shape=None, weight=None, bias=None, eps=1e-5, numeric_mode=None, *, device=None):
     """Gradients of `layer_norm_forward`.
 
     Parameters
@@ -106,6 +109,9 @@ def layer_norm_backward(dy, x, normalized_shape=None, weight=None, bias=None, ep
         The forward's epsilon.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
@@ -128,7 +134,7 @@ def layer_norm_backward(dy, x, normalized_shape=None, weight=None, bias=None, ep
     >>> x = np.random.default_rng(0).random((32, 64), dtype=np.float32)
     >>> dx, dw, db = mojolearn.layer_norm_backward(np.ones_like(x), x)
     """
-    return _SEQ_NATIVE("seqln_backward", None, (dy, x, normalized_shape, weight, bias, eps), numeric_mode, _SEQ_CONTEXT)
+    return _SEQ_NATIVE("seqln_backward", None, (dy, x, normalized_shape, weight, bias, eps, device), numeric_mode, _SEQ_CONTEXT)
 
 class LayerNorm:
     """Layer normalization layer, as `torch.nn.LayerNorm`.
@@ -150,6 +156,9 @@ class LayerNorm:
         Learn a bias. Ignored when `elementwise_affine` is False.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Attributes
     ----------
@@ -171,9 +180,9 @@ class LayerNorm:
     >>> dx = ln.backward(np.ones_like(y))
     """
 
-    def __init__(self, normalized_shape, eps=1e-5, elementwise_affine=True, bias=True, numeric_mode=None):
+    def __init__(self, normalized_shape, eps=1e-5, elementwise_affine=True, bias=True, numeric_mode=None, *, device=None):
         return _SEQ_NATIVE("seqln_initialize", self,
-                           (normalized_shape, eps, elementwise_affine, bias), numeric_mode, _SEQ_CONTEXT)
+                           (normalized_shape, eps, elementwise_affine, bias, device), numeric_mode, _SEQ_CONTEXT)
 
     @property
     def _device_io(self):
