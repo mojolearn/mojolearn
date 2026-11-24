@@ -3654,6 +3654,17 @@ _DL_CALL, _DL_CONTEXT = _connect_decomp_kit("dict_learning_native_call", minibat
 if "decomp_bindings" in _DL_CONTEXT:
     _native_family_bridge.tables(decomp_bindings=_DL_CONTEXT["decomp_bindings"])
 
+    def _share_decomp_cpu_image():
+        # glue: a device="cpu" manifold member beside a GPU set routes to the x_decomp CPU image
+        # (bindings/decomp_kit_native_door.mojo `decomp_entries_routed` reads `decomp_cpu_bindings`): the table the
+        # kit context connected at the same first device="cpu" admission (registered before this one, so loaded
+        # first), never at import.
+        cpu = _DL_CONTEXT.get("decomp_cpu_bindings")
+        if cpu is not None:
+            _native_family_bridge.tables(decomp_cpu_bindings=cpu)
+
+    _native_family_bridge.cpu_load_later(_native_family_bridge.shared_context(), _share_decomp_cpu_image)
+
 
 # The native PLS owner (bindings/pls_native_door.mojo): PLSRegression, PLSCanonical, CCA.
 # `score` runs R^2 through the native metrics owner (family_mcls_r2) inside
