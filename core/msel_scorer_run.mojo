@@ -256,6 +256,11 @@ comptime SCORER_FLOAT_POS_WORDS = ("TypeError: pos_label must contain only strin
 #: that returns no number (model_selection/_validation.py `_score`: raised
 #: after the scorer's try, so a numeric error_score never replaces it).
 comptime SCORER_NUMBER_WORDS = "ValueError: scoring must return a number, got "
+#: Lane mf-rows8a: the native scorer door's refusal of a metric answer that
+#: is no real number (bindings/msel_scorer_native_door.mojo `_scorer_metric`):
+#: cohen_kappa_score's replace_undefined_by object when kappa is undefined
+#: (the kappa row's flag word 1).
+comptime SCORER_REAL_WORDS = "TypeError: scoring must return a real scalar"
 #: Lane mf-score8: a fit label's kind word (the label value words of a
 #: regression scorer on a classifier): a number (an integer, a bool or a
 #: real), a string `float()` converts, a string it does not.
@@ -627,7 +632,7 @@ def msel_scorer_row(code: Int, opts: MselScorerOptions, sel_base: Int) raises ->
     if opts.flag >= 0:
         var flag_row = (row.family == _F_LOG_LOSS or row.family == _F_TOP_K or row.family == _F_BRIER
                         or row.family == _F_AP or msel_scorer_mi(row)
-                        or (row.family == _F_LABEL and row.metric == LBL_BALANCED))
+                        or (row.family == _F_LABEL and row.metric == LBL_BALANCED) or row.family == _F_KAPPA)
         if not flag_row:
             raise Error("RuntimeError: a normalize or adjusted flag on a search scorer that takes none")
         row.flag = opts.flag
@@ -1178,6 +1183,10 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
         value = kappa_run(route, truth, response, count, classes, row.sel_at, row.sel_n, row.wmode, w, flags)
         if flags != 0:
             member_notice_add(notices, MEMBER_NOTICE_METRIC_KAPPA, Float64(flags))
+            if row.flag == 1:
+                # lane mf-rows8a: a replace_undefined_by that is no number (the
+                # flag word 1): the native scorer door refuses the object it answers
+                raise Error(SCORER_REAL_WORDS)
             value = row.param if row.param_given else _nan64()
     elif row.family == _F_HINGE:
         # lane mf-score8 round b: bindings/metrics_exp_rank_door.mojo `_hinge`'s

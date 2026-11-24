@@ -2644,6 +2644,10 @@ struct _ScorerKw(Movable):
     # lane mf-score8 round b: another row's name the kwargs select (roc_auc's
     # multiclass averages; "": the matched row)
     var rename: String
+    # lane mf-rows8a: a kwarg the metric's plan does not take (`refuse_text`
+    # holds the native scorer door's words): the admission scores a stand-in
+    # row whose every side raises them
+    var stand_in: Bool
 
     def __init__(out self):
         self.flip = False
@@ -2666,6 +2670,7 @@ struct _ScorerKw(Movable):
         self.flag = -1
         self.wmode = 0
         self.rename = String("")
+        self.stand_in = False
 
 
 def _sorted_labels(value: PythonObject, b: PythonObject) raises -> PythonObject:
@@ -2803,12 +2808,25 @@ def _table_row_kwarg(typed: MselScorer, word: String, theirs: PythonObject, mut 
             _refuse(kw, "'average_method' must be 'min', 'geometric', 'arithmetic', or 'max'")
         return True
     if word == "beta" and msel_scorer_v_measure(typed):
-        var beta = _real_word(theirs, b)
-        if beta != beta:
-            return False  # not a real number: no typed word reads it
-        kw.param = beta
+        # lane mf-rows8a: as the door reads it, `float(beta)` (a bool, a
+        # numeric string and NaN included); one `float` refuses is that
+        # refusal's words per side
+        try:
+            kw.param = Float64(py=py_call(b.float, theirs))
+        except error:
+            _refuse(kw, String(error))
+            return True
         kw.has_param = True
         kw.param_text = String(py=py_call(b.str, theirs))
+        return True
+    if word == "contingency" and String(typed.name) == "mutual_info_score":
+        # lane mf-rows8a: a precomputed contingency the door refuses
+        # (bindings/mcls_cluster_door.mojo, its words per side); None is the row's
+        if theirs is not None:
+            _refuse(kw, "NotImplementedError: mojolearn mutual_info_score: contingency= is refused; the implemented "
+                    + "entry builds the contingency matrix on the device "
+                    + "(metrics/impl/stats/detail/contingency_matrix.mojo) and has no arm that consumes a "
+                    + "precomputed one")
         return True
     if word == "sparse" and String(typed.name) == "fowlkes_mallows_score":
         return True  # deprecated, reads no value
@@ -2927,14 +2945,63 @@ def _metric_row_kwarg(metric: String, word: String, value: PythonObject, mut kw:
         if word == "replace_undefined_by":
             # the door answers the given object itself when kappa is
             # undefined: a real number is that score (NaN included)
-            if py_type(value) is b.bool or not Bool(py=py_call(b.isinstance, value,
-                                                               native_loaded_module("numbers").Real)):
-                return False
+            # LANE mf-rows8a: a bool too (the native scorer door's
+            # `metric_is_real` reads it as 0 / 1); any other object is no
+            # number, which that door refuses when kappa is undefined
+            # ("TypeError: scoring must return a real scalar"; the RUN's flag
+            # word 1, core/msel_scorer_run.mojo SCORER_REAL_WORDS)
+            if _value_kind(value, b) != 1 and not Bool(py=py_call(b.isinstance, value,
+                                                                  native_loaded_module("numbers").Real)):
+                kw.flag = 1
+                return True
             kw.param = Float64(py=py_call(b.float, value))
             kw.has_param = True
             kw.param_text = String(py=py_call(b.str, value))
             return True
     return False
+
+
+def _kwarg_refusal(plan: PythonObject, kwargs: PythonObject, b: PythonObject) raises -> String:
+    """UNPACK (lane mf-rows8a): the native scorer door's refusal of a
+    make_scorer kwarg its metric's plan does not take, in its words and
+    order (bindings/msel_scorer_native_door.mojo `MselMetricPrepared.prepare`,
+    over the kwargs in their order: a name not among the plan's `allowed`,
+    then a name that is one of its two positional inputs). Raised on every
+    score inside the scorer's call, so the error_score rule applies. "":
+    none. Read once per admission."""
+    var allowed = py_get(plan, "allowed")
+    var inputs = py_get(plan, "inputs")
+    if allowed is None or inputs is None:
+        return String("")
+    var keys = py_call(b.list, py_call(kwargs.keys))
+    for k in range(len(keys)):  # small-loop(the scorer's kwargs, once per admission)
+        var name = keys[k]
+        if py_type(name) is not b.str or not py_contains(allowed, name):
+            return String("TypeError: native metric received an unexpected keyword argument")
+        if Bool(py=py_call(b.bool, py_call(native_loaded_module("operator").eq, name, inputs[0]))) or Bool(
+                py=py_call(b.bool, py_call(native_loaded_module("operator").eq, name, inputs[1]))):
+            return String("TypeError: native metric received multiple values for a positional input")
+    return String("")
+
+
+def _mode_word(value: PythonObject, context: PythonObject, b: PythonObject) raises -> Int:
+    """UNPACK (lane mf-rows8a): a make_scorer's `numeric_mode` as the native
+    scorer door reads it (`MselMetricPrepared.prepare`): 0 the process's
+    default mode (None, or the default's name after `strip().lower()`: the
+    same metric tier the search's own metric route runs), 1 a value the door
+    refuses ("numeric_mode must be 'fast' or 'identical'"), 2 the other tier
+    (no typed route: the search RUN holds one metric route)."""
+    if value is None:
+        return 0
+    if py_type(value) is not b.str:
+        return 1
+    var clean = String(py=py_call(py_call(value.strip).lower))
+    if clean != "identical" and clean != "fast":
+        return 1
+    var default = py_get(context["family_msel_backend_fields"], "_DEFAULT_MODE")
+    if default is not None and py_type(default) is b.str and String(py=py_call(py_call(default.strip).lower)) == clean:
+        return 0
+    return 2
 
 
 def _real_word(value: PythonObject, b: PythonObject) raises -> Float64:
@@ -2989,6 +3056,16 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
     var func = py_call(b.getattr, got, PythonObject("_score_func"), PythonObject(None))
     if func is None:
         return String("")
+    # LANE mf-rows8a: a kwarg the metric does not take (or one of its
+    # positional inputs): the native scorer door refuses it on every score
+    # (`_kwarg_refusal`); a stand-in row raises those words per side.
+    var metric_plan = py_get(context["family_msel_metric_plans"], func)
+    if metric_plan is not None:
+        var refused = _kwarg_refusal(metric_plan, py_call(b.getattr, got, PythonObject("_kwargs")), b)
+        if refused.byte_length() > 0:
+            kw.refuse_text = refused
+            kw.stand_in = True
+            return String("accuracy")  # the stand-in's name (the admission picks its row)
     # 'fbeta_score' is the F row of its average (its module's f1_score's rows)
     var fbeta = String(py=py_call(b.getattr, func, PythonObject("__name__"), PythonObject(""))) == "fbeta_score"
     var module = py_call(b.getattr, func, PythonObject("__module__"), PythonObject(None))
@@ -3037,6 +3114,15 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                 var word = String(py=key) if py_type(key) is b.str else String("")
                 if theirs is not missing and _table_row_kwarg(typed, word, theirs, mine_kw, b):
                     continue  # lane mf-score8 round b: a typed word of the row
+                if word == "numeric_mode" and theirs is not missing:
+                    # lane mf-rows8a: the default tier is the row's; a value the
+                    # door refuses is its words per side; the other tier: no row
+                    var mode = _mode_word(theirs, context, b)
+                    if mode == 0:
+                        continue
+                    if mode == 1:
+                        _refuse(mine_kw, "ValueError: numeric_mode must be 'fast' or 'identical'")
+                        continue
                 if word == "labels" and theirs is not missing and label_row > 0:
                     # read first: an array compares no other way (labels None is the row's)
                     if theirs is not None and label_row == 2:
@@ -3150,8 +3236,12 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                 if value is not None:
                     metric_kw.weights = value
             elif word == "numeric_mode":
-                if value is not None:
+                # lane mf-rows8a: `_mode_word` (the other tier keeps no row)
+                var mode = _mode_word(value, context, b)
+                if mode == 2:
                     return String("")
+                if mode == 1:
+                    _refuse(metric_kw, "ValueError: numeric_mode must be 'fast' or 'identical'")
             elif not _metric_row_kwarg(metric, word, value, metric_kw, normalize, context, b):
                 return String("")
         var code = msel_scorer_metric_code(metric, normalize)
@@ -3496,10 +3586,18 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     for j in range(len(keys)):  # driver-loop: over the scorers (once per admission)
         var kw = _ScorerKw()
         var name = _scorer_name(givens[j], context, b, kw)
-        if name.byte_length() == 0:
-            return False  # a native scorer no table row holds (another metric or kwargs)
         var scorer = msel_get_scorer(givens[j], context)
         var no_method = _response_refusal(scorer, base, b)
+        if no_method.byte_length() == 0 and kw.stand_in:
+            # lane mf-rows8a: a kwarg the metric does not take (`_kwarg_refusal`),
+            # raised per side after the response is asked, as the door does
+            no_method = kw.refuse_text.copy()
+        if name.byte_length() == 0 and no_method.byte_length() == 0:
+            # a native scorer no table row holds: the kwargs listed in
+            # mf-rows8a-work/rows.tsv (another numeric_mode tier, a
+            # non-predict response a class has over a predict metric,
+            # roc_auc's multi_class on its dual row)
+            return False
         if no_method.byte_length() > 0:
             # A CLASS WITH NONE OF THE SCORER'S RESPONSE METHODS (lane mf-score8
             # round b): scikit-learn's scorer raises `_check_response_method`'s
