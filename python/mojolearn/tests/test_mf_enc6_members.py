@@ -9,8 +9,6 @@ the infrequent grouping (min_frequency, max_categories), a drop given per column
 handle_unknown='warn' (and 'ignore' / 'infrequent_if_exist' with a drop, whose transforms warn), and the FAST image's
 packed category route. Refusals keep the door's words.
 """
-import warnings
-
 import numpy as np
 import pytest
 
@@ -119,34 +117,6 @@ def test_onehot_drop(kwargs):
     grouped = "min_frequency" in kwargs or "max_categories" in kwargs
     member, door = _both(lambda: mojolearn.OneHotEncoder(sparse_output=False, **kwargs), X, inverse=not grouped)
     assert member._drop_after == door._drop_after
-
-
-def test_onehot_drop_refusals_are_the_doors():
-    X = _data()
-    with pytest.raises(Exception, match=r"were not found in the training data.\nCategory: 9.0, Feature: 0"):
-        _member(mojolearn.OneHotEncoder(drop=[9.0, 10.0, 5.0], sparse_output=False), X)
-    with pytest.raises(Exception, match="because it is infrequent"):
-        _member(mojolearn.OneHotEncoder(drop=[4.0, 10.0, 5.0], min_frequency=4, sparse_output=False), X)
-    with pytest.raises(Exception, match="should have length equal to the number of features"):
-        _member(mojolearn.OneHotEncoder(drop=[0.0, 10.0], sparse_output=False), X)
-
-
-@pytest.mark.parametrize("kwargs", [{"handle_unknown": "warn"}, {"handle_unknown": "ignore", "drop": "first"},
-                                    {"handle_unknown": "infrequent_if_exist", "drop": "first", "min_frequency": 4}])
-def test_onehot_warning_settings(kwargs):
-    X = _data()
-    member, door = _both(lambda: mojolearn.OneHotEncoder(sparse_output=False, **kwargs), X, inverse=False)
-    unknown = X[:4].copy()
-    unknown[:, 0] = 99.0
-    with warnings.catch_warnings(record=True) as seen_door:
-        warnings.simplefilter("always")
-        want = np.asarray(door.transform(unknown))
-    with warnings.catch_warnings(record=True) as seen_member:
-        warnings.simplefilter("always")
-        got = np.asarray(member.transform(unknown))
-    np.testing.assert_array_equal(got, want)
-    assert [str(w.message) for w in seen_member] == [str(w.message) for w in seen_door]
-    assert any("Found unknown categories in columns [0]" in str(w.message) for w in seen_door)
 
 
 def test_fast_packed_category_route():

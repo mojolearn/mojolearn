@@ -5,11 +5,8 @@ CTRs (lane/inference-gbdt-ctr-tables, 2026-09-15): HostGBDT parses the
 records and the forest host binding applies them with the same
 `expand_raw_columns` and `expand_tensor_ctr_columns` the GPU predict calls.
 
-What the source checks hold (no binding): the records parse with the Mojo
-reader's checks, the raw input count is the column plan's, and what the GPU
-predict refuses is refused at load by name (a CTR type with no apply-time
-arithmetic, a model with both kinds, a model declaring more CTR columns than
-it carries tables).
+The parse checks and the refusals at load by name are in
+test_gbdt_boundary.py, which imports this file's model texts.
 
 The runtime checks (skipped, and SAID to be skipped, unless the forest host
 binary is built): two hand-written models whose leaves name the path each row
@@ -23,8 +20,6 @@ identity_break's gbdt-categorical-ctr-tables and gbdt-tensor-ctr-tables lanes.
 """
 import os
 import sys
-
-from mojolearn._gbdt_host import parse_model_text
 
 HEADER = "format mojolearn-model 2\n"
 
@@ -69,31 +64,6 @@ def _raises(fn, needle):
         assert needle in str(exc), f"expected {needle!r} in {exc}"
         return
     raise AssertionError(f"no refusal naming {needle!r}")
-
-
-def test_ctr_records_parse_with_the_column_plan():
-    a = parse_model_text(CTR_TEXT)
-    assert a["n_features"] == 1 and a["n_input_features"] == 1
-    assert a["n_ctr_tables"] == 1 and a["n_tensor_tables"] == 0 and a["n_ctr_counts"] == 3
-    t = parse_model_text(TENSOR_TEXT)
-    assert t["n_features"] == 3 and t["n_input_features"] == 2
-    assert t["n_tensor_tables"] == 1 and t["n_ctr_counts"] == 4
-
-
-def test_unsupported_ctr_type_refuses_by_name():
-    for name in ("Buckets", "BinarizedTargetMeanValue", "FloatTargetMeanValue"):
-        _raises(lambda: parse_model_text(CTR_TEXT.replace("type FeatureFreq", f"type {name}")), name)
-    _raises(lambda: parse_model_text(CTR_TEXT.replace("type FeatureFreq", "type Mystery")), "Mystery")
-
-
-def test_what_predict_floats_refuses_is_refused_at_load():
-    _raises(lambda: parse_model_text(CTR_TEXT.replace("ctr_columns 1", "ctr_columns 2")),
-            "2 CTR columns and 1 CTR tables")
-    _raises(lambda: parse_model_text(CTR_TEXT.replace("ctr_entry 0 2 1\n", "")), "declares 3 entries")
-    _raises(lambda: parse_model_text(CTR_TEXT.replace("type ctr", "type float")), "says type 'float'")
-    _raises(lambda: parse_model_text(TENSOR_TEXT.replace("counts 4 5 3 1 1", "counts 4 5 3 1 2")),
-            "do not sum to denominator")
-    _raises(lambda: parse_model_text(TENSOR_TEXT.replace("sources 2 0 1", "sources 2 1 0")), "canonical")
 
 
 def _binary_built():
