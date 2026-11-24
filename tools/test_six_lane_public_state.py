@@ -170,7 +170,7 @@ class PublicStateMetadataTest(unittest.TestCase):
         self.assertEqual(self.capture(paths=public_fitted_state_paths('PCA'))['completeness'], 'complete_declared_scope')
 
     def test_ols_prediction_archive_remains_partial(self):
-        arrays = dict(format=np.array(['mojolearn-linear-1']), estimator=np.array(['LinearRegression']),
+        arrays = dict(format=np.array(['mojolearn-linear-2']), estimator=np.array(['LinearRegression']),
                       numeric_mode=np.array(['identical']), coef=np.zeros(3, dtype='<f4'),
                       intercept=np.zeros(1, dtype='<f8'), meta=np.array([3, 1], dtype='<i8'))
         model = fixture_model('LinearRegression', 'mojolearn.linear_model', arrays)

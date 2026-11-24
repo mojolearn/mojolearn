@@ -21,7 +21,7 @@ import mojolearn._verify_native_runtime as observer
 
 
 def _payload(compression=zipfile.ZIP_STORED, **changes):
-    values = dict(format="mojolearn-linear-1", estimator="HostLinearRegression",
+    values = dict(format="mojolearn-linear-2", estimator="HostLinearRegression",
                   numeric_mode="identical", coef=np.array([.75, -.5, .125], "<f4"),
                   intercept=np.array([.25], "<f8"), meta=np.array([3, 1], "<i8"),
                   extra_bytes=np.array([b"a", b"b"], "S4"))
@@ -497,7 +497,7 @@ def test_public_load_allocates_the_connected_model_and_restores_ridge_settings(c
 
 
 @pytest.mark.parametrize("field,value,message", [
-    ("format", "wrong", "model archive format does not match mojolearn-linear-1"),
+    ("format", "wrong", "model archive format does not match mojolearn-linear-2"),
     ("numeric_mode", "wrong", "invalid saved numeric_mode"),
     ("meta", np.array([3], "<i8"), "model meta must hold two fields"),
     ("coef", np.ones(2, "<f4"), "model coef does not match n_features_in_"),

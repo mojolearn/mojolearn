@@ -13,7 +13,7 @@ from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.classical_archive_output_door import archive_numeric_pack
-from bindings.classical_arrays_door import classical_numpy
+from bindings.classical_arrays_door import classical_numpy, classical_array, classical_address
 from bindings.classical_archive_door import _archive_class_name_unpack
 from providers.python.linear_state_boundary_door import linear_state_publish
 from core.native_archive_read import NativeArchiveDecoded
@@ -39,12 +39,21 @@ def archive_linear_pack(cls: PythonObject, plan: NativeLinearArchivePlan,
     # CPU by class.
     py_setitem(fields, "device", PythonObject(None))
     py_setitem(fields, nk[].k_coef_, coefficients)
-    py_setitem(fields, nk[].k_intercept_, plan.intercept)
+    if plan.targets > 1:
+        # Format 2 (lane w3f3-k): one float64 intercept per target.
+        var intercepts = classical_array(plan.targets, 0, context, True)
+        var icpt = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(intercepts)))
+        for t in range(plan.targets):  # small-loop(the targets' intercepts)
+            icpt[t] = plan.intercepts[t]
+        py_setitem(fields, nk[].k_intercept_, intercepts)
+    else:
+        py_setitem(fields, nk[].k_intercept_, plan.intercept)
     py_setitem(fields, nk[].k_n_features_in_, plan.features)
     if ridge:
         py_setitem(fields, nk[].k_alpha, plan.alpha)
         py_setitem(fields, nk[].k_solver, "auto")
         py_setitem(fields, nk[].k_normalize, False)
         py_setitem(fields, nk[].k_solver_, "eig")
-    linear_state_publish(model, coefficients, PythonObject(None), plan.features, plan.intercept, 0.0, False)
+    linear_state_publish(model, coefficients, PythonObject(None), plan.features, plan.intercept, 0.0, False,
+                         plan.targets)
     return model

@@ -5,7 +5,7 @@ from core.hostptr import f32_ptr
 from core.host_predict_threads import host_predict_task_count
 from core.estimators_host_impl import _positive
 from core.host_finite_scan import host_all_finite_f32
-from core.classical_host_predict import host_ols_predict_into
+from core.classical_host_predict import host_ols_predict_into, host_ols_predict_targets_into
 from core.linear_boundary_types import LINEAR_PREDICT_ABI, LinearPredictRequest, linear_predict_request_from_spans
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -20,6 +20,14 @@ def linear_predict_host(request: LinearPredictRequest) raises -> Int:
     _positive(request.cols, "n_features")
     if request.test_x and not host_all_finite_f32(f32_ptr(request.x), request.rows * request.cols):
         return 1
+    if request.targets > 1:
+        # THE T WORD (lane w3f3-k): a multi-target Ridge, X . coef^T in one
+        # gemm (every cell the one-target fold), then each target's
+        # intercept epilogue.
+        host_ols_predict_targets_into(f32_ptr(request.x), f32_ptr(request.coef),
+            MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=request.intercepts), f32_ptr(request.dst),
+            request.rows, request.cols, request.targets, host_predict_task_count(request.rows))
+        return 0
     var intercept = Float32(request.intercept)
     host_ols_predict_into(f32_ptr(request.x), f32_ptr(request.coef), f32_ptr(request.dst),
         request.rows, request.cols, intercept, host_predict_task_count(request.rows))

@@ -25,7 +25,7 @@ NUMERICS: none. The epilogue is `_add_scalar_kernel`'s `ftz(ftz(v) +
 ftz(intercept))` (skipped when the intercept is exactly 0.0, DEVIATION 527).
 The status word is a predicate on bits.
 """
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu import block_dim, block_idx, thread_idx
 from checks.numerics import ftz
 from core.admitted_finite_status import enqueue_finite_status
@@ -129,5 +129,90 @@ def ols_predict_device(
     _ = coef^
     _ = z^
     _ = status^
+    _ = word^
+    return bad
+
+
+def ols_predict_lay_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    z: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    targets_in: Int32,
+    target_in: Int32,
+):
+    """`dst[i, t] = z[i]` (rows x targets, row-major): one thread per row;
+    an exact copy (lane w3f3-k)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        dst.unsafe_store(i * Int(targets_in) + Int(target_in), z.unsafe_load(i))
+
+
+def ols_predict_device_targets(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    intercepts: MutPointer[Float64, MutUntrackedOrigin],
+    out_addr: Int,
+    n_rows: Int,
+    n_features: Int,
+    targets: Int,
+    test_x: Bool,
+) raises -> Int:
+    """A multi-target Ridge's `out[n_rows x targets]` = X . coef^T +
+    intercepts (lane w3f3-k), float32 words at `out_addr`, row-major: X and
+    every coefficient row go up ONCE, each target is the measured gemv
+    (`gemv_n_ols_predict`, the one-target body, so each column is the
+    one-target prediction's words) and the same epilogue into its own
+    column, laid into one rows x targets block on the device, which comes
+    down in one copy at the call's one synchronize. `test_x` as
+    `ols_predict_device`."""
+    var rows = max(n_rows, 1)
+    var test = test_x and n_rows > 0 and n_features > 0
+    var x = ctx.enqueue_create_buffer[DType.float32](max(n_rows * n_features, 1))
+    var block = ctx.enqueue_create_buffer[DType.float32](max(n_rows * targets, 1))
+    var status = ctx.enqueue_create_buffer[DType.int32](1)
+    var coefs = List[DeviceBuffer[DType.float32]]()
+    var zs = List[DeviceBuffer[DType.float32]]()
+    for _ in range(targets):  # driver-loop: over the targets (one coefficient row and one result each)
+        coefs.append(ctx.enqueue_create_buffer[DType.float32](max(n_features, 1)))
+        zs.append(ctx.enqueue_create_buffer[DType.float32](rows))
+    if n_rows * n_features > 0:
+        ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    if n_features > 0:
+        for t in range(targets):  # driver-loop: over the targets (their coefficient rows, uploaded once)
+            ctx.enqueue_copy(dst_buf=coefs[t], src_ptr=MutPointer[Float32, MutUntrackedOrigin](
+                unsafe_from_address=Int(coef_ptr) + 4 * t * n_features))
+    var grid = (n_rows + 1 + _EPI_TPB - 1) // _EPI_TPB
+    for t in range(targets):  # driver-loop: over the targets (one gemv, epilogue and lay each)
+        gemv_n_ols_predict(ctx, zs[t], x, coefs[t], n_rows, n_features)
+        var intercept = Float32(intercepts[t])
+        # The one-target rule per target: `x + 0.0` skipped (DEVIATION
+        # 527); the first target's epilogue also zeroes the status word.
+        var add = intercept != Float32(0.0)
+        if n_rows > 0 and (add or (test and t == 0)):
+            ctx.enqueue_function[ols_predict_epilogue_kernel](
+                zs[t].unsafe_ptr(), status.unsafe_ptr(), Int32(n_rows), intercept, Int32(1 if add else 0),
+                grid_dim=(grid, 1, 1), block_dim=(_EPI_TPB, 1, 1),
+            )
+        if n_rows > 0:
+            ctx.enqueue_function[ols_predict_lay_kernel](
+                block.unsafe_ptr(), zs[t].unsafe_ptr(), Int32(n_rows), Int32(targets), Int32(t),
+                grid_dim=((n_rows + _EPI_TPB - 1) // _EPI_TPB, 1, 1), block_dim=(_EPI_TPB, 1, 1),
+            )
+    if test:
+        enqueue_finite_status(ctx, x.unsafe_ptr(), n_rows * n_features, status.unsafe_ptr(), 0)
+    var word = List[Int32](length=1, fill=0)
+    if n_rows > 0:
+        ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out_addr), src_buf=block)
+    if test:
+        ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(word.unsafe_ptr())),
+                         src_buf=status)
+    ctx.synchronize()
+    var bad = 1 if test and word[0] != Int32(0) else 0
+    _ = x^
+    _ = block^
+    _ = status^
+    _ = coefs^
+    _ = zs^
     _ = word^
     return bad

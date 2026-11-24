@@ -1285,8 +1285,12 @@ def _clf_predict(model: PythonObject, binding: PythonObject, x_source: PythonObj
     var result = _classify(model, binding, x_source, False, context)
     var labels = result[0]
     var size = Int(py=labels.size)
+    # The label names, read ONCE per call for either shape (the 1-D predict
+    # always read them; lane w3f3-k moved the read before the shape branch so
+    # a 2-D predict makes the same one read, no second).
+    var names = py_get(fields, PythonObject("_label_names"), PythonObject(None))
     if _truth(family_field(fields, "outputs_2d_")):
-        var output_names = py_get(fields, PythonObject("_label_names"), PythonObject(None))
+        var output_names = names
         if output_names is not None:
             # Per-output label names (lane w3f3-k: a multi-output state packed
             # from a search over str / bool labels votes on codes).
@@ -1303,7 +1307,6 @@ def _clf_predict(model: PythonObject, binding: PythonObject, x_source: PythonObj
     labels_cast(Int(py=classical_address(labels)), "<i4", Int(py=classical_address(codes)), "<i8", size, context)
     _ = labels  # keep the Python object alive through the native call above
     _ = codes  # keep the Python object alive through the native call above
-    var names = py_get(fields, PythonObject("_label_names"), PythonObject(None))
     if names is not None:
         var decoded = classical_decode_labels(names, codes, labels_scope(model, context))
         knn_door_clock_mark("predict_output_cast")

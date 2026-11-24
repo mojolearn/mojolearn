@@ -4,6 +4,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.admitted_input_unpack import AdmittedX, admit_x, admit_f32
 from core.linear_boundary_run import linear_predict_targets_run, linear_r2_targets
+from providers.python.linear_predict_boundary_unpack import linear_intercepts_unpack
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_validate_unpack import classical_check_x_snapshot, classical_estimator_name
 from bindings.native_loaded_module_door import native_loaded_module
@@ -47,13 +48,19 @@ def classical_linear_score(model: PythonObject, args: PythonObject,
     var cols = admitted_x.cols
     state.features = Int(py=feature_source)
     linear_state_check_width(state, cols, est)
-    if Int(py=coefficient_source.ndim) == 2:
-        # THE 2-D y (lane w3f3-k): a Ridge fitted on several targets scores
-        # scikit-learn's r2_score(y, predict(X)) averaged over the targets.
-        _ = x
-        return _score_targets(model, fields, args, route, pins, context, admitted_x, est,
-                              Int(py=coefficient_source.shape[0]))
-    var coef = admit_x(coefficient_source, 1, "coef_", context)
+    # THE 2-D y (lane w3f3-k): a Ridge fitted on several targets (its 2-D
+    # coef_, which the one-target admission refuses) scores scikit-learn's
+    # r2_score(y, predict(X)) averaged over the targets. Decided on that
+    # refusal only: the one-target score reads nothing more.
+    var coef = PythonObject(None)
+    try:
+        coef = admit_x(coefficient_source, 1, "coef_", context)
+    except error:
+        if _two_d(coefficient_source):
+            _ = x
+            return _score_targets(model, fields, args, route, pins, context, admitted_x, est,
+                                  Int(py=coefficient_source.shape[0]))
+        raise error^
     state.coef_count = Int(py=coef.size)
     linear_state_check_coefficients(state, cols)
     state.coef = Int(py=classical_address(coef))
@@ -109,6 +116,14 @@ def classical_linear_score(model: PythonObject, args: PythonObject,
     return PythonObject(result)
 
 
+def _two_d(value: PythonObject) -> Bool:
+    """An array-like `coef_` of rank 2 (False for anything else)."""
+    try:
+        return Int(py=value.ndim) == 2
+    except:
+        return False
+
+
 def _score_targets(model: PythonObject, fields: PythonObject, args: PythonObject, route: DeviceRoute,
     pins: PythonObject, context: PythonObject, admitted_x: AdmittedX, est: String, targets: Int) raises -> PythonObject:
     """`Ridge.score(X, Y)` of a multi-target fit (lane w3f3-k): the
@@ -120,20 +135,14 @@ def _score_targets(model: PythonObject, fields: PythonObject, args: PythonObject
     var state = LinearModelState()
     state.coef_count = Int(py=coef.size)
     linear_state_check_coefficients(state, cols * targets)
-    var intercept_source = fields["intercept_"]
-    var intercepts = List[Float64]()
-    for t in range(targets):  # driver-loop: over the targets (their public intercepts)
-        var word = intercept_source[t]
-        intercepts.append(Float64(py=word))
+    var intercepts = linear_intercepts_unpack(fields["intercept_"], targets, context)
     var target = admit_f32(args[1], 2, "y", context)
     linear_r2_check_target(rows, target.rows)
     if target.cols != targets:
         raise Error("ValueError: y has " + String(target.cols) + " targets, but " + est + " was fitted on "
                     + String(targets))
-    var columns = List[Float32](length=rows * targets, fill=Float32(0.0))
     var predictions = List[Float32](length=rows * targets, fill=Float32(0.0))
     var coef_address = Int(py=classical_address(coef))
-    var columns_address = Int(columns.unsafe_ptr())
     var predictions_address = Int(predictions.unsafe_ptr())
     var target_address = target.address
     var x_address = admitted_x.address
@@ -142,14 +151,13 @@ def _score_targets(model: PythonObject, fields: PythonObject, args: PythonObject
     var py = Python()
     try:
         with GILReleased(py):
-            linear_predict_targets_run(entry, x_address, coef_address, intercepts, columns_address,
-                                       predictions_address, rows, cols, targets)
+            _ = linear_predict_targets_run(entry, x_address, coef_address, intercepts, predictions_address,
+                                           rows, cols, targets)
             result = linear_r2_targets(target_address, predictions_address, rows, targets)
     finally:
         _ = admitted_x
         _ = coef
         _ = target
-        _ = columns
         _ = predictions
         _ = intercepts
         _ = pins
