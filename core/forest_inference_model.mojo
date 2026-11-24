@@ -584,29 +584,34 @@ struct ResidentForest(Movable):
         finally:
             shared_slot_unlock(word)
 
-    def reads_device_rows(self) -> Bool:
-        """True when a prediction may read rows already on the device
-        (`predict_rows_into`): the one-device snapshot on the registry's
-        process context, which is also the image's fit and store context
-        (lane vdf-scope-trees2a)."""
-        return self.shared and not self.pool
-
-    def predict_rows_into[RF_INPUT: Bool](mut self, mut dx: DeviceBuffer[DType.float32],
+    def predict_rows_into[RF_INPUT: Bool](mut self, src_ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32],
         output: MutPointer[Float32, MutAnyOrigin], rows: Int, features: Int, outputs: Int) raises:
         """`predict_into` on `rows` ROW-major rows already on the device in
-        `dx` (lane vdf-scope-trees2a: the rows an image's device store took
-        on its context, which is this snapshot's): no upload; the same input
-        scan, traversal, output scan and one read of the output. The caller
-        keeps `dx` alive until return. The call's own workspace (the pool),
-        as `predict_into`'s shared path: nothing of the snapshot is written."""
+        `dx` on `src_ctx` (lane vdf-scope-trees2a: the rows an image's device
+        store took on its context, which is this snapshot's): no upload; the
+        same input scan, traversal, output scan and one read of the output.
+        The caller keeps `dx` alive until return. The call's own workspace
+        (the pool), as `predict_into`'s shared path: nothing of the snapshot
+        is written. A snapshot on several devices (lane vdf-scope-trees3):
+        each owner takes its rows device to device
+        (`PooledForest.predict_rows_into`), no host read of the rows."""
         if features != self.features or outputs != self.outputs:
             raise Error("resident forest dimensions differ from prepared snapshot")
         if rows < 0 or rows > 2147483647 // features or rows > 2147483647 // outputs:
             raise Error("resident forest prediction dimensions exceed Int32")
         if rows == 0:
             return
-        if not self.reads_device_rows():
-            raise Error("resident forest: device rows need the one-device shared snapshot")
+        if self.pool:
+            var pooled = self._enter()
+            try:
+                var view = dx.create_sub_buffer[DType.float32](0, rows * features)
+                self.pool.value().predict_rows_into[RF_INPUT](src_ctx, view^, output, rows)
+            finally:
+                shared_slot_unlock(pooled)
+            return
+        if not self.shared:
+            # Unreachable through the registry (`resident_prepare` always hands its process context).
+            raise Error("resident forest: device rows need the registry's shared context")
         var slot = RF_IO.get_or_create_ptr()
         comptime if not RF_INPUT:
             slot = ET_IO.get_or_create_ptr()
@@ -623,18 +628,28 @@ struct ResidentForest(Movable):
         finally:
             slot[].give(io)
 
-    def labels_rows_into[RF_INPUT: Bool](mut self, mut dx: DeviceBuffer[DType.float32],
+    def labels_rows_into[RF_INPUT: Bool](mut self, src_ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32],
         output: MutPointer[Int32, MutAnyOrigin], rows: Int, features: Int, outputs: Int) raises:
         """`predict_labels` on rows already on the device in `dx` (as
-        `predict_rows_into`): the int32 codes, one read back."""
+        `predict_rows_into`, the device pool included): the int32 codes, one
+        read back."""
         if features != self.features or outputs != self.outputs or outputs < 2:
             raise Error("resident forest dimensions differ from prepared snapshot")
         if rows < 0 or rows > 2147483647 // features or rows > 2147483647 // outputs:
             raise Error("resident forest prediction dimensions exceed Int32")
         if rows == 0:
             return
-        if not self.reads_device_rows():
-            raise Error("resident forest: device rows need the one-device shared snapshot")
+        if self.pool:
+            var pooled = self._enter()
+            try:
+                var view = dx.create_sub_buffer[DType.float32](0, rows * features)
+                self.pool.value().predict_labels_rows_into[RF_INPUT](src_ctx, view^, output, rows)
+            finally:
+                shared_slot_unlock(pooled)
+            return
+        if not self.shared:
+            # Unreachable through the registry (`resident_prepare` always hands its process context).
+            raise Error("resident forest: device rows need the registry's shared context")
         var slot = RF_IO.get_or_create_ptr()
         comptime if not RF_INPUT:
             slot = ET_IO.get_or_create_ptr()
@@ -1038,27 +1053,20 @@ def resident_predict_labels[RF_INPUT: Bool](handle: Int,
     lease[].predict_labels[RF_INPUT](x, output, rows, features, outputs)
 
 
-def resident_reads_device_rows[RF_INPUT: Bool](handle: Int) raises -> Bool:
-    """Whether the snapshot `handle` predicts on device rows
-    (`ResidentForest.reads_device_rows`; lane vdf-scope-trees2a)."""
-    var lease = _resident_lease[RF_INPUT](handle)
-    return lease[].reads_device_rows()
-
-
-def resident_predict_rows_into[RF_INPUT: Bool](handle: Int, mut dx: DeviceBuffer[DType.float32],
+def resident_predict_rows_into[RF_INPUT: Bool](handle: Int, src_ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32],
     output: MutPointer[Float32, MutAnyOrigin], rows: Int, features: Int, outputs: Int) raises:
-    """`resident_predict_into` on rows already on the device (lane
-    vdf-scope-trees2a; `ResidentForest.predict_rows_into`)."""
+    """`resident_predict_into` on rows already on the device in `dx` on
+    `src_ctx` (lane vdf-scope-trees2a; `ResidentForest.predict_rows_into`)."""
     var lease = _resident_lease[RF_INPUT](handle)
-    lease[].predict_rows_into[RF_INPUT](dx, output, rows, features, outputs)
+    lease[].predict_rows_into[RF_INPUT](src_ctx, dx, output, rows, features, outputs)
 
 
-def resident_labels_rows_into[RF_INPUT: Bool](handle: Int, mut dx: DeviceBuffer[DType.float32],
+def resident_labels_rows_into[RF_INPUT: Bool](handle: Int, src_ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32],
     output: MutPointer[Int32, MutAnyOrigin], rows: Int, features: Int, outputs: Int) raises:
-    """`resident_predict_labels` on rows already on the device (lane
-    vdf-scope-trees2a; `ResidentForest.labels_rows_into`)."""
+    """`resident_predict_labels` on rows already on the device in `dx` on
+    `src_ctx` (lane vdf-scope-trees2a; `ResidentForest.labels_rows_into`)."""
     var lease = _resident_lease[RF_INPUT](handle)
-    lease[].labels_rows_into[RF_INPUT](dx, output, rows, features, outputs)
+    lease[].labels_rows_into[RF_INPUT](src_ctx, dx, output, rows, features, outputs)
 
 
 def resident_stage_input[RF_INPUT: Bool](x: MutPointer[Float32, MutAnyOrigin], n: Int) raises -> Bool:
