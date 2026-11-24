@@ -731,16 +731,18 @@ there; from the SIMD width up every lane of the vendor kernel has work.
 #: NVIDIA 2.68 ms / AMD 1.51 ms vs 0.8.55 5.45 / 3.54 and candidate
 #: 4c2340386abc 5.52 / 3.02 (2x); istella infer did not regress. One cell
 #: each, with other 0.8.25 -> 0.8.37 harness/Python changes in between. So
-#: OLS predict (`gemv_n_ols_predict`) launches the measured plain kernel by
-#: default; `-D MOJOLEARN_IDN_OLS_PREDICT_TILED` is the B arm (today's tiled
-#: kernel), owed A/B row ols-predict-tiled (ols infer taxi + istella, NV +
-#: AMD) in bench/results/paper_compare/owed-pre0867.json. Fit and every other
-#: `gemv_n` caller keep NV_AMD_IDENTICAL_STEPS. Both kernels run the same
-#: chain per row: no bit moves.
+#: OLS predict (`gemv_n_ols_predict`) launches the measured plain kernel in
+#: IDENTICAL. The tiled kernel as its B arm (`-D MOJOLEARN_IDN_OLS_PREDICT_TILED`)
+#: was timed on 2026-11-24 (nvc-ab-20261124T095727Z-92fd9f, NVIDIA L40S, job
+#: nvc1-0002): 4 cells, median 0.98, ols infer istella 20.51 -> 19.77 ms and taxi
+#: 1.53 -> 1.42 ms (noise), ols istella fit 509 -> 733 ms (1.44): not a winner,
+#: deleted. Fit and every other `gemv_n` caller keep NV_AMD_IDENTICAL_STEPS. Both
+#: kernels run the same chain per row: no bit moves.
 # TOMBSTONE: MOJOLEARN_IDN_OLS_PREDICT_TILED (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 1900f1d297.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_PREDICT_TILED.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime IDN_OLS_PREDICT_TILED = is_defined["MOJOLEARN_IDN_OLS_PREDICT_TILED"]()
+# TOMBSTONE: MOJOLEARN_IDN_OLS_PREDICT_TILED (NOISE/LOSER: 4 cells median 0.98, 0.93..1.44, ols istella fit 509 -> 733 ms; A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_OLS_PREDICT_TILED.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
 
 
 def gemv_n_ols_predict(
@@ -753,9 +755,8 @@ def gemv_n_ols_predict(
 ) raises:
     """`z[m] = x[m x k] . y[k]` for OLS predict: IDENTICAL launches the
     plain one-thread-per-row `pinned_gemv_n_kernel` (the measured 0.8.25
-    route) unless `-D MOJOLEARN_IDN_OLS_PREDICT_TILED`; every other case is
-    `gemv_n`."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not IDN_OLS_PREDICT_TILED:
+    route); every other case is `gemv_n`."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         ctx.enqueue_function[pinned_gemv_n_kernel](
             z.unsafe_ptr(),
             x.unsafe_ptr(),

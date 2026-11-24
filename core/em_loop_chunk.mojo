@@ -23,15 +23,12 @@ after it, tens of microseconds) per iteration against up to
   iteration (the loop is then the per-iteration loop it replaced).
 
 The rule is a cost bound over the work of an iteration, the same on every
-vendor; it keys on no dimension. `-D MOJOLEARN_EM_LOOP_CHECK_EVERY=<k>`
-(k >= 1) pins the interval for the A/B that prices the bound. The interval
-moves no bit: the committed parameters are the stopping iteration's for any
-interval.
+vendor; it keys on no dimension. The interval moves no bit: the committed
+parameters are the stopping iteration's for any interval.
 """
-from std.sys.compile import get_defined_int
 
-#: `-D MOJOLEARN_EM_LOOP_CHECK_EVERY=<k>`: the interval, pinned (0: the rule).
-comptime EM_LOOP_CHECK_EVERY_PIN = get_defined_int["MOJOLEARN_EM_LOOP_CHECK_EVERY", 0]()
+# TOMBSTONE: MOJOLEARN_EM_LOOP_CHECK_EVERY (arms em-check-1 NOISE: 7 cells median 1.00; em-check-8 LOSER: 3 cells median 1.02, gmm taxi 300000 24.79 -> 27.74 ms; A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_EM_LOOP_CHECK_EVERY.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
 
 #: Iterations per read while an iteration is launch-bound.
 comptime EM_LOOP_CHUNK = 8
@@ -45,8 +42,6 @@ comptime EM_LOOP_LAUNCH_BOUND_WORK = 1 << 24
 def em_loop_check_every(n: Int, k: Int, d: Int) -> Int:
     """The read interval of an EM device loop over `n` rows, `k` components
     and `d` features (see the module note)."""
-    comptime if EM_LOOP_CHECK_EVERY_PIN > 0:
-        return EM_LOOP_CHECK_EVERY_PIN
     var work = n * k * d * d
     if work <= EM_LOOP_LAUNCH_BOUND_WORK:
         return EM_LOOP_CHUNK

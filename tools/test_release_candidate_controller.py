@@ -270,7 +270,7 @@ class OwedArms(unittest.TestCase):
         self.owed = Path(self.td.name) / "owed.json"
         self.owed.write_text(json.dumps(dict(b_arms={
             "small-mlp-generic": dict(define="MOJOLEARN_SMALL_MLP_GENERIC_OPS"),
-            "em-check-1": dict(define="MOJOLEARN_EM_LOOP_CHECK_EVERY=1"),
+            "tile-blocks-192": dict(define="MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192"),
             "dec-1": dict(define="MOJOLEARN_D", owed="DECIDED", evidence="L40S A/B"),
             "env-1": dict(define="", env="MOJOLEARN_V=1", owed="RUN")})))
 
@@ -282,19 +282,19 @@ class OwedArms(unittest.TestCase):
                          ("small.mlp.generic", "MOJOLEARN_SMALL_MLP_GENERIC_OPS", "small-mlp-generic"))
         self.assertEqual(RC.resolve_owed("small.mlp.generic", "", "MOJOLEARN_SMALL_MLP_GENERIC_OPS", str(self.owed)),
                          ("small.mlp.generic", "MOJOLEARN_SMALL_MLP_GENERIC_OPS", "small-mlp-generic"))
-        self.assertTrue(RC.LABEL_RE.fullmatch(RC.resolve_owed("em-check-1", "", "", str(self.owed))[0]))
+        self.assertTrue(RC.LABEL_RE.fullmatch(RC.resolve_owed("tile-blocks-192", "", "", str(self.owed))[0]))
 
     def test_owed_arm_takes_the_define(self):
-        self.assertEqual(RC.resolve_owed("", "em-check-1", "", str(self.owed)),
-                         ("em.check.1", "MOJOLEARN_EM_LOOP_CHECK_EVERY=1", "em-check-1"))
+        self.assertEqual(RC.resolve_owed("", "tile-blocks-192", "", str(self.owed)),
+                         ("tile.blocks.192", "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192", "tile-blocks-192"))
 
     def test_refusals(self):
         with self.assertRaises(SystemExit):
             RC.resolve_owed("", "gbdtoff", "", str(self.owed))                           # not owed
         with self.assertRaises(SystemExit):
-            RC.resolve_owed("", "em-check-1", "MOJOLEARN_EM_LOOP_CHECK_EVERY=8", str(self.owed))
+            RC.resolve_owed("", "tile-blocks-192", "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=1024", str(self.owed))
         with self.assertRaises(SystemExit):
-            RC.resolve_owed("small-mlp-generic", "em-check-1", "", str(self.owed))
+            RC.resolve_owed("small-mlp-generic", "tile-blocks-192", "", str(self.owed))
         with self.assertRaises(SystemExit) as cm:
             RC.resolve_owed("", "dec-1", "", str(self.owed))                            # DECIDED: no build
         self.assertIn("DECIDED", str(cm.exception))
@@ -308,8 +308,8 @@ class OwedArms(unittest.TestCase):
         self.assertEqual(RC.resolve_owed("my-run", "", "A=1", str(self.owed)), ("my.run", "A=1", None))
 
     def test_the_parser_takes_owed_arm(self):
-        a = RC.parse(["--commit", C, "--owed-arm", "em-check-1"])
-        self.assertEqual(a.owed_arm, ["em-check-1"])   # repeatable: several arms at once (run_arms)
+        a = RC.parse(["--commit", C, "--owed-arm", "tile-blocks-192"])
+        self.assertEqual(a.owed_arm, ["tile-blocks-192"])   # repeatable: several arms at once (run_arms)
 
 
 class RecordedTooling(unittest.TestCase):

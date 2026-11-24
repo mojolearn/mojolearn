@@ -80,16 +80,16 @@ from x_decomp.kit import Kit, Mat, OP_ABS, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, 
 # scikit-learn 0.9636 both, unlike the Cholesky arm), taxi infer 0.863 -> 0.896 (1.04, median of 20, spread
 # 0.85..1.78 / 0.84..2.65: noise, the arm does not touch predict); istella (d = 220, above the one-block bound, so
 # the serial loop on both arms) fit 122,670 -> 122,650 (1.000) and 122,770 -> 122,910 (1.001), infer 1.006.
-# PROMOTED on the NVIDIA and AMD columns: DEFAULT ON there since 2026-11-20 (-D MOJOLEARN_MCD_FAST_LOCKSTEP_OFF
-# builds the serial candidate loop). The Apple column keeps the serial loop (a round enqueues up to trials x about
+# PROMOTED on the NVIDIA and AMD columns: DEFAULT ON there since 2026-11-20 (the -D MOJOLEARN_MCD_FAST_LOCKSTEP_OFF
+# build of the serial candidate loop is deleted, see the TOMBSTONE below). The Apple column keeps the serial loop (a round enqueues up to trials x about
 # 60 launches before its wait and was never run on Metal); there the old name MOJOLEARN_MCD_FAST_LOCKSTEP still
 # opts in, for the owed smoke. The words are the same in either order, so the columns agree whichever runs.
 # Not timed: the neighbouring shape and the non-board dataset named above.
 #
 # EVERY WIDTH since lane sp-mcd-wide (2026-11-20; NOT MEASURED, owed row mcd-wide-lockstep): the bound above
 # ("up to XD_EIGH_ONE_BLOCK_N columns") is gone on the NVIDIA and AMD columns, so narrow and wide inputs take one
-# path and the serial candidate loop is no longer the wide default there (it is the -D MOJOLEARN_MCD_FAST_LOCKSTEP_OFF
-# build and the Apple column only). Cause: above the bound a 220-column fit still ran its ~560 candidates one at a
+# path and the serial candidate loop is no longer the wide default there (it serves the Apple column, `fast` and
+# `select_init_best` only). Cause: above the bound a 220-column fit still ran its ~560 candidates one at a
 # time, each first solve and each C-step a wait of its own (round 3 above: istella 1.000). What a wide round does
 # (x_decomp/kit_device.mojo `DMcd._ls_eigh`): each candidate's eigen solve takes `DevExec.eigh_into`'s own route,
 # the tridiagonal solve where that route tries it, all candidates enqueued and their refusal words read at ONE
@@ -112,9 +112,15 @@ from x_decomp.kit import Kit, Mat, OP_ABS, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, 
 # most of the per-candidate Jacobi time of the merged stage (50 refused solves as one launch) and ~560 waits;
 # time the board rows with a neighbouring shape (100,000 x 64 and 300,000 x 16 random float32, 5 percent
 # outliers) and a non-board dataset (covtype's 10 continuous columns; all 54 columns for a singular wide case).
+# A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002; arm = the `_OFF` serial loop):
+# 6 cells, median 1.43, the serial loop one-way slower: min-cov-det istella fit 84,981 -> 123,749 ms (1.46), taxi
+# 4,110 -> 5,897 (1.43); elliptic-envelope istella 84,976 -> 123,595 (1.45), taxi 4,143 -> 5,886 (1.42); infer
+# 1.00..1.11. The every-width lockstep is the only NVIDIA / AMD IDENTICAL form.
+# TOMBSTONE: MOJOLEARN_MCD_FAST_LOCKSTEP_OFF (old path, LOSER: 6 cells median 1.43, the serial candidate loop 1.42..1.46 slower; A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MCD_FAST_LOCKSTEP_OFF.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+# The serial loop itself stays: the Apple column (without the opt-in), `fast` and `select_init_best` run it.
 comptime MCD_LOCKSTEP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_MCD_FAST_LOCKSTEP_OFF"]()
     and (not TARGET_HAS_APPLE_GPU or is_defined["MOJOLEARN_MCD_FAST_LOCKSTEP"]())
 )
 #: the lockstep above the one-block bound: NVIDIA and AMD. The Apple opt-in stays at or below the bound (a wide

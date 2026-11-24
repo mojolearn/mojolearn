@@ -3636,15 +3636,16 @@ comptime KDE_QT_TILE_FLOATS = KDE_QT_CELL * KDE_QT_FEAT
 # 0.387). At the default q_tpb = 128 the rule takes the query tile for
 # d <= 16 and the default body above on AMD, d <= 56 on NVIDIA (the budget
 # note at KDE_QT_QUERY_CACHE_BYTES), covering every neighbouring width.
-# The A/B is owed (bench/results/paper_compare/owed-pre0867.json):
-# `-D MOJOLEARN_IDN_KDE_QTILE_FORCE` (the promoted every-d form, B arm),
-# this rule (A), on istella, taxi and one wide non-board dataset, NV and
-# AMD. Same bits either way (see the BITS note above): both bodies write
-# the same partial planes word for word.
+# The A/B of the rule against the promoted every-d form (`-D
+# MOJOLEARN_IDN_KDE_QTILE_FORCE`, B) ran on 2026-11-24 (nvc-ab-20261124T095727Z-92fd9f,
+# NVIDIA L40S, job nvc1-0002): the rule won, kde istella fit 28.16 -> 34.70 ms
+# under the every-d form (1.23), taxi 5.49 -> 5.54 (1.01). Same bits either way
+# (see the BITS note above): both bodies write the same partial planes word for word.
 # TOMBSTONE: MOJOLEARN_IDN_KDE_QTILE_FORCE (unmeasured opt-in arm, EXP:2398 PENDING) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 0ba472a9c7.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_KDE_QTILE_FORCE.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime KDE_IDN_QTILE_FORCE = KDE_IDN_QTILE and is_defined["MOJOLEARN_IDN_KDE_QTILE_FORCE"]()
+# TOMBSTONE: MOJOLEARN_IDN_KDE_QTILE_FORCE (LOSER: 2 cells median 1.12, kde istella fit 28.16 -> 34.70 ms; A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_KDE_QTILE_FORCE.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
 # THE BUDGET IS THE VENDOR'S L1, NOT ONE NUMBER (lane flag-knn-kde-fit,
 # 2026-11-15; owed driver rk-kde-qtile-widths, whose row says "a loss at 24
 # or 48 moves the 32 KiB budget"). Same-box L40S, host 590b12deb83b,
@@ -3668,9 +3669,7 @@ comptime KDE_QT_QUERY_CACHE_BYTES = (128 * 1024 - KDE_QT_TILE_FLOATS * 4) if TAR
 @always_inline
 def kde_qtile_applies(n_features: Int, q_tpb: Int) -> Bool:
     """True when the query-tile pass is the cheaper one for this width and
-    block (the cost rule above); `_FORCE` takes it at every width."""
-    comptime if KDE_IDN_QTILE_FORCE:
-        return True
+    block (the cost rule above)."""
     return q_tpb * KDE_QT_Q * n_features * 4 <= KDE_QT_QUERY_CACHE_BYTES
 
 
