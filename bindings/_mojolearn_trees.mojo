@@ -48,7 +48,7 @@ from core.forest_inference_run import (
     forest_predict_resident_labels_gpu_native, forest_gpu_resident_caps,
 )
 from bindings.forest_fit_boundary_unpack import forest_fit_args_py
-from core.forest_fit_request import ForestFitArgs, XF_CAP_DEVICE_SCAN, forest_export_verify_lists
+from core.forest_fit_request import ForestFitArgs, XF_CAP_DEVICE_SCAN, forest_export_verify_lists, fit_loop_put
 from core.extra_trees_member import extra_trees_member_publish_image
 from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish
 from core.forest_entry_table import FOREST_TABLE_ET
@@ -229,6 +229,8 @@ def _et_classifier_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> 
     else:
         with GILReleased(Python()):
             result = _et_classifier_fit_run[ROWMAJOR](params, times, total_start)
+    # The fit loop words the door asked for (XF_W_LOOP; lane alm-forest).
+    fit_loop_put(params.loop, result.forest.fit_loop)
     var stamp = times.start()
     var output = _retain_et_handle(result^)
     times.stop_host("boundary_export_handle", stamp)
@@ -248,6 +250,8 @@ def _et_regressor_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> I
     else:
         with GILReleased(Python()):
             result = _et_regressor_fit_run[ROWMAJOR](params, times, total_start)
+    # The fit loop words the door asked for (XF_W_LOOP; lane alm-forest).
+    fit_loop_put(params.loop, result.forest.fit_loop)
     var stamp = times.start()
     var output = _retain_et_handle(result^)
     times.stop_host("boundary_export_handle", stamp)

@@ -33,7 +33,7 @@ from core.forest_host_strict_run import (
 from core.forest_host_groves_run import (
     forest_prepare_host_native, forest_predict_resident_host_native, forest_release_host_native,
 )
-from core.forest_fit_request import ForestFitArgs, XF_CAP_STRICT, forest_export_verify_lists
+from core.forest_fit_request import ForestFitArgs, XF_CAP_STRICT, forest_export_verify_lists, fit_loop_put
 from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish
 from core.forest_entry_table import FOREST_TABLE_ET
 from core.native_descriptor_abi import NativeDescriptorError
@@ -211,8 +211,11 @@ def et_host_fit_result[CLASSIFIER: Bool, ROWMAJOR: Bool](params: ForestFitArgs) 
 
 def et_host_fit_handle[CLASSIFIER: Bool, ROWMAJOR: Bool](params: ForestFitArgs) raises -> Int:
     """One fit kept in ET_HOST_EXPORTS (the forest entry's XF_FIT): the
-    export handle."""
-    return et_host_retain(et_host_fit_result[CLASSIFIER, ROWMAJOR](params))
+    export handle. The fit loop words the caller asked for (XF_W_LOOP) are
+    written first."""
+    var result = et_host_fit_result[CLASSIFIER, ROWMAJOR](params)
+    fit_loop_put(params.loop, result.forest.fit_loop)
+    return et_host_retain(result^)
 
 
 def et_host_export_into(id: Int, dst: List[Int], trees: Int, nodes: Int, outputs: Int) raises:
