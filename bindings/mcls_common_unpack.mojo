@@ -29,6 +29,7 @@ from bindings.metrics_native_support_door import metric_is_real, metric_float, m
 from bindings.metrics_native_inputs_door import metric_shape, metric_shape_admitted, metric_flatten, metric_flatten_admitted
 from bindings.classical_pandas_door import classical_admit_value
 from std.python import Python, PythonObject
+from std.memory import unsafe_memcpy
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.py_attr import py_attr
@@ -539,8 +540,8 @@ def mc_labels(values: PythonObject, name: String, context: PythonObject, admitte
             var n = len(fast.codes)
             var fast_codes = family_array(Python.tuple(n), "<i4", context)
             var target = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(fast_codes)))
-            for i in range(n):  # driver-loop: native copy of the n codes
-                target[i] = fast.codes[i]
+            # lane vdf-xm-labels: one block copy of the n codes (was a per-row loop tagged driver-loop)
+            unsafe_memcpy(dest=target, src=FAMILY_I32P(unsafe_from_address=Int(fast.codes.unsafe_ptr())), count=n)
             _ = fast_codes  # keep the Python object alive through the native writes above
             return McLabels("string", n, p3_text_classes(labels, fast.first), fast_codes)
     var classes = mc_sorted(mc_set(labels))
