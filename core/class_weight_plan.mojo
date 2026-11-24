@@ -21,6 +21,35 @@ def class_weight_dict_refused(unknown_keys: Int, unweighted_classes: Int) -> Boo
     return unknown_keys > 0 and unweighted_classes > 0
 
 
+def class_weight_absent_words(listed: String) -> String:
+    """scikit-learn 1.9.1's words for a dict that `class_weight_dict_refused`
+    refuses (sklearn/utils/class_weight.py:116-120, compute_class_weight):
+    `listed` is the printed list of y's classes the dict leaves unweighted,
+    `np.array(unweighted_classes).tolist()` (lane mf-gate6: the one body of
+    these words for every door and member)."""
+    return "The classes, " + listed + ", are not in class_weight"
+
+
+def class_weight_absent_values(unweighted: List[Float64]) -> String:
+    """`class_weight_absent_words` over numeric classes (a member step whose
+    classes are its target's values, x_prep/iterimp_run.mojo): scikit-learn
+    lists `int(c)` per class (class_weight.py:105-106), so an integral class
+    prints as an integer ("[0, 2]"). The classes reaching here are integral
+    (a continuous target is refused before); one beyond the int64 range
+    prints as its float."""
+    var listed = String("[")
+    for i in range(len(unweighted)):  # driver-loop: over the unweighted classes (refusal words only)
+        if i > 0:
+            listed += ", "
+        var c = unweighted[i]
+        if c > -9.2e18 and c < 9.2e18:
+            listed += String(Int(c))
+        else:
+            listed += String(c)
+    listed += "]"
+    return class_weight_absent_words(listed)
+
+
 def class_weight_value(value: Float64) raises:
     if not isfinite(value) or value < 0:
         raise Error("class weights must be finite nonnegative real numbers")

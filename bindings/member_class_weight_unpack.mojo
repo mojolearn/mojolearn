@@ -62,6 +62,7 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_type
 from bindings.svc_common_unpack import svc_float
 from bindings.x_linear_common_unpack import xl_class_weights_unpack
 from core.class_weight_plan import class_weight_dict_refused
+from bindings.class_weight_absent_unpack import class_weight_absent_message
 from core.member_abi import MemberPlan
 from core.member_class_weight import (
     MEMBER_CW_NONE, MEMBER_CW_BALANCED, MEMBER_CW_DICT, MEMBER_CW_INVALID, member_cw_start, member_cw_pending,
@@ -131,13 +132,10 @@ def _svc_values(class_weight: PythonObject, classes: PythonObject, b: PythonObje
     var values = List[Float64](length=k, fill=1.0)
     var named = List[Bool](length=k, fill=False)
     var unknown = 0
-    var first_unknown = PythonObject(None)
     var items = py_call(b.list, py_call(py_call(b.dict, class_weight).items))
     for i in range(len(items)):  # driver-loop: over the user's class_weight entries
         var key = items[i][0]
         if not py_contains(classes, key):
-            if unknown == 0:
-                first_unknown = key
             unknown += 1
             continue
         var c = Int(py=py_call(classes.index, key))
@@ -149,8 +147,8 @@ def _svc_values(class_weight: PythonObject, classes: PythonObject, b: PythonObje
             if not named[c]:
                 unweighted += 1
         if class_weight_dict_refused(unknown, unweighted):
-            raise Error("mojolearn SVC: class_weight names the label " + family_repr(first_unknown)
-                        + ", which is not in y's classes " + family_repr(classes))
+            # scikit-learn's words, as the SVC door (lane mf-gate6)
+            raise Error(class_weight_absent_message(classes, class_weight, b))
     return values^
 
 

@@ -66,6 +66,14 @@ equal (the base's door rounds over the same CPU context), `logregh` /
 on an image without the reference CPU fit, that same refusal), `lassoh`
 the same refusal on both (its host image has no fit).
 
+Gate note (lane mf-gate6): base main d67c21591e vs the member route, the tree_post0 (24) and ctree_int (4) main
+lines differ while ridge / linreg / knn are equal. Not a draw-order fault: every column of `_data` and `_data_int`
+has missing entries, so skip_complete (6166f10c3e) changes no step here, and a tree member fits on its own
+random_state words, never the imputer's stream (as scikit-learn's per-step clone, sklearn/impute/_iterative.py:413).
+The main line also hashes every public fitted field of each step's estimator (`_fitted`): the base's door fit and
+the member PACK may publish different tree fields. tools/mf_gate6_iterimp_oracle.py compares the values with
+scikit-learn's (RUN OWED).
+
 Grid: estimator {Ridge(alpha=1), LinearRegression(), BayesianRidge(),
 GaussianProcessRegressor(random_state=0), DecisionTreeRegressor(random_state=0),
 KNeighborsRegressor()} x sample_posterior {False, True} x initial_strategy
