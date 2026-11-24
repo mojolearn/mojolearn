@@ -16,6 +16,32 @@ one reported, and a failed entry is linked again for a retry.
 Serial by nature: the frees of one close go to one binding store on one
 device context, which serializes them (each is a slot bookkeeping update,
 not work); there is nothing to split across cores.
+
+ONE CACHE PER BINDING FAMILY (lane vdf-scope-run, 2026-11-24). A device
+buffer belongs to the binding whose store made it, so a `resident()` scope
+keeps one cache per (binding family `prefix`, image route), as
+`ArenaScopeState.cache_of` always keyed it. What was x_prep-only is the
+STORE a cache frees into at the scope's close: it was re-resolved from the
+route word as the x_prep transport entry. Now the scope remembers, per
+(prefix, route), the transport entry the first `arena_scope_cache` call
+handed it (`_ARENA_FAMILY_STORES`, process-wide), and the close frees into
+that entry; x_prep keeps its resolution (no entry recorded for it is ever
+needed). THE ADDITIVE API for a member family with its own device store
+(trees, linear, cluster, neural):
+  * its image exports a TRANSPORT ENTRY with the x_prep transport numbering
+    and signature (x_prep/transport_abi.mojo: `ARENA_STORE_PUT` = XP_DEV_PUT
+    a: [src] i: [n_words] -> slot id; `ARENA_STORE_FREE` i: [id];
+    `ARENA_STORE_TAKE_ROWS` a: [idx] i: [src_id, row_words, n_idx] -> slot
+    id; `ARENA_STORE_LIVE` -> live slots), over its own
+    core/device_store.mojo store; its member route carries that EntryRef;
+  * a member call with `call.scope` / `call.pin` (MEMBER_CAN_SCOPE) calls
+    `arena_scope_store_put(call.scope, store, "<prefix>", x_address, words,
+    call.pin)` -> `ArenaCachePut` (sets `call.pin_kept` when `.pinned`), and
+    takes fold rows on its device with `arena_store_take_rows(store,
+    put.store_id, row_words, idx_address, n_idx)` (a fresh slot the member
+    frees with `arena_cache_free(store, id)` after its run);
+  * nothing else: the scope's close frees every family's entries into the
+    family's own store, and `resident.stats()` lists each family's cache.
 """
 from std.memory import ArcPointer
 from core.arena_state import (
@@ -24,19 +50,85 @@ from core.arena_state import (
 )
 from core.entry_table import EntryRef, entry_ref_mode, entry_ref_vendor
 from core.prep_entry_table import PrepEntryKey, xp_transport_ref, xp_transport_call
-from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_LIVE
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_LIVE, XP_DEV_TAKE_ROWS
+
+#: The transport operations every family store answers (the x_prep numbering).
+comptime ARENA_STORE_PUT = XP_DEV_PUT
+comptime ARENA_STORE_FREE = XP_DEV_FREE
+comptime ARENA_STORE_TAKE_ROWS = XP_DEV_TAKE_ROWS
+comptime ARENA_STORE_LIVE = XP_DEV_LIVE
+#: The family whose store is resolved by route alone (no record needed).
+comptime ARENA_PREFIX_X_PREP = "x_prep"
+
+
+@fieldwise_init
+struct _FamilyStore(Copyable, Movable):
+    """One family's transport entry on one image route."""
+    var prefix: String
+    var route: Int
+    var store: EntryRef
+
+
+struct _FamilyStores(Defaultable, Movable):
+    """The transport entries of the family stores a scope has cached into,
+    process-wide (an image's entry lives for the process). A handful of
+    rows: one per family and image."""
+    var rows: List[_FamilyStore]
+    var lock: List[Int64]
+
+    def __init__(out self):
+        self.rows = List[_FamilyStore]()
+        self.lock = List[Int64](length=1, fill=Int64(0))
+
+
+comptime _ARENA_FAMILY_STORES = SharedSlot[_FamilyStores, "MojolearnArenaFamilyStoresV1", 1]
+
+
+def _family_store_note(prefix: String, route: Int, store: EntryRef) raises:
+    """Record the transport entry of (`prefix`, `route`) once (x_prep needs
+    none). Called when a scope creates that family's cache."""
+    if prefix == ARENA_PREFIX_X_PREP:
+        return
+    var slot = _ARENA_FAMILY_STORES.get_or_create_ptr()
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].lock.unsafe_ptr())
+    shared_slot_lock(word)
+    try:
+        for i in range(len(slot[].rows)):  # driver-loop: over the recorded family stores (a handful)
+            if slot[].rows[i].route == route and slot[].rows[i].prefix == prefix:
+                return
+        slot[].rows.append(_FamilyStore(prefix.copy(), route, store))
+    finally:
+        shared_slot_unlock(word)
 
 
 def arena_cache_route(store: EntryRef) -> Int:
-    """The route word of a resolved x_prep transport entry: its mode and
-    vendor words. Two caches with one route share one device store."""
+    """The route word of a resolved transport entry: its mode and vendor
+    words. Two caches of one family with one route share one device store."""
     return (entry_ref_mode(store) << 8) | entry_ref_vendor(store)
 
 
 def arena_cache_store(route: Int) raises -> EntryRef:
-    """The transport entry a route word names (resolved once per scope
+    """The x_prep transport entry a route word names (resolved once per scope
     close; a cache owner object holds its own)."""
     return xp_transport_ref(PrepEntryKey((route >> 8) & 0xFF, route & 0xFF))
+
+
+def arena_cache_store(prefix: String, route: Int) raises -> EntryRef:
+    """The transport entry of the family `prefix` on `route`: the one its
+    scope cache was created with (`arena_scope_cache`), x_prep's by route."""
+    if prefix == ARENA_PREFIX_X_PREP:
+        return arena_cache_store(route)
+    var slot = _ARENA_FAMILY_STORES.get_or_create_ptr()
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].lock.unsafe_ptr())
+    shared_slot_lock(word)
+    try:
+        for i in range(len(slot[].rows)):  # driver-loop: over the recorded family stores (a handful)
+            if slot[].rows[i].route == route and slot[].rows[i].prefix == prefix:
+                return slot[].rows[i].store
+    finally:
+        shared_slot_unlock(word)
+    raise Error("RuntimeError: resident scope: no device store recorded for the binding family '" + prefix + "'")
 
 
 def arena_cache_new(store: EntryRef, prefix: String) raises -> Int:
@@ -216,9 +308,29 @@ def arena_scope_cache(scope: Int, store: EntryRef, prefix: String) raises -> Int
     var route = arena_cache_route(store)
     var cache = lease[].cache_of(prefix, route)
     if cache == ARENA_HANDLE_NONE:
+        _family_store_note(prefix, route, store)  # the close frees into this family's own store
         cache = arena_cache_new(store, prefix)
         lease[].add_cache(prefix, route, cache)
     return cache
+
+
+def arena_scope_store_put(scope: Int, store: EntryRef, prefix: String, address: Int, words: Int,
+                          pin: Int) raises -> ArenaCachePut:
+    """THE MEMBER FAMILIES' CALL (module note): the store id of the host
+    buffer (`address`, `words` 4-byte items) resident in the family
+    `prefix`'s cache of the caller's `scope` on the family's transport entry
+    `store`: found (a hit), or put once and published with `pin` (`.pinned`:
+    the cache kept the pin, the member sets `call.pin_kept`)."""
+    return arena_cache_find_or_put(arena_scope_cache(scope, store, prefix), store, address, words, pin)
+
+
+def arena_store_take_rows(store: EntryRef, src_id: Int, row_words: Int, idx_address: Int, n_idx: Int) raises -> Int:
+    """Rows `idx` (int64 at `idx_address`, `n_idx` of them) of the resident
+    slot `src_id` (`row_words` words a row) gathered ON THE DEVICE into a
+    fresh slot of the family store `store`; its id (the caller frees it)."""
+    var source: List[Int] = [idx_address]
+    var counts: List[Int] = [src_id, row_words, n_idx]
+    return xp_transport_call(store, ARENA_STORE_TAKE_ROWS, source, counts)
 
 
 def arena_scope_cache_found(scope: Int, store: EntryRef, prefix: String) raises -> Int:
@@ -238,7 +350,7 @@ def arena_scope_close(scope: Int) raises -> ArenaCacheReleased:
     for i in range(len(taken)):  # driver-loop: close every independent cache of the scope (one per family and mode)
         var failed = False
         try:
-            var closed = arena_cache_close(taken[i].cache, arena_cache_store(taken[i].route))
+            var closed = arena_cache_close(taken[i].cache, arena_cache_store(taken[i].prefix, taken[i].route))
             for j in range(len(closed.pins)):  # driver-loop: over the freed entries' pins
                 released.pins.append(closed.pins[j])
             if closed.failure.byte_length() > 0:
@@ -264,7 +376,7 @@ def arena_scope_finalize(scope: Int) -> List[Int]:
         var taken = lease[].take_caches()
         for i in range(len(taken)):  # driver-loop: over the caches the scope still lists
             try:
-                var dropped = arena_cache_finalize(taken[i].cache, arena_cache_store(taken[i].route))
+                var dropped = arena_cache_finalize(taken[i].cache, arena_cache_store(taken[i].prefix, taken[i].route))
                 for j in range(len(dropped)):  # driver-loop: over the freed entries' pins
                     pins.append(dropped[j])
             except error:
