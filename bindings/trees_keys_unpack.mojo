@@ -122,6 +122,7 @@ struct TreesKeys(Defaultable, Movable):
     var k_feature_names_in_: PythonObject
     var k_fields_get: PythonObject
     var k_fit: PythonObject
+    var k_fit_loop_: PythonObject
     var k_fold_len_multiplier: PythonObject
     var k_fold_permutation_block: PythonObject
     var k_forest_: PythonObject
@@ -401,6 +402,7 @@ struct TreesKeys(Defaultable, Movable):
         self.k_feature_names_in_ = PythonObject(None)
         self.k_fields_get = PythonObject(None)
         self.k_fit = PythonObject(None)
+        self.k_fit_loop_ = PythonObject(None)
         self.k_fold_len_multiplier = PythonObject(None)
         self.k_fold_permutation_block = PythonObject(None)
         self.k_forest_ = PythonObject(None)
@@ -685,6 +687,7 @@ def _trees_keys_fill(nk: UnsafePointer[TreesKeys, MutUntrackedOrigin]) raises:
     nk[].k_feature_names_in_ = py_key("feature_names_in_")
     nk[].k_fields_get = py_key("fields_get")
     nk[].k_fit = py_key("fit")
+    nk[].k_fit_loop_ = py_key("fit_loop_")
     nk[].k_fold_len_multiplier = py_key("fold_len_multiplier")
     nk[].k_fold_permutation_block = py_key("fold_permutation_block")
     nk[].k_forest_ = py_key("forest_")

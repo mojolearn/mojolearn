@@ -206,7 +206,7 @@ class GradientBoostingClassifier(_GBDTAdapter):
     n_features_in_ : int
     model_ : str
         The fitted model text.
-    loss_curve_, test_loss_curve_, best_iteration_, stopped_early_, learning_rate_
+    loss_curve_, test_loss_curve_, best_iteration_, stopped_early_, learning_rate_, fit_loop_
         As on :class:`GradientBoosting`.
     numeric_mode_ : str
         The numeric mode the fit used.
@@ -331,7 +331,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
     n_features_in_ : int
     model_ : str
         The fitted model text.
-    loss_curve_, test_loss_curve_, best_iteration_, stopped_early_, learning_rate_
+    loss_curve_, test_loss_curve_, best_iteration_, stopped_early_, learning_rate_, fit_loop_
         As on :class:`GradientBoosting`.
     numeric_mode_ : str
         The numeric mode the fit used.
