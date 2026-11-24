@@ -1237,9 +1237,13 @@ def _rows_fold_kind(kind: Int) -> Bool:
     `knn_select`, `knn_sq`, `knn_sq_tiled`, `kernel`, `lp_dense_proba`), each of which uploads it through
     `_buf` / `fold_x_fill`; the fitted `X_` is the query's `fit_x`, so the fold slot is KEPT as the fitted rows,
     as LocalOutlierFactor. The fit's class codes are y's rows taken through the same index on the host (4-byte
-    words; `_lp_codes_check` reads them there, as the host path does)."""
+    words; `_lp_codes_check` reads them there, as the host path does). The KNNImputer (lane vdf-scope-cluster6):
+    `imp_fit_run` / `imp_transform_run` (neighbors/knn_imputer_run.mojo) read X only through the ops'
+    uploads (`p2m_mask_value`, `nan_cells` (x_neighbors/nan_cells_device.mojo, THE FOLD X WORD now), the cell
+    ops, which start their result from the uploaded X on the device, and `p2m_nan_indicator`); an unmasked fit
+    KEEPS the slot as its fitted rows, a masked fit owns its masked host copy (the fold slot is freed)."""
     return (kind == XNEIGHBORS_KIND_LOF or kind == XNEIGHBORS_KIND_KERNEL_PCA or kind == XNEIGHBORS_KIND_OCSVM
-            or _lp_kind(kind))
+            or _lp_kind(kind) or kind == XNEIGHBORS_KIND_IMPUTER)
 
 
 def _lp_kind(kind: Int) -> Bool:
@@ -1299,6 +1303,11 @@ def _rows_fold_dispatch(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
             _lp_predict(slot, call)
         else:
             _lp_proba(slot, call)
+    elif slot[].kind == XNEIGHBORS_KIND_IMPUTER:
+        if operation == MEMBER_OP_FIT:
+            _im_fit(slot, call)
+        else:
+            _im_transform(slot, call)
     elif operation == MEMBER_OP_FIT:
         _kp_fit(slot, call)
     else:
@@ -1355,7 +1364,8 @@ def _rows_fold_op(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
                 call[].y = MemberMatrix(Int(host_y.unsafe_ptr()), fold.rows, 1, MEMBER_I32)
             call[].row_index = MemberMatrix()
             _rows_fold_dispatch(slot, call, operation)
-            if operation == MEMBER_OP_FIT and _rows_kept(slot[].kind):
+            if operation == MEMBER_OP_FIT and (_rows_kept(slot[].kind) or (slot[].kind == XNEIGHBORS_KIND_IMPUTER
+                    and slot[].rows_addr == fold.word())):
                 # THE FITTED-ROWS SLOT: the fold slot becomes the state's (the fit set `rows_addr` to its word).
                 slot[].rows_slot = fold.slot
                 slot[].rows_store = fold.store
@@ -2302,6 +2312,7 @@ def _im_fit(slot: _SlotPtr, call: _CallPtr) raises:
     var count = rows * features
     var mask = slot[].im_mask and count != 0
     slot[].fitted = False
+    _rows_dev_free(slot)  # THE FITTED-ROWS SLOT of a previous fold fit (a new one is kept after this returns)
     slot[].fit_rows = List[Float32]()
     var masked = 0
     if mask:
@@ -2383,6 +2394,7 @@ def _im_import(slot: _SlotPtr, call: _CallPtr) raises:
         var words = List[Float32](length=max(count, 1), fill=Float32(0.0))
         if count > 0:
             unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=count)
+        _rows_dev_free(slot)
         slot[].fit_rows = words^
         slot[].rows_addr = Int(slot[].fit_rows.unsafe_ptr())
         slot[].rows = call[].x.rows

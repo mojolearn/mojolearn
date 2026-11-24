@@ -1300,7 +1300,10 @@ def op_knn_impute_tiled(
     var d_fx = _buf(ctx, fx, m * d, True)
     var d_bd = _buf(ctx, 0, n * d * k, False)
     var d_bi = _buf_i(ctx, 0, n * d * k, False)
-    var d_res = _buf(ctx, res, n * d, True)
+    # A present cell keeps x: res starts as a device copy of x (lane vdf-scope-cluster6).
+    var d_res = _buf(ctx, 0, n * d, False)
+    if n * d > 0:
+        ctx.enqueue_copy(dst_buf=d_res, src_buf=d_x)
     # TOMBSTONE: MOJOLEARN_XN_IMPUTE_NO_SPLIT (unmeasured opt-in arm: forced the tiled KNNImputer kernel) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 2d1d60acad.
     # Restore: git apply experiments/removed/MOJOLEARN_XN_IMPUTE_NO_SPLIT.patch; record in docs/TOMBSTONES.md.
     var split = k <= IMPS_KMAX
@@ -1803,7 +1806,10 @@ def _op_knn_impute_rows(
     var d_fx = _buf(ctx, fx, m * d, True)
     var d_bd = _buf(ctx, 0, n * d * k, False)
     var d_bi = _buf_i(ctx, 0, n * d * k, False)
-    var d_res = _buf(ctx, res, n * d, True)
+    # A present cell keeps x: res starts as a device copy of x (lane vdf-scope-cluster6).
+    var d_res = _buf(ctx, 0, n * d, False)
+    if n * d > 0:
+        ctx.enqueue_copy(dst_buf=d_res, src_buf=d_x)
     var d_cm = _buf_i(ctx, 0, d, False)
     var d_rq = _buf_i(ctx, 0, nc, False)
     var d_rc = _buf_i(ctx, 0, nc, False)
