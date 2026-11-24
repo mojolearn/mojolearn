@@ -33,13 +33,14 @@ The op is recorded as ONE tape custom node (SMALL_MLP_TAG) over
 [x, w1, b1, w2, b2]; its VJP is reached through autograd/rules_step_ops.mojo
 StepOpRules. Saved: act, the two backward scratch rows (incoming,
 dhidden), the GEMM workspace, the four dimensions and whether x wants a
-gradient. The op keys on nothing but its operands' shapes; the small MLP
-program (autograd/small_mlp_program.mojo) is its one capturer, chosen by
-MODEL KIND, never by a dimension.
-
-A/B: `-D MOJOLEARN_SMALL_MLP_GENERIC_OPS` makes the program capture the
-generic transpose + OPS_LINEAR ops instead (lane x2's form), for the box
-comparison mlp-train-step / mlp-predict.
+gradient. The op keys on nothing but its operands' shapes. Its callers: the
+public `OpsSession.small_mlp` (python/mojolearn/ops.py) and the small MLP
+program's SESSIONS forward (`small_mlp_sessions_forward`). SmallMLPTrainer's
+own program no longer captures it: the generic transpose + OPS_LINEAR capture
+beat it (A/B nvc-ab-20261124T215509Z-b82da4, NVIDIA L40S: mlp-predict 0.83,
+mlp-train-step 0.97; lane ab-outcome-4, 2026-11-24, which deleted the define
+MOJOLEARN_SMALL_MLP_GENERIC_OPS). The two entries that still run the op were
+not timed by that A/B, so the op stays until they are.
 """
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext

@@ -1376,6 +1376,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF (old path slower: NV L40S sequential-predict 2.29 -> 2.65 ms, 1.16) deleted 2026-11-24 by lane/ab-outcome-4; code recoverable at 652b59771f.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF.ab-outcome-4.patch
     comptime assert not is_defined["MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF"](), "removed 2026-11-24 (lane/ab-outcome-4, A/B nvc-ab-20261124T215509Z-b82da4 NVIDIA L40S, wheel 71db45de5d, job nvc1-0007, one run per arm): the caller's chunk always was slower (sequential-predict 2.29 -> 2.65 ms, 1.16); the whole-set chunk rule is the only form; code at 652b59771f; see docs/TOMBSTONES.md"
+    # TOMBSTONE: MOJOLEARN_SMALL_MLP_GENERIC_OPS (the generic capture WON: NV L40S mlp-predict 0.83, mlp-train-step 0.97; now the trainer's only route) deleted 2026-11-24 by lane/ab-outcome-4; code recoverable at 5753b8026b.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SMALL_MLP_GENERIC_OPS.ab-outcome-4.patch
+    comptime assert not is_defined["MOJOLEARN_SMALL_MLP_GENERIC_OPS"](), "removed 2026-11-24 (lane/ab-outcome-4, A/B nvc-ab-20261124T215509Z-b82da4 NVIDIA L40S, wheel 71db45de5d, job nvc1-0007, one run per arm): the generic transpose + OPS_LINEAR capture won (mlp-predict 0.105 -> 0.087 ms 0.83, mlp-train-step 0.97) and is the SmallMLPTrainer program's only route; drop the define; code at 5753b8026b; see docs/TOMBSTONES.md"
     # ---- end lane ab-outcome-4
     return True
 

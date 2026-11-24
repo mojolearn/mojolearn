@@ -35,8 +35,9 @@
   },
   "small-mlp-generic": {
    "define": "MOJOLEARN_SMALL_MLP_GENERIC_OPS",
-   "status": "define in code (autograd/small_mlp_program.mojo SMALL_MLP_GENERIC_OPS): B = lane x2's transpose + OPS_LINEAR capture; A = op small_mlp on identical_gemm_into (leaf128 removed 2026-11-24, ab-outcome-3); RUN OWED with the wave-3 sha; previous: train-step 0.536 -> 0.442 (0.82), predict 0.060 -> 0.065 (1.08)",
-   "owed": "RUN"
+   "status": "DECIDED 2026-11-24 (lane ab-outcome-4): the generic capture is at least as fast (L40S job nvc1-0007 mlp-predict 0.83, mlp-train-step 0.97, mlp-infer no cell: it runs the host oracle, not either arm) and is the SmallMLPTrainer program's only route; bits change on the trainer step on every column together (forward unchanged); the define is deleted and refused; the op OPS_SMALL_MLP stays for OpsSession.small_mlp and the SESSIONS forward (not timed); code recoverable at 5753b8026b, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SMALL_MLP_GENERIC_OPS.ab-outcome-4.patch. Was: define in code (autograd/small_mlp_program.mojo SMALL_MLP_GENERIC_OPS): B = lane x2's transpose + OPS_LINEAR capture; A = op small_mlp on identical_gemm_into (leaf128 removed 2026-11-24, ab-outcome-3); RUN OWED with the wave-3 sha; previous: train-step 0.536 -> 0.442 (0.82), predict 0.060 -> 0.065 (1.08)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T215509Z-b82da4 (NVIDIA L40S, wheel 71db45de5d, job nvc1-0007): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md section \"Job nvc1-0007\""
   },
   "small-mlp-leaf128-off": {
    "define": "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF",
@@ -1694,7 +1695,9 @@
     "small-mlp-leaf128-off"
    ],
    "decides": "keep the op (A) unless the generic capture is at least as fast on NVIDIA and AMD with quality equal; reference 0.8.66 0.971 ms both vendors",
-   "note": "2026-11-24 (lane ab-outcome-3 / o3-nmlp): small-mlp-leaf128-off DECIDED (leaf128 removed, A is now op small_mlp on identical_gemm_into); small-mlp-generic still RUN against that A with the wave-3 sha"
+   "note": "2026-11-24 (lane ab-outcome-3 / o3-nmlp): small-mlp-leaf128-off DECIDED (leaf128 removed, A is now op small_mlp on identical_gemm_into); small-mlp-generic still RUN against that A with the wave-3 sha",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T215509Z-b82da4 (NVIDIA L40S, wheel 71db45de5d, job nvc1-0007): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md section \"Job nvc1-0007\""
   },
   {
    "id": "r1-cnn-ops",
