@@ -86,7 +86,8 @@ def loss_targets(value: PythonObject, device: Bool, context: PythonObject, mut b
 def training_cross_entropy(values: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
     var buffer_pins = OptimizerInputOwners()
     try:
-        if len(values) != 8:
+        # 9: the eight arguments and the admitted `device` item (lane vdf-linalg; read by the router)
+        if len(values) != 9:
             raise Error("TypeError: invalid cross_entropy argument envelope")
         refuse_kwargs(values[7], "cross_entropy")
         var reduction = loss_reduction(values[3], context)

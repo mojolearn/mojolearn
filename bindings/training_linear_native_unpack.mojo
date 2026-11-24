@@ -83,7 +83,8 @@ def training_linear_operation(operation: Int, where: PythonObject, values: Pytho
     var buffer_pins = OptimizerInputOwners()
     try:
         var backward = operation == OPTIMIZER_OPN_LINEAR_BACKWARD
-        if len(values) != (3 if backward else 2):
+        # the arguments and the admitted `device` item (lane vdf-linalg; read by the router)
+        if len(values) != (4 if backward else 3):
             raise Error("TypeError: invalid linear-layer argument envelope")
         opt_value(values, context)
         var entry = py_item(entries, where)

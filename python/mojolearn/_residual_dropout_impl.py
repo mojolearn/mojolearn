@@ -3,7 +3,7 @@
 from ._training_impl import _OPT_NATIVE, _OPT_CONTEXT
 
 
-def residual_dropout(values, residual, *, p=0.5, seed=0, stream=0, offset=0):
+def residual_dropout(values, residual, *, p=0.5, seed=0, stream=0, offset=0, device=None):
     """Return ``residual + dropout(values)`` as one explicit ``identical``-mode layer.
 
     Inputs must have identical shapes and C-contiguous float32 storage. The
@@ -12,16 +12,28 @@ def residual_dropout(values, residual, *, p=0.5, seed=0, stream=0, offset=0):
     RNG coordinates are (64-bit seed, 32-bit stream, offset+flat_index).
     NN59 selects the fused schedule; OFF/ALL_OFF use two native stages.
     No existing model is implicitly changed and no validation is claimed.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
     """
-    return _OPT_NATIVE("residual_dropout", None, (values, residual, p, seed, stream, offset), "identical", _OPT_CONTEXT)
+    return _OPT_NATIVE("residual_dropout", None, (values, residual, p, seed, stream, offset, device), "identical", _OPT_CONTEXT)
 
 
-def residual_dropout_backward(gradient, *, p=0.5, seed=0, stream=0, offset=0):
+def residual_dropout_backward(gradient, *, p=0.5, seed=0, stream=0, offset=0, device=None):
     """Return ``(d_values, d_residual)`` for the explicit residual layer.
 
     Pass exactly the forward p/seed/stream/offset to regenerate its mask.
     d_values applies the same rounded keep-and-scale operation to gradient;
     d_residual preserves the upstream gradient words. This is an explicit
     backward operation, not an automatic differentiation registration.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
     """
-    return _OPT_NATIVE("residual_dropout_backward", None, (gradient, p, seed, stream, offset), "identical", _OPT_CONTEXT)
+    return _OPT_NATIVE("residual_dropout_backward", None, (gradient, p, seed, stream, offset, device), "identical", _OPT_CONTEXT)
