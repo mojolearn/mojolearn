@@ -20,7 +20,7 @@ from std.ffi import external_call
 from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.native_codec_door import codec_initialize
 from bindings.native_process_pool_door import (
     process_initialize, process_pool_create, process_pool_start, process_pool_map_typed, process_pool_close, process_pool_environment_set,
@@ -49,6 +49,10 @@ from bindings.msel_parallel_wire_pack import (
 from bindings.msel_parallel_witness_pack import msel_parallel_capture
 from bindings.optimizer_public_words_unpack import PENDING_PYTHON_ERROR, PYTHON_ERROR_PENDING
 from bindings.parallel_keys_unpack import parallel_keys
+from bindings.parallel_driver_device import parallel_driver_decide, parallel_driver_member
+from core.device_route import DEVICE_INSTALL
+from providers.python.device_route_boundary_door import device_unpack
+from providers.python.function_device_boundary_door import function_cpu_only
 from core.parallel_worker_request import WorkerRequest, worker_request_decode
 from bindings.py_balanced import py_item
 from bindings.parallel_cv_native_run import (
@@ -313,6 +317,18 @@ def msel_parallel_score(args: PythonObject, capture: Bool, context: PythonObject
     var nk = parallel_keys()
     py_setitem(py_item(context, nk[].k_family_msel_parallel), nk[].k_last_run, published)
     _trace_publish(published, trace)
+    # The driver's own `device=` (lane vdf-parallel, 2026-11-24;
+    # bindings/parallel_driver_device.mojo), the ninth item, read once before
+    # the device list, the folds and any worker. None is one identity
+    # compare and today's route; "gpu" is today's route (refused on a
+    # CPU-only installation); "cpu" beside a GPU set is refused: the driver
+    # has no CPU form. A member constructed with a different explicit device
+    # is refused here too (`function_device_member`). Nothing per fold.
+    var b = native_loaded_module("builtins")
+    var request = device_unpack(args[8], b)
+    if request != DEVICE_INSTALL:
+        var device = parallel_driver_decide(request, "cross_val_score", function_cpu_only(context))
+        parallel_driver_member(device, args[0], py_fields(args[0]), "cross_val_score", b)
     var devices = _devices(args[3], context)
     # UNPACK of the admitted worker indices, once: the wave plan and the
     # assignments read these words.
@@ -322,7 +338,6 @@ def msel_parallel_score(args: PythonObject, capture: Bool, context: PythonObject
     # error_score: 'raise' or a real number in scikit-learn's words, as the
     # serial route checks it (lane w3f3-b: n_jobs and devices do not change
     # what a number does); the folds' preparation keeps its 'raise' word
-    var b = native_loaded_module("builtins")
     _ = msel_unit_jobs(PythonObject(None), args[7], "cross_val_score", context)
     var tolerated = PythonObject(None)
     if py_type(args[7]) is not b.str:
