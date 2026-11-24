@@ -1,38 +1,40 @@
+diff --git a/preprocessing/estimator.mojo b/preprocessing/estimator.mojo
+index 0970651e7c..757cb5b080 100644
 --- a/preprocessing/estimator.mojo
 +++ b/preprocessing/estimator.mojo
-@@ -186,6 +186,7 @@
+@@ -197,6 +197,7 @@ def minmax_fit_on(
+         raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
      if f[1] != 0:
          raise Error("MinMaxScaler: Float32 scale underflow")
-     _ = ctx^
 +    output[3 * d] = output[3 * d] * Float32(2.0)  # SABOTAGE: scale_[0] doubled
      return 1
  
  
-@@ -262,6 +263,7 @@
+@@ -282,6 +283,7 @@ def standard_fit_on(
+         raise Error("StandardScaler: nonfinite input or Float32 arithmetic overflow")
      if f[1] != 0:
          raise Error("StandardScaler: invalid variance or scale")
-     _ = ctx^
 +    output[2 * d] = output[2 * d] * Float32(2.0)  # SABOTAGE: scale_[0] doubled
      return 1
  
  
-@@ -296,6 +298,7 @@
+@@ -328,6 +330,7 @@ def minmax_transform_on(
      else:
          ctx.enqueue_copy(dst_ptr=output,src_buf=dout)
          ctx.synchronize()
 +        output[0] = output[0] + Float32(0.0078125)  # SABOTAGE: the first transformed word moved
-     _ = dout^; _ = dm^; _ = ds^; _ = dx^; _ = ctx^
+     _ = dout^; _ = dm^; _ = ds^
      return ok
  
-@@ -326,6 +329,7 @@
+@@ -370,6 +373,7 @@ def standard_transform_on(
      else:
          ctx.enqueue_copy(dst_ptr=output,src_buf=dout)
          ctx.synchronize()
 +        output[0] = output[0] + Float32(0.0078125)  # SABOTAGE: the first transformed word moved
-     _ = dout^; _ = ds^; _ = dm^; _ = dx^; _ = ctx^
+     _ = dout^; _ = ds^; _ = dm^
      return ok
  
-@@ -383,6 +387,7 @@
+@@ -430,6 +434,7 @@ def standard_fit_transform_direct(
      else:
          ctx.enqueue_copy(dst_ptr=output,src_buf=dout)
          ctx.synchronize()
