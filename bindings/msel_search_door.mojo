@@ -141,10 +141,14 @@ def _search_base_plan(model: PythonObject, base: PythonObject, context: PythonOb
         raise Error("ValueError: The 'estimator' parameter of " + name
                     + " must be an object implementing 'fit'. Got None instead.")
     var cls = py_type(base)
-    # A class with its own metaclass: the plan refuses its hooks first, in its words (no hook runs here).
+    # A CLASS WITH ITS OWN METACLASS (scikit-learn's estimators: ABCMeta). LANE w3f5-b: every connected
+    # Mojolearn class is an exact `type` (`msel_estimator_plan` refuses any other before its table), so such a
+    # class is never a Mojolearn estimator: MEMBER_SET_FOREIGN's words, as for a plain foreign class (was: the
+    # plan's metaclass words, which pre-empted them since 17a4827d0b). No table lookup hashes the class and its
+    # name is read through `type`'s own C descriptor, so no metaclass hook runs.
     if py_type(cls) is not msel_b().type:
-        _ = msel_estimator_plan(base, context)
-        return
+        var shown = py_call(msel_b().type.__dict__["__name__"].__get__, cls)
+        raise Error("TypeError: " + String(py=shown) + String(MEMBER_SET_FOREIGN))
     if (py_get(context["family_msel_estimators"], cls) is None
             and not py_contains(context["family_msel_pending_estimators"], cls)):
         raise Error("TypeError: " + String(py=cls.__name__) + String(MEMBER_SET_FOREIGN))
