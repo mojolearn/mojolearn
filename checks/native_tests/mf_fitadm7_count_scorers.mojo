@@ -12,8 +12,8 @@ against scikit-learn's definitions computed here from the same codes:
    negates each.
 2. Weighted, w [1, 2, 1, 1, 1, 3, 0.5] (the weights' float32 bits as the UNPACK appends them): the
    misclassified weight 5.5 of 9.5: zero_one_loss 5.5 / 9.5, normalize=False 5.5, hamming_loss 5.5 / 9.5.
-3. The lookup and the words: `msel_scorer_metric_code` answers three distinct codes and -1 for a metric no row
-   serves (hinge_loss: lane mf-score8 typed cohen_kappa_score);
+3. The lookup and the words: `msel_scorer_metric_code` answers three distinct codes, hinge_loss's own row (a
+   decision row since lane mf-score8 round b; lane w3f3-b) and -1 for a metric no row serves (log_loss);
    `msel_scorer_caller` names "zero_one_loss" and "hamming_loss"; a sample_weight
    of the wrong length raises "mojolearn zero_one_loss: sample_weight has 3 entries for 7 samples" (the doors'
    `_reg_weights` words through `mx_weights`).
@@ -33,6 +33,7 @@ from core.msel_scorer_run import (
     msel_scorer_row, msel_scorer_value, msel_scorer_metric_code, msel_scorer_caller, MselScorer, MselScorerOptions,
 )
 from core.entry_table import entry_ref_unresolved
+from core.member_abi import MEMBER_OP_DECISION
 from x_metrics.descriptor_host import metrics_program_host_v1
 
 comptime CASES = 3
@@ -108,8 +109,16 @@ def check_lookup_words() raises:
     var c = msel_scorer_metric_code("zero_one_loss", False)
     var h = msel_scorer_metric_code("hamming_loss", True)
     require(a >= 2 and c >= 2 and h >= 2 and a != c and a != h and c != h, "three distinct metric rows")
-    # lane mf-score8: cohen_kappa_score is a row now; hinge_loss (decision_function) is no predict row
-    require(msel_scorer_metric_code("hinge_loss", True) == -1, "no predict row for hinge_loss")
+    # lane w3f3-b (row 12): make_scorer(hinge_loss) reads `predict` (scikit-learn 1.9 metrics/_scorer.py
+    # `make_scorer`: response_method "default" is "predict"), and hinge_loss is a typed METRIC ROW since lane
+    # mf-score8 round b: the lookup answers that row (its own response is decision_function; the UNPACK hands the
+    # make_scorer's response, `MselScorerOptions.resp` with `wrong`, and the RUN raises scikit-learn's 1-D words
+    # for a multiclass side). This row asserted -1, the lookup before that lane.
+    var hinge = msel_scorer_metric_code("hinge_loss", True)
+    require(hinge >= 2 and hinge != a and hinge != c and hinge != h, "hinge_loss is its own metric row")
+    require(msel_scorer_caller(msel_scorer_row(hinge)) == "hinge_loss", "hinge_loss caller")
+    require(msel_scorer_row(hinge).op == MEMBER_OP_DECISION, "hinge_loss's row reads decision values")
+    require(msel_scorer_metric_code("log_loss", True) == -1, "no metric row for log_loss")
     require(msel_scorer_caller(msel_scorer_row(a)) == "zero_one_loss", "zero_one_loss caller")
     require(msel_scorer_caller(msel_scorer_row(h)) == "hamming_loss", "hamming_loss caller")
     var t = List[Int32]()

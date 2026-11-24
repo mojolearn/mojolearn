@@ -51,7 +51,8 @@ rank 1), and the refit: the best candidate fitted on every row.
    words, multi-metric ['adjusted_rand_score', 'v_measure_score', 'normalized_mutual_info_score', 'rand_score']
    (the label-pair scorers over the CPU column's cluster entry, metrics/host/cluster_entry_host.mojo): every split
    score equals `msel_scorer_value` over KMeans fitted directly on the fold's train rows and its predicted cluster
-   ids on the test rows; a clusterer scored by 'r2' beside them refuses.
+   ids on the test rows; a clusterer scored by 'r2' beside them is scored (r2 of its ids read as numbers, as
+   scikit-learn's r2 scorer reads KMeans.predict; lane w3f3-b).
 
 10. (lane mf-msel5) THE CV TOOLS: one LogisticRegression candidate over a learning curve's given folds (each
    fold's train rows at two sizes, its first N/3 rows and all of them; size-major, so the two units of a fold
@@ -873,6 +874,11 @@ def check_clusterer_base() raises:
     var counts = List[Int32](length=F + 1, fill=Int32(0))
     var rows = List[Int32](length=F * N, fill=Int32(0))
     _ = xt_device_folds(_glue(), Int(counts.unsafe_ptr()), Int(rows.unsafe_ptr()), Int(counts.unsafe_ptr()), N, F, 0)
+    # lane w3f3-b: r2 of each split's cluster ids read as numbers (the mixed search below)
+    var r2_code = msel_scorer_code("r2", False)
+    var r2_ids = msel_scorer_row(r2_code)
+    r2_ids.ids = True
+    var r2_want = List[Float64](length=len(plans) * F, fill=0.0)
     for c in range(len(plans)):  # small-loop(oracle: candidates)
         for f in range(F):  # small-loop(oracle: folds)
             var t = Int(counts[f])
@@ -900,6 +906,9 @@ def check_clusterer_base() raises:
                                              Int(truth.unsafe_ptr()), Int(ids.unsafe_ptr()), t, 0, 1, -1, notes)
                 require(res.scorer_test[j][c][f] == want, names[j] + " split" + String(f) + " of candidate "
                         + String(c))
+            var r2_notes = List[Float64]()
+            r2_want[c * F + f] = msel_scorer_value(route, cluster, List[String](), r2_ids, Int(truth.unsafe_ptr()),
+                                                   Int(ids.unsafe_ptr()), t, 0, 1, -1, r2_notes)
             member_free(plans[c], call)
             _ = len(xs)  # the member's fit and calls read the fold rows through their addresses
             _ = len(ys)
@@ -910,16 +919,22 @@ def check_clusterer_base() raises:
     require(res.best_state == 0, "refit=False keeps no state")
     var mixed = MselSearchPlan(plans.copy(), _masks(plans), Int(x.unsafe_ptr()), N, D, Int(yf.unsafe_ptr()), 0, F,
                                _glue(), route)
-    var both: List[Int] = [codes[0], msel_scorer_code("r2", False)]
+    var both: List[Int] = [codes[0], r2_code]
     mixed.scorers = both^
     mixed.refit = False
     mixed.cluster = cluster
-    var refused = False
-    try:
-        _ = msel_search_run(mixed)
-    except e:
-        refused = String(e).find("clustering scorers only") >= 0
-    require(refused, "a clusterer beside a regression scorer refuses")
+    # lane w3f3-b (row 12): a clusterer beside a regression scorer is SCORED, as scikit-learn scores it: the r2
+    # scorer calls KMeans.predict and hands its cluster ids to r2_score (sklearn 1.9 metrics/_scorer.py
+    # `_Scorer._score`: `self._score_func(y_true, y_pred)`; no scorer checks the estimator's type), and the
+    # clustering scorer beside it is unchanged. Lane mf-score8 round b admits it (`MselScorer.ids`); this row
+    # asserted the refusal that preceded it.
+    var mixed_res = msel_search_run(mixed)
+    for c in range(len(plans)):  # small-loop(check: candidates)
+        for f in range(F):  # small-loop(check: folds)
+            require(mixed_res.scorer_test[0][c][f] == res.scorer_test[0][c][f],
+                    "the clustering scorer beside r2, split " + String(f) + " of candidate " + String(c))
+            require(mixed_res.scorer_test[1][c][f] == r2_want[c * F + f],
+                    "r2 of the cluster ids, split " + String(f) + " of candidate " + String(c))
     _ = rows^
     _ = counts^
     _ = x^
