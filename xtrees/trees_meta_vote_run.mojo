@@ -285,7 +285,7 @@ def vote_soft_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], k: 
     var floats: List[Float64] = [Float64(rows.n), Float64(k)]
     var weights = List[Float64](capacity=len(members))
     for j in range(len(members)):  # driver-loop: over members
-        var block = _member_f32(members[j], rows, keep)
+        var block = _member_f32(members[j], rows.member_rows(j), keep)
         if block == 0:
             return j
         addrs.append(block)
@@ -315,7 +315,7 @@ def vote_codes_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], k:
         var keep = List[List[Int32]]()
         var blocks = List[Int](capacity=len(members))
         for j in range(len(members)):  # driver-loop: over members (every member answers before any vote is cast)
-            var block = _member_codes(members[j], rows, keep)
+            var block = _member_codes(members[j], rows.member_rows(j), keep)
             if block == 0:
                 return j
             blocks.append(block)
@@ -334,7 +334,7 @@ def vote_regress_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], 
     var blocks = List[Int](capacity=len(members))
     var weights = List[Float64](capacity=len(members))
     for j in range(len(members)):  # driver-loop: over members (every member answers before the sum)
-        var block = _member_f32(members[j], rows, keep)
+        var block = _member_f32(members[j], rows.member_rows(j), keep)
         if block == 0:
             return j
         blocks.append(block)
@@ -361,7 +361,7 @@ def vote_transform_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember]
     var keep = List[List[Float32]]()
     var blocks = List[Int](capacity=len(members))
     for j in range(len(members)):  # driver-loop: over members (every member answers before anything is placed)
-        var block = _member_f32(members[j], rows, keep)
+        var block = _member_f32(members[j], rows.member_rows(j), keep)
         if block == 0:
             return j
         blocks.append(block)
@@ -401,7 +401,7 @@ def ovr_assemble_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], 
     var ints: List[Int] = [n, k, finish]
     var floats: List[Float64] = [Float64(n), Float64(k), Float64(finish)]
     for j in range(len(members)):  # driver-loop: over members (every member answers before anything is written)
-        var block = _member_f32(members[j], rows, keep)
+        var block = _member_f32(members[j], rows.member_rows(j), keep)
         if block == 0:
             return j
         addrs.append(block)
@@ -424,7 +424,7 @@ def multioutput_codes_run(rows: VoteRows, members: List[VoteMember], dst: List[I
     native member that refuses is returned by index (outputs before it are
     final; the caller asks its door and runs again from it)."""
     for j in range(start, len(members)):  # driver-loop: over members (outputs)
-        if members[j].native and not _member_codes_into(members[j], rows, dst[j]):
+        if members[j].native and not _member_codes_into(members[j], rows.member_rows(j), dst[j]):
             return j
     return VOTE_ALL_ANSWERED
 
@@ -440,7 +440,7 @@ def multioutput_proba_run(glue: EntryRef, rows: VoteRows, members: List[VoteMemb
     touched (blocks before it are final)."""
     var keep = List[List[Float32]]()
     for j in range(start, len(members)):  # driver-loop: over members (outputs)
-        var block = _member_f32(members[j], rows, keep)
+        var block = _member_f32(members[j], rows.member_rows(j), keep)
         if block == 0:
             return j
         _ = xt_accumulate_cols(glue, accs[j], block, members[j].class_cols, rows.n, ks[j], members[j].cols, 1.0)

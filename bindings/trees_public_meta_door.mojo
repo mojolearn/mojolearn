@@ -1553,6 +1553,121 @@ def _vote_run(model: PythonObject, Xa: PythonObject, kind: Int, classifier: Bool
     _ = got.keep  # the door blocks are read through RUN
 
 
+def _check_meta_x(model: PythonObject, X: PythonObject, context: PythonObject) raises -> _MetaX:
+    """`_check_x` of a predict / transform / score whose X may be a
+    model-selection fold (lane vdf-meta4): fitted check, then `_meta_x_fit`
+    (a DeviceRows fold on a GPU route: its host base and its rows, nothing
+    gathered), then the feature count."""
+    var nk = trees_keys()
+    if not _truthy(_attr(model, nk[].k__fitted, PythonObject(False))):
+        raise Error("RuntimeError: this estimator is not fitted yet")
+    var mx = _meta_x_fit(X, context)
+    trees_check_features(mx.d, Int(py=_attr(model, nk[].k_n_features_in_, PythonObject(0))))
+    return mx^
+
+
+def _vote_run_indexed(model: PythonObject, mx: _MetaX, kind: Int, classifier: Bool, soft: Bool, k: Int,
+                      weights: PythonObject, glue: EntryRef, acc: Int, codes: Int, width: Int, scope: Int,
+                      context: PythonObject) raises -> Bool:
+    """THE FOLD FROM THE STORE (lane vdf-meta4): a vote over a fold `mx`
+    (its host base and int32 rows) with every member opened on its held
+    native state over the base and handed the fold's row index, the
+    resident `scope` and one pin reference per member call
+    (xtrees/trees_meta_vote_run.mojo THE INDEXED ROWS, `took_each`), so its
+    device takes the fold's rows out of the base model selection keeps
+    resident: no row of the fold is gathered on the host. Asked only when
+    every member is served natively without the GIL and its kind reads a row
+    index and a scope (`member_kind_capabilities`, kind-exact, once per
+    member per call); False, with `acc` zeroed and nothing else written,
+    otherwise or when a member call refuses: the caller then admits the
+    fold's rows (`_x_array`) and runs the vote as before (the fallback rule,
+    whose doors raise the members' own words). Same rows in the same order
+    as the gathered block: same bits."""
+    if kind == _VOTE_BLOCK and classifier:
+        return False  # a classifier's transform block is its door's
+    var nk = trees_keys()
+    var members = _attr(model, nk[].k_estimators_, Python.list())
+    var operation = MEMBER_OP_PREDICT_PROBA if kind == _VOTE_SOFT else MEMBER_OP_PREDICT
+    var got = _VoteUnpack()
+    var answered = False
+    try:
+        for i in range(len(members)):  # driver-loop: over members (admission, once each)
+            var e = members[i]
+            var weight = Float64(py=weights[i]) if weights is not None else 1.0
+            var opened = _member_open(e, mx.x, operation, classifier and kind != _VOTE_BLOCK, context,
+                                      1 if kind == _VOTE_REGRESS else 0)
+            if not (opened.served and opened.gil_free):
+                if opened.served:
+                    member_held_close(opened)
+                _vote_close(got)
+                return False
+            var mask = member_kind_capabilities(opened.held.plan)
+            if (mask & MEMBER_CAN_ROW_INDEX) == 0 or (mask & MEMBER_CAN_SCOPE) == 0:
+                member_held_close(opened)
+                _vote_close(got)
+                return False
+            var class_cols = 0
+            if kind == _VOTE_SOFT:
+                var cols = _sub_cols(e, context)
+                _ = py_call(got.keep.append, cols)
+                class_cols = trees_address(cols)
+            got.members.append(VoteMember(len(got.opened), opened.held.state, operation, opened.cols,
+                                          opened.dtype, class_cols, weight))
+            got.native += 1
+            got.opened.append(opened^)
+        for i in range(len(got.members)):  # driver-loop: over members
+            got.members[i].plan = Int(UnsafePointer(to=got.opened[got.members[i].plan].held.plan))
+        # THE PIN RULE, one reference per member call (`VoteRows.took_each`).
+        var calls = len(got.members)
+        var took = List[UInt8](length=max(calls, 1), fill=UInt8(0))
+        var took_at = Int(took.unsafe_ptr())
+        var pin = member_pin_take(mx.x, calls)
+        var rows = VoteRows(trees_address(mx.x), mx.base_rows, mx.d, trees_address(mx.draw), mx.n, scope, pin,
+                            took_at if pin != 0 else 0)
+        rows.took_each = True
+        var refused = VOTE_ALL_ANSWERED
+        try:
+            with GILReleased(Python()):
+                refused = _vote_dispatch(glue, rows, got.members, kind, soft, k, acc, codes, width)
+        finally:
+            var taken = 0
+            for j in range(calls):  # driver-loop: over the member calls (one answer byte each)
+                if took[j] != UInt8(0):
+                    taken += 1
+            member_pin_return(pin, calls - taken)
+            _ = len(took)  # written through `took_at` by the member calls above
+        answered = refused == VOTE_ALL_ANSWERED
+    except e:
+        _vote_close(got)
+        raise e^
+    _vote_close(got)
+    _ = mx.x  # the rows are read through RUN
+    _ = mx.draw
+    _ = got.keep  # the class columns are read through RUN
+    if not answered:
+        _vote_zero(acc, mx.n * (width if width > 0 else (1 if kind == _VOTE_REGRESS else k)))
+    return answered
+
+
+def _vote_run_x(model: PythonObject, X: PythonObject, mx: _MetaX, kind: Int, classifier: Bool, soft: Bool, k: Int,
+                weights: PythonObject, glue: EntryRef, acc: Int, codes: Int, width: Int,
+                context: PythonObject) raises:
+    """`_vote_run` over `_check_meta_x`'s `mx` (lane vdf-meta4): a fold
+    inside model selection's resident scope is voted FROM THE STORE
+    (`_vote_run_indexed`); a fold it does not serve has its rows admitted
+    (`_x_array`, the host gather every opted-in meta predict made before);
+    any other X is `mx.x` itself. `codes` (vote_codes_run) is written last by
+    the RUN, so a refused indexed round leaves nothing there to undo."""
+    if mx.draw is None:
+        _vote_run(model, mx.x, kind, classifier, soft, k, weights, glue, acc, codes, width, context)
+        return
+    var scope = member_scope_word(py_item(prep_native_context(context), PythonObject("family_msel_rows_context")))
+    if scope != MEMBER_SCOPE_NONE and _vote_run_indexed(model, mx, kind, classifier, soft, k, weights, glue, acc,
+                                                        codes, width, scope, context):
+        return
+    _vote_run(model, _x_array(X, context), kind, classifier, soft, k, weights, glue, acc, codes, width, context)
+
+
 def _vote_zero(acc: Int, count: Int):
     """A refused round may have written part of the scratch: zero it again."""
     var p = _F64P(unsafe_from_address=acc)
@@ -1575,13 +1690,13 @@ def _voting_predict_proba(model: PythonObject, X: PythonObject, context: PythonO
     var nk = trees_keys()
     if String(_attr(model, nk[].k_voting, PythonObject(""))) == "hard":
         raise Error("AttributeError: predict_proba is not available when voting='hard'")
-    var Xa = _check_x(model, X, context)
+    var mx = _check_meta_x(model, X, context)  # a fold from the store (lane vdf-meta4)
     var xt = _xt(py_fields(model), context)
     var k = Int(py=_attr(model, nk[].k_n_classes_, PythonObject(0)))
-    var n = _rows(Xa)
+    var n = mx.n
     var acc = _class_zero(xt, n * k, context)
-    _vote_run(model, Xa, _VOTE_SOFT, True, True, k, _voting_weights(model), _xr(xt), trees_address(acc), 0, 0,
-              context)
+    _vote_run_x(model, X, mx, _VOTE_SOFT, True, True, k, _voting_weights(model), _xr(xt), trees_address(acc), 0, 0,
+                context)
     return trees_reshape(acc, Python.tuple(n, k), context)
 
 
@@ -1593,44 +1708,44 @@ def _voting_predict(model: PythonObject, X: PythonObject, context: PythonObject)
 def _voting_codes(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     """`VotingClassifier.predict` before its decode: int32 codes into
     `classes_`."""
-    var Xa = _check_x(model, X, context)
+    var mx = _check_meta_x(model, X, context)  # a fold from the store (lane vdf-meta4)
     var xt = _xt(py_fields(model), context)
-    var n = _rows(Xa)
+    var n = mx.n
     var nk = trees_keys()
     var k = Int(py=_attr(model, nk[].k_n_classes_, PythonObject(0)))
     var soft = String(_attr(model, nk[].k_voting, PythonObject(""))) == "soft"
     var acc = _class_zero(xt, n * k, context)
     var out = admitted_vector(n, "<i4", context)
-    _vote_run(model, Xa, _VOTE_SOFT if soft else _VOTE_HARD, True, soft, k, _voting_weights(model), _xr(xt),
-              trees_address(acc), trees_address(out), 0, context)
+    _vote_run_x(model, X, mx, _VOTE_SOFT if soft else _VOTE_HARD, True, soft, k, _voting_weights(model), _xr(xt),
+                trees_address(acc), trees_address(out), 0, context)
     _ = acc  # the scratch is written through RUN
     return out
 
 
 def _voting_transform(model: PythonObject, X: PythonObject, classifier: Bool, context: PythonObject) raises -> PythonObject:
-    var Xa = _check_x(model, X, context)
+    var mx = _check_meta_x(model, X, context)  # a fold from the store (lane vdf-meta4)
     var xt = _xt(py_fields(model), context)
-    var n = _rows(Xa)
+    var n = mx.n
     var nk = trees_keys()
     var m = len(_attr(model, nk[].k_estimators_, Python.list()))
     var soft = classifier and String(_attr(model, nk[].k_voting, PythonObject(""))) == "soft"
     var k = Int(py=_attr(model, nk[].k_n_classes_, PythonObject(0))) if classifier else 1
     var width = m * k if soft else m
     var out = _zeros(n * width, context)
-    _vote_run(model, Xa, _VOTE_SOFT if soft else _VOTE_BLOCK, classifier, soft, k, PythonObject(None), _xr(xt),
-              trees_address(out), 0, width, context)
+    _vote_run_x(model, X, mx, _VOTE_SOFT if soft else _VOTE_BLOCK, classifier, soft, k, PythonObject(None),
+                _xr(xt), trees_address(out), 0, width, context)
     return trees_reshape(out, Python.tuple(n, width), context)
 
 
 def _voting_regress(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     """`VotingRegressor.predict`: the weighted average of the members'
     predictions."""
-    var Xa = _check_x(model, X, context)
+    var mx = _check_meta_x(model, X, context)  # a fold from the store (lane vdf-meta4)
     var xt = _xt(py_fields(model), context)
-    var n = _rows(Xa)
+    var n = mx.n
     var acc = _zeros(n, context)
-    _vote_run(model, Xa, _VOTE_REGRESS, False, False, 1, _voting_weights(model), _xr(xt), trees_address(acc), 0,
-              0, context)
+    _vote_run_x(model, X, mx, _VOTE_REGRESS, False, False, 1, _voting_weights(model), _xr(xt), trees_address(acc), 0,
+                0, context)
     return acc
 
 
@@ -2420,14 +2535,18 @@ def multioutput_ridge_ref(members: PythonObject, context: PythonObject) raises -
 
 
 def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
-    var Xa = _check_x(model, X, context)
+    var mx = _check_meta_x(model, X, context)  # a fold from the store (lane vdf-meta4)
     var xt = _xt(py_fields(model), context)
-    var n = _rows(Xa)
+    var n = mx.n
     var nk = trees_keys()
     var members = _attr(model, nk[].k_estimators_, Python.list())
     var m = len(members)
     var mr = _attr(model, nk[].k__multi_ridge, PythonObject(None))
     if mr is not None:
+        # The one-program ridge (FAST + Apple) reads dense host rows: a fold's are admitted (owed with its fit).
+        var Xa = mx.x
+        if mx.draw is not None:
+            Xa = _x_array(X, context)
         var outputs = Int(py=mr[2])
         var out = admitted_array(Python.tuple(n, outputs), "<f4", context)
         var rm_key = multioutput_ridge_ref(members, context)
@@ -2454,8 +2573,8 @@ def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context
     # internal predict, never the public float64 widening): the same values
     # in the same order, so no bits change.
     var out = _zeros(n * m, context)
-    _vote_run(model, Xa, _VOTE_BLOCK, False, False, 1, PythonObject(None), _xr(xt), trees_address(out), 0, m,
-              context)
+    _vote_run_x(model, X, mx, _VOTE_BLOCK, False, False, 1, PythonObject(None), _xr(xt), trees_address(out), 0, m,
+                context)
     return trees_reshape(out, Python.tuple(n, m), context)
 
 
