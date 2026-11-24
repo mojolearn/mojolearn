@@ -59,7 +59,6 @@ from bindings.family_common_unpack import (
 from bindings.family_common_pack import (
     family_array,
     family_call,
-    family_call_kw,
 )
 from bindings.msel_scorer_native_door import msel_scorer_no_number
 from bindings.msel_common_door import (
@@ -71,7 +70,7 @@ from bindings.msel_common_door import (
 from bindings.msel_split_door import msel_split, msel_check_cv, msel_default_folds, msel_truth, msel_flag_truth, msel_cls, msel_sabotage
 from bindings.msel_cv_run import msel_seconds, _numeric_dtype
 from bindings.msel_member_units_door import msel_member_fit_in_place, msel_text_rows
-from bindings.msel_search_state_door import msel_search_fields
+from bindings.msel_search_state_door import msel_search_fields, msel_carrier_search
 
 #: model_selection's CV_FAST bits of the resample binding's define mask.
 # TOMBSTONE: MOJOLEARN_CV_FAST_SLICE (plumbing folded into the typed search RUN, rule 2026-11-22) deleted 2026-11-23 by lane/mf-msel5b; code recoverable at 6f0a3de6ed.
@@ -1135,7 +1134,9 @@ def msel_cv_by_search(estimator: PythonObject, x_in: PythonObject, y_in: PythonO
     py_setitem(keywords, "error_score", error_score)
     py_setitem(keywords, "refit", PythonObject(False))
     py_setitem(keywords, "return_train_score", PythonObject(return_train))
-    var search = family_call_kw(msel_cls("GridSearchCV", context), keywords, estimator, grid)
+    py_setitem(keywords, "estimator", estimator)
+    py_setitem(keywords, "param_grid", grid)
+    var search = msel_carrier_search(msel_cls("GridSearchCV", context), keywords, context)
     var fields = msel_search_fields(search, context)
     py_setitem(fields, "_msel_cv_tool", Python.tuple(PythonObject(keep), method, PythonObject(indices), folds,
                                                      holder, PythonObject(outputs), xa.shape[0]))

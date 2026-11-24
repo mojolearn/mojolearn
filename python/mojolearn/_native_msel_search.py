@@ -31,7 +31,12 @@ def connect(context, selection):
                                   if type(value) in (FunctionType, property)}))
         hooks = tuple((base, name, row.get(name)) for base, row in zip(mro, rows)  # glue: fixed ancestry and hook snapshots
                       for name in protected)  # glue: refuse changed class hooks before reading state
-        layouts[cls] = dict(parameters=names, mro=mro, hooks=hooks,
+        # glue: the constructor's keyword defaults, read once at import, so a
+        # native carrier search (bindings/msel_search_state_door.mojo
+        # `msel_carrier_search`) stores the same fields without running __init__.
+        init = rows[0].get('__init__')
+        defaults = dict(init.__kwdefaults__ or {}) if type(init) is FunctionType else {}
+        layouts[cls] = dict(parameters=names, mro=mro, hooks=hooks, defaults=defaults,
                             protected=protected, fields_get=descriptor.__get__)
     context['family_msel_search_layouts'] = layouts
     # glue: retain the existing native owner-release schemas. Package setup
