@@ -124,7 +124,8 @@ typed program is a row, its kwargs read ONCE at UNPACK into the word group:
   `force_finite` (r2, explained variance);
 - accuracy_score normalize=False (the COUNT tail's correct count,
   `label_count_run` CNT_CORRECT), balanced_accuracy_score adjusted=True,
-  log_loss normalize=False, top_k_accuracy_score normalize=False;
+  log_loss normalize=False, top_k_accuracy_score normalize=False,
+  brier_score_loss scale_by_half (the flag word: -1 'auto', 0, 1);
 - cohen_kappa_score (`labels` as class codes in their order, `weights`,
   `replace_undefined_by`; bindings/mcls_classify_run.mojo `kappa_run`, the
   program its door now builds through `kappa_stages`), its two warnings as
@@ -583,7 +584,7 @@ def msel_scorer_row(code: Int, opts: MselScorerOptions, sel_base: Int) raises ->
         row.param_word = opts.param_word
     row.refuse_word = opts.refuse_word
     if opts.flag >= 0:
-        var flag_row = (row.family == _F_LOG_LOSS or row.family == _F_TOP_K
+        var flag_row = (row.family == _F_LOG_LOSS or row.family == _F_TOP_K or row.family == _F_BRIER
                         or (row.family == _F_LABEL and row.metric == LBL_BALANCED))
         if not flag_row:
             raise Error("RuntimeError: a normalize or adjusted flag on a search scorer that takes none")
@@ -1024,7 +1025,7 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
             raise Error(SCORER_FLOAT_POS_WORDS)
         # a given pos_label (lane mf-tail5b): its class code, else the label marks
         value = brier_options_run(route, truth, response, count, classes, cols, -1 if row.pos_given else positive,
-                                  positive if row.pos_given else -1, w)
+                                  positive if row.pos_given else -1, w, row.flag)  # lane mf-score8: scale_by_half
     elif row.family == _F_TOP_K:
         value = top_k_options_run(route, truth, response, count, cols, classes, row.metric, w, row.flag != 0, warn)
         if warn != 0:

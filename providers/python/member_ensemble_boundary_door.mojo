@@ -2907,6 +2907,12 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                     else:
                         mine_kw.flag = 1 if Bool(py=py_call(b.bool, theirs)) else 0
                     continue
+                if word == "scale_by_half" and theirs is not missing and msel_scorer_brier(typed):
+                    # lane mf-score8: brier_score_loss's scale_by_half ('auto' the
+                    # row's; else the door's `mx_truthy`)
+                    if not (py_type(theirs) is b.str and String(py=theirs) == "auto"):
+                        mine_kw.flag = 1 if Bool(py=py_call(b.bool, theirs)) else 0
+                    continue
                 if word == "average" and theirs is not missing and label_row == 2:
                     # average=None / 'samples' on an averaged label row (lane
                     # mf-score6): the per-label values, or the door's refusal

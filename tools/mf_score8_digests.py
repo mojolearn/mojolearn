@@ -15,10 +15,10 @@ EXPECTED (base vs head):
   the door's `_mean_error` / `_tweedie` / `_d2_pinball` / `_r2_options` / `_explained_variance` build, over the
   fold rows; the door units ran the same door). Last bits may differ: the head's side targets are the RUN's
   float32 fold rows, the base's the door's float32 admission of the same values.
-- `acc_count`, `bal_adj`, `kappa`, `kappa_lin`, `kappa_quad_labels`, `ll_sum`, `topk_count`: equal within 1e-6
+- `acc_count`, `bal_adj`, `kappa`, `kappa_lin`, `kappa_quad_labels`, `ll_sum`, `topk_count`, `brier_half`: equal within 1e-6
   (the same programs: `label_count_run` CNT_CORRECT, `label_metric_options_run`'s balanced epilogue with the
   adjusted word, `kappa_run` over `kappa_stages` (moved out of the door, which calls it too),
-  `log_loss_options_run`, `top_k_options_run`).
+  `log_loss_options_run`, `top_k_options_run`, `brier_options_run` with its half word).
 - `cls_mse`, `cls_r2`, `cls_mae`, `cls_max`: equal within 1e-6 (head: the labels' float32 values; base: the door
   units' metric over the predicted label arrays). Base may RAISE the door's "must have dtype float32" words for
   int64 labels (the regression door's dtype rule); head scores them as scikit-learn does: a stated behaviour
@@ -94,6 +94,7 @@ _CLS = {
     "kappa_quad_labels": ("cohen_kappa_score", {'weights': 'quadratic', 'labels': [2, 0, 1]}, 'predict', True),
     "ll_sum": ("log_loss", {'normalize': False}, 'predict_proba', False),
     "topk_count": ("top_k_accuracy_score", {'k': 2, 'normalize': False}, 'predict_proba', True),
+    "brier_half": ("brier_score_loss", {'scale_by_half': True}, 'predict_proba', False),
     "kappa_bad": ("cohen_kappa_score", {'weights': 'cubic'}, 'predict', True),
 }
 _LABELS = {"cls_mse": "neg_mean_squared_error", "cls_r2": "r2", "cls_mae": "neg_mean_absolute_error",

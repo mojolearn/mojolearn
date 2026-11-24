@@ -7,7 +7,7 @@ scikit-learn's metric of the fold estimator's predictions on the same rows, sign
 - the regression metrics with an alpha or a power (``mean_pinball_loss``, ``d2_pinball_score``,
   ``mean_tweedie_deviance``, ``d2_tweedie_score``), ``multioutput`` on a 1-D target and ``force_finite``;
 - ``accuracy_score(normalize=False)``, ``balanced_accuracy_score(adjusted=True)``, ``cohen_kappa_score`` (with
-  ``weights`` and ``labels``), ``log_loss(normalize=False)`` and ``top_k_accuracy_score(normalize=False)``;
+  ``weights`` and ``labels``), ``log_loss(normalize=False)``, ``top_k_accuracy_score(normalize=False)`` and ``brier_score_loss(scale_by_half=True)``;
 - a regression scorer on a classifier (its predicted labels scored as numbers).
 
 A kwarg value the metric refuses is raised per side in the metric's own words (``error_score='raise'``), and
@@ -112,6 +112,7 @@ CLASSIFICATION = [
     ('cohen_kappa_score', {'weights': 'quadratic', 'labels': [2, 0, 1]}, True, 'predict'),
     ('log_loss', {'normalize': False}, False, 'predict_proba'),
     ('top_k_accuracy_score', {'k': 2, 'normalize': False}, True, 'predict_proba'),
+    ('brier_score_loss', {'scale_by_half': True}, False, 'predict_proba'),
 ]
 
 
