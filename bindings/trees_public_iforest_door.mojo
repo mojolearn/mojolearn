@@ -51,6 +51,7 @@ from bindings.native_array_storage_door import native_scratch_bytes, native_scra
 from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.metrics_native_support_door import metric_is_integral, metric_is_bool
 from bindings.trees_keys_unpack import trees_keys
+from bindings.forest_fit_loop_pack import forest_fit_loop_store
 from bindings.py_balanced import py_item
 from std.python._cpython import GILReleased
 from core.entry_table import EntryRef
@@ -345,10 +346,19 @@ def _run_on(model: PythonObject, fields: PythonObject, x: AdmittedX, train: Pyth
     request.out_f32 = 0 if values is None else trees_address(values)
     request.out_i32 = 0 if labels is None else trees_address(labels)
     request.info = trees_address(info)
+    # `fit_loop_` (lane alm-forest): a fresh run is the estimator's fit; the
+    # image writes its tree build loop's two words here (IF_A_LOOP), -1
+    # until it does. A scoring call asks for none. On this frame, no heap.
+    var loop_words: Array[Int, 2] = [-1, -1]
+    if fresh:
+        request.loop = Int(loop_words.unsafe_ptr())
     # The fit and the scoring run with the GIL released, as inside the
     # former Python binding `iforest_run`; the entry touches no Python.
     with GILReleased(Python()):
         _ = if_entry_run(entry, request)
+    if fresh:
+        forest_fit_loop_store(fields, loop_words[0], loop_words[1])
+    _ = loop_words  # written through its address by the run above
     _ = train  # the lent training matrix stays alive through the call above
     _ = x.array  # the lent query stays alive through the call above
     _ = values  # keep the Python object alive through the native call above
