@@ -132,8 +132,19 @@ def _(ml, X, yc, yr, Xh=None):
         search = ms.GridSearchCV(ml.LogisticRegression(max_iter=30), {"C": [0.5, 2.0]}, cv=3, scoring=scorer,
                                  n_jobs=1, error_score=-7.0, refit=False).fit(rows, binary)
         rows8a.append(search.cv_results_["mean_test_score"])
+    # Lane mf-rows8b: a multi-output classifier's target (two outputs of 3 and 4 labels) scored by r2 over its
+    # labels' values, and by accuracy (each side refuses 'multiclass-multioutput is not supported': error_score);
+    # a multi-capable member on a 1-D target scored natively. Digested by their mean test scores.
+    rows8b = []
+    two = np.stack([np.asarray(labels, dtype=np.int64) % 3,
+                    (np.arange(len(rows), dtype=np.int64) % 4) * 10], axis=1)
+    for scorer, y in (("r2", two), ("accuracy", two), ("accuracy", np.asarray(labels))):  # glue: fixtures
+        search = ms.GridSearchCV(ml.KNeighborsClassifier(numeric_mode="identical"), {"n_neighbors": [3, 5]}, cv=3,
+                                 scoring=scorer, n_jobs=1, error_score=-7.0, refit=False).fit(rows, y)
+        rows8b.append(search.cv_results_["mean_test_score"])
     return _fit(dict(scores=_h(values),
                      rows8a=_h(*[np.asarray(v, dtype=np.float64) for v in rows8a]),
+                     rows8b=_h(*[np.asarray(v, dtype=np.float64) for v in rows8b]),
                      folds=_h(*[np.asarray(indices, dtype=np.int64) for pair in folds for indices in pair]),
                      names=_h(np.frombuffer("\n".join(names).encode("utf-8"), dtype=np.uint8)),
                      typed=_h(*[np.asarray(v, dtype=np.float64) for v in typed]),
