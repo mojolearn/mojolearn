@@ -28,6 +28,9 @@ split.
 from core.entry_table import entry_table_publish, entry_table_read
 from core.logistic_native_api import LOGISTIC_NATIVE_ABI, QN_NATIVE_COUNT, LOGISTIC_FOLD_ABI, QN_FOLD_COUNT
 from core.native_descriptor_abi import NativeDescriptorCall
+from core.pca_native_api import PCA_NATIVE_ABI, PCA_NATIVE_COUNT
+from core.tsvd_native_api import TSVD_NATIVE_ABI, TSVD_NATIVE_COUNT
+from x_prep.transport_abi import XP_OP_COUNT
 
 comptime ESTIMATORS_TABLE_QN = 0
 comptime ESTIMATORS_TABLE_QN_FOLD = 1
@@ -157,3 +160,67 @@ def estimators_table_entry[family: Int](key: EstimatorsEntryKey) raises -> Nativ
         if key.mode == 1 and key.vendor == 3:
             return entry_table_read["MojolearnEntriesQnFoldIdenticalHIPV1"](key.mode, key.vendor, 0, schema[0], schema[1])
         return entry_table_read["MojolearnEntriesQnFoldFastHIPV1"](key.mode, key.vendor, 0, schema[0], schema[1])
+
+
+# ---- ESTIMATORS_TABLE_DECOMP_FOLD (lane vdf-scope-neural2, 2026-11-24) ----
+# The resident-fold decomposition entries the GPU base binding `_mojolearn`
+# owns beside the identical model-selection store: entry 0 the PCA fold entry
+# (core/pca_native_fold.mojo), 1 the TruncatedSVD fold entry
+# (core/tsvd_native_fold.mojo), 2 that store as a scope transport entry
+# (core/msel_fold_transport.mojo). The PCA / TruncatedSVD members' UNPACK
+# resolves all three once (THE RESIDENT ROUTE). The store is the identical
+# one: only an identical GPU build publishes, so only identical keys exist.
+comptime ESTIMATORS_TABLE_DECOMP_FOLD = 2
+comptime DECOMP_FOLD_PCA = 0
+comptime DECOMP_FOLD_TSVD = 1
+comptime DECOMP_FOLD_STORE = 2
+comptime DECOMP_FOLD_STORE_ABI = "mojolearn.msel.fold_store.v1"
+
+
+def _decomp_fold_schemas() -> List[String]:
+    return [String(PCA_NATIVE_ABI), String(TSVD_NATIVE_ABI), String(DECOMP_FOLD_STORE_ABI)]
+
+
+def _decomp_fold_counts() -> List[Int]:
+    return [PCA_NATIVE_COUNT, TSVD_NATIVE_COUNT, XP_OP_COUNT]
+
+
+def decomp_fold_table_publish(key: EstimatorsEntryKey, publisher: Int, pca: NativeDescriptorCall,
+                              tsvd: NativeDescriptorCall, store: NativeDescriptorCall) raises:
+    """Publish the identical GPU base image's three resident-fold entries."""
+    _estimators_key_check(key)
+    if key.mode != 1 or key.vendor == 0:
+        raise Error("native estimators entries: the decomposition fold table is identical GPU only")
+    var schemas = _decomp_fold_schemas()
+    var operations = _decomp_fold_counts()
+    var entries: List[NativeDescriptorCall] = [pca, tsvd, store]
+    if key.vendor == 1:
+        entry_table_publish["MojolearnEntriesDecompFoldIdenticalMetalV1"](key.mode, key.vendor, publisher, schemas,
+                                                                         operations, entries)
+    elif key.vendor == 2:
+        entry_table_publish["MojolearnEntriesDecompFoldIdenticalCUDAV1"](key.mode, key.vendor, publisher, schemas,
+                                                                        operations, entries)
+    else:
+        entry_table_publish["MojolearnEntriesDecompFoldIdenticalHIPV1"](key.mode, key.vendor, publisher, schemas,
+                                                                       operations, entries)
+    _ = schemas
+    _ = operations
+    _ = entries
+
+
+def decomp_fold_entry(key: EstimatorsEntryKey, index: Int) raises -> NativeDescriptorCall:
+    """Entry `index` (DECOMP_FOLD_*) of the decomposition fold table of the
+    image the key names; a missing publication (a host or fast key, or a
+    build without the base binding) refuses with the table's error."""
+    _estimators_key_check(key)
+    if key.mode != 1 or key.vendor == 0 or index < 0 or index > DECOMP_FOLD_STORE:
+        raise Error("native estimators entries: no decomposition fold entry for this key")
+    var schemas = _decomp_fold_schemas()
+    var counts = _decomp_fold_counts()
+    var schema = schemas[index].copy()
+    var count = counts[index]
+    if key.vendor == 1:
+        return entry_table_read["MojolearnEntriesDecompFoldIdenticalMetalV1"](key.mode, key.vendor, index, schema, count)
+    if key.vendor == 2:
+        return entry_table_read["MojolearnEntriesDecompFoldIdenticalCUDAV1"](key.mode, key.vendor, index, schema, count)
+    return entry_table_read["MojolearnEntriesDecompFoldIdenticalHIPV1"](key.mode, key.vendor, index, schema, count)
