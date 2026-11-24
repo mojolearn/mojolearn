@@ -1,7 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""BPE ENCODE AND DECODE ON THE GPU, IDENTICAL MODE, EVERY VENDOR (lane vdf-parallel, 2026-11-24;
+"""BPE ENCODE, DECODE AND TRAINING ON THE GPU, EVERY VENDOR (lane vdf-parallel, 2026-11-24;
 addenda 2 and 3 of the vd-functions briefs).
+
+TRAINING (`bpe_gpu_train_into`, the `device="gpu"` side of `BpeVocabularyTrainer.train`): the same
+per-byte pre-tokenizer, a device pre-token set (`gpu_piece_dedup_kernel`: train_bpe's step 1, the
+deduplicated groups with their counts), then the exact device merge loop of
+`tokenizer/fast/bpe_device.mojo` (group init, top-K, select, apply: the host trainer's merges, tie
+count and groups, merge for merge), fed from the device groups and run with no read-back between
+passes. Its kernels are vendor-neutral integer code compiled here for every target.
 
 The `device="gpu"` side of `mojolearn.tokenizer.BpeTokenizer`: the same token ids, id for id, as
 the host column (`tokenizer/encoding.mojo` `BpeTokenizer.encode_bytes` / `decode_bytes`), on CUDA,
@@ -53,7 +60,7 @@ once per tokenizer (`BpeGpuTable`); host text is uploaded once per call by view;
 device-resident are read in place; the result (ids or bytes, counts, the state words) is read back
 once, after the last kernel. No host step inside the call touches the data.
 """
-from std.atomic import Atomic
+from std.atomic import Atomic, Ordering
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -62,9 +69,12 @@ from tokenizer.encoding import BpeTokenizer
 from tokenizer.impl.ranks import RankTable
 from tokenizer.impl.unicode_class import UnicodeClasses
 from tokenizer.fast.bpe_device import (
-    BPE_TPB, BPE_RT, S_FAIL, S_TOTAL, S_LEN, FNV_OFFSET64, FNV_PRIME64,
-    bpe_scan_block_kernel, bpe_scan_sums_kernel, bpe_scan_add_kernel,
+    BPE_TPB, BPE_RT, BPE_RB, BPE_K, BPE_MAX_VOCAB, S_DONE, S_NM, S_TIES, S_FAIL, S_TOTAL, S_LEN, FNV_OFFSET64, FNV_PRIME64,
+    BpeMerges, bpe_scan_block_kernel, bpe_scan_sums_kernel, bpe_scan_add_kernel, bpe_fill_kernel,
+    bpe_group_init_kernel, bpe_topk_part_kernel, bpe_select_kernel, bpe_apply_kernel,
 )
+from tokenizer.fast.bpe_fast_impl import fast_vocab_from_merges
+from tokenizer.train.bpe_train import TrainedVocabulary
 
 comptime I32P = MutPointer[Int32, MutAnyOrigin]
 comptime I64P = MutPointer[Int64, MutAnyOrigin]
@@ -559,6 +569,99 @@ def gpu_seq_lens_kernel(soffs: I64P, pfx: I32P, lens: I64P, nseq: Int64):
     lens.unsafe_store(s, Int64(pfx[Int(soffs[s + 1])] - pfx[Int(soffs[s])]))
 
 
+# ------------------------------------------------------------------ training kernels
+
+
+@always_inline
+def _piece_end(tflag: U8P, b: Int, hi: Int) -> Int:
+    """The end of the pre-token starting at `b`: the next start, or the document end."""
+    var e = b + 1
+    while e < hi and tflag[e] == 0:
+        e += 1
+    return e
+
+
+def gpu_piece_dedup_kernel(
+    text: U8P, offs: I64P, ndocs: Int64, n: Int64, tflag: U8P, hkeys: I32P, hcnt: I32P, tmask: Int64, st: I32P,
+):
+    """One thread per byte; a thread whose byte starts a pre-token inserts it into the device
+    pre-token set (open addressing on its FNV-1a hash, the slot holding the first occurrence's
+    byte offset + 1, claimed by compare-exchange; an equal pre-token found on the probe path adds
+    to that slot's count). Equal pre-tokens share one hash and so one probe path, so each distinct
+    pre-token owns exactly one slot and its count is its number of occurrences: train_bpe's step 1
+    (`PieceGroups`), whose group order the merge loop does not depend on."""
+    var b = _gtid()
+    if b >= Int(n) or tflag[b] != 1:
+        return
+    var d = _doc_of(offs, Int(ndocs), b)
+    var e = _piece_end(tflag, b, Int(offs[d + 1]))
+    var plen = e - b
+    var h = FNV_OFFSET64
+    for i in range(b, e):
+        h = (h ^ UInt64(text[i])) * FNV_PRIME64
+    var tm = Int(tmask)
+    var s = Int(h & UInt64(tm))
+    var probes = 0
+    while probes <= tm:
+        var cur = Atomic.load[ordering=Ordering.RELAXED](hkeys.unsafe_offset(s))
+        if cur == Int32(0):
+            var expected = Int32(0)
+            if Atomic.compare_exchange[
+                success_ordering=Ordering.RELAXED,
+                failure_ordering=Ordering.RELAXED,
+                weak=True,
+            ](hkeys.unsafe_offset(s), expected, Int32(b + 1)):
+                _ = Atomic.fetch_add(hcnt.unsafe_offset(s), Int32(1))
+                return
+            # lost the slot to another thread (or a spurious weak failure): look at it again
+            continue
+        var o = Int(cur) - 1
+        var od = _doc_of(offs, Int(ndocs), o)
+        var oe = _piece_end(tflag, o, Int(offs[od + 1]))
+        if oe - o == plen:
+            var eq = True
+            for i in range(plen):
+                if text[o + i] != text[b + i]:
+                    eq = False
+                    break
+            if eq:
+                _ = Atomic.fetch_add(hcnt.unsafe_offset(s), Int32(1))
+                return
+        s = (s + 1) & tm
+        probes += 1
+    st.unsafe_store(S_FAIL, Int32(4))
+
+
+def gpu_slot_flag_kernel(hkeys: I32P, flags: I32P, ts: Int64):
+    """One thread per set slot: 1 where a distinct pre-token sits."""
+    var s = _gtid()
+    if s >= Int(ts):
+        return
+    flags.unsafe_store(s, Int32(1) if hkeys[s] != Int32(0) else Int32(0))
+
+
+def gpu_group_write_kernel(
+    offs: I64P, ndocs: Int64, tflag: U8P, hkeys: I32P, hcnt: I32P, gpos: I32P, goff: I64P, glen0: I64P,
+    gcnt: I64P, glens: I32P, ts: Int64,
+):
+    """One thread per set slot: its distinct pre-token becomes group gpos[s] (its first
+    occurrence's offset into the text, its length, its count), the merge loop's input."""
+    var s = _gtid()
+    if s >= Int(ts):
+        return
+    var key = Int(hkeys[s])
+    if key == 0:
+        return
+    var o = key - 1
+    var d = _doc_of(offs, Int(ndocs), o)
+    var plen = _piece_end(tflag, o, Int(offs[d + 1])) - o
+    var g = Int(gpos[s])
+    goff.unsafe_store(g, Int64(o))
+    glen0.unsafe_store(g, Int64(plen))
+    gcnt.unsafe_store(g, Int64(hcnt[s]))
+    glens.unsafe_store(g, Int32(plen))
+
+
 # ------------------------------------------------------------------ host side
 
 
@@ -833,3 +936,201 @@ def bpe_gpu_decode_batch_into(
     _ = d_st^
     _ = len(soffs_host)
     return result
+
+
+struct BpeGpuClasses(Movable):
+    """The three Unicode class range tables on the device, uploaded once (the trainer's
+    pre-tokenizer reads nothing else of a tokenizer)."""
+
+    var letters: DeviceBuffer[DType.int64]
+    var numbers: DeviceBuffer[DType.int64]
+    var spaces: DeviceBuffer[DType.int64]
+    var nl: Int
+    var nn: Int
+    var ns: Int
+
+    def __init__(out self, ctx: DeviceContext, classes: UnicodeClasses) raises:
+        self.nl = len(classes.letters) // 2
+        self.nn = len(classes.numbers) // 2
+        self.ns = len(classes.spaces) // 2
+        self.letters = ctx.enqueue_create_buffer[DType.int64](max(len(classes.letters), 1))
+        self.numbers = ctx.enqueue_create_buffer[DType.int64](max(len(classes.numbers), 1))
+        self.spaces = ctx.enqueue_create_buffer[DType.int64](max(len(classes.spaces), 1))
+        _up64(ctx, self.letters, Int(classes.letters.unsafe_ptr()), len(classes.letters))
+        _up64(ctx, self.numbers, Int(classes.numbers.unsafe_ptr()), len(classes.numbers))
+        _up64(ctx, self.spaces, Int(classes.spaces.unsafe_ptr()), len(classes.spaces))
+        ctx.synchronize()
+
+
+def bpe_gpu_train_into(
+    classes_table: BpeGpuClasses, text_addr: Int, n: Int, offs_host: List[Int64], vocab_size: Int, min_frequency: Int,
+) raises -> TrainedVocabulary:
+    """`BpeVocabularyTrainer.train` on the GPU, the host trainer's result merge for merge (the merge
+    loop is tokenizer/fast/bpe_device.mojo's exact device loop, its kernels compiled here for every
+    vendor): the documents uploaded once; pre-tokenized per byte (`gpu_unit_kernel`,
+    `gpu_start_kernel`, no special token, as train_bpe); the pre-tokens deduplicated into groups
+    on the device (`gpu_piece_dedup_kernel`); the pair counts and every merge pass on the device
+    with no read-back between passes (a pass after the selection said done is a no-op, so
+    vocab_size - 256 passes are enqueued). Two words come back before the merge loop (the group
+    count and their total length, which size the loop's tables and launches) and the state and
+    the merges once at the end; the vocabulary is then written in merge order, as train_bpe writes
+    it. `classes_table` holds the Unicode class tables on the device."""
+    if vocab_size < 256 or vocab_size > BPE_MAX_VOCAB:
+        raise Error("ValueError: device='gpu' trains vocab_size from 256 to " + String(BPE_MAX_VOCAB)
+            + " (the device pair key is int32), got " + String(vocab_size) + "; use device='cpu'")
+    if min_frequency < 1:
+        raise Error("ValueError: min_frequency must be at least 1")
+    var ctx = bpe_gpu_ctx()
+    var ndocs = len(offs_host) - 1
+    var mcap = max(2 * (vocab_size - 256), 2)
+    var merges = BpeMerges(mcap)
+    if n == 0 or vocab_size == 256:
+        return fast_vocab_from_merges(merges, 0)
+    var nblk = _blocks(n)
+    var d_text = ctx.enqueue_create_buffer[DType.uint8](n)
+    var d_offs = ctx.enqueue_create_buffer[DType.int64](ndocs + 1)
+    _up8(ctx, d_text, text_addr, n)
+    _up64(ctx, d_offs, Int(offs_host.unsafe_ptr()), ndocs + 1)
+    var text = _p8(d_text)
+    var offs = _p64(d_offs)
+    # Pre-tokenize: units, then starts (no `<|endoftext|>` recognition: allow 0, flags all zero).
+    var mflag = ctx.enqueue_create_buffer[DType.uint8](n)
+    var ustart = ctx.enqueue_create_buffer[DType.uint8](n)
+    var ulen = ctx.enqueue_create_buffer[DType.uint8](n)
+    var ucls = ctx.enqueue_create_buffer[DType.uint8](n)
+    var tflag = ctx.enqueue_create_buffer[DType.uint8](n)
+    mflag.enqueue_fill(UInt8(0))
+    ctx.enqueue_function[gpu_unit_kernel](
+        text, offs, Int64(ndocs), Int64(n), _p8(mflag), Int64(0), Int64(0),
+        _p64(classes_table.letters), Int64(classes_table.nl), _p64(classes_table.numbers), Int64(classes_table.nn),
+        _p64(classes_table.spaces), Int64(classes_table.ns), _p8(ustart), _p8(ulen), _p8(ucls),
+        grid_dim=nblk, block_dim=BPE_TPB,
+    )
+    ctx.enqueue_function[gpu_start_kernel](
+        text, offs, Int64(ndocs), Int64(n), _p8(mflag), Int64(0), _p8(ustart), _p8(ulen), _p8(ucls), _p8(tflag),
+        grid_dim=nblk, block_dim=BPE_TPB,
+    )
+    # Dedup into groups (a set of at most n pre-tokens at load <= 1/2).
+    var tsd = 1024
+    while tsd < 2 * n:
+        tsd *= 2
+    var hkeys = ctx.enqueue_create_buffer[DType.int32](tsd)
+    var hcnt = ctx.enqueue_create_buffer[DType.int32](tsd)
+    var flags = ctx.enqueue_create_buffer[DType.int32](tsd)
+    var gpos = ctx.enqueue_create_buffer[DType.int32](tsd + 1)
+    var glens = ctx.enqueue_create_buffer[DType.int32](tsd)
+    var lpos = ctx.enqueue_create_buffer[DType.int32](tsd + 1)
+    var goff = ctx.enqueue_create_buffer[DType.int64](tsd)
+    var glen0 = ctx.enqueue_create_buffer[DType.int64](tsd)
+    var gcnt = ctx.enqueue_create_buffer[DType.int64](tsd)
+    var st_g = ctx.enqueue_create_buffer[DType.int32](S_LEN)
+    var st_l = ctx.enqueue_create_buffer[DType.int32](S_LEN)
+    hkeys.enqueue_fill(Int32(0))
+    hcnt.enqueue_fill(Int32(0))
+    glens.enqueue_fill(Int32(0))
+    st_g.enqueue_fill(Int32(0))
+    st_l.enqueue_fill(Int32(0))
+    ctx.enqueue_function[gpu_piece_dedup_kernel](
+        text, offs, Int64(ndocs), Int64(n), _p8(tflag), _p32(hkeys), _p32(hcnt), Int64(tsd - 1), _p32(st_g),
+        grid_dim=nblk, block_dim=BPE_TPB,
+    )
+    ctx.enqueue_function[gpu_slot_flag_kernel](_p32(hkeys), _p32(flags), Int64(tsd), grid_dim=_blocks(tsd), block_dim=BPE_TPB)
+    _scan(ctx, _p32(flags), _p32(gpos), _p32(st_g), tsd)
+    ctx.enqueue_function[gpu_group_write_kernel](
+        offs, Int64(ndocs), _p8(tflag), _p32(hkeys), _p32(hcnt), _p32(gpos), _p64(goff), _p64(glen0), _p64(gcnt),
+        _p32(glens), Int64(tsd), grid_dim=_blocks(tsd), block_dim=BPE_TPB,
+    )
+    _scan(ctx, _p32(glens), _p32(lpos), _p32(st_l), tsd)
+    # The two sizing words: the group count and the symbols in them.
+    var h_g = List[Int32](length=S_LEN, fill=Int32(0))
+    var h_l = List[Int32](length=S_LEN, fill=Int32(0))
+    ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=Int(h_g.unsafe_ptr())), src_buf=st_g)
+    ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=Int(h_l.unsafe_ptr())), src_buf=st_l)
+    ctx.synchronize()
+    if h_g[S_FAIL] != Int32(0):
+        raise Error("RuntimeError: bpe_train (gpu): the pre-token set overflowed")
+    var ng = Int(h_g[S_TOTAL])
+    var syms = Int(h_l[S_TOTAL])
+    if ng == 0 or syms - ng < 1:
+        _ = d_text^
+        _ = d_offs^
+        return fast_vocab_from_merges(merges, ng)
+    # The merge loop (tokenizer/fast/bpe_device.mojo `_train_passes`, fed from the device groups).
+    var occ_cap = 3 * syms + 16
+    var ts = 1024
+    while ts < 2 * occ_cap:
+        ts *= 2
+    var seq = ctx.enqueue_create_buffer[DType.int32](n)
+    var glen = ctx.enqueue_create_buffer[DType.int32](ng)
+    var gmask = ctx.enqueue_create_buffer[DType.int32](2 * ng)
+    var keys = ctx.enqueue_create_buffer[DType.int32](ts)
+    var vals = ctx.enqueue_create_buffer[DType.int32](ts)
+    var occ = ctx.enqueue_create_buffer[DType.int32](occ_cap)
+    var st = ctx.enqueue_create_buffer[DType.int32](S_LEN)
+    var sel = ctx.enqueue_create_buffer[DType.int32](2 * BPE_K)
+    var mrg = ctx.enqueue_create_buffer[DType.int32](mcap)
+    var pc = ctx.enqueue_create_buffer[DType.int32](BPE_RB * BPE_K)
+    var pk = ctx.enqueue_create_buffer[DType.int32](BPE_RB * BPE_K)
+    keys.enqueue_fill(Int32(0))
+    vals.enqueue_fill(Int32(0))
+    st.enqueue_fill(Int32(0))
+    var gb = _blocks(ng)
+    var mask = ts - 1
+    ctx.enqueue_function[bpe_group_init_kernel](
+        text, _p64(goff), _p64(glen0), _p64(gcnt), _p32(seq), _p32(glen), _p32(gmask), _p32(keys), _p32(vals),
+        _p32(occ), _p32(st), Int64(ng), Int64(vocab_size), Int64(mask), Int64(occ_cap),
+        grid_dim=gb, block_dim=BPE_TPB,
+    )
+    for _p in range(vocab_size - 256):  # driver-loop: over merge passes (no read-back; a pass after done is a no-op)
+        ctx.enqueue_function[bpe_topk_part_kernel](
+            _p32(keys), _p32(vals), _p32(occ), _p32(st), _p32(pc), _p32(pk), Int64(occ_cap),
+            grid_dim=BPE_RB, block_dim=BPE_RT,
+        )
+        ctx.enqueue_function[bpe_select_kernel](  # small-launch(one threadgroup over BPE_RB partial lists): the pass's selection
+            _p32(pc), _p32(pk), _p32(st), _p32(sel), _p32(mrg), Int64(vocab_size), Int64(vocab_size),
+            Int64(min_frequency), grid_dim=1, block_dim=BPE_RB,
+        )
+        ctx.enqueue_function[bpe_apply_kernel](
+            _p32(seq), _p32(glen), _p64(goff), _p64(gcnt), _p32(gmask), _p32(keys), _p32(vals), _p32(occ), _p32(st),
+            _p32(sel), Int64(ng), Int64(vocab_size), Int64(mask), Int64(occ_cap),
+            grid_dim=gb, block_dim=BPE_TPB,
+        )
+    var h_st = List[Int32](length=S_LEN, fill=Int32(0))
+    ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=Int(h_st.unsafe_ptr())), src_buf=st)
+    ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=Int(merges.pairs.unsafe_ptr())), src_buf=mrg)
+    ctx.synchronize()
+    if h_st[S_FAIL] != Int32(0):
+        raise Error("RuntimeError: bpe_train (gpu): the pair table failed (code " + String(Int(h_st[S_FAIL])) + ")")
+    merges.n_merges = Int(h_st[S_NM])
+    merges.n_ties = Int(h_st[S_TIES])
+    _ = d_text^
+    _ = d_offs^
+    _ = mflag^
+    _ = ustart^
+    _ = ulen^
+    _ = ucls^
+    _ = tflag^
+    _ = hkeys^
+    _ = hcnt^
+    _ = flags^
+    _ = gpos^
+    _ = glens^
+    _ = lpos^
+    _ = goff^
+    _ = glen0^
+    _ = gcnt^
+    _ = st_g^
+    _ = st_l^
+    _ = seq^
+    _ = glen^
+    _ = gmask^
+    _ = keys^
+    _ = vals^
+    _ = occ^
+    _ = st^
+    _ = sel^
+    _ = mrg^
+    _ = pc^
+    _ = pk^
+    _ = len(offs_host)
+    return fast_vocab_from_merges(merges, ng)

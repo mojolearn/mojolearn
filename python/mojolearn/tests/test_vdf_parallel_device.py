@@ -82,9 +82,29 @@ def test_tokenizer_gpu_round_trip(identical_mode):
         tok.decode([1, 999])
 
 
-def test_trainer_gpu_outside_the_fast_trainer_is_refused(identical_mode):
-    with pytest.raises(ValueError, match="device='gpu' is not available for BpeVocabularyTrainer: it has no GPU implementation"):
-        BpeVocabularyTrainer(vocab_size=300, device="gpu")
+def test_trainer_gpu(identical_mode):
+    # On a CPU-only installation (mojolearn.vendor() == "cpu") 'gpu' is refused at construction; on a
+    # GPU installation it trains on the GPU (words and types only; the vocabulary against the host
+    # trainer is the native check checks/native_tests/bpe_gpu_identity.mojo).
+    if mojolearn.vendor() == "cpu":
+        with pytest.raises(ValueError, match="device='gpu' needs a GPU build of mojolearn"):
+            BpeVocabularyTrainer(vocab_size=300, device="gpu")
+        return
+    vocab = BpeVocabularyTrainer(vocab_size=260, device="gpu").train(["abab abab", "ab"])
+    assert isinstance(vocab, TrainedBpeVocabulary)
+    with pytest.raises(ValueError, match="device='gpu' trains vocab_size from 256 to 46340"):
+        BpeVocabularyTrainer(vocab_size=50000, device="gpu").train(["ab"])
+
+
+def test_decode_batch_reports_the_earliest_sequence_error_first(identical_mode):
+    # The host route's order on both devices: an out-of-range id in sequence 0 wins over a
+    # non-integer in sequence 1, and the non-integer wins when sequence 0 is valid.
+    for device in ("cpu",) if mojolearn.vendor() == "cpu" else ("cpu", "gpu"):
+        tok = BpeTokenizer.from_token_bytes(TOKENS, device=device)
+        with pytest.raises(ValueError, match="id 999 at position 0 is outside"):
+            tok.decode_batch([[999], ["x"]])
+        with pytest.raises(TypeError):
+            tok.decode_batch([[1], ["x"]])
 
 
 def test_tokenizer_cpu_runs_the_host_code_in_identical_mode(identical_mode):

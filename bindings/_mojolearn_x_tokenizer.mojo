@@ -11,7 +11,9 @@ module at import (`python/mojolearn/tokenizer.py` `_gpu_binding`) and routes a t
 
 THE ADDRESS CONTRACT (the host binding's buffers):
 
-    tokenizer_gpu_numeric_mode() -> 1 (IDENTICAL); the loader refuses anything else
+    x_tokenizer_numeric_mode(), x_tokenizer_vendor(): the loader's read-back (`_backend.binding`). The
+        work is integer only, so the FAST and IDENTICAL builds are the same code and give the same ids;
+        the binding is an expansion lane's (`python/mojolearn/_surface_tokenizer.py`) and builds both tiers
     bpe_gpu_load(ranks_text) -> handle: the host binding's canonical rank text of the same
         tokenizer, parsed, and its tables uploaded to the device ONCE for the handle's life
     bpe_gpu_encode_batch(handle, text_addr, lengths_addr, ids_addr, counts_addr,
@@ -21,6 +23,9 @@ THE ADDRESS CONTRACT (the host binding's buffers):
     bpe_gpu_decode_batch(handle, ids_addr, offsets_addr, out_addr, lens_addr,
                          [n_seq, n_ids, out_cap]) -> total bytes, or -1 - position of the first
         id outside [0, n_vocab) (the door raises the host's words for it)
+    bpe_gpu_train(text_addr, lengths_addr, [n_docs, n_bytes, vocab_size, min_frequency]) -> handle,
+        then bpe_gpu_trained_sizes(handle), bpe_gpu_trained_copy(handle, arena, lengths, left, right):
+        `BpeVocabularyTrainer.train` on the GPU, the host trainer's vocabulary merge for merge
 """
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
@@ -32,10 +37,31 @@ from bindings.p3_lm_tokenizer_cpython_unpack import lm_try_index
 from bindings.py_balanced import py_call as _balanced_call
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.vendor import COMPILED_VENDOR
 from tokenizer.encoding import BpeTokenizer
 from tokenizer.impl.ranks import parse_rank_table
 from tokenizer.impl.unicode_class import builtin_unicode_classes
-from tokenizer.gpu.bpe_gpu import BpeGpuTable, bpe_gpu_ctx, bpe_gpu_encode_batch_into, bpe_gpu_decode_batch_into
+from tokenizer.gpu.bpe_gpu import (
+    BpeGpuClasses, BpeGpuTable, bpe_gpu_ctx, bpe_gpu_encode_batch_into, bpe_gpu_decode_batch_into, bpe_gpu_train_into,
+)
+from tokenizer.fast.bpe_fast_impl import fast_bpe_trained_copy_into
+from tokenizer.train.bpe_train import TrainedVocabulary
+
+
+struct GpuTrainedHandle(Movable, Writable):
+    """Python-owned result of one `bpe_gpu_train` call, held until `bpe_gpu_trained_copy` has
+    copied it into the caller's buffers (the host binding's ABI)."""
+
+    var vocab: Optional[TrainedVocabulary]
+
+    def __init__(out self):
+        self.vocab = Optional[TrainedVocabulary]()
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("_GpuTrainedHandle(trained=", Bool(self.vocab), ")")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        writer.write("_GpuTrainedHandle(trained=", Bool(self.vocab), ")")
 
 
 struct GpuBpeHandle(Movable, Writable):
@@ -76,8 +102,12 @@ def _flag(value: PythonObject, name: String) raises -> Bool:
     raise Error("tokenizer gpu: " + name + " must be a bool, got " + String(py=value.__class__.__name__))
 
 
-def tokenizer_gpu_numeric_mode_binding() raises -> PythonObject:
-    return PythonObject(GLOBAL_NUMERIC_MODE)
+def x_tokenizer_numeric_mode_binding() raises -> PythonObject:
+    return PythonObject(Int(GLOBAL_NUMERIC_MODE))
+
+
+def x_tokenizer_vendor_binding() raises -> PythonObject:
+    return PythonObject(String(COMPILED_VENDOR))
 
 
 def bpe_gpu_load_binding(ranks_text: PythonObject) raises -> PythonObject:
@@ -168,16 +198,85 @@ def bpe_gpu_decode_batch_binding(
     return PythonObject(result)
 
 
-# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_tokenizer_gpu.mojo.
-def build__mojolearn_tokenizer_gpu() -> PythonObject:
+def bpe_gpu_train_binding(text_addr: PythonObject, lengths_addr: PythonObject, dims: PythonObject) raises -> PythonObject:
+    """The host `bpe_train` ABI, every step on the GPU (tokenizer/gpu/bpe_gpu.mojo
+    `bpe_gpu_train_into`): dims [n_docs, n_bytes, vocab_size, min_frequency]."""
+    if Int(py=len(dims)) != 4:
+        raise Error("bpe_train (gpu): dims must be [n_docs, n_bytes, vocab_size, min_frequency]")
+    var n_docs = _index(dims[0])
+    var n = _index(dims[1])
+    var vocab_size = _index(dims[2])
+    var min_frequency = _index(dims[3])
+    if n_docs < 1:
+        raise Error("bpe_train: n_docs must be >= 1, got " + String(n_docs))
+    if n < 0:
+        raise Error("bpe_train: n_bytes must be >= 0, got " + String(n))
+    var text_address = _index(text_addr) if n > 0 else 0
+    var lengths = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_index(lengths_addr))
+    var offs = List[Int64](length=n_docs + 1, fill=Int64(0))
+    for k in range(n_docs):  # driver-loop: over document lengths (admission, before the upload)
+        if Int(lengths[k]) < 0:
+            raise Error("bpe_train: document " + String(k) + " has a negative length")
+        offs[k + 1] = offs[k] + lengths[k]
+    if Int(offs[n_docs]) != n:
+        raise Error("bpe_train: document lengths must sum to n_bytes " + String(n) + ", got 0 and "
+            + String(Int(offs[n_docs])))
+    var handle = GpuTrainedHandle()
+    with GILReleased(Python()):
+        var ctx = bpe_gpu_ctx()
+        var classes = BpeGpuClasses(ctx, builtin_unicode_classes())
+        handle.vocab = bpe_gpu_train_into(classes, text_address, n, offs, vocab_size, min_frequency)
+    return PythonObject(alloc=handle^)
+
+
+def bpe_gpu_trained_sizes_binding(handle: PythonObject) raises -> PythonObject:
+    """`[n_tokens, arena_bytes, n_merges, n_ties_broken, n_groups]`, as the host binding."""
+    var owner = handle.downcast_value_ptr[GpuTrainedHandle]()
+    if not owner[].vocab:
+        raise Error("tokenizer gpu: the handle holds no trained vocabulary")
+    ref v = owner[].vocab.value()
+    var out = Python.list()
+    out.append(PythonObject(v.n_tokens()))
+    out.append(PythonObject(len(v.arena)))
+    out.append(PythonObject(v.n_merges()))
+    out.append(PythonObject(v.n_ties_broken))
+    out.append(PythonObject(v.n_groups))
+    return out
+
+
+def bpe_gpu_trained_copy_binding(
+    handle: PythonObject, arena_addr: PythonObject, lengths_addr: PythonObject, left_addr: PythonObject,
+    right_addr: PythonObject,
+) raises -> PythonObject:
+    """The host binding's copy-out: token bytes in rank order, lengths, merges. Returns n_tokens."""
+    var owner = handle.downcast_value_ptr[GpuTrainedHandle]()
+    if not owner[].vocab:
+        raise Error("tokenizer gpu: the handle holds no trained vocabulary")
+    var arena_address = _index(arena_addr)
+    var lengths_address = _index(lengths_addr)
+    var nm = owner[].vocab.value().n_merges()
+    var left_address = _index(left_addr) if nm > 0 else 0
+    var right_address = _index(right_addr) if nm > 0 else 0
+    ref v = owner[].vocab.value()
+    fast_bpe_trained_copy_into(v, arena_address, lengths_address, nm, left_address, right_address)
+    return PythonObject(v.n_tokens())
+
+
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_tokenizer.mojo.
+def build__mojolearn_x_tokenizer() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
-        var module = PythonModuleBuilder("_mojolearn_tokenizer_gpu")
-        module.def_function[tokenizer_gpu_numeric_mode_binding]("tokenizer_gpu_numeric_mode")
+        var module = PythonModuleBuilder("_mojolearn_x_tokenizer")
+        module.def_function[x_tokenizer_numeric_mode_binding]("x_tokenizer_numeric_mode")
+        module.def_function[x_tokenizer_vendor_binding]("x_tokenizer_vendor")
         _ = module.add_type[GpuBpeHandle]("_GpuBpeHandle")
         module.def_function[bpe_gpu_load_binding]("bpe_gpu_load")
         module.def_function[bpe_gpu_encode_batch_binding]("bpe_gpu_encode_batch")
         module.def_function[bpe_gpu_decode_batch_binding]("bpe_gpu_decode_batch")
+        _ = module.add_type[GpuTrainedHandle]("_GpuTrainedHandle")
+        module.def_function[bpe_gpu_train_binding]("bpe_gpu_train")
+        module.def_function[bpe_gpu_trained_sizes_binding]("bpe_gpu_trained_sizes")
+        module.def_function[bpe_gpu_trained_copy_binding]("bpe_gpu_trained_copy")
         return module.finalize()
     except error:
-        abort(String("failed to create _mojolearn_tokenizer_gpu: ", error))
+        abort(String("failed to create _mojolearn_x_tokenizer: ", error))

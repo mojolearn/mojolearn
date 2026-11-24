@@ -107,21 +107,23 @@ def _fast_binding(*, connect_all=False):
     return module, bool(train), bool(encode), int(max_vocab)
 
 
-#: The identical GPU tokenizer (`tokenizer/gpu/`, binding `_mojolearn_tokenizer_gpu`): what a
+#: The identical GPU tokenizer (`tokenizer/gpu/`, binding `_mojolearn_x_tokenizer`): what a
 #: BpeTokenizer built with device="gpu" runs. Connected once at import:
-#: `(module, bpe_gpu_load, bpe_gpu_encode_batch, bpe_gpu_decode_batch)`, or a one-item tuple
+#: `(module, bpe_gpu_load, bpe_gpu_encode_batch, bpe_gpu_decode_batch, bpe_gpu_train,
+#: bpe_gpu_trained_sizes, bpe_gpu_trained_copy)`, or a one-item tuple
 #: holding the words device="gpu" is refused with where it is not installed.
-_GPU_EXTENSION = "_mojolearn_tokenizer_gpu"
+_GPU_EXTENSION = "_mojolearn_x_tokenizer"
 
 
 def _gpu_binding():
     if _backend._CPU_ONLY is not None:
         return ("ValueError: device='gpu' needs a GPU build of mojolearn, and this installation is CPU only",)
     try:
-        module = _backend.binding(_GPU_EXTENSION, "identical")  # import-time: the GPU tokenizer, connected once
-        if int(module.tokenizer_gpu_numeric_mode()) != 1:
-            raise ImportError(f"mojolearn: {_GPU_EXTENSION} was not compiled identical")
-        return (module, module.bpe_gpu_load, module.bpe_gpu_encode_batch, module.bpe_gpu_decode_batch)
+        # import-time: the GPU tokenizer of this process's tier, connected once (integer work: both
+        # tiers are the same code and give the same ids)
+        module = _backend.binding(_GPU_EXTENSION, _backend.default_mode())
+        return (module, module.bpe_gpu_load, module.bpe_gpu_encode_batch, module.bpe_gpu_decode_batch,
+                module.bpe_gpu_train, module.bpe_gpu_trained_sizes, module.bpe_gpu_trained_copy)
     except (ImportError, AttributeError, ValueError, OSError) as error:
         return ("ImportError: device='gpu' needs the GPU tokenizer binding, which is not connected: " + str(error),)
 
@@ -526,10 +528,10 @@ class BpeVocabularyTrainer:
         Both name the compiled trainer.
     device : {None, 'gpu', 'cpu'}, default None
         Where training runs. None follows the numeric mode. 'cpu' runs on the
-        CPU and raises ValueError in numeric mode 'fast'. 'gpu' runs the fast
-        trainer on an Apple GPU in numeric mode 'fast', and raises ValueError
-        anywhere else, including when vocab_size exceeds that trainer's limit.
-        Other values raise ValueError.
+        CPU and raises ValueError in numeric mode 'fast'. 'gpu' runs on the GPU,
+        with the same vocabulary as the CPU, for vocab_size up to 46340, and
+        raises ValueError on a CPU-only installation. Other values raise
+        ValueError.
 
     Examples
     --------
