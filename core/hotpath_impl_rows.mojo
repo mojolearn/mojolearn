@@ -17,6 +17,8 @@ from sequence.schedule import fill_epoch_order, splitmix64
 from checks.numerics import portable_cosf, portable_log64
 from metrics.checks.pinned_sum import canonicalize_nan
 from core.hotpath_impl import HOTPATH_SABOTAGE, HP_F32, HP_F64, HP_I32, HP_I64, _ptr
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 
 
 @always_inline
@@ -28,21 +30,54 @@ def _ftz_bits(v: Float32) -> Float32:
     return v
 
 
-def fold_pair_f32(dst_addr: Int, src_addr: Int, count: Int) raises -> Int:
-    """cross_vendor's coordinator fold: dst[i] = ftz(ftz(dst[i]) +
-    ftz(src[i])), one float32 rounding per add, elementwise."""
-    if count < 0:
-        raise Error("fold_pair_f32: n must be non-negative")
-    if count == 0:
+# TOMBSTONE: fold_pair_f32 (the host pair fold, one call per shard) deleted 2026-11-24 by lane vdf-linalg:
+# replaced by ordered_fold_f32 below (same per-element recurrence, elements in tasks); recoverable at 354a1be9e9.
+
+
+@always_inline
+def ordered_fold_step(acc: Float32, value: Float32) -> Float32:
+    """One step of the ordered fold: ftz(ftz(acc) + ftz(value)), one float32
+    rounding, a NaN sum stored as the canonical word. The host column of
+    `ordered_fold_f32` below (and of the deleted pair fold), and the device
+    kernel's (core/hotpath_device.mojo `_ordered_fold_kernel`) arithmetic."""
+    return canonicalize_nan(_ftz_bits(_ftz_bits(acc) + _ftz_bits(value)))
+
+
+def ordered_fold_f32(dst_addr: Int, table_addr: Int, shards: Int, count: Int) raises -> Int:
+    """cross_vendor's ordered fold of `shards` buffers into `dst` (lane
+    vdf-linalg, 2026-11-24): for every element i, dst[i] is folded with
+    shard 0, then shard 1, ... in the logical order of `table` (an Int64
+    array of `shards` buffer addresses), each step `ordered_fold_step`.
+    Exactly the recurrence of `shards` calls of `fold_pair_f32`, so the same
+    bits; the elements are independent and run in tasks across the host's
+    cores (the shard order inside each element is fixed)."""
+    if count < 0 or shards < 0:
+        raise Error("ordered_fold_f32: n and shards must be non-negative")
+    if count == 0 or shards == 0:
         return 0
     var dp = _ptr[DType.float32](dst_addr)
-    var sp = _ptr[DType.float32](src_addr)
-    for i in range(count):
-        # NaN -> the canonical word, as the device kernel (lane/review-fixes)
-        var s = canonicalize_nan(_ftz_bits(_ftz_bits(dp.unsafe_load(i)) + _ftz_bits(sp.unsafe_load(i))))
-        comptime if HOTPATH_SABOTAGE:
-            s = -s
-        dp.unsafe_store(i, s)
+    var tp = _ptr[DType.int64](table_addr)
+    for j in range(shards):  # driver-loop: over the shard addresses, checked once before the tasks
+        _ = _ptr[DType.float32](Int(tp.unsafe_load(j)))
+    var tasks = host_predict_task_count_work(count, count * shards)
+    var chunk = host_predict_chunk(count, tasks)
+
+    def _part(t: Int) {imm dp, imm tp, imm shards, imm count, imm chunk}:
+        var lo = t * chunk
+        var hi = min(lo + chunk, count)
+        for i in range(lo, hi):  # parallel: this task's elements
+            var acc = dp.unsafe_load(i)
+            for j in range(shards):  # driver-loop: over the shards of one element in their logical order
+                var shard = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(tp.unsafe_load(j)))
+                acc = ordered_fold_step(acc, shard.unsafe_load(i))
+                comptime if HOTPATH_SABOTAGE:
+                    acc = -acc
+            dp.unsafe_store(i, acc)
+
+    if tasks <= 1:
+        _part(0)
+    else:
+        host_parallelize(_part, tasks)
     return 0
 
 

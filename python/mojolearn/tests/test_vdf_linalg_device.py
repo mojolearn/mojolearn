@@ -55,20 +55,16 @@ CALLS = [
     (training.chunked_lm_head_loss, lambda d: training.chunked_lm_head_loss(_a(), _a(), np.zeros(2, np.int64), device=d)),
     (training.residual_dropout, lambda d: training.residual_dropout(_a(), _a(), device=d)),
     (training.residual_dropout_backward, lambda d: training.residual_dropout_backward(_a(), device=d)),
-]
-
-HOST_ONLY = [
     (cross_vendor.fold_pair, lambda d: cross_vendor.fold_pair(np.ones(2, np.float32), np.ones(2, np.float32), device=d)),
     (cross_vendor.ordered_fold, lambda d: cross_vendor.ordered_fold([np.ones(2, np.float32)], device=d)),
-    (cross_vendor.state_hash, lambda d: cross_vendor.state_hash({}, device=d)),
 ]
 
-ALL = CALLS + HOST_ONLY + [
+
+ALL = CALLS + [
     (linalg_fast.matmul_fused, None),
     (training.mlp_inference_sessions, None),
     (training.embedding_backward, None),
     (training.rms_norm_backward, None),
-    (cross_vendor.trainer_state_hash, None),
     (_xd.lu_solve, None),
 ]
 
@@ -81,16 +77,16 @@ def test_signature_has_keyword_only_device(function):
 
 
 @pytest.mark.parametrize("bad", ["tpu", 0, "GPU"])
-@pytest.mark.parametrize("call", [c for _, c in CALLS + HOST_ONLY], ids=[f.__name__ for f, _ in CALLS + HOST_ONLY])
+@pytest.mark.parametrize("call", [c for _, c in CALLS], ids=[f.__name__ for f, _ in CALLS])
 def test_bad_word_is_refused(call, bad):
     with pytest.raises(ValueError, match=BAD_WORDS):
         call(bad)
 
 
-@pytest.mark.parametrize("call", [c for _, c in HOST_ONLY], ids=[f.__name__ for f, _ in HOST_ONLY])
-def test_host_only_refuses_gpu(call):
-    with pytest.raises(ValueError, match="has no GPU implementation"):
-        call("gpu")
+@pytest.mark.parametrize("function", [cross_vendor.state_hash, cross_vendor.trainer_state_hash],
+                         ids=lambda f: f.__name__)
+def test_digests_take_no_device(function):
+    assert "device" not in inspect.signature(function).parameters
 
 
 @pytest.mark.parametrize("call", [c for _, c in CALLS], ids=[f.__name__ for f, _ in CALLS])
