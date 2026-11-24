@@ -108,6 +108,10 @@ from training.dev_tensors import (
     IDN_TRAIN_DEV_TENSORS, train_dev_alloc, train_dev_free, train_dev_put, train_dev_get, train_dev_view,
     train_dev_copy, train_linear_forward_dev, train_linear_backward_dev, train_ce_loss_dev,
 )
+# lane vdf-linalg2 (2026-11-24): the RMS-normalization and embedding layers on device arrays
+from training.dev_tensors_layers import (
+    train_rms_norm_forward_dev, train_rms_norm_backward_dev, train_embedding_forward_dev, train_embedding_backward_dev,
+)
 # lane fam2-neural (2026-10-04): parameters and gradients resident across steps
 from training.estimator import (
     identical_optimizer_step_resident_io, IDN_OPT_PARAMS_RESIDENT, OPT_IO_ALL, OPT_IO_UP_G, IDN_MAXIMIZE_DEV,
@@ -381,6 +385,68 @@ def linear_forward_dev_binding(handles: PythonObject, params: PythonObject) rais
     with GILReleased(Python()):
         var ctx = neural_ctx[_NEURAL_CTX]()
         count = train_linear_forward_dev(ctx, hs[0], hs[1], hs[2], m, n, k)
+    return PythonObject(count)
+
+
+def rms_norm_forward_dev_binding(handles: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`rms_norm_forward` on device arrays (lane vdf-linalg2). handles = [y
+    (written), x, w]; params = [m, dm, eps (float)]."""
+    var hs = _handles(handles, 3, "rms_norm_forward_dev")
+    _params(params, 3, "rms_norm_forward_dev")
+    var m = Int(py=params[0])
+    var dm = Int(py=params[1])
+    var eps = Float32(Float64(py=params[2]))
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        count = train_rms_norm_forward_dev(ctx, hs[0], hs[1], hs[2], m, dm, eps)
+    return PythonObject(count)
+
+
+def rms_norm_backward_dev_binding(handles: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`rms_norm_backward` on device arrays. handles = [dx (written), dw
+    (written), dy, x, w]; params = [m, dm, eps (float)]."""
+    var hs = _handles(handles, 5, "rms_norm_backward_dev")
+    _params(params, 3, "rms_norm_backward_dev")
+    var m = Int(py=params[0])
+    var dm = Int(py=params[1])
+    var eps = Float32(Float64(py=params[2]))
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        count = train_rms_norm_backward_dev(ctx, hs[0], hs[1], hs[2], hs[3], hs[4], m, dm, eps)
+    return PythonObject(count)
+
+
+def embedding_forward_dev_binding(handles: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`embedding_forward` with device arrays. handles = [y (written), w];
+    params = [ids host address (int32), n_positions, vocab, width]."""
+    var hs = _handles(handles, 2, "embedding_forward_dev")
+    _params(params, 4, "embedding_forward_dev")
+    var ids = _i32_ptr(Int(py=params[0]))
+    var n_positions = Int(py=params[1])
+    var vocab = Int(py=params[2])
+    var width = Int(py=params[3])
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        count = train_embedding_forward_dev(ctx, hs[0], hs[1], ids, n_positions, vocab, width)
+    return PythonObject(count)
+
+
+def embedding_backward_dev_binding(handles: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`embedding_backward` on device arrays. handles = [dw (written), dy];
+    params = [ids host address (int32), n_positions, vocab, width]."""
+    var hs = _handles(handles, 2, "embedding_backward_dev")
+    _params(params, 4, "embedding_backward_dev")
+    var ids = _i32_ptr(Int(py=params[0]))
+    var n_positions = Int(py=params[1])
+    var vocab = Int(py=params[2])
+    var width = Int(py=params[3])
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        count = train_embedding_backward_dev(ctx, hs[0], hs[1], ids, n_positions, vocab, width)
     return PythonObject(count)
 
 
@@ -1018,6 +1084,10 @@ def build__mojolearn_training() -> PythonObject:
             m.def_function[linear_forward_dev_binding]("linear_forward_dev")
             m.def_function[linear_backward_dev_binding]("linear_backward_dev")
             m.def_function[ce_loss_dev_binding]("ce_loss_dev")
+            m.def_function[rms_norm_forward_dev_binding]("rms_norm_forward_dev")
+            m.def_function[rms_norm_backward_dev_binding]("rms_norm_backward_dev")
+            m.def_function[embedding_forward_dev_binding]("embedding_forward_dev")
+            m.def_function[embedding_backward_dev_binding]("embedding_backward_dev")
             # lane ne3-c-blocks-embedding (row N117): residual dropout on device arrays
             # TOMBSTONE: residual_dropout_dev, residual_dropout_backward_dev exports (dead native entries: the door calls OPT_NATIVE_RESIDUAL_DROPOUT_DEV / _BACKWARD_DEV of optimizer_native_api_v1, training/optimizer_native_extra_gpu.mojo) deleted 2026-11-21 by lane/dw-autograd-seq; code recoverable at 6184091ce8.
             # Restore: git show 6184091ce8:bindings/residual_dropout_boundary_pack.mojo (the two `_dev_binding` functions) and bindings/residual_dropout_boundary_unpack.mojo.

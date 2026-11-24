@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Public embedding input preparation and ownership; numerical entries unchanged.
+from bindings.training_layers_device_unpack import embedding_device
 from std.python import Python, PythonObject
 from bindings.optimizer_container_boundary_unpack import OptimizerInputOwners
 from bindings.native_loaded_module_door import native_loaded_module
@@ -415,6 +416,20 @@ def training_embedding_operation(operation: Int, where: PythonObject, values: Py
         if py_type(entry) is not py_item(context, nk[].k_device_finalizer_types)[2]:
             raise Error("TypeError: embedding requires its connected compiled entry")
         var input = values[0]
+        if py_type(input) is py_item(context, nk[].k_device_class):
+            # lane vdf-linalg2: a TrainDeviceArray weight / dy runs the device
+            # entry in place (bindings/training_layers_device_unpack.mojo);
+            # the ids are admitted as on the host path
+            var dev_ids = embedding_indices(values[1], context, buffer_pins)
+            var dev_vocab = 0
+            if backward:
+                dev_vocab = Int(py=training_scalar_number(values[2], where, context, True))
+                if dev_vocab < 0:
+                    raise Error("ValueError: negative embedding vocabulary size")
+            var dev_result = embedding_device(backward, where, input, Int(py=dev_ids[1]), Int(py=dev_ids[2]),
+                                              dev_vocab, entries, context)
+            _ = dev_ids^
+            return dev_result
         var view = TensorView()
         rms_host_view(input, "dy" if backward else "weight", where, view, buffer_pins)
         if len(view.shape) != 2:
