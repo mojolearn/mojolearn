@@ -566,33 +566,57 @@ def device_count_mask_u8(ctx: DeviceContext, mask_addr: Int, n: Int) raises -> I
     return c
 
 
-# ===========================================================================
-# fold_pair_f32
-# ===========================================================================
+# TOMBSTONE: _fold_pair_kernel / device_fold_pair_f32 (the per-shard device pair fold) deleted 2026-11-24 by
+# lane vdf-linalg: replaced by device_ordered_fold_f32 below; code recoverable at 354a1be9e9.
 
 
-def _fold_pair_kernel(dst: _F32, src: _F32, n_: Int32):
-    """dst[i] = ftz(ftz(dst[i]) + ftz(src[i])): one float32 rounding. A NaN
-    sum is stored as the one canonical word (`canonicalize_nan`), as the
-    host column does: NVIDIA's add returns 0x7FFFFFFF for every NaN while
-    the host and AMD keep the input payload (lane/review-fixes)."""
+# ===========================================================================
+# ordered_fold_f32 (lane vdf-linalg, 2026-11-24): cross_vendor's ordered fold
+# of k shards in ONE pass per element. Element-parallel; inside an element the
+# shards fold in their fixed logical order, each step the host column's
+# `ordered_fold_step` (core/hotpath_impl_rows.mojo): ftz(ftz(acc) + ftz(x)),
+# one float32 rounding, a NaN stored as the canonical word. It is exactly the
+# recurrence of k `fold_pair_f32` launches (same bits) with dst resident: one
+# upload of dst, one upload per shard, one download (k launches each moved
+# dst both ways).
+# ===========================================================================
+
+#: Float32 words of shards staged on the device per launch (256 MiB); more
+#: shards run as further launches over the resident dst, in logical order.
+comptime HPD_FOLD_STAGE = 1 << 26
+
+
+def _ordered_fold_kernel(dst: _F32, stage: _F32, shards_: Int32, n_: Int32):
+    """dst[i] folded with stage[0 * n + i], stage[1 * n + i], ... in order."""
     var i = _tid()
-    if i < Int(n_):
-        var a = ftz(dst.unsafe_load(i))
-        var b = ftz(src.unsafe_load(i))
-        var s = canonicalize_nan(ftz(a + b))
-        dst.unsafe_store(i, s)
+    var n = Int(n_)
+    if i < n:
+        var acc = dst.unsafe_load(i)
+        for j in range(Int(shards_)):  # driver-loop: over this element's shards in their fixed logical order
+            var a = ftz(acc)
+            var b = ftz(stage.unsafe_load(j * n + i))
+            acc = canonicalize_nan(ftz(a + b))
+        dst.unsafe_store(i, acc)
 
 
-def device_fold_pair_f32(ctx: DeviceContext, dst_addr: Int, src_addr: Int, n: Int) raises:
-    """`fold_pair_f32` (`n >= 1`)."""
+def device_ordered_fold_f32(ctx: DeviceContext, dst_addr: Int, table_addr: Int, shards: Int, n: Int) raises:
+    """`ordered_fold_f32` (`n >= 1`, `shards >= 1`): `table` is an Int64
+    array of the shard buffers' host addresses, in logical order."""
+    var tp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=table_addr)
+    var group = max(1, min(shards, HPD_FOLD_STAGE // n))
     var d_d = ctx.enqueue_create_buffer[DType.float32](n)
-    var d_s = ctx.enqueue_create_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_buf=d_d, src_ptr=_F32(unsafe_from_address=dst_addr))
-    ctx.enqueue_copy(dst_buf=d_s, src_ptr=_F32(unsafe_from_address=src_addr))
-    ctx.enqueue_function[_fold_pair_kernel](
-        d_d.unsafe_ptr(), d_s.unsafe_ptr(), Int32(n), grid_dim=_blocks(n), block_dim=HPD_TPB,
-    )
+    var d_s = ctx.enqueue_create_buffer[DType.float32](group * n)
+    var first = 0
+    while first < shards:  # driver-loop: over groups of shards in logical order (one launch each)
+        var count = min(group, shards - first)
+        for j in range(count):  # driver-loop: one upload per shard buffer of this group
+            var part = d_s.create_sub_buffer[DType.float32](j * n, n)
+            ctx.enqueue_copy(dst_buf=part, src_ptr=_F32(unsafe_from_address=Int(tp.unsafe_load(first + j))))
+        ctx.enqueue_function[_ordered_fold_kernel](
+            d_d.unsafe_ptr(), d_s.unsafe_ptr(), Int32(count), Int32(n), grid_dim=_blocks(n), block_dim=HPD_TPB,
+        )
+        first += count
     ctx.enqueue_copy(dst_ptr=_F32(unsafe_from_address=dst_addr), src_buf=d_d)
     ctx.synchronize()
     _ = d_d^

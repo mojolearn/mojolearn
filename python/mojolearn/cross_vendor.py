@@ -34,7 +34,8 @@ def fold_pair(total, shard, *, device=None):
     Parameters
     ----------
     device : {None, 'gpu', 'cpu'}, default None
-        Where the computation runs. None and 'cpu' run on the CPU; 'gpu' raises ValueError.
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
     """
     return _native_cross_vendor("pair", (total, shard, device))
 
@@ -45,31 +46,20 @@ def ordered_fold(gradients, *, prefix=None, device=None):
     Parameters
     ----------
     device : {None, 'gpu', 'cpu'}, default None
-        Where the computation runs. None and 'cpu' run on the CPU; 'gpu' raises ValueError.
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
     """
     return _native_cross_vendor("fold", (gradients, prefix, device))
 
 
-def state_hash(state, *, device=None):
-    """Return SHA256 over parameters, m, v and flags, in that order.
-
-    Parameters
-    ----------
-    device : {None, 'gpu', 'cpu'}, default None
-        Where the computation runs. None and 'cpu' run on the CPU; 'gpu' raises ValueError.
-    """
-    return _native_cross_vendor("state_hash", (state, device))
+def state_hash(state):
+    """Return SHA256 over parameters, m, v and flags, in that order."""
+    return _native_cross_vendor("state_hash", (state,))
 
 
-def trainer_state_hash(trainer, *, device=None):
-    """Return SHA256 over a native trainer's current complete replica state.
-
-    Parameters
-    ----------
-    device : {None, 'gpu', 'cpu'}, default None
-        Where the computation runs. None and 'cpu' run on the CPU; 'gpu' raises ValueError.
-    """
-    return _native_cross_vendor("trainer_hash", (trainer, device), _cross_vendor_errors)
+def trainer_state_hash(trainer):
+    """Return SHA256 over a native trainer's current complete replica state."""
+    return _native_cross_vendor("trainer_hash", (trainer,), _cross_vendor_errors)
 
 
 # ------------------------------------------------------------ framing
