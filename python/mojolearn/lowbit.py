@@ -108,12 +108,20 @@ def format_of(weights):
 
 
 
-def widen_bf16(bits):
-    """Convert bfloat16 bits of any rank (a uint16 buffer) to float32, exactly."""
-    return _NATIVE(None, "family_low_widen_bf16", (bits,), _NATIVE_CONTEXT)
+def widen_bf16(bits, *, device=None):
+    """Convert bfloat16 bits of any rank (a uint16 buffer) to float32, exactly.
+
+    Parameters
+    ----------
+    bits : uint16 buffer
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
+    """
+    return _NATIVE(None, "family_low_widen_bf16", (bits, device), _NATIVE_CONTEXT)
 
 
-def pack_one(value, fmt, name="weight"):
+def pack_one(value, fmt, name="weight", *, device=None):
     """Pack one 2-D float32 tensor to `fmt`.
 
     Parameters
@@ -124,22 +132,35 @@ def pack_one(value, fmt, name="weight"):
         `ValueError`.
     name : str, default 'weight'
         Name used in error messages.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
     BF16Weight, Int8Weight or mojolearn.Array
     """
-    return _NATIVE(None, "family_low_pack_one", (value, fmt, name), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_low_pack_one", (value, fmt, name, device), _NATIVE_CONTEXT)
 
 
-def materialize_one(value, name="weight"):
-    """A packed tensor converted to float32 exactly, or a float32 tensor returned as is."""
-    return _NATIVE(None, "family_low_materialize_one", (value, name), _NATIVE_CONTEXT)
+def materialize_one(value, name="weight", *, device=None):
+    """A packed tensor converted to float32 exactly, or a float32 tensor returned as is.
+
+    Parameters
+    ----------
+    value : BF16Weight, Int8Weight or float32 buffer
+    name : str, default 'weight'
+        Name used in error messages.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
+    """
+    return _NATIVE(None, "family_low_materialize_one", (value, name, device), _NATIVE_CONTEXT)
 
 
 
 
-def pack(weights, fmt):
+def pack(weights, fmt, *, device=None):
     """Pack every 2-D tensor of a weight dict to `fmt`; other tensors pass through unchanged.
 
     Parameters
@@ -148,16 +169,19 @@ def pack(weights, fmt):
         Tensors by name. Anything but a dict raises `TypeError`.
     fmt : {'float32', 'bfloat16', 'int8'}
         Target format; unknown formats raise `ValueError`.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
     dict
         A new dict.
     """
-    return _NATIVE(None, "family_low_pack", (weights, fmt), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_low_pack", (weights, fmt, device), _NATIVE_CONTEXT)
 
 
-def unpack(weights, what="weights"):
+def unpack(weights, what="weights", *, device=None):
     """Convert every packed tensor of a weight dict to float32, exactly.
 
     Parameters
@@ -166,13 +190,16 @@ def unpack(weights, what="weights"):
         Tensors by name; other tensors pass through unchanged.
     what : str, default 'weights'
         Name used in error messages.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Returns
     -------
     (dict, str)
         The float32 dict and the format the weights were stored in.
     """
-    return _NATIVE(None, "family_low_unpack", (weights, what), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_low_unpack", (weights, what, device), _NATIVE_CONTEXT)
 
 
 materialize = unpack

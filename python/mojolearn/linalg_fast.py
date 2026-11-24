@@ -22,7 +22,7 @@ def has_fused():
 
 
 def matmul_fused(a, b, *, bias=None, residual=None, activation=None,
-                 transpose_a=False, transpose_b=False, out=None):
+                 transpose_a=False, transpose_b=False, out=None, device=None):
     """``C = epi(op(a) @ op(b))`` on the Apple FAST simdgroup kernel.
 
     ``bias`` is ``n`` float32 values (required unless every epilogue
@@ -32,11 +32,16 @@ def matmul_fused(a, b, *, bias=None, residual=None, activation=None,
     exact erf GELU), applied after the bias; it cannot be combined with
     ``residual`` (one epilogue per store). ``transpose_a`` with
     ``transpose_b`` is refused as ``matmul`` refuses it.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'gpu' run on the GPU; 'cpu' raises ValueError.
     """
     # One native call: the argument refusals, operand layout, output and the
     # `gemm_fused` call are bindings/linalg_ops_lowbit_door.mojo `_lin_matmul_fused`.
     return _NATIVE(None, "family_lin_matmul_fused",
-                   (None, a, b, bias, residual, activation, transpose_a, transpose_b, out), _NATIVE_CONTEXT)
+                   (None, a, b, bias, residual, activation, transpose_a, transpose_b, out, device), _NATIVE_CONTEXT)
 
 
 # Import-time binding only. All BF16 argument handling, packing, allocations,
