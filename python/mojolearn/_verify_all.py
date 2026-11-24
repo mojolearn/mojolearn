@@ -69,8 +69,10 @@ import platform
 import re
 import subprocess
 import sys
+import threading
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 
 from . import _verify_reference as vref
 # The device-bound view each side runs through (device="cpu" / device="gpu").
@@ -1228,6 +1230,46 @@ CROSS_CHECK_BATCH_LANES = 24
 #: cross-check batches): startup is paid once per batch, and a batch's
 #: accumulated native state is dropped with its process.
 VERIFY_BATCH_CELLS = 24
+
+#: Memory one cell worker process may take, for the worker count (GiB). A
+#: placeholder until the gate measures the heaviest lanes' peak RSS.
+VERIFY_WORKER_GIB = 4.0
+
+
+def verify_cell_workers(requested=None):
+    """How many cell-worker processes run at once: the process's core
+    allocation (affinity), bounded by the available memory at
+    `VERIFY_WORKER_GIB` a worker; `requested` (``--cell-workers``) pins it."""
+    if requested:
+        return max(1, int(requested))
+    try:
+        cores = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        cores = os.cpu_count() or 1
+    try:
+        with open("/sys/fs/cgroup/cpu.max", encoding="ascii") as stream:
+            quota, period = stream.read().split()[:2]
+        if quota != "max":
+            cores = min(cores, max(1, int(int(quota) // int(period))))
+    except (OSError, ValueError):
+        pass
+    available = None
+    try:
+        with open("/proc/meminfo", encoding="ascii") as stream:
+            for line in stream:
+                if line.startswith("MemAvailable:"):
+                    available = int(line.split()[1]) * 1024
+                    break
+    except (OSError, ValueError):
+        pass
+    if available is None:
+        try:
+            available = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_AVPHYS_PAGES")
+        except (AttributeError, OSError, ValueError):
+            available = None
+    if available is not None:
+        cores = min(cores, max(1, int(available // int(VERIFY_WORKER_GIB * (1 << 30)))))
+    return max(1, cores)
 # Saved-model CPU loaders for these public tree algorithms already ship.
 # Their host family has no inference_lanes entry, so the old selector omitted
 # them despite being able to compare the same GPU-trained model on the CPU.
@@ -4183,6 +4225,12 @@ def cmd_verify_all(args):
     # `_verify_worker.execute`), summed over the lane's fixtures. It is beside
     # the cells, never in them: no cell value, verdict or commitment reads it.
     lane_activity = {side: {} for side in SIDES}
+    # PARALLEL CELL WORKERS (w3-integrate-8, 2026-11-24): the batches are
+    # independent units, so `cell_workers` of them run at once, each in its
+    # own worker process; every shared record below is written under `lock`,
+    # and `raw` is put back in cell order at the end, so the report and the
+    # commitment read exactly as a serial sweep's.
+    lock = threading.RLock()
 
     def ran_activity(lane, result):
         for side, act in (result.get("activity") or {}).items():
@@ -4190,13 +4238,15 @@ def cmd_verify_all(args):
                 lane_activity[side][lane] = cb.activity_merge(lane_activity[side].get(lane), act)
 
     def isolated(action, **kwargs):
-        progress(action)
+        with lock:
+            progress(action)
         result = worker.run(dict(action=action, harness=os.path.abspath(harness_file),
                                  table=os.path.abspath(table_file), **kwargs), timeout, log)
-        for binding in result.get("bindings", []):
-            worker_bindings[(binding["module"], binding["sha256"])] = binding
-        if action == "cell":
-            ran_activity(kwargs["lane"], result)
+        with lock:
+            for binding in result.get("bindings", []):
+                worker_bindings[(binding["module"], binding["sha256"])] = binding
+            if action == "cell":
+                ran_activity(kwargs["lane"], result)
         return result["value"]
 
     preflight = dict(passed=None, ran=False,
@@ -4222,6 +4272,10 @@ def cmd_verify_all(args):
         return {side: {p: (None, error) for p in tuple(vref.PARTS) + tuple(extra_parts)} for side in SIDES}
 
     def record(lane, f, sides, seconds):
+        with lock:
+            _record(lane, f, sides, seconds)
+
+    def _record(lane, f, sides, seconds):
         # ONE CELL, TWO SIDES (2026-11-24): `sides` is {side: {part: (value,
         # error)}} from one worker; every row carries its side and is judged
         # against that side's column.
@@ -4241,60 +4295,90 @@ def cmd_verify_all(args):
     def fresh_cell(lane, f):
         nonlocal crash_streak
         c0 = time.monotonic()
-        log(f"  [{execution['completed_cells'] + 1}/{execution['total_cells']}] {lane}/{f} (fresh process)")
+        with lock:
+            log(f"  [{execution['completed_cells'] + 1}/{execution['total_cells']}] {lane}/{f} (fresh process)")
         try:
             parts = isolated("cell", **{k: v for k, v in cell_request(lane, f).items()
                                         if k not in ("action", "harness", "table")})
-            crash_streak = 0
+            with lock:
+                crash_streak = 0
         except worker.WorkerCrash as exc:
-            crash_streak += 1
-            execution["crashed_cells"].append(dict(lane=lane, fixture=f, error=str(exc)[:500]))
-            log(f"    CRASHED (cell refused, sweep continues): {str(exc)[:300]}")
-            if crash_streak >= crash_streak_limit:
-                execution["interrupted"] = f"{crash_streak} consecutive cell workers crashed; last: {exc}"
+            with lock:
+                crash_streak += 1
+                execution["crashed_cells"].append(dict(lane=lane, fixture=f, error=str(exc)[:500]))
+                log(f"    CRASHED (cell refused, sweep continues): {str(exc)[:300]}")
+                if crash_streak >= crash_streak_limit:
+                    execution["interrupted"] = f"{crash_streak} consecutive cell workers crashed; last: {exc}"
             parts = refused_sides(str(exc))
         except worker.WorkerFailure as exc:
-            execution["interrupted"] = str(exc)
+            with lock:
+                execution["interrupted"] = str(exc)
             parts = refused_sides(str(exc))
-        execution["fresh_cells"] += 1
+        with lock:
+            execution["fresh_cells"] += 1
         record(lane, f, parts, time.monotonic() - c0)
 
     cells = [(lane, f) for lane in lanes for f in fixtures]
-    position = 0
-    while position < len(cells) and not execution["interrupted"]:
-        if fresh_only:
-            fresh_cell(*cells[position])
-            position += 1
-            continue
-        chunk = cells[position:position + batch_cells]
-        position += len(chunk)
-        execution["batches"] += 1
-        progress(f"batch {execution['batches']}: {chunk[0][0]}/{chunk[0][1]} .. {chunk[-1][0]}/{chunk[-1][1]}")
+    cell_order = {cell: i for i, cell in enumerate(cells)}
+    cell_workers = verify_cell_workers(getattr(args, "cell_workers", None))
+    execution["cell_workers"] = cell_workers
+    log(f"# {cell_workers} cell worker(s) at once (core allocation, {VERIFY_WORKER_GIB:g} GiB a worker)")
+
+    def run_chunk(chunk):
+        with lock:
+            if execution["interrupted"]:
+                return
+            execution["batches"] += 1
+            progress(f"batch {execution['batches']}: {chunk[0][0]}/{chunk[0][1]} .. {chunk[-1][0]}/{chunk[-1][1]}")
         last = [time.monotonic()]
 
         def answered(index, result, chunk=chunk, last=last):
             nonlocal crash_streak
-            for binding in result.get("bindings", []):
-                worker_bindings[(binding["module"], binding["sha256"])] = binding
-            crash_streak = 0
-            execution["batched_cells"] += 1
-            ran_activity(chunk[index][0], result)
-            now = time.monotonic()
-            record(*chunk[index], result["value"], now - last[0])
-            last[0] = now
+            with lock:
+                for binding in result.get("bindings", []):
+                    worker_bindings[(binding["module"], binding["sha256"])] = binding
+                crash_streak = 0
+                execution["batched_cells"] += 1
+                ran_activity(chunk[index][0], result)
+                now = time.monotonic()
+                _record(*chunk[index], result["value"], now - last[0])
+                last[0] = now
 
         stop = worker.run_batch([cell_request(lane, f) for lane, f in chunk], timeout, log, answered)
         if stop is None:
-            continue
+            return
         lane, f = chunk[stop.index]
-        execution["batch_stops"].append(dict(stop.as_dict(), lane=lane, fixture=f))
-        log(f"    BATCH STOPPED at {lane}/{f} ({stop.kind}): {stop.message[:300]}; "
-            f"{len(chunk) - stop.index} remaining cell(s) of this batch run in fresh processes")
+        with lock:
+            execution["batch_stops"].append(dict(stop.as_dict(), lane=lane, fixture=f))
+            log(f"    BATCH STOPPED at {lane}/{f} ({stop.kind}): {stop.message[:300]}; "
+                f"{len(chunk) - stop.index} remaining cell(s) of this batch run in fresh processes")
         for lane, f in chunk[stop.index:]:
-            if execution["interrupted"]:
-                break
-            execution["fallback_cells"].append(f"{lane}/{f}")
+            with lock:
+                if execution["interrupted"]:
+                    break
+                execution["fallback_cells"].append(f"{lane}/{f}")
             fresh_cell(lane, f)
+
+    def run_one(cell):
+        with lock:
+            if execution["interrupted"]:
+                return
+        fresh_cell(*cell)
+
+    if fresh_only:
+        units, body = [(cell,) for cell in cells], run_one
+    else:
+        units = [(cells[i:i + batch_cells],) for i in range(0, len(cells), batch_cells)]
+        body = run_chunk
+    if cell_workers == 1 or len(units) <= 1:
+        for unit in units:  # one worker: the units in order, as before
+            body(*unit)
+    else:
+        with ThreadPoolExecutor(max_workers=min(cell_workers, len(units))) as pool:
+            for future in [pool.submit(body, *unit) for unit in units]:
+                future.result()
+    # cell order, as a serial sweep writes it (rows within a cell keep theirs)
+    raw.sort(key=lambda row: cell_order.get((row["lane"], row["fixture"]), len(cells)))
     for lane in lanes:
         spent = [cell_seconds[(lane, f)] for f in fixtures if (lane, f) in cell_seconds]
         if spent:
