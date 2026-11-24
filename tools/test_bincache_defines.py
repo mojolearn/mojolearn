@@ -18,8 +18,8 @@ class ScopeDefines(unittest.TestCase):
         self.repo = Path(self.tmp.name)
         (self.repo / "bindings").mkdir()
         (self.repo / "em").mkdir()
-        (self.repo / "em" / "loop.mojo").write_text('comptime E = env_get_int["MOJOLEARN_EM_LOOP_CHECK_EVERY", 4]()\n')
-        (self.repo / "em" / "other.mojo").write_text("fn f(): pass  # MOJOLEARN_EM_LOOP_CHECK_EVERYX\n")
+        (self.repo / "em" / "loop.mojo").write_text('comptime E = env_get_int["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS", 4]()\n')
+        (self.repo / "em" / "other.mojo").write_text("fn f(): pass  # MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKSX\n")
         (self.repo / "bindings" / "build_defines.sh").write_text("# MOJOLEARN_SGD_LOOP_CHECK_EVERY spelled here\n")
         (self.repo / "bindings" / "build_em.sh").write_text("#!/bin/sh\n")
 
@@ -34,13 +34,13 @@ class ScopeDefines(unittest.TestCase):
             return bincache.scope_build_defines(self.repo, self.repo / "bindings" / "build_em.sh", [], env)
 
     def test_reader_keeps_only_its_define(self):
-        env, kept = self.scope(["em/loop.mojo"], "MOJOLEARN_EM_LOOP_CHECK_EVERY=1,MOJOLEARN_SGD_LOOP_CHECK_EVERY=1")
-        self.assertEqual(kept, ["MOJOLEARN_EM_LOOP_CHECK_EVERY=1"])
-        self.assertEqual(env["MOJOLEARN_BUILD_DEFINES"], "MOJOLEARN_EM_LOOP_CHECK_EVERY=1")
+        env, kept = self.scope(["em/loop.mojo"], "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192,MOJOLEARN_SGD_LOOP_CHECK_EVERY=1")
+        self.assertEqual(kept, ["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192"])
+        self.assertEqual(env["MOJOLEARN_BUILD_DEFINES"], "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192")
 
     def test_non_reader_builds_without_the_variable(self):
         # a longer identifier and build_defines.sh's own text are not reads
-        env, kept = self.scope(["em/other.mojo"], "MOJOLEARN_EM_LOOP_CHECK_EVERY=1,MOJOLEARN_SGD_LOOP_CHECK_EVERY=1")
+        env, kept = self.scope(["em/other.mojo"], "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192,MOJOLEARN_SGD_LOOP_CHECK_EVERY=1")
         self.assertEqual(kept, [])
         self.assertNotIn("MOJOLEARN_BUILD_DEFINES", env)
         self.assertEqual(env["PATH"], "/bin")
@@ -48,23 +48,23 @@ class ScopeDefines(unittest.TestCase):
     def test_comment_and_tombstone_mentions_are_not_reads(self):
         # the planner's rule (release_reuse.define_readers): a comment-only unit keeps the define-free key
         (self.repo / "em" / "guard.mojo").write_text(
-            "    # MOJOLEARN_EM_LOOP_CHECK_EVERY: refusal removed (restored; owed B arm)\n"
-            "# TOMBSTONE: MOJOLEARN_EM_LOOP_CHECK_EVERY deleted; `-D MOJOLEARN_EM_LOOP_CHECK_EVERY`\n"
-            '#: "MOJOLEARN_EM_LOOP_CHECK_EVERY" quoted in a comment\n')
-        env, kept = self.scope(["em/guard.mojo"], "MOJOLEARN_EM_LOOP_CHECK_EVERY=1")
+            "    # MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS: refusal removed (restored; owed B arm)\n"
+            "# TOMBSTONE: MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS deleted; `-D MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS`\n"
+            '#: "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS" quoted in a comment\n')
+        env, kept = self.scope(["em/guard.mojo"], "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192")
         self.assertEqual(kept, [])
         self.assertNotIn("MOJOLEARN_BUILD_DEFINES", env)
 
     def test_name_on_its_own_line_after_is_defined_is_a_read(self):
         (self.repo / "em" / "split.mojo").write_text(
-            'comptime X = not is_defined[\n    # kept\n    "MOJOLEARN_EM_LOOP_CHECK_EVERY"\n]()\n')
-        _, kept = self.scope(["em/split.mojo"], "MOJOLEARN_EM_LOOP_CHECK_EVERY")
-        self.assertEqual(kept, ["MOJOLEARN_EM_LOOP_CHECK_EVERY"])
+            'comptime X = not is_defined[\n    # kept\n    "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS"\n]()\n')
+        _, kept = self.scope(["em/split.mojo"], "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS")
+        self.assertEqual(kept, ["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS"])
 
     def test_a_script_names_it_by_the_whole_word(self):
-        (self.repo / "bindings" / "build_em.sh").write_text("#!/bin/sh\n# MOJOLEARN_EM_LOOP_CHECK_EVERY\n")
-        _, kept = self.scope([], "MOJOLEARN_EM_LOOP_CHECK_EVERY")
-        self.assertEqual(kept, ["MOJOLEARN_EM_LOOP_CHECK_EVERY"])
+        (self.repo / "bindings" / "build_em.sh").write_text("#!/bin/sh\n# MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS\n")
+        _, kept = self.scope([], "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS")
+        self.assertEqual(kept, ["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS"])
 
     def test_unreadable_closure_keeps_every_define(self):
         env = {"MOJOLEARN_BUILD_DEFINES": "A=1,B"}

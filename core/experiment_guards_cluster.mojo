@@ -634,6 +634,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE_OFF.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE_OFF"](), "removed 2026-11-23 (lane/ab-prep-classical, decided from A/B round 3 NVIDIA L40S host 2ef132a6de04, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, labels and digests equal: edge-free fit taxi 0.338, taxi 250000 rows 0.519, istella 0.991 of the old route; EXP:4477): the old byte-adjacency route for admitted brute fits is gone; code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE_OFF.patch"
     # ---- end lane ab-prep-classical
+    # ---- lane ab-outcome-2 (2026-11-24): A/B nvc-ab-20261124T095727Z-92fd9f decisions (NVIDIA L40S only, job nvc1-0002; sub-lane ab2-classic)
+    # TOMBSTONE: MOJOLEARN_EM_LOOP_CHECK_EVERY (arms em-check-1 NOISE: 7 cells median 1.00, 0.99..1.02; em-check-8 LOSER: 3 cells median 1.02, gmm taxi 300000 24.79 -> 27.74 ms) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_EM_LOOP_CHECK_EVERY.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_EM_LOOP_CHECK_EVERY"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): the pinned EM read interval lost or was noise against the work rule (em-check-1: 7 cells, median 1.00, 0.99..1.02; em-check-8: 3 cells, median 1.02, gmm taxi 300000 24.79 -> 27.74 ms); the cost rule em_loop_check_every is the only form; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_EM_LOOP_CHECK_EVERY.ab-outcome-2.patch"
+    # ---- end lane ab-outcome-2
     return True
 
 
