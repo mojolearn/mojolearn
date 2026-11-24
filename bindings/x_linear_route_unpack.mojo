@@ -52,6 +52,8 @@ from providers.python.device_route_boundary_door import (
     device_cpu_connect_late,
 )
 from bindings.x_linear_keys_unpack import x_linear_keys
+from bindings.native_loaded_module_door import NativeModules
+from bindings.native_class_admission_door import class_record, class_admit
 
 
 struct XLinearOps(Movable):
@@ -274,6 +276,34 @@ def xl_route_host(context: PythonObject) raises -> XLinearOps:
     if scope is None or py_type(scope) is py_type(PythonObject("")):
         scope = context
     return XLinearOps(entry_ref_unresolved().call, False, True, PythonObject(None), scope)
+
+
+comptime _XL_HOST_ONLY_SLOT = "x_linear_host_inference_only_v1"
+
+
+def xl_host_only(model: PythonObject) raises -> Bool:
+    """An explicit host inference class (`_HOST_INFERENCE_ONLY` in its class
+    dictionaries): it predicts a saved model on the CPU and never fits.
+    The fit door (bindings/x_linear_native_door.mojo) and the Cd member
+    admission (providers/python/member_cd_boundary_door.mojo) both read it.
+    Depends only on the class rows: resolved once per class state
+    (native_class_admission re-checks after any class modification)."""
+    var nk = x_linear_keys()
+    var mods = NativeModules()
+    var cls = py_type(model)
+    var record = class_record(mods, _XL_HOST_ONLY_SLOT, cls)
+    if record is not None:
+        return Bool(py=record)
+    var b = native_loaded_module("builtins")
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
+    var found = False
+    for k in range(len(mro)):  # driver-loop: over the model class's MRO
+        var class_fields = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, mro[k])
+        if py_get(class_fields, nk[].k__HOST_INFERENCE_ONLY) is not None:
+            found = True
+            break
+    class_admit(mods, _XL_HOST_ONLY_SLOT, cls, PythonObject(found))
+    return found
 
 
 def xl_ops_require(ops: XLinearOps) raises:

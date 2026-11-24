@@ -27,7 +27,7 @@
 # RUN per cv split): bindings/x_linear_cv_unpack.mojo says why.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
-from bindings.x_linear_route_unpack import XLinearOps, xl_route, xl_route_host, xl_device_admit, xl_route_drop, xl_route_vendor_used
+from bindings.x_linear_route_unpack import XLinearOps, xl_route, xl_route_host, xl_host_only, xl_device_admit, xl_route_drop, xl_route_vendor_used
 from bindings.x_linear_common_unpack import _b, _truth, _name, _xl_scope, xl_intercept_words, _float, _xl_words
 from x_linear.door_run import xl_cd_fit_run, xl_cd_predict_run
 from bindings.x_linear_cd_unpack import xl_cd_fit_unpack, xl_cd_predict_unpack, xl_cd_host_prediction_unpack
@@ -676,30 +676,10 @@ def xl_isotonic(model: PythonObject, operation: Int, args: PythonObject, entries
 # ------------------------------------------------- Lasso / ElasticNet (cd)
 
 
-def _xl_host_only(model: PythonObject) raises -> Bool:
-    """An explicit host inference class (`_HOST_INFERENCE_ONLY` in its class
-    dictionaries): it predicts a saved model on the CPU and never fits.
-    Depends only on the class rows: resolved once per class state
-    (native_class_admission re-checks after any class modification)."""
-    var nk = x_linear_keys()
-    var mods = NativeModules()
-    var cls = py_type(model)
-    var record = class_record(mods, _XL_HOST_ONLY_SLOT, cls)
-    if record is not None:
-        return Bool(py=record)
-    var b = _b()
-    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
-    var found = False
-    for k in range(len(mro)):  # driver-loop: over the model class's MRO
-        var class_fields = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, mro[k])
-        if py_get(class_fields, nk[].k__HOST_INFERENCE_ONLY) is not None:
-            found = True
-            break
-    class_admit(mods, _XL_HOST_ONLY_SLOT, cls, PythonObject(found))
-    return found
+# `_xl_host_only` moved to bindings/x_linear_route_unpack.mojo `xl_host_only` (lane w3f2-main,
+# 2026-11-24) so the Cd member admission reads the same class word as this fit door.
 
 
-comptime _XL_HOST_ONLY_SLOT = "x_linear_host_inference_only_v1"
 comptime _XL_AFTER_FIT_SLOT = "x_linear_no_after_fit_v1"
 
 
@@ -1069,7 +1049,7 @@ def _xl_public_operation(model: PythonObject, operation: Int, name: PythonObject
     if operation == X_LINEAR_OPN_CD_VENDOR_USED:
         # Lasso / ElasticNet `vendor_used()`: metadata, no input and no
         # lifecycle step. An explicit host class runs the CPU image.
-        if _xl_host_only(model):
+        if xl_host_only(model):
             return PythonObject("cpu")
         return xl_route_vendor_used(model, py_fields(model), context, True)
     var method = _xl_method(operation)
@@ -1093,7 +1073,7 @@ def _xl_public_operation(model: PythonObject, operation: Int, name: PythonObject
         # did) resolves no entry.
         var cd = (operation == X_LINEAR_OPN_CD_FIT or operation == X_LINEAR_OPN_CD_PREDICT
                   or operation == X_LINEAR_OPN_CD_SCORE)
-        if cd and operation != X_LINEAR_OPN_CD_PREDICT and _xl_host_only(model):
+        if cd and operation != X_LINEAR_OPN_CD_PREDICT and xl_host_only(model):
             var hosted = xl_route_host(context)
             result = _xl_dispatch(model, operation, name, args, hosted, context)
         else:
