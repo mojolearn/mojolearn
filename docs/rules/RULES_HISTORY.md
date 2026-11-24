@@ -1081,3 +1081,14 @@ FORGET ABOUT IT." Removed from AGENTS.md (parts 3 and 8), verbatim:
 > of an opponent cell. (The paper's 0.8.55 comparison and the opponent boards are a release-time question for Andrew.)
 
 - 2026-11-23 (Andrew): "Nothing piecemeal" gains "One merge, one gate, per wave": lanes fix outside integration, all merge at once, one gate, integration to main, then A/B, verification, release. Reason: on 2026-11-23 the orchestrator fed the integrator branches one at a time and the gated run was repeated four times on one wave.
+
+
+## Candidate evaluation, 2026-10-06 wording (replaced 2026-11-24 by Andrew: decide on loop time per iteration, full-size data, capped iterations, several conditions, no end-to-end confirmation run)
+
+Candidate evaluation (owner, 2026-10-06):
+- Evaluate a performance candidate with end-to-end A/B runs on the full dataset of every affected estimator, with
+  the whole operation inside the clock (preparation, fit, required synchronization, consumed outputs). Component
+  timings, synthetic substitutes and reduced workloads are screening only: say "component screening complete".
+- Map each candidate to its affected estimators and saved recipes before timing. `--rows full` alone does not prove
+  the full dataset ran. Missing coverage stays pending; never substitute a smaller case and report completion.
+- Do not promote a default from component gains. Record winners AND losers beside the switch and on the boards.
