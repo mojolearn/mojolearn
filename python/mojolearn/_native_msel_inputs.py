@@ -6,7 +6,7 @@
 # helper is called through the native model-selection helper table
 # (core/msel_entry_table.mojo, key `msel_native_key` below) or linked into the
 # door directly (lane calltable-msel).
-_HELPERS = ('bincount2_i32', 'bincount_i64', 'check_indices_i64', 'reduce_stat')
+_HELPERS = ('bincount_i64', 'check_indices_i64', 'reduce_stat')
 
 _SPLITTER_FIELDS = ('_default_test_size', '_folds', '_pairs', 'cv', 'cvargs', 'gap', 'max_train_size',
                     'n_groups', 'n_repeats', 'n_splits', 'p', 'random_state', 'shuffle', 'test_fold', 'test_size', 'train_size')

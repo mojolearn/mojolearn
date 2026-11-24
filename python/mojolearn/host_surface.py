@@ -2032,7 +2032,7 @@ FAMILIES = (
             "assign_fold_i64", "count_fold_hits_i64", "mark_split_roles_f32",
             "scatter_rows_bytes", "uniform_init_f32",
             "strat_fold_assign_i32",
-            "bincount2_i32", "strided_copy_bytes", "check_lengths_i64",
+            "strided_copy_bytes", "check_lengths_i64",
             "ragged_rows_bytes", "row_means_f64",
             "truncnorm_draws", "fsum_f64",
             "class_ratio_f64",

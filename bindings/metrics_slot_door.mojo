@@ -19,7 +19,9 @@ A call with at least one slot runs the entry's device-input form
 (`metric_slots`, metrics/slot_entry_device.mojo); a call with none runs the
 old by-name entry, so `device=None` on host inputs outside `resident()` is
 today's route plus one context read and one thread-local scope read per
-call (`mc_slots_open`), the same reads the program runner makes per run.
+call while a scope is alive in the process (`mc_slots_open`), the same
+reads the program runner makes per run; with no scope alive, one native
+count read and no context read (lane vdf-tail-b).
 
 The host image (a CPU-only install, or `device="cpu"` beside a GPU set)
 publishes `metrics_cluster_key` with vendor 0 and has no device store to
@@ -38,6 +40,7 @@ from bindings.classical_arrays_door import classical_address, classical_same_buf
 from bindings.arena_prog_run import metric_input_temp, metric_input_source
 from bindings.metrics_keys_unpack import metrics_keys
 from bindings.x_prep_native_owner_door import XprepResident, xprep_resident, xprep_resident_none
+from bindings.arena_cache_run import arena_scopes_live
 from bindings.x_prep_native_inputs_door import _rows_fields
 from bindings.family_common_pack import family_call
 from bindings.mcls_common_unpack import mc_entry, mc_class_list
@@ -50,27 +53,43 @@ struct McSlots(Movable):
     """The device-input state of ONE metric call: the active `resident()`
     scope on the metrics image's store (or none), the store's transport
     entry, the slots this call made (gathers, puts outside a scope, codes),
-    freed by `close`, and the Python owners read by address meanwhile."""
+    freed by `close`, and the Python owners read by address meanwhile. The
+    program context (`prog`, with the DeviceRows class) is read inside a
+    scope at open, else at the first DeviceRows question (`_prog_ready`;
+    lane vdf-tail-b): a plain call outside every scope reads no context."""
     var resident: XprepResident
     var store: EntryRef
     var live: Bool
+    var context: PythonObject
+    var has_prog: Bool
     var rows_class: PythonObject
     var prog: PythonObject
     var owned: List[Int]
     var held: List[PythonObject]
 
-    def __init__(out self, var resident: XprepResident, store: EntryRef, live: Bool, rows_class: PythonObject,
-                 prog: PythonObject):
+    def __init__(out self, var resident: XprepResident, store: EntryRef, live: Bool, context: PythonObject,
+                 has_prog: Bool, rows_class: PythonObject, prog: PythonObject):
         self.resident = resident^
         self.store = store
         self.live = live
+        self.context = context
+        self.has_prog = has_prog
         self.rows_class = rows_class
         self.prog = prog
         self.owned = List[Int]()
         self.held = List[PythonObject]()
 
-    def is_rows(self, value: PythonObject) raises -> Bool:
+    def _prog_ready(mut self) raises:
+        # The program context and its DeviceRows class, read once per call.
+        if self.has_prog:
+            return
+        self.prog = py_item(self.context, metrics_keys()[].k_family_metrics_prog_context)
+        self.rows_class = self.prog["maxabs_rows_class"]
+        self.has_prog = True
+
+    def is_rows(mut self, value: PythonObject) raises -> Bool:
         """Whether `value` is an exact DeviceRows fold view."""
+        self._prog_ready()
         return py_type(value) is self.rows_class
 
     def _store_ready(mut self, binding: PythonObject) raises -> Bool:
@@ -160,6 +179,7 @@ struct McSlots(Movable):
         into a slot this call owns."""
         if not self._store_ready(binding):
             return (-1, 0, 0)
+        self._prog_ready()
         var fold = _rows_fields(value, self.prog)
         # A DeviceRows base is a float32 C-contiguous 2-D Array (_arena_io.py)
         if fold.dtype != "<f4" or fold.itemsize != 4:
@@ -211,13 +231,18 @@ struct McSlots(Movable):
 
 
 def mc_slots_open(context: PythonObject) raises -> McSlots:
-    """The call's device-input state: one context read, one thread-local
-    scope read. The store entry is resolved only at the first input that
-    can take a slot."""
+    """The call's device-input state. The scope is checked first: with no
+    `resident()` scope alive in the process (`arena_scopes_live`, one native
+    count read) nothing else is read; inside one, one context read and one
+    thread-local scope read. The store entry is resolved only at the first
+    input that can take a slot."""
+    if not arena_scopes_live():
+        return McSlots(xprep_resident_none(), entry_ref_unresolved(), False, context, False, PythonObject(None),
+                       PythonObject(None))
     var prog = py_item(context, metrics_keys()[].k_family_metrics_prog_context)
     var rows_class = prog["maxabs_rows_class"]
     var resident = xprep_resident(prog, entry_ref_unresolved(), True)
-    return McSlots(resident^, entry_ref_unresolved(), False, rows_class, prog)
+    return McSlots(resident^, entry_ref_unresolved(), False, context, True, rows_class, prog)
 
 
 def mc_slots_step(binding: PythonObject, op: Int, addrs: List[Int], slots: List[Int], ints: List[Int],

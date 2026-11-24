@@ -22,7 +22,6 @@ owns every buffer until the synchronous call returns; nothing is retained.
   BH_REDUCE_STAT          a [src, out]         p [code, n, what]       -> HpStat kind;
                           out: five Int64 words [i, f bits, hi, mid, low]
   BH_EQUAL_ELEMENTS       a [a, b, dst]        p [code, n]             -> 0
-  BH_BINCOUNT2_I32        a [a, b, counts]     p [n, ka, kb]           -> 0
   BH_ROW_MEANS_F64        a [src, out]         p [rows, cols]          -> rows holding +inf and -inf
   BH_ASSIGN_FOLD_I64      a [idx, folds]       p [m, n, fold]          -> 0, 1, 2
   BH_COUNT_FOLD_HITS_I64  a [idx, folds]       p [m, n, fold]          -> hits
@@ -35,6 +34,12 @@ device gather on the GPU binding, the host walk on the host one, as the two
 exports were; RidgeCV's split path calls it typed (bindings/
 x_linear_cv_unpack.mojo), no longer through CPython.
 
+ABI v3 (lane vdf-tail-b, 2026-11-24) drops BH_BINCOUNT2_I32 (was op 4, a
+[a, b, counts] p [n, ka, kb]): its last caller, StratifiedGroupKFold, counts
+group x class on the stored codes since lane vdf-scope-split2
+(MH_GROUP_CLASS_COUNTS_RES, core/msel_entry_table.mojo); the later operations
+moved down one code.
+
 Extending the layout requires a new V suffix, never a new loader.
 Publication and lookup are small metadata operations with no independent
 numerical work to split.
@@ -42,19 +47,18 @@ numerical work to split.
 from core.entry_table import entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall
 
-comptime BASE_HELPERS_ABI = "mojolearn.base.helpers.v2"
+comptime BASE_HELPERS_ABI = "mojolearn.base.helpers.v3"
 
 comptime BH_CHECK_INDICES_I64 = 0
 comptime BH_BINCOUNT_I64 = 1
 comptime BH_REDUCE_STAT = 2
 comptime BH_EQUAL_ELEMENTS = 3
-comptime BH_BINCOUNT2_I32 = 4
-comptime BH_ROW_MEANS_F64 = 5
-comptime BH_ASSIGN_FOLD_I64 = 6
-comptime BH_COUNT_FOLD_HITS_I64 = 7
-comptime BH_MARK_SPLIT_ROLES_F32 = 8
-comptime BH_GATHER_ROWS_BYTES = 9
-comptime BH_OP_COUNT = 10
+comptime BH_ROW_MEANS_F64 = 4
+comptime BH_ASSIGN_FOLD_I64 = 5
+comptime BH_COUNT_FOLD_HITS_I64 = 6
+comptime BH_MARK_SPLIT_ROLES_F32 = 7
+comptime BH_GATHER_ROWS_BYTES = 8
+comptime BH_OP_COUNT = 9
 
 #: Words of the BH_REDUCE_STAT out buffer.
 comptime BH_STAT_WORDS = 5
@@ -174,9 +178,6 @@ def base_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int, nf: Int
         want_p = 3
     elif operation == BH_EQUAL_ELEMENTS:
         want_a = 3
-    elif operation == BH_BINCOUNT2_I32:
-        want_a = 3
-        want_p = 3
     elif operation == BH_ASSIGN_FOLD_I64 or operation == BH_COUNT_FOLD_HITS_I64:
         want_p = 3
     elif operation == BH_MARK_SPLIT_ROLES_F32:

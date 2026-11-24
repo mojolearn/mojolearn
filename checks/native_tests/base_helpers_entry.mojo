@@ -25,12 +25,12 @@ from core.base_entry_table import BaseEntryKey, base_table_entry, BASE_HELPERS_A
 from core.base_helpers_host import publish_base_helpers_host
 from core.base_helpers_calls import (
     base_helpers_ref, base_helper, base_check_indices_i64, base_bincount_i64, base_reduce_stat, base_reduce_stat_int,
-    base_equal_elements, base_bincount2_i32, base_row_means_f64, base_assign_fold_i64,
+    base_equal_elements, base_row_means_f64, base_assign_fold_i64,
     base_count_fold_hits_i64, base_mark_split_roles_f32,
 )
 from core.hotpath_impl import HP_STAT_INT, HP_STAT_FLOAT, HP_STAT_TUPLE
 
-comptime BASE_HELPER_CASES = 9
+comptime BASE_HELPER_CASES = 8
 
 
 def _key() -> BaseEntryKey:
@@ -152,22 +152,13 @@ def run_case(unit: Int) raises:
         _ = y
         _ = dst
     elif unit == 4:
-        var a: List[Int32] = [0, 1, 1]
-        var b: List[Int32] = [0, 0, 1]
-        var counts: List[Int64] = [9, 9, 9, 9]
-        _ = base_bincount2_i32(k, Int(a.unsafe_ptr()), Int(b.unsafe_ptr()), 3, 2, 2, Int(counts.unsafe_ptr()))
-        require(counts[0] == 1 and counts[1] == 1 and counts[2] == 0 and counts[3] == 1, "bincount2")
-        _ = a
-        _ = b
-        _ = counts
-    elif unit == 5:
         var src: List[Float64] = [1.0, 2.0, 3.0, 4.0]
         var dst: List[Float64] = [0.0, 0.0]
         require(base_row_means_f64(k, Int(src.unsafe_ptr()), 2, 2, Int(dst.unsafe_ptr())) == 0, "row_means status")
         require(dst[0] == 1.5 and dst[1] == 3.5, "row_means")
         _ = src
         _ = dst
-    elif unit == 6:
+    elif unit == 5:
         var idx: List[Int64] = [0, 2]
         var again: List[Int64] = [2]
         var folds: List[Int32] = [-1, -1, -1]
@@ -178,14 +169,14 @@ def run_case(unit: Int) raises:
         _ = idx
         _ = again
         _ = folds
-    elif unit == 7:
+    elif unit == 6:
         var idx: List[Int64] = [0, 1, 2]
         var folds: List[Int32] = [1, -1, 1]
         require(base_count_fold_hits_i64(k, Int(idx.unsafe_ptr()), 3, Int(folds.unsafe_ptr()), 3, 1) == 2,
                 "count_fold_hits")
         _ = idx
         _ = folds
-    elif unit == 8:
+    elif unit == 7:
         var idx: List[Int64] = [1]
         var roles: List[Float32] = [0.0, 0.0, 0.0, 0.0]
         require(base_mark_split_roles_f32(k, Int(idx.unsafe_ptr()), 1, 2, 1, 2, Int(roles.unsafe_ptr())) == 0,
