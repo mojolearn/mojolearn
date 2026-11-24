@@ -377,6 +377,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_IDN_LARS_GRID_GRAM_OFF (old path, LOSER: 8 cells median 1.04, lars / lasso-lars taxi fit 21x slower, lasso-lars istella 1.42) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_LARS_GRID_GRAM_OFF.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_IDN_LARS_GRID_GRAM_OFF"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): the old path (main's moments grid for LARS / LassoLars' means, Gram and X'y) was slower: 8 cells, median 1.04, lars taxi fit 2.99 -> 63.01 ms (21.09), lasso-lars taxi 2.97 -> 63.01 ms (21.23), lasso-lars istella 80.11 -> 114 ms (1.42); the blocked moments are the only form on every column; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_LARS_GRID_GRAM_OFF.ab-outcome-2.patch"
+    # TOMBSTONE: MOJOLEARN_IDN_KDE_QTILE_FORCE (LOSER: 2 cells median 1.12, kde istella fit 28.16 -> 34.70 ms) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_KDE_QTILE_FORCE.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_IDN_KDE_QTILE_FORCE"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): the query-tile KDE pass at every width lost to the L1 cost rule kde_qtile_applies: 2 cells, median 1.12, kde istella fit 28.16 -> 34.70 ms (1.23), taxi 5.49 -> 5.54 ms (1.01); the cost rule is the only form; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_KDE_QTILE_FORCE.ab-outcome-2.patch"
     # ---- end lane ab-outcome-2
     return True
 

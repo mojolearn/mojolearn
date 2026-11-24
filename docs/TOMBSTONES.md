@@ -23762,7 +23762,7 @@ Arms decided by the A/B of wheel 0.8.67.dev0+4519097d380a (A = main 4519097d38) 
 - Verdict (A/B nvc-ab-20261124T095727Z-92fd9f, NVIDIA L40S, job nvc1-0002): LOSER. 2 cells (kde istella / taxi full fit), arm / base median 1.12; kde istella fit 28.16 -> 34.70 ms (1.23), taxi 5.49 -> 5.54 ms (1.01). Same bits either way (both bodies write the same partial planes word for word). AMD not measured (NVIDIA-only campaign).
 - Removed: the `KDE_IDN_QTILE_FORCE` comptime and its `comptime if` in `kde_qtile_applies`; the cost rule is the only form. Default unchanged: no bits move on any column. Kept: the owed driver row rk-kde-qtile-widths (`tools/measure_owed_driver.py` kde_widths) prices the rule's budget at neighbouring widths, not this arm.
 - Files: `kde/impl/neighbors/kernel_density.mojo`. No grid_controls entry, no test, no sabotage row.
-- Patch: `~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_KDE_QTILE_FORCE.ab-outcome-2.patch`. Deleted by lane/ab-outcome-2 (sub-lane ab2-classic); code recoverable at ba83d4655f. Refusal: `core/experiment_guards_kernel.mojo`.
+- Patch: `~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_KDE_QTILE_FORCE.ab-outcome-2.patch`. Deleted by lane/ab-outcome-2 (sub-lane ab2-classic); code recoverable at ba83d4655f. Refusal: `core/experiment_guards_linear.mojo` (kernel_density.mojo builds into `_mojolearn_estimators` / `_mojolearn_estimators_host`, whose family guard is linear).
 
 ### mojolearn_idn_ols_predict_tiled (ab2-classic)
 
