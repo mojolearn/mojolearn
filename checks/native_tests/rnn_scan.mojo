@@ -5,8 +5,8 @@
 autograd/rules_recurrent.mojo runs a layer either as the per-step chain (layer_fwd_chain / layer_bwd_chain: per time
 step the projection, as its own GEMM launch above the step rule, and the cell) or as the scan (layer_fwd_scan /
 layer_bwd_scan: the whole sequence in one launch each way, one block a batch row; sequence/recurrent_scan.mojo,
-autograd/kernels/recurrent_scan.mojo). Which one a build takes is the gate-count rule (SCAN_MAX_GATES; GRU and LSTM
-take the scan under -D MOJOLEARN_SEQ_FAST_RNN_SCAN_GATED). This check calls BOTH routes of the trainer, whatever the
+autograd/kernels/recurrent_scan.mojo). Which one a build takes is the gate-count rule (SCAN_MAX_GATES: the tanh RNN
+takes the scan, GRU and LSTM the chain). This check calls BOTH routes of the trainer, whatever the
 build's route, on the same inputs and requires every word equal: forward h, c, GH and the gate activations; backward
 dGX and dGH.
 

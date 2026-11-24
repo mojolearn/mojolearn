@@ -1035,8 +1035,9 @@
   },
   "rnn-scan-gated": {
    "define": "MOJOLEARN_SEQ_FAST_RNN_SCAN_GATED",
-   "status": "define in code (sequence/recurrent_scan.mojo SEQ_RNN_SCAN_GATED, lane rnn-scan, EXP:4582): B = GRU and LSTM layers on the scan (one launch forward and one backward per layer and direction); A = the per-step chain. Same fold as the chain by construction (checks/native_tests/rnn_scan.mojo): digests must equal A. Promote on a win (the chain stays for Apple and fast), delete on loss or noise",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-1): LOSER (L40S 18 cells, median 1.18, gru / lstm infer 4.2-4.5x slower); A (the default) is unchanged; removed: the switch, tools/ops/rnn_scan_timing.py and its driver; the define is refused (core/experiment_guards_neural.mojo); code recoverable at d81b6ba708, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_FAST_RNN_SCAN_GATED.ab-outcome-1.patch. Was: define in code (sequence/recurrent_scan.mojo SEQ_RNN_SCAN_GATED, lane rnn-scan, EXP:4582): B = GRU and LSTM layers on the scan (one launch forward and one backward per layer and direction); A = the per-step chain. Same fold as the chain by construction (checks/native_tests/rnn_scan.mojo): digests must equal A. Promote on a win (the chain stays for Apple and fast), delete on loss or noise",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T070727Z-69dac2 (NVIDIA L40S, wheel 4519097d380a): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "gbdt-device-rounds-off": {
    "define": "MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF",
@@ -1070,10 +1071,9 @@
    "owed": "RUN"
   },
   "set-b03": {
-   "define": "MOJOLEARN_SEQ_FAST_RNN_SCAN_GATED,MOJOLEARN_TREES_HIST_PACKED_GH,MOJOLEARN_IDN_TSQR_TREE_PAR_OFF,MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER,MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF",
+   "define": "MOJOLEARN_TREES_HIST_PACKED_GH,MOJOLEARN_IDN_TSQR_TREE_PAR_OFF,MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER,MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF",
    "owed": "RUN",
    "combined": [
-    "rnn-scan-gated",
     "hist-packed-gh",
     "tsqr-tree-par-off",
     "dbscan-brute-eps-filter",
@@ -6146,7 +6146,7 @@
    "b_arms": [
     "rnn-scan-gated"
    ],
-   "owed": "RUN",
+   "owed": "DECIDED",
    "columns": [
     "time",
     "quality"
@@ -6277,25 +6277,6 @@
     "quality"
    ],
    "decides": "promote B where it is faster than A at equal quality on the NVIDIA L40S (same pod, same job); otherwise the B arm is deleted with the four tombstone parts"
-  },
-  {
-   "id": "rnn-scan-timing",
-   "source": "lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md); tools/ops/rnn_scan_timing.py (lane rnn-scan)",
-   "kind": "driver",
-   "driver": "rnn_scan_timing",
-   "arms": [
-    "candidate",
-    "rnn-scan-gated"
-   ],
-   "tool_arm": {
-    "candidate": "chain",
-    "rnn-scan-gated": "scan"
-   },
-   "vendor": "nvidia",
-   "b_arms": [
-    "rnn-scan-gated"
-   ],
-   "decides": "the scan (B) against the chain (A) at T 16 N 65536 H 64/128 and T 512 N 2048 H 64, batch 256: digests must be equal case by case (rnn_scan_timing.py --compare on the two arms' raw lines); promote with the board rows"
   },
   {
    "id": "sgd-ps-preload-shapes",

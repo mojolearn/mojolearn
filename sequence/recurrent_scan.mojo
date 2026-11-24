@@ -135,12 +135,12 @@ comptime SEQ_RNN_SCAN_ON_THIS_TARGET = not TARGET_HAS_APPLE_GPU
 # fits one block; and (2) take the chain's fold of the step products (i6 = R, the split-K block the chain's GEMM
 # launch takes at that shape, 0 = gemm_dot's chain; autograd/rules_recurrent.mojo scan_fwd_split /
 # scan_bwd_split), so the scan's words are the chain's at every shape and cell: either route gives the same bits.
-# -D MOJOLEARN_SEQ_FAST_RNN_SCAN_GATED (default OFF, opt-in arm, A/B owed: tools/ops/rnn_scan_timing.py) puts GRU and
-# LSTM on the scan (SCAN_MAX_GATES 4). The chain stays the default for them until that timing: the scan replaces
-# the measured RNN_STEP_GEMM / RNN_BPTT_LSTM_GEMM products on a hot path (AGENTS.md "When a removal needs a
-# measurement"). Bits: the same under either setting (the scan folds as the chain).
-comptime SEQ_RNN_SCAN_GATED = is_defined["MOJOLEARN_SEQ_FAST_RNN_SCAN_GATED"]()
-comptime SCAN_MAX_GATES = 4 if SEQ_RNN_SCAN_GATED else 1
+# GRU and LSTM stay on the chain: the arm that put them on the scan (SCAN_MAX_GATES 4) lost its A/B on the L40S
+# (2026-11-24, nvc-ab-20261124T070727Z-69dac2: gru / lstm infer 4.2-4.5x slower, fit higgs 1.17-1.20; 18 cells,
+# median 1.18). The scan kernels stay cell-generic (checks/native_tests/rnn_scan.mojo keeps them equal to the chain).
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_RNN_SCAN_GATED (LOSER: NV L40S 18 cells, median 1.18, gru/lstm infer 4.2-4.5x slower) deleted 2026-11-24 by lane/ab-outcome-1; code recoverable at d81b6ba708.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_FAST_RNN_SCAN_GATED.ab-outcome-1.patch
+comptime SCAN_MAX_GATES = 1
 # TOMBSTONE: MOJOLEARN_SEQ_RNN_SCAN (force-scan A/B arm; EXP:2166 TIE, the gate-count rule stays) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
 # Restore: git apply experiments/removed/MOJOLEARN_SEQ_RNN_SCAN.patch
 # TOMBSTONE: MOJOLEARN_SEQ_RNN_SCAN_OFF (force-chain A/B arm; EXP:2166, the gate-count rule stays) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.

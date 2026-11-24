@@ -1277,6 +1277,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_IDN_ATTN_FOLD_V2 (LOSER: NV L40S 3 cells, median 1.09, 0.99..1.24, lm-train-step 35.06 -> 43.41 ms) deleted 2026-11-24 by lane/ab-outcome-1; code recoverable at d81b6ba708.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_ATTN_FOLD_V2.ab-outcome-1.patch
     comptime assert not is_defined["MOJOLEARN_IDN_ATTN_FOLD_V2"](), "removed 2026-11-24 (lane/ab-outcome-1, A/B nvc-ab-20261124T070727Z-69dac2 NVIDIA L40S, wheel 4519097d380a, one run per arm): IDN_ATTN_FOLD_V2 (the attention key-axis fold in 128-key leaves plus the carry tree, fused row-tile x leaf kernels) was a LOSER: 3 cells, median 1.09, 0.99..1.24, lm-train-step 35.06 -> 43.41 ms; the v1 serial key chain default is kept; code at d81b6ba708; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_ATTN_FOLD_V2.ab-outcome-1.patch"
+    # TOMBSTONE: MOJOLEARN_SEQ_FAST_RNN_SCAN_GATED (LOSER: NV L40S 18 cells, median 1.18, 0.92..4.54, gru/lstm infer 4.2-4.5x slower) deleted 2026-11-24 by lane/ab-outcome-1; code recoverable at d81b6ba708.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_FAST_RNN_SCAN_GATED.ab-outcome-1.patch
+    comptime assert not is_defined["MOJOLEARN_SEQ_FAST_RNN_SCAN_GATED"](), "removed 2026-11-24 (lane/ab-outcome-1, A/B nvc-ab-20261124T070727Z-69dac2 NVIDIA L40S, wheel 4519097d380a, one run per arm): SEQ_FAST_RNN_SCAN_GATED (GRU and LSTM layers on the scan, SCAN_MAX_GATES 4) was a LOSER: 18 cells, median 1.18, 0.92..4.54, gru / lstm infer 4.2-4.5x slower, fit higgs 1.17-1.20; the chain stays their route (SCAN_MAX_GATES 1); code at d81b6ba708; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_FAST_RNN_SCAN_GATED.ab-outcome-1.patch"
     # ---- end lane ab-outcome-1
     return True
 
