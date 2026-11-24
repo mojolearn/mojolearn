@@ -988,7 +988,7 @@ def _map_multi_codes(buffer: Int, dtype: Int, count: Int, outputs: Int, held_at:
 
 
 def _place_multi_proba(src: Int, src_dtype: Int, cols: Int, count: Int, rows: Int, dsts: Int, outputs: Int,
-                       counts_at: Int, held_at: Int, f: Int) raises:
+                       counts_at: Int, held_at: Int, f: Int, log_words: Bool) raises:
     """THE CV TOOLS' PER-OUTPUT BUFFERS (lane mf-tail5): a multi-output
     classifier unit's test-side predict_proba (`count` rows x `cols` words
     of `src_dtype` at `src`: each output's columns in turn, the fold
@@ -998,7 +998,10 @@ def _place_multi_proba(src: Int, src_dtype: Int, cols: Int, count: Int, rows: In
     side's int32 rows: scikit-learn's cross_val_predict of a list response,
     each output placed by `_enforce_prediction_order` over that output's
     classes (a lacking output's columns at its held classes, 0 elsewhere;
-    `held_at`: fold f's per-output held lists, 0: none lack)."""
+    `held_at`: fold f's per-output held lists, 0: none lack). `log_words`
+    (lane mf-rows8b): predict_log_proba, each output's `np.log` of its
+    block in the member's precision, the dtype's lowest at a lacking
+    output's other classes (`_enforce_prediction_order`'s float_min)."""
     var r = _I32P(unsafe_from_address=rows)
     var counts = _IntP(unsafe_from_address=counts_at)
     var addresses = _IntP(unsafe_from_address=dsts)
@@ -1021,10 +1024,11 @@ def _place_multi_proba(src: Int, src_dtype: Int, cols: Int, count: Int, rows: In
             var at = Int(r[i]) * k
             if m > 0:
                 for c in range(k):
-                    df[at + c] = 0.0
+                    df[at + c] = _lowest(src_dtype) if log_words else 0.0
             for c in range(width):
                 var to = Int(held[c]) if m > 0 else c
-                df[at + to] = _word_at(src, i * cols + offset + c, src_dtype)
+                var value = _word_at(src, i * cols + offset + c, src_dtype)
+                df[at + to] = _log_word(value, src_dtype) if log_words else value
         offset += width
 
 
@@ -1111,7 +1115,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         # A multi-output classifier's predict_proba (lane mf-tail5): one
         # result block per output (`respond_width` = minus the outputs,
         # `respond_dst` the address of their addresses; module note).
-        var listed = multi_cls and plan.respond == MEMBER_OP_PREDICT_PROBA and not plan.respond_log
+        # lane mf-rows8b: predict_log_proba too (its log per output block)
+        var listed = multi_cls and plan.respond == MEMBER_OP_PREDICT_PROBA
         if len(codes) != 0 or (y_cols > 1 and (classifier or (plan.respond != MEMBER_OP_PREDICT and not listed))):
             raise Error("member ABI: a search that answers its units' responses takes no scorer and one output")
         if listed and plan.respond_width != -y_cols:
@@ -1674,7 +1679,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                     if dst != 0 and multi_cls and op == MEMBER_OP_PREDICT_PROBA:
                         # THE PER-OUTPUT BUFFERS (lane mf-tail5): one block per output
                         _place_multi_proba(buffer, dtype, got, place.count, _IntP(unsafe_from_address=side_rows_at)[s],
-                                           dst, y_cols, dst_counts_at, mheld_list if mlacks else 0, fold)
+                                           dst, y_cols, dst_counts_at, mheld_list if mlacks else 0, fold,
+                                           log_words)
                     elif dst != 0:
                         # THE CV TOOLS' FINAL BUFFER: straight into the caller's
                         # result at the side's rows (no copy between).

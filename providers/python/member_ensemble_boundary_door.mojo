@@ -138,7 +138,7 @@ from core.ensemble_member import (
     META_BLOCK_SEARCH, META_BLOCK_FOLDS,
 )
 from core.ensemble_member import meta_plan_leaf_importances, META_PARAM_SERVING
-from core.member_abi import MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_PREDICT, member_output_dtype
+from core.member_abi import MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_PREDICT, member_output_dtype, member_outputs
 from bindings.msel_common_door import msel_f64_block, msel_i64_list, msel_index_i64, msel_p64, msel_addr
 from bindings.classical_labels_door import labels_decode_labels
 from bindings.family_common_pack import family_array
@@ -4028,20 +4028,37 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             for q in range(len(codes)):  # small-loop(the scorers)
                 if msel_scorer_row(codes[q]).op != MEMBER_OP_PREDICT:
                     return False
-        if multi and tool_respond >= 0 and tool_respond != MEMBER_OP_PREDICT and not (
-                classifier and tool_respond == MEMBER_OP_PREDICT_PROBA and not tool_log
-                and (nested.masks[c] & MEMBER_CAN_PREDICT_PROBA) != 0):
-            # decision_function / predict_log_proba: MultiOutputClassifier has
-            # neither (scikit-learn's AttributeError, the door's words: lane
-            # mf-ens6b raises them by the units' own attribute read, before
-            # any fit; a class that has it keeps the door)
+        # THE CV TOOLS over a multi-output TARGET (lane mf-rows8b, rows :3790,
+        # :3800, :3852, :3876): the target's own outputs (`tool[5]`, 0 a 1-D
+        # y), not the member's capability, decide; a multi-capable member on
+        # a 1-D y answers as any (before, every such member's cv tool with a
+        # response kept the door).
+        var multi_y = multi and tool is not None and Int(py=tool[5]) > 1
+        if multi_y and tool_respond >= 0 and tool_respond != MEMBER_OP_PREDICT:
+            # decision_function / predict_log_proba / predict_proba of a class
+            # without the method (MultiOutputClassifier has no
+            # decision_function or predict_log_proba): scikit-learn's
+            # AttributeError, raised by the units' own attribute read before
+            # any fit (lane mf-ens6b)
             var asked = String("predict_log_proba") if tool_log else String(py=tool[1])
             if py_call(b.getattr, clones[c], PythonObject(asked), PythonObject(None)) is None:
                 _ = py_call(b.getattr, clones[c], PythonObject(asked))
-            return False
-        if multi and tool_respond == MEMBER_OP_PREDICT_PROBA:
-            multi_proba = True  # (lane mf-tail5) one result block per output
-        if multi and tool_respond >= 0 and classifier:
+            if not classifier:
+                # a multi-output regressor's probability or decision method:
+                # no regressor kind answers one (an invariant)
+                raise Error("RuntimeError: search admission invariant: a multi-output regressor member answers "
+                            + asked)
+            if tool_respond == MEMBER_OP_DECISION:
+                # a multi-output classifier class with decision_function: no
+                # native multi-output classifier kind answers it (its member
+                # lacks MEMBER_CAN_DECISION, so its admission refused above)
+                raise Error("RuntimeError: search admission invariant: a multi-output classifier member answers "
+                            + "decision_function")
+            # predict_proba and (lane mf-rows8b) predict_log_proba: one result
+            # block per output, the log in the member's precision
+            # (core/msel_search_run.mojo `_place_multi_proba`)
+            multi_proba = True
+        if multi_y and tool_respond >= 0 and classifier:
             # A MULTI-OUTPUT CLASSIFIER's predict (lane mf-msel5c): each output's
             # codes decoded at PACK into one rows x outputs block of its labels,
             # int64 for integer labels, float64 for real ones; labels of
@@ -4122,7 +4139,11 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             var n_rows = Int(py=tool[6])
             var outputs = Int(py=tool[5])
             if labels is None or py_type(labels) is not b.list or len(labels) != outputs or outputs < 2:
-                return False
+                # lane mf-rows8b (row :3852): the fit's per-output labels
+                # (bindings/msel_member_units_door.mojo `_encode_outputs`) are
+                # one list per output of a 2-D y: an invariant
+                raise Error("RuntimeError: search admission invariant: a multi-output classifier fit admitted "
+                            + "without one label list per output")
             var blocks = Python.list()
             var addresses = family_array(Python.tuple(outputs), "<i8", context)
             var words_at = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=msel_addr(addresses))
@@ -4144,9 +4165,22 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             if tool_respond == MEMBER_OP_PREDICT:
                 width = max(outputs, 1)
                 two_d = outputs > 0
+            elif not classifier:
+                # LANE mf-rows8b (row :3876): cross_val_predict of a
+                # NON-CLASSIFIER's predict_proba / decision_function (a mixture
+                # model's responsibilities, an outlier detector's decision):
+                # scikit-learn encodes nothing for a non-classifier and hands
+                # each fold's raw answer on (sklearn 1.9
+                # model_selection/_validation.py `_fit_and_predict`, `encode` is
+                # `is_classifier`), so the result is the member's own columns,
+                # asked once before any fit (core/member_abi.mojo
+                # `member_outputs`; a family that cannot answer refuses in its
+                # words). A probability block is 2-D, a one-column decision 1-D.
+                width = max(member_outputs(nested.plans[0], tool_respond, 1, 1), 1)
+                two_d = width > 1 or tool_respond == MEMBER_OP_PREDICT_PROBA
             else:
-                if not classifier or labels is None:
-                    return False
+                if labels is None:
+                    raise Error("RuntimeError: search admission invariant: a classifier fit admitted with no fit labels (a FIT caller hands its labels)")
                 var k = len(py_call(b.list, labels))
                 width = k if (tool_respond == MEMBER_OP_PREDICT_PROBA or k > 2) else 1
                 two_d = width > 1 or tool_respond == MEMBER_OP_PREDICT_PROBA
