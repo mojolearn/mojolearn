@@ -931,6 +931,8 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
             member_set_admit_or_raise(set, member, y_address, unit_w, row_draw, row_count,
                                       0 if all_cols else trees_address(cols), 0 if all_cols else n_feat,
                                       n_classes, context, b)
+            _ = rows  # the draw arrays whose addresses the admission recorded (also held by wave_rows)
+            _ = cols
             _ = py_call(wave_labels.append, codes)
             if given.given() and member_set_reads_given(set):
                 member_set_given(set, given.data, given.dtype)
