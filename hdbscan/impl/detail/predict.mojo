@@ -58,16 +58,6 @@ estimator's `labels_`; theirs are int64 (`hdbscan.pyx:1316`).
 
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
-from core.transfer import (
-    TRANSFER_TIER_IDENTICAL,
-    transfer_download_f32_list,
-    transfer_download_list,
-    transfer_upload_list,
-)
-
-#: The pinned download stages of this module and tier (core/transfer.mojo).
-comptime _XFER_POOL = "MojolearnHdbscanPredictTransferStagesIdenticalV1" if TRANSFER_TIER_IDENTICAL else "MojolearnHdbscanPredictTransferStagesFastV1"
-
 from checks.numerics import identical_div
 from core.identity_trace import IdentityTrace
 from hdbscan.checks.hdbscan_sabotage import HDB_SAB_NONE
@@ -202,39 +192,6 @@ struct PredictOutput(Movable):
         self.probabilities = probabilities^
         self.min_mr_indices = min_mr_indices^
         self.prediction_lambdas = prediction_lambdas^
-
-
-def _upload_f32(
-    ctx: DeviceContext, values: List[Float32], n: Int
-) raises -> DeviceBuffer[DType.float32]:
-    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): read in place
-    # from the caller's list, one wait. Gone: three waits (one before the
-    # host buffer was touched), a pinned buffer per call and one store per
-    # word into it.
-    return transfer_upload_list[DType.float32](ctx, values, n if n > 0 else 0, max(n, 1))
-
-
-def _upload_i32(
-    ctx: DeviceContext, values: List[Int32], n: Int
-) raises -> DeviceBuffer[DType.int32]:
-    # core/transfer.mojo: as `_upload_f32` above.
-    return transfer_upload_list[DType.int32](ctx, values, n if n > 0 else 0, max(n, 1))
-
-
-def _download_f32(
-    ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int
-) raises -> List[Float32]:
-    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): the copy
-    # engine writes the list's own words, one wait. Gone: two waits, a pinned
-    # buffer per call and one append per word.
-    return transfer_download_f32_list[_XFER_POOL](ctx, buf, n)
-
-
-def _download_i32(
-    ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int
-) raises -> List[Int32]:
-    # core/transfer.mojo: as `_download_f32` above (one copy, one wait).
-    return transfer_download_list[DType.int32](ctx, buf, n)
 
 
 struct PredictDevice(Movable):
