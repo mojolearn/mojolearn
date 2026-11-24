@@ -27,7 +27,7 @@ from ._mode import NumericModeMixin as _NumericModeMixin, sklearn_tags as _sklea
 #: intercept travels as `<f8` because it is a Python float computed with
 #: `math.fsum` at fit time and `predict` hands `float(self.intercept_)` to
 #: the binding, so the file carries the exact value predict uses.
-_LINEAR_FORMAT = "mojolearn-linear-1"
+_LINEAR_FORMAT = "mojolearn-linear-2"
 _LOGISTIC_FORMAT = "mojolearn-logistic-1"
 
 # The compiled saved-model owner, connected once at import: LogisticRegression's

@@ -7,7 +7,7 @@ from core.linear_boundary_types import LINEAR_PREDICT_ABI, LinearPredictRequest,
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.neural_context import process_ctx
-from core.p3_linear_impl import ols_predict_device
+from core.p3_linear_impl import ols_predict_device, ols_predict_device_targets
 from core.shared_slot import SharedSlot
 
 comptime _CONTEXT = "MojolearnEstimatorsContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnEstimatorsContextFastV3"
@@ -17,6 +17,11 @@ def linear_predict_device(request: LinearPredictRequest) raises -> Int:
     """The request's predictions; 1 when `request.test_x` and X holds a NaN
     or an infinity (tested on the device at the call's one drain), else 0."""
     var ctx = process_ctx[_CONTEXT]()
+    if request.targets > 1:
+        # THE T WORD (lane w3f3-k): a multi-target Ridge, one call.
+        return ols_predict_device_targets(ctx, f32_ptr(request.x), f32_ptr(request.coef),
+            MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=request.intercepts), request.dst,
+            request.rows, request.cols, request.targets, request.test_x)
     return ols_predict_device(ctx, f32_ptr(request.x), f32_ptr(request.coef), request.dst,
         request.rows, request.cols, Float32(request.intercept), request.test_x)
 

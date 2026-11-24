@@ -85,11 +85,10 @@ struct LinearMemberSlot(Copyable, Movable, Defaultable):
     var scalars: List[Float64]
     # THE 2-D y (lane w3f3-k): the target count (coef is targets x features,
     # scalars the targets' intercepts then the y mean), the intercepts as
-    # the multi-target predict reads them, and its scratch columns and
-    # predictions (grown, never shrunk: no allocation per call).
+    # the multi-target predict reads them, and the score's predictions
+    # (grown, never shrunk: no allocation per call).
     var targets: Int
     var intercepts: List[Float64]
-    var columns: List[Float32]
     var predictions: List[Float32]
 
     def __init__(out self):
@@ -104,7 +103,6 @@ struct LinearMemberSlot(Copyable, Movable, Defaultable):
         self.scalars = List[Float64]()
         self.targets = 1
         self.intercepts = List[Float64]()
-        self.columns = List[Float32]()
         self.predictions = List[Float32]()
 
 
@@ -181,7 +179,6 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
             slot[].mean = List[Float32]()
             slot[].scalars = List[Float64]()
             slot[].intercepts = List[Float64]()
-            slot[].columns = List[Float32]()
             slot[].predictions = List[Float32]()
             store[].free.append(index)
         return address
@@ -394,7 +391,7 @@ def _predict(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPo
 def _predict_targets(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin],
                      call: MutPointer[MemberCall, MutUntrackedOrigin], dst: Int) raises:
     """THE 2-D y's predict (lane w3f3-k): rows x targets float32 at `dst`
-    (`linear_predict_targets_run` over the route's prediction entry), with
+    (one call of the route's prediction entry with the T word), with
     the one-target predict's width check."""
     var estimator = _name(slot[].ridge)
     var rows = call[].x.rows
@@ -407,10 +404,8 @@ def _predict_targets(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin],
             + String(slot[].state.features) + " features as input.")
     if dst == call[].dst.data and (call[].dst.rows != rows or call[].dst.cols != targets):
         raise Error("ValueError: the prediction buffer holds one value per row of X and target")
-    if len(slot[].columns) < rows * targets:
-        slot[].columns = List[Float32](length=rows * targets, fill=0.0)
-    linear_predict_targets_run(call[].route.second.call, call[].x.data, Int(slot[].coef.unsafe_ptr()),
-        slot[].intercepts, Int(slot[].columns.unsafe_ptr()), dst, rows, cols, targets)
+    _ = linear_predict_targets_run(call[].route.second.call, call[].x.data, Int(slot[].coef.unsafe_ptr()),
+        slot[].intercepts, dst, rows, cols, targets)
 
 
 def _score(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPointer[MemberCall, MutUntrackedOrigin]) raises:

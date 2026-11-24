@@ -428,18 +428,16 @@ def classical_archive_save(model: PythonObject, path: PythonObject, ridge: Bool,
     var nk = classical_keys()
     if not py_contains(fields, nk[].k_coef_):
         raise Error("RuntimeError: this estimator is not fitted yet")
-    var several = False
+    # Format 2 (lane w3f3-k): a Ridge fitted on several targets (2-D coef_)
+    # stores one intercept per target.
+    var targets = 1
     if ridge:
         try:
-            several = Int(py=py_item(fields, nk[].k_coef_).ndim) == 2
+            var coef_source = py_item(fields, nk[].k_coef_)
+            if Int(py=coef_source.ndim) == 2:
+                targets = Int(py=coef_source.shape[0])
         except:
-            several = False  # a coef_ without ndim: the member unpack below refuses it in its words
-    if several:
-        # Lane w3f3-k: the archive holds one coefficient vector and one
-        # intercept; a Ridge fitted on several targets is refused in words
-        # (before, its fit refused the 2-D y).
-        raise Error("NotImplementedError: mojolearn Ridge.save: the archive holds one target; this Ridge was fitted"
-                    + " on several (coef_ is 2-D)")
+            targets = 1  # a coef_ without ndim: the member unpack below refuses it in its words
     var mode = py_get(fields, nk[].k_numeric_mode)
     if mode is None or not Bool(py=mode):
         mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
@@ -455,8 +453,16 @@ def classical_archive_save(model: PythonObject, path: PythonObject, ridge: Bool,
     # Every save reads the current writable/rebound public coefficient field.
     var coef = _archive_unpack_member("coef", py_item(fields, nk[].k_coef_), context, pins)
     var alpha = Float64(py=py_item(fields, nk[].k_alpha)) if ridge else Float64(0)
+    var intercepts = List[Float64]()
+    var intercept_source = py_item(fields, nk[].k_intercept_)
+    if targets == 1:
+        intercepts.append(Float64(py=intercept_source))
+    else:
+        for t in range(targets):  # driver-loop: over the targets (their public intercepts)
+            var word = intercept_source[t]
+            intercepts.append(Float64(py=word))
     var members = archive_linear_members(coef^, _archive_class_name_unpack(py_type(model)), selected,
-        Int(py=py_item(fields, nk[].k_n_features_in_)), Float64(py=py_item(fields, nk[].k_intercept_)), Bool(py=py_item(fields, nk[].k_fit_intercept)), ridge, alpha)
+        Int(py=py_item(fields, nk[].k_n_features_in_)), intercepts, Bool(py=py_item(fields, nk[].k_fit_intercept)), ridge, alpha)
     var opened = _archive_open(path, context)
     var file = opened[0]
     var methods = _archive_methods(file, context)

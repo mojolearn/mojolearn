@@ -2966,7 +2966,7 @@ def host_archive_select_pack(path: PythonObject, context: PythonObject, requeste
     result.estimator = estimator
     if fmt == "mojolearn-scaler-1" and estimator == "MinMaxScaler":
         result.value = minmax_archive_decoded(cls, members, context, print_mode)
-    elif fmt == "mojolearn-linear-1":
+    elif fmt == "mojolearn-linear-2":
         result.value = host_archive_linear_decoded(cls, members, estimator == "Ridge", context, print_mode)
     elif fmt == "mojolearn-scaler-1" and estimator == "StandardScaler":
         result.value = standard_archive_decoded(cls, members, context, print_mode)
@@ -2990,7 +2990,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     var arrays = decoded.value
     var model = PythonObject(None)
     if ((fmt == "mojolearn-scaler-1" and (estimator == "MinMaxScaler" or estimator == "StandardScaler"))
-            or fmt == "mojolearn-linear-1" or fmt == "mojolearn-cholesky-1"):
+            or fmt == "mojolearn-linear-2" or fmt == "mojolearn-cholesky-1"):
         model = decoded.value
     elif fmt == "mojolearn-pca-1" or fmt == "mojolearn-tsvd-1":
         model = host_archive_decomposition(cls, arrays, fmt == "mojolearn-pca-1", path, context)

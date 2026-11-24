@@ -42,7 +42,7 @@ def _model(layout="c"):
 
 
 def _values(model):
-    return dict(format="mojolearn-linear-1", estimator="HostLinearRegression", numeric_mode="identical",
+    return dict(format="mojolearn-linear-2", estimator="HostLinearRegression", numeric_mode="identical",
                 coef=vars(model)["coef_"], intercept=np.asarray([.25], dtype="<f8"),
                 meta=np.asarray([3, 1], dtype="<i8"))
 

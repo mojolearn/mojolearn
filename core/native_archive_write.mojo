@@ -185,15 +185,24 @@ def archive_f64(name: String, value: Float64) -> NativeArchiveMember:
 
 
 def archive_linear_members(var coef: NativeArchiveMember, estimator: String, mode: String,
-    features: Int, intercept: Float64, fit_intercept: Bool, ridge: Bool, alpha: Float64) -> List[NativeArchiveMember]:
+    features: Int, intercepts: List[Float64], fit_intercept: Bool, ridge: Bool, alpha: Float64) -> List[NativeArchiveMember]:
+    """Format 2 (lane w3f3-k): `coef` is features words (one target) or a
+    targets x features Ridge, `intercepts` one value per target (one value is
+    the scalar member of format 1's layout)."""
     var members = List[NativeArchiveMember]()
     # Deterministic lexical order is the existing archive's member order.
     if ridge:
         members.append(archive_f64("alpha", alpha))
     members.append(coef^)
     members.append(archive_string("estimator", estimator))
-    members.append(archive_string("format", "mojolearn-linear-1"))
-    members.append(archive_f64("intercept", intercept))
+    members.append(archive_string("format", "mojolearn-linear-2"))
+    if len(intercepts) == 1:
+        members.append(archive_f64("intercept", intercepts[0]))
+    else:
+        var words = List[UInt8]()
+        for t in range(len(intercepts)):  # small-loop(the targets' intercepts)
+            archive_uint(words, bitcast[DType.uint64](intercepts[t]), 8)
+        members.append(archive_owned("intercept", "<f8", [len(intercepts)], 8, words^))
     var meta = List[UInt8]()
     archive_uint(meta, bitcast[DType.uint64](Int64(features)), 8)
     archive_uint(meta, UInt64(fit_intercept), 8)

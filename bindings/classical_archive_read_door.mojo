@@ -411,7 +411,7 @@ def classical_host_model(path: PythonObject, context: PythonObject) raises -> Py
         var cls = py_get(py_item(context, nk[].k_classical_host_estimators), PythonObject(saved_as))
         if cls is None:
             raise Error("mojolearn: " + _archive_read_repr(path, context) + " was saved by "
-                        + saved_as + ", which mojolearn-linear-1 does not hold")
+                        + saved_as + ", which mojolearn-linear-2 does not hold")
         var ridge = Bool(py=py_item(context, nk[].k_classical_kinds)[cls])
         var ancestry = archive_class_names_unpack(cls)
         var plan = native_linear_archive_plan(members, ancestry, ridge, numpy, print_mode)

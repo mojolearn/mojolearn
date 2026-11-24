@@ -17,7 +17,7 @@ from mojolearn._verify_native_runtime import audit_native_call
 
 def _saved_bytes(estimator, order):
     fields = dict(
-        format="mojolearn-linear-1", estimator=estimator, numeric_mode="identical",
+        format="mojolearn-linear-2", estimator=estimator, numeric_mode="identical",
         meta=np.array([2, 1], dtype="<i8"), coef=np.array([1.0, -2.0], dtype="<f4"),
         intercept=np.array([0.5], dtype="<f8"),
     )

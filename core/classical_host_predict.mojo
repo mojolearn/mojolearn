@@ -255,6 +255,36 @@ def host_ols_predict_into(
             dst.unsafe_store(i, ftz(v + ftz(intercept)))
 
 
+def host_ols_predict_targets_into(
+    x: HostF32Ptr, coef: HostF32Ptr, intercepts: MutPointer[Float64, MutUntrackedOrigin], dst: HostF32Ptr,
+    n_rows: Int, n_features: Int, targets: Int, tasks: Int,
+):
+    """A multi-target Ridge's `dst[n_rows x targets]` (lane w3f3-k):
+    `host_gemm_nt_into` over every coefficient row (each cell the one-target
+    fold, `host_pinned_cell_ptr`), then each target's intercept epilogue as
+    `host_ols_predict_into`'s (`ftz(ftz(v) + ftz(intercept))`, skipped for
+    an exact 0.0), split over the rows."""
+    host_gemm_nt_into(x, coef, dst, n_rows, targets, n_features, tasks)
+    var t = max(min(tasks, n_rows), 1)
+    t = host_grain_cap(t, n_rows * targets)
+    var chunk = host_predict_chunk(n_rows, t)
+
+    def _epilogue(c: Int) {imm intercepts, imm dst, imm chunk, imm n_rows, imm targets}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n_rows)
+        for i in range(lo, hi):
+            for j in range(targets):
+                var b = Float32(intercepts[j])
+                if b != Float32(0.0):
+                    var v = ftz(dst.unsafe_load(i * targets + j))
+                    dst.unsafe_store(i * targets + j, ftz(v + ftz(b)))
+
+    if t == 1:
+        _epilogue(0)
+    else:
+        host_parallelize(_epilogue, t)
+
+
 def host_qn_decision(
     x: List[Float32], w: List[Float32], n_rows: Int, n_features: Int,
     fit_intercept: Bool,

@@ -100,7 +100,7 @@ def test_load_refuses_a_wrong_format_and_a_cast(tmp_path):
     _serialize.write_npz(path, arrays)
     with pytest.raises(ValueError, match="the factor is 5 x 5"):
         Cholesky.load(path)
-    arrays["format"] = "mojolearn-linear-1"
+    arrays["format"] = "mojolearn-linear-2"
     _serialize.write_npz(path, arrays)
     with pytest.raises(ValueError, match="model format"):
         Cholesky.load(path)

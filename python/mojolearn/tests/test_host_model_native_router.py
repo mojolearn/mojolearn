@@ -36,7 +36,7 @@ def test_public_router_preserves_existing_linear_and_scaler_loads(tmp_path, name
             mean=np.asarray([1., 2.], dtype="<f4"), var=np.asarray([4., 9.], dtype="<f4"),
             scale=np.asarray([2., 3.], dtype="<f4"))
     else:
-        members = dict(format="mojolearn-linear-1", meta=np.asarray([2, 1], dtype="<i8"),
+        members = dict(format="mojolearn-linear-2", meta=np.asarray([2, 1], dtype="<i8"),
             coef=np.asarray([.25, .75], dtype="<f4"), intercept=np.asarray([.5], dtype="<f8"))
         if name == "Ridge":
             members["alpha"] = np.asarray([1.25], dtype="<f8")
@@ -69,7 +69,7 @@ def test_public_router_preserves_second_arima_format(tmp_path):
 
 def test_public_router_fixture_matrix_covers_every_registered_archive_entry():
     covered = {(fmt, name) for name, (fmt, _) in CASES.items()}
-    covered.update({("mojolearn-linear-1", "LinearRegression"), ("mojolearn-linear-1", "Ridge"),
+    covered.update({("mojolearn-linear-2", "LinearRegression"), ("mojolearn-linear-2", "Ridge"),
                     ("mojolearn-scaler-1", "StandardScaler"), ("mojolearn-arima-2", "ARIMA")})
     # 9b2c7b2324 registered the saved-forest format; its public round trip is
     # test_iforest_save_forest.py::test_host_column_loads_scores_and_resaves_a_saved_forest.

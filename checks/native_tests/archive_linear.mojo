@@ -38,7 +38,7 @@ def _numeric(name: String, dtype: String, width: Int, var shape: List[Int], word
 
 def _members(ridge: Bool) -> List[NativeArchiveDecoded]:
     var members = List[NativeArchiveDecoded]()
-    members.append(_text("format", "mojolearn-linear-1"))
+    members.append(_text("format", "mojolearn-linear-2"))
     members.append(_text("estimator", "Ridge" if ridge else "LinearRegression"))
     var two: List[Int] = [2]
     var meta: List[UInt64] = [3, 0xFFFFFFFFFFFFFFFF]
@@ -96,7 +96,7 @@ def _refusal(unit: Int) raises:
         expected = "mojolearn: model file is missing field 'format'"
     elif unit == 1:
         members[0] = _text("format", "other-format")
-        expected = "model archive format does not match mojolearn-linear-1"
+        expected = "model archive format does not match mojolearn-linear-2"
     elif unit == 2:
         _ = members.pop(1)
         expected = "mojolearn: model file is missing field 'estimator'"

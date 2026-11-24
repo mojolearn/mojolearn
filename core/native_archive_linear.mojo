@@ -15,6 +15,11 @@ struct NativeLinearArchivePlan(Movable):
     var mode: String
     var saved_as: String
     var class_mismatch: Bool
+    # Format 2 (lane w3f3-k): a Ridge fitted on several targets stores coef
+    # targets x features and one intercept per target; `intercepts` holds
+    # them (`intercept` is the first).
+    var targets: Int
+    var intercepts: List[Float64]
 
     def __init__(out self):
         self.coefficients = -1
@@ -25,6 +30,8 @@ struct NativeLinearArchivePlan(Movable):
         self.mode = ""
         self.saved_as = ""
         self.class_mismatch = False
+        self.targets = 1
+        self.intercepts = List[Float64]()
 
 
 def native_archive_field_index(members: List[NativeArchiveDecoded], name: String) -> Int:
@@ -92,8 +99,8 @@ def native_archive_ancestry_matches(saved_as: String, ancestry: List[String]) ->
 def native_linear_archive_plan(members: List[NativeArchiveDecoded], ancestry: List[String],
                                 ridge: Bool, numpy: Bool, print_mode: Int = 2147483647) raises -> NativeLinearArchivePlan:
     var result = NativeLinearArchivePlan()
-    if native_archive_string(members, "format", numpy, print_mode) != "mojolearn-linear-1":
-        raise Error("model archive format does not match mojolearn-linear-1")
+    if native_archive_string(members, "format", numpy, print_mode) != "mojolearn-linear-2":
+        raise Error("model archive format does not match mojolearn-linear-2")
     result.saved_as = native_archive_string(members, "estimator", numpy, print_mode)
     if not native_archive_ancestry_matches(result.saved_as, ancestry):
         result.class_mismatch = True
@@ -107,12 +114,20 @@ def native_linear_archive_plan(members: List[NativeArchiveDecoded], ancestry: Li
     result.coefficients = native_archive_exact(members, "coef", "<f4", numpy)
     result.features = Int(bitcast[DType.int64](archive_data_word(members[meta].layout.payload, 0, 8)))
     result.fit_intercept = archive_data_word(members[meta].layout.payload, 8, 8) != 0
-    if len(members[result.coefficients].layout.shape) != 1 or members[result.coefficients].layout.count != result.features:
+    # Format 2: coef is features (one target) or targets x features, and
+    # the intercept one value per target.
+    var shape = members[result.coefficients].layout.shape.copy()
+    if len(shape) == 2 and ridge and shape[0] > 1 and shape[1] == result.features:
+        result.targets = shape[0]
+    elif len(shape) != 1 or members[result.coefficients].layout.count != result.features:
         raise Error("model coef does not match n_features_in_")
     var bias = native_archive_exact(members, "intercept", "<f8", numpy)
-    if members[bias].layout.count != 1:
-        raise Error("model intercept must hold one value")
-    result.intercept = bitcast[DType.float64](archive_data_word(members[bias].layout.payload, 0, 8))
+    if members[bias].layout.count != result.targets:
+        raise Error(String("model intercept must hold one value") if result.targets == 1
+                    else String("model intercept must hold one value per target"))
+    for t in range(result.targets):  # small-loop(the targets' intercepts)
+        result.intercepts.append(bitcast[DType.float64](archive_data_word(members[bias].layout.payload, 8 * t, 8)))
+    result.intercept = result.intercepts[0]
     if ridge:
         var alpha = native_archive_exact(members, "alpha", "<f8", numpy)
         if members[alpha].layout.count != 1:

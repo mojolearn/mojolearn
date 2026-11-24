@@ -169,7 +169,7 @@ def native_predict(model, x):
 
 def payloads(cls):
     model = fitted(cls)
-    values = {"format": np.array(["mojolearn-linear-1"]), "estimator": np.array([cls.__name__]),
+    values = {"format": np.array(["mojolearn-linear-2"]), "estimator": np.array([cls.__name__]),
               "numeric_mode": np.array(["identical"]), "coef": model.coef_,
               "intercept": np.array([model.intercept_], dtype="f8"), "meta": np.array([3, 1], dtype="i8")}
     if cls is Ridge:
