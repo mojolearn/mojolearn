@@ -13,7 +13,7 @@ The RandomForest form (`ensemble/.../kernels/level_loop_kernels.mojo`,
 forest-batched ExtraTrees counterpart.
 
 ONE FIFO PER GROUP. The group's trees share one device FIFO of work items
-(`ETL_Q_INTS` Int32 each: `[idx, depth, begin, count, slot, gpos]`). The host
+(six Int32 each: `[idx, depth, begin, count, slot, gpos]`). The host
 form kept one queue per tree and filled a batch queue by queue; a batch of
 the shared FIFO holds the same items in a different MIX. The mix is a
 scheduling parameter that cannot move a tree (DEVIATION 211's argument:
@@ -32,7 +32,10 @@ FIFO order) needs no change.
 Since 2026-11-24 the FIFO pop and push kernels are deleted with the
 depth-wise device loop (it lost two A/Bs; depth-wise growth runs the host
 queue): the device loop runs best-first growth only, whose frontier kernels
-live in the builder. The ordering argument above is the one they keep.
+live in the builder. The ordering argument above is the one they keep. The
+device FIFO itself (its buffer, the init kernel's seed, the header's head and
+tail words and the host's re-pack) went with it the same day (lane
+ab-outcome-3, o3-trees): nothing read it after the depth-wise loop.
 
 THE HOST DOES NOT KNOW THE LIVE COUNT. Every per-batch kernel is launched at
 a bound the host proves from the last header (`n_bound` items, a block-map
@@ -84,15 +87,13 @@ comptime ETL_SHARED_FITS = 16384
 GPU this code targets (Apple included) offers at least 32 KiB per group."""
 
 comptime ETL_HDR_WORDS = 16
-comptime ETL_Q_INTS = 6
 comptime ETL_META_INTS = 4
 comptime ETL_STAT_INTS = 4
 
 # --- header words (`Int32`) ---------------------------------------------------
-comptime ETL_H_HEAD = 0
-"""First unpopped FIFO entry."""
-comptime ETL_H_TAIL = 1
-"""One past the last FIFO entry."""
+# Words 0 and 1 are unused: they were the device FIFO's head and tail
+# (ETL_H_HEAD, ETL_H_TAIL), deleted 2026-11-24 with the FIFO (lane
+# ab-outcome-3, o3-trees); the other words keep their numbers.
 comptime ETL_H_NODES = 2
 """Node records used in the group arena."""
 comptime ETL_H_CUR = 3
@@ -102,8 +103,8 @@ comptime ETL_H_NSUB = 4
 comptime ETL_H_OVERFLOW = 5
 """Nonzero when a capacity or a launch bound was exceeded (host raises)."""
 comptime ETL_H_ROWS = 6
-"""Rows the queued (depth-wise) or waiting (best-first) nodes cover: every
-later batch's rows are a subset, so it bounds the block maps."""
+"""Rows the waiting (best-first) nodes cover: every later batch's rows are a
+subset, so it bounds the block maps."""
 comptime ETL_H_BLOCKS = 7
 """Live entries of the block map last staged."""
 comptime ETL_H_POPS = 8
@@ -147,7 +148,6 @@ def etl_blocks(count: Int, tile: Int) -> Int:
 
 def etl_init_kernel(
     hdr: MutPointer[Int32, MutAnyOrigin],
-    queue: MutPointer[Int32, MutAnyOrigin],
     g_nodes: MutPointer[SparseTreeNode[DType.float32], MutAnyOrigin],
     g_meta: MutPointer[Int32, MutAnyOrigin],
     slot_stat: MutPointer[Int32, MutAnyOrigin],
@@ -158,16 +158,22 @@ def etl_init_kernel(
     slot_rows: Int32,
     shared_base: Int32,
     root_expandable: Int32,
-    bestfirst: Int32,
 ):
-    """`NodeQueue.__init__` for every tree of the group at once.
+    """`NodeQueue.__init__` for every tree of the group at once (best-first
+    growth, the device loop's only form).
 
     Tree slot `s`: root leaf record at arena slot `s` (local id 0) holding
     `slot_rows` rows from `s * slot_rows` (0 for every tree under
-    `FOREST_SAB_SHARED_ROW_BASE`), its per-slot counters, and -- when the
-    root is expandable -- its work item: FIFO entry `s` (depth-wise) or
-    pending entry `2 s` of the first search batch (best-first, whose
-    batches hold two entries per tree). Thread 0 writes the header."""
+    `FOREST_SAB_SHARED_ROW_BASE`), its per-slot counters, and the first
+    search batch's two pending entries of the tree (best-first batches hold
+    two entries per tree): entry `2 s` the root's work item when the root is
+    expandable (else a dummy), entry `2 s + 1` a dummy. Thread 0 writes the
+    header."""
+    # TOMBSTONE: the device FIFO seed (the `queue` argument, the `bestfirst`
+    # flag and the depth-wise branch that wrote FIFO entry `s` and the tail
+    # word) deleted 2026-11-24 by lane/ab-outcome-3 (o3-trees), the leftover of
+    # MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT; code recoverable at 9be94fd314.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/ET_DEVICE_LOOP_FIFO.ab-outcome-3.patch
     var s = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var g = Int(g_in)
     var expand = root_expandable != Int32(0)
@@ -176,14 +182,9 @@ def etl_init_kernel(
             hdr[unsafe_offset=w] = Int32(0)
         hdr[unsafe_offset=ETL_H_NODES] = g_in
         hdr[unsafe_offset=ETL_H_GCOUNT] = g_in
+        hdr[unsafe_offset=ETL_H_CUR] = Int32(2) * g_in
         if expand:
             hdr[unsafe_offset=ETL_H_ROWS] = g_in * slot_rows
-            if bestfirst != Int32(0):
-                hdr[unsafe_offset=ETL_H_CUR] = Int32(2) * g_in
-            else:
-                hdr[unsafe_offset=ETL_H_TAIL] = g_in
-        elif bestfirst != Int32(0):
-            hdr[unsafe_offset=ETL_H_CUR] = Int32(2) * g_in
     if s >= g:
         return
     var base = Int32(0) if shared_base != Int32(0) else Int32(s) * slot_rows
@@ -198,29 +199,19 @@ def etl_init_kernel(
     slot_stat[unsafe_offset = s * ETL_STAT_INTS + ETL_ST_LEAVES] = Int32(1)
     slot_stat[unsafe_offset = s * ETL_STAT_INTS + ETL_ST_DEPTH] = Int32(0)
     slot_stat[unsafe_offset = s * ETL_STAT_INTS + ETL_ST_FRONT] = Int32(0)
-    if bestfirst != Int32(0):
-        var root = etl_dummy_item()
-        var root_gpos = Int32(-1)
-        if expand:
-            root = NodeWorkItem(
-                Int32(0), Int32(0), InstanceRange(base, slot_rows)
-            )
-            root_gpos = Int32(s)
-        b_items[unsafe_offset = 2 * s] = root
-        b_slot[unsafe_offset = 2 * s] = Int32(s)
-        b_gpos[unsafe_offset = 2 * s] = root_gpos
-        b_items[unsafe_offset = 2 * s + 1] = etl_dummy_item()
-        b_slot[unsafe_offset = 2 * s + 1] = Int32(s)
-        b_gpos[unsafe_offset = 2 * s + 1] = Int32(-1)
-        return
+    var root = etl_dummy_item()
+    var root_gpos = Int32(-1)
     if expand:
-        var q = s * ETL_Q_INTS
-        queue[unsafe_offset = q + 0] = Int32(0)
-        queue[unsafe_offset = q + 1] = Int32(0)
-        queue[unsafe_offset = q + 2] = base
-        queue[unsafe_offset = q + 3] = slot_rows
-        queue[unsafe_offset = q + 4] = Int32(s)
-        queue[unsafe_offset = q + 5] = Int32(s)
+        root = NodeWorkItem(
+            Int32(0), Int32(0), InstanceRange(base, slot_rows)
+        )
+        root_gpos = Int32(s)
+    b_items[unsafe_offset = 2 * s] = root
+    b_slot[unsafe_offset = 2 * s] = Int32(s)
+    b_gpos[unsafe_offset = 2 * s] = root_gpos
+    b_items[unsafe_offset = 2 * s + 1] = etl_dummy_item()
+    b_slot[unsafe_offset = 2 * s + 1] = Int32(s)
+    b_gpos[unsafe_offset = 2 * s + 1] = Int32(-1)
 
 
 # TOMBSTONE: MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT (NOISE: NV L40S 6 cells, median 1.00, 0.99..1.06) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
