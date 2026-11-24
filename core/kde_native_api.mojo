@@ -5,7 +5,7 @@ from core.native_descriptor_call import native_descriptor_report
 from core.native_descriptor_fixed_call import native_descriptor_call_fixed
 
 comptime KDE_NATIVE_ABI = "mojolearn.kde.native.v1"
-comptime KDE_NATIVE_COUNT = 7
+comptime KDE_NATIVE_COUNT = 9
 comptime KDE_MODE = 0
 comptime KDE_VENDOR = 1
 comptime KDE_CAPABILITIES = 2
@@ -16,6 +16,14 @@ comptime KDE_RESIDENT_QUERY = 6
 comptime KDE_CAP_QUERY = 1
 comptime KDE_CAP_RESIDENT = 2
 comptime KDE_CAP_IMMUTABLE = 4
+# THE RESIDENT-STORE FORMS (lane vdf-scope-cluster2b, 2026-11-24; GPU image only,
+# capability KDE_CAP_DEV_STORE): KDE_PREPARE's words with `train` the id of a slot
+# of the image's resident store (core/estimators_store.mojo) instead of a host
+# address, and KDE_RESIDENT_QUERY's with `query` a slot id. The same kernels on
+# the same words, so the same bits as the host-address forms.
+comptime KDE_PREPARE_STORE = 7
+comptime KDE_RESIDENT_QUERY_STORE = 8
+comptime KDE_CAP_DEV_STORE = 8
 
 
 @fieldwise_init
@@ -76,6 +84,10 @@ trait KDENativeKernels:
     def query(request: KDEQueryRequest) raises -> Float64: ...
     @staticmethod
     def resident(request: KDEResidentQuery) raises -> Float64: ...
+    @staticmethod
+    def prepare_store(request: KDEPrepareRequest) raises -> Int: ...
+    @staticmethod
+    def resident_store(request: KDEResidentQuery) raises -> Float64: ...
 
 
 def _kde_name(address: Int, count: Int) raises -> String:
@@ -108,7 +120,7 @@ def kde_native_dispatch[K: KDENativeKernels](operation: Int, aa: Int, na: Int,
             if na != 0 or np != 1 or nf != 0 or pp == 0:
                 raise Error("KDE native ABI: release requires one integer")
             K.release(Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=pp)[])
-        elif operation == KDE_PREPARE:
+        elif operation == KDE_PREPARE or operation == KDE_PREPARE_STORE:
             if na != 4 or np != 6 or nf != 1 or aa == 0 or pp == 0 or ff == 0:
                 raise Error("KDE native ABI: prepare requires 4 addresses, 6 integers and one scalar")
             var a = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=aa)
@@ -116,7 +128,7 @@ def kde_native_dispatch[K: KDENativeKernels](operation: Int, aa: Int, na: Int,
             var f = Pointer[Float64, ImmUntrackedOrigin](unsafe_from_address=ff)
             var request = KDEPrepareRequest(a[0], a[1], p[0], p[1], f[0], p[2] != 0, p[3] != 0,
                 _kde_name(a[2], p[4]), _kde_name(a[3], p[5]))
-            value = K.prepare(request)
+            value = K.prepare(request) if operation == KDE_PREPARE else K.prepare_store(request)
         elif operation == KDE_QUERY:
             if na != 7 or np != 7 or nf != 1 or aa == 0 or pp == 0 or ff == 0:
                 raise Error("KDE native ABI: query requires 7 addresses, 7 integers and one scalar")
@@ -128,7 +140,7 @@ def kde_native_dispatch[K: KDENativeKernels](operation: Int, aa: Int, na: Int,
             var request = KDEQueryRequest(a[0], a[1], a[2], a[3], p[0], p[1], p[2], f[0], p[3] != 0, p[4] != 0,
                 _kde_name(a[4], p[5]), _kde_name(a[5], p[6]))
             MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=a[6])[] = K.query(request)
-        elif operation == KDE_RESIDENT_QUERY:
+        elif operation == KDE_RESIDENT_QUERY or operation == KDE_RESIDENT_QUERY_STORE:
             if na != 6 or np != 6 or nf != 1 or aa == 0 or pp == 0 or ff == 0:
                 raise Error("KDE native ABI: resident query requires 6 addresses, 6 integers and one scalar")
             var a = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=aa)
@@ -138,7 +150,8 @@ def kde_native_dispatch[K: KDENativeKernels](operation: Int, aa: Int, na: Int,
                 raise Error("KDE native ABI: missing total output")
             var request = KDEResidentQuery(p[0], a[0], a[1], a[2], p[1], p[2], f[0], p[3] != 0,
                 _kde_name(a[3], p[4]), _kde_name(a[4], p[5]))
-            MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=a[5])[] = K.resident(request)
+            MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=a[5])[] = (
+                K.resident(request) if operation == KDE_RESIDENT_QUERY else K.resident_store(request))
         else:
             raise Error("KDE native ABI: unknown operation")
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = value
@@ -202,6 +215,37 @@ struct KDENativeDriver(Copyable, Movable):
         var f: Array[Float64, 1] = [r.bandwidth]
         try:
             _ = native_descriptor_call_fixed(self.entry, KDE_QUERY, a, p, f)
+            return total[0]
+        finally:
+            _ = total
+            _ = kb
+            _ = mb
+            _ = r
+
+    def prepare_store(self, r: KDEPrepareRequest) raises -> Int:
+        """`prepare` with `r.train` a resident slot id (KDE_CAP_DEV_STORE)."""
+        var kb = r.kernel.as_bytes()
+        var mb = r.metric.as_bytes()
+        var a: Array[Int, 4] = [r.train, r.weights, Int(kb.unsafe_ptr()), Int(mb.unsafe_ptr())]
+        var p: Array[Int, 6] = [r.rows, r.features, Int(r.has_weights), Int(r.finite_tested), len(kb), len(mb)]
+        var f: Array[Float64, 1] = [r.bandwidth]
+        try:
+            return native_descriptor_call_fixed(self.entry, KDE_PREPARE_STORE, a, p, f)
+        finally:
+            _ = kb
+            _ = mb
+            _ = r
+
+    def resident_store(self, r: KDEResidentQuery) raises -> Float64:
+        """`resident` with `r.query` a resident slot id (KDE_CAP_DEV_STORE)."""
+        var kb = r.kernel.as_bytes()
+        var mb = r.metric.as_bytes()
+        var total = List[Float64](length=1, fill=0.0)
+        var a: Array[Int, 6] = [r.query, r.dst, r.status, Int(kb.unsafe_ptr()), Int(mb.unsafe_ptr()), Int(total.unsafe_ptr())]
+        var p: Array[Int, 6] = [r.handle, r.rows, r.features, Int(r.want_total), len(kb), len(mb)]
+        var f: Array[Float64, 1] = [r.bandwidth]
+        try:
+            _ = native_descriptor_call_fixed(self.entry, KDE_RESIDENT_QUERY_STORE, a, p, f)
             return total[0]
         finally:
             _ = total

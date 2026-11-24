@@ -43,6 +43,14 @@ struct KDEHostKernels(KDENativeKernels):
     def resident(request: KDEResidentQuery) raises -> Float64:
         raise Error("KDE host provider does not retain a device fit")
 
+    @staticmethod
+    def prepare_store(request: KDEPrepareRequest) raises -> Int:
+        raise Error("KDE host provider has no resident store")
+
+    @staticmethod
+    def resident_store(request: KDEResidentQuery) raises -> Float64:
+        raise Error("KDE host provider has no resident store")
+
 
 from core.shared_slot import SharedSlot
 from core.kde_native_api import KDEProviderAPI

@@ -14,7 +14,7 @@ from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_fixed_call import native_descriptor_call_fixed
 
 comptime MIXTURE_NATIVE_ABI = "mojolearn.mixture.native.v1"
-comptime MIXTURE_NATIVE_COUNT = 7
+comptime MIXTURE_NATIVE_COUNT = 9
 comptime MIXTURE_NATIVE_MODE = 0
 comptime MIXTURE_NATIVE_CAPABILITIES = 1
 comptime MIXTURE_NATIVE_FIT = 2
@@ -22,9 +22,20 @@ comptime MIXTURE_NATIVE_SCORE_SAMPLES = 3
 comptime MIXTURE_NATIVE_PREDICT_PROBA = 4
 comptime MIXTURE_NATIVE_PREDICT = 5
 comptime MIXTURE_NATIVE_SCORE_BIC_AIC = 6
+# THE RESIDENT FORMS (lane vdf-scope-cluster2b, 2026-11-24; GPU image only, capability
+# MIXTURE_CAP_DEV_STORE): the fit's words with `source` the id of a slot of the
+# image's resident store (mixture/mixture_store.mojo) instead of a host address;
+# the scoring words likewise, plus p[5] the scoring operation
+# (MIXTURE_NATIVE_SCORE_SAMPLES .. MIXTURE_NATIVE_SCORE_BIC_AIC). Same bodies on
+# the device X, so the same bits as the host-address forms.
+comptime MIXTURE_NATIVE_FIT_STORE = 7
+comptime MIXTURE_NATIVE_SCORE_STORE = 8
 # Capability bit 0: the fit writes predict(X) itself (`gmm_fit_predict`,
 # row N401; the GPU binding only).
 comptime MIXTURE_CAP_FIT_PREDICT = 1
+# Capability bit 1 (lane vdf-scope-cluster2b): the image has a resident store
+# (its transport entry `mixture_store_v1`) and the two resident forms above.
+comptime MIXTURE_CAP_DEV_STORE = 2
 
 
 @fieldwise_init
@@ -94,3 +105,19 @@ struct GmmDriver(Copyable, Movable):
         var p: Array[Int, 5] = [r.components, r.features, r.n_iter, Int(r.converged), r.rows]
         var f: Array[Float64, 1] = [r.lower_bound]
         _ = native_descriptor_call_fixed(self.entry, operation, a, p, f)
+
+    def fit_store(self, r: GmmFitRequest) raises -> Int:
+        """`fit` with `r.source` a resident slot id (MIXTURE_CAP_DEV_STORE). Returns `n_iter_`."""
+        var a: Array[Int, 10] = [r.source, r.weights, r.means, r.covariances, r.precisions, r.log_det,
+                                 r.scalars, r.labels, r.covariance_type, r.init_params]
+        var p: Array[Int, 5] = [r.rows, r.features, r.components, r.max_iter, r.random_state]
+        var f: Array[Float64, 2] = [r.tol, r.reg_covar]
+        return native_descriptor_call_fixed(self.entry, MIXTURE_NATIVE_FIT_STORE, a, p, f)
+
+    def score_store(self, operation: Int, r: GmmScoreRequest) raises:
+        """`score` with `r.source` a resident slot id (MIXTURE_CAP_DEV_STORE)."""
+        var a: Array[Int, 7] = [r.weights, r.means, r.covariances, r.precisions, r.log_det,
+                                r.source, r.destination]
+        var p: Array[Int, 6] = [r.components, r.features, r.n_iter, Int(r.converged), r.rows, operation]
+        var f: Array[Float64, 1] = [r.lower_bound]
+        _ = native_descriptor_call_fixed(self.entry, MIXTURE_NATIVE_SCORE_STORE, a, p, f)
