@@ -48,7 +48,7 @@ SERIAL BY NATURE: one record read per member estimator per operation.
 """
 from std.python import PythonObject
 from bindings.py_balanced import py_get
-from bindings.member_boundary_door import member_admit_serving, member_state
+from bindings.member_boundary_door import member_admit_serving, member_state, member_admit_labeled
 from bindings.member_held_owner_unpack import MemberHeldOwner, MEMBER_HELD_SLOT, member_held_type_ready
 from bindings.py_model_records import (
     model_generation, records_get, records_put, records_drop, records_stampable, RECORDS_PREPARED,
@@ -105,6 +105,22 @@ def member_held(model: PythonObject, fields: PythonObject, plan: PythonObject, c
     plan, `context` the family context and `needs` every capability bit the
     caller will ask (as for `member_admit_serving`). Raises only for a
     failure of the record table itself."""
+    return _member_held(model, fields, plan, context, b, needs, False)
+
+
+def member_held_or_raise(model: PythonObject, fields: PythonObject, plan: PythonObject, context: PythonObject,
+    b: PythonObject, needs: Int) raises -> MemberHeld:
+    """`member_held` that raises the member's OWN words where `member_held`
+    answers unpublished (lane w3f3-b: a caller with no door to fall back to,
+    an owner's call of a member-only class): the family's raising admission
+    (`member_admit_labeled`: its parameter refusals) and the fitted-state
+    import (`member_state`: an unfitted estimator's words). Unpublished only
+    when neither raises (a kind without an operation in `needs`)."""
+    return _member_held(model, fields, plan, context, b, needs, True)
+
+
+def _member_held(model: PythonObject, fields: PythonObject, plan: PythonObject, context: PythonObject,
+    b: PythonObject, needs: Int, raising: Bool) raises -> MemberHeld:
     var held = MemberHeld()
     var generation = model_generation(model)
     if generation != 0:
@@ -120,6 +136,9 @@ def member_held(model: PythonObject, fields: PythonObject, plan: PythonObject, c
                 return held^
     var owner = member_admit_serving(model, fields, plan, context, b, needs | MEMBER_CAN_IMPORT)
     if not owner.published:
+        if raising:
+            # the family's raising admission: its own words, if it refuses
+            _ = member_admit_labeled(model, fields, plan, context, b, PythonObject(None)).published
         return held^
     var state = 0
     try:
@@ -129,7 +148,9 @@ def member_held(model: PythonObject, fields: PythonObject, plan: PythonObject, c
         if labels is not None and owner.plan.classes == 0:
             owner.plan.classes = len(labels)
         state = member_state(model, fields, context, b, owner.plan)
-    except:
+    except error:
+        if raising:
+            raise error^
         return held^
     if state == 0:
         return held^

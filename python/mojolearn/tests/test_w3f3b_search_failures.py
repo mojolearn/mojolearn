@@ -63,3 +63,17 @@ def test_cross_val_score_takes_a_numeric_error_score():
         warnings.simplefilter("ignore")
         scores = ms.cross_val_score(ml.StandardScaler(), X, y, cv=3, scoring="r2", error_score=-1.0)
     assert np.asarray(scores).tolist() == [-1.0, -1.0, -1.0]
+
+
+def test_parallel_cross_val_score_takes_a_numeric_error_score_like_the_serial_one():
+    from mojolearn import parallel_model_selection as parallel
+    X, y = _regression()
+    with warnings.catch_warnings(record=True) as seen:
+        warnings.simplefilter("always")
+        scores = parallel.cross_val_score(ml.StandardScaler(), X, y, devices=(0,), cv=3, scoring="r2",
+                                          error_score=-1.0)
+    assert np.asarray(scores).tolist() == [-1.0, -1.0, -1.0]
+    failed = [m for m in _messages(seen, UserWarning) if m.startswith("Scoring failed.")]
+    assert len(failed) == 3, failed
+    with pytest.raises(ValueError, match="All the 3 fits failed"):
+        parallel.cross_val_score(ml.Ridge(alpha=-1.0), X, y, devices=(0,), cv=3, error_score=np.nan)

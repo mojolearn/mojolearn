@@ -132,6 +132,18 @@ def msel_catch(error: Error, classes: PythonObject) raises -> Bool:
     return Bool(py=py_call(msel_b().issubclass, _error_class(message), classes))
 
 
+def msel_fit_failed_warn(message: String, context: PythonObject) raises:
+    """Lane w3f3-b: `warnings.warn(message, FitFailedWarning)`: scikit-learn's
+    class when sklearn.exceptions is loaded, else RuntimeWarning (its base).
+    The search PACK and the parallel cv route."""
+    var b = native_loaded_module("builtins")
+    var category = b.RuntimeWarning
+    var sk = py_call(native_loaded_module("sys").modules.get, PythonObject("sklearn.exceptions"))
+    if sk is not None:
+        category = py_call(b.getattr, sk, PythonObject("FitFailedWarning"), category)
+    msel_warn(message, category, context)
+
+
 def msel_warn(message: String, category: PythonObject, context: PythonObject) raises:
     """`warnings.warn(message, category)`, attributed to the public call's
     caller."""

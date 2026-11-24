@@ -95,7 +95,7 @@ from bindings.member_boundary_door import (
 )
 from bindings.member_class_weight_unpack import member_cw_fill
 from core.member_class_weight import member_cw_start, member_cw_pending
-from bindings.member_held_door import MemberHeld, member_held, member_held_release, member_held_adopt
+from bindings.member_held_door import MemberHeld, member_held, member_held_release, member_held_adopt, member_held_or_raise
 from bindings.member_fit_notices_pack import member_fit_notices_raise
 from bindings.admitted_input_unpack import admitted_unfilled
 from bindings.prep_native_estimator_door import prep_estimator_plan
@@ -679,7 +679,7 @@ def _out_typestr(dtype: Int) -> String:
 
 
 def _member_held_open(mut opened: MemberHeldCall, member: PythonObject, operation: Int, classifier: Bool,
-    width: Int, skip_trees: Bool, context: PythonObject, b: PythonObject) raises:
+    width: Int, skip_trees: Bool, context: PythonObject, b: PythonObject, raising: Bool = False) raises:
     var plan = prep_estimator_plan(member, context)
     if plan is None:
         return
@@ -699,7 +699,11 @@ def _member_held_open(mut opened: MemberHeldCall, member: PythonObject, operatio
         needs = MEMBER_CAN_TRANSFORM  # lane w3f3-b: an owner's transform of a member-only class
     var member_context = plan["context"]
     var fields = py_call(plan["fields_get"], member, py_type(member))
-    opened.held = member_held(member, fields, plan, member_context, b, needs)
+    if raising:
+        # lane w3f3-b: the member's own words where it is not served
+        opened.held = member_held_or_raise(member, fields, plan, member_context, b, needs)
+    else:
+        opened.held = member_held(member, fields, plan, member_context, b, needs)
     if not opened.held.published:
         return
     opened.operation = operation
@@ -768,6 +772,51 @@ def member_held_open(member: PythonObject, operation: Int, classifier: Bool, wid
     return opened^
 
 
+def member_held_open_or_raise(member: PythonObject, operation: Int, classifier: Bool, context: PythonObject,
+    b: PythonObject) raises -> MemberHeldCall:
+    """`member_held_open` (any width, trees served) for a caller with no door
+    to fall back to (lane w3f3-b: an owner's call of a member-only class):
+    the member's own words raise (its family's admission, its fitted-state
+    import); `served` False only when neither refused it (its kind lacks the
+    operation, or does not say its element type). Close it on every path."""
+    var opened = MemberHeldCall()
+    try:
+        _member_held_open(opened, member, operation, classifier, 0, False, context, b, True)
+    except error:
+        member_held_release(opened.held)  # a hold taken before the refusal goes with it
+        raise error^
+    return opened^
+
+
+def member_held_run_or_raise(mut opened: MemberHeldCall, x: Int, n: Int, d: Int,
+    context: PythonObject) raises -> PythonObject:
+    """`member_held_run` raising the member call's own words (lane w3f3-b)."""
+    if not opened.served:
+        raise Error("RuntimeError: member_held_run_or_raise of an unserved call")
+    return _member_held_call(opened, x, n, d, context)
+
+
+def _member_held_call(mut opened: MemberHeldCall, x: Int, n: Int, d: Int, context: PythonObject) raises -> PythonObject:
+    """The body of `member_held_run`: ONE member call into a new Array."""
+    var call = member_call_of(opened.held.plan, opened.held.state)
+    var shape = List[Int](length=1, fill=n)
+    if opened.cols > 1:
+        shape.append(opened.cols)
+    # Unfilled: the member writes every cell before anything reads it.
+    var dst = admitted_unfilled(shape, _out_typestr(opened.dtype), context)
+    call.x = MemberMatrix(x, n, d)
+    call.dst = MemberMatrix(dst.addr, n, opened.cols, opened.dtype)
+    var plan_member = opened.held.plan.member
+    var operation = opened.operation
+    if opened.gil_free:
+        with GILReleased(Python()):
+            _ = member_call(plan_member, operation, call)
+    else:
+        _ = member_call(plan_member, operation, call)
+    _ = opened.served   # the hold (its plan words, its owner pin) outlives the call
+    return dst.keep
+
+
 def member_held_run(mut opened: MemberHeldCall, x: Int, n: Int, d: Int, context: PythonObject) -> PythonObject:
     """PREDICT SIDE, RUN: the opened member's operation over the `n` x `d`
     float32 C-order host rows at `x`: ONE member call (the GIL released
@@ -784,23 +833,7 @@ def member_held_run(mut opened: MemberHeldCall, x: Int, n: Int, d: Int, context:
     if not opened.served:
         return PythonObject(None)
     try:
-        var call = member_call_of(opened.held.plan, opened.held.state)
-        var shape = List[Int](length=1, fill=n)
-        if opened.cols > 1:
-            shape.append(opened.cols)
-        # Unfilled: the member writes every cell before anything reads it.
-        var dst = admitted_unfilled(shape, _out_typestr(opened.dtype), context)
-        call.x = MemberMatrix(x, n, d)
-        call.dst = MemberMatrix(dst.addr, n, opened.cols, opened.dtype)
-        var plan_member = opened.held.plan.member
-        var operation = opened.operation
-        if opened.gil_free:
-            with GILReleased(Python()):
-                _ = member_call(plan_member, operation, call)
-        else:
-            _ = member_call(plan_member, operation, call)
-        _ = opened.served   # the hold (its plan words, its owner pin) outlives the call
-        return dst.keep
+        return _member_held_call(opened, x, n, d, context)
     except:
         return PythonObject(None)
 
