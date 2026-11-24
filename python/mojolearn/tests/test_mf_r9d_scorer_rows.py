@@ -141,13 +141,10 @@ def test_a_label_metric_whose_tuple_resolves_to_predict_proba_is_sklearns_mix_wo
     ours = ms.make_scorer(metrics.accuracy_score, response_method=('predict_proba', 'predict'))
     with pytest.raises(ValueError, match="can't handle a mix of binary and continuous targets"):
         _search(ml.LogisticRegression(max_iter=30), {'C': [1.0]}, X, y, ours)
-    theirs = sk_ms.make_scorer if hasattr(sk_ms, 'make_scorer') else None
-    if theirs is not None:
-        with pytest.raises(ValueError, match="can't handle a mix of binary and continuous targets"):
-            sk_ms.GridSearchCV(sk_linear.LogisticRegression(max_iter=30), {'C': [1.0]}, cv=_folds(12),
-                               scoring=sk_m.make_scorer(sk_m.accuracy_score,
-                                                        response_method=('predict_proba', 'predict')),
-                               error_score='raise', refit=False).fit(X, y)
+    with pytest.raises(ValueError, match="can't handle a mix of binary and continuous targets"):
+        sk_ms.GridSearchCV(sk_linear.LogisticRegression(max_iter=30), {'C': [1.0]}, cv=_folds(12),
+                           scoring=sk_m.make_scorer(sk_m.accuracy_score, response_method=('predict_proba', 'predict')),
+                           error_score='raise', refit=False).fit(X, y)
 
 
 def test_top_k_with_a_bad_k_is_the_doors_words_per_side():
