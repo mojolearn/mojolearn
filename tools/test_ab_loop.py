@@ -135,6 +135,20 @@ class DriverSide(unittest.TestCase):
         self.assertIn("not valid", w["why"])
 
 
+class FitKeywordCap(unittest.TestCase):
+    PLAN = dict(PLAN, param="fit:epochs", k=2, pin={})
+
+    def test_fit_kwarg_routing(self):
+        self.assertEqual(AL.capped_params(self.PLAN, {"lr": 1}), {"lr": 1})
+        self.assertEqual(AL.fit_kwargs(self.PLAN, {"verbose": 0}), {"verbose": 0, "epochs": 2})
+        self.assertEqual(AL.fit_kwargs(PLAN), {})
+        self.assertTrue(AL.readback(self.PLAN, {})["ok"])
+
+    def test_executed_count_is_the_readback(self):
+        self.assertEqual(AL.cell_record(self.PLAN, {}, [AL.read_fit_loop(Model((2, 1.0)))])["mode"], "capped")
+        self.assertEqual(AL.cell_record(self.PLAN, {}, [AL.read_fit_loop(Model((3, 1.0)))])["mode"], "whole")
+
+
 class Verdict(unittest.TestCase):
     def test_pair_loop_basis_and_fixed_cost_flag(self):
         p = AL.pair(cell(100.0, 50.0, 5), cell(110.0, 40.0, 5))
