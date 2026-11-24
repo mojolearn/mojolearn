@@ -78,7 +78,7 @@ from sequence.ops import OP_THETA
 from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, OP_AF_RMEAN, OP_AF_ROW, OP_AF_COL
 from sequence.theta_spec import THETA_SPEC
 from sequence.ets_spec import ETS_SPEC, op_ets_spec
-from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST, TSA2_VAR, OP_COLSCALE, OP_VAR_SIGMA, SEQ_FAST_VAR_COOP
+from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST, OP_COLSCALE, OP_VAR_SIGMA, SEQ_FAST_VAR_COOP
 from sequence.vecar_block import VAR_SMEM, VAR_TPB, var_chol_block_kernel, var_forecast_block_kernel
 from sequence.fit_team import SeqTeam, garch_team, prophet_fit_team
 from sequence.ets_team import ETS_TEAM, IDN_ETS_TEAM, ets_team
@@ -276,17 +276,18 @@ def _fhi(w: Int64) -> Float32:
 # Sequence executor routes (lane envgate-train-seq-mamba, 2026-11-15): build
 # constants holding today's defaults (on). Before, each was an environment
 # read per launch (MOE_TILED, VAR_BLOCK) or per executor construction (POOL).
-# ROUTE-DEFAULT-SUSPECT, no A/B on record: B arms RUN OWED in
-# bench/results/paper_compare/owed-pre0867.json ("seq-var-block-off";
-# "seq-moe-tiled-off" and "seq-pool-off" are decided, below).
+# ROUTE-DEFAULT-SUSPECT then; every B arm is now decided in
+# bench/results/paper_compare/owed-pre0867.json ("seq-moe-tiled-off",
+# "seq-var-block-off", "seq-pool-off"; below).
 # TOMBSTONE: MOJOLEARN_SEQ_MOE_TILED_OFF (old path, the untiled MoE items for expert-grouped entries; NV L40S moe fit / infer 1.00 / 1.00, 2 cells) deleted 2026-11-24 by lane/ab-outcome-3 (o3-nseq); code recoverable at 45fb45a679.
 # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_MOE_TILED_OFF.ab-outcome-3.patch
 # (the tiled MoE kernels take every entry that grouped the pairs by expert, a.i4 > 0; the one-thread-per-cell
 # items stay for the entries that did not group them, a.i4 == 0.)
-#: VAR's Cholesky solve and forecast on one threadgroup
-#: (sequence/vecar_block.mojo, lane gap-prep2); `-D MOJOLEARN_SEQ_VAR_BLOCK_OFF`
-#: keeps the one-thread ops (the A/B arm)
-comptime SEQ_VAR_BLOCK = not is_defined["MOJOLEARN_SEQ_VAR_BLOCK_OFF"]()
+# TOMBSTONE: MOJOLEARN_SEQ_VAR_BLOCK_OFF (old path, VAR's Cholesky solve and forecast as one-thread ops even when they fit one threadgroup; NV L40S job nvc1-0003 2 cells 1.00 / 1.01) deleted 2026-11-24 by lane/ab-outcome-3 (o3-nseq); code recoverable at 04feb6f52d.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_VAR_BLOCK_OFF.ab-outcome-3.patch
+# (the threadgroup kernels, sequence/vecar_block.mojo, take every VAR solve and forecast that fits VAR_SMEM; the
+# one-thread ops stay for the shapes that do not. The FAST + Apple TSA2_VAR copy of the same two launches, which
+# existed only to skip this switch, went with it.)
 #: the executor's device buffer pool (always on for a shared executor; an owned executor keeps its own storage)
 # A/B round 2, 2026-11-19 (lane fx-verdicts4; NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and
 # arm in one pod job, tag nvc-ab-20261119T154232Z-0642a5; digests and quality equal). Pool (default) -> no pool, ms:
@@ -304,11 +305,6 @@ comptime SEQ_VAR_BLOCK = not is_defined["MOJOLEARN_SEQ_VAR_BLOCK_OFF"]()
 # 99.7 ms against a 1 ms kernel). The pool stays; the build switch is deleted.
 # TOMBSTONE: MOJOLEARN_SEQ_POOL_OFF (NOISE, A/B rounds 2 and 3 NVIDIA L40S, wheels 0c68d6cd27 and 28a780604c, one run per arm, digests equal: sequential-fit 0.98 / 0.991, sequential-predict 0.95 / 1.023) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
 # Restore: git apply experiments/removed/MOJOLEARN_SEQ_POOL_OFF.patch; record in docs/TOMBSTONES.md.
-
-
-@always_inline
-def _var_block_on() -> Bool:
-    return SEQ_VAR_BLOCK
 
 
 def seq_kernel[OP: Int](
@@ -1351,24 +1347,6 @@ struct DeviceExec(Exec, Movable):
                 )
                 self.execution_profile.kernel()
                 return
-        # lane/apple-fast-tsa2 (-D MOJOLEARN_TSA2_VAR): the threadgroup VAR
-        # kernels without the env read of `_var_block_on` on the fit path
-        comptime if TSA2_VAR and OP == OP_CHOLSOLVE:
-            if a.i0 * a.i0 + a.i0 * a.i1 <= VAR_SMEM:
-                self.ctx.enqueue_function[var_chol_block_kernel](
-                    a.p0, a.p1, a.p2, Int32(a.i0), Int32(a.i1),
-                    grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
-                )
-                self.execution_profile.kernel()
-                return
-        comptime if TSA2_VAR and OP == OP_VAR_FORECAST:
-            if (a.i1 + a.i3) * a.i0 <= VAR_SMEM:
-                self.ctx.enqueue_function[var_forecast_block_kernel](
-                    a.p0, a.p1, a.p2, Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3),
-                    grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
-                )
-                self.execution_profile.kernel()
-                return
         # lane ag-pass6-gemm (BIT VERSION, sequence/gemm_split.mojo): the
         # products the shape rule selects take the split-K order on every GPU
         # column (Apple too), ahead of the coop and tile routes; HostExec takes
@@ -1383,9 +1361,11 @@ struct DeviceExec(Exec, Movable):
             self._gemm_split_kernel(a)
             return
         # VAR's one-thread ops on one threadgroup (sequence/vecar_block.mojo):
-        # the same chain per cell, so the same words
+        # the same chain per cell, so the same words; every column and mode
+        # (the FAST + Apple TSA2_VAR fit path included) takes them where the
+        # shape fits VAR_SMEM
         comptime if OP == OP_CHOLSOLVE:
-            if a.i0 * a.i0 + a.i0 * a.i1 <= VAR_SMEM and _var_block_on():
+            if a.i0 * a.i0 + a.i0 * a.i1 <= VAR_SMEM:
                 self.ctx.enqueue_function[var_chol_block_kernel](
                     a.p0, a.p1, a.p2, Int32(a.i0), Int32(a.i1),
                     grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
@@ -1393,7 +1373,7 @@ struct DeviceExec(Exec, Movable):
                 self.execution_profile.kernel()
                 return
         comptime if OP == OP_VAR_FORECAST:
-            if (a.i1 + a.i3) * a.i0 <= VAR_SMEM and _var_block_on():
+            if (a.i1 + a.i3) * a.i0 <= VAR_SMEM:
                 self.ctx.enqueue_function[var_forecast_block_kernel](
                     a.p0, a.p1, a.p2, Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3),
                     grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),

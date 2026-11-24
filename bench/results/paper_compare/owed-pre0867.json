@@ -428,8 +428,9 @@
   },
   "seq-var-block-off": {
    "define": "MOJOLEARN_SEQ_VAR_BLOCK_OFF",
-   "status": "define in code (sequence/exec_device.mojo SEQ_VAR_BLOCK): B = the one-thread ops (the former =0); A = VAR's Cholesky solve and forecast on one threadgroup (the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3): old path no faster (L40S 2 cells 1.00 / 1.01); the threadgroup VAR kernels stay the route wherever the shape fits VAR_SMEM; the define is refused (core/experiment_guards_neural.mojo); code recoverable at 04feb6f52d, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_VAR_BLOCK_OFF.ab-outcome-3.patch. Was: define in code (sequence/exec_device.mojo SEQ_VAR_BLOCK): B = the one-thread ops (the former =0); A = VAR's Cholesky solve and forecast on one threadgroup (the former default). A transport/route choice: digests must not move.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "seq-pool-off": {
    "define": "MOJOLEARN_SEQ_POOL_OFF",
@@ -2866,7 +2867,9 @@
    "b_arms": [
     "seq-var-block-off"
    ],
-   "decides": "keep A (VAR's Cholesky solve and forecast on one threadgroup (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+   "decides": "keep A (VAR's Cholesky solve and forecast on one threadgroup (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "seq-pool-off-envgate",

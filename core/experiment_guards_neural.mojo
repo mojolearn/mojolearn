@@ -1345,6 +1345,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_SEQ_MOE_TILED_OFF (old path no faster: NV L40S moe fit / infer 1.00, 2 cells) deleted 2026-11-24 by lane/ab-outcome-3 (o3-nseq); code recoverable at 45fb45a679.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_MOE_TILED_OFF.ab-outcome-3.patch
     comptime assert not is_defined["MOJOLEARN_SEQ_MOE_TILED_OFF"](), "removed 2026-11-24 (lane/o3-nseq of ab-outcome-3, A/B nvc-ab-20261124T115722Z-d8f8b2 NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): SEQ_MOE_TILED_OFF (the untiled one-thread-per-cell MoE products for expert-grouped entries, old path) was no faster: 2 cells, moe fit 14.15 -> 14.19 ms, infer 14.04 -> 14.07 ms (1.00); the tiled MoE kernels take every grouped entry, the items stay for ungrouped ones; code at 45fb45a679; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_MOE_TILED_OFF.ab-outcome-3.patch"
+    # TOMBSTONE: MOJOLEARN_SEQ_VAR_BLOCK_OFF (old path no faster: NV L40S 2 cells 1.00 / 1.01) deleted 2026-11-24 by lane/ab-outcome-3 (o3-nseq); code recoverable at 04feb6f52d.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_VAR_BLOCK_OFF.ab-outcome-3.patch
+    comptime assert not is_defined["MOJOLEARN_SEQ_VAR_BLOCK_OFF"](), "removed 2026-11-24 (lane/o3-nseq of ab-outcome-3, A/B nvc-ab-20261124T115722Z-d8f8b2 NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): SEQ_VAR_BLOCK_OFF (VAR's Cholesky solve and forecast as one-thread ops, old path) was no faster: 2 cells, sequential-fit 180 -> 181 ms (1.01), sequential-predict 2.23 -> 2.24 ms (1.00); the threadgroup kernels take every VAR shape that fits VAR_SMEM, the one-thread ops stay for the rest; code at 04feb6f52d; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_VAR_BLOCK_OFF.ab-outcome-3.patch"
     # ---- end lane ab-outcome-3 / o3-nseq
     return True
 
