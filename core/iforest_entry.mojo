@@ -86,6 +86,11 @@ comptime IF_CAP_SCORES_F64 = 2
 """The resident run writes float64 scores for `want` 3 / 4."""
 comptime IF_CAP_DEVICE_SCAN = 4
 """The fit scans the uploaded training matrix for non-finite cells itself."""
+comptime IF_CAP_SLOT_X = 8
+"""The scoring of a one-device run reads THE FOLD X WORD as its query
+(core/fold_x_device.mojo: a negative query address names a fold slot of the
+x_prep store; lane vdf-scope-trees2b). The training address stays a host
+address."""
 
 # IF_OP_RUN addresses.
 comptime IF_A_TRAIN = 0

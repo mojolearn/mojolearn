@@ -127,7 +127,11 @@ from core.gbdt_entry_table import gbdt_vendor_word
 from gbdt.fit_request import GbdtFitArgs, gbdt_string_at
 from gbdt.fit_calls import (
     xg_row_major, xg_model_dim, xg_fit, xg_resident, xg_resident_prepare, xg_resident_predict, xg_predict,
-    xg_predict_multi, xg_sigmoid_pair, xg_binary, xg_feature_freq_fit, xg_ordered_fit, xg_importances,
+    xg_predict_multi, xg_sigmoid_pair, xg_binary, xg_feature_freq_fit, xg_ordered_fit, xg_importances, xg_slot_x,
+)
+from core.member_fold_x import (
+    MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_index, member_fold_take_f32,
+    member_fold_take_view, member_fold_store_ready,
 )
 from gbdt.trees_gbdt_run import gbdt_text_has_ctr
 from gbdt.trees_gbdt_fit_run import (
@@ -155,6 +159,7 @@ from core.member_abi import (
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
     MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_HOME_DEVICE, MEMBER_GIL_FREE, MEMBER_CAN_DECISION, MEMBER_CAN_SCORE,
     MEMBER_CAN_CLASSIFIER, MEMBER_CAN_IMPORTANCES, MEMBER_BLOCK_FEATURE_IMPORTANCES,
+    MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -480,6 +485,128 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
 def _whole(call: _CallPtr) raises:
     if call[].row_index.rows > 0 or call[].column_index.rows > 0:
         raise Error("TypeError: a Gbdt member reads whole host views (no row or column index)")
+
+
+# ---- THE FOLD ROUTE (lane vdf-scope-trees2b, 2026-11-24): MEMBER_CAN_ROW_INDEX
+# and MEMBER_CAN_SCOPE (core/member_fold_x.mojo, the pattern of
+# core/linear_member.mojo `_fold_op`). The caller hands the WHOLE host X, the
+# fold's row numbers and, inside a `resident()` scope, the scope and X's pin.
+# PREDICT / PREDICT_PROBA / DECISION / SCORE of a fitted state without a
+# category map on a resident image: X is kept resident in the scope's x_prep
+# cache (or a slot this call owns), the fold's rows are taken ON THE DEVICE and
+# the resident predict copies the slot into its staging buffer
+# (gbdt/resident_model.mojo `_predict_device`, XG_CAP_SLOT_X): the rows never
+# visit the host. FIT: the image's quantizer builds the borders and bins from
+# HOST columns (gbdt/train.mojo `_quantize_training_columns`; the device
+# quantizer GBDT_QUANT_DEVICE is an opt-in Apple fast arm), so the fold's rows
+# of X are taken on the host (`member_fold_take_f32`, row chunks across the
+# host's cores), as the caller's gather did; y, the weights and the group ids
+# likewise (one take each). Same bytes as the caller's host gather: a byte copy
+# of the same rows in the same order (no bit moves).
+
+
+def _route_slot_x(call: _CallPtr) -> Bool:
+    """Whether the route's image reads the fold word in its resident
+    predict and ships the x_prep family store (asked with the
+    capabilities, once per member class at the caller's UNPACK)."""
+    try:
+        if not xg_slot_x(entry_ref_gil_free(call[].route.entry)):
+            return False
+    except:
+        return False
+    return member_fold_store_ready(call)
+
+
+def _fold_kind(kind: Int) -> Bool:
+    """The kinds with the fold route: the classifier, the booster and the
+    regressor (the FeatureFreq and ordered fits read their own row words; a
+    saved model has no fit)."""
+    return kind == _KIND_CLASSIFIER or kind == _KIND_BOOSTER or kind == _KIND_REGRESSOR
+
+
+def _fold_take(view: MemberMatrix, fold: MemberFoldX, base_rows: Int, mut keep: List[UInt64],
+               what: String) raises -> MemberMatrix:
+    """The fold's rows of a dense host 4- or 8-byte view (the targets, the
+    weights or the group ids), into `keep` (which the caller holds until the
+    operation returned)."""
+    if view.home == MEMBER_HOME_DEVICE or not view.dense_host(view.dtype):
+        raise Error("TypeError: a Gbdt member reads " + what + " as a dense host view")
+    if view.rows != base_rows:
+        raise Error("ValueError: " + what + " and X have different numbers of rows")
+    keep = List[UInt64](unsafe_uninit_length=max(fold.rows * view.cols, 1))
+    member_fold_take_view(view, fold.index, fold.rows, Int(keep.unsafe_ptr()))
+    return MemberMatrix(Int(keep.unsafe_ptr()), fold.rows, view.cols, view.dtype)
+
+
+def _fold_op[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
+    """FIT / PREDICT / PREDICT_PROBA / DECISION / SCORE over the rows
+    `call.row_index` of the WHOLE host X (the fold route above). The call's
+    views are restored before this returns or raises."""
+    var name = _name(slot[].kind)
+    if not _fold_kind(slot[].kind):
+        raise Error("TypeError: a " + name + " member reads whole host views (no row index)")
+    if call[].column_index.rows > 0:
+        raise Error("TypeError: a Gbdt member reads no column index")
+    if call[].cat_keys.rows > 0 or call[].pairs.rows > 0 or call[].pairs_weight.rows > 0:
+        raise Error("TypeError: a Gbdt member reads categorical keys and pairs with whole views only (no row index)")
+    var x = call[].x
+    var y = call[].y
+    var weights = call[].weights
+    var groups = call[].groups
+    var index = call[].row_index
+    var fold = MemberFoldX()
+    var device = (operation != MEMBER_OP_FIT and slot[].fitted and len(slot[].cat_map) == 0
+                  and xg_resident(entry_ref_gil_free(call[].route.entry)) and _route_slot_x(call))
+    var host_x = List[Float32]()
+    var keep_y = List[UInt64]()
+    var keep_w = List[UInt64]()
+    var keep_g = List[UInt64]()
+    var failure = String("")
+    try:
+        _dense(x, MEMBER_F32, "X")
+        if device:
+            member_fold_x_open(call, fold, name)
+            call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
+        else:
+            member_fold_index(call, fold, name)
+            host_x = List[Float32](unsafe_uninit_length=max(fold.rows * fold.cols, 1))
+            member_fold_take_f32(x.data, fold.index, fold.rows, fold.cols, Int(host_x.unsafe_ptr()))
+            call[].x = MemberMatrix(Int(host_x.unsafe_ptr()), fold.rows, fold.cols)
+        if (operation == MEMBER_OP_FIT or operation == MEMBER_OP_SCORE) and y.rows > 0:
+            call[].y = _fold_take(y, fold, x.rows, keep_y, "y")
+        if operation == MEMBER_OP_FIT and weights.rows > 0:
+            call[].weights = _fold_take(weights, fold, x.rows, keep_w, "sample_weight")
+        if operation == MEMBER_OP_FIT and groups.rows > 0:
+            call[].groups = _fold_take(groups, fold, x.rows, keep_g, "group_id")
+        call[].row_index = MemberMatrix()
+        if operation == MEMBER_OP_FIT:
+            _fit[I](slot, call)
+        elif operation == MEMBER_OP_PREDICT:
+            _predict(slot, call)
+        elif operation == MEMBER_OP_PREDICT_PROBA:
+            _proba(slot, call)
+        elif operation == MEMBER_OP_DECISION:
+            _decision(slot, call)
+        else:
+            _score(slot, call)
+    except error:
+        failure = String(error)
+    call[].x = x
+    call[].y = y
+    call[].weights = weights
+    call[].groups = groups
+    call[].row_index = index
+    try:
+        member_fold_x_close(fold)
+    except close_error:
+        if failure.byte_length() == 0:
+            failure = "RuntimeError: a " + name + " member's fold slot was not freed: " + String(close_error)
+    _ = host_x^
+    _ = keep_y^
+    _ = keep_w^
+    _ = keep_g^
+    if failure.byte_length() > 0:
+        raise Error(failure)
 
 
 def _dense(view: MemberMatrix, dtype: Int, what: String) raises:
@@ -1778,12 +1905,10 @@ def _capabilities(kind: Int, loss: String) -> Int:
     # `feature_importances_` at FIT (MEMBER_BLOCK_FEATURE_IMPORTANCES), so RFE
     # reads it (bindings/prep_select_run.mojo `rfe_member_source`). HostGBDT
     # (predict-only) exports it when its file carried it, without the bit.
-    # No MEMBER_CAN_SCOPE and no MEMBER_CAN_ROW_INDEX (lane vdf-scope-trees,
-    # 2026-11-24, audit): the gbdt images own no device store and no row
-    # take, XG_FIT / XG_FIT_ROWMAJOR take a host X (the GPU image quantizes
-    # it on the device after its own upload, GBDT_QUANT_DEVICE) and the
-    # resident scope's caches are x_prep's (bindings/arena_cache_run.mojo).
-    # What is owed: vdf-scope-trees-RESULT.md.
+    # MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE (lane vdf-scope-trees2b): the
+    # three fitting kinds 0..2 on a route whose resident predict reads THE
+    # FOLD X WORD (`_route_slot_x`); `_fold_op`. Answered by `_member` (the
+    # route is the call's), never here.
     var mask = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
                 | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_GIL_FREE | MEMBER_CAN_IMPORTANCES)
     if kind == _KIND_CLASSIFIER:
@@ -1804,6 +1929,14 @@ def _capabilities(kind: Int, loss: String) -> Int:
     return mask
 
 
+def _fold_caps(kind: Int, call: _CallPtr) -> Int:
+    """MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE for a fold kind on a route
+    whose image reads the fold word (the fold route, `_fold_op`), else 0."""
+    if _fold_kind(kind) and _route_slot_x(call):
+        return MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
+    return 0
+
+
 def _loss_of_words(call: _CallPtr) raises -> String:
     if not call[].params or call[].param_count < 2:
         raise Error("member ABI: a Gbdt member answers without a state from its parameter words")
@@ -1822,11 +1955,13 @@ def _member[I: GbdtMemberImage](operation: Int, address: Int) raises -> Int:
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
             if call[].params and call[].param_count >= 2:
-                return _capabilities(_kind_word(_F64P(unsafe_from_address=call[].params)[0]), _loss_of_words(call))
+                var new_kind = _kind_word(_F64P(unsafe_from_address=call[].params)[0])
+                return _capabilities(new_kind, _loss_of_words(call)) | _fold_caps(new_kind, call)
             # The family's union: the booster's widest kind and the classifier.
-            return _capabilities(_KIND_BOOSTER, String("MultiClass")) | _capabilities(_KIND_CLASSIFIER, String("Logloss"))
+            return (_capabilities(_KIND_BOOSTER, String("MultiClass")) | _capabilities(_KIND_CLASSIFIER, String("Logloss"))
+                    | _fold_caps(_KIND_BOOSTER, call))
         var asked = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
-        return _capabilities(asked[].kind, asked[].config.loss)
+        return _capabilities(asked[].kind, asked[].config.loss) | _fold_caps(asked[].kind, call)
     if operation == MEMBER_OP_NEW:
         if not call[].params:
             raise Error("member ABI: a Gbdt member needs its parameter words")
@@ -1901,7 +2036,11 @@ def _member[I: GbdtMemberImage](operation: Int, address: Int) raises -> Int:
         call[].classes = classes
         return 0
     var slot = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
-    if operation == MEMBER_OP_FIT:
+    if call[].row_index.rows > 0 and (operation == MEMBER_OP_FIT or operation == MEMBER_OP_PREDICT
+            or operation == MEMBER_OP_PREDICT_PROBA or operation == MEMBER_OP_DECISION
+            or operation == MEMBER_OP_SCORE):
+        _fold_op[I](slot, call, operation)
+    elif operation == MEMBER_OP_FIT:
         _fit[I](slot, call)
     elif operation == MEMBER_OP_PREDICT:
         _predict(slot, call)

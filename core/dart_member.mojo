@@ -78,7 +78,11 @@ from bindings.trees_dart_rounds_run import (
     DART_M_OFF_START, DART_M_NODE_START, DART_M_VAL_START, DART_M_VAL_N, DART_M_WORDS,
 )
 from xtrees.trees_forest_run import ForestFit
-from xtrees.dart_abi import XD_CAP_RESIDENT
+from xtrees.dart_abi import XD_CAP_RESIDENT, XD_CAP_SLOT_X
+from core.member_fold_x import (
+    MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_index, member_fold_take_f32,
+    member_fold_take_view, member_fold_store_ready,
+)
 from xtrees.dart_calls import xd_caps, xd_predict, xd_forest_prepare, xd_forest_predict, xd_forest_release
 from xtrees.glue_calls import xt_positive_codes, xt_transpose_f64, xt_argmax_rows, xt_softmax_rows, xt_stack_w64
 from core.host_parallel import host_parallelize
@@ -89,6 +93,7 @@ from core.member_abi import (
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT,
     MEMBER_GIL_FREE, MEMBER_OP_IMPORT, MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION,
     MEMBER_CAN_SCORE, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_CLASSIFIER,
+    MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE, MEMBER_HOME_DEVICE,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -359,6 +364,109 @@ def _dense(view: MemberMatrix, dtype: Int, what: String) raises:
         var words = String("float32") if dtype == MEMBER_F32 else (
             String("float64") if dtype == MEMBER_F64 else String("int32"))
         raise Error("TypeError: a DART member reads " + what + " as a dense host " + words + " view")
+
+
+# ---- THE FOLD ROUTE (lane vdf-scope-trees2b, 2026-11-24): MEMBER_CAN_ROW_INDEX
+# and MEMBER_CAN_SCOPE (core/member_fold_x.mojo, the pattern of
+# core/linear_member.mojo `_fold_op`). The caller hands the WHOLE host X, the
+# fold's row numbers and, inside a `resident()` scope, the scope and X's pin.
+# PREDICT / PREDICT_PROBA / DECISION / SCORE of a fitted state on an image
+# whose device predict reads THE FOLD X WORD (XD_CAP_SLOT_X): X kept resident
+# in the scope's x_prep cache (or a slot this call owns), the fold's rows taken
+# ON THE DEVICE and copied by the predict into its own X buffer
+# (xtrees/dart_device.mojo `dart_forest_predict`): the rows never visit the
+# host. FIT: the rounds fit each member tree in the rf image and open the
+# x_trees session from a HOST X (bindings/trees_dart_rounds_run.mojo
+# `dart_round_plan`), so the fold's rows of X and y are taken on the host
+# (`member_fold_take_f32` / `member_fold_take_view`, row chunks across the
+# host's cores), as the caller's gather did. Same bytes either way (a byte
+# copy of the same rows in the same order: no bit moves).
+
+
+def _route_slot_x(call: MutPointer[MemberCall, MutUntrackedOrigin]) -> Bool:
+    """Whether the route's DART image reads the fold word in its device
+    predict and ships the x_prep family store (asked with the
+    capabilities, once per member class at the caller's UNPACK)."""
+    try:
+        if (xd_caps(entry_ref_gil_free(call[].route.entry)) & XD_CAP_SLOT_X) == 0:
+            return False
+    except:
+        return False
+    return member_fold_store_ready(call)
+
+
+def _fold_caps(call: MutPointer[MemberCall, MutUntrackedOrigin]) -> Int:
+    if _route_slot_x(call):
+        return MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
+    return 0
+
+
+def _fold_take(view: MemberMatrix, fold: MemberFoldX, base_rows: Int, mut keep: List[UInt64],
+               what: String) raises -> MemberMatrix:
+    """The fold's rows of a dense host 4- or 8-byte view (y), into `keep`
+    (held by the caller until the operation returned)."""
+    if view.home == MEMBER_HOME_DEVICE or not view.dense_host(view.dtype):
+        raise Error("TypeError: a DART member reads " + what + " as a dense host view")
+    if view.rows != base_rows:
+        raise Error("ValueError: Found input variables with inconsistent numbers of samples")
+    keep = List[UInt64](unsafe_uninit_length=max(fold.rows * view.cols, 1))
+    member_fold_take_view(view, fold.index, fold.rows, Int(keep.unsafe_ptr()))
+    return MemberMatrix(Int(keep.unsafe_ptr()), fold.rows, view.cols, view.dtype)
+
+
+def _fold_op(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], operation: Int) raises:
+    """FIT / PREDICT / PREDICT_PROBA / DECISION / SCORE over the rows
+    `call.row_index` of the WHOLE host X (the fold route above). The call's
+    views are restored before this returns or raises."""
+    if call[].column_index.rows > 0:
+        raise Error("TypeError: a DART member reads no column index")
+    if call[].weights.rows > 0:
+        raise Error("TypeError: a DART member reads no sample weights")
+    var x = call[].x
+    var y = call[].y
+    var index = call[].row_index
+    var fold = MemberFoldX()
+    var device = operation != MEMBER_OP_FIT and slot[].fitted and _route_slot_x(call)
+    var host_x = List[Float32]()
+    var keep_y = List[UInt64]()
+    var failure = String("")
+    try:
+        _dense(x, MEMBER_F32, "X")
+        if device:
+            member_fold_x_open(call, fold, _ESTIMATOR)
+            call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
+        else:
+            member_fold_index(call, fold, _ESTIMATOR)
+            host_x = List[Float32](unsafe_uninit_length=max(fold.rows * fold.cols, 1))
+            member_fold_take_f32(x.data, fold.index, fold.rows, fold.cols, Int(host_x.unsafe_ptr()))
+            call[].x = MemberMatrix(Int(host_x.unsafe_ptr()), fold.rows, fold.cols)
+        if (operation == MEMBER_OP_FIT or operation == MEMBER_OP_SCORE) and y.rows > 0:
+            call[].y = _fold_take(y, fold, x.rows, keep_y, "y")
+        call[].row_index = MemberMatrix()
+        if operation == MEMBER_OP_FIT:
+            _fit(slot, call)
+        elif operation == MEMBER_OP_PREDICT:
+            _predict(slot, call)
+        elif operation == MEMBER_OP_PREDICT_PROBA:
+            _decision(slot, call, True)
+        elif operation == MEMBER_OP_DECISION:
+            _decision(slot, call, False)
+        else:
+            _score(slot, call)
+    except error:
+        failure = String(error)
+    call[].x = x
+    call[].y = y
+    call[].row_index = index
+    try:
+        member_fold_x_close(fold)
+    except close_error:
+        if failure.byte_length() == 0:
+            failure = "RuntimeError: a DART member's fold slot was not freed: " + String(close_error)
+    _ = host_x^
+    _ = keep_y^
+    if failure.byte_length() > 0:
+        raise Error(failure)
 
 
 def _cast_codes(src: Int, dst: Int, rows: Int):
@@ -827,11 +935,9 @@ def _capabilities(classifier: Bool) -> Int:
     # "DART: HAS the bit"): the x_trees entries never touch the GIL, the
     # member trees' forest entry is marked, and the session, kept-forest and
     # member-store registries each have their own lock word.
-    # No MEMBER_CAN_SCOPE and no MEMBER_CAN_ROW_INDEX (lane vdf-scope-trees,
-    # 2026-11-24, audit): the x_trees DART open takes a host X and uploads it
-    # per fit (xtrees/dart_device.mojo), the image owns no device store or
-    # row take, and the resident scope's caches are x_prep's
-    # (bindings/arena_cache_run.mojo). What is owed: vdf-scope-trees-RESULT.md.
+    # MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE (lane vdf-scope-trees2b): on a
+    # route whose device predict reads THE FOLD X WORD (`_fold_caps`, added
+    # by `_member`: the route is the call's); `_fold_op`.
     var mask = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
                 | MEMBER_GIL_FREE)
     if classifier:
@@ -843,8 +949,8 @@ def _member(operation: Int, address: Int) raises -> Int:
     var call = MutPointer[MemberCall, MutUntrackedOrigin](unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
-            return _capabilities(True)
-        return _capabilities(_SlotPtr(unsafe_from_address=_lookup(call[].state, False))[].classifier)
+            return _capabilities(True) | _fold_caps(call)
+        return _capabilities(_SlotPtr(unsafe_from_address=_lookup(call[].state, False))[].classifier) | _fold_caps(call)
     if operation == MEMBER_OP_NEW:
         if not call[].params:
             raise Error("member ABI: a DART member needs its parameter words")
@@ -887,7 +993,11 @@ def _member(operation: Int, address: Int) raises -> Int:
                 call[].out_dtype = MEMBER_I32 if classifier else MEMBER_F32
         return 0
     var slot = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
-    if operation == MEMBER_OP_FIT:
+    if call[].row_index.rows > 0 and (operation == MEMBER_OP_FIT or operation == MEMBER_OP_PREDICT
+            or operation == MEMBER_OP_PREDICT_PROBA or operation == MEMBER_OP_DECISION
+            or operation == MEMBER_OP_SCORE):
+        _fold_op(slot, call, operation)
+    elif operation == MEMBER_OP_FIT:
         _fit(slot, call)
     elif operation == MEMBER_OP_PREDICT:
         _predict(slot, call)

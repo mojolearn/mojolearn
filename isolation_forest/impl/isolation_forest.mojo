@@ -67,6 +67,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
+from core.fold_x_device import fold_x_fill
 from isolation_forest.impl.rng.xorwow import (
     XorwowTables,
     build_xorwow_tables,
@@ -639,7 +640,12 @@ def _upload_rowmajor_query_device(
     var buf = ctx.enqueue_create_buffer[DType.float32](n + pad)
     var flag = ctx.enqueue_create_buffer[DType.int32](1)
     flag.enqueue_fill(Int32(0))
-    ctx.enqueue_copy(dst_buf=buf.create_sub_buffer[DType.float32](0, n), src_ptr=src)
+    # THE FOLD X WORD (core/fold_x_device.mojo; lane vdf-scope-trees2b): a
+    # negative `src_addr` names a fold slot a model-selection member took on
+    # the device (row-major rows): one device copy, the words the host upload
+    # of the gathered rows writes; a host address is the old upload.
+    _ = src
+    fold_x_fill(ctx, buf.create_sub_buffer[DType.float32](0, n), src_addr, n)
     comptime tpb = 256
     var blocks = min((n + tpb * 16 - 1) // (tpb * 16), 65535)
     blocks = max(blocks, (pad + tpb - 1) // tpb)
