@@ -144,10 +144,17 @@ struct DecompositionMemberSlot(Copyable, Movable, Defaultable):
     # and the entry that opened it (the one that closes it).
     var lease: Int
     var lease_entry: EntryRef
+    # TruncatedSVD on the fold route (lane vdf-scope-neural5): the lease of
+    # the fold entry's resident copy of the components (route.fourth's store,
+    # another context than the estimators image's), 0 none.
+    var fold_lease: Int
+    var fold_lease_entry: EntryRef
 
     def __init__(out self):
         self.lease = 0
         self.lease_entry = entry_ref_unresolved()
+        self.fold_lease = 0
+        self.fold_lease_entry = entry_ref_unresolved()
         self.generation = 0
         self.live = False
         self.words = List[Float64]()
@@ -239,6 +246,8 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
     var address = 0
     var lease = 0
     var lease_entry = entry_ref_unresolved()
+    var fold_lease = 0
+    var fold_lease_entry = entry_ref_unresolved()
     shared_slot_lock(lock)
     try:
         var index = handle % _INDEX_SPAN - 1
@@ -255,6 +264,10 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
             lease_entry = slot[].lease_entry
             slot[].lease = 0
             slot[].lease_entry = entry_ref_unresolved()
+            fold_lease = slot[].fold_lease
+            fold_lease_entry = slot[].fold_lease_entry
+            slot[].fold_lease = 0
+            slot[].fold_lease_entry = entry_ref_unresolved()
             slot[].live = False
             slot[].clear()
             slot[].words = List[Float64]()
@@ -263,13 +276,21 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
         shared_slot_unlock(lock)
     if lease != 0:
         TSVDNativeDriver(lease_entry.call).close(lease)
+    if fold_lease != 0:
+        TSVDNativeDriver(fold_lease_entry.call).close(fold_lease)
     return address
 
 
 def _drop_lease(slot: _Slot) raises:
     """Close this state's resident lease before its components change (a
     refit, an import): the resident copy is keyed by the components' address
-    and size, which a new list may reuse."""
+    and size, which a new list may reuse. The fold entry's lease too."""
+    if slot[].fold_lease != 0:
+        var fold_lease = slot[].fold_lease
+        slot[].fold_lease = 0
+        var fold_entry = slot[].fold_lease_entry
+        slot[].fold_lease_entry = entry_ref_unresolved()
+        TSVDNativeDriver(fold_entry.call).close(fold_lease)
     if slot[].lease == 0:
         return
     var lease = slot[].lease
@@ -291,6 +312,21 @@ def _lease(slot: _Slot, call: _Call) raises -> Int:
         slot[].lease = lease
         slot[].lease_entry = entry
     return slot[].lease
+
+
+def _fold_lease(slot: _Slot, call: _Call) raises -> Int:
+    """The fold entry's resident lease of this state's components (lane vdf-scope-neural5; opened at the first
+    fold transform of the fitted state on `route.fourth`, the fold provider, core/tsvd_native_fold.mojo): every
+    later fold transform reads the device copy, never an upload per call. A state the member saw on another
+    fold entry (a different route) keeps its first lease's entry for the close."""
+    if slot[].fold_lease != 0:
+        return slot[].fold_lease
+    var entry = call[].route.fourth
+    var lease = TSVDNativeDriver(entry.call).open()
+    if lease > 0:
+        slot[].fold_lease = lease
+        slot[].fold_lease_entry = entry
+    return slot[].fold_lease
 
 
 def _name(slot: _Slot) -> String:
@@ -625,8 +661,9 @@ def _query_rows(slot: _Slot, call: _Call, mut held: _Rows, inverse: Bool, rows: 
         if slot[].kind() != DECOMP_KIND_PCA:
             # TruncatedSVD.transform on the fold (core/tsvd_native_fold.mojo): the finite word, 2 for a row
             # index out of range.
+            var fold_lease = _fold_lease(slot, call)
             var tsvd_request = TSVDQueryRequest(0, Int(slot[].components.unsafe_ptr()), call[].dst.data,
-                rows, slot[].features, slot[].keep, False, True, False, 0)
+                rows, slot[].features, slot[].keep, False, True, fold_lease > 0, fold_lease)
             tsvd_request.fold = held.fold()
             var status = TSVDNativeDriver(call[].route.fourth.call).query(tsvd_request)
             door_rows_refuse(0 if status == 2 else status, 1 if status == 2 else 0, estimator, held.base_rows)
