@@ -3780,10 +3780,12 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             # raised per side after the response is asked, as the door does
             no_method = kw.refuse_text.copy()
         if name.byte_length() == 0 and no_method.byte_length() == 0:
-            # a native scorer no table row holds: the kwargs listed in
-            # mf-rows8a-work/rows.tsv (another numeric_mode tier, a
-            # non-predict response a class has over a predict metric,
-            # roc_auc's multi_class on its dual row)
+            # a native scorer no table row holds (mf-r9c-work/rows.tsv):
+            # another numeric_mode tier (one MetricRoute per search RUN), a
+            # predict_log_proba response over a regression row, a response
+            # tuple on a metric row. Lane mf-r9c typed roc_auc's multi_class
+            # on its dual row (`_multi_class_row`) and a regression row over
+            # a predict_proba / decision_function response (`resp_any`).
             return False
         if no_method.byte_length() > 0:
             # A CLASS WITH NONE OF THE SCORER'S RESPONSE METHODS (lane mf-score8

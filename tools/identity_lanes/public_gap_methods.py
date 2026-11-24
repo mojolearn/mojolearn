@@ -154,7 +154,29 @@ def _(ml, X, yc, yr, Xh=None):
     outer = ms.GridSearchCV(inner, {"refit": [True]}, cv=[(every, every)], scoring="r2", n_jobs=1,
                             error_score="raise").fit(rows, joined)
     rows8d = [outer.best_estimator_.cv_results_["mean_test_score"]]
+    # Lane mf-r9c: probability scorers on a multi-output classifier (a two-output 0/1 target: multilabel classes,
+    # NOT IMPLEMENTED per side; the 3- and 4-label target: the per-output list's check_array words; both
+    # error_score), the dual 'roc_auc' scorer with multi_class='ovr' (KNN's predict_proba scores; LogisticRegression's
+    # decision rows do not sum to one: error_score) and r2 over a binary classifier's predict_proba column.
+    # Digested by their mean test scores.
+    r9c = []
+    pair = np.stack([np.asarray(labels, dtype=np.int64) % 2, np.arange(len(rows), dtype=np.int64) % 2], axis=1)
+    for scorer, y in (("roc_auc", pair), ("neg_log_loss", two)):  # glue: fixtures
+        search = ms.GridSearchCV(ml.KNeighborsClassifier(numeric_mode="identical"), {"n_neighbors": [3, 5]}, cv=3,
+                                 scoring=scorer, n_jobs=1, error_score=-7.0, refit=False).fit(rows, y)
+        r9c.append(search.cv_results_["mean_test_score"])
+    dual_ovr = ms.make_scorer(metrics.roc_auc_score, response_method=("decision_function", "predict_proba"),
+                              multi_class="ovr")
+    for scorer, est, grid, y in (  # glue: fixtures
+            (dual_ovr, ml.KNeighborsClassifier(numeric_mode="identical"), {"n_neighbors": [3, 5]}, labels),
+            (dual_ovr, ml.LogisticRegression(max_iter=30), {"C": [0.5, 2.0]}, labels),
+            (ms.make_scorer(metrics.r2_score, response_method="predict_proba"), ml.LogisticRegression(max_iter=30),
+             {"C": [0.5, 2.0]}, binary)):
+        search = ms.GridSearchCV(est, grid, cv=3, scoring=scorer, n_jobs=1, error_score=-7.0,
+                                 refit=False).fit(rows, y)
+        r9c.append(search.cv_results_["mean_test_score"])
     return _fit(dict(scores=_h(values),
+                     r9c=_h(*[np.asarray(v, dtype=np.float64) for v in r9c]),
                      rows8a=_h(*[np.asarray(v, dtype=np.float64) for v in rows8a]),
                      rows8b=_h(*[np.asarray(v, dtype=np.float64) for v in rows8b]),
                      rows8d=_h(*[np.asarray(v, dtype=np.float64) for v in rows8d]),
