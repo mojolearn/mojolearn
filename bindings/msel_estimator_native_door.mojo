@@ -141,17 +141,35 @@ def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObj
     response) is answered by `best_estimator_`'s own dispatch. A loop, not
     a recursive call (AGENTS.md part 6: no mutual recursion on the
     bindings' import path); the forward is read only on the miss path."""
+    # The loop carries no owned PythonObject from one turn to the next: the step updates `target` and `target_plan`
+    # in place through `mut` (Mojo 1.2 lowered the loop-carried form to "operand #1 does not dominate this use" in
+    # the PythonObject destructor, w3-integrate-6 host build of the three runtime groups that import this door).
     var target = model
     var target_plan = plan
+    var done = False
     for _ in range(8):  # driver-loop: over nested fitted searches (model structure)
-        var forward = PythonObject(None)
-        var result = _msel_dispatch_once(target, method, args, context, target_plan, scorer_response, keywords,
-                                         forward)
-        if forward is None:
+        var result = _msel_dispatch_step(target, target_plan, method, args, context, scorer_response, keywords,
+                                         done)
+        if done:
             return result
-        target = forward
-        target_plan = msel_estimator_plan(target, context)
     raise Error("RuntimeError: native search delegation is nested more than eight searches deep")
+
+
+def _msel_dispatch_step(mut target: PythonObject, mut target_plan: PythonObject, method: String,
+                        args: PythonObject, context: PythonObject, scorer_response: Bool,
+                        keywords: PythonObject, mut done: Bool) raises -> PythonObject:
+    """One turn of `_msel_admitted_dispatch`: dispatch on `target`; on a
+    fitted search's forward, move `target` and `target_plan` to its best
+    estimator, else set `done`."""
+    var forward = PythonObject(None)
+    var result = _msel_dispatch_once(target, method, args, context, target_plan, scorer_response, keywords,
+                                     forward)
+    if forward is None:
+        done = True
+        return result
+    target_plan = msel_estimator_plan(forward, context)
+    target = forward
+    return result
 
 
 #: Lane w3f3-b: a member-only plan's `fit` and `score`, and (not a search) its
