@@ -50,7 +50,7 @@ from bindings.msel_search_stats_run import (
     msel_row_means, msel_row_stds, msel_score_column, msel_rank_scores, msel_rank_best, msel_pvalue,
 )
 from bindings.family_common_unpack import FAMILY_I32P
-from bindings.msel_member_units_door import msel_member_refit, msel_member_fit_cloned
+from bindings.msel_member_units_door import msel_member_refit, msel_member_fit_cloned, msel_text_rows
 from bindings.msel_cv_door import (
     msel_clone,
     msel_cv_folds,
@@ -125,6 +125,20 @@ def _door_folds_cv(cv: PythonObject, context: PythonObject, b: PythonObject) rai
     return layouts is not None and py_contains(layouts, py_type(cv))
 
 
+def _search_settings_check(fields: PythonObject, context: PythonObject, b: PythonObject) raises:
+    """scikit-learn's `fit` order (sklearn 1.9 model_selection/_search.py:
+    `_get_scorers` and the multi-metric refit check come before the split):
+    the search's scorers and refit word, refused in the door's words. Read
+    only on the refusal path of a door split (`_search_member_fit`)."""
+    var refit = fields["refit"]
+    var multi = msel_scorers(fields["scoring"], context)
+    if py_type(refit) is not b.bool and py_type(refit) is not b.str:
+        raise Error(MSEL_REFIT_CALLBACK_WORDS)
+    if (multi is not None and refit is not PythonObject(False)
+            and (py_type(refit) is not b.str or not py_contains(multi, refit))):
+        raise Error("For multi-metric scoring, refit must be False or a scorer key.")
+
+
 def _search_member_fit(model: PythonObject, fields: PythonObject, x_in: PythonObject, y_in: PythonObject,
                        groups: PythonObject, context: PythonObject, b: PythonObject,
                        drawn: PythonObject) raises -> Bool:
@@ -132,30 +146,38 @@ def _search_member_fit(model: PythonObject, fields: PythonObject, x_in: PythonOb
     (X and y read once; `msel_member_refit` admits the search's clone through
     the member boundary, encodes the labels, releases the GIL around the
     member fit = `msel_search_run` and packs the clone), then the clone's
-    fitted attributes are the model's. False (nothing changed): the kind did
-    not take this search or these data, and the door's units run and raise
-    their own words (THE FALLBACK RULE). y None fits an unsupervised base
-    without a target.
+    fitted attributes are the model's. Always True (lane mf-r9a, THE REFUSAL
+    RULE of bindings/msel_member_units_door.mojo): a search, base or data the
+    kind does not fit is refused natively, before any fit, in the words of
+    whoever refuses it; the Bool stays for the callers whose fallback branch
+    lane mf-r9b deletes. y None fits an unsupervised base without a target.
+    A label table y (rows of Python labels, a text or object 2-D array) is
+    handed as given, as the cv tools hand it (bindings/msel_cv_door.mojo
+    `msel_cv_by_search`): the kind's UNPACK reads it per output.
 
     THE DOOR'S FOLDS (lane mf-msel5c): a splitter object or an index list
     (`_door_folds_cv`) is split ONCE here, with the fit's `groups`, by the
-    door's own checked split (`msel_cv_folds`); the search's clone carries
-    them as the cv tools' carrier does (`_msel_cv_tool` with no response,
-    estimators or indices asked) and is fitted in place
+    door's own checked split (`msel_cv_folds`; its words, after the search's
+    scorer and refit words as scikit-learn orders them); the search's clone
+    carries them as the cv tools' carrier does (`_msel_cv_tool` with no
+    response, estimators or indices asked) and is fitted in place
     (`msel_member_fit_cloned`: the clone admitted its parameters, so no
-    second admission clone; the old route also made one clone). The split (X, y, folds) is appended to
-    `drawn` so a declined search's units reuse it (no second split). An
-    integer cv: the kind's own folds; scikit-learn ignores `groups` there."""
-    var base_plan = msel_estimator_plan(fields["estimator"], context)
+    second admission clone; the old route also made one clone). A
+    Mojolearn base with no member is refused by the carrier's admission; a
+    class that is no Mojolearn estimator by its plan, first. The split (X, y, folds) is appended to `drawn`. An integer
+    cv: the kind's own folds; scikit-learn ignores `groups` there."""
+    # A base class that is no Mojolearn estimator: the plan's words, before
+    # any split reads it.
+    _ = msel_estimator_plan(fields["estimator"], context)
     var cv = py_get(fields, "cv")
+    var table = y_in is not None and msel_text_rows(y_in, context, b)
     if _door_folds_cv(cv, context, b):
-        if py_get(base_plan, "member") is None:
-            return False  # a user's Python estimator: the units split and fit it
         var got = PythonObject(None)
         try:
             got = msel_cv_folds(fields["estimator"], x_in, y_in, cv, groups, True, context)
-        except:
-            return False  # the units split again and raise the splitter's words in the door's order
+        except error:
+            _search_settings_check(fields, context, b)
+            raise error^
         _ = py_call(drawn.append, got)
         var carrier = msel_native_clone(model, context)
         var carrier_fields = msel_search_fields(carrier, context)
@@ -163,24 +185,21 @@ def _search_member_fit(model: PythonObject, fields: PythonObject, x_in: PythonOb
                                                                  PythonObject(False), got[2],
                                                                  Python.list(PythonObject(None)), PythonObject(0),
                                                                  got[0].shape[0]))
-        if not msel_member_fit_cloned(carrier, got[1], got[0], context, b):
-            return False
-        return _search_adopt(fields, msel_search_fields(carrier, context), context)
-    var xa = PythonObject(None)
+        _ = msel_member_fit_cloned(carrier, y_in if table else got[1], got[0], context, b)
+        _search_adopt(fields, msel_search_fields(carrier, context), context)
+        return True
+    var xa = msel_materialize(x_in, "X", context)
     var ya = PythonObject(None)
-    try:
-        xa = msel_materialize(x_in, "X", context)
-        if y_in is not None:
-            ya = msel_materialize_y(y_in, context)
-    except:
-        return False
+    if table:
+        ya = y_in
+    elif y_in is not None:
+        ya = msel_materialize_y(y_in, context)
     var fitted = msel_member_refit(model, Python.dict(), ya, xa, context, b)
-    if fitted is None:
-        return False
-    return _search_adopt(fields, msel_search_fields(fitted, context), context)
+    _search_adopt(fields, msel_search_fields(fitted, context), context)
+    return True
 
 
-def _search_adopt(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> Bool:
+def _search_adopt(fields: PythonObject, source: PythonObject, context: PythonObject) raises:
     """The fitted attributes of the kind's fitted search (`source`, its
     instance dictionary) written into the caller's search (`fields`)."""
     var updates = Python.dict()
@@ -196,13 +215,12 @@ def _search_adopt(fields: PythonObject, source: PythonObject, context: PythonObj
             # multi-metric one no best_*; lane mf-search4b); the first three
             # are always written.
             if i < 3:
-                return False
+                raise Error("RuntimeError: search member fit invariant: the search kind's PACK wrote no " + name)
             if name == "scorer_" and py_contains(source, PythonObject(name)):
                 py_setitem(updates, name, value)  # scoring=None: the door's scorer_ None
             continue
         py_setitem(updates, name, value)
     msel_search_update(fields, updates, context)
-    return True
 
 
 def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:

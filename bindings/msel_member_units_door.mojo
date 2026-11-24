@@ -574,12 +574,14 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
     # label list (lane w3-fix-b, row 6: a classifier admits the list at
     # UNPACK into the one label encoding), or a label table (lane
     # mf-tail5b: rows of Python labels, a text or object 2-D array; a search
-    # over a classifier reads it per output). A 2-D array object of numeric
-    # words is materialized here as the door's y (lane mf-r9a: it kept the
-    # caller's door before).
+    # over a classifier reads it per output). A table of numeric words (a
+    # numeric 2-D array, rows of numbers) is materialized here as the door's
+    # y, an Array (lane mf-r9a: it kept the caller's door before); a table
+    # the materialize refuses with TypeError (text or object labels, as
+    # msel_materialize_y reads it) stays a table.
     var yv = y
     var text_y = yv is not None and not msel_is_array(yv, context) and msel_text_rows(yv, context, b)
-    if text_y and py_type(yv) is not b.list and py_type(yv) is not b.tuple:
+    if text_y:
         var got = msel_try_materialize(yv, "y", b.TypeError, context)
         if not msel_missed(got, context):
             yv = got
