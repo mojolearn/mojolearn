@@ -55,8 +55,12 @@ X @ coef - offset >= 0, else -1); DECISION float32 rows x 1 (X @ coef -
 offset); SCORE_SAMPLES float32 rows x 1 (X @ coef); no SCORE. Sample
 weights (host float32 rows x 1) are read by kinds 0, 2, 3 and 5; a weight
 given to kinds 1 and 4 is refused in words (their fit takes none). A
-device-home view, a row or column index and a nonzero `fit_output` are
-refused in words. A fit whose floating point under- or overflowed is
+device-home view, a column index and a nonzero `fit_output` are refused in
+words. FOLDS (lane vdf-scope-linear2): on a GPU image whose x_linear entry
+has XL_HAS_SLOT_X, a row index selects the fold's rows of the whole X on
+the device and the fit and decision entries read THE FOLD X WORD
+(`_fold_op`, core/member_fold_x.mojo); y and the weights are taken bitwise
+through the index on the host. A fit whose floating point under- or overflowed is
 refused in the estimator's words.
 
 Fitted-state blocks (EXPORT / IMPORT), in index order: 0
@@ -83,10 +87,13 @@ from core.member_abi import (
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_SCORE_SAMPLES, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_SCORE_SAMPLES,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_SCORE, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
     MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF, MEMBER_CAN_DECISION, MEMBER_CAN_CLASSIFIER,
+    MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE,
     MEMBER_BLOCK_COEF, MEMBER_BLOCK_INTERCEPT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_SGD
+from core.device_route import DEVICE_GPU
+from core.member_fold_x import MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_take_into, member_fold_store_ready
 from core.member_class_weight import MEMBER_CW_HEAD, member_cw_table_f32
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -94,6 +101,7 @@ from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from x_linear.door_run import (
     ALGO_SGD, LINK_IDENTITY, LINK_SIGMOID, ROWS_SGD_PROBA, XlClassPrepRequest, xl_class_prep_none,
     xl_class_fit_run, xl_run_block, XlFitRequest, XlDecisionRequest, xl_fit_run, xl_decision_run, xl_r2_run,
+    xl_slot_x_held,
 )
 from x_linear.sgd_loop_words import sgd_result_words, sgd_n_iter_word
 
@@ -658,6 +666,11 @@ def _sgd_member(operation: Int, address: Int) raises -> Int:
             # A regressor's score is the metrics image's R^2 entry: refused
             # at RUN without it, so not advertised.
             bits &= ~MEMBER_CAN_SCORE
+        # MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE (lane vdf-scope-linear2):
+        # the x_linear fit (ALGO_SGD) and decision operations of an image
+        # with XL_HAS_SLOT_X read THE FOLD X WORD; `_fold_op`.
+        if _route_slot_x(call):
+            bits |= MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
         return bits
     if operation == MEMBER_OP_NEW:
         if not call[].params or call[].param_count < 1:
@@ -726,6 +739,73 @@ def _sgd_member(operation: Int, address: Int) raises -> Int:
                 call[].out_cols = max(1, classes)
         return 0
     var slot = _SlotP(unsafe_from_address=_lookup(call[].state, False))
+    if (call[].row_index.rows > 0 and call[].column_index.rows == 0 and call[].route.device == DEVICE_GPU
+            and operation != MEMBER_OP_EXPORT and operation != MEMBER_OP_IMPORT):
+        _fold_op(slot, call, operation)
+        return 0
+    _op(slot, call, operation)
+    return 0
+
+
+def _route_slot_x(call: _CallP) -> Bool:
+    """THE FOLD X WORD on this route: a GPU image whose x_linear entry
+    reads it (XL_HAS_SLOT_X) and ships the x_prep family store. Asked with
+    the capabilities only."""
+    if call[].route.device != DEVICE_GPU:
+        return False
+    if not xl_slot_x_held(call[].route.entry.call):
+        return False
+    return member_fold_store_ready(call)
+
+
+def _fold_op(slot: _SlotP, call: _CallP, operation: Int) raises:
+    """An operation over the rows `call.row_index` of the WHOLE host X
+    (core/member_fold_x.mojo): X resident in the caller's scope, the fold's
+    rows taken on the device and read by the x_linear fit and decision
+    entries (THE FOLD X WORD); y (values or int32 class codes) and the
+    weights are the base's columns taken bitwise through the index on the
+    host. Views restored before this returns or raises."""
+    var estimator = _name(slot)
+    var x = call[].x
+    var y = call[].y
+    var weights = call[].weights
+    var index = call[].row_index
+    var fold = MemberFoldX()
+    var host_y = List[UInt64]()
+    var host_w = List[UInt64]()
+    var failure = String("")
+    try:
+        member_fold_x_open(call, fold, estimator)
+        call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
+        if y.rows > 0 and (operation == MEMBER_OP_FIT or operation == MEMBER_OP_SCORE):
+            if not y.dense_host(y.dtype) or y.rows != x.rows:
+                raise Error("ValueError: X and y have different numbers of rows")
+            call[].y = member_fold_take_into(y, fold, host_y)
+        if weights.rows > 0:
+            _dense(weights, "sample_weight", estimator)
+            if weights.rows != x.rows or weights.cols != 1:
+                raise Error("ValueError: sample_weight and X have different numbers of rows")
+            call[].weights = member_fold_take_into(weights, fold, host_w)
+        call[].row_index = MemberMatrix()
+        _op(slot, call, operation)
+    except error:
+        failure = String(error)
+    call[].x = x
+    call[].y = y
+    call[].weights = weights
+    call[].row_index = index
+    try:
+        member_fold_x_close(fold)
+    except close_error:
+        if failure.byte_length() == 0:
+            failure = "RuntimeError: a " + estimator + " member's fold slot was not freed: " + String(close_error)
+    _ = host_y^
+    _ = host_w^
+    if failure.byte_length() > 0:
+        raise Error(failure)
+
+
+def _op(slot: _SlotP, call: _CallP, operation: Int) raises:
     if operation == MEMBER_OP_FIT:
         _fit(slot, call)
     elif operation == MEMBER_OP_PREDICT:
@@ -744,7 +824,6 @@ def _sgd_member(operation: Int, address: Int) raises -> Int:
         _import(slot, call)
     else:
         member_unsupported(_name(slot), operation)
-    return 0
 
 
 def sgd_member_v2(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
