@@ -174,9 +174,13 @@ def test_invalid_weights_duplicate_labels_and_mode(binding, name):
 @pytest.mark.parametrize('name', NAMES)
 def test_prf_options_rejected(binding, name):
     method = getattr(metrics, name)
-    for bad in ('samples', [], 1):
+    for bad in ([], 1):
         with pytest.raises(ValueError, match='average'):
             method([0], [0], average=bad)
+    # average='samples' is the doors' one refusal, in every path (unweighted, weighted, search scorer):
+    # scikit-learn computes it only on multilabel targets, which are NOT IMPLEMENTED.
+    with pytest.raises(NotImplementedError, match=r"average='samples' applies to multilabel targets"):
+        method([0], [0], average='samples')
     for bad in (2, float('nan'), 'invalid', True):
         with pytest.raises(ValueError, match='zero_division'):
             method([0], [0], zero_division=bad)
