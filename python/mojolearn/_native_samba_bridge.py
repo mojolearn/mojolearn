@@ -138,7 +138,7 @@ def connect(config_cls, model_cls, training, neural, state_cls, session_cls=None
                 continue
             selected = connected["primitives"]
             generator_bindings[route.split(":", 1)[1]] = selected if isinstance(selected, str) else True
-    return {
+    result = {
         **core,
         "admission": _connect_admission(config_cls, model_cls, state_cls, training, neural, session_cls),
         "generator_bindings": generator_bindings, "generator_backend": _backend,
@@ -157,4 +157,23 @@ def connect(config_cls, model_cls, training, neural, state_cls, session_cls=None
         "schedule_classes": {"constant": training.ConstantLR,
                              "linear": training.WarmupLinearLR,
                              "cosine": training.WarmupCosineLR},
+        # `device=` of Generator and the schedules (lane vdf-sched;
+        # bindings/generator_device_unpack.mojo): the shared UNPACK reads the
+        # installation record here.
+        "backend_fields": vars(_backend),
     }
+    # A Generator constructed with device="cpu" beside a GPU set draws on the host
+    # training image's Samba table entry (vendor 0), which the image publishes when it
+    # loads: loaded at the first device="cpu" admission of the process, never at import.
+    if _backend._CPU_ONLY is None:
+        from ._native_family_bridge import cpu_load_later
+
+        def _connect_generator_cpu():
+            # glue: lazy load of the CPU identical training image, once per process
+            try:
+                _backend.load_host_module("_mojolearn_training_host")
+                result["generator_host"] = True
+            except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
+                result["generator_host"] = type(error).__name__ + ": " + str(error)
+        cpu_load_later(result, _connect_generator_cpu)
+    return result

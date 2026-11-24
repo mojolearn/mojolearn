@@ -9,8 +9,10 @@ of the Samba table, resolved once per numeric mode for the process.
 PACK (this file): the Array the draw wrote, and the dropout key.
 
 The former `neural_rng` Python entry (two Python lists per draw) and the
-portable-math scalar entry are not called. A Generator has no device of its
-own: it draws on the installation's training image.
+portable-math scalar entry are not called. A Generator draws on the
+installation's training image, or (lane vdf-sched: constructed with an
+explicit `device="cpu"` beside a GPU set, bindings/generator_device_unpack.mojo)
+on the host training image, the table's vendor-0 entry.
 """
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
@@ -26,6 +28,7 @@ from bindings.generation_buffers_door import generation_initialize_binding, gene
 from core.shared_slot import SharedSlot
 from bindings.py_optional import py_present
 from core.entry_table import EntryRef, entry_ref_unresolved
+from core.device_route import device_cpu_fast
 from core.samba_entry_table import SambaEntryKey, samba_ref, samba_vendor_word, SAMBA_TABLE_TRAINING
 from core.generator_draw_run import (
     GeneratorDrawRequest, generator_draw_run,
@@ -71,21 +74,28 @@ struct GeneratorDrawBoundary(Defaultable, Movable):
     # image publishes under its own compiled words, so a held entry IS the
     # vendor and mode admission the door used to repeat by calling the
     # binding's two read-back entries.
+    # `host`: the host training image's identical entry (vendor 0), for a
+    # Generator constructed with device="cpu" beside a GPU set (lane vdf-sched).
     var builtins: PythonObject
     var fast: EntryRef
     var identical: EntryRef
+    var host: EntryRef
     var has_fast: Bool
     var has_identical: Bool
+    var has_host: Bool
 
     def __init__(out self):
         self.builtins = PythonObject(None)
         self.fast = entry_ref_unresolved()
         self.identical = entry_ref_unresolved()
+        self.host = entry_ref_unresolved()
         self.has_fast = False
         self.has_identical = False
+        self.has_host = False
 
 
-comptime GENERATOR_DRAW_BOUNDARY = SharedSlot[GeneratorDrawBoundary, "MojolearnGeneratorDrawBoundaryV3"]
+# V4 (lane vdf-sched): the layout gained the host entry.
+comptime GENERATOR_DRAW_BOUNDARY = SharedSlot[GeneratorDrawBoundary, "MojolearnGeneratorDrawBoundaryV4"]
 
 
 def _builtins() raises -> PythonObject:
@@ -120,6 +130,22 @@ def _generator_route(fields: PythonObject, context: PythonObject) raises -> Entr
         if word < 0:
             raise Error("Generator: native RNG binding is unavailable for numeric_mode=" + text)
     var g = GENERATOR_DRAW_BOUNDARY.get_or_create_ptr()
+    # lane vdf-sched: the one field construction stored for device="cpu"
+    # beside a GPU set (absent on every other Generator: one dictionary read).
+    if py_get(fields, PythonObject("_host_device")) is not None:
+        if word != 1:
+            device_cpu_fast()
+        if g[].has_host:
+            return g[].host
+        var host = entry_ref_unresolved()
+        try:
+            host = samba_ref[SAMBA_TABLE_TRAINING](SambaEntryKey(1, 0))
+        except problem:
+            raise Error("ImportError: Generator device='cpu' needs the CPU identical training image beside the GPU set: "
+                        + String(problem))
+        g[].host = host
+        g[].has_host = True
+        return host
     if word == 1 and g[].has_identical:
         return g[].identical
     if word == 0 and g[].has_fast:
