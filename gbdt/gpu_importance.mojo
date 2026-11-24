@@ -33,6 +33,8 @@ from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from core.fold_x_device import fold_x_fill
+
 from core.gbdt_importance import (
     GbdtImpF32, GbdtImpI32, GbdtImpU32, GbdtImpU8, GbdtImportanceInput, gbdt_importance_input,
     gbdt_imp_bin_body, gbdt_imp_exponent, gbdt_imp_finish_body, gbdt_imp_fold_body, gbdt_imp_row_leaf,
@@ -170,7 +172,10 @@ def gbdt_feature_importances_device(
     # the model columns: the caller's X (n_cols == n_input) or the expanded copy
     var n_x = n_rows * n_cols
     var d_x = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
-    ctx.enqueue_copy(dst_buf=d_x, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=request.x_addr))
+    # THE FOLD X WORD (lane vdf-scope-trees4, core/fold_x_device.mojo): a
+    # negative address is the fit's fold slot, copied device to device; a
+    # host address is the old upload
+    fold_x_fill(ctx, d_x, request.x_addr, n_x)
     var d_w = ctx.enqueue_create_buffer[DType.float32](max(n_weights, 1))
     if n_weights > 0:
         ctx.enqueue_copy(dst_buf=d_w, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=w_addr))

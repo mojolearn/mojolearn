@@ -22,6 +22,7 @@ from gbdt.options.child_hessian import child_hessian_threshold, check_child_hess
 from gbdt.models.trained_model import TrainedModel
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.device_zero import enqueue_fill
+from core.fold_x_device import fold_x_fill
 from core.transfer import transfer_upload_list
 
 from core.device_plan import DevicePlan, plan_for_single
@@ -724,6 +725,7 @@ def _qd_upload_float_columns(
     n_features: Int,
     x_row_major: Bool,
     x_src: MutPointer[Float32, MutUntrackedOrigin],
+    x_word: Int = 0,
 ) raises -> DeviceBuffer[DType.float32]:
     """lane/apple-fast-sym-feat (`GBDT_QUANT_DEVICE`): the float columns
     resident on the device, column-major in `dev_col_of` order, uploaded
@@ -739,10 +741,16 @@ def _qd_upload_float_columns(
         return mat^
     if x_row_major:
         var raw = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-        ctx.enqueue_copy(
-            dst_buf=raw,
-            src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](x_src),
-        )
+        if x_word < 0:
+            # THE FOLD X WORD (lane vdf-scope-trees4): the fold's rows, taken
+            # on the device into an x_prep store slot, copied device to
+            # device; the same words in the same order as the host rows
+            fold_x_fill(ctx, raw, x_word, n_rows * n_features)
+        else:
+            ctx.enqueue_copy(
+                dst_buf=raw,
+                src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](x_src),
+            )
         var gy = min((n_rows + TR_TILE - 1) // TR_TILE, TR_MAX_GRID_Y)
         ctx.enqueue_function[transpose_rows_to_columns_kernel](
             mat.unsafe_ptr(), raw.unsafe_ptr(), Int32(n_rows), Int32(n_features),
@@ -1186,6 +1194,11 @@ def train(
     # (`x[row * n_features + feature]`). Served only by the FAST Apple
     # device quantizer (`GBDT_QUANT_DEVICE`), raw float columns only.
     x_row_major: Bool = False,
+    # THE FOLD X WORD (lane vdf-scope-trees4, core/fold_x_device.mojo): a
+    # negative word names the x_prep store slot that holds the fit's
+    # ROW-MAJOR rows on the device (`x_row_major` then required; `x_borrow`
+    # is unread); 0 = the rows are at `x_borrow`.
+    x_word: Int = 0,
     # THE POOL'S GROUPING, their `TQueriesGrouping` sizes in row order: one
     # entry per query, each the number of CONSECUTIVE rows carrying that
     # `group_id` (`libs/data/objects.cpp:60-87` builds the groups from runs
@@ -2623,17 +2636,19 @@ def train(
                 "gbdt_fit_rowmajor: a row-major fit takes raw float columns"
                 " only (no categorical, one-hot or CTR columns)"
             )
+        if x_word < 0 and not x_row_major:
+            raise Error("gbdt fit: a fold X word names row-major rows (x_row_major)")
         var mat = _qd_upload_float_columns(
             ctx, column_ptrs, qd_col_of, qd_n_float, n_rows, n_features,
-            x_row_major, x_src,
+            x_row_major, x_src, x_word,
         )
         qd_cols = Optional(mat.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
         qd_mat = Optional(mat^)
     else:
-        if x_row_major:
+        if x_row_major or x_word < 0:
             raise Error(
-                "gbdt_fit_rowmajor is served only by the FAST Apple device"
-                " quantizer (-D MOJOLEARN_GBDT_QUANT_DEVICE)"
+                "gbdt_fit_rowmajor is served only by the device quantizer"
+                " (built with -D MOJOLEARN_GBDT_QUANT_DEVICE_OFF)"
             )
     # lane/apple-fast-sym-ctr: the grids the fast walk already built, by
     # column (empty unless a SYM_CTR define is on)

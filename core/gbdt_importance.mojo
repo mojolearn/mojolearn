@@ -640,6 +640,11 @@ def gbdt_importance_input(text: String, x_addr: Int, n_rows: Int, n_input: Int, 
         raise Error("gbdt importances: the model reads " + String(plan.n_input) + " input columns, the fit "
                     + String(n_input))
     if plan.has_ctr or plan.n_cols != n_input:
+        if x_addr < 0:
+            # THE FOLD X WORD (lane vdf-scope-trees4) names device rows; the
+            # expanded model columns are built from host rows only (a fold
+            # fit with the word is a raw float fit: no CTR, no expansion)
+            raise Error("gbdt importances: a model with expanded columns reads host rows (no fold X word)")
         var mx = gbdt_importance_model_x(arch, x_addr, n_rows, n_input, row_major)
         var addr = Int(mx.unsafe_ptr())
         return GbdtImportanceInput(plan^, mx^, addr, False)

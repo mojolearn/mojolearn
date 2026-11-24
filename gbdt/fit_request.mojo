@@ -111,6 +111,12 @@ comptime XG_CAP_RESIDENT = 2
 #: negative X address names a fold slot of the x_prep store; lane
 #: vdf-scope-trees2b). Answered by every image with the resident model.
 comptime XG_CAP_SLOT_X = 4
+#: the row-major FIT (XG_FIT_ROWMAJOR: the device quantizer) and
+#: XG_IMPORTANCES read THE FOLD X WORD as their X address (lane
+#: vdf-scope-trees4): a raw float fit's rows are copied device to device
+#: from the fold slot. Answered by every image with the row-major fit and
+#: the resident model (the GPU images); the host image never.
+comptime XG_CAP_FIT_SLOT_X = 8
 
 #: flag bits of `GbdtFitArgs.bad`
 comptime GBDT_ARG_NO_INT = 1

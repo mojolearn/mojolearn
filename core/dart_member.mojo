@@ -78,7 +78,7 @@ from bindings.trees_dart_rounds_run import (
     DART_M_OFF_START, DART_M_NODE_START, DART_M_VAL_START, DART_M_VAL_N, DART_M_WORDS,
 )
 from xtrees.trees_forest_run import ForestFit
-from xtrees.dart_abi import XD_CAP_RESIDENT, XD_CAP_SLOT_X
+from xtrees.dart_abi import XD_CAP_RESIDENT, XD_CAP_SLOT_X, XD_CAP_FIT_SLOT_X
 from core.member_fold_x import (
     MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_index, member_fold_take_f32,
     member_fold_take_view, member_fold_store_ready,
@@ -375,12 +375,16 @@ def _dense(view: MemberMatrix, dtype: Int, what: String) raises:
 # in the scope's x_prep cache (or a slot this call owns), the fold's rows taken
 # ON THE DEVICE and copied by the predict into its own X buffer
 # (xtrees/dart_device.mojo `dart_forest_predict`): the rows never visit the
-# host. FIT: the rounds fit each member tree in the rf image and open the
-# x_trees session from a HOST X (bindings/trees_dart_rounds_run.mojo
-# `dart_round_plan`), so the fold's rows of X and y are taken on the host
-# (`member_fold_take_f32` / `member_fold_take_view`, row chunks across the
-# host's cores), as the caller's gather did. Same bytes either way (a byte
-# copy of the same rows in the same order: no bit moves).
+# host. FIT (lane vdf-scope-trees4): the rounds fit each member tree in the rf
+# image from the x_trees session's device X (ensemble/dart_member.mojo), and on
+# an image with XD_CAP_FIT_SLOT_X the session open copies the fold slot into
+# that X device to device (xtrees/dart_device.mojo `dart_open`): the fold's
+# rows of X never visit the host. y is a column of the base taken through the
+# index on the host (`member_fold_take_view`; the open uploads it). On an
+# image without the bit the fold's rows of X are taken on the host
+# (`member_fold_take_f32`, row chunks across the host's cores), as the
+# caller's gather did. Same bytes either way (a byte copy of the same rows in
+# the same order: no bit moves).
 
 
 def _route_slot_x(call: MutPointer[MemberCall, MutUntrackedOrigin]) -> Bool:
@@ -426,7 +430,16 @@ def _fold_op(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], o
     var y = call[].y
     var index = call[].row_index
     var fold = MemberFoldX()
-    var device = operation != MEMBER_OP_FIT and slot[].fitted and _route_slot_x(call)
+    var device: Bool
+    if operation == MEMBER_OP_FIT:
+        var caps = 0
+        try:
+            caps = xd_caps(entry_ref_gil_free(call[].route.entry))
+        except:
+            caps = 0
+        device = (caps & XD_CAP_FIT_SLOT_X) != 0 and member_fold_store_ready(call)
+    else:
+        device = slot[].fitted and _route_slot_x(call)
     var host_x = List[Float32]()
     var keep_y = List[UInt64]()
     var failure = String("")

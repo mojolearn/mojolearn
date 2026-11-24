@@ -432,7 +432,10 @@ def dart_open(
         var n_chunks = (n + DART_CHUNK - 1) // DART_CHUNK
         var ctx = process_ctx[_DART_CTX]()
         var x = ctx.enqueue_create_buffer[DType.float32](n * d)
-        ctx.enqueue_copy(dst_buf=x, src_ptr=F32P(unsafe_from_address=x_addr))
+        # THE FOLD X WORD (lane vdf-scope-trees4, core/fold_x_device.mojo): a
+        # member's fold slot (negative `x_addr`) is copied device to device;
+        # a host address is the old upload. The same words either way.
+        fold_x_fill(ctx, x, x_addr, n * d)
         var y = ctx.enqueue_create_buffer[DType.float32](n)
         ctx.enqueue_copy(dst_buf=y, src_ptr=F32P(unsafe_from_address=y_addr))
         var inits = ctx.enqueue_create_buffer[DType.float32](k)

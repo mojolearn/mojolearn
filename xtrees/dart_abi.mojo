@@ -59,6 +59,11 @@ comptime XD_CAP_RESIDENT = 2
 #: (core/fold_x_device.mojo: a negative X address names a fold slot of the
 #: x_prep store; lane vdf-scope-trees2b)
 comptime XD_CAP_SLOT_X = 4
+#: the session open (XD_OPEN, xtrees/dart_device.mojo `dart_open`) reads THE
+#: FOLD X WORD as its X address: a member's fold slot copied device to device
+#: into the session's X (lane vdf-scope-trees4); the member fits of every
+#: round read the session's X on the device already (ensemble/dart_member.mojo)
+comptime XD_CAP_FIT_SLOT_X = 8
 
 
 def xd_need(c: XtCall, n_addrs: Int, n_params: Int, who: String) raises:

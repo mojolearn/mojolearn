@@ -17,6 +17,7 @@ from gbdt.fit_request import (
     XG_OUTCOME_SIZES, XG_OUTCOME_COPY, XG_OUTCOME_FREE, XG_MODEL_DIM, XG_CAP_ROW_MAJOR, gbdt_string_at,
     XG_PREDICT, XG_PREDICT_MULTI, XG_BINARY, XG_SIGMOID_PAIR, XG_RESIDENT_PREPARE, XG_RESIDENT_PREDICT,
     XG_CAP_RESIDENT, XG_ORDERED_FIT, XG_FEATURE_FREQ_FIT, XG_IMPORTANCES, XG_OUTCOME_WORDS, XG_CAP_SLOT_X,
+    XG_CAP_FIT_SLOT_X,
 )
 
 
@@ -71,6 +72,13 @@ def xg_slot_x(entry: EntryRef) raises -> Bool:
     (core/fold_x_device.mojo; lane vdf-scope-trees2b)."""
     var none = List[Int]()
     return (entry_ref_call(entry, entry_ref_op(entry, XG_CAPS), none, none, _none_f()) & XG_CAP_SLOT_X) != 0
+
+
+def xg_caps(entry: EntryRef) raises -> Int:
+    """The image's capability word (XG_CAP_*), one call (lane
+    vdf-scope-trees4: the member reads it once per fold operation)."""
+    var none = List[Int]()
+    return entry_ref_call(entry, entry_ref_op(entry, XG_CAPS), none, none, _none_f())
 
 
 def xg_predict(entry: EntryRef, text: Int, text_bytes: Int, x: Int, n_rows: Int, dst: Int) raises -> Int:
