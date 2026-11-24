@@ -304,6 +304,7 @@ def fit_classification_device(
     tree_start: Int = 0,
     weights_addr: Int = 0,
     min_weight_fraction: Float64 = 0.0,
+    x_dev_rows: Int = 0,
 ) raises -> Forest:
     """`randomforest.cuh:155-195` again, with the split search on the GPU.
 
@@ -339,7 +340,7 @@ def fit_classification_device(
     validity_check(params)
     if n_classes < 1:
         raise Error("n_classes must be >= 1; got " + String(n_classes))
-    if x_addr == 0 and len(x_col_major) != Int(n_rows) * Int(n_cols):
+    if x_addr == 0 and x_dev_rows == 0 and len(x_col_major) != Int(n_rows) * Int(n_cols):
         raise Error(
             "x_col_major must be n_rows * n_cols long, column major; got "
             + String(len(x_col_major))
@@ -360,7 +361,7 @@ def fit_classification_device(
     # wrapper for single-tree callers.
     var device_dataset = upload_dataset_labels_f32(
         ctx, x_col_major, labels, n_rows, n_cols, n_classes, x_addr=x_addr,
-        x_row_major=x_row_major,
+        x_row_major=x_row_major, x_dev_rows=x_dev_rows,
     )
 
     # The count is resolved (and a bad one refused BY NAME) once for the
@@ -496,6 +497,7 @@ def fit_regression_device_f32(
     tree_start: Int = 0,
     weights_addr: Int = 0,
     min_weight_fraction: Float64 = 0.0,
+    x_dev_rows: Int = 0,
 ) raises -> Forest:
     """`fit_regression_device` from the caller's FLOAT labels: the scale's
     `sum |y|` and the DEVIATION 135 quantization run on the device
@@ -520,11 +522,12 @@ def fit_regression_device_f32(
             ctx, x_col_major, y, n_rows, n_cols, weights_addr,
             min_weight_fraction, scale, x_addr=x_addr, x_row_major=x_row_major,
             drop_zero_rows=not bootstrap,  # lane sk-weq-trees
+            x_dev_rows=x_dev_rows,
         )
     else:
         dataset = upload_dataset_labels_quantized(
             ctx, x_col_major, y, n_rows, n_cols, scale, x_addr=x_addr,
-            x_row_major=x_row_major,
+            x_row_major=x_row_major, x_dev_rows=x_dev_rows,
         )
     var n_sampled = resolve_n_sampled_rows(
         dataset.n_rows, bootstrap, n_sampled_rows
