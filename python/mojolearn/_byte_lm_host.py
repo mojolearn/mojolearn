@@ -99,9 +99,6 @@ class LanguageModelInference:
         Use the multithreaded path.
     threads : int or None, default None
         Thread count; None means one per physical core.
-    device : {None, 'gpu', 'cpu'}, default None
-        Where the computation runs. None and 'cpu' run on the CPU; 'gpu'
-        raises ValueError. Other values raise ValueError.
 
     Attributes
     ----------
@@ -116,11 +113,11 @@ class LanguageModelInference:
     >>> next_ids = lm.next_bytes(ids)
     """
 
-    def __init__(self, parameters, *, shape=None, threaded=True, threads=None, device=None):
-        _HOST_TRAIN(self, "inference_construct", (parameters, shape, threaded, threads, device), _HOST_TRAIN_CONTEXT)
+    def __init__(self, parameters, *, shape=None, threaded=True, threads=None):
+        _HOST_TRAIN(self, "inference_construct", (parameters, shape, threaded, threads), _HOST_TRAIN_CONTEXT)
 
     @classmethod
-    def from_checkpoint(cls, path, *, threaded=True, threads=None, device=None):
+    def from_checkpoint(cls, path, *, threaded=True, threads=None):
         """Load the parameters of a JSON checkpoint written by the trainer.
 
         Reads a file written by :meth:`LanguageModelTrainer.export_checkpoint`,
@@ -134,14 +131,12 @@ class LanguageModelInference:
             As for the constructor.
         threads : int or None, default None
             As for the constructor.
-        device : {None, 'gpu', 'cpu'}, default None
-            As for the constructor.
 
         Returns
         -------
         LanguageModelInference
         """
-        return _HOST_TRAIN(cls, "inference_from_checkpoint", (path, threaded, threads, device), _HOST_TRAIN_CONTEXT)
+        return _HOST_TRAIN(cls, "inference_from_checkpoint", (path, threaded, threads), _HOST_TRAIN_CONTEXT)
 
     @property
     def shape(self):

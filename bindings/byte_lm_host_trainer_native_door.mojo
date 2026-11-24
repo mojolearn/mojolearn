@@ -4,7 +4,6 @@ calls of `LanguageModelInference` (python/mojolearn/_byte_lm_host.py), the
 CPU forward over the host oracles. CPU training is
 `LanguageModelTrainer(device="cpu")` (bindings/byte_lm_trainer_native_door.mojo).
 """
-from bindings.host_class_device_unpack import host_class_device
 from std.python import Python, PythonObject
 from std.memory import bitcast, unsafe_memcpy
 from std.python._cpython import PyObjectPtr
@@ -210,10 +209,6 @@ def byte_lm_host_inference_construct(mut mods: NativeModules, model: PythonObjec
     var bi = mods.module("builtins")
     if py_type(model) is not context["byte_lm_host_inference_class"]:
         raise Error("TypeError: host inference requires the connected native inference class")
-    # `device=` (lane vdf-parallel, 2026-11-24; bindings/host_class_device_unpack.mojo):
-    # the last item, read once before any work. Host only: None and "cpu" are
-    # today's route, "gpu" is refused naming the class.
-    _ = host_class_device(args[4], "LanguageModelInference", bi)
     classical_connect_numpy(context)
     var captured = _host_shape(mods, args[1], context)
     var shape = captured[0].copy()
@@ -245,8 +240,6 @@ def byte_lm_host_inference_checkpoint(mut mods: NativeModules, cls: PythonObject
         context: PythonObject, mut io_error: ByteCheckpointIOError) raises -> PythonObject:
     if cls is not context["byte_lm_host_inference_class"]:
         raise Error("TypeError: host checkpoint restoration requires the connected native inference class")
-    # `device=`, as `byte_lm_host_inference_construct` (lane vdf-parallel).
-    _ = host_class_device(args[3], "LanguageModelInference", mods.module("builtins"))
     classical_connect_numpy(context)
     var source = byte_json_payload(byte_json_read(args[0], io_error))
     mods.released()
@@ -273,7 +266,7 @@ def byte_lm_host_inference_checkpoint(mut mods: NativeModules, cls: PythonObject
     _ = data^  # the typed state lives through the copy above
     var result = native_storage_allocate(cls)
     _ = byte_lm_host_inference_construct(mods, result,
-        Python.tuple(parameters, shape, args[1], args[2], PythonObject(None)), context)  # device admitted above
+        Python.tuple(parameters, shape, args[1], args[2]), context)
     return result
 
 

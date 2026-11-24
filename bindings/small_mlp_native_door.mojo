@@ -24,7 +24,6 @@ admission checks passive class storage and reads its handle without invoking
 Python descriptors. Shared exact input admission precedes native buffer reads;
 balanced call helpers retain original owners without leaking references.
 """
-from bindings.host_class_device_unpack import host_class_device
 from std.math import isfinite
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
@@ -1441,9 +1440,6 @@ def _inference_operation(operation: Int, args: PythonObject) raises -> PythonObj
     var cls = py_item(b[].inference, nk[].k_class)
     if operation == SMALL_MLP_OPN_INFERENCE_CHECKPOINT:
         _small_class(args[0], cls)
-        # `device=` (lane vdf-parallel, 2026-11-24; bindings/host_class_device_unpack.mojo),
-        # the last item, once: host only, "gpu" refused naming the class.
-        _ = host_class_device(args[2], "MLPInference", b[].bi)
         var entries = _inference_entries()
         var payload = _checkpoint_state(args[1], entries)
         var mode = py_item(b[].backend, nk[].k__DEFAULT_MODE)
@@ -1457,8 +1453,6 @@ def _inference_operation(operation: Int, args: PythonObject) raises -> PythonObj
     if operation == SMALL_MLP_OPN_INFERENCE_REPR:
         return PythonObject("MLPInference(architecture=[8, 16, 3])")
     if operation == SMALL_MLP_OPN_INFERENCE_INITIALIZE:
-        # `device=`, the last item, once before the weights (lane vdf-parallel).
-        _ = host_class_device(args[5], "MLPInference", b[].bi)
         var lowbit = py_item(b[].inference, nk[].k_lowbit)
         for i in range(1, 5):  # driver-loop: over native weights before conversion
             if i == 1 or i == 3:
