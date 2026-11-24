@@ -79,6 +79,7 @@ def check_continuous() raises:
     var got = _words(_row("accuracy", 2, none, MselScorerOptions()), List[String](), Int(y.unsafe_ptr()),
                      Int(y.unsafe_ptr()), 3, 2)
     require(got == "ValueError: continuous-multioutput is not supported", "continuous: " + got)
+    _ = len(y)  # read through its address by the scorer
 
 
 def check_mix() raises:
@@ -89,6 +90,8 @@ def check_mix() raises:
                      Int(p.unsafe_ptr()), 3, 2)
     require(got == "ValueError: Classification metrics can't handle a mix of multiclass-multioutput and "
             + "continuous-multioutput targets", "mix: " + got)
+    _ = len(y)  # read through their addresses by the scorer
+    _ = len(p)
 
 
 def check_multilabel() raises:
@@ -100,6 +103,7 @@ def check_multilabel() raises:
     var mcc = _words(_row("matthews_corrcoef", 2, none, MselScorerOptions()), List[String](), Int(y.unsafe_ptr()),
                      Int(y.unsafe_ptr()), 3, 2)
     require(mcc == "ValueError: multilabel-indicator is not supported", "multilabel matthews: " + mcc)
+    _ = len(y)  # read through its address by the scorer
 
 
 def check_cluster_2d() raises:
@@ -108,6 +112,7 @@ def check_cluster_2d() raises:
     var got = _words(_row("adjusted_rand_score", 2, none, MselScorerOptions()), List[String](), Int(y.unsafe_ptr()),
                      Int(y.unsafe_ptr()), 3, 2)
     require(got == "ValueError: labels_true must be 1D: shape is (3, 2)", "cluster 2-D: " + got)
+    _ = len(y)  # read through its address by the scorer
 
 
 def _label_sels(values: List[Float32], kinds: List[Int]) -> List[Int32]:
@@ -141,6 +146,8 @@ def check_classifier_r2() raises:
     var same = msel_scorer_value(_route(), entry_ref_unresolved(), List[String](), row, Int(truth.unsafe_ptr()),
                                  Int(truth.unsafe_ptr()), 2, 0, 2, -1, notes)
     _near(same, 1.0, "multi-output classifier r2, truth = predicted")
+    _ = len(truth)  # read through their addresses by the scorer
+    _ = len(pred)
     _ = len(counts)
     _ = len(sels)
 
@@ -159,6 +166,7 @@ def check_classifier_unread() raises:
     var truth: List[Int32] = [0, 0, 1, 0]
     var got = _words(row, words, Int(truth.unsafe_ptr()), Int(truth.unsafe_ptr()), 2, 2)
     require(got == "ValueError: could not convert string to float: 'x'", "unread label: " + got)
+    _ = len(truth)  # read through its address by the scorer
     _ = len(counts)
     _ = len(sels)
 
@@ -175,6 +183,8 @@ def check_float_clusters() raises:
     row.fpred = 2
     var d = _words(row, List[String](), Int(y.unsafe_ptr()), Int(p.unsafe_ptr()), 3, 1)
     require(d.find("buffer format 'd'") >= 0, "float64 clusters: " + d)
+    _ = len(y)  # read through their addresses by the scorer
+    _ = len(p)
 
 
 def check_types() raises:
@@ -184,6 +194,9 @@ def check_types() raises:
     require(msel_multi_output_type(Int(c.unsafe_ptr()), 4) == "continuous-multioutput", "continuous type")
     require(msel_multi_output_type(Int(m.unsafe_ptr()), 4) == "multilabel-indicator", "multilabel type")
     require(msel_multi_output_type(Int(k.unsafe_ptr()), 4) == "multiclass-multioutput", "multiclass type")
+    _ = len(c)  # read through their addresses by the type scan
+    _ = len(m)
+    _ = len(k)
 
 
 def test_mf_rows8b_multi_output() raises:

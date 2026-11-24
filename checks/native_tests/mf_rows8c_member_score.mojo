@@ -90,6 +90,7 @@ def score_case(unit: Int) raises:
             except problem:
                 refused = String(problem).find("call fit before score") >= 0
             require(refused, "score before fit refuses in its words")
+            _ = len(x)  # read through its address by the score call
             return
         call.x = MemberMatrix(Int(x.unsafe_ptr()), ROWS, FEATURES)
         _ = member_call(plan.member, MEMBER_OP_FIT, call)
