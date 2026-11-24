@@ -113,22 +113,58 @@ def _short(name):
     return name.rsplit(".", 1)[-1]
 
 
-def _caller(fn, name, side_name, strict):
+# THE CALLER THE PRODUCT SEES. `_mode._caller_outside` reads the module
+# globals of the frame that calls a public method or function: a user's code
+# gets the widened public result, the package's own code (and the identity
+# harness, marked `__mojolearn_internal__`) the native one. The wrappers below
+# are that frame now, so they are compiled into a namespace carrying the SAME
+# marker as the code that reached the view: "internal" for the harness and the
+# tape checks, "user" for the public endpoint checks (`_verify_api*`, marked
+# `__mojolearn_user_boundary__`). A wrapper therefore never changes which
+# result a lane hashes.
+_WRAPPER_SOURCE = """
+def inject(fn, side_name):
+    def call(*args, **kwargs):
+        if "device" not in kwargs:
+            kwargs["device"] = side_name
+        return fn(*args, **kwargs)
+    return call
+
+
+def refuse(fn, message, error):
+    def call(*args, **kwargs):
+        if "device" in kwargs:
+            return fn(*args, **kwargs)
+        raise error(message)
+    return call
+"""
+BOUNDARIES = ("internal", "user")
+_BUILDERS = {}
+
+
+def _builders(boundary):
+    hit = _BUILDERS.get(boundary)
+    if hit is None:
+        if boundary not in BOUNDARIES:
+            raise ValueError(f"boundary must be one of {BOUNDARIES}, not {boundary!r}")
+        marker = "__mojolearn_internal__" if boundary == "internal" else "__mojolearn_user_boundary__"
+        hit = {"__name__": f"{__name__}.{boundary}", "__builtins__": __builtins__, marker: True}
+        exec(compile(_WRAPPER_SOURCE, __file__, "exec"), hit)  # noqa: S102 -- this module's own source
+        _BUILDERS[boundary] = hit
+    return hit
+
+
+def _caller(fn, name, side_name, strict, boundary="internal"):
     """`fn` wrapped so a call carries `device=side_name`. Resolved once."""
     mode = device_mode(fn)
+    build = _builders(boundary)
     if mode in ("device", "kwargs", "unknown"):
-        def call(*args, **kwargs):
-            if "device" not in kwargs:
-                kwargs["device"] = side_name
-            return fn(*args, **kwargs)
+        call = build["inject"](fn, side_name)
     elif _short(name) in NON_COMPUTING or not strict:
         return fn
     else:
-        def call(*args, **kwargs):
-            if "device" in kwargs:
-                return fn(*args, **kwargs)
-            raise NoDevice(f"{name} takes no device= (the {side_name.upper()} side cannot be "
-                           "selected through the public parameter)")
+        call = build["refuse"](fn, f"{name} takes no device= (the {side_name.upper()} side cannot be "
+                                   "selected through the public parameter)", NoDevice)
     try:
         functools.update_wrapper(call, fn)
     except (AttributeError, TypeError):
@@ -141,11 +177,11 @@ class BoundClass:
     reaches the class; a class attribute that takes `device` (a classmethod
     loader such as `from_checkpoint`) carries the side too. `isinstance` and
     `issubclass` read the real class."""
-    __slots__ = ("_cls", "_name", "_side", "_new", "_attrs")
+    __slots__ = ("_cls", "_name", "_side", "_new", "_attrs", "_boundary")
 
-    def __init__(self, cls, name, side_name, strict):
-        self._cls, self._name, self._side = cls, name, side_name
-        self._new = _caller(cls, name, side_name, strict)
+    def __init__(self, cls, name, side_name, strict, boundary="internal"):
+        self._cls, self._name, self._side, self._boundary = cls, name, side_name, boundary
+        self._new = _caller(cls, name, side_name, strict, boundary)
         self._attrs = {}
 
     def __call__(self, *args, **kwargs):
@@ -158,9 +194,18 @@ class BoundClass:
         value = getattr(self._cls, attr)
         if (not attr.startswith("_") and callable(value) and not isinstance(value, type)
                 and device_mode(value) == "device"):
-            value = _caller(value, f"{self._name}.{attr}", self._side, False)
+            value = _caller(value, f"{self._name}.{attr}", self._side, False, self._boundary)
         attrs[attr] = value
         return value
+
+    @property
+    def __signature__(self):
+        # `inspect.signature(bound)` reads the class's own parameters
+        return inspect.signature(self._cls)
+
+    @property
+    def __name__(self):
+        return self._cls.__name__
 
     def __instancecheck__(self, obj):
         return isinstance(obj, self._cls)
@@ -177,18 +222,15 @@ class DeviceView:
     side. Submodules of the package are views too. Private names (`_x`),
     non-callables and modules outside the package pass through unchanged."""
 
-    def __init__(self, module, side_name, strict=True, prefix=None):
+    def __init__(self, module, side_name, strict=True, prefix=None, boundary="internal"):
         if side_name not in SIDES:
             raise ValueError(f"side must be one of {SIDES}, not {side_name!r}")
+        object.__setattr__(self, "_boundary", boundary)
         object.__setattr__(self, "_module", module)
         object.__setattr__(self, "_side", side_name)
         object.__setattr__(self, "_strict", strict)
         object.__setattr__(self, "_prefix", prefix or module.__name__)
         object.__setattr__(self, "_names", {})
-
-    @property
-    def side(self):
-        return self._side
 
     def __getattr__(self, name):
         names = self._names
@@ -215,44 +257,44 @@ class DeviceView:
             root = self._module.__name__.split(".", 1)[0]
             if value.__name__.split(".", 1)[0] != root:
                 return value
-            return DeviceView(value, self._side, self._strict, value.__name__)
+            return view(value, self._side, self._strict, self._boundary)
         if isinstance(value, type):
             if issubclass(value, BaseException) or name in NON_COMPUTING:
                 return value
-            return BoundClass(value, qualified, self._side, self._strict)
+            return BoundClass(value, qualified, self._side, self._strict, self._boundary)
         if callable(value):
-            return _caller(value, qualified, self._side, self._strict)
+            return _caller(value, qualified, self._side, self._strict, self._boundary)
         return value
 
 
-#: (id(module), side, strict) -> (module, view): one view per side per process.
+#: (id(module), side, strict, boundary) -> (module, view): one view per side
+#: per process.
 _VIEWS = {}
 
 
-def view(module, side_name, strict=True):
-    """The device-bound view of `module` for `side_name`, built once."""
-    key = (id(module), side_name, bool(strict))
+def view(module, side_name, strict=True, boundary="internal"):
+    """The device-bound view of `module` for `side_name`, built once.
+    `boundary` is the caller the product sees (`_builders`)."""
+    key = (id(module), side_name, bool(strict), boundary)
     hit = _VIEWS.get(key)
     if hit is not None and hit[0] is module:
         return hit[1]
-    bound = DeviceView(module, side_name, strict)
+    bound = DeviceView(module, side_name, strict, module.__name__, boundary)
     _VIEWS[key] = (module, bound)
     return bound
 
 
-def bind(value, name, side_name, strict=True):
+def bind(value, name, side_name, strict=True, boundary="internal"):
     """One resolved public object bound to `side_name` the way the view binds
     it (`_verify_api.resolve` uses this for a dotted endpoint name)."""
     if isinstance(value, types.ModuleType):
-        return view(value, side_name, strict)
-    if any(part.startswith("_") for part in name.split(".")[1:-1]) and not isinstance(value, type):
-        return value
+        return view(value, side_name, strict, boundary)
     if isinstance(value, type):
         if issubclass(value, BaseException) or _short(name) in NON_COMPUTING:
             return value
-        return BoundClass(value, name, side_name, strict)
+        return BoundClass(value, name, side_name, strict, boundary)
     if callable(value):
-        return _caller(value, name, side_name, strict)
+        return _caller(value, name, side_name, strict, boundary)
     return value
 
 
