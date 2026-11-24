@@ -2137,17 +2137,12 @@ def attn_step_run_kept_host(
 #: (`_transformer_run_session[discard_cache=True]`, restored from git at
 #: 616dbdf75f^ / v0.8.66 transformer/transformer_binding_impl.mojo; the path
 #: `TransformerBlock.forward` with no state took on every GPU binding before
-#: lanes x4 / x4b). `-D MOJOLEARN_TRANSFORMER_GENERIC_PREFILL` is lane x4b's
-#: generic op run (`AttnStepArm.block_forward`: x up into the arm's resident
-#: buffer, `attn_step_run_kept`, the two device copies x -> stages input and
-#: residual2 -> y, y down), kept for the boxes' A/B. Both arms run the same
-#: `llama_decoder_layer_forward` (forward_only) on the same zero cache, so
-#: the bits are the same; the restore is a measured-winner rule (AGENTS.md
-#: 2026-11-09: no measurement showed the generic run at least as fast).
+#: lanes x4 / x4b), the only stateless prefill of `AttnStepArm.block_forward`.
 # TOMBSTONE: MOJOLEARN_TRANSFORMER_GENERIC_PREFILL (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 29b23a6003.
 # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_GENERIC_PREFILL.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime TRANSFORMER_GENERIC_PREFILL = is_defined["MOJOLEARN_TRANSFORMER_GENERIC_PREFILL"]()
+# TOMBSTONE: MOJOLEARN_TRANSFORMER_GENERIC_PREFILL (LOSER: NV L40S transformer-forward 2.20 -> 2.97 ms, 1.35; the generic op run for a stateless forward: x up into the resident buffer, attn_step_run_kept, two device copies, y down) deleted 2026-11-24 by lane/ab-outcome-3 (o3-nseq); code recoverable at c23cb55fda.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_GENERIC_PREFILL.ab-outcome-3.patch
 
 
 def attn_step_fresh_prefill(

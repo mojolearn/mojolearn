@@ -28,8 +28,6 @@ next case runs. Drivers (the row's "driver" field):
                 names: the neighbouring and non-board shapes of the Samba step arms; an arm may be a B wheel set
   cnn_widths    CNNClassifier.fit on synthetic images at each conv_channels tuple the row names; an arm may be a
                 B wheel set the row names
-  f16_widen     models.safetensors.widen_f16 of synthetic float16 bits at each element count the row names; an
-                arm may be a B wheel set the row names
   gemm_shapes   linalg.matmul(a, b) (fp32, A [m, k] @ B [k, n], seeded standard normal) at each (m, n, k) case the
                 row names: the neighbouring and non-board shapes of a GEMM kernel arm; an arm may be a B wheel set
   rnn_shapes    LSTMRegressor / GRURegressor / RNNRegressor .fit on a seeded synthetic series, X (rows, window,
@@ -380,20 +378,6 @@ def case_cnn_widths(row, arm_cases):
     return out
 
 
-def case_f16_widen(row, arm_cases):
-    """`mojolearn.models.safetensors.widen_f16` (float16 bits -> float32 Array) at each element count the row
-    names, on uint16 bits covering every half pattern in turn (A: the linalg from_f16 device round trip; B
-    f16-widen-host: the safetensors reader's host-parallel widening). The counts are sizes, not any model's."""
-    import numpy as np
-    from mojolearn.models.safetensors import widen_f16
-    out = []
-    for n in row["shape"]["counts"]:  # serial by nature: timed calls on one host and GPU
-        bits = (np.arange(int(n), dtype=np.uint64) % 65536).astype(np.uint16)
-        ms, why = timed(lambda: widen_f16(bits))
-        out.append(("widen_f16 n=%d" % int(n), ms, why))
-    return out
-
-
 def case_samba_step(row, arm_cases):
     """SambaStack.train_step and the forward that follows it, per case of the row's shape.cases. The stack draws
     its own weights (Generator(7)); ids are uniform bytes from default_rng(0). The shapes are sizes next to and
@@ -590,7 +574,7 @@ def case_online_linear_shapes(row, arm_cases):
 
 
 DRIVERS = {"rnn_shapes": case_rnn_shapes, "online_linear_shapes": case_online_linear_shapes,
-           "gemm_shapes": case_gemm_shapes, "f16_widen": case_f16_widen, "while_loop": case_while_loop, "pandas_input": case_pandas_input, "mlp_fit": case_mlp_fit,
+           "gemm_shapes": case_gemm_shapes, "while_loop": case_while_loop, "pandas_input": case_pandas_input, "mlp_fit": case_mlp_fit,
            "kde_widths": case_kde_widths, "mamba_backward": case_mamba_backward, "cnn_widths": case_cnn_widths,
            "samba_train_step": case_samba_train_step,
            "samba_step": case_samba_step,
