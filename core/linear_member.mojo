@@ -250,7 +250,7 @@ def _fit_whole(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: Mut
     # THE FOLD X WORD's prepared X (lane vdf-scope-linear4): a fold fit whose
     # route centers or row-scales X (LF_PREP) keeps the prepared X in a slot
     # of the fold store; its word lands in `prep`, freed here after the fit.
-    var prep = List[Int64](length=1, fill=Int64(0))
+    var prep = List[Int64](length=1 if call[].x.data < 0 else 0, fill=Int64(0))  # no allocation for a host X
     var request = LinearFitRequest(call[].x.data, call[].y.data, weights, Int(slot[].coef.unsafe_ptr()),
         Int(slot[].mean.unsafe_ptr()), rows, cols, slot[].intercept, slot[].alpha if slot[].ridge else 0.0,
         Int(prep.unsafe_ptr()) if call[].x.data < 0 else 0)
@@ -270,7 +270,7 @@ def _fit_whole(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: Mut
             result = linear_ols_run(route.entry.call, decomp, request, plan, route.vendor)
     except error:
         failure = String(error)
-    if prep[0] < 0:
+    if len(prep) > 0 and prep[0] < 0:
         try:
             arena_cache_free(member_fold_store(call), fold_x_slot(Int(prep[0])))
         except free_error:
