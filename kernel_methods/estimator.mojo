@@ -316,6 +316,18 @@ def krr_chi2_fold_check(ctx: DeviceContext, x: DeviceBuffer[DType.float32], xadd
         raise Error("mojolearn KernelRidge: X contains negative values (the chi2 kernels need x >= 0)")
 
 
+def nys_chi2_fold_check(ctx: DeviceContext, x: DeviceBuffer[DType.float32], xaddr: Int, n: Int,
+                        kernel: Int) raises:
+    """`krr_chi2_fold_check` for Nystroem (lane vdf-scope-linear3): a fold
+    slot's x >= 0 test of the chi2 kernels on the device copy `_upload_checked`
+    made (finite already), in the member's wording (core/kernel_approx_member.mojo
+    `_x` tests host words)."""
+    if xaddr >= 0 or not (kernel == KM_KERNEL_CHI2 or kernel == KM_KERNEL_ADDITIVE_CHI2):
+        return
+    if device_buffer_any_negative(ctx, x, n):
+        raise Error("mojolearn Nystroem: X contains negative values (the chi2 kernels need x >= 0)")
+
+
 def _upload_checked(ctx: DeviceContext, xaddr: Int, n_rows: Int, n_cols: Int, what: String) raises -> DeviceBuffer[
     DType.float32
 ]:
@@ -1839,6 +1851,7 @@ def nystroem_fit_ptr(
         raise Error("nystroem_fit: null X address")
     var ctx = _family_ctx()
     var dx = _upload_checked(ctx, xaddr, n_samples, n_features, "nystroem X")
+    nys_chi2_fold_check(ctx, dx, xaddr, n_samples * n_features, kp.kernel)  # lane vdf-scope-linear3
     var model = _nystroem_fit_dev(ctx, dx, n_samples, n_features, kp, n_components, seed, trace)
     _ = dx^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
@@ -1866,6 +1879,7 @@ def nystroem_fit_transform_ptr[out_origin: MutOrigin, //](
         raise Error("nystroem_fit: null X address")
     var ctx = _family_ctx()
     var dx = _upload_checked(ctx, xaddr, n_samples, n_features, "nystroem X")
+    nys_chi2_fold_check(ctx, dx, xaddr, n_samples * n_features, kp.kernel)  # lane vdf-scope-linear3
     var model = _nystroem_fit_dev(ctx, dx, n_samples, n_features, kp, n_components, seed, trace)
     var t0 = Int(perf_counter_ns())
     _nystroem_transform_dev(ctx, dx, model, n_samples, output, trace, KM_EPILOGUE_TPB, KMSAB_NONE, t0)
@@ -2327,6 +2341,7 @@ def nystroem_transform_ptr_into[out_origin: MutOrigin, //](
     var t0 = Int(perf_counter_ns())
     var ctx = _family_ctx()
     var dx = _upload_checked(ctx, xaddr, n_rows, model.n_features, "nystroem transform X")
+    nys_chi2_fold_check(ctx, dx, xaddr, n_rows * model.n_features, model.kernel)  # lane vdf-scope-linear3
     _nystroem_transform_dev(ctx, dx, model, n_rows, output, trace, KM_EPILOGUE_TPB, KMSAB_NONE, t0)
     _ = dx^
     _ = ctx^
