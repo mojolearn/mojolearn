@@ -7,6 +7,11 @@ a prediction holds its snapshot for the call (core/forest_inference_model.mojo),
 so a handle released on another thread stays alive until that call returns."""
 from core.hostptr import list_f32, list_i32
 from core.forest_inference_model import resident_prepare, resident_predict_into, resident_predict_labels, FOREST_ORDERED_RESIDENT
+from core.forest_inference_model import (
+    resident_reads_device_rows, resident_predict_rows_into, resident_labels_rows_into,
+)
+from core.device_store import DeviceStore
+from max.gpu.host import DeviceContext
 
 
 def _i32_ptr(address: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
@@ -87,6 +92,56 @@ def forest_predict_resident_labels_gpu_native[RF_INPUT: Bool](
     resident_predict_labels[RF_INPUT](handle,
         xp.unsafe_origin_cast[MutAnyOrigin](), op.unsafe_origin_cast[MutAnyOrigin](),
         rows, features, outputs)
+    return rows
+
+
+def forest_resident_rows_native[RF_INPUT: Bool](mut store: DeviceStore, ctx: DeviceContext, labels: Bool,
+    handle: Int, store_id: Int, idx_addr: Int, out_addr: Int, rows: Int, features: Int, outputs: Int) raises -> Int:
+    """XF_RESIDENT_ROWS (lane vdf-scope-trees2a): the resident vote
+    (float32 at `out_addr`) or, with `labels`, the int32 codes of rows
+    `idx_addr` (`rows` host int64 words) of the image's device store slot
+    `store_id` (row-major, `features` words a row). The rows are taken on
+    the device (`DeviceStore.take_rows`, on `ctx`: the image's one context,
+    which is the snapshot's) and the snapshot reads them there: no upload of
+    X, the same scans, traversal and one read of the output as
+    XF_RESIDENT_PREDICT / XF_RESIDENT_LABELS on the host-gathered rows, so
+    the same bytes. A snapshot on several devices (a device pool) reads
+    the taken rows through the host, then predicts as XF_RESIDENT_*: the
+    one host read left, outside the one-device route."""
+    if rows < 0 or features < 1 or outputs < 1:
+        raise Error("invalid resident prediction dimensions")
+    if labels and outputs < 2:
+        raise Error("invalid resident label prediction dimensions")
+    if rows > 2147483647 // features or rows > 2147483647 // outputs:
+        raise Error("resident prediction dimensions exceed Int32")
+    if rows == 0:
+        return 0
+    var taken = store.take_rows(ctx, store_id, features, idx_addr, rows)
+    try:
+        if resident_reads_device_rows[RF_INPUT](handle):
+            var dx = store._held(taken, rows * features)
+            if labels:
+                resident_labels_rows_into[RF_INPUT](handle, dx,
+                    _i32_ptr(out_addr).unsafe_origin_cast[MutAnyOrigin](), rows, features, outputs)
+            else:
+                resident_predict_rows_into[RF_INPUT](handle, dx,
+                    _f32_ptr(out_addr).unsafe_origin_cast[MutAnyOrigin](), rows, features, outputs)
+            _ = dx^  # the prediction above read the taken rows (synchronous)
+        else:
+            var host = List[Float32](length=rows * features, fill=0.0)
+            store.read(ctx, taken, Int(host.unsafe_ptr()), rows * features)
+            var xp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(host.unsafe_ptr()))
+            if labels:
+                resident_predict_labels[RF_INPUT](handle, xp,
+                    _i32_ptr(out_addr).unsafe_origin_cast[MutAnyOrigin](), rows, features, outputs)
+            else:
+                resident_predict_into[RF_INPUT](handle, xp,
+                    _f32_ptr(out_addr).unsafe_origin_cast[MutAnyOrigin](), rows, features, outputs, True)
+            _ = len(host)  # the prediction above read the rows
+    except problem:
+        store.free(ctx, taken)
+        raise problem^
+    store.free(ctx, taken)
     return rows
 
 

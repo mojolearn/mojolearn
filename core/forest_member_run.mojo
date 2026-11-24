@@ -62,18 +62,21 @@ with importances or the out-of-bag outputs (the estimator's own refusal). predic
 (classifier) or float32 values; predict_proba float32 rows x classes; score
 (classifier only) the accuracy count / rows, unweighted.
 
-THE FOLD ROWS (lane vdf-scope-trees, 2026-11-24): `call.row_index` (host
-int32 or int64, MEMBER_CAN_ROW_INDEX on a route whose image answers
-XF_CAP_DEV_ROWS, the RandomForest GPU image) selects the rows of the WHOLE X,
-y and weights. FIT: under a resident scope with a pin (MEMBER_CAN_SCOPE) X
-goes once into the image's device store through the scope's cache of this
-family (`arena_scope_store_put`, prefix "forest_rf"; `pin_kept` as THE PIN
-RULE says) and the image takes the rows on the device (XF_FIT_ROWS: the same
-fit bodies on the plane a row-major upload of those rows makes, so the same
-bits); without one the rows are gathered on the host. y and the weights are
-gathered on the host (one word a row), in row tasks. PREDICT / SCORE: the
-rows are gathered on the host (the predict snapshots live on the image's
-inference context, the store on its fits' context).
+THE FOLD ROWS (lane vdf-scope-trees, 2026-11-24; ExtraTrees and the
+predictions lane vdf-scope-trees2a): `call.row_index` (host int32 or int64,
+MEMBER_CAN_ROW_INDEX on a route whose image answers XF_CAP_DEV_ROWS, the
+RandomForest and ExtraTrees GPU images) selects the rows of the WHOLE X, y
+and weights. FIT: under a resident scope with a pin (MEMBER_CAN_SCOPE) X goes
+once into the image's device store through the scope's cache of this family
+(`arena_scope_store_put`, prefix "forest_rf" / "forest_et"; `pin_kept` as THE
+PIN RULE says) and the image takes the rows on the device (XF_FIT_ROWS: the
+same fit bodies on the plane a row-major upload of those rows makes, so the
+same bits); without one the rows are gathered on the host. y and the weights
+are gathered on the host (one word a row), in row tasks. PREDICT / SCORE:
+under the same scope, on the resident route, the same store slot (a hit in
+the scope's cache) and the image's resident snapshot reads the rows taken on
+the device (XF_RESIDENT_ROWS: the image's store, fits and snapshots share
+its one context); otherwise the rows are gathered on the host.
 
 Fits, as the estimator's own fit door picks them: unweighted without
 importances reads X row-major (the view itself, no copy); the ExtraTrees
@@ -129,9 +132,9 @@ from core.forest_calls import (
     xf_resident_predict, xf_resident_labels, xf_strict_prepare, xf_strict_predict, xf_snapshot_release,
 )
 from core.forest_fit_request import XF_CAP_DEVICE_SCAN, XF_CAP_DEV_ROWS, XF_RESIDENT_RELEASE, XF_STRICT_RELEASE
-from core.forest_calls import xf_fit_rows
-from core.forest_entry_table import FOREST_TABLE_RF
-from core.forest_store_transport import forest_store_transport_ref, FOREST_STORE_PREFIX_RF
+from core.forest_calls import xf_fit_rows, xf_resident_rows
+from core.forest_entry_table import FOREST_TABLE_RF, FOREST_TABLE_ET
+from core.forest_store_transport import forest_store_transport_ref, FOREST_STORE_PREFIX_RF, FOREST_STORE_PREFIX_ET
 from bindings.arena_cache_run import arena_scope_store_put
 from core.host_parallel import host_widen_index_i64
 from bindings.forest_config_run import ForestConfig, forest_request
@@ -615,8 +618,9 @@ struct _FoldRows(Movable):
 
 
 def _dev_rows_route(call: MutPointer[MemberCall, MutUntrackedOrigin]) -> Bool:
-    """The route's image keeps a device store and fits its rows
-    (XF_CAP_DEV_ROWS: the RandomForest GPU image). One entry call."""
+    """The route's image keeps a device store, fits its rows and predicts
+    them (XF_CAP_DEV_ROWS: the RandomForest and ExtraTrees GPU images). One
+    entry call."""
     try:
         return (xf_caps(call[].route.entry) & XF_CAP_DEV_ROWS) != 0
     except:
@@ -709,33 +713,80 @@ def _fold_rows(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin],
     var fold = _FoldRows()
     fold.n = call[].row_index.rows
     fold.index = _row_numbers(call, estimator, fold.wide)
-    if (not slot[].et and call[].scope != MEMBER_SCOPE_NONE and call[].pin != 0 and _dev_rows_route(call)):
-        var store = forest_store_transport_ref(FOREST_TABLE_RF, call[].route.mode, call[].route.vendor)
-        var put = arena_scope_store_put(call[].scope, store, FOREST_STORE_PREFIX_RF, call[].x.data,
-                                        call[].x.rows * call[].x.cols, call[].pin)
-        if put.pinned:
-            call[].pin_kept = call[].pin
-        fold.store_id = put.store_id
+    if call[].scope != MEMBER_SCOPE_NONE and call[].pin != 0 and _dev_rows_route(call):
+        fold.store_id = _scope_store_id(slot, call)
     return fold^
 
 
-def _query_rows(call: MutPointer[MemberCall, MutUntrackedOrigin], estimator: String,
-                mut x_fold: List[Float32], mut wide: List[Int64]) raises -> MemberMatrix:
+def _scope_store_id(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin]) raises -> Int:
+    """The store slot of the WHOLE X in the image's device store, put once
+    per scope through the scope's cache of this family (a hit after the
+    first put: a fold's fit and its predictions share it). THE PIN RULE:
+    `pin_kept` is written the moment the cache took the reference, before
+    anything after it can raise."""
+    var family = FOREST_TABLE_ET if slot[].et else FOREST_TABLE_RF
+    var prefix = String(FOREST_STORE_PREFIX_ET) if slot[].et else String(FOREST_STORE_PREFIX_RF)
+    var store = forest_store_transport_ref(family, call[].route.mode, call[].route.vendor)
+    var put = arena_scope_store_put(call[].scope, store, prefix, call[].x.data,
+                                    call[].x.rows * call[].x.cols, call[].pin)
+    if put.pinned:
+        call[].pin_kept = call[].pin
+    return put.store_id
+
+
+struct _Query(Movable):
+    """A predict / score X (lane vdf-scope-trees2a): `x` its view (`data`
+    0 when the rows stay on the device), and under `call.row_index` the
+    int64 row numbers `index` (the call's own, or `wide`, the int32 index
+    widened) with either `store_id`, the image's store slot of the WHOLE X
+    whose rows the snapshot takes on the device, or -1 and `x_fold`, the
+    rows gathered on the host."""
+    var x: MemberMatrix
+    var store_id: Int
+    var index: Int
+    var x_fold: List[Float32]
+    var wide: List[Int64]
+
+    def __init__(out self, x: MemberMatrix):
+        self.x = x
+        self.store_id = -1
+        self.index = 0
+        self.x_fold = List[Float32]()
+        self.wide = List[Int64]()
+
+
+def _scope_rows_route(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin]) raises -> Bool:
+    """A prediction reads the fold's rows on the device: a resident scope
+    with a pin, an image with a device store, and the state's resident
+    snapshot route (the sequential and strict routes take a host X)."""
+    if call[].scope == MEMBER_SCOPE_NONE or call[].pin == 0 or not _dev_rows_route(call):
+        return False
+    _ensure_prepared(slot)
+    return slot[].route != FOREST_ROUTE_SEQUENTIAL and slot[].route != FOREST_ROUTE_STRICT
+
+
+def _query_rows(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estimator: String) raises -> _Query:
     """A predict / score X: the call's own view, or under `call.row_index`
-    its rows gathered across the host's cores (the forest predict entries
-    take a host X: their snapshots live on the image's inference context,
-    not the fits' context the store belongs to)."""
+    its rows: kept on the device under a resident scope (`_scope_rows_route`:
+    the snapshot takes them out of the image's store, XF_RESIDENT_ROWS), else
+    gathered across the host's cores."""
     if call[].column_index.rows > 0:
         raise Error("TypeError: a " + estimator + " member reads every column (no column index)")
     _dense(call[].x, MEMBER_F32, "X", estimator)
+    var q = _Query(call[].x)
     if call[].row_index.rows == 0:
-        return call[].x
+        return q^
     var n = call[].row_index.rows
     var cols = call[].x.cols
-    var index = _row_numbers(call, estimator, wide)
-    x_fold = List[Float32](length=n * cols, fill=0.0)
-    _take_rows_f32(call[].x.data, index, n, cols, Int(x_fold.unsafe_ptr()))
-    return MemberMatrix(Int(x_fold.unsafe_ptr()), n, cols, MEMBER_F32)
+    q.index = _row_numbers(call, estimator, q.wide)
+    if _scope_rows_route(slot, call):
+        q.store_id = _scope_store_id(slot, call)
+        q.x = MemberMatrix(0, n, cols, MEMBER_F32)
+        return q^
+    q.x_fold = List[Float32](length=n * cols, fill=0.0)
+    _take_rows_f32(call[].x.data, q.index, n, cols, Int(q.x_fold.unsafe_ptr()))
+    q.x = MemberMatrix(Int(q.x_fold.unsafe_ptr()), n, cols, MEMBER_F32)
+    return q^
 
 
 def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estimator: String) raises:
@@ -926,11 +977,16 @@ def _width(slot: _SlotPtr, x: MemberMatrix, estimator: String) raises:
             + " is expecting " + String(slot[].features) + " features as input.")
 
 
-def _vote(slot: _SlotPtr, x: MemberMatrix, dst: Int) raises:
+def _vote(slot: _SlotPtr, q: _Query, dst: Int) raises:
     """The rows' votes or values (flat float32 at `dst`) on the state's route."""
     _ensure_prepared(slot)
+    var x = q.x
     var wrote = 0
-    if slot[].route == FOREST_ROUTE_SEQUENTIAL:
+    if q.store_id >= 0:
+        # XF_RESIDENT_ROWS: the fold's rows taken on the device (resident route)
+        wrote = xf_resident_rows(slot[].key, False, slot[].snapshot, q.store_id, q.index, dst, x.rows, x.cols,
+                                 slot[].outputs)
+    elif slot[].route == FOREST_ROUTE_SEQUENTIAL:
         var model: List[Int] = [Int(slot[].offsets.unsafe_ptr()), Int(slot[].colid.unsafe_ptr()),
             Int(slot[].quesval.unsafe_ptr()), Int(slot[].left.unsafe_ptr()), Int(slot[].leaves.unsafe_ptr())]
         # The RF regressor's sequential walk averages (`rf_predict_reg`); the
@@ -945,26 +1001,31 @@ def _vote(slot: _SlotPtr, x: MemberMatrix, dst: Int) raises:
         raise Error("RuntimeError: forest prediction wrote " + String(wrote) + " of " + String(x.rows) + " rows")
 
 
-def _codes(slot: _SlotPtr, x: MemberMatrix, dst: Int) raises:
+def _codes(slot: _SlotPtr, q: _Query, dst: Int) raises:
     """A classifier's int32 class codes at `dst`: the resident fused labels
     where the image serves them, else the first-max argmax of the vote."""
     _ensure_prepared(slot)
+    var x = q.x
     if slot[].labels:
-        var wrote = xf_resident_labels(slot[].key, slot[].snapshot, x.data, dst, x.rows, x.cols, slot[].outputs)
+        var wrote = 0
+        if q.store_id >= 0:
+            wrote = xf_resident_rows(slot[].key, True, slot[].snapshot, q.store_id, q.index, dst, x.rows, x.cols,
+                                     slot[].outputs)
+        else:
+            wrote = xf_resident_labels(slot[].key, slot[].snapshot, x.data, dst, x.rows, x.cols, slot[].outputs)
         if wrote != x.rows:
             raise Error("RuntimeError: forest label prediction wrote " + String(wrote) + " of " + String(x.rows) + " rows")
         return
     var votes = List[Float32](length=x.rows * slot[].outputs, fill=0.0)
-    _vote(slot, x, Int(votes.unsafe_ptr()))
+    _vote(slot, q, Int(votes.unsafe_ptr()))
     _argmax_rows(Int(votes.unsafe_ptr()), dst, x.rows, slot[].outputs)
     _ = len(votes)
 
 
 def _predict(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], proba: Bool, estimator: String) raises:
     _require_fitted(slot, estimator)
-    var x_fold = List[Float32]()
-    var wide = List[Int64]()
-    var x = _query_rows(call, estimator, x_fold, wide)
+    var q = _query_rows(slot, call, estimator)
+    var x = q.x
     _width(slot, x, estimator)
     var rows = x.rows
     if proba:
@@ -973,17 +1034,17 @@ def _predict(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], p
         _dense(call[].dst, MEMBER_F32, "the probability buffer", estimator)
         if call[].dst.rows != rows or call[].dst.cols != slot[].outputs:
             raise Error("ValueError: the probability buffer holds one row of class probabilities per row of X")
-        _vote(slot, x, call[].dst.data)
+        _vote(slot, q, call[].dst.data)
     elif call[].dst.rows != rows or call[].dst.cols != 1:
         raise Error("ValueError: the prediction buffer holds one value per row of X")
     elif slot[].classifier:
         _dense(call[].dst, MEMBER_I32, "the prediction buffer (class codes)", estimator)
-        _codes(slot, x, call[].dst.data)
+        _codes(slot, q, call[].dst.data)
     else:
         _dense(call[].dst, MEMBER_F32, "the prediction buffer", estimator)
-        _vote(slot, x, call[].dst.data)
-    _ = len(x_fold)  # the walk above read the gathered rows
-    _ = len(wide)
+        _vote(slot, q, call[].dst.data)
+    _ = len(q.x_fold)  # the walk above read the gathered rows
+    _ = len(q.wide)
 
 
 def _score(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estimator: String) raises:
@@ -996,9 +1057,8 @@ def _score(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], est
     if call[].weights.rows > 0:
         raise Error("NotImplementedError: mojolearn: a weighted score of a " + estimator
             + " member is not published; the caller predicts and runs its own weighted metric")
-    var x_fold = List[Float32]()
-    var wide = List[Int64]()
-    var x = _query_rows(call, estimator, x_fold, wide)
+    var q = _query_rows(slot, call, estimator)
+    var x = q.x
     _width(slot, x, estimator)
     _dense(call[].y, MEMBER_I32, "y (class codes)", estimator)
     var rows = x.rows
@@ -1008,17 +1068,17 @@ def _score(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], est
     var y_fold = List[Int32]()
     var y_addr = call[].y.data
     if call[].row_index.rows > 0:
-        var index = Int(wide.unsafe_ptr()) if len(wide) > 0 else call[].row_index.data
+        var index = q.index
         y_fold = List[Int32](length=rows, fill=0)
         _take_rows_i32(call[].y.data, index, rows, Int(y_fold.unsafe_ptr()))
         y_addr = Int(y_fold.unsafe_ptr())
     var codes = List[Int32](length=rows, fill=0)
-    _codes(slot, x, Int(codes.unsafe_ptr()))
+    _codes(slot, q, Int(codes.unsafe_ptr()))
     var hits = _count_equal(Int(codes.unsafe_ptr()), y_addr, rows)
     _ = len(codes)
-    _ = len(x_fold)
+    _ = len(q.x_fold)
     _ = len(y_fold)
-    _ = len(wide)
+    _ = len(q.wide)
     call[].value = Float64(hits) / Float64(rows) if rows > 0 else 0.0
 
 
@@ -1164,7 +1224,7 @@ def _capabilities(classifier: Bool, importances: Bool, weights: Bool, notices: B
     resident store id), so a device-home X is refused (`_dense`).
     `notices`: the kind carries its fit notices (Forest; `fm_member`)."""
     # MEMBER_CAN_ROW_INDEX and MEMBER_CAN_SCOPE are added by `fm_member` on a
-    # route whose image answers XF_CAP_DEV_ROWS (lane vdf-scope-trees).
+    # route whose image answers XF_CAP_DEV_ROWS (lanes vdf-scope-trees, -trees2a).
     # MEMBER_GIL_FREE (THE GIL RULE): every operation of the six kinds is
     # traced (fx-gil-RESULT.md, "forest / tree / extra_trees: HAS the bit"):
     # the route entry is marked `entry_ref_gil_free` at fit and import and
@@ -1206,11 +1266,11 @@ def fm_member[name: StaticString, rf_layout: Bool, notices: Bool](operation: Int
     if operation == MEMBER_OP_CAPABILITIES:
         # THE FOLD ROWS (lane vdf-scope-trees): MEMBER_CAN_ROW_INDEX and
         # MEMBER_CAN_SCOPE on a route whose image keeps a device store
-        # (XF_CAP_DEV_ROWS: the RandomForest GPU image, RF layout only; one
+        # (XF_CAP_DEV_ROWS: the RandomForest and ExtraTrees GPU images; one
         # entry call per capability question, asked once per member class).
         if call[].state == 0:
             var held = _capabilities(True, rf_layout, True, notices)
-            if rf_layout and _dev_rows_route(call):
+            if _dev_rows_route(call):
                 held |= MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
             return held
         var known = _SlotPtr(unsafe_from_address=_lookup[name](call[].state, False))
@@ -1220,7 +1280,7 @@ def fm_member[name: StaticString, rf_layout: Bool, notices: Bool](operation: Int
         var weights = known[].classifier or known[].et or not known[].oob
         var mask = _capabilities(known[].classifier, known[].importances or len(known[].imp) > 0, weights,
                                  notices and not known[].et, known[].predict_only)
-        if not known[].et and not known[].predict_only and _dev_rows_route(call):
+        if not known[].predict_only and _dev_rows_route(call):
             mask |= MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
         return mask
     if operation == MEMBER_OP_NEW:

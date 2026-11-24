@@ -14,7 +14,7 @@ from core.forest_fit_request import (
     XF_EXPORT_SIZES, XF_EXPORT_INTO, XF_EXPORT_VERIFY, XF_EXPORT_RELEASE, XF_PREDICT, XF_RESIDENT_PREPARE,
     XF_RESIDENT_PREDICT, XF_RESIDENT_LABELS, XF_RESIDENT_RELEASE, XF_STRICT_PREPARE, XF_STRICT_PREDICT,
     XF_STRICT_RELEASE, XF_SESSION_OPEN, XF_SESSION_CLOSE, XF_FIT_SESSION, XF_ADA_OPEN, XF_FIT_ADA_ROUND,
-    XF_STAGE_INPUT, XF_UNSTAGE_INPUT, XF_FIT_ROWS, XF_META_MAX, XF_SHAPE_CLASSIFIER, XF_SHAPE_ROWMAJOR, forest_fit_words,
+    XF_STAGE_INPUT, XF_UNSTAGE_INPUT, XF_FIT_ROWS, XF_RESIDENT_ROWS, XF_META_MAX, XF_SHAPE_CLASSIFIER, XF_SHAPE_ROWMAJOR, forest_fit_words,
 )
 
 
@@ -239,3 +239,14 @@ def xf_fit_rows(key: EntryRef, classifier: Bool, args: ForestFitArgs) raises -> 
     `args.session` (the whole X, row-major), taken on the device; its
     export handle, read and released as XF_FIT's."""
     return _fit(key, XF_FIT_ROWS, XF_SHAPE_CLASSIFIER if classifier else 0, args)
+
+
+def xf_resident_rows(key: EntryRef, labels: Bool, handle: Int, store_id: Int, idx: Int, out_addr: Int,
+                     rows: Int, cols: Int, outputs: Int) raises -> Int:
+    """XF_RESIDENT_ROWS (lane vdf-scope-trees2a; an image with
+    XF_CAP_DEV_ROWS): the resident vote (float32 at `out_addr`) or, with
+    `labels`, the int32 codes of rows `idx` (`rows` host int64 words) of
+    the image's device store slot `store_id`, taken on the device."""
+    var addrs: List[Int] = [handle, idx, out_addr]
+    var ints: List[Int] = [rows, cols, outputs, store_id, 1 if labels else 0]
+    return _call(key, XF_RESIDENT_ROWS, addrs, ints)

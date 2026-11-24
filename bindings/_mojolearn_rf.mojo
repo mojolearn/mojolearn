@@ -51,6 +51,7 @@ from forest_inference_binding_door import (
 from core.forest_inference_run import (
     forest_prepare_gpu_native, forest_predict_resident_into_gpu_native,
     forest_predict_resident_labels_gpu_native, forest_gpu_resident_caps,
+    forest_resident_rows_native,
 )
 from bindings.forest_fit_boundary_unpack import forest_fit_args_py
 from core.forest_fit_request import (
@@ -920,6 +921,15 @@ struct RfGpuForest(ForestImage):
         if classifier:
             return _rf_classifier_fit[False, True](args)
         return _rf_regressor_fit[False, True](args)
+
+    @staticmethod
+    def resident_rows(labels: Bool, handle: Int, store_id: Int, idx: Int, out_addr: Int, rows: Int,
+                      cols: Int, outputs: Int) raises -> Int:
+        # XF_RESIDENT_ROWS (lane vdf-scope-trees2a): the rows of the store
+        # taken on the device and read there by the snapshot (one context).
+        var store = RF_STORE.get_or_create_ptr()
+        return forest_resident_rows_native[True](store[], rf_store_ctx(), labels, handle, store_id, idx,
+                                                 out_addr, rows, cols, outputs)
 
 
 def _rf_store_op(op: Int, a: List[Int], p: List[Int]) raises -> Int:

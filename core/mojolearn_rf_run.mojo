@@ -32,7 +32,7 @@ from core.forest_fit_request import (
     ForestFitArgs, XF_CAP_DEVICE_SCAN, XF_CAP_DART, forest_export_verify_lists,
 )
 from core.forest_inference_model import (
-    resident_prepare, resident_predict_into, resident_release,
+    resident_prepare, resident_predict_into, resident_release, RF_CTX_SLOT,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
@@ -43,7 +43,12 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojolearnRfContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnRfContextFastV3"
+#: Lane vdf-scope-trees2a (2026-11-24): the fits run on the image's resident
+#: inference context (core/forest_inference_model.mojo `RF_CTX_SLOT`), so the
+#: device store below, the fits and the resident predictions are ONE context
+#: and a predict reads the store's rows in place (XF_RESIDENT_*_ROWS). Was
+#: its own "MojolearnRfContext" slot. Same kernels: no bit moves.
+comptime _DEVCTX_SLOT = RF_CTX_SLOT
 
 
 from ensemble.decisiontree.batched_levelalgo.bins import (
@@ -98,8 +103,8 @@ from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 comptime DT = DType.float32
 
 #: THE IMAGE'S DEVICE STORE (lane vdf-scope-trees, 2026-11-24;
-#: core/device_store.mojo): resident float32 words on this binding's ONE fit
-#: context (`_DEVCTX_SLOT`), put / freed / taken by the store transport entry
+#: core/device_store.mojo): resident float32 words on this binding's ONE
+#: context (`_DEVCTX_SLOT`, shared with the resident predictions), put / freed / taken by the store transport entry
 #: (bindings/_mojolearn_rf.mojo `rf_gpu_store_transport_v1`, the x_prep
 #: transport numbering) for a resident scope's cache, and read by XF_FIT_ROWS.
 comptime _RF_STORE_NAME = "MojolearnRfStoreIdenticalV1" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnRfStoreFastV1"

@@ -95,6 +95,17 @@ published in `core/forest_entry_table.mojo`; descriptor shape of
                       XF_FIT's row-major upload is, and fitted by the same
                       body: the bytes `fit_forest` reads equal XF_FIT's on
                       the host-gathered rows. Returns an export handle.
+  XF_RESIDENT_ROWS    (lane vdf-scope-trees2a, 2026-11-24; XF_CAP_DEV_ROWS)
+                      addrs [handle, idx, out], ints [rows, cols, outputs,
+                      store id, labels]: XF_RESIDENT_PREDICT (labels 0,
+                      float32 out) or XF_RESIDENT_LABELS (labels 1, int32
+                      codes) on rows `idx` (host int64, `rows` of them) of
+                      the image's DEVICE STORE slot `store id` (the WHOLE X,
+                      row-major, `cols` words a row), taken on the device and
+                      read there by the snapshot (the store, the fits and
+                      the snapshots share the image's one context). A
+                      snapshot on several devices reads the taken rows
+                      through the host. Returns rows written.
 
 The caller owns every buffer until the synchronous call returns.
 """
@@ -103,7 +114,8 @@ from core.fit_loop_clock import FitLoop
 
 # v2 (lane alm-forest, 2026-11-24): XF_W_LOOP joined the XF_FIT words.
 # v3 (lane vdf-scope-trees, 2026-11-24): XF_FIT_ROWS appended.
-comptime FOREST_ENTRY_ABI = "mojolearn.trees.forest.v3"
+# v4 (lane vdf-scope-trees2a, 2026-11-24): XF_RESIDENT_ROWS appended.
+comptime FOREST_ENTRY_ABI = "mojolearn.trees.forest.v4"
 
 comptime XF_CAPS = 0
 comptime XF_NUMERIC_MODE = 1
@@ -130,7 +142,8 @@ comptime XF_FIT_ADA_ROUND = 21
 comptime XF_STAGE_INPUT = 22
 comptime XF_UNSTAGE_INPUT = 23
 comptime XF_FIT_ROWS = 24
-comptime XF_OP_COUNT = 25
+comptime XF_RESIDENT_ROWS = 25
+comptime XF_OP_COUNT = 26
 
 #: capability bits (XF_CAPS)
 comptime XF_CAP_DEVICE_SCAN = 1      # the fits refuse a non-finite X cell on the device
@@ -141,7 +154,7 @@ comptime XF_CAP_STRICT = 16           # the host strict snapshot (XF_STRICT_*)
 comptime XF_CAP_DART = 32             # XF_FIT_DART is served
 comptime XF_CAP_SESSION = 64          # XF_SESSION_* and XF_FIT_SESSION are served
 comptime XF_CAP_ADA = 128             # XF_ADA_OPEN and XF_FIT_ADA_ROUND are served
-comptime XF_CAP_DEV_ROWS = 256        # XF_FIT_ROWS and the store transport entry (forest_store_transport_ref)
+comptime XF_CAP_DEV_ROWS = 256        # XF_FIT_ROWS, XF_RESIDENT_ROWS and the store transport entry (forest_store_transport_ref)
 
 #: XF_FIT request words: addrs[k]
 comptime XF_W_X = 0
