@@ -8,15 +8,13 @@ buffer admission and framework interop. Numerical results are held by the verify
 import numpy as np
 import pytest
 
-sklearn = pytest.importorskip("sklearn")
-from sklearn.datasets import make_classification  # noqa: E402
-from sklearn.metrics import accuracy_score  # noqa: E402
-from sklearn.model_selection import train_test_split  # noqa: E402
-
-import mojolearn as ml  # noqa: E402
+import mojolearn as ml
 
 
 def _xts_clf(n_classes=3, seed=0):
+    pytest.importorskip("sklearn")
+    from sklearn.datasets import make_classification
+    from sklearn.model_selection import train_test_split
     X, y = make_classification(n_samples=1500, n_features=10, n_informative=6, n_classes=n_classes,
                                random_state=seed)
     return train_test_split(X.astype(np.float32), y, test_size=0.3, random_state=seed)
@@ -28,6 +26,7 @@ def test_cv_splitter_objects():
     # native fit (bindings/trees_public_meta_door.mojo _cv_value).
     from mojolearn.model_selection import KFold, StratifiedKFold
     Xa, Xb, ya, yb = _xts_clf()
+    from sklearn.metrics import accuracy_score
     est = [("dt", ml.DecisionTreeClassifier(max_depth=4))]
     a = ml.StackingClassifier(est, final_estimator=ml.DecisionTreeClassifier(max_depth=3), cv=3).fit(Xa, ya)
     b = ml.StackingClassifier(est, final_estimator=ml.DecisionTreeClassifier(max_depth=3),
@@ -108,3 +107,32 @@ def test_fit_truth_decodes_non_native_extended_components(dtype, value):
     before = supplied.tobytes()
     sdp_pair(sdp_x(), bootstrap=supplied)
     assert supplied.tobytes() == before
+
+
+# moved from python/mojolearn/tests/test_rf_class_weight.py
+# RandomForestClassifier class_weight refusals: invalid weights and options, checked at fit.
+import numpy as np
+import pytest
+from mojolearn import RandomForestClassifier
+
+
+def _rfcw_data(balanced):
+    rng = np.random.default_rng(0)
+    x = rng.random((40, 4), dtype=np.float32)
+    y = np.where(np.arange(40) % 2 == 0, 'a', 'b') if balanced else np.where(x[:, 0] > 0.3, 'a', 'b')
+    return x, y
+
+
+@pytest.mark.parametrize('weights', [{'a': -1}, {'a': np.inf}, {'a': np.nan},
+    {'a': True}, {'a': '2'}, {'a': 1e100}, {'a': 1e-100}, {'a': 0, 'b': 0}, {'z': 2}])
+def test_invalid_weights(weights):
+    x, y = _rfcw_data(balanced=True)
+    with pytest.raises(ValueError):
+        RandomForestClassifier(n_estimators=2, class_weight=weights).fit(x, y)
+
+
+@pytest.mark.parametrize('value', ['balanced_subsample', 'unknown', [], 3])
+def test_invalid_option(value):
+    # checked at fit, before any binding is touched (scikit-learn's convention)
+    with pytest.raises(ValueError, match='class_weight'):
+        RandomForestClassifier(class_weight=value).fit([[0.0], [1.0]], [0, 1])

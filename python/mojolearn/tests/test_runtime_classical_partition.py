@@ -35,21 +35,3 @@ def test_tree_resident_type_comes_from_the_single_classical_owner():
     fields = object.__getattribute__(model, '__dict__')
     assert not fields.get('_resident_holder')
     assert entry(None, 'trees_resident_stats', (), context)[0] == kept_before + 1
-
-
-def test_classical_public_input_protocol_is_refused_before_callback():
-    calls = []
-
-    class Input:
-        def __array__(self, *args, **kwargs):
-            calls.append('__array__')
-            raise AssertionError('input protocol must never run')
-
-    model = ml.LinearRegression(numeric_mode='identical')
-    audit = audit_native_call(model.fit, Input(), [1., 2.])
-    assert isinstance(audit.exception, TypeError), audit.report()
-    report = audit.report()
-    assert not any(report[key] for key in ('python_frames', 'forbidden_native_calls',
-                                           'unresolved_native_calls', 'wrapper_work',
-                                           'unobserved_existing_threads')), report
-    assert calls == []

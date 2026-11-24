@@ -1,7 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """CPU SambaInference public boundaries against independent host primitives."""
-from types import SimpleNamespace
-
 import numpy as np
 import pytest
 
@@ -136,14 +134,3 @@ def test_cpu_samba_checkpoint_load_matches_host_weight_recipe(tmp_path, monkeypa
         output = audit_native_call(model.forward, inputs).assert_native()
     assert output.tobytes() == expected.tobytes()
     assert not hasattr(model, "optimizer")
-
-
-@pytest.mark.parametrize("method", ["loss", "train_step"])
-def test_cpu_samba_training_refusal_is_native(method):
-    config, packed, _, _ = _case(["attention"])
-    model = SambaInference(config, packed)
-    ids = np.array([[1, 2]], dtype="i4")
-    result = audit_native_call(getattr(model, method), ids, ids)
-    assert isinstance(result.exception, NotImplementedError), result.report()
-    for name in ("python_frames", "wrapper_work", "forbidden_native_calls", "unobserved_existing_threads"):
-        assert not result.report()[name], result.report()

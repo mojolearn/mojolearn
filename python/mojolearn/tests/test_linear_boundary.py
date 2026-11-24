@@ -116,3 +116,27 @@ def test_native_attribute_dispatch_refuses_metaclass_hash_before_lookup():
     calls.clear()
     cvl_clean(getattr, obj, 'predict', error=TypeError)
     assert calls == []
+
+
+# moved from python/mojolearn/tests/test_runtime_classical_partition.py
+# A Python input protocol handed to a classical fit is refused before its callback runs.
+import mojolearn as ml
+from mojolearn._verify_native_runtime import audit_native_call
+
+
+def test_classical_public_input_protocol_is_refused_before_callback():
+    calls = []
+
+    class Input:
+        def __array__(self, *args, **kwargs):
+            calls.append('__array__')
+            raise AssertionError('input protocol must never run')
+
+    model = ml.LinearRegression(numeric_mode='identical')
+    audit = audit_native_call(model.fit, Input(), [1., 2.])
+    assert isinstance(audit.exception, TypeError), audit.report()
+    report = audit.report()
+    assert not any(report[key] for key in ('python_frames', 'forbidden_native_calls',
+                                           'unresolved_native_calls', 'wrapper_work',
+                                           'unobserved_existing_threads')), report
+    assert calls == []
