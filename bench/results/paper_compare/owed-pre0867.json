@@ -152,8 +152,9 @@
   },
   "ols-predict-tiled": {
    "define": "MOJOLEARN_IDN_OLS_PREDICT_TILED",
-   "status": "define in code (core/gemm.mojo IDN_OLS_PREDICT_TILED): B = the shared-memory tiled gemv for OLS predict (NV_AMD_IDENTICAL_STEPS, 812de59288, never measured for predict); A = the plain one-thread-per-row pinned_gemv_n_kernel (0.8.25 route, restored 2026-11-13 for predict only). Same bits",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2): NOISE/LOSER (L40S 4 cells, median 0.98, 0.93..1.44; ols infer within noise, ols istella fit 509 -> 733 ms); A (the plain pinned_gemv_n_kernel, the default) is unchanged; removed: IDN_OLS_PREDICT_TILED; the define is refused (core/six_lane_experiment_guards.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_OLS_PREDICT_TILED.ab-outcome-2.patch. Was: define in code (core/gemm.mojo IDN_OLS_PREDICT_TILED): B = the shared-memory tiled gemv for OLS predict (NV_AMD_IDENTICAL_STEPS, 812de59288, never measured for predict); A = the plain one-thread-per-row pinned_gemv_n_kernel (0.8.25 route, restored 2026-11-13 for predict only). Same bits",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "mamba12-forward-copies-old": {
    "define": "MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD",
