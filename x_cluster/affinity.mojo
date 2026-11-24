@@ -21,6 +21,7 @@ cgr2-cluster; the host column runs the reference's loops)."""
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul
 from x_cluster.ops import ClusterOps
+from x_cluster.meanshift import x_slot_or_put, x_slot_copy
 from x_cluster.optics import dist_slot
 
 # Since lane cgr2-cluster every build takes the radix median, the device
@@ -43,7 +44,7 @@ def affinity_fit[O: ClusterOps](
     pref_scalar: Float32, pref_array: List[Float32], damping: Float32, max_iter: Int,
     conv_iter: Int, seed: UInt64,
     mut centers_idx: List[Int32], mut labels: List[Int32], mut n_iter: Int, mut affinity: List[Float32],
-    mut ar_diag: List[Float32],
+    mut ar_diag: List[Float32], x_slot: Int = -1,
 ) raises:
     """`ar_diag` returns the final diagonals of A then R (2n floats; empty on
     the equal-similarities shortcut): the continuous state the exemplar
@@ -54,12 +55,13 @@ def affinity_fit[O: ClusterOps](
     var ss: Int
     var neg: Int
     if precomputed:
-        ss = ops.put(x)
-        affinity = x.copy()
+        ss = x_slot_copy(ops, x, x_slot, m)
+        # the caller's matrix as affinity_matrix_ (read back once when it is a slot: THE FOLD X WORD)
+        affinity = x.copy() if x_slot < 0 else ops.get(ss, m)
         neg = ops.alloc(m)
         ops.negate(ss, neg, m)
     else:
-        var xs = ops.put(x)
+        var xs = x_slot_or_put(ops, x, x_slot)
         neg = dist_slot(ops, m)
         ops.sqdist(xs, n, xs, n, d, neg)
         ss = ops.alloc(m)

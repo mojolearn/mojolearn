@@ -57,7 +57,7 @@ def dist_slot[O: ClusterOps](mut ops: O, n: Int) raises -> Int:
 def optics_graph[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, min_samples: Int, max_eps: Float32,
     mut ordering: List[Int], mut core: List[Float32], mut reach: List[Float32], mut pred: List[Int],
-    mut slots: List[Int], metric: Int = -1, p: Float32 = Float32(2),
+    mut slots: List[Int], metric: Int = -1, p: Float32 = Float32(2), x_slot: Int = -1,
 ) raises:
     """metric -1: euclidean through the squared distance (the recorded
     default); 0-4 the `bodies.pdist_cell` metrics; 5 precomputed (`x` is the
@@ -65,7 +65,9 @@ def optics_graph[O: ClusterOps](
     the ordering, the float slot of the reachability and the int slot of the
     predecessors (resident for `optics_xi_ops`)."""
     var inf = Float32.MAX * Float32(2)
-    var xs = ops.put(x)
+    # `x_slot`: X already in a float slot of `ops` (THE FOLD X WORD, lane vdf-scope-cluster6); the slot is this
+    # call's own copy, so the precomputed flush may write it.
+    var xs = ops.put(x) if x_slot < 0 else x_slot
     var dm: Int
     if metric == 5:
         if not ops.check_nonneg(xs, n * n):
