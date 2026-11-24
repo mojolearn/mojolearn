@@ -76,9 +76,6 @@ class HostGBDT:
     category_map : int64 array or None, default None
         The model's ``category_map_`` (for a model fitted with
         ``cat_features``).
-    device : {None, 'gpu', 'cpu'}, default None
-        Where the computation runs. None and 'cpu' run on the CPU; 'gpu'
-        raises ValueError. Other values raise ValueError.
 
     Attributes
     ----------
@@ -108,9 +105,9 @@ class HostGBDT:
     _mojolearn_member_predict_only = True
 
     def __init__(self, *, loss, text, n_features_in, approx_dim, n_classes=None,
-                 numeric_mode=None, bias=None, estimator='GradientBoosting', category_map=None, device=None):
+                 numeric_mode=None, bias=None, estimator='GradientBoosting', category_map=None):
         return _native_host_archive(self, _OP.host_tree_init_gbdt,
-            (loss, text, n_features_in, approx_dim, n_classes, numeric_mode, bias, estimator, category_map, device),
+            (loss, text, n_features_in, approx_dim, n_classes, numeric_mode, bias, estimator, category_map),
             _ARCHIVE_CONTEXT)
 
     @classmethod
