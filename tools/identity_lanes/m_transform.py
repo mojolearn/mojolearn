@@ -378,6 +378,14 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(fit_transform=_m_transform_h(m.fit_transform(X[:4096], yr[:4096]))))
 
 
+@lane("trees-random-embedding-fit-transform")
+def _(ml, X, yc, yr, Xh=None):
+    """RandomTreesEmbedding.fit_transform with trees-random-embedding's arguments on the first 4096 rows
+    (the leaf one-hot of a fresh fit)."""
+    T = ml.RandomTreesEmbedding(n_estimators=8, max_depth=4, random_state=7).fit_transform(X[:4096])
+    return _fit(dict(fit_transform=_m_transform_h(T)))
+
+
 @lane("m-voting-clf-calls")
 def _(ml, X, yc, yr, Xh=None):
     """VotingClassifier.fit_transform (soft voting: the members' probabilities) and .score of that fit
