@@ -105,7 +105,7 @@ from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_kind_capabilities,
     MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_F32, MEMBER_I32, MEMBER_CAN_EXPORT, MEMBER_CAN_TEST_ROWS,
     MEMBER_OP_FIT, MEMBER_CAN_FIT, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle,
-    MEMBER_READS_Y_GIVEN, MEMBER_CAN_SAMPLE_WEIGHT,
+    MEMBER_READS_Y_GIVEN, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_MULTI_OUTPUT,
 )
 from bindings.member_given_y_unpack import member_given_y
 
@@ -814,17 +814,36 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
         run.y_dtype = MEMBER_I32
     elif yv is not None:
         var target = PythonObject(None)
+        # THE 2-D y OF A REGRESSOR (lane w3f3-k; layout 4): a kind that takes
+        # a multi-output target (a search whose every candidate does, as
+        # scikit-learn's KNeighborsRegressor and the multi-output members do)
+        # reads rows x outputs float32 words, admitted once as the target
+        # check admits one column (real, finite, C order; the target check's
+        # NaN words). Before, every such fit refused "currently requires one
+        # target" here. A one-column y keeps the target check (raveled).
+        var y_out = 1
+        var two_d = ((kind_mask & MEMBER_CAN_MULTI_OUTPUT) != 0 and msel_is_array(yv, context)
+                     and Int(py=yv.ndim) == 2 and Int(py=yv.shape[1]) > 1)
         try:
-            target = classical_check_y(yv, rows, classical_estimator_name(est), member_context)
+            if two_d:
+                var admitted_y = admit_f32(yv, 2, "y", member_context, as_array=True)
+                target = admitted_y.array
+                y_out = admitted_y.cols
+            else:
+                target = classical_check_y(yv, rows, classical_estimator_name(est), member_context)
         except error:
             # the target check's words, raised by every fit of a search
-            raise Error(_fit_words(est, fields, String(error), context, b))
+            var words = String(error)
+            if two_d and words == "Input y contains NaN or infinity":
+                words = "Input y contains NaN or infinity (" + classical_estimator_name(est) + ")."
+            raise Error(_fit_words(est, fields, words, context, b))
         _ = py_call(pins.append, target)
         run.y = msel_addr(target)
+        run.y_cols = y_out
         if (kind_mask & MEMBER_READS_Y_GIVEN) != 0:
             # THE GIVEN y (lane mf-tail5): y's own words (a view; `yv` lives
             # to PACK), for a kind whose stratified splitter codes them.
-            run.given = member_given_y(yv, rows, 1, context["array_class"])
+            run.given = member_given_y(yv, rows, y_out, context["array_class"])
     # THE PIN RULE: one reference on X's own object for the fit, taken with
     # the interpreter held; what the fit's cache did not take comes back.
     if run.scope >= 0:
