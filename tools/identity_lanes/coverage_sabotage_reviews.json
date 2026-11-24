@@ -113,7 +113,7 @@
    "product_check": "bindings/msel_split_plan_run.mojo:884-889, MSEL_FILL_INDEXED (LeavePOut): msel_count_mask_u8 of the mask msel_mask_from_indices_u8 just wrote must equal the split's test size, else 'a split's test rows are not distinct'.",
    "why_fault_reaches_check": "LeavePOut(2).split(Xs[:9]) (tools/identity_lanes/metrics.py:259) fills its splits through the CPU model-selection helper table published by the core host; MH_MASK_FROM_INDICES_U8 runs core/hotpath_impl.mojo mask_from_indices_u8, where the patch flips the low bit of every mask byte after the set, so the 2 test rows read 0 and the 7 others 1: count 7 != 2, refused by name at the first split.",
    "error_match": "RuntimeError: mojolearn: a split's test rows are not distinct",
-   "patch_sha256": "a3f35e27b97dbdbac6f1a3ae0408c57a2c2d653223677e61071ea977dce0c22e"
+   "patch_sha256": "45e27f93d1e3d83e8e7f4e0ada1598f20b27bb058b0077bf0d43425c83c4930e"
   }
  },
  "coverage-core-scaler_fit_impl": {
