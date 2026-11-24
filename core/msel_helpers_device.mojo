@@ -24,7 +24,7 @@ from core.msel_entry_table import (
     MSEL_HELPERS_ABI, MH_OP_COUNT,
     MH_ARANGE_I64, MH_COUNT_MASK_U8, MH_SELECT_MASK_U8_I64, MH_MASK_FROM_INDICES_U8, MH_LEAVE_RANGE_I64,
     MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32,
-    MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_FREE,
+    MH_STORE_FREE,
     MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32,
     MH_STORE_PUT, MH_STORE_TAKE_ROWS,
     MH_FIRST_SEEN_RES, MH_STRAT_FOLD_ASSIGN_RES, MH_SELECT_FOLDS_RES, MH_FOLD_IDS_RES,
@@ -323,24 +323,24 @@ def msel_first_seen_res_device_run(codes_id: Int, rows: Int, kk: Int, na: Int, r
     return m
 
 
-def msel_strat_fold_assign_res_device_run(codes_id: Int, rows: Int, kk: Int, K: Int, rank: Int, aa: Int, pa: Int,
-                                          ca: Int, sa: Int) raises -> Int:
+def msel_strat_fold_assign_res_device_run(codes_id: Int, rows: Int, kk: Int, K: Int, width: Int, rank: Int, aa: Int,
+                                          pa: Int, ca: Int, sa: Int) raises -> Int:
     """MH_STRAT_FOLD_ASSIGN_RES on the device: rank[codes] and the
     assignment on the device into a new fold block (returned, never
     downloaded), the n_folds fold sizes down."""
     _res_dims(rows, kk)
-    if K < 1 or aa == 0 or ca == 0 or sa == 0:
+    if K < 1 or aa == 0 or ca == 0 or sa == 0 or (rank != 0 and width < 1):
         raise Error("strat_fold_assign_i32: n_folds >= 1 and non-null tables")
     var ctx = process_ctx[MSEL_CONTEXT_SLOT]()
     var store = msel_store()
     comptime if MSEL_HPDEV_FOLDS:
-        if rows <= HPD_MAX_N and K <= HPD_MAX_N and kk * K <= MSEL_HPDEV_MAX_TABLE:
+        if rows <= HPD_MAX_N and K <= HPD_MAX_N and width <= HPD_MAX_N and kk * K <= MSEL_HPDEV_MAX_TABLE:
             var made = store[].alloc(ctx, 4 * rows)
             var ok = False
             try:
                 var codes = store[].address(codes_id, 4 * rows)
                 var dev_folds = store[].address(made, 4 * rows)
-                ok = device_strat_fold_assign_res(ctx, codes, rank, rows, kk, K, aa, pa, ca, dev_folds, sa)
+                ok = device_strat_fold_assign_res(ctx, codes, rank, width, rows, kk, K, aa, pa, ca, dev_folds, sa)
             except problem:
                 store[].free(ctx, made)
                 raise problem^
@@ -352,7 +352,7 @@ def msel_strat_fold_assign_res_device_run(codes_id: Int, rows: Int, kk: Int, K: 
     var held = _res_words(ctx, codes_id, rows)  # cpu-route: no device twin for this call (build, bound or refusal words)
     var enc = List[Int32](length=rows, fill=0)
     if rank != 0:
-        _ = msel_gather_host_run(0, rank, kk, Int(held.unsafe_ptr()), rows, Int(enc.unsafe_ptr()))
+        _ = msel_gather_host_run(0, rank, width, Int(held.unsafe_ptr()), rows, Int(enc.unsafe_ptr()))
     else:
         enc = held.copy()
     var folds = List[Int32](length=rows, fill=0)
@@ -443,13 +443,6 @@ def msel_helpers_device_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     if op == MH_GATHER_I32:
         return msel_gather_device_run(0, msel_word(aa, 0), msel_word(pp, 0), msel_word(aa, 1), msel_word(pp, 1),
                                       msel_word(aa, 2))
-    if op == MH_FIRST_SEEN_I32:
-        return first_seen_i32_device_run(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1), msel_word(aa, 1),
-                                         msel_word(aa, 2))
-    if op == MH_STRAT_FOLD_ASSIGN_I32:
-        return strat_fold_assign_i32_device_run(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1),
-                                                msel_word(pp, 2), msel_word(aa, 1), msel_word(aa, 2),
-                                                msel_word(aa, 3), msel_word(aa, 4))
     if op == MH_STORE_FREE:
         return msel_store_free_device_run(msel_word(pp, 0))
     if op == MH_PROBA_COLUMN:
@@ -471,8 +464,9 @@ def msel_helpers_device_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
                                               msel_word(aa, 0), msel_word(aa, 1))
     if op == MH_STRAT_FOLD_ASSIGN_RES:
         return msel_strat_fold_assign_res_device_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
-                                                     msel_word(pp, 3), msel_word(aa, 0), msel_word(aa, 1),
-                                                     msel_word(aa, 2), msel_word(aa, 3), msel_word(aa, 4))
+                                                     msel_word(pp, 3), msel_word(pp, 4), msel_word(aa, 0),
+                                                     msel_word(aa, 1), msel_word(aa, 2), msel_word(aa, 3),
+                                                     msel_word(aa, 4))
     if op == MH_SELECT_FOLDS_RES:
         return msel_select_folds_res_device_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
                                                 msel_word(aa, 0), msel_word(aa, 1), msel_word(aa, 2))

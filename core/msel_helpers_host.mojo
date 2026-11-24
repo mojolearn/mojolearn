@@ -22,7 +22,7 @@ from core.msel_entry_table import (
     MSEL_HELPERS_ABI, MH_OP_COUNT,
     MH_ARANGE_I64, MH_COUNT_MASK_U8, MH_SELECT_MASK_U8_I64, MH_MASK_FROM_INDICES_U8, MH_LEAVE_RANGE_I64,
     MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32,
-    MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_FREE,
+    MH_STORE_FREE,
     MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32,
     MH_STORE_PUT, MH_STORE_TAKE_ROWS,
     MH_FIRST_SEEN_RES, MH_STRAT_FOLD_ASSIGN_RES, MH_SELECT_FOLDS_RES, MH_FOLD_IDS_RES,
@@ -31,7 +31,7 @@ from core.hotpath_impl import (
     arange_i64, count_mask_u8, fold_ids, leave_range_i64, mask_from_indices_u8,
     select_fold_i64, select_mask_u8_i64,
 )
-from core.hotpath_impl_rows import bincount_i64, first_seen_i32, first_seen_rank_i32, strat_fold_assign_i32
+from core.hotpath_impl_rows import bincount_i64, first_seen_rank_i32, strat_fold_assign_i32
 from core.labels_native_api import LabelsGatherRequest
 from core.labels_native_host import LabelsHostKernels
 from core.msel_convert import MSEL_F32, MSEL_F64, MSEL_I64, msel_is_int, msel_valid_code
@@ -162,13 +162,13 @@ def msel_first_seen_res_host_run(codes_id: Int, rows: Int, kk: Int, na: Int, ra:
     return first_seen_rank_i32(codes, rows, kk, na, ra)
 
 
-def msel_strat_fold_assign_res_host_run(codes_id: Int, rows: Int, kk: Int, K: Int, rank: Int, aa: Int, pa: Int,
-                                        ca: Int, sa: Int) raises -> Int:
+def msel_strat_fold_assign_res_host_run(codes_id: Int, rows: Int, kk: Int, K: Int, width: Int, rank: Int, aa: Int,
+                                        pa: Int, ca: Int, sa: Int) raises -> Int:
     """MH_STRAT_FOLD_ASSIGN_RES: `strat_fold_assign_i32` over rank[codes]
     (the stored codes as they are when `rank` is null) into a new fold
     block, whose id is returned; the n_folds fold sizes to `sa`."""
     _res_dims(rows, kk)
-    if K < 1 or aa == 0 or ca == 0 or sa == 0:
+    if K < 1 or aa == 0 or ca == 0 or sa == 0 or (rank != 0 and width < 1):
         raise Error("strat_fold_assign_i32: n_folds >= 1 and non-null tables")
     var store = MSEL_HOST_STORE.get_or_create_ptr()
     var codes = Int(store[].ptr(codes_id, 4 * rows))
@@ -177,7 +177,7 @@ def msel_strat_fold_assign_res_host_run(codes_id: Int, rows: Int, kk: Int, K: In
     if rank != 0:
         enc = List[Int32](length=rows, fill=0)
         enc_at = Int(enc.unsafe_ptr())
-        _ = msel_gather_host_run(0, rank, kk, codes, rows, enc_at)
+        _ = msel_gather_host_run(0, rank, width, codes, rows, enc_at)
     var folds_id = store[].alloc(4 * rows)
     try:
         var folds = Int(store[].ptr(folds_id, 4 * rows))
@@ -241,12 +241,6 @@ def msel_helpers_host_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     if op == MH_GATHER_I32:
         return msel_gather_host_run(0, msel_word(aa, 0), msel_word(pp, 0), msel_word(aa, 1), msel_word(pp, 1),
                                     msel_word(aa, 2))
-    if op == MH_FIRST_SEEN_I32:
-        return first_seen_i32(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1), msel_word(aa, 1),
-                              msel_word(aa, 2))
-    if op == MH_STRAT_FOLD_ASSIGN_I32:
-        return strat_fold_assign_i32(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
-                                     msel_word(aa, 1), msel_word(aa, 2), msel_word(aa, 3), msel_word(aa, 4))
     if op == MH_STORE_FREE:
         MSEL_HOST_STORE.get_or_create_ptr()[].free(msel_word(pp, 0))
         return 0
@@ -269,8 +263,9 @@ def msel_helpers_host_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
                                             msel_word(aa, 1))
     if op == MH_STRAT_FOLD_ASSIGN_RES:
         return msel_strat_fold_assign_res_host_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
-                                                   msel_word(pp, 3), msel_word(aa, 0), msel_word(aa, 1),
-                                                   msel_word(aa, 2), msel_word(aa, 3), msel_word(aa, 4))
+                                                   msel_word(pp, 3), msel_word(pp, 4), msel_word(aa, 0),
+                                                   msel_word(aa, 1), msel_word(aa, 2), msel_word(aa, 3),
+                                                   msel_word(aa, 4))
     if op == MH_SELECT_FOLDS_RES:
         return msel_select_folds_res_host_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2), msel_word(aa, 0),
                                               msel_word(aa, 1), msel_word(aa, 2))

@@ -1482,12 +1482,12 @@ def device_strat_fold_assign_i32(
 
 
 def device_strat_fold_assign_res(
-    ctx: DeviceContext, codes: Int, rank_addr: Int, n: Int, k: Int, n_folds: Int, alloc_addr: Int,
+    ctx: DeviceContext, codes: Int, rank_addr: Int, width: Int, n: Int, k: Int, n_folds: Int, alloc_addr: Int,
     perms_addr: Int, counts_addr: Int, fold_dev: Int, sizes_addr: Int,
 ) raises -> Bool:
     """`strat_fold_assign_i32` over a stored code block (lane vdf-scope-split):
     the n int32 sorted-order codes at DEVICE address `codes` are renumbered
-    on the device by the k-word host rank table at `rank_addr`
+    on the device by the `width`-word host rank table at `rank_addr`
     (rank_of[code], the first-seen position; null: the codes are already in
     first-seen order), then assigned (`device_strat_fold_assign_on`) into
     the n-word device block `fold_dev`, never downloaded, with the n_folds
@@ -1496,13 +1496,13 @@ def device_strat_fold_assign_res(
     if rank_addr == 0:
         return device_strat_fold_assign_on(ctx, codes, n, k, n_folds, alloc_addr, perms_addr, counts_addr, 0,
                                            fold_dev, sizes_addr)
-    var d_rank = ctx.enqueue_create_buffer[DType.int32](k)
+    var d_rank = ctx.enqueue_create_buffer[DType.int32](width)
     var d_enc = ctx.enqueue_create_buffer[DType.int32](n)
     var d_status = ctx.enqueue_create_buffer[DType.int32](2)
     enqueue_fill(ctx, d_status, Int32(0))
     ctx.enqueue_copy(dst_buf=d_rank, src_ptr=_I32(unsafe_from_address=rank_addr))
     ctx.enqueue_function[_gather_i32_kernel](
-        d_rank.unsafe_ptr(), Int32(k), _I32(unsafe_from_address=codes), Int32(n), d_enc.unsafe_ptr(),
+        d_rank.unsafe_ptr(), Int32(width), _I32(unsafe_from_address=codes), Int32(n), d_enc.unsafe_ptr(),
         d_status.unsafe_ptr(), grid_dim=_blocks(n), block_dim=HPD_TPB,
     )
     var ok = _read_status(ctx, d_status, 0) == 0

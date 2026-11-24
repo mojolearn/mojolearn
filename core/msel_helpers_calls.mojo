@@ -17,7 +17,7 @@ from core.msel_entry_table import (
     MselEntryKey, msel_table_entry, MSEL_HELPERS_ABI, MH_OP_COUNT,
     MH_ARANGE_I64, MH_COUNT_MASK_U8, MH_SELECT_MASK_U8_I64, MH_MASK_FROM_INDICES_U8, MH_LEAVE_RANGE_I64,
     MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32,
-    MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_FREE,
+    MH_STORE_FREE,
     MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32,
     MH_STORE_PUT, MH_STORE_TAKE_ROWS,
     MH_FIRST_SEEN_RES, MH_STRAT_FOLD_ASSIGN_RES, MH_SELECT_FOLDS_RES, MH_FOLD_IDS_RES,
@@ -117,24 +117,8 @@ def msel_gather_i32(entry: EntryRef, table: Int, n_table: Int, codes: Int, n: In
 # msel_scatter_rows (operations 10, 13, 14, 16 retired, core/msel_entry_table.mojo).
 
 
-def msel_first_seen_i32(entry: EntryRef, codes: Int, n: Int, k: Int, enc: Int, counts: Int) raises -> Int:
-    """Renumber n int32 class codes in [0, k) by first appearance; returns
-    the number of classes present."""
-    var addrs: Array[Int, 3] = [codes, enc, counts]
-    var ints: Array[Int, 2] = [n, k]
-    return msel_helper(entry, MH_FIRST_SEEN_I32, addrs, ints)
-
-
-def msel_strat_fold_assign_i32(entry: EntryRef, enc: Int, n: Int, k: Int, n_folds: Int, alloc: Int,
-                               perms: Int, counts: Int, dst: Int) raises -> Int:
-    """StratifiedKFold's test fold of every row (`perms` 0: unshuffled)."""
-    var addrs: Array[Int, 5] = [enc, alloc, perms, counts, dst]
-    var ints: Array[Int, 3] = [n, k, n_folds]
-    return msel_helper(entry, MH_STRAT_FOLD_ASSIGN_I32, addrs, ints)
-
-
-
-
+# REMOVED (lane vdf-scope-split, 2026-11-24): msel_first_seen_i32 and msel_strat_fold_assign_i32
+# (operations 11, 12 retired; their stored-code forms are msel_first_seen_res / msel_strat_fold_assign_res).
 
 
 def msel_store_free(entry: EntryRef, id: Int) raises -> Int:
@@ -202,13 +186,14 @@ def msel_first_seen_res(entry: EntryRef, codes_id: Int, n: Int, k: Int, counts: 
 
 
 def msel_strat_fold_assign_res(entry: EntryRef, codes_id: Int, n: Int, k: Int, n_folds: Int, rank: Int,
-                               alloc: Int, perms: Int, counts: Int, sizes: Int) raises -> Int:
-    """StratifiedKFold's test fold of every row of the stored codes, renumbered
-    by `rank` (null: already first-seen), into a new stored fold block whose
-    id is returned (free it with `msel_store_free`); the n_folds int64 fold
-    sizes to `sizes`."""
+                               width: Int, alloc: Int, perms: Int, counts: Int, sizes: Int) raises -> Int:
+    """StratifiedKFold's test fold of every row of the stored codes over k
+    classes, the codes renumbered by the `width`-word table `rank` (null:
+    already first-seen), into a new stored fold block whose id is returned
+    (free it with `msel_store_free`); the n_folds int64 fold sizes to
+    `sizes`."""
     var addrs: Array[Int, 5] = [rank, alloc, perms, counts, sizes]
-    var ints: Array[Int, 4] = [codes_id, n, k, n_folds]
+    var ints: Array[Int, 5] = [codes_id, n, k, n_folds, width]
     return msel_helper(entry, MH_STRAT_FOLD_ASSIGN_RES, addrs, ints)
 
 
