@@ -2990,8 +2990,8 @@ _DART_INIT_ARGS = (
 _connect_native_init(DARTRegressor, _TREES, _OP.trees_dart_construct, _DART_INIT_ARGS, _TREES_CONTEXT)
 _connect_native_init(DARTClassifier, _TREES, _OP.trees_dart_construct, _DART_INIT_ARGS, _TREES_CONTEXT)
 _connect_native_init(TreeExplainer, _TREES, _OP.trees_explainer_init,
-                     ("model", "data", "feature_perturbation", "model_output", "numeric_mode"), _TREES_CONTEXT)
+                     ("model", "data", "feature_perturbation", "model_output", "numeric_mode", "device"), _TREES_CONTEXT)
 _connect_native_init(KernelExplainer, _TREES, _OP.trees_agnostic_kernel_init,
-                     ("model", "data", "random_state", "link", "numeric_mode"), _TREES_CONTEXT)
+                     ("model", "data", "random_state", "link", "numeric_mode", "device"), _TREES_CONTEXT)
 _connect_native_init(PermutationExplainer, _TREES, _OP.trees_agnostic_permutation_init,
-                     ("model", "data", "random_state", None, "numeric_mode"), _TREES_CONTEXT)
+                     ("model", "data", "random_state", None, "numeric_mode", "device"), _TREES_CONTEXT)
