@@ -45,7 +45,7 @@ shards). Their two `_OFF` build arms (`MOJOLEARN_MSEL_MEMBER_UNITS_OFF`, `MOJOLE
 | cross_val_score / cross_validate / GridSearchCV of Ridge, LinearRegression (n_jobs 1 and -1, KFold no shuffle, TimeSeriesSplit) | `test_proving_model_selection.py` cases `cvs_ridge_default`, `cvs_linear_regression_n_jobs`, `cv_ridge_kfold_and_time_series` | ma-core (rounds 1-2) |
 | named scorers (neg_mean_squared_error; accuracy, f1_macro, neg_log_loss with train scores; f1 on labels {1, 2}) | cases `cvs_ridge_neg_mean_squared_error`, `cv_logistic_named_scorers`, `cvs_logistic_f1_labels_1_2`, `cvs_logistic_neg_log_loss` | ma-core (rounds 4, 6) |
 | cross_val_predict Ridge / LogisticRegression / predict_proba / SVC decision_function (2 and 4 classes), dtype included | cases `cvp_ridge`, `cvp_logistic`, `cvp_svc_decision_function` | ma-core (rounds 4, 6) |
-| error_score=0.5 with a failing candidate | case `cvs_error_score` (+ all 0.5 asserted) | ma-core (round 4) |
+| error_score=0.5 with a failing candidate | case `cvs_error_score` (+ the failing candidate's splits 0.5 asserted) | ma-core (round 4) |
 | GridSearchCV best_estimator_ predict, `classes_` type, get_params | case `grid_ridge_and_logistic` | ma-core (round 4) |
 | fallback families (PCA, KMeans, LogisticRegression, k-NN, NearestCentroid) | case `cvs_member_fallback_families` | ma-core (rounds 2, 5) |
 | MLP / PLS / CCA cross_val_score, GridSearchCV(MLPRegressor) | case `cvs_neural_and_pls` | ma-core (round 3) |
