@@ -3106,6 +3106,11 @@ class MinCovDet(_DeviceDoor, _Base):
 
     _parameters = ("store_precision", "assume_centered", "support_fraction", "random_state", "numeric_mode", "device")
 
+    #: The member ABI mark (family 32 XDecomp, kind 14, EllipticEnvelope's kind without the envelope: no
+    #: contamination field, so its contamination word is 0; core/xdecomp_member.mojo): fit, export and import
+    #: only (no predict). RFE fits it and reads precision_ / location_ / covariance_ as importance_getter.
+    _mojolearn_member = (32, 14)
+
     def __init__(self, *, store_precision=True, assume_centered=False, support_fraction=None, random_state=None,
                  numeric_mode=None, device=None):
         if device is not None:

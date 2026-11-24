@@ -1513,7 +1513,10 @@ def _fit_mcd(slot: _Slot, call: _Call) raises:
     var kit = _kit(call)
     try:
         var x = kit.borrow(call[].x.data, n, p)
-        var fit = mcd_fit_run(kit, x, h, Int(slot[].words[2]), slot[].words[3] != 0.0, True, slot[].words[4])
+        # words[4]: EllipticEnvelope's contamination, in (0, 0.5]; 0 is MinCovDet (lane w3f3-f: no envelope, no
+        # offset_, as the public door's `envelope` False)
+        var fit = mcd_fit_run(kit, x, h, Int(slot[].words[2]), slot[].words[3] != 0.0, slot[].words[4] != 0.0,
+                              slot[].words[4])
         slot[].blocks.append(_kit_take(kit, fit.loc))
         slot[].blocks.append(_kit_take(kit, fit.precision))
         slot[].blocks.append(_kit_take(kit, fit.raw_loc))
@@ -2684,6 +2687,10 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
             # MEMBER_CAN_TEST_ROWS (see the Isomap / LLE section)
             return mask
         if kind == XDECOMP_KIND_ENVELOPE:
+            if held[].words[4] == 0.0:
+                # MinCovDet (lane w3f3-f; contamination word 0): fit, export and import only. scikit-learn's
+                # MinCovDet has no predict, decision_function or score_samples, and its fit(X, y=None) ignores y.
+                return MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_IGNORES_Y
             return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE_SAMPLES
                     | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
         if _is_rp(kind):
@@ -2786,6 +2793,12 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
             _fit_ipca(slot, call)
     elif kind == XDECOMP_KIND_ENVELOPE and (operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_DECISION
             or operation == MEMBER_OP_SCORE_SAMPLES):
+        if slot[].words[4] == 0.0:
+            # MinCovDet (contamination word 0): scikit-learn's own failure, the class has no such method
+            raise Error("AttributeError: 'MinCovDet' object has no attribute '" + (
+                String("predict") if operation == MEMBER_OP_PREDICT else (
+                    String("decision_function") if operation == MEMBER_OP_DECISION else String("score_samples")))
+                + "'")
         _query_mcd(slot, call, operation)
     elif kind == XDECOMP_KIND_ENVELOPE and (operation == MEMBER_OP_TRANSFORM
             or operation == MEMBER_OP_INVERSE_TRANSFORM):
