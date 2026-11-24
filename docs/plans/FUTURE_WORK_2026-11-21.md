@@ -83,7 +83,8 @@ docs. Work:
 
 ## 4. Owed small items (not projects)
 
-- A/B `abb1b` never ran (`mcd-lockstep-off`, `sgd-ps-preload`).
+- ~~A/B `abb1b` never ran (`mcd-lockstep-off`, `sgd-ps-preload`).~~ Both timed in the 2026-11-24 A/B jobs and deleted
+  (docs/TOMBSTONES.md).
 - Arm batch b2: `fast-vendor-math` fails to compile on sm_89 (twice); b3 never built.
 - Call-profile report for long-row profile nvc1-0005 (report phase failed rc=8 after a capped nsys pass): run
   `tools/ops/call_profile.py report` by hand and fix the tool so a capped pass still writes the report.
