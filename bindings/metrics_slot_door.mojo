@@ -34,7 +34,8 @@ from core.entry_table import EntryRef, entry_ref_unresolved
 from core.prep_entry_table import PrepEntryKey, xp_transport_ref, xp_transport_call
 from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS
 from bindings.py_balanced import py_item, py_type, py_call
-from bindings.classical_arrays_door import classical_address
+from bindings.classical_arrays_door import classical_address, classical_same_buffer
+from bindings.arena_prog_run import metric_input_temp, metric_input_source
 from bindings.metrics_keys_unpack import metrics_keys
 from bindings.x_prep_native_owner_door import XprepResident, xprep_resident, xprep_resident_none
 from bindings.x_prep_native_inputs_door import _rows_fields
@@ -105,6 +106,22 @@ struct McSlots(Movable):
         var size = Int(py=value.size)
         if not self.resident.keeps(False, size):
             return -1  # outside resident() or below its floor: no address read
+        return self.slot_words(binding, value, Int(py=classical_address(value)), size)
+
+    def slot_from(mut self, binding: PythonObject, value: PythonObject, args: PythonObject, argument: Int,
+                  temp: Bool) raises -> Int:
+        """`slot` of an input the door marked (lane vdf-xm-wire2): a per-call
+        temporary (`temp`: codes, flags) is never kept resident; one
+        admitted from `args[argument]` is kept only when it reads that
+        argument's own buffer (a converted copy is a temporary). The compare
+        runs only inside a scope at the floor; -1: the call uploads it."""
+        if temp:
+            return -1
+        var size = Int(py=value.size)
+        if not self.resident.keeps(False, size):
+            return -1  # outside resident() or below its floor: no address read
+        if argument >= 0 and not classical_same_buffer(args[argument], value):
+            return -1
         return self.slot_words(binding, value, Int(py=classical_address(value)), size)
 
     def slot_words(mut self, binding: PythonObject, owner: PythonObject, address: Int, words: Int) raises -> Int:
@@ -242,18 +259,22 @@ def mc_slots_call(binding: PythonObject, op: Int, addrs: List[Int], slots: List[
 
 
 def mc_slot_inputs(binding: PythonObject, op: Int, values: List[PythonObject], ints: List[Int],
-                   floats: List[Float64], outs: List[Int], context: PythonObject) raises -> Optional[PythonObject]:
+                   floats: List[Float64], outs: List[Int], args: PythonObject, temps: UInt64, src: UInt64,
+                   context: PythonObject) raises -> Optional[PythonObject]:
     """The device-input form of one entry call whose inputs are the admitted
     host arrays `values` (C-contiguous float32 / int32): run when at least
     one is resident in the active `resident()` scope (read in place, never
     uploaded again), else None and the caller runs its by-name entry (the
-    old route, unchanged)."""
+    old route, unchanged). `temps` (bit i) and `src` (the argument of `args`
+    value i was admitted from; bindings/arena_prog_run.mojo
+    `metric_source_word`) mark the call's temporaries, never kept resident
+    (`McSlots.slot_from`; lane vdf-xm-wire2)."""
     var state = mc_slots_open(context)
     var slots = List[Int](capacity=len(values))
     var addrs = List[Int](capacity=len(values))
     var any = False
     for i in range(len(values)):  # small-loop(values: the inputs of one metric entry, at most 3)
-        var s = state.slot(binding, values[i])
+        var s = state.slot_from(binding, values[i], args, metric_input_source(src, i), metric_input_temp(temps, i))
         slots.append(s)
         addrs.append(Int(py=classical_address(values[i])))
         any = any or s >= 0

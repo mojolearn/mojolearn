@@ -75,6 +75,20 @@ def classical_address(value: PythonObject) raises -> PythonObject:
     return sequential_address(value)
 
 
+def classical_same_buffer(source: PythonObject, value: PythonObject) raises -> Bool:
+    """Whether the admitted `value` reads `source`'s own buffer (admission
+    made no copy): the same object, or the same data address. A source with
+    no buffer (a list, a scalar) answers False. The metric doors' residency
+    test (lane vdf-xm-wire2): only a caller's buffer is kept resident inside
+    `resident()`; a converted copy is a per-call temporary."""
+    if source is value:
+        return True
+    try:
+        return Int(py=classical_address(source)) == Int(py=classical_address(value))
+    except:
+        return False
+
+
 def classical_wrap_array(store: PythonObject, shape: PythonObject, typestr: String, order: String,
                          context: PythonObject) raises -> PythonObject:
     """A mojolearn Array owning `store`, an `array.array` of the dtype's store

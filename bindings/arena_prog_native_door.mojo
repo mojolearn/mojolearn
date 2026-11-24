@@ -30,7 +30,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.native_error_class import error_without_class
 from bindings.optimizer_public_words_unpack import optimizer_python_error, stash_python_error, PYTHON_ERROR_PENDING
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.classical_arrays_door import classical_address
+from bindings.classical_arrays_door import classical_address, classical_same_buffer
 from bindings.x_prep_native_owner_run import xprep_r3
 from bindings.x_prep_native_owner_door import xprep_address, XprepResident, xprep_resident_none, xprep_resident_of
 from bindings.x_prep_native_inputs_door import _values, _rows_fields, _dense_values
@@ -477,13 +477,7 @@ def metric_reads_source(src: UInt64, args: PythonObject, i: Int, value: PythonOb
     var a = metric_input_source(src, i)
     if a < 0:
         return True
-    var source = args[a]
-    if source is value:
-        return True
-    try:
-        return Int(py=classical_address(source)) == Int(py=classical_address(value))
-    except:
-        return False  # a source with no buffer (a list, a scalar): the input is the door's copy
+    return classical_same_buffer(args[a], value)
 
 
 def metrics_run_plan_slots(plan: MetricProgramPlan, inputs: List[PythonObject], given: List[Int], temps: UInt64,

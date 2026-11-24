@@ -24,7 +24,7 @@ from bindings.operation_names_mcls import (
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
-from bindings.arena_prog_run import MetricArenaOwner
+from bindings.arena_prog_run import MetricArenaOwner, metric_source_word
 from bindings.py_balanced import py_call, py_type, py_contains
 from bindings.classical_arrays_door import classical_address, classical_dtype_str
 from bindings.family_common_unpack import (
@@ -347,7 +347,8 @@ def _roc_auc(args: PythonObject, context: PythonObject) raises -> PythonObject:
     # (lane vdf-xm-kernels); the labels' codes are this door's host encode.
     var roc_values: List[PythonObject] = [encoded, scores]
     var roc_ints: List[Int] = [true.n]
-    var device = mc_slot_inputs(args[0], MS_ROC_AUC, roc_values, roc_ints, List[Float64](), List[Int](), context)
+    var device = mc_slot_inputs(args[0], MS_ROC_AUC, roc_values, roc_ints, List[Float64](), List[Int](), args, UInt64(1),
+                                 metric_source_word(1, 2), context)  # the encoded flags: a temporary (lane vdf-xm-wire2)
     if device:
         return family_call(mc_b().float, device.value())
     var result = family_array(Python.tuple(1), "<f4", context)
@@ -449,7 +450,8 @@ def _pr_curve(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var curve_ints: List[Int] = [n]
     var curve_outs: List[Int] = [Int(py=classical_address(precision)), Int(py=classical_address(recall)),
                                  Int(py=classical_address(thresholds))]
-    var device = mc_slot_inputs(args[0], MS_PR_CURVE, curve_values, curve_ints, List[Float64](), curve_outs, context)
+    var device = mc_slot_inputs(args[0], MS_PR_CURVE, curve_values, curve_ints, List[Float64](), curve_outs, args, UInt64(1),
+                                 metric_source_word(1, 2), context)  # the encoded flags: a temporary (lane vdf-xm-wire2)
     var size: Int
     if device:
         size = mc_int(device.value())

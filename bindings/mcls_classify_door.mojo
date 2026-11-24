@@ -28,7 +28,7 @@ from bindings.operation_names_mcls import (
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
-from bindings.arena_prog_run import MetricArenaOwner
+from bindings.arena_prog_run import MetricArenaOwner, metric_source_word
 from bindings.py_balanced import py_call, py_type, py_contains
 from bindings.classical_arrays_door import classical_address, classical_dtype_str, classical_is_array
 from bindings.classical_pandas_door import classical_admit_value
@@ -181,7 +181,9 @@ def _accuracy(args: PythonObject, context: PythonObject) raises -> PythonObject:
         # resident() inputs read in place (lane vdf-xm-kernels): raw int32 labels and the weights
         var w_values: List[PythonObject] = [yt, yp, w]
         var w_ints: List[Int] = [n]
-        var device = mc_slot_inputs(args[0], MS_ACCURACY_W, w_values, w_ints, List[Float64](), List[Int](), context)
+        var device = mc_slot_inputs(args[0], MS_ACCURACY_W, w_values, w_ints, List[Float64](), List[Int](), args, UInt64(0),
+                                    metric_source_word(0, 1) | metric_source_word(1, 2) | metric_source_word(2, 4),
+                                    context)
         if device:
             result = device.value()
         else:
@@ -194,7 +196,8 @@ def _accuracy(args: PythonObject, context: PythonObject) raises -> PythonObject:
     else:
         var a_values: List[PythonObject] = [yt, yp]
         var a_ints: List[Int] = [n]
-        var device = mc_slot_inputs(args[0], MS_ACCURACY, a_values, a_ints, List[Float64](), List[Int](), context)
+        var device = mc_slot_inputs(args[0], MS_ACCURACY, a_values, a_ints, List[Float64](), List[Int](), args, UInt64(0),
+                                    metric_source_word(0, 1) | metric_source_word(1, 2), context)
         if device:
             result = device.value()
         else:
