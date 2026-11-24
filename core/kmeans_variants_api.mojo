@@ -24,6 +24,12 @@ comptime VARIANTS_RELEASE = 9
 comptime VARIANTS_RESIDENT_QUERY = 10
 comptime VARIANTS_CAP_RESIDENT = 1
 comptime VARIANTS_CAP_DEVSCAN = 2
+#: THE FOLD X WORD (lane vdf-scope-cluster3, core/fold_x_device.mojo): the image's MiniBatchKMeans fit (unweighted),
+#: BisectingKMeans fit and predict and resident centers queries read X ONLY through an upload that takes a negative
+#: X word as an x_prep store slot (x_cluster/device_ops.mojo `put_addr`, x_cluster/minibatch_ptr.mojo
+#: `minibatch_entry_ptr_idn`, x_cluster/resident.mojo `xc_resident_query`): the identical device image. A `fast`
+#: build's zero-copy and host-list routes read host words, so it does not answer it.
+comptime VARIANTS_CAP_FOLD_X = 4
 
 
 @fieldwise_init

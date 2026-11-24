@@ -34,12 +34,21 @@ struct KMeansFoldStore(ImplicitlyCopyable, Movable):
     the device by `indices` beside X; -1 for unit weights. A fit or score
     with weights on a fold names it here (the request's host `weights`
     address is not read on a fold)."""
+    var host_weights: Bool
+    """THE DOOR'S WEIGHTED FOLD (lane vdf-scope-cluster3, 2026-11-24): True
+    when the fold's weights are the request's HOST `weights` address, the
+    fold's own rows already in fold order (an estimator door is handed
+    `sample_weight` of the fold's length), uploaded once by the fold entry
+    and tested finite there; `weights` (the slot) is then -1. False: the slot
+    of the whole vector of the base's rows, gathered by `indices`."""
 
-    def __init__(out self, base: Int = -1, rows: Int = 0, indices: Int = -1, weights: Int = -1):
+    def __init__(out self, base: Int = -1, rows: Int = 0, indices: Int = -1, weights: Int = -1,
+                 host_weights: Bool = False):
         self.base = base
         self.rows = rows
         self.indices = indices
         self.weights = weights
+        self.host_weights = host_weights
 
     def active(self) -> Bool:
         return self.base >= 0 and self.indices >= 0
@@ -161,13 +170,13 @@ def kmeans_native_dispatch[K: KMeansNativeKernels](operation: Int,
                 raise Error("KMeans native ABI: metadata takes no arguments")
             value = K.mode() if operation == KMEANS_MODE else K.capabilities()
         elif operation == KMEANS_FIT:
-            if na != 6 or np != 14 or nf != 2 or aa == 0 or pp == 0 or ff == 0:
-                raise Error("KMeans native ABI: fit requires 6 addresses, 14 integers and 2 floats")
+            if na != 6 or np != 15 or nf != 2 or aa == 0 or pp == 0 or ff == 0:
+                raise Error("KMeans native ABI: fit requires 6 addresses, 15 integers and 2 floats")
             if a[5] == 0:
                 raise Error("KMeans native ABI: missing fit output span")
             var answer = K.fit(KMeansFitRequest(a[0], a[1], a[2], a[3], a[4],
                 p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9] != 0,
-                f[0], f[1], KMeansFoldStore(p[10], p[11], p[12], p[13])))
+                f[0], f[1], KMeansFoldStore(p[10], p[11], p[12], p[13], p[14] != 0)))
             var dst = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=a[5])
             dst[0] = bitcast[DType.int64](answer.inertia)
             dst[1] = Int64(answer.iterations)
@@ -189,12 +198,12 @@ def kmeans_native_dispatch[K: KMeansNativeKernels](operation: Int,
             dst[0] = Int64(answer.finite)
             dst[1] = Int64(answer.range_error)
         elif operation == KMEANS_SCORE:
-            if na != 4 or np != 11 or nf != 0 or aa == 0 or pp == 0:
-                raise Error("KMeans native ABI: score requires 4 addresses and 11 integers")
+            if na != 4 or np != 12 or nf != 0 or aa == 0 or pp == 0:
+                raise Error("KMeans native ABI: score requires 4 addresses and 12 integers")
             if a[3] == 0:
                 raise Error("KMeans native ABI: missing score output span")
             var answer = K.score(KMeansScoreRequest(a[0], a[1], a[2], p[0], p[1], p[2], p[3], p[4],
-                p[5] != 0, p[6], KMeansFoldStore(p[7], p[8], p[9], p[10])))
+                p[5] != 0, p[6], KMeansFoldStore(p[7], p[8], p[9], p[10], p[11] != 0)))
             var dst = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=a[3])
             dst[0] = bitcast[DType.int64](answer.inertia)
             dst[1] = Int64(answer.finite)
@@ -229,9 +238,9 @@ struct KMeansNativeDriver(Copyable, Movable):
     def fit(self, r: KMeansFitRequest) raises -> KMeansFitResult:
         var words = List[Int64](length=9, fill=0)
         var a: Array[Int, 6] = [r.source, r.centers, r.labels, r.weights, r.distances, Int(words.unsafe_ptr())]
-        var p: Array[Int, 14] = [r.rows, r.features, r.clusters, r.weight_count, r.max_iter,
+        var p: Array[Int, 15] = [r.rows, r.features, r.clusters, r.weight_count, r.max_iter,
             r.seed, r.n_init, r.init, r.metric, Int(r.test_finite), r.fold.base, r.fold.rows, r.fold.indices,
-            r.fold.weights]
+            r.fold.weights, Int(r.fold.host_weights)]
         var f: Array[Float64, 2] = [r.tolerance, r.oversampling]
         _ = native_descriptor_call_fixed(self.entry, KMEANS_FIT, a, p, f)
         return KMeansFitResult(bitcast[DType.float64](words[0]), Int(words[1]),
@@ -250,8 +259,8 @@ struct KMeansNativeDriver(Copyable, Movable):
     def score(self, r: KMeansScoreRequest) raises -> KMeansScoreResult:
         var words = List[Int64](length=3, fill=0)
         var a: Array[Int, 4] = [r.source, r.centers, r.weights, Int(words.unsafe_ptr())]
-        var p: Array[Int, 11] = [r.rows, r.features, r.clusters, r.weight_count, r.metric, Int(r.test_finite),
-            r.handle, r.fold.base, r.fold.rows, r.fold.indices, r.fold.weights]
+        var p: Array[Int, 12] = [r.rows, r.features, r.clusters, r.weight_count, r.metric, Int(r.test_finite),
+            r.handle, r.fold.base, r.fold.rows, r.fold.indices, r.fold.weights, Int(r.fold.host_weights)]
         var f: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, KMEANS_SCORE, a, p, f)
         return KMeansScoreResult(bitcast[DType.float64](words[0]), Int(words[1]), Int(words[2]))

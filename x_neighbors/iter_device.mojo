@@ -73,6 +73,7 @@ from x_neighbors.graph_dev import pr_iterate_gpu
 from x_neighbors.items import FP, IP, absdiff_sum_item, xn_fold_blocks, _sub, _add, knn_sq_item, knn_impute_finish
 from x_neighbors.items import knn_impute_tie_mean_item, knn_impute_tie_mean_listed
 from x_neighbors.items import XN_TREE, xn_tree_slot
+from core.fold_x_device import fold_x_fill
 from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
 from x_neighbors.device_ops import (
@@ -2273,7 +2274,10 @@ def _up_direct(ctx: DeviceContext, addr: Int, count: Int) raises -> DeviceBuffer
     pointer by the device copy engine (no host-thread staging)."""
     var buf = ctx.enqueue_create_buffer[DType.float32](max(count, 1))
     if count > 0:
-        ctx.enqueue_copy(dst_buf=buf, src_ptr=FP(unsafe_from_address=addr))
+        if addr < 0:
+            fold_x_fill(ctx, buf, addr, count)  # THE FOLD X WORD (as device_ops `_buf`)
+        else:
+            ctx.enqueue_copy(dst_buf=buf, src_ptr=FP(unsafe_from_address=addr))
     return buf^
 
 

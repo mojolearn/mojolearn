@@ -36,28 +36,14 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.device_store import DeviceStore
 from core.shared_slot import SharedSlot
+# The numbering lives in core/fold_x_word.mojo (no device import; lane vdf-scope-cluster3).
+from core.fold_x_word import fold_x_slot
 
 comptime _FOLD_X_STORE_NAME = (
     "MojolearnXPrepStoreIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXPrepStoreFastV2"
 )
 #: x_prep/device.mojo `X_PREP_STORE` (same name, same layout word).
 comptime FOLD_X_STORE = SharedSlot[DeviceStore, _FOLD_X_STORE_NAME, 2]
-
-#: `fold_x_slot` of a host address word.
-comptime FOLD_X_NONE = -1
-
-
-def fold_x_word(slot: Int) -> Int:
-    """The X address word naming store slot `slot` (negative)."""
-    return -(slot + 1)
-
-
-def fold_x_slot(x_word: Int) -> Int:
-    """The store slot a negative X address word names, else FOLD_X_NONE."""
-    if x_word < 0:
-        return -x_word - 1
-    return FOLD_X_NONE
-
 
 def fold_x_fill(ctx: DeviceContext, d_x: DeviceBuffer[DType.float32], x_word: Int, words: Int) raises:
     """Fill the entry's device X: from the host words at `x_word` (the old

@@ -7,6 +7,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from core.fold_x_device import fold_x_fill
 from core.admitted_finite_status import enqueue_finite_word
 from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_var_item, row_argmax_item
 from x_neighbors.proba64_nc import softmax64_item
@@ -40,9 +41,16 @@ def _grid(count: Int) -> Int:
 
 
 def _buf(ctx: DeviceContext, addr: Int, count: Int, upload: Bool) raises -> DeviceBuffer[DType.float32]:
+    # THE FOLD X WORD (core/fold_x_device.mojo; lane vdf-scope-cluster3): a NEGATIVE `addr` names a slot of the
+    # x_prep store holding a model-selection fold's rows, taken on the device by the member
+    # (core/member_fold_x.mojo); the upload is then one device-to-device copy of its first `count` words on this
+    # stream, the same bytes as the host gather's upload. A host address is never negative.
     var buf = ctx.enqueue_create_buffer[DType.float32](count if count > 0 else 1)
     if upload and count > 0:
-        ctx.enqueue_copy(dst_buf=buf, src_ptr=FP(unsafe_from_address=addr))
+        if addr < 0:
+            fold_x_fill(ctx, buf, addr, count)
+        else:
+            ctx.enqueue_copy(dst_buf=buf, src_ptr=FP(unsafe_from_address=addr))
     return buf^
 
 
