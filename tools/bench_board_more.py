@@ -665,6 +665,65 @@ def _load(name):
     return mod
 
 
+# A/B LOOP MODE (lane ab-loop-mode, 2026-11-24; tools/ab_loop.py is the contract). When bench_board hands this race a
+# loop plan (environment key ab_loop.ENV), OUR arms take the plan's cap and pins through the estimator's public
+# parameters before construction, and every round's fit_loop_ is read after all of the round's clocks have closed.
+# Without a plan nothing here changes the command, a clock or the cell. classical2 has no lane the cap table marks
+# valid today, so a capped plan for one of its lanes is refused by name (build) instead of reaching a private route.
+LOOP_FAMILY = "classical2"
+_LOOP_MOD = []
+_LOOP_PLANS = {}
+
+
+def _ab_loop():
+    """tools/ab_loop.py, loaded once per process."""
+    if not _LOOP_MOD:
+        _LOOP_MOD.append(_load("ab_loop"))
+    return _LOOP_MOD[0]
+
+
+def loop_plan(lane, environ=None, family=LOOP_FAMILY):
+    """The race's loop plan (ab_loop.driver_plan), read once per process, family and lane; None: loop mode off.
+    ENVIRON (tests) is read directly and not cached. FAMILY: tools/bench_board_algos.py reuses these helpers."""
+    if environ is not None:
+        return _ab_loop().driver_plan(family, lane, environ=environ)
+    if (family, lane) not in _LOOP_PLANS:
+        _LOOP_PLANS[(family, lane)] = _ab_loop().driver_plan(family, lane)
+    return _LOOP_PLANS[(family, lane)]
+
+
+def loop_params(plan, params, ours):
+    """An arm's constructor parameters under the plan: for OUR arm with a plan, ab_loop.capped_params (a copy with
+    the cap and the pins; unchanged for a 'whole' plan); PARAMS itself for an opponent or without a plan."""
+    if plan is None or not ours:
+        return params
+    return _ab_loop().capped_params(plan, params)
+
+
+def loop_round(plan, model, fit_keywords=None):
+    """One round's loop record, read after every clock of the round has closed: the model's fit_loop_
+    (ab_loop.read_fit_loop) and the planned parameters as the fitted model's get_params() reports them
+    (FIT_KEYWORDS: a cap passed to fit(), as the call passed it)."""
+    plan = plan or {}
+    want = set(plan.get("pin") or {}) | ({plan["param"]} if plan.get("param") else set())
+    try:
+        got = model.get_params() if want and hasattr(model, "get_params") else {}
+    except Exception:  # noqa: BLE001  (a read-back never breaks a timing; a missing key reads '<absent>')
+        got = {}
+    effective = {k: got[k] for k in sorted(want) if k in got}
+    effective.update({k: v for k, v in (fit_keywords or {}).items() if k in want})
+    return dict(call=_ab_loop().read_fit_loop(model), effective=effective)
+
+
+def loop_cell(plan, rounds):
+    """result["arms"][arm]["loop_mode"] (ab_loop.cell_record) from the arm's [(round, loop_round record)]: round 0 is
+    the warm-up, the others the scored calls; the read-back is the last scored round's."""
+    scored = [rec for r, rec in rounds if r > 0]
+    warm = next((rec["call"] for r, rec in rounds if r == 0), None)
+    return _ab_loop().cell_record(plan, scored[-1]["effective"] if scored else {},
+                                  [rec["call"] for rec in scored], warm=warm)
+
+
 _SMALL_ROWS = []
 
 
@@ -1092,6 +1151,12 @@ def build(lane, arm, D, rec):
     if (lane, arm) in REFUSED:            # FAIRNESS FIX (2026-10-13 audit): see REFUSED
         raise RuntimeError("REFUSED: %s is not raced on %s: %s" % (arm, lane, REFUSED[(lane, arm)]))
     if arm in ("ours", "ours-fast"):
+        plan = loop_plan(lane)
+        if plan is not None and plan.get("mode") == "capped":
+            # A/B LOOP MODE: no classical2 lane builds its estimator from a parameter dict the cap could enter
+            raise RuntimeError("REFUSED: loop mode: classical2/%s has no constructor-parameter route for the cap "
+                               "%s=%s in this driver; tools/ab_loop_caps.tsv must mark it not valid, or the lane "
+                               "gets one" % (lane, plan.get("param"), plan.get("k")))
         return _build_ours(lane, D, rec, S)
     if arm == "sklearn-cpu":
         return _build_sklearn(lane, D, rec, S)
@@ -1853,6 +1918,8 @@ def worker(args):
     # how many consecutive calls the one scored run makes (20 under 10 ms, else 1); the warmup does not
     # decide (it carries start-up and kernel compilation)
     small = _small_rows()
+    # A/B LOOP MODE: the race's plan, read once in this process (None: off); our arm only
+    plan = loop_plan(args.lane) if args.arm in ("ours", "ours-fast") else None
     for line in sys.stdin:
         parts = line.split()
         if not parts:
@@ -1904,6 +1971,11 @@ def worker(args):
                 state_receipt = scored_receipt(last, runner) if r > 0 else None
                 fitted_readback = runner.fitted_readback()
                 route = _classical_route().classical_route(runner)   # after the clock; None for opponents
+                # A/B LOOP MODE: the fitted model's loop region and capped parameters, after every clock of the round
+                loop = None
+                if plan is not None:
+                    from bench_board_state import runner_model
+                    loop = loop_round(plan, runner_model(runner))
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
@@ -1912,7 +1984,7 @@ def worker(args):
             say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m, "state_receipt": state_receipt,
                  "scored_calls": calls_rec,
                  "iterations": fitted_readback["iterations"], "classical_route": route,
-                 "fitted_parameters": fitted_readback["parameters"],
+                 "fitted_parameters": fitted_readback["parameters"], "loop": loop,
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
                                "scope": "prepare-fit-consume" if whole_requested else "call-consume",
                                "dataset_load_included": False,
@@ -2281,6 +2353,7 @@ def race(args):
             json.dump(result, fh, indent=2, sort_keys=True, default=str)
         os.replace(out_json + ".tmp", out_json)
         return 3
+    loop_rounds = {}        # A/B LOOP MODE: arm -> [(round, loop record)], our arms under a plan only
     for r in range(args.rounds + 1):
         live = [a for a in arms if workers[a].alive]
         if not live:
@@ -2314,11 +2387,15 @@ def race(args):
                 result["arms"][arm].setdefault("fitted_parameters", []).append(msg.get("fitted_parameters"))
             if msg.get("classical_route") is not None:   # the route beside the time, read outside the clock
                 result["arms"][arm].setdefault("classical_routes", []).append(dict(msg["classical_route"], round=r))
+            if msg.get("loop") is not None:
+                loop_rounds.setdefault(arm, []).append((r, msg["loop"]))
             result["arms"][arm]["mem"].append(msg.get("mem"))
             print("MORE-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s%s%s"
                   % (lane, ds, arm, r, msg["ms"], msg["digest"],
                      _small_rows().line_suffix(msg.get("scored_calls")),
                      _classical_route().route_suffix(msg.get("classical_route"))), flush=True)
+    for arm, rounds in loop_rounds.items():   # A/B LOOP MODE: the cell's loop record, beside iteration_receipts
+        result["arms"][arm]["loop_mode"] = loop_cell(loop_plan(lane), rounds)
     outs = {}
     for arm in arms:
         w = workers[arm]
