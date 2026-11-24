@@ -119,15 +119,14 @@ from checks.numerics import (
     identical_sqrt,
 )
 from core.identity_trace import IdentityTrace
-from hdbscan.impl.detail.idn_switches import IDN_HDB_SOFT_LEAN
 from hdbscan.impl.detail.predict import (
-    _download_f32,
-    _upload_f32,
-    _upload_i32,
-    approximate_predict,
+    approximate_predict_device,
+    upload_queries,
 )
+from hdbscan.impl.detail.resident import HdbscanResident
 from hdbscan.impl.prediction_data import (
     PredictionData,
+    prediction_neighborhood,
     refuse_nonfinite_queries,
     refuse_soft_clustering_inputs,
 )
@@ -465,44 +464,52 @@ def soft_combine_kernel(
         )
 
 
-def _soft_pass(
+def soft_pass_device(
     ctx: DeviceContext,
     mut trace: IdentityTrace,
     mode: Int32,
-    rows: List[Float32],
+    mut rows_buf: DeviceBuffer[DType.float32],
     n_rows: Int,
-    n: Int,
-    x_host: List[Float32],
-    m: Int,
-    parents: List[Int32],
-    tree_lambdas: List[Float32],
-    pd: PredictionData,
-    min_mr_inds: List[Int32],
-    prediction_lambdas: List[Float32],
+    res: HdbscanResident,
+    mut inds_buf: DeviceBuffer[DType.int32],
+    mut pl_buf: DeviceBuffer[DType.float32],
     row0: Int,
+    out_address: Int,
     tpb: Int,
-) raises -> List[Float32]:
-    """Steps 1 to 6 of the module docstring for `n_rows` rows."""
-    var ns = pd.n_selected_clusters
-    var n_ex = pd.n_exemplars
+) raises:
+    """Steps 1 to 6 of the module docstring for `n_rows` rows ALREADY ON THE
+    DEVICE (`rows_buf`: the query rows, or a sub-buffer of the snapshot's
+    training rows), against the fitted snapshot `res` (lane vdf-misc4,
+    2026-11-24). `inds_buf` / `pl_buf` are `approximate_predict_device`'s
+    min_mr_indices and prediction_lambdas, read in place (one unread cell
+    each in the all-points mode). The `n_rows x n_selected` result is copied
+    once to the host `out_address`. Was: the exemplar rows gathered on the
+    host and, with the rows, the tree arrays and the two predict results,
+    uploaded per call (per batch); the two predict results came from a host
+    download. The kernels, their order and their inputs' bytes are the
+    same."""
+    var n = res.n
+    var ns = res.n_selected
+    var n_ex = res.n_exemplars
     var cells = n_rows * ns
     var blocks = (n_rows + tpb - 1) // tpb
-
-    # the exemplars as a dense array (`soft_clustering.cuh:65-75`, copy_rows)
-    var ex_host = List[Float32](capacity=n_ex * n)
-    for j in range(n_ex):
-        var r = Int(pd.exemplar_idx[j])
-        for f in range(n):
-            ex_host.append(x_host[r * n + f])
-
-    var rows_buf = _upload_f32(ctx, rows, n_rows * n)
-    var ex_buf = _upload_f32(ctx, ex_host, n_ex * n)
-    var off_buf = _upload_i32(ctx, pd.exemplar_label_offsets, ns + 1)
+    var ex_buf = res.ex.copy()
+    var off_buf = res.offsets.copy()
+    var par_buf = res.parents.copy()
+    var iic_buf = res.iic.copy()
+    var lam_buf = res.lambdas.copy()
+    var death_buf = res.deaths.copy()
+    var sel_buf = res.selected.copy()
     var row_norms = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var ex_norms = ctx.enqueue_create_buffer[DType.float32](n_ex)
+    var ex_norms = ctx.enqueue_create_buffer[DType.float32](max(n_ex, 1))
     var min_dist = ctx.enqueue_create_buffer[DType.float32](cells)
     var dist_mv = ctx.enqueue_create_buffer[DType.float32](cells)
-    ctx.synchronize()
+    var row_lambda = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var row_death = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var heights = ctx.enqueue_create_buffer[DType.float32](cells)
+    var outlier = ctx.enqueue_create_buffer[DType.float32](cells)
+    var prob = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var out = ctx.enqueue_create_buffer[DType.float32](cells)
     ctx.enqueue_function[soft_row_norm_kernel](
         rows_buf.unsafe_ptr(), Int32(n_rows), Int32(n), row_norms.unsafe_ptr(),
         grid_dim=(blocks, 1, 1), block_dim=(tpb, 1, 1),
@@ -511,124 +518,146 @@ def _soft_pass(
         ex_buf.unsafe_ptr(), Int32(n_ex), Int32(n), ex_norms.unsafe_ptr(),
         grid_dim=((n_ex + tpb - 1) // tpb, 1, 1), block_dim=(tpb, 1, 1),
     )
-    ctx.synchronize()
     ctx.enqueue_function[exemplar_min_dist_kernel](
         rows_buf.unsafe_ptr(), row_norms.unsafe_ptr(), ex_buf.unsafe_ptr(),
         ex_norms.unsafe_ptr(), off_buf.unsafe_ptr(), Int32(n_rows), Int32(n),
         Int32(ns), min_dist.unsafe_ptr(),
         grid_dim=(blocks, 1, 1), block_dim=(tpb, 1, 1),
     )
-    ctx.synchronize()
     ctx.enqueue_function[dist_membership_kernel](
         min_dist.unsafe_ptr(), Int32(n_rows), Int32(ns), dist_mv.unsafe_ptr(),
         grid_dim=(blocks, 1, 1), block_dim=(tpb, 1, 1),
     )
-    ctx.synchronize()
-
     # the tree
-    var n_edges = pd.n_edges
-    var par_buf = _upload_i32(ctx, parents, n_edges)
-    var iic_buf = _upload_i32(ctx, pd.index_into_children, n_edges + 1)
-    var lam_buf = _upload_f32(ctx, tree_lambdas, n_edges)
-    var death_buf = _upload_f32(ctx, pd.deaths, pd.n_clusters)
-    var sel_buf = _upload_i32(ctx, pd.selected_clusters, ns)
-    var nq_inds = len(min_mr_inds)
-    var inds_buf = _upload_i32(ctx, min_mr_inds, nq_inds)
-    var pl_buf = _upload_f32(ctx, prediction_lambdas, len(prediction_lambdas))
-    var row_lambda = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var row_death = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var heights = ctx.enqueue_create_buffer[DType.float32](cells)
-    var outlier = ctx.enqueue_create_buffer[DType.float32](cells)
-    var prob = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var out = ctx.enqueue_create_buffer[DType.float32](cells)
-    ctx.synchronize()
-    var soft_lean = False
-    comptime if IDN_HDB_SOFT_LEAN:
-        soft_lean = True
     ctx.enqueue_function[soft_row_prep_kernel](
         mode, inds_buf.unsafe_ptr(), pl_buf.unsafe_ptr(), par_buf.unsafe_ptr(),
         iic_buf.unsafe_ptr(), lam_buf.unsafe_ptr(), death_buf.unsafe_ptr(),
-        Int32(pd.n_leaves), Int32(row0), Int32(n_rows),
+        Int32(res.m), Int32(row0), Int32(n_rows),
         row_lambda.unsafe_ptr(), row_death.unsafe_ptr(),
         grid_dim=(blocks, 1, 1), block_dim=(tpb, 1, 1),
     )
-    if not soft_lean:
-        ctx.synchronize()
     ctx.enqueue_function[soft_merge_height_kernel](
         mode, inds_buf.unsafe_ptr(), par_buf.unsafe_ptr(), iic_buf.unsafe_ptr(),
         lam_buf.unsafe_ptr(), sel_buf.unsafe_ptr(), row_lambda.unsafe_ptr(),
         Int32(row0), Int32(n_rows), Int32(ns), heights.unsafe_ptr(),
         grid_dim=(blocks, 1, 1), block_dim=(tpb, 1, 1),
     )
-    if not soft_lean:
-        ctx.synchronize()
     ctx.enqueue_function[soft_outlier_kernel](
         mode, heights.unsafe_ptr(), row_death.unsafe_ptr(), Int32(n_rows),
         Int32(ns), outlier.unsafe_ptr(),
         grid_dim=(blocks, 1, 1), block_dim=(tpb, 1, 1),
     )
-    if not soft_lean:
-        ctx.synchronize()
     ctx.enqueue_function[soft_prob_kernel](
         mode, heights.unsafe_ptr(), row_lambda.unsafe_ptr(),
-        death_buf.unsafe_ptr(), sel_buf.unsafe_ptr(), Int32(pd.n_leaves),
+        death_buf.unsafe_ptr(), sel_buf.unsafe_ptr(), Int32(res.m),
         Int32(n_rows), Int32(ns), prob.unsafe_ptr(),
         grid_dim=(blocks, 1, 1), block_dim=(tpb, 1, 1),
     )
-    if not soft_lean:
-        ctx.synchronize()
     ctx.enqueue_function[soft_combine_kernel](
         mode, outlier.unsafe_ptr(), dist_mv.unsafe_ptr(), prob.unsafe_ptr(),
         Int32(n_rows), Int32(ns), out.unsafe_ptr(),
         grid_dim=(blocks, 1, 1), block_dim=(tpb, 1, 1),
     )
+    # the result, one copy and the one wait
+    var dst = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=out_address)
+    ctx.enqueue_copy(dst_ptr=dst, src_buf=out)
     ctx.synchronize()
-
-    # fam2-cluster, IDN_HDB_SOFT_LEAN: the four intermediates are read by
-    # the trace alone, so they stay on the device when no trace is written.
-    var h_dist_mv = List[Float32]()
-    var h_heights = List[Float32]()
-    var h_outlier = List[Float32]()
-    var h_prob = List[Float32]()
-    if trace.enabled or not soft_lean:
-        h_dist_mv = _download_f32(ctx, dist_mv, cells)
-        h_heights = _download_f32(ctx, heights, cells)
-        h_outlier = _download_f32(ctx, outlier, cells)
-        h_prob = _download_f32(ctx, prob, n_rows)
-    var h_out = _download_f32(ctx, out, cells)
-    if trace.enabled or not soft_lean:
-        trace.record_list_f32("hdbscan.soft.dist_membership", h_dist_mv)
-        trace.record_list_f32("hdbscan.soft.merge_heights", h_heights)
-        trace.record_list_f32("hdbscan.soft.outlier_membership", h_outlier)
-        trace.record_list_f32("hdbscan.soft.prob_in_some_cluster", h_prob)
-    trace.record_list_f32("hdbscan.soft.membership", h_out)
+    # The four intermediates are read by the trace alone.
+    if trace.enabled:
+        trace.record_device(ctx, "hdbscan.soft.dist_membership", dist_mv, cells)
+        trace.record_device(ctx, "hdbscan.soft.merge_heights", heights, cells)
+        trace.record_device(ctx, "hdbscan.soft.outlier_membership", outlier, cells)
+        trace.record_device(ctx, "hdbscan.soft.prob_in_some_cluster", prob, n_rows)
+        trace.record_device(ctx, "hdbscan.soft.membership", out, cells)
 
     # [[mojo-buffer-freed-at-last-use]]: every buffer outlives the queue.
-    _ = rows_buf^
     _ = ex_buf^
     _ = off_buf^
-    _ = row_norms^
-    _ = ex_norms^
-    _ = min_dist^
-    _ = dist_mv^
     _ = par_buf^
     _ = iic_buf^
     _ = lam_buf^
     _ = death_buf^
     _ = sel_buf^
-    _ = inds_buf^
-    _ = pl_buf^
+    _ = row_norms^
+    _ = ex_norms^
+    _ = min_dist^
+    _ = dist_mv^
     _ = row_lambda^
     _ = row_death^
     _ = heights^
     _ = outlier^
     _ = prob^
-    _ = h_dist_mv^
-    _ = h_heights^
-    _ = h_outlier^
-    _ = h_prob^
     _ = out^
-    return h_out^
+
+
+def membership_vector_snapshot(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    res: HdbscanResident,
+    queries_address: Int,
+    nq: Int,
+    min_samples: Int,
+    out_address: Int,
+    tpb: Int = SOFT_TPB,
+) raises:
+    """`soft_clustering.cuh:501-627` on a fitted snapshot (lane vdf-misc4):
+    the `nq` query rows at the host `queries_address` uploaded once,
+    `approximate_predict_device`, then `soft_pass_device` on the same query
+    buffer and the predict results in place; `nq x n_selected` to the host
+    `out_address`."""
+    var neighborhood = prediction_neighborhood(min_samples, res.m)
+    var q = upload_queries(ctx, queries_address, nq, res.n)
+    var near = approximate_predict_device(ctx, trace, res, q, nq, neighborhood, min_samples, tpb)
+    var inds = near.min_mr_indices.copy()
+    var lams = near.prediction_lambdas.copy()
+    soft_pass_device(ctx, trace, SOFT_MODE_PREDICT, q, nq, res, inds, lams, 0, out_address, tpb)
+    _ = inds^
+    _ = lams^
+    _ = near^
+    _ = q^
+
+
+def all_points_snapshot(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    res: HdbscanResident,
+    row0: Int,
+    n_rows: Int,
+    out_address: Int,
+    tpb: Int = SOFT_TPB,
+) raises:
+    """`soft_clustering.cuh:385-482` for training rows `row0 .. row0 +
+    n_rows - 1` on a fitted snapshot (lane vdf-misc4): the rows are read IN
+    PLACE, a sub-buffer of the snapshot's training rows (was: copied on the
+    host and uploaded per batch); `n_rows x n_selected` to `out_address`."""
+    if n_rows < 1 or row0 < 0 or row0 + n_rows > res.m:
+        raise Error(
+            "hdbscan.all_points_membership_vectors: rows " + String(row0)
+            + " + " + String(n_rows) + " are outside the " + String(res.m)
+            + " training rows; refused by name"
+        )
+    var rows = res.x.create_sub_buffer[DType.float32](row0 * res.n, n_rows * res.n)
+    var inds = ctx.enqueue_create_buffer[DType.int32](1)
+    var lams = ctx.enqueue_create_buffer[DType.float32](1)
+    soft_pass_device(ctx, trace, SOFT_MODE_ALL_POINTS, rows, n_rows, res, inds, lams, row0, out_address, tpb)
+    _ = rows^
+    _ = inds^
+    _ = lams^
+
+
+def _soft_snapshot(
+    ctx: DeviceContext, x_host: List[Float32], m: Int, n: Int, core: Int, labels: Int,
+    parents: List[Int32], tree_lambdas: List[Float32], pd: PredictionData,
+) raises -> HdbscanResident:
+    """The host lists of the per-call soft entries as a temporary snapshot
+    (already admitted by `refuse_soft_clustering_inputs`)."""
+    return HdbscanResident(
+        ctx, Int(x_host.unsafe_ptr()), m, n, core, labels, Int(parents.unsafe_ptr()),
+        Int(tree_lambdas.unsafe_ptr()), pd.n_edges, Int(pd.deaths.unsafe_ptr()), pd.n_clusters,
+        Int(pd.selected_clusters.unsafe_ptr()), pd.n_selected_clusters,
+        Int(pd.index_into_children.unsafe_ptr()), Int(pd.exemplar_idx.unsafe_ptr()), pd.n_exemplars,
+        Int(pd.exemplar_label_offsets.unsafe_ptr()),
+    )
 
 
 def membership_vector(
@@ -655,7 +684,10 @@ def membership_vector(
             "hdbscan.membership_vector: points_to_predict has no rows;"
             " refused by name"
         )
-    if len(queries) < n_prediction_points * n or len(x_host) < m * n:
+    if (
+        len(queries) < n_prediction_points * n or len(x_host) < m * n
+        or len(input_core_dists) < m or len(labels) < m
+    ):
         raise Error(
             "hdbscan.membership_vector: a buffer is shorter than its shape;"
             " refused by name"
@@ -671,16 +703,13 @@ def membership_vector(
         + String(pd.n_selected_clusters) + " n_exemplars="
         + String(pd.n_exemplars)
     )
-    # `:554-562` _compute_knn_and_nearest_neighbor, through approximate_predict
-    var near = approximate_predict(
-        ctx, trace, x_host, m, n, input_core_dists, labels, tree_lambdas, pd,
-        queries, n_prediction_points, min_samples, tpb,
-    )
-    return _soft_pass(
-        ctx, trace, SOFT_MODE_PREDICT, queries, n_prediction_points, n,
-        x_host, m, parents, tree_lambdas, pd, near.min_mr_indices,
-        near.prediction_lambdas, 0, tpb,
-    )
+    var res = _soft_snapshot(ctx, x_host, m, n, Int(input_core_dists.unsafe_ptr()), Int(labels.unsafe_ptr()),
+                             parents, tree_lambdas, pd)
+    var out = List[Float32](length=n_prediction_points * pd.n_selected_clusters, fill=Float32(0))
+    membership_vector_snapshot(ctx, trace, res, Int(queries.unsafe_ptr()), n_prediction_points, min_samples,
+                               Int(out.unsafe_ptr()), tpb)
+    _ = res^
+    return out^
 
 
 def all_points_membership_vectors(
@@ -720,11 +749,8 @@ def all_points_membership_vectors(
         + String(pd.n_selected_clusters) + " n_exemplars="
         + String(pd.n_exemplars)
     )
-    var rows = List[Float32](capacity=n_rows * n)
-    for i in range(n_rows * n):
-        rows.append(x_host[row0 * n + i])
-    return _soft_pass(
-        ctx, trace, SOFT_MODE_ALL_POINTS, rows, n_rows, n, x_host, m, parents,
-        tree_lambdas, pd, List[Int32](length=1, fill=Int32(0)),
-        List[Float32](length=1, fill=Float32(0.0)), row0, tpb,
-    )
+    var res = _soft_snapshot(ctx, x_host, m, n, 0, 0, parents, tree_lambdas, pd)
+    var out = List[Float32](length=n_rows * pd.n_selected_clusters, fill=Float32(0))
+    all_points_snapshot(ctx, trace, res, row0, n_rows, Int(out.unsafe_ptr()), tpb)
+    _ = res^
+    return out^

@@ -50,26 +50,18 @@ counts, same refusals, the distance refusal first."""
 
 # TOMBSTONE: MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF (old path: soft clustering downloads every intermediate; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 9f04fe0661.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_HDB_SOFT_LEAN = _IDN_HDB_ON
-"""Soft clustering: the four intermediates are downloaded only when a trace
-is being written (they are read by nothing else), and the five kernels run
-with one wait at the end instead of one each."""
+# IDN_HDB_SOFT_LEAN (always on) removed 2026-11-24 by lane vdf-misc4: the queries run one device body on a
+# fitted snapshot (hdbscan/impl/detail/resident.mojo); no switch is left to read.
 
 # TOMBSTONE: MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF (old path: host narrowing loop over nq * k indices; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 675c1e06ae.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_HDB_PREDICT_DEVICE_CAST = _IDN_HDB_ON
-"""approximate_predict: the k-NN's UInt32 indices are narrowed to Int32 by
-the fit's device kernel instead of a host loop over nq * k cells."""
+# IDN_HDB_PREDICT_DEVICE_CAST (always on) removed 2026-11-24 by lane vdf-misc4: the queries run one device body on a
+# fitted snapshot (hdbscan/impl/detail/resident.mojo); no switch is left to read.
 
 # TOMBSTONE: MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF (old path: per-element staging and waits in approximate_predict; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 6260abe71f.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_HDB_PREDICT_LEAN = _IDN_HDB_ON
-"""approximate_predict (lane fix-c1-cluster): every host staging buffer is
-allocated under one wait, the training matrix, the queries and the model
-arrays are staged with bulk copies instead of per-element loops (and without
-`_upload_*`'s three waits each), the kernels run with no wait between them,
-and the four outputs come back under one wait. The same kernels on the same
-values: no bit moves. Implies `IDN_HDB_PREDICT_DEVICE_CAST`'s device cast."""
+# IDN_HDB_PREDICT_LEAN (always on) removed 2026-11-24 by lane vdf-misc4: the queries run one device body on a
+# fitted snapshot (hdbscan/impl/detail/resident.mojo); no switch is left to read.
 
 # TOMBSTONE: MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS (unmeasured opt-in threshold arm: =4096 / =16384 never timed; the default
 # 46340 = PAIRWISE_MAX_ROWS is kept) deleted 2026-11-18 by lane/fx-env-dead; code recoverable at 0c65d61fed.
