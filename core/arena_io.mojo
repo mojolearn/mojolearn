@@ -26,6 +26,12 @@ Range lists are Int32 words at an address, laid out by
          comes back; CNT >= 0: the arena word CNT (an Int32 the program
          wrote; it comes back first) bounds the range to
          [lo, lo + min(hi - lo, mult * CNT)).
+         CNT <= -2 (lane vdf-tail-a, 2026-11-24, an addition; a runner that
+         passes `slots=True` to `check_out_ranges` only): [lo, hi) is copied
+         device to device into the first hi - lo words of `DeviceStore` slot
+         -CNT - 2 (`copy_out_ranges_to_store`) and never comes back to the
+         host (a stage result the next device step reads, e.g. a scaler's
+         NaN-filled block); mult is unused.
 Where a word travels moves no bit: the words a stage reads are the words
 it read before.
 """
@@ -56,8 +62,9 @@ def check_in_ranges(ins_addr: Int, nins: Int, arena_len: Int) raises:
         at = hi
 
 
-def check_out_ranges(outs_addr: Int, nouts: Int, arena_len: Int) raises:
-    """Raises unless every output quad lies inside the arena."""
+def check_out_ranges(outs_addr: Int, nouts: Int, arena_len: Int, slots: Bool = False) raises:
+    """Raises unless every output quad lies inside the arena. A slot output
+    (CNT <= -2) is refused unless the runner copies them (`slots`)."""
     if nouts < 0 or (nouts > 0 and outs_addr == 0):
         raise Error("arena ranges: invalid output range list")
     var o = ArenaIP(unsafe_from_address=outs_addr)
@@ -67,6 +74,8 @@ def check_out_ranges(outs_addr: Int, nouts: Int, arena_len: Int) raises:
         var cn = Int(o.unsafe_load(OUT_INTS * k + 2))
         if lo < 0 or hi < lo or hi > arena_len or cn >= arena_len or Int(o.unsafe_load(OUT_INTS * k + 3)) < 0:
             raise Error("arena ranges: output range outside the arena")
+        if cn <= -2 and not slots:
+            raise Error("arena ranges: this runner has no store slot outputs")
 
 
 def upload_ranges(
@@ -107,6 +116,7 @@ def download_ranges(
         return
     var o = ArenaIP(unsafe_from_address=outs_addr)
     var bounded = False
+    # A slot output (CNT <= -2) stays on the device (`copy_out_ranges_to_store`).
     for k in range(nouts):
         var cn = Int(o.unsafe_load(OUT_INTS * k + 2))
         if cn >= 0:
@@ -118,11 +128,36 @@ def download_ranges(
         var lo = Int(o.unsafe_load(OUT_INTS * k))
         var hi = Int(o.unsafe_load(OUT_INTS * k + 1))
         var cn = Int(o.unsafe_load(OUT_INTS * k + 2))
+        if cn <= -2:
+            continue
         if cn >= 0:
             var c = Int(bitcast[DType.int32](host_f.unsafe_load(cn))) * Int(o.unsafe_load(OUT_INTS * k + 3))
             hi = lo + max(0, min(hi - lo, c))
         if hi > lo:
             ctx.enqueue_copy(dst_ptr=host_f + lo, src_buf=df.create_sub_buffer[DType.float32](lo, hi - lo))
+
+
+def copy_out_ranges_to_store(
+    ctx: DeviceContext, df: DeviceBuffer[DType.float32], outs_addr: Int, nouts: Int, store: DeviceStore,
+) raises:
+    """Enqueue every slot output quad (CNT <= -2, lane vdf-tail-a): arena
+    words [lo, hi) device to device into the first hi - lo words of store
+    slot -CNT - 2 (refused when the slot holds fewer). No wait: the runner's
+    final synchronize covers them, before the arena is released.
+    `check_out_ranges(..., slots=True)` must have passed."""
+    if nouts <= 0:
+        return
+    var o = ArenaIP(unsafe_from_address=outs_addr)
+    for k in range(nouts):  # small-loop(nouts: arena output ranges): one copy enqueue per declared slot range
+        var cn = Int(o.unsafe_load(OUT_INTS * k + 2))
+        if cn > -2:
+            continue
+        var lo = Int(o.unsafe_load(OUT_INTS * k))
+        var hi = Int(o.unsafe_load(OUT_INTS * k + 1))
+        if hi > lo:
+            var view = df.create_sub_buffer[DType.float32](lo, hi - lo)
+            store.copy_from(ctx, -cn - 2, view, hi - lo)
+            _ = view^  # the queued copy holds its own reference
 
 
 # TOMBSTONE: `upload_ranges_host` (lane fg-knn-nb G3, MOJOLEARN_XPREP_NO_SLOT_HOP: host spans

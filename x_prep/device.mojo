@@ -51,7 +51,7 @@ from x_prep.fastpt import (
     pt_colbatch_fold, cs_tile_stats, ptimpute_part_words,
 )
 from x_prep.dmi_fast import mi_cc_device, mi_cd_device_rank
-from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
+from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges, copy_out_ranges_to_store
 from core.staged_download import download_f32_into
 from core.device_pool import pool_take, pool_give
 
@@ -132,6 +132,8 @@ def _download_ranges_staged(ctx: DeviceContext, mut df: DeviceBuffer[DType.float
         var lo = Int(o.unsafe_load(4 * k))
         var hi = Int(o.unsafe_load(4 * k + 1))
         var cn = Int(o.unsafe_load(4 * k + 2))
+        if cn <= -2:
+            continue  # a slot output stays on the device (copy_out_ranges_to_store)
         if cn >= 0:
             var c = Int(bitcast[DType.int32](hf.unsafe_load(cn))) * Int(o.unsafe_load(4 * k + 3))
             hi = lo + max(0, min(hi - lo, c))
@@ -287,7 +289,8 @@ def run_program_device_ranges(arena_addr: Int, arena_len: Int, prog_addr: Int, s
     output quads of the host arena come back. The scratch and the output
     region behave as in `run_program_device`."""
     check_in_ranges(ins_addr, nins, arena_len)
-    check_out_ranges(outs_addr, nouts, arena_len)
+    # Lane vdf-tail-a: slot outputs (CNT <= -2) are copied into the x_prep store on the device.
+    check_out_ranges(outs_addr, nouts, arena_len, True)
     run_program_device_ptr(
         FP(unsafe_from_address=arena_addr), arena_len, IP(unsafe_from_address=prog_addr), stages, scratch_len,
         out_addr, out_len, ins_addr, nins, outs_addr, nouts,
@@ -814,6 +817,10 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         print("XPPHASE stage", stages - 1, "op", Int(host_q.unsafe_load((stages - 1) * STAGE_INTS)), "us",
               (now - t_last) // 1000)
         t_last = now
+    if nouts > 0:
+        # Lane vdf-tail-a: the slot output quads, device to device into the x_prep store (stream order; the
+        # synchronize below completes them before the arena is pooled or released).
+        copy_out_ranges_to_store(ctx, df, outs_addr, nouts, X_PREP_STORE.get_or_create_ptr()[])
     if nouts >= 0:
         comptime if X_PREP_STAGED_OUT:
             _download_ranges_staged(ctx, df, Int(host_f), outs_addr, nouts)
