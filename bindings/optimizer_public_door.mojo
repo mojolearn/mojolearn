@@ -594,11 +594,11 @@ def optimizer_prepare_registry(params: PythonObject, where: String) raises -> Op
         nbytes.append(views[k].nbytes)
     var offsets = new_array([len(views) + 1], "<i4")
     var plan = optimizer_registry_plan(nbytes, Int(py=offsets._addr))
+    # Adam moments are allocated on first use (lazy, always).
+    # TOMBSTONE: MOJOLEARN_OPT_LAZY_MOMENTS_OFF (old path: eager host moments here) deleted 2026-11-24 by lane/ab2-nseq (ab-outcome-2); code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_OPT_LAZY_MOMENTS_OFF.ab-outcome-2.patch
     var first = PythonObject(None)
     var second = PythonObject(None)
-    if plan.eager:
-        first = new_zeros([plan.count], "<f4")
-        second = new_zeros([plan.count], "<f4")
     var initialized = new_zeros([plan.parameters], "<i4")
     _ = pins
     return OptimizerRegistryPrepared(published, offsets, initialized, first, second, plan)

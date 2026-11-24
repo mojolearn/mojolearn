@@ -295,7 +295,8 @@ def optimizer_initialize(owner: PythonObject, registry: OptimizerRegistryPrepare
     var fields = py_fields(owner)
     # PACK publishes public scalar mirrors only after typed configuration
     # validation. Params/schedule/mode/resident retain their boundary owners.
-    var owner_state = optimizer_owner_new(owner, config.kind, not registry.plan.eager)
+    # Pristine: the moments are lazy (MOJOLEARN_OPT_LAZY_MOMENTS_OFF deleted 2026-11-24, lane ab2-nseq).
+    var owner_state = optimizer_owner_new(owner, config.kind, True)
     var construction = OptimizerOwnerLease(owner, owner_state)
     var nk = optimizer_keys()
     py_setitem(fields, nk[].k__native_optimizer_owner, owner_state)
