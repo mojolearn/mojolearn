@@ -71,8 +71,11 @@ def meta_public_operation(model: PythonObject, operation: String, args: PythonOb
         if args[1] is None:
             raise Error(name + " requires y to be passed, but the target y is None.")
         var shape = labels_shape_of(x, context)
-        if msel_input_count(args[1], native) != shape[0]:
-            raise Error("Found input variables with inconsistent numbers of samples")
+        var y_count = msel_input_count(args[1], native)
+        if y_count != shape[0]:
+            # scikit-learn's check_consistent_length words, with the lengths (X's, then y's).
+            raise Error("Found input variables with inconsistent numbers of samples: [" + String(shape[0]) + ", "
+                        + String(y_count) + "]")
     else:
         _feature_check(model, fields, args[0], context)
     var call_args = Python.tuple(x, args[1], args[2]) if fitting or method == "score" else Python.tuple(x)
