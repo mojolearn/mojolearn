@@ -192,9 +192,9 @@ def schedule_run(operation: Int, owner: PythonObject, values: PythonObject, cont
         opt_value(cfg, context)
         if not opt_exact(py_type(cfg), py_item(context, nk[].k_mapping_types)):
             raise Error("TypeError: schedule configuration requires a native dictionary")
-        var name = py_item(cfg, nk[].k_kind)
-        opt_scalar(name, context)
-        var kind = optimizer_schedule_config_kind(String(name) if py_type(name) is py_item(context, nk[].k_scalar_types)[5] else String())
+        var kind_word = py_item(cfg, nk[].k_kind)
+        opt_scalar(kind_word, context)
+        var kind = optimizer_schedule_config_kind(String(kind_word) if py_type(kind_word) is py_item(context, nk[].k_scalar_types)[5] else String())
         var peak = py_item(cfg, nk[].k_peak_lr)
         var warmup = py_item(cfg, nk[].k_warmup_steps)
         var total = py_item(cfg, nk[].k_total_steps)
