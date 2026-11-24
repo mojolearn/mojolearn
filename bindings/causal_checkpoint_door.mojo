@@ -21,7 +21,10 @@ from bindings.mode_metadata_native_door import _class_fields
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.causal_model_config_door import model_record_fields, model_dict, model_plain, model_string, model_integer, model_sequence
 from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter, AdmittedBorrowedBuffer, connect_native_mmap_exporter
-from bindings.linalg_ops_lowbit_door import _lin_from_f16, lin_connected_binding
+from bindings.linalg_ops_lowbit_door import (
+    _lin_from_f16, lin_device, lin_device_context, lin_device_binding, LIN_HAS_GPU, LIN_HAS_CPU,
+)
+from core.function_device import function_device_default
 from core.shared_slot import SharedSlot
 from bindings.causal_checkpoint_run import (
     checkpoint_header_length, checkpoint_offsets_check, checkpoint_info_count, checkpoint_read_plan,
@@ -686,8 +689,19 @@ def checkpoint_repr(mut mods: NativeModules, value: PythonObject, kind: PythonOb
     return PythonObject("Checkpoint(" + String(py_call(bi.repr, root)) + ", shards=" + String(len(paths)) + ")")
 
 
-def checkpoint_widen_f16(mut mods: NativeModules, value: PythonObject) raises -> PythonObject:
+def checkpoint_widen_f16(mut mods: NativeModules, value: PythonObject, device_value: PythonObject) raises -> PythonObject:
+    """`models.safetensors.widen_f16(bits, device=)`. The one read of
+    `device` (an identity compare for None) is the first thing done, before
+    any capture: "cpu" beside a GPU set widens on the linalg host image, the
+    CPU column's code; None keeps the installation's binding; "gpu" on a
+    CPU-only install is refused in the shared words (vdv-gaps, 2026-11-24;
+    the linalg device helpers are lane vdf-linalg's)."""
     var context = _checkpoint_context()
+    var linalg = context["linalg_context"]
+    var device = function_device_default()
+    if device_value is not None:
+        device = lin_device(device_value, "widen_f16", LIN_HAS_GPU, LIN_HAS_CPU, linalg)
+        linalg = lin_device_context(device, linalg)
     var cls = context["array_class"]
     var slots = neural_array_slots(context)
     var captured = PythonObject(None)
@@ -701,7 +715,7 @@ def checkpoint_widen_f16(mut mods: NativeModules, value: PythonObject) raises ->
         # float16/uint16 arrays. Capture their native buffer once and copy raw
         # bits in C order; no ndarray conversion, Python hook, or arithmetic
         # may execute while preparing the existing widening kernel's input.
-        if py_type(value) is not native_numpy_type("ndarray", context["linalg_context"]):
+        if py_type(value) is not native_numpy_type("ndarray", linalg):
             raise Error("TypeError: widen_f16 requires a native Array or exact ndarray of float16 or uint16 bits")
         admit_native_buffer_exporter(value)
         var pin = AdmittedBorrowedBuffer(value)
@@ -738,8 +752,7 @@ def checkpoint_widen_f16(mut mods: NativeModules, value: PythonObject) raises ->
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CHECKPOINT_FAST_F16_WIDEN_HOST.ab-outcome-3.patch
     # (B widened a C-ordered source on the host with core/causal_checkpoint_impl.mojo checkpoint_widen_halves, which
     # stays: the safetensors reader's widening above uses it.)
-    var linalg = context["linalg_context"]
-    var binding = lin_connected_binding(linalg)
+    var binding = lin_device_binding(device, linalg)
     mods.released()
     var result = _lin_from_f16(Python.tuple(binding, source), linalg)
     mods.released()
@@ -802,7 +815,7 @@ def checkpoint_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) ab
         elif operation == 18:
             result = checkpoint_repr(mods, args[0], args[1])
         elif operation == 19:
-            result = checkpoint_widen_f16(mods, args[0])
+            result = checkpoint_widen_f16(mods, args[0], args[1] if len(args) > 1 else PythonObject(None))
         return result.steal_data()
     except error:
         var message = String(error)
