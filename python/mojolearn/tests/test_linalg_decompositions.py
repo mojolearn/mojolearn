@@ -16,7 +16,7 @@ eigenvalues ASCENDING (numpy's order, the reverse of the one `PCA` reads from
 the same sweep), singular values DESCENDING. A test that merely checked
 self-consistency would pass just as happily on a descending `eigh`.
 
-THE REFUSALS ARE TESTED TOO, because "not implemented" and "unknown" are
+THE REFUSALS ARE TESTED TOO (test_linalg_boundary.py), because "not implemented" and "unknown" are
 different answers and only one of them is honest: a Q factor is not formed
 anywhere in this tree, and a wide matrix needs an LQ route that does not
 exist here (DEVIATION 593).
@@ -52,22 +52,6 @@ def test_the_three_doors_ship_in_the_linalg_family():
     for lane in ("linalg-qr", "linalg-eigh", "linalg-svdvals"):
         assert lane in fam["training_lanes"], lane
     assert "decomposition/host/linalg_public.mojo" in fam["host_modules"]
-
-
-@needs_host
-@pytest.mark.parametrize("rows,cols", [(48, 5), (16, 4)])
-def test_qr_r_public_shape_and_dtype_match_numpy(rows, cols):
-    """Keep the returned-array and caller-storage boundary against NumPy.
-
-    The original two shapes' triangularity and Gram assertions now run over
-    the actual CPU/GPU entries in checks/native_tests/linalg_numerical_*.
-    """
-    a = _matrix(rows, cols)
-    original = a.copy()
-    r = np.asarray(linalg.qr(a, mode="r")).reshape(cols, cols)
-    assert r.shape == np.linalg.qr(a.astype(np.float64), mode="r").shape
-    assert r.dtype == np.float32
-    np.testing.assert_array_equal(a, original)
 
 
 @needs_host
@@ -128,16 +112,9 @@ def test_svdvals_is_descending_like_numpy():
 
 # The original seed-5 duplicated-column 48x4 case moved to native CPU/GPU
 # tests with the same descending order and strict abs(last) < 1e-3 bound.
-
-
-@needs_host
-def test_the_same_input_gives_the_same_bits():
-    """The product these doors sell. Not `allclose` -- the BYTES."""
-    a = _matrix(48, 5)
-    for call in (lambda: linalg.svdvals(a), lambda: linalg.qr(a), lambda: linalg.qr(a, mode="reduced")[0],
-                 lambda: linalg.svd(a)[0]):
-        first = np.asarray(call()).tobytes()
-        assert first == np.asarray(call()).tobytes()
+# Same input, same bytes (svdvals, qr 'r' and 'reduced', svd's U) is the verify
+# lanes linalg-svdvals, linalg-qr, fn-linalg-qr and fn-linalg-svd. The shape,
+# dtype and refusal checks are in test_linalg_boundary.py.
 
 
 def _close(a, b, tol=2e-4):
@@ -191,14 +168,6 @@ def test_qr_modes_are_numpys(rows, cols):
 
 
 @needs_host
-def test_qr_default_preserves_published_r_only_shape_and_bytes():
-    a = _matrix(48, 5)
-    result = linalg.qr(a)
-    assert result.shape == (5, 5)
-    assert np.asarray(result).tobytes() == np.asarray(linalg.qr(a, mode="r")).tobytes()
-
-
-@needs_host
 @pytest.mark.parametrize("rows,cols", [(16, 4), (48, 5), (5, 9), (6, 6)])
 @pytest.mark.parametrize("full", [True, False])
 def test_svd_is_numpys(rows, cols, full):
@@ -243,22 +212,6 @@ def test_a_wide_matrix_takes_the_transpose():
     wide = _matrix(4, 16)
     _close(linalg.svdvals(wide), np.linalg.svd(wide.astype(np.float64), compute_uv=False))
     _close(linalg.qr(wide, mode="r"), np.linalg.qr(wide.astype(np.float64), mode="r"))
-
-
-@needs_host
-def test_eigh_refuses_a_non_square_matrix():
-    with pytest.raises(ValueError, match="must be square"):
-        linalg.eigh(_matrix(16, 4))
-
-
-@needs_host
-@pytest.mark.parametrize("fn", ["qr", "eigh", "svdvals"])
-def test_float64_is_refused_and_never_cast(fn):
-    """`_operand`'s rule, which these doors inherit: a silent downcast loses
-    29 mantissa bits before the profile sees them."""
-    a = _matrix(16, 4).astype(np.float64)
-    with pytest.raises(TypeError, match="float32"):
-        getattr(linalg, fn)(a)
 
 
 # ===========================================================================

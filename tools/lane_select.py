@@ -213,9 +213,12 @@ VERIFY_ORCHESTRATION_FILES = (
 VERIFY_ALL = os.path.join(PKG, "_verify_all.py")
 #: The definitions of `_verify_all.py` that only orchestrate or report. NOT here (they feed bytes or
 #: hashes, so a change to them selects every lane): load_harness, harness_path, run_cell,
-#: _probe_stepfull, _probe_arrays, _collapse, smoke_cell, run_smoke, run_models, portable_contract_inputs,
-#: verification_contract, the commitment and challenge digests, seeds and fixtures, _read_cells,
-#: _value_kind, judge_rows, select_lanes and every definition added after this list was written.
+#: run_sides, _run_cell_side and side_absent (the per-side cell, 2026-11-24: device="cpu" and
+#: device="gpu" in one process, and the n/a value of a missing side), side_class (which column a
+#: side is judged against), _probe_stepfull, _probe_arrays, _collapse, smoke_cell, run_smoke,
+#: run_models, portable_contract_inputs, verification_contract, the commitment and challenge digests,
+#: seeds and fixtures, _read_cells, _sided_lane, _bare_lane, _value_kind, judge_rows, select_lanes and
+#: every definition added after this list was written.
 VERIFY_ALL_ORCHESTRATION = frozenset({
     # errors, logging and refusals
     "CannotRun", "_emit", "_capped", "_error_text", "_finish", "_challenge_refusal", "_compare_refusal",

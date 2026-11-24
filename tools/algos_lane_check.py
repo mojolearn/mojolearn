@@ -18,11 +18,12 @@ for each named identity lane it
      (tools/binding_stamps.py) must carry the digest of its source closure in
      THIS tree, so an edited kernel is rebuilt and never answered by the .so
      of the previous edit. A binding that does not build fails the check.
-  3. FITS the lane on the GPU (`--require-backend cuda|hip|metal`) and on the
-     CPU through the host bindings (`MOJOLEARN_VENDOR=cpu`, `--require-cpu`),
-     once each (`--repeats 1`), every fixture unless `--fixtures` narrows it.
-     A refused stage on either side is a failure (`--fail-on-refused`), with
-     ONE named exception: a KNOWN CPU REFUSAL (below).
+  3. FITS the lane on both sides in ONE harness process (`--side both`,
+     2026-11-24): the GPU column through `device="gpu"` (`--require-backend
+     cuda|hip|metal`) and the CPU column through `device="cpu"` (the host
+     bindings), once each (`--repeats 1`), every fixture unless `--fixtures`
+     narrows it. A refused stage on either side is a failure
+     (`--fail-on-refused`).
   4. DIFFS the two columns with `identity_break.py --diff --require-columns 2`
      over train, infer, model, batch and every property part both carry, and
      counts what was ACTUALLY compared. It prints AGREE only when the diff
@@ -165,7 +166,7 @@ def needed_bindings(lanes):
         # once per pod). The selector keeps them out of `declared` on purpose
         # (`ubiquitous`: reaching them says nothing about one lane), but a fit
         # still imports them: the base binding's buffer helpers and its CPU
-        # route, and the forest and byte LM host loaders arm_env points at.
+        # route, and the forest and byte LM host loaders the CPU side loads.
         ubiq = set(why[lane].get("ubiquitous", ()))
         declared |= {b for b in BASE_BINDINGS if b in ubiq}
         # A NARROW binding the lane's Python CALLS (an export it names, e.g.
@@ -315,7 +316,11 @@ def ensure_built(bindings, log, publish=False):
 
 
 # ------------------------------------------------------------ one lane
-def arm_env(kind):
+def arm_env():
+    """The harness's environment. One process records both sides through the
+    public `device=` parameter (2026-11-24): no MOJOLEARN_VENDOR, and no host
+    binary overrides (the CPU side loads this install's host set, the
+    loaders' default, from the same process)."""
     env = dict(os.environ, PYTHONPATH=str(ROOT / "python"), MOJOLEARN_NUMERIC_MODE="identical")
     for k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS",
               "VECLIB_MAXIMUM_THREADS"):
@@ -324,53 +329,52 @@ def arm_env(kind):
         env.pop(k)
     # An ambient device group never chooses a column.
     env.pop("MOJOLEARN_PAR_DEVICES", None)
-    if kind == "cpu":
-        # tools/verify_cpu_batch.py arm_environment: the direct forest and
-        # byte LM loaders read their own variables, on the same host set.
-        env.update(MOJOLEARN_VENDOR="cpu", MOJOLEARN_HOST_DIR=str(HOST_DIR),
-                   MOJOLEARN_FOREST_HOST_BINARY=str(HOST_DIR / "_mojolearn_forest_host.so"),
-                   MOJOLEARN_BYTE_LM_HOST_BINARY=str(HOST_DIR / "_mojolearn_byte_lm_host.so"))
     return env
 
 
-def run_arm(kind, lane, backend, fixtures, out, log, moved_ok=False):
-    """One column of one lane. `kind` is the SLOT: "gpu" is the lane arm and
-    "cpu" the reference arm.
+def run_sides(lane, backend, fixtures, gpu_json, cpu_json, log, moved_ok=False):
+    """Both columns of one lane, in ONE harness process: `--side both` writes
+    the GPU column (device="gpu") to `gpu_json` and the CPU column
+    (device="cpu") to `cpu_json`.
 
     `moved_ok` (the sabotaged stage only): the
     harness exits 1 when a part it compares INSIDE one column moved (a byte
     LM's sampler-vs-trainer `rlpair`, a batch part), which is exactly what a
-    biting sabotage does; if it still wrote its JSON, `compare` reads that
+    biting sabotage does; if it still wrote both JSONs, `compare` reads that
     within-column verdict as DISAGREE. Before 2026-09-27 the arm raised here,
     so a sabotage that bit byte-lm read as a failed GPU arm (do-amd request
     1790542457986-dedupe). A missing JSON, any other exit, or a clean or
     restored stage still fails. Returns the exit status (0, or 1 in that case)."""
-    harness = ["--lanes", lane, "--repeats", "1", "--fail-on-refused", "--json", str(out)]
+    harness = ["--lanes", lane, "--repeats", "1", "--fail-on-refused", "--side", "both",
+               "--require-backend", backend, "--json", str(gpu_json), "--cpu-json", str(cpu_json)]
     if fixtures:
         harness += ["--fixtures", fixtures]
-    harness += ["--require-cpu", "--require-backend", "cpu"] if kind == "cpu" else ["--require-backend", backend]
     cmd = [sys.executable, "-u", str(HARNESS)] + harness
-    if out.exists():
-        out.unlink()
+    for out in (gpu_json, cpu_json):
+        if out.exists():
+            out.unlink()
+    written = lambda: gpu_json.is_file() and cpu_json.is_file()  # noqa: E731
     with open(log, "a") as fh:
         fh.write(f"\n$ {' '.join(cmd)}\n")
         fh.flush()
         try:
-            rc = subprocess.run(cmd, cwd=ROOT, env=arm_env(kind), stdout=fh,
+            rc = subprocess.run(cmd, cwd=ROOT, env=arm_env(), stdout=fh,
                                 stderr=subprocess.STDOUT, timeout=ARM_TIMEOUT).returncode
         except subprocess.TimeoutExpired:
             fh.write(f"\n[lane-check] HUNG: no exit after {ARM_TIMEOUT} s; killed\n")
-            raise Fail(f"{lane}: the {kind} arm HUNG (no exit after {ARM_TIMEOUT} s, killed; "
+            raise Fail(f"{lane}: the harness HUNG (no exit after {ARM_TIMEOUT} s, killed; "
                        f"MOJOLEARN_LANE_CHECK_ARM_TIMEOUT); last cell started: "
                        + next((ln for ln in reversed(Path(log).read_text(errors='replace').splitlines())
                                if ln.startswith("# START")), "(none)"))
-    if moved_ok and rc == 1 and out.is_file():
-        say(f"{lane}: the {kind} arm exited 1 with its JSON written (a part moved inside the column); "
+    if moved_ok and rc == 1 and written():
+        say(f"{lane}: the harness exited 1 with both columns written (a part moved inside a column); "
             "the diff decides")
         return 1
-    if rc or not out.is_file():
+    if rc or not written():
         tail = Path(log).read_text(errors="replace").splitlines()[-15:]
-        raise Fail(f"{lane}: the {kind} arm failed (exit {rc}); last lines of {log}:\n    " + "\n    ".join(tail))
+        raise Fail(f"{lane}: the harness failed (exit {rc}; GPU column {'written' if gpu_json.is_file() else 'missing'}, "
+                   f"CPU column {'written' if cpu_json.is_file() else 'missing'}); last lines of {log}:\n    "
+                   + "\n    ".join(tail))
     return 0
 
 
@@ -383,7 +387,7 @@ def compare(ib, lane, gpu_json, cpu_json, fixtures, log, backend="gpu"):
 def _compare_columns(ib, lane, gpu_json, cpu_json, fixtures, log, backend):
     cmd = [sys.executable, str(HARNESS), "--diff", str(gpu_json), str(cpu_json), "--lanes", lane,
            "--require-columns", "2"]
-    r = subprocess.run(cmd, cwd=ROOT, env=arm_env("gpu"), capture_output=True, text=True)
+    r = subprocess.run(cmd, cwd=ROOT, env=arm_env(), capture_output=True, text=True)
     with open(log, "a") as fh:
         fh.write(f"\n$ {' '.join(cmd)}\n{r.stdout}{r.stderr}")
     cols = []
@@ -588,13 +592,10 @@ def check(ib, lanes, needed, backend, fixtures, out, stage, log, pass_no=1):
     verdicts = {}
     for lane in lanes:
         gpu_json, cpu_json = out / f"{stage}.{lane}.gpu.json", out / f"{stage}.{lane}.cpu.json"
-        run_arm("gpu", lane, backend, fixtures, gpu_json, log, moved_ok=stage == "sabotaged")
-        crc = run_arm("cpu", lane, backend, fixtures, cpu_json, log, moved_ok=stage == "sabotaged")
+        # Both sides in one process (run_sides raises on any failure outside the
+        # sabotaged stage, before a diff).
+        run_sides(lane, backend, fixtures, gpu_json, cpu_json, log, moved_ok=stage == "sabotaged")
         verdict, detail = compare(ib, lane, gpu_json, cpu_json, fixtures, log, backend)
-        if crc and stage != "sabotaged":
-            tail = Path(log).read_text(errors="replace").splitlines()[-15:]
-            raise Fail(f"{lane}: the cpu arm failed (exit {crc}: {verdict}: "
-                       f"{detail}); last lines of {log}:\n    " + "\n    ".join(tail))
         print(f"{stage.upper()}: {lane}: {verdict}: {detail}", flush=True)
         verdicts[lane] = verdict
     return verdicts

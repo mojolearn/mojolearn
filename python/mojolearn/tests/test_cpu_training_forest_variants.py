@@ -1,15 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CPU training for the forest variant lanes: rf-clf-entropy-log2-noboot,
-rf-clf-balanced-parallel, rf-reg-poisson, rf-reg-gamma-ig,
-et-clf-entropy-bestfirst and et-reg-bootstrap-parallel, through the public
+"""CPU training of the parallel_groves forest engine, through the public
 estimators where the rf and trees host bindings are built and the package
-took the CPU-only path (skipped, and SAID to be skipped, otherwise): each
-variant fits twice on a small draw and returns the same bytes, and the
+took the CPU-only path (skipped, and SAID to be skipped, otherwise): the
 parallel_groves engine's predictions are not the sequential engine's bytes
-(the grove reduction is reached, not a sequential fallback). It is a
-plumbing check; the bit claim against the GPU columns is the release
-verification's.
+(the grove reduction is reached, not a sequential fallback). The two-fit
+repeats of the forest variants are the verify lanes rf-clf-entropy-log2-noboot,
+rf-clf-balanced-parallel, rf-reg-poisson, rf-reg-gamma-ig,
+et-clf-entropy-bestfirst and et-reg-bootstrap-parallel (tools/identity_break.py),
+run on the CPU side and the GPU side.
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_forest_variants
 """
@@ -22,7 +21,7 @@ import mojolearn
 from mojolearn import _backend
 
 
-def test_variants_fit_on_the_host_when_built():
+def test_parallel_groves_is_reached_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
         return
@@ -39,30 +38,20 @@ def test_variants_fit_on_the_host_when_built():
     x = rng.standard_normal((500, 7)).astype(np.float32)
     yc = (x[:, 2] - 0.4 * x[:, 5] > 0.3).astype(np.int32)
     yr = (x[:, 0] - 2.0 * x[:, 1]).astype(np.float32)
-    ypos = (np.abs(yr) + 0.25).astype(np.float32)
     kw = dict(n_estimators=4, max_depth=5, random_state=7)
 
     def fits(engine):
         return (
-            mojolearn.RandomForestClassifier(criterion="entropy", max_features="log2", bootstrap=False,
-                                             **kw).fit(x, yc).predict_proba(x),
             mojolearn.RandomForestClassifier(class_weight="balanced", inference_engine=engine,
                                              **kw).fit(x, yc).predict_proba(x),
-            mojolearn.RandomForestRegressor(criterion="poisson", **kw).fit(x, ypos).predict(x),
-            mojolearn.RandomForestRegressor(criterion="gamma", **kw).fit(x, ypos).predict(x),
-            mojolearn.RandomForestRegressor(criterion="inverse_gaussian", **kw).fit(x, ypos).predict(x),
-            mojolearn.ExtraTreesClassifier(n_estimators=4, random_state=7, criterion="entropy",
-                                           max_leaf_nodes=8).fit(x, yc).predict_proba(x),
             mojolearn.ExtraTreesRegressor(bootstrap=True, max_samples=0.5, inference_engine=engine,
                                           **kw).fit(x, yr).predict(x),
         )
 
-    first = [np.asarray(a).tobytes() for a in fits("parallel_groves")]
-    second = [np.asarray(a).tobytes() for a in fits("parallel_groves")]
-    assert first == second, "two host fits returned different bytes"
+    groves = [np.asarray(a).tobytes() for a in fits("parallel_groves")]
     sequential = [np.asarray(a).tobytes() for a in fits("sequential")]
-    assert first[1] != sequential[1], "RF parallel_groves returned the sequential engine's bytes"
-    assert first[6] != sequential[6], "ET parallel_groves returned the sequential engine's bytes"
+    assert groves[0] != sequential[0], "RF parallel_groves returned the sequential engine's bytes"
+    assert groves[1] != sequential[1], "ET parallel_groves returned the sequential engine's bytes"
 
 
 if __name__ == "__main__":

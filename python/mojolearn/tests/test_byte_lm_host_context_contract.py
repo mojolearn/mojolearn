@@ -53,20 +53,3 @@ def test_host_training_uses_same_owned_array_materializer():
         assert type(value) is ml.Array
         assert np.asarray(value).shape == (shape.n_total,)
         assert np.isfinite(np.asarray(value)).all()
-
-
-def test_invalid_parameters_keep_native_validation_error():
-    with pytest.raises(ValueError, match='parameters') as caught:
-        ml.LanguageModelInference(np.zeros(3, dtype='f4'), shape=_shape())
-    assert 'arena_native_types' not in str(caught.value)
-
-
-def test_user_array_hook_is_not_admitted_by_context_repair():
-    calls = []
-    class UserArray:
-        def __array__(self, *args, **kwargs):
-            calls.append(True)
-            raise AssertionError('user conversion hook executed')
-    with pytest.raises(TypeError):
-        ml.LanguageModelInference(UserArray(), shape=_shape())
-    assert calls == []

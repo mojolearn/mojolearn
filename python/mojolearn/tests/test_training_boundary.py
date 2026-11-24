@@ -1,17 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The Python door to the chunked LM head v2: `mojolearn.training.chunked_lm_head_loss`.
+"""`mojolearn.training` functions at the Python boundary: the refusals. The losses and gradients are the
+fn-training verify lanes."""
+import numpy as np
+import pytest
 
-Runtime checks (run only where the training host binding is built and the
-package took the CPU-only route; they print SKIP and return otherwise): each
-refusal fires by name before any output. The Float64-reference agreement, the
-loss-stage/train-stage agreement and the repeat words are the native check
-checks/native_tests/training_chunked_lm_head_door.mojo
-(pixi run check-native-training-chunked-lm-head-door-cpu).
 
-    cd python && python3 -m pytest mojolearn/tests/test_chunked_lm_head_door.py -q
-"""
-
+# ---------------------------------------------------------------- moved from test_chunked_lm_head_door.py
+# Runtime checks (run only where the training host binding is built and the package took the CPU-only route; they
+# print SKIP and return otherwise): each refusal fires by name before any output.
 
 def _cpu_only_with_training_host():
     try:
@@ -28,8 +24,7 @@ def _cpu_only_with_training_host():
     return True
 
 
-def _inputs(rows=5, vocab=513, width=8):
-    import numpy as np
+def _chunked_inputs(rows=5, vocab=513, width=8):
     rng = np.random.default_rng(23)
     h = rng.uniform(-1.0, 1.0, (rows, width)).astype(np.float32)
     w = rng.uniform(-0.5, 0.5, (vocab, width)).astype(np.float32)
@@ -41,10 +36,8 @@ def _inputs(rows=5, vocab=513, width=8):
 def test_refusals_fire_by_name_when_built():
     if not _cpu_only_with_training_host():
         return
-    import numpy as np
-    import pytest
     from mojolearn import training
-    h, w, t = _inputs()
+    h, w, t = _chunked_inputs()
     with pytest.raises(ValueError, match="vocab must be at least 2"):
         training.chunked_lm_head_loss(h, w[:1], np.zeros(5, dtype=np.int64))
     with pytest.raises(ValueError, match="width"):
@@ -61,9 +54,3 @@ def test_refusals_fire_by_name_when_built():
     bad_h[1, 3] = np.nan
     with pytest.raises(Exception, match="NaN in chunked lm head hidden at flat index 11"):
         training.chunked_lm_head_loss(bad_h, w, t)
-
-
-if __name__ == "__main__":
-    import sys
-    import pytest
-    sys.exit(pytest.main([__file__, "-q"]))

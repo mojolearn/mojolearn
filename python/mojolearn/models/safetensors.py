@@ -50,17 +50,37 @@ class TensorInfo:
         return _NATIVE.checkpoint_repr(self, 0)
 
 
-def widen_f16(bits):
-    """A float16 Array of any rank (`'<f2'`, or its bits as `'<u2'`) to
-    float32, by bit construction: a normal value keeps its mantissa shifted
-    up by 13 and rebiases the exponent by 112, a subnormal is renormalized
-    into a normal float32, zero keeps its sign, and the infinities and
-    every NaN keep sign and payload. The construction is
-    `gemm/contract.mojo::f16_bits_to_f32`, run by the linalg binding's
-    `from_f16` (a device kernel on a GPU install, the linalg host binding
-    on a CPU-only one); the per-element Python loop is gone
-    (pyglue-text-io, Oct 3). Exact, so every column has the same bits."""
-    return _NATIVE.checkpoint_widen_f16(bits)
+def widen_f16(bits, *, device=None):
+    """Widen float16 values to float32, exactly.
+
+    A normal value keeps its mantissa and is rebiased, a subnormal becomes a
+    normal float32, zero keeps its sign, and infinities and NaNs keep their
+    sign and payload, so every device returns the same bits.
+
+    Parameters
+    ----------
+    bits : Array or ndarray of float16 or uint16
+        The half-precision values, or their bit patterns, of any rank.
+    device : {None, "cpu", "gpu"}, default None
+        Where the widening runs. None uses this installation's device.
+
+    Returns
+    -------
+    Array of float32 with the shape of `bits`.
+
+    Examples
+    --------
+    ::
+
+        import numpy as np
+        from mojolearn.models.safetensors import widen_f16
+        wide = widen_f16(np.array([1.0, -2.5], dtype=np.float16), device="cpu")
+    """
+    # The construction is gemm/contract.mojo::f16_bits_to_f32, run by the
+    # linalg binding's `from_f16` (a device kernel on a GPU install, the
+    # linalg host binding on a CPU-only one or for device="cpu"); the
+    # per-element Python loop is gone (pyglue-text-io, Oct 3).
+    return _NATIVE.checkpoint_widen_f16(bits, device)
 
 
 class SafetensorsFile:

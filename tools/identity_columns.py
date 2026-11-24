@@ -13,8 +13,10 @@ no binding is imported and nothing runs on a device.
         each column record against _verify_reference.admit() and the current
         harness fixtures; one IDCOLUMN line per file; exit 1 if any is not
         admissible
-  identity_columns.py from-verify REPORT --harness EXACT_SOURCE --out COLUMN
+  identity_columns.py from-verify REPORT --harness EXACT_SOURCE --out COLUMN [--side cpu|gpu]
         reuse all measured parts of a completed installed-verifier report;
+        a v2 report holds both sides' columns (device="cpu" and device="gpu"
+        in one process): --side names the column taken (required for v2);
         requires its exact harness, input fingerprints, native binary witnesses
         and passing verifier self-test. Local failures stay unusable. A mismatch
         against an older reference is an observation, not a local failure.
@@ -172,8 +174,46 @@ def converted_cells(indexed):
     return cells
 
 
-def record_from_verify(report, h, report_sha256):
+def declared_missing(h, cls):
+    """{lane: reason} for the lanes the harness declares have no side on
+    device class `cls` (`_one_sided(lane, missing=, reason=)`, registry
+    ONE_SIDED): missing "cpu" for the cpu class, missing "gpu" for every GPU
+    class. Read through `h.one_sided(lane)`, the harness's own reader."""
+    if not cls:
+        return {}
+    missing = "cpu" if cls == "cpu" else "gpu"
+    reader = getattr(h, "one_sided", None)
+    if reader is None:
+        return {}
+    out = {}
+    for lane in h.LANES:
+        hit = reader(lane)
+        if hit is not None and hit[0] == missing:
+            out[lane] = hit[1]
+    return out
+
+
+#: Verifier report formats a column can be taken from. v2 (2026-11-24) rows
+#: carry `side`: one report holds the CPU column and the GPU vendor's column.
+VERIFY_REPORT_FORMATS = ("mojolearn.verify-all-report.v1", "mojolearn.verify-all-report.v2")
+
+
+def report_side_rows(report, side):
+    """The rows of `report` that make ONE column: every row of a v1 report
+    (one side per process), the `side` rows of a v2 report."""
+    rows = report.get("cells", [])
+    if report.get("format") != "mojolearn.verify-all-report.v2":
+        return rows
+    if side not in ("cpu", "gpu"):
+        raise ValueError("a v2 verifier report holds both sides' columns; name the side (cpu or gpu)")
+    return [r for r in rows if r.get("side") == side]
+
+
+def record_from_verify(report, h, report_sha256, side=None):
     """Reuse measured verifier values, preserving their original provenance.
+
+    `side` ("cpu" or "gpu") picks the column of a v2 report; a v1 report is
+    one column already and takes no side.
 
     A reference mismatch is distinct from a failed local property. Only a
     completed, witnessed execution can supply values; admission still needs
@@ -184,11 +224,18 @@ def record_from_verify(report, h, report_sha256):
         if not ok:
             raise ValueError(message)
 
-    require(report.get("format") == "mojolearn.verify-all-report.v1", "not a verifier report")
+    require(report.get("format") in VERIFY_REPORT_FORMATS, "not a verifier report")
+    v2 = report["format"] == "mojolearn.verify-all-report.v2"
+    require(v2 or side is None, "a v1 verifier report is one column; it takes no side")
+    require(not v2 or side in ("cpu", "gpu"), "a v2 verifier report holds both sides' columns; name the side")
     device = report.get("device", {})
     require(device.get("numeric_mode") == "identical", "report is not IDENTICAL")
     require(re.fullmatch(r"[0-9a-f]{40}", str(device.get("commit", ""))), "missing source commit")
     require(device.get("device_class") in ("apple", "nvidia", "amd", "cpu", "ptx"), "missing device class")
+    # The column's class: the CPU side of a v2 report is the cpu column on any
+    # installation; its GPU side is the installation's vendor class.
+    column_class = "cpu" if side == "cpu" else device["device_class"]
+    require(side != "gpu" or column_class != "cpu", "a CPU-only report has no GPU column")
     require(report.get("self_test", {}).get("passed") is True, "verifier self-test did not pass")
     contract = report.get("verification_contract", {})
     source_sha = hashlib.sha256(Path(h.__file__).read_bytes()).hexdigest()
@@ -213,12 +260,12 @@ def record_from_verify(report, h, report_sha256):
                 "held-out bytes differ")
     v = vref()
     parts = v.PARTS + v.OPTIONAL_PARTS
-    rows = [r for r in report.get("cells", []) if r.get("lane") in lanes]
+    rows = [r for r in report_side_rows(report, side) if r.get("lane") in lanes]
     indexed = {(r["lane"], r["fixture"], r["part"]): r for r in rows}
     expected = {(l, f, p) for l in lanes for f in fixtures for p in parts}
     require(len(indexed) == len(rows) and set(indexed) == expected, "missing or duplicate cell parts")
     cells = converted_cells(indexed)
-    return dict(mode="identical", vendor=device["device_class"], commit=device["commit"],
+    return dict(mode="identical", vendor=column_class, commit=device["commit"],
                 commit_source=device.get("commit_source"), platform=device.get("platform"),
                 repeats=1, complete=True, partial_column=False, parts_omitted=[],
                 parts_collected=[p for p in parts if p not in ("train", "infer", "model")],
@@ -228,12 +275,14 @@ def record_from_verify(report, h, report_sha256):
                              binding_provenance_protocol=report.get("binding_provenance_protocol")),
                 verifier_observation=dict(report_sha256=report_sha256, harness_sha256=source_sha,
                                           reported_repeats=report["repeats"],
-                                          original_verdict=report.get("verdict")),
+                                          original_verdict=report.get("verdict"),
+                                          **({} if side is None else dict(side=side))),
                 **{p + "_protocol": value for p, value in contract.get("protocols", {}).items()})
 
 
 @lru_cache(maxsize=8)
-def _retained_verifier_bytes(receipt_file, receipt_stat, receipt_sha, report_file, report_stat, report_sha):
+def _retained_verifier_bytes(receipt_file, receipt_stat, receipt_sha, report_file, report_stat, report_sha,
+                             side=None):
     # The same complete report feeds hundreds of lane requirements. Cache only
     # parsed evidence keyed by actual file state and required content digests;
     # column-vs-report comparisons still run for every admission.
@@ -246,7 +295,7 @@ def _retained_verifier_bytes(receipt_file, receipt_stat, receipt_sha, report_fil
     receipt, report = json.loads(receipt_bytes), json.loads(raw)
     from identity_verify_launch import validate_run
     options = validate_run(receipt, report, report_sha)
-    rows = report.get('cells', [])
+    rows = report_side_rows(report, side)
     indexed = {(r['lane'], r['fixture'], r['part']): r for r in rows if r.get('lane') in options['lanes']}
     expected = {(l, f, p) for l in options['lanes'] for f in options['fixtures'] for p in options['parts']}
     if len(indexed) != len(rows) or set(indexed) != expected:
@@ -266,7 +315,8 @@ def retained_verifier_evidence(record, path):
     receipt, receipt_stat = retained(observation.get('launch'))
     report, report_stat = retained(observation.get('report'))
     return _retained_verifier_bytes(receipt, receipt_stat, observation.get('launch_sha256'),
-                                   report, report_stat, observation.get('report_sha256'))
+                                   report, report_stat, observation.get('report_sha256'),
+                                   observation.get('side'))
 
 
 def validate_verifier_record(record, path):
@@ -308,7 +358,7 @@ def validate_optional_install_files(record, path, contracts):
 def cmd_from_verify(args):
     raw = Path(args.report).read_bytes()
     h = _load("identity_report_harness", Path(args.harness))
-    result = record_from_verify(json.loads(raw), h, hashlib.sha256(raw).hexdigest())
+    result = record_from_verify(json.loads(raw), h, hashlib.sha256(raw).hexdigest(), getattr(args, "side", None))
     target = Path(args.out)
     launch = getattr(args, 'launch', None)
     receipt_bytes = None
@@ -926,21 +976,23 @@ def cmd_changed_lanes(args):
                 why[lane] = f"closure changed since {ref[:12]}"
         if lane in why:
             out.append(lane)
-    # NOT APPLICABLE (lane planner-na-parts, 2026-11-05): the harness DECLARES the
-    # lanes with no CPU route (identity_break.GPU_ONLY_LANES, extended by its
-    # fragments; a full-column CPU run drops them by name). On the cpu class
-    # such a lane whose newest result was REFUSED (every bad verdict REFUSED,
-    # never DIVERGENT/MOVED), or that has no cpu evidence at all, is n/a for
-    # the class: not broken (a rerun of unchanged code cannot help, but there
-    # is nothing to fix either) and not owed (a record would refuse again).
-    # Nothing else is n/a: an undeclared refusal (e.g. Apple's TypeError lanes)
-    # stays KNOWN-BAD, and a declared lane that ran and diverged stays known-bad.
-    declared = dict(getattr(h, "GPU_ONLY_LANES", None) or {}) if cls == "cpu" else {}
+    # NOT APPLICABLE (lane planner-na-parts, 2026-11-05; one-sided 2026-11-24):
+    # the harness DECLARES the lanes with no CPU side and the lanes with no GPU
+    # side (identity_break `_one_sided`, registry ONE_SIDED, extended by its
+    # fragments). On the class of the missing side such a lane whose newest
+    # result was REFUSED (every bad verdict REFUSED, never DIVERGENT/MOVED), or
+    # that has no evidence there at all, is n/a for the class: not broken (a
+    # rerun of unchanged code cannot help, but there is nothing to fix either)
+    # and not owed (a record would read n/a again). Nothing else is n/a: an
+    # undeclared refusal (e.g. Apple's TypeError lanes) stays KNOWN-BAD, and a
+    # declared lane that ran and diverged stays known-bad.
+    declared = declared_missing(h, cls)
     not_applicable = {}
     for lane in lanes:
         p = points.get(lane)
         if lane in declared and (p is None or (not p["good"] and p.get("refused"))):
-            not_applicable[lane] = dict(reason=f"no cpu route (harness GPU_ONLY_LANES: {declared[lane]})",
+            not_applicable[lane] = dict(reason=f"no {'cpu' if cls == 'cpu' else 'gpu'} side "
+                                               f"(harness ONE_SIDED: {declared[lane]})",
                                         **({k: p[k] for k in ("commit", "source", "committed")} if p else {}))
     out = [lane for lane in out if lane not in not_applicable]
     known_bad = [lane for lane in lanes if lane in bad_at and lane not in why and lane not in not_applicable]
@@ -1069,6 +1121,8 @@ def main():
     v.add_argument("--harness", required=True, help="exact identity_break.py that ran the report")
     v.add_argument("--out", required=True)
     v.add_argument("--launch", help="completed identity_verify_launch receipt for strict release-ledger admission")
+    v.add_argument("--side", choices=("cpu", "gpu"), default=None,
+                   help="the column taken from a v2 report (both sides ran in one process); a v1 report takes none")
     g = sub.add_parser("changed-lanes")
     g.add_argument("--table", default=str(PKG / "verify_reference" / "table.json"))
     g.add_argument("--since", default="", help="one commit for every lane instead of each lane's own record commit")

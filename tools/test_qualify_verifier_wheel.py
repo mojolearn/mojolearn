@@ -106,14 +106,50 @@ class VerifierAdmissionTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             admit("models", doc, models)
 
-    def test_self_test_requires_clean_match_and_detected_perturbation(self):
-        doc = dict(passed=True, clean={"state": "IDENTICAL"}, perturbed={"state": "DIVERGENT"})
-        admit("self-test", doc, [])
-        for part in ("clean", "perturbed"):
-            broken = copy.deepcopy(doc)
-            broken[part]["state"] = "REFUSED"
-            with self.assertRaises(AssertionError):
-                admit("self-test", broken, [])
+    def self_test(self, gpu=True):
+        side = lambda: dict(ran=True, passed=True, clean={"state": "IDENTICAL"},  # noqa: E731
+                            perturbed={"state": "DIVERGENT"})
+        sides = dict(cpu=side(), gpu=side() if gpu else dict(ran=False, reason="no GPU"))
+        return dict(format="mojolearn.verify-self-test.v2", passed=True, sides=sides)
+
+    def test_self_test_requires_clean_match_and_detected_perturbation_per_side(self):
+        for gpu in (True, False):
+            doc = self.self_test(gpu)
+            admit("self-test", doc, [])
+            for side in ("cpu", "gpu") if gpu else ("cpu",):
+                for part in ("clean", "perturbed"):
+                    broken = copy.deepcopy(doc)
+                    broken["sides"][side][part]["state"] = "REFUSED"
+                    with self.assertRaises(AssertionError):
+                        admit("self-test", broken, [])
+
+    def test_self_test_without_its_cpu_side_refuses(self):
+        doc = self.self_test()
+        doc["sides"]["cpu"] = dict(ran=False, reason="absent")
+        with self.assertRaises(AssertionError):
+            admit("self-test", doc, [])
+
+    def test_self_test_v1_report_refuses(self):
+        with self.assertRaises(AssertionError):
+            admit("self-test", dict(passed=True, clean={"state": "IDENTICAL"},
+                                    perturbed={"state": "DIVERGENT"}), [])
+
+    def test_v2_rows_of_both_sides_are_two_cells(self):
+        doc, models = self.models()
+        doc["cells"] = [dict(c, side=side) for c in doc["cells"] for side in ("cpu", "gpu")]
+        admit("models", doc, models)
+        doc["cells"].append(dict(doc["cells"][0]))
+        with self.assertRaises(AssertionError):
+            admit("models", doc, models)
+
+    def test_gpu_side_na_only_without_a_gpu(self):
+        doc, models = self.models()
+        doc["cells"] = [dict(c, side=side, state="N/A" if side == "gpu" else c["state"])
+                        for c in doc["cells"] for side in ("cpu", "gpu")]
+        with self.assertRaises(AssertionError):
+            admit("models", doc, models)
+        doc["sides"] = dict(run=["cpu", "gpu"], gpu_available=False)
+        admit("models", doc, models)
 
     def test_extended_pending_reference_stays_incomplete_and_failures_refuse(self):
         parts = ("train", "infer", "batch", "batchgrad", "batchscale", "ragged", "rlpair")

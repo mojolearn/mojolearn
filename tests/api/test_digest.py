@@ -159,13 +159,6 @@ def test_a_random_splitter_tree_has_a_digest_from_its_tree_arrays(tmp_path):
     assert _fit("DecisionTreeRegressor", dict(random_state=0), "r").digest_ != first
 
 
-@pytest.mark.parametrize("name,params,target", [case for case in CASES if case[0] in ("Ridge", "LinearRegression")])
-def test_cpu_device_gives_the_gpu_digest(name, params, target):
-    if mojolearn.vendor() == "cpu":
-        pytest.skip("a CPU-only installation has one device")
-    assert _fit(name, params, target, device="cpu").digest_ == _fit(name, params, target).digest_
-
-
 def test_meta_estimator_digest_includes_its_members():
     voting = getattr(mojolearn, "VotingRegressor", None)
     if voting is None:

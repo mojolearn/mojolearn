@@ -72,13 +72,6 @@ def test_randomstate_seed_member_equals_door(cls):
     np.testing.assert_array_equal(np.asarray(member.transform(X)), np.asarray(door.transform(X)))
 
 
-def test_knn_imputer_zero_neighbors_fits_then_refuses():
-    X, _ = _data()
-    member = _member(mojolearn.KNNImputer(n_neighbors=0), X)
-    with pytest.raises(Exception, match="n_neighbors must be >= 1"):
-        member.transform(X)
-
-
 def test_svgp_inducing_points_member_equals_door():
     X, y = _data()
     Z = X[::5].copy()
@@ -109,15 +102,6 @@ def test_dictionary_learning_inits_member_equal_door():
     member = _member(mojolearn.MiniBatchDictionaryLearning(n_components=3, dict_init=atoms, max_iter=2,
                                                            random_state=0), X)
     _same(member, door, ["components_"])
-
-
-def test_dictionary_learning_callback_refused_in_one_text():
-    X, _ = _data(d=4)
-    words = "callback is not carried"
-    with pytest.raises(Exception, match=words):
-        mojolearn.DictionaryLearning(n_components=3, callback=lambda *a: None).fit(X)
-    with pytest.raises(Exception, match=words):
-        _member(mojolearn.DictionaryLearning(n_components=3, callback=lambda *a: None), X)
 
 
 def test_sparse_pca_inits_member_equal_door():

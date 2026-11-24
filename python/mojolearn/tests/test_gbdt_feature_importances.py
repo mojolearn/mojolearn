@@ -1,19 +1,15 @@
-"""`feature_importances_` of the gradient-boosting estimators (lane mf-imp6): the public boundary.
-
-The value is computed in Mojo at fit (core/gbdt_importance.mojo on the host column, gbdt/gpu_importance.mojo on a
-GPU) and read through ONE native call. Checked here: the returned object (a NumPy ndarray), its shape
-(n_features_in_,), dtype float64 (scikit-learn's), non-negative and summing to 1, a fresh array per read, the
-not-fitted error in scikit-learn's words, the same values after save/load, pickle and in HostGBDT, the constant
-target's zeros, and exact invariance under a constant power-of-two sample weight (the integer leaf weights scale
-exactly). The numerical definition itself is checked natively (checks/native_tests/mf_imp6_gbdt_importances.mojo).
+"""`feature_importances_` of the gradient-boosting estimators (lane mf-imp6) against what is known without the
+product: the target's driving columns rank first, the values are non-negative and sum to 1, a constant target gives
+zeros, and a constant power-of-two sample weight leaves them exactly unchanged (the integer leaf weights scale
+exactly). The value is computed in Mojo at fit (core/gbdt_importance.mojo on the host column,
+gbdt/gpu_importance.mojo on a GPU); its digest on both sides is the verify lane trees-gbdt-importances
+(tools/identity_lanes/trees.py), and the numerical definition is checked natively
+(checks/native_tests/mf_imp6_gbdt_importances.mojo). The returned object, the not-fitted error, save/load, pickle,
+HostGBDT, the adapters and scikit-learn's SelectFromModel are in test_gbdt_boundary.py.
 """
-import pickle
-
 import numpy as np
-import pytest
 
 import mojolearn as ml
-from mojolearn.exceptions import NotFittedError
 
 
 def _data(seed=11, n=400, d=5):
@@ -39,44 +35,6 @@ def test_booster_returns_normalised_float64_ndarray():
     # the target is driven by column 2, then column 0
     assert int(np.argmax(imp)) == 2
     assert imp[0] > imp[1] and imp[0] > imp[3] and imp[0] > imp[4]
-
-
-def test_each_read_is_a_fresh_array():
-    X, y = _data()
-    model = ml.GradientBoosting(n_estimators=8).fit(X, y)
-    first = model.feature_importances_
-    kept = first.copy()
-    first[:] = -1.0
-    np.testing.assert_array_equal(model.feature_importances_, kept)
-
-
-@pytest.mark.parametrize("make", [
-    lambda: ml.GradientBoosting(n_estimators=4),
-    lambda: ml.GradientBoostingRegressor(n_estimators=4),
-    lambda: ml.GradientBoostingClassifier(n_estimators=4),
-])
-def test_not_fitted_is_sklearns_error(make):
-    est = make()
-    with pytest.raises(NotFittedError, match="instance is not fitted yet. Call 'fit' with appropriate arguments"):
-        est.feature_importances_
-
-
-def test_adapters_expose_the_learners_importances():
-    X, y = _data()
-    reg = ml.GradientBoostingRegressor(n_estimators=10).fit(X, y)
-    own = ml.GradientBoosting(n_estimators=10).fit(X, y)
-    _check(reg.feature_importances_, X.shape[1])
-    np.testing.assert_array_equal(reg.feature_importances_, own.feature_importances_)
-    codes = (y > np.median(y)).astype(np.int64)
-    clf = ml.GradientBoostingClassifier(n_estimators=10).fit(X, codes)
-    _check(clf.feature_importances_, X.shape[1])
-
-
-def test_multiclass_sums_its_dimensions():
-    X, y = _data()
-    codes = np.digitize(y, np.quantile(y, [0.33, 0.66])).astype(np.float32)
-    model = ml.GradientBoosting(loss="MultiClass", n_estimators=10).fit(X, codes)
-    _check(model.feature_importances_, X.shape[1])
 
 
 def test_constant_target_gives_zeros():
@@ -107,29 +65,3 @@ def test_constant_power_of_two_weight_is_exact_under_l2_score():
         X, y, sample_weight=np.full(X.shape[0], 2.0, np.float32))
     np.testing.assert_array_equal(np.asarray(plain.predict(X)), np.asarray(weighted.predict(X)))
     np.testing.assert_array_equal(plain.feature_importances_, weighted.feature_importances_)
-
-
-def test_save_load_pickle_and_host_twin(tmp_path):
-    X, y = _data()
-    model = ml.GradientBoosting(n_estimators=8).fit(X, y)
-    path = tmp_path / "gb.npz"
-    model.save(path)
-    np.testing.assert_array_equal(ml.GradientBoosting.load(path).feature_importances_, model.feature_importances_)
-    np.testing.assert_array_equal(ml.HostGBDT.from_file(path).feature_importances_, model.feature_importances_)
-    np.testing.assert_array_equal(pickle.loads(pickle.dumps(model)).feature_importances_, model.feature_importances_)
-
-
-def test_set_params_clears_them():
-    X, y = _data()
-    model = ml.GradientBoosting(n_estimators=4).fit(X, y)
-    model.set_params(n_estimators=5)
-    with pytest.raises(NotFittedError):
-        model.feature_importances_
-
-
-def test_sklearn_select_from_model_reads_them():
-    feature_selection = pytest.importorskip("sklearn.feature_selection")
-    X, y = _data()
-    sel = feature_selection.SelectFromModel(ml.GradientBoostingRegressor(n_estimators=10), max_features=1,
-                                            threshold=-np.inf).fit(X, y)
-    assert list(np.flatnonzero(sel.get_support())) == [2]

@@ -4,9 +4,10 @@ into a FRESH venv and run `python -m mojolearn verify --self-test`.
 
   python3 tools/wheel_self_test.py WHEEL --out DIR [--python python3.12] [--cpu-threads 3]
 
-The self-test fits `ols/base` twice through the ordinary comparison (untouched
--> must read IDENTICAL against the bundled reference table; one ULP perturbed
--> must read DIVERGENT). A wheel whose bundled table no longer matches its own
+The self-test fits `ols/base` twice per side through the ordinary comparison
+(device="cpu" and, when the wheel has a GPU set, device="gpu", in one process;
+untouched -> must read IDENTICAL against the bundled reference table; one ULP
+perturbed -> must read DIVERGENT, on each side). A wheel whose bundled table no longer matches its own
 bits fails here, which is how 0.8.35 shipped a `verify --quick` that stopped
 at the comparator self-test (ols/base 23eecb87d9e84cc7 vs table
 3d1d7c30b12d9872). tools/release.py no longer runs it (Andrew 2026-10-10: identity runs ONCE; a
@@ -104,17 +105,22 @@ def _run(args, wheel, out, env_dir):
             except ValueError:
                 report = None
             if isinstance(report, dict):
-                record["clean"] = report.get("clean")
-                record["perturbed"] = report.get("perturbed")
+                # v2 (2026-11-24): {side: {ran, clean, perturbed}} per side
+                record["sides"] = report.get("sides")
                 record["problems"] = report.get("problems")
                 record["self_test_passed"] = report.get("passed")
     record["rc"] = rc
     record["status"] = "PASSED" if rc == 0 and record.get("self_test_passed") is True else "FAILED"
     (out / "results.json").write_text(json.dumps(record, indent=1, sort_keys=True) + "\n")
-    clean = record.get("clean") or {}
-    print(f"WHEEL-SELF-TEST {record['status']} {wheel.name} rc={rc} "
-          f"clean={clean.get('state')} {clean.get('value')} vs {clean.get('reference')} "
-          f"perturbed={(record.get('perturbed') or {}).get('state')} (log {log})")
+    shown = []
+    for side, row in sorted((record.get("sides") or {}).items()):
+        if not isinstance(row, dict) or not row.get("ran"):
+            shown.append(f"{side}=not-run")
+            continue
+        clean = row.get("clean") or {}
+        shown.append(f"{side}: clean={clean.get('state')} {clean.get('value')} vs {clean.get('reference')} "
+                     f"perturbed={(row.get('perturbed') or {}).get('state')}")
+    print(f"WHEEL-SELF-TEST {record['status']} {wheel.name} rc={rc} {'; '.join(shown) or 'no sides'} (log {log})")
     return 0 if record["status"] == "PASSED" else 1
 
 

@@ -133,22 +133,6 @@ def test_strided_readonly_inputs_and_output_ownership(fast):
     np.testing.assert_array_equal(np.asarray(owned), out)
 
 
-def test_invalid_parameters_refuse_before_dispatch(fast):
-    a = np.ones((3, 4), dtype=np.float32)
-    b = _rne(np.ones((4, 2), dtype=np.float32))
-    invalid = [
-        ((a, b), {"transpose_a": True, "transpose_b": True}),
-        ((a, b), {"unknown": 1}),
-        ((a, b.astype(np.float16)), {}),
-        ((a, b[:3]), {}),
-        ((a, b), {"out": np.empty((3, 2), dtype=np.float64)}),
-        ((a, b), {"out": np.empty((3, 4), dtype=np.float32)[:, ::2]}),
-    ]
-    for args, kwargs in invalid:
-        with pytest.raises(Exception):
-            _native_call(fast.matmul_bf16, *args, **kwargs)
-
-
 def test_generic_bf16_native_aliases_and_keyword_operands(fast):
     from mojolearn import linalg
     assert linalg.matmul_bf16 is fast.matmul_bf16

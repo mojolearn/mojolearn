@@ -3,7 +3,7 @@
 """GaussianProcessRegressor(normalize_y=True) (lane/cpu-training-small-gaps,
 2026-09-15).
 
-The refusal check always runs; the value checks run through
+The refusal check and the constant-target metadata are in test_gp_boundary.py; the value checks run through
 whichever GP and preprocessing bindings this install loads and are skipped,
 saying so, without them. The statistics are Float32 (StandardScaler's pinned
 folds) where scikit-learn's reference is Float64, so values are compared to a
@@ -32,11 +32,6 @@ def _fit_or_skip(x, y, normalize_y=True):
         pytest.skip(f"no GP binding that fits on this install: {exc}")
 
 
-def test_non_bool_is_refused_by_name():
-    with pytest.raises(TypeError, match="normalize_y must be a bool"):
-        GaussianProcessRegressor(normalize_y="yes").fit([[0.0], [1.0]], [0.0, 1.0])
-
-
 def test_normalized_prediction_repeats_bitwise_and_tracks_sklearn():
     x, y, q = _data()
     m = _fit_or_skip(x, y)
@@ -52,15 +47,6 @@ def test_normalized_prediction_repeats_bitwise_and_tracks_sklearn():
     rmean, rstd = ref.predict(q.astype(np.float64), return_std=True)
     np.testing.assert_allclose(np.asarray(mean, np.float64), rmean, rtol=2e-4, atol=2e-3)
     np.testing.assert_allclose(np.asarray(std, np.float64), rstd, rtol=2e-3, atol=2e-3)
-
-
-def test_constant_target_publishes_scalar_metadata_and_array():
-    x, _, q = _data()
-    y = np.full(x.shape[0], 7.0, np.float32)
-    m = _fit_or_skip(x, y)
-    assert isinstance(m._y_train_std, float) and isinstance(m._y_train_mean, float)
-    mean = np.asarray(m.predict(q))
-    assert mean.shape == (24,) and mean.dtype == np.float32
 
 
 @pytest.mark.parametrize("kernel_name", ["rbf", "matern12", "matern52_ard", "normalized"])

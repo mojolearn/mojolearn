@@ -3,8 +3,6 @@
 import array
 import json
 
-import pytest
-
 from mojolearn import Array
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.models import Checkpoint, SafetensorsFile
@@ -50,14 +48,3 @@ def test_native_checkpoint_reads_all_storage_types_and_closes_maps(tmp_path, mon
     assert values["empty"].shape == (2, 0) and values["empty"].nbytes == 0
     assert packed.bits.tobytes() == bf.tobytes()
     assert file._mm is None and file._fh is None
-
-
-def test_sharded_index_must_name_the_shard_that_holds_each_tensor(tmp_path):
-    raw = array.array("f", [1.0]).tobytes()
-    write_safetensors(tmp_path / "a.safetensors", {"a": ("F32", (1,), raw)})
-    write_safetensors(tmp_path / "b.safetensors", {"b": ("F32", (1,), raw)})
-    index = tmp_path / "model.safetensors.index.json"
-    index.write_text(json.dumps({"weight_map": {"a": "b.safetensors", "b": "a.safetensors"}}))
-    checkpoint = Checkpoint.open(tmp_path)
-    with pytest.raises(ValueError, match="does not hold"):
-        checkpoint.names()

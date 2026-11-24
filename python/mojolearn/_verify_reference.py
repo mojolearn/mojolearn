@@ -29,7 +29,7 @@ then file name). Apple, NVIDIA and AMD use one shared GPU reference. Apple
 has no separate acceptable IDENTICAL hash. The cpu (host) column is a
 deciding witness too (Andrew 2026-10-24: "the cpu column should be REQUIRED
 too"): it must carry the same hash, and its only N/As are the declared ones,
-a lane the harness declares GPU-only (`identity_break.GPU_ONLY_LANES`, the
+a lane the harness declares without a CPU side (`_one_sided(lane, missing="cpu")`, the
 `RECORD_EXCLUDED_PREFIXES` cooperative drivers) and a model part that loads
 the GPU column's saved file. A deciding class whose newest value differs from
 the reference at an OLDER commit is kept as a distinct value (the record

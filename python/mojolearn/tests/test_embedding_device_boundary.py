@@ -3,8 +3,8 @@
 
 `device=None | "gpu" | "cpu"` is the last constructor parameter (`forward(ids, device=...)` is another thing: where the
 output lives). On a GPU installation a `device="cpu"` layer runs the CPU binary beside the GPU one in one process:
-nothing is launched or uploaded, its forward and backward return the bits the GPU layer returns in `identical` mode,
-and it has no device I/O (`forward(device=True)` and `to_device` are refused in words). What needs two devices is
+nothing is launched or uploaded (that its forward and backward return the GPU layer's bits is the verify lane
+`embedding`), and it has no device I/O (`forward(device=True)` and `to_device` are refused in words). What needs two devices is
 skipped by name on a CPU-only installation.
 """
 import pickle
@@ -69,18 +69,6 @@ def test_cpu_device_does_nothing_on_the_gpu():
     assert activity is not None
     assert activity["launches"] == 0, activity["launch_names"]
     assert activity["upload_calls"] == 0 and activity["download_calls"] == 0
-
-
-@two_devices
-def test_identical_mode_cpu_device_returns_the_gpu_bits():
-    if mojolearn.numeric_mode() != "identical":
-        pytest.skip("bits are promised in identical mode only")
-    gpu = Embedding.from_pretrained(table(), numeric_mode="identical")
-    cpu = Embedding.from_pretrained(table(), numeric_mode="identical", device="cpu")
-    assert gpu.vendor_used() == mojolearn.vendor() and cpu.vendor_used() == "cpu"
-    dy = np.random.default_rng(4).random((2, 4, 6), dtype=np.float32)
-    assert np.asarray(gpu.forward(ids())).tobytes() == np.asarray(cpu.forward(ids())).tobytes()
-    assert np.asarray(gpu.backward(ids(), dy)).tobytes() == np.asarray(cpu.backward(ids(), dy)).tobytes()
 
 
 @two_devices

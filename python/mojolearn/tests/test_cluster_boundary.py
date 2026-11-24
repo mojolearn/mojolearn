@@ -1,4 +1,6 @@
-"""Tiny public cluster regressions for Python 3.10/3.11 Array buffers.
+"""The cluster family at the Python boundary: Array buffer admission.
+
+Moved from test_cluster_array_buffer.py. Tiny public cluster regressions for Python 3.10/3.11 Array buffers.
 
 No NumPy import. The native fitting work is eight rows by two columns. Tests
 also refuse direct Array buffer exports on newer Python, so they cannot mask

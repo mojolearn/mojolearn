@@ -324,7 +324,9 @@ def cmd_inventory(args):
         errors.append(f"mojolearn._verify_light\t{type(exc).__name__}: {str(exc)[:200]}")
     try:
         h = importlib.import_module("mojolearn._identity_break")
-        lanes = [n for n in h.LANES if not n.startswith(h.RECORD_EXCLUDED_PREFIXES) and n not in h.GPU_ONLY_LANES]
+        # the CPU column's lanes: not out of record scope, not declared without a CPU side (ONE_SIDED)
+        lanes = [n for n in h.LANES if not n.startswith(h.RECORD_EXCLUDED_PREFIXES)
+                 and (h.one_sided(n) or ("",))[0] != "cpu"]
     except Exception as exc:
         errors.append(f"mojolearn._identity_break\t{type(exc).__name__}: {str(exc)[:200]}")
         lanes = []

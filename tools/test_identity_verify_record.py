@@ -65,3 +65,29 @@ def test_local_failure_is_never_admissible(tmp_path, state, value, local):
     report["cells"][0].update(state=state, value=value, local_check=local)
     result = columns.record_from_verify(report, h, "d" * 64)
     assert columns.vref()._part_value(result["cells"]["lane/base"], "train") is None
+
+
+def _v2(report):
+    """The same evidence as a v2 report: each row once per side, the CPU side's value differing."""
+    report = copy.deepcopy(report)
+    report["format"] = "mojolearn.verify-all-report.v2"
+    report["cells"] = [dict(row, side=side, value=("e" * 16 if side == "cpu" else row["value"]))
+                       for row in report["cells"] for side in ("cpu", "gpu")]
+    return report
+
+
+@pytest.mark.parametrize("side,cls,value", [("gpu", "nvidia", "c" * 16), ("cpu", "cpu", "e" * 16)])
+def test_v2_report_gives_one_column_per_side(tmp_path, side, cls, value):
+    report, h = example(tmp_path)
+    result = columns.record_from_verify(_v2(report), h, "d" * 64, side)
+    assert result["vendor"] == cls
+    assert result["cells"]["lane/base"]["hashes"] == [value]
+    assert result["verifier_observation"]["side"] == side
+
+
+def test_v2_report_needs_a_side_and_v1_takes_none(tmp_path):
+    report, h = example(tmp_path)
+    with pytest.raises(ValueError):
+        columns.record_from_verify(_v2(report), h, "d" * 64)
+    with pytest.raises(ValueError):
+        columns.record_from_verify(report, h, "d" * 64, "cpu")

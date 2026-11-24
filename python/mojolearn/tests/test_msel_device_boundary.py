@@ -17,7 +17,7 @@ import pytest
 import mojolearn
 from mojolearn import Ridge
 from mojolearn.model_selection import (
-    GridSearchCV, KFold, RandomizedSearchCV, cross_val_predict, cross_val_score, cross_validate, validation_curve,
+    GridSearchCV, RandomizedSearchCV, cross_val_score, validation_curve,
 )
 
 TWO_DEVICES = mojolearn.vendor() != "cpu"
@@ -113,19 +113,6 @@ def test_search_passes_the_members_device_through_unchanged(device):
     assert best.get_params()["device"] == device
     assert best.vendor_used() == ("cpu" if device == "cpu" else mojolearn.vendor())
     assert search.estimator.get_params()["device"] == device   # the base estimator is untouched
-
-
-@two_devices
-def test_a_cpu_member_cross_validates_to_the_gpu_members_bits():
-    x, y = data()
-    cv = KFold(4)
-    gpu, cpu = Ridge(alpha=0.5), Ridge(alpha=0.5, device="cpu")
-    assert same_bits(cross_val_score(cpu, x, y, cv=cv), cross_val_score(gpu, x, y, cv=cv))
-    assert same_bits(cross_val_predict(cpu, x, y, cv=cv), cross_val_predict(gpu, x, y, cv=cv))
-    a, b = cross_validate(cpu, x, y, cv=cv), cross_validate(gpu, x, y, cv=cv)
-    assert same_bits(a["test_score"], b["test_score"])
-    # the estimators handed in are untouched and unfitted
-    assert cpu.get_params()["device"] == "cpu" and gpu.get_params()["device"] is None
 
 
 @two_devices
@@ -237,21 +224,8 @@ def test_check_fits_a_search_once_on_each_device(make):
 
 
 # ------------------------------------------------------------------ scoring on the member's device
-
-@two_devices
-@pytest.mark.parametrize("scoring", ["r2", "neg_mean_squared_error", "neg_mean_absolute_error"])
-def test_a_scorer_of_a_cpu_member_gives_the_gpu_members_bits(scoring):
-    # the scorer's metric runs on the metrics binary of the member's device
-    x, y = data()
-    cv = KFold(4)
-    gpu, cpu = Ridge(alpha=0.5), Ridge(alpha=0.5, device="cpu")
-    assert same_bits(cross_val_score(cpu, x, y, cv=cv, scoring=scoring),
-                     cross_val_score(gpu, x, y, cv=cv, scoring=scoring))
-    a = cross_validate(cpu, x, y, cv=cv, scoring=("r2", "neg_mean_squared_error"), return_train_score=True)
-    b = cross_validate(gpu, x, y, cv=cv, scoring=("r2", "neg_mean_squared_error"), return_train_score=True)
-    for key in ("test_r2", "train_r2", "test_neg_mean_squared_error", "train_neg_mean_squared_error"):
-        assert same_bits(a[key], b[key])
-
+# A CPU member's cross_val_score, cross_val_predict, cross_validate and scorer bits against a GPU member's are the
+# verify lanes fn-msel-cross-val-score, fn-msel-cross-val-predict, fn-msel-cross-validate and fn-msel-scorers.
 
 @two_devices
 def test_a_search_scores_each_candidate_on_the_candidates_device():
@@ -259,15 +233,6 @@ def test_a_search_scores_each_candidate_on_the_candidates_device():
     search = GridSearchCV(Ridge(alpha=0.5), {"device": ["gpu", "cpu"]}, cv=3, scoring="r2").fit(x, y)
     scores = np.asarray(search.cv_results_["mean_test_score"])
     assert scores[0].tobytes() == scores[1].tobytes()
-
-
-@two_devices
-def test_a_scorer_called_on_a_cpu_member_gives_the_gpu_members_bits():
-    from mojolearn.model_selection import get_scorer
-    x, y = data()
-    scorer = get_scorer("r2")
-    gpu, cpu = Ridge(alpha=0.5).fit(x, y), Ridge(alpha=0.5, device="cpu").fit(x, y)
-    assert np.float64(scorer(cpu, x, y)).tobytes() == np.float64(scorer(gpu, x, y)).tobytes()
 
 
 def test_search_check_without_a_fitted_best_estimator_says_why(capsys):

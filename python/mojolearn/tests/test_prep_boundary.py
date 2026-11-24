@@ -1,9 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Python API boundary tests of the prep family: refusals, exception types and words, returned types,
-buffer admission and framework interop. Numerical results are held by the verify lanes."""
+"""The preprocessing family at the Python boundary: refusals by type. Their bits on each side are the verify lanes."""
+import numpy as np
+
+# ---------------------------------------------------------------------------------------------------------------------
+# LabelBinarizer inverse (moved from test_label_binarizer_inverse_window.py).
+from mojolearn._expansion_prep import LabelBinarizer
 
 
+def test_binary_rejects_three_columns():
+    model = LabelBinarizer().fit([3, 7])
+    try:
+        model.inverse_transform(np.zeros((2, 3), dtype=np.float32))
+    except ValueError:
+        return
+    raise AssertionError('binary inverse must reject three columns')
+
+
+# ---- appended by vdv-pytest-b (2026-11-24) ----
 # moved from test_x_prep_scaler_options.py (vdv-pytest-b, 2026-11-24)
 import os
 import tempfile
