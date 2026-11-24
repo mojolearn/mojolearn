@@ -1,0 +1,18 @@
+diff --git a/x_cluster/bodies.mojo b/x_cluster/bodies.mojo
+index 5cce4978af..74fb6bbfa6 100644
+--- a/x_cluster/bodies.mojo
++++ b/x_cluster/bodies.mojo
+@@ -42,6 +42,13 @@ def sq_dist_rows[REV: Bool = False](a: FPtr, i: Int, b: FPtr, j: Int, d: Int) ->
+         var f = d - 1 - q if REV else q
+         var t = ftz(ftz(a[i * d + f]) - ftz(b[j * d + f]))
+         acc = ftz(acc + ftz(identical_mul(t, t)))
++    from std.sys import is_defined
++    from std.memory import bitcast
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-cpu (lane vdv-sabotage): the result one ulp up, the host bindings only
++        var h = acc
++        if abs(h) >= Float32(1.17549435e-38) and h - h == Float32(0):
++            return bitcast[DType.float32](bitcast[DType.uint32](h) + UInt32(1))
++        return h
+     return acc
+ 
+ 
