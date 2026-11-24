@@ -1356,6 +1356,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_VAR_BLOCK_OFF.ab-outcome-3.patch
     comptime assert not is_defined["MOJOLEARN_SEQ_VAR_BLOCK_OFF"](), "removed 2026-11-24 (lane/o3-nseq of ab-outcome-3, A/B nvc-ab-20261124T115722Z-d8f8b2 NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): SEQ_VAR_BLOCK_OFF (VAR's Cholesky solve and forecast as one-thread ops, old path) was no faster: 2 cells, sequential-fit 180 -> 181 ms (1.01), sequential-predict 2.23 -> 2.24 ms (1.00); the threadgroup kernels take every VAR shape that fits VAR_SMEM, the one-thread ops stay for the rest; code at 04feb6f52d; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_VAR_BLOCK_OFF.ab-outcome-3.patch"
     # ---- end lane ab-outcome-3 / o3-nseq
+    # ---- lane ab-outcome-3 / o3-route (2026-11-24)
+    # TOMBSTONE: MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST (WITHDRAWN before any A/B: Andrew 2026-11-24, one route, no per-process timing) deleted 2026-11-24 by lane/o3-route; never reached main, code recoverable at lane/ab-outcome-2@1f40eb3c09.
+    # Restore: git show 1f40eb3c09 -- gemm/host_transport.mojo | git apply (no patch file: the code never reached main).
+    comptime assert not is_defined["MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST"](), "removed 2026-11-24 (lane/o3-route of ab-outcome-3; Andrew 2026-11-24: one route, no per-process timing): GEMM_FAST_STAGE_UP_BY_COST (a one-time chunk probe per process timing the raw pageable upload against the staged one and keeping the faster) was withdrawn before any A/B; the float32 upload stays staged on NVIDIA/AMD, with -D MOJOLEARN_GEMM_STAGE_UP_OFF (raw upload) still owed an A/B with the wave-3 sha; code at lane/ab-outcome-2@1f40eb3c09 (never reached main)"
+    # ---- end lane ab-outcome-3 / o3-route
     return True
 
 
