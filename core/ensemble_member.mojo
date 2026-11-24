@@ -690,6 +690,25 @@ def meta_plan_metric_other(handle: Int, var other: MselOtherTier) raises:
         shared_slot_unlock(lock)
 
 
+def meta_plan_metric_kernels(handle: Int, var kernels: List[EntryRef], var kernel_ok: List[UInt8],
+                             own_score: Bool) raises:
+    """UNPACK (THE SEARCH KIND's admission, lane w3f3-c): per candidate the
+    default-option metric kernels' entry (core/msel_search_run.mojo
+    `MselOtherTier.kernels`) and whether the one scorer is the class's own
+    score, written into the plan entry's tier record after
+    `meta_plan_metric_other` (which replaces that record whole)."""
+    var store = _PLANS.get_or_create_ptr()
+    var address = _plan_lookup(handle, False)
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    shared_slot_lock(lock)
+    try:
+        _PlanSlotPtr(unsafe_from_address=address)[].other.kernels = kernels^
+        _PlanSlotPtr(unsafe_from_address=address)[].other.kernel_ok = kernel_ok^
+        _PlanSlotPtr(unsafe_from_address=address)[].other.own_score = own_score
+    finally:
+        shared_slot_unlock(lock)
+
+
 def meta_plan_search_labels(handle: Int, cluster: EntryRef, var label_words: List[String]) raises:
     """UNPACK (THE SEARCH KIND's admission, lane mf-cluster5): the metrics
     image's cluster label-pair entry (core/metrics_cluster_table.mojo,

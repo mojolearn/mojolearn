@@ -185,12 +185,29 @@ struct MselOtherTier(Copyable, Movable, Defaultable):
     var resolved: Bool
     var cluster: EntryRef
     var cpu_fast: List[UInt8]
+    # THE DEFAULT-OPTION KERNELS (lane w3f3-c, 2026-11-24; set by
+    # core/ensemble_member.mojo `meta_plan_metric_kernels`, kept apart from
+    # the other tier's words above): per candidate, the default tier's
+    # metrics image's float32 regression kernels (core/metrics_entry_table.mojo
+    # MR_R2 / MR_MSE / MR_MAE / MR_RMSE) of the metrics module the native
+    # scorer door would call for that candidate's estimator
+    # (`MselMetricPrepared.prepare`: the CPU image for a host route, else the
+    # default tier's device image), resolved ONCE by the UNPACK; `kernel_ok`
+    # 0: that image publishes none (the scorer then runs the x_metrics
+    # program, as before). `own_score`: the one scorer is the class's own
+    # `score` (scoring=None, `_own_score`), whose program is the class's.
+    var kernels: List[EntryRef]
+    var kernel_ok: List[UInt8]
+    var own_score: Bool
 
     def __init__(out self):
         self.route = MetricRoute(entry_ref_unresolved().call, False, False)
         self.resolved = False
         self.cluster = entry_ref_unresolved()
         self.cpu_fast = List[UInt8]()
+        self.kernels = List[EntryRef]()
+        self.kernel_ok = List[UInt8]()
+        self.own_score = False
 
 
 struct MselSearchPlan(Movable):
@@ -1493,6 +1510,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         member_score = False
         codes[0] = SCORER_ACCURACY
         var accuracy = msel_scorer_row(SCORER_ACCURACY)
+        accuracy.own = True  # lane w3f3-c: the class's own score's program, not accuracy_score's kernel
         rows_of.append(accuracy)
         ops.append(accuracy.op)
         logs.append(False)
@@ -1897,6 +1915,16 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                     # for y_true's printed words in a refusal (three words)
                     scored.given = plan.given
                     scored.given_dtype = plan.given_dtype
+                    # lane w3f3-c: the public metric's default-option kernel of
+                    # this candidate's metrics image (MselOtherTier.kernels,
+                    # resolved once by the UNPACK); the class's own score
+                    # (scoring=None) keeps its program
+                    var cand_k = (u0 + t // sides) // used
+                    if cand_k < len(plan.other.kernel_ok) and plan.other.kernel_ok[cand_k] != UInt8(0):
+                        scored.kernel = plan.other.kernels[cand_k]
+                        scored.kernel_ok = True
+                    if plan.other.own_score:
+                        scored.own = True
                     scored.side_rows = side_rows[s]
                     if y_cols > 1:
                         # lane mf-rows8b (rows :3777 / :3779): the side's outputs and,

@@ -13,9 +13,10 @@ from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
 from core.metrics_entry_table import (
-    MetricsEntryKey, MetricsR2Owner, MR_R2, metrics_r2_check_spans, metrics_r2_publish, metrics_vendor_word,
+    MetricsEntryKey, MetricsR2Owner, MR_R2, MR_R2_WEIGHTED, MR_MSE, MR_MAE, metrics_r2_check_spans,
+    metrics_r2_publish, metrics_vendor_word,
 )
-from metrics.estimator import r2_score_host, r2_score_weighted_host
+from metrics.estimator import r2_score_host, r2_score_weighted_host, regression_error_host
 
 
 def _r2_value(y_addr: Int, yh_addr: Int, n: Int) raises -> Float32:
@@ -45,9 +46,21 @@ def metrics_r2_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         if operation == MR_R2:
             value = _r2_value(a[0], a[1], n)
             MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=a[2])[] = Float64(value)
-        else:
+        elif operation == MR_R2_WEIGHTED:
             value = _r2_weighted_value(a[0], a[1], a[2], n)
             MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=a[3])[] = Float64(value)
+        else:
+            # lane w3f3-c: the Python `mean_squared_error` / `mean_absolute_error` /
+            # `root_mean_squared_error` entries' body (`regression_error_binding`)
+            var y = read_f32(a[0], max(0, n))
+            var yh = read_f32(a[1], max(0, n))
+            if operation == MR_MSE:
+                value = regression_error_host[False, False](y, yh, n)
+            elif operation == MR_MAE:
+                value = regression_error_host[True, False](y, yh, n)
+            else:
+                value = regression_error_host[False, True](y, yh, n)
+            MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=a[2])[] = Float64(value)
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = 0
         return 0
     except problem:
