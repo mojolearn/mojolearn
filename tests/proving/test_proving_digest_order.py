@@ -27,3 +27,31 @@ def test_category_fits_then_a_forest_regressor_twin_has_the_models_digest(twin_c
                          text=True, timeout=900)
     tail = "\n".join(run.stdout.splitlines()[-15:])
     assert run.returncode == 0, "the category fits left state for the next forest regressor:\n" + tail
+
+
+_TWIN_AFTER_IMPORT = r'''
+import sys, os, tempfile
+import numpy as np
+exec(sys.argv[1])
+import mojolearn
+r = np.random.default_rng(0); X = r.random((400, 6), dtype=np.float32); y = X @ np.arange(1, 7, dtype=np.float32)
+bad = []
+for name, target in (("RandomForestRegressor", y), ("RandomForestClassifier", (y > np.median(y)).astype(np.int32)),
+                     ("ExtraTreesRegressor", y)):
+    model = getattr(mojolearn, name)(n_estimators=5, random_state=0, device="cpu").fit(X, target)
+    path = os.path.join(tempfile.mkdtemp(), name + ".npz"); model.save(path)
+    if mojolearn.host_model(path).digest_ != model.digest_:
+        bad.append(name)
+print("BAD " + ",".join(bad) if bad else "OK")
+'''
+
+
+@pytest.mark.parametrize("first", ["", "import mojolearn._classical_host", "import mojolearn._forest_host",
+                                   "import mojolearn._gbdt_host"])
+def test_the_twin_digest_does_not_depend_on_which_host_module_is_imported_first(first):
+    # r6-proving (2026-11-23): `import mojolearn._classical_host` first (a CPU GBDT predict does it) took the
+    # HostForest family layout before its finalizer was installed; the twin's digest then read other fields.
+    run = subprocess.run([sys.executable, "-c", _TWIN_AFTER_IMPORT, first], cwd=ROOT, capture_output=True,
+                         text=True, timeout=600)
+    assert run.returncode == 0, run.stderr[-2000:]
+    assert run.stdout.strip().splitlines()[-1] == "OK", f"{first or 'no prelude'}: {run.stdout.strip()}"

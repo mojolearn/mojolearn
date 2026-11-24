@@ -38,7 +38,6 @@ import hashlib
 import importlib.machinery
 import importlib.util
 import os
-import sys
 import weakref
 
 from . import _backend
@@ -303,9 +302,11 @@ _digest_fields.twin_field(HostForest, "estimator")
 _digest_fields.schema(HostForest, tuple(
     ("when", "family", family, _digest_fields.forest_steps(fmt, _digest_fields.host_forest_engine(fmt)))
     for fmt, family in _FORMATS.items()))  # glue: the two saved forest families
-# The digest reads the instance through the shared family admission, which
-# holds the classes connected when their module was loaded: this module loads
-# on first touch of HostForest, after the package's connection.
-from ._native_family_layouts import connect as _connect_family_layouts  # noqa: E402
-_connect_family_layouts(sys.modules[__package__], only=(HostForest,))
-del _connect_family_layouts
+# The digest reads the instance through the shared family admission. Its
+# family layout is NOT taken here (r6-proving, 2026-11-23): the saved-model
+# owner's connection in _classical_host installs HostForest.__del__ (the grove
+# finalizer), and a layout snapshotted before that install refuses the class
+# ("changed Python storage hooks"), so its digest fell back to the public
+# fields. That happened whenever _classical_host was imported before this
+# module (a CPU GBDT predict connects it). _classical_host takes the layout
+# once, right after its connection, whatever module was imported first.
