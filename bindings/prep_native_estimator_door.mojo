@@ -47,6 +47,11 @@ def prep_native_context(context: PythonObject) raises -> PythonObject:
     var nk = prep_keys()
     var found = py_get(context, nk[].k_native_estimator_context)
     if found is None:
+        # Model selection's own context (a search's plan context, handed down a META work-list: lane w3f2-rfe,
+        # failures row C) IS the plan table; it holds no reference to itself (python/mojolearn/_families.py).
+        # Read only when the key is absent, never on a connected owner's call.
+        if py_get(context, nk[].k_family_msel_estimators) is not None:
+            return context
         raise Error("ImportError: mojolearn: the native estimator plans are not connected")
     return found
 

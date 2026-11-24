@@ -302,13 +302,29 @@ def _connect_pass(package):
         # reach a wrapped estimator or splitter through the same compiled
         # model-selection entry and plan table (bindings/prep_native_estimator_door.mojo).
         prep = loaded("_expansion_prep")
-        if prep is not None:
-            prep._ENCODE_CONTEXT.update(native_estimator_entry=selection._NATIVE,
-                                        native_estimator_context=selection._NATIVE_CONTEXT)
         trees = loaded("_expansion_trees")
+        # Lane w3f2-rfe (failures row C): a META estimator's admission hands its own plan context down the
+        # work-list (providers/python/member_ensemble_boundary_door.mojo: a search's is model selection's,
+        # a forest's or a booster's a private copy of its family context, taken at its connection), and
+        # every nested estimator is looked up through THAT context. Only the encode and trees contexts were
+        # connected, so RFE over a search (or any meta inside a meta) raised "the native estimator plans are
+        # not connected". Every registered plan's context carries the same entry and plan table: connected
+        # here, once per pass, never per call. Model selection's own context gets the entry only: it IS the
+        # plan table (bindings/prep_native_estimator_door.mojo `prep_native_context` answers it itself), so
+        # it never holds a reference to itself.
+        owners = [selection._NATIVE_CONTEXT]
+        owners += [plan.get("context") for plan in selection._NATIVE_CONTEXT.get("family_msel_estimators", {}).values()]  # glue: registered plan contexts, once per connection pass
+        if prep is not None:
+            owners.append(prep._ENCODE_CONTEXT)
         if trees is not None:
-            trees._TREES_CONTEXT.update(native_estimator_entry=selection._NATIVE,
-                                        native_estimator_context=selection._NATIVE_CONTEXT)
+            owners.append(trees._TREES_CONTEXT)
+        for owner in owners:  # glue: fixed connection metadata, once per connection pass
+            if type(owner) is not dict:
+                continue
+            owner["native_estimator_entry"] = selection._NATIVE
+            if owner is not selection._NATIVE_CONTEXT:
+                owner["native_estimator_context"] = selection._NATIVE_CONTEXT
+        if trees is not None:
             # PermutationExplainer's resident linear route recognizes this
             # library's linear predict by identity (bindings/trees_agnostic_native_door.mojo).
             linear = loaded("_expansion_linear")
