@@ -52,13 +52,15 @@ from bindings.trees_public_inputs_door import (
     trees_class_rows_only,
 )
 from bindings.trees_public_inputs_run import TREES_NONFINITE, trees_finite_f32
+from core.member_unit_classes import member_unit_classes, member_unit_recode
+from core.admitted_refusals import admitted_finite_refuse
 from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector,
 )
 from bindings.admitted_input_run import AdmittedXView
 from bindings.member_given_y_unpack import member_given_y
 from bindings.member_set_door import (
-    MemberSet, member_set_admit, member_set_width, member_set_run, member_set_pack, member_set_release,
+    MemberSet, member_set_admit_or_raise, member_set_width, member_set_run, member_set_pack, member_set_release,
     member_set_notices, member_set_resident, member_set_reads_given, member_set_given,
     member_set_tests, member_set_host, member_marked, member_held_open, member_held_run, member_held_close,
     MemberHeldCall,
@@ -770,16 +772,19 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     var count = Int(py=_int(fields["n_estimators"]))
     var template = forest_get_params(base, context) if count > 0 else Python.dict()
     py_setitem(template, "device", device)
-    # NATIVE MEMBERS (core/member_abi.mojo, bindings/member_set_door.mojo): a
-    # member class whose family has published its member entry is fitted
-    # without its fit door, in waves of independent members run in parallel
-    # with the GIL released (wave width: the host cores for a CPU route, one
-    # on a GPU). A wave holds its own draws; each worker gathers its drawn
-    # block (or hands the draw over as an index view when the family reads
-    # one); a member over every row and column reads X by view. `done`
-    # counts the members fitted this way; a member the family does not admit
-    # (and every member after it) keeps the loop below. Same draws, same
-    # seeds, same member order as that loop.
+    # NATIVE MEMBERS (core/member_abi.mojo, bindings/member_set_door.mojo):
+    # every member is fitted without its fit door, in waves of independent
+    # members run in parallel with the GIL released (wave width: the host
+    # cores for a CPU route, one on a GPU). A wave holds its own draws; each
+    # worker gathers its drawn block (or hands the draw over as an index view
+    # when the family reads one); a member over every row and column reads X
+    # by view. NO FIT DOOR IS LEFT (lane mf-del8, 2026-11-23: the loop that
+    # fitted a member the set did not take, and every member after it,
+    # through its fit door (`_member_fit`, which now serves only the batched
+    # route's one forest) is deleted): a member the set does not take is
+    # refused before any fit of its wave in its refuser's words
+    # (`member_set_admit_or_raise`), a member's refused fit or publication
+    # raises its own words. Same draws, same seeds, same member order.
     var done = 0
     var b = trees_builtins()
     var n_classes = len(fields["classes_"]) if classifier else 0
@@ -787,18 +792,16 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     var w_address = 0
     if sw:
         w_address = sw.value().address
-    var native = count > 0
     var jobs = native_unit_jobs(fields["n_jobs"], "Bagging")
     # WHO REFUSES A NON-FINITE X OR y. X (and a regressor's targets) reach
-    # this door untested because each member's fit door tests what it is
-    # given. A member whose kind tests its rows (`member_set_tests`,
-    # MEMBER_CAN_TEST_ROWS) refuses them in its own fit, from the pass its
-    # kernel already makes: no host scan here; its refusal fails the wave and
-    # the loop below raises the forest's own words. Any other member (the
-    # tree families today) reads admitted words: X and a regressor's targets
-    # are proven by one host scan when the first such member is admitted (an
-    # unpublished family never pays it); not finite = the loop below, whose
-    # first fit door refuses in the forest's own words.
+    # this door untested. A member whose kind tests its rows
+    # (`member_set_tests`, MEMBER_CAN_TEST_ROWS) refuses them in its own fit,
+    # from the pass its kernel already makes: no host scan here. Any other
+    # member (the tree families today) reads admitted words: X and a
+    # regressor's targets are proven by one host scan when the first such
+    # member is admitted, and refused before any fit in the forest door's
+    # own words (TREES_NONFINITE for X; scikit-learn's check_array words for
+    # y), which its fit door raised before (lane mf-del8).
     var proven = False
     # Whether `xa` is the object that owns the set's X words (read once per fit:
     # the resident scope's pin, below).
@@ -810,7 +813,8 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     var given = MemberMatrix()
     if not classifier:
         given = member_given_y(y_given, n, 1, context["array_class"])
-    while native and done < count:  # driver-loop: over the waves of member estimators
+    var y_address = trees_address(y_all)
+    while done < count:  # driver-loop: over the waves of member estimators
         var set = MemberSet(x.address, n, d, MEMBER_I32 if classifier else MEMBER_F32, MEMBER_I32)
         set.run.cap = jobs
         # A member on a CPU route keeps its fitted state: this door's
@@ -819,6 +823,16 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
         # device copy of X through their doors and the states are freed.
         set.adopt = True
         set.adopt_trees = True
+        # THE UNIT CLASSES (core/member_unit_classes.mojo): each classifier
+        # draw's classes are read once below (the set's class-cover pass, so
+        # the set makes no second one). A draw that lacks a class of the
+        # ensemble is fitted on the classes it drew, as its fit door fitted
+        # it: its codes re-coded onto them, the member packed labelled with
+        # the ensemble codes it holds (the predicts place its columns by its
+        # classes_, `_sub_cols`).
+        set.run.skip_lacking = classifier
+        var recoded = List[List[Int32]]()
+        var wave_labels = Python.list()
         var wave_rows = Python.list()
         var wave_cols = Python.list()
         var width = 1
@@ -827,54 +841,52 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
             var rows = _arange(xt, n, context) if all_rows else _indices(xt, n, n_rows, bootstrap, seed, 2 * k, context)
             var cols = _arange(xt, d, context) if all_cols else _indices(xt, d, n_feat, bootstrap_features, seed, 2 * k + 1, context)
             var member = _clone_from(base, template, _sub_seed(seed, k), context)
-            if not member_set_admit(set, member, trees_address(y_all), w_address,
-                                    0 if all_rows else trees_address(rows), 0 if all_rows else n_rows,
-                                    0 if all_cols else trees_address(cols), 0 if all_cols else n_feat,
-                                    n_classes, context, b):
-                native = False
-                break
+            var target = y_address
+            var classes = n_classes
+            var labels = codes
+            set.labels = PythonObject(None)
+            if classifier:
+                var held = member_unit_classes(y_address, 0 if all_rows else trees_address(rows), False,
+                                               n if all_rows else n_rows, n_classes)
+                if len(held) > 0:
+                    recoded.append(member_unit_recode(y_address, n, n_classes, held))
+                    target = Int(recoded[len(recoded) - 1].unsafe_ptr())
+                    classes = len(held)
+                    labels = Python.list()
+                    for c in range(len(held)):  # driver-loop: over the draw's held classes (a few labels)
+                        _ = py_call(labels.append, PythonObject(Int(held[c])))
+                    # a class_weight dict is read over the ensemble codes the draw holds
+                    set.labels = labels
+            member_set_admit_or_raise(set, member, target, w_address,
+                                      0 if all_rows else trees_address(rows), 0 if all_rows else n_rows,
+                                      0 if all_cols else trees_address(cols), 0 if all_cols else n_feat,
+                                      classes, context, b)
+            set.labels = PythonObject(None)
+            _ = py_call(wave_labels.append, labels)
             if given.given() and member_set_reads_given(set):
                 member_set_given(set, given.data, given.dtype)
             # Inside `resident()` a member that reads a scope keeps X on the
             # device across the bags (bindings/member_set_door.mojo, THE
             # RESIDENT SCOPE). Only when `xa` is the object that owns the
-            # set's X words; a scope read that raises is the loop's to refuse.
+            # set's X words; a scope read that raises raises its own doors'
+            # words (nothing of the wave is fitted).
             if xa_owns:
-                try:
-                    member_set_resident(set, xa, context)
-                except:
-                    native = False
-                    break
+                member_set_resident(set, xa, context)
             if not proven and not member_set_tests(set, k - done):
-                proven = trees_finite_f32(x.address, n * d) and (
-                    classifier or trees_finite_f32(trees_address(y_all), n))
-                _ = y_all  # keep the Python object alive through the scan above
-                if not proven:
-                    native = False
-                    break
+                if not trees_finite_f32(x.address, n * d):
+                    raise Error(TREES_NONFINITE)
+                if not classifier and not trees_finite_f32(y_address, n):
+                    admitted_finite_refuse(1, owner, "y")
+                _ = y_all  # keep the Python object alive through the scans above
+                proven = True
             _ = py_call(wave_rows.append, rows)
             _ = py_call(wave_cols.append, cols)
             if k == done:
                 width = member_set_width(set)
             k += 1
-        if not native:
-            # Nothing of this wave ran: its members are fitted by the loop below.
-            break
-        # A member that refuses its fit publishes nothing: this wave and the
-        # rest are fitted by the loop below (same draws, same seeds), whose
-        # fit door raises the estimator's own words if the request is wrong.
-        # So does a wave with a draw that lacks a class of the ensemble
-        # (bindings/member_set_door.mojo, the class-cover pass, before any
-        # fit): the member's own door fits it on the classes it drew.
-        var ran = False
-        try:
-            member_set_run(set)   # a failing member releases every state
-            ran = True
-        except:
-            ran = False
-        if not ran:
-            native = False
-            break
+        # A member that refuses its fit publishes nothing: every state of the
+        # wave is released and its own words are raised.
+        member_set_run(set)
         _ = x  # keep the admitted X alive through the member fits above
         _ = y_all
         _ = sample_weight
@@ -882,7 +894,7 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
         _ = wave_cols
         try:
             for i in range(set.count()):  # driver-loop: over this wave's fitted members (publication)
-                _ = py_call(members.append, member_set_pack(set, i, codes, b))
+                _ = py_call(members.append, member_set_pack(set, i, wave_labels[i], b))
                 _ = py_call(features.append, wave_cols[i])
                 if oob:
                     _ = py_call(oob_rows.append, _unseen_rows(xt, wave_rows[i], n, context))
@@ -893,39 +905,21 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
             # THE LIFETIME RULE (core/member_abi.mojo): X, the targets, the
             # weights and this wave's draws were handed to the members' fits
             # and live until every state of the wave was packed (exported,
-            # and made to own its rows when adopted) or released: to here.
+            # and made to own its rows when adopted) or released: to here. A
+            # borrowing member read its re-coded codes again at its pack.
             _ = x
             _ = y_all
             _ = sample_weight
             _ = wave_rows
             _ = wave_cols
+            _ = len(recoded)
         kept = kept and set.kept_all and member_set_host(set)
         done += set.count()
         _ = set.count()
-    for k in range(done, count):  # driver-loop: over the member estimators
-        var rows = _arange(xt, n, context) if all_rows else _indices(xt, n, n_rows, bootstrap, seed, 2 * k, context)
-        var cols = _arange(xt, d, context) if all_cols else _indices(xt, d, n_feat, bootstrap_features, seed, 2 * k + 1, context)
-        var xs = xa if (all_rows and all_cols) else _gather(xt, x.address, n, d, rows, cols, context)
-        _ = x  # keep the Python object alive through the native call above
-        var ys = y_all
-        if not all_rows:
-            ys = _gather_codes(xt, y_all, rows, context) if classifier else _gather_vec(xt, trees_address(y_all), n, rows, context)
-        var member = _clone_from(base, template, _sub_seed(seed, k), context)
-        var weights = PythonObject(None)
-        if sw:
-            # every row: the weights as given (the member's own check reads
-            # the same float32 values); else the drawn rows' weights
-            weights = sample_weight if all_rows else _gather_vec(xt, sw.value().address, n, rows, context)
-        _member_fit(member, xs, ys, weights, context)
-        _ = x  # keep the Python object alive through the native call above
-        _ = py_call(members.append, member)
-        _ = py_call(features.append, cols)
-        if oob:
-            _ = py_call(oob_rows.append, _unseen_rows(xt, rows, n, context))
     py_setitem(fields, "n_features_in_", _P(d))
     _ = x^
     var word = 0
-    if count > 0 and done == count:
+    if count > 0:
         if proven:
             word |= _BAG_X_PROVEN
         if kept:
