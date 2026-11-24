@@ -875,8 +875,8 @@ class _Schedule(_LrTable):
 
     kind = ""
 
-    def __init__(self, peak_lr, warmup_steps=0, total_steps=None, min_lr=0.0):
-        return _OPT_NATIVE("schedule_construct", self, (peak_lr, warmup_steps, total_steps, min_lr), None, _OPT_CONTEXT)
+    def __init__(self, peak_lr, warmup_steps=0, total_steps=None, min_lr=0.0, *, device=None):
+        return _OPT_NATIVE("schedule_construct", self, (peak_lr, warmup_steps, total_steps, min_lr, device), None, _OPT_CONTEXT)
 
     def config(self):
         return _OPT_NATIVE("schedule_config", self, (), None, _OPT_CONTEXT)
@@ -905,6 +905,10 @@ class ConstantLR(_Schedule):
         Step at which the decay reaches `min_lr`; >= max(1, warmup_steps).
     min_lr : float, default 0.0
         Final learning rate; finite and >= 0.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the optimizer that uses this schedule runs. None uses this installation's device,
+        'cpu' the CPU and 'gpu' requires a GPU installation; an optimizer given another
+        device raises ValueError. Other values raise ValueError.
 
     Notes
     -----
@@ -924,8 +928,8 @@ class ConstantLR(_Schedule):
     kind = "constant"
 
     def __init__(self, peak_lr, warmup_steps=0, total_steps=None,
-                 min_lr=0.0):
-        return _OPT_NATIVE("schedule_construct", self, (peak_lr, warmup_steps, None, 0.0), None, _OPT_CONTEXT)
+                 min_lr=0.0, *, device=None):
+        return _OPT_NATIVE("schedule_construct", self, (peak_lr, warmup_steps, None, 0.0, device), None, _OPT_CONTEXT)
 
 
 class WarmupLinearLR(_Schedule):
@@ -944,6 +948,10 @@ class WarmupLinearLR(_Schedule):
         Step at which the decay reaches `min_lr`; >= max(1, warmup_steps).
     min_lr : float, default 0.0
         Final learning rate; finite and >= 0.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the optimizer that uses this schedule runs. None uses this installation's device,
+        'cpu' the CPU and 'gpu' requires a GPU installation; an optimizer given another
+        device raises ValueError. Other values raise ValueError.
 
     Notes
     -----
@@ -989,6 +997,10 @@ class WarmupCosineLR(_Schedule):
         Step at which the decay reaches `min_lr`; >= max(1, warmup_steps).
     min_lr : float, default 0.0
         Final learning rate; finite and >= 0.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the optimizer that uses this schedule runs. None uses this installation's device,
+        'cpu' the CPU and 'gpu' requires a GPU installation; an optimizer given another
+        device raises ValueError. Other values raise ValueError.
 
     Notes
     -----
@@ -1099,6 +1111,9 @@ class Generator(object):
         Seed in [0, 2**64); otherwise `ValueError`.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the draws run. None uses this installation's device, 'cpu' runs on the CPU and
+        'gpu' requires a GPU installation. Other values raise ValueError.
 
     Examples
     --------
@@ -1108,8 +1123,8 @@ class Generator(object):
     >>> y, key = gen.dropout(w, p=0.1)
     """
 
-    def __init__(self, seed, numeric_mode=None):
-        return _native_samba_bridge.RUNTIME.samba_native_call("generator_init", (self, seed, numeric_mode), _native_samba_bridge.CONTEXT)
+    def __init__(self, seed, numeric_mode=None, *, device=None):
+        return _native_samba_bridge.RUNTIME.samba_native_call("generator_init", (self, seed, numeric_mode, device), _native_samba_bridge.CONTEXT)
 
     def state_dict(self):
         """Return the generator state as ``{'seed': int, 'counter': int}``."""
