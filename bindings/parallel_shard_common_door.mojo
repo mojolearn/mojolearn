@@ -42,7 +42,7 @@ from bindings.classical_arrays_door import classical_address
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_process_pool_door import (
     process_pool_create, process_pool_map_typed, process_pool_map_replies, process_pool_close, process_pool_closed, process_pool_pids, PROCESS_BOUNDARY,
-    process_pool_trace, process_pool_trace_set,
+    process_pool_trace, process_pool_trace_set, process_pool_host_set, process_pool_vendor,
 )
 from bindings.native_process_wire_door import wire_reply_pack, wire_record_pack
 from core.parallel_worker_frame import WireRecord
@@ -174,17 +174,21 @@ struct ShardIdlePool(Movable):
     var pid: Int
     var pool: PythonObject
     var environ: PythonObject
+    # True for a pool on the host route (`shard_open(..., host=True)`): part
+    # of the key, so a device='cpu' member never takes a GPU pool or back
+    var host: Bool
 
     def __init__(out self, var child: String, var devices: List[Int], pid: Int, pool: PythonObject,
-                 environ: PythonObject):
+                 environ: PythonObject, host: Bool):
         self.child = child^
         self.devices = devices^
         self.pid = pid
         self.pool = pool
         self.environ = environ
+        self.host = host
 
-    def keyed(self, child: String, devices: List[Int]) -> Bool:
-        if self.child != child or len(self.devices) != len(devices):
+    def keyed(self, child: String, devices: List[Int], host: Bool) -> Bool:
+        if self.host != host or self.child != child or len(self.devices) != len(devices):
             return False
         for i in range(len(devices)):  # small-loop(a pool's device indices)
             if self.devices[i] != devices[i]:
@@ -215,10 +219,10 @@ struct ShardIdle(Defaultable, Movable):
         self.stored_payloads = List[PythonObject]()
         self.stored_models = List[PythonObject]()
 
-    def take(self, child: String, devices: List[Int]) -> Int:
+    def take(self, child: String, devices: List[Int], host: Bool) -> Int:
         """The idle entry of this key, or -1."""
         for i in range(len(self.pools)):  # small-loop(the idle pools of this process: a few)
-            if self.pools[i].keyed(child, devices):
+            if self.pools[i].keyed(child, devices, host):
                 return i
         return -1
 
@@ -359,12 +363,21 @@ def shard_identity() raises -> PythonObject:
 
 
 def shard_open(devices: PythonObject, child: String) raises -> PythonObject:
+    return shard_open(devices, child, False)
+
+
+def shard_open(devices: PythonObject, child: String, host: Bool) raises -> PythonObject:
     """A started pool of one worker per device whose placement is admitted:
     every worker answers an identity request first, and the replies must be
     distinct processes started here and, on CUDA and HIP, distinct physical
     GPUs, one per worker (`native_require_worker_inventory`, the CV pool's
-    rule). The pool and its inventory are recorded in the trace."""
+    rule). The pool and its inventory are recorded in the trace. `host`
+    spawns the workers on the CPU images (`process_pool_host_set`): the
+    route of a device='cpu' member in a process with a GPU set; `devices`
+    are then logical worker indices."""
     var pool = process_pool_create(devices, False, child)
+    if host:
+        process_pool_host_set(pool)
     return _shard_admit(pool, devices)
 
 
@@ -392,9 +405,10 @@ def _shard_admit(pool: PythonObject, devices: PythonObject) raises -> PythonObje
     var pid_words = process_pool_pids(pool)
     for i in range(len(pid_words)):  # driver-loop: over the spawned workers
         _ = py_call(pids.append, PythonObject(pid_words[i]))
-    var p = PROCESS_BOUNDARY.get_or_create_ptr()
+    var route = process_pool_vendor(pool)
     try:
-        native_require_worker_inventory(identities, p[].vendor, pids, Int(external_call["getpid", Int32]()))
+        # the pool's own route: a host pool's workers answer "cpu"
+        native_require_worker_inventory(identities, route, pids, Int(external_call["getpid", Int32]()))
     except error:
         process_pool_close(pool)
         raise error^
@@ -486,6 +500,10 @@ def shard_map(pool: PythonObject, wave: ShardWave) raises -> PythonObject:
 
 
 def _shard_acquire(devices: PythonObject, child: String) raises -> ShardIdlePool:
+    return _shard_acquire(devices, child, False)
+
+
+def _shard_acquire(devices: PythonObject, child: String, host: Bool) raises -> ShardIdlePool:
     """`shard_run`'s pool: the idle pool kept for this child, devices and
     environment, re-admitted, or a fresh one. The returned entry is the
     call's own; `_shard_keep` puts it back."""
@@ -498,7 +516,7 @@ def _shard_acquire(devices: PythonObject, child: String) raises -> ShardIdlePool
     var pid = Int(external_call["getpid", Int32]())
     var reused = PythonObject(None)
     var idle = SHARD_IDLE.get_or_create_ptr()
-    var at = idle[].take(child, indices)
+    var at = idle[].take(child, indices, host)
     if at >= 0:
         # The entry leaves the idle list before any pool call.
         var held = idle[].pools.pop(at)
@@ -524,14 +542,14 @@ def _shard_acquire(devices: PythonObject, child: String) raises -> ShardIdlePool
             except:
                 pass
     if reused is None:
-        reused = shard_open(devices, child)
-    return ShardIdlePool(child.copy(), indices^, pid, reused, environ)
+        reused = shard_open(devices, child, host)
+    return ShardIdlePool(child.copy(), indices^, pid, reused, environ, host)
 
 
 def _shard_keep(var acquired: ShardIdlePool) raises:
     """Keep a pool whose call succeeded idle for the next call (`SHARD_IDLE`)."""
     var idle = SHARD_IDLE.get_or_create_ptr()
-    var at = idle[].take(acquired.child, acquired.devices)
+    var at = idle[].take(acquired.child, acquired.devices, acquired.host)
     if at >= 0:
         var other = idle[].pools.pop(at)
         if other.pid == acquired.pid:  # another thread kept a pool under this key meanwhile
@@ -544,11 +562,15 @@ def _shard_keep(var acquired: ShardIdlePool) raises:
 
 
 def shard_run(requests: ShardWave, devices: PythonObject, child: String) raises -> PythonObject:
+    return shard_run(requests, devices, child, False)
+
+
+def shard_run(requests: ShardWave, devices: PythonObject, child: String, host: Bool) raises -> PythonObject:
     """The workers' results in request order (waves of len(devices), wave
     position j on worker j). A pool whose call succeeded is kept idle for the
     next call with the same child, devices and environment (`SHARD_IDLE`);
     a failed call closes it."""
-    var acquired = _shard_acquire(devices, child)
+    var acquired = _shard_acquire(devices, child, host)
     var reused = acquired.pool
     var results = PythonObject(None)
     try:
@@ -574,6 +596,11 @@ def shard_stored_ref(token: String, index: Int) raises -> PythonObject:
 
 def shard_run_stored(payload: PythonObject, token: String, requests: ShardWave, devices: PythonObject,
                      child: String) raises -> PythonObject:
+    return shard_run_stored(payload, token, requests, devices, child, False)
+
+
+def shard_run_stored(payload: PythonObject, token: String, requests: ShardWave, devices: PythonObject,
+                     child: String, host: Bool) raises -> PythonObject:
     """`shard_run` with the call's shared operands sent ONCE per worker
     (lane ne2-i-j, 2026-11-07, plan row N452). `payload` (a tuple: X, labels,
     ...) is stored under `token` on every worker of the one pool this call
@@ -586,7 +613,7 @@ def shard_run_stored(payload: PythonObject, token: String, requests: ShardWave, 
     per worker, not once per shard). A failed call closes the pool, which
     ends its workers and their stores."""
     var b = shard_b()
-    var acquired = _shard_acquire(devices, child)
+    var acquired = _shard_acquire(devices, child, host)
     var pool = acquired.pool
     var nk = parallel_keys()
     var workers = len(process_pool_pids(pool))

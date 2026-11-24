@@ -82,21 +82,28 @@ struct ProcessPoolOwner(Movable, Writable):
     close) and the worker's admitted hello, kept for the published mirror.
     `environment` is the caller's worker environment overrides (None for
     none), admitted when the workers are spawned. `mirror` is the published
-    dictionary for readers; it never holds this owner (no cycle)."""
+    dictionary for readers; it never holds this owner (no cycle).
+    `vendor` is the route the workers are spawned on: the process's installed
+    route, or "cpu" for a pool `process_pool_host_set` moved to the host
+    images (a device='cpu' member of a shard or forecast driver in a process
+    with a GPU set; vdv-gaps, 2026-11-24). It is read at the start only."""
     var native: ProcessPoolRecord
     var sockets: List[PythonObject]
     var identities: List[PythonObject]
     var module: String
     var environment: PythonObject
     var mirror: PythonObject
+    var vendor: String
 
-    def __init__(out self, var native: ProcessPoolRecord, var module: String, mirror: PythonObject):
+    def __init__(out self, var native: ProcessPoolRecord, var module: String, mirror: PythonObject,
+                 var vendor: String):
         self.native = native^
         self.sockets = List[PythonObject]()
         self.identities = List[PythonObject]()
         self.module = module^
         self.environment = PythonObject(None)
         self.mirror = mirror
+        self.vendor = vendor^
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("ProcessPoolOwner(workers=", len(self.native.pids), ", closed=", self.native.closed, ")")
@@ -149,6 +156,14 @@ def _process_environment(devices: PythonObject, group: PythonObject) raises -> L
 
 
 def _process_environment(devices: PythonObject, group: PythonObject, overrides: PythonObject) raises -> List[String]:
+    return _process_environment(devices, group, overrides, PROCESS_BOUNDARY.get_or_create_ptr()[].vendor)
+
+
+def _process_environment(devices: PythonObject, group: PythonObject, overrides: PythonObject,
+                         vendor: String) raises -> List[String]:
+    """The worker environment of one group on route `vendor` (the pool's:
+    the installed route, or "cpu" for a host pool, whose workers then load
+    the CPU-only set exactly as a CPU-only installation does)."""
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     var bi = p[].bi
     var env = bi.dict()
@@ -160,17 +175,17 @@ def _process_environment(devices: PythonObject, group: PythonObject, overrides: 
     # The parent selected its installed route at connection time. Later
     # visibility-mask edits still apply, but a changed process environment
     # must not silently move an existing GPU owner onto CPU workers.
-    py_setitem(env, nk[].k_MOJOLEARN_VENDOR, p[].vendor)
+    py_setitem(env, nk[].k_MOJOLEARN_VENDOR, vendor)
     var mask = String()
-    if p[].vendor == "cuda":
+    if vendor == "cuda":
         mask = "CUDA_VISIBLE_DEVICES"
-    elif p[].vendor == "hip":
+    elif vendor == "hip":
         mask = "ROCR_VISIBLE_DEVICES" if "ROCR_VISIBLE_DEVICES" in env else "HIP_VISIBLE_DEVICES"
         _ = py_call(env.pop, "HIP_VISIBLE_DEVICES" if mask == "ROCR_VISIBLE_DEVICES" else "ROCR_VISIBLE_DEVICES", PythonObject(None))
-    elif p[].vendor == "metal":
+    elif vendor == "metal":
         if len(group) != 1 or Int(py=group[0]) != 0:
             raise Error("process: Metal supports only the selected device zero")
-    elif p[].vendor != "cpu":
+    elif vendor != "cpu":
         raise Error("process: unsupported installed vendor")
     if mask != "":
         var visible = py_get(env, mask)
@@ -243,7 +258,27 @@ def process_pool_create(devices: PythonObject, cooperative: Bool, child_module: 
     py_setitem(mirror, nk[].k_closed, False)
     # The owner's Python type is registered by every binding that builds this
     # door (bindings/native_process_pool_type_door.mojo).
-    return PythonObject(alloc=ProcessPoolOwner(native^, child_module.copy(), mirror))
+    return PythonObject(alloc=ProcessPoolOwner(native^, child_module.copy(), mirror, p[].vendor.copy()))
+
+
+def process_pool_host_set(pool: PythonObject) raises:
+    """Moves a pool that has not started onto the host route: its workers
+    are spawned with MOJOLEARN_VENDOR=cpu (no visibility mask) and must say
+    "cpu" in their hello. A device='cpu' member of a shard or forecast driver
+    in a process with a GPU set runs there, on the CPU images (vdv-gaps,
+    2026-11-24; it was refused). One word written once per pool, before its
+    start; a started pool is refused."""
+    process_pool_admit(pool)
+    var rec = pool.downcast_value_ptr[ProcessPoolOwner]()
+    if rec[].native.started():
+        raise Error("process: a started pool keeps its route")
+    rec[].vendor = String("cpu")
+
+
+def process_pool_vendor(pool: PythonObject) raises -> String:
+    """The route a pool's workers run on (`ProcessPoolOwner.vendor`)."""
+    process_pool_admit(pool)
+    return pool.downcast_value_ptr[ProcessPoolOwner]()[].vendor.copy()
 
 
 def process_pool_admit(pool: PythonObject) raises:
@@ -528,7 +563,8 @@ def process_pool_start(pool: PythonObject) raises:
         return
     var cooperative = rec[].native.cooperative
     var groups = rec[].native.width()
-    if p[].vendor == "cpu" and cooperative and len(rec[].native.devices) != 1:
+    var vendor = rec[].vendor.copy()
+    if vendor == "cpu" and cooperative and len(rec[].native.devices) != 1:
         raise Error("NotImplementedError: cooperative neural updates across multiple CPU devices have no host implementation")
     # The caller's configuration, once per start: the module is the owner's
     # typed word (admitted at creation or by `process_pool_module_set`); the
@@ -558,7 +594,7 @@ def process_pool_start(pool: PythonObject) raises:
                 group = py_call(bi.list, devices)
             else:
                 _ = py_call(group.append, devices[i])
-            var env = _process_environment(devices, group, overrides)
+            var env = _process_environment(devices, group, overrides, vendor)
             var token = String(py_call(p[].random, 32).hex())
             var argv = List[String]()
             argv.append(String(p[].executable))
@@ -589,7 +625,7 @@ def process_pool_start(pool: PythonObject) raises:
                 rec[].sockets[index] = connection
                 rec[].native.fds[index] = _transport_state(connection)[0]
                 attached = True
-                if String(py_get(hello, nk[].k_vendor, "")) != p[].vendor:
+                if String(py_get(hello, nk[].k_vendor, "")) != vendor:
                     raise Error("process: child vendor differs from the parent native route")
                 # Existing local model workers have no training-operation timeout.
                 # Keep only the connection handshake bounded; large supported
