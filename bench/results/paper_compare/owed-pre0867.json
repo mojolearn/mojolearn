@@ -34,13 +34,14 @@
   },
   "small-mlp-generic": {
    "define": "MOJOLEARN_SMALL_MLP_GENERIC_OPS",
-   "status": "define in code (autograd/small_mlp_program.mojo SMALL_MLP_GENERIC_OPS): B = lane x2's transpose + OPS_LINEAR capture; A = op small_mlp (leaf-128 GEMM, hand backward)",
+   "status": "define in code (autograd/small_mlp_program.mojo SMALL_MLP_GENERIC_OPS): B = lane x2's transpose + OPS_LINEAR capture; A = op small_mlp on identical_gemm_into (leaf128 removed 2026-11-24, ab-outcome-3); RUN OWED with the wave-3 sha; previous: train-step 0.536 -> 0.442 (0.82), predict 0.060 -> 0.065 (1.08)",
    "owed": "RUN"
   },
   "small-mlp-leaf128-off": {
    "define": "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF",
-   "status": "define in code (autograd/small_mlp_op.mojo SMALL_MLP_GEMM_LEAF128): B = op small_mlp on identical_gemm_into",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-nmlp): the DEFAULT lost (L40S 2 cells, median 0.91, mlp-train-step 0.561 -> 0.468 ms (0.83; base 0.485..0.561 over five runs of the box), mlp-predict 0.99; digests equal); B (op small_mlp on identical_gemm_into) is the only form; removed: SMALL_MLP_GEMM_LEAF128, neural_model_leaf_into and the switch; the define is refused (core/experiment_guards_neural.mojo); no bits change; code recoverable at 774ef6eb1f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MLP_GEMM_LEAF128.ab-outcome-3.patch. Was: define in code (autograd/small_mlp_op.mojo SMALL_MLP_GEMM_LEAF128): B = op small_mlp on identical_gemm_into",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "cnn-generic": {
    "define": "MOJOLEARN_CNN_GENERIC_OPS",
@@ -1658,7 +1659,8 @@
     "small-mlp-generic",
     "small-mlp-leaf128-off"
    ],
-   "decides": "keep the op (A) unless the generic capture is at least as fast on NVIDIA and AMD with quality equal; reference 0.8.66 0.971 ms both vendors"
+   "decides": "keep the op (A) unless the generic capture is at least as fast on NVIDIA and AMD with quality equal; reference 0.8.66 0.971 ms both vendors",
+   "note": "2026-11-24 (lane ab-outcome-3 / o3-nmlp): small-mlp-leaf128-off DECIDED (leaf128 removed, A is now op small_mlp on identical_gemm_into); small-mlp-generic still RUN against that A with the wave-3 sha"
   },
   {
    "id": "r1-cnn-ops",
