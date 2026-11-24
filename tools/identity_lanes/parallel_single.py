@@ -1088,6 +1088,12 @@ _one_sided("psd-byte-lm-offload", missing="cpu", reason="ParallelByteLanguageMod
            "the GPU byte-LM binding, which no host binding restates")
 _one_sided("psd-byte-lm-corpus", missing="cpu", reason="ParallelByteLanguageModelTrainer's sessions live inside "
            "the GPU byte-LM binding, which no host binding restates")
+# models.ParallelCausalLM keeps devices= and takes no device= (Andrew, vd-functions addenda 1 and 2, 2026-11-24):
+# its CPU side is an owed decision, listed in UNMAPPED.md, not a lane failure.
+_one_sided("psd-causal-lm", missing="cpu", reason="models.ParallelCausalLM keeps devices= (a GPU list) and takes no "
+           "device=, by the owner's direction of 2026-11-24")
+_one_sided("psd-causal-lm-text", missing="cpu", reason="models.ParallelCausalLM keeps devices= (a GPU list) and takes "
+           "no device=, by the owner's direction of 2026-11-24")
 
 
 _batch_decl("n/a:ordered-shard-driver (the lane holds a multi-GPU driver on one device to its plain one-device "
