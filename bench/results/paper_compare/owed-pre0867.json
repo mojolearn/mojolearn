@@ -1048,8 +1048,9 @@
   },
   "gemm-fill-tiles": {
    "define": "MOJOLEARN_IDN_GEMM_FILL_TILES",
-   "status": "define in code (gemm/checks/gemm_identical.mojo IDN_GEMM_FILL_TILES, EXP:2238): B = one continuous fill-wave rule for the identical GEMM tile step-down; A = the block floor and the NVIDIA short-k gates. Every identical GEMM: bits may change on every column together; quality beside the time; own build (shared code)",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-1): NOISE/LOSER (L40S 3 cells, median 0.99, lm-train-step 35.11 -> 39.19 ms); A (the default) is unchanged; removed: the fill rule and its device cache; the define is refused (core/six_lane_experiment_guards.mojo); code recoverable at d81b6ba708, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_GEMM_FILL_TILES.ab-outcome-1.patch. Was: define in code (gemm/checks/gemm_identical.mojo IDN_GEMM_FILL_TILES, EXP:2238): B = one continuous fill-wave rule for the identical GEMM tile step-down; A = the block floor and the NVIDIA short-k gates. Every identical GEMM: bits may change on every column together; quality beside the time; own build (shared code)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T070727Z-69dac2 (NVIDIA L40S, wheel 4519097d380a): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "emb-unique-rows-off": {
    "define": "MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF",
@@ -6206,7 +6207,7 @@
    "b_arms": [
     "gemm-fill-tiles"
    ],
-   "owed": "RUN",
+   "owed": "DECIDED",
    "columns": [
     "time",
     "quality"

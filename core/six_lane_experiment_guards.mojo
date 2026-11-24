@@ -164,6 +164,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_LEAF512.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_GEMM_FAST_LEAF512"](), "removed 2026-11-20 (lane/fx-verdicts6, A/B abf2 NVIDIA L40S, wheel e41b5148b24d, job nvc-ab-20261120T224801Z-458a59, one run per arm; NOISE: lm-forward 0.96, lm-train-step 0.99, mlp-train-step 1.08, median 0.99; round 3 on wheel 28a780604c 0.990, 1.024, 1.12): the contract's shortest leaf 512 (profile v2-leaf512, version 4); the leaf is 128 on every column; see docs/TOMBSTONES.md"
     # ---- end lane fx-verdicts6
+    # ---- lane ab-outcome-1 (2026-11-24): A/B nvc-ab-20261124T070727Z-69dac2 decisions (NVIDIA L40S only)
+    # TOMBSTONE: MOJOLEARN_IDN_GEMM_FILL_TILES (NOISE/LOSER: NV L40S 3 cells, median 0.99, 0.99..1.12, lm-train-step 35.11 -> 39.19 ms) deleted 2026-11-24 by lane/ab-outcome-1; code recoverable at d81b6ba708.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_GEMM_FILL_TILES.ab-outcome-1.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GEMM_FILL_TILES"](), "removed 2026-11-24 (lane/ab-outcome-1, A/B nvc-ab-20261124T070727Z-69dac2 NVIDIA L40S, wheel 4519097d380a, one run per arm): IDN_GEMM_FILL_TILES (continuous fill-wave tile step-down) was NOISE/LOSER: 3 cells, median 0.99, lm-train-step 35.11 -> 39.19 ms; the two-rule step-down default is kept; code at d81b6ba708; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_GEMM_FILL_TILES.ab-outcome-1.patch"
+    # ---- end lane ab-outcome-1
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()
