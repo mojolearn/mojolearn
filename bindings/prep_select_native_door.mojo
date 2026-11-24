@@ -72,8 +72,9 @@ from bindings.prep_select_run import (
     mi_check_neighbors, mi_check_shape, mi_mask_of_bools, mi_mask_of_indices, mi_columns, mi_gather_stage,
     mi_class_count_stage, mi_int_words, mi_class_check, mi_discrete_check, mi_stage, mi_scatter, MiProgram,
     rfe_select_count, rfe_step_count, RfeKeys, rfe_first_stage, rfe_round_stage,
-    RfeFitPlan, RfeFitResult, rfe_fit_run,
+    RfeFitPlan, RfeFitResult, rfe_fit_run, rfe_rows_gather,
 )
+from bindings.x_prep_native_inputs_door import _rows_fields, _dense_values, _values
 from bindings.prep_classify_prog_door import ClsProg, f32_array
 from bindings.prep_classify_common_door import cls_x2d, cls_mode, XIn
 from bindings.prep_classify_native_door import resident_enter_min, _resident_exit
@@ -409,8 +410,30 @@ def _rfe_native(member: RfeMember, arr: XIn, n: Int, d: Int, counts: List[Float6
     classifier with its labels: the attributes its own fit writes) and the rounds' and the final fit's
     notices, in fit order. Answers the packed clone; `support`, `ranking` and `selected` are written."""
     var image = rfe_image(cc)
+    # THE DEVICE ROWS ROUTE (lane mf-rfe6): a fold's DeviceRows X (`cls_x2d` keeps one only when its base is
+    # dense float32 and proved finite) is handed to the RUN as its base and row numbers, which every round's
+    # program gathers on the device, as the door's programs did (bindings/prep_classify_prog_door.mojo
+    # `ClsProg.run`); an image that gathers no rows gets the fold's host rows, as the door's programs did.
+    # The resident scope keeps the base, as the door's run kept it. Who gathers moves; the programs do not.
+    var x_value = arr.value
+    var x_base = PythonObject(None)
+    var x_index = PythonObject(None)
+    var x_base_words = 0
+    if not classical_is_array(arr.value, cc):
+        var pc = cc["prog_context"]
+        if rfe_rows_gather(image.run):
+            var fold = _rows_fields(arr.value, pc)
+            x_base = _dense_values(fold.base, pc)
+            x_index = fold.indices
+            x_value = x_base
+            x_base_words = Int(py=x_base.size)
+        else:
+            x_value = _values(arr.value, pc, True)
     var plan = RfeFitPlan(member.base.owner.plan.copy(), image.run, image.work_on,
-                          Int(py=classical_address(arr.value)), n, d, member.y_address, member.y_dtype)
+                          Int(py=classical_address(x_value)), n, d, member.y_address, member.y_dtype)
+    if x_index is not None:
+        plan.x_index = Int(py=classical_address(x_index))
+        plan.x_base_words = x_base_words
     plan.nsel = rfe_select_count(d, Int(counts[0]), counts[1], Int(counts[2]))
     plan.step = rfe_step_count(d, counts[3] != 0.0, counts[4], Int(counts[5]))
     plan.block = member.base.block
@@ -427,7 +450,7 @@ def _rfe_native(member: RfeMember, arr: XIn, n: Int, d: Int, counts: List[Float6
     var pin = 0
     var kept = 0
     if resident.scope >= 0:
-        pin = arena_pin(arr.value)
+        pin = arena_pin(x_value)
         plan.scope = resident.scope
         plan.pin = pin
         plan.kept_at = Int(UnsafePointer(to=kept))
@@ -446,6 +469,9 @@ def _rfe_native(member: RfeMember, arr: XIn, n: Int, d: Int, counts: List[Float6
     if pin != 0 and kept == 0:
         arena_unpin(pin)
     _ = arr.value  # read by address through the run above
+    _ = x_value  # the base or host rows the run read by address
+    _ = x_base
+    _ = x_index  # the fold's row numbers, read by address through the run above
     _ = member.y
     _ = member.pins
     _ = len(member.ids)  # read by address through the run above (group ids, held-out codes and rows, keys)
@@ -581,9 +607,10 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
     # runs). A member that refuses (a view or dtype its family does not read, a fit failure) leaves the
     # whole fit to the estimator's own doors below, which raise the estimator's own words if the request is
     # wrong (the fallback rule); with admitted fit parameters its words are raised. X held as DeviceRows
-    # (a fold's rows) is the own doors' (its blocks are gathered on the device).
+    # (a fold's rows) is the RUN's too since lane mf-rfe6 (`_rfe_native`: THE DEVICE ROWS ROUTE, the same
+    # programs gathering the fold's rows on the device).
     var member = _rfe_member(estimator, y, n, d, g, fit_params, context, b)
-    if member.base.native and classical_is_array(arr.value, cc):
+    if member.base.native:
         var support = List[Float32]()
         var ranking = List[Float32]()
         var selected = 0

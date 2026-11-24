@@ -52,6 +52,7 @@ from bindings.prep_encode_cats_run import CatBlock, cat_codes_stage, cat_i2f_sta
 from bindings.prep_classify_prog_run import (
     ClsProgram, CLS_IN_BUFFER, CLS_IN_CONST_F, ClsRunPlan, ClsBorrowed, ClsBorrowedDone, cls_borrowed_run,
 )
+from bindings.arena_prog_run import _switch
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_own,
     MEMBER_OP_FIT, MEMBER_OP_EXPORT, MEMBER_F32,
@@ -611,6 +612,12 @@ struct RfeFitPlan(Movable):
     var scope: Int
     var pin: Int
     var kept_at: Int
+    # THE DEVICE ROWS ROUTE (lane mf-rfe6): `x_index` nonzero: X is a fold's rows, the n int64 row numbers at
+    # `x_index` of the base at `x` (`x_base_words` float32 words, d per row), gathered on the device by each
+    # round's program (`rfe_rows_gather`: the door's DeviceRows route, the same programs and gather); `pin`
+    # then pins the base.
+    var x_index: Int
+    var x_base_words: Int
 
     def __init__(out self, var member: MemberPlan, run: ClsRunPlan, work_on: Bool, x: Int, n: Int, d: Int,
                  y: Int, y_dtype: Int):
@@ -633,6 +640,17 @@ struct RfeFitPlan(Movable):
         self.scope = -1
         self.pin = 0
         self.kept_at = 0
+        self.x_index = 0
+        self.x_base_words = 0
+
+
+def rfe_rows_gather(run: ClsRunPlan) -> Bool:
+    """Whether every RFE program on the image of `run` gathers a fold's rows on the device (THE DEVICE ROWS
+    ROUTE, lane mf-rfe6): the take-rows entries, the ranges entry and switch, and a device scratch for any
+    scratch the program has (`cls_run_route`'s `ranges`, true for every program size). False: the caller
+    hands the fold's host rows (the door's programs then copied them, `_values(..., True)`)."""
+    return (run.take_rows and run.has_ranges and (run.has_out or run.has_scratch)
+            and _switch("MOJOLEARN_ARENA_RANGES"))
 
 
 struct RfeFitResult(Movable):
@@ -697,7 +715,10 @@ def rfe_fit_run(plan: RfeFitPlan) raises -> RfeFitResult:
     var kept = 0
     var support = List[Float32](length=d, fill=1.0)
     var ranking = List[Float32](length=d, fill=1.0)
+    # THE DEVICE ROWS ROUTE: the base and the fold's row numbers, gathered by each program on the device.
     var x_source = ClsBorrowed(plan.x, x_words, plan.pin, 0, 0, 0)
+    if plan.x_index != 0:
+        x_source = ClsBorrowed(plan.x, plan.x_base_words, plan.pin, plan.x_index, n, d)
     var first_program = ClsProgram(plan.work_on)
     var first = rfe_first_stage(first_program, x_words, n, d)
     var first_sources: List[ClsBorrowed] = [ClsBorrowed(Int(support.unsafe_ptr()), d, 0, 0, 0, 0), x_source]
