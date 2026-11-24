@@ -1368,6 +1368,11 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_IDN_SSD_OCCUPANCY_OFF (old path slower: NV L40S mamba2-forward 2.27 -> 3.41 ms, 1.50) deleted 2026-11-24 by lane/ab-outcome-4; code recoverable at 48302d20f6.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_SSD_OCCUPANCY_OFF.ab-outcome-4.patch
     comptime assert not is_defined["MOJOLEARN_IDN_SSD_OCCUPANCY_OFF"](), "removed 2026-11-24 (lane/ab-outcome-4, A/B nvc-ab-20261124T182912Z-977cc8 NVIDIA L40S, wheel 71db45de5d, job nvc1-0004, one run per arm): the cell kernels forced on every device column were slower (mamba2-forward 2.27 -> 3.41 ms, 1.50); the occupancy kernels are the only device form, the cell kernels stay for the host, CPU, sabotage and small-page columns; code at 48302d20f6; see docs/TOMBSTONES.md"
+    # TOMBSTONE: MOJOLEARN_GEMM_STAGE_UP_OFF (raw upload WON on f32: NV L40S 0.90 and 0.81; now the only form) deleted 2026-11-24 by lane/ab-outcome-4; code recoverable at ea48331609.
+    # TOMBSTONE: MOJOLEARN_GEMM_STAGE_UP (staged upload on Apple too; never measured; the staged upload is gone) deleted 2026-11-24 by lane/ab-outcome-4; code recoverable at ea48331609.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GEMM_STAGE_UP_OFF.ab-outcome-4.patch
+    comptime assert not is_defined["MOJOLEARN_GEMM_STAGE_UP_OFF"](), "removed 2026-11-24 (lane/ab-outcome-4, A/B nvc-ab-20261124T182912Z-977cc8 NVIDIA L40S, wheel 71db45de5d, job nvc1-0004, and job nvc1-0002): the raw float32 upload won (gemm 69.58 -> 62.32 ms 0.90; 47.77 -> 38.70 ms 0.81) and is the only form by a per-byte cost rule (gemm/host_transport.mojo); drop the define; code at ea48331609; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_GEMM_STAGE_UP"](), "removed 2026-11-24 (lane/ab-outcome-4): the staged GEMM upload is gone (the raw upload won on float32 on the NVIDIA L40S, 0.90 and 0.81, and is the only form on every column); code at ea48331609; see docs/TOMBSTONES.md"
     # ---- end lane ab-outcome-4
     return True
 

@@ -19,21 +19,16 @@ host surfaces:
   * A STAGED DOWNLOAD: DMA into a pinned host stage, then one memcpy out,
     double-buffered so the next chunk's DMA overlaps this chunk's copy. A
     pinned buffer DMAs at full speed on every vendor.
-  * A STAGED UPLOAD (same stage, the other direction), off by default on
-    Apple where a raw host-pointer upload is already 1.6-2.4 ms per 64 MB.
-
-A/B (build arms; run-time environment reads per matmul until 2026-11-15):
-  -D MOJOLEARN_GEMM_STAGE_UP_OFF      raw upload (default staged except Apple)
-  -D MOJOLEARN_GEMM_STAGE_UP          staged upload on Apple too
+  * A RAW UPLOAD of every operand on every column (`gemm_up_f32`,
+    `gemm_up_u16`): the staged float32 upload was measured slower and is gone
+    (see the cost rule above `gemm_up_f32`).
 """
 
 from std.atomic import Atomic, Ordering
 from std.memory import unsafe_memcpy
-from std.sys import is_defined
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
-from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from core.shared_slot import SharedSlot
 from core.nan_canon import NAN_CANON_ON, nan_canon_f32
 
@@ -87,23 +82,13 @@ comptime GEMM_POOL = SharedSlot[_GemmPool, "MojolearnGemmHostPoolV1"]
 # stay, with no switch.
 #   fresh buffers per call:  1.044 geomean (0.94, 1.09, 1.11)
 #   raw download:            1.125 geomean (1.03, 1.18, 1.17)
-#   raw upload (the B arm below): 0.986 geomean (0.87, 1.07, 1.03), three cells,
-#   one of them faster: UNDECIDED, kept opt-in, re-time owed (owed-pre0867.json
-#   "gemm-stage-up-off").
+#   raw upload: 0.986 geomean (0.87, 1.07, 1.03), three cells, one of them
+#   faster: UNDECIDED then; decided 2026-11-24 (one route, the raw upload: see
+#   the cost rule above `gemm_up_f32`).
 # TOMBSTONE: MOJOLEARN_GEMM_POOL_OFF (LOSER: fresh device buffers per matmul, arm/base geomean 1.044 over 3 cells, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
 # Restore: git apply experiments/removed/MOJOLEARN_GEMM_POOL_OFF-STAGE_DOWN_OFF.patch (restores both gemm switches; re-delete the other); record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_GEMM_STAGE_DOWN_OFF (LOSER: raw device-to-host-pointer download, arm/base geomean 1.125 over 3 cells, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
 # Restore: git apply experiments/removed/MOJOLEARN_GEMM_POOL_OFF-STAGE_DOWN_OFF.patch (restores both gemm switches; re-delete the other); record in docs/TOMBSTONES.md.
-comptime GEMM_STAGE_UP_ON = (
-    TARGET_COLUMN != COLUMN_APPLE or is_defined["MOJOLEARN_GEMM_STAGE_UP"]()
-) and not is_defined["MOJOLEARN_GEMM_STAGE_UP_OFF"]()
-
-
-@always_inline
-def gemm_stage_up_on() -> Bool:
-    return GEMM_STAGE_UP_ON
-
-
 # TOMBSTONE: MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST (WITHDRAWN before any A/B: Andrew 2026-11-24, one route, no per-process timing) deleted 2026-11-24 by lane/o3-route (ab-outcome-3); never reached main, code recoverable at lane/ab-outcome-2@1f40eb3c09.
 # Restore: git show 1f40eb3c09 -- gemm/host_transport.mojo | git apply (no patch file: the code never reached main); record in docs/TOMBSTONES.md.
 
@@ -194,32 +179,35 @@ def _par_copy(dst: F32P, src: F32P, n: Int):
     unsafe_memcpy(dest=dst, src=src, count=n)
 
 
-def gemm_up_f32(ctx: DeviceContext, lease: GemmHostLease, mut dst: DeviceBuffer[DType.float32], src: F32P, n: Int) raises:
-    """Host floats `src[0, n)` into `dst[0, n)`."""
-    if n <= 0:
-        return
-    var addr = lease.stage(ctx) if (n >= GEMM_STAGE_MIN and gemm_stage_up_on()) else 0
-    if addr == 0:
+# ONE UPLOAD ROUTE: RAW, BY A PER-BYTE COST RULE (lane ab-outcome-4, 2026-11-24).
+# The staged form copied each 16 MB chunk into a pinned half on one host thread
+# and DMA'd the half, double-buffered: at best it moves a byte at
+# min(host memcpy rate, pinned DMA rate), plus one wait per chunk. The raw form
+# hands the pageable pointer to the driver, which streams it through its own
+# pinned bounce buffers at the pageable DMA rate. Staging can pay only where
+# pageable DMA < min(memcpy, pinned DMA). That is a property of the host's
+# memory system per byte: it does not depend on the element type (int8 and bf16
+# move fewer bytes, not cheaper bytes) nor on the GEMM's tile cost (the upload
+# finishes before the first tile and overlaps none of them), so no element type,
+# tile or shape can flip it. On the measured host (NVIDIA L40S, EPYC) pageable
+# 24.86 GB/s, pinned 26.96, one-thread memcpy 22.26: staged <= 22.26 < 24.86, and
+# the raw upload won the float32 GEMM twice (A/B nvc-ab-20261124T095727Z-92fd9f,
+# job nvc1-0002: 47.77 -> 38.70 ms, 0.81; A/B nvc-ab-20261124T182912Z-977cc8,
+# wheel 71db45de5d, job nvc1-0004: 69.58 -> 62.32 ms, 0.90; digests equal). The
+# int8 (1.13) and bf16 (1.01) cells of job nvc1-0002 never staged in either arm
+# (their operands always went raw: gemm/linalg_native.mojo), so they are spread,
+# not evidence for staging. Apple's unified memory already went raw (1.6-2.4 ms
+# per 64 MB). So every operand of every element type uploads raw on every
+# column. Bytes moved are the same: no bit moves. AMD not measured (NVIDIA-only
+# campaign, AGENTS.md part 8). The staged download (gemm_down_f32) is a
+# different decision (A/B ab3: raw download 1.125 slower) and stays.
+# TOMBSTONE: MOJOLEARN_GEMM_STAGE_UP_OFF (raw upload WON on f32: NV L40S 0.90 and 0.81; it is now the only form) deleted 2026-11-24 by lane/ab-outcome-4; code recoverable at ea48331609.
+# TOMBSTONE: MOJOLEARN_GEMM_STAGE_UP (staged upload on Apple too; never measured, the staged route is gone) deleted 2026-11-24 by lane/ab-outcome-4; code recoverable at ea48331609.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GEMM_STAGE_UP_OFF.ab-outcome-4.patch
+def gemm_up_f32(ctx: DeviceContext, mut dst: DeviceBuffer[DType.float32], src: F32P, n: Int) raises:
+    """Host floats `src[0, n)` into `dst[0, n)`: one raw upload."""
+    if n > 0:
         ctx.enqueue_copy(dst_buf=dst.create_sub_buffer[DType.float32](0, n), src_ptr=src)
-        return
-    var stage = F32P(unsafe_from_address=addr)
-    # Double-buffered: chunk i is written into its half while chunk i-1's
-    # DMA runs. The wait before DMA i retires DMA i-1, so when chunk i+1
-    # refills that half nothing reads it any more.
-    var off = 0
-    var i = 0
-    while off < n:
-        var cnt = min(GEMM_STAGE_FLOATS, n - off)
-        var half = stage + (i % 2) * GEMM_STAGE_FLOATS
-        _par_copy(half, src + off, cnt)
-        if i > 0:
-            ctx.synchronize()
-        ctx.enqueue_copy(dst_buf=dst.create_sub_buffer[DType.float32](off, cnt), src_ptr=half)
-        off += cnt
-        i += 1
-    # The next host write into the stage (the next upload) needs these DMAs
-    # retired; the kernels the caller enqueues next are ordered after them.
-    ctx.synchronize()
 
 
 def gemm_up_u16(ctx: DeviceContext, lease: GemmHostLease, mut dst: DeviceBuffer[DType.uint16], src: MutPointer[UInt16, MutUntrackedOrigin], n: Int) raises:

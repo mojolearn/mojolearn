@@ -239,7 +239,7 @@ def gemm_bf16_native(
             _lowbit_run(ctx, lease, dc, da, db, m, n, k, op)
         _ = da_bits
     else:
-        gemm_up_f32(ctx, lease, da, f32_ptr(a_address), m * k)
+        gemm_up_f32(ctx, da, f32_ptr(a_address), m * k)
         _lowbit_run(ctx, lease, dc, da, db, m, n, k, op)
     gemm_down_f32(ctx, lease, dc, f32_ptr(c_address), m * n)
     lease.release()

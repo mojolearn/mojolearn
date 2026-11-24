@@ -125,15 +125,15 @@ def identical_gemm_host(
 
     # lane/gap-neural-models (2026-10-02): pooled device buffers, the
     # dispatcher's workspace pooled with them, and staged transfers
-    # (gemm/host_transport.mojo; -D MOJOLEARN_GEMM_STAGE_UP_OFF restores
-    # the raw upload). The kernels
+    # (gemm/host_transport.mojo; the uploads are raw by its cost rule, the
+    # download staged). The kernels
     # and their plan are the same; copies only, no bit moves.
     var lease = GemmHostLease()
     var a = lease.f32(ctx, ROLE_A, m * k)
     var b = lease.f32(ctx, ROLE_B, n * k)
     var c = lease.f32(ctx, ROLE_C, m * n)
-    gemm_up_f32(ctx, lease, a, a_ptr, m * k)
-    gemm_up_f32(ctx, lease, b, b_ptr, n * k)
+    gemm_up_f32(ctx, a, a_ptr, m * k)
+    gemm_up_f32(ctx, b, b_ptr, n * k)
     # NO WAIT AFTER THE UPLOADS (lane/apple-mlp-fused, 2026-09-30): the
     # uploads and the GEMM's launches sit on one in-order context.
 
