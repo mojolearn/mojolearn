@@ -55,12 +55,25 @@ y host int32 class codes 0..classes-1 (classifier, `call.classes` >= 2) or a
 float32 target column (regressor); `call.weights` (optional) host float32,
 one per row (finite and non-negative: the caller's admission, as the
 estimator's `admit_weights`), multiplied by nothing (no class_weight: the
-admission keeps the estimator's own doors for it). Refused in words: a row
-or column index, a device-home view, a nonzero `fit_output`, a multi-column
+admission keeps the estimator's own doors for it). Refused in words: a
+column index, a device-home view, a nonzero `fit_output`, a multi-column
 y, a weighted score, and on a regressor of the RF layout weights together
 with importances or the out-of-bag outputs (the estimator's own refusal). predict writes int32 codes
 (classifier) or float32 values; predict_proba float32 rows x classes; score
 (classifier only) the accuracy count / rows, unweighted.
+
+THE FOLD ROWS (lane vdf-scope-trees, 2026-11-24): `call.row_index` (host
+int32 or int64, MEMBER_CAN_ROW_INDEX on a route whose image answers
+XF_CAP_DEV_ROWS, the RandomForest GPU image) selects the rows of the WHOLE X,
+y and weights. FIT: under a resident scope with a pin (MEMBER_CAN_SCOPE) X
+goes once into the image's device store through the scope's cache of this
+family (`arena_scope_store_put`, prefix "forest_rf"; `pin_kept` as THE PIN
+RULE says) and the image takes the rows on the device (XF_FIT_ROWS: the same
+fit bodies on the plane a row-major upload of those rows makes, so the same
+bits); without one the rows are gathered on the host. y and the weights are
+gathered on the host (one word a row), in row tasks. PREDICT / SCORE: the
+rows are gathered on the host (the predict snapshots live on the image's
+inference context, the store on its fits' context).
 
 Fits, as the estimator's own fit door picks them: unweighted without
 importances reads X row-major (the view itself, no copy); the ExtraTrees
@@ -115,7 +128,12 @@ from core.forest_calls import (
     xf_caps, xf_export_sizes, xf_export_into, xf_export_release, xf_predict, xf_resident_prepare,
     xf_resident_predict, xf_resident_labels, xf_strict_prepare, xf_strict_predict, xf_snapshot_release,
 )
-from core.forest_fit_request import XF_CAP_DEVICE_SCAN, XF_RESIDENT_RELEASE, XF_STRICT_RELEASE
+from core.forest_fit_request import XF_CAP_DEVICE_SCAN, XF_CAP_DEV_ROWS, XF_RESIDENT_RELEASE, XF_STRICT_RELEASE
+from core.forest_calls import xf_fit_rows
+from core.forest_entry_table import FOREST_TABLE_RF
+from core.forest_store_transport import forest_store_transport_ref, FOREST_STORE_PREFIX_RF
+from bindings.arena_cache_run import arena_scope_store_put
+from core.host_parallel import host_widen_index_i64
 from bindings.forest_config_run import ForestConfig, forest_request
 from bindings.forest_predict_run import (
     ForestState, forest_labels_route, FOREST_ROUTE_SEQUENTIAL, FOREST_ROUTE_STRICT,
@@ -125,7 +143,8 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.member_abi import (
     MEMBER_GIL_FREE,
-    MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32,
+    MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_HOME_HOST,
+    MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_SCORE, MEMBER_CAN_EXPORT,
@@ -401,11 +420,6 @@ def _release_snapshot(slot: _SlotPtr):
         pass
 
 
-def _whole(call: MutPointer[MemberCall, MutUntrackedOrigin], estimator: String) raises:
-    if call[].row_index.rows > 0 or call[].column_index.rows > 0:
-        raise Error("TypeError: a " + estimator + " member reads whole host views (no row or column index)")
-
-
 def _dense(view: MemberMatrix, dtype: Int, what: String, estimator: String) raises:
     if not view.dense_host(dtype):
         var words = String("float32") if dtype == MEMBER_F32 else String("int32")
@@ -583,27 +597,181 @@ def _scalars(slot: _SlotPtr, meta: List[Int]):
         slot[].scalars[6 + k] = Float64(meta[k])
 
 
+struct _FoldRows(Movable):
+    """The fit's rows under `call.row_index` (lane vdf-scope-trees): `n`
+    rows, `index` the address of their int64 numbers (the call's own, or
+    `wide`, the int32 index widened), and `store_id` the slot of the whole X
+    in the image's device store (-1: the rows are gathered on the host)."""
+    var n: Int
+    var index: Int
+    var store_id: Int
+    var wide: List[Int64]
+
+    def __init__(out self):
+        self.n = 0
+        self.index = 0
+        self.store_id = -1
+        self.wide = List[Int64]()
+
+
+def _dev_rows_route(call: MutPointer[MemberCall, MutUntrackedOrigin]) -> Bool:
+    """The route's image keeps a device store and fits its rows
+    (XF_CAP_DEV_ROWS: the RandomForest GPU image). One entry call."""
+    try:
+        return (xf_caps(call[].route.entry) & XF_CAP_DEV_ROWS) != 0
+    except:
+        return False
+
+
+def _index_bad(index: Int, n: Int, base_rows: Int) -> Int:
+    """The int64 row numbers outside 0 .. base_rows - 1, counted in row
+    tasks across the host's cores (any order gives the same count)."""
+    var tasks = host_predict_task_count_work(n, n)
+    var chunk = host_predict_chunk(n, tasks)
+    var counts = List[Int](length=max(tasks, 1), fill=0)
+    var ids = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=index)
+    var sums = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(counts.unsafe_ptr()))
+
+    def task(unit: Int) {imm ids, imm sums, imm chunk, imm n, imm base_rows}:
+        var bad = 0
+        for i in range(unit * chunk, min((unit + 1) * chunk, n)):  # native data loop (one host task's rows)
+            var r = Int(ids[i])
+            if r < 0 or r >= base_rows:
+                bad += 1
+        sums[unit] = bad
+    host_parallelize(task, tasks)
+    var total = 0
+    for t in range(len(counts)):  # small-loop(tasks): one count per host task
+        total += counts[t]
+    return total
+
+
+def _take_rows_f32(src: Int, index: Int, n: Int, width: Int, dst: Int):
+    """Rows `index` (int64, `n` of them) of the float32 rows x `width`
+    matrix at `src` into `dst`, in row tasks across the host's cores (a byte
+    copy: the bytes the caller's own gather writes)."""
+    var tasks = host_predict_task_count_work(n, n * width)
+    var chunk = host_predict_chunk(n, tasks)
+    var source = _F32P(unsafe_from_address=src)
+    var target = _F32P(unsafe_from_address=dst)
+    var ids = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=index)
+
+    def task(unit: Int) {imm source, imm target, imm ids, imm chunk, imm n, imm width}:
+        for i in range(unit * chunk, min((unit + 1) * chunk, n)):  # native data loop (one host task's rows)
+            var r = Int(ids[i])
+            for c in range(width):  # native data loop (one row's columns)
+                target[i * width + c] = source[r * width + c]
+    host_parallelize(task, tasks)
+
+
+def _take_rows_i32(src: Int, index: Int, n: Int, dst: Int):
+    """Rows `index` of the int32 column at `src` into `dst` (row tasks)."""
+    var tasks = host_predict_task_count_work(n, n)
+    var chunk = host_predict_chunk(n, tasks)
+    var source = _I32P(unsafe_from_address=src)
+    var target = _I32P(unsafe_from_address=dst)
+    var ids = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=index)
+
+    def task(unit: Int) {imm source, imm target, imm ids, imm chunk, imm n}:
+        for i in range(unit * chunk, min((unit + 1) * chunk, n)):  # native data loop (one host task's rows)
+            target[i] = source[Int(ids[i])]
+    host_parallelize(task, tasks)
+
+
+def _row_numbers(call: MutPointer[MemberCall, MutUntrackedOrigin], estimator: String,
+                 mut wide: List[Int64]) raises -> Int:
+    """The address of the call's row index as int64 numbers (an int32 index
+    widened into `wide` across the host's cores), checked in range of X."""
+    var given = call[].row_index
+    if given.cols != 1 or given.home != MEMBER_HOME_HOST:
+        raise Error("TypeError: a " + estimator + " member reads its row index as one host int32 or int64 column")
+    var index = 0
+    if given.dense_host(MEMBER_I64):
+        index = given.data
+    elif given.dense_host(MEMBER_I32):
+        wide = List[Int64](unsafe_uninit_length=given.rows)
+        host_widen_index_i64(given.data, Int(wide.unsafe_ptr()), given.rows)
+        index = Int(wide.unsafe_ptr())
+    else:
+        raise Error("TypeError: a " + estimator + " member reads its row index as one host int32 or int64 column")
+    if _index_bad(index, given.rows, call[].x.rows) != 0:
+        raise Error("IndexError: a row index of the " + estimator + " member is outside X")
+    return index
+
+
+def _fold_rows(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estimator: String) raises -> _FoldRows:
+    """THE FOLD ROWS of a fit (`_fit`): the row numbers and, under a
+    resident scope with a pin on a route whose image keeps a device store,
+    the store slot of the WHOLE X, put once per scope through the scope's
+    cache of this family (bindings/arena_cache_run.mojo
+    `arena_scope_store_put`; THE PIN RULE: `pin_kept` is written the moment
+    the cache took the reference, before anything after it can raise)."""
+    var fold = _FoldRows()
+    fold.n = call[].row_index.rows
+    fold.index = _row_numbers(call, estimator, fold.wide)
+    if (not slot[].et and call[].scope != MEMBER_SCOPE_NONE and call[].pin != 0 and _dev_rows_route(call)):
+        var store = forest_store_transport_ref(FOREST_TABLE_RF, call[].route.mode, call[].route.vendor)
+        var put = arena_scope_store_put(call[].scope, store, FOREST_STORE_PREFIX_RF, call[].x.data,
+                                        call[].x.rows * call[].x.cols, call[].pin)
+        if put.pinned:
+            call[].pin_kept = call[].pin
+        fold.store_id = put.store_id
+    return fold^
+
+
+def _query_rows(call: MutPointer[MemberCall, MutUntrackedOrigin], estimator: String,
+                mut x_fold: List[Float32], mut wide: List[Int64]) raises -> MemberMatrix:
+    """A predict / score X: the call's own view, or under `call.row_index`
+    its rows gathered across the host's cores (the forest predict entries
+    take a host X: their snapshots live on the image's inference context,
+    not the fits' context the store belongs to)."""
+    if call[].column_index.rows > 0:
+        raise Error("TypeError: a " + estimator + " member reads every column (no column index)")
+    _dense(call[].x, MEMBER_F32, "X", estimator)
+    if call[].row_index.rows == 0:
+        return call[].x
+    var n = call[].row_index.rows
+    var cols = call[].x.cols
+    var index = _row_numbers(call, estimator, wide)
+    x_fold = List[Float32](length=n * cols, fill=0.0)
+    _take_rows_f32(call[].x.data, index, n, cols, Int(x_fold.unsafe_ptr()))
+    return MemberMatrix(Int(x_fold.unsafe_ptr()), n, cols, MEMBER_F32)
+
+
 def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estimator: String) raises:
     # THE GIL RULE: the route entry is marked once per operation; the image
     # then runs its fit and walks with no release (core/forest_entry.mojo).
     # The marked ref is what the slot keeps for its predicts.
     var key = entry_ref_gil_free(call[].route.entry)
-    var rows = call[].x.rows
     var cols = call[].x.cols
-    _whole(call, estimator)
+    if call[].column_index.rows > 0:
+        raise Error("TypeError: a " + estimator + " member reads every column (no column index)")
     if call[].fit_output != 0:
         member_unsupported(estimator, call[].fit_output)
     _dense(call[].x, MEMBER_F32, "X", estimator)
     if call[].y.cols != 1:
         raise Error("ValueError: a " + estimator + " member fits one target column")
-    if call[].y.rows != rows:
+    # THE FOLD ROWS (lane vdf-scope-trees, MEMBER_CAN_ROW_INDEX): X, y and the
+    # weights are the WHOLE base and `call.row_index` the fit's rows. Under a
+    # resident scope with a pin, X goes ONCE into the image's device store
+    # through the scope's cache and the image takes the rows on the device
+    # (XF_FIT_ROWS); otherwise the rows are gathered here across the host's
+    # cores and the fit is the plain one. y and the weights (one word a row)
+    # are gathered here either way.
+    var fold = _FoldRows()
+    var base_rows = call[].x.rows
+    var rows = base_rows
+    if call[].row_index.rows > 0:
+        fold = _fold_rows(slot, call, estimator)
+        rows = fold.n
+    if call[].y.rows != base_rows:
         raise Error("ValueError: Found input variables with inconsistent numbers of samples")
     var weighted = call[].weights.rows > 0
     if weighted:
         _dense(call[].weights, MEMBER_F32, "the sample weights", estimator)
-        if call[].weights.rows != rows or call[].weights.cols != 1:
+        if call[].weights.rows != base_rows or call[].weights.cols != 1:
             raise Error("ValueError: sample_weight.shape == (" + String(call[].weights.rows)
-                + ",), expected (" + String(rows) + ",)!")
+                + ",), expected (" + String(base_rows) + ",)!")
     var classes = 0
     if slot[].classifier:
         _dense(call[].y, MEMBER_I32, "y (class codes)", estimator)
@@ -623,23 +791,50 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
     slot[].fitted = False
     slot[].imp = List[Float32]()
     _clear_oob(slot)
+    # The fit's own views: the call's, or the fold's gathered words.
+    var x_rows_addr = call[].x.data
+    var y_addr = call[].y.data
+    var w_addr = call[].weights.data if weighted else 0
+    var y_fold = List[Int32]()
+    var t_fold = List[Float32]()
+    var w_fold = List[Float32]()
+    var x_fold = List[Float32]()
+    if fold.n > 0:
+        if slot[].classifier:
+            y_fold = List[Int32](length=rows, fill=0)
+            _take_rows_i32(call[].y.data, fold.index, rows, Int(y_fold.unsafe_ptr()))
+            y_addr = Int(y_fold.unsafe_ptr())
+        else:
+            t_fold = List[Float32](length=rows, fill=0.0)
+            _take_rows_f32(call[].y.data, fold.index, rows, 1, Int(t_fold.unsafe_ptr()))
+            y_addr = Int(t_fold.unsafe_ptr())
+        if weighted:
+            w_fold = List[Float32](length=rows, fill=0.0)
+            _take_rows_f32(call[].weights.data, fold.index, rows, 1, Int(w_fold.unsafe_ptr()))
+            w_addr = Int(w_fold.unsafe_ptr())
+        if fold.store_id < 0:
+            x_fold = List[Float32](length=rows * cols, fill=0.0)
+            _take_rows_f32(call[].x.data, fold.index, rows, cols, Int(x_fold.unsafe_ptr()))
+            x_rows_addr = Int(x_fold.unsafe_ptr())
+    var on_device = fold.store_id >= 0
     # The ET classifier reads float32 codes; the cast lives until the launch returns.
     var codes = List[Float32]()
-    var y_addr = call[].y.data
     if slot[].classifier and slot[].et:
         codes = List[Float32](length=rows, fill=0.0)
-        _cast_codes(call[].y.data, Int(codes.unsafe_ptr()), rows)
+        _cast_codes(y_addr, Int(codes.unsafe_ptr()), rows)
         y_addr = Int(codes.unsafe_ptr())
     # The fit the estimator's own door picks (module docstring): the RF
     # layout's weighted, importance and out-of-bag fits read X column-major.
-    var w_addr = call[].weights.data if weighted else 0
-    var column_major = not slot[].et and (weighted or slot[].importances or slot[].oob)
+    # XF_FIT_ROWS makes its own column-major plane on the device.
+    var column_major = not on_device and not slot[].et and (weighted or slot[].importances or slot[].oob)
     var x_cols = List[Float32]()
-    var x_addr = call[].x.data
+    var x_addr = x_rows_addr
     if column_major:
         x_cols = List[Float32](length=rows * cols, fill=0.0)
-        _column_major(call[].x.data, Int(x_cols.unsafe_ptr()), rows, cols)
+        _column_major(x_rows_addr, Int(x_cols.unsafe_ptr()), rows, cols)
         x_addr = Int(x_cols.unsafe_ptr())
+    if on_device:
+        x_addr = fold.index  # XF_FIT_ROWS: x = the int64 row ids
     var imp = List[Float32]()
     if slot[].importances:
         imp = List[Float32](length=cols, fill=0.0)
@@ -671,10 +866,20 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
     # clears the class-weight slot (its class weights travel as row weights).
     var request = forest_request(config, key, rows, cols, classes, x_addr, y_addr, fit,
         weighted and slot[].classifier and slot[].et)
-    var device_scan = (xf_caps(key) & XF_CAP_DEVICE_SCAN) != 0
-    var handle = forest_fit_core(key, slot[].classifier, not column_major, request, device_scan)
+    var handle: Int
+    if on_device:
+        request.session = fold.store_id
+        handle = xf_fit_rows(key, slot[].classifier, request)
+    else:
+        var device_scan = (xf_caps(key) & XF_CAP_DEVICE_SCAN) != 0
+        handle = forest_fit_core(key, slot[].classifier, not column_major, request, device_scan)
     _ = len(codes)
     _ = len(x_cols)
+    _ = len(x_fold)
+    _ = len(y_fold)
+    _ = len(t_fold)
+    _ = len(w_fold)
+    _ = len(fold.wide)
     try:
         var sizes = xf_export_sizes(key, handle)
         var counts = forest_export_counts(sizes)
@@ -715,11 +920,9 @@ def _require_fitted(slot: _SlotPtr, estimator: String) raises:
         raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
 
 
-def _width(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estimator: String) raises:
-    _whole(call, estimator)
-    _dense(call[].x, MEMBER_F32, "X", estimator)
-    if call[].x.cols != slot[].features:
-        raise Error("ValueError: X has " + String(call[].x.cols) + " features, but " + estimator
+def _width(slot: _SlotPtr, x: MemberMatrix, estimator: String) raises:
+    if x.cols != slot[].features:
+        raise Error("ValueError: X has " + String(x.cols) + " features, but " + estimator
             + " is expecting " + String(slot[].features) + " features as input.")
 
 
@@ -759,24 +962,28 @@ def _codes(slot: _SlotPtr, x: MemberMatrix, dst: Int) raises:
 
 def _predict(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], proba: Bool, estimator: String) raises:
     _require_fitted(slot, estimator)
-    _width(slot, call, estimator)
-    var rows = call[].x.rows
+    var x_fold = List[Float32]()
+    var wide = List[Int64]()
+    var x = _query_rows(call, estimator, x_fold, wide)
+    _width(slot, x, estimator)
+    var rows = x.rows
     if proba:
         if not slot[].classifier:
             member_unsupported(estimator, MEMBER_OP_PREDICT_PROBA)
         _dense(call[].dst, MEMBER_F32, "the probability buffer", estimator)
         if call[].dst.rows != rows or call[].dst.cols != slot[].outputs:
             raise Error("ValueError: the probability buffer holds one row of class probabilities per row of X")
-        _vote(slot, call[].x, call[].dst.data)
-        return
-    if call[].dst.rows != rows or call[].dst.cols != 1:
+        _vote(slot, x, call[].dst.data)
+    elif call[].dst.rows != rows or call[].dst.cols != 1:
         raise Error("ValueError: the prediction buffer holds one value per row of X")
-    if slot[].classifier:
+    elif slot[].classifier:
         _dense(call[].dst, MEMBER_I32, "the prediction buffer (class codes)", estimator)
-        _codes(slot, call[].x, call[].dst.data)
+        _codes(slot, x, call[].dst.data)
     else:
         _dense(call[].dst, MEMBER_F32, "the prediction buffer", estimator)
-        _vote(slot, call[].x, call[].dst.data)
+        _vote(slot, x, call[].dst.data)
+    _ = len(x_fold)  # the walk above read the gathered rows
+    _ = len(wide)
 
 
 def _score(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estimator: String) raises:
@@ -789,15 +996,29 @@ def _score(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], est
     if call[].weights.rows > 0:
         raise Error("NotImplementedError: mojolearn: a weighted score of a " + estimator
             + " member is not published; the caller predicts and runs its own weighted metric")
-    _width(slot, call, estimator)
+    var x_fold = List[Float32]()
+    var wide = List[Int64]()
+    var x = _query_rows(call, estimator, x_fold, wide)
+    _width(slot, x, estimator)
     _dense(call[].y, MEMBER_I32, "y (class codes)", estimator)
-    var rows = call[].x.rows
-    if call[].y.rows != rows or call[].y.cols != 1:
+    var rows = x.rows
+    if call[].y.rows != call[].x.rows or call[].y.cols != 1:
         raise Error("ValueError: Found input variables with inconsistent numbers of samples")
+    # Under a row index y is the base's column, read through the same rows.
+    var y_fold = List[Int32]()
+    var y_addr = call[].y.data
+    if call[].row_index.rows > 0:
+        var index = Int(wide.unsafe_ptr()) if len(wide) > 0 else call[].row_index.data
+        y_fold = List[Int32](length=rows, fill=0)
+        _take_rows_i32(call[].y.data, index, rows, Int(y_fold.unsafe_ptr()))
+        y_addr = Int(y_fold.unsafe_ptr())
     var codes = List[Int32](length=rows, fill=0)
-    _codes(slot, call[].x, Int(codes.unsafe_ptr()))
-    var hits = _count_equal(Int(codes.unsafe_ptr()), call[].y.data, rows)
+    _codes(slot, x, Int(codes.unsafe_ptr()))
+    var hits = _count_equal(Int(codes.unsafe_ptr()), y_addr, rows)
     _ = len(codes)
+    _ = len(x_fold)
+    _ = len(y_fold)
+    _ = len(wide)
     call[].value = Float64(hits) / Float64(rows) if rows > 0 else 0.0
 
 
@@ -942,19 +1163,8 @@ def _capabilities(classifier: Bool, importances: Bool, weights: Bool, notices: B
     takes a HOST address of X and uploads it itself (no entry op binds a
     resident store id), so a device-home X is refused (`_dense`).
     `notices`: the kind carries its fit notices (Forest; `fm_member`)."""
-    # No MEMBER_CAN_SCOPE and no MEMBER_CAN_ROW_INDEX (lane vdf-scope-trees,
-    # 2026-11-24, audit): the forest images own no `core/device_store.mojo`
-    # store and no `<prefix>_dev_take_rows`, the resident scope's caches are
-    # bound to the x_prep transport (bindings/arena_cache_run.mojo
-    # `arena_cache_store`: XP_DEV_PUT / XP_DEV_FREE), and every fit and
-    # predict op (XF_FIT, XF_PREDICT, XF_RESIDENT_*, XF_STRICT_*) takes a
-    # HOST address of X. A device buffer belongs to the context that made
-    # it, so an x_prep slot cannot feed this image. What the device route
-    # needs (exact ops) is in vdf-scope-trees-RESULT.md; the image already
-    # holds the pieces: XF_SESSION_OPEN keeps X on the device and the
-    # regressor's XF_FIT_SESSION gathers rows there
-    # (core/mojolearn_rf_run.mojo `_rf_session_rows_forest`,
-    # `launch_gather_rows_colmajor`) before `fit_forest`.
+    # MEMBER_CAN_ROW_INDEX and MEMBER_CAN_SCOPE are added by `fm_member` on a
+    # route whose image answers XF_CAP_DEV_ROWS (lane vdf-scope-trees).
     # MEMBER_GIL_FREE (THE GIL RULE): every operation of the six kinds is
     # traced (fx-gil-RESULT.md, "forest / tree / extra_trees: HAS the bit"):
     # the route entry is marked `entry_ref_gil_free` at fit and import and
@@ -994,15 +1204,25 @@ def fm_member[name: StaticString, rf_layout: Bool, notices: Bool](operation: Int
     not advertise MEMBER_CAN_NOTICES and its callers skip the notice read."""
     var call = MutPointer[MemberCall, MutUntrackedOrigin](unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
+        # THE FOLD ROWS (lane vdf-scope-trees): MEMBER_CAN_ROW_INDEX and
+        # MEMBER_CAN_SCOPE on a route whose image keeps a device store
+        # (XF_CAP_DEV_ROWS: the RandomForest GPU image, RF layout only; one
+        # entry call per capability question, asked once per member class).
         if call[].state == 0:
-            return _capabilities(True, rf_layout, True, notices)
+            var held = _capabilities(True, rf_layout, True, notices)
+            if rf_layout and _dev_rows_route(call):
+                held |= MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
+            return held
         var known = _SlotPtr(unsafe_from_address=_lookup[name](call[].state, False))
         # Kind AND settings exact: the RF-layout regressor whose every fit
         # computes out-of-bag outputs refuses weights (`_fit`; lane mf-rfe6:
         # the importance fit takes them).
         var weights = known[].classifier or known[].et or not known[].oob
-        return _capabilities(known[].classifier, known[].importances or len(known[].imp) > 0, weights,
-                             notices and not known[].et, known[].predict_only)
+        var mask = _capabilities(known[].classifier, known[].importances or len(known[].imp) > 0, weights,
+                                 notices and not known[].et, known[].predict_only)
+        if not known[].et and not known[].predict_only and _dev_rows_route(call):
+            mask |= MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
+        return mask
     if operation == MEMBER_OP_NEW:
         if not call[].params:
             raise Error("member ABI: a forest member needs its parameter words")
