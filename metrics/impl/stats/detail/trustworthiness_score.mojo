@@ -191,7 +191,42 @@ def trustworthiness_rank_sum(
     gate it EXACTLY and see the neighbor structure it rests on. `trace`
     is handed to `knn_search_traced` so the k-NN's `knn.*` stages land in
     the SAME card as the metric's (one `seq` per file; the DEVIATION 518
-    lesson), then `trust.emb_ind` and `trust.rank_sum` are recorded."""
+    lesson), then `trust.emb_ind` and `trust.rank_sum` are recorded.
+
+    X goes up once here and the body is `trustworthiness_rank_sum_dx`
+    (lane vdf-xm-kernels, 2026-11-24: the upload moved ahead of the k-NN,
+    a queue-order change only; the same words reach the same kernels)."""
+    if n * m < 1 or len(x_host) < n * m:
+        raise Error("trustworthiness: X holds " + String(len(x_host)) + " floats, needs " + String(n * m))
+    var x_dev = ctx.enqueue_create_buffer[DType.float32](n * m)
+    ctx.enqueue_copy(dst_buf=x_dev, src_ptr=x_host.unsafe_ptr())
+    var r = trustworthiness_rank_sum_dx(ctx, trace, x_dev, x_embedded_host, n, m, d, n_neighbors,
+                                        block_size_is_64, grid_x_override, want_idx)
+    _ = x_dev^
+    _ = len(x_host)  # the queued upload reads the list: named again past the body's synchronization
+    return r^
+
+
+def trustworthiness_rank_sum_dx(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    mut x_dev: DeviceBuffer[DType.float32],
+    mut x_embedded_host: List[Float32],
+    n: Int,
+    m: Int,
+    d: Int,
+    n_neighbors: Int,
+    block_size_is_64: Bool,
+    grid_x_override: Int,
+    want_idx: Bool = True,
+) raises -> Tuple[Int64, List[UInt32]]:
+    """`trustworthiness_rank_sum` over X already on the device (`x_dev`,
+    n x m row-major on `ctx`): the resident form of the `_mojolearn_metrics`
+    entry reads X in place (metrics/slot_entry_device.mojo). X_embedded
+    stays a host list: the embedded k-NN's boundary
+    (`neighbors/estimator.mojo::knn_search`) is host pointers."""
+    if len(x_dev) < n * m:
+        raise Error("trustworthiness: X holds " + String(len(x_dev)) + " floats, needs " + String(n * m))
     if n_neighbors < 1:
         raise Error("trustworthiness: n_neighbors must be >= 1")
     # cuML's own surface (`python/cuml/cuml/metrics/trustworthiness.pyx:
@@ -276,8 +311,6 @@ def trustworthiness_rank_sum(
     if build_idx:
         for i in range(n * k1):
             out_idx.append(h_idx.unsafe_ptr().unsafe_load(i))
-    var x_dev = ctx.enqueue_create_buffer[DType.float32](n * m)
-    ctx.enqueue_copy(dst_buf=x_dev, src_ptr=x_host.unsafe_ptr())
     var emb: DeviceBuffer[DType.uint32]
     comptime if IDN_TRUST_DEV:
         # the search's own sorted device indices (n x k1 uint32)
@@ -314,7 +347,6 @@ def trustworthiness_rank_sum(
         _ = one^
     _ = partials^
     _ = emb^
-    _ = x_dev^
     _ = h_emb^
     _ = h_dist^
     _ = h_idx^
