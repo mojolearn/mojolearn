@@ -224,7 +224,7 @@ from bindings.prep_classify_prog_run import ClsRunPlan
 from bindings.prep_select_run import (
     RfeFitPlan, RfeFitResult, rfe_fit_run, rfe_select_count, rfe_step_count, rfe_final_plan,
 )
-from core.msel_search_run import MselSearchPlan, MselSearchResult, msel_search_run
+from core.msel_search_run import MselSearchPlan, MselSearchResult, msel_search_run, MselOtherTier
 from core.msel_scorer_run import MselScorerOptions, msel_scorer_group_read, msel_multi_output_type
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of, member_free, member_own, member_new,
@@ -544,6 +544,9 @@ struct MetaPlanSlot(Copyable, Movable, Defaultable):
     # labels' reprs (`meta_plan_search_labels`).
     var cluster: EntryRef
     var label_words: List[String]
+    # Lane mf-r9d: THE SEARCH KIND's other numeric_mode tier
+    # (`meta_plan_metric_other`; core/msel_search_run.mojo `MselOtherTier`).
+    var other: MselOtherTier
     # Lane mf-meta5: THE RFE KIND's x_prep image (the rounds' programs, `meta_plan_rfe`; the admission
     # pins its selection) and the words its first round raises (empty: none).
     var rfe_run: ClsRunPlan
@@ -570,6 +573,7 @@ struct MetaPlanSlot(Copyable, Movable, Defaultable):
         self.split = MselSplitSpec()
         self.cluster = entry_ref_unresolved()
         self.label_words = List[String]()
+        self.other = MselOtherTier()
         self.rfe_run = ClsRunPlan(entry_ref_unresolved(), False, False, False, False, False)
         self.refusal = String("")
         self.refusal_late = False
@@ -667,6 +671,21 @@ def meta_plan_metric(handle: Int, route: MetricRoute) raises:
     shared_slot_lock(lock)
     try:
         _PlanSlotPtr(unsafe_from_address=address)[].metric = route
+    finally:
+        shared_slot_unlock(lock)
+
+
+def meta_plan_metric_other(handle: Int, var other: MselOtherTier) raises:
+    """UNPACK (THE SEARCH KIND's admission, lane mf-r9d): the other
+    numeric_mode tier of a minted plan entry (its metric route, its cluster
+    entry and the candidates' host flags; core/msel_search_run.mojo
+    `MselOtherTier`), copied into every state NEW makes from it."""
+    var store = _PLANS.get_or_create_ptr()
+    var address = _plan_lookup(handle, False)
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    shared_slot_lock(lock)
+    try:
+        _PlanSlotPtr(unsafe_from_address=address)[].other = other^
     finally:
         shared_slot_unlock(lock)
 
@@ -1009,6 +1028,8 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
     # Lane mf-cluster5: the search's cluster entry and labels' reprs.
     var cluster: EntryRef
     var label_words: List[String]
+    # Lane mf-r9d: the search's other numeric_mode tier (`MselOtherTier`).
+    var other: MselOtherTier
     # Lane mf-msel5, THE CV TOOLS: the kept unit states (owned; 0: a failed
     # fit), each unit's candidate (its plan in `base_plans`), and their
     # handles as export words (META_BLOCK_FOLDS).
@@ -1099,6 +1120,7 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
         self.out_classes = List[Int]()
         self.cluster = entry_ref_unresolved()
         self.label_words = List[String]()
+        self.other = MselOtherTier()
         self.fold_states = List[Int]()
         self.fold_owner = List[Int]()
         self.fold_words = List[Int64]()
@@ -1454,6 +1476,7 @@ def _new(call: _CallPtr) raises:
         slot[].split = entry[].split.copy()
         slot[].cluster = entry[].cluster
         slot[].label_words = entry[].label_words.copy()
+        slot[].other = entry[].other.copy()
         slot[].rfe_run = entry[].rfe_run
         slot[].refusal = entry[].refusal.copy()
         slot[].refusal_late = entry[].refusal_late
@@ -3529,6 +3552,7 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
     plan.cap = slot[].cap
     plan.cluster = slot[].cluster
     plan.label_words = slot[].label_words.copy()
+    plan.other = slot[].other.copy()  # lane mf-r9d: the other numeric_mode tier
     # THE SPLITTER CV and a user's index list (lane mf-search4b item 6): the
     # folds of this fit's rows, as Stacking's and Calibrated's (`_split_folds`;
     # the user's are the entry's typed folds), handed to the RUN.

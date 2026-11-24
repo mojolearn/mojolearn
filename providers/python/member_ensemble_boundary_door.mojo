@@ -137,8 +137,10 @@ from core.ensemble_member import (
     meta_plan_metric, meta_plan_search_labels, META_SEARCH_CLASSIFIER, META_SEARCH_REGRESSOR, META_MULTI_CLASSIFIER, META_MULTI_REGRESSOR,
     META_BLOCK_SEARCH, META_BLOCK_FOLDS,
 )
-from core.ensemble_member import meta_plan_leaf_importances, META_PARAM_SERVING
-from core.msel_search_run import SEARCH_REFUSED_SHIFT
+from core.ensemble_member import meta_plan_leaf_importances, META_PARAM_SERVING, meta_plan_metric_other
+from core.msel_search_run import SEARCH_REFUSED_SHIFT, MselOtherTier
+from bindings.mode_answer_door import answer_mode_object
+from core.mode_answer import MODE_FAMILY_MSEL
 from core.member_abi import MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_PREDICT, member_output_dtype, member_outputs
 from bindings.msel_common_door import msel_f64_block, msel_i64_list, msel_index_i64, msel_p64, msel_addr
 from bindings.classical_labels_door import labels_decode_labels
@@ -149,7 +151,7 @@ from core.msel_scorer_run import (
     msel_scorer_metric_code, SCORER_POSITIVE_LABEL_ONE, SCORER_POSITIVE_MARKS, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND,
     SCORER_POSITIVE_MIXED,
     msel_scorer_cluster, msel_scorer_cluster_entry, msel_scorer_top_k, msel_scorer_ap, msel_scorer_brier,
-    msel_scorer_label_row, msel_scorer_f_row, msel_scorer_group_words, MselScorerOptions,
+    msel_scorer_label_row, msel_scorer_f_row, msel_scorer_group_words, MselScorerOptions, msel_scorer_float_roc,
     msel_scorer_weighted, msel_scorer_caller, SCORER_WEIGHTS_EMPTY,
     msel_scorer_log_loss, SCORER_LABEL_NUMBER, SCORER_LABEL_TEXT, SCORER_LABEL_UNREAD,
     msel_scorer_roc_problem, msel_scorer_mi, msel_scorer_v_measure, msel_scorer_d2_proba, msel_scorer_decision_only,
@@ -2702,6 +2704,13 @@ struct _ScorerKw(Movable):
     # whose response is not predict (the class's chosen method becomes the
     # row's response at the admission, `MselScorerOptions.resp`)
     var resp_any: Bool
+    # lane mf-r9d (door :3789): a make_scorer's numeric_mode naming the tier
+    # that is not the process default (`tier` 1, `tier_mode` its clean word:
+    # 'fast' or 'identical'), and a METRIC ROW whose response_method is a
+    # tuple (`resp_tuple`: the admission resolves it against the class)
+    var tier: Int
+    var tier_mode: String
+    var resp_tuple: Bool
 
     def __init__(out self):
         self.flip = False
@@ -2730,6 +2739,9 @@ struct _ScorerKw(Movable):
         self.roc_avg = PythonObject(None)
         self.roc_labels = PythonObject(None)
         self.resp_any = False
+        self.tier = 0
+        self.tier_mode = String("")
+        self.resp_tuple = False
 
 
 def _sorted_labels(value: PythonObject, b: PythonObject) raises -> PythonObject:
@@ -2758,10 +2770,10 @@ def _is_sorted(value: PythonObject, b: PythonObject) raises -> Bool:
 def _non_predict_response(method: PythonObject, b: PythonObject) raises -> Bool:
     """UNPACK (lane mf-r9c, door :3670): a make_scorer response_method a
     regression row may read in place of predict: 'predict_proba',
-    'decision_function', or a tuple / list of method names with neither
-    'predict_log_proba' (no scorer row answers a log response) nor anything
-    but the four response names. The admission takes the first one the
-    class has (`msel_scorer_response`)."""
+    'decision_function', 'predict_log_proba' (lane mf-r9d: the log of the
+    member's probabilities, `MselScorerOptions.log`), or a tuple / list of
+    method names with nothing but the four response names. The admission
+    takes the first one the class has (`msel_scorer_response`)."""
     var listed = Python.list()
     if py_type(method) is b.str:
         _ = py_call(listed.append, method)
@@ -2774,7 +2786,7 @@ def _non_predict_response(method: PythonObject, b: PythonObject) raises -> Bool:
         if py_type(listed[i]) is not b.str:
             return False
         var word = String(py=listed[i])
-        if word == "predict_proba" or word == "decision_function":
+        if word == "predict_proba" or word == "decision_function" or word == "predict_log_proba":
             other = True
         elif word != "predict":
             return False
@@ -3133,7 +3145,7 @@ def _mode_word(value: PythonObject, context: PythonObject, b: PythonObject) rais
     default mode (None, or the default's name after `strip().lower()`: the
     same metric tier the search's own metric route runs), 1 a value the door
     refuses ("numeric_mode must be 'fast' or 'identical'"), 2 the other tier
-    (no typed route: the search RUN holds one metric route)."""
+    (lane mf-r9d: that tier's own metric route, `MselOtherTier`)."""
     if value is None:
         return 0
     if py_type(value) is not b.str:
@@ -3145,6 +3157,13 @@ def _mode_word(value: PythonObject, context: PythonObject, b: PythonObject) rais
     if default is not None and py_type(default) is b.str and String(py=py_call(py_call(default.strip).lower)) == clean:
         return 0
     return 2
+
+
+def _mode_clean(value: PythonObject) raises -> String:
+    """UNPACK (lane mf-r9d): a numeric_mode `_mode_word` answered 2 for, as
+    the native scorer door cleans it (`strip().lower()`): 'fast' or
+    'identical'."""
+    return String(py=py_call(py_call(value.strip).lower))
 
 
 def _real_word(value: PythonObject, b: PythonObject) raises -> Float64:
@@ -3266,13 +3285,17 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                     continue  # lane mf-score8 round b: a typed word of the row
                 if word == "numeric_mode" and theirs is not missing:
                     # lane mf-rows8a: the default tier is the row's; a value the
-                    # door refuses is its words per side; the other tier: no row
+                    # door refuses is its words per side. Lane mf-r9d (door
+                    # :3789): the other tier is the row on that tier's route
                     var mode = _mode_word(theirs, context, b)
                     if mode == 0:
                         continue
                     if mode == 1:
                         _refuse(mine_kw, "ValueError: numeric_mode must be 'fast' or 'identical'")
                         continue
+                    mine_kw.tier = 1
+                    mine_kw.tier_mode = _mode_clean(theirs)
+                    continue
                 if word == "labels" and theirs is not missing and label_row > 0:
                     # read first: an array compares no other way (labels None is the row's)
                     if theirs is not None and label_row == 2:
@@ -3375,7 +3398,18 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
         # `numeric_mode` None. Its row's sign is the metric's value: the
         # flip is greater_is_better=False.
         var plan = py_get(context["family_msel_metric_plans"], func)
-        if plan is None or py_type(got_method) is not b.str:
+        if plan is None:
+            return String("")
+        # lane mf-r9d (door :3789): a response_method TUPLE of method names
+        # (the native scorer door takes a str or a tuple of str,
+        # `_scorer_response`): the admission resolves it against the class
+        # (`resp_tuple`); a list or another value is no response the door takes
+        var tupled = py_type(got_method) is b.tuple
+        if tupled:
+            for q in range(len(got_method)):  # small-loop(the scorer's response methods)
+                if py_type(got_method[q]) is not b.str:
+                    return String("")
+        elif py_type(got_method) is not b.str:
             return String("")
         var metric = String(py=plan["name"])
         var normalize = True
@@ -3389,10 +3423,12 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                 if value is not None:
                     metric_kw.weights = value
             elif word == "numeric_mode":
-                # lane mf-rows8a: `_mode_word` (the other tier keeps no row)
+                # lane mf-rows8a: `_mode_word`. Lane mf-r9d (door :3789): the
+                # other tier is the row on that tier's route
                 var mode = _mode_word(value, context, b)
                 if mode == 2:
-                    return String("")
+                    metric_kw.tier = 1
+                    metric_kw.tier_mode = _mode_clean(value)
                 if mode == 1:
                     _refuse(metric_kw, "ValueError: numeric_mode must be 'fast' or 'identical'")
             elif not _metric_row_kwarg(metric, word, value, metric_kw, normalize, context, b):
@@ -3406,7 +3442,10 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
         var op = msel_scorer_row(code).op
         var wanted = String("decision_function") if op == MEMBER_OP_DECISION else (
             String("predict_proba") if op == MEMBER_OP_PREDICT_PROBA else String("predict"))
-        if String(py=got_method) != wanted:
+        if tupled:
+            # lane mf-r9d: resolved at the admission (`resp_tuple`)
+            metric_kw.resp_tuple = True
+        elif String(py=got_method) != wanted:
             # lane mf-r9c (door :3670): a regression metric row over the
             # make_scorer's own non-predict response
             if not (op == MEMBER_OP_PREDICT and msel_scorer_regression(msel_scorer_row(code))
@@ -3610,12 +3649,13 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                 tool_respond = MEMBER_OP_PREDICT_PROBA
                 tool_log = True
             else:
-                # ANOTHER METHOD: not taken. The one door that sets a method,
+                # ANOTHER METHOD: the one door that sets a method,
                 # bindings/msel_cv_door.mojo `msel_cross_val_predict`, refuses
                 # one outside scikit-learn's options in its words before any
-                # fold (lane w3-fix-b row 14: this admission's refusal never
-                # surfaced, the serving admission swallows it).
-                return False
+                # fold (lane w3-fix-b row 14), so none reaches here. LANE
+                # mf-r9d: an invariant (was the False exit to the door's units).
+                raise Error("RuntimeError: search admission invariant: a cv tool carrier asks the response method '"
+                            + method + "' its door refuses")
             if len(keys) > 0:
                 raise Error("RuntimeError: search admission invariant: a cv tool asks a response method and scorers at once (the carrier sets one of the two)")
     # Where the fold rows live (the docstring): read once per admission.
@@ -3770,6 +3810,8 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     # A MULTI-OUTPUT CLASSIFIER's fit (lane mf-rows8b): one label list per
     # output (bindings/msel_member_units_door.mojo `_encode_outputs`).
     var multi_lab = classifier and _per_output_labels(labels, b)
+    # LANE mf-r9d: the other numeric_mode tier's clean word ("": no scorer of it)
+    var other_mode = String("")
     for j in range(len(keys)):  # driver-loop: over the scorers (once per admission)
         var kw = _ScorerKw()
         var name = _scorer_name(givens[j], context, b, kw)
@@ -3780,12 +3822,18 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             # raised per side after the response is asked, as the door does
             no_method = kw.refuse_text.copy()
         if name.byte_length() == 0 and no_method.byte_length() == 0:
-            # a native scorer no table row holds (mf-r9c-work/rows.tsv):
-            # another numeric_mode tier (one MetricRoute per search RUN), a
-            # predict_log_proba response over a regression row, a response
-            # tuple on a metric row. Lane mf-r9c typed roc_auc's multi_class
-            # on its dual row (`_multi_class_row`) and a regression row over
-            # a predict_proba / decision_function response (`resp_any`).
+            # a native scorer no table row holds. Lane mf-r9c typed roc_auc's
+            # multi_class on its dual row (`_multi_class_row`) and a regression
+            # row over a predict_proba / decision_function response
+            # (`resp_any`); LANE mf-r9d the other numeric_mode tier (its own
+            # route, `_other_tier`), a predict_log_proba response over a
+            # regression row (`opts.log`) and a response tuple on a metric row
+            # (`resp_tuple`). Left (mf-r9d-work/rows.tsv, `_scorer_name`'s ""
+            # answers): a scorer with no `_score_func`, a metric with no
+            # connected plan or no typed row, a kwarg of a connected metric
+            # that no typed word carries (`_metric_row_kwarg` False), fbeta
+            # without a beta or a beta / k the metric refuses, a list
+            # response_method, an option no exact comparison reads.
             return False
         if no_method.byte_length() > 0:
             # A CLASS WITH NONE OF THE SCORER'S RESPONSE METHODS (lane mf-score8
@@ -3818,12 +3866,35 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         opts.beta = kw.beta
         opts.zd = kw.zd
         var row = msel_scorer_row(code)
+        if kw.resp_tuple:
+            # LANE mf-r9d (door :3789): a METRIC ROW whose response_method is a
+            # tuple: the first method the class has (`msel_scorer_response`,
+            # scikit-learn's `_check_response_method`) is the row's own
+            # response, or a regression row's non-predict one (lane mf-r9c's
+            # `resp`). Another response for a non-regression metric row is a
+            # classification / probability metric over the wrong kind of
+            # answer, which no typed row reads (the one exit left here).
+            var wanted_t = String("decision_function") if row.op == MEMBER_OP_DECISION else (
+                String("predict_proba") if row.op == MEMBER_OP_PREDICT_PROBA else String("predict"))
+            if method != wanted_t:
+                if not (row.op == MEMBER_OP_PREDICT and msel_scorer_regression(row)):
+                    return False
+                kw.resp_any = True
         if kw.resp_any and method != "predict":
             # LANE mf-r9c (door :3670): a regression row over the make_scorer's
             # own response the class has (core/msel_scorer_run.mojo
-            # `_response_regression`): the row reads that response
+            # `_response_regression`): the row reads that response. LANE
+            # mf-r9d: predict_log_proba is predict_proba's columns logged in the
+            # member's precision before the RUN narrows them (`opts.log`;
+            # core/msel_search_run.mojo `_respond`)
             opts.resp = MEMBER_OP_DECISION if method == "decision_function" else MEMBER_OP_PREDICT_PROBA
+            opts.log = method == "predict_log_proba"
             row.op = opts.resp
+        # LANE mf-r9d (door :3789): the other numeric_mode tier's route
+        # (resolved once below, `_other_tier`)
+        if kw.tier == 1:
+            opts.tier = 1
+            other_mode = kw.tier_mode.copy()
         # LANE mf-score6: average=None (the words scikit-learn's `_score`
         # names the scorer by, `str(scorer)` or a multi-metric key, as one
         # more label word: a per-label array is no number), average='samples'
@@ -3953,11 +4024,20 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             others = True
         elif msel_scorer_regression(row) == classifier:
             # a probability or decision scorer on a non-classifier whose class
-            # has that method (a mixture model's predict_proba): scikit-learn
-            # 1.9 hands the raw method answer to the metric
-            # (utils/_response.py line 232); no typed route reads a
-            # non-classifier's columns (mf-rows8a-work/rows.tsv)
-            return False
+            # has that method (a mixture model's predict_proba, an outlier
+            # detector's decision_function): scikit-learn 1.9 hands the raw
+            # method answer to the metric (utils/_response.py line 232).
+            # LANE mf-r9d: 'roc_auc' (its binary row, either half) is typed
+            # over the member's own columns and the float targets
+            # (core/msel_scorer_run.mojo `_float_roc_value`; the RUN sizes the
+            # response by `member_outputs`). Not typed (mf-r9d-work/rows.tsv):
+            # the other probability / decision metrics over a non-classifier's
+            # raw columns (log_loss, average_precision, brier, top_k, hinge,
+            # the D^2 probability scores, roc_auc's multi_class rows), each a
+            # metric branch over float y_true no typed program reads yet.
+            if not msel_scorer_float_roc(row):
+                return False
+            others = True
         else:
             others = True
         if msel_scorer_cluster_entry(row):
@@ -4336,6 +4416,13 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             if not labels_out and not ids and dtype != MEMBER_F32 and dtype != MEMBER_F64:
                 raise Error("RuntimeError: search admission invariant: a member answers a scored response in no"
                             + " float type and no integer predict")
+    # LANE mf-r9d (door :3789): THE OTHER numeric_mode TIER, resolved ONCE
+    # before the scorers' word groups are written (a refusal of its image is
+    # one more label word every scorer of the tier raises per side).
+    var other = MselOtherTier()
+    var other_pins = Python.list()
+    if other_mode.byte_length() > 0:
+        _other_tier(other_mode, codes, options, clones, labels, classifier, extra_words, other, other_pins, context, b)
     # The settings words (core/ensemble_member.mojo META_SEARCH_*): the head,
     # then one scorer word group per scorer (lane mf-tail5b; its code, its
     # positive word, its options and labels codes:
@@ -4480,22 +4567,91 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         # THE NATIVE METRIC RUN's route (bindings/arena_prog_run.mojo
         # `metric_inputs_run`): the default-mode x_metrics runner, its
         # connection pinned with the plan entry.
-        var nk = metrics_keys()
-        var prog_context = py_get(context, nk[].k_family_metrics_prog_context)
-        if prog_context is None:
-            # A MISSING METRICS IMAGE (lane mf-msel5b): the metrics module is
-            # imported once (its import connects the runner, as the door's own
-            # scorer calls do), else the refusal in the loader's words.
-            _ = py_call(native_loaded_module("importlib").import_module, PythonObject("mojolearn._expansion_metrics"))
-            prog_context = py_get(context, nk[].k_family_metrics_prog_context)
-            if prog_context is None:
-                raise Error("ImportError: mojolearn: the metrics runner is not connected to model selection "
-                            + "(family_metrics_prog_context); import mojolearn.metrics first")
-        var pin = metric_route_of(metric_route_entries(PythonObject(None), prog_context))
+        var pin = metric_route_of(metric_route_entries(PythonObject(None), _metrics_prog_context(context)))
         meta_plan_metric(Int(owner.plan.params[1]), pin.route)
         _ = py_call(owner.pins.append, pin.provider)
         _ = py_call(owner.pins.append, pin.entries)
+    if other_mode.byte_length() > 0:
+        # LANE mf-r9d: the other tier's route, cluster entry and the
+        # candidates' host flags; its connections pinned with the plan entry
+        meta_plan_metric_other(Int(owner.plan.params[1]), other.copy())
+        for q in range(len(other_pins)):  # small-loop(the other tier's connection owners: two or three)
+            _ = py_call(owner.pins.append, other_pins[q])
     return True
+
+
+def _metrics_prog_context(context: PythonObject) raises -> PythonObject:
+    """UNPACK: model selection's x_metrics program context. A MISSING METRICS
+    IMAGE (lane mf-msel5b): the metrics module is imported once (its import
+    connects the runner, as the door's own scorer calls do), else the
+    refusal in the loader's words."""
+    var nk = metrics_keys()
+    var prog_context = py_get(context, nk[].k_family_metrics_prog_context)
+    if prog_context is None:
+        _ = py_call(native_loaded_module("importlib").import_module, PythonObject("mojolearn._expansion_metrics"))
+        prog_context = py_get(context, nk[].k_family_metrics_prog_context)
+        if prog_context is None:
+            raise Error("ImportError: mojolearn: the metrics runner is not connected to model selection "
+                        + "(family_metrics_prog_context); import mojolearn.metrics first")
+    return prog_context
+
+
+def _other_tier(mode: String, codes: List[Int], mut options: List[MselScorerOptions], clones: PythonObject,
+                labels: PythonObject, classifier: Bool, mut extra_words: List[String], mut other: MselOtherTier,
+                pins: PythonObject, context: PythonObject, b: PythonObject) raises:
+    """UNPACK (lane mf-r9d, door :3789): the other numeric_mode tier `mode`
+    ('fast' or 'identical', the one that is not the process default) of the
+    scorers whose options say `tier` 1, read ONCE as the native scorer door
+    reads its binding (bindings/msel_scorer_native_door.mojo
+    `MselMetricPrepared.prepare`): the mode answered for model selection's
+    family (`answer_mode_object`: where the identical set answers fast, the
+    identical image), that image's x_metrics program runner
+    (core/msel_search_run.mojo `MselOtherTier.route`) and, for a label-pair
+    cluster scorer of the tier, its metrics image's cluster entry. An image
+    the installation does not hold raises its loader's words on every score
+    of those scorers (inside the scorer's try, as the door's prepare raises
+    them: one more label word, `tier_word`). With the fast tier, each
+    candidate whose estimator takes its fold rows on the host
+    (`msel_member_host_folds`, the door's own check of the scored estimator)
+    raises the shared device='cpu' refusal on those scorers' sides
+    (`cpu_fast`). `pins` receives the connections' owners."""
+    var mode_obj = PythonObject(mode)
+    answer_mode_object(mode_obj, mode, MODE_FAMILY_MSEL)
+    var refused = String("")
+    try:
+        var pin = metric_route_of(metric_route_entries(mode_obj, _metrics_prog_context(context)))
+        other.route = pin.route
+        other.resolved = True
+        _ = py_call(pins.append, pin.provider)
+        _ = py_call(pins.append, pin.entries)
+    except error:
+        refused = String(error)
+    var wants_cluster = False
+    for j in range(min(len(options), len(codes))):  # small-loop(the scorers)
+        if options[j].tier == 1 and msel_scorer_cluster_entry(msel_scorer_row(codes[j])):
+            wants_cluster = True
+    if wants_cluster and refused.byte_length() == 0:
+        try:
+            var binding = estimator_binding_mode(mode_obj, "_mojolearn_metrics", context)
+            var key = py_call(b.getattr, binding, PythonObject("metrics_cluster_key"), PythonObject(None))
+            if key is None:
+                refused = String("ImportError: mojolearn: the metrics image publishes no cluster label-pair entry "
+                                 + "(metrics_cluster_key); rebuild the metrics binding")
+            else:
+                other.cluster = cluster_ops_entry(Int(py=key[0]), Int(py=key[1]))
+                _ = py_call(pins.append, binding)
+        except error:
+            refused = String(error)
+    if refused.byte_length() > 0:
+        var word = _next_word(labels, classifier, extra_words, b)
+        extra_words.append(refused)
+        for j in range(len(options)):  # small-loop(the scorers of the tier)
+            if options[j].tier == 1:
+                options[j].tier_word = word
+    if mode == "fast":
+        for c in range(len(clones)):  # driver-loop: over the candidates (their device, once each)
+            var host = msel_member_host_folds(py_call(b.vars, clones[c]), b, context)
+            other.cpu_fast.append(UInt8(1) if host else UInt8(0))
 
 
 # SCORING None's typed scorer (lane mf-rows8c): what a search scores a unit by

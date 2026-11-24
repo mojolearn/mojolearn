@@ -241,8 +241,16 @@ comptime _CL_PAIR = 2
 #: sample_weight words: two per label (the float32 bits as an int32, the
 #: kind word SCORER_LABEL_*). Lane mf-r9c: then the scorer's own response
 #: (0 the row's; else MEMBER_OP_PROBA / _DECISION: a regression row over a
-#: make_scorer's non-predict response the class has).
-comptime SCORER_GROUP_WORDS = 22
+#: make_scorer's non-predict response the class has). Lane mf-r9d: then the
+#: numeric_mode tier (0 the process default's route, 1 the other tier's,
+#: `MselOtherTier`), the tier's refusal word (-1: none; else the label word
+#: each side raises: the other tier's image is not built), and the
+#: predict_log_proba flag (1: the response is the log of predict_proba).
+comptime SCORER_GROUP_WORDS = 25
+#: Lane mf-r9d: the shared refusal of device='cpu' with the fast tier
+#: (core/device_route.mojo `device_cpu_fast`, which the native scorer door's
+#: prepare raises for a host estimator's fast-mode scorer), per side.
+comptime SCORER_CPU_FAST_WORDS = "ValueError: device='cpu' runs in identical mode only; numeric_mode='fast' is for Apple GPUs"
 #: Lane mf-score6: the sample_weight refusal word: none, or an empty weights
 #: array (each side refuses its length in the door's words).
 comptime SCORER_WEIGHTS_OK = -1
@@ -367,6 +375,14 @@ struct MselScorer(ImplicitlyCopyable, Movable):
     # estimator's `classes_`
     var mheld_at: Int
     var fold: Int
+    # lane mf-r9d: the numeric_mode tier (`MselScorerOptions.tier`), its
+    # refusal word, the predict_log_proba response (`log`), and (set by the
+    # search RUN per score like `ids`) the side's candidate takes its rows on
+    # the host under the fast tier (`cpu_fast`: SCORER_CPU_FAST_WORDS)
+    var tier: Int
+    var tier_word: Int
+    var log: Bool
+    var cpu_fast: Bool
 
     def __init__(out self, name: StaticString, family: Int, metric: Int, avg: Int, sign: Float64, op: Int):
         self.name = name
@@ -406,6 +422,10 @@ struct MselScorer(ImplicitlyCopyable, Movable):
         self.counts_at = 0
         self.mheld_at = 0
         self.fold = 0
+        self.tier = 0
+        self.tier_word = -1
+        self.log = False
+        self.cpu_fast = False
 
 
 def _nan64() -> Float64:
@@ -450,6 +470,11 @@ struct MselScorerOptions(ImplicitlyCopyable, Movable):
     var lv_n: Int
     # lane mf-r9c: the scorer's own response (0: the row's; module note)
     var resp: Int
+    # lane mf-r9d: the numeric_mode tier (0 the default's route, 1 the other
+    # tier's), its refusal word (-1: none) and the predict_log_proba response
+    var tier: Int
+    var tier_word: Int
+    var log: Bool
 
     def __init__(out self):
         self.flip = False
@@ -476,6 +501,9 @@ struct MselScorerOptions(ImplicitlyCopyable, Movable):
         self.lv_from = 0
         self.lv_n = 0
         self.resp = 0
+        self.tier = 0
+        self.tier_word = -1
+        self.log = False
 
 
 def _table() -> List[MselScorer]:
@@ -715,6 +743,14 @@ def msel_scorer_row(code: Int, opts: MselScorerOptions, sel_base: Int) raises ->
         if row.family != _F_REG or (opts.resp != MEMBER_OP_PREDICT_PROBA and opts.resp != MEMBER_OP_DECISION):
             raise Error("RuntimeError: a scorer's own response on a search scorer other than a regression row")
         row.op = opts.resp
+    # lane mf-r9d (door :3789): the other numeric_mode tier's route and a
+    # predict_log_proba response (a probability response's log)
+    row.tier = opts.tier
+    row.tier_word = opts.tier_word
+    if opts.log:
+        if row.op != MEMBER_OP_PREDICT_PROBA:
+            raise Error("RuntimeError: predict_log_proba on a search scorer that reads no predict_proba")
+        row.log = True
     return row
 
 
@@ -856,6 +892,9 @@ def msel_scorer_group_words(mut words: List[Float64], code: Int, positive: Int, 
     words.append(Float64(opts.wmode))
     words.append(Float64(opts.lv_n))
     words.append(Float64(opts.resp))  # lane mf-r9c
+    words.append(Float64(opts.tier))  # lane mf-r9d
+    words.append(Float64(opts.tier_word))
+    words.append(1.0 if opts.log else 0.0)
     for j in range(opts.sel_n):  # small-loop(the scorer's labels codes)
         words.append(Float64(sels[opts.sel_from + j]))
     for j in range(max(opts.w_n, 0)):  # driver-loop: over the sample_weight words (once per admission)
@@ -896,6 +935,11 @@ def msel_scorer_group_read(words: List[Float64], at: Int, mut code: Int, mut pos
     opts.wmode = Int(words[at + 19])
     var lv = Int(words[at + 20])
     opts.resp = Int(words[at + 21])  # lane mf-r9c
+    opts.tier = Int(words[at + 22])  # lane mf-r9d
+    opts.tier_word = Int(words[at + 23])
+    opts.log = words[at + 24] != 0.0
+    if opts.tier < 0 or opts.tier > 1:
+        raise Error("member ABI: a search scorer's numeric_mode tier word is not 0 or 1")
     var wk = max(wn, 0)
     if (n < 0 or wn < -1 or lv < 0 or opts.w_word < SCORER_WEIGHTS_EMPTY
             or at + SCORER_GROUP_WORDS + n + wk + 2 * lv > len(words)):
@@ -1036,6 +1080,72 @@ def msel_scorer_d2_proba(row: MselScorer) -> Bool:
     return row.family == _F_D2P
 
 
+def msel_scorer_float_roc(row: MselScorer) -> Bool:
+    """Lane mf-r9d (door :3960): 'roc_auc' (its binary row, multi_class
+    'raise', either response half) on a NON-classifier whose class has the
+    response (an outlier detector's decision_function, a mixture model's
+    predict_proba): scikit-learn's scorer hands the raw answer to
+    roc_auc_score with the float targets (utils/_response.py line 232),
+    `_float_roc_value`."""
+    return row.family == _F_ROC and row.metric == ROC_BINARY
+
+
+def _float_roc_value(route: MetricRoute, cluster: EntryRef, label_words: List[String], row: MselScorer, truth: Int,
+                     response: Int, count: Int, cols: Int, positive: Int,
+                     mut notices: List[Float64]) raises -> Float64:
+    """Lane mf-r9d (door :3960): roc_auc_score(y_true, raw answer) of a
+    non-classifier's side, in scikit-learn 1.9's order (metrics/_ranking.py
+    `roc_auc_score` lines 708-747, `_average_binary_score`,
+    `_binary_roc_auc_score`): `type_of_target(y_true)` multiclass, or binary
+    with more than two score columns, is the multiclass branch, whose
+    multi_class 'raise' refuses (the words the classifier rows raise);
+    continuous fails `_average_binary_score` ("continuous format is not
+    supported"); binary codes y_true by its sorted distinct values
+    (`label_binarize(..., classes=np.unique(y_true))[:, 0]`: the larger value
+    is positive). One class present warns and answers nan
+    (`_binary_roc_auc_score`, MEMBER_NOTICE_METRIC_ROC_ONE); two score
+    columns then refuse in `column_or_1d`'s words; one column is the
+    classifier row's program over the codes (two classes, the score as the
+    positive's)."""
+    var t = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=truth)
+    var yt = List[Float64](capacity=max(count, 1))
+    for i in range(count):  # driver-loop: over the side's rows (the targets as numbers)
+        yt.append(Float64(t[i]))
+    var kt = _target_type(yt)
+    var width = max(cols, 1)
+    if kt == 1 or (kt == 0 and width > 2):
+        raise Error("multi_class must be in ('ovo', 'ovr')")
+    if kt == 2:
+        raise Error("ValueError: continuous format is not supported")
+    # the sorted distinct values (at most two): each value's code
+    var union = List[Float64]()
+    for i in range(count):  # driver-loop: over the side's rows (the distinct values)
+        var seen = False
+        for j in range(len(union)):  # small-loop(the distinct values so far, at most two)
+            seen = seen or union[j] == yt[i]
+        if not seen:
+            union.append(yt[i])
+    if len(union) == 2 and union[0] > union[1]:
+        var v = union[0]
+        union[0] = union[1]
+        union[1] = v
+    if len(union) < 2:
+        # one class present: `_binary_roc_auc_score` warns and answers nan
+        # before roc_curve reads the score's shape
+        member_notice_add(notices, MEMBER_NOTICE_METRIC_ROC_ONE, 1.0)
+        return _nan64()
+    if width == 2:
+        raise Error("ValueError: y should be a 1d array, got an array of shape (" + String(count) + ", 2) instead.")
+    var codes = List[Int32](length=max(count, 1), fill=Int32(0))
+    for i in range(count):  # driver-loop: over the side's rows (their codes)
+        if len(union) == 2 and yt[i] == union[1]:
+            codes[i] = Int32(1)
+    var value = msel_scorer_value(route, cluster, label_words, row, Int(codes.unsafe_ptr()), response, count, 2, 1,
+                                  positive, notices)
+    _ = len(codes)  # read by the program above
+    return value
+
+
 def msel_scorer_float_labels(row: MselScorer) -> Bool:
     """Lane mf-score8 round b: a label row a non-classifier (a regressor, or
     a clusterer's ids) is scored by, its targets and predictions read as
@@ -1141,6 +1251,16 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
                         else String("'shape'")))
     if row.w_n < 0:
         raise Error("TypeError: native metric received an unexpected keyword argument")
+    # LANE mf-r9d (door :3789): the native scorer door's mode binding, after
+    # its kwargs check and before the metric reads anything (`prepare`): the
+    # other tier's image refused (its loader's words, read once at UNPACK),
+    # then a host estimator's fast tier
+    if row.tier_word >= 0:
+        if row.tier_word >= len(label_words):
+            raise Error("member ABI: a search scorer's numeric_mode refusal word is missing")
+        raise Error(label_words[row.tier_word])
+    if row.cpu_fast:
+        raise Error(SCORER_CPU_FAST_WORDS)
     if row.w_word == SCORER_WEIGHTS_EMPTY:
         raise Error("mojolearn " + msel_scorer_caller(row) + ": sample_weight has 0 entries for " + String(count)
                     + " samples")
@@ -1170,6 +1290,9 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
     if row.samples:
         raise Error("NotImplementedError: mojolearn " + msel_scorer_caller(row) + ": average='samples' applies to "
                     + "multilabel targets, which are NOT IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv)")
+    if classes == 0 and msel_scorer_float_roc(row):
+        # lane mf-r9d (door :3960): 'roc_auc' on a non-classifier's own columns
+        return _float_roc_value(route, cluster, label_words, row, truth, response, count, cols, positive, notices)
     if classes == 0 and msel_scorer_float_labels(row):
         # lane mf-score8 round b: a label row on a non-classifier's side
         return _float_label_value(route, cluster, label_words, row, truth, response, count, cols, positive, notices)

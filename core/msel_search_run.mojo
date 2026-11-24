@@ -112,7 +112,7 @@ from core.entry_table import EntryRef, entry_ref_unresolved
 from core.host_parallel import host_parallelize
 from core.msel_scorer_run import (
     MselScorer, MselScorerOptions, msel_scorer_row, msel_scorer_value, msel_scorer_pos_words, msel_scorer_regression, msel_scorer_binary_column,
-    msel_scorer_float_labels,
+    msel_scorer_float_labels, msel_scorer_float_roc,
     msel_scorer_positive, msel_scorer_ap, msel_scorer_cluster, msel_scorer_cluster_entry,
     msel_scorer_labels_from_truth, msel_scorer_log_loss, msel_scorer_brier,
     SCORER_MEMBER, SCORER_ACCURACY, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND, SCORER_POSITIVE_MIXED,
@@ -123,7 +123,7 @@ from core.member_abi import (
     MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_OP_SCORE, MEMBER_OP_PREDICT, member_output_dtype,
     MEMBER_CAN_TEST_ROWS, MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_CAN_ROW_INDEX,
     MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle, MEMBER_OP_DECISION, MEMBER_READS_Y_GIVEN,
-    MEMBER_OP_PREDICT_PROBA,
+    MEMBER_OP_PREDICT_PROBA, member_outputs,
 )
 from core.member_class_weight import member_cw_subset
 from core.member_notices import (
@@ -165,6 +165,32 @@ comptime _U8P = MutPointer[UInt8, MutUntrackedOrigin]
 #: Each of its units fails with those words before any fit (scored
 #: error_score, as scikit-learn's failing fits are); a refit of it raises them.
 comptime SEARCH_REFUSED_SHIFT = 48
+
+
+struct MselOtherTier(Copyable, Movable, Defaultable):
+    """LANE mf-r9d (door :3789): THE OTHER numeric_mode TIER of a search's
+    scorers. A make_scorer whose `numeric_mode` names the tier that is not
+    the process default runs its metric on that tier's x_metrics image, as
+    the native scorer door does (bindings/msel_scorer_native_door.mojo
+    `MselMetricPrepared.prepare`: `family_msel_metric_bindings[mode]`). The
+    UNPACK resolves that image's program runner ONCE (`route`, `resolved`;
+    its connection pinned with the plan entry), its cluster label-pair entry
+    when a label-pair scorer of that tier is asked (`cluster`), and, per
+    candidate, whether its estimator takes its fold rows on the host with the
+    fast tier asked (`cpu_fast`: 1 = each of that candidate's other-tier
+    sides raises the shared device='cpu' refusal, as the door's prepare does
+    per score). A scorer of this tier says so in its options word group
+    (core/msel_scorer_run.mojo `MselScorerOptions.tier`)."""
+    var route: MetricRoute
+    var resolved: Bool
+    var cluster: EntryRef
+    var cpu_fast: List[UInt8]
+
+    def __init__(out self):
+        self.route = MetricRoute(entry_ref_unresolved().call, False, False)
+        self.resolved = False
+        self.cluster = entry_ref_unresolved()
+        self.cpu_fast = List[UInt8]()
 
 
 struct MselSearchPlan(Movable):
@@ -250,6 +276,9 @@ struct MselSearchPlan(Movable):
     # (MEMBER_READS_Y_GIVEN), with the fold's rows, as `y` is.
     var given: Int
     var given_dtype: Int
+    # LANE mf-r9d: the other numeric_mode tier's metric route (`MselOtherTier`;
+    # unresolved: no scorer of that tier)
+    var other: MselOtherTier
 
     def __init__(out self, var plans: List[MemberPlan], var masks: List[Int], x: Int, rows: Int, cols: Int, y: Int,
                  classes: Int, n_splits: Int, glue: EntryRef, metric: MetricRoute):
@@ -295,6 +324,7 @@ struct MselSearchPlan(Movable):
         self.respond_log = False
         self.given = 0
         self.given_dtype = MEMBER_F64
+        self.other = MselOtherTier()
 
 
 struct MselSearchResult(Movable):
@@ -458,6 +488,12 @@ def _member_score(run_at: Int, v: Int, side: _Side, cols: Int, y_dtype: Int, y_c
 
 def _respond(run_at: Int, v: Int, op: Int, side: _Side, cols: Int, dst: Int, capacity: Int,
              dtype: Int, narrow: Bool, predict_cols: Int) raises -> Int:
+    """`_respond` of a response that is not predict_log_proba."""
+    return _respond(run_at, v, op, side, cols, dst, capacity, dtype, narrow, predict_cols, False)
+
+
+def _respond(run_at: Int, v: Int, op: Int, side: _Side, cols: Int, dst: Int, capacity: Int,
+             dtype: Int, narrow: Bool, predict_cols: Int, log: Bool) raises -> Int:
     """Unit `v`'s response `op` (predict, predict_proba or decision_function)
     on one side (`_Side`), written in the member's own `dtype` into
     the 8-byte words at `dst` (`capacity` words), then narrowed in place to
@@ -478,6 +514,24 @@ def _respond(run_at: Int, v: Int, op: Int, side: _Side, cols: Int, dst: Int, cap
     call.dst = MemberMatrix(dst, count, width, dtype)
     _offered(run[].plans[v].member, op, call, side)
     var words = count * width
+    if log:
+        # LANE mf-r9d (door :3789): a scorer whose response is
+        # predict_log_proba. scikit-learn 1.9 hands `np.log(predict_proba(X))`
+        # to the metric as it hands predict_proba (utils/_response.py lines
+        # 217-223: the same `_process_predict_proba`); the log is taken in the
+        # member's own precision through the checks/numerics seam (`_log_word`,
+        # as the cv tools' `respond_log`), BEFORE the narrowing below, which
+        # then rounds it as the metric doors' admission rounds a float64.
+        if op != MEMBER_OP_PREDICT_PROBA or (dtype != MEMBER_F32 and dtype != MEMBER_F64):
+            raise Error("member ABI: predict_log_proba is the log of a float predict_proba")
+        if dtype == MEMBER_F64:
+            var p64 = _F64P(unsafe_from_address=dst)
+            for i in range(words):  # driver-loop: over the side's probabilities (their logs, float64)
+                p64[i] = _log_word(p64[i], MEMBER_F64)
+        else:
+            var p32 = _F32P(unsafe_from_address=dst)
+            for i in range(words):  # driver-loop: over the side's probabilities (their logs, float32)
+                p32[i] = Float32(_log_word(Float64(p32[i]), MEMBER_F32))
     if not narrow:
         return width
     if dtype == MEMBER_I64:
@@ -1219,10 +1273,14 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     var member_score = len(codes) == 1 and codes[0] == SCORER_MEMBER and not responding
     var rows_of = List[MselScorer]()
     var ops = List[Int]()
+    # LANE mf-r9d: per distinct response, whether it is predict_log_proba (a
+    # scorer's own response, `MselScorer.log`); False for every other
+    var logs = List[Bool]()
     var op_of = List[Int]()
     var clusterer = False
     if responding:
         ops.append(plan.respond)
+        logs.append(False)  # the cv tools' log is placed by `_place_response` (`respond_log`)
         op_of.append(0)
     elif not member_score:
         for j in range(len(codes)):  # driver-loop: over the scorers (once per fit)
@@ -1236,21 +1294,36 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                 clusterer = True
             elif (msel_scorer_regression(row) == classifier and not (classifier and row.lv_n == k)
                   and not (not classifier and msel_scorer_float_labels(row))
+                  and not (not classifier and y_cols == 1 and msel_scorer_float_roc(row))
                   and not (multi_cls and row.op == MEMBER_OP_PREDICT_PROBA)):
+                # (lane mf-r9d: 'roc_auc' on a non-classifier's own decision or
+                # probability columns, `msel_scorer_float_roc`)
                 # (lane mf-r9c: a multi-output classifier's probability row,
                 # `classes` 0, reads its outputs' label value words)
                 # lane mf-score8: a regression scorer on a classifier reads its
                 # labels' value words (core/msel_scorer_run.mojo module note)
                 raise Error("member ABI: scorer '" + String(row.name) + "' does not score this kind of estimator")
-            if msel_scorer_cluster_entry(row) and plan.cluster.word == 0:
+            if row.tier == 1 and row.tier_word < 0:
+                # LANE mf-r9d: a scorer of the other numeric_mode tier runs on
+                # that tier's route (`MselOtherTier`), resolved by the UNPACK
+                if not plan.other.resolved:
+                    raise Error("member ABI: a scorer of the other numeric_mode tier needs that tier's metric route")
+                if msel_scorer_cluster_entry(row) and plan.other.cluster.word == 0:
+                    raise Error("member ABI: a label-pair cluster scorer of the other numeric_mode tier needs that "
+                                + "tier's cluster entry")
+            elif msel_scorer_cluster_entry(row) and row.tier == 0 and plan.cluster.word == 0:
                 raise Error("member ABI: a label-pair cluster scorer needs the metrics image's cluster entry")
             var at = -1
-            for o in range(len(ops)):  # small-loop(the distinct responses, at most three)
-                if ops[o] == row.op:
+            for o in range(len(ops)):  # small-loop(the distinct responses, at most four)
+                # LANE mf-r9d: predict_log_proba is its own response (the log of
+                # predict_proba in the member's precision, taken before the
+                # scorer's float32 narrowing: `_respond`)
+                if ops[o] == row.op and logs[o] == row.log:
                     at = o
             if at < 0:
                 at = len(ops)
                 ops.append(row.op)
+                logs.append(row.log)
             op_of.append(at)
             rows_of.append(row)
     # lane mf-score8 round b: a clusterer scored by clustering scorers and
@@ -1405,6 +1478,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         var accuracy = msel_scorer_row(SCORER_ACCURACY)
         rows_of.append(accuracy)
         ops.append(accuracy.op)
+        logs.append(False)
         op_of.append(0)
         nops = len(ops)
     var held_addr = List[Int](length=max(used, 1), fill=0)
@@ -1425,8 +1499,15 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     var rows_route_at = Int(rows_route.unsafe_ptr())
     # Each candidate's response element types, asked once.
     var out_dtypes = List[Int](length=max(m * nops, 1), fill=MEMBER_I32)
+    # LANE mf-r9d (door :3960): a NON-classifier's probability or decision
+    # response is its own columns (a mixture model's components; scikit-learn
+    # hands the raw answer to the metric), asked once per candidate before
+    # any fit (core/member_abi.mojo `member_outputs`); 0: the classes' width
+    var out_widths = List[Int](length=max(m * nops, 1), fill=0)
     for c in range(m):  # driver-loop: over the candidates (one OUTPUTS question per response)
         for o in range(nops):  # small-loop(the distinct responses)
+            if not classifier and not responding and ops[o] != MEMBER_OP_PREDICT:
+                out_widths[c * nops + o] = max(member_outputs(plan.plans[c], ops[o], d, 1), 1)
             var probe = plan.plans[c].copy()
             probe.classes = k
             var labels_out = ops[o] == MEMBER_OP_PREDICT and (classifier or clusterer)
@@ -1451,6 +1532,12 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             out_dtypes[c * nops + o] = dtype
     var out_dtypes_at = Int(out_dtypes.unsafe_ptr())
     var ops_at = Int(ops.unsafe_ptr())
+    # LANE mf-r9d: one byte per distinct response, 1 = predict_log_proba
+    var log_bytes = List[UInt8](length=max(nops, 1), fill=UInt8(0))
+    for o in range(min(nops, len(logs))):  # small-loop(the distinct responses)
+        if logs[o]:
+            log_bytes[o] = UInt8(1)
+    var logs_at = Int(log_bytes.unsafe_ptr())
     # Per (fold, side): its row numbers, its count and its gathered X and y.
     var side_rows = List[Int](length=used * sides, fill=0)
     var side_count = List[Int](length=used * sides, fill=0)
@@ -1619,6 +1706,9 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                 # a predict: one column per output (a multi-output regressor's
                 # responses, lane mf-msel5b); else one per class
                 var width_o = y_cols if ops[o] == MEMBER_OP_PREDICT else max(k, 1)
+                var cand_o = (u0 + t // sides) // used
+                if out_widths[cand_o * nops + o] > 0:
+                    width_o = out_widths[cand_o * nops + o]  # lane mf-r9d: a non-classifier's own columns
                 if multi_cls and ops[o] != MEMBER_OP_PREDICT:
                     # a multi-output classifier's proba: every output's columns (lane mf-tail5)
                     width_o = 0
@@ -1654,7 +1744,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                             imm out_dtypes_at, imm rows_route_at, imm side_rows_at, imm took_at, imm base_x,
                             imm base_y, imm n, imm scope, imm pin, imm secs_at, imm narrow, imm dst, imm dst_width,
                             imm dst_dtype, imm log_words, imm held_addr_at, imm held_count_at, imm k,
-                            imm multi_cls, imm mheld_list, imm mlack_at, imm dst_counts_at}:
+                            imm multi_cls, imm mheld_list, imm mlack_at, imm dst_counts_at, imm logs_at}:
             var v = t // sides
             var side = t % sides
             var started = perf_counter_ns()
@@ -1694,7 +1784,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                     var buffer = _IntP(unsafe_from_address=pred_list)[at]
                     var dtype = _IntP(unsafe_from_address=out_dtypes_at)[c * nops + o]
                     var got = _respond(run_at, v, op, place, d, buffer, _IntP(unsafe_from_address=cap_list)[at],
-                                       dtype, narrow, y_cols)
+                                       dtype, narrow, y_cols, _U8P(unsafe_from_address=logs_at)[o] != UInt8(0))
                     _IntP(unsafe_from_address=cols_list)[at] = got
                     if multi_cls and mlacks and op == MEMBER_OP_PREDICT:
                         # each output's fold codes as its classes' codes (lane mf-tail5)
@@ -1790,8 +1880,16 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                     if not classifier and scored.op == MEMBER_OP_PREDICT and msel_scorer_cluster(scored):
                         # lane mf-rows8b (row :3899): float predictions (1 float32, 2 float64)
                         scored.fpred = 1 if dt == MEMBER_F32 else (2 if dt == MEMBER_F64 else 0)
+                    if scored.tier == 1:
+                        # LANE mf-r9d: the other numeric_mode tier; a candidate
+                        # whose fold rows are on the host with the fast tier
+                        # raises the shared device='cpu' refusal per side
+                        var cand = (u0 + t // sides) // used
+                        scored.cpu_fast = cand < len(plan.other.cpu_fast) and plan.other.cpu_fast[cand] != UInt8(0)
                     try:
-                        values[at] = _scorer_side(plan.metric, plan.cluster, plan.label_words, scored, y_dst[s],
+                        values[at] = _scorer_side(plan.other.route if scored.tier == 1 else plan.metric,
+                                                  plan.other.cluster if scored.tier == 1 else plan.cluster,
+                                                  plan.label_words, scored, y_dst[s],
                                                   pred_at[t * nops + o], side_count[s], k, pred_cols[t * nops + o],
                                                   positives[j], held_addr[fold_of], held_count[fold_of], notes)
                     except error:
@@ -1860,7 +1958,9 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         _ = len(task_secs)
         u0 = u1
     _ = len(out_dtypes)
+    _ = len(out_widths)
     _ = len(ops)
+    _ = len(log_bytes)  # read through `logs_at` by every wave above
     _ = len(rows_route)
     _ = len(side_x)  # the blocks were read through every wave above
     _ = len(side_y)
