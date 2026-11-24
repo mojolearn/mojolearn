@@ -27,7 +27,7 @@ _FAMILY, _FAMILY_CONTEXT = _native_family_bridge.connect()
 _native_parallel_public.connect(_FAMILY_CONTEXT)
 
 
-def fit_graph(estimator, X, *, devices=(0,), device=None):
+def fit_graph(estimator, X, *, devices=(0,)):
     """Fit ``AgglomerativeClustering``, ``SpectralClustering`` or ``UMAP`` on several GPUs.
 
     The pairwise-distance and nearest-neighbor rows are computed across the
@@ -43,20 +43,16 @@ def fit_graph(estimator, X, *, devices=(0,), device=None):
         ``affinity='precomputed'`` takes its affinity matrix as given.
     devices : tuple of int, default=(0,)
         Distinct GPU indices.
-    device : {None, 'gpu', 'cpu'}, default None
-        Where the computation runs. None and 'gpu' run on the GPUs in
-        ``devices``; 'cpu' raises ValueError on a GPU installation, since this
-        driver has no CPU form. Other values raise ValueError.
 
     Returns
     -------
     estimator
         The same estimator, fitted, with the attributes a one-GPU ``fit`` sets.
     """
-    return _FAMILY(estimator, 'family_par_public', ('fit_graph', (X, devices), device), _FAMILY_CONTEXT)
+    return _FAMILY(estimator, 'family_par_public', ('fit_graph', (X, devices)), _FAMILY_CONTEXT)
 
 
-def transform_umap(estimator, X, *, devices=(0,), device=None):
+def transform_umap(estimator, X, *, devices=(0,)):
     """Embed new rows with a fitted ``UMAP``, the neighbor search spread across GPUs.
 
     Parameters
@@ -67,14 +63,10 @@ def transform_umap(estimator, X, *, devices=(0,), device=None):
         Rows to embed.
     devices : tuple of int, default=(0,)
         Distinct GPU indices.
-    device : {None, 'gpu', 'cpu'}, default None
-        Where the computation runs. None and 'gpu' run on the GPUs in
-        ``devices``; 'cpu' raises ValueError on a GPU installation, since this
-        driver has no CPU form. Other values raise ValueError.
 
     Returns
     -------
     Array of shape (n_samples, n_components)
         The same embedding as ``estimator.transform(X)``.
     """
-    return _FAMILY(estimator, 'family_par_public', ('transform_umap', (X, devices), device), _FAMILY_CONTEXT)
+    return _FAMILY(estimator, 'family_par_public', ('transform_umap', (X, devices)), _FAMILY_CONTEXT)

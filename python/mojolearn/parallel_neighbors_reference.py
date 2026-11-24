@@ -47,10 +47,6 @@ class ReferenceShardedNeighbors:
         split evenly over ``devices``.
     query_rows_per_shard : int, default=128
         Number of query rows answered per round.
-    device : {None, 'gpu', 'cpu'}, default None
-        Where the computation runs. None and 'gpu' run on the GPUs in
-        ``devices``; 'cpu' raises ValueError on a GPU installation, since this
-        driver has no CPU form. Other values raise ValueError.
 
     Attributes
     ----------
@@ -67,9 +63,8 @@ class ReferenceShardedNeighbors:
     # The complete input lives on the host. Classification/regression currently
     # retain the complete target table on the voting GPU. Use a context manager.
     def __init__(self, estimator, *, devices=(0,), reference_rows_per_shard=None,
-                 query_rows_per_shard=128, device=None):
-        _native_parallel_shard('reference_init', (self, estimator, devices, reference_rows_per_shard, query_rows_per_shard,
-                                                  device))
+                 query_rows_per_shard=128):
+        _native_parallel_shard('reference_init', (self, estimator, devices, reference_rows_per_shard, query_rows_per_shard))
 
     def kneighbors(self, X, n_neighbors=None, return_distance=True):
         """Find the ``n_neighbors`` nearest reference rows of each query row.

@@ -36,7 +36,7 @@ _shard.register(standard_class=_prep.StandardScaler,
                 minmax_class=_prep.MinMaxScaler,
                 minmax_context=_prep._MINMAX_CONTEXT)
 
-def fit_scaler(estimator, X, *, devices=(0,), columns_per_shard=16, sample_weight=None, device=None):
+def fit_scaler(estimator, X, *, devices=(0,), columns_per_shard=16, sample_weight=None):
     """Fit a ``StandardScaler`` or ``MinMaxScaler`` with column blocks on separate GPUs.
 
     Parameters
@@ -51,10 +51,6 @@ def fit_scaler(estimator, X, *, devices=(0,), columns_per_shard=16, sample_weigh
         Number of feature columns in each block.
     sample_weight : None
         Not supported by the scalers; passing weights raises ``NotImplementedError``.
-    device : {None, 'gpu', 'cpu'}, default None
-        Where the computation runs. None and 'gpu' run on the GPUs in
-        ``devices``; 'cpu' raises ValueError on a GPU installation, since this
-        driver has no CPU form. Other values raise ValueError.
 
     Returns
     -------
@@ -66,10 +62,10 @@ def fit_scaler(estimator, X, *, devices=(0,), columns_per_shard=16, sample_weigh
     # native fit in a worker process per device (block i on device
     # i % len(devices)); each statistic is per column, so every block's
     # statistics are placed at its column offset.
-    return _native_parallel_shard('fit_scaler', (estimator, X, devices, columns_per_shard, sample_weight, device))
+    return _native_parallel_shard('fit_scaler', (estimator, X, devices, columns_per_shard, sample_weight))
 
 
-def transform_scaler(estimator, X, *, devices=(0,), columns_per_shard=16, inverse=False, device=None):
+def transform_scaler(estimator, X, *, devices=(0,), columns_per_shard=16, inverse=False):
     """Apply a fitted scaler, or its inverse, with column blocks on separate GPUs.
 
     Parameters
@@ -84,10 +80,6 @@ def transform_scaler(estimator, X, *, devices=(0,), columns_per_shard=16, invers
         Number of feature columns in each block.
     inverse : bool, default=False
         ``True`` applies ``inverse_transform`` instead of ``transform``.
-    device : {None, 'gpu', 'cpu'}, default None
-        Where the computation runs. None and 'gpu' run on the GPUs in
-        ``devices``; 'cpu' raises ValueError on a GPU installation, since this
-        driver has no CPU form. Other values raise ValueError.
 
     Returns
     -------
@@ -98,4 +90,4 @@ def transform_scaler(estimator, X, *, devices=(0,), columns_per_shard=16, invers
     # the plain native transform with its columns' statistics in a worker
     # process, the blocks joined at their column offsets; the plain method's
     # public conversion for our caller.
-    return _native_parallel_shard('transform_scaler', (estimator, X, devices, columns_per_shard, inverse, device))
+    return _native_parallel_shard('transform_scaler', (estimator, X, devices, columns_per_shard, inverse))

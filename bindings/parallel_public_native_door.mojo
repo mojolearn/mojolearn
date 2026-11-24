@@ -17,10 +17,6 @@ from bindings.classical_pandas_door import classical_admit_value
 from bindings.admitted_input_unpack import admit_x
 from bindings.parallel_public_result_door import parallel_public_result
 from bindings.msel_member_device_unpack import member_says_cpu, member_multi_gpu_refusal
-from bindings.parallel_driver_device import parallel_driver_decide, parallel_driver_member
-from core.device_route import DEVICE_INSTALL
-from core.function_device import function_device_default
-from providers.python.device_route_boundary_door import device_unpack
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.trees_public_forest_door import forest_effective_mode, _engine
 from bindings.parallel_plan_door import plan_indices
@@ -244,13 +240,6 @@ def _predictor(model: PythonObject, operation: Int, args: PythonObject, context:
         var mode = forest_effective_mode(original, py_item(meta, nk[].k_trees_context))
         # The engine is read only for an identical forest, as before.
         public_predictor_route_admit(mode, _engine(original, mode) if mode == "identical" else String(""))
-        # The predictor's own `device=` (lane vdf-parallel, 2026-11-24): read
-        # once, at construction, before the device list; its queries run the
-        # route admitted here. None is one compare and today's route.
-        var request = device_unpack(args[2], b)
-        if request != DEVICE_INSTALL:
-            var device = parallel_driver_decide(request, "ParallelForestPredictor", Bool(py=py_item(meta, nk[].k_cpu_only)))
-            parallel_driver_member(device, source, original, "ParallelForestPredictor", b)
         # Constructor admission historically allows the CPU case; the query's
         # cooperative driver supplies its route refusal before GPU execution.
         var devices = _devices(args[1])
@@ -354,16 +343,6 @@ def parallel_public_operation(model: PythonObject, packed: PythonObject, context
     if spec is None:
         var first = py_call(b.list, options.values())[0]
         raise Error("TypeError: " + String(py_item(first, nk[].k_error)))
-    # The driver's own `device=` (lane vdf-parallel, 2026-11-24;
-    # bindings/parallel_driver_device.mojo): the third item of the call, read
-    # once here, before the device list, the inputs and any worker. None is
-    # one identity compare and today's route; "gpu" is today's route (refused
-    # on a CPU-only installation); "cpu" beside a GPU set is refused: a
-    # driver has no CPU form. Nothing per shard, row or device.
-    var request = device_unpack(packed[2], b)
-    var device = function_device_default()
-    if request != DEVICE_INSTALL:
-        device = parallel_driver_decide(request, String(packed[0]), Bool(py=py_item(meta, nk[].k_cpu_only)))
     var device_at = Int(py=py_item(spec, nk[].k_device_arg))
     py_setitem(args, PythonObject(device_at), _devices(args[device_at]))
     classical_admit_value(args, context)
@@ -377,8 +356,6 @@ def parallel_public_operation(model: PythonObject, packed: PythonObject, context
     if model is not None and member_says_cpu(fields, b):
         if not Bool(py=py_item(meta, nk[].k_cpu_only)):
             member_multi_gpu_refusal(String(packed[0]))
-    if model is not None:
-        parallel_driver_member(device, model, fields, String(packed[0]), b)
     var mode = py_get(fields, nk[].k_numeric_mode)
     var process_mode = py_item(py_item(meta, nk[].k_backend), nk[].k__DEFAULT_MODE)
     var effective = process_mode if mode is None else mode
