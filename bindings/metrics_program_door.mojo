@@ -273,7 +273,8 @@ def metric_door_rows_slot(value: PythonObject, mode: PythonObject, context: Pyth
     `resident()` scope's x_prep cache keeps the base), into a slot the
     door owns (appended to `owned`; free with `metric_slot_release` after
     the run). Anything else (a host array, the host column, a CPU-only
-    install, ranges off, a base that is not float32)
+    install, a base that is not float32; ranges off keeps the store, lane
+    vdf-xm-wire4)
     returns slot -1 and the
     door admits X on the host, as before. One type compare for a host X."""
     var nk = metrics_keys()
