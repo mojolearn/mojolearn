@@ -12,7 +12,7 @@ from neighbors.neighbors_knn_run import (
     KNN_DIST_LP, KNN_DIST_JS, KNN_DIST_COSINE, KNN_MINKOWSKI_OK, KNN_MINKOWSKI_NOT_POSITIVE,
     KNN_MINKOWSKI_SUBNORMAL, knn_refuse_rbc_vote, knn_refuse_distance_inner_product, knn_refuse_algorithm,
     knn_refuse_metric_name, knn_refuse_metric_unimplemented, knn_refuse_metric_unknown, knn_refuse_inert_p,
-    knn_minkowski_status, knn_refuse_minkowski, knn_check_metric_input, knn_metric_reads_host_queries,
+    knn_minkowski_status, knn_refuse_minkowski, knn_check_metric_input, knn_refuse_metric_status,
     knn_refuse_callable_weights, knn_refuse_weights, knn_weights_code, knn_check_y_rank, knn_check_y_rows,
     knn_check_y_ndim, knn_int32_low_fits, knn_check_int32_labels, knn_float_format, knn_labels_finite,
     knn_labels_already_int32, knn_labels_skip_integral, knn_finite_status, knn_check_width, knn_proba_rows, knn_copy_proba_block,
@@ -118,9 +118,15 @@ def fixture(unit: Int) raises:
         _ = x
         _ = y
     elif unit == 9:
-        require(knn_metric_reads_host_queries(KNN_DIST_JS), "js reads host queries")
-        require(not knn_metric_reads_host_queries(KNN_DIST_COSINE), "cosine's refusals run on the device fold")
-        require(not knn_metric_reads_host_queries(KNN_DIST_LP), "minkowski does not")
+        # Lane vdf-scope-cluster8: a fold's metric word (the device Jensen-Shannon test) raises the host check's
+        # words; a zero word raises nothing.
+        knn_refuse_metric_status("NearestNeighbors", 0)
+        try:
+            knn_refuse_metric_status("NearestNeighbors", 1)
+            raise Error("expected a refusal")
+        except e:
+            require(String(e) == "mojolearn NearestNeighbors: metric='jensenshannon' needs X >= 0 (it takes "
+                    + "logarithms of the coordinates)", "metric status refusal wording")
     elif unit == 10:
         try:
             knn_refuse_callable_weights("KNeighborsClassifier")
