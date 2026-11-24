@@ -303,8 +303,9 @@
   },
   "attn-fold-v2-on": {
    "define": "MOJOLEARN_IDN_ATTN_FOLD_V2",
-   "status": "define in code (transformer/impl/llama/attn_fold_v2.mojo ATTN_FOLD_V2, restored 2026-11-15 by lane restore-run-arms-neural): B = the attention key axis folded in 128-key leaves plus the GEMM contract's carry tree, fused forward split into row-tile x leaf blocks (hd64/hd128), eager v2 kernels otherwise, host oracle and byte-LM host kernels on the same fold; A = v1's serial chains",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-1): LOSER (L40S 3 cells, median 1.09, lm-train-step 35.06 -> 43.41 ms); A (the default) is unchanged; removed: attn_fold_v2.mojo and every v2 arm; the define is refused (core/experiment_guards_neural.mojo); code recoverable at d81b6ba708, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_ATTN_FOLD_V2.ab-outcome-1.patch. Was: define in code (transformer/impl/llama/attn_fold_v2.mojo ATTN_FOLD_V2, restored 2026-11-15 by lane restore-run-arms-neural): B = the attention key axis folded in 128-key leaves plus the GEMM contract's carry tree, fused forward split into row-tile x leaf blocks (hd64/hd128), eager v2 kernels otherwise, host oracle and byte-LM host kernels on the same fold; A = v1's serial chains",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T070727Z-69dac2 (NVIDIA L40S, wheel 4519097d380a): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "norm-fixed-lanes-on": {
    "define": "MOJOLEARN_IDN_NORM_FIXED_LANES",
@@ -1081,12 +1082,11 @@
    "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b03 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: rnn-scan-gated, hist-packed-gh, tsqr-tree-par-off, dbscan-brute-eps-filter, xprep-sort-quad-off"
   },
   "set-b04": {
-   "define": "MOJOLEARN_TREES_HIST_WARP_AGG,MOJOLEARN_IDN_TSQR_WY_PAIR_OFF,MOJOLEARN_IDN_ATTN_FOLD_V2,MOJOLEARN_SGD_FAST_PS_PRELOAD,MOJOLEARN_XC_SQDIST_TILED_OFF,MOJOLEARN_PREP_FAST_TAKE_VIEW_ALL",
+   "define": "MOJOLEARN_TREES_HIST_WARP_AGG,MOJOLEARN_IDN_TSQR_WY_PAIR_OFF,MOJOLEARN_SGD_FAST_PS_PRELOAD,MOJOLEARN_XC_SQDIST_TILED_OFF,MOJOLEARN_PREP_FAST_TAKE_VIEW_ALL",
    "owed": "RUN",
    "combined": [
     "hist-warp-agg",
     "tsqr-wy-pair-off",
-    "attn-fold-v2-on",
     "sgd-ps-preload",
     "xc-sqdist-tiled-off",
     "prep-take-view-all"
@@ -2375,7 +2375,8 @@
    "b_arms": [
     "attn-fold-v2-on"
    ],
-   "decides": "NVIDIA L40S only (the NVIDIA-only campaign): B changes bits on every column (fold order); promote it (with a _OFF define) when the three rows are faster than A with quality (loss / perplexity) not worse; then the release's one verification records every vendor column and the host column on the new fold; otherwise delete the arm with a tombstone"
+   "decides": "NVIDIA L40S only (the NVIDIA-only campaign): B changes bits on every column (fold order); promote it (with a _OFF define) when the three rows are faster than A with quality (loss / perplexity) not worse; then the release's one verification records every vendor column and the host column on the new fold; otherwise delete the arm with a tombstone",
+   "owed": "DECIDED"
   },
   {
    "id": "norm-fixed-lanes",

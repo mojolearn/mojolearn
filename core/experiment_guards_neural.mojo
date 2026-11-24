@@ -1273,6 +1273,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_DECODE_RESIDENT_IO.patch
     comptime assert not is_defined["MOJOLEARN_IDN_DECODE_RESIDENT_IO"](), "removed 2026-11-23 (lane/ab-prep-transformer, removed: unreachable, no board row reaches it; no owner sets LlamaDeviceStages.defer_addr since the session arms went, EXP:2356 folded, EXP:2359 deleted); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_DECODE_RESIDENT_IO.patch"
     # ---- end lane ab-prep-transformer
+    # ---- lane ab-outcome-1 (2026-11-24): A/B nvc-ab-20261124T070727Z-69dac2 decisions (NVIDIA L40S only)
+    # TOMBSTONE: MOJOLEARN_IDN_ATTN_FOLD_V2 (LOSER: NV L40S 3 cells, median 1.09, 0.99..1.24, lm-train-step 35.06 -> 43.41 ms) deleted 2026-11-24 by lane/ab-outcome-1; code recoverable at d81b6ba708.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_ATTN_FOLD_V2.ab-outcome-1.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_ATTN_FOLD_V2"](), "removed 2026-11-24 (lane/ab-outcome-1, A/B nvc-ab-20261124T070727Z-69dac2 NVIDIA L40S, wheel 4519097d380a, one run per arm): IDN_ATTN_FOLD_V2 (the attention key-axis fold in 128-key leaves plus the carry tree, fused row-tile x leaf kernels) was a LOSER: 3 cells, median 1.09, 0.99..1.24, lm-train-step 35.06 -> 43.41 ms; the v1 serial key chain default is kept; code at d81b6ba708; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_ATTN_FOLD_V2.ab-outcome-1.patch"
+    # ---- end lane ab-outcome-1
     return True
 
 
