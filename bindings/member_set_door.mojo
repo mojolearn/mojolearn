@@ -112,7 +112,7 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_FIT, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION,
     MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_DTYPE_UNSAID,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION,
-    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_CLASSIFIER,
+    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_CLASSIFIER, MEMBER_IGNORES_Y,
     MEMBER_CAN_TEST_ROWS,
     MEMBER_CAN_SCOPE, MEMBER_BORROWS_FIT, MEMBER_GIL_FREE,
     MEMBER_GIL_DOOR, MEMBER_READS_Y_GIVEN,
@@ -229,6 +229,21 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
         deferred = py_call(b.list, py_call(b.range, PythonObject(classes)))
     var owner = member_admit_serving_labeled(estimator, fields, plan, member_context, b, needs,
                                              deferred if classes > 0 else PythonObject(None))
+    if not owner.published and classes > 0:
+        # lane mf-member8 (round b): a kind whose fit reads no target (MEMBER_IGNORES_Y: NearestNeighbors,
+        # RadiusNeighbors, OPTICS, MDS, SpectralEmbedding) is fitted on the codes as scikit-learn's meta fits it
+        # on y, which it ignores (its predict then fails in scikit-learn's words, as there). Asked only on this
+        # not-served path: one kind question, nothing on a served admission.
+        var plain = member_admit_serving_labeled(estimator, fields, plan, member_context, b,
+                                                 needs & ~MEMBER_CAN_CLASSIFIER, PythonObject(None))
+        var unread = False
+        if plain.published:
+            try:
+                unread = (member_kind_capabilities(plain.plan) & MEMBER_IGNORES_Y) != 0
+            except:
+                unread = False  # the set's rule: a member it cannot ask is not served (never raises)
+        if unread:
+            owner = plain^
     if not owner.published:
         return False
     # A class_weight dict's table over the caller's labels (lane mf-adm3);
