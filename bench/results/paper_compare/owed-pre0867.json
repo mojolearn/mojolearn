@@ -359,8 +359,9 @@
   },
   "lr-table-off": {
    "define": "MOJOLEARN_LR_TABLE_OFF",
-   "status": "define in code (sequence/lr_table.mojo LR_TABLE_ON (read by lr_table_on and bindings/samba_state_native_door.mojo); -D MOJOLEARN_LR_EXACT_ONLY is the same arm): B = every step on the exact route (the former MOJOLEARN_LR_TABLE=0 or MOJOLEARN_LR_EXACT_ONLY=1); the answers are the same; A = the LR schedule table (the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2, sub-lane ab2-nseq): old path LOSER (L40S 4 cells, median 1.00, mlp-train-step 1.15 slower); A (the LR schedule table, the default) is unchanged; both spellings are refused (core/experiment_guards_neural.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_LR_TABLE_OFF.ab-outcome-2.patch. Was: define in code (sequence/lr_table.mojo LR_TABLE_ON (read by lr_table_on and bindings/samba_state_native_door.mojo); -D MOJOLEARN_LR_EXACT_ONLY is the same arm): B = every step on the exact route (the former MOJOLEARN_LR_TABLE=0 or MOJOLEARN_LR_EXACT_ONLY=1); the answers are the same; A = the LR schedule table (the former default). A transport/route choice: digests must not move.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "mamba3-retain-stages-off": {
    "define": "MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF",
