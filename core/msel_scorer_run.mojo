@@ -168,6 +168,9 @@ from bindings.metrics_exp_curve_run import average_precision_run, top_k_run, top
 from bindings.metrics_exp_rank_run import brier_run, brier_options_run, hinge_run, d2_proba_run
 from bindings.metrics_exp_common_run import cluster_mi_run
 from core.entry_table import EntryRef, entry_ref_unresolved
+from core.metrics_entry_table import MR_R2, MR_MSE, MR_MAE, MR_RMSE
+from core.native_descriptor_call import native_descriptor_call
+from core.host_finite_scan import host_all_finite_f32
 from core.metrics_cluster_table import (
     cluster_pair_run, cluster_union_codes, CLUSTER_OP_RAND, CLUSTER_OP_ADJUSTED_RAND, CLUSTER_OP_MUTUAL_INFO,
     CLUSTER_OP_HOMOGENEITY, CLUSTER_OP_COMPLETENESS, CLUSTER_OP_V_MEASURE, CLUSTER_OP_FOWLKES_MALLOWS,
@@ -400,6 +403,21 @@ struct MselScorer(ImplicitlyCopyable, Movable):
     var given: Int
     var given_dtype: Int
     var side_rows: Int
+    # THE PUBLIC METRIC'S DEFAULT-OPTION FORM (lane w3f3-c, 2026-11-24): a
+    # named scorer is `sign * metric(y, response)` with the public metric
+    # (scikit-learn's `_Scorer._score`; bindings/msel_scorer_native_door.mojo
+    # `_scorer_metric`), and with its default options the public metric runs
+    # a float32 kernel, not the x_metrics program: 'accuracy' the count / n
+    # fraction in float32 (bindings/mcls_classify_door.mojo `_accuracy`,
+    # metrics/host/metrics_oracle.mojo `host_accuracy_score_ptr`), the four
+    # regression rows the metrics image's kernels (bindings/mcls_cluster_door.mojo
+    # `_r2` / `_regression_error`; here `kernel`, core/metrics_entry_table.mojo,
+    # `kernel_ok` when the candidate's image publishes it, set per score by
+    # the search RUN). `own`: the row is the class's own `score` (scoring=None,
+    # whose program is the class's, `_own_score`), never the public metric's.
+    var kernel: EntryRef
+    var kernel_ok: Bool
+    var own: Bool
 
     def __init__(out self, name: StaticString, family: Int, metric: Int, avg: Int, sign: Float64, op: Int):
         self.name = name
@@ -447,6 +465,24 @@ struct MselScorer(ImplicitlyCopyable, Movable):
         self.given = 0
         self.given_dtype = MEMBER_F64
         self.side_rows = 0
+        self.kernel = entry_ref_unresolved()
+        self.kernel_ok = False
+        self.own = False
+
+
+@always_inline
+def _kernel_row(row: MselScorer, w: Int, cols: Int, count: Int) -> Bool:
+    """A named regression row the public metric answers with its float32
+    kernel (`MselScorer.kernel`): r2 / MSE / MAE / RMSE of the default tier,
+    unweighted, one output, uniform_average, force_finite (r2), and r2 over
+    at least two rows (fewer: the program's NaN and warning)."""
+    if not row.kernel_ok or row.own or row.tier != 0 or w != 0 or cols > 1 or row.outs > 1:
+        return False
+    if row.mo != REG_MO_UNIFORM or row.param_given or row.ids or row.lv_n > 0 or row.op != MEMBER_OP_PREDICT:
+        return False
+    if row.metric == REG_R2:
+        return row.ff and count >= 2
+    return (row.metric == REG_MSE or row.metric == REG_MAE or row.metric == REG_RMSE) and count >= 1
 
 
 def _nan64() -> Float64:
@@ -1963,7 +1999,14 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
         # lane mf-score8 round b: a label row on a non-classifier's side
         return _float_label_value(route, cluster, label_words, row, truth, response, count, cols, positive, notices)
     if row.family == _F_ACCURACY:
-        return label_accuracy_value(route, truth, response, count, classes, w)
+        var fraction = label_accuracy_value(route, truth, response, count, classes, w)
+        if w != 0 or row.own:
+            return fraction
+        # the public accuracy_score's unweighted kernel (`row.kernel` note):
+        # Float32(matches) / Float32(n), widened. The program's fraction is
+        # matches / n correctly rounded, so the count is exact from it.
+        var matches = Int(fraction * Float64(count) + 0.5)
+        return Float64(Float32(matches) / Float32(count))
     var value: Float64
     var warn = 0
     if row.family == _F_REG:
@@ -1995,6 +2038,22 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
             value = reg_metric_options_run(route, row.metric, truth, Int(floats.unsafe_ptr()), count, w, row.mo, row.ff,
                                            row.param, row.param_given, shown, warn)
             _ = len(floats)  # read by the program above
+        elif _kernel_row(row, w, cols, count) and host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=truth), count) and (
+                host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=response), count)):
+            # the public metric's default-option kernel (`row.kernel` note);
+            # non-finite words and R^2 under two rows stay the program's below
+            var out = List[Float64](length=1, fill=0.0)
+            var addresses: List[Int] = [truth, response, Int(out.unsafe_ptr())]
+            var words: List[Int] = [count]
+            var op = MR_R2
+            if row.metric == REG_MSE:
+                op = MR_MSE
+            elif row.metric == REG_MAE:
+                op = MR_MAE
+            elif row.metric == REG_RMSE:
+                op = MR_RMSE
+            _ = native_descriptor_call(row.kernel.call, op, addresses, words, List[Float64]())
+            value = out[0]
         else:
             # lane mf-score8 round b: `cols` outputs (a multi-output regressor's
             # sides, rows x outputs); 'raw_values' over several is no number

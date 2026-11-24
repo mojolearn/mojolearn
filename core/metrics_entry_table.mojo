@@ -13,7 +13,11 @@ Python `r2_score` / `r2_score_weighted` entries, which stay for the public
 Request layouts (a: addresses, p: Int words; no float words):
   MR_R2           a [y_true f32 (n), y_pred f32 (n), out f64 (1)]            p [n]
   MR_R2_WEIGHTED  a [y_true f32 (n), y_pred f32 (n), w f32 (n), out f64 (1)] p [n]
-`out` receives `Float64(r2)` (the Python entries' return value); the result
+  MR_MSE / MR_MAE / MR_RMSE (lane w3f3-c, 2026-11-24): MR_R2's layout; the
+  Python `mean_squared_error` / `mean_absolute_error` /
+  `root_mean_squared_error` entries' bodies (the public metrics' default
+  options: unweighted, one output), for the search RUN's scorers.
+`out` receives `Float64(value)` (the Python entries' return value); the result
 word is 0. Publication and lookup are small metadata operations with no
 independent numerical work to split.
 """
@@ -23,7 +27,10 @@ from core.native_descriptor_abi import NativeDescriptorCall
 comptime METRICS_R2_ABI = "mojolearn.metrics.r2.v1"
 comptime MR_R2 = 0
 comptime MR_R2_WEIGHTED = 1
-comptime MR_OP_COUNT = 2
+comptime MR_MSE = 2
+comptime MR_MAE = 3
+comptime MR_RMSE = 4
+comptime MR_OP_COUNT = 5
 
 
 @fieldwise_init
@@ -47,7 +54,11 @@ def metrics_vendor_word(vendor: StaticString) -> Int:
 
 def metrics_r2_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int, nf: Int, result: Int) raises -> Int:
     """Refuse a malformed request; returns n."""
-    var want = 3 if operation == MR_R2 else (4 if operation == MR_R2_WEIGHTED else -1)
+    var want = -1
+    if operation == MR_R2 or operation == MR_MSE or operation == MR_MAE or operation == MR_RMSE:
+        want = 3
+    elif operation == MR_R2_WEIGHTED:
+        want = 4
     if want < 0:
         raise Error("metrics r2: unknown operation " + String(operation))
     if not result or na != want or np != 1 or nf != 0 or not aa or not pp:

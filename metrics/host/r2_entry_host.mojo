@@ -9,7 +9,13 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
-from core.metrics_entry_table import MetricsEntryKey, MetricsR2Owner, MR_R2, metrics_r2_check_spans, metrics_r2_publish
+from core.metrics_entry_table import (
+    MetricsEntryKey, MetricsR2Owner, MR_R2, MR_R2_WEIGHTED, MR_MSE, MR_MAE, MR_RMSE, metrics_r2_check_spans,
+    metrics_r2_publish,
+)
+from core.hostptr import f32_ptr
+from metrics.host.metrics_host_entries_impl import regression_inputs_finite
+from metrics.host.classification_oracle import host_regression_error_ptr
 from metrics.host.metrics_oracle import host_r2_score, host_weighted_r2
 from metrics.label_pair_admission import metrics_check_float_pair as _check_float_pair
 
@@ -41,9 +47,18 @@ def metrics_r2_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         if operation == MR_R2:
             value = _r2_value(a[0], a[1], n)
             MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=a[2])[] = Float64(value)
-        else:
+        elif operation == MR_R2_WEIGHTED:
             value = _r2_weighted_value(a[0], a[1], a[2], n)
             MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=a[3])[] = Float64(value)
+        else:
+            # lane w3f3-c: the host binding's `_regression_error_entry` body
+            if n <= 0:
+                raise Error("metrics: n must be positive, got " + String(n))
+            var y = f32_ptr(a[0])
+            var yh = f32_ptr(a[1])
+            regression_inputs_finite(y, yh, n)
+            value = host_regression_error_ptr(y, yh, n, operation == MR_MAE, operation == MR_RMSE)
+            MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=a[2])[] = Float64(value)
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = 0
         return 0
     except problem:

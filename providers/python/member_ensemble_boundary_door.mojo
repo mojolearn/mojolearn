@@ -138,6 +138,8 @@ from core.ensemble_member import (
     META_BLOCK_SEARCH, META_BLOCK_FOLDS,
 )
 from core.ensemble_member import meta_plan_leaf_importances, META_PARAM_SERVING, meta_plan_metric_other
+from core.ensemble_member import meta_plan_metric_kernels
+from core.metrics_entry_table import MetricsEntryKey, metrics_r2_entry
 from core.msel_search_run import SEARCH_REFUSED_SHIFT, MselOtherTier
 from bindings.mode_answer_door import answer_mode_object
 from core.mode_answer import MODE_FAMILY_MSEL
@@ -3849,6 +3851,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     if classifier:
         needs |= MEMBER_CAN_CLASSIFIER
     var own_score = -1  # scoring None: `_own_score`'s answer (lane mf-rows8c); -1 a scorer or a cv tool's response
+    var own_row = False  # lane w3f3-c: the one scorer is the class's own score (its program, not a public metric's kernel)
     if tool_keep:
         needs |= MEMBER_CAN_EXPORT  # each kept unit state is packed into its estimator
     if tool_respond >= 0:
@@ -4403,6 +4406,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                             + " Mojolearn search with scoring=None cannot score it natively. Pass a scoring name.")
             var own = msel_scorer_code(String("accuracy") if own_score == _OWN_ACCURACY else String("r2"), False)
             codes.append(own)
+            own_row = True
             responses.append(msel_scorer_row(own).op)
     if multi_lab and msel_spec_stratified(split.spec.kind):
         # LANE mf-rows8b (row :3779): a stratified splitter over a multi-output
@@ -4688,6 +4692,48 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         meta_plan_metric_other(Int(owner.plan.params[1]), other.copy())
         for q in range(len(other_pins)):  # small-loop(the other tier's connection owners: two or three)
             _ = py_call(owner.pins.append, other_pins[q])
+    if len(codes) > 0 and tool_respond < 0:
+        # THE DEFAULT-OPTION KERNELS (lane w3f3-c, 2026-11-24): a named
+        # 'r2' / 'neg_mean_squared_error' / 'neg_mean_absolute_error' /
+        # 'neg_root_mean_squared_error' scorer with the metric's default
+        # options is the public metric's float32 kernel (bindings/mcls_cluster_door.mojo
+        # `_r2` / `_regression_error`'s unweighted one-output path), on the
+        # metrics module the native scorer door picks per scored estimator
+        # (`MselMetricPrepared.prepare`: the CPU image for a host route, else the
+        # default tier's device image). Resolved once per candidate here (one
+        # table read per distinct image); the RUN calls it per side.
+        var default_word = 1
+        var default = py_get(context["family_msel_backend_fields"], "_DEFAULT_MODE")
+        if default is not None and py_type(default) is b.str and String(py=py_call(py_call(default.strip).lower)) == "fast":
+            default_word = 0
+        var kernels = List[EntryRef]()
+        var kernel_ok = List[UInt8]()
+        var seen_keys = List[Int]()
+        var seen_refs = List[EntryRef]()
+        var seen_ok = List[UInt8]()
+        for c in range(len(nested.plans)):  # driver-loop: over the candidates (one key each, once per admission)
+            var r = nested.plans[c].route
+            var host = r.device == DEVICE_CPU
+            var key_mode = 1 if host else default_word
+            var key_vendor = 0 if host else r.vendor
+            var key = key_mode * 8 + key_vendor
+            var at = -1
+            for q in range(len(seen_keys)):  # small-loop(the distinct images: one or two)
+                if seen_keys[q] == key:
+                    at = q
+            if at < 0:
+                at = len(seen_keys)
+                seen_keys.append(key)
+                try:
+                    seen_refs.append(EntryRef(metrics_r2_entry(MetricsEntryKey(key_mode, key_vendor)), 0))
+                    seen_ok.append(UInt8(1))
+                except:
+                    # not published: that candidate's scorers run the x_metrics program
+                    seen_refs.append(entry_ref_unresolved())
+                    seen_ok.append(UInt8(0))
+            kernels.append(seen_refs[at])
+            kernel_ok.append(seen_ok[at])
+        meta_plan_metric_kernels(Int(owner.plan.params[1]), kernels^, kernel_ok^, own_row)
     return True
 
 
