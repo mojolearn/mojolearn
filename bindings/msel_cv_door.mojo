@@ -1499,7 +1499,7 @@ def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> 
     if (asked != "predict" and asked != "predict_proba" and asked != "predict_log_proba"
             and asked != "decision_function"):
         raise Error(msel_cvp_method_words(String(py=py_call(msel_b().repr, method))))
-    var jobs = msel_unit_jobs(args[5], PythonObject("raise"), "cross_val_predict", context)
+    _ = msel_unit_jobs(args[5], PythonObject("raise"), "cross_val_predict", context)  # n_jobs words, first
     var got = msel_cv_folds(estimator, args[1], args[2], args[4], args[3], False, context)
     var x = got[0]
     var y = got[1]
@@ -1512,7 +1512,6 @@ def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> 
         raise Error("cross_val_predict only works for partitions")
     var held = msel_new(n, "<i8", context)
     var at = 0
-    var tests = Python.list()
     for f in range(len(folds)):  # driver-loop: over folds (one copy each)
         var t = folds[f][1]
         var size = Int(py=t.size)
@@ -1521,49 +1520,37 @@ def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> 
             _ = t  # keep the Python object alive through the native call above
             _ = held  # keep the Python object alive through the native call above
         at += size
-        _ = py_call(tests.append, t)
     if base_check_indices_i64(base_helpers_key(context["family_msel_entries"]), msel_addr(held), n, n) != 0:
         raise Error("cross_val_predict only works for partitions")
     _ = held  # keep the Python object alive through the native calls above
     # THE ONE TYPED SEARCH RUN (lane mf-msel5, `msel_cv_by_search`): each
-    # fold's test-side `method` answered by its unit, placed below as the
-    # units' predictions are.
+    # fold's test-side `method` answered by its unit. Lane mf-r9b: the only
+    # route (its refusals raise there; no units beside it).
     var by = msel_cv_by_search(estimator, x, y, folds, PythonObject(None), args[5], PythonObject("raise"), False,
                                False, method, False, context)
-    if by is not None:
-        # THE RESULT BUFFER (lane mf-msel5b): the RUN wrote every unit's
-        # response at its rows; nothing is placed again. A classifier's
-        # labels were decoded once for every row: an int64 / float64 Array
-        # of them is the result; other labels take the label placement over
-        # the identity rows (the old route's result types).
-        var pred = by["predictions"]
-        if Bool(py=py_call(msel_b().bool, by["placed"])):
-            return pred
-        if msel_is_array(pred, context) and Int(py=pred.ndim) == 1 and (String(py=pred.dtype) == "<i8"
-                                                                          or String(py=pred.dtype) == "<f8"):
-            return pred
-        var ident = msel_new(n, "<i8", context)
-        var words = msel_p64(ident)
-        for i in range(n):  # driver-loop: over the rows (the identity placement of decoded labels)
-            words[i] = Int64(i)
-        _ = ident  # written through the pointer above
-        var host_rows = MselFoldRows(x, y, folds, False, context)
-        var placed = PythonObject(None)
-        try:
-            placed = _place(Python.list(pred), Python.list(ident), n, host_rows, context)
-        finally:
-            host_rows.close(context)
-        return placed
-    var rows = MselFoldRows(x, y, folds, msel_device_rows_ok(estimator, PythonObject(None), context), context)
-    var result = PythonObject(None)
+    # THE RESULT BUFFER (lane mf-msel5b): the RUN wrote every unit's
+    # response at its rows; nothing is placed again. A classifier's
+    # labels were decoded once for every row: an int64 / float64 Array
+    # of them is the result; other labels take the label placement over
+    # the identity rows (the old route's result types).
+    var pred = by["predictions"]
+    if Bool(py=py_call(msel_b().bool, by["placed"])):
+        return pred
+    if msel_is_array(pred, context) and Int(py=pred.ndim) == 1 and (String(py=pred.dtype) == "<i8"
+                                                                      or String(py=pred.dtype) == "<f8"):
+        return pred
+    var ident = msel_new(n, "<i8", context)
+    var words = msel_p64(ident)
+    for i in range(n):  # driver-loop: over the rows (the identity placement of decoded labels)
+        words[i] = Int64(i)
+    _ = ident  # written through the pointer above
+    var host_rows = MselFoldRows(x, y, folds, False, context)
+    var placed = PythonObject(None)
     try:
-        # The folds are units (msel_cv_units): one clone, fit and predict each.
-        var run = msel_cv_units(estimator, PythonObject(None), y, rows, PythonObject(None), False, False,
-                                PythonObject("raise"), jobs, method, context)
-        result = _place(run.preds, tests, n, rows, context)
+        placed = _place(Python.list(pred), Python.list(ident), n, host_rows, context)
     finally:
-        rows.close(context)
-    return result
+        host_rows.close(context)
+    return placed
 
 
 # ---------------------------------------------------------------- split_descriptor
