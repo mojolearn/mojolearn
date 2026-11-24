@@ -442,6 +442,13 @@ struct HostOps(ClusterOps):
             labels.append(Int32(lab[t]))
         return r.inertia
 
+    def kmeans_slot(
+        mut self, xs: Int, n: Int, d: Int, k: Int, max_iter: Int, tol: Float64,
+        seed: UInt64, n_init: Int, init: Int, mut centers: List[Float32], mut labels: List[Int32],
+    ) raises -> Float64:
+        # the host slot's own words (the CPU column holds X on the host)
+        return self.kmeans(self.get(xs, n * d), n, d, k, max_iter, tol, seed, n_init, init, centers, labels)
+
     def gather_rows(mut self, src: Int, d: Int, idx: Int, m: Int, dst: Int) raises:
         var ps = self._fp(src)
         var pi = self._ip(idx)

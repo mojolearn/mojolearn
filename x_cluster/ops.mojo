@@ -110,6 +110,14 @@ trait ClusterOps(Movable):
         bit for bit. Returns the inertia; `centers` k x d and `labels` n."""
         ...
 
+    def kmeans_slot(
+        mut self, xs: Int, n: Int, d: Int, k: Int, max_iter: Int, tol: Float64,
+        seed: UInt64, n_init: Int, init: Int, mut centers: List[Float32], mut labels: List[Int32],
+    ) raises -> Float64:
+        """`kmeans` (unit weights) over the n x d words of float slot `xs` (lane vdf-scope-cluster7: X already in
+        the ops, a model-selection fold's or the caller's one upload): the same words in, the same result."""
+        ...
+
     def gather_rows(mut self, src: Int, d: Int, idx: Int, m: Int, dst: Int) raises:
         """dst[t * d + f] = src[idx[t] * d + f], t < m (lane/neural-pass108)."""
         ...

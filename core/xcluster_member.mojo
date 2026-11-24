@@ -1407,10 +1407,10 @@ def _fold_kind(kind: Int) -> Bool:
     and OPTICS (lane vdf-scope-cluster6): the centroid-fit and OPTICS entries of the same image take THE FOLD X
     WORD as a float slot of their ops (x_cluster/device_execution.mojo `_fold_execute`: one device copy, every
     read of X there, AffinityPropagation's exemplar rows gathered on the device); their predict is the
-    resident centers query. BayesianGaussianMixture (the BGMM entry's k-means initialisations read host X):
-    left on the caller's gather."""
+    resident centers query. BayesianGaussianMixture (lane vdf-scope-cluster7): its fit and score entries take
+    the word the same way (`_fold_execute`; the k-means and k-means++ initialisations read that one slot)."""
     return (kind == _KIND_MINIBATCH or kind == _KIND_BISECT or kind == _KIND_MEANSHIFT or kind == _KIND_AFFINITY
-            or kind == _KIND_OPTICS or kind < 0)
+            or kind == _KIND_OPTICS or kind == _KIND_BGMM or kind < 0)
 
 
 def _fold_operation(kind: Int, operation: Int) -> Bool:
@@ -1420,6 +1420,9 @@ def _fold_operation(kind: Int, operation: Int) -> Bool:
         return True
     if kind == _KIND_OPTICS:
         return False
+    if kind == _KIND_BGMM:
+        return (operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_PREDICT_PROBA
+                or operation == MEMBER_OP_SCORE_SAMPLES or operation == MEMBER_OP_SCORE)
     if kind == _KIND_MEANSHIFT or kind == _KIND_AFFINITY:
         return operation == MEMBER_OP_PREDICT
     return operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_TRANSFORM or operation == MEMBER_OP_SCORE
@@ -1482,8 +1485,12 @@ def _fold_op(slot: _Slot, call: _Call, operation: Int) raises:
                 _affinity_fit(slot, call)
             elif kind == _KIND_OPTICS:
                 _optics_fit(slot, call)
+            elif kind == _KIND_BGMM:
+                _bgmm_fit(slot, call)
             else:
                 _bisect_fit(slot, call)
+        elif kind == _KIND_BGMM:
+            _bgmm_query(slot, call, operation)
         elif operation == MEMBER_OP_PREDICT and kind == _KIND_AFFINITY:
             _affinity_predict(slot, call)
         elif operation == MEMBER_OP_PREDICT and kind == _KIND_BISECT:

@@ -12,7 +12,10 @@ Claims (device column; the CPU column has no fold route, the caller gathers):
   case 2  OPTICS (xi, min_samples 5, euclidean): core distances, reachability, ordering, predecessors, labels,
           clusters;
   case 3  AffinityPropagation (median preference, damping 0.5): indices, labels, affinity matrix, the final
-          diagonals, the exemplar rows (gathered on the device from the slot), n_iter.
+          diagonals, the exemplar rows (gathered on the device from the slot), n_iter;
+  case 4  BayesianGaussianMixture (lane vdf-scope-cluster7), 3 components, full covariance, init 'kmeans' (the
+          k-means initialisation over the one slot, `kmeans_slot`): every block of the fit, labels, scalars;
+  case 5  the same with init 'k-means++' (`greedy_kmeans_pp_indices_slot`), diag covariance.
 Data: a SplitMix64 stream (uniform [0, 4)), 60 rows x 3; fold the rows with i % 4 != 0 (second half first).
 Sabotage: in x_cluster/entries.mojo `affinity_entry` gather the exemplar rows with `d - 1` -> case 3 fails.
 """
@@ -23,7 +26,7 @@ from max.gpu.host import DeviceContext
 from core.fold_x_device import FOLD_X_STORE
 from core.fold_x_word import fold_x_word
 from x_cluster.device_execution import cluster_device_execute
-from x_cluster.entries import ENTRY_MEANSHIFT, ENTRY_OPTICS, ENTRY_AFFINITY
+from x_cluster.entries import ENTRY_MEANSHIFT, ENTRY_OPTICS, ENTRY_AFFINITY, ENTRY_BGMM
 from x_cluster.out import ClusterOut
 
 comptime _ROWS = 60
@@ -85,9 +88,15 @@ def _run(case: Int, source: Int, n: Int) raises -> ClusterOut:
         var ip: List[Int] = [n, _D, 5, 5, 0, 1, -1]
         var fp: List[Float64] = [Float64.MAX, 0.05, 0.5, 2.0]
         return cluster_device_execute(ENTRY_OPTICS, source, count, 0, 0, ip, fp)
-    var ip: List[Int] = [n, _D, 0, 0, 200, 15, 0]
-    var fp: List[Float64] = [0.5, 0.0]
-    return cluster_device_execute(ENTRY_AFFINITY, source, count, 0, 0, ip, fp)
+    if case == 3:
+        var ip: List[Int] = [n, _D, 0, 0, 200, 15, 0]
+        var fp: List[Float64] = [0.5, 0.0]
+        return cluster_device_execute(ENTRY_AFFINITY, source, count, 0, 0, ip, fp)
+    # [n, d, n_components, dirichlet_process, max_iter, n_init, init, seed, has_mean_prior, has_covariance_prior,
+    #  covariance_type, warm, plain, has_weights_init, has_means_init, has_precisions_init]
+    var ip: List[Int] = [n, _D, 3, 1, 50, 1, 0 if case == 4 else 2, 7, 0, 0, 0 if case == 4 else 2, 0, 0, 0, 0, 0]
+    var fp: List[Float64] = [-1.0, -1.0, -1.0, 1e-6, 1e-3, 0.0]
+    return cluster_device_execute(ENTRY_BGMM, source, count, 0, 0, ip, fp)
 
 
 def _device_case(case: Int) raises:
@@ -124,7 +133,7 @@ def test_device_fixtures() raises:
         def body(case: Int) raises:
             _device_case(case)
 
-        check_cases_serial("xcluster_fold_entries device", 4, body)
+        check_cases_serial("xcluster_fold_entries device", 6, body)
 
 
 def main() raises:
