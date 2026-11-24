@@ -1,0 +1,18 @@
+diff --git a/core/msel_search_run.mojo b/core/msel_search_run.mojo
+index b25667179e..6ff791a7c8 100644
+--- a/core/msel_search_run.mojo
++++ b/core/msel_search_run.mojo
+@@ -527,11 +527,11 @@ def _respond(run_at: Int, v: Int, op: Int, side: _Side, cols: Int, dst: Int, cap
+         if dtype == MEMBER_F64:
+             var p64 = _F64P(unsafe_from_address=dst)
+             for i in range(words):  # driver-loop: over the side's probabilities (their logs, float64)
+-                p64[i] = _log_word(p64[i], MEMBER_F64)
++                p64[i] = p64[i]  # SABOTAGE
+         else:
+             var p32 = _F32P(unsafe_from_address=dst)
+             for i in range(words):  # driver-loop: over the side's probabilities (their logs, float32)
+-                p32[i] = Float32(_log_word(Float64(p32[i]), MEMBER_F32))
++                p32[i] = p32[i]  # SABOTAGE
+     if not narrow:
+         return width
+     if dtype == MEMBER_I64:
