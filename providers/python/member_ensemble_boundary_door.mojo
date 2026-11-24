@@ -2616,7 +2616,27 @@ def _search_prepare(model: PythonObject, fields: PythonObject, context: PythonOb
     var candidates = _search_candidates(model, fields, seed, True, context)
     var clones = Python.list()
     for c in range(len(candidates)):  # driver-loop: over the candidates (one native clone with its parameters each)
-        var clone = msel_native_clone(base, context)
+        var clone = PythonObject(None)
+        var stand_in = False
+        try:
+            clone = msel_native_clone(base, context)
+        except error:
+            # Lane w3f3-f: a META base whose `cv` is a user's own splitter object cannot be cloned natively (its
+            # parameter admission refuses the Python object: "Sequential requires native input types"), which
+            # pre-empted that base's own refusal. The base itself stands in for the candidate, never fitted or
+            # set: the work-list admits it and records its meta door's words (`_CV_CALLBACK_WORDS`, the words its
+            # own fit raises), and `_search_nested_refusal` raises them, or scikit-learn's all-fits-failed words
+            # with a numeric error_score. Any other clone refusal raises as before. The refusal path only.
+            var cv = py_get(py_fields(base), "cv")
+            try:
+                _refuse_cv_callback(cv, context, b, _CV_CALLBACK_WORDS, False)
+            except:
+                stand_in = True
+            if not stand_in:
+                raise error^
+        if stand_in:
+            _ = py_call(clones.append, base)
+            continue
         _ = msel_native_set_params(clone, msel_clone_parameter(candidates[c], context), context)
         _ = py_call(clones.append, clone)
     var out = Python.tuple(candidates, clones, PythonObject(seed))
@@ -2641,15 +2661,11 @@ def _scoring_many(scoring: PythonObject, context: PythonObject, b: PythonObject)
 
 def _effective_kwargs(params: PythonObject, kwargs: PythonObject, b: PythonObject) raises -> PythonObject:
     """A scorer's metric options as its metric call reads them: the metric
-    function's keyword defaults (`params`, its signature's parameters; None:
+    function's keyword defaults (`params`, its plan's `defaults` dict; None:
     unknown) updated with the scorer's own kwargs."""
     var out = Python.dict()
     if params is not None:
-        var names = py_call(b.list, params)
-        for i in range(len(names)):  # small-loop(the metric's parameters, once per admission)
-            var default = py_call(b.getattr, params[names[i]], PythonObject("default"))
-            if default is not py_call(b.getattr, params[names[i]], PythonObject("empty")):
-                py_setitem(out, names[i], default)
+        out = py_call(b.dict, params)
     var given = py_call(b.list, py_call(kwargs.items))
     for i in range(len(given)):  # small-loop(the scorer's kwargs)
         py_setitem(out, given[i][0], given[i][1])
@@ -2767,6 +2783,20 @@ def _is_sorted(value: PythonObject, b: PythonObject) raises -> Bool:
                                                py_call(b.sorted, listed))))
     except:
         return False
+
+
+def _response_within(row_method: PythonObject, method: PythonObject, b: PythonObject) raises -> Bool:
+    """UNPACK (lane w3f3-f): a make_scorer whose response_method is ONE of
+    its table row's response tuple (make_scorer(roc_auc_score,
+    response_method='predict_proba', max_fpr=0.5) beside 'roc_auc''s
+    ('decision_function', 'predict_proba')) is that row read over its own
+    response: the admission resolves the scorer's method against the class
+    (`msel_scorer_response`) and picks the row's code for it
+    (`msel_scorer_code(name, decision)`), as scikit-learn scores the
+    make_scorer's own response. Read once per admission."""
+    if py_type(row_method) is not b.tuple or py_type(method) is not b.str:
+        return False
+    return py_contains(row_method, method)
 
 
 def _non_predict_response(method: PythonObject, b: PythonObject) raises -> Bool:
@@ -3246,11 +3276,14 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
     var fbeta = String(py=py_call(b.getattr, func, PythonObject("__name__"), PythonObject(""))) == "fbeta_score"
     var module = py_call(b.getattr, func, PythonObject("__module__"), PythonObject(None))
     var eq = native_loaded_module("operator").eq
+    # The metric's keyword defaults: its connected plan's table (`defaults`, the signature's keyword defaults,
+    # connected at import). Lane w3f3-f: this read `inspect.signature(func)` through
+    # `native_loaded_module("inspect")`, which no import connects, so it always raised, the bare `except` left no
+    # defaults, and a make_scorer's sample_weight looked like a keyword its metric lacks (`w_refused`: every side
+    # refused "unexpected keyword argument" at core/msel_scorer_run.mojo:1914).
     var params = PythonObject(None)
-    try:
-        params = py_call(native_loaded_module("inspect").signature, func).parameters
-    except:
-        params = PythonObject(None)  # no signature: the kwargs are compared as given
+    if metric_plan is not None:
+        params = py_get(metric_plan, "defaults")
     var missing = py_call(b.object)
     try:
         var got_kwargs = _effective_kwargs(params, py_call(b.getattr, got, PythonObject("_kwargs")), b)
@@ -3278,9 +3311,10 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
             if not same_response:
                 # lane mf-r9c (door :3670): a regression row over the
                 # make_scorer's own non-predict response (`_non_predict_response`)
-                if not (msel_scorer_regression(typed) and _non_predict_response(got_method, b)):
+                if msel_scorer_regression(typed) and _non_predict_response(got_method, b):
+                    own_response = True
+                elif not _response_within(py_call(b.getattr, row, PythonObject("_response_method")), got_method, b):
                     continue
-                own_response = True
             var binary = msel_scorer_positive(typed)
             var label_row = msel_scorer_label_row(typed)
             var pos_row = binary or msel_scorer_ap(typed) or msel_scorer_brier(typed)

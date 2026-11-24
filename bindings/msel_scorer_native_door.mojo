@@ -530,14 +530,22 @@ def _scorer_metric(fields: PythonObject, estimator: PythonObject, model: PythonO
     var name = fields["_name"]
     if name is not None and py_type(name) is not b.str:
         raise Error("TypeError: native scorer name must be an exact string")
-    if String(method) == "predict_proba" and py_contains(context["family_msel_binary_proba"], name):
+    # scikit-learn's `_get_response_values` hands a binary CLASSIFIER's positive column to every scorer reading
+    # predict_proba (or, a mojolearn make_scorer, predict_log_proba: the log of the same column, as the search
+    # RUN's `_respond` scores it, core/msel_search_run.mojo), whatever the metric; the named probability scorers
+    # keep reading it for any estimator, as before.
+    var proba = String(method) == "predict_proba"
+    var log_proba = String(method) == "predict_log_proba"
+    if (proba and py_contains(context["family_msel_binary_proba"], name)) or (
+            (proba or log_proba) and py_get(model, "classifier") is PythonObject(True)):
         var array = msel_input(predicted, "pred", context)
         if Int(py=array.ndim) == 2 and Int(py=array.shape[1]) == 2:
-            var column = PythonObject(None) if memo is None else py_get(memo, "predict_proba[:, 1]")
+            var key = String("predict_log_proba[:, 1]") if log_proba else String("predict_proba[:, 1]")
+            var column = PythonObject(None) if memo is None else py_get(memo, key)
             if column is None:
                 column = _scorer_column(array, context)
                 if memo is not None:
-                    py_setitem(memo, "predict_proba[:, 1]", column)
+                    py_setitem(memo, key, column)
             predicted = column
     var keywords = fields["_kwargs"]
     if py_type(keywords) is not b.dict:

@@ -1020,9 +1020,13 @@ def _kit_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) ra
 def _mcd_admit(model: PythonObject, fields: PythonObject, context: PythonObject, mut owner: MemberOwner) raises:
     # bindings/mcd_native_door.mojo `mcd_operation` fit: the contamination
     # check first, in its words; then `mcd_fit`'s reads (h needs n: RUN).
-    var c = fields["contamination"]
+    # MinCovDet (lane w3f3-f: the same kind, no contamination field) runs the fit without the envelope: its
+    # contamination word is 0 (core/xdecomp_member.mojo: no predict, no offset_). EllipticEnvelope's is in (0, 0.5].
+    var envelope = py_contains(fields, PythonObject("contamination"))
+    var c = fields["contamination"] if envelope else PythonObject(0.0)
     var op = native_loaded_module("operator")
-    if not (Bool(py=py_call(op.lt, PythonObject(0), c)) and Bool(py=py_call(op.le, c, PythonObject(0.5)))):
+    if envelope and not (Bool(py=py_call(op.lt, PythonObject(0), c)) and Bool(py=py_call(op.le, c,
+                                                                                            PythonObject(0.5)))):
         raise Error("contamination must be in (0, 0.5]")
     _ = _kit_route(model, fields, context, owner)
     var words = List[Float64](length=XDECOMP_ENVELOPE_PARAM_COUNT, fill=0.0)
@@ -1075,13 +1079,17 @@ def _mcd_pack(fields: PythonObject, context: PythonObject, plan: MemberPlan, sta
     py_setitem(fields, "support_", _mcd_support(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 7), context))
     py_setitem(fields, "dist_", _mcd_vector(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 5), context))
     py_setitem(fields, "n_features_in_", PythonObject(features))
-    py_setitem(fields, "offset_", PythonObject(offset))
+    if plan.params[4] != 0.0:
+        # EllipticEnvelope only (MinCovDet publishes no offset_, as its door: bindings/mcd_native_door.mojo)
+        py_setitem(fields, "offset_", PythonObject(offset))
 
 
 def _mcd_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
     # What the door's queries read: location_, _precision, offset_.
     var precision = py_get(fields, "_precision")
     var offset = py_get(fields, "offset_")
+    if offset is None and plan.params[4] == 0.0:
+        offset = PythonObject(0.0)  # MinCovDet: no offset_ (its state answers no query that reads it)
     if precision is None or py_get(fields, "location_") is None or offset is None:
         raise Error("NotFittedError: this member is not fitted yet")
     var dist = py_get(fields, "dist_")

@@ -54,7 +54,8 @@ _NO_ROUND = [
 def test_no_round_fit_is_the_estimators_own(name, make, attributes):
     x, y = _data()
     rfe = mojolearn.RFE(make(), n_features_to_select=x.shape[1]).fit(x, y)
-    assert rfe.support_.all()
+    # support_ is a list of bool (RFE's documented attribute, python/mojolearn/_expansion_prep.py RFE docstring).
+    assert np.asarray(rfe.support_, dtype=bool).all()
     assert (np.asarray(rfe.ranking_) == 1).all()
     own = make().fit(x)
     for attribute in attributes:

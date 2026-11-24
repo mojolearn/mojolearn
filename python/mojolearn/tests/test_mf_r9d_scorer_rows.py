@@ -78,7 +78,9 @@ def test_numeric_mode_of_either_tier_scores_on_that_tier(mode):
     # Fail-proof: in core/msel_search_run.mojo route every scorer by `plan.metric` (the other tier's values, or
     # its image's refusal, are lost).
     X = _x()
-    y = np.linspace(0.0, 2.0, 12)
+    # float32 targets: r2_score documents float32 only (float64 raises "the float64 overloads ... are NOT
+    # implemented"), so a float64 y made the reference fail for a reason that is not the tier's.
+    y = np.linspace(0.0, 2.0, 12, dtype=np.float32)
     scorer = ms.make_scorer(metrics.r2_score, numeric_mode=mode)
     estimator = ml.KNeighborsRegressor(n_neighbors=3, numeric_mode='identical')
     try:

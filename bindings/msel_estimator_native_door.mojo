@@ -149,7 +149,10 @@ def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObj
             raise Error("RuntimeError: this built-in estimator's native cross-validation schema is pending migration")
         if entry is None or py_type(entry) is not py_type(b.len):
             raise Error("ImportError: native cross-validation estimator binding is unavailable")
-        raise Error("AttributeError: native estimator has no " + method)
+        # Python's (and so scikit-learn's) words for a method the class does not have (a VotingClassifier
+        # over NearestNeighbors: `vote.predict` fails with "'NearestNeighbors' object has no attribute 'predict'").
+        raise Error("AttributeError: '" + String(py_type(model).__name__) + "' object has no attribute '" + method
+                    + "'")
     if entry is None or py_type(entry) is not py_type(b.len):
         raise Error("ImportError: native cross-validation estimator binding is unavailable")
     if keywords is not None:

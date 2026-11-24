@@ -589,7 +589,16 @@ def _encode_target(y: PythonObject, rows: Int, text_y: Bool, label_list: Bool, e
     if text_y:
         outputs = _encode_text_outputs(y, rows, est, fields, context, b)
     elif label_list or Int(py=y.ndim) == 1:
-        var encoded = msel_encode(y, context)
+        var encoded = PythonObject(None)
+        try:
+            encoded = msel_encode(y, context)
+        except error:
+            # The shared encoder refuses a NaN label first, in its own words ("y contains a NaN label",
+            # bindings/classical_labels_door.mojo:392), so `_check_labels`' NaN row was unreachable: scikit-learn's
+            # `type_of_target` raises `_assert_all_finite`'s words before any fit. The refusal path only.
+            if "NaN label" in String(error):
+                raise Error("ValueError: Input y contains NaN.")
+            raise error^
         _check_labels(encoded[0], False, y, est, fields, context, b)
         return Python.tuple(encoded, PythonObject(None))
     else:

@@ -3106,6 +3106,11 @@ class MinCovDet(_DeviceDoor, _Base):
 
     _parameters = ("store_precision", "assume_centered", "support_fraction", "random_state", "numeric_mode", "device")
 
+    #: The member ABI mark (family 32 XDecomp, kind 14, EllipticEnvelope's kind without the envelope: no
+    #: contamination field, so its contamination word is 0; core/xdecomp_member.mojo): fit, export and import
+    #: only (no predict). RFE fits it and reads precision_ / location_ / covariance_ as importance_getter.
+    _mojolearn_member = (32, 14)
+
     def __init__(self, *, store_precision=True, assume_centered=False, support_fraction=None, random_state=None,
                  numeric_mode=None, device=None):
         if device is not None:
@@ -3647,6 +3652,23 @@ _JL_CALL, _JL_CONTEXT = _native_jl_bridge.connect_public()
 # MiniBatchSparsePCA and sparse_encode, one call per public operation.
 from ._native_decomp_kit_bridge import connect_public as _connect_decomp_kit  # noqa: E402
 _DL_CALL, _DL_CONTEXT = _connect_decomp_kit("dict_learning_native_call", minibatch_sparse_pca_class=MiniBatchSparsePCA)
+# glue: the manifold members (Isomap, LLE, MDS: core/xdecomp_member.mojo kinds 16-18) resolve their route through
+# the x_decomp entry tables (providers/python/member_xdecomp_boundary_door.mojo `_mani_route` -> `_table_route`)
+# from their plan context, the shared family context `_NATIVE_CONTEXT`, which had no `decomp_bindings`
+# (ValueError: 'decomp_bindings'). The same tables the kit connected above, added once at import.
+if "decomp_bindings" in _DL_CONTEXT:
+    _native_family_bridge.tables(decomp_bindings=_DL_CONTEXT["decomp_bindings"])
+
+    def _share_decomp_cpu_image():
+        # glue: a device="cpu" manifold member beside a GPU set routes to the x_decomp CPU image
+        # (bindings/decomp_kit_native_door.mojo `decomp_entries_routed` reads `decomp_cpu_bindings`): the table the
+        # kit context connected at the same first device="cpu" admission (registered before this one, so loaded
+        # first), never at import.
+        cpu = _DL_CONTEXT.get("decomp_cpu_bindings")
+        if cpu is not None:
+            _native_family_bridge.tables(decomp_cpu_bindings=cpu)
+
+    _native_family_bridge.cpu_load_later(_native_family_bridge.shared_context(), _share_decomp_cpu_image)
 
 
 # The native PLS owner (bindings/pls_native_door.mojo): PLSRegression, PLSCanonical, CCA.

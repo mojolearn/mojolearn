@@ -49,6 +49,7 @@ from bindings.msel_search_stats_run import (
 )
 from bindings.family_common_unpack import FAMILY_I32P
 from bindings.msel_member_units_door import msel_member_refit, msel_member_fit_cloned, msel_text_rows
+from bindings.member_owner_unpack import MEMBER_SET_FOREIGN
 from bindings.msel_cv_door import (
     msel_cv_folds,
     msel_cv_splitter,
@@ -126,6 +127,30 @@ def _search_settings_check(fields: PythonObject, context: PythonObject, b: Pytho
         raise Error("For multi-metric scoring, refit must be False or a scorer key.")
 
 
+def _search_base_plan(model: PythonObject, base: PythonObject, context: PythonObject) raises:
+    """The search's base checked against its plan (`msel_estimator_plan`: its
+    class rows and fields), after the two refusals the search admission words
+    as scikit-learn's fit and the meta door do (lane w3f3-f;
+    providers/python/member_ensemble_boundary_door.mojo `_search_base_refusal`,
+    which the plan's generic "Python estimator callbacks" words pre-empted):
+    no estimator, scikit-learn's parameter validation words; a class with no
+    plan that is not a built-in pending migration (a third-party or a user's
+    own class), MEMBER_SET_FOREIGN. Read once per search fit."""
+    var name = String(py=py_type(model).__name__)
+    if base is None:
+        raise Error("ValueError: The 'estimator' parameter of " + name
+                    + " must be an object implementing 'fit'. Got None instead.")
+    var cls = py_type(base)
+    # A class with its own metaclass: the plan refuses its hooks first, in its words (no hook runs here).
+    if py_type(cls) is not msel_b().type:
+        _ = msel_estimator_plan(base, context)
+        return
+    if (py_get(context["family_msel_estimators"], cls) is None
+            and not py_contains(context["family_msel_pending_estimators"], cls)):
+        raise Error("TypeError: " + String(py=cls.__name__) + String(MEMBER_SET_FOREIGN))
+    _ = msel_estimator_plan(base, context)
+
+
 def _search_member_fit(model: PythonObject, fields: PythonObject, x_in: PythonObject, y_in: PythonObject,
                        groups: PythonObject, context: PythonObject, b: PythonObject) raises:
     """The search fitted as ONE native member of its own META kind: UNPACK
@@ -152,9 +177,9 @@ def _search_member_fit(model: PythonObject, fields: PythonObject, x_in: PythonOb
     Mojolearn base with no member is refused by the carrier's admission; a
     class that is no Mojolearn estimator by its plan, first. An integer
     cv: the kind's own folds; scikit-learn ignores `groups` there."""
-    # A base class that is no Mojolearn estimator: the plan's words, before
-    # any split reads it.
-    _ = msel_estimator_plan(fields["estimator"], context)
+    # A base class that is no Mojolearn estimator: the search's words
+    # (`_search_base_plan`), before any split reads it.
+    _search_base_plan(model, fields["estimator"], context)
     var cv = py_get(fields, "cv")
     var table = y_in is not None and msel_text_rows(y_in, context, b)
     if _door_folds_cv(cv, context, b):
@@ -217,7 +242,7 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     var estimator = fields["estimator"]
     var error_score = fields["error_score"]
     _ = msel_unit_jobs(fields["n_jobs"], error_score, String(py=py_type(model).__name__), context)  # their words, first
-    _ = msel_estimator_plan(estimator, context)
+    _search_base_plan(model, estimator, context)
     msel_admit(fields["n_jobs"], context)
     msel_admit(error_score, context)
     # THE ONE SEARCH BODY (lane mf-search4 follow-up): a search its member
