@@ -10,7 +10,6 @@ the tape's fixed blocked folds), so the bits are the same on Apple, NVIDIA
 and AMD. Host loops run over layers, batches and epochs only.
 """
 from std.memory import bitcast, unsafe_memcpy
-from std.sys.compile import is_defined
 from sequence.exec_trait import Exec
 from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from sequence.fit_loop_words import fit_loop_publish
@@ -134,9 +133,14 @@ comptime HAS_DROPOUT = True
 # measured (NVIDIA-only campaign, AGENTS.md part 8). No bits change on any column: the chunk grows only when
 # every Linear's split-K decision (gemm_split_shape, the one rule HostExec and DeviceExec share) is the same at
 # the old and new chunk and tails, so every row's words are the caller-chunk words on the host and every vendor.
-# `-D MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF` keeps the caller's chunk (the old default); the on-define is refused
-# (core/experiment_guards_neural.mojo).
-comptime SEQ_TILED_PREDICT = not is_defined["MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF"]()
+# The on-define is refused (core/experiment_guards_neural.mojo).
+# OLD PATH SWITCH DELETED 2026-11-24 (lane ab-outcome-4): A/B nvc-ab-20261124T215509Z-b82da4 (NVIDIA L40S, wheel
+# 71db45de5d, job nvc1-0007, one scored run per arm, the small-row median of 20 calls): `-D
+# MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF` (the caller's chunk always) was slower: neural/sequential-predict full
+# 2.29 -> 2.65 ms (1.16, 1 cell). The whole-set chunk is the only rule; the caller's chunk stays only where
+# `predict_chunk_rows` finds a Linear's split-K decision could move (or the scratch does not fit). AMD not measured.
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF (old path slower: NV L40S sequential-predict 2.29 -> 2.65 ms, 1.16) deleted 2026-11-24 by lane/ab-outcome-4; code recoverable at 652b59771f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF.ab-outcome-4.patch
 comptime PREDICT_WHOLE_SET_BYTES = 1 << 30
 
 # ---------------------------------------------------------------- description
@@ -1938,12 +1942,9 @@ def _predict_split_same(spec: ModelSpec, rows_a: Int, rows_b: Int) -> Bool:
 def predict_chunk_rows(spec: ModelSpec, N: Int, chunk: Int) -> Int:
     """The rows model_predict runs a chunk: the most rows whose inference
     scratch fits PREDICT_WHOLE_SET_BYTES (all N for most models) when no
-    row's GEMM fold can move, else the caller's `chunk` (capped at N; always
-    under `-D MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF`; see SEQ_TILED_PREDICT
-    above)."""
+    row's GEMM fold can move, else the caller's `chunk` (capped at N; see
+    PREDICT_WHOLE_SET_BYTES above)."""
     var bs = chunk if chunk < N else N
-    comptime if not SEQ_TILED_PREDICT:
-        return bs
     if bs >= N or spec.version == SPEC2_VERSION:
         return bs
     # float32 words a row: every layer's output (absorbed activations

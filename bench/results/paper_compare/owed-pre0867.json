@@ -1219,8 +1219,9 @@
   },
   "seq-tiled-predict-off": {
    "define": "MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF",
-   "owed": "RUN",
-   "status": "define in code (autograd/model.mojo; the old per-call predict, behind _OFF since the promotion of MOJOLEARN_IDN_SEQ_TILED_PREDICT by lane ab-outcome-2, 2026-11-24, L40S sequential-predict 2.23 -> 1.87 ms): B = the old form; A = the whole-set chunk (the default). RUN OWED with the wave-3 sha (lane ab-outcome-3): B not faster at equal quality -> delete the old form and its switch with tombstones"
+   "owed": "DECIDED",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-4): old path slower (L40S job nvc1-0007 sequential-predict 2.29 -> 2.65 ms, 1.16); the switch removed (autograd/model.mojo predict_chunk_rows); the define is refused (core/experiment_guards_neural.mojo); code recoverable at 652b59771f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF.ab-outcome-4.patch. Was: define in code (autograd/model.mojo; the old per-call predict, behind _OFF since the promotion of MOJOLEARN_IDN_SEQ_TILED_PREDICT by lane ab-outcome-2, 2026-11-24, L40S sequential-predict 2.23 -> 1.87 ms): B = the old form; A = the whole-set chunk (the default). RUN OWED with the wave-3 sha (lane ab-outcome-3): B not faster at equal quality -> delete the old form and its switch with tombstones",
+   "evidence": "A/B nvc-ab-20261124T215509Z-b82da4 (NVIDIA L40S, wheel 71db45de5d, job nvc1-0007): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md section \"Job nvc1-0007\""
   },
   "seq-libc-copy-off": {
    "define": "MOJOLEARN_SEQ_FAST_LIBC_COPY_OFF",
@@ -6502,7 +6503,9 @@
    "b_arms": [
     "seq-tiled-predict-off"
    ],
-   "decides": "keep the whole-set chunk (A) unless the old form (B) is faster at equal quality and digests; else delete the old form and its _OFF switch"
+   "decides": "keep the whole-set chunk (A) unless the old form (B) is faster at equal quality and digests; else delete the old form and its _OFF switch",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T215509Z-b82da4 (NVIDIA L40S, wheel 71db45de5d, job nvc1-0007): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md section \"Job nvc1-0007\""
   },
   {
    "id": "seq-libc-copy-off-mlp",
