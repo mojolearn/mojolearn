@@ -1222,8 +1222,9 @@
   },
   "seq-libc-copy-off": {
    "define": "MOJOLEARN_SEQ_FAST_LIBC_COPY_OFF",
-   "owed": "RUN",
-   "status": "define in code (sequence/exec_device.mojo; the old unsafe_memcpy element copies, behind _OFF since the promotion of MOJOLEARN_SEQ_FAST_LIBC_COPY by lane ab-outcome-2, 2026-11-24: mlp-clf infer 0.86, mlp-reg infer 0.91): B = the old copies; A = libc memcpy (the default). RUN OWED with the wave-3 sha (lane ab-outcome-3): B not faster -> delete the old form and its switch"
+   "owed": "DECIDED",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-4): old path not faster (L40S 5 cells: mlp-clf istella infer 1.12, mlp-reg infer 1.21 slower, fits 1.05 / 1.04, cross-entropy 0.94); the switch and the unsafe_memcpy arm of _pcopy removed; the define is refused (core/experiment_guards_neural.mojo); code recoverable at 059785de37, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_FAST_LIBC_COPY_OFF.ab-outcome-4.patch. Was: define in code (sequence/exec_device.mojo; the old unsafe_memcpy element copies, behind _OFF since the promotion of MOJOLEARN_SEQ_FAST_LIBC_COPY by lane ab-outcome-2, 2026-11-24: mlp-clf infer 0.86, mlp-reg infer 0.91): B = the old copies; A = libc memcpy (the default). RUN OWED with the wave-3 sha (lane ab-outcome-3): B not faster -> delete the old form and its switch",
+   "evidence": "A/B nvc-ab-20261124T182912Z-977cc8 (NVIDIA L40S, wheel 71db45de5d, job nvc1-0004): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md section \"Job nvc1-0004\""
   },
   "msel-units-gpu-parallel": {
    "define": "MOJOLEARN_MSEL_UNITS_GPU_PARALLEL",
@@ -6487,7 +6488,9 @@
    "b_arms": [
     "seq-libc-copy-off"
    ],
-   "decides": "keep libc memcpy (A) unless the old copies (B) are faster at equal digests; else delete the old copies and the _OFF switch"
+   "decides": "keep libc memcpy (A) unless the old copies (B) are faster at equal digests; else delete the old copies and the _OFF switch",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T182912Z-977cc8 (NVIDIA L40S, wheel 71db45de5d, job nvc1-0004): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md section \"Job nvc1-0004\""
   },
   {
    "id": "seq-libc-copy-off-cross-entropy",
@@ -6499,7 +6502,9 @@
    "b_arms": [
     "seq-libc-copy-off"
    ],
-   "decides": "the same"
+   "decides": "the same",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T182912Z-977cc8 (NVIDIA L40S, wheel 71db45de5d, job nvc1-0004): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md section \"Job nvc1-0004\""
   },
   {
    "id": "msel-units-gpu-parallel",
