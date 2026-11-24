@@ -3589,12 +3589,14 @@ def _decode_text_outputs(result: PythonObject, labels: PythonObject, context: Py
     decoder, one list), then one list per row of its outputs' labels."""
     var rows = Int(py=result.shape[0])
     var outputs = Int(py=result.shape[1])
-    var src = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=msel_addr(result)) if rows > 0 else MutPointer[
-        Int64, MutUntrackedOrigin](unsafe_from_address=0)
+    # the RUN's block address, read once; a Pointer is built from it only when there are rows (a constant
+    # null Pointer is refused at compile time)
+    var src_addr = msel_addr(result) if rows > 0 else 0
     var decoded = Python.list()
     for j in range(outputs):  # driver-loop: over the outputs (one native column copy and one decode each)
         var column = family_array(Python.tuple(rows), "<i8", context)
         if rows > 0:
+            var src = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=src_addr)
             var dst = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=msel_addr(column))
             for i in range(rows):  # driver-loop: over the rows (output j's codes)
                 dst[i] = src[i * outputs + j]
