@@ -2571,13 +2571,13 @@ def _ada_state(fields: PythonObject, context: PythonObject, b: PythonObject, pla
 # ------------------------------------------------------------ the search kind (lane mf-search4)
 
 
-def _search_seed_word(fields: PythonObject, b: PythonObject) raises -> Int:
+def _search_seed_word(fields: PythonObject, b: PythonObject, context: PythonObject) raises -> Int:
     """A RandomizedSearchCV's sampler seed for its admission and its PACK:
     its own exact non-negative int below 2^52 (the words are float64), or,
     for random_state=None, one fresh draw per admission (scikit-learn's
     sampler draws afresh per fit too). _SEED_AS_GIVEN (lane mf-rows8d, row
-    :3552): any other random_state (a NumPy integer, an int the float64
-    words cannot hold, a negative int, a bool, a RandomState): the sampler
+    :3552): any other random_state (a negative int, a bool, a RandomState;
+    lane w3f5-b: an integral seed of any size or NumPy type is a word, below): the sampler
     reads the search's own `random_state` as given, at the admission and at
     the PACK's re-draw (the same field of the same fit), and raises its own
     words for one it refuses (bindings/msel_candidates_door.mojo
@@ -2587,10 +2587,34 @@ def _search_seed_word(fields: PythonObject, b: PythonObject) raises -> Int:
         var raw = py_call(b.int.from_bytes, py_call(native_loaded_module("os").urandom, PythonObject(7)),
                           PythonObject("little"))
         return Int(py=raw) >> 4  # 52 random bits
+    # LANE w3f5-b: a NumPy integer scalar or an exact int of any size is
+    # drawn ONCE here into the native seed word, as scikit-learn's
+    # check_random_state takes any integral seed (was: _SEED_AS_GIVEN, whose
+    # re-read of the field raised the Sequential admission's words for
+    # np.int64(7) and 2**60 + 3). A NumPy integer is admitted by exact type
+    # identity (`msel_is_int_arg`: the connected integer classes) and read
+    # through its C `int`; a value of 2^52 or more (the words are float64)
+    # folds its high bits into the low 52 (`_seed_fold`). Bits change for
+    # those seeds only (their draws; they were refused before).
     var word = _int_word(state, b)
-    if word < 0 or word >= 4503599627370496:
+    if word < 0 and py_type(state) is not b.int and py_type(state) is not b.bool:
+        try:
+            if msel_is_int_arg(state, _splitter_context(context)):
+                word = Int(py=py_call(b.int, state))
+        except:
+            word = -1
+    if word < 0:
         return _SEED_AS_GIVEN
-    return word
+    return _seed_fold(word)
+
+
+def _seed_fold(word: Int) -> Int:
+    """A non-negative seed as a float64-exact word: below 2^52 as is, else
+    its low 52 bits xor its high bits."""
+    comptime LOW = 4503599627370496  # 2^52
+    if word < LOW:
+        return word
+    return (word & (LOW - 1)) ^ (word >> 52)
 
 
 #: A RandomizedSearchCV seed word: the sampler reads the search's own
@@ -2608,7 +2632,12 @@ def _search_candidates(model: PythonObject, fields: PythonObject, seed: Int, war
         return msel_grid_list(fields["param_grid"], context)
     var dists = msel_sampler_check(fields["param_distributions"], context, True)
     var state = fields["random_state"] if seed == _SEED_AS_GIVEN else PythonObject(seed)
-    return msel_sampler_list(dists, fields["n_iter"], state, context, True, warn)
+    # LANE w3f5-b: a random_state read as given (a RandomState, a bool, a
+    # negative int) is refused in the sampler's own words in model
+    # selection's context (`_splitter_context`: a nested search may hand the
+    # trees context copy, whose NumPy types no public call connected)
+    var sampler_context = _splitter_context(context) if seed == _SEED_AS_GIVEN else context
+    return msel_sampler_list(dists, fields["n_iter"], state, sampler_context, True, warn)
 
 
 def _search_prepare(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
@@ -2633,7 +2662,7 @@ def _search_prepare(model: PythonObject, fields: PythonObject, context: PythonOb
     if py_type(model) is not msel_cls("GridSearchCV", context):
         if py_type(model) is not msel_cls("RandomizedSearchCV", context):
             raise Error("TypeError: " + String(py=py_type(model).__name__) + String(MEMBER_SET_FOREIGN))
-        seed = _search_seed_word(fields, b)
+        seed = _search_seed_word(fields, b, context)
     var candidates = _search_candidates(model, fields, seed, True, context)
     var clones = Python.list()
     for c in range(len(candidates)):  # driver-loop: over the candidates (one native clone with its parameters each)
