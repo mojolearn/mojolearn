@@ -63,6 +63,7 @@ def repo(tmp_path, monkeypatch):
     monkeypatch.setattr(dev.build_process, "cancelled", lambda: False)
     monkeypatch.setattr(dev, "available_resources", lambda: (16, 100 * 2 ** 30))
     monkeypatch.setattr(dev, "physical_memory", lambda: 128 * 2 ** 30)
+    monkeypatch.setattr(dev, "CALIBRATION_SECONDS", 0.01)  # the box check, kept short in tests
     return root
 
 
@@ -988,9 +989,9 @@ def test_biggest_recorded_need_starts_first():
 
 
 def test_missing_records_take_the_flag_then_the_set_maximum_then_the_floor():
-    rows = [{"mode": "host", "stem": "a", "recorded_need_bytes": 3 * GIB},
+    rows = [{"mode": "host", "stem": "a", "recorded_need_bytes": 3 * GIB, "recorded_passed_need_bytes": 3 * GIB},
             {"mode": "host", "stem": "b", "recorded_need_bytes": 0},
-            {"mode": "host", "stem": "c", "recorded_need_bytes": 7 * GIB},
+            {"mode": "host", "stem": "c", "recorded_need_bytes": 7 * GIB, "recorded_passed_need_bytes": 7 * GIB},
             {"mode": "identical", "stem": "d", "recorded_need_bytes": 0}]
     assert dev.group_needs(rows, rows, None, 12 * GIB) == [
         (3 * GIB, "recorded"), (7 * GIB, "set-max"), (7 * GIB, "recorded"), (12 * GIB, "group-floor")]
@@ -1479,7 +1480,7 @@ def test_limited_release_group_retains_peak_without_cache_provenance(mac, tmp_pa
     assert failed["state"] == "failed" and failed["exit_code"] == 124
     assert failed["bincache_outcome"] == ""
     assert failed["peak_rss_bytes"] == observed
-    assert dev.recorded_need(cache, row["mode"], row["stem"]) == int(observed * dev.PEAK_HEADROOM["limited"])
+    assert dev.recorded_need(cache, row["mode"], row["stem"]) == int(observed * dev.PEAK_HEADROOM["lower-bound"])
 
 
 def test_main_release_layout_compiles_once_into_the_one_mac_cache_and_the_release_keys_hit(
@@ -1653,3 +1654,209 @@ def test_planner_keys_equal_with_one_and_many_workers(repo, tmp_path, monkeypatc
     one = plan(repo, tmp_path)
     monkeypatch.setattr(dev, "available_resources", lambda: (1, 100 * 2 ** 30))
     assert keys(plan(repo, tmp_path)) == keys(one)
+
+
+# 2026-11-24 (cpc1, w3-integrate-4): a peak of a stopped run became the next build's rss KILL limit
+# (runtime_prep: round-1 timeout peak 2.06 GiB -> limit 4.64 GiB, killed after 2.8 h with 200 GB free).
+
+def test_a_stopped_runs_peak_sizes_packing_but_never_the_kill_limit(repo, tmp_path):
+    cache = tmp_path / "cache"
+    row = plan(repo, tmp_path)["groups"][0]
+    peak = int(2.06 * GIB)
+    dev.record_peak(cache, row, {"status": "timeout", "peak_rss_bytes": peak})
+    again = next(r for r in plan(repo, tmp_path)["groups"] if r["stem"] == row["stem"] and r["mode"] == row["mode"])
+    assert again["recorded_need_bytes"] == int(peak * 1.5) and again["recorded_passed_need_bytes"] == 0
+    floor = dev.GROUP_FLOOR_BYTES["linux"]
+    [(need, source)] = dev.group_needs([again], [again], None, floor)
+    assert (need, source) == (int(peak * 1.5), "lower-bound")
+    limit = dev.guard_rss(need, source, floor)
+    assert limit == int(floor * dev.RSS_GUARD_MARGIN)  # an unmeasured group's limit, not 1.5x the lower bound
+    assert limit > int(4.64 * GIB)
+    # A passed record is the only kill basis; a later, larger lower bound only raises packing.
+    dev.record_peak(cache, row, {"status": "passed", "peak_rss_bytes": 10 * GIB, "elapsed_seconds": 50})
+    dev.record_peak(cache, row, {"status": "rss-limit", "peak_rss_bytes": 20 * GIB})
+    assert dev.recorded_passed_need(cache, row["mode"], row["stem"]) == 12 * GIB
+    assert dev.recorded_need(cache, row["mode"], row["stem"]) == 30 * GIB
+    assert dev.recorded_seconds(cache, row["mode"], row["stem"]) == 50
+    rec = {"recorded_need_bytes": 30 * GIB, "recorded_passed_need_bytes": 12 * GIB, "mode": "identical"}
+    assert dev.group_needs([rec], [rec], None, floor) == [(30 * GIB, "lower-bound")]
+    assert dev.guard_rss(30 * GIB, "lower-bound", floor) == 45 * GIB
+    # The next pass replaces the record and drops the lower bound.
+    dev.record_peak(cache, row, {"status": "passed", "peak_rss_bytes": 5 * GIB})
+    assert dev.recorded_need(cache, row["mode"], row["stem"]) == 6 * GIB
+    assert "lower_bound_rss_bytes" not in json.loads(dev.peak_path(cache, row["mode"], row["stem"]).read_text())
+    # Failed compiles and interruptions record nothing.
+    for status in ("failed", "interrupted", "controller-error"):
+        dev.record_peak(cache, row, {"status": status, "peak_rss_bytes": 90 * GIB})
+    assert dev.recorded_need(cache, row["mode"], row["stem"]) == 6 * GIB
+
+
+def test_old_limited_peak_records_are_ignored_on_read(repo, tmp_path):
+    cache = tmp_path / "cache"
+    row = plan(repo, tmp_path)["groups"][0]
+    path = dev.peak_path(cache, row["mode"], row["stem"])
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"peak_rss_bytes": int(3.09 * GIB), "status": "limited", "elapsed_seconds": 9}))
+    assert dev.recorded_need(cache, row["mode"], row["stem"]) == 0
+    assert dev.recorded_passed_need(cache, row["mode"], row["stem"]) == 0
+    assert dev.recorded_seconds(cache, row["mode"], row["stem"]) == 0.0
+    again = plan(repo, tmp_path)["groups"][0]
+    assert again["recorded_need_bytes"] == 0
+    # A new stopped run starts a clean lower-bound record over the old entry.
+    dev.record_peak(cache, row, {"status": "stalled", "peak_rss_bytes": 2 * GIB})
+    saved = json.loads(path.read_text())
+    assert saved["status"] == "lower-bound" and saved["lower_bound_rss_bytes"] == 2 * GIB
+    assert "peak_rss_bytes" not in saved
+
+
+def test_rss_retry_only_for_own_limit_with_free_memory():
+    def result(status, peak):
+        return {"execution": {"status": status, "peak_rss_bytes": peak, "rss_limit_bytes": peak}}
+    assert dev.rss_retry_reason(result("rss-limit", 4 * GIB), 200 * GIB).startswith("killed by its rss limit")
+    assert dev.rss_retry_reason(result("rss-limit", 4 * GIB), 9 * GIB) is None  # 7.2 GiB free < 2x 4 GiB
+    for status in ("memory-pressure", "timeout", "stalled", "failed", "passed"):
+        assert dev.rss_retry_reason(result(status, 4 * GIB), 200 * GIB) is None
+    assert dev.rss_retry_reason({}, 200 * GIB) is None
+    assert dev.guard_rss(4 * GIB, "rss-retry", 12 * GIB) is None
+
+
+def rss_limited_then(passes, calls):
+    """A group compiler stopped by its rss limit on the first call per group; later calls pass when `passes`."""
+    def compiler(command, root, env, log):
+        group = command[command.index("--group") + 1]
+        calls.setdefault(group, []).append(json.loads(env[dev.GUARD_ENV]))
+        Path(log).write_text(f"attempt {len(calls[group])}\n")
+        if len(calls[group]) == 1 or not passes:
+            Path(str(log) + ".execution.json").write_text(json.dumps({
+                "complete": True, "status": "rss-limit", "exit_code": 124, "peak_rss_bytes": 2 * GIB,
+                "rss_limit_bytes": 2 * GIB, "reason": "rss limit exceeded"}))
+            return 124
+        output = Path(command[command.index("--outdir") + 1])
+        (output / (group + ".so")).write_bytes(b"built")
+        Path(str(log) + ".execution.json").write_text(json.dumps(
+            {"complete": True, "status": "passed", "exit_code": 0, "peak_rss_bytes": 3 * GIB}))
+        return 0
+    return compiler
+
+
+@pytest.mark.parametrize("parallel", ["auto", "1"])
+def test_a_group_killed_by_its_own_rss_limit_with_free_memory_is_retried_once_without_it(
+        repo, tmp_path, monkeypatch, parallel):
+    configure_main(repo, monkeypatch)
+    cache = tmp_path / "cache"
+    for row in plan(repo, tmp_path)["support"]:
+        cache_row(cache, row)
+    calls = {}
+    monkeypatch.setattr(dev, "run_logged", rss_limited_then(True, calls))
+    evidence = tmp_path / "evidence"
+    assert dev.main(["build", "--sets", "identical", "--cache", str(cache), "--evidence", str(evidence),
+                     "--parallel", parallel]) == 0
+    report = json.loads((evidence / "result.json").read_text())
+    assert report["state"] == "activated"
+    assert calls and all(len(seen) == 2 for seen in calls.values())
+    assert all(seen[0]["rss_bytes"] is not None and seen[1]["rss_bytes"] is None for seen in calls.values())
+    assert all(seen[1]["min_available_bytes"] > 0 for seen in calls.values())  # the pressure floor stays
+    assert len(report["rss_limit_retries"]) == len(calls)
+    assert all(r["exit_code"] == 0 and r.get("rss_retry") for r in report["results"])
+    for retry in report["rss_limit_retries"]:
+        kept = [Path(name) for name in retry["first_attempt"]]
+        assert any(path.name.endswith(".rss-limit-attempt.log") and path.read_text() == "attempt 1\n"
+                   for path in kept)
+    # The pass replaced the lower bound: the next plan sizes from 3 GiB passed.
+    assert all(abs(r["recorded_need_bytes"] - int(3.6 * GIB)) <= 1 for r in plan(repo, tmp_path)["groups"])
+
+
+def test_a_group_killed_again_after_its_retry_fails_the_build(repo, tmp_path, monkeypatch):
+    configure_main(repo, monkeypatch)
+    calls = {}
+    monkeypatch.setattr(dev, "run_logged", rss_limited_then(False, calls))
+    evidence = tmp_path / "evidence"
+    assert dev.main(["build", "--sets", "identical", "--cache", str(tmp_path / "cache"),
+                     "--evidence", str(evidence)]) == 1
+    report = json.loads((evidence / "result.json").read_text())
+    assert calls and all(len(seen) == 2 for seen in calls.values())  # once, never a loop
+    assert all(r["exit_code"] == 124 for r in report["results"])
+
+
+def test_no_retry_without_free_memory(repo, tmp_path, monkeypatch):
+    configure_main(repo, monkeypatch)
+    calls = {}
+    monkeypatch.setattr(dev, "run_logged", rss_limited_then(True, calls))
+    monkeypatch.setattr(dev, "available_resources", lambda: (16, 100 * GIB))
+    monkeypatch.setattr(dev, "rss_retry_reason", lambda result, available: None)
+    evidence = tmp_path / "evidence"
+    assert dev.main(["build", "--sets", "identical", "--cache", str(tmp_path / "cache"),
+                     "--evidence", str(evidence)]) == 1
+    assert all(len(seen) == 1 for seen in calls.values())
+    assert "rss_limit_retries" not in json.loads((evidence / "result.json").read_text())
+
+
+def test_timeout_reports_cpu_seconds_and_activity(tmp_path):
+    ticks = []
+
+    def busy(pid, seen):
+        ticks.append(1)
+        return float(len(ticks)), GIB, 100 * GIB
+    result = dev.build_process.run([sys.executable, "-c", "import time;time.sleep(60)"], cwd=tmp_path,
+                                   env=dict(os.environ), log=tmp_path / "b.log", seconds=0.3, poll=0.02,
+                                   probe=busy)
+    assert result["status"] == "timeout" and result["cpu_active_at_end"] is True
+    assert result["cpu_seconds"] == float(len(ticks)) and "while still using CPU" in result["reason"]
+    passed = dev.build_process.run([sys.executable, "-c", "pass"], cwd=tmp_path, env=dict(os.environ),
+                                   log=tmp_path / "c.log", seconds=30, poll=0.02, probe=lambda p, s: (0.0, 0, GIB))
+    assert passed["status"] == "passed" and passed["cpu_seconds"] == 0.0
+
+
+def test_timeout_line_names_cpu_and_the_box_calibration(capsys):
+    report = {"calibration": {"seconds_per_3m_updates": 12.18, "nproc": 32, "allocation_cores": 32,
+                              "slowdown": 135.3, "reference": {"seconds_per_3m_updates": 0.09,
+                                                               "source_commit": "abc", "recorded_utc": "t"}}}
+    result = {"mode": "host", "stem": "runtime_prep",
+              "execution": {"status": "timeout", "deadline_seconds": 6000, "cpu_seconds": 5990.0,
+                            "cpu_active_at_end": True}}
+    dev.report_timeout(result, report)
+    line = capsys.readouterr().out
+    assert line.startswith("TIMEOUT host runtime_prep: deadline 6000 s, cpu 5990 s, still using CPU")
+    assert "nproc 32" in line and "12.18 s per 3M" in line and "135.3x" in line
+    assert result["cpu_seconds"] == 5990.0
+    dev.report_timeout({"mode": "host", "stem": "x", "execution": {"status": "passed"}}, report)
+    assert capsys.readouterr().out == ""
+
+
+def test_calibration_warns_on_a_box_5x_slower_than_the_last_passing_build(tmp_path, monkeypatch, capsys):
+    cache = tmp_path / "cache"
+    monkeypatch.setattr(dev, "single_thread_calibration",
+                        lambda seconds=None: {"updates": 1, "elapsed_seconds": 2.0, "seconds_per_3m_updates": 12.0})
+    first = dev.box_calibration(cache)
+    assert "reference" not in first and "no reference" in capsys.readouterr().out
+    dev.record_calibration(cache, dict(first, seconds_per_3m_updates=2.0), "c0ffee")
+    slow = dev.box_calibration(cache)
+    out = capsys.readouterr()
+    assert slow["slow_box"] and slow["slowdown"] == 6.0 and "WARNING SLOW BOX" in out.out + out.err
+    assert "nproc" in out.out
+    dev.record_calibration(cache, dict(first, seconds_per_3m_updates=10.0), "c0ffee")
+    fine = dev.box_calibration(cache)
+    assert not fine["slow_box"] and "WARNING" not in capsys.readouterr().out
+    real = dev.single_thread_calibration(0.01)
+    assert real["updates"] > 0 and real["seconds_per_3m_updates"] > 0
+
+
+def test_a_passing_build_records_the_calibration_reference(repo, tmp_path, monkeypatch):
+    configure_main(repo, monkeypatch)
+    cache = tmp_path / "cache"
+    for row in plan(repo, tmp_path)["support"]:
+        cache_row(cache, row)
+    monkeypatch.setattr(dev, "run_logged", fake_group_compiler([]))
+    evidence = tmp_path / "evidence"
+    assert dev.main(["build", "--sets", "identical", "--cache", str(cache), "--evidence", str(evidence)]) == 0
+    report = json.loads((evidence / "result.json").read_text())
+    ref = json.loads((cache / dev.CALIBRATION_FILE).read_text())
+    assert ref["seconds_per_3m_updates"] == report["calibration"]["seconds_per_3m_updates"]
+    assert ref["source_commit"] == "synthetic-source-commit"
+    # A failed build leaves the reference alone.
+    (cache / dev.CALIBRATION_FILE).write_text(json.dumps(dict(ref, seconds_per_3m_updates=99.0)))
+    monkeypatch.setattr(dev, "run_logged", lambda *_: 1)
+    shutil.rmtree(cache / "artifacts")
+    assert dev.main(["build", "--sets", "identical", "--cache", str(cache), "--evidence",
+                     str(tmp_path / "evidence2")]) == 1
+    assert json.loads((cache / dev.CALIBRATION_FILE).read_text())["seconds_per_3m_updates"] == 99.0
