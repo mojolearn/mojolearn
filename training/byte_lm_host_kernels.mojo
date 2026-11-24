@@ -105,8 +105,8 @@ from transformer.checks.transformer_oracle import RopeTable, refuse_nonfinite
 # TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (opt-in arm, EXP:2246 PENDING, never run; owner elsewhere) folded to False
 # 2026-11-15 by lane/expdel2-31-neural (the serial S1 fold stays); code recoverable at 3393bec2de.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.expdel2-31-neural.patch
-# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #6 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history).
-from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
+# TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (NOISE: A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, 3 cells 0.96..0.99, all SAME) deleted 2026-11-24 by lane/ab-outcome-2 (ab2-ngemm); code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_NORM_FIXED_LANES.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 
@@ -538,15 +538,9 @@ def rms_norm_fast(x: List[Float32], wnorm_flushed: List[Float32], m: Int, dm: In
     for t in range(m):
         var base = t * dm
         var acc = Float32(0.0)
-        comptime if IDN_NORM_FIXED_LANES:
-            # MOJOLEARN_IDN_NORM_FIXED_LANES: S1 as the fixed 32-lane fold,
-            # the device cells' and the oracle's bits
-            var xr = rebind[MutPointer[Float32, MutAnyOrigin]](xp)
-            acc = nfl_dot(xr, xr, base, base, dm)
-        else:
-            for j in range(dm):
-                var xj = ftz(xp.unsafe_load(base + j))
-                acc = ftz(identical_mul_add(xj, xj, acc))
+        for j in range(dm):
+            var xj = ftz(xp.unsafe_load(base + j))
+            acc = ftz(identical_mul_add(xj, xj, acc))
         var mean = ftz(identical_div(acc, Float32(dm)))
         var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
         var rv = F32V(rstd)

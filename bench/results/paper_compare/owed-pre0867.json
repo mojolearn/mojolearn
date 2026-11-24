@@ -312,8 +312,9 @@
   },
   "norm-fixed-lanes-on": {
    "define": "MOJOLEARN_IDN_NORM_FIXED_LANES",
-   "status": "define in code (transformer/experiments/norm_fixed_lanes.mojo IDN_NORM_FIXED_LANES, restored 2026-11-15 by lane restore-run-arms-neural): B = RMSNorm / LayerNorm statistics and the norm-backward dot as one 32-lane cell per row (shuffle tree, chain depth d -> d/32 + 5) on every column; A = the one-thread serial row chain",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2): NOISE (L40S 3 cells, median 0.96, 0.96..0.99, all SAME: lm-forward 20.66 -> 20.39, lm-train-step 35.19 -> 33.90, transformer-forward 2.18 -> 2.10 ms); A (the one-thread row chain, the default) is unchanged; removed: transformer/experiments/norm_fixed_lanes.mojo and every reader's arm; the define is refused (core/experiment_guards_neural.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_NORM_FIXED_LANES.ab-outcome-2.patch. Was: define in code (transformer/experiments/norm_fixed_lanes.mojo IDN_NORM_FIXED_LANES, restored 2026-11-15 by lane restore-run-arms-neural): B = RMSNorm / LayerNorm statistics and the norm-backward dot as one 32-lane cell per row (shuffle tree, chain depth d -> d/32 + 5) on every column; A = the one-thread serial row chain",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "lg-block-scratch-fill": {
    "define": "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF",
