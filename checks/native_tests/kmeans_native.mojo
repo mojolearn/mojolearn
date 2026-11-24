@@ -139,25 +139,53 @@ comptime FIT_LOOP_RESTARTS = 2
 
 
 def fit_loop_case(driver: KMeansNativeDriver) raises:
-    """A capped fit with the shift stop off (tol 0: the strict `shift < tol`
-    never holds) runs exactly FIT_LOOP_CAP Lloyd steps per restart; the
-    fit loop reports them summed over the restarts, `n_iter` reports the
-    kept restart as cuVS does (max_iter + 1 on exhaustion). Random seeding
-    (init 1), because an explicit start collapses the restarts to one."""
+    """The fit loop counts the executed Lloyd steps, summed over the restarts.
+
+    `tol` must be positive (`KMeansParams.validate`, cuVS `RAFT_EXPECTS` at
+    `detail/kmeans.cuh:825-835`: "invalid parameter (tol<=0)"), so the two
+    stopping rules are pinned with valid tolerances instead of tol 0:
+
+    1. Exhaustion: one explicit start (INIT_ARRAY, which runs one restart) on
+       the points x = 0..9 from centers (0, 1). The first three Lloyd steps
+       move the centers to (0, 5), (1, 6), (1.5, 6.5): squared shifts 16, 2
+       and 0.5, all far above tol 1e-4, and no point sits on a midpoint.
+       So the fit runs FIT_LOOP_CAP steps, `n_iter` is max_iter + 1 (cuVS),
+       and the loop reports FIT_LOOP_CAP steps.
+    2. Restarts: random seeding (init 1) with FIT_LOOP_RESTARTS restarts and
+       tol 1e30, above any squared shift of these rows. KMeans fits never
+       take the lazy shift read, so every restart stops at its first step:
+       `n_iter` is 1 and the loop reports one step per restart."""
+    var line = List[Float32](length=20, fill=Float32(0.0))
+    for i in range(10):
+        line[2 * i] = Float32(i)
+    var start: List[Float32] = [0.0, 0.0, 1.0, 0.0]
+    var line_labels = List[UInt32](length=10, fill=UInt32(99))
+    var capped = driver.fit(KMeansFitRequest(Int(line.unsafe_ptr()), Int(start.unsafe_ptr()),
+        Int(line_labels.unsafe_ptr()), Int(line.unsafe_ptr()), 0, 10, 2, 2, 0, FIT_LOOP_CAP, 7,
+        1, 2, 0, True, 1e-4, 0.0, KMeansFoldStore()))
+    _ = line
+    _ = start
+    _ = line_labels
+    require(capped.finite == 0 and capped.range_error == 0, "capped fit status")
+    require(capped.loop.recorded, "a fit records its loop")
+    require(capped.iterations == FIT_LOOP_CAP + 1, "n_iter on exhaustion is max_iter + 1 (cuVS)")
+    require(capped.loop.iterations == FIT_LOOP_CAP, "an exhausted fit reports max_iter Lloyd steps")
+    require(capped.loop.loop_ns >= 0 and capped.loop.milliseconds() >= 0.0, "fit loop time is not negative")
+
     var source: List[Float32] = [-1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 9.0, 0.0, 10.0, 0.0, 11.0, 0.0]
     var centers = List[Float32](length=4, fill=Float32(0.0))
     var labels = List[UInt32](length=6, fill=UInt32(99))
     var result = driver.fit(KMeansFitRequest(Int(source.unsafe_ptr()), Int(centers.unsafe_ptr()),
         Int(labels.unsafe_ptr()), Int(source.unsafe_ptr()), 0, 6, 2, 2, 0, FIT_LOOP_CAP, 7,
-        FIT_LOOP_RESTARTS, 1, 0, True, 0.0, 0.0, KMeansFoldStore()))
+        FIT_LOOP_RESTARTS, 1, 0, True, 1e30, 0.0, KMeansFoldStore()))
     _ = source
     _ = centers
     _ = labels
     require(result.finite == 0 and result.range_error == 0, "fit loop fit status")
     require(result.loop.recorded, "a fit records its loop")
-    require(result.iterations == FIT_LOOP_CAP + 1, "n_iter on exhaustion is max_iter + 1 (cuVS)")
-    require(result.loop.iterations == FIT_LOOP_CAP * FIT_LOOP_RESTARTS,
-        "fit loop iterations are the capped Lloyd steps summed over the restarts")
+    require(result.iterations == 1, "n_iter is the kept restart's converged step")
+    require(result.loop.iterations == FIT_LOOP_RESTARTS,
+        "fit loop iterations are the executed Lloyd steps summed over the restarts")
     require(result.loop.loop_ns >= 0 and result.loop.milliseconds() >= 0.0, "fit loop time is not negative")
 
 
