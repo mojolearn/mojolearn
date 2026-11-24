@@ -2294,14 +2294,20 @@ def _mani_x(call: _Call, mut run: MRun, k: Int) raises -> Int:
     """`_mani_x`: the caller's X admitted into the kit (`from_snapshot`). Under a row index on the store route
     (THE RESIDENT ROUTE note): with a scope and a pin the fold is taken ON THE DEVICE and the fresh pool id is
     handed to the run (`adopt`: no upload; the run frees it at close unless the state keeps it, as Isomap keeps
-    _fit_X); without a pin the fold gathered on the host cores goes up as the whole X did. Without an index the
-    whole X goes up as before (a scope's resident X is the cache's, never handed to a run)."""
-    if call[].row_index.rows == 0:
+    _fit_X); without a pin the fold gathered on the host cores goes up as the whole X did. Without an index
+    (lane vdf-scope-neural4): on the store route with a scope and a pin the whole X is the scope's cached copy
+    (put ONCE for every candidate of the search) and the run takes a device-to-device copy of it
+    (`MRun.adopt_copy`: the cache keeps its own id, a state may keep the copy); otherwise the whole X goes up as
+    before."""
+    if call[].row_index.rows == 0 and not seq_rows_route(call[].route):
         return run.from_snapshot(k, call[].x.data, call[].x.rows, call[].x.cols, 2, "X")
     var held = member_rows_open(call, 0, String("manifold"), String(XDECOMP_STORE_PREFIX))
     try:
         if held.x >= 0:
             return run.from_snapshot(k, held.x, held.n, held.d, 2, "X")
+        if held.taken < 0:
+            # the scope cache's id (no row index): copied on the device, never handed over
+            return run.adopt_copy(k, -(held.x + 1), held.n, held.d, "X")
         var m = run.adopt(k, held.taken, held.n, held.d, "X")
         held.taken = -1  # the run owns the fold's id from here (adopt raised before taking it, or took it)
         return m
