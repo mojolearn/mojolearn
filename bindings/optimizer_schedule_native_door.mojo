@@ -35,7 +35,8 @@ from bindings.optimizer_keys_unpack import (
     OPTIMIZER_OPN_SCHEDULE_SPEC,
     OPTIMIZER_OPN_SCHEDULE_VALUES,
 )
-from bindings.py_balanced import py_item
+from bindings.py_balanced import py_item, py_get
+from bindings.schedule_device_unpack import schedule_device_item, schedule_device_admit
 
 
 def schedule_kind(owner: PythonObject, context: PythonObject) raises -> Int:
@@ -101,7 +102,11 @@ def schedule_construct(owner: PythonObject, values: PythonObject, context: Pytho
     var kind = schedule_kind(owner, context)
     var fields = py_fields(owner)
     var nk = optimizer_keys()
-    var label = String(py=py_call(py_item(context, nk[].k_type_name), py_type(owner))) + ": "
+    var name = String(py=py_call(py_item(context, nk[].k_type_name), py_type(owner)))
+    var label = name + ": "
+    # lane vdf-sched: `device` rides last; admitted once here, before the
+    # settings are read (bindings/schedule_device_unpack.mojo).
+    schedule_device_admit(owner, schedule_device_item(values, kind), name, context)
     if kind < 3:
         var spec = _warmup_unpack(kind, values[0], values[1], values[2], values[3], label, context)
         _warmup_pack(owner, spec)
@@ -141,12 +146,14 @@ def _schedule_arguments(owner: PythonObject, kind: Int) raises -> PythonObject:
     `schedule_construct`'s order for `kind`."""
     var fields = py_fields(owner)
     var nk = optimizer_keys()
+    # the stored `device` word rides last, as the shell passes it (lane vdf-sched)
+    var device = py_get(fields, nk[].k_device)
     if kind < 3:
-        return Python.tuple(py_item(fields, nk[].k_peak_lr), py_item(fields, nk[].k_warmup_steps), py_item(fields, nk[].k_total_steps), py_item(fields, nk[].k_min_lr))
+        return Python.tuple(py_item(fields, nk[].k_peak_lr), py_item(fields, nk[].k_warmup_steps), py_item(fields, nk[].k_total_steps), py_item(fields, nk[].k_min_lr), device)
     if kind < 5:
-        return Python.tuple(py_item(fields, nk[].k_base_lr), py_item(fields, nk[].k_step_size) if kind == 3 else PythonObject(1), py_item(fields, nk[].k_gamma))
+        return Python.tuple(py_item(fields, nk[].k_base_lr), py_item(fields, nk[].k_step_size) if kind == 3 else PythonObject(1), py_item(fields, nk[].k_gamma), device)
     return Python.tuple(py_item(fields, nk[].k_max_lr), py_item(fields, nk[].k_total_steps), py_item(fields, nk[].k_pct_start), py_item(fields, nk[].k_anneal_strategy),
-                        py_item(fields, nk[].k_div_factor), py_item(fields, nk[].k_final_div_factor), py_item(fields, nk[].k_three_phase))
+                        py_item(fields, nk[].k_div_factor), py_item(fields, nk[].k_final_div_factor), py_item(fields, nk[].k_three_phase), device)
 
 
 def _schedule_rebind(owner: PythonObject, name: PythonObject, context: PythonObject) raises:
@@ -255,7 +262,12 @@ def schedule_run(operation: Int, owner: PythonObject, values: PythonObject, cont
         var target = py_fields(owner)
         _ = target.update(restored)
         opt_schedule(owner, context)
-        schedule_bind_block(owner, schedule_kind(owner, context), context)
+        var restored_kind = schedule_kind(owner, context)
+        # lane vdf-sched: a restored `device` word is admitted where it is given,
+        # as the constructor admits it (absent in a state saved before it existed)
+        schedule_device_admit(owner, py_get(target, nk[].k_device),
+                              String(py=py_call(py_item(context, nk[].k_type_name), py_type(owner))), context)
+        schedule_bind_block(owner, restored_kind, context)
         return PythonObject(None)
     opt_schedule(owner, context)
     var kind = schedule_kind(owner, context)

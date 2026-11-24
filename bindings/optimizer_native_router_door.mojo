@@ -12,6 +12,7 @@ from bindings.samba_head_native_unpack import training_samba_head_loss
 from bindings.training_function_device_unpack import training_function_op, training_function_device, training_entries_cpu
 from core.function_device import function_device_default
 from providers.python.function_device_boundary_door import function_device_admit
+from bindings.schedule_device_unpack import schedule_device_agrees
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
@@ -377,6 +378,8 @@ def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonO
     refuse_kwargs(values[13], where)
     var device = values[14] if len(values) == 15 else PythonObject(None)
     var host = optimizer_device_host(device, values[0], mode, where, context)
+    # lane vdf-sched: a schedule built for the other side is refused here, once
+    schedule_device_agrees(values[9], device, "mojolearn." + where)
     optimizer_profile(context)
     var start = optimizer_constructor_start(kind, values[3], values[6], values[7], values[8], values[10], values[11], context)
     opt_scalar(mode, context)
@@ -500,6 +503,7 @@ def optimizer_set_params(owner: PythonObject, updates: PythonObject, context: Py
     var device = updates[PythonObject("device")] if py_contains(updates, PythonObject("device")) else py_get(fields, nk[].k_device)
     var where = String("SGD") if kind == 0 else (String("Adam") if kind == 1 else String("AdamW"))
     var host = optimizer_device_host(device, params, mode, where, context)
+    schedule_device_agrees(schedule, device, "mojolearn." + where)
     optimizer_profile(context)
     var momentum = optimizer_parameter_value(updates, fields, "momentum") if kind == 0 else PythonObject(None)
     var dampening = optimizer_parameter_value(updates, fields, "dampening") if kind == 0 else PythonObject(None)

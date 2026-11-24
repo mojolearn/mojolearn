@@ -57,7 +57,7 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.samba_state_native_door import samba_fields, samba_snapshot, samba_validate_state, samba_from_state, samba_publish, samba_apply_gradients_from_state
 from bindings.samba_training_native_door import samba_gradients, samba_gradients_from_state
-from bindings.generator_state_native_pack import generator_init, generator_snapshot, generator_restore, generator_next
+from bindings.generator_state_native_pack import generator_construct, generator_snapshot, generator_restore, generator_next
 from bindings.samba_construct_native_pack import samba_construct, samba_load_weights, samba_parameters
 from bindings.samba_step_native_door import samba_train_step
 from bindings.samba_inference_native_door import samba_forward, samba_allocate, samba_loss, samba_state_construct
@@ -339,7 +339,9 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         elif operation == SAMBA_OPN_PARAMETERS:
             result = torch_parameter_form(samba_parameters(values[0]), Int(py=values[1]) if len(values) > 1 else 0)
         elif operation == SAMBA_OPN_GENERATOR_INIT:
-            result = generator_init(values[0], values[1], values[2])
+            # lane vdf-sched: `device` rides fourth (python/mojolearn/_training_impl.py Generator)
+            result = generator_construct(values[0], values[1], values[2],
+                                         values[3] if len(values) > 3 else PythonObject(None), context)
         elif operation == SAMBA_OPN_GENERATOR_SNAPSHOT:
             result = generator_snapshot(values[0])
         elif operation == SAMBA_OPN_GENERATOR_RESTORE:

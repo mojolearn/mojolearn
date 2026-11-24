@@ -18,6 +18,7 @@ from std.memory import unsafe_memcpy
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array
 from bindings.generator_state_native_unpack import generator_fields
 from bindings.generator_state_native_pack import generator_init, generator_validate
+from bindings.schedule_device_unpack import schedule_device_agrees
 from bindings.samba_state_native_door import samba_fields, samba_view, _samba_registry, samba_build_blocks, samba_schedule_snapshot
 from bindings.samba_route_unpack import samba_route_process, samba_device_admit
 from bindings.causal_lm_construct_door import _model_f32, _model_shape
@@ -143,6 +144,8 @@ def samba_construct(model: PythonObject, args: PythonObject, context: PythonObje
     if accumulation < 1 or (accumulation & (accumulation - 1)) != 0:
         raise Error("SambaStack: accumulation_steps must be a power of two >= 1")
     _ = samba_schedule_snapshot(args[7], context)
+    # lane vdf-sched: a schedule built for the other side is refused, once
+    schedule_device_agrees(args[7], args[11], "mojolearn.SambaStack")
     var registry = _samba_registry(config)
     var last = registry[len(registry) - 1]
     var n = Int(py=last["offset"]) + Int(py=last["size"])
