@@ -74,7 +74,7 @@ def fa_fit(model: PythonObject, source: PythonObject, context: PythonObject) rai
     var loop_ns = List[Int](length=1, fill=0)
     var request = FAFitRequest(_address(x), _address(psi0), _address(components), _address(psi), _address(mean),
                                Int(ll.unsafe_ptr()), n, d, nc, max_iter, code, decomp_float(fields["tol"]),
-                               Int(loop_ns.unsafe_ptr()))
+                               Int(loop_ns.unsafe_ptr()), -1)
     var it = 0
     with GILReleased(Python()):
         it = fa_fit_call(entry, request)
@@ -149,7 +149,7 @@ def fa_query(model: PythonObject, source: PythonObject, op: Int, context: Python
         out = decomp_f32(Python.tuple(n), context)
     var spare = _address(w)
     var request = FAQueryRequest(op, _address(x.value()) if Bool(x) else spare, spare, _address(psi),
-                                 _address(mean), _address(out.value()) if Bool(out) else spare, n, d, nc)
+                                 _address(mean), _address(out.value()) if Bool(out) else spare, n, d, nc, -1)
     var value = Float64(0.0)
     with GILReleased(Python()):
         value = fa_query_call(entry, request)

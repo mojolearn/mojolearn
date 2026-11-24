@@ -46,6 +46,7 @@ struct ICAFitRequest(Copyable, Movable):
     var alpha: Float64
     var tol: Float64
     var loop_out: Int      # 0, or one int64: the fixed-point loop's nanoseconds (`fit_loop_`)
+    var source_pool: Int   # X's resident pool id (`source` unread), -1: X is `source` (lane vdf-scope-neural3)
 
 
 @fieldwise_init
@@ -59,6 +60,7 @@ struct ICAProjectRequest(Copyable, Movable):
     var width: Int
     var matrix_rows: Int
     var whiten: Bool
+    var source_pool: Int   # X's resident pool id (`source` unread), -1: X is `source` (lane vdf-scope-neural3)
 
 
 @fieldwise_init
@@ -76,6 +78,7 @@ struct FAFitRequest(Copyable, Movable):
     var rotation: Int      # 0 None, 1 varimax, 2 quartimax
     var tol: Float64
     var loop_out: Int      # 0, or one int64: the EM loop's nanoseconds (`fit_loop_`)
+    var source_pool: Int   # X's resident pool id (`source` unread), -1: X is `source` (lane vdf-scope-neural3)
 
 
 @fieldwise_init
@@ -89,6 +92,7 @@ struct FAQueryRequest(Copyable, Movable):
     var rows: Int
     var features: Int
     var count: Int
+    var source_pool: Int   # X's resident pool id (`source` unread), -1: X is `source` (lane vdf-scope-neural3)
 
 
 @fieldwise_init
@@ -162,8 +166,8 @@ struct RPProjectRequest(Copyable, Movable):
 def ica_fit_call(entry: EntryRef, r: ICAFitRequest) raises -> Int:
     """FastICA fit / fit_transform; returns n_iter_."""
     var a: Array[Int, 8] = [r.source, r.w_init, r.components, r.mixing, r.whitening, r.mean, r.sources, r.loop_out]
-    var p: Array[Int, 9] = [r.rows, r.features, r.count, r.whiten, r.seed, r.algorithm, r.fun, r.max_iter,
-        Int(r.project)]
+    var p: Array[Int, 10] = [r.rows, r.features, r.count, r.whiten, r.seed, r.algorithm, r.fun, r.max_iter,
+        Int(r.project), r.source_pool]
     var f: Array[Float64, 2] = [r.alpha, r.tol]
     return entry_ref_call(entry, XD_ICA_FIT, a, p, f)
 
@@ -171,7 +175,7 @@ def ica_fit_call(entry: EntryRef, r: ICAFitRequest) raises -> Int:
 def ica_project_call(entry: EntryRef, r: ICAProjectRequest) raises:
     """FastICA transform or inverse_transform."""
     var a: Array[Int, 4] = [r.source, r.matrix, r.mean, r.dst]
-    var p: Array[Int, 5] = [Int(r.inverse), r.rows, r.width, r.matrix_rows, Int(r.whiten)]
+    var p: Array[Int, 6] = [Int(r.inverse), r.rows, r.width, r.matrix_rows, Int(r.whiten), r.source_pool]
     var f: Array[Float64, 0] = []
     _ = entry_ref_call(entry, XD_ICA_PROJECT, a, p, f)
 
@@ -179,7 +183,7 @@ def ica_project_call(entry: EntryRef, r: ICAProjectRequest) raises:
 def fa_fit_call(entry: EntryRef, r: FAFitRequest) raises -> Int:
     """FactorAnalysis fit; returns n_iter_."""
     var a: Array[Int, 7] = [r.source, r.psi0, r.components, r.noise, r.mean, r.loglike, r.loop_out]
-    var p: Array[Int, 5] = [r.rows, r.features, r.count, r.max_iter, r.rotation]
+    var p: Array[Int, 6] = [r.rows, r.features, r.count, r.max_iter, r.rotation, r.source_pool]
     var f: Array[Float64, 1] = [r.tol]
     return entry_ref_call(entry, XD_FA_FIT, a, p, f)
 
@@ -188,7 +192,7 @@ def fa_query_call(entry: EntryRef, r: FAQueryRequest) raises -> Float64:
     """A fitted FactorAnalysis query; returns the score (operation 4), else 0."""
     var value: Array[Float64, 1] = [0.0]
     var a: Array[Int, 6] = [r.source, r.components, r.noise, r.mean, r.dst, Int(value.unsafe_ptr())]
-    var p: Array[Int, 4] = [r.operation, r.rows, r.features, r.count]
+    var p: Array[Int, 5] = [r.operation, r.rows, r.features, r.count, r.source_pool]
     var f: Array[Float64, 0] = []
     _ = entry_ref_call(entry, XD_FA_QUERY, a, p, f)
     var answer = value[0]

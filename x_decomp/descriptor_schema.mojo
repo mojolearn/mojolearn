@@ -301,14 +301,16 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
         return (2, 4, 0)
     if op == XD_R_SIGNS:
         return (2, 1, 0)
+    # The last int word of ICA_FIT, ICA_PROJECT, FA_FIT and FA_QUERY (lane vdf-scope-neural3): X's resident pool
+    # id (a fold the XDecomp member took on the device), -1: X is a[0].
     if op == XD_ICA_FIT:
-        return (8, 9, 2)
+        return (8, 10, 2)
     if op == XD_ICA_PROJECT:
-        return (4, 5, 0)
+        return (4, 6, 0)
     if op == XD_FA_FIT:
-        return (7, 5, 1)
+        return (7, 6, 1)
     if op == XD_FA_QUERY:
-        return (6, 4, 0)
+        return (6, 5, 0)
     if op == XD_LDA:
         return (9, 13, 7)
     if op == XD_RP_FIT:
