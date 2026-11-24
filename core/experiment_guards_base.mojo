@@ -234,6 +234,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF"](), "removed 2026-11-23 (lane/ab-prep-classical, decided from A/B round 3 NVIDIA L40S host 2ef132a6de04, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, scores and digests equal: learning-curve istella 0.853, taxi 0.956 of the old form; EXP:4557): the once-per-unit test gather is gone; code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF.patch"
     # ---- end lane ab-prep-classical
+    # ---- lane ab-outcome-3 / o3-prep (2026-11-24)
+    # TOMBSTONE: MOJOLEARN_XPREP_FAST_PT_INTERLEAVE (NOISE/LOSER: NV L40S 4 cells, median 1.02, 1.01..1.03) deleted 2026-11-24 by lane/o3-prep (lane ab-outcome-3); code recoverable at c23cb55fda.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_INTERLEAVE.ab-outcome-3.patch
+    comptime assert not is_defined["MOJOLEARN_XPREP_FAST_PT_INTERLEAVE"](), "removed 2026-11-24 (lane/o3-prep of ab-outcome-3, A/B nvc-ab-20261124T115722Z-d8f8b2 NVIDIA L40S, wheel 4519097d380a, job nvc1-0003, one run per arm): XPREP_FAST_PT_INTERLEAVE (one row's speculated PowerTransformer candidates side by side in T) was NOISE/LOSER: power-transformer istella and taxi fit and infer, 4 cells, median 1.02, 1.01..1.03; the contiguous layout is the only one; code at c23cb55fda; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_INTERLEAVE.ab-outcome-3.patch"
+    # ---- end lane ab-outcome-3 / o3-prep
     return True
 
 

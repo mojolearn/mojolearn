@@ -648,30 +648,19 @@ def pt_spts_unit(t: Int, f: FP, q: IP):
 
 
 def pt_smap_unit(t: Int, f: FP, q: IP):
-    """q = [X, n, d, METHOD, SPL, M, T, LG, IL]; `pt_map_unit`'s word at
-    candidate j's point for row i of column c. IL = 0: each candidate's
-    column contiguous, T[(c*M + j)*n + i], t = (c*M + j)*n + i; IL = 1: one
-    row's candidates side by side, T[(c*n + i)*M + j], t = (i*d + c)*M + j
-    (MOJOLEARN_XPREP_PT_INTERLEAVE; the same words either way)."""
+    """q = [X, n, d, METHOD, SPL, M, T, LG]; `pt_map_unit`'s word at
+    candidate j's point for row i of column c, each candidate's column
+    contiguous: T[(c*M + j)*n + i], t = (c*M + j)*n + i."""
+    # TOMBSTONE: MOJOLEARN_XPREP_FAST_PT_INTERLEAVE (NOISE/LOSER: NV L40S 4 cells, median 1.02, 1.01..1.03) deleted 2026-11-24 by lane/o3-prep (lane ab-outcome-3); code recoverable at c23cb55fda.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_INTERLEAVE.ab-outcome-3.patch
     var n = p(q, 1)
     var d = p(q, 2)
     var M = p(q, 5)
-    var i: Int
-    var c: Int
-    var j: Int
-    var o: Int
-    if p(q, 8) != 0:
-        j = t % M
-        var r = t // M
-        c = r % d
-        i = r // d
-        o = p(q, 6) + (c * n + i) * M + j
-    else:
-        i = t % n
-        var cj = t // n
-        j = cj % M
-        c = cj // M
-        o = p(q, 6) + t
+    var i = t % n
+    var cj = t // n
+    var j = cj % M
+    var c = cj // M
+    var o = p(q, 6) + t
     var x = ld(f, p(q, 0) + i * d + c)
     if is_nan(x):
         f.unsafe_store(o, canonical_nan())
@@ -682,8 +671,8 @@ def pt_smap_unit(t: Int, f: FP, q: IP):
 
 
 def pt_sfold_unit(t: Int, f: FP, q: IP):
-    """q = [X, n, d, METHOD, T, M, STATE, SPL, VALS, FIRST, IL]; t = c*M + j
-    (IL: `pt_smap_unit`'s layout of T).
+    """q = [X, n, d, METHOD, T, M, STATE, SPL, VALS, FIRST]; t = c*M + j
+    (`pt_smap_unit`'s layout of T: candidate j's transforms contiguous).
     VALS[t] = the negative log-likelihood at candidate j's point, folded as
     `pt_fold_unit` folds it and finished as `pt_finish` computes it. FIRST
     (the starting round) also folds sum J and the non-NaN count from X, which
@@ -704,12 +693,11 @@ def pt_sfold_unit(t: Int, f: FP, q: IP):
     var sj = Float32(0)
     if not first:
         sj = raw(f, S + 8)
-    # candidate j's transforms: stride M (IL) or contiguous
-    var Tc = p(q, 4) + c * n * M + j
-    var ts = M
-    if p(q, 10) == 0:
-        Tc = p(q, 4) + t * n
-        ts = 1
+    # TOMBSTONE: MOJOLEARN_XPREP_FAST_PT_INTERLEAVE (NOISE/LOSER: NV L40S 4 cells, median 1.02, 1.01..1.03) deleted 2026-11-24 by lane/o3-prep (lane ab-outcome-3); code recoverable at c23cb55fda.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_INTERLEAVE.ab-outcome-3.patch
+    # candidate j's transforms: contiguous
+    var Tc = p(q, 4) + t * n
+    var ts = 1
     var full = n - n % RUN
     if first:
         for i0 in range(0, full, RUN):

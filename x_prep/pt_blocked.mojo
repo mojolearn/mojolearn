@@ -50,24 +50,17 @@ from x_prep.blocked import _span
 comptime IDN_PT_BLOCKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
+# TOMBSTONE: MOJOLEARN_XPREP_FAST_PT_INTERLEAVE (NOISE/LOSER: NV L40S 4 cells, median 1.02, 1.01..1.03) deleted 2026-11-24 by lane/o3-prep (lane ab-outcome-3); code recoverable at c23cb55fda.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_INTERLEAVE.ab-outcome-3.patch
 @always_inline
-def _t_base(T: Int, n: Int, M: Int, c: Int, j: Int, il: Int) -> Int:
+def _t_base(T: Int, n: Int, M: Int, c: Int, j: Int) -> Int:
     """Candidate j of column c: the offset of its row 0 transform
-    (`pt_smap_unit`'s layouts; row i is `_t_stride` words further each)."""
-    if il != 0:
-        return T + c * n * M + j
+    (`pt_smap_unit`'s layout; row i is the next word)."""
     return T + (c * M + j) * n
 
 
-@always_inline
-def _t_stride(M: Int, il: Int) -> Int:
-    if il != 0:
-        return M
-    return 1
-
-
 def ptb_part1_unit(t: Int, f: FP, q: IP):
-    """q = [X, n, d, METHOD, T, M, STATE, PS, PC, PJ, nb, FIRST, IL];
+    """q = [X, n, d, METHOD, T, M, STATE, PS, PC, PJ, nb, FIRST];
     t = (b*d + c)*M + j. Over the block's rows ascending from zero, as
     `pt_fold_unit`'s first pass takes a row: PS[t] = the sum of candidate
     j's transforms and PC[t] = the rows taken (FIRST != 0: the rows whose X
@@ -89,9 +82,7 @@ def ptb_part1_unit(t: Int, f: FP, q: IP):
     if raw(f, S + 7) != Float32(0):
         return
     var first = p(q, 11) != 0
-    var il = p(q, 12)
-    var Tc = _t_base(p(q, 4), n, M, c, j, il)
-    var ts = _t_stride(M, il)
+    var Tc = _t_base(p(q, 4), n, M, c, j)
     var r = _span(b, n)
     var cnt = 0
     var sm = Float32(0)
@@ -102,7 +93,7 @@ def ptb_part1_unit(t: Int, f: FP, q: IP):
             var x = ld(f, X + i * d + c)
             if is_nan(x):
                 continue
-            sm = add(sm, raw(f, Tc + i * ts))
+            sm = add(sm, raw(f, Tc + i))
             if want_j:
                 if method == 1:
                     sj = add(sj, logf(x))
@@ -117,7 +108,7 @@ def ptb_part1_unit(t: Int, f: FP, q: IP):
         # the starting round counted n rows (STATE[9]): no NaN row, every word is added untested
         var no_nan = ldi(f, S + 9) == n
         for i in range(r[0], r[1]):
-            var tv = raw(f, Tc + i * ts)
+            var tv = raw(f, Tc + i)
             if not no_nan and is_nan(tv):
                 continue
             sm = add(sm, tv)
@@ -160,7 +151,7 @@ def ptb_mean_unit(t: Int, f: FP, q: IP):
 
 
 def ptb_part2_unit(t: Int, f: FP, q: IP):
-    """q = [T, n, d, M, STATE, MEAN, CNT, PSS, nb, IL]; t = (b*d + c)*M + j.
+    """q = [T, n, d, M, STATE, MEAN, CNT, PSS, nb]; t = (b*d + c)*M + j.
     Over the block's rows ascending from zero, as `pt_fold_unit`'s second
     pass takes a row (every row when CNT == n, else the rows whose transform
     is not NaN): PSS[t] = the sum of (T - MEAN)^2; zero when CNT == 0."""
@@ -175,20 +166,18 @@ def ptb_part2_unit(t: Int, f: FP, q: IP):
     var S = p(q, 4) + c * PT_STATE
     if raw(f, S + 7) != Float32(0):
         return
-    var il = p(q, 9)
-    var Tc = _t_base(p(q, 0), n, M, c, j, il)
-    var ts = _t_stride(M, il)
+    var Tc = _t_base(p(q, 0), n, M, c, j)
     var cnt = ldi(f, p(q, 6) + u)
     var mean = raw(f, p(q, 5) + u)
     var r = _span(b, n)
     var ss = Float32(0)
     if cnt == n and n > 0:
         for i in range(r[0], r[1]):
-            var e = sub(raw(f, Tc + i * ts), mean)
+            var e = sub(raw(f, Tc + i), mean)
             ss = add(ss, mul(e, e))
     elif cnt > 0:
         for i in range(r[0], r[1]):
-            var tv = raw(f, Tc + i * ts)
+            var tv = raw(f, Tc + i)
             if is_nan(tv):
                 continue
             var e = sub(tv, mean)
