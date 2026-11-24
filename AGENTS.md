@@ -378,9 +378,11 @@ Candidate evaluation (Andrew, 2026-11-24; replaces the 2026-10-06 end-to-end rul
   promoted as built: fix the losing condition, or delete it; a route rule keyed on the input's shape is the last
   resort, derived from cost and timed at shapes in between. No route is ever picked at run time by timing two
   alternatives (the choice must be the same on every vendor and every run).
-- **No full end-to-end confirmation run (Andrew: "crazy overkill").** The capped-iteration verdict promotes or
-  deletes. Quality and the output hash are compared at the cap, on the same executed iterations of both arms; a
-  quality drop is a regression as always.
+- **No full end-to-end confirmation run by default (Andrew: "crazy overkill"; "if the final run is good and needed,
+  maybe keep").** The capped-iteration verdict promotes or deletes. The output hash and quality are compared at the
+  cap, on the same executed iterations of both arms. When the hashes are equal the arm computes the same thing and
+  nothing more is run. Only an arm that would be promoted AND whose output differs from the base at the cap gets one
+  full run of both arms, for the final quality: a quality drop is a regression as always.
 - **Where the cap is not valid** (the per-iteration cost changes as the fit proceeds: trees growing deeper, solvers
   whose work depends on convergence, anything with no iteration to count), the cell times the whole operation on the
   full dataset as before, and the cell says so. Small datasets, synthetic substitutes and component timings remain
