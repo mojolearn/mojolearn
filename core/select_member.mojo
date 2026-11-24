@@ -55,8 +55,16 @@ SelectKBest views: y is required: f_classif / chi2 read int32 class codes
 those kinds), f_regression / r_regression a float32 target (rows x 1).
 
 Views: X dense row-major host float32 (NaN allowed, as the estimator allows
-it); no y (ignored), no sample weights (refused), no row or column index,
-no device-home view. The transform width is the kept column count: known
+it); no y (ignored), no sample weights (refused), no column index, no
+device-home view. ROW INDEX and SCOPE (lane vdf-scope-neural; answered only on
+a route that puts X, gathers rows on the device and has device scratch,
+`_gathers`): `call.row_index` a dense host int32 / int64 vector of rows of
+the WHOLE X; the whole X is put (or found resident in the caller's scope,
+THE PIN RULE: `call.pin_kept` written when the scope's cache takes the pin)
+and the fold taken on the device, exactly the Prep member's record rule
+(core/prep_member.mojo `_x_record`; on any other route the same call
+gathers the fold on the host). SelectKBest's `y` is then the whole X's
+target and the fold's words are taken on the host (n words, row tasks). The transform width is the kept column count: known
 after the fit only (OUTPUTS before a state refuses in words).
 `call.fit_output = MEMBER_OP_TRANSFORM` fits, then gathers the kept columns.
 
@@ -80,8 +88,12 @@ from std.memory import unsafe_memcpy, bitcast
 from bindings.x_prep_native_owner_run import XprepRunInput
 from x_prep.prep_stateless_native_run import PrepLayout, OP_GATHER_COLS, _variance_program, _place_scratch
 from core.preprocessing_program import prep_program_stage as _stage
-from core.prep_member import _execute as prep_execute, _x_input as prep_x_input, PREP_ROUTE_OUT, PREP_ROUTE_SCRATCH
-from core.prep_member import _enc_run as prep_enc_run
+from core.prep_member import _execute as prep_execute, PREP_ROUTE_OUT, PREP_ROUTE_SCRATCH
+from core.prep_member import PREP_ROUTE_RANGES, PREP_ROUTE_DEV_PUT, PREP_ROUTE_TAKE_ROWS
+from core.prep_member import _enc_run as prep_enc_run, _x_record as prep_x_record, PrepXHeld
+from core.prep_member import _whole as prep_whole, _rows as prep_rows
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.host_zero_arena import HostZeroArena
 from bindings.prep_encode_prog_run import EncProgram
 from bindings.prep_encode_select_run import (
@@ -96,6 +108,7 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_OUTPUTS,
     MEMBER_OP_TRANSFORM, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_TRANSFORM, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
+    MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE, MEMBER_I64,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -265,9 +278,58 @@ def _dense(view: MemberMatrix, what: String, estimator: String) raises:
         raise Error("TypeError: a " + estimator + " member reads " + what + " as a dense host float32 view")
 
 
+def _gathers(flags: Int) -> Bool:
+    """THE RESIDENT ROUTE (lane vdf-scope-neural): the route puts X on the
+    device, gathers a fold's rows there (`x_prep_dev_take_rows`) and runs the
+    range runner with device scratch: the Prep member's device record rule
+    (core/prep_member.mojo `_x_record`). Only there does the kind answer
+    MEMBER_CAN_ROW_INDEX and MEMBER_CAN_SCOPE (read once per call from the
+    route words the caller's UNPACK wrote)."""
+    return ((flags & PREP_ROUTE_DEV_PUT) != 0 and (flags & PREP_ROUTE_RANGES) != 0
+            and (flags & PREP_ROUTE_TAKE_ROWS) != 0 and (flags & (PREP_ROUTE_OUT | PREP_ROUTE_SCRATCH)) != 0)
+
+
 def _whole(call: _Call, estimator: String) raises:
-    if call[].row_index.rows > 0 or call[].column_index.rows > 0:
-        raise Error("TypeError: a " + estimator + " member reads whole host views (no row or column index)")
+    # Every column; a row index is the fold's rows of the WHOLE X
+    # (core/prep_member.mojo `_whole`: a dense host int32 / int64 vector).
+    prep_whole(call, estimator)
+
+
+def _fold_y(call: _Call, n: Int) raises -> List[Int32]:
+    """The target words of the fold's rows (`call.row_index` over the whole
+    X's target, one 4-byte word a row: int32 class codes or float32 values,
+    copied as bytes), bounds-checked, split across the host's workers. The
+    label take the naive Bayes members make (core/naive_bayes_member.mojo
+    `_fit_views`): n words, once per fit; X itself is taken on the device."""
+    var base = call[].y.rows
+    var out = List[Int32](length=max(n, 1), fill=Int32(0))
+    var tasks = host_predict_task_count_work(n, n)
+    var chunk = host_predict_chunk(n, tasks)
+    var bad = List[Int](length=tasks, fill=0)
+    var flags = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(bad.unsafe_ptr()))
+    var wide = call[].row_index.dtype == MEMBER_I64
+    var source = call[].row_index.data
+    var words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=call[].y.data)
+    var into = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(out.unsafe_ptr()))
+
+    def task(worker: Int) {imm chunk, imm n, imm base, imm wide, imm source, imm flags, imm words, imm into}:
+        var begin = worker * chunk
+        var end = min(begin + chunk, n)
+        var out_of_range = 0
+        for r in range(begin, end):
+            var row = Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=source)[r]) if wide else Int(
+                MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=source)[r])
+            if row < 0 or row >= base:
+                out_of_range = 1
+                continue
+            into[r] = words[row]
+        flags[worker] = out_of_range
+
+    host_parallelize(task, tasks)
+    for w in range(tasks):  # driver-loop: over the workers' range flags
+        if bad[w] != 0:
+            raise Error("IndexError: a row index is out of range for y's " + String(base) + " rows")
+    return out^
 
 
 def _fixed5(value: Float64) -> String:
@@ -302,7 +364,7 @@ def _fit_variance(slot: _Slot, call: _Call) raises:
         raise Error("TypeError: a " + estimator + " member takes no sample_weight")
     if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
         member_unsupported(estimator, call[].fit_output)
-    var n = call[].x.rows
+    var n = prep_rows(call)
     var d = call[].x.cols
     var threshold = slot[].words[1]
     var layout = PrepLayout(n * d, slot[].words[3] != 0.0)
@@ -321,9 +383,13 @@ def _fit_variance(slot: _Slot, call: _Call) raises:
     var limit_words = List[Float32](length=2, fill=Float32(0))
     MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(limit_words.unsafe_ptr()))[] = bitcast[DType.uint64](threshold)
     var inputs = List[XprepRunInput](capacity=2)
-    inputs.append(prep_x_input(call, n * d))
+    # X: resident in the caller's scope / the fold taken on the device on a
+    # gathering route, else as before (core/prep_member.mojo `_x_record`).
+    var held = PrepXHeld()
+    inputs.append(prep_x_record(call, 0, n * d, held, False, _gathers(flags)))
     inputs.append(XprepRunInput(limit, 2, Int(limit_words.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
     prep_execute(call, arena, layout.host, layout.scratch, 0, 0, program, inputs)
+    _ = held^  # the fold words X's record addresses live past the run
     _ = limit_words^
     var ap = _F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
     slot[].clear()
@@ -362,15 +428,22 @@ def _fit_kbest(slot: _Slot, call: _Call) raises:
         raise Error("TypeError: a " + estimator + " member takes no sample_weight")
     if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
         member_unsupported(estimator, call[].fit_output)
-    var n = call[].x.rows
+    var n = prep_rows(call)
     var d = call[].x.cols
     var score = Int(slot[].words[1])
     var classif = _classif(slot[].words)
     if not call[].y.dense_host(MEMBER_I32 if classif else MEMBER_F32) or call[].y.cols != 1:
         raise Error("TypeError: a SelectKBest member reads y as one dense host "
                     + ("int32 class-code" if classif else "float32") + " column")
-    if call[].y.rows != n:
+    if call[].y.rows != call[].x.rows:
         raise Error("mojolearn: X and y have different numbers of rows")
+    # Under a row index y is the whole X's target: the fold's words, once.
+    var fold_y = List[Int32]()
+    var y_at = call[].y.data
+    if call[].row_index.rows > 0:
+        fold_y = _fold_y(call, n)
+        y_at = Int(fold_y.unsafe_ptr())
+    var scoped = _gathers(call[].route.flags)
     if classif and call[].classes < 1:
         raise Error("member ABI: a SelectKBest member with a classification score needs call.classes")
     var k = Int(slot[].words[2])
@@ -380,7 +453,8 @@ def _fit_kbest(slot: _Slot, call: _Call) raises:
     var k_ok = keep_all or (0 <= k and k <= d)
     var fam = Int(slot[].words[3])
     if score == SELECT_SCORE_MI_CLASSIF or score == SELECT_SCORE_MI_REGRESSION:
-        _fit_kbest_mi(slot, call, n, d, k, keep_all, k_ok, fam)
+        _fit_kbest_mi(slot, call, n, d, k, keep_all, k_ok, fam, y_at, scoped)
+        _ = len(fold_y)  # the fold's target words live past the runs
         return
     var prog = EncProgram(slot[].words[4] != 0.0)
     var plan = ScorePlan(0, 0, -1)
@@ -393,8 +467,9 @@ def _fit_kbest(slot: _Slot, call: _Call) raises:
     var mo = -1
     if not keep_all and k_ok:
         mo = score_topk_stage(prog, score_at, 0, d, k)
-    var arena = prep_enc_run(call, prog, call[].y.data, 0, False)
+    var arena = prep_enc_run(call, prog, y_at, 0, scoped)
     _ = len(prog.consts_f)  # the program's own input words live past the run
+    _ = len(fold_y)  # the fold's target words live past the run
     var ap = _F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
     if score == SELECT_SCORE_CHI2:
         for j in range(d):  # driver-loop: over the per-column minima (feature metadata)
@@ -421,7 +496,8 @@ def _fit_kbest(slot: _Slot, call: _Call) raises:
         _transform_select(slot, call)
 
 
-def _fit_kbest_mi(slot: _Slot, call: _Call, n: Int, d: Int, k: Int, keep_all: Bool, k_ok: Bool, fam: Int) raises:
+def _fit_kbest_mi(slot: _Slot, call: _Call, n: Int, d: Int, k: Int, keep_all: Bool, k_ok: Bool, fam: Int, y_at: Int,
+    scoped: Bool) raises:
     """mutual_info_classif / mutual_info_regression: `prep_mutual_info_call`
     as `_select_fit` calls it (dense X, discrete_features 'auto': every
     column continuous; n_neighbors 3; random_state None: seed 0), in its
@@ -437,7 +513,7 @@ def _fit_kbest_mi(slot: _Slot, call: _Call, n: Int, d: Int, k: Int, keep_all: Bo
         var classes = call[].classes
         var pc = EncProgram(r3)
         var tot = mi_class_count_stage(pc, 1, n, n, classes)
-        var counted = prep_enc_run(call, pc, call[].y.data, 0, False)
+        var counted = prep_enc_run(call, pc, y_at, 0, scoped)
         counts = mi_int_words(Int(counted.unsafe_ptr()), tot, classes)
         _ = counted^  # the arena lives through the reads above
         _ = len(pc.consts_f)
@@ -452,7 +528,7 @@ def _fit_kbest_mi(slot: _Slot, call: _Call, n: Int, d: Int, k: Int, keep_all: Bo
     var mo = -1
     if not keep_all and k_ok:
         mo = score_topk_stage(prog, staged.outc, 0, d, k)
-    var arena = prep_enc_run(call, prog, call[].y.data, 0, False)
+    var arena = prep_enc_run(call, prog, y_at, 0, scoped)
     _ = len(prog.consts_f)  # the program's own input words live past the run
     var ap = _F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
     if not k_ok:
@@ -482,7 +558,7 @@ def _transform_select(slot: _Slot, call: _Call) raises:
     _whole(call, estimator)
     _dense(call[].x, "X", estimator)
     _dense(call[].dst, "the output buffer", estimator)
-    var n = call[].x.rows
+    var n = prep_rows(call)
     var d = slot[].features
     if call[].x.cols != d:
         raise Error("mojolearn: X has " + String(call[].x.cols) + " features, " + estimator + " was fitted with "
@@ -500,10 +576,12 @@ def _transform_select(slot: _Slot, call: _Call) raises:
     var program = List[Int32]()
     _stage(program, OP_GATHER_COLS, n * k, 0, n, d, ko, k, out)
     var inputs = List[XprepRunInput](capacity=2)
-    inputs.append(prep_x_input(call, n * d))
+    var held = PrepXHeld()
+    inputs.append(prep_x_record(call, 0, n * d, held, False, _gathers(call[].route.flags)))
     inputs.append(XprepRunInput(ko, k, Int(slot[].columns.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
     var arena = HostZeroArena(max(host, 1))
     prep_execute(call, arena, host, 0, 0, 0, program, inputs)
+    _ = held^  # the fold words X's record addresses live past the run
     unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
         src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + out, count=n * k)
     _ = arena^
@@ -604,6 +682,10 @@ def _select_member(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         var mask = MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+        # THE RESIDENT ROUTE (`_gathers`): the fold's rows of the whole X
+        # taken on the device, a pinned X kept in the caller's scope.
+        if _gathers(call[].route.flags):
+            mask |= MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
         if call[].state == 0:
             return mask | MEMBER_CAN_CLASSIFIER  # the family's union
         # Kind-exact: f_classif / chi2 read y as class codes.
