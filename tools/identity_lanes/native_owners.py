@@ -194,8 +194,14 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(lifecycle=_h(np.asarray(observed, dtype=np.int32)), values=_h(values)))
 
 
-GPU_ONLY_LANES["optim-resident-io"] = "the CPU training binding has no resident parameter or gradient buffers"
-GPU_ONLY_LANES["sequence-device-release"] = "the CPU sequence binding has no resident tensor pool to release"
+# One-sided (vdv-fragfix, 2026-11-24; were GPU_ONLY_LANES entries): the lane's
+# subject is the GPU binding's resident buffers, so there is no CPU side. The
+# private upload helper `to_device` these lanes import builds a device-resident
+# input (it computes nothing) and runs on the GPU side only.
+_one_sided("optim-resident-io", missing="cpu",
+           reason="the CPU training binding has no resident parameter or gradient buffers")
+_one_sided("sequence-device-release", missing="cpu",
+           reason="the CPU sequence binding has no resident tensor pool to release")
 _batch_decl("n/a:owner-lifecycle (series, checkpoints, buffer IO and release have no prediction batch axis)",
             "native-schedule-series", "optim-owner-lifecycle", "optim-io-capability",
             "optim-resident-io", "sequence-device-release")

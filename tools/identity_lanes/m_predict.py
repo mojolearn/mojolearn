@@ -437,7 +437,7 @@ def _(ml, X, yc, yr, Xh=None):
     """model_selection.GridSearchCV.score and .transform (the table's base, public-scorer-factories, refits
     nothing): a three-fold search over LinearDiscriminantAnalysis' tol on 300 rows and three classes, refit
     on the best; the refit model's accuracy and its discriminant projection."""
-    from mojolearn import model_selection as ms
+    ms = ml.model_selection   # through the view: the running side (vdv-fragfix)
     rows = np.ascontiguousarray(X[:300])
     y3 = _prep_three_class(X[:300], yr[:300])
     s = ms.GridSearchCV(ml.LinearDiscriminantAnalysis(), {"tol": [1e-4, 1e-3]}, cv=3, n_jobs=1,

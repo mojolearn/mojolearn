@@ -9077,7 +9077,11 @@ def _(ml, X, yc, yr, Xh=None):
     outside FTZ subtleties. The first element cancels 2**100, so a balanced
     reduction returns zero where the required left fold returns three.
     """
-    from mojolearn.parallel_training import ordered_sum_gradients
+    # Through the lane's `ml` (the device view), never an import of the
+    # package (vdv-fragfix). The fold has a GPU and a host implementation
+    # (bindings/_mojolearn_runtime_parallel_host.mojo) but takes no `device`,
+    # so the view refuses it by name on both sides until it gets one (owed).
+    ordered_sum_gradients = ml.parallel_training.ordered_sum_gradients
     seed = np.where(X[:4, :8] >= 0, np.float32(1), np.float32(-1))
     shards = [[np.ascontiguousarray(seed * np.float32(i + 1)),
                np.array([i, -i, i + 1], dtype=np.float32)] for i in range(4)]
@@ -9849,7 +9853,9 @@ def _(ml, X, yc, yr, Xh=None):
         "dt_proj.bias": (di,), "A_log": (di, 16), "D": (di,), "out_proj.weight": (dm, di)},
         ones=("norm.weight",))
     blk = _built(ml.Mamba1Block(w), weights=w)
-    from mojolearn.mamba import Mamba1DecodeSession
+    # The documented class, reached through the lane's `ml` (never an import of
+    # the package) and unwrapped to the product class for the exact type check.
+    Mamba1DecodeSession = _verify_device().unwrap(ml.mamba.Mamba1DecodeSession)
     steps, resident = _decode_session_probe(blk, lambda: blk.allocate_state(2), 2, 16, dm, X)
     held = blk.allocate_state(2)
     sess = blk.decode_session(held)
@@ -9965,7 +9971,8 @@ def _(ml, X, yc, yr, Xh=None):
         near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
     blk = _built(ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv), weights=w)
 
-    from mojolearn.transformer import TransformerDecodeSession
+    # through the lane's `ml`, unwrapped for the exact type check (see mamba1)
+    TransformerDecodeSession = _verify_device().unwrap(ml.transformer.TransformerDecodeSession)
 
     def fresh():
         return blk.allocate_state(2, max_tokens=32)
