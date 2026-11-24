@@ -1678,8 +1678,13 @@ def _up_into(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], p: F32Ptr
     """Host floats into `buf[0, n)`: the raw host-pointer copy. Measured on
     the M4 a fresh 64 MB array uploads this way in 1.6-2.4 ms (only the
     process's first upload pays ~9-20 ms); a memcpy-plus-DMA stage took
-    4.3 ms, so uploads are not staged."""
+    4.3 ms, so uploads are not staged. THE FOLD X WORD (core/fold_x_device.mojo; lane vdf-scope-cluster6): a
+    negative `p` names a model-selection fold's x_prep store slot, copied device to device (the KernelPCA
+    eigensolver's resident route reads its fit X through the kit's upload here)."""
     if n > 0:
+        if Int(p) < 0:
+            fold_x_fill(ctx, buf, Int(p), n)
+            return
         ctx.enqueue_copy(dst_buf=buf.create_sub_buffer[DType.float32](0, n), src_ptr=p)
 
 
