@@ -28,6 +28,15 @@ from gaussian_process.host.gp_host_fit_entries import (
 from gaussian_process.gp_grad_items import gp_free_count
 
 
+def _host_x(address: Int, what: String) raises:
+    """The host column reads X as host words; THE FOLD X WORD (a negative
+    address, core/fold_x_device.mojo) is a device slot a GPU member hands
+    its device entries only (lane vdf-scope-gp). Refused in words."""
+    if address < 0:
+        raise Error("TypeError: the Gaussian process host column reads " + what
+                    + " as host words, not a device fold slot")
+
+
 struct GPHostKernels(GPNativeKernels):
     @staticmethod
     def mode() raises -> Int:
@@ -70,6 +79,7 @@ struct GPHostKernels(GPNativeKernels):
             n_ls,
             String("gpr_fit"),
         )
+        _host_x(r.source, "X")
         var x = read_f32(r.source, max(0, n_train * n_features))
         var y = read_f32(r.targets, max(0, n_train))
         var info = 0
@@ -96,9 +106,11 @@ struct GPHostKernels(GPNativeKernels):
             r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales,
             n_nodes, n_ls, String("gpr_predict_cov"),
         )
+        _host_x(r.training, "X_train_")
         var xt = read_f32(r.training, max(0, n_train * n_features))
         var l = read_f32(r.factor, max(0, n_train * n_train))
         var dual = read_f32(r.dual, max(0, n_train))
+        _host_x(r.source, "X")
         var x_star = read_f32(r.source, max(0, n_star * n_features))
         _gpr_predict_cov_run(
             xt, l, dual, n_train, n_features, spec, info, x_star, n_star,
@@ -134,9 +146,11 @@ struct GPHostKernels(GPNativeKernels):
             n_ls,
             String("gpr_sample_y"),
         )
+        _host_x(r.training, "X_train_")
         var xt = read_f32(r.training, max(0, n_train * n_features))
         var l = read_f32(r.factor, max(0, n_train * n_train))
         var dual = read_f32(r.dual, max(0, n_train))
+        _host_x(r.source, "X")
         var x_star = read_f32(r.source, max(0, n_star * n_features))
         _gpr_sample_y_run(
             xt, l, dual, n_train, n_features, spec, info, x_star, n_star,
@@ -163,6 +177,7 @@ struct GPHostKernels(GPNativeKernels):
         var free = read_i32(r.free_flags, max(0, n_nodes))
         var gp = f64_ptr(r.gradient)
         var sp = f64_ptr(r.scalars)
+        _host_x(r.source, "X")
         var x = read_f32(r.source, max(0, n_train * n_features))
         var y = read_f32(r.targets, max(0, n_train))
         var info = 0
@@ -193,6 +208,7 @@ struct GPHostKernels(GPNativeKernels):
         var tp = f64_ptr(r.theta)
         var vp = f64_ptr(r.values)
         var rp = f64_ptr(r.runs)
+        _host_x(r.source, "X")
         var x = read_f32(r.source, max(0, n_train * n_features))
         var y = read_f32(r.targets, max(0, n_train))
         var best = 0
@@ -227,6 +243,7 @@ struct GPHostKernels(GPNativeKernels):
             n_ls,
             String("gpc_fit"),
         )
+        _host_x(r.source, "X")
         var x = read_f32(r.source, max(0, n_train * n_features))
         var y: List[Float32]
         if r.coded_targets:
