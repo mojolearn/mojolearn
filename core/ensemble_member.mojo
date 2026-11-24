@@ -1373,6 +1373,13 @@ def _any(masks: List[Int], bit: Int) -> Bool:
     return False
 
 
+def _transformer_search(masks: List[Int]) -> Bool:
+    """A search over pure transformers (lane w3f5-b): every candidate
+    transforms and none predicts, so its scorers read transform(X) against
+    y as given (a reconstruction error with y = X): a 2-D y is the scorers'."""
+    return len(masks) > 0 and _all(masks, MEMBER_CAN_TRANSFORM) and not _any(masks, MEMBER_CAN_PREDICT)
+
+
 def _reads_given(slot: _SlotPtr, masks: List[Int]) -> Int:
     """`MEMBER_READS_Y_GIVEN` of a META state (core/member_abi.mojo, lane
     mf-tail5; kind-exact): a REGRESSOR kind whose own splitter is stratified
@@ -1413,7 +1420,13 @@ def _kind_mask(kind: Int, flag: Bool, masks: List[Int]) -> Int:
             mask |= MEMBER_CAN_DECISION
         if len(masks) > 0 and _all(masks, MEMBER_CAN_SCORE):
             mask |= MEMBER_CAN_SCORE
-        if len(masks) > 0 and _all(masks, MEMBER_CAN_MULTI_OUTPUT):
+        if (len(masks) > 0 and _all(masks, MEMBER_CAN_MULTI_OUTPUT)) or _transformer_search(masks):
+            # LANE w3-fix-6: a pure-transformer search takes a 2-D y too (its
+            # scorers', `_fit` two_d), so the search fit's UNPACK
+            # (bindings/msel_member_units_door.mojo `two_d`) admits it as
+            # rows x outputs; before, it refused "RandomizedSearchCV currently
+            # requires one target" (test_public_model_selection_verifier_gaps
+            # transform_delegates_to_refitted_native_scaler).
             mask |= MEMBER_CAN_MULTI_OUTPUT
         if len(masks) > 0 and _all(masks, MEMBER_CAN_STEPS):
             # lane w3f5-c: a search over sequence members (recurrent, CNN)
@@ -4262,8 +4275,7 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
     # scorers only, as scikit-learn's search hands y to the scorer.
     var two_d = _multi_kind(slot[].kind) or (_search_kind(slot[].kind)
                                               and (_all(slot[].base_masks, MEMBER_CAN_MULTI_OUTPUT)
-                                                   or (_all(slot[].base_masks, MEMBER_CAN_TRANSFORM)
-                                                       and not _any(slot[].base_masks, MEMBER_CAN_PREDICT))))
+                                                   or _transformer_search(slot[].base_masks)))
     # A SEARCH WITHOUT A TARGET (lane mf-msel5b): an unsupervised base fitted
     # with y=None hands no y (the search RUN's target-free words).
     var y_free = (_search_kind(slot[].kind) and not _classifier_kind(slot[].kind) and call[].y.rows == 0
