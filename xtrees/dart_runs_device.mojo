@@ -16,7 +16,7 @@ from core.trees_entry_table_dart import trees_dart_table_publish
 from xtrees.glue_abi import XtCall
 from xtrees.dart_abi import (
     XD_DART_ABI, XD_OP_COUNT, XD_CAPS, XD_OPEN, XD_STEP, XD_ADD, XD_CLOSE, XD_PREDICT, XD_FOREST_PREPARE,
-    XD_FOREST_PREDICT, XD_FOREST_RELEASE, XD_CAP_ROUND, XD_CAP_RESIDENT, xd_need, xd_addr, xd_int, xd_float,
+    XD_FOREST_PREDICT, XD_FOREST_RELEASE, XD_CAP_ROUND, XD_CAP_RESIDENT, XD_CAP_SLOT_X, xd_need, xd_addr, xd_int, xd_float,
     xd_words, xd_f64,
 )
 from xtrees.dart_device import (
@@ -27,7 +27,7 @@ from xtrees.dart_device import (
 
 def _dart_device_dispatch(op: Int, c: XtCall) raises -> Int:
     if op == XD_CAPS:
-        var caps = XD_CAP_RESIDENT
+        var caps = XD_CAP_RESIDENT | XD_CAP_SLOT_X
         comptime if DART_DEVICE:
             caps |= XD_CAP_ROUND
         return caps

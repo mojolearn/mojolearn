@@ -45,6 +45,7 @@ and the card use.
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
+from core.fold_x_device import fold_x_fill
 from std.sys.compile import is_defined
 from core.transfer import transfer_download_f32_list, transfer_upload_list
 from max.gpu import block_dim, block_idx, thread_idx
@@ -309,7 +310,9 @@ def _upload_checked(ctx: DeviceContext, xaddr: Int, n_rows: Int, n_cols: Int, wh
         raise Error(what + ": need positive dimensions, got " + String(n_rows) + " x " + String(n_cols))
     var n = n_rows * n_cols
     var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=xaddr))
+    # THE FOLD X WORD (core/fold_x_device.mojo, lane vdf-scope-linear2): a
+    # negative address names a member fold's rows in a device store slot.
+    fold_x_fill(ctx, buf, xaddr, n)
     var bad = device_first_nonfinite(ctx, buf, n)
     if bad >= 0:
         if device_classify_nonfinite(ctx, buf, bad):

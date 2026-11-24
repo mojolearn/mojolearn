@@ -16,6 +16,7 @@ exhausts Metal's per-process command queues, and x_cluster/x_neighbors hung
 on the second GPU call of a process). Each entry's buffers are released
 before it returns; the context stays.
 """
+from core.fold_x_device import fold_x_fill
 from max.gpu import block_idx, block_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA
 from std.utils import StaticTuple
 from max.gpu.primitives.warp import shuffle_idx, shuffle_xor
@@ -171,7 +172,7 @@ def _ridge_device(
     refit when the float32 factor was not trusted (status 1)."""
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
     if n_x > 0:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+        fold_x_fill(ctx, dx, Int(x), n_x)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     ridge_resident(ctx^, dx, n_x, y, n_y, n, d, ip, fp, n_out, res)
     _ = dx^
 
@@ -1600,7 +1601,7 @@ struct _SgdOvrEpochs(LoopStep, Movable):
             hstt[c * SGD_MB_WORDS + 1] = Float32(0)
             hstt[c * SGD_MB_WORDS + 2] = eta0
         if n_x > 0:
-            ctx.enqueue_copy(dst_buf=self.dx, src_ptr=x)
+            fold_x_fill(ctx, self.dx, Int(x), n_x)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
         if has_sw:
             ctx.enqueue_copy(dst_buf=self.dsw, src_ptr=y + n)
         ctx.enqueue_copy(dst_buf=self.dy, src_ptr=y)
@@ -2055,7 +2056,7 @@ struct _SgdMbEpochs(LoopStep, Movable):
         hcf[6] = l1r
         hcf[7] = power_t
         if n_x > 0:
-            ctx.enqueue_copy(dst_buf=self.dx, src_ptr=x)
+            fold_x_fill(ctx, self.dx, Int(x), n_x)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
         if has_sw:
             ctx.enqueue_copy(dst_buf=self.dsw, src_ptr=y + n)
         self.dy = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
@@ -3404,7 +3405,7 @@ struct _SgdPsEpochs(LoopStep, Movable):
             hst[c * SGD_END_ST + 2] = eta0
             hst[c * SGD_END_ST + 3] = bitcast[DType.float32](Int32(1))
         if n_x > 0:
-            ctx.enqueue_copy(dst_buf=self.dx, src_ptr=x)
+            fold_x_fill(ctx, self.dx, Int(x), n_x)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
         # SGDOC_FAST_TAIL: the first epoch e0 and its first position r0 of the
         # last SGDOC_TAIL_K steps, t of that step (0, 0 and t = 1: the full run)
         var e0 = 0
@@ -3985,7 +3986,7 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
     var hsc_l = List[Float32](length=8, fill=Float32(0))
     var hscp = FP(unsafe_from_address=Int(hsc_l.unsafe_ptr()))
     if n_x > 0:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+        fold_x_fill(ctx, dx, Int(x), n_x)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     if n_y > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
     comptime if XLIN_IDN_DEV_FINITE:
@@ -4378,7 +4379,7 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     var dtmp = ctx.enqueue_create_buffer[DType.float32](d + 1)
     var hfp = fp.copy()
     if n_x > 0:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+        fold_x_fill(ctx, dx, Int(x), n_x)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     if n_y > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
     comptime if XLIN_IDN_DEV_FINITE:
@@ -5285,7 +5286,7 @@ def _iso_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, ip: List[Int32], fp:
     var dpa = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
     var dpb = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
     if n_x > 0:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+        fold_x_fill(ctx, dx, Int(x), n_x)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     if n_y > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
     comptime if XLIN_IDN_DEV_FINITE:
@@ -5518,7 +5519,7 @@ def _iso_predict_grid(x: FP, n_x: Int, thr: FP, n_thr: Int, n: Int, ip: List[Int
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
     var dk = ctx.enqueue_create_buffer[DType.float32](n_thr + 4)
     var dout = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    fold_x_fill(ctx, dx, Int(x), n_x)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     ctx.enqueue_copy(dst_buf=dk, src_ptr=hk.unsafe_ptr())
     # check-only count (compiles to nothing by default): the knots ride the one upload that carries the
     # zero status words of this call, so there is no separate fitted copy to keep resident
@@ -5638,7 +5639,8 @@ def fit_device(
         # no grid uploads X on this path: the binding's walk, so the
         # NaN refusal still comes first
         comptime if XLIN_IDN_DEV_FINITE:
-            xlin_finite_host(x, n_x, "X")
+            if Int(x) >= 0:  # a fold X word (core/fold_x_device.mojo) names a device slot: no host walk
+                xlin_finite_host(x, n_x, "X")
             xlin_finite_host(y, n_y, "y")
         raise Error("x_linear: no device route for fit " + String(algo) + " at this shape")
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
@@ -5709,7 +5711,7 @@ def fit_device(
     var dtw = ctx.enqueue_create_buffer[DType.float32](team_work(0, 3, 0))
     var hfp = fp.copy()
     if n_x > 0:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+        fold_x_fill(ctx, dx, Int(x), n_x)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     if n_y > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
     comptime if XLIN_IDN_DEV_FINITE:
@@ -6287,7 +6289,7 @@ def decision_codes_device(
     var dout = ctx.enqueue_create_buffer[DType.float32](max(n * k, 1))
     var dc = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
     if n * d > 0:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+        fold_x_fill(ctx, dx, Int(x), n * d)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     var dwb = _decision_wb(ctx, wb, k * (d + 1))
     var dstat = _decision_status(ctx, dx, n * d, status)
     if n > 0:
@@ -6331,7 +6333,7 @@ def decision_rows_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, rows_
     var d_s2 = ctx.enqueue_create_buffer[DType.float32](1)
     var d_d8 = ctx.enqueue_create_buffer[DType.uint8](1)
     if n * d > 0:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+        fold_x_fill(ctx, dx, Int(x), n * d)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     var dwb = _decision_wb(ctx, wb, k * (d + 1))
     var dstat = _decision_status(ctx, dx, n * d, status)
     if n > 0:
@@ -6378,7 +6380,7 @@ def decision_huber_out_device(
     var d_d32 = ctx.enqueue_create_buffer[DType.float32](1)
     var d_d64 = ctx.enqueue_create_buffer[DType.uint64](1)
     if n * d > 0:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+        fold_x_fill(ctx, dx, Int(x), n * d)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     var dwb = _decision_wb(ctx, wb, d + 1)
     if n > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
@@ -6431,7 +6433,7 @@ def bayes_std_device(x: FP, sm: FP, ev: FP, offset: FP, cols_addr: Int, n: Int, 
     var dc = ctx.enqueue_create_buffer[DType.int32](max(dk, 1))
     var dout = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     if n * d > 0:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+        fold_x_fill(ctx, dx, Int(x), n * d)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     if dk > 0:
         ctx.enqueue_copy(dst_buf=ds, src_ptr=sm)
     if form != 0 and d > 0:
@@ -6463,7 +6465,7 @@ def decision_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, res: FP, s
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
     var dout = ctx.enqueue_create_buffer[DType.float32](max(n * k, 1))
     if n * d > 0:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+        fold_x_fill(ctx, dx, Int(x), n * d)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     var dwb = _decision_wb(ctx, wb, k * (d + 1))
     var dstat = _decision_status(ctx, dx, n * d, status)
     var total = n * k

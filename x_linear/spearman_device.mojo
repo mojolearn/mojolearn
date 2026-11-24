@@ -21,6 +21,7 @@ witness-guarded unit (every output is rebuilt from the uploaded x and y):
 One int32 word comes back: the sign.
 """
 
+from core.fold_x_device import fold_x_fill
 from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceContext
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
@@ -119,7 +120,7 @@ def spearman_sign_device(var ctx: DeviceContext, x: FP, y: FP, n: Int) raises ->
     # never an offset into one (Metal)
     var dvx = ctx.enqueue_create_buffer[DType.float32](n)
     var dvy = ctx.enqueue_create_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_buf=dvx, src_ptr=x)
+    fold_x_fill(ctx, dvx, Int(x), n)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
     ctx.enqueue_copy(dst_buf=dvy, src_ptr=y)
     var dkey = ctx.enqueue_create_buffer[DType.int32](n)
     var dpa = ctx.enqueue_create_buffer[DType.int32](n)

@@ -1644,17 +1644,16 @@
   },
   {
    "arm_lanes": {
-    "coverage-precise-x_metrics-first_rows": [
+    "coverage-precise-core-first_seen_rank": [
      "x-metrics-splitters"
     ]
    },
    "arms": [
-    "coverage-precise-x_metrics-first_rows"
+    "coverage-precise-core-first_seen_rank"
    ],
    "builds": [
-    "build_x_metrics",
-    "build_x_metrics_host",
-    "build_runtime_model_selection_host"
+    "build",
+    "build_core_host"
    ],
    "columns": [
     "cpu",
@@ -1666,7 +1665,7 @@
     "x-metrics-splitters"
    ],
    "patches": [
-    "x_metrics/sabotage/coverage_precise_first_rows.patch"
+    "core/sabotage/coverage_precise_first_seen_rank.patch"
    ]
   },
   {

@@ -21,6 +21,7 @@ from training.optimizer_input_plan import optimizer_contiguous_address
 from bindings.optimizer_device_native_door import shape_count, device_entries, device_shape, device_allocate
 from bindings.optimizer_admission_door import opt_value
 from bindings.training_embedding_native_door import embedding_indices
+from bindings.training_layers_device_unpack import training_device_array, chunked_lm_head_device
 from bindings.py_cpython_table import cpython_table
 from bindings.optimizer_keys_unpack import optimizer_keys
 from bindings.optimizer_keys_unpack import OPTIMIZER_OPN_RESIDUAL_DROPOUT
@@ -264,6 +265,16 @@ def training_chunked_lm_head(values: PythonObject, entries: PythonObject, contex
     try:
         var b = native_loaded_module("builtins")
         var site = String("training.chunked_lm_head_loss")
+        # lane vdf-linalg3: TrainDeviceArray hidden / weight run the device
+        # entry in place (bindings/training_layers_device_unpack.mojo); two
+        # identity compares on the host path
+        if training_device_array(values[0], context) or training_device_array(values[1], context):
+            var dev_targets = embedding_indices(values[2], context, buffer_pins)
+            var dev_result = chunked_lm_head_device(values[0], values[1], Int(py=dev_targets[1]),
+                                                    Int(py=dev_targets[2]),
+                                                    Bool(py=py_call_typed(b.bool, values[3])), entries, context)
+            _ = dev_targets^
+            return dev_result
         var keep = List[List[Float32]]()
         var hv = TensorView()
         var wv = TensorView()

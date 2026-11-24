@@ -6,6 +6,7 @@ from preprocessing.estimator import validate_standard, standard_fit_direct, stan
 from preprocessing.estimator import validate_dimensions, minmax_fit_direct, minmax_fit_refusing, minmax_transform_direct, minmax_transform_refusing
 from preprocessing.estimator import standard_fit_transform_direct, minmax_fit_transform_direct
 from core.hostptr import f32_ptr
+from preprocessing.prep_member_store import prep_slot_fit, prep_slot_transform
 
 struct ScalerDeviceKernels(ScalerNativeKernels):
     @staticmethod
@@ -75,3 +76,17 @@ struct ScalerDeviceKernels(ScalerNativeKernels):
     def minmax_fit_transform(r: ScalerFitTransformRequest) raises -> Int:
         return minmax_fit_transform_direct(f32_ptr(r.source), r.rows, r.features, r.lower, r.upper, Int(r.clip),
                                            f32_ptr(r.stats), f32_ptr(r.dst))
+
+    # Lane vdf-scope-neural2: THE RESIDENT ROUTE (core/scaler_native_api.mojo
+    # SCALER_OP_FIT_SLOT / TRANSFORM_SLOT): X a slot of the image's
+    # preprocessing member store, read in place by the direct bodies.
+    @staticmethod
+    def fit_slot(slot: Int, n: Int, d: Int, minmax: Bool, with_mean: Int, with_std: Int, lower: Float32,
+                 upper: Float32, dst: Int) raises -> Int:
+        return prep_slot_fit(slot, n, d, minmax, with_mean, with_std, lower, upper, dst)
+
+    @staticmethod
+    def transform_slot(slot: Int, n: Int, d: Int, minmax: Bool, inverse: Int, with_mean: Int, with_std: Int,
+                       clip: Int, lower: Float32, upper: Float32, first: Int, second: Int, dst: Int) raises -> Int:
+        return prep_slot_transform(slot, n, d, minmax, inverse, with_mean, with_std, clip, lower, upper, first,
+                                   second, dst)

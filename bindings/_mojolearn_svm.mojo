@@ -97,7 +97,7 @@ from core.native_descriptor_abi import NativeDescriptorError
 from core.forest_fit_request import fit_loop_put
 from core.iforest_entry import (
     IFExportRequest, IFForestRunRequest, IFForestSpans, IFImage, IFRunRequest, IF_CAP_DEVICE_SCAN,
-    IF_CAP_RESIDENT, IF_CAP_SCORES_F64, if_entry_dispatch, if_entry_publish,
+    IF_CAP_RESIDENT, IF_CAP_SCORES_F64, IF_CAP_SLOT_X, if_entry_dispatch, if_entry_publish,
 )
 
 # Lane p3-svm-gp-kernel: the resident forest on every tier. `IDN_IF_RESIDENT`
@@ -752,6 +752,10 @@ def _iforest_run(r: IFRunRequest) raises -> Int:
             want -= _IF_WANT_WIDE_BASE
     if r.n_train <= 0 or r.n_features <= 0 or r.n_query <= 0:
         raise Error("iforest_run: n_train, n_features and n_query must all be positive")
+    if r.train < 0:
+        raise Error("iforest_run: the training matrix is a host address (a fold slot is a query only)")
+    if r.query < 0 and r.device_count > 1:
+        raise Error("iforest_run: a fold slot query runs on one device")
     var tp = f32_ptr(r.train)
     var qp = f32_ptr(r.query)
     var ip = f64_ptr(r.info)
@@ -831,6 +835,10 @@ struct _SvmIForestImage(IFImage):
             bits |= IF_CAP_SCORES_F64
         comptime if IF_DEVICE_TRANSPOSE or IF_FAST_ROWMAJOR:
             bits |= IF_CAP_DEVICE_SCAN
+        # IF_CAP_SLOT_X (lane vdf-scope-trees2b): the lent query goes up through
+        # `_upload_rowmajor_query_device`, which reads THE FOLD X WORD.
+        comptime if IDN_IF_QUERY_DEVICE:
+            bits |= IF_CAP_SLOT_X
         return bits
 
     @staticmethod

@@ -16,7 +16,7 @@ from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
 from core.linear_entry_table_ext import (
     XL_OP_FIT, XL_OP_FIT_FOLD, XL_OP_DECISION, XL_OP_DECISION_CODES, XL_OP_DECISION_ROWS, XL_OP_SPEARMAN,
-    XL_OP_HUBER_OUT, XL_OP_CLASS_PREP, XL_OP_BEST_ALPHA, XL_OP_FLAGS, XL_HAS_FIT_FOLD, XL_OP_BAYES_STD,
+    XL_OP_HUBER_OUT, XL_OP_CLASS_PREP, XL_OP_BEST_ALPHA, XL_OP_FLAGS, XL_HAS_FIT_FOLD, XL_HAS_SLOT_X, XL_OP_BAYES_STD,
 )
 from core.solver_entry_table import solver_cd_fit_call, solver_cd_predict_call
 from core.admitted_refusals import admitted_finite_refuse
@@ -53,6 +53,17 @@ comptime LINK_EXP = 1
 comptime LINK_SIGMOID = 2
 # L-BFGS history length of the Huber route's work estimate.
 comptime XL_LBFGS_M = 10
+
+
+def xl_slot_x_held(entry: NativeDescriptorCall) -> Bool:
+    """Whether the binding behind `entry` reads THE FOLD X WORD in its fit
+    and decision operations (XL_OP_FLAGS, XL_HAS_SLOT_X; core/fold_x_device.mojo).
+    Asked with a member's capabilities only."""
+    try:
+        var flags = native_descriptor_call(entry, XL_OP_FLAGS, List[Int](), List[Int](), List[Float64]())
+        return (flags & XL_HAS_SLOT_X) != 0
+    except:
+        return False
 
 
 def xl_fit_fold_held(entry: NativeDescriptorCall) raises -> Bool:

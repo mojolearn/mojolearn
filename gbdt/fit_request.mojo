@@ -107,6 +107,10 @@ comptime XG_OP_COUNT = 17
 comptime XG_CAP_ROW_MAJOR = 1
 #: the image holds device-resident parsed models (XG_RESIDENT_*)
 comptime XG_CAP_RESIDENT = 2
+#: the resident predict reads THE FOLD X WORD (core/fold_x_device.mojo: a
+#: negative X address names a fold slot of the x_prep store; lane
+#: vdf-scope-trees2b). Answered by every image with the resident model.
+comptime XG_CAP_SLOT_X = 4
 
 #: flag bits of `GbdtFitArgs.bad`
 comptime GBDT_ARG_NO_INT = 1

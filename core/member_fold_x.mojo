@@ -207,3 +207,17 @@ def member_fold_take_words(src: Int, index: Int, rows: Int, width: Int, dst: Int
                     o[r * width + c] = s[at + c]
 
     host_parallelize(_task, tasks)
+
+
+def member_fold_take_into(view: MemberMatrix, fold: MemberFoldX, mut store: List[UInt64]) -> MemberMatrix:
+    """The fold's rows of a dense host column view (targets, class codes of
+    any 4- or 8-byte dtype, weights) taken bitwise through `fold.index` into
+    `store` (which the caller keeps alive past the operation), as a view of
+    the same dtype (lane vdf-scope-linear2, an addition)."""
+    var words = fold.rows * view.cols
+    store = List[UInt64](length=max((words * view.element_bytes() + 7) // 8, 1), fill=UInt64(0))
+    member_fold_take_view(view, fold.index, fold.rows, Int(store.unsafe_ptr()))
+    var part = view
+    part.data = Int(store.unsafe_ptr())
+    part.rows = fold.rows
+    return part

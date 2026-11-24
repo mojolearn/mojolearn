@@ -72,6 +72,10 @@ def x_linear_ops_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         var p = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp)
         var f = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=ff)
         var r = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)
+        if na > 0 and a[0] < 0:
+            # THE FOLD X WORD (core/fold_x_device.mojo) names a device slot;
+            # the host column reads host X only (XL_HAS_SLOT_X is not set here).
+            raise Error("x_linear ops: the host column reads no device fold X word")
         if operation == XL_OP_FLAGS:
             # The CPU column has no device fold store.
             r[] = 0

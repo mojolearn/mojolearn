@@ -122,3 +122,54 @@ def embedding_device(backward: Bool, where: PythonObject, input: PythonObject, i
                 Python.list(ids_address, count, vocab, width))
     _ = input
     return result
+
+
+def chunked_lm_head_device(hidden: PythonObject, weight: PythonObject, targets_address: Int, count: Int,
+                           with_grad: Bool, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`chunked_lm_head_loss(hidden, weight, targets, return_grad)` with hidden and weight TrainDeviceArrays of the
+    selected binding (lane vdf-linalg3, 2026-11-24): read in place by the device entry `chunked_lm_head_dev`
+    (training/dev_tensors_layers.mojo); the targets are the admitted int32 host words (count of them), uploaded once
+    inside the entry. Returns the loss as a Python float, or (loss, d_hidden, d_weight) with the gradients new
+    TrainDeviceArrays: nothing but the loss scalar comes down."""
+    var nk = optimizer_keys()
+    var where = PythonObject("chunked_lm_head_loss")
+    var native = device_entries(py_item(entries, nk[].k_module), context)
+    var hs = List[Int]()
+    var ws = List[Int]()
+    var hf = _dev_fields(hidden, "hidden", where, entries, context, hs)
+    var wf = _dev_fields(weight, "weight", where, entries, context, ws)
+    if len(hs) != 2 or len(ws) != 2:
+        raise Error("ValueError: mojolearn.training.chunked_lm_head_loss: hidden must be (rows, width) and weight "
+                    + "(vocab, width)")
+    var rows = hs[0]
+    var width = hs[1]
+    var vocab = ws[0]
+    if width != ws[1]:
+        raise Error("ValueError: mojolearn.training.chunked_lm_head_loss: hidden has width " + String(width)
+                    + ", weight has width " + String(ws[1]))
+    if vocab < 2:
+        raise Error("ValueError: mojolearn.training.chunked_lm_head_loss: vocab must be at least 2, got "
+                    + String(vocab))
+    if count != rows:
+        raise Error("ValueError: mojolearn.training.chunked_lm_head_loss: " + String(count) + " targets for "
+                    + String(rows) + " rows")
+    var entry = _dev_entry(native, nk[].k_chunked_lm_head_dev, context)
+    var loss = List[Float32](length=1, fill=Float32(0.0))
+    var loss_address = Int(loss.unsafe_ptr())
+    var params = Python.list(loss_address, targets_address, rows, vocab, width, 1 if with_grad else 0)
+    if not with_grad:
+        _ = py_call(entry, Python.list(-1, -1, py_item(hf, nk[].k_h), py_item(wf, nk[].k_h)), params)
+        _ = hidden
+        _ = weight
+        var value = Float64(loss[0])
+        _ = loss^
+        return PythonObject(value)
+    var dh = device_allocate(native, hs, context)
+    var dw = device_allocate(native, ws, context)
+    _ = py_call(entry, Python.list(py_item(py_fields(dh), nk[].k_h), py_item(py_fields(dw), nk[].k_h),
+                                   py_item(hf, nk[].k_h), py_item(wf, nk[].k_h)), params)
+    _ = hidden
+    _ = weight
+    var value = Float64(loss[0])
+    _ = loss^
+    return Python.tuple(PythonObject(value), dh, dw)

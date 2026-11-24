@@ -9,7 +9,7 @@ model and therefore creates no owner-to-model reference cycle.
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from core.hdbscan_query_api import (
-    HDBSCAN_QUERY_ABI, HDBSCAN_QUERY_COUNT, HDBSCAN_QUERY_HOST,
+    HDBSCAN_QUERY_ABI, HDBSCAN_QUERY_COUNT, HDBSCAN_QUERY_HOST, HDBSCAN_QUERY_PREPARE,
     HdbscanQueryDriver, HdbscanQueryDimensions, HdbscanQueryRequest, HdbscanQueryPlan,
 )
 from providers.python.neural_descriptor_pyapi_door import (
@@ -51,6 +51,19 @@ struct HdbscanQueryRecord(Movable, Writable):
     var children: PythonObject
     var indices: PythonObject
     var offsets: PythonObject
+    #: Lane vdf-misc4: the device image's fitted snapshot this record owns
+    #: (0: none, the host image). Released when the record dies: a refit
+    #: drops the model's query records, so does a binding change or the
+    #: model's end.
+    var handle: Int
+
+    def __del__(deinit self):
+        if self.handle != 0:
+            try:
+                self.driver.release(self.handle)
+            except:
+                pass
+        _ = self.provider
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("HdbscanQueryRecord")
@@ -59,12 +72,32 @@ struct HdbscanQueryRecord(Movable, Writable):
         self.write_to(writer)
 
 
+def hdbscan_query_prepare(connection: HdbscanQueryConnection, request: HdbscanQueryRequest,
+    operation: Int) raises -> Int:
+    """Lane vdf-misc4: the fitted arrays of `request` taken ONCE onto the
+    device image's device for query `operation`; the snapshot's handle (0 on
+    the host image, which keeps its per-call route)."""
+    if connection.host:
+        return 0
+    var plan = HdbscanQueryPlan(request, HDBSCAN_QUERY_PREPARE, False, 0, operation)
+    var handle = 0
+    try:
+        with GILReleased(Python()):
+            handle = connection.driver.run(plan)
+    finally:
+        _ = connection.provider
+        _ = plan
+    return handle
+
+
 def hdbscan_query_run(connection: HdbscanQueryConnection, request: HdbscanQueryRequest,
-    operation: Int) raises:
+    operation: Int, handle: Int = 0) raises:
     # Caller pins every borrowed input/output through this whole helper.
     # The constructor snapshots exactly the provider-specific inputs before
     # GIL release. Its native allocations die before caller cache publication.
-    var plan = HdbscanQueryPlan(request, operation, connection.host)
+    # With a `handle` (lane vdf-misc4) nothing fitted is copied: the device
+    # query reads the snapshot.
+    var plan = HdbscanQueryPlan(request, operation, connection.host, handle)
     try:
         with GILReleased(Python()):
             _ = connection.driver.run(plan)

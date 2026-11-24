@@ -744,3 +744,34 @@ def samba_accumulate_host(
     _refuse_host("accumulate parts", parts_ptr, n * a)
     var src = _upload_checked(ctx, "accumulate parts", parts_ptr, n * a)
     return samba_accumulate_buffer(ctx, src^, out_ptr, n, a)
+
+
+def samba_accumulate_resident(
+    ctx: DeviceContext,
+    mut out_buf: DeviceBuffer[DType.float32],
+    var src: DeviceBuffer[DType.float32],
+    n: Int,
+    a: Int,
+    t_tokens: Int,
+) raises -> Int:
+    """`samba_accumulate_host` on parts already stacked on the device (`src`
+    holds `a` consecutive blocks of `n` floats, ascending microbatch index),
+    the result left in `out_buf[0:n]` (lane vdf-linalg3, 2026-11-24:
+    `accumulate_grads` given TrainDeviceArrays). The same refusals (the
+    non-finite one as a device scan in the host words), the same tree: the
+    same bits. Returns `n`."""
+    samba_validate_accumulation(n, a, t_tokens)
+    if len(out_buf) < n:
+        raise Error("mojolearn samba ops: the accumulator buffer holds " + String(len(out_buf))
+                    + " floats, the gradient is " + String(n))
+    var idx = device_first_nonfinite(ctx, src, n * a)
+    if idx >= 0:
+        raise Error("mojolearn samba ops: non-finite accumulate parts at flat index " + String(idx))
+    var out_dev = Optional[DeviceBuffer[DType.float32]](out_buf)
+    # out_ptr is not written when out_dev is set: a one-cell host word stands in
+    var unused = List[Float32](length=1, fill=Float32(0.0))
+    var no_host = unused.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    var done = _samba_accumulate_core(ctx, src^, no_host, out_dev, n, a)
+    _ = out_dev^
+    _ = unused^
+    return done

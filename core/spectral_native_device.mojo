@@ -14,6 +14,7 @@ from spectral.estimator import (
     spectral_fit_predict_dense_host_keep, spectral_embedding_dataset_host,
     spectral_embedding_graph_host, spectral_embedding_dense_host, spectral_predict_host,
     spectral_embedding_rbf_host, spectral_embedding_knn_host,
+    spectral_fit_predict_rbf_host, spectral_fit_predict_knn_host,
 )
 from spectral.impl.spectral_predict_resident import (
     spectral_resident_prepare, spectral_resident_predict, spectral_resident_release,
@@ -67,6 +68,26 @@ struct SpectralDeviceBackend(SpectralBackend):
             UInt64(r.options.seed), result.labels, result.embedding, result.state,
             r.options.keep_state,
         )
+
+    @staticmethod
+    def fit_affinity(r: SpectralFitRequest, mut result: SpectralFitResult) raises:
+        # lane vdf-misc4: SpectralClustering rbf / precomputed_nearest_neighbors
+        # build the affinity on this device and fit from it (no host image).
+        if r.input.route == SPECTRAL_RBF:
+            result.columns = spectral_fit_predict_rbf_host(
+                r.input.source, r.input.rows, r.input.features, r.input.scale, r.input.affinity_out,
+                r.options.clusters, r.options.components, r.options.initializations,
+                r.options.neighbors, Float32(r.options.tolerance), UInt64(r.options.seed),
+                result.labels, result.embedding, result.state, r.options.keep_state,
+            )
+        else:
+            result.columns = spectral_fit_predict_knn_host(
+                r.input.source, r.input.graph_rows, r.input.graph_columns, r.input.graph_values,
+                r.input.nonzeros, r.input.rows, r.input.features, r.input.status, r.input.affinity_out,
+                r.options.clusters, r.options.components, r.options.initializations,
+                r.options.neighbors, Float32(r.options.tolerance), UInt64(r.options.seed),
+                result.labels, result.embedding, result.state, r.options.keep_state,
+            )
 
     @staticmethod
     def embed_dataset(r: SpectralEmbeddingRequest, source: List[Float32], mut result: SpectralEmbeddingResult) raises:

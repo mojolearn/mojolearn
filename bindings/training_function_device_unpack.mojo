@@ -86,6 +86,19 @@ def _training_function_name(operation: Int) -> String:
     return "mojolearn.training.mlp_inference_sessions"
 
 
+def _holds_device(value: PythonObject, device_class: PythonObject, b: PythonObject, depth: Int) raises -> Bool:
+    """True when `value` is a TrainDeviceArray or a list / tuple holding one within `depth` levels."""
+    var cls = py_type(value)
+    if cls is device_class:
+        return True
+    if depth < 1 or not (cls is b.list or cls is b.tuple):
+        return False
+    for i in range(len(value)):  # driver-loop: over one argument's items (arrays of a list argument, not data)
+        if _holds_device(value[i], device_class, b, depth - 1):
+            return True
+    return False
+
+
 def training_function_device(operation: Int, item: PythonObject, values: PythonObject,
                              context: PythonObject) raises -> FunctionDevice:
     """UNPACK of a training function's explicit (non-None) `device` item:
@@ -98,8 +111,11 @@ def training_function_device(operation: Int, item: PythonObject, values: PythonO
     if device.host_beside:
         var nk = optimizer_keys()
         var device_class = py_item(context, nk[].k_device_class)
+        var b = native_loaded_module("builtins")
         for i in range(len(values) - 1):  # driver-loop: over the call's public arguments (at most nine)
-            if py_type(values[i]) is device_class:
+            # lane vdf-linalg3: gradients and sessions come as lists (and
+            # accumulate_grads' as lists of lists) of arrays: looked into too
+            if _holds_device(values[i], device_class, b, 2):
                 raise Error("ValueError: " + name + " was given device='cpu' but argument " + String(i + 1)
                     + " is a TrainDeviceArray, which lives on the GPU; copy it to the host with to_host(), "
                     + "or leave device=None")

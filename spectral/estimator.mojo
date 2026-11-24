@@ -481,11 +481,39 @@ def spectral_fit_predict_dense_host_keep(
     scan built (row-major nonzeros, the diagonal kept) compacted on the
     device instead (`dense_graph.mojo`). Returns `n_out`, or a negative
     SPECTRAL_DENSE_* refusal code before any fit work."""
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var d = _dense_upload(ctx, dense_addr, n_samples)
+    var n_out = _fit_dense_device(
+        ctx, d, n_samples, n_clusters, n_components, n_init, n_neighbors, eigen_tol, seed,
+        labels, embedding, state, keep,
+    )
+    _ = d^
+    return n_out
+
+
+def _fit_dense_device(
+    ctx: DeviceContext,
+    mut d: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_clusters: Int,
+    n_components: Int,
+    n_init: Int,
+    n_neighbors: Int,
+    eigen_tol: Float32,
+    seed: UInt64,
+    mut labels: List[Int32],
+    mut embedding: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+) raises -> Int:
+    """The dense fit on the n x n affinity ALREADY on this image's device in
+    `d`: the scan, the compaction and the fit, as
+    `spectral_fit_predict_dense_host_keep` after its upload (lane vdf-misc4,
+    2026-11-24). Returns `n_out`, or a negative SPECTRAL_DENSE_* refusal code
+    before any fit work."""
     var config = _config(
         n_clusters, n_components, n_init, n_neighbors, eigen_tol, seed
     )
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    var d = _dense_upload(ctx, dense_addr, n_samples)
     var indptr = ctx.enqueue_create_buffer[DType.int32](n_samples + 1)
     var flags = dense_graph_scan(ctx, d, n_samples, indptr)
     var code = _dense_refusal(flags)
@@ -504,7 +532,6 @@ def spectral_fit_predict_dense_host_keep(
     fit_predict_dense_connectivity_keep(
         ctx, config, d, n_samples, Int(flags[DG_TOTAL]), indptr^, labels, embedding, state, keep, trace
     )
-    _ = d^
     return len(embedding) // n_samples
 
 
@@ -648,6 +675,93 @@ def spectral_embedding_knn_host(
     _affinity_publish(ctx, d, n_samples, affinity_out)
     var n_out = _embedding_dense_device(
         ctx, d, n_samples, n_components, norm_laplacian, drop_first, seed, embedding, tolerance
+    )
+    _ = d^
+    return n_out
+
+
+def spectral_fit_predict_rbf_host(
+    x_addr: Int,
+    n_samples: Int,
+    n_features: Int,
+    gamma: Float64,
+    affinity_out: Int,
+    n_clusters: Int,
+    n_components: Int,
+    n_init: Int,
+    n_neighbors: Int,
+    eigen_tol: Float32,
+    seed: UInt64,
+    mut labels: List[Int32],
+    mut embedding: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+) raises -> Int:
+    """SpectralClustering affinity='rbf' on this image's device (lane
+    vdf-misc4, 2026-11-24): X uploaded once, exp(-gamma ||x_i - x_j||^2)
+    built on the device (`rbf_affinity_device`, the x_decomp cells' bits, as
+    `spectral_embedding_rbf_host`), copied once to `affinity_out` (the
+    estimator's public `affinity_matrix_`; 0 for none) and the dense fit run
+    on the same device buffer. Was: the x_decomp image built it, the n x n
+    went to the host and this image uploaded it again
+    (`spectral_fit_predict_dense_host_keep`)."""
+    dense_graph_check_size(n_samples)
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var d = ctx.enqueue_create_buffer[DType.float32](max(n_samples * n_samples, 1))
+    rbf_affinity_device(ctx, x_addr, n_samples, n_features, gamma, d)
+    _affinity_publish(ctx, d, n_samples, affinity_out)
+    var n_out = _fit_dense_device(
+        ctx, d, n_samples, n_clusters, n_components, n_init, n_neighbors, eigen_tol, seed,
+        labels, embedding, state, keep,
+    )
+    _ = d^
+    return n_out
+
+
+def spectral_fit_predict_knn_host(
+    dense_addr: Int,
+    row_addr: Int,
+    column_addr: Int,
+    value_addr: Int,
+    nnz: Int,
+    n_samples: Int,
+    affinity_neighbors: Int,
+    status_addr: Int,
+    affinity_out: Int,
+    n_clusters: Int,
+    n_components: Int,
+    n_init: Int,
+    n_neighbors: Int,
+    eigen_tol: Float32,
+    seed: UInt64,
+    mut labels: List[Int32],
+    mut embedding: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+) raises -> Int:
+    """SpectralClustering affinity='precomputed_nearest_neighbors' on this
+    image's device (lane vdf-misc4, 2026-11-24): the precomputed distances
+    (dense at `dense_addr`, or COO triples when it is 0) uploaded once, the
+    connectivity affinity built on the device (`knn_affinity_f32_device_into`,
+    the base image's kernels and bytes) with `affinity_neighbors`, its 3
+    status words to `status_addr`; a refusal returns SPECTRAL_KNN_REFUSED
+    before any fit work. Then the one copy to `affinity_out` and the dense fit
+    on the same device buffer. Was: the base image built it into host storage
+    and this image uploaded it again."""
+    dense_graph_check_size(n_samples)
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var d = ctx.enqueue_create_buffer[DType.float32](max(n_samples * n_samples, 1))
+    knn_affinity_f32_device_into(
+        ctx, dense_addr, row_addr, column_addr, value_addr, nnz, dense_addr == 0,
+        n_samples, affinity_neighbors, d, status_addr,
+    )
+    if MutPointer[Int32, MutAnyOrigin](unsafe_from_address=status_addr)[0] != Int32(0):
+        _ = d^
+        return SPECTRAL_KNN_REFUSED
+    _affinity_publish(ctx, d, n_samples, affinity_out)
+    var n_out = _fit_dense_device(
+        ctx, d, n_samples, n_clusters, n_components, n_init, n_neighbors, eigen_tol, seed,
+        labels, embedding, state, keep,
     )
     _ = d^
     return n_out

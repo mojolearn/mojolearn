@@ -101,8 +101,13 @@ from core.member_abi import (
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION, MEMBER_CAN_SCORE,
     MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_COEF,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_INTERCEPT, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
-    MEMBER_BLOCK_COEF,
+    MEMBER_BLOCK_COEF, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE,
     member_publish, member_call_from_spans, member_unsupported,
+)
+from core.device_route import DEVICE_GPU
+from core.member_fold_x import (
+    MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_index, member_fold_take_f32,
+    member_fold_take_into, member_fold_store_ready,
 )
 from core.member_families import MEMBER_FAMILY_KERNEL_SVM
 from core.member_class_weight import MEMBER_CW_HEAD, MEMBER_CW_NONE, member_cw_mode, member_cw_table_f64
@@ -1120,6 +1125,92 @@ def _import(slot: _Slot, call: _Call) raises:
 
 
 def _kernel_svm_member(operation: Int, address: Int) raises -> Int:
+    """FOLDS (lane vdf-scope-linear2): MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
+    on a GPU route with the device table (`second`) and the x_prep store;
+    `_fold_op`. Everything else is `_kernel_svm_member_whole`."""
+    var call = _Call(unsafe_from_address=address)
+    if operation == MEMBER_OP_CAPABILITIES:
+        var bits = _kernel_svm_member_whole(operation, address)
+        if _route_fold(call):
+            bits |= MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
+        return bits
+    if (call[].row_index.rows > 0 and call[].column_index.rows == 0 and call[].route.device == DEVICE_GPU
+            and call[].state != 0 and (operation == MEMBER_OP_FIT or operation == MEMBER_OP_PREDICT
+            or operation == MEMBER_OP_DECISION or operation == MEMBER_OP_PREDICT_PROBA
+            or operation == MEMBER_OP_SCORE)):
+        _fold_op(_Slot(unsafe_from_address=_lookup(call[].state, False)), call, operation, address)
+        return 0
+    return _kernel_svm_member_whole(operation, address)
+
+
+def _route_fold(call: _Call) -> Bool:
+    """A GPU route with the SVC device table (the resident query entries)
+    whose image ships the x_prep family store."""
+    return call[].route.device == DEVICE_GPU and call[].route.has_second and member_fold_store_ready(call)
+
+
+def _fold_op(slot: _Slot, call: _Call, operation: Int, address: Int) raises:
+    """An operation over the rows `call.row_index` of the WHOLE host X
+    (core/member_fold_x.mojo). The queries (predict, decision, proba, score)
+    of a fitted computed-kernel state read THE FOLD X WORD: the resident
+    entries upload X through DeviceQueryX (svm/svm_resident_state.mojo
+    `resident_query_x`, core/device_query_x.mojo), which tests it on the
+    device. A FIT and a precomputed kernel take the fold's rows on the host
+    across its cores: the fit's finish gathers the support rows and the
+    one-vs-one pairs gather their rows from host X (svm/svc_kernel_fit_run.mojo),
+    and a precomputed query gathers its columns on the host. y and the
+    weights are taken bitwise through the index. Views restored before this
+    returns or raises."""
+    var x = call[].x
+    var y = call[].y
+    var weights = call[].weights
+    var index = call[].row_index
+    var fold = MemberFoldX()
+    var host_x = List[Float32]()
+    var host_y = List[UInt64]()
+    var host_w = List[UInt64]()
+    var estimator = _name(slot)
+    var device = (operation != MEMBER_OP_FIT and slot[].fitted and len(slot[].machines) > 0
+        and Int(slot[].params[1]) != SVC_KERNEL_PRECOMPUTED and _route_fold(call))
+    var failure = String("")
+    try:
+        if device:
+            member_fold_x_open(call, fold, estimator)
+            call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
+        else:
+            member_fold_index(call, fold, estimator)
+            host_x = List[Float32](unsafe_uninit_length=max(fold.rows * fold.cols, 1))
+            member_fold_take_f32(x.data, fold.index, fold.rows, fold.cols, Int(host_x.unsafe_ptr()))
+            call[].x = MemberMatrix(Int(host_x.unsafe_ptr()), fold.rows, fold.cols)
+        if y.rows > 0 and (operation == MEMBER_OP_FIT or operation == MEMBER_OP_SCORE):
+            if not y.dense_host(y.dtype) or y.rows != x.rows:
+                raise Error("ValueError: X and y have different numbers of rows")
+            call[].y = member_fold_take_into(y, fold, host_y)
+        if weights.rows > 0:
+            if weights.rows != x.rows or weights.cols != 1 or not weights.dense_host(weights.dtype):
+                raise Error("ValueError: sample_weight and X have different numbers of rows")
+            call[].weights = member_fold_take_into(weights, fold, host_w)
+        call[].row_index = MemberMatrix()
+        _ = _kernel_svm_member_whole(operation, address)
+    except error:
+        failure = String(error)
+    call[].x = x
+    call[].y = y
+    call[].weights = weights
+    call[].row_index = index
+    try:
+        member_fold_x_close(fold)
+    except close_error:
+        if failure.byte_length() == 0:
+            failure = "RuntimeError: a " + estimator + " member's fold slot was not freed: " + String(close_error)
+    _ = host_x^
+    _ = host_y^
+    _ = host_w^
+    if failure.byte_length() > 0:
+        raise Error(failure)
+
+
+def _kernel_svm_member_whole(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         # MEMBER_GIL_DOOR (THE GIL RULE, core/member_abi.mojo; fx-gil-RESULT.md,

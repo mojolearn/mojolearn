@@ -33,9 +33,20 @@ def seq_x_slot_resolve(op: Int, mut r: NeuralModelRequest) raises:
     `r.x_device` is set. Any other X word is left as it is."""
     if len(r.addresses) == 0 or r.addresses[0] >= 0:
         return
-    # MLP: ip = [N, D, ...]; RNN: ip = [cell, D, H, L, O, task, N, T, ...].
+    # MLP: ip = [N, D, ...]; RNN: ip = [cell, D, H, L, O, task, N, T, ...];
+    # CNN_FIT (lane vdf-scope-neural2): ip = [n, C, H, W, ...]; CNN_PREDICT:
+    # ip = [token, kind, sid, n, codes, chunk, row] (the seventh word only
+    # with a device-store X).
     var words = 0
-    if op == RNN_FIT or op == RNN_PREDICT:
+    if op == CNN_FIT:
+        if len(r.options) < 4:
+            raise Error("native CNN: a device-store X needs the row and image words")
+        words = r.options[0] * r.options[1] * r.options[2] * r.options[3]
+    elif op == CNN_PREDICT:
+        if len(r.options) != 7:
+            raise Error("native CNN: a device-store X needs the row width word")
+        words = r.options[3] * r.options[6]
+    elif op == RNN_FIT or op == RNN_PREDICT:
         if len(r.options) < 8:
             raise Error("native model: a device-store X needs the row, step and feature words")
         words = r.options[6] * r.options[7] * r.options[1]
@@ -135,9 +146,18 @@ def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: In
             # forward on the resident registry session CNN_OPEN made (the
             # binding opens it with the GIL held, as SESSION_OPEN)
             var cnn = NeuralModelRequest(op, aa, na, pp, np, ff, nf)
+            # Lane vdf-scope-neural2: a CNN X held in the x_sequence member
+            # store (a fold taken on the device) is read in place. The store
+            # lives on the sequence context; its put / take synchronize that
+            # context before returning, and the member frees the slot only
+            # after this call's downloads (which synchronize the x_cnn
+            # context) are done.
+            if op == CNN_FIT or op == CNN_PREDICT:
+                seq_x_slot_resolve(op, cnn)
             var written = 0
             if op == CNN_FIT:
-                written = cnn_fit_program[DeviceExec](_cnn_exec(), cnn.addresses, cnn.options, cnn.floats)
+                written = cnn_fit_program[DeviceExec](_cnn_exec(), cnn.addresses, cnn.options, cnn.floats,
+                                                      cnn.x_device)
             elif op == CNN_OPEN:
                 if nf != 0:
                     raise Error("native CNN: the resident open takes no scalar descriptors")
@@ -145,7 +165,7 @@ def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: In
             else:
                 if nf != 0:
                     raise Error("native CNN: predict takes no scalar descriptors")
-                written = cnn_predict_program[DeviceExec, OPS_DEVICE](cnn.addresses, cnn.options)
+                written = cnn_predict_program[DeviceExec, OPS_DEVICE](cnn.addresses, cnn.options, cnn.x_device)
             MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = written
             return 0
         var ex = DeviceExec()
