@@ -32,6 +32,11 @@ comptime SPECTRAL_CAP_RESIDENT = 2
 comptime SPECTRAL_CAP_AFFINITY = 4
 #: The image reads `fit`'s SPECTRAL_DATASET_STORE route (its resident store, lane vdf-scope-cluster4).
 comptime SPECTRAL_CAP_DEV_STORE = 8
+#: `prepare` and `query_resident` read slot words of the metrics image's resident store (lane vdf-scope-cluster8,
+#: 2026-11-24): a NEGATIVE `training` word of SpectralPrepareRequest names the store slot holding the training
+#: rows, a NEGATIVE `source` word of SpectralResidentQueryRequest the slot holding the queries
+#: (core/fold_x_word.mojo numbering), nearest-neighbors affinity only. The same kernels on the same words.
+comptime SPECTRAL_CAP_DEV_QUERY = 16
 comptime SPECTRAL_DATASET = 0
 comptime SPECTRAL_GRAPH = 1
 comptime SPECTRAL_DENSE = 2

@@ -52,8 +52,12 @@ through the same view, so THE CALLER KEEPS X ALIVE UNTIL THIS STATE IS
 FREED OR REFITTED (the member ABI's view lifetime). MEMBER_OP_EXPORT of the
 reference block copies the rows into the state once (the class's own fit
 copies them into `_fit_X` on every fit); from then on the state reads its
-own copy. No sample weights, no row or column index, no device-home view:
-refused in words.
+own copy. A row index (lane vdf-scope-cluster8) names a model-selection
+fold: taken on the device into an x_prep store slot that the solver, the
+x_cluster tree entry, the x_neighbors zero-row test and the labeled-reference
+predict read as a negative X word (the state keeps it as THE FITTED-ROWS
+SLOT), or gathered on the host cores, the state owning the words. No sample
+weights, no column index, no device-home view: refused in words.
 
 Outputs: predict writes int32 labels (rows x 1): the label of the nearest
 training row (squared euclidean, ties to the lowest label then the lowest
@@ -111,6 +115,17 @@ from core.member_families import MEMBER_FAMILY_HIERARCHY
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from core.member_abi import MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE
+from core.member_fold_x import MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_store_ready
+from core.member_scope_rows import MemberScopeRows, member_scope_rows_in
+from core.device_route import DEVICE_GPU
+from core.entry_table import EntryRef, entry_ref_unresolved
+from core.fold_x_word import fold_x_word
+from core.dbscan_native_api import DBSCAN_CAP_FOLD_X
+from core.native_descriptor_fixed_call import native_descriptor_call_fixed
+from hierarchy.solver_descriptor_schema import HIERARCHY_SOLVER_CAPABILITIES, HIERARCHY_SOLVER_CAP_FOLD_X
+from hierarchy.cluster_descriptor_schema import HIERARCHY_CLUSTER_CAPABILITIES, HIERARCHY_CLUSTER_CAP_FOLD_X
+from bindings.arena_cache_run import arena_cache_free, arena_store_read
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
@@ -156,6 +171,10 @@ struct HierarchyMemberSlot(Copyable, Movable, Defaultable):
     # alive until free or refit), else the state's own copy in `refs`.
     var borrowed: Int
     var refs: List[Float32]
+    # THE FITTED-ROWS SLOT (lane vdf-scope-cluster8): a fold fit taken on the device keeps its reference rows as
+    # that slot of the x_prep store `rows_store` (-1: none; `borrowed` / `refs` then hold none).
+    var rows_slot: Int
+    var rows_store: EntryRef
     # The resident reference handle of a GPU image (-1: none minted).
     var handle: Int
     var labels: List[Int32]
@@ -188,6 +207,8 @@ struct HierarchyMemberSlot(Copyable, Movable, Defaultable):
         self.features = 0
         self.borrowed = 0
         self.refs = List[Float32]()
+        self.rows_slot = -1
+        self.rows_store = entry_ref_unresolved()
         self.handle = -1
         self.labels = List[Int32]()
         self.children = List[Int32]()
@@ -324,10 +345,47 @@ def _release_resident(slot: _Slot, call: _Call) raises:
     _ = _driver(call).release(handle)
 
 
+def _drop_rows_slot(slot: _Slot) raises:
+    """Free THE FITTED-ROWS SLOT (a new fit, an import, a free or the first export of the rows replace it). The
+    resident reference set (if any) holds its own device copy."""
+    if slot[].rows_slot >= 0:
+        var held = slot[].rows_slot
+        slot[].rows_slot = -1
+        arena_cache_free(slot[].rows_store, held)
+
+
+def _caps(entry: EntryRef, operation: Int) -> Int:
+    """An entry's capability word (0 when it answers none)."""
+    try:
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
+        return native_descriptor_call_fixed(entry.call, operation, a, p, f)
+    except:
+        return 0
+
+
+def _fold_ready(slot: _Slot, call: _Call) -> Bool:
+    """THE FOLD X WORD on this fit (lane vdf-scope-cluster8): a GPU route whose image ships the x_prep store, whose
+    fit entry takes the word (the solver route: HIERARCHY_SOLVER_CAP_FOLD_X on `route.second`; the tree route:
+    HIERARCHY_CLUSTER_CAP_FOLD_X on `route.third`, with the device x_neighbors zero-row test of a GPU route), and,
+    when the fit keeps prediction data, whose predict entry reads the word too (DBSCAN_CAP_FOLD_X with
+    DBSCAN_CAP_RESIDENT on `route.entry`)."""
+    if call[].route.device != DEVICE_GPU or not member_fold_store_ready(call):
+        return False
+    if slot[].prediction_data and ((call[].route.flags & DBSCAN_CAP_FOLD_X) == 0
+            or (call[].route.flags & DBSCAN_CAP_RESIDENT) == 0):
+        return False
+    if slot[].options().solver_route():
+        return call[].route.has_second and (
+            _caps(call[].route.second, HIERARCHY_SOLVER_CAPABILITIES) & HIERARCHY_SOLVER_CAP_FOLD_X) != 0
+    return call[].route.has_third and (
+        _caps(call[].route.third, HIERARCHY_CLUSTER_CAPABILITIES) & HIERARCHY_CLUSTER_CAP_FOLD_X) != 0
+
+
 def _whole_x(call: _Call) raises:
     if call[].row_index.rows > 0 or call[].column_index.rows > 0:
-        raise Error("TypeError: an AgglomerativeClustering member reads no row or column index"
-            + " (a fold is handed over as gathered host words)")
+        raise Error("TypeError: an AgglomerativeClustering member reads no column index")
     if call[].x.home == MEMBER_HOME_DEVICE or not call[].x.dense_host(MEMBER_F32):
         raise Error("TypeError: an AgglomerativeClustering member reads X as a dense host float32 view")
 
@@ -343,38 +401,71 @@ def _labels_out(call: _Call, rows: Int) raises:
 def _fit(slot: _Slot, call: _Call) raises:
     """`_agglo_fit`: the class's route predicate picks its owner, the solver
     route (`_agglo_legacy`) or the x_cluster tree route (`_agglo_x`), both on
-    the borrowed X."""
-    _whole_x(call)
+    the borrowed X. Under a row index (MEMBER_CAN_ROW_INDEX, lane vdf-scope-cluster8) the fold's rows: taken ON
+    THE DEVICE into a slot of the x_prep store (`_fold_ready`: the scope's one copy of X), whose negative word the
+    fit entry reads and which the state keeps as THE FITTED-ROWS SLOT for predict; else gathered on the host
+    cores, the state owning the gathered words."""
     if call[].weights.rows > 0:
         raise Error("TypeError: AgglomerativeClustering takes no sample_weight")
+    if call[].column_index.rows > 0 or call[].x.home == MEMBER_HOME_DEVICE or not call[].x.dense_host(MEMBER_F32):
+        raise Error("TypeError: an AgglomerativeClustering member reads X as a dense host float32 view, no column"
+            + " index")
     var output = call[].fit_output
-    var rows = call[].x.rows
+    var rows = call[].row_index.rows if call[].row_index.rows > 0 else call[].x.rows
     if output == MEMBER_OP_PREDICT:
         _labels_out(call, rows)
     elif output != 0:
         member_unsupported(_EST, output)
-    if slot[].options().solver_route():
-        _fit_solver(slot, call)
+    if call[].row_index.rows == 0:
+        _fit_words(slot, call, call[].x.data, call[].x.rows, call[].x.cols)
+        slot[].borrowed = call[].x.data if slot[].predicting else 0
+    elif _fold_ready(slot, call):
+        var fold = MemberFoldX()
+        member_fold_x_open(call, fold, _EST)
+        var kept = False
+        try:
+            _fit_words(slot, call, fold.word(), fold.rows, fold.cols)
+            if slot[].predicting:
+                slot[].rows_slot = fold.slot
+                slot[].rows_store = fold.store
+                fold.slot = -1  # the state owns the slot now
+                kept = True
+        finally:
+            if not kept:
+                member_fold_x_close(fold)
     else:
-        _fit_tree(slot, call)
+        var gathered = member_scope_rows_in(call[], call[].route.entry, "x_prep", False, _EST)
+        _fit_words(slot, call, gathered.source, gathered.rows, gathered.cols)
+        if slot[].predicting:
+            swap(slot[].refs, gathered.gathered)  # the state owns the gathered rows (nothing borrowed)
+        _ = gathered.rows  # the gathered rows stay alive through the fit
     if output == MEMBER_OP_PREDICT:
         unsafe_memcpy(dest=_I32P(unsafe_from_address=call[].dst.data), src=slot[].labels.unsafe_ptr(), count=rows)
 
 
-def _fit_solver(slot: _Slot, call: _Call) raises:
+def _fit_words(slot: _Slot, call: _Call, x_word: Int, rows: Int, d: Int) raises:
+    """The class's route predicate picks its owner over X at `x_word` (`rows` x `d`: host words, or a negative
+    fold X word); the state borrows nothing here (the caller sets `borrowed` / the kept rows)."""
+    if slot[].options().solver_route():
+        _fit_solver(slot, call, x_word, rows, d)
+    else:
+        _fit_tree(slot, call, x_word, rows, d)
+    slot[].borrowed = 0
+
+
+def _fit_solver(slot: _Slot, call: _Call, x_word: Int, rows: Int, d: Int) raises:
     """`_agglo_legacy`: its row and cluster checks, one solver call."""
-    var rows = call[].x.rows
-    var d = call[].x.cols
     if not call[].route.has_second:
         raise Error("member ABI: an AgglomerativeClustering member's route holds no solver entry")
     agglo_check_solver_rows(rows, d, rows > AGGLO_PAIRWISE_MAX_ROWS and slot[].fast_mst and d <= 64)
     agglo_check_solver_clusters(slot[].clusters, rows)
     _release_resident(slot, call)
+    _drop_rows_slot(slot)
     slot[].clear()
     slot[].children = List[Int32](length=(rows - 1) * 2, fill=0)
     slot[].labels = List[Int32](length=rows, fill=0)
     var info = AggloSolverScratch()
-    var request = agglo_solver_request(call[].x.data, Int(slot[].children.unsafe_ptr()),
+    var request = agglo_solver_request(x_word, Int(slot[].children.unsafe_ptr()),
         Int(slot[].labels.unsafe_ptr()), info.address(), rows, d, slot[].clusters)
     _ = AggloSolverDriver(call[].route.second.call).fit(request)
     var scalars: List[Float64] = [Float64(slot[].clusters), Float64(info.rounds()), Float64(info.components())]
@@ -383,7 +474,6 @@ def _fit_solver(slot: _Slot, call: _Call) raises:
     slot[].rows = rows
     slot[].features = d
     slot[].predicting = slot[].prediction_data
-    slot[].borrowed = call[].x.data if slot[].predicting else 0
     slot[].fitted = True
 
 
@@ -399,11 +489,10 @@ def _connectivity_check(slot: _Slot, rows: Int) raises:
         raise Error("Wrong shape for connectivity matrix when X has " + String(rows) + " samples")
 
 
-def _fit_tree(slot: _Slot, call: _Call) raises:
+def _fit_tree(slot: _Slot, call: _Call, x_word: Int, n: Int, d: Int) raises:
     """`_agglo_x`: the x_cluster route's checks in its order, one cluster fit
-    (`route.third`), the zero-row test for cosine on `route.fourth`."""
-    var n = call[].x.rows
-    var d = call[].x.cols
+    (`route.third`), the zero-row test for cosine on `route.fourth` (both read a
+    negative fold X word on the device)."""
     var options = slot[].options()
     if not call[].route.has_third:
         raise Error("member ABI: an AgglomerativeClustering member's route holds no x_cluster entry")
@@ -415,7 +504,7 @@ def _fit_tree(slot: _Slot, call: _Call) raises:
             raise Error("member ABI: an AgglomerativeClustering member's route holds no x_neighbors entry")
         var zrow = AggloZeroRowsScratch(n)
         AggloZeroRowsDriver(XnDriver(call[].route.fourth.call)).run(
-            agglo_zero_rows_request(call[].x.data, zrow.address(), n, d))
+            agglo_zero_rows_request(x_word, zrow.address(), n, d))
         agglo_check_zero_rows(zrow.any_zero())
         _ = zrow^
     var requested = 0
@@ -436,12 +525,13 @@ def _fit_tree(slot: _Slot, call: _Call) raises:
         edge_mode = slot[].conn_mode
     var threshold = slot[].threshold if options.has_threshold else Float64(0)
     _release_resident(slot, call)
+    _drop_rows_slot(slot)
     slot[].clear()
     slot[].children = List[Int32](length=merges * 2, fill=0)
     slot[].labels = List[Int32](length=n, fill=0)
     slot[].distances = List[Float32](length=merges, fill=0.0)
     var scratch = AggloClusterScratch()
-    var request = agglo_cluster_request(call[].x.data, conn_address, Int(slot[].children.unsafe_ptr()),
+    var request = agglo_cluster_request(x_word, conn_address, Int(slot[].children.unsafe_ptr()),
         Int(slot[].labels.unsafe_ptr()), Int(slot[].distances.unsafe_ptr()), scratch.address(), n * d, conn_count,
         n, d, options, edges, plan, edge_mode, threshold)
     AggloClusterDriver(call[].route.third.call).fit(request)
@@ -458,7 +548,6 @@ def _fit_tree(slot: _Slot, call: _Call) raises:
     slot[].rows = n
     slot[].features = d
     slot[].predicting = agglo_x_predicts(options)
-    slot[].borrowed = call[].x.data if slot[].predicting else 0
     slot[].fitted = True
 
 
@@ -473,21 +562,48 @@ def _predict(slot: _Slot, call: _Call) raises:
     if not slot[].fitted or not slot[].predicting:
         raise Error("mojolearn AgglomerativeClustering.predict: prediction data was not stored. Fit with"
             + " AgglomerativeClustering(prediction_data=True)")
-    _whole_x(call)
-    var queries = call[].x.rows
+    if call[].row_index.rows == 0:
+        _whole_x(call)
+        _predict_words(slot, call, call[].x.data, call[].x.rows, call[].x.cols)
+        return
+    if call[].column_index.rows > 0 or call[].x.home == MEMBER_HOME_DEVICE or not call[].x.dense_host(MEMBER_F32):
+        raise Error("TypeError: an AgglomerativeClustering member reads X as a dense host float32 view, no column"
+            + " index")
+    # MEMBER_CAN_ROW_INDEX (lane vdf-scope-cluster8): the fold's queries taken on the device (DBSCAN_CAP_FOLD_X)
+    # out of the scope's one copy of X, else gathered on the host cores.
+    if (call[].route.device == DEVICE_GPU and (call[].route.flags & DBSCAN_CAP_FOLD_X) != 0
+            and (call[].route.flags & DBSCAN_CAP_RESIDENT) != 0 and member_fold_store_ready(call)):
+        var fold = MemberFoldX()
+        member_fold_x_open(call, fold, _EST)
+        try:
+            _predict_words(slot, call, fold.word(), fold.rows, fold.cols)
+        finally:
+            member_fold_x_close(fold)
+        return
+    var gathered = member_scope_rows_in(call[], call[].route.entry, "x_prep", False, _EST)
+    _predict_words(slot, call, gathered.source, gathered.rows, gathered.cols)
+    _ = gathered.rows  # the gathered queries stay alive through the query call
+
+
+def _predict_words(slot: _Slot, call: _Call, q_word: Int, queries: Int, cols: Int) raises:
+    """`_agglo_predict` over the queries at `q_word` (host words, or a negative fold X word); the reference rows
+    are the state's host words or THE FITTED-ROWS SLOT (its negative word, DBSCAN_CAP_FOLD_X)."""
     var d = slot[].features
-    agglo_check_reference_width(d, call[].x.cols)
+    agglo_check_reference_width(d, cols)
     _labels_out(call, queries)
     var driver = _driver(call)
-    var refs = slot[].reference_address()
+    var refs = fold_x_word(slot[].rows_slot) if slot[].rows_slot >= 0 else slot[].reference_address()
     var labels = Int(slot[].labels.unsafe_ptr())
     if slot[].handle < 0 and (call[].route.flags & DBSCAN_CAP_RESIDENT) != 0:
         slot[].handle = driver.prepare(agglo_reference_request(refs, labels, slot[].rows, d))
     if slot[].handle >= 0:
-        _ = driver.resident(agglo_resident_query(call[].x.data, call[].dst.data, slot[].handle, queries, d))
+        _ = driver.resident(agglo_resident_query(q_word, call[].dst.data, slot[].handle, queries, d))
         return
+    if refs < 0 or q_word < 0:
+        raise Error("member ABI: an AgglomerativeClustering state's device-resident rows need a resident predict"
+            + " entry (DBSCAN_CAP_RESIDENT)")
     var chosen = List[Int32](length=queries, fill=0)
-    _ = driver.query(agglo_query_request(refs, labels, call[].x.data, call[].dst.data, Int(chosen.unsafe_ptr()),
+    _ = driver.query(agglo_query_request(refs, labels, q_word, call[].dst.data, Int(chosen.unsafe_ptr()),
         slot[].rows, queries, d))
     _ = chosen^
 
@@ -498,10 +614,19 @@ def _i32_view(values: List[Int32], rows: Int, cols: Int) -> MemberMatrix:
     return MemberMatrix(Int(values.unsafe_ptr()), rows, cols, MEMBER_I32)
 
 
-def _own_refs(slot: _Slot):
+def _own_refs(slot: _Slot) raises:
     """Copy the borrowed reference rows into the state, once (the class's
     `_fit_copy`); the state reads its own copy from then on. The resident
-    copy (if any) holds the same words and stays."""
+    copy (if any) holds the same words and stays. THE FITTED-ROWS SLOT is read
+    home once (`arena_store_read`) and freed."""
+    if slot[].rows_slot >= 0:
+        var words = slot[].rows * slot[].features
+        slot[].refs = List[Float32](length=words, fill=0.0)
+        if words > 0:
+            arena_store_read(slot[].rows_store, slot[].rows_slot, Int(slot[].refs.unsafe_ptr()), words)
+        _drop_rows_slot(slot)
+        slot[].borrowed = 0
+        return
     if slot[].borrowed == 0:
         return
     var count = slot[].rows * slot[].features
@@ -565,6 +690,7 @@ def _import(slot: _Slot, call: _Call) raises:
     var block = call[].block
     if block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
         _release_resident(slot, call)
+        _drop_rows_slot(slot)
         slot[].fitted = False
     if block == _BLOCK_LABELS:
         slot[].labels = _take_i32(call, "labels")
@@ -609,7 +735,13 @@ def _hierarchy_member(operation: Int, address: Int) raises -> Int:
         # MEMBER_BORROWS_FIT: a fitted state reads the caller's X (its
         # training rows) until an export of the rows block, or
         # MEMBER_EXPORT_OWN, copied them.
-        return MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_BORROWS_FIT
+        # MEMBER_CAN_ROW_INDEX (lane vdf-scope-cluster8): a fold's rows (gathered on the host cores, or taken on
+        # the device: MEMBER_CAN_SCOPE on a GPU route whose image ships the x_prep store).
+        var caps = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_BORROWS_FIT
+            | MEMBER_CAN_ROW_INDEX)
+        if call[].route.device == DEVICE_GPU and member_fold_store_ready(call):
+            caps |= MEMBER_CAN_SCOPE
+        return caps
     if operation == MEMBER_OP_NEW:
         if not call[].params or call[].param_count < 1:
             raise Error("member ABI: a hierarchy member's first parameter word is its kind")
@@ -628,6 +760,7 @@ def _hierarchy_member(operation: Int, address: Int) raises -> Int:
         var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
         try:
             _release_resident(held, call)
+            _drop_rows_slot(held)
         finally:
             _ = _lookup(call[].state, True)
         call[].state = 0

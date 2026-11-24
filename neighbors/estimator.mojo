@@ -130,7 +130,7 @@ from core.admitted_finite_status import enqueue_finite_word
 from core.device_zero import enqueue_fill
 from core.device_query_x import QueryFold
 from core.msel_device_x import msel_device_x_f32
-from neighbors.zero_row_device import device_first_zero_row
+from neighbors.zero_row_device import device_first_zero_row, device_first_negative_word
 
 # TOMBSTONE: MOJOLEARN_KNN_FAST_REFINE (NEUTRAL / REVERTED: rab5-knnref istella +3.7%, taxi -1.5%, recall identical) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at 1fadfcc7b3.
 # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_REFINE.patch; record in docs/TOMBSTONES.md.
@@ -1382,7 +1382,8 @@ def _knn_status_flagged(status_addr: Int, fold: Bool) -> Bool:
     var words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr)
     if words[0] != 0:
         return True
-    return fold and words[1] != 0
+    # A fold's third word (lane vdf-scope-cluster8): the metric's input refusal (Jensen-Shannon X < 0).
+    return fold and (words[1] != 0 or words[2] != 0)
 
 
 def knn_put_status(status_addr: Int, word: Int32):
@@ -1449,7 +1450,10 @@ def _knn_search_on_device_index(
     `msel_device_x_f32`, the finite and range tests in the same pass) and
     never uploaded; `queries_ptr` is not read. `ctx` must be the fold
     store's context (the gather refuses any other). `status_addr` then
-    names TWO int32 words: the finite word and the index-range word.
+    names THREE int32 words: the finite word, the index-range word and the
+    metric word (lane vdf-scope-cluster8: Jensen-Shannon's X >= 0 test of the
+    queries as a device reduction, 1 a negative query word; the outputs are
+    then unwritten and the caller raises the estimator's words).
 
     `cache` (DEVIATION 3061) is a resident index's derived buffers, None
     for a per-call index: with it the index norms are copied from the cache
@@ -1549,10 +1553,20 @@ def _knn_search_on_device_index(
         _ = fold_status^
         knn_put_status(status_addr, finite_word)
         knn_put_status(status_addr + 4, range_word)
+        knn_put_status(status_addr + 8, Int32(0))
         if finite_word != 0 or range_word != 0:
             if pooled:
                 knn_pool_release(cache.value())
             return query_tile
+        if mtr == DIST_JENSEN_SHANNON:
+            # THE JENSEN-SHANNON INPUT TEST over the gathered fold queries on the device (lane
+            # vdf-scope-cluster8; the index was tested at its fit, on its host words): the third status word
+            # carries the answer, and the caller raises the estimator's words.
+            if device_first_negative_word(ctx, queries, n_queries * n_features) >= 0:
+                knn_put_status(status_addr + 8, Int32(1))
+                if pooled:
+                    knn_pool_release(cache.value())
+                return query_tile
         if mtr == DIST_COSINE_EXPANDED:
             # THE COSINE ZERO-ROW REFUSALS over device rows (lane vdf-scope-cluster7; the plan ran with
             # `zero_rows_checked`): the resident index's rows, then the gathered fold queries, as device

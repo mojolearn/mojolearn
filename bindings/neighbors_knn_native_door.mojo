@@ -94,7 +94,7 @@ from neighbors.neighbors_knn_run import (
     KNN_DIST_LP, KNN_DIST_JS, KNN_CODE_F32, KNN_CODE_F64, KNN_CODE_I64, KNN_REDUCE_MIN, KNN_REDUCE_MAX,
     KNN_REDUCE_INTEGRAL, knn_refuse_rbc_vote, knn_refuse_distance_inner_product, knn_refuse_algorithm,
     knn_refuse_metric_name, knn_metric_code, knn_metric_resolve, knn_refuse_inert_p,
-    knn_minkowski_status, knn_refuse_minkowski, knn_check_metric_input, knn_metric_reads_host_queries,
+    knn_minkowski_status, knn_refuse_minkowski, knn_check_metric_input, knn_refuse_metric_status,
     knn_refuse_callable_weights, knn_refuse_weights, knn_weights_code, knn_check_y_rank, knn_check_y_rows,
     knn_check_y_ndim, knn_int32_low_fits, knn_check_int32_labels, knn_labels_already_int32, knn_float_format,
     knn_labels_finite,
@@ -1064,8 +1064,6 @@ def _knn_fold(model: PythonObject, binding: PythonObject, x_source: PythonObject
             or py_get(fields, PythonObject("_y_cols"), PythonObject(None)) is None):
         raise Error("mojolearn: call fit before predict")
     var resolved = knn_dist_words(model, context)
-    if knn_metric_reads_host_queries(resolved.metric):
-        return DoorRowsStore.none()
     var store = door_rows_store(x_source, context)
     if not store.active():
         return DoorRowsStore.none()
@@ -1120,6 +1118,7 @@ def knn_query_refuse(model: PythonObject, request: KnnQueryRequest, outcome: Knn
         knn_index_scan_done(py_fields(model), scan_key)
     if fold.active():
         door_rows_refuse(outcome.status, outcome.range_status, cls_name, fold.base_rows)
+        knn_refuse_metric_status(cls_name, outcome.metric_status)  # lane vdf-scope-cluster8: Jensen-Shannon
     else:
         admitted_finite_refuse(outcome.status, cls_name)
 

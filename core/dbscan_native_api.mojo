@@ -31,6 +31,10 @@ comptime DBSCAN_CORE_GATHER_STORE = 11
 # on the host by `cosine_unit_rows`, whose refusal words the member keeps on the gathered form).
 comptime DBSCAN_RESIDENT_QUERY_STORE = 12
 comptime DBSCAN_CAP_DEV_STORE = 2
+#: DBSCAN_PREPARE's `refs` and DBSCAN_RESIDENT_QUERY's `query` may be NEGATIVE: a model-selection fold's slot of the
+#: x_prep store (core/fold_x_word.mojo), copied device to device (lane vdf-scope-cluster8,
+#: AgglomerativeClustering's fold fit and predict). GPU image only.
+comptime DBSCAN_CAP_FOLD_X = 4
 
 
 @fieldwise_init

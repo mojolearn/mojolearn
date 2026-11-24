@@ -15,6 +15,8 @@ cell's bits are the three-launch chain's and the x_decomp host column's
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_decomp.cells import F32Ptr, OP_EXP, OP_SCALE, ew_cell, sqdist_cell
+from core.metrics_store import metrics_store_buffer
+from core.fold_x_word import fold_x_slot
 
 comptime RBF_TPB = 128
 
@@ -36,12 +38,21 @@ def rbf_affinity_device(
 ) raises:
     """X (n x d float32 at the host address `x_addr`) uploaded once, the n x n
     affinity written into `dst` (at least max(n * n, 1) words) on the device.
-    Enqueued: the caller synchronizes before reading `dst` on the host."""
+    Enqueued: the caller synchronizes before reading `dst` on the host.
+
+    A NEGATIVE `x_addr` (lane vdf-scope-cluster8, core/fold_x_word.mojo) names
+    a slot of the metrics image's resident store holding X (a model-selection
+    fold taken on the device, the same context): the kernel reads that slot in
+    place, no upload; the same cells on the same words."""
     if n * n > 2147483647:
         raise Error("spectral embedding: the rbf affinity exceeds the Int32 index bound")
-    var dx = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
-    if n * d > 0:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=F32Ptr(unsafe_from_address=x_addr))
+    var dx: DeviceBuffer[DType.float32]
+    if x_addr < 0:
+        dx = metrics_store_buffer(fold_x_slot(x_addr), max(n * d, 1))
+    else:
+        dx = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
+        if n * d > 0:
+            ctx.enqueue_copy(dst_buf=dx, src_ptr=F32Ptr(unsafe_from_address=x_addr))
     var nn = n * n
     ctx.enqueue_function[rbf_affinity_kernel](
         dx.unsafe_ptr(), dst.unsafe_ptr(), Int32(n), Int32(d), Float32(-gamma),

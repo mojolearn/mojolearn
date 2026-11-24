@@ -529,13 +529,14 @@ def minibatch_partial_entry[O: ClusterOps](
 
 
 def agglo_entry[O: ClusterOps](
-    mut ops: O, x: List[Float32], edges: List[Float32], ip: List[Int], fp: List[Float64]
+    mut ops: O, x: List[Float32], edges: List[Float32], ip: List[Int], fp: List[Float64], x_slot: Int = -1
 ) raises -> ClusterOut:
     """ip = [n, d, linkage (0 ward, 1 complete, 2 average, 3 single), metric
     (-1 euclidean, 0-4 bodies.pdist_cell, 5 precomputed), n_edges (-1: no
     connectivity), n_merges]; fp = [minkowski p]; `edges` = the n_edges
     (row, col) pairs. i = [children (n_merges x 2)], f = [distances],
-    s = [n_connected_components].
+    s = [n_connected_components]. `x_slot` >= 0 (lane vdf-scope-cluster8): X
+    is that float slot of `ops` already (a fold on the device); `x` unread.
 
     Optional (lane apple-fast-py2mojo-cluster, what `_hierarchy_impl.py`
     computed in Python): ip[6] = edge_mode (0 the pairs above, 1 `edges` is
@@ -549,7 +550,8 @@ def agglo_entry[O: ClusterOps](
     var n_cc = 1
     var edge_mode = ip[6] if len(ip) > 6 else 0
     agglo_tree(
-        ops, x, ip[0], ip[1], ip[2], ip[3], Float32(fp[0]), edges, ip[4], ip[5], children, dist, n_cc, edge_mode
+        ops, x, ip[0], ip[1], ip[2], ip[3], Float32(fp[0]), edges, ip[4], ip[5], children, dist, n_cc, edge_mode,
+        x_slot,
     )
     var out = ClusterOut()
     var cut = ip[7] if len(ip) > 7 else -1
