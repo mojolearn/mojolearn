@@ -1,31 +1,34 @@
 # SPDX-License-Identifier: Apache-2.0
 """UNPACK of the device-resident inputs of an x_metrics program (lane
-vdf-xm-transport, 2026-11-24): the x_metrics resident transport of the shared
-program runner (`bindings/arena_prog_native_door.mojo`
-`metrics_run_plan_entries`).
+vdf-xm-transport, 2026-11-24; ONE store, lane vdf-xm-wire, 2026-11-24): the
+resident transport of the shared program runner
+(`bindings/arena_prog_native_door.mojo` `metrics_run_plan_entries`).
 
-On an image with a resident store (`MetricRoute.store`: the GPU images, the
-range route on), a program input is read from the image's store in place:
+THE ONE STORE. Resident metric inputs live in the x_prep image's store
+(x_prep/store_slot.mojo `X_PREP_STORE` on `x_prep_ctx`), the store the
+`resident()` scope, `DeviceRows`, the estimators, the x_prep programs and the
+`_mojolearn_metrics` kernel entries (metrics/slot_inputs.mojo) use. The
+x_metrics GPU image runs on that store's context (x_metrics/device.mojo
+`metrics_ctx`), so a program metric and a kernel metric read the SAME slot in
+place, and one `resident()` block uploads an X once whichever metric family
+reads it. Put, gather and free go through the x_prep transport entry of the
+program image's tier and vendor (`metric_store_ref`); no x_prep image
+connected in the process means no store: the host route below.
+
+On an image with the store (`MetricRoute.store` and `metric_store_ref`), a
+program input is read from it in place:
 
   * a `DeviceRows` fold view of a float32 base: the base is put ONCE (into the
-    active `resident()` scope's x_metrics cache at any size, identity-keyed,
-    so every fold, candidate and metric of the block shares the upload; else
+    active `resident()` scope's x_prep cache at any size, identity-keyed, so
+    every fold, candidate and metric of the block shares the upload; else
     into a slot this run owns) and the fold's rows are gathered on the device
-    (`MP_DEV_TAKE_ROWS`, core/device_store.mojo `take_rows`); the rows never
-    come to the host (before: `_values(value, context, True)`, a host gather
-    of every fold, then the arena upload);
+    (`XP_DEV_TAKE_ROWS`, core/device_store.mojo `take_rows`); the rows never
+    come to the host;
   * a host buffer of at least the scope's floor inside `resident()`: put once
-    and found again by identity (`DeviceCache`'s contract, restored for
-    x_metrics: the `x_metrics_dev_*` entries were deleted as dead on
-    2026-10-26 by c209716bf).
+    and found again by identity (`XprepResident`, the x_prep runner's form).
 
 The slot reaches the program through the range route's input triple
-(core/arena_io.mojo `upload_ranges`, device to device). The store
-operations are the image's program entry (x_metrics/descriptor_schema.mojo
-`MP_DEV_*`); the scope's cache uses the same entry through
-bindings/arena_cache_run.mojo (route bit `ARENA_ROUTE_METRICS`). This is the
-estimators' convention (python/mojolearn/_arena_io.py), the x_prep runner's
-form (`_rows_gather`, `XprepResident`), not a second one.
+(core/arena_io.mojo `upload_ranges`, device to device on the store's context).
 
 The host column, a CPU-only install and `MOJOLEARN_ARENA_RANGES=0` have no
 store: their routes read host words exactly as before (a DeviceRows is its
@@ -35,68 +38,42 @@ Where a word travels moves no bit: a slot holds exactly the host words the
 host path would have copied into the arena (the same float32 rows in index
 order), and `upload_ranges` copies them byte for byte.
 """
-from std.memory import ArcPointer
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.py_balanced import py_get, py_type
+from bindings.py_balanced import py_get
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_arrays_door import classical_address, classical_is_array, classical_c_order
 from bindings.sequential_admission_door import sequential_admit_value
 from bindings.x_prep_native_inputs_door import _rows_fields, _dense_values
-from bindings.arena_scope_door import arena_scope_active, arena_cache_slot
-from bindings.arena_cache_run import arena_scope_cache, arena_scope_floor, arena_metrics_store
-from core.arena_state import ARENA_CACHES, ARENA_HANDLE_NONE, DeviceCacheState, arena_handle
-from core.entry_table import EntryRef, entry_ref_unresolved
+from bindings.x_prep_native_owner_door import XprepResident, xprep_resident_none
+from bindings.arena_scope_door import arena_scope_active
+from bindings.arena_cache_run import arena_scope_floor
+from core.entry_table import EntryRef
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
-from x_metrics.descriptor_schema import MP_MODE, MP_VENDOR, MP_DEV_PUT, MP_DEV_FREE, MP_DEV_TAKE_ROWS
+from core.prep_entry_table import PrepEntryKey, xp_transport_ref, xp_transport_call
+from x_metrics.descriptor_schema import MP_MODE, MP_VENDOR
+from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS
 
 comptime _INT32_MAX = 2147483647
 
 
-struct MetricResident(Movable):
-    """The calling thread's `resident()` scope resolved for ONE x_metrics
-    program run: the scope's handle word (`ARENA_HANDLE_NONE` outside a
-    scope), its size floor and the image's store entry. The scope's x_metrics
-    cache is created and leased at the first input the run keeps resident.
-    (`XprepResident` of bindings/x_prep_native_owner_door.mojo, on the
-    x_metrics store.)"""
-    var scope: Int
-    var min_words: Int
-    var store: EntryRef
-    var cache: Int
-    var lease: Optional[ArcPointer[DeviceCacheState]]
-
-    def __init__(out self, scope: Int, min_words: Int, store: EntryRef):
-        self.scope = scope
-        self.min_words = min_words
-        self.store = store
-        self.cache = ARENA_HANDLE_NONE
-        self.lease = Optional[ArcPointer[DeviceCacheState]]()
-
-    def active(self) -> Bool:
-        return self.scope >= 0
-
-    def keeps(self, rows: Bool, words: Int) -> Bool:
-        """Whether the run keeps an input of `words` words resident (a
-        DeviceRows base at any size)."""
-        return self.scope >= 0 and (rows or words >= self.min_words)
-
-    def slot(mut self, source: PythonObject, address: Int, words: Int) raises -> Int:
-        """The store id of `source`'s resident copy: found (a hit), or put
-        once and published with `source` pinned by the cache."""
-        if not self.lease:
-            self.cache = arena_scope_cache(self.scope, self.store, "x_metrics")
-            self.lease = Optional[ArcPointer[DeviceCacheState]](ARENA_CACHES.acquire(arena_handle(self.cache)))
-        return arena_cache_slot(self.lease.value(), self.cache, self.store, source, address, words)
+def metric_store_ref(program: NativeDescriptorCall) -> Optional[EntryRef]:
+    """The x_prep transport entry of the program image's tier and vendor (two
+    entry calls, then the process table read): the one resident store's
+    door. None when no x_prep image of that tier and vendor is connected in
+    the process: the run takes the host route (as a CPU-only install does).
+    Once per run, at its first input that could be resident."""
+    try:
+        var mode = native_descriptor_call(program, MP_MODE, [], [], [])
+        var vendor = native_descriptor_call(program, MP_VENDOR, [], [], [])
+        return Optional[EntryRef](xp_transport_ref(PrepEntryKey(mode, vendor)))
+    except:
+        return Optional[EntryRef]()
 
 
-def metric_resident_none() -> MetricResident:
-    """The value of a run that keeps nothing resident."""
-    return MetricResident(ARENA_HANDLE_NONE, 0, entry_ref_unresolved())
-
-
-def _metric_scope_word(context: PythonObject) raises -> Int:
+def metric_scope_word(context: PythonObject) raises -> Int:
+    """The calling thread's active `resident()` scope word, -1 outside one."""
     # The thread's active scope (bindings/arena_scope_door.mojo): the
     # thread-local's dictionary, one slot read, one downcast. A program
     # context connected without the scope keys (none today: every x_metrics
@@ -104,39 +81,36 @@ def _metric_scope_word(context: PythonObject) raises -> Int:
     # `connect`, or a copy of it) keeps nothing resident.
     var local = py_get(context, "arena_local")
     if local is None:
-        return ARENA_HANDLE_NONE
+        return -1
     return arena_scope_active(local, native_loaded_module("_thread")._local,
                               native_loaded_module("builtins").str, context["arena_scope_owner"],
                               context["arena_scope_class"])
 
 
-def metric_resident_of(program: NativeDescriptorCall, context: PythonObject) raises -> MetricResident:
-    """The run's resident scope on the store of the image whose program
-    entry is `program` (a route with `store`). The image's tier and vendor
-    words (two entry calls) and its store entry are resolved only inside a
-    scope. Once per run, at its first nonempty input."""
-    var scope = _metric_scope_word(context)
+def metric_resident_of(scope: Int, store: EntryRef) raises -> XprepResident:
+    """The run's `resident()` scope (`metric_scope_word`) on the one store
+    (`store`: its x_prep transport entry), or none outside a scope."""
     if scope < 0:
-        return metric_resident_none()
-    var mode = native_descriptor_call(program, MP_MODE, [], [], [])
-    var vendor = native_descriptor_call(program, MP_VENDOR, [], [], [])
-    return MetricResident(scope, arena_scope_floor(scope), arena_metrics_store(mode, vendor))
+        return xprep_resident_none()
+    return XprepResident(scope, arena_scope_floor(scope), store)
 
 
-def metric_store_put(program: NativeDescriptorCall, address: Int, words: Int) raises -> Int:
+def metric_store_put(store: EntryRef, address: Int, words: Int) raises -> Int:
     """A slot this run owns holding the `words` host words at `address`."""
+    var src: List[Int] = [address]
+    var count: List[Int] = [words]
     var slot = -1
     with GILReleased(Python()):
-        slot = native_descriptor_call(program, MP_DEV_PUT, [address], [words], [])
+        slot = xp_transport_call(store, XP_DEV_PUT, src, count)
     return slot
 
 
-def metric_rows_gather(value: PythonObject, program: NativeDescriptorCall, mut owned: List[Int],
-                       mut resident: MetricResident, context: PythonObject) raises -> Int:
+def metric_rows_gather(value: PythonObject, store: EntryRef, mut owned: List[Int],
+                       mut resident: XprepResident, context: PythonObject) raises -> Int:
     """The store slot of a DeviceRows' rows gathered on the device out of its
     base (`_rows_gather` of the x_prep runner): the base put once through the
     active `resident()` scope (any size) or into a slot this run owns, then
-    `MP_DEV_TAKE_ROWS` into a slot this run owns (appended to `owned`).
+    `XP_DEV_TAKE_ROWS` into a slot this run owns (appended to `owned`).
     -1 when the fold cannot be gathered as the program's float32 words (a
     base that is not float32, an empty fold): the caller reads its host
     rows, as before."""
@@ -160,12 +134,13 @@ def metric_rows_gather(value: PythonObject, program: NativeDescriptorCall, mut o
         # the run's resident scope keeps a DeviceRows base at any size
         base_slot = resident.slot(base, base_address, base_words)
     else:
-        base_slot = metric_store_put(program, base_address, base_words)
+        base_slot = metric_store_put(store, base_address, base_words)
         owned.append(base_slot)
-    var index_address = Int(py=classical_address(indices))
+    var idx: List[Int] = [Int(py=classical_address(indices))]
+    var shape: List[Int] = [base_slot, d, n]
     var slot = -1
     with GILReleased(Python()):
-        slot = native_descriptor_call(program, MP_DEV_TAKE_ROWS, [index_address], [base_slot, d, n], [])
+        slot = xp_transport_call(store, XP_DEV_TAKE_ROWS, idx, shape)
     owned.append(slot)
     # read by address inside the calls above: named again so they outlive them
     _ = indices^
@@ -173,15 +148,16 @@ def metric_rows_gather(value: PythonObject, program: NativeDescriptorCall, mut o
     return slot
 
 
-def metric_store_release(program: NativeDescriptorCall, owned: List[Int]) -> String:
+def metric_store_release(store: EntryRef, owned: List[Int]) -> String:
     """Free every slot a run acquired, newest first, even when one fails.
     Returns the failures' text (empty: none); never raises."""
     var failures = String()
     for i in range(len(owned)):  # driver-loop: over the device slots one program run acquired
         var slot = owned[len(owned) - 1 - i]
         try:
+            var ids: List[Int] = [slot]
             with GILReleased(Python()):
-                _ = native_descriptor_call(program, MP_DEV_FREE, [], [slot], [])
+                _ = xp_transport_call(store, XP_DEV_FREE, List[Int](), ids)
         except error:
             failures += ("" if failures.byte_length() == 0 else "; ") + "slot " + String(slot) + ": " + String(error)
     return failures

@@ -88,9 +88,9 @@ def _pad(var words: List[Int32], fill: List[Int32]) -> List[Int32]:
 struct MetricProgramInput(ImplicitlyCopyable, Movable):
     """One admitted input of a metric program: its arena offset, the address
     of its words (the door keeps the owner alive) and its word count; or,
-    with `slot` >= 0, a slot of the image's resident store
-    (x_metrics/descriptor_schema.mojo `MP_DEV_PUT` / `MP_DEV_TAKE_ROWS`)
-    whose first `words` words the range route copies device to device
+    with `slot` >= 0, a slot of the one resident store (the x_prep image's,
+    x_prep/store_slot.mojo; put with `XP_DEV_PUT`, gathered with
+    `XP_DEV_TAKE_ROWS`) whose first `words` words the range route copies device to device
     (core/arena_io.mojo `upload_ranges`; lane vdf-xm-transport,
     2026-11-24). A slot input has no host address."""
     var offset: Int
@@ -261,9 +261,9 @@ def metric_inputs_run(route: MetricRoute, plan: MetricProgramPlan, addresses: Li
 def metric_slots_run(route: MetricRoute, plan: MetricProgramPlan, addresses: List[Int],
                      sizes: List[Int], slots: List[Int]) raises -> MetricArenaOwner:
     """`metric_inputs_run` where buffer input i may be DEVICE-RESIDENT (lane
-    vdf-xm-transport, 2026-11-24): `slots[i]` >= 0 names a slot of the
-    route image's resident store holding at least `sizes[i]` words (put
-    with `MP_DEV_PUT`, gathered with `MP_DEV_TAKE_ROWS`, or found in a
+    vdf-xm-transport, 2026-11-24): `slots[i]` >= 0 names a slot of the one
+    resident store (x_prep/store_slot.mojo) holding at least `sizes[i]` words
+    (put with `XP_DEV_PUT`, gathered with `XP_DEV_TAKE_ROWS`, or found in a
     `resident()` cache); the range route copies it device to device and its
     `addresses[i]` is not read. `slots` empty: every input is a host buffer.
     A slot needs `route.store` (refused otherwise: the host column has no

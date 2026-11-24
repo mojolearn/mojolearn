@@ -8,7 +8,7 @@
 # python/mojolearn/_native_arena_prog.py), the host arena and output stores,
 # the input copies, the resident-store and device-gathered inputs
 # (core/device_store.mojo through the family's *_dev_put / *_dev_take_rows;
-# x_metrics through its program entry's MP_DEV_* operations,
+# x_metrics on the same x_prep store through the x_prep transport entry,
 # bindings/x_metrics_resident_door.mojo),
 # the input/output range descriptors of the shared ranges runner
 # (core/arena_io.mojo), the stage word packing, the run itself and the
@@ -42,8 +42,9 @@ from bindings.arena_prog_run import (
     _switch, _add_input, _merge_pairs, _pad, MetricArenaOwner, MetricRoute, metric_inputs_run, metric_slots_run,
 )
 from bindings.x_metrics_resident_door import (
-    metric_resident_none, metric_resident_of, metric_rows_gather, metric_store_release,
+    metric_store_ref, metric_scope_word, metric_resident_of, metric_rows_gather, metric_store_release,
 )
+from core.entry_table import EntryRef
 from core.native_descriptor_call import native_descriptor_call
 from std.python._cpython import GILReleased
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
@@ -472,14 +473,16 @@ def metrics_run_plan_slots(plan: MetricProgramPlan, inputs: List[PythonObject], 
     `device="cpu"` estimator's route names beside a device set (lane
     dw-decomp, 2026-11-21: EllipticEnvelope.score). Same UNPACK and RUN.
 
-    The x_metrics resident transport (lane vdf-xm-transport, 2026-11-24,
-    bindings/x_metrics_resident_door.mojo): on an image with a resident store
-    (`route.store`) a DeviceRows input is gathered on the device out of its
-    once-put base, and a host input the active `resident()` scope keeps is
-    read from its device copy; both reach the program as store slots, copied
-    device to device. Elsewhere (host column, CPU-only install, ranges off)
-    a DeviceRows input is its host base's rows, as before. The slots this
-    run put or gathered are freed after it, newest first, even on error.
+    The x_metrics resident transport (lane vdf-xm-transport, 2026-11-24; the
+    one x_prep store, lane vdf-xm-wire; bindings/x_metrics_resident_door.mojo):
+    on an image with the store (`route.store` and an x_prep image of its tier
+    and vendor connected) a DeviceRows input is gathered on the device out of
+    its once-put base, and a host input the active `resident()` scope keeps
+    is read from its device copy; both reach the program as store slots,
+    copied device to device. Elsewhere (host column, CPU-only install, ranges
+    off, no x_prep image) a DeviceRows input is its host base's rows, as
+    before. The slots this run put or gathered are freed after it, newest
+    first, even on error.
 
     `given` (empty, or one word per buffer input): a slot >= 0 the DOOR put
     or gathered on this image's store and checked (bindings/metrics_program_door.mojo
@@ -497,8 +500,10 @@ def metrics_run_plan_slots(plan: MetricProgramPlan, inputs: List[PythonObject], 
     # word per buffer input, -1 for a host one.
     var slots = List[Int]()
     var owned = List[Int]()
-    var resident = metric_resident_none()
+    var resident = xprep_resident_none()
     var resident_read = False
+    var store_read = False
+    var store = Optional[EntryRef]()
     var arena = MetricArenaOwner(0)
     try:
         for i in range(len(inputs)):  # driver-loop: over the program's buffer inputs
@@ -509,11 +514,24 @@ def metrics_run_plan_slots(plan: MetricProgramPlan, inputs: List[PythonObject], 
                 raise Error("RuntimeError: x_metrics: a door's resident input needs an image with a resident store")
             if slot < 0 and size_i > 0 and pin.route.store:
                 var rows = _is_rows(value, context)
+                # The store entry is resolved only inside a scope or for a
+                # DeviceRows input (two entry calls and a table read), once
+                # per run; outside both a host input costs one scope read.
                 if not resident_read:
-                    resident = metric_resident_of(pin.route.program, context)
                     resident_read = True
-                if rows:
-                    slot = metric_rows_gather(value, pin.route.program, owned, resident, context)
+                    var scope = metric_scope_word(context)
+                    if scope >= 0:
+                        store = metric_store_ref(pin.route.program)
+                        store_read = True
+                        if store:
+                            resident = metric_resident_of(scope, store.value())
+                if rows and not store_read:
+                    store = metric_store_ref(pin.route.program)
+                    store_read = True
+                if not store:
+                    pass  # no x_prep image of this tier and vendor connected: the host route
+                elif rows:
+                    slot = metric_rows_gather(value, store.value(), owned, resident, context)
                 elif resident.keeps(False, size_i):
                     slot = resident.slot(value, Int(py=classical_address(value)), size_i)
             if slot >= 0 and len(slots) == 0:
@@ -535,12 +553,12 @@ def metrics_run_plan_slots(plan: MetricProgramPlan, inputs: List[PythonObject], 
         with GILReleased(Python()):
             arena = metric_slots_run(pin.route, plan, addresses, sizes, slots)
     except error:
-        var cleanup = metric_store_release(pin.route.program, owned)
+        var cleanup = metric_store_release(store.value(), owned) if store else String()
         if cleanup.byte_length() > 0:
             _drop_pending(error)
             raise Error("RuntimeError: x_metrics operation failed: " + String(error) + "; cleanup also failed: " + cleanup)
         raise error
-    var cleanup = metric_store_release(pin.route.program, owned)
+    var cleanup = metric_store_release(store.value(), owned) if store else String()
     _ = held^
     _ = addresses^
     _ = sizes^

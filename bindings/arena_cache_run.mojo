@@ -4,9 +4,7 @@
 Typed find / put / publish / free sequences on the native cache and scope
 states of `core/arena_state.mojo` (`ARENA_CACHES`, `ARENA_SCOPES`) and the
 x_prep transport entry (`core/prep_entry_table.mojo`: `XP_DEV_PUT`,
-`XP_DEV_FREE`, `XP_DEV_LIVE`) or, for a cache on an x_metrics image, its
-program entry (`MP_DEV_PUT`, `MP_DEV_FREE`, `MP_DEV_LIVE`; lane
-vdf-xm-transport). No Python import (tools/python_free_dirs.sh):
+`XP_DEV_FREE`, `XP_DEV_LIVE`). No Python import (tools/python_free_dirs.sh):
 a door resolves the handle word and the entry once per public operation
 (UNPACK), calls these with the interpreter lock released, and unpins the
 returned pin tokens afterwards (PACK).
@@ -50,12 +48,10 @@ from core.arena_state import (
     ARENA_CACHES, ARENA_SCOPES, ARENA_HANDLE_NONE, ArenaStoreEntry, ArenaScopeState,
     DeviceCacheState, arena_handle, arena_handle_word,
 )
-from core.entry_table import EntryRef, entry_ref_mode, entry_ref_vendor, entry_ref_word
+from core.entry_table import EntryRef, entry_ref_mode, entry_ref_vendor
 from core.prep_entry_table import PrepEntryKey, xp_transport_ref, xp_transport_call
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
-from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_LIVE, XP_DEV_TAKE_ROWS, XP_OP_COUNT
-from core.linear_entry_table import LinearEntryKey, linear_table_entry, LINEAR_TABLE_METRICS
-from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT, MP_DEV_PUT, MP_DEV_FREE, MP_DEV_LIVE
+from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_LIVE, XP_DEV_TAKE_ROWS
 
 #: The transport operations every family store answers (the x_prep numbering).
 comptime ARENA_STORE_PUT = XP_DEV_PUT
@@ -106,44 +102,23 @@ def _family_store_note(prefix: String, route: Int, store: EntryRef) raises:
         shared_slot_unlock(word)
 
 
-#: The route bit of a cache on an x_metrics image's resident store (lane
-#: vdf-xm-transport, 2026-11-24): the x_metrics program entry
-#: (x_metrics/descriptor_schema.mojo, `MP_DEV_*`) instead of the x_prep
-#: transport entry. Two families of one tier and vendor have two stores (each
-#: image owns its own, next to its own device context), so two routes.
-comptime ARENA_ROUTE_METRICS = 1 << 16
-
-
-def arena_store_is_metrics(store: EntryRef) -> Bool:
-    """Whether a resolved store entry is an x_metrics program entry: its
-    layout word carries the metrics ABI's operation count (the x_prep
-    transport's differs, checked at compile time)."""
-    comptime assert MP_OPERATION_COUNT != XP_OP_COUNT, "the store families are told apart by their operation counts"
-    return ((store.word >> 16) & 0xFFFFFFFF) == MP_OPERATION_COUNT
-
-
-def arena_metrics_store(mode: Int, vendor: Int) raises -> EntryRef:
-    """The x_metrics program entry of tier `mode` on `vendor` (the image's
-    published table, core/linear_entry_table.mojo LINEAR_TABLE_METRICS) as a
-    resident store entry; the table refusals raise here."""
-    return EntryRef(linear_table_entry[LINEAR_TABLE_METRICS](LinearEntryKey(mode, vendor), 0,
-                                                              String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT),
-                    entry_ref_word(mode, vendor, MP_OPERATION_COUNT))
+# TOMBSTONE: ARENA_ROUTE_METRICS, arena_store_is_metrics, arena_metrics_store (a resident() cache on a
+# separate x_metrics store, told apart by the program entry's operation count; lane vdf-xm-transport)
+# deleted 2026-11-24 by lane vdf-xm-wire: the x_metrics programs and the _mojolearn_metrics kernel entries
+# read the ONE store, the x_prep image's (x_prep/store_slot.mojo), so every cache is an x_prep transport
+# cache again. Never on main: recoverable at
+# lane/vd-functions 55fed275ea (no patch, AGENTS.md "Deleting an experiment" part 3).
 
 
 def arena_cache_route(store: EntryRef) -> Int:
-    """The route word of a resolved store entry: its mode and vendor words,
-    and the family bit of an x_metrics store. Two caches with one route share
-    one device store."""
-    var family = ARENA_ROUTE_METRICS if arena_store_is_metrics(store) else 0
-    return family | (entry_ref_mode(store) << 8) | entry_ref_vendor(store)
+    """The route word of a resolved x_prep transport entry: its mode and
+    vendor words. Two caches with one route share one device store."""
+    return (entry_ref_mode(store) << 8) | entry_ref_vendor(store)
 
 
 def arena_cache_store(route: Int) raises -> EntryRef:
-    """The store entry a route word names (resolved once per scope close; a
-    cache owner object holds its own)."""
-    if (route & ARENA_ROUTE_METRICS) != 0:
-        return arena_metrics_store((route >> 8) & 0xFF, route & 0xFF)
+    """The transport entry a route word names (resolved once per scope
+    close; a cache owner object holds its own)."""
     return xp_transport_ref(PrepEntryKey((route >> 8) & 0xFF, route & 0xFF))
 
 
@@ -172,18 +147,17 @@ def arena_cache_new(store: EntryRef, prefix: String) raises -> Int:
 def arena_cache_put(store: EntryRef, address: Int, words: Int) raises -> Int:
     var source: List[Int] = [address]
     var counts: List[Int] = [words]
-    return xp_transport_call(store, MP_DEV_PUT if arena_store_is_metrics(store) else XP_DEV_PUT, source, counts)
+    return xp_transport_call(store, XP_DEV_PUT, source, counts)
 
 
 def arena_cache_free(store: EntryRef, store_id: Int) raises:
     var ids: List[Int] = [store_id]
-    _ = xp_transport_call(store, MP_DEV_FREE if arena_store_is_metrics(store) else XP_DEV_FREE, List[Int](), ids)
+    _ = xp_transport_call(store, XP_DEV_FREE, List[Int](), ids)
 
 
 def arena_cache_live(store: EntryRef) raises -> Int:
     """Live slots of the binding store (every cache on it)."""
-    return xp_transport_call(store, MP_DEV_LIVE if arena_store_is_metrics(store) else XP_DEV_LIVE,
-                             List[Int](), List[Int]())
+    return xp_transport_call(store, XP_DEV_LIVE, List[Int](), List[Int]())
 
 
 @fieldwise_init

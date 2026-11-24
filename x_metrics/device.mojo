@@ -8,14 +8,12 @@ from std.sys import is_defined
 from std.time import perf_counter_ns
 from std.memory import bitcast
 from max.gpu.host import DeviceContext, DeviceBuffer
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_metrics.common import FP, IP, STAGE_INTS
 from x_metrics.units import N_OPS, run_unit
 from x_metrics.plan import Plan, plan_program, is_user_op, OP_SORT_MERGE
 from x_metrics.par import sort_merge_path_unit, merge_path_chunks
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
-from core.device_store import DeviceStore
-from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from x_prep.store_slot import X_PREP_STORE, x_prep_ctx
 
 #: x_metrics program profile: `-D MOJOLEARN_XMETRICS_PROFILE` builds drain and
 #: print per stage; default builds compile it out. Before (lane
@@ -26,46 +24,24 @@ comptime XMETRICS_PROFILE_ON = is_defined["MOJOLEARN_XMETRICS_PROFILE"]()
 comptime BLOCK = 128
 
 
-struct _MetricsContext(Defaultable, Movable):
-    """ONE process-lifetime DeviceContext for every x_metrics call (the
-    x_cnn pattern: a context per call exhausts Metal's per-process command
-    queues, and a cross-validation loop scores thousands of times). One slot
-    per numeric tier, so a FAST and an IDENTICAL .so never share it."""
-    var ctx: Optional[DeviceContext]
-    #: Lane fx-gil (2026-11-21): the first creation was serialized by the
-    #: GIL; a member's worker holds none.
-    var lock: List[Int64]
-
-    def __init__(out self):
-        self.ctx = Optional[DeviceContext]()
-        self.lock = List[Int64](length=1, fill=Int64(0))
-
-
-comptime _CTX_NAME = "MojolearnXMetricsContextIdenticalV4" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXMetricsContextFastV4"
-comptime X_METRICS_CONTEXT = SharedSlot[_MetricsContext, _CTX_NAME, 2]
-
-
 def metrics_ctx() raises -> DeviceContext:
-    var slot = X_METRICS_CONTEXT.get_or_create_ptr()
-    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].lock.unsafe_ptr())
-    shared_slot_lock(word)
-    try:
-        if not slot[].ctx:
-            slot[].ctx = DeviceContext()
-        return slot[].ctx.value().copy()
-    finally:
-        shared_slot_unlock(word)
+    """The ONE process-lifetime DeviceContext of every x_metrics call: the
+    resident store's context (x_prep/store_slot.mojo `x_prep_ctx`), so a
+    program reads a `resident()` / DeviceRows slot of that store in place
+    (`upload_ranges`, device to device on the buffer's own context), the same
+    slot the `_mojolearn_metrics` kernel entries and the x_prep programs
+    read. A context per call exhausts Metal's per-process command queues and
+    a cross-validation loop scores thousands of times, so it is created once.
+    Context lifetime moves no bit."""
+    return x_prep_ctx()
 
 
-#: The binding's resident input store (core/device_store.mojo; lane
-#: py-shared), one per tier like the context whose buffers it holds. Reached
-#: through the image's program entry (x_metrics/descriptor_schema.mojo
-#: `MP_DEV_PUT` / `_FREE` / `_TAKE_ROWS` / `_LIVE`; lane vdf-xm-transport,
-#: 2026-11-24: the deleted `x_metrics_dev_*` Python entries, typed) and read
-#: by `run_program_device_ranges` through `upload_ranges`.
-# V2 (lane linalg-owner, 2026-11-22): DeviceStore gained its lock word
-comptime _STORE_NAME = "MojolearnXMetricsStoreIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXMetricsStoreFastV2"
-comptime X_METRICS_STORE = SharedSlot[DeviceStore, _STORE_NAME, 2]
+# TOMBSTONE: _MetricsContext / X_METRICS_CONTEXT (the x_metrics image's own process context) and X_METRICS_STORE
+# (its own resident store, lane vdf-xm-transport) deleted 2026-11-24 by lane vdf-xm-wire: ONE store for resident
+# metric inputs, the x_prep image's (X_PREP_STORE on x_prep_ctx), which the resident() scope, DeviceRows, the
+# estimators, the x_prep programs and the _mojolearn_metrics kernel entries already use; a second store on a
+# second context meant a second upload of the same X per resident() block and no slot a kernel metric could read.
+# Code recoverable at 55fed275ea.
 
 
 def run_program_device_ranges(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int,
@@ -73,7 +49,8 @@ def run_program_device_ranges(arena_addr: Int, arena_len: Int, prog_addr: Int, s
     """`run_program_device_out` that also uploads only the INPUT ranges
     (core/arena_io.mojo; lane py-shared): `nins` Int32 triples [lo, hi, src]
     at `ins_addr`; every other arena word starts zero on the device, as the
-    host arena's words do. src >= 0 names a resident slot (`x_metrics_dev_put`)
+    host arena's words do. src >= 0 names a slot of the resident store
+    (x_prep/store_slot.mojo `X_PREP_STORE`, the x_prep transport's put)
     copied device to device. `nouts` quads as `run_program_device_out`."""
     check_in_ranges(ins_addr, nins, arena_len)
     check_out_ranges(outs_addr, nouts, arena_len)
@@ -152,7 +129,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         ctx.synchronize()
         print("XMPROF alloc us", (perf_counter_ns() - t_setup) // 1000, "floats", pl.size, "arena", arena_len)
     if nins >= 0:
-        upload_ranges(ctx, df, host_f, arena_len, ins_addr, nins, X_METRICS_STORE.get_or_create_ptr()[])
+        upload_ranges(ctx, df, host_f, arena_len, ins_addr, nins, X_PREP_STORE.get_or_create_ptr()[])
     elif arena_len > 0:
         ctx.enqueue_copy(dst_buf=df.create_sub_buffer[DType.float32](0, arena_len), src_ptr=host_f)
     if nst > 0:

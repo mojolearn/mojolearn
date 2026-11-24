@@ -20,8 +20,10 @@ from bindings.arena_prog_native_door import (
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.metrics_keys_unpack import metrics_keys
 from bindings.py_balanced import py_item, py_get, py_type
-from bindings.x_metrics_resident_door import metric_resident_of, metric_rows_gather, metric_store_release
-from core.entry_table import entry_ref_unresolved
+from bindings.x_metrics_resident_door import (
+    metric_store_ref, metric_scope_word, metric_resident_of, metric_rows_gather, metric_store_release,
+)
+from core.entry_table import EntryRef, entry_ref_unresolved
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
 from x_metrics.descriptor_schema import MP_DEV_FIRST_NONFINITE
@@ -160,47 +162,55 @@ def metric_door_run(prog: MetricDoorProg, mode: PythonObject, context: PythonObj
 
 
 struct MetricRowsSlot(Movable):
-    """A DeviceRows input of a metric door gathered on the route image's
-    store: its slot (-1: not gathered; the door reads the host rows as
-    before), its rows and columns, and the image's program entry that owns
-    the slot (`metric_slot_release`)."""
+    """A DeviceRows input of a metric door gathered on the one resident
+    store (the x_prep image's): its slot (-1: not gathered; the door reads the
+    host rows as before), its rows and columns, the route image's program
+    entry (its scans) and the store's transport entry that owns the slot
+    (`metric_slot_release`)."""
     var slot: Int
     var rows: Int
     var cols: Int
     var program: NativeDescriptorCall
+    var store: EntryRef
 
-    def __init__(out self, slot: Int, rows: Int, cols: Int, program: NativeDescriptorCall):
+    def __init__(out self, slot: Int, rows: Int, cols: Int, program: NativeDescriptorCall, store: EntryRef):
         self.slot = slot
         self.rows = rows
         self.cols = cols
         self.program = program
+        self.store = store
 
 
 def metric_door_rows_slot(value: PythonObject, mode: PythonObject, context: PythonObject,
                           mut owned: List[Int]) raises -> MetricRowsSlot:
     """UNPACK of a 2-D X that is a `DeviceRows` on a GPU image: the fold's
     rows gathered on the device out of its once-put base (the active
-    `resident()` scope's x_metrics cache keeps the base), into a slot the
+    `resident()` scope's x_prep cache keeps the base), into a slot the
     door owns (appended to `owned`; free with `metric_slot_release` after
     the run). Anything else (a host array, the host column, a CPU-only
-    install, ranges off, a base that is not float32) returns slot -1 and the
+    install, ranges off, no x_prep image, a base that is not float32)
+    returns slot -1 and the
     door admits X on the host, as before. One type compare for a host X."""
     var nk = metrics_keys()
     var prog_context = py_item(context, nk[].k_family_metrics_prog_context)
     var rows_class = py_get(prog_context, "maxabs_rows_class")
+    var none = entry_ref_unresolved()
     if rows_class is None or py_type(value) is not rows_class:
-        return MetricRowsSlot(-1, 0, 0, entry_ref_unresolved().call)
+        return MetricRowsSlot(-1, 0, 0, none.call, none)
     var pin = metric_route_open(mode, context)
     if not pin.route.store:
-        return MetricRowsSlot(-1, 0, 0, entry_ref_unresolved().call)
+        return MetricRowsSlot(-1, 0, 0, none.call, none)
     var program = pin.route.program
-    var resident = metric_resident_of(program, prog_context)
+    var store = metric_store_ref(program)
+    if not store:
+        return MetricRowsSlot(-1, 0, 0, none.call, none)
+    var resident = metric_resident_of(metric_scope_word(prog_context), store.value())
     var shape = value.shape
-    var slot = metric_rows_gather(value, program, owned, resident, prog_context)
+    var slot = metric_rows_gather(value, store.value(), owned, resident, prog_context)
     _ = pin^
     if slot < 0:
-        return MetricRowsSlot(-1, 0, 0, entry_ref_unresolved().call)
-    return MetricRowsSlot(slot, Int(py=shape[0]), Int(py=shape[1]), program)
+        return MetricRowsSlot(-1, 0, 0, none.call, none)
+    return MetricRowsSlot(slot, Int(py=shape[0]), Int(py=shape[1]), program, store.value())
 
 
 def metric_slot_first_nonfinite(rows: MetricRowsSlot) raises -> Int:
@@ -219,4 +229,4 @@ def metric_slot_release(rows: MetricRowsSlot, owned: List[Int]) -> String:
     never raises."""
     if len(owned) == 0:
         return String()
-    return metric_store_release(rows.program, owned)
+    return metric_store_release(rows.store, owned)
