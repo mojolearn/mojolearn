@@ -196,9 +196,17 @@ def _device_case(case: Int) raises:
                     var qa = GPDeviceKernels.gpr_query(GPRQueryRequest(word, _a(la), _a(da), fold_x_word(qslot),
                         _a(ma), _a(va), _a(ta), Int(ca.unsafe_ptr()), n, FD, q, kernel.view(), ia, True, False, 1.0,
                         0.0, GP_ROUTE_RESIDENT, lease_a, -1, 0, -1))
+                    _ = ca^
+                    _ = da^
+                    _ = la^
+                    _ = va^
                     var qb = GPDeviceKernels.gpr_query(GPRQueryRequest(_a(gathered), _a(lb), _a(db), _a(xq),
                         _a(mb), _a(vb), _a(tb), Int(cb.unsafe_ptr()), n, FD, q, kernel.view(), ib, True, False, 1.0,
                         0.0, GP_ROUTE_RESIDENT, lease_b, -1, 0, -1))
+                    _ = cb^
+                    _ = db^
+                    _ = lb^
+                    _ = vb^
                     GPDeviceKernels.lease_close(lease_a)
                     GPDeviceKernels.lease_close(lease_b)
                     _ = native_descriptor_call(store, XP_DEV_FREE, [], [qslot], [])
@@ -269,9 +277,17 @@ def _device_case(case: Int) raises:
                 var qa = GPDeviceKernels.gpc_query_all(GPCQueryAllRequest(word, _a(xq), _a64(oa),
                     Int(tya.unsafe_ptr()), Int(tpa.unsafe_ptr()), Int(twa.unsafe_ptr()), Int(tla.unsafe_ptr()),
                     n, FD, q, kernel.view(), 2, 1, lease_a, -1, 0, -1))
+                _ = ya^
+                _ = la^
+                _ = pa^
+                _ = wa^
                 var qb = GPDeviceKernels.gpc_query_all(GPCQueryAllRequest(_a(gathered), _a(xq), _a64(ob),
                     Int(tyb.unsafe_ptr()), Int(tpb.unsafe_ptr()), Int(twb.unsafe_ptr()), Int(tlb.unsafe_ptr()),
                     n, FD, q, kernel.view(), 2, 1, lease_b, -1, 0, -1))
+                _ = yb^
+                _ = lb^
+                _ = pb^
+                _ = wb^
                 GPDeviceKernels.lease_close(lease_a)
                 GPDeviceKernels.lease_close(lease_b)
                 require(qa.finite == 0 and qb.finite == 0, "a finite query was flagged")
@@ -325,6 +341,9 @@ def _device_case(case: Int) raises:
                 _ = t32^
                 _ = tl^
                 _ = t64^
+                _ = da^
+                _ = la^
+                _ = sa^
             else:
                 var back = List[Float32](length=n * FD, fill=0.0)
                 _ = native_descriptor_call(store, XP_DEV_READ, [_a(back)], [slot, n * FD], [])

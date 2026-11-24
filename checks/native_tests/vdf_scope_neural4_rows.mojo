@@ -269,9 +269,13 @@ def _pca_fit_transform(whiten: Bool) raises:
     _ = PCADeviceKernels.fit(PCAFitRequest(Int(host_x.unsafe_ptr()), Int(comp_a.unsafe_ptr()), Int(mean_a.unsafe_ptr()),
         Int(var_a.unsafe_ptr()), Int(rat_a.unsafe_ptr()), Int(sin_a.unsafe_ptr()), Int(proj_a.unsafe_ptr()), n, d, k,
         False, 0, whiten, False, 0, 0, False, 0, True, 0.0, PCAFoldStore()))
+    _ = rat_a^
+    _ = var_a^
     var got = PCAFoldKernels.fit(PCAFitRequest(0, Int(comp_b.unsafe_ptr()), Int(mean_b.unsafe_ptr()),
         Int(var_b.unsafe_ptr()), Int(rat_b.unsafe_ptr()), Int(sin_b.unsafe_ptr()), Int(proj_b.unsafe_ptr()), n, d, k,
         False, 0, whiten, False, 0, 0, False, 0, True, 0.0, store.fold()))
+    _ = rat_b^
+    _ = var_b^
     store.close()
     require(got.finite == 0 and got.in_range == 0, "PCA fold fit_transform status")
     var what = String("PCA fit_transform (whiten ") + String(whiten) + "):"
@@ -358,6 +362,7 @@ def _refusals() raises:
         False, 0)
     tsvd_request.fold = store.fold()
     var word = TSVDFoldKernels.query(tsvd_request)
+    _ = dst^
     store.close()
     require(word == 2, "TruncatedSVD fold transform: an out-of-range index answers 2")
     _ = whole^

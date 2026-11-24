@@ -129,6 +129,7 @@ def _host_case(case: Int) raises:
         codes[i] = Int32(Int(outer[i]) % 3)
     var draw_codes = List[Int32](length=NB, fill=Int32(-7))
     meta_rows_take_u32(Int(codes.unsafe_ptr()), Int(inv.unsafe_ptr()), NB, Int(draw_codes.unsafe_ptr()))
+    _ = inv^
     var te = _split(n)
     var m = len(te)
     var te_x = List[Int32](length=m, fill=Int32(-1))
@@ -214,6 +215,7 @@ def _device_case(case: Int) raises:
                 MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(host_x.unsafe_ptr())),
                 MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(coef.unsafe_ptr())),
                 Int(out_b.unsafe_ptr()), m, FD, Float32(-0.5), True)
+            _ = coef^
             require(ra == rb and ra == 0, "finite status differs")
             # THE PLACEMENT (case 1: the out-of-fold block, n rows, at the split's fold positions).
             var block_a = List[Float32](length=n, fill=0.0)

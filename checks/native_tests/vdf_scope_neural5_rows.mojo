@@ -250,6 +250,7 @@ def _inverse() raises:
     var word = TSVDFoldKernels.query(off)
     var pca_off = PCAFoldKernels.query(PCAQueryRequest(0, Int(mean.unsafe_ptr()), Int(comps.unsafe_ptr()), 0,
         Int(dst.unsafe_ptr()), 2, d, k, _ROWS, True, False, bad_store.fold()))
+    _ = dst^
     bad_store.close()
     require(word == 2, "TruncatedSVD fold inverse_transform: an out-of-range index answers 2")
     require(pca_off.in_range != 0, "PCA fold inverse_transform: an out-of-range index sets the range word")
@@ -326,6 +327,7 @@ def _refusals() raises:
     except error:
         tsqr_refused = _refused(String(error), "only in a GPU randomized fit")
     require(tsqr_refused, "TruncatedSVD decomposition provider: a resident source on the TSQR route is refused")
+    _ = cpu^
     _free(ids[1])
     _free(ids[0])
     _ = whole^

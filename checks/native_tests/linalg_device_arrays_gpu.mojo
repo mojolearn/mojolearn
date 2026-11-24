@@ -165,6 +165,7 @@ def test_bf16_conversions_device_arrays() raises:
     var c_host = List[Float32](length=m * nn, fill=0.0)
     _ = gemm_bf16_gpu(Int(c_gpu.unsafe_ptr()), Int(a.unsafe_ptr()), Int(bits_gpu.unsafe_ptr()), [m, nn, k, OP_NT, 0])
     _ = gemm_bf16_host(Int(c_host.unsafe_ptr()), Int(a.unsafe_ptr()), Int(bits_gpu.unsafe_ptr()), [m, nn, k, OP_NT, 0])
+    _ = bits_gpu^
     var ha = _put(ctx, a)
     var hc = train_dev_alloc(ctx, m * nn)
     _ = gemm_bf16_dev_native(hc, ha, hbits, [m, nn, k, OP_NT, 0])
@@ -222,6 +223,9 @@ def test_int8_device_arrays() raises:
                       Int(eb_g.unsafe_ptr()), [m, n, k])
     _ = gemm_int8_host(Int(c_h.unsafe_ptr()), Int(qa_g.unsafe_ptr()), Int(ea_g.unsafe_ptr()), Int(qb_g.unsafe_ptr()),
                        Int(eb_g.unsafe_ptr()), [m, n, k])
+    _ = ea_g^
+    _ = eb_g^
+    _ = qb_g^
     var hc = train_dev_alloc(ctx, m * n)
     _ = gemm_int8_dev_native(hc, hqa, hea, hqb, heb, [m, n, k])
     var c_d = _get(ctx, hc, m * n)
@@ -297,6 +301,12 @@ def test_int15_device_arrays() raises:
     var c_h = List[Float32](length=m * n, fill=0.0)
     _ = gemm_int15_gpu([Int(c_g.unsafe_ptr()), _a(ah_g), _a(al_g), _ai(ea_g), _a(bh_g), _a(bl_g), _ai(eb_g)], [m, n, k])
     _ = gemm_int15_host([Int(c_h.unsafe_ptr()), _a(ah_g), _a(al_g), _ai(ea_g), _a(bh_g), _a(bl_g), _ai(eb_g)], [m, n, k])
+    _ = ah_g^
+    _ = al_g^
+    _ = bh_g^
+    _ = bl_g^
+    _ = ea_g^
+    _ = eb_g^
     var hc = train_dev_alloc(ctx, m * n)
     _ = gemm_int15_dev_native([hc, hah, hal, hea, hbh, hbl, heb], [m, n, k])
     var c_d = _get(ctx, hc, m * n)

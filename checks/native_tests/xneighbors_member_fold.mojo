@@ -145,6 +145,7 @@ def _host_case(case: Int) raises:
         _same_f32(taken, _serial(x, index, _D), "host take of the fold")
         var labels = _take_codes(codes, index)
         var fit = _fit(XnDriver(xn_host_v1), Int(taken.unsafe_ptr()), Int(labels.unsafe_ptr()), n)
+        _ = taken^
         _ = fit^
         _ = x^
         _ = codes^

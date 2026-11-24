@@ -81,6 +81,7 @@ def test_rbf_device_affinity() raises:
     # the standalone function publishes nothing
     var bare_emb = List[Float32]()
     _ = spectral_embedding_rbf_host(Int(x.unsafe_ptr()), _N, _D, gamma, 0, _LANCZOS, True, True, UInt64(3), bare_emb)
+    _ = x^
     _same(bare_emb, host_emb, "rbf: embedding without a published affinity")
 
 
@@ -112,6 +113,7 @@ def _knn_cell(negative: Bool) raises:
         Int(dist.unsafe_ptr()), 0, 0, 0, 0, _N, _K, Int(dev_status.unsafe_ptr()), Int(dev_aff.unsafe_ptr()),
         _LANCZOS, True, True, UInt64(3), dev_emb,
     )
+    _ = dist^
     for w in range(3):
         require(dev_status[w] == host_status[w], "knn: status word " + String(w) + " differs")
     if negative:
@@ -166,6 +168,7 @@ def test_rbf_device_fit() raises:
         Int(x.unsafe_ptr()), _N, _D, gamma, Int(dev_aff.unsafe_ptr()), _CLUSTERS, _COMPONENTS, _INIT, _K,
         Float32(1e-5), UInt64(3), dev_labels, dev_emb, state, False,
     )
+    _ = x^
     require(dev_cols == host_cols, "rbf fit: column counts differ")
     _same(dev_aff, host_aff, "rbf fit: published affinity vs the x_decomp cells")
     _same(dev_emb, host_emb, "rbf fit: embedding vs the dense fit on the host affinity")
@@ -190,6 +193,7 @@ def _knn_fit_cell(negative: Bool) raises:
         Int(dist.unsafe_ptr()), 0, 0, 0, 0, _N, _K, Int(dev_status.unsafe_ptr()), Int(dev_aff.unsafe_ptr()),
         _CLUSTERS, _COMPONENTS, _INIT, _K, Float32(1e-5), UInt64(3), dev_labels, dev_emb, state, False,
     )
+    _ = dist^
     for w in range(3):
         require(dev_status[w] == host_status[w], "knn fit: status word " + String(w) + " differs")
     if negative:

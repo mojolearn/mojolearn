@@ -195,6 +195,7 @@ def _device_case(case: Int) raises:
                     FD, 1, 0, FP(unsafe_from_address=Int(oa.unsafe_ptr())))
                 decision_device(FP(unsafe_from_address=Int(gathered.unsafe_ptr())),
                     FP(unsafe_from_address=Int(wb.unsafe_ptr())), n, FD, 1, 0, FP(unsafe_from_address=Int(ob.unsafe_ptr())))
+                _ = wb^
                 _same(oa, ob, "x_linear decisions")
             elif case == 3 or case == 4:
                 var ctx = process_ctx[_CTX]()

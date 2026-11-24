@@ -40,6 +40,7 @@ from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, check_cases_serial, CPU_COLUMN_BUILD, require
 from core.native_descriptor_abi import NativeDescriptorError
 from max.gpu.host import DeviceContext
+from checks.native_tests.kit import upload_whole_into
 from core.neural_context import process_ctx
 from core.fold_x_device import FOLD_X_STORE, fold_x_word
 from core.fold_x_word import fold_x_slot
@@ -200,12 +201,14 @@ def _device_case(case: Int) raises:
                 ols_prep_device(ctx, Int(word), Int(y_fold.unsafe_ptr()), Int(w_fold.unsafe_ptr()),
                     Int(box.unsafe_ptr()), Int(wya.unsafe_ptr()), Int(m64a.unsafe_ptr()), Int(m32a.unsafe_ptr()),
                     Int(y64a.unsafe_ptr()), Int(y32a.unsafe_ptr()), n, FD, True, OLS_PREP_WEIGHTED)
+                _ = y32a^
                 require(Int(box[0]) < 0, "the fold prep left no prepared X slot")
                 store[].read(ctx, fold_x_slot(Int(box[0])), Int(wxa.unsafe_ptr()), n * FD)
                 store[].free(ctx, fold_x_slot(Int(box[0])))
                 ols_prep_device(ctx, Int(gathered.unsafe_ptr()), Int(y_fold.unsafe_ptr()), Int(w_fold.unsafe_ptr()),
                     Int(wxb.unsafe_ptr()), Int(wyb.unsafe_ptr()), Int(m64b.unsafe_ptr()), Int(m32b.unsafe_ptr()),
                     Int(y64b.unsafe_ptr()), Int(y32b.unsafe_ptr()), n, FD, True, OLS_PREP_WEIGHTED)
+                _ = y32b^
                 _same(wxa, wxb, "prepared X")
                 _same(wya, wyb, "prepared y")
                 _same(m32a, m32b, "float32 means")
@@ -221,16 +224,16 @@ def _device_case(case: Int) raises:
             elif case == 4:
                 var ctx = process_ctx[_CTX]()
                 var dg = ctx.enqueue_create_buffer[DType.float32](n * FD)
-                ctx.enqueue_copy(dst_buf=dg, src_ptr=_p(gathered))
+                upload_whole_into(ctx, dg, gathered)
                 require(device_buffer_any_negative(ctx, dg, n * FD), "the raw fold (negative cells) passed")
                 var shifted = List[Float32](length=n * FD, fill=0.0)
                 for i in range(n * FD):  # small-loop(fixture: the fold made non-negative, -0.0 kept)
                     var v = gathered[i]
                     shifted[i] = v if v.to_bits() == Float32(-0.0).to_bits() else abs(v)
-                ctx.enqueue_copy(dst_buf=dg, src_ptr=_p(shifted))
+                upload_whole_into(ctx, dg, shifted)
                 require(not device_buffer_any_negative(ctx, dg, n * FD), "a non-negative fold (with -0.0) flagged")
                 shifted[n * FD - 1] = Float32(-0.5)
-                ctx.enqueue_copy(dst_buf=dg, src_ptr=_p(shifted))
+                upload_whole_into(ctx, dg, shifted)
                 require(device_buffer_any_negative(ctx, dg, n * FD), "a negative cell passed")
                 _ = dg^
                 _ = shifted^

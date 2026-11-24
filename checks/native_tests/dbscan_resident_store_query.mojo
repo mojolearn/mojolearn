@@ -60,6 +60,7 @@ def _device_case(case: Int) raises:
                 try:
                     _ = DBSCANDeviceKernels.resident_store(DBSCANResidentQuery(slot, Int(resident.unsafe_ptr()),
                         handle, _Q, _D, metric, True, 0.9))
+                    _ = resident^
                 except error:
                     refused = String(error).find("cosine") >= 0
                 require(refused, "the cosine store form refuses")
