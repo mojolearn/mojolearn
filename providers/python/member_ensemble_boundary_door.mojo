@@ -3365,7 +3365,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                 # options in sorted order (a set prints in hash order).
                 raise Error(msel_cvp_method_words(String(py=py_call(b.repr, tool[1]))))
             if len(keys) > 0:
-                return False
+                raise Error("RuntimeError: search admission invariant: a cv tool asks a response method and scorers at once (the carrier sets one of the two)")
     # Where the fold rows live (the docstring): read once per admission.
     var resident = not msel_member_host_folds(fields, b, context)
     var cv = py_get(fields, "cv")
@@ -3379,7 +3379,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     if tool is not None:
         # THE CV TOOLS: the door's own folds (already split and checked).
         if not _tool_folds(tool[3], context, fold_train, fold_test):
-            return False
+            raise Error("RuntimeError: search admission invariant: the cv tool carrier's folds are not the door's checked int64 index pairs")
         folds = len(fold_test)
     elif cv is not None and (py_type(cv) is b.list or py_type(cv) is b.tuple):
         # A user's index list: its folds read ONCE into typed int32 rows,
@@ -3524,7 +3524,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         var method = String(py=msel_scorer_response(scorer, base_plan, context))
         var code = msel_scorer_code(name, method == "decision_function")
         if code < 0:
-            return False
+            raise Error("RuntimeError: search admission invariant: a matched scorer name has no scorer code")
         var opts = MselScorerOptions()
         opts.flip = kw.flip
         opts.k = kw.top_k
@@ -3585,7 +3585,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             # scores the predicted labels as numbers; each fit label's value
             # read once (`_label_values`), each side maps its codes onto them.
             if labels is None:
-                return False  # a classifier admitted with no fit labels known: nothing to map (guard)
+                raise Error("RuntimeError: search admission invariant: a classifier fit admitted with no fit labels (a FIT caller hands its labels)")
             _label_values(labels, sels, opts, b)
             others = True
         elif not classifier and msel_scorer_float_labels(row):
@@ -3608,7 +3608,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             # the binary label scorers' pos_label=1 and 'average_precision''s
             # (its default; a binary member's column, lane mf-score5)
             if labels is None:
-                return False
+                raise Error("RuntimeError: search admission invariant: a classifier fit admitted with no fit labels (a FIT caller hands its labels)")
             positive = _positive_code(labels, b)
             if kw.given_pos:
                 # A MAKE_SCORER's pos_label (lanes mf-msel5c, mf-tail5b): its
@@ -3684,7 +3684,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         elif positive_kind == SCORER_POSITIVE_MARKS:
             # 'neg_brier_score': `_pos_label(None, ...)`'s label marks (lane mf-score5)
             if labels is None:
-                return False
+                raise Error("RuntimeError: search admission invariant: a classifier fit admitted with no fit labels (a FIT caller hands its labels)")
             positive = _brier_marks(labels, context, b)
             if kw.given_pos:
                 # a given pos_label (lane mf-tail5b): its class code
@@ -3928,7 +3928,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     # `flag`: the fold rows may stay resident (the docstring's `device`).
     if not _finish(fields, trees_context, b, owner, nested, kind, 1.0 if resident else 0.0, folds, List[Float64](),
                    List[Int](), words^, fold_train^, fold_test^):
-        return False
+        raise Error("RuntimeError: search admission invariant: _finish answered False (it raises every refusal itself)")
     _finish_split(owner, split)
     if proba_addresses is not None:
         _ = py_call(owner.pins.append, proba_addresses)  # the per-output result addresses, read by the RUN
