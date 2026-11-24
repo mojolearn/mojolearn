@@ -41,7 +41,6 @@ from bindings.msel_split_door import msel_truth, msel_flag_truth, msel_field, ms
 from bindings.msel_common_door import msel_signed32
 from bindings.msel_helpers_key_unpack import msel_helpers_key
 from bindings.msel_member_device_unpack import msel_member_host_folds, msel_params_name_device
-from bindings.msel_helpers_released_unpack import msel_gather_i64
 # lane calltable-msel: the score-table passes both base bindings exported,
 # linked into this door instead of called through CPython.
 from bindings.msel_search_stats_run import (
@@ -525,25 +524,52 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     var sizes = _train_sizes(msel_parameter_values(args[4], context), n_max, context)
     var orders = Python.list()
     if shuffle:
+        # ONE program for every fold (lane vdf-scope-cv, 2026-11-24): fold f's
+        # draw is a `permute` stage (the draws in fold order, as
+        # `permutation_rows` made them) and `take_rows64` gathers the fold's
+        # train rows by it on the device (TAB[IDX[i]], the word the helper
+        # table's `gather_i64` gave); every fold's order is read back once.
+        # Was: the permutations read back, then one helper-table gather per
+        # fold (its device twin uploaded the train rows and the permutation and
+        # downloaded the order, per fold). Same draws, same rows, same order:
+        # no bit changes. The train rows go in as int32 words (the arena's
+        # word; the permutation is int32 too), narrowed by the typed parallel
+        # conversion, which refuses a row past int32 in its own words.
         var rng = MselRng(seed, context)
-        var lengths = List[Int]()
-        for f in range(nf):  # driver-loop: over folds
-            lengths.append(Int(py=folds[f][0].size))
-        var perms = rng.permutation_rows(lengths, context)
-        var key = msel_helpers_key(context)
-        for f in range(nf):  # driver-loop: over folds (one device gather each)
+        var prog = MetricDoorProg()
+        var trains = List[PythonObject]()
+        var outs = List[Int]()
+        for f in range(nf):  # driver-loop: over folds (stages of the one program)
             var tr = msel_index_i64(folds[f][0], context)
-            var size = lengths[f]
+            var size = Int(py=folds[f][0].size)
+            var drawn = rng.permute_stage(prog, size)
+            var w = -1
             if size > 0:
-                var out = msel_new(size, "<i8", context)
-                _ = msel_gather_i64(key, msel_addr(tr), size, msel_addr(perms[f]), size, msel_addr(out))
+                var narrow = msel_new(size, "<i4", context)
+                if not admitted_convert_vector(msel_addr(tr), "<i8", msel_addr(narrow), "<i4", size):
+                    raise Error("TypeError: learning_curve train rows are not int64 row indices")
                 _ = tr  # keep the Python object alive through the native call above
-                _ = out  # keep the Python object alive through the native call above
-                tr = out
-            _ = py_call(orders.append, tr)
-        # Each gather reads a raw address into a permutation owned by this
-        # list. Keep every permutation alive through the final fold's call.
-        _ = perms^
+                var table = prog.put_i32(narrow)  # pinned by the program until its run
+                var slot = prog.alloc(2 * size)
+                w = prog.want(slot, 2 * size)
+                prog.stage("take_rows64", size, [table, drawn, w])
+            trains.append(tr)
+            outs.append(w)
+        var arena = metric_door_run(prog, PythonObject(None), context)
+        var base = arena.base()
+        for f in range(nf):  # driver-loop: over folds (one copy of its order out of the arena each)
+            if outs[f] < 0:
+                _ = py_call(orders.append, trains[f])
+                continue
+            var size = Int(py=trains[f].size)
+            var out = msel_new(size, "<i8", context)
+            unsafe_memcpy(dest=msel_p64(out), src=FAMILY_I64P(unsafe_from_address=base + 4 * outs[f]), count=size)
+            _ = out  # keep the Python object alive through the native copy above
+            _ = py_call(orders.append, out)
+        # The copied offsets are raw addresses into the arena: keep it (and
+        # the program's pins) through the last copy.
+        _ = arena^
+        _ = prog^
     else:
         for f in range(nf):  # driver-loop: over folds
             _ = py_call(orders.append, msel_index_i64(folds[f][0], context))

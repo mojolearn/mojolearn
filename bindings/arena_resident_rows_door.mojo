@@ -146,16 +146,7 @@ def arena_resident_take(view: ArenaOwnerView, values: PythonObject, indices_valu
     return output
 
 
-def arena_resident_entry(view: ArenaOwnerView, values: PythonObject, indices: Bool,
-                         context: PythonObject) raises -> PythonObject:
-    # _Resident._entry: the (owner, prepared Array, store id) entry of
-    # `values`, put once; `indices` casts to the int64 index layout.
-    var lease = ARENA_RESIDENTS.acquire(arena_handle(view.word))
-    var hit = _entry_info(values,lease,view,indices,context)
-    var owner = arena_pinned(hit.entry.owner_pin)
-    var prepared = arena_pinned(hit.entry.prepared_pin)
-    var result = Python.tuple(owner, prepared, PythonObject(hit.entry.store_id))
-    return result
+# REMOVED (lane vdf-scope-cv, 2026-11-24): `arena_resident_entry` (`_Resident._entry`), no caller left.
 
 
 def arena_materialize(rows: ArenaRows, context: PythonObject) raises -> PythonObject:

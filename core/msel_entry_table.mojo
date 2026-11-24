@@ -31,13 +31,12 @@ one (an empty side, no codes, no permutation).
   MH_SELECT_FOLD_I64       a [folds, test, train]         p [n, fold]            -> test count
   MH_SELECT_FOLDS_I64      a [folds, sizes, tests, trains] p [n, k]              -> -1 or first differing fold
   MH_GATHER_I32            a [table, codes, dst]          p [n_table, n]         -> 0
-  MH_GATHER_I64            a [table, codes, dst]          p [n_table, n]         -> 0
+  (10 retired: MH_GATHER_I64, see MH_RETIRED_10)
   MH_FIRST_SEEN_I32        a [codes, enc, counts]         p [n, k]               -> classes present
   MH_STRAT_FOLD_ASSIGN_I32 a [enc, alloc, perms, counts, dst] p [n, k, n_folds]  -> 0
-  MH_STORE_ALLOC           a []                           p [nbytes]             -> block id
-  MH_STORE_READ            a [dst]                        p [id, nbytes]         -> 0
+  (13, 14 retired: MH_STORE_ALLOC, MH_STORE_READ, see MH_RETIRED_13)
   MH_STORE_FREE            a []                           p [id]                 -> 0
-  MH_SCATTER_ROWS          a [src]                        p [dst_id, n_dst, dst_code, src_code, n_src, width, idx_id] -> 0
+  (16 retired: MH_SCATTER_ROWS, see MH_RETIRED_13)
   MH_PROBA_COLUMN          a [src, dst]                   p [code, n, k, col]    -> 0
   MH_SPLIT_TABLE_I32       a [perm, counts, table, sums]  p [m, n_test, n_train] -> 0
   MH_GROUP_FOLD_PERM_I32   a [counts, perm, dst, sizes]   p [m, n_folds]         -> 0
@@ -69,13 +68,21 @@ comptime MH_FOLD_IDS = 6
 comptime MH_SELECT_FOLD_I64 = 7
 comptime MH_SELECT_FOLDS_I64 = 8
 comptime MH_GATHER_I32 = 9
-comptime MH_GATHER_I64 = 10
+#: 10 was MH_GATHER_I64 (learning_curve's per-fold shuffle gather, now a
+#: `take_rows64` stage of the one shuffle program, bindings/msel_search_door.mojo;
+#: retired lane vdf-scope-cv, 2026-11-24). The number stays reserved and is refused.
+comptime MH_RETIRED_10 = 10
 comptime MH_FIRST_SEEN_I32 = 11
 comptime MH_STRAT_FOLD_ASSIGN_I32 = 12
-comptime MH_STORE_ALLOC = 13
-comptime MH_STORE_READ = 14
+#: 13 was MH_STORE_ALLOC, 14 MH_STORE_READ and 16 MH_SCATTER_ROWS: the
+#: cross_val_predict placement block (allocated, scattered into, read back),
+#: whose last caller, the identity placement of decoded labels, was deleted
+#: (lane vdf-scope-cv, 2026-11-24; bindings/msel_cv_door.mojo `_decoded_labels`). The numbers
+#: stay reserved and are refused.
+comptime MH_RETIRED_13 = 13
+comptime MH_RETIRED_14 = 14
 comptime MH_STORE_FREE = 15
-comptime MH_SCATTER_ROWS = 16
+comptime MH_RETIRED_16 = 16
 comptime MH_PROBA_COLUMN = 17
 comptime MH_SPLIT_TABLE_I32 = 18
 comptime MH_GROUP_FOLD_PERM_I32 = 19
@@ -205,18 +212,14 @@ def _msel_span_shape(operation: Int) -> Tuple[Int, Int]:
         return (3, 2)
     if operation == MH_SELECT_FOLDS_I64:
         return (4, 2)
-    if operation == MH_GATHER_I32 or operation == MH_GATHER_I64:
+    if operation == MH_GATHER_I32:
         return (3, 2)
     if operation == MH_FIRST_SEEN_I32:
         return (3, 2)
     if operation == MH_STRAT_FOLD_ASSIGN_I32:
         return (5, 3)
-    if operation == MH_STORE_ALLOC or operation == MH_STORE_FREE:
+    if operation == MH_STORE_FREE:
         return (0, 1)
-    if operation == MH_STORE_READ:
-        return (1, 2)
-    if operation == MH_SCATTER_ROWS:
-        return (1, 7)
     if operation == MH_PROBA_COLUMN:
         return (2, 4)
     if operation == MH_SPLIT_TABLE_I32:
@@ -231,7 +234,9 @@ def _msel_span_shape(operation: Int) -> Tuple[Int, Int]:
 def msel_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int, nf: Int, result: Int) raises:
     """Refuse a request whose spans do not match the operation's layout
     before any word is read."""
-    if operation < 0 or operation >= MH_OP_COUNT or operation == MH_RETIRED_5 or operation == MH_RETIRED_20:
+    if (operation < 0 or operation >= MH_OP_COUNT or operation == MH_RETIRED_5 or operation == MH_RETIRED_10
+            or operation == MH_RETIRED_13 or operation == MH_RETIRED_14 or operation == MH_RETIRED_16
+            or operation == MH_RETIRED_20):
         raise Error("model-selection helpers: unknown operation " + String(operation))
     if not result:
         raise Error("model-selection helpers: null result word")

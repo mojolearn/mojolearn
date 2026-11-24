@@ -26,7 +26,7 @@ set by any thread that sees an out-of-range index.
 
 from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.memory import bitcast, unsafe_memcpy
+from std.memory import unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.ctx_key import ctx_cache_key
@@ -35,13 +35,10 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.shared_slot import shared_slot_lock, shared_slot_unlock, SharedSlot
 from core.msel_convert import (
-    MSEL_I64,
     MSEL_ID_SLOT_BITS,
     MSEL_ID_SLOT_MASK,
     msel_itemsize,
     msel_load_f32,
-    msel_load_f64_bits,
-    msel_load_i64,
 )
 
 comptime MSEL_TPB = 256
@@ -566,65 +563,8 @@ def device_take_rows(
     return ok
 
 
-# ===========================================================================
-# scatter_rows: dst[idx[r]] = cast(src[r]), into a resident 64-bit block
-# ===========================================================================
-
-
-def _scatter_kernel(
-    src: _U8, src_code: Int32, n_src: Int64, width: Int64, idx: _I64, n_dst: Int64,
-    dst: _U64, dst_code: Int32, status: _I32,
-):
-    var w = Int(width)
-    var total = Int(n_src) * w
-    var code = Int(src_code)
-    var to_int = Int(dst_code) == MSEL_I64
-    var step = _stride()
-    var t = _tid()
-    while t < total:
-        var r = t // w
-        var c = t - r * w
-        var d = Int(idx.unsafe_load(r))
-        if d < 0 or d >= Int(n_dst):
-            status.unsafe_store(0, Int32(1))
-        else:
-            var word: UInt64
-            if to_int:
-                word = bitcast[DType.uint64](msel_load_i64(src, code, t))
-            else:
-                word = msel_load_f64_bits(src, code, t)
-            dst.unsafe_store(d * w + c, word)
-        t += step
-
-
-def device_scatter_rows(
-    ctx: DeviceContext, store: MselStore, dst_id: Int, n_dst: Int, dst_code: Int,
-    src_addr: Int, src_code: Int, n_src: Int, width: Int, idx_id: Int,
-) raises -> Bool:
-    """Row r of the host `n_src` x `width` buffer at `src_addr` (dtype
-    `src_code`) into row idx[r] (int64, the store's `idx_id`) of the
-    resident `n_dst` x `width` block `dst_id` of int64 (`dst_code` I64) or
-    float64 words, cast on the device. False when an index is out of range
-    (the block is then not to be read)."""
-    if n_src < 1 or width < 1:
-        return True
-    var dst_at = store.address(dst_id, n_dst * width * 8)
-    var idx_at = store.address(idx_id, n_src * 8)
-    var nbytes = n_src * width * msel_itemsize(src_code)
-    var d_src = ctx.enqueue_create_buffer[DType.uint8](nbytes)
-    ctx.enqueue_copy(dst_buf=d_src, src_ptr=_U8(unsafe_from_address=src_addr))
-    var d_status = ctx.enqueue_create_buffer[DType.int32](2)
-    enqueue_fill(ctx, d_status, Int32(0))
-    ctx.enqueue_function[_scatter_kernel](
-        d_src.unsafe_ptr(), Int32(src_code), Int64(n_src), Int64(width),
-        MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=idx_at), Int64(n_dst),
-        MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=dst_at), Int32(dst_code), d_status.unsafe_ptr(),
-        grid_dim=_grid(n_src * width), block_dim=MSEL_TPB,
-    )
-    var ok = _status(ctx, d_status) == 0
-    _ = d_src^
-    _ = d_status^
-    return ok
+# REMOVED (lane vdf-scope-cv, 2026-11-24): scatter_rows (`_scatter_kernel`,
+# `device_scatter_rows`), cross_val_predict's placement; its operation 16 is retired.
 
 
 # ===========================================================================
