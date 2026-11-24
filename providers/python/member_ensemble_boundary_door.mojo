@@ -3871,15 +3871,32 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             # tuple: the first method the class has (`msel_scorer_response`,
             # scikit-learn's `_check_response_method`) is the row's own
             # response, or a regression row's non-predict one (lane mf-r9c's
-            # `resp`). Another response for a non-regression metric row is a
-            # classification / probability metric over the wrong kind of
-            # answer, which no typed row reads (the one exit left here).
+            # `resp`). LANE mf-r9d round b (door :3881): another response for a
+            # non-regression metric row on a single-output classifier is the
+            # metric over that answer (`opts.wrong`; core/msel_scorer_run.mojo
+            # `_wrong_response_value`: a label row's `_check_targets` words,
+            # hinge_loss over the probabilities); a probability metric row
+            # (the D^2 scores) over another answer, or any of them on a
+            # non-classifier or a multi-output classifier, is refused natively.
             var wanted_t = String("decision_function") if row.op == MEMBER_OP_DECISION else (
                 String("predict_proba") if row.op == MEMBER_OP_PREDICT_PROBA else String("predict"))
             if method != wanted_t:
-                if not (row.op == MEMBER_OP_PREDICT and msel_scorer_regression(row)):
-                    return False
-                kw.resp_any = True
+                if row.op == MEMBER_OP_PREDICT and msel_scorer_regression(row):
+                    kw.resp_any = True
+                else:
+                    var label_metric = row.op == MEMBER_OP_PREDICT and not msel_scorer_cluster(row)
+                    var hinge_metric = row.op == MEMBER_OP_DECISION
+                    if not classifier or multi_lab or not (label_metric or hinge_metric) or (
+                            label_metric and method == "predict"):
+                        raise Error("NotImplementedError: mojolearn: make_scorer(" + String(row.name) + ") with a "
+                                    + "response_method tuple that resolves to " + method + " on "
+                                    + String(py=py_type(base).__name__) + " is not served natively by a search; "
+                                    + "pass the metric's own response_method ('" + wanted_t + "')")
+                    opts.wrong = True
+                    opts.resp = MEMBER_OP_DECISION if method == "decision_function" else (
+                        MEMBER_OP_PREDICT if method == "predict" else MEMBER_OP_PREDICT_PROBA)
+                    opts.log = method == "predict_log_proba"
+                    row.op = opts.resp
         if kw.resp_any and method != "predict":
             # LANE mf-r9c (door :3670): a regression row over the make_scorer's
             # own response the class has (core/msel_scorer_run.mojo

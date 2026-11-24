@@ -246,7 +246,10 @@ comptime _CL_PAIR = 2
 #: `MselOtherTier`), the tier's refusal word (-1: none; else the label word
 #: each side raises: the other tier's image is not built), and the
 #: predict_log_proba flag (1: the response is the log of predict_proba).
-comptime SCORER_GROUP_WORDS = 25
+#: Lane mf-r9d round b: then the wrong-response flag (1: a metric row whose
+#: response_method tuple resolved to another response than its metric reads,
+#: `resp` that response; `_wrong_response_value`).
+comptime SCORER_GROUP_WORDS = 26
 #: Lane mf-r9d: the shared refusal of device='cpu' with the fast tier
 #: (core/device_route.mojo `device_cpu_fast`, which the native scorer door's
 #: prepare raises for a host estimator's fast-mode scorer), per side.
@@ -383,6 +386,9 @@ struct MselScorer(ImplicitlyCopyable, Movable):
     var tier_word: Int
     var log: Bool
     var cpu_fast: Bool
+    # lane mf-r9d round b: the row reads another response than its metric's
+    # (`MselScorerOptions.wrong`)
+    var wrong: Bool
 
     def __init__(out self, name: StaticString, family: Int, metric: Int, avg: Int, sign: Float64, op: Int):
         self.name = name
@@ -425,6 +431,7 @@ struct MselScorer(ImplicitlyCopyable, Movable):
         self.tier = 0
         self.tier_word = -1
         self.log = False
+        self.wrong = False
         self.cpu_fast = False
 
 
@@ -475,6 +482,8 @@ struct MselScorerOptions(ImplicitlyCopyable, Movable):
     var tier: Int
     var tier_word: Int
     var log: Bool
+    # lane mf-r9d round b: `resp` is another response than the metric reads
+    var wrong: Bool
 
     def __init__(out self):
         self.flip = False
@@ -504,6 +513,7 @@ struct MselScorerOptions(ImplicitlyCopyable, Movable):
         self.tier = 0
         self.tier_word = -1
         self.log = False
+        self.wrong = False
 
 
 def _table() -> List[MselScorer]:
@@ -742,7 +752,14 @@ def msel_scorer_row(code: Int, opts: MselScorerOptions, sel_base: Int) raises ->
     if opts.resp != 0:
         # lane mf-r9c (door :3670): a regression row over the make_scorer's
         # own response (`_response_regression`)
-        if row.family != _F_REG or (opts.resp != MEMBER_OP_PREDICT_PROBA and opts.resp != MEMBER_OP_DECISION):
+        if opts.wrong:
+            # lane mf-r9d round b: a label row over predict_proba /
+            # decision_function, or hinge_loss over predict_proba / predict
+            var label_row = row.op == MEMBER_OP_PREDICT and row.family != _F_REG and row.family != _F_CLUSTER
+            if not (label_row or row.family == _F_HINGE) or opts.resp == row.op:
+                raise Error("RuntimeError: a wrong response on a search scorer that reads no other response")
+            row.wrong = True
+        elif row.family != _F_REG or (opts.resp != MEMBER_OP_PREDICT_PROBA and opts.resp != MEMBER_OP_DECISION):
             raise Error("RuntimeError: a scorer's own response on a search scorer other than a regression row")
         row.op = opts.resp
     # lane mf-r9d (door :3789): the other numeric_mode tier's route and a
@@ -897,6 +914,7 @@ def msel_scorer_group_words(mut words: List[Float64], code: Int, positive: Int, 
     words.append(Float64(opts.tier))  # lane mf-r9d
     words.append(Float64(opts.tier_word))
     words.append(1.0 if opts.log else 0.0)
+    words.append(1.0 if opts.wrong else 0.0)  # lane mf-r9d round b
     for j in range(opts.sel_n):  # small-loop(the scorer's labels codes)
         words.append(Float64(sels[opts.sel_from + j]))
     for j in range(max(opts.w_n, 0)):  # driver-loop: over the sample_weight words (once per admission)
@@ -940,6 +958,7 @@ def msel_scorer_group_read(words: List[Float64], at: Int, mut code: Int, mut pos
     opts.tier = Int(words[at + 22])  # lane mf-r9d
     opts.tier_word = Int(words[at + 23])
     opts.log = words[at + 24] != 0.0
+    opts.wrong = words[at + 25] != 0.0  # lane mf-r9d round b
     if opts.tier < 0 or opts.tier > 1:
         raise Error("member ABI: a search scorer's numeric_mode tier word is not 0 or 1")
     var wk = max(wn, 0)
@@ -1080,6 +1099,89 @@ def msel_scorer_v_measure(row: MselScorer) -> Bool:
 def msel_scorer_d2_proba(row: MselScorer) -> Bool:
     """Lane mf-score8: d2_log_loss_score / d2_brier_score."""
     return row.family == _F_D2P
+
+
+def _target_words(values: List[Float64], two_d: Bool, cols: Int) -> String:
+    """`type_of_target` of a response block (count x `cols` when `two_d`):
+    1-D 'binary' / 'multiclass' / 'continuous'; 2-D 'multilabel-indicator'
+    (only 0 / 1 values, more than one column), 'multiclass-multioutput'
+    (integral), 'continuous-multioutput' (any value not integral)."""
+    var integral = True
+    var zero_one = True
+    for i in range(len(values)):  # driver-loop: over the block's values (their kind)
+        var v = values[i]
+        if not (v - v == 0.0) or Float64(Int(v)) != v:
+            integral = False
+        if v != 0.0 and v != 1.0:
+            zero_one = False
+    if two_d and cols > 1:
+        if not integral:
+            return String("continuous-multioutput")
+        return String("multilabel-indicator") if zero_one else String("multiclass-multioutput")
+    var kinds: List[String] = ["binary", "multiclass", "continuous"]
+    return kinds[_target_type(values)]
+
+
+def _wrong_response_value(route: MetricRoute, cluster: EntryRef, label_words: List[String], row: MselScorer,
+                          truth: Int, response: Int, count: Int, classes: Int, cols: Int, positive: Int,
+                          mut notices: List[Float64]) raises -> Float64:
+    """Lane mf-r9d round b (door :3881): a METRIC ROW whose make_scorer
+    response_method tuple resolved, on a classifier, to another response than
+    its metric reads (scikit-learn's `_check_response_method` takes the first
+    the class has; utils/_response.py hands a binary classifier's
+    predict_proba as classes[-1]'s column, its decision 1-D, a multiclass
+    one's 2-D block). A LABEL row: `_check_targets` (metrics/_classification.py
+    lines 116-138) types y_true ('binary' / 'multiclass' by the side's
+    present labels) and the response; different kinds raise "Classification
+    metrics can't handle a mix of ..."; an integral response of y_true's kind
+    would be read as labels, which no typed row does (refused natively).
+    HINGE_LOSS over predict_proba (or its log): the probabilities are the
+    decision values (lines 3553-3613), a binary member's classes[-1] column;
+    over predict: more than two present labels raise its 1-D shape words, two
+    or fewer would read the labels as decisions (refused natively)."""
+    var present = _present_count(truth, count, classes) if classes > 0 else 0
+    var width = max(cols, 1)
+    var binary_column = classes == 2 and width == 2 and row.op == MEMBER_OP_PREDICT_PROBA
+    var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=response)
+    var plain = row
+    plain.wrong = False
+    if row.family == _F_HINGE:
+        if row.op == MEMBER_OP_PREDICT:
+            if present > 2:
+                raise Error("ValueError: The shape of pred_decision cannot be 1d arraywith a multiclass target. "
+                            + "pred_decision shape must be (n_samples, n_classes), that is (" + String(count) + ", "
+                            + String(present) + "). Got: (" + String(count) + ",)")
+            raise Error("NotImplementedError: mojolearn: hinge_loss over predicted labels (a response_method tuple "
+                        + "that resolved to predict) is not served natively by a search; pass "
+                        + "response_method='decision_function'")
+        if binary_column:
+            var column = List[Float32](length=max(count, 1), fill=0.0)
+            for i in range(count):  # driver-loop: over the side's rows (classes[-1]'s probability column)
+                column[i] = src[2 * i + 1]
+            var value = msel_scorer_value(route, cluster, label_words, plain, truth, Int(column.unsafe_ptr()), count,
+                                          classes, 1, positive, notices)
+            _ = len(column)  # read by the program above
+            return value
+        return msel_scorer_value(route, cluster, label_words, plain, truth, response, count, classes, width, positive,
+                                 notices)
+    var values = List[Float64](capacity=max(count * width, 1))
+    var two_d = width > 1 and not binary_column
+    if binary_column:
+        for i in range(count):  # driver-loop: over the side's rows (classes[-1]'s column)
+            values.append(Float64(src[2 * i + 1]))
+    else:
+        for i in range(count * width):  # driver-loop: over the side's response words
+            values.append(Float64(src[i]))
+    var kind_true = String("binary") if present <= 2 else String("multiclass")
+    var kind_pred = _target_words(values, two_d, width)
+    var merged = (kind_true == "binary" or kind_true == "multiclass") and (kind_pred == "binary"
+                                                                           or kind_pred == "multiclass")
+    if kind_true != kind_pred and not merged:
+        raise Error("ValueError: Classification metrics can't handle a mix of " + kind_true + " and " + kind_pred
+                    + " targets")
+    var asked = String("decision_function") if row.op == MEMBER_OP_DECISION else String("predict_proba")
+    raise Error("NotImplementedError: mojolearn: a classification metric over integral " + asked + " values read "
+                + "as labels is not served natively by a search; pass response_method='predict'")
 
 
 def msel_scorer_float_proba(row: MselScorer) -> Bool:
@@ -1481,6 +1583,10 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
         raise Error(label_words[row.tier_word])
     if row.cpu_fast:
         raise Error(SCORER_CPU_FAST_WORDS)
+    if row.wrong:
+        # lane mf-r9d round b (door :3881): the metric over another response
+        return _wrong_response_value(route, cluster, label_words, row, truth, response, count, classes, cols,
+                                     positive, notices)
     if row.w_word == SCORER_WEIGHTS_EMPTY:
         raise Error("mojolearn " + msel_scorer_caller(row) + ": sample_weight has 0 entries for " + String(count)
                     + " samples")
