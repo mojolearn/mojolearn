@@ -24037,3 +24037,11 @@ Arms decided by the A/B of wheel 0.8.67.dev0+4519097d380a on the NVIDIA L40S (jo
 - Removed: `SEQ_VAR_BLOCK`, `_var_block_on`, its term in the two VAR dispatch conditions, and the duplicate `TSA2_VAR` launch block (identical to the default block once the switch is gone; the `TSA2_VAR` import in exec_device went with it; `TSA2_VAR` itself stays in sequence/ops.mojo and ops_impl.mojo for the queued fit). Kept: the one-thread ops for shapes that exceed VAR_SMEM. Default unchanged on every column and mode: no bits move.
 - Files: `sequence/exec_device.mojo`. No grid_controls entry, no test, no sabotage row.
 - Patch: `~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_VAR_BLOCK_OFF.ab-outcome-3.patch`. Deleted by lane/ab-outcome-3 (sub-lane o3-nseq); code recoverable at 04feb6f52d. Refusal: `core/experiment_guards_neural.mojo`.
+
+### mojolearn_opt_scan_fused_env (ab-outcome-3)
+
+- What it was: a leftover of `MOJOLEARN_OPT_SCAN_FUSED_OFF` (see "mojolearn_opt_scan_fused_off (ab-outcome-2)", which stands). `opt_refuse_device_inputs` (training/checks/optimizer.mojo; the byte LM step calls it) still read `MOJOLEARN_OPT_SCAN_FUSED` from the environment on every step and, on "0", ran the four separate refusal scans (`_opt_refuse_device_buffer`: `device_first_nonfinite` and a wait per buffer) instead of the fused scan with one readback.
+- Verdict: the build switch's A/B (nvc-ab-20261124T095727Z-92fd9f, NVIDIA L40S, job nvc1-0002) decided the fused scan: the old form lost, mlp-train-step 1.25 slower. The environment read was its run-time twin; no environment read picks a route.
+- Removed: the `getenv("MOJOLEARN_OPT_SCAN_FUSED")` read, the separate-scan branch, `_opt_refuse_device_buffer` and the `device_first_nonfinite` import. Kept: `_opt_refuse_device_fused` as the only form (same refusal, same message, same buffer named first). Default unchanged: no bits move on any column.
+- Files: `training/checks/optimizer.mojo`. No grid_controls entry, no test, no sabotage row. The define refusal is the existing `MOJOLEARN_OPT_SCAN_FUSED_OFF` one in `core/experiment_guards_neural.mojo` (an environment variable has no define to refuse).
+- Patch: `~/mojolearn-evidence/experiments-removed/MOJOLEARN_OPT_SCAN_FUSED_ENV.ab-outcome-3.patch`. Deleted by lane/ab-outcome-3 (sub-lane o3-nseq); code recoverable at f740725f9c.

@@ -144,7 +144,6 @@ from core.device_scan import (
     SCAN_TPB,
     _scan_blocks,
     device_classify_nonfinite,
-    device_first_nonfinite,
     nonfinite_partial_kernel,
 )
 from training.neural_ab_profiles import NN57_NORM_PROFILE, nn_reduce_pointer_into, nn_reduce_scratch_floats
@@ -1553,23 +1552,6 @@ def _step_timing_tick(
     t = now
 
 
-def _opt_refuse_device_buffer(
-    ctx: DeviceContext,
-    name: String,
-    mut buf: DeviceBuffer[DType.float32],
-    n: Int,
-) raises:
-    """One of the four scans: `device_first_nonfinite` over `buf[0:n]`,
-    the offending element classified, `opt_nonfinite_message` raised. The
-    host `refuse_nonfinite(name, List)` on the same bytes produces the
-    same string, by construction (one builder) and by gate (clause (f))."""
-    var idx = device_first_nonfinite(ctx, buf, n)
-    if idx < 0:
-        return
-    var is_nan = device_classify_nonfinite(ctx, buf, idx)
-    raise Error(opt_nonfinite_message(name, idx, is_nan))
-
-
 def _scan_launch(
     ctx: DeviceContext, mut part: DeviceBuffer[DType.int32], k: Int, blocks: Int,
     mut buf: DeviceBuffer[DType.float32], n: Int,
@@ -1599,8 +1581,9 @@ def _opt_refuse_device_fused(
     buffer, ONE readback, and the host fold buffer by buffer in the
     oracle's order. The first buffer with a hit and its smallest index are
     what the four separate scans found, so the same refusal and the same
-    message; on clean inputs nothing moves. MOJOLEARN_OPT_SCAN_FUSED=0
-    keeps the separate scans (the A/B)."""
+    message; on clean inputs nothing moves. The only form since
+    2026-11-24 (the separate scans, the env arm MOJOLEARN_OPT_SCAN_FUSED=0,
+    lost with MOJOLEARN_OPT_SCAN_FUSED_OFF: mlp-train-step 1.25 slower)."""
     var blocks = _scan_blocks(n)
     var count = 3 if is_sgd else 4
     var part = ctx.enqueue_create_buffer[DType.int32](4 * blocks)
@@ -1682,10 +1665,11 @@ def opt_refuse_device_inputs(
     `param`, `grad`, then `exp_avg` and `exp_avg_sq` (AdamW) or
     `momentum_buffer` (SGD): the order `optimizer_step_oracle` refuses in,
     so the two sides name the SAME buffer first on an input that is bad in
-    more than one place. Each scan is `core/device_scan.device_first_nonfinite`
-    (one read of the buffer on the device, an integer minimum over block
-    partials, so the index is THE SMALLEST on every vendor), the one
-    offending element is read back (4 B) to say NaN or infinity, and the
+    more than one place. The scans are `nonfinite_partial_kernel` launches
+    into one partials buffer with ONE readback (`_opt_refuse_device_fused`;
+    an integer minimum over block partials, so the index is THE SMALLEST on
+    every vendor), the one offending element is read back (4 B) to say NaN
+    or infinity, and the
     refusal is the oracle's own `opt_nonfinite_message`, which is also what
     the host `refuse_nonfinite` raises through. optimizer_check clause (f)
     asserts the device message EQUALS the host message on the same planted
@@ -1707,18 +1691,13 @@ def opt_refuse_device_inputs(
     var n = offsets[len(offsets) - 1] if len(offsets) > 0 else 0
     if n <= 0:
         return
-    if String(getenv("MOJOLEARN_OPT_SCAN_FUSED")) != "0":
-        _opt_refuse_device_fused(ctx, param, grad, m_state, v_state, n, cfg.kind == OPT_SGD)
-        return
-    # ORDER MATCHES THE ORACLE'S so the two sides name the SAME buffer first
-    # on an input that is bad in more than one place.
-    _opt_refuse_device_buffer(ctx, String("param"), param, n)
-    _opt_refuse_device_buffer(ctx, String("grad"), grad, n)
-    if cfg.kind != OPT_SGD:
-        _opt_refuse_device_buffer(ctx, String("exp_avg"), m_state, n)
-        _opt_refuse_device_buffer(ctx, String("exp_avg_sq"), v_state, n)
-    else:
-        _opt_refuse_device_buffer(ctx, String("momentum_buffer"), m_state, n)
+    # TOMBSTONE: the MOJOLEARN_OPT_SCAN_FUSED=0 environment arm (four separate scans and waits, `_opt_refuse_device_buffer`;
+    # the run-time twin of MOJOLEARN_OPT_SCAN_FUSED_OFF, which lost A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S,
+    # mlp-train-step 1.25 slower) deleted 2026-11-24 by lane/ab-outcome-3 (o3-nseq); code recoverable at f740725f9c.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_OPT_SCAN_FUSED_ENV.ab-outcome-3.patch
+    # The fused scan folds the buffers in the oracle's order, so the two sides name the SAME buffer first on an input
+    # that is bad in more than one place.
+    _opt_refuse_device_fused(ctx, param, grad, m_state, v_state, n, cfg.kind == OPT_SGD)
 
 
 def opt_refuse_scan_bytes(offsets: List[Int], cfg: OptimizerConfig) -> Int:
