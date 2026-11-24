@@ -4019,13 +4019,20 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             # clustering scorer whose predict is float values (a regressor
             # under 'adjusted_rand_score'): scikit-learn scores each distinct
             # value as a cluster after its UserWarning (sklearn 1.9
-            # metrics/cluster/_supervised.py `check_clusterings`); the RUN's
-            # label-pair entry reads integer ids only (rows.tsv: not typed).
+            # metrics/cluster/_supervised.py `check_clusterings`). LANE
+            # mf-rows8b: a Mojolearn scorer runs the public cluster metric,
+            # whose doors take integer labels only (bindings/mcls_cluster_door.mojo
+            # `_pair_i32`, bindings/mcls_common_unpack.mojo `mc_i32_1d`): each
+            # side raises their labels_pred words (core/msel_scorer_run.mojo
+            # `_cluster_value`, `MselScorer.fpred`), as the door's units did.
             if labels_out and dtype != MEMBER_I32 and dtype != MEMBER_I64:
                 if classifier:
                     raise Error("RuntimeError: search admission invariant: a classifier member answers its predict"
                                 + " as no integer codes")
-                return False  # float predictions under a clustering scorer (see above)
+                if dtype != MEMBER_F32 and dtype != MEMBER_F64:
+                    raise Error("RuntimeError: search admission invariant: a member answers its predict in no"
+                                + " float type and no integer ids")
+                continue  # float predictions under a clustering scorer: refused per side (above)
             if not labels_out and not ids and dtype != MEMBER_F32 and dtype != MEMBER_F64:
                 raise Error("RuntimeError: search admission invariant: a member answers a scored response in no"
                             + " float type and no integer predict")

@@ -1406,7 +1406,11 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                 if dtype != MEMBER_I32 and dtype != MEMBER_I64 and dtype != MEMBER_F32 and dtype != MEMBER_F64:
                     raise Error("member ABI: a cv tool response of an element type the result cannot hold")
             elif labels_out:
-                if dtype != MEMBER_I32 and dtype != MEMBER_I64:
+                # lane mf-rows8b (row :3899): a non-classifier's float predict
+                # under a clustering scorer is kept as floats; each side raises
+                # the public cluster doors' refusal (`MselScorer.fpred`)
+                var float_ids = not classifier and (dtype == MEMBER_F32 or dtype == MEMBER_F64)
+                if dtype != MEMBER_I32 and dtype != MEMBER_I64 and not float_ids:
                     raise Error("member ABI: a search scored by labels needs a member that predicts class codes")
             elif ops[o] == MEMBER_OP_PREDICT and not classifier and (dtype == MEMBER_I32 or dtype == MEMBER_I64):
                 pass  # lane mf-score8 round b: a non-classifier's integer ids (narrowed to int32)
@@ -1735,6 +1739,9 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                     var dt = out_dtypes[((u0 + t // sides) // used) * nops + o]
                     scored.ids = (not classifier and scored.op == MEMBER_OP_PREDICT
                                   and (dt == MEMBER_I32 or dt == MEMBER_I64))
+                    if not classifier and scored.op == MEMBER_OP_PREDICT and msel_scorer_cluster(scored):
+                        # lane mf-rows8b (row :3899): float predictions (1 float32, 2 float64)
+                        scored.fpred = 1 if dt == MEMBER_F32 else (2 if dt == MEMBER_F64 else 0)
                     try:
                         values[at] = _scorer_side(plan.metric, plan.cluster, plan.label_words, scored, y_dst[s],
                                                   pred_at[t * nops + o], side_count[s], k, pred_cols[t * nops + o],

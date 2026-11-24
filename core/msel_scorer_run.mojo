@@ -345,6 +345,11 @@ struct MselScorer(ImplicitlyCopyable, Movable):
     # non-classifier's predict: a clusterer), set by the search RUN per
     # score; not a word of the group
     var ids: Bool
+    # lane mf-rows8b (row :3899): the side's member answers its predict as
+    # floats (a regressor) under a clustering scorer: 1 float32, 2 float64
+    # (the member's element type), 0 none; set by the search RUN per score
+    # like `ids`; the public cluster doors refuse it (`_cluster_value`)
+    var fpred: Int
 
     def __init__(out self, name: StaticString, family: Int, metric: Int, avg: Int, sign: Float64, op: Int):
         self.name = name
@@ -379,6 +384,7 @@ struct MselScorer(ImplicitlyCopyable, Movable):
         self.lv_at = 0
         self.lv_n = 0
         self.ids = False
+        self.fpred = 0
 
 
 def _nan64() -> Float64:
@@ -1581,6 +1587,16 @@ def _cluster_value(route: MetricRoute, cluster: EntryRef, row: MselScorer, truth
                 raise Error("ValueError: labels_true must hold integer labels that fit in int32")
             labels[i] = Int32(Int(v))
         t = Int(labels.unsafe_ptr())
+    if classes == 0 and row.fpred != 0:
+        # LANE mf-rows8b (row :3899): a regressor's float predictions under a
+        # clustering scorer. The public cluster doors take integer labels
+        # only (bindings/mcls_cluster_door.mojo `_pair_i32` / the MI doors,
+        # bindings/mcls_common_unpack.mojo `mc_i32_1d`): labels_pred of the
+        # member's float buffer refuses in their words, after labels_true's
+        # check above (their order), on every side.
+        raise Error("mojolearn metrics: labels_pred must be an integer label array, got buffer format "
+                    + (String("'d'") if row.fpred == 2 else String("'f'"))
+                    + "; the ported kernels take int32 labels")
     var value: Float64
     # lane mf-score8: v_measure's beta (the param word), NMI / AMI's
     # average_method (the flag word: 0 min, 1 geometric, 2 arithmetic, 3 max)
