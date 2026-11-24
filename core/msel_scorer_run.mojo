@@ -611,7 +611,10 @@ def msel_scorer_row(code: Int, opts: MselScorerOptions, sel_base: Int) raises ->
             raise Error("RuntimeError: force_finite on a search scorer whose metric takes none")
         row.ff = opts.ff == 1
     if opts.param_word >= 0:
+        # lane mf-rows8a: a binary label row on a non-classifier, its
+        # pos_label's value (`msel_scorer_float_labels`)
         var param_row = row.family == _F_KAPPA or row.family == _F_ROC or msel_scorer_v_measure(row) or (
+            row.family == _F_BINARY) or (
             row.family == _F_REG and (
             row.metric == REG_PINBALL or row.metric == REG_D2_PINBALL or row.metric == REG_TWEEDIE
             or row.metric == REG_D2_TWEEDIE))
@@ -960,10 +963,12 @@ def msel_scorer_float_labels(row: MselScorer) -> Bool:
     labels per side as scikit-learn's `_check_targets` reads them (integral
     values: 'binary' / 'multiclass'; any other: 'continuous', refused in its
     words): accuracy, the averaged label rows and balanced accuracy /
-    matthews, the COUNT rows, cohen_kappa_score, the likelihood ratios. The
-    binary label rows (pos_label=1 among float labels) are not among them."""
+    matthews, the COUNT rows, cohen_kappa_score, the likelihood ratios, and
+    (lane mf-rows8a) the binary label rows, their pos_label a number the
+    UNPACK read once (`param`, printed as given at `param_word`) found among
+    the side's float labels (`_float_binary_positive`)."""
     return (row.family == _F_ACCURACY or row.family == _F_LABEL or row.family == _F_COUNT or row.family == _F_KAPPA
-            or row.family == _F_CLR)
+            or row.family == _F_CLR or row.family == _F_BINARY)
 
 
 def msel_scorer_decision_only(row: MselScorer) -> Bool:
@@ -1303,11 +1308,177 @@ def _float_label_value(route: MetricRoute, cluster: EntryRef, label_words: List[
                 tc[i] = Int32(j)
             if union[j] == yp[i]:
                 pc[i] = Int32(j)
+    var side_positive = positive
+    if row.family == _F_BINARY:
+        # lane mf-rows8a: the binary label rows' pos_label among the side's
+        # labels, `_check_set_wise_labels`' checks in its order
+        side_positive = _float_binary_positive(label_words, row, union, positive)
     var value = msel_scorer_value(route, cluster, label_words, row, Int(tc.unsafe_ptr()), Int(pc.unsafe_ptr()), count,
-                                  len(union), cols, positive, notices)
+                                  len(union), cols, side_positive, notices)
     _ = len(tc)  # read by the program above
     _ = len(pc)
     return value
+
+
+def _float_binary_positive(label_words: List[String], row: MselScorer, union: List[Float64],
+                           positive: Int) raises -> Int:
+    """Lane mf-rows8a: a binary label row (f1 / precision / recall / jaccard,
+    average 'binary') on a regressor's side, after `_check_targets` (sklearn
+    1.9 metrics/_classification.py `_check_set_wise_labels`, lines 1911-1919):
+    more than two labels refuse ("Target is multiclass ..."); a pos_label the
+    metric door reads as no number (`row.pos_float`: None or another object,
+    SCORER_FLOAT_POS_WORDS) or a string (`positive` SCORER_POSITIVE_KIND, the
+    door's type words) refuse; the pos_label's value (`row.param`, printed as
+    given at `param_word`) not among two present labels refuses, the labels
+    printed as `f"{present_labels}"` prints NumPy's float array
+    (`_numpy_float_words`); else its code, or SCORER_POSITIVE_ABSENT for one
+    label present (scored as `labels=[pos_label]`: 0.0 and its warning)."""
+    if len(union) > 2:
+        raise Error("ValueError: Target is multiclass but average='binary'. Please choose another average setting, "
+                    + "one of [None, 'micro', 'macro', 'weighted'].")
+    if row.pos_float:
+        raise Error(SCORER_FLOAT_POS_WORDS)
+    if positive == SCORER_POSITIVE_KIND:
+        raise Error("pos_label must use the same type as the targets")
+    if not row.param_given or row.param_word < 0 or row.param_word >= len(label_words):
+        raise Error("member ABI: a binary label scorer on a non-classifier needs its pos_label value word")
+    var at = -1
+    for j in range(len(union)):  # small-loop(the side's labels, at most two)
+        if union[j] == row.param:
+            at = j
+    if at >= 0:
+        return at
+    if len(union) >= 2:
+        raise Error("ValueError: pos_label=" + label_words[row.param_word] + " is not a valid label. It should be "
+                    + "one of " + _numpy_float_words(union))
+    return SCORER_POSITIVE_ABSENT
+
+
+def _int_digit_list(v: Float64) -> List[Int]:
+    """Lane mf-rows8a: the exact decimal digits of |v|, most significant
+    first, for an integral float64 below 2^128 (a float32 target's value);
+    [0] for zero."""
+    var a = abs(v)
+    var digits = List[Int]()
+    if a < 9.0e18:
+        var n = Int(a)
+        if n == 0:
+            digits.append(0)
+            return digits^
+        while n > 0:  # small-loop(the decimal digits, at most 19)
+            digits.append(n % 10)
+            n = n // 10
+    else:
+        var bits = bitcast[DType.uint64](a)
+        var mant = ((bits & UInt64(0xFFFFFFFFFFFFF)) | UInt64(0x10000000000000)).cast[DType.uint128]()
+        var shift = Int((bits >> UInt64(52)) & UInt64(0x7FF)) - 1075
+        var n = mant << UInt128(min(max(shift, 0), 74))
+        while n > UInt128(0):  # small-loop(the decimal digits, at most 39)
+            digits.append(Int(n % UInt128(10)))
+            n = n // UInt128(10)
+    digits.reverse()
+    return digits^
+
+
+def _pad_left(text: String, width: Int) -> String:
+    """`text.rjust(width)`."""
+    var out = String("")
+    for _ in range(width - text.byte_length()):  # small-loop(the padding spaces)
+        out += " "
+    return out + text
+
+
+def _numpy_float_words(values: List[Float64]) -> String:
+    """Lane mf-rows8a: `str(np.array(values))` of integral float labels
+    (`_check_targets`' present labels: never continuous here), as NumPy's
+    default print options print them (precision 8, floatmode 'maxprec',
+    sign '-'; numpy/_core/arrayprint.py `FloatingFormat.fillFormat`):
+    positional ("0.", every entry right-aligned to the widest) unless the
+    largest nonzero |value| is >= 1e8 or more than 1000 times the smallest,
+    then scientific (the shortest digits, at most 8 after the point, every
+    mantissa padded to the longest fraction with zeros, the exponent at
+    least two digits). One line: two labels at most here."""
+    var max_a = 0.0
+    var min_a = 0.0
+    var nonzero = False
+    for i in range(len(values)):  # small-loop(the labels)
+        var a = abs(values[i])
+        if a == 0.0:
+            continue
+        if not nonzero or a > max_a:
+            max_a = a
+        if not nonzero or a < min_a:
+            min_a = a
+        nonzero = True
+    var sci = nonzero and (max_a >= 1.0e8 or max_a / min_a > 1000.0)
+    var parts = List[String]()
+    var width = 0
+    if not sci:
+        for i in range(len(values)):  # small-loop(the labels)
+            var digits = _int_digit_list(values[i])
+            var text = String("-") if values[i] < 0.0 else String("")
+            for d in range(len(digits)):  # small-loop(the digits)
+                text += String(digits[d])
+            text += "."
+            width = max(width, text.byte_length())
+            parts.append(text^)
+    else:
+        var heads = List[String]()
+        var fracs = List[List[Int]]()
+        var exps = List[Int]()
+        var precision = 0
+        var exp_size = 2
+        for i in range(len(values)):  # small-loop(the labels)
+            var digits = _int_digit_list(values[i])
+            var e = len(digits) - 1 if values[i] != 0.0 else 0
+            if len(digits) > 9:
+                # precision 8: nine significant digits, rounded
+                var up = digits[9] >= 5
+                var kept = List[Int]()
+                for d in range(9):  # small-loop(the kept digits)
+                    kept.append(digits[d])
+                var at = 8
+                while up and at >= 0:  # small-loop(the carry)
+                    kept[at] += 1
+                    up = kept[at] == 10
+                    if up:
+                        kept[at] = 0
+                    at -= 1
+                if up:
+                    kept.insert(0, 1)
+                    _ = kept.pop()
+                    e += 1
+                digits = kept^
+            while len(digits) > 1 and digits[len(digits) - 1] == 0:  # small-loop(the trailing zeros)
+                _ = digits.pop()
+            var head = String("-") if values[i] < 0.0 else String("")
+            head += String(digits[0])
+            var frac = List[Int]()
+            for d in range(1, len(digits)):  # small-loop(the fraction digits)
+                frac.append(digits[d])
+            precision = max(precision, len(frac))
+            exp_size = max(exp_size, String(e).byte_length())
+            width = max(width, head.byte_length())
+            heads.append(head^)
+            fracs.append(frac^)
+            exps.append(e)
+        for i in range(len(heads)):  # small-loop(the labels)
+            var text = _pad_left(heads[i], width) + "."
+            for d in range(precision):  # small-loop(the fraction digits, zero padded)
+                text += String(fracs[i][d]) if d < len(fracs[i]) else String("0")
+            var shown = String(exps[i])
+            text += "e+"
+            for _ in range(exp_size - shown.byte_length()):  # small-loop(the exponent's zero padding)
+                text += "0"
+            text += shown
+            parts.append(text^)
+        width = 0
+    var out = String("[")
+    for i in range(len(parts)):  # small-loop(the labels)
+        if i > 0:
+            out += " "
+        out += _pad_left(parts[i], width)
+    return out + "]"
 
 
 def _check_listed(label_words: List[String], row: MselScorer, truth: Int, count: Int) raises:
