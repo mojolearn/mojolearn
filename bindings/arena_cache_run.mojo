@@ -43,6 +43,7 @@ needed). THE ADDITIVE API for a member family with its own device store
   * nothing else: the scope's close frees every family's entries into the
     family's own store, and `resident.stats()` lists each family's cache.
 """
+from std.atomic import Atomic, Ordering
 from std.memory import ArcPointer
 from core.arena_state import (
     ARENA_CACHES, ARENA_SCOPES, ARENA_HANDLE_NONE, ArenaStoreEntry, ArenaScopeState,
@@ -302,9 +303,41 @@ def arena_cache_finalize(word: Int, store: EntryRef) -> List[Int]:
 # ---------------------------------------------------------------- scope
 
 
+struct _ScopesLive(Defaultable, Movable):
+    """The number of `resident()` scope states alive in the process (lane
+    vdf-tail-b): one Int64 word, changed only by atomic adds. Zero means no
+    thread can have an active scope, so a door outside one skips its context
+    and thread-local reads (`arena_scopes_live`)."""
+    var count: List[Int64]
+
+    def __init__(out self):
+        self.count = List[Int64](length=1, fill=Int64(0))
+
+
+comptime _ARENA_SCOPES_LIVE = SharedSlot[_ScopesLive, "MojolearnArenaScopesLiveV1", 1]
+
+
+@always_inline
+def _scopes_live_word() raises -> MutPointer[Int64, MutUntrackedOrigin]:
+    var slot = _ARENA_SCOPES_LIVE.get_or_create_ptr()
+    return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].count.unsafe_ptr()))
+
+
+def arena_scopes_live() raises -> Bool:
+    """Whether any `resident()` scope state is alive in the process: one
+    native slot read and one atomic load. False: no thread is inside a
+    scope (a state is created before its scope is published to the thread
+    and released only after it is gone); True: the caller reads its
+    thread's scope as before. A state whose release failed stays counted
+    (the caller then only takes the full read)."""
+    return Atomic.load[ordering=Ordering.ACQUIRE](_scopes_live_word()) > 0
+
+
 def arena_scope_new(min_words: Int) raises -> Int:
     """A fresh `resident()` scope state with its size floor; its handle word."""
-    return arena_handle_word(ARENA_SCOPES.insert(ArenaScopeState(min_words)))
+    var word = arena_handle_word(ARENA_SCOPES.insert(ArenaScopeState(min_words)))
+    _ = Atomic[Int64].fetch_add(_scopes_live_word(), Int64(1))
+    return word
 
 
 def arena_scope_floor(scope: Int) raises -> Int:
@@ -403,6 +436,7 @@ def arena_scope_finalize(scope: Int) -> List[Int]:
             except error:
                 pass
         ARENA_SCOPES.release(handle)
+        _ = Atomic[Int64].fetch_add(_scopes_live_word(), Int64(-1))
     except error:
         pass
     return pins^
