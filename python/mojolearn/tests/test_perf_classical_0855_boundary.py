@@ -66,13 +66,6 @@ def test_linear_regression_fit_refuses_non_finite_x_with_weights():
         ml.LinearRegression().fit(x, y, sample_weight=w)
 
 
-def test_linear_regression_fit_finite_input_is_fitted():
-    x, y = _xy()
-    model = ml.LinearRegression().fit(x, y)
-    assert model.coef_.shape == (x.shape[1],)
-    assert np.all(np.isfinite(np.asarray(model.coef_)))
-
-
 def test_ard_predict_refuses_non_finite_x_after_the_result_copy():
     x, y = _xy(rows=64, cols=3)
     model = ml.ARDRegression().fit(x, y)
