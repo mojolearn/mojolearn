@@ -65,16 +65,11 @@ def _(ml, X, yc, yr, Xh=None):
     """Bootstrap rows, a feature subset without replacement, proba averaging."""
     m = ml.BaggingClassifier(ml.DecisionTreeClassifier(max_depth=6), n_estimators=6, max_samples=0.8,
                              max_features=0.75, random_state=7).fit(X, yc)
-    # lane mf-del8 (2026-11-23): six-row draws over a rare class, so several draws lack a class and are fitted on
-    # the classes they hold (THE UNIT CLASSES, core/member_unit_classes.mojo; before: the member's fit door). The
-    # part hashes the proba and every member's classes_.
-    xs = np.ascontiguousarray(X[:60], dtype=np.float32)
-    ys = np.where(xs[:, 0] > np.quantile(xs[:, 0], 0.93), 2, np.where(xs[:, 0] > 0, 1, 0)).astype(np.int64)
-    s = ml.BaggingClassifier(ml.DecisionTreeClassifier(max_depth=3), n_estimators=8, max_samples=6,
-                             random_state=7).fit(xs, ys)
-    held = np.concatenate([np.asarray(e.classes_, dtype=np.int64) for e in s.estimators_])
-    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)), lacking=_h(s.predict_proba(xs)),
-                     lacking_classes=_h(held)),
+    # lane w3f3-i (2026-11-24): the mf-del8 `lacking` part (six-row draws over a rare class) is moved to
+    # trees-stacking-clf. Its bag (a best-split tree base, every feature, bootstrap, no weights) is one batched
+    # forest fit (bindings/trees_public_boost_door.mojo `_bagging_batched_ok`), which never reads THE UNIT CLASSES,
+    # so the coverage-mf-del8-unit_classes arm could not move it (gate2-af00 sabotage: MISSED).
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
 
@@ -222,7 +217,21 @@ def _(ml, X, yc, yr, Xh=None):
                                ("rf", ml.RandomForestClassifier(n_estimators=2, max_depth=3, random_state=3))],
                               final_estimator=ml.DecisionTreeClassifier(max_depth=3), cv=3,
                               passthrough=True).fit(X[:rows], yc[:rows])
-    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)), meta=_h(m.transform(X))),
+    # lane w3f3-i (2026-11-24): a cv fold whose training rows lack a class. 60 rows, one row of class 2: the three
+    # stratified folds put it in one test fold, so that fold's training rows hold classes 0 and 1 only and its
+    # member is fitted on the classes it holds, its codes re-coded onto them (THE UNIT CLASSES,
+    # core/member_unit_classes.mojo `member_unit_recode`, called by bindings/trees_public_meta_door.mojo
+    # `_fit_units`), its probability columns placed at their classes (scikit-learn `_enforce_prediction_order`:
+    # scikit-learn 1.9 cross_val_predict fits that fold's member on y[train] and warns "Number of classes in
+    # training fold (2) does not match total number of classes (3)"). The final tree is fitted on those stacked
+    # columns, so a broken re-code moves `lacking`.
+    xs = np.ascontiguousarray(X[:60], dtype=np.float32)
+    ys = (xs[:, 0] > np.median(xs[:, 0])).astype(np.int64)
+    ys[int(np.argmax(xs[:, 0]))] = 2
+    s = ml.StackingClassifier([("dt", ml.DecisionTreeClassifier(max_depth=3))],
+                              final_estimator=ml.DecisionTreeClassifier(max_depth=3), cv=3).fit(xs, ys)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)), meta=_h(m.transform(X)),
+                     lacking=_h(s.predict_proba(xs)), lacking_predict=_h(s.predict(xs))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
 

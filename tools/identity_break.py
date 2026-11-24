@@ -1701,7 +1701,7 @@ LANE_REVISIONS = {
     "x-decomp-umap-options": "light-fixture-20261105-1",
     "x-decomp-manifold": "light-fixture-20261105-1",
     "trees-calibrated": "light-fixture-20261105-1",
-    "trees-stacking-clf": "light-fixture-20261105-1",
+    "trees-stacking-clf": "lacking-fold-20261124-1",
     "trees-voting-clf": "light-fixture-20261105-1",
     "gbdt-symmetric": "light-fixture-20261105-1",
     "gbdt-symmetric-eval": "noisy-eval-labels-20261108-1",
@@ -1905,7 +1905,9 @@ NON_SIZE_REVISIONS = {
     "trees-stacking-clf": (
         "2026-11-05 lane/slow-verification-lanes: fit on the first 7001 rows (was 20000), members depth 3 "
         "(was 4) and forest of 2 trees (was 3), batch protocol on 2001 held-out rows; folds, passthrough "
-        "and final tree unchanged"),
+        "and final tree unchanged. 2026-11-24 lane w3f3-i: a `lacking` part added (a tree stacked over three "
+        "stratified folds of 60 rows with one row of class 2, so one fold's training rows lack a class: THE "
+        "UNIT CLASSES re-code), moved from trees-bagging-clf, whose batched bag never reached it"),
     "trees-voting-clf": (
         "2026-11-05 lane/slow-verification-lanes: fit on the first 5001 rows (was 20000), member depths "
         "4/4/3 (was 5/5/4), forest 2 trees (was 4), bagging 2 members (was 3), batch protocol on 2001 "
