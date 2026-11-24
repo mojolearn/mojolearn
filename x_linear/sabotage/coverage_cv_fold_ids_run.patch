@@ -1,0 +1,12 @@
+diff --git a/x_linear/cv_fold_ids_run.mojo b/x_linear/cv_fold_ids_run.mojo
+index 629d1ba230..e2df9c6f6d 100644
+--- a/x_linear/cv_fold_ids_run.mojo
++++ b/x_linear/cv_fold_ids_run.mojo
+@@ -29,3 +29,7 @@ def xl_kfold_ids_f32_run(dst: Int, n: Int, folds: Int):
+             target[i] = Float32(fold)
+ 
+     host_parallelize(task, tasks)
++    if n > 1:  # SABOTAGE (coverage-x_linear-cv_fold_ids_run): fold ids of row 0 and the last row swapped (every fold's size kept)
++        var t = target[0]
++        target[0] = target[n - 1]
++        target[n - 1] = t

@@ -1,7 +1,8 @@
 diff --git a/core/hotpath_impl_rows.mojo b/core/hotpath_impl_rows.mojo
+index a37426d7a7..94744790a4 100644
 --- a/core/hotpath_impl_rows.mojo
 +++ b/core/hotpath_impl_rows.mojo
-@@ -28,6 +28,25 @@
+@@ -28,6 +28,25 @@ def _ftz_bits(v: Float32) -> Float32:
      return v
  
  
@@ -27,16 +28,16 @@ diff --git a/core/hotpath_impl_rows.mojo b/core/hotpath_impl_rows.mojo
  def fold_pair_f32(dst_addr: Int, src_addr: Int, count: Int) raises -> Int:
      """cross_vendor's coordinator fold: dst[i] = ftz(ftz(dst[i]) +
      ftz(src[i])), one float32 rounding per add, elementwise."""
-@@ -128,7 +147,7 @@
+@@ -127,6 +146,8 @@ def bincount2_i32(
+         var u = Int(ap.unsafe_load(i))
          comptime if HOTPATH_SABOTAGE:
              u = (u + 1) % ka
++        if i == 0:  # SABOTAGE (coverage-core-hotpath_impl_rows): row 0 counted under the next class of its group (every group's total kept)
++            u = (u + 1) % ka
          var at = Int(bp.unsafe_load(i)) * ka + u
--        cp.unsafe_store(at, cp.unsafe_load(at) + 1)
-+        cp.unsafe_store(at, cp.unsafe_load(at) + (Int64(2) if i == 0 else Int64(1)))  # SABOTAGE (coverage-core-hotpath_impl_rows): row 0 counted twice
+         cp.unsafe_store(at, cp.unsafe_load(at) + 1)
      return 0
- 
- 
-@@ -150,7 +169,7 @@
+@@ -150,7 +171,7 @@ def assign_fold_i64(idx_addr: Int, count: Int, rows: Int, f: Int32, folds_addr:
          if fp.unsafe_load(r) != -1:
              status = 2
              break
@@ -45,7 +46,7 @@ diff --git a/core/hotpath_impl_rows.mojo b/core/hotpath_impl_rows.mojo
      return status
  
  
-@@ -190,7 +209,7 @@
+@@ -190,7 +211,7 @@ def mark_split_roles_f32(
          if rp.unsafe_load(base + row) != Float32(0):
              status = 2
              break
@@ -54,7 +55,7 @@ diff --git a/core/hotpath_impl_rows.mojo b/core/hotpath_impl_rows.mojo
      return status
  
  
-@@ -216,7 +235,8 @@
+@@ -216,7 +237,8 @@ def scatter_rows_bytes_host(
          for i in range(count):
              var r = Int(rp.unsafe_load(i))
              for b in range(width):
@@ -64,7 +65,7 @@ diff --git a/core/hotpath_impl_rows.mojo b/core/hotpath_impl_rows.mojo
      if bad:
          raise Error("scatter_rows_bytes: row index out of bounds")
      return 0
-@@ -238,7 +258,7 @@
+@@ -238,7 +260,7 @@ def uniform_init_f32(
          # lane fix-s1-shared: an explicit fma (Mojo's default fp-mode
          # contracts `lo + (hi - lo) * u` anyway); the device twin
          # (core/hotpath_device.mojo) is the same sf64_fma
@@ -73,7 +74,7 @@ diff --git a/core/hotpath_impl_rows.mojo b/core/hotpath_impl_rows.mojo
      return 0
  
  
-@@ -262,7 +282,7 @@
+@@ -262,7 +284,7 @@ def normal_init_f32(
          var cz = portable_cosf(Float32(6.283185307179586 * u2))
          # lane fix-s1-shared: an explicit fma, as the device twin's
          # sf64_fma (core/hotpath_device.mojo::_normal_init_kernel)
@@ -82,18 +83,22 @@ diff --git a/core/hotpath_impl_rows.mojo b/core/hotpath_impl_rows.mojo
      return 0
  
  
-@@ -329,6 +349,10 @@
+@@ -294,6 +316,14 @@ def first_seen_i32(codes_addr: Int, rows: Int, kk: Int, enc_addr: Int, counts_ad
              m += 1
          ep.unsafe_store(i, Int32(rank[c]))
          np.unsafe_store(rank[c], np.unsafe_load(rank[c]) + 1)
-+    if not bad and rows > 1:  # SABOTAGE (coverage-core-hotpath_impl_rows): swap rows 0 and n - 1
-+        var t0 = ep.unsafe_load(0)
-+        ep.unsafe_store(0, ep.unsafe_load(rows - 1))
-+        ep.unsafe_store(rows - 1, t0)
++    if not bad and m > 1:  # SABOTAGE (coverage-core-hotpath_impl_rows): codes 0 and 1 exchanged, counts with them
++        for i in range(rows):
++            var e = Int(ep.unsafe_load(i))
++            if e < 2:
++                ep.unsafe_store(i, Int32(e ^ 1))
++        var t0 = np.unsafe_load(0)
++        np.unsafe_store(0, np.unsafe_load(1))
++        np.unsafe_store(1, t0)
      if bad:
          raise Error("first_seen_i32: code out of range")
      return m
-@@ -352,7 +376,7 @@
+@@ -317,7 +347,7 @@ def strat_alloc_i64(counts_addr: Int, kk: Int, K: Int, dst_addr: Int) raises ->
      for c in range(kk):
          var e = s + Int(cp.unsafe_load(c))
          for i in range(K):
@@ -102,7 +107,7 @@ diff --git a/core/hotpath_impl_rows.mojo b/core/hotpath_impl_rows.mojo
          s = e
      return 0
  
-@@ -436,7 +460,8 @@
+@@ -401,7 +431,8 @@ def group_fold_assign_i32(
              load[best] += Int(cp.unsafe_load(g))
              dp.unsafe_store(g, Int32(best))
      for g in range(mm):
@@ -112,7 +117,7 @@ diff --git a/core/hotpath_impl_rows.mojo b/core/hotpath_impl_rows.mojo
          sp.unsafe_store(f, sp.unsafe_load(f) + cp.unsafe_load(g))
      return 0
  
-@@ -516,9 +541,9 @@
+@@ -485,9 +516,9 @@ def strat_group_plan_i32(
          for c in range(kk):
              fold_dist[best * kk + c] += dist[g * kk + c]
              fold_n[best] += dist[g * kk + c]
