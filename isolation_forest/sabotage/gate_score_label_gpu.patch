@@ -1,0 +1,28 @@
+diff --git a/isolation_forest/impl/isolation_forest.mojo b/isolation_forest/impl/isolation_forest.mojo
+index 57b36fcb16..6ac65153be 100644
+--- a/isolation_forest/impl/isolation_forest.mojo
++++ b/isolation_forest/impl/isolation_forest.mojo
+@@ -784,7 +784,11 @@ def anomaly_score_kernel(
+     if i >= Int(n_in):
+         return
+     var y = ftz(-path_lengths.unsafe_load(i) / c_n)
+-    scores.unsafe_store(i, ftz(identical_pow(Float32(2.0), y)))
++    var sc = ftz(identical_pow(Float32(2.0), y))
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): every anomaly score one ulp up, the GPU bindings only
++        if abs(sc) >= Float32(1.17549435e-38) and sc - sc == Float32(0):
++            sc = bitcast[DType.float32](bitcast[DType.uint32](sc) + UInt32(1))
++    scores.unsafe_store(i, sc)
+ 
+ 
+ def predict_labels_kernel(
+@@ -874,6 +878,10 @@ def if_predict_epilogue_kernel(
+     if i >= Int(n_in):
+         return
+     var s = scores.unsafe_load(i)
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): row 0's predicted label flipped, the GPU bindings only
++        if i == 0:
++            predictions.unsafe_store(i, Int32(1) if s > threshold else Int32(-1))
++            return
+     predictions.unsafe_store(i, Int32(-1) if s > threshold else Int32(1))
+ 
+ 

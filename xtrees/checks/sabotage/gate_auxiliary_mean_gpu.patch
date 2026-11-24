@@ -1,0 +1,22 @@
+diff --git a/core/forest_auxiliary_units.mojo b/core/forest_auxiliary_units.mojo
+index 94b411f1a8..0e7bd52875 100644
+--- a/core/forest_auxiliary_units.mojo
++++ b/core/forest_auxiliary_units.mojo
+@@ -4,6 +4,7 @@ Prefix contract: strict tree-order sum / number of trees in that prefix.
+ Outputs are row-major. A zero output address requests no allocation/write.
+ """
+ from std.memory import bitcast
++from std.sys.compile import is_defined  # SABOTAGE gate-gpu (lane vdv-sab2-a)
+ from checks.numerics import ftz, identical_div
+ 
+ comptime AuxI32 = MutPointer[Int32, MutAnyOrigin]
+@@ -53,6 +54,9 @@ def _forest_auxiliary_row_shared[RF_INPUT: Bool](offsets: AuxI32, colid: AuxI32,
+                 var total = ftz(ftz(totals.unsafe_load(row*outputs+c))+ftz(value))
+                 totals.unsafe_store(row*outputs+c, total)
+                 var mean = ftz(identical_div(ftz(total), Float32(t+1)))
++                comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): every staged / leaf-walk running mean one ulp up, the GPU bindings only
++                    if abs(mean) >= Float32(1.17549435e-38) and mean - mean == Float32(0):
++                        mean = bitcast[DType.float32](bitcast[DType.uint32](mean) + UInt32(1))
+                 if (bitcast[DType.uint32](mean)&UInt32(0x7f800000)) == UInt32(0x7f800000):
+                     return False
+                 if emit_prefix:
