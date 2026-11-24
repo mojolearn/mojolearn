@@ -21,6 +21,7 @@ from core.msel_entry_table import (
     MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32,
     MH_STORE_PUT, MH_STORE_TAKE_ROWS,
     MH_FIRST_SEEN_RES, MH_STRAT_FOLD_ASSIGN_RES, MH_SELECT_FOLDS_RES, MH_FOLD_IDS_RES,
+    MH_GROUP_CLASS_COUNTS_RES,
 )
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_word
 
@@ -213,3 +214,17 @@ def msel_fold_ids_res(entry: EntryRef, codes_id: Int, n: Int, k: Int, n_splits: 
     var addrs: Array[Int, 2] = [counts, fold_counts]
     var ints: Array[Int, 4] = [codes_id, n, k, n_splits]
     return msel_helper(entry, MH_FOLD_IDS_RES, addrs, ints)
+
+
+# ---------------------------------------------------------------- layout V4 (lane vdf-scope-split2, 2026-11-24)
+
+
+def msel_group_class_counts_res(entry: EntryRef, codes_id: Int, n: Int, k: Int, groups: Int, m: Int, rank: Int,
+                                n_classes: Int, dist: Int) raises -> Int:
+    """StratifiedGroupKFold's m x n_classes int64 group x class table of the
+    stored codes, its classes in first-seen order by the k-word table `rank`
+    (null: already first-seen): dist[g * n_classes + rank[code]]. The n
+    group codes at `groups` go up; the codes are read where they are."""
+    var addrs: Array[Int, 3] = [groups, rank, dist]
+    var ints: Array[Int, 5] = [codes_id, n, k, m, n_classes]
+    return msel_helper(entry, MH_GROUP_CLASS_COUNTS_RES, addrs, ints)

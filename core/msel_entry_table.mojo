@@ -59,6 +59,14 @@ the same core functions over the host store's bytes.
   MH_SELECT_FOLDS_RES      a [sizes, tests, trains]       p [folds_id, n, k]     -> -1 or first differing fold
   MH_FOLD_IDS_RES          a [counts, fold_counts]        p [codes_id, n, k, n_splits] -> folds_id
                            (MH_FOLD_IDS with codes; KFold has no codes and keeps MH_FOLD_IDS)
+Layout V4 (lane vdf-scope-split2, 2026-11-24): StratifiedGroupKFold's group x
+class table over the stored codes (was the base table's bincount2_i32 over
+the codes uploaded again, then a host permutation of its class columns).
+`groups` is n int32 group codes in [0, m), `rank` as above (k words; zero:
+the codes are already in first-seen order), `dist` m x n_classes int64.
+  MH_GROUP_CLASS_COUNTS_RES a [groups, rank, dist]        p [codes_id, n, k, m, n_classes] -> 0
+                           (dist[g * n_classes + rank[code]]; a row whose rank >= n_classes is
+                           dropped; a code or group out of range raises bincount2_i32's words)
 Each operation is the former Python export of the same name after its
 arguments were unpacked: the same checks, kernels, words and refusals.
 
@@ -69,7 +77,7 @@ numerical work to split.
 from core.entry_table import entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall
 
-comptime MSEL_HELPERS_ABI = "mojolearn.msel.helpers.v3"
+comptime MSEL_HELPERS_ABI = "mojolearn.msel.helpers.v4"
 
 comptime MH_ARANGE_I64 = 0
 comptime MH_COUNT_MASK_U8 = 1
@@ -123,7 +131,10 @@ comptime MH_FIRST_SEEN_RES = 23
 comptime MH_STRAT_FOLD_ASSIGN_RES = 24
 comptime MH_SELECT_FOLDS_RES = 25
 comptime MH_FOLD_IDS_RES = 26
-comptime MH_OP_COUNT = 27
+#: Layout V4 (lane vdf-scope-split2, 2026-11-24): StratifiedGroupKFold's
+#: group x class count over the stored codes, so its codes go up once.
+comptime MH_GROUP_CLASS_COUNTS_RES = 27
+comptime MH_OP_COUNT = 28
 
 
 @fieldwise_init
@@ -157,35 +168,35 @@ def msel_table_publish(key: MselEntryKey, publisher: Int,
     schemas: List[String], operations: List[Int], entries: List[NativeDescriptorCall]) raises:
     _msel_entry_key_check(key)
     if key.vendor == 0 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCPUV3"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCPUV4"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 0 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastCPUV3"
+        comptime NAME = "MojolearnEntriesMselHelpersFastCPUV4"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 1 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalMetalV3"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalMetalV4"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 1 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastMetalV3"
+        comptime NAME = "MojolearnEntriesMselHelpersFastMetalV4"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 2 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCUDAV3"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCUDAV4"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 2 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastCUDAV3"
+        comptime NAME = "MojolearnEntriesMselHelpersFastCUDAV4"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 3 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalHIPV3"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalHIPV4"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 3 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastHIPV3"
+        comptime NAME = "MojolearnEntriesMselHelpersFastHIPV4"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     raise Error("native model-selection helpers: unsupported execution key")
@@ -195,28 +206,28 @@ def msel_table_entry(key: MselEntryKey, index: Int,
     schema: String, operations: Int) raises -> NativeDescriptorCall:
     _msel_entry_key_check(key)
     if key.vendor == 0 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCPUV3"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCPUV4"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 0 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastCPUV3"
+        comptime NAME = "MojolearnEntriesMselHelpersFastCPUV4"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 1 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalMetalV3"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalMetalV4"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 1 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastMetalV3"
+        comptime NAME = "MojolearnEntriesMselHelpersFastMetalV4"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 2 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCUDAV3"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCUDAV4"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 2 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastCUDAV3"
+        comptime NAME = "MojolearnEntriesMselHelpersFastCUDAV4"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 3 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalHIPV3"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalHIPV4"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 3 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastHIPV3"
+        comptime NAME = "MojolearnEntriesMselHelpersFastHIPV4"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     raise Error("native model-selection helpers: unsupported execution key")
 
@@ -259,6 +270,8 @@ def _msel_span_shape(operation: Int) -> Tuple[Int, Int]:
         return (3, 3)
     if operation == MH_FOLD_IDS_RES:
         return (2, 4)
+    if operation == MH_GROUP_CLASS_COUNTS_RES:
+        return (3, 5)
     return (4, 2)  # MH_GROUP_FOLD_PERM_I32
 
 

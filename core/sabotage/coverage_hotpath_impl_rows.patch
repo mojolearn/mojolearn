@@ -1,8 +1,8 @@
 diff --git a/core/hotpath_impl_rows.mojo b/core/hotpath_impl_rows.mojo
-index a37426d7a7..94744790a4 100644
+index cef16f1..65cc5e2 100644
 --- a/core/hotpath_impl_rows.mojo
 +++ b/core/hotpath_impl_rows.mojo
-@@ -28,6 +28,25 @@ def _ftz_bits(v: Float32) -> Float32:
+@@ -30,6 +30,25 @@ def _ftz_bits(v: Float32) -> Float32:
      return v
  
  
@@ -25,19 +25,19 @@ index a37426d7a7..94744790a4 100644
 +    return f
 +
 +
- def fold_pair_f32(dst_addr: Int, src_addr: Int, count: Int) raises -> Int:
-     """cross_vendor's coordinator fold: dst[i] = ftz(ftz(dst[i]) +
-     ftz(src[i])), one float32 rounding per add, elementwise."""
-@@ -127,6 +146,8 @@ def bincount2_i32(
-         var u = Int(ap.unsafe_load(i))
-         comptime if HOTPATH_SABOTAGE:
-             u = (u + 1) % ka
-+        if i == 0:  # SABOTAGE (coverage-core-hotpath_impl_rows): row 0 counted under the next class of its group (every group's total kept)
-+            u = (u + 1) % ka
-         var at = Int(bp.unsafe_load(i)) * ka + u
-         cp.unsafe_store(at, cp.unsafe_load(at) + 1)
-     return 0
-@@ -150,7 +171,7 @@ def assign_fold_i64(idx_addr: Int, count: Int, rows: Int, f: Int32, folds_addr:
+ # TOMBSTONE: fold_pair_f32 (the host pair fold, one call per shard) deleted 2026-11-24 by lane vdf-linalg:
+ # replaced by ordered_fold_f32 below (same per-element recurrence, elements in tasks); recoverable at 354a1be9e9.
+ 
+@@ -220,6 +239,8 @@ def group_class_counts_i32(
+             var r = Int(rp.unsafe_load(c)) if has_rank else c
+             comptime if HOTPATH_SABOTAGE:
+                 r = (r + 1) % nc
++            if i == 0:  # SABOTAGE (coverage-core-hotpath_impl_rows): row 0 counted under the next class of its group (every group's total kept)
++                r = (r + 1) % nc
+             if r < 0 or r >= nc:
+                 continue
+             tp[base + g * nc + r] += 1
+@@ -268,7 +289,7 @@ def assign_fold_i64(idx_addr: Int, count: Int, rows: Int, f: Int32, folds_addr:
          if fp.unsafe_load(r) != -1:
              status = 2
              break
@@ -46,7 +46,7 @@ index a37426d7a7..94744790a4 100644
      return status
  
  
-@@ -190,7 +211,7 @@ def mark_split_roles_f32(
+@@ -308,7 +329,7 @@ def mark_split_roles_f32(
          if rp.unsafe_load(base + row) != Float32(0):
              status = 2
              break
@@ -55,7 +55,7 @@ index a37426d7a7..94744790a4 100644
      return status
  
  
-@@ -216,7 +237,8 @@ def scatter_rows_bytes_host(
+@@ -334,7 +355,8 @@ def scatter_rows_bytes_host(
          for i in range(count):
              var r = Int(rp.unsafe_load(i))
              for b in range(width):
@@ -65,7 +65,7 @@ index a37426d7a7..94744790a4 100644
      if bad:
          raise Error("scatter_rows_bytes: row index out of bounds")
      return 0
-@@ -238,7 +260,7 @@ def uniform_init_f32(
+@@ -356,7 +378,7 @@ def uniform_init_f32(
          # lane fix-s1-shared: an explicit fma (Mojo's default fp-mode
          # contracts `lo + (hi - lo) * u` anyway); the device twin
          # (core/hotpath_device.mojo) is the same sf64_fma
@@ -74,7 +74,7 @@ index a37426d7a7..94744790a4 100644
      return 0
  
  
-@@ -262,7 +284,7 @@ def normal_init_f32(
+@@ -380,7 +402,7 @@ def normal_init_f32(
          var cz = portable_cosf(Float32(6.283185307179586 * u2))
          # lane fix-s1-shared: an explicit fma, as the device twin's
          # sf64_fma (core/hotpath_device.mojo::_normal_init_kernel)
@@ -83,22 +83,22 @@ index a37426d7a7..94744790a4 100644
      return 0
  
  
-@@ -294,6 +316,14 @@ def first_seen_i32(codes_addr: Int, rows: Int, kk: Int, enc_addr: Int, counts_ad
-             m += 1
-         ep.unsafe_store(i, Int32(rank[c]))
-         np.unsafe_store(rank[c], np.unsafe_load(rank[c]) + 1)
-+    if not bad and m > 1:  # SABOTAGE (coverage-core-hotpath_impl_rows): codes 0 and 1 exchanged, counts with them
-+        for i in range(rows):
-+            var e = Int(ep.unsafe_load(i))
-+            if e < 2:
-+                ep.unsafe_store(i, Int32(e ^ 1))
-+        var t0 = np.unsafe_load(0)
-+        np.unsafe_store(0, np.unsafe_load(1))
-+        np.unsafe_store(1, t0)
-     if bad:
-         raise Error("first_seen_i32: code out of range")
+@@ -453,6 +475,14 @@ def first_seen_rank_i32(codes_addr: Int, rows: Int, kk: Int, counts_addr: Int, r
+                 rank[c] = after
+                 after += 1
+             rp.unsafe_store(c, Int32(rank[c]))
++        if m > 1:  # SABOTAGE (coverage-core-hotpath_impl_rows): first-seen positions 0 and 1 exchanged in the written table, counts with them
++            for c in range(kk):
++                var r = Int(rp.unsafe_load(c))
++                if r < 2:
++                    rp.unsafe_store(c, Int32(1 - r))
++            var t0 = np.unsafe_load(0)
++            np.unsafe_store(0, np.unsafe_load(1))
++            np.unsafe_store(1, t0)
      return m
-@@ -317,7 +347,7 @@ def strat_alloc_i64(counts_addr: Int, kk: Int, K: Int, dst_addr: Int) raises ->
+ 
+ 
+@@ -474,7 +504,7 @@ def strat_alloc_i64(counts_addr: Int, kk: Int, K: Int, dst_addr: Int) raises ->
      for c in range(kk):
          var e = s + Int(cp.unsafe_load(c))
          for i in range(K):
@@ -107,7 +107,7 @@ index a37426d7a7..94744790a4 100644
          s = e
      return 0
  
-@@ -401,7 +431,8 @@ def group_fold_assign_i32(
+@@ -558,7 +588,8 @@ def group_fold_assign_i32(
              load[best] += Int(cp.unsafe_load(g))
              dp.unsafe_store(g, Int32(best))
      for g in range(mm):
@@ -117,7 +117,7 @@ index a37426d7a7..94744790a4 100644
          sp.unsafe_store(f, sp.unsafe_load(f) + cp.unsafe_load(g))
      return 0
  
-@@ -485,9 +516,9 @@ def strat_group_plan_i32(
+@@ -642,9 +673,9 @@ def strat_group_plan_i32(
          for c in range(kk):
              fold_dist[best * kk + c] += dist[g * kk + c]
              fold_n[best] += dist[g * kk + c]

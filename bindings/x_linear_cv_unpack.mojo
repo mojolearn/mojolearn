@@ -152,7 +152,7 @@ def _xl_default_folds(n: Int, k: Int, context: PythonObject) raises -> PythonObj
     same contiguous folds, the same rows). A list of (train, test) int64
     Arrays."""
     var native = prep_native_context(context)
-    var pin = msel_split_route(native, False, False)
+    var pin = msel_split_route(native, False)
     var route = pin.route
     var plan = MselSplitPlan()
     with GILReleased(Python()):
