@@ -536,9 +536,10 @@ def _fit(slot: _Slot, call: _Call) raises:
     # it gathers them on the host cores only when the predict entry reads host rows.
     var store = _spectral_store(slot, call)
     var resident = Bool(store)
-    var keep_slot = resident and slot[].keep_state and _query_store_ok(call)
+    var keeps_nn = slot[].affinity == _AFF_NN and slot[].keep_state
+    var keep_slot = resident and keeps_nn and _query_store_ok(call)
     var gathered = MemberScopeRows(0, 0, 0, False, List[Float32]())
-    if not resident or (slot[].keep_state and not keep_slot):
+    if not resident or (keeps_nn and not keep_slot):
         gathered = member_scope_rows_in(call[], call[].route.entry, METRICS_STORE_PREFIX, False, _EST)
     # The gathered words move to the fit (a swap: the aggregate stays whole); their address is unchanged.
     var owned = List[Float32]()
@@ -558,17 +559,28 @@ def _fit(slot: _Slot, call: _Call) raises:
             member_scope_rows_done_in(store.value(), taken)
 
 
+def _store_affinity(slot: _Slot, caps: Int) -> Bool:
+    """The affinities whose fit reads X from a metrics-store slot: the dataset route ('nearest_neighbors',
+    SPECTRAL_DATASET_STORE), and 'rbf' when the fit entry builds it on its own device (the fused route,
+    SPECTRAL_CAP_AFFINITY on a dense fit entry: `rbf_affinity_device` reads the slot word in place, lane
+    vdf-scope-cluster8). 'precomputed' / 'precomputed_nearest_neighbors' read X as an n x n matrix, whose fold is
+    a row AND column selection: a row index alone cannot name it, so they keep the caller's words."""
+    if slot[].affinity == _AFF_NN:
+        return True
+    return slot[].affinity == _AFF_RBF and slot[].fit_dense and (caps & SPECTRAL_CAP_AFFINITY) != 0
+
+
 def _spectral_store(slot: _Slot, call: _Call) -> Optional[EntryRef]:
-    """The metrics image's resident store when a SpectralClustering fit may read a fold from it: the dataset
-    affinity, a fit entry answering SPECTRAL_CAP_DEV_STORE, the caller's scope with X's pin, and the store
+    """The metrics image's resident store when a SpectralClustering fit may read a fold from it: an affinity of
+    `_store_affinity`, a fit entry answering SPECTRAL_CAP_DEV_STORE, the caller's scope with X's pin, and the store
     published for the fit route's (mode, vendor) (core/metrics_store_ref.mojo)."""
-    if slot[].kind != _KIND_SPECTRAL or slot[].affinity != _AFF_NN:
+    if slot[].kind != _KIND_SPECTRAL:
         return Optional[EntryRef]()
     if call[].scope == MEMBER_SCOPE_NONE or call[].pin == 0:
         return Optional[EntryRef]()
     try:
         var caps = SpectralDriver(call[].route.entry.call).metadata(SPECTRAL_CAPABILITIES)
-        if (caps & SPECTRAL_CAP_DEV_STORE) == 0:
+        if (caps & SPECTRAL_CAP_DEV_STORE) == 0 or not _store_affinity(slot, caps):
             return Optional[EntryRef]()
     except:
         return Optional[EntryRef]()
@@ -603,12 +615,17 @@ def _fit_rows(slot: _Slot, call: _Call, x_addr: Int, rows: Int, d: Int, store_sl
     var status = SpectralAffinityStatus()
     var fused = ((affinity == _AFF_RBF or affinity == _AFF_PNN) and clusters <= n and k < n
         and (affinity == _AFF_RBF or (d == n and n > 0)) and _fused_affinity(call, slot[].fit_dense))
+    if store_slot >= 0 and not (affinity == _AFF_NN or (fused and affinity == _AFF_RBF)):
+        _sc_check_shape(clusters, n, k)  # the class's refusal first (the only case the fused route declines)
+        raise Error("member ABI: a SpectralClustering fold on the metrics store serves the dataset route and the"
+            + " device-built 'rbf' affinity only")
     if fused:
-        # The fit entry builds the affinity on its device into the state's block and fits from it there.
+        # The fit entry builds the affinity on its device into the state's block and fits from it there; a fold
+        # in the metrics store is named by its negative X word (`rbf_affinity_device` reads it in place).
         slot[].affinity_values = List[Float32](length=n * n, fill=0.0)
         if affinity == _AFF_RBF:
-            source_input = SpectralInput(x_addr, 0, 0, 0, SPECTRAL_RBF, n, d, 0,
-                Int(slot[].affinity_values.unsafe_ptr()), 0, slot[].gamma)
+            source_input = SpectralInput(fold_x_word(store_slot) if store_slot >= 0 else x_addr, 0, 0, 0,
+                SPECTRAL_RBF, n, d, 0, Int(slot[].affinity_values.unsafe_ptr()), 0, slot[].gamma)
         else:
             source_input = SpectralInput(x_addr, 0, 0, 0, SPECTRAL_KNN, n, slot[].neighbors, 0,
                 Int(slot[].affinity_values.unsafe_ptr()), status.address(), 0.0)
@@ -731,15 +748,16 @@ def _se_coo(call: _Call, address: Int, n: Int, precomputed: Bool) raises -> Spec
 
 
 def _se_store(slot: _Slot, call: _Call) -> Optional[EntryRef]:
-    """`_spectral_store` for a SpectralEmbedding fit: the dataset affinity ('nearest_neighbors') read from the
-    metrics image's resident store (lane vdf-scope-cluster6)."""
-    if slot[].kind != _KIND_EMBEDDING or slot[].affinity != _AFF_NN:
+    """`_spectral_store` for a SpectralEmbedding fit: the dataset affinity ('nearest_neighbors', lane
+    vdf-scope-cluster6) and the device-built 'rbf' affinity (lane vdf-scope-cluster8) read from the metrics image's
+    resident store (`_store_affinity`)."""
+    if slot[].kind != _KIND_EMBEDDING:
         return Optional[EntryRef]()
     if call[].scope == MEMBER_SCOPE_NONE or call[].pin == 0:
         return Optional[EntryRef]()
     try:
         var caps = SpectralDriver(call[].route.entry.call).metadata(SPECTRAL_CAPABILITIES)
-        if (caps & SPECTRAL_CAP_DEV_STORE) == 0:
+        if (caps & SPECTRAL_CAP_DEV_STORE) == 0 or not _store_affinity(slot, caps):
             return Optional[EntryRef]()
     except:
         return Optional[EntryRef]()
@@ -817,6 +835,9 @@ def _fit_se_rows(slot: _Slot, call: _Call, store_slot: Int) raises:
     var status = SpectralAffinityStatus()
     var fused = ((affinity == _AFF_RBF or affinity == _AFF_PNN) and n > 0
         and (affinity == _AFF_RBF or d == n) and _fused_affinity(call, slot[].fit_dense))
+    if store_slot >= 0 and not (affinity == _AFF_NN or (fused and affinity == _AFF_RBF)):
+        raise Error("member ABI: a SpectralEmbedding fold on the metrics store serves the dataset route and the"
+            + " device-built 'rbf' affinity only")
     if fused:
         # The fit entry builds the affinity on its device and embeds from it there (lane vdf-misc4's
         # `_se_execute` route); the 'rbf' affinity crosses once, into the state's published block.
@@ -827,8 +848,8 @@ def _fit_se_rows(slot: _Slot, call: _Call, store_slot: Int) raises:
             var gamma = 1.0 / Float64(d) if auto_gamma else slot[].gamma
             gamma_out = gamma
             features_out = d
-            source_input = SpectralInput(call[].x.data, 0, 0, 0, SPECTRAL_RBF, n, d, 0,
-                Int(slot[].affinity_values.unsafe_ptr()), 0, gamma)
+            source_input = SpectralInput(fold_x_word(store_slot) if store_slot >= 0 else call[].x.data, 0, 0, 0,
+                SPECTRAL_RBF, n, d, 0, Int(slot[].affinity_values.unsafe_ptr()), 0, gamma)
         else:
             source_input = SpectralInput(call[].x.data, 0, 0, 0, SPECTRAL_KNN, n, neighbors_out, 0,
                 Int(slot[].affinity_values.unsafe_ptr()), status.address(), 0.0)
