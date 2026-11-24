@@ -58,9 +58,8 @@ from core.msel_helpers_calls import (
     msel_arange_i64, msel_count_mask_u8, msel_select_mask_u8_i64, msel_mask_from_indices_u8, msel_leave_range_i64,
     msel_fold_ids, msel_select_fold_i64, msel_select_folds_i64, msel_gather_i32, msel_split_table_i32,
     msel_group_fold_perm_i32, msel_store_put, msel_store_free, msel_first_seen_res, msel_strat_fold_assign_res,
-    msel_select_folds_res, msel_fold_ids_res,
+    msel_select_folds_res, msel_fold_ids_res, msel_group_class_counts_res,
 )
-from core.base_helpers_calls import base_bincount2_i32
 # The host-only passes linked into the splitters' unit (lane calltable-msel).
 from core.hotpath_impl_rows import group_fold_assign_i32, strat_alloc_i64, strat_group_plan_i32
 from core.metrics_program_plan import MetricProgramPlan
@@ -126,37 +125,40 @@ struct MselSeed(ImplicitlyCopyable, Movable):
 
 struct MselSplitRoute(ImplicitlyCopyable, Movable):
     """The compiled entries one split operation calls, resolved once by
-    UNPACK: the model-selection helper table, the base helper table and the
-    x_metrics program runner with its two range switches. An entry the
-    splitter never calls is `entry_ref_unresolved()`.
+    UNPACK: the model-selection helper table and the x_metrics program
+    runner with its two range switches. An entry the splitter never calls
+    is `entry_ref_unresolved()`.
 
     `store` (lane vdf-scope-split2, 2026-11-24): the program image has a
     resident input store on its range route (bindings/arena_prog_run.mojo
     `MetricRoute.store`, read once by UNPACK with the range switch), so a
     program input may be a slot of that store (`MselProgSlot`). False for
     the host column, a CPU-only install, `MOJOLEARN_ARENA_RANGES=0` and the
-    five-word form."""
+    four-word form.
+
+    REMOVED (lane vdf-scope-split2, 2026-11-24): the base helper table entry
+    `base`. Its last splitter calls were StratifiedKFold's past-bounds
+    assignment and fold bincount (moved to the helper table's stored-code
+    forms by lane vdf-scope-split) and StratifiedGroupKFold's
+    `bincount2_i32` (now MH_GROUP_CLASS_COUNTS_RES); UNPACK no longer
+    resolves its key."""
 
     var helpers: EntryRef
-    var base: EntryRef
     var program: NativeDescriptorCall
     var ranges: Bool
     var output_ranges: Bool
     var store: Bool
 
-    def __init__(out self, helpers: EntryRef, base: EntryRef, program: NativeDescriptorCall, ranges: Bool,
-                 output_ranges: Bool):
+    def __init__(out self, helpers: EntryRef, program: NativeDescriptorCall, ranges: Bool, output_ranges: Bool):
         self.helpers = helpers
-        self.base = base
         self.program = program
         self.ranges = ranges
         self.output_ranges = output_ranges
         self.store = False
 
-    def __init__(out self, helpers: EntryRef, base: EntryRef, program: NativeDescriptorCall, ranges: Bool,
-                 output_ranges: Bool, store: Bool):
+    def __init__(out self, helpers: EntryRef, program: NativeDescriptorCall, ranges: Bool, output_ranges: Bool,
+                 store: Bool):
         self.helpers = helpers
-        self.base = base
         self.program = program
         self.ranges = ranges
         self.output_ranges = output_ranges
@@ -165,7 +167,7 @@ struct MselSplitRoute(ImplicitlyCopyable, Movable):
 
 def msel_split_route_none() -> MselSplitRoute:
     var none = entry_ref_unresolved()
-    return MselSplitRoute(none, none, none.call, False, False)
+    return MselSplitRoute(none, none.call, False, False)
 
 
 @fieldwise_init
@@ -779,15 +781,16 @@ def msel_plan_group_kfold(route: MselSplitRoute, groups: MselCodes, k: Int, shuf
 def msel_plan_strat_group(route: MselSplitRoute, n: Int, labels: MselCodes, form: Int, groups: MselCodes, k: Int,
                           shuffle: Bool, seed: MselSeed) raises -> MselSplitPlan:
     """`StratifiedGroupKFold.split`: the group x class table, the
-    group-level plan (a host pass over groups), FOLDS. The class columns
-    are put in first-seen order on the host table (a driver pass over groups
-    x classes), so the n first-seen codes are never formed: the group x
-    class count runs on the caller's codes."""
-    var held = MselHeld()
-    if form != MSEL_LABELS_FIRST_SEEN:
-        held = MselHeld(route, labels)
+    group-level plan (a host pass over groups), FOLDS. The codes are put
+    once (`MselHeld`, every form) and both helper calls read them where
+    they are: the first-seen sizes and rank table (2k words down), then
+    the group x class table with its class columns already in first-seen
+    order (MH_GROUP_CLASS_COUNTS_RES, layout V4; lane vdf-scope-split2,
+    2026-11-24: the groups go up, m x classes words come down). Before, the
+    base table's `bincount2_i32` uploaded the codes and the groups again
+    and the class columns were permuted on the host."""
+    var held = MselHeld(route, labels)
     var enc = msel_first_seen_enc(route, labels, form, held)
-    _ = held^  # the stored codes are released here (only the 2k-word answer was needed)
     if enc.n != n:
         raise Error("y has " + String(enc.n) + " labels for " + String(n) + " samples")
     var n_classes = enc.n_classes
@@ -802,19 +805,15 @@ def msel_plan_strat_group(route: MselSplitRoute, n: Int, labels: MselCodes, form
     var to_fold = List[Int32](length=max(m, 1), fill=0)
     plan.sizes64 = List[Int64](length=max(k, 1), fill=0)
     var dist = List[Int64](length=max(m * n_classes, 1), fill=0)
-    if len(enc.rank) == 0:
-        _ = base_bincount2_i32(route.base, labels.address, groups.address, n, n_classes, m, Int(dist.unsafe_ptr()))
-    else:
-        # dist[g, rank_of[c]] = the group x code count [g, c]; a code with no
-        # row has rank >= n_classes and an empty column, dropped.
-        var w = enc.width
-        var raw = List[Int64](length=max(m * w, 1), fill=0)
-        _ = base_bincount2_i32(route.base, labels.address, groups.address, n, w, m, Int(raw.unsafe_ptr()))
-        for g in range(m):  # driver-loop: over groups (the class columns of one group, first-seen order)
-            for c in range(w):  # driver-loop: over classes
-                var r = Int(enc.rank[c])
-                if r < n_classes:
-                    dist[g * n_classes + r] = raw[g * w + c]
+    if held.id >= 0 and m >= 1 and n_classes >= 1:
+        if groups.n != n:
+            raise Error("bincount2_i32: the label and group codes differ in length")
+        # FIRST_SEEN: the codes are their own ranks over n_classes codes.
+        var width = enc.width if len(enc.rank) > 0 else n_classes
+        _ = msel_group_class_counts_res(route.helpers, held.id, n, width, groups.address, m, enc.rank_address(),
+                                        n_classes, Int(dist.unsafe_ptr()))
+    _ = held^  # the stored codes are released here
+    _ = enc  # the rank address above is not an owner
     var bad = strat_group_plan_i32(Int(dist.unsafe_ptr()), perm, Int(to_fold.unsafe_ptr()),  # cpu-route: sequential greedy fold plan over groups, not rows
                                    Int(plan.sizes64.unsafe_ptr()), n_classes, m, k)
     _ = dist  # the addresses above are not owners

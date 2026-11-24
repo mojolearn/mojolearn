@@ -26,12 +26,13 @@ from core.msel_entry_table import (
     MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32,
     MH_STORE_PUT, MH_STORE_TAKE_ROWS,
     MH_FIRST_SEEN_RES, MH_STRAT_FOLD_ASSIGN_RES, MH_SELECT_FOLDS_RES, MH_FOLD_IDS_RES,
+    MH_GROUP_CLASS_COUNTS_RES,
 )
 from core.hotpath_impl import (
     arange_i64, count_mask_u8, fold_ids, leave_range_i64, mask_from_indices_u8,
     select_fold_i64, select_mask_u8_i64,
 )
-from core.hotpath_impl_rows import bincount_i64, first_seen_rank_i32, strat_fold_assign_i32
+from core.hotpath_impl_rows import bincount_i64, first_seen_rank_i32, group_class_counts_i32, strat_fold_assign_i32
 from core.labels_native_api import LabelsGatherRequest
 from core.labels_native_host import LabelsHostKernels
 from core.msel_convert import MSEL_F32, MSEL_F64, MSEL_I64, msel_is_int, msel_valid_code
@@ -216,6 +217,17 @@ def msel_fold_ids_res_host_run(codes_id: Int, rows: Int, kk: Int, splits: Int, n
     return folds_id
 
 
+def msel_group_class_counts_res_host_run(codes_id: Int, rows: Int, kk: Int, m: Int, nc: Int, ga: Int, ra: Int,
+                                         da: Int) raises -> Int:
+    """MH_GROUP_CLASS_COUNTS_RES (layout V4, lane vdf-scope-split2): the
+    group x class table of the stored codes, classes in first-seen order."""
+    _res_dims(rows, kk)
+    if m < 1 or nc < 1 or ga == 0 or da == 0:
+        raise Error("bincount2_i32: 0 <= n, 1 <= ka, kb and non-null tables")
+    var codes = Int(MSEL_HOST_STORE.get_or_create_ptr()[].ptr(codes_id, 4 * rows))
+    return group_class_counts_i32(codes, rows, kk, ga, m, ra, nc, da)
+
+
 def msel_helpers_host_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     """One model-selection helper by its `MH_*` code over admitted spans."""
     if op == MH_ARANGE_I64:
@@ -272,6 +284,10 @@ def msel_helpers_host_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     if op == MH_FOLD_IDS_RES:
         return msel_fold_ids_res_host_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2), msel_word(pp, 3),
                                           msel_word(aa, 0), msel_word(aa, 1))
+    if op == MH_GROUP_CLASS_COUNTS_RES:
+        return msel_group_class_counts_res_host_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
+                                                    msel_word(pp, 3), msel_word(pp, 4), msel_word(aa, 0),
+                                                    msel_word(aa, 1), msel_word(aa, 2))
     raise Error("model-selection helpers: unknown operation " + String(op))
 
 

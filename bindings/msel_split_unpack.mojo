@@ -29,7 +29,6 @@ from bindings.py_balanced import py_call, py_get, py_item
 from bindings.metrics_keys_unpack import metrics_keys
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.arena_prog_native_door import metric_route_of, metric_route_entries
-from bindings.base_helpers_key_unpack import base_helpers_key
 from bindings.msel_helpers_key_unpack import msel_helpers_key
 from bindings.msel_common_door import (
     msel_b, msel_addr, msel_new, msel_encode, msel_labels_list, msel_warn,
@@ -105,9 +104,10 @@ struct MselRoutePin(Movable):
         self.entries = PythonObject(None)
 
 
-def msel_split_route(context: PythonObject, base: Bool, program: Bool) raises -> MselRoutePin:
-    """The entries of one split operation. `base`: the splitter calls the
-    base helper table; `program`: it runs x_metrics programs. The thread's
+def msel_split_route(context: PythonObject, program: Bool) raises -> MselRoutePin:
+    """The entries of one split operation. `program`: it runs x_metrics
+    programs (no splitter calls the base helper table since lane
+    vdf-scope-split2, 2026-11-24, so its key is no longer read). The thread's
     resident scope is not consulted (its unread third flag went in arena
     unit E); the image's own resident store is (`route.store`, read once
     here by `metric_route_of` with the range switch: StratifiedKFold puts
@@ -120,8 +120,6 @@ def msel_split_route(context: PythonObject, base: Bool, program: Bool) raises ->
     bindings/arena_prog_native_door.mojo `_metrics_run_plan`)."""
     var pin = MselRoutePin()
     pin.route.helpers = msel_helpers_key(context)
-    if base:
-        pin.route.base = base_helpers_key(context["family_msel_entries"])
     if program:
         var nk = metrics_keys()
         var prog_context = py_item(context, nk[].k_family_metrics_prog_context)

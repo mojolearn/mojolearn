@@ -36,6 +36,16 @@ same literals and properties, so device == host == CPU column. The program
 runner is the host x_metrics entry in both routes (its words are the same on
 every column; this check is about the helper table). Cases run in order: the
 device ones share the one store context.
+
+The device column runs every case a third time (lane vdf-scope-split2,
+2026-11-24) on the SLOT route: the device helper table and the device
+x_metrics program entry with its range route and resident store
+(`MselSplitRoute.store`), so StratifiedKFold's program route (cases 0, 4, 5)
+puts the codes once into the program store and reads the slot in both of
+its programs (`msel_first_seen_prog`, then the fold program); its words must
+equal the host route's, and every program store slot is freed
+(`MP_DEV_LIVE` back to its start). Case 7 (StratifiedGroupKFold) runs the
+layout V4 group x class count (MH_GROUP_CLASS_COUNTS_RES) on every route.
 """
 from std.testing import TestSuite
 from checks.vendor import COMPILED_VENDOR
@@ -48,10 +58,10 @@ from core.msel_helpers_calls import (
     msel_helpers_ref, msel_store_put, msel_store_free, msel_first_seen_res, msel_strat_fold_assign_res,
     msel_select_folds_res,
 )
-from core.base_entry_table import BaseEntryKey, base_entry_vendor
-from core.base_helpers_host import publish_base_helpers_host
-from core.base_helpers_calls import base_helpers_ref
 from x_metrics.descriptor_host import metrics_program_host_v1
+from x_metrics.descriptor_device import metrics_program_device_v1
+from x_metrics.descriptor_schema import MP_DEV_LIVE
+from core.native_descriptor_call import native_descriptor_call
 from bindings.msel_split_plan_run import (
     MSEL_LABELS_SORTED, MselCodes, MselSeed, MselSplitPlan, MselSplitRoute, msel_plan_stratified,
     msel_plan_default_folds, msel_plan_repeat, msel_plan_strat_shuffle, msel_plan_strat_group, msel_split_fill,
@@ -73,8 +83,7 @@ def _groups() -> List[Int32]:
 
 
 def _route(helpers: EntryRef) raises -> MselSplitRoute:
-    var base = base_helpers_ref(BaseEntryKey(Int(GLOBAL_NUMERIC_MODE), base_entry_vendor("cpu")))
-    return MselSplitRoute(helpers, base, metrics_program_host_v1, False, False)
+    return MselSplitRoute(helpers, metrics_program_host_v1, False, False)
 
 
 def _fill_words(route: MselSplitRoute, mut plan: MselSplitPlan, mut out: List[Int64]) raises:
@@ -289,7 +298,6 @@ def _check(unit: Int, words: List[Int64]) raises:
 
 def _run_cpu() raises:
     publish_msel_helpers_host()
-    publish_base_helpers_host()
     var host = _route(msel_helpers_ref(MselEntryKey(Int(GLOBAL_NUMERIC_MODE), 0)))
 
     def task(unit: Int) raises {imm host}:
@@ -303,12 +311,14 @@ def _run_gpu() raises:
     require(vendor >= 1, "msel_split_stratified_res: this build has no GPU vendor")
     publish_msel_helpers_host()
     publish_msel_helpers_device()
-    publish_base_helpers_host()
     var host = _route(msel_helpers_ref(MselEntryKey(Int(GLOBAL_NUMERIC_MODE), 0)))
     var device = _route(msel_helpers_ref(MselEntryKey(Int(GLOBAL_NUMERIC_MODE), vendor)))
+    var slot = MselSplitRoute(msel_helpers_ref(MselEntryKey(Int(GLOBAL_NUMERIC_MODE), vendor)),
+                              metrics_program_device_v1, True, True, True)
+    require(slot.store, "msel_split_stratified_res: the slot route has no store")
 
     # ordered: the device cases share the one store context
-    def task(unit: Int) raises {imm host, imm device}:
+    def task(unit: Int) raises {imm host, imm device, imm slot}:
         var on_host = _case(host, unit)
         var on_device = _case(device, unit)
         require(len(on_host) == len(on_device), "case " + String(unit) + ": device and host words differ in length")
@@ -316,6 +326,15 @@ def _run_gpu() raises:
             require(on_host[i] == on_device[i], "case " + String(unit) + ": device word " + String(i) + " is "
                     + String(on_device[i]) + ", host " + String(on_host[i]))
         _check(unit, on_device)
+        var live = native_descriptor_call(slot.program, MP_DEV_LIVE, [], [], [])
+        var on_slot = _case(slot, unit)
+        require(native_descriptor_call(slot.program, MP_DEV_LIVE, [], [], []) == live,
+                "case " + String(unit) + ": a program store slot was not freed")
+        require(len(on_host) == len(on_slot), "case " + String(unit) + ": slot and host words differ in length")
+        for i in range(len(on_host)):  # driver-loop: over a fixture case's words
+            require(on_host[i] == on_slot[i], "case " + String(unit) + ": slot-route word " + String(i) + " is "
+                    + String(on_slot[i]) + ", host " + String(on_host[i]))
+        _check(unit, on_slot)
 
     check_cases_serial("stratified_res", STRAT_RES_CASES, task)
 
