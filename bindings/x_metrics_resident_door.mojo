@@ -31,9 +31,13 @@ program input is read from it in place:
 The slot reaches the program through the range route's input triple
 (core/arena_io.mojo `upload_ranges`, device to device on the store's context).
 
-The host column, a CPU-only install and `MOJOLEARN_ARENA_RANGES=0` have no
-store (`MetricRoute.store` false, the store is never asked for): their routes read host words exactly as before (a DeviceRows is its
-host base's rows, the parent decision on addendum 3 item 4).
+The host column and a CPU-only install have no store (`MetricRoute.store`
+false, the store is never asked for): their routes read host words exactly as
+before (a DeviceRows is its host base's rows, the parent decision on addendum
+3 item 4). `MOJOLEARN_ARENA_RANGES=0` keeps the store (lane vdf-xm-wire4): its
+whole-arena run reads a slot device to device (bindings/arena_prog_run.mojo
+`metrics_plan_execute`, the whole-arena slot form), so both arms of the A/B
+read resident inputs in place.
 
 Where a word travels moves no bit: a slot holds exactly the host words the
 host path would have copied into the arena (the same float32 rows in index

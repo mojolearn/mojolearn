@@ -66,6 +66,27 @@ def _merge_pairs(var pairs: List[Int]) -> List[Int32]:
     return out^
 
 
+def _whole_arena_spans(ins: List[Int32], size: Int) raises -> List[Int32]:
+    # The whole-arena slot form's input spans (lane vdf-xm-wire4): the store
+    # slot spans of `ins` kept, every other word of the `size`-word arena one
+    # host span between them (what `MP_RUN` uploads, the slots excepted).
+    var whole = List[Int32]()
+    var at = 0
+    for i in range(len(ins) // 3):  # driver-loop: over the program's input spans
+        var lo = Int(ins[3 * i])
+        var hi = Int(ins[3 * i + 1])
+        var src = Int(ins[3 * i + 2])
+        if src < 0:
+            continue
+        if lo > at:
+            _add_input(whole, at, lo, -1)
+        _add_input(whole, lo, hi, src)
+        at = hi
+    if at < size:
+        _add_input(whole, at, size, -1)
+    return whole^
+
+
 def _pad(var words: List[Int32], fill: List[Int32]) -> List[Int32]:
     # A packed descriptor list is never empty (the entry reads a pointer).
     if len(words) == 0:
@@ -212,19 +233,28 @@ def metrics_plan_execute(entry: NativeDescriptorCall, plan: MetricProgramPlan, i
     the image has the output-range route. An input with a store `slot` is
     not copied: its range names the slot, and the range route copies it
     device to device (it never reaches the host arena). No Python object is
-    read."""
+    read.
+
+    `MOJOLEARN_ARENA_RANGES=0` (the whole-arena A/B arm) with a store slot
+    (lane vdf-xm-wire4): the whole-arena slot form. Every host word of the
+    arena goes up (the whole arena but the slot spans, as `MP_RUN` uploads
+    it), the slot spans are copied device to device, and the download is the
+    whole-arena arm's (the declared outputs with the output-range route, else
+    the whole arena). A resident input is never refused or read on the host
+    by one arm and not the other: both arms read it in place, and only the
+    host transfers differ, which is what the switch measures."""
     var ranges = ranges_on and (native_descriptor_call(entry, MP_CAPABILITIES, [], [], []) & MP_HAS_RANGES) != 0
     var arena = MetricArenaOwner(plan.size)
     var base = arena.base()
     var ins = List[Int32]()
+    var any_slot = False
     for k in range(len(inputs)):  # driver-loop: over the program's input buffers
         var record = inputs[k]
         if record.words == 0:
             continue
         if record.slot >= 0:
-            # a resident input: only the range route reads a store slot
-            if not ranges:
-                raise Error("RuntimeError: x_metrics: a device-resident input needs the image's range route")
+            # a resident input: the range entry reads a store slot (on either arm of the switch)
+            any_slot = True
             _add_input(ins, record.offset, record.offset + record.words, record.slot)
             continue
         unsafe_memcpy(dest=_RUN_F32P(unsafe_from_address=base + 4 * record.offset),
@@ -235,10 +265,17 @@ def metrics_plan_execute(entry: NativeDescriptorCall, plan: MetricProgramPlan, i
     var nst = len(plan.stages) // _STAGE_WORDS
     var pa = Int(plan.stages.unsafe_ptr())
     var size = plan.size
-    if ranges:
+    var whole_slots = any_slot and not ranges
+    if whole_slots:
+        # the whole-arena slot form (see above): only the range entry reads a slot
+        if (native_descriptor_call(entry, MP_CAPABILITIES, [], [], []) & MP_HAS_RANGES) == 0:
+            raise Error("RuntimeError: x_metrics: a device-resident input needs the image's range route")
+        ins = _whole_arena_spans(ins, size)
+    if ranges or whole_slots:
         # the shared ranges runner (core/arena_io.mojo): only the inputs go
-        # up, only the outputs come back
-        var outs = merged.copy() if known else [Int32(0), Int32(size), Int32(-1), Int32(1)]
+        # up, only the outputs come back (ranges on); the whole arena's host
+        # words up and the whole-arena arm's download (the slot form)
+        var outs = merged.copy() if known and (ranges or output_ranges) else [Int32(0), Int32(size), Int32(-1), Int32(1)]
         var n_in = len(ins) // 3
         var n_out = len(outs) // 4
         var ia = _pad(ins.copy(), [Int32(0), Int32(0), Int32(-1)])
@@ -266,11 +303,14 @@ struct MetricRoute(ImplicitlyCopyable, Movable):
     2026-11-23). Typed: a RUN holds it with no Python owner; the pin that
     keeps the entry's connection alive stays with the UNPACK.
 
-    `store` (lane vdf-xm-transport, 2026-11-24): the range route is on AND
-    the image has a resident input store (`MP_HAS_STORE`), so a program
-    input may be a store slot (`metric_slots_run`). False for the host
-    column, a CPU-only install, `MOJOLEARN_ARENA_RANGES=0` and every route
-    built with the three-word form."""
+    `store` (lane vdf-xm-transport, 2026-11-24): the image has the range
+    entry and a resident input store (`MP_HAS_STORE`), so a program input may
+    be a store slot (`metric_slots_run`). False for the host column, a
+    CPU-only install and every route built with the three-word form. Lane
+    vdf-xm-wire4: independent of `MOJOLEARN_ARENA_RANGES` (`ranges`), whose
+    off arm reads a slot through the whole-arena slot form
+    (`metrics_plan_execute`); it was `store and ranges`, which refused
+    resident inputs on the off arm and made the A/B unlike for like."""
 
     var program: NativeDescriptorCall
     var ranges: Bool
@@ -287,7 +327,7 @@ struct MetricRoute(ImplicitlyCopyable, Movable):
         self.program = program
         self.ranges = ranges
         self.output_ranges = output_ranges
-        self.store = store and ranges
+        self.store = store
 
 
 def metric_inputs_run(route: MetricRoute, plan: MetricProgramPlan, addresses: List[Int],

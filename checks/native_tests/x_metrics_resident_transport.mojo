@@ -26,6 +26,11 @@ k = 3 labels) runs four ways; the wanted output words must be bitwise equal:
             slot equals the same entry on host words: the program metric and
             the kernel metric read one resident buffer, no copy; every slot
             freed (`XP_DEV_LIVE` back to its start)
+    case 6  the whole-arena slot form (lane vdf-xm-wire4): the case 2 and
+            case 3 slots read with `MOJOLEARN_ARENA_RANGES` off (route
+            `ranges` False, `store` True), with and without the output-range
+            download, equal the CPU column: the off arm of the A/B reads a
+            resident input in place too
 
 Importable; `main()` only runs the suite. GPU only: a host-column build never
 instantiates the device cases.
@@ -121,11 +126,15 @@ def _host_run(entry: NativeDescriptorCall, ranges: Bool, x: List[Float32], lab: 
 
 
 def _slot_run(x_slot: Int, lab: List[Int32]) raises -> List[Int32]:
+    return _slot_run_route(x_slot, lab, True, True)
+
+
+def _slot_run_route(x_slot: Int, lab: List[Int32], ranges: Bool, output_ranges: Bool) raises -> List[Int32]:
     var p = _Prog()
     var addresses: List[Int] = [0, Int(lab.unsafe_ptr())]
     var sizes: List[Int] = [_N * _D, _N]
     var slots: List[Int] = [x_slot, -1]
-    var route = MetricRoute(metrics_program_device_v1, True, True, True)
+    var route = MetricRoute(metrics_program_device_v1, ranges, output_ranges, True)
     var arena = metric_slots_run(route, p.plan, addresses, sizes, slots)
     _ = lab
     return _words(arena, p.out, p.words)
@@ -150,6 +159,10 @@ def _device_cases() raises:
         var base_slot = native_descriptor_call(store, XP_DEV_PUT, [Int(base.unsafe_ptr())], [_BASE_ROWS * _D], [])
         var rows = native_descriptor_call(store, XP_DEV_TAKE_ROWS, [Int(idx.unsafe_ptr())], [base_slot, _D, _N], [])
         _same(_slot_run(rows, lab), cpu, "case 3: GPU gathered rows vs CPU column")  # case 3
+        # case 6: the whole-arena slot form (ranges off), both downloads
+        _same(_slot_run_route(put, lab, False, True), cpu, "case 6: ranges off, slot input, output ranges")
+        _same(_slot_run_route(put, lab, False, False), cpu, "case 6: ranges off, slot input, whole download")
+        _same(_slot_run_route(rows, lab, False, False), cpu, "case 6: ranges off, gathered rows, whole download")
         # case 4: the slot scans
         require(native_descriptor_call(entry, MP_DEV_FIRST_NONFINITE, [], [rows, _N * _D], []) == -1,
                 "case 4: no NaN in the fixture")

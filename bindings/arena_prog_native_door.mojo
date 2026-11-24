@@ -495,9 +495,9 @@ def metrics_run_plan_slots(plan: MetricProgramPlan, inputs: List[PythonObject], 
     DeviceRows input is gathered on the device out of
     its once-put base, and a host input the active `resident()` scope keeps
     is read from its device copy; both reach the program as store slots,
-    copied device to device. Elsewhere (host column, CPU-only install, ranges
-    off) a DeviceRows input is its host base's rows, as
-    before. The slots this run put or gathered are freed after it, newest
+    copied device to device, on either arm of `MOJOLEARN_ARENA_RANGES` (lane
+    vdf-xm-wire4). Elsewhere (host column, CPU-only install) a DeviceRows
+    input is its host base's rows, as before. The slots this run put or gathered are freed after it, newest
     first, even on error.
 
     `given` (empty, or one word per buffer input): -1 a host input, or a
@@ -617,11 +617,15 @@ def metric_route_of(entries: PythonObject) raises -> MetricRoutePin:
     var provider = neural_descriptor_connect_factory_once(entries["metrics_program_native_api_v1"],
         String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)
     var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
-    var ranges = _switch("MOJOLEARN_ARENA_RANGES") and py_get(entries, "x_metrics_run_ranges") is not None
+    var has_ranges = py_get(entries, "x_metrics_run_ranges") is not None
+    var ranges = _switch("MOJOLEARN_ARENA_RANGES") and has_ranges
     var output_ranges = py_get(entries, "x_metrics_run_out") is not None
     # The image's resident input store (lane vdf-xm-transport): read once
-    # here with the range switch, never per input.
-    var store = ranges and (native_descriptor_call(entry, MP_CAPABILITIES, [], [], []) & MP_HAS_STORE) != 0
+    # here, never per input. Lane vdf-xm-wire4: on either arm of the range
+    # switch (the off arm reads a slot through the whole-arena slot form,
+    # bindings/arena_prog_run.mojo `metrics_plan_execute`); it was gated on
+    # the switch, which refused resident inputs inside resident() on the off arm.
+    var store = has_ranges and (native_descriptor_call(entry, MP_CAPABILITIES, [], [], []) & MP_HAS_STORE) != 0
     return MetricRoutePin(MetricRoute(entry, ranges, output_ranges, store), provider, entries)
 
 
