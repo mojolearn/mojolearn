@@ -1565,6 +1565,9 @@ def forest_shard_publish(plan: ForestShardPlan, merged: PythonObject, parts: Pyt
         _ = py_call(arrays.append, merged[names[i]])
     _ = py_call(arrays.append, meta)
     _store_model(fields, arrays, plan.cols)
+    # A tree-range fit runs its loops in worker processes and reports no
+    # one loop: no `fit_loop_` (an earlier plain fit's is removed).
+    forest_fit_loop_store(fields, -1, 0)
     if _family(plan.kind) == "et":
         var bound = False
         for r in range(len(parts)):  # driver-loop: one flag per tree range
