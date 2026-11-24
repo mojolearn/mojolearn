@@ -142,6 +142,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CLASSICAL_NATIVE_DISPATCH.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_NATIVE_DISPATCH"](), "removed 2026-11-23 (lane/ab-prep-classical, removed without measurement: plumbing, rule 2026-11-22: both arms ran the same numerical owners on the same words, svr_fit_host_borrowed / svc tables; the B arm only dropped the device-resident query and device-X fit and added a mode readback and a published diagnostic); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CLASSICAL_NATIVE_DISPATCH.patch"
     # ---- end lane ab-prep-classical
+    # ---- lane ab-outcome-2 (2026-11-24): A/B nvc-ab-20261124T095727Z-92fd9f decisions (NVIDIA L40S only, job nvc1-0002; sub-lane ab2-classic)
+    # TOMBSTONE: MOJOLEARN_IDN_KDE_QTILE_FORCE (LOSER: 2 cells median 1.12, kde istella fit 28.16 -> 34.70 ms) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_KDE_QTILE_FORCE.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_IDN_KDE_QTILE_FORCE"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): the query-tile KDE pass at every width lost to the L1 cost rule kde_qtile_applies: 2 cells, median 1.12, kde istella fit 28.16 -> 34.70 ms (1.23), taxi 5.49 -> 5.54 ms (1.01); the cost rule is the only form; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_KDE_QTILE_FORCE.ab-outcome-2.patch"
+    # ---- end lane ab-outcome-2
     return True
 
 
