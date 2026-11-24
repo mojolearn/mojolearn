@@ -1507,9 +1507,8 @@ def _ada_pack(fields: PythonObject, base: PythonObject, template: PythonObject, 
     var selection = forest_export_selection() if result.launched else String("into")
     var j = 0
     try:
-        # Every fitted round's notices (RUN read them; the member's own fit
-        # door raised them; lane mf-ada2: round 1 dropped them).
-        member_fit_notices_raise(result.notices, context)
+        # No fit notices: a DecisionTree* (splitter='best') round's only notice
+        # was the n_bins clamp, no longer raised (lane w3-fix-h, 2026-11-24).
         while j < len(result.handles):  # driver-loop: over the kept boosting rounds (one member each)
             var member = first if j == 0 else _validated_clone(base, template, _sub_seed(seed, j), kind, memo,
                                                                context)

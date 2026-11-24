@@ -24,7 +24,7 @@ def forest_member_v2(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int
     result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     """The member entry of RandomForestClassifier and RandomForestRegressor (schema `MEMBER_ABI`)."""
     try:
-        var word = fm_member[_STORE_NAME, True](operation, member_call_from_spans(operation, aa, na, np, nf), "RandomForest")
+        var word = fm_member[_STORE_NAME, True, True](operation, member_call_from_spans(operation, aa, na, np, nf), "RandomForest")
         if result:
             MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = word
         return 0

@@ -24,7 +24,7 @@ def extra_trees_member_v2(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff
     result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     """The member entry of ExtraTreesClassifier and ExtraTreesRegressor (schema `MEMBER_ABI`)."""
     try:
-        var word = fm_member[_STORE_NAME, False](operation, member_call_from_spans(operation, aa, na, np, nf), "ExtraTrees")
+        var word = fm_member[_STORE_NAME, False, False](operation, member_call_from_spans(operation, aa, na, np, nf), "ExtraTrees")
         if result:
             MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = word
         return 0

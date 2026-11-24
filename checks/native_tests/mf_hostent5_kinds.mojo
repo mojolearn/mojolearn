@@ -224,7 +224,7 @@ def _forest_words(kind: Float64, et: Bool) -> List[Float64]:
 
 
 def _forest(operation: Int, mut call: MemberCall) raises -> Int:
-    return fm_member[_FOREST_STORE, True](operation, Int(MutPointer(to=call)), "RandomForest")
+    return fm_member[_FOREST_STORE, True, True](operation, Int(MutPointer(to=call)), "RandomForest")
 
 
 def _forest_refusal(state: Int, operation: Int) -> String:

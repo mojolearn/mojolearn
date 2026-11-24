@@ -3,8 +3,8 @@
 fit's warnings reach the user (lane fx-audit, audit-trees F1 and
 audit-classical-2 F1).
 
-A family's own fit door raises some warnings at fit (RandomForest's `n_bins`
-and `max_samples` notices, Nystroem's `n_components > n_samples`, the
+A family's own fit door raises some warnings at fit (RandomForest's
+`max_samples` and partial out-of-bag notices, Nystroem's `n_components > n_samples`, the
 GaussianProcessRegressor ridge retries, the PLS constant residual). On a member route the fit runs in
 RUN with the GIL released, so the state keeps them as WORDS, set by FIT and
 cleared by the next fit, import or free, and a family with any sets
@@ -27,7 +27,8 @@ from core.member_abi import (
 )
 
 comptime MEMBER_NOTICE_WORDS = 3
-#: RandomForest / DecisionTree (the RF layout): a = the `ensemble/rf_notices.mojo` bit mask of the fit.
+#: RandomForest (the RF layout): a = the `ensemble/rf_notices.mojo` bit mask of the fit. DecisionTree has
+#: no notice since the n_bins clamp went silent (lane w3-fix-h, 2026-11-24).
 comptime MEMBER_NOTICE_FOREST = 1
 #: Nystroem: n_components was clamped to the rows (a = requested, b = rows).
 comptime MEMBER_NOTICE_NYSTROEM_COMPONENTS = 2
