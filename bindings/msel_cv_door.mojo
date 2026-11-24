@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Cross-validation of python/mojolearn/model_selection.py, natively (lane
 # mcb2-msel): the estimator clone (`_clone`), the fold drawing and checks
-# (`_folds`, `_prepare_folds`, `_cv_folds`, `_indices`, `_overlap`), the
+# (`_folds`, `_prepare_folds`, `_cv_folds`, `_indices`), the
 # resident fold rows (`_FoldRows`: X, y and every fold's indices put ONCE
 # into the `_Resident` store and each fold's rows one device gather out of
 # it, or `_arena_io.DeviceRows` for an estimator that takes them), and
@@ -23,7 +23,7 @@ from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.msel_helpers_key_unpack import msel_helpers_key
 from bindings.msel_member_device_unpack import msel_member_host_folds
 from bindings.msel_helpers_released_unpack import (
-    msel_indices_overlap_i64, msel_store_alloc, msel_store_read, msel_store_free, msel_scatter_rows,
+    msel_store_alloc, msel_store_read, msel_store_free, msel_scatter_rows,
     msel_store_free_bytes,
 )
 from bindings.native_unit_threads_unpack import (
@@ -125,17 +125,6 @@ def msel_indices(value: PythonObject, n: Int, name: String, context: PythonObjec
     return as_i64
 
 
-def msel_overlap(train: PythonObject, test: PythonObject, n: Int, context: PythonObject) raises -> Bool:
-    """`_overlap`: whether two accepted index Arrays share a row."""
-    if Int(py=train.size) == 0 or Int(py=test.size) == 0 or n <= 0:
-        return False
-    var hit = msel_indices_overlap_i64(msel_helpers_key(context), msel_addr(train), Int(py=train.size),
-                                       msel_addr(test), Int(py=test.size), n)
-    _ = train  # keep the Python objects alive through the native call above
-    _ = test
-    return hit != 0
-
-
 def msel_splits_of(splitter: PythonObject, x: PythonObject, y: PythonObject, groups: PythonObject,
                    context: PythonObject) raises -> PythonObject:
     """`splitter.split(X, y, groups)`: a mojolearn splitter's splits natively
@@ -147,8 +136,10 @@ def msel_splits_of(splitter: PythonObject, x: PythonObject, y: PythonObject, gro
 
 
 def msel_checked_folds(pairs: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
-    """Every (train, test) of `pairs` checked by `_indices` and `_overlap`
-    before the first fit; refused when there is none."""
+    """Every (train, test) of `pairs` checked by `_indices` before the first
+    fit; refused when there is none. A train side may share rows with its
+    test side, as scikit-learn accepts (`cross_val_predict` alone needs a
+    partition and checks it itself)."""
     var b = msel_b()
     var it = family_call(b.iter, pairs)
     var folds = Python.list()
@@ -164,8 +155,6 @@ def msel_checked_folds(pairs: PythonObject, n: Int, context: PythonObject) raise
                         else String("not enough values to unpack (expected 2, got ") + String(len(pair)) + ")")
         var train = msel_indices(pair[0], n, "train", context)
         var test = msel_indices(pair[1], n, "test", context)
-        if msel_overlap(train, test, n, context):
-            raise Error("train and test indices overlap")
         _ = py_call(folds.append, Python.tuple(train, test))
     if len(folds) == 0:
         raise Error("cv must produce at least one fold")

@@ -77,10 +77,27 @@ def test_scores_fold_order_and_fresh_clones_match_serial(data, devices, scoring)
 def test_validate_all_folds_before_any_worker_fit(data):
     x, y = data
     error = clean(parallel.cross_val_score, LinearRegression(), x, y, devices=(0,),
-                  cv=[([0, 1], [2]), ([0, 1], [1])], error=ValueError)
-    assert 'overlap' in str(error)
+                  cv=[([0, 1, 2, 3], [4]), ([0, 1, 2, 3], [len(x)])], error=ValueError)
+    assert 'out-of-range' in str(error)
     assert trace()['workers'] == [] and trace()['waves'] == []
     assert trace()['stages'] == ['validate']
+
+
+def test_explicit_folds_whose_sides_share_rows_run_as_scikit_learn(data):
+    # scikit-learn's cross_val_score accepts explicit (train, test) pairs whose
+    # sides share rows (it never checks disjointness; only cross_val_predict
+    # needs a partition), so the native fold admission accepts them too.
+    sklearn_ms = pytest.importorskip('sklearn.model_selection')
+    sklearn_lm = pytest.importorskip('sklearn.linear_model')
+    x, y = data
+    rows = np.arange(len(x))
+    cv = [(rows[:30], rows[20:]), (rows, rows[:15]), (rows[10:], rows[10:])]
+    actual = clean(parallel.cross_val_score, LinearRegression(), x, y, devices=(0,), cv=cv)
+    serial_scores = clean(serial.cross_val_score, LinearRegression(), x, y, cv=cv)
+    expected = sklearn_ms.cross_val_score(sklearn_lm.LinearRegression(), x.astype('f8'), y.astype('f8'), cv=cv)
+    np.testing.assert_array_equal(np.asarray(actual), np.asarray(serial_scores))
+    np.testing.assert_allclose(np.asarray(actual, dtype='f8'), expected, rtol=1e-4, atol=1e-5)
+    closed(trace())
 
 
 @pytest.mark.parametrize('callback_kind', ['estimator', 'scorer', 'splitter', 'protocol', 'devices'])

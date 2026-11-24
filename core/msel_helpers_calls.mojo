@@ -16,7 +16,7 @@ text its former Python export raised. These calls do not touch the GIL.
 from core.msel_entry_table import (
     MselEntryKey, msel_table_entry, MSEL_HELPERS_ABI, MH_OP_COUNT,
     MH_ARANGE_I64, MH_COUNT_MASK_U8, MH_SELECT_MASK_U8_I64, MH_MASK_FROM_INDICES_U8, MH_LEAVE_RANGE_I64,
-    MH_INDICES_OVERLAP_I64, MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32, MH_GATHER_I64,
+    MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32, MH_GATHER_I64,
     MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_ALLOC, MH_STORE_READ, MH_STORE_FREE, MH_SCATTER_ROWS,
     MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32, MH_STORE_FREE_BYTES,
     MH_STORE_PUT, MH_STORE_TAKE_ROWS,
@@ -74,13 +74,6 @@ def msel_leave_range_i64(entry: EntryRef, n: Int, lo: Int, hi: Int, train: Int, 
     var addrs: Array[Int, 2] = [train, test]
     var ints: Array[Int, 3] = [n, lo, hi]
     return msel_helper(entry, MH_LEAVE_RANGE_I64, addrs, ints)
-
-
-def msel_indices_overlap_i64(entry: EntryRef, a: Int, na: Int, b: Int, nb: Int, bound: Int) raises -> Int:
-    """1 when two int64 index sets share a member, else 0."""
-    var addrs: Array[Int, 2] = [a, b]
-    var ints: Array[Int, 3] = [na, nb, bound]
-    return msel_helper(entry, MH_INDICES_OVERLAP_I64, addrs, ints)
 
 
 def msel_fold_ids(entry: EntryRef, codes: Int, n: Int, n_classes: Int, n_splits: Int, counts: Int,

@@ -26,8 +26,8 @@ from metrics.checks.pinned_sum import canonicalize_nan
 #: writes each run of eight elements reversed, min and max trade places,
 #: the float sum folds descending, argmax takes the LAST maximum, equality
 #: is inverted, the encoder's codes are reversed, the
-#: gather reads the next table slot, a duplicate index is accepted, an
-#: overlap is denied and the fold ids are rotated by one.
+#: gather reads the next table slot, a duplicate index is accepted and
+#: the fold ids are rotated by one.
 #: `tests/test_hotpath_native.py` must FAIL against such a build in every
 #: group; a differential test that passes against it compares nothing.
 comptime HOTPATH_SABOTAGE = (
@@ -655,41 +655,6 @@ def check_indices_i64(addr: Int, count: Int, limit: Int) raises -> Int:
                     break
         _ = len(bits)
     return status
-
-
-def indices_overlap_i64(a_addr: Int, na: Int, b_addr: Int, nb: Int, limit: Int) raises -> Int:
-    """1 when two int64 index sets share a member, else 0. Both must already
-    have passed `check_indices_i64` against `bound`."""
-    if na < 1 or nb < 1 or limit < 1:
-        raise Error("indices_overlap_i64: counts and bound must be positive")
-    var ap = _ptr[DType.int64](a_addr)
-    var bp = _ptr[DType.int64](b_addr)
-    var hit = 0
-    var bad = False
-    var words = (limit + 63) // 64
-    var bits = List[UInt64](length=words, fill=UInt64(0))
-    var wp = rebind[MutPointer[UInt64, MutUntrackedOrigin]](bits.unsafe_ptr())
-    for i in range(na):
-        var v = Int(ap.unsafe_load(i))
-        if v < 0 or v >= limit:
-            bad = True
-            break
-        _ = _bit_test_set(wp, v)
-    if not bad:
-        for i in range(nb):
-            var v = Int(bp.unsafe_load(i))
-            if v < 0 or v >= limit:
-                bad = True
-                break
-            var word = wp.unsafe_load(v >> 6)
-            if (word & (UInt64(1) << UInt64(v & 63))) != 0:
-                comptime if not HOTPATH_SABOTAGE:
-                    hit = 1
-                    break
-    _ = len(bits)
-    if bad:
-        raise Error("indices_overlap_i64: index out of range")
-    return hit
 
 
 def fold_ids(

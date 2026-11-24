@@ -2006,7 +2006,7 @@ FAMILIES = (
             # (the ORDER RULE's label encoder, DEVIATION 2500, runs inside
             # prepare_targets).
             "cast_elements", "reduce_stat", "equal_elements",
-            "gather_i32", "check_indices_i64", "indices_overlap_i64",
+            "gather_i32", "check_indices_i64",
             "fold_ids", "select_fold_i64",
             # lane ne1-b-door (N051): every fold's partition as one split plan
             "select_folds_i64",

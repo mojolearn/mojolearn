@@ -95,7 +95,6 @@ from core.hotpath_impl import (
     gather_i32,
     ic_running_min_f32_host,
     ic_running_min_f64_host,
-    indices_overlap_i64,
     leave_range_i64,
     mask_from_indices_u8,
     reduce_stat,
@@ -256,22 +255,6 @@ def check_indices_i64_binding(
     with GILReleased(Python()):
         status = check_indices_i64(a, count, limit)
     return PythonObject(status)
-
-
-def indices_overlap_i64_binding(
-    a_addr: PythonObject, n_a: PythonObject, b_addr: PythonObject,
-    n_b: PythonObject, bound: PythonObject,
-) raises -> PythonObject:
-    """1 when two int64 index sets share a member, else 0."""
-    var na = Int(py=n_a)
-    var nb = Int(py=n_b)
-    var limit = Int(py=bound)
-    var a = Int(py=a_addr)
-    var b = Int(py=b_addr)
-    var hit: Int
-    with GILReleased(Python()):
-        hit = indices_overlap_i64(a, na, b, nb, limit)
-    return PythonObject(hit)
 
 
 def fold_ids_binding(
