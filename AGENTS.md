@@ -365,13 +365,31 @@ are still made only from a measurement that was actually taken ("Releases").
    kernel/kernel, every other opponent whole/whole, never an invented copy time. Our arm records its copy
    separately (`upload_ms_separate`); only OUR cells on the mixed lanes are re-raced.
 
-Candidate evaluation (owner, 2026-10-06):
-- Evaluate a performance candidate with end-to-end A/B runs on the full dataset of every affected estimator, with
-  the whole operation inside the clock (preparation, fit, required synchronization, consumed outputs). Component
-  timings, synthetic substitutes and reduced workloads are screening only: say "component screening complete".
+Candidate evaluation (Andrew, 2026-11-24; replaces the 2026-10-06 end-to-end rule, kept in RULES_HISTORY):
+- **An A/B arm is decided on loop time per iteration.** The cell runs on the FULL-size dataset of each affected
+  estimator with a small capped iteration count (rounds, epochs, sweeps) set explicitly and equally on both arms. The
+  clock is the loop region, first iteration start to last iteration end, with one device synchronization at the end
+  of the region and none inside it; the number is loop time divided by the executed iterations. Fixed costs (setup,
+  upload, plan, allocation, readback) amortize; they are recorded beside it and flagged when an arm adds to them, and
+  they do not decide the arm.
+- **Under several conditions, never one.** Each arm is timed on at least a wide and a narrow dataset among those its
+  estimators support (and more than one size where the arm's cost depends on it). It wins when it is faster in
+  aggregate and slower on none beyond the noise floor. An arm that wins one condition and loses another is not
+  promoted as built: fix the losing condition, or delete it; a route rule keyed on the input's shape is the last
+  resort, derived from cost and timed at shapes in between. No route is ever picked at run time by timing two
+  alternatives (the choice must be the same on every vendor and every run).
+- **No full end-to-end confirmation run by default (Andrew: "crazy overkill"; "if the final run is good and needed,
+  maybe keep").** The capped-iteration verdict promotes or deletes. The output hash and quality are compared at the
+  cap, on the same executed iterations of both arms. When the hashes are equal the arm computes the same thing and
+  nothing more is run. Only an arm that would be promoted AND whose output differs from the base at the cap gets one
+  full run of both arms, for the final quality: a quality drop is a regression as always.
+- **Where the cap is not valid** (the per-iteration cost changes as the fit proceeds: trees growing deeper, solvers
+  whose work depends on convergence, anything with no iteration to count), the cell times the whole operation on the
+  full dataset as before, and the cell says so. Small datasets, synthetic substitutes and component timings remain
+  screening only: say "component screening complete".
 - Map each candidate to its affected estimators and saved recipes before timing. `--rows full` alone does not prove
   the full dataset ran. Missing coverage stays pending; never substitute a smaller case and report completion.
-- Do not promote a default from component gains. Record winners AND losers beside the switch and on the boards.
+- Record winners AND losers beside the switch and on the boards.
 - Decide each candidate as soon as its evidence is complete on both vendors; do not wait for the whole campaign.
   When the evidence supports it, flip the switch promptly and put the reason INSIDE the source file beside it:
   experiment ids, cases, both vendors' ratios, identity and quality outcome, sample count, limits. A promoted change
