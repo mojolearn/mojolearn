@@ -694,6 +694,22 @@ struct MRun(Movable):
             raise Error(name + ": input must be finite; NaN/inf are unsupported")
         return self.add(-1, rows, cols, handle, k)
 
+    def adopt(mut self, k: Int, handle: Int, rows: Int, cols: Int, name: String) raises -> Int:
+        """`from_snapshot` of an input already on image k's device (lane
+        vdf-scope-neural3: a fold the XDecomp member took ON THE DEVICE,
+        x_decomp/member_store.mojo): pool id `handle`, handed to this
+        operation (returned at close() unless a state keeps it, as `alloc`'s
+        ids). No upload; no finite scan here: the member's caller scanned the
+        rows (the member answers no MEMBER_CAN_TEST_ROWS). The same words as
+        the host snapshot of those rows, so the same bits."""
+        if not self.images[k].resident:
+            raise Error(name + ": a device-resident input needs a GPU x_decomp image")
+        if rows == 0 or cols == 0:
+            raise Error(name + ": a nonempty two-dimensional input is required")
+        self.alloc_image.append(k)
+        self.alloc_id.append(handle)
+        return self.add(-1, rows, cols, handle, k)
+
     def iso_gather_min(mut self, k: Int, d: Int, im: Int, sq: Int, q: Int, nn: Int) raises -> Int:
         """Isomap.transform's per-rank gather-and-min (row N295) as one native
         operation; -1 on a host image or a shape the per-rank path takes."""

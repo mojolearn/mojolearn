@@ -156,6 +156,7 @@ struct RPProjectRequest(Copyable, Movable):
     var matrix_rows: Int
     var tiled: Int         # 0 plain product, 1 tiled, 2 tiled and X not yet tested finite
     var matrix_pool: Int   # the matrix's resident pool id, -1: none
+    var source_pool: Int   # X's resident pool id (`source` unread), -1: X is `source` (lane vdf-scope-neural3)
 
 
 def ica_fit_call(entry: EntryRef, r: ICAFitRequest) raises -> Int:
@@ -225,6 +226,6 @@ def rp_fit_call(entry: EntryRef, r: RPFitRequest) raises -> Int:
 def rp_project_call(entry: EntryRef, r: RPProjectRequest) raises -> Int:
     """X matrix^T; returns 1 when the tiled projection flagged a non-finite X."""
     var a: Array[Int, 3] = [r.source, r.matrix, r.dst]
-    var p: Array[Int, 5] = [r.rows, r.width, r.matrix_rows, r.tiled, r.matrix_pool]
+    var p: Array[Int, 6] = [r.rows, r.width, r.matrix_rows, r.tiled, r.matrix_pool, r.source_pool]
     var f: Array[Float64, 0] = []
     return entry_ref_call(entry, XD_RP_PROJECT, a, p, f)

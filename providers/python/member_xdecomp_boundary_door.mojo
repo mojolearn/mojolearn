@@ -55,6 +55,11 @@ from x_decomp.nmf_descriptor_boundary_run import nmf_driver, nmf_mode, nmf_vendo
 from x_decomp.nmf_owner import NMF_INIT_RANDOM, NMF_INIT_NNDSVD, NMF_INIT_NNDSVDA, NMF_INIT_NNDSVDAR
 from core.nmf_native_api import NMF_NATIVE_COUNT, NMF_CAP_FIT, NMF_CAP_INVERSE
 from core.device_route import DeviceRoute
+from core.seq_member_rows import SEQ_ROUTE_STORE
+from providers.python.neural_descriptor_pyapi_door import (
+    NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect_factory_once,
+)
+from x_prep.transport_abi import XP_TRANSPORT_ABI, XP_OP_COUNT
 from core.entry_table import EntryRef, entry_ref_word
 from core.hostptr import f32_ptr
 from core.ipca_native_api import IPCA_NATIVE_COUNT
@@ -253,9 +258,31 @@ def _table_route(model: PythonObject, fields: PythonObject, context: PythonObjec
     route.vendor = Int(py=key[1])
     route.entry = entry
     route.flags = XDECOMP_ROUTE_POOL if decomp_resident_binding(entries) else 0
+    if (route.flags & XDECOMP_ROUTE_POOL) != 0:
+        _store_route(entries, route)
     owner.plan.route = route
     owner.pins = entries
     return entries
+
+
+def _store_route(entries: PythonObject, mut route: DeviceRoute) raises:
+    """The GPU image's device pool as a scope transport (x_decomp/member_store.mojo `x_decomp_store_v1`, lane
+    vdf-scope-neural3) into `route.fifth` with SEQ_ROUTE_STORE: the member then keeps a scoped X in the pool
+    (`arena_scope_store_put`) and takes each fold's rows there (core/seq_member_rows.mojo `member_rows_open`,
+    prefix "x_decomp"). `route.second` stays the LLE helper image's. An image that exports no store (an older
+    build) keeps the route as it was: its kinds answer no row index. The connection is held by the process
+    record of `neural_descriptor_connect_factory_once`, so no member pin is needed for it."""
+    var binding = py_get(entries, "x_decomp_module")
+    if binding is None:
+        return
+    var factory = neural_descriptor_entry(binding, "x_decomp_store_v1", False)
+    if factory is None:
+        return
+    var provider = neural_descriptor_connect_factory_once(factory, String(XP_TRANSPORT_ABI), XP_OP_COUNT)
+    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
+    route.fifth = EntryRef(entry, entry_ref_word(route.mode, route.vendor, XP_OP_COUNT))
+    route.has_fifth = True
+    route.flags |= SEQ_ROUTE_STORE
 
 
 def _ica_admit(model: PythonObject, fields: PythonObject, context: PythonObject,

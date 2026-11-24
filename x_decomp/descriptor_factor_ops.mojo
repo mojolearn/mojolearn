@@ -139,12 +139,13 @@ def xd_factor_op[E: Exec, D: RDev, RES: Bool, X: DecompDev](op: Int, a: List[Int
         return rp_fit_run[E, D, RES, X](x, n, d, kc, p[3] != 0, xd_float(floats, 0), p[4], p[5] != 0, p[6] != 0,
                                         pc, pi)
     if op == XD_RP_PROJECT:
-        var x = xd_f32(a[0])
+        # word 5 (lane vdf-scope-neural3): X's pool id (a fold taken on the device, the scope's X); -1: X is a[0]
+        var x = xd_f32(a[0]) if p[5] < 0 else F32Ptr(unsafe_from_address=0)
         var m = xd_dim(p[0])
         var d = xd_dim(p[1])
         var matrix = xd_f32(a[1])
         var rows = xd_dim(p[2])
         var dst = xd_f32(a[2])
         # word 3: 0 = plain product, 1 = tiled, 2 = tiled and X not yet tested finite
-        return rp_project_run[E, D, RES, X](x, m, d, matrix, rows, p[3] != 0, dst, p[4], p[3] == 2)
+        return rp_project_run[E, D, RES, X](x, m, d, matrix, rows, p[3] != 0, dst, p[4], p[3] == 2, p[5])
     raise Error("x_decomp native ABI: not a factor operation " + String(op))

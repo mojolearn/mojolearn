@@ -141,7 +141,7 @@ comptime XD_FA_FIT = 76           # a: [x, psi0, components, noise, mean, loglik
 comptime XD_FA_QUERY = 77         # a: [x, components, noise, mean, dst, value out(f64)] i: [op, n, d, nc]
 comptime XD_LDA = 78              # a: [x, comps in, exp in, comps out, exp out, dst, draw inout(int64), n_batch_iter inout(int64), value out(f64)] i: [op, n, v, nc, fresh, flag, max_iter, online, batch_size, max_doc_update_iter, seed, evaluate_every, refusal (0 fit, 1 partial_fit, 2 transform)] f: [doc prior, topic prior, offset, decay, mean_change_tol, total samples, perp_tol] -> n_iter
 comptime XD_RP_FIT = 79           # a: [x, components, inverse] i: [n, d, kc, sparse, seed, inverse, fused_ok] f: [density] -> first non-finite index or -1
-comptime XD_RP_PROJECT = 80       # a: [x, matrix, dst] i: [m, d, rows, tiled (0 plain, 1 tiled, 2 tiled and X untested), matrix pool id (-1: none)] -> 1 when X was flagged non-finite
+comptime XD_RP_PROJECT = 80       # a: [x, matrix, dst] i: [m, d, rows, tiled (0 plain, 1 tiled, 2 tiled and X untested), matrix pool id (-1: none), X pool id (-1: none; lane vdf-scope-neural3: X then is that id's words and a[0] is unread)] -> 1 when X was flagged non-finite
 # lane vdf-linalg2 (2026-11-24): linalg.qr's geqrf, orgqr and R cut on pool ids
 # (x_decomp/resident_qr.mojo), so h, tau, Q and R stay on the device and each
 # result is downloaded once (were XD_GEQRF / XD_ORGQR host-address round trips
@@ -314,7 +314,7 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
     if op == XD_RP_FIT:
         return (3, 7, 1)
     if op == XD_RP_PROJECT:
-        return (3, 5, 0)
+        return (3, 6, 0)
     if xd_is_mani_op(op):
         return xd_mani_schema(op)
     raise Error("x_decomp native ABI: unknown operation " + String(op))

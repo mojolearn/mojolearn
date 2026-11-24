@@ -17,6 +17,7 @@ from providers.python.x_decomp_api_pyapi_pack import (
     colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, absmax_sign_py, geqrf_py, orgqr_py, move_py, select_smallest_py, argmin_all_py, pca_mle_rank_host_py, rowsum_py, sqdist_py, vendor_py, idn_flags_py, ols_tsqr_r_py,
 )
 from x_decomp.device import DevExec
+from x_decomp.member_store import X_DECOMP_STORE_API
 from x_decomp.pca_randomized_dev import DevRDev
 from providers.python.x_decomp_tsvd_owner_pyapi_pack import tsvd_randomized_py, tsvd_tsqr_py
 from x_decomp.ipca_owner_dev import DevIpcaDev
@@ -117,6 +118,14 @@ def tsvd_decomp_native_api_v1_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
+def x_decomp_store_v1_binding() raises -> PythonObject:
+    """The image's device pool as a scope transport entry (x_decomp/member_store.mojo, lane
+    vdf-scope-neural3): the XDecomp member boundary (providers/python/member_xdecomp_boundary_door.mojo)
+    connects it once and hands it to the member in `route.fifth`. GPU image only."""
+    var api = X_DECOMP_STORE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def x_decomp_native_api_v1_binding() raises -> PythonObject:
     """The x_decomp kernel-call table (x_decomp/descriptor_schema.mojo): one
     capsule over this image's dispatch function, connected once per module
@@ -134,6 +143,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_decomp")
         m.def_function[x_decomp_native_api_v1_binding]("x_decomp_native_api_v1")
+        m.def_function[x_decomp_store_v1_binding]("x_decomp_store_v1")
         m.def_function[tsvd_decomp_native_api_v1_binding]("tsvd_decomp_native_api_v1")
         m.def_function[nmf_native_api_v1_binding]("nmf_native_api_v1")
         m.def_function[ipca_native_api_v1_binding]("ipca_native_api_v1")
