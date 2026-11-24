@@ -26,6 +26,10 @@ def solver_ops_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
             # THE FOLD X WORD (core/fold_x_device.mojo) names a device slot; the
             # host column reads host X only (core/cd_member.mojo sends it on GPU routes).
             raise Error("solver ops: the host column reads no device fold X word")
+        if operation == SV_OP_CD_FIT and (a[1] < 0 or a[4] < 0):
+            # THE PER-INPUT PINS (lane vdf-scope-pins): a fold y / weights word
+            # names a device slot too; the host column reads host words only.
+            raise Error("solver ops: the host column reads no device fold y or sample_weight word")
         if operation == SV_OP_CD_FIT:
             var has_sw = p[5] != 0
             if has_sw and a[4] == 0:

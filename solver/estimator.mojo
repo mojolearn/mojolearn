@@ -150,7 +150,7 @@ def cd_fit_host(
         # lane/apple-fast-linear: the C-order design goes up AS IT IS and the
         # FAST Apple grid Gram reads its row-major tiles (no transpose pass)
         fold_x_fill(ctx, x, Int(x_ptr), n_rows * n_cols)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
-        ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
+        fold_x_fill(ctx, y, Int(y_ptr), n_rows)  # THE PER-INPUT PINS (lane vdf-scope-pins): host y, or a fold slot
         ctx.enqueue_memset(coef, Float32(0.0))
         ctx.synchronize()
     elif row_major:
@@ -168,7 +168,7 @@ def cd_fit_host(
             ),
             block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
         )
-        ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
+        fold_x_fill(ctx, y, Int(y_ptr), n_rows)  # THE PER-INPUT PINS (lane vdf-scope-pins): host y, or a fold slot
         ctx.enqueue_memset(coef, Float32(0.0))
         ctx.synchronize()
         _ = xr^
@@ -179,7 +179,7 @@ def cd_fit_host(
         if Int(x_ptr) < 0 and n_cols > 1:
             raise Error("cd_fit_host: a fold X word is C order; pass row_major for more than one column")
         fold_x_fill(ctx, x, Int(x_ptr), n_rows * n_cols)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
-        ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
+        fold_x_fill(ctx, y, Int(y_ptr), n_rows)  # THE PER-INPUT PINS (lane vdf-scope-pins): host y, or a fold slot
         ctx.enqueue_memset(coef, Float32(0.0))
         ctx.synchronize()
 
@@ -205,7 +205,7 @@ def cd_fit_host(
                 " See solver/impl/shuffle.mojo"
             )
         var sw = ctx.enqueue_create_buffer[DType.float32](n_rows)
-        ctx.enqueue_copy(dst_buf=sw, src_ptr=sw_ptr)
+        fold_x_fill(ctx, sw, Int(sw_ptr), n_rows)  # THE PER-INPUT PINS: host weights, or a fold slot
         ctx.synchronize()
         var wout = cd_fit_weighted(
             ctx, x, n_rows, n_cols, y, coef, sw, fit_intercept, epochs,
