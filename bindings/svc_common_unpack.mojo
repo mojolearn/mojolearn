@@ -106,7 +106,7 @@ def svc_mode(fields: PythonObject) raises -> PythonObject:
 def svc_zero_division(float_division: Bool) raises:
     """Raise Python's ZeroDivisionError with the message the Python division
     raised (`division by zero` for ints, `float division by zero`)."""
-    var operator = Python.import_module("operator")
+    var operator = native_loaded_module("operator")  # the import-time connection (lane w3f3-a), never __import__
     if float_division:
         _ = family_call(operator.truediv, PythonObject(1.0), PythonObject(0.0))
     _ = family_call(operator.truediv, PythonObject(1), PythonObject(0))

@@ -3560,16 +3560,18 @@ def _admit_search_serving(fields: PythonObject, context: PythonObject, b: Python
     var nested = _Nested()
     if not _admit_nested(done, nested, base, classifier, needs, context, b, labels):
         return False
-    var trees = py_call(native_loaded_module("sys").modules.get, PythonObject("mojolearn._expansion_trees"))
-    if trees is None:
-        try:
-            trees = py_call(native_loaded_module("importlib").import_module,
-                            PythonObject("mojolearn._expansion_trees"))
-        except:
-            return False  # the x_trees image is not built: no META image to run on
-    var trees_context = py_get(py_call(b.vars, trees), "_TREES_CONTEXT")
+    # The x_trees image model selection connected at its import (lane w3f3-a: `_msel_x_trees`; before, the
+    # tree family was imported here through an importlib connection that never existed). An image that is
+    # not built in the process default mode (its recorded refusal) answers False, as the failed import did.
+    var trees_context = _msel_x_trees(context)
     if trees_context is None:
         return False
+    var default_tables = py_get(trees_context["trees_bindings"], trees_context["backend_fields"]["_DEFAULT_MODE"])
+    if default_tables is None:
+        return False
+    var default_image = py_get(default_tables, "_mojolearn_x_trees")
+    if default_image is None or py_type(default_image) is b.str:
+        return False  # the x_trees image is not built: no META image to run on
     # The head words of a search that is never fitted here (`_admit_search`'s layout for scoring=None: scorer
     # 0, no tolerance, no train scores, a grid's seed -1, refit True, refit scorer 0, count 0) and its one
     # scorer group.
@@ -4627,17 +4629,13 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         words.append(Float64(dst_dtype))
         words.append(1.0 if tool_log else 0.0)
     var kind = META_SEARCH_CLASSIFIER if classifier else META_SEARCH_REGRESSOR
-    # The META entry and its glue run on an x_trees image: the search's own
-    # context is model selection's, so the image is the one the meta classes'
-    # context names (`_finish` reads its bindings).
-    var trees = py_call(native_loaded_module("sys").modules.get, PythonObject("mojolearn._expansion_trees"))
-    if trees is None:
-        # not imported yet (lane mf-ens6b): imported once, as the metrics
-        # module is below. AN IMAGE THAT IS NOT BUILT (lane mf-fitadm7): its
-        # loader's ImportError is raised as it stands (no image can run the
-        # search kind; before, the door's units fitted it).
-        trees = py_call(native_loaded_module("importlib").import_module, PythonObject("mojolearn._expansion_trees"))
-    var trees_context = py_get(py_call(b.vars, trees), "_TREES_CONTEXT")
+    # The META entry and its glue run on an x_trees image (`_finish` reads its
+    # bindings).
+    # Lane w3f3-a: the x_trees tables model selection connected at its import (`_msel_x_trees`), never the
+    # tree family imported here through importlib (no such connection existed: every search in a process
+    # without a tree estimator raised ImportError). AN IMAGE THAT IS NOT BUILT (lane mf-fitadm7): its
+    # recorded refusal is raised by `_trees_key` in `_finish`.
+    var trees_context = _msel_x_trees(context)
     if trees_context is None:
         # the x_trees image is not connected (lane mf-fitadm7): `_trees_key`'s
         # words, the refusal every meta estimator's own fit raises
@@ -4693,6 +4691,23 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     return True
 
 
+def _msel_x_trees(context: PythonObject) raises -> PythonObject:
+    """UNPACK: the x_trees image tables a META entry runs on (`_trees_key`'s
+    context: `trees_bindings`, `backend_fields`), connected ONCE at model
+    selection's import (python/mojolearn/model_selection.py
+    `family_msel_x_trees`). A search's context is model selection's own; any
+    other META owner's (RFE: the prep owner's) carries model selection's as
+    `native_estimator_context` (python/mojolearn/_families.py). None when
+    model selection is not connected. One or two exact-dict reads per
+    admission, never per row."""
+    var x_trees = py_get(context, "family_msel_x_trees")
+    if x_trees is None:
+        var hub = py_get(context, "native_estimator_context")
+        if hub is not None:
+            x_trees = py_get(hub, "family_msel_x_trees")
+    return x_trees
+
+
 def _metrics_prog_context(context: PythonObject) raises -> PythonObject:
     """UNPACK: model selection's x_metrics program context. A MISSING METRICS
     IMAGE (lane mf-msel5b): the metrics module is imported once (its import
@@ -4701,11 +4716,11 @@ def _metrics_prog_context(context: PythonObject) raises -> PythonObject:
     var nk = metrics_keys()
     var prog_context = py_get(context, nk[].k_family_metrics_prog_context)
     if prog_context is None:
-        _ = py_call(native_loaded_module("importlib").import_module, PythonObject("mojolearn._expansion_metrics"))
-        prog_context = py_get(context, nk[].k_family_metrics_prog_context)
-        if prog_context is None:
-            raise Error("ImportError: mojolearn: the metrics runner is not connected to model selection "
-                        + "(family_metrics_prog_context); import mojolearn.metrics first")
+        # Lane w3f3-a: no import here. Model selection's import connects the metrics runner
+        # (python/mojolearn/_families.py DEPENDS["model_selection"] -> `_expansion_metrics`); the
+        # importlib call that stood here could never run (no importlib connection existed).
+        raise Error("ImportError: mojolearn: the metrics runner is not connected to model selection "
+                    + "(family_metrics_prog_context); import mojolearn.metrics first")
     return prog_context
 
 
@@ -6009,10 +6024,11 @@ def _admit_rfe(model: PythonObject, fields: PythonObject, context: PythonObject,
     words.append(1.0 if work_on else 0.0)
     words.append(1.0 if (run.dev_store and run.has_ranges) else 0.0)
     var kind = META_RFE_CLASSIFIER if base.classifier else META_RFE_REGRESSOR
-    # The META entry and its glue run on an x_trees image: RFE's own context is the prep owner's, so the
-    # image is the one the meta classes' context names (as the search kind's admission reads it).
-    var trees = py_call(native_loaded_module("sys").modules.get, PythonObject("mojolearn._expansion_trees"))
-    var trees_context = PythonObject(None) if trees is None else py_get(py_call(b.vars, trees), "_TREES_CONTEXT")
+    # The META entry and its glue run on an x_trees image (as the search kind's admission reads it).
+    # Lane w3f3-a: the x_trees tables model selection connected at its import, read through RFE's
+    # `native_estimator_context` (`_msel_x_trees`); before, only a process that had imported the tree family
+    # could run RFE's META entry.
+    var trees_context = _msel_x_trees(context)
     if trees_context is None:
         raise Error("ImportError: mojolearn: _mojolearn_x_trees is not connected to the tree owner")
     _ = _finish(fields, trees_context, b, owner, nested, kind, 0.0, 0, List[Float64](), List[Int](), words^,

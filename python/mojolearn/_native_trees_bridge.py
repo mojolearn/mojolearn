@@ -120,6 +120,35 @@ def _estimators_native_key(table):
         table["estimators_native_key"] = (mode, vendor)
 
 
+_X_TREES = None
+
+
+def x_trees_tables():
+    """{mode: the x_trees binding's entry table, or the refusal recorded for
+    it}, both numeric modes, connected once per process. Model selection
+    connects it at its own import (a search's and RFE's META entry runs on
+    the x_trees image, providers/python/member_ensemble_boundary_door.mojo
+    `_msel_x_trees`) without loading the tree family; the tree owner's
+    `_bindings` reuses the same tables (lane w3f3-a: the door imported
+    `_expansion_trees` through an importlib connection that never existed)."""
+    global _X_TREES
+    if _X_TREES is None:
+        from . import _backend
+        selected = _backend.default_mode()
+        name = "_mojolearn_x_trees"
+        tables = {}
+        for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes
+            try:
+                table = _entries(_backend.binding(name, mode))
+            except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
+                table = _refusal(error)
+            if isinstance(table, dict):
+                _native_key(table, name)
+            tables[mode] = table
+        _X_TREES = tables
+    return _X_TREES
+
+
 def _bindings():
     # glue: connect each tree binding of both numeric modes once at import
     from . import _backend
@@ -128,6 +157,9 @@ def _bindings():
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes
         per_mode = {}
         for name in _TREE_BINDINGS:  # glue: the fixed tree binding names
+            if name == "_mojolearn_x_trees":
+                per_mode[name] = x_trees_tables()[mode]  # connected once, shared with model selection
+                continue
             try:
                 per_mode[name] = _entries(_backend.binding(name, mode))
             except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
