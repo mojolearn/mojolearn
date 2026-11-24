@@ -90,7 +90,9 @@ comptime XT_PSHAP_VALUES_MODEL = 66
 comptime XT_AGN_POOL_RELEASE = 67
 comptime XT_BLOCK_MEAN = 68
 comptime XT_LOGIT = 69
-comptime XT_OP_COUNT = 70
+# KernelExplainer over the resident linear block (lane vdf-explain, 2026-11-24).
+comptime XT_KSHAP_SOLVE_LINEAR = 70
+comptime XT_OP_COUNT = 71
 
 
 struct XtCall(Copyable, Movable):

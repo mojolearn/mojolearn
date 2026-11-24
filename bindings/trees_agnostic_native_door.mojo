@@ -1312,14 +1312,14 @@ def _kernel_values(fields: PythonObject, args: PythonObject, context: PythonObje
 
 
 def _kernel_with[M: AgnModel](mut model: M, gil_free: Bool, glue: EntryRef, req: AgnRequest, ns: Int, nl: Int,
-                              logit: Bool) raises:
+                              logit: Bool, wb: Int, wb_link: Int) raises:
     """RUN `agn_kernel_values_run` over `model`, the GIL released once around it when every member may run
     without it. A member refusal raises its own words."""
     if gil_free:
         with GILReleased(Python()):
-            agn_kernel_values_run(glue, req, ns, nl, logit, model)
+            agn_kernel_values_run(glue, req, ns, nl, logit, wb, wb_link, model)
     else:
-        agn_kernel_values_run(glue, req, ns, nl, logit, model)
+        agn_kernel_values_run(glue, req, ns, nl, logit, wb, wb_link, model)
 
 
 def _kernel_values_over(fields: PythonObject, args: PythonObject, var context: PythonObject,
@@ -1359,22 +1359,40 @@ def _kernel_values_over(fields: PythonObject, args: PythonObject, var context: P
     var nl = trees_address(fnull)
     # The device forest route needs the model once (fx), through the same handle as every other route.
     _forest_words(s.dev, s.bg, req)
-    _open(em, s, x, n, context)
-    if em.meta:
-        # The meta's glue, resolved here with the GIL held; the members' plans stay in `em` through the RUN.
-        var meta = AgnMeta(em.meta_plan, req.x, n, d, em.meta_parallel, req.host, _xr(em.meta_xt))
-        _kernel_with(meta, em.meta_gil_free, glue, req, ns, nl, logit)
-        _ = meta^
-    elif em.native:
-        var handle = _handle_of(em, req.x, n, d, k, req.host, glue)
-        _kernel_with(handle, em.gil_free, glue, req, ns, nl, logit)
-        _ = handle^
+    var wb = 0
+    var wb_link = 0
+    var lin = PythonObject(None)
+    if not req.device_forest():
+        # The resident linear block (lane vdf-explain): KernelExplainer over this library's linear predict on a
+        # GPU build evaluates it on the device per chunk, as PermutationExplainer does (`_linear_block` answers
+        # None on the host column and every other build).
+        lin = _linear_block(s, context)
+        if lin is not None:
+            wb = trees_address(lin[0])
+            wb_link = Int(py=lin[1])
+    if lin is not None:
+        # The model is never called on this route (fx too is the device's linear decision): nothing is opened.
+        var unused = _Unevaluated()
+        _kernel_with(unused, True, glue, req, ns, nl, logit, wb, wb_link)
+        _ = unused^
     else:
-        # A label propagation model (`_open` raised for anything it did not serve): the typed query, released
-        # as the public predict_proba releases it; the request's buffers stay in `em`.
-        var lp = AgnLabelProp(em.lp_drivers[0], em.lp_requests[0], em.lp_name, req.x, n, d)
-        _kernel_with(lp, True, glue, req, ns, nl, logit)
-        _ = lp^
+        _open(em, s, x, n, context)
+        if em.meta:
+            # The meta's glue, resolved here with the GIL held; the members' plans stay in `em` through the RUN.
+            var meta = AgnMeta(em.meta_plan, req.x, n, d, em.meta_parallel, req.host, _xr(em.meta_xt))
+            _kernel_with(meta, em.meta_gil_free, glue, req, ns, nl, logit, wb, wb_link)
+            _ = meta^
+        elif em.native:
+            var handle = _handle_of(em, req.x, n, d, k, req.host, glue)
+            _kernel_with(handle, em.gil_free, glue, req, ns, nl, logit, wb, wb_link)
+            _ = handle^
+        else:
+            # A label propagation model (`_open` raised for anything it did not serve): the typed query, released
+            # as the public predict_proba releases it; the request's buffers stay in `em`.
+            var lp = AgnLabelProp(em.lp_drivers[0], em.lp_requests[0], em.lp_name, req.x, n, d)
+            _kernel_with(lp, True, glue, req, ns, nl, logit, wb, wb_link)
+            _ = lp^
+    _ = lin
     _ = x
     _ = fnull
     _ = s.bg  # the background the RUN read through req.bg
@@ -1440,8 +1458,8 @@ def _linear_block(s: _State, context: PythonObject) raises -> PythonObject:
 
 
 struct _Unevaluated(AgnModel):
-    """The model of a Permutation SHAP route that never evaluates it (the device forest, the resident linear
-    block: both evaluate on the device per chunk). Any call raises."""
+    """The model of a route that never evaluates it (Permutation SHAP's device forest; the resident linear block of
+    Permutation and Kernel SHAP: each evaluates on the device per chunk). Any call raises."""
 
     def __init__(out self):
         pass

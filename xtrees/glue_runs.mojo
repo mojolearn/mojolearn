@@ -36,6 +36,7 @@ from xtrees.glue_abi import (
     XT_WEIGHTED_SAMPLE, XT_KSHAP_SCHEDULE, XT_KSHAP_SYNTH, XT_KSHAP_SOLVE, XT_KSHAP_MEANS, XT_KSHAP_SOLVE_EY,
     XT_PSHAP_SYNTH, XT_PSHAP_VALUES, XT_PSHAP_DSYNTH, XT_PSHAP_DVALUES, XT_PSHAP_VALUES_LINEAR, XT_AGN_MODEL_LOAD,
     XT_AGN_MODEL_RELEASE, XT_KSHAP_SOLVE_MODEL, XT_PSHAP_VALUES_MODEL, XT_AGN_POOL_RELEASE, XT_BLOCK_MEAN, XT_LOGIT,
+    XT_KSHAP_SOLVE_LINEAR,
 )
 from xtrees import agnostic_device as agn_dev
 from xtrees import agnostic_host as agn_host
@@ -1353,6 +1354,25 @@ def pshap_values_linear_run(c: XtCall) raises -> Int:
     return p[0]
 
 
+def kshap_solve_linear_run(c: XtCall) raises -> Int:
+    """MOJOLEARN_IDN_PSHAP_RESIDENT (lane vdf-explain): a chunk of KernelExplainer values over one of this library's
+    linear models, masks, synthetic rows, the model, the means and the solve on the device: addresses = [x Float32
+    R x d, bg Float32 nb x d, wb Float32 k x (d + 1), fnull, size_off, size_w, cdf, phi]; params =
+    x_trees_kshap_solve's 13 words, then the linear model's link word (0, 1 or 2)."""
+    _addrs(c, 8, "x_trees_kshap_solve_linear")
+    var p = _agn_ints(c, 14, "x_trees_kshap_solve_linear")
+    _kshap_check(p, "x_trees_kshap_solve_linear")
+    if p[11] < 1 or p[13] < 0 or p[13] > 2:
+        raise Error("x_trees_kshap_solve_linear: bad counts")
+    comptime if XTREES_DEVICE_OPS and agn_dev.PSHAP_IDN_RESIDENT:
+        agn_dev.kshap_solve_linear(_a(c, 0), _a(c, 1), _a(c, 2), _a(c, 3), _a(c, 4), _a(c, 5), _a(c, 6), _a(c, 7),
+                                   p[0], p[1], p[2], p[11], p[4], p[3], p[5], p[7], p[6], p[9], p[8], UInt64(p[10]),
+                                   p[12] != 0, p[13])
+    else:
+        raise Error("x_trees_kshap_solve_linear: built without MOJOLEARN_IDN_PSHAP_RESIDENT")
+    return p[0]
+
+
 #: MOJOLEARN_IDN_SHAP_DEVICE_MODEL on an IDENTICAL GPU build (the provider's `_XT_AGN_DEVICE_MODEL`).
 comptime XT_AGN_DEVICE_MODEL = XTREES_DEVICE_OPS and agn_dev.AGN_IDN_DEVICE_MODEL
 
@@ -1591,6 +1611,8 @@ def x_trees_glue_dispatch(op: Int, c: XtCall) raises -> Int:
         return block_mean_run(c)
     if op == XT_LOGIT:
         return logit_run(c)
+    if op == XT_KSHAP_SOLVE_LINEAR:
+        return kshap_solve_linear_run(c)
     raise Error("x_trees glue: unknown operation " + String(op))
 
 
