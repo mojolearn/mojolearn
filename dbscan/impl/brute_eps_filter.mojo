@@ -59,12 +59,18 @@ device memory, and `m n` fits an int32): one `identical_gemm` (`xc[range] . xc^T
 which has the reference kernel's tile and epilogue (64 x 64 pairs a block, 4 x 4 a thread, the same bit and
 degree reductions) with the accumulate loop replaced by one load of `g` per pair.
 
-WHEN IT IS NOT WORTH IT, DECIDED AT RUN TIME FROM THE DATA IN FRONT OF IT. The recheck recomputes a thread's 4
-pairs of a row from global memory, and a warp runs it while any of its 32 lanes needs it; when more than about
-1 / (32 x 4) of the pairs are uncertain most warps recheck and the filter is overhead. The first range of the
-degrees pass counts its uncertain pairs (one scalar readback a fit); above 1 / `DBF_DECLINE_DEN` (1/256) the
-fit continues on `bef_eps_kernel`. That covers data whose distances crowd the threshold and data the centre
-does not fit (an outlier dragging the mean, norms above the cap). Cost reasoning only; the A/B decides it.
+WHEN IT IS NOT WORTH IT, DECIDED AT RUN TIME FROM THE DATA IN FRONT OF IT (lane ab-outcome-1, 2026-11-24;
+`brute_edge_free.bef_filtered_fit`, THE COST RULE). The first A/B (nvc-ab-20261124T070727Z-69dac2, L40S) halved
+a 220-feature fit (575 -> 296 s) and did not speed an 11-feature one (1.02 at 250,000 rows, not faster at full
+size). Per pair the reference spends work proportional to k; the filter spends the GEMM's (also proportional
+to k, at a far higher rate), a fixed round trip of the product through device memory, and the recheck of the
+open pairs (a warp reruns its row's k features from global memory while any of its 32 lanes x 4 pairs is
+open, so the open fraction costs about 128x its size in warps). Which side wins depends on k AND on how the
+distances crowd the threshold, so the fit times the filter and `bef_eps_kernel` on the same probe rows of the
+degrees pass (at most an eighth of the rows) and keeps the faster. The first range also counts its open pairs
+(one scalar readback), printed with the probe's times under phase timing: the evidence a decline leaves. The
+old fixed rule (decline above 1 / 256 open pairs) is replaced by the timing; it could not see the k-independent
+costs. Cost reasoning only; the next A/B decides it.
 
 SCOPE. The brute edge-free route of `identical` (NVIDIA and AMD), squared-L2 arithmetic (euclidean, and cosine
 on its unit rows); L1 has no expanded form and keeps the reference kernel. Not carried to radius neighbours,
@@ -103,7 +109,8 @@ from gemm.checks.gemm_identical import (
 from gemm.contract import OP_NT
 
 
-#: The switch: default OFF, A/B owed (bench/results/paper_compare/owed-pre0867.json arm dbscan-brute-eps-filter).
+#: The switch: default OFF, A/B owed with the wave-3 sha (bench/results/paper_compare/owed-pre0867.json arm
+#: dbscan-brute-eps-filter): the first A/B was split (module docstring), and the timed probe is the new form.
 #: Read only on the brute edge-free route, which exists under IDENTICAL on NVIDIA and AMD.
 comptime DBSCAN_BRUTE_EPS_FILTER = (
     is_defined["MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER"]() and IDN_DBSCAN_EDGE_FREE
@@ -123,9 +130,6 @@ comptime DBF_MAX_CELLS = 2147483647
 #: The product buffer's (and the centred copy's) share of the free device memory, in percent: the share the
 #: bit matrix of the route takes (`BEF_BM_SHARE_PCT`).
 comptime DBF_G_SHARE_PCT = 25
-#: The fit leaves the filter when more than 1 / this of the probe range's pairs needed the recheck (module
-#: docstring: 32 lanes x 4 pairs share one recheck, so past about 1/128 most warps run it; half of that).
-comptime DBF_DECLINE_DEN = 256
 #: Row-strided partial sums of the column means (blocks along grid.x): enough blocks to fill any device.
 comptime DBF_MEAN_PARTS = 1024
 comptime DBF_TPB = 256
