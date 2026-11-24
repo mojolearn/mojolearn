@@ -13,6 +13,8 @@
 # `log_loss_options`), rebuilt here with the same arena layout, the same
 # stage records in the same order and the same declared outputs, run by the
 # shared runner. Same kernels, same programs: the bits do not move.
+from bindings.metrics_slot_door import mc_slot_inputs
+from metrics.slot_ops import MS_ACCURACY, MS_ACCURACY_W
 from bindings.operation_names_mcls import (
     MCLS_OPN_FAMILY_MCLS_ACCURACY,
     MCLS_OPN_FAMILY_MCLS_ACCURACY_FRACTION,
@@ -169,14 +171,27 @@ def _accuracy(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var result: PythonObject
     if args[4] is not None:
         var w = mc_weights(args[4], n, "accuracy_score", context)
-        result = family_call(mc_entry(args[0], "accuracy_score_weighted"), classical_address(yt),
-                             classical_address(yp), classical_address(w), params)
+        # resident() inputs read in place (lane vdf-xm-kernels): raw int32 labels and the weights
+        var w_values: List[PythonObject] = [yt, yp, w]
+        var w_ints: List[Int] = [n]
+        var device = mc_slot_inputs(args[0], MS_ACCURACY_W, w_values, w_ints, List[Float64](), List[Int](), context)
+        if device:
+            result = device.value()
+        else:
+            result = family_call(mc_entry(args[0], "accuracy_score_weighted"), classical_address(yt),
+                                 classical_address(yp), classical_address(w), params)
         _ = yt  # keep the Python object alive through the native call above
         _ = w  # keep the Python object alive through the native call above
         _ = yp  # keep the Python object alive through the native call above
         _ = w^
     else:
-        result = family_call(mc_entry(args[0], "accuracy_score"), classical_address(yt), classical_address(yp), params)
+        var a_values: List[PythonObject] = [yt, yp]
+        var a_ints: List[Int] = [n]
+        var device = mc_slot_inputs(args[0], MS_ACCURACY, a_values, a_ints, List[Float64](), List[Int](), context)
+        if device:
+            result = device.value()
+        else:
+            result = family_call(mc_entry(args[0], "accuracy_score"), classical_address(yt), classical_address(yp), params)
         _ = yp  # keep the Python object alive through the native call above
         _ = yt  # keep the Python object alive through the native call above
     _ = yt^

@@ -15,6 +15,8 @@
 # fold words become the score with the same handful of binary64 operations
 # `_FoldCurve.auc` made, every product pinned (checks/numerics.mojo
 # `pinned_mul_f64`: Python never fuses). Same kernels: the bits do not move.
+from bindings.metrics_slot_door import mc_slot_inputs
+from metrics.slot_ops import MS_ROC_AUC, MS_PR_CURVE
 from bindings.operation_names_mcls import (
     MCLS_OPN_FAMILY_MCLS_PR_CURVE,
     MCLS_OPN_FAMILY_MCLS_ROC_AUC,
@@ -341,6 +343,13 @@ def _roc_auc(args: PythonObject, context: PythonObject) raises -> PythonObject:
     if mc_len(classes) != 2:
         raise Error("roc_auc_score requires both positive and negative classes")
     var encoded = mc_map_equal(true, classes[1], context)
+    # A score vector resident in the active resident() scope is read in place
+    # (lane vdf-xm-kernels); the labels' codes are this door's host encode.
+    var roc_values: List[PythonObject] = [encoded, scores]
+    var roc_ints: List[Int] = [true.n]
+    var device = mc_slot_inputs(args[0], MS_ROC_AUC, roc_values, roc_ints, List[Float64](), List[Int](), context)
+    if device:
+        return family_call(mc_b().float, device.value())
     var result = family_array(Python.tuple(1), "<f4", context)
     _ = family_call(mc_entry(args[0], "roc_auc_score"), classical_address(encoded), classical_address(scores),
                     classical_address(result), Python.list(PythonObject(true.n)))
@@ -436,7 +445,16 @@ def _pr_curve(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var precision = family_array(Python.tuple(n + 1), "<f4", context)
     var recall = family_array(Python.tuple(n + 1), "<f4", context)
     var thresholds = family_array(Python.tuple(n), "<f4", context)
-    var size = mc_int(family_call(mc_entry(args[0], "precision_recall_curve"), classical_address(encoded),
+    var curve_values: List[PythonObject] = [encoded, scores]
+    var curve_ints: List[Int] = [n]
+    var curve_outs: List[Int] = [Int(py=classical_address(precision)), Int(py=classical_address(recall)),
+                                 Int(py=classical_address(thresholds))]
+    var device = mc_slot_inputs(args[0], MS_PR_CURVE, curve_values, curve_ints, List[Float64](), curve_outs, context)
+    var size: Int
+    if device:
+        size = mc_int(device.value())
+    else:
+        size = mc_int(family_call(mc_entry(args[0], "precision_recall_curve"), classical_address(encoded),
                                   classical_address(scores), classical_address(precision), classical_address(recall),
                                   classical_address(thresholds), Python.list(PythonObject(n))))
     _ = encoded  # keep the Python object alive through the native call above
