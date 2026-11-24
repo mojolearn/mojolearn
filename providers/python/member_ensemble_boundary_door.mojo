@@ -3754,12 +3754,47 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             # (core/msel_scorer_run.mojo `_multi_output_refusal`) or scores a
             # regression row over the labels' values, rows x outputs. No
             # pos_label or `labels` code is read: the side refuses before
-            # either (scikit-learn's `_check_targets` first). A probability or
-            # decision row is not typed: MultiOutputClassifier answers a list
-            # of per-output blocks that each metric reads its own way
-            # (mf-rows8b-work/rows.tsv).
-            if row.op != MEMBER_OP_PREDICT:
-                return False
+            # either (scikit-learn's `_check_targets` first).
+            # LANE mf-r9c (row :3761): a PROBABILITY row. The class answers a
+            # list of per-output blocks; each side reads the fold estimator's
+            # `classes_` and the metric's handling of that list in scikit-
+            # learn's words (core/msel_scorer_run.mojo `_multi_classes`,
+            # `_multi_proba_value`) from the outputs' label value words read
+            # here once, the effective pos_label (None or not; for
+            # average_precision whether it is 1) and a `labels` kwarg's
+            # in-labels flags (`_multi_labels_flags`). REMOVED: the False exit
+            # that sent every such scorer to the door's units.
+            if row.op == MEMBER_OP_DECISION:
+                # the scorer's response rule takes decision_function only when
+                # the class has it; no native multi-output classifier kind
+                # answers it (its member lacks MEMBER_CAN_DECISION), and
+                # hinge_loss on such a class is a stand-in row above
+                raise Error("RuntimeError: search admission invariant: a multi-output classifier is scored by "
+                            + "decision_function")
+            if row.op == MEMBER_OP_PREDICT_PROBA:
+                _multi_label_values(labels, sels, opts, extra_words, b)
+                var op_ne = native_loaded_module("operator").ne
+                if msel_scorer_ap(row):
+                    # average_precision_score's pos_label=1 unless given
+                    opts.pos_given = not kw.given_pos or kw.pos_label is not None
+                    if kw.given_pos and Bool(py=py_call(b.bool, py_call(op_ne, kw.pos_label, PythonObject(1)))):
+                        opts.wmode = 1
+                elif kw.given_pos and kw.pos_label is not None:
+                    opts.pos_given = True  # brier_score_loss / d2_brier_score's given pos_label
+                if kw.labels is not None and (msel_scorer_log_loss(row) or msel_scorer_brier(row)
+                                              or msel_scorer_d2_proba(row)):
+                    _multi_labels_flags(labels, kw.labels, sels, opts, extra_words, b)
+                others = True
+                codes.append(code)
+                positives.append(-1)
+                options.append(opts)
+                var seen_q = False
+                for o in range(len(responses)):  # small-loop(the distinct responses, at most three)
+                    seen_q = seen_q or responses[o] == row.op
+                if not seen_q:
+                    responses.append(row.op)
+                needs |= MEMBER_CAN_PREDICT_PROBA
+                continue
             _multi_label_values(labels, sels, opts, extra_words, b)
             if msel_scorer_cluster_entry(row):
                 cluster_entry = True
@@ -4829,6 +4864,69 @@ def _multi_label_values(labels: PythonObject, mut sels: List[Int32], mut opts: M
             sels.append(Int32(kind))
             total += 1
     opts.lv_n = total
+
+
+def _multi_labels_flags(labels: PythonObject, given: PythonObject, mut sels: List[Int32],
+                        mut opts: MselScorerOptions, mut extra_words: List[String], b: PythonObject) raises:
+    """UNPACK (lane mf-r9c): a `labels` kwarg of log_loss / brier_score_loss /
+    the D^2 scores on a MULTI-OUTPUT classifier, read ONCE: one flag per
+    output label in value-word order (1: equal to a listed label, as
+    `np.isin` compares), then two label-word indexes (-1: none) for the
+    refusals `_one_hot_encoding_multiclass_target` raises from the labels
+    alone (sklearn 1.9 metrics/_classification.py lines 178-215):
+    LabelBinarizer's fit of an empty list ("y has 0 samples: %r",
+    preprocessing/_label.py) and fewer than two distinct labels ("The labels
+    array needs to contain at least two labels, got <classes_>": NumPy's
+    print of the one class: a string's repr, a whole float as `1.`). The RUN
+    reads them per side in that order (core/msel_scorer_run.mojo
+    `_multi_proba_value`)."""
+    var listed = py_call(b.list, given)
+    var eq = native_loaded_module("operator").eq
+    opts.sel_from = len(sels)
+    var total = 0
+    for j in range(len(labels)):  # driver-loop: over the outputs (their labels, once per admission)
+        var items = py_call(b.list, labels[j])
+        for i in range(len(items)):  # driver-loop: over one output's labels (each against the listed ones)
+            var found = False
+            for q in range(len(listed)):  # driver-loop: over the listed labels
+                if Bool(py=py_call(b.bool, py_call(eq, items[i], listed[q]))):
+                    found = True
+                    break
+            sels.append(Int32(1) if found else Int32(0))
+            total += 1
+    var empty_word = -1
+    var one_word = -1
+    if len(listed) == 0:
+        empty_word = _next_word(labels, True, extra_words, b)
+        extra_words.append("ValueError: y has 0 samples: " + String(py=py_call(b.repr, given)))
+    else:
+        var first = listed[0]
+        var distinct = 1
+        for q in range(1, len(listed)):  # driver-loop: over the listed labels (is there a second one)
+            if not Bool(py=py_call(b.bool, py_call(eq, listed[q], first))):
+                distinct = 2
+                break
+        if distinct == 1:
+            var shown: String
+            if Bool(py=py_call(b.isinstance, first, b.str)):
+                shown = String(py=py_call(b.repr, first))
+            elif py_type(first) is b.bool:
+                shown = String(" True") if Bool(py=first) else String("False")
+            else:
+                shown = String(py=py_call(b.str, first))
+                if py_type(first) is b.float:
+                    try:
+                        var whole = py_call(b.int, first)
+                        if Bool(py=py_call(b.bool, py_call(eq, first, py_call(b.float, whole)))):
+                            shown = String(py=py_call(b.str, whole)) + "."
+                    except:
+                        pass  # nan / inf: printed as `str` gives them
+            one_word = _next_word(labels, True, extra_words, b)
+            extra_words.append("ValueError: The labels array needs to contain at least two labels, got [" + shown
+                               + "].")
+    sels.append(Int32(empty_word))
+    sels.append(Int32(one_word))
+    opts.sel_n = total + 2
 
 
 def _joined_label_words(labels: PythonObject, mut extra_words: List[String], b: PythonObject) raises:

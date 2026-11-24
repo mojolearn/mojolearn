@@ -357,6 +357,14 @@ struct MselScorer(ImplicitlyCopyable, Movable):
     # `lv_n`) then every output's labels in output order
     var outs: Int
     var counts_at: Int
+    # lane mf-r9c: a multi-output classifier's probability row (set by the
+    # search RUN per score like `outs`): the folds' held classes per output
+    # (`mheld_at`, the address of the RUN's List[List[Int32]], fold-major,
+    # one list per output, empty: every class; 0 when no fold lacks one)
+    # and the side's fold, which `_multi_classes` reads as the fold
+    # estimator's `classes_`
+    var mheld_at: Int
+    var fold: Int
 
     def __init__(out self, name: StaticString, family: Int, metric: Int, avg: Int, sign: Float64, op: Int):
         self.name = name
@@ -394,6 +402,8 @@ struct MselScorer(ImplicitlyCopyable, Movable):
         self.fpred = 0
         self.outs = 0
         self.counts_at = 0
+        self.mheld_at = 0
+        self.fold = 0
 
 
 def _nan64() -> Float64:
@@ -658,8 +668,13 @@ def msel_scorer_row(code: Int, opts: MselScorerOptions, sel_base: Int) raises ->
             raise Error("RuntimeError: kappa weights on a search scorer other than cohen_kappa_score")
         row.wmode = opts.wmode
     if opts.lv_n > 0:
-        if row.family != _F_REG:
-            raise Error("RuntimeError: label value words on a search scorer other than a regression row")
+        # A regression row on a classifier (lane mf-score8), and every row on
+        # a MULTI-OUTPUT classifier: its label and clustering rows (lane
+        # mf-rows8b, `_multi_output_refusal` reads their values) and its
+        # probability rows (lane mf-r9c, `_multi_classes`). Lane mf-r9c: the
+        # guard that refused label value words on any row but a regression row
+        # is removed (it refused rows8b's own multi-output label rows, whose
+        # UNPACK hands them).
         row.lv_at = sel_base + 4 * opts.lv_from
         row.lv_n = opts.lv_n
     return row
@@ -1069,6 +1084,17 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
     # length and values per side (bindings/metrics_reg_door.mojo
     # `_reg_weights`' words), average='samples' (1-D targets; the door's
     # words: multilabel targets are NOT IMPLEMENTED, metrics/NOT_IMPLEMENTED.tsv).
+    # LANE mf-r9c: a probability row on a MULTI-OUTPUT classifier's side.
+    # scikit-learn's `_get_response_values` reads `type_of_target` of the fold
+    # estimator's `classes_` (a list, one array per output) before the metric
+    # runs; a 'binary' list fails there (`_multi_classes`).
+    var mclasses = -1
+    var mwidths = List[Int]()
+    if row.outs > 1 and row.counts_at != 0 and row.op != MEMBER_OP_PREDICT:
+        mclasses = _multi_classes(row, label_words, mwidths)
+        if mclasses == _MC_BINARY:
+            raise Error("AttributeError: 'list' object has no attribute " + (String("'tolist'") if row.pos_given
+                        else String("'shape'")))
     if row.w_n < 0:
         raise Error("TypeError: native metric received an unexpected keyword argument")
     if row.w_word == SCORER_WEIGHTS_EMPTY:
@@ -1087,6 +1113,10 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
         if row.refuse_word >= len(label_words):
             raise Error("member ABI: a search scorer's refusal word is missing")
         raise Error(label_words[row.refuse_word])
+    if mclasses >= 0:
+        # lane mf-r9c: the metric over the multi-output response, after the
+        # kwargs' refusals (the metric's parameter validation)
+        return row.sign * _multi_proba_value(row, label_words, truth, count, mclasses, mwidths, notices)
     if row.outs > 1 and row.family != _F_REG:
         # LANE mf-rows8b (rows :3777 / :3779): a label or clustering scorer on
         # a multi-output target, after the kwargs' refusals (scikit-learn's
@@ -1754,6 +1784,223 @@ def _multi_output_refusal(row: MselScorer, truth: Int, response: Int, count: Int
                     + " of type: multilabel-indicator")
     raise Error("NotImplementedError: mojolearn " + msel_scorer_caller(row) + ": y_true is 2-D; multilabel-indicator "
                 + "targets are NOT IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv), only binary and multiclass 1-D labels")
+
+
+#: Lane mf-r9c: `type_of_target` of a multi-output fold estimator's `classes_`
+#: as `_get_response_values` acts on it: any type it hands on unchanged (the
+#: per-output probability LIST reaches the metric), 'binary' (it fails on the
+#: list), 'multilabel-indicator' (the positive columns, rows x outputs).
+comptime _MC_LIST = 0
+comptime _MC_BINARY = 1
+comptime _MC_MULTILABEL = 2
+
+
+def _multi_classes(row: MselScorer, label_words: List[String], mut widths: List[Int]) raises -> Int:
+    """LANE mf-r9c: the fold estimator's `classes_` on a multi-output
+    classifier's side (a list of one array per output: KNeighborsClassifier
+    and MultiOutputClassifier hold each output's `np.unique` of its train
+    labels; here the fold's held classes, `row.mheld_at`, else every class
+    of the output) and `type_of_target` of that list (sklearn 1.9
+    utils/multiclass.py `is_multilabel`, `type_of_target`):
+      * outputs of different class counts are a ragged list, an object array
+        of arrays: 'unknown' (_MC_LIST);
+      * equal counts make a 2-D (outputs, count) array: numbers with at most
+        two distinct values over two or more columns, all integral, are
+        'multilabel-indicator' (_MC_MULTILABEL); a non-integral number is
+        'continuous...' (_MC_LIST); one column with at most two distinct
+        values (numbers or strings) is 'binary' (_MC_BINARY); any other is
+        'multiclass...' (_MC_LIST);
+      * numbers and strings together (an object array) take the list reading
+        (_MC_LIST; scikit-learn's own fit refuses a mixed-kind column).
+    `widths` gets each output's class count (its probability block's
+    columns). Strings are told apart by their value word (a `float()`-able
+    string) or their repr word. A few dozen words per side."""
+    var outs = row.outs
+    var counts = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=row.counts_at)
+    var lv = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=row.lv_at)
+    widths = List[Int](length=outs, fill=0)
+    var numbers = False
+    var texts = False
+    var integral = True
+    var distinct = 0
+    var first = Float32(0.0)
+    var second = Float32(0.0)
+    var seen_text = List[String]()
+    var offset = 0
+    for j in range(outs):  # small-loop(the outputs: their fold classes)
+        var held_n = 0
+        var held = 0
+        if row.mheld_at != 0:
+            var lists = MutPointer[List[Int32], MutUntrackedOrigin](unsafe_from_address=row.mheld_at)
+            held_n = len(lists[row.fold * outs + j])
+            held = Int(lists[row.fold * outs + j].unsafe_ptr())
+        var w = held_n if held_n > 0 else counts[j]
+        widths[j] = w
+        var h = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=held)
+        for q in range(w):  # small-loop(output j's fold classes)
+            var c = Int(h[q]) if held_n > 0 else q
+            var at = offset + c
+            if at < 0 or 2 * at + 1 >= 2 * row.lv_n:
+                raise Error("member ABI: a multi-output classifier's scorer needs one value per output label")
+            var kind = Int(lv[2 * at + 1])
+            if kind == SCORER_LABEL_NUMBER:
+                numbers = True
+                var v = bitcast[DType.float32](lv[2 * at])
+                if not (v >= -9.0e18 and v <= 9.0e18) or Float32(Float64(Int(v))) != v:
+                    integral = False
+                if distinct == 0:
+                    first = v
+                    distinct = 1
+                elif distinct == 1 and v != first:
+                    second = v
+                    distinct = 2
+                elif distinct == 2 and v != first and v != second:
+                    distinct = 3
+            else:
+                texts = True
+                var key = String("v") + String(Int(lv[2 * at]))
+                if kind == SCORER_LABEL_UNREAD:
+                    var word = Int(lv[2 * at])
+                    key = String("r") + (label_words[word] if word >= 0 and word < len(label_words) else String(at))
+                var known = False
+                for s in range(len(seen_text)):  # small-loop(the distinct strings so far, at most three)
+                    known = known or seen_text[s] == key
+                if not known and len(seen_text) < 3:
+                    seen_text.append(key)
+        offset += counts[j]
+    for j in range(1, outs):  # small-loop(the outputs' class counts)
+        if widths[j] != widths[0]:
+            return _MC_LIST
+    var w0 = widths[0]
+    if numbers and texts:
+        return _MC_LIST
+    if numbers:
+        if not integral:
+            return _MC_LIST
+        if w0 >= 2 and distinct < 3:
+            return _MC_MULTILABEL
+        if w0 == 1 and distinct <= 2:
+            return _MC_BINARY
+        return _MC_LIST
+    if w0 == 1 and len(seen_text) <= 2:
+        return _MC_BINARY
+    return _MC_LIST
+
+
+def _multi_proba_value(row: MselScorer, label_words: List[String], truth: Int, count: Int, mclasses: Int,
+                       widths: List[Int], mut notices: List[Float64]) raises -> Float64:
+    """LANE mf-r9c (door :3761): a probability scorer on one side of a
+    MULTI-OUTPUT classifier (KNeighborsClassifier, MultiOutputClassifier:
+    `predict_proba` is a list of one (rows, classes) block per output; no
+    native multi-output kind answers decision_function). After
+    `_get_response_values` (`_multi_classes`), the metric as scikit-learn
+    1.9 runs it on y_true (rows x outputs) and what it was handed:
+      * the LIST (_MC_LIST): `check_array` of it is a 3-D array (equal
+        blocks: utils/validation.py line 1083) or NumPy's inhomogeneous-shape
+        refusal (ragged blocks). roc_auc_score and log_loss / brier_score_loss
+        check it first; average_precision_score first reads y_true's type
+        (`pos_label` fixed to 1, then `_average_binary_score`'s format
+        refusal, metrics/_base.py line 73, and its length check, where the
+        list's length is its outputs); the D^2 scores first check the lengths
+        (metrics/_classification.py lines 3947, 4053);
+      * the positive columns (_MC_MULTILABEL, rows x outputs): roc_auc_score
+        and average_precision_score score a 'multilabel-indicator' y_true and
+        refuse any other type in `_average_binary_score`'s words; log_loss,
+        brier_score_loss and the D^2 scores binarize y_true
+        (`_one_hot_encoding_multiclass_target`): LabelBinarizer refuses a
+        multi-output type; with `labels`, the fit of the labels, their
+        `_isin` check (a 2-D y_true's `set` is unhashable), the two-label
+        check and the transform's multilabel refusal, in that order. A
+        served multilabel-indicator target is Mojolearn's NOT IMPLEMENTED
+        (metrics/NOT_IMPLEMENTED.tsv), the doors' words;
+      * top_k_accuracy_score: `column_or_1d(y_true)` first.
+    The D^2 scores of fewer than two rows over the columns: nan and their
+    warning. The side's labels are read through the row's value words
+    (`_multi_floats`), never its probabilities."""
+    var m = row.outs
+    if row.family == _F_TOP_K:
+        raise Error("ValueError: y should be a 1d array, got an array of shape (" + String(count) + ", " + String(m)
+                    + ") instead.")
+    var yt = List[Float32]()
+    var numeric = True
+    _multi_floats(row, List[String](), truth, count, False, yt, numeric)
+    var target = _multi_type(yt, numeric)
+    var multilabel = target == "multilabel-indicator"
+    var equal = True
+    for j in range(1, len(widths)):  # small-loop(the outputs' block widths)
+        equal = equal and widths[j] == widths[0]
+    var array_words = String("ValueError: Found array with dim 3, while dim <= 2 is required.")
+    if not equal:
+        array_words = ("ValueError: setting an array element with a sequence. The requested array has an "
+                       + "inhomogeneous shape after 2 dimensions. The detected shape was (" + String(m) + ", "
+                       + String(count) + ") + inhomogeneous part.")
+    var weighted = (", " + String(count)) if row.w_n > 0 else String("")
+    var not_implemented = ("NotImplementedError: mojolearn " + msel_scorer_caller(row) + ": y_true is 2-D; "
+                           + "multilabel-indicator targets are NOT IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv), only "
+                           + "binary and multiclass 1-D labels")
+    var format_words = "ValueError: " + target + " format is not supported"
+    if row.family == _F_ROC:
+        if mclasses == _MC_LIST:
+            raise Error(array_words)
+        if multilabel:
+            raise Error(not_implemented)
+        raise Error(format_words)
+    if row.family == _F_AP:
+        if multilabel and row.wmode == 1:
+            raise Error("ValueError: Parameter pos_label is fixed to 1 for multilabel-indicator y_true. Do not set "
+                        + "pos_label or set pos_label to 1.")
+        if not multilabel:
+            raise Error(format_words)
+        if mclasses == _MC_MULTILABEL:
+            raise Error(not_implemented)
+        if count != m:
+            raise Error("ValueError: Found input variables with inconsistent numbers of samples: [" + String(count)
+                        + ", " + String(m) + weighted + "]")
+        raise Error(array_words)
+    if row.family == _F_LOG_LOSS or row.family == _F_BRIER or row.family == _F_D2P:
+        if mclasses == _MC_LIST:
+            if row.family == _F_D2P and m != count:
+                raise Error("ValueError: Found input variables with inconsistent numbers of samples: [" + String(m)
+                            + ", " + String(count) + weighted + "]")
+            raise Error(array_words)
+        if row.family == _F_D2P and count < 2:
+            member_notice_add(notices, MEMBER_NOTICE_METRIC_FEW, 1.0)
+            return _nan64()
+        if row.sel_n > 0:
+            # a `labels` kwarg (the UNPACK's words, `_multi_labels_flags`):
+            # one in-labels flag per output label (value-word order), then
+            # the fit's empty-labels word and the one-label word (-1: none)
+            if row.sel_n != row.lv_n + 2:
+                raise Error("member ABI: a multi-output probability scorer's labels flags are cut short")
+            var flags = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=row.sel_at)
+            var empty_word = Int(flags[row.lv_n])
+            var one_word = Int(flags[row.lv_n + 1])
+            if empty_word >= 0:
+                if empty_word >= len(label_words):
+                    raise Error("member ABI: a search scorer's labels refusal word is missing")
+                raise Error(label_words[empty_word])
+            var counts = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=row.counts_at)
+            var offsets = List[Int](length=m, fill=0)
+            for j in range(1, m):  # small-loop(the outputs' first labels)
+                offsets[j] = offsets[j - 1] + counts[j - 1]
+            var t = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=truth)
+            for i in range(count * m):  # driver-loop: over the side's rows x outputs (is each label listed)
+                var at = offsets[i % m] + Int(t[i])
+                if at < 0 or at >= row.lv_n:
+                    raise Error("ValueError: y codes outside [0, n_classes)")
+                if flags[at] == Int32(0):
+                    raise Error("TypeError: unhashable type: 'numpy.ndarray'")
+            if one_word >= 0:
+                if one_word >= len(label_words):
+                    raise Error("member ABI: a search scorer's labels refusal word is missing")
+                raise Error(label_words[one_word])
+            if multilabel:
+                raise Error("ValueError: The object was not fitted with multilabel input.")
+            raise Error("ValueError: Multioutput target data is not supported with label binarization")
+        if multilabel:
+            raise Error(not_implemented)
+        raise Error("ValueError: Multioutput target data is not supported with label binarization")
+    raise Error("RuntimeError: a multi-output classifier's probability scorer of no typed family")
 
 
 def _present_count(truth: Int, count: Int, classes: Int) -> Int:
