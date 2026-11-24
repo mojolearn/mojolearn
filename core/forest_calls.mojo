@@ -241,12 +241,14 @@ def xf_fit_rows(key: EntryRef, classifier: Bool, args: ForestFitArgs) raises -> 
     return _fit(key, XF_FIT_ROWS, XF_SHAPE_CLASSIFIER if classifier else 0, args)
 
 
-def xf_resident_rows(key: EntryRef, labels: Bool, handle: Int, store_id: Int, idx: Int, out_addr: Int,
+def xf_resident_rows(key: EntryRef, mode: Int, handle: Int, store_id: Int, idx: Int, out_addr: Int,
                      rows: Int, cols: Int, outputs: Int) raises -> Int:
     """XF_RESIDENT_ROWS (lane vdf-scope-trees2a; an image with
-    XF_CAP_DEV_ROWS): the resident vote (float32 at `out_addr`) or, with
-    `labels`, the int32 codes of rows `idx` (`rows` host int64 words) of
-    the image's device store slot `store_id`, taken on the device."""
+    XF_CAP_DEV_ROWS): the resident vote (`mode` 0, float32 at `out_addr`),
+    the int32 codes (1) of rows `idx` (`rows` host int64 words) of the
+    image's device store slot `store_id`, taken on the device, or (2, lane
+    vdf-scope-trees3) the count of those rows whose code equals the int32
+    true code at `out_addr` (read on the device)."""
     var addrs: List[Int] = [handle, idx, out_addr]
-    var ints: List[Int] = [rows, cols, outputs, store_id, 1 if labels else 0]
+    var ints: List[Int] = [rows, cols, outputs, store_id, mode]
     return _call(key, XF_RESIDENT_ROWS, addrs, ints)

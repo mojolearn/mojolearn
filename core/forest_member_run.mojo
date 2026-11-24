@@ -76,7 +76,14 @@ are gathered on the host (one word a row), in row tasks. PREDICT / SCORE:
 under the same scope, on the resident route, the same store slot (a hit in
 the scope's cache) and the image's resident snapshot reads the rows taken on
 the device (XF_RESIDENT_ROWS: the image's store, fits and snapshots share
-its one context); otherwise the rows are gathered on the host.
+its one context); otherwise the rows are gathered on the host. A
+classifier's score there reads the fold's y on the device against those
+codes (XF_RESIDENT_ROWS mode 2, lane vdf-scope-trees3): one count comes back.
+y and the weights of a fit are not kept in the store: they belong to no
+pinned object (THE PIN RULE), so a scope cache entry keyed by their address
+could be hit by a later buffer at the same address (the permutation test's
+shuffled y under its enclosing scope); they are gathered per fold (one word a
+row) and uploaded by the fit as before.
 
 Fits, as the estimator's own fit door picks them: unweighted without
 importances reads X row-major (the view itself, no copy); the ExtraTrees
@@ -1027,7 +1034,7 @@ def _vote(slot: _SlotPtr, q: _Query, dst: Int) raises:
     var wrote = 0
     if q.store_id >= 0:
         # XF_RESIDENT_ROWS: the fold's rows taken on the device (resident route)
-        wrote = xf_resident_rows(slot[].key, False, slot[].snapshot, q.store_id, q.index, dst, x.rows, x.cols,
+        wrote = xf_resident_rows(slot[].key, 0, slot[].snapshot, q.store_id, q.index, dst, x.rows, x.cols,
                                  slot[].outputs)
     elif slot[].route == FOREST_ROUTE_SEQUENTIAL:
         var model: List[Int] = [Int(slot[].offsets.unsafe_ptr()), Int(slot[].colid.unsafe_ptr()),
@@ -1052,7 +1059,7 @@ def _codes(slot: _SlotPtr, q: _Query, dst: Int) raises:
     if slot[].labels:
         var wrote = 0
         if q.store_id >= 0:
-            wrote = xf_resident_rows(slot[].key, True, slot[].snapshot, q.store_id, q.index, dst, x.rows, x.cols,
+            wrote = xf_resident_rows(slot[].key, 1, slot[].snapshot, q.store_id, q.index, dst, x.rows, x.cols,
                                      slot[].outputs)
         else:
             wrote = xf_resident_labels(slot[].key, slot[].snapshot, x.data, dst, x.rows, x.cols, slot[].outputs)
@@ -1115,9 +1122,19 @@ def _score(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], est
         y_fold = List[Int32](length=rows, fill=0)
         _take_rows_i32(call[].y.data, index, rows, Int(y_fold.unsafe_ptr()))
         y_addr = Int(y_fold.unsafe_ptr())
-    var codes = List[Int32](length=rows, fill=0)
-    _codes(slot, q, Int(codes.unsafe_ptr()))
-    var hits = _count_equal(Int(codes.unsafe_ptr()), y_addr, rows)
+    var codes = List[Int32]()
+    var hits: Int
+    _ensure_prepared(slot)
+    if q.store_id >= 0 and slot[].labels and rows > 0:
+        # XF_RESIDENT_ROWS mode 2 (lane vdf-scope-trees3): the fold's y is
+        # read ON THE DEVICE against the codes the snapshot made of the rows
+        # it took there; one word (the matching count) comes back, no codes.
+        hits = xf_resident_rows(slot[].key, 2, slot[].snapshot, q.store_id, q.index, y_addr, rows, x.cols,
+                                slot[].outputs)
+    else:
+        codes = List[Int32](length=rows, fill=0)
+        _codes(slot, q, Int(codes.unsafe_ptr()))
+        hits = _count_equal(Int(codes.unsafe_ptr()), y_addr, rows)
     _ = len(codes)
     _ = len(q.x_fold)
     _ = len(y_fold)

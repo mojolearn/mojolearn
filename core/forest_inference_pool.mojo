@@ -20,7 +20,7 @@ from core.device_fold import device_exclusive_scan_total
 from core.multi_gpu import transfer_bytes
 from core.forest_inference import (
     forest_add, reached_leaf, FOREST_PACKED_NODES, FOREST_FINITE_TPB, device_ptr_all_finite,
-    device_all_finite, launch_forest_argmax, forest_pack_resident, forest_validate_device,
+    device_all_finite, launch_forest_argmax, forest_count_equal, forest_pack_resident, forest_validate_device,
     _forest_tree_of,
 )
 
@@ -662,31 +662,40 @@ struct PooledForest(Movable):
             return
         var no_ctx = Optional[DeviceContext]()
         var no_src = Optional[DeviceBuffer[DType.float32]]()
-        self._labels_out[RF_INPUT](x, no_ctx, no_src, output, rows)
+        _ = self._labels_out[RF_INPUT](x, no_ctx, no_src, output, rows)
 
     def predict_labels_rows_into[RF_INPUT: Bool](mut self, src_ctx: DeviceContext,
         var dx: DeviceBuffer[DType.float32], output: MutPointer[Int32, MutAnyOrigin], rows: Int,
-    ) raises:
+        score: Bool = False,
+    ) raises -> Int:
         """`predict_labels_into` on rows already resident in `dx` on
-        `src_ctx` (as `predict_rows_into`; lane vdf-scope-trees3)."""
+        `src_ctx` (as `predict_rows_into`; lane vdf-scope-trees3); rows
+        written. `score`: `output` holds the rows' int32 true codes, compared
+        on owner 0's device (`forest_count_equal`); the matching row count."""
         if rows <= 0:
-            return
+            return 0
         var ctx_given = Optional[DeviceContext](src_ctx.copy())
         var src_given = Optional[DeviceBuffer[DType.float32]](dx^)
         var unused = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(output))
-        self._labels_out[RF_INPUT](unused, ctx_given, src_given, output, rows)
+        return self._labels_out[RF_INPUT](unused, ctx_given, src_given, output, rows, score)
 
     def _labels_out[RF_INPUT: Bool](mut self, x: MutPointer[Float32, MutAnyOrigin],
         src_ctx: Optional[DeviceContext], mut src: Optional[DeviceBuffer[DType.float32]],
-        output: MutPointer[Int32, MutAnyOrigin], rows: Int,
-    ) raises:
+        output: MutPointer[Int32, MutAnyOrigin], rows: Int, score: Bool = False,
+    ) raises -> Int:
+        """The codes (rows written) or, with `score`, the count of codes
+        equal to the true codes at `output` (read on owner 0's device)."""
         var dout = self._finish_resident[RF_INPUT](x, src_ctx, src, rows)
         ref ctx = self.owners[0].ctx.value()
         var dlab = ctx.enqueue_create_buffer[DType.int32](rows)
+        var answer = rows
         try:
             launch_forest_argmax(ctx, dout, dlab, rows, self.outputs)
-            ctx.enqueue_copy(dst_ptr=output, src_buf=dlab)
-            ctx.synchronize()
+            if score:
+                answer = forest_count_equal(ctx, dlab, Int(output), rows)
+            else:
+                ctx.enqueue_copy(dst_ptr=output, src_buf=dlab)
+                ctx.synchronize()
         except e:
             ctx.synchronize()
             _ = dout^
@@ -694,3 +703,4 @@ struct PooledForest(Movable):
             raise e
         _ = dout^
         _ = dlab^
+        return answer

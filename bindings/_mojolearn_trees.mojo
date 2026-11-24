@@ -527,12 +527,12 @@ struct EtGpuForest(ForestImage):
         return _et_regressor_fit[False, True](args)
 
     @staticmethod
-    def resident_rows(labels: Bool, handle: Int, store_id: Int, idx: Int, out_addr: Int, rows: Int,
+    def resident_rows(mode: Int, handle: Int, store_id: Int, idx: Int, out_addr: Int, rows: Int,
                       cols: Int, outputs: Int) raises -> Int:
         # XF_RESIDENT_ROWS (lane vdf-scope-trees2a): the rows of the store
         # taken on the device and read there by the snapshot (one context).
         var store = ET_STORE.get_or_create_ptr()
-        return forest_resident_rows_native[False](store[], et_store_ctx(), labels, handle, store_id, idx,
+        return forest_resident_rows_native[False](store[], et_store_ctx(), mode, handle, store_id, idx,
                                                   out_addr, rows, cols, outputs)
 
 

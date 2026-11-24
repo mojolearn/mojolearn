@@ -95,10 +95,10 @@ def forest_predict_resident_labels_gpu_native[RF_INPUT: Bool](
     return rows
 
 
-def forest_resident_rows_native[RF_INPUT: Bool](mut store: DeviceStore, ctx: DeviceContext, labels: Bool,
+def forest_resident_rows_native[RF_INPUT: Bool](mut store: DeviceStore, ctx: DeviceContext, mode: Int,
     handle: Int, store_id: Int, idx_addr: Int, out_addr: Int, rows: Int, features: Int, outputs: Int) raises -> Int:
     """XF_RESIDENT_ROWS (lane vdf-scope-trees2a): the resident vote
-    (float32 at `out_addr`) or, with `labels`, the int32 codes of rows
+    (`mode` 0, float32 at `out_addr`) or (1) the int32 codes of rows
     `idx_addr` (`rows` host int64 words) of the image's device store slot
     `store_id` (row-major, `features` words a row). The rows are taken on
     the device (`DeviceStore.take_rows`, on `ctx`: the image's one context,
@@ -110,9 +110,15 @@ def forest_resident_rows_native[RF_INPUT: Bool](mut store: DeviceStore, ctx: Dev
     device to device (core/forest_inference_pool.mojo `contribution_rows`;
     on AMD across two devices `transfer_bytes` stages through pinned host
     memory, its documented MI300X ordering fix). The host read of the taken
-    rows that path made before is gone."""
+    rows that path made before is gone. Mode 2 (lane vdf-scope-trees3, a
+    classifier's score): `out_addr` holds the rows' int32 true codes, read
+    on the device against the predicted codes; returns the matching row
+    count (one word read back, no codes)."""
     if rows < 0 or features < 1 or outputs < 1:
         raise Error("invalid resident prediction dimensions")
+    if mode < 0 or mode > 2:
+        raise Error("invalid resident prediction mode")
+    var labels = mode != 0
     if labels and outputs < 2:
         raise Error("invalid resident label prediction dimensions")
     if rows > 2147483647 // features or rows > 2147483647 // outputs:
@@ -120,11 +126,12 @@ def forest_resident_rows_native[RF_INPUT: Bool](mut store: DeviceStore, ctx: Dev
     if rows == 0:
         return 0
     var taken = store.take_rows(ctx, store_id, features, idx_addr, rows)
+    var answer = rows
     try:
         var dx = store._held(taken, rows * features)
         if labels:
-            resident_labels_rows_into[RF_INPUT](handle, ctx, dx,
-                _i32_ptr(out_addr).unsafe_origin_cast[MutAnyOrigin](), rows, features, outputs)
+            answer = resident_labels_rows_into[RF_INPUT](handle, ctx, dx,
+                _i32_ptr(out_addr).unsafe_origin_cast[MutAnyOrigin](), rows, features, outputs, mode == 2)
         else:
             resident_predict_rows_into[RF_INPUT](handle, ctx, dx,
                 _f32_ptr(out_addr).unsafe_origin_cast[MutAnyOrigin](), rows, features, outputs)
@@ -133,7 +140,7 @@ def forest_resident_rows_native[RF_INPUT: Bool](mut store: DeviceStore, ctx: Dev
         store.free(ctx, taken)
         raise problem^
     store.free(ctx, taken)
-    return rows
+    return answer
 
 
 def forest_gpu_resident_caps() -> Int:

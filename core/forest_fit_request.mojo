@@ -97,9 +97,12 @@ published in `core/forest_entry_table.mojo`; descriptor shape of
                       the host-gathered rows. Returns an export handle.
   XF_RESIDENT_ROWS    (lane vdf-scope-trees2a, 2026-11-24; XF_CAP_DEV_ROWS)
                       addrs [handle, idx, out], ints [rows, cols, outputs,
-                      store id, labels]: XF_RESIDENT_PREDICT (labels 0,
-                      float32 out) or XF_RESIDENT_LABELS (labels 1, int32
-                      codes) on rows `idx` (host int64, `rows` of them) of
+                      store id, mode]: XF_RESIDENT_PREDICT (mode 0,
+                      float32 out) or XF_RESIDENT_LABELS (mode 1, int32
+                      codes); mode 2 (lane vdf-scope-trees3, a classifier's
+                      score): `out` holds the rows' int32 true codes, read
+                      on the device against the codes, and the call
+                      returns the matching row count; on rows `idx` (host int64, `rows` of them) of
                       the image's DEVICE STORE slot `store id` (the WHOLE X,
                       row-major, `cols` words a row), taken on the device and
                       read there by the snapshot (the store, the fits and
