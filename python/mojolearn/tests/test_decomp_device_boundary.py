@@ -9,8 +9,8 @@ always runs. These four classes have a field-only constructor and `set_params`, 
 checked where it is given (the constructor, `set_params`) and read once, when the estimator's route is resolved,
 into the one native route owner (providers/python/device_route_boundary_door.mojo); `get_params`, `set_params`,
 clone and pickle carry it, and `set_params(device=...)` resolves again. No public call reads the device. On a GPU installation both images exist in one process and `device="cpu"` runs the CPU
-binaries (`vendor_used() == "cpu"`); in `identical` mode it returns the bits the GPU returns. These tests run on a GPU
-installation and on a CPU-only one; what needs two devices is skipped by name on the CPU-only one.
+binaries (`vendor_used() == "cpu"`); that it returns the bits the GPU returns is the verify lanes' (pca, tsvd,
+x-decomp-ipca, x-decomp-nmf and the rows' lanes below). These tests run on a GPU installation and on a CPU-only one; what needs two devices is skipped by name on the CPU-only one.
 """
 import pickle
 import sys
@@ -134,20 +134,6 @@ def test_explicit_cpu_always_runs(cls):
     model = build(cls, device="cpu").fit(x)
     assert model.vendor_used() == "cpu"
     assert np.asarray(model.transform(x)).shape == (len(x), 3)
-
-
-@two_devices
-@pytest.mark.parametrize("cls", CLASSES)
-def test_cpu_device_returns_the_gpu_bits_in_identical_mode(cls):
-    x = data()
-    gpu = build(cls, device="gpu", numeric_mode="identical").fit(x)
-    cpu = build(cls, device="cpu", numeric_mode="identical").fit(x)
-    assert gpu.vendor_used() != "cpu" and cpu.vendor_used() == "cpu"
-    left, right = fitted_arrays(gpu), fitted_arrays(cpu)
-    assert left.keys() == right.keys() and "components_" in left
-    for name in left:
-        assert left[name].tobytes() == right[name].tobytes(), name
-    assert np.asarray(gpu.transform(x)).tobytes() == np.asarray(cpu.transform(x)).tobytes()
 
 
 @two_devices
@@ -322,8 +308,15 @@ def test_fit_row_explicit_cpu_always_runs(row):
     assert len(arrays["query"]) > 0
 
 
+# The CPU side's bits against the GPU side's are the verify lanes for every row but these two (x-decomp-fastica,
+# x-decomp-factor-analysis, x-decomp-lda, x-decomp-grp, x-decomp-srp, x-decomp-robust-cov, x-decomp-dict-learning,
+# x-decomp-sparse-pca, x-neighbors-kpca, x-neighbors-poly-sketch): no lane transforms through
+# MiniBatchDictionaryLearning or SparseCoder with their default 'omp' transform algorithm.
+BITS_ROWS = [row for row in FIT_ROWS if row[0] in ("MiniBatchDictionaryLearning", "SparseCoder")]
+
+
 @two_devices
-@pytest.mark.parametrize("row", FIT_ROWS, ids=FIT_IDS)
+@pytest.mark.parametrize("row", BITS_ROWS, ids=[row[0] for row in BITS_ROWS])
 def test_fit_row_cpu_device_returns_the_gpu_bits_in_identical_mode(row):
     x = data()
     gpu, left = _fit_outputs(row, x, device="gpu", numeric_mode="identical")
@@ -369,13 +362,10 @@ def test_cholesky_default_and_explicit_cpu_devices():
 
 
 @two_devices
-def test_cholesky_cpu_device_returns_the_gpu_bits_in_identical_mode():
+def test_cholesky_set_params_drops_the_route():
+    # the CPU side's bits against the GPU side's (L_, solve) are the verify lane `cholesky`
     from mojolearn import Cholesky
-    a, b = _spd(), np.ones(48, dtype=np.float32)
-    gpu = Cholesky(jitter=0.0, numeric_mode="identical", device="gpu").fit(a)
-    cpu = Cholesky(jitter=0.0, numeric_mode="identical", device="cpu").fit(a)
-    assert gpu.vendor_used() != "cpu" and cpu.vendor_used() == "cpu"
-    assert np.asarray(gpu.L_).tobytes() == np.asarray(cpu.L_).tobytes()
-    assert np.asarray(gpu.solve(b)).tobytes() == np.asarray(cpu.solve(b)).tobytes()
+    gpu = Cholesky(jitter=0.0, numeric_mode="identical", device="gpu").fit(_spd())
+    assert gpu.vendor_used() != "cpu"
     gpu.set_params(device="cpu")                               # the constructor runs again: the route is dropped
     assert gpu.vendor_used() == "cpu"

@@ -3,9 +3,9 @@
 
 Construction, refusals, `set_params`, clone and pickle of the parameter itself are covered for every class that takes
 `device=` by `test_device_parameter.py`. Here: on a GPU installation `device="cpu"` runs the CPU binary beside the GPU
-one in one process (`vendor_used() == "cpu"`, nothing launched on the GPU by fit, recommend or similar_items); in
-`identical` mode it returns the bits the GPU returns. What needs two devices is skipped by name on a CPU-only
-installation.
+one in one process (`vendor_used() == "cpu"`, nothing launched on the GPU by fit, recommend or similar_items).
+That both sides return the same bits is the verify lane `x-decomp-als`. What needs two devices is skipped by name on a
+CPU-only installation.
 """
 import numpy as np
 import pytest
@@ -60,17 +60,6 @@ def test_cpu_device_does_nothing_on_the_gpu():
     assert activity is not None
     assert activity["launches"] == 0, activity["launch_names"]
     assert activity["upload_calls"] == 0 and activity["download_calls"] == 0
-
-
-@two_devices
-def test_identical_mode_cpu_device_returns_the_gpu_bits():
-    if mojolearn.numeric_mode() != "identical":
-        pytest.skip("bits are promised in identical mode only")
-    r = interactions()
-    gpu = answers(build(numeric_mode="identical").fit(r), r)
-    cpu = answers(build(numeric_mode="identical", device="cpu").fit(r), r)
-    for left, right in zip(gpu, cpu):
-        assert left.tobytes() == right.tobytes()
 
 
 @two_devices
