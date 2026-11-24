@@ -28,10 +28,15 @@ def _data(k, n=120, seed=3):
 
 
 def _gap_cv(y, k, held):
-    """Three folds of i % 3; fold 0's train rows hold only the classes in `held`."""
+    """Three contiguous folds; fold 0's train rows hold exactly the classes in `held`.
+
+    The folds are row blocks, not i % 3: `_data`'s class is i % k, so with k = 3 the rows of i % 3 != 0
+    never hold class 0, and held (0, 1) or (0, 2) left ONE class in fold 0 (scikit-learn's own
+    LogisticRegression then refuses "only one class"), never the two-class fold these cases name."""
     rows = np.arange(len(y))
-    train0 = rows[(rows % 3 != 0) & np.isin(y, held)]
-    return [(train0, rows[rows % 3 == 0])] + [(rows[rows % 3 != f], rows[rows % 3 == f]) for f in (1, 2)]
+    fold = rows * 3 // len(y)
+    train0 = rows[(fold != 0) & np.isin(y, held)]
+    return [(train0, rows[fold == 0])] + [(rows[fold != f], rows[fold == f]) for f in (1, 2)]
 
 
 def _words(fit):

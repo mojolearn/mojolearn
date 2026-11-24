@@ -9,6 +9,12 @@ from mojolearn import Array, Sequential, _backend
 from mojolearn.tests._cast_in import describe
 from mojolearn._verify_native_runtime import audit_native_call
 
+# The model ABI's training state is FIT_STATE_WORDS int64 words (autograd/model.mojo); 16 since
+# 58536dcfdd added the reduce_on_plateau words FS_PL_LR .. FS_PL_COOL. The native fit writes all
+# of them, so a 12-word oracle buffer was overrun (heap corruption, worker crashes) and its bytes
+# could never equal the public 16-word _fit_state.
+FIT_STATE_WORDS = 16
+
 
 def binding():
     value = _backend.binding("_mojolearn_x_sequence")
@@ -33,7 +39,7 @@ def raw_fit(x, y, width, *, loss="mse", epochs=4, validation=None, restore=False
     params = np.zeros(count, "f4")
     moment = np.zeros(count, "f4")
     variance = np.zeros(count, "f4")
-    state = np.zeros(12, "i8")
+    state = np.zeros(FIT_STATE_WORDS, "i8")
     curve = np.zeros(epochs, "f4")
     classes = None
     target = 0

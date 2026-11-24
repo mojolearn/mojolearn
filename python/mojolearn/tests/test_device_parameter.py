@@ -99,9 +99,13 @@ def _package_classes():
             continue
         found.add(cls)
         todo.extend(type.__subclasses__(cls))
-    return sorted((cls for cls in found
-                   if getattr(cls, "__module__", "").startswith("mojolearn.")
-                   and not cls.__module__.startswith("mojolearn.tests")),
+    # A class from outside the package can carry a non-string __module__: type.__module__ returns the class's own
+    # __dict__ entry, and a type that defines an instance getset named __module__ returns that getset_descriptor.
+    # Such a class is not in a mojolearn module, so only a string module is compared.
+    modules = ((cls, getattr(cls, "__module__", "")) for cls in found)
+    return sorted((cls for cls, module in modules
+                   if isinstance(module, str) and module.startswith("mojolearn.")
+                   and not module.startswith("mojolearn.tests")),
                   key=lambda cls: cls.__module__ + "." + cls.__qualname__)
 
 

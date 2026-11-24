@@ -1,4 +1,5 @@
 """Native transport vs independent Python wire/process oracles (test only)."""
+import errno
 import json
 import os
 import socket
@@ -276,7 +277,32 @@ def test_posix_transport_does_not_invoke_python_audit_hooks():
         'events': [], 'transport': 'complete'}
 
 
+def _host_has_ipv6_loopback():
+    # Detected with the independent socket the test compares against: a host whose kernel has no
+    # IPv6 loopback address (bind fails with EADDRNOTAVAIL, errno 99 on Linux, or AF_INET6 is not
+    # supported at all) cannot run this comparison; any other failure is not hidden.
+    if not socket.has_ipv6:
+        return False
+    try:
+        probe = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+    except OSError as error:
+        if error.errno in (errno.EAFNOSUPPORT, errno.EPROTONOSUPPORT):
+            return False
+        raise
+    try:
+        probe.bind(('::1', 0))
+    except OSError as error:
+        if error.errno == errno.EADDRNOTAVAIL:
+            return False
+        raise
+    finally:
+        probe.close()
+    return True
+
+
 def test_native_ipv6_address_matches_independent_socket(native):
+    if not _host_has_ipv6_loopback():
+        pytest.skip('this host has no IPv6 loopback address (::1 cannot be bound by an independent socket)')
     server = native('listen', ('::1', 0, 5.0))
     address = native('address', (server, False))
     client = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)

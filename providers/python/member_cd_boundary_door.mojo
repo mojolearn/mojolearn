@@ -27,7 +27,7 @@ from bindings.py_balanced import py_get, py_item, py_setitem
 from bindings.x_linear_common_unpack import _truth, _float, _int
 from bindings.x_linear_keys_unpack import x_linear_keys
 from bindings.x_linear_cd_unpack import _xl_cd_validate, xl_cd_host_fit_words
-from bindings.x_linear_route_unpack import xl_route, xl_ops_require
+from bindings.x_linear_route_unpack import xl_route, xl_ops_require, xl_host_only
 from core.entry_table import EntryRef, entry_ref_word
 from core.hostptr import f32_ptr
 from core.member_abi import (
@@ -46,12 +46,16 @@ def cd_member_admit(model: PythonObject, fields: PythonObject, kind: Int, contex
     var nk = x_linear_keys()
     if kind != CD_MEMBER_ELASTIC_NET and kind != CD_MEMBER_LASSO:
         raise Error("RuntimeError: mojolearn: unknown Cd member kind " + String(kind))
-    var ops = xl_route(model, fields, context, True)
-    if ops.host_only:
+    if not owner.serving and xl_host_only(model):
         # An explicit host class predicts a saved model only: its own fit door's refusal, in its words and
         # first, as `xl_cd_fit_unpack` (lane mf-lin6; a serving caller that only predicts keeps the class's
-        # own predict, `member_admit_serving` never raises).
+        # own predict, `member_admit_serving` never raises). Lane w3f2-main (2026-11-24): read from the
+        # class word the fit door reads (`xl_host_only`), before any route resolution; the former
+        # `ops.host_only` of `xl_route` was never set (only `xl_route_host` sets it), so HostLasso and
+        # HostElasticNet were fitted as members where their own fit refuses. A serving admission
+        # (`owner.serving`: the caller only predicts on fitted state) is not a fit and is admitted.
         raise Error(xl_cd_host_fit_words(model))
+    var ops = xl_route(model, fields, context, True)
     _xl_cd_validate(fields, context)
     xl_ops_require(ops)
     var shuffle = _int(py_item(context, nk[].k_cd_selection)[py_item(fields, nk[].k_selection)]) != 0
