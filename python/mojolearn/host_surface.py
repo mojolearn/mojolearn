@@ -491,8 +491,8 @@ TRAINING_LANE_NAMES = {
     "metrics": "the metrics",
     # The spectral lane, same batch: the spectral host oracle moved to
     # spectral/host/spectral_oracle.mojo with the k-NN graph, the symmetrize
-    # kernel and the k-means recluster restated, exported as
-    # spectral_fit_predict_dataset from the metrics host binding.
+    # kernel and the k-means recluster restated, reached through the metrics
+    # host binding's spectral_native_api_v1.
     "spectral": "spectral clustering",
     # The two scaler lanes, same batch: preprocessing/host/scaler_oracle.mojo
     # through the preprocessing family's own host binding.
@@ -530,10 +530,10 @@ TRAINING_LANE_NAMES = {
     "standard-scaler-no-mean": "the standard scaler without centering",
     "standard-scaler-no-std": "the standard scaler without scaling",
     "minmax-scaler-clip": "the clipped min-max scaler",
-    # Spectral clustering on a precomputed affinity: spectral_fit_predict_graph
-    # in the metrics host binding over host_spectral_fit_predict_coo, and the
-    # dense affinity's COO scan (nonzero_f64_count, nonzero_f64_fill) in the
-    # core host binding.
+    # Spectral clustering on a precomputed affinity: spectral_native_api_v1
+    # in the metrics host binding over host_spectral_fit_predict_coo_keep, and
+    # the dense affinity's COO scan (spectral_preparation_native_api_v1 over
+    # nonzero_f64_count / nonzero_f64_fill) in the core host binding.
     "spectral-precomputed": "spectral clustering on a precomputed affinity",
     # lane/expose-spectral-embedding (2026-09-20): SpectralEmbedding and
     # manifold.spectral_embedding, through spectral_native_api_v1 in the
@@ -1998,7 +1998,7 @@ FAMILIES = (
             "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict", "kmeans_transform",
             "kmeans_native_api_v1",
             "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search",
-            "spectral_preparation_native_api_v1", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
+            "spectral_preparation_native_api_v1", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
             "argmax_rows_f64",
             # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
@@ -2297,12 +2297,6 @@ FAMILIES = (
             # manifest sync (ne-fix-tests-b, 2026-11-07): registered in the binding source
             "homogeneity_completeness_v_measure",
             "spectral_native_api_v1",
-            "spectral_fit_predict_dataset", "spectral_fit_predict_graph",
-            # lane/spectral-predict (2026-09-15): the fit entries that keep
-            # the prediction data and SpectralClustering.predict (DEVIATION
-            # 2860), so a saved model predicts from the inference wheel.
-            "spectral_fit_predict_dataset_state", "spectral_fit_predict_graph_state",
-            "spectral_predict",
             "umap_fit_transform", "umap_transform", "umap_numeric_mode",
             "umap_fit_transform_ex",
             "rand_score", "mean_squared_error", "mean_absolute_error",
