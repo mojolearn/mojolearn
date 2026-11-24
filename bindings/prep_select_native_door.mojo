@@ -330,7 +330,11 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: Pyt
         var ya = admit_f32(view, 1, "y", base.member_context, finite=False, admitted=True)
         _ = view^
         if not trees_finite_f32(ya.address, ya.rows):
-            raise Error("y must be finite")
+            # The public fit's admission scans y first (bindings/labels_admission_unpack.mojo ADMISSION_Y_SCAN,
+            # scikit-learn's `_check_y` words naming the class) before `_regression_target` reads it, so its
+            # words are the door's (lane w3f2-words; gate 14f1 test_refused_target_raises_the_estimators_own_words
+            # [gbdt]: "y must be finite" was `_regression_target`'s unreachable line).
+            raise Error("Input y contains NaN or infinity (" + classical_estimator_name(estimator) + ").")
         if ya.rows != n:
             raise Error("mojolearn: y has " + String(ya.rows) + " values for " + String(n) + " rows")
         member.y = ya.array
