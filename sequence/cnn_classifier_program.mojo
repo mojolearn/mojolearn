@@ -5,18 +5,18 @@ x8-cnn-on-executor, plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) row X8
 The classifier's whole fit is ONE captured program trained by `Program.fit`
 (autograd/program_runtime.mojo `train_program_control`) in an inference
 `OpsSession` on the caller's executor (the device or the host column, the same
-code): per conv block `OPS_CONV2D` (stride 1, 'same' padding k // 2, the bias),
-`OPS_RELU` and, where the map still holds a window, `OPS_MAXPOOL2D` (window =
-stride = pool_size), then `OPS_RESHAPE_N` (flatten from axis 1) and the head
-`OPS_LINEAR` over `OPS_TRANSPOSE` of the (classes, flat) weight; the loss is
+code): per conv block one `OPS_CNN_CONV_BLOCK` (conv with stride 1, 'same'
+padding k // 2 and the bias, ReLU and, where the map still holds a window, max
+pool with window = stride = pool_size), then `OPS_RESHAPE_N` (flatten from axis
+1) and the head `OPS_CNN_LINEAR` over the (classes, flat) weight; the loss is
 the program loss `cross_entropy` (mean softmax cross-entropy on the class
 codes); the optimizer is the session's (SGD with momentum, dampening,
 Nesterov and weight decay, Adam, AdamW: one OP_OPT launch per parameter).
 The epoch order is Program.fit's `permutation(seed, epoch, n)` (OP_MLP_PERM,
 the Feistel order the old x_cnn epoch entry drew) with the classifier's
-splitmix64 seed. Every forward and backward kernel is the tape's (the rank-4
-conv, pool and layout ops of autograd/rankn_conv.mojo, the tape's linear and
-loss), one fold order on the host and on every vendor.
+splitmix64 seed. The block and head kernels are the hand classifier's
+(autograd/cnn_block_op.mojo, see below), the loss is the tape's; one fold order
+on the host and on every vendor.
 
 predict / predict_proba (lane x8b-cnn-resident-predict): the fitted
 parameters live ONCE in a resident registry session (CNN_OPEN, made at the
@@ -38,8 +38,9 @@ RESTORED 2026-11-09 (lane r1-restore-measured-winners; AGENTS.md "A measured
 winner is never deleted on reasoning"): by default each conv block and the
 head are the hand classifier's tuned kernels as executor ops
 (OPS_CNN_CONV_BLOCK, OPS_CNN_LINEAR; autograd/cnn_block_op.mojo), captured
-by this same program; `-D MOJOLEARN_CNN_GENERIC_OPS` keeps lane x8's generic
-tape chain (the A/B's B arm). The loss and the optimizer stay the program's.
+by this same program (the only path: lane x8's generic tape chain, the A/B's
+B arm, lost 2.45x on cnn-clf fit and was deleted 2026-11-24). The loss and the
+optimizer stay the program's.
 
 Python reaches these through the x_sequence whole-model descriptor ABI
 (sequence/neural_model_dispatch.mojo CNN_FIT, CNN_PREDICT); no Python runs
@@ -61,8 +62,9 @@ from core.cast_in import CastIn, CAST_KIND_SIGNED
 from autograd.rankn import ShapeN
 from autograd.rankn_api import rn_shape
 from autograd.model import SCHED_CONSTANT
+# OPS_RELU: only the coverage sabotage patch (sequence/checks/sabotage/coverage_cnn_classifier_program.patch) uses it.
 from autograd.ops_api import (
-    OpsSession, OPS_CONV2D, OPS_RELU, OPS_MAXPOOL2D, OPS_RESHAPE_N, OPS_TRANSPOSE, OPS_LINEAR, OPS_SOFTMAX,
+    OpsSession, OPS_RELU, OPS_RESHAPE_N, OPS_SOFTMAX,
     OPS_ARGMAX, ops_session_open, ops_session_close, ops_session, ops_session_registry_token,
 )
 from autograd.program_runtime import train_program_control, parameter_buffers, replay_values_prepared
@@ -71,7 +73,7 @@ from autograd.ops_api import _SLOT_BITS, _SLOT_MASK
 from sequence.exec_device import DeviceExec
 from autograd.tape import Tape
 from autograd.cast_ops import upload_cast
-from autograd.cnn_block_op import OPS_CNN_CONV_BLOCK, OPS_CNN_LINEAR, CNN_FUSED_OPS
+from autograd.cnn_block_op import OPS_CNN_CONV_BLOCK, OPS_CNN_LINEAR
 
 # Program.fit's loss kind 5: cross_entropy over (rows, 1) class codes.
 comptime _LOSS_CROSS_ENTROPY = 5
@@ -253,51 +255,30 @@ def _forward[E: Exec & Movable & Deinitable](
     """The classifier's logits (rows, k) of the images `x` (rows, C, H, W),
     as session operations (logged for `capture` in an inference session).
 
-    Default (CNN_FUSED_OPS, lane r1-restore-measured-winners, 2026-11-09):
-    each block is ONE OPS_CNN_CONV_BLOCK (the hand classifier's fused conv +
+    Lane r1-restore-measured-winners, 2026-11-09: each block is ONE OPS_CNN_CONV_BLOCK (the hand classifier's fused conv +
     ReLU + max pool kernels and pinned GEMM plan) and the head is
     OPS_CNN_LINEAR (its pinned NT GEMM over the (k, flat) weight as stored),
-    autograd/cnn_block_op.mojo. `-D MOJOLEARN_CNN_GENERIC_OPS` captures lane
-    x8's generic tape chain below instead (the A/B's B arm)."""
+    autograd/cnn_block_op.mojo."""
     var none = List[Float32]()
     var h = x
     var nb = g.blocks()
     # TOMBSTONE: MOJOLEARN_CNN_GENERIC_OPS (unmeasured opt-in arm, EXP:2374 PENDING: lane x8's generic tape chain; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at c599b986ce.
     # Restore: git apply experiments/removed/MOJOLEARN_CNN_GENERIC_OPS.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
     # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-    comptime if CNN_FUSED_OPS:
-        # RESTORED 2026-11-09 (lane r1-restore-measured-winners): the X8
-        # TOMBSTONE above deleted these kernels' epoch drivers; the kernels
-        # return here as ops of the one program, the drivers stay deleted.
-        for j in range(nb):  # driver-loop: over conv blocks (model structure)
-            var bs: List[Int] = [h, params[2 * j], params[2 * j + 1]]
-            var block_ints: List[Int] = [g.ks // 2, 1 if g.pool[j] else 0, g.ps]
-            h = s.op(OPS_CNN_CONV_BLOCK, bs, block_ints, none)
-        var ffs: List[Int] = [h]
-        var fl_ints: List[Int] = [1, 1, -1]
-        h = s.op(OPS_RESHAPE_N, ffs, fl_ints, none)
-        var hls: List[Int] = [h, params[2 * nb], params[2 * nb + 1]]
-        return s.op(OPS_CNN_LINEAR, hls, List[Int](), none)
+    # TOMBSTONE: MOJOLEARN_CNN_GENERIC_OPS (LOSER: NV L40S cnn-clf fit 161 -> 395 ms (2.45), infer 1.45, median 1.23 over 4 cells) deleted 2026-11-24 by lane/ab2-nseq (ab-outcome-2); code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CNN_GENERIC_OPS.ab-outcome-2.patch
+    # RESTORED 2026-11-09 (lane r1-restore-measured-winners): the X8
+    # TOMBSTONE above deleted these kernels' epoch drivers; the kernels
+    # return here as ops of the one program, the drivers stay deleted.
     for j in range(nb):  # driver-loop: over conv blocks (model structure)
-        var hs: List[Int] = [h, params[2 * j], params[2 * j + 1]]
-        var conv_ints: List[Int] = [1, g.ks // 2]
-        h = s.op(OPS_CONV2D, hs, conv_ints, none)
-        var rs: List[Int] = [h]
-        h = s.op(OPS_RELU, rs, List[Int](), none)
-        if g.pool[j]:
-            var ps: List[Int] = [h]
-            var pool_ints: List[Int] = [g.ps, g.ps]
-            h = s.op(OPS_MAXPOOL2D, ps, pool_ints, none)
-    var fs: List[Int] = [h]
-    var flat_ints: List[Int] = [1, 1, -1]
-    h = s.op(OPS_RESHAPE_N, fs, flat_ints, none)
-    # OPS_LINEAR takes the (inputs, outputs) weight; the head keeps torch's
-    # (outputs, inputs) layout, so its parameter downloads as it uploaded.
-    var ts: List[Int] = [params[2 * nb]]
-    var wt = s.op(OPS_TRANSPOSE, ts, List[Int](), none)
-    var ls: List[Int] = [h, wt, params[2 * nb + 1]]
-    var act: List[Int] = [0]
-    return s.op(OPS_LINEAR, ls, act, none)
+        var bs: List[Int] = [h, params[2 * j], params[2 * j + 1]]
+        var block_ints: List[Int] = [g.ks // 2, 1 if g.pool[j] else 0, g.ps]
+        h = s.op(OPS_CNN_CONV_BLOCK, bs, block_ints, none)
+    var ffs: List[Int] = [h]
+    var fl_ints: List[Int] = [1, 1, -1]
+    h = s.op(OPS_RESHAPE_N, ffs, fl_ints, none)
+    var hls: List[Int] = [h, params[2 * nb], params[2 * nb + 1]]
+    return s.op(OPS_CNN_LINEAR, hls, List[Int](), none)
 
 
 def _download_params[E: Exec & Movable & Deinitable](

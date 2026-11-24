@@ -41,8 +41,9 @@
   },
   "cnn-generic": {
    "define": "MOJOLEARN_CNN_GENERIC_OPS",
-   "status": "define in code (autograd/cnn_block_op.mojo CNN_FUSED_OPS): B = lane x8's OPS_CONV2D / OPS_RELU / OPS_MAXPOOL2D / OPS_LINEAR chain; A = ops cnn_conv_block / cnn_linear",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2, sub-lane ab2-nseq): LOSER (L40S 4 cells, median 1.23, cnn-clf fit 161 -> 395 ms (2.45), infer 1.45); A (the tuned ops, the default) is unchanged; the define is refused (core/experiment_guards_neural.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CNN_GENERIC_OPS.ab-outcome-2.patch. Was: define in code (autograd/cnn_block_op.mojo CNN_FUSED_OPS): B = lane x8's OPS_CONV2D / OPS_RELU / OPS_MAXPOOL2D / OPS_LINEAR chain; A = ops cnn_conv_block / cnn_linear",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "transformer-generic-prefill": {
    "define": "MOJOLEARN_TRANSFORMER_GENERIC_PREFILL",
