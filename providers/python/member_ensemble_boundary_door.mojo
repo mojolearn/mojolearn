@@ -3405,7 +3405,13 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                     if py_type(theirs) is b.str and String(py=theirs) == "samples":
                         mine_kw.samples = True
                         continue
-                if mine is not missing and theirs is not missing and _same_kwarg(mine, theirs, eq, b):
+                # LANE w3f5-b: on a binary row, a pos_label equal to the row's default
+                # but of another type (1.0 or True for 1) is no default: the binary
+                # rows' door reads its type (a float is refused, a bool is the
+                # integer label), so it is the make_scorer's given pos_label
+                if (mine is not missing and theirs is not missing
+                        and (word != "pos_label" or not pos_row or py_type(mine) is py_type(theirs))
+                        and _same_kwarg(mine, theirs, eq, b)):
                     continue
                 if word == "pos_label" and theirs is not missing:
                     if pos_row:
