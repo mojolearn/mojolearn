@@ -682,8 +682,9 @@
   },
   "xprep-sort-quad-off": {
    "define": "MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF",
-   "status": "define in code (x_prep/dsort.mojo SORT_QUAD): B = one bitonic pass per stride; A = the quad passes, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): old path no faster (L40S 16 cells, median 1.00, 0.95..1.02); the two-stride default is unchanged; removed: the switch (the single pass stays for the tail stride); the define is refused (core/experiment_guards_base.mojo); code recoverable at f0ddedf522, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF.ab-outcome-3.patch. Was: define in code (x_prep/dsort.mojo SORT_QUAD): B = one bitonic pass per stride; A = the quad passes, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "xprep-te-gather-off": {
    "define": "MOJOLEARN_XPREP_FAST_TE_GATHER_OFF",
@@ -4074,7 +4075,10 @@
    "b_arms": [
     "xprep-sort-quad-off"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): old path no faster (L40S 16 cells, median 1.00, 0.95..1.02); the two-stride default is unchanged; removed: the switch (the single pass stays for the tail stride); the define is refused (core/experiment_guards_base.mojo); code recoverable at f0ddedf522, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF.ab-outcome-3.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "xprep-te-gather-off-rows",
