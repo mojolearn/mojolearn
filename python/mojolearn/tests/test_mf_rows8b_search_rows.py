@@ -98,8 +98,9 @@ def test_cross_val_predict_of_a_mixture_models_proba_is_its_own_columns():
     # Nine rows: `_TESTS` is a partition of 0..8 only; over twelve rows scikit-learn's cross_val_predict itself
     # refuses ("cross_val_predict only works for partitions", sklearn/model_selection/_validation.py).
     X = _x(9)
-    got = ms.cross_val_predict(ml.GaussianMixture(n_components=2, random_state=0), X, None, cv=_folds(len(X)),
-                               method='predict_proba')
+    # an in-package caller receives the Array (no fancy indexing): read it as NumPy
+    got = np.asarray(ms.cross_val_predict(ml.GaussianMixture(n_components=2, random_state=0), X, None,
+                                          cv=_folds(len(X)), method='predict_proba'))
     assert got.shape == (9, 2)
     for train, test in _folds(len(X)):
         est = ml.GaussianMixture(n_components=2, random_state=0).fit(X[train])

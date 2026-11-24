@@ -25,6 +25,12 @@ def _member(est, X, y=None, scoring=None):
     every = np.arange(len(X))
     params = est.get_params()
     name = sorted(params)[0]
+    # scoring=None needs the class's own `score` (scikit-learn 1.9 metrics/_scorer.py `check_scoring`, a TypeError
+    # before any fit; 9b4bc3f04b, providers/python/member_ensemble_boundary_door.mojo `_no_score_refusal`). A class
+    # without one is searched by a scorer whose response it lacks: every score is error_score (nan) and the best is
+    # refitted through the member, as scikit-learn does (the test_mf_nbr6_members / test_mf_enc6_members helper).
+    if scoring is None and getattr(est, "score", None) is None:
+        scoring = "r2"
     search = GridSearchCV(est, {name: [params[name]]}, cv=[(every, every)], scoring=scoring, refit=True)
     search.fit(X, y)
     return search.best_estimator_

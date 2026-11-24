@@ -238,7 +238,7 @@ from core.member_abi import (
     MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_SCORE,
     MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_BY_INDEX, MEMBER_EXPORT_OWN, MEMBER_IMPORT_DONE,
     MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, MEMBER_CAN_TRANSFORM, MEMBER_OP_TRANSFORM,
-    MEMBER_READS_Y_GIVEN, MEMBER_HOME_HOST,
+    MEMBER_READS_Y_GIVEN, MEMBER_HOME_HOST, MEMBER_CAN_STEPS,
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import (
@@ -1395,6 +1395,10 @@ def _kind_mask(kind: Int, flag: Bool, masks: List[Int]) -> Int:
             mask |= MEMBER_CAN_SCORE
         if len(masks) > 0 and _all(masks, MEMBER_CAN_MULTI_OUTPUT):
             mask |= MEMBER_CAN_MULTI_OUTPUT
+        if len(masks) > 0 and _all(masks, MEMBER_CAN_STEPS):
+            # lane w3f5-c: a search over sequence members (recurrent, CNN)
+            # takes their (rows, T, F) X; the RUN hands the steps on.
+            mask |= MEMBER_CAN_STEPS
         if len(masks) > 0 and _all(masks, MEMBER_GIL_FREE):
             mask |= MEMBER_GIL_FREE
         elif len(masks) > 0 and _all_either(masks):
@@ -1473,7 +1477,7 @@ def _all_either(masks: List[Int]) -> Bool:
 comptime _UNION = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION
     | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_CLASSIFIER | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_BORROWS_FIT
     | MEMBER_GIL_FREE | MEMBER_GIL_DOOR | MEMBER_CAN_SCORE | MEMBER_CAN_MULTI_OUTPUT | MEMBER_CAN_SCOPE
-    | MEMBER_CAN_TRANSFORM | MEMBER_READS_Y_GIVEN)
+    | MEMBER_CAN_TRANSFORM | MEMBER_READS_Y_GIVEN | MEMBER_CAN_STEPS)
 
 
 def _set_word(mask: Int) -> UInt8:
@@ -3437,6 +3441,10 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
                               call[].x.cols, call[].y.data, k, slot[].folds, slot[].glue, slot[].metric)
     plan.y_dtype = MEMBER_I32 if classifier else MEMBER_F32
     plan.y_cols = outputs
+    # THE SEQUENCES (lane w3f5-c): X's steps go on to every candidate's
+    # views; the kind has MEMBER_CAN_STEPS only when every candidate does
+    # (`_kind_mask`), so a caller hands steps > 1 to such a search only.
+    plan.steps = call[].x.steps
     if not classifier:
         # THE GIVEN y (lane mf-tail5): the RUN hands it to the candidates that read it.
         plan.given = slot[].fit_given
