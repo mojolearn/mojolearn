@@ -3031,6 +3031,10 @@ class RFE(_SelectorMixin):
     importance_getter : 'auto' or str, default 'auto'
         ``'auto'`` uses ``coef_`` or ``feature_importances_``; a dotted attribute path of the fitted
         estimator picks the importances instead (they are squared).
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on the CPU and
+        'gpu' requires a GPU installation. The estimator is fitted on the same device: its own ``device``
+        must be None or the same value. Other values raise ValueError.
 
     Attributes
     ----------
@@ -3059,7 +3063,10 @@ class RFE(_SelectorMixin):
     # Native lifecycle handling replaces the inherited Python fit/output
     # wrappers; constructor and parameter setters remain separately audited.
     _mojolearn_native_public = True
-    _parameters = ("estimator", "n_features_to_select", "step", "verbose", "importance_getter")
+    _parameters = ("estimator", "n_features_to_select", "step", "verbose", "importance_getter", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
     #: Kernel and Permutation SHAP explain this exact class natively: its fitted estimator_'s member over the
     #: support_ columns (bindings/trees_agnostic_native_door.mojo); read from the class's own namespace.
     _mojolearn_explained = "rfe"
@@ -3068,12 +3075,14 @@ class RFE(_SelectorMixin):
     # estimator's, chosen by the admission.
     _mojolearn_member = (39, 14)
 
-    def __init__(self, estimator, *, n_features_to_select=None, step=1, verbose=0, importance_getter="auto"):
+    def __init__(self, estimator, *, n_features_to_select=None, step=1, verbose=0, importance_getter="auto",
+                 device=None):
         self.estimator = estimator
         self.n_features_to_select = n_features_to_select
         self.step = step
         self.verbose = verbose
         self.importance_getter = importance_getter
+        self.device = device
 
     def fit(self, X, y, **fit_params):
         """Fit the selector and final estimator.

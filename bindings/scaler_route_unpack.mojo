@@ -134,6 +134,26 @@ def _scaler_cpu_sync(cpu: PythonObject, context: PythonObject, b: PythonObject) 
     _ = py_call(cpu.update, merged)
 
 
+def scaler_cpu_scope(context: PythonObject, b: PythonObject) raises -> PythonObject:
+    """The family's CPU context beside a device set (a scaler's or
+    classifier's device="cpu" route, and RFE's rounds on the classifier
+    context; lane vdf-misc moved it here from `_scaler_route_build`, the
+    same steps)."""
+    var cpu = py_get(context, "prep_cpu_context")
+    # Built at the first device="cpu" admission (fx-host-import:
+    # python/mojolearn/_native_prep_device.py, no longer at import);
+    # an estimator restored without construction connects it here,
+    # once, at its first route resolution.
+    if cpu is None and device_cpu_connect_late(context):
+        cpu = py_get(context, "prep_cpu_context")
+    if cpu is None:
+        raise Error("ImportError: device='cpu' is not connected in this installation")
+    if py_type(cpu) is b.str:
+        raise Error("ImportError: " + String(cpu))
+    _scaler_cpu_sync(cpu, context, b)
+    return cpu
+
+
 def _scaler_route_build(model: PythonObject, context: PythonObject) raises -> DeviceRouteOwner:
     var b = context["prep_builtins"]
     var owner = DeviceRouteOwner(DEVICE_GPU)
@@ -150,20 +170,8 @@ def _scaler_route_build(model: PythonObject, context: PythonObject) raises -> De
         var process_vendor = _scaler_process_vendor(context)
         owner.route.device = device_installed(device_request(py_fields(model), b), process_vendor)
         if owner.route.device == DEVICE_CPU and process_vendor != 0:
-            var cpu = py_get(context, "prep_cpu_context")
-            # Built at the first device="cpu" admission (fx-host-import:
-            # python/mojolearn/_native_prep_device.py, no longer at import);
-            # an estimator restored without construction connects it here,
-            # once, at its first route resolution.
-            if cpu is None and device_cpu_connect_late(context):
-                cpu = py_get(context, "prep_cpu_context")
-            if cpu is None:
-                raise Error("ImportError: device='cpu' is not connected in this installation")
-            if py_type(cpu) is b.str:
-                raise Error("ImportError: " + String(cpu))
-            _scaler_cpu_sync(cpu, context, b)
             owner.route.flags = SCALER_ROUTE_CPU_TABLE
-            owner.scope = cpu
+            owner.scope = scaler_cpu_scope(context, b)
         else:
             owner.scope = context
     owner.cls = b.str

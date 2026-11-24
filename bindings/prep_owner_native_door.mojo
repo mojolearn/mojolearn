@@ -169,8 +169,20 @@ def prep_owner_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
                 composition_after_fit(model, args[0], run)
             return parallel_public_result(result, operation, PythonObject(None), run).steal_data()
         elif kind == "rfe":
-            var prepared = composition_before(model, kind, op, operation, args, context)
-            result = prep_rfe_call(model, op, operation, prepared, context)
+            # The connected context of RFE's device route (lane vdf-misc: RFE
+            # takes `device`; the one read of it, resolved once per
+            # estimator as for SelectKBest; a hit is one record read and one
+            # pointer compare). "cpu" beside a GPU set is the family's CPU
+            # context; its rounds and member follow (`_rfe_fit`).
+            var run = prep_route_context(model, context)
+            if run is not context:
+                # the CPU context beside a device set: its own NumPy cells
+                classical_connect_numpy(run)
+            var prepared = composition_before(model, kind, op, operation, args, run)
+            result = prep_rfe_call(model, op, operation, prepared, run)
+            if op == PREP_OPN_FIT or op == PREP_OPN_FIT_TRANSFORM:
+                composition_after_fit(model, args[0], run)
+            return parallel_public_result(result, operation, PythonObject(None), run).steal_data()
         elif kind != "":
             raise Error("TypeError: the native prep owner does not serve this class")
         elif op == PREP_OPN_MUTUAL_INFO_CLASSIF or op == PREP_OPN_MUTUAL_INFO_REGRESSION:
@@ -185,10 +197,6 @@ def prep_owner_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
             result = prep_encode_scores_call(operation, args, run)
         else:
             raise Error("unknown native prep operation")
-        if kind == "rfe":
-            if op == PREP_OPN_FIT or op == PREP_OPN_FIT_TRANSFORM:
-                composition_after_fit(model, args[0], context)
-            result = parallel_public_result(result, operation, PythonObject(None), context)
         return result.steal_data()
     except error:
         if String(error) == PYTHON_ERROR_PENDING:
