@@ -659,8 +659,8 @@ def _lin_decomp_dev(operation: Int, args: PythonObject, device: FunctionDevice, 
     var who = String("qr") if operation == LINOPS_OPN_FAMILY_LIN_QR else (
         String("eigh") if operation == LINOPS_OPN_FAMILY_LIN_EIGH else (
             String("svdvals") if operation == LINOPS_OPN_FAMILY_LIN_SVDVALS else String("svd")))
-    # (outside an identical GPU set the device entries refuse in words: gemm/linalg_dev_arrays.mojo `lin_dev_ready`,
-    # x_decomp/resident_train.mojo `_train_ready`)
+    # (both GPU tiers: the device-array pool is one per process, core/train_dev_pool.mojo; lane vdf-linalg7 lifted the
+    # fast tier's refusals of these forms, x_decomp ops 84-87 and the svdvals / qr 'r' device entries)
     var entries = lin_dev_entries(args[0], held)
     var a = lin_dev_operand(args[0], "a", who, entries, held, TRAIN_DEV_F32, 2)
     var rows = a.dim(0)
