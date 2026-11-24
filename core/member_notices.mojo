@@ -88,6 +88,12 @@ comptime MEMBER_NOTICE_METRIC_CLR = 15
 #: roc_auc_score with options (lane mf-score8 round b; bindings/mcls_ranking_door.mojo
 #: `_ROC_ONE_CLASS`): a = how many folds or classes saw one class, one warning each.
 comptime MEMBER_NOTICE_METRIC_ROC_ONE = 16
+#: A search or cv tool score that failed under a numeric error_score (lane
+#: w3f3-b; core/msel_search_run.mojo, the error rule): a = the failure's index
+#: in the result's `score_failed` words. Its PACK raises scikit-learn's
+#: "Scoring failed. ..." UserWarning (sklearn 1.9 model_selection/
+#: _validation.py `_score`) with those words, in the unit's order.
+comptime MEMBER_NOTICE_SCORE_FAILED = 17
 
 #: The words scikit-learn's cross_val_predict adds to its imbalanced-fold
 #: warning and refusals (model_selection/_validation.py

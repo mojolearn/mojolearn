@@ -128,6 +128,7 @@ from core.member_abi import (
 from core.member_class_weight import member_cw_subset
 from core.member_notices import (
     member_notices_take, member_notice_add, MEMBER_NOTICE_FOLD_LACKING, MEMBER_LACKING_STRATIFY,
+    MEMBER_NOTICE_SCORE_FAILED,
 )
 from checks.numerics import identical_log, identical_log64
 from std.time import perf_counter_ns
@@ -361,6 +362,11 @@ struct MselSearchResult(Movable):
     var unit_states: List[Int]
     var fold_train: List[List[Int32]]
     var fold_test: List[List[Int32]]
+    # LANE w3f3-b: under a numeric error_score, each failed fit's words (unit
+    # order; scikit-learn's FitFailedWarning summary, raised at PACK) and each
+    # failed score's words (MEMBER_NOTICE_SCORE_FAILED's index).
+    var fit_failed: List[String]
+    var score_failed: List[String]
 
     def __init__(out self):
         self.n_splits = 0
@@ -385,6 +391,39 @@ struct MselSearchResult(Movable):
         self.unit_states = List[Int]()
         self.fold_train = List[List[Int32]]()
         self.fold_test = List[List[Int32]]()
+        self.fit_failed = List[String]()
+        self.score_failed = List[String]()
+
+
+def msel_fit_failures_summary(errors: List[String]) -> String:
+    """LANE w3f3-b: scikit-learn's summary of a search's failed fits (sklearn
+    1.9 model_selection/_validation.py `_warn_or_raise_about_fit_failures`):
+    one section per distinct error, in first-seen order, with its count,
+    after 80 dashes. scikit-learn prints each failure's traceback; a native
+    fit has no Python frames, so a section prints the error's own line (the
+    traceback's last line), as the admission's all-fits-failed words do."""
+    var distinct = List[String]()
+    var counts = List[Int]()
+    for i in range(len(errors)):  # small-loop(the failed fits' words, once per fit)
+        var at = -1
+        for e in range(len(distinct)):  # small-loop(the distinct errors so far)
+            if distinct[e] == errors[i]:
+                at = e
+        if at < 0:
+            distinct.append(errors[i].copy())
+            counts.append(1)
+        else:
+            counts[at] += 1
+    var delimiter = String("")
+    for _ in range(80):  # small-loop(the delimiter's 80 dashes)
+        delimiter += "-"
+    delimiter += "\n"
+    var summary = String("")
+    for e in range(len(distinct)):  # small-loop(the distinct errors)
+        if e > 0:
+            summary += "\n"
+        summary += delimiter + String(counts[e]) + " fits failed with the following error:\n" + distinct[e]
+    return summary^
 
 
 def _set_word(mask: Int) -> UInt8:
@@ -1944,6 +1983,19 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                         _drop_kept(plan, res)
                         raise Error(words)
                     value = plan.error_value
+                    # LANE w3f3-b: scikit-learn's warnings for what failed
+                    # (its FitFailedWarning once per fit, raised at PACK over
+                    # the words; a "Scoring failed" UserWarning per failed
+                    # score, a notice in the unit's order)
+                    if failed[t * nsc + j] == UInt8(1):
+                        if side == 0 and j == 0:
+                            var v = t // sides
+                            res.fit_failed.append(run.errors[v].copy() if run.failed[v] != UInt8(0)
+                                                  else String("member ABI: a unit that was not fitted"))
+                    else:
+                        member_notice_add(metric_notes[t // sides], MEMBER_NOTICE_SCORE_FAILED,
+                                          Float64(len(res.score_failed)))
+                        res.score_failed.append(errors[t * nsc + j].copy())
                 if side == 0:
                     test[j * units + u] = value
                 else:
@@ -2013,6 +2065,15 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     _ = len(fold_rows)
     _ = len(fold_counts)
     _ = len(columns)
+    if plan.tolerate and units > 0 and len(res.fit_failed) == units:
+        # LANE w3f3-b: every fit failed under a numeric error_score: scikit-
+        # learn raises, before its tables and its refit (sklearn 1.9
+        # model_selection/_validation.py `_warn_or_raise_about_fit_failures`)
+        _drop_kept(plan, res)
+        raise Error("ValueError: \nAll the " + String(units) + " fits failed.\n"
+                    + "It is very likely that your model is misconfigured.\n"
+                    + "You can try to debug the error by setting error_score='raise'.\n\n"
+                    + "Below are more details about the failures:\n" + msel_fit_failures_summary(res.fit_failed))
     # 5. The tables, per scorer; the best by the refit scorer.
     if plan.refit_scorer < 0 or plan.refit_scorer >= nsc:
         _drop_kept(plan, res)
