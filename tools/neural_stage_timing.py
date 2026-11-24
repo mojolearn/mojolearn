@@ -16,7 +16,6 @@ quadratic attention stages, which is the 3.7 GB training-step question.
     python tools/neural_stage_timing.py                      # all six lanes, 5 calls
     python tools/neural_stage_timing.py --lane lm-train-step --calls 20
     MOJOLEARN_GEMM_ARM=tuned128 python tools/neural_stage_timing.py --lane lm-train-step
-    MOJOLEARN_BYTE_LM_LAYER_SYNC=0 python tools/neural_stage_timing.py --lane lm-train-step
 
 Read the first call as "session open + compile" and the rest as the
 steady state; the board's warm-up round is the first call.
