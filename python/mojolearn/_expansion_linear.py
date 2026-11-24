@@ -271,6 +271,10 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
         Number of passes run.
     t_ : float
         Number of weight updates, ``n_iter_ * n_samples + 1``.
+    fit_loop_ : tuple of (int, float)
+        The number of epochs the last fit ran (equal to ``n_iter_``) and the
+        time in milliseconds its epoch loop took, from the start of the first
+        epoch to the end of the last. Not kept by a saved and loaded model.
     n_features_in_ : int
         Number of features seen in ``fit``.
 
@@ -430,6 +434,10 @@ class SGDRegressor(_LinearRegressorMixin, NumericModeMixin):
         Number of passes run.
     t_ : float
         Number of weight updates, ``n_iter_ * n_samples + 1``.
+    fit_loop_ : tuple of (int, float)
+        The number of epochs the last fit ran (equal to ``n_iter_``) and the
+        time in milliseconds its epoch loop took, from the start of the first
+        epoch to the end of the last. Not kept by a saved and loaded model.
     n_features_in_ : int
         Number of features seen in ``fit``.
 
@@ -1440,6 +1448,10 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
         Number of passes run.
     t_ : float
         Number of weight updates, ``n_iter_ * n_samples + 1``.
+    fit_loop_ : tuple of (int, float)
+        The number of epochs the last fit ran (equal to ``n_iter_``) and the
+        time in milliseconds its epoch loop took, from the start of the first
+        epoch to the end of the last. Not kept by a saved and loaded model.
     n_features_in_ : int
         Number of features seen in ``fit``.
 
@@ -1563,6 +1575,10 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
         Number of passes run.
     t_ : float
         Number of weight updates, ``n_iter_ * n_samples + 1``.
+    fit_loop_ : tuple of (int, float)
+        The number of epochs the last fit ran (equal to ``n_iter_``) and the
+        time in milliseconds its epoch loop took, from the start of the first
+        epoch to the end of the last. Not kept by a saved and loaded model.
     n_features_in_ : int
         Number of features seen in ``fit``.
 
@@ -1676,6 +1692,10 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
         Number of passes run.
     t_ : float
         Number of weight updates, ``n_iter_ * n_samples + 1``.
+    fit_loop_ : tuple of (int, float)
+        The number of epochs the last fit ran (equal to ``n_iter_``) and the
+        time in milliseconds its epoch loop took, from the start of the first
+        epoch to the end of the last. Not kept by a saved and loaded model.
     n_features_in_ : int
         Number of features seen in ``fit``.
 
@@ -1787,6 +1807,10 @@ class SGDOneClassSVM(NumericModeMixin):
         Number of passes run.
     t_ : float
         Number of weight updates, ``n_iter_ * n_samples + 1``.
+    fit_loop_ : tuple of (int, float)
+        The number of epochs the last fit ran (equal to ``n_iter_``) and the
+        time in milliseconds its epoch loop took, from the start of the first
+        epoch to the end of the last. Not kept by a saved and loaded model.
     n_features_in_ : int
         Number of features seen in ``fit``.
 

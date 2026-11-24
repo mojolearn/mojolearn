@@ -95,6 +95,7 @@ from x_linear.door_run import (
     ALGO_SGD, LINK_IDENTITY, LINK_SIGMOID, ROWS_SGD_PROBA, XlClassPrepRequest, xl_class_prep_none,
     xl_class_fit_run, xl_run_block, XlFitRequest, XlDecisionRequest, xl_fit_run, xl_decision_run, xl_r2_run,
 )
+from x_linear.sgd_loop_words import sgd_result_words, sgd_n_iter_word
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
@@ -375,7 +376,9 @@ def _fit(slot: _SlotP, call: _CallP) raises:
     var ip: List[Int] = [k, Int(p[1]), Int(p[2]), Int(p[3]), Int(p[4]), Int(p[5]), Int(p[6]), Int(p[7]), Int(p[8]),
         Int(p[9]), has_sw, 1 if weighted_classes else 0, Int(p[10]), Int(p[11])]
     var fp: List[Float64] = [p[12], p[13], p[14], p[15], p[16], p[17]]
-    var n_out = problems * d + problems + 2
+    # the SGD result tail (x_linear/sgd_loop_words.mojo): n_iter, status, the
+    # loop-time words; a member reads n_iter and status only
+    var n_out = sgd_result_words(problems, d)
     var result = List[Float32](length=n_out, fill=0.0)
     var request = XlFitRequest(call[].route.entry.call, ALGO_SGD, call[].x.data, n * d, n, d, y, n * (1 + has_sw),
         ip^, fp^, n_out, problems * (n + d + 1), problems * n, Int(result.unsafe_ptr()), False, 0, 0, 0)
@@ -393,10 +396,10 @@ def _fit(slot: _SlotP, call: _CallP) raises:
     else:
         _ = xl_fit_run(request)
     _ = parts^
-    if result[n_out - 1] != 0.0:
+    if result[sgd_n_iter_word(problems, d) + 1] != 0.0:
         raise Error("Floating-point under-/overflow occurred. Scaling input data with "
             + "StandardScaler or MinMaxScaler might help.")
-    var n_iter = Int(result[n_out - 2])
+    var n_iter = Int(result[sgd_n_iter_word(problems, d)])
     var record = List[Float32](length=problems * d + problems, fill=0.0)
     unsafe_memcpy(dest=record.unsafe_ptr(), src=result.unsafe_ptr(), count=problems * d + problems)
     _keep(slot, record^, problems, d, k if _classifier(kind) else 0)

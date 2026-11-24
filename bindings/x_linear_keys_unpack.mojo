@@ -112,6 +112,7 @@ struct XLinearKeys(Defaultable, Movable):
     var k_eta0: PythonObject
     var k_family_msel_splitter_layouts: PythonObject
     var k_fit_intercept: PythonObject
+    var k_fit_loop_: PythonObject
     var k_fortran_copied_: PythonObject
     var k_hinge: PythonObject
     var k_increasing: PythonObject
@@ -234,6 +235,7 @@ struct XLinearKeys(Defaultable, Movable):
         self.k_eta0 = PythonObject(None)
         self.k_family_msel_splitter_layouts = PythonObject(None)
         self.k_fit_intercept = PythonObject(None)
+        self.k_fit_loop_ = PythonObject(None)
         self.k_fortran_copied_ = PythonObject(None)
         self.k_hinge = PythonObject(None)
         self.k_increasing = PythonObject(None)
@@ -360,6 +362,7 @@ def _x_linear_keys_fill(nk: UnsafePointer[XLinearKeys, MutUntrackedOrigin]) rais
     nk[].k_eta0 = py_key("eta0")
     nk[].k_family_msel_splitter_layouts = py_key("family_msel_splitter_layouts")
     nk[].k_fit_intercept = py_key("fit_intercept")
+    nk[].k_fit_loop_ = py_key("fit_loop_")
     nk[].k_fortran_copied_ = py_key("fortran_copied_")
     nk[].k_hinge = py_key("hinge")
     nk[].k_increasing = py_key("increasing")
