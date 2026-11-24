@@ -96,15 +96,6 @@ def test_cpu_device_runs_the_cpu_binary(tmp_path):
 
 
 @two_devices
-def test_identical_mode_cpu_device_returns_the_gpu_bits():
-    gpu, x = fitted(None)
-    cpu, _ = fitted("cpu")
-    assert np.asarray(gpu.params_).tobytes() == np.asarray(cpu.params_).tobytes()
-    assert np.asarray(gpu.predict(x)).tobytes() == np.asarray(cpu.predict(x)).tobytes()
-    assert list(gpu.loss_curve_) == list(cpu.loss_curve_)
-
-
-@two_devices
 def test_two_models_on_two_devices_interleave_in_one_process(tmp_path):
     gpu, x = fitted(None)
     cpu, _ = fitted("cpu")

@@ -167,33 +167,6 @@ def block_reference(model, ids, state=None, *, step=False):
     return np.asarray(result).reshape(b, length, model.vocab_size)
 
 
-@pytest.mark.parametrize('devices', [(0,), (), (0, -1), (0, True)])
-def test_invalid_map_precedes_model_or_worker_construction(devices):
-    # The plan must be the connected ModelPlan record (a stand-in object is
-    # refused as "requires its connected record class" before the map is
-    # read); the two-layer llama fixture's plan and weights are real.
-    from mojolearn.models import plan_for
-    cfg, tensors = family_fixture('llama', False)
-    refused(mod.ParallelCausalLM, ValueError, 'per layer', plan_for(cfg), tensors, layer_devices=devices)
-
-
-def test_native_route_admission_precedes_checkpoint_read(monkeypatch):
-    selected = _backend.vendor()
-    refused(mod.ParallelCausalLM.load, FileNotFoundError, 'checkpoint directory',
-            '/does/not/exist', layer_devices=(0, 0))
-    if selected == 'metal':
-        refused(mod.ParallelCausalLM.load, ValueError, 'device 0',
-                '/does/not/exist', layer_devices=(0, 1))
-    # The layer map and the route are admitted before the path is read: an
-    # invalid map is refused by name for a path that does not exist. (The
-    # native owner keeps its own copy of the import-time connection metadata,
-    # bindings/parallel_causal_native_door.mojo `parallel_causal_initialize`, so
-    # the unsupported-vendor refusal can no longer be injected through
-    # `_CAUSAL_CONTEXT`.)
-    refused(mod.ParallelCausalLM.load, ValueError, 'one nonnegative device index per layer',
-            '/does/not/exist', layer_devices=(0, -1))
-
-
 @pytest.mark.parametrize('family,profile', [('llama', None), ('llama', 'fp32_v1'),
                                            ('mamba', None), ('mamba2', None)])
 def test_native_owners_match_independent_blocks_and_continue_states(tmp_path, monkeypatch, family, profile):

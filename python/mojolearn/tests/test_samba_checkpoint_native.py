@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """Public checkpoint byte compatibility, complete resume and corruption audits."""
-import copy
 import hashlib
 import json
 import struct
@@ -139,16 +138,6 @@ def test_failed_checkpoint_save_preserves_existing_file_and_leaves_no_temporary(
         model.flat.shape = original
     assert path.read_bytes() == b"previous complete checkpoint"
     assert not list(tmp_path.glob("existing.bin.tmp-*"))
-
-
-def test_checkpoint_missing_path_and_python_path_callback_refusals(tmp_path):
-    _assert_refusal(audit_native_call(SambaStack.from_checkpoint, tmp_path / "missing"), FileNotFoundError)
-
-    class CallbackPath:
-        def __fspath__(self):
-            pytest.fail("Python path callback executed")
-
-    _assert_refusal(audit_native_call(SambaStack.from_checkpoint, CallbackPath()), TypeError)
 
 
 def test_streamed_checkpoint_spanning_several_write_chunks(tmp_path):

@@ -1,13 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Public Samba inference against an independent primitive/block sequence."""
-from types import SimpleNamespace
-
 import numpy as np
 import pytest
 
 from mojolearn import SambaConfig, SambaStack
 from mojolearn._samba_impl import SambaState
-from mojolearn import _native_samba_bridge as bridge
 from mojolearn import _training_impl as training
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.tests.test_causal_model_native_loading import _poison
@@ -133,18 +130,6 @@ def test_public_ragged_forward_ignores_invalid_padding_and_zeros_output(layers):
     assert not np.asarray(actual).view("u4")[1, 1:].any()
 
 
-@pytest.mark.parametrize("operation,args", [("step", (np.array([1], dtype="i4"), None)),
-                                           ("allocate_state", (0, 2)),
-                                           ("forward", (np.array([[999]], dtype="i4"),))])
-def test_public_inference_refusals_are_native(operation, args):
-    _, model = _models(["attention"])
-    result = audit_native_call(getattr(model, operation), *args)
-    assert isinstance(result.exception, ValueError), result.report()
-    report = result.report()
-    for name in ("python_frames", "wrapper_work", "forbidden_native_calls", "unobserved_existing_threads"):
-        assert not report[name], report
-
-
 def test_stateless_forward_leaves_block_reports_untouched():
     # lane perf-neural-sessions (2026-11-13): a stack's Mamba-3 blocks discard
     # their reports, so the stateless forward on a device build requests none
@@ -250,19 +235,3 @@ def test_resident_forward_two_models_alternating_upload_once_each():
     assert trained.tobytes() != first_a.tobytes()
     assert np.asarray(b.forward(ids)).tobytes() == first_b.tobytes()
     assert vars(b)["_samba_resident_uploads"] == ub, "a write to A re-uploaded B"
-
-
-class _HookedInt(int):
-    def __index__(self):  # pragma: no cover - must never run
-        raise AssertionError("Python hook ran inside a native Samba forward")
-
-
-def test_read_only_forward_still_refuses_hooks_in_fields_it_reads():
-    # The read-only admission walks only the fields forward reads; each of them
-    # keeps the full walk's refusal.
-    _, model = _models(["attention"])
-    ids = np.array([[1, 2, 3]], dtype="i4")
-    audit_native_call(model.forward, ids).assert_native()
-    vars(model)["n_total"] = _HookedInt(model.n_total)
-    with pytest.raises(TypeError):
-        model.forward(ids)

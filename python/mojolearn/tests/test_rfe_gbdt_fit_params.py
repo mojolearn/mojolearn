@@ -1,5 +1,5 @@
 """RFE.fit(X, y, **fit_params) over a GradientBoosting member (lane mf-gbdt5): the fit parameters are admitted
-natively with the estimator's own fit door's checks and words, and RFE's member fits read them, the held-out X
+natively (the refusal words are in test_prep_boundary.py), and RFE's member fits read them, the held-out X
 restricted to the fit's columns. With n_features_to_select keeping every column RFE runs no round (scikit-learn
 reads no importances then), so its final estimator is the estimator's own fit on X: same predictions, same
 curves. A round over a family with no importance block (GaussianNB) refuses before it fits; since lane mf-imp6
@@ -79,27 +79,6 @@ def test_classifier_adapter_eval_set_equals_its_own_fit():
     np.testing.assert_array_equal(np.asarray(rfe.predict(X)), np.asarray(own.predict(X)))
 
 
-def _words(fit):
-    with pytest.raises(Exception) as caught:
-        fit()
-    return f"{type(caught.value).__name__}: {caught.value}"
-
-
-@pytest.mark.parametrize("params", [
-    {"eval_set": [(np.zeros((4, 5), np.float32), np.zeros(4, np.float32))] * 2},
-    {"eval_set": (np.zeros((4, 4), np.float32), np.zeros(4, np.float32))},
-    {"eval_set": (np.zeros((4, 5), np.float32), np.zeros(3, np.float32))},
-    {"pairs_weight": [1.0]},
-    {"subgroup_id": np.zeros(160)},
-    {"pairs": [[0, 1]], "group_id": np.zeros(160)},
-])
-def test_booster_refusals_are_the_fit_doors_words(params):
-    X, y = _data()
-    ours = _words(lambda: RFE(ml.GradientBoosting(n_estimators=4), n_features_to_select=5).fit(X, y, **params))
-    own = _words(lambda: ml.GradientBoosting(n_estimators=4).fit(X, y, **params))
-    assert ours == own
-
-
 def test_a_round_over_gbdt_reads_its_feature_importances():
     # lane mf-imp6: a Gbdt member exports feature_importances_, so RFE's rounds fit it and drop the column of
     # least importance, as scikit-learn's RFE does over its feature_importances_ (the oracle below walks the
@@ -127,10 +106,3 @@ def test_no_round_needs_no_importances():
     rfe = RFE(ml.GaussianNB(), n_features_to_select=X.shape[1]).fit(X, codes)
     assert list(rfe.support_) == [True] * X.shape[1]
     np.testing.assert_array_equal(np.asarray(rfe.predict(X)), np.asarray(ml.GaussianNB().fit(X, codes).predict(X)))
-
-
-def test_an_unknown_key_keeps_the_fit_door():
-    X, y = _data()
-    ours = _words(lambda: RFE(ml.GradientBoosting(n_estimators=4), n_features_to_select=5).fit(X, y, bogus=1))
-    own = _words(lambda: ml.GradientBoosting(n_estimators=4).fit(X, y, bogus=1))
-    assert ours == own

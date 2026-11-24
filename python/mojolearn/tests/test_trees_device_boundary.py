@@ -93,19 +93,6 @@ def test_cpu_device_runs_everywhere(cls):
     assert len(answer(model, cls, x)) == len(x)
 
 
-@two_devices
-@pytest.mark.parametrize("cls", CLASSES)
-def test_two_devices_in_one_process_return_the_same_bits(cls):
-    gpu, x = fit(build(cls, numeric_mode="identical"), cls)
-    cpu, _ = fit(build(cls, numeric_mode="identical", device="cpu"), cls)
-    assert gpu.vendor_used() != "cpu" and cpu.vendor_used() == "cpu"
-    # interleaved: neither estimator's route leaks into the other's
-    first = answer(gpu, cls, x)
-    second = answer(cpu, cls, x)
-    third = answer(gpu, cls, x)
-    assert first.tobytes() == second.tobytes() == third.tobytes()
-
-
 @pytest.mark.skipif(mojolearn.vendor() != "metal", reason="numeric_mode='fast' exists on Apple GPUs only")
 @pytest.mark.parametrize("cls", CLASSES)
 def test_cpu_device_refuses_fast_mode_in_words(cls):

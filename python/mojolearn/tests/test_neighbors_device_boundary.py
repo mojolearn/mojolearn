@@ -130,8 +130,15 @@ def test_two_devices_keep_their_own_module_across_interleaved_fits_and_queries(c
         case.fit(cpu, x, y)
 
 
+# The CPU-equals-GPU bits of the other classes are the two-sided verify lanes'
+# (knn, knn-clf, psd-queries-knn, knn-reg, x-neighbors-lof, x-neighbors-nearest-centroid,
+# ivf, x-ann-*, x-neighbors-poly-sketch, x-neighbors-*-chi2, x-neighbors-knn-imputer).
+# No lane digests predict of the kernel="knn" label propagation and spreading.
+_IDENTICAL_CASES = [case for case in CASES if case.name in ("LabelPropagation", "LabelSpreading")]
+
+
 @two_devices
-@pytest.mark.parametrize("case", CASES, ids=ids)
+@pytest.mark.parametrize("case", _IDENTICAL_CASES, ids=[case.name for case in _IDENTICAL_CASES])
 def test_identical_mode_cpu_device_returns_the_gpu_bits(case):
     if mojolearn.numeric_mode() != "identical":
         pytest.skip("bits are promised in identical mode only")

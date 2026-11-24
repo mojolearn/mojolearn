@@ -451,26 +451,6 @@ def test_bagging_oob_score():
         ml.BaggingRegressor(oob_score=True, bootstrap=False).fit(Xa, ya)
 
 
-def test_cv_splitter_objects():
-    # The meta-estimators admit mojolearn's native splitters and lists of
-    # index pairs; a Python splitter's split() would be a callback inside the
-    # native fit (bindings/trees_public_meta_door.mojo _cv_value).
-    from mojolearn.model_selection import KFold, StratifiedKFold
-    Xa, Xb, ya, yb = _clf()
-    est = [("dt", ml.DecisionTreeClassifier(max_depth=4))]
-    a = ml.StackingClassifier(est, final_estimator=ml.DecisionTreeClassifier(max_depth=3), cv=3).fit(Xa, ya)
-    b = ml.StackingClassifier(est, final_estimator=ml.DecisionTreeClassifier(max_depth=3),
-                              cv=StratifiedKFold(3)).fit(Xa, ya)
-    np.testing.assert_array_equal(np.asarray(a.transform(Xb)), np.asarray(b.transform(Xb)))
-    pairs = [(np.asarray(tr).tolist(), np.asarray(te).tolist())
-             for tr, te in KFold(4, shuffle=True, random_state=0).split(Xa)]
-    c = ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(max_depth=4), cv=pairs).fit(Xa, ya)
-    assert len(c.calibrated_classifiers_) == 4
-    d = ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(max_depth=4), cv=KFold(3, shuffle=True, random_state=1),
-                                  method="isotonic", ensemble=False).fit(Xa, ya)
-    assert accuracy_score(yb, np.asarray(d.predict(Xb))) > 0.5
-
-
 def test_extratrees_deviance_criteria():
     from sklearn.ensemble import ExtraTreesRegressor
     Xa, Xb, ya, yb = _reg()

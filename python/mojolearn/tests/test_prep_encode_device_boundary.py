@@ -77,6 +77,13 @@ CASES = [
     ("iterative-imputer", IterativeImputer, dict(max_iter=3, random_state=0), lambda: (_with_nan(),), False),
 ]
 case = pytest.mark.parametrize("spec", CASES, ids=[row[0] for row in CASES])
+# The rows whose CPU and GPU bits (transform, fit_transform, inverse_transform) are a verify lane's digest
+# (x-prep-* in tools/identity_lanes/prep.py and m_transform.py) and whose vendor_used on both sides
+# test_check_runs_both_devices_in_this_process reads are left out of the cross-device bits test.
+DIGESTED = ("imputer-mean", "imputer-median", "kbins-ordinal", "ordinal", "onehot", "spline", "label-encoder",
+            "label-binarizer", "iterative-imputer")
+UNDIGESTED = [row for row in CASES if row[0] not in DIGESTED]
+undigested_case = pytest.mark.parametrize("spec", UNDIGESTED, ids=[row[0] for row in UNDIGESTED])
 
 
 def build(spec, **extra):
@@ -136,7 +143,7 @@ def test_cpu_device_fits_and_transforms(spec):
 
 
 @two_devices
-@case
+@undigested_case
 def test_identical_mode_cpu_device_returns_the_gpu_bits(spec):
     args = spec[3]()
     gpu, cpu = build(spec), build(spec, device="cpu")

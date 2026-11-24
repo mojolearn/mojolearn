@@ -67,3 +67,31 @@ def test_constant_target_publishes_scalar_metadata_and_array():
     assert isinstance(m._y_train_std, float) and isinstance(m._y_train_mean, float)
     mean = np.asarray(m.predict(q))
     assert mean.shape == (24,) and mean.dtype == np.float32
+
+
+# ---- appended by vdv-pytest-b (2026-11-24) ----
+# moved from python/mojolearn/tests/test_parallel_gaussian_process.py
+import numpy as np
+import pytest
+
+from mojolearn import parallel_gaussian_process as _pgp_pg
+from mojolearn._gpc_impl import GaussianProcessClassifier as _PgpGPC
+
+
+@pytest.fixture
+def _pgp_identical(monkeypatch):
+    monkeypatch.setattr('mojolearn._backend.default_mode', lambda: 'identical')
+    yield
+
+
+@pytest.mark.parametrize('labels', [[1, 1], [1], []])
+def test_parallel_gpc_invalid_targets(_pgp_identical, labels):
+    with pytest.raises(ValueError):
+        _pgp_pg.fit_gaussian_process_classifier(_PgpGPC(), np.ones((2, 3), np.float32), labels)
+
+
+def test_parallel_gpc_prediction_validation(_pgp_identical):
+    with pytest.raises(ValueError, match='method'):
+        _pgp_pg.predict_gaussian_process_classifier(_PgpGPC(), np.ones((2, 3), np.float32), method='score')
+    with pytest.raises(ValueError, match='fit'):
+        _pgp_pg.predict_gaussian_process_classifier(_PgpGPC(), np.ones((2, 3), np.float32))

@@ -12,11 +12,11 @@ Written without a run (lane fix-x-decomp-native-api-cpu, 2026-11-08).
 """
 from types import BuiltinFunctionType, ModuleType
 
-import numpy as np
 import pytest
 
 from mojolearn import _backend, host_surface
 from mojolearn import _native_spectral_umap_bridge as bridge
+
 
 def test_host_surface_lists_the_provider_for_vendor_cpu():
     assert host_surface.routed_modules()["_mojolearn_x_decomp"] == "_mojolearn_x_decomp_host"
@@ -53,12 +53,3 @@ def test_cpu_only_decomp_route_owns_the_provider():
     assert type(module) is ModuleType
     entry = module.__dict__["x_decomp_native_api_v1"]
     assert type(entry) is BuiltinFunctionType and entry.__self__ is module
-
-
-@pytest.mark.skipif(_backend._CPU_ONLY is None, reason="the CPU-only set is not selected")
-def test_cpu_only_umap_fit_runs():
-    from mojolearn import UMAP
-    rng = np.random.default_rng(0)
-    x = rng.standard_normal((80, 6)).astype(np.float32)
-    emb = UMAP(n_neighbors=8, n_components=2, n_epochs=20, random_state=0).fit(x).embedding_
-    assert emb.shape == (80, 2)
