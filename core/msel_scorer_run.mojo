@@ -111,18 +111,56 @@ get_scorer name but a typed program is a row too, matched by its metric
 hamming_loss over the COUNT tail (bindings/mcls_classify_run.mojo
 `label_count_run`, the program bindings/metrics_exp_cls_door.mojo
 `_cm_count` runs), sample_weight as the other weighted rows take it.
+
+EVERY REMAINING SCORER, TYPED (lane mf-score8): a native make_scorer over
+any connected metric that returns one number for 1-D targets and has a
+typed program is a row, its kwargs read ONCE at UNPACK into the word group:
+- the regression metrics (`reg_metric_options_run`, the one body of
+  bindings/metrics_reg_door.mojo): mean_pinball_loss and d2_pinball_score
+  (`alpha`), mean_tweedie_deviance and d2_tweedie_score (`power`, printed
+  as given in the Tweedie domain words), `multioutput` on a 1-D target
+  ('raw_values', 'uniform_average', r2 / explained variance's
+  'variance_weighted': the door's program of that rule, one output's value),
+  `force_finite` (r2, explained variance);
+- accuracy_score normalize=False (the COUNT tail's correct count,
+  `label_count_run` CNT_CORRECT), balanced_accuracy_score adjusted=True,
+  log_loss normalize=False, top_k_accuracy_score normalize=False;
+- cohen_kappa_score (`labels` as class codes in their order, `weights`,
+  `replace_undefined_by`; bindings/mcls_classify_run.mojo `kappa_run`, the
+  program its door now builds through `kappa_stages`), its two warnings as
+  notice words (MEMBER_NOTICE_METRIC_KAPPA);
+- a REGRESSION scorer on a CLASSIFIER: scikit-learn scores the predicted
+  labels as numbers. The UNPACK reads each fit label's value once (an
+  integer, a bool or a real as float32 words; a string as `float(label)`
+  when that converts) into two words per label (the value's bits, its kind
+  word `SCORER_LABEL_*`); each side maps its codes onto them and runs the
+  regression row's program. A string that does not convert raises
+  NumPy's words ("could not convert string to float: <repr>", y_true's rows
+  first) and median_absolute_error / max_error, which check their targets
+  with dtype='numeric', refuse string labels in scikit-learn's words
+  (`SCORER_NUMERIC_WORDS`).
+A kwarg value the metric's door refuses (a bad multioutput string, custom
+multioutput weights on 1-D targets, an alpha outside [0, 1], a power that
+is no real, a normalize that is no bool, kappa weights of another name, a
+repeated or other-kind `labels` entry) is ONE MORE LABEL WORD the UNPACK
+appends (`refuse_word`), raised per side in that door's words, so the
+error_score rule applies as scikit-learn's scorer error would.
 """
+from std.memory import bitcast
 from bindings.arena_prog_run import MetricRoute
 from bindings.metrics_reg_run import (
-    reg_metric_run, reg_metric_caller, REG_R2, REG_MSE, REG_MAE, REG_RMSE, REG_MSLE, REG_RMSLE, REG_MAPE, REG_MEDAE,
-    REG_EXPLAINED_VARIANCE, REG_MAX_ERROR, REG_POISSON, REG_GAMMA, REG_D2_ABSOLUTE,
+    reg_metric_run, reg_metric_options_run, reg_metric_caller, reg_metric_d2, reg_metric_takes_multioutput,
+    reg_metric_takes_variance, REG_R2, REG_MSE, REG_MAE, REG_RMSE, REG_MSLE, REG_RMSLE, REG_MAPE, REG_MEDAE,
+    REG_EXPLAINED_VARIANCE, REG_MAX_ERROR, REG_POISSON, REG_GAMMA, REG_D2_ABSOLUTE, REG_PINBALL, REG_TWEEDIE,
+    REG_D2_TWEEDIE, REG_D2_PINBALL, REG_MO_UNIFORM,
 )
 from bindings.mcls_classify_run import (
     label_metric_run, label_binary_run, label_metric_options_run, label_binary_options_run, log_loss_run, LBL_JACCARD, LBL_BALANCED, LBL_PRECISION, LBL_RECALL, LBL_F1, LBL_MCC,
-    LBL_MICRO, LBL_MACRO, LBL_WEIGHTED, label_count_run, CNT_LOSS, CNT_COUNT,
+    LBL_MICRO, LBL_MACRO, LBL_WEIGHTED, label_count_run, CNT_LOSS, CNT_COUNT, CNT_CORRECT, log_loss_options_run,
+    kappa_run,
 )
 from bindings.mcls_ranking_run import roc_auc_run, ROC_BINARY, ROC_OVR, ROC_OVR_WEIGHTED, ROC_OVO, ROC_OVO_WEIGHTED
-from bindings.metrics_exp_curve_run import average_precision_run, top_k_run
+from bindings.metrics_exp_curve_run import average_precision_run, top_k_run, top_k_options_run
 from bindings.metrics_exp_rank_run import brier_run, brier_options_run
 from bindings.metrics_exp_common_run import cluster_mi_run
 from core.entry_table import EntryRef, entry_ref_unresolved
@@ -132,7 +170,7 @@ from core.metrics_cluster_table import (
 )
 from core.member_notices import (
     member_notice_add, MEMBER_NOTICE_METRIC_PRF, MEMBER_NOTICE_METRIC_JACCARD, MEMBER_NOTICE_METRIC_BALANCED,
-    MEMBER_NOTICE_METRIC_FEW, MEMBER_NOTICE_METRIC_TOP_K,
+    MEMBER_NOTICE_METRIC_FEW, MEMBER_NOTICE_METRIC_TOP_K, MEMBER_NOTICE_METRIC_KAPPA,
 )
 from bindings.arena_prog_run import metric_inputs_run
 from core.labels_accuracy_plan import label_accuracy_plan
@@ -158,6 +196,11 @@ comptime _F_CLUSTER = 9
 #: their metric word CNT_LOSS / CNT_COUNT or `_CNT_HAMMING`.
 comptime _F_COUNT = 10
 comptime _CNT_HAMMING = 2
+#: lane mf-score8: accuracy_score normalize=False on the COUNT tail (its
+#: metric word: bindings/mcls_classify_run.mojo CNT_CORRECT) and the
+#: cohen_kappa_score family.
+comptime _CNT_CORRECT = CNT_CORRECT
+comptime _F_KAPPA = 11
 #: `_F_CLUSTER` metrics.
 comptime _CL_NMI = 0
 comptime _CL_AMI = 1
@@ -177,7 +220,16 @@ comptime _CL_PAIR = 2
 #: fit's classes is a label no row holds), then the sample_weight words (each
 #: float32's bits as an int32). Replaces the code bits SCORER_FLIP,
 #: SCORER_POS_GIVEN and SCORER_K_UNIT of lanes mf-cluster5 / mf-msel5c.
-comptime SCORER_GROUP_WORDS = 13
+#: Lane mf-score8 appends 8 words: the multioutput rule (REG_MO_*), force_finite
+#: (-1 the row's, 0, 1), the metric's alpha / power / replace_undefined_by
+#: (`param`), the label word printing it when given (-1: not given), the
+#: refusal word (-1: none; else the label word raised per side), the
+#: normalize / adjusted flag (-1 the row's, 0, 1), cohen_kappa_score's
+#: weights word, the number of fit labels whose value words follow (0: none;
+#: a regression scorer on a classifier). Those value words come after the
+#: sample_weight words: two per label (the float32 bits as an int32, the
+#: kind word SCORER_LABEL_*).
+comptime SCORER_GROUP_WORDS = 21
 #: Lane mf-score6: the sample_weight refusal word: none, or an empty weights
 #: array (each side refuses its length in the door's words).
 comptime SCORER_WEIGHTS_OK = -1
@@ -193,6 +245,18 @@ comptime SCORER_FLOAT_POS_WORDS = ("TypeError: pos_label must contain only strin
 #: that returns no number (model_selection/_validation.py `_score`: raised
 #: after the scorer's try, so a numeric error_score never replaces it).
 comptime SCORER_NUMBER_WORDS = "ValueError: scoring must return a number, got "
+#: Lane mf-score8: a fit label's kind word (the label value words of a
+#: regression scorer on a classifier): a number (an integer, a bool or a
+#: real), a string `float()` converts, a string it does not.
+comptime SCORER_LABEL_NUMBER = 1
+comptime SCORER_LABEL_TEXT = 2
+comptime SCORER_LABEL_UNREAD = 0
+#: Lane mf-score8: scikit-learn's refusal of string targets in a metric that
+#: checks them with dtype='numeric' (sklearn 1.9 utils/validation.py
+#: `check_array`; metrics/_regression.py median_absolute_error and max_error
+#: call `_check_reg_targets(..., dtype="numeric")`).
+comptime SCORER_NUMERIC_WORDS = ("ValueError: dtype='numeric' is not compatible with arrays of bytes/strings."
+                                 + "Convert your data to numeric values explicitly instead.")
 #: The top_k scorer's k (`top_k_accuracy_score`'s default; the scorer passes none).
 comptime _TOP_K = 2
 #: `MselSearchPlan.positives` words a scorer reads (`msel_scorer_positive_kind`).
@@ -246,6 +310,21 @@ struct MselScorer(ImplicitlyCopyable, Movable):
     var w_n: Int
     var w_word: Int
     var pos_float: Bool
+    # lane mf-score8: the multioutput rule, force_finite, the metric's alpha
+    # / power / replace_undefined_by (`param`, given when `param_given`, its
+    # printed words at label word `param_word`), the refusal word, the
+    # normalize / adjusted flag, kappa's weights, the fit labels' value
+    # words (int32 pairs at `lv_at`, `lv_n` labels).
+    var mo: Int
+    var ff: Bool
+    var param: Float64
+    var param_given: Bool
+    var param_word: Int
+    var refuse_word: Int
+    var flag: Int
+    var wmode: Int
+    var lv_at: Int
+    var lv_n: Int
 
     def __init__(out self, name: StaticString, family: Int, metric: Int, avg: Int, sign: Float64, op: Int):
         self.name = name
@@ -269,6 +348,21 @@ struct MselScorer(ImplicitlyCopyable, Movable):
         self.w_n = 0
         self.w_word = SCORER_WEIGHTS_OK
         self.pos_float = False
+        self.mo = REG_MO_UNIFORM
+        self.ff = True
+        self.param = _nan64()
+        self.param_given = False
+        self.param_word = -1
+        self.refuse_word = -1
+        self.flag = -1
+        self.wmode = 0
+        self.lv_at = 0
+        self.lv_n = 0
+
+
+def _nan64() -> Float64:
+    var zero = Float64(0.0)
+    return zero / zero
 
 
 struct MselScorerOptions(ImplicitlyCopyable, Movable):
@@ -294,6 +388,18 @@ struct MselScorerOptions(ImplicitlyCopyable, Movable):
     var w_n: Int
     var w_word: Int
     var pos_float: Bool
+    # lane mf-score8 (module note): `mo`, `ff` (-1 the row's), `param` with
+    # `param_word` (-1: not given), `refuse_word`, `flag` (-1 the row's),
+    # `wmode`, and the label value words' place (`lv_from`, `lv_n` labels).
+    var mo: Int
+    var ff: Int
+    var param: Float64
+    var param_word: Int
+    var refuse_word: Int
+    var flag: Int
+    var wmode: Int
+    var lv_from: Int
+    var lv_n: Int
 
     def __init__(out self):
         self.flip = False
@@ -310,6 +416,15 @@ struct MselScorerOptions(ImplicitlyCopyable, Movable):
         self.w_n = 0
         self.w_word = SCORER_WEIGHTS_OK
         self.pos_float = False
+        self.mo = REG_MO_UNIFORM
+        self.ff = -1
+        self.param = 0.0
+        self.param_word = -1
+        self.refuse_word = -1
+        self.flag = -1
+        self.wmode = 0
+        self.lv_from = 0
+        self.lv_n = 0
 
 
 def _table() -> List[MselScorer]:
@@ -381,6 +496,16 @@ def _table() -> List[MselScorer]:
     t.append(MselScorer("zero_one_loss", _F_COUNT, CNT_LOSS, 0, 1.0, MEMBER_OP_PREDICT))
     t.append(MselScorer("zero_one_loss(normalize=False)", _F_COUNT, CNT_COUNT, 0, 1.0, MEMBER_OP_PREDICT))
     t.append(MselScorer("hamming_loss", _F_COUNT, _CNT_HAMMING, 0, 1.0, MEMBER_OP_PREDICT))
+    # lane mf-score8 (appended: earlier codes unchanged): METRIC ROWS of the
+    # regression metrics with an alpha or a power, accuracy_score's count and
+    # cohen_kappa_score (`msel_scorer_metric_code`; their sign the metric's
+    # value, a make_scorer's greater_is_better=False the flip).
+    t.append(MselScorer("mean_pinball_loss", _F_REG, REG_PINBALL, 0, 1.0, MEMBER_OP_PREDICT))
+    t.append(MselScorer("mean_tweedie_deviance", _F_REG, REG_TWEEDIE, 0, 1.0, MEMBER_OP_PREDICT))
+    t.append(MselScorer("d2_tweedie_score", _F_REG, REG_D2_TWEEDIE, 0, 1.0, MEMBER_OP_PREDICT))
+    t.append(MselScorer("d2_pinball_score", _F_REG, REG_D2_PINBALL, 0, 1.0, MEMBER_OP_PREDICT))
+    t.append(MselScorer("accuracy_score(normalize=False)", _F_COUNT, _CNT_CORRECT, 0, 1.0, MEMBER_OP_PREDICT))
+    t.append(MselScorer("cohen_kappa_score", _F_KAPPA, 0, 0, 1.0, MEMBER_OP_PREDICT))
     return t^
 
 
@@ -417,7 +542,8 @@ def msel_scorer_row(code: Int, opts: MselScorerOptions, sel_base: Int) raises ->
         row.zd = opts.zd
         row.quiet = True
     if opts.sel_n > 0:
-        if row.family != _F_LABEL or row.metric == LBL_BALANCED or row.metric == LBL_MCC:
+        # lane mf-score8: cohen_kappa_score's `labels` too (its chosen order)
+        if row.family != _F_KAPPA and (row.family != _F_LABEL or row.metric == LBL_BALANCED or row.metric == LBL_MCC):
             raise Error("RuntimeError: a given labels list on a search scorer other than an averaged label row")
         row.sel_at = sel_base + 4 * opts.sel_from
         row.sel_n = opts.sel_n
@@ -435,6 +561,42 @@ def msel_scorer_row(code: Int, opts: MselScorerOptions, sel_base: Int) raises ->
         row.w_n = opts.w_n
         row.w_at = sel_base + 4 * opts.w_from
         row.w_word = opts.w_word
+    # lane mf-score8 (module note): the regression options, the refusal word,
+    # the normalize / adjusted flag, kappa's weights, the label value words.
+    if opts.mo != REG_MO_UNIFORM:
+        if (row.family != _F_REG or not reg_metric_takes_multioutput(row.metric)
+                or (opts.mo != 1 and not reg_metric_takes_variance(row.metric))):
+            raise Error("RuntimeError: a multioutput rule on a search scorer whose metric takes none")
+        row.mo = opts.mo
+    if opts.ff >= 0:
+        if row.family != _F_REG or (row.metric != REG_R2 and row.metric != REG_EXPLAINED_VARIANCE):
+            raise Error("RuntimeError: force_finite on a search scorer whose metric takes none")
+        row.ff = opts.ff == 1
+    if opts.param_word >= 0:
+        var param_row = row.family == _F_KAPPA or (row.family == _F_REG and (
+            row.metric == REG_PINBALL or row.metric == REG_D2_PINBALL or row.metric == REG_TWEEDIE
+            or row.metric == REG_D2_TWEEDIE))
+        if not param_row:
+            raise Error("RuntimeError: an alpha, power or replace_undefined_by on a search scorer that takes none")
+        row.param = opts.param
+        row.param_given = True
+        row.param_word = opts.param_word
+    row.refuse_word = opts.refuse_word
+    if opts.flag >= 0:
+        var flag_row = (row.family == _F_LOG_LOSS or row.family == _F_TOP_K
+                        or (row.family == _F_LABEL and row.metric == LBL_BALANCED))
+        if not flag_row:
+            raise Error("RuntimeError: a normalize or adjusted flag on a search scorer that takes none")
+        row.flag = opts.flag
+    if opts.wmode != 0:
+        if row.family != _F_KAPPA:
+            raise Error("RuntimeError: kappa weights on a search scorer other than cohen_kappa_score")
+        row.wmode = opts.wmode
+    if opts.lv_n > 0:
+        if row.family != _F_REG:
+            raise Error("RuntimeError: label value words on a search scorer other than a regression row")
+        row.lv_at = sel_base + 4 * opts.lv_from
+        row.lv_n = opts.lv_n
     return row
 
 
@@ -498,18 +660,45 @@ def msel_scorer_code(name: String, has_decision: Bool) -> Int:
     return -1
 
 
-def msel_scorer_metric_code(metric: String, normalize: Bool) -> Int:
-    """UNPACK's typed lookup of a METRIC ROW (lane mf-fitadm7): the code
-    of a native make_scorer over the connected metric `metric` (its plan
-    name) with response 'predict' and no kwargs but `normalize`
-    (zero_one_loss only) and `sample_weight`, or -1 when no row serves it."""
-    var name = String("")
+def msel_scorer_metric_name(metric: String, normalize: Bool) -> String:
+    """Lane mf-score8: the row name of the connected metric `metric` (its
+    plan name) as a make_scorer with response 'predict' wraps it: its
+    get_scorer row (r2_score is 'r2', mean_squared_error
+    'neg_mean_squared_error', ...) or its METRIC ROW; `normalize` picks
+    zero_one_loss's and accuracy_score's row. "": no typed row."""
     if metric == "zero_one_loss":
-        name = String("zero_one_loss") if normalize else String("zero_one_loss(normalize=False)")
-    elif metric == "hamming_loss":
-        name = String("hamming_loss")
-    else:
+        return String("zero_one_loss") if normalize else String("zero_one_loss(normalize=False)")
+    if metric == "accuracy_score":
+        return String("accuracy") if normalize else String("accuracy_score(normalize=False)")
+    if (metric == "hamming_loss" or metric == "mean_pinball_loss" or metric == "mean_tweedie_deviance"
+            or metric == "d2_tweedie_score" or metric == "d2_pinball_score" or metric == "cohen_kappa_score"
+            or metric == "d2_absolute_error_score" or metric == "matthews_corrcoef" or metric == "max_error"):
+        return metric.copy()
+    if metric == "r2_score":
+        return String("r2")
+    if metric == "explained_variance_score":
+        return String("explained_variance")
+    if metric == "balanced_accuracy_score":
+        return String("balanced_accuracy")
+    if (metric == "mean_squared_error" or metric == "mean_absolute_error" or metric == "root_mean_squared_error"
+            or metric == "mean_squared_log_error" or metric == "root_mean_squared_log_error"
+            or metric == "mean_absolute_percentage_error" or metric == "median_absolute_error"
+            or metric == "mean_poisson_deviance" or metric == "mean_gamma_deviance"):
+        return "neg_" + metric
+    return String("")
+
+
+def msel_scorer_metric_code(metric: String, normalize: Bool) -> Int:
+    """UNPACK's typed lookup of a METRIC ROW (lane mf-fitadm7; lane
+    mf-score8: every connected metric with a typed row,
+    `msel_scorer_metric_name`): the code of a native make_scorer over the
+    connected metric `metric` (its plan name) with response 'predict', or
+    -1 when no row serves it."""
+    var name = msel_scorer_metric_name(metric, normalize)
+    if name.byte_length() == 0:
         return -1
+    if name == "accuracy":
+        return SCORER_ACCURACY
     var t = _table()
     for i in range(len(t)):  # driver-loop: over the served scorer rows (a fixed table)
         if String(t[i].name) == name:
@@ -534,10 +723,21 @@ def msel_scorer_group_words(mut words: List[Float64], code: Int, positive: Int, 
     words.append(1.0 if opts.samples else 0.0)
     words.append(Float64(opts.w_n))
     words.append(Float64(opts.w_word))
+    # lane mf-score8
+    words.append(Float64(opts.mo))
+    words.append(Float64(opts.ff))
+    words.append(opts.param)
+    words.append(Float64(opts.param_word))
+    words.append(Float64(opts.refuse_word))
+    words.append(Float64(opts.flag))
+    words.append(Float64(opts.wmode))
+    words.append(Float64(opts.lv_n))
     for j in range(opts.sel_n):  # small-loop(the scorer's labels codes)
         words.append(Float64(sels[opts.sel_from + j]))
     for j in range(max(opts.w_n, 0)):  # driver-loop: over the sample_weight words (once per admission)
         words.append(Float64(sels[opts.w_from + j]))
+    for j in range(2 * opts.lv_n):  # small-loop(the fit labels' value words, two each)
+        words.append(Float64(sels[opts.lv_from + j]))
 
 
 def msel_scorer_group_read(words: List[Float64], at: Int, mut code: Int, mut positive: Int,
@@ -562,8 +762,18 @@ def msel_scorer_group_read(words: List[Float64], at: Int, mut code: Int, mut pos
     opts.samples = words[at + 10] != 0.0
     var wn = Int(words[at + 11])
     opts.w_word = Int(words[at + 12])
+    # lane mf-score8
+    opts.mo = Int(words[at + 13])
+    opts.ff = Int(words[at + 14])
+    opts.param = words[at + 15]
+    opts.param_word = Int(words[at + 16])
+    opts.refuse_word = Int(words[at + 17])
+    opts.flag = Int(words[at + 18])
+    opts.wmode = Int(words[at + 19])
+    var lv = Int(words[at + 20])
     var wk = max(wn, 0)
-    if n < 0 or wn < -1 or opts.w_word < SCORER_WEIGHTS_EMPTY or at + SCORER_GROUP_WORDS + n + wk > len(words):
+    if (n < 0 or wn < -1 or lv < 0 or opts.w_word < SCORER_WEIGHTS_EMPTY
+            or at + SCORER_GROUP_WORDS + n + wk + 2 * lv > len(words)):
         raise Error("member ABI: a search scorer's labels codes are cut short")
     opts.sel_from = len(sels)
     opts.sel_n = n
@@ -573,7 +783,11 @@ def msel_scorer_group_read(words: List[Float64], at: Int, mut code: Int, mut pos
     opts.w_n = wn
     for j in range(wk):  # driver-loop: over the sample_weight words (once per fit)
         sels.append(Int32(Int(words[at + SCORER_GROUP_WORDS + n + j])))
-    return at + SCORER_GROUP_WORDS + n + wk
+    opts.lv_from = len(sels)
+    opts.lv_n = lv
+    for j in range(2 * lv):  # small-loop(the fit labels' value words, two each; once per fit)
+        sels.append(Int32(Int(words[at + SCORER_GROUP_WORDS + n + wk + j])))
+    return at + SCORER_GROUP_WORDS + n + wk + 2 * lv
 
 
 def msel_scorer_top_k(row: MselScorer) -> Bool:
@@ -750,6 +964,11 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
     if row.w_n > 0:
         _check_weights(row, count)
         w = row.w_at
+    if row.refuse_word >= 0:
+        # lane mf-score8: a kwarg value the metric's door refuses (module note)
+        if row.refuse_word >= len(label_words):
+            raise Error("member ABI: a search scorer's refusal word is missing")
+        raise Error(label_words[row.refuse_word])
     if row.samples:
         raise Error("NotImplementedError: mojolearn " + msel_scorer_caller(row) + ": average='samples' applies to "
                     + "multilabel targets, which are NOT IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv)")
@@ -758,17 +977,28 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
     var value: Float64
     var warn = 0
     if row.family == _F_REG:
-        value = reg_metric_run(route, row.metric, truth, response, count, w, warn)
+        var shown = String("")
+        if row.param_word >= 0 and row.param_word < len(label_words):
+            shown = label_words[row.param_word].copy()
+        if row.lv_n > 0:
+            # lane mf-score8: a regression scorer on a classifier (module note)
+            value = _label_regression(route, label_words, row, truth, response, count, classes, w, shown, warn)
+        else:
+            value = reg_metric_options_run(route, row.metric, truth, response, count, w, row.mo, row.ff, row.param,
+                                           row.param_given, shown, warn)
         if warn != 0:
-            member_notice_add(notices, MEMBER_NOTICE_METRIC_FEW, 1.0 if row.metric == REG_D2_ABSOLUTE else 0.0)
+            member_notice_add(notices, MEMBER_NOTICE_METRIC_FEW, 1.0 if reg_metric_d2(row.metric) else 0.0)
     elif row.family == _F_BINARY:
         value = _binary_value(route, label_words, row, truth, response, count, classes, positive, w, warn)
         if not row.quiet:
             _prf_notices(row.metric, warn, notices)
     elif row.family == _F_LABEL:
         var per_class = List[Float64]()
+        var zd = row.zd
+        if row.metric == LBL_BALANCED:
+            zd = 1 if row.flag == 1 else 0  # lane mf-score8: balanced_accuracy_score's `adjusted`
         value = label_metric_options_run(route, row.metric, 0 if row.avg_none else row.avg, truth, response, count,
-                                         classes, row.zd, row.fmode, row.b2, row.sel_at, row.sel_n, w, per_class,
+                                         classes, zd, row.fmode, row.b2, row.sel_at, row.sel_n, w, per_class,
                                          warn)
         if row.avg_none:
             # average=None (lane mf-score6): the per-label array. scikit-learn's
@@ -796,7 +1026,7 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
         value = brier_options_run(route, truth, response, count, classes, cols, -1 if row.pos_given else positive,
                                   positive if row.pos_given else -1, w)
     elif row.family == _F_TOP_K:
-        value = top_k_run(route, truth, response, count, cols, classes, row.metric, w, warn)
+        value = top_k_options_run(route, truth, response, count, cols, classes, row.metric, w, row.flag != 0, warn)
         if warn != 0:
             member_notice_add(notices, MEMBER_NOTICE_METRIC_TOP_K, Float64(row.metric), Float64(
                 _present_count(truth, count, classes)))
@@ -807,15 +1037,26 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
         # `_hamming` over the same program (`label_count_run`), their
         # ZeroDivisionError words on a zero total
         var zero = False
-        value = label_count_run(route, CNT_COUNT if row.metric == CNT_COUNT else CNT_LOSS, truth, response, count,
-                                classes, w, zero)
+        var answer = CNT_LOSS
+        if row.metric == CNT_COUNT or row.metric == _CNT_CORRECT:
+            answer = row.metric  # lane mf-score8: accuracy_score normalize=False's correct count
+        value = label_count_run(route, answer, truth, response, count, classes, w, zero)
         if zero:
             raise Error("ZeroDivisionError: " + (String("float division by zero") if (row.metric == _CNT_HAMMING
                         or w != 0) else String("division by zero")))
     elif row.family == _F_LOG_LOSS:
         if cols != (1 if classes == 2 else classes):
             raise Error("probability columns must match the label count (at least two)")
-        value = log_loss_run(route, truth, response, count, classes, w)
+        # lane mf-score8: log_loss's `normalize` (flag 0: the summed loss)
+        value = log_loss_options_run(route, truth, response, count, classes, w, row.flag != 0)
+    elif row.family == _F_KAPPA:
+        # lane mf-score8: bindings/metrics_exp_cls_door.mojo `_kappa`'s program
+        # (`kappa_run`); its two warnings, then its replace_undefined_by
+        var flags = 0
+        value = kappa_run(route, truth, response, count, classes, row.sel_at, row.sel_n, row.wmode, w, flags)
+        if flags != 0:
+            member_notice_add(notices, MEMBER_NOTICE_METRIC_KAPPA, Float64(flags))
+            value = row.param if row.param_given else _nan64()
     else:
         if row.metric == ROC_BINARY:
             if classes > 2 or cols != 1:
@@ -824,6 +1065,50 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
             raise Error("Number of classes in y_true not equal to the number of columns in 'y_score'")
         value = roc_auc_run(route, row.metric, truth, response, count, classes, w)
     return row.sign * value
+
+
+def _label_floats(label_words: List[String], row: MselScorer, codes: Int, count: Int,
+                  mut dst: List[Float32]) raises:
+    """Lane mf-score8: one side's class codes as their labels' float32
+    values (the UNPACK's value words), as NumPy converts the labels; a
+    string label `float()` does not convert raises NumPy's words."""
+    var lv = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=row.lv_at)
+    var c = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=codes)
+    dst = List[Float32](length=max(count, 1), fill=0.0)
+    for i in range(count):  # driver-loop: over the side's rows (their labels' values)
+        var k = Int(c[i])
+        if k < 0 or k >= row.lv_n:
+            raise Error("ValueError: y codes outside [0, n_classes)")
+        if Int(lv[2 * k + 1]) == SCORER_LABEL_UNREAD:
+            raise Error("ValueError: could not convert string to float: "
+                        + (label_words[k] if k < len(label_words) else String(k)))
+        dst[i] = bitcast[DType.float32](lv[2 * k])
+
+
+def _label_regression(route: MetricRoute, label_words: List[String], row: MselScorer, truth: Int, response: Int,
+                      count: Int, classes: Int, w: Int, shown: String, mut warn: Int) raises -> Float64:
+    """Lane mf-score8: a regression scorer on a classifier's side: the true
+    and the predicted class codes as their labels' values (y_true's rows
+    first, as `_check_reg_targets` converts y_true before y_pred), then the
+    row's own regression program. median_absolute_error and max_error check
+    their targets with dtype='numeric': string labels refuse in
+    scikit-learn's words."""
+    if row.lv_n != classes:
+        raise Error("member ABI: a regression scorer on a classifier needs one value per class")
+    if row.metric == REG_MEDAE or row.metric == REG_MAX_ERROR:
+        var lv = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=row.lv_at)
+        for c in range(row.lv_n):  # small-loop(the fit labels: their kinds)
+            if Int(lv[2 * c + 1]) != SCORER_LABEL_NUMBER:
+                raise Error(SCORER_NUMERIC_WORDS)
+    var yt = List[Float32]()
+    var yp = List[Float32]()
+    _label_floats(label_words, row, truth, count, yt)
+    _label_floats(label_words, row, response, count, yp)
+    var value = reg_metric_options_run(route, row.metric, Int(yt.unsafe_ptr()), Int(yp.unsafe_ptr()), count, w, row.mo,
+                                       row.ff, row.param, row.param_given, shown, warn)
+    _ = len(yt)  # read by the program above
+    _ = len(yp)
+    return value
 
 
 def _present_count(truth: Int, count: Int, classes: Int) -> Int:
@@ -956,7 +1241,11 @@ def msel_scorer_caller(row: MselScorer) -> String:
     if row.family == _F_CLUSTER:
         return String(row.name)
     if row.family == _F_COUNT:
+        if row.metric == _CNT_CORRECT:
+            return String("accuracy_score")
         return String("hamming_loss") if row.metric == _CNT_HAMMING else String("zero_one_loss")
+    if row.family == _F_KAPPA:
+        return String("cohen_kappa_score")
     if row.metric == LBL_JACCARD:
         return String("jaccard_score")
     if row.metric == LBL_BALANCED:

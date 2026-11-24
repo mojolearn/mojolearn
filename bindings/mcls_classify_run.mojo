@@ -352,7 +352,9 @@ def label_metric_options_run(route: MetricRoute, metric: Int, avg: Int, truth: I
     if metric == LBL_MCC:
         at = mc_mcc_words(plan, s.groups[col], s.groups[2 + col], s.groups[4 + col], labels, col)
     elif metric == LBL_BALANCED:
-        at = mc_epi_stage(plan, s, McEpi(1, labels, 0, 0, 0, 0.0))
+        # lane mf-score8: `zd` is balanced_accuracy_score's `adjusted` (1),
+        # the word the door's `_balanced_accuracy` stages in that slot
+        at = mc_epi_stage(plan, s, McEpi(1, labels, 0, 1 if zd == 1 else 0, 0, 0.0))
     elif metric == LBL_JACCARD:
         at = mc_epi_stage(plan, s, McEpi(0, chosen, avg, zd, 0, 0.0))
     elif metric == LBL_PRECISION or metric == LBL_RECALL or metric == LBL_F1:
@@ -519,7 +521,15 @@ def log_loss_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: Int) rai
 
 
 def log_loss_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: Int, w: Int) raises -> Float64:
-    """`w` (lane mf-score6): n float32 sample weights (0: none), the
+    """`log_loss_options_run` with normalize=True."""
+    return log_loss_options_run(route, truth, proba, n, k, w, True)
+
+
+def log_loss_options_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: Int, w: Int,
+                         normalize: Bool) raises -> Float64:
+    """`normalize` (lane mf-score8): log_loss's `normalize`, the rank_epi
+    MEAN word `mc_log_loss_stages` stages (False: the summed loss).
+    `w` (lane mf-score6): n float32 sample weights (0: none), the
     program's third input (`mc_log_loss_stages(weighted)`, the door's
     weighted mean).
     THE TYPED RUN of `log_loss(y_true, y_proba)` with its defaults over n
@@ -552,7 +562,7 @@ def log_loss_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: Int, w: 
     for i in range(n):  # driver-loop: over the rows (the encoded labels)
         codes[i] = rank[Int(t[i])]
     var plan = MetricProgramPlan()
-    var got = mc_log_loss_stages(plan, n, k, binary, w != 0, True)
+    var got = mc_log_loss_stages(plan, n, k, binary, w != 0, normalize)
     var addresses: List[Int] = [proba, Int(codes.unsafe_ptr())]
     var sizes: List[Int] = [n if binary else n * k, n]
     if w != 0:
@@ -580,6 +590,9 @@ def log_loss_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: Int, w: 
 #: `label_count_run`'s answers (the COUNT slot's words the doors read).
 comptime CNT_LOSS = 0       # f64 at +6: the normalized loss (zero_one normalize=True, hamming_loss)
 comptime CNT_COUNT = 1      # zero_one normalize=False: i32 at +10 (counts) or f64 at +4 (weighted)
+#: lane mf-score8: accuracy_score normalize=False, the door's `accuracy_count`
+#: (bindings/mcls_classify_door.mojo `_accuracy`): i32 at +1 (counts) or f64 at +2 (weighted)
+comptime CNT_CORRECT = 3
 
 
 def label_count_run(route: MetricRoute, answer: Int, truth: Int, pred: Int, n: Int, k: Int, w: Int,
@@ -611,6 +624,120 @@ def label_count_run(route: MetricRoute, answer: Int, truth: Int, pred: Int, n: I
     if answer == CNT_LOSS:
         zero_div = arena.i32(out) != 0
         return arena.f64(out + 6)
+    if answer == CNT_CORRECT:
+        if weighted:
+            return arena.f64(out + 2)
+        return Float64(arena.i32(out + 1))
     if weighted:
         return arena.f64(out + 4)
     return Float64(arena.i32(out + 10))
+
+
+# ---------------------------------------------------------------- cohen_kappa_score, typed
+# Lane mf-score8 (2026-11-23): the program bindings/metrics_exp_cls_door.mojo
+# `_kappa` assembled inline (`_confusion` over the chosen labels, then the
+# four cm_epi KAPPA phases), as one builder: the door calls it over its pins
+# and the search scorers' RUN (core/msel_scorer_run.mojo) over typed codes.
+# Same stages in the same order, the same arena layout: the bits do not move.
+comptime _CM_KAPPA = 4
+#: cohen_kappa_score's `weights` words (`_kappa`'s `wm`).
+comptime KAPPA_NONE = 0
+comptime KAPPA_LINEAR = 1
+comptime KAPPA_QUADRATIC = 2
+#: `kappa_run`'s flags (the slot's first word): no label of y2 in both y1
+#: and the labels; only one label in common (the door's two warnings).
+comptime KAPPA_NO_COMMON = 1
+comptime KAPPA_ONE_COMMON = 2
+
+
+def kappa_stages(mut plan: MetricProgramPlan, n: Int, k: Int, weighted: Bool, wm: Int) raises -> Int:
+    """`_kappa`'s program over its inputs: the true and the predicted codes
+    in the chosen labels' order (n int32 words each, -1 for a label outside
+    them) and, weighted, the weights (n), in that order (the door's pins:
+    `_confusion`'s two `put_i32`, then `put(w)` after the pair key). The
+    4-word result slot (flags, then the binary64 kappa at +2)."""
+    if k > 4096:
+        raise Error("mojolearn metrics: at most 4096 labels in a confusion matrix")
+    var a = plan.input(n)
+    var b = plan.input(n)
+    var key = plan.scratch(n)
+    plan.stage_op("pair_key", n, [a, b, key, k, 0])
+    var w_off = MC_NONE
+    if weighted:
+        w_off = plan.input(n)
+    var g = plan.group(key, n, k * k, MC_NONE, 1, w_off, 1)
+    var cells = g[1] if weighted else g[0]
+    var col = 1 if weighted else 0
+    var out = plan.want(plan.alloc(4), 4, -1, 1)
+    var sc = plan.scratch(8 * k + 2)
+    var phases: List[Int] = [0, 1, 2, 3]
+    var units: List[Int] = [k, 1, k, 1]
+    for i in range(4):  # small-loop(4: the four kappa stages): fixed
+        if units[i]:
+            plan.stage_op("cm_epi", units[i], [_CM_KAPPA, cells, k, col, phases[i], wm, out, sc])
+    return out
+
+
+def kappa_run(route: MetricRoute, truth: Int, pred: Int, n: Int, k: Int, sel_at: Int, sel_n: Int, wm: Int, w: Int,
+              mut flags: Int) raises -> Float64:
+    """THE TYPED RUN of `cohen_kappa_score(y1, y2, labels=..., weights=...)`
+    over n int32 true and predicted class codes in 0 .. k-1 (the caller
+    keeps both alive) and, `w` != 0, n float32 sample weights. `sel_at` /
+    `sel_n`: the caller's `labels` as int32 class codes in their given order
+    (a code >= k is a label no row holds; 0 / 0: the labels present in
+    either vector, sorted, as `mx_selected(None, ...)` answers). A row whose
+    label is outside the chosen ones is coded -1 (`mx_codes`), as the door
+    codes it. The door's refusal when no chosen label is one of y1's, in its
+    words. `flags`: KAPPA_NO_COMMON / KAPPA_ONE_COMMON when the door warns
+    and answers its `replace_undefined_by` (the caller does both); else the
+    kappa. No Python."""
+    flags = 0
+    var t = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=truth)
+    var p = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=pred)
+    var mt = List[Int32]()
+    var mp = List[Int32]()
+    var chosen: Int
+    if sel_n > 0:
+        var sel = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=sel_at)
+        var span = k
+        for j in range(sel_n):  # small-loop(the caller's labels)
+            span = max(span, Int(sel[j]) + 1)
+        var rank = List[Int32](length=max(span, 1), fill=Int32(-1))
+        for j in range(sel_n):  # small-loop(the caller's labels: their places)
+            var c = Int(sel[j])
+            if c < 0 or rank[c] >= 0:
+                raise Error("labels must be unique")
+            rank[c] = Int32(j)
+        var in_y1 = False
+        mt = List[Int32](length=max(n, 1), fill=Int32(0))
+        mp = List[Int32](length=max(n, 1), fill=Int32(0))
+        for i in range(n):  # driver-loop: over the rows (their codes among the chosen labels)
+            var a = Int(t[i])
+            var b = Int(p[i])
+            if a < 0 or a >= k or b < 0 or b >= k:
+                raise Error("ValueError: y codes outside [0, n_classes)")
+            mt[i] = rank[a]
+            mp[i] = rank[b]
+            in_y1 = in_y1 or rank[a] >= 0
+        if not in_y1:
+            raise Error("At least one label in `labels` must be present in `y1` (even though "
+                        + "`cohen_kappa_score` is otherwise agnostic to the order of `y1` and `y2`).")
+        chosen = sel_n
+    else:
+        chosen = label_present_codes(truth, pred, n, k, mt, mp)
+    var plan = MetricProgramPlan()
+    var out = kappa_stages(plan, n, chosen, w != 0, wm)
+    var addresses: List[Int] = [Int(mt.unsafe_ptr()), Int(mp.unsafe_ptr())]
+    var sizes: List[Int] = [n, n]
+    if w != 0:
+        addresses.append(w)
+        sizes.append(n)
+    var arena = metric_inputs_run(route, plan, addresses, sizes)
+    _ = len(mt)  # the program's inputs were copied from these codes above
+    _ = len(mp)
+    var bits = arena.i32(out)
+    if (bits & KAPPA_NO_COMMON) != 0:
+        flags = KAPPA_NO_COMMON
+    elif (bits & KAPPA_ONE_COMMON) != 0:
+        flags = KAPPA_ONE_COMMON
+    return arena.f64(out + 2)

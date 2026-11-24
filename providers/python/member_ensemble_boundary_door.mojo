@@ -150,6 +150,7 @@ from core.msel_scorer_run import (
     msel_scorer_cluster, msel_scorer_cluster_entry, msel_scorer_top_k, msel_scorer_ap, msel_scorer_brier,
     msel_scorer_label_row, msel_scorer_f_row, msel_scorer_group_words, MselScorerOptions,
     msel_scorer_weighted, msel_scorer_caller, SCORER_WEIGHTS_EMPTY,
+    msel_scorer_log_loss, SCORER_LABEL_NUMBER, SCORER_LABEL_TEXT, SCORER_LABEL_UNREAD,
 )
 # lane mf-score6: a make_scorer's sample_weight read as float32 words
 from std.memory import bitcast
@@ -2623,6 +2624,19 @@ struct _ScorerKw(Movable):
     var samples: Bool
     var weights: PythonObject
     var w_refused: Bool
+    # lane mf-score8 (core/msel_scorer_run.mojo module note): the regression
+    # options (multioutput rule, force_finite -1 / 0 / 1, alpha or power or
+    # kappa's replace_undefined_by with its printed words), the words of a
+    # kwarg value the metric's door refuses ("": none), the normalize /
+    # adjusted flag (-1 the row's) and kappa's weights word.
+    var mo: Int
+    var ff: Int
+    var param: Float64
+    var has_param: Bool
+    var param_text: String
+    var refuse_text: String
+    var flag: Int
+    var wmode: Int
 
     def __init__(out self):
         self.flip = False
@@ -2636,6 +2650,126 @@ struct _ScorerKw(Movable):
         self.samples = False
         self.weights = PythonObject(None)
         self.w_refused = False
+        self.mo = 0
+        self.ff = -1
+        self.param = 0.0
+        self.has_param = False
+        self.param_text = String("")
+        self.refuse_text = String("")
+        self.flag = -1
+        self.wmode = 0
+
+
+def _bool_word(value: PythonObject, b: PythonObject) raises -> Int:
+    """UNPACK (lane mf-score8): a kwarg the metric door reads as a bool
+    (`mx_is_bool` / `mc_is_bool`: Python's bool or NumPy's bool_) as 0 / 1;
+    -1 for any other value (the door's "must be a bool" refusal)."""
+    if not Bool(py=py_call(b.isinstance, value, b.bool)) and String(py=py_type(value).__name__) != "bool_":
+        return -1
+    return 1 if Bool(py=py_call(b.bool, value)) else 0
+
+
+def _metric_row_kwarg(metric: String, word: String, value: PythonObject, mut kw: _ScorerKw, mut normalize: Bool,
+                      context: PythonObject, b: PythonObject) raises -> Bool:
+    """UNPACK of one kwarg of a METRIC ROW (lane mf-score8; core/
+    msel_scorer_run.mojo `msel_scorer_metric_name`): read ONCE into `kw` as
+    the metric's door reads it (bindings/metrics_reg_door.mojo,
+    metrics_exp_cls_door.mojo, mcls_classify_door.mojo). A value that door
+    refuses becomes `kw.refuse_text`, the door's words, raised per side.
+    False: a kwarg no typed word carries (the caller answers "")."""
+    var reg_mo = (metric == "r2_score" or metric == "explained_variance_score" or metric == "mean_squared_error"
+                  or metric == "mean_absolute_error" or metric == "root_mean_squared_error"
+                  or metric == "mean_squared_log_error" or metric == "root_mean_squared_log_error"
+                  or metric == "mean_absolute_percentage_error" or metric == "median_absolute_error"
+                  or metric == "d2_absolute_error_score" or metric == "mean_pinball_loss"
+                  or metric == "d2_pinball_score")
+    if word == "multioutput" and reg_mo:
+        # `_reg_new`'s rule on a 1-D target: a string among the allowed ones
+        # (variance only for r2 / explained variance), None the default,
+        # custom weights refused ("useful only in multi-output cases")
+        if value is None:
+            return True
+        if Bool(py=py_call(b.isinstance, value, b.str)):
+            var text = String(py=value)
+            var variance = metric == "r2_score" or metric == "explained_variance_score"
+            if text == "uniform_average":
+                kw.mo = 0
+            elif text == "raw_values":
+                kw.mo = 1
+            elif text == "variance_weighted" and variance:
+                kw.mo = 2
+            elif kw.refuse_text.byte_length() == 0:
+                var allowed = String("('raw_values', 'uniform_average', 'variance_weighted')") if variance else String(
+                    "('raw_values', 'uniform_average')")
+                kw.refuse_text = ("Allowed 'multioutput' string values are " + allowed + ". You provided multioutput="
+                                  + String(py=py_call(b.repr, value)))
+            return True
+        if kw.refuse_text.byte_length() == 0:
+            try:
+                _ = classical_view(value, context, "multioutput")
+                kw.refuse_text = String("Custom weights are useful only in multi-output cases.")
+            except error:
+                kw.refuse_text = String(error)
+        return True
+    if word == "force_finite" and (metric == "r2_score" or metric == "explained_variance_score"):
+        kw.ff = 1 if Bool(py=py_call(b.bool, value)) else 0  # the door's `bool(force_finite)`
+        return True
+    if word == "alpha" and (metric == "mean_pinball_loss" or metric == "d2_pinball_score"):
+        var alpha = _real_word(value, b)
+        if not (alpha >= 0.0 and alpha <= 1.0):
+            if kw.refuse_text.byte_length() == 0:
+                kw.refuse_text = String("alpha must be a real number in [0, 1]")  # `_check_alpha`
+            return True
+        kw.param = alpha
+        kw.has_param = True
+        kw.param_text = String(py=py_call(b.str, value))
+        return True
+    if word == "power" and (metric == "mean_tweedie_deviance" or metric == "d2_tweedie_score"):
+        if py_type(value) is b.bool or not Bool(py=py_call(b.isinstance, value, native_loaded_module("numbers").Real)):
+            if kw.refuse_text.byte_length() == 0:
+                kw.refuse_text = String("power must be a real number")  # `_tweedie_power`
+            return True
+        kw.param = Float64(py=py_call(b.float, value))
+        kw.has_param = True
+        kw.param_text = String(py=py_call(b.str, value))  # `family_str(power)`: the domain words print it
+        return True
+    if word == "normalize" and (metric == "zero_one_loss" or metric == "accuracy_score"):
+        var flag = _bool_word(value, b)
+        if flag < 0:
+            if kw.refuse_text.byte_length() == 0:
+                kw.refuse_text = String("normalize must be a bool")
+            return True
+        normalize = flag == 1
+        return True
+    if word == "adjusted" and metric == "balanced_accuracy_score":
+        kw.flag = 1 if Bool(py=py_call(b.bool, value)) else 0  # the door's `mx_truthy(adjusted)`
+        return True
+    if metric == "cohen_kappa_score":
+        if word == "labels":
+            if value is not None:
+                kw.labels = value
+            return True
+        if word == "weights":
+            if value is None:
+                kw.wmode = 0
+            elif Bool(py=py_call(b.isinstance, value, b.str)) and String(py=value) == "linear":
+                kw.wmode = 1
+            elif Bool(py=py_call(b.isinstance, value, b.str)) and String(py=value) == "quadratic":
+                kw.wmode = 2
+            elif kw.refuse_text.byte_length() == 0:
+                kw.refuse_text = String("weights must be None, 'linear' or 'quadratic'")
+            return True
+        if word == "replace_undefined_by":
+            # the door answers the given object itself when kappa is
+            # undefined: a real number is that score (NaN included)
+            if py_type(value) is b.bool or not Bool(py=py_call(b.isinstance, value,
+                                                               native_loaded_module("numbers").Real)):
+                return False
+            kw.param = Float64(py=py_call(b.float, value))
+            kw.has_param = True
+            kw.param_text = String(py=py_call(b.str, value))
+            return True
+    return False
 
 
 def _real_word(value: PythonObject, b: PythonObject) raises -> Float64:
@@ -2759,6 +2893,20 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                     else:
                         mine_kw.weights = theirs
                     continue
+                if word == "normalize" and theirs is not missing and (msel_scorer_log_loss(typed) or ranked):
+                    # lane mf-score8: log_loss's normalize (`mc_is_bool`, else
+                    # the door's words per side) and top_k_accuracy_score's
+                    # (`mx_truthy`), as the RUN's flag word
+                    if msel_scorer_log_loss(typed):
+                        var nf = _bool_word(theirs, b)
+                        if nf < 0:
+                            if mine_kw.refuse_text.byte_length() == 0:
+                                mine_kw.refuse_text = String("normalize must be a bool")
+                        else:
+                            mine_kw.flag = nf
+                    else:
+                        mine_kw.flag = 1 if Bool(py=py_call(b.bool, theirs)) else 0
+                    continue
                 if word == "average" and theirs is not missing and label_row == 2:
                     # average=None / 'samples' on an averaged label row (lane
                     # mf-score6): the per-label values, or the door's refusal
@@ -2818,26 +2966,26 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
         var metric = String(py=plan["name"])
         var normalize = True
         var metric_kw = _ScorerKw()
-        var given = py_call(b.list, py_call(got_kwargs.items))
+        # only the kwargs the scorer gave (the metric's defaults are its row's)
+        var given = py_call(b.list, py_call(py_call(b.getattr, got, PythonObject("_kwargs")).items))
         for q in range(len(given)):  # small-loop(the scorer's options, once per admission)
             var word = String(py=given[q][0]) if py_type(given[q][0]) is b.str else String("")
             var value = given[q][1]
-            if word == "normalize" and metric == "zero_one_loss":
-                if py_type(value) is not b.bool:
-                    return String("")  # the metric's "normalize must be a bool": the door's words per side
-                normalize = Bool(py=value)
-            elif word == "sample_weight":
+            if word == "sample_weight":
                 if value is not None:
                     metric_kw.weights = value
             elif word == "numeric_mode":
                 if value is not None:
                     return String("")
-            else:
+            elif not _metric_row_kwarg(metric, word, value, metric_kw, normalize, context, b):
                 return String("")
         var code = msel_scorer_metric_code(metric, normalize)
         if code < 0:
             return String("")
-        metric_kw.flip = Int(py=py_call(b.int, py_call(b.getattr, got, PythonObject("_sign")))) != 1
+        # lane mf-score8: the row's sign is its get_scorer sign (or +1 for a
+        # metric row); the flip is a make_scorer sign that differs from it
+        var row_sign = Int(msel_scorer_row(code).sign)
+        metric_kw.flip = Int(py=py_call(b.int, py_call(b.getattr, got, PythonObject("_sign")))) != row_sign
         kw = metric_kw^
         return String(msel_scorer_row(code).name)
     except:
@@ -3198,11 +3346,39 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         elif kw.weights is not None:
             _weight_words(kw.weights, msel_scorer_caller(row), _next_word(labels, classifier, extra_words, b),
                           context, sels, opts, extra_words)
+        # LANE mf-score8: the typed kwargs of a metric row (core/
+        # msel_scorer_run.mojo module note), read once in `_scorer_name`: the
+        # multioutput rule, force_finite, the normalize / adjusted flag,
+        # kappa's weights; a given alpha / power / replace_undefined_by with
+        # its printed words, and a refused kwarg's door words, each one more
+        # label word.
+        opts.mo = kw.mo
+        opts.ff = kw.ff
+        opts.flag = kw.flag
+        opts.wmode = kw.wmode
+        if kw.has_param:
+            opts.param = kw.param
+            opts.param_word = _next_word(labels, classifier, extra_words, b)
+            extra_words.append(kw.param_text)
+        if kw.refuse_text.byte_length() > 0:
+            opts.refuse_word = _next_word(labels, classifier, extra_words, b)
+            extra_words.append(kw.refuse_text)
         # A CLUSTERER base (lane mf-cluster5): a non-classifier scored by the
         # clustering scorers only (its predict is cluster ids).
         if not classifier and msel_scorer_cluster(row):
             clusterer = True
+        elif classifier and msel_scorer_regression(row):
+            # A REGRESSION SCORER ON A CLASSIFIER (lane mf-score8): scikit-learn
+            # scores the predicted labels as numbers; each fit label's value
+            # read once (`_label_values`), each side maps its codes onto them.
+            if labels is None:
+                return False  # a classifier admitted with no fit labels known: nothing to map (guard)
+            _label_values(labels, sels, opts, b)
+            others = True
         elif msel_scorer_regression(row) == classifier:
+            # a label scorer on a regressor: scikit-learn's `_check_targets`
+            # decides per side from the values (continuous targets refuse,
+            # integral floats score): no typed check of that yet
             return False
         else:
             others = True
@@ -3311,19 +3487,36 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             opts.sel_from = len(sels)
             opts.sel_n = len(listed)
             var absent = 0
+            var refused = String("")
             for q in range(len(listed)):  # small-loop(the scorer's labels, once per admission)
                 var c = _label_code(labels, listed[q], b)
                 if c < 0:
                     var kind = _label_kind(listed[q], b)
-                    if kind == 0 or fit_kind == -1 or (kind == 1) != (fit_kind == SCORER_POSITIVE_ABSENT):
-                        return False
+                    if kind == 0 or fit_kind == -1:
+                        return False  # a label of no kind the doors' labels read (`mx_list_labels`' own words)
+                    if (kind == 1) != (fit_kind == SCORER_POSITIVE_ABSENT):
+                        # lane mf-score8: `mx_selected`'s words, per side
+                        refused = String("TypeError: labels must use the same type as the targets")
+                        break
                     c = n_labels + absent
                     absent += 1
+                var repeated = False
                 for r in range(opts.sel_from, len(sels)):  # small-loop(the labels so far)
-                    if Int(sels[r]) == c:
-                        return False  # "labels must be unique": the door's words
+                    repeated = repeated or Int(sels[r]) == c
+                if repeated:
+                    refused = String("labels must be unique")  # lane mf-score8: the door's words, per side
+                    break
                 sels.append(Int32(c))
-            if opts.sel_n == 0:
+            if refused.byte_length() > 0:
+                # the selection is dropped; the refusal is raised per side
+                # before the metric reads any label (the doors' order)
+                for _ in range(len(sels) - opts.sel_from):  # small-loop(the labels read so far)
+                    _ = sels.pop()
+                opts.sel_n = 0
+                if opts.refuse_word < 0:
+                    opts.refuse_word = _next_word(labels, classifier, extra_words, b)
+                    extra_words.append(refused)
+            elif opts.sel_n == 0:
                 return False
         codes.append(code)
         positives.append(positive)
@@ -3635,6 +3828,33 @@ def _weight_words(source: PythonObject, caller: String, word: Int, context: Pyth
         sels.append(bitcast[DType.int32](words[i]))
     _ = w  # read through its address above
     _ = view^
+
+
+def _label_values(labels: PythonObject, mut sels: List[Int32], mut opts: MselScorerOptions, b: PythonObject) raises:
+    """UNPACK (lane mf-score8): a regression scorer on a classifier. Each fit
+    label (by class code) read ONCE as the number scikit-learn's regression
+    metric converts it to (`check_array` / `np.asarray(..., dtype=float)`:
+    an integer, a bool or a real as its value; a string as `float(label)`
+    when that converts), as float32 words: two per label at `opts.lv_from`,
+    the value's bits and its kind (core/msel_scorer_run.mojo SCORER_LABEL_*;
+    an unconverted string's side refusal is NumPy's words over its repr).
+    Read once per admission; nothing per side."""
+    var items = py_call(b.list, labels)
+    opts.lv_from = len(sels)
+    opts.lv_n = len(items)
+    for i in range(len(items)):  # driver-loop: over the fit's labels (their values, once per admission)
+        var item = items[i]
+        var value = Float32(0.0)
+        var kind = SCORER_LABEL_NUMBER
+        var text = Bool(py=py_call(b.isinstance, item, b.str))
+        try:
+            value = Float32(Float64(py=py_call(b.float, item)))
+            if text:
+                kind = SCORER_LABEL_TEXT
+        except:
+            kind = SCORER_LABEL_UNREAD
+        sels.append(bitcast[DType.int32](value))
+        sels.append(Int32(kind))
 
 
 def _numeric_outputs(labels: PythonObject, b: PythonObject) raises -> Int:

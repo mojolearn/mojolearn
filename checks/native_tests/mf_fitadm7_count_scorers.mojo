@@ -107,7 +107,8 @@ def check_lookup_words() raises:
     var c = msel_scorer_metric_code("zero_one_loss", False)
     var h = msel_scorer_metric_code("hamming_loss", True)
     require(a >= 2 and c >= 2 and h >= 2 and a != c and a != h and c != h, "three distinct metric rows")
-    require(msel_scorer_metric_code("cohen_kappa_score", True) == -1, "no row for cohen_kappa_score")
+    # lane mf-score8: cohen_kappa_score is a row now; hinge_loss (decision_function) is no predict row
+    require(msel_scorer_metric_code("hinge_loss", True) == -1, "no predict row for hinge_loss")
     require(msel_scorer_caller(msel_scorer_row(a)) == "zero_one_loss", "zero_one_loss caller")
     require(msel_scorer_caller(msel_scorer_row(h)) == "hamming_loss", "hamming_loss caller")
     var t = List[Int32]()

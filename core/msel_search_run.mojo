@@ -1153,7 +1153,9 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             # clustering scorers only, on its predicted cluster ids.
             if not classifier and msel_scorer_cluster(row):
                 clusterer = True
-            elif msel_scorer_regression(row) == classifier:
+            elif msel_scorer_regression(row) == classifier and not (classifier and row.lv_n == k):
+                # lane mf-score8: a regression scorer on a classifier reads its
+                # labels' value words (core/msel_scorer_run.mojo module note)
                 raise Error("member ABI: scorer '" + String(row.name) + "' does not score this kind of estimator")
             if msel_scorer_cluster_entry(row) and plan.cluster.word == 0:
                 raise Error("member ABI: a label-pair cluster scorer needs the metrics image's cluster entry")
