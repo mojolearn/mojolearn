@@ -3911,6 +3911,16 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         # for every other kind without the op.
         own_score = _own_score(base, base_plan, classifier, b)
         positives.append(-1)
+        if not classifier:
+            # LANE w3f5-d (gate 3cda8a05b3): a member that publishes its own
+            # score (KernelDensity's total log-likelihood, MEMBER_OP_SCORE)
+            # is scored by it and has no predict to need: the PREDICT need
+            # refused it in "'KernelDensity' object has no attribute
+            # 'predict'" since 6d4306f458 (cross_validate through this RUN
+            # only). A candidate without the score op needs predict again
+            # below (the accuracy / R^2 of predict its class's score is). A
+            # classifier keeps it: a fold that lacks a class scores predict.
+            needs &= ~MEMBER_CAN_PREDICT
     var clusterer = False
     var cluster_entry = False
     var others = False
@@ -4497,6 +4507,14 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                 raise Error("NotImplementedError: " + String(py=py_type(base).__name__) + "'s score is not the"
                             + " accuracy or R^2 of its predict and its native member publishes no score, so a"
                             + " Mojolearn search with scoring=None cannot score it natively. Pass a scoring name.")
+            # the scorer below reads predict (lane w3f5-d: the need dropped
+            # above for a member's own score): a candidate without it is
+            # refused in the words the PREDICT need gave before
+            for c in range(len(nested.masks)):  # small-loop(the candidates' masks)
+                if (nested.masks[c] & MEMBER_CAN_PREDICT) == 0:
+                    var at = c if c < len(clones) else 0
+                    raise Error(_search_member_refusal(done, clones[at], classifier, needs | MEMBER_CAN_PREDICT,
+                                                       labels, context, b))
             var own = msel_scorer_code(String("accuracy") if own_score == _OWN_ACCURACY else String("r2"), False)
             codes.append(own)
             own_row = True
