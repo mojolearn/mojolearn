@@ -84,6 +84,22 @@ def member_unit_classes(codes: Int, draw: Int, wide: Bool, count: Int, k: Int) r
     return held^
 
 
+@always_inline
+def member_unit_recode_rows(codes: Int, dst: Int, table: Int, k: Int, begin: Int, end: Int):
+    """THE RE-CODE, one body: rows `begin` .. `end`-1 of the int32 codes at
+    `codes` written to `dst` through the int32 code table at `table` (`k`
+    words: ensemble code c -> the unit's code; a code outside 0 .. k-1 maps
+    to 0). Both callers run it inside their own host tasks:
+    `member_unit_recode` (one unit, its rows split across the cores) and
+    core/ensemble_member.mojo `_held_and_codes` (one task per lacking unit)."""
+    var y = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=codes)
+    var target = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=dst)
+    var lookup = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=table)
+    for i in range(begin, end):  # small-loop(one task's rows)
+        var c = Int(y[i])
+        target[i] = lookup[c] if (c >= 0 and c < k) else Int32(0)
+
+
 def member_unit_recode(codes: Int, n: Int, k: Int, held: List[Int32]) -> List[Int32]:
     """The `n` codes at `codes` re-coded onto `held` (ensemble code
     `held[c]` -> c), every row (a draw then selects the rows it names, as it
@@ -104,14 +120,8 @@ def member_unit_recode(codes: Int, n: Int, k: Int, held: List[Int32]) -> List[In
     var chunk = host_predict_chunk(n, tasks)
 
     def task(t: Int) {imm codes, imm dst, imm table_at, imm chunk, imm n, imm k}:
-        var y = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=codes)
-        var target = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=dst)
-        var lookup = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=table_at)
         var begin = t * chunk
-        var end = min(begin + chunk, n)
-        for i in range(begin, end):
-            var c = Int(y[i])
-            target[i] = lookup[c] if (c >= 0 and c < k) else Int32(0)
+        member_unit_recode_rows(codes, dst, table_at, k, begin, min(begin + chunk, n))
 
     host_parallelize(task, tasks)
     _ = len(table)  # read through its address by the tasks above

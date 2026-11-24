@@ -230,8 +230,14 @@ def _(ml, X, yc, yr, Xh=None):
     ys[int(np.argmax(xs[:, 0]))] = 2
     s = ml.StackingClassifier([("dt", ml.DecisionTreeClassifier(max_depth=3))],
                               final_estimator=ml.DecisionTreeClassifier(max_depth=3), cv=3).fit(xs, ys)
+    # The same stack as a MEMBER of a soft vote: fitted by THE META MEMBER KIND (core/ensemble_member.mojo
+    # `_held_and_codes`), whose lacking fold reads the same re-code body (`member_unit_recode_rows`).
+    v = ml.VotingClassifier([("st", ml.StackingClassifier([("dt", ml.DecisionTreeClassifier(max_depth=3))],
+                                                          final_estimator=ml.DecisionTreeClassifier(max_depth=3),
+                                                          cv=3))], voting="soft").fit(xs, ys)
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)), meta=_h(m.transform(X)),
-                     lacking=_h(s.predict_proba(xs)), lacking_predict=_h(s.predict(xs))),
+                     lacking=_h(s.predict_proba(xs)), lacking_predict=_h(s.predict(xs)),
+                     lacking_member=_h(v.predict_proba(xs))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
 
