@@ -219,6 +219,10 @@ def _pred_f64(v: PythonObject, context: PythonObject) raises -> List[Float64]:
 
 
 # ---------------------------------------------------------------- parameters
+# `_refuse`'s sample_posterior words; the member admission raises the same (lane mf-ens6b).
+comptime _POSTERIOR_WORDS = "mojolearn: If 'sample_posterior' is True, the estimator must support 'return_std' in its 'predict' method."
+
+
 def _refuse(model: PythonObject, context: PythonObject) raises:
     var nk = prep_keys()
     # `_refuse`: the parameter refusals, before X is read.
@@ -245,8 +249,7 @@ def _refuse(model: PythonObject, context: PythonObject) raises:
             and not prep_estimator_has(estimator, "predict_std", context)):
         # The native plan declares the supported return_std operation;
         # inspecting/calling the estimator's Python predict is unnecessary.
-        raise Error("mojolearn: If 'sample_posterior' is True, the estimator must support "
-                    + "'return_std' in its 'predict' method.")
+        raise Error(_POSTERIOR_WORDS)
 
 
 def _per_bound(v: PythonObject, d: Int) raises -> List[Float64]:
@@ -701,10 +704,15 @@ struct _Member(Movable):
     var classifier: Bool
     var code_dtype: Int
     var cw_refusal: String
+    # Lane mf-ens6b: a sample_posterior fit whose admitted member family
+    # answers no posterior pair (`_posterior_family`): refused natively in
+    # `_refuse`'s words, never sent to the door rounds.
+    var posterior_refused: Bool
 
     def __init__(out self):
         self.native = False
         self.cw_refusal = String("")
+        self.posterior_refused = False
         self.owner = MemberOwner()
         self.plan_key = PythonObject(None)
         self.template = PythonObject(None)
@@ -761,6 +769,7 @@ def _member(estimator: PythonObject, posterior: Bool, dk: Int, context: PythonOb
         if not owner.published:
             return out^
         if posterior and not _posterior_family(owner.plan.family):
+            out.posterior_refused = True  # `_refuse`'s words, raised by the fit (lane mf-ens6b)
             return out^
         # The mask of THIS kind (the family's union holds its other kinds'
         # bits): one state minted, asked and released, once per fit.
@@ -908,6 +917,8 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
         py_setitem(fields, "_step_classes", Python.list())
         return _take2(runner.held[fitted.out_handle], fitted.out_offset, n, fitted.cols, context)
     var member = _member(estimator, request.posterior, dk, context)
+    if member.posterior_refused:
+        raise Error(_POSTERIOR_WORDS)
     if not member.native:
         _refuse_member_only(estimator, context)
     if member.native:
