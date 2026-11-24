@@ -3,104 +3,8 @@
   "lane": "gap-tsqr",
   "branch": "lane/gap-tsqr",
   "head": "3c5c5592a",
-  "controls": {
-    "tsqr_tree_par": {
-      "define": "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF",
-      "kind": "switch",
-      "arms": {
-        "on": [],
-        "off": [
-          "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF"
-        ]
-      },
-      "default": "on",
-      "source": [
-        "x_decomp/tsqr_core.mojo:99",
-        "x_decomp/tsqr_device.mojo:720",
-        "x_decomp/tsqr_device.mojo:820",
-        "x_decomp/tsqr_host.mojo:278"
-      ],
-      "binding": "_mojolearn_x_decomp (device) + _mojolearn_x_decomp_host (host column)",
-      "bits_change": true,
-      "status": "new",
-      "note": "The TSQR combine tree: each reflector's norm is a 256-lane fixed fold (lane t: alpha^2 for t == 0, then rows i == t mod 256 ascending; halving tree ts_tree_fold) instead of one serial chain recomputed by every thread of the pair's threadgroup; the scaled reflector column is staged in threadgroup memory for the column threads (same words). The Q C tree apply (ts_capply_kernel) tiles C's columns over threadgroups (256 a tile) with the reflector column staged. Bits change in the tree norms only; the column chains are unchanged. Host replay (ts_combine_host) folds the same lanes. NV and AMD must match per arm. NOT COMPILED, NOT MEASURED."
-    },
-    "tsqr_wy_pair": {
-      "define": "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF",
-      "kind": "switch",
-      "arms": {
-        "on": [],
-        "off": [
-          "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF"
-        ]
-      },
-      "default": "on",
-      "source": [
-        "x_decomp/tsqr_core.mojo:96",
-        "x_decomp/tsqr_device.mojo:90",
-        "x_decomp/tsqr_device.mojo:625",
-        "x_decomp/tsqr_host.mojo:138",
-        "x_decomp/tsqr_host.mojo:186"
-      ],
-      "binding": "_mojolearn_x_decomp (device) + _mojolearn_x_decomp_host (host column)",
-      "bits_change": true,
-      "status": "new",
-      "note": "Blocked TSQR (linalg.qr, linalg.svd, lstsq, LinearRegression, RSVD_IDN_TSQR_ORTHO): two consecutive 16-column panels share ONE compact-WY trailing update and ONE Q C pass through the merged T2 = [[Ta, -Ta (Ya^T Yb) Tb], [0, Tb]] (panel a factored, its reflectors applied to panel b's columns only, panel b factored, T2 merged, one 32-reflector update of the columns right of the pair). The trailing matrix crosses the device twice per pair instead of twice per panel: half the traffic of the bandwidth-bound update passes (32 multiply-adds per loaded word). Size rule: the pair width is one thread's 32 accumulators and one TS_PART fold page in two rounds; no shape rule. Bits change right of every pair (one 32-wide fold instead of two 16-wide); host replay (ts_wy_host[_, TS_W2], ts_pair_t_host) folds the same chains. NV and AMD must match per arm. NOT COMPILED (lanes never compile), NOT MEASURED."
-    }
-  },
-  "algorithms": {
-    "linalg:qr": {
-      "binding": "_mojolearn_x_decomp",
-      "route": "_linalg_impl.py _qr_tsqr -> x_decomp_tsqr_r (ts_factor_device [tsqr_wy_pair, tsqr_tree_par]) -> x_decomp_r_signs -> x_decomp_tsqr_q (_ts_apply_dcb [tsqr_wy_pair, tsqr_tree_par])",
-      "controls": [
-        "tsqr_wy_pair",
-        "tsqr_tree_par"
-      ],
-      "interaction_groups": [
-        [
-          "tsqr_wy_pair",
-          "tsqr_tree_par"
-        ]
-      ]
-    },
-    "linalg:svd": {
-      "binding": "_mojolearn_x_decomp",
-      "route": "_linalg_impl.py _svd_tsqr -> x_decomp_tsqr_r [tsqr_wy_pair, tsqr_tree_par] -> _svd_tall(R) -> DevExec.svd _svd_on [xd_svd_group] -> x_decomp_tsqr_q [tsqr_wy_pair, tsqr_tree_par]",
-      "controls": [
-        "tsqr_wy_pair",
-        "tsqr_tree_par"
-      ],
-      "interaction_groups": []
-    },
-    "linalg:lstsq": {
-      "binding": "_mojolearn_x_decomp",
-      "route": "_expansion_decomp.py _tsqr_lstsq_core -> x_decomp_tsqr_r (nrhs > 0, ts_pack_device + ts_factor_device [tsqr_wy_pair, tsqr_tree_par]) -> SVD of the small R [xd_svd_group]",
-      "controls": [
-        "tsqr_wy_pair",
-        "tsqr_tree_par"
-      ],
-      "interaction_groups": [
-        [
-          "tsqr_wy_pair",
-          "tsqr_tree_par"
-        ]
-      ]
-    },
-    "linear_model:linear-regression": {
-      "binding": "_mojolearn_x_decomp",
-      "route": "ols_tsqr_r_py -> DevExec.ols_tsqr_factor -> ts_factor_device [tsqr_wy_pair, tsqr_tree_par]",
-      "controls": [
-        "tsqr_wy_pair",
-        "tsqr_tree_par"
-      ],
-      "interaction_groups": [
-        [
-          "tsqr_wy_pair",
-          "tsqr_tree_par"
-        ]
-      ]
-    }
-  },
+  "controls": {},
+  "algorithms": {},
   "removed": [
     {
       "define": "MOJOLEARN_IDN_TSQR_RSTACK_TREE",
@@ -111,6 +15,16 @@
       "define": "MOJOLEARN_IDN_XD_SVD_GROUP_OFF",
       "control": "xd_svd_group",
       "reason": "DELETED 2026-11-15 (lane/expdel2-16-decomposition, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): the _OFF rollback of the bit-neutral svd sweep grouping default is gone; IDN_XD_SVD_GROUP = IDN_XD_SWEEP (no bit change); define refused in core/experiment_guards_decomposition.mojo; code recoverable at 02aeadc9f6."
+    },
+    {
+      "define": "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF",
+      "control": "tsqr_tree_par",
+      "reason": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-decomp): the `_OFF` old path (the serial tree-combine norm and untiled Q C apply) was no faster, A/B nvc-ab-20261124T115722Z-d8f8b2 NVIDIA L40S (wheel 4519097d380a, job nvc1-0003), 10 cells, median 1.00, 0.89..1.08; TS_TREE_PAR is the IDENTICAL default (the serial forms stay for FAST builds); define refused in core/experiment_guards_decomposition.mojo; code recoverable at a58cf59d32; AMD not measured (NVIDIA-only campaign)."
+    },
+    {
+      "define": "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF",
+      "control": "tsqr_wy_pair",
+      "reason": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-decomp): the `_OFF` old path (the per-panel WY update) was slower, A/B nvc-ab-20261124T115722Z-d8f8b2 NVIDIA L40S (wheel 4519097d380a, job nvc1-0003), 10 cells, median 1.03; istella lstsq 283 -> 373 ms (1.32), ols 510 -> 683 ms (1.34), qr / svd 1.11; TS_WY_PAIR is the IDENTICAL default (the per-panel update stays for FAST builds); define refused in core/experiment_guards_decomposition.mojo; code recoverable at 4ce303e41b; AMD not measured (NVIDIA-only campaign)."
     }
   ]
 }

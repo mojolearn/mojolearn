@@ -6,18 +6,12 @@ plan EXECUTOR_N7_OPS (git history) keeps the contract: enqueue only, the caller'
 outputs written only while the gate is open, a status word for a solve that
 can fail on the device).
 
-  `svd_op_tall`  a tall A (m x n, m >= n, CONSUMED): the power-of-two range
-                 scale, the bounded Householder QR / TSQR of
-                 x_decomp/qr_bounded.mojo (its passes, no wait), R^T, the
-                 round-robin one-sided Jacobi of x_decomp/rr_svd.mojo as ONE
-                 block (`rs_block_gated_kernel`: the sweeps and the test on
-                 the device), the unscale, then `svd_order`'s descending
-                 order on the device: s (n, descending; ties keep the lower
-                 index, as the stable host order of -s) and vt (n x n, row a
-                 = the right singular vector of s[a]). status[0] = 1 when
-                 the Jacobi did not converge in X_DECOMP_SVD_SWEEPS sweeps or
-                 a value is NaN (a NaN input, or a launch macOS cut short:
-                 the QR's NaN poison reaches s), else 0.
+  `so_desc_rank_kernel`, `so_desc_commit_kernel`  `svd_order`'s descending
+                 order on the device (`DevExec.svd_desc_into`): s (n,
+                 descending; ties keep the lower index, as the stable host
+                 order of -s) and vt (n x n, row a = the right singular
+                 vector of s[a]). (The one-block SVD op `svd_op_tall` was
+                 deleted 2026-11-24 with MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.)
   `qr_op_r`      R (n x n) of the bounded Householder QR / TSQR of a tall A
                  (m x n, CONSUMED), committed through the gate.
   `qr_op_q`      the first qc columns of Q of the sliced Householder QR
@@ -26,13 +20,11 @@ can fail on the device).
                  committed through the gate.
 
 HOST COLUMN. The words are the host column's as it stands, so the twins are
-the existing host forms: `svd_op_tall` is `HostExec.svd` (the same scale, QR
-and `host_rr_svd` rounds) then `svd_order` (`Kit[HostExec].svd`); `qr_op_r`
+the existing host forms: the order kernels are `svd_order`
+(`Kit[HostExec].svd`); `qr_op_r`
 is `HostExec._qr_r`; `qr_op_q` is `HostExec.geqrf` + `HostExec.orgqr`.
 
-BITS. None move: the one-block Jacobi adds the same pairs in the same tree
-as the round launches (x_decomp/rr_svd_device.mojo), and the order is the
-host's stable order. A family that moves its SVD here keeps its words.
+BITS. None move: the order is the host's stable order.
 
 APPLE. The bounded QR's passes keep their waits on Apple (they read nothing;
 they pace a Metal queue, x_decomp/qr_bounded.mojo), as the sliced QR's
@@ -43,17 +35,12 @@ from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
-from core.device_zero import enqueue_fill
 from core.householder_qr import qr_slice_count
 from core.step_gate import StepI32
-from x_decomp.cells import F32Ptr, I32Ptr, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL
-from x_decomp.eigh_scale import enqueue_es_scale_rect, enqueue_es_unscale
-from x_decomp.jacobi_par import PJ_TPB, pj_transpose_kernel
+from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.moves import order_key
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
 from x_decomp.qr_sliced_device import qs_geqrf_device, qs_orgqr_device
-from x_decomp.rr_svd import RS_TPB
-from x_decomp.rr_svd_device import rs_block_gated_kernel
 
 comptime SO_TPB = 256
 
@@ -124,17 +111,6 @@ def so_desc_commit_kernel(
         s_out.unsafe_store(a, s.unsafe_load(j))
 
 
-def so_status_kernel(gate: StepI32, marks: F32Ptr, bad: I32Ptr, status: StepI32):
-    """One thread: status[0] = 1 when the Jacobi did not converge (marks[0]
-    != 1) or a value is NaN, else 0, while the gate is open."""
-    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
-        return
-    if gate.unsafe_load(0) != Int32(0):
-        return
-    var fail = marks.unsafe_load(0) != Float32(1.0) or bad.unsafe_load(0) != Int32(0)
-    status.unsafe_store(0, Int32(1) if fail else Int32(0))
-
-
 def so_commit_kernel(gate: StepI32, src: F32Ptr, dst: F32Ptr, count_in: Int32):
     """dst[t] = src[t] while the gate is open (a bit copy)."""
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -148,65 +124,10 @@ def so_commit_kernel(gate: StepI32, src: F32Ptr, dst: F32Ptr, count_in: Int32):
 # ---------------------------------------------------------------- the ops
 
 
-def svd_op_tall(
-    ctx: DeviceContext,
-    mut gate: DeviceBuffer[DType.int32],
-    mut a: DeviceBuffer[DType.float32],
-    mut s: DeviceBuffer[DType.float32],
-    mut vt: DeviceBuffer[DType.float32],
-    mut status: DeviceBuffer[DType.int32],
-    m: Int,
-    n: Int,
-) raises:
-    """The thin SVD of a tall A (m x n row major, m >= n >= 1; CONSUMED: the
-    QR destroys it) into s (n, descending) and vt (n x n, row a the right
-    singular vector of s[a]); status[0] = 1 when it does not hold. Enqueued
-    only; s, vt and status are written only while the gate is open."""
-    if n < 1 or m < n:
-        raise Error("svd_op_tall: needs m >= n >= 1 (a tall matrix), got " + String(m) + " x " + String(n))
-    var nn = n * n
-    if len(a) < m * n or len(s) < n or len(vt) < nn or len(status) < 1:
-        raise Error("svd_op_tall: a buffer is shorter than " + String(m) + " x " + String(n))
-    var dfac = enqueue_es_scale_rect(ctx, _fp(a), 1, m, n)
-    var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, n) * nn)
-    var r_buf = ctx.enqueue_create_buffer[DType.float32](nn)
-    _ = qr_factor_bounded(ctx, a, scratch, r_buf, m, n, QRB_CELLS, SO_QR_WAIT)
-    var rt = ctx.enqueue_create_buffer[DType.float32](nn)
-    ctx.enqueue_function[pj_transpose_kernel](
-        _fp(r_buf), _fp(rt), Int32(n), grid_dim=(nn + PJ_TPB - 1) // PJ_TPB, block_dim=PJ_TPB
-    )
-    var vtb = ctx.enqueue_create_buffer[DType.float32](nn)
-    var su = ctx.enqueue_create_buffer[DType.float32](n)
-    var marks = ctx.enqueue_create_buffer[DType.float32](2)
-    enqueue_fill(ctx, marks, Float32(-1.0))
-    var gp = _ip(gate)
-    ctx.enqueue_function[rs_block_gated_kernel](  # small-launch(n: columns of R, the features): the n x n Jacobi of the QR's R in one block, its pairs across the block
-        gp, _fp(rt), _fp(vtb), _fp(su), _fp(marks), Int32(n), Int32(X_DECOMP_SVD_SWEEPS), X_DECOMP_SVD_TOL,
-        grid_dim=1, block_dim=RS_TPB,
-    )
-    enqueue_es_unscale(ctx, _fp(su), dfac, 1, n)
-    var pos = ctx.enqueue_create_buffer[DType.int32](n)
-    var bad = ctx.enqueue_create_buffer[DType.int32](1)
-    enqueue_fill(ctx, bad, Int32(0))
-    ctx.enqueue_function[so_desc_rank_kernel](
-        gp, _fp(su), _ip(pos), _ip(bad), Int32(n), grid_dim=_so_blocks(n), block_dim=SO_TPB
-    )
-    ctx.enqueue_function[so_desc_commit_kernel](
-        gp, _fp(su), _fp(vtb), _ip(pos), _ip(bad), _fp(s), _fp(vt), Int32(n), grid_dim=_so_blocks(nn),
-        block_dim=SO_TPB,
-    )
-    ctx.enqueue_function[so_status_kernel](  # small-launch(one word): the op's status word
-        gp, _fp(marks), _ip(bad), _ip(status), grid_dim=(1, 1, 1), block_dim=(1, 1, 1)
-    )
-    _ = dfac^
-    _ = scratch^
-    _ = r_buf^
-    _ = rt^
-    _ = vtb^
-    _ = su^
-    _ = marks^
-    _ = pos^
-    _ = bad^
+# TOMBSTONE: MOJOLEARN_XD_FAST_SVD_ONE_BLOCK (NOISE: NV L40S 8 cells, median 1.00, 0.97..1.05) deleted 2026-11-24 by lane/o3-decomp (ab-outcome-3); code recoverable at c23cb55fda.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.ab-outcome-3.patch
+# (`svd_op_tall`, the thin SVD of a tall A with the Jacobi in ONE block, and its `so_status_kernel`: the
+# solve of that arm only; `so_desc_rank_kernel` / `so_desc_commit_kernel` stay for `DevExec.svd_desc_into`.)
 
 
 def qr_op_r(

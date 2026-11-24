@@ -81,7 +81,9 @@ class ScopeDefines(unittest.TestCase):
 REPO = Path(__file__).resolve().parents[1]
 OS = dict(id="ubuntu", version_id="22.04", glibc="glibc 2.35", machine="x86_64", ld="GNU ld 2.38", cc="cc 11.4")
 HOST_ARGS = ["host", "--group", "_mojolearn_native_x_host", "--rootdir", "/tmp/mojolearn-merged-roots/host"]
-SVD = "MOJOLEARN_XD_FAST_SVD_ONE_BLOCK"
+# The define is only an example of one the x_host closure reads: MOJOLEARN_XD_FAST_SVD_ONE_BLOCK until it was deleted
+# 2026-11-24 (lane ab-outcome-3 / o3-decomp); now the live opt-in MOJOLEARN_XD_FAST_CLS2_GRP_LAZY (x_decomp/resident.mojo).
+SVD = "MOJOLEARN_XD_FAST_CLS2_GRP_LAZY"
 #: What the release legs set around the host compile (legs/*/GHA/bincache/keys/*.json, candidate
 #: 4c2340386abc.svd1); the leg-level packaging switches differ by leg and must not reach the key.
 LEG_ENV = {"cuda-sm_89": {"MOJOLEARN_CUDA_CODE_FORMAT": "native"},
@@ -91,7 +93,7 @@ LEG_ENV = {"cuda-sm_89": {"MOJOLEARN_CUDA_CODE_FORMAT": "native"},
 
 class HostUnitReadsADefine(unittest.TestCase):
     """The svd1 B set (2026-11-13): the merged CPU host group _mojolearn_native_x_host compiles
-    x_decomp, whose closure names MOJOLEARN_XD_FAST_SVD_ONE_BLOCK. Its key must keep the define and
+    x_decomp, whose closure names a define (SVD above). Its key must keep the define and
     be ONE key on every leg (the host unit does not depend on the leg)."""
 
     def env(self, leg, defines=SVD):

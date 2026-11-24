@@ -29,8 +29,9 @@
   },
   "svd-one-block": {
    "define": "MOJOLEARN_XD_FAST_SVD_ONE_BLOCK",
-   "status": "define in code (x_decomp/device.mojo:227): B routes DevExec._svd_on (pca / tsvd / randomized-svd through x_decomp_svd and x_decomp_dev_svd) through svd_op_tall; A = today's round launches",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-decomp): NOISE (L40S 8 cells, median 1.00, 0.97..1.05); A (DevExec._svd_on and DKit.svd on the round launches, the default) is unchanged; removed: the switch, DevExec._svd_on_op, DKit's one-block branch and its sticky status word (dk_eig_sticky_kernel, svd_word / svd_host_word / svd_pending), svd_op_tall and so_status_kernel (x_decomp/svd_ops.mojo), rs_block_gated_kernel (x_decomp/rr_svd_device.mojo); the define is refused (core/experiment_guards_decomposition.mojo); code recoverable at c23cb55fda, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.ab-outcome-3.patch. Was: define in code (x_decomp/device.mojo:227): B routes DevExec._svd_on (pca / tsvd / randomized-svd through x_decomp_svd and x_decomp_dev_svd) through svd_op_tall; A = today's round launches",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "small-mlp-generic": {
    "define": "MOJOLEARN_SMALL_MLP_GENERIC_OPS",
@@ -140,18 +141,21 @@
   },
   "tsqr-wy-pair-off": {
    "define": "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF",
-   "status": "define in code (x_decomp/tsqr_core.mojo TS_WY_PAIR): B = the single-panel WY update (before 3c5c5592a0); A = the paired-panel WY update (default since 2026-10-08, never A/B'd)",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-decomp): old path LOSER (L40S 10 cells, median 1.03; istella lstsq 283 -> 373 ms (1.32), ols 510 -> 683 ms (1.34), qr / svd 1.11); A (the paired-panel WY update, the IDENTICAL default) is unchanged; removed: the switch term (TS_WY_PAIR = IDENTICAL; the per-panel update stays for FAST builds); grid control tsqr_wy_pair moved to removed (gap-tsqr.json); the define is refused (core/experiment_guards_decomposition.mojo); code recoverable at 4ce303e41b, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_TSQR_WY_PAIR_OFF.ab-outcome-3.patch. Was: define in code (x_decomp/tsqr_core.mojo TS_WY_PAIR): B = the single-panel WY update (before 3c5c5592a0); A = the paired-panel WY update (default since 2026-10-08, never A/B'd)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "tsqr-tree-par-off": {
    "define": "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF",
-   "status": "define in code (x_decomp/tsqr_core.mojo TS_TREE_PAR): B = the serial tree-combine norm and untiled Q C apply (before 3c5c5592a0); A = the lane-parallel tree fold and tiled apply (default since 2026-10-08, never A/B'd)",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-decomp): old path no faster (L40S 10 cells, median 1.00, 0.89..1.08); A (the lane-parallel tree fold and tiled apply, the IDENTICAL default) is unchanged; removed: the switch term (TS_TREE_PAR = IDENTICAL; the serial forms stay for FAST builds); grid control tsqr_tree_par moved to removed (gap-tsqr.json); the define is refused (core/experiment_guards_decomposition.mojo); code recoverable at a58cf59d32, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.ab-outcome-3.patch. Was: define in code (x_decomp/tsqr_core.mojo TS_TREE_PAR): B = the serial tree-combine norm and untiled Q C apply (before 3c5c5592a0); A = the lane-parallel tree fold and tiled apply (default since 2026-10-08, never A/B'd)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "tsqr-wy-pair-tree-par-off": {
    "define": "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF,MOJOLEARN_IDN_TSQR_TREE_PAR_OFF",
-   "status": "both defines together: the whole pre-3c5c5592a0 TSQR (x_decomp/tsqr_core.mojo)",
-   "owed": "RUN"
+   "status": "DECIDED 2026-11-24 (lane ab-outcome-3, sub-lane o3-decomp): both old paths together were slower (L40S 10 cells, median 1.00; istella lstsq 1.31, ols 1.33, svd 1.11 slower); decided by the two deletions of MOJOLEARN_IDN_TSQR_TREE_PAR_OFF and MOJOLEARN_IDN_TSQR_WY_PAIR_OFF (both refused in core/experiment_guards_decomposition.mojo; patches ~/mojolearn-evidence/experiments-removed/<DEFINE>.ab-outcome-3.patch). Was: both defines together: the whole pre-3c5c5592a0 TSQR (x_decomp/tsqr_core.mojo)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "ols-predict-tiled": {
    "define": "MOJOLEARN_IDN_OLS_PREDICT_TILED",
@@ -459,8 +463,9 @@
   },
   "xc-sqdist-tiled-off": {
    "define": "MOJOLEARN_XC_SQDIST_TILED_OFF",
-   "status": "define in code (x_cluster/device_ops.mojo SQDIST_TILED): B = the per-cell `_sqdist_kernel` (the former MOJOLEARN_XC_SQDIST_TILED=0); A = the tiled `_sqdist_tiled_kernel` where its page fits (the default since bda43f7250). Every word is the same: digests must not move.",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-decomp): old path no faster (L40S 10 cells, median 1.00, 0.98..1.07); A (the tiled _sqdist_tiled_kernel where its page fits, the default) is unchanged; removed: the switch term (SQDIST_TILED = the page-fit rule; the per-cell _sqdist_kernel stays for columns whose page does not hold the tile and for empty shapes); the define is refused (core/experiment_guards_cluster.mojo); code recoverable at 8e05d20993, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XC_SQDIST_TILED_OFF.ab-outcome-3.patch. Was: define in code (x_cluster/device_ops.mojo SQDIST_TILED): B = the per-cell `_sqdist_kernel` (the former MOJOLEARN_XC_SQDIST_TILED=0); A = the tiled `_sqdist_tiled_kernel` where its page fits (the default since bda43f7250). Every word is the same: digests must not move.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "nc-split-ops": {
    "define": "MOJOLEARN_NC_SPLIT_OPS",
@@ -1297,7 +1302,9 @@
    "b_arms": [
     "svd-one-block"
    ],
-   "decides": "two SVD paths exist: delete the slower (A = DevExec._svd_on round launches, B = svd_op_tall one gated block)"
+   "decides": "two SVD paths exist: delete the slower (A = DevExec._svd_on round launches, B = svd_op_tall one gated block)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "decode-n-vs-step",
@@ -1908,7 +1915,9 @@
     "tsqr-tree-par-off",
     "tsqr-wy-pair-tree-par-off"
    ],
-   "decides": "keep the defaults (A) unless an _OFF arm wins on the NVIDIA + AMD average (one cell each on record: ols taxi fit AMD 7.9 -> 12.2 ms after the switch, NV 17.5 -> 14.3 ms, ols istella NV 1029 -> 653, qr istella NV 1177 -> 850); bits change between arms on every column"
+   "decides": "keep the defaults (A) unless an _OFF arm wins on the NVIDIA + AMD average (one cell each on record: ols taxi fit AMD 7.9 -> 12.2 ms after the switch, NV 17.5 -> 14.3 ms, ols istella NV 1029 -> 653, qr istella NV 1177 -> 850); bits change between arms on every column",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "ols-predict-tiled",
@@ -2964,7 +2973,9 @@
    "b_arms": [
     "xc-sqdist-tiled-off"
    ],
-   "decides": "keep the tiled sqdist (A) unless the per-cell kernel (B) is at least as fast on fit at equal quality; digests must not move"
+   "decides": "keep the tiled sqdist (A) unless the per-cell kernel (B) is at least as fast on fit at equal quality; digests must not move",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "xc-sqdist-tiled-off-agglomerative",
@@ -2977,7 +2988,9 @@
    "b_arms": [
     "xc-sqdist-tiled-off"
    ],
-   "decides": "keep the tiled sqdist (A) unless the per-cell kernel (B) is at least as fast on fit at equal quality; digests must not move"
+   "decides": "keep the tiled sqdist (A) unless the per-cell kernel (B) is at least as fast on fit at equal quality; digests must not move",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "xc-sqdist-tiled-off-meanshift",
@@ -2990,7 +3003,9 @@
    "b_arms": [
     "xc-sqdist-tiled-off"
    ],
-   "decides": "keep the tiled sqdist (A) unless the per-cell kernel (B) is at least as fast on fit at equal quality; digests must not move"
+   "decides": "keep the tiled sqdist (A) unless the per-cell kernel (B) is at least as fast on fit at equal quality; digests must not move",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "nc-split-ops-nearest-centroid",
