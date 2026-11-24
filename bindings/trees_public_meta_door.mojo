@@ -129,6 +129,7 @@ from bindings.classical_pandas_door import native_pandas_exact
 from bindings.native_unit_threads_unpack import native_unit_jobs, native_unit_device_workers
 from core.host_parallel import host_parallelize
 from bindings.device_rows_door import DoorRows, door_is_device_rows
+from core.meta_fold_rows import meta_rows_index, meta_rows_compose, meta_rows_take_u32
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from std.python._cpython import GILReleased
 from std.ffi import c_int, external_call
@@ -870,7 +871,7 @@ def _meta_x_fit(X: PythonObject, context: PythonObject) raises -> _MetaX:
             var wide = _index_i64(door.indices, context)
             var draw = admitted_vector(n, "<i4", context)
             var inv = admitted_vector(base_rows, "<i8", context)
-            _meta_rows_index(trees_address(wide), n, base_rows, trees_address(draw), trees_address(inv))
+            meta_rows_index(trees_address(wide), n, base_rows, trees_address(draw), trees_address(inv))
             _ = wide  # read through its address above
             return _MetaX(base, draw, inv, n, _cols(base), base_rows)
         _ = door^
@@ -878,69 +879,16 @@ def _meta_x_fit(X: PythonObject, context: PythonObject) raises -> _MetaX:
     return _MetaX(Xa, PythonObject(None), PythonObject(None), _rows(Xa), _cols(Xa), _rows(Xa))
 
 
-def _meta_rows_index(wide: Int, n: Int, base_rows: Int, draw: Int, inv: Int) raises:
-    """A fold's int64 row numbers `wide` (n) as int32 `draw`, and `inv`
-    (base_rows int64 words): the fold position of each base row (zero first;
-    a row listed twice keeps one of its positions, whose targets are the
-    same row's). Rows across the host's cores; a row number outside the
-    base is refused."""
-    var tasks = host_predict_task_count_work(base_rows, base_rows)
-    var chunk = host_predict_chunk(base_rows, tasks)
-
-    def zero(t: Int) {imm inv, imm chunk, imm base_rows}:
-        var p = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=inv)
-        for i in range(t * chunk, min(t * chunk + chunk, base_rows)):
-            p[i] = 0
-
-    host_parallelize(zero, max(tasks, 1))
-    var bad = List[UInt8](length=1, fill=UInt8(0))
-    var bad_at = Int(bad.unsafe_ptr())
-    var row_tasks = host_predict_task_count_work(n, n)
-    var row_chunk = host_predict_chunk(n, row_tasks)
-
-    def place(t: Int) {imm wide, imm draw, imm inv, imm row_chunk, imm n, imm base_rows, imm bad_at}:
-        var s = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=wide)
-        var dd = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=draw)
-        var v = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=inv)
-        for i in range(t * row_chunk, min(t * row_chunk + row_chunk, n)):
-            var r = Int(s[i])
-            if r < 0 or r >= base_rows:
-                MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=bad_at)[] = UInt8(1)
-                dd[i] = 0
-                continue
-            dd[i] = Int32(r)
-            v[r] = Int64(i)
-
-    host_parallelize(place, max(row_tasks, 1))
-    if MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=bad_at)[] != UInt8(0):
-        raise Error("IndexError: a DeviceRows fold names a row outside its base")
-    _ = len(bad)
-
-
 def _meta_take(mx: _MetaX, values: PythonObject, context: PythonObject) raises -> PythonObject:
     """`values` (one 4-byte word per fold row: int32 codes, float32 targets
-    or weights; None stays None) at the base rows of `mx`'s fold: word b is
-    the fold row `inv[b]`'s, so the members' draws read the fold's own
-    words. `values` itself when `mx` holds no fold."""
+    or weights; None stays None) at the base rows of `mx`'s fold
+    (core/meta_fold_rows.mojo `meta_rows_take_u32`), so the members' draws
+    read the fold's own words. `values` itself when `mx` holds no fold."""
     if values is None or mx.inv is None:
         return values
     var typestr = String(py=values.dtype)
     var out = admitted_vector(mx.base_rows, "<i4" if typestr == "<i4" or typestr == "int32" else "<f4", context)
-    var src = trees_address(values)
-    var dst = trees_address(out)
-    var inv = trees_address(mx.inv)
-    var rows = mx.base_rows
-    var tasks = host_predict_task_count_work(rows, rows)
-    var chunk = host_predict_chunk(rows, tasks)
-
-    def task(t: Int) {imm src, imm dst, imm inv, imm chunk, imm rows}:
-        var s = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=src)
-        var o = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=dst)
-        var v = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=inv)
-        for b in range(t * chunk, min(t * chunk + chunk, rows)):
-            o[b] = s[Int(v[b])]
-
-    host_parallelize(task, max(tasks, 1))
+    meta_rows_take_u32(trees_address(values), trees_address(mx.inv), mx.base_rows, trees_address(out))
     _ = values  # read through its address above
     _ = mx.inv
     return out
@@ -948,27 +896,14 @@ def _meta_take(mx: _MetaX, values: PythonObject, context: PythonObject) raises -
 
 def _meta_compose(mx: _MetaX, rows: PythonObject, context: PythonObject) raises -> PythonObject:
     """THE FOLD IN PLACE: int32 fold positions `rows` (a cv split of the
-    fold) as rows of `mx.x` (`draw[rows[i]]`: the inner fold composed inside
-    the outer one, index words only); `rows` itself when `mx` holds no fold."""
+    fold) as rows of `mx.x` (core/meta_fold_rows.mojo `meta_rows_compose`:
+    the inner fold composed inside the outer one, index words only); `rows`
+    itself when `mx` holds no fold."""
     if mx.draw is None:
         return rows
     var count = Int(py=rows.shape[0])
     var out = admitted_vector(count, "<i4", context)
-    var src = trees_address(rows)
-    var dst = trees_address(out)
-    var draw = trees_address(mx.draw)
-    var tasks = host_predict_task_count_work(count, count)
-    var chunk = host_predict_chunk(count, tasks)
-
-    def task(t: Int) {imm src, imm dst, imm draw, imm chunk, imm count}:
-        var s = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=src)
-        var o = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=dst)
-        var w = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=draw)
-        for i in range(t * chunk, min(t * chunk + chunk, count)):
-            o[i] = w[Int(s[i])]
-
-    if count > 0:
-        host_parallelize(task, max(tasks, 1))
+    meta_rows_compose(trees_address(rows), count, trees_address(mx.draw), trees_address(out))
     _ = rows  # read through its address above
     _ = mx.draw
     return out
