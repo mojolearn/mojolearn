@@ -3,8 +3,7 @@
 2026-11-24): `tsne_fit_device` and `tsne_fit_host` on an 8-row fixture with
 max_iter K. The loop always runs max_iter steps (TSNE's n_iter_), so the check
 is that each column writes a non-negative loop time through `loop_word`
-(the fit's `fit_loop_` milliseconds) and that the word stays untouched
-without one.
+(the fit's `fit_loop_` milliseconds).
 
 Suite module (no `main`): checks/native_tests/fit_loop_tsne.mojo runs
 `run_checks`."""
