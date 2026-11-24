@@ -23,6 +23,7 @@ device form is compared with the host-input form on the same image.
 Small fixture: 96 rows x 5 features, a fold of 61 rows with repeats.
 """
 from std.testing import TestSuite
+from checks.native_tests.kit import upload_whole_into
 from checks.native_tests.testsuite_cases import require as _require
 from core.entry_table import entry_ref_unresolved
 from bindings.forest_config_run import forest_request
@@ -217,8 +218,7 @@ def _same_pool[RF_INPUT: Bool]() raises:
     var lb = List[Int32](length=n, fill=-1)
     var ctx = rf_store_ctx() if RF_INPUT else et_store_ctx()
     var dx = ctx.enqueue_create_buffer[DType.float32](n * _D)
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=xg.unsafe_ptr())
-    ctx.synchronize()
+    upload_whole_into(ctx, dx, xg)
     var xp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(xg.unsafe_ptr()))
     pool.predict_into[RF_INPUT](xp, MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(va.unsafe_ptr())), n)
     pool.predict_labels_into[RF_INPUT](xp, MutPointer[Int32, MutAnyOrigin](unsafe_from_address=Int(la.unsafe_ptr())), n)

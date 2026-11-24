@@ -19,6 +19,7 @@ truncated UTF-8, stray continuation bytes, `<|endoftext|>` at the start, the end
 split across documents, and empty documents."""
 from std.testing import TestSuite, assert_equal, assert_true
 from max.gpu.host import DeviceContext
+from checks.native_tests.kit import upload_into
 
 from tokenizer.encoding import BpeTokenizer, string_bytes
 from tokenizer.impl.vocab_build import table_from_tokens
@@ -89,6 +90,7 @@ def _check_encode(tok: BpeTokenizer, table: BpeGpuTable, docs: List[List[UInt8]]
     var counts = List[Int64](length=max(hi - lo, 1), fill=Int64(-1))
     var total = bpe_gpu_encode_batch_into(table, Int(text.unsafe_ptr()), n, offs, allow, tok.eot_id(),
                                           Int(ids.unsafe_ptr()), Int(counts.unsafe_ptr()))
+    _ = text^
     var at = 0
     for d in range(lo, hi):
         var host = tok.encode_bytes(docs[d], allow)
@@ -122,8 +124,7 @@ def _decode(table: BpeGpuTable, tok: BpeTokenizer, ids: List[Int64], soffs: List
     var ctx = bpe_gpu_ctx()
     var d_ids = ctx.enqueue_create_buffer[DType.int64](max(nids, 1))
     if nids > 0:
-        ctx.enqueue_copy(dst_buf=d_ids.create_sub_buffer[DType.int64](0, nids),
-                         src_ptr=MutPointer[Int64, MutAnyOrigin](unsafe_from_address=Int(ids.unsafe_ptr())))
+        upload_into(ctx, d_ids, ids)
     ctx.synchronize()
     var p = d_ids.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var total = bpe_gpu_decode_batch_into(table, Optional[MutPointer[Int64, MutAnyOrigin]](p), 0, soffs, 64,
@@ -178,6 +179,7 @@ def _check_train(docs: List[List[UInt8]], vocab_size: Int, min_frequency: Int) r
     _batch(docs, 0, len(docs), text, offs)
     var classes = BpeGpuClasses(bpe_gpu_ctx(), builtin_unicode_classes())
     var gpu = bpe_gpu_train_into(classes, Int(text.unsafe_ptr()), len(text), offs, vocab_size, min_frequency)
+    _ = text^
     var label = "vocab " + String(vocab_size) + " minf " + String(min_frequency)
     assert_equal(gpu.n_tokens(), host.n_tokens(), label + ": tokens")
     assert_equal(gpu.n_merges(), host.n_merges(), label + ": merges")

@@ -118,6 +118,7 @@ def _host_case(case: Int) raises:
     var m = len(inner)
     var composed = List[Int32](length=m, fill=Int32(-1))
     meta_rows_compose(Int(inner.unsafe_ptr()), m, Int(draw.unsafe_ptr()), Int(composed.unsafe_ptr()))
+    _ = draw^
     var codes = List[Int32](length=n, fill=Int32(0))
     var target = List[Float32](length=n, fill=0.0)
     for i in range(n):  # small-loop(fixture: the fold's own words, a function of the base row)
@@ -127,6 +128,7 @@ def _host_case(case: Int) raises:
     var target_base = List[Float32](length=NB, fill=0.0)
     meta_rows_take_u32(Int(codes.unsafe_ptr()), Int(inv.unsafe_ptr()), NB, Int(codes_base.unsafe_ptr()))
     meta_rows_take_u32(Int(target.unsafe_ptr()), Int(inv.unsafe_ptr()), NB, Int(target_base.unsafe_ptr()))
+    _ = inv^
     for i in range(m):  # small-loop(oracle: the composed draw and the words it reads)
         var p = Int(inner[i])
         require(Int(composed[i]) == Int(outer[p]), "composed row " + String(i) + " differs")
@@ -163,6 +165,7 @@ def _device_case(case: Int) raises:
         var m = len(inner)
         var composed = List[Int32](length=m, fill=Int32(0))
         meta_rows_compose(Int(inner.unsafe_ptr()), m, Int(draw.unsafe_ptr()), Int(composed.unsafe_ptr()))
+        _ = draw^
         var composed64 = List[Int64](length=m, fill=Int64(0))
         for i in range(m):  # small-loop(fixture: the store reads int64 row numbers)
             composed64[i] = Int64(composed[i])
@@ -183,6 +186,7 @@ def _device_case(case: Int) raises:
         # The device-row path: the fold's targets at the base rows, read through the composed draw.
         var y_base = List[Float32](length=DN, fill=0.0)
         meta_rows_take_u32(Int(y_fold.unsafe_ptr()), Int(inv.unsafe_ptr()), DN, Int(y_base.unsafe_ptr()))
+        _ = y_fold^
         var dev_y = List[Float32](length=m, fill=0.0)
         for r in range(m):  # small-loop(fixture: the member set's target selection by the draw)
             dev_y[r] = y_base[Int(composed[r])]
@@ -231,6 +235,7 @@ def _device_case(case: Int) raises:
                     MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(host_x.unsafe_ptr())),
                     MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(coef.unsafe_ptr())),
                     Int(out_b.unsafe_ptr()), m, FD, Float32(0.75), True)
+                _ = coef^
                 require(ra == rb and ra == 0, "finite status differs")
                 _same(out_a, out_b, "predictions")
         except error:

@@ -65,6 +65,10 @@ def _spans(op: Int, na: Int, np: Int, nf: Int) -> Bool:
     try:
         ridge_multi_check_spans(op, Int(a.unsafe_ptr()), na, Int(p.unsafe_ptr()), np, Int(f.unsafe_ptr()), nf,
                                 Int(result.unsafe_ptr()))
+        _ = a^
+        _ = p^
+        _ = f^
+        _ = result^
     except:
         return False
     return True
@@ -130,11 +134,15 @@ def _device_case(case: Int) raises:
                 ridge_fit_multi_slot_run(Int(y.unsafe_ptr()), Int(coef_a.unsafe_ptr()), Int(ym_a.unsafe_ptr()),
                                          Int(sums_a.unsafe_ptr()), Int(m64_a.unsafe_ptr()), Int(xm_a.unsafe_ptr()),
                                          Int(ic_a.unsafe_ptr()), slot, n, FD, NT, intercept, Float32(0.75))
+                _ = m64_a^
+                _ = sums_a^
                 if intercept:
                     var work = List[Float32](length=n * FD, fill=0.0)
                     lm_col_sums_run(Int(host_x.unsafe_ptr()), Int(sums_b.unsafe_ptr()), n, FD)
                     lm_means_finish_run(Int(sums_b.unsafe_ptr()), Int(m64_b.unsafe_ptr()), Int(xm_b.unsafe_ptr()),
                                         FD, n, False, 0.0)
+                    _ = m64_b^
+                    _ = sums_b^
                     lm_center_run(Int(host_x.unsafe_ptr()), Int(xm_b.unsafe_ptr()), Int(work.unsafe_ptr()), n, FD)
                     ridge_fit_multi_run(Int(work.unsafe_ptr()), Int(y.unsafe_ptr()), Int(coef_b.unsafe_ptr()),
                                         Int(ym_b.unsafe_ptr()), n, FD, NT, Float32(0.75), True, True,
@@ -158,6 +166,8 @@ def _device_case(case: Int) raises:
                                              slot, n, FD, NT)
                 ridge_predict_multi_run(Int(host_x.unsafe_ptr()), Int(coef.unsafe_ptr()), Int(icpt.unsafe_ptr()),
                                         Int(out_b.unsafe_ptr()), n, FD, NT)
+                _ = coef^
+                _ = icpt^
                 _same(out_a, out_b, "predictions")
         except error:
             failure = String(error)

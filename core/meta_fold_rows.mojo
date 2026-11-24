@@ -62,9 +62,9 @@ def meta_rows_index(wide: Int, n: Int, base_rows: Int, draw: Int, inv: Int) rais
     if n > 0:
         host_parallelize(place, max(row_tasks, 1))
     var outside = _U8P(unsafe_from_address=bad_at)[] != UInt8(0)
-    _ = len(bad)  # written through `bad_at` by the tasks above
     if outside:
         raise Error(META_ROWS_OUTSIDE)
+    _ = bad^  # written through `bad_at` by the tasks above, read through it into `outside`
 
 
 def meta_rows_compose(rows: Int, count: Int, draw: Int, dst: Int):

@@ -144,6 +144,8 @@ def _cluster_case() raises:
     var host_codes = List[Int32](length=2 * N, fill=Int32(0))
     _ = score_encode_signed(Int(both.unsafe_ptr()), 4, 2 * N, Int(host_classes.unsafe_ptr()),
                             Int(host_codes.unsafe_ptr()))
+    _ = both^
+    _ = host_codes^
     var dev_classes = List[Int32](length=2 * N, fill=Int32(0))
     var dev = _DevicePair(Int(yt.unsafe_ptr()), Int(yp.unsafe_ptr()), 4, Int(dev_classes.unsafe_ptr()))
     try:
@@ -270,6 +272,7 @@ def _prfs_case() raises:
         var outs: List[Int] = [Int(table.unsafe_ptr())]
         var miss_t = _run(MS_GATHER, [0], [dev.ct], [N, k, gt], List[Float64](), outs)[0]
         var miss_p = _run(MS_GATHER, [0], [dev.cp], [N, k, gp], List[Float64](), outs)[0]
+        _ = table^
         require(miss_t == -1 and miss_p == -1, "gather: no row may miss")
         var width = k + 0  # average None: one value per selected class
         var a = List[Float32](length=3 * width + 3, fill=Float32(-1.0))
@@ -322,12 +325,15 @@ def _confusion_labels_case() raises:
     var gp = metric_slot_create(N)
     try:
         var answer = _run(MS_GATHER, [0], [dev.ct], [N, ku, hit], List[Float64](), [Int(miss.unsafe_ptr())])[0]
+        _ = miss^
         require(answer == first, "label check: the first selected y_true row " + String(answer) + " vs " + String(first))
         var empty = _run(MS_GATHER, [0], [dev.ct], [N, ku, hit], List[Float64](), [Int(none.unsafe_ptr())])[0]
+        _ = none^
         require(empty == -1, "label check: no selected class answers -1")
         var outs: List[Int] = [Int(table.unsafe_ptr())]
         _ = _run(MS_GATHER, [0], [dev.ct], [N, ku, gt], List[Float64](), outs)
         _ = _run(MS_GATHER, [0], [dev.cp], [N, ku, gp], List[Float64](), outs)
+        _ = table^
         var from_slots = List[Int64](length=kl * kl, fill=Int64(-1))
         var from_host = List[Int64](length=kl * kl, fill=Int64(-2))
         var ints: List[Int] = [N, kl, 0]
