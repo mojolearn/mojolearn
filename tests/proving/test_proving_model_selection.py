@@ -137,12 +137,13 @@ def _import_every_family():
 
 #: The marked classes whose constructor is not a field-only schema, so no member-only plan can clone them
 #: (python/mojolearn/_native_msel_more.py `_derive_member`): their Python __init__ calls a native constructor
-#: operation (the Theta / ETS forecasters and CNNClassifier through `_XSEQ` / `_XCNN`, GradientBoosting through
-#: `_TREES`). Every other marked class is registered. The ma-core claim (rounds 5-6: "CNNClassifier and DBSCAN
+#: operation (the Theta / ETS forecasters and CNNClassifier through `_XSEQ` / `_XCNN`). Every other marked class is
+#: registered; GradientBoosting (16, 1) is registered from its constructor's `_INIT_NAMES` and `trees_gbdt_init`
+#: (python/mojolearn/_native_msel_more.py `_TEXT_MODEL_MEMBERS`, lane w3-fix-a: RFE over the booster). The ma-core claim (rounds 5-6: "CNNClassifier and DBSCAN
 #: only") was never run; the 2026-11-22 proving read listed 48 classes, because `_derive_member` refused every
 #: native (`_native_full_reset_params` / `_native_declared_constructors`) constructor.
 UNREGISTERED = ["AutoTheta", "CNNClassifier", "DampedETS", "DynamicOptimizedTheta", "DynamicTheta", "ETS",
-                "GradientBoosting", "OptimizedTheta", "Theta"]
+                "OptimizedTheta", "Theta"]
 
 
 def test_every_family_is_registered_for_the_member_route():

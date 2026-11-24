@@ -125,7 +125,13 @@ def composition_before(model: PythonObject, kind: String, op: Int, operation: St
     var rows = Int(py=x.shape[0])
     if len(args) > 1:
         classical_admit_value(args[1], context)
-        _target(args[1], rows, context)
+        if kind != "rfe":
+            # RFE's target is admitted once, in its ESTIMATOR's fit door's words, by RFE's member UNPACK
+            # (bindings/prep_select_native_door.mojo `_rfe_member`, lane mf-rfe6): this x_prep target check
+            # named MaxAbsScaler in its refusals and ran first (lane w3-fix-a, row 13;
+            # test_mf_rfe6_members::test_refused_target_raises_the_estimators_own_words). REMOVED for RFE: the
+            # second target scan per fit.
+            _target(args[1], rows, context)
     if not fitting:
         var names = _feature_names(args[0], context)
         var fitted = py_get(fields, nk[].k_feature_names_in_)

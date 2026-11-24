@@ -16,6 +16,7 @@ from bindings.sequential_inputs_door import sequential_input
 from bindings.native_numpy_metadata_pack import native_numpy_type, native_numpy_module_fields
 from bindings.classical_keys_unpack import classical_keys
 from bindings.fitted_digest_property_pack import fitted_digest_property, fitted_digest_property_read
+from bindings.optimizer_public_words_unpack import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
 from bindings.py_balanced import py_item
 
 
@@ -263,6 +264,23 @@ def _classical_descriptor_get(binding: PythonObject, model: PythonObject, cls: P
     return PythonObject(from_owned=result)
 
 
+def _classical_native_property(binding: PythonObject, model: PythonObject) raises -> PythonObject:
+    """`binding` = (property, entry, (operation, arguments, context)): `entry(model, operation, arguments,
+    context)`, the compiled owner call the property's body made. A refusal (NotFittedError before a fit) is
+    the entry's own Python exception, stashed with its class (`stash_python_error`) for the attribute door
+    to restore unchanged."""
+    ref cpy = Python().cpython()
+    var entry = binding[1]
+    var call = binding[2]
+    var args = Python.tuple(model, call[0], call[1], call[2])
+    var result = cpy.PyObject_Call(entry._obj_ptr, args._obj_ptr, PyObjectPtr())
+    _ = args  # the argument tuple (and the model it holds) lives through the call
+    if not result:
+        var failure = stash_python_error()
+        raise failure^
+    return PythonObject(from_owned=result)
+
+
 def classical_getattribute(model: PythonObject, name: PythonObject, context: PythonObject,
                            layout_checked: Bool = False) raises -> PythonObject:
     # Callers without an admission record (host density, KDE, neighbours,
@@ -345,6 +363,11 @@ def _classical_getattribute_impl(mut mods: NativeModules, model: PythonObject, n
             if digest is not None:
                 return fitted_digest_property_read(digest, model)
             raise Error("TypeError: Python model property/descriptor hooks are not accepted")
+        if len(binding) == 3:
+            # A property the connection bound to its NATIVE read (lane w3-fix-a: the GBDT adapters'
+            # `feature_importances_`, python/mojolearn/_native_trees_bridge.py `connect_gbdt_parameters`):
+            # its compiled entry's operation, resolved at connection; the property's getter never runs.
+            return _classical_native_property(binding, model)
         return _classical_descriptor_get(binding, model, cls, plan)
     var fields = py_call(py_item(plan, nk[].k_fields_get), model, cls)
     if py_contains(fields, name):
@@ -489,6 +512,9 @@ def classical_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") 
         var result = classical_getattribute(model, args[2], context)
         return result.steal_data()
     except error:
+        if String(error) == PYTHON_ERROR_PENDING:
+            # a native property read's own exception (`_classical_native_property`), restored with its class
+            return optimizer_python_error(error^)
         if String(error).startswith("AttributeError:"):
             return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
         if String(error).startswith("RuntimeError:"):
