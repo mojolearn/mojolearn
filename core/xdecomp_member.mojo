@@ -568,8 +568,10 @@ def _whole(call: _Call, estimator: String) raises:
 # word 5, the X pool id), the dictionary-learning kit (DictionaryLearning, MiniBatchDictionaryLearning,
 # SparsePCA, MiniBatchSparsePCA fit; every kit query), the robust covariance kit (EllipticEnvelope / MinCovDet
 # fit and queries), and the manifold kit (Isomap, LLE, MDS fit; Isomap / LLE transform).
+# IncrementalPCA (lane vdf-scope-neural4): IPCA_FIT / IPCA_QUERY's `source` word is `-(id + 1)` of the fold's
+# pool id; the owner slices each fit batch from it on the device (x_decomp/ipca_owner.mojo `_resident_rows`).
 # Kinds left on the whole host view (their typed drivers take a host X address; no pool word yet):
-# IncrementalPCA and NMF. LatentDirichletAllocation reads the X pool id through XD_LDA int word 13. SparseCoder's fit reads X's width only (its transform is a kit
+# NMF. LatentDirichletAllocation reads the X pool id through XD_LDA int word 13. SparseCoder's fit reads X's width only (its transform is a kit
 # query). FastICA and FactorAnalysis
 # read the X pool id through the last int word of XD_ICA_FIT / XD_ICA_PROJECT / XD_FA_FIT / XD_FA_QUERY.
 comptime XDECOMP_STORE_PREFIX = "x_decomp"
@@ -577,7 +579,7 @@ comptime XDECOMP_STORE_PREFIX = "x_decomp"
 
 def _rows_kind(kind: Int) -> Bool:
     """The kinds that read X through `_rows` (the note above)."""
-    return (_is_rp(kind) or kind == XDECOMP_KIND_ICA or kind == XDECOMP_KIND_FA or kind == XDECOMP_KIND_LDA
+    return (kind == XDECOMP_KIND_IPCA or _is_rp(kind) or kind == XDECOMP_KIND_ICA or kind == XDECOMP_KIND_FA or kind == XDECOMP_KIND_LDA
             or _is_kit(kind)
             or kind == XDECOMP_KIND_ENVELOPE or _is_mani(kind))
 
@@ -617,14 +619,26 @@ def _address(slot: _Slot, block: Int) -> Int:
 
 
 def _fit_ipca(slot: _Slot, call: _Call) raises:
+    """THE RESIDENT ROUTE wrapper (lane vdf-scope-neural4): `_fit_ipca_rows` over the call's rows (`_rows`)."""
     var estimator = _name(slot)
-    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    var held = _rows(call, estimator)
+    try:
+        _fit_ipca_rows(slot, call, held)
+    finally:
+        seq_rows_close(call, held)
+
+
+def _fit_ipca_rows(slot: _Slot, call: _Call, held: SeqRows) raises:
+    """IPCA_FIT over `held`: a host X address, or `-(id + 1)` of the fold's pool id (the request's `source`
+    word, core/ipca_native_provider.mojo `_ipca_source_pool`), whose batches the owner slices on the device."""
+    var estimator = _name(slot)
     _dense(call[].x, "X", estimator)
     if call[].weights.rows > 0:
         raise Error("TypeError: a " + estimator + " member takes no sample_weight")
     if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
         member_unsupported(estimator, call[].fit_output)
-    var rows = call[].x.rows
+    var rows = held.n
     var cols = call[].x.cols
     var batch = 5 * cols if slot[].words[3] < 0.0 else Int(slot[].words[3])
     var requested = -1 if slot[].words[1] < 0.0 else Int(slot[].words[1])
@@ -639,7 +653,7 @@ def _fit_ipca(slot: _Slot, call: _Call) raises:
     var outputs = IPCAOutputs(_address(slot, 0), _address(slot, 1), _address(slot, 2), _address(slot, 3),
         _address(slot, 4), _address(slot, 5))
     var driver = IPCANativeDriver(route.entry.call)
-    var result = driver.fit(IPCAFitRequest(call[].x.data, rows, cols, requested, batch, outputs^, keep))
+    var result = driver.fit(IPCAFitRequest(held.x, rows, cols, requested, batch, outputs^, keep))
     if result.kept:
         for k in range(_HANDLES):  # driver-loop: five resident state handles
             slot[].handles[k] = result.state.values[k]
@@ -649,7 +663,7 @@ def _fit_ipca(slot: _Slot, call: _Call) raises:
     slot[].scalars = [Float64(result.count), Float64(cols), Float64(rows), result.noise, Float64(batch)]
     slot[].fitted = True
     if call[].fit_output == MEMBER_OP_TRANSFORM:
-        _query(slot, call, False)
+        _query_rows(slot, call, False, held)
 
 
 def _prepared(slot: _Slot, call: _Call, k: Int, block: Int, count: Int) raises -> Int:
@@ -666,15 +680,28 @@ def _prepared(slot: _Slot, call: _Call, k: Int, block: Int, count: Int) raises -
 
 
 def _query(slot: _Slot, call: _Call, inverse: Bool) raises:
-    """transform (X -> rows x n_components_) or inverse_transform (rows x
-    n_components_ -> rows x n_features_in_) through the route's entry."""
+    """THE RESIDENT ROUTE wrapper (lane vdf-scope-neural4): `_query_rows` over the call's rows (`_rows`)."""
     var estimator = _name(slot)
     if not slot[].fitted:
         raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
-    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    var held = _rows(call, estimator)
+    try:
+        _query_rows(slot, call, inverse, held)
+    finally:
+        seq_rows_close(call, held)
+
+
+def _query_rows(slot: _Slot, call: _Call, inverse: Bool, held: SeqRows) raises:
+    """transform (X -> rows x n_components_) or inverse_transform (rows x
+    n_components_ -> rows x n_features_in_) through the route's entry, over
+    `held` (a host address or `-(id + 1)` of a pool id read in place)."""
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
     _dense(call[].x, "X", estimator)
     _dense(call[].dst, "the output buffer", estimator)
-    var rows = call[].x.rows
+    var rows = held.n
     var count = slot[].count
     var features = slot[].features
     if not inverse and call[].x.cols != features:
@@ -694,7 +721,7 @@ def _query(slot: _Slot, call: _Call, inverse: Bool) raises:
         ids.values[2] = _prepared(slot, call, 2, 2, features)
         if whiten:
             ids.values[4] = _prepared(slot, call, 4, 4, count)
-    var request = IPCAQueryRequest(call[].x.data, rows, features, count, _address(slot, 2), _address(slot, 0),
+    var request = IPCAQueryRequest(held.x, rows, features, count, _address(slot, 2), _address(slot, 0),
         _address(slot, 4), call[].dst.data, inverse, whiten, resident, ids^)
     IPCANativeDriver(call[].route.entry.call).query(request)
 
