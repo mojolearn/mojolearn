@@ -927,6 +927,21 @@ def meta_plan_release(handle: Int):
         pass
 
 
+def _plan_refused_first(handle: Int) raises -> Bool:
+    """THE DOOR'S REFUSAL raised before anything (lane mf-refuse5) on a plan
+    entry (`_refused_first` on a state): the door's words with `late` False,
+    not the RFE kind's. Read under the store's lock."""
+    var store = _PLANS.get_or_create_ptr()
+    var address = _plan_lookup(handle, False)
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    shared_slot_lock(lock)
+    try:
+        var slot = _PlanSlotPtr(unsafe_from_address=address)
+        return slot[].refusal.byte_length() != 0 and not slot[].refusal_late and not _rfe_kind(slot[].kind)
+    finally:
+        shared_slot_unlock(lock)
+
+
 def _plan_final(handle: Int) raises -> MemberPlan:
     """The LAST nested plan of a plan entry (a stack's final estimator), copied
     under the store's lock."""
@@ -4711,6 +4726,28 @@ def _outputs_unit(call: _CallPtr, kind: Int, classes: Int) raises:
     call[].classes = classes if classifier else 0
 
 
+def _outputs_refused(call: _CallPtr, kind: Int):
+    """OUTPUTS of a plan refused before anything (lane w3-fix-6): its FIT
+    raises the door's words first (`_refused_first`), so these widths are
+    only what a caller sizes before that FIT (a search's admission over the
+    candidates' responses) and are never read. Every call `_refused_mask`
+    admits answers: predict one column per output (int32 codes for a
+    classifier, else float64), a classifier's probabilities or decision its
+    classes, anything else its input's width."""
+    var classifier = _classifier_kind(kind)
+    if call[].flags == MEMBER_OP_PREDICT:
+        call[].out_cols = max(call[].y.cols, 1) if _multi_kind(kind) else 1
+        call[].out_dtype = MEMBER_I32 if classifier else MEMBER_F64
+    elif classifier and (call[].flags == MEMBER_OP_PREDICT_PROBA or call[].flags == MEMBER_OP_DECISION):
+        call[].out_cols = max(call[].classes, 1)
+        call[].out_dtype = MEMBER_F64
+    else:
+        call[].out_cols = max(call[].x.cols, 1)
+        call[].out_dtype = MEMBER_F64
+    if not classifier:
+        call[].classes = 0
+
+
 def _outputs(call: _CallPtr) raises:
     if call[].state == 0:
         if call[].param_count != META_PARAM_COUNT or not call[].params:
@@ -4719,6 +4756,15 @@ def _outputs(call: _CallPtr) raises:
         var kind = Int(words[0])
         if _ada_kind(kind):
             _outputs_ada(call, kind, call[].classes)
+            return
+        if not _rfe_kind(kind) and _plan_refused_first(Int(words[1])):
+            # LANE w3-fix-6: THE DOOR'S REFUSAL first (a nested Stacking whose
+            # cv is a user's splitter, in a search's candidates): the entry may
+            # hold no members, so `_plan_final` / `_plan_first` below raised
+            # "a meta member plan holds no members" at the search's admission
+            # before any fit raised the door's words (test_mf_rows8c
+            # test_nested_meta_refusal_*). Its FIT raises them first.
+            _outputs_refused(call, kind)
             return
         if _rfe_kind(kind):
             var entry_words = _plan_words(Int(words[1]))
