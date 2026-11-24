@@ -24,11 +24,27 @@ comptime SPECTRAL_RESIDENT_COUNT = 8
 comptime SPECTRAL_NATIVE_COUNT = 9
 comptime SPECTRAL_CAP_DENSE = 1
 comptime SPECTRAL_CAP_RESIDENT = 2
+#: The image builds the RBF and precomputed-kNN affinities ON ITS OWN DEVICE
+#: (routes SPECTRAL_RBF / SPECTRAL_KNN) and runs the dense embedding on that
+#: device buffer: no n x n affinity crosses to the host between images (lane
+#: vdf-misc3, 2026-11-24).
+comptime SPECTRAL_CAP_AFFINITY = 4
 comptime SPECTRAL_DATASET = 0
 comptime SPECTRAL_GRAPH = 1
 comptime SPECTRAL_DENSE = 2
+#: source = X (rows x features float32, host), scale = gamma: the affinity
+#: exp(-gamma ||x_i - x_j||^2) on the device (embedding only).
+comptime SPECTRAL_RBF = 3
+#: source = a dense precomputed distance matrix (rows x rows float32, host)
+#: or 0 with graph_rows / graph_columns / graph_values = its COO triples
+#: (nonzeros of them); features = n_neighbors; status = 3 int32 host words
+#: (code, bad row, stored): the connectivity affinity 0.5 (C + C^T) on the
+#: device (embedding only).
+comptime SPECTRAL_KNN = 4
+#: `embed`'s return when the kNN affinity refused (the words are in status).
+comptime SPECTRAL_KNN_REFUSED = -4
 
-@fieldwise_init
+
 struct SpectralInput(ImplicitlyCopyable, Movable):
     var source: Int
     var graph_rows: Int
@@ -38,6 +54,29 @@ struct SpectralInput(ImplicitlyCopyable, Movable):
     var rows: Int
     var features: Int
     var nonzeros: Int
+    #: SPECTRAL_RBF / SPECTRAL_KNN: the host n x n float32 the generated
+    #: affinity is written to once at the end (the estimator's public
+    #: `affinity_matrix_`), 0 for none (the standalone function).
+    var affinity_out: Int
+    #: SPECTRAL_KNN: the 3 int32 host status words; else 0.
+    var status: Int
+    #: SPECTRAL_RBF: gamma; else 0.
+    var scale: Float64
+
+    def __init__(out self, source: Int, graph_rows: Int, graph_columns: Int, graph_values: Int,
+                 route: Int, rows: Int, features: Int, nonzeros: Int,
+                 affinity_out: Int = 0, status: Int = 0, scale: Float64 = 0.0):
+        self.source = source
+        self.graph_rows = graph_rows
+        self.graph_columns = graph_columns
+        self.graph_values = graph_values
+        self.route = route
+        self.rows = rows
+        self.features = features
+        self.nonzeros = nonzeros
+        self.affinity_out = affinity_out
+        self.status = status
+        self.scale = scale
 
 @fieldwise_init
 struct SpectralStateView(ImplicitlyCopyable, Movable):
@@ -158,12 +197,12 @@ def spectral_native_dispatch[K: SpectralNativeKernels](operation: Int,
             var request = SpectralFitRequest(SpectralInput(a[0], a[1], a[2], a[3], p[0], p[1], p[2], p[3]), a[4], a[5], SpectralStateView(a[6], a[7], a[8], a[9]), SpectralFitOptions(p[4], p[5], p[6], p[7], f[0], p[8], p[9] != 0))
             value = K.fit(request)
         elif operation == SPECTRAL_EMBED:
-            if na != 5 or np != 10 or nf != 1 or aa == 0 or pp == 0 or ff == 0:
-                raise Error("Spectral native ABI: embed requires 5 addresses, 10 integers and 1 floats")
+            if na != 7 or np != 10 or nf != 2 or aa == 0 or pp == 0 or ff == 0:
+                raise Error("Spectral native ABI: embed requires 7 addresses, 10 integers and 2 floats")
             var a = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=aa)
             var p = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=pp)
             var f = Pointer[Float64, ImmUntrackedOrigin](unsafe_from_address=ff)
-            var request = SpectralEmbeddingRequest(SpectralInput(a[0], a[1], a[2], a[3], p[0], p[1], p[2], p[3]), a[4], SpectralEmbeddingOptions(p[4], p[5], p[6], p[7] != 0, p[8] != 0, p[9], f[0]))
+            var request = SpectralEmbeddingRequest(SpectralInput(a[0], a[1], a[2], a[3], p[0], p[1], p[2], p[3], a[5], a[6], f[1]), a[4], SpectralEmbeddingOptions(p[4], p[5], p[6], p[7] != 0, p[8] != 0, p[9], f[0]))
             value = K.embed(request)
         elif operation == SPECTRAL_QUERY:
             if na != 8 or np != 7 or nf != 0 or aa == 0 or pp == 0:
@@ -216,9 +255,9 @@ struct SpectralDriver(Copyable, Movable):
         return native_descriptor_call_fixed(self.entry, SPECTRAL_FIT, a, p, f)
 
     def embed(self, r: SpectralEmbeddingRequest) raises -> Int:
-        var a: Array[Int, 5] = [r.input.source, r.input.graph_rows, r.input.graph_columns, r.input.graph_values, r.embedding]
+        var a: Array[Int, 7] = [r.input.source, r.input.graph_rows, r.input.graph_columns, r.input.graph_values, r.embedding, r.input.affinity_out, r.input.status]
         var p: Array[Int, 10] = [r.input.route, r.input.rows, r.input.features, r.input.nonzeros, r.options.lanczos_components, r.options.output_components, r.options.neighbors, Int(r.options.normalize_laplacian), Int(r.options.drop_first), r.options.seed]
-        var f: Array[Float64, 1] = [r.options.tolerance]
+        var f: Array[Float64, 2] = [r.options.tolerance, r.input.scale]
         return native_descriptor_call_fixed(self.entry, SPECTRAL_EMBED, a, p, f)
 
     def query(self, r: SpectralQueryRequest) raises -> Int:

@@ -11,7 +11,7 @@ from core.spectral_native_api import (
     SpectralInput, SpectralStateView, SpectralFitRequest, SpectralEmbeddingRequest,
     SpectralQueryShape, SpectralQueryRequest, SpectralPrepareRequest,
     SpectralResidentQueryRequest, SpectralNativeKernels,
-    SPECTRAL_DATASET, SPECTRAL_GRAPH, SPECTRAL_DENSE,
+    SPECTRAL_DATASET, SPECTRAL_GRAPH, SPECTRAL_DENSE, SPECTRAL_RBF, SPECTRAL_KNN,
 )
 from spectral.impl.spectral_predict_common import (
     SpectralPredictionState, SpectralPrediction, spectral_predict_validate,
@@ -96,7 +96,9 @@ def spectral_write_fit(request: SpectralFitRequest, result: SpectralFitResult) r
 
 def spectral_write_embedding(request: SpectralEmbeddingRequest,
                              result: SpectralEmbeddingResult) raises -> Int:
-    if request.input.route == SPECTRAL_DENSE and result.columns < 0:
+    var dense_kind = (request.input.route == SPECTRAL_DENSE or request.input.route == SPECTRAL_RBF
+                      or request.input.route == SPECTRAL_KNN)
+    if dense_kind and result.columns < 0:
         return result.columns
     spectral_guard_embedding(result.embedding, request.input.rows, result.columns,
                              request.options.output_components)
@@ -137,6 +139,8 @@ trait SpectralBackend:
                     values: List[Float32], mut result: SpectralEmbeddingResult) raises: ...
     @staticmethod
     def embed_dense(request: SpectralEmbeddingRequest, mut result: SpectralEmbeddingResult) raises: ...
+    @staticmethod
+    def embed_affinity(request: SpectralEmbeddingRequest, mut result: SpectralEmbeddingResult) raises: ...
     @staticmethod
     def query(source: List[Float32], training: List[Float32], shape: SpectralQueryShape,
               state: SpectralPredictionState) raises -> SpectralPrediction: ...
@@ -214,6 +218,11 @@ struct SpectralKernels[B: SpectralBackend](SpectralNativeKernels):
             _ = f32_ptr(r.input.source)
             _ = f32_ptr(r.embedding)
             Self.B.embed_dense(r, result)
+        elif r.input.route == SPECTRAL_RBF or r.input.route == SPECTRAL_KNN:
+            # lane vdf-misc3: the affinity is generated on this image's device
+            # from X (rbf) or the precomputed distances (knn) and stays there.
+            _ = f32_ptr(r.embedding)
+            Self.B.embed_affinity(r, result)
         else:
             raise Error("Spectral native ABI: unknown embedding input route")
         return result^

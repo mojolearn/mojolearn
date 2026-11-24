@@ -3,7 +3,7 @@
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.spectral_native_api import (
     SpectralFitRequest, SpectralEmbeddingRequest, SpectralQueryShape,
-    SPECTRAL_CAP_DENSE, SPECTRAL_CAP_RESIDENT,
+    SPECTRAL_CAP_DENSE, SPECTRAL_CAP_RESIDENT, SPECTRAL_CAP_AFFINITY, SPECTRAL_RBF,
 )
 from core.spectral_native_execution import (
     SpectralBackend, SpectralKernels, SpectralFitResult, SpectralEmbeddingResult,
@@ -13,6 +13,7 @@ from spectral.estimator import (
     spectral_fit_predict_dataset_host_keep, spectral_fit_predict_graph_host_keep,
     spectral_fit_predict_dense_host_keep, spectral_embedding_dataset_host,
     spectral_embedding_graph_host, spectral_embedding_dense_host, spectral_predict_host,
+    spectral_embedding_rbf_host, spectral_embedding_knn_host,
 )
 from spectral.impl.spectral_predict_resident import (
     spectral_resident_prepare, spectral_resident_predict, spectral_resident_release,
@@ -27,7 +28,7 @@ struct SpectralDeviceBackend(SpectralBackend):
 
     @staticmethod
     def capabilities() raises -> Int:
-        return SPECTRAL_CAP_DENSE | SPECTRAL_CAP_RESIDENT
+        return SPECTRAL_CAP_DENSE | SPECTRAL_CAP_RESIDENT | SPECTRAL_CAP_AFFINITY
 
     @staticmethod
     def dataset_copy_count(count: Int) -> Int:
@@ -91,6 +92,22 @@ struct SpectralDeviceBackend(SpectralBackend):
             r.options.normalize_laplacian, r.options.drop_first, UInt64(r.options.seed),
             result.embedding, Float32(r.options.tolerance),
         )
+
+    @staticmethod
+    def embed_affinity(r: SpectralEmbeddingRequest, mut result: SpectralEmbeddingResult) raises:
+        if r.input.route == SPECTRAL_RBF:
+            result.columns = spectral_embedding_rbf_host(
+                r.input.source, r.input.rows, r.input.features, r.input.scale, r.input.affinity_out,
+                r.options.lanczos_components, r.options.normalize_laplacian, r.options.drop_first,
+                UInt64(r.options.seed), result.embedding, Float32(r.options.tolerance),
+            )
+        else:
+            result.columns = spectral_embedding_knn_host(
+                r.input.source, r.input.graph_rows, r.input.graph_columns, r.input.graph_values,
+                r.input.nonzeros, r.input.rows, r.input.features, r.input.status, r.input.affinity_out,
+                r.options.lanczos_components, r.options.normalize_laplacian, r.options.drop_first,
+                UInt64(r.options.seed), result.embedding, Float32(r.options.tolerance),
+            )
 
     @staticmethod
     def query(source: List[Float32], training: List[Float32], shape: SpectralQueryShape,
