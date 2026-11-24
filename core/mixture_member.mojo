@@ -37,8 +37,9 @@ Outputs: predict writes component ids as int32 (rows x 1); predict_proba
 float32 rows x n_components; score_samples float32 rows x 1 (the per-row
 log-likelihood). `call.fit_output = MEMBER_OP_PREDICT` writes predict of the
 fitted model for the training rows (fit_predict: in the fit's own crossing
-where the image has `MIXTURE_CAP_FIT_PREDICT`, else a second entry call). No
-score (the caller averages score_samples itself).
+where the image has `MIXTURE_CAP_FIT_PREDICT`, else a second entry call).
+Score (lane mf-rows8c): `call.value` = the mean log-likelihood, the public
+`score`'s own entry words (`_score_mean`).
 
 Fitted-state blocks (MEMBER_OP_EXPORT / MEMBER_OP_IMPORT), in index order:
 0 `MEMBER_BLOCK_FAMILY` float32 1 x k, the weights;
@@ -64,11 +65,12 @@ from core.member_abi import (
     MEMBER_CAN_IMPORT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
+from core.member_abi import MEMBER_OP_SCORE, MEMBER_CAN_SCORE  # lane mf-rows8c: GaussianMixture.score
 from core.member_families import MEMBER_FAMILY_MIXTURE
 from core.cluster_member_words import member_words_byte_slots, member_words_take_text
 from core.mixture_native_api import (
     GmmDriver, GmmFitRequest, GmmScoreRequest, MIXTURE_NATIVE_PREDICT, MIXTURE_NATIVE_PREDICT_PROBA,
-    MIXTURE_NATIVE_SCORE_SAMPLES, MIXTURE_CAP_FIT_PREDICT,
+    MIXTURE_NATIVE_SCORE_SAMPLES, MIXTURE_CAP_FIT_PREDICT, MIXTURE_NATIVE_SCORE_BIC_AIC,
 )
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -288,6 +290,33 @@ def _score(slot: _Slot, call: _Call, operation: Int) raises:
     GmmDriver(call[].route.entry.call).score(operation, request)
 
 
+def _score_mean(slot: _Slot, call: _Call) raises:
+    """MEMBER_OP_SCORE (lane mf-rows8c, 2026-11-23): `GaussianMixture.score(X)`, the mean log-likelihood of
+    the call's X, into `call.value`. ONE BODY with the public call: the scoring entry's
+    MIXTURE_NATIVE_SCORE_BIC_AIC words (score, bic, aic) over the same fitted words, word 0, as
+    bindings/mixture_public_native_pack.mojo `_gmm_bic_aic` reads them for `score`. `y` is not read
+    (scikit-learn's `score(X, y=None)`); no sample weights (the class's score takes none). A search with
+    scoring=None scores each unit by it (core/msel_search_run.mojo `_member_score`)."""
+    if not slot[].fitted:
+        raise Error("RuntimeError: " + String(_EST) + ": call fit before score")
+    _whole_x(call)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: GaussianMixture.score takes no sample_weight")
+    var rows = call[].x.rows
+    var d = slot[].features
+    if call[].x.cols != d:
+        raise Error(String(_EST) + ": X has " + String(call[].x.cols) + " features, the fit had " + String(d))
+    var words = List[Float64](length=3, fill=0.0)
+    # ORDER MATCHES bindings/_mojolearn_mixture.mojo::_rebuild_model (as `_score`).
+    var request = GmmScoreRequest(Int(slot[].weights.unsafe_ptr()), Int(slot[].means.unsafe_ptr()),
+        Int(slot[].covariances.unsafe_ptr()), Int(slot[].precisions.unsafe_ptr()),
+        Int(slot[].log_det.unsafe_ptr()), call[].x.data, Int(words.unsafe_ptr()), slot[].components, d,
+        Int(slot[].scalars[0]), slot[].scalars[1] != 0.0, rows, slot[].scalars[2])
+    GmmDriver(call[].route.entry.call).score(MIXTURE_NATIVE_SCORE_BIC_AIC, request)
+    call[].value = words[0]
+    _ = len(words)  # written through its address by the entry above
+
+
 def _block_list(slot: _Slot, block: Int) raises -> Int:
     """The address of block `block`'s list (f32), its rows and columns via
     `_block_shape`."""
@@ -388,8 +417,9 @@ def _mixture_member(operation: Int, address: Int) raises -> Int:
     if operation == MEMBER_OP_CAPABILITIES:
         # No MEMBER_CAN_TEST_ROWS: X is admitted finite by the caller (the
         # GMM entry does not test it).
+        # MEMBER_CAN_SCORE (lane mf-rows8c): `_score_mean`, the class's own score.
         return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_SCORE_SAMPLES
-            | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
+            | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
     if operation == MEMBER_OP_NEW:
         if call[].param_count < 6 or not call[].params:
             raise Error("member ABI: a GaussianMixture member takes six parameters (n_components, max_iter,"
@@ -434,6 +464,8 @@ def _mixture_member(operation: Int, address: Int) raises -> Int:
         _score(slot, call, MIXTURE_NATIVE_PREDICT_PROBA)
     elif operation == MEMBER_OP_SCORE_SAMPLES:
         _score(slot, call, MIXTURE_NATIVE_SCORE_SAMPLES)
+    elif operation == MEMBER_OP_SCORE:
+        _score_mean(slot, call)
     elif operation == MEMBER_OP_EXPORT:
         _export(slot, call)
     elif operation == MEMBER_OP_IMPORT:
