@@ -437,6 +437,24 @@ def _scorer_response(fields: PythonObject, model: PythonObject, b: PythonObject)
         if py_contains(model["methods"], methods[k]):
             found_method = methods[k]
             break
+    if not found_method and py_get(model, "member_only") is not None:
+        # A MEMBER-ONLY plan (python/mojolearn/_native_msel_more.py
+        # `connect_members`: a marked class registered without method
+        # recipes) has an empty method table; its responses are its member's,
+        # answered by the search kind. The response is the first of the
+        # preference order its class has, as scikit-learn's
+        # `_check_response_method` reads it (`getattr(estimator, name)`;
+        # an instance override is refused by the plan's checks). Lane
+        # w3f2-cv, gate 14f1 group B: a scorer over OneClassSVM / SVGP (and
+        # every member-only class) raised here, the search kind's admission
+        # answered unserved, and the caller raised "schema is pending
+        # migration". Read only on this miss path: a plan with recipes is
+        # unchanged.
+        var cls = model["mro"][0]
+        for k in range(len(methods)):  # driver-loop: fixed response preference order
+            if py_call(b.getattr, cls, methods[k], PythonObject(None)) is not None:
+                found_method = methods[k]
+                break
     if not found_method:
         raise Error("AttributeError: native estimator has none of the requested scorer response methods")
     return found_method.value()
