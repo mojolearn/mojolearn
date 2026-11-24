@@ -84,8 +84,6 @@ from bindings.device_plan_binding_pack import device_plan_enter_binding, device_
 from core.hostptr import f32_ptr, i32_ptr
 from core.mojolearn_shell_impl import (
     cast_f64_to_f32_host,
-    nonzero_f64_count_host,
-    nonzero_f64_fill_host,
 )
 from core.dense_coo import (
     nonzero_f32_count as dense_nonzero_f32_count,
@@ -1263,84 +1261,8 @@ def cast_f64_to_f32_binding(
 # TOMBSTONE: the base binding transpose_f32 / cast_colmajor_f64_to_f32 exports deleted 2026-11-23 on lane/sab-host-missed-cls (no product caller); code recoverable at 4519097d38.
 
 
-def nonzero_f64_count_binding(
-    src_addr: PythonObject, n: PythonObject
-) raises -> PythonObject:
-    """How many of the `n` float64 values at `src` are nonzero under the
-    test `v != 0.0` (DEVIATION 2489). That is the Python loop's test, so
-    -0.0 is a zero and NaN is NOT: NaN compares unequal to everything,
-    `np.nonzero` kept it, the Python loop kept it, this keeps it. The
-    count is what `nonzero_f64_fill` needs its three outputs sized to; the
-    two-call shape is `radius_neighbors_count`/`_fill` above. An empty
-    input reads nothing; a negative count is refused.
-    """
-    var count = Int(py=n)
-    if count < 0:
-        raise Error(
-            "nonzero_f64_count: n must be non-negative, got " + String(count)
-        )
-    if count == 0:
-        return PythonObject(0)
-    var sp = _f64_ptr(Int(py=src_addr))
-    var nz = 0
-    with GILReleased(Python()):
-        nz = nonzero_f64_count_host(sp, count)
-    return PythonObject(nz)
-
-
-def nonzero_f64_fill_binding(
-    src_addr: PythonObject,
-    rows: PythonObject,
-    cols: PythonObject,
-    outs: PythonObject,
-    capacity: PythonObject,
-) raises -> PythonObject:
-    """COO triples of a C-contiguous float64 `[rows, cols]` matrix at `src`
-    (DEVIATION 2489): for every entry with `v != 0.0`, in row-major scan
-    order, write its row to `outs[0]` (int32), its column to `outs[1]`
-    (int32) and `Float32(v)` to `outs[2]` (float32), the same
-    round-to-nearest-even narrowing `array.array('f')` applies. Returns the
-    number written. `capacity` is the length of each output; the fill
-    STOPS and raises if the matrix holds more nonzeros than that, so a
-    stale count cannot write past the buffers. Byte-for-byte the output of
-    `_spectral_impl._coo_triples`'s Python loop, which is the oracle.
-    """
-    var nr = Int(py=rows)
-    var nc = Int(py=cols)
-    var cap = Int(py=capacity)
-    if nr < 0 or nc < 0:
-        raise Error(
-            "nonzero_f64_fill: rows and cols must be non-negative, got "
-            + String(nr) + " x " + String(nc)
-        )
-    if cap < 0:
-        raise Error(
-            "nonzero_f64_fill: capacity must be non-negative, got "
-            + String(cap)
-        )
-    if len(outs) != 3:
-        raise Error(
-            "nonzero_f64_fill: outs must hold 3 addresses, got "
-            + String(len(outs))
-        )
-    if nr == 0 or nc == 0:
-        return PythonObject(0)
-    var sp = _f64_ptr(Int(py=src_addr))
-    var rp = _i32_ptr(Int(py=outs[0]))
-    var cp = _i32_ptr(Int(py=outs[1]))
-    var vp = _f32_ptr(Int(py=outs[2]))
-    var k = 0
-    var overflow = False
-    with GILReleased(Python()):
-        k = nonzero_f64_fill_host(sp, nr, nc, cap, rp, cp, vp)
-        if k < 0:
-            overflow = True
-    if overflow:
-        raise Error(
-            "nonzero_f64_fill: more than " + String(cap)
-            + " nonzero entries; count first with nonzero_f64_count"
-        )
-    return PythonObject(k)
+# TOMBSTONE: the base binding nonzero_f64_count / nonzero_f64_fill by-name exports deleted 2026-11-23 on lane/sab-host-missed-cls (no product
+# caller: SpectralClustering takes the typed spectral_preparation_native_api_v1); code recoverable at 4519097d38.
 
 
 # ===========================================================================
@@ -1830,8 +1752,6 @@ def build__mojolearn() -> PythonObject:
         m.def_function[radius_neighbors_fill_binding]("radius_neighbors_fill")
         m.def_function[rbc_knn_search_binding]("rbc_knn_search")
         m.def_function[cast_f64_to_f32_binding]("cast_f64_to_f32")
-        m.def_function[nonzero_f64_count_binding]("nonzero_f64_count")
-        m.def_function[nonzero_f64_fill_binding]("nonzero_f64_fill")
         m.def_function[knn_affinity_f32_binding]("knn_affinity_f32")
         m.def_function[unique_inverse_binding]("unique_inverse")
         # lane migrate-shared-labels: the shared argument-and-label entry

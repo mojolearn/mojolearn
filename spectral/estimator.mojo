@@ -155,25 +155,7 @@ def _config(
     )
 
 
-def spectral_fit_predict_dataset_host(
-    dataset: List[Float32],
-    n_samples: Int,
-    n_features: Int,
-    n_clusters: Int,
-    n_components: Int,
-    n_init: Int,
-    n_neighbors: Int,
-    eigen_tol: Float32,
-    seed: UInt64,
-    mut labels: List[Int32],
-    mut embedding: List[Float32],
-) raises -> Int:
-    """`spectral_fit_predict_dataset_host_keep` keeping nothing."""
-    var state = SpectralPredictionState()
-    return spectral_fit_predict_dataset_host_keep(
-        dataset, n_samples, n_features, n_clusters, n_components, n_init,
-        n_neighbors, eigen_tol, seed, labels, embedding, state, False,
-    )
+# TOMBSTONE: spectral_fit_predict_dataset_host (its only callers were the deleted by-name spectral exports) deleted 2026-11-23 on lane/sab-host-missed-cls; code recoverable at 4519097d38.
 
 
 def spectral_fit_predict_dataset_host_keep(
@@ -237,26 +219,7 @@ def spectral_fit_predict_dataset_host_keep(
     return len(embedding) // n_samples
 
 
-def spectral_fit_predict_graph_host(
-    rows: List[Int32],
-    cols: List[Int32],
-    vals: List[Float32],
-    n_samples: Int,
-    n_clusters: Int,
-    n_components: Int,
-    n_init: Int,
-    n_neighbors: Int,
-    eigen_tol: Float32,
-    seed: UInt64,
-    mut labels: List[Int32],
-    mut embedding: List[Float32],
-) raises -> Int:
-    """`spectral_fit_predict_graph_host_keep` keeping nothing."""
-    var state = SpectralPredictionState()
-    return spectral_fit_predict_graph_host_keep(
-        rows, cols, vals, n_samples, n_clusters, n_components, n_init,
-        n_neighbors, eigen_tol, seed, labels, embedding, state, False,
-    )
+# TOMBSTONE: spectral_fit_predict_graph_host (its only callers were the deleted by-name spectral exports) deleted 2026-11-23 on lane/sab-host-missed-cls; code recoverable at 4519097d38.
 
 
 def spectral_fit_predict_graph_host_keep(

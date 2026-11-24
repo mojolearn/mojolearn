@@ -71,7 +71,9 @@ The spectral-precomputed lane (2026-09-14) adds `nonzero_f64_count` and
 `nonzero_f64_fill`, the base binding's dense-to-COO scan (DEVIATION 2489)
 that `_spectral_impl._coo_triples` reaches through `_native` on a dense
 precomputed affinity; bodies copied from `bindings/_mojolearn.mojo`, a
-comparison and one narrowing per kept value, no fold to sabotage.
+comparison and one narrowing per kept value, no fold to sabotage. The by-name
+exports were deleted 2026-11-23 (no caller: the typed SpectralPreparationHost
+calls the same core functions).
 """
 # lane cpu2-l4-modelsel (2026-10-04): model selection's resident fold store,
 # fold-row gather, cross_val_predict scatter, binary proba column and the
@@ -188,8 +190,6 @@ from core.core_host_impl import (
     knn_classify_host,
     knn_regress_host,
     knn_search_host,
-    nonzero_f64_count,
-    nonzero_f64_fill,
     radius_neighbors_count_host,
     radius_neighbors_fill_host,
     rbc_knn_search_host,
@@ -354,81 +354,8 @@ def mojolearn_numeric_mode_binding() raises -> PythonObject:
 # TOMBSTONE: the core host transpose_f32 / cast_colmajor_f64_to_f32 exports deleted 2026-11-23 on lane/sab-host-missed-cls (no product caller); code recoverable at 4519097d38.
 
 
-# ===========================================================================
-# THE DENSE AFFINITY'S COO SCAN (the spectral-precomputed lane, 2026-09-14).
-# `python/mojolearn/_spectral_impl.py::_coo_triples` reaches these two
-# through `_buffer._native` on a dense precomputed affinity before the
-# metrics host binding's `spectral_fit_predict_graph` is called; without
-# them the lane refuses at `_mojolearn.nonzero_f64_count`. Both bodies are
-# `bindings/_mojolearn.mojo::nonzero_f64_count_binding` and
-# `nonzero_f64_fill_binding` (DEVIATION 2489) with this binding's `_index`
-# and `core/hostptr.mojo`'s pointers: a comparison, a row-major scan
-# and one narrowing per kept value, no fold, so no sabotage arm here (the
-# lane's arms are the spectral oracle's).
-# ===========================================================================
-
-
-def nonzero_f64_count_binding(
-    src_addr: PythonObject, n: PythonObject
-) raises -> PythonObject:
-    """How many of the `n` float64 values at `src` are nonzero under the
-    test `v != 0.0` (DEVIATION 2489): -0.0 is a zero and NaN is NOT. An
-    empty input reads nothing; a negative count is refused."""
-    var count = _index(n)
-    if count < 0:
-        raise Error(
-            "nonzero_f64_count: n must be non-negative, got " + String(count)
-        )
-    if count == 0:
-        return PythonObject(0)
-    var sp = f64_ptr(_index(src_addr))
-    var nz = 0
-    with GILReleased(Python()):
-        nz = nonzero_f64_count(sp, count)
-    return PythonObject(nz)
-
-
-def nonzero_f64_fill_binding(
-    src_addr: PythonObject,
-    rows: PythonObject,
-    cols: PythonObject,
-    outs: PythonObject,
-    capacity: PythonObject,
-) raises -> PythonObject:
-    """COO triples of a C-contiguous float64 `[rows, cols]` matrix at `src`
-    (DEVIATION 2489): for every entry with `v != 0.0`, in row-major scan
-    order, its row to `outs[0]` (int32), its column to `outs[1]` (int32)
-    and `Float32(v)` to `outs[2]` (float32). Returns the number written.
-    The fill STOPS and raises if the matrix holds more than `capacity`
-    nonzeros, so a stale count cannot write past the buffers."""
-    var nr = _index(rows)
-    var nc = _index(cols)
-    var cap = _index(capacity)
-    if nr < 0 or nc < 0:
-        raise Error(
-            "nonzero_f64_fill: rows and cols must be non-negative, got "
-            + String(nr) + " x " + String(nc)
-        )
-    if cap < 0:
-        raise Error(
-            "nonzero_f64_fill: capacity must be non-negative, got "
-            + String(cap)
-        )
-    if len(outs) != 3:
-        raise Error(
-            "nonzero_f64_fill: outs must hold 3 addresses, got "
-            + String(len(outs))
-        )
-    if nr == 0 or nc == 0:
-        return PythonObject(0)
-    var sp = f64_ptr(_index(src_addr))
-    var rp = i32_ptr(_index(outs[0]))
-    var cp = i32_ptr(_index(outs[1]))
-    var vp = f32_ptr(_index(outs[2]))
-    var k = 0
-    with GILReleased(Python()):
-        k = nonzero_f64_fill(sp, nr, nc, rp, cp, vp, cap)
-    return PythonObject(k)
+# TOMBSTONE: the core host nonzero_f64_count / nonzero_f64_fill by-name exports deleted 2026-11-23 on lane/sab-host-missed-cls (no product
+# caller: SpectralClustering takes the typed spectral_preparation_native_api_v1); code recoverable at 4519097d38.
 
 
 # ===========================================================================
@@ -1032,8 +959,6 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[radius_neighbors_count_binding]("radius_neighbors_count")
         module.def_function[radius_neighbors_fill_binding]("radius_neighbors_fill")
         module.def_function[rbc_knn_search_binding]("rbc_knn_search")
-        module.def_function[nonzero_f64_count_binding]("nonzero_f64_count")
-        module.def_function[nonzero_f64_fill_binding]("nonzero_f64_fill")
         module.def_function[knn_affinity_f32_binding]("knn_affinity_f32")
         module.def_function[unique_inverse_binding]("unique_inverse")
         module.def_function[cast_f64_to_f32_binding]("cast_f64_to_f32")
