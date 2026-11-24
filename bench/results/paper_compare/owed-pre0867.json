@@ -609,8 +609,9 @@
   },
   "gbdt-pw-int-slots-off": {
    "define": "MOJOLEARN_GBDT_FAST_PW_INT_SLOTS_OFF",
-   "status": "define in code (gbdt/methods/pointwise_kernels.mojo PW_INT_SLOTS): B = the one-block histogram launch; A = the int-slot split, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2): old path LOSER (L40S 9 cells, median 1.01; old path pairlogit istella fit 1929 -> 4700 ms 2.44x, symmetric istella 9569 -> 31016 ms 3.24x, symmetric taxi 5762 -> 52279 ms 9.07x); A (the int-slot split, the default) is unchanged; removed: the switch pw_int_slots_on() and its three gates; the one-block launch stays for estimates that are not a power of two above 1; the define is refused (core/experiment_guards_trees.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_FAST_PW_INT_SLOTS_OFF.ab-outcome-2.patch. Was: define in code (gbdt/methods/pointwise_kernels.mojo PW_INT_SLOTS): B = the one-block histogram launch; A = the int-slot split, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "xprep-direct-off": {
    "define": "MOJOLEARN_XPREP_FAST_DIRECT_OFF",
@@ -3899,7 +3900,8 @@
    "b_arms": [
     "gbdt-pw-int-slots-off"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "owed": "DECIDED"
   },
   {
    "id": "xprep-direct-off-rows",
