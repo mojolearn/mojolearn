@@ -22,7 +22,9 @@
 # A class the generic fixture does not apply to (its constructor requires an argument the estimator type does not
 # give or refuses the generic arguments with a TypeError, it has no fit taking rows, or its own fit raises on the
 # fixture with words that do not name the device) is recorded, never skipped: its part is
-# "n/a:generic-fixture: <why>", read at the first recorded column and listed in
+# "n/a:generic-fixture:<ExceptionType>:<sha of the message without device words>" (a static reason reads
+# "n/a:generic-fixture: <why>"), so only a failure that is the same on both sides is the same part in both columns;
+# a one-sided or different failure is a digest difference. Read at the first recorded column and listed in
 # docs/plans/verify_through_device/UNMAPPED.md. A class that starts or stops running moves its part.
 #
 # Sizes are correctness-check sizes (AGENTS.md part 4, bounded fixtures), never product dispatch rules. Each lane is an
@@ -127,7 +129,7 @@ def _checks_generic_build(ml, where, name, cls):
     except TypeError as exc:
         if "device" in str(exc):
             raise    # the side itself refused (or the view's "takes no device="): a failure, never n/a
-        return None, f"its constructor refused the generic arguments: TypeError: {_checks_generic_words(exc)}"
+        return None, _checks_generic_na(exc)
     try:
         params = est.get_params(deep=False)
     except Exception:  # noqa: BLE001 -- a class without get_params keeps its own seed
@@ -164,6 +166,19 @@ def _checks_generic_method(est):
 def _checks_generic_words(exc):
     import re
     return re.sub(r"0x[0-9a-fA-F]+", "0x?", " ".join(str(exc).split()))[:160]
+
+
+def _checks_generic_na(exc):
+    """The n/a part of a class whose own constructor or fit raised on the generic fixture: a pure function of the
+    exception type and its message with the device words removed, so the part is the same on both sides ONLY when
+    both sides fail the same way; a one-sided or a different failure is a digest difference between the columns."""
+    import hashlib
+    import re
+    words = re.sub(r"0x[0-9a-fA-F]+", "0x?", " ".join(str(exc).split()))
+    words = re.sub(r"device\s*=\s*['\"]?\w*['\"]?", "", words)
+    words = re.sub(r"\b(cpu|gpu|cuda|hip|metal|host|device)\b", "", words, flags=re.I)
+    words = " ".join(words.split())
+    return f"n/a:generic-fixture:{type(exc).__name__}:{hashlib.sha256(words.encode()).hexdigest()[:16]}"
 
 
 def _checks_generic_side_part(result, side, label, failed):
@@ -212,9 +227,11 @@ def _checks_generic_run(ml, X, yc, yr, group):
                     # a refusal of the side (device='cpu' not connected) is a failure of the cell, never n/a
                     failed.append(f"{label}.fit refused on the {side} side: {type(exc).__name__}: {words}")
                     continue
-                why = f"its fit raised {type(exc).__name__}: {words}"
+                why = _checks_generic_na(exc)
         if why is not None:
-            parts[label] = "n/a:generic-fixture: " + why
+            # a raised exception is already its n/a part; a static reason (no fit, no method, a required argument)
+            # is the same on both sides by construction
+            parts[label] = why if why.startswith("n/a:") else "n/a:generic-fixture: " + why
             continue
         try:
             with contextlib.redirect_stdout(io.StringIO()):   # check prints its report; the digest is the record
