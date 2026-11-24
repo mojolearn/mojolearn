@@ -20,7 +20,7 @@ from bindings.msel_estimator_native_door import (
     msel_estimator_call, msel_estimator_plan, msel_native_clone, MSEL_MEMBER_ONLY_OWN_WORDS,
 )
 from bindings.msel_member_units_door import msel_member_fit_in_place, msel_member_fit_weighted
-from bindings.member_set_door import member_held_open, member_held_run, member_held_close
+from bindings.member_set_door import member_held_open_or_raise, member_held_run_or_raise, member_held_close
 from bindings.admitted_input_unpack import admit_f32
 from bindings.msel_common_door import msel_addr
 from core.member_abi import MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_OP_TRANSFORM, MEMBER_I64
@@ -131,8 +131,9 @@ def _member_only_response(model: PythonObject, method: String, x: PythonObject, 
     / `member_held_run`: one member call), X admitted as its own door admits
     it (`admit_f32`: check_array's words for a non-finite X). A classifier's
     predict writes class codes, decoded to its `classes_` here (PACK). Not
-    served (unfitted, or its kind does not answer `method`): refused in words
-    naming the class and the method."""
+    served: the member's own words (its family's admission, an unfitted
+    estimator's fitted-state import, its call), else, for a kind that does
+    not answer `method`, words naming the class and the method."""
     var plan = msel_estimator_plan(model, context)
     var classifier = Bool(py=plan["classifier"])
     var op = MEMBER_OP_PREDICT if method == "predict" else (
@@ -143,16 +144,19 @@ def _member_only_response(model: PythonObject, method: String, x: PythonObject, 
                    + " fitted state, so another estimator cannot call it natively. Call " + name + "." + method
                    + " on its own.")
     var xa = admit_f32(x, 2, "X", plan["context"])
-    var opened = member_held_open(model, op, classifier, 0, False, context, b)
+    # the member's own words raise (its admission, its fitted-state import,
+    # its call); `refused` only for a kind that does not answer `method`
+    var opened = member_held_open_or_raise(model, op, classifier, context, b)
     if not opened.served:
         member_held_close(opened)
         raise Error(refused)
     var dtype = opened.dtype
-    var out = member_held_run(opened, xa.address, xa.rows, xa.cols, context)
-    member_held_close(opened)
+    var out = PythonObject(None)
+    try:
+        out = member_held_run_or_raise(opened, xa.address, xa.rows, xa.cols, context)
+    finally:
+        member_held_close(opened)
     _ = xa.array  # the rows the member read through their address
-    if out is None:
-        raise Error(refused)
     if not (classifier and op == MEMBER_OP_PREDICT):
         return out
     # THE LABELS: code c is the c-th of `classes_` (one read; one item per row)
