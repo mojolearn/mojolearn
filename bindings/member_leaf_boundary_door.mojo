@@ -15,7 +15,8 @@ SERIAL BY NATURE: one member's admission.
 """
 from std.python import PythonObject
 from bindings.member_owner_unpack import MemberOwner, member_mark, member_labels_hold, member_labels_take
-from bindings.py_balanced import py_setitem
+from bindings.py_balanced import py_setitem, py_get
+from bindings.classical_attributes_door import classical_connect_numpy
 from core.member_abi import MemberPlan, member_resolve_family
 from core.member_families import (
     MEMBER_FAMILY_LINEAR,
@@ -199,6 +200,24 @@ def member_leaf_admit(model: PythonObject, fields: PythonObject, plan: PythonObj
     return member_leaf_admit_labeled(model, fields, plan, context, b, PythonObject(None))
 
 
+def _member_context_connect(member_context: PythonObject) raises:
+    """LANE w3f5-b: connect loaded NumPy's native types in the member's OWN
+    owner context (its plan's `context`) before its leaf admission reads an
+    ndarray parameter there (GaussianNB's `priors`, a class_weight array).
+    A context no public call of that estimator connected yet (a cold process,
+    or the context copy python/mojolearn/_native_msel_more.py `owner_for`
+    takes at import) refused every ndarray in the shared admission
+    ("Sequential requires native input types"), which a search or cv tool
+    then raised as the candidate's words. RFE's door made the same
+    connection for its member (providers/python/member_rfe_boundary_door.mojo
+    `rfe_member_context_connect`). Connected: one dict probe per admission."""
+    if member_context is None:
+        return
+    if py_get(member_context, "native_value_types") is None or py_get(member_context, "modules") is None:
+        return
+    classical_connect_numpy(member_context)
+
+
 def member_leaf_admit_labeled(model: PythonObject, fields: PythonObject, plan: PythonObject, context: PythonObject,
     b: PythonObject, labels: PythonObject) raises -> MemberOwner:
     """`member_leaf_admit` for a FIT caller that holds the labels of its codes (`owner.labels`, as
@@ -211,6 +230,7 @@ def member_leaf_admit_labeled(model: PythonObject, fields: PythonObject, plan: P
         return owner^
     owner.plan.family = mark.family
     owner.plan.kind = mark.kind
+    _member_context_connect(context)
     if not member_leaf_fill(model, fields, mark.family, mark.kind, context, b, owner):
         return owner^
     owner.plan.member = member_resolve_family(owner.plan.family, owner.plan.route)

@@ -122,7 +122,7 @@ from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, MemberRef, member_call, member_call_of, member_outputs_of, member_free, member_own,
     MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_OP_SCORE, MEMBER_OP_PREDICT, member_output_dtype,
     MEMBER_CAN_TEST_ROWS, MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_CAN_ROW_INDEX,
-    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle, MEMBER_OP_DECISION, MEMBER_READS_Y_GIVEN,
+    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle, MEMBER_OP_DECISION, MEMBER_READS_Y_GIVEN, MEMBER_OP_TRANSFORM,
     MEMBER_OP_PREDICT_PROBA, member_outputs, MEMBER_CAN_PREDICT,
 )
 from core.member_class_weight import member_cw_subset
@@ -219,6 +219,12 @@ struct MselSearchPlan(Movable):
     var x: Int
     var rows: Int
     var cols: Int
+    # THE SEQUENCES (lane w3f5-c): X's `MemberMatrix.steps` as the search's
+    # own call carries it (0: a plain matrix; T: each row is T steps of
+    # `cols / T` features). Every unit's, side's and the refit's X view
+    # carries it on (MemberSetRun.steps); the caller hands a nonzero value
+    # only when every candidate has MEMBER_CAN_STEPS.
+    var steps: Int
     var y: Int
     var classes: Int        # 0: a regressor
     var n_splits: Int
@@ -305,6 +311,7 @@ struct MselSearchPlan(Movable):
         self.x = x
         self.rows = rows
         self.cols = cols
+        self.steps = 0
         self.y = y
         self.classes = classes
         self.n_splits = n_splits
@@ -567,6 +574,7 @@ def _member_score(run_at: Int, v: Int, side: _Side, cols: Int, y_dtype: Int, y_c
     var run = _RunPtr(unsafe_from_address=run_at)
     var call = member_call_of(run[].plans[v], run[].states[v])
     _side_set(call, side, cols, y_dtype, y_cols, True)
+    call.x.steps = run[].steps  # whole-width rows on every side (lane w3f5-c)
     _offered(run[].plans[v].member, MEMBER_OP_SCORE, call, side)
     return call.value
 
@@ -596,6 +604,7 @@ def _respond(run_at: Int, v: Int, op: Int, side: _Side, cols: Int, dst: Int, cap
     if count * width > capacity:
         raise Error("member ABI: a member response wider than its classes")
     _side_set(call, side, cols, MEMBER_F32, 1, False)
+    call.x.steps = run[].steps  # whole-width rows on every side (lane w3f5-c)
     call.dst = MemberMatrix(dst, count, width, dtype)
     _offered(run[].plans[v].member, op, call, side)
     var words = count * width
@@ -1239,7 +1248,10 @@ def _multi_output_scorers(codes: List[Int], plan: MselSearchPlan, multi_cls: Boo
             return False
         var row = msel_scorer_row(codes[j], plan.options[j] if j < len(plan.options) else MselScorerOptions(),
                                   Int(plan.selections.unsafe_ptr()))
-        if row.op != MEMBER_OP_PREDICT and not (multi_cls and row.op == MEMBER_OP_PREDICT_PROBA):
+        # LANE w3f5-b: a regression row over a transformer's transform(X)
+        # block reads the outputs as a multi-output regressor's predict
+        if (row.op != MEMBER_OP_PREDICT and not (multi_cls and row.op == MEMBER_OP_PREDICT_PROBA)
+                and not (row.op == MEMBER_OP_TRANSFORM and msel_scorer_regression(row))):
             return False
     return True
 
@@ -1609,7 +1621,14 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     var out_widths = List[Int](length=max(m * nops, 1), fill=0)
     for c in range(m):  # driver-loop: over the candidates (one OUTPUTS question per response)
         for o in range(nops):  # small-loop(the distinct responses)
-            if not classifier and not responding and ops[o] != MEMBER_OP_PREDICT:
+            # lane w3f5-c: the cv tools' response too (cross_val_predict of a
+            # mixture's predict_proba): the UNPACK sized the caller's result
+            # by the same `member_outputs` (providers/python/
+            # member_ensemble_boundary_door.mojo, LANE mf-rows8b row :3876), so
+            # each side's buffer is the member's own columns, never the
+            # classes' width (dcd54c92bb kept the responding path at max(k, 1)
+            # and `_respond` refused the mixture's n_components columns).
+            if not classifier and ops[o] != MEMBER_OP_PREDICT:
                 out_widths[c * nops + o] = max(member_outputs(plan.plans[c], ops[o], d, 1), 1)
             var probe = plan.plans[c].copy()
             probe.classes = k
@@ -1738,6 +1757,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         var u1 = min(units, u0 + wave)
         var width = u1 - u0
         var run = MemberSetRun(plan.x, n, d, y_dtype, MEMBER_I32)
+        run.steps = plan.steps
         run.cap = plan.cap
         run.y_cols = y_cols
         run.scope = plan.scope
@@ -2177,6 +2197,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         best.class_counts = plan.class_counts.copy()
         var mask = plan.masks[res.best]
         var run = MemberSetRun(plan.x, n, d, y_dtype, MEMBER_I32)
+        run.steps = plan.steps
         run.cap = plan.cap
         run.y_cols = y_cols
         run.scope = plan.scope

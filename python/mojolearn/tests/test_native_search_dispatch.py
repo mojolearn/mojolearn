@@ -76,9 +76,15 @@ def test_parameter_sampler_distribution_property_is_not_called():
 def test_learning_curve_native_fit_failure_uses_error_score():
     x = np.arange(36, dtype='f4').reshape(12, 3)
     y = np.arange(12, dtype='f4')
-    result = audit_native_call(ms.learning_curve, ml.Ridge(alpha=-1), x, y, cv=3,
-                               train_sizes=[4, 8], error_score=-123., n_jobs=1).assert_native()
-    sizes, train, test = result
-    assert np.array_equal(np.asarray(sizes), [4, 8])
-    assert np.array_equal(np.asarray(train), np.full((2, 3), -123.))
-    assert np.array_equal(np.asarray(test), np.full((2, 3), -123.))
+    # Every fit fails (Ridge(alpha=-1)): scikit-learn 1.9's learning_curve calls
+    # `_warn_or_raise_about_fit_failures`, which raises 'All the N fits failed' under a numeric
+    # error_score (lane w3f3-b 7c15fd7947 made the search RUN and cvs_error_score follow it; this
+    # test asserted every score -123 before). Natively, before any fit, with the member's own words.
+    audit = audit_native_call(ms.learning_curve, ml.Ridge(alpha=-1), x, y, cv=3,
+                              train_sizes=[4, 8], error_score=-123., n_jobs=1)
+    assert isinstance(audit.exception, ValueError), audit.report()
+    words = str(audit.exception)
+    assert words.startswith("\nAll the 6 fits failed.\n"), words
+    assert "6 fits failed with the following error:\n" in words, words
+    assert "alpha must be non-negative, got -1" in words, words
+    assert not audit.report()['python_frames'], audit.report()

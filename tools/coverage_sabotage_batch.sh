@@ -227,6 +227,11 @@ for arm in ${ARMS//,/ }; do
         v=$(tail -n 1 "$OUT/check_${arm}_$col.txt" | awk '{print $3}')
         [ "$v" = CAUGHT ] || miss=1
         echo "SABOTAGE batch=$BATCH arm=$arm column=$col verdict=${v:-ERROR}" | tee -a "$OUT/summary.txt"
+        # The check's reasons ride with a miss in summary.txt (lane w3f5-e, 2026-11-24: gate 3cda8a05b3's copies
+        # kept only summary.txt, so eight MISSED arms carried no cause: an unstable clean lane, an unmoved
+        # fixture or a binary change outside the declared closure could not be told apart).
+        [ "$v" = CAUGHT ] || grep -v '^ARM ' "$OUT/check_${arm}_$col.txt" | cut -c1-300 | head -n 12 \
+            | sed "s/^/  CHECK $arm $col: /" >> "$OUT/summary.txt"
     done
 done
 log "DONE"
