@@ -160,6 +160,45 @@ def device_buffer_all_finite(ctx: DeviceContext, d: DeviceBuffer[DType.float32],
     return bad == 0
 
 
+def _negative_u32_kernel(src: _U32, n_: Int32, status: _I32):
+    """status[0] = 1 when any float32 word of src[0:n] is below zero (the
+    sign bit with a nonzero magnitude: -0.0 is not, as `x < 0` says)."""
+    var i = _tid()
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    var n = Int(n_)
+    var hit = False
+    while i < n:
+        var bits = src.unsafe_load(i)
+        if (bits & UInt32(0x80000000)) != UInt32(0) and (bits & UInt32(0x7FFFFFFF)) != UInt32(0):
+            hit = True
+            break
+        i += stride
+    if hit:
+        status.unsafe_store(0, Int32(1))
+
+
+def device_buffer_any_negative(ctx: DeviceContext, d: DeviceBuffer[DType.float32], n: Int) raises -> Bool:
+    """True when any of the `n` float32 words already on the device is
+    below zero (lane vdf-scope-linear3: the chi2 kernels' x >= 0 test of a
+    model-selection fold slot where it is, no host walk). Call it on words
+    already tested finite (a NaN with the sign bit counts as negative). The
+    caller keeps `d` alive past this call (it synchronizes)."""
+    var d_status = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_fill(ctx, d_status, Int32(0))
+    var base = Int(d.unsafe_ptr())
+    var off = 0
+    while off < n:  # driver-loop: over IND_MAX_N chunks of one buffer (one launch each)
+        var m = min(IND_MAX_N, n - off)
+        ctx.enqueue_function[_negative_u32_kernel](
+            _U32(unsafe_from_address=base + off * 4), Int32(m), d_status.unsafe_ptr(),
+            grid_dim=_stride_grid(m), block_dim=IND_TPB,
+        )
+        off += m
+    var bad = _read_word(ctx, d_status)
+    _ = d_status^
+    return bad != 0
+
+
 # TOMBSTONE: the device transpose_f32 / cast_colmajor_f64_to_f32 twin (_narrow_word, _transpose_u32_kernel, _transpose_narrow_kernel, device_transpose_to_f32) deleted 2026-11-23 on lane/sab-host-missed-cls (no product caller); code recoverable at 4519097d38.
 
 
