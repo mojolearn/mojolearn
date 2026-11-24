@@ -53,10 +53,18 @@ def _lda_refusal(which: Int) raises -> String:
     raise Error("x_decomp_lda: unknown refusal word " + String(which))
 
 
+def _x_word(address: Int, pool: Int) raises -> F32Ptr:
+    """X's host words (never null), or nothing when X is the resident pool id `pool` (>= 0; the owner reads it
+    through its kit, lane vdf-scope-neural3)."""
+    if pool >= 0:
+        return F32Ptr(unsafe_from_address=0)
+    return xd_f32(address)
+
+
 def xd_factor_op[E: Exec, D: RDev, RES: Bool, X: DecompDev](op: Int, a: List[Int], p: List[Int],
                                                             floats: Int) raises -> Int:
     if op == XD_ICA_FIT:
-        var x = xd_f32(a[0])
+        var x = _x_word(a[0], p[9])
         var n = xd_dim(p[0])
         var d = xd_dim(p[1])
         var nc = xd_dim(p[2])
@@ -68,19 +76,19 @@ def xd_factor_op[E: Exec, D: RDev, RES: Bool, X: DecompDev](op: Int, a: List[Int
         var ps = xd_f32(a[6])
         return ica_fit_run[E, D, RES, X](x, n, d, nc, p[3], winit, a[1] != 0, p[4], p[5], p[6], p[7],
                                          xd_float(floats, 0), xd_float(floats, 1), p[8] != 0, pc, pm, pw, pu, ps,
-                                         a[7])
+                                         a[7], p[9])
     if op == XD_ICA_PROJECT:
-        var x = xd_f32(a[0])
+        var x = _x_word(a[0], p[5])
         var n = xd_dim(p[1])
         var width = xd_dim(p[2])
         var matrix = xd_f32(a[1])
         var rows = xd_dim(p[3])
         var mean = xd_f32(a[2])
         var dst = xd_f32(a[3])
-        ica_project_run[E, D, RES](x, n, width, p[0] != 0, matrix, rows, mean, p[4] != 0, dst)
+        ica_project_run[E, D, RES](x, n, width, p[0] != 0, matrix, rows, mean, p[4] != 0, dst, p[5])
         return n
     if op == XD_FA_FIT:
-        var x = xd_f32(a[0])
+        var x = _x_word(a[0], p[5])
         var n = xd_dim(p[0])
         var d = xd_dim(p[1])
         var nc = xd_dim(p[2])
@@ -91,9 +99,10 @@ def xd_factor_op[E: Exec, D: RDev, RES: Bool, X: DecompDev](op: Int, a: List[Int
         if a[5] == 0:
             raise Error("x_decomp: null float64 buffer address")
         var ll = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=a[5])
-        return fa_fit_run[E, D, RES, X](x, n, d, nc, p[3], xd_float(floats, 0), psi0, p[4], pc, ps, pm, ll, a[6])
+        return fa_fit_run[E, D, RES, X](x, n, d, nc, p[3], xd_float(floats, 0), psi0, p[4], pc, ps, pm, ll, a[6],
+                                        p[5])
     if op == XD_FA_QUERY:
-        var x = xd_f32(a[0])
+        var x = _x_word(a[0], p[4])
         var n = xd_dim(p[1])
         var d = xd_dim(p[2])
         var nc = xd_dim(p[3])
@@ -103,10 +112,11 @@ def xd_factor_op[E: Exec, D: RDev, RES: Bool, X: DecompDev](op: Int, a: List[Int
         var dst = xd_f32(a[4])
         if a[5] == 0:
             raise Error("x_decomp: null result word address")
-        FactorF64(unsafe_from_address=a[5])[0] = fa_query_run[E, D, RES, X](p[0], x, n, d, nc, pc, ps, pm, dst)
+        FactorF64(unsafe_from_address=a[5])[0] = fa_query_run[E, D, RES, X](p[0], x, n, d, nc, pc, ps, pm, dst,
+                                                                             p[4])
         return 0
     if op == XD_LDA:
-        var x = xd_f32(a[0])
+        var x = _x_word(a[0], p[13])
         var n = xd_dim(p[1])
         var v = xd_dim(p[2])
         var nc = xd_dim(p[3])
@@ -124,7 +134,7 @@ def xd_factor_op[E: Exec, D: RDev, RES: Bool, X: DecompDev](op: Int, a: List[Int
         var nbi = FactorInt(unsafe_from_address=a[7])[0]
         var text = _lda_refusal(p[12])
         var got = lda_run[E, D, RES, X](p[0], x, n, v, nc, p[4] != 0, args, draw, nbi, p[5] != 0, ci, ei, co, eo,
-                                        dst, text)
+                                        dst, text, p[13])
         FactorInt(unsafe_from_address=a[6])[0] = draw
         FactorInt(unsafe_from_address=a[7])[0] = nbi
         FactorF64(unsafe_from_address=a[8])[0] = got[1]
@@ -139,12 +149,13 @@ def xd_factor_op[E: Exec, D: RDev, RES: Bool, X: DecompDev](op: Int, a: List[Int
         return rp_fit_run[E, D, RES, X](x, n, d, kc, p[3] != 0, xd_float(floats, 0), p[4], p[5] != 0, p[6] != 0,
                                         pc, pi)
     if op == XD_RP_PROJECT:
-        var x = xd_f32(a[0])
+        # word 5 (lane vdf-scope-neural3): X's pool id (a fold taken on the device, the scope's X); -1: X is a[0]
+        var x = xd_f32(a[0]) if p[5] < 0 else F32Ptr(unsafe_from_address=0)
         var m = xd_dim(p[0])
         var d = xd_dim(p[1])
         var matrix = xd_f32(a[1])
         var rows = xd_dim(p[2])
         var dst = xd_f32(a[2])
         # word 3: 0 = plain product, 1 = tiled, 2 = tiled and X not yet tested finite
-        return rp_project_run[E, D, RES, X](x, m, d, matrix, rows, p[3] != 0, dst, p[4], p[3] == 2)
+        return rp_project_run[E, D, RES, X](x, m, d, matrix, rows, p[3] != 0, dst, p[4], p[3] == 2, p[5])
     raise Error("x_decomp native ABI: not a factor operation " + String(op))

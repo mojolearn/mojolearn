@@ -187,7 +187,7 @@ def rp_project(model: PythonObject, fields: PythonObject, source: PythonObject, 
         pool = Int(py=held[5])
     var request = RPProjectRequest(
         Int(py=classical_address(x)), Int(py=classical_address(matrix)), Int(py=classical_address(out)),
-        m, width, rows, (2 if unchecked else 1) if tiled else 0, pool)
+        m, width, rows, (2 if unchecked else 1) if tiled else 0, pool, -1)
     var flagged = 0
     with GILReleased(Python()):
         flagged = rp_project_call(entry, request)

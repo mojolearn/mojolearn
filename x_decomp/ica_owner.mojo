@@ -30,7 +30,7 @@ def ica_fit_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     x: F32Ptr, n: Int, d: Int, nc: Int, whiten: Int, winit: F32Ptr, has_winit: Bool, seed: Int,
     algo: Int, fun: Int, max_iter: Int, alpha: Float64, tol: Float64, project: Bool,
     components_out: F32Ptr, mixing_out: F32Ptr, whitening_out: F32Ptr, mean_out: F32Ptr, sources_out: F32Ptr,
-    loop_word: Int = 0,
+    loop_word: Int = 0, x_dev: Int = -1,
 ) raises -> Int:
     """`_fit(X, project)`. whiten: 0 False, 1 'unit-variance', 2
     'arbitrary-variance'. Writes components (nc x d, or the unmixing matrix
@@ -38,9 +38,14 @@ def ica_fit_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     mean (d) when whitening, and with `project` the sources (n x nc).
     Returns n_iter_. `loop_word`: when nonzero, the host address of one Int
     that receives the fixed-point loop's nanoseconds (`fit_loop_`)."""
+    # `x_dev` (lane vdf-scope-neural3): X's resident pool id (a fold the XDecomp member took on the device; the
+    # caller owns it, not this kit's ledger), -1: the host X. Every kit step is on the device on a GPU binding
+    # either way (RKit), so the route and the bits are the host-X route's.
+    if x_dev >= 0 and not RES:
+        raise Error("x_decomp: a resident X needs a GPU binding")
     var kit = RKit[E, D, RES]()
     try:
-        var m = kit.add(Int(x), -1, n, d)
+        var m = kit.add(Int(x) if x_dev < 0 else 0, x_dev, n, d)
         var xc: Int
         var x1: Int
         var k_mat = -1
@@ -113,13 +118,18 @@ def ica_fit_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
 
 def ica_project_run[E: Exec, D: RDev, RES: Bool](
     x: F32Ptr, n: Int, width: Int, inverse: Bool, matrix: F32Ptr, rows: Int, mean: F32Ptr, whiten: Bool,
-    out_buf: F32Ptr,
+    out_buf: F32Ptr, x_dev: Int = -1,
 ) raises:
     """transform: (X - mean_) components_^T (rows x width components); or
     inverse_transform: X mixing_^T (+ mean_), mixing_ rows x width."""
+    # `x_dev` (lane vdf-scope-neural3): X's resident pool id (a fold the XDecomp member took on the device; the
+    # caller owns it, not this kit's ledger), -1: the host X. Every kit step is on the device on a GPU binding
+    # either way (RKit), so the route and the bits are the host-X route's.
+    if x_dev >= 0 and not RES:
+        raise Error("x_decomp: a resident X needs a GPU binding")
     var kit = RKit[E, D, RES]()
     try:
-        var m = kit.add(Int(x), -1, n, width)
+        var m = kit.add(Int(x) if x_dev < 0 else 0, x_dev, n, width)
         var b = kit.add(Int(matrix), -1, rows, width)
         var y: Int
         if not inverse:
