@@ -185,14 +185,27 @@ def executed_iterations(cell):
 
 
 def phase_split(cell):
-    """The cell's phase record beside its scored whole-operation time (which it does not change)."""
+    """The cell's phase record beside its scored whole-operation time (which it does not change). A/B LOOP MODE
+    (tools/ab_loop.py, lane ab-loop-mode 2026-11-24): where the product reported its loop region (the estimator's
+    fit_loop_, recorded by the driver in cell["loop_mode"]), loop_ms and loop_per_iteration_ms are the product's own
+    and fixed_ms is the rest of the whole operation (setup, upload, plan, allocation, readback together: the product
+    reports no finer split, so setup_ms and teardown_ms stay None)."""
     whole = cell.get("median_ms")
-    n, src = executed_iterations(cell)
+    lm = cell.get("loop_mode") or {}
+    if lm.get("loop_ms") is not None and lm.get("iterations"):
+        n, src = int(lm["iterations"]), "fit_loop_ (the product's loop region)"
+    else:
+        n, src = executed_iterations(cell)
     per = whole / n if isinstance(whole, (int, float)) and n else None
-    return {"whole_ms": whole, "iterations": n, "iterations_source": src,
-            "per_iteration_ms": per, "per_iteration_scope": "whole operation / executed iterations" if per else None,
-            "setup_ms": None, "loop_ms": None, "loop_per_iteration_ms": None, "teardown_ms": None,
-            "not_exposed": PHASE_NOT_EXPOSED}
+    out = {"whole_ms": whole, "iterations": n, "iterations_source": src,
+           "per_iteration_ms": per, "per_iteration_scope": "whole operation / executed iterations" if per else None,
+           "setup_ms": None, "loop_ms": None, "loop_per_iteration_ms": None, "teardown_ms": None, "fixed_ms": None,
+           "loop_mode": lm.get("mode"), "not_exposed": PHASE_NOT_EXPOSED}
+    if lm.get("loop_ms") is not None and lm.get("iterations"):
+        out.update(loop_ms=lm["loop_ms"], loop_per_iteration_ms=lm["loop_ms"] / lm["iterations"],
+                   fixed_ms=(whole - lm["loop_ms"]) if isinstance(whole, (int, float)) else None,
+                   not_exposed="setup and teardown are reported together as fixed_ms")
+    return out
 
 
 class MemProbe(object):

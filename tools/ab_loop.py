@@ -237,6 +237,26 @@ def pair(base_cell, arm_cell, noise=NOISE):
     return out
 
 
+def condition_of(race_id):
+    """The condition of a board race id: its dataset ('family/lane/dataset/rows=R'), or its shape for a neural race
+    ('neural/lane/dataset/shape=S')."""
+    parts = race_id.split("/")
+    if parts[0] == "neural" and len(parts) > 3 and parts[3].startswith("shape="):
+        return parts[3][len("shape="):]
+    return parts[2] if len(parts) > 2 else race_id
+
+
+def unit_verdict(cell_pairs, planned_ids, noise=NOISE, conditions=None):
+    """arm_verdict over one A/B unit. CELL_PAIRS: [(race id, base cell, arm cell)] of every cell key both boards hold;
+    PLANNED_IDS: the unit's race ids. Returns (verdict, [(race id, pair)])."""
+    pairs = [(rid, pair(b, a, noise)) for rid, b, a in cell_pairs]
+    v = arm_verdict([(condition_of(rid), p) for rid, p in pairs], [condition_of(r) for r in planned_ids], noise,
+                    conditions)
+    v["full_run_races"] = sorted({rid for rid, p in pairs if p["basis"] == "loop" and not p["same_hash"]}) \
+        if v["full_run"] else []
+    return v, pairs
+
+
 def width_of(dataset, conditions=None):
     return (load_conditions() if conditions is None else conditions).get(dataset)
 
