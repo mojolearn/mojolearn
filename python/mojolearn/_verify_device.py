@@ -130,6 +130,13 @@ def _short(name):
     return name.rsplit(".", 1)[-1]
 
 
+def _non_computing(name):
+    """`name` (dotted) is a NON_COMPUTING name or a method of one (the
+    endpoint checks resolve e.g. ``mojolearn.ConstantKernel.__add__``)."""
+    parts = name.rsplit(".", 2)
+    return parts[-1] in NON_COMPUTING or (len(parts) > 1 and parts[-2] in NON_COMPUTING)
+
+
 # THE CALLER THE PRODUCT SEES. `_mode._caller_outside` reads the module
 # globals of the frame that calls a public method or function: a user's code
 # gets the widened public result, the package's own code (and the identity
@@ -215,9 +222,9 @@ def _caller(fn, name, side_name, strict, boundary="internal"):
     """`fn` wrapped so a call carries `device=side_name`. Resolved once."""
     mode = device_mode(fn)
     build = _builders(boundary)
-    if mode in ("device", "kwargs", "unknown") and _short(name) not in NON_COMPUTING:
+    if mode in ("device", "kwargs", "unknown") and not _non_computing(name):
         call = build["inject"](fn, side_name, unwrap)
-    elif _short(name) in NON_COMPUTING or not strict:
+    elif _non_computing(name) or not strict:
         call = build["passthrough"](fn, unwrap)
     elif mode == "devices":
         call = build["members"](fn, side_name, f"{name} takes devices= and no device=, and no member argument "
