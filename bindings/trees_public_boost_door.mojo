@@ -890,6 +890,11 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
         _ = x  # keep the admitted X alive through the member fits above
         _ = y_all
         _ = sample_weight
+        # THE ADMITTED WEIGHTS: `sw` owns the float32 copy a float64 (or any
+        # non-float32) sample_weight is admitted as, and `w_address` points
+        # into it; its last named use was the address read above, so without
+        # this use the copy is freed before the members read it.
+        _ = sw
         _ = wave_rows
         _ = wave_cols
         try:
@@ -910,6 +915,7 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
             _ = x
             _ = y_all
             _ = sample_weight
+            _ = sw
             _ = wave_rows
             _ = wave_cols
             _ = len(recoded)
