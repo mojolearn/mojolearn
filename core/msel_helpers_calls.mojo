@@ -20,6 +20,7 @@ from core.msel_entry_table import (
     MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_FREE,
     MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32,
     MH_STORE_PUT, MH_STORE_TAKE_ROWS,
+    MH_FIRST_SEEN_RES, MH_STRAT_FOLD_ASSIGN_RES, MH_SELECT_FOLDS_RES, MH_FOLD_IDS_RES,
 )
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_word
 
@@ -186,3 +187,44 @@ def msel_store_take_rows(entry: EntryRef, src_id: Int, n_src: Int, row_bytes: In
     var addrs: Array[Int, 1] = [dst]
     var ints: Array[Int, 5] = [src_id, n_src, row_bytes, idx_id, n_idx]
     return msel_helper(entry, MH_STORE_TAKE_ROWS, addrs, ints)
+
+
+# ---------------------------------------------------------------- layout V3 (lane vdf-scope-split, 2026-11-24)
+
+
+def msel_first_seen_res(entry: EntryRef, codes_id: Int, n: Int, k: Int, counts: Int, rank: Int) raises -> Int:
+    """The stored codes' k int64 class sizes in first-seen order and, when
+    `rank` is not null, their k int32 first-seen positions rank_of[code];
+    returns the number of classes present. Nothing n-long crosses."""
+    var addrs: Array[Int, 2] = [counts, rank]
+    var ints: Array[Int, 3] = [codes_id, n, k]
+    return msel_helper(entry, MH_FIRST_SEEN_RES, addrs, ints)
+
+
+def msel_strat_fold_assign_res(entry: EntryRef, codes_id: Int, n: Int, k: Int, n_folds: Int, rank: Int,
+                               alloc: Int, perms: Int, counts: Int, sizes: Int) raises -> Int:
+    """StratifiedKFold's test fold of every row of the stored codes, renumbered
+    by `rank` (null: already first-seen), into a new stored fold block whose
+    id is returned (free it with `msel_store_free`); the n_folds int64 fold
+    sizes to `sizes`."""
+    var addrs: Array[Int, 5] = [rank, alloc, perms, counts, sizes]
+    var ints: Array[Int, 4] = [codes_id, n, k, n_folds]
+    return msel_helper(entry, MH_STRAT_FOLD_ASSIGN_RES, addrs, ints)
+
+
+def msel_select_folds_res(entry: EntryRef, folds_id: Int, n: Int, k: Int, sizes: Int, tests: Int,
+                          trains: Int) raises -> Int:
+    """`msel_select_folds_i64` over a stored fold block."""
+    var addrs: Array[Int, 3] = [sizes, tests, trains]
+    var ints: Array[Int, 3] = [folds_id, n, k]
+    return msel_helper(entry, MH_SELECT_FOLDS_RES, addrs, ints)
+
+
+def msel_fold_ids_res(entry: EntryRef, codes_id: Int, n: Int, k: Int, n_splits: Int, counts: Int,
+                      fold_counts: Int) raises -> Int:
+    """The unshuffled stratified default folds of the stored codes into a new
+    stored fold block whose id is returned; the k int64 class counts and the
+    n_splits int64 fold sizes come back."""
+    var addrs: Array[Int, 2] = [counts, fold_counts]
+    var ints: Array[Int, 4] = [codes_id, n, k, n_splits]
+    return msel_helper(entry, MH_FOLD_IDS_RES, addrs, ints)

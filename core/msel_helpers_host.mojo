@@ -25,12 +25,13 @@ from core.msel_entry_table import (
     MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_FREE,
     MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32,
     MH_STORE_PUT, MH_STORE_TAKE_ROWS,
+    MH_FIRST_SEEN_RES, MH_STRAT_FOLD_ASSIGN_RES, MH_SELECT_FOLDS_RES, MH_FOLD_IDS_RES,
 )
 from core.hotpath_impl import (
     arange_i64, count_mask_u8, fold_ids, leave_range_i64, mask_from_indices_u8,
     select_fold_i64, select_mask_u8_i64,
 )
-from core.hotpath_impl_rows import first_seen_i32, strat_fold_assign_i32
+from core.hotpath_impl_rows import bincount_i64, first_seen_i32, first_seen_rank_i32, strat_fold_assign_i32
 from core.labels_native_api import LabelsGatherRequest
 from core.labels_native_host import LabelsHostKernels
 from core.msel_convert import MSEL_F32, MSEL_F64, MSEL_I64, msel_is_int, msel_valid_code
@@ -139,6 +140,82 @@ def msel_store_take_rows_host_run(src_id: Int, n_src: Int, row_bytes: Int, idx_i
     return 0
 
 
+# ---------------------------------------------------------------- layout V3: stored label codes
+# (lane vdf-scope-split, 2026-11-24). The same core functions over the host
+# store's bytes; a fold block is allocated here and returned, freed by the
+# caller (MH_STORE_FREE), or freed here when the run refuses.
+
+
+def _res_dims(rows: Int, kk: Int) raises:
+    if rows < 1 or kk < 1:
+        raise Error("model-selection helpers: a stored-code operation needs n >= 1 and k >= 1")
+
+
+def msel_first_seen_res_host_run(codes_id: Int, rows: Int, kk: Int, na: Int, ra: Int) raises -> Int:
+    """MH_FIRST_SEEN_RES: the class sizes in first-seen order and the rank
+    table of the stored codes; the classes present."""
+    _res_dims(rows, kk)
+    if na == 0:
+        raise Error("first_seen_i32: null counts address")
+    var store = MSEL_HOST_STORE.get_or_create_ptr()
+    var codes = Int(store[].ptr(codes_id, 4 * rows))
+    return first_seen_rank_i32(codes, rows, kk, na, ra)
+
+
+def msel_strat_fold_assign_res_host_run(codes_id: Int, rows: Int, kk: Int, K: Int, rank: Int, aa: Int, pa: Int,
+                                        ca: Int, sa: Int) raises -> Int:
+    """MH_STRAT_FOLD_ASSIGN_RES: `strat_fold_assign_i32` over rank[codes]
+    (the stored codes as they are when `rank` is null) into a new fold
+    block, whose id is returned; the n_folds fold sizes to `sa`."""
+    _res_dims(rows, kk)
+    if K < 1 or aa == 0 or ca == 0 or sa == 0:
+        raise Error("strat_fold_assign_i32: n_folds >= 1 and non-null tables")
+    var store = MSEL_HOST_STORE.get_or_create_ptr()
+    var codes = Int(store[].ptr(codes_id, 4 * rows))
+    var enc = List[Int32]()
+    var enc_at = codes
+    if rank != 0:
+        enc = List[Int32](length=rows, fill=0)
+        enc_at = Int(enc.unsafe_ptr())
+        _ = msel_gather_host_run(0, rank, kk, codes, rows, enc_at)
+    var folds_id = store[].alloc(4 * rows)
+    try:
+        var folds = Int(store[].ptr(folds_id, 4 * rows))
+        _ = strat_fold_assign_i32(enc_at, rows, kk, K, aa, pa, ca, folds)
+        # The fold sizes are the folds' own bincount (int32 words: code 2).
+        _ = bincount_i64(folds, 2, rows, K, sa, False)
+    except problem:
+        store[].free(folds_id)
+        raise problem^
+    _ = enc  # the address above is not an owner
+    return folds_id
+
+
+def msel_select_folds_res_host_run(folds_id: Int, rows: Int, splits: Int, sa: Int, ta: Int, ra: Int) raises -> Int:
+    """MH_SELECT_FOLDS_RES: `select_folds_i64` over a stored fold block."""
+    if rows < 1 or splits < 1:
+        raise Error("model-selection helpers: a stored-fold selection needs n >= 1 and k >= 1")
+    var folds = Int(MSEL_HOST_STORE.get_or_create_ptr()[].ptr(folds_id, 4 * rows))
+    return select_folds_i64_host_run(folds, rows, splits, sa, ta, ra)
+
+
+def msel_fold_ids_res_host_run(codes_id: Int, rows: Int, kk: Int, splits: Int, na: Int, fca: Int) raises -> Int:
+    """MH_FOLD_IDS_RES: the stratified `fold_ids` of the stored codes into a
+    new fold block, whose id is returned."""
+    _res_dims(rows, kk)
+    if splits < 2 or na == 0 or fca == 0:
+        raise Error("fold_ids: n_splits >= 2 and non-null counts")
+    var store = MSEL_HOST_STORE.get_or_create_ptr()
+    var codes = Int(store[].ptr(codes_id, 4 * rows))
+    var folds_id = store[].alloc(4 * rows)
+    try:
+        _ = fold_ids(codes, rows, kk, splits, na, Int(store[].ptr(folds_id, 4 * rows)), fca)
+    except problem:
+        store[].free(folds_id)
+        raise problem^
+    return folds_id
+
+
 def msel_helpers_host_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     """One model-selection helper by its `MH_*` code over admitted spans."""
     if op == MH_ARANGE_I64:
@@ -187,6 +264,19 @@ def msel_helpers_host_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     if op == MH_STORE_TAKE_ROWS:
         return msel_store_take_rows_host_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
                                              msel_word(pp, 3), msel_word(pp, 4), msel_word(aa, 0))
+    if op == MH_FIRST_SEEN_RES:
+        return msel_first_seen_res_host_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2), msel_word(aa, 0),
+                                            msel_word(aa, 1))
+    if op == MH_STRAT_FOLD_ASSIGN_RES:
+        return msel_strat_fold_assign_res_host_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
+                                                   msel_word(pp, 3), msel_word(aa, 0), msel_word(aa, 1),
+                                                   msel_word(aa, 2), msel_word(aa, 3), msel_word(aa, 4))
+    if op == MH_SELECT_FOLDS_RES:
+        return msel_select_folds_res_host_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2), msel_word(aa, 0),
+                                              msel_word(aa, 1), msel_word(aa, 2))
+    if op == MH_FOLD_IDS_RES:
+        return msel_fold_ids_res_host_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2), msel_word(pp, 3),
+                                          msel_word(aa, 0), msel_word(aa, 1))
     raise Error("model-selection helpers: unknown operation " + String(op))
 
 

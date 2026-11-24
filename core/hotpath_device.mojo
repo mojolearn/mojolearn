@@ -889,10 +889,28 @@ def device_select_folds_i64(
     Returns True when every fold's flagged count equals `sizes[f]`; False
     (a size out of range, or a count that differs) has the binding rerun the
     host helper, which reports the fold. `1 <= n <= HPD_MAX_N`, `k >= 1`."""
+    var d_fold = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_copy(dst_buf=d_fold, src_ptr=_I32(unsafe_from_address=fold_addr))
+    var bad = device_select_folds_on(ctx, Int(d_fold.unsafe_ptr()), n, k, sizes_addr, test_addrs_addr,
+                                     train_addrs_addr)
+    _ = d_fold^  # the device address above is not an owner
+    return bad < 0
+
+
+def device_select_folds_on(
+    ctx: DeviceContext, folds: Int, n: Int, k: Int, sizes_addr: Int,
+    test_addrs_addr: Int, train_addrs_addr: Int,
+) raises -> Int:
+    """The body of `device_select_folds_i64` over the n int32 fold ids at
+    DEVICE address `folds` (lane vdf-scope-split: the host shell's upload,
+    or a stored fold block of the model-selection store, whose context
+    `ctx` is). Every fold's rows go to the host arrays as there. Returns -1
+    when every fold's flagged count equals `sizes[f]`, else the first fold
+    whose size is out of range or whose count differs (its count is read
+    back only then: k words)."""
     var sizes = _I64(unsafe_from_address=sizes_addr)
     var tests = _I64(unsafe_from_address=test_addrs_addr)
     var trains = _I64(unsafe_from_address=train_addrs_addr)
-    var d_fold = ctx.enqueue_create_buffer[DType.int32](n)
     var d_flag = ctx.enqueue_create_buffer[DType.int32](n)
     var d_scan = ctx.enqueue_create_buffer[DType.int32](n)
     var d_bsum = ctx.enqueue_create_buffer[DType.int32](frs_scan_blocks(n))
@@ -900,17 +918,17 @@ def device_select_folds_i64(
     var d_sizes = ctx.enqueue_create_buffer[DType.int64](k)
     var d_status = ctx.enqueue_create_buffer[DType.int32](2)
     var d_out = ctx.enqueue_create_buffer[DType.int64](n)
-    ctx.enqueue_copy(dst_buf=d_fold, src_ptr=_I32(unsafe_from_address=fold_addr))
     ctx.enqueue_copy(dst_buf=d_sizes, src_ptr=sizes)
     enqueue_fill(ctx, d_status, Int32(0))
-    var sized = True
+    enqueue_fill(ctx, d_counts, Int32(0))
+    var unsized = -1
     for f in range(k):  # driver-loop: over folds of one split plan (stream-ordered; d_out is reused after its copies)
         var size = Int(sizes.unsafe_load(f))
         if size < 0 or size > n:
-            sized = False
+            unsized = f
             break
         ctx.enqueue_function[_fold_flag_kernel](
-            d_fold.unsafe_ptr(), Int32(n), Int32(f), d_flag.unsafe_ptr(), d_scan.unsafe_ptr(),
+            _I32(unsafe_from_address=folds), Int32(n), Int32(f), d_flag.unsafe_ptr(), d_scan.unsafe_ptr(),
             grid_dim=_blocks(n), block_dim=HPD_TPB,
         )
         frs_exclusive_scan(ctx, d_scan, n, d_bsum)
@@ -932,16 +950,24 @@ def device_select_folds_i64(
             var tail = d_out.create_sub_buffer[DType.int64](size, n - size)
             ctx.enqueue_copy(dst_ptr=_I64(unsafe_from_address=train_addr), src_buf=tail)
             _ = tail^
-    var ok = False
-    if sized:
+    var bad = unsized
+    if unsized < 0:
         ctx.enqueue_function[_fold_counts_check_kernel](
             d_counts.unsafe_ptr(), d_sizes.unsafe_ptr(), Int32(k), d_status.unsafe_ptr(),
             grid_dim=_blocks(k), block_dim=HPD_TPB,
         )
-        ok = _read_status(ctx, d_status, 0) == 0
+        if _read_status(ctx, d_status, 0) != 0:
+            # A count differs: its k words come back to name the first fold.
+            var h = ctx.enqueue_create_host_buffer[DType.int32](k)
+            ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=d_counts)
+            ctx.synchronize()
+            for f in range(k):  # driver-loop: over folds (the first differing count)
+                if Int64(h.unsafe_ptr()[f]) != sizes.unsafe_load(f):
+                    bad = f
+                    break
+            _ = h^
     else:
         ctx.synchronize()
-    _ = d_fold^
     _ = d_flag^
     _ = d_scan^
     _ = d_bsum^
@@ -949,7 +975,7 @@ def device_select_folds_i64(
     _ = d_sizes^
     _ = d_status^
     _ = d_out^
-    return ok
+    return bad
 
 
 def device_select_mask_u8_i64(
@@ -1172,13 +1198,15 @@ def _rank_fold_kernel(
 
 def device_class_counts(
     ctx: DeviceContext,
-    mut d_codes: DeviceBuffer[DType.int32],
+    codes: Int,
     n: Int,
     k: Int,
     mut d_cnt: DeviceBuffer[DType.int32],
     mut d_order: DeviceBuffer[DType.uint32],
 ) raises -> Bool:
-    """Per class code: its row count into `d_cnt` (k) and the class codes in
+    """Per class code of the n int32 codes at DEVICE address `codes` (a
+    buffer of this context, or a block of the model-selection store on its
+    own context): its row count into `d_cnt` (k) and the class codes in
     first-seen order into `d_order` (k; classes with no row last). False
     when a code is outside [0, k). Synchronizes."""
     var d_first = ctx.enqueue_create_buffer[DType.int32](k)
@@ -1191,7 +1219,7 @@ def device_class_counts(
     enqueue_fill(ctx, d_first, Int32(0x7FFFFFFF))
     enqueue_fill(ctx, d_status, Int32(0))
     ctx.enqueue_function[_class_first_kernel](
-        d_codes.unsafe_ptr(), Int32(n), Int32(k), d_cnt.unsafe_ptr(), d_first.unsafe_ptr(),
+        _I32(unsafe_from_address=codes), Int32(n), Int32(k), d_cnt.unsafe_ptr(), d_first.unsafe_ptr(),
         d_status.unsafe_ptr(), grid_dim=_blocks(n), block_dim=HPD_TPB,
     )
     ctx.enqueue_function[_pair_iota_kernel](
@@ -1211,7 +1239,7 @@ def device_class_counts(
 
 def device_rank_folds(
     ctx: DeviceContext,
-    mut d_codes: DeviceBuffer[DType.int32],
+    codes: Int,
     n: Int,
     k: Int,
     splits: Int,
@@ -1220,18 +1248,24 @@ def device_rank_folds(
     perm_addr: Int,
     fold_addr: Int,
     fold_counts_addr: Int,
+    fold_dev: Int,
 ) raises:
-    """Each row's fold from its rank within its class (`_rank_fold_kernel`):
-    int32 fold ids to the host `fold_addr`, and, when `fold_counts_addr` is
-    not null, the int64 row count of each fold. `d_start` (k) is the class
+    """Each row's fold from its rank within its class (`_rank_fold_kernel`)
+    over the n int32 class codes at DEVICE address `codes`: int32 fold ids
+    to the host `fold_addr`, or, when `fold_dev` is not null, straight into
+    the n-word device block at `fold_dev` (lane vdf-scope-split: a stored
+    fold block, never downloaded); and, when `fold_counts_addr` is not
+    null, the int64 row count of each fold. `d_start` (k) is the class
     offsets in the class-sorted rows, `d_cum` (k * splits) the cumulative
-    per-class fold quotas; `perm_addr` (int64, n, or null) permutes ranks."""
+    per-class fold quotas; `perm_addr` (host int64, n, or null) permutes
+    ranks."""
     var d_keys = ctx.enqueue_create_buffer[DType.uint32](n)
     var d_vals = ctx.enqueue_create_buffer[DType.uint32](n)
     var d_tk = ctx.enqueue_create_buffer[DType.uint32](n)
     var d_tv = ctx.enqueue_create_buffer[DType.uint32](n)
     var d_sc = ctx.enqueue_create_buffer[DType.int32](frs_counts_len(n))
-    var d_fold = ctx.enqueue_create_buffer[DType.int32](n)
+    var d_fold = ctx.enqueue_create_buffer[DType.int32](n if fold_dev == 0 else 1)
+    var fold_at = fold_dev if fold_dev != 0 else Int(d_fold.unsafe_ptr())
     var d_pf = ctx.enqueue_create_buffer[DType.int32](splits)
     var d_pf64 = ctx.enqueue_create_buffer[DType.int64](splits)
     var has_perm = perm_addr != 0
@@ -1240,17 +1274,18 @@ def device_rank_folds(
         ctx.enqueue_copy(dst_buf=d_perm, src_ptr=_I64(unsafe_from_address=perm_addr))
     enqueue_fill(ctx, d_pf, Int32(0))
     ctx.enqueue_function[_pair_iota_kernel](
-        d_codes.unsafe_ptr(), Int32(n), d_keys.unsafe_ptr(), d_vals.unsafe_ptr(),
+        _I32(unsafe_from_address=codes), Int32(n), d_keys.unsafe_ptr(), d_vals.unsafe_ptr(),
         grid_dim=_blocks(n), block_dim=HPD_TPB,
     )
     fast_radix_sort_pairs_u32(ctx, n, d_keys, d_vals, d_tk, d_tv, d_sc)
     ctx.enqueue_function[_rank_fold_kernel](
         d_keys.unsafe_ptr(), d_vals.unsafe_ptr(), Int32(n), d_start.unsafe_ptr(), d_cum.unsafe_ptr(),
         Int32(splits), d_perm.unsafe_ptr(), Int32(1) if has_perm else Int32(0),
-        d_fold.unsafe_ptr(), d_pf.unsafe_ptr(),
+        _I32(unsafe_from_address=fold_at), d_pf.unsafe_ptr(),
         grid_dim=_blocks(n), block_dim=HPD_TPB,
     )
-    ctx.enqueue_copy(dst_ptr=_I32(unsafe_from_address=fold_addr), src_buf=d_fold)
+    if fold_dev == 0 and fold_addr != 0:
+        ctx.enqueue_copy(dst_ptr=_I32(unsafe_from_address=fold_addr), src_buf=d_fold)
     if fold_counts_addr != 0:
         ctx.enqueue_function[_widen_counts_kernel](
             d_pf.unsafe_ptr(), Int32(splits), d_pf64.unsafe_ptr(), Int32(0),
@@ -1274,17 +1309,34 @@ def device_stratified_fold_ids(
     counts_addr: Int, fold_addr: Int, fold_counts_addr: Int,
 ) raises -> Bool:
     """`fold_ids` with class codes (`1 <= n <= HPD_MAX_N`, `k >= 1`,
-    `splits >= 2`). The rows are counted, ranked and dealt on the device,
-    and the k x splits quota table is built there too (the helper's own
-    integer formula, `_fold_quota_rows_kernel`). False when a code is out of
-    range (nothing written)."""
+    `splits >= 2`) over the n host codes at `codes_addr`, fold ids to the
+    host `fold_addr`: the codes go up and `device_stratified_fold_ids_on`
+    runs. False when a code is out of range (nothing written)."""
     var d_codes = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_copy(dst_buf=d_codes, src_ptr=_I32(unsafe_from_address=codes_addr))
+    var ok = device_stratified_fold_ids_on(ctx, Int(d_codes.unsafe_ptr()), n, k, splits, counts_addr, fold_addr,
+                                           fold_counts_addr, 0)
+    _ = d_codes^  # the device address above is not an owner
+    return ok
+
+
+def device_stratified_fold_ids_on(
+    ctx: DeviceContext, codes: Int, n: Int, k: Int, splits: Int,
+    counts_addr: Int, fold_addr: Int, fold_counts_addr: Int, fold_dev: Int,
+) raises -> Bool:
+    """The body of `device_stratified_fold_ids` over the n int32 codes at
+    DEVICE address `codes` (lane vdf-scope-split: the host shell's upload,
+    or a stored code block of the model-selection store, whose context
+    `ctx` is). The rows are counted, ranked and dealt on the device, and the
+    k x splits quota table is built there too (the helper's own integer
+    formula, `_fold_quota_rows_kernel`). The fold ids go to the host
+    `fold_addr`, or into the device block `fold_dev` when it is not null;
+    the k class counts (int64) to the host `counts_addr`. False when a code
+    is out of range (nothing written)."""
     var d_cnt = ctx.enqueue_create_buffer[DType.int32](k)
     var d_order = ctx.enqueue_create_buffer[DType.uint32](k)
-    ctx.enqueue_copy(dst_buf=d_codes, src_ptr=_I32(unsafe_from_address=codes_addr))
-    var ok = device_class_counts(ctx, d_codes, n, k, d_cnt, d_order)
+    var ok = device_class_counts(ctx, codes, n, k, d_cnt, d_order)
     if not ok:
-        _ = d_codes^
         _ = d_cnt^
         _ = d_order^
         return False
@@ -1315,10 +1367,9 @@ def device_stratified_fold_ids(
         grid_dim=_blocks(k), block_dim=HPD_TPB,
     )
     ctx.enqueue_copy(dst_ptr=_I64(unsafe_from_address=counts_addr), src_buf=d_cnt64)
-    device_rank_folds(ctx, d_codes, n, k, splits, d_start, d_cum, 0, fold_addr, fold_counts_addr)
+    device_rank_folds(ctx, codes, n, k, splits, d_start, d_cum, 0, fold_addr, fold_counts_addr, fold_dev)
     _ = d_ocnt^
     _ = d_ooff^
-    _ = d_codes^
     _ = d_cnt^
     _ = d_order^
     _ = d_start^
@@ -1350,35 +1401,55 @@ def _first_rank_kernel(order: _U32, k: Int32, cnt: _I32, rank_of: _I32, counts: 
 def device_first_seen_i32(
     ctx: DeviceContext, codes_addr: Int, n: Int, k: Int, enc_addr: Int, counts_addr: Int,
 ) raises -> Int:
-    """`first_seen_i32` (`1 <= n <= HPD_MAX_N`, `k >= 1`): the classes
-    present, or -1 when a code is out of range (nothing written)."""
+    """`first_seen_i32` (`1 <= n <= HPD_MAX_N`, `k >= 1`) over the n host
+    codes at `codes_addr`: the codes go up and `device_first_seen_on` runs.
+    The classes present, or -1 when a code is out of range (nothing
+    written)."""
     var d_codes = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_copy(dst_buf=d_codes, src_ptr=_I32(unsafe_from_address=codes_addr))
+    var m = device_first_seen_on(ctx, Int(d_codes.unsafe_ptr()), n, k, enc_addr, counts_addr, 0)
+    _ = d_codes^  # the device address above is not an owner
+    return m
+
+
+def device_first_seen_on(
+    ctx: DeviceContext, codes: Int, n: Int, k: Int, enc_addr: Int, counts_addr: Int, rank_addr: Int,
+) raises -> Int:
+    """The body of `device_first_seen_i32` over the n int32 codes at DEVICE
+    address `codes` (lane vdf-scope-split: the host shell's upload, or a
+    stored code block of the model-selection store, whose context `ctx`
+    is). Writes the k int64 class sizes in first-seen order to the host
+    `counts_addr`; when `rank_addr` is not null the k int32 words rank_of[c]
+    (each code's first-seen position) to it; when `enc_addr` is not null the
+    n first-seen codes rank_of[codes[i]] to it (the stored form passes 0:
+    its caller gathers by the rank table where the codes are). The classes
+    present, or -1 when a code is out of range (nothing written)."""
     var d_cnt = ctx.enqueue_create_buffer[DType.int32](k)
     var d_order = ctx.enqueue_create_buffer[DType.uint32](k)
-    ctx.enqueue_copy(dst_buf=d_codes, src_ptr=_I32(unsafe_from_address=codes_addr))
-    var ok = device_class_counts(ctx, d_codes, n, k, d_cnt, d_order)
+    var ok = device_class_counts(ctx, codes, n, k, d_cnt, d_order)
     if not ok:
-        _ = d_codes^
         _ = d_cnt^
         _ = d_order^
         return -1
     var d_rank = ctx.enqueue_create_buffer[DType.int32](k)
     var d_counts = ctx.enqueue_create_buffer[DType.int64](k)
-    var d_enc = ctx.enqueue_create_buffer[DType.int32](n)
+    var d_enc = ctx.enqueue_create_buffer[DType.int32](n if enc_addr != 0 else 1)
     var d_status = ctx.enqueue_create_buffer[DType.int32](2)
     enqueue_fill(ctx, d_status, Int32(0))
     ctx.enqueue_function[_first_rank_kernel](
         d_order.unsafe_ptr(), Int32(k), d_cnt.unsafe_ptr(), d_rank.unsafe_ptr(), d_counts.unsafe_ptr(),
         d_status.unsafe_ptr(), grid_dim=_blocks(k), block_dim=HPD_TPB,
     )
-    ctx.enqueue_function[_gather_i32_kernel](
-        d_rank.unsafe_ptr(), Int32(k), d_codes.unsafe_ptr(), Int32(n), d_enc.unsafe_ptr(),
-        d_status.unsafe_ptr(), grid_dim=_blocks(n), block_dim=HPD_TPB,
-    )
-    ctx.enqueue_copy(dst_ptr=_I32(unsafe_from_address=enc_addr), src_buf=d_enc)
+    if enc_addr != 0:
+        ctx.enqueue_function[_gather_i32_kernel](
+            d_rank.unsafe_ptr(), Int32(k), _I32(unsafe_from_address=codes), Int32(n), d_enc.unsafe_ptr(),
+            d_status.unsafe_ptr(), grid_dim=_blocks(n), block_dim=HPD_TPB,
+        )
+        ctx.enqueue_copy(dst_ptr=_I32(unsafe_from_address=enc_addr), src_buf=d_enc)
+    if rank_addr != 0:
+        ctx.enqueue_copy(dst_ptr=_I32(unsafe_from_address=rank_addr), src_buf=d_rank)
     ctx.enqueue_copy(dst_ptr=_I64(unsafe_from_address=counts_addr), src_buf=d_counts)
     var m = _read_status(ctx, d_status, 1)
-    _ = d_codes^
     _ = d_cnt^
     _ = d_order^
     _ = d_rank^
@@ -1397,11 +1468,66 @@ def device_strat_fold_assign_i32(
     ctx: DeviceContext, enc_addr: Int, n: Int, k: Int, n_folds: Int, alloc_addr: Int,
     perms_addr: Int, counts_addr: Int, dst_addr: Int,
 ) raises -> Bool:
-    """`strat_fold_assign_i32`. The k x n_folds tables (class offsets,
-    cumulative allocations) are built on the device from the caller's
-    uploaded `counts` and `alloc` (`_strat_alloc_rows_kernel` and a scan);
-    every row is ranked and assigned on the device. False (nothing written) when the tables are inconsistent or
-    a class code is out of range: the binding reruns the host helper."""
+    """`strat_fold_assign_i32` over the n host first-seen codes at
+    `enc_addr`, fold ids to the host `dst_addr`: the codes go up and
+    `device_strat_fold_assign_on` runs. False (nothing written) when the
+    tables are inconsistent or a class code is out of range: the binding
+    reruns the host helper."""
+    var d_enc = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_copy(dst_buf=d_enc, src_ptr=_I32(unsafe_from_address=enc_addr))
+    var ok = device_strat_fold_assign_on(ctx, Int(d_enc.unsafe_ptr()), n, k, n_folds, alloc_addr, perms_addr,
+                                         counts_addr, dst_addr, 0, 0)
+    _ = d_enc^  # the device address above is not an owner
+    return ok
+
+
+def device_strat_fold_assign_res(
+    ctx: DeviceContext, codes: Int, rank_addr: Int, n: Int, k: Int, n_folds: Int, alloc_addr: Int,
+    perms_addr: Int, counts_addr: Int, fold_dev: Int, sizes_addr: Int,
+) raises -> Bool:
+    """`strat_fold_assign_i32` over a stored code block (lane vdf-scope-split):
+    the n int32 sorted-order codes at DEVICE address `codes` are renumbered
+    on the device by the k-word host rank table at `rank_addr`
+    (rank_of[code], the first-seen position; null: the codes are already in
+    first-seen order), then assigned (`device_strat_fold_assign_on`) into
+    the n-word device block `fold_dev`, never downloaded, with the n_folds
+    int64 fold sizes to the host `sizes_addr`. False (nothing written) when
+    a code is outside [0, k) or the tables are inconsistent."""
+    if rank_addr == 0:
+        return device_strat_fold_assign_on(ctx, codes, n, k, n_folds, alloc_addr, perms_addr, counts_addr, 0,
+                                           fold_dev, sizes_addr)
+    var d_rank = ctx.enqueue_create_buffer[DType.int32](k)
+    var d_enc = ctx.enqueue_create_buffer[DType.int32](n)
+    var d_status = ctx.enqueue_create_buffer[DType.int32](2)
+    enqueue_fill(ctx, d_status, Int32(0))
+    ctx.enqueue_copy(dst_buf=d_rank, src_ptr=_I32(unsafe_from_address=rank_addr))
+    ctx.enqueue_function[_gather_i32_kernel](
+        d_rank.unsafe_ptr(), Int32(k), _I32(unsafe_from_address=codes), Int32(n), d_enc.unsafe_ptr(),
+        d_status.unsafe_ptr(), grid_dim=_blocks(n), block_dim=HPD_TPB,
+    )
+    var ok = _read_status(ctx, d_status, 0) == 0
+    if ok:
+        ok = device_strat_fold_assign_on(ctx, Int(d_enc.unsafe_ptr()), n, k, n_folds, alloc_addr, perms_addr,
+                                         counts_addr, 0, fold_dev, sizes_addr)
+    _ = d_rank^
+    _ = d_enc^  # the device address above is not an owner
+    _ = d_status^
+    return ok
+
+
+def device_strat_fold_assign_on(
+    ctx: DeviceContext, enc: Int, n: Int, k: Int, n_folds: Int, alloc_addr: Int,
+    perms_addr: Int, counts_addr: Int, dst_addr: Int, fold_dev: Int, sizes_addr: Int,
+) raises -> Bool:
+    """The body of `strat_fold_assign_i32` over the n int32 first-seen codes
+    at DEVICE address `enc` (lane vdf-scope-split). The k x n_folds tables
+    (class offsets, cumulative allocations) are built on the device from the
+    caller's uploaded `counts` and `alloc` (`_strat_alloc_rows_kernel` and a
+    scan); every row is ranked and assigned on the device, its fold id to
+    the host `dst_addr` or into the device block `fold_dev` when that is not
+    null, and the n_folds int64 fold sizes to the host `sizes_addr` when it
+    is not null. False (nothing written) when the tables are inconsistent or
+    a class code is out of range."""
     # lane/review-fixes: the k x n_folds tables are built on the device from
     # the uploaded `counts` and `alloc` (was a host loop between device
     # phases): one thread per class checks its allocations (non-negative,
@@ -1411,7 +1537,6 @@ def device_strat_fold_assign_i32(
     # n. Integers only: the same tables, no bit moves.
     var cp = _I64(unsafe_from_address=counts_addr)
     var ap = _I64(unsafe_from_address=alloc_addr)
-    var d_codes = ctx.enqueue_create_buffer[DType.int32](n)
     var d_cnt = ctx.enqueue_create_buffer[DType.int32](k)
     var d_cnt64 = ctx.enqueue_create_buffer[DType.int64](k)
     var d_ref64 = ctx.enqueue_create_buffer[DType.int64](k)
@@ -1422,7 +1547,6 @@ def device_strat_fold_assign_i32(
     var d_cum = ctx.enqueue_create_buffer[DType.int32](k * n_folds)
     enqueue_fill(ctx, d_cnt, Int32(0))
     enqueue_fill(ctx, d_status, Int32(0))
-    ctx.enqueue_copy(dst_buf=d_codes, src_ptr=_I32(unsafe_from_address=enc_addr))
     ctx.enqueue_copy(dst_buf=d_ref64, src_ptr=cp)
     ctx.enqueue_copy(dst_buf=d_alloc, src_ptr=ap)
     ctx.enqueue_function[_strat_alloc_rows_kernel](
@@ -1434,7 +1558,7 @@ def device_strat_fold_assign_i32(
     # the rows' own class counts must be the caller's `counts`: a row whose
     # rank passes its class's count would read another class's permutation
     ctx.enqueue_function[_bincount_i32_kernel](
-        d_codes.unsafe_ptr(), Int32(n), Int32(k), d_cnt.unsafe_ptr(), d_status.unsafe_ptr(),
+        _I32(unsafe_from_address=enc), Int32(n), Int32(k), d_cnt.unsafe_ptr(), d_status.unsafe_ptr(),
         grid_dim=_blocks(n), block_dim=HPD_TPB,
     )
     ctx.enqueue_function[_widen_counts_kernel](
@@ -1447,10 +1571,9 @@ def device_strat_fold_assign_i32(
     )
     var ok = _read_status(ctx, d_status, 0) == 0
     if ok:
-        device_rank_folds(ctx, d_codes, n, k, n_folds, d_start, d_cum, perms_addr, dst_addr, 0)
+        device_rank_folds(ctx, enc, n, k, n_folds, d_start, d_cum, perms_addr, dst_addr, sizes_addr, fold_dev)
     _ = d_alloc^
     _ = d_ref32^
-    _ = d_codes^
     _ = d_cnt^
     _ = d_cnt64^
     _ = d_ref64^
