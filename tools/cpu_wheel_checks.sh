@@ -45,7 +45,11 @@ got=$(sha256sum "$WHEEL" | cut -d' ' -f1)
 [ "$got" = "$WANT" ] || { echo "cpu_wheel_checks: $WHEEL is $got, not the release's $WANT" >&2; exit 2; }
 mkdir -p "$OUT"
 unset PYTHONPATH
-export MOJOLEARN_VENDOR=cpu MOJOLEARN_NUMERIC_MODE=identical
+# The core wheel on a CPU-only runner IS the CPU side (no GPU set installed); nothing selects it through
+# MOJOLEARN_VENDOR (2026-11-24: verify runs the CPU side through device="cpu"; the install check below
+# still asserts vendor cpu).
+unset MOJOLEARN_VENDOR
+export MOJOLEARN_NUMERIC_MODE=identical
 PY=${PYTHON:-python3}
 declare -A RC
 check() { local name=$1; shift; mkdir -p "$OUT/$name"; "$@" > "$OUT/$name/log.txt" 2>&1; RC[$name]=$?
