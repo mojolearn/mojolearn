@@ -142,7 +142,7 @@ KEEP = {
     "x_cluster_mbk_policy": "paused Apple fast read-back (MINIBATCH_FAST_DEV policies, x_cluster/minibatch_fast.mojo)",
     "x_decomp_lu_resid": "paused Apple fast arm (lane apple-fast-q-linalg, LU_QFIX)",
     "x_decomp_dev_orth_ws": "paused Apple fast arm (lane apple-fast-s-linalg, DECOMP_FAST_ORTH_WS)",
-    "gbdt_fit_rowmajor": "paused Apple fast arm (lane apple-fast-sym-feat, GBDT_QUANT_DEVICE)",
+    "gbdt_fit_rowmajor": "Python entry of the row-major fit (GBDT_QUANT_DEVICE, the default device quantizer since lane vdf-scope-trees4; members reach it through XG_FIT_ROWMAJOR)",
 }
 
 
