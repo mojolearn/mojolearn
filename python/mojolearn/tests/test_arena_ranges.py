@@ -121,6 +121,30 @@ def test_ranges_and_resident_move_no_bit(monkeypatch):
     assert live_after == 0, live_after
 
 
+def test_ranges_off_reads_resident_slots(monkeypatch):
+    # The switch is an A/B arm (lane vdf-tail-b): with it off, inside resident(), the x_prep runner reads
+    # the inputs the scope keeps from their slots (the range runner's whole-arena form) instead of copying
+    # them from the host; same bytes as the whole-arena run outside the scope, every slot freed.
+    b = _gpu_ranges()
+    if b is None:
+        pytest.skip("no GPU binding with the ranges entries in this process")
+    _, pb = b
+    run = _battery()
+    monkeypatch.setenv("MOJOLEARN_ARENA_RANGES", "0")
+    whole = run()
+    with _arena_io.resident(min_words=1) as r:
+        off1 = run()
+        off2 = run()
+        stats = r.stats()
+        live_inside = int(pb.x_prep_dev_live())
+    live_after = int(pb.x_prep_dev_live())
+    for arm, got in (("ranges off, resident", off1), ("ranges off, resident second pass", off2)):
+        assert got == whole, (arm, [n for (n, a), (_, c) in zip(whole, got) if a != c])
+    assert stats and any(h > 0 for _, h in stats.values()), stats
+    assert live_inside > 0, live_inside
+    assert live_after == 0, live_after
+
+
 def test_device_cache_frees_deterministically():
     b = _gpu_ranges()
     if b is None:
