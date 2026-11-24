@@ -179,13 +179,17 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
             var cprm = wd[0].copy()
             var pprm = wd[1].copy()
             comptime if E.IS_DEVICE:
+                var other = False
                 if self.scratch != 0:
                     var csc = _ScratchRef(unsafe_from_address=self.scratch)
-                    if csc[].cnn_other_queue:
-                        ex.sync()  # a public session: finish the upstream gradient before the x_cnn entry
+                    other = csc[].cnn_other_queue
+                if other:
+                    ex.sync()  # a public session: finish the upstream gradient before the x_cnn entry
+                # ... and the entry waits for its gradients (no may_defer): the session reads them on its own queue
                 cnn_block_backward_device(inputs[0], inputs[1], inputs[2], upstream, saved.p0, cprm, pprm, pool, need_dx,
                                           gradients[0], gradients[1], gradients[2],
-                                          Int(saved.p1) if saved.i10 != 0 else 0, Int(saved.p2) if saved.i10 != 0 else 0)
+                                          Int(saved.p1) if saved.i10 != 0 else 0, Int(saved.p2) if saved.i10 != 0 else 0,
+                                          not other)
             else:
                 var kept = saved.i10 != 0
                 var hb: List[FP] = [inputs[0], inputs[1], inputs[2], upstream, saved.p0, gradients[0], gradients[1],
@@ -199,12 +203,15 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
             if len(gradients) != 3 or len(inputs) != 3:
                 raise Error("ops: cnn_linear backward takes [h, w, b]")
             comptime if E.IS_DEVICE:
+                var other = False
                 if self.scratch != 0:
                     var lsc = _ScratchRef(unsafe_from_address=self.scratch)
-                    if lsc[].cnn_other_queue:
-                        ex.sync()  # a public session: finish the upstream gradient before the x_cnn entry
+                    other = lsc[].cnn_other_queue
+                if other:
+                    ex.sync()  # a public session: finish the upstream gradient before the x_cnn entry
+                # ... and the entry waits for its gradients (no may_defer): the session reads them on its own queue
                 cnn_linear_backward_device(inputs[0], inputs[1], upstream, saved.i0, saved.i1, saved.i2,
-                                           gradients[0], gradients[1], gradients[2])
+                                           gradients[0], gradients[1], gradients[2], not other)
             else:
                 var hb: List[FP] = [inputs[0], inputs[1], upstream, gradients[0], gradients[1], gradients[2]]
                 var hw: List[Int] = [saved.i0, saved.i1, saved.i2]
