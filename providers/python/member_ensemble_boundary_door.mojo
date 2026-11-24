@@ -145,7 +145,7 @@ from bindings.family_common_pack import family_array
 from core.member_abi import MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION
 from core.msel_scorer_run import (
     msel_scorer_code, msel_scorer_row, msel_scorer_regression, msel_scorer_positive, msel_scorer_positive_kind,
-    SCORER_POSITIVE_LABEL_ONE, SCORER_POSITIVE_MARKS, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND,
+    msel_scorer_metric_code, SCORER_POSITIVE_LABEL_ONE, SCORER_POSITIVE_MARKS, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND,
     SCORER_POSITIVE_MIXED,
     msel_scorer_cluster, msel_scorer_cluster_entry, msel_scorer_top_k, msel_scorer_ap, msel_scorer_brier,
     msel_scorer_label_row, msel_scorer_f_row, msel_scorer_group_words, MselScorerOptions,
@@ -2803,6 +2803,41 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                                                                py_call(b.getattr, got, PythonObject("_sign")))))
             kw = mine_kw^
             return name
+        # THE METRIC ROWS (lane mf-fitadm7; core/msel_scorer_run.mojo
+        # `msel_scorer_metric_code`): a make_scorer over a connected metric
+        # no get_scorer name holds, response 'predict', whose kwargs are
+        # only the ones its typed row reads: zero_one_loss's `normalize` (an
+        # exact bool), `sample_weight` (data, read once as the other rows'),
+        # `numeric_mode` None. Its row's sign is the metric's value: the
+        # flip is greater_is_better=False.
+        var plan = py_get(context["family_msel_metric_plans"], func)
+        if plan is None or py_type(got_method) is not b.str or String(py=got_method) != "predict":
+            return String("")
+        var metric = String(py=plan["name"])
+        var normalize = True
+        var metric_kw = _ScorerKw()
+        var given = py_call(b.list, py_call(got_kwargs.items))
+        for q in range(len(given)):  # small-loop(the scorer's options, once per admission)
+            var word = String(py=given[q][0]) if py_type(given[q][0]) is b.str else String("")
+            var value = given[q][1]
+            if word == "normalize" and metric == "zero_one_loss":
+                if py_type(value) is not b.bool:
+                    return String("")  # the metric's "normalize must be a bool": the door's words per side
+                normalize = Bool(py=value)
+            elif word == "sample_weight":
+                if value is not None:
+                    metric_kw.weights = value
+            elif word == "numeric_mode":
+                if value is not None:
+                    return String("")
+            else:
+                return String("")
+        var code = msel_scorer_metric_code(metric, normalize)
+        if code < 0:
+            return String("")
+        metric_kw.flip = Int(py=py_call(b.int, py_call(b.getattr, got, PythonObject("_sign")))) != 1
+        kw = metric_kw^
+        return String(msel_scorer_row(code).name)
     except:
         return String("")  # options no exact comparison reads: the door
     return String("")
