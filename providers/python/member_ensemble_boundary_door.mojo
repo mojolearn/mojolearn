@@ -878,7 +878,9 @@ def _finish(fields: PythonObject, context: PythonObject, b: PythonObject, mut ow
             var words: List[Float64], var fold_train: List[List[Int32]], var fold_test: List[List[Int32]]) raises -> Bool:
     """The admission's tail for every kind: the x_trees image's route, the
     nested plans minted once into the plan store (released by the capsule
-    kept in the owner's pins), the parameter words."""
+    kept in the owner's pins), the parameter words. Never answers False
+    (lane mf-fitadm7, read: an image that is not connected raises
+    `_trees_key`'s words), so no caller's door is reached through it."""
     var cap = _cap_of(fields, b)
     var key = _trees_key(fields, context, b)
     var device = DEVICE_CPU
