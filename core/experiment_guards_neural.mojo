@@ -1281,6 +1281,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_FAST_RNN_SCAN_GATED.ab-outcome-1.patch
     comptime assert not is_defined["MOJOLEARN_SEQ_FAST_RNN_SCAN_GATED"](), "removed 2026-11-24 (lane/ab-outcome-1, A/B nvc-ab-20261124T070727Z-69dac2 NVIDIA L40S, wheel 4519097d380a, one run per arm): SEQ_FAST_RNN_SCAN_GATED (GRU and LSTM layers on the scan, SCAN_MAX_GATES 4) was a LOSER: 18 cells, median 1.18, 0.92..4.54, gru / lstm infer 4.2-4.5x slower, fit higgs 1.17-1.20; the chain stays their route (SCAN_MAX_GATES 1); code at d81b6ba708; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_FAST_RNN_SCAN_GATED.ab-outcome-1.patch"
     # ---- end lane ab-outcome-1
+    # ---- lane ab-outcome-2 (2026-11-24): A/B nvc-ab-20261124T095727Z-92fd9f decisions (NVIDIA L40S only)
+    # TOMBSTONE: MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY (LOSER: NV L40S 2 cells, median 2.29, mojolearn-162m generate 887 -> 2978 ms (3.36), smollm2 1456 -> 1782 ms (1.22)) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY.ab-outcome-2.patch
+    comptime assert not is_defined["MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, one run per arm): EXPERIMENT_GENERATION_ROUTE_LEGACY (every generate read on the host read loop instead of the decode program) was a LOSER: 2 cells, mojolearn-162m generate 887 -> 2978 ms (3.36), smollm2-135m 1456 -> 1782 ms (1.22); route auto (the decode program where it serves, the host loop for what it refuses) is kept; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY.ab-outcome-2.patch"
+    # ---- end lane ab-outcome-2
     return True
 
 

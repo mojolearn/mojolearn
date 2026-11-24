@@ -9,20 +9,18 @@ from std.sys.compile import is_defined
 # exp/modular_generation_control_20261030); their B arms are RUN OWED
 # (bench/results/paper_compare/owed-pre0867.json, docs/apple-fast/EXPERIMENTS.md).
 #   -D MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE   reuse KV uploads (was =1)
-#   -D MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY    route legacy (was ROUTE=legacy)
 #   -D MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_RESIDENT  route resident
 #   -D MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_NATIVE_ENGINE  route native_engine
 #   -D MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE         engine "1" (was ENGINE=1)
 #   -D MOJOLEARN_GENERATION_NATIVE_ENGINE_OFF           engine "0" (was ENGINE=0)
 comptime EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE = is_defined["MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE"]()
-comptime _ROUTE_LEGACY = is_defined["MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY"]()
 comptime _ROUTE_RESIDENT = is_defined["MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_RESIDENT"]()
 comptime _ROUTE_NATIVE_ENGINE = is_defined["MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_NATIVE_ENGINE"]()
+# TOMBSTONE: MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY (LOSER: NV L40S 2 cells, median 2.29, mojolearn-162m generate 887 -> 2978 ms (3.36), smollm2 1456 -> 1782 ms (1.22)) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY.ab-outcome-2.patch
 comptime EXPERIMENT_GENERATION_ROUTE: StaticString = (
-    "legacy" if _ROUTE_LEGACY else (
-        "resident" if _ROUTE_RESIDENT else (
-            "native_engine" if _ROUTE_NATIVE_ENGINE else "auto"
-        )
+    "resident" if _ROUTE_RESIDENT else (
+        "native_engine" if _ROUTE_NATIVE_ENGINE else "auto"
     )
 )
 comptime GENERATION_NATIVE_ENGINE_FORCE = is_defined["MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE"]()
@@ -77,7 +75,7 @@ struct GenerationReadControl(Copyable, Movable):
         self.kv = GenerationKVUploadPolicy(capacity)
         self.sampling_policy = sampling_policy
         self.greedy = greedy
-        comptime assert Int(_ROUTE_LEGACY) + Int(_ROUTE_RESIDENT) + Int(_ROUTE_NATIVE_ENGINE) <= 1, (
+        comptime assert Int(_ROUTE_RESIDENT) + Int(_ROUTE_NATIVE_ENGINE) <= 1, (
             "at most one MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_* define"
         )
         comptime assert not (GENERATION_NATIVE_ENGINE_FORCE and GENERATION_NATIVE_ENGINE_OFF), (

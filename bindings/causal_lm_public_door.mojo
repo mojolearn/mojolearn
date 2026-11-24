@@ -3336,7 +3336,9 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
         # read and the native generation engine read are deleted. The host
         # loop below stays for what the program does not serve (a CPU install,
         # distributed execution, the fixed15_v1 head, the Float64 sampler).
-        if capacity > 0 and not s.done() and read_control.route != "legacy":
+        # TOMBSTONE: MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY (LOSER: NV L40S 2 cells, median 2.29, mojolearn-162m generate 887 -> 2978 ms (3.36)) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY.ab-outcome-2.patch
+        if capacity > 0 and not s.done():
             var blocks = _block_list(mods, s.model)
             var refusal_held = s.model_held
             if refusal_held is None:
