@@ -606,6 +606,14 @@ def mc_binary_sets() raises -> PythonObject:
                         Python.list(PythonObject(0), PythonObject(1)), Python.list(PythonObject(-1), PythonObject(1)))
 
 
+def _caller_words(source: PythonObject, admitted: PythonObject, context: PythonObject) raises -> Bool:
+    """Whether the admitted array reads the caller's own buffer (an array
+    admitted without a copy), so the program runner may keep it resident by
+    identity; a converted copy is a per-call temporary."""
+    return (classical_is_array(source, context)
+            and Int(py=classical_address(source)) == Int(py=classical_address(admitted)))
+
+
 def _log_loss_options(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`log_loss_options` (`_proba`, then one program); args = (y_true,
     y_pred, normalize, sample_weight, labels, numeric_mode)."""
@@ -666,7 +674,7 @@ def _log_loss_options(args: PythonObject, context: PythonObject) raises -> Pytho
     # the slot form (lane vdf-xm-wire): y_proba, when the admitted words ARE the caller's buffer, is
     # read from its resident copy inside resident(); a float32 copy, the codes and the weights are
     # this call's temporaries
-    prog.pin(proba, proba is args[1])
+    prog.pin(proba, _caller_words(args[1], proba, context))
     prog.pin(codes, False)
     if w is not None:
         prog.pin(w, False)
@@ -722,7 +730,7 @@ def _log_loss(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var encoded = mc_map_order(true, selected, context)
     var prog = MetricDoorProg()
     var put = mc_log_loss_stages(prog.plan, n, k, binary, False, mc_bool(normalize))
-    prog.pin(proba, proba is args[1])  # the caller's buffer: the slot form inside resident() (lane vdf-xm-wire)
+    prog.pin(proba, _caller_words(args[1], proba, context))  # the caller's buffer: the slot form inside resident() (lane vdf-xm-wire)
     prog.pin(encoded, False)
     var res = put[1]
     var arena = metric_door_run(prog, args[5], context)
