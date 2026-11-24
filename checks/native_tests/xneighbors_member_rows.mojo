@@ -9,7 +9,7 @@ later query reads the fitted rows from that slot (a negative X word). Claims, pe
   device: (case 0, fused tiled k-NN; case 1, the old-items `knn_sq`) the fit over the fold word == the fit over
           the host-gathered rows (root distances, densities, scores bits, offset bits); score_samples and
           decision_function of the test fold, with the query AND the fitted rows as slot words == with both as
-          host rows (float32 bits); OneClassSVM's support-vector gather over the fold word == the host rows'
+          host rows (float32 bits); OneClassSVM's support-vector gather over the fold word == the host rows
           words; the export's download of the resident rows (`take_rows` with the identity
           index over the slot word) == the host-gathered rows (bits).
   host:   the host take of the fold == a serial gather, and the same LocalOutlierFactor RUN over it on the host
