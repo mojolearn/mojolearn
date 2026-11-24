@@ -29,7 +29,7 @@ from core.member_abi import MemberCall, MemberMatrix, MEMBER_F32, MEMBER_I32, ME
 from core.entry_table import EntryRef, entry_ref_unresolved, entry_ref_mode, entry_ref_vendor
 from core.prep_entry_table import PrepEntryKey, xp_transport_ref
 from core.host_parallel import host_widen_index_i64, host_parallelize
-from core.fold_x_device import fold_x_word
+from core.fold_x_word import fold_x_word
 from bindings.arena_cache_run import (
     ARENA_PREFIX_X_PREP, ARENA_STORE_PUT, arena_scope_store_put, arena_store_take_rows, arena_cache_free,
 )

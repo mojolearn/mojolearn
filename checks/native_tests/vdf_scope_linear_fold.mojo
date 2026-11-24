@@ -39,7 +39,8 @@ from core.gram_multi_gpu import gram_plan_current
 from core.neural_context import process_ctx
 from glm.impl.gram_solve import linear_gram_fit_host
 from core.p3_linear_impl import ols_predict_device
-from core.fold_x_device import FOLD_X_STORE, fold_x_word
+from core.fold_x_device import FOLD_X_STORE
+from core.fold_x_word import fold_x_word
 
 comptime N = 40000
 comptime D = 3

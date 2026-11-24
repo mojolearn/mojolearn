@@ -19,7 +19,8 @@ from std.memory import bitcast
 from checks.native_tests.testsuite_cases import check_cases_serial, CPU_COLUMN_BUILD, require
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from max.gpu.host import DeviceContext
-from core.fold_x_device import FOLD_X_STORE, fold_x_word
+from core.fold_x_device import FOLD_X_STORE
+from core.fold_x_word import fold_x_word
 from core.kmeans_variants_api import (
     KMeansVariantsDriver, VariantsSpan, VariantsResultSlot, BisectFitRequest, BisectPredictRequest,
     MiniBatchFitRequest, VARIANTS_CAPABILITIES, VARIANTS_CAP_FOLD_X,

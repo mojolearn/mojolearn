@@ -21,7 +21,8 @@ from std.memory import bitcast
 from checks.native_tests.testsuite_cases import check_cases_serial, CPU_COLUMN_BUILD, require
 from max.gpu.host import DeviceContext
 from core.member_fold_x import member_fold_take_f32
-from core.fold_x_device import FOLD_X_STORE, fold_x_word
+from core.fold_x_device import FOLD_X_STORE
+from core.fold_x_word import fold_x_word
 from x_neighbors.native_descriptor_host import xn_native_v1 as xn_host_v1
 from x_neighbors.native_descriptor_device import xn_native_v1 as xn_device_v1
 from core.neighbors_native_driver import XnDriver
