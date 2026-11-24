@@ -127,10 +127,13 @@ def mc_classification_pair(y_true: PythonObject, y_pred: PythonObject, context: 
 
 
 def mc_sums(mut prog: MetricDoorProg, pair: McPair, order: PythonObject, epis: List[McEpi],
-            context: PythonObject) raises -> McSums:
+            args: PythonObject, w_arg: Int, context: PythonObject) raises -> McSums:
     """`_Sums(true, pred, w, order, numeric_mode, epi=...)` up to its tail:
     the codes over `order`, the pair key, the three (four weighted)
-    groupings, the count slots and the cls_epi stages, in that order."""
+    groupings, the count slots and the cls_epi stages, in that order.
+    `args[w_arg]`: the sample_weight argument the weights were admitted from
+    (-1: none named); the mapped codes are this call's temporaries, never
+    kept resident (lane vdf-xm-wire2)."""
     var n = pair.true.n
     var labels = mc_len(order)
     var yt = mc_map_order(pair.true, order, context)
@@ -138,10 +141,10 @@ def mc_sums(mut prog: MetricDoorProg, pair: McPair, order: PythonObject, epis: L
     # the typed builder (bindings/mcls_classify_run.mojo `mc_sums_stages`):
     # inputs a, b and (weighted) w, pinned here in that order
     var s = mc_sums_stages(prog.plan, n, labels, pair.w is not None)
-    prog.pins.append(yt)
-    prog.pins.append(yp)
+    prog.pin(yt, False)
+    prog.pin(yp, False)
     if s.weighted:
-        prog.pins.append(pair.w)
+        prog.pin_arg(pair.w, args, w_arg)
     for e in range(len(epis)):  # driver-loop: over the requested set-wise epilogues
         _ = mc_epi_stage(prog.plan, s, epis[e])
     _ = yt^
@@ -161,7 +164,7 @@ def _accuracy(args: PythonObject, context: PythonObject) raises -> PythonObject:
         # `accuracy_count`: the COUNT tail over the match sums
         var pair = mc_pair(args[1], args[2], args[4], "accuracy_score", context, True, True)
         var prog = MetricDoorProg()
-        var s = mc_sums(prog, pair, pair.present, List[McEpi](), context)
+        var s = mc_sums(prog, pair, pair.present, List[McEpi](), args, 4, context)
         var out = mc_count_tail(prog.plan, s, mc_len(pair.present))
         var arena = metric_door_run(prog, args[5], context)
         if not s.weighted:
@@ -256,11 +259,12 @@ def _confusion_weighted(args: PythonObject, context: PythonObject) raises -> Pyt
     var prog = MetricDoorProg()
     var yt = mc_map_order(pair.true, chosen, context)
     var yp = mc_map_order(pair.pred, chosen, context)
-    var a = prog.put(yt)
-    var b = prog.put(yp)
+    # the mapped codes are this call's temporaries: never kept resident (lane vdf-xm-wire2)
+    var a = prog.put_temp(yt)
+    var b = prog.put_temp(yp)
     var key = prog.scratch(n)
     prog.stage("pair_key", n, [a, b, key, k, 0])
-    var w_off = prog.put(pair.w)
+    var w_off = prog.put_arg(pair.w, args, 4)
     var got = prog.group(key, n, k * k, MC_NONE, 1, w_off, 1)
     var cells = got[1]
     var col = 1
@@ -411,7 +415,7 @@ def _prf_weighted(args: PythonObject, metric: Int, context: PythonObject) raises
     var epis = List[McEpi]()
     epis.append(McEpi(2, k, avg, zd, 2, 1.0))
     var prog = MetricDoorProg()
-    var s = mc_sums(prog, pair, order, epis, context)
+    var s = mc_sums(prog, pair, order, epis, args, 7, context)
     var arena = metric_door_run(prog, args[9], context)
     var eo = s.eos[0]
     var bad = arena.i32(eo)
@@ -606,12 +610,9 @@ def mc_binary_sets() raises -> PythonObject:
                         Python.list(PythonObject(0), PythonObject(1)), Python.list(PythonObject(-1), PythonObject(1)))
 
 
-def _caller_words(source: PythonObject, admitted: PythonObject, context: PythonObject) raises -> Bool:
-    """Whether the admitted array reads the caller's own buffer (an array
-    admitted without a copy), so the program runner may keep it resident by
-    identity; a converted copy is a per-call temporary."""
-    return (classical_is_array(source, context)
-            and Int(py=classical_address(source)) == Int(py=classical_address(admitted)))
+# TOMBSTONE: _caller_words (the per-call address compare of log_loss's y_proba, on every route; lane
+# vdf-xm-wire) deleted 2026-11-24 by lane vdf-xm-wire2: the runner compares inside resident() only
+# (bindings/arena_prog_native_door.mojo `metric_reads_source`); code recoverable at 82e076645c.
 
 
 def _log_loss_options(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -671,13 +672,14 @@ def _log_loss_options(args: PythonObject, context: PythonObject) raises -> Pytho
     # inputs proba, codes and (weighted) w, pinned in that order
     var prog = MetricDoorProg()
     var put = mc_log_loss_stages(prog.plan, n, k, binary, w is not None, mc_bool(args[2]))
-    # the slot form (lane vdf-xm-wire): y_proba, when the admitted words ARE the caller's buffer, is
-    # read from its resident copy inside resident(); a float32 copy, the codes and the weights are
-    # this call's temporaries
-    prog.pin(proba, _caller_words(args[1], proba, context))
+    # the slot form (lane vdf-xm-wire): y_proba and the weights, when the admitted words ARE the
+    # caller's buffer, are read from their resident copies inside resident(); a converted copy and the
+    # codes are this call's temporaries. The runner compares the buffers inside a scope only (lane
+    # vdf-xm-wire2; was an address compare per call here, `_caller_words`, on every route).
+    prog.pin_arg(proba, args, 1)
     prog.pin(codes, False)
     if w is not None:
-        prog.pin(w, False)
+        prog.pin_arg(w, args, 3)
     var res = put[1]
     var arena = metric_door_run(prog, args[5], context)
     var code = mc_proba_code(arena, put[0])  # put = (FLAGS, result)
@@ -730,7 +732,7 @@ def _log_loss(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var encoded = mc_map_order(true, selected, context)
     var prog = MetricDoorProg()
     var put = mc_log_loss_stages(prog.plan, n, k, binary, False, mc_bool(normalize))
-    prog.pin(proba, _caller_words(args[1], proba, context))  # the caller's buffer: the slot form inside resident() (lane vdf-xm-wire)
+    prog.pin_arg(proba, args, 1)  # the caller's buffer: the slot form inside resident() (lanes vdf-xm-wire, vdf-xm-wire2)
     prog.pin(encoded, False)
     var res = put[1]
     var arena = metric_door_run(prog, args[5], context)
@@ -755,7 +757,8 @@ def mcls_accuracy_fraction(y_true: PythonObject, y_pred: PythonObject, sample_we
     raises as the division did. The same program as accuracy_count's."""
     var pair = mc_pair(y_true, y_pred, sample_weight, "accuracy_score", context, true_admitted, pred_admitted)
     var prog = MetricDoorProg()
-    var s = mc_sums(prog, pair, pair.present, List[McEpi](), context)
+    # no argument tuple here: the weights stay unmarked (kept as the caller's, as before)
+    var s = mc_sums(prog, pair, pair.present, List[McEpi](), PythonObject(None), -1, context)
     var out = mc_count_tail(prog.plan, s, mc_len(pair.present))
     var arena = metric_door_run(prog, numeric_mode, context)
     if s.weighted and arena.i32(out) != 0:

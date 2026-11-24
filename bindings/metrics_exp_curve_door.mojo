@@ -85,11 +85,11 @@ def _curve_out(args: PythonObject, caller: String, kind: Int,
     if n <= 0:
         raise Error("mojolearn metrics: an empty curve has no thresholds")
     var prog = MetricDoorProg()
-    var S = prog.put(s.a)
-    var POS = prog.put_i32(flags)
+    var S = prog.put_arg(s.a, args, 1)
+    var POS = prog.put_temp(flags)  # this call's flags: never kept resident (lane vdf-xm-wire2)
     var W = MX_NONE
     if w is not None:
-        W = prog.put(w)
+        W = prog.put_arg(w, args, 3)
     var order = prog.scratch(n)
     var cnt = prog.scratch(1)
     var fps = prog.scratch(n)
@@ -261,10 +261,10 @@ def _ap_binary(true: MxLab, args: PythonObject, context: PythonObject) raises ->
     # the typed builder (bindings/metrics_exp_curve_run.mojo `ap_binary_stages`,
     # lane mf-score5): its inputs S, POS, W pinned in that order
     var out = ap_binary_stages(prog.plan, n, w is not None)
-    prog.pins.append(s.a)
-    prog.pins.append(flags)
+    prog.pin_arg(s.a, args, 1)
+    prog.pin(flags, False)
     if w is not None:
-        prog.pins.append(w)
+        prog.pin_arg(w, args, 3)
     var arena = metric_door_run(prog, args[4], context)
     return PythonObject(_fold_ap(arena, out))
 
@@ -304,20 +304,20 @@ def _average_precision(args: PythonObject, context: PythonObject) raises -> Pyth
         # `ap_micro_stages`, which the search scorers' RUN calls too; its
         # pins in its input order)
         var out = ap_micro_stages(prog.plan, n, k, w is not None)
-        prog.pins.append(s.a)
-        prog.pins.append(codes)
+        prog.pin_arg(s.a, args, 1)
+        prog.pin(codes, False)
         if w is not None:
-            prog.pins.append(w)
+            prog.pin_arg(w, args, 3)
         var arena = metric_door_run(prog, args[4], context)
         return PythonObject(_fold_ap(arena, out))
     # one-vs-rest: the class-major one-hot flags, the folds and the tail, by
     # the typed builder (bindings/metrics_exp_curve_run.mojo `ap_ovr_stages`,
     # lane mf-score5): its inputs S, C, W pinned in that order
     var o = ap_ovr_stages(prog.plan, n, k, w is not None, average is not None, avg == "weighted")
-    prog.pins.append(s.a)
-    prog.pins.append(codes)
+    prog.pin_arg(s.a, args, 1)
+    prog.pin(codes, False)
     if w is not None:
-        prog.pins.append(w)
+        prog.pin_arg(w, args, 3)
     var arena = metric_door_run(prog, args[4], context)
     if not ap_ovr_edge(arena, o, k):
         if average is None:
@@ -383,10 +383,10 @@ def _top_k(args: PythonObject, context: PythonObject) raises -> PythonObject:
         _ = s.a  # keep the Python object alive through the native read above
     var got = top_k_stages(prog.plan, n, binary, k, s.cols, threshold, w is not None)
     if top_k_reads_scores(binary, k):
-        prog.pins.append(s.a)
-    prog.pins.append(codes)
+        prog.pin_arg(s.a, args, 1)
+    prog.pin(codes, False)  # this call's codes: never kept resident (lane vdf-xm-wire2)
     if w is not None:
-        prog.pins.append(w)
+        prog.pin_arg(w, args, 4)
     var arena = metric_door_run(prog, args[6], context)
     return PythonObject(top_k_value(arena, got[0], got[1], n, mx_truthy(args[3])))
 
@@ -411,11 +411,11 @@ def _ranking_report(args: PythonObject, context: PythonObject) raises -> PythonO
     var weights = mx_weights(args[3], n, "ranking_report", context)
     var flags = mx_map_eq(true, pos, context)
     var prog = MetricDoorProg()
-    var S = prog.put(scores.a)
-    var POS = prog.put_i32(flags)
+    var S = prog.put_arg(scores.a, args, 1)
+    var POS = prog.put_temp(flags)  # this call's flags: never kept resident (lane vdf-xm-wire2)
     var W = MX_NONE
     if weights is not None:
-        W = prog.put(weights)
+        W = prog.put_arg(weights, args, 3)
     var curves = List[Int]()
     for _ in range(2):  # driver-loop: the report's fixed ROC/AP pair
         var order = prog.scratch(n)

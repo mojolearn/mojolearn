@@ -13,7 +13,7 @@
 # same records, same declared outputs as before: the bits do not move.
 from std.python import PythonObject
 from core.metrics_program_plan import MetricProgramPlan
-from bindings.arena_prog_run import MetricArenaOwner, METRIC_INPUT_TEMP
+from bindings.arena_prog_run import MetricArenaOwner, METRIC_TEMP_BITS, metric_source_word
 from bindings.arena_prog_native_door import (
     metrics_run_plan_entries, metrics_run_plan_slots, metric_route_of, metric_route_entries, MetricRoutePin,
 )
@@ -38,11 +38,24 @@ struct MetricDoorProg(Movable):
     #: Empty unless a buffer input is a resident slot (`put_resident`); then
     #: one word per pin, -1 for a host buffer (lane vdf-xm-transport).
     var slots: List[Int]
+    #: Bit i: pin i is a per-call temporary of the door, copied and never kept
+    #: resident (`pin(x, False)`, `put_temp`; lane vdf-xm-wire2). A mask, so
+    #: marking one allocates nothing on the hot path.
+    var temps: UInt64
+    #: 4 bits per pin (`put_arg`): the door call's argument (in `args`) pin i
+    #: was admitted from; inside `resident()` the runner keeps it only when it
+    #: reads that argument's own buffer (bindings/arena_prog_native_door.mojo
+    #: `metric_reads_source`). No allocation: a word and one reference.
+    var src: UInt64
+    var args: PythonObject
 
     def __init__(out self):
         self.plan = MetricProgramPlan()
         self.pins = List[PythonObject]()
         self.slots = List[Int]()
+        self.temps = 0
+        self.src = 0
+        self.args = PythonObject(None)
 
     def alloc(mut self, n: Int) raises -> Int:
         return self.plan.alloc(n)
@@ -56,18 +69,48 @@ struct MetricDoorProg(Movable):
             self.slots.append(-1)
         return off
 
+    def put_temp(mut self, array: PythonObject) raises -> Int:
+        """`put` of a per-call temporary the door made (mapped or encoded
+        codes, a converted or admitted copy, a flag vector): copied into the
+        arena and never kept resident in a `resident()` scope (lane
+        vdf-xm-wire2: under `put` it was put on the device every call and
+        pinned until the block ended)."""
+        var off = self.plan.input(Int(py=array.size))
+        self.pin(array, False)
+        return off
+
+    def put_arg(mut self, array: PythonObject, args: PythonObject, argument: Int) raises -> Int:
+        """`put` of an array admitted from `args[argument]` of the door's
+        call: the caller's own buffer when admission made no copy (kept
+        resident inside a scope, as before), else a per-call temporary
+        (never kept; lane vdf-xm-wire2). Decided by the runner inside a
+        scope only; nothing is compared here."""
+        var off = self.plan.input(Int(py=array.size))
+        self.pin_arg(array, args, argument)
+        return off
+
+    def pin_arg(mut self, array: PythonObject, args: PythonObject, argument: Int):
+        """`pin(array, True)` naming the argument it was admitted from
+        (`put_arg`)."""
+        self.src |= metric_source_word(len(self.pins), argument)
+        self.args = args
+        self.pin(array, True)
+
     def pin(mut self, array: PythonObject, keep: Bool):
         """Pin a buffer input a typed builder already laid out, in input
         order. `keep` False: a per-call temporary of the door (encoded codes,
         admitted weights) that the runner copies and never keeps resident in
-        a `resident()` scope (`METRIC_INPUT_TEMP`); True: the caller's own
-        buffer, which the runner reads from its resident copy inside a scope
-        (put once per scope, found again by identity; lane vdf-xm-wire)."""
-        if not keep and len(self.slots) == 0:
-            self.slots = List[Int](length=len(self.pins), fill=-1)
+        a `resident()` scope (the `temps` bit; an input past
+        `METRIC_TEMP_BITS` is kept as a host input, as before); True: the
+        caller's own buffer, which the runner reads from its resident copy
+        inside a scope (put once per scope, found again by identity; lane
+        vdf-xm-wire)."""
+        var i = len(self.pins)
+        if not keep and i < METRIC_TEMP_BITS:
+            self.temps |= UInt64(1) << UInt64(i)
         self.pins.append(array)
         if len(self.slots) > 0:
-            self.slots.append(-1 if keep else METRIC_INPUT_TEMP)
+            self.slots.append(-1)
 
     def put_resident(mut self, owner: PythonObject, words: Int, slot: Int) raises -> Int:
         """A buffer input already on the route image's resident store: `words`
@@ -139,6 +182,21 @@ def metric_plan_run(plan: MetricProgramPlan, pins: List[PythonObject], mode: Pyt
     return metrics_run_plan_entries(plan, pins, _door_entries(mode, context), prog_context)
 
 
+def metric_plan_run_from(plan: MetricProgramPlan, pins: List[PythonObject], temps: UInt64, src: UInt64,
+                         args: PythonObject, mode: PythonObject, context: PythonObject) raises -> MetricArenaOwner:
+    """`metric_plan_run` with the pins' residency words: `temps` (bit i: pin
+    i is this call's temporary, never kept resident) and the sources word
+    `src` over the door call's arguments `args`
+    (bindings/arena_prog_run.mojo `metric_source_word`: inside `resident()`
+    a pin that is a converted copy of its argument is a temporary too; lane
+    vdf-xm-wire2). Outside a scope nothing is compared: the same run as
+    `metric_plan_run`."""
+    var nk = metrics_keys()
+    var prog_context = py_item(context, nk[].k_family_metrics_prog_context)
+    return metrics_run_plan_slots(plan, pins, List[Int](), temps, src, args, _door_entries(mode, context),
+                                  prog_context)
+
+
 def _door_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
     """The connected x_metrics image a door program of `context` runs on
     (`metric_plan_run`): the CPU label scope's entries, else `mode`'s."""
@@ -164,10 +222,11 @@ def metric_route_open(mode: PythonObject, context: PythonObject) raises -> Metri
 
 def metric_door_run(prog: MetricDoorProg, mode: PythonObject, context: PythonObject) raises -> MetricArenaOwner:
     """`_run(prog, numeric_mode)` of a door program."""
-    if len(prog.slots) > 0:
+    if len(prog.slots) > 0 or prog.temps != 0 or prog.src != 0:
         var nk = metrics_keys()
         var prog_context = py_item(context, nk[].k_family_metrics_prog_context)
-        return metrics_run_plan_slots(prog.plan, prog.pins, prog.slots, _door_entries(mode, context), prog_context)
+        return metrics_run_plan_slots(prog.plan, prog.pins, prog.slots, prog.temps, prog.src, prog.args,
+                                      _door_entries(mode, context), prog_context)
     return metric_plan_run(prog.plan, prog.pins, mode, context)
 
 

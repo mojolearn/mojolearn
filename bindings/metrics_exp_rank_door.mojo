@@ -47,16 +47,18 @@ from bindings.metrics_exp_common_unpack import (
 # bindings/metrics_exp_rank_run.mojo 2026-11-12 by lane metric-programs-2; code recoverable at 4f5a5ae6d8.
 
 
-def _pin_weights(mut prog: MetricDoorProg, w: PythonObject):
-    """Pin the weights a typed fold declared as the plan's next input."""
+def _pin_weights(mut prog: MetricDoorProg, w: PythonObject, args: PythonObject, w_arg: Int):
+    """Pin the weights a typed fold declared as the plan's next input,
+    admitted from `args[w_arg]` (a converted copy is never kept resident;
+    lane vdf-xm-wire2)."""
     if w is not None:
-        prog.pins.append(w)
+        prog.pin_arg(w, args, w_arg)
 
 
 def _row_mean(mut prog: MetricDoorProg, S: Int, cols: Int, Y: Int, n: Int, kind: Int, w: PythonObject,
-              K: Int, Dt: Int, normalize: Bool, half: Bool) raises -> Int:
+              K: Int, Dt: Int, normalize: Bool, half: Bool, args: PythonObject, w_arg: Int) raises -> Int:
     var res = row_mean_stage(prog.plan, S, cols, Y, n, kind, w is not None, K, Dt, normalize, half)
-    _pin_weights(prog, w)
+    _pin_weights(prog, w, args, w_arg)
     return res
 
 
@@ -137,9 +139,9 @@ def _brier(args: PythonObject, context: PythonObject) raises -> PythonObject:
     # lane mf-score5): its inputs (the probabilities, the codes, the
     # weights) pinned in that order
     var got = brier_stages(prog.plan, p.shape, w is not None, half)
-    prog.pins.append(p.a)
-    prog.pins.append(p.codes)
-    _pin_weights(prog, w)
+    prog.pin_arg(p.a, args, 1)
+    prog.pin(p.codes, False)
+    _pin_weights(prog, w, args, 2)
     var arena = metric_door_run(prog, args[6], context)
     proba_check(arena, got[0], caller)
     return PythonObject(arena.f64(got[1]))
@@ -158,9 +160,9 @@ def _d2_proba(args: PythonObject, caller: String, logloss: Bool, context: Python
     # its input order (the probabilities, the codes, the weights)
     var prog = MetricDoorProg()
     var got = d2_proba_stages(prog.plan, p.shape, w is not None, logloss)
-    prog.pins.append(p.a)
-    prog.pins.append(p.codes)
-    _pin_weights(prog, w)
+    prog.pin_arg(p.a, args, 1)
+    prog.pin(p.codes, False)
+    _pin_weights(prog, w, args, 2)
     var arena = metric_door_run(prog, args[5], context)
     proba_check(arena, got[0], caller)
     return PythonObject(arena.f64(got[1]))
@@ -188,20 +190,20 @@ def _hinge(args: PythonObject, context: PythonObject) raises -> PythonObject:
         # lane mf-score8: ONE BODY, bindings/metrics_exp_rank_run.mojo
         # `hinge_stages` (the search scorers' RUN calls it too); its pins in
         # its input order (the decision values, the codes, the weights)
-        prog.pins.append(s.a)
-        prog.pins.append(codes)
+        prog.pin_arg(s.a, args, 1)
+        prog.pin(codes, False)
         var res = hinge_stages(prog.plan, n, s.cols, True, False, w is not None)
-        _pin_weights(prog, w)
+        _pin_weights(prog, w, args, 3)
         var arena = metric_door_run(prog, args[4], context)
         return PythonObject(arena.f64(res))
     if s.ndim == 2 and s.cols != 1:
         raise Error("pred_decision must be 1-D for a binary target")
-    prog.pins.append(s.a)
+    prog.pin_arg(s.a, args, 1)
     if nu == 2:
-        prog.pins.append(mx_map_eq(true, uniq[nu - 1], context))
+        prog.pin(mx_map_eq(true, uniq[nu - 1], context), False)
     # nu 1: all-zero codes, program-owned words (`hinge_stages(zero_codes)`)
     var res = hinge_stages(prog.plan, n, 1, False, nu != 2, w is not None)
-    _pin_weights(prog, w)
+    _pin_weights(prog, w, args, 3)
     var arena = metric_door_run(prog, args[4], context)
     return PythonObject(arena.f64(res))
 
@@ -252,11 +254,11 @@ def _dcg(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var c = r[0].cols
     var w = mx_weights(args[4], n, caller, context)
     var prog = MetricDoorProg()
-    var S = prog.put(r[1].a)
-    var Y = prog.put(r[0].a)
+    var S = prog.put_arg(r[1].a, args, 1)
+    var Y = prog.put_arg(r[0].a, args, 0)
     var Dt = _dcg_table(prog, c, args[3], context)
     var kind = _ROW_DCG_IGNORE_TIES if mx_truthy(args[5]) else _ROW_DCG
-    var res = _row_mean(prog, S, c, Y, n, kind, w, _top_k_param(args[2]), Dt, True, False)
+    var res = _row_mean(prog, S, c, Y, n, kind, w, _top_k_param(args[2]), Dt, True, False, args, 4)
     var arena = metric_door_run(prog, args[6], context)
     return PythonObject(arena.f64(res))
 
@@ -273,8 +275,8 @@ def _ndcg(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var w = mx_weights(args[3], n, caller, context)
     var K = _top_k_param(args[2])
     var prog = MetricDoorProg()
-    var S = prog.put(r[1].a)
-    var Y = prog.put(r[0].a)
+    var S = prog.put_arg(r[1].a, args, 1)
+    var Y = prog.put_arg(r[0].a, args, 0)
     var neg = prog.scan_flag(Y, n * c, _SCAN_NEGATIVE)
     var Dt = _dcg_table(prog, c, PythonObject(2), context)
     var gain = prog.scratch(n)
@@ -288,7 +290,7 @@ def _ndcg(args: PythonObject, context: PythonObject) raises -> PythonObject:
     prog.stage("pair_key", n, [0, 0, zero, 1, 2])
     var W = MX_NONE
     if w is not None:
-        W = prog.put(w)
+        W = prog.put_arg(w, args, 3)
     var tot = prog.group(zero, n, 1, ratio, 1, W, 1)[1]
     var sw = MX_NONE
     if w is not None:
@@ -309,10 +311,10 @@ def _label_ranking(args: PythonObject, kind: Int, caller: String, context: Pytho
     var c = r[0].cols
     var w = mx_weights(args[2], n, caller, context)
     var prog = MetricDoorProg()
-    var S = prog.put(r[1].a)
-    var Y = prog.put(r[0].a)
+    var S = prog.put_arg(r[1].a, args, 1)
+    var Y = prog.put_arg(r[0].a, args, 0)
     var flag = prog.scan_flag(Y, n * c, _SCAN_INDICATOR)
-    var res = _row_mean(prog, S, c, Y, n, kind, w, 0, MX_NONE, True, False)
+    var res = _row_mean(prog, S, c, Y, n, kind, w, 0, MX_NONE, True, False, args, 2)
     var arena = metric_door_run(prog, args[3], context)
     if arena.i32(flag) != 0:
         raise Error(caller + " requires a binary label indicator y_true")
