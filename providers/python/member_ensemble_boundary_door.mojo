@@ -4548,9 +4548,10 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         # SCORING None over kinds without MEMBER_OP_SCORE (lane mf-rows8c): every
         # candidate is the base's class, so one typed scorer scores them all,
         # the one the class's `score` is: 'accuracy' of predict (a classifier,
-        # an outlier detector) or 'r2' of predict (a regressor), the metric
-        # program the class's own score runs (its door predicts, then the
-        # x_metrics accuracy / R^2 program).
+        # an outlier detector) or 'r2' of predict (a regressor), what the
+        # class's own score runs (its door predicts, then the exact accuracy
+        # fraction, or the public r2_score's float32 kernel: lane w3-fix-6,
+        # core/msel_scorer_run.mojo `_kernel_row`).
         var lacking = False
         for c in range(len(nested.masks)):  # small-loop(the candidates' masks)
             lacking = lacking or (nested.masks[c] & MEMBER_CAN_SCORE) == 0

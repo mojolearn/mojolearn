@@ -415,7 +415,8 @@ struct MselScorer(ImplicitlyCopyable, Movable):
     # `_r2` / `_regression_error`; here `kernel`, core/metrics_entry_table.mojo,
     # `kernel_ok` when the candidate's image publishes it, set per score by
     # the search RUN). `own`: the row is the class's own `score` (scoring=None,
-    # whose program is the class's, `_own_score`), never the public metric's.
+    # `_own_score`): a classifier's exact accuracy fraction; a regressor's R^2
+    # is the public kernel, as its class's `score` (lane w3-fix-6, `_kernel_row`).
     var kernel: EntryRef
     var kernel_ok: Bool
     var own: Bool
@@ -476,8 +477,17 @@ def _kernel_row(row: MselScorer, w: Int, cols: Int, count: Int) -> Bool:
     """A named regression row the public metric answers with its float32
     kernel (`MselScorer.kernel`): r2 / MSE / MAE / RMSE of the default tier,
     unweighted, one output, uniform_average, force_finite (r2), and r2 over
-    at least two rows (fewer: the program's NaN and warning)."""
-    if not row.kernel_ok or row.own or row.tier != 0 or w != 0 or cols > 1 or row.outs > 1:
+    at least two rows (fewer: the program's NaN and warning).
+
+    LANE w3-fix-6: the class's own score (scoring=None, `row.own`) over a
+    regressor is that class's `score`, the public `r2_score` of its float32
+    prediction (bindings/neighbors_knn_native_door.mojo `_reg_score`,
+    bindings/trees_public_score_door.mojo `trees_r2`): the same kernel.
+    REMOVED: `row.own` among the exits below, which kept scoring=None on
+    the float64 R^2 program and so off the class's own `score` in the last
+    bits (test_mf_rows8c `test_scoring_none_regressor_without_member_score_is_r2`).
+    `row.own` still keeps the classifiers' exact accuracy fraction."""
+    if not row.kernel_ok or row.tier != 0 or w != 0 or cols > 1 or row.outs > 1:
         return False
     if row.mo != REG_MO_UNIFORM or row.param_given or row.ids or row.lv_n > 0 or row.op != MEMBER_OP_PREDICT:
         return False

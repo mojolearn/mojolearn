@@ -196,7 +196,8 @@ struct MselOtherTier(Copyable, Movable, Defaultable):
     # default tier's device image), resolved ONCE by the UNPACK; `kernel_ok`
     # 0: that image publishes none (the scorer then runs the x_metrics
     # program, as before). `own_score`: the one scorer is the class's own
-    # `score` (scoring=None, `_own_score`), whose program is the class's.
+    # `score` (scoring=None, `_own_score`): a classifier's exact accuracy
+    # fraction, a regressor's public R^2 kernel (core/msel_scorer_run.mojo `_kernel_row`).
     var kernels: List[EntryRef]
     var kernel_ok: List[UInt8]
     var own_score: Bool
@@ -2006,7 +2007,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                     # lane w3f3-c: the public metric's default-option kernel of
                     # this candidate's metrics image (MselOtherTier.kernels,
                     # resolved once by the UNPACK); the class's own score
-                    # (scoring=None) keeps its program
+                    # (scoring=None) keeps a classifier's exact fraction
                     var cand_k = (u0 + t // sides) // used
                     if cand_k < len(plan.other.kernel_ok) and plan.other.kernel_ok[cand_k] != UInt8(0):
                         scored.kernel = plan.other.kernels[cand_k]
