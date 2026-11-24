@@ -487,7 +487,12 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         scratch = max(scratch, idn_tree_scratch_words(host_q, stages))
     # lane fx-env-dead (2026-11-18): were the run-time env reads MOJOLEARN_XPREP_MI_SORTED=0 /
     # MOJOLEARN_XPREP_MI_TIES=0 per program run; now build defines, default unchanged (on), A/B owed.
-    var mi_sorted = not is_defined["MOJOLEARN_XPREP_FAST_MI_SORTED_OFF"]()
+    # Measured (A/B nvc-ab-20261124T115722Z-d8f8b2, NVIDIA L40S, wheel 4519097d380a, job nvc1-0003):
+    # without the sorted search (every OP_MI_CD on the n^2 unit) select-mutual-info istella fit
+    # 498 -> 18292 ms (36.7x), taxi 7.6x, 4 cells median 4.30; the sorted search is the only device
+    # route for OP_MI_CD. AMD not measured (NVIDIA-only campaign).
+    # TOMBSTONE: MOJOLEARN_XPREP_FAST_MI_SORTED_OFF (old path LOSER: NV L40S 4 cells, median 4.30, select-mutual-info istella fit 498 -> 18292 ms, 36.7x, taxi 7.6x) deleted 2026-11-24 by lane/o3-prep (lane ab-outcome-3); code recoverable at 344c99c579.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_MI_SORTED_OFF.ab-outcome-3.patch
     var mi_ties = not is_defined["MOJOLEARN_XPREP_FAST_MI_TIES_OFF"]()
     var mi_w = 1
     var mi_u = 1
@@ -531,8 +536,8 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     var dpt = ctx.enqueue_create_buffer[DType.float32](ptw)
     var dcg = ctx.enqueue_create_buffer[DType.float32](cov_words)
     var dre = ctx.enqueue_create_buffer[DType.float32](rre_scr)
-    var dmw = ctx.enqueue_create_buffer[DType.uint64](mi_w if mi_sorted else 1)
-    var dmu = ctx.enqueue_create_buffer[DType.uint32](mi_u if mi_sorted else 1)
+    var dmw = ctx.enqueue_create_buffer[DType.uint64](mi_w)
+    var dmu = ctx.enqueue_create_buffer[DType.uint32](mi_u)
     var out_n = out_len if out_addr != 0 and out_len > 0 else 0
     var out_at = arena_len + max(scratch_len, 0)
     var dev_len = out_at + out_n
@@ -583,7 +588,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             continue
         var qp = dq.unsafe_ptr() + (s * STAGE_INTS + 2)
         comptime if MI_CLF_RANKMAJOR:
-            if mi_sorted and mi_ties and op == OP_MI_CD:
+            if mi_ties and op == OP_MI_CD:
                 var hq = host_q + (s * STAGE_INTS + 2)
                 mi_cd_device_rank(ctx, df, dmw, dmu, dq, s * STAGE_INTS + 2, total, Int(hq[1]), Int(hq[2]),
                                   Int(hq[0]), Int(hq[7]))
@@ -600,7 +605,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                 continue
         # TOMBSTONE: MOJOLEARN_MI_FAST_FOLDS (DROP speed + quality) deleted 2026-10-09 on lane/owed-deletions-D2;
         # code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_MI_FAST_FOLDS.patch
-        if mi_sorted and op == OP_MI_CD:
+        if op == OP_MI_CD:
             var hq = host_q + (s * STAGE_INTS + 2)
             mi_cd_device(ctx, df, dmw, dmu, dq, s * STAGE_INTS + 2, total, Int(hq[1]), Int(hq[2]), Int(hq[0]),
                          Int(hq[7]), mi_ties)
