@@ -568,3 +568,49 @@ def log_loss_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: Int, w: 
     if code == 3:
         raise Error("log_loss probabilities rows must sum to one within sqrt(float32 eps)")
     return arena.f64(got[1])
+
+
+# ---------------------------------------------------------------- the COUNT tail over typed codes
+# Lane mf-fitadm7 (2026-11-23): zero_one_loss and hamming_loss (1-D) as a
+# typed RUN, the program bindings/metrics_exp_cls_door.mojo `_cm_count`
+# assembles: the sums over the present labels (`_sums(pair, pair.present)`,
+# here `label_present_codes` + `mc_sums_stages`) and the COUNT tail
+# (`_cm_stage(..., _CM_COUNT, 11)`, here `mc_count_tail`). Same stages in
+# the same order; the search scorers' RUN (core/msel_scorer_run.mojo) calls it.
+#: `label_count_run`'s answers (the COUNT slot's words the doors read).
+comptime CNT_LOSS = 0       # f64 at +6: the normalized loss (zero_one normalize=True, hamming_loss)
+comptime CNT_COUNT = 1      # zero_one normalize=False: i32 at +10 (counts) or f64 at +4 (weighted)
+
+
+def label_count_run(route: MetricRoute, answer: Int, truth: Int, pred: Int, n: Int, k: Int, w: Int,
+                    mut zero_div: Bool) raises -> Float64:
+    """THE TYPED RUN of the COUNT tail over n int32 true and predicted class
+    codes in 0 .. k-1 (the caller keeps both alive) and, `w` != 0, n float32
+    sample weights (the sums' third input). `answer` CNT_LOSS: the
+    misclassified fraction (zero_one_loss normalize=True, hamming_loss on 1-D
+    targets); CNT_COUNT: the misclassified count (an integer for unweighted
+    codes, the weighted sum otherwise). `zero_div`: the slot's zero-total
+    flag for CNT_LOSS (the caller raises the door's ZeroDivisionError words).
+    No Python."""
+    zero_div = False
+    var mt = List[Int32]()
+    var mp = List[Int32]()
+    var labels = label_present_codes(truth, pred, n, k, mt, mp)
+    var weighted = w != 0
+    var plan = MetricProgramPlan()
+    var s = mc_sums_stages(plan, n, labels, weighted)
+    var out = mc_count_tail(plan, s, labels)
+    var addresses: List[Int] = [Int(mt.unsafe_ptr()), Int(mp.unsafe_ptr())]
+    var sizes: List[Int] = [n, n]
+    if weighted:
+        addresses.append(w)
+        sizes.append(n)
+    var arena = metric_inputs_run(route, plan, addresses, sizes)
+    _ = len(mt)  # the program's inputs were copied from these codes above
+    _ = len(mp)
+    if answer == CNT_LOSS:
+        zero_div = arena.i32(out) != 0
+        return arena.f64(out + 6)
+    if weighted:
+        return arena.f64(out + 4)
+    return Float64(arena.i32(out + 10))

@@ -145,7 +145,7 @@ from bindings.family_common_pack import family_array
 from core.member_abi import MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION
 from core.msel_scorer_run import (
     msel_scorer_code, msel_scorer_row, msel_scorer_regression, msel_scorer_positive, msel_scorer_positive_kind,
-    SCORER_POSITIVE_LABEL_ONE, SCORER_POSITIVE_MARKS, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND,
+    msel_scorer_metric_code, SCORER_POSITIVE_LABEL_ONE, SCORER_POSITIVE_MARKS, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND,
     SCORER_POSITIVE_MIXED,
     msel_scorer_cluster, msel_scorer_cluster_entry, msel_scorer_top_k, msel_scorer_ap, msel_scorer_brier,
     msel_scorer_label_row, msel_scorer_f_row, msel_scorer_group_words, MselScorerOptions,
@@ -273,8 +273,10 @@ def _active(fields: PythonObject, b: PythonObject) raises -> _Active:
 
 
 def _stack_method(fields: PythonObject, est: PythonObject, classifier: Bool, context: PythonObject) raises -> Int:
-    """`_StackingBase._method` (the door's `_stack_method`): -1 for a value
-    the door refuses."""
+    """`_StackingBase._method` (the door's `_stack_method`). A value the
+    door refuses raises its words (lane mf-fitadm7; bindings/
+    trees_meta_validate_unpack.mojo `meta_stacking_validate`, one wording):
+    before, -1 and the caller kept the door, which raised them."""
     var method = py_get(fields, "stack_method")
     var name = String("auto") if method is None else String(method)
     if name == "auto":
@@ -290,7 +292,7 @@ def _stack_method(fields: PythonObject, est: PythonObject, classifier: Bool, con
         return STACK_DECISION
     if name == "predict":
         return STACK_PREDICT
-    return -1
+    raise Error("stack_method must be auto, predict_proba, decision_function or predict")
 
 
 def _stack_need(kind: Int) -> Int:
@@ -744,8 +746,6 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
             # A classifier stacked with stack_method='predict' writes its
             # predicted codes (core/ensemble_member.mojo `_label_block`).
             var method = _stack_method(fields, active.ests[i], classifier, context)
-            if method < 0:
-                return False
             stack_kinds.append(method)
             if not _admit_nested(done, nested, active.ests[i], classifier, base_needs | _stack_need(method), context, b,
                                  child):
@@ -878,7 +878,9 @@ def _finish(fields: PythonObject, context: PythonObject, b: PythonObject, mut ow
             var words: List[Float64], var fold_train: List[List[Int32]], var fold_test: List[List[Int32]]) raises -> Bool:
     """The admission's tail for every kind: the x_trees image's route, the
     nested plans minted once into the plan store (released by the capsule
-    kept in the owner's pins), the parameter words."""
+    kept in the owner's pins), the parameter words. Never answers False
+    (lane mf-fitadm7, read: an image that is not connected raises
+    `_trees_key`'s words), so no caller's door is reached through it."""
     var cap = _cap_of(fields, b)
     var key = _trees_key(fields, context, b)
     var device = DEVICE_CPU
@@ -2803,6 +2805,41 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                                                                py_call(b.getattr, got, PythonObject("_sign")))))
             kw = mine_kw^
             return name
+        # THE METRIC ROWS (lane mf-fitadm7; core/msel_scorer_run.mojo
+        # `msel_scorer_metric_code`): a make_scorer over a connected metric
+        # no get_scorer name holds, response 'predict', whose kwargs are
+        # only the ones its typed row reads: zero_one_loss's `normalize` (an
+        # exact bool), `sample_weight` (data, read once as the other rows'),
+        # `numeric_mode` None. Its row's sign is the metric's value: the
+        # flip is greater_is_better=False.
+        var plan = py_get(context["family_msel_metric_plans"], func)
+        if plan is None or py_type(got_method) is not b.str or String(py=got_method) != "predict":
+            return String("")
+        var metric = String(py=plan["name"])
+        var normalize = True
+        var metric_kw = _ScorerKw()
+        var given = py_call(b.list, py_call(got_kwargs.items))
+        for q in range(len(given)):  # small-loop(the scorer's options, once per admission)
+            var word = String(py=given[q][0]) if py_type(given[q][0]) is b.str else String("")
+            var value = given[q][1]
+            if word == "normalize" and metric == "zero_one_loss":
+                if py_type(value) is not b.bool:
+                    return String("")  # the metric's "normalize must be a bool": the door's words per side
+                normalize = Bool(py=value)
+            elif word == "sample_weight":
+                if value is not None:
+                    metric_kw.weights = value
+            elif word == "numeric_mode":
+                if value is not None:
+                    return String("")
+            else:
+                return String("")
+        var code = msel_scorer_metric_code(metric, normalize)
+        if code < 0:
+            return String("")
+        metric_kw.flip = Int(py=py_call(b.int, py_call(b.getattr, got, PythonObject("_sign")))) != 1
+        kw = metric_kw^
+        return String(msel_scorer_row(code).name)
     except:
         return String("")  # options no exact comparison reads: the door
     return String("")
@@ -3429,20 +3466,19 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var kind = META_SEARCH_CLASSIFIER if classifier else META_SEARCH_REGRESSOR
     # The META entry and its glue run on an x_trees image: the search's own
     # context is model selection's, so the image is the one the meta classes'
-    # context names (`_finish` reads its bindings; not loaded: the door).
+    # context names (`_finish` reads its bindings).
     var trees = py_call(native_loaded_module("sys").modules.get, PythonObject("mojolearn._expansion_trees"))
     if trees is None:
         # not imported yet (lane mf-ens6b): imported once, as the metrics
-        # module is below, where the door kept the search before; an image
-        # that is not built (its ImportError) keeps the door's units
-        try:
-            trees = py_call(native_loaded_module("importlib").import_module,
-                            PythonObject("mojolearn._expansion_trees"))
-        except:
-            return False
+        # module is below. AN IMAGE THAT IS NOT BUILT (lane mf-fitadm7): its
+        # loader's ImportError is raised as it stands (no image can run the
+        # search kind; before, the door's units fitted it).
+        trees = py_call(native_loaded_module("importlib").import_module, PythonObject("mojolearn._expansion_trees"))
     var trees_context = py_get(py_call(b.vars, trees), "_TREES_CONTEXT")
     if trees_context is None:
-        return False  # the x_trees image is not built: the door's units (no META image to run on)
+        # the x_trees image is not connected (lane mf-fitadm7): `_trees_key`'s
+        # words, the refusal every meta estimator's own fit raises
+        raise Error("ImportError: mojolearn: _mojolearn_x_trees is not connected to the tree owner")
     # THE CLUSTER LABEL-PAIR ENTRY (lane mf-cluster5): the default-mode
     # metrics image the public doors resolve (`estimator_binding_mode`), its
     # key read and its entry resolved ONCE; the image is pinned below. Not
@@ -4081,6 +4117,10 @@ def _admit_multi(fields: PythonObject, kind: Int, context: PythonObject, b: Pyth
     var classifier = kind == META_MULTI_CLASSIFIER
     var base = py_get(fields, "estimator")
     if base is None:
+        # NO BASE (lane mf-fitadm7): the door's `_require_member` refusal, in
+        # its words (its fit refuses None before any column is fitted).
+        prep_estimator_admit(base, String("MultiOutputClassifier") if classifier else String("MultiOutputRegressor"),
+                             context)
         return False
     if not classifier and not owner.serving:
         var defaults = py_get(context, "native_estimator_defaults")
