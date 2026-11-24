@@ -250,6 +250,10 @@ from core.device_route import DEVICE_GPU
 from core.member_fold_x import (
     MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_take_view, member_fold_store_ready,
 )
+# lane vdf-scope-cluster5: THE FITTED-ROWS SLOT (the fold's rows kept resident by the fitted state).
+from core.member_fold_x import member_fold_index, member_fold_take_f32
+from core.entry_table import EntryRef, entry_ref_unresolved
+from bindings.arena_cache_run import arena_cache_free
 from core.member_families import MEMBER_FAMILY_XNEIGHBORS
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -405,6 +409,13 @@ struct XNeighborsMemberSlot(Copyable, Movable, Defaultable):
     var offset: Float64
     var rows_addr: Int
     var fit_rows: List[Float32]
+    # THE FITTED-ROWS SLOT (lane vdf-scope-cluster5): a model-selection fold fit on a GPU route keeps its fold's
+    # rows resident in the slot of the x_prep store it took them into (`rows_slot`, of `rows_store`; -1: none),
+    # and `rows_addr` is that slot's negative X address word (core/fold_x_word.mojo), read device to device by
+    # every x_neighbors op. The state owns the slot until its next fit, import or free; `fit_rows` is then only
+    # the host copy an export downloaded.
+    var rows_slot: Int
+    var rows_store: EntryRef
     var distances: List[Float32]
     var densities: List[Float32]
     var scores: List[Float32]
@@ -561,6 +572,8 @@ struct XNeighborsMemberSlot(Copyable, Movable, Defaultable):
         self.offset = 0.0
         self.rows_addr = 0
         self.fit_rows = List[Float32]()
+        self.rows_slot = -1
+        self.rows_store = entry_ref_unresolved()
         self.distances = List[Float32]()
         self.densities = List[Float32]()
         self.scores = List[Float32]()
@@ -700,6 +713,10 @@ def _slot_address(index: Int) raises -> Int:
 
 def _clear(slot: _SlotPtr):
     slot[].fitted = False
+    try:
+        _rows_dev_free(slot)
+    except:
+        slot[].rows_slot = -1  # the store is gone with its image (process teardown): nothing left to free
     slot[].given = List[Float64]()
     slot[].centroids = List[Float32]()
     slot[].std = List[Float32]()
@@ -1158,6 +1175,184 @@ def _nc_import(slot: _SlotPtr, call: _CallPtr) raises:
 # ------------------------------------------------------------ LocalOutlierFactor
 
 
+# ------------------------------------------------------------ THE FITTED-ROWS SLOT (lane vdf-scope-cluster5)
+
+#: Rows of one host task of the export's index fill.
+comptime _ROWS_IOTA_CHUNK = 16384
+
+
+def _rows_dev_free(slot: _SlotPtr) raises:
+    """Free the state's fitted-rows slot (its next fit, import or free); a host-borrowed or owned state has none."""
+    if slot[].rows_slot >= 0:
+        var held = slot[].rows_slot
+        slot[].rows_slot = -1
+        arena_cache_free(slot[].rows_store, held)
+
+
+def _rows_view(slot: _SlotPtr) -> Int:
+    """The host address an export of the fitted rows answers: the downloaded copy of a resident state, else the
+    borrowed or owned rows."""
+    if slot[].rows_slot >= 0:
+        return Int(slot[].fit_rows.unsafe_ptr())
+    return slot[].rows_addr
+
+
+def _rows_dev_download(slot: _SlotPtr, call: _CallPtr, count: Int) raises -> List[Float32]:
+    """The resident fitted rows downloaded once for an export: the image's `take_rows` op over the slot word
+    (one device-to-device read of the slot, the rows in order, then the op's download), bit for bit. Only the
+    `rows` int32 index words cross the bus to the device (filled in row chunks across the host's cores)."""
+    var rows = slot[].rows
+    var host = List[Float32](length=count, fill=Float32(0.0))
+    if count == 0:
+        return host^
+    var index = List[Int32](length=rows, fill=Int32(0))
+    var at = Int(index.unsafe_ptr())
+    var tasks = (rows + _ROWS_IOTA_CHUNK - 1) // _ROWS_IOTA_CHUNK
+
+    def _iota(t: Int) {imm at, imm rows}:
+        var o = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=at)
+        var lo = t * _ROWS_IOTA_CHUNK
+        var hi = min(rows, lo + _ROWS_IOTA_CHUNK)
+        for r in range(lo, hi):  # the task's rows (one chunk of the split)
+            o[r] = Int32(r)
+
+    host_parallelize(_iota, tasks)
+    var a: Array[Int, 3] = [slot[].rows_addr, Int(index.unsafe_ptr()), Int(host.unsafe_ptr())]
+    var p: Array[Int, 3] = [rows, slot[].features, rows]
+    var f: Array[Float64, 0] = []
+    _ = XnDriver(call[].route.entry.call).run("take_rows", a, p, f)
+    _ = len(index)
+    return host^
+
+
+def _rows_fold_kind(kind: Int) -> Bool:
+    """The kinds that keep the fit X as their fitted rows and read X ONLY through the x_neighbors ops' uploads
+    (`_buf`, `_up_direct`, `op_knn_sq_tiled`: THE FOLD X WORD), so a fold fit keeps its rows in THE FITTED-ROWS
+    SLOT: LocalOutlierFactor and KernelPCA (lane vdf-scope-cluster5). OneClassSVM reads X the same way (gamma's
+    variance, the Gram / resident solve, its query ops) and gathers its support vectors ON THE DEVICE from the
+    fold slot (`oc_take_rows_into`: the x_neighbors `take_rows` op over the fold word; only supports x features
+    words come back, into the state's own vectors), so its fold slot is freed after the call. LabelPropagation /
+    LabelSpreading and the KNNImputer are not audited for host reads of X (`lp_fit_run`, the imputer's masked
+    copy and NaN cells): the caller gathers (vdf-scope-cluster5-RESULT.md)."""
+    return kind == XNEIGHBORS_KIND_LOF or kind == XNEIGHBORS_KIND_KERNEL_PCA or kind == XNEIGHBORS_KIND_OCSVM
+
+
+def _rows_kept(kind: Int) -> Bool:
+    """The `_rows_fold_kind` kinds whose fitted state reads its fit rows past the fit (THE FITTED-ROWS SLOT)."""
+    return kind == XNEIGHBORS_KIND_LOF or kind == XNEIGHBORS_KIND_KERNEL_PCA
+
+
+def _rows_fold_kp_host(slot: _SlotPtr, rows: Int) -> Bool:
+    """A KernelPCA fit whose route is the eigensolver's resident one (`KPCAFitRoute.resident`): that entry
+    reads the fit X as host words (`KPCAEigenRequest.source`), so the fold's rows are taken on the host into
+    the state's own `fit_rows` (bit for bit, row chunks across the host's cores) and the state owns them."""
+    if slot[].kind != XNEIGHBORS_KIND_KERNEL_PCA:
+        return False
+    return KPCAFitRoute(rows, slot[].kp_requested, slot[].kp_kernel, slot[].kp_auto, slot[].kp_resident).resident
+
+
+def _rows_fold_operation(kind: Int, operation: Int) -> Bool:
+    """The operations `_rows_fold_op` serves for a `_rows_fold_kind` kind (every other one refuses a row index
+    through the kind's own `_whole`)."""
+    if operation == MEMBER_OP_FIT:
+        return True
+    if kind == XNEIGHBORS_KIND_LOF or kind == XNEIGHBORS_KIND_OCSVM:
+        return (operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_DECISION
+                or operation == MEMBER_OP_SCORE_SAMPLES)
+    return operation == MEMBER_OP_TRANSFORM
+
+
+def _rows_fold_dispatch(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
+    if slot[].kind == XNEIGHBORS_KIND_LOF:
+        if operation == MEMBER_OP_FIT:
+            _lof_fit(slot, call)
+        elif operation == MEMBER_OP_PREDICT:
+            _lof_query(slot, call, LOF_RESULT_LABELS, "predict")
+        elif operation == MEMBER_OP_DECISION:
+            _lof_query(slot, call, LOF_RESULT_DECISION, "decision_function")
+        else:
+            _lof_query(slot, call, LOF_RESULT_SCORES, "score_samples")
+    elif slot[].kind == XNEIGHBORS_KIND_OCSVM:
+        if operation == MEMBER_OP_FIT:
+            _oc_fit(slot, call)
+        elif operation == MEMBER_OP_PREDICT:
+            _oc_query(slot, call, LOF_RESULT_LABELS, "predict")
+        elif operation == MEMBER_OP_DECISION:
+            _oc_query(slot, call, LOF_RESULT_DECISION, "decision_function")
+        else:
+            _oc_query(slot, call, LOF_RESULT_SCORES, "score_samples")
+    elif operation == MEMBER_OP_FIT:
+        _kp_fit(slot, call)
+    else:
+        _kp_transform(slot, call)
+
+
+def _rows_fold_op(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
+    """A LocalOutlierFactor or OneClassSVM FIT / PREDICT / DECISION / SCORE_SAMPLES or a KernelPCA FIT / TRANSFORM
+    over the rows
+    `call.row_index` of the WHOLE host X (MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE on a GPU route; the pattern of
+    `_nc_fold_op`, lane vdf-scope-cluster5): X found in the caller's scope's x_prep cache, or put ONCE and
+    published with the pin (THE PIN RULE), or, outside a scope, put into a slot this call owns; the fold's rows
+    taken ON THE DEVICE into a fresh slot (`member_fold_x_open`) and every x_neighbors op of the RUN reads them
+    there (THE FOLD X WORD). A FIT then KEEPS that slot as the state's fitted rows (THE FITTED-ROWS SLOT: the
+    rows the model reads at every later query stay resident, the scope's X can be released, and nothing points
+    into the caller's X: no MEMBER_BORROWS_FIT); a query, and a OneClassSVM fit (its support vectors are gathered
+    from the slot into its own words), free it after the call. Same rows in the same order
+    as the host gather: the same bytes as the host-index path and the CPU column. A KernelPCA fit on the
+    eigensolver's resident route takes its rows on the host (`_rows_fold_kp_host`). The call's views are
+    restored and an unkept fold slot freed whether the operation returns or raises."""
+    if not _rows_fold_kind(slot[].kind):
+        raise Error("TypeError: a " + _name(slot) + " member reads whole host views (no row or column index)")
+    var estimator = _name(slot)
+    var x = call[].x
+    var index = call[].row_index
+    var fold = MemberFoldX()
+    var host_rows = List[Float32]()
+    var failure = String("")
+    var kept = False
+    try:
+        if operation == MEMBER_OP_FIT and _rows_fold_kp_host(slot, index.rows):
+            member_fold_index(call, fold, estimator)
+            host_rows = List[Float32](length=max(fold.rows * fold.cols, 1), fill=Float32(0.0))
+            member_fold_take_f32(x.data, fold.index, fold.rows, fold.cols, Int(host_rows.unsafe_ptr()))
+            call[].x = MemberMatrix(Int(host_rows.unsafe_ptr()), fold.rows, fold.cols)
+            call[].row_index = MemberMatrix()
+            _kp_fit(slot, call)
+            # The state owns the taken rows (no borrow of the caller's X).
+            slot[].fit_rows = host_rows^
+            host_rows = List[Float32]()
+            slot[].rows_addr = Int(slot[].fit_rows.unsafe_ptr())
+        else:
+            member_fold_x_open(call, fold, estimator)
+            call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
+            call[].row_index = MemberMatrix()
+            _rows_fold_dispatch(slot, call, operation)
+            if operation == MEMBER_OP_FIT and _rows_kept(slot[].kind):
+                # THE FITTED-ROWS SLOT: the fold slot becomes the state's (the fit set `rows_addr` to its word).
+                slot[].rows_slot = fold.slot
+                slot[].rows_store = fold.store
+                fold.slot = -1
+                kept = True
+    except error:
+        failure = String(error)
+        if operation == MEMBER_OP_FIT and not kept:
+            slot[].fitted = False
+            slot[].rows_addr = 0
+    call[].x = x
+    call[].row_index = index
+    try:
+        member_fold_x_close(fold)
+    except close_error:
+        if failure.byte_length() == 0:
+            failure = "RuntimeError: a " + estimator + " member's fold slot was not freed: " + String(close_error)
+    _ = host_rows^
+    if failure.byte_length() > 0:
+        raise Error(failure)
+
+
+# ------------------------------------------------------------ LocalOutlierFactor (fit)
+
+
 def _lof_fit(slot: _SlotPtr, call: _CallPtr) raises:
     var estimator = _name(slot)
     _whole(call, estimator)
@@ -1178,7 +1373,8 @@ def _lof_fit(slot: _SlotPtr, call: _CallPtr) raises:
             raise Error("ValueError: the label buffer holds one label per row of X")
     var k = lof_fit_neighbors(slot[].k, rows)
     slot[].fitted = False
-    # Borrow the rows (LIFETIME); a copy a previous import or export left is dropped.
+    # Borrow the rows (LIFETIME); a copy a previous import or export left is dropped, a resident slot freed.
+    _rows_dev_free(slot)
     slot[].fit_rows = List[Float32]()
     slot[].rows_addr = call[].x.data
     slot[].distances = List[Float32](length=rows * k, fill=Float32(0.0))
@@ -1224,9 +1420,15 @@ def _lof_query(slot: _SlotPtr, call: _CallPtr, kind: Int, what: String) raises:
     admitted_finite_refuse(status, estimator)
 
 
-def _lof_own_rows(slot: _SlotPtr):
-    """Copy the borrowed fit rows into the slot once (first export)."""
+def _lof_own_rows(slot: _SlotPtr, call: _CallPtr, download: Bool) raises:
+    """Copy the borrowed fit rows into the slot once (first export). A state whose rows are resident in THE
+    FITTED-ROWS SLOT borrows nothing: an export of its rows block (`download`) reads them back once into
+    `fit_rows`, and its queries keep reading the slot; MEMBER_EXPORT_OWN has nothing to do."""
     var count = slot[].rows * slot[].features
+    if slot[].rows_slot >= 0:
+        if download and len(slot[].fit_rows) != count:
+            slot[].fit_rows = _rows_dev_download(slot, call, count)
+        return
     if slot[].rows_addr == Int(slot[].fit_rows.unsafe_ptr()) and len(slot[].fit_rows) == count:
         return
     var owned = List[Float32](length=count, fill=Float32(0.0))
@@ -1242,7 +1444,7 @@ def _lof_export(slot: _SlotPtr, call: _CallPtr) raises:
         raise Error("NotFittedError: this LocalOutlierFactor member is not fitted yet")
     if (call[].flags & MEMBER_EXPORT_OWN) != 0:
         # THE LIFETIME RULE: the borrowed fit rows, once; no view is answered.
-        _lof_own_rows(slot)
+        _lof_own_rows(slot, call, False)
         return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
@@ -1250,8 +1452,8 @@ def _lof_export(slot: _SlotPtr, call: _CallPtr) raises:
             raise Error("member ABI: a LocalOutlierFactor member has five fitted blocks")
         block = LOF_BLOCK_ROWS + block
     if block == LOF_BLOCK_ROWS:
-        _lof_own_rows(slot)
-        call[].dst = MemberMatrix(slot[].rows_addr, slot[].rows, slot[].features)
+        _lof_own_rows(slot, call, True)
+        call[].dst = MemberMatrix(_rows_view(slot), slot[].rows, slot[].features)
     elif block == LOF_BLOCK_DISTANCES:
         call[].dst = MemberMatrix(Int(slot[].distances.unsafe_ptr()), slot[].rows, slot[].neighbors)
     elif block == LOF_BLOCK_DENSITIES:
@@ -1284,6 +1486,7 @@ def _lof_import(slot: _SlotPtr, call: _CallPtr) raises:
         var words = List[Float32](length=count, fill=Float32(0.0))
         unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=count)
         if block == LOF_BLOCK_ROWS:
+            _rows_dev_free(slot)
             slot[].fit_rows = words^
             slot[].rows_addr = Int(slot[].fit_rows.unsafe_ptr())
             slot[].rows = call[].x.rows
@@ -1578,7 +1781,9 @@ def _kp_fit(slot: _SlotPtr, call: _CallPtr) raises:
         unsafe_memcpy(dest=slot[].kp_values.unsafe_ptr(), src=room.values.unsafe_ptr(), count=kept)
         unsafe_memcpy(dest=slot[].kp_vectors.unsafe_ptr(), src=room.vectors.unsafe_ptr(), count=rows * kept)
     _ = room^
-    # Borrow the rows as the fitted X (LIFETIME); a copy a previous import or export left is dropped.
+    # Borrow the rows as the fitted X (LIFETIME); a copy a previous import or export left is dropped, a
+    # resident slot freed.
+    _rows_dev_free(slot)
     slot[].fit_rows = List[Float32]()
     slot[].rows_addr = call[].x.data
     slot[].rows = rows
@@ -1643,7 +1848,7 @@ def _kp_export(slot: _SlotPtr, call: _CallPtr) raises:
         raise Error("NotFittedError: this KernelPCA member is not fitted yet")
     if (call[].flags & MEMBER_EXPORT_OWN) != 0:
         # THE LIFETIME RULE: the borrowed fit rows, once; no view is answered.
-        _lof_own_rows(slot)
+        _lof_own_rows(slot, call, False)
         return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
@@ -1651,8 +1856,8 @@ def _kp_export(slot: _SlotPtr, call: _CallPtr) raises:
             raise Error("member ABI: a KernelPCA member has six fitted blocks")
         block = KP_BLOCK_ROWS + block
     if block == KP_BLOCK_ROWS:
-        _lof_own_rows(slot)
-        call[].dst = MemberMatrix(slot[].rows_addr, slot[].rows, slot[].features)
+        _lof_own_rows(slot, call, True)
+        call[].dst = MemberMatrix(_rows_view(slot), slot[].rows, slot[].features)
     elif block == KP_BLOCK_VALUES:
         call[].dst = MemberMatrix(Int(slot[].kp_values.unsafe_ptr()), 1, slot[].kp_kept)
     elif block == KP_BLOCK_VECTORS:
@@ -1689,6 +1894,7 @@ def _kp_import(slot: _SlotPtr, call: _CallPtr) raises:
         if count > 0:
             unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=count)
         if block == KP_BLOCK_ROWS:
+            _rows_dev_free(slot)
             slot[].fit_rows = words^
             slot[].rows_addr = Int(slot[].fit_rows.unsafe_ptr())
             slot[].rows = call[].x.rows
@@ -2115,7 +2321,7 @@ def _im_export(slot: _SlotPtr, call: _CallPtr) raises:
         raise Error("NotFittedError: this KNNImputer member is not fitted yet")
     if (call[].flags & MEMBER_EXPORT_OWN) != 0:
         # THE LIFETIME RULE: the borrowed fit rows, once; no view is answered.
-        _lof_own_rows(slot)
+        _lof_own_rows(slot, call, False)
         return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
@@ -2123,8 +2329,8 @@ def _im_export(slot: _SlotPtr, call: _CallPtr) raises:
             raise Error("member ABI: a KNNImputer member has three fitted blocks")
         block = IM_BLOCK_ROWS + block
     if block == IM_BLOCK_ROWS:
-        _lof_own_rows(slot)
-        call[].dst = MemberMatrix(slot[].rows_addr, slot[].rows, slot[].features)
+        _lof_own_rows(slot, call, True)
+        call[].dst = MemberMatrix(_rows_view(slot), slot[].rows, slot[].features)
     elif block == IM_BLOCK_VALID:
         call[].dst = MemberMatrix(Int(slot[].im_valid.unsafe_ptr()), 1, slot[].features, MEMBER_I32)
     elif block == IM_BLOCK_MISSING:
@@ -2562,7 +2768,7 @@ def _lp_export(slot: _SlotPtr, call: _CallPtr) raises:
         raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
     if (call[].flags & MEMBER_EXPORT_OWN) != 0:
         # THE LIFETIME RULE: the borrowed fit rows, once; no view is answered.
-        _lof_own_rows(slot)
+        _lof_own_rows(slot, call, False)
         return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
@@ -2570,8 +2776,8 @@ def _lp_export(slot: _SlotPtr, call: _CallPtr) raises:
             raise Error("member ABI: a " + estimator + " member has four fitted blocks")
         block = LP_BLOCK_ROWS + block
     if block == LP_BLOCK_ROWS:
-        _lof_own_rows(slot)
-        call[].dst = MemberMatrix(slot[].rows_addr, slot[].rows, slot[].features)
+        _lof_own_rows(slot, call, True)
+        call[].dst = MemberMatrix(_rows_view(slot), slot[].rows, slot[].features)
     elif block == LP_BLOCK_DISTRIBUTIONS:
         call[].dst = MemberMatrix(Int(slot[].lp_dist.unsafe_ptr()), slot[].rows, slot[].classes)
     elif block == LP_BLOCK_TRANSDUCTION:
@@ -2613,6 +2819,7 @@ def _lp_import(slot: _SlotPtr, call: _CallPtr) raises:
         var words = List[Float32](length=count, fill=Float32(0.0))
         unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=count)
         if block == LP_BLOCK_ROWS:
+            _rows_dev_free(slot)
             slot[].fit_rows = words^
             slot[].rows_addr = Int(slot[].fit_rows.unsafe_ptr())
             slot[].rows = call[].x.rows
@@ -2685,9 +2892,10 @@ def _fold_kind(kind: Int) -> Bool:
     """The kinds whose every read of X is an upload through the device ops'
     `_buf` (x_neighbors/device_ops.mojo, THE FOLD X WORD) during the call,
     with no host read of X and no borrow of X past the call (lane
-    vdf-scope-cluster3): NearestCentroid. LocalOutlierFactor, KernelPCA,
-    LabelPropagation / LabelSpreading and a KNNImputer borrow the fit X as
-    their fitted rows; OneClassSVM gathers its support vectors from host X
+    vdf-scope-cluster3): NearestCentroid. LocalOutlierFactor and KernelPCA
+    keep their fold's rows in THE FITTED-ROWS SLOT (`_rows_fold_op`, lane
+    vdf-scope-cluster5); LabelPropagation / LabelSpreading and a KNNImputer
+    borrow the fit X as their fitted rows; OneClassSVM gathers its support vectors from host X
     (core/ocsvm_plan.mojo `oc_take_rows_into`); the samplers and SVGP are
     left on the host gather (vdf-scope-cluster3-RESULT.md)."""
     return kind == XNEIGHBORS_KIND_NEAREST_CENTROID
@@ -2897,6 +3105,12 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
             return (_NC_EUCLIDEAN | _LOF_NOVELTY | _OCSVM | _TRANSFORMER | _SVGP | _LABEL_PROP | MEMBER_BORROWS_FIT
                 | _fold_bits(call))
         var held = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
+        if _rows_fold_kind(held[].kind):
+            # THE FITTED-ROWS SLOT (lane vdf-scope-cluster5): a state whose rows are resident borrows nothing.
+            var bits = _capabilities(held) | _fold_bits(call)
+            if held[].rows_slot >= 0:
+                bits = bits & ~MEMBER_BORROWS_FIT
+            return bits
         return _capabilities(held) | (_fold_bits(call) if _fold_kind(held[].kind) else 0)
     if operation == MEMBER_OP_NEW:
         _new(call)
@@ -3047,6 +3261,10 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
             _pc_import(slot, call)
         else:
             member_unsupported(_name(slot), operation)
+        return 0
+    if (call[].row_index.rows > 0 and call[].column_index.rows == 0 and call[].route.device == DEVICE_GPU
+            and _rows_fold_kind(slot[].kind) and _rows_fold_operation(slot[].kind, operation)):
+        _rows_fold_op(slot, call, operation)
         return 0
     if slot[].kind == XNEIGHBORS_KIND_KERNEL_PCA:
         if operation == MEMBER_OP_FIT:

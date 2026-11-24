@@ -15,6 +15,8 @@ and the verify's digest compares the columns. Claims, per column:
 Data: a SplitMix64 stream (uniform [0, 4)), 96 rows x 3, folds 0..63 / 64..95 as int32 row numbers; gaussian
 kernel, bandwidth 0.75; metrics euclidean, cosine and sqeuclidean (lane vdf-scope-cluster4: the cosine zero-row
 rule and the sqeuclidean bound run on the device over the slot, so those two keep the resident-store path).
+Refusal words (lane vdf-scope-cluster5): under cosine and sqeuclidean a NaN in the test fold (row 70, column 1)
+refuses with the host pass's words, "kde: query contains NaN at row 6, column 1 (DEVIATION 604)", on every arm.
 """
 from std.testing import TestSuite
 from std.memory import bitcast
@@ -162,6 +164,38 @@ def _same(a: _Arm, b: _Arm, what: String) raises:
     require(bitcast[DType.uint64](a.score) == bitcast[DType.uint64](b.score), what + ": score bits")
 
 
+def _refusal(route: DeviceRoute, x: List[Float32], metric: Float64, indexed: Bool, scope: Int, pin: Int) -> String:
+    """The words an arm whose test fold holds a NaN refuses with ("" when it does not refuse)."""
+    try:
+        _ = _arm(route, x, metric, indexed, scope, pin)
+    except error:
+        return String(error)
+    return String("")
+
+
+def _nan_words(device: Bool, metric: Float64) raises:
+    """Lane vdf-scope-cluster5: the device row rules keep the host pass's finite words."""
+    if metric == 0.0:
+        return
+    var x = _uniform4(20261124)
+    x[70 * _D + 1] = Float32.NAN
+    var route = _route(device)
+    var want = "kde: query contains NaN at row 6, column 1 (DEVIATION 604)"
+    var plain = _refusal(route, x, metric, False, -1, 0)
+    require(want in plain, "plain fold rows refuse a NaN query in the host pass's words: " + plain)
+    var host_index = _refusal(route, x, metric, True, -1, 0)
+    require(want in host_index, "the host row index refuses a NaN query in the host pass's words: " + host_index)
+    if not device:
+        return
+    var scope = arena_scope_new(0)
+    try:
+        var scoped = _refusal(route, x, metric, True, scope, 1)
+        require(want in scoped, "the scoped device fold refuses a NaN query in the host pass's words: " + scoped)
+    finally:
+        _ = arena_scope_close(scope)
+    _ = len(x)
+
+
 def fixture(device: Bool, metric: Float64) raises:
     var x = _uniform4(20261124)
     var route = _route(device)
@@ -196,6 +230,7 @@ def fixture(device: Bool, metric: Float64) raises:
 
 def _host_fixture(unit: Int) raises:
     fixture(False, _metric(unit))
+    _nan_words(False, _metric(unit))
 
 
 def test_kde_member_scope() raises:
@@ -206,6 +241,7 @@ def test_kde_member_scope() raises:
         comptime assert TARGET_COLUMN != COLUMN_CPU
         for unit in range(SCOPE_FIXTURES):  # driver-loop: over the three metrics
             fixture(True, _metric(unit))
+            _nan_words(True, _metric(unit))
 
 
 def main() raises:

@@ -1153,11 +1153,13 @@ def op_knn_sq_tiled(
         var ctx2 = xn_ctx()
         var d_x2 = ctx2.enqueue_create_buffer[DType.float32](max(n * d, 1))
         var d_y2 = ctx2.enqueue_create_buffer[DType.float32](max(m * d, 1))
+        # THE FOLD X WORD (core/fold_x_device.mojo): a negative `x` / `y` names an x_prep store slot (a fold's
+        # rows, or a fitted state's resident rows, lane vdf-scope-cluster5); one device-to-device copy then.
         if n * d > 0:
-            ctx2.enqueue_copy(dst_buf=d_x2, src_ptr=FP(unsafe_from_address=x))
+            fold_x_fill(ctx2, d_x2, x, n * d)
         var d_s2 = xn_finite_behind(ctx2, d_x2, n * d, status)
         if m * d > 0:
-            ctx2.enqueue_copy(dst_buf=d_y2, src_ptr=FP(unsafe_from_address=y))
+            fold_x_fill(ctx2, d_y2, y, m * d)
         var d_dist2 = ctx2.enqueue_create_buffer[DType.float32](max(n * k, 1))
         var d_idx2 = _buf_i(ctx2, 0, n * k, False)
         ctx2.enqueue_function[knn_sq_tiled2_kernel](
