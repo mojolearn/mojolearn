@@ -30,6 +30,8 @@ comptime SPECTRAL_CAP_RESIDENT = 2
 #: vdf-misc3, 2026-11-24). Lane vdf-misc4 (2026-11-24): the same two routes
 #: on `fit` (SpectralClustering), the dense fit run on that device buffer.
 comptime SPECTRAL_CAP_AFFINITY = 4
+#: The image reads `fit`'s SPECTRAL_DATASET_STORE route (its resident store, lane vdf-scope-cluster4).
+comptime SPECTRAL_CAP_DEV_STORE = 8
 comptime SPECTRAL_DATASET = 0
 comptime SPECTRAL_GRAPH = 1
 comptime SPECTRAL_DENSE = 2
@@ -43,6 +45,11 @@ comptime SPECTRAL_RBF = 3
 #: (code, bad row, stored): the connectivity affinity 0.5 (C + C^T) on the
 #: device (embedding; and fit since lane vdf-misc4, 2026-11-24).
 comptime SPECTRAL_KNN = 4
+#: source = the id of a slot of the metrics image's resident store (core/metrics_store.mojo) holding X (rows x
+#: features float32, a model-selection fold taken on the device): `fit`'s dataset route without a host X (lane
+#: vdf-scope-cluster4, 2026-11-24; capability SPECTRAL_CAP_DEV_STORE). The same kernels on the same words as
+#: SPECTRAL_DATASET.
+comptime SPECTRAL_DATASET_STORE = 5
 #: `embed`'s and `fit`'s return when the kNN affinity refused (the words are
 #: in status).
 comptime SPECTRAL_KNN_REFUSED = -4
