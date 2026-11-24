@@ -3,9 +3,11 @@
 MEMBER-ABI-V2.md; RUN: core/xcluster_member.mojo.
 
 Published kinds: 0 MiniBatchKMeans, 1 BisectingKMeans, 2 MeanShift,
-4 AffinityPropagation, 5 BayesianGaussianMixture (`_mojolearn_member =
-(25, kind)` on each class). Every other kind answers False here (OPTICS 3:
-the class has no predict). Settings whose value is DATA (lane mf-clu6) are
+3 OPTICS (lane mf-member8: fit and export; `_optics_admit` reads
+`optics_fit_stage`'s settings in its order without X, the row-count refusals
+run at fit; `optics_fit`'s attributes are packed), 4 AffinityPropagation,
+5 BayesianGaussianMixture (`_mojolearn_member = (25, kind)` on each class).
+Settings whose value is DATA (lane mf-clu6) are
 read once here and travel as the state's data words
 (core/cluster_member_words.mojo): a MiniBatchKMeans array `init`, MeanShift
 `seeds`, an AffinityPropagation per-sample preference (and
@@ -47,6 +49,10 @@ from bindings.admitted_family_door import admit_family
 from bindings.classical_arrays_door import classical_address, classical_c_bytes
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.cluster_fit_public_native_unpack import _attr, _int, _float, _eq, _one_of, _seed, _set, _truthy
+from bindings.cluster_fit_public_native_unpack import _optics_metric
+from bindings.optics_fit_boundary_door import optics_fit_connection
+from core.optics_fit_api import OPTICS_FIT_COUNT
+from cluster.cluster_fit_door_run import optics_eps_refused, optics_xi_range
 from bindings.cluster_centroid_fit_boundary_door import centroid_fit_connection
 from bindings.native_loaded_module_door import native_loaded_module
 from core.cluster_centroid_fit_api import CENTROID_FIT_COUNT
@@ -86,6 +92,7 @@ from providers.python.estimator_binding_pyapi_door import estimator_binding
 comptime _KIND_MINIBATCH = 0
 comptime _KIND_BISECT = 1
 comptime _KIND_MEANSHIFT = 2
+comptime _KIND_OPTICS = 3
 comptime _KIND_AFFINITY = 4
 comptime _KIND_BGMM = 5
 comptime _BLOCK_BGMM = MEMBER_BLOCK_FAMILY + 8
@@ -203,6 +210,74 @@ def _meanshift_admit(model: PythonObject, context: PythonObject, mut owner: Memb
     var words: List[Float64] = [Float64(_KIND_MEANSHIFT), bw, 1.0 if cluster_all else 0.0, Float64(max_iter),
         1.0 if bin_seeding else 0.0, Float64(min_bin_freq)]
     words.extend(seeds^)
+    owner.plan.params = words^
+    return True
+
+
+def _optics_size_words(value: PythonObject, name: String, mut words: List[Float64]) raises:
+    """`OPTICS._size`'s reads without the row count (bindings/
+    cluster_fit_public_native_unpack.mojo `_optics_size`): its refusals that
+    need no n, in its words, then (mode, value, float word) for the fit."""
+    var b = native_loaded_module("builtins")
+    var op = native_loaded_module("operator")
+    if family_isinstance(value, b.bool) or value is None:
+        raise Error(name + " must be an int >= 2 or a float in (0, 1]")
+    var is_float = family_isinstance(value, b.float)
+    if family_isinstance(value, b.int) or (is_float and _truthy(py_call(op.gt, value, PythonObject(1)))):
+        # A count: its range against n is checked at fit, in these words.
+        words.append(0.0)
+        words.append(Float64(py=_float(value)))
+        words.append(1.0 if is_float else 0.0)
+        return
+    if not (_truthy(py_call(op.lt, PythonObject(0), value)) and _truthy(py_call(op.le, value, PythonObject(1)))):
+        raise Error(name + " must be in (0, 1], got " + family_str(value))
+    words.append(1.0)
+    words.append(Float64(py=_float(value)))
+    words.append(1.0)
+
+
+def _optics_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
+    """Lane mf-member8: `optics_fit_stage`'s reads, in its order, without X
+    (metric, cluster_method, the two sizes, max_eps, eps, xi,
+    predecessor_correction, the second xi read); the row-count refusals and
+    the precomputed square check run at fit. The binding's OPTICS entry is
+    `route.third`."""
+    var code = _optics_metric(model, context)
+    var method = _attr(model, "cluster_method")
+    if not _one_of(method, "xi", "dbscan"):
+        raise Error("cluster_method must be 'xi' or 'dbscan', got " + family_repr(method))
+    var words: List[Float64] = [Float64(_KIND_OPTICS)]
+    _optics_size_words(_attr(model, "min_samples"), "min_samples", words)
+    var mcs_field = _attr(model, "min_cluster_size")
+    if mcs_field is None:
+        words.append(-1.0)
+        words.append(0.0)
+        words.append(0.0)
+    else:
+        _optics_size_words(mcs_field, "min_cluster_size", words)
+    var max_eps = _float(_attr(model, "max_eps"))
+    var eps_field = _attr(model, "eps")
+    var eps = max_eps if eps_field is None else _float(eps_field)
+    var is_xi = _eq(method, PythonObject("xi"))
+    if optics_eps_refused(_eq(method, PythonObject("dbscan")), Float64(py=eps), Float64(py=max_eps)):
+        raise Error("Specify an epsilon smaller than " + family_str(max_eps) + ". Got " + family_str(eps) + ".")
+    optics_xi_range(Float64(py=_float(_attr(model, "xi"))))
+    var predecessor_correction = _truthy(_attr(model, "predecessor_correction"))
+    var repeated_xi = Float64(py=_float(_attr(model, "xi")))
+    words.append(0.0 if is_xi else 1.0)
+    words.append(1.0 if predecessor_correction else 0.0)
+    words.append(Float64(code.code))
+    words.append(code.power)
+    words.append(Float64(py=max_eps))
+    words.append(repeated_xi)
+    words.append(Float64(py=eps))
+    _variants_route(model, context, owner)
+    var binding = owner.pins[0]
+    var optics = optics_fit_connection(binding)
+    owner.plan.route.third = EntryRef(optics.driver.entry, entry_ref_word(owner.plan.route.mode,
+        owner.plan.route.vendor, OPTICS_FIT_COUNT))
+    owner.plan.route.has_third = True
+    owner.pins = Python.tuple(owner.pins[0], owner.pins[1], optics.provider)
     owner.plan.params = words^
     return True
 
@@ -513,11 +588,14 @@ def xcluster_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     if kind == _KIND_AFFINITY:
         classical_connect_numpy(context)
         return _affinity_admit(model, context, owner)
+    if kind == _KIND_OPTICS:
+        classical_connect_numpy(context)
+        return _optics_admit(model, context, owner)
     if kind == _KIND_BGMM:
         classical_connect_numpy(context)
         return _bgmm_admit(model, context, owner)
     if kind != _KIND_BISECT:
-        # Kinds 0, 1, 2, 4 and 5 are marked (python/mojolearn/_expansion_cluster.py);
+        # Kinds 0 to 5 are marked (python/mojolearn/_expansion_cluster.py);
         # any other mark is the member's own NEW refusal, raised here (lane mf-clu6).
         raise Error("member ABI: x_cluster member kind " + String(kind) + " is not published")
     classical_connect_numpy(context)
@@ -780,10 +858,37 @@ def xcluster_member_pack(model: PythonObject, fields: PythonObject, context: Pyt
     the estimator's own fit does (the same names, dtypes and shapes)."""
     var kind = Int(plan.params[0])
     if (kind != _KIND_BISECT and kind != _KIND_MINIBATCH and kind != _KIND_MEANSHIFT and kind != _KIND_AFFINITY
-            and kind != _KIND_BGMM):
+            and kind != _KIND_BGMM and kind != _KIND_OPTICS):
         raise Error("RuntimeError: mojolearn: this x_cluster member kind is not published")
     classical_connect_numpy(context)
     var call = MemberCall(plan.route, state)
+    if kind == _KIND_OPTICS:
+        # Lane mf-member8: `optics_fit`'s publications, the same names,
+        # dtypes, shapes and order (core/xcluster_member.mojo blocks 0 .. 5).
+        _export(plan, call, MEMBER_BLOCK_FAMILY + 40)
+        var n = call.dst.cols
+        var core_distances = _f32_shaped(call.dst, Python.tuple(n), context)
+        _export(plan, call, MEMBER_BLOCK_FAMILY + 41)
+        var reachability = _f32_shaped(call.dst, Python.tuple(n), context)
+        _export(plan, call, MEMBER_BLOCK_FAMILY + 42)
+        var ordering = _i32_array(call.dst, Python.tuple(n), context)
+        _export(plan, call, MEMBER_BLOCK_FAMILY + 43)
+        var predecessor = _i32_array(call.dst, Python.tuple(n), context)
+        _export(plan, call, MEMBER_BLOCK_FAMILY + 1)
+        var op_labels = _i32_array(call.dst, Python.tuple(n), context)
+        _set(model, "core_distances_", core_distances)
+        _set(model, "reachability_", reachability)
+        _set(model, "ordering_", ordering)
+        _set(model, "predecessor_", predecessor)
+        _set(model, "labels_", op_labels)
+        if plan.params[7] == 0.0:
+            _export(plan, call, MEMBER_BLOCK_FAMILY + 44)
+            _set(model, "cluster_hierarchy_", _i32_array(call.dst, Python.tuple(call.dst.rows, 2), context))
+        # The fit's X width (SCALARS [n_features_in_]), as `optics_fit` publishes it.
+        _export(plan, call, MEMBER_BLOCK_SCALARS)
+        var op_features = Int(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)[0])
+        _set(model, "n_features_in_", PythonObject(op_features))
+        return
     if kind == _KIND_BGMM and _plain(plan):
         _gmm_plain_pack(model, context, plan, call)
         return

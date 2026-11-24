@@ -683,6 +683,9 @@ class OPTICS(_XCluster):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    # A native member that fits and exports its arrays (core/xcluster_member.mojo kind 3, lane mf-member8).
+    # No predict, no coef_ or feature_importances_.
+    _mojolearn_member = (25, 3)
 
     def __init__(self, *, min_samples=5, max_eps=float("inf"), metric="minkowski", p=2,
                  metric_params=None, cluster_method="xi", eps=None, xi=0.05,

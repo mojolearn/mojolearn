@@ -17,8 +17,8 @@ UNPACK). `route.second` (MeanShift, AffinityPropagation) is the image's centroid
 No other route slot is read by the kinds published here. No kernel is touched.
 
 Kinds (MEMBER_OP_NEW word [0]): 0 MiniBatchKMeans, 1 BisectingKMeans,
-2 MeanShift, 4 AffinityPropagation, 5 BayesianGaussianMixture. Kind 3
-OPTICS (the class has no predict: not a member) is reserved and refused.
+2 MeanShift, 3 OPTICS (lane mf-member8: fit and export only, the class has
+no predict), 4 AffinityPropagation, 5 BayesianGaussianMixture.
 
 MEMBER_OP_NEW parameters (Float64 words):
   kind 0 MiniBatchKMeans (11 words, 13 + data with an array init): [0] 0,
@@ -48,6 +48,17 @@ MEMBER_OP_NEW parameters (Float64 words):
   n x n similarity matrix and its predict is scikit-learn's refusal. No
   sample weights, no transform or score (refused in words). Predict writes
   -1 for every row when the fit found no exemplar, as the class does.
+  kind 3 OPTICS (14 words, lane mf-member8; `optics_fit_stage`'s reads, the
+  row-count-dependent ones resolved at fit): [0] 3, [1] min_samples mode
+  (0 a count: an int, or a float above 1; 1 a fraction in (0, 1]), [2] its
+  value, [3] 1 when the value was a float (the refusal prints it as one),
+  [4] min_cluster_size mode (-1 None: min_samples; else as [1]), [5] its
+  value, [6] its float word, [7] cluster_method (0 'xi', 1 'dbscan'),
+  [8] predecessor_correction (0 / 1), [9] metric code, [10] metric power,
+  [11] max_eps, [12] xi (the class's second read), [13] eps (max_eps for
+  None). The OPTICS entry (core/optics_fit_api.mojo `OpticsFitDriver`, the
+  binding's `optics_fit_native_api_v1`) is `route.third`. No sample weights,
+  no predict, no import (refused in words).
   kind 5 BayesianGaussianMixture (13 words): [0] 5, [1] n_components,
   [2] covariance_type (0 'full', 1 'tied', 2 'diag', 3 'spherical'),
   [3] init_params (0 'kmeans', 1 'random', 2 'k-means++',
@@ -112,6 +123,12 @@ exemplar indices; 4 `MEMBER_BLOCK_FAMILY + 6` float32 rows x rows, the
 affinity matrix; 5 `MEMBER_BLOCK_FAMILY + 7` float32 1 x m, the final message
 diagonal (empty after an import). Centers may be empty (no exemplar). An
 import needs 0 and 1.
+kind 3 (OPTICS, 6 blocks): 0 `MEMBER_BLOCK_FAMILY + 1` int32 1 x rows, the
+labels; 1 `MEMBER_BLOCK_FAMILY + 40` float32 1 x rows, core_distances_;
+2 `+ 41` float32 1 x rows, reachability_; 3 `+ 42` int32 1 x rows,
+ordering_; 4 `+ 43` int32 1 x rows, predecessor_; 5 `+ 44` int32 m x 2,
+cluster_hierarchy_ (0 x 2 for 'dbscan'); 6 `MEMBER_BLOCK_SCALARS` float64
+[n_features_in_].
 kind 1: 3 `MEMBER_BLOCK_FAMILY + 2` float32 nodes x features, the tree
 centers; 4 `MEMBER_BLOCK_FAMILY + 3` int32 nodes x 3, the tree (left, right,
 label). An import needs blocks 0, 1, 3 and 4.
@@ -147,6 +164,7 @@ from core.bgmm_native_api import BgmmDriver, BgmmFitRequest, BgmmResultSlot
 from core.cluster_centroid_fit_api import (
     CentroidFitDriver, CentroidFitResultSlot, MeanShiftFitRequest, AffinityFitRequest,
 )
+from core.optics_fit_api import OpticsFitDriver, OpticsFitResultSlot, OpticsMetric
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_HOME_DEVICE,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
@@ -161,6 +179,7 @@ from core.member_families import MEMBER_FAMILY_XCLUSTER
 from core.cluster_member_words import member_words_f32_slots
 from core.host_finite_scan import host_all_finite_f32
 from cluster.cluster_fit_door_run import meanshift_seed_features, affinity_similarity_square, affinity_preference_rows
+from cluster.cluster_fit_door_run import optics_precomputed_square, optics_fit_request
 from mixture.mixture_door_run import (
     mixture_mean_prior_size, mixture_square_prior_refused, mixture_diag_prior_size, mixture_rows_cover,
     mixture_weights_size, mixture_means_shape, mixture_precision_values,
@@ -174,8 +193,16 @@ comptime _INDEX_SPAN = 16777216
 comptime _KIND_MINIBATCH = 0
 comptime _KIND_BISECT = 1
 comptime _KIND_MEANSHIFT = 2
+comptime _KIND_OPTICS = 3
 comptime _KIND_AFFINITY = 4
 comptime _KIND_BGMM = 5
+# OPTICS (lane mf-member8): its five fitted arrays beside the labels.
+comptime _OPTICS_WORDS = 14
+comptime _BLOCK_OPTICS_CORE = MEMBER_BLOCK_FAMILY + 40
+comptime _BLOCK_OPTICS_REACH = MEMBER_BLOCK_FAMILY + 41
+comptime _BLOCK_OPTICS_ORDER = MEMBER_BLOCK_FAMILY + 42
+comptime _BLOCK_OPTICS_PRED = MEMBER_BLOCK_FAMILY + 43
+comptime _BLOCK_OPTICS_HIER = MEMBER_BLOCK_FAMILY + 44
 # BayesianGaussianMixture: the entry's sixteen float blocks f[0 .. 15], named
 # _BLOCK_BGMM + j; f[1] means, f[3] full precision factors, f[8] constants.
 comptime _BGMM_BLOCKS = 16
@@ -219,6 +246,14 @@ struct XClusterMemberSlot(Copyable, Movable, Defaultable):
     # every query).
     var mixture: List[List[Float32]]
     var score_words: List[Float32]
+    # OPTICS (lane mf-member8): core distances, reachability, ordering,
+    # predecessors and the xi hierarchy (start, end pairs), as its entry
+    # returns them (`labels` holds its labels).
+    var core_distances: List[Float32]
+    var reachability: List[Float32]
+    var ordering: List[Int32]
+    var predecessor: List[Int32]
+    var hierarchy: List[Int32]
 
     def __init__(out self):
         self.generation = 0
@@ -239,6 +274,11 @@ struct XClusterMemberSlot(Copyable, Movable, Defaultable):
         self.scalars = List[Float64]()
         self.mixture = List[List[Float32]]()
         self.score_words = List[Float32]()
+        self.core_distances = List[Float32]()
+        self.reachability = List[Float32]()
+        self.ordering = List[Int32]()
+        self.predecessor = List[Int32]()
+        self.hierarchy = List[Int32]()
 
     def clear(mut self):
         self.fitted = False
@@ -254,6 +294,11 @@ struct XClusterMemberSlot(Copyable, Movable, Defaultable):
         self.scalars = List[Float64]()
         self.mixture = List[List[Float32]]()
         self.score_words = List[Float32]()
+        self.core_distances = List[Float32]()
+        self.reachability = List[Float32]()
+        self.ordering = List[Int32]()
+        self.predecessor = List[Int32]()
+        self.hierarchy = List[Int32]()
 
 
 struct XClusterMemberStore(Defaultable, Movable):
@@ -283,6 +328,8 @@ def _name(kind: Int) -> String:
         return "BisectingKMeans"
     if kind == _KIND_MEANSHIFT:
         return "MeanShift"
+    if kind == _KIND_OPTICS:
+        return "OPTICS"
     if kind == _KIND_AFFINITY:
         return "AffinityPropagation"
     if kind == _KIND_BGMM:
@@ -298,6 +345,8 @@ def _param_count(kind: Int) raises -> Int:
         return 8
     if kind == _KIND_MEANSHIFT:
         return 6
+    if kind == _KIND_OPTICS:
+        return _OPTICS_WORDS
     if kind == _KIND_AFFINITY:
         return 7
     if kind == _KIND_BGMM:
@@ -650,6 +699,102 @@ def _affinity_predict(slot: _Slot, call: _Call) raises:
             rows, Int32(-1))
         return
     _centers_query(slot, call, _RES_PREDICT)
+
+
+# ---------------------------------------------------------------- OPTICS (lane mf-member8)
+def _optics_float(value: Float64, is_float: Bool) -> String:
+    """The value as `str(value)` prints it: an int, or a float."""
+    if is_float:
+        return String(value)
+    return String(Int(value))
+
+
+def _optics_size(mode: Int, value: Float64, is_float: Bool, n: Int, name: String) raises -> Int:
+    """`OPTICS._size` (bindings/cluster_fit_public_native_unpack.mojo
+    `_optics_size`) over the admitted words: a count in [2, n] (an int, or an
+    integral float above 1), or a fraction in (0, 1] of n (at least 2). The
+    refusals that need no row count were raised at admission, in its words."""
+    if mode == 0:
+        if Float64(Int(value)) != value or value < 2.0 or value > Float64(n):
+            raise Error(name + " must be no greater than the number of samples (" + String(n) + ") and >= 2, got "
+                        + _optics_float(value, is_float))
+        return Int(value)
+    return max(2, Int(value * Float64(n)))
+
+
+def _optics_fit(slot: _Slot, call: _Call) raises:
+    """`OPTICS.fit(X)` (bindings/cluster_fit_public_native_pack.mojo
+    `optics_fit`): the two sizes over X's row count, the precomputed square
+    check, one OPTICS entry call on the borrowed X, its arrays kept."""
+    var kind = slot[].kind
+    _whole_x(call, kind)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: OPTICS takes no sample_weight")
+    if call[].fit_output != 0:
+        member_unsupported(_name(kind), call[].fit_output)
+    if not call[].route.has_third:
+        raise Error("member ABI: an OPTICS member's route holds no OPTICS entry")
+    var rows = call[].x.rows
+    var cols = call[].x.cols
+    var w = slot[].words.unsafe_ptr()
+    var min_samples = _optics_size(Int(w[1]), w[2], w[3] != 0.0, rows, "min_samples")
+    var min_cluster_size = min_samples
+    if Int(w[4]) >= 0:
+        min_cluster_size = _optics_size(Int(w[4]), w[5], w[6] != 0.0, rows, "min_cluster_size")
+    var metric = OpticsMetric(Int(w[9]), w[10])
+    optics_precomputed_square(metric.code, rows, cols)
+    var is_xi = w[7] == 0.0
+    slot[].clear()
+    var request = optics_fit_request(VariantsSpan(call[].x.data, rows * cols), rows, cols, min_samples,
+        min_cluster_size, is_xi, w[8] != 0.0, metric, w[11], w[12], w[13])
+    var result = OpticsFitResultSlot()
+    OpticsFitDriver(call[].route.third.call).fit(request, result)
+    swap(slot[].core_distances, result.storage[0].core_distances)
+    swap(slot[].reachability, result.storage[0].reachability)
+    swap(slot[].ordering, result.storage[0].ordering)
+    swap(slot[].predecessor, result.storage[0].predecessor)
+    swap(slot[].labels, result.storage[0].labels)
+    swap(slot[].hierarchy, result.storage[0].hierarchy)
+    _ = result^
+    var scalars: List[Float64] = [Float64(cols)]
+    slot[].scalars = scalars^
+    slot[].features = cols
+    slot[].fitted = True
+
+
+def _optics_block_at(index: Int) raises -> Int:
+    if index == 0:
+        return _BLOCK_LABELS
+    if index >= 1 and index <= 5:
+        return _BLOCK_OPTICS_CORE + index - 1
+    if index == 6:
+        return MEMBER_BLOCK_SCALARS
+    raise Error("member ABI: an OPTICS member has 7 fitted blocks")
+
+
+def _optics_export(slot: _Slot, call: _Call) raises:
+    """A view of one of OPTICS's fitted arrays; the slot owns the words."""
+    var block = call[].block
+    if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
+        block = _optics_block_at(block)
+    if block == _BLOCK_LABELS:
+        call[].dst = _i32_view(slot[].labels, 1, len(slot[].labels))
+    elif block == _BLOCK_OPTICS_CORE:
+        call[].dst = _f32_view(slot[].core_distances, 1, len(slot[].core_distances))
+    elif block == _BLOCK_OPTICS_REACH:
+        call[].dst = _f32_view(slot[].reachability, 1, len(slot[].reachability))
+    elif block == _BLOCK_OPTICS_ORDER:
+        call[].dst = _i32_view(slot[].ordering, 1, len(slot[].ordering))
+    elif block == _BLOCK_OPTICS_PRED:
+        call[].dst = _i32_view(slot[].predecessor, 1, len(slot[].predecessor))
+    elif block == _BLOCK_OPTICS_HIER:
+        call[].dst = _i32_view(slot[].hierarchy, len(slot[].hierarchy) // 2, 2)
+    elif block == MEMBER_BLOCK_SCALARS:
+        call[].dst = MemberMatrix(Int(slot[].scalars.unsafe_ptr()), 1, len(slot[].scalars), MEMBER_F64)
+    else:
+        raise Error("member ABI: an OPTICS member has no fitted block " + String(block))
+    call[].block = block
+    call[].out_cols = 7
 
 
 # ---------------------------------------------------------------- BayesianGaussianMixture
@@ -1050,6 +1195,9 @@ def _export(slot: _Slot, call: _Call) raises:
             block = _bgmm_block_at(block)
         _bgmm_export(slot, call, block)
         return
+    if kind == _KIND_OPTICS:
+        _optics_export(slot, call)
+        return
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
         block = _block_at(kind, block)
     var d = slot[].features
@@ -1106,6 +1254,8 @@ def _import(slot: _Slot, call: _Call) raises:
     if kind == _KIND_BGMM:
         _bgmm_import(slot, call)
         return
+    if kind == _KIND_OPTICS:
+        member_unsupported(_name(kind), MEMBER_OP_IMPORT)
     var block = call[].block
     if block == _BLOCK_CENTERS:
         _release_resident(slot, call)
@@ -1157,6 +1307,10 @@ def _capabilities(kind: Int) -> Int:
     # A state's kind, or (kind -1, state 0) the family's union. No
     # MEMBER_CAN_TEST_ROWS for any kind: X is admitted finite by the caller
     # (module docstring); the variants, centroid and BGMM entries do not test it.
+    if kind == _KIND_OPTICS:
+        # Lane mf-member8: fit and export only (no predict; no import: a
+        # fitted OPTICS serves no member query).
+        return MEMBER_CAN_FIT | MEMBER_CAN_EXPORT
     if kind == _KIND_MEANSHIFT or kind == _KIND_AFFINITY:
         return MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
     var bgmm = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_SCORE_SAMPLES
@@ -1244,6 +1398,8 @@ def _xcluster_member(operation: Int, address: Int) raises -> Int:
         _meanshift_fit(slot, call)
     elif operation == MEMBER_OP_PREDICT and kind == _KIND_MEANSHIFT:
         _centers_query(slot, call, _RES_PREDICT)
+    elif operation == MEMBER_OP_FIT and kind == _KIND_OPTICS:
+        _optics_fit(slot, call)
     elif operation == MEMBER_OP_FIT and kind == _KIND_AFFINITY:
         _affinity_fit(slot, call)
     elif operation == MEMBER_OP_PREDICT and kind == _KIND_AFFINITY:
