@@ -262,16 +262,19 @@ def member_admit(model: PythonObject, fields: PythonObject, plan: PythonObject, 
 
 
 def member_admit_labeled(model: PythonObject, fields: PythonObject, plan: PythonObject, context: PythonObject,
-    b: PythonObject, labels: PythonObject) raises -> MemberOwner:
+    b: PythonObject, labels: PythonObject, serving: Bool = False) raises -> MemberOwner:
     """`member_admit` for a FIT caller that holds the labels of the codes it
     fits on (`labels`, in code order; None or an empty list: none known).
     A META family reads them from `owner.labels` and hands each nested
     estimator the labels ITS fit sees (lane mf-split4,
     providers/python/member_ensemble_boundary_door.mojo `_child_labels`), so
     a nested class_weight table is filled as `member_set_admit` fills a
-    leaf's; a leaf family does not read them (its caller fills its table)."""
+    leaf's; a leaf family does not read them (its caller fills its table).
+    `serving` (lane mf-door7): the caller only predicts on fitted state; a
+    META family then skips what only its FIT reads (`MemberOwner.serving`)."""
     var owner = MemberOwner()
     owner.labels = labels
+    owner.serving = serving
     var mark = member_mark(plan, b)
     if mark.family < 0:
         return owner^
@@ -317,7 +320,7 @@ def member_admit_serving_labeled(model: PythonObject, fields: PythonObject, plan
     a dict the estimator refuses raises its own words there (lane mf-adm3).
     Without labels a FIT admission of such a member is the fallback."""
     try:
-        var owner = member_admit_labeled(model, fields, plan, context, b, labels)
+        var owner = member_admit_labeled(model, fields, plan, context, b, labels, (needs & MEMBER_CAN_FIT) == 0)
         if owner.published and not owner.plan.member.has(needs):
             owner.published = False
         if owner.published and (needs & MEMBER_CAN_FIT) != 0 and labels is None:

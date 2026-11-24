@@ -26,12 +26,19 @@ struct MemberOwner(Movable):
     # bindings/member_boundary_door.mojo `member_admit_labeled`); None (or
     # an empty list): none known. A leaf family's admission never reads it.
     var labels: PythonObject
+    # A SERVING admission (lane mf-door7, 2026-11-23): the caller only
+    # predicts on fitted state (`member_admit_serving` with `needs` without
+    # MEMBER_CAN_FIT, a META import's nested admission), so a META family
+    # skips the settings only its FIT reads (cv, scorers, a search's
+    # candidates, the device route of a fit). False: a fit may follow.
+    var serving: Bool
 
     def __init__(out self):
         self.plan = MemberPlan()
         self.pins = PythonObject(None)
         self.published = False
         self.labels = PythonObject(None)
+        self.serving = False
 
 
 @fieldwise_init
