@@ -33,9 +33,14 @@ struct LinearFitRequest(Copyable, Movable):
     var cols: Int
     var intercept: Bool
     var alpha: Float64
+    #: THE FOLD X WORD's prepared X (lane vdf-scope-linear4): the address of
+    #: one host Int64 that receives the fold word of a prepared-X slot the fit
+    #: left in the fold store (LF_PREP of a fold X keeps its result on the
+    #: device); the member frees that slot after the fit. 0: none (a host X).
+    var prep_slot: Int
 
     def __init__(out self, x: Int, y: Int, weights: Int, coef: Int, mean: Int,
-                 rows: Int, cols: Int, intercept: Bool, alpha: Float64):
+                 rows: Int, cols: Int, intercept: Bool, alpha: Float64, prep_slot: Int = 0):
         self.x = x
         self.y = y
         self.weights = weights
@@ -45,6 +50,7 @@ struct LinearFitRequest(Copyable, Movable):
         self.cols = cols
         self.intercept = intercept
         self.alpha = alpha
+        self.prep_slot = prep_slot
 
 
 struct LinearFitResult(Copyable, Movable):
