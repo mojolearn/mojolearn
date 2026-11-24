@@ -3647,6 +3647,12 @@ _JL_CALL, _JL_CONTEXT = _native_jl_bridge.connect_public()
 # MiniBatchSparsePCA and sparse_encode, one call per public operation.
 from ._native_decomp_kit_bridge import connect_public as _connect_decomp_kit  # noqa: E402
 _DL_CALL, _DL_CONTEXT = _connect_decomp_kit("dict_learning_native_call", minibatch_sparse_pca_class=MiniBatchSparsePCA)
+# glue: the manifold members (Isomap, LLE, MDS: core/xdecomp_member.mojo kinds 16-18) resolve their route through
+# the x_decomp entry tables (providers/python/member_xdecomp_boundary_door.mojo `_mani_route` -> `_table_route`)
+# from their plan context, the shared family context `_NATIVE_CONTEXT`, which had no `decomp_bindings`
+# (ValueError: 'decomp_bindings'). The same tables the kit connected above, added once at import.
+if "decomp_bindings" in _DL_CONTEXT:
+    _native_family_bridge.tables(decomp_bindings=_DL_CONTEXT["decomp_bindings"])
 
 
 # The native PLS owner (bindings/pls_native_door.mojo): PLSRegression, PLSCanonical, CCA.
