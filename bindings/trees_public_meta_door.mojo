@@ -2786,16 +2786,79 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
     return model
 
 
-def _multioutput_member_codes(model: PythonObject, Xa: PythonObject, context: PythonObject) raises -> PythonObject:
+def _multioutput_member_codes(model: PythonObject, X: PythonObject, mx: _MetaX,
+                              context: PythonObject) raises -> PythonObject:
     """Each output's member codes (int32, into that output's `classes_[j]`;
     the members were fitted on the column codes), lane bm-meta-3: UNPACK
     `_vote_unpack` (kind _VOTE_HARD: per member its held native state, else
     its door's codes, `_member_label_codes`'s routes in its order), RUN
     `multioutput_codes_run` (no Python; the GIL released when a member is
     native) into one int32 Array per output allocated here (PACK), which the
-    native call writes directly, as `member_held_run`'s new Array was."""
+    native call writes directly, as `member_held_run`'s new Array was.
+    THE FOLD FROM THE STORE (lane vdf-meta5): over a model-selection fold
+    `mx` the members read the fold by number (`_codes_fold`); a fold they
+    do not serve is admitted (`_x_array`) as before."""
     var nk = trees_keys()
-    return _codes_of(_attr(model, nk[].k_estimators_, Python.list()), Xa, context)
+    return _codes_of_x(_attr(model, nk[].k_estimators_, Python.list()), X, mx, context)
+
+
+def _codes_of_x(members: PythonObject, X: PythonObject, mx: _MetaX, context: PythonObject) raises -> PythonObject:
+    """`_codes_of` over `_check_meta_x`'s `mx`: a fold inside model
+    selection's resident scope FROM THE STORE (`_codes_fold`), else the
+    fold's rows admitted (`_x_array`), else `mx.x` itself."""
+    if mx.draw is None:
+        return _codes_of(members, mx.x, context)
+    var scope = _fold_scope(mx, context)
+    if scope != MEMBER_SCOPE_NONE:
+        var got = _codes_fold(members, mx, scope, context)
+        if got is not None:
+            return got
+    return _codes_of(members, _x_array(X, context), context)
+
+
+def _codes_fold(members: PythonObject, mx: _MetaX, scope: Int, context: PythonObject) raises -> PythonObject:
+    """THE FOLD FROM THE STORE (lane vdf-meta5): `_codes_of` over a fold
+    `mx` with every member opened on its held native state over the base
+    (`_fold_open`) and handed the fold's row index, `scope` and one pin
+    reference per call (`_FoldPin`): its device takes the fold's rows out of
+    the resident base. None, nothing published, when a member is not served
+    that way or a call refuses: the caller admits the fold's rows and asks
+    `_codes_of` (whose doors raise the members' words). Same rows, same
+    order: same codes."""
+    var got = _VoteUnpack()
+    var out = Python.list()
+    var answered = False
+    try:
+        var opened_all = True
+        for i in range(len(members)):  # driver-loop: over members (admission, once each)
+            if not _fold_open(got, members[i], mx.x, MEMBER_OP_PREDICT, True, 0, 0, 1.0, True, context):
+                opened_all = False
+                break
+        if opened_all:
+            _fold_plans(got)
+            var dst = List[Int](capacity=len(got.members))
+            for j in range(len(got.members)):  # driver-loop: over members (outputs)
+                var col = admitted_vector(mx.n, "<i4", context)
+                _ = py_call(out.append, col)
+                dst.append(trees_address(col))
+            var pin = _FoldPin(mx.x, len(got.members))
+            var rows = pin.rows(trees_address(mx.x), mx.base_rows, mx.d, trees_address(mx.draw), mx.n, scope)
+            var refused = VOTE_ALL_ANSWERED
+            try:
+                with GILReleased(Python()):
+                    refused = multioutput_codes_run(rows, got.members, dst, 0)
+            finally:
+                pin.settle()
+            answered = refused == VOTE_ALL_ANSWERED
+    except e:
+        _vote_close(got)
+        raise e^
+    _vote_close(got)
+    _ = mx.x  # the rows are read through RUN
+    _ = mx.draw
+    if not answered:
+        return PythonObject(None)
+    return out
 
 
 def _codes_of(members: PythonObject, Xa: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -2842,18 +2905,17 @@ def _codes_of(members: PythonObject, Xa: PythonObject, context: PythonObject) ra
 
 
 def _multioutput_classifier_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
-    var Xa = _check_x(model, X, context)
-    return _multioutput_assemble(model, Xa, _multioutput_member_codes(model, Xa, context), context)
+    var mx = _check_meta_x(model, X, context)  # a fold from the store (lane vdf-meta5)
+    return _multioutput_assemble(model, mx.n, _multioutput_member_codes(model, X, mx, context), context)
 
 
-def _multioutput_assemble(model: PythonObject, Xa: PythonObject, codes: PythonObject,
+def _multioutput_assemble(model: PythonObject, n: Int, codes: PythonObject,
                           context: PythonObject) raises -> PythonObject:
-    """`MultiOutputClassifier.predict` from each output's member codes: the
-    decoded columns stacked into one (n, m) Array, or per-row label lists
-    for label objects no Array holds."""
+    """`MultiOutputClassifier.predict` from each output's member codes (`n`
+    rows): the decoded columns stacked into one (n, m) Array, or per-row
+    label lists for label objects no Array holds."""
     var b = trees_builtins()
     var xt = _xt(py_fields(model), context)
-    var n = _rows(Xa)
     var nk = trees_keys()
     var classes = _attr(model, nk[].k_classes_, Python.list())
     var cols = Python.list()
@@ -2928,13 +2990,75 @@ def _multioutput_classifier_proba(model: PythonObject, X: PythonObject, context:
     its door's float32 probabilities and class columns, `_member_scores`'s
     routes), RUN `multioutput_proba_run` into one float64 zero block per
     output allocated here, PACK the (n, k_j) views of them."""
-    var Xa = _check_x(model, X, context)
+    var mx = _check_meta_x(model, X, context)  # a fold from the store (lane vdf-meta5)
     var nk = trees_keys()
     var ks = List[Int]()
     var classes = _attr(model, nk[].k_classes_, Python.list())
     for j in range(len(classes)):  # driver-loop: over members (outputs)
         ks.append(len(classes[j]))
-    return _probas_of(model, _attr(model, nk[].k_estimators_, Python.list()), ks, Xa, context)
+    var members = _attr(model, nk[].k_estimators_, Python.list())
+    if mx.draw is None:
+        return _probas_of(model, members, ks, mx.x, context)
+    var scope = _fold_scope(mx, context)
+    if scope != MEMBER_SCOPE_NONE:
+        var got = _probas_fold(model, members, ks, mx, scope, context)
+        if got is not None:
+            return got
+    return _probas_of(model, members, ks, _x_array(X, context), context)
+
+
+def _probas_fold(model: PythonObject, members: PythonObject, ks: List[Int], mx: _MetaX, scope: Int,
+                 context: PythonObject) raises -> PythonObject:
+    """THE FOLD FROM THE STORE (lane vdf-meta5): `_probas_of` over a fold
+    `mx`, every member reading the fold by number out of the resident base
+    (`_fold_open`, `_FoldPin`; RUN `multioutput_proba_run`). None, nothing
+    published, when a member is not served that way or a call refuses (the
+    caller admits the fold's rows and asks `_probas_of`). Same rows, same
+    order, same accumulation: same bits."""
+    var xt = _xt(py_fields(model), context)
+    var n = mx.n
+    var got = _VoteUnpack()
+    var blocks = Python.list()
+    var answered = False
+    try:
+        var opened_all = True
+        for i in range(len(members)):  # driver-loop: over members (admission, once each)
+            var cols = _sub_cols(members[i], context)
+            _ = py_call(got.keep.append, cols)
+            if not _fold_open(got, members[i], mx.x, MEMBER_OP_PREDICT_PROBA, True, 0, trees_address(cols), 1.0,
+                              True, context):
+                opened_all = False
+                break
+        if opened_all:
+            _fold_plans(got)
+            var accs = List[Int](capacity=len(got.members))
+            for j in range(len(got.members)):  # driver-loop: over members (outputs)
+                var acc = _zeros(n * ks[j], context)
+                _ = py_call(blocks.append, acc)
+                accs.append(trees_address(acc))
+            var glue = _xr(xt)
+            var pin = _FoldPin(mx.x, len(got.members))
+            var rows = pin.rows(trees_address(mx.x), mx.base_rows, mx.d, trees_address(mx.draw), n, scope)
+            var refused = VOTE_ALL_ANSWERED
+            try:
+                with GILReleased(Python()):
+                    refused = multioutput_proba_run(glue, rows, got.members, ks, accs, 0)
+            finally:
+                pin.settle()
+            answered = refused == VOTE_ALL_ANSWERED
+    except e:
+        _vote_close(got)
+        raise e^
+    _vote_close(got)
+    _ = mx.x  # the rows are read through RUN
+    _ = mx.draw
+    _ = got.keep  # the class columns are read through RUN
+    if not answered:
+        return PythonObject(None)
+    var out = Python.list()
+    for j in range(len(blocks)):  # driver-loop: over members (outputs)
+        _ = py_call(out.append, trees_reshape(blocks[j], Python.tuple(n, ks[j]), context))
+    return out
 
 
 def _probas_of(model: PythonObject, members: PythonObject, ks: List[Int], Xa: PythonObject,
@@ -2987,13 +3111,13 @@ def _multioutput_classifier_score(model: PythonObject, X: PythonObject, y: Pytho
     """`MultiOutputClassifier.score`: the (weighted) fraction of rows whose
     every output matches."""
     var b = trees_builtins()
-    var Xa = _check_x(model, X, context)
-    var codes = _multioutput_member_codes(model, Xa, context)
-    var pred = _multioutput_assemble(model, Xa, codes, context)
+    var mx = _check_meta_x(model, X, context)  # a fold from the store (lane vdf-meta5)
+    var codes = _multioutput_member_codes(model, X, mx, context)
+    var pred = _multioutput_assemble(model, mx.n, codes, context)
     var nk = trees_keys()
     if py_type(pred) is not py_item(context, nk[].k_array_class):
         # Label objects no Array holds (str classes): scored in codes.
-        return _multioutput_score_codes(model, codes, _rows(Xa), y, sample_weight, context)
+        return _multioutput_score_codes(model, codes, mx.n, y, sample_weight, context)
     var truth = admit_c_view(y, "y", context)
     var shown = py_call(b.tuple, pred.shape)
     var truth_shape = Python.list()
