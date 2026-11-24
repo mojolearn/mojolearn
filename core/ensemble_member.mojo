@@ -4422,23 +4422,36 @@ def _fit_gathered(slot: _SlotPtr, call: _CallPtr) raises:
     """THE GATHERED ROWS of a fit: X, y, the weights and the given y at the caller's row index, gathered once
     into the slot's words (its nested states may borrow them: they live until the next fit or FREE), the
     call pointed at them for `_fit_views` and restored after it whether it returned or raised. X's pin is
-    not offered (the gathered block is not the pinned X). The states of the previous fit, which may borrow
-    the previous gathered words, are released first (a fit replaces them in any case)."""
+    not offered (the gathered block is not the pinned X).
+
+    CHECK FIRST, RELEASE AFTER (lane vdf-meta3): the rows are gathered into words this call owns, the call's
+    arguments are checked on them (`_fit_check`), and only then are the previous fit's states released (they
+    may borrow the previous gathered words) and the new words moved into the slot (a List move keeps its heap
+    block, so the views stay valid). A refused fit leaves the previous fit as it was."""
     var index = call[].row_index
     var x_view = call[].x
     var y_view = call[].y
     var w_view = call[].weights
     var g_view = call[].y_given
     var pin = call[].pin
-    _drop_states(slot)
-    call[].x = _gather_view(x_view, index, slot[].rows_x)
-    call[].y = _gather_view(y_view, index, slot[].rows_y)
-    call[].weights = _gather_view(w_view, index, slot[].rows_w)
-    call[].y_given = _gather_view(g_view, index, slot[].rows_given)
+    var gx = List[Int64]()
+    var gy = List[Int64]()
+    var gw = List[Int64]()
+    var gg = List[Int64]()
+    call[].x = _gather_view(x_view, index, gx)
+    call[].y = _gather_view(y_view, index, gy)
+    call[].weights = _gather_view(w_view, index, gw)
+    call[].y_given = _gather_view(g_view, index, gg)
     call[].row_index = MemberMatrix()
     call[].pin = 0
     try:
-        _fit_views(slot, call)
+        _fit_check(slot, call)
+        _drop_states(slot)
+        slot[].rows_x = gx^
+        slot[].rows_y = gy^
+        slot[].rows_w = gw^
+        slot[].rows_given = gg^
+        _fit_run(slot, call)
     finally:
         call[].x = x_view
         call[].y = y_view
@@ -4449,6 +4462,14 @@ def _fit_gathered(slot: _SlotPtr, call: _CallPtr) raises:
 
 
 def _fit_views(slot: _SlotPtr, call: _CallPtr) raises:
+    """FIT over the call's own views: the arguments checked, then the previous fit released, then the fit."""
+    _fit_check(slot, call)
+    _drop_states(slot)
+    _fit_run(slot, call)
+
+
+def _fit_check(slot: _SlotPtr, call: _CallPtr) raises:
+    """FIT's argument checks, in order; nothing is released or written (lane vdf-meta3: CHECK FIRST)."""
     # THE DOOR'S REFUSAL (lane mf-refuse5, `meta_plan_refuse`): the door's words for a constructor value,
     # first, as the door's validation runs before it reads X.
     if _refused_first(slot):
@@ -4489,7 +4510,10 @@ def _fit_views(slot: _SlotPtr, call: _CallPtr) raises:
         raise Error("TypeError: a " + name + " member's fit takes no sample weights")
     if call[].weights.given() and _rfe_kind(slot[].kind) and (_rfe_mask(slot) & MEMBER_CAN_SAMPLE_WEIGHT) == 0:
         raise Error("TypeError: an RFE member's estimator fits no sample weights")
-    _drop_states(slot)
+
+
+def _fit_run(slot: _SlotPtr, call: _CallPtr) raises:
+    """FIT after `_fit_check` passed and the previous fit's states were released."""
     slot[].features = call[].x.cols
     # THE GIVEN y (lane mf-tail5): a regressor's, for this fit only.
     slot[].fit_y = call[].y.data
