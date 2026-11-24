@@ -28,7 +28,7 @@ State on `lane/w3-integrate` 3cda8a05b3 (coverage audit of the round-6 gate):
    widens). Classes whose constructor lacks `device` gain it the same way.
 2. **Verify passes `device=`.** Each lane runs its endpoint with `device="cpu"` and `device="gpu"`; the digests are
    compared with the reference columns as today. The `MOJOLEARN_VENDOR=cpu` switch inside verify goes in the same
-   change; if nothing else needs the variable it is deleted from the product too ("remove what a change made
+   change; the variable itself stays in the product (see the inventory below); its 80 verify-only sites go ("remove what a change made
    unnecessary").
 3. **Coverage.** Every public endpoint with a numerical result gets a lane where reasonably possible, in this order:
    `score`, `fit_transform`, `fit_predict`, `state_dict` / `load_state_dict`, pickling round trips, the 45 autograd /
@@ -40,6 +40,28 @@ State on `lane/w3-integrate` 3cda8a05b3 (coverage audit of the round-6 gate):
 5. **Delete what verify now covers.** The dedicated `device=` pytest files and the pytest files that re-check an
    endpoint's numbers go in the same merge. Kept in pytest: refusal of a bad device word, of a device array handed
    to a CPU model, of callbacks; exception types and words; returned object types.
+
+## What the inventory found (lane vd-inventory, 2026-11-24; tables in `docs/plans/verify_through_device/`)
+
+- `MOJOLEARN_VENDOR` stays in the product: it chooses cuda or hip and the CPU-only set, and the native process pool
+  writes it into each child (`bindings/native_process_pool_door.mojo:163`). Of its 362 sites, 80 go once verify
+  passes `device=` (`vendor_switch_uses.tsv`); the rest stay. Item 2 removes those 80, not the variable.
+- Two sabotage patches fault one side by reading that variable. With both sides in one process they fault both or
+  neither: re-cut each so the fault sits in the code of one side.
+- `mojolearn.check` (`_check_both.py`) starts the same CPU child process as verify: it moves to `device=` with it.
+- 43 `parallel_*` entries take `devices=` (a GPU list) and have no CPU side: they keep `devices=`, verify takes
+  their one digest, and they are listed as single-sided.
+- 197 functions and 75 computing constructors have no `device` (`functions_without_device.tsv`): lane vd-functions.
+- `device="cpu"` is refused by 15 estimator classes (9 not connected, 6 compiled constructors without `device`):
+  connect them in lane vd-functions.
+- 210 endpoints have no CPU side and 152 no GPU side: verify takes one digest and the table names the missing
+  side; each missing side is an owed implementation, listed, not hidden.
+- Fault arms: 655 mapped endpoints have an arm on the CPU side only (GPU arms reach 258 lanes); 96 have none
+  (`ops.Session` 85, `ops.Program` 9). Item 4 closes both.
+- Unmapped: 1,341 endpoints fall to five generic lanes (params 391, digest 391, attribute access 251, `check` 196,
+  pickling 78); 606 need lanes of their own (`score` 73, `fit_transform` 49, `call` 43, state dicts 58, ...).
+- pytest: 1,332 files, 11,147 tests: 601 tooling, 511 boundary, 181 duplicate, 39 device. The classes are a first
+  pass from names and contents: each duplicate file is read before it is deleted.
 
 ## Lanes
 

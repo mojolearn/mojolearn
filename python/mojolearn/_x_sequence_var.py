@@ -110,6 +110,18 @@ class VAR(ParamsMixin):
     def __init__(self, endog, exog=None, numeric_mode=None, device=None):
         return _XSEQ(self, "var_initialize", (endog, exog, numeric_mode, device), _XSEQ_CONTEXT)
 
+    def vendor_used(self):
+        """The backend this model runs on.
+
+        Returns
+        -------
+        str
+            ``'cpu'`` for a ``device="cpu"`` model, otherwise this
+            installation's vendor (``'metal'``, ``'cuda'``, ``'hip'`` or
+            ``'cpu'``), read from the compiled binary it uses.
+        """
+        return _XSEQ(self, "xseq_vendor_used", (), _XSEQ_CONTEXT)
+
     def fit(self, maxlags=1, method="ols", ic=None, trend="c"):
         """Estimate the VAR with a fixed lag order.
 

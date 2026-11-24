@@ -19,9 +19,21 @@ def _rows():
     return np.array([[-1, 0], [0, 0], [1, 0], [9, 0], [10, 0], [11, 0]], dtype=np.float32)
 
 
+def _line():
+    return np.array([[i, 0] for i in range(10)], dtype=np.float32)
+
+
 def _kmeans():
-    # tol 0: the strict shift test never stops the fit, so every restart runs max_iter steps
-    return ml.KMeans(n_clusters=2, init="random", n_init=2, max_iter=3, tol=0.0, random_state=7)
+    # tol must be positive (cuVS: "invalid parameter (tol<=0)"). 1e30 is above any
+    # squared shift of these rows, so every restart stops at its first Lloyd step.
+    return ml.KMeans(n_clusters=2, init="random", n_init=2, max_iter=3, tol=1e30, random_state=7)
+
+
+def _kmeans_capped():
+    # One explicit start (0, 1) on x = 0..9: the first three steps move the centers
+    # by squared shifts 16, 2 and 0.5, all above tol, so the fit exhausts max_iter.
+    start = np.array([[0, 0], [1, 0]], dtype=np.float32)
+    return ml.KMeans(n_clusters=2, init=start, n_init=1, max_iter=3, tol=1e-4, random_state=7)
 
 
 def _minibatch():
@@ -41,10 +53,18 @@ def test_fit_loop_is_a_tuple_of_int_and_float_after_fit(make):
 
 def test_kmeans_fit_loop_sums_the_restarts():
     model = _kmeans().fit(_rows())
-    # n_iter_ is the kept restart's count as cuVS reports it (max_iter + 1
-    # on exhaustion); the loop counts every executed step of both restarts
+    # n_iter_ is the kept restart's converged step; the loop counts every
+    # executed step of both restarts
+    assert model.n_iter_ == 1
+    assert model.fit_loop_[0] == 2 * 1
+
+
+def test_kmeans_fit_loop_counts_an_exhausted_fit():
+    model = _kmeans_capped().fit(_line())
+    # n_iter_ is max_iter + 1 on exhaustion, as cuVS reports it; the loop
+    # counts the max_iter executed steps
     assert model.n_iter_ == 4
-    assert model.fit_loop_[0] == 2 * 3
+    assert model.fit_loop_[0] == 3
 
 
 def test_minibatch_fit_loop_counts_the_steps():

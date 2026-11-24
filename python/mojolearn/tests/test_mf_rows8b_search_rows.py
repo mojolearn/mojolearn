@@ -98,8 +98,9 @@ def test_cross_val_predict_of_a_mixture_models_proba_is_its_own_columns():
     # Nine rows: `_TESTS` is a partition of 0..8 only; over twelve rows scikit-learn's cross_val_predict itself
     # refuses ("cross_val_predict only works for partitions", sklearn/model_selection/_validation.py).
     X = _x(9)
-    got = ms.cross_val_predict(ml.GaussianMixture(n_components=2, random_state=0), X, None, cv=_folds(len(X)),
-                               method='predict_proba')
+    # an in-package caller receives the Array (no fancy indexing): read it as NumPy
+    got = np.asarray(ms.cross_val_predict(ml.GaussianMixture(n_components=2, random_state=0), X, None,
+                                          cv=_folds(len(X)), method='predict_proba'))
     assert got.shape == (9, 2)
     for train, test in _folds(len(X)):
         est = ml.GaussianMixture(n_components=2, random_state=0).fit(X[train])
@@ -109,6 +110,17 @@ def test_cross_val_predict_of_a_mixture_models_proba_is_its_own_columns():
 def test_float_predictions_under_a_clustering_scorer_are_the_cluster_doors_words():
     X = _x()
     y = (np.arange(12) % 3).astype(np.int64)
+    # The cluster doors' refusal is a failed SCORE: with error_score='raise' it raises; under the default
+    # numeric error_score scikit-learn's `_score` scores error_score and warns "Scoring failed" with the words
+    # (lane w3f3-b d9b1fae936 made the search follow that rule; this test expected a raise under NaN).
     with pytest.raises(Exception, match='labels_pred must be an integer label array'):
         ms.GridSearchCV(ml.KNeighborsRegressor(), {'n_neighbors': [3]}, cv=_folds(12),
-                        scoring='adjusted_rand_score', refit=False).fit(X, y)
+                        scoring='adjusted_rand_score', refit=False, error_score='raise').fit(X, y)
+    import warnings
+    with warnings.catch_warnings(record=True) as seen:
+        warnings.simplefilter('always')
+        got = ms.GridSearchCV(ml.KNeighborsRegressor(), {'n_neighbors': [3]}, cv=_folds(12),
+                              scoring='adjusted_rand_score', refit=False).fit(X, y)
+    assert all(np.isnan(got.cv_results_[f'split{f}_test_score'][0]) for f in range(3))
+    failed = [str(w.message) for w in seen if str(w.message).startswith('Scoring failed.')]
+    assert len(failed) == 3 and all('labels_pred must be an integer label array' in m for m in failed), failed

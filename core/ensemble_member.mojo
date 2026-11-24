@@ -238,7 +238,7 @@ from core.member_abi import (
     MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_SCORE,
     MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_BY_INDEX, MEMBER_EXPORT_OWN, MEMBER_IMPORT_DONE,
     MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, MEMBER_CAN_TRANSFORM, MEMBER_OP_TRANSFORM,
-    MEMBER_READS_Y_GIVEN, MEMBER_HOME_HOST,
+    MEMBER_READS_Y_GIVEN, MEMBER_HOME_HOST, MEMBER_CAN_STEPS,
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import (
@@ -637,7 +637,18 @@ def meta_plan_mint_with(var plans: List[MemberPlan], var weights: List[Float64],
             index = store[].count
             store[].count += 1
         var slot = _PlanSlotPtr(unsafe_from_address=_plan_slot_address(index))
-        slot[].generation += 1
+        # A reused slot starts whole from the default (lane w3f5-d, gate
+        # 3cda8a05b3): the optional words (`split`, `metric`, `other`,
+        # `cluster` / `label_words`, `rfe_run`, `refusal`) are written only by
+        # the admissions that have them (`meta_plan_split` ...), so a search
+        # with a user's index list (no splitter spec) read the previous
+        # entry's splitter: its folds and fit count were another plan's (a
+        # GridSearchCV over listed folds scored other rows, a member's inner
+        # listed cv indexed rows the stale folds did not hold), depending on
+        # which entry the free list handed back. One slot write per admission.
+        var generation = slot[].generation + 1
+        slot[] = MetaPlanSlot()
+        slot[].generation = generation
         slot[].live = True
         slot[].plans = plans^
         slot[].weights = weights^
@@ -896,17 +907,11 @@ def _plan_lookup(handle: Int, release: Bool) raises -> Int:
         if not slot[].live or slot[].generation != handle // _INDEX_SPAN:
             raise Error("RuntimeError: mojolearn: this meta member plan was released")
         if release:
-            slot[].live = False
-            slot[].plans = List[MemberPlan]()
-            slot[].weights = List[Float64]()
-            slot[].stack_kinds = List[Int]()
-            slot[].masks = List[Int]()
-            slot[].words = List[Float64]()
-            slot[].fold_train = List[List[Int32]]()
-            slot[].fold_test = List[List[Int32]]()
-            slot[].refusal = String("")
-            slot[].refusal_late = False
-            slot[].rfe_hops = List[Float64]()
+            # Every word goes (lane w3f5-d): the generation alone is kept, so
+            # a released handle stays refused and the next mint starts clean.
+            var generation = slot[].generation
+            slot[] = MetaPlanSlot()
+            slot[].generation = generation
             store[].free.append(index)
         return address
     finally:
@@ -1395,6 +1400,10 @@ def _kind_mask(kind: Int, flag: Bool, masks: List[Int]) -> Int:
             mask |= MEMBER_CAN_SCORE
         if len(masks) > 0 and _all(masks, MEMBER_CAN_MULTI_OUTPUT):
             mask |= MEMBER_CAN_MULTI_OUTPUT
+        if len(masks) > 0 and _all(masks, MEMBER_CAN_STEPS):
+            # lane w3f5-c: a search over sequence members (recurrent, CNN)
+            # takes their (rows, T, F) X; the RUN hands the steps on.
+            mask |= MEMBER_CAN_STEPS
         if len(masks) > 0 and _all(masks, MEMBER_GIL_FREE):
             mask |= MEMBER_GIL_FREE
         elif len(masks) > 0 and _all_either(masks):
@@ -1473,7 +1482,7 @@ def _all_either(masks: List[Int]) -> Bool:
 comptime _UNION = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION
     | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_CLASSIFIER | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_BORROWS_FIT
     | MEMBER_GIL_FREE | MEMBER_GIL_DOOR | MEMBER_CAN_SCORE | MEMBER_CAN_MULTI_OUTPUT | MEMBER_CAN_SCOPE
-    | MEMBER_CAN_TRANSFORM | MEMBER_READS_Y_GIVEN)
+    | MEMBER_CAN_TRANSFORM | MEMBER_READS_Y_GIVEN | MEMBER_CAN_STEPS)
 
 
 def _set_word(mask: Int) -> UInt8:
@@ -3437,6 +3446,10 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
                               call[].x.cols, call[].y.data, k, slot[].folds, slot[].glue, slot[].metric)
     plan.y_dtype = MEMBER_I32 if classifier else MEMBER_F32
     plan.y_cols = outputs
+    # THE SEQUENCES (lane w3f5-c): X's steps go on to every candidate's
+    # views; the kind has MEMBER_CAN_STEPS only when every candidate does
+    # (`_kind_mask`), so a caller hands steps > 1 to such a search only.
+    plan.steps = call[].x.steps
     if not classifier:
         # THE GIVEN y (lane mf-tail5): the RUN hands it to the candidates that read it.
         plan.given = slot[].fit_given
@@ -4228,8 +4241,14 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
     var y_dtype = MEMBER_I32 if _classifier_kind(slot[].kind) else MEMBER_F32
     # THE 2-D y (lane mf-search4): a multi-output kind, or a search whose
     # every candidate is one, reads rows x outputs.
+    # LANE w3f5-b: a search over pure transformers (every candidate
+    # transforms and none predicts: its scorers read transform(X) against
+    # y, e.g. a reconstruction error with y = X) reads its 2-D y for the
+    # scorers only, as scikit-learn's search hands y to the scorer.
     var two_d = _multi_kind(slot[].kind) or (_search_kind(slot[].kind)
-                                              and _all(slot[].base_masks, MEMBER_CAN_MULTI_OUTPUT))
+                                              and (_all(slot[].base_masks, MEMBER_CAN_MULTI_OUTPUT)
+                                                   or (_all(slot[].base_masks, MEMBER_CAN_TRANSFORM)
+                                                       and not _any(slot[].base_masks, MEMBER_CAN_PREDICT))))
     # A SEARCH WITHOUT A TARGET (lane mf-msel5b): an unsupervised base fitted
     # with y=None hands no y (the search RUN's target-free words).
     var y_free = (_search_kind(slot[].kind) and not _classifier_kind(slot[].kind) and call[].y.rows == 0
