@@ -132,4 +132,3 @@ def prep_native_split(cv: PythonObject, x: PythonObject, y: PythonObject, contex
 # REMOVED (lane mf-rfe7, 2026-11-23): `prep_estimator_attribute`, RFE's attribute path over a fitted
 # estimator's connected state or its registered attribute operation (SVM coef_); its one caller, RFE's door
 # rounds, is deleted (every RFE round reads its member's EXPORT block).
-    return current
