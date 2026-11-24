@@ -38,6 +38,8 @@ Operations and their words (inputs are (address, slot) pairs, in order):
     MS_SILHOUETTE       X f32, labels i32       rows, cols, n_labels, chunk, sx -       scores (rows)  1 (mean)
     MS_TRUST            X f32, X_emb (HOST)     n, m, d, n_neighbors, batch, sx -       -              1
     MS_ENCODE           labels (slot only)      n, kind, item, codes slot       -       classes (host) returns k
+    MS_ENCODE_PAIR      yt, yp (item 4 / 8)     n, kind, item, codes_t, codes_p -       classes|0      returns k
+    MS_GATHER           codes (slot only)       n, nt, dst slot                 -       table (host)   first miss|-1
 
 `sx`: 0 when the door scanned X on the host; else the X finiteness refusal
 runs here on the device (1 silhouette_score / trustworthiness, 2
@@ -50,13 +52,29 @@ embedded k-NN's boundary is host pointers (neighbors/estimator.mojo
 writing the codes into a store slot the caller made (`metric_slot_create`),
 so a resident label vector's codes reach the kernel entry without a host
 round trip.
+
+MS_ENCODE_PAIR (lane vdf-xm-wire) is the DEVICE UNION STEP of a label pair,
+the device twin of core/metrics_cluster_table.mojo `cluster_union_codes`:
+both vectors (each a slot or a host address, the host one uploaded once) are
+concatenated on the device (two device-to-device copies), encoded ONCE by the
+order rule over the 2n labels (`metric_encode_resident`), and the two halves
+of the codes are copied into the caller's two code slots (`metric_slot_create`),
+where the next entry call (MS_MI .. MS_HCV over [0, k-1], MS_CONFUSION,
+MS_PRFS) reads them in place. The k union classes come back once at the
+labels' width when `outs[0]` names a host buffer of at least 2n items (the
+class-list PACK of confusion_matrix / precision_recall_fscore), else into a
+scratch the entry owns. Same codes as the host union encoder (integers fixed
+by the input alone), so the same bits. MS_GATHER is lane vdf-xm-labels'
+`metric_gather_resident`: a door's O(k) class-order table (host) applied to a
+codes slot on the device into another slot; it answers the first row mapped
+to -1, or -1.
 """
 from std.memory import unsafe_memcpy
 from std.math import fma
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
-from core.metric_labels_device import metric_encode_resident
+from core.metric_labels_device import metric_encode_resident, metric_gather_resident
 from metrics.slot_inputs import MetricInputs, MetricSlotF32, MetricSlotI32
 from metrics.label_pair_admission import metrics_check_range
 from metrics.impl.regression_errors import regression_error
@@ -83,7 +101,7 @@ from metrics.impl.stats.detail.trustworthiness_score import trustworthiness_rank
 from metrics.slot_ops import (
     MS_ACCURACY, MS_ACCURACY_W, MS_RAND, MS_ARI, MS_MI, MS_FM, MS_HOMOG, MS_COMPL, MS_V_MEASURE, MS_HCV,
     MS_ENTROPY, MS_R2, MS_R2_W, MS_MSE, MS_MAE, MS_RMSE, MS_KL, MS_ROC_AUC, MS_PR_CURVE, MS_LOG_LOSS,
-    MS_CONFUSION, MS_PRFS, MS_SILHOUETTE, MS_TRUST, MS_ENCODE,
+    MS_CONFUSION, MS_PRFS, MS_SILHOUETTE, MS_TRUST, MS_ENCODE, MS_ENCODE_PAIR, MS_GATHER,
 )
 
 comptime _OutF32 = MutPointer[Float32, MutAnyOrigin]
@@ -118,6 +136,10 @@ def metric_slot_schema(op: Int) raises -> Tuple[Int, Int, Int, Int]:
         return (2, 6, 0, 0)
     if op == MS_ENCODE:
         return (1, 4, 0, 1)
+    if op == MS_ENCODE_PAIR:
+        return (2, 5, 0, 1)
+    if op == MS_GATHER:
+        return (1, 3, 0, 1)
     raise Error("metric_slots: unknown operation " + String(op))
 
 
@@ -372,6 +394,62 @@ def metric_slot_run(op: Int, addrs: List[Int], slots: List[Int], ints: List[Int]
         values.append(fma(-(2.0 / ((nn * kk) * (fma(-3.0, kk, 2.0 * nn) - 1.0))), Float64(r[0]), 1.0))
         _ = dx^
         _ = emb^
+    elif op == MS_ENCODE_PAIR:
+        # the device union step (module note): concatenate, encode once, split the codes
+        var kind = ints[1]
+        var item = ints[2]
+        if item != 4 and item != 8:
+            raise Error("metric_slots: the label pair encode reads 4- or 8-byte labels, got " + String(item))
+        if n <= 0 or n > 1073741823:
+            raise Error("metric_slots: the label pair encode needs 1 .. 2^30 - 1 rows, got " + String(n))
+        if ints[3] < 0 or ints[4] < 0:
+            raise Error("metric_slots: the label pair encode writes two code slots")
+        var w = n * item // 4
+        var dt = inputs.i32(slots[0], addrs[0], w)
+        var dp = inputs.i32(slots[1], addrs[1], w)
+        var both = ctx.enqueue_create_buffer[DType.int32](2 * w)
+        var both_t = both.create_sub_buffer[DType.int32](0, w)
+        var both_p = both.create_sub_buffer[DType.int32](w, w)
+        ctx.enqueue_copy(dst_buf=both_t, src_buf=dt)
+        ctx.enqueue_copy(dst_buf=both_p, src_buf=dp)
+        var codes = ctx.enqueue_create_buffer[DType.int32](2 * n)
+        # the k union classes: the caller's host buffer (>= 2n items), else a scratch never touched past k
+        var scratch = List[UInt8]()
+        var classes_addr = outs[0]
+        if classes_addr == 0:
+            scratch = List[UInt8](unsafe_uninit_length=2 * n * item)
+            classes_addr = Int(scratch.unsafe_ptr())
+        count = metric_encode_resident(ctx, Int(both.unsafe_ptr()), 2 * n, kind, item, Int(codes.unsafe_ptr()),
+                                       classes_addr)
+        var ct = inputs.i32(ints[3], 0, n)
+        var cp = inputs.i32(ints[4], 0, n)
+        var codes_t = codes.create_sub_buffer[DType.int32](0, n)
+        var codes_p = codes.create_sub_buffer[DType.int32](n, n)
+        ctx.enqueue_copy(dst_buf=ct, src_buf=codes_t)
+        ctx.enqueue_copy(dst_buf=cp, src_buf=codes_p)
+        ctx.synchronize()
+        _ = both_t^
+        _ = both_p^
+        _ = codes_t^
+        _ = codes_p^
+        _ = scratch^
+        _ = dt^
+        _ = dp^
+        _ = both^
+        _ = codes^
+        _ = ct^
+        _ = cp^
+    elif op == MS_GATHER:
+        # a door's class-order table over a codes slot, into another slot, on the device
+        if slots[0] < 0 or ints[2] < 0:
+            raise Error("metric_slots: the class-order gather reads and writes store slots only")
+        if n <= 0:
+            raise Error("metrics: n must be positive, got " + String(n))
+        var src = inputs.i32(slots[0], 0, n)
+        var dst = inputs.i32(ints[2], 0, n)
+        count = metric_gather_resident(ctx, outs[0], ints[1], Int(src.unsafe_ptr()), n, Int(dst.unsafe_ptr()))
+        _ = src^
+        _ = dst^
     else:
         # MS_ENCODE: the resident labels' codes into the caller's slot; k classes to the host
         if slots[0] < 0 or ints[3] < 0:

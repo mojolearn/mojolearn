@@ -425,13 +425,23 @@ def mc_encode_words(addr: Int, item: Int, count: Int, context: PythonObject) rai
     var codes = family_array(Python.tuple(count), "<i4", context)
     var k = mc_encode_signed(addr, item, count, Int(classes.unsafe_ptr()), Int(py=classical_address(codes)))
     _ = codes  # keep the Python object alive through the native call above
+    var listed = mc_class_list(Int(classes.unsafe_ptr()), item, k)
+    _ = classes^
+    return Python.tuple(listed, codes)
+
+
+def mc_class_list(at: Int, item: Int, k: Int) raises -> PythonObject:
+    """THE CLASS-LIST PACK: the k sorted distinct labels at host address `at`
+    (`item` bytes each, signed, the encoder's class words) as one presized
+    Python int list. Shared by the host encoder (`mc_encode_words`) and the
+    device union step's classes (bindings/metrics_slot_door.mojo
+    `mc_resident_pair`, lane vdf-xm-wire)."""
     ref cpy = Python().cpython()
     var t = cpython_table()
     var raw = t[].PyList_New(k)
     if not raw:
         raise cpy.unsafe_get_error()
     var listed = PythonObject(from_owned=raw)
-    var at = Int(classes.unsafe_ptr())
     for c in range(k):  # driver-loop: over the k distinct classes
         var value: Int64
         if item == 8:
@@ -446,8 +456,7 @@ def mc_encode_words(addr: Int, item: Int, count: Int, context: PythonObject) rai
         if not obj:
             raise cpy.unsafe_get_error()
         _ = t[].PyList_SetItem(listed._obj_ptr, c, obj)
-    _ = classes^
-    return Python.tuple(listed, codes)
+    return listed
 
 
 def mc_encode_store(store: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
