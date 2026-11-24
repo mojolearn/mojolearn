@@ -26,8 +26,10 @@ release, as its fit does), imported from `_index`.
     over the code targets (predict decodes the voted codes, as for str
     labels). Without labels the targets are the codes.
   * `neighbors_member_state` (UNPACK): a member state from a fitted
-    one-output estimator; the classifier's stored labels are encoded to codes
-    by the native encoder (the class count is its class list's length).
+    estimator (one output or several, lane w3f3-k); the classifier's stored
+    labels are encoded to codes by the native encoder, per output (the class
+    count is its class list's length). A multi-output PACK writes
+    `_y_cols` outputs x rows and `outputs_2d_` as the estimator's own fit.
 
 SERIAL BY NATURE: one member's admission or publication (a few record reads
 and block copies); a caller runs its members in parallel.
@@ -40,8 +42,8 @@ from bindings.classical_labels_door import classical_encode_labels, classical_de
 from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.family_common_pack import family_array, family_field
 from bindings.member_owner_unpack import MemberOwner, member_labels_take, member_host_only
-from bindings.neighbors_knn_native_door import _check_refusals, knn_dist_words, knn_ops_key, knn_release
-from bindings.py_balanced import py_get, py_setitem
+from bindings.neighbors_knn_native_door import _check_refusals, _encode_column, knn_dist_words, knn_ops_key, knn_release
+from bindings.py_balanced import py_call, py_get, py_setitem
 from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU
 from core.entry_table import EntryRef, entry_ref_word
 from core.member_abi import (
@@ -138,7 +140,12 @@ def neighbors_member_pack(model: PythonObject, fields: PythonObject, context: Py
     py_setitem(fields, "_index", index)
     py_setitem(fields, "n_samples_fit_", PythonObject(rows))
     py_setitem(fields, "n_features_in_", PythonObject(cols))
-    py_setitem(fields, "outputs_2d_", PythonObject(False))
+    # THE 2-D y (lane w3f3-k): the targets block is outputs x rows.
+    var outputs = call.dst.rows
+    py_setitem(fields, "outputs_2d_", PythonObject(outputs > 1))
+    if outputs > 1:
+        _pack_outputs(model, fields, context, b, plan, call.dst.data, outputs, rows)
+        return
     if plan.kind == 0:
         # The caller's labels (member_pack_labeled), taken once: code c is labels[c].
         var labels = member_labels_take(fields, b)
@@ -172,10 +179,52 @@ def neighbors_member_pack(model: PythonObject, fields: PythonObject, context: Py
         py_setitem(fields, "_y_cols", yc)
 
 
+def _pack_outputs(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
+    plan: MemberPlan, data: Int, outputs: Int, rows: Int) raises:
+    """PACK of a multi-output state (lane w3f3-k): `_y_cols` outputs x rows
+    as the estimator's own fit keeps them (`_reg_fit`: the float32 targets;
+    `_clf_fit`: the int32 labels, each output's codes decoded through the
+    caller's labels of that output (`member_pack_labeled` hands one label
+    list per output; without labels the codes are the labels), and
+    `_classes_list` per output from the native encoder, `_label_names`
+    None). `data` is the exported targets block."""
+    var count = outputs * rows
+    if plan.kind != 0:
+        var targets = family_array(Python.tuple(outputs, rows), "<f4", context)
+        unsafe_memcpy(dest=_F32P(unsafe_from_address=Int(py=classical_address(targets))),
+            src=_F32P(unsafe_from_address=data), count=count)
+        py_setitem(fields, "_y_cols", targets)
+        return
+    var labels = member_labels_take(fields, b)
+    var yc = family_array(Python.tuple(outputs, rows), "<i4", context)
+    var yc_address = Int(py=classical_address(yc))
+    unsafe_memcpy(dest=_I32P(unsafe_from_address=yc_address), src=_I32P(unsafe_from_address=data), count=count)
+    var classes = Python.list()
+    if labels is not None:
+        var scope = labels_scope(model, context)
+        for j in range(outputs):  # driver-loop: over the outputs (one decode each)
+            var column = family_array(Python.tuple(rows), "<i4", context)
+            var column_address = Int(py=classical_address(column))
+            unsafe_memcpy(dest=_I32P(unsafe_from_address=column_address),
+                src=_I32P(unsafe_from_address=yc_address + 4 * j * rows), count=rows)
+            var own = labels[j]
+            var decoded = admit_c_view(classical_decode_labels(own, column, scope), "y", context)
+            labels_cast(Int(py=classical_address(decoded)), admitted_dtype(decoded, context),
+                yc_address + 4 * j * rows, "<i4", rows, context)
+            _ = decoded  # keep the Python object alive through the native call above
+            _ = column  # keep the Python object alive through the native call above
+    for j in range(outputs):  # driver-loop: over the outputs (one native encoding each)
+        _ = py_call(classes.append, _encode_column(yc, j, rows, context))
+    _ = yc  # keep the Python object alive through the native calls above
+    py_setitem(fields, "_label_names", PythonObject(None))
+    py_setitem(fields, "_y_cols", yc)
+    py_setitem(fields, "_classes_list", classes)
+
+
 def neighbors_member_state(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan) raises -> Int:
     """UNPACK: a new member state holding the fitted attributes of `model`
-    (one output). The caller frees it (`member_free`)."""
+    (one output or several). The caller frees it (`member_free`)."""
     var index_source = py_get(fields, "_index")
     if plan.kind == 2 or plan.kind == 3:
         # Lane mf-member8: the points are the whole fitted state.
@@ -196,25 +245,44 @@ def neighbors_member_state(model: PythonObject, fields: PythonObject, context: P
     var y_source = py_get(fields, "_y_cols")
     if index_source is None or y_source is None:
         raise Error("NotFittedError: this member is not fitted yet")
-    if Int(py=y_source.shape[0]) != 1:
-        raise Error("ValueError: mojolearn: a k-NN member has one output; this estimator was fitted on "
-            + String(Int(py=y_source.shape[0])))
+    # THE 2-D y (lane w3f3-k): one row of `_y_cols` per output.
+    var outputs = Int(py=y_source.shape[0])
     var index = admit_x(index_source, 2, "_index", context)
     var rows = Int(py=index.shape[0])
     var cols = Int(py=index.shape[1])
     var targets = PythonObject(None)
     var classes = 0
+    var counts = List[Int]()
     var flat = family_array(Python.tuple(rows), "<i4" if plan.kind == 0 else "<f4", context)
     var flat_address = Int(py=classical_address(flat))
     var y_address = Int(py=classical_address(y_source))
-    if Int(py=y_source.size) != rows:
+    if outputs < 1 or Int(py=y_source.size) != rows * outputs:
         raise Error("ValueError: mojolearn: the fitted targets and points differ in length")
-    if plan.kind == 0:
+    if plan.kind == 0 and outputs > 1:
+        # Each output's stored labels encoded to codes by the native encoder,
+        # its class count the length of its class list.
+        targets = family_array(Python.tuple(outputs, rows), "<i4", context)
+        var block_address = Int(py=classical_address(targets))
+        for j in range(outputs):  # driver-loop: over the outputs (one native encoding each)
+            unsafe_memcpy(dest=_I32P(unsafe_from_address=flat_address),
+                src=_I32P(unsafe_from_address=y_address + 4 * j * rows), count=rows)
+            var encoded = classical_encode_labels(flat, context)
+            counts.append(len(encoded.classes))
+            var codes = admit_c_view(encoded.codes, "y", context)
+            labels_cast(Int(py=classical_address(codes)), admitted_dtype(codes, context),
+                block_address + 4 * j * rows, "<i4", rows, context)
+            _ = codes  # keep the Python object alive through the native call above
+            _ = flat  # keep the Python object alive through the native call above
+    elif plan.kind == 0:
         unsafe_memcpy(dest=_I32P(unsafe_from_address=flat_address), src=_I32P(unsafe_from_address=y_address),
             count=rows)
         var encoded = classical_encode_labels(flat, context)
         classes = len(encoded.classes)
         targets = encoded.codes
+    elif outputs > 1:
+        targets = family_array(Python.tuple(outputs, rows), "<f4", context)
+        unsafe_memcpy(dest=_F32P(unsafe_from_address=Int(py=classical_address(targets))),
+            src=_F32P(unsafe_from_address=y_address), count=rows * outputs)
     else:
         unsafe_memcpy(dest=_F32P(unsafe_from_address=flat_address), src=_F32P(unsafe_from_address=y_address),
             count=rows)
@@ -227,15 +295,17 @@ def neighbors_member_state(model: PythonObject, fields: PythonObject, context: P
         _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
         call.block = NEIGHBORS_BLOCK_TARGETS
         if plan.kind == 0:
-            call.x = MemberMatrix(Int(py=classical_address(targets)), 1, rows, MEMBER_I32)
+            call.x = MemberMatrix(Int(py=classical_address(targets)), outputs, rows, MEMBER_I32)
         else:
-            call.x = MemberMatrix(Int(py=classical_address(targets)), 1, rows)
+            call.x = MemberMatrix(Int(py=classical_address(targets)), outputs, rows)
         call.classes = classes
+        call.class_counts = Int(counts.unsafe_ptr()) if len(counts) > 0 else 0
         call.flags = MEMBER_IMPORT_DONE
         _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
     except error:
         member_free(plan, call)
         raise error
+    _ = counts^  # the class counts the import read
     _ = index
     _ = targets
     _ = flat

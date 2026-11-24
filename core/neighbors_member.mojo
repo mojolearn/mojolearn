@@ -43,8 +43,13 @@ Classifier: y = class CODES 0 .. classes-1 as one int32 column
 (`MEMBER_I32`), `call.classes` the class count at fit / import; predict
 writes int32 codes (rows x 1); predict_proba writes float32 rows x classes
 (a class absent from the fitted rows has probability 0). Regressor: y one
-float32 column; predict writes float32 rows x 1. One output only (no
-MEMBER_CAN_MULTI_OUTPUT). The caller's UNPACK admits X and y (finite,
+float32 column; predict writes float32 rows x 1. THE 2-D y (lane w3f3-k,
+MEMBER_CAN_MULTI_OUTPUT, core/member_abi.mojo layout 4), as the estimators'
+own multi-output fit and predict (scikit-learn's KNeighbors* take a 2-D y):
+y rows x outputs (the classifier's codes per output, `call.class_counts`
+each output's count); predict writes rows x outputs, predict_proba rows x
+the counts' sum (each output's columns in turn); the same RUN calls with
+`outputs` target columns. The caller's UNPACK admits X and y (finite,
 shapes) as for every member; the member tests no word again. OUTPUTS with
 no state answers from the NEW words: predict_proba `call.classes` columns
 (the classifier), predict `max(1, y.cols)`; `out_dtype` int32 for the
@@ -54,9 +59,10 @@ published: the caller predicts and runs its own metric.
 
 Fitted-state blocks (MEMBER_OP_EXPORT / MEMBER_OP_IMPORT), in index order:
 `MEMBER_BLOCK_FAMILY` (64) float32 rows x features, the fitted points;
-`MEMBER_BLOCK_FAMILY + 1` (65) 1 x rows, the targets (int32 codes for the
-classifier, float32 for the regressor). An import needs both;
-`MEMBER_IMPORT_DONE` reads `call.classes` for the classifier.
+`MEMBER_BLOCK_FAMILY + 1` (65) outputs x rows, the targets (int32 codes for
+the classifier, float32 for the regressor; one row per output). An import
+needs both; `MEMBER_IMPORT_DONE` reads `call.classes` for a one-output
+classifier, `call.class_counts` (one count per output) for several.
 
 The fitted state (the class set present in the targets, the resident index
 handle, the per-state query buffers) is OWNED here, in a process-wide store
@@ -67,7 +73,10 @@ LIFETIME: a fit BORROWS the caller's X and y views, exactly as the
 estimator's own fit borrows the user's array (k-NN is a lazy learner: the
 fitted points ARE X). The caller keeps the words of X and y alive and
 unchanged until this state's next fit, import or free; no copy is made per
-fit (a copy per fit is a copy per fold inside cross-validation). The first
+fit (a copy per fit is a copy per fold inside cross-validation), but for a
+y of several outputs: the RUN reads `outputs` contiguous target columns
+(POLICY 6 of neighbors/estimator.mojo), so that fit copies y once into the
+slot in that layout (the estimator's own fit makes the same transpose). The first
 MEMBER_OP_EXPORT of a block copies that block once into the slot, and the
 state reads the slot's copy from then on, so an exported view lives until
 the state's next fit, import or free whatever the caller does with X. An
@@ -87,7 +96,7 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
-    MEMBER_CAN_CLASSIFIER,
+    MEMBER_CAN_CLASSIFIER, MEMBER_CAN_MULTI_OUTPUT,
     MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -109,6 +118,7 @@ comptime NEIGHBORS_BLOCK_TARGETS = MEMBER_BLOCK_FAMILY + 1
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _U8P = MutPointer[UInt8, MutUntrackedOrigin]
+comptime _IntP = MutPointer[Int, MutUntrackedOrigin]
 
 
 struct NeighborsMemberSlot(Copyable, Movable, Defaultable):
@@ -142,6 +152,13 @@ struct NeighborsMemberSlot(Copyable, Movable, Defaultable):
     # one-output class-count list (allocated at fit, never per query).
     var present: List[Int32]
     var counts: List[Int]
+    # THE 2-D y (lane w3f3-k): the target columns (1: the borrowed column),
+    # and the running offsets of each output's class count (the classifier)
+    # and of its present classes (`outputs + 1` words each, made at fit /
+    # import, never per query).
+    var outputs: Int
+    var class_off: List[Int]
+    var present_off: List[Int]
     # Per-state buffers a query reuses: the entry's class set, the one-word
     # sentinel of the output it does not write, the probabilities of the
     # present classes when some class is absent.
@@ -176,6 +193,9 @@ struct NeighborsMemberSlot(Copyable, Movable, Defaultable):
         self.targets = List[Float32]()
         self.present = List[Int32]()
         self.counts = List[Int]()
+        self.outputs = 1
+        self.class_off = List[Int]()
+        self.present_off = List[Int]()
         self.uniq = List[Int32]()
         self.one_i32 = List[Int32](length=1, fill=Int32(0))
         self.one_f32 = List[Float32](length=1, fill=Float32(0.0))
@@ -236,6 +256,7 @@ def _mint(words: MutPointer[Float64, MutUntrackedOrigin]) raises -> Int:
         slot[].weights = Int(words[4])
         slot[].query_tile = Int(words[5])
         slot[].fitted = False
+        slot[].outputs = 1
         slot[].handle = 0
         slot[].handle_entry = entry_ref_unresolved()
         return slot[].generation * _INDEX_SPAN + index + 1
@@ -267,6 +288,8 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
             slot[].targets = List[Float32]()
             slot[].present = List[Int32]()
             slot[].counts = List[Int]()
+            slot[].class_off = List[Int]()
+            slot[].present_off = List[Int]()
             slot[].uniq = List[Int32]()
             slot[].proba = List[Float32]()
             store[].free.append(index)
@@ -308,29 +331,56 @@ def _release_index(slot: _SlotPtr):
     slot[].handle_entry = entry_ref_unresolved()
 
 
+def _set_class_counts(slot: _SlotPtr, call: _CallPtr, outputs: Int) raises:
+    """Each output's class count (lane w3f3-k): `call.classes` for one
+    output, the `outputs` words at `call.class_counts` for several (layout
+    4), kept as their running offsets `class_off` (in the slot's own list,
+    its capacity reused fit after fit: no allocation per fit)."""
+    if outputs > 1 and call[].class_counts == 0:
+        raise Error("ValueError: a " + _name(slot) + " member needs each output's class count")
+    var given = _IntP(unsafe_from_address=call[].class_counts)
+    slot[].class_off.clear()
+    slot[].class_off.append(0)
+    for j in range(outputs):  # small-loop(the outputs' class counts)
+        var count = call[].classes if outputs == 1 else given.unsafe_load(j)
+        if count < 1:
+            raise Error("ValueError: a " + _name(slot) + " member needs each output's class count")
+        slot[].class_off.append(slot[].class_off[j] + count)
+    slot[].classes = call[].classes if outputs == 1 else 0
+
+
 def _present_codes(slot: _SlotPtr) raises:
-    """The class codes present in the fitted codes (ascending), with a code
-    outside 0 .. classes-1 refused. Parallel: each task marks the codes of
-    its rows in its own presence row; the merge reads tasks x classes bytes."""
+    """The class codes present in the fitted codes (ascending), per output
+    (the slot's `outputs` code columns, each output's count from
+    `class_off`), with a code outside 0 .. count-1 refused. Parallel:
+    each task marks the codes of its rows in its own presence row; the merge
+    reads tasks x (the counts' sum) bytes. `counts` is the entry's class
+    count per output (the present classes), `present` their codes, output
+    after output."""
     var rows = slot[].rows
-    var classes = slot[].classes
-    var tasks = max(host_predict_task_count_work(rows, rows), 1)
+    var outputs = slot[].outputs
+    var total = slot[].class_off[outputs]
+    var tasks = max(host_predict_task_count_work(rows, rows * outputs), 1)
     var chunk = host_predict_chunk(rows, tasks)
-    var marks = List[UInt8](length=tasks * classes, fill=UInt8(0))
+    var marks = List[UInt8](length=tasks * total, fill=UInt8(0))
     var bad = List[UInt8](length=tasks, fill=UInt8(0))
     var marks_ptr = _U8P(unsafe_from_address=Int(marks.unsafe_ptr()))
     var bad_ptr = _U8P(unsafe_from_address=Int(bad.unsafe_ptr()))
     var codes_ptr = _I32P(unsafe_from_address=slot[].targets_addr)
+    var off_ptr = _IntP(unsafe_from_address=Int(slot[].class_off.unsafe_ptr()))
 
-    def _scan(t: Int) {imm marks_ptr, imm bad_ptr, imm codes_ptr, imm rows, imm classes, imm chunk}:
+    def _scan(t: Int) {imm marks_ptr, imm bad_ptr, imm codes_ptr, imm off_ptr, imm rows, imm outputs, imm total,
+                       imm chunk}:
         var lo = t * chunk
         var hi = min(lo + chunk, rows)
-        for i in range(lo, hi):  # member fit: this task's rows, one presence mark each
-            var v = Int(codes_ptr.unsafe_load(i))
-            if v < 0 or v >= classes:
-                bad_ptr.unsafe_store(t, UInt8(1))
-                return
-            marks_ptr.unsafe_store(t * classes + v, UInt8(1))
+        for i in range(lo, hi):  # member fit: this task's rows, one presence mark per output
+            for j in range(outputs):
+                var first = off_ptr.unsafe_load(j)
+                var v = Int(codes_ptr.unsafe_load(j * rows + i))
+                if v < 0 or v >= off_ptr.unsafe_load(j + 1) - first:
+                    bad_ptr.unsafe_store(t, UInt8(1))
+                    return
+                marks_ptr.unsafe_store(t * total + first + v, UInt8(1))
 
     if tasks <= 1:
         _scan(0)
@@ -338,19 +388,28 @@ def _present_codes(slot: _SlotPtr) raises:
         host_parallelize(_scan, tasks)
     for t in range(tasks):  # driver-loop: over the tasks' refusal words
         if bad[t] != 0:
-            raise Error("ValueError: a k-NN classifier member reads class codes 0 .. "
-                + String(classes - 1) + " in y")
+            if outputs == 1:
+                raise Error("ValueError: a k-NN classifier member reads class codes 0 .. "
+                    + String(slot[].classes - 1) + " in y")
+            raise Error("ValueError: a k-NN classifier member reads each output's class codes 0 .. count-1 in y")
     var present = List[Int32]()
-    for c in range(classes):  # driver-loop: over classes, merging the tasks' presence rows
-        for t in range(tasks):  # driver-loop: over tasks (cores)
-            if marks[t * classes + c] != 0:
-                present.append(Int32(c))
-                break
+    # The slot's own count lists, their capacity reused fit after fit.
+    slot[].counts.clear()
+    slot[].present_off.clear()
+    slot[].present_off.append(0)
+    for j in range(outputs):  # driver-loop: over the outputs
+        var found = 0
+        for c in range(slot[].class_off[j + 1] - slot[].class_off[j]):  # driver-loop: over classes, merging the tasks' presence rows
+            for t in range(tasks):  # driver-loop: over tasks (cores)
+                if marks[t * total + slot[].class_off[j] + c] != 0:
+                    present.append(Int32(c))
+                    found += 1
+                    break
+        slot[].counts.append(found)
+        slot[].present_off.append(slot[].present_off[j] + found)
     _ = marks^
     _ = bad^
     slot[].present = present^
-    var counts: List[Int] = [len(slot[].present)]
-    slot[].counts = counts^
     slot[].uniq = List[Int32](length=len(slot[].present), fill=Int32(0))
 
 
@@ -393,15 +452,17 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
     _dense(call[].x, MEMBER_F32, "X", estimator)
     var rows = call[].x.rows
     var cols = call[].x.cols
-    if call[].y.cols != 1:
-        raise Error("ValueError: a " + estimator + " member fits one target column")
+    # THE 2-D y (lane w3f3-k): `outputs` target columns.
+    var outputs = call[].y.cols
+    if outputs < 1:
+        raise Error("ValueError: a " + estimator + " member fits one target column or more")
     if call[].y.rows != rows:
         raise Error("ValueError: X and y have different numbers of rows")
     if slot[].regressor:
         _dense(call[].y, MEMBER_F32, "y", estimator)
     else:
         _dense(call[].y, MEMBER_I32, "y (class codes)", estimator)
-        if call[].classes < 1:
+        if outputs == 1 and call[].classes < 1:
             raise Error("ValueError: a " + estimator + " member needs the class count at fit")
     knn_check_metric_input(estimator, slot[].metric, call[].x.data, rows * cols)
     _release_index(slot)
@@ -415,10 +476,61 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
     slot[].targets_addr = call[].y.data
     slot[].rows = rows
     slot[].features = cols
+    slot[].outputs = outputs
+    if outputs > 1:
+        # Several outputs: the RUN's contiguous target columns, copied once.
+        _target_columns(slot, call[].y.data, rows, outputs)
     if not slot[].regressor:
-        slot[].classes = call[].classes
+        _set_class_counts(slot, call, outputs)
         _present_codes(slot)
     slot[].fitted = True
+
+
+def _target_columns(slot: _SlotPtr, source: Int, rows: Int, outputs: Int):
+    """THE 2-D y (lane w3f3-k): the caller's rows x `outputs` targets at
+    `source` as the k-NN RUN reads them, `outputs` contiguous columns of
+    `rows` words (POLICY 6 of neighbors/estimator.mojo; the estimator's own
+    fit makes the same layout with `knn_transpose_targets_run`), owned by the
+    slot (codes for the classifier, float32 targets for the regressor). An
+    exact copy, once per fit of a multi-output y. Parallel: each task moves
+    its own rows."""
+    var count = rows * outputs
+    var tasks = max(host_predict_task_count_work(rows, count), 1)
+    var chunk = host_predict_chunk(rows, tasks)
+    if slot[].regressor:
+        slot[].targets = List[Float32](length=count, fill=Float32(0.0))
+        var dst_f = _F32P(unsafe_from_address=Int(slot[].targets.unsafe_ptr()))
+        var src_f = _F32P(unsafe_from_address=source)
+
+        def _move_f(t: Int) {imm dst_f, imm src_f, imm rows, imm outputs, imm chunk}:
+            var lo = t * chunk
+            var hi = min(lo + chunk, rows)
+            for i in range(lo, hi):  # member fit: this task's rows, one word per output
+                for j in range(outputs):
+                    dst_f.unsafe_store(j * rows + i, src_f.unsafe_load(i * outputs + j))
+
+        if tasks <= 1:
+            _move_f(0)
+        else:
+            host_parallelize(_move_f, tasks)
+        slot[].targets_addr = Int(slot[].targets.unsafe_ptr())
+        return
+    slot[].codes = List[Int32](length=count, fill=Int32(0))
+    var dst_i = _I32P(unsafe_from_address=Int(slot[].codes.unsafe_ptr()))
+    var src_i = _I32P(unsafe_from_address=source)
+
+    def _move_i(t: Int) {imm dst_i, imm src_i, imm rows, imm outputs, imm chunk}:
+        var lo = t * chunk
+        var hi = min(lo + chunk, rows)
+        for i in range(lo, hi):  # member fit: this task's rows, one code per output
+            for j in range(outputs):
+                dst_i.unsafe_store(j * rows + i, src_i.unsafe_load(i * outputs + j))
+
+    if tasks <= 1:
+        _move_i(0)
+    else:
+        host_parallelize(_move_i, tasks)
+    slot[].targets_addr = Int(slot[].codes.unsafe_ptr())
 
 
 def _request(slot: _SlotPtr, call: _CallPtr) raises -> KnnQueryRequest:
@@ -457,15 +569,19 @@ def _predict(slot: _SlotPtr, call: _CallPtr) raises:
     var rows = call[].x.rows
     var entry = call[].route.entry.call
     var outcome = KnnQueryOutcome()
+    # THE 2-D y (lane w3f3-k): the entry writes rows x outputs, row-major.
+    var outputs = slot[].outputs
     if slot[].regressor:
         _dense(call[].dst, MEMBER_F32, "the prediction buffer", estimator)
-        if call[].dst.rows != rows or call[].dst.cols != 1:
-            raise Error("ValueError: the prediction buffer holds one value per row of X")
-        outcome = knn_regress_run(entry, request, slot[].targets_addr, call[].dst.data, 1)
+        if call[].dst.rows != rows or call[].dst.cols != outputs:
+            raise Error("ValueError: the prediction buffer holds one value per row of X"
+                        + (String("") if outputs == 1 else String(" and output")))
+        outcome = knn_regress_run(entry, request, slot[].targets_addr, call[].dst.data, outputs)
     else:
         _dense(call[].dst, MEMBER_I32, "the prediction buffer (class codes)", estimator)
-        if call[].dst.rows != rows or call[].dst.cols != 1:
-            raise Error("ValueError: the prediction buffer holds one class code per row of X")
+        if call[].dst.rows != rows or call[].dst.cols != outputs:
+            raise Error("ValueError: the prediction buffer holds one class code per row of X"
+                        + (String("") if outputs == 1 else String(" and output")))
         outcome = knn_classify_run(entry, request, slot[].targets_addr, call[].dst.data,
             Int(slot[].one_f32.unsafe_ptr()), Int(slot[].uniq.unsafe_ptr()), False, slot[].counts)
     _ = outcome^
@@ -475,6 +591,9 @@ def _predict_proba(slot: _SlotPtr, call: _CallPtr) raises:
     var estimator = _name(slot)
     if slot[].regressor:
         member_unsupported(estimator, MEMBER_OP_PREDICT_PROBA)
+    if slot[].outputs > 1:
+        _predict_proba_outputs(slot, call)
+        return
     var request = _request(slot, call)
     var rows = call[].x.rows
     var classes = slot[].classes
@@ -517,6 +636,59 @@ def _predict_proba(slot: _SlotPtr, call: _CallPtr) raises:
         host_parallelize(_scatter, tasks)
 
 
+def _predict_proba_outputs(slot: _SlotPtr, call: _CallPtr) raises:
+    """THE 2-D y's predict_proba (lane w3f3-k): the entry's per-output
+    blocks (rows x the output's present classes, output after output,
+    neighbors/estimator.mojo `out_proba_ptr`) into `dst`, rows x the class
+    counts' sum, each output's columns in turn (layout 4: scikit-learn's
+    list of per-output probabilities side by side); a class absent from the
+    fitted rows has probability 0. Parallel over rows."""
+    var estimator = _name(slot)
+    var request = _request(slot, call)
+    var rows = call[].x.rows
+    var outputs = slot[].outputs
+    var width = slot[].class_off[outputs]
+    var present = slot[].present_off[outputs]
+    _dense(call[].dst, MEMBER_F32, "the probability buffer", estimator)
+    if call[].dst.rows != rows or call[].dst.cols != width:
+        raise Error("ValueError: the probability buffer holds one row of " + String(width)
+            + " class probabilities (every output's) per row of X")
+    if len(slot[].proba) < rows * present:
+        slot[].proba = List[Float32](length=rows * present, fill=Float32(0.0))
+    var target = Int(slot[].proba.unsafe_ptr())
+    var outcome = knn_classify_run(call[].route.entry.call, request, slot[].targets_addr,
+        Int(slot[].one_i32.unsafe_ptr()), target, Int(slot[].uniq.unsafe_ptr()), True, slot[].counts)
+    _ = outcome^
+    var dst_ptr = _F32P(unsafe_from_address=call[].dst.data)
+    var src_ptr = _F32P(unsafe_from_address=target)
+    var present_ptr = _I32P(unsafe_from_address=Int(slot[].present.unsafe_ptr()))
+    var class_off = _IntP(unsafe_from_address=Int(slot[].class_off.unsafe_ptr()))
+    var present_off = _IntP(unsafe_from_address=Int(slot[].present_off.unsafe_ptr()))
+    var tasks = max(host_predict_task_count_work(rows, rows * width), 1)
+    var chunk = host_predict_chunk(rows, tasks)
+
+    def _scatter(t: Int) {imm dst_ptr, imm src_ptr, imm present_ptr, imm class_off, imm present_off, imm rows,
+                          imm outputs, imm width, imm chunk}:
+        var lo = t * chunk
+        var hi = min(lo + chunk, rows)
+        for r in range(lo, hi):  # member predict_proba: this task's rows
+            for c in range(width):
+                dst_ptr.unsafe_store(r * width + c, Float32(0.0))
+            for j in range(outputs):
+                var first = present_off.unsafe_load(j)
+                var m = present_off.unsafe_load(j + 1) - first
+                var block = rows * first + r * m
+                var column = r * width + class_off.unsafe_load(j)
+                for q in range(m):
+                    dst_ptr.unsafe_store(column + Int(present_ptr.unsafe_load(first + q)),
+                        src_ptr.unsafe_load(block + q))
+
+    if tasks <= 1:
+        _scatter(0)
+    else:
+        host_parallelize(_scatter, tasks)
+
+
 def _own_points(slot: _SlotPtr):
     """Copy borrowed points into the slot once (first export); the state
     reads its own copy from then on. A resident device index is a copy of
@@ -532,8 +704,9 @@ def _own_points(slot: _SlotPtr):
 
 def _own_targets(slot: _SlotPtr):
     """Copy borrowed targets (float32) or class codes (int32) into the slot
-    once (first export)."""
-    var count = slot[].rows
+    once (first export); a multi-output fit's columns are the slot's own
+    already (lane w3f3-k)."""
+    var count = slot[].rows * slot[].outputs
     if slot[].regressor:
         if slot[].targets_addr == Int(slot[].targets.unsafe_ptr()) and len(slot[].targets) == count:
             return
@@ -575,10 +748,11 @@ def _export(slot: _SlotPtr, call: _CallPtr) raises:
         call[].dst = MemberMatrix(Int(slot[].points.unsafe_ptr()), slot[].rows, slot[].features)
     elif block == NEIGHBORS_BLOCK_TARGETS:
         _own_targets(slot)
+        # One row per output (lane w3f3-k: outputs x rows).
         if slot[].regressor:
-            call[].dst = MemberMatrix(Int(slot[].targets.unsafe_ptr()), 1, slot[].rows)
+            call[].dst = MemberMatrix(Int(slot[].targets.unsafe_ptr()), slot[].outputs, slot[].rows)
         else:
-            call[].dst = MemberMatrix(Int(slot[].codes.unsafe_ptr()), 1, slot[].rows, MEMBER_I32)
+            call[].dst = MemberMatrix(Int(slot[].codes.unsafe_ptr()), slot[].outputs, slot[].rows, MEMBER_I32)
     else:
         raise Error("member ABI: a k-NN member has no fitted block " + String(block))
     call[].block = block
@@ -603,6 +777,8 @@ def _import(slot: _SlotPtr, call: _CallPtr) raises:
         var count = call[].x.rows * call[].x.cols
         slot[].fitted = False
         slot[].targets_addr = 0
+        # One row per output (lane w3f3-k: outputs x rows).
+        slot[].outputs = max(call[].x.rows, 1)
         if slot[].regressor:
             _dense(call[].x, MEMBER_F32, "the fitted targets", estimator)
             slot[].targets = List[Float32](length=count, fill=Float32(0.0))
@@ -625,14 +801,15 @@ def _import(slot: _SlotPtr, call: _CallPtr) raises:
         slot[].fitted = True
         return
     var targets = len(slot[].targets) if slot[].regressor else len(slot[].codes)
-    if slot[].rows == 0 or len(slot[].points) != slot[].rows * slot[].features or targets != slot[].rows:
-        raise Error("member ABI: a fitted k-NN state needs its points and one target per point")
+    if (slot[].rows == 0 or len(slot[].points) != slot[].rows * slot[].features
+            or targets != slot[].rows * slot[].outputs):
+        raise Error("member ABI: a fitted k-NN state needs its points and one target per point and output")
     slot[].points_addr = Int(slot[].points.unsafe_ptr())
     slot[].targets_addr = Int(slot[].targets.unsafe_ptr()) if slot[].regressor else Int(slot[].codes.unsafe_ptr())
     if not slot[].regressor:
-        if call[].classes < 1:
+        if slot[].outputs == 1 and call[].classes < 1:
             raise Error("member ABI: a k-NN classifier import needs the class count")
-        slot[].classes = call[].classes
+        _set_class_counts(slot, call, slot[].outputs)
         _present_codes(slot)
     slot[].fitted = True
 
@@ -665,8 +842,11 @@ def _neighbors_member(operation: Int, address: Int) raises -> Int:
     # with the GIL held read the call's own words; the store has its own
     # lock. NOT `MEMBER_GIL_FREE`: the resident index and the images behind
     # the route are not traced for parallel workers.
+    # MEMBER_CAN_MULTI_OUTPUT (lane w3f3-k): both kinds take a 2-D y, as
+    # scikit-learn's KNeighborsClassifier / KNeighborsRegressor and the
+    # estimators' own fit do (THE 2-D y in the module docstring).
     comptime _REGRESSOR = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
-        | MEMBER_BORROWS_FIT | MEMBER_GIL_DOOR)
+        | MEMBER_BORROWS_FIT | MEMBER_GIL_DOOR | MEMBER_CAN_MULTI_OUTPUT)
     comptime _CLASSIFIER = _REGRESSOR | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_CLASSIFIER
     # Lane mf-member8: NearestNeighbors / RadiusNeighbors fit, export and
     # import their points; no predict, no coef_ or importances.
@@ -711,7 +891,14 @@ def _neighbors_member(operation: Int, address: Int) raises -> Int:
             if call[].flags == MEMBER_OP_PREDICT_PROBA:
                 raise Error("member ABI: KNeighborsRegressor has no predict_proba")
             call[].classes = 0
-        call[].out_cols = call[].classes if call[].flags == MEMBER_OP_PREDICT_PROBA else max(1, call[].y.cols)
+        var proba_cols = call[].classes
+        if call[].y.cols > 1 and call[].class_counts != 0:
+            # THE 2-D y (lane w3f3-k): every output's columns in turn.
+            var given = _IntP(unsafe_from_address=call[].class_counts)
+            proba_cols = 0
+            for j in range(call[].y.cols):  # small-loop(the outputs' class counts)
+                proba_cols += given.unsafe_load(j)
+        call[].out_cols = proba_cols if call[].flags == MEMBER_OP_PREDICT_PROBA else max(1, call[].y.cols)
         call[].out_dtype = _out_dtype(words[0] == 1.0, call[].flags)
         return 0
     var slot = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
@@ -722,6 +909,15 @@ def _neighbors_member(operation: Int, address: Int) raises -> Int:
     if slot[].unsupervised and operation == MEMBER_OP_OUTPUTS:
         member_unsupported(_name(slot), operation)
     if operation == MEMBER_OP_OUTPUTS:
+        if slot[].fitted and slot[].outputs > 1:
+            # THE 2-D y (lane w3f3-k): rows x outputs, or every output's
+            # class columns in turn.
+            call[].classes = 0
+            call[].out_cols = (slot[].class_off[slot[].outputs]
+                               if call[].flags == MEMBER_OP_PREDICT_PROBA and not slot[].regressor
+                               else slot[].outputs)
+            call[].out_dtype = _out_dtype(slot[].regressor, call[].flags)
+            return 0
         call[].classes = 0 if slot[].regressor else (slot[].classes if slot[].fitted else call[].classes)
         call[].out_cols = call[].classes if call[].flags == MEMBER_OP_PREDICT_PROBA else 1
         call[].out_dtype = _out_dtype(slot[].regressor, call[].flags)
