@@ -679,12 +679,71 @@ def _se_coo(call: _Call, address: Int, n: Int, precomputed: Bool) raises -> Spec
     return room^
 
 
+def _se_store(slot: _Slot, call: _Call) -> Optional[EntryRef]:
+    """`_spectral_store` for a SpectralEmbedding fit: the dataset affinity ('nearest_neighbors') read from the
+    metrics image's resident store (lane vdf-scope-cluster6)."""
+    if slot[].kind != _KIND_EMBEDDING or slot[].affinity != _AFF_NN:
+        return Optional[EntryRef]()
+    if call[].scope == MEMBER_SCOPE_NONE or call[].pin == 0:
+        return Optional[EntryRef]()
+    try:
+        var caps = SpectralDriver(call[].route.entry.call).metadata(SPECTRAL_CAPABILITIES)
+        if (caps & SPECTRAL_CAP_DEV_STORE) == 0:
+            return Optional[EntryRef]()
+    except:
+        return Optional[EntryRef]()
+    return metrics_store_find(entry_ref_mode(call[].route.entry), entry_ref_vendor(call[].route.entry))
+
+
 def _fit_se(slot: _Slot, call: _Call) raises:
+    """`SpectralEmbedding.fit(X)` over the whole X, or (MEMBER_CAN_ROW_INDEX, lane vdf-scope-cluster6) over a
+    model-selection fold: taken on the device out of the scope's one copy of X when the affinity is the dataset
+    route and the fit entry reads the metrics store (SPECTRAL_DATASET_STORE), else gathered on the host cores.
+    The state owns its embedding: nothing points into the fold after the call."""
+    if call[].row_index.rows == 0:
+        _fit_se_rows(slot, call, -1)
+        return
+    if call[].column_index.rows > 0 or call[].x.home == MEMBER_HOME_DEVICE:
+        raise Error("TypeError: a SpectralEmbedding member reads X as a dense host float32 view, no column index")
+    var x = call[].x
+    var index = call[].row_index
+    var store = _se_store(slot, call)
+    var failure = String("")
+    if store:
+        var taken = member_scope_rows_in(call[], store.value(), METRICS_STORE_PREFIX, True, _SE_EST)
+        try:
+            call[].x = MemberMatrix(0, taken.rows, taken.cols)
+            call[].row_index = MemberMatrix()
+            _fit_se_rows(slot, call, taken.source)
+        except error:
+            failure = String(error)
+        call[].x = x
+        call[].row_index = index
+        member_scope_rows_done_in(store.value(), taken)
+    else:
+        var gathered = member_scope_rows_in(call[], call[].route.entry, METRICS_STORE_PREFIX, False, _SE_EST)
+        try:
+            call[].x = MemberMatrix(gathered.source, gathered.rows, gathered.cols)
+            call[].row_index = MemberMatrix()
+            _fit_se_rows(slot, call, -1)
+        except error:
+            failure = String(error)
+        call[].x = x
+        call[].row_index = index
+        _ = gathered.rows  # the gathered rows stay alive through the fit
+    if failure.byte_length() > 0:
+        raise Error(failure)
+
+
+def _fit_se_rows(slot: _Slot, call: _Call, store_slot: Int) raises:
     """Lane mf-member8: `SpectralEmbedding.fit(X)` (bindings/cfb_spectral_door.mojo
     `_se_execute`): the affinity's route and shape checks in its order, one
     EMBED call of the fit entry (`route.entry`), the embedding and the
-    attributes its fit publishes kept (SCALARS)."""
-    _whole_x(call)
+    attributes its fit publishes kept (SCALARS). `store_slot >= 0`: the rows are that slot of the metrics store
+    (the dataset affinity only; SPECTRAL_DATASET_STORE, the same kernels on the same words; `call.x` then names
+    only the fold's shape)."""
+    if store_slot < 0:
+        _whole_x(call)
     if call[].weights.rows > 0:
         raise Error("TypeError: SpectralEmbedding takes no sample_weight")
     if call[].fit_output != 0:
@@ -731,7 +790,10 @@ def _fit_se(slot: _Slot, call: _Call) raises:
         neighbors_out = neighbors
         neighbors_word = neighbors
         features_out = d
-        source_input = SpectralInput(call[].x.data, 0, 0, 0, SPECTRAL_DATASET, rows, d, 0)
+        if store_slot >= 0:
+            source_input = SpectralInput(store_slot, 0, 0, 0, SPECTRAL_DATASET_STORE, rows, d, 0)
+        else:
+            source_input = SpectralInput(call[].x.data, 0, 0, 0, SPECTRAL_DATASET, rows, d, 0)
     else:
         var dense_address = call[].x.data
         if affinity == _AFF_PNN:
@@ -1026,7 +1088,17 @@ def _spectral_member(operation: Int, address: Int) raises -> Int:
         if call[].state != 0:
             var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
             if held[].kind == _KIND_EMBEDDING:
-                return MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_IGNORES_Y
+                # MEMBER_CAN_ROW_INDEX (lane vdf-scope-cluster6): a fold's rows (gathered, or taken on the device
+                # from the metrics store: MEMBER_CAN_SCOPE, as SpectralClustering below).
+                var se = MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_IGNORES_Y | MEMBER_CAN_ROW_INDEX
+                try:
+                    var se_caps = SpectralDriver(call[].route.entry.call).metadata(SPECTRAL_CAPABILITIES)
+                    if (se_caps & SPECTRAL_CAP_DEV_STORE) != 0 and metrics_store_find(
+                            entry_ref_mode(call[].route.entry), entry_ref_vendor(call[].route.entry)):
+                        se |= MEMBER_CAN_SCOPE
+                except:
+                    pass
+                return se
         # MEMBER_CAN_ROW_INDEX (lane vdf-scope-cluster4): a SpectralClustering call reads a host row index (a
         # gathered fold owns its rows); MEMBER_CAN_SCOPE when the fit entry reads the metrics image's resident
         # store (SPECTRAL_CAP_DEV_STORE and the store published for its (mode, vendor)): a search's dataset-route

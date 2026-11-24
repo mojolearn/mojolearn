@@ -251,7 +251,6 @@ from core.member_fold_x import (
     MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_take_view, member_fold_store_ready,
 )
 # lane vdf-scope-cluster5: THE FITTED-ROWS SLOT (the fold's rows kept resident by the fitted state).
-from core.member_fold_x import member_fold_index, member_fold_take_f32
 from core.entry_table import EntryRef, entry_ref_unresolved
 from bindings.arena_cache_run import arena_cache_free
 from core.member_families import MEMBER_FAMILY_XNEIGHBORS
@@ -1232,23 +1231,32 @@ def _rows_fold_kind(kind: Int) -> Bool:
     variance, the Gram / resident solve, its query ops) and gathers its support vectors ON THE DEVICE from the
     fold slot (`oc_take_rows_into`: the x_neighbors `take_rows` op over the fold word; only supports x features
     words come back, into the state's own vectors), so its fold slot is freed after the call. LabelPropagation /
-    LabelSpreading and the KNNImputer are not audited for host reads of X (`lp_fit_run`, the imputer's masked
-    copy and NaN cells): the caller gathers (vdf-scope-cluster5-RESULT.md)."""
-    return kind == XNEIGHBORS_KIND_LOF or kind == XNEIGHBORS_KIND_KERNEL_PCA or kind == XNEIGHBORS_KIND_OCSVM
+    LabelSpreading (lane vdf-scope-cluster6, audited): `lp_fit_run` and `lp_query_run`
+    (neighbors/label_propagation_run.mojo) read X ONLY as the address of their x_neighbors ops (`sqdist`,
+    `knn_select`, `knn_sq`, `knn_sq_tiled`, `kernel`, `lp_dense_proba`), each of which uploads it through
+    `_buf` / `fold_x_fill`; the fitted `X_` is the query's `fit_x`, so the fold slot is KEPT as the fitted rows,
+    as LocalOutlierFactor. The fit's class codes are y's rows taken through the same index on the host (4-byte
+    words; `_lp_codes_check` reads them there, as the host path does). The KNNImputer (lane vdf-scope-cluster6):
+    `imp_fit_run` / `imp_transform_run` (neighbors/knn_imputer_run.mojo) read X only through the ops'
+    uploads (`p2m_mask_value`, `nan_cells` (x_neighbors/nan_cells_device.mojo, THE FOLD X WORD now), the cell
+    ops, which start their result from the uploaded X on the device, and `p2m_nan_indicator`); an unmasked fit
+    KEEPS the slot as its fitted rows, a masked fit owns its masked host copy (the fold slot is freed)."""
+    return (kind == XNEIGHBORS_KIND_LOF or kind == XNEIGHBORS_KIND_KERNEL_PCA or kind == XNEIGHBORS_KIND_OCSVM
+            or _lp_kind(kind) or kind == XNEIGHBORS_KIND_IMPUTER)
+
+
+def _lp_kind(kind: Int) -> Bool:
+    return kind == XNEIGHBORS_KIND_LABEL_PROPAGATION or kind == XNEIGHBORS_KIND_LABEL_SPREADING
 
 
 def _rows_kept(kind: Int) -> Bool:
     """The `_rows_fold_kind` kinds whose fitted state reads its fit rows past the fit (THE FITTED-ROWS SLOT)."""
-    return kind == XNEIGHBORS_KIND_LOF or kind == XNEIGHBORS_KIND_KERNEL_PCA
+    return kind == XNEIGHBORS_KIND_LOF or kind == XNEIGHBORS_KIND_KERNEL_PCA or _lp_kind(kind)
 
 
-def _rows_fold_kp_host(slot: _SlotPtr, rows: Int) -> Bool:
-    """A KernelPCA fit whose route is the eigensolver's resident one (`KPCAFitRoute.resident`): that entry
-    reads the fit X as host words (`KPCAEigenRequest.source`), so the fold's rows are taken on the host into
-    the state's own `fit_rows` (bit for bit, row chunks across the host's cores) and the state owns them."""
-    if slot[].kind != XNEIGHBORS_KIND_KERNEL_PCA:
-        return False
-    return KPCAFitRoute(rows, slot[].kp_requested, slot[].kp_kernel, slot[].kp_auto, slot[].kp_resident).resident
+# Removed (lane vdf-scope-cluster6): `_rows_fold_kp_host` (a KernelPCA fold fit on the eigensolver's
+# resident route took its rows on the host) is removed: that entry's kit upload (x_decomp/device.mojo `_up_into`)
+# now reads THE FOLD X WORD, so the fold slot serves every KernelPCA route.
 
 
 def _rows_fold_operation(kind: Int, operation: Int) -> Bool:
@@ -1259,6 +1267,8 @@ def _rows_fold_operation(kind: Int, operation: Int) -> Bool:
     if kind == XNEIGHBORS_KIND_LOF or kind == XNEIGHBORS_KIND_OCSVM:
         return (operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_DECISION
                 or operation == MEMBER_OP_SCORE_SAMPLES)
+    if _lp_kind(kind):
+        return operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_PREDICT_PROBA
     return operation == MEMBER_OP_TRANSFORM
 
 
@@ -1281,6 +1291,18 @@ def _rows_fold_dispatch(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
             _oc_query(slot, call, LOF_RESULT_DECISION, "decision_function")
         else:
             _oc_query(slot, call, LOF_RESULT_SCORES, "score_samples")
+    elif _lp_kind(slot[].kind):
+        if operation == MEMBER_OP_FIT:
+            _lp_fit(slot, call)
+        elif operation == MEMBER_OP_PREDICT:
+            _lp_predict(slot, call)
+        else:
+            _lp_proba(slot, call)
+    elif slot[].kind == XNEIGHBORS_KIND_IMPUTER:
+        if operation == MEMBER_OP_FIT:
+            _im_fit(slot, call)
+        else:
+            _im_transform(slot, call)
     elif operation == MEMBER_OP_FIT:
         _kp_fit(slot, call)
     else:
@@ -1299,53 +1321,52 @@ def _rows_fold_op(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
     into the caller's X: no MEMBER_BORROWS_FIT); a query, and a OneClassSVM fit (its support vectors are gathered
     from the slot into its own words), free it after the call. Same rows in the same order
     as the host gather: the same bytes as the host-index path and the CPU column. A KernelPCA fit on the
-    eigensolver's resident route takes its rows on the host (`_rows_fold_kp_host`). The call's views are
-    restored and an unkept fold slot freed whether the operation returns or raises."""
+    eigensolver's resident route reads the slot through that entry's kit upload (x_decomp/device.mojo
+    `_up_into`, lane vdf-scope-cluster6). The call's views are restored and an unkept fold slot freed whether the operation returns or raises."""
     if not _rows_fold_kind(slot[].kind):
         raise Error("TypeError: a " + _name(slot) + " member reads whole host views (no row or column index)")
     var estimator = _name(slot)
     var x = call[].x
+    var y = call[].y
     var index = call[].row_index
     var fold = MemberFoldX()
-    var host_rows = List[Float32]()
+    var host_y = List[Int32]()
     var failure = String("")
     var kept = False
     try:
-        if operation == MEMBER_OP_FIT and _rows_fold_kp_host(slot, index.rows):
-            member_fold_index(call, fold, estimator)
-            host_rows = List[Float32](length=max(fold.rows * fold.cols, 1), fill=Float32(0.0))
-            member_fold_take_f32(x.data, fold.index, fold.rows, fold.cols, Int(host_rows.unsafe_ptr()))
-            call[].x = MemberMatrix(Int(host_rows.unsafe_ptr()), fold.rows, fold.cols)
-            call[].row_index = MemberMatrix()
-            _kp_fit(slot, call)
-            # The state owns the taken rows (no borrow of the caller's X).
-            slot[].fit_rows = host_rows^
-            host_rows = List[Float32]()
-            slot[].rows_addr = Int(slot[].fit_rows.unsafe_ptr())
-        else:
-            member_fold_x_open(call, fold, estimator)
-            call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
-            call[].row_index = MemberMatrix()
-            _rows_fold_dispatch(slot, call, operation)
-            if operation == MEMBER_OP_FIT and _rows_kept(slot[].kind):
-                # THE FITTED-ROWS SLOT: the fold slot becomes the state's (the fit set `rows_addr` to its word).
-                slot[].rows_slot = fold.slot
-                slot[].rows_store = fold.store
-                fold.slot = -1
-                kept = True
+        member_fold_x_open(call, fold, estimator)
+        call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
+        if operation == MEMBER_OP_FIT and _lp_kind(slot[].kind):
+            # The class codes: y's rows through the same index (4-byte words, row chunks across the cores).
+            _dense(y, MEMBER_I32, "y (class codes)", estimator)
+            if y.rows != x.rows or y.cols != 1:
+                raise Error("X and y have different numbers of rows")
+            host_y = List[Int32](length=max(fold.rows, 1), fill=Int32(0))
+            member_fold_take_view(y, fold.index, fold.rows, Int(host_y.unsafe_ptr()))
+            call[].y = MemberMatrix(Int(host_y.unsafe_ptr()), fold.rows, 1, MEMBER_I32)
+        call[].row_index = MemberMatrix()
+        _rows_fold_dispatch(slot, call, operation)
+        if operation == MEMBER_OP_FIT and (_rows_kept(slot[].kind) or (slot[].kind == XNEIGHBORS_KIND_IMPUTER
+                and slot[].rows_addr == fold.word())):
+            # THE FITTED-ROWS SLOT: the fold slot becomes the state's (the fit set `rows_addr` to its word).
+            slot[].rows_slot = fold.slot
+            slot[].rows_store = fold.store
+            fold.slot = -1
+            kept = True
     except error:
         failure = String(error)
         if operation == MEMBER_OP_FIT and not kept:
             slot[].fitted = False
             slot[].rows_addr = 0
     call[].x = x
+    call[].y = y
     call[].row_index = index
     try:
         member_fold_x_close(fold)
     except close_error:
         if failure.byte_length() == 0:
             failure = "RuntimeError: a " + estimator + " member's fold slot was not freed: " + String(close_error)
-    _ = host_rows^
+    _ = host_y^
     if failure.byte_length() > 0:
         raise Error(failure)
 
@@ -2272,6 +2293,7 @@ def _im_fit(slot: _SlotPtr, call: _CallPtr) raises:
     var count = rows * features
     var mask = slot[].im_mask and count != 0
     slot[].fitted = False
+    _rows_dev_free(slot)  # THE FITTED-ROWS SLOT of a previous fold fit (a new one is kept after this returns)
     slot[].fit_rows = List[Float32]()
     var masked = 0
     if mask:
@@ -2353,6 +2375,7 @@ def _im_import(slot: _SlotPtr, call: _CallPtr) raises:
         var words = List[Float32](length=max(count, 1), fill=Float32(0.0))
         if count > 0:
             unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=count)
+        _rows_dev_free(slot)
         slot[].fit_rows = words^
         slot[].rows_addr = Int(slot[].fit_rows.unsafe_ptr())
         slot[].rows = call[].x.rows
@@ -2634,7 +2657,9 @@ def _lp_fit(slot: _SlotPtr, call: _CallPtr) raises:
     slot[].proba32 = List[Float32]()
     slot[].proba64 = List[Float64]()
     # Borrow the rows (LIFETIME, as LocalOutlierFactor: the door publishes the
-    # admitted X itself as X_); a copy a previous import or export left is dropped.
+    # admitted X itself as X_); a copy a previous import or export left is dropped, a resident slot freed
+    # (THE FITTED-ROWS SLOT: a fold fit's `_rows_fold_op` keeps the new one after this returns).
+    _rows_dev_free(slot)
     slot[].fit_rows = List[Float32]()
     slot[].rows_addr = call[].x.data
     slot[].lp_dist = List[Float32](length=rows * classes, fill=Float32(0.0))
@@ -2894,8 +2919,8 @@ def _fold_kind(kind: Int) -> Bool:
     with no host read of X and no borrow of X past the call (lane
     vdf-scope-cluster3): NearestCentroid. LocalOutlierFactor and KernelPCA
     keep their fold's rows in THE FITTED-ROWS SLOT (`_rows_fold_op`, lane
-    vdf-scope-cluster5); LabelPropagation / LabelSpreading and a KNNImputer
-    borrow the fit X as their fitted rows; OneClassSVM gathers its support vectors from host X
+    vdf-scope-cluster5), as LabelPropagation / LabelSpreading (lane vdf-scope-cluster6); a KNNImputer
+    borrows the fit X as its fitted rows; OneClassSVM gathers its support vectors from host X
     (core/ocsvm_plan.mojo `oc_take_rows_into`); the samplers and SVGP are
     left on the host gather (vdf-scope-cluster3-RESULT.md)."""
     return kind == XNEIGHBORS_KIND_NEAREST_CENTROID
@@ -3188,6 +3213,11 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
             return 0
         _outputs(slot[].kind, slot[].classes if slot[].fitted else call[].classes, call)
         return 0
+    if (call[].row_index.rows > 0 and call[].column_index.rows == 0 and call[].route.device == DEVICE_GPU
+            and _rows_fold_kind(slot[].kind) and _rows_fold_operation(slot[].kind, operation)):
+        # A fold over the WHOLE host X: its rows taken on the device (lanes vdf-scope-cluster5 / 6).
+        _rows_fold_op(slot, call, operation)
+        return 0
     if slot[].kind == XNEIGHBORS_KIND_LABEL_PROPAGATION or slot[].kind == XNEIGHBORS_KIND_LABEL_SPREADING:
         if operation == MEMBER_OP_FIT:
             _lp_fit(slot, call)
@@ -3261,10 +3291,6 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
             _pc_import(slot, call)
         else:
             member_unsupported(_name(slot), operation)
-        return 0
-    if (call[].row_index.rows > 0 and call[].column_index.rows == 0 and call[].route.device == DEVICE_GPU
-            and _rows_fold_kind(slot[].kind) and _rows_fold_operation(slot[].kind, operation)):
-        _rows_fold_op(slot, call, operation)
         return 0
     if slot[].kind == XNEIGHBORS_KIND_KERNEL_PCA:
         if operation == MEMBER_OP_FIT:

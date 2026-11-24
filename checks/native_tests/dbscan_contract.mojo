@@ -91,6 +91,11 @@ struct DBSCANWireOracle(DBSCANNativeKernels):
     def core_gather_store(r: DBSCANGatherRequest) raises -> Int:
         return Self.core_gather(r) + 1000
 
+    @staticmethod
+    def resident_store(r: DBSCANResidentQuery) raises -> Int:
+        # The resident-store query (lane vdf-scope-cluster6): the resident query's words, `query` a slot id.
+        return Self.resident(r) + 1000
+
 
 def fit_request(weighted: Bool) -> DBSCANFitRequest:
     return DBSCANFitRequest(11, 13, 17 if weighted else 0, 19, 23, 29, 31, 37, 41, 1, 3, 0.10000000000000002)
@@ -185,7 +190,7 @@ def malformed(unit: Int) raises:
 
 
 def fixture(unit: Int) raises:
-    comptime assert DBSCAN_NATIVE_COUNT == 12 and DBSCAN_MODE == 0 and DBSCAN_VENDOR == 1 and DBSCAN_CAPABILITIES == 2
+    comptime assert DBSCAN_NATIVE_COUNT == 13 and DBSCAN_MODE == 0 and DBSCAN_VENDOR == 1 and DBSCAN_CAPABILITIES == 2
     comptime assert DBSCAN_FIT == 3 and DBSCAN_CORE_COUNT == 4 and DBSCAN_CORE_GATHER == 5 and DBSCAN_PREPARE == 6
     comptime assert DBSCAN_RELEASE == 7 and DBSCAN_QUERY == 8 and DBSCAN_RESIDENT_QUERY == 9
     var driver = DBSCANNativeDriver(dbscan_native_v1[DBSCANWireOracle])
@@ -216,6 +221,9 @@ def fixture(unit: Int) raises:
     elif unit <= 10:
         require(driver.resident(DBSCANResidentQuery(181, 191, EXACT_RESULT, 193, 197, 0, unit == 10,
             0.10000000000000002)) == EXACT_RESULT + unit - 1, "DBSCAN resident threshold flag and integer result")
+        require(driver.resident_store(DBSCANResidentQuery(181, 191, EXACT_RESULT, 193, 197, 0, unit == 10,
+            0.10000000000000002)) == EXACT_RESULT + unit - 1 + 1000,
+            "DBSCAN resident-store query carries the resident query's words")
     elif unit == 11:
         var original = fit_request(False)
         var copied = original.copy()

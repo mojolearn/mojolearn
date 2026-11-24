@@ -1246,7 +1246,11 @@ def op_knn_impute_cells(cells: Int, x: Int, fx: Int, res: Int, n: Int, m: Int, d
     var d_fx = _buf(ctx, fx, m * d, True)
     var d_best_d = _buf(ctx, 0, n * d * k, False)
     var d_best_i = _buf_i(ctx, 0, n * d * k, False)
-    var d_res = _buf(ctx, res, n * d, True)
+    # A present cell keeps x: res starts as a device copy of x (lane vdf-scope-cluster6; was a host copy of x
+    # into res and a second upload).
+    var d_res = _buf(ctx, 0, n * d, False)
+    if n * d > 0:
+        ctx.enqueue_copy(dst_buf=d_res, src_buf=d_x)
     ctx.enqueue_function[knn_impute_cells_kernel](
         d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_best_d.unsafe_ptr(), d_best_i.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(m), Int64(d), Int64(k), Int64(weights), Int64(nc),
         grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),

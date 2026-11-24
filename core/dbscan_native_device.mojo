@@ -121,6 +121,18 @@ struct DBSCANDeviceKernels(DBSCANNativeKernels):
             r.metric, r.eps, r.has_threshold, dst)
         return 0
 
+    @staticmethod
+    def resident_store(r: DBSCANResidentQuery) raises -> Int:
+        """`resident` over the query rows in slot `r.query` of the resident store (one device copy into the
+        reference set's context, no upload; lane vdf-scope-cluster6)."""
+        var dst = i32_ptr(r.dst)
+        var rows = estimators_store_buffer(r.query, max(1, r.queries * r.features))
+        # The host query pointer is not read on the store form: the destination's address stands in for it.
+        labeled_reference_predict_resident(r.handle, f32_ptr(r.dst), r.queries, r.features,
+            r.metric, r.eps, r.has_threshold, dst, Optional(rows))
+        _ = rows^
+        return 0
+
 
 comptime _DBSCAN_DEVICE_NAME = "MojolearnDBSCANDeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnDBSCANDeviceFastV1"
 comptime DBSCAN_DEVICE_API = SharedSlot[DBSCANProviderAPI[DBSCANDeviceKernels], _DBSCAN_DEVICE_NAME]

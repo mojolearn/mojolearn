@@ -22,6 +22,7 @@ from core.identity_trace import IdentityTrace
 from spectral.impl.preprocessing.detail.spectral_embedding import (
     SpectralEmbeddingParams,
     transform_dataset,
+    transform_dataset_resident,
     transform_dense_keep,
     transform_graph,
 )
@@ -76,6 +77,22 @@ def transform(
     var params = to_cuvs(config)
     params.tolerance = tolerance
     return transform_dataset(ctx, params, dataset, n_samples, n_features, embedding, trace)
+
+
+def transform_resident(
+    ctx: DeviceContext,
+    config: MLSpectralEmbeddingParams,
+    mut data: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    mut embedding: List[Float32],
+    mut trace: IdentityTrace,
+    tolerance: Float32 = Float32(1e-5),
+) raises -> Int:
+    """`transform` over device rows (lane vdf-scope-cluster6: a fold of the metrics image's store)."""
+    var params = to_cuvs(config)
+    params.tolerance = tolerance
+    return transform_dataset_resident(ctx, params, data, n_samples, n_features, embedding, trace)
 
 
 def transform_connectivity(

@@ -148,6 +148,8 @@ trait SpectralBackend:
     @staticmethod
     def embed_affinity(request: SpectralEmbeddingRequest, mut result: SpectralEmbeddingResult) raises: ...
     @staticmethod
+    def embed_dataset_store(request: SpectralEmbeddingRequest, mut result: SpectralEmbeddingResult) raises: ...
+    @staticmethod
     def query(source: List[Float32], training: List[Float32], shape: SpectralQueryShape,
               state: SpectralPredictionState) raises -> SpectralPrediction: ...
     @staticmethod
@@ -241,6 +243,10 @@ struct SpectralKernels[B: SpectralBackend](SpectralNativeKernels):
             # from X (rbf) or the precomputed distances (knn) and stays there.
             _ = f32_ptr(r.embedding)
             Self.B.embed_affinity(r, result)
+        elif r.input.route == SPECTRAL_DATASET_STORE:
+            # lane vdf-scope-cluster6: the dataset route over a slot of the image's resident store.
+            _ = f32_ptr(r.embedding)
+            Self.B.embed_dataset_store(r, result)
         else:
             raise Error("Spectral native ABI: unknown embedding input route")
         return result^

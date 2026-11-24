@@ -1404,10 +1404,25 @@ def _fold_kind(kind: Int) -> Bool:
     """MiniBatchKMeans and BisectingKMeans (or the family's union, -1): the
     kinds whose fits and queries on the variants entry read X only through
     the uploads `VARIANTS_CAP_FOLD_X` names. MeanShift, AffinityPropagation
-    and OPTICS (the centroid-fit and OPTICS entries) and
-    BayesianGaussianMixture (the BGMM entry) copy X into host words first:
-    left on the caller's gather (vdf-scope-cluster3-RESULT.md)."""
-    return kind == _KIND_MINIBATCH or kind == _KIND_BISECT or kind < 0
+    and OPTICS (lane vdf-scope-cluster6): the centroid-fit and OPTICS entries of the same image take THE FOLD X
+    WORD as a float slot of their ops (x_cluster/device_execution.mojo `_fold_execute`: one device copy, every
+    read of X there, AffinityPropagation's exemplar rows gathered on the device); their predict is the
+    resident centers query. BayesianGaussianMixture (the BGMM entry's k-means initialisations read host X):
+    left on the caller's gather."""
+    return (kind == _KIND_MINIBATCH or kind == _KIND_BISECT or kind == _KIND_MEANSHIFT or kind == _KIND_AFFINITY
+            or kind == _KIND_OPTICS or kind < 0)
+
+
+def _fold_operation(kind: Int, operation: Int) -> Bool:
+    """The operations `_fold_op` serves for a `_fold_kind` kind: the k-means kinds' fit and centers queries;
+    MeanShift's and AffinityPropagation's fit and predict; OPTICS's fit (fit_predict) only."""
+    if operation == MEMBER_OP_FIT:
+        return True
+    if kind == _KIND_OPTICS:
+        return False
+    if kind == _KIND_MEANSHIFT or kind == _KIND_AFFINITY:
+        return operation == MEMBER_OP_PREDICT
+    return operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_TRANSFORM or operation == MEMBER_OP_SCORE
 
 
 def _fold_op(slot: _Slot, call: _Call, operation: Int) raises:
@@ -1461,8 +1476,16 @@ def _fold_op(slot: _Slot, call: _Call, operation: Int) raises:
         if operation == MEMBER_OP_FIT:
             if kind == _KIND_MINIBATCH:
                 _minibatch_fit(slot, call)
+            elif kind == _KIND_MEANSHIFT:
+                _meanshift_fit(slot, call)
+            elif kind == _KIND_AFFINITY:
+                _affinity_fit(slot, call)
+            elif kind == _KIND_OPTICS:
+                _optics_fit(slot, call)
             else:
                 _bisect_fit(slot, call)
+        elif operation == MEMBER_OP_PREDICT and kind == _KIND_AFFINITY:
+            _affinity_predict(slot, call)
         elif operation == MEMBER_OP_PREDICT and kind == _KIND_BISECT:
             _bisect_predict(slot, call)
         elif operation == MEMBER_OP_PREDICT:
@@ -1557,9 +1580,7 @@ def _xcluster_member(operation: Int, address: Int) raises -> Int:
         return 0
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     var kind = slot[].kind
-    if (call[].row_index.rows > 0 and (kind == _KIND_MINIBATCH or kind == _KIND_BISECT) and _fold_ready(call)
-            and (operation == MEMBER_OP_FIT or operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_TRANSFORM
-            or operation == MEMBER_OP_SCORE)):
+    if call[].row_index.rows > 0 and _fold_kind(kind) and _fold_operation(kind, operation) and _fold_ready(call):
         _fold_op(slot, call, operation)
     elif operation == MEMBER_OP_FIT and kind == _KIND_MINIBATCH:
         _minibatch_fit(slot, call)

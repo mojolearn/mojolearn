@@ -10,7 +10,7 @@ from core.spectral_native_execution import (
 )
 from spectral.impl.spectral_predict_common import SpectralPredictionState, SpectralPrediction
 from core.metrics_store import metrics_store_buffer
-from spectral.estimator import spectral_fit_predict_dataset_resident_keep
+from spectral.estimator import spectral_fit_predict_dataset_resident_keep, spectral_embedding_dataset_resident
 from spectral.estimator import (
     spectral_fit_predict_dataset_host_keep, spectral_fit_predict_graph_host_keep,
     spectral_fit_predict_dense_host_keep, spectral_embedding_dataset_host,
@@ -112,6 +112,17 @@ struct SpectralDeviceBackend(SpectralBackend):
             r.options.neighbors, r.options.normalize_laplacian, r.options.drop_first,
             UInt64(r.options.seed), result.embedding, Float32(r.options.tolerance),
         )
+
+    @staticmethod
+    def embed_dataset_store(r: SpectralEmbeddingRequest, mut result: SpectralEmbeddingResult) raises:
+        """`embed_dataset` over the rows in slot `r.input.source` of the resident store (no upload)."""
+        var data = metrics_store_buffer(r.input.source, max(1, r.input.rows * r.input.features))
+        result.columns = spectral_embedding_dataset_resident(
+            data, r.input.rows, r.input.features, r.options.lanczos_components,
+            r.options.neighbors, r.options.normalize_laplacian, r.options.drop_first,
+            UInt64(r.options.seed), result.embedding, Float32(r.options.tolerance),
+        )
+        _ = data^
 
     @staticmethod
     def embed_graph(r: SpectralEmbeddingRequest, rows: List[Int32], columns: List[Int32],
