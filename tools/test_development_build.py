@@ -1558,3 +1558,98 @@ def test_python_free_check_refuses_before_compile_and_passes_a_clean_tree(tmp_pa
         dev.python_free_check(tmp_path)
     script.write_text("exit 0\n")
     dev.python_free_check(tmp_path)
+
+
+def _serial_closure_oracle(repo, members):
+    """The SourceGraph.closure of 1d808a6bb1 (per-group re-hash, re-listed
+    directories), kept here only as the oracle for the planner's values."""
+    import generated_sources as gs
+    repo = Path(repo).resolve()
+    nodes = {}
+
+    def node(path):
+        if path not in nodes:
+            dependencies, unresolved = set(), []
+            for module, names in bincache.parse_imports(path.read_text(errors="replace")):
+                got = bincache.resolve(module, names, path, [repo, repo / "bindings"])
+                if got is None:
+                    unresolved.append({"file": str(path.relative_to(repo)), "import": module})
+                else:
+                    dependencies.update(p.resolve() for p in got)
+            nodes[path] = dependencies, unresolved
+        return nodes[path]
+
+    files, unresolved = set(), []
+    todo = [repo / "bindings" / (member + ".mojo") for member in members]
+    while todo:
+        path = todo.pop().resolve()
+        if path in files:
+            continue
+        files.add(path)
+        dependencies, unknown = node(path)
+        unresolved.extend(unknown)
+        todo.extend(dependencies - files)
+    scope = "closure"
+    if unresolved:
+        scope = "tree-fallback"
+        files = {p.resolve() for p in bincache.tree_sources(repo)}
+    if any(str(p.relative_to(repo)).startswith("tokenizer/") for p in files):
+        files.update(p.resolve() for p in (repo / "tokenizer/tools").rglob("*")
+                     if p.is_file() and dev.generator_input(p))
+        files.add(repo / "tokenizer/impl/unicode_class.mojo")
+    relative = {str(p.relative_to(repo)) for p in files}
+    for generated, inputs in gs.GENERATED.items():
+        if generated in relative or any(name in relative for name in inputs):
+            source = repo / gs.GENERATOR_DIRS[generated]
+            paths = [source] if source.is_file() else source.rglob("*")
+            files.update(p.resolve() for p in paths if p.is_file() and dev.generator_input(p))
+            files.update(repo / name for name in inputs)
+    hashes = {str(p.relative_to(repo)): bincache.sha256_file(p) for p in sorted(files)}
+    return {"scope": scope, "files": hashes, "unresolved": unresolved}
+
+
+@pytest.mark.parametrize("workers", [1, 2])
+def test_planner_closures_equal_the_serial_per_group_hash(repo, tmp_path, workers):
+    """Hashed once, parsed in worker processes, the closure values (and so
+    every key) equal the per-group serial re-hash. The wide fixture makes a
+    frontier large enough to be parsed in chunks by the process pool."""
+    path = repo / f"bindings/{A}.mojo"
+    wide = 3 * dev.PARSE_CHUNK
+    path.write_text("".join(f"from wide.m{i} import v{i}\n" for i in range(wide))
+                    + "from tokenizer.impl.unicode_class import value\n" + path.read_text())
+    for i in range(wide):
+        write(repo, f"wide/m{i}.mojo", f"from core.shared import value\ncomptime v{i} = {i}\n")
+    write(repo, "tokenizer/impl/unicode_class.mojo", "from .unicode_table_generated import value\n")
+    write(repo, "tokenizer/impl/unicode_table_generated.mojo", "comptime value = 1\n")
+    write(repo, "tokenizer/tools/gen_unicode_categories.py", "# declared generator\n")
+    groups = [[A], [B], [A, B], [HOST]]
+    graph = dev.SourceGraph(repo, workers)
+    graph.prepare(groups)
+    if workers > 1:
+        assert len(graph.nodes) > 2 * dev.PARSE_CHUNK
+    for members in groups:
+        expected = _serial_closure_oracle(repo, members)
+        assert graph.closure(members) == expected
+        assert dev.SourceGraph(repo, workers).closure(members) == expected  # unprepared path
+    # Each file was hashed once for the whole plan, not once per group.
+    calls = []
+    real = bincache.sha256_file
+    def counted(p):
+        calls.append(p)
+        return real(p)
+    original = bincache.sha256_file
+    bincache.sha256_file = counted
+    try:
+        fresh = dev.SourceGraph(repo, workers)
+        fresh.prepare(groups)
+        for members in groups:
+            fresh.closure(members)
+    finally:
+        bincache.sha256_file = original
+    assert len(calls) == len(set(calls)) == len(fresh.hashes)
+
+
+def test_planner_keys_equal_with_one_and_many_workers(repo, tmp_path, monkeypatch):
+    one = plan(repo, tmp_path)
+    monkeypatch.setattr(dev, "available_resources", lambda: (1, 100 * 2 ** 30))
+    assert keys(plan(repo, tmp_path)) == keys(one)

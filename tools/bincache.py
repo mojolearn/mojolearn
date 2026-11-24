@@ -282,17 +282,21 @@ def cache_directory_listings(enabled=True):
     _DIR_NAMES = {} if enabled else None
 
 
-def _names_in(directory):
-    if _DIR_NAMES is None:
+def _names_in(directory, listings=None):
+    """The entry names of DIRECTORY: from LISTINGS (a caller-owned cache for
+    one pass over a tree that does not change under it, such as one
+    development plan), else from the opt-in process cache, else listed now."""
+    cache = listings if listings is not None else _DIR_NAMES
+    if cache is None:
         return {p.name for p in directory.iterdir()}
     key = str(directory)
-    names = _DIR_NAMES.get(key)
+    names = cache.get(key)
     if names is None:
-        names = _DIR_NAMES[key] = frozenset(p.name for p in directory.iterdir())
+        names = cache.setdefault(key, frozenset(p.name for p in directory.iterdir()))
     return names
 
 
-def exact_source_file(path, root):
+def exact_source_file(path, root, listings=None):
     """Require on-disk spelling even on a case-insensitive filesystem.
 
     An imported symbol such as Tape is not the module tape.mojo. Admitting
@@ -303,15 +307,16 @@ def exact_source_file(path, root):
         return False
     parent = root
     for part in path.relative_to(root).parts:
-        if part not in (".", "..") and part not in _names_in(parent):
+        if part not in (".", "..") and part not in _names_in(parent, listings):
             return False
         parent = parent / part
     return True
 
 
-def resolve(module, names, importer, roots):
+def resolve(module, names, importer, roots, listings=None):
     """Every existing file the import could mean, or None if it names this
-    tree and nothing matches (the caller then widens to the whole tree)."""
+    tree and nothing matches (the caller then widens to the whole tree).
+    LISTINGS: see _names_in."""
     if module.startswith("."):
         dots = len(module) - len(module.lstrip("."))
         base = importer.parent
@@ -328,11 +333,11 @@ def resolve(module, names, importer, roots):
     for root in search:
         for k in range(1, len(parts) + 1):
             init = root.joinpath(*parts[:k], "__init__.mojo")
-            if exact_source_file(init, root):
+            if exact_source_file(init, root, listings):
                 found.add(init)
         if parts:
             leaf = root.joinpath(*parts[:-1], parts[-1] + ".mojo")
-            if exact_source_file(leaf, root):
+            if exact_source_file(leaf, root, listings):
                 found.add(leaf)
         pkg = root.joinpath(*parts) if parts else root
         for name in names:
@@ -341,7 +346,7 @@ def resolve(module, names, importer, roots):
                     found.update(p for p in pkg.glob("*.mojo") if p.is_file())
                 continue
             for cand in (pkg / (name + ".mojo"), pkg / name / "__init__.mojo"):
-                if exact_source_file(cand, root):
+                if exact_source_file(cand, root, listings):
                     found.add(cand)
     if not found and not external:
         return None

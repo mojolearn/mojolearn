@@ -72,7 +72,7 @@ work and lock waits; defaults live in tools/release_limits.sh. These controller
 settings never reach the compiler.
 """
 import argparse
-from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, as_completed, wait
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, ThreadPoolExecutor, as_completed, wait
 import contextlib
 from datetime import datetime, timezone
 import fcntl
@@ -222,27 +222,142 @@ def lock(path, seconds=None):
             fcntl.flock(stream, fcntl.LOCK_UN)
 
 
-class SourceGraph:
-    """Conservative file-level closure using the existing cache import parser."""
+# Files per parse task of SourceGraph.parse_all; a smaller frontier is
+# parsed in the controller.
+PARSE_CHUNK = 32
 
-    def __init__(self, repo):
+
+def parse_node(repo, path, dir_names):
+    """(project imports of PATH as resolved paths, unresolved imports)."""
+    dependencies, unresolved = set(), []
+    for module, names in bincache.parse_imports(path.read_text(errors="replace")):
+        got = bincache.resolve(module, names, path, [repo, repo / "bindings"], dir_names)
+        if got is None:
+            unresolved.append({"file": str(path.relative_to(repo)), "import": module})
+        else:
+            dependencies.update(p.resolve() for p in got)
+    return dependencies, unresolved
+
+
+def parse_nodes(repo, paths):
+    """parse_node over one chunk in a worker process (its own listing cache)."""
+    dir_names = {}
+    return [(path, parse_node(repo, path, dir_names)) for path in paths]
+
+
+def planner_workers():
+    """Planner threads: the allocation's cores (available_resources reads the
+    cgroup and affinity on Linux), never the host's visible CPU count."""
+    return max(1, int(available_resources()[0]))
+
+
+def parallel_map(function, items, workers):
+    """[function(item) for item in items] across WORKERS threads, in order.
+
+    The first exception in item order is raised, as the serial loop raised it.
+    sha256 and file reads release the GIL, so hashing uses every thread."""
+    items = list(items)
+    if workers <= 1 or len(items) <= 1:
+        return [function(item) for item in items]
+    with ThreadPoolExecutor(max_workers=min(workers, len(items))) as pool:
+        return list(pool.map(function, items))
+
+
+class SourceGraph:
+    """Conservative file-level closure using the existing cache import parser.
+
+    One graph serves one plan: each file is parsed once and hashed once,
+    whatever number of groups import it. The closure's `files` field is a map
+    of per-file sha256 digests (bincache.sha256_file), so a closure is
+    composed from the cached digests and its value is the one the per-group
+    re-hash produced. Before 2026-11-24 every import probe re-listed its
+    directory and every group re-hashed its whole closure and re-walked the
+    tree and generator directories, serially: on a 32-core box the planner
+    held one busy core for minutes before any compile.
+    A graph is never reused across plans (make_plan's final re-plan builds a
+    new one), so an edit made between plans still changes the key."""
+
+    def __init__(self, repo, workers=None):
         self.repo = Path(repo).resolve()
+        self.workers = workers or planner_workers()
         self.nodes = {}
+        self.hashes = {}
+        self.listings = {}
+        # Directory entry names read by bincache.exact_source_file, listed
+        # once per graph: the uncached listing was 162 of 196 profiled seconds
+        # of a laptop plan of 89 groups (2026-11-24), every import probe
+        # re-listing a directory of hundreds of files.
+        self.dir_names = {}
+        self.relative_names = {}  # path -> repository-relative str
+        self.walks = {}  # members -> files() result, filled by prepare
+        self.lock = threading.Lock()
 
     def node(self, path):
         path = path.resolve()
-        if path not in self.nodes:
-            dependencies, unresolved = set(), []
-            for module, names in bincache.parse_imports(path.read_text(errors="replace")):
-                got = bincache.resolve(module, names, path, [self.repo, self.repo / "bindings"])
-                if got is None:
-                    unresolved.append({"file": str(path.relative_to(self.repo)), "import": module})
-                else:
-                    dependencies.update(p.resolve() for p in got)
-            self.nodes[path] = dependencies, unresolved
-        return self.nodes[path]
+        with self.lock:
+            known = self.nodes.get(path)
+        if known is None:
+            known = parse_node(self.repo, path, self.dir_names)
+            with self.lock:
+                known = self.nodes.setdefault(path, known)
+        return known
 
-    def closure(self, members):
+    def listing(self, name, produce):
+        """A directory walk done once per graph (tree sources, generator dirs)."""
+        with self.lock:
+            known = self.listings.get(name)
+        if known is None:
+            known = tuple(produce())
+            with self.lock:
+                known = self.listings.setdefault(name, known)
+        return known
+
+    def hash_files(self, paths):
+        """Fill the per-file digest cache for PATHS across the planner threads."""
+        missing = sorted({p for p in paths if p not in self.hashes})
+        for path, value in zip(missing, parallel_map(bincache.sha256_file, missing, self.workers)):
+            self.hashes[path] = value
+
+    def parse_all(self, roots):
+        """Parse every file reachable from ROOTS once, one import frontier at a
+        time, in chunks across worker processes (the parse and the import
+        probes are pure Python: threads measured 2.6x slower than one thread
+        on the laptop, 2026-11-24). A frontier too small to pay for a chunk
+        is parsed here."""
+        seen, frontier = set(), {p.resolve() for p in roots}
+        pool = None
+        try:
+            while frontier:
+                frontier = sorted(p for p in frontier - seen
+                                  if p.is_file() and p.is_relative_to(self.repo) and p not in self.nodes)
+                seen.update(frontier)
+                if self.workers > 1 and len(frontier) >= 2 * PARSE_CHUNK:
+                    if pool is None:
+                        pool = ProcessPoolExecutor(max_workers=self.workers)
+                    size = max(PARSE_CHUNK, math.ceil(len(frontier) / (4 * self.workers)))
+                    chunks = [frontier[i:i + size] for i in range(0, len(frontier), size)]
+                    parsed = [row for rows in pool.map(parse_nodes, [self.repo] * len(chunks), chunks)
+                              for row in rows]
+                else:
+                    parsed = [(path, parse_node(self.repo, path, self.dir_names)) for path in frontier]
+                following = set()
+                for path, (dependencies, unresolved) in parsed:
+                    with self.lock:
+                        self.nodes.setdefault(path, (dependencies, unresolved))
+                    following |= dependencies
+                frontier = following
+        finally:
+            if pool is not None:
+                pool.shutdown()
+
+    def relative(self, path):
+        name = self.relative_names.get(path)
+        if name is None:
+            name = self.relative_names[path] = str(path.relative_to(self.repo))
+        return name
+
+    def files(self, members):
+        """(scope, closure paths, unresolved imports) of one group."""
         files, unresolved = set(), []
         todo = [self.repo / "bindings" / (member + ".mojo") for member in members]
         while todo:
@@ -256,25 +371,51 @@ class SourceGraph:
             files.add(path)
             dependencies, unknown = self.node(path)
             unresolved.extend(unknown)
-            todo.extend(dependencies - files)
+            # Sorted: a set of paths iterates in str-hash order, which
+            # PYTHONHASHSEED changes per process, and the order fixes the
+            # `unresolved` list of a tree-fallback key.
+            todo.extend(sorted(dependencies - files, reverse=True))
         scope = "closure"
         if unresolved:
             scope = "tree-fallback"
-            files = {p.resolve() for p in bincache.tree_sources(self.repo)}
+            files = set(self.listing("tree", lambda: (p.resolve() for p in bincache.tree_sources(self.repo))))
         # The generated table itself joins the closure once present. Generator
         # sources and the declared Unicode pin are inputs before it exists too.
-        if any(str(p.relative_to(self.repo)).startswith("tokenizer/") for p in files):
-            files.update(p.resolve() for p in (self.repo / "tokenizer/tools").rglob("*")
-                         if p.is_file() and generator_input(p))
+        if any(self.relative(p).startswith("tokenizer/") for p in files):
+            files.update(self.listing("tokenizer/tools", lambda: (
+                p.resolve() for p in (self.repo / "tokenizer/tools").rglob("*")
+                if p.is_file() and generator_input(p))))
             files.add(self.repo / "tokenizer/impl/unicode_class.mojo")
-        relative = {str(p.relative_to(self.repo)) for p in files}
+        relative = {self.relative(p) for p in files}
         for generated, inputs in gs.GENERATED.items():
             if generated in relative or any(name in relative for name in inputs):
                 source = self.repo / gs.GENERATOR_DIRS[generated]
-                paths = [source] if source.is_file() else source.rglob("*")
-                files.update(p.resolve() for p in paths if p.is_file() and generator_input(p))
+                files.update(self.listing("generator:" + generated, lambda source=source: (
+                    p.resolve() for p in ([source] if source.is_file() else source.rglob("*"))
+                    if p.is_file() and generator_input(p))))
                 files.update(self.repo / name for name in inputs)
-        hashes = {str(p.relative_to(self.repo)): bincache.sha256_file(p) for p in sorted(files)}
+        return scope, files, unresolved
+
+    def prepare(self, member_lists):
+        """Parse every closure file (worker processes) and hash it (threads)
+        once, before the per-group keys are composed.
+
+        The per-group walks stay in this thread: each is a pure-Python walk
+        over the parsed graph (1.2 s for 89 groups on the laptop) and threads
+        made the walks 2.4x slower under the GIL (2026-11-24)."""
+        member_lists = [tuple(members) for members in member_lists]
+        self.parse_all(self.repo / "bindings" / (member + ".mojo")
+                       for members in member_lists for member in members)
+        for members in dict.fromkeys(member_lists):
+            self.walks[members] = self.files(members)
+        self.hash_files(set().union(*(files for _, files, _ in self.walks.values())))
+
+    def closure(self, members):
+        walked = self.walks.get(tuple(members))
+        scope, files, unresolved = walked if walked is not None else self.files(members)
+        unresolved = list(unresolved)
+        self.hash_files(files)
+        hashes = {self.relative(p): self.hashes[p] for p in sorted(files)}
         return {"scope": scope, "files": hashes, "unresolved": unresolved}
 
 
@@ -456,8 +597,10 @@ def toolchain_facts(repo):
     compiler = repo / ".pixi/envs/default/bin/mojo"
     available = compiler.is_file()
     package_dir = repo / ".pixi/envs/default/lib/mojo"
-    packages = {p.name: bincache.sha256_file(p) for p in sorted(package_dir.iterdir())
-                if p.is_file() and p.suffix in (".mojoc", ".mojopkg")} if package_dir.is_dir() else {}
+    listed = [p for p in sorted(package_dir.iterdir())
+              if p.is_file() and p.suffix in (".mojoc", ".mojopkg")] if package_dir.is_dir() else []
+    packages = {p.name: value for p, value in
+                zip(listed, parallel_map(bincache.sha256_file, listed, planner_workers()))}
     config = repo / "pixi.toml"
     return {"available": available, "compiler": str(compiler.resolve()),
             "compiler_sha256": bincache.sha256_file(compiler) if available else None,
@@ -585,8 +728,10 @@ def make_plan(repo, cache, modes, env, selection=(), facts=None, plat=None, c_fa
     facts = facts if facts is not None else toolchain_facts(repo)
     if plat not in ("linux", "darwin"):
         raise BuildError("development builds require Linux or macOS")
-    graph, rows = SourceGraph(repo), []
+    started = time.monotonic()
+    graph = SourceGraph(repo)
     scripts = build_input_scripts(repo)
+    groups = []
     for mode in modes:
         if mode not in ("identical", "host"):
             raise BuildError("development builds support identical and host only")
@@ -597,27 +742,40 @@ def make_plan(repo, cache, modes, env, selection=(), facts=None, plat=None, c_fa
         if arch and (plat == "darwin" or not arch.replace("_", "").isalnum()):
             raise BuildError("supply one Linux accelerator target, not a list or an Apple override")
         byte_lm = effective["MOJOLEARN_PACKAGE_BYTE_LM"] == "1"
-        for stem, flags_class, members in merged.plan(mode, plat, byte_lm, "development"):
-            fields = group_fields(repo, cache, mode, plat, stem, flags_class, members,
-                                  graph, scripts, facts, effective)
-            row = {"mode": mode, "stem": stem, "members": members, "flags_class": flags_class,
-                   "key": digest(fields), "fields": fields,
-                   "selected": selected_group(mode, stem, selection)}
-            row["auto_compile_jobs"] = auto_compile_jobs(mode, env, plat)
-            row["compile_jobs"] = int(effective["MOJOLEARN_COMPILE_JOBS"])
-            row["action"] = "reuse" if facts.get("available") and cached_artifact(cache, row) else "build"
-            if row["action"] == "build" and row["auto_compile_jobs"] and facts.get("available"):
-                # The scheduler chose this group's compiler threads last time;
-                # its exact cached build under that keyed value is current.
-                built = built_compile_jobs(cache, mode, stem)
-                if built and built != row["compile_jobs"]:
-                    alternative = with_compile_jobs(row, env, built, plat)
-                    if cached_artifact(cache, alternative):
-                        row = dict(alternative, action="reuse")
-            # Sizing only; never a key field. It survives key changes.
-            row["recorded_need_bytes"] = recorded_need(cache, mode, stem)
-            row["recorded_seconds"] = recorded_seconds(cache, mode, stem)
-            rows.append(row)
+        groups.extend((mode, effective, stem, flags_class, members)
+                      for stem, flags_class, members in merged.plan(mode, plat, byte_lm, "development"))
+    # Every closure file is parsed (worker processes) and hashed (threads)
+    # once; each group's key fields are then composed from the cached digests
+    # here (dictionary building only), and the per-group cache checks, which
+    # sha256 each cached artifact, run across the planner threads.
+    graph.prepare(members for _, _, _, _, members in groups)
+    composed = [(group, group_fields(repo, cache, group[0], plat, group[2], group[3], group[4],
+                                     graph, scripts, facts, group[1])) for group in groups]
+
+    def plan_row(item):
+        (mode, effective, stem, flags_class, members), fields = item
+        row = {"mode": mode, "stem": stem, "members": members, "flags_class": flags_class,
+               "key": digest(fields), "fields": fields,
+               "selected": selected_group(mode, stem, selection)}
+        row["auto_compile_jobs"] = auto_compile_jobs(mode, env, plat)
+        row["compile_jobs"] = int(effective["MOJOLEARN_COMPILE_JOBS"])
+        row["action"] = "reuse" if facts.get("available") and cached_artifact(cache, row) else "build"
+        if row["action"] == "build" and row["auto_compile_jobs"] and facts.get("available"):
+            # The scheduler chose this group's compiler threads last time;
+            # its exact cached build under that keyed value is current.
+            built = built_compile_jobs(cache, mode, stem)
+            if built and built != row["compile_jobs"]:
+                alternative = with_compile_jobs(row, env, built, plat)
+                if cached_artifact(cache, alternative):
+                    row = dict(alternative, action="reuse")
+        # Sizing only; never a key field. It survives key changes.
+        row["recorded_need_bytes"] = recorded_need(cache, mode, stem)
+        row["recorded_seconds"] = recorded_seconds(cache, mode, stem)
+        return row
+
+    rows = parallel_map(plan_row, composed, graph.workers)
+    print(f"planner: {len(rows)} groups, {len(graph.hashes)} files hashed once, "
+          f"{time.monotonic() - started:.2f} s on {graph.workers} workers", file=sys.stderr, flush=True)
     for group in selection:
         if not any(selected_group(r["mode"], r["stem"], [group]) for r in rows):
             raise BuildError(f"group selection matches nothing: {group}")
