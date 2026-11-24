@@ -71,7 +71,8 @@ def cluster_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, n
 def zero_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        require(operation == xn_operation_id("row_all_zero") and operation == 36
+        # Resolved by name only, as the product caller does: 457fe9f524 removed group_mean and renumbered the table.
+        require(operation == xn_operation_id("row_all_zero")
             and na == 2 and np == 2 and nf == 0 and result != 0, "Agglomerative existing Xn zero-row envelope")
         var a = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=aa)
         var p = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=pp)

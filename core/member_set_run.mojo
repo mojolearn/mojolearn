@@ -61,6 +61,12 @@ struct MemberSetRun(Movable):
     var x: Int
     var rows: Int
     var cols: Int
+    # THE SEQUENCES (lane w3f5-c; core/member_abi.mojo `MemberMatrix.steps`):
+    # 0, a plain matrix; T >= 1, each row of X is T steps of `cols / T`
+    # features, handed on as `call.x.steps` to every whole-width view (a
+    # column draw is a plain matrix). Set only for kinds with
+    # MEMBER_CAN_STEPS (the search RUN's caller checks the mask).
+    var steps: Int
     # Per member: the address of its target column (`rows` values of
     # `y_dtype`: MEMBER_F32, or MEMBER_I32 class codes) and of its float32
     # sample weights (0: none).
@@ -152,6 +158,7 @@ struct MemberSetRun(Movable):
         self.x = x
         self.rows = rows
         self.cols = cols
+        self.steps = 0
         self.targets = List[Int]()
         self.weights = List[Int]()
         self.y_dtype = y_dtype
@@ -555,6 +562,7 @@ def _member_set_unit(address: Int, u: Int, alone: Bool) raises:
     var done = False
     try:
         call.x = MemberMatrix(x_address, rows, cols)
+        call.x.steps = run[].steps
         var y_free = run[].targets[u] == 0  # a fit without a target (lane mf-msel5b)
         if not y_free:
             call.y = MemberMatrix(run[].targets[u], rows, run[].y_cols, run[].y_dtype)
@@ -594,6 +602,8 @@ def _member_set_unit(address: Int, u: Int, alone: Bool) raises:
                     w_address = Int(w_part.unsafe_ptr())
             _set_gather(address, u, n, width, x_at, y_at, w_address, alone)
             call.x = MemberMatrix(x_at, n, width)
+            if column_count == 0:
+                call.x.steps = run[].steps  # whole rows gathered: each still T steps
             if not y_free:
                 call.y = MemberMatrix(y_at, n, run[].y_cols, run[].y_dtype)
             if given != 0:

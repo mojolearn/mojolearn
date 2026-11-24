@@ -13,6 +13,7 @@ from std.memory import bitcast
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from core.neighbors_native_driver import XnDriver
+from x_neighbors.descriptor_schema import xn_operation_id
 from core.lof_plan import LofPlan, LofLabelsPlan, lof_f32_address, lof_i32_address, lof_matrix_count, lof_percentile, lof_offset
 
 comptime LOF_PLAN_CONTRACT_FIXTURES = 28
@@ -22,7 +23,9 @@ comptime _F64 = Pointer[Float64, ImmUntrackedOrigin]
 
 
 def witness(operation: Int, a: List[Int], p: List[Int], ff: Int, nf: Int) raises:
-    if operation == 0:  # sqdist; a real matrix owner, no source-data reads
+    # Operation ids are resolved by name, as every product caller does: the
+    # generated table renumbers when an op is removed (457fe9f524 dropped group_mean).
+    if operation == xn_operation_id("sqdist"):  # sqdist; a real matrix owner, no source-data reads
         require(len(a) == 3 and len(p) == 4 and nf == 0, "sqdist envelope lengths")
         require(a[0] == 101 and a[1] == 103, "query/reference order")
         require(p[0] == 3 and p[1] == 5 and p[2] == 7 and p[3] != 0, "sqdist shape/status")
@@ -32,7 +35,7 @@ def witness(operation: Int, a: List[Int], p: List[Int], ff: Int, nf: Int) raises
         matrix[14] = 113
         var status = _I32(unsafe_from_address=p[3])
         status[0] = 23
-    elif operation == 7:  # knn_select
+    elif operation == xn_operation_id("knn_select"):
         require(len(a) == 3 and len(p) == 4 and nf == 0, "select envelope lengths")
         require(p[0] == 3 and p[1] == 5 and p[2] == 2 and (p[3] == 0 or p[3] == 1), "select shape/exclude")
         var matrix = _F32(unsafe_from_address=a[0])
@@ -44,7 +47,7 @@ def witness(operation: Int, a: List[Int], p: List[Int], ff: Int, nf: Int) raises
         square[5] = 9
         indices[0] = 1
         indices[5] = 4
-    elif operation == 8 or operation == 63:  # legacy fused / tiled
+    elif operation == xn_operation_id("knn_sq") or operation == xn_operation_id("knn_sq_tiled"):  # legacy fused / tiled
         require(len(a) == 4 and len(p) == 6 and nf == 0, "fused envelope lengths")
         require(a[0] == 101 and a[1] == 103, "fused query/reference order")
         require(p[0] == 3 and p[1] == 5 and p[2] == 7 and p[3] == 2 and p[5] != 0, "fused dimensions/status")
@@ -58,7 +61,7 @@ def witness(operation: Int, a: List[Int], p: List[Int], ff: Int, nf: Int) raises
         indices[5] = 4
         var status = _I32(unsafe_from_address=p[5])
         status[0] = 23
-    elif operation == 6:  # unary
+    elif operation == xn_operation_id("unary"):
         require(len(a) == 2 and len(p) == 2 and nf == 2 and ff != 0, "unary envelope lengths")
         var f = _F64(unsafe_from_address=ff)
         require(f[0] == 1.0 and a[0] != a[1], "unary scale and detached destination")
@@ -76,7 +79,7 @@ def witness(operation: Int, a: List[Int], p: List[Int], ff: Int, nf: Int) raises
             require(dst[0] == 0 and dst[2] == 0, "decision destination zeros")
             dst[0] = -0.5
             dst[2] = -2.5
-    elif operation == 13:  # lof_lrd
+    elif operation == xn_operation_id("lof_lrd"):
         require(len(a) == 4 and len(p) == 3 and nf == 0, "density envelope lengths")
         require(p[0] == 2 and p[1] == 3 and p[2] == 11, "density k/query/fitted metadata order")
         require(a[2] == 107, "fit distance source slot")
@@ -87,7 +90,7 @@ def witness(operation: Int, a: List[Int], p: List[Int], ff: Int, nf: Int) raises
         require(dst[0] == 0 and dst[2] == 0, "density destination zeros")
         dst[0] = 13
         dst[2] = 17
-    elif operation == 14:  # lof_score
+    elif operation == xn_operation_id("lof_score"):
         require(len(a) == 4 and len(p) == 3 and nf == 0, "score envelope lengths")
         require(p[0] == 2 and p[1] == 3 and p[2] == 11 and a[1] == 109, "score k/query/fitted source order")
         var indices = _I32(unsafe_from_address=a[0])
@@ -97,7 +100,7 @@ def witness(operation: Int, a: List[Int], p: List[Int], ff: Int, nf: Int) raises
         require(dst[0] == 0 and dst[2] == 0, "score destination zeros")
         dst[0] = -2
         dst[2] = -4
-    elif operation == 47:  # p2m_sign_label
+    elif operation == xn_operation_id("p2m_sign_label"):
         require(len(a) == 2 and len(p) == 2 and nf == 1 and ff != 0, "label envelope lengths")
         require(a[0] == 101 and p[0] == 3 and (p[1] == 0 or p[1] == 1), "label input/count/mode")
         require(_F64(unsafe_from_address=ff)[0] == (-0.5 if p[1] == 0 else 0.0), "label threshold")
@@ -106,7 +109,7 @@ def witness(operation: Int, a: List[Int], p: List[Int], ff: Int, nf: Int) raises
         dst[0] = -1
         dst[1] = 1
         dst[2] = -1 if p[1] == 0 else 1
-    elif operation == 56:  # prescribed row-sort result for interpolation
+    elif operation == xn_operation_id("p2m_row_sort"):  # prescribed row-sort result for interpolation
         require(len(a) == 5 and len(p) == 4 and nf == 0, "sort envelope lengths")
         require(p[0] == 1 and p[1] == 4 and p[2] == 4 and p[3] == 3, "sort network shape")
         require(a[2] == 101, "sort score input slot")
@@ -144,15 +147,33 @@ def refusal_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, n
     return -1
 
 
-def route_entry[EXPECTED: Int, EXCLUDE: Int](operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
+comptime _ROUTE_UNFUSED = 0
+comptime _ROUTE_FUSED = 1
+comptime _ROUTE_TILED = 2
+
+
+def route_operation(route: Int) raises -> Int:
+    if route == _ROUTE_TILED:
+        return xn_operation_id("knn_sq_tiled")
+    if route == _ROUTE_FUSED:
+        return xn_operation_id("knn_sq")
+    return xn_operation_id("sqdist")
+
+
+def route_entry[ROUTE: Int, EXCLUDE: Int](operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
     result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        if operation == 0 or operation == 7 or operation == 8 or operation == 63:
-            require(operation == EXPECTED or (EXPECTED == 0 and operation == 7), "selected neighbor route changed")
+        var sqdist = xn_operation_id("sqdist")
+        var select_op = xn_operation_id("knn_select")
+        var fused = xn_operation_id("knn_sq")
+        var tiled = xn_operation_id("knn_sq_tiled")
+        var expected = route_operation(ROUTE)
+        if operation == sqdist or operation == select_op or operation == fused or operation == tiled:
+            require(operation == expected or (expected == sqdist and operation == select_op), "selected neighbor route changed")
             var p = native_descriptor_words(pp, np)
-            if operation == 7:
+            if operation == select_op:
                 require(np == 4 and p[3] == EXCLUDE, "unfused exclusion flag changed")
-            elif operation == 8 or operation == 63:
+            elif operation == fused or operation == tiled:
                 require(np == 6 and p[4] == EXCLUDE, "fused exclusion flag changed")
         return witness_entry(operation, aa, na, pp, np, ff, nf, result, context, sink)
     except error:
@@ -167,17 +188,17 @@ def fixture(unit: Int) raises:
     var failing = XnDriver(fail_entry)
     if unit < 6:
         var route = unit // 2
-        var selected: NativeDescriptorCall = route_entry[63, 0]
+        var selected: NativeDescriptorCall = route_entry[_ROUTE_TILED, 0]
         if unit == 1:
-            selected = route_entry[63, 1]
+            selected = route_entry[_ROUTE_TILED, 1]
         elif unit == 2:
-            selected = route_entry[8, 0]
+            selected = route_entry[_ROUTE_FUSED, 0]
         elif unit == 3:
-            selected = route_entry[8, 1]
+            selected = route_entry[_ROUTE_FUSED, 1]
         elif unit == 4:
-            selected = route_entry[0, 0]
+            selected = route_entry[_ROUTE_UNFUSED, 0]
         elif unit == 5:
-            selected = route_entry[0, 1]
+            selected = route_entry[_ROUTE_UNFUSED, 1]
         driver = XnDriver(selected)
         var plan = LofPlan(3, 5, 7, 2, unit % 2 == 1, route == 2, route == 1 or unit == 5)
         require(len(plan.squared) == 0 and len(plan.indices) == 0, "construction must defer scratch")
