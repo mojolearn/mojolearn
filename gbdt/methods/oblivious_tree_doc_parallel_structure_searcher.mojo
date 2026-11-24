@@ -88,7 +88,6 @@ bootstrap arrives.
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu import block_dim, block_idx, thread_idx
-from std.sys.compile import is_defined
 
 from core.device_plan import DevicePlan, plan_for_single
 from core.identity_trace import IdentityTrace
@@ -174,24 +173,12 @@ from gbdt.models.oblivious_model import (
 # word of document docIndices[p]), the calcer and the split table take the
 # stride `doc_count`, and the levels read position `subsets.Indices[i]`
 # directly: the same word for every (position, feature), in the same order,
-# so the same histograms and splits. Without `-D MOJOLEARN_GBDT_FAST_ORDERED_FOLD_INDEX`
-# restores the per-level gather.
-def ordered_fold_index() -> Bool:
-    """OPT-IN (`-D MOJOLEARN_GBDT_FAST_ORDERED_FOLD_INDEX`) since lane/neural-pass124:
-    the histogram accumulators key their quantizer's dither on the row id
-    they are handed (`hist2_dither(row)`), and on the fold-order index that
-    id is the fold POSITION, not the document: where a stat is not exactly
-    on the grid the dither moves the cell (peer's L40S, taxi 4.1M, 20
-    Ordered trees: hash 72f4fbfc vs main's cc8d198d; the M4's 30K checks
-    sat on the grid). Off, the levels gather document ids and the cells are
-    main's. Keying the dither on docIndices[position] would make it a pure
-    layout change; it measured 6% of pw.hist on the L40S."""
-    # lane fx-env-dead (2026-11-18): the run-time env read
-    # MOJOLEARN_ORDERED_FOLD_INDEX=1 is now this build define (default off,
-    # unchanged), so the host and device columns read one decision.
-    return is_defined["MOJOLEARN_GBDT_FAST_ORDERED_FOLD_INDEX"]()
-
-
+# so the same histograms and splits. The index runs where the fit already
+# takes it (`T22`, `ORD_ALL` wide fits); elsewhere the levels gather.
+# TOMBSTONE: MOJOLEARN_GBDT_FAST_ORDERED_FOLD_INDEX (NOISE: NV L40S 6 cells, median 1.00, 0.99..1.01) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_FAST_ORDERED_FOLD_INDEX.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+# (`ordered_fold_index()`: the opt-in that took the fold-order index on the
+# remaining Ordered fits, with the dither keyed on the fold position.)
 
 
 def fold_cindex_gather_kernel(
@@ -293,7 +280,7 @@ struct PointwiseTreeWorkspace(Movable):
     var doc_ids_keys: List[Int]
     var doc_ids: List[DeviceBuffer[DType.uint32]]
     # the compressed index in each permutation's fold order (one per
-    # doc_ids entry; lane/neural-pass116, `ordered_fold_index`)
+    # doc_ids entry; lane/neural-pass116, the fold-order index)
     var fold_cindex: List[DeviceBuffer[DType.uint32]]
 
     # ---- DEVIATION 207: the blind level loop's device state ----------
@@ -691,10 +678,8 @@ def fit_oblivious_tree_structure_levels(
         if ord_wide:
             # the fold-order index as the default (no env read a tree)
             fold_order = fold_count > 1
-        else:
-            fold_order = fold_count > 1 and ordered_fold_index()
-    else:
-        fold_order = fold_count > 1 and ordered_fold_index()
+    # TOMBSTONE: MOJOLEARN_GBDT_FAST_ORDERED_FOLD_INDEX (NOISE: NV L40S 6 cells, median 1.00, 0.99..1.01) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_FAST_ORDERED_FOLD_INDEX.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
     comptime if T22:
         fold_order = fold_count > 1
     if dim_count > 0:
