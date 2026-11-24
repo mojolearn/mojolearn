@@ -314,7 +314,8 @@ def forest_count_equal(ctx: DeviceContext, mut codes: DeviceBuffer[DType.int32],
         raise Error("forest score: null int32 true-code address")
     var dy = ctx.enqueue_create_buffer[DType.int32](rows)
     var dh = ctx.enqueue_create_buffer[DType.int32](1)
-    var hh = ctx.enqueue_create_host_buffer[DType.int32](1)
+    # one pageable word for the count (no pinned allocation per score)
+    var hh = List[Int32](length=1, fill=0)
     try:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=MutPointer[Int32, MutAnyOrigin](unsafe_from_address=truth_addr))
         ctx.enqueue_memset(dh, Int32(0))
@@ -328,12 +329,10 @@ def forest_count_equal(ctx: DeviceContext, mut codes: DeviceBuffer[DType.int32],
         ctx.synchronize()
         _ = dy^
         _ = dh^
-        _ = hh^
         raise e
-    var hits = Int(hh.unsafe_ptr()[unsafe_offset=0])
+    var hits = Int(hh[0])
     _ = dy^
     _ = dh^
-    _ = hh^
     return hits
 
 
