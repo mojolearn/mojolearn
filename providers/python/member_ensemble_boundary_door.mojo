@@ -149,7 +149,7 @@ from core.member_abi import MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION
 from core.msel_scorer_run import (
     msel_scorer_code, msel_scorer_row, msel_scorer_regression, msel_scorer_positive, msel_scorer_positive_kind,
     msel_scorer_metric_code, SCORER_POSITIVE_LABEL_ONE, SCORER_POSITIVE_MARKS, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND,
-    SCORER_POSITIVE_MIXED,
+    SCORER_POSITIVE_MIXED, SCORER_ACCURACY_OWN,
     msel_scorer_cluster, msel_scorer_cluster_entry, msel_scorer_top_k, msel_scorer_ap, msel_scorer_brier,
     msel_scorer_label_row, msel_scorer_f_row, msel_scorer_group_words, MselScorerOptions, msel_scorer_float_proba,
     msel_scorer_weighted, msel_scorer_caller, SCORER_WEIGHTS_EMPTY,
@@ -4386,6 +4386,17 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             var own = msel_scorer_code(String("accuracy") if own_score == _OWN_ACCURACY else String("r2"), False)
             codes.append(own)
             responses.append(msel_scorer_row(own).op)
+            # LANE w3f3-d (w3-integrate-5 row 5): the class's own accuracy is
+            # `ClassifierMixin.score`'s binary64 fraction, not the named
+            # 'accuracy' scorer's float32 (core/msel_scorer_run.mojo
+            # SCORER_ACCURACY_OWN); one option word, written once per admission.
+            var own_opts = MselScorerOptions()
+            if own_score == _OWN_ACCURACY:
+                own_opts.flag = SCORER_ACCURACY_OWN
+            if len(options) < len(codes):
+                options.append(own_opts)
+            else:
+                options[len(codes) - 1] = own_opts
     if multi_lab and msel_spec_stratified(split.spec.kind):
         # LANE mf-rows8b (row :3779): a stratified splitter over a multi-output
         # classifier's target. StratifiedKFold, its repeated form and

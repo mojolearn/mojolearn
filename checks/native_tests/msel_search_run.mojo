@@ -272,6 +272,16 @@ def _side_score(plan: MemberPlan, state: Int, xs: List[Float32], ys: List[Int32]
         call.y = MemberMatrix(Int(ys.unsafe_ptr()), count, 1, MEMBER_I32)
         _ = member_call(plan.member, MEMBER_OP_SCORE, call)
         return call.value
+    # the named 'accuracy' scorer: the public accuracy_score's float32 result (lane w3f3-d,
+    # core/msel_scorer_run.mojo SCORER_ACCURACY_OWN)
+    return Float64(Float32(_side_fraction(plan, state, xs, count, ys)))
+
+
+def _side_fraction(plan: MemberPlan, state: Int, xs: List[Float32], count: Int, ys: List[Int32]) raises -> Float64:
+    """The matched fraction of the member's predict on one side, binary64
+    (`ClassifierMixin.score`, a classifier's own score)."""
+    var call = member_call_of(plan, state)
+    call.x = MemberMatrix(Int(xs.unsafe_ptr()), count, D)
     var wide = List[Int64](length=count, fill=Int64(0))
     call.dst = MemberMatrix(Int(wide.unsafe_ptr()), count, 1, MEMBER_I64)
     _ = member_call(plan.member, MEMBER_OP_PREDICT, call)
@@ -1195,16 +1205,18 @@ def check_lacking_fold() raises:
     for i in range(len(test0)):  # small-loop(oracle: accuracy of the mapped codes)
         if Int(wide[i]) + 1 == Int(yt0[i]):
             hits += 1
-    require(scored.test[0][0] == Float64(hits) / Float64(len(test0)), "fold 0's accuracy over mapped codes")
+    require(scored.test[0][0] == Float64(Float32(Float64(hits) / Float64(len(test0)))),
+            "fold 0's accuracy over mapped codes (the named scorer's float32)")
     require(scored.test[0][1] == _side_score(one, s1, xt1, yt1, len(test1), SEARCH_SCORE_ACCURACY), "fold 1")
     # the member's own score of a lacking fold (lane mf-kmeans5): `ClassifierMixin.score`, the accuracy of
-    # each unit's predict (fold 0's mapped codes), the same values as 'accuracy' above
+    # each unit's predict (fold 0's mapped codes), the binary64 fractions of 'accuracy' above (lane w3f3-d:
+    # the own score is not rounded to the named scorer's float32)
     var plan4 = _plan([one.copy()], x, y, SEARCH_SCORE_MEMBER)
     _given(plan4, given)
     plan4.refit = False
     var own = msel_search_run(plan4)
     require(own.test[0][0] == Float64(hits) / Float64(len(test0)), "fold 0's own score is its mapped accuracy")
-    require(own.test[0][1] == _side_score(one, s1, xt1, yt1, len(test1), SEARCH_SCORE_ACCURACY),
+    require(own.test[0][1] == _side_fraction(one, s1, xt1, len(test1), yt1),
             "fold 1's own score is its accuracy")
     var c0 = MemberCall(two.route, s0)
     member_free(two, c0)

@@ -187,6 +187,19 @@ from core.member_abi import (
 #: own score (scoring=None), 1 'accuracy', then `_TABLE` order from 2.
 comptime SCORER_MEMBER = 0
 comptime SCORER_ACCURACY = 1
+#: Lane w3f3-d (w3-integrate-5 row 5): the accuracy row's `flag` word when it
+#: stands for a classifier's OWN score (scoring=None over a kind without
+#: MEMBER_OP_SCORE, or a fold that lacks a class): `ClassifierMixin.score`,
+#: whose Mojolearn door answers the binary64 matched fraction
+#: (bindings/mcls_classify_door.mojo `mcls_accuracy_fraction`). The named
+#: 'accuracy' scorer (flag -1) is `make_scorer(accuracy_score)` (scikit-learn
+#: 1.9 metrics/_scorer.py `accuracy_scorer`): the public
+#: `metrics.accuracy_score`, whose result is the cuML kernel's float32
+#: (bindings/_mojolearn_metrics.mojo `accuracy_score_binding`, Float32 ->
+#: Float64), so the RUN rounds the same fraction to float32 for it. Both are
+#: one rounding of the same exact count over the same rows (k / n in binary64
+#: then to binary32 equals the float32 division: 53 >= 2 * 24 + 2).
+comptime SCORER_ACCURACY_OWN = 1
 
 #: The families of `_TABLE`.
 comptime _F_ACCURACY = 0
@@ -741,8 +754,11 @@ def msel_scorer_row(code: Int, opts: MselScorerOptions, sel_base: Int) raises ->
         row.param_word = opts.param_word
     row.refuse_word = opts.refuse_word
     if opts.flag >= 0:
-        var flag_row = (row.family == _F_LOG_LOSS or row.family == _F_TOP_K or row.family == _F_BRIER
-                        or row.family == _F_AP or msel_scorer_mi(row)
+        # (lane w3f3-d) the accuracy row's flag: SCORER_ACCURACY_OWN only
+        if row.family == _F_ACCURACY and opts.flag != SCORER_ACCURACY_OWN:
+            raise Error("RuntimeError: an accuracy row's flag other than the own-score mark")
+        var flag_row = (row.family == _F_ACCURACY or row.family == _F_LOG_LOSS or row.family == _F_TOP_K
+                        or row.family == _F_BRIER or row.family == _F_AP or msel_scorer_mi(row)
                         or (row.family == _F_LABEL and row.metric == LBL_BALANCED) or row.family == _F_KAPPA)
         if not flag_row:
             raise Error("RuntimeError: a normalize or adjusted flag on a search scorer that takes none")
@@ -1963,7 +1979,11 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
         # lane mf-score8 round b: a label row on a non-classifier's side
         return _float_label_value(route, cluster, label_words, row, truth, response, count, cols, positive, notices)
     if row.family == _F_ACCURACY:
-        return label_accuracy_value(route, truth, response, count, classes, w)
+        var fraction = label_accuracy_value(route, truth, response, count, classes, w)
+        if row.flag == SCORER_ACCURACY_OWN:
+            return fraction  # a classifier's own score (SCORER_ACCURACY_OWN): the binary64 fraction
+        # lane w3f3-d: the named 'accuracy' scorer is the public accuracy_score's float32 result
+        return Float64(Float32(fraction))
     var value: Float64
     var warn = 0
     if row.family == _F_REG:

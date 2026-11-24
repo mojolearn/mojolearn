@@ -116,7 +116,7 @@ from core.msel_scorer_run import (
     msel_scorer_positive, msel_scorer_ap, msel_scorer_cluster, msel_scorer_cluster_entry,
     msel_scorer_labels_from_truth, msel_scorer_log_loss, msel_scorer_brier,
     SCORER_MEMBER, SCORER_ACCURACY, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND, SCORER_POSITIVE_MIXED,
-    SCORER_MIXED_WORDS, SCORER_NUMBER_WORDS,
+    SCORER_MIXED_WORDS, SCORER_NUMBER_WORDS, SCORER_ACCURACY_OWN,
 )
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, MemberRef, member_call, member_call_of, member_outputs_of, member_free, member_own,
@@ -1493,6 +1493,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         member_score = False
         codes[0] = SCORER_ACCURACY
         var accuracy = msel_scorer_row(SCORER_ACCURACY)
+        accuracy.flag = SCORER_ACCURACY_OWN  # the own score's binary64 fraction, not the named scorer's float32
         rows_of.append(accuracy)
         ops.append(accuracy.op)
         logs.append(False)
