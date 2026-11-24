@@ -7922,6 +7922,13 @@ def worker(args):
                     # the predict inputs' own copy (the inference cell's kernel clock, lane harness-evidence)
                     if did and runner.infer_upload_inputs:
                         upload_sep_infer = _ours_upload_probe(runner, runner.infer_upload_inputs)
+                # PER-CELL PHASE SPLIT (lane ab-harness-speed, 2026-11-24): the executed iteration count the fitted
+                # model reports (n_iter_), read after every clock of the round has closed, as the classical2 driver
+                # already does; "unavailable" when the estimator exposes none (never the configured cap)
+                iterations = None
+                if r > 0:
+                    from bench_board_state import runner_model
+                    iterations = _tool("bench_board_probe").iteration_receipt(runner_model(runner))
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
@@ -7931,7 +7938,7 @@ def worker(args):
                  "scored_calls": fit_rec, "infer_scored_calls": inf_rec,
                  "host_usage": {"fit": fit_use, "infer": inf_use if did else None},
                  "aft_capture": aft_capture, "upload_separate": upload_sep,
-                 "upload_separate_infer": upload_sep_infer, "compile": compile_rec,
+                 "upload_separate_infer": upload_sep_infer, "compile": compile_rec, "iterations": iterations,
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
                                "scope": "prepare-fit-consume" if whole_requested else "call-consume",
                                "dataset_load_included": False,
@@ -9024,6 +9031,8 @@ def race(args):
                 a.setdefault("operations", []).append(dict(msg["operation"], round=r, warmup=r == 0))
             if msg.get("state_receipt") is not None:
                 a.setdefault("state_receipts", []).append(msg["state_receipt"])
+            if r > 0 and "iterations" in msg:     # the scored rounds' executed iterations (PER-CELL PHASE SPLIT)
+                a.setdefault("iteration_receipts", []).append(msg["iterations"])
             if msg.get("aft_capture") is not None:
                 a.setdefault("aft_captures", []).append(msg["aft_capture"])
             if msg.get("upload_separate") is not None:

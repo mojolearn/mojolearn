@@ -46,6 +46,7 @@ There is no `ours-cpu` arm. `refuse_our_cpu_arms` stops a driver asked for one
 same-bits digests (lq ID, tools/aft_idcheck.sh), CPU-only installs and
 inference, never a race line.
 """
+import re
 import os
 import subprocess
 import sys
@@ -152,6 +153,46 @@ def iteration_receipt(model):
         return dict(status="recorded", attribute="n_iter_", values=values)
     except (AttributeError, TypeError, ValueError, OverflowError):
         return dict(status="unavailable", reason="actual fitted iterations not exposed")
+
+
+#: PER-CELL PHASE SPLIT (lane ab-harness-speed, 2026-11-24; Andrew: "decide arms on the time inside the loops, not on
+#: fixed costs"). What a cell can split today, from what the drivers and the product already report, with nothing
+#: added inside a timed call: the whole operation (the scored number, unchanged) and the EXECUTED iteration count
+#: where the fitted model reports one (n_iter_: the classical2 and algos workers, read after the clock; trees: the
+#: tree count the trees driver reads back, src=get_tree_leaf_counts). Setup, the loop region and teardown are not
+#: reported by the product (no public phase clock in the wheel; the only phase clocks are build-time profile defines
+#: such as MOJOLEARN_FOREST_PROFILE, a different build), so they are recorded as not exposed, never estimated.
+#: per_iteration_ms is the WHOLE operation over the executed iterations: it carries the fixed cost, so between two arms
+#: it differs from the whole-operation ratio only when their iteration counts differ.
+PHASE_NOT_EXPOSED = "not reported by the product: needs a native phase clock (see ab-harness-speed-RESULT.md table)"
+_TREES_RE = re.compile(r"\btrees=(\d+)")
+
+
+def executed_iterations(cell):
+    """(count, source) of a cell's executed iterations, or (None, why)."""
+    for rec in cell.get("iteration_receipts") or []:
+        if isinstance(rec, dict) and rec.get("status") == "recorded" and rec.get("values"):
+            vals = rec["values"]
+            # one value per output (one-vs-rest classes, targets): the largest, the loop's length
+            return max(vals), "n_iter_" if len(set(vals)) == 1 else "n_iter_ (max over %d outputs)" % len(vals)
+    fit = cell.get("fit")
+    if isinstance(fit, str):
+        m = _TREES_RE.search(fit)
+        if m and int(m.group(1)) > 0:
+            return int(m.group(1)), "trees (get_tree_leaf_counts)"
+    reasons = [r.get("reason") for r in cell.get("iteration_receipts") or [] if isinstance(r, dict) and r.get("reason")]
+    return None, (reasons[0] if reasons else "the family's driver reads no executed iteration count")
+
+
+def phase_split(cell):
+    """The cell's phase record beside its scored whole-operation time (which it does not change)."""
+    whole = cell.get("median_ms")
+    n, src = executed_iterations(cell)
+    per = whole / n if isinstance(whole, (int, float)) and n else None
+    return {"whole_ms": whole, "iterations": n, "iterations_source": src,
+            "per_iteration_ms": per, "per_iteration_scope": "whole operation / executed iterations" if per else None,
+            "setup_ms": None, "loop_ms": None, "loop_per_iteration_ms": None, "teardown_ms": None,
+            "not_exposed": PHASE_NOT_EXPOSED}
 
 
 class MemProbe(object):

@@ -4676,6 +4676,11 @@ def _run_race(ctx, race):
         # not disposable quality-pass scratch. Keep them for E.seal and later
         # verified retention; deleting them here left only hashes in R2.
     rec["cells"] = add_ratios(flag_recompiles(mark_not_scored(cells)))
+    for c in rec["cells"]:
+        # PER-CELL PHASE SPLIT (tools/bench_board_probe.py phase_split): beside the scored time, read from what the
+        # cell already holds; it changes nothing that is timed
+        if c.get("library") == "mojolearn" and c.get("median_ms") is not None:
+            c["phase_split"] = PROBE.phase_split(c)
     if rec.get("infer_cells"):
         flag_recompiles(mark_not_scored(rec["infer_cells"]))
     rec["finished"] = now_utc()

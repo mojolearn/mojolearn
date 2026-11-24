@@ -1181,7 +1181,7 @@ def summary(doc, rows, results, ids, units=(), prior_versions=None):
     for arm, rows_tag, uids, capped_ids in units:
         base = MO.load_board(os.path.join(results, "board-tg-ab-%s-base-%s" % (arm, rows_tag), "board.json"))
         brd = MO.load_board(os.path.join(results, "board-tg-ab-%s-%s" % (arm, rows_tag), "board.json"))
-        ratios, untimed_cells, start = [], 0, len(detail)
+        ratios, untimed_cells, start, differ = [], 0, len(detail), 0
         for rid in uids:
             bc = MO.our_cells(((base or {}).get("races") or {}).get(rid) or {})
             ac = MO.our_cells(((brd or {}).get("races") or {}).get(rid) or {})
@@ -1209,23 +1209,44 @@ def summary(doc, rows, results, ids, units=(), prior_versions=None):
                         for side, d, ms in (("base", base, b), ("arm", brd, x)) if not ms)
                 else:
                     v = " " + MO.verdict(r, "FASTER", "SLOWER", "SAME")
-                detail.append("AB %s rows=%s %s %s %s: base %s -> arm %s ms ratio %s%s%s" % (
-                    arm, rows_tag, rid, k[0], k[1], PC.fmt_ms(b), PC.fmt_ms(x), PC.fmt_ratio(r), v,
+                ph = per_iteration_text(bc.get(k), ac.get(k), r) if r is not None else ""
+                if "PHASE-VERDICTS-DIFFER" in ph:
+                    differ += 1
+                detail.append("AB %s rows=%s %s %s %s: base %s -> arm %s ms ratio %s%s%s%s" % (
+                    arm, rows_tag, rid, k[0], k[1], PC.fmt_ms(b), PC.fmt_ms(x), PC.fmt_ratio(r), v, ph,
                     base_used(base, brd, rid)))
         med = statistics.median(ratios) if ratios else None
         gaps = ab_row_gaps(base, brd, uids)
-        table.append("  %-34s rows=%-6s races=%-3d cells=%-3d median arm/base %s %s%s%s%s" % (
+        table.append("  %-34s rows=%-6s races=%-3d cells=%-3d median arm/base %s %s%s%s%s%s" % (
             arm, rows_tag, len(uids), len(ratios), PC.fmt_ratio(med),
             "-" if med is None else MO.verdict(med, "FASTER", "SLOWER", "SAME"),
             ("; " + direction(ratios)) if ratios else "",
             ("; untimed cells %d" % untimed_cells) if untimed_cells else "",
-            ("; rows differ %d" % len(gaps)) if gaps else ""))
+            ("; rows differ %d" % len(gaps)) if gaps else "",
+            ("; per-iteration verdict differs %d" % differ) if differ else ""))
         if gaps:
             detail.insert(start, gap_line(arm, rows_tag, gaps))
     if table:
         lines.append("A/B (arm and its base, the candidate, back to back):")
         lines += table + detail
     return "\n".join(lines) + "\n"
+
+
+def per_iteration_text(bcell, acell, whole_ratio):
+    """' | per-iteration base X (N it) -> arm Y (M it) ratio R VERDICT', with PHASE-VERDICTS-DIFFER when that verdict
+    is not the whole operation's (tools/bench_board_probe.py phase_split: the whole operation over the EXECUTED
+    iterations; the loop region itself is not reported by the product); '' when either side has no iteration count."""
+    import bench_board_probe as PR
+    pb, pa = PR.phase_split(bcell or {}), PR.phase_split(acell or {})
+    if not (pb["per_iteration_ms"] and pa["per_iteration_ms"]):
+        return ""
+    import measure_owed as MO
+    r = pa["per_iteration_ms"] / pb["per_iteration_ms"]
+    v = MO.verdict(r, "FASTER", "SLOWER", "SAME")
+    w = MO.verdict(whole_ratio, "FASTER", "SLOWER", "SAME")
+    return " | per-iteration base %s (%d it) -> arm %s (%d it) ratio %s %s%s" % (
+        PC.fmt_ms(pb["per_iteration_ms"]), pb["iterations"], PC.fmt_ms(pa["per_iteration_ms"]), pa["iterations"],
+        PC.fmt_ratio(r), v, " PHASE-VERDICTS-DIFFER" if v != w else "")
 
 
 def base_used(base, brd, rid):

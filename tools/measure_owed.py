@@ -60,7 +60,7 @@ unit whose B rounds are capped). A neighbouring shape is the row's own "rows" (a
         BASE_BOARD (this job's board of the candidate) is timed: the slowest of its timed cells, whole seconds up.
 
 SHARED BASE (lane ab-harness-speed, 2026-11-24). nvc-ab-20261124T070727Z-69dac2 and ...T095727Z-92fd9f timed the
-candidate base once PER ARM: 165 base races for 122 distinct ones, 852 s of repeated base wall and a base board process
+candidate base once PER ARM: 165 base races for 109 distinct ones (122 within each job), 852 s of repeated base wall and a base board process
 per unit. plan now orders the B units so arms on the same races run next to each other (overlap_order), and before
 each base chunk the job runs
   base-share --target BASE_DIR --ids CHUNK --source DIR... [--max-age-s S] --out TODO

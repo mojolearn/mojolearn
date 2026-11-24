@@ -925,5 +925,28 @@ class AbReading(unittest.TestCase):
         self.assertIn("grep -m 20 '^PAPER-PASS-IDS-FAILED' \"$RES/logs/pass-ids-tg-ab-$arm.log\"", text)
 
 
+class PhaseSplit(unittest.TestCase):
+    """bench_board_probe.phase_split and the A/B summary's per-iteration column (lane ab-harness-speed, 2026-11-24)."""
+
+    def test_iterations_from_n_iter_and_trees_else_named_missing(self):
+        import bench_board_probe as PR
+        c = {"median_ms": 100.0, "iteration_receipts": [{"status": "recorded", "values": [10, 20]}]}
+        p = PR.phase_split(c)
+        self.assertEqual((p["iterations"], p["per_iteration_ms"]), (20, 5.0))
+        self.assertIsNone(p["loop_ms"])
+        self.assertEqual(PR.phase_split({"median_ms": 50.0, "fit": "trees=500 leaves=9 depth=8"})["iterations"], 500)
+        miss = PR.phase_split({"median_ms": 5.0, "iteration_receipts": [{"status": "unavailable", "reason": "r"}]})
+        self.assertEqual((miss["iterations"], miss["iterations_source"], miss["per_iteration_ms"]), (None, "r", None))
+
+    def test_per_iteration_verdict_marked_when_it_differs(self):
+        b = {"median_ms": 100.0, "iteration_receipts": [{"status": "recorded", "values": [10]}]}
+        a = {"median_ms": 80.0, "iteration_receipts": [{"status": "recorded", "values": [5]}]}
+        t = TR.per_iteration_text(b, a, 0.8)
+        self.assertIn("ratio 1.60 SLOWER PHASE-VERDICTS-DIFFER", t)
+        same = TR.per_iteration_text(b, dict(a, iteration_receipts=b["iteration_receipts"]), 0.8)
+        self.assertNotIn("DIFFER", same)
+        self.assertEqual(TR.per_iteration_text(b, {"median_ms": 1.0}, 1.0), "")
+
+
 if __name__ == "__main__":
     unittest.main()
