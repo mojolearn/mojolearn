@@ -902,6 +902,9 @@ def tsne_fit_device(
     var t_rep = 0
     var t_sum = 0
     var t_step = 0
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    ctx.synchronize()
     var loop_start = fit_loop_start()
     for it in range(max_iter):
         var ex = exaggeration if it < exploration else Float32(1.0)

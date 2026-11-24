@@ -35,6 +35,9 @@ def fa_em_dev(mut k: DKit, A: DMat, mut psi: DMat, mut W: DMat, mut ll_out: List
     # per fit instead of twice per EM iteration. Same words, same order.
     var keep = k.upload(fa_mask(nc, d, True))
     var drop = k.upload(fa_mask(nc, d, False))
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    k.sync()
     var loop_start = fit_loop_start()
     for i in range(1, a.max_iter + 1):  # driver-loop: over the EM iterations
         it = i

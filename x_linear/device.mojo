@@ -1791,6 +1791,9 @@ def _sgd_mb_ovr_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[
     # fit_loop_ (lane alm-linear): bounded_device_loop's last flag read waits
     # on the stream, so the clock stops right after it (no synchronization
     # added); the epochs are the n_iter word `finish` brings home
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    ctx.synchronize()
     var loop_start = fit_loop_start()
     _ = bounded_device_loop(
         ctx, step, registers, 1, step.max_iter,
@@ -2479,6 +2482,9 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     # fit_loop_ (lane alm-linear): the clock starts before the first problem's
     # first epoch and stops after the result readback's wait that follows the
     # last problem's loop (no synchronization added; nothing inside a loop)
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    ctx.synchronize()
     var loop_start = fit_loop_start()
     for c in range(problems):  # driver-loop: over the one-vs-rest problems, one device loop each
         step.begin_problem(c)
@@ -3581,6 +3587,9 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     # fit_loop_ (lane alm-linear): bounded_device_loop's last flag read waits
     # on the stream, so the clock stops right after it (no synchronization
     # added); the epochs are the n_iter word `finish` brings home
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    ctx.synchronize()
     var loop_start = fit_loop_start()
     var outcome = bounded_device_loop(
         ctx, step, registers, 1, step.max_iter - step.e0,

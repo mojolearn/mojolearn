@@ -3125,6 +3125,10 @@ def fit_forest_prepared[
     # first tree's first launch; read once more after the drain that ends
     # the loop below. Nothing is read inside the loop. Measurement only: no
     # computed bit changes.
+    # lane alm-left: ONE synchronization before the clock (outside the
+    # loop): the binning launch, the sampler's and builders' fills and any
+    # queued upload of X finish here, so the region holds tree work only.
+    ctx.synchronize()
     var loop_start = fit_loop_start()
     # PRIME: one tree per slot. A tree whose root is not expandable
     # (max_depth 0, min_samples_split too big) finishes inside

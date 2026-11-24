@@ -4594,6 +4594,9 @@ def fit_with_test(
         var needs_mags = False
         comptime if _needs_magnitudes:
             needs_mags = True
+        # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+        # clock, outside the loop, so the loop region holds loop work only
+        ctx.synchronize()
         fit_loop_t0 = fit_loop_start()
         stopped_early = fit_sym_rounds_on_device(
             ctx, model, test, detector, losses, test_losses, not_pd_total,
@@ -4609,6 +4612,9 @@ def fit_with_test(
             fold_counts, row_index,
         )
     else:
+        # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+        # clock, outside the loop, so the loop region holds loop work only
+        ctx.synchronize()
         fit_loop_t0 = fit_loop_start()
     for iteration in range(0 if device_rounds else n_estimators):
         var t_grad = loop_times.start()

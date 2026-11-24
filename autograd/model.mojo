@@ -1649,6 +1649,9 @@ def model_fit_state[E: Exec](
     var inv_n = ftz(identical_div(Float32(1), Float32(N)))
     var n_iter = 0
     var loop_record = FitLoop.empty()
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    ex.sync()
     var loop_start = fit_loop_start()
     for e in range(cfg.epochs):  # driver-loop: over epochs
         # the absolute epoch index: a resumed fit continues the row orders

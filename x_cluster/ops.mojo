@@ -64,6 +64,13 @@ trait ClusterOps(Movable):
         """x[i] = ftz(x[i]) for the first n values (`bodies.flush_cell`)."""
         ...
 
+    def settle(mut self) raises:
+        """Wait for every queued operation (the device column's one
+        synchronization; nothing on the host column, whose operations
+        complete when they return). Called once before a fit loop's clock so
+        the loop region holds no queued setup work (lane alm-left)."""
+        ...
+
     def kth(mut self, m: Int, n_rows: Int, n_cols: Int, k: Int, dst: Int) raises:
         """out[r] = k-th smallest of row r (an exact selection over the magnitude bits, DEVIATION 5103)."""
         ...

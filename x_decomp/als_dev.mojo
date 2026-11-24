@@ -87,6 +87,9 @@ def als_fit_dev_run(
     var loop_start = 0
     if a.use_cg:
         var Ct = k.t(C)
+        # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+        # clock, outside the loop, so the loop region holds loop work only
+        k.sync()
         loop_start = fit_loop_start()
         for _ in range(a.iterations):
             X = als_cg_half_dev(k, C, Y, X, a.reg, a.cg_steps, sink)
@@ -94,6 +97,9 @@ def als_fit_dev_run(
             if a.calc_loss:
                 losses.append(als_loss_dev(k, C, X, Y, a.reg))
     else:
+        # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+        # clock, outside the loop, so the loop region holds loop work only
+        k.sync()
         loop_start = fit_loop_start()
         for _ in range(a.iterations):
             X = als_half_dev(k, C, Y, a.reg, False, sink)

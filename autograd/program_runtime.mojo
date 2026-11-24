@@ -417,6 +417,9 @@ def train_program_control[E: Exec & Movable & Deinitable](
         swap(held, s.tape)
         swapped = True
         s.tape.record()
+        # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+        # clock, outside the loop, so the loop region holds loop work only
+        s.ex.sync()
         var loop_start = fit_loop_start()
         for e in range(epochs):  # driver-loop: over epochs, the bounded loop's iterations, read once per chunk
             if criterion:

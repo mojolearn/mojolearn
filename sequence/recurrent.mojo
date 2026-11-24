@@ -558,6 +558,9 @@ def rnn_fit[E: Exec, //, S: RnnStep](
     var loss_ws = loss_scratch(ex, bmax * net.O)
     var st = OptState()
     var step = S()
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    ex.sync()
     var loop_start = fit_loop_start()
     for k in range(n_steps):
         var j = k % per

@@ -293,6 +293,10 @@ struct HostOps(ClusterOps):
 
         host_cells(body, n, 4)
 
+    def settle(mut self) raises:
+        # the host column's operations complete when they return
+        pass
+
     def flush(mut self, x: Int, n: Int) raises:
         var px = self._fp(x)
 

@@ -262,6 +262,9 @@ def nmf_mu_dev(M: DMat, mut W: DMat, mut H: DMat, a: NmfArgs, mut loop: FitLoop)
     # tol <= 0 has no criterion: the whole bound is one chunk, one read
     var check = NMF_MU_CHECK_PERIOD if a.tol > 0 else max(a.max_iter, 1)
     var timers = LoopTimers("nmf.mu")
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    ctx.synchronize()
     var loop_start = fit_loop_start()
     var outcome = bounded_device_loop(ctx, step, registers, 1, a.max_iter, check, timers)
     loop = fit_loop_stop(loop_start, outcome.stop_iteration if outcome.converged else max(a.max_iter, 0))
@@ -375,6 +378,9 @@ def nmf_cd_dev(M: DMat, mut W: DMat, mut H: DMat, a: NmfArgs, mut loop: FitLoop)
     var registers = LoopRegisters(ctx)
     var step = _CdStep(M, W, Ht, a)
     var timers = LoopTimers("nmf.cd")
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    ctx.synchronize()
     var loop_start = fit_loop_start()
     var outcome = bounded_device_loop(ctx, step, registers, 1, a.max_iter, NMF_CD_LOOP_CHUNK, timers)
     loop = fit_loop_stop(loop_start, outcome.stop_iteration if outcome.converged else max(a.max_iter, 0))

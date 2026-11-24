@@ -1957,6 +1957,10 @@ struct DeviceOps(ClusterOps):
         )
         self._ph1("sqrt")
 
+    def settle(mut self) raises:
+        """The queue drained (and the held upload sources released)."""
+        self._sync()
+
     def flush(mut self, x: Int, n: Int) raises:
         self._ph0()
         self.ctx.enqueue_function[_flush_kernel](

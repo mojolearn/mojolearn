@@ -713,6 +713,9 @@ def mlp_fit[E: Exec](
     var pw2 = Float32(1.0)
     var t_samples = 0
     var n_iter = 0
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    ex.sync()
     var loop_start = fit_loop_start()
     for it in range(max_iter):
         comptime if MLP_EPOCH_DEV:

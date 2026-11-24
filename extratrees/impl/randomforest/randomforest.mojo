@@ -407,6 +407,9 @@ def fit_classification_device(
     # `download_trees` waited on the device), so no synchronization is
     # added; its end-of-fit liveness canary is one drain of an empty queue.
     # Nothing is read inside the loop. Measurement only: no bit changes.
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    ctx.synchronize()
     var loop_start = fit_loop_start()
     forest.trees = train_forest_classification_device(
         ctx, device_dataset, tree_params, tree_ids, seed,
@@ -464,6 +467,9 @@ def fit_regression_device(
         tree_ids.append(Int32(tree_start + tree_id))
     var forest = Forest(1)
     # The fit loop clock, as `fit_classification_device`'s.
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    ctx.synchronize()
     var loop_start = fit_loop_start()
     forest.trees = train_forest_regression_device(
         ctx, dataset, scale, params, tree_ids, seed,
@@ -530,6 +536,9 @@ def fit_regression_device_f32(
         tree_ids.append(Int32(tree_start + tree_id))
     var forest = Forest(1)
     # The fit loop clock, as `fit_classification_device`'s.
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    ctx.synchronize()
     var loop_start = fit_loop_start()
     forest.trees = train_forest_regression_device(
         ctx, dataset, scale, tree_params, tree_ids, seed,

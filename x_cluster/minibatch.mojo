@@ -328,7 +328,10 @@ def minibatch_fit[O: ClusterOps](
     # allocated after the FAST block, so a fit that runs the step loop reads
     # the clock again right before it (`n_steps` > 0 only then). The stop is
     # read right after the centers readback that follows the loop (an
-    # existing wait). Nothing is read inside the steps.
+    # existing wait). Nothing is read inside the steps. ONE settle before
+    # the clock (lane alm-left): the batch slots' fills and the centers
+    # upload are queued, and would otherwise run inside the region.
+    ops.settle()
     var loop_start = fit_loop_start()
     # lane/apple-fast-cluster (2026-10-02), FAST on Apple, ON by default (see
     # x_cluster/minibatch_fast.mojo for the M3 A/B): MINIBATCH_FAST_DEV runs the
@@ -398,6 +401,9 @@ def minibatch_fit[O: ClusterOps](
     # centers reassign often; a discarded step is wasted device work)
     var gsz = 1
     if n_steps > 0:
+        # the step loop's scratch fills and the cumulative weights' upload,
+        # drained before the clock (lane alm-left; once per fit)
+        ops.settle()
         loop_start = fit_loop_start()
     while gstep < n_steps and not stop:  # driver-loop: over step groups
         var g_n = n_steps - gstep

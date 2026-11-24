@@ -56,6 +56,9 @@ def ica_par_dev(mut k: DKit, X1: DMat, mut W: DMat, fun: Int, alpha: Float64, ma
     W = sym_decorrelation_dev(k, W)
     var p = X1.c
     var it = 0
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    k.sync()
     var loop_start = fit_loop_start()
     for i in range(1, max_iter + 1):
         it = i
@@ -82,6 +85,9 @@ def ica_def_dev(mut k: DKit, X1: DMat, mut W: DMat, fun: Int, alpha: Float64, ma
     var Winit = k.copy(W)
     var best = 0
     var first = True
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    k.sync()
     var loop_start = fit_loop_start()
     for j in range(nc):  # small-loop(nc: components): one deflation row per component, each a device-sized loop
         var w = k.rows(Winit, j, j + 1)

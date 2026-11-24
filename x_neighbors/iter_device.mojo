@@ -326,6 +326,9 @@ def op_lp_iterate(
     var timers = LoopTimers("label_propagation.dense")
     # the fit loop clock (`fit_loop_`): around the bounded loop, whose last
     # register read drains the stream (no synchronization added)
+    # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+    # clock, outside the loop, so the loop region holds loop work only
+    ctx.synchronize()
     var loop_start = fit_loop_start()
     var outcome = bounded_device_loop(ctx, step, registers, 1, max_iter, LPK_BATCH, timers)
     var loop_end = fit_loop_stop(loop_start, 0)
@@ -3561,6 +3564,9 @@ def op_lp_iterate_knn(
     else:
         var registers = LoopRegisters(ctx)
         var timers = LoopTimers("label_propagation.knn")
+        # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
+        # clock, outside the loop, so the loop region holds loop work only
+        ctx.synchronize()
         var loop_start = fit_loop_start()
         var outcome = bounded_device_loop(ctx, step, registers, 1, max_iter, LPK_BATCH, timers)
         loop_ns = fit_loop_stop(loop_start, 0).loop_ns
