@@ -18,13 +18,36 @@ n_nearest_features None, sample_posterior False: the imputer's own stream is our
 order or neighbour draw is never compared), skip_complete True / False, on the digest's fixtures
 (mf_iterimp_digests.py `_data`, `_data_int`) plus one with a complete column (where skip_complete matters), for
 DecisionTreeRegressor(random_state=0) (member route), DecisionTreeRegressor(splitter='random', random_state=0) (the
-ExtraTree-style splitter: the door rounds) and DecisionTreeClassifier(random_state=0) on the integer fixture.
+ExtraTree-style splitter), DecisionTreeClassifier(random_state=0) on the integer fixture, and `tree_allbins`: ours with
+n_bins=1024 against scikit-learn's plain DecisionTreeRegressor(random_state=0).
+
+THE CAUSE OF THE `differs` ROWS (lane w3-fix-d, 2026-11-23; gate b7ee oracle.txt: 24 of 48 differ, every one a
+continuous fixture, every integer fixture equal). Not the imputer and not split ties:
+  * Seeding already matches scikit-learn: each step fits a NEW member state from the estimator's own words
+    (x_prep/iterimp_run.mojo `_member_step`: `member_new(member.plan)`), the clone's random_state is never redrawn,
+    and the imputer's stream reaches only the posterior draws and the neighbour draws (`_member_put`, `plan.draws`).
+  * Our DecisionTreeRegressor searches splits over per-feature quantile bins (cuML's rule, n_bins=None -> 128; its
+    public docstring in python/mojolearn/_expansion_trees.py: "thresholds can differ from scikit-learn's";
+    ensemble/decisiontree/batched_levelalgo/quantiles.mojo: sample_count = min(rows, 4 * n_bins), bin edge
+    idx = round((bin + 1) * sample_count / n_bins) - 1, deduplicated). A step's training block has about 340 rows
+    of continuous values (400 rows, 15 percent missing), so about 340 distinct values per feature against 128 edges:
+    most of scikit-learn's candidate partitions do not exist for ours, the chosen splits differ, and every imputed
+    cell moves (cells = about every missing cell). The integer fixtures have 3 distinct values per feature, so every
+    candidate partition is an edge on both and the rows are equal: that is why only the continuous rows differ.
+  * splitter='random' draws its thresholds from our ExtraTrees stream (extratrees/, PCG), not scikit-learn's rand_r
+    over an MT19937-derived seed: on continuous features it differs by construction; on 3-valued features every
+    threshold in a gap gives the same partition (equal).
+  * The imputer's storage dtype: given float64 X scikit-learn keeps Xt and every imputed target in float64; ours
+    reads X as float32 (the estimator docstrings), as scikit-learn does when given float32 X (FLOAT_DTYPES keeps
+    float32). The `_sk32` rows give scikit-learn the same float32 X, the like-for-like comparison.
+EXPECTED: `tree_allbins_*_sk32` equal (n_bins=1024 >= the step's rows makes every distinct value an edge, so the
+candidate partitions are scikit-learn's); a remaining `differs` there with a gross max_abs is a criterion near-tie
+flip (float accumulation order) and is a finding for the tree, not the imputer. `tree_*` and `tree_random_*` on the
+continuous fixtures stay `differs` by the documented split-search difference above; every int / ctree row equal.
 
 Per case one line: `<case> equal` (bit-equal fit_transform, n_iter_, n_features_with_missing_ and step order), or
-`<case> differs cells=<k>/<n> max_abs=<x> n_iter=<ours>/<sklearn> order=<same|differs>`, or `<case> error ...`. A
-tree split that ties between features is broken by each library's own feature permutation (scikit-learn's MT19937,
-ours): a `differs` row on a fixture with tied splits is a tie, not an order fault; the skip_complete pairs must then
-differ in the same way (same `order`, same n_features_with_missing_ as scikit-learn).
+`<case> differs cells=<k>/<n> max_abs=<x> n_iter=<ours>/<sklearn> missing=<ours>/<sklearn> order=<same|differs>`,
+or `<case> error ...`.
 
     PYTHONPATH=<repo>/python python3 tools/mf_gate6_iterimp_oracle.py > oracle.txt
 
@@ -35,7 +58,8 @@ import os
 import sys
 from concurrent.futures import ProcessPoolExecutor
 
-ESTIMATORS = ("tree", "tree_random", "ctree")
+ESTIMATORS = ("tree", "tree_allbins", "tree_random", "ctree")
+SK_DTYPES = ("f64", "f32")  # the dtype scikit-learn is given (ours always reads float32)
 ORDERS = ("ascending", "roman", "arabic")
 FIXTURES = ("cont", "int", "complete")
 
@@ -82,6 +106,10 @@ def _estimator(lib, name):
         import sklearn.tree as m
     if name == "tree":
         return m.DecisionTreeRegressor(random_state=0)
+    if name == "tree_allbins":
+        # every distinct value of a step's training block an edge (n_bins >= its rows; 1024 is the tree's cap)
+        return m.DecisionTreeRegressor(random_state=0, n_bins=1024) if lib == "ours" else \
+            m.DecisionTreeRegressor(random_state=0)
     if name == "tree_random":
         return m.DecisionTreeRegressor(splitter="random", random_state=0)
     return m.DecisionTreeClassifier(random_state=0)
@@ -89,10 +117,10 @@ def _estimator(lib, name):
 
 def _cases():
     cases = []
-    for est, fixture, order, skip in itertools.product(ESTIMATORS, FIXTURES, ORDERS, (False, True)):
+    for sk, est, fixture, order, skip in itertools.product(SK_DTYPES, ESTIMATORS, FIXTURES, ORDERS, (False, True)):
         if est == "ctree" and fixture == "cont":
             continue  # a classifier on a continuous target is refused on both (not a value case)
-        cases.append((est, fixture, order, skip))
+        cases.append((est, fixture, order, skip, sk))
     return cases
 
 
@@ -112,15 +140,16 @@ def _fit(lib, est, X, order, skip):
 
 def _run(case):
     import numpy as np
-    est, fixture, order, skip = case
-    name = f"{est}_{fixture}_{order}_skip{int(skip)}"
+    est, fixture, order, skip, sk = case
+    # the f64 rows keep the gate's names (oracle.txt of gate b7ee); the f32 rows end in `_sk32`
+    name = f"{est}_{fixture}_{order}_skip{int(skip)}" + ("_sk32" if sk == "f32" else "")
     X = _fixture(fixture, est == "ctree")
     try:
         ours = _fit("ours", est, X.copy(), order, skip)
     except Exception as e:  # noqa: BLE001 - the line records the refusal
         return f"{name} error ours {type(e).__name__}: {str(e).splitlines()[0] if str(e) else ''}"
     try:
-        theirs = _fit("sklearn", est, X.copy().astype(np.float64), order, skip)
+        theirs = _fit("sklearn", est, X.copy().astype(np.float64 if sk == "f64" else np.float32), order, skip)
     except Exception as e:  # noqa: BLE001 - the line records the refusal
         return f"{name} error sklearn {type(e).__name__}: {str(e).splitlines()[0] if str(e) else ''}"
     a, b = ours[0], theirs[0].astype(np.float32)
