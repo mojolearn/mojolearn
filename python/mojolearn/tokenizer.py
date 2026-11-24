@@ -107,6 +107,27 @@ def _fast_binding(*, connect_all=False):
     return module, bool(train), bool(encode), int(max_vocab)
 
 
+#: The identical GPU tokenizer (`tokenizer/gpu/`, binding `_mojolearn_x_tokenizer`): what a
+#: BpeTokenizer built with device="gpu" runs. Connected once at import:
+#: `(module, bpe_gpu_load, bpe_gpu_encode_batch, bpe_gpu_decode_batch, bpe_gpu_train,
+#: bpe_gpu_trained_sizes, bpe_gpu_trained_copy)`, or a one-item tuple
+#: holding the words device="gpu" is refused with where it is not installed.
+_GPU_EXTENSION = "_mojolearn_x_tokenizer"
+
+
+def _gpu_binding():
+    if _backend._CPU_ONLY is not None:
+        return ("ValueError: device='gpu' needs a GPU build of mojolearn, and this installation is CPU only",)
+    try:
+        # import-time: the GPU tokenizer of this process's tier, connected once (integer work: both
+        # tiers are the same code and give the same ids)
+        module = _backend.binding(_GPU_EXTENSION, _backend.default_mode())
+        return (module, module.bpe_gpu_load, module.bpe_gpu_encode_batch, module.bpe_gpu_decode_batch,
+                module.bpe_gpu_train, module.bpe_gpu_trained_sizes, module.bpe_gpu_trained_copy)
+    except (ImportError, AttributeError, ValueError, OSError) as error:
+        return ("ImportError: device='gpu' needs the GPU tokenizer binding, which is not connected: " + str(error),)
+
+
 # `encode` and `decode` for byte-level BPE in the GPT-2 format.
 #
 # Ids are in [0, n_vocab): the vocabulary's ranks, then `<|endoftext|>` at
@@ -142,11 +163,10 @@ class BpeTokenizer:
         A rank file (see :meth:`from_ranks_file`). Required: there is no
         built-in vocabulary, so omitting it raises ValueError.
     device : {None, 'gpu', 'cpu'}, default None
-        Where the computation runs. None follows the numeric mode. 'cpu' runs on
-        the CPU and raises ValueError in numeric mode 'fast'. 'gpu' runs the fast
-        batch encoder on an Apple GPU in numeric mode 'fast', and raises
-        ValueError anywhere else and for the operations that encoder does not
-        cover (encode, decode, allow_endoftext=True). Other values raise ValueError.
+        Where encoding and decoding run. None follows the numeric mode. 'cpu'
+        runs on the CPU and raises ValueError in numeric mode 'fast'. 'gpu'
+        runs on the GPU, with the same ids as the CPU, and raises ValueError on
+        a CPU-only installation. Other values raise ValueError.
 
     Raises
     ------
@@ -399,19 +419,10 @@ class TrainedBpeVocabulary:
         ``(left_id, right_id, new_id)`` in the order the merges were made.
     stats : dict
         Training statistics, including ``n_ties_broken`` and ``tie_break``.
-
-    Parameters
-    ----------
-    tokens, merges, stats
-        As the attributes.
-    device : {None, 'gpu', 'cpu'}, default None
-        Where the computation runs. None and 'cpu' run on the CPU ('cpu'
-        raises ValueError in numeric mode 'fast'); 'gpu' raises ValueError.
-        Other values raise ValueError.
     """
 
-    def __init__(self, tokens, merges, stats, *, device=None):
-        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_init', (self, tokens, merges, stats, device), _TOKENIZER_CONTEXT)
+    def __init__(self, tokens, merges, stats):
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_init', (self, tokens, merges, stats), _TOKENIZER_CONTEXT)
 
     @property
     def n_tokens(self):
@@ -517,10 +528,10 @@ class BpeVocabularyTrainer:
         Both name the compiled trainer.
     device : {None, 'gpu', 'cpu'}, default None
         Where training runs. None follows the numeric mode. 'cpu' runs on the
-        CPU and raises ValueError in numeric mode 'fast'. 'gpu' runs the fast
-        trainer on an Apple GPU in numeric mode 'fast', and raises ValueError
-        anywhere else, including when vocab_size exceeds that trainer's limit.
-        Other values raise ValueError.
+        CPU and raises ValueError in numeric mode 'fast'. 'gpu' runs on the GPU,
+        with the same vocabulary as the CPU, and raises ValueError on a
+        CPU-only installation. Other values raise
+        ValueError.
 
     Examples
     --------
@@ -594,5 +605,5 @@ _TOKENIZER_FAST_ENTRIES = tuple(
     ("bpe_fast_load", "bpe_encode_batch", "bpe_train", "bpe_trained_sizes", "bpe_trained_copy"))
 _TOKENIZER_CONTEXT = (BpeTokenizer, TrainedBpeVocabulary, BpeVocabularyTrainer,
                       _TOKENIZER_NATIVE, _TOKENIZER_FAST, _TOKENIZER_FAST_ENTRIES,
-                      vars(_backend), _numpy_free_context())
+                      vars(_backend), _numpy_free_context(), _gpu_binding())
 _TOKENIZER_NATIVE.tokenizer_public_call("connect_bpe", (), _TOKENIZER_CONTEXT)

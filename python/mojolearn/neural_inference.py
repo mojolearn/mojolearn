@@ -59,9 +59,6 @@ class MLPInference:
         Second-layer weights.
     bias2 : array of float32
         Second-layer bias.
-    device : {None, 'gpu', 'cpu'}, default None
-        Where the computation runs. None and 'cpu' run on the CPU; 'gpu'
-        raises ValueError. Other values raise ValueError.
 
     Attributes
     ----------
@@ -75,13 +72,13 @@ class MLPInference:
     >>> logits = model.predict_logits(X)    # X: (rows, 8) float32, 1..256 rows
     """
 
-    def __init__(self, weight1, bias1, weight2, bias2, *, device=None):
+    def __init__(self, weight1, bias1, weight2, bias2):
         # lane/identical-lowbit-inference (2026-09-17): the two matrices may
         # arrive packed (mojolearn.lowbit); materialized exactly, fp32 after.
-        return _MLP_NATIVE("inference_initialize", (self, weight1, bias1, weight2, bias2, device))
+        return _MLP_NATIVE("inference_initialize", (self, weight1, bias1, weight2, bias2))
 
     @classmethod
-    def from_checkpoint(cls, path, *, device=None):
+    def from_checkpoint(cls, path):
         """Build from a `SmallMLPTrainer.save_checkpoint` file.
 
         The file's size, schema, SHA-256 and arithmetic profile are checked (any mismatch
@@ -91,14 +88,12 @@ class MLPInference:
         ----------
         path : str or path-like
             Checkpoint file.
-        device : {None, 'gpu', 'cpu'}, default None
-            As for the constructor.
 
         Returns
         -------
         MLPInference
         """
-        return _MLP_NATIVE("inference_checkpoint", (cls, path, device))
+        return _MLP_NATIVE("inference_checkpoint", (cls, path))
 
     @property
     def weights_(self):
@@ -174,9 +169,6 @@ class SambaInference:
     weights : dict
         float32 arrays keyed by registry name. Missing or unknown names, wrong shapes
         and non-finite values raise `ValueError`.
-    device : {None, 'gpu', 'cpu'}, default None
-        Where the computation runs. None and 'cpu' run on the CPU; 'gpu'
-        raises ValueError. Other values raise ValueError.
 
     Attributes
     ----------
@@ -195,12 +187,12 @@ class SambaInference:
     >>> next_logits = lm.step(next_ids, st)       # (B, vocab)
     """
 
-    def __init__(self, config, weights, *, device=None):
+    def __init__(self, config, weights):
         return _native_samba_bridge.RUNTIME.samba_native_call(
-            "inference_construct", (self, config, weights, device), _native_samba_bridge.CONTEXT)
+            "inference_construct", (self, config, weights), _native_samba_bridge.CONTEXT)
 
     @classmethod
-    def from_checkpoint(cls, path, *, device=None):
+    def from_checkpoint(cls, path):
         """Build from a `SambaStack.save_checkpoint` file (the streamed archive or the older JSON format).
 
         The checkpoint's integrity checks run, and its schema, profile and weight registry
@@ -211,15 +203,13 @@ class SambaInference:
         ----------
         path : str or path-like
             Checkpoint file.
-        device : {None, 'gpu', 'cpu'}, default None
-            As for the constructor.
 
         Returns
         -------
         SambaInference
         """
         return _native_samba_bridge.RUNTIME.samba_native_call(
-            "inference_checkpoint", (cls, path, device), _native_samba_bridge.CONTEXT)
+            "inference_checkpoint", (cls, path), _native_samba_bridge.CONTEXT)
 
     def parameters(self):
         """An iterator over independent copies of the weights, in registry order."""

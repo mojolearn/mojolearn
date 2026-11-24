@@ -104,7 +104,8 @@ import sys as _sys
 #: name, so two lanes can never collide here and a fragment can never move an
 #: existing family. With every fragment empty the manifest is byte for byte
 #: what it was.
-EXPANSION_LANES = ("linear", "cluster", "neighbors", "decomp", "prep", "sequence", "trees", "cnn", "ann", "metrics")
+EXPANSION_LANES = ("linear", "cluster", "neighbors", "decomp", "prep", "sequence", "trees", "cnn", "ann", "metrics",
+                   "tokenizer")
 #: The expansion lanes whose GPU binding builds IDENTICAL ONLY. EMPTY SINCE
 #: 2026-09-27 (FAST AND IDENTICAL on every lane, neural included):
 #: all nine expansion bindings build FAST and IDENTICAL and join

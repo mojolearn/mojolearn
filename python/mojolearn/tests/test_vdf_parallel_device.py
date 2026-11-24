@@ -1,50 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Boundary words of `device=` on the host-only inference classes (lane
-vdf-parallel): LanguageModelInference, MLPInference and SambaInference run
-compiled CPU code on every installation, so None and 'cpu' keep today's
-route and 'gpu' is refused naming the class. Words and exception types only;
-the numbers are verify's. The word is admitted before any file or weight is
-read, so a missing checkpoint path never reaches its own error here."""
+"""Boundary words of `device=` on the BPE tokenizers (lane vdf-parallel):
+BpeTokenizer, BpeVocabularyTrainer and TrainedBpeVocabulary. Words and
+exception types only; the numbers (GPU path against the host column) are the
+native check checks/native_tests/bpe_gpu_identity.mojo and verify's."""
 import inspect
 
 import pytest
 
 import mojolearn
 
-CLASSES = [
-    ("LanguageModelInference", lambda: mojolearn.LanguageModelInference),
-    ("MLPInference", lambda: mojolearn.MLPInference),
-    ("SambaInference", lambda: mojolearn.SambaInference),
-]
 MISSING = "vdf-parallel-no-such-checkpoint.ckpt"
-
-
-@pytest.mark.parametrize("name,cls", CLASSES)
-def test_constructors_take_keyword_only_device_default_none(name, cls):
-    for method in (cls().__init__, cls().from_checkpoint):
-        parameter = inspect.signature(method).parameters["device"]
-        assert parameter.kind is inspect.Parameter.KEYWORD_ONLY, name
-        assert parameter.default is None, name
-
-
-@pytest.mark.parametrize("name,cls", CLASSES)
-@pytest.mark.parametrize("bad", ["tpu", 0])
-def test_unknown_device_is_refused_in_the_shared_words(name, cls, bad):
-    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got "):
-        cls().from_checkpoint(MISSING, device=bad)
-
-
-@pytest.mark.parametrize("name,cls", CLASSES)
-def test_gpu_is_refused_naming_the_class(name, cls):
-    with pytest.raises(ValueError, match="device='gpu' is not available for " + name + ": it has no GPU implementation"):
-        cls().from_checkpoint(MISSING, device="gpu")
-
-
-def test_gpu_is_refused_by_the_constructors_before_the_weights():
-    with pytest.raises(ValueError, match="device='gpu' is not available for MLPInference"):
-        mojolearn.MLPInference(None, None, None, None, device="gpu")
-    with pytest.raises(ValueError, match="device='gpu' is not available for LanguageModelInference"):
-        mojolearn.LanguageModelInference(None, device="gpu")
 
 
 # The tokenizers (BpeTokenizer, BpeVocabularyTrainer, TrainedBpeVocabulary).
@@ -74,17 +39,17 @@ TOKENIZER_CONSTRUCTORS = [
     ("BpeTokenizer", lambda **kw: BpeTokenizer.from_files(MISSING, MISSING, **kw)),
     ("BpeTokenizer", lambda **kw: TrainedBpeVocabulary(TOKENS, [], {}).tokenizer(**kw)),
     ("BpeVocabularyTrainer", lambda **kw: BpeVocabularyTrainer(vocab_size=300, **kw)),
-    ("TrainedBpeVocabulary", lambda **kw: TrainedBpeVocabulary(TOKENS, [], {}, **kw)),
 ]
 
 
 def test_tokenizer_constructors_take_keyword_only_device_default_none():
     for method in (BpeTokenizer.__init__, BpeTokenizer.from_ranks_file, BpeTokenizer.from_token_bytes,
-                   BpeTokenizer.from_files, BpeVocabularyTrainer.__init__, TrainedBpeVocabulary.__init__,
-                   TrainedBpeVocabulary.tokenizer):
+                   BpeTokenizer.from_files, BpeVocabularyTrainer.__init__, TrainedBpeVocabulary.tokenizer):
         parameter = inspect.signature(method).parameters["device"]
         assert parameter.kind is inspect.Parameter.KEYWORD_ONLY, method
         assert parameter.default is None, method
+    # A trained vocabulary holds data and computes nothing: no device parameter.
+    assert "device" not in inspect.signature(TrainedBpeVocabulary.__init__).parameters
 
 
 @pytest.mark.parametrize("name,build", TOKENIZER_CONSTRUCTORS)
@@ -94,10 +59,51 @@ def test_tokenizer_unknown_device_is_refused_in_the_shared_words(identical_mode,
         build(device=bad)
 
 
-@pytest.mark.parametrize("name,build", TOKENIZER_CONSTRUCTORS)
-def test_tokenizer_gpu_outside_the_fast_arm_is_refused_naming_the_class(identical_mode, name, build):
-    with pytest.raises(ValueError, match="device='gpu' is not available for " + name + ": it has no GPU implementation"):
-        build(device="gpu")
+def test_tokenizer_gpu_on_a_cpu_only_installation_is_refused(identical_mode):
+    # Holds on a CPU-only installation (mojolearn.vendor() == "cpu"); on a GPU installation
+    # device='gpu' runs the GPU tokenizer (test_tokenizer_gpu_round_trip).
+    if mojolearn.vendor() != "cpu":
+        return
+    with pytest.raises(ValueError, match="device='gpu' needs a GPU build of mojolearn"):
+        BpeTokenizer.from_token_bytes(TOKENS, device="gpu")
+
+
+def test_tokenizer_gpu_round_trip(identical_mode):
+    # Holds on a GPU installation: words and types only (the ids against the host column are the
+    # native check checks/native_tests/bpe_gpu_identity.mojo).
+    if mojolearn.vendor() == "cpu":
+        return
+    tok = BpeTokenizer.from_token_bytes(TOKENS, device="gpu")
+    ids = tok.encode("ab cd")
+    assert isinstance(ids, list) and all(isinstance(i, int) for i in ids)
+    assert tok.decode(ids) == "ab cd"
+    assert tok.decode_batch(tok.encode_batch(["a", "", "b<|endoftext|>"], allow_endoftext=True)) == ["a", "", "b<|endoftext|>"]
+    with pytest.raises(ValueError, match="id 999 at position 1 is outside"):
+        tok.decode([1, 999])
+
+
+def test_trainer_gpu(identical_mode):
+    # On a CPU-only installation (mojolearn.vendor() == "cpu") 'gpu' is refused at construction; on a
+    # GPU installation it trains on the GPU (words and types only; the vocabulary against the host
+    # trainer is the native check checks/native_tests/bpe_gpu_identity.mojo).
+    if mojolearn.vendor() == "cpu":
+        with pytest.raises(ValueError, match="device='gpu' needs a GPU build of mojolearn"):
+            BpeVocabularyTrainer(vocab_size=300, device="gpu")
+        return
+    for size in (260, 50000):
+        vocab = BpeVocabularyTrainer(vocab_size=size, device="gpu").train(["abab abab", "ab"])
+        assert isinstance(vocab, TrainedBpeVocabulary)
+
+
+def test_decode_batch_reports_the_earliest_sequence_error_first(identical_mode):
+    # The host route's order on both devices: an out-of-range id in sequence 0 wins over a
+    # non-integer in sequence 1, and the non-integer wins when sequence 0 is valid.
+    for device in ("cpu",) if mojolearn.vendor() == "cpu" else ("cpu", "gpu"):
+        tok = BpeTokenizer.from_token_bytes(TOKENS, device=device)
+        with pytest.raises(ValueError, match="id 999 at position 0 is outside"):
+            tok.decode_batch([[999], ["x"]])
+        with pytest.raises(TypeError):
+            tok.decode_batch([[1], ["x"]])
 
 
 def test_tokenizer_cpu_runs_the_host_code_in_identical_mode(identical_mode):
