@@ -957,8 +957,9 @@
   },
   "mcd-lockstep-off": {
    "define": "MOJOLEARN_MCD_FAST_LOCKSTEP_OFF",
-   "status": "define in code (x_decomp/mcd.mojo MCD_LOCKSTEP): B = the serial candidate loop; A = the default on the NVIDIA and AMD columns, candidates taking each C-step together. The old path of a promotion of 2026-11-20 (lane fx-verdicts5); same bits on both arms. Owed: one confirming measurement, then the old path is deleted.",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2): old path LOSER (L40S 6 cells, median 1.43, the serial loop 1.42..1.46 slower on every fit); the lockstep (the default) is unchanged; removed: the _OFF switch (the serial loop stays for Apple, fast and select_init_best); the define is refused (core/six_lane_experiment_guards.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MCD_FAST_LOCKSTEP_OFF.ab-outcome-2.patch. Was: define in code (x_decomp/mcd.mojo MCD_LOCKSTEP): B = the serial candidate loop; A = the default on the NVIDIA and AMD columns, candidates taking each C-step together. The old path of a promotion of 2026-11-20 (lane fx-verdicts5); same bits on both arms. Owed: one confirming measurement, then the old path is deleted.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "samba-step-registry-resident-off": {
    "define": "MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF",
