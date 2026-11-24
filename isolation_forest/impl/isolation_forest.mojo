@@ -827,10 +827,14 @@ def if_score_epilogue_kernel(
 # float32 host buffer, no cast pass. BITS UNCHANGED: the value is the same
 # float32 `-paper` (minus the float32 offset) as if_score_epilogue_kernel,
 # widened exactly to float64, which is what the host cast wrote.
-# Not on Apple (Metal has no float64). `-D MOJOLEARN_IDN_IF_SCORES_F64_OFF`
-# restores the float32 download plus the door's cast (the B arm of the owed
-# A/B, bench/results/paper_compare/owed-pre0867.json).
-comptime IDN_IF_SCORES_F64 = not TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_IDN_IF_SCORES_F64_OFF"]()
+# Not on Apple (Metal has no float64): there, and on the CPU column, the
+# float32 download plus the door's cast stays (the only use of that form).
+# A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job
+# nvc1-0003): the float32 download + cast was 6 cells median 1.06, iforest
+# taxi infer 4.99 -> 7.63 ms (1.53) and 2.83 -> 5.30 ms (1.88) slower.
+# TOMBSTONE: MOJOLEARN_IDN_IF_SCORES_F64_OFF (old path, LOSER: NV L40S 6 cells, median 1.06, iforest taxi infer 1.53 / 1.88 slower) deleted 2026-11-24 by lane/ab-outcome-3 (o3-trees); code recoverable at e4f3c40fa0.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_IF_SCORES_F64_OFF.ab-outcome-3.patch
+comptime IDN_IF_SCORES_F64 = not TARGET_HAS_APPLE_GPU
 
 
 def if_score_epilogue_f64_kernel(

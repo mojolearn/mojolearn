@@ -182,8 +182,9 @@ def iforest_public_operation(model: PythonObject, operation: String, args: Pytho
         estimator_fit_complete(model, source, False, context)
     # Preserve internal Float32 arrays; public outlier scores widen even when
     # the optional NumPy output view is unavailable. The float32 scores of a
-    # binary without iforest_scores_f64 (the CPU column, Apple,
-    # -D MOJOLEARN_IDN_IF_SCORES_F64_OFF) are widened by one parallel cast,
+    # binary without iforest_scores_f64 (the CPU column, Apple) are widened by
+    # one parallel cast (MOJOLEARN_IDN_IF_SCORES_F64_OFF, which forced it on the
+    # GPU columns, was deleted 2026-11-24, lane ab-outcome-3; docs/TOMBSTONES.md),
     # whatever container the route returned (the CPU column's scores reached
     # the public caller as float32, smoke 2026-11-15); float64 scores are
     # returned as they are.
