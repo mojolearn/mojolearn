@@ -718,9 +718,9 @@ def _query(slot: _Slot, call: _Call, inverse: Bool) raises:
     # lane vdf-scope-neural4 added the last two) and an inverse_transform (PCA
     # unwhitened, TruncatedSVD; lane vdf-scope-neural5: the fold's rows are
     # scores) read a fold of the scope's resident rows through the fold entry;
-    # the whitened PCA inverse host rows.
-    var whitened_pca = slot[].kind() == DECOMP_KIND_PCA and slot[].words[5] != 0.0
-    var held = _rows_open(call, not (inverse and whitened_pca))
+    # lane vdf-scope-neural6: the whitened PCA inverse as well
+    # (decomposition/pca_fold.mojo `pca_whiten_inverse_transform_fold`).
+    var held = _rows_open(call, True)
     try:
         _query_rows(slot, call, held, inverse, rows)
     finally:
