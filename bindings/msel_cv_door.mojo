@@ -12,6 +12,7 @@
 # folds, the gathered rows and every score are unchanged.
 from bindings.member_scope_door import member_scope_word
 from core.member_abi import MEMBER_SCOPE_NONE
+from core.msel_refusal_words import msel_empty_scoring_words, msel_cvp_method_words
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.base_helpers_key_unpack import base_helpers_key
@@ -635,6 +636,10 @@ def msel_scorers(scoring: PythonObject, context: PythonObject) raises -> PythonO
             if py_type(items[i]) is not b.str:
                 raise Error("TypeError: multiple scoring names must be exact strings")
             py_setitem(out, items[i], msel_get_scorer(items[i], context))
+        if len(items) == 0:
+            # scikit-learn's `_check_multimetric_scoring` refusal (lane w3-fix-b
+            # row 14; the search kind's words, core/msel_refusal_words.mojo)
+            raise Error(msel_empty_scoring_words(False, String(py=py_call(b.repr, scoring))))
         return out
     var mappings = context["mapping_types"]
     var mapping = False
@@ -647,6 +652,8 @@ def msel_scorers(scoring: PythonObject, context: PythonObject) raises -> PythonO
             if py_type(items[i][0]) is not b.str:
                 raise Error("TypeError: multiple scoring keys must be exact strings")
             py_setitem(out, items[i][0], msel_get_scorer(items[i][1], context))
+        if len(items) == 0:
+            raise Error(msel_empty_scoring_words(True, String(py=py_call(b.repr, scoring))))
         return out
     return PythonObject(None)
 
@@ -1502,6 +1509,15 @@ def _place(preds: PythonObject, tests: PythonObject, n: Int, mut resident_rows: 
 def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`cross_val_predict(estimator, X, y, groups, cv, n_jobs, method)`."""
     var estimator = args[0]
+    # scikit-learn validates `method` before anything else (its
+    # `validate_params` StrOptions; lane w3-fix-b row 14): one exact-str read.
+    var method = args[6]
+    if py_type(method) is not msel_b().str:
+        raise Error("TypeError: native prediction method must be an exact string")
+    var asked = String(py=method)
+    if (asked != "predict" and asked != "predict_proba" and asked != "predict_log_proba"
+            and asked != "decision_function"):
+        raise Error(msel_cvp_method_words(String(py=py_call(msel_b().repr, method))))
     var jobs = msel_unit_jobs(args[5], PythonObject("raise"), "cross_val_predict", context)
     var got = msel_cv_folds(estimator, args[1], args[2], args[4], args[3], False, context)
     var x = got[0]
@@ -1528,9 +1544,6 @@ def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> 
     if base_check_indices_i64(base_helpers_key(context["family_msel_entries"]), msel_addr(held), n, n) != 0:
         raise Error("cross_val_predict only works for partitions")
     _ = held  # keep the Python object alive through the native calls above
-    var method = args[6]
-    if py_type(method) is not msel_b().str:
-        raise Error("TypeError: native prediction method must be an exact string")
     # THE ONE TYPED SEARCH RUN (lane mf-msel5, `msel_cv_by_search`): each
     # fold's test-side `method` answered by its unit, placed below as the
     # units' predictions are.
