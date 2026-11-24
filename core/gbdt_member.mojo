@@ -1778,6 +1778,12 @@ def _capabilities(kind: Int, loss: String) -> Int:
     # `feature_importances_` at FIT (MEMBER_BLOCK_FEATURE_IMPORTANCES), so RFE
     # reads it (bindings/prep_select_run.mojo `rfe_member_source`). HostGBDT
     # (predict-only) exports it when its file carried it, without the bit.
+    # No MEMBER_CAN_SCOPE and no MEMBER_CAN_ROW_INDEX (lane vdf-scope-trees,
+    # 2026-11-24, audit): the gbdt images own no device store and no row
+    # take, XG_FIT / XG_FIT_ROWMAJOR take a host X (the GPU image quantizes
+    # it on the device after its own upload, GBDT_QUANT_DEVICE) and the
+    # resident scope's caches are x_prep's (bindings/arena_cache_run.mojo).
+    # What is owed: vdf-scope-trees-RESULT.md.
     var mask = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
                 | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_GIL_FREE | MEMBER_CAN_IMPORTANCES)
     if kind == _KIND_CLASSIFIER:

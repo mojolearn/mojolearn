@@ -942,6 +942,19 @@ def _capabilities(classifier: Bool, importances: Bool, weights: Bool, notices: B
     takes a HOST address of X and uploads it itself (no entry op binds a
     resident store id), so a device-home X is refused (`_dense`).
     `notices`: the kind carries its fit notices (Forest; `fm_member`)."""
+    # No MEMBER_CAN_SCOPE and no MEMBER_CAN_ROW_INDEX (lane vdf-scope-trees,
+    # 2026-11-24, audit): the forest images own no `core/device_store.mojo`
+    # store and no `<prefix>_dev_take_rows`, the resident scope's caches are
+    # bound to the x_prep transport (bindings/arena_cache_run.mojo
+    # `arena_cache_store`: XP_DEV_PUT / XP_DEV_FREE), and every fit and
+    # predict op (XF_FIT, XF_PREDICT, XF_RESIDENT_*, XF_STRICT_*) takes a
+    # HOST address of X. A device buffer belongs to the context that made
+    # it, so an x_prep slot cannot feed this image. What the device route
+    # needs (exact ops) is in vdf-scope-trees-RESULT.md; the image already
+    # holds the pieces: XF_SESSION_OPEN keeps X on the device and the
+    # regressor's XF_FIT_SESSION gathers rows there
+    # (core/mojolearn_rf_run.mojo `_rf_session_rows_forest`,
+    # `launch_gather_rows_colmajor`) before `fit_forest`.
     # MEMBER_GIL_FREE (THE GIL RULE): every operation of the six kinds is
     # traced (fx-gil-RESULT.md, "forest / tree / extra_trees: HAS the bit"):
     # the route entry is marked `entry_ref_gil_free` at fit and import and
