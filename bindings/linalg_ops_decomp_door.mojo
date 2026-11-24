@@ -44,6 +44,13 @@ from bindings.linalg_keys_unpack import linalg_keys
 from bindings.py_balanced import py_item
 from bindings.operation_names_linops import (
     LINOPS_OPN_FAMILY_LIN_QR, LINOPS_OPN_FAMILY_LIN_EIGH, LINOPS_OPN_FAMILY_LIN_SVDVALS, LINOPS_OPN_FAMILY_LIN_SVD)
+from bindings.linalg_dev_arrays_unpack import (
+    lin_train_device, lin_is_device_array, lin_dev_device, lin_dev_entries, lin_dev_operand, lin_dev_new,
+    lin_dev_handle,
+)
+from bindings.linalg_ops_lowbit_door import lin_call
+from bindings.linalg_ops_lowbit_run import LIN_OP_SVDVALS_DEV, LIN_OP_QR_R_DEV
+from core.train_dev_pool import TRAIN_DEV_F32
 
 
 def _lin_door(device: FunctionDevice, context: PythonObject) raises -> PythonObject:
@@ -474,6 +481,56 @@ def _lin_decomp_name(operation: Int) -> String:
     return "mojolearn.linalg.svd"
 
 
+# lane vdf-linalg5 (2026-11-24): a TrainDeviceArray operand (bindings/linalg_dev_arrays_unpack.mojo, the training
+# ops' one device-array convention) is read in place by the linalg binding's device entries (gemm/linalg_dev_arrays.mojo
+# `svdvals_dev_native`, `qr_r_dev_native`: the host-address entries' kernels on a pool view); the result is a new
+# TrainDeviceArray. The forms whose host route runs on the x_decomp kit or the TSQR table (eigh, qr 'reduced' /
+# 'complete' / 'raw', a wide qr 'r', svd with compute_uv) read host addresses only: they refuse a device array in
+# words (no download in their place) until the x_decomp image reads training pool handles.
+
+
+def _lin_decomp_dev(operation: Int, args: PythonObject, device: FunctionDevice, held: PythonObject,
+                    context: PythonObject) raises -> PythonObject:
+    """svdvals, svd(compute_uv=False) and qr(mode='r') of a tall operand on a TrainDeviceArray."""
+    var name = _lin_decomp_name(operation)
+    lin_dev_device(device, name)
+    var who = String("qr") if operation == LINOPS_OPN_FAMILY_LIN_QR else (
+        String("eigh") if operation == LINOPS_OPN_FAMILY_LIN_EIGH else (
+            String("svdvals") if operation == LINOPS_OPN_FAMILY_LIN_SVDVALS else String("svd")))
+    # (outside an identical GPU set the device entry refuses in words: gemm/linalg_dev_arrays.mojo `lin_dev_ready`)
+    # the linalg binding of the call and its operations table, published for `lin_call` (`_lin_door`)
+    _ = _lin_door(device, context)
+    var entries = lin_dev_entries(args[0], held)
+    var a = lin_dev_operand(args[0], "a", who, entries, held, TRAIN_DEV_F32, 2)
+    var rows = a.dim(0)
+    var cols = a.dim(1)
+    var values_only = operation == LINOPS_OPN_FAMILY_LIN_SVDVALS or (
+        operation == LINOPS_OPN_FAMILY_LIN_SVD and not lin_truth(args[2]))
+    if values_only:
+        # as `lin_svdvals_of`: a wide A's values are A^T's, transposed by the entry on the device
+        var wide = rows < cols
+        var n_values = rows if wide else cols
+        var out = lin_dev_new(entries, held, [n_values], TRAIN_DEV_F32)
+        var params = List[Int]()
+        if wide:
+            params.append(cols)
+            params.append(rows)
+            params.append(1)
+        else:
+            params.append(rows)
+            params.append(cols)
+        _ = lin_call(context, LIN_OP_SVDVALS_DEV, [a.handle, lin_dev_handle(out)], params)
+        return out
+    if operation == LINOPS_OPN_FAMILY_LIN_QR and _lin_eq(args[1], "r") and rows >= cols:
+        var r = lin_dev_new(entries, held, [cols, cols], TRAIN_DEV_F32)
+        # ORDER as qr_r: (a, r_out), params (n_rows, n_cols)
+        _ = lin_call(context, LIN_OP_QR_R_DEV, [a.handle, lin_dev_handle(r)], [rows, cols])
+        return r
+    raise Error("TypeError: " + name + ": this form (eigh, qr 'reduced' / 'complete' / 'raw' or a wide 'r', svd with "
+                + "compute_uv) takes host arrays; a TrainDeviceArray is read in place by svdvals, "
+                + "svd(compute_uv=False) and a tall qr(mode='r'). Copy it with to_host() first")
+
+
 def lin_decomp_operation(operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
     # bw2-linalg: `operation` is a leaf code of bindings/operation_names_linops.mojo.
     # Admit public scalar controls before equality/truth conversion; input
@@ -485,6 +542,17 @@ def lin_decomp_operation(operation: Int, args: PythonObject, context: PythonObje
     # before any work, and selects the context (`lin_device_context`) and the
     # two bindings (`_lin_door`, `_lin_xd`) of this call.
     var last = len(args) - 1
+    # lane vdf-linalg5: one dictionary read and one identity compare; a device array never reaches host admission.
+    var held = lin_train_device(context)
+    if held is not None and lin_is_device_array(args[0], held):
+        for i in range(1, last):  # small-loop(public decomposition option metadata)
+            host_inference_scalar(args[i], context, True)
+        var dev_device = function_device_default()
+        var dev_scope = context
+        if args[last] is not None:
+            dev_device = lin_device(args[last], _lin_decomp_name(operation), LIN_HAS_GPU, LIN_HAS_CPU, context)
+            dev_scope = lin_device_context(dev_device, context)
+        return _lin_decomp_dev(operation, args, dev_device, held, dev_scope)
     classical_admit_value(args[0], context)
     for i in range(1, last):  # small-loop(public decomposition option metadata)
         host_inference_scalar(args[i], context, True)

@@ -34,6 +34,10 @@ from gemm.checks.gemm_int15 import (
     quantize_planes_int15_parallel_device,
 )
 from decomposition.linalg_door_impl import from_f16_into
+from decomposition.linalg_public_device import device_svdvals_into
+from decomposition.linalg_types import _validate_shape
+from decomposition.impl.linalg.detail.svd_full import _wide_transpose_kernel
+from core.householder_qr import qr_factor, qr_slice_count
 from gemm.linalg_native import _refuse_lowbit_shape
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.contract import INT8_MAX_K, INT15_MAX_K, OP_NN, OP_NT, OP_TN
@@ -345,3 +349,68 @@ def from_f16_dev_native(dst_h: Int, src_h: Int, params: List[Int]) raises -> Int
     _ = dsrc^
     _ = ddst^
     return count
+
+
+# The decompositions of the linalg binding (lane vdf-linalg5): `svdvals` and `qr(mode='r')` of a tall operand, the
+# host-address entries' bodies (decomposition/linalg_public_device.mojo `device_svdvals_at` / `device_qr_r`) on a pool
+# view. Both kernels destroy their operand, so the caller's device array is first copied device-to-device into a
+# fresh buffer (the host entries destroy their upload, never the caller's matrix): no download, no upload. The result
+# is written into a pool handle; one wait at the end.
+
+
+def svdvals_dev_native(a_h: Int, s_h: Int, params: List[Int]) raises -> Int:
+    """`svdvals` on device arrays: handle s_h (n_cols float32, DESCENDING, written) of handle a_h; params (n_rows,
+    n_cols[, wide]) word for word as the `svdvals` entry (wide: a_h holds the WIDE n_cols x n_rows matrix, transposed
+    on the device by `_wide_transpose_kernel`, the kernel `device_svdvals_at` runs). Returns n_cols."""
+    lin_dev_ready("svdvals")
+    if len(params) != 2 and len(params) != 3:
+        raise Error("svdvals: params must contain 2 or 3 values (n_rows, n_cols[, wide]), got " + String(len(params)))
+    var n_rows = params[0]
+    var n_cols = params[1]
+    var wide = len(params) == 3 and params[2] != 0
+    _validate_shape(n_rows, n_cols, "svdvals")
+    var count = n_rows * n_cols
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var src = train_dev_view(ctx, a_h, count, "a")
+    var so = train_dev_view(ctx, s_h, n_cols, "the singular values")
+    var da = ctx.enqueue_create_buffer[DType.float32](count)
+    if wide:
+        # the operand is n_cols x n_rows; its transpose n_rows x n_cols
+        ctx.enqueue_function[_wide_transpose_kernel](
+            src.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), da.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n_cols), Int32(n_rows), grid_dim=((count + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+        )
+    else:
+        ctx.enqueue_copy(dst_buf=da, src_buf=src)
+    device_svdvals_into(ctx, da, so, n_rows, n_cols)
+    ctx.synchronize()
+    _ = da^
+    _ = src^
+    _ = so^
+    return n_cols
+
+
+def qr_r_dev_native(a_h: Int, r_h: Int, params: List[Int]) raises -> Int:
+    """`qr(mode='r')` of a tall operand on device arrays: handle r_h (n_cols x n_cols float32, written) of handle a_h
+    (n_rows x n_cols); params (n_rows, n_cols) as the `qr_r` entry; `qr_factor` with the scratch `qr_slice_count`
+    sizes, as `device_qr_r`. Returns n_cols."""
+    lin_dev_ready("qr")
+    if len(params) != 2:
+        raise Error("qr_r: params must contain 2 values (n_rows, n_cols), got " + String(len(params)))
+    var n_rows = params[0]
+    var n_cols = params[1]
+    _validate_shape(n_rows, n_cols, "qr")
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var src = train_dev_view(ctx, a_h, n_rows * n_cols, "a")
+    var r_buf = train_dev_view(ctx, r_h, n_cols * n_cols, "R")
+    var da = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
+    ctx.enqueue_copy(dst_buf=da, src_buf=src)
+    var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(n_rows, n_cols) * n_cols * n_cols)
+    ctx.synchronize()
+    _ = qr_factor(ctx, da, scratch, r_buf, n_rows, n_cols)
+    ctx.synchronize()
+    _ = da^
+    _ = scratch^
+    _ = src^
+    _ = r_buf^
+    return n_cols

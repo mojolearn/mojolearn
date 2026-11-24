@@ -9,12 +9,12 @@ from gemm.linalg_fused_run import gemm_fused_native
 from gemm.linalg_dev_arrays import (
     gemm_dev_native, to_bf16_dev_native, from_bf16_dev_native, quantize_int8_dev_native, dequantize_int8_dev_native,
     gemm_bf16_dev_native, gemm_int8_dev_native, quantize_int15_dev_native, dequantize_int15_dev_native,
-    gemm_int15_dev_native, from_f16_dev_native,
+    gemm_int15_dev_native, from_f16_dev_native, svdvals_dev_native, qr_r_dev_native,
 )
 from core.shared_slot import SharedSlot
 
 comptime LINALG_NATIVE_ABI_NAME = "mojolearn.linalg.v1"
-comptime LINALG_NATIVE_OPERATION_COUNT = 27
+comptime LINALG_NATIVE_OPERATION_COUNT = 29
 
 
 def linalg_native_operation(op: Int, a: List[Int], p: List[Int]) raises -> Int:
@@ -125,6 +125,15 @@ def linalg_native_operation(op: Int, a: List[Int], p: List[Int]) raises -> Int:
         if len(a) != 2:
             raise Error("linalg native ABI: invalid from_f16_dev handle count")
         return from_f16_dev_native(a[0], a[1], p)
+    if op == 27:
+        # lane vdf-linalg5: svdvals and qr(mode='r') (tall) on training device arrays: handles (a, result).
+        if len(a) != 2:
+            raise Error("linalg native ABI: invalid svdvals_dev handle count")
+        return svdvals_dev_native(a[0], a[1], p)
+    if op == 28:
+        if len(a) != 2:
+            raise Error("linalg native ABI: invalid qr_r_dev handle count")
+        return qr_r_dev_native(a[0], a[1], p)
     raise Error("linalg native ABI: unknown operation")
 
 

@@ -15,8 +15,11 @@ from core.train_dev_pool import (
 from gemm.linalg_dev_arrays import (
     gemm_dev_native, to_bf16_dev_native, from_bf16_dev_native, quantize_int8_dev_native, dequantize_int8_dev_native,
     gemm_bf16_dev_native, gemm_int8_dev_native, quantize_int15_dev_native, dequantize_int15_dev_native,
-    gemm_int15_dev_native, from_f16_dev_native,
+    gemm_int15_dev_native, from_f16_dev_native, svdvals_dev_native, qr_r_dev_native,
 )
+from core.hostptr import f32_ptr
+from decomposition.linalg_door_impl import svdvals_device_at_into, qr_r_device_into
+from decomposition.linalg_host_impl import svdvals_host_at_run, qr_r_host_run
 from gemm.linalg_native import gemm_native as gemm_native_gpu
 from gemm.linalg_native import (
     quantize_int15_native as quantize_int15_gpu, dequantize_int15_native as dequantize_int15_gpu,
@@ -330,6 +333,67 @@ def test_from_f16_device_arrays() raises:
     _same("from_f16 device == host column", w_d, w_h)
     train_dev_free(ctx, hbits)
     train_dev_free(ctx, hw)
+
+
+def _svdvals_case(rows: Int, cols: Int) raises:
+    """svdvals of a rows x cols operand (tall, or wide: the entry transposes on the device)."""
+    var a = _fill(rows * cols, rows + 3 * cols)
+    var wide = rows < cols
+    var n_rows = cols if wide else rows
+    var n_cols = rows if wide else cols
+    var s_g = List[Float32](length=n_cols, fill=0.0)
+    var s_h = List[Float32](length=n_cols, fill=0.0)
+    svdvals_device_at_into(Int(a.unsafe_ptr()), n_rows, n_cols, wide, f32_ptr(Int(s_g.unsafe_ptr())))
+    svdvals_host_at_run(Int(a.unsafe_ptr()), n_rows, n_cols, wide, f32_ptr(Int(s_h.unsafe_ptr())))
+    var ctx = process_ctx[_CTX]()
+    var ha = _put(ctx, a)
+    var hs = train_dev_alloc(ctx, n_cols)
+    var params = List[Int]()
+    params.append(n_rows)
+    params.append(n_cols)
+    if wide:
+        params.append(1)
+    _ = svdvals_dev_native(ha, hs, params)
+    var s_d = _get(ctx, hs, n_cols)
+    var label = "svdvals " + String(rows) + "x" + String(cols)
+    _same(label + " device == host-input", s_d, s_g)
+    _same(label + " device == host column", s_d, s_h)
+    # the caller's device array is not destroyed (the entry factors a device copy)
+    _same(label + " operand kept", _get(ctx, ha, rows * cols), a)
+    train_dev_free(ctx, ha)
+    train_dev_free(ctx, hs)
+
+
+def test_svdvals_device_arrays() raises:
+    """lane vdf-linalg5: svdvals on pool handles == the host-address GPU entry == the host column."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        return
+    _svdvals_case(9, 4)
+    _svdvals_case(5, 5)
+    _svdvals_case(3, 8)
+
+
+def test_qr_r_device_arrays() raises:
+    """lane vdf-linalg5: qr(mode='r') of a tall operand on pool handles == the GPU entry == the host column."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        return
+    var rows = 11
+    var cols = 4
+    var a = _fill(rows * cols, 17)
+    var r_g = List[Float32](length=cols * cols, fill=0.0)
+    var r_h = List[Float32](length=cols * cols, fill=0.0)
+    qr_r_device_into(a, rows, cols, f32_ptr(Int(r_g.unsafe_ptr())))
+    qr_r_host_run(a, rows, cols, f32_ptr(Int(r_h.unsafe_ptr())))
+    var ctx = process_ctx[_CTX]()
+    var ha = _put(ctx, a)
+    var hr = train_dev_alloc(ctx, cols * cols)
+    _ = qr_r_dev_native(ha, hr, [rows, cols])
+    var r_d = _get(ctx, hr, cols * cols)
+    _same("qr_r device == host-input", r_d, r_g)
+    _same("qr_r device == host column", r_d, r_h)
+    _same("qr_r operand kept", _get(ctx, ha, rows * cols), a)
+    train_dev_free(ctx, ha)
+    train_dev_free(ctx, hr)
 
 
 def main() raises:

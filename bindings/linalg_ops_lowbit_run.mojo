@@ -39,6 +39,8 @@ comptime LIN_OP_QUANTIZE_INT15_DEV = 23
 comptime LIN_OP_DEQUANTIZE_INT15_DEV = 24
 comptime LIN_OP_GEMM_INT15_DEV = 25
 comptime LIN_OP_FROM_F16_DEV = 26
+comptime LIN_OP_SVDVALS_DEV = 27
+comptime LIN_OP_QR_R_DEV = 28
 # The operation count the door admits (gemm/linalg_dispatch.mojo
 # LINALG_NATIVE_OPERATION_COUNT).
-comptime LIN_OPERATION_COUNT = 27
+comptime LIN_OPERATION_COUNT = 29
