@@ -37,6 +37,16 @@ downloaded) one n-word vector: first_seen_i32 (codes up, first-seen codes
 down), the program (first-seen codes up), strat_fold_assign_i32 (up, down),
 the fold sizes' bincount (up) and select_folds_i64 (up). Same integers.
 
+On a program image with a resident store (`MselSplitRoute.store`; lane
+vdf-scope-split2, 2026-11-24) StratifiedKFold's program route puts the codes
+ONCE, into that store (`MselProgSlot`), and reads the slot twice: a small
+first-seen program (`msel_first_seen_prog`: sizes and first rows, 2k + 1
+words down) and the fold program (the slot is its input, copied device to
+device). Before, they went up twice: into the helper table's store for
+MH_FIRST_SEEN_RES, then as the fold program's host input. StratifiedGroupKFold's
+group x class table is counted on the stored codes (MH_GROUP_CLASS_COUNTS_RES,
+layout V4), its classes ranked where they are counted.
+
 No Python object is read, built or called here.
 """
 from std.math import ceil, floor, isinf, isnan
@@ -54,7 +64,9 @@ from core.base_helpers_calls import base_bincount2_i32
 # The host-only passes linked into the splitters' unit (lane calltable-msel).
 from core.hotpath_impl_rows import group_fold_assign_i32, strat_alloc_i64, strat_group_plan_i32
 from core.metrics_program_plan import MetricProgramPlan
-from bindings.arena_prog_run import MetricArenaOwner, MetricRoute, metric_inputs_run
+from bindings.arena_prog_run import MetricArenaOwner, MetricRoute, metric_inputs_run, metric_slots_run
+from core.native_descriptor_call import native_descriptor_call
+from x_metrics.descriptor_schema import MP_DEV_PUT, MP_DEV_FREE
 from bindings.msel_split_run import (
     MSEL_SPLIT_GOLDEN, MSEL_SPLIT_NONE, MselCounterRng, MselFoldRows, msel_fold_rows_fits, msel_split_mix64,
     msel_split_signed32, msel_shuffled_fold_rows_plan, msel_stratified_fold_rows_plan,
@@ -112,18 +124,43 @@ struct MselSeed(ImplicitlyCopyable, Movable):
         return MselCounterRng(self.value, 0)
 
 
-@fieldwise_init
 struct MselSplitRoute(ImplicitlyCopyable, Movable):
     """The compiled entries one split operation calls, resolved once by
     UNPACK: the model-selection helper table, the base helper table and the
     x_metrics program runner with its two range switches. An entry the
-    splitter never calls is `entry_ref_unresolved()`."""
+    splitter never calls is `entry_ref_unresolved()`.
+
+    `store` (lane vdf-scope-split2, 2026-11-24): the program image has a
+    resident input store on its range route (bindings/arena_prog_run.mojo
+    `MetricRoute.store`, read once by UNPACK with the range switch), so a
+    program input may be a slot of that store (`MselProgSlot`). False for
+    the host column, a CPU-only install, `MOJOLEARN_ARENA_RANGES=0` and the
+    five-word form."""
 
     var helpers: EntryRef
     var base: EntryRef
     var program: NativeDescriptorCall
     var ranges: Bool
     var output_ranges: Bool
+    var store: Bool
+
+    def __init__(out self, helpers: EntryRef, base: EntryRef, program: NativeDescriptorCall, ranges: Bool,
+                 output_ranges: Bool):
+        self.helpers = helpers
+        self.base = base
+        self.program = program
+        self.ranges = ranges
+        self.output_ranges = output_ranges
+        self.store = False
+
+    def __init__(out self, helpers: EntryRef, base: EntryRef, program: NativeDescriptorCall, ranges: Bool,
+                 output_ranges: Bool, store: Bool):
+        self.helpers = helpers
+        self.base = base
+        self.program = program
+        self.ranges = ranges
+        self.output_ranges = output_ranges
+        self.store = store and ranges
 
 
 def msel_split_route_none() -> MselSplitRoute:
@@ -178,6 +215,43 @@ def msel_prog_run(route: MselSplitRoute, prog: MselProg) raises -> MetricArenaOw
     2026-11-23: its record loop was a copy of the door runner's)."""
     return metric_inputs_run(MetricRoute(route.program, route.ranges, route.output_ranges), prog.plan,
                              prog.addresses, prog.sizes)
+
+
+def msel_prog_run_slots(route: MselSplitRoute, prog: MselProg, slots: List[Int]) raises -> MetricArenaOwner:
+    """`msel_prog_run` where buffer input i is the program store's slot
+    `slots[i]` when it is >= 0 (bindings/arena_prog_run.mojo
+    `metric_slots_run`: copied device to device into the arena, its host
+    address not read). `slots` empty: every input is a host buffer."""
+    return metric_slots_run(MetricRoute(route.program, route.ranges, route.output_ranges, route.store), prog.plan,
+                            prog.addresses, prog.sizes, slots)
+
+
+struct MselProgSlot(Movable):
+    """A split call's n int32 label codes put once into the program image's
+    resident store (x_metrics/descriptor_schema.mojo MP_DEV_PUT; lane
+    vdf-scope-split2, 2026-11-24): the slot (-1: nothing put) and the entry
+    that frees it (MP_DEV_FREE), on every path (`__del__`). Only on a route
+    with `store`; every program of the call reads the slot."""
+
+    var slot: Int
+    var program: NativeDescriptorCall
+
+    def __init__(out self, route: MselSplitRoute, labels: MselCodes) raises:
+        self.program = route.program
+        self.slot = -1
+        if labels.n > 0:
+            self.slot = native_descriptor_call(route.program, MP_DEV_PUT, [labels.address], [labels.n], [])
+
+    def __init__(out self):
+        self.program = entry_ref_unresolved().call
+        self.slot = -1
+
+    def __del__(deinit self):
+        if self.slot >= 0:
+            try:
+                _ = native_descriptor_call(self.program, MP_DEV_FREE, [], [self.slot], [])
+            except error:
+                pass
 
 
 def msel_draw_rows(route: MselSplitRoute, mut rng: MselCounterRng, sizes: List[Int],
@@ -434,6 +508,63 @@ def msel_first_seen_enc(route: MselSplitRoute, labels: MselCodes, form: Int, hel
     return enc^
 
 
+def msel_first_seen_prog(route: MselSplitRoute, labels: MselCodes, form: Int, slot: Int) raises -> MselEnc:
+    """`msel_first_seen_enc` over the codes in the program store's `slot`
+    (lane vdf-scope-split2, 2026-11-24): the same class sizes in first-seen
+    order and the same rank table, from ONE small x_metrics program that
+    reads the slot where it is: a stable `group_sort` of the codes (each
+    code's row count is its OFF step, its first row the first word of its
+    run) and one `gather_i32` of ORD at OFF (each code's first row), so
+    the 2k + 1 words come down and nothing n-long does. The codes are
+    ranked by their first rows on the host (a driver pass over classes;
+    rows are distinct, so `row * width + code` sorts by row alone), absent
+    codes after the present ones in code order, as MH_FIRST_SEEN_RES does.
+    The fold program then reads the same slot, so the codes cross the bus
+    once. A code outside [0, k) is dropped by the sort and refused here
+    with MH_FIRST_SEEN_RES's words."""
+    var enc = MselEnc()
+    enc.n = labels.n
+    if labels.n == 0 or slot < 0:
+        return enc^
+    var n = labels.n
+    var width = max(labels.m, 1)
+    var prog = MselProg()
+    var code_slot = prog.put_i32(labels.address, n)
+    var off = prog.alloc(width + 1)
+    # One word past the rows: a trailing absent code's OFF is n, and its
+    # gathered word is read but never used.
+    var ordr = prog.plan.scratch(n + 1)
+    prog.stage("group_sort", 1, [code_slot, n, width, off, ordr])
+    var first = prog.alloc(width)
+    prog.stage("gather_i32", width, [ordr, off, first])
+    _ = prog.want(off, width + 1)
+    _ = prog.want(first, width)
+    var arena = msel_prog_run_slots(route, prog, [slot])
+    if arena.i32(off + width) != n:
+        raise Error("first_seen_i32: code out of range")
+    var keys = List[Int](capacity=width)
+    for c in range(width):  # driver-loop: over classes (the present codes by first row)
+        if arena.i32(off + c + 1) > arena.i32(off + c):
+            keys.append(arena.i32(first + c) * width + c)
+    sort(keys)
+    var present = len(keys)
+    enc.rank = List[Int32](length=width, fill=-1)
+    enc.width = width
+    for r in range(present):  # driver-loop: over classes (first-seen order)
+        var c = keys[r] % width
+        enc.rank[c] = Int32(r)
+    var after = present
+    for c in range(width):  # driver-loop: over classes (the absent codes' positions)
+        if enc.rank[c] < 0:
+            enc.rank[c] = Int32(after)
+            after += 1
+    enc.n_classes = labels.m if form == MSEL_LABELS_ALIGNED else present
+    for r in range(enc.n_classes):  # driver-loop: over classes
+        var c = keys[r] % width if r < present else -1
+        enc.counts.append(arena.i32(off + c + 1) - arena.i32(off + c) if c >= 0 else 0)
+    return enc^
+
+
 # ---------------------------------------------------------------- the plans
 
 
@@ -520,10 +651,23 @@ def msel_plan_stratified(route: MselSplitRoute, labels: MselCodes, form: Int, k:
     past its bounds the stored-code assignment and FOLDS out of the stored
     fold block. The codes are put once (`MselHeld`) and freed when the plan
     returns or refuses."""
+    # The program route with the image's resident store (lane
+    # vdf-scope-split2): the codes go up once, into the program store, and
+    # both programs (first-seen, folds) read that slot. Otherwise the
+    # helper table's store holds them (`MselHeld`) and the fold program
+    # takes the caller's codes as its host input.
+    var on_slot = (route.store and form != MSEL_LABELS_FIRST_SEEN and labels.n > 0 and k <= 256
+                   and msel_fold_rows_fits(labels.n, k))
     var held = MselHeld()
-    if form != MSEL_LABELS_FIRST_SEEN:
-        held = MselHeld(route, labels)
-    var enc = msel_first_seen_enc(route, labels, form, held)
+    var xm = MselProgSlot()
+    var enc = MselEnc()
+    if on_slot:
+        xm = MselProgSlot(route, labels)
+        enc = msel_first_seen_prog(route, labels, form, xm.slot)
+    else:
+        if form != MSEL_LABELS_FIRST_SEEN:
+            held = MselHeld(route, labels)
+        enc = msel_first_seen_enc(route, labels, form, held)
     var n = enc.n
     var n_classes = enc.n_classes
     var plan = MselSplitPlan()
@@ -548,9 +692,10 @@ def msel_plan_stratified(route: MselSplitRoute, labels: MselCodes, form: Int, k:
     if shuffle:
         rng = seed.rng()
     if k <= 256 and msel_fold_rows_fits(n, k):
-        # The caller's codes are the program's one n-word input; the program
-        # renumbers them by the rank table (`gather_i32`), so the first-seen
-        # codes are formed where they are used.
+        # The caller's codes are the program's one n-word input (the store
+        # slot when `on_slot`: no upload); the program renumbers them by the
+        # rank table (`gather_i32`), so the first-seen codes are formed where
+        # they are used.
         var prog = MselProg()
         var enc_slot = prog.put_i32(labels.address, n)
         if len(enc.rank) > 0:
@@ -560,11 +705,15 @@ def msel_plan_stratified(route: MselSplitRoute, labels: MselCodes, form: Int, k:
             prog.stage("gather_i32", n, [rank_slot, code_slot, enc_slot])
         var rows = msel_stratified_fold_rows_plan(prog.plan, enc_slot, n, enc.counts, Int(alloc.unsafe_ptr()), k,
                                                   rng, shuffle)
-        plan.arena = msel_prog_run(route, prog)
+        if on_slot:
+            plan.arena = msel_prog_run_slots(route, prog, [xm.slot])
+        else:
+            plan.arena = msel_prog_run(route, prog)
         _ = alloc  # the table address above is not an owner
         _ = cnt
         _plan_fold_rows(plan, rows)
         _ = held^  # the stored codes are released here (the program read the caller's)
+        _ = xm^  # the program store's slot is released here (both programs read it)
         return plan^
     # the same assignment by the stored-code `strat_fold_assign_i32`, then
     # each fold's rows out of the stored fold block

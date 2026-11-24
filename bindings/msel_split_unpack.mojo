@@ -107,9 +107,12 @@ struct MselRoutePin(Movable):
 
 def msel_split_route(context: PythonObject, base: Bool, program: Bool) raises -> MselRoutePin:
     """The entries of one split operation. `base`: the splitter calls the
-    base helper table; `program`: it runs x_metrics programs. (An x_metrics
-    image has no resident store, so the thread's resident scope is not
-    consulted; its unread third flag went in arena unit E.)
+    base helper table; `program`: it runs x_metrics programs. The thread's
+    resident scope is not consulted (its unread third flag went in arena
+    unit E); the image's own resident store is (`route.store`, read once
+    here by `metric_route_of` with the range switch: StratifiedKFold puts
+    its label codes there once and both of its programs read the slot; lane
+    vdf-scope-split2, 2026-11-24).
 
     The program runner is the default-mode x_metrics image's, connected
     once per factory: what `metric_door_run(prog, None, context)` resolved
@@ -128,6 +131,7 @@ def msel_split_route(context: PythonObject, base: Bool, program: Bool) raises ->
         pin.route.program = got.route.program
         pin.route.ranges = got.route.ranges
         pin.route.output_ranges = got.route.output_ranges
+        pin.route.store = got.route.store
         pin.provider = got.provider
         pin.entries = got.entries
     return pin^
