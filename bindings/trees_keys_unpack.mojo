@@ -113,9 +113,6 @@ struct TreesKeys(Defaultable, Movable):
     var k_dim: PythonObject
     var k_estimator: PythonObject
     var k_family_msel_arena_io: PythonObject
-    var k_family_msel_resident_call: PythonObject
-    var k_family_msel_resident_class: PythonObject
-    var k_family_msel_resident_context: PythonObject
     var k_family_msel_rows_context: PythonObject
     var k_family_msel_rows_entry: PythonObject
     var k_family_msel_splitter_layouts: PythonObject
@@ -395,9 +392,6 @@ struct TreesKeys(Defaultable, Movable):
         self.k_dim = PythonObject(None)
         self.k_estimator = PythonObject(None)
         self.k_family_msel_arena_io = PythonObject(None)
-        self.k_family_msel_resident_call = PythonObject(None)
-        self.k_family_msel_resident_class = PythonObject(None)
-        self.k_family_msel_resident_context = PythonObject(None)
         self.k_family_msel_rows_context = PythonObject(None)
         self.k_family_msel_rows_entry = PythonObject(None)
         self.k_family_msel_splitter_layouts = PythonObject(None)
@@ -682,9 +676,6 @@ def _trees_keys_fill(nk: UnsafePointer[TreesKeys, MutUntrackedOrigin]) raises:
     nk[].k_dim = py_key("dim")
     nk[].k_estimator = py_key("estimator")
     nk[].k_family_msel_arena_io = py_key("family_msel_arena_io")
-    nk[].k_family_msel_resident_call = py_key("family_msel_resident_call")
-    nk[].k_family_msel_resident_class = py_key("family_msel_resident_class")
-    nk[].k_family_msel_resident_context = py_key("family_msel_resident_context")
     nk[].k_family_msel_rows_context = py_key("family_msel_rows_context")
     nk[].k_family_msel_rows_entry = py_key("family_msel_rows_entry")
     nk[].k_family_msel_splitter_layouts = py_key("family_msel_splitter_layouts")
