@@ -1332,6 +1332,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF.ab-outcome-2.patch
     comptime assert not is_defined["MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): IDN_EMB_UNIQUE_ROWS_OFF (old path: the T < V touched-rows launch rule instead of the unique-rows compaction in the identical embedding backward) was no faster: 2 cells, median 1.01 (train-embedding-backward 59.76 -> 60.65, lm-train-step 35.14 -> 35.09 ms); EMB_UNIQUE_ROWS is EMB_TOUCHED_ROWS; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF.ab-outcome-2.patch"
     # ---- end lane ab-outcome-2 (ab2-ngemm)
+    # ---- lane ab-outcome-3 / o3-nseq (2026-11-24): A/B nvc-ab-20261124T115722Z-d8f8b2 decisions (NVIDIA L40S only, job nvc1-0003)
+    # TOMBSTONE: MOJOLEARN_TRANSFORMER_GENERIC_PREFILL (LOSER: NV L40S transformer-forward 2.20 -> 2.97 ms, 1.35) deleted 2026-11-24 by lane/ab-outcome-3 (o3-nseq); code recoverable at c23cb55fda.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_GENERIC_PREFILL.ab-outcome-3.patch
+    comptime assert not is_defined["MOJOLEARN_TRANSFORMER_GENERIC_PREFILL"](), "removed 2026-11-24 (lane/o3-nseq of ab-outcome-3, A/B nvc-ab-20261124T115722Z-d8f8b2 NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): TRANSFORMER_GENERIC_PREFILL (lane x4b's generic op run for a stateless attention-step forward) was a LOSER: 1 cell, transformer-forward 2.20 -> 2.97 ms (1.35); attn_step_fresh_prefill is the only stateless prefill; code at c23cb55fda; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_GENERIC_PREFILL.ab-outcome-3.patch"
+    # ---- end lane ab-outcome-3 / o3-nseq
     return True
 
 

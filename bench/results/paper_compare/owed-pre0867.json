@@ -50,8 +50,9 @@
   },
   "transformer-generic-prefill": {
    "define": "MOJOLEARN_TRANSFORMER_GENERIC_PREFILL",
-   "status": "define in code (autograd/block_step_ops.mojo TRANSFORMER_GENERIC_PREFILL): B = lane x4b's generic step-op run for a stateless forward; A = attn_step_fresh_prefill (0.8.66's session fresh prefill)",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3): LOSER (L40S transformer-forward 2.20 -> 2.97 ms, 1.35); attn_step_fresh_prefill stays the only stateless prefill; the define is refused (core/experiment_guards_neural.mojo); code recoverable at c23cb55fda, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_GENERIC_PREFILL.ab-outcome-3.patch. Was: define in code (autograd/block_step_ops.mojo TRANSFORMER_GENERIC_PREFILL): B = lane x4b's generic step-op run for a stateless forward; A = attn_step_fresh_prefill (0.8.66's session fresh prefill)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "rsvd-devscan-off": {
    "define": "MOJOLEARN_RSVD_FAST_DEVSCAN_OFF",
@@ -2983,7 +2984,9 @@
     "transformer-generic-prefill",
     "transformer-session-fresh-off"
    ],
-   "decides": "keep the prefill arm (A) unless B is at least as fast on NVIDIA and AMD; the session-fresh-off arm (-D MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF, the former env arm MOJOLEARN_TRANSFORMER_SESSION_FRESH=0, which no tool read) tests whether 0.8.55's per-call route is what NVIDIA lost (0.8.66 was 1.44x slower than 0.8.55)"
+   "decides": "keep the prefill arm (A) unless B is at least as fast on NVIDIA and AMD; the session-fresh-off arm (-D MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF, the former env arm MOJOLEARN_TRANSFORMER_SESSION_FRESH=0, which no tool read) tests whether 0.8.55's per-call route is what NVIDIA lost (0.8.66 was 1.44x slower than 0.8.55)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "byte-lm-layer-sync-off-lm-train-step",
