@@ -125,6 +125,19 @@ struct MetricDoorProg(Movable):
         self.slots.append(slot)
         return off
 
+    def pin_resident(mut self, owner: PythonObject, slot: Int):
+        """Pin a buffer input a typed builder already laid out that is a slot
+        of the route image's resident store (`put_resident` without the
+        layout; lane vdf-xm-wire3): device label codes the door encoded and
+        mapped on the device (bindings/metric_resident_labels_door.mojo). The
+        runner reads `owner.size` words from the slot (the owner is the label
+        vector, one code word per label) device to device; the door frees the
+        slot after the run."""
+        if len(self.slots) == 0:
+            self.slots = List[Int](length=len(self.pins), fill=-1)
+        self.pins.append(owner)
+        self.slots.append(slot)
+
     def put_i32(mut self, array: PythonObject) raises -> Int:
         """int32 words (read with ldi), copied in as their bits."""
         return self.put(array)
