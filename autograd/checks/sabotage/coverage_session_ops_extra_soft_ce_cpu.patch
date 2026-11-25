@@ -1,0 +1,10 @@
+diff --git a/autograd/session_ops_extra_sabotage.mojo b/autograd/session_ops_extra_sabotage.mojo
+index 2be48dc955..539c99b39b 100644
+--- a/autograd/session_ops_extra_sabotage.mojo
++++ b/autograd/session_ops_extra_sabotage.mojo
+@@ -20,4 +20,4 @@ comptime SOX_SABOTAGE_GATHER_GRAD_HOST = is_defined["MOJOLEARN_SESSION_OPS_EXTRA
+ comptime SOX_SABOTAGE_LSE_SETTLE = is_defined["MOJOLEARN_SESSION_OPS_EXTRA_SABOTAGE_LSE_SETTLE"]()
+ comptime SOX_SABOTAGE_LSE_SETTLE_HOST = is_defined["MOJOLEARN_SESSION_OPS_EXTRA_SABOTAGE_LSE_SETTLE_HOST"]()
+ comptime SOX_SABOTAGE_SOFT_CE = is_defined["MOJOLEARN_SESSION_OPS_EXTRA_SABOTAGE_SOFT_CE"]()
+-comptime SOX_SABOTAGE_SOFT_CE_HOST = is_defined["MOJOLEARN_SESSION_OPS_EXTRA_SABOTAGE_SOFT_CE_HOST"]()
++comptime SOX_SABOTAGE_SOFT_CE_HOST = True  # SABOTAGE
