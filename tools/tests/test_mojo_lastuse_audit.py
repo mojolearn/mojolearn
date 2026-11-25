@@ -153,6 +153,255 @@ def g(flag: Bool) raises -> Int:
         self.assertEqual([(f["path"], f["local"]) for f in found], [("pkg/user.mojo", "d")])
 
 
+class HelperCarrierTest(unittest.TestCase):
+    """HELPERS THAT CARRY AN ADDRESS (lane lastuse-helpers, 2026-11-25): the address is taken through a function
+    whose return value carries its argument's address, found from the code, not from a list of names."""
+
+    LINEAR2 = '''
+comptime _P = MutPointer[Float32, MutUntrackedOrigin]
+
+
+def _p(values: List[Float32]) -> _P:
+    return _P(unsafe_from_address=Int(values.unsafe_ptr()))
+
+
+def _device_case(which: Int) raises:
+    if which == 1:
+        var coef: List[Float32] = [Float32(0.25), Float32(-1.5), Float32(2.0), Float32(0.125)]
+        var f_order = List[Float32](length=n * FD, fill=0.0)
+        for r in range(n):
+            f_order[r] = gathered[r]
+        var oa = List[Float32](length=n, fill=0.0)
+        var ob = List[Float32](length=n, fill=0.0)
+        cd_predict_host(ctx, word, _p(coef), _p(oa), n, FD, Float32(0.75))
+        cd_predict_host(ctx, _p(f_order), _p(coef), _p(ob), n, FD, Float32(0.75))
+FIX1
+        _same(oa, ob, "cd predictions")
+    elif which == 5:
+        var coef: List[Float32] = [Float32(0.5), Float32(-0.25)]
+        var sa = ctx.enqueue_create_buffer[DType.float32](n)
+        var sb = ctx.enqueue_create_buffer[DType.float32](n)
+        qn_decision_function_device(ctx, word, _p(coef), sa, n, FD, True, 2)
+        qn_decision_function_device(ctx, _p(gathered), _p(coef), sb, n, FD, True, 2)
+FIX5
+        _same(sa, sb, "QN decisions")
+'''
+
+    GRADS = '''
+comptime _FP = MutPointer[Float32, MutUntrackedOrigin]
+
+
+def _fp(v: List[Float32]) -> _FP:
+    return _FP(unsafe_from_address=Int(v.unsafe_ptr()))
+
+
+def test_chunked_lm_head_device_arrays() raises:
+    var hidden = _fill(rows * width, 1)
+    var weight = _fill(vocab * width, 2)
+    var loss_h = List[Float32](length=1, fill=0.0)
+    var mx = List[Float32](length=rows, fill=0.0)
+    var dn = List[Float32](length=rows, fill=0.0)
+    var dh_h = List[Float32](length=rows * width, fill=0.0)
+    var dw_h = List[Float32](length=vocab * width, fill=0.0)
+    _ = chunked_lm_head_v2_train_host(ctx, _fp(loss_h), _fp(mx), _fp(dn), _fp(dh_h), _fp(dw_h), _fp(hidden),
+                                      _fp(weight), tp, rows, vocab, width)
+FIX
+    var hh = _put(ctx, hidden)
+    var hw = _put(ctx, weight)
+    _same(loss_h, dh_h, dw_h)
+'''
+
+    def test_vdf_scope_linear2_fold_pre_fix_is_found(self):
+        # checks/native_tests/vdf_scope_linear2_fold.mojo before 701b026c5b
+        text = self.LINEAR2.replace("FIX1\n", "").replace("FIX5\n", "")
+        self.assertEqual(sorted(failing(text)), [("coef", "call"), ("coef", "call"), ("f_order", "call")])
+
+    def test_vdf_scope_linear2_fold_fixed_passes(self):
+        text = self.LINEAR2.replace("FIX1", "        _ = coef^\n        _ = f_order^").replace(
+            "FIX5", "        _ = coef^")
+        self.assertEqual(failing(text), [])
+
+    def test_training_grads_pre_fix_is_found(self):
+        # checks/native_tests/training_grads_device_arrays_gpu.mojo before 71b636f52c
+        self.assertEqual(sorted(failing(self.GRADS.replace("FIX\n", ""))), [("dn", "call"), ("mx", "call")])
+
+    def test_training_grads_fixed_passes(self):
+        self.assertEqual(failing(self.GRADS.replace("FIX", "    _ = mx^\n    _ = dn^")), [])
+
+    def test_helper_is_derived_from_the_code(self):
+        h = lu.helpers_of(self.LINEAR2)
+        self.assertEqual(h.get("_p"), "untracked")
+        self.assertIn(0, h["args:_p"])
+
+    def test_any_origin_pointer_around_an_address_carries_it(self):
+        # x_decomp/checks/seam_util.mojo `ptr`: an any-origin pointer built from an Int address keeps nothing alive
+        text = '''
+comptime F32Ptr = MutPointer[Float32, MutAnyOrigin]
+
+
+def ptr(values: List[Float32]) -> F32Ptr:
+    return F32Ptr(unsafe_from_address=Int(values.unsafe_ptr()))
+
+
+def g() raises:
+    var a = zeros(4)
+    gemm(ptr(a), 4)
+'''
+        self.assertEqual(failing(text), [("a", "call")])
+
+    def test_tracked_or_any_origin_cast_helper_passes(self):
+        text = '''
+def _keep(mut v: List[Float32]) -> MutPointer[Float32, MutAnyOrigin]:
+    return v.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+
+def g() raises:
+    var a = zeros(4)
+    gemm(_keep(a), 4)
+'''
+        self.assertNotIn("_keep", lu.helpers_of(text))
+        self.assertEqual(failing(text), [])
+
+    def test_helper_that_reads_through_the_address_is_no_carrier(self):
+        # core/prep_member.mojo `_iword`: the pointer is indexed on the spot; an Int value comes back
+        text = '''
+def _iword(arena: HostZeroArena, offset: Int) -> Int:
+    return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(arena.unsafe_ptr()))[offset])
+
+
+def g() raises:
+    var arena = HostZeroArena(8)
+    if _iword(arena, 0) > 0:
+        raise Error(String(_iword(arena, 1)))
+'''
+        self.assertNotIn("_iword", lu.helpers_of(text))
+        self.assertEqual(failing(text), [])
+
+    def test_carried_argument_position_and_keyword(self):
+        # core/member_class_weight.mojo `member_cw_rows(..., mut rows)` returns Int(rows.unsafe_ptr())
+        text = '''
+def rows_of(codes: Int, n: Int, mut rows: List[Float32]) -> Int:
+    if n == 0:
+        return codes
+    return Int(rows.unsafe_ptr())
+
+
+def g() raises:
+    var codes = List[Int32](length=4, fill=0)
+    var rows = List[Float32]()
+    var at = rows_of(Int(codes.unsafe_ptr()), 4, rows)
+    _ = codes^
+    use(at)
+'''
+        self.assertEqual(lu.helpers_of(text)["args:rows_of"], frozenset({2, "rows"}))
+        self.assertEqual(failing(text), [("rows", "assign")])
+        self.assertEqual(failing(text + "    _ = rows^\n"), [])
+        compared = text.replace("    use(at)\n", "    require(at == 0, \"no rows\")\n")
+        self.assertEqual(failing(compared), [])
+        asserted = text.replace("    var at = rows_of(", "    assert_equal(rows_of(").replace(
+            "4, rows)\n", "4, rows), 0)\n").replace("    use(at)\n", "")
+        self.assertEqual(failing(asserted), [])
+        discarded = text.replace("    var at = rows_of(", "    _ = rows_of(").replace("    use(at)\n", "")
+        self.assertEqual(failing(discarded), [])
+
+    def test_method_returning_an_address_of_self(self):
+        text = '''
+struct Arena:
+    var words: List[Int32]
+
+    def base(self) -> Int:
+        return Int(self.words.unsafe_ptr())
+
+
+def g() raises:
+    var arena = Arena()
+    var base = arena.base()
+    run(base)
+'''
+        self.assertEqual(lu.helpers_of(text).get("meth:base"), "untracked")
+        self.assertEqual(failing(text), [("arena", "assign")])
+        self.assertEqual(failing(text + "    _ = arena^\n"), [])
+        # a value read through the address is no pointer that outlives the owner
+        read = text.replace("    run(base)\n", "    var v = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=base)[0]"
+                                              "\n    _ = arena^\n    run(v)\n")
+        self.assertEqual(failing(read), [])
+
+    def test_constructor_storing_an_address_is_a_carrier(self):
+        text = '''
+struct View:
+    var at: Int
+
+    def __init__(out self, values: List[Float32]):
+        self.at = Int(values.unsafe_ptr())
+
+
+def g() raises:
+    var a = zeros(4)
+    kernel(View(a))
+'''
+        self.assertEqual(lu.helpers_of(text).get("View"), "untracked")
+        self.assertEqual(failing(text), [("a", "call")])
+
+    def test_sub_buffer_view_frees_nothing(self):
+        # training/samba_resident.mojo: `var wv = s.view(j)` is a create_sub_buffer view of s.param
+        text = '''
+comptime FP = MutPointer[Float32, MutAnyOrigin]
+
+
+struct Store:
+    var param: DeviceBuffer[DType.float32]
+
+    def view(self, j: Int) raises -> DeviceBuffer[DType.float32]:
+        return self.param.create_sub_buffer[DType.float32](j, 4)
+
+
+def _fpb(mut buf: DeviceBuffer[DType.float32]) -> FP:
+    return FP(unsafe_from_address=Int(buf.unsafe_ptr()))
+
+
+def g(s: Store) raises:
+    for k in range(9):
+        var wv = s.view(k)
+        params.append(variable_into(_fpb(wv), 4))
+'''
+        self.assertEqual(failing(text), [])
+
+    def test_use_ending_a_loop_body_lives_to_the_loop_exit(self):
+        text = HELPER + '''
+def g() raises:
+    var q = List[Int64](length=4, fill=0)
+    for p in range(4):
+        out[p] = cell(_a(q) + p)
+'''
+        self.assertEqual(failing(text), [])
+
+    def test_wrapper_of_an_imported_helper_is_found_across_files(self):
+        files = [("pkg/helpers.mojo", HELPER),
+                 ("pkg/wrap.mojo", "from pkg.helpers import (\n    _a,\n)\n\n\ndef _b(mut v: List[Int64]) -> Int:\n"
+                                   "    return _a(v)\n"),
+                 ("pkg/user.mojo", "from pkg.wrap import _b\n\ndef g() raises:\n    var d: List[Int64] = [0]\n"
+                                   "    entry(_b(d))\n")]
+        found = [f for f in lu.scan(files, workers=2) if f["fails"]]
+        self.assertEqual([(f["path"], f["local"]) for f in found], [("pkg/user.mojo", "d")])
+
+    def test_helper_over_a_python_data_address_keeps_the_holder_exception(self):
+        # bindings/msel_common_door.mojo `msel_addr` wraps classical_address: `pin.owner = codes` holds the data
+        text = '''
+def msel_addr(array: PythonObject) raises -> Int:
+    return Int(py=classical_address(array))
+
+
+def g(got: PythonObject) raises -> Pin:
+    var pin = Pin()
+    var codes = got[1]
+    var address = msel_addr(codes)
+    pin.owner = codes
+    pin.view = Codes(address)
+    return pin^
+'''
+        self.assertEqual(failing(text), [])
+
+
 class QueuedCopyTest(unittest.TestCase):
     """FREED BEFORE THE DRAIN: an asynchronous enqueue_copy still reads a host local that Mojo freed at its last
     named use (hist2_check, partitions_reduce_check and greedy_search_helper.run_tree, 2026-11-18)."""
