@@ -1515,7 +1515,7 @@ def train(
         comptime if not GBDT_QUANT_DEVICE:
             raise Error(
                 "gbdt fit: a fold X word is served only by the device"
-                " quantizer (built with -D MOJOLEARN_GBDT_QUANT_DEVICE_OFF)"
+                " quantizer (build with -D MOJOLEARN_GBDT_QUANT_DEVICE)"
             )
         var mat = _rows_to_device_columns(
             ctx, x_src, x_word, n_rows, n_features
@@ -2720,7 +2720,7 @@ def train(
         if x_row_major or x_word < 0:
             raise Error(
                 "gbdt_fit_rowmajor is served only by the device quantizer"
-                " (built with -D MOJOLEARN_GBDT_QUANT_DEVICE_OFF)"
+                " (build with -D MOJOLEARN_GBDT_QUANT_DEVICE)"
             )
     # lane/apple-fast-sym-ctr: the grids the fast walk already built, by
     # column (empty unless a SYM_CTR define is on)

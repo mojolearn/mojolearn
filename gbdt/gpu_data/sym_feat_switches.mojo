@@ -2,8 +2,8 @@
 feature set outside histograms and leaf estimation (quantization, index
 build, predict). Every switch but `GBDT_QUANT_DEVICE` is compiled
 ONLY under `GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()`
-and is OFF by default; `GBDT_QUANT_DEVICE` is the default on every image
-since 2026-11-24 (its note below). One module so `train.mojo`, `gls_borders_device.mojo`,
+and is OFF by default; `GBDT_QUANT_DEVICE` is OFF by default and opts in on
+any GPU image (its note below). One module so `train.mojo`, `gls_borders_device.mojo`,
 `doc_parallel_boosting.mojo` and `resident_model.mojo`
 read the same flags without importing each other."""
 from std.sys.compile import is_defined
@@ -50,22 +50,20 @@ comptime GBDT_INDEX_PACK_DEVICE = SYM_FEAT_FAST_APPLE and (
 # TOMBSTONE: MOJOLEARN_GBDT_QUANT_DEVICE (DELETE-EXPERIMENT, EXP:1303 NEUTRAL; prerequisite of a never-run Apple FAST card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 408e1ba726.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_QUANT_DEVICE.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
-# PROMOTED 2026-11-24 by lane vdf-scope-trees4 (brief vdf-scope-trees4: the
-# device quantizer is the default on every GPU image, every tier and vendor,
-# so a model-selection fold's X can reach the fit as THE FOLD X WORD,
-# core/fold_x_device.mojo, and never visit the host). The float columns are
-# uploaded once (or copied device to device from the fold slot) and the
-# border build and the index build read them in place; the same border
-# kernels and the same binarize arithmetic as the staged path, so the
-# borders, the index words and the model are the same bits as before and as
-# the CPU column (gbdt/host, the same border algorithm). A/B OWED: no timing
-# of this default exists (EXP:1303 was NEUTRAL on Apple fast only);
-# `-D MOJOLEARN_GBDT_QUANT_DEVICE_OFF` keeps the staged per-chunk path until
-# the NVIDIA measurement decides it (docs/apple-fast/EXPERIMENTS.md row
-# MOJOLEARN_GBDT_QUANT_DEVICE_OFF). The former opt-in word
-# `MOJOLEARN_GBDT_QUANT_DEVICE` is read no more (it is the default).
+# OPT-IN AGAIN 2026-11-24 (lane w3-integrate-9, AGENTS.md "A measured winner is
+# never deleted on reasoning": a default changes only on an A/B). Lane
+# vdf-scope-trees4 had promoted the device quantizer to the default on every
+# GPU image with no timing (EXP:1303 was NEUTRAL on Apple fast only). The
+# default is back to round 7's: off on every image, the staged per-chunk path.
+# `-D MOJOLEARN_GBDT_QUANT_DEVICE` opts in on any GPU image (no longer Apple
+# fast only, so the owed NVIDIA L40S A/B can time it): the float columns
+# resident once, and the image answers XG_CAP_FIT_SLOT_X so a model-selection
+# fold's X reaches the fit as THE FOLD X WORD (core/fold_x_device.mojo); off,
+# the member fit takes the host fold gather (core/gbdt_member.mojo). Same
+# border kernels and binarize arithmetic either way. A/B OWED on the L40S:
+# docs/apple-fast/EXPERIMENTS.md row MOJOLEARN_GBDT_QUANT_DEVICE (pending).
 comptime GBDT_QUANT_DEVICE = (
-    not is_defined["MOJOLEARN_GBDT_QUANT_DEVICE_OFF"]()
+    is_defined["MOJOLEARN_GBDT_QUANT_DEVICE"]()
 ) or GBDT_INDEX_PACK_DEVICE
 # TOMBSTONE: MOJOLEARN_GBDT_EVAL_SKIP_EMPTY (NEUTRAL) deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at
 # 8815b00d75.
