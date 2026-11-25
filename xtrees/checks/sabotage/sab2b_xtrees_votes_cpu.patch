@@ -20,14 +20,21 @@ index f88c3370ee..5f33ec3783 100644
 +                    break
      return col
 diff --git a/xtrees/glue_runs.mojo b/xtrees/glue_runs.mojo
-index d6f31d49e3..eaefbbf4ca 100644
+index d6f31d49e3..dddefa4136 100644
 --- a/xtrees/glue_runs.mojo
 +++ b/xtrees/glue_runs.mojo
-@@ -694,6 +694,10 @@ def scatter_run(c: XtCall) raises -> Int:
+@@ -687,6 +687,7 @@ def scatter_run(c: XtCall) raises -> Int:
+     if col0 + n_src_cols > n_cols:
+         raise Error("x_trees_scatter: columns out of range")
+     var rp = i32_ptr(rows) if m > 0 else i32_ptr(1)
++    from std.sys import is_defined  # SABOTAGE sab2b-xtrees-votes-cpu: function scope (an import may not sit in a branch)
+     comptime if XTREES_DEVICE_OPS:
+         # the row refusal is the device's check kernel (lane cpu2-l5-trees)
+         elem_dev.scatter_device(f64_ptr(dst), n_dst, n_cols, f32_ptr(src), m, n_src_cols, rp, col0)
+@@ -694,6 +695,9 @@ def scatter_run(c: XtCall) raises -> Int:
          scatter_rows_check(rp, m, n_dst)
          if m * n_src_cols > 0:
              scatter(f64_ptr(dst), n_cols, f32_ptr(src), m, n_src_cols, rp, col0)
-+            from std.sys import is_defined
 +            comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sab2b-xtrees-votes-cpu (lane w3-fix-9-s1): the first placed cell one binary64 ulp up (Voting*.transform's side-by-side block, vote_transform_run), the host bindings only
 +                var cell = f64_ptr(dst).bitcast[UInt64]() + (Int(rp[0]) * n_cols + col0)
 +                cell[0] = cell[0] + UInt64(1)
