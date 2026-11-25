@@ -1,0 +1,24 @@
+diff --git a/autograd/model.mojo b/autograd/model.mojo
+index 43c0e4ce58..95fe5ff91a 100644
+--- a/autograd/model.mojo
++++ b/autograd/model.mojo
+@@ -10,6 +10,7 @@ the tape's fixed blocked folds), so the bits are the same on Apple, NVIDIA
+ and AMD. Host loops run over layers, batches and epochs only.
+ """
+ from std.memory import bitcast, unsafe_memcpy
++from std.sys.compile import is_defined  # SABOTAGE coverage (sab-arms-67): the side switch
+ from sequence.exec_trait import Exec
+ from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
+ from sequence.fit_loop_words import fit_loop_publish
+@@ -1293,7 +1294,10 @@ def model_loss[E: Exec](
+         return ce
+     var kind = model_loss_kind(cfg.loss)
+     var averaged = cfg.reduction != REDUCTION_SUM
+-    return tape.loss_reduced(ex, pred, target, kind, cfg.huber_delta, averaged, ls_per_row(kind, cfg.reduction))
++    var sab_scalar = cfg.huber_delta  # SABOTAGE coverage (sab-arms-67): the loss's scalar
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the smooth_l1 beta / bce pos_weight / huber delta + 1, host bindings only
++        sab_scalar = cfg.huber_delta + Float32(1)  # SABOTAGE coverage (sab-arms-67): the wrong scalar
++    return tape.loss_reduced(ex, pred, target, kind, sab_scalar, averaged, ls_per_row(kind, cfg.reduction))
+ 
+ 
+ # nn-losses begin

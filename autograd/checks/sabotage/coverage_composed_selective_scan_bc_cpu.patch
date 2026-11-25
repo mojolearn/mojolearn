@@ -1,0 +1,28 @@
+diff --git a/autograd/model_blocks.mojo b/autograd/model_blocks.mojo
+index 873e36c988..17f9d7e75c 100644
+--- a/autograd/model_blocks.mojo
++++ b/autograd/model_blocks.mojo
+@@ -77,6 +77,7 @@ its monolith agree to the fold order of their kernels, not bit for bit
+ (checks/native_tests/neural_blocks.mojo states the measured differences).
+ """
+ from std.collections import Array
++from std.sys.compile import is_defined  # SABOTAGE coverage (sab-arms-67): the side switch
+ from std.math import isfinite
+ from std.memory import bitcast
+ from sequence.exec_trait import Exec
+@@ -910,8 +911,13 @@ def block_forward[E: Exec](
+         var dim = _scan_dim(xargs, i, cur)
+         var u = rankn_narrow(tape, ex, h, 2, 0, dim)
+         var dl = rankn_narrow(tape, ex, h, 2, dim, dim)
+-        var bm = rankn_narrow(tape, ex, h, 2, 2 * dim, a0)
+-        var cm = rankn_narrow(tape, ex, h, 2, 2 * dim + a0, a0)
++        var sab_b = 2 * dim  # SABOTAGE coverage (sab-arms-67): B's column
++        var sab_c = 2 * dim + a0  # SABOTAGE coverage (sab-arms-67): C's column
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): B and C swapped, host bindings only
++            sab_b = 2 * dim + a0  # SABOTAGE coverage (sab-arms-67): B reads C
++            sab_c = 2 * dim  # SABOTAGE coverage (sab-arms-67): C reads B
++        var bm = rankn_narrow(tape, ex, h, 2, sab_b, a0)
++        var cm = rankn_narrow(tape, ex, h, 2, sab_c, a0)
+         var a_log = _p(tape, ex, P, Gr, off, dim, a0, train)
+         var d_skip = _p(tape, ex, P, Gr, off + dim * a0, 1, dim, train)
+         return graph_selective_scan(tape, ex, u, dl, bm, cm, a_log, d_skip)

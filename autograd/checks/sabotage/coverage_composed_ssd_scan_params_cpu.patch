@@ -1,0 +1,28 @@
+diff --git a/autograd/model_blocks.mojo b/autograd/model_blocks.mojo
+index 873e36c988..fd3d4cac55 100644
+--- a/autograd/model_blocks.mojo
++++ b/autograd/model_blocks.mojo
+@@ -77,6 +77,7 @@ its monolith agree to the fold order of their kernels, not bit for bit
+ (checks/native_tests/neural_blocks.mojo states the measured differences).
+ """
+ from std.collections import Array
++from std.sys.compile import is_defined  # SABOTAGE coverage (sab-arms-67): the side switch
+ from std.math import isfinite
+ from std.memory import bitcast
+ from sequence.exec_trait import Exec
+@@ -919,8 +920,13 @@ def block_forward[E: Exec](
+         var wide = a0 * SSD_HEADDIM + 2 * SSD_STATES
+         var xbc = rankn_narrow(tape, ex, h, 2, 0, wide)
+         var dts = rankn_narrow(tape, ex, h, 2, wide, a0)
+-        var a_log2 = _p(tape, ex, P, Gr, off, 1, a0, train)
+-        var d_skip2 = _p(tape, ex, P, Gr, off + a0, 1, a0, train)
++        var sab_a = off  # SABOTAGE coverage (sab-arms-67): A_log's offset
++        var sab_d = off + a0  # SABOTAGE coverage (sab-arms-67): D's offset
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): A_log and D swapped, host bindings only
++            sab_a = off + a0  # SABOTAGE coverage (sab-arms-67): A_log reads D
++            sab_d = off  # SABOTAGE coverage (sab-arms-67): D reads A_log
++        var a_log2 = _p(tape, ex, P, Gr, sab_a, 1, a0, train)
++        var d_skip2 = _p(tape, ex, P, Gr, sab_d, 1, a0, train)
+         return graph_ssd_scan(tape, ex, xbc, dts, a_log2, d_skip2)
+     # Mamba-3 (lane neural-blocks-3-m3): [v | k | q | dt | A | trap] as narrow views
+     if code == LAYER_TRAPEZOID_SCAN:
