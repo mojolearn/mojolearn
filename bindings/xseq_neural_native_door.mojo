@@ -35,9 +35,16 @@ from bindings.optimizer_keys_unpack import OPTIMIZER_OPN_SCHEDULE_VALUES
 from bindings.xseq_native_common_door import (
     XF32P, XI32P, xseq_route, XseqRoute, xseq_base, xseq_input, xseq_is_f64, xseq_refuse_f64, xseq_zeros,
     xseq_addr, xseq_f32p, xseq_reshape, xseq_curve_list, xseq_int, xseq_float, xseq_truth, xseq_is_int,
-    XseqStream, xseq_neural_provider,
+    XseqStream, xseq_neural_provider, xseq_zeros_i64,
 )
 from bindings.admitted_sequence_door import admit_nd_f32
+# lane stream-fits: fit(source=) / partial_fit(source=)
+from autograd.batch_source import (
+    BS_FIELD_STEPS, BS_FIELD_TARGETS, SOURCE_PART_WORDS, batch_source_open, batch_source_class_scan,
+    batch_source_fit_words, batch_source_part_of, program_training_source_refuse, source_part_load,
+)
+from providers.python.batch_source_pyapi_door import batch_source_spec, batch_source_position_out
+from providers.python.autograd_program_arrays_pyapi_door import is_integer_input
 from providers.python.xseq_public_lifecycle_pyapi_door import xseq_public_labels, xseq_private_input
 from core.xseq_marshal import xseq_fill_f32, xseq_codes_f32, xseq_take_native
 from sequence.perf3_seq_resident_words import seq_resident_token
@@ -53,7 +60,7 @@ from sequence.xseq_neural_run import (
     xseq_run_mlp_sizes, xseq_run_mlp_param_count, xseq_run_mlp_glorot, xseq_run_mlp_fit, xseq_run_copy_f32,
     xseq_run_mlp_layers_check, xseq_run_mlp_layer_check, xseq_run_mlp_pack, xseq_run_mlp_output_check,
     xseq_run_mlp_predict, XseqRnnFitOptions, XseqRnnPredictOptions, xseq_run_rnn_fit_options,
-    xseq_run_rnn_predict_options, xseq_run_rnn_layout_dirs, xseq_run_balanced_class_weights, xseq_run_remap_codes,
+    xseq_run_rnn_predict_options, xseq_run_rnn_layout_dirs, xseq_run_rnn_fit_stream, xseq_run_balanced_class_weights, xseq_run_remap_codes,
     xseq_run_step_weights, xseq_run_lengths_check, xseq_run_class_counts, RNN_REVIEW_SABOTAGE_LENGTHS_DEVICE,
     RNN_REVIEW_SABOTAGE_LENGTHS_HOST, RNN_REVIEW_SABOTAGE_PADDING_DEVICE, RNN_REVIEW_SABOTAGE_PADDING_HOST,
 )
@@ -601,6 +608,60 @@ def _rnn_class_weights(fields: PythonObject, target: PythonObject, n: Int, steps
     return words
 
 
+struct _RnnStart(Movable):
+    """The parameters a recurrent fit starts from (lane stream-fits: one body for the array and the streamed fit):
+    the fitted ones (warm_start, partial_fit) when they fit the layout, else a fresh seeded draw; the stream whose
+    later draws seed the fit; the parameter count."""
+
+    var params: PythonObject
+    var stream: XseqStream
+    var warm: Bool
+    var total: Int
+
+    def __init__(out self, var params: PythonObject, var stream: XseqStream, warm: Bool, total: Int):
+        self.params = params^
+        self.stream = stream^
+        self.warm = warm
+        self.total = total
+
+
+def _rnn_start_params(model: PythonObject, fields: PythonObject, route: XseqRoute, fo: RnnFieldOptions, cell: Int,
+                      d: Int, hidden: Int, layers: Int, outputs: Int, partial: Bool,
+                      context: PythonObject) raises -> _RnnStart:
+    """`_RnnStart` of a fit: writes params_ (a read-only view) and returns its buffer."""
+    var nk = xseq_keys()
+    var stream = XseqStream(py_get(fields, nk[].k_random_state), context)
+    var mods = NativeModules()
+    var total = xseq_run_rnn_param_count(xseq_run_rnn_gates(cell), d, hidden, layers, outputs)
+    if fo.dirs == 2:
+        total = _bidi_count(cell, d, hidden, layers, outputs)
+    # warm_start / partial_fit: start from the fitted parameters when they fit this layout
+    var params = PythonObject(None)
+    var warm = (fo.warm_start or partial) and py_contains(fields, nk[].k_params_)
+    if warm:
+        var old = admit_nd_f32(xseq_private_input(py_item(fields, nk[].k_params_), context, "params_"), "params_",
+                               False, context)
+        if Int(py=old.size) == total:
+            params = xseq_zeros(Python.tuple(total), context)
+            unsafe_memcpy(dest=xseq_f32p(params), src=xseq_f32p(old), count=total)
+            _ = old
+        else:
+            warm = False
+    prepared_drop(mods, _RNN_PARAMS_SLOT, model)  # the new params_ is a new object
+    if not warm:
+        var bound = xseq_run_rnn_bound(xseq_float(py_item(fields, nk[].k_hidden_size)))
+        params = xseq_zeros(Python.tuple(total), context)
+        var params_address = Int(py=xseq_addr(params))
+        var output_provider = xseq_neural_provider(route.output)
+        var output_entry = _entry(output_provider)
+        var py0 = Python()
+        with GILReleased(py0):
+            stream.offset = xseq_run_uniform(output_entry, params_address, total, stream.seed, stream.offset, -bound, bound)
+        _ = output_provider
+    py_setitem(fields, nk[].k_params_, xseq_readonly_view(params))
+    return _RnnStart(params, stream^, warm, total)
+
+
 def _rnn_fit_full(model: PythonObject, fields: PythonObject, x_source: PythonObject, target_in: PythonObject,
                   route: XseqRoute, context: PythonObject, lengths_in: PythonObject, sw_in: PythonObject,
                   h0_source: PythonObject, c0_source: PythonObject, validation: PythonObject,
@@ -681,39 +742,14 @@ def _rnn_fit_full(model: PythonObject, fields: PythonObject, x_source: PythonObj
     var c0 = _rnn_state_arg(c0_source, slots, n, hidden, "c_0", context)
     _rnn_c0_check(h0, c0, cell)
     var plain = fo.plain() and sw is None and cw is None and h0 is None and vx is None and not partial
-    var stream = XseqStream(py_get(fields, nk[].k_random_state), context)
-    var mods = NativeModules()
-    var total = xseq_run_rnn_param_count(xseq_run_rnn_gates(cell), d, hidden, layers, outputs)
-    if fo.dirs == 2:
-        total = _bidi_count(cell, d, hidden, layers, outputs)
-    # warm_start / partial_fit: start from the fitted parameters when they fit this layout
-    var params = PythonObject(None)
-    var warm = (fo.warm_start or partial) and py_contains(fields, nk[].k_params_)
-    if warm:
-        var old = admit_nd_f32(xseq_private_input(py_item(fields, nk[].k_params_), context, "params_"), "params_",
-                               False, context)
-        if Int(py=old.size) == total:
-            params = xseq_zeros(Python.tuple(total), context)
-            unsafe_memcpy(dest=xseq_f32p(params), src=xseq_f32p(old), count=total)
-            _ = old
-        else:
-            warm = False
-    prepared_drop(mods, _RNN_PARAMS_SLOT, model)  # the new params_ is a new object
-    if not warm:
-        var bound = xseq_run_rnn_bound(xseq_float(py_item(fields, nk[].k_hidden_size)))
-        params = xseq_zeros(Python.tuple(total), context)
-        var params_address = Int(py=xseq_addr(params))
-        var output_provider = xseq_neural_provider(route.output)
-        var output_entry = _entry(output_provider)
-        var py0 = Python()
-        with GILReleased(py0):
-            stream.offset = xseq_run_uniform(output_entry, params_address, total, stream.seed, stream.offset, -bound, bound)
-        _ = output_provider
-    py_setitem(fields, nk[].k_params_, xseq_readonly_view(params))
+    var start = _rnn_start_params(model, fields, route, fo, cell, d, hidden, layers, outputs, partial, context)
+    var total = start.total
+    var params = start.params
+    var warm = start.warm
     var batch_size = xseq_int(py_item(fields, nk[].k_batch_size))
     var epochs = 1 if partial else xseq_int(py_item(fields, nk[].k_max_epochs))
     var schedule = xseq_run_rnn_schedule(batch_size, n, epochs)
-    var seed = stream.child_seed()
+    var seed = start.stream.child_seed()
     var shuffle = xseq_truth(py_item(fields, nk[].k_shuffle))
     var steps = schedule.steps
     var optimizer = _rnn_optimizer(py_get(fields, nk[].k_optimizer), py_get(fields, nk[].k_optimizer_options), context)
@@ -1054,11 +1090,187 @@ def _rnn_target(model: PythonObject, fields: PythonObject, y_source: PythonObjec
     return target
 
 
+comptime _XI64P = MutPointer[Int64, MutUntrackedOrigin]
+
+
+def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """fit(source=) and partial_fit(source=, steps=) of the recurrent estimators (lane stream-fits, 2026-11-25).
+    UNPACK: the exact BatchSource handle's words (providers/python/batch_source_pyapi_door.mojo
+    batch_source_spec: opened with inputs=("steps",), target="targets"), the step count, the parameters
+    (_rnn_start_params, as an array fit), the optimizer state of partial_fit, and the position to train from: the
+    estimator's saved source part (`_source_state_`) when partial_fit continues, else the handle's. A classifier's
+    classes are the source's class indices (classes_ = 0 .. K - 1, K scanned once from the targets on its first
+    fit). RUN: one RNN_FIT call in its streamed form (sequence/xseq_neural_run.mojo xseq_run_rnn_fit_stream): the
+    training image opens the source and runs sequence/recurrent.mojo rnn_fit_stream. PACK: params_, the per-step
+    loss_curve_, the optimizer state, `_source_state_` (the consumed position and the source's binding words, so a
+    pickled estimator resumes in a fresh process on the same next batch) and the consumed position on the handle.
+    fit trains max_epochs epochs of the source from its position; partial_fit the rest of the current epoch, or
+    exactly `steps` batches."""
+    var nk = xseq_keys()
+    var fo = rnn_field_options(fields)
+    var route = xseq_route(model, fields, context)
+    var partial = xseq_truth(_arg(args, 8))
+    if args[0] is not None or args[1] is not None:
+        raise Error("TypeError: fit(source=) takes no X or y: the source holds the sequences and their targets")
+    if (_arg(args, 2) is not None or _arg(args, 3) is not None or _arg(args, 4) is not None
+            or _arg(args, 5) is not None or _arg(args, 6) is not None):
+        raise Error("TypeError: fit(source=) takes no lengths, sample_weight, h_0, c_0 or validation_data: the "
+                    + "lengths are the source's record lengths")
+    if fo.early_stopping and not partial:
+        raise Error("ValueError: fit(source=) does not take early_stopping: it holds out part of an array")
+    if _field(fields, "class_weight", PythonObject(None)) is not None:
+        raise Error("ValueError: fit(source=) does not take class_weight")
+    var source = args[9]
+    var spec = batch_source_spec(source)  # the exact connected BatchSource only (no Python iterable or callback)
+    if len(spec.inputs) != 1 or spec.inputs[0] != BS_FIELD_STEPS or spec.target != BS_FIELD_TARGETS:
+        raise Error("ValueError: fit(source=) reads a BatchSource opened with inputs=('steps',) and target='targets'")
+    var max_steps = 0
+    var steps_in = _arg(args, 10)
+    if steps_in is not None:
+        if not is_integer_input(steps_in) or Int(py=steps_in) < 1:
+            raise Error("ValueError: steps must be a positive integer or None")
+        max_steps = Int(py=steps_in)
+    var task = Int(py=_attr(py_type(model), "_TASK"))
+    var width = Int(py=source.n_features)
+    var longest = Int(py=source.max_length)
+    var n = Int(py=source.n_records)
+    var nb = Int(py=source.n_batches)
+    var tw = Int(py=source.target_width)
+    var rows_per = longest if fo.seq_out else 1
+    xseq_run_rnn_dims_check(n, longest)
+    var fitted = partial and py_contains(fields, nk[].k_params_) and py_contains(fields, nk[].k_n_outputs_)
+    if fitted and width != Int(py=py_item(fields, nk[].k_n_features_in_)):
+        raise Error("ValueError: the source's records have " + String(width) + " features; the model was fitted on "
+                    + String(py=py_call(native_loaded_module("builtins").str, py_item(fields, nk[].k_n_features_in_))))
+    # partial_fit continues at the position its state saved, on the same sealed data, plan and fields
+    if fitted:
+        var kept = _field(fields, "_source_state_", PythonObject(None))
+        if kept is not None:
+            var part = source_part_load(_XI64P(unsafe_from_address=Int(py=xseq_addr(kept))))
+            _ = kept
+            if part.present:
+                if not spec.sealed:
+                    raise Error("ValueError: partial_fit(source=): the shard index under " + spec.path + " records no "
+                                + "content digest, so a resume could not tell these shards from other data of the "
+                                + "same shape; call BatchSource.seal(path) once after writing the shards")
+                program_training_source_refuse(batch_source_part_of(spec), part, "partial_fit(source=)")
+                spec.epoch = part.epoch
+                spec.consumed = part.consumed
+    # the steps of this call: from the pending batch, max_epochs epochs (fit), the rest of the epoch (partial_fit)
+    # or exactly `steps`
+    var first = spec.consumed if spec.consumed < nb else 0
+    var total = max_steps
+    if total == 0:
+        total = nb - first
+        if not partial:
+            total += (xseq_int(py_item(fields, nk[].k_max_epochs)) - 1) * nb
+    # the outputs: a regressor's target row is n_outputs_ words a step; a classifier's one class index a step
+    var outputs = 0
+    if task == 0:
+        if tw < 1 or tw % rows_per != 0:
+            raise Error("ValueError: fit(source=): each record's target row must hold n_outputs words"
+                        + String(" a step, padded to the longest record" if fo.seq_out else "")
+                        + "; the source's targets have width " + String(tw))
+        outputs = tw // rows_per
+        if fitted and outputs != Int(py=py_item(fields, nk[].k_n_outputs_)):
+            raise Error("ValueError: the source's targets have another n_outputs_ than the fitted model")
+        py_setitem(fields, nk[].k__y_1d, outputs == 1)
+    else:
+        if tw != rows_per:
+            raise Error("ValueError: fit(source=): a classifier reads one class index a record"
+                        + String(" a step, padded to the longest record" if fo.seq_out else "")
+                        + "; the source's targets have width " + String(tw))
+        if fitted:
+            outputs = Int(py=py_item(fields, nk[].k_n_outputs_))
+        else:
+            var opened = batch_source_open(spec.copy())
+            try:
+                outputs = batch_source_class_scan(opened, 0, "fit(source=)")
+            except error:
+                opened.close()
+                raise error^
+            opened.close()
+            if outputs < 2:
+                raise Error("classification needs at least two classes")
+            var classes = xseq_zeros_i64(Python.tuple(outputs), context)
+            var cp = _XI64P(unsafe_from_address=Int(py=xseq_addr(classes)))
+            for k in range(outputs):  # small-loop(classes: the class labels, PACK)
+                cp[k] = Int64(k)
+            py_setitem(fields, nk[].k_classes_, classes)
+    py_setitem(fields, nk[].k_n_outputs_, outputs)
+    py_setitem(fields, nk[].k_n_features_in_, width)
+    var cell = _rnn_cell(model, fields)
+    var hidden = xseq_int(py_item(fields, nk[].k_hidden_size))
+    var layers = xseq_int(py_item(fields, nk[].k_num_layers))
+    var start = _rnn_start_params(model, fields, route, fo, cell, width, hidden, layers, outputs, partial, context)
+    var n_params = start.total
+    var params = start.params
+    var seed = start.stream.child_seed()
+    var optimizer = _rnn_optimizer(py_get(fields, nk[].k_optimizer), py_get(fields, nk[].k_optimizer_options), context)
+    var state = PythonObject(None)
+    var t0 = 0
+    if partial:
+        var kept_state = _field(fields, "_optimizer_state_", PythonObject(None))
+        state = xseq_zeros(Python.tuple(3 * n_params + 4), context)
+        if kept_state is not None and start.warm and Int(py=kept_state.size) == 3 * n_params + 4:
+            unsafe_memcpy(dest=xseq_f32p(state), src=xseq_f32p(kept_state), count=3 * n_params + 4)
+            t0 = Int(xseq_f32p(state)[3 * n_params + 3])
+        else:
+            var sp = xseq_f32p(state)
+            sp[3 * n_params] = Float32(1.0)
+            sp[3 * n_params + 1] = Float32(1.0)
+            sp[3 * n_params + 2] = Float32(1.0)
+    var rates = _rnn_rates_from(fields, t0, total, context)
+    var losses = xseq_zeros(Python.tuple(total), context)
+    var request = XseqRnnFitRequest(cell, width, hidden, layers, outputs, task, n, longest, 1, spec.batch,
+                                    spec.shuffle, seed)
+    var o = XseqRnnFitOptions(
+        fo.dirs, fo.seq_out, fo.no_bias, 0, False, 0, 0, 0, 0, 0, False, 0, 0, 0, 0,
+        0 if state is None else Int(py=xseq_addr(state)), fo.dropout, fo.clip, fo.tol)
+    var provider = xseq_neural_provider(route.entries)
+    var entry = _entry(provider)
+    var loop_words = fit_loop_words()
+    var path = spec.path
+    var path_bytes = path.as_bytes()
+    var words = batch_source_fit_words(spec, total)
+    var saved = xseq_zeros_i64(Python.tuple(SOURCE_PART_WORDS), context)
+    var position = List[Int64](length=2, fill=Int64(0))
+    var params_address = Int(py=xseq_addr(params))
+    var losses_address = Int(py=xseq_addr(losses))
+    var rates_address = Int(py=_buffer_address(rates))
+    var saved_address = Int(py=xseq_addr(saved))
+    var py = Python()
+    with GILReleased(py):
+        xseq_run_rnn_fit_stream(entry, request, optimizer, params_address, losses_address, rates_address,
+                                Int(loop_words.unsafe_ptr()), o, words, Int(path_bytes.unsafe_ptr()), len(path_bytes),
+                                saved_address, Int(position.unsafe_ptr()))
+    _ = path  # keep the path's bytes and every buffer alive through the native call above
+    _ = provider
+    _ = params
+    _ = state
+    _ = losses
+    _ = rates
+    _ = saved
+    _ = route.owner  # the route's images stay loaded through the call above
+    batch_source_position_out(source, Int(position[0]), Int(position[1]))
+    _ = position^
+    if partial:
+        py_setitem(fields, PythonObject("_optimizer_state_"), state)
+    py_setitem(fields, PythonObject("_source_state_"), saved)
+    py_setitem(fields, nk[].k_loss_curve_, losses)
+    py_setitem(fields, nk[].k_n_iter_, (t0 if partial else 0) + total)
+    py_setitem(fields, nk[].k_n_timesteps_, longest)
+    py_setitem(fields, nk[].k_fit_loop_, fit_loop_pack(loop_words))
+    return model
+
+
 def _rnn_fit_op(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """fit(X, y, lengths, sample_weight, h_0, c_0, validation_data, restore_best, partial) (lane rnn-parity:
     every argument after lengths optional; partial is partial_fit's one epoch). The lengths (training and
     validation) are admitted and checked here once, before the target encoder or the class histogram reads one
     (lane rnn-review-fixes)."""
+    if _arg(args, 9) is not None:
+        return _rnn_fit_source(model, fields, args, context)  # lane stream-fits: fit(source=) / partial_fit(source=)
     var fo = rnn_field_options(fields)
     var route = xseq_route(model, fields, context)
     var partial = xseq_truth(_arg(args, 8))

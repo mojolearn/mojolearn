@@ -1139,41 +1139,60 @@ def batch_source_fit_saved[IS_DEVICE: Bool](src: BatchSource) -> ProgramTraining
     return out^
 
 
-def batch_source_check_classes(src: BatchSource, classes: Int, who: String) raises:
-    """Admit the class targets of a streamed classification fit, once a fit: every target word of every record is a
-    whole number in [0, classes). One host task a shard (one pread of its targets file); the shards' targets are one
-    word a record, small beside the steps. Refuses a source without targets or with a target width other than 1."""
-    if src.twidth != 1:
-        raise Error("ValueError: " + who + ": a classification loss reads one class index a record (targets of width "
-                    + "1); the source's targets have width " + String(src.twidth))
+def batch_source_class_scan(src: BatchSource, classes: Int, who: String) raises -> Int:
+    """Admit the class targets of a streamed classification fit, once a fit, and return the class count they
+    imply (1 + the largest): every target word of every record must be a whole number >= 0, and below `classes`
+    when `classes` > 0. One host task a shard (one pread of its targets file); the targets are a few words a
+    record, small beside the steps. Refuses a source without targets."""
+    if src.twidth < 1:
+        raise Error("ValueError: " + who + ": a classification fit reads class indices from the source's targets; "
+                    + "it has none")
     var shards = len(src.tgt_fd)
     var counts = List[Int](length=shards, fill=0)
     for i in range(src.n):  # driver-loop: over records (their shard, once a fit)
         counts[src.rec_shard[i]] += 1
     var bad = List[Int](length=shards, fill=0)
+    var top = List[Int](length=shards, fill=0)
     var bp = _ip(Int(bad.unsafe_ptr()))
+    var mp = _ip(Int(top.unsafe_ptr()))
     var cp = _ip(Int(counts.unsafe_ptr()))
     var tfd = _ip(Int(src.tgt_fd.unsafe_ptr()))
     var toff = _ip(Int(src.tgt_off.unsafe_ptr()))
-    var limit = Float32(classes)
-    def check_shard(k: Int) {imm bp, imm cp, imm tfd, imm toff, imm limit}:
-        var n = cp[k]
+    var W = src.twidth
+    var limit = Float32(classes) if classes > 0 else Float32(16777216)
+    def scan_shard(k: Int) {imm bp, imm mp, imm cp, imm tfd, imm toff, imm W, imm limit}:
+        var n = cp[k] * W
         var words = List[Float32](length=max(1, n), fill=Float32(0))
         var got = _pread(tfd[k], Int(words.unsafe_ptr()), n * 4, toff[k])
         if got != n * 4:
             bp[k] = 2
             return
+        var most = 0
         for i in range(n):  # driver-loop: over one shard's class targets (admission)
             var v = words[i]
             if not (v >= Float32(0) and v < limit) or Float32(Int(v)) != v:
                 bp[k] = 1
                 return
-    host_parallelize(check_shard, shards)
+            most = max(most, Int(v))
+        mp[k] = most + 1
+    host_parallelize(scan_shard, shards)
+    var found = 0
     for k in range(shards):  # driver-loop: over shards (their verdicts)
         if bad[k] == 2:
             raise Error("OSError: " + who + ": reading the targets of shard " + String(k) + " failed")
         if bad[k] == 1:
-            raise Error("ValueError: " + who + ": a target of shard " + String(k) + " is not a class index in [0, "
-                        + String(classes) + ")")
+            if classes > 0:
+                raise Error("ValueError: " + who + ": a target of shard " + String(k) + " is not a class index in "
+                            + "[0, " + String(classes) + ")")
+            raise Error("ValueError: " + who + ": a target of shard " + String(k) + " is not a class index (a "
+                        + "whole number >= 0)")
+        found = max(found, top[k])
     _ = counts^
     _ = bad^
+    _ = top^
+    return found
+
+
+def batch_source_check_classes(src: BatchSource, classes: Int, who: String) raises:
+    """`batch_source_class_scan` with the class count fixed: every target word a class index in [0, classes)."""
+    _ = batch_source_class_scan(src, classes, who)

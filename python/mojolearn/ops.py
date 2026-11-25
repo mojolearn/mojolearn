@@ -3346,6 +3346,8 @@ class BatchSource:
     ----------
     n_records, n_batches, n_features, max_length : int
         Records, batches per pass, F, and the longest record.
+    target_width : int
+        W, the words of each record's target row (0 without targets).
     sealed : bool
         Whether ``index.txt`` records the shards' content digests.
 
@@ -3353,6 +3355,9 @@ class BatchSource:
     --------
     >>> source = BatchSource("shards/", batch_size=32, bucket_batches=8)  # doctest: +SKIP
     >>> program.fit(source=source, optimizer=opt, loss="output", epochs=2)  # doctest: +SKIP
+
+    ``Sequential.fit(source=...)`` and the recurrent estimators' ``fit(source=...)`` and
+    ``partial_fit(source=...)`` train on a source opened with ``inputs=("steps",)`` and ``target="targets"``.
     """
 
     def __init__(self, path, batch_size, *, inputs=("steps", "lengths"), target=None, shuffle=True, seed=0,

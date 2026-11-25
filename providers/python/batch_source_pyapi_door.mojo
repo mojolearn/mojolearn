@@ -311,6 +311,7 @@ def _open(source: PythonObject, args: PythonObject) raises:
     py_setattr(source, "n_batches", PythonObject(src.n_batches))
     py_setattr(source, "n_features", PythonObject(src.width))
     py_setattr(source, "max_length", PythonObject(src.max_len))
+    py_setattr(source, "target_width", PythonObject(src.twidth))  # lane stream-fits: 0 without targets
     py_setattr(source, "sealed", PythonObject(src.sealed))
 
 

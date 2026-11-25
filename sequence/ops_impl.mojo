@@ -19,6 +19,8 @@ from sequence.recurrent import gemm
 from sequence.layernorm_core import layer_norm_fwd_core, layer_norm_bwd_core
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, RnnOptions, opt_scalars, opt_step, rnn_fit
+from sequence.recurrent import rnn_fit_stream  # lane stream-fits
+from autograd.batch_source import batch_source_open, batch_source_fit_spec, batch_source_check_classes
 from autograd.rules_recurrent import AutogradRnnStep, rnn_predict, rnn_predict_options
 from autograd.route_ops import moe_tape_train_step
 from autograd.profile import ag_profile_on, ag_profile_report, ag_profile_reset
@@ -129,9 +131,23 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
     hold epochs * ceil(N / bs) words). The optional sixth address holds N
     float32 sequence lengths (rnn_lengths_of; 0 = none). The optional
     seventh address (lane alm-neural, 2026-11-24) holds the fit loop's
-    record words (sequence/fit_loop_words.mojo; 0 = none)."""
-    var extended = len(ip) == 15 + RNN_FIT_OPTION_INTS
-    if extended:
+    record words (sequence/fit_loop_words.mojo; 0 = none).
+
+    THE STREAMED FORM (lane stream-fits, 2026-11-25; fit(source=), partial_fit(source=)): the options form's
+    28 integers, then the batch source's words (autograd/batch_source.mojo batch_source_fit_words, max_steps the
+    exact step count, then the path's byte count) and their count; 19 addresses: the options form's 16 (X and y
+    0: the source holds the rows), the path's bytes, the estimator's saved source part (SOURCE_PART_WORDS int64
+    words, out) and the consumed position (2 int64 words, out). The source is opened here, in the training image,
+    and trained by sequence/recurrent.mojo rnn_fit_stream; ip[6] N is unused and ip[7] T is the padded length."""
+    var streamed = len(ip) > 15 + RNN_FIT_OPTION_INTS
+    var extended = len(ip) == 15 + RNN_FIT_OPTION_INTS or streamed
+    if streamed:
+        var count = ival(ip, 15 + RNN_FIT_OPTION_INTS)
+        if (count < 2 or len(ip) != 16 + RNN_FIT_OPTION_INTS + count or len(addrs) != 19
+                or len(fp) != 6 + RNN_FIT_OPTION_FLOATS):
+            raise Error("rnn_fit: the streamed form requires 19 addresses, the options form's words and the "
+                        + "source's words")
+    elif extended:
         if len(addrs) != 16 or len(fp) != 6 + RNN_FIT_OPTION_FLOATS:
             raise Error("rnn_fit: the options form requires 16 addresses, 28 integer and 9 float parameters")
     elif (len(addrs) < 5 or len(addrs) > 7) or len(ip) != 15 or len(fp) != 6:
@@ -162,6 +178,39 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
     if ival(ip, 13) < 0 or ival(ip, 14) < 0:
         raise Error("rnn_fit: the seed words must be non-negative 32-bit values")
     var cfg = opt_of(ip, 10, fp, 0)
+    if streamed:
+        # lane stream-fits: the source's words and path, the source opened here at the position they carry
+        var count = ival(ip, 15 + RNN_FIT_OPTION_INTS)
+        var words = List[Int]()
+        for k in range(count - 1):  # small-loop(the source words)
+            words.append(ival(ip, 16 + RNN_FIT_OPTION_INTS + k))
+        var path_bytes = ival(ip, 16 + RNN_FIT_OPTION_INTS + count - 1)
+        if path_bytes < 1 or addrs[16] == 0 or addrs[17] == 0 or addrs[18] == 0:
+            raise Error("rnn_fit: damaged batch source words")
+        var source = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addrs[16])
+        var text = List[UInt8](capacity=path_bytes)
+        for i in range(path_bytes):  # driver-loop: over the bytes of the source's path
+            text.append(source[i])
+        var opened = batch_source_fit_spec(String(StringSlice(unsafe_from_utf8=Span(text))), words)
+        var total = opened[1]
+        var src = batch_source_open(opened[0].copy())
+        try:
+            var opts_s = rnn_fit_options_of(addrs, ip, fp, net, task, src.n, T, epochs, True)
+            if opts_s.has_sw or opts_s.has_cw or opts_s.has_h0 or opts_s.nv > 0:
+                raise Error("ValueError: fit(source=) takes no sample_weight, class_weight, h_0, c_0 or validation")
+            if task == TASK_CE:
+                batch_source_check_classes(src, net.O, "fit(source=)")
+            var profile_s = ag_profile_fit_begin()
+            rnn_fit_stream[AutogradRnnStep](ex, net, task, src, total, T, seed, fptr(p_addr, "params"),
+                                            fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5),
+                                            addrs[6], opts_s, addrs[17], addrs[18])
+            if profile_s:
+                ag_profile_fit_end("rnn_fit_stream cell=" + String(ival(ip, 0)))
+        except error:
+            src.close()
+            raise error^
+        src.close()
+        return net.n_params()
     var lengths = rnn_lengths_of(addrs[5] if len(addrs) >= 6 else 0, N, T, "fit")
     var loop_words = addrs[6] if len(addrs) >= 7 else 0
     var opts = RnnOptions()

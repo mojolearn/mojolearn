@@ -1660,6 +1660,10 @@ def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool](
                 raise Error("ValueError: Sequential.fit(source=): the model has " + String(TW) + " outputs; the "
                             + "source's targets have width " + String(stream[].twidth))
         else:
+            if stream[].twidth != 1:
+                raise Error("ValueError: Sequential.fit(source=): a classification loss reads one class index a "
+                            + "record (targets of width 1); the source's targets have width "
+                            + String(stream[].twidth))
             batch_source_check_classes(stream[], 2 if cfg.target == TARGET_CODE_VALUES else O,
                                        "Sequential.fit(source=)")
     else:
