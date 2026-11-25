@@ -726,7 +726,6 @@ struct FitConfig(Copyable, Movable):
         self.tensor_offs = tensor_offs^
 
 
-@fieldwise_init
 struct FitValidation(Copyable, Movable):
     var x: CastIn
     var y: CastIn
