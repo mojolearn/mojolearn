@@ -261,6 +261,73 @@ def _(ml, X, yc, yr, Xh=None):
                      decoded=_h(np.frombuffer("".join(single).encode(), dtype=np.uint8))))
 
 
+# ---------------------------------------------------------------- the whole-sequence per-step model (lane rnn-parity-B)
+
+@lane("ops-per-step-weighted-embedding")
+def _(ml, X, yc, yr, Xh=None):
+    """ops.Session's per-step weighted model (lane rnn-parity-B, 2026-11-25), the user's whole-flight GRU: an
+    embedding of each sequence's category (4 sequences, 3 categories, width 2) reshaped to (1, batch, 2),
+    expanded over the 8 steps and concatenated on the last axis with 3 fixture features a step, a GRU (hidden 5)
+    with lengths 8 5 3 6 (padded steps zeroed and carried), a linear head on every step, bce_with_logits at every
+    step weighted 0 on padded steps and 30 on positives, backward and one Adam step. Parts: the loss, every
+    parameter's gradient and every updated parameter. Plus the recurrent options one seeded forward each:
+    a bidirectional GRU from a given h_0 (the forward and reverse outputs joined), and an LSTM run one step at a
+    time carrying (h_n, c_n) with return_state, digested with the whole-sequence call (inputs 5 <= 64: the same
+    words, checked here). Sabotage arms coverage-autograd-rnn_parity_loss_weight_gpu / _cpu drop the weight
+    from the loss numerator on one side: the loss, gradient and parameter parts move."""
+    T, B, F, E, H, K = 8, 4, 3, 2, 5, 3
+    x = _seq(X, T, B, F)
+    lengths = np.array([8, 5, 3, 6], dtype=np.float32)
+    category = (_ids(X, 1, B) % K).astype(np.int64).reshape(B)
+    y = (_seq(X, T, B, 1, skip=4096) > 0.6).astype(np.float32)
+    valid = (np.arange(T)[:, None] < lengths[None, :]).astype(np.float32)[:, :, None]
+    w = (valid * np.where(y > 0, 30.0, 1.0)).astype(np.float32)
+    init = {"table": _hw((K, E), "ops-psw:table", -0.3, 0.3), "w_ih": _hw((3 * H, F + E), "ops-psw:ih", -0.4, 0.4),
+            "w_hh": _hw((3 * H, H), "ops-psw:hh", -0.4, 0.4), "b_ih": _hw((1, 3 * H), "ops-psw:bi", -0.1, 0.1),
+            "b_hh": _hw((1, 3 * H), "ops-psw:bh", -0.1, 0.1), "w_out": _hw((H, 1), "ops-psw:wo", -0.5, 0.5),
+            "b_out": _hw((1, 1), "ops-psw:bo", -0.1, 0.1)}
+    parts = {}
+    with ml.ops.Session(record=True, numeric_mode="identical") as s:
+        p = {k: s.tensor(v, requires_grad=True) for k, v in init.items()}  # glue: seven parameters
+        e = s.expand(s.reshape(s.embedding(p["table"], category), (1, B, E)), (T, B, E))
+        h = s.gru(s.concat([s.tensor(x), e], axis=2), p["w_ih"], p["w_hh"], p["b_ih"], p["b_hh"],
+                  lengths=s.tensor(lengths))
+        logits = s.linear(h, p["w_out"], p["b_out"])
+        loss = s.bce_with_logits(logits, s.tensor(y), weight=s.tensor(w))
+        parts["loss"] = _h(np.asarray(s.numpy(loss)), np.asarray(s.numpy(logits)))
+        s.backward(loss)
+        parts["grad"] = _h(*[np.asarray(s.grad(p[k])) for k in init])  # glue: one array per parameter
+        s.step(s.optimizer("adam", lr=0.01), [p[k] for k in init])
+        parts["param"] = _h(*[np.asarray(s.numpy(p[k])) for k in init])  # glue: one array per parameter
+    with ml.ops.Session(numeric_mode="identical") as s:
+        xs = s.tensor(_seq(X, T, B, H, skip=8192))
+        h0 = s.tensor(_hw((B, H), "ops-psw:h0", -0.5, 0.5))
+        gw = [s.tensor(_hw(sh, f"ops-psw:bi{k}", -0.4, 0.4))
+              for k, sh in enumerate(((3 * H, H), (3 * H, H), (1, 3 * H), (1, 3 * H),
+                                      (3 * H, H), (3 * H, H), (1, 3 * H), (1, 3 * H)))]  # glue: eight weights
+        fwd = s.gru(xs, *gw[:4], h_0=h0, lengths=s.tensor(lengths))
+        rev = s.gru(xs, *gw[4:], h_0=h0, lengths=s.tensor(lengths), reverse=True)
+        parts["bidirectional"] = _h(np.asarray(s.numpy(s.concat([fwd, rev], axis=2))))
+        lw = [s.tensor(_hw(sh, f"ops-psw:l{k}", -0.4, 0.4))
+              for k, sh in enumerate(((4 * H, H), (4 * H, H), (1, 4 * H), (1, 4 * H)))]  # glue: four weights
+        whole, hn, cn = s.lstm(xs, *lw, return_state=True)
+        steps, hc, cc = [], None, None
+        for t in range(T):  # driver-loop: over time steps (the streaming form under test)
+            xt = s.tensor(_seq(X, T, B, H, skip=8192)[t:t + 1])
+            out, hc, cc = s.lstm(xt, *lw, h_0=hc, c_0=cc, return_state=True)
+            steps.append(np.asarray(s.numpy(out)))
+        streamed = np.concatenate(steps, axis=0)
+        _same_bytes("Session.lstm one step at a time", streamed, "Session.lstm whole sequence",
+                    np.asarray(s.numpy(whole)))
+        _same_bytes("Session.lstm streamed c_n", np.asarray(s.numpy(cc)), "Session.lstm c_n", np.asarray(s.numpy(cn)))
+        parts["stream"] = _h(streamed, np.asarray(s.numpy(hn)), np.asarray(s.numpy(cn)))
+    return _fit(parts)
+
+
+_batch_decl("n/a:training-step (one seeded training step through the ops session; its forward outputs are "
+            "train parts, digested whole)", "ops-per-step-weighted-embedding")
+
+
 _batch_decl("n/a:program-endpoints (session operations, captured and imported programs, containers, model "
             "and tokenizer round trips; outputs digested whole)",
             "nn-pg-session-blocks", "nn-pg-program-decode", "nn-pg-imported-program", "nn-pg-array",

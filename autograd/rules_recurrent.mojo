@@ -57,6 +57,8 @@ from sequence.recurrent import (
 )
 from autograd.rankn_layout import rankn_concat, rankn_narrow
 from autograd.loss_ops import LS_MSE
+from autograd.per_step_ops import weighted_reduce
+from autograd.losses import REDUCTION_MEAN, REDUCTION_SUM
 from autograd.kernels.recurrent import colsum, wgrad_block, wgrad_blocked
 from sequence.mlp import EPI_BIAS_ACT
 from sequence.gemm_split import gemm_split_block, gemm_split_shape
@@ -805,7 +807,7 @@ comptime OPS_RNN_SCAN = 94
 def rnn_scan_op[E: Exec](
     mut tape: Tape, mut ex: E, x: Tensor, w_ih: Tensor, w_hh: Tensor, b_ih: Tensor, b_hh: Tensor,
     cell: Int, T: Int, B: Int, lengths: Optional[FP] = None, reverse: Bool = False,
-    h0: Optional[FP] = None, c0: Optional[FP] = None,
+    h0: Optional[FP] = None, c0: Optional[FP] = None, c_last: Optional[FP] = None,
 ) raises -> Tensor:
     """One recurrent layer (cell CELL_LSTM, CELL_GRU or the tanh RNN) over a
     time-major sequence x [T B, D] from h_0 = c_0 = 0: returns h_1..h_T
@@ -867,7 +869,15 @@ def rnn_scan_op[E: Exec](
     var gx = rnn_linear(tape, ex, x, w_ih, b_ih, gxb, RNN_INPUT_BIAS_IN_GX, True, tape.requires_grad(x), w)
     # `reverse` (lane nn-recurrent): time T - 1 down to 0, the same launches (rnn_layer); the output stays in
     # time order. `h0` / `c0` (lane rnn-parity): B x H executor words, the initial state (rnn_layer); no gradient.
-    return rnn_layer(tape, ex, gx, w_hh, b_hh, tape.value(b_ih), cell, T, B, w, 0, False, reverse, h0, c0)
+    var y = rnn_layer(tape, ex, gx, w_hh, b_hh, tape.value(b_ih), cell, T, B, w, 0, False, reverse, h0, c0)
+    if c_last:
+        # Lane rnn-parity-B (`Session.lstm(..., return_state=True)`): the LSTM's final cell state, B x H words
+        # copied out of the state rows the layer wrote last: rows [T B, (T + 1) B) forward, rows [0, B)
+        # reverse (layer_fwd_scan's layout; a row past its length carries its state forward, so these hold
+        # each row's state at its own last valid step). A copy, no gradient. Without c_last nothing runs.
+        _copy(ex, c_last.value(), call + (0 if reverse else T) * B * H, B * H)
+    _ = call
+    return y
 
 
 # ------------------------------------------------------------------ trainer step
@@ -970,10 +980,11 @@ def rnn_forward_options[E: Exec](
 def rnn_weighted_sums[E: Exec](
     mut tape: Tape, mut ex: E, net: Net, task: Int, logits: Tensor, R: Int, w: Work,
 ) raises -> Tuple[Tensor, Tensor]:
-    """Lane rnn-parity: (sum_r w_r l_r, sum_r w_r) over the R rows of `logits` as tape nodes (the tape's term,
-    product and blocked fold bodies: one order on every column). l_r is the row's mean squared error over the O
-    outputs against w.yb, or its softmax cross-entropy against the code in w.yb; w_r = w.wrow[r] takes no
-    gradient."""
+    """Lane rnn-parity: (sum_r w_r l_r, sum_r w_r) over the R rows of `logits`, through the generic masked and
+    weighted loss block (autograd/per_step_ops.mojo weighted_reduce, the block `Session` losses' `weight=` use:
+    one implementation). l_r is the row's mean squared error over the O outputs against w.yb, or its softmax
+    cross-entropy against the code in w.yb; w_r = w.wrow[r] (the mask: 0 at a padded step) takes no gradient.
+    Gradient accumulation and validation chunks combine these sums, never their means."""
     var wt = tape.variable(ex, w.wrow, R, 1, False)
     var terms: Tensor
     if task == TASK_MSE:
@@ -982,17 +993,23 @@ def rnn_weighted_sums[E: Exec](
     else:
         var codes = tape.variable(ex, w.yb, R, 1, False)
         terms = tape.cross_entropy_rows(ex, logits, codes)
-    return (tape.sum(ex, tape.multiply(ex, terms, wt)), tape.sum(ex, wt))
+    return (weighted_reduce(tape, ex, terms, wt, REDUCTION_SUM), tape.sum(ex, wt))
 
 
 def rnn_weighted_loss[E: Exec](
     mut tape: Tape, mut ex: E, net: Net, task: Int, logits: Tensor, R: Int, w: Work,
 ) raises -> Tensor:
-    """Lane rnn-parity: the weighted mean sum_r w_r l_r / (sum_r w_r + 2^-126) of rnn_weighted_sums. A zero
-    total weight gives 0, never NaN (2^-126 moves no denominator above 2^-100)."""
-    var sums = rnn_weighted_sums(tape, ex, net, task, logits, R, w)
-    var den = tape.add(ex, sums[1], tape.variable(ex, w.tiny, 1, 1, False))
-    return tape.divide(ex, sums[0], den)
+    """Lane rnn-parity: the weighted mean sum_r w_r l_r / (sum_r w_r + 2^-126) of the generic block
+    (weighted_reduce, mean). A zero total weight gives 0, never NaN."""
+    var wt = tape.variable(ex, w.wrow, R, 1, False)
+    var terms: Tensor
+    if task == TASK_MSE:
+        var target = tape.variable(ex, w.yb, R, net.O, False)
+        terms = tape.mean(ex, tape.loss_terms(ex, logits, target, LS_MSE), 1)
+    else:
+        var codes = tape.variable(ex, w.yb, R, 1, False)
+        terms = tape.cross_entropy_rows(ex, logits, codes)
+    return weighted_reduce(tape, ex, terms, wt, REDUCTION_MEAN)
 
 
 def rnn_backward_autograd[E: Exec](mut tape: Tape, mut ex: E, net: Net, logits: Tensor, dy: FP, B: Int) raises:

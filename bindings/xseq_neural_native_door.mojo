@@ -17,6 +17,7 @@ predicted codes become labels in this same call.
 """
 from bindings.neural_labels_native_unpack import neural_encode_labels, neural_decode_labels
 from std.python import Python, PythonObject
+from std.memory import unsafe_memcpy
 from std.python._cpython import GILReleased
 from std.memory import unsafe_memcpy
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
@@ -53,6 +54,7 @@ from sequence.xseq_neural_run import (
     xseq_run_mlp_layers_check, xseq_run_mlp_layer_check, xseq_run_mlp_pack, xseq_run_mlp_output_check,
     xseq_run_mlp_predict, XseqRnnFitOptions, XseqRnnPredictOptions, xseq_run_rnn_fit_options,
     xseq_run_rnn_predict_options, xseq_run_rnn_layout_dirs, xseq_run_balanced_class_weights, xseq_run_remap_codes,
+    xseq_run_step_weights,
 )
 from bindings.class_weight_boundary_unpack import class_weight_dictionary_values
 from core.class_weight_plan import class_weight_plan
@@ -515,6 +517,17 @@ def _rnn_f32(source: PythonObject, name: String, context: PythonObject) raises -
     return admit_nd_f32(a, name, False, context)
 
 
+def _rnn_predict_options_of(fields: PythonObject) raises -> RnnFieldOptions:
+    """The prediction's options: output and bidirectional (two field reads; the fit-only options stay at their
+    defaults here)."""
+    var output = _field(fields, "output", PythonObject("final"))
+    var seq_out = _eq(output, "sequence")
+    if not seq_out and not _eq(output, "final"):
+        raise Error("ValueError: output must be 'final' or 'sequence', got " + _repr(output))
+    var dirs = 2 if xseq_truth(_field(fields, "bidirectional", PythonObject(False))) else 1
+    return RnnFieldOptions(seq_out, dirs, 0.0, False, 0.0, False, 0.1, 10, 1e-4, False)
+
+
 def _rnn_state_arg(source: PythonObject, slots: Int, n: Int, hidden: Int, name: String,
                    context: PythonObject) raises -> PythonObject:
     """h_0 / c_0: None, or a float32 (num_layers * num_directions, n_samples, hidden_size) array (PyTorch's h_0
@@ -557,13 +570,6 @@ def _rnn_class_weights(fields: PythonObject, target: PythonObject, n: Int, steps
         dst[c] = plan.words[c]
     _ = words
     return words
-
-
-def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, target: PythonObject,
-             route: XseqRoute, context: PythonObject, lengths_source: PythonObject) raises -> PythonObject:
-    """`_RecurrentBase._fit(X, target)`, with the optional sequence lengths (no further argument)."""
-    return _rnn_fit_full(model, fields, x_source, target, route, context, lengths_source, PythonObject(None),
-                         PythonObject(None), PythonObject(None), PythonObject(None), PythonObject(None), True, False)
 
 
 def _rnn_fit_full(model: PythonObject, fields: PythonObject, x_source: PythonObject, target_in: PythonObject,
@@ -836,57 +842,246 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
     return Python.tuple(out, seq)
 
 
+def _rnn_run_options(model: PythonObject, fields: PythonObject, source: PythonObject, want_seq: Bool,
+                     route: XseqRoute, context: PythonObject, lengths_source: PythonObject, fo: RnnFieldOptions,
+                     h0_source: PythonObject, c0_source: PythonObject, want_state: Bool) raises -> PythonObject:
+    """_rnn_run with the options (lane rnn-parity): two directions, every step's head ((n, T, O)), initial states
+    and, with `want_state` (streaming), the final states: `(out, seq, (h_n, c_n))` (c_n None but for the LSTM)."""
+    var x = _rnn_x(source, fields, False, context)
+    var n = Int(py=x.shape[0])
+    var steps_t = Int(py=x.shape[1])
+    var lengths = _rnn_lengths(lengths_source, n, context)
+    var nk = xseq_keys()
+    var hidden = xseq_int(py_item(fields, nk[].k_hidden_size))
+    var layers = xseq_int(py_item(fields, nk[].k_num_layers))
+    var outputs = Int(py=py_item(fields, nk[].k_n_outputs_))
+    var slots = layers * fo.dirs
+    var out = xseq_zeros(Python.tuple(n, steps_t, outputs) if fo.seq_out else Python.tuple(n, outputs), context)
+    var seq = xseq_zeros(Python.tuple(n, steps_t, fo.dirs * hidden) if want_seq else Python.tuple(1), context)
+    var h0 = _rnn_state_arg(h0_source, slots, n, hidden, "h_0", context)
+    var c0 = _rnn_state_arg(c0_source, slots, n, hidden, "c_0", context)
+    var cell = _rnn_cell(model, fields)
+    var hn = xseq_zeros(Python.tuple(slots, n, hidden), context) if want_state else PythonObject(None)
+    var cn = xseq_zeros(Python.tuple(slots, n, hidden), context) if want_state and cell == 2 else PythonObject(None)
+    var params = admit_nd_f32(xseq_private_input(py_item(fields, nk[].k_params_), context, "params_"), "params_",
+                              False, context)
+    var ints = _rnn_ints(model, fields)
+    var n_params = xseq_run_rnn_layout_dirs(ints, fo.dirs, Int(py=params.size))
+    var task = Int(py=_attr(py_type(model), "_TASK"))
+    var request = XseqRnnPredictRequest(ints^, n_params, task, n, steps_t, xseq_int(py_item(fields, nk[].k_predict_chunk)),
+                                        want_seq, Int(model._obj_ptr), 0)
+    var o = XseqRnnPredictOptions(fo.dirs, fo.seq_out, 0 if h0 is None else Int(py=xseq_addr(h0)),
+                                  0 if c0 is None else Int(py=xseq_addr(c0)), 0 if hn is None else Int(py=xseq_addr(hn)),
+                                  0 if cn is None else Int(py=xseq_addr(cn)))
+    var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(params)), Int(py=xseq_addr(out)), Int(py=xseq_addr(seq))]
+    var provider = xseq_neural_provider(route.entries)
+    var entry = _entry(provider)
+    var py = Python()
+    with GILReleased(py):
+        xseq_run_rnn_predict_options(entry, request, addresses[0], addresses[1], addresses[2], addresses[3],
+                                     _rnn_lengths_address(lengths), o)
+    _ = lengths  # keep the Python objects alive through the native call above
+    _ = provider
+    _ = params
+    _ = x
+    _ = h0
+    _ = c0
+    _ = route.owner
+    return Python.tuple(out, seq, Python.tuple(hn, cn))
+
+
+def _arg(args: PythonObject, i: Int) raises -> PythonObject:
+    """args[i], None past the end (callers of before send shorter tuples)."""
+    return args[i] if len(args) > i else PythonObject(None)
+
+
+def _codes_against(classes: PythonObject, source: PythonObject, route: XseqRoute, n: Int,
+                   context: PythonObject) raises -> PythonObject:
+    """The float32 codes of labels `source` against the FITTED `classes` (partial_fit after the first call, a
+    validation target): the label encoder's own codes mapped through each of its classes' index in `classes`
+    (equality of the few class labels: metadata); a label that is not a fitted class raises."""
+    var encoded = xseq_labels(source, route.entries, context)
+    var own = encoded[0]
+    var mapping = List[Int]()
+    for j in range(len(own)):  # small-loop(classes)
+        var at = -1
+        for i in range(len(classes)):  # small-loop(classes)
+            if Bool(py=own[j] == classes[i]):
+                at = i
+                break
+        if at < 0:
+            raise Error("ValueError: y holds the label " + _repr(own[j]) + ", which is not one of the fitted classes "
+                        + _repr(classes))
+        mapping.append(at)
+    var codes = encoded[1]
+    var count = Int(py=codes.shape[0])
+    if count != n:
+        raise Error("ValueError: y must hold " + String(n) + " labels")
+    var target = xseq_zeros(Python.tuple(count), context)
+    xseq_run_remap_codes(Int(py=xseq_addr(codes)), count, mapping, Int(py=xseq_addr(target)))
+    _ = codes
+    return target
+
+
+def _rnn_target(model: PythonObject, fields: PythonObject, y_source: PythonObject, n: Int, steps: Int,
+                seq_out: Bool, keep_classes: Bool, route: XseqRoute, context: PythonObject,
+                fitting: Bool) raises -> PythonObject:
+    """The float32 training target: regression (n,) / (n, O), or with output="sequence" (n, T) / (n, T, O), as N S
+    rows of O words; classification: N S class codes (labels (n,), or (n, T) per step). `fitting` writes
+    n_outputs_ / _y_1d / classes_; `keep_classes` maps against the fitted classes_ instead of encoding anew."""
+    var nk = xseq_keys()
+    var task = Int(py=_attr(py_type(model), "_TASK"))
+    var rows = n * steps
+    if task == 0:
+        var y = _rnn_f32(y_source, "y", context)
+        var rank = Int(py=y.ndim)
+        var base = 2 if seq_out else 1
+        if rank < base or rank > base + 1 or Int(py=y.shape[0]) != n or (seq_out and Int(py=y.shape[1]) != steps):
+            raise Error("ValueError: y must have shape " + String("(n_samples, n_timesteps[, n_outputs])" if seq_out
+                        else "(n_samples[, n_outputs])"))
+        var target = xseq_reshape(y, Python.tuple(rows, -1))
+        if fitting:
+            py_setitem(fields, nk[].k__y_1d, rank == base)
+            py_setitem(fields, nk[].k_n_outputs_, Int(py=target.shape[1]))
+        elif Int(py=target.shape[1]) != Int(py=py_item(fields, nk[].k_n_outputs_)):
+            raise Error("ValueError: y must have the fitted n_outputs_")
+        return target
+    var flat = y_source
+    if seq_out:
+        var y = xseq_input(y_source, context)
+        if Int(py=y.ndim) != 2 or Int(py=y.shape[0]) != n or Int(py=y.shape[1]) != steps:
+            raise Error("ValueError: y must have shape (n_samples, n_timesteps): one label per step")
+        flat = xseq_reshape(y, Python.tuple(rows))
+    if keep_classes:
+        return _codes_against(py_item(fields, nk[].k_classes_), flat, route, rows, context)
+    var encoded = xseq_labels(flat, route.entries, context)
+    py_setitem(fields, nk[].k_classes_, encoded[0])
+    var k = len(encoded[0])
+    if k < 2:
+        raise Error("classification needs at least two classes")
+    py_setitem(fields, nk[].k_n_outputs_, k)
+    var codes = encoded[1]
+    var count = Int(py=codes.shape[0])
+    var target = xseq_zeros(Python.tuple(count), context)
+    xseq_codes_f32(XI32P(unsafe_from_address=Int(py=xseq_addr(codes))), xseq_f32p(target), count)
+    _ = codes
+    return target
+
+
+def _rnn_fit_op(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """fit(X, y, lengths, sample_weight, h_0, c_0, validation_data, restore_best, partial) (lane rnn-parity:
+    every argument after lengths optional; partial is partial_fit's one epoch)."""
+    var fo = rnn_field_options(fields)
+    var route = xseq_route(model, fields, context)
+    var partial = xseq_truth(_arg(args, 8))
+    var nk = xseq_keys()
+    var x = _rnn_x(args[0], fields, not (partial and py_contains(fields, nk[].k_params_)), context)
+    var n = Int(py=x.shape[0])
+    var steps = Int(py=x.shape[1]) if fo.seq_out else 1
+    var keep = partial and py_contains(fields, nk[].k_classes_)
+    var target = _rnn_target(model, fields, args[1], n, steps, fo.seq_out, keep, route, context, not partial or
+                             not py_contains(fields, nk[].k_n_outputs_))
+    var validation = PythonObject(None)
+    var vtarget = PythonObject(None)
+    var vd = _arg(args, 6)
+    if vd is not None:
+        if len(vd) != 2 and len(vd) != 3:
+            raise Error("ValueError: validation_data must be (X_val, y_val) or (X_val, y_val, lengths_val)")
+        var vx = _rnn_x(vd[0], fields, False, context)
+        var nv = Int(py=vx.shape[0])
+        vtarget = _rnn_target(model, fields, vd[1], nv, Int(py=vx.shape[1]) if fo.seq_out else 1, fo.seq_out, True,
+                              route, context, False)
+        validation = Python.tuple(vd[0], vd[2] if len(vd) == 3 else PythonObject(None))
+    var restore = True if _arg(args, 7) is None else xseq_truth(args[7])
+    # every option at its default runs the RNN_FIT call of before (_rnn_fit_full's `plain`)
+    return _rnn_fit_full(model, fields, args[0], target, route, context, _arg(args, 2), _arg(args, 3), _arg(args, 4),
+                         _arg(args, 5), validation, vtarget, restore, partial)
+
+
 def xseq_rnn(model: PythonObject, operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
     # bw2-sequence (2026-11-20): `operation` is the xseq code (bindings/xseq_keys_unpack.mojo); it was
     # the name String, compared per call. A code that is not one of these (an unknown `rnn_` name
     # is -1) predicts, as the name chain did.
     var fields = py_fields(model)
-    # The optional sequence lengths travel last in `args` (fit (X, y, lengths), the predictions (X, lengths));
-    # a caller that passes none sends the tuple it sent before.
-    var lengths_at = 2 if operation == XSEQ_OPN_RNN_FIT else 1
-    var lengths_source = args[lengths_at] if len(args) > lengths_at else PythonObject(None)
     if operation == XSEQ_OPN_RNN_FIT:
-        var nk = xseq_keys()
-        var task = Int(py=_attr(py_type(model), "_TASK"))
-        if task == 0:
-            var y = xseq_input(args[1], context)
-            xseq_refuse_f64(y, "y: float64 is refused; pass float32 (no float64 on the device)")
-            y = admit_nd_f32(y, "y", False, context)
-            py_setitem(fields, nk[].k__y_1d, Int(py=y.ndim) == 1)
-            var rows = Int(py=y.shape[0])
-            var target = xseq_reshape(y, Python.tuple(rows, -1))
-            py_setitem(fields, nk[].k_n_outputs_, Int(py=target.shape[1]))
-            return _rnn_fit(model, fields, args[0], target, xseq_route(model, fields, context), context, lengths_source)
-        var route = xseq_route(model, fields, context)
-        var encoded = xseq_labels(args[1], route.entries, context)
-        py_setitem(fields, nk[].k_classes_, encoded[0])
-        var k = len(encoded[0])
-        if k < 2:
-            raise Error("classification needs at least two classes")
-        py_setitem(fields, nk[].k_n_outputs_, k)
-        # the int32 codes as the float32 target the recurrent loss reads
-        var codes = encoded[1]
-        var count = Int(py=codes.shape[0])
-        var target = xseq_zeros(Python.tuple(count), context)
-        xseq_codes_f32(XI32P(unsafe_from_address=Int(py=xseq_addr(codes))), xseq_f32p(target), count)
-        _ = target  # keep the Python object alive through the native call above
-        _ = codes  # keep the Python object alive through the native call above
-        return _rnn_fit(model, fields, args[0], target, route, context, lengths_source)
+        return _rnn_fit_op(model, fields, args, context)
+    # predictions: (X, lengths, h_0, c_0, want_state) (lane rnn-parity: every word after lengths optional)
+    var lengths_source = _arg(args, 1)
     var route = xseq_route(model, fields, context)
+    # the two words a prediction needs (output, bidirectional), not the fit's whole option set
+    var fo = _rnn_predict_options_of(fields)
+    var h0 = _arg(args, 2)
+    var c0 = _arg(args, 3)
+    var want_state = xseq_truth(_arg(args, 4))
+    if want_state and h0 is not None:
+        # step(X, state): the state is the (h_n, c_n) pair a previous step returned
+        var b = native_loaded_module("builtins")
+        if not Bool(py=py_call(b.isinstance, h0, b.tuple)) or len(h0) != 2:
+            raise Error("TypeError: state must be the (h, c) pair step returned, or None")
+        c0 = h0[1]
+        h0 = h0[0]
+    var options = not (fo.seq_out == False and fo.dirs == 1 and h0 is None and not want_state)
     if operation == XSEQ_OPN_RNN_HIDDEN_SEQUENCE:
+        if options:
+            return _rnn_run_options(model, fields, args[0], True, route, context, lengths_source, fo, h0, c0, False)[1]
         return _rnn_run(model, fields, args[0], True, route, context, lengths_source)[1]
     var nk = xseq_keys()
-    var result = _rnn_run(model, fields, args[0], False, route, context, lengths_source)
+    var result = (_rnn_run_options(model, fields, args[0], False, route, context, lengths_source, fo, h0, c0, want_state)
+                  if options else _rnn_run(model, fields, args[0], False, route, context, lengths_source))
     var out = result[0]
-    if operation == XSEQ_OPN_RNN_PREDICT_PROBA:
-        return out
-    if Int(py=_attr(py_type(model), "_TASK")) == 0:
+    var task = Int(py=_attr(py_type(model), "_TASK"))
+    var n = Int(py=out.shape[0])
+    var lead = Python.tuple(n, Int(py=out.shape[1])) if fo.seq_out else Python.tuple(n)
+    var value: PythonObject
+    if operation == XSEQ_OPN_RNN_PREDICT_PROBA or (want_state and task == 1):
+        value = out
+    elif task == 0:
+        value = out
         if xseq_truth(py_get(fields, nk[].k__y_1d, PythonObject(False))):
-            return xseq_reshape(out, Python.tuple(out.shape[0]))
-        return out
-    var rows = Int(py=out.shape[0])
-    var codes = xseq_argmax(out, rows, Int(py=out.shape[1]), route.output, context)
-    return xseq_take(xseq_public_labels(fields, context), codes, context)
+            value = xseq_reshape(out, lead)
+    else:
+        var k = Int(py=out.shape[len(out.shape) - 1])
+        var rows = Int(py=out.size) // k
+        var codes = xseq_argmax(out, rows, k, route.output, context)
+        value = xseq_take(xseq_public_labels(fields, context), codes, context)
+        if fo.seq_out:
+            value = xseq_reshape(value, lead)
+    if want_state:
+        return Python.tuple(value, result[2])
+    return value
+
+
+def xseq_rnn_sequence_score(model: PythonObject, prediction: PythonObject, args: PythonObject,
+                            context: PythonObject) raises -> PythonObject:
+    """score with output="sequence" (lane rnn-parity): `(prediction, args)` flattened to one row per step, and the
+    steps' weights (each sequence's valid steps 1, its padded steps 0, times sample_weight per sequence or per
+    step) as the score's sample_weight, so R^2 or the accuracy covers every valid step. None when the model's
+    output is 'final' (the score of before)."""
+    var fields = py_fields(model)
+    if not _eq(_field(fields, "output", PythonObject("final")), "sequence"):
+        return PythonObject(None)
+    var n = Int(py=prediction.shape[0])
+    var steps = Int(py=prediction.shape[1])
+    var rows = n * steps
+    var lead = Python.tuple(rows) if Int(py=prediction.ndim) == 2 else Python.tuple(rows, -1)
+    var pred = xseq_reshape(prediction, lead)
+    var y = xseq_input(args[1], context)
+    var ylead = Python.tuple(rows) if Int(py=y.ndim) == 2 else Python.tuple(rows, -1)
+    var yf = xseq_reshape(y, ylead)
+    var lengths = _rnn_lengths(_arg(args, 3), n, context)
+    var sw = PythonObject(None)
+    var sw_steps = False
+    if _arg(args, 2) is not None:
+        sw = _rnn_f32(args[2], "sample_weight", context)
+        sw_steps = Int(py=sw.ndim) == 2
+    var weights = PythonObject(None)
+    if lengths is not None or sw is not None:
+        weights = xseq_zeros(Python.tuple(rows), context)
+        xseq_run_step_weights(n, steps, _rnn_lengths_address(lengths), 0 if sw is None else Int(py=xseq_addr(sw)),
+                              sw_steps, Int(py=xseq_addr(weights)))
+    _ = lengths
+    _ = sw
+    return Python.tuple(pred, Python.tuple(args[0], yf, weights))
 
 
 # ---------------------------------------------------------------- multi-layer perceptrons

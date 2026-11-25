@@ -5104,6 +5104,7 @@ PUBLIC_PENDING_LANES = {
     "nn-tr-schedules": "no reference",
     "nn-tr-seqopt-state": "no reference",
     "nn-tr-small-mlp": "no reference",
+    "ops-per-step-weighted-embedding": "no reference",  # lane rnn-parity-B (2026-11-25)
     "psd-arima": "no reference",
     "psd-cross-val": "no reference",
     "psd-forecast-arima": "no reference",

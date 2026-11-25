@@ -20,10 +20,11 @@ from autograd.ops_frontend_impl import session_split, clip_low_unbounded, clip_h
 from autograd.ops_block_frontend import (
     SESSION_ATTENTION_MIN_PIECES, SESSION_ATTENTION_GATE, session_mamba_code, session_attention_ints,
     session_attention_option_words, session_block_create, session_block_step, session_lm_rows, session_lm_pick,
-    session_lm_alive, session_rnn,
+    session_lm_alive, session_rnn, session_rnn_state,
 )
 from sequence.ops import CELL_LSTM, CELL_GRU, CELL_RNN_TANH
 from autograd.block_step_ops import OPS_ATTN_STEP
+from autograd.per_step_ops import OPS_WEIGHTED_LOSS
 from autograd.program_io import ProgramInput
 from core.cast_in import CastIn
 from providers.python.autograd_program_arrays_pyapi_door import output_array_unfilled, is_integer_input, uint64_input, program_admit_value, program_numeric_scalar, program_builtin_types
@@ -633,11 +634,29 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
             _int(py_item(block, nk[].k_state), "state", 1), words, config, _float(py_item(block, nk[].k_dt_lo), "dt_limit"),
             _float(py_item(block, nk[].k_dt_hi), "dt_limit"), op == _SOP_ATTENTION_STEP))
     if op == _SOP_LSTM or op == _SOP_GRU or op == _SOP_RNN:
-        # args (x, weight_ih, weight_hh, bias_ih, bias_hh): tensor handles
+        # args (x, weight_ih, weight_hh, bias_ih, bias_hh, h_0, c_0, lengths,
+        # reverse, return_state): tensor handles, None for an absent option
+        # (c_0 is None for gru and rnn), then two flags (lane rnn-parity-B).
         var cell = CELL_LSTM if op == _SOP_LSTM else (CELL_GRU if op == _SOP_GRU else CELL_RNN_TANH)
-        return PythonObject(session_rnn[E, KIND](
+        var h0 = 0 if _nil(args[5]) else _int(args[5], "h_0", 1)
+        var c0 = 0 if _nil(args[6]) else _int(args[6], "c_0", 1)
+        var lengths = 0 if _nil(args[7]) else _int(args[7], "lengths", 1)
+        var reverse = Bool(py=args[8])
+        var return_state = Bool(py=args[9])
+        if not return_state:
+            return PythonObject(session_rnn[E, KIND](
+                Int(py=sid), cell, _int(args[0], "input", 1), _int(args[1], "weight_ih", 1),
+                _int(args[2], "weight_hh", 1), _int(args[3], "bias_ih", 1), _int(args[4], "bias_hh", 1),
+                h0, c0, lengths, reverse))
+        var got = session_rnn_state[E, KIND](
             Int(py=sid), cell, _int(args[0], "input", 1), _int(args[1], "weight_ih", 1),
-            _int(args[2], "weight_hh", 1), _int(args[3], "bias_ih", 1), _int(args[4], "bias_hh", 1)))
+            _int(args[2], "weight_hh", 1), _int(args[3], "bias_ih", 1), _int(args[4], "bias_hh", 1),
+            h0, c0, lengths, reverse, True)
+        # PACK: (outputs, h_T) for gru and rnn, (outputs, h_T, c_T) for lstm
+        if cell == CELL_LSTM:
+            return _tuple_ints(got)
+        var two: List[Int] = [got[0], got[1]]
+        return _tuple_ints(two)
     if op == _SOP_LM_ROWS:
         # args (batch_size, eos_token_ids): an int, or a sequence of ints
         var eos = List[Int]()
@@ -1028,11 +1047,23 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         if reduction != "mean" and reduction != "sum":
             raise Error("ValueError: reduction must be 'mean' or 'sum'")
         ints.append(0 if reduction == "mean" else 1)
+        var delta = Float32(1)
         if op == _SOP_HUBER:
-            var delta = _float(args[2], "delta")
+            delta = _float(args[2], "delta")
             if not delta > 0:
                 raise Error("ValueError: delta must be positive")
             fs.append(delta)
+        # Lane rnn-parity-B: weight= (args[4] for huber, else args[3]); None keeps
+        # the unweighted code above, its words unchanged. A weight selects
+        # OPS_WEIGHTED_LOSS (autograd/per_step_ops.mojo): hs [p, y, weight],
+        # ints [the unweighted code, reduction], floats [delta].
+        var weight = args[4 if op == _SOP_HUBER else 3]
+        if not _nil(weight):
+            hs.append(_int(weight, "weight", 1))
+            var red = ints[0]
+            ints = [code, red]
+            fs = [delta]
+            code = OPS_WEIGHTED_LOSS
     elif op == _SOP_SMALL_MLP:
         # lane fx-ops-session-blocks: OPS_SMALL_MLP (autograd/small_mlp_op.mojo)
         code = 88
