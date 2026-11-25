@@ -125,13 +125,14 @@ def rankn_conv2d[E: Exec](
 
 def rankn_conv1d[E: Exec](
     mut tape: Tape, mut ex: E, x: Tensor, weight: Tensor, bias: Optional[Tensor] = None,
-    stride: Int = 1, padding: Int = 0, groups: Int = 1,
+    stride: Int = 1, padding: Int = 0, groups: Int = 1, dilation: Int = 1,
 ) raises -> Tensor:
     """One-dimensional convolution (cross-correlation) of a batch of sequences.
 
     The same node as rankn_conv2d over (N, C, 1, L) with a (OC, C // groups, 1, K) kernel,
-    step (1, stride) and pads (0, padding): one im2col, one GEMM chain over the C // groups K
-    terms, one output launch, and the conv2d backward.
+    step (1, stride), pads (0, padding) and tap spacing (1, dilation): one im2col, one GEMM chain
+    over the C // groups K terms, one output launch, and the conv2d backward. Sequential's conv1d
+    layer passes no dilation (1); ops.Session.conv1d passes PyTorch's (lane session-ops-conv).
 
     Args:
         tape: The tape that records the operation.
@@ -142,9 +143,10 @@ def rankn_conv1d[E: Exec](
         stride: The step between windows.
         padding: Zeros added at both ends of each sequence.
         groups: The number of channel groups; it divides C and out_channels.
+        dilation: The spacing between kernel taps.
 
     Returns:
-        The output, shape (N, out_channels, OL), OL = (L + 2 padding - K) // stride + 1.
+        The output, shape (N, out_channels, OL), OL = (L + 2 padding - dilation (K - 1) - 1) // stride + 1.
     """
     var sx = tape.shape_of(x)
     var sw = tape.shape_of(weight)
@@ -154,7 +156,7 @@ def rankn_conv1d[E: Exec](
         raise Error("conv1d: weight must be a rank-3 tensor")
     var x4 = tape.view_nd(ex, x, _shape4(sx.d[0], sx.d[1], 1, sx.d[2]))
     var w4 = tape.view_nd(ex, weight, _shape4(sw.d[0], sw.d[1], 1, sw.d[2]))
-    var y4 = _rankn_conv(tape, ex, x4, w4, bias, 1, stride, 0, padding, groups)
+    var y4 = _rankn_conv(tape, ex, x4, w4, bias, 1, stride, 0, padding, groups, 1, dilation)
     var sy = tape.shape_of(y4)
     return tape.view_nd(ex, y4, _shape3(sy.d[0], sy.d[1], sy.d[3]))
 
