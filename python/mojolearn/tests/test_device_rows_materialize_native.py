@@ -38,10 +38,16 @@ def _released(owner, value, *views):
     # of `views`: their reference-count drops when `release` frees the entry
     # (the entry pins the owner object and its prepared Array, so a prepared
     # Array that aliases the caller's storage shows as a second reference).
+    # Both counts are read the same way, outside any zip: CPython's zip keeps
+    # its reused result tuple, which still holds `item` while
+    # `sys.getrefcount(item)` runs, so counting inside
+    # `for held, item in zip(before, objects)` read every drop one short
+    # (written so in 5c14d6f780; the 41 reds of gate 9: held=0 for a copy).
     objects = (value, *views)
     before = [sys.getrefcount(item) for item in objects]
     owner.release(value)
-    return [held - sys.getrefcount(item) for held, item in zip(before, objects)]
+    after = [sys.getrefcount(item) for item in objects]
+    return [held - left for held, left in zip(before, after)]
 
 
 def _refused(audit, category=TypeError):
