@@ -194,6 +194,12 @@ comptime _SOP_SCAN = 1118
 comptime _SOP_CUSTOM_OP = 1260
 comptime _SOP_CUSTOM = 1261
 # nn-blocks-cbw end
+# session-ops-extra begin: 1000 + the session codes (180..183; the soft-target cross-entropy is cross_entropy's name)
+comptime _SOP_SEQUENCE_MASK = 1180
+comptime _SOP_TOPK = 1181
+comptime _SOP_GATHER = 1182
+comptime _SOP_LOGSUMEXP = 1183
+# session-ops-extra end
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -371,6 +377,12 @@ struct _SessionOpCodes(Defaultable, Movable):
         self.codes["custom_op"] = _SOP_CUSTOM_OP
         self.codes["custom"] = _SOP_CUSTOM
         # nn-blocks-cbw end
+        # session-ops-extra begin
+        self.codes["sequence_mask"] = _SOP_SEQUENCE_MASK
+        self.codes["topk"] = _SOP_TOPK
+        self.codes["gather"] = _SOP_GATHER
+        self.codes["logsumexp"] = _SOP_LOGSUMEXP
+        # session-ops-extra end
 
 
 # One table per process (identical contents in every extension that links this file).

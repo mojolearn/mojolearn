@@ -96,6 +96,13 @@ from providers.python.nn_pg_pyapi_door import (
 from autograd.autograd_ops_frontend_run import _SOP_SCATTER_ADD, _SOP_SEGMENT_SUM, _SOP_SEGMENT_MEAN, _SOP_SEGMENT_MAX
 from autograd.nn_scatter import OPS_SCATTER_ADD, OPS_SEGMENT_SUM
 # nn-blocks-scatter end
+# session-ops-extra begin
+from autograd.autograd_ops_frontend_run import _SOP_SEQUENCE_MASK, _SOP_TOPK, _SOP_GATHER, _SOP_LOGSUMEXP
+from autograd.session_ops_extra import (
+    OPS_SEQUENCE_MASK, OPS_TOPK_INDICES, OPS_GATHER_AXIS, OPS_LOGSUMEXP, OPS_SOFT_CROSS_ENTROPY,
+    OPS_SOFT_CROSS_ENTROPY_WEIGHTED,
+)
+# session-ops-extra end
 
 
 struct _SessionOpNames(Defaultable, Movable):
@@ -1083,7 +1090,19 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         # OPS_WEIGHTED_LOSS (autograd/per_step_ops.mojo): hs [p, y, weight],
         # ints [the unweighted code, reduction], floats [delta].
         var weight = args[4 if op == _SOP_HUBER else 3]
-        if not _nil(weight):
+        # session-ops-extra begin: a target DISTRIBUTION (the logits' shape, more than one class) picks the
+        # soft-target codes 184 / 185 here at UNPACK; class codes keep code 28 / OPS_WEIGHTED_LOSS unchanged
+        var soft = False
+        if op == _SOP_CROSS_ENTROPY:
+            var ce_shape = s[].shape_nd(hs[0])
+            soft = ce_shape.ndim > 0 and ce_shape.d[ce_shape.ndim - 1] > 1 and ce_shape.same(s[].shape_nd(hs[1]))
+        if soft:
+            code = OPS_SOFT_CROSS_ENTROPY
+            if not _nil(weight):
+                hs.append(_int(weight, "weight", 1))
+                code = OPS_SOFT_CROSS_ENTROPY_WEIGHTED
+        # session-ops-extra end
+        elif not _nil(weight):
             hs.append(_int(weight, "weight", 1))
             var red = ints[0]
             ints = [code, red]
@@ -1153,6 +1172,42 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         hs = [_int(args[0], "data", 1), _int(args[1], "segment_ids", 1)]
         ints.append(_int(args[2], "num_segments"))
     # nn-blocks-scatter end
+    # session-ops-extra begin
+    elif op == _SOP_SEQUENCE_MASK:
+        # args (lengths, max_length)
+        code = OPS_SEQUENCE_MASK
+        hs.append(_int(args[0], "lengths", 1))
+        ints.append(_int(args[1], "max_length", 1))
+    elif op == _SOP_TOPK:
+        # args (x, k, axis, largest, sorted): two operations, recorded (and captured) one after the other: the
+        # indices (181), then the values as gather(x, axis, indices) (182), so the gradient reaches x through the
+        # gather. The result is always sorted, which `sorted=False` (any order) also allows.
+        var tx = _int(args[0], "x", 1)
+        var tk = _int(args[1], "k", 1)
+        var taxis = _int(args[2], "axis")
+        var thx: List[Int] = [tx]
+        var tki: List[Int] = [tk, taxis, Int(Bool(py=args[3]))]
+        var tidx = s[].op(OPS_TOPK_INDICES, thx, tki, fs)
+        var tgh: List[Int] = [tx, tidx]
+        var tgi: List[Int] = [taxis]
+        var tval = s[].op(OPS_GATHER_AXIS, tgh, tgi, fs)
+        var tpair: List[Int] = [tval, tidx]
+        return _tuple_ints(tpair)
+    elif op == _SOP_GATHER:
+        # args (x, axis, index): torch.gather's order; index an ids() tensor (or topk's indices)
+        code = OPS_GATHER_AXIS
+        if not _is_int(args[2]):
+            raise Error("TypeError: gather: index must be an integer tensor made with Session.ids")
+        hs = [_int(args[0], "x", 1), _int(args[2], "index", 1)]
+        ints.append(_int(args[1], "axis"))
+    elif op == _SOP_LOGSUMEXP:
+        # args (x, axis, keepdims): one axis
+        code = OPS_LOGSUMEXP
+        if not _is_int(args[1]):
+            raise Error("TypeError: logsumexp: axis must be one integer")
+        hs.append(_int(args[0], "x", 1))
+        ints = [_int(args[1], "axis"), Int(Bool(py=args[2]))]
+    # session-ops-extra end
     # nn-blocks-pg begin
     if op >= _SOP_PG_FIRST and op <= _SOP_PG_LAST:
         return pg_session_call_py[E](s, op, args)

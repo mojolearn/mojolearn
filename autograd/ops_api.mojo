@@ -179,6 +179,13 @@ from autograd.session_layer_rules import (
     LayerRules, OPS_LAYER_FIRST, OPS_LAYER_LAST, OPS_LAYER_POOL_FIRST, OPS_LAYER_RESIZE_FIRST, OPS_LAYER_REST_FIRST,
     OPS_LAYER_EXTRA_FIRST,
 )
+# session-ops-extra begin: sequence_mask, topk, gather along an axis, logsumexp, soft-target cross-entropy
+from autograd.session_ops_extra import (
+    OPS_SEQUENCE_MASK, OPS_TOPK_INDICES, OPS_GATHER_AXIS, OPS_LOGSUMEXP, OPS_SOFT_CROSS_ENTROPY,
+    OPS_SOFT_CROSS_ENTROPY_WEIGHTED, session_ops_extra_int_result, sox_sequence_mask, sox_topk_indices, sox_gather,
+    sox_logsumexp, sox_soft_cross_entropy,
+)
+# session-ops-extra end
 # session-ops end
 # nn-blocks-qkv begin: attention over explicit q, k, v (session code 122, autograd/nn_qkv.mojo)
 from autograd.nn_qkv import OPS_ATTENTION_QKV, qkv_attention
@@ -2574,7 +2581,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if self.tape.is_recording():
             self.layer_nodes = True
         var result = self._add(t, 0, False, 0)
-        self.int_words[self._slot(result)] = False
+        # session-ops-extra: topk's indices are int32 words (an ids tensor); every other layer op returns floats
+        self.int_words[self._slot(result)] = session_ops_extra_int_result(code)
         return result
 
     # session-ops-conv begin: codes 130..139 (sub-lane session-ops-conv replaces this body)
@@ -2607,7 +2615,51 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
 
     # session-ops-extra begin: codes 180..189 (sub-lane session-ops-extra replaces this body)
     def _layer_extra(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Tensor:
-        """sequence_mask, topk, gather along an axis, logsumexp and the soft-target cross-entropy."""
+        """sequence_mask, topk, gather along an axis, logsumexp and the soft-target cross-entropy
+        (autograd/session_ops_extra.mojo has the words, launches and refusals of each)."""
+        var n = len(x)
+        var ni = len(ints)
+        var nf = len(fs)
+        if code == OPS_SEQUENCE_MASK:
+            # [lengths], ints [max_length]
+            _need("sequence_mask", n, 1, 1, ni, 0, nf)
+            if self.int_words[self._slot(hs[0])]:
+                raise Error("ValueError: ops: sequence_mask: lengths must be a floating-point tensor (one length per"
+                            + " sequence, as Session.scan takes)")
+            return sox_sequence_mask(self.tape, self.ex, x[0], ints[0])
+        if code == OPS_TOPK_INDICES:
+            # [x], ints [k, axis, largest (0, 1)]
+            _need("topk", n, 1, 3, ni, 0, nf)
+            if self.int_words[self._slot(hs[0])]:
+                raise Error("ValueError: ops: topk: x must be a floating-point tensor")
+            return sox_topk_indices(self.tape, self.ex, x[0], ints[0], ints[1], ints[2] != 0)
+        if code == OPS_GATHER_AXIS:
+            # [x, index (an ids tensor)], ints [axis]
+            _need("gather", n, 2, 1, ni, 0, nf)
+            if self.int_words[self._slot(hs[0])]:
+                raise Error("ValueError: ops: gather: x must be a floating-point tensor")
+            var gi = self._slot(hs[1])
+            if not self.int_words[gi]:
+                raise Error("ValueError: ops: gather: index must be an integer tensor made with Session.ids or"
+                            + " returned by Session.topk")
+            return sox_gather(self.tape, self.ex, x[0], ints[0], self.tape.value_of(self.ex, x[1]), self.shapes[gi])
+        if code == OPS_LOGSUMEXP:
+            # [x], ints [axis, keepdims (0, 1)]
+            _need("logsumexp", n, 1, 2, ni, 0, nf)
+            if self.int_words[self._slot(hs[0])]:
+                raise Error("ValueError: ops: logsumexp: x must be a floating-point tensor")
+            return sox_logsumexp(self.tape, self.ex, x[0], ints[0], ints[1] != 0)
+        if code == OPS_SOFT_CROSS_ENTROPY or code == OPS_SOFT_CROSS_ENTROPY_WEIGHTED:
+            # [logits, target (a distribution of the logits' shape), (weight)], ints [reduction]
+            var weighted = code == OPS_SOFT_CROSS_ENTROPY_WEIGHTED
+            _need("cross_entropy", n, 3 if weighted else 2, 1, ni, 0, nf)
+            for q in range(n):  # small-loop(n: two or three operands): operand kinds, no data
+                if self.int_words[self._slot(hs[q])]:
+                    raise Error("ValueError: ops: cross_entropy: logits, a target distribution and a weight must be"
+                                + " floating-point tensors")
+            if weighted:
+                return sox_soft_cross_entropy(self.tape, self.ex, x[0], x[1], ints[0], Optional[Tensor](x[2]))
+            return sox_soft_cross_entropy(self.tape, self.ex, x[0], x[1], ints[0], None)
         raise Error("ops: unknown operation code " + String(code))
     # session-ops-extra end
     # session-ops end
