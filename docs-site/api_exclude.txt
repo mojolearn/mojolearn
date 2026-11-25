@@ -247,3 +247,9 @@ Session.scan	nn-blocks-scan scan over a captured cell: not yet in a release veri
 Session.custom_op	nn-blocks-cbw user-defined backward rule: not yet in a release verification
 Session.custom	nn-blocks-cbw user-defined backward rule: not yet in a release verification
 # nn-blocks-cbw end
+# session-ops-conv begin
+Session.conv1d	session-ops-conv Sequential's convolutions as Session ops: not yet in a release verification
+Session.conv3d	session-ops-conv Sequential's convolutions as Session ops: not yet in a release verification
+Session.conv_transpose1d	session-ops-conv Sequential's convolutions as Session ops: not yet in a release verification
+Session.conv_transpose2d	session-ops-conv Sequential's convolutions as Session ops: not yet in a release verification
+# session-ops-conv end

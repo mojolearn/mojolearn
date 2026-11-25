@@ -316,3 +316,9 @@ mojolearn.ops.Session.segment_sum	mapped	ops-scatter-segment	tools/identity_lane
 mojolearn.ops.Session.segment_mean	mapped	ops-scatter-segment	tools/identity_lanes/nn_scatter.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
 mojolearn.ops.Session.segment_max	mapped	ops-scatter-segment	tools/identity_lanes/nn_scatter.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
 # nn-blocks-scatter end
+# session-ops-conv begin
+mojolearn.ops.Session.conv1d	mapped	ops-conv-layers	tools/identity_lanes/session_ops_conv.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.conv3d	mapped	ops-conv-layers	tools/identity_lanes/session_ops_conv.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.conv_transpose1d	mapped	ops-conv-layers	tools/identity_lanes/session_ops_conv.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.conv_transpose2d	mapped	ops-conv-layers	tools/identity_lanes/session_ops_conv.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+# session-ops-conv end
