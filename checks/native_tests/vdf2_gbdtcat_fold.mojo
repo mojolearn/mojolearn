@@ -17,7 +17,8 @@ column-major fit, the estimator's host-input route):
              its codes written into the slot) == the member's host `_category_fit` over the gathered column-major
              copy (gbdt/data/category_map.mojo `CategoryMaps`), word for word; the COLUMN-MAJOR fit of the fold
              word == of the host codes, model text byte for byte; the device importances of the fold word (a CTR
-             model: the slot's rows come home for the expansion, `gbdt_importance_fold_rows`) == of the host codes
+             model: the slot's rows expanded on the device, lane vd-leftovers `gbdt_imp_expand_device`) == of the host codes
+             == the host column's (`gbdt_feature_importances_host`, the host expansion)
 The host-gather fit is the estimator's own route, whose device and CPU columns the release's one verification
 compares; equal bytes here put the fold routes in that same column.
 
@@ -40,6 +41,7 @@ from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome
 from gbdt.gbdt_entry import GbdtImage
 from gbdt.mojolearn_gbdt_run import gbdt_fit_native_run
 from gbdt.gpu_importance import gbdt_feature_importances_device
+from core.gbdt_importance import gbdt_feature_importances_host
 from checks.native_tests.gbdt_public_fits import GbdtOpts, GbdtInputs, fit, _DeviceFit
 
 comptime N = 240
@@ -301,8 +303,10 @@ def _cat_case(slot: Int, gathered: List[Float32], n: Int) raises:
                                             Int(imp_a.unsafe_ptr()))
         _ = gbdt_feature_importances_device(ctx, from_rows.text, Int(cm.unsafe_ptr()), n, D, False, 0, 0,
                                             Int(imp_b.unsafe_ptr()))
+        var imp_h = gbdt_feature_importances_host(from_rows.text, Int(cm.unsafe_ptr()), n, D, False, 0, 0)
         for k in range(D):  # small-loop(fixture columns)
             require(imp_a[k] == imp_b[k], "case 3 importances: column " + String(k) + " differs")
+            require(imp_a[k] == imp_h[k], "case 3 importances: column " + String(k) + " differs from the host column")
         _ = imp_a^
         _ = imp_b^
         _ = columns^
