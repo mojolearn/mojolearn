@@ -54,7 +54,9 @@ from bindings.msel_common_door import (
     msel_numeric_vector, msel_new, msel_read_i64, msel_arange, msel_range_index, msel_index_copy,
     msel_lazy, msel_u64, msel_take_labels, msel_resident_new, msel_resident_take, msel_resident_close,
 )
-from bindings.msel_scope_rows_door import msel_scope_rows, msel_scope_take_pair, msel_scope_codes_slot
+from bindings.msel_scope_rows_door import (
+    msel_scope_rows, msel_scope_take_pair, msel_scope_codes_slot, msel_scope_helper_codes_id,
+)
 # RUN: every fold computation, on typed values (no Python object).
 from bindings.msel_split_run import msel_fold_rows_fits
 from bindings.msel_split_plan_run import (
@@ -546,10 +548,15 @@ def msel_default_folds(y: PythonObject, n_splits: PythonObject, classifier: Bool
     var pin = msel_split_route(context, False)
     var route = pin.route
     var sabotage = msel_sabotage()
+    # Inside a resident() scope the stratified codes are kept by the caller's
+    # y in the helper table's own store and the plan reads that block
+    # (bindings/msel_scope_rows_door.mojo; lane gd-rf-msel). Outside a scope:
+    # one atomic load, -1, the plan as before.
+    var kept = msel_scope_helper_codes_id(y, route, n, k, codes, coded, sabotage, context)
     # RUN
     var plan = MselSplitPlan()
     with GILReleased(Python()):
-        plan = msel_plan_default_folds(route, n, k, codes, coded, sabotage)
+        plan = msel_plan_default_folds(route, n, k, codes, coded, sabotage, kept)
     # PACK (allocation), RUN (rows)
     var pairs = msel_split_finish(pin, plan, context)
     _ = held  # the codes stay alive through the plan above

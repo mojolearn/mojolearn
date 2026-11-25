@@ -46,6 +46,20 @@ needed). THE ADDITIVE API for a member family with its own device store
     gd-device-store, core/arena_state.mojo `DeviceCacheState`);
   * nothing else: the scope's close frees every family's entries into the
     family's own store, and `resident.stats()` lists each family's cache.
+
+THE PER-FAMILY OP MAP (lane gd-rf-msel, 2026-11-25). A family store whose
+entry does not answer the x_prep transport numbering registers its own put,
+free and live operation numbers (`ArenaStoreOps`) with its FIRST cache
+(`arena_scope_cache(scope, store, ops, prefix)` / `arena_scope_store_put(...,
+ops, ...)`): the ops travel with the caller's call (a constant of its
+family), are recorded once in `_ARENA_FAMILY_STORES` beside the entry, and
+the scope's close reads them from that record. No lookup is added to a put.
+Every signature without `ops` is the transport numbering
+(`arena_store_ops_transport`: put 4, free 5, live 7, words), which x_prep,
+the resample store (resample/resample_store.mojo, family_store_entry) and
+every member family store answer; the model-selection helper table registers
+MH_STORE_PUT 21 (bytes), MH_STORE_FREE 15 and no live operation
+(core/msel_scope_codes.mojo `MSEL_HELPER_STORE_OPS`).
 """
 from std.atomic import Atomic, Ordering
 from std.memory import ArcPointer
@@ -71,11 +85,30 @@ comptime ARENA_PREFIX_X_PREP = "x_prep"
 
 
 @fieldwise_init
+struct ArenaStoreOps(ImplicitlyCopyable, Movable):
+    """A family store's operation numbers (module note, THE PER-FAMILY OP
+    MAP): put a: [src] i: [count] -> id; free i: [id]; live -> count (-1:
+    the store has none); `put_bytes`: the put's count is in bytes, not
+    4-byte words."""
+    var put: Int
+    var free: Int
+    var live: Int
+    var put_bytes: Bool
+
+
+@always_inline
+def arena_store_ops_transport() -> ArenaStoreOps:
+    """The x_prep transport numbering every transport-entry family store answers."""
+    return ArenaStoreOps(XP_DEV_PUT, XP_DEV_FREE, XP_DEV_LIVE, False)
+
+
+@fieldwise_init
 struct _FamilyStore(Copyable, Movable):
-    """One family's transport entry on one image route."""
+    """One family's store entry on one image route and its operation numbers."""
     var prefix: String
     var route: Int
     var store: EntryRef
+    var ops: ArenaStoreOps
 
 
 struct _FamilyStores(Defaultable, Movable):
@@ -93,9 +126,9 @@ struct _FamilyStores(Defaultable, Movable):
 comptime _ARENA_FAMILY_STORES = SharedSlot[_FamilyStores, "MojolearnArenaFamilyStoresV1", 1]
 
 
-def _family_store_note(prefix: String, route: Int, store: EntryRef) raises:
-    """Record the transport entry of (`prefix`, `route`) once (x_prep needs
-    none). Called when a scope creates that family's cache."""
+def _family_store_note(prefix: String, route: Int, store: EntryRef, ops: ArenaStoreOps) raises:
+    """Record the store entry of (`prefix`, `route`) and its operation numbers
+    once (x_prep needs none). Called when a scope creates that family's cache."""
     if prefix == ARENA_PREFIX_X_PREP:
         return
     var slot = _ARENA_FAMILY_STORES.get_or_create_ptr()
@@ -105,7 +138,7 @@ def _family_store_note(prefix: String, route: Int, store: EntryRef) raises:
         for i in range(len(slot[].rows)):  # driver-loop: over the recorded family stores (a handful)
             if slot[].rows[i].route == route and slot[].rows[i].prefix == prefix:
                 return
-        slot[].rows.append(_FamilyStore(prefix.copy(), route, store))
+        slot[].rows.append(_FamilyStore(prefix.copy(), route, store, ops))
     finally:
         shared_slot_unlock(word)
 
@@ -131,17 +164,24 @@ def arena_cache_store(route: Int) raises -> EntryRef:
 
 
 def arena_cache_store(prefix: String, route: Int) raises -> EntryRef:
-    """The transport entry of the family `prefix` on `route`: the one its
+    """The store entry of the family `prefix` on `route`: the one its
     scope cache was created with (`arena_scope_cache`), x_prep's by route."""
+    return arena_family_store(prefix, route).store
+
+
+def arena_family_store(prefix: String, route: Int) raises -> _FamilyStore:
+    """The store entry of the family `prefix` on `route` and the operation
+    numbers it registered (x_prep: its route's transport entry, the
+    transport numbering). Read once per cache at a scope's close."""
     if prefix == ARENA_PREFIX_X_PREP:
-        return arena_cache_store(route)
+        return _FamilyStore(prefix.copy(), route, arena_cache_store(route), arena_store_ops_transport())
     var slot = _ARENA_FAMILY_STORES.get_or_create_ptr()
     var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].lock.unsafe_ptr())
     shared_slot_lock(word)
     try:
         for i in range(len(slot[].rows)):  # driver-loop: over the recorded family stores (a handful)
             if slot[].rows[i].route == route and slot[].rows[i].prefix == prefix:
-                return slot[].rows[i].store
+                return slot[].rows[i].copy()
     finally:
         shared_slot_unlock(word)
     raise Error("RuntimeError: resident scope: no device store recorded for the binding family '" + prefix + "'")
@@ -153,19 +193,36 @@ def arena_cache_new(store: EntryRef, prefix: String) raises -> Int:
 
 
 def arena_cache_put(store: EntryRef, address: Int, words: Int) raises -> Int:
+    return arena_cache_put(store, arena_store_ops_transport(), address, words)
+
+
+def arena_cache_put(store: EntryRef, ops: ArenaStoreOps, address: Int, words: Int) raises -> Int:
+    """Put `words` 4-byte words at `address` with the family's put operation
+    (its count in bytes when `ops.put_bytes`); the new slot's id."""
     var source: List[Int] = [address]
-    var counts: List[Int] = [words]
-    return xp_transport_call(store, XP_DEV_PUT, source, counts)
+    var counts: List[Int] = [4 * words if ops.put_bytes else words]
+    return xp_transport_call(store, ops.put, source, counts)
 
 
 def arena_cache_free(store: EntryRef, store_id: Int) raises:
+    arena_cache_free(store, arena_store_ops_transport(), store_id)
+
+
+def arena_cache_free(store: EntryRef, ops: ArenaStoreOps, store_id: Int) raises:
     var ids: List[Int] = [store_id]
-    _ = xp_transport_call(store, XP_DEV_FREE, List[Int](), ids)
+    _ = xp_transport_call(store, ops.free, List[Int](), ids)
 
 
 def arena_cache_live(store: EntryRef) raises -> Int:
     """Live slots of the binding store (every cache on it)."""
-    return xp_transport_call(store, XP_DEV_LIVE, List[Int](), List[Int]())
+    return arena_cache_live(store, arena_store_ops_transport())
+
+
+def arena_cache_live(store: EntryRef, ops: ArenaStoreOps) raises -> Int:
+    """Live slots of a family store; refused for a store with no live operation."""
+    if ops.live < 0:
+        raise Error("RuntimeError: resident scope: this binding family's store has no live-slot operation")
+    return xp_transport_call(store, ops.live, List[Int](), List[Int]())
 
 
 @fieldwise_init
@@ -178,10 +235,15 @@ struct ArenaCachePut(ImplicitlyCopyable, Movable):
 
 
 def arena_cache_upload(word: Int, store: EntryRef, address: Int, words: Int, pin: Int) raises -> ArenaCachePut:
+    return arena_cache_upload(word, store, arena_store_ops_transport(), address, words, pin)
+
+
+def arena_cache_upload(word: Int, store: EntryRef, ops: ArenaStoreOps, address: Int, words: Int,
+                       pin: Int) raises -> ArenaCachePut:
     """Put (`address`, `words`) and publish it in the cache `word`. The put
     runs outside the cache lock. A lost publication race, or a cache released
     while the put ran, frees this call's own id."""
-    var store_id = arena_cache_put(store, address, words)
+    var store_id = arena_cache_put(store, ops, address, words)
     var kept = store_id
     try:
         # Acquire after the put: a cache released meanwhile refuses here.
@@ -189,25 +251,30 @@ def arena_cache_upload(word: Int, store: EntryRef, address: Int, words: Int, pin
         kept = lease[].publish(address, words, store_id, pin)
     except error:
         try:
-            arena_cache_free(store, store_id)
+            arena_cache_free(store, ops, store_id)
         except cleanup_error:
             raise Error("RuntimeError: DeviceCache publication failed: " + String(error) + "; cleanup of the unpublished slot "
                         + String(store_id) + " also failed: " + String(cleanup_error))
         raise error^
     if kept != store_id:
-        arena_cache_free(store, store_id)
+        arena_cache_free(store, ops, store_id)
         return ArenaCachePut(kept, False)
     return ArenaCachePut(store_id, True)
 
 
 def arena_cache_find_or_put(word: Int, store: EntryRef, address: Int, words: Int, pin: Int) raises -> ArenaCachePut:
+    return arena_cache_find_or_put(word, store, arena_store_ops_transport(), address, words, pin)
+
+
+def arena_cache_find_or_put(word: Int, store: EntryRef, ops: ArenaStoreOps, address: Int, words: Int,
+                            pin: Int) raises -> ArenaCachePut:
     """`id_of` for a native caller: the resident id (counted as a hit), else
     an upload."""
     var lease = ARENA_CACHES.acquire(arena_handle(word))
     var found = lease[].find(address, words, True)
     if found >= 0:
         return ArenaCachePut(found, False)
-    return arena_cache_upload(word, store, address, words, pin)
+    return arena_cache_upload(word, store, ops, address, words, pin)
 
 
 @fieldwise_init
@@ -277,8 +344,8 @@ struct ArenaCacheReleased(Movable):
             self.failure = text
 
 
-def _free_or_restore(lease: ArcPointer[DeviceCacheState], store: EntryRef, entry: ArenaStoreEntry,
-                     mut released: ArenaCacheReleased) raises:
+def _free_or_restore(lease: ArcPointer[DeviceCacheState], store: EntryRef, ops: ArenaStoreOps,
+                     entry: ArenaStoreEntry, mut released: ArenaCacheReleased) raises:
     # One unlinked entry: free it; a failed free links it again for a retry
     # (its pin stays with the cache). A held entry (ARENA_STORE_ID_DEFERRED)
     # is freed by its last unhold: its pin is released now.
@@ -286,7 +353,7 @@ def _free_or_restore(lease: ArcPointer[DeviceCacheState], store: EntryRef, entry
         released.pins.append(entry.pin)
         return
     try:
-        arena_cache_free(store, entry.store_id)
+        arena_cache_free(store, ops, entry.store_id)
         released.pins.append(entry.pin)
     except error:
         released.keep(String(error))
@@ -300,13 +367,17 @@ def _free_or_restore(lease: ArcPointer[DeviceCacheState], store: EntryRef, entry
 
 
 def arena_cache_close(word: Int, store: EntryRef) raises -> ArenaCacheReleased:
+    return arena_cache_close(word, store, arena_store_ops_transport())
+
+
+def arena_cache_close(word: Int, store: EntryRef, ops: ArenaStoreOps) raises -> ArenaCacheReleased:
     """Free every entry of the cache `word` (`close`, context exit)."""
     var lease = ARENA_CACHES.acquire(arena_handle(word))
     # Unlink everything first: no other thread finds an entry being freed.
     var drained = lease[].drain()
     var released = ArenaCacheReleased()
     for i in range(len(drained)):  # driver-loop: attempt every independent release (one store bookkeeping free each)
-        _free_or_restore(lease, store, drained[i], released)
+        _free_or_restore(lease, store, ops, drained[i], released)
     return released^
 
 
@@ -316,7 +387,7 @@ def arena_cache_release(word: Int, store: EntryRef, address: Int, words: Int) ra
     var released = ArenaCacheReleased()
     var removed = lease[].remove(address, words)
     if removed.store_id != -1:
-        _free_or_restore(lease, store, removed, released)
+        _free_or_restore(lease, store, arena_store_ops_transport(), removed, released)
     return released^
 
 
@@ -342,6 +413,10 @@ def arena_cache_drop(word: Int, store: EntryRef, addresses: List[Int], words: Li
 
 
 def arena_cache_finalize(word: Int, store: EntryRef) -> List[Int]:
+    return arena_cache_finalize(word, store, arena_store_ops_transport())
+
+
+def arena_cache_finalize(word: Int, store: EntryRef, ops: ArenaStoreOps) -> List[Int]:
     """Best-effort end of a cache state (an owner's destructor, a scope's
     end): free what it holds, release the state, return every pin."""
     var pins = List[Int]()
@@ -354,7 +429,7 @@ def arena_cache_finalize(word: Int, store: EntryRef) -> List[Int]:
             if drained[i].store_id == ARENA_STORE_ID_DEFERRED:
                 continue  # held: its last unhold frees it
             try:
-                arena_cache_free(store, drained[i].store_id)
+                arena_cache_free(store, ops, drained[i].store_id)
             except error:
                 pass
         ARENA_CACHES.release(handle)
@@ -409,13 +484,19 @@ def arena_scope_floor(scope: Int) raises -> Int:
 
 
 def arena_scope_cache(scope: Int, store: EntryRef, prefix: String) raises -> Int:
+    return arena_scope_cache(scope, store, arena_store_ops_transport(), prefix)
+
+
+def arena_scope_cache(scope: Int, store: EntryRef, ops: ArenaStoreOps, prefix: String) raises -> Int:
     """The scope's cache on `store` for the binding family `prefix`, created
-    on first use. Called once per program run that keeps an input resident."""
+    on first use; the family's store and operation numbers `ops` are
+    recorded with it (module note). Called once per program run that keeps
+    an input resident."""
     var lease = ARENA_SCOPES.acquire(arena_handle(scope))
     var route = arena_cache_route(store)
     var cache = lease[].cache_of(prefix, route)
     if cache == ARENA_HANDLE_NONE:
-        _family_store_note(prefix, route, store)  # the close frees into this family's own store
+        _family_store_note(prefix, route, store, ops)  # the close frees into this family's own store
         cache = arena_cache_new(store, prefix)
         lease[].add_cache(prefix, route, cache)
     return cache
@@ -428,7 +509,14 @@ def arena_scope_store_put(scope: Int, store: EntryRef, prefix: String, address: 
     `prefix`'s cache of the caller's `scope` on the family's transport entry
     `store`: found (a hit), or put once and published with `pin` (`.pinned`:
     the cache kept the pin, the member sets `call.pin_kept`)."""
-    return arena_cache_find_or_put(arena_scope_cache(scope, store, prefix), store, address, words, pin)
+    return arena_scope_store_put(scope, store, arena_store_ops_transport(), prefix, address, words, pin)
+
+
+def arena_scope_store_put(scope: Int, store: EntryRef, ops: ArenaStoreOps, prefix: String, address: Int,
+                          words: Int, pin: Int) raises -> ArenaCachePut:
+    """`arena_scope_store_put` on a family store with its own operation
+    numbers `ops` (THE PER-FAMILY OP MAP)."""
+    return arena_cache_find_or_put(arena_scope_cache(scope, store, ops, prefix), store, ops, address, words, pin)
 
 
 def arena_scope_store_hold(scope: Int, store: EntryRef, prefix: String, address: Int, words: Int,
@@ -474,7 +562,8 @@ def arena_scope_close(scope: Int) raises -> ArenaCacheReleased:
     for i in range(len(taken)):  # driver-loop: close every independent cache of the scope (one per family and mode)
         var failed = False
         try:
-            var closed = arena_cache_close(taken[i].cache, arena_cache_store(taken[i].prefix, taken[i].route))
+            var family = arena_family_store(taken[i].prefix, taken[i].route)
+            var closed = arena_cache_close(taken[i].cache, family.store, family.ops)
             for j in range(len(closed.pins)):  # driver-loop: over the freed entries' pins
                 released.pins.append(closed.pins[j])
             if closed.failure.byte_length() > 0:
@@ -500,7 +589,8 @@ def arena_scope_finalize(scope: Int) -> List[Int]:
         var taken = lease[].take_caches()
         for i in range(len(taken)):  # driver-loop: over the caches the scope still lists
             try:
-                var dropped = arena_cache_finalize(taken[i].cache, arena_cache_store(taken[i].prefix, taken[i].route))
+                var family = arena_family_store(taken[i].prefix, taken[i].route)
+                var dropped = arena_cache_finalize(taken[i].cache, family.store, family.ops)
                 for j in range(len(dropped)):  # driver-loop: over the freed entries' pins
                     pins.append(dropped[j])
             except error:
