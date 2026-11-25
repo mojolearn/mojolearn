@@ -215,6 +215,26 @@ def program_op_name(code: Int) -> String:
     if code == 126:
         return "custom"
     # nn-blocks-cbw end
+    # session-ops-pool begin: Sequential's pools (autograd/session_ops_pool.mojo)
+    if code == 140:
+        return "max_pool1d"
+    if code == 141:
+        return "avg_pool1d"
+    if code == 142:
+        return "max_pool2d"
+    if code == 143:
+        return "avg_pool2d"
+    if code == 144:
+        return "max_pool3d"
+    if code == 145:
+        return "avg_pool3d"
+    if code == 146:
+        return "adaptive_avg_pool3d"
+    if code == 147:
+        return "adaptive_avg_pool1d / adaptive_avg_pool2d"
+    if code == 148:
+        return "adaptive_max_pool1d / adaptive_max_pool2d"
+    # session-ops-pool end
     return "op_" + String(code)
 
 

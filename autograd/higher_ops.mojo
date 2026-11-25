@@ -156,6 +156,12 @@ def higher_family(op: Int) -> String:
     if tag == 202 or tag == 203:
         return "attention"
     # nn-blocks-qkv end
+    # session-ops-pool begin: the adaptive pools' nodes (autograd/nn_conv.mojo NNC_TAG_ADAPT_AVG / _MAX)
+    if tag == 562:
+        return "adaptive_avg_pool"
+    if tag == 563:
+        return "adaptive_max_pool"
+    # session-ops-pool end
     return "custom"
 
 
