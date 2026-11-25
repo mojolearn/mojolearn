@@ -132,6 +132,7 @@ from autograd.block_step_ops import (
     ATTN_STEP_TAG, attn_step_train_run, step_train_tag, mamba_step_train_run,
     block_step_run, block_weight_sizes, block_state_sizes, block_offsets, block_guard, block_int_words,
     block_part_floats, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS, attn_append_restore,
+    OPS_LINEAR15, linear15_run,
 )
 from autograd.rules_step_ops import StepOpRules
 from autograd.rules_recurrent import OPS_RNN_SCAN, rnn_scan_op
@@ -1756,6 +1757,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if is_generation_op(code):
             # Lane x45c: the token pick and the decode condition, one branch.
             return self._generation_op(code, hs, ints, fs, x)
+        if code == OPS_LINEAR15:
+            # Lane fixed15-decode: the decode program's fixed15_v1 head.
+            return self._linear15(hs, ints, fs, x)
         if code == OPS_LM_HEAD_V2:
             # Lane m2-neural-leftovers: the chunked LM head (loss without
             # the logits), one custom node (autograd/lm_head_v2_op.mojo).
@@ -2258,6 +2262,42 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             t = self.tape.variable(self.ex, out, sh.d[0], sh.d[1], False)
         else:
             t = self.tape.variable_nd(self.ex, out, sh, False)
+        return self._add(t, 0, False, 0)
+
+    def _linear15(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_LINEAR15 (lane fixed15-decode, 2026-11-25): [x (..., k),
+        weights] ints [n, k] -> (..., n) under fixed15_v1, over the planes
+        adopted for the weights tensor (autograd/block_step_ops.mojo
+        `linear15_adopt`; the CausalLM decode program's head). Inference
+        only, device only: the planes are device planes."""
+        _need("linear15", len(x), 2, 2, len(ints), 0, len(fs))
+        if self.tape.is_recording():
+            raise Error("ValueError: ops: linear15 runs in an inference session (Session(record=False))")
+        var xs = self._slot(hs[0])
+        var ws = self._slot(hs[1])
+        if self.int_words[xs] or self.int_words[ws]:
+            raise Error("ValueError: ops: linear15 takes floating-point x and weights")
+        var n = ints[0]
+        var k = ints[1]
+        var sh = self.shapes[xs]
+        var count = sh.count()
+        if n < 1 or k < 1 or sh.ndim < 1 or sh.d[sh.ndim - 1] != k:
+            raise Error("ValueError: ops: linear15: x must be (..., " + String(k) + ") and n positive")
+        var m = count // k
+        var xp = self.tape.value_of(self.ex, x[0])
+        var wp = self.tape.value_of(self.ex, x[1])
+        var y = self.tape.reserve(self.ex, m * n)
+        comptime if Self.E.IS_DEVICE:
+            linear15_run(rebind[DeviceExec](self.ex), self.steps, wp, xp, y, m, n, k)
+        else:
+            raise Error("ValueError: ops: linear15 runs on a GPU session (its planes are device planes)")
+        var out_shape = sh
+        out_shape.d[out_shape.ndim - 1] = n
+        var t: Tensor
+        if out_shape.ndim == 2:
+            t = self.tape.variable(self.ex, y, out_shape.d[0], out_shape.d[1], False)
+        else:
+            t = self.tape.variable_nd(self.ex, y, out_shape, False)
         return self._add(t, 0, False, 0)
 
     def _lm_head_v2(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:

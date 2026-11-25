@@ -1452,6 +1452,38 @@ struct LlamaDeviceWeights(Movable):
         self.int15 = None
         self._validate_finite(ctx)
 
+    def __init__(out self, *, shared_from: Self):
+        """Lane fixed15-decode (2026-11-25): a second handle on the same
+        device weights (a `DeviceBuffer` copy is a handle, so nothing is
+        uploaded or copied on the device). The decode program keeps one per
+        fixed15 layer (`attn_step_adopt_source`) so an attention entry
+        dropped with its state (a decode loop that ran past its stop) is
+        rebuilt over the same planes without uploading them again. The
+        weights were validated when they were built."""
+        self.dims = shared_from.dims.copy()
+        self.eps = shared_from.eps
+        self.norm1_w = shared_from.norm1_w.copy()
+        self.norm2_w = shared_from.norm2_w.copy()
+        self.w_q = shared_from.w_q.copy()
+        self.w_k = shared_from.w_k.copy()
+        self.w_v = shared_from.w_v.copy()
+        self.w_o = shared_from.w_o.copy()
+        self.w_gate = shared_from.w_gate.copy()
+        self.w_up = shared_from.w_up.copy()
+        self.w_down = shared_from.w_down.copy()
+        self.opts = shared_from.opts.copy()
+        self.b_q = shared_from.b_q.copy()
+        self.b_k = shared_from.b_k.copy()
+        self.b_v = shared_from.b_v.copy()
+        self.b_o = shared_from.b_o.copy()
+        self.norm1_b = shared_from.norm1_b.copy()
+        self.norm2_b = shared_from.norm2_b.copy()
+        self.b_up = shared_from.b_up.copy()
+        self.b_down = shared_from.b_down.copy()
+        self.b_gate = shared_from.b_gate.copy()
+        self.qn_w = shared_from.qn_w.copy()
+        self.kn_w = shared_from.kn_w.copy()
+        self.int15 = shared_from.int15.copy()
 
     def _validate_finite(mut self, ctx: DeviceContext) raises:
         """Validate all weights before use, preserving named refusal order.
