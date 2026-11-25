@@ -41,7 +41,8 @@ from autograd.nn_norms import graph_group_norm, graph_instance_norm
 from autograd.nn_activations import nn_act_forward, LAYER_PRELU, LAYER_MISH
 from autograd.nn_attention import nn_mha_forward, nn_pos_enc_forward
 from autograd.losses import smooth_l1, nll, kl_div, binary_cross_entropy_with_logits
-from autograd.nn_ctc import ctc_loss
+from autograd.nn_ctc import ctc_loss, ctc_refuse_rows
+from autograd.embedding_ops import embedding_check_words
 from autograd.ssm_primitives import graph_selective_scan
 from autograd.ssm_m2_primitives import graph_ssd_scan
 from autograd.ssm_m3_primitives import graph_trapezoid_scan
@@ -936,6 +937,72 @@ def test_session_ops_rest_reference() raises:
         def ref_case(k: Int) raises:
             _reference_case(_reference_cases()[k])
         check_cases_serial("session_ops_rest reference", len(_reference_cases()), ref_case)
+
+
+comptime SOR_CTC_ADMISSION_CASES = 7
+
+
+def _ctc_admission_on[E: Exec & Movable & Deinitable](var ex: E, which: Int) raises:
+    """lane fable-review-2: Session.ctc_loss's admission on the executor (nn_ctc.ctc_refuse_rows: OP_CTC_ADMIT, the
+    first-bad search, two words back). Packed rows (N 2, 2 + S 2) with T 4, C 3, blank 0. Case 0 is admitted
+    (sample 1's second label is the blank, past its target length 1, so it is never read); each other case
+    spoils one word and names it; case 6 spoils two and must name the earlier one (the host loop's order)."""
+    var rows: List[Float32] = [4.0, 2.0, 1.0, 1.0, 3.0, 1.0, 2.0, 0.0]
+    var want = List[String]()
+    if which == 1:
+        rows[4] = 5.0
+        want = ["input_lengths must be whole numbers from 0 to the 4 steps", "sample 1 has"]
+    elif which == 2:
+        rows[1] = 2.5
+        want = ["target_lengths must be whole numbers from 0 to the targets' width (2)", "sample 0 has"]
+    elif which == 3:
+        rows[3] = 3.0
+        want = ["targets must be class indices in [0, 3)", "sample 0 label 1 is"]
+    elif which == 4:
+        rows[6] = 0.0
+        want = ["targets must not hold the blank index (0)", "sample 1 label 0"]
+    elif which == 5:
+        rows[2] = 1.5
+        want = ["targets must be class indices in [0, 3)", "sample 0 label 0 is"]
+    elif which == 6:
+        rows[0] = -1.0
+        rows[6] = 0.0
+        want = ["input_lengths must be whole numbers", "sample 0 has"]
+    var n = len(rows)
+    var cw = embedding_check_words(n)
+    var packed = ex.alloc(n)
+    var flags = ex.alloc(n)
+    var scratch_a = ex.alloc(cw)
+    var scratch_b = ex.alloc(cw)
+    ex.upload(packed, FP(unsafe_from_address=Int(rows.unsafe_ptr())), n)
+    var message = String("")
+    try:
+        ctc_refuse_rows(ex, packed, 2, 4, 4, 3, 0, flags, scratch_a, scratch_b, String("ctc_loss"))
+    except error:
+        message = String(error)
+    ex.free(packed)
+    ex.free(flags)
+    ex.free(scratch_a)
+    ex.free(scratch_b)
+    _ = len(rows)  # the upload's source stays alive past the launches that read it
+    if len(want) == 0:
+        require(message == "", "ctc admission case 0: admitted rows were refused: " + message)
+        return
+    for k in range(len(want)):  # small-loop(the message's parts)
+        require(want[k] in message, "ctc admission case " + String(which) + ": the refusal must say '" + want[k]
+                + "', got '" + message + "'")
+
+
+def test_session_ops_rest_ctc_admission() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_case(which: Int) raises:
+            _ctc_admission_on[HostExec](HostExec(), which)
+        check_cases_serial("session_ops_rest ctc admission", SOR_CTC_ADMISSION_CASES, host_case)
+    else:
+        def device_case(which: Int) raises:
+            _ctc_admission_on[DeviceExec](DeviceExec(), which)
+            _ctc_admission_on[HostExec](HostExec(), which)
+        check_cases_serial("session_ops_rest ctc admission", SOR_CTC_ADMISSION_CASES, device_case)
 
 
 def main() raises:

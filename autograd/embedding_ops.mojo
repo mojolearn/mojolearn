@@ -293,12 +293,13 @@ def embedding_check_words(n_positions: Int) -> Int:
     return max(2, (n_positions + EMB_CHECK_BLOCK - 1) // EMB_CHECK_BLOCK)
 
 
-def embedding_refuse_ids[E: Exec](
-    mut ex: E, ids: FP, n_positions: Int, vocab: Int, scratch_a: FP, scratch_b: FP,
-) raises:
-    """Refuse an id outside [0, vocab), by position and value, before any
-    gather reads it. Each scratch buffer holds embedding_check_words(n)
-    words of `ex`. One two-word read-back (a wait)."""
+def embedding_first_bad[E: Exec](
+    mut ex: E, ids: FP, n_positions: Int, vocab: Int, scratch_a: FP, scratch_b: FP, values: FP,
+) raises -> Tuple[Int, Int]:
+    """(position, word) of the first of `ids`' n int32 words outside [0, vocab), or (-1, 0) when there is none;
+    `word` is the int32 bit pattern of values[position] (`values` = `ids` gives the refused id itself; another
+    buffer of n words gives the word a caller's flags were computed from). The blocked search runs on the
+    executor; each scratch buffer holds embedding_check_words(n) words of `ex`. One two-word read-back (a wait)."""
     var a = Args()
     a.p0 = ids
     a.p1 = scratch_a
@@ -324,15 +325,24 @@ def embedding_refuse_ids[E: Exec](
         other = was
         level += 1
     var v = Args()
-    v.p0 = ids
+    v.p0 = values
     v.p1 = result
     ex.launch[OP_EMB_IDS_VALUE](v, 1)
     var out = List[Float32](length=2, fill=Float32(0))
     ex.download(FP(unsafe_from_address=Int(out.unsafe_ptr())), result, 2)
-    var at = Int(bitcast[DType.int32](out[0]))
-    if at >= 0:
+    return (Int(bitcast[DType.int32](out[0])), Int(bitcast[DType.int32](out[1])))
+
+
+def embedding_refuse_ids[E: Exec](
+    mut ex: E, ids: FP, n_positions: Int, vocab: Int, scratch_a: FP, scratch_b: FP,
+) raises:
+    """Refuse an id outside [0, vocab), by position and value, before any
+    gather reads it. Each scratch buffer holds embedding_check_words(n)
+    words of `ex`. One two-word read-back (a wait)."""
+    var found = embedding_first_bad(ex, ids, n_positions, vocab, scratch_a, scratch_b, ids)
+    if found[0] >= 0:
         raise Error(
-            "embedding: id " + String(Int(bitcast[DType.int32](out[1]))) + " at position " + String(at)
+            "embedding: id " + String(found[1]) + " at position " + String(found[0])
             + " is outside [0, " + String(vocab) + ")"
         )
 
