@@ -1535,6 +1535,105 @@ class Session:
         """
         return _SESSION_CALL(self, "load_optimizer_state", (optimizer, param, state))
 
+    # nn-blocks-cbw begin ---------------------------------------- user-defined backward rules
+    def custom_op(self, forward, backward, *, saved=(), outputs=None):
+        """Give a captured operation your own backward rule; returns its handle.
+
+        ``forward`` computes the operation's outputs from its inputs, and
+        ``backward`` computes the gradient of each input from the saved
+        tensors and the incoming gradient of each output: a vector-Jacobian
+        product, like ``torch.autograd.Function``'s ``forward`` and
+        ``backward``. Both are :class:`Program` objects captured from an
+        inference session with the operations of this module. They are
+        checked against each other here, once: the counts, shapes and kinds
+        of the inputs, outputs, saved tensors and gradients must agree, and a
+        mismatch raises ``ValueError`` naming it.
+
+        Call the operation with :meth:`custom`. In a recording session,
+        :meth:`backward` runs ``backward`` on the device with the gradient
+        that reaches each output from the rest of the model (for
+        ``loss = 3 * sum(f(x))`` that gradient is 3, not 1), and adds each
+        gradient it returns to the input's other contributions, so an input
+        used along several paths receives all of them. The same holds in
+        :meth:`Program.fit` for a program captured with the operation, and a
+        saved program keeps both graphs.
+
+        Parameters
+        ----------
+        forward : Program
+            ``(x_0, ..., x_{n-1}) -> (y_0, ..., y_{m-1}, extra, ...)``: the
+            operation's outputs, then any further tensors the backward needs.
+        backward : Program
+            ``(saved_0, ..., grad_y_0, ..., grad_y_{m-1}) -> (grad_x, ...)``:
+            the saved tensors, then the incoming gradient of each output (of
+            that output's shape); it returns one gradient per float input of
+            ``forward``, in input order, each of its input's shape (an input
+            made with :meth:`ids` takes no gradient).
+        saved : sequence of int, default ()
+            Indices into ``forward``'s outputs: the tensors ``backward``
+            receives first, in this order. They stay on the device from the
+            forward to the backward.
+        outputs : int or None, default None
+            How many leading outputs of ``forward`` the operation returns;
+            None returns every output. Each later output must be saved.
+
+        Returns
+        -------
+        int
+            The operation's handle, for :meth:`custom`.
+
+        The first version has these limits. Both programs are built from the
+        operations of this module (a new device kernel needs a compiled Mojo
+        extension). Neither may read a tensor of its session as a parameter:
+        capture every tensor it reads as an input (a learnable weight then
+        gets its gradient from ``backward``) and make constants with
+        :meth:`full`. The rule is first order: a second derivative through
+        it (``backward(..., create_graph=True)``, :meth:`hvp`, :meth:`jvp`)
+        is refused.
+
+        Use it for a gradient that differs from the forward's: a
+        straight-through estimator, gradient reversal, a clipped gradient, or
+        a numerically stable gradient of a custom activation.
+
+        Example
+        -------
+        ``MyTanh``: forward ``y = tanh(x)``, saving ``y``; backward
+        ``grad_y * (1 - y * y)``.
+
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> zeros = np.zeros((4, 3), np.float32)
+        >>> with ops.Session() as cap:
+        ...     x = cap.tensor(zeros)
+        ...     forward = cap.capture(inputs=[x], outputs=[cap.tanh(x)])
+        ...     y, grad_y = cap.tensor(zeros), cap.tensor(zeros)
+        ...     one = cap.full((1, 1), 1.0)
+        ...     dx = cap.mul(grad_y, cap.sub(one, cap.mul(y, y)))
+        ...     backward = cap.capture(inputs=[y, grad_y], outputs=[dx])
+        ...     with ops.Session(record=True) as s:
+        ...         my_tanh = s.custom_op(forward, backward, saved=[0])
+        ...         w = s.tensor(np.ones((4, 3), np.float32), requires_grad=True)
+        ...         loss = s.scale(s.sum(s.custom(my_tanh, w)), 3.0)
+        ...         s.backward(loss)
+        ...         grad_w = s.grad(w)
+        """
+        return _SESSION_CALL(self, "custom_op", (forward, backward, saved, outputs))
+
+    def custom(self, op, *inputs):
+        """Call the operation :meth:`custom_op` returned on tensor handles.
+
+        ``inputs`` are in the order of the forward program's inputs, each of
+        its captured rank. Returns the handle of the output, or a tuple of
+        handles when the operation returns several. In an inference session
+        :meth:`capture` keeps the call like any other operation.
+
+        Example
+        -------
+        >>> y = s.custom(my_tanh, w)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "custom", (op, inputs))
+    # nn-blocks-cbw end
+
 
 class Program:
     """A model captured from an inference :class:`Session`, run in one call.

@@ -225,3 +225,7 @@ Sequential.max_pool3d	nn-conv3d 3-D layers: not yet in a release verification
 Sequential.avg_pool3d	nn-conv3d 3-D layers: not yet in a release verification
 Sequential.adaptive_avg_pool3d	nn-conv3d 3-D layers: not yet in a release verification
 # nn-conv3d end
+# nn-blocks-cbw begin
+Session.custom_op	nn-blocks-cbw user-defined backward rule: not yet in a release verification
+Session.custom	nn-blocks-cbw user-defined backward rule: not yet in a release verification
+# nn-blocks-cbw end
