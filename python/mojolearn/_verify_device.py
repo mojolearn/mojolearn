@@ -68,6 +68,14 @@ NON_COMPUTING = frozenset((
     # returns, and the readers of a corpus already tokenized (cached ids and
     # their vocabulary); pretokenize, prepare and the trainer carry the side
     "pattern_name", "require_vocabulary", "tokenizer_for", "TokenizedCorpus", "TokenBatches",
+    # the rows docs/plans/verify_through_device/functions_without_device.tsv
+    # (vd-functions sweep) classes "no device" that this list lacked
+    # (w3-integrate-9: the self-test's endpoint part read NoDevice on them):
+    # CPU-inference classes, settings readers and writers, result and program
+    # containers, a closed-form scalar of two integers
+    "MLPInference", "SambaInference", "catboost_auto_learning_rate", "gpu_arch", "gpu_arch_how",
+    "ImportedProgram", "profile", "require_identical", "Program", "BootstrapResult", "MonteCarloResult",
+    "PermutationTestResult", "set_numeric_mode", "numeric_mode_used", "vendor_used",
 ))
 
 
