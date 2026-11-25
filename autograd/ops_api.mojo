@@ -1459,6 +1459,18 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             raise Error("ops: " + what + " takes tensors made with requires_grad=True")
         return slot
 
+    def _state_param_slot(self, h: Int, what: String) raises -> Int:
+        """The slot of a parameter whose optimizer state is read or restored: a recording session's
+        requires_grad tensor (as `step`), or in an inference session an owned tensor, the parameters
+        Program.fit trains there (a loaded program's parameters cannot be made with requires_grad=True;
+        w3-integrate-10: their saved state could not be restored for a resumed Program.fit)."""
+        if self.tape.is_recording():
+            return self._param_slot(h, what)
+        var slot = self._slot(h)
+        if self.owned[slot] == 0:
+            raise Error("ops: " + what + " takes parameter tensors owned by this session")
+        return slot
+
     def _state_of(mut self, oi: Int, h: Int, n: Int) raises -> Int:
         """The index of (optimizer oi, parameter h)'s state, allocated (zero
         moment buffers, step 0) on first use."""
@@ -1611,7 +1623,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if self.opts[oi].pg >= 0:
             # nn-blocks-pg: the parameter's group member keeps its state
             oi = self._pg_member(oi, h, "optimizer_state")
-        var slot = self._param_slot(h, "optimizer_state")
+        var slot = self._state_param_slot(h, "optimizer_state")
         var si = self._state_of(oi, h, self.rows[slot] * self.cols[slot])
         var r = self.opt_states[si]
         var used = optimizer_slots(self.opts[oi].cfg)
@@ -1647,7 +1659,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             # nn-blocks-composed end
             # nn-blocks-pg: the parameter's group member keeps its state
             oi = self._pg_member(oi, h, "load_optimizer_state")
-        var slot = self._param_slot(h, "load_optimizer_state")
+        var slot = self._state_param_slot(h, "load_optimizer_state")
         var n = self.rows[slot] * self.cols[slot]
         var si = self._state_of(oi, h, n)
         var r = self.opt_states[si]
