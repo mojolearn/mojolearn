@@ -88,6 +88,9 @@ _OP = {
     # nn-blocks-qkv begin
     "attention": 122,
     # nn-blocks-qkv end
+    # session-ops-conv begin
+    "conv1d": 130, "conv2d_dilated": 131, "conv3d": 132, "conv_transpose1d": 133, "conv_transpose2d": 134,
+    # session-ops-conv end
 }
 _GELU = {"none": 0, "tanh": 1}
 # the state buffers autograd/ops_api.mojo optimizer_state returns, by kind
@@ -486,23 +489,29 @@ class Session:
         return _SESSION_CALL(self, "take", (x, indices, axis))
 
     # ------------------------------------------------------------ convolution and pooling
-    def conv2d(self, x, weight, bias=None, stride=1, padding=0, groups=1):
-        """A 2-D convolution (cross-correlation) of ``x``.
+    def conv2d(self, x, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
+        """A 2-D convolution (cross-correlation) of ``x``, as ``torch.nn.functional.conv2d``.
 
         ``x`` is ``(N, C, H, W)``, ``weight`` ``(out_channels, C // groups,
         kh, kw)`` and ``bias`` an optional tensor of ``out_channels`` values.
-        The input is padded with ``padding`` zeros on every side and the
-        kernel moves ``stride`` positions at a time; the result is
-        ``(N, out_channels, H_out, W_out)``. With ``groups`` greater than 1
-        the channels split into ``groups`` equal blocks and each block of
-        outputs sees only its block of inputs; ``groups=C`` is a depthwise
-        convolution.
+        ``stride``, ``padding`` and ``dilation`` are an integer or a pair
+        ``(height, width)``: the input is padded with ``padding`` zeros at
+        both ends of each axis, the kernel moves ``stride`` positions at a
+        time and its taps are ``dilation`` positions apart. ``padding`` may
+        also be ``'valid'`` (no padding) or ``'same'`` (the output keeps the
+        input's size; it needs stride 1 and ``dilation * (k - 1)`` even on
+        each axis). The result is ``(N, out_channels, H_out, W_out)`` with
+        ``H_out = (H + 2 * padding - dilation * (kh - 1) - 1) // stride + 1``
+        and ``W_out`` likewise. With ``groups`` greater than 1 the channels
+        split into ``groups`` equal blocks and each block of outputs sees
+        only its block of inputs; ``groups=C`` is a depthwise convolution.
 
         Example::
 
             y = s.conv2d(x, w, stride=1, padding=1, groups=4)
+            z = s.conv2d(x, w, padding=(2, 1), dilation=(2, 1))
         """
-        return _SESSION_CALL(self, "conv2d", (x, weight, bias, stride, padding, groups))
+        return _SESSION_CALL(self, "conv2d", (x, weight, bias, stride, padding, dilation, groups))
 
     def max_pool2d(self, x, kernel_size, stride=None):
         """The largest value of each ``kernel_size`` window of an
@@ -2107,6 +2116,124 @@ class Session:
         """
         return _SESSION_CALL(self, "custom", (op, inputs))
     # nn-blocks-cbw end
+
+    # session-ops-conv begin ------------------------------------ Sequential's convolutions
+    def conv1d(self, x, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
+        """A 1-D convolution (cross-correlation) of ``x``, as ``torch.nn.functional.conv1d``.
+
+        ``x`` is ``(N, C, L)``, ``weight`` ``(out_channels, C // groups, k)``
+        and ``bias`` an optional tensor of ``out_channels`` values. The
+        input is padded with ``padding`` zeros at both ends, the kernel
+        moves ``stride`` positions at a time and its taps are ``dilation``
+        positions apart; ``padding`` may also be ``'valid'`` or ``'same'``
+        (stride 1 and ``dilation * (k - 1)`` even). The result is
+        ``(N, out_channels, L_out)`` with
+        ``L_out = (L + 2 * padding - dilation * (k - 1) - 1) // stride + 1``.
+        With ``groups`` greater than 1 each block of outputs sees only its
+        block of input channels. The values and gradients are those of
+        :class:`Sequential`'s ``conv1d`` layer.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session(record=True) as s:
+        ...     x = s.tensor(np.ones((2, 3, 8), np.float32))
+        ...     w = s.tensor(np.full((4, 3, 3), 0.1, np.float32), requires_grad=True)
+        ...     y = s.conv1d(x, w, padding=2, dilation=2)
+        ...     s.backward(s.sum(y))
+        ...     s.shape(y)
+        (2, 4, 8)
+        """
+        return _SESSION_CALL(self, "conv1d", (x, weight, bias, stride, padding, dilation, groups))
+
+    def conv3d(self, x, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
+        """A 3-D convolution (cross-correlation) of ``x``, as ``torch.nn.functional.conv3d``.
+
+        ``x`` is ``(N, C, D, H, W)``, ``weight`` ``(out_channels, C // groups,
+        kd, kh, kw)`` and ``bias`` an optional tensor of ``out_channels``
+        values. ``stride``, ``padding`` and ``dilation`` are an integer or a
+        triple ``(depth, height, width)``; ``padding`` may also be
+        ``'valid'`` or ``'same'`` (stride 1 and ``dilation * (k - 1)`` even
+        on each axis). The result is ``(N, out_channels, D_out, H_out,
+        W_out)`` with ``D_out = (D + 2 * padding - dilation * (kd - 1) - 1)
+        // stride + 1`` and the others likewise. The values and gradients
+        are those of :class:`Sequential`'s ``conv3d`` layer.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session(record=True) as s:
+        ...     x = s.tensor(np.ones((1, 2, 4, 6, 6), np.float32))
+        ...     w = s.tensor(np.full((3, 2, 3, 3, 3), 0.05, np.float32), requires_grad=True)
+        ...     y = s.conv3d(x, w, stride=(1, 2, 2), padding=1)
+        ...     s.backward(s.sum(y))
+        ...     s.shape(y)
+        (1, 3, 4, 3, 3)
+        """
+        return _SESSION_CALL(self, "conv3d", (x, weight, bias, stride, padding, dilation, groups))
+
+    def conv_transpose1d(self, x, weight, bias=None, stride=1, padding=0, output_padding=0, groups=1,
+                         dilation=1):
+        """A 1-D transposed convolution of ``x``, as ``torch.nn.functional.conv_transpose1d``.
+
+        ``x`` is ``(N, C_in, L)``, ``weight`` ``(C_in, C_out // groups, k)``
+        and ``bias`` an optional tensor of ``C_out`` values. The result is
+        ``(N, C_out, L_out)`` with
+        ``L_out = (L - 1) * stride - 2 * padding + dilation * (k - 1) + output_padding + 1``:
+        the gradient of ``conv1d`` with the same weight, stride, padding and
+        dilation with respect to its input, plus the bias. It is the usual
+        learned upsampling of a decoder. ``output_padding`` must be smaller
+        than ``stride``. The values and gradients are those of
+        :class:`Sequential`'s ``conv_transpose1d`` layer.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session(record=True) as s:
+        ...     x = s.tensor(np.ones((2, 4, 5), np.float32))
+        ...     w = s.tensor(np.full((4, 2, 3), 0.1, np.float32), requires_grad=True)
+        ...     y = s.conv_transpose1d(x, w, stride=2, padding=1, output_padding=1)
+        ...     s.backward(s.sum(y))
+        ...     s.shape(y)
+        (2, 2, 10)
+        """
+        return _SESSION_CALL(self, "conv_transpose1d",
+                             (x, weight, bias, stride, padding, output_padding, groups, dilation))
+
+    def conv_transpose2d(self, x, weight, bias=None, stride=1, padding=0, output_padding=0, groups=1,
+                         dilation=1):
+        """A 2-D transposed convolution of ``x``, as ``torch.nn.functional.conv_transpose2d``.
+
+        ``x`` is ``(N, C_in, H, W)``, ``weight`` ``(C_in, C_out // groups,
+        kh, kw)`` and ``bias`` an optional tensor of ``C_out`` values.
+        ``stride``, ``padding``, ``output_padding`` and ``dilation`` are an
+        integer or a pair ``(height, width)``. The result is ``(N, C_out,
+        H_out, W_out)`` with ``H_out = (H - 1) * stride - 2 * padding +
+        dilation * (kh - 1) + output_padding + 1`` and ``W_out`` likewise:
+        the gradient of ``conv2d`` with the same weight, stride, padding and
+        dilation with respect to its input, plus the bias. ``output_padding``
+        must be smaller than ``stride`` on each axis. The values and
+        gradients are those of :class:`Sequential`'s ``conv_transpose2d``
+        layer.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session(record=True) as s:
+        ...     x = s.tensor(np.ones((1, 4, 3, 3), np.float32))
+        ...     w = s.tensor(np.full((4, 2, 2, 2), 0.1, np.float32), requires_grad=True)
+        ...     y = s.conv_transpose2d(x, w, stride=2)
+        ...     s.backward(s.sum(y))
+        ...     s.shape(y)
+        (1, 2, 6, 6)
+        """
+        return _SESSION_CALL(self, "conv_transpose2d",
+                             (x, weight, bias, stride, padding, output_padding, groups, dilation))
+    # session-ops-conv end
 
 
 class Program:
