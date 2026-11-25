@@ -93,8 +93,13 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("fn-training-clip-grad-norm")
 def _(ml, X, yc, yr, Xh=None):
     """clip_grad_norm_ (as training.clip_grad_norm_ and mojolearn.clip_grad_norm_)
-    over three gradients, L2 and max norm: the total norm and the clipped
-    gradients, each call on fresh copies (the function writes in place)."""
+    over three gradients, the L2 norm (the one norm the profile has): the total
+    norm and the gradients after a clipping call (max_norm 0.5) and after a
+    call under the total (max_norm 1e6, gradients left as they are), each call
+    on fresh copies (the function writes in place). norm_type=inf is refused by
+    name (bindings/optimizer_public_door.mojo door_clip_options) and is held as
+    a refusal here, not hashed: hashing it made the clean cell REFUSED on every
+    side (coverage-gate-training-step_scalars-cpu, d1641666a4)."""
     gs = [_functions_mat(X, 16, 8, "fn-clip:g0"), _functions_mat(X[16:], 4, 3, "fn-clip:g1"),
           np.ascontiguousarray(_functions_cont(X, 5, 6, "fn-clip:g2") * np.float32(4))]
 
@@ -102,8 +107,15 @@ def _(ml, X, yc, yr, Xh=None):
         a = [p(g.copy()) for g in gs]
         b = [p(g.copy()) for g in gs]
         c = [p(g.copy()) for g in gs]
+        try:
+            ml.training.clip_grad_norm_([p(g.copy()) for g in gs], 0.25, norm_type=float("inf"))
+        except Exception as error:  # the host door raises NotImplementedError; any other refusal is a defect
+            if type(error).__name__ != "NotImplementedError" and "NotImplementedError" not in str(error):
+                raise
+        else:
+            raise AssertionError("fn-training-clip-grad-norm: norm_type=inf was accepted; the profile refuses it by name")
         return dict(l2=_functions_d(ml.training.clip_grad_norm_(a, 0.5), a),
-                    inf=_functions_d(ml.training.clip_grad_norm_(b, 0.25, norm_type=float("inf")), b),
+                    unclipped=_functions_d(ml.training.clip_grad_norm_(b, 1e6), b),
                     top=_functions_d(ml.clip_grad_norm_(c, 0.5), c))
 
     return _functions_resident(ml, "training.clip_grad_norm_", lambda p: clip(p), form="train")
