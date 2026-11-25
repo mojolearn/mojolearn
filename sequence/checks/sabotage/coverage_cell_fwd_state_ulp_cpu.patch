@@ -1,0 +1,24 @@
+diff --git a/sequence/ops.mojo b/sequence/ops.mojo
+index a2320c4495..3038e7c3c1 100644
+--- a/sequence/ops.mojo
++++ b/sequence/ops.mojo
+@@ -635,6 +635,9 @@ def op_cell_fwd(t: Int, a: Args):
+         var og = sigm(add(ld(a.p0, row + 3 * H + u), ld(a.p1, row + 3 * H + u)))
+         var c = fma3(fg, ld(a.p4, t), mul(ig, gg))
+         var h = mul(og, tanh_(c))
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the LSTM state one ulp up, host bindings only
++            if abs(h) >= Float32(1.17549435e-38) and h - h == Float32(0):  # SABOTAGE coverage (sab-arms-67): finite normals
++                h = bitcast[DType.float32](bitcast[DType.uint32](h) + UInt32(1))  # SABOTAGE coverage (sab-arms-67): one ulp
+         st(a.p2, row + u, ig)
+         st(a.p2, row + H + u, fg)
+         st(a.p2, row + 2 * H + u, gg)
+@@ -648,6 +651,9 @@ def op_cell_fwd(t: Int, a: Args):
+         var z = sigm(add(ld(a.p0, row + H + u), ld(a.p1, row + H + u)))
+         var n = tanh_(fma3(r, ld(a.p1, row + 2 * H + u), ld(a.p0, row + 2 * H + u)))
+         var h = fma3(z, sub(ld(a.p3, t), n), n)
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the GRU state one ulp up, host bindings only
++            if abs(h) >= Float32(1.17549435e-38) and h - h == Float32(0):  # SABOTAGE coverage (sab-arms-67): finite normals
++                h = bitcast[DType.float32](bitcast[DType.uint32](h) + UInt32(1))  # SABOTAGE coverage (sab-arms-67): one ulp
+         st(a.p2, row + u, r)
+         st(a.p2, row + H + u, z)
+         st(a.p2, row + 2 * H + u, n)

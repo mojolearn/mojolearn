@@ -1,0 +1,21 @@
+diff --git a/autograd/nn_attention.mojo b/autograd/nn_attention.mojo
+index b0b9ed4f7d..97ffb48b60 100644
+--- a/autograd/nn_attention.mojo
++++ b/autograd/nn_attention.mojo
+@@ -52,6 +52,7 @@ lane nn-attention group): multihead_attention, dropout, residual, layer_norm and
+ """
+ from std.collections import Array
+ from std.sys.compile import is_defined
++from std.memory import bitcast  # SABOTAGE coverage (sab-arms-67): the scale fault's bit view
+ from sequence.exec_trait import Exec
+ from sequence.ops import FP, Args, OP_COPY
+ from checks.numerics import ftz, identical_div, identical_sqrt
+@@ -447,6 +448,8 @@ def nn_mha_core[E: Exec](
+     var scale = ftz(identical_div(Float32(1), identical_sqrt(Float32(hd))))
+     comptime if NN_SABOTAGE_SCALE:
+         scale = Float32(1)
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the scores' scale one ulp up, host bindings only
++        scale = bitcast[DType.float32](bitcast[DType.uint32](scale) + UInt32(1))  # SABOTAGE coverage (sab-arms-67): one ulp
+     var probs = nn_attn_softmax(tape, ex, scores, B, H, T, S, scale, flags, lengths)
+     if train and f > Float32(0):
+         var s4: List[Int] = [B, H, T, S]
