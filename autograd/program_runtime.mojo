@@ -23,6 +23,7 @@ from autograd.program_loop import (
     fit_epochs_per_read,
 )
 from autograd.losses import mse, mae, huber, binary_cross_entropy_with_logits, cross_entropy
+from autograd.session_layer_rules import LayerRules  # session-ops
 from autograd.rules_step_ops import StepOpRules
 from autograd.nn_cbw import OPS_CUSTOM_VJP
 from autograd.nn_scan import OPS_SCAN
@@ -579,7 +580,12 @@ def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom
                         # nn-blocks-cbw: the graph may hold a user-defined backward rule (decided once per fit)
                         s.cbw_backward_scalar(loss, rules, False)
                     else:
-                        s.tape.backward_scalar_with_rules(s.ex, loss, rules)
+                        if s.layer_nodes:
+                            # session-ops: the replay recorded a Sequential layer node (the session's Bool, one
+                            # test per batch beside a whole backward; a program without layer ops keeps `rules`)
+                            s.tape.backward_scalar_with_rules(s.ex, loss, LayerRules[StepOpRules](rules))
+                        else:
+                            s.tape.backward_scalar_with_rules(s.ex, loss, rules)
                 if len(grads_out) != 0 and differentiable and e == epochs - 1 and bi == n_batches - 1:
                     for j in range(len(params)):  # driver-loop: over trained parameters (last-step gradient copies)
                         if grad_dst[j] == 0 or not selected[j]:

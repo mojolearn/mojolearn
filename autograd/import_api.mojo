@@ -667,7 +667,7 @@ def imp_gather_nd[E: Exec](
 
 # ---------------------------------------------------------------- rules
 @fieldwise_init
-struct ImportRules(BackwardRules):
+struct ImportRules(BackwardRules, ImplicitlyCopyable, Movable):
     """RankNRules plus the import family's tags (192..207)."""
 
     def supports(self, tag: Int) -> Bool:

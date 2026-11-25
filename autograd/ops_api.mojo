@@ -173,6 +173,12 @@ from autograd.nn_cbw import (
     cbw_bind, cbw_from_words,
 )
 # nn-blocks-cbw end
+# session-ops begin: Sequential's layers as Session ops, codes OPS_LAYER_FIRST..OPS_LAYER_LAST, and the rules that
+# differentiate their nodes in a session (autograd/session_layer_rules.mojo)
+from autograd.session_layer_rules import (
+    LayerRules, OPS_LAYER_FIRST, OPS_LAYER_LAST, OPS_LAYER_POOL_FIRST, OPS_LAYER_RESIZE_FIRST, OPS_LAYER_REST_FIRST,
+)
+# session-ops end
 # nn-blocks-qkv begin: attention over explicit q, k, v (session code 122, autograd/nn_qkv.mojo)
 from autograd.nn_qkv import OPS_ATTENTION_QKV, qkv_attention
 # nn-blocks-qkv end
@@ -449,6 +455,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     #: lane nn-blocks-pg: the parameter-group tables of the grouped
     #: optimizers (autograd/nn_pg.mojo), indexed by `_OpsOptimizer.pg`
     var pg_tables: List[ParamGroupTable]
+    #: lane session-ops: True once a Sequential layer op (OPS_LAYER_FIRST..OPS_LAYER_LAST) recorded a node since
+    #: the last reset; each backward entry tests it once per call and then differentiates with
+    #: LayerRules[its usual rules] (autograd/session_layer_rules.mojo). A session that never uses one keeps
+    #: exactly its old rules.
+    var layer_nodes: Bool
 
     def __init__(out self, var ex: Self.E, record: Bool):
         self.ex = ex^
@@ -482,6 +493,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.append_state = Dict[Int, Int]()
         self.cbw = CbwState()  # nn-blocks-cbw
         self.pg_tables = List[ParamGroupTable]()
+        self.layer_nodes = False  # session-ops
 
     # ------------------------------------------------------------ handles
     def _slot(self, h: Int) raises -> Int:
@@ -937,6 +949,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         # the computed tensors the log names are gone; captured programs stay
         self.oplog.clear()
         self.cbw.clear_records()  # nn-blocks-cbw: the saved tensors were tape storage
+        self.layer_nodes = False  # session-ops: the layer nodes were on the tape
         for slot in range(len(self.live)):  # driver-loop: over session handles
             if not self.live[slot]:
                 continue
@@ -1011,6 +1024,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if self.cbw.holds_rules():
             # nn-blocks-cbw: the graph holds a user-defined backward rule
             self.cbw_backward_scalar(t, StepOpRules(self.steps_address()), accumulate)
+            return
+        if self.layer_nodes:
+            # session-ops: the graph holds a Sequential layer node (one Bool test per call)
+            self.tape.backward_scalar_with_rules(
+                self.ex, t, LayerRules[StepOpRules](StepOpRules(self.steps_address())), accumulate)
             return
         self.tape.backward_scalar_with_rules(self.ex, t, StepOpRules(self.steps_address()), accumulate)
 
@@ -1129,6 +1147,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         elif self.cbw.holds_rules():
             # nn-blocks-cbw: the graph holds a user-defined backward rule
             self.cbw_backward_seeded(t, seed)
+        elif self.layer_nodes:
+            # session-ops: the graph holds a Sequential layer node (one Bool test per call)
+            self.tape.backward_with_rules(self.ex, t, seed, LayerRules[ImportRules](ImportRules()), False)
         else:
             # First-order seeded and scalar backward accept the same supported
             # rank-N and import operations. Recorded higher derivatives keep
@@ -2069,6 +2090,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 if code == OPS_CUSTOM_VJP:
                     return self._cbw_forward(hs, ints, fs, x)
             # nn-blocks-scan / nn-blocks-cbw end
+            # session-ops begin: Sequential's layers as Session ops (codes 130..179), on the no-match path as well;
+            # plain operations, so a scan cell or a custom operation's program (`nested`) may use them
+            if code >= OPS_LAYER_FIRST and code <= OPS_LAYER_LAST:
+                return self._layer_op(code, hs, ints, fs, x)
+            # session-ops end
             raise Error("ops: unknown operation code " + String(code))
         if n >= 1 and _keeps_shape(code):
             # elementwise and row-wise ops keep x's full shape (a free view
@@ -2528,6 +2554,54 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         return self._add(rt, 0, self.tape.requires_grad(rt), 0)
 
     # nn-blocks-qkv begin
+    # session-ops begin: Sequential's layers as Session ops (autograd/session_layer_rules.mojo has the codes)
+    def _layer_op(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """Session codes OPS_LAYER_FIRST..OPS_LAYER_LAST: the family's method records the SAME tape nodes as the
+        Sequential layer (its forward function), and a recording session notes that its graph now holds a layer
+        node, so its backward differentiates with LayerRules (tested once per backward call)."""
+        var t: Tensor
+        if code < OPS_LAYER_POOL_FIRST:
+            t = self._layer_conv(code, hs, ints, fs, x)
+        elif code < OPS_LAYER_RESIZE_FIRST:
+            t = self._layer_pool(code, hs, ints, fs, x)
+        elif code < OPS_LAYER_REST_FIRST:
+            t = self._layer_resize(code, hs, ints, fs, x)
+        else:
+            t = self._layer_rest(code, hs, ints, fs, x)
+        if self.tape.is_recording():
+            self.layer_nodes = True
+        var result = self._add(t, 0, False, 0)
+        self.int_words[self._slot(result)] = False
+        return result
+
+    # session-ops-conv begin: codes 130..139 (sub-lane session-ops-conv replaces this body)
+    def _layer_conv(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Tensor:
+        """The convolutions (conv1d, conv3d, conv_transpose1d / 2d / 3d)."""
+        raise Error("ops: unknown operation code " + String(code))
+    # session-ops-conv end
+
+
+    # session-ops-pool begin: codes 140..149 (sub-lane session-ops-pool replaces this body)
+    def _layer_pool(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Tensor:
+        """The pools (1-D and 3-D max / avg, adaptive avg / max 1-D / 2-D / 3-D)."""
+        raise Error("ops: unknown operation code " + String(code))
+    # session-ops-pool end
+
+
+    # session-ops-resize begin: codes 150..159 (sub-lane session-ops-resize replaces this body)
+    def _layer_resize(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Tensor:
+        """Resampling and rearranging (interpolate, pixel_shuffle / unshuffle, reflection / replication pad)."""
+        raise Error("ops: unknown operation code " + String(code))
+    # session-ops-resize end
+
+
+    # session-ops-rest begin: codes 160..179 (sub-lane session-ops-rest replaces this body)
+    def _layer_rest(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Tensor:
+        """Norms, activations with parameters, multi-head attention, positional encoding and the losses."""
+        raise Error("ops: unknown operation code " + String(code))
+    # session-ops-rest end
+    # session-ops end
+
     def _attention_qkv(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
         """OPS_ATTENTION_QKV: [q, k, v] or [q, k, v, mask], ints [causal (0, 1), scale given (0, 1), mask kind
         (0 none, 1 boolean: ids words, nonzero attends, PyTorch's boolean mask; 2 additive: float values added to
@@ -3902,12 +3976,20 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         """The scalar backward of a graph that may hold custom nodes: `rules`
         plus the custom tag (identical to `rules` on every other node)."""
         var wrapped = CbwRules[Self.E](rules, Int(UnsafePointer(to=self)))
+        if self.layer_nodes:
+            # session-ops: custom nodes and Sequential layer nodes in one graph
+            self.tape.backward_scalar_with_rules(self.ex, t, LayerRules[CbwRules[Self.E]](wrapped), accumulate)
+            return
         self.tape.backward_scalar_with_rules(self.ex, t, wrapped, accumulate)
 
     def cbw_backward_seeded(mut self, t: Tensor, seed: Tensor) raises:
         """The seeded first-order backward of a graph that may hold custom
         nodes (StepOpRules: ImportRules plus the step ops' tags)."""
         var wrapped = CbwRules[Self.E](StepOpRules(self.steps_address()), Int(UnsafePointer(to=self)))
+        if self.layer_nodes:
+            # session-ops: custom nodes and Sequential layer nodes in one graph
+            self.tape.backward_with_rules(self.ex, t, seed, LayerRules[CbwRules[Self.E]](wrapped), False)
+            return
         self.tape.backward_with_rules(self.ex, t, seed, wrapped, False)
 
     def _cbw_op(mut self, ints: List[Int], fs: List[Float32]) raises -> Int:
