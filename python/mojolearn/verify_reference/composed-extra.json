@@ -1367,6 +1367,415 @@
      ]
     }
    ]
+  },
+  {
+   "name": "ctc-offset",
+   "about": "Session.ctc_loss's gradient under a large common offset (lane stream-fits, 2026-11-25): (T 4, N 2, C 3) log-probabilities on a 2^-8 grid, and the same words 2^14 lower (exact). The scans read each step's log-probabilities less their largest and normalize every step's states, so the gradient (each step's state posteriors) is the SAME WORDS for both, and the enumeration oracle's; the moved loss is the loss plus 2^14 times each row's input length over its target length, averaged.",
+   "data": {
+    "lp": {
+     "value": [
+      [
+       [
+        -2.73046875,
+        -1.52734375,
+        -0.328125
+       ],
+       [
+        -1.4921875,
+        -0.29296875,
+        -3.4921875
+       ]
+      ],
+      [
+       [
+        -1.4921875,
+        -0.29296875,
+        -3.4921875
+       ],
+       [
+        -2.73046875,
+        -1.52734375,
+        -0.328125
+       ]
+      ],
+      [
+       [
+        -2.73046875,
+        -1.52734375,
+        -0.328125
+       ],
+       [
+        -0.16015625,
+        -3.359375,
+        -2.16015625
+       ]
+      ],
+      [
+       [
+        -0.16015625,
+        -3.359375,
+        -2.16015625
+       ],
+       [
+        -2.73046875,
+        -1.52734375,
+        -0.328125
+       ]
+      ]
+     ]
+    },
+    "lps": {
+     "value": [
+      [
+       [
+        -16386.73046875,
+        -16385.52734375,
+        -16384.328125
+       ],
+       [
+        -16385.4921875,
+        -16384.29296875,
+        -16387.4921875
+       ]
+      ],
+      [
+       [
+        -16385.4921875,
+        -16384.29296875,
+        -16387.4921875
+       ],
+       [
+        -16386.73046875,
+        -16385.52734375,
+        -16384.328125
+       ]
+      ],
+      [
+       [
+        -16386.73046875,
+        -16385.52734375,
+        -16384.328125
+       ],
+       [
+        -16384.16015625,
+        -16387.359375,
+        -16386.16015625
+       ]
+      ],
+      [
+       [
+        -16384.16015625,
+        -16387.359375,
+        -16386.16015625
+       ],
+       [
+        -16386.73046875,
+        -16385.52734375,
+        -16384.328125
+       ]
+      ]
+     ]
+    },
+    "tg": {
+     "value": [
+      [
+       1,
+       2
+      ],
+      [
+       1,
+       1
+      ]
+     ],
+     "dtype": "int64"
+    },
+    "il": {
+     "value": [
+      4,
+      4
+     ],
+     "dtype": "int64"
+    },
+    "tl": {
+     "value": [
+      2,
+      2
+     ],
+     "dtype": "int64"
+    },
+    "want": {
+     "value": [
+      [
+       [
+        -0.04634233117297294,
+        -0.20365766882702707,
+        -0.0
+       ],
+       [
+        -0.04658563336262842,
+        -0.2034143666373716,
+        -0.0
+       ]
+      ],
+      [
+       [
+        -0.044941164899631306,
+        -0.19863056391218342,
+        -0.00642827118818525
+       ],
+       [
+        -0.04886540550647699,
+        -0.20113459449352303,
+        -0.0
+       ]
+      ],
+      [
+       [
+        -0.0029964999565217443,
+        -0.007293102140226766,
+        -0.23971039790325147
+       ],
+       [
+        -0.24753860768366998,
+        -0.002461392316330034,
+        -0.0
+       ]
+      ],
+      [
+       [
+        -0.2116108264779634,
+        -0.0,
+        -0.0383891735220366
+       ],
+       [
+        -0.0005683841301628626,
+        -0.24943161586983711,
+        -0.0
+       ]
+      ]
+     ],
+     "dtype": "float64"
+    },
+    "loss": {
+     "value": [
+      1.1675731793334645
+     ],
+     "dtype": "float64"
+    },
+    "lossm": {
+     "value": [
+      32769.16757317934
+     ],
+     "dtype": "float64"
+    }
+   },
+   "do": [
+    {
+     "op": "session",
+     "as": "sa",
+     "record": true,
+     "do": [
+      {
+       "op": "call",
+       "fn": "sa.tensor",
+       "args": [
+        "@lp"
+       ],
+       "kw": {
+        "requires_grad": true
+       },
+       "as": "xa"
+      },
+      {
+       "op": "call",
+       "fn": "sa.ids",
+       "args": [
+        "@tg"
+       ],
+       "as": "ta"
+      },
+      {
+       "op": "call",
+       "fn": "sa.ids",
+       "args": [
+        "@il"
+       ],
+       "as": "ia"
+      },
+      {
+       "op": "call",
+       "fn": "sa.ids",
+       "args": [
+        "@tl"
+       ],
+       "as": "la"
+      },
+      {
+       "op": "call",
+       "fn": "sa.ctc_loss",
+       "args": [
+        "@xa",
+        "@ta",
+        "@ia",
+        "@la"
+       ],
+       "as": "ca"
+      },
+      {
+       "op": "read",
+       "fn": "sa.numpy",
+       "of": "@ca",
+       "as": "va"
+      },
+      {
+       "op": "call",
+       "fn": "sa.backward",
+       "args": [
+        "@ca"
+       ]
+      },
+      {
+       "op": "read",
+       "fn": "sa.grad",
+       "of": "@xa",
+       "as": "ga"
+      }
+     ]
+    },
+    {
+     "op": "session",
+     "as": "sb",
+     "record": true,
+     "do": [
+      {
+       "op": "call",
+       "fn": "sb.tensor",
+       "args": [
+        "@lps"
+       ],
+       "kw": {
+        "requires_grad": true
+       },
+       "as": "xb"
+      },
+      {
+       "op": "call",
+       "fn": "sb.ids",
+       "args": [
+        "@tg"
+       ],
+       "as": "tb"
+      },
+      {
+       "op": "call",
+       "fn": "sb.ids",
+       "args": [
+        "@il"
+       ],
+       "as": "ib"
+      },
+      {
+       "op": "call",
+       "fn": "sb.ids",
+       "args": [
+        "@tl"
+       ],
+       "as": "lb"
+      },
+      {
+       "op": "call",
+       "fn": "sb.ctc_loss",
+       "args": [
+        "@xb",
+        "@tb",
+        "@ib",
+        "@lb"
+       ],
+       "as": "cb"
+      },
+      {
+       "op": "read",
+       "fn": "sb.numpy",
+       "of": "@cb",
+       "as": "vb"
+      },
+      {
+       "op": "call",
+       "fn": "sb.backward",
+       "args": [
+        "@cb"
+       ]
+      },
+      {
+       "op": "read",
+       "fn": "sb.grad",
+       "of": "@xb",
+       "as": "gb"
+      }
+     ]
+    },
+    {
+     "op": "same",
+     "a": "@ga",
+     "b": "@gb",
+     "what": "the ctc gradient is the same words with every log-probability 2^14 lower"
+    },
+    {
+     "op": "close",
+     "a": "@ga",
+     "b": "@want",
+     "rtol": 0.0003,
+     "atol": 3e-05,
+     "what": "the ctc gradient is the enumeration oracle's"
+    },
+    {
+     "op": "np",
+     "fn": "reshape",
+     "args": [
+      "@va",
+      [
+       -1
+      ]
+     ],
+     "as": "va1"
+    },
+    {
+     "op": "np",
+     "fn": "reshape",
+     "args": [
+      "@vb",
+      [
+       -1
+      ]
+     ],
+     "as": "vb1"
+    },
+    {
+     "op": "close",
+     "a": "@va1",
+     "b": "@loss",
+     "rtol": 0.0003,
+     "atol": 3e-05,
+     "what": "the ctc loss is the enumeration oracle's"
+    },
+    {
+     "op": "close",
+     "a": "@vb1",
+     "b": "@lossm",
+     "rtol": 1e-06,
+     "atol": 0.01,
+     "what": "the moved ctc loss is the loss plus the offset per input step"
+    },
+    {
+     "op": "digest",
+     "part": "grad",
+     "of": [
+      "@va",
+      "@vb",
+      "@ga"
+     ]
+    }
+   ]
   }
  ]
 }

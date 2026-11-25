@@ -3,7 +3,7 @@
 """The log_softmax layer and the ctc loss of lane nn-losses-2 (2026-11-23), and nll / kl_div fitted through
 Sequential (autograd/nn_log_softmax.mojo, autograd/nn_ctc.mojo, autograd/nn_ctc_ops.mojo).
 
-One test, test_nn_losses_2, runs eleven independent units across host cores (each on its own HostExec):
+One test, test_nn_losses_2, runs twelve independent units across host cores (each on its own HostExec):
   - units 0-2, log_softmax: the layer (nn_log_softmax_forward, the Sequential layer's recording) on (3, 4, 5) samples
     along dim -1 (the row op) and dim 1 (permute, row op, permute back): values against a float64 oracle; the input
     gradient of sum(w * y) against the oracle's closed form w - softmax * sum(w), and that closed form against
@@ -21,6 +21,9 @@ One test, test_nn_losses_2, runs eleven independent units across host cores (eac
       sequences (1 to 3 labels of 3 symbols, repeats included, inputs of 4 to 10 of the 10 padded steps through
       `lengths`): greedy decoding reaches a label accuracy (1 - edit distance / labels) >= 0.9 on its 96
       samples with finite loss, parameters and predictions; the admission refusals in words.
+  - unit 11, the ctc gradient under a large common offset (lane stream-fits, 2026-11-25): log-probabilities and the
+      same words 2^14 lower give the same gradient words (the normalized form), the oracle's gradient, and the moved
+      loss = the loss + 2^14 x each row's input length, reduced.
   - one `NN_LOSSES_2 <case> digest` line over the value and gradient words of each case.
 
 nll on log_softmax against cross_entropy (the stated difference): the row loss is the same word (cross_entropy's
@@ -390,6 +393,88 @@ def run_ctc_case[E: Exec](mut ex: E, c: CtcCase) raises -> List[Float32]:
     return words^
 
 
+def _ctc_tape[E: Exec](
+    mut ex: E, lp32: List[Float32], rows: List[Float32], B: Int, T: Int, C: Int, blank: Int, reduction: Int,
+) raises -> Tuple[Float32, List[Float32]]:
+    """(the reduced loss, its gradient in the log-probabilities) of one tape ctc_loss call."""
+    var tape = Tape()
+    var lt = tape.tensor(ex, lp32, B * T, C, True)
+    var tt = tape.tensor(ex, rows, B, len(rows) // B, False)
+    var loss = ctc_loss(tape, ex, lt, tt, T, C, blank, reduction, False)
+    tape.backward_scalar_with_rules(ex, loss, NnCtcRules())
+    var value = tape.values(ex, loss)[0]
+    var g = tape.gradients(ex, lt)
+    tape.release(ex)
+    return (value, g^)
+
+
+comptime _CTC_OFFSET = 16384.0
+
+
+def run_ctc_offset_case[E: Exec](mut ex: E) raises -> List[Float32]:
+    """Unit 11 (lane stream-fits, 2026-11-25): the gradient under a large common offset. Log-probabilities on a
+    2^-8 grid (|lp| < 8) and the same words minus 2^14 (exact: 22 significant bits): every step's shift is exact
+    on both, so the normalized scans see the same words and the gradient must be the SAME WORDS (the raw form of
+    before 2026-11-25, exp(alpha + beta - lp + nll) with nll near 5 * 2^14, moves them by ulp(nll), about 1e-2
+    relative). The unshifted gradient against the enumeration oracle; the shifted loss against the unshifted one
+    plus the offset times each row's input length (scaled as the reduction scales it)."""
+    var rows_c = _ctc_cases()[0].rows.copy()
+    var B = len(rows_c)
+    var T = _CT
+    var C = _CC
+    var state = UInt64(20261125)
+    var lp32 = List[Float32]()
+    var shifted = List[Float32]()
+    for _ in range(B * T):  # small-loop(fixture)
+        var z = List[Float64]()
+        for _ in range(C):  # small-loop(fixture)
+            z.append(2.0 * _lcg(state))
+        var mx = max(z[0], max(z[1], z[2]))
+        var s = 0.0
+        for k in range(C):  # small-loop(fixture)
+            s += exp(z[k] - mx)
+        for k in range(C):  # small-loop(fixture)
+            var q = Float64(Int((z[k] - mx - log(s)) * 256.0)) / 256.0  # on the 2^-8 grid, |q| < 8
+            lp32.append(Float32(q))
+            shifted.append(Float32(q - _CTC_OFFSET))
+    var rows = List[Float32]()
+    for b in range(B):  # small-loop(fixture)
+        rows.append(Float32(rows_c[b].tin))
+        rows.append(Float32(len(rows_c[b].labels)))
+        for k in range(_CS):  # small-loop(fixture)
+            rows.append(Float32(rows_c[b].labels[k]) if k < len(rows_c[b].labels) else Float32(-9))
+    var plain = _ctc_tape(ex, lp32, rows, B, T, C, 0, REDUCTION_MEAN)
+    var moved = _ctc_tape(ex, shifted, rows, B, T, C, 0, REDUCTION_MEAN)
+    _same_words("ctc offset gradient (2^14 below vs unmoved)", plain[1], moved[1])
+    var lp = List[Float64]()
+    for i in range(len(lp32)):  # small-loop(fixture)
+        lp.append(Float64(lp32[i]))
+    var g64 = List[Float64](length=B * T * C, fill=0.0)
+    var total = 0.0
+    var extra = 0.0
+    for b in range(B):  # small-loop(fixture)
+        var r = _ctc64(lp, b * T * C, C, rows_c[b], 0)
+        var L = len(rows_c[b].labels)
+        var factor = 1.0 / Float64(L if L > 0 else 1) / Float64(B)
+        total += -log(r[0]) * factor
+        extra += _CTC_OFFSET * Float64(rows_c[b].tin) * factor
+        for t in range(rows_c[b].tin):  # small-loop(fixture)
+            for k in range(C):  # small-loop(fixture)
+                g64[b * T * C + t * C + k] = -r[1][t * C + k] / r[0] * factor
+    _close("ctc offset gradient", plain[1], g64)
+    var pv: List[Float32] = [plain[0]]
+    var mv: List[Float32] = [moved[0]]
+    var pe: List[Float64] = [total]
+    var me: List[Float64] = [total + extra]
+    _close("ctc offset value (unmoved)", pv, pe)
+    _close("ctc offset value (2^14 below)", mv, me, 1.0e-6, 1.0e-2)
+    var words = plain[1].copy()
+    words.append(plain[0])
+    words.append(moved[0])
+    print("NN_LOSSES_2 ctc_offset value", moved[0], "digest", _digest(words))
+    return words^
+
+
 # ---------------------------------------------------------------- Sequential fits
 comptime _N = 96
 comptime _D = 4
@@ -703,12 +788,12 @@ def run_ctc_fit[E: Exec](mut ex: E) raises -> List[Float32]:
 
 
 # ---------------------------------------------------------------- tests
-comptime _UNITS = 11
+comptime _UNITS = 12
 
 
 def _run_unit[E: Exec](mut ex: E, unit: Int) raises -> List[Float32]:
     """Units: 0-2 log_softmax (dim -1, 1, 2), 3-7 the ctc tape cases, 8 the class fits, 9 the ctc fit, 10 the ctc
-    refusals."""
+    refusals, 11 the ctc gradient under a large common offset."""
     var t0 = perf_counter_ns()
     var words: List[Float32]
     var dims: List[Int] = [-1, 1, 2]
@@ -720,8 +805,10 @@ def _run_unit[E: Exec](mut ex: E, unit: Int) raises -> List[Float32]:
         words = run_class_fits(ex)
     elif unit == 9:
         words = run_ctc_fit(ex)
-    else:
+    elif unit == 10:
         words = run_ctc_refusals(ex)
+    else:
+        words = run_ctc_offset_case(ex)
     print("NN_LOSSES_2 unit", unit, "seconds", Float64(perf_counter_ns() - t0) * 1.0e-9)
     return words^
 
