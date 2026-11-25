@@ -55,6 +55,11 @@ def metric_exact_buffer(value: PythonObject) raises -> Bool:
     return _exact_kind(value) != 0
 
 
+def metric_exact_ndarray(value: PythonObject) raises -> Bool:
+    """Whether `value` is an exact NumPy ndarray (its `view` is NumPy's own)."""
+    return _exact_kind(value) == 2
+
+
 def _typestr(value: PythonObject, kind: Int) raises -> String:
     if kind == 1:
         return String(value.dtype)
