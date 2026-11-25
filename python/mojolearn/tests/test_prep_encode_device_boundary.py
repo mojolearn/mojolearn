@@ -200,10 +200,24 @@ def test_an_instance_without_the_parameter_runs_this_installations_device(spec):
     assert same_bits(model.fit(*args).transform(args[0]), build(spec).fit(*args).transform(args[0]))
 
 
-def test_rfe_does_not_take_device():
-    # A meta-estimator over a member: the member carries its own device.
-    with pytest.raises(TypeError):
-        mojolearn.RFE(mojolearn.Ridge(), device="cpu")
+def test_rfe_takes_device_and_hands_it_to_its_estimator():
+    # 0e3056074e ("RFE: device="): RFE takes `device` as its last constructor
+    # parameter, stored under its own name (the declared constructor writes it),
+    # checked at construction with the estimators' words, and handed to the
+    # estimator it fits; an estimator constructed with a different explicit
+    # device is refused before anything runs (core/function_device.mojo
+    # `function_device_member`).
+    assert mojolearn.RFE._parameters[-1] == "device"
+    assert mojolearn.RFE(mojolearn.Ridge()).get_params()["device"] is None
+    assert mojolearn.RFE(mojolearn.Ridge(), device="cpu").get_params()["device"] == "cpu"
+    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
+        mojolearn.RFE(mojolearn.Ridge(), device="tpu")
+    x, y = _continuous(), _continuous(cols=1).ravel()
+    model = mojolearn.RFE(mojolearn.Ridge(), n_features_to_select=2, device="cpu").fit(x, y)
+    assert model.support_.sum() == 2
+    if TWO_DEVICES:
+        with pytest.raises(ValueError, match="give both the same device"):
+            mojolearn.RFE(mojolearn.Ridge(device="gpu"), n_features_to_select=2, device="cpu").fit(x, y)
 
 
 @pytest.mark.parametrize("device", [None, "cpu"])
