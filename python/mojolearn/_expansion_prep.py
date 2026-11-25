@@ -3084,6 +3084,21 @@ class RFE(_SelectorMixin):
         self.importance_getter = importance_getter
         self.device = device
 
+    def vendor_used(self):
+        """The backend this selector runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the selector uses.
+        """
+        # w3-fix-11 (2026-11-25): RFE took `device=` (vd-functions 8d69936402) without this, so
+        # `mojolearn.check` (_check_both._route_of) could not tell which binary ran. The encode door
+        # answers it from this estimator's device route (bindings/prep_encode_native_door.mojo,
+        # "vendor_used": prep_route_vendor_used), as for every other encode-door class.
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
+
     def fit(self, X, y, **fit_params):
         """Fit the selector and final estimator.
 
