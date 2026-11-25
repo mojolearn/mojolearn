@@ -130,7 +130,9 @@ def test_sigterm_controller_stops_worker_group(tmp_path):
     pid = None
     try:
         deadline = time.monotonic()+5
-        while not (tmp_path/'worker.pid').exists() and time.monotonic()<deadline:
+        # the file exists before write_text has written the pid (w3-integrate-10: int('') under load)
+        while not ((tmp_path/'worker.pid').exists() and (tmp_path/'worker.pid').read_text().strip()) \
+                and time.monotonic()<deadline:
             time.sleep(.03)
         pid = int((tmp_path/'worker.pid').read_text())
         proc.terminate()
