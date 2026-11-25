@@ -951,23 +951,29 @@ def _ctc_admission_on[E: Exec & Movable & Deinitable](var ex: E, which: Int) rai
     var want = List[String]()
     if which == 1:
         rows[4] = 5.0
-        want = ["input_lengths must be whole numbers from 0 to the 4 steps", "sample 1 has"]
+        want.append(String("input_lengths must be whole numbers from 0 to the 4 steps"))
+        want.append(String("sample 1 has"))
     elif which == 2:
         rows[1] = 2.5
-        want = ["target_lengths must be whole numbers from 0 to the targets' width (2)", "sample 0 has"]
+        want.append(String("target_lengths must be whole numbers from 0 to the targets' width (2)"))
+        want.append(String("sample 0 has"))
     elif which == 3:
         rows[3] = 3.0
-        want = ["targets must be class indices in [0, 3)", "sample 0 label 1 is"]
+        want.append(String("targets must be class indices in [0, 3)"))
+        want.append(String("sample 0 label 1 is"))
     elif which == 4:
         rows[6] = 0.0
-        want = ["targets must not hold the blank index (0)", "sample 1 label 0"]
+        want.append(String("targets must not hold the blank index (0)"))
+        want.append(String("sample 1 label 0"))
     elif which == 5:
         rows[2] = 1.5
-        want = ["targets must be class indices in [0, 3)", "sample 0 label 0 is"]
+        want.append(String("targets must be class indices in [0, 3)"))
+        want.append(String("sample 0 label 0 is"))
     elif which == 6:
         rows[0] = -1.0
         rows[6] = 0.0
-        want = ["input_lengths must be whole numbers", "sample 0 has"]
+        want.append(String("input_lengths must be whole numbers"))
+        want.append(String("sample 0 has"))
     var n = len(rows)
     var cw = embedding_check_words(n)
     var packed = ex.alloc(n)
