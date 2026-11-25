@@ -35,7 +35,11 @@ def tiny_lm():
 
 def tiny_mlp():
     import numpy as np
-    from . import SmallMLPTrainer
+    # Bound to the running side (w3f7-a, 2026-11-24): built from the bare
+    # package it carried no device, so SmallMLPTrainer's checks ran on the
+    # installation's default on both sides, and ParallelNeuralTrainer (a
+    # devices= driver that runs on the side its member carries) refused it.
+    SmallMLPTrainer=resolve('mojolearn.SmallMLPTrainer')
     weights=[(np.arange(n,dtype=np.float32)%7-3).reshape(shape)/32 for n,shape in
              [(128,(16,8)),(16,(16,)),(48,(3,16)),(3,(3,))]]
     return SmallMLPTrainer(*weights,data_schedule={'fixture':'public-api-v1'},lr=.125)

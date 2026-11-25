@@ -63,6 +63,14 @@ OPTIMIZER_DEVICE_METHODS=frozenset(('params_to_device','params_to_host','grads_t
     'grads_to_host','param_device','step_device'))
 DEVICE_ONLY_CLASSES=frozenset(('ParallelByteLanguageModelTrainer',))
 DEVICE_ONLY_METHODS=frozenset((('Embedding','to_device'),))
+#: `devices=` drivers whose workers run on the installation's own set whatever
+#: side their member carries (Andrew, 2026-11-24: the parallel drivers keep
+#: `devices=`; verify takes their one digest and lists them single-sided).
+#: On a CPU-only install that set is the CPU one and the CPU side runs them;
+#: beside a GPU set they run on the GPU side and the CPU side records them
+#: 'not applicable' (kind 'installation side'), never a GPU digest under the
+#: CPU label.
+INSTALLATION_SIDE_CLASSES=frozenset(('ParallelNeuralTrainer',))
 
 
 def device_only(family, public, method):
@@ -107,6 +115,10 @@ def capture(path=None, endpoints=None, *, artifacts=None, side=None):
                 recorder.rows[endpoint]=dict(status='not applicable',kind='device only',
                     reason='the CPU side (device="cpu")' if side=='cpu' and not cpu_only
                     else 'this build declares no device (runtime_report cpu_only)')
+                continue
+            if side=='cpu' and not cpu_only and public.rsplit('.',1)[-1] in INSTALLATION_SIDE_CLASSES:
+                recorder.rows[endpoint]=dict(status='not applicable',kind='installation side',
+                    reason='a devices= driver runs on this installation\'s GPU set; its one digest is the GPU side\'s')
                 continue
             groups.setdefault((family,public),(module,[]))[1].append(method)
         for (family,public),(module,methods) in groups.items():
@@ -197,7 +209,7 @@ def admit(captures):
             raise ValueError('stale fixtures or missing native artifact provenance')
         passed=sorted(e for e,row in report.get('endpoints',{}).items() if row.get('status')=='captured')
         not_applicable=sorted(e for e,row in report.get('endpoints',{}).items()
-            if vendor=='cpu' and row.get('status')=='not applicable' and row.get('kind')=='device only')
+            if vendor=='cpu' and row.get('status')=='not applicable' and row.get('kind') in ('device only','installation side'))
         missing=sorted(expected-set(passed)-set(not_applicable))
         if vendor=='cuda' and (missing or report.get('pending')):
             raise ValueError('canonical reference must execute every endpoint successfully')

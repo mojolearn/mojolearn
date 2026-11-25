@@ -337,7 +337,12 @@ def _ivf_search(model: PythonObject, kind: PythonObject, args: PythonObject, adm
                            Int(py=fields["n_lists_"]), Int(py=fields["metric_code_"])])
     var dim = fitted[1]
     if q.shape[1] != dim:
-        raise Error("ValueError: query feature count differs from the fitted index")
+        # The wording of the sibling refusals (extend's "X has N features",
+        # x_ann/neighbors_ann_query_run.mojo's "queries have N features"):
+        # e230964ecf had shortened it to "query feature count differs",
+        # dropping the word the public contract names (w3f7-a, 2026-11-24).
+        raise Error("ValueError: mojolearn IVFIndex: queries have " + String(q.shape[1])
+                    + " features, the index has " + String(dim))
     var names = Python.tuple("n_lists", "n_probes", "n_neighbors", "kmeans_n_iters", "random_state")
     for i in range(len(names)):  # small-loop(five public integer parameters)
         if py_type(fields[names[i]]) is not b.int:

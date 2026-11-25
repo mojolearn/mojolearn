@@ -281,6 +281,21 @@ def process_pool_vendor(pool: PythonObject) raises -> String:
     return pool.downcast_value_ptr[ProcessPoolOwner]()[].vendor.copy()
 
 
+def process_pool_host(pool: PythonObject) raises -> Bool:
+    """True for a pool `process_pool_host_set` moved off the process's
+    installed route: its route is "cpu" while the process's is a GPU one.
+    On a CPU-only install the installed route is itself "cpu", so no pool is
+    a host pool there: its parent-side merges run on the process's own CPU
+    images (w3f7-a, 2026-11-24: reading every "cpu" pool as a host pool sent
+    a CPU-only install's merges to the host twins, which it does not connect,
+    and refused "the base binding publishes no native entry table"). Two
+    word reads and two string compares; no lookup, no allocation."""
+    process_pool_admit(pool)
+    if pool.downcast_value_ptr[ProcessPoolOwner]()[].vendor != "cpu":
+        return False
+    return PROCESS_BOUNDARY.get_or_create_ptr()[].vendor != "cpu"
+
+
 def process_pool_admit(pool: PythonObject) raises:
     """Refuses anything but a pool handle this door created (exact native
     type; no dictionary or attribute of `pool` is read)."""

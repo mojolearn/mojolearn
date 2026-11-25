@@ -51,7 +51,7 @@ from bindings.parallel_neighbor_worker_door import parallel_neighbor_worker, par
 from bindings.native_process_pool_door import (
     process_worker_connect, process_worker_next, process_worker_value, process_worker_reply, process_worker_refuse,
     process_pool_create, process_pool_close, process_pool_closed, process_pool_pids, process_pool_devices,
-    process_pool_vendor,
+    process_pool_host,
 )
 from bindings.native_transport_door import transport_close
 from core.entry_table import EntryRef
@@ -247,8 +247,10 @@ def _member_host(fields: PythonObject) raises -> Bool:
 
 def _pool_host(pool: PythonObject) raises -> Bool:
     """A held pool's route (a holder's or a distributed index's), read once
-    per query call: True for a host pool."""
-    return process_pool_vendor(pool) == "cpu"
+    per query call: True for a host pool, one moved off the process's
+    installed route (`process_pool_host`); never on a CPU-only install, whose
+    own pools merge on the recorded `table_keys` (w3f7-a, 2026-11-24)."""
+    return process_pool_host(pool)
 
 
 def _identical(fields: PythonObject) raises -> Bool:
