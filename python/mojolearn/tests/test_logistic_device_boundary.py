@@ -182,7 +182,9 @@ def test_cpu_device_never_runs_a_fast_binary():
         # where no fast binaries are installed, the mode's own refusal stands
         pass
     else:
-        raise AssertionError("device='cpu' with numeric_mode='fast' must not fit")
+        # Off Apple with no fast set the identical set answers `fast` for this family (core/mode_answer.mojo,
+        # MODE_FAMILIES_ANSWERED; lane gs-fix: the test predated it and failed on the L40S GPU install).
+        assert model.vendor_used() == "cpu"
 
 
 @pytest.mark.parametrize("problem", PROBLEMS)
