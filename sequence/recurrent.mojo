@@ -28,6 +28,8 @@ from sequence.ops import (
     OP_CELL_FWD,
     OP_CELL_BWD_H,
     OP_COLSUM,
+    OP_COPY,
+    OP_SEQ_IOTA,
     OP_FILL,
     OP_GATHER_ROWS,
     OP_GATHER_SEQ,
@@ -73,6 +75,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_di
 from autograd.losses import LossScratch, loss_scratch, release_loss_scratch, loss_value_into, REDUCTION_MEAN
 from autograd.loss_ops import LS_MSE, LS_CROSS_ENTROPY
 from sequence.rnn_options_ops import OP_RNO_ROW_WEIGHTS
+from autograd.epoch_monitor import EpochMonitor
 from autograd.optim import OP_AGO_SUMSQ_PART, OP_AGO_NORM_ACC, OP_AGH_OPT_SCALED
 from autograd.ops import ag_fold_block
 from std.sys.compile import is_defined
@@ -222,6 +225,28 @@ struct RnnOptions(ImplicitlyCopyable, Movable):
     var h0: FP
     var has_c0: Bool
     var c0: FP
+    #: per-epoch validation (the generic EpochMonitor, autograd/epoch_monitor.mojo): `nv` sequences (0: none) in
+    #: `vx` [nv, T, D], their targets `vy` (as Y), their lengths `vl` when `has_vl`; `patience` n_iter_no_change
+    #: (0: every epoch), `tol`, `restore` (the best epoch's parameters and optimizer state at the end). `vcurve`
+    #: receives epochs + 2 host words: each epoch's validation loss, then the epochs run and the best epoch.
+    var nv: Int
+    var vx: FP
+    var vy: FP
+    var has_vl: Bool
+    var vl: FP
+    var patience: Int
+    var tol: Float32
+    var restore: Bool
+    var vcurve: FP
+    #: resume (warm start of the optimizer, partial_fit): `state` holds 3 n_params + 4 host words in and out (the
+    #: optimizer's three state buffers, beta1^t, beta2^t, NAdam's mu product, and the steps taken before, `t0`)
+    var has_state: Bool
+    var state: FP
+    #: the fit's epochs (the vcurve's length less its two result words)
+    var epochs: Int
+
+    def vcurve_words(self) -> Int:
+        return self.epochs if self.nv > 0 else 0
 
     def __init__(out self):
         self.seq_out = False
@@ -237,11 +262,24 @@ struct RnnOptions(ImplicitlyCopyable, Movable):
         self.h0 = dummy_ptr()
         self.has_c0 = False
         self.c0 = dummy_ptr()
+        self.nv = 0
+        self.vx = dummy_ptr()
+        self.vy = dummy_ptr()
+        self.has_vl = False
+        self.vl = dummy_ptr()
+        self.patience = 0
+        self.tol = Float32(0.0)
+        self.restore = False
+        self.vcurve = dummy_ptr()
+        self.has_state = False
+        self.state = dummy_ptr()
+        self.epochs = 0
 
     def plain(self, net: Net) -> Bool:
         """No option on: the launches of the last-step model of before."""
         return (net.dirs == 1 and not self.seq_out and not self.no_bias and self.dropout == Float32(0.0)
-                and self.clip == Float32(0.0) and not self.has_sw and not self.has_cw and not self.has_h0)
+                and self.clip == Float32(0.0) and not self.has_sw and not self.has_cw and not self.has_h0
+                and self.nv == 0 and not self.has_state)
 
     def weighted(self, has_lens: Bool) -> Bool:
         """The loss is a weighted mean (sum w l / sum w): sample or class weights, or every step's loss masked by
@@ -473,7 +511,7 @@ struct Work(Movable):
         self.lens = ex.alloc(B) if has_lens else self.one
         self.wrow = self.one
         self.tiny = self.one
-        if train and opts.weighted(has_lens):
+        if train and (opts.weighted(has_lens) or opts.nv > 0):
             self.wrow = ex.alloc(S * B)
             self.tiny = ex.alloc(1)
             # the smallest normal float32: sum w + 2^-126 is sum w for any sum above 2^-100, and 0 / 2^-126 is 0
@@ -662,6 +700,16 @@ trait RnnStep(Defaultable & Movable & Deinitable):
         at loss_dst[0], and every parameter gradient into Gr through it."""
         ...
 
+    def validation_loss[E: Exec](
+        mut self, mut ex: E, net: Net, task: Int, opts: RnnOptions, P: FP, T: Int, w: Work, setup: RnnFitSetup,
+        dst: FP,
+    ) raises:
+        """Lane rnn-parity: the loss of the parameters P on the opts.nv validation sequences into dst[0] (an
+        executor word): the forward in inference mode in chunks of the Work's rows, each row (each valid step
+        with output="sequence") weighted 1, the plain mean over all of them (sum l / count, the chunks' sums
+        folded in order). Sample and class weights do not enter it."""
+        ...
+
 
 # Lane rnn-parity fault injection (verify's sabotage arms of the weighted fit, never in a product build): the
 # loss weights drop their sample-weight factor on ONE side, the device executor's fit or the host executor's.
@@ -760,12 +808,26 @@ def rnn_fit[E: Exec, //, S: RnnStep](
     var st = OptState()
     var step = S()
     # lane rnn-parity: the options' setup, once (nothing when plain)
-    var setup = RnnFitSetup(ex, net, task, opts, N, St, np_, P, dY, has_lens, w)
+    var setup = RnnFitSetup(ex, net, task, opts, N, St, np_, P, dY, has_lens, w, T, ycols, bmax)
     # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
     # clock, outside the loop, so the loop region holds loop work only
     ex.sync()
     var loop_start = fit_loop_start()
+    var epochs_run = epochs
     if not plain:
+        # resume (partial_fit, lane rnn-parity): the optimizer state and step count of the previous call
+        var t0 = 0
+        if opts.has_state:
+            ex.upload(s1, opts.state, np_)
+            ex.upload(s2, opts.state + np_, np_)
+            ex.upload(s3, opts.state + 2 * np_, np_)
+            st.pw1 = opts.state.unsafe_load(3 * np_)
+            st.pw2 = opts.state.unsafe_load(3 * np_ + 1)
+            st.mu_prod = opts.state.unsafe_load(3 * np_ + 2)
+            t0 = Int(opts.state.unsafe_load(3 * np_ + 3))
+        var monitor = EpochMonitor(Float64(opts.tol), opts.patience)
+        var best = RnnBest(ex, opts, np_)
+        var vword = List[Float32](length=1, fill=0.0)
         for k in range(n_steps):  # driver-loop: over optimizer steps (the options loop, lane rnn-parity)
             var j = k % per
             if j == 0:
@@ -773,11 +835,42 @@ def rnn_fit[E: Exec, //, S: RnnStep](
             var off = j * bs
             var B = min(bs, N - off)
             _rnn_options_step(ex, step, net, task, opts, setup, w, P, Gr, dX, dY, dL, dL_opt, dord, has_lens,
-                              N, T, St, B, off, ycols, np_, seed, k, dloss + k, loss_ws)
+                              N, T, St, B, off, ycols, np_, seed, t0 + k, dloss + k, loss_ws)
             if opts.clip > Float32(0.0):
-                opt_step_clipped(ex, cfg, st, k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_, setup.cell)
+                opt_step_clipped(ex, cfg, st, t0 + k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_,
+                                 setup.cell)
             else:
-                opt_step(ex, cfg, st, k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_)
+                opt_step(ex, cfg, st, t0 + k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_)
+            if opts.nv > 0 and j == per - 1:
+                # the epoch's end: the validation loss, one word read back, the generic monitor's decision
+                var e = k // per
+                step.validation_loss(ex, net, task, opts, P, T, w, setup, best.vloss + e)
+                ex.sync()
+                ex.download(FP(unsafe_from_address=Int(vword.unsafe_ptr())), best.vloss + e, 1)
+                epochs_run = e + 1
+                if monitor.observe(Float64(vword[0]), e + 1) and opts.restore:
+                    best.keep(ex, P, s1, s2, s3, np_, st)
+                if monitor.stop():
+                    break
+        if opts.nv > 0:
+            ex.sync()
+            ex.download(opts.vcurve, best.vloss, epochs_run)
+            opts.vcurve.unsafe_store(epochs, Float32(epochs_run))
+            opts.vcurve.unsafe_store(epochs + 1, Float32(monitor.best_epoch))
+            if opts.restore and monitor.best_epoch > 0:
+                best.restore(ex, P, s1, s2, s3, np_, st)
+                t0 -= (epochs_run - monitor.best_epoch) * per
+        if opts.has_state:
+            ex.sync()
+            ex.download(opts.state, s1, np_)
+            ex.download(opts.state + np_, s2, np_)
+            ex.download(opts.state + 2 * np_, s3, np_)
+            opts.state.unsafe_store(3 * np_, st.pw1)
+            opts.state.unsafe_store(3 * np_ + 1, st.pw2)
+            opts.state.unsafe_store(3 * np_ + 2, st.mu_prod)
+            opts.state.unsafe_store(3 * np_ + 3, Float32(t0 + epochs_run * per))
+        _ = vword^
+        _ = best^
     for k in range(n_steps if plain else 0):
         var j = k % per
         if j == 0:
@@ -816,10 +909,61 @@ def rnn_fit[E: Exec, //, S: RnnStep](
         opt_step(ex, cfg, st, k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_)
     release_loss_scratch(ex, loss_ws)
     ex.sync()
-    fit_loop_publish(loop_words, fit_loop_stop(loop_start, epochs))
+    fit_loop_publish(loop_words, fit_loop_stop(loop_start, epochs_run))
     ex.download(Pio, P, np_)
     ex.download(losses, dloss, n_steps)
     _ = setup^  # the options' device buffers live through the loop's queued launches
+
+
+struct RnnBest(Movable):
+    """Lane rnn-parity: the per-epoch validation losses (`vloss`, one executor word an epoch) and the best
+    epoch's parameters and optimizer state (kept on the executor, copied when the generic EpochMonitor says an
+    epoch improved and opts.restore asks for it; restored at the end). Placeholders without validation."""
+
+    var vloss: FP
+    var p: FP
+    var s1: FP
+    var s2: FP
+    var s3: FP
+    var pw1: Float32
+    var pw2: Float32
+    var mu: Float32
+
+    def __init__[E: Exec](out self, mut ex: E, opts: RnnOptions, np_: Int) raises:
+        var keep = opts.nv > 0 and opts.restore
+        self.vloss = ex.alloc(max(1, opts.vcurve_words()))
+        self.p = ex.alloc(np_ if keep else 1)
+        self.s1 = ex.alloc(np_ if keep else 1)
+        self.s2 = ex.alloc(np_ if keep else 1)
+        self.s3 = ex.alloc(np_ if keep else 1)
+        self.pw1 = Float32(1.0)
+        self.pw2 = Float32(1.0)
+        self.mu = Float32(1.0)
+
+    def keep[E: Exec](mut self, mut ex: E, P: FP, s1: FP, s2: FP, s3: FP, n: Int, st: OptState) raises:
+        _copy_words(ex, self.p, P, n)
+        _copy_words(ex, self.s1, s1, n)
+        _copy_words(ex, self.s2, s2, n)
+        _copy_words(ex, self.s3, s3, n)
+        self.pw1 = st.pw1
+        self.pw2 = st.pw2
+        self.mu = st.mu_prod
+
+    def restore[E: Exec](self, mut ex: E, P: FP, s1: FP, s2: FP, s3: FP, n: Int, mut st: OptState) raises:
+        _copy_words(ex, P, self.p, n)
+        _copy_words(ex, s1, self.s1, n)
+        _copy_words(ex, s2, self.s2, n)
+        _copy_words(ex, s3, self.s3, n)
+        st.pw1 = self.pw1
+        st.pw2 = self.pw2
+        st.mu_prod = self.mu
+
+
+def _copy_words[E: Exec](mut ex: E, dst: FP, src: FP, n: Int) raises:
+    var a = Args()
+    a.p0 = src
+    a.p1 = dst
+    ex.launch[OP_COPY](a, n)
 
 
 struct RnnFitSetup(Movable):
@@ -837,10 +981,19 @@ struct RnnFitSetup(Movable):
     var cell: FP
     var block: Int
     var nparts: Int
+    #: validation (opts.nv > 0): the sequences, targets and lengths on the executor, their identity order, a
+    #: weight of 1.0 per row (or step), and two words per chunk (the chunk's loss sum and its row count)
+    var vx: FP
+    var vy: FP
+    var vl: FP
+    var vidx: FP
+    var vones: FP
+    var vparts: FP
+    var vchunk: Int
 
     def __init__[E: Exec](
         out self, mut ex: E, net: Net, task: Int, opts: RnnOptions, N: Int, St: Int, np_: Int, P: FP, dY: FP,
-        has_lens: Bool, w: Work,
+        has_lens: Bool, w: Work, T: Int, ycols: Int, bmax: Int,
     ) raises:
         self.weighted = opts.weighted(has_lens)
         self.wt = w.one
@@ -850,6 +1003,29 @@ struct RnnFitSetup(Movable):
         self.cell = w.one
         self.block = 1
         self.nparts = 0
+        self.vx = w.one
+        self.vy = w.one
+        self.vl = w.one
+        self.vidx = w.one
+        self.vones = w.one
+        self.vparts = w.one
+        self.vchunk = bmax
+        if opts.nv > 0:
+            var nv = opts.nv
+            self.vx = ex.alloc(nv * T * net.D)
+            ex.upload(self.vx, opts.vx, nv * T * net.D)
+            self.vy = ex.alloc(nv * St * ycols)
+            ex.upload(self.vy, opts.vy, nv * St * ycols)
+            if opts.has_vl:
+                self.vl = ex.alloc(nv)
+                ex.upload(self.vl, opts.vl, nv)
+            self.vidx = ex.alloc(nv)
+            var ia = Args()
+            ia.p0 = self.vidx
+            ex.launch[OP_SEQ_IOTA](ia, nv)
+            self.vones = ex.alloc(nv * St)
+            fill(ex, self.vones, nv * St, Float32(1.0))
+            self.vparts = ex.alloc(2 * ((nv + bmax - 1) // bmax))
         if self.weighted:
             self.wt = ex.alloc(N * St)
             var a = Args()

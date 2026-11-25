@@ -52,7 +52,7 @@ from sequence.ops import (
 )
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, scan_routes
 from sequence.recurrent import (
-    Net, Work, RnnStep, RnnOptions, SEQ_WGRAD_BLOCKED, TASK_CE, TASK_MSE, WGRAD_IDN_SCRATCH, bias_rows, fill,
+    Net, Work, RnnStep, RnnOptions, RnnFitSetup, SEQ_WGRAD_BLOCKED, TASK_CE, TASK_MSE, WGRAD_IDN_SCRATCH, bias_rows, fill,
     gather_rows, gather_seq, gemm,
 )
 from autograd.rankn_layout import rankn_concat, rankn_narrow
@@ -967,13 +967,13 @@ def rnn_forward_options[E: Exec](
     return (logits, inp)
 
 
-def rnn_weighted_loss[E: Exec](
+def rnn_weighted_sums[E: Exec](
     mut tape: Tape, mut ex: E, net: Net, task: Int, logits: Tensor, R: Int, w: Work,
-) raises -> Tensor:
-    """Lane rnn-parity: sum_r w_r l_r / (sum_r w_r + 2^-126) over the R rows of `logits` as tape nodes (the
-    tape's term, product, blocked fold and division bodies: one order on every column). l_r is the row's mean
-    squared error over the O outputs against w.yb, or its softmax cross-entropy against the code in w.yb; w_r =
-    w.wrow[r] takes no gradient. A zero total weight gives 0, never NaN."""
+) raises -> Tuple[Tensor, Tensor]:
+    """Lane rnn-parity: (sum_r w_r l_r, sum_r w_r) over the R rows of `logits` as tape nodes (the tape's term,
+    product and blocked fold bodies: one order on every column). l_r is the row's mean squared error over the O
+    outputs against w.yb, or its softmax cross-entropy against the code in w.yb; w_r = w.wrow[r] takes no
+    gradient."""
     var wt = tape.variable(ex, w.wrow, R, 1, False)
     var terms: Tensor
     if task == TASK_MSE:
@@ -982,9 +982,17 @@ def rnn_weighted_loss[E: Exec](
     else:
         var codes = tape.variable(ex, w.yb, R, 1, False)
         terms = tape.cross_entropy_rows(ex, logits, codes)
-    var num = tape.sum(ex, tape.multiply(ex, terms, wt))
-    var den = tape.add(ex, tape.sum(ex, wt), tape.variable(ex, w.tiny, 1, 1, False))
-    return tape.divide(ex, num, den)
+    return (tape.sum(ex, tape.multiply(ex, terms, wt)), tape.sum(ex, wt))
+
+
+def rnn_weighted_loss[E: Exec](
+    mut tape: Tape, mut ex: E, net: Net, task: Int, logits: Tensor, R: Int, w: Work,
+) raises -> Tensor:
+    """Lane rnn-parity: the weighted mean sum_r w_r l_r / (sum_r w_r + 2^-126) of rnn_weighted_sums. A zero
+    total weight gives 0, never NaN (2^-126 moves no denominator above 2^-100)."""
+    var sums = rnn_weighted_sums(tape, ex, net, task, logits, R, w)
+    var den = tape.add(ex, sums[1], tape.variable(ex, w.tiny, 1, 1, False))
+    return tape.divide(ex, sums[0], den)
 
 
 def rnn_backward_autograd[E: Exec](mut tape: Tape, mut ex: E, net: Net, logits: Tensor, dy: FP, B: Int) raises:
@@ -1044,6 +1052,49 @@ struct AutogradRnnStep(RnnStep):
         self.logits = out[0]
         # a forward from given initial states leaves them in rows [0, B): the next one fills (or copies) again
         self.h0_rows = 0 if w.has_h0 else B
+
+    def validation_loss[E: Exec](
+        mut self, mut ex: E, net: Net, task: Int, opts: RnnOptions, P: FP, T: Int, w: Work, setup: RnnFitSetup,
+        dst: FP,
+    ) raises:
+        var nv = opts.nv
+        var S = T if opts.seq_out else 1
+        var bmax = setup.vchunk
+        var nmax = (nv + bmax - 1) // bmax
+        var ycols = net.O if task == TASK_MSE else 1
+        var lens = Optional[FP](None)
+        if opts.has_vl:
+            lens = Optional[FP](setup.vl)
+        var vt = Tape()
+        vt.no_grad()
+        var nc = 0
+        var b0 = 0
+        while b0 < nv:  # driver-loop: over validation chunks
+            var B = min(bmax, nv - b0)
+            gather_seq(ex, setup.vx, setup.vidx, w.xb, T, B, net.D, b0, lens)
+            if opts.has_vl:
+                gather_rows(ex, setup.vl, setup.vidx, w.lens, B, 1, b0)
+            var out = rnn_forward_options(vt, ex, net, opts, P, dummy_ptr(), w.xb, T, B, w, w.yhat, False, False,
+                                          UInt64(0), 0)
+            if opts.seq_out:
+                gather_seq(ex, setup.vy, setup.vidx, w.yb, T, B, ycols, b0)
+                gather_seq(ex, setup.vones, setup.vidx, w.wrow, T, B, 1, b0, lens)
+            else:
+                gather_rows(ex, setup.vy, setup.vidx, w.yb, B, ycols, b0)
+                gather_rows(ex, setup.vones, setup.vidx, w.wrow, B, 1, b0)
+            var sums = rnn_weighted_sums(vt, ex, net, task, out[0], B * S, w)
+            _copy(ex, setup.vparts + nc, vt.value(sums[0]), 1)
+            _copy(ex, setup.vparts + nmax + nc, vt.value(sums[1]), 1)
+            nc += 1
+            b0 += B
+        vt.reset()
+        var num = vt.sum(ex, vt.variable(ex, setup.vparts, 1, nc, False))
+        var den = vt.add(ex, vt.sum(ex, vt.variable(ex, setup.vparts + nmax, 1, nc, False)),
+                         vt.variable(ex, w.tiny, 1, 1, False))
+        _copy(ex, dst, vt.value(vt.divide(ex, num, den)), 1)
+        vt.release(ex)
+        # this pass wrote the shared state buffers: the next training forward fills its zero state again
+        self.h0_rows = 0
 
     def weighted_backward[E: Exec](mut self, mut ex: E, net: Net, task: Int, R: Int, w: Work, loss_dst: FP) raises:
         var loss = rnn_weighted_loss(self.tape, ex, net, task, self.logits, R, w)
@@ -1149,3 +1200,123 @@ def rnn_predict[E: Exec](
     ex.download(dst, dout, N * net.O)
     if want_seq:
         ex.download(seq, dseq, N * T * H)
+
+
+def rnn_predict_options[E: Exec](
+    mut ex: E, net: Net, task: Int, opts: RnnOptions, X: FP, N: Int, T: Int, Pin: FP,
+    dst: FP, seq: FP, want_seq: Bool, chunk: Int, resident: Bool, lengths: Optional[FP], x_device: Bool,
+    state_h: FP, state_c: FP, want_state: Bool,
+) raises:
+    """Lane rnn-parity: rnn_predict with RnnOptions (rnn_forward_options in inference mode: no dropout).
+    dst: [N, O] (the final state's head; softmax for task CE), or with output="sequence" [N, T, O] batch-first,
+    every step's head (a step past a row's length repeats its last valid step's state in the forward direction).
+    seq (want_seq): [N, T, dirs H], the top layer's output. Initial states (opts.has_h0): opts.h0 / opts.c0, L dirs
+    N H host words. `want_state` (streaming, `step`): state_h [L dirs, N, H] receives every layer-direction's
+    final state (PyTorch's h_n: forward at time T - 1, i.e. each row's last valid step; reverse at time 0) and
+    state_c the LSTM's c_n likewise: fed back as h_0 / c_0 of the next call, the next steps run from exactly the
+    words the whole-sequence pass holds there (the same cell body and stored state words)."""
+    var np_ = net.n_params()
+    var H = net.H
+    var HW = net.head_in()
+    var S = T if opts.seq_out else 1
+    var has_lens = Bool(lengths)
+    var dL = ex.alloc(N if has_lens else 1)
+    var dL_opt = Optional[FP](None)
+    if has_lens:
+        ex.upload(dL, lengths.value(), N)
+        dL_opt = Optional[FP](dL)
+    var bmax = chunk if chunk < N else N
+    var dX: FP
+    if x_device:
+        dX = X
+    else:
+        dX = ex.alloc(N * T * net.D)
+        ex.upload(dX, X, N * T * net.D)
+    var didx = ex.alloc(N)
+    var ia = Args()
+    ia.p0 = didx
+    ex.launch[OP_SEQ_IOTA](ia, N)
+    var P: FP
+    if resident:
+        P = Pin
+    else:
+        P = ex.alloc(np_)
+        ex.upload(P, Pin, np_)
+    var dout = ex.alloc(N * S * net.O)
+    var dseq = ex.alloc(N * T * HW if want_seq else 1)
+    var nh = net.slots() * N * H
+    var dH0 = didx
+    var dC0 = didx
+    if opts.has_h0:
+        dH0 = ex.alloc(nh)
+        ex.upload(dH0, opts.h0, nh)
+        if opts.has_c0:
+            dC0 = ex.alloc(nh)
+            ex.upload(dC0, opts.c0, nh)
+    var dHn = ex.alloc(nh if want_state else 1)
+    var dCn = ex.alloc(nh if want_state and net.cell == CELL_LSTM else 1)
+    var w = Work(ex, net, T, bmax, False, has_lens, opts)
+    var tape = Tape()
+    tape.no_grad()
+    var h0_rows = 0
+    var b0 = 0
+    while b0 < N:  # driver-loop: over prediction chunks
+        var B = bmax if b0 + bmax <= N else N - b0
+        gather_seq(ex, dX, didx, w.xb, T, B, net.D, b0, dL_opt)
+        if has_lens:
+            gather_rows(ex, dL, didx, w.lens, B, 1, b0)
+        if opts.has_h0:
+            for k in range(net.slots()):  # driver-loop: over layer-direction slots
+                gather_rows(ex, dH0 + k * N * H, didx, w.h0b + k * B * H, B, H, b0)
+                if opts.has_c0:
+                    gather_rows(ex, dC0 + k * N * H, didx, w.c0b + k * B * H, B, H, b0)
+        # the head writes this chunk's rows: [B, O] straight into dout, or [T B, O] time-major into w.yhat
+        var head_dst = w.yhat if opts.seq_out else dout + b0 * net.O
+        var out = rnn_forward_options(tape, ex, net, opts, P, dummy_ptr(), w.xb, T, B, w, head_dst,
+                                      B <= h0_rows, False, UInt64(0), 0)
+        h0_rows = 0 if opts.has_h0 else B
+        var R = B * S
+        if task == TASK_CE:
+            var a = Args()
+            a.p0 = head_dst
+            a.p1 = head_dst
+            a.i1 = net.O
+            ex.launch[OP_SOFTMAX](a, R)
+        if opts.seq_out:
+            # time-major [T, B, O] to batch-first rows b0 .. b0 + B of [N, T, O]
+            var a = Args()
+            a.p0 = w.yhat
+            a.p1 = dout
+            a.i0 = T
+            a.i1 = B
+            a.i2 = net.O
+            a.i3 = b0
+            ex.launch[OP_SEQ_OUT](a, B * T * net.O)
+        if want_seq:
+            var a = Args()
+            a.p0 = tape.value(out[1])
+            a.p1 = dseq
+            a.i0 = T
+            a.i1 = B
+            a.i2 = HW
+            a.i3 = b0
+            ex.launch[OP_SEQ_OUT](a, B * T * HW)
+        if want_state:
+            for l in range(net.L):  # driver-loop: over layers
+                for d in range(net.dirs):  # driver-loop: over directions
+                    var k = l * net.dirs + d
+                    # forward: rows [T B, (T + 1) B) hold the state after time T - 1; reverse: rows [0, B) time 0
+                    var at = 0 if d == 1 else T * B * H
+                    _copy(ex, dHn + k * N * H + b0 * H, w.hall[k] + at, B * H)
+                    if net.cell == CELL_LSTM:
+                        _copy(ex, dCn + k * N * H + b0 * H, w.call[k] + at, B * H)
+        b0 += B
+    tape.release(ex)
+    ex.sync()
+    ex.download(dst, dout, N * S * net.O)
+    if want_seq:
+        ex.download(seq, dseq, N * T * HW)
+    if want_state:
+        ex.download(state_h, dHn, nh)
+        if net.cell == CELL_LSTM:
+            ex.download(state_c, dCn, nh)
