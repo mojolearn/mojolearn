@@ -14,6 +14,9 @@
 # the fit's loss weights drop their sample-weight factor on one side) must move sequence-rnn-weighted-steps;
 # coverage-sequence-rnn_step_bits_gpu / _cpu (MOJOLEARN_RNN_STEP_BITS_SABOTAGE_DEVICE / _HOST forced on: the recurrent
 # projections take the row-keyed split order again on one side) must make sequence-rnn-step-widths refuse there.
+# coverage-sequence-rnn_review_lengths_gpu / _cpu and coverage-sequence-rnn_review_padding_gpu / _cpu
+# (MOJOLEARN_RNN_REVIEW_SABOTAGE_LENGTHS_* / _PADDING_*: the two defects of before back on one side) must move or
+# refuse sequence-rnn-padding-labels there.
 
 
 def _rnn_parity_steps_y(n, t, tag):
@@ -144,7 +147,60 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts, m, lambda e: (e.predict(Xp),))
 
 
+@lane("sequence-rnn-padding-labels")
+def _(ml, X, yc, yr, Xh=None):
+    """The two defects an outside review found in the recurrent options (lane rnn-review-fixes, 2026-11-25), on
+    a GRUClassifier with output='sequence' over 6 sequences of 4 steps of 2 inputs (hidden 3, one epoch).
+    P1-a: `lengths` are checked before anything reads one. A fit with class_weight='balanced' and a length of 0
+    on the only sequence that holds class 1 must refuse with the lengths' own words; when the class histogram or
+    the label encoder reads the lengths first, that class has no valid step and the fit refuses with another
+    message instead (part `refused`, 1 = the lengths' words). P1-b: labels are read at valid steps only. The same
+    fit with padding label 7 and with padding label 0 must give the same classes_ (0, 1), head width
+    (n_outputs_ 2), parameters, probabilities and digest_ (checked byte for byte: a difference REFUSES), and a
+    validation target whose padding holds 9, a label no valid step has, is not refused as unknown. Sabotage arms
+    coverage-sequence-rnn_review_lengths_gpu / _cpu move `refused` on their side; coverage-sequence-
+    rnn_review_padding_gpu / _cpu make classes_ (0, 1, 7) there and REFUSE."""
+    n, t, d = 6, 4, 2
+    Xs = _hw((n, t, d), "rnn-pl:x", -1.0, 1.0)
+    steps = np.arange(t)[None, :]
+    lengths = np.array([4, 3, 2, 1, 4, 2], np.int64)
+    padded = steps >= lengths[:, None]
+    y = (np.arange(n * t).reshape(n, t) % 2).astype(np.int64)
+
+    def model(**kw):
+        return ml.GRUClassifier(hidden_size=3, output="sequence", learning_rate=1e-2, batch_size=6, max_epochs=1,
+                                random_state=5, **kw)
+
+    # P1-a: class 1 only in sequence 2, whose length is 0
+    y1 = np.zeros((n, t), np.int64)
+    y1[2] = 1
+    bad = np.array([4, 4, 0, 4, 4, 4], np.int64)
+    refused = _refused(lambda: model(class_weight="balanced").fit(Xs, y1, lengths=bad),
+                       "every length must be a whole number from 1 to the sequence length 4")
+    # P1-b: only the padding label differs
+    a = model().fit(Xs, np.where(padded, 7, y), lengths=lengths)
+    b = model().fit(Xs, np.where(padded, 0, y), lengths=lengths)
+    pa = np.asarray(a.predict_proba(Xs, lengths=lengths))
+    da = np.frombuffer(str(a.digest_).encode(), dtype=np.uint8)
+    _same_bytes("classes_, padding 7", np.asarray(a.classes_, np.int64), "classes_, padding 0",
+                np.asarray(b.classes_, np.int64))
+    _same_bytes("n_outputs_, padding 7", np.int64(a.n_outputs_), "n_outputs_, padding 0", np.int64(b.n_outputs_))
+    _same_bytes("params_, padding 7", np.asarray(a.params_), "params_, padding 0", np.asarray(b.params_))
+    _same_bytes("predict_proba, padding 7", pa, "predict_proba, padding 0",
+                np.asarray(b.predict_proba(Xs, lengths=lengths)))
+    _same_bytes("digest_, padding 7", da, "digest_, padding 0",
+                np.frombuffer(str(b.digest_).encode(), dtype=np.uint8))
+    v = model().fit(Xs, np.where(padded, 0, y), lengths=lengths,
+                    validation_data=(Xs, np.where(padded, 9, y), lengths))
+    parts = dict(refused=_h(np.int64(refused)),
+                 classes=_h(np.asarray(a.classes_, np.int64), np.int64(a.n_outputs_)),
+                 params=_h(a.params_), proba=_h(pa), digest=_h(da),
+                 validation=_h(np.asarray(v.validation_loss_)))
+    Xp = _hw((n, t, d), "rnn-pl:probe", -1.0, 1.0)
+    return _fit(parts, a, lambda e: (e.predict_proba(Xp, lengths=lengths),))
+
+
 _batch_decl("n/a:per-row-arguments (the endpoints under test take per-sequence lengths, per-step sample weights "
             "and initial states whose rows are the call's; the plain predict batch axis of these estimators is "
             "sequence-gru's and sequence-lstm's)", "sequence-rnn-weighted-steps", "sequence-rnn-bidi-options",
-            "sequence-rnn-step-widths")
+            "sequence-rnn-step-widths", "sequence-rnn-padding-labels")

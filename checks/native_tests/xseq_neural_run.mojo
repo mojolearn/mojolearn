@@ -10,6 +10,7 @@ not called here.
 The cases are independent units and run across the native host worker pool.
 """
 from std.testing import TestSuite
+from std.math import nan
 from checks.native_tests.testsuite_cases import check_cases, require
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -26,10 +27,11 @@ from sequence.xseq_neural_run import (
     xseq_run_rnn_schedule, xseq_run_rnn_fit, xseq_run_rnn_layout, xseq_run_rnn_predict, xseq_run_mlp_scalars_check,
     xseq_run_mlp_hidden_check, xseq_run_mlp_out_name, xseq_run_mlp_sizes, xseq_run_mlp_param_count,
     xseq_run_mlp_glorot, xseq_run_mlp_fit, xseq_run_copy_f32, xseq_run_mlp_layers_check, xseq_run_mlp_layer_check,
-    xseq_run_mlp_pack, xseq_run_mlp_output_check, xseq_run_mlp_predict,
+    xseq_run_mlp_pack, xseq_run_mlp_output_check, xseq_run_mlp_predict, xseq_run_class_counts,
+    xseq_run_balanced_class_weights, xseq_run_remap_codes, xseq_run_lengths_check,
 )
 
-comptime XSEQ_NEURAL_RUN_CASES = 17
+comptime XSEQ_NEURAL_RUN_CASES = 19
 
 
 def _refuses(problem: Error, text: String) raises:
@@ -284,6 +286,76 @@ def run_case(unit: Int) raises:
             require(False, "broken layout accepted")
         except problem:
             _refuses(problem, "ValueError: MLP fitted parameter shapes do not match the layer layout")
+    elif unit == 17:
+        # lane rnn-review-fixes, P1-a: the class histogram checks each length before it bounds a read. Three
+        # sequences of 4 steps, every code 0, then one guard word holding class 1 right after the last sequence:
+        # a length of 5 on the last row would count that word.
+        var codes: List[Float32] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+        var ok: List[Float32] = [4.0, 2.0, 1.0]
+        var counts = xseq_run_class_counts[DType.float32](Int(codes.unsafe_ptr()), 3, 4, Int(ok.unsafe_ptr()), 2)
+        require(counts[0] == 7 and counts[1] == 0, "valid-step class counts")
+        # four bad length rows of three: too long on the last row, zero, fractional, negative
+        var bad: List[Float32] = [4.0, 4.0, 5.0, 4.0, 0.0, 4.0, 4.0, 2.5, 4.0, -1.0, 4.0, 4.0]
+        for b in range(4):  # small-loop(refusal cases)
+            var lengths = Int(bad.unsafe_ptr() + b * 3)
+            try:
+                _ = xseq_run_class_counts[DType.float32](Int(codes.unsafe_ptr()), 3, 4, lengths, 2)
+                require(False, "a bad length reached the class histogram")
+            except problem:
+                _refuses(problem, "ValueError: fit: every length must be a whole number from 1 to the sequence "
+                         + "length 4")
+            try:
+                _ = xseq_run_balanced_class_weights(Int(codes.unsafe_ptr()), 3, 4, lengths, 2)
+                require(False, "a bad length reached the balanced class weights")
+            except problem:
+                _refuses(problem, "ValueError: fit: every length must be a whole number from 1 to the sequence "
+                         + "length 4")
+            try:
+                xseq_run_lengths_check(lengths, 3, 4, "fit")
+                require(False, "the admission accepted a bad length")
+            except problem:
+                _refuses(problem, "ValueError: fit: every length must be a whole number from 1 to the sequence "
+                         + "length 4")
+        var nan_row: List[Float32] = [4.0, 4.0, 4.0]
+        nan_row[1] = nan[DType.float32]()
+        try:
+            xseq_run_lengths_check(Int(nan_row.unsafe_ptr()), 3, 4, "fit")
+            require(False, "the admission accepted a non-finite length")
+        except problem:
+            _refuses(problem, "ValueError: fit: every length must be a whole number from 1 to the sequence length 4")
+        xseq_run_lengths_check(Int(ok.unsafe_ptr()), 3, 4, "fit")
+        var both: List[Float32] = [0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+        var weights = xseq_run_balanced_class_weights(Int(both.unsafe_ptr()), 3, 4, Int(ok.unsafe_ptr()), 2)
+        # valid steps: row 0 [0 1 0 1], row 1 [1 1], row 2 [0]: three 0s and four 1s of 7
+        require(weights[0] == 7.0 / 6.0 and weights[1] == 7.0 / 8.0, "balanced weights over valid steps")
+        _ = codes^
+        _ = ok^
+        _ = both^
+        _ = nan_row^
+        _ = bad^
+    elif unit == 18:
+        # lane rnn-review-fixes, P1-b: a label seen only on padded steps is no class, and every padded step's code
+        # is 0. Two sequences of 3 steps, lengths 2 and 3; the encoder's class 2 sits only at (0, 2), a padded step.
+        var codes: List[Int32] = [1, 0, 2, 0, 1, 1]
+        var lengths: List[Float32] = [2.0, 3.0]
+        var seen = xseq_run_class_counts[DType.int32](Int(codes.unsafe_ptr()), 2, 3, Int(lengths.unsafe_ptr()), 3)
+        require(seen[0] == 2 and seen[1] == 3 and seen[2] == 0, "valid-step label counts")
+        var mapping: List[Int] = [0, 1, -1]
+        var dst = List[Float32](length=6, fill=Float32(-7.0))
+        xseq_run_remap_codes(Int(codes.unsafe_ptr()), 2, 3, Int(lengths.unsafe_ptr()), mapping, Int(dst.unsafe_ptr()))
+        require(dst[0] == 1.0 and dst[1] == 0.0 and dst[2] == 0.0 and dst[3] == 0.0 and dst[4] == 1.0
+                and dst[5] == 1.0, "valid steps remapped, padded steps code 0")
+        # without lengths every step is valid (one label a sequence: steps 1)
+        var plain: List[Int32] = [1, 0]
+        var two = List[Float32](length=2, fill=Float32(-7.0))
+        var swap: List[Int] = [1, 0]
+        xseq_run_remap_codes(Int(plain.unsafe_ptr()), 2, 1, 0, swap, Int(two.unsafe_ptr()))
+        require(two[0] == 0.0 and two[1] == 1.0, "remap without lengths")
+        _ = codes^
+        _ = lengths^
+        _ = dst^
+        _ = plain^
+        _ = two^
     else:
         xseq_run_mlp_output_check(2, 2)
         try:
