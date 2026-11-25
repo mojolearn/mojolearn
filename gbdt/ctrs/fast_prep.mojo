@@ -390,18 +390,27 @@ def device_dense_codes(
     src: MutPointer[Float32, MutUntrackedOrigin],
     n: Int,
     feature: Int,
+    src_on_device: Bool = False,
 ) raises -> DeviceCodes:
     """The `cat_features` walk's host loops for one column, on the device:
     `dense_category_code` per row, the cardinality (`maxc + 1`), the
     `CB_ENSURE(uniqueValues > 1)`, the denseness check and the apply
     table's `counts`. Two launches, two small readbacks, one upload of the
-    raw column."""
+    raw column. `src_on_device` (lane vdf2-gbdtcat): `src` is a device
+    column (the trainer's copy of a fold slot), read in place, no upload."""
     if n <= 0:
         raise Error("device_dense_codes: empty column")
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-    unsafe_memcpy(dest=h.unsafe_ptr(), src=src, count=n)
-    var x = ctx.enqueue_create_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=h.unsafe_ptr())
+    var h = ctx.enqueue_create_host_buffer[DType.float32](1 if src_on_device else n)
+    var x: DeviceBuffer[DType.float32]
+    if src_on_device:
+        x = DeviceBuffer[DType.float32](
+            ctx, rebind[UnsafePointer[Float32, MutAnyOrigin]](src), n,
+            owning=False,
+        )
+    else:
+        unsafe_memcpy(dest=h.unsafe_ptr(), src=src, count=n)
+        x = ctx.enqueue_create_buffer[DType.float32](n)
+        ctx.enqueue_copy(dst_buf=x, src_ptr=h.unsafe_ptr())
     var codes = ctx.enqueue_create_buffer[DType.uint32](n)
     var d_max = ctx.enqueue_create_buffer[DType.uint32](STRIPE_SLOTS)
     var d_flags = ctx.enqueue_create_buffer[DType.uint32](STRIPE_SLOTS)

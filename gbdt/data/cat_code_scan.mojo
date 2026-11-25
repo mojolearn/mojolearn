@@ -21,6 +21,12 @@ non-negative floats the IEEE order and the integer order of the bits agree,
 so the largest bit pattern is the largest code, exactly, up to 2^32 - 1.
 Integer and compare work only: same result on every vendor and the host.
 
+A DEVICE SOURCE (lane vdf2-gbdtcat): every entry takes `src_on_device`.
+Set, `src` is a device column (the trainer's column-major copy of a fold
+slot, `gbdt/train.mojo`), read where it is: no upload, and the one offending
+value of a refusal comes home as one word. The kernels and the words are
+the host-source ones, so the codes and every refusal are the same.
+
 WORDS (Int32): 0 lowest invalid row (`CAT_NO_ROW` = none), 1 the largest
 valid code's bit pattern (0 = code 0), 2 the lowest absent category below
 the maximum (`CAT_NO_ROW` = dense).
@@ -113,13 +119,14 @@ def _scan_column(
     want_codes: Bool,
     mut codes_out: List[UInt32],
     lenient: Bool = False,
+    src_on_device: Bool = False,
 ) raises -> CatColumnScan:
     var d_codes = ctx.enqueue_create_buffer[DType.uint32](
         n_rows if want_codes and n_rows > 0 else 1
     )
     return _scan_column_into(
         ctx, src, n_rows, feature, want_codes, True, codes_out, d_codes,
-        lenient,
+        lenient, src_on_device,
     )
 
 
@@ -133,15 +140,24 @@ def _scan_column_into(
     mut codes_out: List[UInt32],
     mut d_codes: DeviceBuffer[DType.uint32],
     lenient: Bool = False,
+    src_on_device: Bool = False,
 ) raises -> CatColumnScan:
     """`_scan_column` writing the codes into the caller's `d_codes` (at
     least `n_rows` words when `want_codes`), so a caller can keep them
     resident (lane cpu4-gbdt); `want_host_codes` also reads them back into
-    `codes_out`."""
+    `codes_out`. `src_on_device`: `src` is a device column, read in place
+    (a non-owning view; the caller keeps it alive)."""
     if n_rows <= 0:
         return CatColumnScan(0, -1)
-    var d_x = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    ctx.enqueue_copy(dst_buf=d_x, src_ptr=src)
+    var d_x: DeviceBuffer[DType.float32]
+    if src_on_device:
+        d_x = DeviceBuffer[DType.float32](
+            ctx, rebind[UnsafePointer[Float32, MutAnyOrigin]](src), n_rows,
+            owning=False,
+        )
+    else:
+        d_x = ctx.enqueue_create_buffer[DType.float32](n_rows)
+        ctx.enqueue_copy(dst_buf=d_x, src_ptr=src)
     var h = ctx.enqueue_create_host_buffer[DType.int32](_CAT_WORDS)
     h.unsafe_ptr().unsafe_store(0, CAT_NO_ROW)
     h.unsafe_ptr().unsafe_store(1, Int32(0))
@@ -163,7 +179,20 @@ def _scan_column_into(
     var bad = h.unsafe_ptr().unsafe_load(0)
     if bad != CAT_NO_ROW:
         # the host contract on the ONE offending value: same words, same row
-        _ = dense_category_code(src.unsafe_load(Int(bad)), feature, Int(bad))
+        var value: Float32
+        if src_on_device:
+            # one word comes home (the column stays on the device)
+            var hv = ctx.enqueue_create_host_buffer[DType.float32](1)
+            ctx.enqueue_copy(
+                dst_ptr=hv.unsafe_ptr(),
+                src_buf=d_x.create_sub_buffer[DType.float32](Int(bad), 1),
+            )
+            ctx.synchronize()
+            value = hv.unsafe_ptr().unsafe_load(0)
+            _ = hv^
+        else:
+            value = src.unsafe_load(Int(bad))
+        _ = dense_category_code(value, feature, Int(bad))
         raise Error(
             "categorical feature " + String(feature) + " row "
             + String(Int(bad)) + " is not a dense category code"
@@ -217,11 +246,14 @@ def cat_column_max_code(
     src: MutPointer[Float32, MutUntrackedOrigin],
     n_rows: Int,
     feature: Int,
+    src_on_device: Bool = False,
 ) raises -> Int:
     """The largest dense code in `src[0:n_rows]` (0 for an empty column),
     refusing an invalid code as `dense_category_code` does."""
     var unused = List[UInt32]()
-    return _scan_column(ctx, src, n_rows, feature, False, unused).max_code
+    return _scan_column(
+        ctx, src, n_rows, feature, False, unused, False, src_on_device
+    ).max_code
 
 
 def cat_column_codes(
@@ -261,13 +293,15 @@ def cat_column_codes_resident(
     feature: Int,
     mut codes_out: List[UInt32],
     mut d_codes: DeviceBuffer[DType.uint32],
+    src_on_device: Bool = False,
 ) raises -> CatColumnScan:
     """`cat_column_codes` that ALSO leaves the codes on the device, in the
     caller's `d_codes` (`n_rows` words), for the CTR calcers to read in
     place (lane cpu4-gbdt). The host copy in `codes_out` is still written:
     the apply-time `build_ctr_tables` takes it."""
     return _scan_column_into(
-        ctx, src, n_rows, feature, True, True, codes_out, d_codes
+        ctx, src, n_rows, feature, True, True, codes_out, d_codes, False,
+        src_on_device,
     )
 
 
@@ -276,10 +310,13 @@ def onehot_column_max_code(
     src: MutPointer[Float32, MutUntrackedOrigin],
     n_rows: Int,
     column: Int,
+    src_on_device: Bool = False,
 ) raises -> Int:
     """`_quantize_training_columns`' one-hot scan, `max(0, Int(v))` over the
     column, without the dense-code refusal (that scan never refused). A
     value at or past 2^31 (or +inf) returns 2^31 - 1, which the caller's
     255-category limit refuses."""
     var unused = List[UInt32]()
-    return _scan_column(ctx, src, n_rows, column, False, unused, True).max_code
+    return _scan_column(
+        ctx, src, n_rows, column, False, unused, True, src_on_device
+    ).max_code
