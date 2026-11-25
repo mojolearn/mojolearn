@@ -81,10 +81,9 @@ from bindings.optimizer_keys_unpack import (
 # nn-blocks-pg begin: SGD / Adam / AdamW parameter groups
 from bindings.optimizer_keys_unpack import (
     OPTIMIZER_OPN_PG_STEP, OPTIMIZER_OPN_PG_STATE, OPTIMIZER_OPN_PG_LOAD, OPTIMIZER_OPN_PG_ZERO,
-    OPTIMIZER_OPN_PG_FIRST, OPTIMIZER_OPN_PG_LAST,
+    OPTIMIZER_OPN_PG_NEW, OPTIMIZER_OPN_PG_FIRST, OPTIMIZER_OPN_PG_LAST,
 )
 from bindings.optimizer_public_door import OP_STEP, STATE_DICT
-from bindings.py_balanced import py_setattr
 from autograd.nn_pg import (
     pg_admit_key, pg_check_membership, PG_SABOTAGE_TRAINING_CLIP, PG_SABOTAGE_TRAINING_CLIP_HOST, PG_COLUMN_CPU,
 )
@@ -1033,8 +1032,10 @@ def pg_training_construct(owner: PythonObject, values: PythonObject, mode: Pytho
     _ = pg_check_membership(ids)
     var members = Python.list()
     var new = builtins.object.__new__
+    var impl = native_loaded_module("mojolearn._training_impl")
+    var member_class = impl.SGD if kind == 0 else (impl.Adam if kind == 1 else impl.AdamW)
     for gi in range(len(envelopes)):  # driver-loop: over parameter groups (one member optimizer each)
-        var member = py_call(new, py_type(owner))
+        var member = py_call(new, member_class)
         opt_owner(member, context)
         _ = optimizer_construct(member, envelopes[gi], mode, context)
         _ = py_call(members.append, member)
@@ -1042,17 +1043,38 @@ def pg_training_construct(owner: PythonObject, values: PythonObject, mode: Pytho
     py_setitem(fields, PythonObject("_pg_members"), members)
     py_setitem(fields, PythonObject("param_groups"), param_groups)
     py_setitem(fields, PythonObject("total_norm_"), PythonObject(None))
-    py_setattr(owner, "__class__", native_loaded_module("mojolearn._training_impl")._ParamGroups)
     return PythonObject(None)
+
+
+def pg_training_new(cls: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`__new__` of SGD / Adam / AdamW: an instance of `cls`, or, when `params` is a list of parameter groups, of
+    its parameter-group form (`_SGDGroups`, `_AdamGroups`, `_AdamWGroups`, subclasses of the public class whose
+    `__init__` then builds the members). Nothing else is decided here."""
+    var builtins = native_loaded_module("builtins")
+    if not pg_training_grouped(params):
+        return py_call(builtins.object.__new__, cls)
+    var impl = native_loaded_module("mojolearn._training_impl")
+    var grouped = impl._SGDGroups
+    if Bool(py=py_call(builtins.issubclass, cls, impl.AdamW)):
+        grouped = impl._AdamWGroups
+    elif Bool(py=py_call(builtins.issubclass, cls, impl.Adam)):
+        grouped = impl._AdamGroups
+    return py_call(builtins.object.__new__, grouped)
 
 
 def _pg_member_entries(member: PythonObject, context: PythonObject) raises -> Tuple[PythonObject, PythonObject]:
     """(module, provider) of one member, chosen as `optimizer_native` chooses them for its own operations."""
     var nk = optimizer_keys()
+    var entries = _pg_entries(member, context)
+    return (py_item(entries, nk[].k_module), optimizer_provider_entries(entries))
+
+
+def _pg_entries(member: PythonObject, context: PythonObject) raises -> PythonObject:
+    """One member's entry dictionary (its numeric mode and side), as `optimizer_native` selects it."""
+    var nk = optimizer_keys()
     var selected_mode = opt_owner_mode(member, context)
     var host_owner = py_get(py_fields(member), nk[].k__host_device) is PythonObject(True)
-    var entries = optimizer_entries_cpu(selected_mode, context) if host_owner else optimizer_entries(selected_mode, context)
-    return (py_item(entries, nk[].k_module), optimizer_provider_entries(entries))
+    return optimizer_entries_cpu(selected_mode, context) if host_owner else optimizer_entries(selected_mode, context)
 
 
 def _pg_slices(members: PythonObject, grads: PythonObject, where: String) raises -> PythonObject:
@@ -1079,9 +1101,24 @@ def _pg_slices(members: PythonObject, grads: PythonObject, where: String) raises
     return out
 
 
+def _pg_clip(member: PythonObject, provider: PythonObject, grads: PythonObject, max_norm: PythonObject,
+             on_device: Bool, context: PythonObject) raises -> PythonObject:
+    """clip_grad_norm_ in place over `grads` (every group's, in group order): on the device for TrainDeviceArrays
+    (`clip_device`), else on the host (`door_clip`), as the router's CLIP operation chooses."""
+    if on_device:
+        var envelope = Python.list()
+        for item in [grads, max_norm, PythonObject(2.0), PythonObject(True), Python.dict(), PythonObject(None)]:  # driver-loop: over the clip envelope's six fields
+            _ = py_call(envelope.append, item)
+        return clip_device(py_call(native_loaded_module("builtins").tuple, envelope), _pg_entries(member, context),
+                           context)
+    return door_clip(provider, grads, max_norm, PythonObject(2.0), PythonObject(True), Python.dict())
+
+
 def pg_training_operation(operation: Int, owner: PythonObject, values: PythonObject,
                           context: PythonObject) raises -> PythonObject:
-    """`_ParamGroups.step`, `zero_grad`, `state_dict`, `load_state_dict`."""
+    """`_ParamGroups.step`, `zero_grad`, `state_dict`, `load_state_dict`, and the classes' `__new__`."""
+    if operation == OPTIMIZER_OPN_PG_NEW:
+        return pg_training_new(owner, values[0])
     var builtins = native_loaded_module("builtins")
     var fields = py_fields(owner)
     if not py_contains(fields, PythonObject("_pg_members")):
@@ -1091,8 +1128,11 @@ def pg_training_operation(operation: Int, owner: PythonObject, values: PythonObj
     if operation == OPTIMIZER_OPN_PG_STEP or operation == OPTIMIZER_OPN_PG_ZERO:
         var grads = values[0]
         opt_value(grads, context)
-        if grads_device_input(grads, False, context):
-            raise Error("TypeError: mojolearn optimizer with parameter groups: step takes host gradient arrays")
+        # device gradients (TrainDeviceArray) as the one-group step takes them: refused by a device="cpu"
+        # optimizer in its words, clipped on the device, each group's slice handed to its member's step
+        var on_device = grads_device_input(grads, False, context)
+        if py_get(py_fields(members[0]), optimizer_keys()[].k__host_device) is PythonObject(True):
+            optimizer_refuse_device_grads(grads, context)
         var parts = _pg_slices(members, grads, where + (".step" if operation == OPTIMIZER_OPN_PG_STEP else ".zero_grad"))
         if operation == OPTIMIZER_OPN_PG_ZERO:
             for gi in range(len(members)):  # driver-loop: over parameter groups
@@ -1109,10 +1149,9 @@ def pg_training_operation(operation: Int, owner: PythonObject, values: PythonObj
                 per_group = (PG_SABOTAGE_TRAINING_CLIP and not host) or (PG_SABOTAGE_TRAINING_CLIP_HOST and host)
             if per_group:
                 for gi in range(len(members)):  # SABOTAGE: each group clipped by its own norm
-                    total = door_clip(e0[1], parts[gi], values[1], PythonObject(2.0), PythonObject(True), Python.dict())
+                    total = _pg_clip(members[0], e0[1], parts[gi], values[1], on_device, context)
             else:
-                total = door_clip(e0[1], py_call(builtins.list, grads), values[1], PythonObject(2.0), PythonObject(True),
-                                  Python.dict())
+                total = _pg_clip(members[0], e0[1], py_call(builtins.list, grads), values[1], on_device, context)
         for gi in range(len(members)):  # driver-loop: over parameter groups (each its member's step)
             var e = _pg_member_entries(members[gi], context)
             _ = door_step(e[0], e[1], members[gi], parts[gi], PythonObject(None), OP_STEP, PythonObject(None))

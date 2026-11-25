@@ -126,8 +126,9 @@ comptime OPTIMIZER_OPN_PG_STEP = 1110
 comptime OPTIMIZER_OPN_PG_STATE = 1111
 comptime OPTIMIZER_OPN_PG_LOAD = 1112
 comptime OPTIMIZER_OPN_PG_ZERO = 1113
+comptime OPTIMIZER_OPN_PG_NEW = 1114
 comptime OPTIMIZER_OPN_PG_FIRST = OPTIMIZER_OPN_PG_STEP
-comptime OPTIMIZER_OPN_PG_LAST = OPTIMIZER_OPN_PG_ZERO
+comptime OPTIMIZER_OPN_PG_LAST = OPTIMIZER_OPN_PG_NEW
 # nn-blocks-pg end
 
 
@@ -578,6 +579,7 @@ def _optimizer_keys_fill(nk: UnsafePointer[OptimizerKeys, MutUntrackedOrigin]) r
     py_op_add(ops, "pg_state", OPTIMIZER_OPN_PG_STATE)
     py_op_add(ops, "pg_load", OPTIMIZER_OPN_PG_LOAD)
     py_op_add(ops, "pg_zero", OPTIMIZER_OPN_PG_ZERO)
+    py_op_add(ops, "pg_new", OPTIMIZER_OPN_PG_NEW)
     # nn-blocks-pg end
     nk[].ops = ops
     nk[].ready = True
