@@ -1,0 +1,219 @@
+{
+  "schema": "mojolearn.composed-cases.v1",
+  "about": "The smallest cases that each cross one piece of Session glue once: the tape's accumulation, Program capture and replay, gradient accumulation with a masked sum and a shared denominator, parameter groups with a resume, and a scan with dropout over unequal lengths.",
+  "cases": [
+    {
+      "name": "tape-two-paths",
+      "about": "x feeds two paths (matmul then tanh, and x * x, itself two edges), the loss is scaled by 0.37 so every upstream gradient carries a non-unit seed. The gradients of x and w must equal central differences of the same graph captured as a Program; a lost or doubled contribution moves them.",
+      "data": {
+        "x": {"hashed": [2, 3], "lo": -1.0, "hi": 1.0},
+        "w": {"hashed": [3, 2], "lo": -1.0, "hi": 1.0},
+        "scale": {"value": [[0.37]]}
+      },
+      "do": [
+        {"op": "def", "name": "graph", "do": [
+          {"op": "call", "fn": "S.matmul", "args": ["@xh", "@wh"], "as": "xw"},
+          {"op": "call", "fn": "S.tanh", "args": ["@xw"], "as": "t"},
+          {"op": "call", "fn": "S.sum", "args": ["@t"], "as": "a"},
+          {"op": "call", "fn": "S.mul", "args": ["@xh", "@xh"], "as": "xx"},
+          {"op": "call", "fn": "S.sum", "args": ["@xx"], "as": "q"},
+          {"op": "call", "fn": "S.add", "args": ["@a", "@q"], "as": "l"},
+          {"op": "call", "fn": "S.tensor", "args": ["@scale"], "as": "k"},
+          {"op": "call", "fn": "S.mul", "args": ["@l", "@k"], "as": "loss"}
+        ]},
+        {"op": "session", "as": "c", "do": [
+          {"op": "call", "fn": "c.tensor", "args": ["@x"], "as": "cx"},
+          {"op": "call", "fn": "c.tensor", "args": ["@w"], "as": "cwt"},
+          {"op": "use", "name": "graph", "with": {"S": "@c", "xh": "@cx", "wh": "@cwt"}},
+          {"op": "call", "fn": "c.capture", "kw": {"inputs": ["@cx", "@cwt"], "outputs": ["@loss"]}, "as": "prog"},
+          {"op": "session", "as": "s", "record": true, "do": [
+            {"op": "call", "fn": "s.tensor", "args": ["@x"], "kw": {"requires_grad": true}, "as": "sx"},
+            {"op": "call", "fn": "s.tensor", "args": ["@w"], "kw": {"requires_grad": true}, "as": "sw"},
+            {"op": "use", "name": "graph", "with": {"S": "@s", "xh": "@sx", "wh": "@sw"}},
+            {"op": "read", "fn": "s.numpy", "of": "@loss", "as": "lv"},
+            {"op": "call", "fn": "s.backward", "args": ["@loss"]},
+            {"op": "read", "fn": "s.grad", "of": ["@sx", "@sw"], "as": "g"}
+          ]},
+          {"op": "fd_grad", "program": "@prog", "inputs": ["@x", "@w"], "wrt": 0, "grad": "@g.0", "eps": 0.01, "rtol": 0.02, "atol": 0.001, "what": "the gradient of x (three contributions: matmul and both edges of x * x)"},
+          {"op": "fd_grad", "program": "@prog", "inputs": ["@x", "@w"], "wrt": 1, "grad": "@g.1", "eps": 0.01, "rtol": 0.02, "atol": 0.001, "what": "the gradient of w"}
+        ]},
+        {"op": "digest", "part": "grads", "of": ["@lv", "@g"]}
+      ]
+    },
+    {
+      "name": "program-replay",
+      "about": "A captured Program run on new inputs equals the same operations called one by one, to the bit; saved and loaded in a fresh session it gives the same bytes.",
+      "data": {
+        "x": {"hashed": [3, 4], "lo": -1.0, "hi": 1.0},
+        "x2": {"hashed": [3, 4], "lo": -1.0, "hi": 1.0},
+        "w": {"hashed": [4, 2], "lo": -0.5, "hi": 0.5},
+        "b": {"hashed": [1, 2], "lo": -0.1, "hi": 0.1}
+      },
+      "do": [
+        {"op": "session", "as": "c", "do": [
+          {"op": "call", "fn": "c.tensor", "args": ["@x"], "as": "xi"},
+          {"op": "call", "fn": "c.tensor", "args": ["@w"], "as": "wt"},
+          {"op": "call", "fn": "c.tensor", "args": ["@b"], "as": "bt"},
+          {"op": "call", "fn": "c.linear", "args": ["@xi", "@wt", "@bt"], "kw": {"activation": "tanh"}, "as": "h"},
+          {"op": "call", "fn": "c.softmax", "args": ["@h"], "as": "y"},
+          {"op": "call", "fn": "c.capture", "kw": {"inputs": ["@xi"], "outputs": ["@y"]}, "as": "prog"},
+          {"op": "call", "fn": "prog.run", "args": ["@x2"], "as": "replayed"},
+          {"op": "call", "fn": "c.tensor", "args": ["@x2"], "as": "x2t"},
+          {"op": "call", "fn": "c.linear", "args": ["@x2t", "@wt", "@bt"], "kw": {"activation": "tanh"}, "as": "h2"},
+          {"op": "call", "fn": "c.softmax", "args": ["@h2"], "as": "y2"},
+          {"op": "read", "fn": "c.numpy", "of": "@y2", "as": "eager"},
+          {"op": "path", "name": "replay.mlp", "as": "path"},
+          {"op": "call", "fn": "prog.save", "args": ["@path"]}
+        ]},
+        {"op": "array", "of": "@replayed", "dtype": "float32", "as": "replayed"},
+        {"op": "same", "a": "@replayed", "b": "@eager", "what": "Program.run against the operations one by one"},
+        {"op": "session", "as": "d", "do": [
+          {"op": "call", "fn": "d.load_program", "args": ["@path"], "as": "loaded"},
+          {"op": "call", "fn": "loaded.run", "args": ["@x2"], "as": "reloaded"}
+        ]},
+        {"op": "array", "of": "@reloaded", "dtype": "float32", "as": "reloaded"},
+        {"op": "same", "a": "@replayed", "b": "@reloaded", "what": "Program.run against the saved and loaded program"},
+        {"op": "digest", "part": "replay", "of": ["@replayed"]}
+      ]
+    },
+    {
+      "name": "grad-accum-masked",
+      "about": "Two microbatches, each loss sum(mask * (x w - y)^2) / D with D the whole batch's mask count (3, one row masked out), accumulated by backward(accumulate=True) after zero_grad, must equal the gradient of the whole batch with its denominator sum(mask) computed in the session (float64 tolerance: the fold order differs).",
+      "data": {
+        "xa": {"hashed": [2, 3], "lo": -1.0, "hi": 1.0},
+        "xb": {"hashed": [2, 3], "lo": -1.0, "hi": 1.0},
+        "ya": {"hashed": [2, 1], "lo": -1.0, "hi": 1.0},
+        "yb": {"hashed": [2, 1], "lo": -1.0, "hi": 1.0},
+        "ma": {"value": [[1], [0]]},
+        "mb": {"value": [[1], [1]]},
+        "den": {"value": [[3.0]]},
+        "w": {"hashed": [3, 1], "lo": -0.5, "hi": 0.5}
+      },
+      "do": [
+        {"op": "def", "name": "masked_sum", "do": [
+          {"op": "call", "fn": "S.tensor", "args": ["@xd"], "as": "xt"},
+          {"op": "call", "fn": "S.tensor", "args": ["@yd"], "as": "yt"},
+          {"op": "call", "fn": "S.tensor", "args": ["@md"], "as": "mt"},
+          {"op": "call", "fn": "S.matmul", "args": ["@xt", "@wh"], "as": "pr"},
+          {"op": "call", "fn": "S.sub", "args": ["@pr", "@yt"], "as": "r"},
+          {"op": "call", "fn": "S.mul", "args": ["@r", "@r"], "as": "sq"},
+          {"op": "call", "fn": "S.mul", "args": ["@mt", "@sq"], "as": "msq"},
+          {"op": "call", "fn": "S.sum", "args": ["@msq"], "as": "num"}
+        ]},
+        {"op": "session", "as": "s", "record": true, "do": [
+          {"op": "call", "fn": "s.tensor", "args": ["@w"], "kw": {"requires_grad": true}, "as": "wh"},
+          {"op": "call", "fn": "s.tensor", "args": ["@den"], "as": "dt"},
+          {"op": "call", "fn": "s.zero_grad"},
+          {"op": "use", "name": "masked_sum", "with": {"S": "@s", "xd": "@xa", "yd": "@ya", "md": "@ma"}},
+          {"op": "call", "fn": "s.div", "args": ["@num", "@dt"], "as": "la"},
+          {"op": "call", "fn": "s.backward", "args": ["@la"], "kw": {"accumulate": true}},
+          {"op": "use", "name": "masked_sum", "with": {"xd": "@xb", "yd": "@yb", "md": "@mb"}},
+          {"op": "call", "fn": "s.div", "args": ["@num", "@dt"], "as": "lb"},
+          {"op": "call", "fn": "s.backward", "args": ["@lb"], "kw": {"accumulate": true}},
+          {"op": "read", "fn": "s.grad", "of": "@wh", "as": "gacc"}
+        ]},
+        {"op": "np", "fn": "concatenate", "args": [["@xa", "@xb"]], "as": "xf"},
+        {"op": "np", "fn": "concatenate", "args": [["@ya", "@yb"]], "as": "yf"},
+        {"op": "np", "fn": "concatenate", "args": [["@ma", "@mb"]], "as": "mf"},
+        {"op": "session", "as": "s", "record": true, "do": [
+          {"op": "call", "fn": "s.tensor", "args": ["@w"], "kw": {"requires_grad": true}, "as": "wh"},
+          {"op": "use", "name": "masked_sum", "with": {"S": "@s", "xd": "@xf", "yd": "@yf", "md": "@mf"}},
+          {"op": "call", "fn": "s.sum", "args": ["@mt"], "as": "count"},
+          {"op": "call", "fn": "s.div", "args": ["@num", "@count"], "as": "lf"},
+          {"op": "call", "fn": "s.backward", "args": ["@lf"]},
+          {"op": "read", "fn": "s.grad", "of": "@wh", "as": "gfull"}
+        ]},
+        {"op": "close", "a": "@gacc", "b": "@gfull", "rtol": 1e-5, "atol": 1e-6, "what": "accumulated microbatch gradient against the whole batch's"},
+        {"op": "digest", "part": "grads", "of": ["@gacc", "@gfull"]}
+      ]
+    },
+    {
+      "name": "groups-resume",
+      "about": "Adam with two parameter groups (the bias at a higher rate and other betas), two steps, parameters and optimizer_state_dict saved to a file, a third step uninterrupted against a fresh session that loads the save: the same bytes.",
+      "data": {
+        "a": {"hashed": [2, 2], "lo": -0.5, "hi": 0.5},
+        "b": {"hashed": [1, 2], "lo": -0.1, "hi": 0.1},
+        "x": {"hashed": [3, 2], "lo": -1.0, "hi": 1.0},
+        "t": {"hashed": [3, 2], "lo": -0.5, "hi": 0.5}
+      },
+      "do": [
+        {"op": "def", "name": "optimizer", "do": [
+          {"op": "call", "fn": "S.param_group_optimizer", "args": [[
+            {"params": ["@p.a"], "lr": 0.05},
+            {"params": ["@p.b"], "lr": 0.2, "betas": {"tuple": [0.8, 0.9]}}], "adam"], "as": "opt"}
+        ]},
+        {"op": "def", "name": "train_step", "do": [
+          {"op": "call", "fn": "S.tensor", "args": ["@x"], "as": "xt"},
+          {"op": "call", "fn": "S.tensor", "args": ["@t"], "as": "tt"},
+          {"op": "call", "fn": "S.linear", "args": ["@xt", "@p.a", "@p.b"], "kw": {"activation": "tanh"}, "as": "h"},
+          {"op": "call", "fn": "S.mse", "args": ["@h", "@tt"], "as": "loss"},
+          {"op": "call", "fn": "S.backward", "args": ["@loss"]},
+          {"op": "call", "fn": "S.step", "args": ["@opt", ["@p.a", "@p.b"]]},
+          {"op": "call", "fn": "S.reset"}
+        ]},
+        {"op": "session", "as": "s", "record": true, "do": [
+          {"op": "map", "fn": "s.tensor", "over": {"a": "@a", "b": "@b"}, "kw": {"requires_grad": true}, "as": "p"},
+          {"op": "use", "name": "optimizer", "with": {"S": "@s"}},
+          {"op": "repeat", "n": 2, "var": "k", "do": [{"op": "use", "name": "train_step"}]},
+          {"op": "read", "fn": "s.numpy", "of": "@p", "as": "saved_p"},
+          {"op": "roundtrip", "of": "@saved_p", "as": "saved_p"},
+          {"op": "state_save", "on": "s", "opt": "@opt", "keys": ["exp_avg", "exp_avg_sq"], "as": "saved"},
+          {"op": "roundtrip", "of": "@saved", "as": "saved"},
+          {"op": "use", "name": "train_step"},
+          {"op": "read", "fn": "s.numpy", "of": "@p", "as": "straight"},
+          {"op": "state_save", "on": "s", "opt": "@opt", "keys": ["exp_avg", "exp_avg_sq"], "as": "straight_state"}
+        ]},
+        {"op": "session", "as": "r", "record": true, "do": [
+          {"op": "map", "fn": "r.tensor", "over": "@saved_p", "kw": {"requires_grad": true}, "as": "p"},
+          {"op": "use", "name": "optimizer", "with": {"S": "@r"}},
+          {"op": "state_load", "on": "r", "opt": "@opt", "from": "@saved", "keys": ["exp_avg", "exp_avg_sq"]},
+          {"op": "use", "name": "train_step"},
+          {"op": "read", "fn": "r.numpy", "of": "@p", "as": "resumed"},
+          {"op": "state_save", "on": "r", "opt": "@opt", "keys": ["exp_avg", "exp_avg_sq"], "as": "resumed_state"}
+        ]},
+        {"op": "same", "a": "@straight", "b": "@resumed", "what": "uninterrupted against resumed parameters"},
+        {"op": "same", "a": "@straight_state_arrays", "b": "@resumed_state_arrays", "what": "uninterrupted against resumed moments"},
+        {"op": "digest", "part": "resume", "of": ["@saved_p", "@resumed", "@resumed_state_arrays"]}
+      ]
+    },
+    {
+      "name": "scan-dropout-lengths",
+      "about": "A captured cell with a dropout inside it (h' = h + dropout(x)) scanned over two sequences of lengths 1 and 3 with keys 0 and 1: outputs and input gradients are zero at and past each length, and the two keys draw different masks.",
+      "data": {
+        "xs": {"hashed": [3, 2, 4], "lo": 0.5, "hi": 1.5},
+        "lens": {"value": [[1], [3]]},
+        "z24": {"zeros": [2, 4]}
+      },
+      "do": [
+        {"op": "def", "name": "run", "do": [
+          {"op": "call", "fn": "s.tensor", "args": ["@xs"], "kw": {"requires_grad": true}, "as": "xt"},
+          {"op": "call", "fn": "s.tensor", "args": ["@lens"], "as": "lt"},
+          {"op": "call", "fn": "s.tensor", "args": ["@z24"], "as": "h0"},
+          {"op": "call", "fn": "s.scan", "args": ["@dcell", "@xt", "@h0"], "kw": {"lengths": "@lt", "counter": "@key"}, "as": ["ys", null]},
+          {"op": "call", "fn": "s.sum", "args": ["@ys"], "as": "loss"},
+          {"op": "read", "fn": "s.numpy", "of": "@ys", "as": "yv"},
+          {"op": "call", "fn": "s.backward", "args": ["@loss"]},
+          {"op": "read", "fn": "s.grad", "of": "@xt", "as": "gx"},
+          {"op": "zero", "of": "@yv", "index": [[1, null], 0], "what": "sequence 0 (length 1) has an output past its length"},
+          {"op": "zero", "of": "@gx", "index": [[1, null], 0], "what": "sequence 0 (length 1) has an input gradient past its length"},
+          {"op": "call", "fn": "s.reset"}
+        ]},
+        {"op": "session", "as": "c", "do": [
+          {"op": "call", "fn": "c.tensor", "args": ["@z24"], "as": "dh"},
+          {"op": "call", "fn": "c.tensor", "args": ["@z24"], "as": "dx"},
+          {"op": "call", "fn": "c.dropout", "args": ["@dx", 0.5], "kw": {"seed": 29, "counter": 0}, "as": "dy"},
+          {"op": "call", "fn": "c.add", "args": ["@dh", "@dy"], "as": "dhy"},
+          {"op": "call", "fn": "c.capture", "kw": {"inputs": ["@dh", "@dx"], "outputs": ["@dhy", "@dy"]}, "as": "dcell"},
+          {"op": "session", "as": "s", "record": true, "do": [
+            {"op": "use", "name": "run", "with": {"key": 0}},
+            {"op": "let", "as": "k0", "value": {"ys": "@yv", "gx": "@gx"}},
+            {"op": "use", "name": "run", "with": {"key": 1}},
+            {"op": "let", "as": "k1", "value": {"ys": "@yv", "gx": "@gx"}}
+          ]}
+        ]},
+        {"op": "differ", "a": "@k0.ys", "b": "@k1.ys", "what": "keys 0 and 1 drew the same dropout masks over unequal lengths"},
+        {"op": "digest", "part": "scan", "of": ["@k0", "@k1"]}
+      ]
+    }
+  ]
+}

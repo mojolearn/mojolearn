@@ -90,6 +90,25 @@ _OP = {
     # nn-blocks-qkv begin
     "attention": 122,
     # nn-blocks-qkv end
+    # session-ops-resize begin: "pad" with mode 'reflect' / 'replicate' records 153
+    "interpolate": 150, "pixel_shuffle": 151, "pixel_unshuffle": 152,
+    # session-ops-resize end
+    # session-ops-conv begin
+    "conv1d": 130, "conv2d_dilated": 131, "conv3d": 132, "conv_transpose1d": 133, "conv_transpose2d": 134,
+    # session-ops-conv end
+    # session-ops-pool begin: the base codes (max_pool2d / avg_pool2d with an option record 142 / 143)
+    "max_pool1d": 140, "avg_pool1d": 141, "max_pool3d": 144, "avg_pool3d": 145, "adaptive_avg_pool3d": 146,
+    "adaptive_avg_pool1d": 147, "adaptive_avg_pool2d": 147, "adaptive_max_pool1d": 148, "adaptive_max_pool2d": 148,
+    # session-ops-pool end
+    # session-ops-extra begin
+    "sequence_mask": 180, "topk": 181, "gather": 182, "logsumexp": 183,
+    # session-ops-extra end
+    # session-ops-rest begin
+    "batch_norm": 160, "group_norm": 161, "instance_norm": 162, "prelu": 163, "mish": 164,
+    "multi_head_attention": 165, "positional_encoding": 166, "smooth_l1_loss": 167, "nll_loss": 168,
+    "kl_div": 169, "binary_cross_entropy_with_logits": 170, "ctc_loss": 171, "selective_scan": 172,
+    "ssd_scan": 173, "trapezoid_scan": 174,
+    # session-ops-rest end
 }
 _GELU = {"none": 0, "tanh": 1}
 # the state buffers autograd/ops_api.mojo optimizer_state returns, by kind
@@ -488,34 +507,69 @@ class Session:
         return _SESSION_CALL(self, "take", (x, indices, axis))
 
     # ------------------------------------------------------------ convolution and pooling
-    def conv2d(self, x, weight, bias=None, stride=1, padding=0, groups=1):
-        """A 2-D convolution (cross-correlation) of ``x``.
+    def conv2d(self, x, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
+        """A 2-D convolution (cross-correlation) of ``x``, as ``torch.nn.functional.conv2d``.
 
         ``x`` is ``(N, C, H, W)``, ``weight`` ``(out_channels, C // groups,
         kh, kw)`` and ``bias`` an optional tensor of ``out_channels`` values.
-        The input is padded with ``padding`` zeros on every side and the
-        kernel moves ``stride`` positions at a time; the result is
-        ``(N, out_channels, H_out, W_out)``. With ``groups`` greater than 1
-        the channels split into ``groups`` equal blocks and each block of
-        outputs sees only its block of inputs; ``groups=C`` is a depthwise
-        convolution.
+        ``stride``, ``padding`` and ``dilation`` are an integer or a pair
+        ``(height, width)``: the input is padded with ``padding`` zeros at
+        both ends of each axis, the kernel moves ``stride`` positions at a
+        time and its taps are ``dilation`` positions apart. ``padding`` may
+        also be ``'valid'`` (no padding) or ``'same'`` (the output keeps the
+        input's size; it needs stride 1 and ``dilation * (k - 1)`` even on
+        each axis). The result is ``(N, out_channels, H_out, W_out)`` with
+        ``H_out = (H + 2 * padding - dilation * (kh - 1) - 1) // stride + 1``
+        and ``W_out`` likewise. With ``groups`` greater than 1 the channels
+        split into ``groups`` equal blocks and each block of outputs sees
+        only its block of inputs; ``groups=C`` is a depthwise convolution.
 
         Example::
 
             y = s.conv2d(x, w, stride=1, padding=1, groups=4)
+            z = s.conv2d(x, w, padding=(2, 1), dilation=(2, 1))
         """
-        return _SESSION_CALL(self, "conv2d", (x, weight, bias, stride, padding, groups))
+        return _SESSION_CALL(self, "conv2d", (x, weight, bias, stride, padding, dilation, groups))
 
-    def max_pool2d(self, x, kernel_size, stride=None):
-        """The largest value of each ``kernel_size`` window of an
-        ``(N, C, H, W)`` tensor, windows ``stride`` apart (by default
-        ``kernel_size``)."""
-        return _SESSION_CALL(self, "max_pool2d", (x, kernel_size, stride))
+    def max_pool2d(self, x, kernel_size, stride=None, padding=0, dilation=1, ceil_mode=False,
+                   return_indices=False):
+        """The largest value of each window of an ``(N, C, H, W)`` tensor, as
+        ``torch.nn.functional.max_pool2d``.
 
-    def avg_pool2d(self, x, kernel_size, stride=None):
-        """The mean of each ``kernel_size`` window of an ``(N, C, H, W)``
-        tensor, windows ``stride`` apart (by default ``kernel_size``)."""
-        return _SESSION_CALL(self, "avg_pool2d", (x, kernel_size, stride))
+        ``kernel_size``, ``stride`` (by default ``kernel_size``), ``padding``
+        and ``dilation`` are an integer for both axes or a ``(height,
+        width)`` pair. Padded positions are never chosen; ``padding`` is at
+        most half of the window. ``ceil_mode=True`` rounds the output size
+        up, keeping a last window that starts inside the input. A NaN in a
+        window wins, and of tied values the first in row-major window order
+        receives the gradient. ``return_indices`` must be False.
+
+        Example::
+
+            y = s.max_pool2d(x, 3, stride=2, padding=1)
+        """
+        return _SESSION_CALL(self, "max_pool2d", (x, kernel_size, stride, padding, dilation, ceil_mode,
+                                                  return_indices))
+
+    def avg_pool2d(self, x, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True,
+                   divisor_override=None):
+        """The mean of each window of an ``(N, C, H, W)`` tensor, as
+        ``torch.nn.functional.avg_pool2d``.
+
+        ``kernel_size``, ``stride`` (by default ``kernel_size``) and
+        ``padding`` are an integer for both axes or a ``(height, width)``
+        pair; the zero padding is at most half of the window. Each window's
+        sum is divided by its size clipped to the padded input, counting the
+        padding when ``count_include_pad`` is True and only the input
+        positions otherwise; ``divisor_override``, when given, divides every
+        window instead. ``ceil_mode=True`` rounds the output size up.
+
+        Example::
+
+            y = s.avg_pool2d(x, 3, stride=2, padding=1, count_include_pad=False)
+        """
+        return _SESSION_CALL(self, "avg_pool2d", (x, kernel_size, stride, padding, ceil_mode, count_include_pad,
+                                                  divisor_override))
 
     # ------------------------------------------------------------ more elementwise math
     def erf(self, x):
@@ -672,14 +726,34 @@ class Session:
         """
         return _SESSION_CALL(self, "argmax", (x, axis, keepdims, int32))
 
-    def pad(self, x, pads, value=0.0):
-        """``x`` padded with ``value``.
+    def pad(self, x, pads, value=0.0, mode=None):
+        """``x`` padded with ``value``, or by reflection or replication.
 
         ``pads`` lists two counts per axis, as ONNX ``Pad`` does: every
         axis's count before its first element, then every axis's count after
         its last one. A negative count removes elements instead.
+
+        ``mode`` is ``'constant'`` (the default, also when ``None``),
+        ``'reflect'`` or ``'replicate'``, as in
+        ``torch.nn.functional.pad``. ``'reflect'`` mirrors ``x`` without
+        repeating its edge value and ``'replicate'`` repeats the edge value;
+        both pad an ``(N, C, L)`` or ``(N, C, H, W)`` tensor on its spatial
+        axes only (the batch and channel counts are 0), take non-negative
+        counts, and take no ``value``. A reflection count must be smaller
+        than the axis it pads. The argument order is this method's own:
+        ``value`` comes before ``mode``, and ``pads`` keeps the ONNX order
+        above (PyTorch lists the last axis's pair first).
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.arange(4, dtype=np.float32).reshape(1, 1, 4))
+        ...     s.numpy(s.pad(x, [0, 0, 2, 0, 0, 1], mode="reflect"))
+        array([[[2., 1., 0., 1., 2., 3., 2.]]], dtype=float32)
         """
-        return _SESSION_CALL(self, "pad", (x, pads, value))
+        return _SESSION_CALL(self, "pad", (x, pads, value, mode))
 
     def any(self, x, axis=None, keepdims=None):
         """1.0 where some element over ``axis`` is nonzero, else 0.0, with
@@ -1192,6 +1266,16 @@ class Session:
         codes' count); the mean is ``sum(weight * loss) / sum(weight)``, as
         ``torch.nn.CrossEntropyLoss`` normalizes a weighted mean, and the
         rest as in :meth:`mse`.
+
+        ``codes`` may instead be a target distribution with the logits' shape
+        (soft labels: distillation, label smoothing, mixup), as torch accepts
+        class probabilities: the loss of a position is
+        ``-sum(target * log_softmax(logits))`` over the classes, averaged over
+        the positions (or summed); ``weight`` works the same way. The gradient
+        flows to the logits and to the target.
+
+        >>> t = s.tensor(np.array([[0.9, 0.1], [0.2, 0.8]], dtype=np.float32))
+        >>> loss = s.cross_entropy(logits, t)
         """
         return _SESSION_CALL(self, "cross_entropy", (logits, codes, reduction, weight))
 
@@ -2143,6 +2227,721 @@ class Session:
         """
         return _SESSION_CALL(self, "custom", (op, inputs))
     # nn-blocks-cbw end
+
+    # session-ops-resize begin ------------------------------- resampling and rearranging
+    def interpolate(self, x, size=None, scale_factor=None, mode="nearest", align_corners=None,
+                    recompute_scale_factor=None, antialias=False):
+        """``x`` resampled to a new length or height and width, as
+        ``torch.nn.functional.interpolate``.
+
+        ``x`` is ``(N, C, L)`` or ``(N, C, H, W)``. Give exactly one of
+        ``size`` (the output length, or height and width: one integer for
+        every spatial axis or one per axis) and ``scale_factor`` (one number
+        or one per axis; the output size is ``floor(input_size *
+        scale_factor)``). ``mode`` is ``'nearest'``, ``'linear'`` (for
+        ``(N, C, L)``) or ``'bilinear'`` (for ``(N, C, H, W)``).
+        ``align_corners`` (``'linear'`` and ``'bilinear'`` only, ``False`` by
+        default) maps the corner samples of input and output onto each
+        other. With a ``scale_factor`` the source positions use that factor,
+        unless ``recompute_scale_factor=True``, which uses the input and
+        output sizes instead.
+
+        In a recording session the gradient flows back to ``x``: each output
+        value's gradient is added to the input values it was read from.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.array([[[[1, 2], [3, 4]]]], dtype=np.float32))
+        ...     s.numpy(s.interpolate(x, scale_factor=2))
+        array([[[[1., 1., 2., 2.],
+                 [1., 1., 2., 2.],
+                 [3., 3., 4., 4.],
+                 [3., 3., 4., 4.]]]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "interpolate", (x, size, scale_factor, mode, align_corners,
+                                                   recompute_scale_factor, antialias))
+
+    def pixel_shuffle(self, x, upscale_factor):
+        """``x`` of shape ``(N, C * r * r, H, W)`` rearranged to
+        ``(N, C, H * r, W * r)`` with ``r = upscale_factor``, as
+        ``torch.nn.functional.pixel_shuffle``:
+        ``out[n, c, h * r + i, w * r + j] = x[n, c * r * r + i * r + j, h, w]``.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.arange(4, dtype=np.float32).reshape(1, 4, 1, 1))
+        ...     s.numpy(s.pixel_shuffle(x, 2))
+        array([[[[0., 1.],
+                 [2., 3.]]]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "pixel_shuffle", (x, upscale_factor))
+
+    def pixel_unshuffle(self, x, downscale_factor):
+        """The inverse of :meth:`pixel_shuffle`: ``x`` of shape
+        ``(N, C, H * r, W * r)`` rearranged to ``(N, C * r * r, H, W)`` with
+        ``r = downscale_factor``, as ``torch.nn.functional.pixel_unshuffle``.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.arange(4, dtype=np.float32).reshape(1, 1, 2, 2))
+        ...     s.numpy(s.pixel_unshuffle(x, 2)).ravel()
+        array([0., 1., 2., 3.], dtype=float32)
+        """
+        return _SESSION_CALL(self, "pixel_unshuffle", (x, downscale_factor))
+    # session-ops-resize end
+    # session-ops-conv begin ------------------------------------ Sequential's convolutions
+    def conv1d(self, x, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
+        """A 1-D convolution (cross-correlation) of ``x``, as ``torch.nn.functional.conv1d``.
+
+        ``x`` is ``(N, C, L)``, ``weight`` ``(out_channels, C // groups, k)``
+        and ``bias`` an optional tensor of ``out_channels`` values. The
+        input is padded with ``padding`` zeros at both ends, the kernel
+        moves ``stride`` positions at a time and its taps are ``dilation``
+        positions apart; ``padding`` may also be ``'valid'`` or ``'same'``
+        (stride 1 and ``dilation * (k - 1)`` even). The result is
+        ``(N, out_channels, L_out)`` with
+        ``L_out = (L + 2 * padding - dilation * (k - 1) - 1) // stride + 1``.
+        With ``groups`` greater than 1 each block of outputs sees only its
+        block of input channels. The values and gradients are those of
+        :class:`Sequential`'s ``conv1d`` layer.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session(record=True) as s:
+        ...     x = s.tensor(np.ones((2, 3, 8), np.float32))
+        ...     w = s.tensor(np.full((4, 3, 3), 0.1, np.float32), requires_grad=True)
+        ...     y = s.conv1d(x, w, padding=2, dilation=2)
+        ...     s.backward(s.sum(y))
+        ...     s.shape(y)
+        (2, 4, 8)
+        """
+        return _SESSION_CALL(self, "conv1d", (x, weight, bias, stride, padding, dilation, groups))
+
+    def conv3d(self, x, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
+        """A 3-D convolution (cross-correlation) of ``x``, as ``torch.nn.functional.conv3d``.
+
+        ``x`` is ``(N, C, D, H, W)``, ``weight`` ``(out_channels, C // groups,
+        kd, kh, kw)`` and ``bias`` an optional tensor of ``out_channels``
+        values. ``stride``, ``padding`` and ``dilation`` are an integer or a
+        triple ``(depth, height, width)``; ``padding`` may also be
+        ``'valid'`` or ``'same'`` (stride 1 and ``dilation * (k - 1)`` even
+        on each axis). The result is ``(N, out_channels, D_out, H_out,
+        W_out)`` with ``D_out = (D + 2 * padding - dilation * (kd - 1) - 1)
+        // stride + 1`` and the others likewise. The values and gradients
+        are those of :class:`Sequential`'s ``conv3d`` layer.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session(record=True) as s:
+        ...     x = s.tensor(np.ones((1, 2, 4, 6, 6), np.float32))
+        ...     w = s.tensor(np.full((3, 2, 3, 3, 3), 0.05, np.float32), requires_grad=True)
+        ...     y = s.conv3d(x, w, stride=(1, 2, 2), padding=1)
+        ...     s.backward(s.sum(y))
+        ...     s.shape(y)
+        (1, 3, 4, 3, 3)
+        """
+        return _SESSION_CALL(self, "conv3d", (x, weight, bias, stride, padding, dilation, groups))
+
+    def conv_transpose1d(self, x, weight, bias=None, stride=1, padding=0, output_padding=0, groups=1,
+                         dilation=1):
+        """A 1-D transposed convolution of ``x``, as ``torch.nn.functional.conv_transpose1d``.
+
+        ``x`` is ``(N, C_in, L)``, ``weight`` ``(C_in, C_out // groups, k)``
+        and ``bias`` an optional tensor of ``C_out`` values. The result is
+        ``(N, C_out, L_out)`` with
+        ``L_out = (L - 1) * stride - 2 * padding + dilation * (k - 1) + output_padding + 1``:
+        the gradient of ``conv1d`` with the same weight, stride, padding and
+        dilation with respect to its input, plus the bias. It is the usual
+        learned upsampling of a decoder. ``output_padding`` must be smaller
+        than ``stride``. The values and gradients are those of
+        :class:`Sequential`'s ``conv_transpose1d`` layer.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session(record=True) as s:
+        ...     x = s.tensor(np.ones((2, 4, 5), np.float32))
+        ...     w = s.tensor(np.full((4, 2, 3), 0.1, np.float32), requires_grad=True)
+        ...     y = s.conv_transpose1d(x, w, stride=2, padding=1, output_padding=1)
+        ...     s.backward(s.sum(y))
+        ...     s.shape(y)
+        (2, 2, 10)
+        """
+        return _SESSION_CALL(self, "conv_transpose1d",
+                             (x, weight, bias, stride, padding, output_padding, groups, dilation))
+
+    def conv_transpose2d(self, x, weight, bias=None, stride=1, padding=0, output_padding=0, groups=1,
+                         dilation=1):
+        """A 2-D transposed convolution of ``x``, as ``torch.nn.functional.conv_transpose2d``.
+
+        ``x`` is ``(N, C_in, H, W)``, ``weight`` ``(C_in, C_out // groups,
+        kh, kw)`` and ``bias`` an optional tensor of ``C_out`` values.
+        ``stride``, ``padding``, ``output_padding`` and ``dilation`` are an
+        integer or a pair ``(height, width)``. The result is ``(N, C_out,
+        H_out, W_out)`` with ``H_out = (H - 1) * stride - 2 * padding +
+        dilation * (kh - 1) + output_padding + 1`` and ``W_out`` likewise:
+        the gradient of ``conv2d`` with the same weight, stride, padding and
+        dilation with respect to its input, plus the bias. ``output_padding``
+        must be smaller than ``stride`` on each axis. The values and
+        gradients are those of :class:`Sequential`'s ``conv_transpose2d``
+        layer.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session(record=True) as s:
+        ...     x = s.tensor(np.ones((1, 4, 3, 3), np.float32))
+        ...     w = s.tensor(np.full((4, 2, 2, 2), 0.1, np.float32), requires_grad=True)
+        ...     y = s.conv_transpose2d(x, w, stride=2)
+        ...     s.backward(s.sum(y))
+        ...     s.shape(y)
+        (1, 2, 6, 6)
+        """
+        return _SESSION_CALL(self, "conv_transpose2d",
+                             (x, weight, bias, stride, padding, output_padding, groups, dilation))
+    # session-ops-conv end
+    # session-ops-pool begin ------------------------------------------ 1-D and 3-D pools, adaptive pools
+    def max_pool1d(self, x, kernel_size, stride=None, padding=0, dilation=1, ceil_mode=False,
+                   return_indices=False):
+        """The largest value of each window of an ``(N, C, L)`` tensor, as
+        ``torch.nn.functional.max_pool1d``.
+
+        Windows of ``kernel_size`` positions (taps ``dilation`` apart) start
+        ``stride`` positions apart (by default ``kernel_size``). ``padding``
+        positions are added at both ends (at most half of the window) and are
+        never chosen. ``ceil_mode=True`` rounds the output length up, keeping
+        a last window that starts inside the input. A NaN in a window wins,
+        and of tied values the first receives the gradient.
+        ``return_indices`` must be False.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.arange(6, dtype=np.float32).reshape(1, 1, 6))
+        ...     s.numpy(s.max_pool1d(x, 2))
+        array([[[1., 3., 5.]]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "max_pool1d", (x, kernel_size, stride, padding, dilation, ceil_mode,
+                                                  return_indices))
+
+    def avg_pool1d(self, x, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True):
+        """The mean of each window of an ``(N, C, L)`` tensor, as
+        ``torch.nn.functional.avg_pool1d``.
+
+        Windows of ``kernel_size`` positions start ``stride`` positions apart
+        (by default ``kernel_size``), with ``padding`` zeros at both ends (at
+        most half of the window). Each window's sum is divided by its length
+        clipped to the padded input, counting the padding when
+        ``count_include_pad`` is True and only the input positions otherwise.
+        ``ceil_mode=True`` rounds the output length up.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.arange(6, dtype=np.float32).reshape(1, 1, 6))
+        ...     s.numpy(s.avg_pool1d(x, 2))
+        array([[[0.5, 2.5, 4.5]]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "avg_pool1d", (x, kernel_size, stride, padding, ceil_mode, count_include_pad))
+
+    def max_pool3d(self, x, kernel_size, stride=None, padding=0, dilation=1, ceil_mode=False,
+                   return_indices=False):
+        """The largest value of each window of an ``(N, C, D, H, W)`` tensor,
+        as ``torch.nn.functional.max_pool3d``.
+
+        ``kernel_size``, ``stride`` (by default ``kernel_size``), ``padding``
+        and ``dilation`` are an integer for all three axes or a ``(depth,
+        height, width)`` triple. Padded positions are never chosen;
+        ``padding`` is at most half of the window. ``ceil_mode=True`` rounds
+        the output sizes up. A NaN in a window wins, and of tied values the
+        first in (depth, height, width) order receives the gradient.
+        ``return_indices`` must be False.
+
+        Example::
+
+            y = s.max_pool3d(x, (1, 2, 2))
+        """
+        return _SESSION_CALL(self, "max_pool3d", (x, kernel_size, stride, padding, dilation, ceil_mode,
+                                                  return_indices))
+
+    def avg_pool3d(self, x, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True,
+                   divisor_override=None):
+        """The mean of each window of an ``(N, C, D, H, W)`` tensor, as
+        ``torch.nn.functional.avg_pool3d``.
+
+        ``kernel_size``, ``stride`` (by default ``kernel_size``) and
+        ``padding`` are an integer for all three axes or a ``(depth, height,
+        width)`` triple; the zero padding is at most half of the window. Each
+        window's sum is divided by its size clipped to the padded input,
+        counting the padding when ``count_include_pad`` is True and only the
+        input positions otherwise; ``divisor_override``, when given, divides
+        every window instead. ``ceil_mode=True`` rounds the output sizes up.
+
+        Example::
+
+            y = s.avg_pool3d(x, 2, padding=1, count_include_pad=False)
+        """
+        return _SESSION_CALL(self, "avg_pool3d", (x, kernel_size, stride, padding, ceil_mode, count_include_pad,
+                                                  divisor_override))
+
+    def adaptive_avg_pool1d(self, x, output_size):
+        """The mean of ``output_size`` windows spread over the length of an
+        ``(N, C, L)`` tensor, as ``torch.nn.functional.adaptive_avg_pool1d``.
+
+        Output ``i`` is the mean of positions ``floor(i L / output_size)`` up
+        to ``ceil((i + 1) L / output_size)``; any ``output_size`` of 1 or
+        more works. ``adaptive_avg_pool1d(x, 1)`` is the global average.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.arange(6, dtype=np.float32).reshape(1, 1, 6))
+        ...     s.numpy(s.adaptive_avg_pool1d(x, 3))
+        array([[[0.5, 2.5, 4.5]]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "adaptive_avg_pool1d", (x, output_size))
+
+    def adaptive_avg_pool2d(self, x, output_size):
+        """The mean of ``output_size`` windows spread over the height and
+        width of an ``(N, C, H, W)`` tensor, as
+        ``torch.nn.functional.adaptive_avg_pool2d``.
+
+        ``output_size`` is an integer for both axes or an ``(height, width)``
+        pair; None in the pair keeps the input's size on that axis. Each
+        axis's windows follow the rule of :meth:`adaptive_avg_pool1d`.
+        ``adaptive_avg_pool2d(x, 1)`` is the global average pool.
+
+        Example::
+
+            y = s.adaptive_avg_pool2d(x, (7, 7))
+        """
+        return _SESSION_CALL(self, "adaptive_avg_pool2d", (x, output_size))
+
+    def adaptive_avg_pool3d(self, x, output_size):
+        """The mean of ``output_size`` windows over the depth, height and
+        width of an ``(N, C, D, H, W)`` tensor, as
+        ``torch.nn.functional.adaptive_avg_pool3d``.
+
+        ``output_size`` is an integer for all three axes or a ``(depth,
+        height, width)`` triple; None keeps the input's size on that axis.
+        Each output size must be 1 for every axis (the global average) or
+        divide the input's size on its axis (equal windows).
+
+        Example::
+
+            y = s.adaptive_avg_pool3d(x, 1)
+        """
+        return _SESSION_CALL(self, "adaptive_avg_pool3d", (x, output_size))
+
+    def adaptive_max_pool1d(self, x, output_size, return_indices=False):
+        """The largest value of ``output_size`` windows spread over the length
+        of an ``(N, C, L)`` tensor, as
+        ``torch.nn.functional.adaptive_max_pool1d``.
+
+        The windows are those of :meth:`adaptive_avg_pool1d`. A NaN in a
+        window wins, and of tied values the first receives the gradient.
+        ``return_indices`` must be False.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.arange(6, dtype=np.float32).reshape(1, 1, 6))
+        ...     s.numpy(s.adaptive_max_pool1d(x, 2))
+        array([[[2., 5.]]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "adaptive_max_pool1d", (x, output_size, return_indices))
+
+    def adaptive_max_pool2d(self, x, output_size, return_indices=False):
+        """The largest value of ``output_size`` windows spread over the height
+        and width of an ``(N, C, H, W)`` tensor, as
+        ``torch.nn.functional.adaptive_max_pool2d``.
+
+        ``output_size`` is an integer for both axes or a ``(height, width)``
+        pair; None keeps the input's size on that axis. A NaN in a window
+        wins, and of tied values the first in row-major order receives the
+        gradient. ``adaptive_max_pool2d(x, 1)`` is the global max pool,
+        shape ``(N, C, 1, 1)``. ``return_indices`` must be False.
+
+        Example::
+
+            y = s.adaptive_max_pool2d(x, 1)
+        """
+        return _SESSION_CALL(self, "adaptive_max_pool2d", (x, output_size, return_indices))
+    # session-ops-pool end
+    # session-ops-extra begin ------------------------------------- masks, selection, log-sum-exp
+    def sequence_mask(self, lengths, max_length):
+        """A ``(batch, max_length)`` mask of the positions inside each sequence.
+
+        ``mask[b, t]`` is 1.0 when ``t < lengths[b]`` and 0.0 otherwise. ``lengths`` is a
+        floating-point tensor holding one length per sequence (any shape with ``batch``
+        values, as :meth:`scan` takes them); ``max_length`` is the number of positions.
+        The mask is a float32 tensor, so it is directly a loss ``weight=``, a factor for
+        masked pooling, or a ``condition`` for :meth:`where`. :meth:`attention` reads a
+        floating-point mask as additive scores; to mask attention with it, pass
+        ``where(mask, zero, minus_inf)``. No gradient flows through it.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     lengths = s.tensor(np.array([[1.0], [3.0]], dtype=np.float32))
+        ...     s.numpy(s.sequence_mask(lengths, 4))
+        array([[1., 0., 0., 0.],
+               [1., 1., 1., 0.]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "sequence_mask", (lengths, max_length))
+
+    def topk(self, x, k, axis=-1, largest=True, sorted=True):
+        """The ``k`` largest values of ``x`` along ``axis`` and their positions, as
+        ``torch.topk``: a pair ``(values, indices)``.
+
+        Both have ``x``'s shape with ``axis`` of length ``k``, in rank order (the largest
+        first; with ``largest=False`` the ``k`` smallest, the smallest first). Among equal
+        values the lowest position comes first, so the result is the same on every
+        device; ``-0.0`` and ``0.0`` are equal, and a NaN ranks above every number.
+        ``indices`` is an integer tensor (as made by :meth:`ids`) that :meth:`gather`,
+        :meth:`take` and :meth:`scatter_add` accept. ``values`` is
+        ``gather(x, axis, indices)``, so in a recording session the gradient flows to the
+        selected positions of ``x``. The result is always sorted. Read the positions
+        with ``s.numpy(indices).view(np.int32)``.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.array([[1.0, 5.0, 3.0, 5.0]], dtype=np.float32))
+        ...     values, indices = s.topk(x, 2)
+        ...     s.numpy(values), s.numpy(indices).view(np.int32)
+        (array([[5., 5.]], dtype=float32), array([[1, 3]], dtype=int32))
+        """
+        return _SESSION_CALL(self, "topk", (x, k, axis, largest, sorted))
+
+    def gather(self, x, axis, index):
+        """The values of ``x`` at the positions ``index`` names along ``axis``, as
+        ``torch.gather``.
+
+        For a 2-D ``x`` and ``axis=1``, ``out[i, j] = x[i, index[i, j]]``; any rank and
+        any axis work the same way. ``index`` is an integer tensor made with :meth:`ids`
+        (or returned by :meth:`topk`) with ``x``'s size on every axis except ``axis``,
+        each value in ``[0, x.shape[axis])``; the result has ``index``'s shape. In a
+        recording session the gradient of ``x`` adds the gradient of every value taken
+        from each position, so a position gathered twice gets both, added in one fixed
+        order on every device.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.array([[1, 2, 3], [4, 5, 6]], dtype=np.float32))
+        ...     index = s.ids(np.array([[2, 0], [1, 1]]))
+        ...     s.numpy(s.gather(x, 1, index))
+        array([[3., 1.],
+               [5., 5.]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "gather", (x, axis, index))
+
+    def logsumexp(self, x, axis, keepdims=False):
+        """``log(sum(exp(x)))`` along ``axis``, as ``torch.logsumexp``.
+
+        The row maximum is subtracted before the exponentials (the same arithmetic as
+        :meth:`log_softmax`), so large scores give a finite result. A row whose largest
+        value is infinite gives that value (``-inf`` for a row of only ``-inf``, ``inf``
+        when the row holds ``inf``) and passes a zero gradient; a NaN in a row gives NaN.
+        The result has ``x``'s shape without ``axis`` (``keepdims=True`` keeps it with
+        length 1); a 1-D ``x`` gives one value of shape ``(1,)``. The gradient of ``x`` is
+        the upstream gradient times ``softmax(x)`` along ``axis``.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.array([[0.0, 0.0], [1000.0, 1000.0]], dtype=np.float32))
+        ...     s.numpy(s.logsumexp(x, axis=1))
+        array([   0.6931472, 1000.6931   ], dtype=float32)
+        """
+        return _SESSION_CALL(self, "logsumexp", (x, axis, keepdims))
+    # session-ops-extra end
+    # session-ops-rest begin ---------------------------------------- norms, attention, losses, state-space scans
+    def batch_norm(self, input, running_mean, running_var, weight=None, bias=None, training=False, momentum=0.1,
+                   eps=1e-5):
+        """Batch normalization over the channel axis, as ``torch.nn.functional.batch_norm``.
+
+        ``input`` is ``(N, C)`` or ``(N, C, ...)``: each channel is normalized over the batch and every axis
+        after it, then scaled by ``weight`` and shifted by ``bias`` (``C`` values each, both given or both
+        None). With ``training=True`` the batch's mean and (biased) variance normalize, and ``running_mean``
+        and ``running_var`` are updated in place as
+        ``running = (1 - momentum) * running + momentum * statistic`` (the variance unbiased); they must
+        then be state tensors made with :meth:`state`, or both None. With ``training=False`` the running
+        statistics normalize. The result has ``input``'s shape; the gradient flows to ``input``, ``weight``
+        and ``bias``.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session(record=True) as s:
+        ...     x = s.tensor(np.random.default_rng(0).standard_normal((8, 3, 4, 4), dtype=np.float32))
+        ...     mean, var = s.state(np.zeros(3, np.float32)), s.state(np.ones(3, np.float32))
+        ...     w = s.tensor(np.ones(3, np.float32), requires_grad=True)
+        ...     b = s.tensor(np.zeros(3, np.float32), requires_grad=True)
+        ...     y = s.batch_norm(x, mean, var, w, b, training=True)
+        """
+        return _SESSION_CALL(self, "batch_norm",
+                             (input, running_mean, running_var, weight, bias, training, momentum, eps))
+
+    def group_norm(self, input, num_groups, weight=None, bias=None, eps=1e-5):
+        """Group normalization, as ``torch.nn.functional.group_norm``.
+
+        ``input`` is ``(N, C, ...)``; its ``C`` channels are split into ``num_groups`` groups (which must
+        divide ``C``), and every group of every sample is normalized with its own mean and (biased)
+        variance, then scaled by ``weight`` and shifted by ``bias`` (``C`` values each, both given or both
+        None). The result has ``input``'s shape.
+
+        Example
+        -------
+        >>> y = s.group_norm(x, num_groups=2, weight=w, bias=b)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "group_norm", (input, num_groups, weight, bias, eps))
+
+    def instance_norm(self, input, running_mean=None, running_var=None, weight=None, bias=None,
+                      use_input_stats=True, momentum=0.1, eps=1e-5):
+        """Instance normalization, as ``torch.nn.functional.instance_norm``.
+
+        Every channel of every sample of ``input`` ``(N, C, ...)`` is normalized over the axes after the
+        channel axis (at least two values), then scaled by ``weight`` and shifted by ``bias`` (``C`` values
+        each, both given or both None). With running statistics and ``use_input_stats=True`` the
+        statistics are updated in place with ``momentum`` (state tensors made with :meth:`state`); with
+        ``use_input_stats=False`` the running statistics normalize.
+
+        Example
+        -------
+        >>> y = s.instance_norm(x, weight=w, bias=b)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "instance_norm", (input, running_mean, running_var, weight, bias,
+                                                     use_input_stats, momentum, eps))
+
+    def prelu(self, input, weight):
+        """``max(0, x) + weight * min(0, x)``, as ``torch.nn.functional.prelu``.
+
+        ``weight`` holds one slope shared by every element, or one slope per channel (axis 1 of
+        ``input``). The gradient flows to ``input`` and ``weight``.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.array([[-2.0, 3.0]], dtype=np.float32))
+        ...     s.numpy(s.prelu(x, s.tensor(np.array([0.25], dtype=np.float32))))
+        array([[-0.5,  3. ]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "prelu", (input, weight))
+
+    def mish(self, input):
+        """``x * tanh(softplus(x))`` elementwise, as ``torch.nn.functional.mish``.
+
+        Example
+        -------
+        >>> y = s.mish(x)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "mish", (input,))
+
+    def multi_head_attention(self, query, key, value, num_heads, in_proj_weight, in_proj_bias, out_proj_weight,
+                             out_proj_bias, key_lengths=None, attn_mask=None, is_causal=False, dropout_p=0.0,
+                             training=True, seed=0, counter=0):
+        """Multi-head attention with input and output projections, as ``torch.nn.MultiheadAttention``
+        with ``batch_first=True``.
+
+        ``query`` is ``(batch, L, embed_dim)``. ``key`` and ``value`` are the same tensor: ``query`` itself
+        for self-attention, or another ``(batch, S, kdim)`` sequence for cross-attention. The weights use the
+        ``(in, out)`` layout of :meth:`linear`, the transpose of PyTorch's:
+
+        - self-attention: ``in_proj_weight`` ``(embed_dim, 3 * embed_dim)`` with the query, key and value
+          columns in that order (PyTorch's ``in_proj_weight.T``), ``in_proj_bias`` ``3 * embed_dim`` values;
+        - cross-attention: ``in_proj_weight`` a pair ``(query weight (embed_dim, embed_dim), key and value
+          weight (kdim, 2 * embed_dim))`` and ``in_proj_bias`` a pair of ``embed_dim`` and ``2 * embed_dim``
+          values;
+        - ``out_proj_weight`` ``(embed_dim, embed_dim)``, ``out_proj_bias`` ``embed_dim`` values.
+
+        Both biases are given or both None. ``num_heads`` must divide ``embed_dim``; each head attends with
+        ``softmax(q k^T / sqrt(head_dim))``. ``is_causal=True`` lets query ``i`` see keys ``0..i``.
+        ``key_lengths`` (one float per batch row) masks the keys at positions at or after the row's length,
+        as a ``key_padding_mask`` that is True on the padded tail. An arbitrary ``attn_mask`` is refused:
+        use :meth:`attention`. With ``training=True`` and ``dropout_p > 0`` the attention weights take
+        dropout with the mask of ``seed`` and ``counter`` (use a new ``counter`` every step). The result is
+        ``(batch, L, embed_dim)``; the attention weights are not returned.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> rng = np.random.default_rng(0)
+        >>> with ops.Session(record=True) as s:
+        ...     x = s.tensor(rng.standard_normal((2, 5, 8), dtype=np.float32))
+        ...     w_in = s.tensor(rng.standard_normal((8, 24), dtype=np.float32) * 0.2, requires_grad=True)
+        ...     b_in = s.tensor(np.zeros(24, np.float32), requires_grad=True)
+        ...     w_out = s.tensor(rng.standard_normal((8, 8), dtype=np.float32) * 0.2, requires_grad=True)
+        ...     b_out = s.tensor(np.zeros(8, np.float32), requires_grad=True)
+        ...     y = s.multi_head_attention(x, x, x, 2, w_in, b_in, w_out, b_out, is_causal=True)
+        """
+        return _SESSION_CALL(self, "multi_head_attention",
+                             (query, key, value, num_heads, in_proj_weight, in_proj_bias, out_proj_weight,
+                              out_proj_bias, key_lengths, attn_mask, is_causal, dropout_p, training, seed, counter))
+
+    def positional_encoding(self, x, dropout_p=0.0, training=True, seed=0, counter=0):
+        """``x`` plus the sinusoidal positional encoding of the original Transformer.
+
+        ``x`` is ``(..., length, d_model)`` with ``d_model`` even and ``length`` at most 8192; position
+        ``p`` adds ``sin(p / 10000^(2j / d_model))`` to feature ``2j`` and the cosine to feature ``2j + 1``.
+        With ``training=True`` and ``dropout_p > 0`` dropout follows (the mask of ``seed`` and ``counter``).
+        PyTorch has no function of this name; this is the ``PositionalEncoding`` module of its transformer
+        tutorial. The gradient of ``x`` is the incoming gradient.
+
+        Example
+        -------
+        >>> y = s.positional_encoding(x)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "positional_encoding", (x, dropout_p, training, seed, counter))
+
+    def smooth_l1_loss(self, input, target, reduction="mean", beta=1.0):
+        """The smooth L1 loss, as ``torch.nn.functional.smooth_l1_loss``: ``0.5 d^2 / beta`` where
+        ``|d| < beta``, else ``|d| - 0.5 beta`` (``d = input - target``), averaged (``"mean"``) or summed
+        (``"sum"``). ``beta=0`` is the L1 loss.
+
+        Example
+        -------
+        >>> loss = s.smooth_l1_loss(prediction, target, beta=0.5)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "smooth_l1_loss", (input, target, reduction, beta))
+
+    def nll_loss(self, input, target, weight=None, ignore_index=-100, reduction="mean"):
+        """The negative log-likelihood loss, as ``torch.nn.functional.nll_loss``.
+
+        ``input`` is ``(N, C)`` log-probabilities (for example from :meth:`log_softmax`) and ``target``
+        ``N`` class ids made with :meth:`ids`, each in ``[0, C)``. The loss is ``-input[n, target[n]]``
+        averaged over the rows (``"mean"``) or summed (``"sum"``). Class weights and ``ignore_index`` are
+        not supported.
+
+        Example
+        -------
+        >>> loss = s.nll_loss(s.log_softmax(logits), s.ids(labels))  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "nll_loss", (input, target, weight, ignore_index, reduction))
+
+    def kl_div(self, input, target, reduction="mean", log_target=False):
+        """The Kullback-Leibler divergence loss, as ``torch.nn.functional.kl_div``.
+
+        ``input`` holds log-probabilities and ``target`` probabilities of the same shape; each term is
+        ``target * (log(target) - input)``, 0 where ``target`` is 0. ``"batchmean"`` divides the sum by the
+        rows (the divergence per sample), ``"mean"`` by the elements, ``"sum"`` by nothing.
+
+        Example
+        -------
+        >>> loss = s.kl_div(s.log_softmax(logits), teacher_probs, reduction="batchmean")  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "kl_div", (input, target, reduction, log_target))
+
+    def binary_cross_entropy_with_logits(self, input, target, weight=None, reduction="mean", pos_weight=None):
+        """Binary cross-entropy of ``sigmoid(input)`` against ``target`` in ``[0, 1]``, computed stably
+        from the logits, as ``torch.nn.functional.binary_cross_entropy_with_logits``.
+
+        ``pos_weight`` (a float, one weight for every output) multiplies the positive term:
+        ``-(pos_weight * y * log(sigmoid(x)) + (1 - y) * log(1 - sigmoid(x)))``. A per-element ``weight``
+        is taken by :meth:`bce_with_logits`.
+
+        Example
+        -------
+        >>> loss = s.binary_cross_entropy_with_logits(logits, y, pos_weight=3.0)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "binary_cross_entropy_with_logits", (input, target, weight, reduction, pos_weight))
+
+    def ctc_loss(self, log_probs, targets, input_lengths, target_lengths, blank=0, reduction="mean",
+                 zero_infinity=False):
+        """The connectionist temporal classification loss, as ``torch.nn.functional.ctc_loss``.
+
+        ``log_probs`` is ``(T, N, C)`` log-probabilities over ``C`` classes (``blank`` one of them);
+        ``targets`` is ``(N, S)``, each row's first ``target_lengths[n]`` entries its labels (never
+        ``blank``); ``input_lengths`` and ``target_lengths`` hold ``N`` lengths. Targets and lengths may be
+        made with :meth:`ids` or :meth:`tensor`. The loss is the negative log-likelihood of each target over
+        every alignment of the row's first ``input_lengths[n]`` steps; ``"mean"`` divides each row's loss by
+        its target length and averages over the batch, ``"sum"`` adds them. ``zero_infinity=True`` gives 0
+        (and gradient 0) for a row no alignment can produce. Only ``log_probs`` takes a gradient.
+
+        Example
+        -------
+        >>> loss = s.ctc_loss(s.log_softmax(logits), targets, in_lens, tgt_lens)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "ctc_loss",
+                             (log_probs, targets, input_lengths, target_lengths, blank, reduction, zero_infinity))
+
+    def selective_scan(self, u, delta, A_log, B, C, D):
+        """The Mamba selective scan over ``(batch, length)`` sequences, the core of :meth:`mamba_block`.
+
+        ``u`` and ``delta`` are ``(..., length, dim)``, ``B`` and ``C`` ``(..., length, state)`` (state 4,
+        8 or 16), ``A_log`` ``(dim, state)`` and ``D`` ``dim`` values. With ``A = -exp(A_log)``, the state
+        ``h[t] = exp(delta[t] A) h[t-1] + delta[t] B[t] u[t]`` from ``h[-1] = 0`` gives the output
+        ``y[t] = C[t] . h[t] + D u[t]``, ``(..., length, dim)``. Every input takes a gradient.
+
+        Example
+        -------
+        >>> y = s.selective_scan(u, delta, A_log, B, C, D)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "selective_scan", (u, delta, A_log, B, C, D))
+
+    def ssd_scan(self, x, dt, A_log, D):
+        """The Mamba-2 state-space dual scan over ``(batch, length)`` sequences.
+
+        ``x`` is ``(..., length, heads * 64 + 256)``, each row ``[values | B | C]`` (64 values per head,
+        then 128 ``B`` and 128 ``C`` states shared by the heads); ``dt`` ``(..., length, heads)``, already
+        positive (for example after :meth:`softplus`); ``A_log`` and ``D`` ``heads`` values each. The result
+        is ``(..., length, heads * 64)``.
+
+        Example
+        -------
+        >>> y = s.ssd_scan(xbc, s.softplus(dt), A_log, D)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "ssd_scan", (x, dt, A_log, D))
+
+    def trapezoid_scan(self, v, k, q, dt, A, trap, D, heads):
+        """The Mamba-3 trapezoid scan over ``(batch, length)`` sequences.
+
+        ``v`` is ``(..., length, heads * P)``, ``k`` and ``q`` ``(..., length, heads * N)``, ``dt``, ``A``
+        and ``trap`` ``(..., length, heads)``, ``D`` ``heads`` values. The result is
+        ``(..., length, heads * P)``.
+
+        Example
+        -------
+        >>> y = s.trapezoid_scan(v, k, q, dt, A, trap, D, heads=2)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "trapezoid_scan", (v, k, q, dt, A, trap, D, heads))
+    # session-ops-rest end
 
 
 class Program:

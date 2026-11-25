@@ -11,6 +11,7 @@ from autograd.program_control import _signature
 from autograd.control_replay_metadata import ControlReplay
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.tape import Tape
+from autograd.session_layer_rules import LayerRules  # session-ops
 from autograd.import_api import ImportRules
 from autograd.program_io import ProgramInput, HostArray
 from autograd.rankn import ShapeN
@@ -314,7 +315,12 @@ def control_vjp_finish[E: Exec & Movable & Deinitable, KIND: Int](
             var out = s[].tensor(h)
             if s[].tape.requires_grad(out):
                 var seed_tensor = s[].tape.variable_nd(s[].ex, buf, shape, False)
-                s[].tape.backward_with_rules(s[].ex, out, seed_tensor, ImportRules(), accumulated)
+                if s[].layer_nodes:
+                    # session-ops: the replay recorded a Sequential layer node (one Bool test per output)
+                    s[].tape.backward_with_rules(s[].ex, out, seed_tensor, LayerRules[ImportRules](ImportRules()),
+                                                 accumulated)
+                else:
+                    s[].tape.backward_with_rules(s[].ex, out, seed_tensor, ImportRules(), accumulated)
                 accumulated = True
         _ = seeds^  # retain scalar-list owners through every seed upload
         for k in range(len(st.initial)):  # driver-loop: over initial input VJPs

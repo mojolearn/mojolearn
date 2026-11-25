@@ -18,6 +18,7 @@ from autograd.program_runtime import replay_values, replay_values_prepared, prog
 from autograd.program_replay_metadata import PreparedProgramReplay
 from autograd.rankn import ShapeN
 from autograd.tape import Tensor
+from autograd.session_layer_rules import LayerRules  # session-ops
 from autograd.import_api import ImportRules
 from core.cast_in import CastIn
 
@@ -127,11 +128,20 @@ struct ProgramExecutor[E: Exec & Movable & Deinitable](Movable):
 
     def backward(mut self, loss: Tensor) raises:
         """Differentiate a scalar loss."""
+        if self.session.layer_nodes:
+            # session-ops: the replay recorded a Sequential layer node (one Bool test per call)
+            self.session.tape.backward_scalar_with_rules(self.session.ex, loss, LayerRules[ImportRules](ImportRules()))
+            return
         self.session.tape.backward_scalar_with_rules(self.session.ex, loss, ImportRules())
 
     def backward_seeded(mut self, output: Tensor, seed: FP, shape: ShapeN) raises:
         """Differentiate `output` against the adjoint held in device buffer `seed`."""
         var seed_tensor = self.session.tape.variable_nd(self.session.ex, seed, shape, False)
+        if self.session.layer_nodes:
+            # session-ops: the replay recorded a Sequential layer node (one Bool test per call)
+            self.session.tape.backward_with_rules(
+                self.session.ex, output, seed_tensor, LayerRules[ImportRules](ImportRules()), False)
+            return
         self.session.tape.backward_with_rules(self.session.ex, output, seed_tensor, ImportRules(), False)
 
     def has_gradient(self, h: Int) raises -> Bool:

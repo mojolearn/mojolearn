@@ -1,0 +1,24 @@
+diff --git a/autograd/rankn_conv_ops.mojo b/autograd/rankn_conv_ops.mojo
+index 0f90c3206a..e3ae874924 100644
+--- a/autograd/rankn_conv_ops.mojo
++++ b/autograd/rankn_conv_ops.mojo
+@@ -33,6 +33,7 @@
+ # reserved. sequence/dispatch.mojo routes and fences them.
+ from std.memory import bitcast
+ from std.sys.compile import is_defined
++from std.sys.info import is_gpu
+ from sequence.ops import Args, FP
+ from checks.numerics import ftz, identical_div, identical_rsqrt
+ from autograd.rankn import rn_word
+@@ -295,6 +296,11 @@ def op_rnv_maxpool_fwd(t: Int, a: Args):
+     var D = rn_word(d, PP_LEN + RN_DEPTH_D); var KD = rn_word(d, PP_LEN + RN_DEPTH_KD)
+     var SD = rn_word(d, PP_LEN + RN_DEPTH_SD); var PD = rn_word(d, PP_LEN + RN_DEPTH_PD)
+     var DD = rn_word(d, PP_LEN + RN_DEPTH_DD); var OD = rn_word(d, PP_LEN + RN_DEPTH_OD)
++    comptime if is_gpu():
++        # SABOTAGE (coverage-autograd-session_ops_pool_dilation_gpu): the device max pool reads every dilation as 1
++        DH = 1
++        DW = 1
++        DD = 1
+     var ow = _um(t, OW)
+     var s = _ud(t, OW)
+     var oh = _um(s, OH)

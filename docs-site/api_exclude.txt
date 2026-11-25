@@ -256,3 +256,48 @@ BatchSource	batch-source streamed shard batches: not yet in a release verificati
 Program.save_training	batch-source one-call training checkpoint: not yet in a release verification
 Session.load_training	batch-source one-call training checkpoint: not yet in a release verification
 # batch-source end
+# session-ops-resize begin
+Session.interpolate	session-ops-resize resampling: not yet in a release verification
+Session.pixel_shuffle	session-ops-resize rearranging: not yet in a release verification
+Session.pixel_unshuffle	session-ops-resize rearranging: not yet in a release verification
+# session-ops-resize end
+# session-ops-conv begin
+Session.conv1d	session-ops-conv Sequential's convolutions as Session ops: not yet in a release verification
+Session.conv3d	session-ops-conv Sequential's convolutions as Session ops: not yet in a release verification
+Session.conv_transpose1d	session-ops-conv Sequential's convolutions as Session ops: not yet in a release verification
+Session.conv_transpose2d	session-ops-conv Sequential's convolutions as Session ops: not yet in a release verification
+# session-ops-conv end
+# session-ops-pool begin
+Session.max_pool1d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.avg_pool1d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.max_pool3d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.avg_pool3d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.adaptive_avg_pool1d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.adaptive_avg_pool2d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.adaptive_avg_pool3d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.adaptive_max_pool1d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.adaptive_max_pool2d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+# session-ops-pool end
+# session-ops-extra begin
+Session.sequence_mask	not yet in a release verification
+Session.topk	not yet in a release verification
+Session.gather	not yet in a release verification
+Session.logsumexp	not yet in a release verification
+# session-ops-extra end
+# session-ops-rest begin
+Session.batch_norm	not yet in a release verification
+Session.group_norm	not yet in a release verification
+Session.instance_norm	not yet in a release verification
+Session.prelu	not yet in a release verification
+Session.mish	not yet in a release verification
+Session.multi_head_attention	not yet in a release verification
+Session.positional_encoding	not yet in a release verification
+Session.smooth_l1_loss	not yet in a release verification
+Session.nll_loss	not yet in a release verification
+Session.kl_div	not yet in a release verification
+Session.binary_cross_entropy_with_logits	not yet in a release verification
+Session.ctc_loss	not yet in a release verification
+Session.selective_scan	not yet in a release verification
+Session.ssd_scan	not yet in a release verification
+Session.trapezoid_scan	not yet in a release verification
+# session-ops-rest end

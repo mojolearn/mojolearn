@@ -173,6 +173,32 @@ from autograd.nn_cbw import (
     cbw_bind, cbw_from_words,
 )
 # nn-blocks-cbw end
+# session-ops begin: Sequential's layers as Session ops, codes OPS_LAYER_FIRST..OPS_LAYER_LAST, and the rules that
+# differentiate their nodes in a session (autograd/session_layer_rules.mojo)
+from autograd.session_layer_rules import (
+    LayerRules, OPS_LAYER_FIRST, OPS_LAYER_LAST, OPS_LAYER_POOL_FIRST, OPS_LAYER_RESIZE_FIRST, OPS_LAYER_REST_FIRST,
+    OPS_LAYER_EXTRA_FIRST,
+)
+# session-ops-extra begin: sequence_mask, topk, gather along an axis, logsumexp, soft-target cross-entropy
+from autograd.session_ops_extra import (
+    OPS_SEQUENCE_MASK, OPS_TOPK_INDICES, OPS_GATHER_AXIS, OPS_LOGSUMEXP, OPS_SOFT_CROSS_ENTROPY,
+    OPS_SOFT_CROSS_ENTROPY_WEIGHTED, session_ops_extra_int_result, sox_sequence_mask, sox_topk_indices, sox_gather,
+    sox_logsumexp, sox_soft_cross_entropy,
+)
+# session-ops-extra end
+# session-ops end
+# session-ops-resize begin: interpolate, pixel_shuffle / unshuffle, pad with a mode (codes 150..153)
+from autograd.session_ops_resize import (
+    OPS_INTERPOLATE, OPS_PIXEL_SHUFFLE, OPS_PIXEL_UNSHUFFLE, OPS_PAD_MODE,
+    session_interpolate, session_pixel_shuffle, session_pad_mode,
+)
+# session-ops-resize end
+# session-ops-conv begin: conv1d, conv2d with dilation / per-axis words, conv3d, conv_transpose1d / 2d (130..134)
+from autograd.session_ops_conv import session_conv_forward, session_conv_name
+# session-ops-conv end
+# session-ops-pool begin: Sequential's pools as Session ops, codes 140..148 (autograd/session_ops_pool.mojo)
+from autograd.session_ops_pool import session_pool, pool_int_count, pool_op_name, OPS_POOL_LAST
+# session-ops-pool end
 # nn-blocks-qkv begin: attention over explicit q, k, v (session code 122, autograd/nn_qkv.mojo)
 from autograd.nn_qkv import OPS_ATTENTION_QKV, qkv_attention
 # nn-blocks-qkv end
@@ -194,6 +220,16 @@ from autograd.nn_composed import (
     COMPOSED_SABOTAGE_GROUP_STATE_HOST,
 )
 # nn-blocks-composed end
+# session-ops-rest begin: norms, prelu, mish, multi-head attention, positional encoding, losses and raw SSM scans as
+# Session ops, codes 160..174 (autograd/session_ops_rest.mojo)
+from autograd.session_ops_rest import (
+    SOR_FIRST, SOR_LAST, SOR_BATCH_NORM, SOR_GROUP_NORM, SOR_INSTANCE_NORM, SOR_PRELU, SOR_MISH, SOR_MHA,
+    SOR_POS_ENC, SOR_SMOOTH_L1, SOR_NLL, SOR_KL_DIV, SOR_BCE_POS_WEIGHT, SOR_CTC, SOR_SELECTIVE_SCAN, SOR_SSD_SCAN,
+    SOR_TRAPEZOID_SCAN, sor_name, sor_batch_norm, sor_group_norm, sor_instance_norm, sor_prelu, sor_mish,
+    sor_multi_head_attention, sor_positional_encoding, sor_smooth_l1_loss, sor_nll_loss, sor_kl_div,
+    sor_bce_with_logits, sor_ctc_loss, sor_selective_scan, sor_ssd_scan, sor_trapezoid_scan,
+)
+# session-ops-rest end
 
 # Executor kinds of a session (the binding that opened it).
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea G): the packed argument
@@ -456,6 +492,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     #: lane nn-blocks-pg: the parameter-group tables of the grouped
     #: optimizers (autograd/nn_pg.mojo), indexed by `_OpsOptimizer.pg`
     var pg_tables: List[ParamGroupTable]
+    #: lane session-ops: True once a Sequential layer op (OPS_LAYER_FIRST..OPS_LAYER_LAST) recorded a node since
+    #: the last reset; each backward entry tests it once per call and then differentiates with
+    #: LayerRules[its usual rules] (autograd/session_layer_rules.mojo). A session that never uses one keeps
+    #: exactly its old rules.
+    var layer_nodes: Bool
 
     def __init__(out self, var ex: Self.E, record: Bool):
         self.ex = ex^
@@ -491,6 +532,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.cbw_tape = Tape()
         self.cbw_tape.no_grad()
         self.pg_tables = List[ParamGroupTable]()
+        self.layer_nodes = False  # session-ops
 
     # ------------------------------------------------------------ handles
     def _slot(self, h: Int) raises -> Int:
@@ -946,6 +988,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         # the computed tensors the log names are gone; captured programs stay
         self.oplog.clear()
         self.cbw.clear_records()  # nn-blocks-cbw: the saved tensors were tape storage
+        self.layer_nodes = False  # session-ops: the layer nodes were on the tape
         for slot in range(len(self.live)):  # driver-loop: over session handles
             if not self.live[slot]:
                 continue
@@ -1021,6 +1064,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if self.cbw.holds_rules():
             # nn-blocks-cbw: the graph holds a user-defined backward rule
             self.cbw_backward_scalar(t, StepOpRules(self.steps_address()), accumulate)
+            return
+        if self.layer_nodes:
+            # session-ops: the graph holds a Sequential layer node (one Bool test per call)
+            self.tape.backward_scalar_with_rules(
+                self.ex, t, LayerRules[StepOpRules](StepOpRules(self.steps_address())), accumulate)
             return
         self.tape.backward_scalar_with_rules(self.ex, t, StepOpRules(self.steps_address()), accumulate)
 
@@ -1139,6 +1187,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         elif self.cbw.holds_rules():
             # nn-blocks-cbw: the graph holds a user-defined backward rule
             self.cbw_backward_seeded(t, seed)
+        elif self.layer_nodes:
+            # session-ops: the graph holds a Sequential layer node (one Bool test per call)
+            self.tape.backward_with_rules(self.ex, t, seed, LayerRules[ImportRules](ImportRules()), False)
         else:
             # First-order seeded and scalar backward accept the same supported
             # rank-N and import operations. Recorded higher derivatives keep
@@ -2079,6 +2130,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 if code == OPS_CUSTOM_VJP:
                     return self._cbw_forward(hs, ints, fs, x)
             # nn-blocks-scan / nn-blocks-cbw end
+            # session-ops begin: Sequential's layers as Session ops and the round's additions (codes 130..189), on the no-match path as well;
+            # plain operations, so a scan cell or a custom operation's program (`nested`) may use them
+            if code >= OPS_LAYER_FIRST and code <= OPS_LAYER_LAST:
+                return self._layer_op(code, hs, ints, fs, x)
+            # session-ops end
             raise Error("ops: unknown operation code " + String(code))
         if n >= 1 and _keeps_shape(code):
             # elementwise and row-wise ops keep x's full shape (a free view
@@ -2538,6 +2594,270 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         return self._add(rt, 0, self.tape.requires_grad(rt), 0)
 
     # nn-blocks-qkv begin
+    # session-ops begin: Sequential's layers as Session ops (autograd/session_layer_rules.mojo has the codes)
+    def _layer_op(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """Session codes OPS_LAYER_FIRST..OPS_LAYER_LAST: the family's method records the SAME tape nodes as the
+        Sequential layer (its forward function), and a recording session notes that its graph now holds a layer
+        node, so its backward differentiates with LayerRules (tested once per backward call)."""
+        var t: Tensor
+        if code < OPS_LAYER_POOL_FIRST:
+            t = self._layer_conv(code, hs, ints, fs, x)
+        elif code < OPS_LAYER_RESIZE_FIRST:
+            t = self._layer_pool(code, hs, ints, fs, x)
+        elif code < OPS_LAYER_REST_FIRST:
+            t = self._layer_resize(code, hs, ints, fs, x)
+        elif code < OPS_LAYER_EXTRA_FIRST:
+            t = self._layer_rest(code, hs, ints, fs, x)
+        else:
+            t = self._layer_extra(code, hs, ints, fs, x)
+        if self.tape.is_recording():
+            self.layer_nodes = True
+        var result = self._add(t, 0, False, 0)
+        # session-ops-extra: topk's indices are int32 words (an ids tensor); every other layer op returns floats
+        self.int_words[self._slot(result)] = session_ops_extra_int_result(code)
+        return result
+
+    # session-ops-conv begin: codes 130..139 (sub-lane session-ops-conv replaces this body)
+    def _layer_conv(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Tensor:
+        """The convolutions (autograd/session_ops_conv.mojo): conv1d, conv2d with dilation or per-axis words,
+        conv3d, conv_transpose1d / 2d, each the forward function Sequential's layer calls (its node, its bits).
+        ints: the words the door resolved (that file's header); no float arguments."""
+        if len(fs) != 0:
+            raise Error("ValueError: ops: " + session_conv_name(code) + " takes no float arguments")
+        for i in range(len(hs)):  # small-loop(hs: x, weight and an optional bias): admission, no data
+            if self.int_words[self._slot(hs[i])]:
+                raise Error("TypeError: ops: " + session_conv_name(code)
+                            + ": x, weight and bias must be floating-point tensors, not Session.ids tensors")
+        return session_conv_forward(self.tape, self.ex, code, ints, x)
+    # session-ops-conv end
+
+
+    # session-ops-pool begin: codes 140..149 (sub-lane session-ops-pool replaces this body)
+    def _layer_pool(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Tensor:
+        """The pools (autograd/session_ops_pool.mojo): 1-D, 2-D with PyTorch's options, 3-D max / avg, adaptive
+        avg 1-D / 2-D / 3-D and adaptive max 1-D / 2-D, each through the forward function Sequential's layer calls.
+        x [input]; ints pool_int_count(code) words (the ops door writes them)."""
+        if code > OPS_POOL_LAST:
+            raise Error("ops: unknown operation code " + String(code))  # 149: no operation took it
+        var what = pool_op_name(code, ints)
+        _need(what, len(x), 1, pool_int_count(code), len(ints), 0, len(fs))
+        if self.int_words[self._slot(hs[0])]:
+            raise Error("ValueError: ops: " + what + ": x must be a floating-point tensor")
+        return session_pool(self.tape, self.ex, code, x[0], ints)
+    # session-ops-pool end
+
+
+    # session-ops-resize begin: codes 150..159 (sub-lane session-ops-resize replaces this body)
+    def _layer_resize(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Tensor:
+        """Resampling and rearranging (interpolate, pixel_shuffle / unshuffle, reflection / replication pad):
+        the Sequential layers' own forward functions (autograd/session_ops_resize.mojo)."""
+        if len(x) != 1:
+            raise Error("ops: resampling and padding operations take one tensor")
+        if self.int_words[self._slot(hs[0])]:
+            raise Error("TypeError: interpolate, pixel_shuffle, pixel_unshuffle and pad with a mode take a "
+                        + "floating-point tensor")
+        if code == OPS_INTERPOLATE:
+            return session_interpolate(self.tape, self.ex, x[0], ints, fs)
+        if code == OPS_PIXEL_SHUFFLE or code == OPS_PIXEL_UNSHUFFLE:
+            return session_pixel_shuffle(self.tape, self.ex, x[0], ints, code == OPS_PIXEL_UNSHUFFLE)
+        if code == OPS_PAD_MODE:
+            return session_pad_mode(self.tape, self.ex, x[0], ints)
+        raise Error("ops: unknown operation code " + String(code))
+    # session-ops-resize end
+
+
+    # session-ops-rest begin: codes 160..179 (autograd/session_ops_rest.mojo has the forward glue)
+    def _layer_rest(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Tensor:
+        """Norms, activations with parameters, multi-head attention, positional encoding, the losses and the raw
+        state-space scans. The operands and words of each code (read once by the ops door at UNPACK):
+          160 batch_norm, 162 instance_norm: [x, (running_mean, running_var), (weight, bias)], ints [training
+              (instance_norm: use_input_stats), running given, affine], floats [momentum, eps]
+          161 group_norm: [x, (weight, bias)], ints [num_groups, affine], floats [eps]
+          163 prelu [x, weight]; 164 mish [x]
+          165 multi_head_attention: [query, key, in-projection (self: (E, 3E); cross: Wq (E, E), then [Wk | Wv]
+              (kdim, 2E)), out_proj_weight, (in_proj_bias (cross: bq, then [bk | bv]), out_proj_bias),
+              (key_lengths)], ints [num_heads, self-attention, bias, is_causal, key_lengths given, training,
+              seed low, seed high, counter], floats [dropout_p]
+          166 positional_encoding: [x], ints [training, seed low, seed high, counter], floats [dropout_p]
+          167 smooth_l1_loss [input, target] ints [reduction] floats [beta]; 168 nll_loss [input, target ids]
+              ints [reduction]; 169 kl_div [input, target] ints [reduction (2 batchmean)]; 170
+              binary_cross_entropy_with_logits [input, target] ints [reduction] floats [pos_weight]
+          171 ctc_loss: [log_probs, targets, input_lengths, target_lengths] (each of the last three float values
+              or Session.ids), ints [blank, reduction, zero_infinity]
+          172 selective_scan [u, delta, A_log, B, C, D]; 173 ssd_scan [x, dt, A_log, D]; 174 trapezoid_scan
+              [v, k, q, dt, A, trap, D] ints [heads]"""
+        var n = len(x)
+        var ni = len(ints)
+        var nf = len(fs)
+        var name = sor_name(code)
+        if code < SOR_FIRST or code > SOR_LAST:
+            raise Error("ops: unknown operation code " + String(code))
+        # every operand is a floating-point tensor, except the class ids of nll_loss and the targets and lengths
+        # of ctc_loss (either kind)
+        for k in range(n):  # small-loop(n: the op's operands, at most 9): handle metadata, no data
+            var ids_ok = (code == SOR_NLL and k == 1) or (code == SOR_CTC and k >= 1)
+            if self.int_words[self._slot(hs[k])] and not ids_ok:
+                raise Error("ValueError: ops: " + name + ": operand " + String(k)
+                            + " must be a floating-point tensor (made with Session.tensor)")
+        if code == SOR_BATCH_NORM or code == SOR_INSTANCE_NORM:
+            if ni < 3 or nf < 2:
+                _need(name, n, 1, 3, ni, 2, nf)
+            var has_run = ints[1] == 1
+            var affine = ints[2] == 1
+            _need(name, n, 1 + (2 if has_run else 0) + (2 if affine else 0), 3, ni, 2, nf)
+            var rm: Optional[Tensor] = None
+            var rv: Optional[Tensor] = None
+            var w: Optional[Tensor] = None
+            var b: Optional[Tensor] = None
+            var at = 1
+            if has_run:
+                if ints[0] == 1:
+                    # training (use_input_stats) writes the running statistics in place: carried state only
+                    for k in range(1, 3):  # small-loop(2: running_mean, running_var): buffer metadata, no data
+                        if self._buffer_kind_of(Int(self.tape.value_of(self.ex, x[k]))) != OPS_BUFFER_STATE:
+                            raise Error("ValueError: ops: " + name + ": running_mean and running_var are updated "
+                                        + "in place in training; make them with Session.state")
+                rm = Optional[Tensor](x[1])
+                rv = Optional[Tensor](x[2])
+                at = 3
+            if affine:
+                w = Optional[Tensor](x[at])
+                b = Optional[Tensor](x[at + 1])
+            if code == SOR_BATCH_NORM:
+                return sor_batch_norm(self.tape, self.ex, x[0], rm, rv, w, b, ints[0] == 1, fs[0], fs[1])
+            return sor_instance_norm(self.tape, self.ex, x[0], rm, rv, w, b, ints[0] == 1, fs[0], fs[1])
+        if code == SOR_GROUP_NORM:
+            if ni < 2:
+                _need(name, n, 1, 2, ni, 1, nf)
+            var g_affine = ints[1] == 1
+            _need(name, n, 3 if g_affine else 1, 2, ni, 1, nf)
+            var gw: Optional[Tensor] = None
+            var gb: Optional[Tensor] = None
+            if g_affine:
+                gw = Optional[Tensor](x[1])
+                gb = Optional[Tensor](x[2])
+            return sor_group_norm(self.tape, self.ex, x[0], ints[0], gw, gb, fs[0])
+        if code == SOR_PRELU:
+            _need(name, n, 2, 0, ni, 0, nf)
+            return sor_prelu(self.tape, self.ex, x[0], x[1])
+        if code == SOR_MISH:
+            _need(name, n, 1, 0, ni, 0, nf)
+            return sor_mish(self.tape, self.ex, x[0])
+        if code == SOR_MHA:
+            if ni < 9:
+                _need(name, n, 4, 9, ni, 1, nf)
+            var self_attn = ints[1] == 1
+            var bias = ints[2] == 1
+            var lens = ints[4] == 1
+            var cross = 0 if self_attn else 1
+            _need(name, n, 4 + cross + ((2 + cross) if bias else 0) + (1 if lens else 0), 9, ni, 1, nf)
+            var w_kv: Optional[Tensor] = None
+            if not self_attn:
+                w_kv = Optional[Tensor](x[3])
+            var wo = x[3 + cross]
+            var b_in: Optional[Tensor] = None
+            var b_kv: Optional[Tensor] = None
+            var bo: Optional[Tensor] = None
+            var at = 4 + cross
+            if bias:
+                b_in = Optional[Tensor](x[at])
+                if not self_attn:
+                    b_kv = Optional[Tensor](x[at + 1])
+                bo = Optional[Tensor](x[at + 1 + cross])
+                at += 2 + cross
+            var kl: Optional[Tensor] = None
+            if lens:
+                kl = Optional[Tensor](x[at])
+            return sor_multi_head_attention(self.tape, self.ex, x[0], x[0] if self_attn else x[1], self_attn, ints[0],
+                                            x[2], b_in, w_kv, b_kv, wo, bo, kl, ints[3] == 1, fs[0], ints[5] == 1,
+                                            _seed(ints[6], ints[7]), ints[8])
+        if code == SOR_POS_ENC:
+            _need(name, n, 1, 4, ni, 1, nf)
+            return sor_positional_encoding(self.tape, self.ex, x[0], fs[0], ints[0] == 1, _seed(ints[1], ints[2]),
+                                           ints[3])
+        if code == SOR_SMOOTH_L1:
+            _need(name, n, 2, 1, ni, 1, nf)
+            return sor_smooth_l1_loss(self.tape, self.ex, x[0], x[1], ints[0], fs[0])
+        if code == SOR_NLL:
+            _need(name, n, 2, 1, ni, 0, nf)
+            if not self.int_words[self._slot(hs[1])]:
+                raise Error("ValueError: ops: nll_loss: target must be class ids made with Session.ids")
+            return sor_nll_loss(self.tape, self.ex, x[0], x[1], ints[0])
+        if code == SOR_KL_DIV:
+            _need(name, n, 2, 1, ni, 0, nf)
+            return sor_kl_div(self.tape, self.ex, x[0], x[1], ints[0])
+        if code == SOR_BCE_POS_WEIGHT:
+            _need(name, n, 2, 1, ni, 1, nf)
+            return sor_bce_with_logits(self.tape, self.ex, x[0], x[1], ints[0], fs[0])
+        if code == SOR_CTC:
+            _need(name, n, 4, 3, ni, 0, nf)
+            return sor_ctc_loss(self.tape, self.ex, x[0], x[1], self.int_words[self._slot(hs[1])], x[2],
+                                self.int_words[self._slot(hs[2])], x[3], self.int_words[self._slot(hs[3])], ints[0],
+                                ints[1], ints[2] == 1)
+        if code == SOR_SELECTIVE_SCAN:
+            _need(name, n, 6, 0, ni, 0, nf)
+            return sor_selective_scan(self.tape, self.ex, x[0], x[1], x[2], x[3], x[4], x[5])
+        if code == SOR_SSD_SCAN:
+            _need(name, n, 4, 0, ni, 0, nf)
+            return sor_ssd_scan(self.tape, self.ex, x[0], x[1], x[2], x[3])
+        if code == SOR_TRAPEZOID_SCAN:
+            _need(name, n, 7, 1, ni, 0, nf)
+            return sor_trapezoid_scan(self.tape, self.ex, x[0], x[1], x[2], x[3], x[4], x[5], x[6], ints[0])
+        raise Error("ops: unknown operation code " + String(code))
+    # session-ops-rest end
+
+
+    # session-ops-extra begin: codes 180..189 (sub-lane session-ops-extra replaces this body)
+    def _layer_extra(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Tensor:
+        """sequence_mask, topk, gather along an axis, logsumexp and the soft-target cross-entropy
+        (autograd/session_ops_extra.mojo has the words, launches and refusals of each)."""
+        var n = len(x)
+        var ni = len(ints)
+        var nf = len(fs)
+        if code == OPS_SEQUENCE_MASK:
+            # [lengths], ints [max_length]
+            _need("sequence_mask", n, 1, 1, ni, 0, nf)
+            if self.int_words[self._slot(hs[0])]:
+                raise Error("ValueError: ops: sequence_mask: lengths must be a floating-point tensor (one length per"
+                            + " sequence, as Session.scan takes)")
+            return sox_sequence_mask(self.tape, self.ex, x[0], ints[0])
+        if code == OPS_TOPK_INDICES:
+            # [x], ints [k, axis, largest (0, 1)]
+            _need("topk", n, 1, 3, ni, 0, nf)
+            if self.int_words[self._slot(hs[0])]:
+                raise Error("ValueError: ops: topk: x must be a floating-point tensor")
+            return sox_topk_indices(self.tape, self.ex, x[0], ints[0], ints[1], ints[2] != 0)
+        if code == OPS_GATHER_AXIS:
+            # [x, index (an ids tensor)], ints [axis]
+            _need("gather", n, 2, 1, ni, 0, nf)
+            if self.int_words[self._slot(hs[0])]:
+                raise Error("ValueError: ops: gather: x must be a floating-point tensor")
+            var gi = self._slot(hs[1])
+            if not self.int_words[gi]:
+                raise Error("ValueError: ops: gather: index must be an integer tensor made with Session.ids or"
+                            + " returned by Session.topk")
+            return sox_gather(self.tape, self.ex, x[0], ints[0], self.tape.value_of(self.ex, x[1]), self.shapes[gi])
+        if code == OPS_LOGSUMEXP:
+            # [x], ints [axis, keepdims (0, 1)]
+            _need("logsumexp", n, 1, 2, ni, 0, nf)
+            if self.int_words[self._slot(hs[0])]:
+                raise Error("ValueError: ops: logsumexp: x must be a floating-point tensor")
+            return sox_logsumexp(self.tape, self.ex, x[0], ints[0], ints[1] != 0)
+        if code == OPS_SOFT_CROSS_ENTROPY or code == OPS_SOFT_CROSS_ENTROPY_WEIGHTED:
+            # [logits, target (a distribution of the logits' shape), (weight)], ints [reduction]
+            var weighted = code == OPS_SOFT_CROSS_ENTROPY_WEIGHTED
+            _need("cross_entropy", n, 3 if weighted else 2, 1, ni, 0, nf)
+            for q in range(n):  # small-loop(n: two or three operands): operand kinds, no data
+                if self.int_words[self._slot(hs[q])]:
+                    raise Error("ValueError: ops: cross_entropy: logits, a target distribution and a weight must be"
+                                + " floating-point tensors")
+            if weighted:
+                return sox_soft_cross_entropy(self.tape, self.ex, x[0], x[1], ints[0], Optional[Tensor](x[2]))
+            return sox_soft_cross_entropy(self.tape, self.ex, x[0], x[1], ints[0], None)
+        raise Error("ops: unknown operation code " + String(code))
+    # session-ops-extra end
+    # session-ops end
+
     def _attention_qkv(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
         """OPS_ATTENTION_QKV: [q, k, v] or [q, k, v, mask], ints [causal (0, 1), scale given (0, 1), mask kind
         (0 none, 1 boolean: ids words, nonzero attends, PyTorch's boolean mask; 2 additive: float values added to
@@ -3912,12 +4232,20 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         """The scalar backward of a graph that may hold custom nodes: `rules`
         plus the custom tag (identical to `rules` on every other node)."""
         var wrapped = CbwRules[Self.E](rules, Int(UnsafePointer(to=self)))
+        if self.layer_nodes:
+            # session-ops: custom nodes and Sequential layer nodes in one graph
+            self.tape.backward_scalar_with_rules(self.ex, t, LayerRules[CbwRules[Self.E]](wrapped), accumulate)
+            return
         self.tape.backward_scalar_with_rules(self.ex, t, wrapped, accumulate)
 
     def cbw_backward_seeded(mut self, t: Tensor, seed: Tensor) raises:
         """The seeded first-order backward of a graph that may hold custom
         nodes (StepOpRules: ImportRules plus the step ops' tags)."""
         var wrapped = CbwRules[Self.E](StepOpRules(self.steps_address()), Int(UnsafePointer(to=self)))
+        if self.layer_nodes:
+            # session-ops: custom nodes and Sequential layer nodes in one graph
+            self.tape.backward_with_rules(self.ex, t, seed, LayerRules[CbwRules[Self.E]](wrapped), False)
+            return
         self.tape.backward_with_rules(self.ex, t, seed, wrapped, False)
 
     def _cbw_op(mut self, ints: List[Int], fs: List[Float32]) raises -> Int:

@@ -1,0 +1,203 @@
+{
+  "schema": "mojolearn.composed-cases.v1",
+  "about": "The composed tagger: an embedding with a padding id concatenated with per-step float features, a captured tanh cell with a dropout inside it run by Session.scan with lengths, a per-step cross-entropy weighted by the mask built from the lengths (the padding label 3 is a class no real token has), and AdamW with the embedding, the cell and the head in three parameter groups. Eager training, save and resume in a fresh session; the same tagger captured and trained by Program.fit, saved, loaded and resumed; and the scan's dropout key.",
+  "cases": [
+    {
+      "name": "tagger",
+      "about": "Batch 3, lengths 1, 3, 4, T 4, vocabulary 5 + padding id 5, 2 features, hidden 3, tags 0..2 + padding label 3. Parts: train (losses, logits, every gradient and the parameters after each of two steps), resume (the resumed third step's parameters and moments), program (Program.fit's loss curve, fitted, resumed parameters and moments), keys (scan dropout masks of keys 0 and 1, and of two consecutive Program.fit minibatches).",
+      "data": {
+        "ids": {"value": [[2, 5, 5, 5], [0, 4, 1, 5], [3, 1, 2, 0]], "dtype": "int32"},
+        "codes": {"value": [[1, 3, 3, 3], [0, 2, 1, 3], [2, 2, 0, 1]]},
+        "feats": {"hashed": [3, 4, 2], "lo": -1.0, "hi": 1.0},
+        "lens": {"value": [[1], [3], [4]]},
+        "table": {"hashed": [6, 3], "lo": -0.5, "hi": 0.5},
+        "w": {"hashed": [5, 3], "lo": -0.5, "hi": 0.5},
+        "u": {"hashed": [3, 3], "lo": -0.5, "hi": 0.5},
+        "b": {"hashed": [1, 3], "lo": -0.1, "hi": 0.1},
+        "head_w": {"hashed": [3, 4], "lo": -0.5, "hi": 0.5},
+        "head_b": {"zeros": [1, 4]},
+        "h0": {"zeros": [3, 3]},
+        "x0": {"zeros": [3, 5]},
+        "zi": {"zeros": [3, 4], "dtype": "int32"},
+        "zf": {"zeros": [3, 4, 2]},
+        "zl": {"zeros": [3, 1]},
+        "zc": {"zeros": [3, 4]},
+        "z28": {"zeros": [2, 8]},
+        "z228": {"zeros": [2, 2, 8]},
+        "ones228": {"ones": [2, 2, 8]}
+      },
+      "do": [
+        {"op": "let", "as": "init", "value": {"table": "@table", "w": "@w", "u": "@u", "b": "@b", "head_w": "@head_w", "head_b": "@head_b"}},
+        {"op": "def", "name": "cell", "do": [
+          {"op": "call", "fn": "S.tensor", "args": ["@h0"], "as": "ceh"},
+          {"op": "call", "fn": "S.tensor", "args": ["@x0"], "as": "cx"},
+          {"op": "call", "fn": "S.dropout", "args": ["@cx", 0.25], "kw": {"seed": 13, "counter": 0}, "as": "cd"},
+          {"op": "call", "fn": "S.matmul", "args": ["@cd", "@cw.w"], "as": "cm1"},
+          {"op": "call", "fn": "S.matmul", "args": ["@ceh", "@cw.u"], "as": "cm2"},
+          {"op": "call", "fn": "S.add", "args": ["@cm1", "@cm2"], "as": "ca1"},
+          {"op": "call", "fn": "S.add", "args": ["@ca1", "@cw.b"], "as": "ca2"},
+          {"op": "call", "fn": "S.tanh", "args": ["@ca2"], "as": "ceh2"},
+          {"op": "call", "fn": "S.capture", "kw": {"inputs": ["@ceh", "@cx"], "outputs": ["@ceh2", "@ceh2"]}, "as": "cell"}
+        ]},
+        {"op": "def", "name": "forward", "do": [
+          {"op": "call", "fn": "S.embedding", "args": ["@p.table", "@idh"], "kw": {"padding_idx": 5}, "as": "e0"},
+          {"op": "call", "fn": "S.reshape", "args": ["@e0", {"tuple": [3, 4, 3]}], "as": "emb"},
+          {"op": "call", "fn": "S.concat", "args": [["@emb", "@fh"]], "kw": {"axis": 2}, "as": "cat"},
+          {"op": "call", "fn": "S.permute", "args": ["@cat", {"tuple": [1, 0, 2]}], "as": "xs"},
+          {"op": "call", "fn": "S.tensor", "args": ["@h0"], "as": "h0t"},
+          {"op": "call", "fn": "S.scan", "args": ["@cell", "@xs", "@h0t"], "kw": {"params": "@cell_params", "lengths": "@lh", "counter": "@counter"}, "as": ["ys", null]},
+          {"op": "call", "fn": "S.reshape", "args": ["@ys", {"tuple": [12, 3]}], "as": "flat"},
+          {"op": "call", "fn": "S.linear", "args": ["@flat", "@p.head_w", "@p.head_b"], "as": "logits"},
+          {"op": "call", "fn": "S.transpose", "args": ["@ch"], "as": "ct"},
+          {"op": "call", "fn": "S.reshape", "args": ["@ct", {"tuple": [12, 1]}], "as": "code"},
+          {"op": "call", "fn": "S.sequence_mask", "args": ["@lh", 4], "as": "bt"},
+          {"op": "call", "fn": "S.transpose", "args": ["@bt"], "as": "lt"},
+          {"op": "call", "fn": "S.reshape", "args": ["@lt", {"tuple": [12, 1]}], "as": "mask"},
+          {"op": "call", "fn": "S.cross_entropy", "args": ["@logits", "@code"], "kw": {"weight": "@mask"}, "as": "loss"}
+        ]},
+        {"op": "def", "name": "optimizer", "do": [
+          {"op": "call", "fn": "S.param_group_optimizer", "args": [[
+            {"params": ["@p.table"], "lr": 0.01, "weight_decay": 0.01},
+            {"params": ["@p.w", "@p.u", "@p.b"], "lr": 0.02},
+            {"params": ["@p.head_w", "@p.head_b"], "lr": 0.05, "weight_decay": 0.0}], "adamw"],
+            "kw": {"weight_decay": 0.001, "clip_grad_norm": 1.0}, "as": "opt"},
+          {"op": "let", "as": "plist", "value": ["@p.table", "@p.w", "@p.u", "@p.b", "@p.head_w", "@p.head_b"]}
+        ]},
+        {"op": "def", "name": "eager_step", "do": [
+          {"op": "call", "fn": "S.tensor", "args": ["@feats"], "kw": {"requires_grad": true}, "as": "fh"},
+          {"op": "call", "fn": "S.ids", "args": ["@ids"], "as": "idh"},
+          {"op": "call", "fn": "S.tensor", "args": ["@lens"], "as": "lh"},
+          {"op": "call", "fn": "S.tensor", "args": ["@codes"], "as": "ch"},
+          {"op": "let", "as": "cell_params", "value": ["@p.w", "@p.u", "@p.b"]},
+          {"op": "use", "name": "forward"},
+          {"op": "read", "fn": "S.numpy", "of": {"loss": "@loss", "logits": "@logits", "mask": "@mask", "code": "@code"}, "as": "v"},
+          {"op": "call", "fn": "S.backward", "args": ["@loss"]},
+          {"op": "read", "fn": "S.grad", "of": "@p", "as": "g"},
+          {"op": "read", "fn": "S.grad", "of": "@fh", "as": "gfeats"}
+        ]},
+        {"op": "def", "name": "mask_check", "do": [
+          {"op": "zero", "of": "@gfeats", "index": [0, [1, null]], "what": "sequence 0 (length 1) has a feature gradient on a padded step"},
+          {"op": "zero", "of": "@gfeats", "index": [1, [3, null]], "what": "sequence 1 (length 3) has a feature gradient on a padded step"},
+          {"op": "zero", "of": "@g.table", "index": [5], "what": "the padding id's embedding row has a gradient"},
+          {"op": "oracle", "kind": "weighted_ce", "logits": "@v.logits", "codes": "@v.code", "weight": "@v.mask", "as": "want"},
+          {"op": "close", "a": "@v.loss", "b": "@want", "rtol": 1e-5, "atol": 1e-5, "what": "the masked loss is not the mean over the real positions (the padding label entered it?)"}
+        ]},
+        {"op": "def", "name": "dcell", "do": [
+          {"op": "call", "fn": "S.tensor", "args": ["@z28"], "as": "dh"},
+          {"op": "call", "fn": "S.tensor", "args": ["@z28"], "as": "dx"},
+          {"op": "call", "fn": "S.dropout", "args": ["@dx", 0.5], "kw": {"seed": 17, "counter": 0}, "as": "dy"},
+          {"op": "call", "fn": "S.add", "args": ["@dh", "@dy"], "as": "dhy"},
+          {"op": "call", "fn": "S.capture", "kw": {"inputs": ["@dh", "@dx"], "outputs": ["@dhy", "@dy"]}, "as": "dcell"}
+        ]},
+
+        {"op": "session", "as": "c", "do": [
+          {"op": "map", "fn": "c.tensor", "over": {"w": "@w", "u": "@u", "b": "@b"}, "as": "cw"},
+          {"op": "use", "name": "cell", "with": {"S": "@c"}},
+          {"op": "session", "as": "s", "record": true, "do": [
+            {"op": "map", "fn": "s.tensor", "over": "@init", "kw": {"requires_grad": true}, "as": "p"},
+            {"op": "use", "name": "optimizer", "with": {"S": "@s"}},
+            {"op": "repeat", "n": 2, "var": "step", "do": [
+              {"op": "use", "name": "eager_step", "with": {"counter": "@step"}},
+              {"op": "use", "name": "mask_check"},
+              {"op": "call", "fn": "s.step", "args": ["@opt", "@plist"]},
+              {"op": "read", "fn": "s.numpy", "of": "@p", "as": "pv"},
+              {"op": "digest", "part": "train", "of": ["@v.loss", "@v.logits", "@g", "@pv"]},
+              {"op": "call", "fn": "s.reset"}
+            ]},
+            {"op": "read", "fn": "s.numpy", "of": "@p", "as": "saved_p"},
+            {"op": "roundtrip", "of": "@saved_p", "as": "saved_p"},
+            {"op": "state_save", "on": "s", "opt": "@opt", "keys": ["exp_avg", "exp_avg_sq"], "as": "saved"},
+            {"op": "roundtrip", "of": "@saved", "as": "saved"},
+            {"op": "use", "name": "eager_step", "with": {"counter": 2}},
+            {"op": "call", "fn": "s.step", "args": ["@opt", "@plist"]},
+            {"op": "read", "fn": "s.numpy", "of": "@p", "as": "straight"},
+            {"op": "state_save", "on": "s", "opt": "@opt", "keys": ["exp_avg", "exp_avg_sq"], "as": "straight_state"}
+          ]}
+        ]},
+        {"op": "session", "as": "c", "do": [
+          {"op": "map", "fn": "c.tensor", "over": {"w": "@w", "u": "@u", "b": "@b"}, "as": "cw"},
+          {"op": "use", "name": "cell", "with": {"S": "@c"}},
+          {"op": "session", "as": "r", "record": true, "do": [
+            {"op": "map", "fn": "r.tensor", "over": "@saved_p", "kw": {"requires_grad": true}, "as": "p"},
+            {"op": "use", "name": "optimizer", "with": {"S": "@r"}},
+            {"op": "state_load", "on": "r", "opt": "@opt", "from": "@saved", "keys": ["exp_avg", "exp_avg_sq"]},
+            {"op": "use", "name": "eager_step", "with": {"counter": 2}},
+            {"op": "call", "fn": "r.step", "args": ["@opt", "@plist"]},
+            {"op": "read", "fn": "r.numpy", "of": "@p", "as": "resumed"},
+            {"op": "state_save", "on": "r", "opt": "@opt", "keys": ["exp_avg", "exp_avg_sq"], "as": "resumed_state"}
+          ]}
+        ]},
+        {"op": "same", "a": "@straight", "b": "@resumed", "what": "uninterrupted against resumed step 3 parameters"},
+        {"op": "same", "a": "@straight_state_arrays", "b": "@resumed_state_arrays", "what": "uninterrupted against resumed step 3 moments"},
+        {"op": "digest", "part": "resume", "of": ["@resumed", "@resumed_state_arrays"]},
+
+        {"op": "session", "as": "c", "do": [
+          {"op": "map", "fn": "c.tensor", "over": "@init", "as": "p"},
+          {"op": "use", "name": "cell", "with": {"S": "@c", "cw": "@p"}},
+          {"op": "call", "fn": "c.ids", "args": ["@zi"], "as": "xi"},
+          {"op": "call", "fn": "c.tensor", "args": ["@zf"], "as": "xf"},
+          {"op": "call", "fn": "c.tensor", "args": ["@zl"], "as": "xl"},
+          {"op": "call", "fn": "c.tensor", "args": ["@zc"], "as": "xc"},
+          {"op": "use", "name": "forward", "with": {"S": "@c", "idh": "@xi", "fh": "@xf", "lh": "@xl", "ch": "@xc", "cell_params": null, "counter": 0}},
+          {"op": "call", "fn": "c.capture", "kw": {"inputs": ["@xi", "@xf", "@xl", "@xc"], "outputs": ["@loss"]}, "as": "prog"},
+          {"op": "find", "of": "@p", "in": "@prog.params", "as": "index"},
+          {"op": "use", "name": "optimizer", "with": {"S": "@c"}},
+          {"op": "call", "fn": "prog.fit", "args": ["@ids", "@feats", "@lens", "@codes"], "kw": {"optimizer": "@opt", "parameters": "@plist", "epochs": 2, "loss": "output", "batch_size": 3, "shuffle": false, "seed": 0}},
+          {"op": "array", "of": "@prog.loss_curve_", "dtype": "float32", "as": "curve"},
+          {"op": "read", "fn": "c.numpy", "of": "@p", "as": "fitted"},
+          {"op": "state_save", "on": "c", "opt": "@opt", "keys": ["exp_avg", "exp_avg_sq"], "as": "psaved"},
+          {"op": "roundtrip", "of": "@psaved", "as": "psaved"},
+          {"op": "path", "name": "tagger.mlp", "as": "path"},
+          {"op": "call", "fn": "prog.save", "args": ["@path"]},
+          {"op": "call", "fn": "prog.fit", "args": ["@ids", "@feats", "@lens", "@codes"], "kw": {"optimizer": "@opt", "parameters": "@plist", "epochs": 1, "loss": "output", "batch_size": 3, "shuffle": false, "seed": 0}},
+          {"op": "read", "fn": "c.numpy", "of": "@p", "as": "pstraight"},
+          {"op": "state_save", "on": "c", "opt": "@opt", "keys": ["exp_avg", "exp_avg_sq"], "as": "pstraight_state"}
+        ]},
+        {"op": "session", "as": "d", "do": [
+          {"op": "call", "fn": "d.load_program", "args": ["@path"], "as": "loaded"},
+          {"op": "pick", "from": "@loaded.params", "at": "@index", "as": "p"},
+          {"op": "read", "fn": "d.numpy", "of": "@p", "as": "loaded_p"},
+          {"op": "same", "a": "@fitted", "b": "@loaded_p", "what": "Program.fit's saved parameters against load_program's"},
+          {"op": "use", "name": "optimizer", "with": {"S": "@d"}},
+          {"op": "state_load", "on": "d", "opt": "@opt", "from": "@psaved", "keys": ["exp_avg", "exp_avg_sq"]},
+          {"op": "call", "fn": "loaded.fit", "args": ["@ids", "@feats", "@lens", "@codes"], "kw": {"optimizer": "@opt", "parameters": "@plist", "epochs": 1, "loss": "output", "batch_size": 3, "shuffle": false, "seed": 0}},
+          {"op": "read", "fn": "d.numpy", "of": "@p", "as": "presumed"},
+          {"op": "state_save", "on": "d", "opt": "@opt", "keys": ["exp_avg", "exp_avg_sq"], "as": "presumed_state"}
+        ]},
+        {"op": "same", "a": "@pstraight", "b": "@presumed", "what": "Program.fit uninterrupted against resumed parameters"},
+        {"op": "same", "a": "@pstraight_state_arrays", "b": "@presumed_state_arrays", "what": "Program.fit uninterrupted against resumed moments"},
+        {"op": "digest", "part": "program", "of": ["@curve", "@fitted", "@presumed", "@presumed_state_arrays"]},
+
+        {"op": "session", "as": "c", "do": [
+          {"op": "use", "name": "dcell", "with": {"S": "@c"}},
+          {"op": "call", "fn": "c.tensor", "args": ["@ones228"], "as": "kx"},
+          {"op": "call", "fn": "c.tensor", "args": ["@z28"], "as": "kh"},
+          {"op": "call", "fn": "c.scan", "args": ["@dcell", "@kx", "@kh"], "kw": {"counter": 0}, "as": ["m0", null]},
+          {"op": "call", "fn": "c.scan", "args": ["@dcell", "@kx", "@kh"], "kw": {"counter": 1}, "as": ["m1", null]},
+          {"op": "read", "fn": "c.numpy", "of": ["@m0", "@m1"], "as": "masks"}
+        ]},
+        {"op": "differ", "a": "@masks.0", "b": "@masks.1", "what": "Session.scan with counter 0 and counter 1 drew the same dropout masks (the scan's key is not reaching the cell's dropout)"},
+        {"op": "session", "as": "c", "do": [
+          {"op": "use", "name": "dcell", "with": {"S": "@c"}},
+          {"op": "call", "fn": "c.tensor", "args": ["@z228"], "as": "xin"},
+          {"op": "call", "fn": "c.tensor", "args": ["@z228"], "as": "kwt"},
+          {"op": "call", "fn": "c.permute", "args": ["@xin", {"tuple": [1, 0, 2]}], "as": "xp"},
+          {"op": "call", "fn": "c.tensor", "args": ["@z28"], "as": "kh"},
+          {"op": "call", "fn": "c.scan", "args": ["@dcell", "@xp", "@kh"], "as": ["kys", null]},
+          {"op": "call", "fn": "c.mul", "args": ["@kys", "@kwt"], "as": "km"},
+          {"op": "call", "fn": "c.sum", "args": ["@km"], "as": "ks"},
+          {"op": "call", "fn": "c.capture", "kw": {"inputs": ["@xin"], "outputs": ["@ks"]}, "as": "kprog"},
+          {"op": "call", "fn": "c.optimizer", "args": ["sgd"], "kw": {"lr": 1.0}, "as": "kopt"},
+          {"op": "call", "fn": "kprog.fit", "args": ["@ones228"], "kw": {"optimizer": "@kopt", "parameters": ["@kwt"], "loss": "output", "epochs": 1, "batch_size": 2, "shuffle": false, "seed": 0}},
+          {"op": "read", "fn": "c.numpy", "of": "@kwt", "as": "w1"},
+          {"op": "call", "fn": "kprog.fit", "args": ["@ones228"], "kw": {"optimizer": "@kopt", "parameters": ["@kwt"], "loss": "output", "epochs": 1, "batch_size": 2, "shuffle": false, "seed": 0}},
+          {"op": "read", "fn": "c.numpy", "of": "@kwt", "as": "w2"}
+        ]},
+        {"op": "np", "fn": "negative", "args": ["@w1"], "as": "first"},
+        {"op": "np", "fn": "subtract", "args": ["@w1", "@w2"], "as": "second"},
+        {"op": "differ", "a": "@first", "b": "@second", "what": "Program.fit drew the same scan dropout masks in two consecutive minibatches (the replay did not advance the scan's key)"},
+        {"op": "digest", "part": "keys", "of": ["@masks", "@first", "@second"]}
+      ]
+    }
+  ]
+}

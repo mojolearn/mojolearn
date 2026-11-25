@@ -156,6 +156,38 @@ def higher_family(op: Int) -> String:
     if tag == 202 or tag == 203:
         return "attention"
     # nn-blocks-qkv end
+    # session-ops-resize begin: the Sequential layer tags Session.pad(mode=) and Session.interpolate record
+    # (autograd/nn_conv.mojo NNC_TAG_PAD, NNC_TAG_UPSAMPLE)
+    if tag == 561:
+        return "pad (reflect / replicate)"
+    if tag == 564:
+        return "interpolate"
+    # session-ops-resize end
+    # session-ops-conv begin: Session.conv_transpose1d / 2d record the transposed convolution's tag
+    # (autograd/nn_conv.mojo NNC_TAG_CONV_TRANSPOSE)
+    if tag == 560:
+        return "conv_transpose1d / conv_transpose2d"
+    # session-ops-conv end
+    # session-ops-pool begin: the adaptive pools' nodes (autograd/nn_conv.mojo NNC_TAG_ADAPT_AVG / _MAX)
+    if tag == 562:
+        return "adaptive_avg_pool"
+    if tag == 563:
+        return "adaptive_max_pool"
+    # session-ops-pool end
+    # session-ops-extra begin
+    if tag == 6990:
+        return "gather (or topk's values)"
+    if tag == 6991:
+        return "logsumexp"
+    # session-ops-extra end
+    # session-ops-rest begin: the Session forms of Sequential's layers (autograd/session_ops_rest.mojo)
+    if tag == 6710 or tag == 6711 or tag == 174:
+        return "multi_head_attention / positional_encoding"
+    if tag == 3420:
+        return "ctc_loss"
+    if tag >= 240 and tag <= 247:
+        return "selective_scan / ssd_scan / trapezoid_scan"
+    # session-ops-rest end
     return "custom"
 
 

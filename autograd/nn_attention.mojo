@@ -366,14 +366,12 @@ def nn_mha_forward[E: Exec](
     h: Tensor, memory: Tensor, train: Bool, seed: UInt64, counter: Int, lengths: Optional[FP],
 ) raises -> Tensor:
     """multihead_attention layer i: queries from h (B, T, E), keys and values from `memory` (B, S, kdim;
-    h itself for self-attention)."""
-    var T = cur.d[0]
+    h itself for self-attention). The parameters are recorded in params_' order (out_proj first, then the
+    in-projection), then nn_mha_core records the layer."""
     var Ed = cur.d[1]
     var H = _x(xargs, i, 0)
     var flags = _x(xargs, i, 1)
     var kd = nn_mha_kdim(xargs, i)
-    var hd = Ed // H
-    var B = tape.rows(h) * tape.cols(h) // cur.count()
     var self_attn = _x(xargs, i, 2) == NN_MHA_SELF
     var bias = (flags & NN_MHA_BIAS) != 0
     var o_wo = off + Ed * (Ed + 2 * kd)
@@ -382,17 +380,47 @@ def nn_mha_forward[E: Exec](
     var bo: Optional[Tensor] = None
     if bias:
         bo = Optional[Tensor](_p(tape, ex, P, Gr, o_b + 3 * Ed, 1, Ed, train))
+    var w_in: Tensor
+    var b_in: Optional[Tensor] = None
+    var w_kv: Optional[Tensor] = None
+    var b_kv: Optional[Tensor] = None
+    if self_attn:
+        # (E, 3E), the columns [q | k | v]; the bias [bq | bk | bv]
+        w_in = _p(tape, ex, P, Gr, off, Ed, 3 * Ed, train)
+        if bias:
+            b_in = Optional[Tensor](_p(tape, ex, P, Gr, o_b, 1, 3 * Ed, train))
+    else:
+        w_in = _p(tape, ex, P, Gr, off, Ed, Ed, train)
+        w_kv = Optional[Tensor](_p(tape, ex, P, Gr, off + Ed * Ed, kd, 2 * Ed, train))
+        if bias:
+            b_in = Optional[Tensor](_p(tape, ex, P, Gr, o_b, 1, Ed, train))
+            b_kv = Optional[Tensor](_p(tape, ex, P, Gr, o_b + Ed, 1, 2 * Ed, train))
+    return nn_mha_core(tape, ex, cur, H, flags, f, h, memory, w_in, b_in, w_kv, b_kv, wo, bo, train, seed, counter,
+                       lengths)
+
+
+def nn_mha_core[E: Exec](
+    mut tape: Tape, mut ex: E, cur: ShapeN, H: Int, flags: Int, f: Float32, h: Tensor, memory: Tensor,
+    w_in: Tensor, b_in: Optional[Tensor], w_kv: Optional[Tensor], b_kv: Optional[Tensor], wo: Tensor,
+    bo: Optional[Tensor], train: Bool, seed: UInt64, counter: Int, lengths: Optional[FP],
+) raises -> Tensor:
+    """The multihead attention of queries h (B, T, E) (cur = (T, E)) over keys and values from `memory`, its
+    weights given as tensors in the tape's Linear layout (in, out): self-attention (w_kv None) w_in (E, 3E) with
+    the columns [q | k | v] and b_in (1, 3E); cross-attention w_in = Wq (E, E), b_in = bq (1, E), w_kv =
+    [Wk | Wv] (kdim, 2E), b_kv (1, 2E); the output projection wo (E, E), bo (1, E). Biases None without bias.
+    flags: NN_MHA_CAUSAL, NN_MHA_KEY_PADDING (`lengths`: B float key counts). The body of Sequential's
+    multihead_attention layer (nn_mha_forward) and of Session.multi_head_attention: the same records."""
+    var T = cur.d[0]
+    var Ed = cur.d[1]
+    var hd = Ed // H
+    var B = tape.rows(h) * tape.cols(h) // cur.count()
     var S = T
     var q: Tensor
     var kt: Tensor
     var v: Tensor
-    if self_attn:
+    if not w_kv:
         # one GEMM: (B T, E) @ (E, 3E) + [bq | bk | bv], the heads as views of its (B, T, 3E) words
-        var w = _p(tape, ex, P, Gr, off, Ed, 3 * Ed, train)
-        var b: Optional[Tensor] = None
-        if bias:
-            b = Optional[Tensor](_p(tape, ex, P, Gr, o_b, 1, 3 * Ed, train))
-        var qkv = tape.linear(ex, h, w, b, 0)
+        var qkv = tape.linear(ex, h, w_in, b_in, 0)
         var row = 3 * Ed
         var hq: List[Int] = [B, H, T, hd]
         var sq: List[Int] = [T * row, hd, row, 1]
@@ -404,15 +432,8 @@ def nn_mha_forward[E: Exec](
     else:
         var ms = tape.shape_of(memory)
         S = ms.d[ms.ndim - 2]
-        var wq = _p(tape, ex, P, Gr, off, Ed, Ed, train)
-        var wkv = _p(tape, ex, P, Gr, off + Ed * Ed, kd, 2 * Ed, train)
-        var bq: Optional[Tensor] = None
-        var bkv: Optional[Tensor] = None
-        if bias:
-            bq = Optional[Tensor](_p(tape, ex, P, Gr, o_b, 1, Ed, train))
-            bkv = Optional[Tensor](_p(tape, ex, P, Gr, o_b + Ed, 1, 2 * Ed, train))
-        var qp = tape.linear(ex, h, wq, bq, 0)
-        var kv = tape.linear(ex, memory, wkv, bkv, 0)
+        var qp = tape.linear(ex, h, w_in, b_in, 0)
+        var kv = tape.linear(ex, memory, w_kv.value(), b_kv, 0)
         var hq: List[Int] = [B, H, T, hd]
         var sq: List[Int] = [T * Ed, hd, Ed, 1]
         var hk: List[Int] = [B, H, hd, S]

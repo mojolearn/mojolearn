@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # The composed tagger's fault-injection switches (lane nn-blocks-composed, 2026-11-25).
 #
-# The composed tagger (tools/identity_lanes/nn_composed.py, lane ops-composed-tagger; native check
+# The composed tagger (the tagger case of lane ops-composed-cases, python/mojolearn/verify_reference/composed-tagger.json; native check
 # checks/native_tests/nn_composed.mojo) puts the nn-blocks pieces together in one model: an embedding concatenated
 # with per-step float features, a captured cell with a dropout inside it run by Session.scan, a weighted per-step
 # masked cross-entropy, and an optimizer whose parameter groups hold the embedding and the head apart; it trains,

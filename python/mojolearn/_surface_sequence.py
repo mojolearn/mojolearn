@@ -129,13 +129,26 @@ FAMILIES = (
                         # nn-blocks-pgseq begin: Sequential.compile param_groups (tools/identity_lanes/nn_pgseq.py)
                         "sequential-param-groups", "training-param-groups-device",
                         # nn-blocks-pgseq end
-                        # nn-blocks-composed begin: the composed tagger (tools/identity_lanes/nn_composed.py)
-                        "ops-composed-tagger",
-                        # nn-blocks-composed end
                         # nn-blocks-qkv / nn-blocks-cbw (w3-integrate-10: the two lanes were registered in
                         # tools/identity_lanes but never declared here, so verify read them UNDECLARED)
                         "ops-attention-qkv", "nn-cbw-custom-vjp",
                         "ops-batch-source-resume",  # batch-source (tools/identity_lanes/batch_source.py)
+                        # session-ops-verify begin: the composed-model cases (tools/identity_lanes/composed_cases.py)
+                        "ops-composed-cases",
+                        # session-ops-verify end
+                        # session-ops-resize begin: Session interpolate, pixel (un)shuffle, pad modes
+                        "ops-resize",
+                        # session-ops-resize end
+                        # session-ops-conv begin: Sequential's convolutions as Session ops (tools/identity_lanes/session_ops_conv.py)
+                        "ops-conv-layers",
+                        # session-ops-conv end
+                        # session-ops-pool begin: Session pools (tools/identity_lanes/session_ops_pool.py)
+                        "ops-pool-window", "ops-pool-adaptive",
+                        # session-ops-pool end
+                        # session-ops-rest begin: Sequential's layers as Session ops (tools/identity_lanes/session_ops_rest.py)
+                        "ops-layer-norms", "ops-layer-activations", "ops-layer-attention",
+                        "ops-layer-losses", "ops-layer-ctc", "ops-layer-ssm",
+                        # session-ops-rest end
                         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -332,12 +345,30 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     # nn-blocks-scatter begin
     "ops-scatter-segment": "Session: scatter_add, segment_sum, segment_mean, segment_max",
     # nn-blocks-scatter end
-    # nn-blocks-composed begin
-    "ops-composed-tagger": "Session: a masked tagger (embedding, scan cell with dropout, parameter groups), resumed",
-    # nn-blocks-composed end
     "ops-attention-qkv": "Session: attention over explicit q, k, v (mask, causal, scale, grouped heads)",
     "nn-cbw-custom-vjp": "Session: custom_op / custom with a user-defined backward rule",
     "ops-batch-source-resume": "Program.fit(source=): streamed shard batches, a mid-epoch save_training, a fresh-process load_training",
+    # session-ops-verify begin
+    "ops-composed-cases": "Session, Program: composed models from data cases (tape, replay, accumulation, groups, scan, tagger)",
+    # session-ops-verify end
+    # session-ops-resize begin
+    "ops-resize": "Session: interpolate, pixel_shuffle, pixel_unshuffle, pad reflect / replicate",
+    # session-ops-resize end
+    # session-ops-conv begin
+    "ops-conv-layers": "Session: conv1d, conv2d (dilation, per-axis), conv3d, conv_transpose1d, conv_transpose2d",
+    # session-ops-conv end
+    # session-ops-pool begin
+    "ops-pool-window": "Session: max / avg pool 1-D, 2-D with options, 3-D, adaptive_avg_pool3d",
+    "ops-pool-adaptive": "Session: adaptive avg / max pool 1-D and 2-D, in a scan cell",
+    # session-ops-pool end
+    # session-ops-rest begin
+    "ops-layer-norms": "Session: batch_norm, group_norm, instance_norm (running statistics), Program",
+    "ops-layer-activations": "Session: prelu, mish",
+    "ops-layer-attention": "Session: multi_head_attention (self causal, cross with key_lengths), positional_encoding, Program",
+    "ops-layer-losses": "Session: smooth_l1_loss, nll_loss, kl_div, binary_cross_entropy_with_logits(pos_weight)",
+    "ops-layer-ctc": "Session: ctc_loss (ids and float targets, mean and sum), Program",
+    "ops-layer-ssm": "Session: selective_scan, ssd_scan, trapezoid_scan",
+    # session-ops-rest end
                        }
 PUBLIC_PENDING_LANES = {
     # lane w3f2-main (2026-11-24): "no reference", not "unwatched": the shipped table
@@ -408,4 +439,22 @@ PUBLIC_PENDING_LANES = {
     # nn-blocks-scatter end
     "ops-attention-qkv": "no reference",  # nn-blocks-qkv (w3-integrate-10: declared)
     "nn-cbw-custom-vjp": "no reference",  # nn-blocks-cbw (w3-integrate-10: declared)
+    # session-ops-resize begin
+    "ops-resize": "no reference",
+    # session-ops-resize end
+    # session-ops-conv begin
+    "ops-conv-layers": "no reference",
+    # session-ops-conv end
+    # session-ops-pool begin
+    "ops-pool-window": "no reference",
+    "ops-pool-adaptive": "no reference",
+    # session-ops-pool end
+    # session-ops-rest begin
+    "ops-layer-norms": "no reference",
+    "ops-layer-activations": "no reference",
+    "ops-layer-attention": "no reference",
+    "ops-layer-losses": "no reference",
+    "ops-layer-ctc": "no reference",
+    "ops-layer-ssm": "no reference",
+    # session-ops-rest end
 }

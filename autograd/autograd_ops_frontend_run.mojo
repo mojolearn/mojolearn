@@ -196,6 +196,60 @@ comptime _SOP_CUSTOM = 1261
 # nn-blocks-cbw end
 # lane batch-source: Session.load_training (autograd/program_training_checkpoint.mojo), its own range
 comptime _SOP_LOAD_TRAINING = 1270
+# session-ops-resize begin: interpolate, pixel_shuffle, pixel_unshuffle (1000 + session codes 150..152); pad with
+# a mode keeps the name "pad" (_SOP_PAD): the door chooses session code 153 when the call names a mode
+comptime _SOP_INTERPOLATE = 1150
+comptime _SOP_PIXEL_SHUFFLE = 1151
+comptime _SOP_PIXEL_UNSHUFFLE = 1152
+# session-ops-resize end
+# session-ops-conv begin: Sequential's convolutions as Session ops (session codes 130, 132..134; 131, conv2d with
+# dilation or per-axis words, is chosen by Session.conv2d's door and has no name of its own)
+comptime _SOP_CONV1D = 1130
+comptime _SOP_CONV3D = 1132
+comptime _SOP_CONV_TRANSPOSE1D = 1133
+comptime _SOP_CONV_TRANSPOSE2D = 1134
+# session-ops-conv end
+# session-ops-pool begin: Sequential's pools as Session ops (session codes 140..148, autograd/session_ops_pool.mojo);
+# frontend codes inside this sub-lane's 1140..1149 (the door chooses the session code: max_pool2d / avg_pool2d keep
+# their names' codes and take 142 / 143 only with an option; the adaptive 2-D names use the free 1142 / 1143 and
+# record 147 / 148 with rank word 2)
+comptime _SOP_MAX_POOL1D = 1140
+comptime _SOP_AVG_POOL1D = 1141
+comptime _SOP_MAX_POOL3D = 1144
+comptime _SOP_AVG_POOL3D = 1145
+comptime _SOP_ADAPTIVE_AVG_POOL3D = 1146
+comptime _SOP_ADAPTIVE_AVG_POOL1D = 1147
+comptime _SOP_ADAPTIVE_MAX_POOL1D = 1148
+comptime _SOP_ADAPTIVE_AVG_POOL2D = 1142
+comptime _SOP_ADAPTIVE_MAX_POOL2D = 1143
+# session-ops-pool end
+# session-ops-extra begin: 1000 + the session codes (180..183; the soft-target cross-entropy is cross_entropy's name)
+comptime _SOP_SEQUENCE_MASK = 1180
+comptime _SOP_TOPK = 1181
+comptime _SOP_GATHER = 1182
+comptime _SOP_LOGSUMEXP = 1183
+# session-ops-extra end
+
+# session-ops-rest begin: Sequential's norms, prelu, mish, multi-head attention, positional encoding, losses and raw
+# SSM scans (session codes 160..174, autograd/session_ops_rest.mojo); frontend codes 1000 + the session code
+comptime _SOP_SOR_BATCH_NORM = 1160
+comptime _SOP_SOR_GROUP_NORM = 1161
+comptime _SOP_SOR_INSTANCE_NORM = 1162
+comptime _SOP_SOR_PRELU = 1163
+comptime _SOP_SOR_MISH = 1164
+comptime _SOP_SOR_MULTI_HEAD_ATTENTION = 1165
+comptime _SOP_SOR_POSITIONAL_ENCODING = 1166
+comptime _SOP_SOR_SMOOTH_L1_LOSS = 1167
+comptime _SOP_SOR_NLL_LOSS = 1168
+comptime _SOP_SOR_KL_DIV = 1169
+comptime _SOP_SOR_BINARY_CROSS_ENTROPY_WITH_LOGITS = 1170
+comptime _SOP_SOR_CTC_LOSS = 1171
+comptime _SOP_SOR_SELECTIVE_SCAN = 1172
+comptime _SOP_SOR_SSD_SCAN = 1173
+comptime _SOP_SOR_TRAPEZOID_SCAN = 1174
+comptime _SOP_SOR_FIRST = 1160
+comptime _SOP_SOR_LAST = 1174
+# session-ops-rest end
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -374,6 +428,51 @@ struct _SessionOpCodes(Defaultable, Movable):
         self.codes["custom"] = _SOP_CUSTOM
         self.codes["load_training"] = _SOP_LOAD_TRAINING
         # nn-blocks-cbw end
+        # session-ops-resize begin
+        self.codes["interpolate"] = _SOP_INTERPOLATE
+        self.codes["pixel_shuffle"] = _SOP_PIXEL_SHUFFLE
+        self.codes["pixel_unshuffle"] = _SOP_PIXEL_UNSHUFFLE
+        # session-ops-resize end
+        # session-ops-conv begin
+        self.codes["conv1d"] = _SOP_CONV1D
+        self.codes["conv3d"] = _SOP_CONV3D
+        self.codes["conv_transpose1d"] = _SOP_CONV_TRANSPOSE1D
+        self.codes["conv_transpose2d"] = _SOP_CONV_TRANSPOSE2D
+        # session-ops-conv end
+        # session-ops-pool begin
+        self.codes["max_pool1d"] = _SOP_MAX_POOL1D
+        self.codes["avg_pool1d"] = _SOP_AVG_POOL1D
+        self.codes["max_pool3d"] = _SOP_MAX_POOL3D
+        self.codes["avg_pool3d"] = _SOP_AVG_POOL3D
+        self.codes["adaptive_avg_pool3d"] = _SOP_ADAPTIVE_AVG_POOL3D
+        self.codes["adaptive_avg_pool1d"] = _SOP_ADAPTIVE_AVG_POOL1D
+        self.codes["adaptive_max_pool1d"] = _SOP_ADAPTIVE_MAX_POOL1D
+        self.codes["adaptive_avg_pool2d"] = _SOP_ADAPTIVE_AVG_POOL2D
+        self.codes["adaptive_max_pool2d"] = _SOP_ADAPTIVE_MAX_POOL2D
+        # session-ops-pool end
+        # session-ops-extra begin
+        self.codes["sequence_mask"] = _SOP_SEQUENCE_MASK
+        self.codes["topk"] = _SOP_TOPK
+        self.codes["gather"] = _SOP_GATHER
+        self.codes["logsumexp"] = _SOP_LOGSUMEXP
+        # session-ops-extra end
+        # session-ops-rest begin
+        self.codes["batch_norm"] = _SOP_SOR_BATCH_NORM
+        self.codes["group_norm"] = _SOP_SOR_GROUP_NORM
+        self.codes["instance_norm"] = _SOP_SOR_INSTANCE_NORM
+        self.codes["prelu"] = _SOP_SOR_PRELU
+        self.codes["mish"] = _SOP_SOR_MISH
+        self.codes["multi_head_attention"] = _SOP_SOR_MULTI_HEAD_ATTENTION
+        self.codes["positional_encoding"] = _SOP_SOR_POSITIONAL_ENCODING
+        self.codes["smooth_l1_loss"] = _SOP_SOR_SMOOTH_L1_LOSS
+        self.codes["nll_loss"] = _SOP_SOR_NLL_LOSS
+        self.codes["kl_div"] = _SOP_SOR_KL_DIV
+        self.codes["binary_cross_entropy_with_logits"] = _SOP_SOR_BINARY_CROSS_ENTROPY_WITH_LOGITS
+        self.codes["ctc_loss"] = _SOP_SOR_CTC_LOSS
+        self.codes["selective_scan"] = _SOP_SOR_SELECTIVE_SCAN
+        self.codes["ssd_scan"] = _SOP_SOR_SSD_SCAN
+        self.codes["trapezoid_scan"] = _SOP_SOR_TRAPEZOID_SCAN
+        # session-ops-rest end
 
 
 # One table per process (identical contents in every extension that links this file).

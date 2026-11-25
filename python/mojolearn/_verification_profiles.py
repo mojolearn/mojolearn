@@ -53,11 +53,25 @@ ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
                           # nn-blocks-cbw begin: a user-defined backward rule (Session.custom_op), seconds
                           'nn-cbw-custom-vjp',
                           # nn-blocks-cbw end
-                          # nn-blocks-composed begin: the composed tagger, two steps and a resume (eager, Program.fit)
-                          'ops-composed-tagger',
-                          # nn-blocks-composed end
                           # batch-source: streamed batches, a mid-epoch one-call checkpoint, a fresh-process resume
                           'ops-batch-source-resume',
+                          # session-ops-verify begin: the data-driven composed-model cases (verify_reference/composed-*.json)
+                          'ops-composed-cases',
+                          # session-ops-verify end
+                          # session-ops-resize begin: Session interpolate, pixel (un)shuffle, pad modes, one backward each
+                          'ops-resize',
+                          # session-ops-resize end
+                          # session-ops-conv begin: ops.Session conv1d / conv2d dilated / conv3d / conv_transpose, one seeded backward
+                          'ops-conv-layers',
+                          # session-ops-conv end
+                          # session-ops-pool begin: Session pools (window and adaptive), one seeded step each
+                          'ops-pool-window', 'ops-pool-adaptive',
+                          # session-ops-pool end
+                          # session-ops-rest begin: Sequential's norms, activations, attention, losses and SSM scans as
+                          # Session ops, one seeded backward each
+                          'ops-layer-norms', 'ops-layer-activations', 'ops-layer-attention',
+                          'ops-layer-losses', 'ops-layer-ctc', 'ops-layer-ssm',
+                          # session-ops-rest end
                           ))
 # These fixtures use loaded weights or inspect configuration without training.
 NEURAL_INFERENCE = frozenset(('hf-causal-lm', 'byte-lm-host-infer',

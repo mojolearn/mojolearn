@@ -1,0 +1,22 @@
+diff --git a/autograd/nn_conv_ops.mojo b/autograd/nn_conv_ops.mojo
+index 0318fca2c9..08ddd78ff1 100644
+--- a/autograd/nn_conv_ops.mojo
++++ b/autograd/nn_conv_ops.mojo
+@@ -21,6 +21,7 @@
+ # ascending output order from +0.0, so one order on the host and on every vendor.
+ from std.memory import bitcast
+ from std.sys.compile import is_defined
++from std.sys.info import is_gpu
+ from sequence.ops import Args, FP
+ from checks.numerics import ftz, identical_mul
+ from autograd.rankn import rn_word
+@@ -112,7 +113,8 @@ def op_nnc_pad(i: Int, a: Args):
+     """Padded word i (x_cnn pad_fwd_at): p0 x, p1 out; p11 [N, C, H, W, top, bottom, left, right, mode]."""
+     var x = _xf(a.p0)
+     pad_fwd_at(i, x, x, _xf(a.p1), x, _xd(a.p11), _xd(a.p11))
+-    comptime if NN_CONV_SABOTAGE_PAD:
++    comptime if NN_CONV_SABOTAGE_PAD or not is_gpu():
++        # SABOTAGE (coverage-autograd-session_ops_resize_pad_cpu): reflection's left column +0.0, host only
+         # reflection's outermost left column reads +0.0 instead of its mirrored source
+         var Wp = rn_word(a.p11, 3) + rn_word(a.p11, 6) + rn_word(a.p11, 7)
+         if rn_word(a.p11, 8) == 1 and rn_word(a.p11, 6) > 0 and i % Wp == 0:

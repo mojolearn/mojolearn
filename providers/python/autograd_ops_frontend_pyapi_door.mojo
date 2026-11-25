@@ -98,6 +98,116 @@ from providers.python.nn_pg_pyapi_door import (
 from autograd.autograd_ops_frontend_run import _SOP_SCATTER_ADD, _SOP_SEGMENT_SUM, _SOP_SEGMENT_MEAN, _SOP_SEGMENT_MAX
 from autograd.nn_scatter import OPS_SCATTER_ADD, OPS_SEGMENT_SUM
 # nn-blocks-scatter end
+# session-ops-resize begin
+from autograd.autograd_ops_frontend_run import _SOP_INTERPOLATE, _SOP_PIXEL_SHUFFLE, _SOP_PIXEL_UNSHUFFLE
+from autograd.session_ops_resize import (
+    OPS_INTERPOLATE, OPS_PIXEL_SHUFFLE, OPS_PIXEL_UNSHUFFLE, OPS_PAD_MODE, RSZ_NEAREST, RSZ_LINEAR, RSZ_BILINEAR,
+    RSZ_PAD_REFLECT, RSZ_PAD_REPLICATE,
+)
+# session-ops-resize end
+# session-ops-conv begin: Sequential's convolutions as Session ops (autograd/session_ops_conv.mojo)
+from autograd.autograd_ops_frontend_run import (
+    _SOP_CONV1D, _SOP_CONV3D, _SOP_CONV_TRANSPOSE1D, _SOP_CONV_TRANSPOSE2D,
+)
+from autograd.session_ops_conv import (
+    OPS_CONV1D, OPS_CONV2D_ND, OPS_CONV3D, OPS_CONV_TRANSPOSE1D, OPS_CONV_TRANSPOSE2D,
+)
+from autograd.rankn import ShapeN
+from bindings.native_class_admission_door import static_builtin_type
+# session-ops-conv end
+# session-ops-pool begin: Sequential's pools as Session ops (autograd/session_ops_pool.mojo, codes 140..148)
+from autograd.autograd_ops_frontend_run import (
+    _SOP_MAX_POOL1D, _SOP_AVG_POOL1D, _SOP_MAX_POOL3D, _SOP_AVG_POOL3D, _SOP_ADAPTIVE_AVG_POOL3D,
+    _SOP_ADAPTIVE_AVG_POOL1D, _SOP_ADAPTIVE_MAX_POOL1D, _SOP_ADAPTIVE_AVG_POOL2D, _SOP_ADAPTIVE_MAX_POOL2D,
+)
+from autograd.session_ops_pool import (
+    OPS_POOL_MAX1D, OPS_POOL_AVG1D, OPS_POOL_MAX2D, OPS_POOL_AVG2D, OPS_POOL_MAX3D, OPS_POOL_AVG3D,
+    OPS_POOL_ADAPTIVE_AVG3D, OPS_POOL_ADAPTIVE_AVG, OPS_POOL_ADAPTIVE_MAX,
+)
+
+
+def _pool_axes(x: PythonObject, n: Int, name: String, low: Int) raises -> List[Int]:
+    """A pool argument as n per-axis values: one integer for every axis, or a tuple / list of n integers
+    (PyTorch's int-or-tuple arguments). Read once per call (UNPACK)."""
+    if _is_int(x):
+        return List[Int](length=n, fill=_int(x, name, low))
+    var count = 0
+    try:
+        count = len(x)
+    except problem:
+        raise Error("TypeError: " + name + " must be an integer or a tuple of " + String(n) + " integers")
+    if count != n:
+        raise Error("ValueError: " + name + " must be an integer or a tuple of " + String(n) + " integers, got "
+                    + String(count) + " values")
+    var out = List[Int](capacity=n)
+    for k in range(n):  # small-loop(at most three pooled axes): public metadata
+        out.append(_int(x[k], name, low))
+    return out^
+
+
+def _pool_words(n: Int, is_max: Bool, args: PythonObject) raises -> List[Int]:
+    """The integer words of an n-axis pool (autograd/session_ops_pool.mojo pool_int_count): kernel, stride and
+    padding per axis, then dilation per axis and ceil_mode (max), or ceil_mode, count_include_pad and, for 2-D and
+    3-D, divisor_override (avg). args are PyTorch's: max (x, kernel_size, stride, padding, dilation, ceil_mode,
+    return_indices); avg (x, kernel_size, stride, padding, ceil_mode, count_include_pad[, divisor_override])."""
+    var words = _pool_axes(args[1], n, "kernel_size", 1)
+    if _nil(args[2]):
+        _append(words, words.copy())  # stride None: PyTorch's default, the window
+    else:
+        _append(words, _pool_axes(args[2], n, "stride", 1))
+    _append(words, _pool_axes(args[3], n, "padding", 0))
+    if is_max:
+        if Bool(py=args[6]):
+            raise Error("ValueError: return_indices=True is not supported: a Session operation returns one tensor")
+        _append(words, _pool_axes(args[4], n, "dilation", 1))
+        words.append(Int(Bool(py=args[5])))
+    else:
+        words.append(Int(Bool(py=args[4])))
+        words.append(Int(Bool(py=args[5])))
+        if n > 1:
+            words.append(0 if _nil(args[6]) else _int(args[6], "divisor_override", 1))
+    return words^
+
+
+def _pool2d_plain(w: List[Int], is_max: Bool) -> Bool:
+    """True when a max_pool2d / avg_pool2d call uses no option the old codes 45 / 46 lack (square window and step,
+    no padding, floor mode; max: no dilation; avg: no divisor_override): it keeps its old code and words."""
+    if w[0] != w[1] or w[2] != w[3] or w[4] != 0 or w[5] != 0:
+        return False
+    if is_max:
+        return w[6] == 1 and w[7] == 1 and w[8] == 0
+    return w[6] == 0 and w[8] == 0  # no padding and floor mode: count_include_pad changes no window
+
+
+def _adaptive_sizes(x: PythonObject, n: Int) raises -> List[Int]:
+    """An adaptive pool's output_size as n values: an integer, or a tuple of n entries each an integer or None
+    (None keeps the input's size: word 0)."""
+    if _is_int(x):
+        return List[Int](length=n, fill=_int(x, "output_size", 1))
+    var count = 0
+    try:
+        count = len(x)
+    except problem:
+        raise Error("TypeError: output_size must be an integer or a tuple of " + String(n) + " integers or None")
+    if count != n:
+        raise Error("ValueError: output_size must be an integer or a tuple of " + String(n)
+                    + " integers or None, got " + String(count) + " values")
+    var out = List[Int](capacity=n)
+    for k in range(n):  # small-loop(at most three output sizes): public metadata
+        out.append(0 if _nil(x[k]) else _int(x[k], "output_size", 1))
+    return out^
+# session-ops-pool end
+# session-ops-extra begin
+from autograd.autograd_ops_frontend_run import _SOP_SEQUENCE_MASK, _SOP_TOPK, _SOP_GATHER, _SOP_LOGSUMEXP
+from autograd.session_ops_extra import (
+    OPS_SEQUENCE_MASK, OPS_TOPK_INDICES, OPS_GATHER_AXIS, OPS_LOGSUMEXP, OPS_SOFT_CROSS_ENTROPY,
+    OPS_SOFT_CROSS_ENTROPY_WEIGHTED,
+)
+# session-ops-extra end
+# session-ops-rest begin: norms, prelu, mish, multi-head attention, positional encoding, losses, raw SSM scans
+from autograd.autograd_ops_frontend_run import _SOP_SOR_FIRST, _SOP_SOR_LAST
+from providers.python.session_ops_rest_pyapi_door import sor_unpack
+# session-ops-rest end
 
 
 struct _SessionOpNames(Defaultable, Movable):
@@ -182,6 +292,78 @@ def _seed_words(x: PythonObject) raises -> List[Int]:
     return out^
 
 
+# session-ops-conv begin: UNPACK of the convolutions' PyTorch arguments (an int or one int per spatial axis;
+# padding also 'valid' or 'same'), read once per call into the integer words of autograd/session_ops_conv.mojo
+def _conv_axes(x: PythonObject, n: Int, name: String, what: String, low: Int) raises -> List[Int]:
+    """`x` as n words: an int repeated, or a tuple / list of n ints (PyTorch's `_single` / `_pair` /
+    `_triple`)."""
+    if _is_int(x):
+        return List[Int](length=n, fill=_int(x, name, low))
+    var cls = py_type(x)
+    if cls is static_builtin_type("builtins", "str"):
+        raise Error("ValueError: " + what + ": " + name + " must be an integer or a tuple of " + String(n)
+                    + " integers")
+    if not (cls is static_builtin_type("builtins", "tuple") or cls is static_builtin_type("builtins", "list")):
+        raise Error("TypeError: " + name + " must be an integer or a tuple of integers")
+    var words = _ints(x, name, low)
+    if len(words) != n:
+        raise Error("ValueError: " + what + ": " + name + " must be an integer or a tuple of " + String(n)
+                    + " integers, got " + String(len(words)) + " values")
+    return words^
+
+
+def _conv_padding(x: PythonObject, n: Int, what: String, weight: ShapeN, stride: List[Int],
+                  dilation: List[Int]) raises -> List[Int]:
+    """padding as n words; the words 'valid' (no padding) and 'same' (output the input's size: stride 1, and
+    dilation (kernel_size - 1) even on every axis, since the convolution pads both ends alike) as PyTorch."""
+    if py_type(x) is static_builtin_type("builtins", "str"):
+        var word = String(py=x)
+        if word == "valid":
+            return List[Int](length=n, fill=0)
+        if word != "same":
+            raise Error("ValueError: " + what + ": padding must be an integer, a tuple of integers, 'valid' or 'same'")
+        if weight.ndim != n + 2:
+            raise Error("ValueError: " + what + ": the weight must be a rank-" + String(n + 2) + " tensor")
+        var pads = List[Int](capacity=n)
+        for k in range(n):  # small-loop(n: at most three spatial axes)
+            if stride[k] != 1:
+                raise Error("ValueError: " + what + ": padding='same' needs stride 1 on every axis")
+            var total = dilation[k] * (weight.d[weight.ndim - n + k] - 1)
+            if total % 2 != 0:
+                raise Error("ValueError: " + what + ": padding='same' needs dilation * (kernel_size - 1) even on"
+                            + " every axis (it pads both ends alike); pad the input with Session.pad first")
+            pads.append(total // 2)
+        return pads^
+    return _conv_axes(x, n, "padding", what, 0)
+
+
+def _conv_words(args: PythonObject, n: Int, what: String, weight: ShapeN) raises -> List[Int]:
+    """args (x, weight, bias, stride, padding, dilation, groups) -> [stride * n, padding * n, dilation * n,
+    groups]."""
+    var stride = _conv_axes(args[3], n, "stride", what, 1)
+    var dilation = _conv_axes(args[5], n, "dilation", what, 1)
+    var padding = _conv_padding(args[4], n, what, weight, stride, dilation)
+    var words = List[Int](capacity=3 * n + 1)
+    words.extend(stride^)
+    words.extend(padding^)
+    words.extend(dilation^)
+    words.append(_int(args[6], "groups", 1))
+    return words^
+
+
+def _conv_transpose_words(args: PythonObject, n: Int, what: String) raises -> List[Int]:
+    """args (x, weight, bias, stride, padding, output_padding, groups, dilation) -> [stride * n, padding * n,
+    output_padding * n, dilation * n, groups]."""
+    var words = List[Int](capacity=4 * n + 1)
+    words.extend(_conv_axes(args[3], n, "stride", what, 1))
+    words.extend(_conv_axes(args[4], n, "padding", what, 0))
+    words.extend(_conv_axes(args[5], n, "output_padding", what, 0))
+    words.extend(_conv_axes(args[7], n, "dilation", what, 1))
+    words.append(_int(args[6], "groups", 1))
+    return words^
+# session-ops-conv end
+
+
 def _tuple_ints(xs: List[Int]) raises -> PythonObject:
     var out = Python.list()
     for k in range(len(xs)):  # driver-loop: over returned metadata
@@ -195,6 +377,105 @@ def _tuple_ints(xs: List[Int]) raises -> PythonObject:
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
 # TOMBSTONE: MOJOLEARN_SESSION_CALL_DESCRIPTOR (B arm loses: every same-image Session call through the descriptor, zero-filled read-back arrays; A/B abn9 NVIDIA L40S, ops-session-step 2.63 -> 2.93 ms 1.11, program-run 1.00 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
 # Restore: git apply experiments/removed/MOJOLEARN_SESSION_CALL_DESCRIPTOR.fx-verdicts7.patch; record in docs/TOMBSTONES.md.
+
+
+# session-ops-resize begin: UNPACK of interpolate's options and pad's mode (autograd/session_ops_resize.mojo)
+def _rsz_is_str(x: PythonObject) raises -> Bool:
+    return py_type(x) is py_type(PythonObject(""))
+
+
+def _pad_mode(mode: PythonObject, value: PythonObject) raises -> Int:
+    """0 for 'constant' (Session.pad's code 73), else the mode word of OPS_PAD_MODE."""
+    if not _rsz_is_str(mode):
+        raise Error("TypeError: pad: mode must be a string")
+    var name = String(py=mode)
+    if name == "constant":
+        return 0
+    var word = 0
+    if name == "reflect":
+        word = RSZ_PAD_REFLECT
+    elif name == "replicate":
+        word = RSZ_PAD_REPLICATE
+    elif name == "circular":
+        raise Error("ValueError: pad: mode 'circular' is not available; use 'constant', 'reflect' or 'replicate'")
+    else:
+        raise Error("ValueError: pad: unknown mode '" + name + "'; use 'constant', 'reflect' or 'replicate'")
+    if not program_numeric_scalar(value) or Float64(py=value) != 0:
+        raise Error("ValueError: pad: mode '" + name + "' takes no value")
+    return word
+
+
+def _interpolate_kind(x: PythonObject) raises -> Int:
+    """-1 for one number (every spatial axis), else the sequence's length (one or two)."""
+    if _is_int(x) or program_numeric_scalar(x):
+        return -1
+    var n = len(x)
+    if n < 1 or n > 2:
+        raise Error("ValueError: interpolate: size and scale_factor take one or two values (inputs (N, C, L) or "
+                    + "(N, C, H, W); 5-D inputs have no kernel)")
+    return n
+
+
+def _interpolate_words(args: PythonObject) raises -> List[Int]:
+    var size = args[1]
+    var scale = args[2]
+    if _nil(size) == _nil(scale):
+        raise Error("ValueError: interpolate: give exactly one of size or scale_factor")
+    if not _rsz_is_str(args[3]):
+        raise Error("TypeError: interpolate: mode must be a string")
+    var name = String(py=args[3])
+    var mode = -1
+    if name == "nearest":
+        mode = RSZ_NEAREST
+    elif name == "linear":
+        mode = RSZ_LINEAR
+    elif name == "bilinear":
+        mode = RSZ_BILINEAR
+    elif name == "trilinear" or name == "bicubic" or name == "area" or name == "nearest-exact":
+        raise Error("ValueError: interpolate: mode '" + name + "' is not available; use 'nearest', 'linear' "
+                    + "(N, C, L) or 'bilinear' (N, C, H, W)")
+    else:
+        raise Error("ValueError: interpolate: unknown mode '" + name + "'")
+    var align = 0
+    if not _nil(args[4]):
+        if mode == RSZ_NEAREST:
+            raise Error("ValueError: interpolate: align_corners can only be set with mode 'linear' or 'bilinear'")
+        align = Int(Bool(py=args[4]))
+    var recompute = 0 if _nil(args[5]) else Int(Bool(py=args[5]))
+    if Bool(py=args[6]):
+        raise Error("ValueError: interpolate: antialias=True is not available")
+    var size_kind = 0
+    var s0 = 0
+    var s1 = 0
+    if not _nil(size):
+        if recompute == 1:
+            raise Error("ValueError: interpolate: recompute_scale_factor needs scale_factor, not size")
+        size_kind = -1 if _is_int(size) else _interpolate_kind(size)
+        if size_kind == -1:
+            s0 = _int(size, "size", 1)
+            s1 = s0
+        else:
+            s0 = _int(size[0], "size", 1)
+            s1 = _int(size[1], "size", 1) if size_kind == 2 else s0
+    var scale_kind = 0 if _nil(scale) else _interpolate_kind(scale)
+    var words: List[Int] = [mode, align, recompute, size_kind, s0, s1, scale_kind]
+    return words^
+
+
+def _interpolate_scales(scale: PythonObject) raises -> List[Float32]:
+    var fs: List[Float32] = [Float32(0), Float32(0)]
+    if _nil(scale):
+        return fs^
+    if program_numeric_scalar(scale):
+        fs[0] = _float(scale, "scale_factor")
+        fs[1] = fs[0]
+    else:
+        fs[0] = _float(scale[0], "scale_factor")
+        fs[1] = _float(scale[1], "scale_factor") if len(scale) == 2 else fs[0]
+    if not (fs[0] > Float32(0)) or not (fs[1] > Float32(0)):
+        raise Error("ValueError: interpolate: scale_factor must be positive")
+    return fs^
+# session-ops-resize end
 
 
 # nn-blocks-cbw begin: UNPACK of Session.custom_op: a Program's description,
@@ -944,7 +1225,14 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         if not _nil(args[2]):
             hs.append(_int(args[2], "bias", 1))
         if op == _SOP_CONV2D:
-            ints = [_int(args[3], "stride", 1), _int(args[4], "padding", 0), _int(args[5], "groups", 1)]
+            # args (x, weight, bias, stride, padding, dilation, groups): PyTorch's order. session-ops-conv: a call
+            # with int stride and padding and dilation 1 records OPS_CONV2D with its old words; a dilation, a
+            # per-axis stride or padding, or a padding word records OPS_CONV2D_ND (autograd/session_ops_conv.mojo)
+            if _is_int(args[3]) and _is_int(args[4]) and _is_int(args[5]) and _int(args[5], "dilation", 1) == 1:
+                ints = [_int(args[3], "stride", 1), _int(args[4], "padding", 0), _int(args[6], "groups", 1)]
+            else:
+                code = OPS_CONV2D_ND
+                ints = _conv_words(args, 2, "conv2d", s[].shape_nd(hs[1]))
         else:
             var act = "none" if _nil(args[3]) else String(args[3])
             var activation = 0
@@ -960,10 +1248,17 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
                 raise Error("ValueError: activation must be None, 'relu', 'sigmoid', 'tanh' or 'softmax'")
             ints.append(activation)
     elif op == _SOP_MAX_POOL2D or op == _SOP_AVG_POOL2D:
-        code = 45 if op == _SOP_MAX_POOL2D else 46
         hs.append(_int(args[0], "handle", 1))
-        var kernel = _int(args[1], "kernel_size", 1)
-        ints = [kernel, kernel if _nil(args[2]) else _int(args[2], "stride", 1)]
+        # session-ops-pool: PyTorch's options (per-axis tuples, padding, dilation, ceil_mode, count_include_pad,
+        # divisor_override). A call that uses none keeps code 45 / 46 and its two words [kernel, stride], the
+        # branch it ran before; one that does records 142 / 143 (autograd/session_ops_pool.mojo).
+        var pool2d = _pool_words(2, op == _SOP_MAX_POOL2D, args)
+        if _pool2d_plain(pool2d, op == _SOP_MAX_POOL2D):
+            code = 45 if op == _SOP_MAX_POOL2D else 46
+            ints = [pool2d[0], pool2d[2]]
+        else:
+            code = OPS_POOL_MAX2D if op == _SOP_MAX_POOL2D else OPS_POOL_AVG2D
+            ints = pool2d^
     elif op == _SOP_GELU:
         code = 49
         hs.append(_int(args[0], "handle", 1))
@@ -1007,7 +1302,15 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         ints = _ints(args[1], "pads")
         if len(ints) < 1 or len(ints) > 16:
             raise Error("ValueError: pads must list two counts for each of one to eight axes")
-        fs.append(_float(args[2], "value"))
+        # session-ops-resize: `mode` (args[3]) None or 'constant' keeps code 73 and its words exactly; one
+        # identity test against None per call, the mode's name read only when the caller named one
+        if not _nil(args[3]):
+            var pad_mode = _pad_mode(args[3], args[2])
+            if pad_mode != 0:
+                code = OPS_PAD_MODE
+                ints.insert(0, pad_mode)
+        if code == 73:
+            fs.append(_float(args[2], "value"))
     elif op == _SOP_CUMSUM:
         code = 75
         hs.append(_int(args[0], "handle", 1))
@@ -1105,7 +1408,19 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         # OPS_WEIGHTED_LOSS (autograd/per_step_ops.mojo): hs [p, y, weight],
         # ints [the unweighted code, reduction], floats [delta].
         var weight = args[4 if op == _SOP_HUBER else 3]
-        if not _nil(weight):
+        # session-ops-extra begin: a target DISTRIBUTION (the logits' shape, more than one class) picks the
+        # soft-target codes 184 / 185 here at UNPACK; class codes keep code 28 / OPS_WEIGHTED_LOSS unchanged
+        var soft = False
+        if op == _SOP_CROSS_ENTROPY:
+            var ce_shape = s[].shape_nd(hs[0])
+            soft = ce_shape.ndim > 0 and ce_shape.d[ce_shape.ndim - 1] > 1 and ce_shape.same(s[].shape_nd(hs[1]))
+        if soft:
+            code = OPS_SOFT_CROSS_ENTROPY
+            if not _nil(weight):
+                hs.append(_int(weight, "weight", 1))
+                code = OPS_SOFT_CROSS_ENTROPY_WEIGHTED
+        # session-ops-extra end
+        elif not _nil(weight):
             hs.append(_int(weight, "weight", 1))
             var red = ints[0]
             ints = [code, red]
@@ -1175,6 +1490,110 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         hs = [_int(args[0], "data", 1), _int(args[1], "segment_ids", 1)]
         ints.append(_int(args[2], "num_segments"))
     # nn-blocks-scatter end
+    # session-ops-resize begin
+    elif op == _SOP_INTERPOLATE:
+        # args (x, size, scale_factor, mode, align_corners, recompute_scale_factor, antialias): torch's
+        # interpolate; words as autograd/session_ops_resize.mojo states, read once here
+        code = OPS_INTERPOLATE
+        hs.append(_int(args[0], "input", 1))
+        ints = _interpolate_words(args)
+        fs = _interpolate_scales(args[2])
+    elif op == _SOP_PIXEL_SHUFFLE:
+        code = OPS_PIXEL_SHUFFLE
+        hs.append(_int(args[0], "input", 1))
+        ints.append(_int(args[1], "upscale_factor", 1))
+    elif op == _SOP_PIXEL_UNSHUFFLE:
+        code = OPS_PIXEL_UNSHUFFLE
+        hs.append(_int(args[0], "input", 1))
+        ints.append(_int(args[1], "downscale_factor", 1))
+    # session-ops-resize end
+    # session-ops-conv begin
+    elif op == _SOP_CONV1D or op == _SOP_CONV3D:
+        # args (x, weight, bias, stride, padding, dilation, groups): torch.nn.functional's order
+        code = OPS_CONV1D if op == _SOP_CONV1D else OPS_CONV3D
+        hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1)]
+        if not _nil(args[2]):
+            hs.append(_int(args[2], "bias", 1))
+        ints = _conv_words(args, 1 if op == _SOP_CONV1D else 3, "conv1d" if op == _SOP_CONV1D else "conv3d",
+                           s[].shape_nd(hs[1]))
+    elif op == _SOP_CONV_TRANSPOSE1D or op == _SOP_CONV_TRANSPOSE2D:
+        # args (x, weight, bias, stride, padding, output_padding, groups, dilation): torch.nn.functional's order
+        code = OPS_CONV_TRANSPOSE1D if op == _SOP_CONV_TRANSPOSE1D else OPS_CONV_TRANSPOSE2D
+        hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1)]
+        if not _nil(args[2]):
+            hs.append(_int(args[2], "bias", 1))
+        if op == _SOP_CONV_TRANSPOSE1D:
+            ints = _conv_transpose_words(args, 1, "conv_transpose1d")
+        else:
+            ints = _conv_transpose_words(args, 2, "conv_transpose2d")
+    # session-ops-conv end
+    # session-ops-pool begin: Sequential's pools (autograd/session_ops_pool.mojo); words pool_int_count(code)
+    elif op == _SOP_MAX_POOL1D or op == _SOP_AVG_POOL1D or op == _SOP_MAX_POOL3D or op == _SOP_AVG_POOL3D:
+        var pool_max = op == _SOP_MAX_POOL1D or op == _SOP_MAX_POOL3D
+        var pool_n = 1 if (op == _SOP_MAX_POOL1D or op == _SOP_AVG_POOL1D) else 3
+        hs.append(_int(args[0], "input", 1))
+        ints = _pool_words(pool_n, pool_max, args)
+        if pool_n == 1:
+            code = OPS_POOL_MAX1D if pool_max else OPS_POOL_AVG1D
+        else:
+            code = OPS_POOL_MAX3D if pool_max else OPS_POOL_AVG3D
+    elif (op == _SOP_ADAPTIVE_AVG_POOL1D or op == _SOP_ADAPTIVE_AVG_POOL2D or op == _SOP_ADAPTIVE_MAX_POOL1D
+          or op == _SOP_ADAPTIVE_MAX_POOL2D):
+        # args (x, output_size) or (x, output_size, return_indices); ints [rank 1 or 2, o0, o1]
+        var adapt_max = op == _SOP_ADAPTIVE_MAX_POOL1D or op == _SOP_ADAPTIVE_MAX_POOL2D
+        var adapt_n = 2 if (op == _SOP_ADAPTIVE_AVG_POOL2D or op == _SOP_ADAPTIVE_MAX_POOL2D) else 1
+        hs.append(_int(args[0], "input", 1))
+        if adapt_max and Bool(py=args[2]):
+            raise Error("ValueError: return_indices=True is not supported: a Session operation returns one tensor")
+        var sizes = _adaptive_sizes(args[1], adapt_n)
+        ints = [adapt_n, sizes[0], sizes[1] if adapt_n == 2 else 0]
+        code = OPS_POOL_ADAPTIVE_MAX if adapt_max else OPS_POOL_ADAPTIVE_AVG
+    elif op == _SOP_ADAPTIVE_AVG_POOL3D:
+        # args (x, output_size); ints [od, oh, ow], 0 keeps the input's size
+        code = OPS_POOL_ADAPTIVE_AVG3D
+        hs.append(_int(args[0], "input", 1))
+        ints = _adaptive_sizes(args[1], 3)
+    # session-ops-pool end
+    # session-ops-extra begin
+    elif op == _SOP_SEQUENCE_MASK:
+        # args (lengths, max_length)
+        code = OPS_SEQUENCE_MASK
+        hs.append(_int(args[0], "lengths", 1))
+        ints.append(_int(args[1], "max_length", 1))
+    elif op == _SOP_TOPK:
+        # args (x, k, axis, largest, sorted): two operations, recorded (and captured) one after the other: the
+        # indices (181), then the values as gather(x, axis, indices) (182), so the gradient reaches x through the
+        # gather. The result is always sorted, which `sorted=False` (any order) also allows.
+        var tx = _int(args[0], "x", 1)
+        var tk = _int(args[1], "k", 1)
+        var taxis = _int(args[2], "axis")
+        var thx: List[Int] = [tx]
+        var tki: List[Int] = [tk, taxis, Int(Bool(py=args[3]))]
+        var tidx = s[].op(OPS_TOPK_INDICES, thx, tki, fs)
+        var tgh: List[Int] = [tx, tidx]
+        var tgi: List[Int] = [taxis]
+        var tval = s[].op(OPS_GATHER_AXIS, tgh, tgi, fs)
+        var tpair: List[Int] = [tval, tidx]
+        return _tuple_ints(tpair)
+    elif op == _SOP_GATHER:
+        # args (x, axis, index): torch.gather's order; index an ids() tensor (or topk's indices)
+        code = OPS_GATHER_AXIS
+        if not _is_int(args[2]):
+            raise Error("TypeError: gather: index must be an integer tensor made with Session.ids")
+        hs = [_int(args[0], "x", 1), _int(args[2], "index", 1)]
+        ints.append(_int(args[1], "axis"))
+    elif op == _SOP_LOGSUMEXP:
+        # args (x, axis, keepdims): one axis
+        code = OPS_LOGSUMEXP
+        if not _is_int(args[1]):
+            raise Error("TypeError: logsumexp: axis must be one integer")
+        hs.append(_int(args[0], "x", 1))
+        ints = [_int(args[1], "axis"), Int(Bool(py=args[2]))]
+    # session-ops-extra end
+    # session-ops-rest begin: frontend codes 1160..1174 (providers/python/session_ops_rest_pyapi_door.mojo)
+    elif op >= _SOP_SOR_FIRST and op <= _SOP_SOR_LAST:
+        code = sor_unpack(op, args, hs, ints, fs)
+    # session-ops-rest end
     # nn-blocks-pg begin
     if op >= _SOP_PG_FIRST and op <= _SOP_PG_LAST:
         return pg_session_call_py[E](s, op, args)
