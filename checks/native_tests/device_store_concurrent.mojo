@@ -9,6 +9,10 @@ or replaced a slot another call was reading. The store now takes its lock word a
 `STORE_CONCURRENT_CALLS` tasks at once, on one store and one context, each: put its own words, gather two rows of them
 (`take_rows`), read both slots back, free both. Every word read back must equal the words that task put (alone, a
 put/read is a byte copy, so the reference is the input itself); at the end no slot is live.
+
+`test_store_stale_id_refused` (lane gd-device-store, 2026-11-25): an id freed and its slot handed out again carries the
+old generation (core/device_store.mojo STORE_ID_SLOT_BITS), so a second free, a read and a gather through it are refused
+and the new holder's words are untouched. Sabotage: drop the `gens` test in `_DeviceStoreTable.slot_of` -> it fails.
 """
 from std.memory import bitcast
 from std.testing import TestSuite
@@ -82,7 +86,7 @@ def test_store_concurrent() raises:
             if count == 0:
                 first = messages[i]
             count += 1
-    var live = store.live
+    var live = store.live_count()
     _ = messages^
     _ = failed^
     _ = store^
@@ -90,6 +94,45 @@ def test_store_concurrent() raises:
     require(count == 0, String(count) + " of " + String(STORE_CONCURRENT_CALLS)
         + " concurrent store tasks read back other words; first: " + first)
     require(live == 0, "slots left live after every task freed its own: " + String(live))
+
+
+def test_store_stale_id_refused() raises:
+    var ctx = DeviceContext()
+    var store = DeviceStore()
+    var a = _words(1)
+    var b = _words(2)
+    var first = store.put(ctx, Int(a.unsafe_ptr()), len(a))
+    store.free(ctx, first)
+    var second = store.put(ctx, Int(b.unsafe_ptr()), len(b))
+    require(second != first, "a reused slot kept the freed id: " + String(second))
+    var refused = 0
+    try:
+        store.free(ctx, first)
+    except error:
+        refused += 1
+    var back = List[Float32](length=len(b), fill=0)
+    try:
+        store.read(ctx, first, Int(back.unsafe_ptr()), len(back))
+    except error:
+        refused += 1
+    var rows: List[Int64] = [Int64(0)]
+    try:
+        var taken = store.take_rows(ctx, first, _ROW, Int(rows.unsafe_ptr()), 1)
+        store.free(ctx, taken)
+    except error:
+        refused += 1
+    require(refused == 3, "a stale id was accepted by " + String(3 - refused) + " of free, read, take_rows")
+    store.read(ctx, second, Int(back.unsafe_ptr()), len(back))
+    _same(back, b, 0, "the slot's new holder")
+    store.free(ctx, second)
+    var live = store.live_count()
+    _ = a^
+    _ = b^
+    _ = rows^
+    _ = back^
+    _ = store^
+    _ = ctx^
+    require(live == 0, "slots left live: " + String(live))
 
 
 def main() raises:

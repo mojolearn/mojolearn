@@ -40,10 +40,10 @@ from core.shared_slot import SharedSlot
 from core.fold_x_word import fold_x_slot, fold_x_word
 
 comptime _FOLD_X_STORE_NAME = (
-    "MojolearnXPrepStoreIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXPrepStoreFastV2"
+    "MojolearnXPrepStoreIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXPrepStoreFastV3"
 )
 #: x_prep/device.mojo `X_PREP_STORE` (same name, same layout word).
-comptime FOLD_X_STORE = SharedSlot[DeviceStore, _FOLD_X_STORE_NAME, 2]
+comptime FOLD_X_STORE = SharedSlot[DeviceStore, _FOLD_X_STORE_NAME, 3]
 
 def fold_x_fill(ctx: DeviceContext, d_x: DeviceBuffer[DType.float32], x_word: Int, words: Int) raises:
     """Fill the entry's device X: from the host words at `x_word` (the old

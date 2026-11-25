@@ -203,7 +203,7 @@ def _configuration(minmax: Bool, nan_cells: Bool, nan_column: Bool, weighted: Bo
     var host = _arm(_route(False), params, x, w, weighted, False, -1, 0)
     for i in range(len(plain)):  # small-loop(oracle: per fold and output)
         _same(plain[i], host[i], label + ": GPU host-input vs the host column, output " + String(i))
-    var slots_before = FOLD_X_STORE.get_or_create_ptr()[].live
+    var slots_before = FOLD_X_STORE.get_or_create_ptr()[].live_count()
     var scope = arena_scope_new(0)
     var scoped = List[List[Float32]]()
     try:
@@ -212,7 +212,7 @@ def _configuration(minmax: Bool, nan_cells: Bool, nan_column: Bool, weighted: Bo
         _ = arena_scope_close(scope)
     for i in range(len(plain)):  # small-loop(oracle: per fold and output)
         _same(scoped[i], plain[i], label + ": scoped fold (x_prep slot programs) vs GPU host-input, output " + String(i))
-    require(FOLD_X_STORE.get_or_create_ptr()[].live == slots_before,
+    require(FOLD_X_STORE.get_or_create_ptr()[].live_count() == slots_before,
             label + ": every x_prep copy of a fold slot is freed")
     _ = len(x) + len(w) + len(params)
 

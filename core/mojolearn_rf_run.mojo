@@ -24,7 +24,7 @@ from ensemble.ada_rounds import (
 )
 from xtrees.ops_device import weighted_sample_on
 from xtrees.ops_device_boost import r2_step_on, samme_step_on
-from xtrees.dart_device import DART_SESSIONS, _DART_CTX
+from xtrees.dart_device import _DART_CTX
 from ensemble.nan_refusal import RF_NAN_REFUSAL, RF_NONFINITE_REFUSAL
 
 from ensemble.device_finite import FOREST_DEVICE_FINITE, ForestFiniteScan
@@ -108,8 +108,8 @@ comptime DT = DType.float32
 #: context (`_DEVCTX_SLOT`, shared with the resident predictions), put / freed / taken by the store transport entry
 #: (bindings/_mojolearn_rf.mojo `rf_gpu_store_transport_v1`, the x_prep
 #: transport numbering) for a resident scope's cache, and read by XF_FIT_ROWS.
-comptime _RF_STORE_NAME = "MojolearnRfStoreIdenticalV1" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnRfStoreFastV1"
-comptime RF_STORE = SharedSlot[DeviceStore, _RF_STORE_NAME, 2]
+comptime _RF_STORE_NAME = "MojolearnRfStoreIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnRfStoreFastV2"
+comptime RF_STORE = SharedSlot[DeviceStore, _RF_STORE_NAME, 3]
 
 
 def rf_store_ctx() raises -> DeviceContext:

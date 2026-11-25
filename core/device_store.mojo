@@ -26,7 +26,8 @@ a new slot gathered on the device out of a resident one (`take_rows`).
 
 FREED DETERMINISTICALLY: `free` waits for the context (so no queued launch
 still reads the slot), then drops the buffer at once (the slot keeps a
-shared one-word placeholder), and the id is reused. Outside FAST a large
+shared one-word placeholder), and the slot is reused under a new
+generation (STORE_ID_SLOT_BITS: an old id is refused). Outside FAST a large
 freed buffer is kept as a spare for the next put of its length (G2,
 STORE_SLOT_POOL, capped at STORE_POOL_KEEP_BYTES). Where bytes live moves
 no bit.
@@ -109,86 +110,159 @@ def _store_grid(total: Int) -> Int:
     return b
 
 
-# THE STORE'S LOCK (lane linalg-owner, 2026-11-22). A store is one process
-# slot per binding and the doors release the GIL around put / free /
-# take_rows and the program runs that read slots, so two calls at once
-# appended to (reallocated) `bufs` under each other and a free replaced a
-# slot another call was indexing. Every public method now takes `lock`
-# around its List steps; an upload or a gather runs with the lock released
-# (a put's buffer is filed only after its copy; a gather reads a buffer
-# reference copied out under the lock). `check` and `_add` are called with
-# the lock held.
-struct DeviceStore(Defaultable, Movable):
+#: A store id is `generation << STORE_ID_SLOT_BITS | slot` (lane
+#: gd-device-store, 2026-11-25; the numbering of core/msel_convert.mojo
+#: MSEL_ID_SLOT_BITS): a freed slot is handed out again with its generation
+#: raised, so an id kept past its free (a second free, a read after free, a
+#: wrong caller's id) is refused as not live instead of reading, gathering
+#: from or releasing the slot's next holder. Generations start at 1, so
+#: every id is positive (a fold X word `-(id + 1)` stays negative); 2^31
+#: slots and 2^31 reuses per slot fit an Int.
+comptime STORE_ID_SLOT_BITS = 32
+comptime STORE_ID_SLOT_MASK = (1 << STORE_ID_SLOT_BITS) - 1
+
+
+struct _DeviceStoreTable(Movable):
+    """The store's shared state, in heap storage of its own (the
+    `DeviceStore` note, THE TABLE IS BEHIND A POINTER). Every method is
+    called with the store's lock held."""
     var bufs: List[DeviceBuffer[DType.float32]]
-    #: words held by each id; -1 for a freed id
+    #: words held by each slot; -1 for a freed slot
     var words: List[Int]
     var released: List[Int]
+    #: generation of each slot, raised on every reuse (STORE_ID_SLOT_BITS)
+    var gens: List[Int]
     var live: Int
     #: G2: freed slot buffers kept for a put of the same length, and their bytes.
     var spare: List[DeviceBuffer[DType.float32]]
     var spare_bytes: Int
-    var lock: List[Int64]
 
     def __init__(out self):
         self.bufs = List[DeviceBuffer[DType.float32]]()
         self.words = List[Int]()
         self.released = List[Int]()
+        self.gens = List[Int]()
         self.live = 0
         self.spare = List[DeviceBuffer[DType.float32]]()
         self.spare_bytes = 0
+
+    def slot_of(self, id: Int, need: Int) raises -> Int:
+        """The slot of a live `id` holding at least `need` words; raises
+        for a freed slot, a stale generation or a short slot."""
+        var slot = id & STORE_ID_SLOT_MASK
+        if (id < 0 or slot >= len(self.words) or self.words[slot] < 0
+                or self.gens[slot] != (id >> STORE_ID_SLOT_BITS)):
+            raise Error(String("device store: id ", id, " is not live"))
+        if self.words[slot] < need:
+            raise Error(String("device store: id ", id, " holds ", self.words[slot], " words, ", need, " read"))
+        return slot
+
+    def take_spare(mut self, n_words: Int) -> Int:
+        """G2: the index of an idle spare of exactly `n_words`, or -1."""
+        comptime if STORE_SLOT_POOL:
+            for i in range(len(self.spare)):  # small-loop(idle spare slot buffers): a few buffer handles, never data
+                if len(self.spare[i]) == n_words:
+                    return i
+        return -1
+
+    def add(mut self, var buf: DeviceBuffer[DType.float32], n_words: Int) -> Int:
+        """Files `buf` (n_words words) under a fresh or released slot; the
+        id names the slot's new generation."""
+        var slot: Int
+        if len(self.released) > 0:
+            slot = self.released.pop()
+            self.bufs[slot] = buf^
+            self.words[slot] = n_words
+            self.gens[slot] += 1
+        else:
+            self.bufs.append(buf^)
+            self.words.append(n_words)
+            self.gens.append(1)
+            slot = len(self.words) - 1
+        self.live += 1
+        return (self.gens[slot] << STORE_ID_SLOT_BITS) | slot
+
+
+# THE STORE'S LOCK (lane linalg-owner, 2026-11-22). A store is one process
+# slot per binding and the doors release the GIL around put / free /
+# take_rows and the program runs that read slots, so two calls at once
+# appended to (reallocated) `bufs` under each other and a free replaced a
+# slot another call was indexing. Every public method takes `lock` around
+# its List steps; an upload, a gather, a device allocation and a buffer
+# drop run with the lock released (a put's buffer is filed only after its
+# copy; a gather reads a buffer reference copied out under the lock).
+#
+# THE TABLE IS BEHIND A POINTER (lane gd-device-store, 2026-11-25; the
+# pattern of core/msel_host.mojo, lane r2-known 11-22). The lists used to be
+# fields of the store read through `self`: the compiler may load such a
+# field (a List's data pointer and length) once before the lock and keep the
+# snapshot, so two threads could pop the SAME released id (two folds filed
+# under one id: "id 1 holds 318 words, 324 read", "take_rows index out of
+# range"), and a free wrote through a stale list ("fold slot was not freed:
+# device store: id N is not live", SIGSEGV in cross_val_score /
+# cross_validate; proving and verify --all on the L40S, 2026-11-25). The
+# lists now live in `_DeviceStoreTable`, the one element of the heap List
+# `cell`, reached through `_table()` after `shared_slot_lock`; memory reached
+# through a pointer the method loads is ordered by the acquire
+# compare-and-swap. A new field of shared state goes into
+# `_DeviceStoreTable`, never into the store struct.
+struct DeviceStore(Defaultable, Movable):
+    #: word 0 guards everything in the table
+    var lock: List[Int64]
+    #: exactly one `_DeviceStoreTable`, never grown, so its address is stable
+    var cell: List[_DeviceStoreTable]
+
+    def __init__(out self):
         self.lock = List[Int64](length=1, fill=Int64(0))
+        self.cell = List[_DeviceStoreTable]()
+        self.cell.append(_DeviceStoreTable())
 
     def _word(self) -> MutPointer[Int64, MutUntrackedOrigin]:
         return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(self.lock.unsafe_ptr()))
 
+    def _table(self) -> MutPointer[_DeviceStoreTable, MutUntrackedOrigin]:
+        return MutPointer[_DeviceStoreTable, MutUntrackedOrigin](unsafe_from_address=Int(self.cell.unsafe_ptr()))
+
+    def live_count(self) -> Int:
+        """Ids held now, read under the lock (the transport's LIVE readout)."""
+        var table = self._table()
+        var word = self._word()
+        shared_slot_lock(word)
+        var n = table[].live
+        shared_slot_unlock(word)
+        return n
+
     def _held(self, id: Int, need: Int) raises -> DeviceBuffer[DType.float32]:
-        """A reference to slot `id`'s buffer, copied out under the lock (it
+        """A reference to id `id`'s buffer, copied out under the lock (it
         keeps the device memory alive past a concurrent free)."""
+        var table = self._table()
         var word = self._word()
         shared_slot_lock(word)
         try:
-            self.check(id, need)
-            return self.bufs[id]
+            var slot = table[].slot_of(id, need)
+            return table[].bufs[slot].copy()
         finally:
             shared_slot_unlock(word)
 
-    def _new_buffer(mut self, ctx: DeviceContext, n_words: Int) raises -> DeviceBuffer[DType.float32]:
-        """G2: a spare of exactly `n_words` when one is idle, else a fresh
-        allocation. Its words are unspecified either way."""
+    def _new_buffer(self, ctx: DeviceContext, n_words: Int) raises -> DeviceBuffer[DType.float32]:
+        """G2: a spare of exactly `n_words` when one is idle (taken under
+        the lock), else a fresh allocation (made after it). Its words are
+        unspecified either way."""
         comptime if STORE_SLOT_POOL:
-            var n_spare = len(self.spare)
-            for i in range(n_spare):  # small-loop(n_spare: idle spare slot buffers): a few buffer handles, never data
-                if len(self.spare[i]) == n_words:
-                    self.spare_bytes -= n_words * 4
-                    return self.spare.pop(i)
+            if n_words >= STORE_POOL_MIN_WORDS:
+                var table = self._table()
+                var word = self._word()
+                shared_slot_lock(word)
+                var at = table[].take_spare(n_words)
+                if at >= 0:
+                    table[].spare_bytes -= n_words * 4
+                    var spare = table[].spare.pop(at)
+                    shared_slot_unlock(word)
+                    return spare^
+                shared_slot_unlock(word)
         return ctx.enqueue_create_buffer[DType.float32](n_words)
 
-    def _new_buffer_locked(mut self, ctx: DeviceContext, n_words: Int) raises -> DeviceBuffer[DType.float32]:
-        """`_new_buffer` under the lock (the spare list is shared)."""
-        var word = self._word()
-        shared_slot_lock(word)
-        try:
-            return self._new_buffer(ctx, n_words)
-        finally:
-            shared_slot_unlock(word)
-
-    def _retire_buffer(mut self, var buf: DeviceBuffer[DType.float32]):
-        """G2: keep a freed slot's buffer as a spare (the caller has waited
-        on every use), or drop it. Over STORE_POOL_KEEP_BYTES the oldest
-        spares are dropped first."""
-        comptime if STORE_SLOT_POOL:
-            var n = len(buf)
-            var nb = n * 4
-            if n >= STORE_POOL_MIN_WORDS and nb <= STORE_POOL_KEEP_BYTES:
-                while len(self.spare) > 0 and self.spare_bytes + nb > STORE_POOL_KEEP_BYTES:
-                    self.spare_bytes -= len(self.spare[0]) * 4
-                    _ = self.spare.pop(0)
-                self.spare_bytes += nb
-                self.spare.append(buf^)
-                return
-        _ = buf^
-
-    def _upload(mut self, ctx: DeviceContext, dst: DeviceBuffer[DType.float32], src_addr: Int, n_words: Int) raises:
+    def _upload(self, ctx: DeviceContext, dst: DeviceBuffer[DType.float32], src_addr: Int, n_words: Int) raises:
         """The `n_words` host words at `src_addr` into `dst[0, n_words)`;
         waits. One copy from the caller's pointer (the G1 pinned stage was
         deleted 2026-10-09: slower on both vendors, see the TOMBSTONE above)."""
@@ -210,55 +284,43 @@ struct DeviceStore(Defaultable, Movable):
 
     def check(self, id: Int, need: Int) raises:
         """Raises unless `id` is live and holds at least `need` words."""
-        if id < 0 or id >= len(self.words) or self.words[id] < 0:
-            raise Error(String("device store: id ", id, " is not live"))
-        if self.words[id] < need:
-            raise Error(String("device store: id ", id, " holds ", self.words[id], " words, ", need, " read"))
+        var table = self._table()
+        var word = self._word()
+        shared_slot_lock(word)
+        try:
+            _ = table[].slot_of(id, need)
+        finally:
+            shared_slot_unlock(word)
 
-    def put(mut self, ctx: DeviceContext, src_addr: Int, n_words: Int) raises -> Int:
+    def _file(self, var buf: DeviceBuffer[DType.float32], n_words: Int) -> Int:
+        """Files `buf` under the lock; its id."""
+        var table = self._table()
+        var word = self._word()
+        shared_slot_lock(word)
+        var id = table[].add(buf^, n_words)
+        shared_slot_unlock(word)
+        return id
+
+    def put(self, ctx: DeviceContext, src_addr: Int, n_words: Int) raises -> Int:
         """A new slot holding the `n_words` host words at `src_addr`; waits
         for the copy (the host memory may change after this returns)."""
         if n_words < 1 or src_addr == 0:
             raise Error("device store: put needs at least one word at a non-null address")
-        var buf = self._new_buffer_locked(ctx, n_words)
+        var buf = self._new_buffer(ctx, n_words)
         self._upload(ctx, buf, src_addr, n_words)
-        var word = self._word()
-        shared_slot_lock(word)
-        try:
-            return self._add(buf^, n_words)
-        finally:
-            shared_slot_unlock(word)
+        return self._file(buf^, n_words)
 
-    def create(mut self, ctx: DeviceContext, n_words: Int) raises -> Int:
+    def create(self, ctx: DeviceContext, n_words: Int) raises -> Int:
         """A new slot of `n_words` words with no upload, for a device stage
         that writes every word before any read (lane vdf-xm-kernels: a
         resident label vector's codes). Its words are unspecified."""
         if n_words < 1:
             raise Error("device store: create needs at least one word")
-        var buf = self._new_buffer_locked(ctx, n_words)
-        var word = self._word()
-        shared_slot_lock(word)
-        try:
-            return self._add(buf^, n_words)
-        finally:
-            shared_slot_unlock(word)
-
-    def _add(mut self, var buf: DeviceBuffer[DType.float32], n_words: Int) -> Int:
-        """Files `buf` (n_words words) under a fresh or released id."""
-        var id: Int
-        if len(self.released) > 0:
-            id = self.released.pop()
-            self.bufs[id] = buf^
-            self.words[id] = n_words
-        else:
-            self.bufs.append(buf^)
-            self.words.append(n_words)
-            id = len(self.words) - 1
-        self.live += 1
-        return id
+        var buf = self._new_buffer(ctx, n_words)
+        return self._file(buf^, n_words)
 
     def take_rows(
-        mut self, ctx: DeviceContext, src_id: Int, row_words: Int, idx_addr: Int, n_idx: Int
+        self, ctx: DeviceContext, src_id: Int, row_words: Int, idx_addr: Int, n_idx: Int
     ) raises -> Int:
         """A new slot holding rows `idx` (the `n_idx` host int64 words at
         `idx_addr`) of slot `src_id`, read as rows of `row_words` words:
@@ -269,16 +331,15 @@ struct DeviceStore(Defaultable, Movable):
             raise Error("device store: take_rows needs at least one index and one word a row")
         var src = self._held(src_id, 0)
         var n_src = len(src) // row_words
-        var word = self._word()
         var total = n_idx * row_words
         var d_idx = ctx.enqueue_create_buffer[DType.int64](n_idx)
         ctx.enqueue_copy(dst_buf=d_idx, src_ptr=_StoreI64(unsafe_from_address=idx_addr))
         var d_status = ctx.enqueue_create_buffer[DType.int32](2)
         enqueue_fill(ctx, d_status, Int32(0))
-        var out = ctx.enqueue_create_buffer[DType.float32](total)
+        var gathered = ctx.enqueue_create_buffer[DType.float32](total)
         ctx.enqueue_function[_store_take_kernel](
             src.unsafe_ptr().bitcast[UInt32](), Int64(n_src), Int64(row_words),
-            d_idx.unsafe_ptr(), Int64(n_idx), out.unsafe_ptr().bitcast[UInt32](), d_status.unsafe_ptr(),
+            d_idx.unsafe_ptr(), Int64(n_idx), gathered.unsafe_ptr().bitcast[UInt32](), d_status.unsafe_ptr(),
             grid_dim=_store_grid(total), block_dim=STORE_TPB,
         )
         var h = ctx.enqueue_create_host_buffer[DType.int32](2)
@@ -291,13 +352,9 @@ struct DeviceStore(Defaultable, Movable):
         _ = src^  # keep the source slot's buffer alive through the gather above
         if bad != 0:
             raise Error("device store: take_rows index out of range")
-        shared_slot_lock(word)
-        try:
-            return self._add(out^, total)
-        finally:
-            shared_slot_unlock(word)
+        return self._file(gathered^, total)
 
-    def write(mut self, ctx: DeviceContext, id: Int, src_addr: Int, n_words: Int) raises:
+    def write(self, ctx: DeviceContext, id: Int, src_addr: Int, n_words: Int) raises:
         """Overwrite the slot's first `n_words` words from the host; waits."""
         var held = self._held(id, n_words)
         if n_words > 0:
@@ -350,25 +407,38 @@ struct DeviceStore(Defaultable, Movable):
         _ = held^
         return StoreWP(unsafe_from_address=address)
 
-    def free(mut self, ctx: DeviceContext, id: Int) raises:
-        """Release the slot now: wait for the context, drop the buffer."""
+    def free(self, ctx: DeviceContext, id: Int) raises:
+        """Release the slot now: wait for the context, drop the buffer (or
+        keep it as a G2 spare). The one-word placeholder is made and the
+        dropped buffers are released outside the lock; a second free of the
+        same id, or a free of a stale one, raises and touches nothing."""
         ctx.synchronize()
+        # The placeholder before the swap, the slot's old buffer after it.
+        var held = ctx.enqueue_create_buffer[DType.float32](1)
+        var dropped = List[DeviceBuffer[DType.float32]]()
+        var table = self._table()
         var word = self._word()
         shared_slot_lock(word)
         try:
-            self._free_locked(ctx, id)
+            var slot = table[].slot_of(id, 0)
+            swap(table[].bufs[slot], held)
+            table[].words[slot] = -1
+            table[].released.append(slot)
+            table[].live -= 1
+            comptime if STORE_SLOT_POOL:
+                # G2: keep the freed buffer as a spare; over STORE_POOL_KEEP_BYTES the
+                # oldest spares are dropped first (after the unlock).
+                var n = len(held)
+                var nb = n * 4
+                if n >= STORE_POOL_MIN_WORDS and nb <= STORE_POOL_KEEP_BYTES:
+                    while len(table[].spare) > 0 and table[].spare_bytes + nb > STORE_POOL_KEEP_BYTES:  # small-loop(idle spares, oldest first)
+                        table[].spare_bytes -= len(table[].spare[0]) * 4
+                        dropped.append(table[].spare.pop(0))
+                    table[].spare_bytes += nb
+                    # A second reference (a handle copy, no device work): the spare keeps
+                    # the memory when `held` is dropped below.
+                    table[].spare.append(held.copy())
         finally:
             shared_slot_unlock(word)
-
-    def _free_locked(mut self, ctx: DeviceContext, id: Int) raises:
-        self.check(id, 0)
-        comptime if STORE_SLOT_POOL:
-            # G2: the slot's buffer becomes a spare (or is dropped there).
-            var old = self.bufs.pop(id)
-            self.bufs.insert(id, ctx.enqueue_create_buffer[DType.float32](1))
-            self._retire_buffer(old^)
-        else:
-            self.bufs[id] = ctx.enqueue_create_buffer[DType.float32](1)
-        self.words[id] = -1
-        self.released.append(id)
-        self.live -= 1
+        _ = dropped^
+        _ = held^

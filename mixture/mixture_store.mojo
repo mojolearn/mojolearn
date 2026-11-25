@@ -26,8 +26,8 @@ from mixture.estimator import _binding_ctx
 #: The scope cache's family prefix of this store.
 comptime MIXTURE_STORE_PREFIX = "mixture"
 
-comptime MIXTURE_STORE = SharedSlot[DeviceStore, ("MojolearnMixtureStoreIdenticalV1" if GLOBAL_NUMERIC_MODE == 1
-                                                  else "MojolearnMixtureStoreFastV1")]
+comptime MIXTURE_STORE = SharedSlot[DeviceStore, ("MojolearnMixtureStoreIdenticalV2" if GLOBAL_NUMERIC_MODE == 1
+                                                  else "MojolearnMixtureStoreFastV2"), 2]
 
 
 def mixture_store_ctx() raises -> DeviceContext:

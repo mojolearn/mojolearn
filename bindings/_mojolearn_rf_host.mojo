@@ -110,7 +110,7 @@ from core.entry_table import ENTRY_OP_GIL_FREE
 from core.native_descriptor_call import native_descriptor_report
 from core.forest_entry_table import FOREST_TABLE_RF
 from core.native_descriptor_abi import NativeDescriptorError
-from xtrees.dart_host import DART_HOST, DART_HOST_SESSIONS
+from xtrees.dart_host import DART_HOST
 from ensemble.host.rf_oracle import (
     RF_ORACLE_HOST_SABOTAGE,
     RfHostForest,

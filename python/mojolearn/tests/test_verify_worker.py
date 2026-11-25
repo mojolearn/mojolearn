@@ -452,6 +452,34 @@ def test_fallback_crash_refuses_cell_and_streak_stops(monkeypatch, tmp_path):
     assert all(r["state"] == verifier.vref.REFUSED for r in report["cells"])
 
 
+def test_one_lane_crashing_on_every_fixture_does_not_stop_the_sweep(monkeypatch, tmp_path):
+    """The streak counts DISTINCT lanes (a device signal), not one lane's
+    fixtures crashing fresh one after another: lane "one" crashes on all
+    three fixtures, every cell of it is refused with its crash, and the
+    other lanes still run."""
+    run_verify = controller(monkeypatch, tmp_path, lanes=("one", "two", "three"))
+    monkeypatch.setattr(verifier, "select_lanes",
+                        lambda *args, **kwargs: (["one", "two", "three"], ["base", "odd", "wide"]))
+    batch, batch_calls = fake_batch(lambda r: good_value(r["lane"]),
+                                    stops=lambda r: "crash" if r["lane"] == "one" else None)
+
+    def crash(request):
+        if request["lane"] == "one":
+            raise worker.WorkerCrash(f"cell/one/{request['fixture']}: worker exited -11; ")
+
+    run, fresh_calls = fresh_runs(crash)
+    monkeypatch.setattr(worker, "run_batch", batch)
+    monkeypatch.setattr(worker, "run", run)
+    code, report, progress, journal = run_verify(batch_cells=3)
+    execution = progress["execution"]
+    assert execution["interrupted"] is None
+    assert [(c["lane"], c["fixture"]) for c in execution["crashed_cells"]] == [
+        ("one", "base"), ("one", "odd"), ("one", "wide")]
+    assert code != verifier.EXIT_VERIFIED
+    assert {r["lane"] for r in report["cells"] if r["state"] == verifier.vref.REFUSED} == {"one"}
+    assert all(r["state"] == verifier.vref.IDENTICAL for r in report["cells"] if r["lane"] != "one")
+
+
 def test_fallback_timeout_stops_sweep(monkeypatch, tmp_path):
     run_verify = controller(monkeypatch, tmp_path, lanes=LANES)
     batch, batch_calls = fake_batch(lambda r: good_value(r["lane"]),

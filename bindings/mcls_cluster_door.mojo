@@ -59,7 +59,8 @@ from bindings.mcls_common_unpack import (
     mc_regression_f32_1d, mc_pair_check, mc_weights, mc_encode_store, mc_encode_signed,
 )
 from core.host_finite_scan import host_all_finite_f32
-from bindings.metrics_slot_door import mc_slots_open, mc_slots_call, mc_slot_inputs, mc_resident_pair
+from bindings.metrics_slot_door import mc_slots_open, mc_slots_call, mc_slot_inputs
+from bindings.metric_resident_pair_door import mc_resident_caller_pair
 from bindings.arena_prog_run import metric_source_word
 from metrics.slot_ops import (
     MS_RAND, MS_ARI, MS_ENTROPY, MS_R2, MS_R2_W, MS_MSE, MS_MAE, MS_RMSE, MS_KL, MS_SILHOUETTE, MS_TRUST,
@@ -114,7 +115,7 @@ def _cluster_ms(operation: Int) -> Int:
     return MS_HCV
 
 
-def _cluster_union_device(binding: PythonObject, operation: Int, yt: PythonObject, yp: PythonObject, n: Int,
+def _cluster_union_device(binding: PythonObject, operation: Int, args: PythonObject, n: Int,
                           beta: Float64, context: PythonObject) raises -> Optional[PythonObject]:
     """The union-code metrics (mutual information, Fowlkes-Mallows,
     homogeneity, completeness, v-measure, and the three at once) over
@@ -124,12 +125,15 @@ def _cluster_union_device(binding: PythonObject, operation: Int, yt: PythonObjec
     makes, kept on the device) then the entry over [0, k-1] reading the two
     code slots in place: two entry calls, k and the answer come back, no
     label or code word does. None: the host route (`cluster_pair_run` /
-    `cluster_hcv_run`), unchanged. Same codes, same kernels: same bits."""
+    `cluster_hcv_run`), unchanged. Same codes, same kernels: same bits.
+    The pair is the CALLER'S two label vectors (`args[1]`, `args[2]`, the
+    door's admitted arguments; bindings/metric_resident_pair_door.mojo), not
+    their int32 copies, which had a new address per call and so never hit
+    the scope (lane gd-resident-functions: `stats {'x_prep': (4|8, 0)}`)."""
     var state = mc_slots_open(context)
     if not state.resident.active():
         return Optional[PythonObject]()  # outside resident(): one scope read, the host route
-    var pair = mc_resident_pair(binding, yt, Int(py=classical_address(yt)), yp, Int(py=classical_address(yp)), n, 4,
-                                False, state)
+    var pair = mc_resident_caller_pair(binding, args[1], args[2], False, state, context)
     if not pair.live():
         return Optional[PythonObject]()
     var addrs: List[Int] = [0, 0]
@@ -139,8 +143,6 @@ def _cluster_union_device(binding: PythonObject, operation: Int, yt: PythonObjec
     if operation == CLUSTER_OP_V_MEASURE or operation == CLUSTER_OP_HCV:
         floats.append(beta)
     var result = mc_slots_call(binding, _cluster_ms(operation), addrs, slots, ints, floats, List[Int](), state)
-    _ = yt  # read by address inside the steps above
-    _ = yp
     if operation == CLUSTER_OP_HCV:
         return Optional[PythonObject](result)  # the entry's 3-tuple of floats
     return Optional[PythonObject](_as_float(result))
@@ -172,7 +174,7 @@ def _cluster_pair(binding: PythonObject, operation: Int, args: PythonObject, bet
             return _as_float(device.value())
     else:
         # the union-code metrics: resident labels encoded on the device (lane vdf-xm-wire)
-        var device = _cluster_union_device(binding, operation, yt, yp, n, beta, context)
+        var device = _cluster_union_device(binding, operation, args, n, beta, context)
         if device:
             return device.value()
     var t = Int(py=classical_address(yt))
@@ -540,7 +542,7 @@ def mcls_cluster_operation(operation: Int, args: PythonObject, context: PythonOb
         var yp = pair[1]
         var beta = Float64(py=family_call(b.float, args[3]))
         var n = Int(py=yt.size)
-        var device = _cluster_union_device(args[0], CLUSTER_OP_HCV, yt, yp, n, beta, context)
+        var device = _cluster_union_device(args[0], CLUSTER_OP_HCV, args, n, beta, context)
         if device:
             return device.value()
         var t = Int(py=classical_address(yt))
