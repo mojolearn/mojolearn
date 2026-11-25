@@ -567,12 +567,24 @@ def _scoped_indexed(slot: _Slot, call: _Call, operation: Int) raises:
     var put = arena_scope_store_put(call[].scope, store, KMEANS_FOLD_PREFIX, x.data, x.rows * x.cols, call[].pin)
     if put.pinned:
         call[].pin_kept = 1
-    # THE WEIGHTED FOLD (lane vdf-scope-cluster2a): the whole weight vector is
-    # put for this call (x.rows words; no pin keeps it resident past the call)
-    # and gathered on the device by the fold's index, beside X's rows.
+    # THE WEIGHTED FOLD (lane vdf-scope-cluster2a): the whole weight vector,
+    # gathered on the device by the fold's index, beside X's rows. THE
+    # PER-INPUT PINS (lane vdf-scope-pins): with the weights' own token it is
+    # found in (or put once into) the same scope cache as X, kept resident for
+    # every fold and candidate (`call.weights_pin_kept` = 1 the moment the
+    # cache keeps it); without one it is put for this call and freed after.
     var weights_id = -1
+    var weights_owned = False
     if weights.rows > 0:
-        weights_id = arena_cache_put(store, weights.data, x.rows)
+        if call[].weights_pin != 0 and call[].scope != MEMBER_SCOPE_NONE:
+            var wput = arena_scope_store_put(call[].scope, store, KMEANS_FOLD_PREFIX, weights.data, x.rows,
+                                             call[].weights_pin)
+            if wput.pinned:
+                call[].weights_pin_kept = 1
+            weights_id = wput.store_id
+        else:
+            weights_id = arena_cache_put(store, weights.data, x.rows)
+            weights_owned = True
     var wide = List[Int64]()
     var index_address = index.data
     if index.dtype == MEMBER_I32:
@@ -603,7 +615,7 @@ def _scoped_indexed(slot: _Slot, call: _Call, operation: Int) raises:
         call[].row_index = index
         call[].weights = weights
         arena_cache_free(store, index_id)
-        if weights_id >= 0:
+        if weights_owned:
             arena_cache_free(store, weights_id)
 
 

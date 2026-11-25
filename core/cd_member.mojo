@@ -65,11 +65,11 @@ from core.member_abi import (
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_CD
-from core.fold_x_word import fold_x_word, fold_x_slot
+from core.fold_x_word import fold_x_slot
 from core.device_route import DEVICE_GPU
 from core.member_fold_x import (
     MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_store_ready,
-    member_fold_column_open, member_fold_slot_free,
+    MemberFoldColumn, member_fold_column_open, member_fold_column_close,
 )
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -425,8 +425,13 @@ def _fold_op(slot: _SlotP, call: _CallP, operation: Int) raises:
     """FIT / PREDICT / SCORE over the rows `call.row_index` of the WHOLE
     host X (core/member_fold_x.mojo): X resident in the caller's scope, the
     fold's rows taken on the device and read by `cd_fit` / `cd_predict`
-    (THE FOLD X WORD); y and the weights are the base's columns taken bitwise
-    through the index on the host. Views restored before this returns or
+    (THE FOLD X WORD). FIT (lane vdf-scope-pins, THE PER-INPUT PINS): y and
+    the weights are taken ON THE DEVICE from their scope-resident columns
+    (`member_fold_column_open`, their own tokens `call.y_pin` /
+    `call.weights_pin`; without one, put for this call) and read by
+    `cd_fit_host`'s uploads as fold words (`fold_x_fill`): no host gather of
+    y or the weights. SCORE takes y the same way and the metrics program's
+    R^2 reads the slot in place. Views restored before this returns or
     raises."""
     var estimator = _name(slot)
     var x = call[].x
@@ -434,8 +439,8 @@ def _fold_op(slot: _SlotP, call: _CallP, operation: Int) raises:
     var weights = call[].weights
     var index = call[].row_index
     var fold = MemberFoldX()
-    var y_slot = -1
-    var w_slot = -1
+    var dev_y = MemberFoldColumn()
+    var dev_w = MemberFoldColumn()
     var failure = String("")
     try:
         member_fold_x_open(call, fold, estimator)
@@ -449,16 +454,20 @@ def _fold_op(slot: _SlotP, call: _CallP, operation: Int) raises:
             _dense(y, "y", estimator)
             if y.rows != x.rows:
                 raise Error("mojolearn ElasticNet X and y lengths differ")
-            # SCORE too (lane vdf-scope-linear4): the R^2 program reads the y
-            # slot in place (`member_r2_score_slot`), so no host gather is left.
-            y_slot = member_fold_column_open(fold, y, estimator)
-            call[].y = MemberMatrix(fold_x_word(y_slot), fold.rows, y.cols)
+            # FIT and SCORE (lanes vdf-scope-linear4, vdf-scope-pins): the
+            # fold's y rows are taken on the device from the scope-resident
+            # column (its own token `call.y_pin`); `cd_fit_host` reads the word
+            # through `fold_x_fill`, the R^2 program reads the slot in place
+            # (`member_r2_score_slot`). No host gather is left.
+            member_fold_column_open(call, fold, y, call[].y_pin, call[].y_pin_kept, dev_y, "y", estimator)
+            call[].y = MemberMatrix(dev_y.word(), fold.rows, y.cols)
         if weights.rows > 0 and operation == MEMBER_OP_FIT:
             _dense(weights, "sample_weight", estimator)
             if weights.rows != x.rows or weights.cols != 1:
                 raise Error("ValueError: sample_weight and X have different numbers of rows")
-            w_slot = member_fold_column_open(fold, weights, estimator)
-            call[].weights = MemberMatrix(fold_x_word(w_slot), fold.rows, 1)
+            member_fold_column_open(call, fold, weights, call[].weights_pin, call[].weights_pin_kept, dev_w,
+                                    "sample_weight", estimator)
+            call[].weights = MemberMatrix(dev_w.word(), fold.rows, 1)
         call[].row_index = MemberMatrix()
         _op(slot, call, operation)
     except error:
@@ -468,8 +477,12 @@ def _fold_op(slot: _SlotP, call: _CallP, operation: Int) raises:
     call[].weights = weights
     call[].row_index = index
     try:
-        member_fold_slot_free(fold, y_slot)
-        member_fold_slot_free(fold, w_slot)
+        member_fold_column_close(fold, dev_y)
+        member_fold_column_close(fold, dev_w)
+    except close_error:
+        if failure.byte_length() == 0:
+            failure = "RuntimeError: a " + estimator + " member's fold slot was not freed: " + String(close_error)
+    try:
         member_fold_x_close(fold)
     except close_error:
         if failure.byte_length() == 0:

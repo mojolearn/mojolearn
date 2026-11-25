@@ -25,7 +25,9 @@ COLUMNS OF THE BASE read through the same index (`member_fold_take_f32`:
 rows x width words, in chunks across the host's cores; the y words cross
 the bus as the entry uploads them, never X).
 """
-from core.member_abi import MemberCall, MemberMatrix, MEMBER_F32, MEMBER_I32, MEMBER_I64, MEMBER_SCOPE_NONE
+from core.member_abi import (
+    MemberCall, MemberMatrix, MEMBER_F32, MEMBER_I32, MEMBER_I64, MEMBER_SCOPE_NONE, MEMBER_HOME_HOST,
+)
 from core.entry_table import EntryRef, entry_ref_unresolved, entry_ref_mode, entry_ref_vendor
 from core.prep_entry_table import PrepEntryKey, xp_transport_ref
 from core.host_parallel import host_widen_index_i64, host_parallelize
@@ -52,6 +54,7 @@ struct MemberFoldX(Movable):
     var cols: Int
     var index: Int
     var wide: List[Int64]
+    var base_rows: Int
 
     def __init__(out self):
         self.store = entry_ref_unresolved()
@@ -60,6 +63,7 @@ struct MemberFoldX(Movable):
         self.cols = 0
         self.index = 0
         self.wide = List[Int64]()
+        self.base_rows = 0
 
     def word(self) -> Int:
         """The X address word of the fold slot (core/fold_x_device.mojo)."""
@@ -101,6 +105,7 @@ def member_fold_index(call: _Call, mut fold: MemberFoldX, estimator: String) rai
         raise Error("TypeError: a " + estimator + " member reads X as a dense host float32 view")
     fold.rows = index.rows
     fold.cols = call[].x.cols
+    fold.base_rows = call[].x.rows
     _index_check(fold.index, fold.rows, call[].x.rows, estimator)
 
 
@@ -223,35 +228,77 @@ def member_fold_take_into(view: MemberMatrix, fold: MemberFoldX, mut store: List
     return part
 
 
-def member_fold_column_open(fold: MemberFoldX, view: MemberMatrix, estimator: String) raises -> Int:
-    """The fold's rows of a dense host 4-byte column view of the base (the
-    targets, the float32 weights) taken ON THE DEVICE (lane vdf-scope-linear3,
-    an addition): the view is put into a slot this call owns on the fold's
-    store, its rows `fold.index` are taken into a fresh slot (returned: the
-    entry reads it through `fold_x_word`, the caller frees it with
-    `member_fold_slot_free` after the entry returned) and the own slot is
-    freed (`take_rows` waited for the store's context). The view carries no
-    pin of its own, so it is never published in the scope's cache: the
-    whole column (n words, a fraction of X's n x d) crosses once per
-    operation, the host gather of the fold's rows is gone."""
-    if view.element_bytes() != 4 or not view.dense_host(view.dtype):
-        raise Error("TypeError: a " + estimator + " member takes a dense host 4-byte column on the device")
-    var source: List[Int] = [view.data]
-    var counts: List[Int] = [view.rows * view.cols]
-    var own = xp_transport_call(fold.store, ARENA_STORE_PUT, source, counts)
-    var slot = -1
+struct MemberFoldColumn(Movable):
+    """THE PER-INPUT PINS (lane vdf-scope-pins; core/member_abi.mojo
+    `MemberCall.y_pin`): one fold's rows of a base column (the targets or the
+    sample weights) taken ON THE DEVICE into a slot of the fold's store, as
+    `member_fold_x_open` takes X. `slot` -1: none; `row_words` the 4-byte
+    words of one row (a float32 or int32 column: its width; float64 / int64:
+    twice it)."""
+    var slot: Int
+    var rows: Int
+    var row_words: Int
+
+    def __init__(out self):
+        self.slot = -1
+        self.rows = 0
+        self.row_words = 0
+
+    def word(self) -> Int:
+        """The address word of the slot (THE FOLD X WORD numbering,
+        core/fold_x_word.mojo): an entry whose upload goes through
+        `fold_x_fill` reads it as it reads a fold X word."""
+        return fold_x_word(self.slot)
+
+
+def member_fold_column_open(call: _Call, fold: MemberFoldX, view: MemberMatrix, pin: Int, mut kept: Int,
+                            mut column: MemberFoldColumn, what: String, estimator: String) raises:
+    """The fold's rows of the dense host column `view` (the WHOLE base: one
+    row per row of X, read through `fold.index`) taken on the device into
+    `column.slot`. Inside the caller's scope with a nonzero `pin` (the
+    column's own token, `call.y_pin` or `call.weights_pin`) the whole column
+    is found in the scope's x_prep cache or put ONCE and published with that
+    token (`kept` = 1 the moment the cache took it, THE PIN RULE); without a
+    pin it is put into a slot this call owns and frees. Only the index words
+    and, once per scope, the column cross the bus. Same bytes as
+    `member_fold_take_view` (a device gather of the same rows in the same
+    order)."""
+    # The WHOLE base's rows (`fold.base_rows`, read in `member_fold_index`):
+    # the caller has already put the fold's X view into `call.x` here.
+    if view.rows != fold.base_rows or view.cols < 1 or view.stride != view.cols or view.offset != 0:
+        raise Error("TypeError: a " + estimator + " member reads " + what + " as a dense host column of X's rows")
+    if view.home != MEMBER_HOME_HOST:
+        raise Error("TypeError: a " + estimator + " member reads " + what + " as a dense host column of X's rows")
+    column.rows = fold.rows
+    column.row_words = view.cols * view.element_bytes() // 4
+    var words = view.rows * column.row_words
+    var base = -1
+    var own = -1
+    if call[].scope != MEMBER_SCOPE_NONE and pin != 0:
+        var put = arena_scope_store_put(call[].scope, fold.store, ARENA_PREFIX_X_PREP, view.data, words, pin)
+        if put.pinned:
+            kept = 1  # THE PIN RULE: the cache holds the reference now
+        base = put.store_id
+    else:
+        var source: List[Int] = [view.data]
+        var counts: List[Int] = [words]
+        own = xp_transport_call(fold.store, ARENA_STORE_PUT, source, counts)
+        base = own
     var failure = String("")
     try:
-        slot = arena_store_take_rows(fold.store, own, view.cols, fold.index, fold.rows)
+        column.slot = arena_store_take_rows(fold.store, base, column.row_words, fold.index, fold.rows)
     except error:
         failure = String(error)
-    arena_cache_free(fold.store, own)
+    if own >= 0:
+        arena_cache_free(fold.store, own)  # take_rows waited for the store's context
     if failure.byte_length() > 0:
         raise Error(failure)
-    return slot
 
 
-def member_fold_slot_free(fold: MemberFoldX, slot: Int) raises:
-    """Free a slot `member_fold_column_open` returned (no-op for -1)."""
-    if slot >= 0:
+def member_fold_column_close(fold: MemberFoldX, mut column: MemberFoldColumn) raises:
+    """Free the column's fold slot (after the entry that read it returned)."""
+    if column.slot >= 0:
+        var slot = column.slot
+        column.slot = -1
         arena_cache_free(fold.store, slot)
+
