@@ -611,7 +611,7 @@ def run_recipe(ml, recipe, data, device=None):
         except Exception as exc:
             raise CannotRun(f"{method} raised {type(exc).__name__}: {exc}"[:600]) from exc
         for k, a in enumerate(cb.as_arrays(result)):
-            answers.append((f"{method}[{k}]" if isinstance(result, (tuple, list)) else method, a))
+            answers.append((f"{method}[{k}]" if isinstance(result, (tuple, list, dict)) else method, a))
     if outputs.get("score"):
         # on the training rows: they are the rows with targets
         try:

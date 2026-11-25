@@ -104,9 +104,17 @@ def _np():
 
 def as_arrays(result):
     """The outputs of one call as a list of arrays: one array, or each member
-    of a tuple or list of arrays (`kneighbors` answers two)."""
+    of a tuple or list of arrays (`kneighbors` answers two), or each value of
+    a dictionary in key order (a forecaster's `predict` answers
+    `{"mean": ...}`)."""
+    # A dictionary was one object array whose bytes were its repr: numpy
+    # prints float32 to 8 significant digits and summarizes long arrays, so a
+    # one-ulp difference could hash the same (w3-fix-10-s1, 2026-11-25).
     np = _np()
-    members = result if isinstance(result, (tuple, list)) else (result,)
+    if isinstance(result, dict):
+        members = [result[key] for key in sorted(result, key=str)]
+    else:
+        members = result if isinstance(result, (tuple, list)) else (result,)
     arrays = []
     for member in members:
         a = np.asarray(member)
