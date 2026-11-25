@@ -490,7 +490,16 @@ def minmax_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         elif operation == MINMAX_OPN_SAVE:
             result = py_present(minmax_archive_save(model,args[0],context))
         elif operation == MINMAX_OPN_LOAD:
-            result = py_present(minmax_archive_load(model,args[0],context))
+            # `load(path, device=...)` (gd-verify-view, 2026-11-25): as StandardScaler's load
+            # (bindings/scaler_lifecycle_native_door.mojo).
+            var device = PythonObject(None)
+            if len(args) > 1:
+                device = args[1]
+            scaler_device_admit(device, cls, root)
+            var loaded = minmax_archive_load(model,args[0],context)
+            if device is not None:
+                py_setitem(_fields(loaded), nk[].k_device, device)
+            result = py_present(loaded)
         else:
             raise Error("unknown native MinMaxScaler operation")
         return py_or_none(result).steal_data()

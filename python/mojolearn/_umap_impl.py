@@ -309,7 +309,7 @@ class UMAP(NumericModeMixin):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a model written by ``save``.
 
         The loaded model transforms new rows against the saved training rows
@@ -319,6 +319,10 @@ class UMAP(NumericModeMixin):
         ----------
         path : str or path-like
             File written by ``UMAP.save``.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
@@ -331,7 +335,7 @@ class UMAP(NumericModeMixin):
         ValueError
             If the file is not a UMAP model or its contents are inconsistent.
         """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+        return _ARCHIVE(cls, "host_archive_load", (path, device), _ARCHIVE_CONTEXT)
 
 
 def _config(i):

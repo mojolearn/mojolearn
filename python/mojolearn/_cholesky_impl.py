@@ -214,14 +214,23 @@ class Cholesky(NumericModeMixin):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a factor written by `save`.
 
         The result can `solve` and report `logdet_`; it holds no matrix and does not
         refactor. A file saved by another estimator, or with mismatched shapes or dtypes,
         raises `ValueError`.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by `save`.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
         """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+        return _ARCHIVE(cls, "host_archive_load", (path, device), _ARCHIVE_CONTEXT)
 
 
 # The fixed Cholesky archive family is implemented by typed native plans.

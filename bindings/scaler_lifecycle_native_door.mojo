@@ -698,7 +698,16 @@ def scaler_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         elif op == SCALER_OPN_SAVE:
             result = scaler_archive_save(model,args[0],context)
         elif op == SCALER_OPN_LOAD:
+            # `load(path, device=...)` (gd-verify-view, 2026-11-25): the file
+            # holds no device; the loader's is admitted with the constructor's
+            # check before the read and written on the loaded scaler.
+            var device = PythonObject(None)
+            if len(args) > 1:
+                device = args[1]
+            scaler_device_admit(device, cls, root)
             result = scaler_archive_load(model,args[0],context)
+            if device is not None:
+                py_setitem(py_fields(result), nk[].k_device, device)
         else:
             raise Error("unknown native StandardScaler operation")
         return result.steal_data()

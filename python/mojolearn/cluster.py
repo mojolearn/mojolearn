@@ -444,7 +444,7 @@ class KMeans(_NumericModeMixin):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a model written by `save`.
 
         Arrays keep their saved dtypes. The result supports `predict` and
@@ -455,6 +455,10 @@ class KMeans(_NumericModeMixin):
         ----------
         path : str or path-like
             File written by `KMeans.save`.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
@@ -467,7 +471,7 @@ class KMeans(_NumericModeMixin):
             inconsistent (field counts, center shape, label count), or names a
             metric or `init` the class does not support.
         """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+        return _ARCHIVE(cls, "host_archive_load", (path, device), _ARCHIVE_CONTEXT)
 
 
 # The fixed tables the native fit reads: the init and metric names and
