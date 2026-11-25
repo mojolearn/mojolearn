@@ -127,7 +127,9 @@ FAMILIES = (
                         "ops-scatter-segment",
                         # nn-blocks-scatter end
                         # nn-blocks-pgseq begin: Sequential.compile param_groups (tools/identity_lanes/nn_pgseq.py)
-                        "sequential-param-groups", "training-param-groups-device",
+                        # training-param-groups-device is one-sided (missing cpu): held 'no cpu route' in
+                        # host_surface, so not covered here (w3-integrate-10)
+                        "sequential-param-groups",
                         # nn-blocks-pgseq end
                         # nn-blocks-qkv / nn-blocks-cbw (w3-integrate-10: the two lanes were registered in
                         # tools/identity_lanes but never declared here, so verify read them UNDECLARED)
@@ -340,7 +342,6 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     # nn-blocks-pg end
     # nn-blocks-pgseq begin
     "sequential-param-groups": "Sequential: compile param_groups and no_decay, checkpoint resume",
-    "training-param-groups-device": "SGD, AdamW: parameter groups stepped from device gradients",
     # nn-blocks-pgseq end
     # nn-blocks-scatter begin
     "ops-scatter-segment": "Session: scatter_add, segment_sum, segment_mean, segment_max",
