@@ -1,0 +1,250 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""The Python door of `mojolearn.ops.BatchSource` and of `Program.fit(source=)` (lane batch-source, 2026-11-25).
+
+UNPACK reads the handle once into a typed `BatchSourceSpec` (autograd/batch_source.mojo): the exact connected
+`BatchSource` class only (a Python iterable, generator, data loader or a subclass is refused before anything is
+called: no call back into Python during a fit), its `_spec` tuple and its `_position` pair. RUN opens the shards,
+trains and closes them (autograd/program_entries.mojo `program_fit_source`). PACK writes the consumed position
+back to the handle and builds the returned dicts. The handle holds no native resource between calls, so a handle
+rebuilt in a fresh process from the same directory and a saved state is the same source.
+
+`_spec` = (path, batch_size, input field codes, target code, shuffle, seed, bucket_batches, fingerprint);
+`_position` = (epoch, consumed batches of that epoch).
+"""
+from std.python import Python, PythonObject
+from bindings.py_balanced import py_call, py_type, py_setitem, py_setattr, py_item
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.native_json_door import native_path
+from core.shared_slot import SharedSlot
+from providers.python.autograd_program_arrays_pyapi_door import is_integer_input, uint64_input
+from autograd.batch_source import (
+    BatchSourceSpec, BATCH_SOURCE_FORMAT, BS_FIELD_TARGETS, batch_source_open, batch_source_field,
+    batch_source_field_name,
+)
+from autograd.program_training_checkpoint import ProgramTrainingSource
+
+
+struct _BatchSourceDoor(Defaultable, Movable):
+    var ready: Bool
+    var cls: PythonObject
+
+    def __init__(out self):
+        self.ready = False
+        self.cls = PythonObject(None)
+
+
+comptime _BATCH_SOURCE_DOOR = SharedSlot[_BatchSourceDoor, "MojolearnBatchSourceDoorV1"]
+
+
+def _int(value: PythonObject, what: String, low: Int) raises -> Int:
+    if not is_integer_input(value):
+        raise Error("TypeError: BatchSource: " + what + " must be an integer")
+    var v = Int(py=value)
+    if v < low:
+        raise Error("ValueError: BatchSource: " + what + " must be >= " + String(low))
+    return v
+
+
+def _flag(value: PythonObject, what: String) raises -> Bool:
+    var b = native_loaded_module("builtins")
+    if py_type(value) is not b.bool:
+        raise Error("TypeError: BatchSource: " + what + " must be True or False")
+    return Bool(py=value)
+
+
+def _word_out(v: UInt64) raises -> PythonObject:
+    return PythonObject(Int(v >> 32)).__lshift__(32).__or__(Int(v & UInt64(0xFFFFFFFF)))
+
+
+def batch_source_admit(source: PythonObject) raises:
+    """Refuse anything but the exact connected BatchSource (module note)."""
+    var door = _BATCH_SOURCE_DOOR.get_or_create_ptr()
+    if not door[].ready:
+        raise Error("TypeError: BatchSource is not connected (mojolearn.ops connects it at import)")
+    if py_type(source) is not door[].cls:
+        raise Error("TypeError: Program.fit(source=) takes a mojolearn.ops.BatchSource; Python iterables, "
+                    + "generators, data loaders and batch callbacks are not accepted (a fit never calls back into "
+                    + "Python). Write the data as batch shards and open them with BatchSource(path, ...)")
+
+
+def batch_source_spec(source: PythonObject) raises -> BatchSourceSpec:
+    """UNPACK: the handle's typed words."""
+    batch_source_admit(source)
+    var spec = BatchSourceSpec()
+    var words = source._spec
+    var at = source._position
+    spec.path = String(py=words[0])
+    spec.batch = Int(py=words[1])
+    var codes = words[2]
+    for k in range(len(codes)):  # small-loop(codes: the source's input fields)
+        spec.inputs.append(Int(py=codes[k]))
+    spec.target = Int(py=words[3])
+    spec.shuffle = Bool(py=words[4])
+    spec.seed = uint64_input(words[5], "seed")
+    spec.bucket = Int(py=words[6])
+    spec.fingerprint = uint64_input(words[7], "fingerprint")
+    spec.epoch = Int(py=at[0])
+    spec.consumed = Int(py=at[1])
+    return spec^
+
+
+def batch_source_position_out(source: PythonObject, epoch: Int, consumed: Int) raises:
+    """PACK: the consumed position back on the handle."""
+    py_setattr(source, "_position", Python.tuple(PythonObject(epoch), PythonObject(consumed)))
+
+
+def batch_source_training_part(source: PythonObject) raises -> ProgramTrainingSource:
+    """The source part of a training checkpoint (autograd/program_training_checkpoint.mojo), from the handle."""
+    var out = ProgramTrainingSource()
+    if source is None:
+        return out^
+    var spec = batch_source_spec(source)
+    out.present = True
+    out.epoch = spec.epoch
+    out.consumed = spec.consumed
+    out.fingerprint = spec.fingerprint
+    out.seed = spec.seed
+    out.batch = spec.batch
+    out.bucket = spec.bucket
+    out.shuffle = spec.shuffle
+    return out^
+
+
+def batch_source_restore(source: PythonObject, part: ProgramTrainingSource) raises:
+    """Session.load_training(source=): the saved position on the handle, after checking it is the same data with
+    the same plan settings."""
+    if source is None:
+        return
+    if not part.present:
+        raise Error("ValueError: Session.load_training(source=): the checkpoint was saved without a batch source")
+    var spec = batch_source_spec(source)
+    if (spec.fingerprint != part.fingerprint or spec.seed != part.seed or spec.batch != part.batch
+            or spec.bucket != part.bucket or spec.shuffle != part.shuffle):
+        raise Error("ValueError: Session.load_training(source=): the source is not the one the checkpoint was saved "
+                    + "with (other data, seed, batch_size, bucket_batches or shuffle)")
+    batch_source_position_out(source, part.epoch, part.consumed)
+
+
+def _state_dict(source: PythonObject) raises -> PythonObject:
+    var spec = batch_source_spec(source)
+    var out = native_loaded_module("builtins").dict()
+    py_setitem(out, PythonObject("format"), PythonObject(BATCH_SOURCE_FORMAT))
+    py_setitem(out, PythonObject("epoch"), PythonObject(spec.epoch))
+    py_setitem(out, PythonObject("consumed"), PythonObject(spec.consumed))
+    py_setitem(out, PythonObject("fingerprint"), _word_out(spec.fingerprint))
+    py_setitem(out, PythonObject("seed"), _word_out(spec.seed))
+    py_setitem(out, PythonObject("batch_size"), PythonObject(spec.batch))
+    py_setitem(out, PythonObject("bucket_batches"), PythonObject(spec.bucket))
+    py_setitem(out, PythonObject("shuffle"), PythonObject(spec.shuffle))
+    return out
+
+
+def _load_state_dict(source: PythonObject, state: PythonObject) raises:
+    var b = native_loaded_module("builtins")
+    if py_type(state) is not b.dict or len(state) != 8:
+        raise Error("TypeError: BatchSource.load_state_dict takes the dict state_dict returns")
+    var spec = batch_source_spec(source)
+    var fmt = py_item(state, PythonObject("format"))
+    if py_type(fmt) is not b.str or String(py=fmt) != BATCH_SOURCE_FORMAT:
+        raise Error("ValueError: BatchSource.load_state_dict: the state's format words are not '"
+                    + BATCH_SOURCE_FORMAT + "'")
+    var part = ProgramTrainingSource()
+    part.present = True
+    part.epoch = _int(py_item(state, PythonObject("epoch")), "epoch", 0)
+    part.consumed = _int(py_item(state, PythonObject("consumed")), "consumed", 0)
+    part.fingerprint = uint64_input(py_item(state, PythonObject("fingerprint")), "fingerprint")
+    part.seed = uint64_input(py_item(state, PythonObject("seed")), "seed")
+    part.batch = _int(py_item(state, PythonObject("batch_size")), "batch_size", 1)
+    part.bucket = _int(py_item(state, PythonObject("bucket_batches")), "bucket_batches", 1)
+    part.shuffle = _flag(py_item(state, PythonObject("shuffle")), "shuffle")
+    if part.consumed > Int(py=source.n_batches):
+        raise Error("ValueError: BatchSource.load_state_dict: consumed is past the epoch's batches")
+    batch_source_restore(source, part)
+    _ = spec^
+
+
+def _open(source: PythonObject, args: PythonObject) raises:
+    """BatchSource(path, batch_size, inputs, target, shuffle, seed, bucket_batches): admit, open once (every
+    header and offset table checked, the fingerprint taken), close, and write the handle's words."""
+    var b = native_loaded_module("builtins")
+    if py_type(args) is not b.tuple or len(args) != 7:
+        raise Error("TypeError: BatchSource takes path, batch_size, inputs, target, shuffle, seed, bucket_batches")
+    batch_source_admit(source)
+    var spec = BatchSourceSpec()
+    spec.path = String(py=native_path(args[0]))
+    spec.batch = _int(args[1], "batch_size", 1)
+    var names = args[2]
+    if py_type(names) is not b.tuple and py_type(names) is not b.list:
+        raise Error("TypeError: BatchSource: inputs must be a tuple of field names")
+    if len(names) < 1:
+        raise Error("ValueError: BatchSource: inputs names at least one field")
+    var codes = Python.list()
+    for k in range(len(names)):  # small-loop(names: the requested fields)
+        if py_type(names[k]) is not b.str:
+            raise Error("TypeError: BatchSource: a field name must be a str")
+        var code = batch_source_field(String(py=names[k]))
+        spec.inputs.append(code)
+        _ = py_call(codes.append, PythonObject(code))
+    if args[3] is not None:
+        if py_type(args[3]) is not b.str:
+            raise Error("TypeError: BatchSource: target must be 'targets' or None")
+        if batch_source_field(String(py=args[3])) != BS_FIELD_TARGETS:
+            raise Error("ValueError: BatchSource: target must be 'targets' or None")
+        spec.target = BS_FIELD_TARGETS
+    spec.shuffle = _flag(args[4], "shuffle")
+    spec.seed = uint64_input(args[5], "seed")
+    spec.bucket = _int(args[6], "bucket_batches", 1)
+    var path = spec.path
+    var batch = spec.batch
+    var target = spec.target
+    var shuffle = spec.shuffle
+    var seed = spec.seed
+    var bucket = spec.bucket
+    var src = batch_source_open(spec^)
+    src.close()
+    py_setattr(source, "_spec", Python.tuple(PythonObject(path), PythonObject(batch), py_call(b.tuple, codes),
+                                            PythonObject(target), PythonObject(shuffle), _word_out(seed),
+                                            PythonObject(bucket), _word_out(src.fingerprint)))
+    py_setattr(source, "_position", Python.tuple(PythonObject(0), PythonObject(0)))
+    py_setattr(source, "n_records", PythonObject(src.n))
+    py_setattr(source, "n_batches", PythonObject(src.n_batches))
+    py_setattr(source, "n_features", PythonObject(src.width))
+    py_setattr(source, "max_length", PythonObject(src.max_len))
+
+
+def _next_records(source: PythonObject) raises -> PythonObject:
+    """The record ids (in row order) of the batch the next fit trains first."""
+    var src = batch_source_open(batch_source_spec(source))
+    var at = src.pending()
+    var ids = src.records(at[0], at[1])
+    src.close()
+    var out = Python.list()
+    for k in range(len(ids)):  # small-loop(ids: one batch's record ids)
+        _ = py_call(out.append, PythonObject(ids[k]))
+    return out
+
+
+def batch_source_call_py(op: PythonObject, source: PythonObject, args: PythonObject) raises -> PythonObject:
+    """The one binding entry of BatchSource: "connect" (import time: the exact class), "open", "state_dict",
+    "load_state_dict", "next_records"."""
+    var b = native_loaded_module("builtins")
+    if py_type(op) is not b.str:
+        raise Error("TypeError: BatchSource operation must be a str")
+    var name = String(py=op)
+    if name == "connect":
+        var door = _BATCH_SOURCE_DOOR.get_or_create_ptr()
+        door[].cls = source
+        door[].ready = True
+        return PythonObject(None)
+    if name == "open":
+        _open(source, args)
+        return PythonObject(None)
+    if name == "state_dict":
+        return _state_dict(source)
+    if name == "load_state_dict":
+        _load_state_dict(source, args[0])
+        return PythonObject(None)
+    if name == "next_records":
+        return _next_records(source)
+    raise Error("ValueError: unknown BatchSource operation " + name)

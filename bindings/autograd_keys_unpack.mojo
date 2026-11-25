@@ -50,6 +50,7 @@ comptime AUTOGRAD_OPN_EXIT = 37
 comptime AUTOGRAD_OPN_STATE = 38
 comptime AUTOGRAD_OPN_RESIDENCY = 39
 comptime AUTOGRAD_OPN_ENTER = 40
+comptime AUTOGRAD_OPN_SAVE_TRAINING = 41  # lane batch-source: Program.save_training
 
 
 struct AutogradKeys(Defaultable, Movable):
@@ -839,6 +840,7 @@ def _autograd_keys_fill(nk: UnsafePointer[AutogradKeys, MutUntrackedOrigin]) rai
     py_op_add(ops, "state", AUTOGRAD_OPN_STATE)
     py_op_add(ops, "residency", AUTOGRAD_OPN_RESIDENCY)
     py_op_add(ops, "enter", AUTOGRAD_OPN_ENTER)
+    py_op_add(ops, "save_training", AUTOGRAD_OPN_SAVE_TRAINING)
     nk[].ops = ops
     nk[].ready = True
 

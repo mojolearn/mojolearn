@@ -194,6 +194,8 @@ comptime _SOP_SCAN = 1118
 comptime _SOP_CUSTOM_OP = 1260
 comptime _SOP_CUSTOM = 1261
 # nn-blocks-cbw end
+# lane batch-source: Session.load_training (autograd/program_training_checkpoint.mojo), its own range
+comptime _SOP_LOAD_TRAINING = 1270
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -370,6 +372,7 @@ struct _SessionOpCodes(Defaultable, Movable):
         # nn-blocks-cbw begin
         self.codes["custom_op"] = _SOP_CUSTOM_OP
         self.codes["custom"] = _SOP_CUSTOM
+        self.codes["load_training"] = _SOP_LOAD_TRAINING
         # nn-blocks-cbw end
 
 

@@ -20,7 +20,8 @@ from autograd.rankn import ShapeN
 from providers.python.autograd_program_arrays_pyapi_door import output_array, output_array_dims, is_ndarray, is_integer_input, uint64_input, program_native_input, program_admit_value, program_numeric_scalar, program_builtin_types
 from autograd.tape import Tape
 from autograd.program_io import ProgramInput, HostArray
-from autograd.program_entries import program_execute_prepare, program_execute_run, program_fit_parameters, program_fit_native
+from autograd.program_entries import program_execute_prepare, program_execute_run, program_fit_parameters, program_fit_native, program_fit_source
+from providers.python.batch_source_pyapi_door import batch_source_spec, batch_source_position_out
 from providers.python.autograd_program_arrays_pyapi_door import host_arrays_py, output_array_unfilled
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.ops_api import ops_session
@@ -552,6 +553,50 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
         py_setitem(counts, "true", branches[0])
         py_setitem(counts, "false", branches[1])
         _ = py_call(out.append, counts)
+    return out
+
+
+def ops_program_fit_source_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, pid: PythonObject, source: PythonObject, steps: PythonObject, targets: PythonObject,
+    optimizer: PythonObject, parameters: PythonObject, loss: PythonObject, epochs: PythonObject,
+    delta: PythonObject, condition_id: Int, otherwise_id: Int, tol_given: Bool,
+) raises -> PythonObject:
+    """Program.fit(source=) (lane batch-source): UNPACK the source handle and the options, RUN
+    `program_fit_source`, PACK the curve, the epochs run and the source's consumed position (written back to the
+    handle). The batches, their size, order and padding are the source's: arrays and targets must be omitted."""
+    if targets is not None:
+        raise Error("ValueError: Program.fit(source=) takes its targets from the source (target='targets'); omit targets")
+    if tol_given:
+        raise Error("ValueError: Program.fit(source=) does not take tol: pass tol=None")
+    var kind = program_fit_loss_kind(String(py=loss))
+    var count = _integer(epochs, "epochs", 1)
+    var opt = _integer(optimizer, "optimizer", 1)
+    var max_steps = 0 if steps is None else _integer(steps, "steps", 1)
+    var explicit = parameters is not None
+    var selected = List[Int]()
+    if explicit:
+        if is_integer_input(parameters):
+            selected.append(_integer(parameters, "parameter", 1))
+        else:
+            var selected_values = program_native_input(parameters)
+            for k in range(len(selected_values)):  # small-loop(selected_values: selected parameter handles): argument parsing, no data
+                selected.append(_integer(selected_values[k], "parameter", 1))
+    var params = program_fit_parameters[E, KIND](Int(py=sid), Int(py=pid), otherwise_id, explicit, selected)
+    var spec = batch_source_spec(source)
+    var curve = output_array(ShapeN.of([count]))
+    var result = program_fit_source[E, KIND](
+        Int(py=sid), Int(py=pid), spec^, kind, Float32(py=delta), opt, params, count, max_steps,
+        FP(unsafe_from_address=Int(py=curve.__array_interface__["data"][0])), condition_id, otherwise_id)
+    batch_source_position_out(source, result.epoch, result.consumed)
+    var b = native_loaded_module("builtins")
+    var ran = result.branches[2]
+    var out = Python.list()
+    if ran < count:
+        _ = py_call(out.append, curve[py_call(b.slice, PythonObject(0), PythonObject(ran))])
+    else:
+        _ = py_call(out.append, curve)
+    _ = curve
+    _ = py_call(out.append, PythonObject(ran))
     return out
 
 
