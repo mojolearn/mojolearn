@@ -81,7 +81,20 @@ comptime PROGRAM_PARAM_STATE_WORDS = 2
 # replay refuses by name.
 comptime PROGRAM_MAX_CODE_V2 = 80
 # 94: the recurrent scan (`lstm`, `gru`, `rnn`; autograd/rules_recurrent.mojo).
-comptime PROGRAM_MAX_CODE = 94
+# nn-blocks-qkv begin: 95..129 the 2026-11-25 operations (lane rnn-parity 95; lanes nn-blocks-pg 110..112,
+# -scatter 113..117, -scan 118..121, -qkv 122..125 (`attention`, autograd/nn_qkv.mojo), -cbw 126..129); a code
+# of the range no operation took is refused by name at replay, as 89 and 92 are.
+comptime PROGRAM_MAX_CODE = 129
+# nn-blocks-qkv end
+# nn-blocks-scan begin: the scan over a captured cell (autograd/nn_scan.mojo), version 3 records only; its
+# node's integer words hold the nested cell's own program words, checked when the scan runs.
+comptime PROGRAM_SCAN_CODE = 118
+# nn-blocks-scan end
+# nn-blocks-cbw begin: 126, a custom operation with a user-defined backward
+# rule (autograd/nn_cbw.mojo OPS_CUSTOM_VJP; version 3 records): its integer
+# and float arguments hold both captured programs
+comptime PROGRAM_CBW_CODE = 126
+# nn-blocks-cbw end
 
 
 struct OpsLog(Movable):
@@ -362,7 +375,7 @@ def program_from_words(xi: List[Int64], xf: List[Float32], what: String) raises 
     var nf_total = 0
     for k in range(nn):  # driver-loop: over program nodes
         var code = r.take(xi, what)
-        if code < 1 or code > max_code or code == 47:
+        if code < 1 or (code > max_code and not ((code == PROGRAM_SCAN_CODE or code == PROGRAM_CBW_CODE) and version == PROGRAM_RECORD_VERSION)) or code == 47:  # nn-blocks-scan 118, nn-blocks-cbw 126
             raise Error(what + ": node " + String(k) + " holds an unknown operation code " + String(code))
         p.code.append(code)
         var na = r.take(xi, what)

@@ -107,10 +107,20 @@ FAMILIES = (
                         "ops-per-step-weighted-embedding",
                         "nn-tr-schedules",
                         "nn-tr-seqopt-state",
+                        # nn-blocks-scan begin: Session.scan over a captured cell (tools/identity_lanes/nn_scan.py)
+                        "ops-scan-cell",
+                        # nn-blocks-scan end
                         "public-theta-variants-forecast",
                         "sequence-croston-forecast",
                         "sequence-ets-forecast",
-                        "sequence-theta-forecast",),
+                        "sequence-theta-forecast",
+                        # nn-blocks-pg begin: ops.Session optimizer parameter groups (tools/identity_lanes/nn_pg.py)
+                        "ops-param-groups", "ops-param-groups-program-fit", "training-param-groups",
+                        # nn-blocks-pg end
+                        # nn-blocks-scatter begin: ops.Session scatter_add and segment reductions
+                        "ops-scatter-segment",
+                        # nn-blocks-scatter end
+                        ),
         inference_lanes=(),
         forest_kinds=(),
         classes=("LSTMRegressor", "LSTMClassifier", "GRURegressor", "GRUClassifier", "RMSprop", "Adagrad", "AutoARIMA", "STL", "VAR", "MLPClassifier",
@@ -284,10 +294,21 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     "ops-per-step-weighted-embedding": "Session: per-step weighted GRU with an embedding, h_0, reverse, streaming",
     "nn-tr-schedules": "StepLR, ExponentialLR, OneCycleLR: schedules",
     "nn-tr-seqopt-state": "Adagrad, Adamax, LAMB: state",
+    # nn-blocks-scan begin
+    "ops-scan-cell": "Session: scan over a captured cell (GRU cell, linear recurrence, reverse, lengths, captured)",
+    # nn-blocks-scan end
     "public-theta-variants-forecast": "DynamicTheta, OptimizedTheta: forecast",
     "sequence-croston-forecast": "CrostonClassic, CrostonOptimized, CrostonSBA: forecast",
     "sequence-ets-forecast": "DampedETS, ETS: forecast",
     "sequence-theta-forecast": "AutoTheta, DynamicOptimizedTheta, Theta: forecast",
+    # nn-blocks-pg begin
+    "ops-param-groups": "Session: optimizer parameter groups, global clip, state dict",
+    "ops-param-groups-program-fit": "Program.fit with an optimizer that has parameter groups",
+    "training-param-groups": "SGD, AdamW: parameter groups, one clip over every group, state dict",
+    # nn-blocks-pg end
+    # nn-blocks-scatter begin
+    "ops-scatter-segment": "Session: scatter_add, segment_sum, segment_mean, segment_max",
+    # nn-blocks-scatter end
                        }
 PUBLIC_PENDING_LANES = {
     # lane w3f2-main (2026-11-24): "no reference", not "unwatched": the shipped table
@@ -351,4 +372,7 @@ PUBLIC_PENDING_LANES = {
     "sequence-optim-adagrad": "no reference",
     "sequence-optim-lamb": "no reference",
     # lane nn-optim end
+    # nn-blocks-scatter begin
+    "ops-scatter-segment": "no reference",
+    # nn-blocks-scatter end
 }

@@ -212,6 +212,14 @@ from autograd.nn_ctc_ops import OP_CTC_FIRST, OP_CTC_LAST, apply_nn_ctc
 # nn-losses-2 end
 # lane rnn-parity: the recurrent estimators' fit options (sequence/rnn_options_ops.mojo), 6740..6749
 from sequence.rnn_options_ops import OP_RNO_FIRST, OP_RNO_LAST, apply_rnn_options
+# nn-blocks-qkv begin
+# lane nn-blocks-qkv: attention over explicit q, k, v, the masked row softmax (autograd/nn_qkv_ops.mojo), 6840..6859
+from autograd.nn_qkv_ops import OP_QKV_FIRST, OP_QKV_LAST, apply_nn_qkv
+# nn-blocks-qkv end
+# nn-blocks-scatter begin
+# lane nn-blocks-scatter: scatter_add and the segment reductions (autograd/nn_scatter_ops.mojo), 6800..6819
+from autograd.nn_scatter_ops import OP_SCT_FIRST, OP_SCT_LAST, apply_nn_scatter
+# nn-blocks-scatter end
 
 
 @always_inline
@@ -789,3 +797,13 @@ def apply[OP: Int](t: Int, a: Args):
     elif OP >= OP_RNO_FIRST and OP <= OP_RNO_LAST:
         comptime assert OP_RNO_FIRST > OP_NN_LAST and OP_RNO_FIRST > OP_CTC_LAST and OP_RNO_FIRST > OP_NNC_LAST and OP_RNO_FIRST > OP_SSM_LAST and OP_RNO_FIRST > OP_TFP_LAST, "rnn-parity opcode range overlaps another family"
         apply_rnn_options[OP](t, a)
+    # nn-blocks-qkv begin
+    elif OP >= OP_QKV_FIRST and OP <= OP_QKV_LAST:
+        comptime assert OP_QKV_FIRST > OP_NN_LAST and OP_QKV_FIRST > OP_CTC_LAST and OP_QKV_FIRST > OP_IMP_LAST, "nn-blocks-qkv opcode range overlaps another family"
+        apply_nn_qkv[OP](t, a)
+    # nn-blocks-qkv end
+    # nn-blocks-scatter begin
+    elif OP >= OP_SCT_FIRST and OP <= OP_SCT_LAST:
+        comptime assert OP_SCT_FIRST > OP_SSM_LAST and OP_SCT_FIRST > OP_TFP_LAST and OP_SCT_FIRST > OP_IMP_LAST and OP_SCT_FIRST > OP_NN_LAST, "nn-blocks-scatter opcode range overlaps another family"
+        apply_nn_scatter[OP](t, a)
+    # nn-blocks-scatter end

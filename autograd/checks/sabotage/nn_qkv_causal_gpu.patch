@@ -1,0 +1,21 @@
+diff --git a/autograd/nn_qkv_ops.mojo b/autograd/nn_qkv_ops.mojo
+index 960f5d57d4..9b3d714810 100644
+--- a/autograd/nn_qkv_ops.mojo
++++ b/autograd/nn_qkv_ops.mojo
+@@ -23,6 +23,7 @@ Fold order: per row, the scaled scores left to right, the maximum left to right,
+ ascending from 0 (softmax_row_from_max_f32): one order on the host and every vendor.
+ """
+ from std.memory import bitcast
++from std.sys.compile import is_defined
+ from sequence.ops import Args
+ from checks.numerics import ftz, identical_mul
+ from core.row_cells import softmax_row_from_max_f32
+@@ -70,6 +71,8 @@ def qkv_softmax_row(r: Int, a: Args):
+     for j in range(S):
+         var v = low
+         var attend = not (causal and j > i)
++        comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE nn-blocks-qkv-causal-gpu: the causal mask one key late, the GPU bindings only
++            attend = not (causal and j > i + 1)
+         if attend and boolean:
+             attend = bitcast[DType.int32](a.p2.unsafe_load(mrow + j * a.i8)) != Int32(0)
+         if attend:

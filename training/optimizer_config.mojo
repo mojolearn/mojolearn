@@ -100,10 +100,10 @@ def optimizer_keyword_refusal(key: String, where: String) raises:
         raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "CUDA-graph capture; nothing on this surface captures, and the step synchronizes before it returns (training/checks/optimizer.mojo::identical_optimizer_step)" + " (python/mojolearn/_training_impl.py)")
     if key == "differentiable":
         raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "there is no autograd in this library, which is also why `step` takes the gradients as an argument" + " (python/mojolearn/_training_impl.py)")
-    if key == "params_groups":
-        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "one `OptimizerConfig` per optimizer. Two parameter groups would be two calls with two registries and two clips, and two clips do not equal one: the clip coefficient is a function of every gradient in ITS registry (optimizer contract 3.5)" + " (python/mojolearn/_training_impl.py)")
-    if key == "param_groups":
-        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "one `OptimizerConfig` per optimizer; see `params_groups`" + " (python/mojolearn/_training_impl.py)")
+    if key == "params_groups" or key == "param_groups":
+        # lane nn-blocks-pg (2026-11-25): parameter groups are supported, spelled as torch.optim spells them
+        raise Error("TypeError: mojolearn." + where + ": " + key + "= is not a keyword: pass the parameter groups as "
+            + "`params`, a list of dicts with 'params' and per-group options, as torch.optim takes them")
     if key == "weight":
         raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "a per-class weight vector is REFUSED BY NAME (loss contract section 11): a weighted mean's denominator is a SUM OF FLOATS and would need a fold, a clause, a fixture and a sabotage of its own, where `count` today is an INTEGER and therefore exact, order-free and vendor-free (contract 5.5, `ce_count` in training/checks/loss_oracle.mojo)" + " (python/mojolearn/_training_impl.py)")
     if key == "size_average":

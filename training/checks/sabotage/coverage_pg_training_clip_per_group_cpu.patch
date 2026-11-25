@@ -1,0 +1,13 @@
+diff --git a/autograd/nn_pg.mojo b/autograd/nn_pg.mojo
+index 3a6f4d6bbd..e55ea32997 100644
+--- a/autograd/nn_pg.mojo
++++ b/autograd/nn_pg.mojo
+@@ -58,7 +58,7 @@ comptime PG_SABOTAGE_GROUP_LR_HOST = is_defined["MOJOLEARN_PG_SABOTAGE_GROUP_LR_
+ # parameter-group step of SGD / Adam / AdamW clips each group by its own norm (bindings/optimizer_native_router_door.mojo
+ # pg_training_operation). GPU: a GPU image's device-side optimizer; CPU: a CPU-column image or a device="cpu" one.
+ comptime PG_SABOTAGE_TRAINING_CLIP = is_defined["MOJOLEARN_PG_SABOTAGE_TRAINING_CLIP"]()
+-comptime PG_SABOTAGE_TRAINING_CLIP_HOST = is_defined["MOJOLEARN_PG_SABOTAGE_TRAINING_CLIP_HOST"]()
++comptime PG_SABOTAGE_TRAINING_CLIP_HOST = True  # SABOTAGE: a clip per group in SGD/Adam/AdamW groups, CPU side
+ comptime PG_COLUMN_CPU = is_defined["MOJOLEARN_COLUMN_CPU"]()
+ 
+ 

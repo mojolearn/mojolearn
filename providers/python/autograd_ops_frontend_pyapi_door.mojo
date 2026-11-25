@@ -42,6 +42,13 @@ from providers.python.neural_descriptor_pyapi_door import neural_descriptor_reso
 from providers.python.autograd_execution_profile_pyapi_pack import execution_profile_object
 from providers.python.autograd_control_checkpoint_pyapi_pack import control_save_py, control_load_py
 from providers.python.autograd_gradient_diagnostics_pyapi_pack import gradient_report_py
+# nn-blocks-scan begin: Session.scan (autograd/nn_scan_frontend.mojo)
+from autograd.nn_scan_frontend import session_scan
+from autograd.autograd_ops_frontend_run import _SOP_SCAN
+# nn-blocks-scan end
+# nn-blocks-cbw begin
+from autograd.program import OpsProgram
+# nn-blocks-cbw end
 
 
 # Session operation codes (row N089, lesson 12) and their one-per-process
@@ -74,7 +81,21 @@ from autograd.autograd_ops_frontend_run import (
     _SOP_STATE, _SOP_MAMBA_BLOCK, _SOP_ATTENTION_BLOCK, _SOP_MAMBA_STEP, _SOP_ATTENTION_STEP, _SOP_SMALL_MLP,
     _SOP_LM_HEAD_LOSS, _SOP_LM_ROWS, _SOP_LM_PICK, _SOP_LM_ALIVE, _SOP_LM_EMBEDDING, _SOP_CONV_BLOCK,
     _SOP_CONV_LINEAR, _SOP_LSTM, _SOP_GRU, _SOP_RNN,
+    _SOP_CUSTOM_OP, _SOP_CUSTOM,  # nn-blocks-cbw
 )
+# nn-blocks-qkv begin
+from autograd.autograd_ops_frontend_run import _SOP_ATTENTION_QKV
+# nn-blocks-qkv end
+# nn-blocks-pg begin: optimizer parameter groups and the shared optimizer UNPACK / PACK
+from autograd.autograd_ops_frontend_run import _SOP_PG_FIRST, _SOP_PG_LAST
+from providers.python.nn_pg_pyapi_door import (
+    pg_session_call_py, ops_optimizer_unpack, ops_optimizer_state_pack, ops_optimizer_state_unpack,
+)
+# nn-blocks-pg end
+# nn-blocks-scatter begin
+from autograd.autograd_ops_frontend_run import _SOP_SCATTER_ADD, _SOP_SEGMENT_SUM, _SOP_SEGMENT_MEAN, _SOP_SEGMENT_MAX
+from autograd.nn_scatter import OPS_SCATTER_ADD, OPS_SEGMENT_SUM
+# nn-blocks-scatter end
 
 
 struct _SessionOpNames(Defaultable, Movable):
@@ -172,6 +193,23 @@ def _tuple_ints(xs: List[Int]) raises -> PythonObject:
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
 # TOMBSTONE: MOJOLEARN_SESSION_CALL_DESCRIPTOR (B arm loses: every same-image Session call through the descriptor, zero-filled read-back arrays; A/B abn9 NVIDIA L40S, ops-session-step 2.63 -> 2.93 ms 1.11, program-run 1.00 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
 # Restore: git apply experiments/removed/MOJOLEARN_SESSION_CALL_DESCRIPTOR.fx-verdicts7.patch; record in docs/TOMBSTONES.md.
+
+
+# nn-blocks-cbw begin: UNPACK of Session.custom_op: a Program's description,
+# read once from the inference session that captured it (this connection).
+def _cbw_program[E: Exec & Movable & Deinitable, KIND: Int](program: PythonObject, which: String) raises -> OpsProgram:
+    var nk = autograd_keys()
+    var fields = program_owner_fields(program)
+    var pid = py_item(fields, nk[].k__id)
+    if _nil(pid):
+        raise Error("ValueError: custom_op: the " + which + " program was freed")
+    var owner = ops_session_fields(py_item(fields, nk[].k__s))
+    var owner_id = py_item(owner, nk[].k__id)
+    if _nil(owner_id):
+        raise Error("ValueError: custom_op: the session that captured the " + which + " program is closed")
+    var o = ops_session[E, KIND](_integer(owner_id, "session", 1))
+    return o[].program(_integer(pid, which + " program", 1))
+# nn-blocks-cbw end
 
 
 def _program_initialize(mut out: PythonObject, session: PythonObject, info: PythonObject) raises:
@@ -429,30 +467,10 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         s[].zero_grad()
         return PythonObject(None)
     if op == _SOP_OPTIMIZER:
-        # UNPACK: exact supported scalar/container admission precedes every
-        # conversion; no user conversion hook can enter optimizer execution.
-        program_admit_value(args)
-        var codes = ops_optimizer_codes(String(args[0]), String(args[8]))
-        var request = OpsOptimizerRequest(codes[0], Bool(py=args[3]), codes[1],
-            _int(args[9], "step_size", 1), _float(args[1], "lr"), _float(args[2], "momentum"),
-            _float(args[4], "beta1"), _float(args[5], "beta2"), _float(args[6], "eps"),
-            _float(args[7], "weight_decay"), _float(args[10], "gamma"), Float32(0))
-        # lane fx-ops-session-blocks: args[11..16] = alpha, centered, lr_decay,
-        # initial_accumulator_value, clip_grad_norm, clip_grad_value (None: no
-        # clip); a clip given must be positive.
-        var clip_norm = Float32(0)
-        var clip_value = Float32(0)
-        if not _nil(args[15]):
-            clip_norm = _float(args[15], "clip_grad_norm")
-            if not (clip_norm > Float32(0)):
-                raise Error("ValueError: clip_grad_norm must be positive")
-        if not _nil(args[16]):
-            clip_value = _float(args[16], "clip_grad_value")
-            if not (clip_value > Float32(0)):
-                raise Error("ValueError: clip_grad_value must be positive")
-        var extras = OpsOptimizerExtras(_float(args[11], "alpha"), Bool(py=args[12]), _float(args[13], "lr_decay"),
-            _float(args[14], "initial_accumulator_value"), clip_norm, clip_value)
-        return PythonObject(s[].optimizer_with(request, extras))
+        # UNPACK in providers/python/nn_pg_pyapi_door.mojo (nn-blocks-pg: shared with
+        # param_group_optimizer; the same words)
+        var unpacked = ops_optimizer_unpack(args)
+        return PythonObject(s[].optimizer_with(unpacked[0], unpacked[1]))
     if op == _SOP_STEP or op == _SOP_SCHEDULER_STEP or op == _SOP_LEARNING_RATE or op == _SOP_OPTIMIZER_STATE or op == _SOP_LOAD_OPTIMIZER_STATE:
         var opt = _int(args[0], "optimizer", 1)
         var oi = s[]._opt_index(opt)
@@ -466,69 +484,11 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
             return PythonObject(Float64(s[].learning_rate(opt)))
         if op == _SOP_OPTIMIZER_STATE:
             var snapshot = s[].optimizer_state_value(opt, _int(args[1], "param", 1))
-            # PACK the native snapshot directly into the documented mapping.
-            var state = Python.dict()
-            py_setitem(state, "step", snapshot.step)
-            if snapshot.kind == 3 or snapshot.kind == 4:
-                # RMSprop / Adagrad (sequence/ops.mojo OPT_RMSPROP 3,
-                # OPT_ADAGRAD 4), torch's state names
-                if snapshot.first != 0:
-                    py_setitem(state, "momentum_buffer", snapshot.first)
-                if snapshot.second != 0:
-                    py_setitem(state, "square_avg" if snapshot.kind == 3 else "sum", snapshot.second)
-                if snapshot.third != 0:
-                    py_setitem(state, "grad_avg", snapshot.third)
-            elif snapshot.kind != 0:
-                py_setitem(state, "beta1_power", Float64(snapshot.beta1_power))
-                py_setitem(state, "beta2_power", Float64(snapshot.beta2_power))
-                if snapshot.kind == 9:
-                    # NAdam (sequence/ops.mojo OPT_NADAM): the running mu product
-                    py_setitem(state, "mu_product", Float64(snapshot.mu_product))
-                if snapshot.first != 0:
-                    py_setitem(state, "exp_avg", snapshot.first)
-                if snapshot.second != 0:
-                    # Adamax (OPT_ADAMAX 8) keeps the infinity norm there
-                    py_setitem(state, "exp_inf" if snapshot.kind == 8 else "exp_avg_sq", snapshot.second)
-            elif snapshot.first != 0:
-                py_setitem(state, "momentum_buffer", snapshot.first)
-            return state
-        var state = args[2]
-        program_admit_value(state)
-        var step = _int(py_item(state, nk[].k_step), "step", 0)
-        var first = 0
-        var second = 0
-        var beta1 = Float32(1)
-        var beta2 = Float32(1)
-        var mu = Float32(1)
-        var opt_kind = s[].opts[oi].cfg.kind
-        var third = 0
-        if opt_kind == 0:
-            if py_contains(state, nk[].k_momentum_buffer):
-                first = _int(py_item(state, nk[].k_momentum_buffer), "momentum_buffer", 1)
-        elif opt_kind == 3 or opt_kind == 4:
-            if py_contains(state, nk[].k_momentum_buffer):
-                first = _int(py_item(state, nk[].k_momentum_buffer), "momentum_buffer", 1)
-            if opt_kind == 3:
-                if py_contains(state, nk[].k_square_avg):
-                    second = _int(py_item(state, nk[].k_square_avg), "square_avg", 1)
-            elif py_contains(state, nk[].k_sum):
-                second = _int(py_item(state, nk[].k_sum), "sum", 1)
-            if py_contains(state, nk[].k_grad_avg):
-                third = _int(py_item(state, nk[].k_grad_avg), "grad_avg", 1)
-        else:
-            if py_contains(state, nk[].k_exp_avg):
-                first = _int(py_item(state, nk[].k_exp_avg), "exp_avg", 1)
-            if opt_kind == 8:
-                # Adamax: the keys `optimizer_state` returns for it
-                if py_contains(state, nk[].k_exp_inf):
-                    second = _int(py_item(state, nk[].k_exp_inf), "exp_inf", 1)
-            elif py_contains(state, nk[].k_exp_avg_sq):
-                second = _int(py_item(state, nk[].k_exp_avg_sq), "exp_avg_sq", 1)
-            beta1 = Float32(py=state["beta1_power"])
-            beta2 = Float32(py=state["beta2_power"])
-            if opt_kind == 9:
-                mu = Float32(py=py_item(state, nk[].k_mu_product))
-        var request = OpsOptimizerRestoreRequest(step, first, second, third, beta1, beta2, mu)
+            # PACK the native snapshot directly into the documented mapping
+            # (providers/python/nn_pg_pyapi_door.mojo, shared with optimizer_state_dict).
+            return ops_optimizer_state_pack(snapshot)
+        # UNPACK in providers/python/nn_pg_pyapi_door.mojo (shared with load_optimizer_state_dict)
+        var request = ops_optimizer_state_unpack(args[2], s[].opts[oi].cfg.kind)
         s[].load_optimizer_state(opt, _int(args[1], "param", 1), request)
         return PythonObject(None)
     if op == _SOP_MAMBA_BLOCK or op == _SOP_ATTENTION_BLOCK:
@@ -618,6 +578,52 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         py_setitem(block, "dt_lo", Float64(dt_lo))
         py_setitem(block, "dt_hi", Float64(dt_hi))
         return block
+    # nn-blocks-scan begin
+    if op == _SOP_SCAN:
+        # UNPACK: args (cell, xs, init_state, params, reverse, lengths, counter). The cell is a Program (or a loaded
+        # one) of this session or of another session of this image; its description is read natively
+        # (autograd/nn_scan_frontend.mojo). init_state is one handle or a sequence of handles; params None or a
+        # sequence of handles; lengths None or a handle.
+        var cell = program_owner_fields(args[0])
+        var cell_session = py_item(cell, nk[].k__s)
+        var cell_sid = Int(py=sid)
+        if cell_session is not session:
+            var cell_fields = ops_session_fields(cell_session)
+            var cell_handle = py_item(cell_fields, nk[].k__id)
+            if _nil(cell_handle):
+                raise Error("ValueError: scan: the cell's Session is closed")
+            var cell_scope: List[Int] = [ops_session_registry_token(), KIND]
+            var admitted = neural_descriptor_resource_handle(py_item(cell_fields, nk[].k__lifetime), cell_scope)
+            if admitted == 0 or admitted != _int(cell_handle, "cell session", 1):
+                raise Error("ValueError: scan: the cell was captured in a Session on another device;"
+                            + " capture it on this Session's device")
+            cell_sid = admitted
+        if _nil(py_item(cell, nk[].k__id)):
+            raise Error("ValueError: scan: the cell Program was freed")
+        var pid = _int(py_item(cell, nk[].k__id), "cell", 1)
+        var one_state = _is_int(args[2])
+        var states = _ints(args[2], "init_state", 1)
+        var given = not _nil(args[3])
+        var params = List[Int]()
+        if given:
+            params = _ints(args[3], "params", 1)
+        var lengths = 0 if _nil(args[5]) else _int(args[5], "lengths", 1)
+        if not program_numeric_scalar(args[4]):
+            raise Error("TypeError: reverse must be a bool")
+        var got = session_scan[E, KIND](Int(py=sid), cell_sid, pid, _int(args[1], "xs", 1), states, lengths,
+                                        params, given, Bool(py=args[4]), _int(args[6], "counter", 0))
+        # PACK: (ys, final_state); final_state one handle when init_state was one handle, else a tuple
+        var finals = List[Int](capacity=len(got) - 1)
+        for k in range(1, len(got)):  # driver-loop: over the final state handles
+            finals.append(got[k])
+        var pair = Python.list()
+        _ = py_call(pair.append, PythonObject(got[0]))
+        if one_state:
+            _ = py_call(pair.append, PythonObject(got[1]))
+        else:
+            _ = py_call(pair.append, _tuple_ints(finals))
+        return py_call(native_loaded_module("builtins").tuple, pair)
+    # nn-blocks-scan end
     if op == _SOP_MAMBA_STEP or op == _SOP_ATTENTION_STEP:
         # UNPACK: args (x, block); the block is the exact dict a block maker
         # returned. One native step op (autograd/ops_block_frontend.mojo).
@@ -673,6 +679,25 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
     if op == _SOP_LM_ALIVE:
         return PythonObject(session_lm_alive[E, KIND](
             Int(py=sid), _int(args[0], "ids", 1), _int(args[1], "rows", 1)))
+    # nn-blocks-cbw begin: Session.custom_op / Session.custom (autograd/nn_cbw.mojo)
+    if op == _SOP_CUSTOM_OP:
+        # UNPACK: args (forward, backward, saved, outputs); the binding checks
+        # run natively once here (OpsSession.cbw_define).
+        var forward = _cbw_program[E, KIND](args[0], "forward")
+        var backward = _cbw_program[E, KIND](args[1], "backward")
+        var saved = List[Int]()
+        if not _nil(args[2]):
+            saved = _ints(args[2], "saved", 0)
+        var n_out = len(forward.outs) if _nil(args[3]) else _int(args[3], "outputs", 1)
+        return PythonObject(s[].cbw_define(forward^, backward^, saved, n_out))
+    if op == _SOP_CUSTOM:
+        # args (op, inputs): one handle per returned output (PACK: an int, or
+        # a tuple for several)
+        var outs = s[].cbw_call(_int(args[0], "op", 1), _ints(args[1], "input", 1))
+        if len(outs) == 1:
+            return PythonObject(outs[0])
+        return _tuple_ints(outs)
+    # nn-blocks-cbw end
     var code = 0
     var hs = List[Int]()
     var ints = List[Int]()
@@ -1096,6 +1121,42 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         var metric = 1 if op == _SOP_ACCURACY else (2 if op == _SOP_LOG_LOSS else 3)
         hs = [_int(args[0], "handle", 1), _int(args[1], "handle", 1)]
         return PythonObject(Float64(s[].metric(metric, hs)))
+    # nn-blocks-qkv begin
+    elif op == _SOP_ATTENTION_QKV:
+        # OPS_ATTENTION_QKV (autograd/nn_qkv.mojo): args (q, k, v, mask or None, causal, scale or None);
+        # ints [causal, scale given, mask kind (0 none, 1 ids words: boolean, 2 float values: additive)],
+        # floats [scale]. The kind is read once here from the mask tensor and recorded with the call, so a
+        # captured program replays the same reading.
+        code = 122
+        hs = [_int(args[0], "q", 1), _int(args[1], "k", 1), _int(args[2], "v", 1)]
+        var mask_kind = 0
+        if not _nil(args[3]):
+            var mask_handle = _int(args[3], "mask", 1)
+            hs.append(mask_handle)
+            mask_kind = 1 if s[].int_words[s[]._slot(mask_handle)] else 2
+        ints = [Int(Bool(py=args[4])), 0 if _nil(args[5]) else 1, mask_kind]
+        fs.append(Float32(0) if _nil(args[5]) else _float(args[5], "scale"))
+    # nn-blocks-qkv end
+    # nn-blocks-scatter begin
+    elif op == _SOP_SCATTER_ADD:
+        # args (x, dim, index, src): torch.Tensor.scatter_add's order; index an ids() tensor
+        code = OPS_SCATTER_ADD
+        if not _is_int(args[2]):
+            raise Error("TypeError: scatter_add: index must be an integer tensor made with Session.ids")
+        hs = [_int(args[0], "x", 1), _int(args[2], "index", 1), _int(args[3], "src", 1)]
+        ints.append(_int(args[1], "dim"))
+    elif op == _SOP_SEGMENT_SUM or op == _SOP_SEGMENT_MEAN or op == _SOP_SEGMENT_MAX:
+        # args (data, segment_ids, num_segments); segment_ids an ids() tensor
+        code = OPS_SEGMENT_SUM + (0 if op == _SOP_SEGMENT_SUM else (1 if op == _SOP_SEGMENT_MEAN else 2))
+        if not _is_int(args[1]):
+            raise Error("TypeError: segment_ids must be an integer tensor made with Session.ids")
+        hs = [_int(args[0], "data", 1), _int(args[1], "segment_ids", 1)]
+        ints.append(_int(args[2], "num_segments"))
+    # nn-blocks-scatter end
+    # nn-blocks-pg begin
+    if op >= _SOP_PG_FIRST and op <= _SOP_PG_LAST:
+        return pg_session_call_py[E](s, op, args)
+    # nn-blocks-pg end
     if code == 0:
         raise Error("unknown native session operation: " + String(operation))
     return PythonObject(s[].op(code, hs, ints, fs))

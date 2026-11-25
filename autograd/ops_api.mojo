@@ -94,6 +94,12 @@ from autograd.optimizer_requests import (
     ops_optimizer_request, ops_optimizer_restore_request,
 )
 from autograd.model import SCHED_CONSTANT, SCHED_STEP, SCHED_EXPONENTIAL, epoch_lr
+# nn-blocks-pg begin: optimizer parameter groups (autograd/nn_pg.mojo)
+from autograd.nn_pg import (
+    ParamGroupTable, pg_check_membership, PG_SABOTAGE_CLIP_PER_GROUP, PG_SABOTAGE_CLIP_PER_GROUP_HOST,
+    PG_SABOTAGE_GROUP_LR, PG_SABOTAGE_GROUP_LR_HOST,
+)
+# nn-blocks-pg end
 # Rank-N tensors (lane ag-rankn-python, plan AUTOGRAD_RANKN (git history)): the
 # core's shape metadata and views, the fold / bmm / layout / conv lanes'
 # entries, and the shared glue (autograd/rankn_api.mojo).
@@ -160,6 +166,27 @@ from autograd.generation_ops import (
     lm_alive_run, LM_PICK_SAMPLE,
 )
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+# nn-blocks-cbw begin: user-defined backward rules (autograd/nn_cbw.mojo)
+from autograd.tape import BackwardRules
+from autograd.nn_cbw import (
+    OPS_CUSTOM_VJP, NN_CBW_TAG, NN_CBW_SABOTAGE_DROP_PATH, NN_CBW_SABOTAGE_SEED_ONE, CbwOp, CbwRecord, CbwState,
+    cbw_bind, cbw_from_words,
+)
+# nn-blocks-cbw end
+# nn-blocks-qkv begin: attention over explicit q, k, v (session code 122, autograd/nn_qkv.mojo)
+from autograd.nn_qkv import OPS_ATTENTION_QKV, qkv_attention
+# nn-blocks-qkv end
+# nn-blocks-scatter begin: scatter_add and the segment reductions, session codes 113..116 (autograd/nn_scatter.mojo)
+from autograd.nn_scatter import (
+    OPS_SCATTER_ADD, OPS_SEGMENT_SUM, OPS_SEGMENT_MEAN, OPS_SEGMENT_MAX, nn_scatter_add, nn_segment, segment_op_name,
+)
+# nn-blocks-scatter end
+# nn-blocks-scan begin: the public scan over a captured cell, session code 118 (autograd/nn_scan.mojo)
+from autograd.nn_scan import (
+    OPS_SCAN, ScanSpec, scan_decode, scan_check_binding, SCAN_SABOTAGE_STATE_LAG, SCAN_SABOTAGE_STATE_LAG_HOST,
+    SCAN_SABOTAGE_INIT_GRAD, SCAN_SABOTAGE_INIT_GRAD_HOST,
+)
+# nn-blocks-scan end
 
 # Executor kinds of a session (the binding that opened it).
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea G): the packed argument
@@ -324,12 +351,15 @@ def _seed(lo: Int, hi: Int) raises -> UInt64:
 struct _OpsOptimizer(ImplicitlyCopyable, Movable):
     """One optimizer of a session: its OP_OPT configuration (packed as
     Sequential.compile packs it), its learning-rate schedule
-    (autograd/model.mojo SCHED_*) and the schedule's epoch."""
+    (autograd/model.mojo SCHED_*) and the schedule's epoch. `pg`: -1 for an
+    ordinary optimizer, else the index of its parameter-group table
+    (`OpsSession.pg_tables`, autograd/nn_pg.mojo; lane nn-blocks-pg)."""
     var cfg: OptimizerConfig
     var sched: Int
     var sched_step: Int
     var gamma: Float32
     var epoch: Int
+    var pg: Int
 
 
 @fieldwise_init
@@ -405,6 +435,13 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     #: position reads, so a bounded loop shadows only the position word
     #: (autograd/program_control.mojo), never the cache itself.
     var append_state: Dict[Int, Int]
+    # nn-blocks-cbw begin: the bound custom operations and the custom nodes
+    # of the recorded graph (autograd/nn_cbw.mojo)
+    var cbw: CbwState
+    # nn-blocks-cbw end
+    #: lane nn-blocks-pg: the parameter-group tables of the grouped
+    #: optimizers (autograd/nn_pg.mojo), indexed by `_OpsOptimizer.pg`
+    var pg_tables: List[ParamGroupTable]
 
     def __init__(out self, var ex: Self.E, record: Bool):
         self.ex = ex^
@@ -436,6 +473,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.buffer_kind = Dict[Int, Int]()
         self.steps = BlockStepScratch()
         self.append_state = Dict[Int, Int]()
+        self.cbw = CbwState()  # nn-blocks-cbw
+        self.pg_tables = List[ParamGroupTable]()
 
     # ------------------------------------------------------------ handles
     def _slot(self, h: Int) raises -> Int:
@@ -890,6 +929,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.tape.reset()
         # the computed tensors the log names are gone; captured programs stay
         self.oplog.clear()
+        self.cbw.clear_records()  # nn-blocks-cbw: the saved tensors were tape storage
         for slot in range(len(self.live)):  # driver-loop: over session handles
             if not self.live[slot]:
                 continue
@@ -946,6 +986,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.program_replays.clear()
         self.op_tensors = List[Tensor]()
         self.oplog.clear()
+        self.cbw.clear()  # nn-blocks-cbw
         self.ex.sync()
 
     # ------------------------------------------------------------ gradients
@@ -960,6 +1001,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         # recorded-run tags (lane x56d: a session that records a step op
         # differentiates it here, not only Program.fit); a graph without
         # those nodes runs as with NeuralRules
+        if self.cbw.holds_rules():
+            # nn-blocks-cbw: the graph holds a user-defined backward rule
+            self.cbw_backward_scalar(t, StepOpRules(self.steps_address()), accumulate)
+            return
         self.tape.backward_scalar_with_rules(self.ex, t, StepOpRules(self.steps_address()), accumulate)
 
     def gradient_into(mut self, h: Int, dst: FP) raises:
@@ -1057,6 +1102,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         gradient tensor with an operation instead."""
         if not self.tape.is_recording():
             raise Error("ops: backward needs a recording session (Session(record=True))")
+        self.cbw_first_order("backward(create_graph=True)")  # nn-blocks-cbw
         var t = self.tensor(h)
         backward_scalar_recorded(self.tape, self.ex, t)
 
@@ -1071,7 +1117,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if not same_shape(self.shape_nd(h), self.shape_nd(seed_h)):
             raise Error("ValueError: ops: the seed must have the output's full shape")
         if create_graph:
+            self.cbw_first_order("create_graph=True")  # nn-blocks-cbw
             backward_recorded(self.tape, self.ex, t, seed)
+        elif self.cbw.holds_rules():
+            # nn-blocks-cbw: the graph holds a user-defined backward rule
+            self.cbw_backward_seeded(t, seed, ImportRules())
         else:
             # First-order seeded and scalar backward accept the same supported
             # rank-N and import operations. Recorded higher derivatives keep
@@ -1114,6 +1164,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         zeros."""
         if not self.tape.is_recording():
             raise Error("ops: hvp needs a recording session (Session(record=True))")
+        self.cbw_first_order("hvp")  # nn-blocks-cbw
         var xs = self._wrt(hs, "hvp")
         self._same_shapes(hs, vs, "hvp")
         var t = self.tensor(loss_h)
@@ -1145,6 +1196,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         to w is sum_i J_i u_i."""
         if not self.tape.is_recording():
             raise Error("ops: jvp needs a recording session (Session(record=True))")
+        self.cbw_first_order("jvp")  # nn-blocks-cbw
         var xs = self._wrt(hs, "jvp")
         self._same_shapes(hs, us, "jvp")
         var t = self.tensor(out_h)
@@ -1192,6 +1244,21 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         (autograd/optimizer_requests.mojo OpsOptimizerExtras): RMSprop
         (`request.momentum` is its momentum) and Adagrad, and the gradient
         clips applied inside `step`."""
+        var entry = self._optimizer_entry(request, extras)
+        self.opts.append(entry)
+        # Failed control-checkpoint restore pops opts before its caller retires
+        # partial parameter states. Keep that index addressable during cleanup,
+        # then reuse its table on the next creation instead of accumulating an
+        # orphan table for each failed restore. Index storage is bounded by the
+        # optimizer-count high-water mark; ordinary creation still adds one.
+        if len(self.opt_state_indices) < len(self.opts):
+            self.opt_state_indices.append(Dict[Int, Int]())
+        return len(self.opts)
+
+    def _optimizer_entry(self, request: OpsOptimizerRequest, extras: OpsOptimizerExtras) raises -> _OpsOptimizer:
+        """The validated configuration and schedule of one optimizer (lane
+        nn-blocks-pg: split from `optimizer_with` so a parameter group's
+        member and a loaded group's settings pass the same checks)."""
         var kind = request.kind
         # Lane fx-ops-session-blocks (2026-11-18): Lion, Adamax and NAdam are
         # OP_OPT kinds (sequence/ops.mojo op_opt) whose whole configuration
@@ -1269,15 +1336,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             cfg.clip_global = True
         cfg.clip_value = extras.clip_grad_value
         var sched_step = request.step_size if sched == SCHED_STEP else 1
-        self.opts.append(_OpsOptimizer(cfg, sched, sched_step, gamma, 0))
-        # Failed control-checkpoint restore pops opts before its caller retires
-        # partial parameter states. Keep that index addressable during cleanup,
-        # then reuse its table on the next creation instead of accumulating an
-        # orphan table for each failed restore. Index storage is bounded by the
-        # optimizer-count high-water mark; ordinary creation still adds one.
-        if len(self.opt_state_indices) < len(self.opts):
-            self.opt_state_indices.append(Dict[Int, Int]())
-        return len(self.opts)
+        return _OpsOptimizer(cfg, sched, sched_step, gamma, 0, -1)
 
     def _opt_index(self, o: Int) raises -> Int:
         if o < 1 or o > len(self.opts):
@@ -1293,6 +1352,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         """Advance optimizer `o`'s schedule by one epoch."""
         var oi = self._opt_index(o)
         self.opts[oi].epoch += 1
+        if self.opts[oi].pg >= 0:
+            self._pg_scheduler_step(oi)  # nn-blocks-pg: every group's rate
 
     def _param_slot(self, h: Int, what: String) raises -> Int:
         var slot = self._slot(h)
@@ -1370,6 +1431,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             raise Error("ops: step needs a recording session (Session(record=True))")
         if len(hs) < 1:
             raise Error("ops: step takes at least one parameter")
+        if self.opts[oi].pg >= 0:
+            self._pg_step(oi, hs)  # nn-blocks-pg: a grouped optimizer
+            return
         var slots = List[Int](capacity=len(hs))
         var grads = List[FP](capacity=len(hs))
         var seen = Dict[Int, Int]()
@@ -1446,6 +1510,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         until reset, and 0 for one it does not use). A parameter never
         stepped reads step 0 and zero buffers."""
         var oi = self._opt_index(o)
+        if self.opts[oi].pg >= 0:
+            # nn-blocks-pg: the parameter's group member keeps its state
+            oi = self._pg_member(oi, h, "optimizer_state")
         var slot = self._param_slot(h, "optimizer_state")
         var si = self._state_of(oi, h, self.rows[slot] * self.cols[slot])
         var r = self.opt_states[si]
@@ -1473,6 +1540,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if state.step < 0:
             raise Error("ops: the optimizer state's step count must be >= 0")
         var oi = self._opt_index(o)
+        if self.opts[oi].pg >= 0:
+            # nn-blocks-pg: the parameter's group member keeps its state
+            oi = self._pg_member(oi, h, "load_optimizer_state")
         var slot = self._param_slot(h, "load_optimizer_state")
         var n = self.rows[slot] * self.cols[slot]
         var si = self._state_of(oi, h, n)
@@ -1558,9 +1628,18 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             for i in range(len(hs)):  # small-loop(hs: an op's input handles, three or a concat's list): handle lookup, no data
                 x.append(self.tensor(hs[i]))
             return self._op_run_tensors(code, hs, ints, fs, x)
+        except err:
+            # nn-blocks-scan begin: OPS_SCAN is in no dispatch chain, so no other operation pays a compare for it:
+            # its code falls through `_op_run_tensors` to "unknown operation code" (no work done, nothing
+            # launched) and is taken here, on the error edge only. `_scan` replays its cell through
+            # `_op_run_tensors`, never through this method, so the two never call each other (AGENTS.md part 6).
+            if code != OPS_SCAN:
+                raise err
+            # nn-blocks-scan end
         finally:
             x.clear()
             swap(x, self.op_tensors)
+        return self._scan(hs, ints, fs)  # nn-blocks-scan: reached only for OPS_SCAN (above)
 
     def _op_run_tensors(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
         """Execute with this call's freshly checked native tensor references."""
@@ -1597,6 +1676,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             # Lane r1-restore-measured-winners: the byte LM trainer's tuned
             # embedding backward, one custom node (autograd/lm_embedding_op.mojo).
             return self._lm_embedding(hs, ints, fs, x)
+        # nn-blocks-qkv begin
+        if code == OPS_ATTENTION_QKV:
+            return self._attention_qkv(hs, ints, fs, x)
+        # nn-blocks-qkv end
         if code == OPS_RMS_NORM or code == OPS_ROTARY or code == OPS_TRANSFORMER_LINEAR or code == OPS_TRANSFORMER_SOFTMAX:
             # These primitive signatures have at most two handles. Their
             # arity validation below rejects any additional operands.
@@ -1938,6 +2021,34 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         elif code >= OPS_IMP_FIRST and code <= OPS_IMP_LAST:
             # lane ag-import-kernels: the import elementwise family
             t = self._import_op(code, x, ints, fs)
+        # nn-blocks-scatter begin
+        elif code == OPS_SCATTER_ADD:
+            # [x, index (an ids tensor of src's shape), src], ints [dim] (autograd/nn_scatter.mojo)
+            _need("scatter_add", n, 3, 1, ni, 0, nf)
+            if self.int_words[self._slot(hs[0])] or self.int_words[self._slot(hs[2])]:
+                raise Error("ValueError: ops: scatter_add: x and src must be floating-point tensors")
+            var sc_slot = self._slot(hs[1])
+            if not self.int_words[sc_slot]:
+                raise Error("ValueError: ops: scatter_add: index must be an integer tensor made with Session.ids")
+            t = nn_scatter_add(self.tape, self.ex, x[0], self.tape.value_of(self.ex, x[1]), self.shapes[sc_slot],
+                               x[2], ints[0])
+        elif code == OPS_SEGMENT_SUM or code == OPS_SEGMENT_MEAN or code == OPS_SEGMENT_MAX:
+            # [data, segment_ids (an ids tensor, one id per row of data)], ints [num_segments]
+            var sg_name = segment_op_name(code - OPS_SEGMENT_SUM)
+            _need(sg_name, n, 2, 1, ni, 0, nf)
+            if self.int_words[self._slot(hs[0])]:
+                raise Error("ValueError: ops: " + sg_name + ": data must be a floating-point tensor")
+            var sg_slot = self._slot(hs[1])
+            if not self.int_words[sg_slot]:
+                raise Error("ValueError: ops: " + sg_name + ": segment_ids must be an integer tensor made with Session.ids")
+            t = nn_segment(self.tape, self.ex, x[0], self.tape.value_of(self.ex, x[1]), self.shapes[sg_slot].count(),
+                           ints[0], code - OPS_SEGMENT_SUM)
+        # nn-blocks-scatter end
+        # nn-blocks-cbw begin: a user-defined backward rule (reached only by
+        # codes no branch above took: no compare on another operation's path)
+        elif code == OPS_CUSTOM_VJP:
+            return self._cbw_forward(hs, ints, fs, x)
+        # nn-blocks-cbw end
         else:
             raise Error("ops: unknown operation code " + String(code))
         if n >= 1 and _keeps_shape(code):
@@ -2397,6 +2508,31 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var rt = self.tape.custom(self.ex, rx, y, n, width, LM_EMBEDDING_TAG, saved)
         return self._add(rt, 0, self.tape.requires_grad(rt), 0)
 
+    # nn-blocks-qkv begin
+    def _attention_qkv(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_ATTENTION_QKV: [q, k, v] or [q, k, v, mask], ints [causal (0, 1), scale given (0, 1), mask kind
+        (0 none, 1 boolean: ids words, nonzero attends, PyTorch's boolean mask; 2 additive: float values added to
+        the scaled scores, PyTorch's float mask)], floats [scale] -> softmax(scale q k^T + mask) v
+        (autograd/nn_qkv.mojo qkv_attention: its shapes, refusals and launches). The door reads the kind from
+        the mask tensor once and the call records it, so a program's replay reads the mask the same way."""
+        if len(x) != 3 and len(x) != 4:
+            raise Error("ValueError: attention takes q, k, v and an optional mask")
+        if len(ints) < 3 or len(fs) < 1:
+            raise Error("ops: attention takes 3 integers and 1 float")
+        if (len(x) == 4) != (ints[2] == 1 or ints[2] == 2) or ints[2] < 0 or ints[2] > 2:
+            raise Error("ops: attention: the mask kind must be 1 or 2 with a mask and 0 without one")
+        for i in range(3):  # small-loop(three operands): operand kinds, no data
+            if self.int_words[self._slot(hs[i])]:
+                raise Error("ValueError: attention: q, k and v must be floating-point tensors")
+        var mask = Optional[Tensor](None)
+        if len(x) == 4:
+            mask = Optional[Tensor](x[3])
+        var mask_bool = ints[2] == 1
+        var t = qkv_attention(self.tape, self.ex, x[0], x[1], x[2], mask, mask_bool, ints[0] != 0, ints[1] != 0,
+                              fs[0])
+        return self._add(t, 0, False, 0)
+    # nn-blocks-qkv end
+
     def _generation_op(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
         """Generation op `code` (autograd/generation_ops.mojo): operand 0 the
         logits (pick, floating point) or the ids (alive), operand 1 the rows
@@ -2761,6 +2897,257 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             raise Error("ops: unknown split mode " + String(mode))
         return rankn_narrow(self.tape, self.ex, x, a, start, length)
 
+    # nn-blocks-scan begin: the scan over a captured cell (autograd/nn_scan.mojo, session code 118)
+    def _scan_call(
+        mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], mut x: List[Tensor],
+    ) raises -> Int:
+        """One existing operation inside a scan: `_op_run` without the scan branch (so a scan never re-enters
+        it), the operand list `x` the scan's own reused capacity."""
+        x.clear()
+        for i in range(len(hs)):  # small-loop(hs: one node's input handles): handle lookup, no data
+            x.append(self.tensor(hs[i]))
+        return self._op_run_tensors(code, hs, ints, fs, x)
+
+    def _scan(mut self, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
+        """OPS_SCAN: [xs (steps, ...), state_1 .. state_k, (lengths), param_1 .. param_m], ints and floats the
+        cell's description (autograd/nn_scan.mojo). A driver loop over steps: step t's input is a free view of
+        xs (operation 40, then 33 to the cell's step shape), the cell's nodes run on the step's handles through
+        `_op_run_tensors` (the same kernels as the operations one by one, on this session's executor), and the
+        next state replaces the state handles; nothing is read back and no buffer is copied between steps. With
+        `lengths` (one float length per sequence, batch on axis 1 of xs) a step t >= length keeps the row's
+        state (where) and gives a zero output row; the mask is built once on the executor (full, cumsum,
+        compare). `reverse` walks t = steps - 1 down to 0; the outputs stay in time order. Returns one (n, 1)
+        column: the outputs of every step in time order, then the final states, each flattened (one concat
+        node: each step's output copied once). A dropout in the cell draws a new mask each step. Launches per step: two views, the
+        cell's nodes, and with lengths one view, one view per state rank and one where per state and output.
+        Every temporary handle is retired before the return; the tape keeps its nodes, so a recording session
+        differentiates the whole loop (backward through time over the stored per-step values)."""
+        var spec = scan_decode(ints, fs, len(hs))
+        ref cell = spec.cell
+        var n_state = spec.n_state
+        var reverse = spec.reverse
+        var has_lengths = spec.has_lengths
+        var xs = hs[0]
+        var xs_slot = self._slot(xs)
+        var xs_shape = self.shapes[xs_slot]
+        var state = List[Int](capacity=n_state)
+        var state_shapes = List[ShapeN](capacity=n_state)
+        var state_ids = List[Bool](capacity=n_state)
+        for k in range(n_state):  # driver-loop: over state tensors (handles and metadata)
+            var slot = self._slot(hs[1 + k])
+            state.append(hs[1 + k])
+            state_shapes.append(self.shapes[slot])
+            state_ids.append(self.int_words[slot])
+        var at = 1 + n_state
+        var lengths = 0
+        var lengths_count = -1
+        if has_lengths:
+            lengths = hs[at]
+            var lslot = self._slot(lengths)
+            if self.int_words[lslot]:
+                raise Error("ValueError: scan: lengths must hold floating-point values")
+            lengths_count = self.shapes[lslot].count()
+            at += 1
+        var params = List[Int](capacity=spec.n_params)
+        var param_shapes = List[ShapeN](capacity=spec.n_params)
+        var param_ids = List[Bool](capacity=spec.n_params)
+        for j in range(spec.n_params):  # driver-loop: over the cell's bound parameters (handles and metadata)
+            var slot = self._slot(hs[at + j])
+            params.append(hs[at + j])
+            param_shapes.append(self.shapes[slot])
+            param_ids.append(self.int_words[slot])
+        scan_check_binding(cell, xs_shape, self.int_words[xs_slot], state_shapes, state_ids, lengths_count,
+                           param_shapes, param_ids)
+        # Resolved once per call: the nodes' arguments, the step views' words, the mask.
+        var n_nodes = cell.n_nodes()
+        var node_ints = List[List[Int]](capacity=n_nodes)
+        var node_fs = List[List[Float32]](capacity=n_nodes)
+        for k in range(n_nodes):  # driver-loop: over cell nodes (their arguments, once per call)
+            var ni = List[Int]()
+            for j in range(cell.i_at[k], cell.i_at[k + 1]):  # small-loop(ints: a node's integer arguments)
+                ni.append(cell.ints[j])
+            node_ints.append(ni^)
+            var nf = List[Float32]()
+            for j in range(cell.f_at[k], cell.f_at[k + 1]):  # small-loop(fs: a node's float arguments)
+                nf.append(cell.fs[j])
+            node_fs.append(nf^)
+        # Dropout nodes (OPS_DROPOUT 21: ints [seed lo, seed hi, counter]) draw a new mask every step: their
+        # captured counters, and the per-step offsets (autograd/nn_scan.mojo note).
+        var drop_nodes = List[Int]()
+        var drop_counter = List[Int]()
+        for k in range(n_nodes):  # driver-loop: over cell nodes (dropout ones), once per call
+            if cell.code[k] == OPS_DROPOUT and len(node_ints[k]) >= 3:
+                drop_nodes.append(k)
+                drop_counter.append(node_ints[k][2])
+        var steps = xs_shape.d[0]
+        var batch = xs_shape.d[1]
+        var x_dims = cell.in_shapes[n_state].dims()
+        var view_x: List[Int] = [0]
+        for d in range(len(x_dims)):  # small-loop(ndim: the step input's rank, at most 8)
+            view_x.append(x_dims[d])
+        var piece: List[Int] = [0, 0, 1, steps]
+        var no_ints = List[Int]()
+        var no_fs = List[Float32]()
+        var x = List[Tensor]()
+        var one_h: List[Int] = [xs]
+        var xs_h: List[Int] = [xs]
+        var where_h: List[Int] = [0, 0, 0]
+        var temps = List[Int]()
+        var mask = 0
+        var zero = 0
+        var rank_view = List[List[Int]]()
+        var mask_by_rank = List[Int](length=9, fill=0)
+        var packed = 0
+        var step_at = -1
+        try:
+            if has_lengths:
+                var ones_i: List[Int] = [steps, 1]
+                var one_f: List[Float32] = [Float32(1.0)]
+                var ones = self._scan_call(OPS_FULL, no_ints, ones_i, one_f, x)
+                temps.append(ones)
+                one_h[0] = ones
+                var cs_i: List[Int] = [0, 1, 0]
+                var times = self._scan_call(OPS_CUMSUM, one_h, cs_i, no_fs, x)
+                temps.append(times)
+                one_h[0] = lengths
+                var lr_i: List[Int] = [0, 1, batch]
+                var lrow = self._scan_call(OPS_RESHAPE_N, one_h, lr_i, no_fs, x)
+                temps.append(lrow)
+                var cmp_h: List[Int] = [lrow, times]
+                var cmp_i: List[Int] = [1]
+                mask = self._scan_call(OPS_COMPARE, cmp_h, cmp_i, no_fs, x)
+                temps.append(mask)
+                var z_i: List[Int] = [1, 1]
+                var z_f: List[Float32] = [Float32(0.0)]
+                zero = self._scan_call(OPS_FULL, no_ints, z_i, z_f, x)
+                temps.append(zero)
+            for r in range(9):  # small-loop(ranks 0..8): the mask's view words per rank, once per call
+                var rv = List[Int]()
+                if r >= 2:
+                    rv.append(0)
+                    rv.append(batch)
+                    for _q in range(r - 1):  # small-loop(rank - 1 unit axes)
+                        rv.append(1)
+                rank_view.append(rv^)
+            comptime if (SCAN_SABOTAGE_INIT_GRAD and Self.E.IS_DEVICE) or (
+                    SCAN_SABOTAGE_INIT_GRAD_HOST and not Self.E.IS_DEVICE):
+                for k in range(n_state):  # driver-loop: over state tensors  # SABOTAGE: the initial state detached
+                    one_h[0] = state[k]
+                    var dk = self._scan_call(OPS_DETACH, one_h, no_ints, no_fs, x)
+                    temps.append(dk)
+                    state[k] = dk
+            var lag1 = state.copy()
+            var lag2 = state.copy()
+            var outs_by_time = List[Int](length=steps, fill=0)
+            var vals = List[Int]()
+            var args = List[Int]()
+            var nxt = List[Int](capacity=n_state + 1)
+            for i in range(steps):  # driver-loop: over steps
+                var t = steps - 1 - i if reverse else i
+                step_at = t
+                piece[1] = t
+                var x3 = self._scan_call(OPS_NARROW, xs_h, piece, no_fs, x)
+                temps.append(x3)
+                one_h[0] = x3
+                var x_t = self._scan_call(OPS_RESHAPE_N, one_h, view_x, no_fs, x)
+                temps.append(x_t)
+                vals.clear()
+                comptime if (SCAN_SABOTAGE_STATE_LAG and Self.E.IS_DEVICE) or (
+                        SCAN_SABOTAGE_STATE_LAG_HOST and not Self.E.IS_DEVICE):
+                    for k in range(n_state):  # driver-loop: over state tensors  # SABOTAGE: step t fed state t - 2
+                        vals.append(lag2[k] if i >= 2 else state[k])
+                else:
+                    for k in range(n_state):  # driver-loop: over state tensors (this step's handles)
+                        vals.append(state[k])
+                vals.append(x_t)
+                for q in range(len(drop_nodes)):  # driver-loop: over the cell's dropout nodes (this step's counters)
+                    var dk = drop_nodes[q]
+                    node_ints[dk][2] = drop_counter[q] + (spec.counter * steps + t) * n_nodes + dk
+                for k in range(n_nodes):  # driver-loop: over the cell's nodes (one step's launch sequence)
+                    args.clear()
+                    for j in range(cell.a_at[k], cell.a_at[k + 1]):  # small-loop(args: a node's input refs)
+                        var rf = cell.args[j]
+                        args.append(params[-rf - 1] if rf < 0 else vals[rf])
+                    var h = self._scan_call(cell.code[k], args, node_ints[k], node_fs[k], x)
+                    temps.append(h)
+                    vals.append(h)
+                if has_lengths:
+                    one_h[0] = mask
+                    var mrow = self._scan_call(OPS_NARROW, one_h, piece, no_fs, x)
+                    temps.append(mrow)
+                    for r in range(9):  # small-loop(ranks 0..8): this step's mask views, made on first use
+                        mask_by_rank[r] = 0
+                    mask_by_rank[0] = mrow
+                nxt.clear()
+                for k in range(n_state + 1):  # driver-loop: over the cell's outputs (next state, then the output)
+                    var rf = cell.outs[k]
+                    var h = params[-rf - 1] if rf < 0 else vals[rf]
+                    var slot = self._slot(h)
+                    var want = cell.in_shapes[k] if k < n_state else cell.out_shapes[n_state]
+                    if self.int_words[slot]:
+                        raise Error("ValueError: scan: the cell's output " + String(k)
+                                    + " holds integer ids; a scan carries floating-point values")
+                    if not self.shapes[slot].same(want):
+                        raise Error("ValueError: scan: the cell's output " + String(k) + " is "
+                                    + shape_text(self.shapes[slot]) + " here but was captured as "
+                                    + shape_text(want) + ": the output shape must not vary per step")
+                    if has_lengths:
+                        var r = want.ndim
+                        if mask_by_rank[r] == 0:
+                            one_h[0] = mask_by_rank[0]
+                            mask_by_rank[r] = self._scan_call(OPS_RESHAPE_N, one_h, rank_view[r], no_fs, x)
+                            temps.append(mask_by_rank[r])
+                        where_h[0] = mask_by_rank[r]
+                        where_h[1] = h
+                        where_h[2] = vals[k] if k < n_state else zero
+                        h = self._scan_call(OPS_WHERE, where_h, no_ints, no_fs, x)
+                        temps.append(h)
+                    nxt.append(h)
+                outs_by_time[t] = nxt[n_state]
+                comptime if (SCAN_SABOTAGE_STATE_LAG and Self.E.IS_DEVICE) or (
+                        SCAN_SABOTAGE_STATE_LAG_HOST and not Self.E.IS_DEVICE):
+                    lag2 = lag1.copy()
+                    lag1 = state.copy()
+                for k in range(n_state):  # driver-loop: over state tensors (the next step's handles)
+                    state[k] = nxt[k]
+            step_at = -1
+            # The stack: each step's output and each final state as an (n, 1) column (free views), joined once.
+            var cols = List[Int](capacity=steps)
+            var col_i: List[Int] = [0, cell.out_shapes[n_state].count(), 1]
+            for t in range(steps):  # driver-loop: over steps (the stack's columns, views)
+                one_h[0] = outs_by_time[t]
+                var c = self._scan_call(OPS_RESHAPE_N, one_h, col_i, no_fs, x)
+                temps.append(c)
+                cols.append(c)
+            var extra = List[Int](capacity=n_state)
+            for k in range(n_state):  # driver-loop: over state tensors (the final states' columns, views)
+                var si: List[Int] = [0, cell.in_shapes[k].count(), 1]
+                one_h[0] = state[k]
+                var c = self._scan_call(OPS_RESHAPE_N, one_h, si, no_fs, x)
+                temps.append(c)
+                extra.append(c)
+            # One concat node over every column (autograd/rankn_layout.mojo rankn_concat: one slab copy per
+            # operand into the reserved (n, 1) output, one slab copy per operand back in the backward; it takes
+            # any number of operands, so each step's output is copied once).
+            for k in range(len(extra)):  # driver-loop: over the final states' columns
+                cols.append(extra[k])
+            var parts = List[Tensor](capacity=len(cols))
+            for q in range(len(cols)):  # driver-loop: over the stack's columns (handle lookup, no data)
+                parts.append(self.tensor(cols[q]))
+            var stacked = rankn_concat(self.tape, self.ex, parts, 0)
+            packed = self._add(stacked, 0, self.tape.requires_grad(stacked), 0)
+        except err:
+            self._drop_temps(temps)
+            if step_at < 0:
+                raise err
+            var message = String(err)
+            if message.startswith("ValueError: "):
+                raise Error("ValueError: scan step " + String(step_at) + ": " + String(message[byte=12:]))
+            raise Error("scan step " + String(step_at) + ": " + message)
+        self._drop_temps(temps)
+        return packed
+    # nn-blocks-scan end
+
     def op_packed(mut self, code: Int, block: Int) raises -> Int:
         """`op` with its arguments in a packed block at address `block`
         (OPS_PACK_* layout): the same checks and the same call."""
@@ -2955,8 +3342,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         return self.tape._nodes[self.tensor(h)._index].grad_ready
 
     def optimizer_settings(self, o: Int) raises -> _OpsOptimizer:
-        """A copy of optimizer o's configuration and schedule."""
-        return self.opts[self._opt_index(o)]
+        """A copy of optimizer o's configuration and schedule (one group:
+        a partitioned or distributed program trains one configuration)."""
+        return self.opts[self._opt_index_single(o, "a partitioned or distributed program")]
 
     def optimizer_state_index(self, o: Int, h: Int) raises -> Int:
         """The index of (optimizer o, parameter handle h)'s retained state, or
@@ -3149,6 +3537,613 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 raise Error("ops: roc_auc takes one score column")
             return roc_auc(self.ex, yt, pv, rows)
         raise Error("ops: unknown metric code " + String(kind))
+
+    # nn-blocks-pg begin: optimizer parameter groups (autograd/nn_pg.mojo)
+    def _opt_index_single(self, o: Int, what: String) raises -> Int:
+        """`_opt_index` for a surface that trains ONE configuration: an
+        optimizer with parameter groups is refused by name."""
+        var oi = self._opt_index(o)
+        if self.opts[oi].pg >= 0:
+            raise Error("ValueError: ops: " + what + " takes an optimizer without parameter groups; optimizer "
+                        + String(o) + " has parameter groups (update its parameters with Session.step)")
+        return oi
+
+    def param_group_optimizer(
+        mut self, request: OpsOptimizerRequest, extras: OpsOptimizerExtras,
+        group_requests: List[OpsOptimizerRequest], group_extras: List[OpsOptimizerExtras], groups: List[List[Int]],
+    ) raises -> Int:
+        """A new optimizer with parameter groups; returns its id (>= 1).
+
+        `request` / `extras` are the optimizer-wide settings (its kind, its
+        schedule, the gradient clips); group g's settings are
+        `group_requests[g]` / `group_extras[g]` (the door fills them from the
+        optimizer-wide ones and the group's own keys) and its parameters are
+        `groups[g]`. Every setting and every membership is checked before any
+        optimizer is added: a refusal leaves the session unchanged. Each group
+        becomes a member optimizer of its own (an id after the returned one);
+        the table is resolved here, once (autograd/nn_pg.mojo)."""
+        var n = len(groups)
+        if len(group_requests) != n or len(group_extras) != n:
+            raise Error("ops: param_group_optimizer takes one setting per parameter group")
+        var table = pg_check_membership(groups)
+        for g in range(n):  # driver-loop: over parameter groups (construction, once)
+            for i in range(len(groups[g])):  # driver-loop: over one group's parameters (construction, once)
+                # a session-owned tensor (made with `tensor`): Program.fit
+                # trains captured parameters of an inference session, so
+                # requires_grad is checked where the step runs, not here
+                if self.owned[self._slot(groups[g][i])] == 0:
+                    raise Error("ValueError: ops: param_groups[" + String(g) + "] parameter " + String(i)
+                                + " is not a tensor made with Session.tensor")
+            var r = group_requests[g]
+            var x = group_extras[g]
+            if (r.kind != request.kind or r.schedule != request.schedule or r.step_size != request.step_size
+                    or r.gamma != request.gamma or x.clip_grad_norm != extras.clip_grad_norm
+                    or x.clip_grad_value != extras.clip_grad_value):
+                raise Error("ops: param_groups[" + String(g) + "] differs from the optimizer in an optimizer-wide "
+                            + "setting (kind, schedule or clip)")
+        var head = self._optimizer_entry(request, extras)
+        var entries = List[_OpsOptimizer](capacity=n)
+        for g in range(n):  # driver-loop: over parameter groups (validation before any change)
+            var entry = self._optimizer_entry(group_requests[g], group_extras[g])
+            entries.append(entry)
+        var first = len(self.opts)
+        head.pg = len(self.pg_tables)
+        self.opts.append(head)
+        for g in range(n):  # driver-loop: over parameter groups (one member optimizer each)
+            table.members.append(len(self.opts))
+            self.opts.append(entries[g])
+        while len(self.opt_state_indices) < len(self.opts):  # driver-loop: over new optimizers' index tables
+            self.opt_state_indices.append(Dict[Int, Int]())
+        self.pg_tables.append(table^)
+        return first + 1
+
+    def _pg_index(self, o: Int) raises -> Int:
+        """The table index of grouped optimizer o."""
+        var oi = self._opt_index(o)
+        var g = self.opts[oi].pg
+        if g < 0:
+            raise Error("ValueError: ops: optimizer " + String(o) + " has no parameter groups")
+        return g
+
+    def _pg_group(self, oi: Int, h: Int, what: String) raises -> Int:
+        """The group index of parameter h in grouped optimizer oi."""
+        ref table = self.pg_tables[self.opts[oi].pg]
+        if h not in table.group_of:
+            raise Error("ValueError: ops: " + what + ": the parameter is in no parameter group of optimizer "
+                        + String(oi + 1))
+        return table.group_of[h]
+
+    def _pg_member(self, oi: Int, h: Int, what: String) raises -> Int:
+        """The member optimizer index (opts) of parameter h's group."""
+        var gi = self._pg_group(oi, h, what)
+        return self.pg_tables[self.opts[oi].pg].members[gi]
+
+    def _pg_scheduler_step(mut self, oi: Int):
+        """Every group member at the grouped optimizer's epoch: one schedule
+        scales every group's rate (torch's schedulers scale every group)."""
+        var g = self.opts[oi].pg
+        var epoch = self.opts[oi].epoch
+        for k in range(len(self.pg_tables[g].members)):  # driver-loop: over parameter groups
+            var m = self.pg_tables[g].members[k]
+            self.opts[m].epoch = epoch
+
+    def _pg_rates(self, oi: Int) -> List[Float32]:
+        """Each group's learning rate at the schedule's current epoch, once
+        per step (a host scalar of each group, never data)."""
+        var g = self.opts[oi].pg
+        var ngroups = len(self.pg_tables[g].members)
+        var rates = List[Float32](capacity=ngroups)
+        for k in range(ngroups):  # driver-loop: over parameter groups (one rate each)
+            var op = self.opts[self.pg_tables[g].members[k]]
+            rates.append(epoch_lr(op.cfg.lr, op.sched, op.sched_step, op.gamma, op.epoch))
+        comptime if (PG_SABOTAGE_GROUP_LR and Self.E.IS_DEVICE) or (PG_SABOTAGE_GROUP_LR_HOST and not Self.E.IS_DEVICE):
+            for k in range(ngroups):  # driver-loop: over parameter groups
+                rates[k] = rates[0]  # SABOTAGE: every group steps at group 0's rate
+        return rates^
+
+    def _pg_step(mut self, oi: Int, hs: List[Int]) raises:
+        """`step` of a grouped optimizer: each listed parameter updated by its
+        group's member (its settings, its rate, its own state), the
+        member's ordinary launches (autograd/nn_pg.mojo). With
+        clip_grad_norm, ONE norm over every listed gradient of every group,
+        in the order `hs` lists them, and ONE coefficient for all.
+        Every parameter is checked before any is updated."""
+        var rates = self._pg_rates(oi)
+        var slots = List[Int](capacity=len(hs))
+        var grads = List[FP](capacity=len(hs))
+        var groups_of = List[Int](capacity=len(hs))
+        var members_of = List[Int](capacity=len(hs))
+        var seen = Dict[Int, Int]()
+        var g = self.opts[oi].pg
+        for i in range(len(hs)):  # driver-loop: over the step's parameters
+            var slot = self._param_slot(hs[i], "step")
+            if slot in seen:
+                raise Error("ops: step lists a parameter twice")
+            seen[slot] = i
+            var gi = self._pg_group(oi, hs[i], "step")
+            slots.append(slot)
+            groups_of.append(gi)
+            members_of.append(self.pg_tables[g].members[gi])
+            grads.append(self.tape.gradient(self.tensors[slot]))
+        var head_cfg = self.opts[oi].cfg
+        if optimizer_clips(head_cfg):
+            # The clip across the step's tensors of EVERY group: the fold of
+            # autograd/optim.mojo `clip_norm_accumulate` (the norm in the first
+            # tensor's cell), then each tensor's update reads that one
+            # coefficient (`step_lr_clipped`, one launch a tensor).
+            var sis = List[Int](capacity=len(slots))
+            for i in range(len(slots)):  # driver-loop: over the step's parameters
+                sis.append(self._state_of(members_of[i], hs[i], self.rows[slots[i]] * self.cols[slots[i]]))
+            var cells = List[FP](capacity=len(slots))
+            var cell = self.opt_states[sis[0]].cell
+            for i in range(len(slots)):  # driver-loop: over the step's parameters
+                comptime if (PG_SABOTAGE_CLIP_PER_GROUP and Self.E.IS_DEVICE) or (
+                        PG_SABOTAGE_CLIP_PER_GROUP_HOST and not Self.E.IS_DEVICE):
+                    if i > 0 and groups_of[i] != groups_of[i - 1]:
+                        cell = self.opt_states[sis[i]].cell  # SABOTAGE: a norm of each group's own
+                cells.append(cell)
+            if head_cfg.clip_global:
+                for i in range(len(slots)):  # driver-loop: over the step's parameters (the norm's fold order)
+                    var first = i == 0
+                    var last = i == len(slots) - 1
+                    comptime if (PG_SABOTAGE_CLIP_PER_GROUP and Self.E.IS_DEVICE) or (
+                            PG_SABOTAGE_CLIP_PER_GROUP_HOST and not Self.E.IS_DEVICE):
+                        first = i == 0 or groups_of[i] != groups_of[i - 1]
+                        last = i == len(slots) - 1 or groups_of[i + 1] != groups_of[i]
+                    var sv = self._state_view(sis[i])
+                    clip_norm_accumulate(self.ex, head_cfg, sv, grads[i], self.rows[slots[i]] * self.cols[slots[i]],
+                                         cells[i], first, last)
+            for i in range(len(slots)):  # driver-loop: over the step's parameters
+                var cslot = slots[i]
+                var cfg = self.opts[members_of[i]].cfg
+                var ct = self.opt_states[sis[i]].t + 1
+                var cst = self._state_view(sis[i])
+                step_lr_clipped(self.ex, cfg, cst, FP(unsafe_from_address=self.owned[cslot]), grads[i],
+                                self.rows[cslot] * self.cols[cslot], ct, rates[groups_of[i]], cells[i])
+                self.steps_forget(self.owned[cslot])  # the weights moved: a step op re-checks them
+                self.opt_states[sis[i]].t = ct
+                self.opt_states[sis[i]].pw1 = cst.pw1
+                self.opt_states[sis[i]].pw2 = cst.pw2
+                self.opt_states[sis[i]].mu_prod = cst.mu_prod
+            return
+        for i in range(len(slots)):  # driver-loop: over the step's parameters
+            var slot = slots[i]
+            var n = self.rows[slot] * self.cols[slot]
+            var si = self._state_of(members_of[i], hs[i], n)
+            var t = self.opt_states[si].t + 1
+            var st = self._state_view(si)
+            var cfg = self.opts[members_of[i]].cfg
+            step_lr(self.ex, cfg, st, FP(unsafe_from_address=self.owned[slot]), grads[i], n, t, rates[groups_of[i]])
+            self.steps_forget(self.owned[slot])  # the weights moved: a step op re-checks them
+            self.opt_states[si].t = t
+            self.opt_states[si].pw1 = st.pw1
+            self.opt_states[si].pw2 = st.pw2
+            self.opt_states[si].mu_prod = st.mu_prod
+
+    def pg_groups(self, o: Int) raises -> Int:
+        """The number of parameter groups of grouped optimizer o."""
+        return len(self.pg_tables[self._pg_index(o)].members)
+
+    def pg_group_params(self, o: Int, gi: Int) raises -> List[Int]:
+        """Group gi's parameter handles, in the order the group listed them."""
+        var g = self._pg_index(o)
+        if gi < 0 or gi >= len(self.pg_tables[g].members):
+            raise Error("ValueError: ops: optimizer " + String(o) + " has no parameter group " + String(gi))
+        var out = List[Int]()
+        for k in range(self.pg_tables[g].starts[gi], self.pg_tables[g].starts[gi + 1]):  # driver-loop: over one group's parameters
+            out.append(self.pg_tables[g].params[k])
+        return out^
+
+    def pg_group_config(self, o: Int, gi: Int) raises -> OptimizerConfig:
+        """Group gi's configuration (its base learning rate and settings)."""
+        var g = self._pg_index(o)
+        if gi < 0 or gi >= len(self.pg_tables[g].members):
+            raise Error("ValueError: ops: optimizer " + String(o) + " has no parameter group " + String(gi))
+        return self.opts[self.pg_tables[g].members[gi]].cfg
+
+    def pg_learning_rates(self, o: Int) raises -> List[Float32]:
+        """Every group's learning rate at the schedule's current epoch."""
+        _ = self._pg_index(o)
+        return self._pg_rates(o - 1)
+
+    def pg_epoch(self, o: Int) raises -> Int:
+        """The schedule's epoch of grouped optimizer o (every group's)."""
+        _ = self._pg_index(o)
+        return self.opts[o - 1].epoch
+
+    def pg_set_epoch(mut self, o: Int, epoch: Int) raises:
+        """Set the schedule's epoch of grouped optimizer o and every group."""
+        _ = self._pg_index(o)
+        if epoch < 0:
+            raise Error("ValueError: ops: the schedule's epoch must be >= 0")
+        self.opts[o - 1].epoch = epoch
+        self._pg_scheduler_step(o - 1)
+
+    def pg_group_request(self, o: Int, gi: Int) raises -> Tuple[OpsOptimizerRequest, OpsOptimizerExtras]:
+        """Group gi's settings as the request that builds them (the base a
+        loaded group's keys are applied over)."""
+        var g = self._pg_index(o)
+        if gi < 0 or gi >= len(self.pg_tables[g].members):
+            raise Error("ValueError: ops: optimizer " + String(o) + " has no parameter group " + String(gi))
+        var m = self.opts[self.pg_tables[g].members[gi]]
+        var c = m.cfg
+        var request = OpsOptimizerRequest(c.kind, c.nesterov, m.sched, m.sched_step, c.lr, c.momentum, c.beta1,
+                                          c.beta2, c.eps, c.weight_decay, m.gamma, c.dampening)
+        var extras = OpsOptimizerExtras(c.alpha, c.centered, c.lr_decay, c.init_acc,
+                                        c.clip if c.clip_global else Float32(0), c.clip_value)
+        return (request, extras)
+
+    def pg_load_group(
+        mut self, o: Int, gi: Int, request: OpsOptimizerRequest, extras: OpsOptimizerExtras, commit: Bool,
+    ) raises:
+        """Replace group gi's settings (a loaded state dict's group): the
+        same checks as construction; the kind, the schedule, the clips and the
+        state buffers the group keeps (`optimizer_slots`) must not change, so
+        its retained state stays valid. `commit` False checks only (the
+        caller checks every group before it changes any)."""
+        var g = self._pg_index(o)
+        if gi < 0 or gi >= len(self.pg_tables[g].members):
+            raise Error("ValueError: ops: optimizer " + String(o) + " has no parameter group " + String(gi))
+        var m = self.pg_tables[g].members[gi]
+        var entry = self._optimizer_entry(request, extras)
+        var now = self.opts[m]
+        var head = self.opts[o - 1]
+        if (entry.cfg.kind != now.cfg.kind or entry.sched != now.sched or entry.sched_step != now.sched_step
+                or entry.gamma != now.gamma or entry.cfg.clip != head.cfg.clip
+                or entry.cfg.clip_global != head.cfg.clip_global or entry.cfg.clip_value != head.cfg.clip_value):
+            raise Error("ValueError: ops: param_groups[" + String(gi) + "] of the loaded state changes an "
+                        + "optimizer-wide setting (kind, schedule or clip)")
+        var a = optimizer_slots(entry.cfg)
+        var b = optimizer_slots(now.cfg)
+        if a[0] != b[0] or a[1] != b[1] or a[2] != b[2]:
+            raise Error("ValueError: ops: param_groups[" + String(gi) + "] of the loaded state changes which "
+                        + "state buffers the group keeps (momentum or centered); build the optimizer with "
+                        + "those settings")
+        if entry.cfg.init_acc != now.cfg.init_acc and len(self.opt_state_indices[m]) > 0:
+            raise Error("ValueError: ops: param_groups[" + String(gi) + "] of the loaded state changes "
+                        + "initial_accumulator_value after its state was made")
+        if commit:
+            self.opts[m].cfg = entry.cfg
+    # nn-blocks-pg end
+
+    # nn-blocks-cbw begin: user-defined backward rules (autograd/nn_cbw.mojo).
+    # A custom operation is two captured programs (forward, backward) bound
+    # once (cbw_define, or the first replay of a loaded program holding one).
+    # A call runs the forward without recording and, in a recording session,
+    # records ONE tape node (tag NN_CBW_TAG) whose rule (CbwRules below) runs
+    # the backward program on the node's incoming gradient and hands the tape
+    # one gradient per input, which the tape accumulates like any other
+    # contribution. No Python is called in either direction.
+    def cbw_define(mut self, var forward: OpsProgram, var backward: OpsProgram, saved: List[Int], n_out: Int) raises -> Int:
+        """Bind a custom operation (the checks of autograd/nn_cbw.mojo
+        cbw_bind); returns its id (>= 1). Binding the same pair again returns
+        the same id."""
+        var op = cbw_bind(forward^, backward^, saved, n_out)
+        return self.cbw.add(op^) + 1
+
+    def cbw_call(mut self, op_id: Int, hs: List[Int]) raises -> List[Int]:
+        """Call custom operation `op_id` on the tensors `hs`; one handle per
+        returned output. It is one OPS_CUSTOM_VJP operation holding both
+        programs (an inference session logs it, so a capture holds it and a
+        saved program carries both graphs), then, for several outputs, one
+        narrow and one reshape per output over its (1, total) result."""
+        if op_id < 1 or op_id > len(self.cbw.ops):
+            raise Error("ValueError: custom: " + String(op_id) + " is not a custom operation of this session")
+        var words = self.cbw.ops[op_id - 1].words.copy()
+        var floats = self.cbw.ops[op_id - 1].floats.copy()
+        var n_out = self.cbw.ops[op_id - 1].n_out
+        var res = self.op(OPS_CUSTOM_VJP, hs, words, floats)
+        var outs = List[Int](capacity=n_out)
+        if n_out == 1:
+            outs.append(res)
+            return outs^
+        var shapes = self.cbw.last_out_shapes.copy()
+        var spec = List[Int]()
+        var dims = List[Int]()
+        var one = List[Int]()
+        for k in range(n_out):  # driver-loop: over the operation's outputs
+            spec.clear()
+            spec.append(1)
+            spec.append(k)
+            spec.append(0)
+            for j in range(n_out):  # small-loop(n_out: the operation's outputs): narrow sizes
+                spec.append(shapes[j].count())
+            one.clear()
+            one.append(res)
+            var piece = self.op(OPS_NARROW, one, spec, List[Float32]())
+            dims.clear()
+            dims.append(0)
+            for j in range(shapes[k].ndim):  # small-loop(ndim: tensor rank, at most 8): shape words
+                dims.append(shapes[k].d[j])
+            one.clear()
+            one.append(piece)
+            outs.append(self.op(OPS_RESHAPE_N, one, dims, List[Float32]()))
+        return outs^
+
+    def cbw_first_order(self, what: String) raises:
+        """Refuse a recorded (create_graph) backward through a custom rule."""
+        if self.cbw.holds_rules():
+            raise Error("ValueError: custom: " + what + " through a user-defined backward rule is not supported: "
+                        + "custom rules are first order only (the engine does not differentiate the backward "
+                        + "program); call reset() before recording a graph without one")
+
+    def cbw_backward_scalar(mut self, t: Tensor, rules: StepOpRules, accumulate: Bool) raises:
+        """The scalar backward of a graph that may hold custom nodes: `rules`
+        plus the custom tag (identical to `rules` on every other node)."""
+        var wrapped = CbwRules[Self.E](rules, Int(UnsafePointer(to=self)))
+        self.tape.backward_scalar_with_rules(self.ex, t, wrapped, accumulate)
+
+    def cbw_backward_seeded(mut self, t: Tensor, seed: Tensor) raises:
+        """The seeded first-order backward of a graph that may hold custom
+        nodes (StepOpRules: ImportRules plus the step ops' tags)."""
+        var wrapped = CbwRules[Self.E](StepOpRules(self.steps_address()), Int(UnsafePointer(to=self)))
+        self.tape.backward_with_rules(self.ex, t, seed, wrapped, False)
+
+    def _cbw_op(mut self, ints: List[Int], fs: List[Float32]) raises -> Int:
+        """The bound op a node's words name: one dictionary read, or (a loaded
+        program's first replay) decoded, bound and kept."""
+        var i = self.cbw.find(ints)
+        if i >= 0:
+            return i
+        var op = cbw_from_words(ints, fs)
+        return self.cbw.add(op^)
+
+    def _cbw_forward(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_CUSTOM_VJP: the forward program on `hs` without recording; in a
+        recording session one custom tape node over the inputs (its value the
+        output, or the outputs packed in one (1, total) row)."""
+        var oi = self._cbw_op(ints, fs)
+        var recording = self.tape.is_recording()
+        var op = CbwOp()
+        swap(op, self.cbw.ops[oi])
+        var temps = List[Int]()
+        var result = 0
+        try:
+            result = self._cbw_run_forward(oi, op, hs, x, recording, temps)
+        finally:
+            if recording:
+                self.tape.record()
+            swap(op, self.cbw.ops[oi])
+            self._drop_temps(temps)
+        return result
+
+    def _cbw_run_forward(
+        mut self, oi: Int, op: CbwOp, hs: List[Int], x: List[Tensor], recording: Bool, mut temps: List[Int],
+    ) raises -> Int:
+        var n_in = op.forward.n_in
+        if len(hs) != n_in:
+            raise Error("ValueError: custom: this custom operation takes " + String(n_in) + " inputs, got "
+                        + String(len(hs)))
+        for k in range(n_in):  # driver-loop: over the operation's inputs
+            var sh = self.shape_nd(hs[k])
+            if sh.ndim != op.forward.in_shapes[k].ndim:
+                raise Error("ValueError: custom: input " + String(k) + " has shape " + shape_text(sh)
+                            + "; the forward program was captured with " + shape_text(op.forward.in_shapes[k])
+                            + " (the rank must match)")
+            var ids = op.forward.in_kinds[k] == PROGRAM_IN_IDS
+            if self.int_words[self._slot(hs[k])] != ids:
+                if ids:
+                    raise Error("ValueError: custom: input " + String(k) + " must be an ids tensor (Session.ids)")
+                raise Error("ValueError: custom: input " + String(k) + " must be a float tensor, not ids")
+        if recording:
+            self.tape.no_grad()
+        var values = List[Int](capacity=n_in + op.forward.n_nodes())
+        for k in range(n_in):  # driver-loop: over the operation's inputs
+            values.append(hs[k])
+        var args = List[Int]()
+        for k in range(op.forward.n_nodes()):  # driver-loop: over the forward program's nodes
+            args.clear()
+            for j in range(op.forward.a_at[k], op.forward.a_at[k + 1]):  # small-loop(args: a node's input refs): handle lookup
+                args.append(values[op.forward.args[j]])
+            var h = self._program_op(k, op.forward.code[k], args, op.f_ints[k], op.f_fs[k])
+            temps.append(h)
+            values.append(h)
+        # every forward output; one the forward returns unchanged from its
+        # inputs is copied (a node never shares an input's storage)
+        var outs = List[Int](capacity=len(op.forward.outs))
+        var no_ints = List[Int]()
+        var no_fs = List[Float32]()
+        for k in range(len(op.forward.outs)):  # driver-loop: over the forward program's outputs
+            var rf = op.forward.outs[k]
+            var h = values[rf]
+            if rf < n_in:
+                args.clear()
+                args.append(h)
+                h = self._op_run(OPS_COPY, args, no_ints, no_fs)
+                temps.append(h)
+            outs.append(h)
+        if recording:
+            self.tape.record()
+        var n_out = op.n_out
+        self.cbw.last_out_shapes.clear()
+        var total = 0
+        for k in range(n_out):  # driver-loop: over the returned outputs
+            var sh = self.shape_nd(outs[k])
+            self.cbw.last_out_shapes.append(sh)
+            total += sh.count()
+        var out_fp: FP
+        var out_shape: ShapeN
+        var offsets = List[Int](capacity=n_out)
+        if n_out == 1:
+            var t0 = self.tensor(outs[0])
+            out_fp = self.tape.value_of(self.ex, t0)
+            out_shape = self.shape_nd(outs[0])
+            offsets.append(0)
+        else:
+            out_fp = self.tape.reserve(self.ex, total)
+            var at = 0
+            for k in range(n_out):  # driver-loop: over the returned outputs (one copy each into the packed row)
+                var tk = self.tensor(outs[k])
+                var a = Args()
+                a.p0 = self.tape.value_of(self.ex, tk)
+                a.p1 = out_fp + at
+                var n = self.cbw.last_out_shapes[k].count()
+                self.ex.launch[OP_COPY](a, n)
+                offsets.append(at)
+                at += n
+            out_shape = ShapeN.matrix(1, total)
+        if not recording:
+            if n_out == 1:
+                # the forward's own result: kept, not dropped with the temporaries
+                for j in range(len(temps)):  # driver-loop: over this call's temporary handles
+                    if temps[j] == outs[0]:
+                        temps[j] = temps[len(temps) - 1]
+                        _ = temps.pop()
+                        break
+                return outs[0]
+            return self._constant(out_fp, 1, total, 0)
+        var rec = CbwRecord()
+        rec.op = oi
+        rec.out_shapes = self.cbw.last_out_shapes.copy()
+        rec.out_offsets = offsets^
+        for k in range(n_in):  # driver-loop: over the operation's inputs
+            rec.in_shapes.append(self.shape_nd(hs[k]))
+        for j in range(len(op.saved)):  # driver-loop: over the saved tensors
+            var h = outs[op.saved[j]]
+            var ts = self.tensor(h)
+            var fp = self.tape.value_of(self.ex, ts)
+            rec.saved.append(Int(fp))
+            rec.saved_shapes.append(self.shape_nd(h))
+            rec.saved_words.append(self.int_words[self._slot(h)])
+        # Records live with the graph: a reset tape (Program.fit resets it per
+        # batch; Session.reset clears them) restarts its node indices, so a
+        # node index at or below the last record's starts a new graph.
+        var node = len(self.tape._nodes)
+        var last = len(self.cbw.records) - 1
+        if last >= 0 and node <= self.cbw.records[last].node:
+            self.cbw.records.clear()
+        rec.node = node
+        var saved_args = Args()
+        saved_args.i0 = len(self.cbw.records)
+        saved_args.i1 = node
+        self.cbw.records.append(rec^)
+        var t = self.tape.custom_nd(self.ex, x, out_fp, out_shape, NN_CBW_TAG, saved_args)
+        if t._index != node:
+            raise Error("custom: the tape recorded the custom node at an unexpected index")
+        return self._add(t, 0, False, 0)
+
+    def _cbw_apply(mut self, ri: Int, node: Int, upstream: FP, gradients: List[FP]) raises:
+        """The rule of custom node `node` (record `ri`): the backward program on
+        the saved tensors and the incoming gradient, on the session's scratch
+        tape, each gradient copied into its destination (the tape adds it to
+        the input's other contributions). Called by CbwRules.apply while the
+        session's tape runs its backward: the tape is moved aside for the call
+        and put back word for word, as Session.run_program does."""
+        if ri < 0 or ri >= len(self.cbw.records) or self.cbw.records[ri].node != node:
+            raise Error("ValueError: custom: the recorded graph no longer holds this custom operation's saved "
+                        + "tensors; run its forward again")
+        var rec = CbwRecord()
+        swap(rec, self.cbw.records[ri])
+        var oi = rec.op
+        var op = CbwOp()
+        swap(op, self.cbw.ops[oi])
+        var held = Tape()
+        swap(held, self.prog_tape)
+        swap(held, self.tape)
+        var temps = List[Int]()
+        try:
+            self.tape.reset()
+            self.tape.no_grad()
+            self._cbw_run_backward(op, rec, upstream, gradients, temps)
+        finally:
+            self._drop_temps(temps)
+            swap(held, self.tape)
+            swap(held, self.prog_tape)
+            swap(op, self.cbw.ops[oi])
+            swap(rec, self.cbw.records[ri])
+
+    def _cbw_run_backward(
+        mut self, op: CbwOp, rec: CbwRecord, upstream: FP, gradients: List[FP], mut temps: List[Int],
+    ) raises:
+        var values = List[Int](capacity=op.backward.n_in + op.backward.n_nodes())
+        for j in range(len(rec.saved)):  # driver-loop: over the saved tensors
+            var h = self._leaf(FP(unsafe_from_address=rec.saved[j]), rec.saved_shapes[j], rec.saved_words[j])
+            temps.append(h)
+            values.append(h)
+        for k in range(op.n_out):  # driver-loop: over the incoming gradients, one per output
+            var g = upstream + rec.out_offsets[k]
+            comptime if NN_CBW_SABOTAGE_SEED_ONE:
+                # fault injection: a rule that assumes the incoming gradient is 1
+                var n = rec.out_shapes[k].count()
+                g = self.tape.reserve(self.ex, n)
+                var fill = Args()
+                fill.p0 = g
+                fill.f0 = Float32(1)
+                self.ex.launch[OP_FILL](fill, n)
+            var h = self._leaf(g, rec.out_shapes[k])
+            temps.append(h)
+            values.append(h)
+        var args = List[Int]()
+        for k in range(op.backward.n_nodes()):  # driver-loop: over the backward program's nodes
+            args.clear()
+            for j in range(op.backward.a_at[k], op.backward.a_at[k + 1]):  # small-loop(args: a node's input refs): handle lookup
+                args.append(values[op.backward.args[j]])
+            var h = self._program_op(k, op.backward.code[k], args, op.b_ints[k], op.b_fs[k])
+            temps.append(h)
+            values.append(h)
+        for j in range(len(op.grad_inputs)):  # driver-loop: over the differentiable inputs
+            var i = op.grad_inputs[j]
+            var h = values[op.backward.outs[j]]
+            var sh = self.shape_nd(h)
+            if not same_shape(sh, rec.in_shapes[i]):
+                raise Error("ValueError: custom: the backward program's gradient " + String(j) + " has shape "
+                            + shape_text(sh) + " at run time; input " + String(i) + " has shape "
+                            + shape_text(rec.in_shapes[i]))
+            if self.int_words[self._slot(h)]:
+                raise Error("ValueError: custom: the backward program's gradient " + String(j)
+                            + " holds integer words, not float values")
+            var tg = self.tensor(h)
+            var a = Args()
+            a.p0 = self.tape.value_of(self.ex, tg)
+            a.p1 = gradients[i]
+            self.ex.launch[OP_COPY](a, sh.count())
+    # nn-blocks-cbw end
+
+
+# nn-blocks-cbw begin: the rule set of a graph that may hold custom nodes
+@fieldwise_init
+struct CbwRules[S: Exec & Movable & Deinitable](BackwardRules, ImplicitlyCopyable, Movable):
+    """StepOpRules plus NN_CBW_TAG, whose rule runs the custom operation's
+    captured backward program in the session at address `session` (an
+    OpsSession[S]; an open session never moves). Every other tag is
+    StepOpRules' own, so a graph without custom nodes differentiates exactly
+    as with StepOpRules."""
+    var inner: StepOpRules
+    var session: Int
+
+    def supports(self, tag: Int) -> Bool:
+        if tag == NN_CBW_TAG:
+            return True
+        return self.inner.supports(tag)
+
+    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        if tag == NN_CBW_TAG:
+            # the rule overwrites every element of each differentiable
+            # input's destination; an ids input's is never read
+            return False
+        return self.inner.zeroed_destination(tag, saved, edge)
+
+    def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        if tag == NN_CBW_TAG:
+            comptime if NN_CBW_SABOTAGE_DROP_PATH:
+                # fault injection: the copy lands on the input's whole
+                # gradient, dropping another consumer's earlier term
+                return True
+            return False
+        return self.inner.writes_total(tag, saved, edge)
+
+    def apply[E: Exec](
+        self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
+        inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
+    ) raises:
+        if tag != NN_CBW_TAG:
+            self.inner.apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+            return
+        # The session's own executor (the same object as `ex`) runs the
+        # backward program's operations.
+        var s = UnsafePointer[OpsSession[Self.S], MutUntrackedOrigin](unsafe_from_address=self.session)
+        s[]._cbw_apply(saved.i0, saved.i1, upstream, gradients)
+# nn-blocks-cbw end
 
 
 def _keeps_shape(code: Int) -> Bool:

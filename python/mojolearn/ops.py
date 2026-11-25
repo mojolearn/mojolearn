@@ -82,6 +82,12 @@ _OP = {
     "round": 60, "sin": 61, "cos": 62, "sign": 63, "reciprocal": 64, "pow": 65,
     "minimum": 66, "maximum": 67, "where": 68, "compare": 69, "logical": 70,
     "expand": 71, "argmax": 72, "pad": 73, "any_all": 74, "cumsum": 75, "index": 76,
+    # nn-blocks-scatter begin
+    "scatter_add": 113, "segment_sum": 114, "segment_mean": 115, "segment_max": 116,
+    # nn-blocks-scatter end
+    # nn-blocks-qkv begin
+    "attention": 122,
+    # nn-blocks-qkv end
 }
 _GELU = {"none": 0, "tanh": 1}
 # the state buffers autograd/ops_api.mojo optimizer_state returns, by kind
@@ -1413,6 +1419,89 @@ class Session:
         """
         return _SESSION_CALL(self, "program_run", (program, arrays, dynamic_shapes, optimize))
 
+    # nn-blocks-scan begin
+    def scan(self, cell, xs, init_state, *, params=None, reverse=False, lengths=None, counter=0):
+        """Apply a captured cell at every step of a sequence, carrying its state.
+
+        ``cell`` is a :class:`Program` captured with
+        ``inputs=[state_1, ..., state_k, x_t]`` and
+        ``outputs=[next_state_1, ..., next_state_k, y_t]``: one step of any
+        recurrence written with this session's operations (a custom RNN or
+        LSTM cell, a state-space update, a filter). ``scan`` runs it once per
+        step of ``xs``, on the device, in one call: step ``t`` reads
+        ``xs[t]`` and the state the previous step returned, the state stays
+        on the device between steps and nothing is read back. Like
+        ``jax.lax.scan`` and PyTorch's recurrent layers, the outputs are
+        stacked with the steps first.
+
+        In a recording session (``Session(record=True)``) the scan is
+        differentiable: :meth:`backward` reaches ``init_state``, ``xs`` and
+        every tensor in ``params``, and :meth:`step` trains them. The
+        gradient keeps every step's values (backward through time). In an
+        inference session the scan is captured with the rest of the model
+        by :meth:`capture`, and a saved program keeps the cell.
+
+        Parameters
+        ----------
+        cell : Program
+            The step, captured from an inference session.
+        xs : int
+            The handle of a ``(steps, ...)`` tensor; ``xs[t]`` must have the
+            shape of the cell's last input.
+        init_state : int or sequence of int
+            The initial state tensors, in the cell's input order, each of
+            the shape the cell's input had. A sequence may be empty (a map
+            over the steps).
+        params : sequence of int, optional
+            Tensors of this session for the tensors the cell reads as
+            parameters (:attr:`Program.params`), in that order and of the
+            same shapes. Required when the cell was captured in another
+            session (for example, a training session's own trainable
+            weights); by default the cell reads its own parameters.
+        reverse : bool, default False
+            Run from the last step to the first. The outputs keep their
+            time order (``ys[t]`` belongs to ``xs[t]``), and the final state
+            is the state after step 0.
+        lengths : int, optional
+            The handle of one length per sequence (float values), for ``xs``
+            of shape ``(steps, batch, ...)`` and states and outputs with the
+            batch first. A sequence's steps at or past its length keep its
+            state and give zero outputs, as a packed sequence in PyTorch.
+        counter : int, default 0
+            A :meth:`dropout` inside the cell draws a new mask at every
+            step, from its own seed, this counter and the step index; use a
+            new ``counter`` for every training step, as with :meth:`dropout`.
+
+        Returns
+        -------
+        tuple
+            ``(ys, final_state)``: ``ys`` the ``(steps, ...)`` outputs, and
+            ``final_state`` one handle when ``init_state`` was one handle,
+            else a tuple of handles.
+
+        Examples
+        --------
+        A tanh RNN cell, trained through a scan:
+
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> rng = np.random.default_rng(0)
+        >>> W = (0.3 * rng.standard_normal((3, 4))).astype(np.float32)
+        >>> U = (0.3 * rng.standard_normal((4, 4))).astype(np.float32)
+        >>> with ops.Session() as c:
+        ...     h, x = c.tensor(np.zeros((2, 4), np.float32)), c.tensor(np.zeros((2, 3), np.float32))
+        ...     h2 = c.tanh(c.add(c.matmul(x, c.tensor(W)), c.matmul(h, c.tensor(U))))
+        ...     cell = c.capture(inputs=[h, x], outputs=[h2, h2])
+        ...     with ops.Session(record=True) as s:
+        ...         w, u = s.tensor(W, requires_grad=True), s.tensor(U, requires_grad=True)
+        ...         xs = s.tensor(rng.standard_normal((5, 2, 3), dtype=np.float32))
+        ...         ys, h_n = s.scan(cell, xs, s.tensor(np.zeros((2, 4), np.float32)), params=[w, u])
+        ...         s.backward(s.mean(s.mul(ys, ys)))
+        ...         s.step(s.optimizer("adam", lr=0.01), [w, u])
+        """
+        return _SESSION_CALL(self, "scan", (cell, xs, init_state, params, reverse, lengths, counter))
+    # nn-blocks-scan end
+
     def load_partitioned(self, path, devices=(0,)):
         """Restore a complete partitioned program onto physical devices."""
         return _SESSION_CALL(self, "load_partitioned", (path, devices))
@@ -1653,6 +1742,369 @@ class Session:
         exactly where the saved run stopped.
         """
         return _SESSION_CALL(self, "load_optimizer_state", (optimizer, param, state))
+
+    # nn-blocks-qkv begin
+    def attention(self, q, k, v, mask=None, causal=False, scale=None):
+        """Scaled dot-product attention over your own queries, keys and values.
+
+        Computes ``softmax(scale * q @ k^T + mask) @ v`` with the argument
+        meanings of PyTorch's ``torch.nn.functional.scaled_dot_product_attention``:
+        ``q`` is ``(batch, heads, Lq, d)``, ``k`` is ``(batch, kv_heads, Lk, d)``
+        and ``v`` is ``(batch, kv_heads, Lk, dv)``; the result is
+        ``(batch, heads, Lq, dv)``. Inputs without the heads axis,
+        ``(batch, L, features)``, give ``(batch, Lq, dv)``. ``Lq`` and ``Lk``
+        may differ (cross-attention: queries from one sequence, keys and
+        values from another).
+
+        Grouped heads: ``heads`` may be a multiple of ``kv_heads``; query head
+        ``h`` attends with key/value head ``h // (heads // kv_heads)``, as
+        PyTorch's ``enable_gqa=True``. The keys and values are never copied
+        per group.
+
+        Parameters
+        ----------
+        q, k, v : int
+            Tensor handles of the shapes above.
+        mask : int or None, default None
+            A tensor that broadcasts to the scores ``(batch, heads, Lq, Lk)``
+            (aligned on the right, as NumPy broadcasts). As in PyTorch, its
+            kind decides how it is read: a tensor made with :meth:`ids` is a
+            boolean mask, where a nonzero value takes part in attention and a
+            zero is left out (pass ``s.ids(mask.astype(np.int8))`` for a
+            boolean array); a float tensor made with :meth:`tensor` is added
+            to the scaled scores, and ``-inf`` there leaves the position out.
+            A float mask made with ``requires_grad=True`` receives its
+            gradient (summed over the axes it broadcasts along), as in
+            PyTorch; a boolean mask takes none.
+        causal : bool, default False
+            Query ``i`` attends to keys ``0 .. i`` only (PyTorch's
+            ``is_causal``, the lower triangle aligned at the top left when
+            ``Lq`` and ``Lk`` differ). It cannot be combined with ``mask``;
+            put the causal pattern into the mask instead.
+        scale : float or None, default None
+            The factor on ``q @ k^T``; None means ``1 / sqrt(d)``.
+
+        Returns
+        -------
+        int
+            The handle of the attention output.
+
+        A query whose every key is left out (by the mask or by ``causal``)
+        gets an output row of zeros and passes zero gradient back; PyTorch
+        returns NaN for such a row. In a recording session the gradients
+        flow to ``q``, ``k`` and ``v`` through :meth:`backward`, :meth:`vjp`
+        and :meth:`Program.fit`. The softmax sums each row in one fixed
+        order, so the result has the same bits on every device. The call can
+        be captured into a :class:`Program` like any other operation, the
+        mask included (as an input, or as a fixed tensor of the program).
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> rng = np.random.default_rng(0)
+        >>> with ops.Session(record=True) as s:
+        ...     q = s.tensor(rng.standard_normal((2, 4, 5, 8), dtype=np.float32), requires_grad=True)
+        ...     k = s.tensor(rng.standard_normal((2, 2, 7, 8), dtype=np.float32), requires_grad=True)
+        ...     v = s.tensor(rng.standard_normal((2, 2, 7, 8), dtype=np.float32), requires_grad=True)
+        ...     keep = np.ones((2, 1, 1, 7), dtype=np.int8)
+        ...     keep[1, ..., 5:] = 0                       # the second sequence has 5 keys
+        ...     out = s.attention(q, k, v, mask=s.ids(keep))
+        ...     s.backward(s.sum(out))
+        ...     dq, dk, dv = s.grad(q), s.grad(k), s.grad(v)
+        """
+        return _SESSION_CALL(self, "attention", (q, k, v, mask, causal, scale))
+    # nn-blocks-qkv end
+    # nn-blocks-pg begin: optimizer parameter groups (autograd/nn_pg.mojo)
+    def param_group_optimizer(self, param_groups, kind="adam", lr=1e-3, *, momentum=0.0, nesterov=False,
+                              beta1=0.9, beta2=0.999, eps=1e-8, weight_decay=0.0, schedule="constant",
+                              step_size=1, gamma=0.1, alpha=0.99, centered=False, lr_decay=0.0,
+                              initial_accumulator_value=0.0, clip_grad_norm=None, clip_grad_value=None):
+        """Create an optimizer with parameter groups for :meth:`step`; returns its integer handle.
+
+        As ``torch.optim`` with a list of parameter groups: each group is a
+        dict with ``'params'`` (the tensors of the group, made with
+        ``requires_grad=True``) and, optionally, its own options, which
+        override the optimizer-wide ones given as keywords. A typical use is
+        a new head at a higher learning rate than a pretrained backbone, or
+        biases without weight decay.
+
+        Parameters
+        ----------
+        param_groups : list of dict
+            One dict per group. Keys: ``'params'`` and, for each kind,
+            ``'lr'``, ``'weight_decay'`` and ``'sgd'``: ``'momentum'``,
+            ``'nesterov'``, ``'dampening'``; ``'adam'``, ``'adamw'``,
+            ``'adamax'``, ``'nadam'``: ``'betas'`` (or ``'beta1'`` and
+            ``'beta2'``), ``'eps'``; ``'lion'``: ``'betas'``; ``'rmsprop'``:
+            ``'alpha'``, ``'eps'``, ``'momentum'``, ``'centered'``;
+            ``'adagrad'``: ``'eps'``, ``'lr_decay'``,
+            ``'initial_accumulator_value'``. A parameter belongs to one group.
+        kind, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, alpha, centered, lr_decay, initial_accumulator_value
+            The defaults of every group, as in :meth:`optimizer`.
+        schedule, step_size, gamma
+            One learning-rate schedule for the optimizer; it scales every
+            group's rate. Advance it with :meth:`scheduler_step`.
+        clip_grad_norm : float or None, default None
+            Clip by the norm of ALL the gradients of every group that one
+            :meth:`step` updates (one norm, one coefficient for every group,
+            as ``torch.nn.utils.clip_grad_norm_`` over all parameters).
+        clip_grad_value : float or None, default None
+            Clamp every gradient to ``[-clip_grad_value, clip_grad_value]``.
+
+        Each group's update is the one :meth:`optimizer` with that group's
+        options gives, bit for bit. :meth:`optimizer_state` and
+        :meth:`load_optimizer_state` work per parameter as for any optimizer;
+        :meth:`optimizer_state_dict` saves every group at once.
+
+        Example
+        -------
+        >>> with ops.Session(record=True) as s:
+        ...     body = s.tensor(np.zeros((4, 8), dtype=np.float32), requires_grad=True)
+        ...     head = s.tensor(np.zeros((8, 1), dtype=np.float32), requires_grad=True)
+        ...     bias = s.tensor(np.zeros((1, 1), dtype=np.float32), requires_grad=True)
+        ...     opt = s.param_group_optimizer(
+        ...         [{"params": [body], "lr": 1e-4},
+        ...          {"params": [head], "lr": 1e-2},
+        ...          {"params": [bias], "lr": 1e-2, "weight_decay": 0.0}],
+        ...         "adamw", weight_decay=0.01, clip_grad_norm=1.0)
+        """
+        return _SESSION_CALL(self, "param_group_optimizer", (kind, lr, momentum, nesterov, beta1, beta2, eps,
+                                                             weight_decay, schedule, step_size, gamma, alpha,
+                                                             centered, lr_decay, initial_accumulator_value,
+                                                             clip_grad_norm, clip_grad_value, param_groups))
+
+    def learning_rates(self, optimizer):
+        """Every parameter group's current learning rate, as a list of floats
+        (an optimizer made by :meth:`param_group_optimizer`)."""
+        return _SESSION_CALL(self, "learning_rates", (optimizer,))
+
+    def optimizer_state_dict(self, optimizer):
+        """The whole state of an optimizer with parameter groups, as a dict.
+
+        ``torch.optim``'s layout: ``'state'`` maps each parameter's index
+        (its position across the groups, in group order) to the dict
+        :meth:`optimizer_state` returns for it, and ``'param_groups'`` lists
+        each group's options with ``'params'`` holding those indices;
+        ``'epoch'`` is the schedule's epoch. The state tensors are copies,
+        valid until :meth:`reset`: read them with :meth:`numpy` to save a
+        checkpoint.
+        """
+        return _SESSION_CALL(self, "optimizer_state_dict", (optimizer,))
+
+    def load_optimizer_state_dict(self, optimizer, state_dict):
+        """Restore what :meth:`optimizer_state_dict` returned, into an
+        optimizer built with the same groups (the same number of groups and
+        of parameters in each; state tensors as handles of this session).
+        Each group's options are taken from the dict, every parameter's
+        state is copied on the device, and the next :meth:`step` continues
+        exactly where the saved run stopped."""
+        return _SESSION_CALL(self, "load_optimizer_state_dict", (optimizer, state_dict))
+    # nn-blocks-pg end
+
+    # nn-blocks-scatter begin
+    # ------------------------------------------------------------ indexed writes and grouped reductions
+    def scatter_add(self, x, dim, index, src):
+        """``x`` with every value of ``src`` added at the position ``index`` names along ``dim``, as
+        ``torch.Tensor.scatter_add``.
+
+        For a 2-D ``x`` and ``dim=0`` the result is ``x`` with ``out[index[i, j], j] += src[i, j]`` for
+        every ``(i, j)``; any rank and any ``dim`` work the same way. ``index`` is an integer tensor made
+        with :meth:`ids`, of ``src``'s shape, each value in ``[0, x.shape[dim])``; ``src`` has ``x``'s size
+        on every dimension except ``dim``. The result has ``x``'s shape.
+
+        An index may repeat: the values that land on one position are added to ``x``'s value one after
+        another in ascending position in ``src``, so the result is the same bits whatever the hardware.
+        A position no index names keeps ``x``'s value.
+
+        In a recording session the gradient flows to ``x`` (unchanged) and to ``src`` (the gradient at
+        the position each value was added to); ``index`` takes none.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.zeros((3, 2), dtype=np.float32))
+        ...     src = s.tensor(np.ones((4, 2), dtype=np.float32))
+        ...     index = s.ids(np.array([[0, 1], [2, 1], [0, 0], [2, 1]]))
+        ...     s.numpy(s.scatter_add(x, 0, index, src))
+        array([[2., 1.],
+               [0., 3.],
+               [2., 0.]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "scatter_add", (x, dim, index, src))
+
+    def segment_sum(self, data, segment_ids, num_segments):
+        """The rows of ``data`` added up by segment: row ``s`` of the result is the sum of the rows ``r``
+        of ``data`` with ``segment_ids[r] == s``.
+
+        ``data`` is ``(n, ...)``; ``segment_ids`` is an integer tensor made with :meth:`ids` holding one
+        id per row of ``data``, each in ``[0, num_segments)``, in any order (as
+        ``tf.math.unsorted_segment_sum``); the result is ``(num_segments, ...)``. A segment no row names
+        is 0. The rows of a segment are added in ascending row order, so the result is the same bits
+        whatever the hardware. The gradient of ``data`` is the gradient of each row's segment.
+
+        This is the aggregation of a graph neural network (sum the messages of each edge into its target
+        node), of a bag of embeddings (sum the vectors of each bag) and of pooling by group.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     data = s.tensor(np.array([[1, 2], [3, 4], [5, 6]], dtype=np.float32))
+        ...     ids = s.ids(np.array([2, 0, 2]))
+        ...     s.numpy(s.segment_sum(data, ids, num_segments=3))
+        array([[3., 4.],
+               [0., 0.],
+               [6., 8.]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "segment_sum", (data, segment_ids, num_segments))
+
+    def segment_mean(self, data, segment_ids, num_segments):
+        """The rows of ``data`` averaged by segment: :meth:`segment_sum` divided by the number of rows in
+        each segment.
+
+        Arguments as :meth:`segment_sum`. A segment no row names is 0 (the sum divided by
+        ``max(count, 1)``). The gradient of a row is its segment's gradient divided by the segment's row
+        count.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     data = s.tensor(np.array([[1, 2], [3, 4], [5, 6]], dtype=np.float32))
+        ...     ids = s.ids(np.array([2, 0, 2]))
+        ...     s.numpy(s.segment_mean(data, ids, num_segments=3))
+        array([[3., 4.],
+               [0., 0.],
+               [3., 4.]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "segment_mean", (data, segment_ids, num_segments))
+
+    def segment_max(self, data, segment_ids, num_segments):
+        """The largest value of each column within each segment of ``data``'s rows.
+
+        Arguments as :meth:`segment_sum`. A segment no row names is 0 (as ``torch_scatter.scatter_max``,
+        so the result stays finite). A NaN in a segment makes that value NaN. In a recording session the
+        gradient of each result value goes to the row that holds the maximum; when several rows hold it,
+        to the first of them (the lowest row index); the other rows get 0.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     data = s.tensor(np.array([[1, 8], [3, 4], [5, 6]], dtype=np.float32))
+        ...     ids = s.ids(np.array([2, 0, 2]))
+        ...     s.numpy(s.segment_max(data, ids, num_segments=3))
+        array([[3., 4.],
+               [0., 0.],
+               [5., 8.]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "segment_max", (data, segment_ids, num_segments))
+    # nn-blocks-scatter end
+
+    # nn-blocks-cbw begin ---------------------------------------- user-defined backward rules
+    def custom_op(self, forward, backward, *, saved=(), outputs=None):
+        """Give a captured operation your own backward rule; returns its handle.
+
+        ``forward`` computes the operation's outputs from its inputs, and
+        ``backward`` computes the gradient of each input from the saved
+        tensors and the incoming gradient of each output: a vector-Jacobian
+        product, like ``torch.autograd.Function``'s ``forward`` and
+        ``backward``. Both are :class:`Program` objects captured from an
+        inference session with the operations of this module. They are
+        checked against each other here, once: the counts, shapes and kinds
+        of the inputs, outputs, saved tensors and gradients must agree, and a
+        mismatch raises ``ValueError`` naming it.
+
+        Call the operation with :meth:`custom`. In a recording session,
+        :meth:`backward` runs ``backward`` on the device with the gradient
+        that reaches each output from the rest of the model (for
+        ``loss = 3 * sum(f(x))`` that gradient is 3, not 1), and adds each
+        gradient it returns to the input's other contributions, so an input
+        used along several paths receives all of them. The same holds in
+        :meth:`Program.fit` for a program captured with the operation, and a
+        saved program keeps both graphs.
+
+        Parameters
+        ----------
+        forward : Program
+            ``(x_0, ..., x_{n-1}) -> (y_0, ..., y_{m-1}, extra, ...)``: the
+            operation's outputs, then any further tensors the backward needs.
+        backward : Program
+            ``(saved_0, ..., grad_y_0, ..., grad_y_{m-1}) -> (grad_x, ...)``:
+            the saved tensors, then the incoming gradient of each output (of
+            that output's shape); it returns one gradient per float input of
+            ``forward``, in input order, each of its input's shape (an input
+            made with :meth:`ids` takes no gradient).
+        saved : sequence of int, default ()
+            Indices into ``forward``'s outputs: the tensors ``backward``
+            receives first, in this order. They stay on the device from the
+            forward to the backward.
+        outputs : int or None, default None
+            How many leading outputs of ``forward`` the operation returns;
+            None returns every output. Each later output must be saved.
+
+        Returns
+        -------
+        int
+            The operation's handle, for :meth:`custom`.
+
+        The first version has these limits. Both programs are built from the
+        operations of this module (a new device kernel needs a compiled Mojo
+        extension). Neither may read a tensor of its session as a parameter:
+        capture every tensor it reads as an input (a learnable weight then
+        gets its gradient from ``backward``) and make constants with
+        :meth:`full`. The rule is first order: a second derivative through
+        it (``backward(..., create_graph=True)``, :meth:`hvp`, :meth:`jvp`)
+        is refused.
+
+        Use it for a gradient that differs from the forward's: a
+        straight-through estimator, gradient reversal, a clipped gradient, or
+        a numerically stable gradient of a custom activation.
+
+        Example
+        -------
+        ``MyTanh``: forward ``y = tanh(x)``, saving ``y``; backward
+        ``grad_y * (1 - y * y)``.
+
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> zeros = np.zeros((4, 3), np.float32)
+        >>> with ops.Session() as cap:
+        ...     x = cap.tensor(zeros)
+        ...     forward = cap.capture(inputs=[x], outputs=[cap.tanh(x)])
+        ...     y, grad_y = cap.tensor(zeros), cap.tensor(zeros)
+        ...     one = cap.full((1, 1), 1.0)
+        ...     dx = cap.mul(grad_y, cap.sub(one, cap.mul(y, y)))
+        ...     backward = cap.capture(inputs=[y, grad_y], outputs=[dx])
+        ...     with ops.Session(record=True) as s:
+        ...         my_tanh = s.custom_op(forward, backward, saved=[0])
+        ...         w = s.tensor(np.ones((4, 3), np.float32), requires_grad=True)
+        ...         loss = s.scale(s.sum(s.custom(my_tanh, w)), 3.0)
+        ...         s.backward(loss)
+        ...         grad_w = s.grad(w)
+        """
+        return _SESSION_CALL(self, "custom_op", (forward, backward, saved, outputs))
+
+    def custom(self, op, *inputs):
+        """Call the operation :meth:`custom_op` returned on tensor handles.
+
+        ``inputs`` are in the order of the forward program's inputs, each of
+        its captured rank. Returns the handle of the output, or a tuple of
+        handles when the operation returns several. In an inference session
+        :meth:`capture` keeps the call like any other operation.
+
+        Example
+        -------
+        >>> y = s.custom(my_tanh, w)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "custom", (op, inputs))
+    # nn-blocks-cbw end
 
 
 class Program:

@@ -5098,6 +5098,7 @@ PUBLIC_PENDING_LANES = {
     "nn-pg-imported-program": "no reference",
     "nn-pg-program-decode": "no reference",
     "nn-pg-session-blocks": "no reference",
+    "ops-scan-cell": "no reference",  # nn-blocks-scan (2026-11-25)
     "nn-tr-byte-lm": "no reference",
     "nn-tr-generator": "no reference",
     "nn-tr-optim-state": "no reference",
@@ -5107,6 +5108,9 @@ PUBLIC_PENDING_LANES = {
     "ops-per-step-weighted-embedding": "no reference",  # lane rnn-parity-B (2026-11-25)
     # lane rnn-parity-c (2026-11-25): the loss fold's 2-vs-20 claim; RECORD OWED at the release's one verification
     "ops-loss-fold-num-den": "no reference",
+    "ops-param-groups": "no reference",  # nn-blocks-pg (2026-11-25)
+    "ops-param-groups-program-fit": "no reference",  # nn-blocks-pg
+    "training-param-groups": "no reference",  # nn-blocks-pg
     "psd-arima": "no reference",
     "psd-cross-val": "no reference",
     "psd-forecast-arima": "no reference",

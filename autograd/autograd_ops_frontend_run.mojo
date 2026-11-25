@@ -166,6 +166,34 @@ comptime _SOP_CONV_LINEAR = 145
 comptime _SOP_LSTM = 146
 comptime _SOP_GRU = 147
 comptime _SOP_RNN = 148
+# nn-blocks-qkv begin: attention over explicit q, k, v (122); its own name code, clear of the shared 1xx run
+comptime _SOP_ATTENTION_QKV = 1122
+# nn-blocks-qkv end
+# nn-blocks-pg begin: optimizer parameter groups (providers/python/nn_pg_pyapi_door.mojo); a range of its own,
+# clear of the shared sequence above
+comptime _SOP_PG_OPTIMIZER = 1110
+comptime _SOP_PG_LEARNING_RATES = 1111
+comptime _SOP_PG_STATE_DICT = 1112
+comptime _SOP_PG_LOAD_STATE_DICT = 1113
+comptime _SOP_PG_FIRST = _SOP_PG_OPTIMIZER
+comptime _SOP_PG_LAST = _SOP_PG_LOAD_STATE_DICT
+# nn-blocks-pg end
+# nn-blocks-scatter begin: scatter_add and the segment reductions (session codes 113..116); private codes
+# 1113..1116 so the nn-blocks sub-lanes' additions cannot collide
+comptime _SOP_SCATTER_ADD = 1113
+comptime _SOP_SEGMENT_SUM = 1114
+comptime _SOP_SEGMENT_MEAN = 1115
+comptime _SOP_SEGMENT_MAX = 1116
+# nn-blocks-scatter end
+# nn-blocks-scan begin: the scan over a captured cell (OPS 118; the frontend code is 1000 + 118, outside the
+# shared 1..999 sequence so the parallel nn-blocks lanes cannot collide)
+comptime _SOP_SCAN = 1118
+# nn-blocks-scan end
+# nn-blocks-cbw begin: a user-defined backward rule (autograd/nn_cbw.mojo);
+# codes from the sub-lane's own range, so no other lane's next code collides
+comptime _SOP_CUSTOM_OP = 1260
+comptime _SOP_CUSTOM = 1261
+# nn-blocks-cbw end
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -321,6 +349,28 @@ struct _SessionOpCodes(Defaultable, Movable):
         self.codes["lstm"] = _SOP_LSTM
         self.codes["gru"] = _SOP_GRU
         self.codes["rnn"] = _SOP_RNN
+        # nn-blocks-qkv begin
+        self.codes["attention"] = _SOP_ATTENTION_QKV
+        # nn-blocks-qkv end
+        # nn-blocks-pg begin
+        self.codes["param_group_optimizer"] = _SOP_PG_OPTIMIZER
+        self.codes["learning_rates"] = _SOP_PG_LEARNING_RATES
+        self.codes["optimizer_state_dict"] = _SOP_PG_STATE_DICT
+        self.codes["load_optimizer_state_dict"] = _SOP_PG_LOAD_STATE_DICT
+        # nn-blocks-pg end
+        # nn-blocks-scatter begin
+        self.codes["scatter_add"] = _SOP_SCATTER_ADD
+        self.codes["segment_sum"] = _SOP_SEGMENT_SUM
+        self.codes["segment_mean"] = _SOP_SEGMENT_MEAN
+        self.codes["segment_max"] = _SOP_SEGMENT_MAX
+        # nn-blocks-scatter end
+        # nn-blocks-scan begin
+        self.codes["scan"] = _SOP_SCAN
+        # nn-blocks-scan end
+        # nn-blocks-cbw begin
+        self.codes["custom_op"] = _SOP_CUSTOM_OP
+        self.codes["custom"] = _SOP_CUSTOM
+        # nn-blocks-cbw end
 
 
 # One table per process (identical contents in every extension that links this file).

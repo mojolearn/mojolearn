@@ -146,6 +146,16 @@ def higher_family(op: Int) -> String:
         return "attention_step"
     if tag == 120 or tag == 121:
         return "small_mlp"
+    # nn-blocks-scatter begin
+    if tag == 6810:
+        return "scatter_add"
+    if tag >= 6811 and tag <= 6813:
+        return "segment_sum / segment_mean / segment_max"
+    # nn-blocks-scatter end
+    # nn-blocks-qkv begin
+    if tag == 6710 or tag == 6850:
+        return "attention"
+    # nn-blocks-qkv end
     return "custom"
 
 

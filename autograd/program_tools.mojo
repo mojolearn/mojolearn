@@ -7,6 +7,10 @@ from autograd.program import OpsProgram
 def program_op_name(code: Int) -> String:
     if code == 0:
         return "invalid"
+    # nn-blocks-qkv begin (placed here, away from lane rnn-parity's insertion after 94)
+    if code == 122:
+        return "attention"
+    # nn-blocks-qkv end
     if code == 1:
         return "matmul"
     if code == 2:
@@ -193,6 +197,24 @@ def program_op_name(code: Int) -> String:
         return "rnn_scan"
     if code == 95:
         return "weighted_loss"
+    # nn-blocks-scatter begin
+    if code == 113:
+        return "scatter_add"
+    if code == 114:
+        return "segment_sum"
+    if code == 115:
+        return "segment_mean"
+    if code == 116:
+        return "segment_max"
+    # nn-blocks-scatter end
+    # nn-blocks-scan begin
+    if code == 118:
+        return "scan"
+    # nn-blocks-scan end
+    # nn-blocks-cbw begin
+    if code == 126:
+        return "custom"
+    # nn-blocks-cbw end
     return "op_" + String(code)
 
 

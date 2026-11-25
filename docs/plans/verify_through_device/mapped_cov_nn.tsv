@@ -310,3 +310,9 @@ mojolearn.training.WarmupLinearLR.bits_at	mapped	nn-tr-schedules	tools/identity_
 mojolearn.training.WarmupLinearLR.config	mapped	nn-tr-schedules	tools/identity_lanes/nn_training.py	yes _mojolearn_training_host via optimizer_native	yes _mojolearn_training via optimizer_native	-
 mojolearn.training.WarmupLinearLR.from_config	mapped	nn-tr-schedules	tools/identity_lanes/nn_training.py	yes _mojolearn_training_host via optimizer_native	yes _mojolearn_training via optimizer_native	-
 mojolearn.training.WarmupLinearLR.lr_at	mapped	nn-tr-schedules	tools/identity_lanes/nn_training.py	yes _mojolearn_training_host via optimizer_native	yes _mojolearn_training via optimizer_native	-
+# nn-blocks-scatter begin
+mojolearn.ops.Session.scatter_add	mapped	ops-scatter-segment	tools/identity_lanes/nn_scatter.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.segment_sum	mapped	ops-scatter-segment	tools/identity_lanes/nn_scatter.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.segment_mean	mapped	ops-scatter-segment	tools/identity_lanes/nn_scatter.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.segment_max	mapped	ops-scatter-segment	tools/identity_lanes/nn_scatter.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+# nn-blocks-scatter end

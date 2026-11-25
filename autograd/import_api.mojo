@@ -51,6 +51,12 @@ from autograd.rankn_ops import rn_copy_strided
 from autograd.rankn_fold import rankn_max_argmax
 from autograd.rankn_fold_ops import OP_RN_REDUCE_PART
 from autograd.rankn_api import RankNRules, rn_shape
+# nn-blocks-scatter begin: scatter_add and the segment reductions' tags (6810..6813), known to every backward
+from autograd.nn_scatter import NnScatterRules
+# nn-blocks-scatter end
+# nn-blocks-qkv begin: Session.attention's masked softmax tags (6710, 6850), known to every backward
+from autograd.nn_qkv_rules import QkvRules
+# nn-blocks-qkv end
 from autograd.import_ops import (
     OP_IMP_UNARY_FWD, OP_IMP_UNARY_VJP, OP_IMP_BIN_FWD, OP_IMP_BIN_VJP, OP_IMP_ARGMAX,
     OP_IMP_PAD, OP_IMP_PAD_VJP, OP_IMP_SCAN_TOTALS, OP_IMP_SCAN_FINAL, OP_IMP_FLAT_IDS,
@@ -665,6 +671,14 @@ struct ImportRules(BackwardRules):
         if tag >= IMP_TAG_FIRST and tag <= IMP_TAG_LAST:
             return (tag == IMP_TAG_UNARY or tag == IMP_TAG_BINARY or tag == IMP_TAG_EXPAND
                     or tag == IMP_TAG_ARGMAX or tag == IMP_TAG_PAD or tag == IMP_TAG_CUMSUM)
+        # nn-blocks-scatter begin
+        if NnScatterRules.owns(tag):
+            return True
+        # nn-blocks-scatter end
+        # nn-blocks-qkv begin
+        if QkvRules.owns(tag):
+            return True
+        # nn-blocks-qkv end
         return RankNRules().supports(tag)
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
@@ -677,11 +691,27 @@ struct ImportRules(BackwardRules):
             if tag == IMP_TAG_BINARY:
                 return edge == 2 or not binary_has_gradient(saved.i1)
             return tag == IMP_TAG_ARGMAX
+        # nn-blocks-scatter begin
+        if NnScatterRules.owns(tag):
+            return NnScatterRules().zeroed_destination(tag, saved, edge)
+        # nn-blocks-scatter end
+        # nn-blocks-qkv begin
+        if QkvRules.owns(tag):
+            return QkvRules().zeroed_destination(tag, saved, edge)
+        # nn-blocks-qkv end
         return RankNRules().zeroed_destination(tag, saved, edge)
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
         if tag >= IMP_TAG_FIRST and tag <= IMP_TAG_LAST:
             return False
+        # nn-blocks-scatter begin
+        if NnScatterRules.owns(tag):
+            return NnScatterRules().writes_total(tag, saved, edge)
+        # nn-blocks-scatter end
+        # nn-blocks-qkv begin
+        if QkvRules.owns(tag):
+            return QkvRules().writes_total(tag, saved, edge)
+        # nn-blocks-qkv end
         return RankNRules().writes_total(tag, saved, edge)
 
     def apply[E: Exec](
@@ -721,5 +751,13 @@ struct ImportRules(BackwardRules):
                        1 - saved.i4, saved.i5)
         elif tag >= IMP_TAG_FIRST and tag <= IMP_TAG_LAST:
             raise Error("import rules: unknown tag")
+        # nn-blocks-scatter begin
+        elif NnScatterRules.owns(tag):
+            NnScatterRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+        # nn-blocks-scatter end
+        # nn-blocks-qkv begin
+        elif QkvRules.owns(tag):
+            QkvRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+        # nn-blocks-qkv end
         else:
             RankNRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)

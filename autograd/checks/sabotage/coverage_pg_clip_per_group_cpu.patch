@@ -1,0 +1,13 @@
+diff --git a/autograd/nn_pg.mojo b/autograd/nn_pg.mojo
+index af86220204..7e7a4c5e69 100644
+--- a/autograd/nn_pg.mojo
++++ b/autograd/nn_pg.mojo
+@@ -51,7 +51,7 @@ from sequence.ops import (
+ # one on. CLIP_PER_GROUP: the norm restarts at each group's first listed tensor and closes at its last, so each
+ # group is clipped by its own norm (two clips, not one). GROUP_LR: every group steps at group 0's rate.
+ comptime PG_SABOTAGE_CLIP_PER_GROUP = is_defined["MOJOLEARN_PG_SABOTAGE_CLIP_PER_GROUP"]()
+-comptime PG_SABOTAGE_CLIP_PER_GROUP_HOST = is_defined["MOJOLEARN_PG_SABOTAGE_CLIP_PER_GROUP_HOST"]()
++comptime PG_SABOTAGE_CLIP_PER_GROUP_HOST = True  # SABOTAGE: a clip per group, host
+ comptime PG_SABOTAGE_GROUP_LR = is_defined["MOJOLEARN_PG_SABOTAGE_GROUP_LR"]()
+ comptime PG_SABOTAGE_GROUP_LR_HOST = is_defined["MOJOLEARN_PG_SABOTAGE_GROUP_LR_HOST"]()
+ 
