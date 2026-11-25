@@ -58,6 +58,8 @@ from autograd.nn_optim import (
 
 comptime PGSEQ_GROUP_WORDS = 8   # lr, flags, f1, f2, eps, weight_decay, f7, reserved (0)
 comptime PGSEQ_HEADER = 3        # G, T, D
+# a Sequential checkpoint record's group section starts with this word (autograd/model_checkpoint.mojo)
+comptime PGSEQ_RECORD_MARK = 0x50475351
 
 # Sabotage arms (tools/identity_lanes/coverage_sabotage.tsv coverage-autograd-pgseq_*, lane
 # sequential-param-groups). Off in every build; an arm's patch switches one on. GROUP_LR: each run steps at the
