@@ -1075,10 +1075,12 @@ struct LlamaDeviceWeights(Movable):
     var qn_w: DeviceBuffer[DType.float32]  # [head_dim]             qk_norm
     var kn_w: DeviceBuffer[DType.float32]  # [head_dim]             qk_norm
     var int15: Optional[LlamaInt15Weights]
-    """lane/lowbit-blocks: the seven projections' planes under
-    `numeric_profile="fixed15_v1"` (the profile constructor below), None in
-    every other constructor. With planes, the seven float32 projection
-    fields above are one-element placeholders that no call reads."""
+    """lane/lowbit-blocks: the block's fixed15_v1 parts (the profile
+    constructor below), None in every other constructor. Per part (lane
+    fixed15-parts-native, 2026-11-25): a projection whose bit is set has
+    planes and its float32 field above is a one-element placeholder no call
+    reads; a projection whose bit is clear keeps its float32 weight and
+    computes on gemm.fp32.v1, exactly the call of the other constructors."""
 
     def __init__(
         out self,
@@ -1179,6 +1181,13 @@ struct LlamaDeviceWeights(Movable):
         var norm1_w: DeviceBuffer[DType.float32],
         var norm2_w: DeviceBuffer[DType.float32],
         var int15: LlamaInt15Weights,
+        var w_q: DeviceBuffer[DType.float32],
+        var w_k: DeviceBuffer[DType.float32],
+        var w_v: DeviceBuffer[DType.float32],
+        var w_o: DeviceBuffer[DType.float32],
+        var w_gate: DeviceBuffer[DType.float32],
+        var w_up: DeviceBuffer[DType.float32],
+        var w_down: DeviceBuffer[DType.float32],
         var b_q: DeviceBuffer[DType.float32],
         var b_k: DeviceBuffer[DType.float32],
         var b_v: DeviceBuffer[DType.float32],
@@ -1191,13 +1200,15 @@ struct LlamaDeviceWeights(Movable):
         var qn_w: DeviceBuffer[DType.float32],
         var kn_w: DeviceBuffer[DType.float32],
     ) raises:
-        """THE PROFILE CONSTRUCTOR (lane/lowbit-blocks,
-        `numeric_profile="fixed15_v1"`, inference only): the options
-        constructor with the seven float32 projection weights replaced by
-        their planes. The planes are checked against the block's shapes BY
-        NAME; the float32 projection fields are one-element placeholders,
-        never read (every projection goes through `llama_proj`, which takes
-        the planes when they are present)."""
+        """THE PROFILE CONSTRUCTOR (lane/lowbit-blocks, inference only; per
+        part, lane fixed15-parts-native 2026-11-25): the options constructor
+        with each projection whose bit `int15.parts` sets replaced by its
+        planes. A fixed15 projection's float32 argument is a placeholder (at
+        most one element, never read: the field keeps a zero placeholder);
+        an fp32 projection's is its weight at its exact length. Both are
+        checked BY NAME, as the planes are against the block's shapes.
+        Every projection goes through `llama_proj`, which takes the planes
+        of a part that has them."""
         dims.validate()
         opts.validate(dims.head_dim)
         self.dims = dims.copy()
@@ -1216,6 +1227,16 @@ struct LlamaDeviceWeights(Movable):
                 + " and the options record says gated=" + String(opts.gated())
             )
         int15.check_shapes(dm, qw, kw, it)
+        _expect_proj(int15, LLAMA_PROJ_Q, "q_proj.weight", len(w_q), qw * dm)
+        _expect_proj(int15, LLAMA_PROJ_K, "k_proj.weight", len(w_k), kw * dm)
+        _expect_proj(int15, LLAMA_PROJ_V, "v_proj.weight", len(w_v), kw * dm)
+        _expect_proj(int15, LLAMA_PROJ_O, "o_proj.weight", len(w_o), dm * qw)
+        if opts.gated():
+            _expect_proj(int15, LLAMA_PROJ_GATE, "gate_proj.weight", len(w_gate), it * dm)
+        else:
+            _expect_optional("gate_proj.weight", len(w_gate), 0, False)
+        _expect_proj(int15, LLAMA_PROJ_UP, "up_proj.weight", len(w_up), it * dm)
+        _expect_proj(int15, LLAMA_PROJ_DOWN, "down_proj.weight", len(w_down), dm * it)
         _expect_optional("q_proj.bias", len(b_q), qw, opts.qkv_bias)
         _expect_optional("k_proj.bias", len(b_k), kw, opts.qkv_bias)
         _expect_optional("v_proj.bias", len(b_v), kw, opts.qkv_bias)
@@ -1232,13 +1253,36 @@ struct LlamaDeviceWeights(Movable):
         var ph = _zeros(ctx, 1)
         self.norm1_w = norm1_w^
         self.norm2_w = norm2_w^
-        self.w_q = ph.copy()
-        self.w_k = ph.copy()
-        self.w_v = ph.copy()
-        self.w_o = ph.copy()
-        self.w_gate = ph.copy()
-        self.w_up = ph.copy()
-        self.w_down = ph^
+        if int15.on(LLAMA_PROJ_Q):
+            self.w_q = ph.copy()
+        else:
+            self.w_q = w_q^
+        if int15.on(LLAMA_PROJ_K):
+            self.w_k = ph.copy()
+        else:
+            self.w_k = w_k^
+        if int15.on(LLAMA_PROJ_V):
+            self.w_v = ph.copy()
+        else:
+            self.w_v = w_v^
+        if int15.on(LLAMA_PROJ_O):
+            self.w_o = ph.copy()
+        else:
+            self.w_o = w_o^
+        # An ungated MLP's gate is a placeholder either way (never read).
+        if int15.on(LLAMA_PROJ_GATE) or not opts.gated():
+            self.w_gate = ph.copy()
+        else:
+            self.w_gate = w_gate^
+        if int15.on(LLAMA_PROJ_UP):
+            self.w_up = ph.copy()
+        else:
+            self.w_up = w_up^
+        if int15.on(LLAMA_PROJ_DOWN):
+            self.w_down = ph.copy()
+        else:
+            self.w_down = w_down^
+        _ = ph^
         self.b_q = b_q^
         self.b_k = b_k^
         self.b_v = b_v^
@@ -1527,6 +1571,23 @@ struct LlamaDeviceWeights(Movable):
             _refuse_nonfinite_at(ctx, "q_norm.weight", self.qn_w, indices[slots[9]])
         if slots[10] >= 0:
             _refuse_nonfinite_at(ctx, "k_norm.weight", self.kn_w, indices[slots[10]])
+
+
+def _expect_proj(
+    w15: LlamaInt15Weights, which: Int, name: String, got: Int, want: Int
+) raises:
+    """lane fixed15-parts-native: the profile constructor's float32
+    projection argument. A projection with planes takes a placeholder (at
+    most one element; its planes are the weight), one without takes its
+    weight at the exact length. Both refused by name."""
+    if w15.on(which):
+        if got > 1:
+            raise Error(
+                String("llama: ") + name + " computes under fixed15_v1 (its planes are the weight) and was "
+                + "also handed " + String(got) + " float32 values; pass a placeholder"
+            )
+    else:
+        _expect_len(name, got, want)
 
 
 def _expect_optional(name: String, got: Int, want: Int, on: Bool) raises:
@@ -2095,18 +2156,28 @@ def llama_proj(
 ) raises:
     """ONE projection, `C[m x n] = A[m x k] . W[n x k]^T` (OP_NT).
 
-    Weights WITHOUT planes (every block but the profile's): exactly the call
-    that stood at each site before lane/lowbit-blocks, `gw.run[False](ctx, c,
-    a, wf, m, n, k, OP_NT)`, gemm.fp32.v1. Weights WITH planes
-    (`numeric_profile="fixed15_v1"`): `A` quantized per token by the
-    parallel quantizer, the weight's kept planes, gemm.int15i64.v1
-    (`int15_block.mojo`); `wf` is then a placeholder and is not read."""
-    if w15:
+    A projection WITHOUT planes (every block but the profile's, and under
+    the profile every projection whose parts-mask bit is clear, lane
+    fixed15-parts-native): exactly the call that stood at each site before
+    lane/lowbit-blocks, `gw.run[False](ctx, c, a, wf, m, n, k, OP_NT)`,
+    gemm.fp32.v1. A projection WITH planes (its bit set): `A` quantized per
+    token by the parallel quantizer, the weight's kept planes,
+    gemm.int15i64.v1 (`int15_block.mojo`); `wf` is then a placeholder and
+    is not read."""
+    if w15 and w15.value().on(which):
         if not st15:
             st15 = Optional[LlamaInt15Stage](LlamaInt15Stage(ctx))
         llama_int15_proj(ctx, st15.value(), c, a, w15.value().get(which), m, n, k)
     else:
         gw.run[False](ctx, c, a, wf, m, n, k, _gemm_op_nt())
+
+
+def _qkv_planes(w: LlamaDeviceWeights) -> Bool:
+    """Any of q, k, v computes on planes (lane fixed15-parts-native)."""
+    if not w.int15:
+        return False
+    ref p = w.int15.value()
+    return p.on(LLAMA_PROJ_Q) or p.on(LLAMA_PROJ_K) or p.on(LLAMA_PROJ_V)
 
 
 def ensure_attention_stage_capacity(
@@ -4524,7 +4595,9 @@ def eager_attention_forward(
     # lane/lowbit-blocks: under `fixed15_v1` the fused kernels would compute
     # Q.K^T in fp32 inside themselves, so the profile FORCES the eager
     # kernels, whose S11 is the profile's product and whose S19 (P.V) is
-    # the pinned fp32 chain the profile keeps.
+    # the pinned fp32 chain the profile keeps. Per part (lane
+    # fixed15-parts-native): only when the attn_scores bit is set
+    # (`int15_on`); with it clear S11 is fp32_v1's on either path.
     if stages.int15_on:
         choice = ATTN_PATH_EAGER
     var need_eager = materialize or trace.enabled or choice == ATTN_PATH_EAGER
@@ -5180,7 +5253,9 @@ def llama_attention_forward(
         # Three independent OP_NT outputs share one input and a launch.
         # Plain FP32 only: quantized projection planes keep their own route.
         # Bias and q/k normalization remain AFTER these same rounded outputs.
-        grouped_projections = not Bool(w.int15)
+        # Per part (lane fixed15-parts-native): grouped exactly when q, k
+        # and v all compute on fp32, the same output bits as three calls.
+        grouped_projections = not _qkv_planes(w)
         if grouped_projections:
             step_count_launch()
             neural_projection_triplet(ctx, stages.q_proj, stages.k_proj,
@@ -6358,9 +6433,11 @@ def llama_decoder_layer_forward_planted(
     if not refused_held:
         llama_refuse_bad_call(ctx, w, rope, x, kv, b, l)
     pc.tick(ctx, "fwd.refuse_call")
-    # lane/lowbit-blocks: this call runs under `fixed15_v1` exactly when its
-    # weights carry planes.
-    stages.int15_on = Bool(w.int15)
+    # lane/lowbit-blocks: this call's S11 runs under `fixed15_v1` exactly
+    # when its parts mask sets attn_scores (lane fixed15-parts-native: a
+    # flag of its own, no longer "the weights carry planes"); with the bit
+    # clear S11 and the attention path choice are fp32_v1's.
+    stages.int15_on = Bool(w.int15) and w.int15.value().scores_on()
 
     trace.record_device[DType.float32](ctx, prefix + ".input.x", x, m * dm)
 

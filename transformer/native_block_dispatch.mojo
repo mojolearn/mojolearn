@@ -58,10 +58,13 @@ def _transformer_block_session_operation(op: Int, session: Int, a: List[Int], wo
         if len(a) != INT15_ENTRY_ADDRS or len(p) != INT15_ENTRY_PARAMS:
             raise Error("transformer_session_forward_int15: invalid native descriptor arity")
         _check_base_addrs(a, [0, 1, 2, 10, 11, 12], String("transformer_session_forward_int15"))
+        # The last word is the parts mask (lane fixed15-parts-native); the
+        # options tail sits before it.
+        var parts_word = p.pop()
         var opts = BlockOptions.from_params(p, 10)
         try:
             return _transformer_run_session_int15(owner[], a,
-                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts)
+                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts, parts_word)
         except problem:
             owner[].clear()
             raise problem

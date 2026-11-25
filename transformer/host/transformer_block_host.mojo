@@ -161,7 +161,7 @@ def transformer_host_forward(
     k_in: List[Float32],
     v_in: List[Float32],
     emit_cache: Bool = True,
-    int15: Bool = False,
+    parts: Int = 0,
 ) raises -> TransformerHostForward:
     """`transformer_forward` (and, at L = 1, `transformer_decode_step`) on
     the host. `k_in`/`v_in` are the caller's caches in the device layout,
@@ -211,9 +211,11 @@ def transformer_host_forward(
     # lane/block-options: the table from the record (theta, scaling,
     # rope_dim, max_positions); the default record is `build_rope_table`.
     var rope = build_rope_table_opts(dims, w.opts)
-    # lane/lowbit-blocks: `int15` is numeric_profile="fixed15_v1" (the seven
-    # projections and S11 on gemm.int15i64.v1's host oracle, P.V fp32).
-    var st = transformer_block_oracle(w, x, b, l, cache, rope, ScorePlant.none(), int15)
+    # lane fixed15-parts-native (2026-11-25): `parts` is the block's parts
+    # mask (core/numeric_profile_parts.mojo): each set projection bit and the
+    # attn_scores bit on gemm.int15i64.v1's host oracle, every other product
+    # and P.V on fp32. 0 is fp32_v1, the default call, unchanged.
+    var st = transformer_block_oracle(w, x, b, l, cache, rope, ScorePlant.none(), parts)
     var out = TransformerHostForward()
     out.y = st.residual2_out.copy()
     out.cached_tokens = cache.used

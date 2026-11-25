@@ -80,6 +80,7 @@ from bindings.native_class_admission_door import static_builtin_type
 from bindings.sha256_door import sha256_hexdigest
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from core.neural_host_dispatch import NATIVE_HOST_PRIMITIVE_API, NATIVE_HOST_MAMBA_STATE_API, NATIVE_HOST_TRANSFORMER_API, NATIVE_HOST_MAMBA_BLOCK_API
+from core.numeric_profile_parts_sabotage import np_entry_parts
 from core.mojolearn_neural_host_impl import _opt_read, _write, _run_forward, _run_decode_steps, _m1_weights, _mamba1_run, _m2_weights, _mamba2_run, _m3_weights, _mamba3_run
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -374,23 +375,27 @@ def transformer_forward_binding(
 def transformer_forward_int15_binding(
     addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
-    """`transformer_forward` under numeric_profile="fixed15_v1"
-    (lane/lowbit-blocks, 2026-09-29): the seven projections and the score
-    product S11 on gemm.int15i64.v1's host oracle, both operands quantized
-    row by row along the contracted extent (the weights by the same rule
-    that packs them on a GPU, so the same codes), P.V on fp32. The same
-    lists as `transformer_forward`, the float32 weights included, and the
-    two option tails ALWAYS sent: 24 addresses, 27 params. Returns the
-    post-call cached_tokens."""
+    """`transformer_forward` under a fixed15_v1 parts mask (lane/lowbit-blocks,
+    2026-09-29; per part, lane fixed15-parts-native 2026-11-25): each part the
+    mask sets (the seven projections, S11) on gemm.int15i64.v1's host oracle,
+    both operands quantized row by row along the contracted extent (the
+    weights by the same rule that packs them on a GPU, so the same codes),
+    every other product and P.V on fp32. The same lists as
+    `transformer_forward`, the float32 weights included, the two option
+    tails ALWAYS sent, then the parts mask: 24 addresses, 28 params. Returns
+    the post-call cached_tokens."""
     var what = String("transformer_forward_int15")
-    if Int(py=len(addrs)) != 13 + BLOCK_OPTION_ADDRS or Int(py=len(params)) != 10 + BLOCK_OPTION_PARAMS:
-        raise Error(what + ": addrs must hold 24 addresses and params 27 values (both tails always)")
+    if Int(py=len(addrs)) != 13 + BLOCK_OPTION_ADDRS or Int(py=len(params)) != 10 + BLOCK_OPTION_PARAMS + 1:
+        raise Error(what + ": addrs must hold 24 addresses and params 28 values (both tails always, then the parts mask)")
     var a = _addrs_tail(addrs, 13, 7, what)
-    var p = _params_tail(params, 10, what)
+    var parts = np_entry_parts(_index(params[10 + BLOCK_OPTION_PARAMS]), what)
+    var p = List[Int](capacity=10 + BLOCK_OPTION_PARAMS)
+    for i in range(10 + BLOCK_OPTION_PARAMS):  # small-loop(the 27 scalar words before the mask)
+        p.append(_index(params[i]))
     var opts = BlockOptions.from_params(p, 10)
     var out_len = 0
     with GILReleased(Python()):
-        out_len = _run_forward(a, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts, True)
+        out_len = _run_forward(a, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts, parts)
     return PythonObject(out_len)
 
 

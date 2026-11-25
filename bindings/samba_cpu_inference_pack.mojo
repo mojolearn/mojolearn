@@ -6,7 +6,7 @@ from bindings.generation_buffers_door import generation_initialize_binding, gene
 from bindings.samba_state_native_door import samba_fields, _samba_registry
 from bindings.samba_config_native_door import samba_config_from_dict, samba_block_shapes
 from bindings.samba_checkpoint_native_pack import samba_checkpoint_read
-from bindings.causal_lm_construct_door import _model_bindings, _model_block, _model_unpack, _model_profile, _model_shape
+from bindings.causal_lm_construct_door import _model_bindings, _model_block, _model_unpack, _model_shape
 from bindings.causal_lm_public_door import _native_function, causal_entry_key
 from bindings.causal_checkpoint_door import checkpoint_array
 from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type
@@ -78,7 +78,9 @@ def samba_inference_construct(model: PythonObject, config: PythonObject, weights
             py_setitem(plan.block_options, nk[].k_n_kv_heads, py_item(cfg, nk[].k_n_kv_heads))
             py_setitem(plan.block_options, nk[].k_head_dim, py_item(cfg, nk[].k_head_dim))
             py_setitem(plan.block_options, nk[].k_norm_eps, PythonObject(1e-6))
-            profile = _model_profile(PythonObject(None), "transformer", nc)
+            # Samba's attention layers stay fp32_v1 (the fixed15_v1 default
+            # reaches CausalLM and ParallelCausalLM only; lane
+            # fixed15-parts-native, docs/plans/NUMERIC_PROFILE_PARTS.md).
         _ = py_call(blocks.append, _model_block(layer, plan, profile, PythonObject("cpu"), bindings, nc))
     py_setitem(fields, nk[].k__blocks, blocks)
     return PythonObject(None)

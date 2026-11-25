@@ -44,6 +44,9 @@ struct CausalModelWords(Copyable, Movable):
     var norm: Bool
     # The head is the packed (int15) plane triple.
     var head_packed: Bool
+    # lane fixed15-parts-native (2026-11-25): some part of the model (head
+    # or layers) computes under fixed15_v1; the head has its own word above.
+    var fixed15: Bool
     # Entry registry words (the admitted execution registry of the model).
     # The model runs through the parallel door.
     var parallel: Bool
@@ -75,6 +78,7 @@ struct CausalModelWords(Copyable, Movable):
         self.max_positions = 0
         self.norm = False
         self.head_packed = False
+        self.fixed15 = False
         self.parallel = False
         self.primitives = False
         self.provider = False

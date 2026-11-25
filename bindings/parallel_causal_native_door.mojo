@@ -6,7 +6,8 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.torch_parameter_form_pack import torch_parameter_form
 from bindings.native_error_class import error_without_class
 from bindings.generation_buffers_door import GENERATION_BOUNDARY, generation_initialize_binding, generation_copy, generation_array, generation_array_snapshot, generation_address, py_ints
-from bindings.causal_lm_construct_door import causal_model_read_weights_binding, _causal_model_prepare_snapshot, _model_construction_set, _model_options_snapshot, _model_weights_snapshot, _model_block, _model_bindings, _model_profile, _model_quantize15
+from bindings.causal_lm_construct_door import causal_model_read_weights_binding, _causal_model_prepare_snapshot, _model_construction_set, _model_options_snapshot, _model_weights_snapshot, _model_block, _model_bindings, _model_profile, _model_quantize15, _model_parts_mask
+from core.numeric_profile_parts import NP_PART_HEAD, np_part_on
 from bindings.causal_lm_public_door import causal_model_embedding, causal_model_head, causal_lm_parameters_binding, _native_function, causal_entry_key
 from bindings.neural_block_public_door import neural_block_owner, neural_block_allocate_binding, neural_block_forward_binding
 from bindings.causal_model_config_door import config_load_binding, model_plan_for_binding, model_plan_snapshot, model_record_fields, model_dict, model_plain, model_sequence, model_string
@@ -522,7 +523,9 @@ def _parallel_causal_worker_request(mut mods: NativeModules, mut registry: Causa
             var name = String(keys[i])
             causal_top_tensor_admit(name)
             py_setitem(fields, "_" + name, args[keys[i]])
-        if py_contains(args, nk[].k_head) and String(top.numeric_profile) == "fixed15_v1":
+        # lane fixed15-parts-native: the head's planes exactly when the parts
+        # mask sets lm_head (resolved from the canonical spec the worker got).
+        if py_contains(args, nk[].k_head) and String(top.kind) == "transformer" and np_part_on(_model_parts_mask(top.numeric_profile, top.device), NP_PART_HEAD):
             py_setattr(top, "_head_int15", _model_quantize15(mods, top._head, causal_entry_key(registry.bindings)))
         return wire_unpack(top._head_int15)
     if op == PC_EMBEDDING:

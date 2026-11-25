@@ -5,6 +5,7 @@
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME, MAMBA_BLOCK_ABI_NAME, TRANSFORMER_BLOCK_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
+from core.numeric_profile_parts_sabotage import np_entry_parts
 from core.mojolearn_neural_host_impl import _run_forward, _transformer_weights_from, _mamba1_run, _mamba2_run, _mamba3_run
 from core.hostptr import copy_f32, f32_ptr, read_f32, read_i32
 from training.host.samba_ops_oracle import host_samba_embedding_forward, host_samba_rms_norm_forward, host_samba_linear_forward
@@ -66,19 +67,30 @@ def neural_host_transformer_operation(op: Int, a: List[Int], p: List[Int]) raise
         raise Error("CPU Transformer inference: unavailable operation")
     var base_a = 11 if fresh else 13
     var base_p = 8 if fresh else 10
-    if (len(a) != base_a and len(a) != base_a + BLOCK_OPTION_ADDRS) or (len(p) != base_p and len(p) != base_p + BLOCK_OPTION_PARAMS):
+    # lane fixed15-parts-native (2026-11-25): op 34 carries the block's parts
+    # mask after both option tails (28 params); ops 4 and 33 are unchanged.
+    var parts = 0
+    if packed:
+        if len(a) != 13 + BLOCK_OPTION_ADDRS or len(p) != 10 + BLOCK_OPTION_PARAMS + 1:
+            raise Error("CPU fixed15 Transformer: both option tails and the parts mask are required")
+        parts = np_entry_parts(p[10 + BLOCK_OPTION_PARAMS], String("CPU fixed15 Transformer"))
+    elif (len(a) != base_a and len(a) != base_a + BLOCK_OPTION_ADDRS) or (len(p) != base_p and len(p) != base_p + BLOCK_OPTION_PARAMS):
         raise Error("CPU Transformer inference: invalid descriptor arity")
-    if packed and (len(a) != 13 + BLOCK_OPTION_ADDRS or len(p) != 10 + BLOCK_OPTION_PARAMS):
-        raise Error("CPU fixed15 Transformer: both option tails are required")
     var raw = a.copy()
     while len(raw) < base_a + BLOCK_OPTION_ADDRS:  # small-loop(absent optional weight slots)
         raw.append(0)
     for i in range(base_a):  # driver-loop: the existing base buffer vector, with optional gate slot
         if i != 7 and raw[i] == 0:
             raise Error("CPU Transformer inference: null buffer address")
-    var opts = BlockOptions.from_params(p, base_p)
+    var opts: BlockOptions
+    if packed:
+        var head = p.copy()
+        _ = head.pop()  # the parts mask, read above
+        opts = BlockOptions.from_params(head, base_p)
+    else:
+        opts = BlockOptions.from_params(p, base_p)
     if not fresh:
-        return _run_forward(raw, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts, packed)
+        return _run_forward(raw, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts, parts)
     var expanded = List[Int]()
     for i in range(10):  # small-loop(ten fresh input/weight slots)
         expanded.append(raw[i])

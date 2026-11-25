@@ -54,6 +54,7 @@ from gemm.checks.gemm_int15_tuned import (
 )
 from gemm.checks.gemm_int8_mma_tuned import INT8_DECODE_AVAILABLE, INT8_DECODE_MAX_M
 from gemm.contract import INT15_MAX_K
+from core.numeric_profile_parts import NP_PART_SCORES, np_part_on
 
 # WHICH PLAN (clause W-8, W-13: every plan is the same bits, so this is
 # scheduling). By default `identical_gemm_int15_planes_into`: the reference
@@ -187,9 +188,28 @@ def int15_planes_from_f32(
     return Int15Planes(hi^, lo^, e^, rows, cols)
 
 
+def int15_planes_placeholder(ctx: DeviceContext) raises -> Int15Planes:
+    """One-row, one-column planes that no call reads: the slot of a
+    projection that computes on fp32 under its parts mask (or the gate of an
+    ungated MLP)."""
+    step_count_device_alloc()
+    var hi = ctx.enqueue_create_buffer[DType.int8](1)
+    step_count_device_alloc()
+    var lo = ctx.enqueue_create_buffer[DType.int8](1)
+    step_count_device_alloc()
+    var e = ctx.enqueue_create_buffer[DType.int32](1)
+    return Int15Planes(hi^, lo^, e^, 1, 1)
+
+
 struct LlamaInt15Weights(Copyable, Movable):
-    """The seven projection weights of one block as planes. Under an ungated
-    MLP `gate` is a one-row placeholder that no call reads."""
+    """The block's products under its PARTS MASK (lane fixed15-parts-native,
+    2026-11-25; `core/numeric_profile_parts.mojo`, resolved once at
+    construction or load): the planes of each projection whose bit is set,
+    and the attn_scores bit. A projection whose bit is clear has one-row
+    placeholder planes that no call reads and computes on its float32
+    weight (gemm.fp32.v1, `llama_proj`). Under an ungated MLP `gate` is a
+    placeholder whatever its bit says. The projections' bits are the
+    `LLAMA_PROJ_*` indices (bits 0..6 = NP_PART_Q..NP_PART_DOWN)."""
 
     var q: Int15Planes
     var k: Int15Planes
@@ -199,6 +219,8 @@ struct LlamaInt15Weights(Copyable, Movable):
     var up: Int15Planes
     var down: Int15Planes
     var gated: Bool
+    var parts: Int
+    """The block's bits of the parts mask: projections 0..6, attn_scores 8."""
 
     def __init__(
         out self,
@@ -210,6 +232,7 @@ struct LlamaInt15Weights(Copyable, Movable):
         var up: Int15Planes,
         var down: Int15Planes,
         gated: Bool,
+        parts: Int,
     ):
         self.q = q^
         self.k = k^
@@ -219,6 +242,20 @@ struct LlamaInt15Weights(Copyable, Movable):
         self.up = up^
         self.down = down^
         self.gated = gated
+        self.parts = parts
+
+    @always_inline
+    def on(self, which: Int) -> Bool:
+        """Projection `which` (a `LLAMA_PROJ_*`) computes on its planes. The
+        gate of an ungated MLP never does."""
+        if which == LLAMA_PROJ_GATE and not self.gated:
+            return False
+        return np_part_on(self.parts, which)
+
+    @always_inline
+    def scores_on(self) -> Bool:
+        """S11 computes under gemm.int15i64.v1."""
+        return np_part_on(self.parts, NP_PART_SCORES)
 
     def get(self, which: Int) -> Int15Planes:
         if which == LLAMA_PROJ_Q:
@@ -238,16 +275,22 @@ struct LlamaInt15Weights(Copyable, Movable):
     def check_shapes(
         self, d_model: Int, q_width: Int, kv_width: Int, intermediate: Int
     ) raises:
-        """Each weight's planes against the block's shapes, BY NAME: a
-        transposed weight is a plausible buffer of the right size."""
-        _want(self.q, "q_proj", q_width, d_model)
-        _want(self.k, "k_proj", kv_width, d_model)
-        _want(self.v, "v_proj", kv_width, d_model)
-        _want(self.o, "o_proj", d_model, q_width)
-        if self.gated:
+        """Each fixed15 projection's planes against the block's shapes, BY
+        NAME: a transposed weight is a plausible buffer of the right size."""
+        if self.on(LLAMA_PROJ_Q):
+            _want(self.q, "q_proj", q_width, d_model)
+        if self.on(LLAMA_PROJ_K):
+            _want(self.k, "k_proj", kv_width, d_model)
+        if self.on(LLAMA_PROJ_V):
+            _want(self.v, "v_proj", kv_width, d_model)
+        if self.on(LLAMA_PROJ_O):
+            _want(self.o, "o_proj", d_model, q_width)
+        if self.on(LLAMA_PROJ_GATE):
             _want(self.gate, "gate_proj", intermediate, d_model)
-        _want(self.up, "up_proj", intermediate, d_model)
-        _want(self.down, "down_proj", d_model, intermediate)
+        if self.on(LLAMA_PROJ_UP):
+            _want(self.up, "up_proj", intermediate, d_model)
+        if self.on(LLAMA_PROJ_DOWN):
+            _want(self.down, "down_proj", d_model, intermediate)
 
 
 def _want(p: Int15Planes, name: String, rows: Int, cols: Int) raises:

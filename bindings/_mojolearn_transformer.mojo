@@ -811,17 +811,20 @@ def transformer_decode_session_open_int15_binding(
     options tail + 21: the open's eleven with the seven projection slots
     ZERO (never read), the options tail (always sent), then the planes,
     three per projection in the order q, k, v, o, gate, up, down (`hi`,
-    `lo`, `exponents`; zeros for gate under an ungated MLP). `params` is
-    EXACTLY the open's nine scalars and the 17-int options tail. The planes
+    `lo`, `exponents`; zeros for gate under an ungated MLP). Per part (lane
+    fixed15-parts-native, 2026-11-25): a projection the parts mask leaves on
+    fp32 sends its float32 weight in its slot and zero planes. `params` is
+    EXACTLY the open's nine scalars, the 17-int options tail and the parts
+    mask. The planes
     are COPIED to the device once and stay there; every other entry of the
     session (step, forward, export, load, close, `causal_lm_session_run`)
     is the float32 session's own."""
     var owner = session.downcast_value_ptr[TransformerDecodeSession]()
     var what = String("transformer_decode_session_open_int15")
-    if len(addrs) != 11 + BLOCK_OPTION_ADDRS + 21 or len(params) != 9 + BLOCK_OPTION_PARAMS:
+    if len(addrs) != 11 + BLOCK_OPTION_ADDRS + 21 or len(params) != 9 + BLOCK_OPTION_PARAMS + 1:
         raise Error(
             what + ": expected " + String(11 + BLOCK_OPTION_ADDRS + 21) + " addresses and "
-            + String(9 + BLOCK_OPTION_PARAMS) + " scalars, got " + String(len(addrs)) + " and "
+            + String(9 + BLOCK_OPTION_PARAMS + 1) + " scalars, got " + String(len(addrs)) + " and "
             + String(len(params))
         )
     if owner[].busy:
@@ -841,7 +844,10 @@ def transformer_decode_session_open_int15_binding(
         a.append(raw[11 + i])
     _check_base_addrs(a, [1, 2, 10, 11], what)
     _ = a  # keep the Python object alive through the native call above
-    var p = _read_params(params, 9, what)
+    var p = List[Int](capacity=9 + BLOCK_OPTION_PARAMS)
+    for i in range(9 + BLOCK_OPTION_PARAMS):  # small-loop(26: the scalar words before the mask)
+        p.append(Int(py=params[i]))
+    var parts_word = Int(py=params[9 + BLOCK_OPTION_PARAMS])
     var opts = BlockOptions.from_params(p, 9)
     if p[0] <= 0:
         raise Error(what + ": B must be positive")
@@ -851,7 +857,7 @@ def transformer_decode_session_open_int15_binding(
     try:
         with GILReleased(Python()):
             out_len = _session_open_run_int15(
-                owner[], a, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], opts)
+                owner[], a, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], opts, parts_word)
     except error:
         owner[].busy = False
         owner[].release()
