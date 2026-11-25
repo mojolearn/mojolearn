@@ -27,6 +27,10 @@ from autograd.rules_step_ops import StepOpRules
 from autograd.nn_cbw import OPS_CUSTOM_VJP
 from autograd.nn_scan import OPS_SCAN
 from checks.numerics import identical_div
+from autograd.batch_source import (
+    BatchSource, BS_FIELD_TARGETS, batch_source_field_rank, batch_source_shape, batch_source_upload,
+    batch_source_capacity,
+)
 
 
 def parameter_buffers[E: Exec & Movable & Deinitable](
@@ -231,19 +235,57 @@ def train_program_control[E: Exec & Movable & Deinitable](
                   or _fit_may_record_custom(s.programs[s._program_index(otherwise_id)]))
     if grouped:
         if custom:
-            return _train_program_control[E, True, True](
+            return _train_program_control[E, True, True, False](
             s, pid, srcs, shapes, target, loss_kind, delta, optimizer, parameters, epochs, batch, shuffle_rows, seed, curve,
-            condition_id, otherwise_id, tol, n_iter_no_change, step_curve, grads_out, loop_words, device_srcs)
-        return _train_program_control[E, True, False](
+            condition_id, otherwise_id, tol, n_iter_no_change, step_curve, grads_out, loop_words, device_srcs, 0, 0)
+        return _train_program_control[E, True, False, False](
             s, pid, srcs, shapes, target, loss_kind, delta, optimizer, parameters, epochs, batch, shuffle_rows, seed, curve,
-            condition_id, otherwise_id, tol, n_iter_no_change, step_curve, grads_out, loop_words, device_srcs)
+            condition_id, otherwise_id, tol, n_iter_no_change, step_curve, grads_out, loop_words, device_srcs, 0, 0)
     if custom:
-        return _train_program_control[E, False, True](
+        return _train_program_control[E, False, True, False](
             s, pid, srcs, shapes, target, loss_kind, delta, optimizer, parameters, epochs, batch, shuffle_rows, seed, curve,
-            condition_id, otherwise_id, tol, n_iter_no_change, step_curve, grads_out, loop_words, device_srcs)
-    return _train_program_control[E, False, False](
+            condition_id, otherwise_id, tol, n_iter_no_change, step_curve, grads_out, loop_words, device_srcs, 0, 0)
+    return _train_program_control[E, False, False, False](
             s, pid, srcs, shapes, target, loss_kind, delta, optimizer, parameters, epochs, batch, shuffle_rows, seed, curve,
-            condition_id, otherwise_id, tol, n_iter_no_change, step_curve, grads_out, loop_words, device_srcs)
+            condition_id, otherwise_id, tol, n_iter_no_change, step_curve, grads_out, loop_words, device_srcs, 0, 0)
+
+
+def train_program_source[E: Exec & Movable & Deinitable](
+    mut s: OpsSession[E], pid: Int, mut stream: BatchSource, loss_kind: Int, delta: Float32, optimizer: Int,
+    parameters: List[Int], epochs: Int, max_steps: Int, curve: FP, condition_id: Int, otherwise_id: Int,
+) raises -> Tuple[Int, Int, Int]:
+    """Program.fit(source=) (lane batch-source, 2026-11-25): the fit loop's STREAMED instance
+    (`_train_program_control[..., streamed=True]`), chosen once per fit like the grouped and custom instances, so a
+    fit that passes arrays runs the instance it ran before. The batches come from `stream`
+    (autograd/batch_source.mojo) at its consumed position: one loop iteration is the rest of the source's current
+    epoch (at most `max_steps` batches in the whole call when > 0); the next batch is read ahead after each step is
+    queued; `stream.epoch` / `stream.consumed` are left at the consumed position. Returns as
+    `train_program_control`."""
+    var grouped = optimizer >= 1 and optimizer <= len(s.opts) and s.opts[optimizer - 1].pg >= 0
+    var custom = s.cbw.holds_rules() or _fit_may_record_custom(s.programs[s._program_index(pid)])
+    if condition_id > 0 and otherwise_id > 0:
+        custom = (custom or _fit_may_record_custom(s.programs[s._program_index(condition_id)])
+                  or _fit_may_record_custom(s.programs[s._program_index(otherwise_id)]))
+    var srcs = List[CastIn]()
+    var shapes = List[ShapeN]()
+    var target = CastIn.f32_c(0, 1, 1)
+    var address = Int(UnsafePointer(to=stream))
+    var none = List[Int]()
+    if grouped:
+        if custom:
+            return _train_program_control[E, True, True, True](
+                s, pid, srcs, shapes, target, loss_kind, delta, optimizer, parameters, epochs, 1, False, 0, curve,
+                condition_id, otherwise_id, Float32(0.0), 0, 0, none, 0, False, address, max_steps)
+        return _train_program_control[E, True, False, True](
+            s, pid, srcs, shapes, target, loss_kind, delta, optimizer, parameters, epochs, 1, False, 0, curve,
+            condition_id, otherwise_id, Float32(0.0), 0, 0, none, 0, False, address, max_steps)
+    if custom:
+        return _train_program_control[E, False, True, True](
+            s, pid, srcs, shapes, target, loss_kind, delta, optimizer, parameters, epochs, 1, False, 0, curve,
+            condition_id, otherwise_id, Float32(0.0), 0, 0, none, 0, False, address, max_steps)
+    return _train_program_control[E, False, False, True](
+        s, pid, srcs, shapes, target, loss_kind, delta, optimizer, parameters, epochs, 1, False, 0, curve,
+        condition_id, otherwise_id, Float32(0.0), 0, 0, none, 0, False, address, max_steps)
 
 
 def _fit_may_record_custom(p: OpsProgram) -> Bool:
@@ -254,13 +296,13 @@ def _fit_may_record_custom(p: OpsProgram) -> Bool:
     return False
 
 
-def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom: Bool](
+def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom: Bool, streamed: Bool](
     mut s: OpsSession[E], pid: Int, srcs: List[CastIn], shapes: List[ShapeN],
     target: CastIn, loss_kind: Int, delta: Float32, optimizer: Int, parameters: List[Int],
     epochs: Int, batch: Int, shuffle_rows: Bool, seed: UInt64, curve: FP,
     condition_id: Int, otherwise_id: Int, tol: Float32, n_iter_no_change: Int,
     step_curve: Int, grads_out: List[Int], loop_words: Int,
-    device_srcs: Bool,
+    device_srcs: Bool, stream_address: Int, max_steps: Int,
 ) raises -> Tuple[Int, Int, Int]:
     """Program.fit: `epochs` epochs of minibatch steps as the executor's
     bounded device loop (lane x1b-executor-gated-state-chunked-loop).
@@ -302,7 +344,11 @@ def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom
     `export_gradients`, the pre-update gradient of the last step). The
     backward's rules are StepOpRules (ImportRules plus the attention step
     op's tag, autograd/rules_step_ops.mojo), so a program that runs
-    OPS_ATTN_STEP trains through it."""
+    OPS_ATTN_STEP trains through it.
+    `streamed` (lane batch-source): the instance of `train_program_source`; `stream_address` is its BatchSource
+    and `max_steps` its batch cap (0: none). Every `comptime if streamed` below is that instance's only
+    difference; the array instances (streamed False, stream_address 0) compile the loop as it was."""
+    var stream = UnsafePointer[BatchSource, MutUntrackedOrigin](unsafe_from_address=stream_address)
     var p = s.program(pid)
     var conditional = condition_id > 0 and otherwise_id > 0
     if (condition_id > 0) != (otherwise_id > 0):
@@ -313,16 +359,38 @@ def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom
         p = choice.body.copy()
     if s.tape.is_recording():
         raise Error("Program.fit uses a captured inference session")
-    if epochs < 1 or batch < 1 or len(srcs) != p.n_in or len(parameters) < 1 or len(p.outs) != 1:
-        raise Error("Program.fit needs inputs, trainable parameters, one output, and positive epochs/batch_size")
+    comptime if streamed:
+        if epochs < 1 or len(stream[].spec.inputs) != p.n_in or len(parameters) < 1 or len(p.outs) != 1:
+            raise Error("ValueError: Program.fit(source=) needs one source field per program input (the source has "
+                        + String(len(stream[].spec.inputs)) + ", the program " + String(p.n_in)
+                        + "), trainable parameters, one output and positive epochs")
+        if n_iter_no_change > 0:
+            raise Error("ValueError: Program.fit(source=) does not take tol: the stopping rule reads whole "
+                        + "epochs of arrays; pass tol=None")
+        if max_steps < 0:
+            raise Error("ValueError: Program.fit steps must be a positive integer or None")
+    else:
+        if epochs < 1 or batch < 1 or len(srcs) != p.n_in or len(parameters) < 1 or len(p.outs) != 1:
+            raise Error("Program.fit needs inputs, trainable parameters, one output, and positive epochs/batch_size")
     if n_iter_no_change < 0:
         raise Error("ValueError: Program.fit n_iter_no_change must be a nonnegative integer")
     if epochs > LOOP_MAX_EXACT:
         raise Error("ValueError: Program.fit epochs must be at most " + String(LOOP_MAX_EXACT))
     var oi = s._opt_index(optimizer)
-    var n = shapes[0].d[0]
-    var bs = min(n, batch)
-    var n_batches = (n + bs - 1) // bs
+    var n: Int
+    var bs: Int
+    var n_batches: Int
+    # the target's width: the array's, or the source's target field (lane batch-source)
+    var tcols = target.cols
+    comptime if streamed:
+        n = stream[].n
+        bs = min(n, stream[].spec.batch)
+        n_batches = stream[].n_batches
+        tcols = stream[].twidth
+    else:
+        n = shapes[0].d[0]
+        bs = min(n, batch)
+        n_batches = (n + bs - 1) // bs
     var params = parameter_buffers(s, p)
     var trainable = List[Bool](length=len(p.params), fill=False)
     var states = List[Int](length=len(p.params), fill=-1)
@@ -357,11 +425,27 @@ def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom
     # under `device_srcs`, the caller's executor memory (borrowed).
     var inputs = List[FP]()
     var batches = List[FP]()
-    for k in range(len(srcs)):  # driver-loop: over input shape contracts
-        if shapes[k].ndim < 2 or shapes[k].d[0] != n or shapes[k].ndim != p.in_shapes[k].ndim:
-            raise Error("Program.fit inputs must have equal sample counts and their captured ranks")
-    if loss_kind != 0 and target.rows != n:
-        raise Error("Program.fit targets must match the input sample count")
+    comptime if streamed:
+        # each source field against its program input: float32 data, the captured rank, the captured trailing width
+        for k in range(p.n_in):  # driver-loop: over program inputs (source fields, once per fit)
+            var field = stream[].spec.inputs[k]
+            var want = batch_source_shape(stream[], field, 1, 1)
+            if p.in_kinds[k] == PROGRAM_IN_IDS or p.in_shapes[k].ndim != batch_source_field_rank(field):
+                raise Error("ValueError: Program.fit(source=): program input " + String(k) + " has rank "
+                            + String(p.in_shapes[k].ndim) + " or holds ids; the source field it reads is float32 of rank "
+                            + String(batch_source_field_rank(field)))
+            if want.ndim == 3 and p.in_shapes[k].d[2] != want.d[2]:
+                raise Error("ValueError: Program.fit(source=): program input " + String(k) + " was captured with "
+                            + String(p.in_shapes[k].d[2]) + " features a step; the source's steps have "
+                            + String(want.d[2]))
+        if loss_kind != 0 and stream[].spec.target != BS_FIELD_TARGETS:
+            raise Error("ValueError: Program.fit(source=) with a named loss needs a source opened with target='targets'")
+    else:
+        for k in range(len(srcs)):  # driver-loop: over input shape contracts
+            if shapes[k].ndim < 2 or shapes[k].d[0] != n or shapes[k].ndim != p.in_shapes[k].ndim:
+                raise Error("Program.fit inputs must have equal sample counts and their captured ranks")
+        if loss_kind != 0 and target.rows != n:
+            raise Error("Program.fit targets must match the input sample count")
     var ty = Optional[FP]()
     var yb = Optional[FP]()
     var indices = Optional[FP]()
@@ -377,6 +461,9 @@ def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom
     # admitted fit. Only the minibatch row count and conditional selection vary.
     # Reuse their native containers throughout the epoch/batch loop.
     var batch_shapes = shapes.copy()
+    comptime if streamed:
+        for k in range(p.n_in):  # driver-loop: over source fields (shape records, once per fit)
+            batch_shapes.append(batch_source_shape(stream[], stream[].spec.inputs[k], bs, stream[].max_len))
     var widths = List[Int]()
     for k in range(len(shapes)):  # driver-loop: over admitted input shape metadata once per fit
         widths.append(shapes[k].count() // n)
@@ -421,6 +508,9 @@ def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom
     var committed = 0
     var mirror = List[Float32](length=LOOP_WORDS, fill=Float32(0))
     try:
+        comptime if streamed:
+            for k in range(p.n_in):  # driver-loop: over source fields (one batch buffer each, the longest batch's)
+                batches.append(s.ex.alloc(batch_source_capacity(stream[], stream[].spec.inputs[k])))
         for k in range(len(srcs)):  # driver-loop: over program input arrays
             if device_srcs:
                 if p.in_kinds[k] == PROGRAM_IN_IDS or not srcs[k].is_f32_c():
@@ -439,14 +529,15 @@ def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom
                 upload_cast(s.ex, buf, srcs[k])
             batches.append(s.ex.alloc(bs * (shapes[k].count() // n)))
         ty = s.ex.alloc(max(1, target.count()))
-        yb = s.ex.alloc(max(1, bs * target.cols))
-        if loss_kind != 0:
-            upload_cast(s.ex, ty.value(), target)
+        yb = s.ex.alloc(max(1, bs * tcols))
+        comptime if not streamed:
+            if loss_kind != 0:
+                upload_cast(s.ex, ty.value(), target)
         for j in range(len(params)):  # driver-loop: over trainable parameter state
             if trainable[j]:
                 states[j] = s._state_of(p_oi[j], p.params[j], p.param_shapes[j].count())
                 s.wants_grad[s._slot(p.params[j])] = True
-        indices = s.ex.alloc(n)
+        indices = s.ex.alloc(1 if streamed else n)
         batch_losses = s.ex.alloc(n_batches)
         losses = s.ex.alloc(epochs)
         var words = s.ex.alloc(LOOP_WORDS)  # zero-filled: running, iteration 0
@@ -498,8 +589,25 @@ def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom
         # lane alm-left: the queued setup (uploads, fills) drained ONCE before the
         # clock, outside the loop, so the loop region holds loop work only
         s.ex.sync()
+        # lane batch-source: batches trained in this call, the iteration's first and end batch, its rows
+        var taken = 0
+        var first_b = 0
+        var last_b = n_batches
+        var rows_run = n
         var loop_start = fit_loop_start()
         for e in range(epochs):  # driver-loop: over epochs, the bounded loop's iterations, read once per chunk
+            comptime if streamed:
+                # one iteration is the rest of the source's current epoch, within the call's batch cap
+                if max_steps > 0 and taken >= max_steps:
+                    break
+                var at = stream[].pending()
+                stream[].epoch = at[0]
+                stream[].consumed = at[1]
+                first_b = at[1]
+                last_b = n_batches
+                if max_steps > 0:
+                    last_b = min(n_batches, first_b + (max_steps - taken))
+                rows_run = 0
             if criterion:
                 marks.append(_FitMark(s, oi, states, true_batches, false_batches))
             var gate = Args()
@@ -510,23 +618,45 @@ def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom
             var lr = s.learning_rate(optimizer)
             comptime if grouped:
                 rates = s._pg_rates(oi)  # nn-blocks-pg: each group's rate, once an epoch
-            if shuffle_rows:
-                permutation(s.ex, seed, epoch, n, indices.value())
-            else:
-                var order = Args()
-                order.p0 = indices.value()
-                s.ex.launch[OP_SEQ_IOTA](order, n)
-            for bi in range(n_batches):  # driver-loop: over minibatches
+            comptime if not streamed:
+                if shuffle_rows:
+                    permutation(s.ex, seed, epoch, n, indices.value())
+                else:
+                    var order = Args()
+                    order.p0 = indices.value()
+                    s.ex.launch[OP_SEQ_IOTA](order, n)
+            for bi in range(first_b, last_b):  # driver-loop: over minibatches
+                var jb = bi
                 var start = bi * bs
-                var count = minibatch_rows(start, n, bs)
+                var count: Int
+                comptime if streamed:
+                    jb = bi - first_b
+                    count = 0
+                else:
+                    count = minibatch_rows(start, n, bs)
                 s._drop_temps(temps)
                 temps.clear()
                 s.tape.reset()
-                for k in range(len(inputs)):  # driver-loop: over program inputs
-                    gather_rows(s.ex, inputs[k], indices.value(), start, count, widths[k], batches[k])
-                    batch_shapes[k].d[0] = count
-                if loss_kind != 0:
-                    gather_rows(s.ex, ty.value(), indices.value(), start, count, target.cols, yb.value())
+                comptime if streamed:
+                    # the batch read ahead after the previous step (or, for the call's first batch, read here)
+                    if stream[].held_epoch != stream[].epoch or stream[].held_batch != bi:
+                        stream[].read(stream[].epoch, bi)
+                    if taken > 0:
+                        # one batch of queued work at most: the previous step ran while its successor was read;
+                        # the upload staging of the previous batch is released here (sequence/exec_device.mojo)
+                        s.ex.sync()
+                    count = stream[].held_rows
+                    rows_run += count
+                    for k in range(p.n_in):  # driver-loop: over source fields (one upload each)
+                        batch_shapes[k] = batch_source_upload(s.ex, stream[], stream[].spec.inputs[k], batches[k])
+                    if loss_kind != 0:
+                        _ = batch_source_upload(s.ex, stream[], BS_FIELD_TARGETS, yb.value())
+                else:
+                    for k in range(len(inputs)):  # driver-loop: over program inputs
+                        gather_rows(s.ex, inputs[k], indices.value(), start, count, widths[k], batches[k])
+                        batch_shapes[k].d[0] = count
+                    if loss_kind != 0:
+                        gather_rows(s.ex, ty.value(), indices.value(), start, count, target.cols, yb.value())
                 phs.clear()
                 var step = 0
                 for j in range(len(states)):  # driver-loop: over optimizer states
@@ -571,7 +701,7 @@ def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom
                                          s, choice.otherwise, otherwise_replay, batches, batch_shapes, params, selected,
                                          temps, phs, step, random_stride, random_offset)
                 var out = s.tensor(outs[0])
-                var y = s.tape.variable(s.ex, yb.value(), count, max(1, target.cols), False)
+                var y = s.tape.variable(s.ex, yb.value(), count, max(1, tcols), False)
                 var loss = program_loss(s.tape, s.ex, out, y, loss_kind, delta)
                 var differentiable = s.tape.requires_grad(loss)
                 if differentiable or not conditional:
@@ -591,7 +721,7 @@ def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom
                 var weighted = s.tape.scale(s.ex, loss, Float32(count))
                 var a = Args()
                 a.p0 = s.tape.value(weighted)
-                a.p1 = batch_losses.value() + bi
+                a.p1 = batch_losses.value() + jb
                 s.ex.launch[OP_COPY](a, 1)
                 if step_losses:
                     var sa = Args()
@@ -674,8 +804,15 @@ def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom
                         s.opt_states[si].pw1 = st.pw1
                         s.opt_states[si].pw2 = st.pw2
                         s.opt_states[si].mu_prod = st.mu_prod
-            var terms = s.tape.variable(s.ex, batch_losses.value(), 1, n_batches, False)
-            var average = s.tape.scale(s.ex, s.tape.sum(s.ex, terms), identical_div(Float32(1), Float32(n)))
+                comptime if streamed:
+                    # this batch is consumed (its step is queued); then the next batch is read ahead while the
+                    # device trains this one. A checkpoint records the consumed position, never the read-ahead.
+                    taken += 1
+                    stream[].consumed = bi + 1
+                    var ahead = stream[].next_position(stream[].epoch, bi)
+                    stream[].read(ahead[0], ahead[1])
+            var terms = s.tape.variable(s.ex, batch_losses.value(), 1, last_b - first_b, False)
+            var average = s.tape.scale(s.ex, s.tape.sum(s.ex, terms), identical_div(Float32(1), Float32(rows_run)))
             var a = Args()
             a.p0 = s.tape.value(average)
             a.p1 = losses.value() + e
@@ -693,7 +830,13 @@ def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom
                 sh.p1 = shadow_copy[k]
                 sh.p2 = words
                 s.ex.launch[OP_LOOP_SHADOW](sh, shadow_n[k])
-            s.scheduler_step(optimizer)
+            comptime if streamed:
+                # the schedule advances when the SOURCE's epoch ends, so a run stopped and resumed mid-epoch steps
+                # it exactly where the uninterrupted run does
+                if last_b == n_batches:
+                    s.scheduler_step(optimizer)
+            else:
+                s.scheduler_step(optimizer)
             enqueued = e + 1
             if criterion and (enqueued - chunk_start == chunk or enqueued == epochs):
                 s.ex.download(FP(unsafe_from_address=Int(mirror.unsafe_ptr())), words, LOOP_WORDS)

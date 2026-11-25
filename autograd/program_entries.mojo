@@ -17,7 +17,8 @@ from autograd.program_io import HostArray, ProgramInput
 from autograd.program_output_copy import program_output_copy
 from autograd.program_tools import ProgramTrace
 from autograd.program_optimize import ProgramOptimization, program_optimize
-from autograd.program_runtime import replay_values, parameter_buffers, train_program_control
+from autograd.program_runtime import replay_values, parameter_buffers, train_program_control, train_program_source
+from autograd.batch_source import BatchSourceSpec, batch_source_open, batch_source_saved
 
 
 struct ProgramExecPlan(Movable):
@@ -235,3 +236,38 @@ def program_fit_native[E: Exec & Movable & Deinitable, KIND: Int](
     _ = owners^
     _ = target_owners^
     return branches
+
+
+struct ProgramSourceFit(Movable):
+    """program_fit_source's answer: the branch counts and epochs run (as program_fit_native's) and the source's
+    position after the fit, the one a checkpoint records (autograd/batch_source.mojo THE POSITION)."""
+    var branches: Tuple[Int, Int, Int]
+    var epoch: Int
+    var consumed: Int
+    var fingerprint: UInt64
+
+    def __init__(out self, branches: Tuple[Int, Int, Int], epoch: Int, consumed: Int, fingerprint: UInt64):
+        self.branches = branches
+        self.epoch = epoch
+        self.consumed = consumed
+        self.fingerprint = fingerprint
+
+
+def program_fit_source[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: Int, pid: Int, var spec: BatchSourceSpec, kind: Int, delta: Float32, opt: Int, params: List[Int],
+    count: Int, max_steps: Int, curve: FP, condition_id: Int, otherwise_id: Int,
+) raises -> ProgramSourceFit:
+    """Train program `pid` on the batches of the source `spec` describes (lane batch-source): the shards are opened
+    here, once per call, and closed on every path. Returns the counts and the consumed position."""
+    var src = batch_source_open(spec^)
+    var s = ops_session[E, KIND](sid)
+    var branches = (0, 0, 0)
+    try:
+        branches = train_program_source(s[], pid, src, kind, delta, opt, params, count, max_steps, curve,
+                                        condition_id, otherwise_id)
+    except error:
+        src.close()
+        raise error
+    src.close()
+    var at = batch_source_saved[E.IS_DEVICE](src)
+    return ProgramSourceFit(branches, at[0], at[1], src.fingerprint)

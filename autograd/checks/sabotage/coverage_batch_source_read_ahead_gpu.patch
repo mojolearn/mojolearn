@@ -1,0 +1,13 @@
+diff --git a/autograd/batch_source.mojo b/autograd/batch_source.mojo
+index 651c483f59..5d5a887c47 100644
+--- a/autograd/batch_source.mojo
++++ b/autograd/batch_source.mojo
+@@ -72,7 +72,7 @@ comptime _Bytes = UnsafePointer[UInt8, MutUntrackedOrigin]
+ # executor only, _HOST the host executor only (comptime E.IS_DEVICE at the one use, `batch_source_saved`).
+ #   READ_AHEAD: the position a fit hands back for a checkpoint is the read-ahead batch's, not the consumed one, so a
+ #   resume skips the batch that was read ahead but never trained.
+-comptime BATCH_SOURCE_SABOTAGE_READ_AHEAD = is_defined["MOJOLEARN_BATCH_SOURCE_SABOTAGE_READ_AHEAD"]()
++comptime BATCH_SOURCE_SABOTAGE_READ_AHEAD = True  # SABOTAGE: a checkpoint records the read-ahead position on the device
+ comptime BATCH_SOURCE_SABOTAGE_READ_AHEAD_HOST = is_defined["MOJOLEARN_BATCH_SOURCE_SABOTAGE_READ_AHEAD_HOST"]()
+ 
+ 

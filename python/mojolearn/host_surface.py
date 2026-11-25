@@ -5116,6 +5116,7 @@ PUBLIC_PENDING_LANES = {
     "training-param-groups-device": "no reference",
     # nn-blocks-pgseq end
     "ops-composed-tagger": "no reference",  # nn-blocks-composed (2026-11-25)
+    "ops-batch-source-resume": "no reference",  # batch-source (2026-11-25)
     "psd-arima": "no reference",
     "psd-cross-val": "no reference",
     "psd-forecast-arima": "no reference",

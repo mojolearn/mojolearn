@@ -135,6 +135,7 @@ FAMILIES = (
                         # nn-blocks-qkv / nn-blocks-cbw (w3-integrate-10: the two lanes were registered in
                         # tools/identity_lanes but never declared here, so verify read them UNDECLARED)
                         "ops-attention-qkv", "nn-cbw-custom-vjp",
+                        "ops-batch-source-resume",  # batch-source (tools/identity_lanes/batch_source.py)
                         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -336,6 +337,7 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     # nn-blocks-composed end
     "ops-attention-qkv": "Session: attention over explicit q, k, v (mask, causal, scale, grouped heads)",
     "nn-cbw-custom-vjp": "Session: custom_op / custom with a user-defined backward rule",
+    "ops-batch-source-resume": "Program.fit(source=): streamed shard batches, a mid-epoch save_training, a fresh-process load_training",
                        }
 PUBLIC_PENDING_LANES = {
     # lane w3f2-main (2026-11-24): "no reference", not "unwatched": the shipped table

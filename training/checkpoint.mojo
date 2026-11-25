@@ -177,7 +177,10 @@ comptime CKPT_SECTION_PARTITIONED_PROGRAM = 5
 
 comptime CKPT_SECTION_CONTROL_PROGRAM = 6
 # Conditional/loop component graphs with a single shared parameter table.
-comptime CKPT_SECTION_MAX = 6
+comptime CKPT_SECTION_PROGRAM_TRAINING = 7
+# One captured graph, its parameters, the optimizer with its groups, schedule and every state, and a batch source's
+# consumed position (autograd/program_training_checkpoint.mojo, lane batch-source).
+comptime CKPT_SECTION_MAX = 7
 comptime CKPT_EXT_HEAD_BYTES = 8
 
 

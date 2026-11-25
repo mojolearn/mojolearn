@@ -65,7 +65,7 @@ from ._partitioned_program import PartitionedProgram as _PartitionedProgram
 # A developer testing tool for custom_op backward rules (python/mojolearn/_gradcheck.py).
 from ._gradcheck import gradcheck, GradcheckError
 
-__all__ = ["Session", "Program", "gradcheck", "GradcheckError"]
+__all__ = ["Session", "Program", "BatchSource", "gradcheck", "GradcheckError"]
 
 # autograd/ops_api.mojo OPS_*
 _OP = {
@@ -1518,6 +1518,38 @@ class Session:
         """Load control components and shared parameters from one checkpoint."""
         return _SESSION_CALL(self, "load_control", (path,))
 
+    def load_training(self, path, *, source=None):
+        """Resume training from a checkpoint written by :meth:`Program.save_training`.
+
+        One call restores the program, its parameters (new tensors of this
+        session), the optimizer with its parameter groups, schedule and
+        every state, so the next :meth:`Program.fit` step is the step an
+        uninterrupted run would take, with the same batches and the same
+        dropout masks. The session must not record.
+
+        Parameters
+        ----------
+        path : str or path-like
+            The checkpoint file.
+        source : BatchSource or None
+            The batch source the training read. It must be opened on the
+            same data with the same ``batch_size``, ``bucket_batches``,
+            ``shuffle`` and ``seed``; its position becomes the saved one
+            (the last batch that was trained, not one read ahead).
+
+        Returns
+        -------
+        dict
+            ``{"program": Program, "optimizer": int, "parameters": list}``,
+            the parameters in the program's order.
+
+        Examples
+        --------
+        >>> state = session.load_training("run.ckpt", source=source)  # doctest: +SKIP
+        >>> state["program"].fit(source=source, optimizer=state["optimizer"], loss="output", steps=1)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "load_training", (path, source))
+
     def load_program(self, path):
         """Load a :class:`Program` saved with :meth:`Program.save`.
 
@@ -2270,7 +2302,7 @@ class Program:
 
     def fit(self, *arrays, targets=None, optimizer, parameters=None, loss="mse",
             epochs=10, batch_size=32, shuffle=True, seed=0, huber_delta=1.0,
-            tol=None, n_iter_no_change=5):
+            tol=None, n_iter_no_change=5, source=None, steps=None):
         """Train this captured graph in one native call.
 
         Parameters
@@ -2278,6 +2310,7 @@ class Program:
         arrays : ndarray
             Input arrays in capture order, with equal sample counts on
             their first axis. Batching preserves the remaining dimensions.
+            Omit them when ``source`` is given.
         targets : ndarray or None
             Targets for the chosen loss. Cross-entropy takes numeric class
             codes. With ``loss="output"``, omit targets and capture a scalar
@@ -2305,6 +2338,17 @@ class Program:
             every epoch.
         n_iter_no_change : int
             Epochs without improvement before stopping, used with ``tol``.
+        source : BatchSource or None
+            Train on streamed batches read from disk instead of arrays: each
+            program input reads the source field its ``inputs`` names, every
+            batch padded to its own longest record. The batch size, order
+            and shuffling are the source's (``batch_size``, ``shuffle`` and
+            ``seed`` above are not used); each epoch of the loss curve is
+            the rest of one pass over the source. The source's position
+            moves to the last batch trained.
+        steps : int or None
+            With ``source``, the most batches this call trains (it may stop
+            within a pass); None trains ``epochs`` passes.
 
         Returns
         -------
@@ -2319,7 +2363,8 @@ class Program:
         >>> model.fit(X, targets=y, optimizer=opt, epochs=20)
         """
         return _PROGRAM_CALL(self, "fit", (None, None, arrays, targets,
-            (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta, tol, n_iter_no_change)))
+            (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta, tol, n_iter_no_change),
+            (source, steps)))
 
     def fit_if(self, condition, otherwise, *arrays, targets=None, optimizer,
                parameters=None, loss="mse", epochs=10, batch_size=32,
@@ -2333,7 +2378,8 @@ class Program:
         ``tol`` and ``n_iter_no_change`` stop training early as in :meth:`fit`.
         """
         return _PROGRAM_CALL(self, "fit_if", (condition, otherwise, arrays, targets,
-            (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta, tol, n_iter_no_change)))
+            (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta, tol, n_iter_no_change),
+            (None, None)))
 
     def partition(self, devices=(0,), *, stages=2, tensor_shards=1,
                   microbatches=2, optimizer, parameters=(), seed=0):
@@ -2363,6 +2409,37 @@ class Program:
         """Save control components, shared parameters and optional optimizer state."""
         return _PROGRAM_CALL(self, "save_control", (path, condition, otherwise, max_iterations, optimizer, seed))
 
+    def save_training(self, path, *, optimizer, source=None):
+        """Write everything training needs to continue to ``path``, in one file.
+
+        The file holds the graph, every parameter, the optimizer with its
+        parameter groups, its schedule and every state (step counts and
+        moments, which also key the dropout and scan masks of later steps),
+        and, with ``source``, the source's position: the last batch that
+        was trained, never a batch read ahead. :meth:`Session.load_training`
+        restores it, in this process or a new one.
+
+        Parameters
+        ----------
+        path : str or path-like
+            The checkpoint file to write.
+        optimizer : int
+            The session optimizer that trains this program.
+        source : BatchSource or None
+            The batch source the training reads, if any.
+
+        Returns
+        -------
+        int
+            The number of bytes written.
+
+        Examples
+        --------
+        >>> program.fit(source=source, optimizer=opt, loss="output", steps=3)  # doctest: +SKIP
+        >>> program.save_training("run.ckpt", optimizer=opt, source=source)  # doctest: +SKIP
+        """
+        return _PROGRAM_CALL(self, "save_training", (path, optimizer, source))
+
     def save(self, path, *, verify=True):
         """Write the program and its parameters' current values to ``path``,
         for :meth:`Session.load_program` on any install.
@@ -2385,6 +2462,75 @@ class Program:
     def free(self):
         """Release the program (its parameters stay session tensors)."""
         return _PROGRAM_CALL(self, "free", ())
+
+
+class BatchSource:
+    """Streamed, variable-sized training batches read from sharded files.
+
+    The data is a directory in the ``mojolearn-batch-shards v1`` format:
+    an ``index.txt`` whose first line is ``mojolearn-batch-shards v1`` and
+    then one ``shard <stem>`` line per shard, and for each shard the NumPy
+    files ``<stem>.steps.npy`` (float32, ``(total_steps, F)``: every
+    record's steps, record after record), ``<stem>.offsets.npy`` (int64,
+    ``(n + 1,)``: record ``r`` is ``steps[offsets[r]:offsets[r + 1]]``) and,
+    optionally, ``<stem>.targets.npy`` (float32, ``(n, W)``). Write them
+    with ``numpy.save``.
+
+    Each batch holds ``batch_size`` records (the last one of a pass may
+    hold fewer) padded to the batch's own longest record. With
+    ``bucket_batches`` greater than one, each window of ``batch_size *
+    bucket_batches`` records is sorted by length before it is cut, so a
+    batch holds records of similar length. With ``shuffle`` the records
+    and then the batches are shuffled from ``seed`` each pass; the same
+    seed gives the same batches on every device. The next batch is read
+    while the current one trains.
+
+    Parameters
+    ----------
+    path : str or path-like
+        The shard directory.
+    batch_size : int
+        Records per batch.
+    inputs : tuple of str, default ("steps", "lengths")
+        The field each program input reads, in capture order:
+        ``"steps"`` (B, L, F), zero past each record's length;
+        ``"lengths"`` (B, 1) float32; ``"mask"`` (B, L) float32, 1 on a real
+        step and 0 on padding; ``"targets"`` (B, W).
+    target : {"targets", None}, default None
+        The field a named loss of :meth:`Program.fit` compares with.
+    shuffle : bool, default True
+        Shuffle records and batches each pass.
+    seed : int, default 0
+        Seed of the shuffle.
+    bucket_batches : int, default 1
+        Batches per length-sorted window; 1 keeps the drawn order.
+
+    Attributes
+    ----------
+    n_records, n_batches, n_features, max_length : int
+        Records, batches per pass, F, and the longest record.
+
+    Examples
+    --------
+    >>> source = BatchSource("shards/", batch_size=32, bucket_batches=8)  # doctest: +SKIP
+    >>> program.fit(source=source, optimizer=opt, loss="output", epochs=2)  # doctest: +SKIP
+    """
+
+    def __init__(self, path, batch_size, *, inputs=("steps", "lengths"), target=None, shuffle=True, seed=0,
+                 bucket_batches=1):
+        return _BATCH_SOURCE_CALL("open", self, (path, batch_size, inputs, target, shuffle, seed, bucket_batches))
+
+    def state_dict(self):
+        """The position (the last batch trained) and the settings that fix the batch order."""
+        return _BATCH_SOURCE_CALL("state_dict", self, ())
+
+    def load_state_dict(self, state):
+        """Continue from a :meth:`state_dict` taken on the same data with the same settings."""
+        return _BATCH_SOURCE_CALL("load_state_dict", self, (state,))
+
+    def next_records(self):
+        """The record numbers, in row order, of the batch the next fit trains first."""
+        return _BATCH_SOURCE_CALL("next_records", self, ())
 
 
 # Import-time connection only; save never calls a Python layout/provenance helper.
@@ -2489,6 +2635,14 @@ if _backend.vendor() != "cpu":
 _SESSION_CALL = _session_connected.call
 
 _PROGRAM_CALL = _session_connected.binding.ops_program_public_call
+
+# BatchSource's one entry, and the exact class every binding image admits (a fit refuses anything else).
+from ._native_family_bridge import shared_context as _batch_source_context
+_BATCH_SOURCE_CALL = _session_connected.binding.batch_source_call
+for _connection in (*_SESSION_CONNECTIONS.values(), _batch_source_context().get("ops_session_cpu_connection")):  # import-time: connect each image
+    if _connection is not None and not isinstance(_connection, str):
+        _connection.binding.batch_source_call("connect", BatchSource, ())
+del _batch_source_context
 
 from ._distributed_program import _connect_owned_programs
 _connect_owned_programs(_SESSION_CONNECTIONS)

@@ -44,7 +44,9 @@ from providers.python.autograd_control_checkpoint_pyapi_pack import control_save
 from providers.python.autograd_gradient_diagnostics_pyapi_pack import gradient_report_py
 # nn-blocks-scan begin: Session.scan (autograd/nn_scan_frontend.mojo)
 from autograd.nn_scan_frontend import session_scan
-from autograd.autograd_ops_frontend_run import _SOP_SCAN
+from autograd.autograd_ops_frontend_run import _SOP_SCAN, _SOP_LOAD_TRAINING
+from autograd.program_training_checkpoint import program_training_load
+from providers.python.batch_source_pyapi_door import batch_source_restore
 # nn-blocks-scan end
 # nn-blocks-cbw begin
 from autograd.program import OpsProgram
@@ -347,6 +349,26 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         var else_program = py_item(bundle, nk[].k_otherwise)
         if else_program is not PythonObject(None):
             py_setitem(bundle, nk[].k_otherwise, program_new_owner(session, else_program))
+        return bundle
+    if op == _SOP_LOAD_TRAINING:
+        # lane batch-source: args (path, source or None) -> {"program", "optimizer", "parameters"}; with a source,
+        # its position becomes the checkpoint's consumed one (same data and plan settings checked)
+        var loaded = program_training_load[E, KIND](Int(py=sid), String(py=native_path(args[0])))
+        try:
+            batch_source_restore(args[1], loaded.source)
+        except error:
+            s[].program_free(loaded.program)
+            for k in range(len(loaded.params)):  # driver-loop: over the loaded parameter tensors
+                s[].free(loaded.params[k])
+            raise error
+        var bundle = native_loaded_module("builtins").dict()
+        py_setitem(bundle, PythonObject("program"),
+                   program_new_owner(session, program_info(loaded.program, s[].program(loaded.program))))
+        py_setitem(bundle, PythonObject("optimizer"), PythonObject(loaded.optimizer))
+        var handles = Python.list()
+        for k in range(len(loaded.params)):  # small-loop(params: the program's parameter handles)
+            _ = py_call(handles.append, PythonObject(loaded.params[k]))
+        py_setitem(bundle, PythonObject("parameters"), handles)
         return bundle
     if op == _SOP_SAVE_PROGRAM:
         return ops_program_save_native_py[E, KIND](args[0], args[1])

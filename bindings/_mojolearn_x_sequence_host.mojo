@@ -19,6 +19,7 @@ from providers.python.autograd_python_errors_pyapi_unpack import graph_python_er
 from providers.python.autograd_session_public_request_pyapi_unpack import ops_session_public_connect_py
 from providers.python.autograd_session_public_request_pyapi_pack import ops_session_public_call_py
 from providers.python.autograd_program_public_request_pyapi_pack import ops_program_public_call_py
+from providers.python.batch_source_pyapi_door import batch_source_call_py
 from providers.python.autograd_session_public_dispatch_pyapi_unpack import NativeSessionPublicAPI
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -402,6 +403,19 @@ def ops_owned_program_call_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) 
         return graph_python_error(error)
 
 
+def batch_source_call_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    # lane batch-source: mojolearn.ops.BatchSource's one entry (providers/python/batch_source_pyapi_door.mojo);
+    # the handle holds no executor state, so both executors' bindings run the same door
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        if len(args) != 3:
+            raise Error("TypeError: batch_source_call expects three arguments")
+        var result = batch_source_call_py(args[0], args[1], args[2])
+        return result.steal_data()
+    except error:
+        return graph_python_error(error)
+
+
 def ops_program_public_call_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var args = PythonObject(from_borrowed=packed)
@@ -642,6 +656,7 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         m.def_function[session_public_api_binding]("session_public_api_v1")
         m.def_function[ops_session_public_connect_py]("ops_session_public_connect")
         m.def_py_c_function(ops_program_public_call_c_binding, "ops_program_public_call")
+        m.def_py_c_function(batch_source_call_c_binding, "batch_source_call")
         m.def_function[owned_program_public_api_binding]("owned_program_public_api_v1")
         m.def_function[ops_owned_program_connect_py]("ops_owned_program_connect")
         m.def_py_c_function(ops_owned_program_call_c_binding, "ops_owned_program_call")

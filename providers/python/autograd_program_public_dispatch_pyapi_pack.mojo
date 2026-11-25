@@ -11,7 +11,7 @@ from autograd.ops_api import ops_session
 from autograd.control_checkpoint import control_save
 from providers.python.autograd_program_owner_pyapi_door import program_owner_fields, program_native_sequence, program_release_fields
 from providers.python.autograd_program_arrays_pyapi_door import program_numeric_scalar, program_admit_value, uint64_input
-from providers.python.autograd_program_pyapi_door import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, fit_stop_options, _integer
+from providers.python.autograd_program_pyapi_door import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, fit_stop_options, _integer, ops_program_fit_source_py
 from providers.python.autograd_program_control_pyapi_pack import ops_program_control_py, ops_program_decode_py
 from providers.python.autograd_program_control_grad_pyapi_pack import ops_program_control_vjp_py
 from providers.python.autograd_program_save_pyapi_door import ops_program_save_fields_py
@@ -40,7 +40,10 @@ from bindings.autograd_keys_unpack import (
     AUTOGRAD_OPN_FIT_IF,
     AUTOGRAD_OPN_SAVE,
     AUTOGRAD_OPN_SAVE_CONTROL,
+    AUTOGRAD_OPN_SAVE_TRAINING,
 )
+from autograd.program_training_checkpoint import program_training_save
+from providers.python.batch_source_pyapi_door import batch_source_training_part
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
@@ -147,7 +150,7 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
             raise Error("TypeError: decode state must be a dict of state handle -> array, or None")
         return ops_program_decode_py[E, KIND](sid, pid, args[0], n, unroll, Bool(py=args[3]), args[4])
     if name == AUTOGRAD_OPN_FIT or name == AUTOGRAD_OPN_FIT_IF:
-        _arguments(args, 5)
+        _arguments(args, 6)
         var condition = 0
         var otherwise = 0
         if name == AUTOGRAD_OPN_FIT_IF:
@@ -163,6 +166,21 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         _option(options[7])
         var replaced = Python.tuple("loss_curve_", "n_iter_", "branch_counts_") if name == AUTOGRAD_OPN_FIT_IF else Python.tuple("loss_curve_", "n_iter_")
         program_release_fields(output_fields, replaced)
+        # lane batch-source: args[5] = (source, steps); a source replaces the arrays (fit only)
+        var streamed = args[5]
+        _arguments(streamed, 2)
+        if streamed[0] is not None:
+            if name == AUTOGRAD_OPN_FIT_IF:
+                raise Error("ValueError: Program.fit_if does not take a source")
+            if len(args[2]) != 0:
+                raise Error("ValueError: Program.fit(source=) takes no arrays: the source supplies every input")
+            var sresult = ops_program_fit_source_py[E, KIND](sid, pid, streamed[0], streamed[1], args[3],
+                options[0], options[1], options[2], options[3], options[7], 0, 0, options[8] is not None)
+            py_setitem(output_fields, nk[].k_loss_curve_, sresult[0])
+            py_setitem(output_fields, nk[].k_n_iter_, sresult[1])
+            return owner
+        if streamed[1] is not None:
+            raise Error("ValueError: Program.fit steps applies to a source (source=)")
         var stop = fit_stop_options(options)
         var result = ops_program_fit_native_py[E, KIND](sid, pid, args[2], args[3],
             options[0], options[1], options[2], options[3], options[4], options[5], options[6], options[7],
@@ -183,6 +201,14 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         else:
             _arguments(args, 1)
         return ops_program_save_fields_py[E, KIND](fields, state, args[0], output_fields, replay)
+    if name == AUTOGRAD_OPN_SAVE_TRAINING:
+        # lane batch-source: (path, optimizer, source) -> the byte count; one file holds the graph, parameters,
+        # optimizer groups and states, schedule and the source's consumed position
+        _arguments(args, 3)
+        var opt = _integer(args[1], "optimizer", 1)
+        var part = batch_source_training_part(args[2])
+        var file = native_path(args[0])
+        return PythonObject(program_training_save[E, KIND](Int(py=sid), Int(py=pid), opt, String(py=file), part))
     if name == AUTOGRAD_OPN_SAVE_CONTROL:
         _arguments(args, 6)
         var condition = Int(py=_component(args[1], session))

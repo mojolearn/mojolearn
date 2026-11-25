@@ -1,0 +1,13 @@
+diff --git a/autograd/program_training_checkpoint.mojo b/autograd/program_training_checkpoint.mojo
+index 2e7a9b2b0d..a3c5d4d9ca 100644
+--- a/autograd/program_training_checkpoint.mojo
++++ b/autograd/program_training_checkpoint.mojo
+@@ -58,7 +58,7 @@ from training.checkpoint import Checkpoint, CKPT_SECTION_PROGRAM_TRAINING, read_
+ #   DROP_GROUP: a resume restores the optimizer state of group 0 only: every later group's moments and step counts
+ #   start over, so the first resumed update differs from the uninterrupted one.
+ comptime PT_SABOTAGE_DROP_GROUP = is_defined["MOJOLEARN_PT_SABOTAGE_DROP_GROUP"]()
+-comptime PT_SABOTAGE_DROP_GROUP_HOST = is_defined["MOJOLEARN_PT_SABOTAGE_DROP_GROUP_HOST"]()
++comptime PT_SABOTAGE_DROP_GROUP_HOST = True  # SABOTAGE: a resume restores group 0 only on the host
+ 
+ comptime _PT_VERSION = 1
+ comptime _PT_GROUP_FLOATS = 13

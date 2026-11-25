@@ -251,3 +251,8 @@ Session.custom	nn-blocks-cbw user-defined backward rule: not yet in a release ve
 _gradcheck.gradcheck	gradcheck of custom_op backward rules: not compiled or run yet
 _gradcheck.GradcheckError	gradcheck of custom_op backward rules: not compiled or run yet
 # gradcheck end
+# batch-source begin
+BatchSource	batch-source streamed shard batches: not yet in a release verification
+Program.save_training	batch-source one-call training checkpoint: not yet in a release verification
+Session.load_training	batch-source one-call training checkpoint: not yet in a release verification
+# batch-source end
