@@ -17,8 +17,9 @@ DeviceExec and requires the host words):
         walked against PyTorch's cell in float64 from that state;
   15-17 the same three cells run one step at a time (T = 6 calls of one step, each from the previous call's
         last state; the LSTM's cell state from c_last) give the words of one 6-step call, outputs and final
-        states (inputs 4 <= 64: the input projection takes no split-K order at either row count, and the step's
-        fold depends on the batch and hidden sizes only);
+        states (the input projection folds one chain at every row count, autograd/rules_recurrent.mojo
+        rnn_linear_chain, and the step's fold depends on the batch and hidden sizes only; the wide inputs are
+        checks/native_tests/rnn_parity.mojo units 11-14);
   18    rnn_zero_padded: every padded step (t >= length) of x is +0.0 and every valid step keeps its words.
 """
 from std.math import tanh, exp, log, isfinite

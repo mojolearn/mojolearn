@@ -115,7 +115,10 @@ class _RecurrentBase(ParamsMixin):
             next call.
 
         Running a sequence through ``step`` in pieces gives the same scores
-        as running it whole, bit for bit, for a unidirectional model.
+        and states as running it whole, bit for bit, at any number of
+        features. A bidirectional model cannot stream (its reverse direction
+        reads the steps that come later) and raises ``ValueError``; use
+        :meth:`predict` on the whole sequence.
 
         Examples
         --------

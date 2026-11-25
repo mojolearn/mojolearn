@@ -95,6 +95,16 @@ def test_step_refuses_a_state_that_is_not_the_pair_step_returned(state):
         m.step(x[:, :1], state)
 
 
+@pytest.mark.parametrize("state", [False, True])
+def test_step_refuses_a_bidirectional_model(state):
+    # a reverse direction reads the steps that come later: no piece of a sequence can be scored before it ends
+    x, y, _ = _data()
+    m = _small(mojolearn.GRURegressor, bidirectional=True).fit(x, y)
+    carried = (np.zeros((2, N, H), np.float32), None) if state else None
+    with pytest.raises(ValueError, match="step: a bidirectional model cannot stream"):
+        m.step(x[:, :1], carried)
+
+
 # ---------------------------------------------------------------- names
 _OPTIONS = ("output", "bidirectional", "dropout", "bias", "clip_grad_norm", "class_weight", "early_stopping",
             "validation_fraction", "n_iter_no_change", "tol", "warm_start")
@@ -146,9 +156,11 @@ def test_bidirectional_gru_state_dict_loads_into_torch_and_matches():
         out, h_n = gru(torch.from_numpy(x))
         pred = head(torch.cat([h_n[-2], h_n[-1]], dim=1))[:, 0]
     np.testing.assert_allclose(np.asarray(m.hidden_sequence(x)), out.numpy(), rtol=1e-5, atol=1e-5)
-    _, (h, c) = m.step(x)
-    assert c is None
-    np.testing.assert_allclose(np.asarray(h), h_n.numpy(), rtol=1e-5, atol=1e-5)
+    # the top layer's h_n from the output: forward at the last step, reverse at the first (step refuses a
+    # bidirectional model: it cannot stream)
+    seq = np.asarray(m.hidden_sequence(x))
+    np.testing.assert_allclose(seq[:, -1, :H], h_n.numpy()[-2], rtol=1e-5, atol=1e-5)
+    np.testing.assert_allclose(seq[:, 0, H:], h_n.numpy()[-1], rtol=1e-5, atol=1e-5)
     np.testing.assert_allclose(np.asarray(m.predict(x)), pred.numpy(), rtol=1e-5, atol=1e-5)
     # and back: torch's tensors load into another fitted estimator, which then predicts the same words
     other = mojolearn.GRURegressor(hidden_size=H, num_layers=2, bidirectional=True, max_epochs=1, batch_size=6,

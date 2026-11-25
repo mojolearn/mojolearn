@@ -33,13 +33,19 @@ DeviceExec and requires the host words):
   10   (g) clip_grad_norm: one SGD step (lr 1, so the update is the clipped gradient) with max_norm a quarter of
        the gradient's norm moves the parameters by a vector of norm <= max_norm, parallel to the unclipped step;
        with max_norm four times the norm the step is the plain step's words (coefficient exactly 1);
-  11   (f) EpochMonitor's decisions (host scalars; no device words): the improvement, best epoch, stall and stop
+  15   (f) EpochMonitor's decisions (host scalars; no device words): the improvement, best epoch, stall and stop
        of scikit-learn's rule over a fixed loss sequence, patience 0 never stops, a loss that is not finite is
        refused.
-Why the streaming and h_0 units keep every width <= 64 (inputs 3 or 4, hidden 5 or 6): the step recurrence's fold
-depends only on the batch and the hidden size, but the input projection's split-K rule (gemm_split_shape) keys
-on its row count T B once its inputs exceed 64, so a T-step call and T one-step calls are the same words only up
-to 64 inputs (the estimator's `step` documents the same bound).
+  11-14 (h) streaming at every input width (lane rnn-step-bits, Andrew 2026-11-25): an LSTM (hidden 32, one
+       layer, output='sequence') over 4 sequences of 64 steps of 8, 64, 65 and 300 inputs: 64 calls of one step
+       carrying (h, c) give the one 64-step call's words, every step's probabilities and the final states. The
+       shape is one the split-K rule (sequence/gemm_split.mojo gemm_split_shape) separates: the whole call's input
+       projection 256 x 128 is not a split shape, a one-step call's 4 x 128 is (above 64 inputs); the unit fails if
+       the rule stops separating them, so it keeps testing what it claims. The recurrent projections ask for one
+       chain at every row count (autograd/rules_recurrent.mojo rnn_linear_chain), so 65 and 300 agree too; under
+       MOJOLEARN_RNN_STEP_BITS_SABOTAGE_HOST (or _DEVICE) the host (device) column must fail them.
+The streaming unit (e) and the h_0 unit (d) keep small widths (inputs 3 or 4, hidden 5 or 6); the widths that
+used to separate the orders are unit (h)'s.
 """
 from std.math import tanh, exp, log, sqrt
 from std.memory import bitcast
@@ -51,6 +57,7 @@ from sequence.ops import FP, Args, OP_SEQ_IOTA, OPT_ADAM, OPT_SGD, CELL_GRU, CEL
 from sequence.ops_impl import rnn_fit_impl, rnn_predict_impl
 from sequence.recurrent import Net, Work, RnnOptions, RnnFitSetup, TASK_MSE, TASK_CE, gather_rows, gather_seq
 from autograd.rules_recurrent import AutogradRnnStep
+from sequence.gemm_split import gemm_split_shape
 from autograd.epoch_monitor import EpochMonitor
 from checks.native_tests.sequence_port_common import normal, u01
 from checks.native_tests.testsuite_cases import CPU_COLUMN_BUILD
@@ -633,6 +640,46 @@ def run_stream_case[E: Exec](mut ex: E, which: Int) raises -> List[Float32]:
     return words^
 
 
+# ---------------------------------------------------------------- (h) streaming at every input width
+def run_width_case[E: Exec](mut ex: E, which: Int) raises -> List[Float32]:
+    var widths: List[Int] = [8, 64, 65, 300]
+    var D = widths[which]
+    var name = "lstm streaming, " + String(D) + " inputs"
+    var cell = CELL_LSTM
+    var N = 4
+    var T = 64
+    var H = 32
+    var L = 1
+    var O = 3
+    var GH = gates_of(cell) * H
+    # the shape must separate the orders the old rule took (it keys on the rows above 64 inputs)
+    if D > 64 and (gemm_split_shape(N * T, GH, D) or not gemm_split_shape(N, GH, D)):
+        _fail(name + ": the shape no longer separates a one-step call's split rule from the whole call's")
+    var shape: List[Int] = [cell, D, H, L, O, TASK_CE]
+    var np_ = Net(cell, D, H, L, O).n_params()
+    var x = _values(N * T * D, 0x7F00 + which, 1.0)
+    var p = _params(np_, 0x7F10 + which, 0.1)
+    var whole = _predict(ex, shape, 1, 1, N, T, x, p, _empty(), _empty(), _empty())
+    var probs = List[Float32](length=N * T * O, fill=0.0)
+    var h = _empty()
+    var c = _empty()
+    for s in range(T):  # driver-loop: over time steps (the streaming form under test)
+        var one = _predict(ex, shape, 1, 1, N, 1, _steps(x, N, T, D, s, 1), p, _empty(), h, c)
+        for b in range(N):  # small-loop(N: check assembly)
+            for o in range(O):  # small-loop(O: check assembly)
+                probs[(b * T + s) * O + o] = one[0][b * O + o]
+        h = one[2].copy()
+        c = one[3].copy()
+    _same(name + ": 64 one-step calls vs one 64-step call (probabilities)", whole[0], probs)
+    _same(name + ": streamed h_n vs whole", whole[2], h)
+    _same(name + ": streamed c_n vs whole", whole[3], c)
+    print("RNN_PARITY", name, "(h) one step at a time is the whole sequence's words")
+    var words = whole[0].copy()
+    words.extend(whole[2].copy())
+    words.extend(whole[3].copy())
+    return words^
+
+
 # ---------------------------------------------------------------- (g) the gradient clip
 def run_clip_case[E: Exec](mut ex: E) raises -> List[Float32]:
     var name = String("gru clip_grad_norm")
@@ -736,14 +783,16 @@ def _run_unit[E: Exec](mut ex: E, unit: Int) raises -> List[Float32]:
         return run_stream_case(ex, unit - 8)
     if unit == 10:
         return run_clip_case(ex)
+    if unit < 15:
+        return run_width_case(ex, unit - 11)
     return run_monitor_case()
 
 
 # ---------------------------------------------------------------- tests
 def test_rnn_parity() raises:
-    # The twelve units are independent: on the host column each runs on its own HostExec across host cores;
+    # The sixteen units are independent: on the host column each runs on its own HostExec across host cores;
     # the device column then runs them in order on the one device and requires the host words.
-    comptime U = 12
+    comptime U = 16
     var failed = List[Int](length=U, fill=0)
     var host_words = List[List[Float32]](length=U, fill=List[Float32]())
     var fp = failed.unsafe_ptr()
@@ -766,7 +815,7 @@ def test_rnn_parity() raises:
             _same("unit " + String(unit) + " host vs device", host_words[unit], dw)
     _ = failed^
     _ = host_words^
-    print("PASS RNN_PARITY 12")
+    print("PASS RNN_PARITY 16")
 
 
 def main() raises:
