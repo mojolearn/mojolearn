@@ -197,9 +197,12 @@ def _conv_axes(x: PythonObject, n: Int, name: String, what: String, low: Int) ra
     `_triple`)."""
     if _is_int(x):
         return List[Int](length=n, fill=_int(x, name, low))
-    if py_type(x) is static_builtin_type("builtins", "str"):
+    var cls = py_type(x)
+    if cls is static_builtin_type("builtins", "str"):
         raise Error("ValueError: " + what + ": " + name + " must be an integer or a tuple of " + String(n)
                     + " integers")
+    if not (cls is static_builtin_type("builtins", "tuple") or cls is static_builtin_type("builtins", "list")):
+        raise Error("TypeError: " + name + " must be an integer or a tuple of integers")
     var words = _ints(x, name, low)
     if len(words) != n:
         raise Error("ValueError: " + what + ": " + name + " must be an integer or a tuple of " + String(n)
