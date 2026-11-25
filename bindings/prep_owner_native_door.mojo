@@ -169,6 +169,13 @@ def prep_owner_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
                 composition_after_fit(model, args[0], run)
             return parallel_public_result(result, operation, PythonObject(None), run).steal_data()
         elif kind == "rfe":
+            if op < 0 and operation == "vendor_used":
+                # the image of this estimator's device route, read back, as for
+                # the iterative imputer above. w3-fix-12 (2026-11-25): RFE's
+                # vendor_used (w3-fix-11 ec19b09241) reached composition_before,
+                # whose args[0] on the empty tuple raised "tuple index out of
+                # range" (gate 9 row 1, arm coverage-gate-x_prep-store-cpu).
+                return prep_route_vendor_used(model, context).steal_data()
             # The connected context of RFE's device route (lane vdf-misc: RFE
             # takes `device`; the one read of it, resolved once per
             # estimator as for SelectKBest; a hit is one record read and one
