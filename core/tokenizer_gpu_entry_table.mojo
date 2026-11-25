@@ -50,20 +50,29 @@ The `mojolearn.models.Tokenizer` device side (lane vdf2-tokmodel, tokenizer/gpu/
   TOK_GPU_OP_VOCAB_FREE     addresses [handle]                  ints []
       The table released. The result is 0.
 
+The `mojolearn.models.tokenizer.pretokenize(device="gpu")` side (lane vdl-pretok, 2026-11-24,
+tokenizer/gpu/pretokenize_gpu.mojo):
+
+  TOK_GPU_OP_VOCAB_CUT      addresses [text, bounds_out]        ints [n, pattern]
+      The pre-token boundaries of the n bytes at `text` under the pattern code (0 gpt2, 1 llama3,
+      2 qwen2; any other code is refused): the host `pretokenize_pattern`'s m + 1 offsets (int64,
+      room n + 1), offset for offset. The result is the boundary count.
+
 Publication and lookup are small metadata operations with no independent
 numerical work to split. A layout change takes a new V suffix.
 """
 from core.entry_table import EntryRef, entry_table_publish, entry_table_resolve
 from core.native_descriptor_abi import NativeDescriptorCall
 
-comptime TOKENIZER_GPU_ENTRY_ABI = "mojolearn.tokenizer.gpu.v2"
+comptime TOKENIZER_GPU_ENTRY_ABI = "mojolearn.tokenizer.gpu.v3"
 comptime TOK_GPU_OP_CORPUS_TRAIN = 0
 comptime TOK_GPU_OP_CORPUS_ENCODE = 1
 comptime TOK_GPU_OP_VOCAB_LOAD = 2
 comptime TOK_GPU_OP_VOCAB_ENCODE = 3
 comptime TOK_GPU_OP_VOCAB_DECODE = 4
 comptime TOK_GPU_OP_VOCAB_FREE = 5
-comptime TOK_GPU_OP_COUNT = 6
+comptime TOK_GPU_OP_VOCAB_CUT = 6
+comptime TOK_GPU_OP_COUNT = 7
 
 
 def tokenizer_gpu_vendor_word(vendor: String) -> Int:

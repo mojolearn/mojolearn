@@ -8373,10 +8373,15 @@ def _(ml, X, yc, yr, Xh=None):
       VOCABULARY the ids are drawn from, the Python patterns' ids with the
       compiled one's. `base` a66a961b530381ae -> dc2af787603953e6.
 
-    `bounds` and `names` move under NEITHER and cannot: the pre-tokenizer
-    boundaries and the pattern-name lookup are Python over byte codes, with
-    no binding of any kind behind them, and `names` does not even read the
-    vocabulary. `text_ids` does not move under the trainer arm, and that is
+    `bounds` and `names` move under NEITHER: neither reads the vocabulary.
+    `bounds` (and the gpt2 `pieces` the flags hold) is `pretokenize` through
+    the view, so it is TWO-SIDED (lane vdl-pretok, 2026-11-24): on the CPU
+    side the host cut (`pretokenize_pattern`, the tokenizer host binding's
+    door), on the GPU side the GPU tokenizer image's native entry
+    (TOK_GPU_OP_VOCAB_CUT, `pretokenize_gpu_into`). Its own arm is
+    `coverage-tokenizer-gpu_cut` (tools/identity_lanes/coverage_sabotage.tsv,
+    side gpu: the first interior boundary one byte later), which moves the
+    GPU cell and leaves the CPU cell. `names` is the pattern-name lookup. `text_ids` does not move under the trainer arm, and that is
     a measurement: the hostile text is plain ASCII, and a vocabulary trained
     on float32 bytes has no merge that applies to it, so a different
     vocabulary gives the same ids. `decoded` does not move under the trainer

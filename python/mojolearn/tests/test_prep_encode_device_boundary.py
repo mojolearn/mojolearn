@@ -214,7 +214,7 @@ def test_rfe_takes_device_and_hands_it_to_its_estimator():
         mojolearn.RFE(mojolearn.Ridge(), device="tpu")
     x, y = _continuous(), _continuous(cols=1).ravel()
     model = mojolearn.RFE(mojolearn.Ridge(), n_features_to_select=2, device="cpu").fit(x, y)
-    assert model.support_.sum() == 2
+    assert sum(model.support_) == 2  # support_ is a list of bools (the select door stores list(support))
     if TWO_DEVICES:
         with pytest.raises(ValueError, match="give both the same device"):
             mojolearn.RFE(mojolearn.Ridge(device="gpu"), n_features_to_select=2, device="cpu").fit(x, y)

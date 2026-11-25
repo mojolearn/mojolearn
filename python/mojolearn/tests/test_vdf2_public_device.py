@@ -2,8 +2,9 @@
 """Boundary of `device=` on `mojolearn.models.tokenizer.pretokenize` and `mojolearn.lm_corpus.prepare`,
 and of `import mojolearn.linalg_fast` on every installation (lane vdf2-public): the keyword is keyword-only
 with default None, a bad word is refused in the shared words before any work, 'gpu' is refused in the rule's
-words where it cannot run. No numbers: the digests are verify's, the GPU cut's offsets are the native check
-checks/native_tests/pretokenize_gpu_identity.mojo."""
+words where it cannot run. No numbers: the digests are verify's, the GPU cut's offsets are the native checks
+checks/native_tests/pretokenize_gpu_identity.mojo (the body) and pretokenize_gpu_entry.mojo (the image's native
+entry, TOK_GPU_OP_VOCAB_CUT, that device='gpu' reaches; lane vdl-pretok)."""
 import importlib
 import inspect
 
@@ -64,6 +65,17 @@ def test_prepare_gpu_reads_the_corpus_like_the_host_side(tmp_path):
 def test_pretokenize_cpu_returns_a_list_of_ints():
     cut = hf_tokenizer.pretokenize(b"Hello world", "llama3", device="cpu")
     assert type(cut) is list and all(type(offset) is int for offset in cut)
+
+
+@pytest.mark.skipif(not GPU, reason="the GPU side runs only on a GPU installation")
+def test_pretokenize_gpu_returns_a_list_of_ints_and_refuses_a_bad_pattern_in_the_host_words():
+    # the GPU side goes through the GPU tokenizer image's native entry (lane vdl-pretok): the result is
+    # published as the host side's, and an unknown pattern is refused by the door before the entry
+    cut = hf_tokenizer.pretokenize(b"Hello world", "llama3", device="gpu")
+    assert type(cut) is list and all(type(offset) is int for offset in cut)
+    for device in ("cpu", "gpu"):
+        with pytest.raises(ValueError, match="unknown pattern"):
+            hf_tokenizer.pretokenize(b"Hello world", "gpt3", device=device)
 
 
 def test_linalg_fast_imports_on_every_installation():

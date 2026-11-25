@@ -2,9 +2,10 @@
 """Import-time schemas for the field-only constructors of the declared families.
 
 The prep (`_PrepBase`) and decomp (`_Base`) classes whose `set_params` is the
-shallow declared assignment (`_native_declared_params.py`), and a few plain
-classes (the shuffle and leave-P splitters), have constructors that only
-store their parameters. The resample results are owned by the resample
+shallow declared assignment (`_native_declared_params.py`) have constructors
+that only store their parameters (the shuffle and leave-P splitters left this
+table when their native constructor took over their fields and `device`,
+eb852fc947). The resample results are owned by the resample
 provider's native result initializer instead. Their public `__init__` is one call to the
 same native constructor as the full-reset owners
 (bindings/full_reset_constructor_native_door.mojo); re-initialization releases an
@@ -39,7 +40,6 @@ _CLASS_SOURCES = {
     'FastICA': '_expansion_decomp',
     'GaussianNB': '_expansion_prep',
     'GaussianRandomProjection': '_expansion_decomp',
-    'GroupShuffleSplit': 'model_selection',
     'IncrementalPCA': '_expansion_decomp',
     'Isomap': '_expansion_decomp',
     'IterativeImputer': '_expansion_prep',
@@ -47,8 +47,6 @@ _CLASS_SOURCES = {
     'LabelBinarizer': '_expansion_prep',
     'LabelEncoder': '_expansion_prep',
     'LatentDirichletAllocation': '_expansion_decomp',
-    'LeavePGroupsOut': 'model_selection',
-    'LeavePOut': 'model_selection',
     'LocallyLinearEmbedding': '_expansion_decomp',
     'MDS': '_expansion_decomp',
     'MinCovDet': '_expansion_decomp',
@@ -68,13 +66,11 @@ _CLASS_SOURCES = {
     'QuantileTransformer': '_expansion_prep',
     'RFE': '_expansion_prep',
     'SelectKBest': '_expansion_prep',
-    'ShuffleSplit': 'model_selection',
     'SimpleImputer': '_expansion_prep',
     'SparseCoder': '_expansion_decomp',
     'SparsePCA': '_expansion_decomp',
     'SparseRandomProjection': '_expansion_decomp',
     'SplineTransformer': '_expansion_prep',
-    'StratifiedShuffleSplit': 'model_selection',
     'TargetEncoder': '_expansion_prep',
     'VarianceThreshold': '_expansion_prep',
 }
@@ -96,7 +92,6 @@ _EVENTS = {
     'FastICA': (('n_components', 'parameter', 'n_components', False), ('algorithm', 'parameter', 'algorithm', False), ('whiten', 'parameter', 'whiten', False), ('fun', 'parameter', 'fun', False), ('fun_args', 'parameter', 'fun_args', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('w_init', 'parameter', 'w_init', False), ('whiten_solver', 'parameter', 'whiten_solver', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', False), ('device', 'parameter', 'device', False)),
     'GaussianNB': (('priors', 'parameter', 'priors', False), ('var_smoothing', 'parameter', 'var_smoothing', False), ('numeric_mode', 'parameter', 'numeric_mode', False), ('device', 'parameter', 'device', False)),
     'GaussianRandomProjection': (('n_components', 'parameter', 'n_components', False), ('eps', 'parameter', 'eps', False), ('compute_inverse_components', 'parameter', 'compute_inverse_components', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', False), ('device', 'parameter', 'device', False)),
-    'GroupShuffleSplit': (('n_splits', 'parameter', 'n_splits', False), ('test_size', 'parameter', 'test_size', False), ('train_size', 'parameter', 'train_size', False), ('random_state', 'parameter', 'random_state', False)),
     'IncrementalPCA': (('n_components', 'parameter', 'n_components', False), ('whiten', 'parameter', 'whiten', False), ('copy', 'parameter', 'copy', False), ('batch_size', 'parameter', 'batch_size', False), ('numeric_mode', 'parameter', 'numeric_mode', False), ('device', 'parameter', 'device', False)),
     'Isomap': (('n_neighbors', 'parameter', 'n_neighbors', False), ('radius', 'parameter', 'radius', False), ('n_components', 'parameter', 'n_components', False), ('eigen_solver', 'parameter', 'eigen_solver', False), ('tol', 'parameter', 'tol', False), ('max_iter', 'parameter', 'max_iter', False), ('path_method', 'parameter', 'path_method', False), ('neighbors_algorithm', 'parameter', 'neighbors_algorithm', False), ('n_jobs', 'parameter', 'n_jobs', False), ('metric', 'parameter', 'metric', False), ('p', 'parameter', 'p', False), ('metric_params', 'parameter', 'metric_params', False), ('numeric_mode', 'parameter', 'numeric_mode', False), ('device', 'parameter', 'device', False)),
     'IterativeImputer': (('estimator', 'parameter', 'estimator', False), ('missing_values', 'parameter', 'missing_values', False), ('sample_posterior', 'parameter', 'sample_posterior', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('n_nearest_features', 'parameter', 'n_nearest_features', False), ('initial_strategy', 'parameter', 'initial_strategy', False), ('fill_value', 'parameter', 'fill_value', False), ('imputation_order', 'parameter', 'imputation_order', False), ('skip_complete', 'parameter', 'skip_complete', False), ('min_value', 'parameter', 'min_value', False), ('max_value', 'parameter', 'max_value', False), ('verbose', 'parameter', 'verbose', False), ('random_state', 'parameter', 'random_state', False), ('add_indicator', 'parameter', 'add_indicator', False), ('keep_empty_features', 'parameter', 'keep_empty_features', False), ('device', 'parameter', 'device', False)),
@@ -104,8 +99,6 @@ _EVENTS = {
     'LabelBinarizer': (('neg_label', 'parameter', 'neg_label', False), ('pos_label', 'parameter', 'pos_label', False), ('sparse_output', 'parameter', 'sparse_output', False), ('device', 'parameter', 'device', False)),
     'LabelEncoder': (('device', 'parameter', 'device', False),),
     'LatentDirichletAllocation': (('n_components', 'parameter', 'n_components', False), ('doc_topic_prior', 'parameter', 'doc_topic_prior', False), ('topic_word_prior', 'parameter', 'topic_word_prior', False), ('learning_method', 'parameter', 'learning_method', False), ('learning_decay', 'parameter', 'learning_decay', False), ('learning_offset', 'parameter', 'learning_offset', False), ('max_iter', 'parameter', 'max_iter', False), ('batch_size', 'parameter', 'batch_size', False), ('evaluate_every', 'parameter', 'evaluate_every', False), ('total_samples', 'parameter', 'total_samples', False), ('perp_tol', 'parameter', 'perp_tol', False), ('mean_change_tol', 'parameter', 'mean_change_tol', False), ('max_doc_update_iter', 'parameter', 'max_doc_update_iter', False), ('n_jobs', 'parameter', 'n_jobs', False), ('verbose', 'parameter', 'verbose', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', False), ('device', 'parameter', 'device', False)),
-    'LeavePGroupsOut': (('n_groups', 'parameter', 'n_groups', False),),
-    'LeavePOut': (('p', 'parameter', 'p', False),),
     'LocallyLinearEmbedding': (('n_neighbors', 'parameter', 'n_neighbors', False), ('n_components', 'parameter', 'n_components', False), ('reg', 'parameter', 'reg', False), ('eigen_solver', 'parameter', 'eigen_solver', False), ('tol', 'parameter', 'tol', False), ('max_iter', 'parameter', 'max_iter', False), ('method', 'parameter', 'method', False), ('hessian_tol', 'parameter', 'hessian_tol', False), ('modified_tol', 'parameter', 'modified_tol', False), ('neighbors_algorithm', 'parameter', 'neighbors_algorithm', False), ('random_state', 'parameter', 'random_state', False), ('n_jobs', 'parameter', 'n_jobs', False), ('numeric_mode', 'parameter', 'numeric_mode', False), ('device', 'parameter', 'device', False)),
     'MDS': (('n_components', 'parameter', 'n_components', False), ('metric_mds', 'parameter', 'metric_mds', False), ('n_init', 'parameter', 'n_init', False), ('init', 'parameter', 'init', False), ('max_iter', 'parameter', 'max_iter', False), ('verbose', 'parameter', 'verbose', False), ('eps', 'parameter', 'eps', False), ('n_jobs', 'parameter', 'n_jobs', False), ('random_state', 'parameter', 'random_state', False), ('metric', 'parameter', 'metric', False), ('metric_params', 'parameter', 'metric_params', False), ('normalized_stress', 'parameter', 'normalized_stress', False), ('numeric_mode', 'parameter', 'numeric_mode', False), ('device', 'parameter', 'device', False)),
     'MinCovDet': (('store_precision', 'parameter', 'store_precision', False), ('assume_centered', 'parameter', 'assume_centered', False), ('support_fraction', 'parameter', 'support_fraction', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', False), ('device', 'parameter', 'device', False)),
@@ -125,13 +118,11 @@ _EVENTS = {
     'QuantileTransformer': (('n_quantiles', 'parameter', 'n_quantiles', False), ('output_distribution', 'parameter', 'output_distribution', False), ('ignore_implicit_zeros', 'parameter', 'ignore_implicit_zeros', False), ('subsample', 'parameter', 'subsample', False), ('random_state', 'parameter', 'random_state', False), ('copy', 'parameter', 'copy', False), ('device', 'parameter', 'device', False)),
     'RFE': (('estimator', 'parameter', 'estimator', False), ('n_features_to_select', 'parameter', 'n_features_to_select', False), ('step', 'parameter', 'step', False), ('verbose', 'parameter', 'verbose', False), ('importance_getter', 'parameter', 'importance_getter', False), ('device', 'parameter', 'device', False)),
     'SelectKBest': (('score_func', 'parameter', 'score_func', False), ('k', 'parameter', 'k', False), ('device', 'parameter', 'device', False)),
-    'ShuffleSplit': (('n_splits', 'parameter', 'n_splits', False), ('test_size', 'parameter', 'test_size', False), ('train_size', 'parameter', 'train_size', False), ('random_state', 'parameter', 'random_state', False)),
     'SimpleImputer': (('missing_values', 'parameter', 'missing_values', False), ('strategy', 'parameter', 'strategy', False), ('fill_value', 'parameter', 'fill_value', False), ('copy', 'parameter', 'copy', False), ('add_indicator', 'parameter', 'add_indicator', False), ('keep_empty_features', 'parameter', 'keep_empty_features', False), ('device', 'parameter', 'device', False)),
     'SparseCoder': (('dictionary', 'parameter', 'dictionary', False), ('transform_algorithm', 'parameter', 'transform_algorithm', False), ('transform_n_nonzero_coefs', 'parameter', 'transform_n_nonzero_coefs', False), ('transform_alpha', 'parameter', 'transform_alpha', False), ('split_sign', 'parameter', 'split_sign', False), ('n_jobs', 'parameter', 'n_jobs', False), ('positive_code', 'parameter', 'positive_code', False), ('transform_max_iter', 'parameter', 'transform_max_iter', False), ('numeric_mode', 'parameter', 'numeric_mode', False), ('device', 'parameter', 'device', False)),
     'SparsePCA': (('n_components', 'parameter', 'n_components', False), ('alpha', 'parameter', 'alpha', False), ('ridge_alpha', 'parameter', 'ridge_alpha', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('method', 'parameter', 'method', False), ('n_jobs', 'parameter', 'n_jobs', False), ('U_init', 'parameter', 'U_init', False), ('V_init', 'parameter', 'V_init', False), ('verbose', 'parameter', 'verbose', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', False), ('device', 'parameter', 'device', False)),
     'SparseRandomProjection': (('n_components', 'parameter', 'n_components', False), ('density', 'parameter', 'density', False), ('eps', 'parameter', 'eps', False), ('dense_output', 'parameter', 'dense_output', False), ('compute_inverse_components', 'parameter', 'compute_inverse_components', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', False), ('device', 'parameter', 'device', False)),
     'SplineTransformer': (('n_knots', 'parameter', 'n_knots', False), ('degree', 'parameter', 'degree', False), ('knots', 'parameter', 'knots', False), ('extrapolation', 'parameter', 'extrapolation', False), ('include_bias', 'parameter', 'include_bias', False), ('order', 'parameter', 'order', False), ('handle_missing', 'parameter', 'handle_missing', False), ('sparse_output', 'parameter', 'sparse_output', False), ('device', 'parameter', 'device', False)),
-    'StratifiedShuffleSplit': (('n_splits', 'parameter', 'n_splits', False), ('test_size', 'parameter', 'test_size', False), ('train_size', 'parameter', 'train_size', False), ('random_state', 'parameter', 'random_state', False)),
     'TargetEncoder': (('categories', 'parameter', 'categories', False), ('target_type', 'parameter', 'target_type', False), ('smooth', 'parameter', 'smooth', False), ('cv', 'parameter', 'cv', False), ('shuffle', 'parameter', 'shuffle', False), ('random_state', 'parameter', 'random_state', False), ('device', 'parameter', 'device', False)),
     'VarianceThreshold': (('threshold', 'parameter', 'threshold', False), ('device', 'parameter', 'device', False)),
 }
