@@ -23,12 +23,18 @@
 def _(ml, X, yc, yr, Xh=None):
     """One CART tree, entropy, every feature (the weighted entry has no CPU arm yet); the same tree
     on a float64 Fortran-order copy of 2000 rows, the column-major fit entry (rf_classifier_fit_export:
-    every fixture is float32 C-order, which takes the row-major entry)."""
+    every fixture is float32 C-order, which takes the row-major entry). Part `saved` (lane w3i11-endpoints,
+    2026-11-25): the bytes `save` writes for the fitted tree (a saved file does not depend on the device)."""
     m = ml.DecisionTreeClassifier(max_depth=8, criterion="entropy", random_state=7).fit(X, yc)
     mf = ml.DecisionTreeClassifier(max_depth=8, criterion="entropy", random_state=7).fit(
         np.asfortranarray(X[:2000], dtype=np.float64), yc[:2000])
+    with tempfile.TemporaryDirectory(prefix="ib-trees-dt-save-") as d:
+        path = os.path.join(d, "tree.mlf")
+        m.save(path)
+        with open(path, "rb") as fh:
+            saved = np.frombuffer(fh.read(), dtype=np.uint8)
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)), depth=_h(np.int64(m.get_depth())),
-                     colmajor=_h(mf.predict_proba(X))),
+                     colmajor=_h(mf.predict_proba(X)), saved=_h(saved)),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
 

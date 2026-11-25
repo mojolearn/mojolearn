@@ -17,6 +17,21 @@ LOADERS = frozenset(('load', 'from_checkpoint', 'from_checkpoint_dir', 'from_che
 #: class's short name (its aliases are read from the endpoint rows).
 RETURNS_CLASS = {'mojolearn.importers.import_model': 'ImportedProgram'}
 
+#: Verification helpers that EXECUTE one of their arguments, by the position
+#: of the operation they run: `audit_native_call(operation, ...)` and the
+#: program verifiers' shared `audited(audits, name, operation, ...)` /
+#: `audited_context(audits, name, operation, ...)`
+#: (python/mojolearn/_verify_native_runtime.py). Passing a method to any other
+#: helper is NOT a call of it.
+EXECUTORS = {'mojolearn._verify_native_runtime.audit_native_call': 0,
+             'mojolearn._verify_native_runtime.audited': 2,
+             'mojolearn._verify_native_runtime.audited_context': 2}
+
+#: `functools.partial(f, *bound)` keeps `f` and the number of positional
+#: arguments it binds, so a later call of the partial finds the operation an
+#: executor runs at its shifted position.
+PARTIAL = '@partial:'
+
 
 class Instance(str):
     """A path that names an INSTANCE of a public class, not the class: a call
@@ -30,9 +45,15 @@ class Calls:
     def __init__(self, endpoints, helpers=None):
         self.endpoints = {}
         self.classes = set()
+        # Attributes installed on the class after its body (`Array.flags =
+        # property(...)`): READING one runs its descriptor, so an attribute
+        # read reaches the endpoint as the class's own `<name>:get` does.
+        self.installed = {}
         for row in endpoints:
             for alias in row['aliases']:
                 self.endpoints[alias + '.' + row['op']] = row['endpoint']
+                if row['kind'] == 'installed_method':
+                    self.installed[alias + '.' + row['op']] = row['endpoint']
                 if row['kind'] != 'function':
                     self.classes.add(alias)
         self.helpers = helpers or {}
@@ -80,20 +101,52 @@ class Calls:
                 paths = {p + '.' + expr.attr for p in value(expr.value)}
                 for path in paths:
                     record(path + ':get')
+                    if path in self.installed:
+                        self.seen.add(self.installed[path])
                 return paths
+            if isinstance(expr, ast.IfExp):
+                # `ops if side is None else vd.view(ops, side)`: either branch
+                # is what the expression can hold
+                value(expr.test)
+                return value(expr.body) | value(expr.orelse)
             if isinstance(expr, ast.Call):
                 args = [value(a) for a in expr.args]
                 for kw in expr.keywords:
                     value(kw.value)
                 paths, result = value(expr.func), set()
-                # The graph verifier's sole invocation helper delegates to
-                # audit_native_call(operation, ...), which executes its first
-                # argument. Passing a method to an arbitrary helper is NOT
-                # enough to establish this call.
-                if 'mojolearn._verify_native_runtime.audit_native_call' in paths and args:
-                    for operation in args[0]:
+                # An executor (EXECUTORS) runs the argument at its operation
+                # position, directly or through a partial that bound some of
+                # its leading arguments. Passing a method to an arbitrary
+                # helper is NOT enough to establish this call.
+                for path in paths:
+                    bound, target = 0, path
+                    if path.startswith(PARTIAL):
+                        count, _, target = path[len(PARTIAL):].partition(':')
+                        bound = int(count)
+                    position = EXECUTORS.get(target)
+                    if position is None or not 0 <= position - bound < len(args):
+                        continue
+                    for operation in args[position - bound]:
                         record(operation)
-                        result.update('@audit:' + p for p in returned(operation))
+                        if target.endswith('.audit_native_call'):
+                            result.update('@audit:' + p for p in returned(operation))
+                        else:
+                            result.update(returned(operation))
+                if 'functools.partial' in paths and args:
+                    result.update(f'{PARTIAL}{len(args) - 1}:{p}' for p in args[0] if not p.startswith(PARTIAL))
+                if isinstance(expr.func, ast.Name) and expr.func.id not in env and args:
+                    # builtins that run a dunder of their first argument
+                    builtin = expr.func.id
+                    for path in args[0]:
+                        if not isinstance(path, Instance):
+                            continue
+                        if builtin == 'hash':
+                            record(path + '.__hash__')
+                        elif builtin in ('delattr', 'setattr'):
+                            record(path + ('.__delattr__' if builtin == 'delattr' else '.__setattr__'))
+                            name = expr.args[1] if len(expr.args) > 1 else None
+                            if isinstance(name, ast.Constant) and isinstance(name.value, str):
+                                record(path + '.' + name.value + (':delete' if builtin == 'delattr' else ':set'))
                 for path in paths:
                     if isinstance(path, Instance):
                         # `obj(x)` on an instance runs the class's __call__
@@ -142,13 +195,19 @@ class Calls:
             if isinstance(expr, ast.Compare):
                 # `key in obj` / `key not in obj` runs the right operand's
                 # __contains__
-                value(expr.left)
+                # `a == b` / `a != b` runs the left operand's __eq__ / __ne__
+                left = value(expr.left)
                 for op, comparator in zip(expr.ops, expr.comparators):
                     held = value(comparator)
                     if isinstance(op, (ast.In, ast.NotIn)):
                         for path in held:
                             if isinstance(path, Instance):
                                 record(path + '.__contains__')
+                    elif isinstance(op, (ast.Eq, ast.NotEq)):
+                        for path in left:
+                            if isinstance(path, Instance):
+                                record(path + ('.__eq__' if isinstance(op, ast.Eq) else '.__ne__'))
+                    left = held
                 return set()
             if isinstance(expr, (ast.Yield, ast.YieldFrom)):
                 yielded = value(expr.value)
@@ -176,7 +235,25 @@ class Calls:
                 elif isinstance(n, (ast.Assign, ast.AnnAssign)):
                     values = value(n.value)
                     for target in n.targets if isinstance(n, ast.Assign) else [n.target]:
-                        bind(target, values)
+                        if isinstance(target, ast.Attribute):
+                            # `obj.name = v` runs the class's __setattr__ and the
+                            # property's setter
+                            for path in value(target.value):
+                                if isinstance(path, Instance):
+                                    record(path + '.__setattr__')
+                                    record(path + '.' + target.attr + ':set')
+                        else:
+                            bind(target, values)
+                elif isinstance(n, ast.Delete):
+                    for target in n.targets:
+                        if isinstance(target, ast.Attribute):
+                            # `del obj.name` runs __delattr__ and the property's deleter
+                            for path in value(target.value):
+                                if isinstance(path, Instance):
+                                    record(path + '.__delattr__')
+                                    record(path + '.' + target.attr + ':delete')
+                        else:
+                            value(target)
                 elif isinstance(n, (ast.With, ast.AsyncWith)):
                     for item in n.items:
                         bind(item.optional_vars, value(item.context_expr))

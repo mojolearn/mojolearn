@@ -3746,6 +3746,12 @@ def _(ml, X, yc, yr, Xh=None):
                       ml.LanguageModelConfig(**cfg.to_dict()) == cfg,
                       len(flat) == cfg.n_total, cfg.offsets[-1] == cfg.n_total,
                       len(cfg.parameter_shapes) == cfg.n_tensors))
+        # The frozen value's own dunders (lane w3i11-endpoints, 2026-11-25): equal configs hash equal, a config
+        # of another shape is not equal (nor equal to its own field tuple), and deleting a field is refused with
+        # the dataclass's words. Numbers, so a broken equality or a lifted refusal reads DIVERGENT.
+        twin = ml.LanguageModelConfig(**cfg.to_dict())
+        flags.extend((hash(twin) == hash(cfg), cfg == ml.LanguageModelConfig(), cfg == cfg.native_shape,
+                      _refused(lambda cfg=cfg: delattr(cfg, "batch"), "cannot delete field 'batch'")))
     for kw, needle in LM_CONFIG_REFUSALS:
         flags.append(_refused(lambda kw=kw: ml.LanguageModelConfig(**kw), needle))
     default = ml.LanguageModelConfig()

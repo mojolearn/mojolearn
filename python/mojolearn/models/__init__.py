@@ -46,10 +46,16 @@ __all__ = ["ParallelCausalLM", "CausalLM", "CausalLMState", "GenerationStream", 
            "verify_catalog_entry"]
 
 
+# name -> (module under mojolearn, attribute): the table the export census
+# (packaging/native_only/inventory.py) reads to resolve a lazy name.
+_LAZY_EXPORTS = {"catalog": ("models._catalog", "catalog"),
+                 "verify_catalog_entry": ("models._catalog", "verify_catalog_entry")}
+
+
 def __getattr__(name):
-    if name in ("catalog", "verify_catalog_entry"):
+    if name in _LAZY_EXPORTS:
         from . import _catalog
-        value = getattr(_catalog, name)
+        value = getattr(_catalog, _LAZY_EXPORTS[name][1])
         globals()[name] = value
         return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

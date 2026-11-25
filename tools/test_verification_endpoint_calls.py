@@ -121,3 +121,87 @@ def fixture(ml, X):
     visitor = Calls(rows)
     visitor.function(node, {'ml': {'mojolearn'}})
     assert visitor.seen == {'mojolearn.KMeans.__init__', 'mojolearn.KMeans.fit'}
+
+
+def test_side_view_helper_returns_either_branch_of_a_conditional():
+    rows = _rows('mojolearn.ops.Session', ('__init__', 'cos'))
+    tree = ast.parse('''
+def _ops():
+    from . import ops, _verify_device as vd
+    side = vd.current_side()
+    return ops if side is None else vd.view(ops, side)
+def case():
+    ops = _ops()
+    with ops.Session() as s:
+        s.cos(1)
+''')
+    helper, case = tree.body
+    visitor = Calls(rows, {'_ops': helper})
+    visitor.function(case)
+    assert visitor.seen == {r['endpoint'] for r in rows}
+
+
+def test_partial_of_the_shared_audited_helpers_executes_the_operation():
+    rows = _rows('mojolearn.ops.Session', ('__init__', 'load_partitioned', 'mul'))
+    node = ast.parse('''
+def verify(path):
+    from functools import partial
+    from . import ops
+    from ._verify_native_runtime import audited, audited_context
+    native = partial(audited, [])
+    opened = partial(audited_context, [])
+    with ops.Session() as s:
+        native("mul", s.mul, 1, 2)
+        with opened("load", s.load_partitioned, path) as restored:
+            pass
+''').body[0]
+    visitor = Calls(rows)
+    visitor.function(node)
+    assert visitor.seen == {r['endpoint'] for r in rows}
+
+
+def test_passing_a_method_to_a_partial_of_another_helper_is_not_a_call():
+    rows = _rows('mojolearn.ops.Session', ('__init__', 'mul'))
+    node = ast.parse('''
+def verify():
+    from functools import partial
+    from . import ops
+    keep = partial(print, 1)
+    with ops.Session() as s:
+        keep("mul", s.mul)
+''').body[0]
+    visitor = Calls(rows)
+    visitor.function(node)
+    assert visitor.seen == {'mojolearn.ops.Session.__init__'}
+
+
+def test_attribute_assignment_deletion_equality_and_hash_reach_their_endpoints():
+    rows = (_rows('mojolearn.RMSprop', ('__init__', 'lr_schedule:get', 'lr_schedule:set', 'lr_schedule:delete'))
+            + _rows('mojolearn.LanguageModelConfig', ('__init__', '__eq__', '__hash__'))
+            + _rows('mojolearn.LanguageModelConfig', ('__delattr__',), kind='installed_method'))
+    node = ast.parse('''
+def fixture(ml, sched):
+    opt = ml.RMSprop([1])
+    opt.lr_schedule = sched
+    assert opt.lr_schedule is not None
+    del opt.lr_schedule
+    cfg = ml.LanguageModelConfig()
+    same = cfg == ml.LanguageModelConfig()
+    h = hash(cfg)
+    delattr(cfg, "batch")
+''').body[0]
+    visitor = Calls(rows)
+    visitor.function(node, {'ml': {'mojolearn'}})
+    assert visitor.seen == {r['endpoint'] for r in rows}
+
+
+def test_reading_an_installed_attribute_runs_its_descriptor():
+    rows = _rows('mojolearn.Array', ('__init__',)) + _rows('mojolearn.Array', ('flags',), kind='installed_method')
+    node = ast.parse('''
+def fixture(ml):
+    a = ml.Array((2,))
+    f = a.flags
+''').body[0]
+    visitor = Calls(rows)
+    visitor.function(node, {'ml': {'mojolearn'}})
+    assert visitor.seen == {r['endpoint'] for r in rows}

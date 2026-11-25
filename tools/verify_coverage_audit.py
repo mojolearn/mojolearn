@@ -1177,6 +1177,35 @@ def endpoints_declared(path=None):
     return out
 
 
+#: Public methods whose native owner refuses the whole operation by name (the Python body is one native call,
+#: so the source census cannot see the refusal that `always_refuses` reads from a `raise`). Each names the
+#: native source and the refusal's words; the audit FAILS when those words are gone from that source (the
+#: operation was implemented and needs a lane), so the row can never outlive the refusal.
+NATIVE_REFUSALS = {
+    'mojolearn.KernelDensity.sample': ('providers/python/density_public_lifecycle_pyapi_pack.mojo',
+                                       'KernelDensity: sample() is not implemented'),
+}
+
+#: Framework-adapter entries on product classes (AGENTS.md "Framework adapters are the same API in another
+#: format"): qualified by the installed-wheel adapter smoke, never by an identity lane.
+TORCH_ADAPTER_METHODS = {
+    'run_torch': 'PyTorch adapter entry (torch tensors in and out): tools/check_native_adapters.py runs it from '
+                 'the installed wheel; its arithmetic is the program run the identity lanes cover',
+}
+
+
+def _native_refusal(endpoint):
+    where = NATIVE_REFUSALS.get(endpoint)
+    if where is None:
+        return False
+    path, words = where
+    with open(os.path.join(ROOT, path), encoding='utf-8') as fh:
+        if words not in fh.read():
+            raise SystemExit(f"NATIVE_REFUSALS: {endpoint}: '{words}' is no longer in {path}; "
+                             "the operation is implemented and needs an identity lane")
+    return True
+
+
 def endpoint_rows(walker, reach):
     """Map the complete existing endpoint census onto actual lane call roots.
 
@@ -1227,8 +1256,12 @@ def endpoint_rows(walker, reach):
             reason = 'lifetime/context management; no numerical identity output'
         elif public == 'mojolearn.ops.Session' and op in ('profile_reset', 'profile_report'):
             reason = 'launch profiling diagnostics; no numerical identity output'
-        elif endpoint.get('always_refuses'):
+        elif endpoint.get('always_refuses') or _native_refusal(endpoint['endpoint']):
             reason = 'explicit unsupported-operation refusal; no numerical identity output'
+        elif op in TORCH_ADAPTER_METHODS:
+            reason = TORCH_ADAPTER_METHODS[op]
+        elif origin.startswith('mojolearn._verify'):
+            reason = 'verification tooling (verify itself), not a product operation; no numerical identity output'
         rows.append(dict(endpoint=endpoint['endpoint'], public=public, op=method,
                          kind=endpoint['kind'], where=endpoint['definition'],
                          aliases=endpoint['aliases'], lanes=sorted(lanes),

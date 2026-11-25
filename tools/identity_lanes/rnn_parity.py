@@ -204,3 +204,46 @@ _batch_decl("n/a:per-row-arguments (the endpoints under test take per-sequence l
             "and initial states whose rows are the call's; the plain predict batch axis of these estimators is "
             "sequence-gru's and sequence-lstm's)", "sequence-rnn-weighted-steps", "sequence-rnn-bidi-options",
             "sequence-rnn-step-widths", "sequence-rnn-padding-labels")
+
+
+@lane("sequence-rnn-partial-step")
+def _(ml, X, yc, yr, Xh=None):
+    """partial_fit and step on the recurrent estimators no lane called them on (lane w3i11-endpoints, 2026-11-25).
+    32 sequences of 6 steps of 4 fixture columns, output='sequence' (a target at every step: labels about one step
+    in five positive, regression targets from the hashed stream), hidden 5, one epoch of fit, then one partial_fit
+    epoch from the trained parameters and optimizer state: GRUClassifier, GRURegressor, LSTMClassifier,
+    RNNClassifier and RNNRegressor; part per class: the loss curve and the parameters after partial_fit. Then the
+    streaming promise on GRUClassifier, LSTMClassifier and RNNRegressor: step() in two pieces (steps 0-2 from None,
+    then 3-5 from the returned state) must give predict_proba's (classifiers) or predict's (regressor) every-step
+    words byte for byte and its final hidden state the one-call state; part per class: the streamed scores and the
+    final hidden state."""
+    n, t, d, H = 32, 6, 4, 5
+    Xs = _sequence_seq(X, rows=n * t, t=t, d=d)
+    y_labels = _rnn_parity_steps_y(n, t, "rnn-ps:y")
+    y_values = _hw((n, t), "rnn-ps:yr", -1.0, 1.0)
+    common = dict(hidden_size=H, output="sequence", learning_rate=1e-2, batch_size=16, max_epochs=1, random_state=13)
+    # each estimator is its own name (not a dict entry), so the coverage audit's receiver walk types it
+    gru_clf = ml.GRUClassifier(**common).fit(Xs, y_labels)
+    gru_reg = ml.GRURegressor(**common).fit(Xs, y_values)
+    lstm_clf = ml.LSTMClassifier(**common).fit(Xs, y_labels)
+    rnn_clf = ml.RNNClassifier(**common).fit(Xs, y_labels)
+    rnn_reg = ml.RNNRegressor(**common).fit(Xs, y_values)
+    parts = {}
+    for name, m, y in (("gru_clf", gru_clf, y_labels), ("gru_reg", gru_reg, y_values),
+                       ("lstm_clf", lstm_clf, y_labels), ("rnn_clf", rnn_clf, y_labels),
+                       ("rnn_reg", rnn_reg, y_values)):  # driver-loop: over the five estimators
+        m.partial_fit(Xs, y)
+        parts[name] = _h(m.loss_curve_, m.params_)
+    for name, est, whole in (("gru_clf", gru_clf, gru_clf.predict_proba(Xs)),
+                             ("lstm_clf", lstm_clf, lstm_clf.predict_proba(Xs)),
+                             ("rnn_reg", rnn_reg, rnn_reg.predict(Xs))):  # driver-loop: over the three streamers
+        label = type(est).__name__
+        first, state = est.step(Xs[:, :3])
+        second, state = est.step(Xs[:, 3:], state)
+        _, (h_whole, _c) = est.step(Xs)
+        _same_bytes(label + ".step in two pieces", np.concatenate([np.asarray(first), np.asarray(second)], axis=1),
+                    label + " predict / predict_proba every step", np.asarray(whole))
+        _same_bytes(label + ".step pieces h_n", np.asarray(state[0]), label + ".step whole h_n", np.asarray(h_whole))
+        parts[name + "_stream"] = _h(np.asarray(first), np.asarray(second), np.asarray(state[0]))
+    Xhs = _sequence_seq(Xh, rows=n * t, t=t, d=d)
+    return _fit(parts, gru_clf, lambda e: (e.predict_proba(Xhs),))
