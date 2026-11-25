@@ -197,10 +197,7 @@ def neural_rng_kernel(gid_: Int,
     out_buf.unsafe_store(i, value)
 
 
-def neural_rng_host(
-    ctx: DeviceContext,
-    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    in_ptr: MutPointer[Float32, MutUntrackedOrigin],
+def neural_rng_admit(
     n: Int,
     offset: Int,
     seed_lo: Int,
@@ -209,11 +206,11 @@ def neural_rng_host(
     kind: Int,
     a: Float32,
     b: Float32,
-) raises -> Int:
-    """`n` draws of `kind` into `out_ptr`, elements `offset .. offset + n`
-    of stream `(seed, stream_id)`. The DROPOUT arms read `n` floats from
-    `in_ptr` (x for the forward, dy for the backward); the other two never
-    touch it and it may be a one-float placeholder. Returns `n`."""
+) raises -> Bool:
+    """The words' refusals shared by every form of the draw (host input
+    pointers here, training device arrays in training/neural_rng_dev_run.mojo).
+    Returns whether `kind` reads an input (the two DROPOUT arms); the input's
+    finite scan is the caller's, on the side the input lives."""
     if n < 1:
         raise Error("mojolearn neural rng: n must be at least 1, got " + String(n))
     if offset < 0:
@@ -236,6 +233,28 @@ def neural_rng_host(
             raise Error("mojolearn neural rng: dropout p must be in [0, 1)")
         if b <= Float32(0.0):
             raise Error("mojolearn neural rng: dropout scale must be > 0")
+    return reads_input
+
+
+def neural_rng_host(
+    ctx: DeviceContext,
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    in_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+    offset: Int,
+    seed_lo: Int,
+    seed_hi: Int,
+    stream_id: Int,
+    kind: Int,
+    a: Float32,
+    b: Float32,
+) raises -> Int:
+    """`n` draws of `kind` into `out_ptr`, elements `offset .. offset + n`
+    of stream `(seed, stream_id)`. The DROPOUT arms read `n` floats from
+    `in_ptr` (x for the forward, dy for the backward); the other two never
+    touch it and it may be a one-float placeholder. Returns `n`."""
+    var reads_input = neural_rng_admit(n, offset, seed_lo, seed_hi, stream_id, kind, a, b)
+    if reads_input:
         # parallel: the one host finite scan; the index walk runs only on a refusal
         if not host_all_finite_f32(in_ptr, n):
             raise Error(
