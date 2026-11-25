@@ -187,9 +187,11 @@ def prepare(corpus, *, vocab=None, cache_dir=None, vocab_size=_DEFAULT_VOCAB_SIZ
     progress : None, default None
         Preparation timings are recorded in the returned manifest. Python
         progress callbacks are not accepted by native preparation.
-    device : {None, 'cpu'}, default None
+    device : {None, 'cpu', 'gpu'}, default None
         Where the vocabulary training and the encoding run. None and 'cpu'
-        run on the CPU. Other values raise ValueError.
+        run on the CPU; 'gpu' runs both on the GPU and gives the same
+        vocabulary and the same token ids. Other values raise ValueError,
+        as does 'gpu' on a CPU-only installation.
 
     Returns
     -------
@@ -381,4 +383,4 @@ from ._array import Array as _CorpusArray
 _NATIVE = _tokenizer._TOKENIZER_NATIVE
 _NATIVE.lm_corpus_public_call("connect", (
     TokenizedCorpus, TokenBatches, _TokenBatchIterator, _CorpusArray, _corpus_mmap.mmap,
-    _tokenizer._TOKENIZER_CONTEXT[7]))
+    _tokenizer._TOKENIZER_CONTEXT[7], _tokenizer._TOKENIZER_CONTEXT[6], _tokenizer._TOKENIZER_CONTEXT[8]))

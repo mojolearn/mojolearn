@@ -28,8 +28,9 @@ from bindings.tokenizer_public_native_door import (tokenizer_bpe_export, tokeniz
     tokenizer_bpe_handle)
 from bindings.py_cpython_table import cpython_table
 from core.native_json_value import JsonDoc
-from core.device_route import DEVICE_INSTALL
+from core.device_route import DEVICE_INSTALL, DEVICE_GPU
 from core.function_device import function_device_decide
+from bindings.lm_corpus_metadata_door import CORPUS_GPU_CONNECTION
 from providers.python.device_route_boundary_door import device_unpack
 from tokenizer.impl.tokenizer_host_shell_impl import BpeHandle
 from core.lm_batch_run import LmBatchRequest, lm_batch_dims, lm_batch_run, lm_batch_steps_run
@@ -150,15 +151,22 @@ def _prepare_released(request: CorpusPrepareRequest) raises -> CorpusPrepared:
 
 def _prepare(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = lm_keys()
-    # UNPACK. `device=` first (lane vdf2-public), through the ONE rule of a public function
-    # (core/function_device.mojo `function_device_decide`): the preparation has its host side only
-    # today (has_gpu False), so None and 'cpu' run it unchanged and 'gpu' is refused in the rule's
-    # words naming the function, before any file is read. With no GPU side the rule never reads
-    # `cpu_only` for an admitted value ('gpu' is refused first; 'cpu' runs the host side on either
-    # installation), so the backend record is not read here.
-    var request = device_unpack(args[9], native_loaded_module("builtins"))
-    if request != DEVICE_INSTALL:
-        _ = function_device_decide(request, False, False, True, "mojolearn.lm_corpus.prepare")
+    # UNPACK. `device=` first (lane vdf2-public; GPU side lane vdf2-tok), through the ONE rule of a
+    # public function (core/function_device.mojo `function_device_decide`; both sides exist): None
+    # and 'cpu' run the host preparation unchanged, 'gpu' runs it on the device through the GPU
+    # tokenizer image's entry (tokenizer/gpu/corpus_gpu.mojo), resolved once at the import-time
+    # connection (`CORPUS_GPU_CONNECTION`); 'gpu' on a CPU-only installation is refused in the
+    # estimators' words and, where the GPU tokenizer image is not connected, in its connection words,
+    # before any file is read.
+    var device_request = device_unpack(args[9], native_loaded_module("builtins"))
+    var on_gpu = False
+    if device_request != DEVICE_INSTALL:
+        ref gpu = CORPUS_GPU_CONNECTION.get_or_create_ptr()[]
+        var decided = function_device_decide(device_request, gpu.cpu_only, True, True, "mojolearn.lm_corpus.prepare")
+        if decided.request == DEVICE_GPU:
+            if gpu.refusal.byte_length() != 0:
+                raise Error(gpu.refusal)
+            on_gpu = True
     var size = _positive(args[3], "vocab_size")
     var frequency = _positive(args[4], "min_frequency")
     var sample = _positive(args[5], "vocab_sample_bytes")
@@ -172,6 +180,9 @@ def _prepare(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var cache = _default_cache() if args[2] is None else corpus_path(args[2], True)
     var corpus = corpus_path(args[0], True, True)
     var request = CorpusPrepareRequest(corpus, cache, size, frequency, sample, document_bytes)
+    if on_gpu:
+        request.gpu = True
+        request.gpu_entry = CORPUS_GPU_CONNECTION.get_or_create_ptr()[].entry
     if vocab is not None:
         # The caller's vocabulary as its canonical rank text (the tokenizer
         # door's export): text, rank count, where it came from.

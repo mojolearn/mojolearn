@@ -29,6 +29,11 @@ THE ADDRESS CONTRACT (the host binding's buffers):
     bpe_gpu_pretokenize(text_addr, bounds_addr, [n_bytes, pattern]) -> count: the pre-tokenizer cut
         of `mojolearn.models.tokenizer.pretokenize` on the GPU, the host column's boundaries offset
         for offset (tokenizer/gpu/pretokenize_gpu.mojo)
+
+THE NATIVE ENTRY (lane vdf2-tok): `tokenizer_gpu_entry_v1`, published at module init under this
+image's tier and vendor (core/tokenizer_gpu_entry_table.mojo), is the `device="gpu"` side of
+`mojolearn.lm_corpus.prepare`: the host corpus door resolves it once at its import-time connection
+and its RUN calls it with the GIL released (tokenizer/gpu/corpus_gpu.mojo). No Python object crosses.
 """
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
@@ -48,6 +53,10 @@ from tokenizer.gpu.bpe_gpu import (
     BpeGpuClasses, BpeGpuTable, bpe_gpu_ctx, bpe_gpu_encode_batch_into, bpe_gpu_decode_batch_into, bpe_gpu_train_into,
 )
 from tokenizer.gpu.pretokenize_gpu import pretokenize_gpu_into
+from tokenizer.gpu.corpus_gpu import corpus_gpu_entry_dispatch
+from core.native_descriptor_abi import NativeDescriptorError
+from core.shared_slot import SharedSlot
+from core.tokenizer_gpu_entry_table import tokenizer_gpu_publish, tokenizer_gpu_vendor_word
 from tokenizer.fast.bpe_fast_impl import fast_bpe_trained_copy_into
 from tokenizer.train.bpe_train import TrainedVocabulary
 
@@ -286,6 +295,22 @@ def bpe_gpu_pretokenize_binding(
     return PythonObject(count)
 
 
+struct TokenizerGpuEntryOwner(Defaultable, Movable):
+    """An image-lifetime publisher word."""
+
+    var word: Int
+
+    def __init__(out self):
+        self.word = 1
+
+
+def tokenizer_gpu_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
+    ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    """This image's tokenizer entry (core/tokenizer_gpu_entry_table.mojo `TOKENIZER_GPU_ENTRY_ABI`).
+    Its caller (the host RUN of `lm_corpus.prepare`) has released the GIL; the body never takes it."""
+    return corpus_gpu_entry_dispatch(operation, aa, na, pp, np, ff, nf, result, context, sink)
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_tokenizer.mojo.
 def build__mojolearn_x_tokenizer() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
@@ -302,6 +327,11 @@ def build__mojolearn_x_tokenizer() -> PythonObject:
         module.def_function[bpe_gpu_trained_sizes_binding]("bpe_gpu_trained_sizes")
         module.def_function[bpe_gpu_trained_copy_binding]("bpe_gpu_trained_copy")
         module.def_function[bpe_gpu_pretokenize_binding]("bpe_gpu_pretokenize")
+        # The native entry (core/tokenizer_gpu_entry_table.mojo) under this image's tier and vendor;
+        # a build with no GPU vendor publishes nothing.
+        comptime OWNER = SharedSlot[TokenizerGpuEntryOwner, "MojolearnTokenizerGpuEntryOwnerV1"]
+        tokenizer_gpu_publish(Int(GLOBAL_NUMERIC_MODE), tokenizer_gpu_vendor_word(String(COMPILED_VENDOR)),
+                              Int(OWNER.get_or_create_ptr()), tokenizer_gpu_entry_v1)
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_x_tokenizer: ", error))

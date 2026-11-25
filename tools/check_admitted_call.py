@@ -258,7 +258,7 @@ DEBT = {
     'bindings/linalg_ops_resample_door.mojo': {'native_loaded_module': 10},
     'bindings/linear_constructor_native_pack.mojo': {'native_loaded_module': 2},
     'bindings/lm_corpus_files_door.mojo': {'cpython': 1, 'import_module': 1, 'native_loaded_module': 6},
-    'bindings/lm_corpus_metadata_door.mojo': {'native_loaded_module': 11},
+    'bindings/lm_corpus_metadata_door.mojo': {'native_loaded_module': 12},  # raised vdf2-tok 2026-11-24 (corpus_gpu_connect, import time)
     'bindings/lm_corpus_public_native_door.mojo': {'native_loaded_module': 12},
     'bindings/lm_corpus_scalars_unpack.mojo': {'native_loaded_module': 3},
     'bindings/logistic_admission_pack.mojo': {'native_loaded_module': 1},
