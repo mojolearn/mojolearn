@@ -28,6 +28,9 @@ from bindings.tokenizer_public_native_door import (tokenizer_bpe_export, tokeniz
     tokenizer_bpe_handle)
 from bindings.py_cpython_table import cpython_table
 from core.native_json_value import JsonDoc
+from core.device_route import DEVICE_INSTALL
+from core.function_device import function_device_decide
+from providers.python.device_route_boundary_door import device_unpack
 from tokenizer.impl.tokenizer_host_shell_impl import BpeHandle
 from core.lm_batch_run import LmBatchRequest, lm_batch_dims, lm_batch_run, lm_batch_steps_run
 from bindings.native_json_door import native_json_parse
@@ -147,7 +150,15 @@ def _prepare_released(request: CorpusPrepareRequest) raises -> CorpusPrepared:
 
 def _prepare(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = lm_keys()
-    # UNPACK
+    # UNPACK. `device=` first (lane vdf2-public), through the ONE rule of a public function
+    # (core/function_device.mojo `function_device_decide`): the preparation has its host side only
+    # today (has_gpu False), so None and 'cpu' run it unchanged and 'gpu' is refused in the rule's
+    # words naming the function, before any file is read. With no GPU side the rule never reads
+    # `cpu_only` for an admitted value ('gpu' is refused first; 'cpu' runs the host side on either
+    # installation), so the backend record is not read here.
+    var request = device_unpack(args[9], native_loaded_module("builtins"))
+    if request != DEVICE_INSTALL:
+        _ = function_device_decide(request, False, False, True, "mojolearn.lm_corpus.prepare")
     var size = _positive(args[3], "vocab_size")
     var frequency = _positive(args[4], "min_frequency")
     var sample = _positive(args[5], "vocab_sample_bytes")
@@ -529,7 +540,7 @@ def lm_corpus_public_call(name: PythonObject, args: PythonObject) raises -> Pyth
         return corpus_connect(args)
     var context = corpus_context()
     if operation == LM_OPN_PREPARE:
-        _arity(args, 9)
+        _arity(args, 10)
         return _prepare(args, context)
     if operation == LM_OPN_TOKENIZE:
         _arity(args, 9)
