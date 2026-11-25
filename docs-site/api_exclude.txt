@@ -211,6 +211,28 @@ Sequential.compile:blank	not yet in a release verification
 Sequential.compile:zero_infinity	not yet in a release verification
 Sequential.fit:target_lengths	not yet in a release verification
 # nn-losses-2 end
+# lane stream-fits begin (2026-11-25): the streamed fits, not yet in a release verification
+Sequential.fit:source	not yet in a release verification
+Sequential.fit:steps	not yet in a release verification
+LSTMRegressor.fit:source	not yet in a release verification
+LSTMRegressor.partial_fit:source	not yet in a release verification
+LSTMRegressor.partial_fit:steps	not yet in a release verification
+LSTMClassifier.fit:source	not yet in a release verification
+LSTMClassifier.partial_fit:source	not yet in a release verification
+LSTMClassifier.partial_fit:steps	not yet in a release verification
+GRURegressor.fit:source	not yet in a release verification
+GRURegressor.partial_fit:source	not yet in a release verification
+GRURegressor.partial_fit:steps	not yet in a release verification
+GRUClassifier.fit:source	not yet in a release verification
+GRUClassifier.partial_fit:source	not yet in a release verification
+GRUClassifier.partial_fit:steps	not yet in a release verification
+RNNRegressor.fit:source	not yet in a release verification
+RNNRegressor.partial_fit:source	not yet in a release verification
+RNNRegressor.partial_fit:steps	not yet in a release verification
+RNNClassifier.fit:source	not yet in a release verification
+RNNClassifier.partial_fit:source	not yet in a release verification
+RNNClassifier.partial_fit:steps	not yet in a release verification
+# lane stream-fits end
 # lane nn-optim begin (2026-11-23): Sequential.compile's new choices, not yet in a release verification. They are
 # arguments of the documented Sequential.compile, not names, so they cannot be excluded by name here; lane
 # nn-surface decides how compile's docstring carries them until the release verification:
