@@ -41,6 +41,7 @@ from bindings.admitted_sequence_door import admit_nd_f32
 # lane stream-fits: fit(source=) / partial_fit(source=)
 from autograd.batch_source import (
     BS_FIELD_STEPS, BS_FIELD_TARGETS, SOURCE_PART_WORDS, batch_source_open, batch_source_class_scan,
+    RNN_STREAM_BALANCED, RNN_STREAM_MONITOR_WORDS, RNN_STREAM_POSITION_WORDS,
     batch_source_fit_words, batch_source_part_of, program_training_source_refuse, source_part_load,
 )
 from providers.python.batch_source_pyapi_door import batch_source_spec, batch_source_position_out
@@ -1113,12 +1114,8 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
     var partial = xseq_truth(_arg(args, 8))
     if args[0] is not None or args[1] is not None:
         raise Error("TypeError: fit(source=) takes no X or y: the source holds the sequences and their targets")
-    if (_arg(args, 2) is not None or _arg(args, 3) is not None or _arg(args, 4) is not None
-            or _arg(args, 5) is not None):
-        raise Error("TypeError: fit(source=) takes no lengths, sample_weight, h_0 or c_0: the lengths are the "
-                    + "source's record lengths")
-    if fo.early_stopping and not partial:
-        raise Error("ValueError: fit(source=) does not take early_stopping: it holds out part of an array")
+    if _arg(args, 2) is not None:
+        raise Error("TypeError: fit(source=) takes no lengths: they are the source's record lengths")
     var source = args[9]
     var spec = batch_source_spec(source)  # the exact connected BatchSource only (no Python iterable or callback)
     if len(spec.inputs) != 1 or spec.inputs[0] != BS_FIELD_STEPS or spec.target != BS_FIELD_TARGETS:
@@ -1198,24 +1195,38 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
             py_setitem(fields, nk[].k_classes_, classes)
     py_setitem(fields, nk[].k_n_outputs_, outputs)
     py_setitem(fields, nk[].k_n_features_in_, width)
-    # CLASS WEIGHTS (lane fable-finalize, 2026-11-25): a dict {class: weight}, one weight a class in classes_ order,
-    # applied to every record (to every valid step with output="sequence") by its own label, batch by batch
-    # (sequence/recurrent.mojo rnn_fit_stream). 'balanced' is refused by name: it needs every label of the source
-    # counted before the first step.
+    # CLASS WEIGHTS (lanes fable-finalize, stream-fits-2): a dict {class: weight}, one weight a class in classes_
+    # order, applied to every record (to every valid step with output="sequence") by its own label, batch by batch
+    # (sequence/recurrent.mojo rnn_fit_stream); 'balanced' is counted by the training image in its one admission
+    # read of the source's targets (RNN_STREAM_BALANCED; sequence/ops_impl.mojo), valid steps only.
     var cw = PythonObject(None)
+    var stream_flags = 0
     var cw_in = _field(fields, "class_weight", PythonObject(None))
     if cw_in is not None:
         if task != 1:
             raise Error("ValueError: class_weight is for classifiers")
         if _eq(cw_in, "balanced"):
-            raise Error("ValueError: fit(source=) takes class_weight as a dict {class: weight}; 'balanced' would "
-                        + "count every label of the source before training (count them when the shards are "
-                        + "written and pass the weights)")
-        cw = _rnn_class_weights(fields, PythonObject(None), n, rows_per, PythonObject(None), outputs, context)
-    # VALIDATION PER EPOCH (lane fable-finalize): validation_data=(X_val, y_val[, lengths_val]) arrays, padded to
-    # the source's max_length; their loss is taken at the end of every pass over the source this call completes
-    # (validation_loss_, best_epoch_). Early stopping and restore_best stay refused: a streamed fit runs the
-    # steps it was asked for.
+            stream_flags = RNN_STREAM_BALANCED
+        else:
+            cw = _rnn_class_weights(fields, PythonObject(None), n, rows_per, PythonObject(None), outputs, context)
+    # SAMPLE WEIGHTS AND INITIAL STATES (lane stream-fits-2): one per RECORD, the records numbered over the shards in
+    # index order (BatchSource.n_records): sample_weight (n_records,) or with output="sequence" (n_records,
+    # max_length); h_0 / c_0 (num_layers * num_directions, n_records, hidden_size). Each batch gathers its records'.
+    var sw = PythonObject(None)
+    var sw_steps = False
+    if _arg(args, 3) is not None:
+        sw = _rnn_f32(args[3], "sample_weight", context)
+        if Int(py=sw.ndim) == 2 and fo.seq_out and Int(py=sw.shape[0]) == n and Int(py=sw.shape[1]) == longest:
+            sw_steps = True
+        elif not (Int(py=sw.ndim) == 1 and Int(py=sw.shape[0]) == n):
+            raise Error("ValueError: fit(source=): sample_weight must have shape (n_records,) = (" + String(n) + ",)"
+                        + (String(" or (n_records, max_length) = (" + String(n) + ", " + String(longest) + ")")
+                           if fo.seq_out else String("")) + ": one weight a record of the source")
+    # VALIDATION PER PASS (lanes fable-finalize, stream-fits-2): validation_data=(X_val, y_val, lengths_val) arrays,
+    # padded to the source's max_length; their loss is taken at the end of every pass over the source this call
+    # completes (validation_loss_, best_epoch_). early_stopping stops after n_iter_no_change passes without an
+    # improvement of tol; restore_best (fit) keeps the best pass's parameters. The monitor carries across
+    # partial_fit calls (`_stream_monitor_`), so a resumed run stops where the uninterrupted one does.
     var vx = PythonObject(None)
     var vy = PythonObject(None)
     var vlengths = PythonObject(None)
@@ -1235,9 +1246,17 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
         vlengths = _rnn_fit_lengths(vd[2] if len(vd) == 3 else PythonObject(None), nv, longest, "validation",
                                     context, True)
         vy = _rnn_target(model, fields, vd[1], nv, rows_per, fo.seq_out, True, route, context, False, vlengths)
+    if fo.early_stopping and nv == 0:
+        raise Error("ValueError: fit(source=) with early_stopping needs validation_data=(X_val, y_val, lengths_val): "
+                    + "no part of a stream is held out (validation_fraction holds out the end of an array)")
+    var restore = (not partial) and nv > 0 and (True if _arg(args, 7) is None else xseq_truth(args[7]))
     var cell = _rnn_cell(model, fields)
     var hidden = xseq_int(py_item(fields, nk[].k_hidden_size))
     var layers = xseq_int(py_item(fields, nk[].k_num_layers))
+    var slots = layers * fo.dirs
+    var h0 = _rnn_state_arg(_arg(args, 4), slots, n, hidden, "h_0", context)
+    var c0 = _rnn_state_arg(_arg(args, 5), slots, n, hidden, "c_0", context)
+    _rnn_c0_check(h0, c0, cell)
     var start = _rnn_start_params(model, fields, route, fo, cell, width, hidden, layers, outputs, partial, context)
     var n_params = start.total
     var params = start.params
@@ -1267,11 +1286,21 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
     var v_epochs = max(1, passes)
     var vcurve = PythonObject(None)
     if nv > 0:
-        vcurve = xseq_zeros(Python.tuple(v_epochs + 2), context)
+        # the passes' losses, the two result words, then the monitor words (sequence/recurrent.mojo
+        # RNN_STREAM_MONITOR_WORDS): partial_fit continues the monitor an earlier call left
+        vcurve = xseq_zeros(Python.tuple(v_epochs + 2 + RNN_STREAM_MONITOR_WORDS), context)
+        var carried = _field(fields, "_stream_monitor_", PythonObject(None)) if fitted else PythonObject(None)
+        if carried is not None and Int(py=carried.size) == RNN_STREAM_MONITOR_WORDS:
+            var cm = _rnn_f32(carried, "_stream_monitor_", context)
+            unsafe_memcpy(dest=xseq_f32p(vcurve) + v_epochs + 2, src=xseq_f32p(cm), count=RNN_STREAM_MONITOR_WORDS)
+            _ = cm
     var request = XseqRnnFitRequest(cell, width, hidden, layers, outputs, task, n, longest, v_epochs, spec.batch,
                                     spec.shuffle, seed)
     var o = XseqRnnFitOptions(
-        fo.dirs, fo.seq_out, fo.no_bias, 0, False, 0 if cw is None else Int(py=xseq_addr(cw)), 0, 0, nv, 0, False,
+        fo.dirs, fo.seq_out, fo.no_bias, 0 if sw is None else Int(py=xseq_addr(sw)), sw_steps,
+        0 if cw is None else Int(py=xseq_addr(cw)), 0 if h0 is None else Int(py=xseq_addr(h0)),
+        0 if c0 is None else Int(py=xseq_addr(c0)), nv,
+        fo.n_iter_no_change if (fo.early_stopping and nv > 0) else 0, restore,
         0 if vx is None else Int(py=xseq_addr(vx)), 0 if vy is None else Int(py=xseq_addr(vy)),
         _rnn_lengths_address(vlengths), 0 if vcurve is None else Int(py=xseq_addr(vcurve)),
         0 if state is None else Int(py=xseq_addr(state)), fo.dropout, fo.clip, fo.tol)
@@ -1282,7 +1311,7 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
     var path_bytes = path.as_bytes()
     var words = batch_source_fit_words(spec, total)
     var saved = xseq_zeros_i64(Python.tuple(SOURCE_PART_WORDS), context)
-    var position = List[Int64](length=2, fill=Int64(0))
+    var position = List[Int64](length=RNN_STREAM_POSITION_WORDS, fill=Int64(0))
     var params_address = Int(py=xseq_addr(params))
     var losses_address = Int(py=xseq_addr(losses))
     var rates_address = Int(py=_buffer_address(rates))
@@ -1291,8 +1320,11 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
     with GILReleased(py):
         xseq_run_rnn_fit_stream(entry, request, optimizer, params_address, losses_address, rates_address,
                                 Int(loop_words.unsafe_ptr()), o, words, Int(path_bytes.unsafe_ptr()), len(path_bytes),
-                                saved_address, Int(position.unsafe_ptr()))
+                                saved_address, Int(position.unsafe_ptr()), stream_flags)
     _ = path_bytes^  # keep the path's bytes and every buffer alive through the native call above
+    _ = sw
+    _ = h0
+    _ = c0
     _ = path
     _ = provider
     _ = params
@@ -1307,18 +1339,29 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
     _ = route.owner  # the route's images stay loaded through the call above
     if vcurve is not None:
         var vp = xseq_f32p(vcurve)
-        var ran = Int(vp[v_epochs])
+        var vran = Int(vp[v_epochs])
         py_setitem(fields, PythonObject("validation_loss_"), vcurve[py_call(native_loaded_module("builtins").slice,
-                                                                             PythonObject(0), PythonObject(ran))])
+                                                                             PythonObject(0), PythonObject(vran))])
         py_setitem(fields, PythonObject("best_epoch_"), Int(vp[v_epochs + 1]))
+        # the monitor the next partial_fit(source=) continues
+        var monitor = xseq_zeros(Python.tuple(RNN_STREAM_MONITOR_WORDS), context)
+        unsafe_memcpy(dest=xseq_f32p(monitor), src=vp + v_epochs + 2, count=RNN_STREAM_MONITOR_WORDS)
+        py_setitem(fields, PythonObject("_stream_monitor_"), monitor)
         _ = vcurve  # vp reads its storage: keep it alive past the last read
+    else:
+        py_setitem(fields, PythonObject("_stream_monitor_"), PythonObject(None))
     batch_source_position_out(source, Int(position[0]), Int(position[1]))
+    var ran = Int(position[2])
     _ = position^
+    var curve = losses
+    if ran != total:
+        # early stopping ended the call after `ran` steps
+        curve = losses[py_call(native_loaded_module("builtins").slice, PythonObject(0), PythonObject(ran))]
     if partial:
         py_setitem(fields, PythonObject("_optimizer_state_"), state)
     py_setitem(fields, PythonObject("_source_state_"), saved)
-    py_setitem(fields, nk[].k_loss_curve_, losses)
-    py_setitem(fields, nk[].k_n_iter_, (t0 if partial else 0) + total)
+    py_setitem(fields, nk[].k_loss_curve_, curve)
+    py_setitem(fields, nk[].k_n_iter_, (t0 if partial else 0) + ran)
     py_setitem(fields, nk[].k_n_timesteps_, longest)
     py_setitem(fields, nk[].k_fit_loop_, fit_loop_pack(loop_words))
     return model
