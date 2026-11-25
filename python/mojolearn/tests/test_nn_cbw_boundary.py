@@ -165,6 +165,22 @@ def test_signature_mismatches_are_refused_by_name():
                 s.custom(99, s.tensor(zeros))
 
 
+def test_dropout_inside_a_custom_program_is_refused_by_name():
+    # A dropout inside either program would keep its captured key at every call (a training replay advances the
+    # outer program's random nodes only): the same mask every minibatch. Refused at bind.
+    from mojolearn import ops
+    zeros = np.zeros((4, 3), np.float32)
+    with ops.Session() as cap:
+        forward, backward = _my_tanh(cap, (4, 3))
+        x = cap.tensor(zeros)
+        drop_forward = cap.capture(inputs=[x], outputs=[cap.tanh(cap.dropout(x, 0.5, seed=7))])
+        y, g = cap.tensor(zeros), cap.tensor(zeros)
+        drop_backward = cap.capture(inputs=[y, g], outputs=[cap.dropout(g, 0.5, seed=7)])
+        with ops.Session(record=True) as s:
+            _refusal(cap, s, drop_forward, backward, r"the forward program holds a dropout \(node 0\)", saved=[0])
+            _refusal(cap, s, forward, drop_backward, r"the backward program holds a dropout \(node 0\)", saved=[0])
+
+
 def test_call_refusals_and_first_order_only():
     from mojolearn import ops
     zeros = np.zeros((4, 3), np.float32)

@@ -20,6 +20,13 @@ bound into a recording session with `cbw_define`, and called with `cbw_call`.
   2 words round trip: the operation decoded from its node words (what a saved
     program holds) is bound again with the same key; a second session trains
     with the decoded operation and gives the same gradient bits.
+  4 scratch storage (fable-review-neural, 2026-11-25 review): the rule runs its
+    backward program on the session's own `cbw_tape`, never on `prog_tape`
+    (Program.fit and run_program hold that one swapped; a rule that borrowed
+    it allocated on a tape the fit dropped, storage kept until close). Two
+    backwards of the same graph with a reset between: the rule's tape holds
+    storage after the first, the SAME number of buffers after the second
+    (reused, not grown), `prog_tape` holds none, and the gradient bits repeat.
   3 refusals: a backward with the wrong input count, a gradient of the wrong
     shape, a saved index past the forward's outputs, a forward output neither
     returned nor saved; and a recorded (create_graph) backward through the rule.
@@ -36,7 +43,7 @@ from checks.native_tests.core_ops_common import normal
 from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, check_cases_serial, require
 
 
-comptime NN_CBW_CASES = 4
+comptime NN_CBW_CASES = 5
 
 comptime _SUB = 3
 comptime _MUL = 4
@@ -215,6 +222,24 @@ def _refusal_case[E: Exec & Movable & Deinitable](mut cap: OpsSession[E], mut s:
     require(refused, "create_graph through a custom rule must be refused by name")
 
 
+def _scratch_case[E: Exec & Movable & Deinitable](mut cap: OpsSession[E], mut s: OpsSession[E]) raises:
+    var w0 = normal(_ROWS * _COLS, 73)
+    var op_id = _my_tanh(cap, s)
+    var w = tensor(s, w0, _dims(), True)
+    s.backward(scale(s, total(s, _call(s, op_id, w)), 3), False)
+    var first = gradient(s, w, _dims())
+    var kept = len(s.cbw_tape._buffers)
+    require(kept > 0, "the custom rule's backward program allocates on the session's cbw_tape")
+    require(len(s.prog_tape._buffers) == 0, "the custom rule must not allocate on prog_tape")
+    s.reset()
+    s.backward(scale(s, total(s, _call(s, op_id, w)), 3), False)
+    same_words(gradient(s, w, _dims()), first, "the same graph after a reset gives the same gradient")
+    require(len(s.cbw_tape._buffers) == kept,
+            "the rule's scratch storage is reused: " + String(kept) + " buffers after one backward, "
+            + String(len(s.cbw_tape._buffers)) + " after two")
+    require(len(s.prog_tape._buffers) == 0, "the custom rule must not allocate on prog_tape (second backward)")
+
+
 def run_nn_cbw_case[E: Exec & Movable & Deinitable](
     mut cap: OpsSession[E], mut s: OpsSession[E], mut r: OpsSession[E], case_id: Int,
 ) raises:
@@ -226,6 +251,8 @@ def run_nn_cbw_case[E: Exec & Movable & Deinitable](
         _words_case(cap, s, r)
     elif case_id == 3:
         _refusal_case(cap, s)
+    elif case_id == 4:
+        _scratch_case(cap, s)
     else:
         raise Error("unknown nn_cbw case")
 
