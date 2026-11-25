@@ -38,7 +38,7 @@ model.numeric_profile        # the canonical form: a preset name, or a dict with
   (`STATE_KEY`); a state with no field is `fp32_v1` (unchanged). Reload without a keyword adopts the saved spec;
   reload naming a different spec is refused by name.
 - Resolved ONCE at construction/load into the native PARTS MASK (`core/numeric_profile_parts.mojo`,
-  `bindings/numeric_profile_mask.mojo::profile_parts_mask`): bit set = int15i64.v1, clear = fp32.v1.
+  `bindings/numeric_profile_mask_unpack.mojo::profile_parts_mask`): bit set = int15i64.v1, clear = fp32.v1.
   `fixed15_v1` = 511 (bits 0..8), `fp32_v1` = 0. Native code reads the mask, never a name.
 - The training default and trainers are unchanged; a trainer named a dict is refused (no training profile).
 
