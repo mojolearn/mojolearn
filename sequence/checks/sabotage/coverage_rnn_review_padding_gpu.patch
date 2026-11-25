@@ -1,0 +1,13 @@
+diff --git a/sequence/xseq_neural_run.mojo b/sequence/xseq_neural_run.mojo
+index 3f0d182021..5c18b212b5 100644
+--- a/sequence/xseq_neural_run.mojo
++++ b/sequence/xseq_neural_run.mojo
+@@ -600,7 +600,7 @@ def xseq_run_rnn_predict_options(entry: XseqNeuralEntry, req: XseqRnnPredictRequ
+ # padded ones included, and a padding label of a validation or partial_fit target is refused as unknown.
+ comptime RNN_REVIEW_SABOTAGE_LENGTHS_DEVICE = is_defined["MOJOLEARN_RNN_REVIEW_SABOTAGE_LENGTHS_DEVICE"]()
+ comptime RNN_REVIEW_SABOTAGE_LENGTHS_HOST = is_defined["MOJOLEARN_RNN_REVIEW_SABOTAGE_LENGTHS_HOST"]()
+-comptime RNN_REVIEW_SABOTAGE_PADDING_DEVICE = is_defined["MOJOLEARN_RNN_REVIEW_SABOTAGE_PADDING_DEVICE"]()
++comptime RNN_REVIEW_SABOTAGE_PADDING_DEVICE = True  # SABOTAGE: the padded steps' labels discovered as classes on the device route
+ comptime RNN_REVIEW_SABOTAGE_PADDING_HOST = is_defined["MOJOLEARN_RNN_REVIEW_SABOTAGE_PADDING_HOST"]()
+ comptime _RNN_REVIEW_COUNTS_CHECK_LENGTHS = not (RNN_REVIEW_SABOTAGE_LENGTHS_DEVICE or RNN_REVIEW_SABOTAGE_LENGTHS_HOST)
+ 

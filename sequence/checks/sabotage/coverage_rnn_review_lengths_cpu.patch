@@ -1,0 +1,13 @@
+diff --git a/sequence/xseq_neural_run.mojo b/sequence/xseq_neural_run.mojo
+index 3f0d182021..6717e50f1d 100644
+--- a/sequence/xseq_neural_run.mojo
++++ b/sequence/xseq_neural_run.mojo
+@@ -599,7 +599,7 @@ def xseq_run_rnn_predict_options(entry: XseqNeuralEntry, req: XseqRnnPredictRequ
+ # histogram's own check is compiled out). PADDING: the sequence target's classes are discovered over every step,
+ # padded ones included, and a padding label of a validation or partial_fit target is refused as unknown.
+ comptime RNN_REVIEW_SABOTAGE_LENGTHS_DEVICE = is_defined["MOJOLEARN_RNN_REVIEW_SABOTAGE_LENGTHS_DEVICE"]()
+-comptime RNN_REVIEW_SABOTAGE_LENGTHS_HOST = is_defined["MOJOLEARN_RNN_REVIEW_SABOTAGE_LENGTHS_HOST"]()
++comptime RNN_REVIEW_SABOTAGE_LENGTHS_HOST = True  # SABOTAGE: fit reads the lengths before they are checked on the host route
+ comptime RNN_REVIEW_SABOTAGE_PADDING_DEVICE = is_defined["MOJOLEARN_RNN_REVIEW_SABOTAGE_PADDING_DEVICE"]()
+ comptime RNN_REVIEW_SABOTAGE_PADDING_HOST = is_defined["MOJOLEARN_RNN_REVIEW_SABOTAGE_PADDING_HOST"]()
+ comptime _RNN_REVIEW_COUNTS_CHECK_LENGTHS = not (RNN_REVIEW_SABOTAGE_LENGTHS_DEVICE or RNN_REVIEW_SABOTAGE_LENGTHS_HOST)
