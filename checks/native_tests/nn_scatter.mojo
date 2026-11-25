@@ -483,7 +483,10 @@ def run_long_case[E: Exec](mut ex: E) raises -> List[Float32]:
             cnt[s] += 1
         if kind == SEGMENT_MEAN:
             for s in range(3):  # small-loop(fixture)
-                want[s] = want[s] / Float32(cnt[s])
+                # ids r (r + 3) % 3 never name segment 2: an empty segment's mean is 0, as the op documents
+                # (w3-integrate-10: the oracle divided 0 by 0)
+                if cnt[s] > 0:
+                    want[s] = want[s] / Float32(cnt[s])
         _same_words("4097 rows " + segment_op_name(kind), got, want)
         for s in range(3):  # small-loop(fixture)
             words.append(got[s])

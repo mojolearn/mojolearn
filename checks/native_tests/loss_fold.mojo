@@ -97,7 +97,7 @@ def _part(which: Int, n: Int) -> List[Float32]:
     return v^
 
 
-def _fold_on[E: Exec](mut ex: E, fold: LossFold, grads: List[List[Float32]], dens: List[Float32], n: Int
+def _fold_on[E: Exec](mut ex: E, var fold: LossFold, grads: List[List[Float32]], dens: List[Float32], n: Int
                      ) raises -> List[Float32]:
     """The trainers' fold: each part's gradient scaled by fold.weight and accumulated in part order, then the
     final scale (when not 1); the folded words read back."""
@@ -113,6 +113,9 @@ def _fold_on[E: Exec](mut ex: E, fold: LossFold, grads: List[List[Float32]], den
         ex.launch[OP_SCALE](a, n)
         a.p1 = totals
         ex.launch[OP_AG_ACCUMULATE](a, n)
+        # the trainers fold each part's denominator as they go (w3-integrate-10: the check never did, so the
+        # tail form's final scale refused "the parts' denominators sum to zero")
+        fold.add_sum(Float32(0), dens[k])
     var tail = fold.final_scale[E]()
     if tail != Float32(1):
         var a = Args()
