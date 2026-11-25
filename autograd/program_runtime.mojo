@@ -271,7 +271,7 @@ def train_program_control[E: Exec & Movable & Deinitable](
         raise Error("ValueError: Program.fit n_iter_no_change must be a nonnegative integer")
     if epochs > LOOP_MAX_EXACT:
         raise Error("ValueError: Program.fit epochs must be at most " + String(LOOP_MAX_EXACT))
-    var oi = s._opt_index(optimizer)
+    var oi = s._opt_index_single(optimizer, "Program.fit")  # nn-blocks-pg: one configuration per fit
     var n = shapes[0].d[0]
     var bs = min(n, batch)
     var n_batches = (n + bs - 1) // bs

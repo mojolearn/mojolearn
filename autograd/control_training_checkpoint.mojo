@@ -16,7 +16,7 @@ def save_control_training[E: Exec & Movable & Deinitable](
     mut s: OpsSession[E], handles: List[Int], shapes: List[ShapeN],
     mut ck: Checkpoint, optimizer: Int, seed: UInt64,
 ) raises:
-    var oi = s._opt_index(optimizer)
+    var oi = s._opt_index_single(optimizer, "save_control")  # nn-blocks-pg: one configuration per record
     var option = s.opts[oi]
     var slots = optimizer_slots(option.cfg)
     if slots[2]:
