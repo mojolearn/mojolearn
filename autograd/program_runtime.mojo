@@ -271,7 +271,7 @@ def train_program_control[E: Exec & Movable & Deinitable](
         raise Error("ValueError: Program.fit n_iter_no_change must be a nonnegative integer")
     if epochs > LOOP_MAX_EXACT:
         raise Error("ValueError: Program.fit epochs must be at most " + String(LOOP_MAX_EXACT))
-    var oi = s._opt_index_single(optimizer, "Program.fit")  # nn-blocks-pg: one configuration per fit
+    var oi = s._opt_index(optimizer)
     var n = shapes[0].d[0]
     var bs = min(n, batch)
     var n_batches = (n + bs - 1) // bs
@@ -346,6 +346,19 @@ def train_program_control[E: Exec & Movable & Deinitable](
         predicate_replay = PreparedProgramReplay(choice.condition)
         otherwise_replay = PreparedProgramReplay(choice.otherwise)
     var cfg = s.opts[oi].cfg
+    # nn-blocks-pg: each parameter's optimizer, resolved once per fit: the
+    # optimizer itself, or, for an optimizer with parameter groups
+    # (autograd/nn_pg.mojo), its group's member and the group's index (the
+    # rate of the group each epoch). The clip settings are the optimizer's
+    # (`cfg`): one norm over every group's gradients.
+    var p_oi = List[Int](length=len(params), fill=oi)
+    var p_group = List[Int](length=len(params), fill=0)
+    var grouped = s.opts[oi].pg >= 0
+    if grouped:
+        for j in range(len(params)):  # driver-loop: over trainable parameters (group membership, once per fit)
+            if trainable[j]:
+                p_group[j] = s._pg_group(oi, p.params[j], "Program.fit")
+                p_oi[j] = s._pg_member(oi, p.params[j], "Program.fit")
     # lane x1b: the loop's register block, the shadows of the trained
     # parameters and their optimizer moments, and the host scalars at the
     # start of every epoch of the current chunk (`marks`).
@@ -383,7 +396,7 @@ def train_program_control[E: Exec & Movable & Deinitable](
             upload_cast(s.ex, ty.value(), target)
         for j in range(len(params)):  # driver-loop: over trainable parameter state
             if trainable[j]:
-                states[j] = s._state_of(oi, p.params[j], p.param_shapes[j].count())
+                states[j] = s._state_of(p_oi[j], p.params[j], p.param_shapes[j].count())
                 s.wants_grad[s._slot(p.params[j])] = True
         indices = s.ex.alloc(n)
         batch_losses = s.ex.alloc(n_batches)
@@ -394,10 +407,10 @@ def train_program_control[E: Exec & Movable & Deinitable](
         # nothing can stop the loop early, so no read before the end and no
         # shadow; with one, whole epochs per read, and the shadow only when
         # an epoch can run past the stop (more than one epoch per read).
-        var slots = optimizer_slots(cfg)
         var shadow_floats = 0
         for j in range(len(params)):  # driver-loop: over trained parameters (shadow sizes)
             if trainable[j]:
+                var slots = optimizer_slots(s.opts[p_oi[j]].cfg)
                 var m = p.param_shapes[j].count()
                 shadow_floats += m * (1 + (1 if slots[0] else 0) + (1 if slots[1] else 0) + (1 if slots[2] else 0))
         var chunk = epochs
@@ -408,6 +421,7 @@ def train_program_control[E: Exec & Movable & Deinitable](
                 if not trainable[j]:
                     continue
                 var m = p.param_shapes[j].count()
+                var slots = optimizer_slots(s.opts[p_oi[j]].cfg)
                 var r = s.opt_states[states[j]]
                 var live = List[FP]()
                 live.append(params[j])
@@ -446,6 +460,10 @@ def train_program_control[E: Exec & Movable & Deinitable](
             var epoch = s.opts[oi].epoch
             # Scheduler advancement occurs only at the end of this epoch.
             var lr = s.learning_rate(optimizer)
+            # nn-blocks-pg: each group's rate (one entry, `lr`, without groups)
+            var rates: List[Float32] = [lr]
+            if grouped:
+                rates = s._pg_rates(oi)
             if shuffle_rows:
                 permutation(s.ex, seed, epoch, n, indices.value())
             else:
@@ -551,8 +569,9 @@ def train_program_control[E: Exec & Movable & Deinitable](
                             var usi = states[uj]
                             var ust = s._state_view(usi)
                             var ut = s.opt_states[usi].t + 1
-                            step_lr_clipped(s.ex, cfg, ust, params[uj], s.tape.gradient(s.tensor(phs[uj])),
-                                            p.param_shapes[uj].count(), ut, lr, cell)
+                            step_lr_clipped(s.ex, s.opts[p_oi[uj]].cfg, ust, params[uj],
+                                            s.tape.gradient(s.tensor(phs[uj])), p.param_shapes[uj].count(), ut,
+                                            rates[p_group[uj]], cell)
                             s.opt_states[usi].t = ut
                             s.opt_states[usi].pw1 = ust.pw1
                             s.opt_states[usi].pw2 = ust.pw2
@@ -564,7 +583,8 @@ def train_program_control[E: Exec & Movable & Deinitable](
                     var st = s._state_view(si)
                     var t = s.opt_states[si].t + 1
                     var gradient = s.tape.gradient(s.tensor(phs[j]))
-                    step_lr(s.ex, cfg, st, params[j], gradient, p.param_shapes[j].count(), t, lr)
+                    step_lr(s.ex, s.opts[p_oi[j]].cfg, st, params[j], gradient, p.param_shapes[j].count(), t,
+                            rates[p_group[j]])
                     s.opt_states[si].t = t
                     s.opt_states[si].pw1 = st.pw1
                     s.opt_states[si].pw2 = st.pw2
@@ -606,6 +626,8 @@ def train_program_control[E: Exec & Movable & Deinitable](
             # Epochs past the stop: their device writes were undone behind
             # the gate; their host scalars go back to the first of them.
             marks[committed - chunk_start].restore(s, oi, states)
+            if grouped:
+                s._pg_scheduler_step(oi)  # nn-blocks-pg: every group back at the restored epoch
             true_batches = marks[committed - chunk_start].true_batches
             false_batches = marks[committed - chunk_start].false_batches
         s.ex.download(curve, losses.value(), epochs)
