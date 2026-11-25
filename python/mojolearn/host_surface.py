@@ -5098,6 +5098,7 @@ PUBLIC_PENDING_LANES = {
     "nn-pg-imported-program": "no reference",
     "nn-pg-program-decode": "no reference",
     "nn-pg-session-blocks": "no reference",
+    "ops-scan-cell": "no reference",  # nn-blocks-scan (2026-11-25)
     "nn-tr-byte-lm": "no reference",
     "nn-tr-generator": "no reference",
     "nn-tr-optim-state": "no reference",

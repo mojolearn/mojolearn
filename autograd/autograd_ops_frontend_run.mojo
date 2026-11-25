@@ -185,6 +185,10 @@ comptime _SOP_SEGMENT_SUM = 1114
 comptime _SOP_SEGMENT_MEAN = 1115
 comptime _SOP_SEGMENT_MAX = 1116
 # nn-blocks-scatter end
+# nn-blocks-scan begin: the scan over a captured cell (OPS 118; the frontend code is 1000 + 118, outside the
+# shared 1..999 sequence so the parallel nn-blocks lanes cannot collide)
+comptime _SOP_SCAN = 1118
+# nn-blocks-scan end
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -355,6 +359,9 @@ struct _SessionOpCodes(Defaultable, Movable):
         self.codes["segment_mean"] = _SOP_SEGMENT_MEAN
         self.codes["segment_max"] = _SOP_SEGMENT_MAX
         # nn-blocks-scatter end
+        # nn-blocks-scan begin
+        self.codes["scan"] = _SOP_SCAN
+        # nn-blocks-scan end
 
 
 # One table per process (identical contents in every extension that links this file).

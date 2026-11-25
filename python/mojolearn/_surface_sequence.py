@@ -103,6 +103,9 @@ FAMILIES = (
                         "nn-pg-session-blocks",
                         "nn-tr-schedules",
                         "nn-tr-seqopt-state",
+                        # nn-blocks-scan begin: Session.scan over a captured cell (tools/identity_lanes/nn_scan.py)
+                        "ops-scan-cell",
+                        # nn-blocks-scan end
                         "public-theta-variants-forecast",
                         "sequence-croston-forecast",
                         "sequence-ets-forecast",
@@ -283,6 +286,9 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     "nn-pg-session-blocks": "Mamba1Block, Session: blocks",
     "nn-tr-schedules": "StepLR, ExponentialLR, OneCycleLR: schedules",
     "nn-tr-seqopt-state": "Adagrad, Adamax, LAMB: state",
+    # nn-blocks-scan begin
+    "ops-scan-cell": "Session: scan over a captured cell (GRU cell, linear recurrence, reverse, lengths, captured)",
+    # nn-blocks-scan end
     "public-theta-variants-forecast": "DynamicTheta, OptimizedTheta: forecast",
     "sequence-croston-forecast": "CrostonClassic, CrostonOptimized, CrostonSBA: forecast",
     "sequence-ets-forecast": "DampedETS, ETS: forecast",

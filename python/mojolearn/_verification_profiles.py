@@ -47,6 +47,9 @@ ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
                           # nn-blocks-scatter begin: ops.Session scatter_add and segment reductions, one seeded backward
                           'ops-scatter-segment',
                           # nn-blocks-scatter end
+                          # nn-blocks-scan begin: Session.scan over a captured cell, one seeded step
+                          'ops-scan-cell',
+                          # nn-blocks-scan end
                           ))
 # These fixtures use loaded weights or inspect configuration without training.
 NEURAL_INFERENCE = frozenset(('hf-causal-lm', 'byte-lm-host-infer',

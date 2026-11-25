@@ -86,6 +86,10 @@ comptime PROGRAM_MAX_CODE_V2 = 80
 # of the range no operation took is refused by name at replay, as 89 and 92 are.
 comptime PROGRAM_MAX_CODE = 129
 # nn-blocks-qkv end
+# nn-blocks-scan begin: the scan over a captured cell (autograd/nn_scan.mojo), version 3 records only; its
+# node's integer words hold the nested cell's own program words, checked when the scan runs.
+comptime PROGRAM_SCAN_CODE = 118
+# nn-blocks-scan end
 
 
 struct OpsLog(Movable):
@@ -366,7 +370,7 @@ def program_from_words(xi: List[Int64], xf: List[Float32], what: String) raises 
     var nf_total = 0
     for k in range(nn):  # driver-loop: over program nodes
         var code = r.take(xi, what)
-        if code < 1 or code > max_code or code == 47:
+        if code < 1 or (code > max_code and not (code == PROGRAM_SCAN_CODE and version == PROGRAM_RECORD_VERSION)) or code == 47:  # nn-blocks-scan: 118
             raise Error(what + ": node " + String(k) + " holds an unknown operation code " + String(code))
         p.code.append(code)
         var na = r.take(xi, what)

@@ -1,0 +1,13 @@
+diff --git a/autograd/nn_scan.mojo b/autograd/nn_scan.mojo
+index 2bd3f5876f..24b6feb580 100644
+--- a/autograd/nn_scan.mojo
++++ b/autograd/nn_scan.mojo
+@@ -40,7 +40,7 @@ comptime SCAN_HEADER = 6
+ #   INIT_GRAD: the initial state is detached (its gradient is zero; the parameter and xs gradients of a loss that
+ #   reads the initial state's path move too).
+ # The plain name faults the device executor only, _HOST the host executor only.
+-comptime SCAN_SABOTAGE_STATE_LAG = is_defined["MOJOLEARN_NN_SCAN_SABOTAGE_STATE_LAG"]()
++comptime SCAN_SABOTAGE_STATE_LAG = True  # SABOTAGE: the state of step t - 2 fed to step t on the device
+ comptime SCAN_SABOTAGE_STATE_LAG_HOST = is_defined["MOJOLEARN_NN_SCAN_SABOTAGE_STATE_LAG_HOST"]()
+ comptime SCAN_SABOTAGE_INIT_GRAD = is_defined["MOJOLEARN_NN_SCAN_SABOTAGE_INIT_GRAD"]()
+ comptime SCAN_SABOTAGE_INIT_GRAD_HOST = is_defined["MOJOLEARN_NN_SCAN_SABOTAGE_INIT_GRAD_HOST"]()
