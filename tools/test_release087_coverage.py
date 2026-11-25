@@ -1,7 +1,6 @@
 """Focused regression checks for the release coverage audit and new metric lane."""
 import types
 import unittest
-from unittest.mock import patch
 
 import numpy as np
 import identity_break as identity
@@ -68,7 +67,7 @@ class CoverageTests(unittest.TestCase):
             types.SimpleNamespace(metrics=Metrics), x, np.arange(16) % 2, np.zeros(16))
 
     def run_ordered(self, balanced=False, mutate=False):
-        def ordered(parts):
+        def ordered(parts, device=None):
             # Mirror the native boundary: do not consume Python iterator hooks.
             assert type(parts) in (list, tuple), "native shard container required"
             parts = list(parts)
@@ -84,9 +83,9 @@ class CoverageTests(unittest.TestCase):
             return result
         module = types.ModuleType("mojolearn.parallel_training")
         module.ordered_sum_gradients = ordered
-        with patch.dict("sys.modules", {"mojolearn.parallel_training": module}):
-            return identity.LANES["ordered-gradient-sum"](
-                None, np.ones((8, 8), dtype=np.float32), None, None)
+        # the lane reaches the fold through its `ml` (the device view), never an import
+        return identity.LANES["ordered-gradient-sum"](
+            types.SimpleNamespace(parallel_training=module), np.ones((8, 8), dtype=np.float32), None, None)
 
     def test_ordered_gradient_lane_accepts_left_fold(self):
         self.run_ordered()

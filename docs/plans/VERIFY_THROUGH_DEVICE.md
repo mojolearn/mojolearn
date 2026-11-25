@@ -57,6 +57,8 @@ State on `lane/w3-integrate` 3cda8a05b3 (coverage audit of the round-6 gate):
 - `mojolearn.check` (`_check_both.py`) starts the same CPU child process as verify: it moves to `device=` with it.
 - 43 `parallel_*` entries take `devices=` (a GPU list) and have no CPU side: they keep `devices=`, verify takes
   their one digest, and they are listed as single-sided.
+- `ordered-gradient-sum` is two-sided: `ordered_sum_gradients` takes `device=` and has a CPU fold of the GPU's order
+  (lane ogs-cpu, Andrew 2026-11-24). `ParallelCausalLM` stays GPU only (`devices=`) by decision.
 - 197 functions and 75 computing constructors have no `device` (`functions_without_device.tsv`): lane vd-functions.
 - `device="cpu"` is refused by 15 estimator classes (9 not connected, 6 compiled constructors without `device`):
   connect them in lane vd-functions.

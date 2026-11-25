@@ -21,7 +21,7 @@ from bindings.parallel_byte_native_door import _parallel_int, _parallel_view
 from bindings.parallel_mlp_native_door import (
     mlp_snapshot, mlp_from_state, mlp_publish, mlp_validate_state,
     mlp_gradients_open, mlp_gradients_close, mlp_gradients_on,
-    mlp_apply_from_state, mlp_batch, mlp_targets, neural_ordered_sum,
+    mlp_apply_from_state, mlp_batch, mlp_targets, neural_ordered_sum, neural_ordered_sum_device,
     neural_cooperative_admit,
 )
 from bindings.native_process_pool_door import (
@@ -703,7 +703,8 @@ def parallel_neural_call(operation: Int, name: PythonObject, args: PythonObject)
     if operation == PARALLEL_NEURAL_OPN_RESTORE:
         return _neural_restore(args[0], args[1], args[2], child)
     if operation == PARALLEL_NEURAL_OPN_ORDERED_SUM:
-        return neural_ordered_sum(args[0])
+        # the public ordered_sum_gradients(parts, device=...): (parts, device)
+        return neural_ordered_sum_device(args[0], args[1])
     if operation == PARALLEL_NEURAL_OPN_WORKER:
         neural_worker(args)
         return PythonObject(None)

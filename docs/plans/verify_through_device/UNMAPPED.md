@@ -201,14 +201,14 @@ decides. They are failures, not n/a (contract items 3 and 4).
   `nn-ep-samba-inference` is one-sided, so its view passes them through.
 - **Parallel drivers reached through the view** (vdv-fragfix moved them to `ml.<module>.<name>`): `forest-shard`
   (`parallel_ensemble.fit_forest`), `neighbors-reference-shard` (`ReferenceShardedNeighbors`), `ivf-distributed`
-  (`DistributedIVFIndex`), `neural-trainer-unfused` (`ParallelNeuralTrainer`), `ordered-gradient-sum`
-  (`parallel_training.ordered_sum_gradients`). Their signatures take `devices=`, so the strict view refuses them on
-  both sides. The owner's direction of 2026-11-24 keeps `parallel_*` without `device`, so the refusal is permanent as
+  (`DistributedIVFIndex`), `neural-trainer-unfused` (`ParallelNeuralTrainer`). Their signatures take `devices=`, so
+  the strict view refuses them on both sides. The owner's direction of 2026-11-24 keeps `parallel_*` without `device`, so the refusal is permanent as
   written. The `psd-*` lanes import the drivers directly, and vdv-gaps routes a `device='cpu'` member to host workers.
   Decided by vd-verify: the view now passes a `devices`-mode driver through when a member argument carries the
   side (`device=` of the estimator or trainer handed to it), and refuses it by name otherwise
-  (`_verify_device.members`). `ordered-gradient-sum` has no member, so it is `_one_sided(..., missing="cpu")`; its
-  host implementation in `_mojolearn_runtime_parallel_host` has no public `device=`: owed decision (owner).
+  (`_verify_device.members`). `ordered-gradient-sum` (`parallel_training.ordered_sum_gradients`) is no longer here:
+  Andrew decided on 2026-11-24 that it gets a CPU side for verification, and lane ogs-cpu gave it `device=` (the
+  CPU fold in `core/ordered_gradient_sum_host.mojo`), so the lane is two-sided.
 - **vd-functions not merged into vd-verify yet** (`origin/lane/vd-functions`): every lane that reaches a function or
   constructor that gets `device=` only there reads "takes no device=" until the merge. Per vdv-cov-func, the GPU
   side's device-resident run of the `fn-*` lanes also fails until vdf-xm-labels / vdf-xm-kernels / vdf-xm-transport

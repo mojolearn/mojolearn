@@ -632,3 +632,17 @@ their probe reads; the other 113 declare `n/a:<reason>` (scalar-reduction for `s
 fit-endpoint for `fit_transform` / `fit_predict` / `partial_fit` / inverses of a fresh fit, forecast-fit,
 whole-series, training-trajectory, fit-probe, fixed-session-batch). Every batch protocol part is OWED and is
 recorded with the full CPU and NVIDIA records above.
+
+## G. `ordered-gradient-sum` made two-sided (lane ogs-cpu, 2026-11-24)
+
+`parallel_training.ordered_sum_gradients` takes `device=` (Andrew, 2026-11-24: a CPU side for verification), so the
+lane's `_one_sided(..., missing="cpu")` declaration is gone and both columns are owed, all nine fixtures, by the
+commands at the top:
+
+| lane | file | parts | batch part | CPU column | NVIDIA column |
+|---|---|---|---|---|---|
+| `ordered-gradient-sum` | identity_break.py | every part the harness collects | n/a:ordered-shard-reduction | record (the CPU fold, `core/ordered_gradient_sum_host.mojo`, first on the GitHub CPU runner; the `WITH_CPU=1` CPU record on the L40S must equal it) | record (the GPU pair fold, unchanged code) |
+
+The two columns must be equal byte for byte (same per-element step, same order; the lane also holds both to its
+NumPy left-fold oracle). The CPU-only installation's `device=None` now runs the same CPU fold in place of the host
+training image's `accumulate` (same arithmetic), so the CPU column is recorded, not reused.

@@ -31,6 +31,9 @@ from core.shared_slot import SharedSlot
 from std.python._cpython import GILReleased
 from core.entry_table import EntryRef, entry_ref_unresolved
 from core.samba_entry_table import SambaEntryKey, samba_ref, samba_vendor_word, SAMBA_TABLE_TRAINING
+from core.function_device import FunctionDevice, function_device_decide, function_device_default
+from core.ordered_gradient_sum_host import ordered_gradient_sum_cpu
+from providers.python.device_route_boundary_door import device_unpack
 from bindings.parallel_mlp_native_run import (
     _mlp_names, _mlp_dims, mlp_schema_admit, mlp_config_admit, mlp_optimizer_kind_admit, mlp_batch_admit,
     mlp_targets_admit, mlp_registry_extent, mlp_ordered_fold, mlp_step_admit, mlp_optimizer_step, mlp_update_admit,
@@ -67,6 +70,11 @@ struct ParallelMlpBoundary(Defaultable, Movable):
     # raised at the first call, so initialize refuses exactly what it did.
     var primitives: EntryRef
     var primitives_error: String
+    # True when the admitted vendor is the host's (vendor word 0: a CPU-only
+    # installation), decided ONCE at initialize (lane ogs-cpu): the ordered
+    # gradient sum then runs its CPU fold (core/ordered_gradient_sum_host.mojo)
+    # for device=None, and an explicit device="gpu" is refused in words.
+    var host_process: Bool
 
     def __init__(out self):
         self.bi = PythonObject(None)
@@ -78,10 +86,12 @@ struct ParallelMlpBoundary(Defaultable, Movable):
         self.mode = String()
         self.primitives = entry_ref_unresolved()
         self.primitives_error = String("parallel MLP: training primitives are not connected")
+        self.host_process = False
 
 
 # V2: the layout gained the resolved primitive entry (V1 held Python entries).
-comptime PARALLEL_MLP_BOUNDARY = SharedSlot[ParallelMlpBoundary, "MojolearnParallelMlpBoundaryV2"]
+# V3 (lane ogs-cpu): the layout gained `host_process`.
+comptime PARALLEL_MLP_BOUNDARY = SharedSlot[ParallelMlpBoundary, "MojolearnParallelMlpBoundaryV3"]
 
 
 def _mlp_primitives() raises -> EntryRef:
@@ -117,6 +127,7 @@ def mlp_initialize(model_cls: PythonObject, opt_cls: PythonObject, binding: Pyth
         raise Error("parallel MLP: compiled mode/vendor admission mismatch")
     b[].primitives = entry_ref_unresolved()
     var word = samba_vendor_word(vendor)
+    b[].host_process = word == 0
     if word < 0:
         b[].primitives_error = String("parallel MLP: unsupported native vendor ") + vendor
     else:
@@ -320,9 +331,39 @@ def mlp_gradients_from_checked(checked: PythonObject, inputs: PythonObject, targ
     return result
 
 
+comptime ORDERED_SUM_NAME = "mojolearn.parallel_training.ordered_sum_gradients"
+
+
 def neural_ordered_sum(parts: PythonObject) raises -> PythonObject:
+    """The ordered fold on this installation's device (`device=None`): the
+    trainers' own callers (the parallel neural worker's update, the MLP
+    operation table)."""
     _mlp_mode()
+    return neural_ordered_sum_on(parts, function_device_default())
+
+
+def neural_ordered_sum_device(parts: PythonObject, device_value: PythonObject) raises -> PythonObject:
+    """UNPACK of the public `ordered_sum_gradients(parts, device=...)` (lane
+    ogs-cpu): the `device` word admitted ONCE, by the estimators' read
+    (`device_unpack`) and the public functions' rule (`function_device_decide`,
+    core/function_device.mojo), before any work. Both implementations exist:
+    the GPU pair fold and the CPU fold (core/ordered_gradient_sum_host.mojo).
+    `None` costs one identity compare and runs exactly today's route."""
+    _mlp_mode()  # first, as before: the boundary (and its builtins) is admitted
     var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
+    var request = device_unpack(device_value, b[].bi)
+    var device = function_device_decide(request, b[].host_process, True, True, String(ORDERED_SUM_NAME))
+    return neural_ordered_sum_on(parts, device)
+
+
+def neural_ordered_sum_on(parts: PythonObject, device: FunctionDevice) raises -> PythonObject:
+    """The ordered fold after the caller's mode admission (`_mlp_mode`, once)."""
+    var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
+    # The CPU fold runs for an explicit device="cpu" beside a GPU set, and on
+    # a CPU-only installation for every admitted word (its one device is the
+    # host; it ran the host training image's `accumulate` before lane ogs-cpu:
+    # the same per-element step, so the same bits). Decided once per call.
+    var host = device.host_beside or b[].host_process
     var shards = py_call(b[].bi.list, parts)
     if len(shards) == 0:
         raise Error("ordered reduction needs at least one shard")
@@ -375,15 +416,25 @@ def neural_ordered_sum(parts: PythonObject) raises -> PythonObject:
             offset += counts[j]
             _ = value^
     var base = Int(py=stacked._addr)
-    # Primitive op 9 (the former `accumulate` entry: addresses [out, parts],
-    # ints [n, a, t_tokens]) through the entry resolved at initialize. One GIL
-    # release covers the whole ordered fold (the Python entry released it per
-    # shard); the fold order and every pair add are unchanged.
-    var primitives = _mlp_primitives()
-    with GILReleased(Python()):
-        mlp_ordered_fold(primitives, base, count, n_shards)
+    # The slot that holds the folded total: n_shards - 1 on the GPU side (the
+    # pair fold writes step k over slot k), 0 on the CPU side.
+    var last = n_shards - 1
+    if host:
+        # RUN, CPU side: the same fold order and per-element step
+        # (core/ordered_gradient_sum_host.mojo), elements across the host's
+        # cores, under the one GIL release.
+        with GILReleased(Python()):
+            last = ordered_gradient_sum_cpu(base, count, n_shards)
+    else:
+        # Primitive op 9 (the former `accumulate` entry: addresses [out, parts],
+        # ints [n, a, t_tokens]) through the entry resolved at initialize. One GIL
+        # release covers the whole ordered fold (the Python entry released it per
+        # shard); the fold order and every pair add are unchanged.
+        var primitives = _mlp_primitives()
+        with GILReleased(Python()):
+            mlp_ordered_fold(primitives, base, count, n_shards)
     _ = stacked  # keep the Python owner alive through the native calls above
-    var source = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=base) + (n_shards - 1) * count
+    var source = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=base) + last * count
     offset = 0
     for j in range(len(total)):  # driver-loop: over owned folded gradient output tensors
         var destination = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=total[j]._addr))
