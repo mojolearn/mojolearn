@@ -1002,7 +1002,10 @@ def _causal_model_init(mut mods: NativeModules, model: PythonObject, input_plan:
     _model_construction_set(mods, live, captured, "_head_int15", PythonObject(None))
     # lane fixed15-parts-native: the head's planes exactly when the parts
     # mask sets lm_head.
-    if String(py_item(plan, nk[].k_kind)) == "transformer" and np_part_on(_model_parts_mask(profile, route), NP_PART_HEAD):
+    var model_parts = 0
+    if String(py_item(plan, nk[].k_kind)) == "transformer":
+        model_parts = _model_parts_mask(profile, route)
+    if np_part_on(model_parts, NP_PART_HEAD):
         _model_construction_set(mods, live, captured, "_head_int15", _model_quantize15(mods, py_item(captured, nk[].k__head), causal_entry_key(bindings)))
     # Admission may call sibling native entries. Give it the private record;
     # a replaced public model descriptor cannot run after those calls.
@@ -1010,7 +1013,9 @@ def _causal_model_init(mut mods: NativeModules, model: PythonObject, input_plan:
     var admission = _causal_namespace(mods, captured)
     var admitted = causal_snapshot_fields(mods, admission)
     try:
-        _ = causal_lm_admit_binding(mods, admission, bindings[py_item(plan, nk[].k_kind)], py_item(bindings, nk[].k_primitives), py_item(bindings, nk[].k_linalg) if py_item(captured, nk[].k__head_int15) is not None else PythonObject(None))
+        # The packed arithmetic is admitted when ANY part (head or block)
+        # computes under fixed15_v1 (lane fixed15-parts-native).
+        _ = causal_lm_admit_binding(mods, admission, bindings[py_item(plan, nk[].k_kind)], py_item(bindings, nk[].k_primitives), py_item(bindings, nk[].k_linalg) if model_parts != 0 else PythonObject(None))
     except problem:
         mods.released()
         _model_construction_admission(mods, live, admitted)

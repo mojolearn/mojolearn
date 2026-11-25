@@ -323,7 +323,10 @@ def causal_lm_admit_binding(mut mods: NativeModules,
     # answers onto it. The reads and writes are the ones the single function
     # made on the owner.
     var local_blocks = py_get(_standalone_record_fields(mods, model), "_native_block_fields")
-    var admission = CausalAdmission(String(model.device) == "gpu", String(model.kind), model._head_int15 is not None,
+    # `packed`: some part of the model computes under fixed15_v1 (the caller
+    # passes the packed arithmetic's binding exactly then; lane
+    # fixed15-parts-native: the head and the layers each have their own bit).
+    var admission = CausalAdmission(String(model.device) == "gpu", String(model.kind), int15_binding is not None,
         local_blocks[0]["_neural_weight_names"] if local_blocks is not None else PythonObject(None),
         model._blocks[0], _causal_context_for(mods, model))
     try:
