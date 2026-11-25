@@ -13,7 +13,7 @@ step in time order (steps first, as torch's recurrent layers and jax.lax.scan st
 from sequence.exec_trait import Exec
 from autograd.ops_api import OpsSession, ops_session
 from autograd.program import OpsProgram
-from autograd.nn_scan import OPS_SCAN, scan_encode, scan_check_binding
+from autograd.nn_scan import OPS_SCAN, scan_encode, scan_check_binding, scan_check_cell
 from autograd.rankn import ShapeN
 
 
@@ -42,6 +42,7 @@ def scan_session[E: Exec & Movable & Deinitable](
     if lengths != 0:
         lengths_count = s.shape_nd(lengths).count()
     var xs_shape = s.shape_nd(xs)
+    scan_check_cell(cell)
     scan_check_binding(cell, xs_shape, s.is_integer(xs), state_shapes, state_ids, lengths_count, param_shapes,
                        param_ids)
     var words = scan_encode(cell, reverse, lengths != 0, counter)

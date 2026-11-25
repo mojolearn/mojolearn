@@ -19,7 +19,12 @@
 # binding checks (shared by the session's op and its frontend, autograd/nn_scan_frontend.mojo).
 #
 # The node (session code 118): handles [xs, state_1 .. state_k, (lengths), param_1 .. param_m]; ints
-# [SCAN_FORMAT, k, reverse, has_lengths, m, n_words, the cell's program words ..., key]; floats the cell's floats.
+# [SCAN_FORMAT, fingerprint low 32 bits, fingerprint high 32 bits, k, reverse, has_lengths, m, n_words, the cell's
+# program words ..., key]; floats the cell's floats. The FINGERPRINT (FNV-1a over every integer after the first three
+# except the key, and every float's bits; `scan_fingerprint`) is written once when the node is made; the session keeps
+# each decoded cell under it (`ScanCache`, one dictionary read per call), so a scan replayed every minibatch parses its
+# cell and splits its nodes' arguments once per session, not once per call (lane fable-followups, 2026-11-25:
+# AGENTS.md "No refactor adds cost on a hot path"). The key is outside the fingerprint because a replay advances it.
 # The KEY is the node's last integer, the word a training replay advances for every random node
 # (autograd/program_runtime.mojo, PreparedReplayNode.random: the same rule as a top-level dropout's counter, from the
 # captured value: captured + step * stride + offset + node), so a scan inside Program.fit draws new masks every
@@ -38,12 +43,15 @@ from autograd.program import (
     OpsProgram, program_words, program_from_words, shape_text, same_shape, PROGRAM_IN_FLOAT, PROGRAM_PARAM_WEIGHT,
 )
 from autograd.rankn import ShapeN
-from autograd.nn_cbw import OPS_CUSTOM_VJP
+from autograd.nn_cbw import OPS_CUSTOM_VJP, _fnv, _split_nodes
+from std.memory import bitcast
 
 comptime OPS_SCAN = 118
-#: the version word of the node's integer arguments
-comptime SCAN_FORMAT = 1
-comptime SCAN_HEADER = 6
+#: the version word of the node's integer arguments (2: the fingerprint words, lane fable-followups 2026-11-25)
+comptime SCAN_FORMAT = 2
+comptime SCAN_HEADER = 8
+#: autograd/ops_api.mojo OPS_DROPOUT (not imported: ops_api imports this module); ints [seed lo, seed hi, counter]
+comptime _SCAN_DROPOUT_CODE = 21
 
 # Sabotage arms (tools/identity_lanes/coverage_sabotage.tsv coverage-autograd-nn_scan_*, lane ops-scan-cell).
 # Off in every build; each arm's patch switches one on.
@@ -60,24 +68,70 @@ comptime SCAN_SABOTAGE_DROP_KEY = is_defined["MOJOLEARN_NN_SCAN_SABOTAGE_DROP_KE
 comptime SCAN_SABOTAGE_DROP_KEY_HOST = is_defined["MOJOLEARN_NN_SCAN_SABOTAGE_DROP_KEY_HOST"]()
 
 
-struct ScanSpec(Movable):
-    """The decoded scan node: the cell and its options."""
+struct ScanCell(Movable):
+    """One decoded scan node, kept by its session for every later call with the same fingerprint: the cell, its
+    options, each cell node's integer and float arguments split once, and the cell's dropout nodes with their
+    captured seeds. The per-call RNG key is not here (it is the node's last word, read per call)."""
     var cell: OpsProgram
     var n_state: Int
     var reverse: Bool
     var has_lengths: Bool
     var n_params: Int
-    #: the RNG key of this call (the node's last integer; Session.scan counter=, advanced by a training replay)
-    var key: Int
+    #: the node's fingerprint and word counts (a dictionary hit is taken only when the counts agree too)
+    var fingerprint: Int
+    var n_ints: Int
+    var n_fs: Int
+    #: each cell node's arguments; a dropout node's two seed words are rewritten before every step that runs it
+    var node_ints: List[List[Int]]
+    var node_fs: List[List[Float32]]
+    var drop_nodes: List[Int]
+    var drop_seed: List[UInt64]
 
-    def __init__(out self, var cell: OpsProgram, n_state: Int, reverse: Bool, has_lengths: Bool, n_params: Int,
-                 key: Int):
-        self.cell = cell^
-        self.n_state = n_state
-        self.reverse = reverse
-        self.has_lengths = has_lengths
-        self.n_params = n_params
-        self.key = key
+    def __init__(out self):
+        self.cell = OpsProgram()
+        self.n_state = 0
+        self.reverse = False
+        self.has_lengths = False
+        self.n_params = 0
+        self.fingerprint = 0
+        self.n_ints = 0
+        self.n_fs = 0
+        self.node_ints = List[List[Int]]()
+        self.node_fs = List[List[Float32]]()
+        self.drop_nodes = List[Int]()
+        self.drop_seed = List[UInt64]()
+
+
+struct ScanCache(Movable):
+    """A session's decoded scan cells (`ScanCell`), indexed by fingerprint. Cleared when the session closes."""
+    var cells: List[ScanCell]
+    var by_key: Dict[Int, Int]
+
+    def __init__(out self):
+        self.cells = List[ScanCell]()
+        self.by_key = Dict[Int, Int]()
+
+    def clear(mut self):
+        self.cells.clear()
+        self.by_key.clear()
+
+    def find(self, ints: List[Int], fs: List[Float32]) raises -> Int:
+        """The index of the decoded cell these node words name, or -1 (one dictionary read, no parse)."""
+        if len(ints) < SCAN_HEADER + 2 or ints[0] != SCAN_FORMAT:
+            raise Error("ValueError: ops: scan: the node's arguments are not a scan description")
+        var found = self.by_key.find(scan_key_of(ints))
+        if found:
+            var i = found.value()
+            if self.cells[i].n_ints == len(ints) and self.cells[i].n_fs == len(fs):
+                return i
+        return -1
+
+    def add(mut self, var cell: ScanCell) -> Int:
+        """Keep a decoded cell; returns its index."""
+        var key = cell.fingerprint
+        self.cells.append(cell^)
+        self.by_key[key] = len(self.cells) - 1
+        return len(self.cells) - 1
 
 
 def scan_host_code_name(code: Int) -> String:
@@ -130,8 +184,8 @@ def scan_check_binding(
     params: List[ShapeN], params_ids: List[Bool],
 ) raises:
     """The binding of a cell to its operands, checked once per call before any step runs. `lengths` is the
-    lengths tensor's element count, or -1 when none is given."""
-    scan_check_cell(cell)
+    lengths tensor's element count, or -1 when none is given. The cell's own signature (`scan_check_cell`) is
+    checked by the caller: once per decoded cell in the session, once per call in the frontend."""
     var n_state = cell.n_in - 1
     if xs.ndim < 2:
         raise Error("ValueError: scan: xs must have the steps first and at least one more dimension (rank 2 or"
@@ -197,44 +251,90 @@ def scan_dropout_seed(seed: UInt64, key: Int, node: Int, t: Int) -> UInt64:
     return _splitmix64(h ^ UInt64(t))
 
 
+def scan_key_of(ints: List[Int]) -> Int:
+    """The fingerprint a scan node's words carry (words 1 and 2)."""
+    return (ints[1] & 0xFFFFFFFF) | ((ints[2] & 0xFFFFFFFF) << 32)
+
+
+def scan_fingerprint(ints: List[Int], fs: List[Float32]) -> Int:
+    """FNV-1a over the node's integers after the first three, except the last (the key a replay advances), and
+    every float's bits (the hash autograd/nn_cbw.mojo uses for a custom operation's key)."""
+    var h = UInt64(0xCBF29CE484222325)
+    for j in range(3, len(ints) - 1):  # driver-loop: over node words, once per node made or decoded
+        h = _fnv(h, bitcast[DType.uint64](Int64(ints[j])))
+    for j in range(len(fs)):  # driver-loop: over float words, once per node made or decoded
+        h = _fnv(h, UInt64(bitcast[DType.uint32](fs[j])))
+    return Int(bitcast[DType.int64](h))
+
+
 def scan_encode(cell: OpsProgram, reverse: Bool, has_lengths: Bool, key: Int) -> Tuple[List[Int], List[Float32]]:
-    """The node's integer and float arguments (the layout in the module note)."""
+    """The node's integer and float arguments (the layout in the module note), its fingerprint written in."""
     var got = program_words(cell)
-    var ints = List[Int]()
+    var ints = List[Int](capacity=SCAN_HEADER + len(got[0]) + 1)
     ints.append(SCAN_FORMAT)
+    ints.append(0)
+    ints.append(0)
     ints.append(cell.n_in - 1)
     ints.append(1 if reverse else 0)
     ints.append(1 if has_lengths else 0)
     ints.append(len(cell.params))
     ints.append(len(got[0]))
-    for i in range(len(got[0])):  # driver-loop: over the cell's description words, once per call
+    for i in range(len(got[0])):  # driver-loop: over the cell's description words, once per node made
         ints.append(Int(got[0][i]))
     ints.append(key)
-    return (ints^, got[1].copy())
+    var fs = got[1].copy()
+    var fp = scan_fingerprint(ints, fs)
+    ints[1] = fp & 0xFFFFFFFF
+    ints[2] = (fp >> 32) & 0xFFFFFFFF
+    return (ints^, fs^)
 
 
-def scan_decode(ints: List[Int], fs: List[Float32], n_handles: Int) raises -> ScanSpec:
-    """The node's arguments read back and checked against its handle count."""
-    if len(ints) < SCAN_HEADER or ints[0] != SCAN_FORMAT:
+def scan_decode(ints: List[Int], fs: List[Float32]) raises -> ScanCell:
+    """The node's arguments read back, checked (format, counts, fingerprint, the cell's signature) and split per
+    cell node: once per session for each distinct scan node (OpsSession keeps the result in its ScanCache)."""
+    if len(ints) < SCAN_HEADER + 2 or ints[0] != SCAN_FORMAT:
         raise Error("ValueError: ops: scan: the node's arguments are not a scan description")
-    var n_state = ints[1]
-    var reverse = ints[2] != 0
-    var has_lengths = ints[3] != 0
-    var n_params = ints[4]
-    var n_words = ints[5]
+    var n_state = ints[3]
+    var reverse = ints[4] != 0
+    var has_lengths = ints[5] != 0
+    var n_params = ints[6]
+    var n_words = ints[7]
     if n_state < 0 or n_params < 0 or n_words < 1 or SCAN_HEADER + n_words + 1 != len(ints):
         raise Error("ValueError: ops: scan: a damaged scan description")
+    var fp = scan_fingerprint(ints, fs)
+    if (fp & 0xFFFFFFFF) != (ints[1] & 0xFFFFFFFF) or ((fp >> 32) & 0xFFFFFFFF) != (ints[2] & 0xFFFFFFFF):
+        raise Error("ValueError: ops: scan: a damaged scan description (its fingerprint does not match its words)")
     var words = List[Int64](capacity=n_words)
-    for i in range(n_words):  # driver-loop: over the cell's description words, once per call
+    for i in range(n_words):  # driver-loop: over the cell's description words, once per decoded node
         words.append(Int64(ints[SCAN_HEADER + i]))
     var cell = program_from_words(words, fs, "ops: scan: the cell")
     if cell.n_in != n_state + 1 or len(cell.params) != n_params:
         raise Error("ValueError: ops: scan: the description's counts disagree with its cell")
-    var want = 1 + n_state + (1 if has_lengths else 0) + n_params
+    scan_check_cell(cell)
+    var got = ScanCell()
+    _split_nodes(cell, got.node_ints, got.node_fs)
+    for k in range(cell.n_nodes()):  # driver-loop: over cell nodes (dropout ones), once per decoded node
+        if cell.code[k] == _SCAN_DROPOUT_CODE and len(got.node_ints[k]) >= 3:
+            got.drop_nodes.append(k)
+            got.drop_seed.append((UInt64(got.node_ints[k][1]) << 32) | UInt64(got.node_ints[k][0] & 0xFFFFFFFF))
+    got.cell = cell^
+    got.n_state = n_state
+    got.reverse = reverse
+    got.has_lengths = has_lengths
+    got.n_params = n_params
+    got.fingerprint = scan_key_of(ints)
+    got.n_ints = len(ints)
+    got.n_fs = len(fs)
+    return got^
+
+
+def scan_call_key(ints: List[Int], cell: ScanCell, n_handles: Int) raises -> Int:
+    """Per call: the handle count against the decoded cell, and this call's RNG key (the node's last word)."""
+    var want = 1 + cell.n_state + (1 if cell.has_lengths else 0) + cell.n_params
     if n_handles != want:
         raise Error("ValueError: ops: scan takes " + String(want) + " tensors (xs, the state tensors, "
-                    + ("lengths, " if has_lengths else "") + "the cell's parameters); got " + String(n_handles))
+                    + ("lengths, " if cell.has_lengths else "") + "the cell's parameters); got " + String(n_handles))
     var key = ints[len(ints) - 1]
     if key < 0:
         raise Error("ValueError: ops: scan: a damaged scan description (negative key)")
-    return ScanSpec(cell^, n_state, reverse, has_lengths, n_params, key)
+    return key

@@ -1,8 +1,8 @@
 diff --git a/autograd/nn_scan.mojo b/autograd/nn_scan.mojo
-index 8bf9e19282..3ce8cbc6ec 100644
+index 4532633919..b5fd836af5 100644
 --- a/autograd/nn_scan.mojo
 +++ b/autograd/nn_scan.mojo
-@@ -56,7 +56,7 @@ comptime SCAN_SABOTAGE_INIT_GRAD = is_defined["MOJOLEARN_NN_SCAN_SABOTAGE_INIT_G
+@@ -65,7 +65,7 @@ comptime SCAN_SABOTAGE_INIT_GRAD = is_defined["MOJOLEARN_NN_SCAN_SABOTAGE_INIT_G
  comptime SCAN_SABOTAGE_INIT_GRAD_HOST = is_defined["MOJOLEARN_NN_SCAN_SABOTAGE_INIT_GRAD_HOST"]()
  #   DROP_KEY: a dropout inside the cell reuses its captured seed at every step and every key (the masks repeat).
  comptime SCAN_SABOTAGE_DROP_KEY = is_defined["MOJOLEARN_NN_SCAN_SABOTAGE_DROP_KEY"]()
@@ -10,4 +10,4 @@ index 8bf9e19282..3ce8cbc6ec 100644
 +comptime SCAN_SABOTAGE_DROP_KEY_HOST = True  # SABOTAGE: a dropout in the cell reuses its captured seed on the host
  
  
- struct ScanSpec(Movable):
+ struct ScanCell(Movable):

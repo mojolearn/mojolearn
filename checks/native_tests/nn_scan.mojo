@@ -23,7 +23,12 @@ after another on DeviceExec, which shares one device context):
      same output); the same key gives the same words (a resumed fit continues the stream); key 1 gives other
      masks (consecutive minibatches differ); the masks do not depend on the sequence length (step t of a 4-step
      and of a 2-step call with one key agree) and do not collide across lengths (key 0 step 2 of 4 steps differs
-     from key 1 step 0 of 2 steps, which a linear offset (key * steps + t) would make equal).
+     from key 1 step 0 of 2 steps, which a linear offset (key * steps + t) would make equal);
+  5  the cell is decoded once per session (lane fable-followups, 2026-11-25): the same scan called 20 times with
+     20 keys gives the same words and adds no decoded cell after the first call (the check counts the session's
+     ScanCache entries before and after every call: a parse is the only thing that adds one); a reverse scan of the
+     same cell is a second node (one more entry); a captured program holding the scan run 10 times adds none; a
+     node whose fingerprint words do not match its description is refused by name.
 """
 from std.math import tanh, exp, isfinite
 from std.memory import bitcast
@@ -37,11 +42,12 @@ from core.hostptr import f32_ptr
 from autograd.ops_api import OpsSession
 from autograd.program import OpsProgram, program_words, program_from_words
 from autograd.nn_scan_frontend import scan_session
+from autograd.nn_scan import OPS_SCAN, scan_encode
 from checks.native_tests.ops_higher_common import tensor, values, gradient
 from checks.native_tests.sequence_port_common import normal
 from checks.native_tests.testsuite_cases import check_cases, check_cases_serial, CPU_COLUMN_BUILD, require
 
-comptime NN_SCAN_UNITS = 5
+comptime NN_SCAN_UNITS = 6
 
 comptime _MATMUL = 1
 comptime _ADD = 2
@@ -515,6 +521,64 @@ def run_dropout_unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E]) raise
     require(apart, "key 0 step 2 (4 steps) and key 1 step 0 (2 steps) share a dropout mask")
 
 
+# ---------------------------------------------------------------- unit 5: the cell is decoded once per session
+def run_cache_unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E]) raises:
+    var a = tensor(c, _draw(_LD, 0x5C51, 0.5), [1, _LD])
+    var cell = c.program(_linear_cell(c, a))
+    var xv = _draw(_LT * _B * _LD, 0x5C52, 1.0)
+    var h0v = _draw(_B * _LD, 0x5C53, 1.0)
+    var xs = tensor(c, xv, [_LT, _B, _LD])
+    var h0 = tensor(c, h0v, [_B, _LD])
+    var states: List[Int] = [h0]
+    var base = len(c.scans.cells)
+    var first = values(c, scan_session(c, cell, xs, states, 0, cell.params, False)[0], [_LT, _B, _LD])
+    require(len(c.scans.cells) == base + 1, "the first scan call did not decode its cell once")
+    var parses = 0
+    for call in range(20):  # small-loop(check calls: the same scan, a new key each call)
+        var before = len(c.scans.cells)
+        var got = values(c, scan_session(c, cell, xs, states, 0, cell.params, False, call)[0], [_LT, _B, _LD])
+        if len(c.scans.cells) != before:
+            parses += 1
+        _same("the same scan called again", got, first)
+    require(parses == 0, "the same scan re-parsed its cell on " + String(parses) + " of 20 calls")
+    var back = scan_session(c, cell, xs, states, 0, cell.params, True)
+    require(len(c.scans.cells) == base + 2, "a reverse scan of the same cell is not its own decoded node")
+    # A captured program holding the (reverse) scan, replayed: no further decode.
+    var ins: List[Int] = [xs, h0]
+    var outs: List[Int] = [back[0], back[1]]
+    var outer = c.capture(ins, outs)
+    var srcs = List[CastIn]()
+    srcs.append(CastIn.f32_c(Int(xv.unsafe_ptr()), _LT * _B, _LD))
+    srcs.append(CastIn.f32_c(Int(h0v.unsafe_ptr()), _B, _LD))
+    var y = List[Float32](length=_LT * _B * _LD, fill=0)
+    var h = List[Float32](length=_B * _LD, fill=0)
+    var before = len(c.scans.cells)
+    for _round in range(10):  # small-loop(check replays)
+        var dsts = List[FP]()
+        dsts.append(f32_ptr(Int(y.unsafe_ptr())))
+        dsts.append(f32_ptr(Int(h.unsafe_ptr())))
+        c.run_program(outer, srcs, dsts)
+    _ = len(xv)
+    _ = len(h0v)
+    _ = len(y)
+    _ = len(h)
+    require(len(c.scans.cells) == before, "a replayed program re-parsed its scan's cell")
+    # A node whose fingerprint does not match its words is refused.
+    var words = scan_encode(cell, False, False, 0)
+    var bad = words[0].copy()
+    bad[1] = bad[1] ^ 1
+    var hs: List[Int] = [xs, h0]
+    for j in range(len(cell.params)):  # small-loop(the cell's parameters)
+        hs.append(cell.params[j])
+    var refused = String("")
+    try:
+        _ = c.op(OPS_SCAN, hs, bad, words[1])
+    except err:
+        refused = String(err)
+    if "fingerprint does not match" not in refused:
+        _fail("scan: a damaged fingerprint was not refused; got '" + refused + "'")
+
+
 # ---------------------------------------------------------------- the columns
 def _unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E], mut s: OpsSession[E], mut z: OpsSession[E],
                                          unit: Int) raises:
@@ -526,6 +590,8 @@ def _unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E], mut s: OpsSessio
         run_capture_unit(c)
     elif unit == 4:
         run_dropout_unit(c)
+    elif unit == 5:
+        run_cache_unit(c)
     else:
         run_refusal_unit(c)
 
