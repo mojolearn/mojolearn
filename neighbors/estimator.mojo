@@ -2083,6 +2083,7 @@ def knn_classifier_predict_resident(
     fold_base: Int = -1,
     fold_base_rows: Int = 0,
     fold_index: Int = -1,
+    index_zero_row: Int = -2,
 ) raises -> Int:
     """Reads the device plan once and runs the planned overload below."""
     return knn_classifier_predict_resident(
@@ -2112,6 +2113,7 @@ def knn_classifier_predict_resident(
         fold_base,
         fold_base_rows,
         fold_index,
+        index_zero_row=index_zero_row,
     )
 
 
@@ -2222,6 +2224,7 @@ def knn_regressor_predict_resident(
     fold_base: Int = -1,
     fold_base_rows: Int = 0,
     fold_index: Int = -1,
+    index_zero_row: Int = -2,
 ) raises -> Int:
     """Reads the device plan once and runs the planned overload below."""
     return knn_regressor_predict_resident(
@@ -2246,6 +2249,7 @@ def knn_regressor_predict_resident(
         fold_base,
         fold_base_rows,
         fold_index,
+        index_zero_row=index_zero_row,
     )
 
 

@@ -393,14 +393,14 @@ def vocab_gpu_load(a: MutPointer[Int, MutUntrackedOrigin], p: MutPointer[Int, Mu
     var table = VocabGpuTable(ctx, a[0], p[0], a[1], a[2], p[1], a[3], p[2], p[3], a[4], p[4], a[5], a[6],
                               a[7], p[5], a[8], p[6], p[7])
     var slot = alloc[VocabGpuTable](1)
-    slot.init_pointee_move(table^)
+    slot.unsafe_write(table^)
     return Int(slot)
 
 
 def vocab_gpu_free(handle: Int) raises:
     """TOK_GPU_OP_VOCAB_FREE: the device buffers and the table released."""
     var table = _table(handle)
-    table.destroy_pointee()
+    table.unsafe_deinit_pointee()
     table.free()
 
 
