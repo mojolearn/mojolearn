@@ -693,8 +693,7 @@ def rf_host_fit_dart(params: ForestFitArgs) raises -> Int:
         var cols_a = params.y
         # held for this member fit (the registry's lock word covers the
         # lookup only; lane fx-gil)
-        var dreg = DART_HOST_SESSIONS.get_or_create_ptr()
-        var dsess = dreg[].lease(hid)
+        var dsess = DART_HOST_SESSIONS.lease(hid)
         var n = dsess[].n
         var d = dsess[].d
         var k = dsess[].k

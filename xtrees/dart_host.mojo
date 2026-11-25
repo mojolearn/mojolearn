@@ -18,8 +18,8 @@ from xtrees.dart_units import (
     dart_apply_unit, dart_leaf_sum_unit, dart_leaf_sum_rows_unit, dart_newton_unit, dart_add_unit, U64P,
     dart_predict_unit,
 )
-from std.memory import bitcast, ArcPointer
-from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from std.memory import bitcast
+from xtrees.dart_handles import DartHandles
 from core.host_finite_scan import host_all_finite_f32
 from ensemble.nan_refusal import RF_NONFINITE_REFUSAL
 
@@ -43,7 +43,6 @@ def _hu16(mut v: List[UInt16]) -> U16P:
 
 
 struct DartHostSession(Movable):
-    var id: Int
     var n: Int
     var d: Int
     var k: Int
@@ -65,10 +64,8 @@ struct DartHostSession(Movable):
     var part: List[Float32]
 
     def __init__(
-        out self, id: Int, n: Int, d: Int, k: Int, kind: Int, cap_iters: Int, node_cap: Int, n_chunks: Int,
-        x_addr: Int,
+        out self, n: Int, d: Int, k: Int, kind: Int, cap_iters: Int, node_cap: Int, n_chunks: Int, x_addr: Int,
     ):
-        self.id = id
         self.n = n
         self.d = d
         self.k = k
@@ -92,61 +89,13 @@ struct DartHostSession(Movable):
         self.part = List[Float32](length=n_chunks * node_cap * 2, fill=0.0)
 
 
-struct DartHostRegistry(Defaultable, Movable):
-    """The open host DART sessions. `lock` guards the list and `next_id` for one list step
-    (mint, keep, lease, retire); an operation holds its entry by a copy of
-    the `ArcPointer` and launches with no lock, so nothing here relies on
-    the GIL (lane fx-gil, 2026-11-21: a bare List another thread's open
-    could reallocate under a running round)."""
-    var lock: List[Int64]
-    var sessions: List[ArcPointer[DartHostSession]]
-    var next_id: Int
-
-    def __init__(out self):
-        self.lock = List[Int64](length=1, fill=Int64(0))
-        self.sessions = List[ArcPointer[DartHostSession]]()
-        self.next_id = 1
-
-    def mint(mut self) -> Int:
-        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
-        shared_slot_lock(word)
-        var id = self.next_id
-        self.next_id += 1
-        shared_slot_unlock(word)
-        return id
-
-    def keep(mut self, entry: ArcPointer[DartHostSession]):
-        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
-        shared_slot_lock(word)
-        self.sessions.append(entry.copy())
-        shared_slot_unlock(word)
-
-    def lease(mut self, id: Int) raises -> ArcPointer[DartHostSession]:
-        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
-        shared_slot_lock(word)
-        try:
-            for i in range(len(self.sessions)):  # small-loop(live handles): a handle lookup over live fits
-                if self.sessions[i][].id == id:
-                    return self.sessions[i].copy()
-            raise Error("x_trees dart: unknown or closed session handle")
-        finally:
-            shared_slot_unlock(word)
-
-    def retire(mut self, id: Int) raises -> ArcPointer[DartHostSession]:
-        """The entry leaves the registry; it is freed when the caller and
-        every operation still holding it let go."""
-        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
-        shared_slot_lock(word)
-        try:
-            for i in range(len(self.sessions)):  # small-loop(live handles): a handle lookup over live fits
-                if self.sessions[i][].id == id:
-                    return self.sessions.pop(i)
-            raise Error("x_trees dart: unknown or closed session handle")
-        finally:
-            shared_slot_unlock(word)
-
-
-comptime DART_HOST_SESSIONS = SharedSlot[DartHostRegistry, "MojolearnXTreesDartHostSessionsV2", 2]
+#: The open host DART sessions (xtrees/dart_handles.mojo: the table read
+#: through its pointer after the lock, the id minted with the keep; lane
+#: gd-dart-threads, 2026-11-25. V2 was `DartHostRegistry`, whose methods read
+#: `next_id` and the list through `self`, possibly before the lock).
+comptime DART_HOST_SESSIONS = DartHandles[
+    DartHostSession, "MojolearnXTreesDartHostSessionsV3", 3, "x_trees dart: unknown or closed session handle"
+]
 
 
 def dart_open(
@@ -164,19 +113,17 @@ def dart_open(
         if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x_addr), n * d):
             raise Error("x_trees dart_open: " + RF_NONFINITE_REFUSAL)
         var n_chunks = (n + DART_CHUNK - 1) // DART_CHUNK
-        var reg = DART_HOST_SESSIONS.get_or_create_ptr()
-        var id = reg[].mint()
-        var sess = ArcPointer[DartHostSession](DartHostSession(id, n, d, k, kind, cap_iters, node_cap, n_chunks, x_addr))
-        reg[].keep(sess)
+        # filled before it is kept: no other thread sees it half made
+        var sess = DartHostSession(n, d, k, kind, cap_iters, node_cap, n_chunks, x_addr)
         var ysrc = F32P(unsafe_from_address=y_addr)
-        var yp = _hf(sess[].y)
+        var yp = _hf(sess.y)
         for i in range(n):
             yp[i] = ysrc[i]
         var inits = F32P(unsafe_from_address=inits_addr)
-        var sp = _hf(sess[].score)
+        var sp = _hf(sess.score)
         for e in range(k * n):
             dart_init_unit(e, n, inits, sp)
-        return id
+        return DART_HOST_SESSIONS.add(sess^)
     else:
         raise Error("x_trees dart_open: built without the host DART round (MOJOLEARN_IDN_DART_DEVICE_OFF)")
 
@@ -191,8 +138,7 @@ def dart_step(
     rf binding's `rf_regressor_fit_dart_export`), the flags and the bad word
     to the caller."""
     comptime if DART_HOST:
-        var reg = DART_HOST_SESSIONS.get_or_create_ptr()
-        var sess = reg[].lease(id)
+        var sess = DART_HOST_SESSIONS.lease(id)
         var n = sess[].n
         var k = sess[].k
         # box-run-2-dart-host (2026-10-05): cpu4-forest (820fd9928) moved the
@@ -245,8 +191,7 @@ def dart_add(
     only, chunked over the list positions in list order (the device's
     `dart_leaf_sum_rows_unit`, the same units in the same order)."""
     comptime if DART_HOST:
-        var reg = DART_HOST_SESSIONS.get_or_create_ptr()
-        var sess = reg[].lease(id)
+        var sess = DART_HOST_SESSIONS.lease(id)
         var n = sess[].n
         var k = sess[].k
         var d = sess[].d
@@ -298,14 +243,12 @@ def dart_add(
 def dart_close(id: Int, bad_out: Int) raises:
     """Write the bad word and free the session."""
     comptime if DART_HOST:
-        var reg = DART_HOST_SESSIONS.get_or_create_ptr()
-        var sess = reg[].lease(id)
+        # out of the table first, then its bad word (one locked step, not a
+        # lease and a retire)
+        var gone = DART_HOST_SESSIONS.retire(id)
         var bo = I32P(unsafe_from_address=bad_out)
-        var bad = _hi(sess[].bad)
-        bo[0] = bad[0]
-        var gone = reg[].retire(id)
+        bo[0] = gone[].bad[0]
         _ = gone^
-        _ = sess^
     else:
         raise Error("x_trees dart_close: built without the host DART round (MOJOLEARN_IDN_DART_DEVICE_OFF)")
 
