@@ -255,8 +255,11 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("x-prep-variance-threshold-fit-transform")
 def _(ml, X, yc, yr, Xh=None):
-    T = ml.VarianceThreshold(threshold=0.3).fit_transform(np.ascontiguousarray(X[:4096]))
-    return _fit(dict(fit_transform=_m_transform_h(T)))
+    # lane w3-fix-9-s5 (2026-11-25): the selected columns are input words copied through, so no fault in the
+    # computation can move them; the fitted variances the selection was made from is digested too.
+    vt = ml.VarianceThreshold(threshold=0.3)
+    T = vt.fit_transform(np.ascontiguousarray(X[:4096]))
+    return _fit(dict(fit_transform=_m_transform_h(T), variances=_h(vt.variances_)))
 
 
 @lane("x-prep-simple-imputer-fit-transform")
@@ -334,7 +337,11 @@ def _(ml, X, yc, yr, Xh=None):
     Xs, y3 = X[:1200, :6], _prep_three_class(X, yr)[:1200]
     Xm = np.array(Xs, dtype=np.float32)
     Xm[:, :3] = _prep_categorical(Xs[:, :3])
-    return _fit(dict(fit_transform=_m_transform_h(ml.SelectKBest(ml.mutual_info_classif, k=3).fit_transform(Xm, y3))))
+    # lane w3-fix-9-s5 (2026-11-25): the selected columns are input words copied through, so no fault in the
+    # computation can move them; the fitted mutual-information scores the selection was made from is digested too.
+    sel = ml.SelectKBest(ml.mutual_info_classif, k=3)
+    T = sel.fit_transform(Xm, y3)
+    return _fit(dict(fit_transform=_m_transform_h(T), scores=_h(sel.scores_)))
 
 
 @lane("x-prep-score-edges-rfe-fit-transform")
@@ -343,9 +350,11 @@ def _(ml, X, yc, yr, Xh=None):
     on 2048 rows."""
     Z = np.ascontiguousarray(X[:2048])
     y3 = _prep_three_class(Z, yr[:2048])
-    T = ml.RFE(ml.LinearDiscriminantAnalysis(), n_features_to_select=5, step=3,
-               importance_getter="coef_").fit_transform(Z, y3)
-    return _fit(dict(fit_transform=_m_transform_h(T)))
+    # lane w3-fix-9-s5 (2026-11-25): the selected columns are input words copied through, so no fault in the
+    # computation can move them; the fitted final estimator's coefficients the selection was made from is digested too.
+    rfe = ml.RFE(ml.LinearDiscriminantAnalysis(), n_features_to_select=5, step=3, importance_getter="coef_")
+    T = rfe.fit_transform(Z, y3)
+    return _fit(dict(fit_transform=_m_transform_h(T), coef=_h(rfe.estimator_.coef_)))
 
 
 @lane("x-prep-iterative-imputer-fit")

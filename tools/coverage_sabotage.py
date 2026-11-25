@@ -191,15 +191,23 @@ def _changed_parts(a, b, limit=8):
     return " (parts: " + ", ".join(str(n) for n in names[:limit]) + more + ")"
 
 
+#: the longest error line `_unstable_reason` keeps
+_REASON_CHARS = 4000
+
+
 def _unstable_reason(cell, repeats):
-    """One short phrase for a cell `_stable` rejects: its verdict and the first
-    line of its error, probe error or first oracle error."""
+    """One phrase for a cell `_stable` rejects: its verdict and the first line
+    of its error, probe error or first oracle error. The line is kept up to
+    `_REASON_CHARS`: a lane that collects its failures (check-generic-*
+    joins every failing class into one AssertionError line) is named whole in
+    check_<arm>.txt; the old 160-character cut left gate 9 with
+    "AssertionError: check-generic-" and no class (lane w3-fix-9-s5)."""
     for field in ("error", "probe_error"):
         if cell.get(field):
-            return f"verdict {cell.get('verdict')}, {field}: {str(cell[field]).splitlines()[0][:160]}"
+            return f"verdict {cell.get('verdict')}, {field}: {str(cell[field]).splitlines()[0][:_REASON_CHARS]}"
     errors = [e for e in (cell.get("oracle_errors") or []) if e]
     if errors:
-        return f"verdict {cell.get('verdict')}, oracle error: {str(errors[0]).splitlines()[0][:160]}"
+        return f"verdict {cell.get('verdict')}, oracle error: {str(errors[0]).splitlines()[0][:_REASON_CHARS]}"
     return f"verdict {cell.get('verdict')}, {len(cell.get('hashes') or [])} of {repeats} hashes or an unstable part"
 
 

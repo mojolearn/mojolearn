@@ -573,8 +573,10 @@ def _(ml, X, yc, yr, Xh=None):
     Z, yc, yr = X[:rows], yc[:rows], yr[:rows]
     y3 = _prep_three_class(Z, yr)
     m = ml.RFE(ml.LinearDiscriminantAnalysis(), n_features_to_select=5, step=3).fit(Z, y3)
+    # lane w3-fix-9-s5 (2026-11-25): ranking, support, labels and the copied columns are integer or input words, so
+    # no fault in the computation moved the lane; the final estimator's coefficients are digested too.
     parts = dict(ranking=_h(m.ranking_), support=_h(np.array(m.support_)), predict=_h(m.predict(Z[:256])),
-                 transform=_h(m.transform(Z[:256])))
+                 transform=_h(m.transform(Z[:256])), coef=_h(m.estimator_.coef_))
     return _fit(parts, m, lambda e: (e.predict(Xh[:256]), e.transform(Xh[:256])))
 
 
