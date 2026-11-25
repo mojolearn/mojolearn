@@ -349,7 +349,7 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     "nn-cbw-custom-vjp": "Session: custom_op / custom with a user-defined backward rule",
     "ops-batch-source-resume": "Program.fit(source=): streamed shard batches, a mid-epoch save_training, a fresh-process load_training",
     # session-ops-verify begin
-    "ops-composed-cases": "Session, Program: composed models from data cases (tape, replay, accumulation, groups, scan, tagger)",
+    "ops-composed-cases": "Session, Program: composed models from data cases (tape, replay, accumulation, groups, scan, tagger, checkpoint)",
     # session-ops-verify end
     # session-ops-resize begin
     "ops-resize": "Session: interpolate, pixel_shuffle, pixel_unshuffle, pad reflect / replicate",

@@ -243,6 +243,9 @@ Session.segment_max	not yet in a release verification
 # nn-blocks-scan begin
 Session.scan	nn-blocks-scan scan over a captured cell: not yet in a release verification
 # nn-blocks-scan end
+# activation-ckpt begin
+Session.checkpoint	activation-ckpt checkpointed segment (recompute in the backward): not compiled or run yet
+# activation-ckpt end
 # nn-blocks-cbw begin
 Session.custom_op	nn-blocks-cbw user-defined backward rule: not yet in a release verification
 Session.custom	nn-blocks-cbw user-defined backward rule: not yet in a release verification

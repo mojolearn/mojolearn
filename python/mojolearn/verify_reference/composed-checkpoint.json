@@ -1,0 +1,1620 @@
+{
+ "schema": "mojolearn.composed-cases.v1",
+ "about": "Activation checkpointing (lane activation-ckpt): Session.checkpoint and Session.scan(checkpoint_every=k) against the plain forms, eager and through Program.fit. The checkpointed runs must equal the plain runs bit for bit (autograd/nn_ckpt.mojo). Sabotage arms coverage-autograd-nn_ckpt_{fresh_mask,skip_node}_{gpu,cpu}: each faults the recompute on one side, so every `same` check of these cases REFUSES on that side.",
+ "cases": [
+  {
+   "name": "checkpoint-segment",
+   "about": "Session.checkpoint: a segment of two tanh layers with a dropout between them (and the same segment returning its hidden layer too), three calls in a chain (keys 4, 5, 6), its first weight also read by the loss before and after the segments. The plain form (recompute=False, every node on the tape) against the checkpointed form (the backward recomputes each segment): the loss, the outputs and every gradient must be the same bytes. Part segment: the checkpointed values and gradients.",
+   "data": {
+    "x": {
+     "hashed": [
+      4,
+      3
+     ],
+     "lo": -1.0,
+     "hi": 1.0
+    },
+    "x0": {
+     "zeros": [
+      4,
+      3
+     ]
+    },
+    "w1": {
+     "hashed": [
+      3,
+      5
+     ],
+     "lo": -0.6,
+     "hi": 0.6
+    },
+    "w2": {
+     "hashed": [
+      5,
+      3
+     ],
+     "lo": -0.6,
+     "hi": 0.6
+    },
+    "cy": {
+     "hashed": [
+      4,
+      3
+     ],
+     "lo": -1.0,
+     "hi": 1.0
+    },
+    "ch": {
+     "hashed": [
+      4,
+      5
+     ],
+     "lo": -1.0,
+     "hi": 1.0
+    },
+    "d1": {
+     "hashed": [
+      3,
+      5
+     ],
+     "lo": -1.0,
+     "hi": 1.0
+    },
+    "d2": {
+     "hashed": [
+      3,
+      5
+     ],
+     "lo": -1.0,
+     "hi": 1.0
+    }
+   },
+   "do": [
+    {
+     "op": "let",
+     "as": "init",
+     "value": {
+      "w1": "@w1",
+      "w2": "@w2"
+     }
+    },
+    {
+     "op": "def",
+     "name": "segment",
+     "do": [
+      {
+       "op": "call",
+       "fn": "S.tensor",
+       "args": [
+        "@x0"
+       ],
+       "as": "sx"
+      },
+      {
+       "op": "call",
+       "fn": "S.matmul",
+       "args": [
+        "@sx",
+        "@sw.w1"
+       ],
+       "as": "sm1"
+      },
+      {
+       "op": "call",
+       "fn": "S.tanh",
+       "args": [
+        "@sm1"
+       ],
+       "as": "sh"
+      },
+      {
+       "op": "call",
+       "fn": "S.dropout",
+       "args": [
+        "@sh",
+        0.25
+       ],
+       "kw": {
+        "seed": 11,
+        "counter": 0
+       },
+       "as": "sd"
+      },
+      {
+       "op": "call",
+       "fn": "S.matmul",
+       "args": [
+        "@sd",
+        "@sw.w2"
+       ],
+       "as": "sm2"
+      },
+      {
+       "op": "call",
+       "fn": "S.tanh",
+       "args": [
+        "@sm2"
+       ],
+       "as": "sy"
+      },
+      {
+       "op": "call",
+       "fn": "S.capture",
+       "kw": {
+        "inputs": [
+         "@sx"
+        ],
+        "outputs": [
+         "@sy"
+        ]
+       },
+       "as": "seg"
+      },
+      {
+       "op": "call",
+       "fn": "S.capture",
+       "kw": {
+        "inputs": [
+         "@sx"
+        ],
+        "outputs": [
+         "@sy",
+         "@sh"
+        ]
+       },
+       "as": "seg2"
+      }
+     ]
+    },
+    {
+     "op": "def",
+     "name": "train",
+     "do": [
+      {
+       "op": "map",
+       "fn": "s.tensor",
+       "over": "@init",
+       "kw": {
+        "requires_grad": true
+       },
+       "as": "p"
+      },
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@x"
+       ],
+       "kw": {
+        "requires_grad": true
+       },
+       "as": "xh"
+      },
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@cy"
+       ],
+       "as": "cyh"
+      },
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@ch"
+       ],
+       "as": "chh"
+      },
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@d1"
+       ],
+       "as": "d1h"
+      },
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@d2"
+       ],
+       "as": "d2h"
+      },
+      {
+       "op": "call",
+       "fn": "s.mul",
+       "args": [
+        "@p.w1",
+        "@d1h"
+       ],
+       "as": "before_m"
+      },
+      {
+       "op": "call",
+       "fn": "s.sum",
+       "args": [
+        "@before_m"
+       ],
+       "as": "before"
+      },
+      {
+       "op": "call",
+       "fn": "s.checkpoint",
+       "args": [
+        "@seg",
+        "@xh"
+       ],
+       "kw": {
+        "params": [
+         "@p.w1",
+         "@p.w2"
+        ],
+        "counter": 4,
+        "recompute": "@recompute"
+       },
+       "as": "y1"
+      },
+      {
+       "op": "call",
+       "fn": "s.checkpoint",
+       "args": [
+        "@seg",
+        "@y1"
+       ],
+       "kw": {
+        "params": [
+         "@p.w1",
+         "@p.w2"
+        ],
+        "counter": 5,
+        "recompute": "@recompute"
+       },
+       "as": "y2"
+      },
+      {
+       "op": "call",
+       "fn": "s.checkpoint",
+       "args": [
+        "@seg2",
+        "@y2"
+       ],
+       "kw": {
+        "params": [
+         "@p.w1",
+         "@p.w2"
+        ],
+        "counter": 6,
+        "recompute": "@recompute"
+       },
+       "as": [
+        "y3",
+        "h3"
+       ]
+      },
+      {
+       "op": "call",
+       "fn": "s.mul",
+       "args": [
+        "@y3",
+        "@cyh"
+       ],
+       "as": "ly_m"
+      },
+      {
+       "op": "call",
+       "fn": "s.sum",
+       "args": [
+        "@ly_m"
+       ],
+       "as": "ly"
+      },
+      {
+       "op": "call",
+       "fn": "s.mul",
+       "args": [
+        "@h3",
+        "@chh"
+       ],
+       "as": "lh_m"
+      },
+      {
+       "op": "call",
+       "fn": "s.sum",
+       "args": [
+        "@lh_m"
+       ],
+       "as": "lh"
+      },
+      {
+       "op": "call",
+       "fn": "s.mul",
+       "args": [
+        "@p.w1",
+        "@d2h"
+       ],
+       "as": "after_m"
+      },
+      {
+       "op": "call",
+       "fn": "s.sum",
+       "args": [
+        "@after_m"
+       ],
+       "as": "after"
+      },
+      {
+       "op": "call",
+       "fn": "s.add",
+       "args": [
+        "@before",
+        "@ly"
+       ],
+       "as": "l1"
+      },
+      {
+       "op": "call",
+       "fn": "s.add",
+       "args": [
+        "@l1",
+        "@lh"
+       ],
+       "as": "l2"
+      },
+      {
+       "op": "call",
+       "fn": "s.add",
+       "args": [
+        "@l2",
+        "@after"
+       ],
+       "as": "loss"
+      },
+      {
+       "op": "call",
+       "fn": "s.backward",
+       "args": [
+        "@loss"
+       ]
+      },
+      {
+       "op": "read",
+       "fn": "s.numpy",
+       "of": {
+        "loss": "@loss",
+        "y3": "@y3",
+        "h3": "@h3"
+       },
+       "as": "v"
+      },
+      {
+       "op": "read",
+       "fn": "s.grad",
+       "of": {
+        "p": "@p",
+        "x": "@xh"
+       },
+       "as": "g"
+      }
+     ]
+    },
+    {
+     "op": "session",
+     "as": "c",
+     "do": [
+      {
+       "op": "map",
+       "fn": "c.tensor",
+       "over": "@init",
+       "as": "sw"
+      },
+      {
+       "op": "use",
+       "name": "segment",
+       "with": {
+        "S": "@c"
+       }
+      },
+      {
+       "op": "session",
+       "as": "s",
+       "record": true,
+       "do": [
+        {
+         "op": "use",
+         "name": "train",
+         "with": {
+          "recompute": false
+         }
+        },
+        {
+         "op": "let",
+         "as": "vp",
+         "value": "@v"
+        },
+        {
+         "op": "let",
+         "as": "gp",
+         "value": "@g"
+        }
+       ]
+      },
+      {
+       "op": "session",
+       "as": "s",
+       "record": true,
+       "do": [
+        {
+         "op": "use",
+         "name": "train",
+         "with": {
+          "recompute": true
+         }
+        },
+        {
+         "op": "let",
+         "as": "vc",
+         "value": "@v"
+        },
+        {
+         "op": "let",
+         "as": "gc",
+         "value": "@g"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "op": "same",
+     "a": "@vp",
+     "b": "@vc",
+     "what": "checkpointed segments' loss and outputs against the plain form"
+    },
+    {
+     "op": "same",
+     "a": "@gp",
+     "b": "@gc",
+     "what": "checkpointed segments' gradients against the plain form (the recompute or its fold differs)"
+    },
+    {
+     "op": "digest",
+     "part": "segment",
+     "of": [
+      "@vc",
+      "@gc"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "checkpoint-scan",
+   "about": "Session.scan(checkpoint_every=k): a tanh cell with a dropout on its step input that returns its state as its output, 6 steps, forward and reverse, k = 1, 2, 3, 6, against the plain scan; the cell's weight also read by the loss. Every loss, output and gradient (the initial state, xs, W, U, b) must be the same bytes. Part scan: the k = 2 values and gradients, both directions.",
+   "data": {
+    "w": {
+     "hashed": [
+      3,
+      4
+     ],
+     "lo": -0.5,
+     "hi": 0.5
+    },
+    "u": {
+     "hashed": [
+      4,
+      4
+     ],
+     "lo": -0.5,
+     "hi": 0.5
+    },
+    "b": {
+     "hashed": [
+      1,
+      4
+     ],
+     "lo": -0.1,
+     "hi": 0.1
+    },
+    "xs": {
+     "hashed": [
+      6,
+      2,
+      3
+     ],
+     "lo": -1.0,
+     "hi": 1.0
+    },
+    "h0": {
+     "hashed": [
+      2,
+      4
+     ],
+     "lo": -0.5,
+     "hi": 0.5
+    },
+    "cys": {
+     "hashed": [
+      6,
+      2,
+      4
+     ],
+     "lo": -1.0,
+     "hi": 1.0
+    },
+    "dh": {
+     "hashed": [
+      2,
+      4
+     ],
+     "lo": -1.0,
+     "hi": 1.0
+    },
+    "ew": {
+     "hashed": [
+      3,
+      4
+     ],
+     "lo": -1.0,
+     "hi": 1.0
+    },
+    "h00": {
+     "zeros": [
+      2,
+      4
+     ]
+    },
+    "x00": {
+     "zeros": [
+      2,
+      3
+     ]
+    }
+   },
+   "do": [
+    {
+     "op": "let",
+     "as": "init",
+     "value": {
+      "w": "@w",
+      "u": "@u",
+      "b": "@b"
+     }
+    },
+    {
+     "op": "def",
+     "name": "cell",
+     "do": [
+      {
+       "op": "call",
+       "fn": "S.tensor",
+       "args": [
+        "@h00"
+       ],
+       "as": "ceh"
+      },
+      {
+       "op": "call",
+       "fn": "S.tensor",
+       "args": [
+        "@x00"
+       ],
+       "as": "cx"
+      },
+      {
+       "op": "call",
+       "fn": "S.dropout",
+       "args": [
+        "@cx",
+        0.25
+       ],
+       "kw": {
+        "seed": 13,
+        "counter": 0
+       },
+       "as": "cd"
+      },
+      {
+       "op": "call",
+       "fn": "S.matmul",
+       "args": [
+        "@cd",
+        "@cw.w"
+       ],
+       "as": "cm1"
+      },
+      {
+       "op": "call",
+       "fn": "S.matmul",
+       "args": [
+        "@ceh",
+        "@cw.u"
+       ],
+       "as": "cm2"
+      },
+      {
+       "op": "call",
+       "fn": "S.add",
+       "args": [
+        "@cm1",
+        "@cm2"
+       ],
+       "as": "ca1"
+      },
+      {
+       "op": "call",
+       "fn": "S.add",
+       "args": [
+        "@ca1",
+        "@cw.b"
+       ],
+       "as": "ca2"
+      },
+      {
+       "op": "call",
+       "fn": "S.tanh",
+       "args": [
+        "@ca2"
+       ],
+       "as": "ceh2"
+      },
+      {
+       "op": "call",
+       "fn": "S.capture",
+       "kw": {
+        "inputs": [
+         "@ceh",
+         "@cx"
+        ],
+        "outputs": [
+         "@ceh2",
+         "@ceh2"
+        ]
+       },
+       "as": "cell"
+      }
+     ]
+    },
+    {
+     "op": "def",
+     "name": "train",
+     "do": [
+      {
+       "op": "map",
+       "fn": "s.tensor",
+       "over": "@init",
+       "kw": {
+        "requires_grad": true
+       },
+       "as": "p"
+      },
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@xs"
+       ],
+       "kw": {
+        "requires_grad": true
+       },
+       "as": "xsh"
+      },
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@h0"
+       ],
+       "kw": {
+        "requires_grad": true
+       },
+       "as": "h0h"
+      },
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@cys"
+       ],
+       "as": "cyh"
+      },
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@dh"
+       ],
+       "as": "dhh"
+      },
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@ew"
+       ],
+       "as": "ewh"
+      },
+      {
+       "op": "call",
+       "fn": "s.scan",
+       "args": [
+        "@cell",
+        "@xsh",
+        "@h0h"
+       ],
+       "kw": {
+        "params": [
+         "@p.w",
+         "@p.u",
+         "@p.b"
+        ],
+        "reverse": "@reverse",
+        "counter": 2,
+        "checkpoint_every": "@every"
+       },
+       "as": [
+        "ys",
+        "hT"
+       ]
+      },
+      {
+       "op": "call",
+       "fn": "s.mul",
+       "args": [
+        "@ys",
+        "@cyh"
+       ],
+       "as": "ly_m"
+      },
+      {
+       "op": "call",
+       "fn": "s.sum",
+       "args": [
+        "@ly_m"
+       ],
+       "as": "ly"
+      },
+      {
+       "op": "call",
+       "fn": "s.mul",
+       "args": [
+        "@hT",
+        "@dhh"
+       ],
+       "as": "lh_m"
+      },
+      {
+       "op": "call",
+       "fn": "s.sum",
+       "args": [
+        "@lh_m"
+       ],
+       "as": "lh"
+      },
+      {
+       "op": "call",
+       "fn": "s.mul",
+       "args": [
+        "@p.w",
+        "@ewh"
+       ],
+       "as": "lw_m"
+      },
+      {
+       "op": "call",
+       "fn": "s.sum",
+       "args": [
+        "@lw_m"
+       ],
+       "as": "lw"
+      },
+      {
+       "op": "call",
+       "fn": "s.add",
+       "args": [
+        "@ly",
+        "@lh"
+       ],
+       "as": "l1"
+      },
+      {
+       "op": "call",
+       "fn": "s.add",
+       "args": [
+        "@l1",
+        "@lw"
+       ],
+       "as": "loss"
+      },
+      {
+       "op": "call",
+       "fn": "s.backward",
+       "args": [
+        "@loss"
+       ]
+      },
+      {
+       "op": "read",
+       "fn": "s.numpy",
+       "of": {
+        "loss": "@loss",
+        "ys": "@ys",
+        "hT": "@hT"
+       },
+       "as": "v"
+      },
+      {
+       "op": "read",
+       "fn": "s.grad",
+       "of": {
+        "p": "@p",
+        "xs": "@xsh",
+        "h0": "@h0h"
+       },
+       "as": "g"
+      }
+     ]
+    },
+    {
+     "op": "session",
+     "as": "c",
+     "do": [
+      {
+       "op": "map",
+       "fn": "c.tensor",
+       "over": "@init",
+       "as": "cw"
+      },
+      {
+       "op": "use",
+       "name": "cell",
+       "with": {
+        "S": "@c"
+       }
+      },
+      {
+       "op": "session",
+       "as": "s",
+       "record": true,
+       "do": [
+        {
+         "op": "use",
+         "name": "train",
+         "with": {
+          "reverse": false,
+          "every": null
+         }
+        },
+        {
+         "op": "let",
+         "as": "vpf",
+         "value": "@v"
+        },
+        {
+         "op": "let",
+         "as": "gpf",
+         "value": "@g"
+        }
+       ]
+      },
+      {
+       "op": "session",
+       "as": "s",
+       "record": true,
+       "do": [
+        {
+         "op": "use",
+         "name": "train",
+         "with": {
+          "reverse": false,
+          "every": 1
+         }
+        },
+        {
+         "op": "let",
+         "as": "vcf1",
+         "value": "@v"
+        },
+        {
+         "op": "let",
+         "as": "gcf1",
+         "value": "@g"
+        }
+       ]
+      },
+      {
+       "op": "session",
+       "as": "s",
+       "record": true,
+       "do": [
+        {
+         "op": "use",
+         "name": "train",
+         "with": {
+          "reverse": false,
+          "every": 2
+         }
+        },
+        {
+         "op": "let",
+         "as": "vcf2",
+         "value": "@v"
+        },
+        {
+         "op": "let",
+         "as": "gcf2",
+         "value": "@g"
+        }
+       ]
+      },
+      {
+       "op": "session",
+       "as": "s",
+       "record": true,
+       "do": [
+        {
+         "op": "use",
+         "name": "train",
+         "with": {
+          "reverse": false,
+          "every": 3
+         }
+        },
+        {
+         "op": "let",
+         "as": "vcf3",
+         "value": "@v"
+        },
+        {
+         "op": "let",
+         "as": "gcf3",
+         "value": "@g"
+        }
+       ]
+      },
+      {
+       "op": "session",
+       "as": "s",
+       "record": true,
+       "do": [
+        {
+         "op": "use",
+         "name": "train",
+         "with": {
+          "reverse": false,
+          "every": 6
+         }
+        },
+        {
+         "op": "let",
+         "as": "vcf6",
+         "value": "@v"
+        },
+        {
+         "op": "let",
+         "as": "gcf6",
+         "value": "@g"
+        }
+       ]
+      },
+      {
+       "op": "session",
+       "as": "s",
+       "record": true,
+       "do": [
+        {
+         "op": "use",
+         "name": "train",
+         "with": {
+          "reverse": true,
+          "every": null
+         }
+        },
+        {
+         "op": "let",
+         "as": "vpr",
+         "value": "@v"
+        },
+        {
+         "op": "let",
+         "as": "gpr",
+         "value": "@g"
+        }
+       ]
+      },
+      {
+       "op": "session",
+       "as": "s",
+       "record": true,
+       "do": [
+        {
+         "op": "use",
+         "name": "train",
+         "with": {
+          "reverse": true,
+          "every": 1
+         }
+        },
+        {
+         "op": "let",
+         "as": "vcr1",
+         "value": "@v"
+        },
+        {
+         "op": "let",
+         "as": "gcr1",
+         "value": "@g"
+        }
+       ]
+      },
+      {
+       "op": "session",
+       "as": "s",
+       "record": true,
+       "do": [
+        {
+         "op": "use",
+         "name": "train",
+         "with": {
+          "reverse": true,
+          "every": 2
+         }
+        },
+        {
+         "op": "let",
+         "as": "vcr2",
+         "value": "@v"
+        },
+        {
+         "op": "let",
+         "as": "gcr2",
+         "value": "@g"
+        }
+       ]
+      },
+      {
+       "op": "session",
+       "as": "s",
+       "record": true,
+       "do": [
+        {
+         "op": "use",
+         "name": "train",
+         "with": {
+          "reverse": true,
+          "every": 3
+         }
+        },
+        {
+         "op": "let",
+         "as": "vcr3",
+         "value": "@v"
+        },
+        {
+         "op": "let",
+         "as": "gcr3",
+         "value": "@g"
+        }
+       ]
+      },
+      {
+       "op": "session",
+       "as": "s",
+       "record": true,
+       "do": [
+        {
+         "op": "use",
+         "name": "train",
+         "with": {
+          "reverse": true,
+          "every": 6
+         }
+        },
+        {
+         "op": "let",
+         "as": "vcr6",
+         "value": "@v"
+        },
+        {
+         "op": "let",
+         "as": "gcr6",
+         "value": "@g"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "op": "same",
+     "a": "@vpf",
+     "b": "@vcf1",
+     "what": "checkpointed scan (forward, checkpoint_every 1) loss and outputs against the plain scan"
+    },
+    {
+     "op": "same",
+     "a": "@gpf",
+     "b": "@gcf1",
+     "what": "checkpointed scan (forward, checkpoint_every 1) gradients against the plain scan (the recompute or the boundary fold differs)"
+    },
+    {
+     "op": "same",
+     "a": "@vpf",
+     "b": "@vcf2",
+     "what": "checkpointed scan (forward, checkpoint_every 2) loss and outputs against the plain scan"
+    },
+    {
+     "op": "same",
+     "a": "@gpf",
+     "b": "@gcf2",
+     "what": "checkpointed scan (forward, checkpoint_every 2) gradients against the plain scan (the recompute or the boundary fold differs)"
+    },
+    {
+     "op": "same",
+     "a": "@vpf",
+     "b": "@vcf3",
+     "what": "checkpointed scan (forward, checkpoint_every 3) loss and outputs against the plain scan"
+    },
+    {
+     "op": "same",
+     "a": "@gpf",
+     "b": "@gcf3",
+     "what": "checkpointed scan (forward, checkpoint_every 3) gradients against the plain scan (the recompute or the boundary fold differs)"
+    },
+    {
+     "op": "same",
+     "a": "@vpf",
+     "b": "@vcf6",
+     "what": "checkpointed scan (forward, checkpoint_every 6) loss and outputs against the plain scan"
+    },
+    {
+     "op": "same",
+     "a": "@gpf",
+     "b": "@gcf6",
+     "what": "checkpointed scan (forward, checkpoint_every 6) gradients against the plain scan (the recompute or the boundary fold differs)"
+    },
+    {
+     "op": "same",
+     "a": "@vpr",
+     "b": "@vcr1",
+     "what": "checkpointed scan (reverse, checkpoint_every 1) loss and outputs against the plain scan"
+    },
+    {
+     "op": "same",
+     "a": "@gpr",
+     "b": "@gcr1",
+     "what": "checkpointed scan (reverse, checkpoint_every 1) gradients against the plain scan (the recompute or the boundary fold differs)"
+    },
+    {
+     "op": "same",
+     "a": "@vpr",
+     "b": "@vcr2",
+     "what": "checkpointed scan (reverse, checkpoint_every 2) loss and outputs against the plain scan"
+    },
+    {
+     "op": "same",
+     "a": "@gpr",
+     "b": "@gcr2",
+     "what": "checkpointed scan (reverse, checkpoint_every 2) gradients against the plain scan (the recompute or the boundary fold differs)"
+    },
+    {
+     "op": "same",
+     "a": "@vpr",
+     "b": "@vcr3",
+     "what": "checkpointed scan (reverse, checkpoint_every 3) loss and outputs against the plain scan"
+    },
+    {
+     "op": "same",
+     "a": "@gpr",
+     "b": "@gcr3",
+     "what": "checkpointed scan (reverse, checkpoint_every 3) gradients against the plain scan (the recompute or the boundary fold differs)"
+    },
+    {
+     "op": "same",
+     "a": "@vpr",
+     "b": "@vcr6",
+     "what": "checkpointed scan (reverse, checkpoint_every 6) loss and outputs against the plain scan"
+    },
+    {
+     "op": "same",
+     "a": "@gpr",
+     "b": "@gcr6",
+     "what": "checkpointed scan (reverse, checkpoint_every 6) gradients against the plain scan (the recompute or the boundary fold differs)"
+    },
+    {
+     "op": "digest",
+     "part": "scan",
+     "of": [
+      "@vcf2",
+      "@gcf2",
+      "@vcr2",
+      "@gcr2"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "checkpoint-fit",
+   "about": "Program.fit over a captured model that holds two checkpointed calls of the dropout segment (loss mean(y * y), Adam, 2 epochs of 3 minibatches, the dropout key advanced every minibatch): the checkpointed program (recompute=True) against the plain one (recompute=False). The loss curves and the fitted weights must be the same bytes. Part fit: the checkpointed curve and weights.",
+   "data": {
+    "x": {
+     "hashed": [
+      4,
+      3
+     ],
+     "lo": -1.0,
+     "hi": 1.0
+    },
+    "x0": {
+     "zeros": [
+      4,
+      3
+     ]
+    },
+    "w1": {
+     "hashed": [
+      3,
+      5
+     ],
+     "lo": -0.6,
+     "hi": 0.6
+    },
+    "w2": {
+     "hashed": [
+      5,
+      3
+     ],
+     "lo": -0.6,
+     "hi": 0.6
+    },
+    "cy": {
+     "hashed": [
+      4,
+      3
+     ],
+     "lo": -1.0,
+     "hi": 1.0
+    },
+    "ch": {
+     "hashed": [
+      4,
+      5
+     ],
+     "lo": -1.0,
+     "hi": 1.0
+    },
+    "d1": {
+     "hashed": [
+      3,
+      5
+     ],
+     "lo": -1.0,
+     "hi": 1.0
+    },
+    "d2": {
+     "hashed": [
+      3,
+      5
+     ],
+     "lo": -1.0,
+     "hi": 1.0
+    },
+    "xdata": {
+     "hashed": [
+      12,
+      3
+     ],
+     "lo": -1.0,
+     "hi": 1.0
+    }
+   },
+   "do": [
+    {
+     "op": "let",
+     "as": "init",
+     "value": {
+      "w1": "@w1",
+      "w2": "@w2"
+     }
+    },
+    {
+     "op": "def",
+     "name": "segment",
+     "do": [
+      {
+       "op": "call",
+       "fn": "S.tensor",
+       "args": [
+        "@x0"
+       ],
+       "as": "sx"
+      },
+      {
+       "op": "call",
+       "fn": "S.matmul",
+       "args": [
+        "@sx",
+        "@sw.w1"
+       ],
+       "as": "sm1"
+      },
+      {
+       "op": "call",
+       "fn": "S.tanh",
+       "args": [
+        "@sm1"
+       ],
+       "as": "sh"
+      },
+      {
+       "op": "call",
+       "fn": "S.dropout",
+       "args": [
+        "@sh",
+        0.25
+       ],
+       "kw": {
+        "seed": 11,
+        "counter": 0
+       },
+       "as": "sd"
+      },
+      {
+       "op": "call",
+       "fn": "S.matmul",
+       "args": [
+        "@sd",
+        "@sw.w2"
+       ],
+       "as": "sm2"
+      },
+      {
+       "op": "call",
+       "fn": "S.tanh",
+       "args": [
+        "@sm2"
+       ],
+       "as": "sy"
+      },
+      {
+       "op": "call",
+       "fn": "S.capture",
+       "kw": {
+        "inputs": [
+         "@sx"
+        ],
+        "outputs": [
+         "@sy"
+        ]
+       },
+       "as": "seg"
+      },
+      {
+       "op": "call",
+       "fn": "S.capture",
+       "kw": {
+        "inputs": [
+         "@sx"
+        ],
+        "outputs": [
+         "@sy",
+         "@sh"
+        ]
+       },
+       "as": "seg2"
+      }
+     ]
+    },
+    {
+     "op": "def",
+     "name": "model",
+     "do": [
+      {
+       "op": "map",
+       "fn": "c.tensor",
+       "over": "@init",
+       "as": "p"
+      },
+      {
+       "op": "call",
+       "fn": "c.tensor",
+       "args": [
+        "@x0"
+       ],
+       "as": "xi"
+      },
+      {
+       "op": "call",
+       "fn": "c.checkpoint",
+       "args": [
+        "@seg",
+        "@xi"
+       ],
+       "kw": {
+        "params": [
+         "@p.w1",
+         "@p.w2"
+        ],
+        "recompute": "@recompute"
+       },
+       "as": "fy"
+      },
+      {
+       "op": "call",
+       "fn": "c.checkpoint",
+       "args": [
+        "@seg",
+        "@fy"
+       ],
+       "kw": {
+        "params": [
+         "@p.w1",
+         "@p.w2"
+        ],
+        "counter": 1,
+        "recompute": "@recompute"
+       },
+       "as": "fy2"
+      },
+      {
+       "op": "call",
+       "fn": "c.mul",
+       "args": [
+        "@fy2",
+        "@fy2"
+       ],
+       "as": "fsq"
+      },
+      {
+       "op": "call",
+       "fn": "c.mean",
+       "args": [
+        "@fsq"
+       ],
+       "as": "floss"
+      },
+      {
+       "op": "call",
+       "fn": "c.capture",
+       "kw": {
+        "inputs": [
+         "@xi"
+        ],
+        "outputs": [
+         "@floss"
+        ]
+       },
+       "as": "prog"
+      },
+      {
+       "op": "call",
+       "fn": "c.optimizer",
+       "args": [
+        "adam"
+       ],
+       "kw": {
+        "lr": 0.05
+       },
+       "as": "opt"
+      },
+      {
+       "op": "call",
+       "fn": "prog.fit",
+       "args": [
+        "@xdata"
+       ],
+       "kw": {
+        "optimizer": "@opt",
+        "parameters": [
+         "@p.w1",
+         "@p.w2"
+        ],
+        "loss": "output",
+        "epochs": 2,
+        "batch_size": 4,
+        "shuffle": false,
+        "seed": 0
+       }
+      },
+      {
+       "op": "array",
+       "of": "@prog.loss_curve_",
+       "dtype": "float32",
+       "as": "curve"
+      },
+      {
+       "op": "read",
+       "fn": "c.numpy",
+       "of": "@p",
+       "as": "fitted"
+      }
+     ]
+    },
+    {
+     "op": "session",
+     "as": "cs",
+     "do": [
+      {
+       "op": "map",
+       "fn": "cs.tensor",
+       "over": "@init",
+       "as": "sw"
+      },
+      {
+       "op": "use",
+       "name": "segment",
+       "with": {
+        "S": "@cs"
+       }
+      },
+      {
+       "op": "session",
+       "as": "c",
+       "do": [
+        {
+         "op": "use",
+         "name": "model",
+         "with": {
+          "recompute": false
+         }
+        },
+        {
+         "op": "let",
+         "as": "cp",
+         "value": "@curve"
+        },
+        {
+         "op": "let",
+         "as": "fp",
+         "value": "@fitted"
+        }
+       ]
+      },
+      {
+       "op": "session",
+       "as": "c",
+       "do": [
+        {
+         "op": "use",
+         "name": "model",
+         "with": {
+          "recompute": true
+         }
+        },
+        {
+         "op": "let",
+         "as": "cc",
+         "value": "@curve"
+        },
+        {
+         "op": "let",
+         "as": "fc",
+         "value": "@fitted"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "op": "same",
+     "a": "@cp",
+     "b": "@cc",
+     "what": "Program.fit loss curve through checkpoints against the plain program"
+    },
+    {
+     "op": "same",
+     "a": "@fp",
+     "b": "@fc",
+     "what": "Program.fit fitted weights through checkpoints against the plain program"
+    },
+    {
+     "op": "digest",
+     "part": "fit",
+     "of": [
+      "@cc",
+      "@fc"
+     ]
+    }
+   ]
+  }
+ ]
+}

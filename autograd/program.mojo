@@ -83,7 +83,8 @@ comptime PROGRAM_MAX_CODE_V2 = 80
 # 94: the recurrent scan (`lstm`, `gru`, `rnn`; autograd/rules_recurrent.mojo).
 # nn-blocks-qkv begin: 95..129 the 2026-11-25 operations (lane rnn-parity 95; lanes nn-blocks-pg 110..112,
 # -scatter 113..117, -scan 118..121, -qkv 122..125 (`attention`, autograd/nn_qkv.mojo), -cbw 126..129); a code
-# of the range no operation took is refused by name at replay, as 89 and 92 are.
+# of the range no operation took is refused by name at replay, as 89 and 92 are. 119 (lane activation-ckpt): a
+# checkpointed segment (autograd/nn_ckpt.mojo OPS_CHECKPOINT); its words hold the segment's program words.
 comptime PROGRAM_MAX_CODE = 189  # session-ops: 130..189, Sequential's layers as Session ops and the round's additions (was 129)
 # nn-blocks-qkv end
 # nn-blocks-scan begin: the scan over a captured cell (autograd/nn_scan.mojo), version 3 records only; its

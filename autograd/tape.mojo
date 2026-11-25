@@ -1037,6 +1037,68 @@ struct Tape(Movable):
         """Return whether a backward computes a gradient for this tensor."""
         return self._nodes[self._check(x)].requires_grad
 
+    # activation-ckpt begin: what a recomputing backward rule needs (autograd/nn_ckpt.mojo)
+    def edge_holds_gradient(self, node: Int, edge: Int) -> Bool:
+        """While a rule of custom node `node` runs (inside `_backward`): whether the gradient of its input
+        `edge`, a writes_total edge, already held a contribution when the traversal reached the node. A rule
+        that continues that gradient's fold (variable_carry with carry=True) reads it before it adds its own
+        terms, so a recomputed segment's contributions land in the order the unrecomputed graph applies them."""
+        return self._nodes[self._parents[self._nodes[node].start + edge]].grad_ready
+
+    def variable_carry[E: Exec](
+        mut self, mut ex: E, data: FP, grad_destination: FP, shape: ShapeN, carry: Bool,
+    ) raises -> Tensor:
+        """A differentiable leaf over `data` (shape `shape`) whose gradient lands in caller storage, for a
+        backward with accumulate=True: with `carry` the destination holds earlier contributions and every
+        contribution of this graph is added to it in the tape's order; without, the first one is written in
+        place, as for a leaf never written. A leaf that no output reaches must be released
+        (release_leaf_gradient) before the backward, which would otherwise zero its destination."""
+        rn_check(shape)
+        var t = self._record(ex, data, shape.rows(), shape.cols(), LEAF, List[Tensor](), Args(), True,
+                             grad_destination, True)
+        self._nodes[t._index].grad_ready = carry
+        return self._with_shape(t, shape)
+
+    def release_leaf_gradient(mut self, x: Tensor) raises:
+        """Make leaf `x` non-differentiable before a backward (a variable_carry leaf that no output of this
+        graph reaches): the backward neither writes nor zero-fills its destination. The nodes recorded from it
+        keep their flags; none of them is an ancestor of the output, so none is differentiated."""
+        var i = self._check(x)
+        if self._nodes[i].op != LEAF:
+            raise Error("autograd: release_leaf_gradient takes a leaf")
+        self._nodes[i].requires_grad = False
+
+    def gradient_ready(self, x: Tensor) raises -> Bool:
+        """Whether tensor `x`'s gradient buffer holds a value (after a backward, or a carried leaf)."""
+        return self._nodes[self._check(x)].grad_ready
+
+    def reaches(self, roots: List[Tensor], leaves: List[Tensor]) raises -> List[Bool]:
+        """For each of `leaves`: whether a backward from `roots` (together) would differentiate it, i.e. it
+        requires a gradient and is an ancestor of a differentiable root through differentiable nodes (the
+        walk of `_mark_active` from several roots)."""
+        var top = -1
+        var active = List[Bool](length=len(self._nodes), fill=False)
+        for r in range(len(roots)):  # driver-loop: over the roots (a segment's outputs)
+            var i = self._check(roots[r])
+            if self._nodes[i].requires_grad:
+                active[i] = True
+                if i > top:
+                    top = i
+        for reverse in range(top + 1):  # driver-loop: over graph nodes, reverse creation order
+            var i = top - reverse
+            if not active[i]:
+                continue
+            var n = self._nodes[i]
+            for edge in range(n.count):  # driver-loop: over node inputs
+                var p = self._parents[n.start + edge]
+                if self._nodes[p].requires_grad:
+                    active[p] = True
+        var got = List[Bool](capacity=len(leaves))
+        for j in range(len(leaves)):  # driver-loop: over the leaves asked about
+            got.append(active[self._check(leaves[j])])
+        return got^
+    # activation-ckpt end
+
     def grad_of(self, x: Tensor) raises -> Tensor:
         """The gradient of x from the last recorded backward, as a tensor.
 
@@ -2617,6 +2679,11 @@ struct Tape(Movable):
                     # the rule writes this input's whole gradient in place
                     first[edge] = True
                     total[edge] = True
+                    # lane activation-ckpt: whether the destination already holds earlier contributions, for a
+                    # rule that continues the fold there (edge_holds_gradient; autograd/nn_ckpt.mojo). One
+                    # store on a writes_total edge only; set True for every touched node after the traversal
+                    # anyway, and read by nothing else while the traversal runs.
+                    self._nodes[parent].grad_ready = touched[parent]
                     touched[parent] = True
                     contributions.append(p.grad)
                 elif p.requires_grad and not touched[parent]:
