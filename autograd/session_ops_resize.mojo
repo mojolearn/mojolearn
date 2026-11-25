@@ -147,7 +147,14 @@ def session_pixel_shuffle[E: Exec](
         raise Error("ValueError: " + name + ": " + factor + " must be a positive integer, got " + String(ints[0]))
     if tape.ndim(x) != 4:
         raise Error("ValueError: " + name + ": x must be (N, C, H, W), got a " + String(tape.ndim(x)) + "-D tensor")
-    return nn_pixel_shuffle(tape, ex, x, ints[0], unshuffle)
+    var r = ints[0]
+    if not unshuffle and tape.dim(x, 1) % (r * r) != 0:
+        raise Error("ValueError: pixel_shuffle: the channels (" + String(tape.dim(x, 1))
+                    + ") must be divisible by upscale_factor squared (" + String(r * r) + ")")
+    if unshuffle and (tape.dim(x, 2) % r != 0 or tape.dim(x, 3) % r != 0):
+        raise Error("ValueError: pixel_unshuffle: the height and width must be divisible by downscale_factor ("
+                    + String(r) + ")")
+    return nn_pixel_shuffle(tape, ex, x, r, unshuffle)
 
 
 def session_pad_mode[E: Exec](
@@ -177,5 +184,10 @@ def session_pad_mode[E: Exec](
     var bottom = ints[3 + nd] if nd == 4 else 0
     if left < 0 or right < 0 or top < 0 or bottom < 0:
         raise Error("ValueError: pad: mode " + name + " takes non-negative counts")
+    if mode == RSZ_PAD_REFLECT:
+        var W = tape.dim(x, nd - 1)
+        var H = tape.dim(x, 2) if nd == 4 else 1
+        if left >= W or right >= W or (nd == 4 and (top >= H or bottom >= H)):
+            raise Error("ValueError: pad: a 'reflect' count must be smaller than the axis it pads")
     var kernel_mode = NNC_PAD_REFLECT if mode == RSZ_PAD_REFLECT else NNC_PAD_REPLICATE
     return nn_pad(tape, ex, x, left, right, top, bottom, kernel_mode, Float32(0))
