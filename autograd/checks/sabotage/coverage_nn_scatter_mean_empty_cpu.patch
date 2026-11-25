@@ -1,0 +1,24 @@
+diff --git a/autograd/nn_scatter_ops.mojo b/autograd/nn_scatter_ops.mojo
+index ee475323a5..4d0a29023a 100644
+--- a/autograd/nn_scatter_ops.mojo
++++ b/autograd/nn_scatter_ops.mojo
+@@ -19,6 +19,7 @@
+ from std.memory import bitcast
+ from sequence.ops import FP, Args
+ from checks.numerics import ftz, identical_div
++from std.sys.info import is_gpu
+ 
+ comptime OP_SCT_KEYS = 6800
+ comptime OP_SCT_MEAN = 6801
+@@ -63,6 +64,11 @@ def op_sct_mean(t: Int, a: Args):
+     run_begin (S + 1 words); i0 d."""
+     var v = t // a.i0
+     var count = _sct_ld_i(a.p1, v + 1) - _sct_ld_i(a.p1, v)
++    comptime if not is_gpu():
++        # SABOTAGE (coverage-autograd-nn_scatter_mean_empty_cpu): on the host an empty segment's mean is 0 / 0
++        if count == 0:
++            a.p0.unsafe_store(t, ftz(a.p0.unsafe_load(t)) / Float32(count))
++            return
+     if count > 0:
+         a.p0.unsafe_store(t, ftz(identical_div(ftz(a.p0.unsafe_load(t)), Float32(count))))
+ 
