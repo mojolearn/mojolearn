@@ -153,28 +153,39 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("nn-ep-mamba3-owned")
 def _(ml, X, yc, yr, Xh=None):
-    """Mamba3Block's owned weight snapshot: `install_owned_weights` (its generation number),
-    `export_owned_weights` (must equal the weights given), a stateless forward with the caller's
-    arrays then overwritten (the snapshot must answer as before), `release_owned_weights` (the
-    forward then reads the overwritten arrays). Parts: the generation, the exported weights, the
-    snapshot forward, the released forward."""
+    """Mamba3Block's owned weight endpoints as the product offers them: the owned snapshot arm
+    (MOJOLEARN_NN40_OWNED_WEIGHTS) was deleted 2026-11-15 (core/experiment_guards_neural.mojo), so
+    every image, GPU and CPU, reports no MAMBA3_CAP_OWNED_WEIGHTS and `install_owned_weights`
+    refuses by name (bindings/mamba_public_native_door.mojo mamba3_install_owned). On each side:
+    the forward; `install_owned_weights` must refuse naming owned weights and leave the block
+    working (the forward after it equal); `export_owned_weights` must refuse "no installed owned
+    snapshot"; `release_owned_weights` releases nothing and the forward after it is equal again.
+    An image that admitted the snapshot fails the lane (the capability would be untested here).
+    Parts: the forward. (w3-fix-11, 2026-11-25: the earlier body asked for a snapshot no build
+    provides, so its clean run was REFUSED on both sides.)"""
     w = _nn_endpoints_mamba_weights("mamba3", "nn-ep-mamba3-owned")
     blk = ml.Mamba3Block(w)
     x = _seq(X, 2, 16, 32)
     y = _nn_endpoints_host(blk.forward(x))
-    generation = blk.install_owned_weights()
-    exported = blk.export_owned_weights()
-    names = sorted(exported)
-    for k in names:
-        _same_bytes(f"export_owned_weights[{k}]", np.asarray(exported[k]), f"weights[{k}]", np.asarray(w[k]))
-    w["out_proj.weight"][...] = np.float32(0.0)
-    snap = _nn_endpoints_host(blk.forward(x))
-    _same_bytes("forward", y, "forward on the owned snapshot", snap)
+    try:
+        blk.install_owned_weights()
+    except RuntimeError as exc:
+        if "owned weights" not in str(exc):
+            raise
+    else:
+        blk.release_owned_weights()
+        raise AssertionError("install_owned_weights was admitted: an owned-weight image needs its own lane")
+    _same_bytes("forward", y, "forward after the refused install", _nn_endpoints_host(blk.forward(x)))
+    try:
+        blk.export_owned_weights()
+    except RuntimeError as exc:
+        if "no installed owned snapshot" not in str(exc):
+            raise
+    else:
+        raise AssertionError("export_owned_weights answered without an installed snapshot")
     blk.release_owned_weights()
-    released = _nn_endpoints_host(blk.forward(x))
-    return _fit(dict(generation=_h(np.asarray([int(generation)], dtype=np.int64)),
-                     exported=_h(*[np.asarray(exported[k]) for k in names]), snapshot=_h(snap),
-                     released=_h(released)))
+    _same_bytes("forward", y, "forward after release_owned_weights", _nn_endpoints_host(blk.forward(x)))
+    return _fit(dict(forward=_h(y)))
 
 
 @lane("nn-ep-transformer-block")
