@@ -85,11 +85,11 @@ Sequential layer codes are `python/mojolearn/_x_sequence_model.py` `_LAYER`. "ex
 
 | Op | Reuses | Session op | Backward | Owner |
 |---|---|---|---|---|
-| `sequence_mask(lengths, max_length)` | scan's length mask construction where the semantics agree | missing | none (mask) | extra |
-| `topk(x, k, axis)` (lowest index wins a tie, every vendor) | existing sort / argmax bodies where they fit | missing | gather of the upstream to the selected positions | extra |
-| `gather(x, axis, index)` (torch.gather / take_along_dim) | rankn take / embedding runs | missing | scatter_add (repeated indices accumulate) | extra |
-| `logsumexp(x, axis)` | log-softmax's numerics | missing | softmax of the row times the upstream | extra |
-| soft-target `cross_entropy` (a target distribution) | the cross-entropy / log-softmax bodies; the hard-label path keeps its code | missing | softmax minus target | extra |
+| `sequence_mask(lengths, max_length)` (float32 (B, T), t < lengths[b]) | OP_SEQ_IOTA + the import compare (rnn_zero_padded's / scan's construction, batch first) | added `Session.sequence_mask`, code 180 | none (mask) | extra |
+| `topk(x, k, axis, largest, sorted)` (lowest index wins a tie, every vendor) | order-key pack + read-out (6980, 6981) around the embedding's bitonic stage OP_EMB_SORT_STAGE | added `Session.topk`, codes 181 (indices) + 182 (values = gather) | through the gather | extra |
+| `gather(x, axis, index)` (torch.gather) | OP_SCT_KEYS + OP_EMB_GATHER | added `Session.gather`, code 182 | OP_EMB_FOLD over embedding runs (repeated indices accumulate), tag 6990 | extra |
+| `logsumexp(x, axis, keepdims)` | log-softmax's max-shift fold (OP_SOX_LSE 6982, the same row words) | added `Session.logsumexp`, code 183 | OP_SOX_LSE_VJP 6983, tag 6991 | extra |
+| soft-target `cross_entropy` (a target distribution) | tape log_softmax, multiply, row sum, scale; weighted_reduce | added (`Session.cross_entropy`, the door picks code 184 / 185 for a target of the logits' shape) | the tape's own rules (create_graph works) | extra |
 
 Expected not exposable without a new kernel (each sub-lane confirms or exposes): conv_transpose3d (no 3-D col2im
 path), adaptive_max_pool3d, interpolate modes trilinear / bicubic / area, padding modes circular and 3-D
