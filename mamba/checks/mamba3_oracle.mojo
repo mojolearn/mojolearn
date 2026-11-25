@@ -133,7 +133,6 @@ from std.os import getenv
 from core.host_predict_threads import host_predict_task_count
 from core.host_lanes import HostF32Ptr, host_block_timing_on, host_f32_uninit, host_row_tasks, host_tick
 from mamba.checks.mamba_rms_fold import mamba_rms_row_sumsq_host
-from core.rms_norm_body import rms_rstd, rms_scale  # RMSNorm's one body (w3-fix-9-s2: the oracle's spelling was a copy)
 from core.host_parallel import host_parallelize
 from gemm.host.gemm_host_rows import gemm_host_rows_into, GhrPtr, GHR_SERIAL_FMAS, gemm_host_rows, gemm_host_rows_right_zero_padded
 from mamba.checks.mamba_oracle import refuse_nonfinite
@@ -525,9 +524,11 @@ def mamba3_block_oracle(
             # lane nr-mamba (B11): the shared lanes + tree fold.
             var acc = mamba_rms_row_sumsq_host(xp, t * dm, dm)
             nsq_p.unsafe_store(t, acc)
-            var rstd = rms_rstd(acc, dm, M3_RMS_EPS)
+            var mean = ftz(identical_div(acc, Float32(dm)))
+            var rstd = ftz(identical_rsqrt(ftz(mean + M3_RMS_EPS)))
             for j in range(dm):
-                nout_p.unsafe_store(t * dm + j, rms_scale(xp.unsafe_load(t * dm + j), rstd, normw_p.unsafe_load(j)))
+                var inner = ftz(identical_mul(ftz(xp.unsafe_load(t * dm + j)), rstd))
+                nout_p.unsafe_store(t * dm + j, ftz(identical_mul(ftz(normw_p.unsafe_load(j)), inner)))
     if ttasks <= 1:
         _norm_rows(0)
     else:
