@@ -113,7 +113,7 @@ def test_a_nested_refusal_names_the_meta_estimator_that_handed_the_device():
 
 
 def test_a_search_over_a_meta_estimator_with_a_device_hands_it_to_members_that_name_none():
-    from mojolearn import GridSearchCV
+    from mojolearn.model_selection import GridSearchCV
     x, y = _data(VotingClassifier)
     voting = VotingClassifier([("a", _tree(DecisionTreeClassifier))], device="cpu")
     search = GridSearchCV(voting, {"voting": ["hard"]}, cv=2).fit(x, y)

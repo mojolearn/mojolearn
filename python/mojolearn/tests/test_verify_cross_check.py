@@ -118,7 +118,10 @@ def test_spectral_batch_uses_identical_fixture_input_on_both_devices(monkeypatch
         fixture=lambda fx: (affinity, None, None), heldout=lambda fx: affinity,
         _save_load=lambda est: ('save', None, '.model'), _public_est=lambda lane, est: est,
         _h=lambda *a: 'b' * 16, _probe_batch=batch, BATCH_ALONE=1,
-        Fit=lambda *a: SimpleNamespace(), cpu_model=lambda: 'test processor')
+        Fit=lambda *a: SimpleNamespace(), cpu_model=lambda: 'test processor',
+        # the harness's one lane call on a side (vd-verify): (fit, the package as given)
+        call_lane=lambda lane, ml, side, *a: (fit, ml), device_view=lambda ml, side, lane: ml,
+        one_sided_na=lambda lane, side: None)
     # the two sides are described from the runtime report (the shared check
     # module, _check_both.side_environment), once, after the cells ran
     report = dict(version='0', numeric_mode='identical', vendor='metal', gpu_arch=None, code_kind='native',
