@@ -52,6 +52,12 @@ from glm.impl.linear_model.qn import QN_LOSS_LOGISTIC
 from core.device_query_x import DeviceQueryX, QueryFold
 from x_decomp.device import DevExec
 
+
+def _drop_error(context: Int, address: Int, count: Int) abi("C") -> NoneType:
+    """The refusal's words are not read here (the return code says it refused)."""
+    _ = context
+
+
 comptime FN = 300
 comptime FD = 4
 comptime _CTX = "MojolearnEstimatorsContextIdenticalV3"
@@ -109,7 +115,7 @@ def _host_case(which: Int) raises:
         _ = index^
         return
     # case 1: the host columns refuse a fold word in words
-    var sink = NativeDescriptorError()
+    var sink: NativeDescriptorError = _drop_error
     var result = 0
     var dst = List[Float32](length=4, fill=0.0)
     var a: List[Int] = [fold_x_word(0), Int(dst.unsafe_ptr()), Int(dst.unsafe_ptr())]

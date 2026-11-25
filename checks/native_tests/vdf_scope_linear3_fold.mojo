@@ -57,6 +57,12 @@ from core.input_device import device_buffer_any_negative
 from svm.impl.scale_gamma_device import scale_gamma_limbs_device
 from svm.impl.scale_gamma_limbs import SG_SLOTS
 
+
+def _drop_error(context: Int, address: Int, count: Int) abi("C") -> NoneType:
+    """The refusal's words are not read here (the return code says it refused)."""
+    _ = context
+
+
 comptime FN = 300
 comptime FD = 4
 comptime _CTX = "MojolearnEstimatorsContextIdenticalV3"
@@ -89,7 +95,7 @@ def _p(values: List[Float32]) -> _P:
 
 
 def _host_case(which: Int) raises:
-    var sink = NativeDescriptorError()
+    var sink: NativeDescriptorError = _drop_error
     var result = 0
     var buf = List[Float32](length=16, fill=0.0)
     var host = Int(buf.unsafe_ptr())

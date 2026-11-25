@@ -69,7 +69,12 @@ def _member() -> MemberRef:
 
 def _route(device: Bool) -> DeviceRoute:
     var route = DeviceRoute(1 if device else 0)
-    route.entry = EntryRef(neighbors_ops_device_v1 if device else neighbors_ops_host_v1, 0)
+    # the device entry only in a GPU column build: a CPU column build would elaborate the device kernels
+    # ("target 'unknown' is not supported by this build")
+    route.entry = EntryRef(neighbors_ops_host_v1, 0)
+    comptime if not CPU_COLUMN_BUILD:
+        if device:
+            route.entry = EntryRef(neighbors_ops_device_v1, 0)
     return route^
 
 

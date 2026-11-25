@@ -73,15 +73,21 @@ def _route(device: Bool) raises -> DeviceRoute:
     route.vendor = device_vendor_code(String(COMPILED_VENDOR)) if device else 0
     # What providers/python/member_spectral_boundary_door.mojo hands the member: the fit and the predict
     # entries of one image (here the same), the predict entry's capabilities.
-    var entry = spectral_native_v1[SpectralDeviceKernels] if device else spectral_native_v1[SpectralHostKernels]
+    # the device entry only in a GPU column build: a CPU column build would elaborate the device kernels
+    # ("target 'unknown' is not supported by this build")
+    var entry = spectral_native_v1[SpectralHostKernels]
+    comptime if not CPU_COLUMN_BUILD:
+        if device:
+            entry = spectral_native_v1[SpectralDeviceKernels]
     route.entry = EntryRef(entry, entry_ref_word(route.mode, route.vendor, SPECTRAL_NATIVE_COUNT))
     route.second = route.entry
     route.has_second = True
     route.flags = SpectralDriver(entry).metadata(SPECTRAL_CAPABILITIES)
-    if device:
-        # What bindings/_mojolearn_metrics.mojo publishes at module initialization.
-        metrics_store_publish(route.mode, route.vendor, Int(METRICS_STORE_API.get_or_create_ptr()[].entries.unsafe_ptr()),
-                              metrics_store_v1)
+    comptime if not CPU_COLUMN_BUILD:
+        if device:
+            # What bindings/_mojolearn_metrics.mojo publishes at module initialization.
+            metrics_store_publish(route.mode, route.vendor, Int(METRICS_STORE_API.get_or_create_ptr()[].entries.unsafe_ptr()),
+                                  metrics_store_v1)
     return route^
 
 

@@ -18,6 +18,7 @@ rule and the sqeuclidean bound run on the device over the slot, so those two kee
 Refusal words (lane vdf-scope-cluster5): under cosine and sqeuclidean a NaN in the test fold (row 70, column 1)
 refuses with the host pass's words, "kde: query contains NaN at row 6, column 1 (DEVIATION 604)", on every arm.
 """
+from std.math import nan
 from std.testing import TestSuite
 from std.memory import bitcast
 from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
@@ -178,7 +179,7 @@ def _nan_words(device: Bool, metric: Float64) raises:
     if metric == 0.0:
         return
     var x = _uniform4(20261124)
-    x[70 * _D + 1] = Float32.NAN
+    x[70 * _D + 1] = nan[DType.float32]()
     var route = _route(device)
     var want = "kde: query contains NaN at row 6, column 1 (DEVIATION 604)"
     var plain = _refusal(route, x, metric, False, -1, 0)

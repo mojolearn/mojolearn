@@ -62,7 +62,12 @@ def _member() -> MemberRef:
 
 def _route(device: Bool) raises -> DeviceRoute:
     var route = DeviceRoute(1 if device else 0)
-    route.entry = EntryRef(kmeans_device_native_v1 if device else kmeans_host_native_v1, 0)
+    # the device entry only in a GPU column build: a CPU column build would elaborate the device kernels
+    # ("target 'unknown' is not supported by this build")
+    route.entry = EntryRef(kmeans_host_native_v1, 0)
+    comptime if not CPU_COLUMN_BUILD:
+        if device:
+            route.entry = EntryRef(kmeans_device_native_v1, 0)
     route.flags = KMeansNativeDriver(route.entry.call).metadata(KMEANS_CAPABILITIES)
     return route^
 

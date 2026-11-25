@@ -74,12 +74,18 @@ def _route(device: Bool) raises -> DeviceRoute:
     route.mode = Int(GLOBAL_NUMERIC_MODE)
     route.vendor = device_vendor_code(String(COMPILED_VENDOR)) if device else 0
     # What the UMAP member door hands the member: the UMAP operations entry of the route's image.
-    var entry = umap_ops_device_v1 if device else umap_ops_host_v1
+    # the device entry only in a GPU column build: a CPU column build would elaborate the device kernels
+    # ("target 'unknown' is not supported by this build")
+    var entry = umap_ops_host_v1
+    comptime if not CPU_COLUMN_BUILD:
+        if device:
+            entry = umap_ops_device_v1
     route.entry = EntryRef(entry, entry_ref_word(route.mode, route.vendor, UMAP_OPERATION_COUNT))
-    if device:
-        # What bindings/_mojolearn_metrics.mojo publishes at module initialization.
-        metrics_store_publish(route.mode, route.vendor, Int(METRICS_STORE_API.get_or_create_ptr()[].entries.unsafe_ptr()),
-                              metrics_store_v1)
+    comptime if not CPU_COLUMN_BUILD:
+        if device:
+            # What bindings/_mojolearn_metrics.mojo publishes at module initialization.
+            metrics_store_publish(route.mode, route.vendor, Int(METRICS_STORE_API.get_or_create_ptr()[].entries.unsafe_ptr()),
+                                  metrics_store_v1)
     return route^
 
 

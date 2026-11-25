@@ -69,12 +69,18 @@ def _route(device: Bool) raises -> DeviceRoute:
     var route = DeviceRoute(1 if device else 0)
     route.mode = Int(GLOBAL_NUMERIC_MODE)
     route.vendor = device_vendor_code(String(COMPILED_VENDOR)) if device else 0
-    route.entry = EntryRef(gmm_native_device_v1 if device else gmm_native_host_v1, 0)
+    # the device entry only in a GPU column build: a CPU column build would elaborate the device kernels
+    # ("target 'unknown' is not supported by this build")
+    route.entry = EntryRef(gmm_native_host_v1, 0)
+    comptime if not CPU_COLUMN_BUILD:
+        if device:
+            route.entry = EntryRef(gmm_native_device_v1, 0)
     route.flags = GmmDriver(route.entry.call).metadata(MIXTURE_NATIVE_CAPABILITIES)
-    if device:
-        # What providers/python/member_mixture_boundary_door.mojo hands the member: the store's transport entry.
-        route.second = EntryRef(mixture_store_v1, entry_ref_word(route.mode, route.vendor, XP_OP_COUNT))
-        route.has_second = True
+    comptime if not CPU_COLUMN_BUILD:
+        if device:
+            # What providers/python/member_mixture_boundary_door.mojo hands the member: the store's transport entry.
+            route.second = EntryRef(mixture_store_v1, entry_ref_word(route.mode, route.vendor, XP_OP_COUNT))
+            route.has_second = True
     return route^
 
 
