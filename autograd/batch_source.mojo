@@ -38,7 +38,11 @@ THE READ of one batch: each record is one `pread` of its steps (and its target r
 buffers, the padding zero-filled, on host tasks (one record a task: the reads are independent). PREFETCH: the fit
 loop reads the NEXT batch into the host buffers right after it has queued the current batch's training, so on a
 GPU the disk reads run while the device trains (the upload copies the host words into the executor's staging at
-once, autograd/program_runtime.mojo).
+once, autograd/program_runtime.mojo). On the HOST executor the two do not overlap, and cannot without a new
+mechanism: a host step runs on the calling thread and returns when it is done, so the read-ahead starts after it;
+each of the two uses every core in turn (the read one task a record, the step its kernels' own tasks), and
+core/host_parallel.mojo has parallel loops only, no task that outlives its call. Overlapping them needs a
+background host task; with all cores already busy in the step it would win the reads' I/O wait and nothing else.
 
 THE POSITION is (epoch, consumed): `consumed` batches of `epoch` have been trained (their optimizer step is
 queued). The read-ahead batch is NOT consumed: a checkpoint records the consumed position, so a resume continues
