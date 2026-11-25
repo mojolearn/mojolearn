@@ -205,10 +205,22 @@ def _(ml, X, yc, yr, Xh=None):
     lu, piv = np.ascontiguousarray(np.asarray(lu)), np.ascontiguousarray(np.asarray(piv))
     b = _functions_cont(X, 10, 4, "fn-lu-solve:b")
     B = _functions_mat(X[10:], 10, 3, "fn-lu-solve:B")
-    return _functions_resident(ml, "lu_solve", lambda p: dict(
-        vector=_functions_d(ml.lu_solve((p(lu), p(piv)), p(b))),
-        matrix=_functions_d(ml.lu_solve((p(lu), p(piv)), p(B))),
-        trans=_functions_d(ml.lu_solve((p(lu), p(piv)), p(B), trans=1))), form="train")
+
+    def pair(p):
+        # The device form of the (lu, piv) pair is lu_factor of the uploaded
+        # matrix: piv is an int32 device array (TRAIN_DEV_I32), which only
+        # lu_factor makes (train_to_device uploads float32 only). Uploading lu
+        # alone left piv on the host: "device and host arrays are mixed"
+        # (gd-verify-view, 2026-11-25). fn-lu-factor holds that pair's digest
+        # to the host factor's, so both calls solve with the same factor.
+        return (lu, piv) if p is _functions_as_given else ml.lu_factor(p(A))
+
+    def run(p):
+        lp = pair(p)
+        return dict(vector=_functions_d(ml.lu_solve(lp, p(b))),
+                    matrix=_functions_d(ml.lu_solve(lp, p(B))),
+                    trans=_functions_d(ml.lu_solve(lp, p(B), trans=1)))
+    return _functions_resident(ml, "lu_solve", run, form="train")
 
 
 @lane("fn-randomized-svd")

@@ -88,7 +88,10 @@ def _functions_as_given(a):
 def _functions_train_put(a):
     """The training family's device form: a float32 host array as a
     TrainDeviceArray, uploaded once (`train_to_device`); other inputs (ids,
-    targets, scalars, lists) as given."""
+    targets, scalars, lists) as given. `train_to_device` uploads float32
+    only, so an integer operand a function needs on the device (lu_solve's
+    int32 pivots) comes from the function that makes it there (lu_factor of
+    the uploaded matrix): the lane builds it (functions_linalg.py fn-lu-solve)."""
     from mojolearn._training_impl import train_to_device
     if isinstance(a, np.ndarray) and a.dtype == np.float32:
         return train_to_device(np.ascontiguousarray(a), numeric_mode="identical")
