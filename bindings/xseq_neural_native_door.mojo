@@ -1169,7 +1169,7 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
     if task == 0:
         if tw < 1 or tw % rows_per != 0:
             raise Error("ValueError: fit(source=): each record's target row must hold n_outputs words"
-                        + String(" a step, padded to the longest record" if fo.seq_out else "")
+                        + (String(" a step, padded to the longest record") if fo.seq_out else String(""))
                         + "; the source's targets have width " + String(tw))
         outputs = tw // rows_per
         if fitted and outputs != Int(py=py_item(fields, nk[].k_n_outputs_)):
@@ -1178,7 +1178,7 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
     else:
         if tw != rows_per:
             raise Error("ValueError: fit(source=): a classifier reads one class index a record"
-                        + String(" a step, padded to the longest record" if fo.seq_out else "")
+                        + (String(" a step, padded to the longest record") if fo.seq_out else String(""))
                         + "; the source's targets have width " + String(tw))
         if fitted:
             outputs = Int(py=py_item(fields, nk[].k_n_outputs_))
