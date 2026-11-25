@@ -196,8 +196,11 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
         var src = batch_source_open(opened[0].copy())
         try:
             var opts_s = rnn_fit_options_of(addrs, ip, fp, net, task, src.n, T, epochs, True)
-            if opts_s.has_sw or opts_s.has_cw or opts_s.has_h0 or opts_s.nv > 0:
-                raise Error("ValueError: fit(source=) takes no sample_weight, class_weight, h_0, c_0 or validation")
+            # class weights and per-epoch validation run (lane fable-finalize; sequence/recurrent.mojo
+            # rnn_fit_stream); what needs every row in memory or a decision per epoch stays refused
+            if opts_s.has_sw or opts_s.has_h0 or opts_s.patience > 0 or opts_s.restore:
+                raise Error("ValueError: fit(source=) takes no sample_weight, h_0, c_0, early stopping or "
+                            + "restore_best")
             if task == TASK_CE:
                 batch_source_check_classes(src, net.O, "fit(source=)")
             var profile_s = ag_profile_fit_begin()

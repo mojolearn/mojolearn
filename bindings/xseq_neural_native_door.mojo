@@ -1113,13 +1113,11 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
     if args[0] is not None or args[1] is not None:
         raise Error("TypeError: fit(source=) takes no X or y: the source holds the sequences and their targets")
     if (_arg(args, 2) is not None or _arg(args, 3) is not None or _arg(args, 4) is not None
-            or _arg(args, 5) is not None or _arg(args, 6) is not None):
-        raise Error("TypeError: fit(source=) takes no lengths, sample_weight, h_0, c_0 or validation_data: the "
-                    + "lengths are the source's record lengths")
+            or _arg(args, 5) is not None):
+        raise Error("TypeError: fit(source=) takes no lengths, sample_weight, h_0 or c_0: the lengths are the "
+                    + "source's record lengths")
     if fo.early_stopping and not partial:
         raise Error("ValueError: fit(source=) does not take early_stopping: it holds out part of an array")
-    if _field(fields, "class_weight", PythonObject(None)) is not None:
-        raise Error("ValueError: fit(source=) does not take class_weight")
     var source = args[9]
     var spec = batch_source_spec(source)  # the exact connected BatchSource only (no Python iterable or callback)
     if len(spec.inputs) != 1 or spec.inputs[0] != BS_FIELD_STEPS or spec.target != BS_FIELD_TARGETS:
@@ -1199,6 +1197,43 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
             py_setitem(fields, nk[].k_classes_, classes)
     py_setitem(fields, nk[].k_n_outputs_, outputs)
     py_setitem(fields, nk[].k_n_features_in_, width)
+    # CLASS WEIGHTS (lane fable-finalize, 2026-11-25): a dict {class: weight}, one weight a class in classes_ order,
+    # applied to every record (to every valid step with output="sequence") by its own label, batch by batch
+    # (sequence/recurrent.mojo rnn_fit_stream). 'balanced' is refused by name: it needs every label of the source
+    # counted before the first step.
+    var cw = PythonObject(None)
+    var cw_in = _field(fields, "class_weight", PythonObject(None))
+    if cw_in is not None:
+        if task != 1:
+            raise Error("ValueError: class_weight is for classifiers")
+        if _eq(cw_in, "balanced"):
+            raise Error("ValueError: fit(source=) takes class_weight as a dict {class: weight}; 'balanced' would "
+                        + "count every label of the source before training (count them when the shards are "
+                        + "written and pass the weights)")
+        cw = _rnn_class_weights(fields, PythonObject(None), n, rows_per, PythonObject(None), outputs, context)
+    # VALIDATION PER EPOCH (lane fable-finalize): validation_data=(X_val, y_val[, lengths_val]) arrays, padded to
+    # the source's max_length; their loss is taken at the end of every pass over the source this call completes
+    # (validation_loss_, best_epoch_). Early stopping and restore_best stay refused: a streamed fit runs the
+    # steps it was asked for.
+    var vx = PythonObject(None)
+    var vy = PythonObject(None)
+    var vlengths = PythonObject(None)
+    var nv = 0
+    var vd = _arg(args, 6)
+    if vd is not None:
+        if len(vd) != 2 and len(vd) != 3:
+            raise Error("ValueError: validation_data must be (X_val, y_val) or (X_val, y_val, lengths_val)")
+        if len(vd) != 3 or vd[2] is None:
+            raise Error("ValueError: fit(source=): validation_data needs the validation sequences' lengths, "
+                        + "(X_val, y_val, lengths_val): the source's records are masked by theirs")
+        vx = _rnn_x(vd[0], fields, False, context)
+        nv = Int(py=vx.shape[0])
+        if Int(py=vx.shape[1]) != longest:
+            raise Error("ValueError: fit(source=): the validation sequences must be padded to the source's "
+                        + "max_length (" + String(longest) + " steps)")
+        vlengths = _rnn_fit_lengths(vd[2] if len(vd) == 3 else PythonObject(None), nv, longest, "validation",
+                                    context, True)
+        vy = _rnn_target(model, fields, vd[1], nv, rows_per, fo.seq_out, True, route, context, False, vlengths)
     var cell = _rnn_cell(model, fields)
     var hidden = xseq_int(py_item(fields, nk[].k_hidden_size))
     var layers = xseq_int(py_item(fields, nk[].k_num_layers))
@@ -1225,10 +1260,19 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
             sp[3 * n_params + 2] = Float32(1.0)
     var rates = _rnn_rates_from(fields, t0, total, context)
     var losses = xseq_zeros(Python.tuple(total), context)
-    var request = XseqRnnFitRequest(cell, width, hidden, layers, outputs, task, n, longest, 1, spec.batch,
+    # the passes over the source this call completes (each ends with the validation loss); the request's epochs is
+    # the validation curve's length (at least 1: the run side sizes its words by it)
+    var passes = (first + total) // nb
+    var v_epochs = max(1, passes)
+    var vcurve = PythonObject(None)
+    if nv > 0:
+        vcurve = xseq_zeros(Python.tuple(v_epochs + 2), context)
+    var request = XseqRnnFitRequest(cell, width, hidden, layers, outputs, task, n, longest, v_epochs, spec.batch,
                                     spec.shuffle, seed)
     var o = XseqRnnFitOptions(
-        fo.dirs, fo.seq_out, fo.no_bias, 0, False, 0, 0, 0, 0, 0, False, 0, 0, 0, 0,
+        fo.dirs, fo.seq_out, fo.no_bias, 0, False, 0 if cw is None else Int(py=xseq_addr(cw)), 0, 0, nv, 0, False,
+        0 if vx is None else Int(py=xseq_addr(vx)), 0 if vy is None else Int(py=xseq_addr(vy)),
+        _rnn_lengths_address(vlengths), 0 if vcurve is None else Int(py=xseq_addr(vcurve)),
         0 if state is None else Int(py=xseq_addr(state)), fo.dropout, fo.clip, fo.tol)
     var provider = xseq_neural_provider(route.entries)
     var entry = _entry(provider)
@@ -1255,7 +1299,17 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
     _ = losses
     _ = rates
     _ = saved
+    _ = cw
+    _ = vx
+    _ = vy
+    _ = vlengths
     _ = route.owner  # the route's images stay loaded through the call above
+    if vcurve is not None:
+        var vp = xseq_f32p(vcurve)
+        var ran = Int(vp[v_epochs])
+        py_setitem(fields, PythonObject("validation_loss_"), vcurve[py_call(native_loaded_module("builtins").slice,
+                                                                             PythonObject(0), PythonObject(ran))])
+        py_setitem(fields, PythonObject("best_epoch_"), Int(vp[v_epochs + 1]))
     batch_source_position_out(source, Int(position[0]), Int(position[1]))
     _ = position^
     if partial:

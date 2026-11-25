@@ -409,7 +409,10 @@ def _fit_cases() -> List[_FitCase]:
     c.append(_FitCase("rmsprop centered", NN_OPT_RMSPROP, 1, 0.01, 0.0, 0.99, 1e-8, 0.0, 0.0, 0, 0.1, none.copy(), True, False))
     # lane stream-fits: centered with momentum, refused at compile before 2026-11-25 (its third state buffer, the
     # momentum, is now kept: resume and checkpoint give the uninterrupted bits)
-    c.append(_FitCase("rmsprop centered momentum", NN_OPT_RMSPROP, 1, 0.01, 0.0, 0.99, 1e-8, 0.0, 0.5, 0, 0.1, none.copy(), True, True))
+    # lr 0.005, the plain momentum case's (momentum 0.5 doubles the settled step; lane fable-finalize: 0.01 here was
+    # the no-momentum cases' rate). The quarter-loss bar on this case is unrun; what decides it is the resume and
+    # checkpoint equality below.
+    c.append(_FitCase("rmsprop centered momentum", NN_OPT_RMSPROP, 1, 0.005, 0.0, 0.99, 1e-8, 0.0, 0.5, 0, 0.1, none.copy(), True, True))
     c.append(_FitCase("adagrad", NN_OPT_ADAGRAD, 0, 0.1, 0.01, 0.1, 1e-10, 0.0, 0.0, 0, 0.1, none.copy(), True, False))
     c.append(_FitCase("lamb", NN_OPT_LAMB, lb | NN_LAMB_CLIP, 0.05, 0.9, 0.999, 1e-6, 0.01, 1.0, 0, 0.1, none.copy(), True, True))
     # schedules on adam (opt 1), lr 0.01

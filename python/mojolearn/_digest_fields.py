@@ -222,11 +222,16 @@ TRAINING = (
     "log_marginal_likelihood_value_", "n_boruvka_rounds_",
     # the optimizer's state, which only a resumed fit reads
     "optimizer_m_", "optimizer_v_", "optimizer_runs_",
+    # the third state buffer (centered RMSprop with momentum; None for every other optimizer)
+    "optimizer_w_",
     # a search's or a cross-validated model's record of the candidates (scores, fit / score times, paths):
     # the chosen candidate is in the fitted state (`best_estimator_`, `best_params_`, `alpha_`, `C_`)
     "cv_results_", "best_score_", "scores_", "coefs_paths_", "mse_path_",
 )
 
+#: (The six recurrent estimators' rows below.) The recurrent estimators' private training state (bindings/xseq_neural_native_door.mojo): the optimizer's three
+#: buffers and counters partial_fit continues from, and the batch source part a streamed partial_fit continues at
+#: (the consumed position with the source's binding words). Only a resumed fit reads either.
 #: class name -> private training fields: state that only a resumed fit reads.
 TRAINING_EXTRA_BY_NAME = {
     # bindings/sequential_execution_pack.mojo: the optimizer and row-order counters, the curve buffer, the
@@ -234,6 +239,12 @@ TRAINING_EXTRA_BY_NAME = {
     "Sequential": ("_fit_state", "_curve", "_fit_batch", "_fit_shuffle", "_target",
                    # nn-blocks-pgseq: compile's parameter groups as the fit resolved them (per-tensor table)
                    "_param_groups"),
+    "LSTMRegressor": ("_optimizer_state_", "_source_state_"),
+    "LSTMClassifier": ("_optimizer_state_", "_source_state_"),
+    "GRURegressor": ("_optimizer_state_", "_source_state_"),
+    "GRUClassifier": ("_optimizer_state_", "_source_state_"),
+    "RNNRegressor": ("_optimizer_state_", "_source_state_"),
+    "RNNClassifier": ("_optimizer_state_", "_source_state_"),
 }
 
 #: Save-schema members that are training records or run settings: `answer_steps`

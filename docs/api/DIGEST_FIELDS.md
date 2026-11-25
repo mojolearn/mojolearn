@@ -24,7 +24,7 @@ private fields a row names), under the class name followed by `#training`.
 - A CPU twin of a class (a `Host*` class, what `host_model` loads) is hashed as that class: same name, same
   fields, same digest.
 - Public names no class hashes (they record how a call ran, not what was fitted): `input_copied_`, `fortran_copied_`, `last_shards_`, `used_query_tile_`, `n_candidate_distances_`, `grad_weight_`, `grad_bias_`, `grad_weight_r_`, `scorer_`, `fit_loop_`.
-- The training record (`training_digest_` only): `n_iter_`, `t_`, `n_steps_`, `n_batch_iter_`, `epochs_run_`, `best_epoch_`, `best_iteration_`, `num_batches_tracked_`, `loss_`, `loss_curve_`, `losses_`, `validation_loss_curve_`, `validation_scores_`, `best_loss_`, `best_validation_score_`, `training_loss_`, `error_`, `reconstruction_err_`, `objective_`, `dual_gap_`, `kl_divergence_`, `stress_`, `lower_bound_`, `converged_`, `stopped_early_`, `retcode_`, `info_`, `sse_`, `criterion_`, `log_marginal_likelihood_value_`, `n_boruvka_rounds_`, `optimizer_m_`, `optimizer_v_`, `optimizer_runs_`, `cv_results_`, `best_score_`, `scores_`, `coefs_paths_`, `mse_path_`.
+- The training record (`training_digest_` only): `n_iter_`, `t_`, `n_steps_`, `n_batch_iter_`, `epochs_run_`, `best_epoch_`, `best_iteration_`, `num_batches_tracked_`, `loss_`, `loss_curve_`, `losses_`, `validation_loss_curve_`, `validation_scores_`, `best_loss_`, `best_validation_score_`, `training_loss_`, `error_`, `reconstruction_err_`, `objective_`, `dual_gap_`, `kl_divergence_`, `stress_`, `lower_bound_`, `converged_`, `stopped_early_`, `retcode_`, `info_`, `sse_`, `criterion_`, `log_marginal_likelihood_value_`, `n_boruvka_rounds_`, `optimizer_m_`, `optimizer_v_`, `optimizer_runs_`, `optimizer_w_`, `cv_results_`, `best_score_`, `scores_`, `coefs_paths_`, `mse_path_`.
 - Fit-only settings a save schema's digest leaves out: `_hp_cache_size`, `_hp_max_iter`, `_hp_nochange_steps`, `_hp_tol`, `_n_init`, `cache_size`, `init_params`, `max_iter`, `maxiter`, `nochange_steps`, `query_tile`, `reg_covar`, `tol`.
 
 | Class | Source | Fields |
@@ -80,22 +80,22 @@ private fields a row names), under the class name followed by `#training`.
 | `ElasticNet` | save schema (answer members) | `format`, `estimator`, `numeric_mode`, `coef`, `intercept`, `hyper`, `meta` |
 | `ElasticNetCV` | public fitted attributes | every public fitted attribute |
 | `EllipticEnvelope` | public fitted attributes | every public fitted attribute; plus `_precision`, `_seed`, `_draws` |
-| `ExperimentalTwoLevelFeatureFreq` | save schema (answer members) | `format`, `numeric_mode`, `estimator`, `loss`, `model`, `meta`, `bias`, `category_map` (when present) |
+| `ExperimentalTwoLevelFeatureFreq` | save schema (answer members) | `format`, `numeric_mode`, `estimator`, `loss`, `model`, `meta`, `bias`, `category_map` (when present), `feature_importances` (when present) |
 | `ExponentialSmoothing` | save schema (answer members) | `format`, `estimator`, `numeric_mode`, `seasonal`, `initialization_method`, `components`, `alpha`, `beta`, `gamma`, `meta`, `eps` |
 | `ExtraTreesClassifier` | save schema (answer members) | `format`, `estimator`, `device`, `offsets`, `colid`, `quesval`, `left_child`, `leaves`, `meta`, `classes`, `(step forest_engine)` |
 | `ExtraTreesRegressor` | save schema (answer members) | `format`, `estimator`, `device`, `offsets`, `colid`, `quesval`, `left_child`, `leaves`, `meta`, `classes`, `(step forest_engine)` |
 | `FactorAnalysis` | public fitted attributes | every public fitted attribute |
 | `FastICA` | public fitted attributes | every public fitted attribute; plus `_whiten` |
 | `GARCH` | public fitted attributes | every public fitted attribute; plus `_one`, `_y`, `_fc` |
-| `GRUClassifier` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `hidden_size`, `num_layers` |
-| `GRURegressor` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `hidden_size`, `num_layers` |
+| `GRUClassifier` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `hidden_size`, `num_layers`, `output`, `bidirectional`; `training_digest_` also `_optimizer_state_`, `_source_state_` |
+| `GRURegressor` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `hidden_size`, `num_layers`, `output`, `bidirectional`; `training_digest_` also `_optimizer_state_`, `_source_state_` |
 | `GammaRegressor` | public fitted attributes | every public fitted attribute; plus `_link` |
 | `GaussianMixture` | save schema (answer members) | `format`, `estimator`, `numeric_mode`, `covariance_type`, `weights`, `means`, `covariances`, `precisions_cholesky`, `log_det_chol`, `ints` |
 | `GaussianNB` | public fitted attributes | every public fitted attribute; plus `_const`, `_raw_var` |
 | `GaussianProcessClassifier` | save schema (answer members) | `format`, `estimator`, `numeric_mode`, `kinds`, `kparams`, `ls_len`, `ls`, `classes`, `x`, `meta`, `y`, `L`, `pi`, `wsr`, `(step each)`, `(step each)`, `(step each)` |
 | `GaussianProcessRegressor` | save schema (answer members) | `kinds`, `params`, `ls_len`, `ls`, `format`, `estimator`, `numeric_mode`, `X_train`, `L`, `alpha`, `ints`, `reals` |
 | `GaussianRandomProjection` | public fitted attributes | every public fitted attribute; plus `_rp_components` |
-| `GradientBoosting` | save schema (answer members) | `format`, `numeric_mode`, `estimator`, `loss`, `model`, `meta`, `bias`, `category_map` (when present) |
+| `GradientBoosting` | save schema (answer members) | `format`, `numeric_mode`, `estimator`, `loss`, `model`, `meta`, `bias`, `category_map` (when present), `feature_importances` (when present) |
 | `GradientBoostingClassifier` | public fitted attributes | every public fitted attribute; plus `_learner_` |
 | `GradientBoostingRegressor` | public fitted attributes | every public fitted attribute; plus `_learner_` |
 | `HDBSCAN` | save schema (answer members) | `format`, `estimator`, `numeric_mode`, `metric`, `cluster_selection_method`, `raw_data`, `core_distances`, `labels`, `parents`, `lambdas`, `deaths`, `selected_clusters`, `index_into_children`, `exemplar_idx`, `exemplar_label_offsets`, `ints`, `reals` |
@@ -117,8 +117,8 @@ private fields a row names), under the class name followed by `#training`.
 | `KernelDensity` | save schema (answer members) | `format`, `estimator`, `numeric_mode`, `kernel`, `metric`, `x`, `bandwidth`, `meta`, `weights` (when present) |
 | `KernelPCA` | public fitted attributes | every public fitted attribute; plus `_gamma`, `_fit_X`, `_fit_cols`, `_fit_all` |
 | `KernelRidge` | public fitted attributes | every public fitted attribute; plus `_kernel_params`, `_squeeze` |
-| `LSTMClassifier` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `hidden_size`, `num_layers` |
-| `LSTMRegressor` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `hidden_size`, `num_layers` |
+| `LSTMClassifier` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `hidden_size`, `num_layers`, `output`, `bidirectional`; `training_digest_` also `_optimizer_state_`, `_source_state_` |
+| `LSTMRegressor` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `hidden_size`, `num_layers`, `output`, `bidirectional`; `training_digest_` also `_optimizer_state_`, `_source_state_` |
 | `LabelBinarizer` | public fitted attributes | every public fitted attribute; plus `_classes`, `_cats` |
 | `LabelEncoder` | public fitted attributes | every public fitted attribute; plus `_classes`, `_cats` |
 | `LabelPropagation` | public fitted attributes | every public fitted attribute; plus `_classical_raw_graph`; parameters `kernel`, `gamma`, `n_neighbors` |
@@ -163,7 +163,7 @@ private fields a row names), under the class name followed by `#training`.
 | `OneHotEncoder` | public fitted attributes | every public fitted attribute; plus `_infrequent`, `_grouping`, `_drop_after` |
 | `OneVsRestClassifier` | public fitted attributes | every public fitted attribute |
 | `OptimizedTheta` | public fitted attributes | every public fitted attribute; plus `_one`, `_y` |
-| `OrderedRMSE` | save schema (answer members) | `format`, `numeric_mode`, `estimator`, `loss`, `model`, `meta`, `bias`, `category_map` (when present) |
+| `OrderedRMSE` | save schema (answer members) | `format`, `numeric_mode`, `estimator`, `loss`, `model`, `meta`, `bias`, `category_map` (when present), `feature_importances` (when present) |
 | `OrdinalEncoder` | public fitted attributes | every public fitted attribute; plus `_missing`, `_infrequent`, `_grouping` |
 | `PCA` | save schema (answer members) | `format`, `estimator`, `numeric_mode`, `svd_solver`, `components`, `mean`, `singular_values`, `explained_variance`, `explained_variance_ratio`, `noise_variance`, `meta` |
 | `PLSCanonical` | public fitted attributes | every public fitted attribute; plus `_x_mean`, `_x_std`, `_y_mean`, `_y_std`, `_x_scores`, `_y_scores`, `_predict_1d` |
@@ -183,8 +183,8 @@ private fields a row names), under the class name followed by `#training`.
 | `QuantileTransformer` | public fitted attributes | every public fitted attribute; plus `_q` |
 | `RBFSampler` | public fitted attributes | every public fitted attribute; plus `_params` |
 | `RFE` | public fitted attributes | every public fitted attribute; plus `_mask` |
-| `RNNClassifier` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `hidden_size`, `num_layers`, `nonlinearity` |
-| `RNNRegressor` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `hidden_size`, `num_layers`, `nonlinearity` |
+| `RNNClassifier` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `hidden_size`, `num_layers`, `nonlinearity`, `output`, `bidirectional`; `training_digest_` also `_optimizer_state_`, `_source_state_` |
+| `RNNRegressor` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `hidden_size`, `num_layers`, `nonlinearity`, `output`, `bidirectional`; `training_digest_` also `_optimizer_state_`, `_source_state_` |
 | `RadiusNeighbors` | save schema (answer members) | `format`, `estimator`, `numeric_mode`, `metric`, `algorithm`, `radius`, `p`, `index`, `meta` |
 | `RandomForestClassifier` | save schema (answer members) | `format`, `estimator`, `device`, `offsets`, `colid`, `quesval`, `left_child`, `leaves`, `meta`, `classes`, `(step forest_engine)` |
 | `RandomForestRegressor` | save schema (answer members) | `format`, `estimator`, `device`, `offsets`, `colid`, `quesval`, `left_child`, `leaves`, `meta`, `classes`, `(step forest_engine)` |
@@ -201,7 +201,7 @@ private fields a row names), under the class name followed by `#training`.
 | `SVGP` | public fitted attributes | every public fitted attribute; plus `_alpha`, `_C` |
 | `SVR` | save schema (answer members) | `format`, `estimator`, `numeric_mode`, `kernel`, `gamma`, `dual_coef`, `support_vectors`, `support`, `intercept`, `hyper`, `meta`, `kernel_params` (when present) |
 | `SelectKBest` | public fitted attributes | every public fitted attribute; plus `_mask` |
-| `Sequential` | public fitted attributes | every public fitted attribute; plus `_layers`, `_sample_shape`, `_fit_loss`, `_y_1d`; `training_digest_` also `_fit_state`, `_curve`, `_fit_batch`, `_fit_shuffle`, `_target` |
+| `Sequential` | public fitted attributes | every public fitted attribute; plus `_layers`, `_sample_shape`, `_fit_loss`, `_y_1d`; `training_digest_` also `_fit_state`, `_curve`, `_fit_batch`, `_fit_shuffle`, `_target`, `_param_groups` |
 | `SimpleImputer` | public fitted attributes | every public fitted attribute; plus `_fill`, `_keep`, `_indicator` |
 | `SkewedChi2Sampler` | public fitted attributes | every public fitted attribute; plus `_random_weights`; parameters `skewedness` |
 | `SparseCoder` | public fitted attributes | every public fitted attribute; parameters `transform_algorithm`, `transform_n_nonzero_coefs`, `transform_alpha`, `split_sign`, `positive_code`, `transform_max_iter` |

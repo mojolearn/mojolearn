@@ -22,7 +22,14 @@ Units (one column each build: the host column with -D MOJOLEARN_COLUMN_CPU=1, el
      part (position (0, 3)), and 5 steps from a source reopened at the saved position with the saved state: the
      same parameters and optimizer state, word for word; the step losses of the resumed run are the uninterrupted
      run's last five.
-Sabotage arms coverage-autograd-batch_source_fit_read_ahead_{gpu,cpu} fail both units on their own column (the saved
+  2  CLASS WEIGHTS AND VALIDATION (lane fable-finalize). A GRU(4) classifier of three classes with
+     output="sequence" on class targets (one a step). Class weights of 1 give the unweighted fit's words (the
+     weight of a row is its label's weight, times nothing else); weights (1, 3, 0.5) move the parameters; weights
+     of 0 leave the parameters at their initial words (every valid step's weight comes from its label: one row
+     weighed by a stale or foreign word would move them); validation sequences leave the training words unchanged
+     and give one finite loss for each of the two passes over the source, with the passes completed and the best
+     one.
+Sabotage arms coverage-autograd-batch_source_fit_read_ahead_{gpu,cpu} fail units 0 and 1 on their own column (the saved
 position is (0, 4)).
 """
 from std.ffi import c_int, external_call
@@ -32,7 +39,7 @@ from sequence.exec_trait import Exec
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
 from sequence.ops import FP, OPT_ADAM, CELL_GRU
-from sequence.recurrent import Net, OptConfig, RnnOptions, TASK_MSE, rnn_fit_stream
+from sequence.recurrent import Net, OptConfig, RnnOptions, TASK_MSE, TASK_CE, rnn_fit_stream
 from autograd.rules_recurrent import AutogradRnnStep
 from autograd.model import FIT_STATE_WORDS, FS_SOURCE, IP64, LAYER_FLATTEN, LOSS_MSE, TARGET_DENSE, parse_model
 from autograd.model_blocks import LAYER_RECURRENT
@@ -45,7 +52,7 @@ from bindings.byte_checkpoint_native_run import byte_file_write, ByteCheckpointW
 from checks.native_tests.training_sequential_common import SeqModel, L_DROPOUT
 from checks.native_tests.testsuite_cases import check_cases, check_cases_serial, CPU_COLUMN_BUILD, require
 
-comptime STREAM_FITS_UNITS = 2
+comptime STREAM_FITS_UNITS = 3
 comptime _F = 2
 comptime _T = 4  # the longest record: every batch is padded to it
 comptime _W = 4  # target words a record: one a step (unit 1), or the regressor's four outputs (unit 0)
@@ -97,8 +104,9 @@ def _lengths(shard: Int) -> List[Int]:
     return [2, 1, 3]
 
 
-def _write_sealed(root: String) raises:
-    """The fixture's two shards with targets under `root`, then sealed."""
+def _write_sealed(root: String, classes: Bool = False) raises:
+    """The fixture's two shards with targets under `root`, then sealed. `classes`: the targets are class indices
+    in [0, 3), one a step."""
     for k in range(2):  # driver-loop: over the two shards
         var lengths = _lengths(k)
         var total = 0
@@ -111,7 +119,10 @@ def _write_sealed(root: String) raises:
             steps.append(Float32(((i * 37 + k * 11) % 17) - 8) / Float32(8))
         var targets = List[Float32]()
         for i in range(len(lengths) * _W):  # driver-loop: over the shard's target words (a fixed draw)
-            targets.append(Float32(((i * 29 + k * 7) % 13) - 6) / Float32(12))
+            if classes:
+                targets.append(Float32((i * 5 + k) % 3))
+            else:
+                targets.append(Float32(((i * 29 + k * 7) % 13) - 6) / Float32(12))
         var stem = root + "/part" + String(k)
         _put(stem + ".steps.npy", _npy("<f4", "(" + String(total) + ", " + String(_F) + ")",
                                        Int(steps.unsafe_ptr()), total * _F * 4))
@@ -309,24 +320,119 @@ def run_recurrent_unit[E: Exec](root: String, var ex: E) raises:
     print("STREAM_FITS recurrent loss", whole.losses[0], "->", whole.losses[7])
 
 
+# ---------------------------------------------------------------- unit 2: class weights and validation
+def _rnn_fit_classes[E: Exec](
+    mut ex: E, net: Net, mut run: _RnnRun, root: String, total: Int, weights: List[Float32], validate: Bool,
+    mut vcurve: List[Float32],
+) raises:
+    """`total` streamed steps of the classifier from position (0, 0); `weights` empty: no class weights; `validate`:
+    three validation sequences, their losses into vcurve (2 passes, then the passes run and the best one)."""
+    var opts = RnnOptions()
+    opts.seq_out = True
+    opts.has_state = True
+    opts.state = FP(unsafe_from_address=Int(run.state.unsafe_ptr()))
+    opts.epochs = 2
+    if len(weights) > 0:
+        opts.has_cw = True
+        opts.cw = FP(unsafe_from_address=Int(weights.unsafe_ptr()))
+    var vx = List[Float32]()
+    var vy = List[Float32]()
+    var vl: List[Float32] = [4.0, 2.0, 3.0]
+    for i in range(3 * _T * _F):  # small-loop(a fixed draw of validation steps)
+        vx.append(Float32(((i * 31) % 11) - 5) / Float32(6))
+    for i in range(3 * _T):  # small-loop(a fixed draw of validation class indices)
+        vy.append(Float32((i * 7) % 3))
+    if validate:
+        opts.nv = 3
+        opts.vx = FP(unsafe_from_address=Int(vx.unsafe_ptr()))
+        opts.vy = FP(unsafe_from_address=Int(vy.unsafe_ptr()))
+        opts.has_vl = True
+        opts.vl = FP(unsafe_from_address=Int(vl.unsafe_ptr()))
+        opts.vcurve = FP(unsafe_from_address=Int(vcurve.unsafe_ptr()))
+    var cfg = OptConfig(OPT_ADAM, 0, Float32(0.9), Float32(0.999), Float32(1e-8), Float32(0), Float32(0))
+    var lrs = List[Float32](length=total, fill=Float32(0.05))
+    run.losses = List[Float32](length=total, fill=Float32(0))
+    var src = batch_source_open(_spec(root, 0, 0))
+    rnn_fit_stream[AutogradRnnStep](ex, net, TASK_CE, src, total, _T, UInt64(17),
+                                    FP(unsafe_from_address=Int(run.params.unsafe_ptr())),
+                                    FP(unsafe_from_address=Int(run.losses.unsafe_ptr())),
+                                    FP(unsafe_from_address=Int(lrs.unsafe_ptr())), cfg, Float32(0), 0, opts,
+                                    Int(run.saved.unsafe_ptr()), Int(run.position.unsafe_ptr()))
+    ex.sync()
+    src.close()
+    _ = lrs^
+    _ = vx^
+    _ = vy^
+    _ = vl^
+    _ = weights
+    _ = vcurve
+
+
+def run_weights_unit[E: Exec](root: String, var ex: E) raises:
+    var net = Net(CELL_GRU, _F, 4, 1, 3)
+    var none = List[Float32]()
+    var unused = List[Float32](length=4, fill=Float32(0))
+    var plain = _RnnRun(net.n_params())
+    var start = plain.params.copy()
+    _rnn_fit_classes(ex, net, plain, root, 8, none, False, unused)
+    _finite("classifier step losses", plain.losses)
+    var ones: List[Float32] = [1.0, 1.0, 1.0]
+    var unit_w = _RnnRun(net.n_params())
+    _rnn_fit_classes(ex, net, unit_w, root, 8, ones, False, unused)
+    _same("class weights of 1: parameters", unit_w.params, plain.params)
+    _same("class weights of 1: step losses", unit_w.losses, plain.losses)
+    var mixed: List[Float32] = [1.0, 3.0, 0.5]
+    var weighted = _RnnRun(net.n_params())
+    _rnn_fit_classes(ex, net, weighted, root, 8, mixed, False, unused)
+    _finite("weighted classifier step losses", weighted.losses)
+    var moved = False
+    for i in range(len(weighted.params)):  # small-loop(check values)
+        if bitcast[DType.uint32](weighted.params[i]) != bitcast[DType.uint32](plain.params[i]):
+            moved = True
+    require(moved, "stream_fits: class weights (1, 3, 0.5) left the parameters of the unweighted fit")
+    var zeros: List[Float32] = [0.0, 0.0, 0.0]
+    var still = _RnnRun(net.n_params())
+    _rnn_fit_classes(ex, net, still, root, 8, zeros, False, unused)
+    _same("class weights of 0: the parameters do not move", still.params, start)
+    # validation: the training words of the weighted fit, and one loss a pass
+    var curve = List[Float32](length=4, fill=Float32(-1))
+    var watched = _RnnRun(net.n_params())
+    _rnn_fit_classes(ex, net, watched, root, 8, mixed, True, curve)
+    _same("validation leaves the training parameters", watched.params, weighted.params)
+    _same("validation leaves the step losses", watched.losses, weighted.losses)
+    var seen: List[Float32] = [curve[0], curve[1]]
+    _finite("validation losses", seen)
+    require(curve[0] > Float32(0) and curve[1] > Float32(0), "stream_fits: a validation loss is not positive")
+    require(curve[2] == Float32(2), "stream_fits: two passes over the source give two validation losses, not "
+            + String(curve[2]))
+    var want_best = Float32(2) if curve[1] < curve[0] else Float32(1)
+    require(curve[3] == want_best, "stream_fits: the best pass is " + String(curve[3]) + ", not "
+            + String(want_best))
+    print("STREAM_FITS validation", curve[0], "->", curve[1])
+
+
 def test_stream_fits() raises:
     comptime if CPU_COLUMN_BUILD:
         def host_unit(unit: Int) raises:
             var root = _dir(unit)
-            _write_sealed(root)
+            _write_sealed(root, unit == 2)
             if unit == 0:
                 run_sequential_unit[HostExec](root, HostExec())
-            else:
+            elif unit == 1:
                 run_recurrent_unit[HostExec](root, HostExec())
+            else:
+                run_weights_unit[HostExec](root, HostExec())
         check_cases("stream_fits", STREAM_FITS_UNITS, host_unit)
     else:
         def device_unit(unit: Int) raises:
             var root = _dir(unit)
-            _write_sealed(root)
+            _write_sealed(root, unit == 2)
             if unit == 0:
                 run_sequential_unit[DeviceExec](root, DeviceExec())
-            else:
+            elif unit == 1:
                 run_recurrent_unit[DeviceExec](root, DeviceExec())
+            else:
+                run_weights_unit[DeviceExec](root, DeviceExec())
         check_cases_serial("stream_fits", STREAM_FITS_UNITS, device_unit)
     print("PASS STREAM_FITS units", STREAM_FITS_UNITS)
 

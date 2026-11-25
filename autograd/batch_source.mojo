@@ -934,6 +934,20 @@ def batch_source_capacity(src: BatchSource, field: Int) -> Int:
 #     beside them): the Sequential and estimator doors run in another binding image than the computation, so no
 #     opened source crosses an image (each `fit` call opens it once; the handle's owner is Program.fit's cache);
 #   - the class targets of a classification loss are admitted once a fit (`batch_source_check_classes`).
+# WHY THE OPENED SOURCE IS NOT KEPT ACROSS THESE FITS' CALLS (lane fable-finalize, 2026-11-25; reviewed, not changed).
+# Program.fit keeps its opened source on the handle's native owner, which only the binding image that built it uses
+# (providers/python/batch_source_pyapi_door.mojo: another image's owner fails the downcast and is replaced). Here
+# the door (bindings/sequential_execution_pack.mojo, bindings/xseq_neural_native_door.mojo) and the training loop
+# (the provider image behind `xseq_neural_run_call` / the model file dispatch) are DIFFERENT images, so a kept
+# source would have to be a struct built in one image and grown, replanned and freed in another: its Lists
+# (order, bounds, the host buffers) are reallocated by `plan` and `read`. Nothing in the tree shares Mojo-owned
+# heap storage across binding images today (the one shared slot holds a Bool and a Python reference), and whether
+# two separately built images share one allocator and one layout of this struct is not established. A wrong
+# guess is silent heap corruption, so it is not done blind. What it costs: one open (index, offset tables: O(
+# records)) and, for a classifier, one scan of the targets PER fit OR partial_fit CALL, never per step: a fit of E
+# epochs opens once; only a loop of partial_fit(source=, steps=1) calls pays it every step. What would settle it: a
+# native check that builds a List in one binding image and grows and frees it in another (under the address
+# sanitizer), or Modular's word on the allocator; then the owner can hand its source's address to these doors.
 # The position a fit leaves is written twice: the CONSUMED position back to the handle, and the position the
 # training state saves (`batch_source_fit_saved`, the same words unless a sabotage arm moves them) with the source's
 # binding words (`ProgramTrainingSource`) into the model's state, so a fresh process resumes on the same next batch.

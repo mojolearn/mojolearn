@@ -142,3 +142,58 @@ def test_recurrent_streamed_classifier_classes_are_the_indices(tmp_path):
     root = _shards(str(tmp_path), targets="classes")
     est = mojolearn.GRUClassifier(hidden_size=4, max_epochs=1).fit(source=_source(root))
     assert list(est.classes_) == [0, 1, 2] and est.n_outputs_ == 3
+
+
+def _classes_by_step(root):
+    """The classes fixture with one class index a step (output='sequence'), padded to the longest record."""
+    os.makedirs(root, exist_ok=True)
+    lines = ["mojolearn-batch-shards v1"]
+    for k, lengths in enumerate(LENGTHS):
+        n, total = len(lengths), sum(lengths)
+        steps = (np.arange(total * F, dtype=np.float32).reshape(-1, F) % 7 - 3) / 4.0 + k
+        np.save(os.path.join(root, f"p{k}.steps.npy"), np.ascontiguousarray(steps, np.float32))
+        np.save(os.path.join(root, f"p{k}.offsets.npy"), np.concatenate([[0], np.cumsum(lengths)]).astype(np.int64))
+        t = (np.arange(n * LONGEST, dtype=np.float32).reshape(n, LONGEST) * 5 + k) % 3
+        np.save(os.path.join(root, f"p{k}.targets.npy"), np.ascontiguousarray(t, np.float32))
+        lines.append(f"shard p{k}")
+    with open(os.path.join(root, "index.txt"), "w", encoding="ascii") as fh:
+        fh.write("\n".join(lines) + "\n")
+    assert ops.BatchSource.seal(root) == len(LENGTHS)
+    return root
+
+
+def _tagger(**kw):
+    return mojolearn.GRUClassifier(hidden_size=4, output="sequence", learning_rate=0.05, random_state=0,
+                                   max_epochs=2, **kw)
+
+
+def test_recurrent_streamed_class_weights_per_step(tmp_path):
+    """class_weight as a dict weighs every valid step by its label; weights of 1 are the unweighted fit."""
+    root = _classes_by_step(str(tmp_path))
+    plain = _tagger().fit(source=_source(root))
+    ones = _tagger(class_weight={0: 1.0, 1: 1.0, 2: 1.0}).fit(source=_source(root))
+    assert np.array_equal(ones.params_, plain.params_)
+    weighted = _tagger(class_weight={0: 1.0, 1: 3.0, 2: 0.5}).fit(source=_source(root))
+    assert not np.array_equal(weighted.params_, plain.params_)
+    assert np.all(np.isfinite(weighted.loss_curve_))
+    with pytest.raises(ValueError, match="class_weight as a dict"):
+        _tagger(class_weight="balanced").fit(source=_source(root))
+    with pytest.raises(ValueError, match="class_weight is for classifiers"):
+        mojolearn.GRURegressor(hidden_size=4, class_weight={0: 2.0}).fit(source=_source(_shards(str(tmp_path / "r"))))
+
+
+def test_recurrent_streamed_validation_per_epoch(tmp_path):
+    """validation_data arrays give one validation loss for each pass over the source and leave training as it is."""
+    root = _classes_by_step(str(tmp_path))
+    xv = (np.arange(3 * LONGEST * F, dtype=np.float32).reshape(3, LONGEST, F) % 5 - 2) / 3.0
+    yv = (np.arange(3 * LONGEST).reshape(3, LONGEST) * 7) % 3
+    lv = np.array([4, 2, 3])
+    plain = _tagger().fit(source=_source(root))
+    seen = _tagger().fit(source=_source(root), validation_data=(xv, yv, lv))
+    assert np.array_equal(seen.params_, plain.params_)
+    assert len(seen.validation_loss_) == 2 and np.all(np.isfinite(seen.validation_loss_))
+    assert seen.best_epoch_ == 1 + int(np.argmin(seen.validation_loss_))
+    with pytest.raises(ValueError, match="needs the validation sequences' lengths"):
+        _tagger().fit(source=_source(root), validation_data=(xv, yv))
+    with pytest.raises(ValueError, match="padded to the source's max_length"):
+        _tagger().fit(source=_source(root), validation_data=(xv[:, :3], yv[:, :3], np.array([3, 2, 3])))

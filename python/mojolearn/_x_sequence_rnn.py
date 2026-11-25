@@ -193,9 +193,13 @@ class _RecurrentRegressor(_RecurrentBase):
             The batch size, shuffling and order are the source's;
             ``max_epochs`` passes over it, the next batch read from disk
             while the current one trains. ``loss_curve_`` holds every
-            step's loss. Not combined with ``sample_weight``,
-            ``class_weight``, ``h_0``, ``validation_data`` or
-            ``early_stopping``. :meth:`partial_fit` with ``source``
+            step's loss. ``class_weight`` as a dict weighs every record
+            (every step with ``output='sequence'``) by its class.
+            ``validation_data=(X_val, y_val, lengths_val)`` arrays,
+            padded to ``max_length``, give ``validation_loss_`` after
+            every pass over the source and ``best_epoch_``. Not combined
+            with ``sample_weight``, ``class_weight='balanced'``, ``h_0``
+            or ``early_stopping``. :meth:`partial_fit` with ``source``
             continues from where the last call stopped.
         source : mojolearn.ops.BatchSource or None, default None
             Train on sequences streamed from sharded files on disk instead
@@ -208,8 +212,10 @@ class _RecurrentRegressor(_RecurrentBase):
             The batch size, shuffling and order are the source's;
             ``max_epochs`` passes over it, the next batch read from disk
             while the current one trains. ``loss_curve_`` holds every
-            step's loss. Not combined with ``sample_weight``,
-            ``class_weight``, ``h_0``, ``validation_data`` or
+            step's loss. ``validation_data=(X_val, y_val, lengths_val)``
+            arrays, padded to ``max_length``, give ``validation_loss_``
+            after every pass over the source and ``best_epoch_``. Not
+            combined with ``sample_weight``, ``h_0`` or
             ``early_stopping``. :meth:`partial_fit` with ``source``
             continues from where the last call stopped.
 
