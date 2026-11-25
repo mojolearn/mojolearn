@@ -70,6 +70,7 @@ def _check(data: List[UInt8], document_bytes: Int, vocab_size: Int) raises:
     var device = trained_vocab_from_pairs(
         MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(pairs.unsafe_ptr())), Int(words[0]),
         Int(words[1]), Int(words[2]))
+    _ = pairs^
     ref expected = host.vocab.value()
     assert_equal(device.n_merges(), expected.n_merges(), "merge count, width " + String(width))
     assert_equal(device.n_ties_broken, expected.n_ties_broken, "tie count, width " + String(width))
