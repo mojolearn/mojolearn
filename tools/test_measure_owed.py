@@ -558,9 +558,10 @@ class CommittedOwed(unittest.TestCase):
         # relaxation of `fast` names MOJOLEARN_MODE_FAST_ROWS with it (checks/mode_policy.mojo `_row`)
         from release_github_build import normalize_defines
         doc = json.load(open(os.path.join(PC.OUT_DIR, "owed-pre0867.json")))
-        # lane fx-verdicts6, 2026-11-20: the matrix-units route is the default of the fast set; its old path
-        # (MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF) is the one family name left, and means something only in a fast set
-        rows = ("MOJOLEARN_MODE_FAST_", "MOJOLEARN_GEMM_FAST_MATRIX_UNITS")
+        # lane fx-verdicts6, 2026-11-20: the matrix-units route is the default of the fast set. Its old path
+        # (MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF), the one family name that meant something only in a fast set, was
+        # deleted 2026-11-25 (lane fable-followups, docs/TOMBSTONES.md); only the row defines are left here.
+        rows = ("MOJOLEARN_MODE_FAST_",)
         for name, arm in doc["b_arms"].items():
             if arm["owed"] != "RUN" or arm.get("env"):
                 continue

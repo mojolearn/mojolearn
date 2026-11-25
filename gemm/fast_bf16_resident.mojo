@@ -5,7 +5,7 @@
 EXPERIMENT `-D MOJOLEARN_GEMM_FAST_BF16_RESIDENT`, default OFF, A/B owed with quality beside every time
 (docs/apple-fast/EXPERIMENTS.md; arm `fast-bf16-resident` of bench/results/paper_compare/owed-pre0867.json, rows
 `kernel-clock-units-*`). Legal only in a `fast` build with the matrix-units route (`-D MOJOLEARN_MODE_FAST_ROWS` on
-the NVIDIA or AMD column, no `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF`): in a build that promises identical bits the
+the NVIDIA or AMD column): in a build that promises identical bits the
 define is a compile error (here and in core/experiment_guards_neural.mojo).
 
 WHY A NEW ARM. The deleted arm `MOJOLEARN_GEMM_FAST_BF16_UNITS` (docs/TOMBSTONES.md, A/B abf2: median 0.96, dominated by
@@ -64,7 +64,7 @@ def _bf16_resident_checked() -> Bool:
     """The compile-time refusal outside a fast build with the matrix-units route. True when the arm is on."""
     comptime assert (
         (not _BF16_RESIDENT_DEFINED) or GEMM_FAST_MATRIX_UNITS
-    ), "MOJOLEARN_GEMM_FAST_BF16_RESIDENT is legal only in a fast build with the matrix-units route (-D MOJOLEARN_MODE_FAST_ROWS on the NVIDIA or AMD column, without MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF); never in a build that promises identical bits"
+    ), "MOJOLEARN_GEMM_FAST_BF16_RESIDENT is legal only in a fast build with the matrix-units route (-D MOJOLEARN_MODE_FAST_ROWS on the NVIDIA or AMD column); never in a build that promises identical bits"
     return _BF16_RESIDENT_DEFINED
 
 

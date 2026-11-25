@@ -25,8 +25,8 @@ from gemm.experiments.neural_profile import (
 )
 from gemm.experiments.neural_switches import ROLE_PROJECTION,ROLE_HEAD,ROLE_WGRAD
 # The matrix-units route of a `fast` build on NVIDIA and AMD (gemm/fast_matrix_units.mojo: DEFAULT there since
-# 2026-11-20, A/B abf2, median 0.93 over 13 cells, quality equal; -D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF keeps the
-# exact route). False on every other build, identical builds included.
+# 2026-11-20, A/B abf2, median 0.93 over 13 cells, quality equal; the `_OFF` define of the
+# old exact route is deleted 2026-11-25, TOMBSTONE in checks/mode_policy.mojo). False on every other build, identical builds included.
 from gemm.fast_matrix_units import (
     GEMM_FAST_MATRIX_UNITS,matrix_units_takes,matrix_units_workspace_floats,matrix_units_gemm_into,
 )

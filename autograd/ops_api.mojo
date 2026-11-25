@@ -209,7 +209,7 @@ from autograd.nn_scatter import (
 # nn-blocks-scatter end
 # nn-blocks-scan begin: the public scan over a captured cell, session code 118 (autograd/nn_scan.mojo)
 from autograd.nn_scan import (
-    OPS_SCAN, ScanSpec, scan_decode, scan_check_binding, SCAN_SABOTAGE_STATE_LAG, SCAN_SABOTAGE_STATE_LAG_HOST,
+    OPS_SCAN, ScanCell, ScanCache, scan_decode, scan_call_key, scan_check_binding, SCAN_SABOTAGE_STATE_LAG, SCAN_SABOTAGE_STATE_LAG_HOST,
     SCAN_SABOTAGE_INIT_GRAD, SCAN_SABOTAGE_INIT_GRAD_HOST, SCAN_SABOTAGE_DROP_KEY, SCAN_SABOTAGE_DROP_KEY_HOST,
     scan_dropout_seed,
 )
@@ -481,6 +481,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     # nn-blocks-cbw begin: the bound custom operations and the custom nodes
     # of the recorded graph (autograd/nn_cbw.mojo)
     var cbw: CbwState
+    #: The decoded scan cells by fingerprint (autograd/nn_scan.mojo ScanCache): each distinct scan node is parsed
+    #: once per session, not once per call (lane fable-followups, 2026-11-25). Cleared at close.
+    var scans: ScanCache
     #: The scratch tape of the custom backward rules (`_cbw_apply`), the session's own: its storage is reused by
     #: every rule call and returned at close. fable-review-neural (2026-11-25 review): the rule used to borrow
     #: `prog_tape`. Inside Program.fit that field holds the empty tape the fit made while it keeps the session's
@@ -529,6 +532,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.steps = BlockStepScratch()
         self.append_state = Dict[Int, Int]()
         self.cbw = CbwState()  # nn-blocks-cbw
+        self.scans = ScanCache()  # nn-blocks-scan
         self.cbw_tape = Tape()
         self.cbw_tape.no_grad()
         self.pg_tables = List[ParamGroupTable]()
@@ -1047,6 +1051,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.op_tensors = List[Tensor]()
         self.oplog.clear()
         self.cbw.clear()  # nn-blocks-cbw
+        self.scans.clear()  # nn-blocks-scan
         self.ex.sync()
 
     # ------------------------------------------------------------ gradients
@@ -3270,12 +3275,37 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         node: each step's output copied once). A dropout in the cell draws a new mask each step. Launches per step: two views, the
         cell's nodes, and with lengths one view, one view per state rank and one where per state and output.
         Every temporary handle is retired before the return; the tape keeps its nodes, so a recording session
-        differentiates the whole loop (backward through time over the stored per-step values)."""
-        var spec = scan_decode(ints, fs, len(hs))
-        ref cell = spec.cell
-        var n_state = spec.n_state
-        var reverse = spec.reverse
-        var has_lengths = spec.has_lengths
+        differentiates the whole loop (backward through time over the stored per-step values).
+
+        The node's cell is decoded once per session (`_scan_cell`: one dictionary read by the fingerprint the node
+        words carry; a parse, check and per-node split only for a node not seen before) and lent to `_scan_run`."""
+        var ci = self._scan_cell(ints, fs)
+        var sc = ScanCell()
+        swap(sc, self.scans.cells[ci])
+        var packed = 0
+        try:
+            packed = self._scan_run(sc, hs, ints)
+        finally:
+            swap(sc, self.scans.cells[ci])
+        return packed
+
+    def _scan_cell(mut self, ints: List[Int], fs: List[Float32]) raises -> Int:
+        """The index in `self.scans` of the decoded cell these node words name: one dictionary read, or (a node
+        not seen before in this session) decoded, checked and kept."""
+        var i = self.scans.find(ints, fs)
+        if i >= 0:
+            return i
+        var got = scan_decode(ints, fs)
+        return self.scans.add(got^)
+
+    def _scan_run(mut self, mut sc: ScanCell, hs: List[Int], ints: List[Int]) raises -> Int:
+        """The body of `_scan` on a decoded cell `sc` (lent by `_scan`; its dropout nodes' seed words are
+        rewritten before each step that runs them)."""
+        var key = scan_call_key(ints, sc, len(hs))
+        ref cell = sc.cell
+        var n_state = sc.n_state
+        var reverse = sc.reverse
+        var has_lengths = sc.has_lengths
         var xs = hs[0]
         var xs_slot = self._slot(xs)
         var xs_shape = self.shapes[xs_slot]
@@ -3297,37 +3327,21 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 raise Error("ValueError: scan: lengths must hold floating-point values")
             lengths_count = self.shapes[lslot].count()
             at += 1
-        var params = List[Int](capacity=spec.n_params)
-        var param_shapes = List[ShapeN](capacity=spec.n_params)
-        var param_ids = List[Bool](capacity=spec.n_params)
-        for j in range(spec.n_params):  # driver-loop: over the cell's bound parameters (handles and metadata)
+        var params = List[Int](capacity=sc.n_params)
+        var param_shapes = List[ShapeN](capacity=sc.n_params)
+        var param_ids = List[Bool](capacity=sc.n_params)
+        for j in range(sc.n_params):  # driver-loop: over the cell's bound parameters (handles and metadata)
             var slot = self._slot(hs[at + j])
             params.append(hs[at + j])
             param_shapes.append(self.shapes[slot])
             param_ids.append(self.int_words[slot])
         scan_check_binding(cell, xs_shape, self.int_words[xs_slot], state_shapes, state_ids, lengths_count,
                            param_shapes, param_ids)
-        # Resolved once per call: the nodes' arguments, the step views' words, the mask.
+        # Resolved once per decoded cell (autograd/nn_scan.mojo scan_decode): the nodes' arguments and the
+        # dropout nodes (OPS_DROPOUT 21: ints [seed lo, seed hi, counter]), which draw a new mask every step from a
+        # seed derived from (captured seed, the call's key, the node, the time index) (autograd/nn_scan.mojo note).
+        # Resolved once per call: the step views' words, the mask.
         var n_nodes = cell.n_nodes()
-        var node_ints = List[List[Int]](capacity=n_nodes)
-        var node_fs = List[List[Float32]](capacity=n_nodes)
-        for k in range(n_nodes):  # driver-loop: over cell nodes (their arguments, once per call)
-            var ni = List[Int]()
-            for j in range(cell.i_at[k], cell.i_at[k + 1]):  # small-loop(ints: a node's integer arguments)
-                ni.append(cell.ints[j])
-            node_ints.append(ni^)
-            var nf = List[Float32]()
-            for j in range(cell.f_at[k], cell.f_at[k + 1]):  # small-loop(fs: a node's float arguments)
-                nf.append(cell.fs[j])
-            node_fs.append(nf^)
-        # Dropout nodes (OPS_DROPOUT 21: ints [seed lo, seed hi, counter]) draw a new mask every step: a seed
-        # derived from (captured seed, the call's key, the node, the time index) (autograd/nn_scan.mojo note).
-        var drop_nodes = List[Int]()
-        var drop_seed = List[UInt64]()
-        for k in range(n_nodes):  # driver-loop: over cell nodes (dropout ones), once per call
-            if cell.code[k] == OPS_DROPOUT and len(node_ints[k]) >= 3:
-                drop_nodes.append(k)
-                drop_seed.append((UInt64(node_ints[k][1]) << 32) | UInt64(node_ints[k][0] & 0xFFFFFFFF))
         var steps = xs_shape.d[0]
         var batch = xs_shape.d[1]
         var x_dims = cell.in_shapes[n_state].dims()
@@ -3409,25 +3423,25 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                     for k in range(n_state):  # driver-loop: over state tensors (this step's handles)
                         vals.append(state[k])
                 vals.append(x_t)
-                for q in range(len(drop_nodes)):  # driver-loop: over the cell's dropout nodes (this step's seeds)
-                    var dk = drop_nodes[q]
-                    var seed = scan_dropout_seed(drop_seed[q], spec.key, dk, t)
+                for q in range(len(sc.drop_nodes)):  # driver-loop: over the cell's dropout nodes (this step's seeds)
+                    var dk = sc.drop_nodes[q]
+                    var seed = scan_dropout_seed(sc.drop_seed[q], key, dk, t)
                     # nn-blocks-composed begin
                     comptime if (COMPOSED_SABOTAGE_SCAN_KEY and Self.E.IS_DEVICE) or (
                             COMPOSED_SABOTAGE_SCAN_KEY_HOST and not Self.E.IS_DEVICE):
-                        seed = scan_dropout_seed(drop_seed[q], 0, dk, t)  # SABOTAGE: the key stays at the capture's 0
+                        seed = scan_dropout_seed(sc.drop_seed[q], 0, dk, t)  # SABOTAGE: the key stays at the capture's 0
                     # nn-blocks-composed end
                     comptime if (SCAN_SABOTAGE_DROP_KEY and Self.E.IS_DEVICE) or (
                             SCAN_SABOTAGE_DROP_KEY_HOST and not Self.E.IS_DEVICE):
-                        seed = drop_seed[q]  # SABOTAGE: the captured seed at every step and key
-                    node_ints[dk][0] = Int(seed & UInt64(0xFFFFFFFF))
-                    node_ints[dk][1] = Int(seed >> 32)
+                        seed = sc.drop_seed[q]  # SABOTAGE: the captured seed at every step and key
+                    sc.node_ints[dk][0] = Int(seed & UInt64(0xFFFFFFFF))
+                    sc.node_ints[dk][1] = Int(seed >> 32)
                 for k in range(n_nodes):  # driver-loop: over the cell's nodes (one step's launch sequence)
                     args.clear()
                     for j in range(cell.a_at[k], cell.a_at[k + 1]):  # small-loop(args: a node's input refs)
                         var rf = cell.args[j]
                         args.append(params[-rf - 1] if rf < 0 else vals[rf])
-                    var h = self._scan_call(cell.code[k], args, node_ints[k], node_fs[k], x)
+                    var h = self._scan_call(cell.code[k], args, sc.node_ints[k], sc.node_fs[k], x)
                     temps.append(h)
                     vals.append(h)
                 if has_lengths:

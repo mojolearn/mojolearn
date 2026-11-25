@@ -1445,8 +1445,8 @@ struct DeviceExec(Exec, Movable):
         # recoverable at 06d1e8ff34.
         # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_BF16_UNITS.patch
         # The matrix-units route (DEFAULT in a `fast` build on NVIDIA and AMD since 2026-11-20: A/B abf2, mlp fits
-        # 0.96-0.97, infers 0.85-0.95, quality equal; -D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF keeps the exact
-        # route; never compiled in an identical build): a large plain dense product with row-major operands runs
+        # 0.96-0.97, infers 0.85-0.95, quality equal; the `_OFF` define of the old exact route is deleted
+        # 2026-11-25, TOMBSTONE in checks/mode_policy.mojo; never compiled in an identical build): a large plain dense product with row-major operands runs
         # the matrix-unit product, FP32 accumulation (sequence/gemm_matrix_units_route.mojo: the rule, what is not
         # routed, the error bound). An epilogue opcode then runs its follower in FP32 as OP_GEMM_EPI_TAIL on the
         # stored words, the launch pair of the packed route below. After the split-K and coop tests above, which
