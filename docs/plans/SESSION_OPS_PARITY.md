@@ -99,14 +99,28 @@ reflection / replication.
 
 1. **One light verify lane per op**, both sides through `device=` (`docs/plans/VERIFY_THROUGH_DEVICE.md`), smallest
    shapes that exercise padding / stride / dilation edges, a sabotage arm per side that the lane catches.
-2. **One generic composed-model lane driven by data cases**, never a lane per composition. A case is a data file
-   under the verify fixtures: a captured Program graph plus tiny inputs, and optional train / save / resume steps.
-   The runner runs every case on both sides and digests the outputs and updates. Adding a case = adding a data
-   file, no code. One sabotage arm per side on the runner (it drops one node's gradient contribution).
-   nn-blocks' `ops-composed-tagger` moves over as the first case (its arms kept as case-level faults where they
-   fit, else on the runner). The minimum further cases, each crossing one piece of glue once: tape / backward
-   accumulation (an input on two paths, a non-unit seed); Program capture + replay; gradient accumulation with a
-   masked sum and denominator; param groups + resume; scan with dropout over varying lengths.
+2. **One generic composed-model lane driven by data cases**, never a lane per composition: `ops-composed-cases`
+   (`tools/identity_lanes/composed_cases.py`, lane session-ops-verify). A case is a declarative spec in a data file,
+   `python/mojolearn/verify_reference/composed-*.json` (shipped by every packer through the existing
+   `verify_reference/*.json` glob; nothing to generate, no binary). Schema `mojolearn.composed-cases.v1`: a file
+   holds related cases; a case has tiny `data` arrays (literal values or the harness's hashed stream) and a list of
+   statements that call the public `ops.Session` / `Program` methods BY NAME (`{"op": "call", "fn": "s.matmul",
+   "args": ["@x", "@w"], "as": "y"}`), so any op, including ops added later (sequence_mask, topk, gather, ...),
+   is usable in a case with no runner change. Verbs: session, call, map, let, read, array, np (host oracles only),
+   repeat, def/use (macros), path, roundtrip (an .npz checkpoint), state_save/state_load (optimizer_state_dict),
+   find/pick (Program.params), and the checks digest, same (bytes), differ, zero, close, oracle (weighted
+   cross-entropy in float64), fd_grad (central differences of a captured Program). The runner runs every case on
+   the harness's side (both sides through `device=`), REFUSES on a failed check, and hashes the named parts
+   `<case>:<part>` (Session and Program expose no `digest_`). Adding a case = adding a data file. References OWED.
+   Cases: `composed-tagger.json` tagger (nn-blocks' `ops-composed-tagger`, moved over; its lane file deleted, its
+   native check `checks/native_tests/nn_composed.mojo` and its four arms kept as the case's faults);
+   `composed-glue.json` tape-two-paths (an input on two paths, a 0.37 loss scale; gradients against central
+   differences), program-replay (capture, replay to the bit, save/load), grad-accum-masked (two microbatches with a
+   masked sum over a shared denominator against the whole batch), groups-resume (Adam, two groups, save, fresh-session
+   resume bit equal), scan-dropout-lengths (lengths 1 and 3, keys 0 and 1, zeros past each length).
+   Runner arms (`autograd/session_ops_verify.mojo`, test-build defines, off in the product): DROP_ACCUMULATE /
+   _HOST, the tape skips every gradient contribution after a tensor's first on one side (`autograd/tape.mojo`,
+   comptime, so the product build runs the plain accumulate); tape-two-paths REFUSES on that side.
 3. Verify keeps working from the built wheel and fails on a fault (AGENTS.md "The verify command is protected").
 
 ## Sub-lanes

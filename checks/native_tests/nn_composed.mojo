@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # native-check: cpu gpu
 """The composed tagger (lane nn-blocks-composed, 2026-11-25): the nn-blocks pieces in one model, the native twin of
-the verify lane ops-composed-tagger (tools/identity_lanes/nn_composed.py).
+the verify lane ops-composed-cases, case tagger (python/mojolearn/verify_reference/composed-tagger.json).
 
 The model: three sequences of lengths 1, 3 and 4 (T = 4), token ids 0..4 with the padding id 5 past each length;
 embedding (6 x 3, padding_idx 5) concatenated with two float features per step; a captured cell
