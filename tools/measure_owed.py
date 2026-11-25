@@ -151,11 +151,22 @@ def race_planner(planner, vendor):
     return fam, planned
 
 
-def row_races(row, fam, planned):
-    """(lanes the board still has, lanes it lost, rows (None = full), the races) of one board / ab row."""
+def host_lanes(planner):
+    """The board lanes whose ours arm is our CPU host binding (bench_board_neural.DEVICE_OF "cpu": the *-infer rows
+    and lm-host-train-step). The board plans no race for them (bench_board.py plan_races: "ours would run on the CPU:
+    never raced"), because our CPU is never timed (AGENTS.md part 3). Lane mlp-infer-cell, 2026-11-24: jobs nvc1-0004
+    and nvc1-0007 (L40S) put mlp-infer and mamba2-infer in the board's --lanes, planned nothing for them and reported
+    no cell and no reason; such a lane is now named in not-planned.json and left out of the board arguments."""
+    device_of = getattr(getattr(planner, "NEURAL", None), "DEVICE_OF", None) or {}
+    return frozenset(l for l, d in device_of.items() if d == "cpu")
+
+
+def row_races(row, fam, planned, host=frozenset()):
+    """(lanes the board times, lanes it lost or never times, rows (None = full), the races) of one board / ab row.
+    A lost lane is one the board no longer has; a HOST lane (host_lanes) is one it never races."""
     want_lanes = as_list(row["lane"])
-    gone = [l for l in want_lanes if l not in fam]
-    lane_list = [l for l in want_lanes if l in fam]
+    gone = [l for l in want_lanes if l not in fam or l in host]
+    lane_list = [l for l in want_lanes if l in fam and l not in host]
     rows = None if row.get("rows") in (None, "full") else int(row["rows"])
     ds = row.get("dataset") or "*"
     races = [r for r in planned(lane_list, rows) if ds == "*" or r["dataset"] == ds] if lane_list else []
@@ -169,10 +180,11 @@ def data_keys(doc, paper, planner, vendor, data_root, b_present=(), prior_presen
     (tools/ops/measure_candidate.py) stages these before a submit and the job checks them after its plan (2026-11-12:
     a hand-written list left out higgs and half the smoke shards refused)."""
     fam, planned = race_planner(planner, vendor)
+    host = host_lanes(planner)
     races = [r for r in (paper.get("recipes") or []) if r.get("family") and r.get("lane") and r.get("dataset")]
     for row in doc.get("rows") or []:
         if row.get("kind") in ("board", "ab") and row_arms(row, b_present, prior_present)[0]:
-            races += row_races(row, fam, planned)[3]
+            races += row_races(row, fam, planned, host)[3]
     needed, _ = planner.data_needs(races)
     out = [(planner.R2_KEYS[n], os.path.join(data_root, planner.DATA_FILES[n])) for n in needed if n in planner.R2_KEYS]
     corpus = sorted({k for r in races if r["family"] == "algos"
@@ -186,6 +198,7 @@ def plan(doc, paper, planner, vendor, b_present, prior_present=False):
     if doc.get("schema") != SCHEMA:
         raise SystemExit("measure_owed: not a %s document" % SCHEMA)
     fam, planned = race_planner(planner, vendor)
+    host = host_lanes(planner)
     paper_ids = set(paper.get("race_ids") or [])
     pb = paper.get("bench_board_args") or {}
     families, lanes, datasets = list(pb.get("families") or []), list(pb.get("lanes") or []), list(pb.get("datasets") or [])
@@ -213,9 +226,11 @@ def plan(doc, paper, planner, vendor, b_present, prior_present=False):
                 "(PC_PRIOR_VERSION is the paper baseline)")
         if not arms:
             continue
-        lane_list, gone, rows, races = row_races(row, fam, planned)
+        lane_list, gone, rows, races = row_races(row, fam, planned, host)
         for l in gone:
-            missing["%s %s" % (rid, l)] = "lane %s is no longer a board lane" % l
+            missing["%s %s" % (rid, l)] = (
+                "lane %s runs our CPU host binding: the board never races it (our CPU is never timed)" % l
+                if l in host else "lane %s is no longer a board lane" % l)
         if not lane_list:
             continue
         ds = row.get("dataset") or "*"
