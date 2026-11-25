@@ -154,9 +154,15 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("x-decomp-robust-cov-fit-predict")
 def _(ml, X, yc, yr, Xh=None):
+    """EllipticEnvelope.fit_predict on 400 fixture rows: the labels and the state that same call fitted
+    (location_, covariance_, offset_). w3-fix-11, 2026-11-25: the labels alone are +1/-1 and a one-ulp
+    fault in the robust covariance (arm coverage-gate-x_decomp-add_gemm-cpu) cannot flip one, so the lane
+    read unmoved; the fitted state is the call's continuous result and moves with any fault it reaches."""
     S = np.ascontiguousarray(X[:400, :6])
-    return _fit(dict(fit_predict=_m_predict_h(
-        ml.EllipticEnvelope(contamination=0.05, random_state=1, support_fraction=0.7).fit_predict(S))))
+    e = ml.EllipticEnvelope(contamination=0.05, random_state=1, support_fraction=0.7)
+    labels = e.fit_predict(S)
+    return _fit(dict(fit_predict=_m_predict_h(labels),
+                     fitted=_m_predict_h(e.location_, e.covariance_, np.float64(e.offset_))))
 
 
 # ---------------------------------------------------------------- forecast: fit and forecast in one call
