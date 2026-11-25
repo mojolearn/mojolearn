@@ -1,0 +1,48 @@
+diff --git a/core/mojolearn_neural_host_impl.mojo b/core/mojolearn_neural_host_impl.mojo
+index b42e2309ae..d9a4d90b20 100644
+--- a/core/mojolearn_neural_host_impl.mojo
++++ b/core/mojolearn_neural_host_impl.mojo
+@@ -92,6 +92,19 @@ def _transformer_weights_from(
+     )
+ 
+ 
++def _sab_block_out_up(mut values: List[Float32]):
++    """SABOTAGE coverage-gate-neural-mamba_block_run-cpu (lane w3-fix-9): the first
++    finite normal block output one ulp up, the host bindings only."""
++    from std.sys import is_defined
++    from std.memory import bitcast
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++        for i in range(len(values)):
++            var v = values[i]
++            if abs(v) >= Float32(1.17549435e-38) and v - v == Float32(0):
++                values[i] = bitcast[DType.float32](bitcast[DType.uint32](v) + UInt32(1))
++                break
++
++
+ def _write(addr: Int, values: List[Float32], n: Int) raises:
+     """`_mojolearn_mamba_host`'s `_write`: a length-checked copy out, so a
+     state piece that came back the wrong size is an error by name rather
+@@ -206,6 +219,7 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, position: Int = 0) raises
+     state.conv_win = read_f32(a[11], b * di * D_CONV)
+     state.h = read_f32(a[12], b * di * D_STATE)
+     var st = mamba_block_oracle(w, read_f32(a[0], b * l * dm), b, l, state)
++    _sab_block_out_up(st.residual_out)
+     _write(a[13], st.residual_out, b * l * dm)
+     _write(a[11], state.conv_win, b * di * D_CONV)
+     _write(a[12], state.h, b * di * D_STATE)
+@@ -261,6 +275,7 @@ def _mamba2_run(
+     state.buf_dtraw = read_f32(a[13], b * M2_CHUNK_SIZE * nh)
+     state.buf_len = q0
+     var st = mamba2_block_oracle(w, read_f32(a[0], b * l * dm), b, l, dt_lo, dt_hi, state)
++    _sab_block_out_up(st.residual_out)
+     _write(a[14], st.residual_out, b * l * dm)
+     _write(a[15], st.h_last, h_n)
+     _write(a[10], state.conv_win, b * cd * M2_D_CONV)
+@@ -340,6 +355,7 @@ def _mamba3_run(a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int, fresh
+             state.pend_k = read_f32(a[18], k_n)
+             state.pend_v = read_f32(a[19], v_n)
+     var st = mamba3_block_oracle(w, read_f32(a[0], b * l * dm), b, l, state)
++    _sab_block_out_up(st.residual_out)
+     _write(a[20], st.residual_out, b * l * dm)
+     _write(a[21], st.h_last, h_n)
+     _write(a[22], st.k_last, k_n)

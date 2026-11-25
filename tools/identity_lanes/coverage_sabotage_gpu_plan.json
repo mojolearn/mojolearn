@@ -126,8 +126,7 @@
      "x-prep-user-objects"
     ],
     "coverage-core-msel_device_host": [
-     "x-metrics-splitters",
-     "x-metrics-search"
+     "x-metrics-splitters"
     ],
     "coverage-gate-cluster-kmeans_label-gpu": [
      "m-kmeans-fit-predict"
@@ -164,7 +163,6 @@
    "lanes": [
     "x-prep-user-objects",
     "x-metrics-splitters",
-    "x-metrics-search",
     "m-kmeans-fit-predict",
     "forest-shard",
     "neighbors-reference-shard",
@@ -2098,11 +2096,8 @@
    "arm_lanes": {
     "coverage-gate-resample-mean_of_sum-gpu": [
      "fn-resample-bootstrap",
-     "fn-resample-indices",
      "fn-resample-monte-carlo",
      "fn-resample-permutation-test",
-     "fn-resample-resample",
-     "resample-utils",
      "monte-carlo",
      "permutation-test",
      "resample-perm-samples",
@@ -2125,11 +2120,8 @@
    "id": "resample-2",
    "lanes": [
     "fn-resample-bootstrap",
-    "fn-resample-indices",
     "fn-resample-monte-carlo",
     "fn-resample-permutation-test",
-    "fn-resample-resample",
-    "resample-utils",
     "monte-carlo",
     "permutation-test",
     "resample-perm-samples",
@@ -2819,7 +2811,6 @@
     "coverage-gate-training-step_scalars-gpu": [
      "fn-training-accumulate-grads",
      "fn-training-chunked-lm-head-loss",
-     "fn-training-clip-grad-norm",
      "fn-training-embedding-backward",
      "fn-training-linear-backward",
      "fn-training-linear-forward",
@@ -2852,7 +2843,6 @@
    "lanes": [
     "fn-training-accumulate-grads",
     "fn-training-chunked-lm-head-loss",
-    "fn-training-clip-grad-norm",
     "fn-training-embedding-backward",
     "fn-training-linear-backward",
     "fn-training-linear-forward",
@@ -4636,7 +4626,6 @@
    "arm_lanes": {
     "coverage-gate-x_neighbors-add-gpu": [
      "check-generic-neighbors",
-     "fn-connected-components",
      "x-decomp-eigh-wide-kpca",
      "x-decomp-eigh-wide-kpca-fit",
      "x-neighbors-additive-chi2",
@@ -4645,17 +4634,12 @@
      "x-neighbors-knn-imputer-fit-transform",
      "x-neighbors-kpca",
      "x-neighbors-label-propagation",
-     "x-neighbors-label-propagation-score",
      "x-neighbors-label-spreading",
-     "x-neighbors-label-spreading-score",
      "x-neighbors-lof",
      "x-neighbors-lof-decision-function",
      "x-neighbors-louvain",
-     "x-neighbors-louvain-fit-predict",
      "x-neighbors-nearest-centroid",
-     "x-neighbors-nearest-centroid-score",
      "x-neighbors-ocsvm",
-     "x-neighbors-ocsvm-fit-predict",
      "x-neighbors-ocsvm-score-samples",
      "x-neighbors-pagerank",
      "x-neighbors-poly-sketch",
@@ -4682,7 +4666,6 @@
    "id": "x_neighbors-1",
    "lanes": [
     "check-generic-neighbors",
-    "fn-connected-components",
     "x-decomp-eigh-wide-kpca",
     "x-decomp-eigh-wide-kpca-fit",
     "x-neighbors-additive-chi2",
@@ -4691,17 +4674,12 @@
     "x-neighbors-knn-imputer-fit-transform",
     "x-neighbors-kpca",
     "x-neighbors-label-propagation",
-    "x-neighbors-label-propagation-score",
     "x-neighbors-label-spreading",
-    "x-neighbors-label-spreading-score",
     "x-neighbors-lof",
     "x-neighbors-lof-decision-function",
     "x-neighbors-louvain",
-    "x-neighbors-louvain-fit-predict",
     "x-neighbors-nearest-centroid",
-    "x-neighbors-nearest-centroid-score",
     "x-neighbors-ocsvm",
-    "x-neighbors-ocsvm-fit-predict",
     "x-neighbors-ocsvm-score-samples",
     "x-neighbors-pagerank",
     "x-neighbors-poly-sketch",
