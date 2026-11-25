@@ -31,6 +31,17 @@
 #   MOJOLEARN_NUMERIC_PROFILE_SABOTAGE_DROP_SAVED (the profile door's saved-state reader keeps only the preset of a
 #     saved dict; door code serves both sides): case save-reload adopts "fixed15_v1" instead of the saved spec, so
 #     its part and the reload flags (adopted == saved, reloaded profile, logits and digest_ equal) MOVE on both sides.
+#   MOJOLEARN_NP_PARTS_SABOTAGE_PROGRAM_IGNORE_HOST (lane fixed15-decode: the CPU generation engine runs every fixed15
+#     layer on the float32 entry): part gen-default MOVES on the CPU side (its caches and tokens are fp32_v1 layers')
+#     and gen-parts too; the device side stays.
+#   MOJOLEARN_NP_PARTS_SABOTAGE_PROGRAM_IGNORE_DEVICE (the GPU decode program drops a layer's attn_scores bit): part
+#     gen-default MOVES on the GPU side (the second layer's caches follow the first layer's float32 scores); gen-parts
+#     (attn_scores already fp32_v1) stays; the CPU side stays.
+#
+# GENERATE (lane fixed15-decode, 2026-11-25): gen-default (no keyword) and gen-parts (_NPP_SAVED_SPEC) run a greedy
+# stream of HF_LM_NEW tokens: on a GPU side the decode program (fixed15_v1 layers and head adopted), on the CPU side
+# the native generation engine (host op 34, the linalg head). A part is the tokens and every layer's k/v caches of the
+# stream's state; the flags hold the stream's tokens equal to `generate`'s continuation.
 #
 # Every reference is OWED (python/mojolearn/host_surface.py PUBLIC_PENDING_LANES: "no reference"): the release's one
 # verification records them. A fragment of tools/identity_break.py (loaded by `_load_lane_fragments`); np, os,
@@ -118,6 +129,18 @@ def _(ml, X, yc, yr, Xh=None):
             else:
                 parts[case["name"]] = _h(y)
                 flags += [y.tobytes() != base.tobytes(), y.tobytes() != other.tobytes()]
+
+        # GENERATE under the default and under a per-part spec (lane fixed15-decode).
+        for name, spec in (("gen-default", None), ("gen-parts", _NPP_SAVED_SPEC)):  # driver-loop: over two specs
+            gm = CLM.load(root) if spec is None else CLM.load(root, numeric_profile=spec)
+            stream = gm.stream(A(ids), HF_LM_NEW)
+            tokens = np.ascontiguousarray(np.asarray(stream.read(HF_LM_NEW)), dtype=np.int32)
+            snap = stream.state_dict()
+            caches = [np.ascontiguousarray(np.asarray(layer[k])) for layer in snap["layers"]
+                      for k in ("k_cache", "v_cache")]
+            parts[name] = _h(tokens, *caches)
+            full = np.asarray(gm.generate(A(ids), HF_LM_NEW), dtype=np.int32)[:, HF_LM_LEN:]
+            flags.append(np.ascontiguousarray(full).tobytes() == tokens.tobytes())
 
         # SAVE AND RELOAD with a per-part spec: the weights and the profile field a checkpoint writer stores
         # (`state_field`), written to files and read back; the reader names nothing and adopts the saved spec.

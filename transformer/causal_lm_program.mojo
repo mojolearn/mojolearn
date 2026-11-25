@@ -68,6 +68,7 @@ from transformer.fixed15_layer_weights import (
     _int15_entry_parts, _upload_planes, _upload_planes_one, _profile_weights, _lean_for_w,
 )
 from transformer.block_options import BLOCK_OPTION_ADDRS
+from core.numeric_profile_parts_sabotage import np_parts_sabotage_program
 from transformer.impl.llama.modeling_llama import LlamaDeviceWeights
 from max.gpu.host import DeviceContext
 from autograd.program_control import control_prepare, control_run
@@ -123,7 +124,7 @@ def _fixed15_layer(ctx: DeviceContext, ints: List[Int], weights: List[Int], plan
         a[13 + i] = weights[9 + i]
     for i in range(21):  # small-loop(21: the seven plane triples): address words, no data
         a[_F15_PLANES_AT + i] = planes[1 + i]
-    var parts = _int15_entry_parts(a, _F15_PLANES_AT, planes[0], opts.gated(), what)
+    var parts = _int15_entry_parts(a, _F15_PLANES_AT, np_parts_sabotage_program(planes[0]), opts.gated(), what)
     var p15 = _upload_planes(ctx, dims, opts, a, _F15_PLANES_AT, parts)
     return _profile_weights(ctx, dims, opts, a, p15^, what)
 

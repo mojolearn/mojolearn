@@ -65,6 +65,10 @@ struct CausalModelWords(Copyable, Movable):
     # The decode program's session family word of the registry
     # (`program_read`); -1 when the install has no GPU decode program.
     var program_read: Int
+    # lane fixed15-decode (2026-11-25): the registry carries the fixed15
+    # planes entry ("forward15": a GPU block image with op 35), so a
+    # fixed15_v1 layer can run on its planes.
+    var planes: Bool
     # The final norm's eps (read only when `norm`).
     var norm_eps: Float64
 
@@ -87,6 +91,7 @@ struct CausalModelWords(Copyable, Movable):
         self.resident = False
         self.resident_cuda = False
         self.program_read = -1
+        self.planes = False
         self.norm_eps = 0.0
 
 
@@ -101,12 +106,46 @@ def causal_positions_admit(words: CausalModelWords, has_state: Bool, have: Int, 
         raise Error("CausalLM: sequence exceeds allocated state capacity")
 
 
+# The route word of a read the decode program serves (the door's route
+# witness says the same word).
+comptime CAUSAL_ROUTE_PROGRAM = "program_decode"
+
+
+def causal_program_route(words: CausalModelWords, greedy: Bool, sampling_policy: Int, layers: Int) -> String:
+    """The decode program's admission of a read, on typed words: its route
+    word (`CAUSAL_ROUTE_PROGRAM`) when the program serves it, else why not
+    (the door's refusal text; "layer kind" is completed by the door with the
+    kind's name). Lane fixed15-decode (2026-11-25): fixed15_v1 layers (any
+    parts mask) and a fixed15_v1 head are served (adopted planes, the
+    `OPS_LINEAR15` head), so the fixed15_v1 default generates as one program
+    on the GPU as fp32_v1 does; before, both were refused and every default
+    read took the per-token route."""
+    if not greedy and sampling_policy != 1:
+        return "the Float64 sampling policy runs on the host"
+    if words.program_read < 0:
+        return "no GPU decode program in this install"
+    if words.parallel:
+        return "distributed execution"
+    if words.fixed15 and not words.planes:
+        return "fixed15_v1 without the planes entry"
+    if words.kind != CAUSAL_LAYER_TRANSFORMER and words.kind != CAUSAL_LAYER_MAMBA1 and words.kind != CAUSAL_LAYER_MAMBA2:
+        return "layer kind"
+    if words.kind == CAUSAL_LAYER_MAMBA1 and words.mamba1_profile != 1:
+        return "the Mamba-1 profile"
+    if layers == 0:
+        return "a model without layers"
+    if words.norm and not (words.norm_eps > 0):
+        return "a final norm with eps 0"
+    return String(CAUSAL_ROUTE_PROGRAM)
+
+
 def causal_engine_candidate(words: CausalModelWords) -> Bool:
     """The model-only half of the native generation engine's selection: a
-    local fp32 model of a known kind whose providers are admitted. The
-    caller adds the build's dispatch word, the setup arm and the resident
-    verdict (which reads the state)."""
-    if words.parallel or words.head_packed:
+    local model of a known kind whose providers are admitted (lane
+    fixed15-decode: fixed15_v1 layers and heads included, the engine runs
+    their entries). The caller adds the build's dispatch word, the setup arm
+    and the resident verdict (which reads the state)."""
+    if words.parallel:
         return False
     if words.kind == CAUSAL_LAYER_OTHER:
         return False

@@ -124,7 +124,9 @@ def neural_host_mamba_fresh(a: List[Int], p: List[Int]) raises -> Int:
 def neural_host_dispatch[FAMILY: Int](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                                       result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        if na < 0 or na > 25 or np < 0 or np > 27 or nf < 0 or nf > 2 or result == 0:
+        # lane fixed15-decode: 28 words for op 34 (the 27 of op 33 and the
+        # parts mask), the native generation engine's fixed15 layer call.
+        if na < 0 or na > 25 or np < 0 or np > 28 or nf < 0 or nf > 2 or result == 0:
             raise Error("CPU neural descriptor: invalid span or result")
         var a = native_descriptor_words(aa, na)
         var p = native_descriptor_words(pp, np)

@@ -364,6 +364,7 @@ def causal_model_owner_build(fields: PythonObject) raises -> PythonObject:
             words.mamba1_profile = Int(py=profile)
     words.resident = py_contains(entries, PythonObject(CAUSAL_ENTRY_RESIDENT))
     var vendor = py_get(entries, PythonObject(CAUSAL_ENTRY_RESIDENT_VENDOR))
+    words.planes = py_contains(entries, PythonObject(CAUSAL_ENTRY_FORWARD15))
     var program = py_get(entries, PythonObject(CAUSAL_ENTRY_PROGRAM_READ))
     if program is not None:
         words.program_read = Int(py=program)

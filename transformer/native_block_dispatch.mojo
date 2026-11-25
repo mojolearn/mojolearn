@@ -211,7 +211,10 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int], f: List
 def transformer_block_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                          result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        if op < 0 or op >= NEURAL_BLOCK_OPERATIONS or nf < 0 or nf > 1 or na < 0 or na > 45 or np < 0 or np > 28:
+        # lane fixed15-decode: 29 words for a session's op 35 (the handle, the
+        # 27 of op 11 and the parts mask), the native generation engine's
+        # fixed15 layer call.
+        if op < 0 or op >= NEURAL_BLOCK_OPERATIONS or nf < 0 or nf > 1 or na < 0 or na > 45 or np < 0 or np > 29:
             raise Error("transformer block native ABI: unknown operation or scalar span")
         if result == 0:
             raise Error("transformer block native ABI: null result")

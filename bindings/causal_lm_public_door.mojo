@@ -42,6 +42,7 @@ from providers.python.generation_metadata_pyapi_door import (
 )
 from core.causal_owner import (
     CausalModelWords, causal_positions_admit, causal_engine_candidate, causal_resident_candidate,
+    causal_program_route, CAUSAL_ROUTE_PROGRAM,
     CausalLayerStateWords, CausalBufferWords, causal_state_admit, causal_state_buffer_contiguous, causal_state_buffer_address,
     CAUSAL_STATE_K, CAUSAL_STATE_V, CAUSAL_STATE_CONV, CAUSAL_STATE_H, CAUSAL_STATE_AFFINE_BOUNDARY,
     CAUSAL_STATE_AFFINE_A, CAUSAL_STATE_AFFINE_B, CAUSAL_STATE_XBC, CAUSAL_STATE_DTRAW,
@@ -2930,26 +2931,16 @@ def _program_refusal(s: GenerationHandle, words: CausalModelWords, blocks: List[
     Continuation 4: decided on the model owner's words (before: the entry
     registry, the head, the kind, the norm and its eps read by name per
     read)."""
-    if not s.greedy and s.sampling_policy != 1:
-        return "the Float64 sampling policy runs on the host"
-    if words.program_read < 0:
-        return "no GPU decode program in this install"
-    if words.parallel:
-        return "distributed execution"
-    if words.head_packed:
-        return "the fixed15_v1 head"
-    if words.fixed15:
-        return "fixed15_v1 layers"
-    if words.kind != CAUSAL_LAYER_TRANSFORMER and words.kind != CAUSAL_LAYER_MAMBA1 and words.kind != CAUSAL_LAYER_MAMBA2:
+    # Lane fixed15-decode: the decision is typed (`causal_program_route`,
+    # core/causal_owner.mojo, which a native check holds); fixed15_v1 layers
+    # and heads are no longer refused.
+    var route = causal_program_route(words, s.greedy, s.sampling_policy, len(blocks))
+    if route == CAUSAL_ROUTE_PROGRAM:
+        return ""
+    if route == "layer kind":
         # The refusal names the kind (read only on this refusal).
         return "layer kind " + String(s.model.kind)
-    if words.kind == CAUSAL_LAYER_MAMBA1 and words.mamba1_profile != 1:
-        return "the Mamba-1 profile"
-    if len(blocks) == 0:
-        return "a model without layers"
-    if words.norm and not (words.norm_eps > 0):
-        return "a final norm with eps 0"
-    return ""
+    return route
 
 
 def _program_state_pieces(kind: Int, blk: PythonObject, fields: PythonObject, b: Int, cap: Int,
@@ -3359,7 +3350,8 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
         # (`_read_program`); the resident greedy read, the resident sampling
         # read and the native generation engine read are deleted. The host
         # loop below stays for what the program does not serve (a CPU install,
-        # distributed execution, the fixed15_v1 head, the Float64 sampler).
+        # distributed execution, the Float64 sampler; lane fixed15-decode: the
+        # fixed15_v1 layers and head run in the program).
         # TOMBSTONE: MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY (LOSER: NV L40S 2 cells, median 2.29, mojolearn-162m generate 887 -> 2978 ms (3.36)) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
         # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY.ab-outcome-2.patch
         if capacity > 0 and not s.done():
@@ -3372,7 +3364,7 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
             if refusal == "":
                 admission = NativeArrayAdmission(generation_array_context())
                 var result = _read_program(mods, s, capacity, admission.value(), blocks)
-                _generation_route_witness("program_decode", capacity, s.produced, read_control)
+                _generation_route_witness(String(CAUSAL_ROUTE_PROGRAM), capacity, s.produced, read_control)
                 return result
             if read_control.route != "auto":
                 raise Error("generation: the decode program route does not serve " + refusal)

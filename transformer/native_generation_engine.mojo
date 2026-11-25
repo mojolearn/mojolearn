@@ -96,6 +96,20 @@ struct NativeGenerationModel(Movable):
     var head_failure: String
     var hidden_workspace: List[Float32]
     var output_workspace: List[Float32]
+    # Lane fixed15-decode (2026-11-25): a fixed15_v1 head (its hi, lo and
+    # exponent plane addresses; empty for a float32 head). `_forward` then
+    # stops after the final norm and leaves the head to its caller, which
+    # runs the linalg image's quantizer and planes product with the GIL
+    # released (the per-layer route's head calls, in its order) and then
+    # `head15_commit`. `head15_rows` > 0: a forward is waiting for its head
+    # over the normed rows at `head15_hidden`.
+    var head15: List[Int]
+    var head15_rows: Int
+    var head15_hidden: Int
+    var head15_length: Int
+    var q_hi: List[Int8]
+    var q_lo: List[Int8]
+    var q_e: List[Int32]
 
     def __init__(out self, primitive: NativeExecutionEndpoint, embedding: Int, norm: Int, head: Int,
                  norm_eps: Float64, batch: Int, width: Int, vocab: Int, position: Int,
@@ -125,6 +139,35 @@ struct NativeGenerationModel(Movable):
         self.head_failure = String("")
         self.hidden_workspace = List[Float32]()
         self.output_workspace = List[Float32]()
+        self.head15 = List[Int]()
+        self.head15_rows = 0
+        self.head15_hidden = 0
+        self.head15_length = 0
+        self.q_hi = List[Int8]()
+        self.q_lo = List[Int8]()
+        self.q_e = List[Int32]()
+
+    def head15_scratch(mut self, rows: Int) -> List[Int]:
+        """The quantized rows' hi, lo and exponent buffers of a fixed15_v1
+        head over `rows` normed rows: kept across tokens, replaced only when
+        the extent changes (every value is written by the quantizer)."""
+        var n = rows * self.width
+        if len(self.q_hi) != n:
+            self.q_hi = List[Int8](length=n, fill=0)
+            self.q_lo = List[Int8](length=n, fill=0)
+        if len(self.q_e) != rows:
+            self.q_e = List[Int32](length=rows, fill=0)
+        return [Int(self.q_hi.unsafe_ptr()), Int(self.q_lo.unsafe_ptr()), Int(self.q_e.unsafe_ptr())]
+
+    def head15_commit(mut self):
+        """The caller ran the fixed15_v1 head of the waiting forward: the
+        forward is complete (the position and count advance as a float32
+        head's forward does after its head call)."""
+        self.position += self.head15_length
+        self.forwards += 1
+        self.head15_rows = 0
+        self.head15_hidden = 0
+        self.head15_length = 0
 
     def primitive_call(mut self, op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises:
         self.calls[op] += 1
@@ -162,6 +205,8 @@ struct NativeGenerationModel(Movable):
         if self.position + length > self.capacity:
             raise Error("CausalLM: sequence exceeds allocated state capacity")
         var rows = self.batch * length
+        if len(self.head15) == 3 and address == 0:
+            raise Error("CausalLM: a fixed15_v1 head runs through forward_to (its caller runs the head)")
         try:
             if self.embedding_failure.byte_length() != 0:
                 raise Error(self.embedding_failure)
@@ -231,6 +276,12 @@ struct NativeGenerationModel(Movable):
                 output = address
             else:
                 output = _generation_zero_workspace(logits, rows * self.vocab)
+            if len(self.head15) == 3:
+                # lane fixed15-decode: the caller runs the head (see `head15`)
+                self.head15_rows = rows
+                self.head15_hidden = hidden
+                self.head15_length = length
+                return
             self.primitive_call(4, [output, hidden, self.head],
                                 [rows, self.vocab, self.width], [])
             self.position += length

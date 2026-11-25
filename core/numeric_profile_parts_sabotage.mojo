@@ -25,7 +25,24 @@ device model resolves its mask at construction or load
 (`bindings/causal_lm_construct_door.mojo` `_model_parts_mask`, a `gpu`
 route only), BEFORE the planes are made: a device part the arm turns on is
 quantized from its float32 weight there, so the device column computes the
-sabotaged mask with its own kernels."""
+sabotaged mask with its own kernels.
+
+Lane fixed15-decode (2026-11-25), one more pair: the GENERATION routes
+ignore the mask.
+
+  MOJOLEARN_NP_PARTS_SABOTAGE_PROGRAM_IGNORE_HOST    the CPU generation
+                                                     engine runs every
+                                                     fixed15 layer on the
+                                                     float32 entry (op 33)
+  MOJOLEARN_NP_PARTS_SABOTAGE_PROGRAM_IGNORE_DEVICE  the GPU decode program
+                                                     drops a layer's
+                                                     attn_scores bit (the
+                                                     one bit its addresses
+                                                     do not carry)
+
+Each moves the default `generate` case of numeric-profile-parts on its own
+side only (the override with attn_scores on fp32_v1 stays for the device
+arm)."""
 
 from std.sys import is_defined
 
@@ -38,6 +55,8 @@ comptime NP_PARTS_SABOTAGE_WRONG_PART_HOST = is_defined["MOJOLEARN_NP_PARTS_SABO
 comptime NP_PARTS_SABOTAGE_WRONG_PART_DEVICE = is_defined["MOJOLEARN_NP_PARTS_SABOTAGE_WRONG_PART_DEVICE"]()
 comptime NP_PARTS_SABOTAGE_IGNORE_HOST = is_defined["MOJOLEARN_NP_PARTS_SABOTAGE_IGNORE_HOST"]()
 comptime NP_PARTS_SABOTAGE_IGNORE_DEVICE = is_defined["MOJOLEARN_NP_PARTS_SABOTAGE_IGNORE_DEVICE"]()
+comptime NP_PARTS_SABOTAGE_PROGRAM_IGNORE_HOST = is_defined["MOJOLEARN_NP_PARTS_SABOTAGE_PROGRAM_IGNORE_HOST"]()
+comptime NP_PARTS_SABOTAGE_PROGRAM_IGNORE_DEVICE = is_defined["MOJOLEARN_NP_PARTS_SABOTAGE_PROGRAM_IGNORE_DEVICE"]()
 
 #: The bits a Transformer block computes: the seven projections and attn_scores.
 comptime NP_MASK_BLOCK = NP_MASK_PROJECTIONS | (1 << NP_PART_SCORES)
@@ -94,6 +113,17 @@ def np_parts_sabotage_device(mask: Int) -> Int:
     return out
 
 
+def np_parts_sabotage_program(mask: Int) -> Int:
+    """The decode program's layer mask under its device arm (identity when
+    it is off): the attn_scores bit dropped while a projection keeps the
+    block on its fixed15 entry."""
+    var out = mask
+    comptime if NP_PARTS_SABOTAGE_PROGRAM_IGNORE_DEVICE:
+        if (out & NP_MASK_PROJECTIONS) != 0:
+            out = out & ~(1 << NP_PART_SCORES)
+    return out
+
+
 def np_parts_sabotage_name() -> String:
     """The armed parts sabotage defines, comma separated, or "" (a report
     word for the check and the verify banner)."""
@@ -106,4 +136,8 @@ def np_parts_sabotage_name() -> String:
         names += "MOJOLEARN_NP_PARTS_SABOTAGE_IGNORE_HOST,"
     comptime if NP_PARTS_SABOTAGE_IGNORE_DEVICE:
         names += "MOJOLEARN_NP_PARTS_SABOTAGE_IGNORE_DEVICE,"
+    comptime if NP_PARTS_SABOTAGE_PROGRAM_IGNORE_HOST:
+        names += "MOJOLEARN_NP_PARTS_SABOTAGE_PROGRAM_IGNORE_HOST,"
+    comptime if NP_PARTS_SABOTAGE_PROGRAM_IGNORE_DEVICE:
+        names += "MOJOLEARN_NP_PARTS_SABOTAGE_PROGRAM_IGNORE_DEVICE,"
     return names
