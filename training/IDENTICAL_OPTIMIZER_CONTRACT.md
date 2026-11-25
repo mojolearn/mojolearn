@@ -277,10 +277,11 @@ update reads it with its own scalars. That is torch's
 (autograd/nn_pg.mojo: the cross-tensor clip fold of autograd/optim.mojo over
 every listed tensor of every group, one coefficient, then each group's own
 update launch). The narrower claim above still holds, with "registry" meaning
-the one registry of all groups. The public `SGD` / `Adam` / `AdamW` of this
-contract still take one group (`param_groups=` is refused by name there until
-their step takes the same single registry over several groups; nothing about
-two clips is the reason any more).
+the one registry of all groups. The public `SGD` / `Adam` / `AdamW` take
+groups the same way (`params` as a list of dicts): their step runs
+`clip_grad_norm_` ONCE over every group's gradients in group order, then
+each group's own update with its options and no second clip
+(bindings/optimizer_native_router_door.mojo `pg_training_operation`).
 
 ---
 

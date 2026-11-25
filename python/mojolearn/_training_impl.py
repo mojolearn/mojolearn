@@ -239,14 +239,12 @@ class _Optimizer(NumericModeMixin):
     methods and objects exposed to callers. There is no Python initializer or
     configuration implementation to fall back to.
 
-    ONE PARAMETER GROUP PER OPTIMIZER. `torch.optim` accepts a list of dicts
-    so that different tensors carry different learning rates; the certified
-    entry point takes ONE `OptimizerConfig` for the whole flat buffer, so a
-    second group would be a second call with a second registry and a second
-    clip, and the clip's coefficient is a function of every gradient in ITS
-    registry (contract 3.5). Per-parameter groups are REFUSED BY NAME below
-    rather than emulated by two calls, because two calls do not give the same
-    clip as one.
+    PARAMETER GROUPS (lane nn-blocks-pg, 2026-11-25). `params` may be a list
+    of dicts, as in `torch.optim`; the native constructor then builds one
+    member optimizer per group and the object becomes a `_ParamGroups`: its
+    `step` clips ONCE over every group's gradients (contract 3.5: one
+    registry, one coefficient) and then steps each group with its own
+    options.
     """
 
     _mojolearn_native_public = True
@@ -415,8 +413,8 @@ class _Optimizer(NumericModeMixin):
 # copy and the recurrence agree. nesterov with momentum 0 is refused because the profile would accept
 # it and silently equal the plain update. maximize: torch's -grad at the top of the step, before the
 # coupled decay and the momentum buffer (training/maximize.mojo, DEVIATION 6200). One launch per
-# tensor for SGD; param_groups= refused by name here (one group per optimizer); parameter groups with one global
-# clip are ops.Session.param_group_optimizer (contract 3.5, lane nn-blocks-pg).
+# tensor for SGD; parameter groups: `params` as a list of dicts (torch's form), one global clip over every group
+# (contract 3.5, lane nn-blocks-pg, `_ParamGroups`).
 # Mixed precision: see the native optimizer input plan refusal.
 class SGD(_Optimizer):
     """Stochastic gradient descent, as `torch.optim.SGD`, over float32 buffers (NumPy arrays, `array.array` or `mojolearn.Array`; any writable buffer-protocol object).
@@ -427,8 +425,11 @@ class SGD(_Optimizer):
 
     Parameters
     ----------
-    params : buffer or list of buffers
-        float32 parameter arrays, updated in place.
+    params : buffer, list of buffers, or list of dicts
+        float32 parameter arrays, updated in place; or parameter groups as in
+        ``torch.optim``: dicts with ``"params"`` and per-group options
+        (``lr``, ``weight_decay`` and this optimizer's own), stepped with one
+        clip over every group.
     lr : float, default 1e-3
         Learning rate. torch's SGD has no default; this one is 1e-3.
     momentum : float, default 0.0
@@ -510,8 +511,11 @@ class Adam(_Optimizer):
 
     Parameters
     ----------
-    params : buffer or list of buffers
-        float32 parameter arrays, updated in place.
+    params : buffer, list of buffers, or list of dicts
+        float32 parameter arrays, updated in place; or parameter groups as in
+        ``torch.optim``: dicts with ``"params"`` and per-group options
+        (``lr``, ``weight_decay`` and this optimizer's own), stepped with one
+        clip over every group.
     lr : float, default 1e-3
         Learning rate.
     betas : tuple of float, default (0.9, 0.999)
@@ -609,6 +613,56 @@ class AdamW(Adam):
                  weight_decay=0.01, lr_schedule=None, accumulation_steps=1,
                  maximize=False, resident=None, *, numeric_mode=None, device=None, **kwargs):
         return _OPT_NATIVE("construct", self, (params, _KIND_ADAMW, lr, betas, eps, weight_decay, 0.0, 0.0, False, lr_schedule, accumulation_steps, maximize, resident, kwargs, device), numeric_mode, _OPT_CONTEXT)
+
+
+# nn-blocks-pg begin: parameter groups of SGD / Adam / AdamW (bindings/optimizer_native_router_door.mojo `pg_training_*`)
+class _ParamGroups(object):
+    """An `SGD`, `Adam` or `AdamW` built from a list of parameter groups.
+
+    The constructor of those classes makes this object when ``params`` is a
+    list of dicts, as in ``torch.optim``: each dict holds ``"params"`` (the
+    group's float32 arrays) and any of the optimizer's per-group options
+    (``lr``, ``weight_decay``; ``momentum``, ``dampening``, ``nesterov`` for
+    SGD; ``betas``, ``eps`` for Adam and AdamW). Options a group leaves out
+    take the constructor's values. A parameter belongs to one group.
+
+    Example
+    -------
+    >>> opt = mojolearn.AdamW([{"params": [w_body], "lr": 1e-4},
+    ...                        {"params": [w_head, b_head], "lr": 1e-3, "weight_decay": 0.0}],
+    ...                       lr=1e-3, weight_decay=0.01)
+    >>> total_norm = opt.step([g_body, g_head, g_bias], max_norm=1.0)
+    """
+
+    __getattribute__ = object.__getattribute__
+
+    def step(self, grads, max_norm=None):
+        """One step from ``grads``, one array per parameter in group order
+        (every group's parameters, the first group's first). With
+        ``max_norm``, the gradients are clipped ONCE by the norm over every
+        group's gradients (``clip_grad_norm_`` over all parameters, in place),
+        then each group is updated with its own options. Returns the
+        pre-clip total norm, or None."""
+        return _OPT_NATIVE("pg_step", self, (grads, max_norm), None, _OPT_CONTEXT)
+
+    def zero_grad(self, grads):
+        """Write ``+0.0`` into every gradient array, as each group's
+        ``zero_grad`` does."""
+        return _OPT_NATIVE("pg_zero", self, (grads,), None, _OPT_CONTEXT)
+
+    def state_dict(self):
+        """``torch.optim``'s layout: ``"state"`` maps each group's index to
+        that group's state (``t``, ``exp_avg``, ``exp_avg_sq``,
+        ``buf_initialized`` over the group's parameters) and
+        ``"param_groups"`` lists each group's options with ``"params"`` the
+        indices of its parameters across the groups."""
+        return _OPT_NATIVE("pg_state", self, (), None, _OPT_CONTEXT)
+
+    def load_state_dict(self, state):
+        """Restore what `state_dict` returned into an optimizer built with
+        the same groups: each group's options, then its state."""
+        return _OPT_NATIVE("pg_load", self, (state,), None, _OPT_CONTEXT)
+# nn-blocks-pg end
 
 
 # Keyword admission and named refusals are implemented by the native optimizer

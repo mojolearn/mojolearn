@@ -78,6 +78,15 @@ from bindings.optimizer_keys_unpack import (
     OPTIMIZER_OPN_RESIDENT, OPTIMIZER_OPN_IO, OPTIMIZER_OPN_CLIP, OPTIMIZER_OPN_ACCUMULATE, OPTIMIZER_OPN_ALIGNED,
     OPTIMIZER_OPN_SEQ_SCHEDULE, OPTIMIZER_OPN_SEQ_SCHEDULE_SET,
 )
+# nn-blocks-pg begin: SGD / Adam / AdamW parameter groups
+from bindings.optimizer_keys_unpack import (
+    OPTIMIZER_OPN_PG_STEP, OPTIMIZER_OPN_PG_STATE, OPTIMIZER_OPN_PG_LOAD, OPTIMIZER_OPN_PG_ZERO,
+    OPTIMIZER_OPN_PG_FIRST, OPTIMIZER_OPN_PG_LAST,
+)
+from bindings.optimizer_public_door import OP_STEP, STATE_DICT
+from bindings.py_balanced import py_setattr
+from autograd.nn_pg import pg_admit_key, pg_check_membership
+# nn-blocks-pg end
 from bindings.py_keys import py_op_code
 
 
@@ -660,8 +669,13 @@ def optimizer_native(operation: Int, name: PythonObject, owner: PythonObject, va
     if operation == OPTIMIZER_OPN_CONSTRUCT:
         if len(values) != 14 and len(values) != 15:
             raise Error("TypeError: invalid optimizer constructor envelope")
+        if pg_training_grouped(values[0]):
+            # nn-blocks-pg: `params` is a list of parameter groups
+            return pg_training_construct(owner, values, mode, context)
         opt_owner(owner, context)
         return optimizer_construct(owner, values, mode, context)
+    if operation >= OPTIMIZER_OPN_PG_FIRST and operation <= OPTIMIZER_OPN_PG_LAST:
+        return pg_training_operation(operation, owner, values, context)  # nn-blocks-pg
     var selected_mode = mode
     var host_owner = False
     if owner is not None:
@@ -751,22 +765,9 @@ def optimizer_native(operation: Int, name: PythonObject, owner: PythonObject, va
         opt_value(values[1], context)
         return door_state_set(module, provider, owner, Int(py=values[0]), values[1])
     if operation == OPTIMIZER_OPN_LOAD:
-        var state = values[0]
-        opt_value(state, context)
-        if not opt_exact(py_type(state), py_item(context, nk[].k_mapping_types)):
-            raise Error("TypeError: optimizer checkpoint must be a native dictionary")
-        opt_scalar(py_item(state, nk[].k_t), context)
-        var t = optimizer_integer(py_item(state, nk[].k_t), context)
-        var m = optimizer_state_array(py_item(state, nk[].k_exp_avg), False, context)
-        var v = optimizer_state_array(py_item(state, nk[].k_exp_avg_sq), False, context)
-        var initialized = optimizer_state_array(py_item(state, nk[].k_buf_initialized), True, context)
-        # Conversion released the GIL: retain the previous door's fresh owner
-        # admission before reading fields another thread could have rebound.
-        opt_owner(owner, context)
-        optimizer_load_buffers(module, provider, owner, m, v, initialized)
-        var fields = py_fields(owner)
-        py_setitem(fields, nk[].k_buf_initialized, initialized)
-        py_setitem(fields, nk[].k_t, PythonObject(t))
+        # nn-blocks-pg: the body is `optimizer_load_owner` (each parameter
+        # group's load runs it too), the same words
+        optimizer_load_owner(module, provider, owner, values[0], context)
         return PythonObject(None)
     if operation == OPTIMIZER_OPN_ZERO:
         return door_zero(owner, values[0])
@@ -885,3 +886,277 @@ def schedule_attribute_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> 
         raise Error("TypeError: schedule attribute hook expects (name, value) or (name)")
     except error:
         return _optimizer_router_error(error)
+
+
+def optimizer_load_owner(module: PythonObject, provider: PythonObject, owner: PythonObject, state: PythonObject,
+                         context: PythonObject) raises:
+    """`load_state_dict` of one SGD / Adam / AdamW: t, exp_avg, exp_avg_sq,
+    buf_initialized (moved from the router's LOAD branch, the same words)."""
+    var nk = optimizer_keys()
+    opt_value(state, context)
+    if not opt_exact(py_type(state), py_item(context, nk[].k_mapping_types)):
+        raise Error("TypeError: optimizer checkpoint must be a native dictionary")
+    opt_scalar(py_item(state, nk[].k_t), context)
+    var t = optimizer_integer(py_item(state, nk[].k_t), context)
+    var m = optimizer_state_array(py_item(state, nk[].k_exp_avg), False, context)
+    var v = optimizer_state_array(py_item(state, nk[].k_exp_avg_sq), False, context)
+    var initialized = optimizer_state_array(py_item(state, nk[].k_buf_initialized), True, context)
+    # Conversion released the GIL: retain the previous door's fresh owner
+    # admission before reading fields another thread could have rebound.
+    opt_owner(owner, context)
+    optimizer_load_buffers(module, provider, owner, m, v, initialized)
+    var fields = py_fields(owner)
+    py_setitem(fields, nk[].k_buf_initialized, initialized)
+    py_setitem(fields, nk[].k_t, PythonObject(t))
+
+
+# nn-blocks-pg begin: parameter groups of SGD / Adam / AdamW (lane nn-blocks-pg, 2026-11-25)
+#
+# `params` as a list of dicts (torch.optim's form). UNPACK resolves the groups ONCE, at construction: each group
+# becomes a member optimizer of the same class, built by `optimizer_construct` with the group's options over the
+# constructor's (the same admission, registry and state as a one-group optimizer), and the object becomes a
+# `_ParamGroups` (python/mojolearn/_training_impl.py) that holds them. Its step clips ONCE over every group's
+# gradients (`door_clip`, torch's clip_grad_norm_ over all parameters in group order: optimizer contract 3.5, one
+# registry and one coefficient), then steps each member with its own options and no clip (`door_step`, each
+# member's existing route and kernels). A one-group optimizer never reaches this code: its construct tests the
+# type of one argument once, and its other operations are unchanged.
+# Per-group keys and the membership checks are autograd/nn_pg.mojo's (`pg_admit_key`, `pg_check_membership`), the
+# same as ops.Session.param_group_optimizer's: the training kinds 0 / 1 / 2 are the OPT_SGD / OPT_ADAM / OPT_ADAMW
+# codes.
+
+
+def pg_training_grouped(params: PythonObject) raises -> Bool:
+    """Whether a constructor's `params` is a list (or tuple) of dicts."""
+    var builtins = native_loaded_module("builtins")
+    var cls = py_type(params)
+    if cls is not builtins.list and cls is not builtins.tuple:
+        return False
+    return len(params) > 0 and py_type(params[0]) is builtins.dict
+
+
+def _pg_where(kind: Int) -> String:
+    return String("SGD") if kind == 0 else (String("Adam") if kind == 1 else String("AdamW"))
+
+
+def _pg_group_list(value: PythonObject, where: String) raises -> PythonObject:
+    """A group's `params`: one array or a list / tuple of arrays, as a list."""
+    var builtins = native_loaded_module("builtins")
+    var cls = py_type(value)
+    if cls is builtins.list or cls is builtins.tuple:
+        return py_call(builtins.list, value)
+    var one = Python.list()
+    _ = py_call(one.append, value)
+    return one
+
+
+def pg_training_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
+                          context: PythonObject) raises -> PythonObject:
+    """The constructor of an SGD / Adam / AdamW given parameter groups: every group admitted and checked before
+    any member is built (a refusal leaves nothing behind), then one member per group, then the owner becomes a
+    `_ParamGroups` holding them."""
+    var kind = optimizer_integer(values[1], context)
+    var where = _pg_where(kind)
+    var builtins = native_loaded_module("builtins")
+    opt_value(values[13], context)
+    refuse_kwargs(values[13], where)
+    var groups = values[0]
+    var envelopes = Python.list()
+    var param_groups = Python.list()
+    var ids = List[List[Int]]()
+    var index = 0
+    for gi in range(len(groups)):  # driver-loop: over parameter groups (construction, once)
+        var group = groups[gi]
+        var gw = "mojolearn." + where + ": param_groups[" + String(gi) + "]"
+        if py_type(group) is not builtins.dict:
+            raise Error("TypeError: " + gw + " must be a dict; once one entry of params is a group, every entry is")
+        if not py_contains(group, PythonObject("params")):
+            raise Error("ValueError: " + gw + " has no 'params'")
+        var lr = values[2]
+        var betas = values[3]
+        var eps = values[4]
+        var decay = values[5]
+        var momentum = values[6]
+        var dampening = values[7]
+        var nesterov = values[8]
+        var keys = py_call(builtins.list, group)
+        for k in range(len(keys)):  # driver-loop: over one group's keys (construction, once)
+            if py_type(keys[k]) is not builtins.str:
+                raise Error("TypeError: " + gw + " has a key that is not a str")
+            var key = String(keys[k])
+            if key == "beta1" or key == "beta2":
+                raise Error("ValueError: " + gw + ": give 'betas' as a pair (beta1, beta2)")
+            pg_admit_key(kind, key, gi)
+            var v = py_item(group, keys[k])
+            if key == "lr":
+                lr = v
+            elif key == "betas":
+                betas = v
+            elif key == "eps":
+                eps = v
+            elif key == "weight_decay":
+                decay = v
+            elif key == "momentum":
+                momentum = v
+            elif key == "dampening":
+                dampening = v
+            elif key == "nesterov":
+                nesterov = v
+        var plist = _pg_group_list(py_item(group, PythonObject("params")), gw)
+        var gid = List[Int]()
+        var indices = Python.list()
+        for k in range(len(plist)):  # driver-loop: over one group's parameter arrays (construction, once)
+            gid.append(Int(py=py_call(builtins.id, plist[k])))
+            _ = py_call(indices.append, index)
+            index += 1
+        ids.append(gid^)
+        var envelope = Python.list()
+        for item in [plist, values[1], lr, betas, eps, decay, momentum, dampening, nesterov, values[9], values[10],
+                     values[11], values[12], values[13]]:  # driver-loop: over the constructor envelope's fields
+            _ = py_call(envelope.append, item)
+        if len(values) == 15:
+            _ = py_call(envelope.append, values[14])
+        _ = py_call(envelopes.append, py_call(builtins.tuple, envelope))
+        var gd = Python.dict()
+        py_setitem(gd, PythonObject("params"), indices)
+        py_setitem(gd, PythonObject("lr"), lr)
+        py_setitem(gd, PythonObject("weight_decay"), decay)
+        if kind == 0:
+            py_setitem(gd, PythonObject("momentum"), momentum)
+            py_setitem(gd, PythonObject("dampening"), dampening)
+            py_setitem(gd, PythonObject("nesterov"), nesterov)
+        else:
+            py_setitem(gd, PythonObject("betas"), betas)
+            py_setitem(gd, PythonObject("eps"), eps)
+        _ = py_call(param_groups.append, gd)
+    _ = pg_check_membership(ids)
+    var members = Python.list()
+    var new = builtins.object.__new__
+    for gi in range(len(envelopes)):  # driver-loop: over parameter groups (one member optimizer each)
+        var member = py_call(new, py_type(owner))
+        opt_owner(member, context)
+        _ = optimizer_construct(member, envelopes[gi], mode, context)
+        _ = py_call(members.append, member)
+    var fields = py_fields(owner)
+    py_setitem(fields, PythonObject("_pg_members"), members)
+    py_setitem(fields, PythonObject("param_groups"), param_groups)
+    py_setitem(fields, PythonObject("total_norm_"), PythonObject(None))
+    py_setattr(owner, "__class__", native_loaded_module("mojolearn._training_impl")._ParamGroups)
+    return PythonObject(None)
+
+
+def _pg_member_entries(member: PythonObject, context: PythonObject) raises -> Tuple[PythonObject, PythonObject]:
+    """(module, provider) of one member, chosen as `optimizer_native` chooses them for its own operations."""
+    var nk = optimizer_keys()
+    var selected_mode = opt_owner_mode(member, context)
+    var host_owner = py_get(py_fields(member), nk[].k__host_device) is PythonObject(True)
+    var entries = optimizer_entries_cpu(selected_mode, context) if host_owner else optimizer_entries(selected_mode, context)
+    return (py_item(entries, nk[].k_module), optimizer_provider_entries(entries))
+
+
+def _pg_slices(members: PythonObject, grads: PythonObject, where: String) raises -> PythonObject:
+    """The gradient list split by group, in group order (refusing a count that is not every group's)."""
+    var nk = optimizer_keys()
+    var builtins = native_loaded_module("builtins")
+    var cls = py_type(grads)
+    if cls is not builtins.list and cls is not builtins.tuple:
+        raise Error("TypeError: mojolearn." + where + ": grads must be a list of arrays, one per parameter in group order")
+    var out = Python.list()
+    var offset = 0
+    for gi in range(len(members)):  # driver-loop: over parameter groups
+        var n = len(py_item(py_fields(members[gi]), nk[].k_params))
+        var part = Python.list()
+        for k in range(n):  # driver-loop: over one group's gradient arrays (references, no data)
+            if offset + k >= len(grads):
+                break
+            _ = py_call(part.append, grads[offset + k])
+        _ = py_call(out.append, part)
+        offset += n
+    if offset != len(grads):
+        raise Error("ValueError: mojolearn." + where + ": " + String(len(grads)) + " gradients for "
+                    + String(offset) + " parameters across the groups")
+    return out
+
+
+def pg_training_operation(operation: Int, owner: PythonObject, values: PythonObject,
+                          context: PythonObject) raises -> PythonObject:
+    """`_ParamGroups.step`, `zero_grad`, `state_dict`, `load_state_dict`."""
+    var builtins = native_loaded_module("builtins")
+    var fields = py_fields(owner)
+    if not py_contains(fields, PythonObject("_pg_members")):
+        raise Error("TypeError: optimizer has no parameter groups")
+    var members = py_item(fields, PythonObject("_pg_members"))
+    var where = String("optimizer")
+    if operation == OPTIMIZER_OPN_PG_STEP or operation == OPTIMIZER_OPN_PG_ZERO:
+        var grads = values[0]
+        opt_value(grads, context)
+        if grads_device_input(grads, False, context):
+            raise Error("TypeError: mojolearn optimizer with parameter groups: step takes host gradient arrays")
+        var parts = _pg_slices(members, grads, where + (".step" if operation == OPTIMIZER_OPN_PG_STEP else ".zero_grad"))
+        if operation == OPTIMIZER_OPN_PG_ZERO:
+            for gi in range(len(members)):  # driver-loop: over parameter groups
+                _ = door_zero(members[gi], parts[gi])
+            return PythonObject(None)
+        var total = PythonObject(None)
+        if values[1] is not PythonObject(None):
+            # ONE clip over every group's gradients, in group order (contract 3.5): clip_grad_norm_ in place
+            var e0 = _pg_member_entries(members[0], context)
+            total = door_clip(e0[1], py_call(builtins.list, grads), values[1], PythonObject(2.0), PythonObject(True),
+                              Python.dict())
+        for gi in range(len(members)):  # driver-loop: over parameter groups (each its member's step)
+            var e = _pg_member_entries(members[gi], context)
+            _ = door_step(e[0], e[1], members[gi], parts[gi], PythonObject(None), OP_STEP, PythonObject(None))
+        py_setitem(fields, PythonObject("total_norm_"), total)
+        return total
+    if operation == OPTIMIZER_OPN_PG_STATE:
+        var state = Python.dict()
+        for gi in range(len(members)):  # driver-loop: over parameter groups
+            var e = _pg_member_entries(members[gi], context)
+            py_setitem(state, PythonObject(gi), door_state(e[0], e[1], members[gi], STATE_DICT))
+        var groups = Python.list()
+        var saved = py_item(fields, PythonObject("param_groups"))
+        for gi in range(len(saved)):  # driver-loop: over parameter groups (copies of their option dicts)
+            _ = py_call(groups.append, py_call(builtins.dict, saved[gi]))
+        var out = Python.dict()
+        py_setitem(out, PythonObject("state"), state)
+        py_setitem(out, PythonObject("param_groups"), groups)
+        return out
+    # OPTIMIZER_OPN_PG_LOAD
+    var sd = values[0]
+    opt_value(sd, context)
+    if (py_type(sd) is not builtins.dict or not py_contains(sd, PythonObject("state"))
+            or not py_contains(sd, PythonObject("param_groups"))):
+        raise Error("ValueError: load_state_dict takes the dict state_dict returned (keys 'state' and 'param_groups')")
+    var saved_groups = py_item(sd, PythonObject("param_groups"))
+    var saved_state = py_item(sd, PythonObject("state"))
+    if len(saved_groups) != len(members):
+        raise Error("ValueError: the state has " + String(len(saved_groups)) + " parameter groups and this optimizer has "
+                    + String(len(members)))
+    var nk = optimizer_keys()
+    var kind = owner_kind(members[0])
+    for gi in range(len(members)):  # driver-loop: over parameter groups (every check before any change)
+        var g = saved_groups[gi]
+        if py_type(g) is not builtins.dict or not py_contains(g, PythonObject("params")):
+            raise Error("ValueError: the state's param_groups[" + String(gi) + "] has no 'params'")
+        var n = len(py_item(py_fields(members[gi]), nk[].k_params))
+        if len(py_item(g, PythonObject("params"))) != n:
+            raise Error("ValueError: the state's param_groups[" + String(gi) + "] has "
+                        + String(len(py_item(g, PythonObject("params")))) + " parameters and this optimizer's has " + String(n))
+        if not py_contains(saved_state, PythonObject(gi)):
+            raise Error("ValueError: the state has no entry for parameter group " + String(gi))
+    var current = py_item(fields, PythonObject("param_groups"))
+    for gi in range(len(members)):  # driver-loop: over parameter groups (options, then state)
+        var g = saved_groups[gi]
+        var updates = Python.dict()
+        var keys = py_call(builtins.list, g)
+        for k in range(len(keys)):  # driver-loop: over one group's saved options
+            var key = String(keys[k])
+            if key == "params":
+                continue
+            pg_admit_key(kind, key, gi)
+            py_setitem(updates, keys[k], py_item(g, keys[k]))
+            py_setitem(current[gi], keys[k], py_item(g, keys[k]))
+        _ = optimizer_set_params(members[gi], updates, context)
+        var e = _pg_member_entries(members[gi], context)
+        optimizer_load_owner(e[0], e[1], members[gi], py_item(saved_state, PythonObject(gi)), context)
+    return PythonObject(None)
+# nn-blocks-pg end
