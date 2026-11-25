@@ -376,7 +376,7 @@ def run_refusals() raises:
     var head = List[List[Int]]()
     head.append(_one(1))
     var w4 = w2.copy()
-    w4.extend(w2)
+    w4.extend(w2.copy())
     var fp = pgseq_resolve(lnames, head, _no_names(1), _strs("bias"), w4)
     require(Int(fp[0]) == 4 and Int(fp[1]) == 4 and Int(fp[2]) == 1, "the header [G, T, D]")
     var at = 3 + 4 * PGSEQ_GROUP_WORDS

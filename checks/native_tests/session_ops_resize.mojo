@@ -384,7 +384,7 @@ def _session[E: Exec & Movable & Deinitable, KIND: Int](
     return r^
 
 
-def _sequential[E: Exec](var ex: E, c: _Case, xv: List[Float32], seed: List[Float32]) raises -> _Run:
+def _sequential[E: Exec & Deinitable](var ex: E, c: _Case, xv: List[Float32], seed: List[Float32]) raises -> _Run:
     """Sequential's own layer (nnc_forward, as autograd/model.mojo records it) on a (batch, features) input."""
     var r = _Run()
     var tape = Tape()
