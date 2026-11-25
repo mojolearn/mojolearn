@@ -60,7 +60,7 @@ NON_COMPUTING = frozenset((
     # vocabulary's tokens and merges, the byte LM's settings, a safetensors
     # header entry and the parameter-grid sampler (it draws settings, not data)
     "Kernel", "ConstantKernel", "WhiteKernel", "RBF", "Matern",
-    "TrainedBpeVocabulary", "ByteLanguageModelConfig", "TensorInfo", "ParameterSampler",
+    "TrainedBpeVocabulary", "ByteLanguageModelConfig", "TensorInfo", "ParameterSampler", "ParameterGrid",
     # a predicate over two integers (whether a microbatch split keeps the bits)
     "accumulation_is_aligned",
 ))
