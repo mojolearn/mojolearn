@@ -4888,7 +4888,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             slots.append(slot)
             groups_of.append(gi)
             members_of.append(self.pg_tables[g].members[gi])
-            grads.append(self.tape.gradient(self.tensors[slot]))
+        # the gradients after every parameter's group is checked: a parameter in no group is refused in its own
+        # words even when an earlier one has no gradient yet (w3-integrate-10: checks/native_tests/nn_pg.mojo row 11
+        # read "tensor has no gradient" for the first parameter instead)
+        for i in range(len(slots)):  # driver-loop: over the step's parameters
+            grads.append(self.tape.gradient(self.tensors[slots[i]]))
         var head_cfg = self.opts[oi].cfg
         if optimizer_clips(head_cfg):
             # The clip across the step's tensors of EVERY group: the fold of
