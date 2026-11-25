@@ -249,7 +249,7 @@ def run_segment_case[E: Exec](mut ex: E, kind: Int) raises -> List[Float32]:
     if kind == SEGMENT_MAX:
         # a NaN in a segment makes that value NaN (the first NaN is kept)
         var nt = Tape()
-        var xn: List[Float32] = [Float32(1.0), Float32(0.0) / Float32(0.0), Float32(3.0), Float32(2.0)]
+        var xn: List[Float32] = [Float32(1.0), bitcast[DType.float32](UInt32(0x7FC00000)), Float32(3.0), Float32(2.0)]
         var nids: List[Int] = [0, 0, 0, 1]
         var nd = nt.tensor(ex, xn, 4, 1, False)
         var ny = nn_segment(nt, ex, nd, _ids_tensor(nt, ex, nids), 4, 2, SEGMENT_MAX)

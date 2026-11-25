@@ -28,10 +28,10 @@
 # The flat target of a scatter source (o, k, i) is the output cell (o, index, i) (OP_SCT_KEYS), so scatter_add is
 # the same width-1 fold over flat cells.
 #
-# EMPTY SEGMENTS. sum 0, mean 0 (sum / max(count, 1)), max 0. The max of an empty segment is 0, not -inf (the
-# identity of max, tf.math.unsorted_segment_max's choice): torch_scatter.scatter_max's choice, a finite value, so a
-# model that pools a graph with an isolated node or a bag with no item stays finite and its gradient defined; an
-# empty segment takes no gradient.
+# EMPTY SEGMENTS. sum 0, mean 0 (sum / max(count, 1)), max 0. The max of an empty segment is 0, not the lowest
+# float32 (tf.math.unsorted_segment_max's choice) nor -inf: torch_scatter.scatter_max's choice, a finite value, so a
+# model that pools a graph with an isolated node or a bag with no item stays finite; an empty segment passes no
+# gradient to any row.
 #
 # GRADIENTS (first order; a VJP each, every destination word written once, no accumulation inside a rule):
 #   scatter_add  d x = the upstream gradient (a copy); d src[e] = upstream[key[e]] (OP_EMB_GATHER, width 1)
