@@ -56,6 +56,11 @@ ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
                           # nn-blocks-composed begin: the composed tagger, two steps and a resume (eager, Program.fit)
                           'ops-composed-tagger',
                           # nn-blocks-composed end
+                          # session-ops-rest begin: Sequential's norms, activations, attention, losses and SSM scans as
+                          # Session ops, one seeded backward each
+                          'ops-layer-norms', 'ops-layer-activations', 'ops-layer-attention',
+                          'ops-layer-losses', 'ops-layer-ctc', 'ops-layer-ssm',
+                          # session-ops-rest end
                           ))
 # These fixtures use loaded weights or inspect configuration without training.
 NEURAL_INFERENCE = frozenset(('hf-causal-lm', 'byte-lm-host-infer',

@@ -128,6 +128,10 @@ FAMILIES = (
                         # nn-blocks-composed begin: the composed tagger (tools/identity_lanes/nn_composed.py)
                         "ops-composed-tagger",
                         # nn-blocks-composed end
+                        # session-ops-rest begin: Sequential's layers as Session ops (tools/identity_lanes/session_ops_rest.py)
+                        "ops-layer-norms", "ops-layer-activations", "ops-layer-attention",
+                        "ops-layer-losses", "ops-layer-ctc", "ops-layer-ssm",
+                        # session-ops-rest end
                         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -325,6 +329,14 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     # nn-blocks-composed begin
     "ops-composed-tagger": "Session: a masked tagger (embedding, scan cell with dropout, parameter groups), resumed",
     # nn-blocks-composed end
+    # session-ops-rest begin
+    "ops-layer-norms": "Session: batch_norm, group_norm, instance_norm (running statistics), Program",
+    "ops-layer-activations": "Session: prelu, mish",
+    "ops-layer-attention": "Session: multi_head_attention (self causal, cross with key_lengths), positional_encoding, Program",
+    "ops-layer-losses": "Session: smooth_l1_loss, nll_loss, kl_div, binary_cross_entropy_with_logits(pos_weight)",
+    "ops-layer-ctc": "Session: ctc_loss (ids and float targets, mean and sum), Program",
+    "ops-layer-ssm": "Session: selective_scan, ssd_scan, trapezoid_scan",
+    # session-ops-rest end
                        }
 PUBLIC_PENDING_LANES = {
     # lane w3f2-main (2026-11-24): "no reference", not "unwatched": the shipped table
@@ -392,4 +404,12 @@ PUBLIC_PENDING_LANES = {
     # nn-blocks-scatter begin
     "ops-scatter-segment": "no reference",
     # nn-blocks-scatter end
+    # session-ops-rest begin
+    "ops-layer-norms": "no reference",
+    "ops-layer-activations": "no reference",
+    "ops-layer-attention": "no reference",
+    "ops-layer-losses": "no reference",
+    "ops-layer-ctc": "no reference",
+    "ops-layer-ssm": "no reference",
+    # session-ops-rest end
 }
