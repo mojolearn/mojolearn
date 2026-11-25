@@ -316,8 +316,15 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("fn-resample-bootstrap")
 def _(ml, X, yc, yr, Xh=None):
-    """mojolearn.resample.bootstrap of the mean and the median of 256 values,
-    999 resamples, percentile and BCa."""
+    """mojolearn.resample.bootstrap of 256 values, 999 resamples: the mean and
+    the median (statistic "quantile", q_or_prop 0.5) with the percentile
+    interval, and the standard deviation with BCa (a statistic with a
+    jackknife arm)."""
+    # HARNESS FIX (w3-fix-9-s3, 2026-11-25): the median part asked for
+    # statistic="median", which is not a name in resample.STATISTICS; the
+    # boundary refuses it ("mojolearn bootstrap: statistic must be one of
+    # ..."), so the clean lane was REFUSED in every run. The median is the 0.5
+    # quantile; BCa moves to "std" (quantile has no jackknife arm).
     v = _functions_cont(X, 256, 3, "fn-resample-bootstrap:v")
 
     def answer(r):
@@ -326,8 +333,10 @@ def _(ml, X, yc, yr, Xh=None):
 
     return _functions_resident(ml, "resample.bootstrap", lambda p: dict(
         mean=_functions_d(answer(ml.resample.bootstrap(p(v), statistic="mean", n_resamples=999, random_state=5))),
-        median_bca=_functions_d(answer(ml.resample.bootstrap(p(v), statistic="median", n_resamples=999,
-                                                             method="BCa", random_state=5)))))
+        median=_functions_d(answer(ml.resample.bootstrap(p(v), statistic="quantile", q_or_prop=0.5,
+                                                         n_resamples=999, random_state=5))),
+        std_bca=_functions_d(answer(ml.resample.bootstrap(p(v), statistic="std", n_resamples=999,
+                                                          method="BCa", random_state=5)))))
 
 
 @lane("fn-resample-permutation-test")
@@ -369,14 +378,18 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("fn-resample-resample")
 def _(ml, X, yc, yr, Xh=None):
     """mojolearn.resample.resample of two aligned arrays, with and without
-    replacement, and stratified."""
+    replacement, and a full permutation of one array (the default n_samples)."""
+    # HARNESS FIX (w3-fix-9-s3, 2026-11-25): the third part passed stratify=,
+    # which the product refuses by name (resample/NOT_IMPLEMENTED.tsv;
+    # providers/python/resample_rows_operation_pyapi_pack.mojo:28), so the
+    # clean lane was REFUSED in every run. It is now the default-size
+    # permutation of one array.
     v = _functions_cont(X, 256, 3, "fn-resample-resample:v")
     M = _functions_mat(X, 256, 3, "fn-resample-resample:m")
-    s = _functions_classes(X, 256, 3, "fn-resample-resample:s")
     return _functions_resident(ml, "resample.resample", lambda p: dict(
         replace=_functions_d(ml.resample.resample(p(v), p(M), n_samples=200, random_state=8)),
         noreplace=_functions_d(ml.resample.resample(p(v), p(M), replace=False, n_samples=128, random_state=8)),
-        stratified=_functions_d(ml.resample.resample(p(v), n_samples=192, stratify=p(s), random_state=8))))
+        permutation=_functions_d(ml.resample.resample(p(v), replace=False, random_state=8))))
 
 
 @lane("fn-resample-indices")
