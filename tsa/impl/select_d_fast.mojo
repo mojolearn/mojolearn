@@ -314,12 +314,12 @@ def kpss_one_wait(
         (wp + flag_at).bitcast[UInt32](), wp, Int32(total),
         grid_dim=((total + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
     )
-    var src = wp
+    var y_src = wp
     if not direct:
         var d_y = buf.create_sub_buffer[DType.float32](0, total)
         var y_diff = buf.create_sub_buffer[DType.float32](y_at, tot)
         prepare_data(ctx, y_diff, d_y, batch_size, n_obs, d, D, s)
-        src = wp + y_at
+        y_src = wp + y_at
         _ = y_diff^
         _ = d_y^
     comptime sum_kernel = series_sum_kernel[False]
@@ -329,11 +329,11 @@ def kpss_one_wait(
     var elem_grid = (tot + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB
     var series_grid = (batch_size + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB
     ctx.enqueue_function[sum_kernel](
-        wp + means_at, src, Int32(nd), ratio,
+        wp + means_at, y_src, Int32(nd), ratio,
         grid_dim=(batch_size, 1, 1), block_dim=(STATS_TPB, 1, 1),
     )
     ctx.enqueue_function[center_kernel](
-        wp + cent_at, src, wp + means_at, Int32(nd), Int32(tot),
+        wp + cent_at, y_src, wp + means_at, Int32(nd), Int32(tot),
         grid_dim=(elem_grid, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
     )
     ctx.enqueue_function[sumsq_kernel](

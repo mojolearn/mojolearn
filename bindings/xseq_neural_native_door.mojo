@@ -18,6 +18,7 @@ predicted codes become labels in this same call.
 from bindings.neural_labels_native_unpack import neural_encode_labels, neural_decode_labels
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
+from std.memory import unsafe_memcpy
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.optimizer_real_unpack import optimizer_real
 from bindings.native_identity_key_door import NativeIdentityKey
