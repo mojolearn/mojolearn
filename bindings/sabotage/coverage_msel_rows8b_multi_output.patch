@@ -1,13 +1,13 @@
 diff --git a/core/msel_scorer_run.mojo b/core/msel_scorer_run.mojo
-index f760a46722..b8f3058eb4 100644
+index 68027301c0..46b6bf865a 100644
 --- a/core/msel_scorer_run.mojo
 +++ b/core/msel_scorer_run.mojo
-@@ -1602,7 +1602,7 @@ def _multi_floats(row: MselScorer, label_words: List[String], codes: Int, count:
-     var counts = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=row.counts_at)
-     var offsets = List[Int](length=outs, fill=0)
-     for j in range(1, outs):  # small-loop(the outputs' first labels)
--        offsets[j] = offsets[j - 1] + counts[j - 1]
-+        offsets[j] = 0  # SABOTAGE
-     if offsets[outs - 1] + counts[outs - 1] != row.lv_n:
-         raise Error("member ABI: a multi-output classifier's scorer needs one value per output label")
-     var lv = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=row.lv_at)
+@@ -2638,7 +2638,7 @@ def _multi_floats(row: MselScorer, label_words: List[String], codes: Int, count:
+         var k = Int(c[i])
+         if k < 0 or k >= counts[j]:
+             raise Error("ValueError: y codes outside [0, n_classes)")
+-        var at = offsets[j] + k
++        var at = k  # SABOTAGE coverage-bindings-msel_rows8b_multi_output: every output read at output 0's label offset (in range: k < counts[j] <= lv_n), the value table check still passes
+         var kind = Int(lv[2 * at + 1])
+         if kind != SCORER_LABEL_NUMBER:
+             numeric = False
