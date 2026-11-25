@@ -1616,9 +1616,9 @@ class Session:
         the segment's inputs and outputs, and :meth:`backward` runs the
         segment's forward again from the inputs, then its backward. The
         gradients and the trained parameters are the same, to the bit, as
-        when the segment's operations are called one by one (or with
-        ``recompute=False``), on every device; a :meth:`dropout` inside the
-        segment replays the same mask in the recompute. Use it to train a
+        with ``recompute=False`` (every value kept), on every device; a
+        :meth:`dropout` inside the segment replays the same mask in the
+        recompute. Use it to train a
         deeper or wider model in a fixed memory budget: for ``N`` segments
         that each keep ``A`` values and return ``O``, the recorded graph
         keeps about ``2 N O + A`` values instead of ``N A``, at the price
