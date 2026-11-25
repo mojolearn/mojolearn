@@ -1,10 +1,10 @@
 diff --git a/sequence/recurrent.mojo b/sequence/recurrent.mojo
-index ba246a07fd..6b719499f8 100644
+index 14e5ef6e49..b0b2e6f15f 100644
 --- a/sequence/recurrent.mojo
 +++ b/sequence/recurrent.mojo
 @@ -715,7 +715,7 @@ trait RnnStep(Defaultable & Movable & Deinitable):
  # loss weights drop their sample-weight factor on ONE side, the device executor's fit or the host executor's.
- # The verify lane sequence-rnn-weighted-steps (tools/identity_lanes/sequence.py) must FAIL under either.
+ # The verify lane sequence-rnn-weighted-steps (tools/identity_lanes/rnn_parity.py) must FAIL under either.
  comptime RNN_PARITY_SABOTAGE_WEIGHT_DEVICE = is_defined["MOJOLEARN_RNN_PARITY_SABOTAGE_WEIGHT_DEVICE"]()
 -comptime RNN_PARITY_SABOTAGE_WEIGHT_HOST = is_defined["MOJOLEARN_RNN_PARITY_SABOTAGE_WEIGHT_HOST"]()
 +comptime RNN_PARITY_SABOTAGE_WEIGHT_HOST = True  # SABOTAGE: the sample weights dropped from the fit's loss weights on the host

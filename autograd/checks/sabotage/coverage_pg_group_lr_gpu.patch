@@ -1,13 +1,13 @@
 diff --git a/autograd/nn_pg.mojo b/autograd/nn_pg.mojo
-index af86220204..6729054cb6 100644
+index 9104756a83..43aecdaa35 100644
 --- a/autograd/nn_pg.mojo
 +++ b/autograd/nn_pg.mojo
-@@ -52,7 +52,7 @@ from sequence.ops import (
+@@ -54,7 +54,7 @@ from autograd.nn_optim import NN_OPT_LAMB
  # group is clipped by its own norm (two clips, not one). GROUP_LR: every group steps at group 0's rate.
  comptime PG_SABOTAGE_CLIP_PER_GROUP = is_defined["MOJOLEARN_PG_SABOTAGE_CLIP_PER_GROUP"]()
  comptime PG_SABOTAGE_CLIP_PER_GROUP_HOST = is_defined["MOJOLEARN_PG_SABOTAGE_CLIP_PER_GROUP_HOST"]()
 -comptime PG_SABOTAGE_GROUP_LR = is_defined["MOJOLEARN_PG_SABOTAGE_GROUP_LR"]()
 +comptime PG_SABOTAGE_GROUP_LR = True  # SABOTAGE: every group at group 0's rate, device
  comptime PG_SABOTAGE_GROUP_LR_HOST = is_defined["MOJOLEARN_PG_SABOTAGE_GROUP_LR_HOST"]()
- 
- 
+ # The training module's twins (coverage-training-pg_clip_per_group_gpu / _cpu, lane training-param-groups): the
+ # parameter-group step of SGD / Adam / AdamW clips each group by its own norm (bindings/optimizer_native_router_door.mojo
