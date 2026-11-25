@@ -106,6 +106,7 @@ def model_fit_setup(prog: List[Int], ip: List[Int], fp: List[Float64]) raises ->
 def model_fit_source_native[E: Exec](
     mut ex: E, addrs: List[Int], prog: List[Int], ip: List[Int], fp: List[Float64], path: String,
     words: List[Int], source_out: Int, loop_words: Int = 0, state3: Int = 0,
+    sources: Optional[List[CastIn]] = None,
 ) raises -> Int:
     """Sequential.fit(source=) (lane stream-fits, 2026-11-25): the stateful fit's 8 addresses and 15 integer words
     (N, X and y unused: the source holds the rows) with the batch source's words (autograd/batch_source.mojo
@@ -113,9 +114,31 @@ def model_fit_source_native[E: Exec](
     position the words carry; a resume refuses a source that is not the one its state was trained on
     (program_training_source_refuse against the state's FS_SOURCE words) and starts at the state's consumed
     position, whatever the handle's (so a fresh process resumes with a new handle at (0, 0)). Returns the
-    iterations run in all (the state's FS_EPOCH)."""
-    if len(addrs) != FIT_ADDRS_STATE or len(ip) != FIT_INTS_STATE or len(fp) < FIT_FLOATS + 1:
-        raise Error("model_fit: Sequential.fit(source=) takes 8 addresses and 15 integer parameters")
+    iterations run in all (the state's FS_EPOCH).
+
+    Lane stream-fits-2: with validation_data, 13 addresses and 16 integers as the array fit's validated form
+    (addresses 8 to 10 unused: the validation rows, targets and classes are `sources` 2 to 4; 11 the validation
+    curve, 12 the result words; ip[15] restore_best_weights), or 15 with the validation rows' lengths (address 13
+    unused: the training lengths are the source's; 14 the validation lengths)."""
+    var validated_lengths = len(addrs) == FIT_ADDRS_VALIDATED + 2 and len(ip) == FIT_INTS_STATE + 1
+    var validated = (len(addrs) == FIT_ADDRS_VALIDATED and len(ip) == FIT_INTS_STATE + 1) or validated_lengths
+    if not validated and (len(addrs) != FIT_ADDRS_STATE or len(ip) != FIT_INTS_STATE):
+        raise Error("model_fit: Sequential.fit(source=) takes 8 addresses and 15 integer parameters (13 and 16 with "
+                    + "validation data, 15 and 16 with its lengths)")
+    if len(fp) < FIT_FLOATS + 1:
+        raise Error("model_fit: Sequential.fit(source=) takes 9 floats plus one per layer")
+    var validation = Optional[FitValidation]()
+    if validated:
+        if not sources or len(sources.value()) != 5:
+            raise Error("model_fit: Sequential.fit(source=) with validation data needs its input descriptors")
+        ref casts = sources.value()
+        var val_lengths = Optional[FP]()
+        if validated_lengths:
+            val_lengths = Optional[FP](model_fptr(addrs[14], "validation lengths"))
+        validation = Optional[FitValidation](FitValidation(
+            casts[2], casts[3], casts[4], model_fptr(addrs[11], "validation curve"), ip[15] != 0,
+            IP64(unsafe_from_address=addrs[12]), val_lengths,
+        ))
     var setup = model_fit_setup(prog, ip, fp)
     var opened = batch_source_fit_spec(path, words)
     var spec_words = opened[0].copy()
@@ -144,7 +167,8 @@ def model_fit_source_native[E: Exec](
     try:
         _ = model_fit_state_source(ex, setup.spec, setup.cfg, src, max_steps, model_fptr(addrs[2], "params"),
                                    model_fptr(addrs[3], "loss_curve"), model_fptr(addrs[4], "m"),
-                                   model_fptr(addrs[5], "v"), state, prev, resume, loop_words, state3, source_out)
+                                   model_fptr(addrs[5], "v"), state, prev, resume, loop_words, state3, source_out,
+                                   validation)
     except error:
         src.close()
         raise error^

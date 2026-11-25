@@ -67,6 +67,8 @@
 # every second gradient contribution to a tensor used on two paths, on one side) and the tagger case's kept arms
 # coverage-autograd-nn_composed_{scan_key,group_state}_{gpu,cpu} (autograd/nn_composed.mojo), and the checkpoint cases'
 # arms coverage-autograd-nn_ckpt_{fresh_mask,skip_node}_{gpu,cpu} (autograd/nn_ckpt.mojo; composed-checkpoint.json).
+# Lane stream-fits-2: the streamed recurrent fit's arms coverage-sequence-stream_fit_{cw_batch,val_ahead}_{gpu,cpu}
+# (sequence/recurrent.mojo; case gru-stream-cw-val-resume in composed-stream.json).
 
 _CC_SCHEMA = "mojolearn.composed-cases.v1"
 _CC_PREFIX = "composed-"

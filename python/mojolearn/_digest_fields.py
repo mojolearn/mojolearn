@@ -239,12 +239,12 @@ TRAINING_EXTRA_BY_NAME = {
     "Sequential": ("_fit_state", "_curve", "_fit_batch", "_fit_shuffle", "_target",
                    # nn-blocks-pgseq: compile's parameter groups as the fit resolved them (per-tensor table)
                    "_param_groups"),
-    "LSTMRegressor": ("_optimizer_state_", "_source_state_"),
-    "LSTMClassifier": ("_optimizer_state_", "_source_state_"),
-    "GRURegressor": ("_optimizer_state_", "_source_state_"),
-    "GRUClassifier": ("_optimizer_state_", "_source_state_"),
-    "RNNRegressor": ("_optimizer_state_", "_source_state_"),
-    "RNNClassifier": ("_optimizer_state_", "_source_state_"),
+    "LSTMRegressor": ("_optimizer_state_", "_source_state_", "_stream_monitor_"),
+    "LSTMClassifier": ("_optimizer_state_", "_source_state_", "_stream_monitor_"),
+    "GRURegressor": ("_optimizer_state_", "_source_state_", "_stream_monitor_"),
+    "GRUClassifier": ("_optimizer_state_", "_source_state_", "_stream_monitor_"),
+    "RNNRegressor": ("_optimizer_state_", "_source_state_", "_stream_monitor_"),
+    "RNNClassifier": ("_optimizer_state_", "_source_state_", "_stream_monitor_"),
 }
 
 #: Save-schema members that are training records or run settings: `answer_steps`

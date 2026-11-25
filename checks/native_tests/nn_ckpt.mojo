@@ -31,6 +31,11 @@ after another on DeviceExec):
      runs: the fold continues) or only before it (it holds none: the first term is written in place), and the
      backward runs twice, the second accumulating (every leaf's gradient then holds the first backward's value
      when the rule runs). Checkpointed == plain word for word: dL/dx, dL/du, dL/dw1, dL/dw2 after each backward.
+  7  a custom operation (a user rule, autograd/nn_cbw.mojo) and a checkpoint in one graph (lane stream-fits-2), the
+     custom node before the segment and after it: checkpointed == plain word for word.
+  8  a denormal upstream seed (float32 subnormals) through a checkpointed segment whose input is a non-leaf (lane
+     stream-fits-2): the leaves' and parameters' gradients are the plain words; the non-leaf's raw gradient differs
+     at most by a flushed denormal (the alias rule), and the count of such words is printed.
 """
 from std.memory import bitcast
 from std.testing import TestSuite
@@ -48,7 +53,7 @@ from checks.native_tests.ops_higher_common import tensor, values, gradient
 from checks.native_tests.sequence_port_common import normal
 from checks.native_tests.testsuite_cases import check_cases, check_cases_serial, CPU_COLUMN_BUILD, require
 
-comptime NN_CKPT_UNITS = 7
+comptime NN_CKPT_UNITS = 9
 
 comptime _MATMUL = 1
 comptime _ADD = 2
@@ -512,6 +517,146 @@ def run_carry_unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E], mut s: 
         require(moved, "checkpoint: an accumulating backward left dL/dw1 as it was")
 
 
+# ---------------------------------------------------------------- unit 7: a custom operation and a checkpoint
+comptime _SUB = 3
+comptime _FULL = 30
+
+
+def _my_tanh[E: Exec & Movable & Deinitable](mut c: OpsSession[E], mut s: OpsSession[E]) raises -> Int:
+    """MyTanh (checks/native_tests/nn_cbw.mojo's user rule: forward tanh(x) saving y; backward g (1 - y y)) over
+    (B, F), captured in `c` and bound in the recording session `s`; returns its operation id."""
+    var zeros = List[Float32](length=_B * _F, fill=0)
+    var x = tensor(c, zeros, [_B, _F])
+    var y = _op1(c, _TANH, x)
+    var fin: List[Int] = [x]
+    var fout: List[Int] = [y]
+    var fwd = c.capture(fin, fout)
+    var ys = tensor(c, zeros, [_B, _F])
+    var g = tensor(c, zeros, [_B, _F])
+    var ints: List[Int] = [1, 1]
+    var fs: List[Float32] = [Float32(1)]
+    var one = c.op(_FULL, List[Int](), ints, fs)
+    var dx = _op(c, _MUL, g, _op(c, _SUB, one, _op(c, _MUL, ys, ys)))
+    var bin: List[Int] = [ys, g]
+    var bout: List[Int] = [dx]
+    var bwd = c.capture(bin, bout)
+    var saved: List[Int] = [0]
+    return s.cbw_define(c.program(fwd), c.program(bwd), saved, 1)
+
+
+def _custom_grads[E: Exec & Movable & Deinitable](
+    mut c: OpsSession[E], mut s: OpsSession[E], seg: OpsProgram, recompute: Bool, after: Bool,
+) raises -> List[List[Float32]]:
+    """One graph holding a user rule (MyTanh) and a checkpointed segment: u = my_tanh(x), y = seg(u) with the loss
+    also reading u (`after` False), or u = seg(x), y = my_tanh(u) (`after` True). Returns [loss terms' output,
+    dL/dx, dL/dw1, dL/dw2]."""
+    s.reset()
+    var op_id = _my_tanh(c, s)
+    var x = tensor(s, _draw(_B * _F, 0xC471, 1.0), [_B, _F], True)
+    var w1 = tensor(s, _draw(_F * _H, 0xC401, 0.5), [_F, _H], True)
+    var w2 = tensor(s, _draw(_H * _F, 0xC402, 0.5), [_H, _F], True)
+    var cy = tensor(s, _draw(_B * _F, 0xC472, 1.0), [_B, _F])
+    var cu = tensor(s, _draw(_B * _F, 0xC473, 1.0), [_B, _F])
+    var params: List[Int] = [w1, w2]
+    var y = 0
+    var u = 0
+    if after:
+        var ins: List[Int] = [x]
+        u = checkpoint_session(s, seg, ins, params, 2, recompute)[0]
+        var hs: List[Int] = [u]
+        y = s.cbw_call(op_id, hs)[0]
+    else:
+        var hs: List[Int] = [x]
+        u = s.cbw_call(op_id, hs)[0]
+        var ins: List[Int] = [u]
+        y = checkpoint_session(s, seg, ins, params, 2, recompute)[0]
+    var loss = _op(s, _ADD, _dot(s, y, cy), _dot(s, u, cu))
+    s.backward(loss, False)
+    var out = List[List[Float32]]()
+    out.append(values(s, y, [_B, _F]))
+    out.append(gradient(s, x, [_B, _F]))
+    out.append(gradient(s, w1, [_F, _H]))
+    out.append(gradient(s, w2, [_H, _F]))
+    return out^
+
+
+def run_custom_unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E], mut s: OpsSession[E]) raises:
+    """Unit 7 (lane stream-fits-2, owed by the fable-finalize review): a custom operation (cbw, the CbwRules the
+    checkpoint's CkptRules wrap) and a checkpoint in ONE graph, the custom node before the segment (its gradient
+    comes from the checkpoint's rule) and after it (the checkpoint's rule receives the custom rule's gradient):
+    checkpointed == plain, word for word."""
+    var names: List[String] = ["output", "dL/dx", "dL/dw1", "dL/dw2"]
+    var seg = c.program(_segment(c, False))
+    for variant in range(2):  # small-loop(the custom node before or after the segment)
+        var after = variant == 1
+        var plain = _custom_grads(c, s, seg, False, after)
+        var ckpt = _custom_grads(c, s, seg, True, after)
+        for q in range(len(names)):  # small-loop(the compared words)
+            _same("custom operation " + ("after" if after else "before") + " the checkpoint: " + names[q], ckpt[q],
+                  plain[q])
+
+
+# ---------------------------------------------------------------- unit 8: a denormal upstream seed
+def _denormal_grads[E: Exec & Movable & Deinitable](
+    mut s: OpsSession[E], seg: OpsProgram, recompute: Bool,
+) raises -> List[List[Float32]]:
+    """u = tanh(x) (a non-leaf input), y = seg(u), loss = sum(y C) with C holding float32 SUBNORMAL words (the
+    upstream seed the segment's backward receives is denormal), plus sum(u D). Returns [dL/dx, dL/dw1, dL/dw2,
+    dL/du (the non-leaf's raw gradient words)]."""
+    s.reset()
+    var x = tensor(s, _draw(_B * _F, 0xC481, 1.0), [_B, _F], True)
+    var w1 = tensor(s, _draw(_F * _H, 0xC401, 0.5), [_F, _H], True)
+    var w2 = tensor(s, _draw(_H * _F, 0xC402, 0.5), [_H, _F], True)
+    var tiny = List[Float32](length=_B * _F, fill=0)
+    for i in range(_B * _F):  # small-loop(seed words: float32 subnormals, 2^-130 to 2^-140, both signs)
+        var magnitude = Float32(1.0)
+        for _ in range(130 + 2 * i):  # small-loop(halvings: an exact power of two)
+            magnitude = magnitude * Float32(0.5)
+        tiny[i] = magnitude if i % 2 == 0 else -magnitude
+    var cy = tensor(s, tiny, [_B, _F])
+    var cu = tensor(s, _draw(_B * _F, 0xC482, 1.0), [_B, _F])
+    var u = _op1(s, _TANH, x)
+    var params: List[Int] = [w1, w2]
+    var ins: List[Int] = [u]
+    var y = checkpoint_session(s, seg, ins, params, 4, recompute)[0]
+    var loss = _op(s, _ADD, _dot(s, y, cy), _dot(s, u, cu))
+    s.backward(loss, False)
+    var out = List[List[Float32]]()
+    out.append(gradient(s, x, [_B, _F]))
+    out.append(gradient(s, w1, [_F, _H]))
+    out.append(gradient(s, w2, [_H, _F]))
+    out.append(gradient(s, u, [_B, _F]))
+    return out^
+
+
+def _subnormal_or_zero(v: Float32) -> Bool:
+    var bits = bitcast[DType.uint32](v) & UInt32(0x7FFFFFFF)
+    return bits < UInt32(0x00800000)
+
+
+def run_denormal_unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E], mut s: OpsSession[E]) raises:
+    """Unit 8 (lane stream-fits-2, owed by the fable-finalize review): a DENORMAL upstream seed through a
+    checkpointed segment. The alias rule (autograd/nn_ckpt.mojo, review item (b)): the leaves' and parameters'
+    gradients are the plain graph's words; the non-leaf input's raw gradient may differ from the plain form's only
+    where one side holds a flushed denormal (a subnormal or zero against the other's subnormal or zero). Both are
+    checked; the line STREAM_FITS2 ALIAS records which the column showed."""
+    var seg = c.program(_segment(c, False))
+    var plain = _denormal_grads(s, seg, False)
+    var ckpt = _denormal_grads(s, seg, True)
+    var names: List[String] = ["dL/dx", "dL/dw1", "dL/dw2"]
+    for q in range(3):  # small-loop(the leaves' gradients)
+        _same("denormal seed: " + names[q], ckpt[q], plain[q])
+    var differing = 0
+    for i in range(len(ckpt[3])):  # small-loop(the non-leaf input's gradient words)
+        if bitcast[DType.uint32](ckpt[3][i]) != bitcast[DType.uint32](plain[3][i]):
+            if not (_subnormal_or_zero(ckpt[3][i]) and _subnormal_or_zero(plain[3][i])):
+                _fail("denormal seed: dL/du word " + String(i) + " differs beyond a flushed denormal ("
+                      + String(ckpt[3][i]) + " vs " + String(plain[3][i]) + ")")
+            differing += 1
+    print("STREAM_FITS2 ALIAS denormal seed: dL/du words differing only by a flushed denormal:", differing, "of",
+          len(ckpt[3]), "(leaves and parameters equal)")
+
+
 def _unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E], mut s: OpsSession[E], unit: Int) raises:
     if unit == 0:
         run_segment_unit(c, s)
@@ -525,8 +670,12 @@ def _unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E], mut s: OpsSessio
         run_refusal_unit(c, s)
     elif unit == 5:
         run_memory_unit(c, s)
-    else:
+    elif unit == 6:
         run_carry_unit(c, s)
+    elif unit == 7:
+        run_custom_unit(c, s)
+    else:
+        run_denormal_unit(c, s)
 
 
 def test_nn_ckpt() raises:

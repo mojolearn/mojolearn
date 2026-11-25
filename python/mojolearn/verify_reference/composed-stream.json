@@ -515,6 +515,384 @@
      ]
     }
    ]
+  },
+  {
+   "name": "gru-stream-cw-val-resume",
+   "about": "GRUClassifier.partial_fit(source=, steps=, validation_data=) (lane stream-fits-2, 2026-11-25): output='sequence' on 7 sealed records of 1 to 4 steps of 2 features (two shards, batch 2, two batches a length bucket, shuffled from seed 5: 4 batches an epoch), a class index in [0, 3) at every step (each target row padded to 4 steps, the padded steps weighed 0), class_weight='balanced' (the valid steps' counts, counted in the training image's one admission read of the targets), validation_data=(X_val, y_val, lengths_val) evaluated at the end of every pass over the source, early_stopping with n_iter_no_change=1 and tol=1e9 (every pass after the first stalls). Uninterrupted: partial_fit(steps=12) stops after the second pass, at 8 steps. Interrupted: partial_fit(steps=3) stops mid-epoch AFTER the source read the fourth batch ahead (consumed position 3), the estimator is pickled, and in a FRESH PROCESS partial_fit(source=a new handle at (0, 0), steps=9) continues at the saved position with the saved optimizer state and the carried monitor (_stream_monitor_): it stops at the same step, with the uninterrupted run's parameters, optimizer state and monitor words. Sabotage arms (each CAUGHT on its own side only, through the digest): coverage-sequence-stream_fit_cw_batch_{gpu,cpu} (each batch's class weights made from the previous batch's labels) and coverage-sequence-stream_fit_val_ahead_{gpu,cpu} (a pass's validation loss taken one step late, after the read-ahead batch trained).",
+   "data": {
+    "three": {
+     "value": 3,
+     "dtype": "int64"
+    },
+    "eight": {
+     "value": 8,
+     "dtype": "int64"
+    },
+    "xv": {
+     "value": [
+      [
+       [
+        -0.625,
+        0.5
+       ],
+       [
+        0.25,
+        0.0
+       ],
+       [
+        -0.25,
+        -0.5
+       ],
+       [
+        0.625,
+        0.375
+       ]
+      ],
+      [
+       [
+        0.125,
+        -0.125
+       ],
+       [
+        -0.375,
+        -0.625
+       ],
+       [
+        0.5,
+        0.25
+       ],
+       [
+        0.0,
+        -0.25
+       ]
+      ],
+      [
+       [
+        -0.5,
+        0.625
+       ],
+       [
+        0.375,
+        0.125
+       ],
+       [
+        -0.125,
+        -0.375
+       ],
+       [
+        -0.625,
+        0.5
+       ]
+      ]
+     ],
+     "dtype": "float32"
+    },
+    "yv": {
+     "value": [
+      [
+       0,
+       1,
+       2,
+       0
+      ],
+      [
+       1,
+       2,
+       0,
+       1
+      ],
+      [
+       2,
+       0,
+       1,
+       2
+      ]
+     ],
+     "dtype": "int64"
+    },
+    "lv": {
+     "value": [
+      4,
+      2,
+      3
+     ],
+     "dtype": "int64"
+    }
+   },
+   "do": [
+    {
+     "op": "shards",
+     "as": "root",
+     "lengths": [
+      [
+       1,
+       3,
+       2,
+       4
+      ],
+      [
+       2,
+       1,
+       3
+      ]
+     ],
+     "F": 2,
+     "targets": {
+      "kind": "classes",
+      "classes": 3,
+      "width": 4
+     }
+    },
+    {
+     "op": "make",
+     "cls": "ops.BatchSource",
+     "args": [
+      "@root",
+      2
+     ],
+     "kw": {
+      "inputs": {
+       "tuple": [
+        "steps"
+       ]
+      },
+      "target": "targets",
+      "shuffle": true,
+      "seed": 5,
+      "bucket_batches": 2
+     },
+     "as": "sa"
+    },
+    {
+     "op": "make",
+     "cls": "GRUClassifier",
+     "kw": {
+      "hidden_size": 4,
+      "output": "sequence",
+      "learning_rate": 0.05,
+      "random_state": 0,
+      "batch_size": 2,
+      "class_weight": "balanced",
+      "early_stopping": true,
+      "n_iter_no_change": 1,
+      "tol": 1000000000.0
+     },
+     "as": "ea"
+    },
+    {
+     "op": "call",
+     "fn": "ea.partial_fit",
+     "kw": {
+      "source": "@sa",
+      "steps": 12,
+      "validation_data": {
+       "tuple": [
+        "@xv",
+        "@yv",
+        "@lv"
+       ]
+      }
+     }
+    },
+    {
+     "op": "let",
+     "as": "pa",
+     "value": [
+      "@ea.params_",
+      "@ea._optimizer_state_",
+      "@ea._stream_monitor_"
+     ]
+    },
+    {
+     "op": "array",
+     "of": "@ea.n_iter_",
+     "dtype": "int64",
+     "as": "ran"
+    },
+    {
+     "op": "same",
+     "a": "@ran",
+     "b": "@eight",
+     "what": "early stopping ends the call after the second pass, at 8 of 12 steps"
+    },
+    {
+     "op": "make",
+     "cls": "ops.BatchSource",
+     "args": [
+      "@root",
+      2
+     ],
+     "kw": {
+      "inputs": {
+       "tuple": [
+        "steps"
+       ]
+      },
+      "target": "targets",
+      "shuffle": true,
+      "seed": 5,
+      "bucket_batches": 2
+     },
+     "as": "sb"
+    },
+    {
+     "op": "make",
+     "cls": "GRUClassifier",
+     "kw": {
+      "hidden_size": 4,
+      "output": "sequence",
+      "learning_rate": 0.05,
+      "random_state": 0,
+      "batch_size": 2,
+      "class_weight": "balanced",
+      "early_stopping": true,
+      "n_iter_no_change": 1,
+      "tol": 1000000000.0
+     },
+     "as": "eb"
+    },
+    {
+     "op": "call",
+     "fn": "eb.partial_fit",
+     "kw": {
+      "source": "@sb",
+      "steps": 3,
+      "validation_data": {
+       "tuple": [
+        "@xv",
+        "@yv",
+        "@lv"
+       ]
+      }
+     }
+    },
+    {
+     "op": "call",
+     "fn": "sb.state_dict",
+     "as": "sd"
+    },
+    {
+     "op": "array",
+     "of": "@sd.consumed",
+     "dtype": "int64",
+     "as": "cons"
+    },
+    {
+     "op": "same",
+     "a": "@cons",
+     "b": "@three",
+     "what": "three steps leave the source's consumed position at 3 (the fourth batch read ahead, not trained)"
+    },
+    {
+     "op": "pickle",
+     "dump": "@eb",
+     "as": "pk"
+    },
+    {
+     "op": "fresh",
+     "pass": [
+      "pk",
+      "root",
+      "xv",
+      "yv",
+      "lv"
+     ],
+     "keep": [
+      "pc0",
+      "pc1",
+      "pc2",
+      "pn"
+     ],
+     "do": [
+      {
+       "op": "make",
+       "cls": "ops.BatchSource",
+       "args": [
+        "@root",
+        2
+       ],
+       "kw": {
+        "inputs": {
+         "tuple": [
+          "steps"
+         ]
+        },
+        "target": "targets",
+        "shuffle": true,
+        "seed": 5,
+        "bucket_batches": 2
+       },
+       "as": "sc"
+      },
+      {
+       "op": "pickle",
+       "load": "@pk",
+       "as": "ec"
+      },
+      {
+       "op": "call",
+       "fn": "ec.partial_fit",
+       "kw": {
+        "source": "@sc",
+        "steps": 9,
+        "validation_data": {
+         "tuple": [
+          "@xv",
+          "@yv",
+          "@lv"
+         ]
+        }
+       }
+      },
+      {
+       "op": "array",
+       "of": "@ec.params_",
+       "as": "pc0"
+      },
+      {
+       "op": "array",
+       "of": "@ec._optimizer_state_",
+       "as": "pc1"
+      },
+      {
+       "op": "array",
+       "of": "@ec._stream_monitor_",
+       "as": "pc2"
+      },
+      {
+       "op": "array",
+       "of": "@ec.n_iter_",
+       "dtype": "int64",
+       "as": "pn"
+      }
+     ]
+    },
+    {
+     "op": "same",
+     "a": "@pa",
+     "b": [
+      "@pc0",
+      "@pc1",
+      "@pc2"
+     ],
+     "what": "a fresh-process resume of the pickled estimator stops at the same step with the uninterrupted run's parameters, optimizer state and monitor words"
+    },
+    {
+     "op": "same",
+     "a": "@pn",
+     "b": "@eight",
+     "what": "the resumed run's step count is the uninterrupted run's"
+    },
+    {
+     "op": "digest",
+     "part": "stream-cw-val",
+     "of": [
+      "@pa",
+      "@ea.loss_curve_",
+      "@ea.validation_loss_"
+     ]
+    }
+   ]
   }
  ]
 }

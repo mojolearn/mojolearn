@@ -1,0 +1,13 @@
+diff --git a/sequence/recurrent.mojo b/sequence/recurrent.mojo
+index db57384dfc..c87433151d 100644
+--- a/sequence/recurrent.mojo
++++ b/sequence/recurrent.mojo
+@@ -929,7 +929,7 @@ def rnn_fit[E: Exec, //, S: RnnStep](
+ #:   VAL_AHEAD: the validation loss of a pass is taken one step late, after the read-ahead batch (the next pass's
+ #:   first) has trained.
+ comptime STREAM_FIT_SABOTAGE_CW_BATCH = is_defined["MOJOLEARN_STREAM_FIT_SABOTAGE_CW_BATCH"]()
+-comptime STREAM_FIT_SABOTAGE_CW_BATCH_HOST = is_defined["MOJOLEARN_STREAM_FIT_SABOTAGE_CW_BATCH_HOST"]()
++comptime STREAM_FIT_SABOTAGE_CW_BATCH_HOST = True  # SABOTAGE
+ comptime STREAM_FIT_SABOTAGE_VAL_AHEAD = is_defined["MOJOLEARN_STREAM_FIT_SABOTAGE_VAL_AHEAD"]()
+ comptime STREAM_FIT_SABOTAGE_VAL_AHEAD_HOST = is_defined["MOJOLEARN_STREAM_FIT_SABOTAGE_VAL_AHEAD_HOST"]()
+ 

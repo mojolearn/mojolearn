@@ -174,7 +174,8 @@ def model_request_execute[E: Exec](mut ex: E, op: Int, request: NativeModelReque
         if request.source_out != 0:
             return model_fit_source_native(ex, request.addresses, request.program, request.options,
                                            request.floats, request.source_path, request.source_words,
-                                           request.source_out, request.loop_words, request.state3)
+                                           request.source_out, request.loop_words, request.state3,
+                                           Optional[List[CastIn]](request.sources.copy()))
         return model_fit_native(ex, request.addresses, request.sources, request.program,
                                 request.options, request.floats, loop_words=request.loop_words,
                                 state3=request.state3)

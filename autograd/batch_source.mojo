@@ -447,6 +447,9 @@ struct BatchSource(Movable):
     var h_lens: List[Float32]
     var h_mask: List[Float32]
     var h_tgt: List[Float32]
+    #: the read-ahead batch's record ids (float32, exact below 2^24), row by row (lane stream-fits-2: the streamed
+    #: recurrent fits gather per-record sample weights and initial states with them)
+    var h_ids: List[Float32]
     var held_epoch: Int
     var held_batch: Int
     var held_rows: Int
@@ -479,6 +482,7 @@ struct BatchSource(Movable):
         self.h_lens = List[Float32]()
         self.h_mask = List[Float32]()
         self.h_tgt = List[Float32]()
+        self.h_ids = List[Float32]()
         self.held_epoch = -1
         self.held_batch = -1
         self.held_rows = 0
@@ -619,10 +623,12 @@ struct BatchSource(Movable):
         var xl = FP(unsafe_from_address=Int(self.h_lens.unsafe_ptr()))
         var xm = FP(unsafe_from_address=Int(self.h_mask.unsafe_ptr()))
         var xt = FP(unsafe_from_address=Int(self.h_tgt.unsafe_ptr()))
+        var xi = FP(unsafe_from_address=Int(self.h_ids.unsafe_ptr()))
         var has_t = W > 0
         def read_row(r: Int) {imm sp, imm ids, imm shard, imm first, imm lens, imm rowin, imm sfd, imm soff, imm tfd,
-                               imm toff, imm xs, imm xl, imm xm, imm xt, imm F, imm W, imm length, imm has_t}:
+                               imm toff, imm xs, imm xl, imm xm, imm xt, imm xi, imm F, imm W, imm length, imm has_t}:
             var rec = ids[r]
+            xi[r] = Float32(rec)
             var sh = shard[rec]
             var ln = lens[rec]
             var row = xs + r * length * F
@@ -770,6 +776,7 @@ def batch_source_open(var spec: BatchSourceSpec) raises -> BatchSource:
         src.h_lens = List[Float32](length=max(1, rows), fill=Float32(0))
         src.h_mask = List[Float32](length=max(1, rows * src.max_len), fill=Float32(0))
         src.h_tgt = List[Float32](length=max(1, rows * src.twidth), fill=Float32(0))
+        src.h_ids = List[Float32](length=max(1, rows), fill=Float32(0))
     except error:
         src.close()
         raise error
@@ -915,6 +922,14 @@ def batch_source_upload[E: Exec](mut ex: E, src: BatchSource, field: Int, dst: F
     return shape
 
 
+def batch_source_upload_ids[E: Exec](mut ex: E, src: BatchSource, dst: FP) raises -> Int:
+    """Upload the read-ahead batch's record ids (one float32 word a row, exact: records < 2^24) into executor
+    buffer `dst` and return the word count (lane stream-fits-2: the streamed recurrent fits gather each row's
+    sample weights and initial states from the per-record arrays by these ids)."""
+    ex.upload(dst, FP(unsafe_from_address=Int(src.h_ids.unsafe_ptr())), src.held_rows)
+    return src.held_rows
+
+
 def batch_source_capacity(src: BatchSource, field: Int) -> Int:
     """Executor words a field's batch buffer needs: the longest batch's."""
     var rows = min(src.spec.batch, src.n)
@@ -950,12 +965,31 @@ def batch_source_capacity(src: BatchSource, field: Int) -> Int:
 # epochs opens once; only a loop of partial_fit(source=, steps=1) calls pays it every step. What would settle it: a
 # native check that builds a List in one binding image and grows and frees it in another (under the address
 # sanitizer), or Modular's word on the allocator; then the owner can hand its source's address to these doors.
+# Lane stream-fits-2 (2026-11-25) wrote that check: checks/cross_image_heap (cih_image.mojo built twice as two
+# shared libraries, cih_driver.mojo moving a holder with this struct's member kinds between them; build and run
+# commands in the driver's docstring). It has NOT run yet (the lane writes code only). Until it prints
+# CROSS_IMAGE_HEAP PASS with no sanitizer report, the source stays reopened per call; when it does, the owner hands
+# its opened source's address to the doors and the reopen above goes.
 # The position a fit leaves is written twice: the CONSUMED position back to the handle, and the position the
 # training state saves (`batch_source_fit_saved`, the same words unless a sabotage arm moves them) with the source's
 # binding words (`ProgramTrainingSource`) into the model's state, so a fresh process resumes on the same next batch.
 
 #: words a streamed fit writes back: the consumed (epoch, batch) the handle takes
 comptime BATCH_SOURCE_FIT_OUT_WORDS = 2
+
+# The recurrent estimators' streamed fit (sequence/recurrent.mojo rnn_fit_stream; lane stream-fits-2), here so the
+# door (bindings/xseq_neural_native_door.mojo), the run entry (sequence/ops_impl.mojo) and the loop read one set:
+#: the streamed form's flags word: class_weight='balanced', counted from the source's targets in the run image's one
+#: admission read of them (batch_source_class_counts)
+comptime RNN_STREAM_BALANCED = 1
+#: the words a streamed fit's validation curve carries after its passes' losses and its two result words: the
+#: monitor a partial_fit(source=) hands the next call (in and out): the best validation loss, the stall count, the
+#: best pass and the passes completed before (float32 words, exact: the loss is a float32 word, the counts are below
+#: 2^24). All 0: no pass monitored yet.
+comptime RNN_STREAM_MONITOR_WORDS = 4
+#: the int64 words a streamed recurrent fit writes for its caller: the consumed (epoch, batch) and the steps it ran
+#: (fewer than asked when early stopping ended it)
+comptime RNN_STREAM_POSITION_WORDS = 3
 
 
 struct ProgramTrainingSource(Copyable, Movable):
@@ -1160,23 +1194,53 @@ def batch_source_class_scan(src: BatchSource, classes: Int, who: String) raises 
     imply (1 + the largest): every target word of every record must be a whole number >= 0, and below `classes`
     when `classes` > 0. One host task a shard (one pread of its targets file); the targets are a few words a
     record, small beside the steps. Refuses a source without targets."""
+    return _class_pass(src, classes, False, False, who)[0]
+
+
+def batch_source_class_counts(src: BatchSource, classes: Int, valid_steps: Bool, who: String) raises -> List[Int]:
+    """`batch_source_class_scan` with the class count fixed (`classes` > 0), returning how many targets of each
+    class the source holds, in the SAME one read of the targets (lane stream-fits-2: class_weight='balanced' of a
+    streamed fit, counted where the targets are admitted, never in a second read). `valid_steps` (output=
+    "sequence": a record's target row holds one class a step, padded to the longest record) counts the first
+    `length` words of each record only, as the array fit counts the valid steps."""
+    return _class_pass(src, classes, True, valid_steps, who)[1].copy()
+
+
+def _class_pass(src: BatchSource, classes: Int, count: Bool, valid_steps: Bool, who: String) raises -> Tuple[
+        Int, List[Int]]:
+    """The one pass over a source's targets: admission (every word a class index, below `classes` when > 0), the
+    implied class count, and with `count` the per-class counts (of each record's first `length` words with
+    `valid_steps`). Parallel plan: one host task a shard, each with its own count row (shards x classes words);
+    the rows are added on the host in shard order."""
     if src.twidth < 1:
         raise Error("ValueError: " + who + ": a classification fit reads class indices from the source's targets; "
                     + "it has none")
+    if count and classes < 1:
+        raise Error("ValueError: " + who + ": counting classes needs the class count")
     var shards = len(src.tgt_fd)
     var counts = List[Int](length=shards, fill=0)
     for i in range(src.n):  # driver-loop: over records (their shard, once a fit)
         counts[src.rec_shard[i]] += 1
+    # each shard's first record id (records are numbered over the shards in index order)
+    var firsts = List[Int](length=shards, fill=0)
+    for k in range(1, shards):  # driver-loop: over shards (their first record)
+        firsts[k] = firsts[k - 1] + counts[k - 1]
+    var K = classes if count else 1
+    var hist = List[Int](length=shards * K, fill=0)
     var bad = List[Int](length=shards, fill=0)
     var top = List[Int](length=shards, fill=0)
     var bp = _ip(Int(bad.unsafe_ptr()))
     var mp = _ip(Int(top.unsafe_ptr()))
     var cp = _ip(Int(counts.unsafe_ptr()))
+    var fp = _ip(Int(firsts.unsafe_ptr()))
+    var hp = _ip(Int(hist.unsafe_ptr()))
+    var lp = _ip(Int(src.rec_len.unsafe_ptr()))
     var tfd = _ip(Int(src.tgt_fd.unsafe_ptr()))
     var toff = _ip(Int(src.tgt_off.unsafe_ptr()))
     var W = src.twidth
     var limit = Float32(classes) if classes > 0 else Float32(16777216)
-    def scan_shard(k: Int) {imm bp, imm mp, imm cp, imm tfd, imm toff, imm W, imm limit}:
+    def scan_shard(k: Int) {imm bp, imm mp, imm cp, imm fp, imm hp, imm lp, imm tfd, imm toff, imm W, imm limit,
+                            imm K, imm count, imm valid_steps}:
         var n = cp[k] * W
         var words = List[Float32](length=max(1, n), fill=Float32(0))
         var got = _pread(tfd[k], Int(words.unsafe_ptr()), n * 4, toff[k])
@@ -1190,7 +1254,12 @@ def batch_source_class_scan(src: BatchSource, classes: Int, who: String) raises 
                 bp[k] = 1
                 return
             most = max(most, Int(v))
+            if count:
+                var r = i // W
+                if not valid_steps or i - r * W < lp[fp[k] + r]:
+                    hp[k * K + Int(v)] += 1
         mp[k] = most + 1
+        _ = words^  # read through its address above
     host_parallelize(scan_shard, shards)
     var found = 0
     for k in range(shards):  # driver-loop: over shards (their verdicts)
@@ -1203,10 +1272,17 @@ def batch_source_class_scan(src: BatchSource, classes: Int, who: String) raises 
             raise Error("ValueError: " + who + ": a target of shard " + String(k) + " is not a class index (a "
                         + "whole number >= 0)")
         found = max(found, top[k])
+    var total = List[Int](length=K if count else 0, fill=0)
+    if count:
+        for k in range(shards):  # driver-loop: over shards (their count rows, in order)
+            for c in range(K):  # driver-loop: over classes
+                total[c] += hist[k * K + c]
     _ = counts^
+    _ = firsts^
+    _ = hist^
     _ = bad^
     _ = top^
-    return found
+    return (found, total^)
 
 
 def batch_source_check_classes(src: BatchSource, classes: Int, who: String) raises:

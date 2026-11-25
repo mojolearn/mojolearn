@@ -20,7 +20,10 @@ from sequence.layernorm_core import layer_norm_fwd_core, layer_norm_bwd_core
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, RnnOptions, opt_scalars, opt_step, rnn_fit
 from sequence.recurrent import rnn_fit_stream  # lane stream-fits
-from autograd.batch_source import batch_source_open, batch_source_fit_spec, batch_source_check_classes
+from autograd.batch_source import (
+    batch_source_open, batch_source_fit_spec, batch_source_check_classes, batch_source_class_counts,
+    RNN_STREAM_BALANCED,
+)
 from autograd.rules_recurrent import AutogradRnnStep, rnn_predict, rnn_predict_options
 from autograd.route_ops import moe_tape_train_step
 from autograd.profile import ag_profile_on, ag_profile_report, ag_profile_reset
@@ -135,15 +138,17 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
 
     THE STREAMED FORM (lane stream-fits, 2026-11-25; fit(source=), partial_fit(source=)): the options form's
     28 integers, then the batch source's words (autograd/batch_source.mojo batch_source_fit_words, max_steps the
-    exact step count, then the path's byte count) and their count; 19 addresses: the options form's 16 (X and y
-    0: the source holds the rows), the path's bytes, the estimator's saved source part (SOURCE_PART_WORDS int64
-    words, out) and the consumed position (2 int64 words, out). The source is opened here, in the training image,
-    and trained by sequence/recurrent.mojo rnn_fit_stream; ip[6] N is unused and ip[7] T is the padded length."""
+    most steps to run), the stream flags (RNN_STREAM_BALANCED; lane stream-fits-2) and the path's byte count, and
+    their count; 19 addresses: the options form's 16 (X and y 0: the source holds the rows), the path's bytes, the
+    estimator's saved source part (SOURCE_PART_WORDS int64 words, out) and the position (RNN_STREAM_POSITION_WORDS
+    int64 words, out: the consumed (epoch, batch) and the steps run). The source is opened here, in the training
+    image, and trained by sequence/recurrent.mojo rnn_fit_stream; ip[6] N is unused and ip[7] T is the padded
+    length. Sample weights and h_0 / c_0 are per record (src.n rows)."""
     var streamed = len(ip) > 15 + RNN_FIT_OPTION_INTS
     var extended = len(ip) == 15 + RNN_FIT_OPTION_INTS or streamed
     if streamed:
         var count = ival(ip, 15 + RNN_FIT_OPTION_INTS)
-        if (count < 2 or len(ip) != 16 + RNN_FIT_OPTION_INTS + count or len(addrs) != 19
+        if (count < 3 or len(ip) != 16 + RNN_FIT_OPTION_INTS + count or len(addrs) != 19
                 or len(fp) != 6 + RNN_FIT_OPTION_FLOATS):
             raise Error("rnn_fit: the streamed form requires 19 addresses, the options form's words and the "
                         + "source's words")
@@ -182,8 +187,11 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
         # lane stream-fits: the source's words and path, the source opened here at the position they carry
         var count = ival(ip, 15 + RNN_FIT_OPTION_INTS)
         var words = List[Int]()
-        for k in range(count - 1):  # small-loop(the source words)
+        for k in range(count - 2):  # small-loop(the source words)
             words.append(ival(ip, 16 + RNN_FIT_OPTION_INTS + k))
+        var flags = ival(ip, 16 + RNN_FIT_OPTION_INTS + count - 2)
+        if flags < 0 or flags > RNN_STREAM_BALANCED:
+            raise Error("rnn_fit: damaged stream flags")
         var path_bytes = ival(ip, 16 + RNN_FIT_OPTION_INTS + count - 1)
         if path_bytes < 1 or addrs[16] == 0 or addrs[17] == 0 or addrs[18] == 0:
             raise Error("rnn_fit: damaged batch source words")
@@ -194,15 +202,42 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
         var opened = batch_source_fit_spec(String(StringSlice(unsafe_from_utf8=Span(text))), words)
         var total = opened[1]
         var src = batch_source_open(opened[0].copy())
+        # 'balanced' class weights (the run side's one admission read of the targets counts them)
+        var balanced_words = List[Float32](length=max(1, net.O), fill=Float32(0))
         try:
             var opts_s = rnn_fit_options_of(addrs, ip, fp, net, task, src.n, T, epochs, True)
-            # class weights and per-epoch validation run (lane fable-finalize; sequence/recurrent.mojo
-            # rnn_fit_stream); what needs every row in memory or a decision per epoch stays refused
-            if opts_s.has_sw or opts_s.has_h0 or opts_s.patience > 0 or opts_s.restore:
-                raise Error("ValueError: fit(source=) takes no sample_weight, h_0, c_0, early stopping or "
-                            + "restore_best")
+            # every option of the array fit runs (lanes fable-finalize, stream-fits-2; sequence/recurrent.mojo
+            # rnn_fit_stream): weights and initial states per record, validation, early stopping and restore_best
+            # on the passes over the source
+            if (opts_s.patience > 0 or opts_s.restore) and opts_s.nv == 0:
+                raise Error("ValueError: fit(source=): early stopping and restore_best monitor validation_data")
+            if opts_s.nv > 0 and opts_s.patience > 0 and opts_s.epochs < 1:
+                raise Error("rnn_fit: damaged validation curve words")
             if task == TASK_CE:
-                batch_source_check_classes(src, net.O, "fit(source=)")
+                if flags == RNN_STREAM_BALANCED:
+                    if opts_s.has_cw:
+                        raise Error("rnn_fit: class_weight is either 'balanced' or given")
+                    var counts = batch_source_class_counts(src, net.O, opts_s.seq_out, "fit(source=)")
+                    var counted = 0
+                    for c in range(net.O):  # small-loop(classes)
+                        counted += counts[c]
+                    for c in range(net.O):  # small-loop(classes)
+                        if counts[c] == 0:
+                            raise Error("ValueError: class_weight='balanced' needs every class in the source's "
+                                        + "targets; class " + String(c) + " has none")
+                        # scikit-learn's compute_class_weight('balanced'), narrowed to float32 as the array fit's
+                        balanced_words[c] = Float32(Float64(counted) / (Float64(net.O) * Float64(counts[c])))
+                    # weights all 1 (every class equally often) are no weights, as the array fit's plan has it
+                    var ones = True
+                    for c in range(net.O):  # small-loop(classes)
+                        ones = ones and balanced_words[c] == Float32(1.0)
+                    if not ones:
+                        opts_s.has_cw = True
+                        opts_s.cw = FP(unsafe_from_address=Int(balanced_words.unsafe_ptr()))
+                else:
+                    batch_source_check_classes(src, net.O, "fit(source=)")
+            elif flags == RNN_STREAM_BALANCED:
+                raise Error("ValueError: class_weight is for classifiers")
             var profile_s = ag_profile_fit_begin()
             rnn_fit_stream[AutogradRnnStep](ex, net, task, src, total, T, seed, fptr(p_addr, "params"),
                                             fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5),
@@ -213,6 +248,7 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
             src.close()
             raise error^
         src.close()
+        _ = balanced_words^  # read through opts_s.cw by the fit above
         return net.n_params()
     var lengths = rnn_lengths_of(addrs[5] if len(addrs) >= 6 else 0, N, T, "fit")
     var loop_words = addrs[6] if len(addrs) >= 7 else 0

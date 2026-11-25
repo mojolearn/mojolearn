@@ -1903,18 +1903,23 @@ class Sequential(_CheckMixin):
             recurrent layers, masked by each record's length (the
             ``lengths`` of an array fit). The targets are each record's
             target row: ``n_outputs`` values for ``mse``, ``l1``,
-            ``smooth_l1``, ``huber`` and ``kl_div``, or one class index
-            (``classes_`` is ``0 .. n_classes - 1``) for ``cross_entropy``
-            and ``bce_with_logits``. The batch size, shuffling and order are
+            ``smooth_l1``, ``huber`` and ``kl_div``; one class index
+            (``classes_`` is ``0 .. n_classes - 1``) for ``cross_entropy``,
+            ``nll`` and ``bce_with_logits``; the token ids for
+            ``token_cross_entropy``. The batch size, shuffling and order are
             the source's. One iteration (one ``loss_curve_`` value) is the
             rest of the source's current epoch; the next batch is read from
-            disk while the current one trains. The training state records
-            the source's consumed position, so :meth:`save_checkpoint`,
+            disk while the current one trains. ``validation_data`` (arrays
+            padded to the model's sequence length, with their lengths for
+            a model with recurrent layers) is evaluated at the end of every
+            pass over the source; early stopping, ``reduce_on_plateau`` and
+            ``restore_best_weights`` monitor it there (they need
+            ``validation_data``). The training state records the source's
+            consumed position, so :meth:`save_checkpoint`,
             :meth:`from_checkpoint` and ``fit(source=..., resume=True)``
             continue with the next batch, in another process too (the
             shards must be sealed with ``BatchSource.seal``). Not combined
-            with ``validation_data``, early stopping or
-            ``reduce_on_plateau``.
+            with the ``ctc`` loss.
         steps : int or None, default None
             With ``source``: train at most this many batches in this call.
 
