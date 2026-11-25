@@ -47,6 +47,12 @@ from bindings.causal_lm_construct_run import (
     CAUSAL_BLOCK_OPTIONAL_PRESENT,
 )
 from bindings.py_balanced import py_item
+# lane fixed15-parts-native (2026-11-25): the profile door's resolve and the
+# parts mask, resolved ONCE per model at construction or load.
+from bindings.numeric_profile_native_door import numeric_profile_operation
+from bindings.numeric_profile_mask_unpack import profile_parts_mask
+from core.numeric_profile_parts import NP_PART_GATE, NP_PART_HEAD, np_part_on
+from core.numeric_profile_parts_sabotage import NP_MASK_BLOCK, np_block_parts, np_parts_sabotage_device
 
 
 def _model_shape(value: PythonObject, shape: List[Int], name: String) raises:
@@ -223,6 +229,22 @@ def _model_quantize15(mut mods: NativeModules, value: PythonObject, key: CausalE
 
 
 def _model_profile(mut mods: NativeModules, requested: PythonObject, family: String, context: PythonObject) raises -> PythonObject:
+    # lane fixed15-parts-native (2026-11-25): a Transformer family resolves
+    # through the profile door's `resolve` (numeric_profile_native_door.mojo):
+    # the default it derives (fixed15_v1 for the transformer models, fp32_v1
+    # for a bare block), a per-part dict validated against the family's
+    # parts, and the CANONICAL form returned. The other families keep the
+    # registry walk below (they have no parts and no family row).
+    if family == "transformer" or family == "transformer_block":
+        var np_module = py_get(context, PythonObject("numeric_profile_module"))
+        if np_module is None:
+            raise Error("RuntimeError: CausalLM: the numeric profile operations are not connected")
+        var np_context = np_module._CONTEXT
+        if np_context is None:
+            raise Error("RuntimeError: CausalLM: the numeric profile operations are not connected")
+        return numeric_profile_operation(String("resolve"),
+            Python.tuple(requested, PythonObject("numeric_profile"), PythonObject("inference"), PythonObject(family)),
+            np_context)
     var bi = mods.module("builtins")
     var nk = causal_keys()
     var profiles = py_item(context, nk[].k_profiles)
@@ -676,11 +698,26 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
         raise Error("CausalLM: unexpected block tensor names")
     py_setitem(fields, nk[].k__w, base)
     py_setitem(fields, nk[].k__int15, PythonObject(None))
-    if String(profile) == "fixed15_v1":
+    # lane fixed15-parts-native (2026-11-25): PER PART. The block's bits of the
+    # model's parts mask, resolved once here (`_model_parts_mask`, the device
+    # sabotage arms on a gpu route) and kept as `_np_parts` for every entry
+    # this block runs. `_int15` holds the planes of each projection whose bit
+    # is set and None for the others (and for an ungated gate); it is None
+    # when the block computes no part under fixed15_v1, which then runs the
+    # fp32_v1 entries exactly as before.
+    var block_parts = 0
+    if kind == "transformer":
+        var parts = _model_parts_mask(profile, route)
+        if not gated and py_type(profile) is bi.dict and py_contains(profile, PythonObject("gate_proj")):
+            raise Error("ValueError: CausalLM: numeric_profile part gate_proj was named but this model's MLP has no gate")
+        block_parts = np_block_parts(parts)
+    py_setitem(fields, PythonObject("_np_parts"), PythonObject(block_parts))
+    if block_parts != 0:
         var planes = bi.list()
         var quantize_key = causal_entry_key(bindings)
         for i in range(2, 9):  # driver-loop: over the seven transformer projections
-            _ = py_call(planes.append, PythonObject(None) if base[i] is None else _model_quantize15(mods, base[i], quantize_key))
+            var on = np_part_on(block_parts, i - 2) and base[i] is not None
+            _ = py_call(planes.append, _model_quantize15(mods, base[i], quantize_key) if on else PythonObject(None))
         py_setitem(fields, nk[].k__int15, planes)
     if kind == "mamba3":
         if String(route) == "gpu" and String(py_item(fields, nk[].k_numeric_mode)) == "identical":
@@ -696,6 +733,17 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
             String(MAMBA_STATE_ABI_NAME), String(route) == "gpu")
         mods.released()
     return block
+
+
+def _model_parts_mask(profile: PythonObject, route: PythonObject) raises -> Int:
+    """The model's parts mask (core/numeric_profile_parts.mojo) from its
+    resolved profile, ONCE at construction or load; on a gpu route under the
+    device sabotage arms (core/numeric_profile_parts_sabotage.mojo), applied
+    before any planes are made."""
+    var mask = profile_parts_mask(profile)
+    if String(route) == "gpu":
+        mask = np_parts_sabotage_device(mask)
+    return mask
 
 
 def _model_class_weight_names(mut mods: NativeModules, cls: PythonObject) raises -> PythonObject:
@@ -952,7 +1000,9 @@ def _causal_model_init(mut mods: NativeModules, model: PythonObject, input_plan:
         py_setitem(primitive_fields, nk[].k__ext, py_item(bindings, nk[].k_primitives))
     _model_construction_set(mods, live, captured, "_prims", primitive)
     _model_construction_set(mods, live, captured, "_head_int15", PythonObject(None))
-    if String(profile) == "fixed15_v1":
+    # lane fixed15-parts-native: the head's planes exactly when the parts
+    # mask sets lm_head.
+    if String(py_item(plan, nk[].k_kind)) == "transformer" and np_part_on(_model_parts_mask(profile, route), NP_PART_HEAD):
         _model_construction_set(mods, live, captured, "_head_int15", _model_quantize15(mods, py_item(captured, nk[].k__head), causal_entry_key(bindings)))
     # Admission may call sibling native entries. Give it the private record;
     # a replaced public model descriptor cannot run after those calls.

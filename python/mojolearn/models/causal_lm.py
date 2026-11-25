@@ -423,6 +423,9 @@ def _connect_causal_native():
                                "norm_bias", "mlp", "mlp_bias", "qk_norm", "attn_softcap"),
         "bindings": bindings, "profiles": _numeric_profile.PROFILES,
         "profile_defaults": _numeric_profile._defaults,
+        # lane fixed15-parts-native: the construct door resolves the
+        # profile through the profile door with this module's _CONTEXT.
+        "numeric_profile_module": _numeric_profile,
         "rejected_profiles": _numeric_profile.REJECTED,
         "config_context": config_context, "checkpoint_context": checkpoint_context,
         "array_class": _Array, "bf16_class": _lowbit.BF16Weight,
