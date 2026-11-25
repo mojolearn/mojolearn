@@ -27,8 +27,9 @@ from bindings.parallel_mlp_native_door import (
 from bindings.native_process_pool_door import (
     process_pool_create, process_pool_map_typed, process_pool_close,
     process_worker_connect, process_worker_next, process_worker_value, process_worker_reply_typed, process_worker_refuse,
-    process_pool_devices,
+    process_pool_devices, process_pool_host_set, process_pool_vendor,
 )
+from bindings.msel_member_device_unpack import member_says_cpu
 from bindings.native_transport_door import transport_close
 from bindings.native_process_wire_door import WireOutgoing, wire_unpack, wire_append
 from core.parallel_worker_frame import WIRE_TUPLE
@@ -222,6 +223,19 @@ def _neural_init(owner: PythonObject, model: PythonObject, devices: PythonObject
     else:
         raise Error("TypeError: ParallelNeuralTrainer supports SmallMLPTrainer and SambaStack")
     var pool = process_pool_create(devices, False, child_module)
+    # A model built with device='cpu' in a process with a GPU set trains on host workers, as the
+    # shard drivers run such a member (bindings/parallel_shard_native_door.mojo `_member_host`,
+    # `shard_open(..., host=True)`; lane vdf2-tok): both pools are moved to the host route before
+    # they start (`process_pool_host_set`: workers on the CPU-only set, `devices` logical worker
+    # indices there). Read once per trainer: the model's `device` (the shared read) and, only for
+    # 'cpu', the pool's route (a CPU-only process's pools are already the host ones). Across
+    # several CPU workers the cooperative update pool is refused when it starts, in the words a
+    # CPU-only installation gives (native_process_pool_door.mojo `process_pool_start`).
+    var host = False
+    if member_says_cpu(py_call(b[].bi.object.__getattribute__, model, "__dict__"), b[].bi):
+        host = process_pool_vendor(pool) != "cpu"
+    if host:
+        process_pool_host_set(pool)
     var pool_devices = process_pool_devices(pool)
     neural_devices_admit(len(pool_devices), shards)
     # One device (lane perf-trees-misc, 2026-11-05): the cooperative update
@@ -238,6 +252,8 @@ def _neural_init(owner: PythonObject, model: PythonObject, devices: PythonObject
         for i in range(len(pool_devices)):  # small-loop(the devices the gradient pool admitted)
             _ = py_call(admitted.append, PythonObject(pool_devices[i]))
         update_pool = process_pool_create(admitted, True, child_module)
+        if host:
+            process_pool_host_set(update_pool)
     var lock = b[].lock()
     var owner_id = Int(py=py_call(b[].bi.id, owner))
     var record = PythonObject(alloc=ParallelNeuralOwner(owner_id, operation, shards, len(pool_devices) == 1,
