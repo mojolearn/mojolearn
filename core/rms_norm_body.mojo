@@ -13,7 +13,9 @@ reciprocal square root is the pinned one; the scale is two separately rounded pr
 Callers: autograd/transformer_primitives_ops.mojo `_rms` (the public rms_norm layer, host and device),
 transformer/impl/llama/modeling_llama.mojo `llama_rms_norm_kernel` and `residual_rms_norm_kernel`,
 mamba/impl/modeling/modeling_mamba.mojo `mamba_rms_norm_kernel`, `mamba_rms_lane_kernel` and
-`mamba_rms_out_kernel`. Each keeps its own loop, fold order, launch and buffers.
+`mamba_rms_out_kernel`; the host Mamba oracles (the CPU blocks' forward), mamba/checks/mamba_oracle.mojo,
+mamba2_oracle.mojo (block norm and gated norm) and mamba3_oracle.mojo (block norm), lane w3-fix-9-s2. Each keeps
+its own loop, fold order, launch and buffers.
 """
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add, identical_rsqrt
 

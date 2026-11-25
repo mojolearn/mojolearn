@@ -81,6 +81,7 @@ from gemm.contract import OP_NN, OP_NT, OP_TN
 # remain fixed in the device kernels and therefore in these host calls.
 from gemm.host.neural_gemm import gemm_host_rows as neural_gemm_host_rows
 from mamba.checks.mamba_rms_fold import mamba_rms_row_sumsq_list
+from core.rms_norm_body import rms_rstd, rms_scale  # RMSNorm's one body (w3-fix-9-s2: the oracle's spelling was a copy)
 from gemm.checks.gemm_oracle import gemm_oracle, gemm_oracle_right_zero_padded
 from gemm.host.gemm_host_rows import gemm_host_rows, gemm_host_rows_right_zero_padded
 from mamba.checks.mamba_oracle import refuse_nonfinite
@@ -637,11 +638,9 @@ def mamba2_block_oracle(
     for t in range(m):
         var acc = mamba_rms_row_sumsq_list(x, t * dm, dm)
         st.norm_sumsq.append(acc)
-        var mean = ftz(identical_div(acc, Float32(dm)))
-        var rstd = ftz(identical_rsqrt(ftz(mean + M2_RMS_EPS)))
+        var rstd = rms_rstd(acc, dm, M2_RMS_EPS)
         for j in range(dm):
-            var inner = ftz(identical_mul(ftz(x[t * dm + j]), rstd))
-            st.norm_out.append(ftz(identical_mul(ftz(w.norm_w[j]), inner)))
+            st.norm_out.append(rms_scale(x[t * dm + j], rstd, w.norm_w[j]))
 
     # ---- in_proj (mamba2.py:211; Linear, bias=False), S4: gemm v1 OP_NT,
     #      k = d_model. Columns z | xBC | dt_raw (:211-215 order).
@@ -825,11 +824,9 @@ def mamba2_block_oracle(
     for t in range(m):
         var acc = mamba_rms_row_sumsq_list(st.gnorm_gate, t * di, di)
         st.gnorm_sumsq.append(acc)
-        var mean = ftz(identical_div(acc, Float32(di)))
-        var rstd = ftz(identical_rsqrt(ftz(mean + M2_RMS_EPS)))
+        var rstd = rms_rstd(acc, di, M2_RMS_EPS)
         for j in range(di):
-            var inner = ftz(identical_mul(ftz(st.gnorm_gate[t * di + j]), rstd))
-            st.gnorm_out.append(ftz(identical_mul(ftz(w.gnorm_w[j]), inner)))
+            st.gnorm_out.append(rms_scale(st.gnorm_gate[t * di + j], rstd, w.gnorm_w[j]))
 
     # ---- out_proj (mamba2.py:275), S4: gemm v1 OP_NT, k = d_inner.
     st.out_proj = neural_gemm_host_rows(st.gnorm_out, w.w_out, OP_NT, m, dm, di)

@@ -36,6 +36,7 @@ from checks.numerics import (
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
 from gemm.contract import OP_NT
 from mamba.checks.mamba_rms_fold import mamba_rms_row_sumsq_list
+from core.rms_norm_body import rms_rstd, rms_scale  # RMSNorm's one body (w3-fix-9-s2: the oracle's spelling was a copy)
 from gemm.host.neural_gemm import gemm_oracle
 from gemm.host.neural_gemm import gemm_host_rows
 from mamba.checks.mamba_fixture import (
@@ -253,11 +254,9 @@ def mamba_block_oracle(
     for t in range(m):
         var acc = mamba_rms_row_sumsq_list(x, t * dm, dm)
         st.norm_sumsq.append(acc)
-        var mean = ftz(identical_div(acc, Float32(dm)))
-        var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
+        var rstd = rms_rstd(acc, dm, RMS_EPS)
         for j in range(dm):
-            var inner = ftz(identical_mul(ftz(x[t * dm + j]), rstd))
-            st.norm_out.append(ftz(identical_mul(ftz(w.norm_w[j]), inner)))
+            st.norm_out.append(rms_scale(x[t * dm + j], rstd, w.norm_w[j]))
 
     # ---- in_proj (MM:371; Linear no bias, use_bias False MC:75) ----------
     # GEMM v1 OP_NT: [M, dm] . [2di, dm]^T. k = dm <= 128 so P == 1: the
