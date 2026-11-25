@@ -1,0 +1,13 @@
+diff --git a/autograd/nn_composed.mojo b/autograd/nn_composed.mojo
+index f230f0ccb8..2b390b65e5 100644
+--- a/autograd/nn_composed.mojo
++++ b/autograd/nn_composed.mojo
+@@ -18,7 +18,7 @@
+ #   (autograd/ops_api.mojo OpsSession.load_optimizer_state, group nn-blocks-composed).
+ from std.sys.compile import is_defined
+ 
+-comptime COMPOSED_SABOTAGE_SCAN_KEY = is_defined["MOJOLEARN_NN_COMPOSED_SABOTAGE_SCAN_KEY"]()
++comptime COMPOSED_SABOTAGE_SCAN_KEY = True  # SABOTAGE: a dropout in a scanned cell ignores the scan key on the device
+ comptime COMPOSED_SABOTAGE_SCAN_KEY_HOST = is_defined["MOJOLEARN_NN_COMPOSED_SABOTAGE_SCAN_KEY_HOST"]()
+ comptime COMPOSED_SABOTAGE_GROUP_STATE = is_defined["MOJOLEARN_NN_COMPOSED_SABOTAGE_GROUP_STATE"]()
+ comptime COMPOSED_SABOTAGE_GROUP_STATE_HOST = is_defined["MOJOLEARN_NN_COMPOSED_SABOTAGE_GROUP_STATE_HOST"]()
