@@ -4066,8 +4066,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         # The distinct boundary tensors: a node the cell returns for several states is one tensor.
         for k in range(n_state):  # driver-loop: over state tensors (metadata)
             var b = -1
+            # With lengths each state is where(mask, the cell's output, that state's own carry), and the step
+            # output where(mask, ., 0): one cell node is no longer one tensor, so neither merges (w3-integrate-10:
+            # checks/native_tests/nn_ckpt.mojo unit 2, a row past its length got the step output's gradient).
             for j in range(k):  # small-loop(the earlier states)
-                if sc.cell.outs[j] == sc.cell.outs[k]:
+                if not sc.has_lengths and sc.cell.outs[j] == sc.cell.outs[k]:
                     b = rec.state_bd[j]
                     break
             if b < 0:
@@ -4076,7 +4079,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 rec.bd_off.append(rec.n_bd)
                 rec.n_bd += sc.cell.in_shapes[k].count()
             rec.state_bd.append(b)
-            if sc.cell.outs[k] == sc.cell.outs[n_state] and rec.y_alias < 0:
+            if not sc.has_lengths and sc.cell.outs[k] == sc.cell.outs[n_state] and rec.y_alias < 0:
                 rec.y_alias = b
         var nb = len(rec.bd_k)
         var y_n = sc.cell.out_shapes[n_state].count()
