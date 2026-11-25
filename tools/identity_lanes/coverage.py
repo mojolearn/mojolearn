@@ -1647,10 +1647,24 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """KernelRidge with the poly and sigmoid kernels on 80 features (the
     fixture's 16 tiled five times), past the dot-cell bound, so the kernel
-    matrix takes polynomial_epilogue_kernel and tanh_epilogue_kernel."""
+    matrix takes polynomial_epilogue_kernel and tanh_epilogue_kernel.
+
+    Each row is scaled to norm at most 1 (FIX w3-fix-13, 2026-11-25). The unscaled fixture asked for an ill-posed
+    fit: the sigmoid kernel is not positive semidefinite and on the large-magnitude fixtures the cubic kernel's
+    entries dwarf alpha=1 in float32, so K + alpha I failed Cholesky and the product refused by design
+    (kernel_methods/estimator.mojo, DEVIATION 1662 in kernel_methods/NOT_IMPLEMENTED.tsv: no least-squares fallback,
+    "THE CLOSURE IS alpha"). With |<x, y>| <= 1 and gamma=0.01 the poly entries are within 1.01**3 and the sigmoid
+    kernel is tanh(1) plus perturbations far below alpha, so the fit is well posed on every fixture. The route is
+    picked by the 80 features, not the values, so the covered kernels are unchanged."""
     d = _coverage_digester(ml)
-    w = np.ascontiguousarray(np.tile(X[:512], (1, 5)))
-    q = np.ascontiguousarray(np.tile(X[512:768], (1, 5)))
+
+    def unit_rows(a):
+        a = np.asarray(a, dtype=np.float32)
+        norm = np.sqrt(np.sum(np.square(a.astype(np.float64)), axis=1, keepdims=True))
+        return np.ascontiguousarray((a / np.maximum(norm, 1.0)).astype(np.float32))
+
+    w = unit_rows(np.tile(X[:512], (1, 5)))
+    q = unit_rows(np.tile(X[512:768], (1, 5)))
     parts = {}
     for kernel in ("poly", "sigmoid"):
         m = ml.KernelRidge(alpha=1.0, kernel=kernel, gamma=0.01, degree=3, coef0=1.0).fit(w, yr[:512])
