@@ -30,7 +30,7 @@
 #                      $HOME/mojolearn-sabotage-scratch; one <batch id> directory, deleted on exit). Never
 #                      under OUT: the job persists OUT, and the tar of every native (about 120 MB a batch)
 #                      made the nvc1-0003 results 5.5 GB, so its final upload never landed before the cap.
-# Output: one line per arm, `SABOTAGE batch=<id> arm=<arm> side=<cpu|gpu|cpu+gpu> verdict=CAUGHT|MISSED`,
+# Output: one line per arm, `SABOTAGE batch=<id> arm=<arm> side=<cpu|gpu|cpu+gpu> verdict=CAUGHT|GPU-OWED|MISSED`,
 # and $OUT/summary.txt; the records and per-arm check logs stay in $OUT.
 # The tree is left as it was found (patches reverted, native files restored) on every exit path.
 set -u
@@ -233,15 +233,18 @@ for arm in ${ARMS//,/ }; do
             [ -f "$OUT/evidence_${arm}_$col.json" ] && sideargs+=(--$s-evidence "$OUT/evidence_${arm}_$col.json");;
         esac
     done
-    "${PY[@]}" tools/coverage_sabotage.py check-sides --arm "$arm" "${sideargs[@]}" \
+    # An installation without a GPU never ran the GPU side: a cpu+gpu arm whose CPU side passes reads GPU-OWED
+    # (its GPU half is the GPU plan's), never CAUGHT and never MISSED for the side it did not run (lane w3f7-b).
+    nogpu=(); [ "$GPU_SIDE" = yes ] || nogpu=(--no-gpu)
+    "${PY[@]}" tools/coverage_sabotage.py check-sides --arm "$arm" "${sideargs[@]}" ${nogpu[@]+"${nogpu[@]}"} \
         --batch-bindings "$BUILDS" > "$OUT/check_${arm}.txt" 2>&1
     v=$(tail -n 1 "$OUT/check_${arm}.txt" | awk '{print $3}')
-    [ "$v" = CAUGHT ] || miss=1
+    [ "$v" = CAUGHT ] || [ "$v" = GPU-OWED ] || miss=1
     echo "SABOTAGE batch=$BATCH arm=$arm side=${side:-?} verdict=${v:-ERROR}" | tee -a "$OUT/summary.txt"
     # The check's reasons ride with a miss in summary.txt (lane w3f5-e, 2026-11-24: gate 3cda8a05b3's copies
     # kept only summary.txt, so eight MISSED arms carried no cause: an unstable clean lane, an unmoved
     # fixture or a binary change outside the declared closure could not be told apart).
-    [ "$v" = CAUGHT ] || grep -e '^INVALID' -e 'moved' -e 'unmoved' "$OUT/check_${arm}.txt" | cut -c1-300 | head -n 12 \
+    [ "$v" = CAUGHT ] || grep -e '^INVALID' -e '^OWED' -e 'moved' -e 'unmoved' "$OUT/check_${arm}.txt" | cut -c1-300 | head -n 12 \
         | sed "s/^/  CHECK $arm: /" >> "$OUT/summary.txt"
 done
 log "DONE"

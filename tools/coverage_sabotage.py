@@ -474,20 +474,31 @@ def stays_put(arm, side, clean_path, sab_path, restored_path):
     return failures
 
 
-def check_sides(arm, records, evidence=None, root=ROOT, batch_bindings=()):
+def check_sides(arm, records, evidence=None, root=ROOT, batch_bindings=(), no_gpu=False):
     """Judge an arm per side. `records` maps a side to its (clean, sabotaged,
     restored) record paths, `evidence` a side to its review evidence path. On
     each side the arm faults, `check` must pass on that side's records; on the
     other side of a one-sided arm every lane must stay put (`stays_put`). A
-    side the arm faults with no records fails; the other side with no records
-    (an installation without a GPU) is reported not applicable."""
+    side the arm faults with no records fails, except the GPU side of an
+    installation without a GPU (`no_gpu`, the batch's probe): that side was
+    never run there, so it is OWED to a GPU box, not judged. Such an arm whose
+    CPU side passes reads GPU-OWED (never CAUGHT: the GPU plan,
+    tools/identity_lanes/coverage_sabotage_gpu_plan.json, proves its other
+    half); any failure on the sides it has still reads MISSED. The other side
+    with no records is reported not applicable."""
+    # HARNESS FIX (lane w3f7-b, 2026-11-24): the host-only gate at f200804327 read 31 cpu+gpu arms MISSED with
+    # "gpu side: no records" although their CPU side moved: a host run judged the GPU side it never ran.
     evidence = evidence or {}
     faulted = arm_sides(arm)
     failures = []
+    owed = []
     for side in SIDES:
         paths = records.get(side)
         if side in faulted:
             if not paths:
+                if side == "gpu" and no_gpu:
+                    owed.append("gpu side: owed to a GPU box (no GPU in this installation; the GPU plan runs it)")
+                    continue
                 failures.append(f"{side} side: no records (the arm faults this side)")
                 continue
             print(f"## {arm['arm']} {side} side: must move")
@@ -517,8 +528,14 @@ def check_sides(arm, records, evidence=None, root=ROOT, batch_bindings=()):
                 failures.append("cpu side: no records (every installation has a CPU side)")
     for failure in failures:
         print(f"INVALID: {failure}")
-    print(f"ARM {arm['arm']} {'MISSED' if failures else 'CAUGHT'} side={'+'.join(faulted)}")
-    return 1 if failures else 0
+    for note in owed:
+        print(f"OWED: {note}")
+    if not failures and owed and not any(records.get(side) for side in faulted):
+        failures.append("no side the arm faults was run here")
+        print(f"INVALID: {failures[-1]}")
+    verdict = "MISSED" if failures else ("GPU-OWED" if owed else "CAUGHT")
+    print(f"ARM {arm['arm']} {verdict} side={'+'.join(faulted)}")
+    return 1 if failures else (3 if owed else 0)
 
 
 REVIEW_FIELDS = ("product_check", "why_fault_reaches_check", "error_match", "patch_sha256")
@@ -767,6 +784,8 @@ def main(argv=None):
         cs.add_argument(f"--{side}-evidence", default="", help=f"the {side} side's review evidence")
     cs.add_argument("--batch-bindings", default="",
                     help="a batched run's build stems (comma separated): the other arms' bindings may change too")
+    cs.add_argument("--no-gpu", action="store_true",
+                    help="this installation has no GPU (the batch's probe): a faulted GPU side reads GPU-OWED")
     r = sub.add_parser("review", help="bind the arm's declared reviews to three records (writes --out)")
     r.add_argument("--arm", required=True)
     r.add_argument("--clean", required=True)
@@ -818,7 +837,7 @@ def main(argv=None):
             if getattr(args, f"{side}_evidence"):
                 evidence[side] = getattr(args, f"{side}_evidence")
         return check_sides(table[args.arm], records, evidence,
-                           batch_bindings=[x for x in args.batch_bindings.split(",") if x])
+                           batch_bindings=[x for x in args.batch_bindings.split(",") if x], no_gpu=args.no_gpu)
     return check(table[args.arm], args.clean, args.sabotaged, args.restored, args.evidence,
                  batch_bindings=[x for x in args.batch_bindings.split(",") if x])
 
