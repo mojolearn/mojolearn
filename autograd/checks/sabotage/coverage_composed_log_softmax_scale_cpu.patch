@@ -1,0 +1,11 @@
+diff --git a/autograd/nn_log_softmax.mojo b/autograd/nn_log_softmax.mojo
+index 92786de66b..a00f509b3f 100644
+--- a/autograd/nn_log_softmax.mojo
++++ b/autograd/nn_log_softmax.mojo
+@@ -65,4 +65,6 @@ def nn_log_softmax_forward[E: Exec](
+     var axis = log_softmax_axis(a0, cur) + 1
+     comptime if NN_LOG_SOFTMAX_SABOTAGE:
+         return rn_softmax_along(tape, ex, h, axis, False)
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): twice the log-probabilities (still <= 0), host bindings only
++        return tape.scale(ex, rn_softmax_along(tape, ex, h, axis, True), Float32(2))  # SABOTAGE coverage (sab-arms-67): doubled
+     return rn_softmax_along(tape, ex, h, axis, True)

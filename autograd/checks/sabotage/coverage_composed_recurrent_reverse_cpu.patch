@@ -1,0 +1,28 @@
+diff --git a/autograd/model_blocks.mojo b/autograd/model_blocks.mojo
+index 873e36c988..45c75486e0 100644
+--- a/autograd/model_blocks.mojo
++++ b/autograd/model_blocks.mojo
+@@ -77,6 +77,7 @@ its monolith agree to the fold order of their kernels, not bit for bit
+ (checks/native_tests/neural_blocks.mojo states the measured differences).
+ """
+ from std.collections import Array
++from std.sys.compile import is_defined  # SABOTAGE coverage (sab-arms-67): the side switch
+ from std.math import isfinite
+ from std.memory import bitcast
+ from sequence.exec_trait import Exec
+@@ -827,10 +828,13 @@ def block_recurrent[E: Exec](
+     var tm = tape.view_nd(ex, xt, ShapeN.matrix(T * B, F))
+     # nn-recurrent: `reverse` is the same scan walking time from T - 1 down (rnn_scan_op); its output is in time
+     # order. `final` is the state after the last step walked: time T - 1 forward, time 0 reverse.
++    var sab_rev = reverse  # SABOTAGE coverage (sab-arms-67): the scan's direction
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the direction flipped, host bindings only
++        sab_rev = not reverse  # SABOTAGE coverage (sab-arms-67): a forward layer scans in reverse
+     var y = rnn_scan_op(tape, ex, tm, w_ih, w_hh, b_ih, b_hh, cell, T, B,
+-                        nn_rnn_reverse_lengths(lengths) if reverse else lengths, reverse)
++                        nn_rnn_reverse_lengths(lengths) if sab_rev else lengths, sab_rev)
+     if final:
+-        return nn_rnn_final(tape, ex, y, T, B, Hs, 0 if reverse else T - 1)
++        return nn_rnn_final(tape, ex, y, T, B, Hs, 0 if sab_rev else T - 1)
+     var y3: List[Int] = [T, B, Hs]
+     var yt = tape.view_nd(ex, y, _sh(y3))
+     return tape.permute(ex, yt, tp)

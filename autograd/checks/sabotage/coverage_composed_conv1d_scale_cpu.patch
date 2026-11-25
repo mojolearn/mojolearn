@@ -1,0 +1,21 @@
+diff --git a/autograd/model.mojo b/autograd/model.mojo
+index 43c0e4ce58..0ec96507b7 100644
+--- a/autograd/model.mojo
++++ b/autograd/model.mojo
+@@ -10,6 +10,7 @@ the tape's fixed blocked folds), so the bits are the same on Apple, NVIDIA
+ and AMD. Host loops run over layers, batches and epochs only.
+ """
+ from std.memory import bitcast, unsafe_memcpy
++from std.sys.compile import is_defined  # SABOTAGE coverage (sab-arms-67): the side switch
+ from sequence.exec_trait import Exec
+ from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
+ from sequence.fit_loop_words import fit_loop_publish
+@@ -1136,6 +1137,8 @@ def _model_forward_v2[E: Exec](
+                                  groups)
+             else:
+                 h = rankn_conv1d(tape, ex, h, w3, None, spec.xargs[xa + 2], spec.xargs[xa + 3], groups)
++            comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the conv1d layer's output doubled, host bindings only
++                h = tape.scale(ex, h, Float32(2))  # SABOTAGE coverage (sab-arms-67): twice the convolution
+         elif k == LAYER_MAXPOOL1D:
+             h = rankn_max_pool1d(tape, ex, h, spec.arg0[i], spec.arg1[i], spec.xargs[xa + 2])
+         elif k == LAYER_AVGPOOL1D:

@@ -1,0 +1,24 @@
+diff --git a/autograd/model_blocks.mojo b/autograd/model_blocks.mojo
+index 873e36c988..2ebaccd9cf 100644
+--- a/autograd/model_blocks.mojo
++++ b/autograd/model_blocks.mojo
+@@ -77,6 +77,7 @@ its monolith agree to the fold order of their kernels, not bit for bit
+ (checks/native_tests/neural_blocks.mojo states the measured differences).
+ """
+ from std.collections import Array
++from std.sys.compile import is_defined  # SABOTAGE coverage (sab-arms-67): the side switch
+ from std.math import isfinite
+ from std.memory import bitcast
+ from sequence.exec_trait import Exec
+@@ -771,7 +772,10 @@ def block_attention[E: Exec](
+     var kt = tape.permute(ex, tape.view_nd(ex, k, _sh(k5)), kp)
+     var vh = tape.permute(ex, tape.view_nd(ex, v, _sh(k5)), qp)
+     var scores = rankn_matmul(tape, ex, qh, kt)
+-    scores = tape.scale(ex, scores, ftz(identical_div(Float32(1), identical_sqrt(Float32(hd)))))
++    var sab_hd = hd  # SABOTAGE coverage (sab-arms-67): the score scale
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): scores scaled by 1/sqrt(hd + 1), host bindings only
++        sab_hd = hd + 1  # SABOTAGE coverage (sab-arms-67): one head width too many
++    scores = tape.scale(ex, scores, ftz(identical_div(Float32(1), identical_sqrt(Float32(sab_hd)))))
+     if causal:
+         var cond = _attention_mask(tape, ex, T, window)
+         var mp = tape.reserve(ex, 1)
