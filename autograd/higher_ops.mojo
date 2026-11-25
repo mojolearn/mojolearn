@@ -156,6 +156,14 @@ def higher_family(op: Int) -> String:
     if tag == 202 or tag == 203:
         return "attention"
     # nn-blocks-qkv end
+    # session-ops-rest begin: the Session forms of Sequential's layers (autograd/session_ops_rest.mojo)
+    if tag == 6710 or tag == 6711 or tag == 174:
+        return "multi_head_attention / positional_encoding"
+    if tag == 3420:
+        return "ctc_loss"
+    if tag >= 240 and tag <= 247:
+        return "selective_scan / ssd_scan / trapezoid_scan"
+    # session-ops-rest end
     return "custom"
 
 
