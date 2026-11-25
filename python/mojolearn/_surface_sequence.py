@@ -110,6 +110,9 @@ FAMILIES = (
                         # nn-blocks-pg begin: ops.Session optimizer parameter groups (tools/identity_lanes/nn_pg.py)
                         "ops-param-groups",
                         # nn-blocks-pg end
+                        # nn-blocks-scatter begin: ops.Session scatter_add and segment reductions
+                        "ops-scatter-segment",
+                        # nn-blocks-scatter end
                         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -287,6 +290,9 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     # nn-blocks-pg begin
     "ops-param-groups": "Session: optimizer parameter groups, global clip, state dict",
     # nn-blocks-pg end
+    # nn-blocks-scatter begin
+    "ops-scatter-segment": "Session: scatter_add, segment_sum, segment_mean, segment_max",
+    # nn-blocks-scatter end
                        }
 PUBLIC_PENDING_LANES = {
     # lane w3f2-main (2026-11-24): "no reference", not "unwatched": the shipped table
@@ -348,4 +354,7 @@ PUBLIC_PENDING_LANES = {
     "sequence-optim-adagrad": "no reference",
     "sequence-optim-lamb": "no reference",
     # lane nn-optim end
+    # nn-blocks-scatter begin
+    "ops-scatter-segment": "no reference",
+    # nn-blocks-scatter end
 }

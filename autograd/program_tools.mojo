@@ -195,6 +195,16 @@ def program_op_name(code: Int) -> String:
         return "lm_embedding"
     if code == 94:
         return "rnn_scan"
+    # nn-blocks-scatter begin
+    if code == 113:
+        return "scatter_add"
+    if code == 114:
+        return "segment_sum"
+    if code == 115:
+        return "segment_mean"
+    if code == 116:
+        return "segment_max"
+    # nn-blocks-scatter end
     return "op_" + String(code)
 
 

@@ -164,6 +164,11 @@ from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 # nn-blocks-qkv begin: attention over explicit q, k, v (session code 122, autograd/nn_qkv.mojo)
 from autograd.nn_qkv import OPS_ATTENTION_QKV, qkv_attention
 # nn-blocks-qkv end
+# nn-blocks-scatter begin: scatter_add and the segment reductions, session codes 113..116 (autograd/nn_scatter.mojo)
+from autograd.nn_scatter import (
+    OPS_SCATTER_ADD, OPS_SEGMENT_SUM, OPS_SEGMENT_MEAN, OPS_SEGMENT_MAX, nn_scatter_add, nn_segment, segment_op_name,
+)
+# nn-blocks-scatter end
 
 # Executor kinds of a session (the binding that opened it).
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea G): the packed argument
@@ -1963,6 +1968,29 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         elif code >= OPS_IMP_FIRST and code <= OPS_IMP_LAST:
             # lane ag-import-kernels: the import elementwise family
             t = self._import_op(code, x, ints, fs)
+        # nn-blocks-scatter begin
+        elif code == OPS_SCATTER_ADD:
+            # [x, index (an ids tensor of src's shape), src], ints [dim] (autograd/nn_scatter.mojo)
+            _need("scatter_add", n, 3, 1, ni, 0, nf)
+            if self.int_words[self._slot(hs[0])] or self.int_words[self._slot(hs[2])]:
+                raise Error("ValueError: ops: scatter_add: x and src must be floating-point tensors")
+            var sc_slot = self._slot(hs[1])
+            if not self.int_words[sc_slot]:
+                raise Error("ValueError: ops: scatter_add: index must be an integer tensor made with Session.ids")
+            t = nn_scatter_add(self.tape, self.ex, x[0], self.tape.value_of(self.ex, x[1]), self.shapes[sc_slot],
+                               x[2], ints[0])
+        elif code == OPS_SEGMENT_SUM or code == OPS_SEGMENT_MEAN or code == OPS_SEGMENT_MAX:
+            # [data, segment_ids (an ids tensor, one id per row of data)], ints [num_segments]
+            var sg_name = segment_op_name(code - OPS_SEGMENT_SUM)
+            _need(sg_name, n, 2, 1, ni, 0, nf)
+            if self.int_words[self._slot(hs[0])]:
+                raise Error("ValueError: ops: " + sg_name + ": data must be a floating-point tensor")
+            var sg_slot = self._slot(hs[1])
+            if not self.int_words[sg_slot]:
+                raise Error("ValueError: ops: " + sg_name + ": segment_ids must be an integer tensor made with Session.ids")
+            t = nn_segment(self.tape, self.ex, x[0], self.tape.value_of(self.ex, x[1]), self.shapes[sg_slot].count(),
+                           ints[0], code - OPS_SEGMENT_SUM)
+        # nn-blocks-scatter end
         else:
             raise Error("ops: unknown operation code " + String(code))
         if n >= 1 and _keeps_shape(code):

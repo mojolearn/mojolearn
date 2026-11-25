@@ -83,6 +83,10 @@ from providers.python.nn_pg_pyapi_door import (
     pg_session_call_py, ops_optimizer_unpack, ops_optimizer_state_pack, ops_optimizer_state_unpack,
 )
 # nn-blocks-pg end
+# nn-blocks-scatter begin
+from autograd.autograd_ops_frontend_run import _SOP_SCATTER_ADD, _SOP_SEGMENT_SUM, _SOP_SEGMENT_MEAN, _SOP_SEGMENT_MAX
+from autograd.nn_scatter import OPS_SCATTER_ADD, OPS_SEGMENT_SUM
+# nn-blocks-scatter end
 
 
 struct _SessionOpNames(Defaultable, Movable):
@@ -1012,6 +1016,22 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         ints = [Int(Bool(py=args[4])), 0 if _nil(args[5]) else 1, mask_kind]
         fs.append(Float32(0) if _nil(args[5]) else _float(args[5], "scale"))
     # nn-blocks-qkv end
+    # nn-blocks-scatter begin
+    elif op == _SOP_SCATTER_ADD:
+        # args (x, dim, index, src): torch.Tensor.scatter_add's order; index an ids() tensor
+        code = OPS_SCATTER_ADD
+        if not _is_int(args[2]):
+            raise Error("TypeError: scatter_add: index must be an integer tensor made with Session.ids")
+        hs = [_int(args[0], "x", 1), _int(args[2], "index", 1), _int(args[3], "src", 1)]
+        ints.append(_int(args[1], "dim"))
+    elif op == _SOP_SEGMENT_SUM or op == _SOP_SEGMENT_MEAN or op == _SOP_SEGMENT_MAX:
+        # args (data, segment_ids, num_segments); segment_ids an ids() tensor
+        code = OPS_SEGMENT_SUM + (0 if op == _SOP_SEGMENT_SUM else (1 if op == _SOP_SEGMENT_MEAN else 2))
+        if not _is_int(args[1]):
+            raise Error("TypeError: segment_ids must be an integer tensor made with Session.ids")
+        hs = [_int(args[0], "data", 1), _int(args[1], "segment_ids", 1)]
+        ints.append(_int(args[2], "num_segments"))
+    # nn-blocks-scatter end
     # nn-blocks-pg begin
     if op >= _SOP_PG_FIRST and op <= _SOP_PG_LAST:
         return pg_session_call_py[E](s, op, args)

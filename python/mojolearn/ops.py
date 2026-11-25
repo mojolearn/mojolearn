@@ -82,6 +82,9 @@ _OP = {
     "round": 60, "sin": 61, "cos": 62, "sign": 63, "reciprocal": 64, "pow": 65,
     "minimum": 66, "maximum": 67, "where": 68, "compare": 69, "logical": 70,
     "expand": 71, "argmax": 72, "pad": 73, "any_all": 74, "cumsum": 75, "index": 76,
+    # nn-blocks-scatter begin
+    "scatter_add": 113, "segment_sum": 114, "segment_mean": 115, "segment_max": 116,
+    # nn-blocks-scatter end
     # nn-blocks-qkv begin
     "attention": 122,
     # nn-blocks-qkv end
@@ -1693,6 +1696,111 @@ class Session:
         exactly where the saved run stopped."""
         return _SESSION_CALL(self, "load_optimizer_state_dict", (optimizer, state_dict))
     # nn-blocks-pg end
+
+    # nn-blocks-scatter begin
+    # ------------------------------------------------------------ indexed writes and grouped reductions
+    def scatter_add(self, x, dim, index, src):
+        """``x`` with every value of ``src`` added at the position ``index`` names along ``dim``, as
+        ``torch.Tensor.scatter_add``.
+
+        For a 2-D ``x`` and ``dim=0`` the result is ``x`` with ``out[index[i, j], j] += src[i, j]`` for
+        every ``(i, j)``; any rank and any ``dim`` work the same way. ``index`` is an integer tensor made
+        with :meth:`ids`, of ``src``'s shape, each value in ``[0, x.shape[dim])``; ``src`` has ``x``'s size
+        on every dimension except ``dim``. The result has ``x``'s shape.
+
+        An index may repeat: the values that land on one position are added to ``x``'s value one after
+        another in ascending position in ``src``, so the result is the same bits whatever the hardware.
+        A position no index names keeps ``x``'s value.
+
+        In a recording session the gradient flows to ``x`` (unchanged) and to ``src`` (the gradient at
+        the position each value was added to); ``index`` takes none.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.zeros((3, 2), dtype=np.float32))
+        ...     src = s.tensor(np.ones((4, 2), dtype=np.float32))
+        ...     index = s.ids(np.array([[0, 1], [2, 1], [0, 0], [2, 1]]))
+        ...     s.numpy(s.scatter_add(x, 0, index, src))
+        array([[2., 1.],
+               [0., 3.],
+               [2., 0.]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "scatter_add", (x, dim, index, src))
+
+    def segment_sum(self, data, segment_ids, num_segments):
+        """The rows of ``data`` added up by segment: row ``s`` of the result is the sum of the rows ``r``
+        of ``data`` with ``segment_ids[r] == s``.
+
+        ``data`` is ``(n, ...)``; ``segment_ids`` is an integer tensor made with :meth:`ids` holding one
+        id per row of ``data``, each in ``[0, num_segments)``, in any order (as
+        ``tf.math.unsorted_segment_sum``); the result is ``(num_segments, ...)``. A segment no row names
+        is 0. The rows of a segment are added in ascending row order, so the result is the same bits
+        whatever the hardware. The gradient of ``data`` is the gradient of each row's segment.
+
+        This is the aggregation of a graph neural network (sum the messages of each edge into its target
+        node), of a bag of embeddings (sum the vectors of each bag) and of pooling by group.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     data = s.tensor(np.array([[1, 2], [3, 4], [5, 6]], dtype=np.float32))
+        ...     ids = s.ids(np.array([2, 0, 2]))
+        ...     s.numpy(s.segment_sum(data, ids, num_segments=3))
+        array([[3., 4.],
+               [0., 0.],
+               [6., 8.]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "segment_sum", (data, segment_ids, num_segments))
+
+    def segment_mean(self, data, segment_ids, num_segments):
+        """The rows of ``data`` averaged by segment: :meth:`segment_sum` divided by the number of rows in
+        each segment.
+
+        Arguments as :meth:`segment_sum`. A segment no row names is 0 (the sum divided by
+        ``max(count, 1)``). The gradient of a row is its segment's gradient divided by the segment's row
+        count.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     data = s.tensor(np.array([[1, 2], [3, 4], [5, 6]], dtype=np.float32))
+        ...     ids = s.ids(np.array([2, 0, 2]))
+        ...     s.numpy(s.segment_mean(data, ids, num_segments=3))
+        array([[3., 4.],
+               [0., 0.],
+               [3., 4.]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "segment_mean", (data, segment_ids, num_segments))
+
+    def segment_max(self, data, segment_ids, num_segments):
+        """The largest value of each column within each segment of ``data``'s rows.
+
+        Arguments as :meth:`segment_sum`. A segment no row names is 0 (as ``torch_scatter.scatter_max``,
+        so the result stays finite). A NaN in a segment makes that value NaN. In a recording session the
+        gradient of each result value goes to the row that holds the maximum; when several rows hold it,
+        to the first of them (the lowest row index); the other rows get 0.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     data = s.tensor(np.array([[1, 8], [3, 4], [5, 6]], dtype=np.float32))
+        ...     ids = s.ids(np.array([2, 0, 2]))
+        ...     s.numpy(s.segment_max(data, ids, num_segments=3))
+        array([[3., 4.],
+               [0., 0.],
+               [5., 8.]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "segment_max", (data, segment_ids, num_segments))
+    # nn-blocks-scatter end
 
 
 class Program:

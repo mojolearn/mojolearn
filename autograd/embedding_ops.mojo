@@ -384,6 +384,28 @@ def embedding_backward_into[E: Exec](
     (embedding_plan). Scratch: run_begin vocab + 1 words, perm
     embedding_perm_words(plan, n) words, keys the same for the sort (unused
     by the scan). The ids are refused by the caller."""
+    embedding_runs_into(ex, ids, n_positions, vocab, padding_idx, plan, run_begin, perm, keys)
+    var f = Args()
+    f.p0 = dy
+    f.p1 = perm
+    f.p2 = run_begin
+    f.p3 = dw
+    f.i0 = width
+    f.i1 = padding_idx
+    f.i2 = 1 if carry else 0
+    ex.launch[OP_EMB_FOLD](f, vocab * width)
+
+
+def embedding_runs_into[E: Exec](
+    mut ex: E, ids: FP, n_positions: Int, vocab: Int, padding_idx: Int, plan: Int,
+    run_begin: FP, perm: FP, keys: FP,
+) raises:
+    """The runs of embedding_backward_into without its fold: for each row v
+    its positions in ascending order at perm[run_begin[v] ..
+    run_begin[v + 1]) (padding_idx positions in no run). The launches
+    embedding_backward_into ran before its fold, word for word (lane
+    nn-blocks-scatter split them out so segment_max and segment_mean read the
+    same runs, autograd/nn_scatter.mojo). Scratch as embedding_backward_into."""
     var a = Args()
     a.p0 = ids
     a.p1 = run_begin
@@ -425,12 +447,3 @@ def embedding_backward_into[E: Exec](
         pm.i0 = n_positions
         pm.i1 = padding_idx
         ex.launch[OP_EMB_SCAN_PERM](pm, vocab)
-    var f = Args()
-    f.p0 = dy
-    f.p1 = perm
-    f.p2 = run_begin
-    f.p3 = dw
-    f.i0 = width
-    f.i1 = padding_idx
-    f.i2 = 1 if carry else 0
-    ex.launch[OP_EMB_FOLD](f, vocab * width)
