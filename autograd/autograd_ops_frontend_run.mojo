@@ -166,6 +166,9 @@ comptime _SOP_CONV_LINEAR = 145
 comptime _SOP_LSTM = 146
 comptime _SOP_GRU = 147
 comptime _SOP_RNN = 148
+# nn-blocks-qkv begin: attention over explicit q, k, v (122); its own name code, clear of the shared 1xx run
+comptime _SOP_ATTENTION_QKV = 1122
+# nn-blocks-qkv end
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -321,6 +324,9 @@ struct _SessionOpCodes(Defaultable, Movable):
         self.codes["lstm"] = _SOP_LSTM
         self.codes["gru"] = _SOP_GRU
         self.codes["rnn"] = _SOP_RNN
+        # nn-blocks-qkv begin
+        self.codes["attention"] = _SOP_ATTENTION_QKV
+        # nn-blocks-qkv end
 
 
 # One table per process (identical contents in every extension that links this file).

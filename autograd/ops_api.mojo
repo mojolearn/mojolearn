@@ -155,6 +155,9 @@ from autograd.generation_ops import (
     lm_alive_run, LM_PICK_SAMPLE,
 )
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+# nn-blocks-qkv begin: attention over explicit q, k, v (session code 122, autograd/nn_qkv.mojo)
+from autograd.nn_qkv import OPS_ATTENTION_QKV, qkv_attention
+# nn-blocks-qkv end
 
 # Executor kinds of a session (the binding that opened it).
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea G): the packed argument
@@ -1592,6 +1595,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             # Lane r1-restore-measured-winners: the byte LM trainer's tuned
             # embedding backward, one custom node (autograd/lm_embedding_op.mojo).
             return self._lm_embedding(hs, ints, fs, x)
+        # nn-blocks-qkv begin
+        if code == OPS_ATTENTION_QKV:
+            return self._attention_qkv(hs, ints, fs, x)
+        # nn-blocks-qkv end
         if code == OPS_RMS_NORM or code == OPS_ROTARY or code == OPS_TRANSFORMER_LINEAR or code == OPS_TRANSFORMER_SOFTMAX:
             # These primitive signatures have at most two handles. Their
             # arity validation below rejects any additional operands.
@@ -2316,6 +2323,31 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         rx.append(x[0])
         var rt = self.tape.custom(self.ex, rx, y, n, width, LM_EMBEDDING_TAG, saved)
         return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+
+    # nn-blocks-qkv begin
+    def _attention_qkv(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_ATTENTION_QKV: [q, k, v] or [q, k, v, mask], ints [causal (0, 1), scale given (0, 1), mask kind
+        (0 none, 1 boolean: ids words, nonzero attends, PyTorch's boolean mask; 2 additive: float values added to
+        the scaled scores, PyTorch's float mask)], floats [scale] -> softmax(scale q k^T + mask) v
+        (autograd/nn_qkv.mojo qkv_attention: its shapes, refusals and launches). The door reads the kind from
+        the mask tensor once and the call records it, so a program's replay reads the mask the same way."""
+        if len(x) != 3 and len(x) != 4:
+            raise Error("ValueError: attention takes q, k, v and an optional mask")
+        if len(ints) < 3 or len(fs) < 1:
+            raise Error("ops: attention takes 3 integers and 1 float")
+        if (len(x) == 4) != (ints[2] == 1 or ints[2] == 2) or ints[2] < 0 or ints[2] > 2:
+            raise Error("ops: attention: the mask kind must be 1 or 2 with a mask and 0 without one")
+        for i in range(3):  # small-loop(three operands): operand kinds, no data
+            if self.int_words[self._slot(hs[i])]:
+                raise Error("ValueError: attention: q, k and v must be floating-point tensors")
+        var mask = Optional[Tensor](None)
+        if len(x) == 4:
+            mask = Optional[Tensor](x[3])
+        var mask_bool = ints[2] == 1
+        var t = qkv_attention(self.tape, self.ex, x[0], x[1], x[2], mask, mask_bool, ints[0] != 0, ints[1] != 0,
+                              fs[0])
+        return self._add(t, 0, False, 0)
+    # nn-blocks-qkv end
 
     def _generation_op(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
         """Generation op `code` (autograd/generation_ops.mojo): operand 0 the

@@ -82,6 +82,9 @@ _OP = {
     "round": 60, "sin": 61, "cos": 62, "sign": 63, "reciprocal": 64, "pow": 65,
     "minimum": 66, "maximum": 67, "where": 68, "compare": 69, "logical": 70,
     "expand": 71, "argmax": 72, "pad": 73, "any_all": 74, "cumsum": 75, "index": 76,
+    # nn-blocks-qkv begin
+    "attention": 122,
+    # nn-blocks-qkv end
 }
 _GELU = {"none": 0, "tanh": 1}
 # the state buffers autograd/ops_api.mojo optimizer_state returns, by kind
@@ -1534,6 +1537,76 @@ class Session:
         exactly where the saved run stopped.
         """
         return _SESSION_CALL(self, "load_optimizer_state", (optimizer, param, state))
+
+    # nn-blocks-qkv begin
+    def attention(self, q, k, v, mask=None, causal=False, scale=None):
+        """Scaled dot-product attention over your own queries, keys and values.
+
+        Computes ``softmax(scale * q @ k^T + mask) @ v`` with the argument
+        meanings of PyTorch's ``torch.nn.functional.scaled_dot_product_attention``:
+        ``q`` is ``(batch, heads, Lq, d)``, ``k`` is ``(batch, kv_heads, Lk, d)``
+        and ``v`` is ``(batch, kv_heads, Lk, dv)``; the result is
+        ``(batch, heads, Lq, dv)``. Inputs without the heads axis,
+        ``(batch, L, features)``, give ``(batch, Lq, dv)``. ``Lq`` and ``Lk``
+        may differ (cross-attention: queries from one sequence, keys and
+        values from another).
+
+        Grouped heads: ``heads`` may be a multiple of ``kv_heads``; query head
+        ``h`` attends with key/value head ``h // (heads // kv_heads)``, as
+        PyTorch's ``enable_gqa=True``. The keys and values are never copied
+        per group.
+
+        Parameters
+        ----------
+        q, k, v : int
+            Tensor handles of the shapes above.
+        mask : int or None, default None
+            A tensor that broadcasts to the scores ``(batch, heads, Lq, Lk)``
+            (aligned on the right, as NumPy broadcasts). As in PyTorch, its
+            kind decides how it is read: a tensor made with :meth:`ids` is a
+            boolean mask, where a nonzero value takes part in attention and a
+            zero is left out (pass ``s.ids(mask.astype(np.int8))`` for a
+            boolean array); a float tensor made with :meth:`tensor` is added
+            to the scaled scores, and ``-inf`` there leaves the position out.
+            The mask takes no gradient.
+        causal : bool, default False
+            Query ``i`` attends to keys ``0 .. i`` only (PyTorch's
+            ``is_causal``, the lower triangle aligned at the top left when
+            ``Lq`` and ``Lk`` differ). It cannot be combined with ``mask``;
+            put the causal pattern into the mask instead.
+        scale : float or None, default None
+            The factor on ``q @ k^T``; None means ``1 / sqrt(d)``.
+
+        Returns
+        -------
+        int
+            The handle of the attention output.
+
+        A query whose every key is left out (by the mask or by ``causal``)
+        gets an output row of zeros and passes zero gradient back; PyTorch
+        returns NaN for such a row. In a recording session the gradients
+        flow to ``q``, ``k`` and ``v``. The softmax sums each row in one fixed
+        order, so the result has the same bits on every device. The call can
+        be captured into a :class:`Program` like any other operation, the
+        mask included (as an input, or as a fixed tensor of the program).
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> rng = np.random.default_rng(0)
+        >>> with ops.Session(record=True) as s:
+        ...     q = s.tensor(rng.standard_normal((2, 4, 5, 8), dtype=np.float32), requires_grad=True)
+        ...     k = s.tensor(rng.standard_normal((2, 2, 7, 8), dtype=np.float32), requires_grad=True)
+        ...     v = s.tensor(rng.standard_normal((2, 2, 7, 8), dtype=np.float32), requires_grad=True)
+        ...     keep = np.ones((2, 1, 1, 7), dtype=np.int8)
+        ...     keep[1, ..., 5:] = 0                       # the second sequence has 5 keys
+        ...     out = s.attention(q, k, v, mask=s.ids(keep))
+        ...     s.backward(s.sum(out))
+        ...     dq, dk, dv = s.grad(q), s.grad(k), s.grad(v)
+        """
+        return _SESSION_CALL(self, "attention", (q, k, v, mask, causal, scale))
+    # nn-blocks-qkv end
 
 
 class Program:

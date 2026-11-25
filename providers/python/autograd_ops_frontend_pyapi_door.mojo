@@ -74,6 +74,9 @@ from autograd.autograd_ops_frontend_run import (
     _SOP_LM_HEAD_LOSS, _SOP_LM_ROWS, _SOP_LM_PICK, _SOP_LM_ALIVE, _SOP_LM_EMBEDDING, _SOP_CONV_BLOCK,
     _SOP_CONV_LINEAR, _SOP_LSTM, _SOP_GRU, _SOP_RNN,
 )
+# nn-blocks-qkv begin
+from autograd.autograd_ops_frontend_run import _SOP_ATTENTION_QKV
+# nn-blocks-qkv end
 
 
 struct _SessionOpNames(Defaultable, Movable):
@@ -1065,6 +1068,22 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         var metric = 1 if op == _SOP_ACCURACY else (2 if op == _SOP_LOG_LOSS else 3)
         hs = [_int(args[0], "handle", 1), _int(args[1], "handle", 1)]
         return PythonObject(Float64(s[].metric(metric, hs)))
+    # nn-blocks-qkv begin
+    elif op == _SOP_ATTENTION_QKV:
+        # OPS_ATTENTION_QKV (autograd/nn_qkv.mojo): args (q, k, v, mask or None, causal, scale or None);
+        # ints [causal, scale given, mask kind (0 none, 1 ids words: boolean, 2 float values: additive)],
+        # floats [scale]. The kind is read once here from the mask tensor and recorded with the call, so a
+        # captured program replays the same reading.
+        code = 122
+        hs = [_int(args[0], "q", 1), _int(args[1], "k", 1), _int(args[2], "v", 1)]
+        var mask_kind = 0
+        if not _nil(args[3]):
+            var mask_handle = _int(args[3], "mask", 1)
+            hs.append(mask_handle)
+            mask_kind = 1 if s[].int_words[s[]._slot(mask_handle)] else 2
+        ints = [Int(Bool(py=args[4])), 0 if _nil(args[5]) else 1, mask_kind]
+        fs.append(Float32(0) if _nil(args[5]) else _float(args[5], "scale"))
+    # nn-blocks-qkv end
     if code == 0:
         raise Error("unknown native session operation: " + String(operation))
     return PythonObject(s[].op(code, hs, ints, fs))

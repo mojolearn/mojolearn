@@ -81,7 +81,11 @@ comptime PROGRAM_PARAM_STATE_WORDS = 2
 # replay refuses by name.
 comptime PROGRAM_MAX_CODE_V2 = 80
 # 94: the recurrent scan (`lstm`, `gru`, `rnn`; autograd/rules_recurrent.mojo).
-comptime PROGRAM_MAX_CODE = 94
+# nn-blocks-qkv begin: 95..129 the 2026-11-25 operations (lane rnn-parity 95; lanes nn-blocks-pg 110..112,
+# -scatter 113..117, -scan 118..121, -qkv 122..125 (`attention`, autograd/nn_qkv.mojo), -cbw 126..129); a code
+# of the range no operation took is refused by name at replay, as 89 and 92 are.
+comptime PROGRAM_MAX_CODE = 129
+# nn-blocks-qkv end
 
 
 struct OpsLog(Movable):

@@ -7,6 +7,10 @@ from autograd.program import OpsProgram
 def program_op_name(code: Int) -> String:
     if code == 0:
         return "invalid"
+    # nn-blocks-qkv begin (placed here, away from lane rnn-parity's insertion after 94)
+    if code == 122:
+        return "attention"
+    # nn-blocks-qkv end
     if code == 1:
         return "matmul"
     if code == 2:

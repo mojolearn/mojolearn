@@ -225,3 +225,6 @@ Sequential.max_pool3d	nn-conv3d 3-D layers: not yet in a release verification
 Sequential.avg_pool3d	nn-conv3d 3-D layers: not yet in a release verification
 Sequential.adaptive_avg_pool3d	nn-conv3d 3-D layers: not yet in a release verification
 # nn-conv3d end
+# nn-blocks-qkv begin
+Session.attention	nn-blocks attention over explicit q, k, v: not yet in a release verification
+# nn-blocks-qkv end

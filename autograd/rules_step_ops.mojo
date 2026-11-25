@@ -50,6 +50,10 @@ from autograd.embedding_ops import AG_EMB_PLAN_AUTO, embedding_plan, embedding_p
 # nodes (RNN_LINEAR, RNN_LAYER) are the recurrent trainer's own tags and
 # rules; every answer for them is RecurrentRules'.
 from autograd.rules_recurrent import RecurrentRules
+# nn-blocks-qkv begin: Session.attention's masked softmax node carries the classic attention layer's softmax tag
+# (autograd/nn_qkv.mojo); its rule is that layer's (the softmax VJP times the scale)
+from autograd.nn_attention import NN_TAG_SOFTMAX, NNAttentionRules
+# nn-blocks-qkv end
 
 comptime _ScratchRef = MutPointer[BlockStepScratch, MutUntrackedOrigin]
 
@@ -68,6 +72,10 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
             return self.scratch != 0
         if tag == LM_HEAD_V2_TAG or tag == SMALL_MLP_TAG or tag == CNN_CONV_BLOCK_TAG or tag == CNN_LINEAR_TAG or tag == LM_EMBEDDING_TAG:
             return True
+        # nn-blocks-qkv begin
+        if tag == NN_TAG_SOFTMAX:
+            return True
+        # nn-blocks-qkv end
         return ImportRules().supports(tag)
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
@@ -90,6 +98,10 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
             # edge 0 (x): the rule writes all of d_x; edge 1 (the packed
             # weights): only the weight pieces' slots, the gaps stay zero.
             return edge != 0
+        # nn-blocks-qkv begin
+        if tag == NN_TAG_SOFTMAX:
+            return NNAttentionRules().zeroed_destination(tag, saved, edge)
+        # nn-blocks-qkv end
         return ImportRules().zeroed_destination(tag, saved, edge)
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
@@ -99,6 +111,10 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
             return False
         if step_tag_code(tag) != 0:
             return False
+        # nn-blocks-qkv begin
+        if tag == NN_TAG_SOFTMAX:
+            return NNAttentionRules().writes_total(tag, saved, edge)
+        # nn-blocks-qkv end
         return ImportRules().writes_total(tag, saved, edge)
 
     def apply[E: Exec](
@@ -235,4 +251,9 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
                 embedding_backward_into(ex, saved.p0, upstream, gradients[0], saved.i0, saved.i1, saved.i2, saved.i3,
                                         False, plan, run_begin, perm, keys)
             return
+        # nn-blocks-qkv begin
+        if tag == NN_TAG_SOFTMAX:
+            NNAttentionRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+            return
+        # nn-blocks-qkv end
         ImportRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
