@@ -26,10 +26,12 @@
 # fold32 of autograd/row_ops.mojo), result = ftz(m + log_total): the log-softmax's own max-shift fold, so a row of
 # large scores stays finite. SETTLED: a row whose maximum is infinite returns that maximum (+inf, or -inf for a row
 # of only -inf) and NaN when the row holds a NaN; its VJP is 0 for every element (the shift is undefined there).
+# THE VJP is the row's softmax times the upstream word, from the forward's own m and shifted sum (kept per row when
+# the op records): g * exp(x - m) / total, never exp(x - result), whose shift is rounded at the scores' magnitude.
 from std.memory import bitcast
 from sequence.ops import FP, Args, ld, st, add, sub, mul
-from checks.numerics import ftz, identical_exp, identical_log
-from autograd.row_ops import ROW_COOP, row_first_max, row_expsum32
+from checks.numerics import ftz, identical_log
+from autograd.row_ops import ROW_COOP, row_first_max, row_expsum32, row_exp, row_div
 
 comptime OP_SOX_TOPK_PACK = 6980
 comptime OP_SOX_TOPK_OUT = 6981
@@ -111,52 +113,93 @@ def op_sox_topk_out(t: Int, a: Args):
 
 
 @always_inline
-def sox_lse_row(p: FP, base: Int, cols: Int, settle: Bool = True) -> Float32:
-    """log(sum_j exp(x_j)) of the row at p[base .. base + cols): the log-softmax's maximum and log of the shifted
-    exponential sum (its fold, its words), then ftz(m + log_total); an infinite maximum is settled (see the file
-    header)."""
+def sox_lse_max(p: FP, base: Int, cols: Int) -> Float32:
+    """The maximum of the row at p[base .. base + cols), as log-softmax takes it."""
     var m: Float32
-    var log_total: Float32
     comptime if ROW_COOP:
         m = ld(p, base + row_first_max(p, base, cols))
     else:
         m = ld(p, base)
         for k in range(1, cols):
             m = max(m, ld(p, base + k))
-    if settle and _sox_infinite(m):
-        # an infinite maximum: the row's +inf (or -inf for a row of only -inf), NaN when a NaN is in the row
-        for k in range(cols):
-            var w = ld(p, base + k)
-            if w != w:
-                return w
-        return m
+    return m
+
+
+@always_inline
+def sox_lse_settled(p: FP, base: Int, cols: Int, m: Float32) -> Float32:
+    """The result of a row whose maximum m is infinite: the row's first NaN when it holds one, else m."""
+    for k in range(cols):
+        var w = ld(p, base + k)
+        if w != w:
+            return w
+    return m
+
+
+@always_inline
+def sox_lse_total(p: FP, base: Int, cols: Int, m: Float32) -> Float32:
+    """sum_j exp(x_j - m) of the row, in log-softmax's fold: at least 1 for a finite maximum m of a row without
+    NaN (the maximum's own term is exp(0))."""
+    var total = Float32(0)
     comptime if ROW_COOP:
-        log_total = ftz(identical_log(row_expsum32(p, base, cols, m)))
+        total = row_expsum32(p, base, cols, m)
     else:
-        var total = Float32(0)
         for k in range(cols):
-            total = add(total, ftz(identical_exp(sub(ld(p, base + k), m))))
-        log_total = ftz(identical_log(total))
-    return add(m, log_total)
+            total = add(total, row_exp(ld(p, base + k), m))
+    return total
+
+
+@always_inline
+def sox_lse_row(p: FP, base: Int, cols: Int, settle: Bool = True) -> Float32:
+    """log(sum_j exp(x_j)) of the row at p[base .. base + cols): the log-softmax's maximum and log of the shifted
+    exponential sum (its fold, its words), then ftz(m + log_total); an infinite maximum is settled (see the file
+    header)."""
+    var m = sox_lse_max(p, base, cols)
+    if settle and _sox_infinite(m):
+        return sox_lse_settled(p, base, cols, m)
+    return add(m, ftz(identical_log(sox_lse_total(p, base, cols, m))))
 
 
 @always_inline
 def op_sox_lse(t: Int, a: Args):
     """Row t: out[t] = logsumexp of x's row t. p0 x (rows, cols), p1 out (rows); i0 cols, i1 1 (0 only in a
-    sabotage build: an infinite maximum not settled)."""
-    st(a.p1, t, sox_lse_row(a.p0, t * a.i0, a.i0, a.i1 != 0))
+    sabotage build: an infinite maximum not settled). i2 1 when the row's backward is wanted: p2[t] takes the row
+    maximum m and p3[t] the shifted sum, or +0.0 for a settled row (the VJP's "no gradient" mark; a real sum is at
+    least 1). p2 and p3 are unbound when i2 is 0."""
+    var base = t * a.i0
+    var m = sox_lse_max(a.p0, base, a.i0)
+    var total = Float32(0.0)
+    var result: Float32
+    if a.i1 != 0 and _sox_infinite(m):
+        result = sox_lse_settled(a.p0, base, a.i0, m)
+    else:
+        total = sox_lse_total(a.p0, base, a.i0, m)
+        result = add(m, ftz(identical_log(total)))
+    st(a.p1, t, result)
+    if a.i2 != 0:
+        st(a.p2, t, m)
+        st(a.p3, t, total)
 
 
 @always_inline
 def op_sox_lse_vjp(t: Int, a: Args):
-    """Element t = (r, c): dx = g[r] * exp(x - out[r]), 0 when out[r] is not finite. p0 x (rows, cols), p1 out
-    (rows), p2 the upstream gradient (rows), p3 dx (rows, cols); i0 cols. Every word written once."""
+    """Element t = (r, c): dx = g[r] * exp(x - m[r]) / total[r], the forward's own shifted exponential over its
+    own sum, so the row's gradients are the softmax of the row and add up to g[r] whatever the size of the scores.
+    (exp(x - out[r]) is NOT used: out = m + log(total) is rounded at the scores' magnitude, and for scores near
+    1e8 that rounding is larger than log(total) itself, which turned [0.5, 0.5] into [1, 1].) 0 when total[r] is
+    not a positive number: a settled row, or a row holding a NaN. p0 x (rows, cols), p1 total (rows), p2 the
+    upstream gradient (rows), p3 dx (rows, cols), p4 m (rows); i0 cols, i1 0 (1 only in a sabotage build: the
+    shift is p4's word plus log(total), the rounded output). Every word written once."""
     var r = t // a.i0
-    var lse = ld(a.p1, r)
-    if not (lse == lse) or _sox_infinite(lse):
+    var total = ld(a.p1, r)
+    if not (total > Float32(0.0)):
         st(a.p3, t, Float32(0.0))
         return
-    st(a.p3, t, mul(ld(a.p2, r), ftz(identical_exp(sub(ld(a.p0, t), lse)))))
+    if a.i1 != 0:
+        # SABOTAGE builds only: the gradient from the rounded output
+        var rounded = add(ld(a.p4, r), ftz(identical_log(total)))
+        st(a.p3, t, mul(ld(a.p2, r), row_exp(ld(a.p0, t), rounded)))
+        return
+    st(a.p3, t, mul(ld(a.p2, r), row_div(row_exp(ld(a.p0, t), ld(a.p4, r)), total)))
 
 
 @always_inline

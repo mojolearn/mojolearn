@@ -11,8 +11,9 @@
 #                     embedding_runs_into), one thread per cell of x, the sources of a cell added in ascending
 #                     output position from +0.0, so an index gathered twice gets both terms in one fixed order on
 #                     every vendor (no atomics). A cell no index names gets +0.0. The index takes none.
-#   SOX_LSE_TAG       d x = g * exp(x - logsumexp(x)) along the axis (OP_SOX_LSE_VJP), 0 on a row whose result is not
-#                     finite.
+#   SOX_LSE_TAG       d x = g * softmax(x) along the axis, from the forward's own row maximum and shifted sum
+#                     (OP_SOX_LSE_VJP: g * exp(x - m) / total, so a large common offset leaves it unchanged), 0 on
+#                     a row whose result is not finite.
 # Each rule writes every word of its destination once (zeroed_destination and writes_total False); the tape adds
 # the destination into the input's gradient. A second-order backward refuses both tags by name
 # (autograd/higher_ops.mojo).
@@ -21,7 +22,9 @@ from sequence.ops import FP, Args
 from autograd.tape import BackwardRules
 from autograd.embedding_ops import OP_EMB_FOLD
 from autograd.session_ops_extra_ops import OP_SOX_LSE_VJP
-from autograd.session_ops_extra_sabotage import SOX_SABOTAGE_GATHER_GRAD, SOX_SABOTAGE_GATHER_GRAD_HOST
+from autograd.session_ops_extra_sabotage import (
+    SOX_SABOTAGE_GATHER_GRAD, SOX_SABOTAGE_GATHER_GRAD_HOST, SOX_SABOTAGE_LSE_GRAD, SOX_SABOTAGE_LSE_GRAD_HOST,
+)
 
 comptime SOX_GATHER_TAG = 6990
 comptime SOX_LSE_TAG = 6991
@@ -65,13 +68,17 @@ struct SessionOpsExtraRules(BackwardRules, ImplicitlyCopyable, Movable):
             ex.launch[OP_EMB_FOLD](f, saved.i1)
             return
         if tag == SOX_LSE_TAG:
-            # saved: p0 x's dense (rows, cols) values (the axis last); i0 rows, i1 cols
+            # saved: p0 x's dense (rows, cols) values (the axis last), p1 the rows' maxima, p2 the rows' shifted
+            # sums (+0.0 marks a settled row); i0 rows, i1 cols. The rounded output is not read.
             var a = Args()
             a.p0 = saved.p0
-            a.p1 = output
+            a.p1 = saved.p2
             a.p2 = upstream
             a.p3 = gradients[0]
+            a.p4 = saved.p1
             a.i0 = saved.i1
+            comptime if (SOX_SABOTAGE_LSE_GRAD and E.IS_DEVICE) or (SOX_SABOTAGE_LSE_GRAD_HOST and not E.IS_DEVICE):
+                a.i1 = 1  # SABOTAGE: the gradient from the rounded output, exp(x - (m + log total))
             ex.launch[OP_SOX_LSE_VJP](a, saved.i0 * saved.i1)
             return
         raise Error("session-ops-extra rules: unknown tag")

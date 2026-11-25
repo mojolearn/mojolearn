@@ -247,11 +247,20 @@ def sox_logsumexp[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, axis: Int, keep
     var rows = xs.count() // cols
     var src = tape.value_of(ex, moved)
     var out = tape.reserve(ex, rows)
+    var keep = tape.is_recording() and tape.requires_grad(x)
     var a = Args()
     a.p0 = src
     a.p1 = out
     a.i0 = cols
     a.i1 = 1
+    var saved = Args()
+    if keep:
+        # the backward's row maximum and shifted sum, written by the forward's own launch
+        saved.p1 = tape.reserve(ex, rows)
+        saved.p2 = tape.reserve(ex, rows)
+        a.p2 = saved.p1
+        a.p3 = saved.p2
+        a.i2 = 1
     comptime if (SOX_SABOTAGE_LSE_SETTLE and E.IS_DEVICE) or (SOX_SABOTAGE_LSE_SETTLE_HOST and not E.IS_DEVICE):
         a.i1 = 0  # SABOTAGE: an infinite maximum not settled
     ex.launch[OP_SOX_LSE](a, rows)
@@ -264,9 +273,8 @@ def sox_logsumexp[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, axis: Int, keep
     if len(dims) == 0:
         dims.append(1)
     var shape = rn_shape(dims, "logsumexp")
-    if not (tape.is_recording() and tape.requires_grad(x)):
+    if not keep:
         return tape.variable_nd(ex, out, shape, False)
-    var saved = Args()
     saved.p0 = src
     saved.i0 = rows
     saved.i1 = cols
