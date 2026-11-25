@@ -255,13 +255,16 @@ def _functions_graph(X, n, directed):
 @lane("fn-connected-components")
 def _(ml, X, yc, yr, Xh=None):
     """mojolearn.connected_components on a 128-node undirected graph and a
-    directed one (weak and strong)."""
+    directed one (weak), and connection='strong' on the undirected graph (the
+    documented 'weak' equivalence). Strong components of a directed graph are
+    refused by the product (NotImplementedError, documented), so the lane does
+    not ask for them (lane w3-fix-9-s4: the clean run was REFUSED)."""
     U = _functions_graph(X, 128, False)
     D = _functions_graph(X, 128, True)
     return _functions_resident(ml, "connected_components", lambda p: dict(
         undirected=_functions_d(ml.connected_components(p(U), directed=False)),
         weak=_functions_d(ml.connected_components(p(D), directed=True, connection="weak")),
-        strong=_functions_d(ml.connected_components(p(D), directed=True, connection="strong"))))
+        strong=_functions_d(ml.connected_components(p(U), directed=False, connection="strong"))))
 
 
 @lane("fn-kpss-test")
