@@ -11,9 +11,14 @@ Device column (X put once into the fold store, the fold's rows taken on the devi
     case 0   `fold_x_first_nan` (the gbdt member's nan_mode='Forbidden' refusal over the fold slot, XG_SLOT_NAN) ==
              the host scan of the host gather: the first NaN word with NaNs present, -1 with only infinities, -1
              clean
+    case 1   IsolationForest on a TWO-OWNER plan (both owners on device 0, so one GPU runs it; the two-device column
+             is the same code with `MOJOLEARN_PAR_DEVICES=0,1`): the fit from the fold word (each owner's
+             `fold_x_fill`, the sharded scorer's device-to-device copy for the contamination offset) == the fit from
+             the host gather: offset_ and every score_samples word (identical only: the sharded fit requires it)
 
 FAIL-PROOF EDITS (each must fail the named case): in `fx_nan_word_kernel` test `v != v or v > 1e30` (device 0,
-infinity arm); keep the HIGHEST hit with Atomic.max (device 0, first-word arm).
+infinity arm); keep the HIGHEST hit with Atomic.max (device 0, first-word arm); in `_pooled_path_lengths` copy from
+word 1 of the rows (device 1); in `_fit_tree_shards` pass `src_addr=0` to owners after the first (device 1).
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, check_cases_serial, CPU_COLUMN_BUILD, require
@@ -23,6 +28,9 @@ from max.gpu.host import DeviceContext
 from core.fold_x_device import FOLD_X_STORE, fold_x_word
 from core.fold_x_scan import fold_x_first_nan
 from core.neural_context import process_ctx
+from core.device_plan import DevicePlan
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from isolation_forest.estimator import IsolationForestEstimator as IFEstimator
 
 comptime N = 240
 comptime D = 3
@@ -127,10 +135,61 @@ def _nan_case() raises:
                 raise Error(failure)
 
 
+def _iforest_fit(ctx: DeviceContext, src: Int, n: Int, plan: DevicePlan) raises -> IFEstimator:
+    var est = IFEstimator(ctx)
+    est.n_estimators = 9
+    est.random_state = 3
+    est.contamination_auto = False
+    est.contamination = 0.1
+    est.fit(ctx, List[Float32](), n, D, src_addr=src, plan=plan)
+    return est^
+
+
+def _iforest_plan_case() raises:
+    comptime if not CPU_COLUMN_BUILD and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        var ctx = process_ctx["MojolearnEstimatorsContextIdenticalV3"]()
+        var store_ctx = DeviceContext()
+        var store = FOLD_X_STORE.get_or_create_ptr()
+        var x = _x(N, D)
+        var index = _fold(N)
+        var n = len(index)
+        var gathered = _gather(x, index, D)
+        var base = store[].put(store_ctx, Int(x.unsafe_ptr()), N * D)
+        var slot = store[].take_rows(store_ctx, base, D, Int(index.unsafe_ptr()), n)
+        var failure = String("")
+        try:
+            var devices: List[Int] = [0, 0]
+            var plan = DevicePlan(String("2"), 2, 0, devices^, True)
+            var a = _iforest_fit(ctx, fold_x_word(slot), n, plan)
+            var b = _iforest_fit(ctx, Int(gathered.unsafe_ptr()), n, plan)
+            require(len(a.model.shards) == 2 and len(b.model.shards) == 2, "IsolationForest plan: not two owners")
+            require(a.offset_ == b.offset_, "IsolationForest plan: offset_ " + String(a.offset_) + " != "
+                    + String(b.offset_))
+            var sa = a.score_samples(ctx, List[Float32](), n, D, Int(gathered.unsafe_ptr()))
+            var sb = b.score_samples(ctx, List[Float32](), n, D, Int(gathered.unsafe_ptr()))
+            var sf = a.score_samples(ctx, List[Float32](), n, D, fold_x_word(slot))
+            for i in range(n):  # small-loop(score compare)
+                require(sa[i] == sb[i], "IsolationForest plan: score " + String(i) + " differs (fit)")
+                require(sf[i] == sa[i], "IsolationForest plan: score " + String(i) + " differs (fold query)")
+            _ = a^
+            _ = b^
+        except error:
+            failure = String(error)
+        store[].free(store_ctx, slot)
+        store[].free(store_ctx, base)
+        _ = x^
+        _ = index^
+        _ = gathered^
+        if failure.byte_length() > 0:
+            raise Error(failure)
+
+
 def _device_case(which: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         if which == 0:
             _nan_case()
+        elif which == 1:
+            _iforest_plan_case()
 
 
 def test_device_fixtures() raises:
@@ -138,7 +197,7 @@ def test_device_fixtures() raises:
         def body(which: Int) raises:
             _device_case(which)
 
-        check_cases_serial("vdf2_tail2_fold device", 1, body)
+        check_cases_serial("vdf2_tail2_fold device", 2, body)
 
 
 def main() raises:

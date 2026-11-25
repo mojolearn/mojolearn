@@ -1250,8 +1250,9 @@ struct IsolationForest(Movable):
         """`IsolationForest::compute_path_lengths` (`:143-162`): `threads =
         256`, one thread per row-major sample."""
         if len(model.shards) != 0:
-            var host_input = read_f32(ctx, input_rowmajor, n_rows * n_cols)
-            var pooled = _pooled_path_lengths(ctx, model, host_input,
+            # lane vdf2-tail2: each owner copies the rows device to device
+            # from this buffer (no host round trip of X)
+            var pooled = _pooled_path_lengths(ctx, model, input_rowmajor,
                 n_rows, n_cols, path_tpb)
             pooled.enqueue_copy_to(avg_path_lengths)
             ctx.synchronize()
@@ -1682,13 +1683,26 @@ def predict_into(
 
 
 def _pooled_path_lengths(ctx: DeviceContext, model: IsolationForestModel,
-    input_rowmajor: List[Float32], rows: Int, columns: Int, threads: Int,
+    input_rowmajor: DeviceBuffer[DType.float32], rows: Int, columns: Int, threads: Int,
 ) raises -> DeviceBuffer[DType.float32]:
-    """Carry the FP32 accumulator through global tree order, never shard sums."""
+    """Carry the FP32 accumulator through global tree order, never shard sums.
+
+    The ROW-major rows are on `ctx` (the query upload, or a fold slot's
+    copy); each owner takes them with one device-to-device copy onto its
+    own device (lane vdf2-tail2: before, they were read back to the host
+    and uploaded again per owner). The same words either way: no bit
+    moves. Only the per-row carry (one float32 per row) crosses the host
+    between owners, as before."""
+    ctx.synchronize()  # the rows are complete on `ctx` before any owner copies them
     var carry = List[Float32](length=rows, fill=Float32(0.0))
     for rank in range(len(model.shards)):
         ref shard = model.shards[rank]
-        var data = _upload_f32(shard.ctx, input_rowmajor, rows * columns, 0, Float32(0.0))
+        var data = shard.ctx.enqueue_create_buffer[DType.float32](max(rows * columns, 1))
+        if rows * columns > 0:
+            shard.ctx.enqueue_copy(
+                dst_buf=data.create_sub_buffer[DType.float32](0, rows * columns),
+                src_buf=input_rowmajor.create_sub_buffer[DType.float32](0, rows * columns),
+            )
         var total = _upload_f32(shard.ctx, carry, rows, 0, Float32(0.0))
         shard.ctx.enqueue_function[compute_path_lengths_range_kernel](
             _mp_f32(data), Int64(rows), Int32(columns),
