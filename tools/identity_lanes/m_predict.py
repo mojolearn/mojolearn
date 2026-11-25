@@ -131,8 +131,15 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("x-cluster-optics-fit-predict")
 def _(ml, X, yc, yr, Xh=None):
-    return _fit(dict(fit_predict=_m_predict_h(
-        ml.OPTICS(min_samples=8).fit_predict(np.ascontiguousarray(X[:1500, 1:5])))))
+    """OPTICS.fit_predict labels, plus the core and reachability distances that same call fitted.
+
+    Lane w3-fix-10-s2, 2026-11-25: the labels alone cannot move under a one-ulp distance fault
+    (coverage-gate-x_cluster-sq_dist_rows-cpu missed this lane); the two float vectors the call
+    already computed carry the euclidean sqdist -> sqrt -> kth chain into the digest."""
+    m = ml.OPTICS(min_samples=8)
+    labels = m.fit_predict(np.ascontiguousarray(X[:1500, 1:5]))
+    return _fit(dict(fit_predict=_m_predict_h(labels),
+                     core=_m_predict_h(m.core_distances_), reach=_m_predict_h(m.reachability_)))
 
 
 @lane("x-neighbors-louvain-fit-predict")
