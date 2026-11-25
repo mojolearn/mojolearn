@@ -1,5 +1,5 @@
 {
- "audit_head": "f20080432732de44832d5ba599ee6a965ab742ab",
+ "audit_head": "c4c08dd0dc41e23b983a63dfa1b3d073bb730074",
  "batches": [
   {
    "arm_lanes": {
@@ -101,7 +101,10 @@
    "builds": [
     "build",
     "build_core_host",
-    "build_runtime_model_selection_host"
+    "build_runtime_model_selection_host",
+    "build_runtime_trees_host",
+    "build_x_trees_host",
+    "build_x_trees"
    ],
    "columns": [
     "cpu",
@@ -803,6 +806,9 @@
     "coverage-gbdt-binary_prediction": [
      "gbdt-adapter-clf"
     ],
+    "coverage-gbdt-device-ctr-importances": [
+     "trees-gbdt-importances"
+    ],
     "coverage-gbdt-device_boost_fused_cursor": [
      "gbdt-cat-rmse",
      "gbdt-cat-bootstrap",
@@ -848,9 +854,6 @@
     "coverage-gbdt-device_pw_first_dim_only": [
      "gbdt-pointwise-multiclass"
     ],
-    "coverage-gbdt-importances": [
-     "trees-gbdt-importances"
-    ],
     "coverage-gbdt-ordered_segment_reverse": [
      "gbdt-ordered",
      "gbdt-ordered-rmse",
@@ -859,6 +862,7 @@
    },
    "arms": [
     "coverage-gbdt-binary_prediction",
+    "coverage-gbdt-device-ctr-importances",
     "coverage-gbdt-device_boost_fused_cursor",
     "coverage-gbdt-device_feature_freq_denominator",
     "coverage-gbdt-device_nonsym_l2_right_lambda",
@@ -866,21 +870,19 @@
     "coverage-gbdt-device_pair_weight",
     "coverage-gbdt-device_pointwise_perm_partition",
     "coverage-gbdt-device_pw_first_dim_only",
-    "coverage-gbdt-importances",
     "coverage-gbdt-ordered_segment_reverse"
    ],
    "builds": [
-    "build_gbdt",
-    "build_gbdt_host"
+    "build_gbdt"
    ],
    "columns": [
-    "cpu",
     "device"
    ],
    "family": "gbdt",
    "id": "gbdt-1",
    "lanes": [
     "gbdt-adapter-clf",
+    "trees-gbdt-importances",
     "gbdt-cat-rmse",
     "gbdt-cat-bootstrap",
     "gbdt-cat-noise",
@@ -912,13 +914,13 @@
     "gbdt-rank-pairs",
     "gbdt-pointwise-rest",
     "gbdt-pointwise-multiclass",
-    "trees-gbdt-importances",
     "gbdt-ordered",
     "gbdt-ordered-rmse",
     "gbdt-ordered-bayesian-noise"
    ],
    "patches": [
     "gbdt/checks/sabotage/coverage_binary_prediction.patch",
+    "gbdt/checks/sabotage/coverage_gbdt_device_ctr_importances.patch",
     "gbdt/checks/sabotage/coverage_gbdt_device_boost_fused_cursor.patch",
     "gbdt/checks/sabotage/coverage_gbdt_device_feature_freq_denominator.patch",
     "gbdt/checks/sabotage/coverage_gbdt_device_nonsym_l2_right_lambda.patch",
@@ -926,11 +928,9 @@
     "gbdt/checks/sabotage/coverage_gbdt_device_pair_weight.patch",
     "gbdt/checks/sabotage/coverage_gbdt_device_pointwise_perm_partition.patch",
     "gbdt/checks/sabotage/coverage_gbdt_device_pw_first_dim_only.patch",
-    "gbdt/checks/sabotage/coverage_gbdt_importances.patch",
     "gbdt/checks/sabotage/ordered_segment_reverse.patch"
    ],
    "sides": [
-    "cpu",
     "gpu"
    ]
   },
@@ -970,6 +970,9 @@
     ],
     "coverage-gbdt-device_searcher_leaf_reg": [
      "gbdt-simple-leaves"
+    ],
+    "coverage-gbdt-importances": [
+     "trees-gbdt-importances"
     ]
    },
    "arms": [
@@ -978,12 +981,15 @@
     "coverage-gbdt-device_ordered_prefix",
     "coverage-gbdt-device_ordered_rmse_cursor",
     "coverage-gbdt-device_rank_group_boundary",
-    "coverage-gbdt-device_searcher_leaf_reg"
+    "coverage-gbdt-device_searcher_leaf_reg",
+    "coverage-gbdt-importances"
    ],
    "builds": [
-    "build_gbdt"
+    "build_gbdt",
+    "build_gbdt_host"
    ],
    "columns": [
+    "cpu",
     "device"
    ],
    "family": "gbdt",
@@ -1011,7 +1017,8 @@
     "gbdt-rank-leaves",
     "gbdt-rank-pointwise-arms",
     "gbdt-rank-pairs",
-    "gbdt-simple-leaves"
+    "gbdt-simple-leaves",
+    "trees-gbdt-importances"
    ],
    "patches": [
     "gbdt/checks/sabotage/coverage_gbdt_device_cat_perm_export.patch",
@@ -1019,9 +1026,11 @@
     "gbdt/checks/sabotage/coverage_gbdt_device_ordered_prefix.patch",
     "gbdt/checks/sabotage/coverage_gbdt_device_ordered_rmse_cursor.patch",
     "gbdt/checks/sabotage/coverage_gbdt_device_rank_group_boundary.patch",
-    "gbdt/checks/sabotage/coverage_gbdt_device_searcher_leaf_reg.patch"
+    "gbdt/checks/sabotage/coverage_gbdt_device_searcher_leaf_reg.patch",
+    "gbdt/checks/sabotage/coverage_gbdt_importances.patch"
    ],
    "sides": [
+    "cpu",
     "gpu"
    ]
   },
@@ -5427,6 +5436,33 @@
    ],
    "sides": [
     "cpu",
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-tokenizer-gpu_cut": [
+     "hf-tokenizer"
+    ]
+   },
+   "arms": [
+    "coverage-tokenizer-gpu_cut"
+   ],
+   "builds": [
+    "build_x_tokenizer"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_tokenizer",
+   "id": "x_tokenizer-1",
+   "lanes": [
+    "hf-tokenizer"
+   ],
+   "patches": [
+    "tokenizer/sabotage/coverage_gpu_cut.patch"
+   ],
+   "sides": [
     "gpu"
    ]
   },
