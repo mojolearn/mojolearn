@@ -348,15 +348,37 @@ def rnn_head[E: Exec](
                             RNN_LINEAR, saved)
 
 
+@always_inline
+def _initial_state[E: Exec](
+    mut ex: E, hall: FP, call: FP, T: Int, B: Int, H: Int, reverse: Bool, h0: Optional[FP], c0: Optional[FP],
+) raises:
+    """Lane rnn-parity: the given initial state (PyTorch's h_0 / c_0, B x H rows of this batch on the executor)
+    copied into the state rows the layer reads first: rows [0, B) of hall / call, or rows [T B, (T + 1) B) in
+    the reverse direction. c_0 absent (a GRU or tanh RNN, or an LSTM given h_0 alone) is zeros, as in PyTorch.
+    The caller passes h0 only when it is given: without it nothing here runs."""
+    var at = (T if reverse else 0) * B * H
+    _copy(ex, hall + at, h0.value(), B * H)
+    if c0:
+        _copy(ex, call + at, c0.value(), B * H)
+    else:
+        fill(ex, call + at, B * H, Float32(0.0))
+
+
 def layer_fwd_scan[E: Exec](
     mut ex: E, cell: Int, T: Int, B: Int, H: Int, gxp: FP, gh: FP, act: FP, hall: FP, call: FP,
     whh: FP, bhh: FP, b_ih: FP, lens: FP, masked: Bool, reverse: Bool,
+    h0: Optional[FP] = None, c0: Optional[FP] = None,
 ) raises:
     """A layer's forward recurrence as ONE launch (OP_CELL_FWD_SCAN, one block a batch row): gx [T B, G H] -> the
     states in hall / call (h_0 = 0 first; reverse: after the states), GH in gh, the gate activations in act. i6 is
-    the chain's fold of the step projection at this shape (scan_fwd_split), so the words are layer_fwd_chain's."""
+    the chain's fold of the step projection at this shape (scan_fwd_split), so the words are layer_fwd_chain's.
+    `h0` / `c0` (lane rnn-parity): the batch's initial state, copied into the first state rows before the launch;
+    the scan's i7 = 1 then leaves those rows as they are instead of storing zeros there."""
     var GH = gates_of(cell) * H
     var sa = Args()
+    if h0:
+        _initial_state(ex, hall, call, T, B, H, reverse, h0, c0)
+        sa.i7 = 1
     # step 0's pointers: time 0 (forward), or time T - 1 (reverse: h_prev the zero rows after the states)
     var t0 = T - 1 if reverse else 0
     sa.p0 = gxp + t0 * B * GH
@@ -387,16 +409,20 @@ def layer_fwd_scan[E: Exec](
 def layer_fwd_chain[E: Exec](
     mut ex: E, cell: Int, T: Int, B: Int, H: Int, gxp: FP, gh: FP, act: FP, hall: FP, call: FP,
     whh: FP, bhh: FP, b_ih: FP, lens: FP, masked: Bool, reverse: Bool, h0_clean: Bool,
+    h0: Optional[FP] = None, c0: Optional[FP] = None,
 ) raises:
     """The same forward as the per-step chain: per time step the projection (its own GEMM launch above the step
-    rule, RNN_STEP_GEMM, else fused into the cell) and the cell. The buffers as layer_fwd_scan's."""
+    rule, RNN_STEP_GEMM, else fused into the cell) and the cell. The buffers as layer_fwd_scan's. `h0` / `c0`
+    (lane rnn-parity): the batch's initial state replaces the zero fills (layer_fwd_scan's)."""
     var GH = gates_of(cell) * H
     # Lane fx-rnn-cnn-fit (2026-11-19): h_0 and c_0 are rows [0, B) of the two buffers, which nothing but
     # this fill (or the scan's own zero stores) writes while the batch size stays B: step s stores rows
     # [(s + 1) B, (s + 2) B). Only a forward of FEWER rows writes below B H, so the caller passes h0_clean when
     # the previous forward on this Work had at least B rows (AutogradRnnStep, rnn_predict): the two fills then
     # run once after an epoch's short last batch, not every step. The same zeros, so the same bits.
-    if reverse:
+    if h0:
+        _initial_state(ex, hall, call, T, B, H, reverse, h0, c0)
+    elif reverse:
         # the reverse direction's zero state is rows [T B, (T + 1) B) (lane nn-recurrent)
         fill(ex, hall + T * B * H, B * H, Float32(0.0))
         fill(ex, call + T * B * H, B * H, Float32(0.0))
@@ -442,6 +468,7 @@ def layer_fwd_chain[E: Exec](
 def rnn_layer[E: Exec](
     mut tape: Tape, mut ex: E, gx: Tensor, w_hh: Tensor, b_hh: Tensor, b_ih: FP,
     cell: Int, T: Int, B: Int, w: Work, l: Int, h0_clean: Bool = False, reverse: Bool = False,
+    h0: Optional[FP] = None, c0: Optional[FP] = None,
 ) raises -> Tensor:
     """Layer l's recurrence over gx [T B, G H]; returns h_1..h_T [T B, H]
     (w.hall[l] holds h_0 = 0 first). The launches are recurrent.forward's.
@@ -455,7 +482,13 @@ def rnn_layer[E: Exec](
     position is the time, so a row's padded times (now first) hold its zero
     state and its own steps run from its last valid step down to 0.
     `h0_clean`: the caller knows rows [0, B) of w.hall[l] and w.call[l]
-    already hold zeros, so the per-step chain does not fill them again."""
+    already hold zeros, so the per-step chain does not fill them again.
+    `h0` / `c0` (lane rnn-parity: PyTorch's initial state): B x H rows on the
+    executor copied into the first state rows (the reverse direction's rows
+    after the states) in place of the zeros; c0 absent is zeros. The state
+    takes no gradient (the backward reads the stored rows as step 0's
+    previous state, as it reads the zeros). `l` indexes the Work's buffers:
+    the trainer's layer and direction slot."""
     var H = tape.cols(w_hh)
     var GH = tape.rows(w_hh)
     if GH != gates_of(cell) * H or tape.cols(gx) != GH or tape.rows(gx) != T * B:
@@ -477,11 +510,11 @@ def rnn_layer[E: Exec](
     comptime if SEQ_LSTM_SCAN:
         if scan_routes(H, gates_of(cell)):
             layer_fwd_scan(ex, cell, T, B, H, gxp, w.gh[l], w.act[l], w.hall[l], w.call[l], whh, bhh, b_ih, w.lens,
-                           masked, reverse)
+                           masked, reverse, h0, c0)
             scanned = True
     if not scanned:
         layer_fwd_chain(ex, cell, T, B, H, gxp, w.gh[l], w.act[l], w.hall[l], w.call[l], whh, bhh, b_ih, w.lens,
-                        masked, reverse, h0_clean)
+                        masked, reverse, h0_clean, h0, c0)
     var saved = Args()
     saved.p0 = w.act[l]
     saved.p1 = w.gh[l]
@@ -769,6 +802,7 @@ comptime OPS_RNN_SCAN = 94
 def rnn_scan_op[E: Exec](
     mut tape: Tape, mut ex: E, x: Tensor, w_ih: Tensor, w_hh: Tensor, b_ih: Tensor, b_hh: Tensor,
     cell: Int, T: Int, B: Int, lengths: Optional[FP] = None, reverse: Bool = False,
+    h0: Optional[FP] = None, c0: Optional[FP] = None,
 ) raises -> Tensor:
     """One recurrent layer (cell CELL_LSTM, CELL_GRU or the tanh RNN) over a
     time-major sequence x [T B, D] from h_0 = c_0 = 0: returns h_1..h_T
@@ -829,8 +863,8 @@ def rnn_scan_op[E: Exec](
         w.has_lens = True
     var gx = rnn_linear(tape, ex, x, w_ih, b_ih, gxb, RNN_INPUT_BIAS_IN_GX, True, tape.requires_grad(x), w)
     # `reverse` (lane nn-recurrent): time T - 1 down to 0, the same launches (rnn_layer); the output stays in
-    # time order
-    return rnn_layer(tape, ex, gx, w_hh, b_hh, tape.value(b_ih), cell, T, B, w, 0, False, reverse)
+    # time order. `h0` / `c0` (lane rnn-parity): B x H executor words, the initial state (rnn_layer); no gradient.
+    return rnn_layer(tape, ex, gx, w_hh, b_hh, tape.value(b_ih), cell, T, B, w, 0, False, reverse, h0, c0)
 
 
 # ------------------------------------------------------------------ trainer step
