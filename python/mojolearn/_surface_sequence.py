@@ -47,6 +47,8 @@ FAMILIES = (
                         # nn-recurrent begin (tools/identity_lanes/nn_recurrent.py)
                         "sequence-blocks-bigru-lengths", "sequence-blocks-bilstm",
                         # nn-recurrent end
+                        # lane rnn-parity-D (2026-11-25): the recurrent estimators' options (tools/identity_lanes/rnn_parity.py)
+                        "sequence-rnn-weighted-steps", "sequence-rnn-bidi-options",
                         # nn-attention begin: classic attention models (tools/identity_lanes/nn_attention.py)
                         "sequence-attention-encoder", "sequence-attention-cross",
                         # nn-attention end
@@ -220,6 +222,9 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-blocks-bigru-lengths": "Sequential gru, two bidirectional layers, lengths",
                        "sequence-blocks-bilstm": "Sequential lstm, bidirectional",
                        # nn-recurrent end
+                       # lane rnn-parity-D (2026-11-25)
+                       "sequence-rnn-weighted-steps": "GRUClassifier: output='sequence', lengths, per-step sample_weight, class_weight, clip_grad_norm",
+                       "sequence-rnn-bidi-options": "LSTMRegressor: bidirectional, dropout, bias=False, validation, partial_fit, h_0 / c_0, step",
                        # nn-attention begin
                        "sequence-attention-encoder": "Sequential transformer_encoder_layer, positional_encoding",
                        "sequence-attention-cross": "Sequential transformer_decoder_layer, multihead_attention",
@@ -307,6 +312,8 @@ PUBLIC_PENDING_LANES = {
     "sequence-blocks-bigru-lengths": "no reference",
     "sequence-blocks-bilstm": "no reference",
     # nn-recurrent end
+    "sequence-rnn-weighted-steps": "no reference",  # lane rnn-parity-D
+    "sequence-rnn-bidi-options": "no reference",  # lane rnn-parity-D
     # nn-attention begin
     "sequence-attention-encoder": "no reference",
     "sequence-attention-cross": "no reference",
