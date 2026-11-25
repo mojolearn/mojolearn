@@ -1205,7 +1205,10 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
     var start = _rnn_start_params(model, fields, route, fo, cell, width, hidden, layers, outputs, partial, context)
     var n_params = start.total
     var params = start.params
-    var seed = start.stream.child_seed()
+    # the dropout masks' seed from the estimator's random_state alone (a fresh stream, not the one the parameter
+    # draw advanced), so a partial_fit that continues from saved parameters keys its masks as the uninterrupted run
+    var mask_stream = XseqStream(py_get(fields, nk[].k_random_state), context)
+    var seed = mask_stream.child_seed()
     var optimizer = _rnn_optimizer(py_get(fields, nk[].k_optimizer), py_get(fields, nk[].k_optimizer_options), context)
     var state = PythonObject(None)
     var t0 = 0

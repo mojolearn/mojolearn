@@ -42,6 +42,20 @@
 #   oracle {kind: "weighted_ce", logits, codes, weight, as}  float64 sum(w * ce) / sum(w)
 #   fd_grad {program, inputs, wrt, grad, eps, rtol, atol, what}  central differences of a captured program's first
 #                                     output (a scalar) against a gradient, element by element (tiny tensors only)
+# Lane stream-fits (2026-11-25), for the streamed fits and their fresh-process resumes:
+#   make {cls, args, kw, as}          call a public class or classmethod by its dotted name under the package
+#                                     ("Sequential", "ops.BatchSource", "GRURegressor", "Sequential.from_checkpoint")
+#   shards {as, lengths, F, targets, seal}  a batch shard directory (mojolearn-batch-shards v1) in the case's
+#                                     temporary directory: one shard per list of record lengths, steps (total, F)
+#                                     from the hashed stream, int64 offsets; targets {kind: "dense" (width W),
+#                                     "classes" (classes K, width W: whole numbers in [0, K)) or "steps" (width w
+#                                     a step, padded to the longest record)}; sealed unless seal is false; binds the
+#                                     directory's path
+#   pickle {dump, as} / pickle {load, as}  an object pickled to a file of the case's temporary directory (binds the
+#                                     path) / read back
+#   fresh {pass, do, keep}            run `do` in a FRESH PROCESS on this side (a child Python that loads this
+#                                     harness): the names in `pass` (paths, numbers, arrays) go in, the arrays
+#                                     named in `keep` come back into this case's environment
 #
 # A fragment of tools/identity_break.py (loaded by `_load_lane_fragments`; np, os, json, tempfile, _h, _fit, _hw,
 # _same_bytes, lane and _batch_decl are that namespace's). Device-agnostic (docs/plans/VERIFY_THROUGH_DEVICE.md
@@ -367,12 +381,123 @@ def _cc_fd_grad(ml, env, st, ctx, where):
                              f"difference {fd!r} (a gradient contribution lost or doubled?)")
 
 
+def _cc_make(ml, env, st, ctx, where):
+    obj = ml
+    for part in st["cls"].split("."):  # small-loop(a dotted public name)
+        obj = getattr(obj, part)
+    _cc_bind(env, st.get("as"), obj(*_cc_val(env, st.get("args", []), where), **_cc_val(env, st.get("kw", {}),
+                                                                                         where)))
+
+
+def _cc_shards(ml, env, st, ctx, where):
+    """A sealed batch shard directory (autograd/batch_source.mojo's format), written with numpy.save alone."""
+    root = os.path.join(ctx["tmp"], st["as"] + "-shards")
+    os.makedirs(root)
+    width = int(st["F"])
+    spec = st.get("targets")
+    longest = max(max(lengths) for lengths in st["lengths"])  # glue: the fixture's record lengths
+    lines = ["mojolearn-batch-shards v1"]
+    for k, lengths in enumerate(st["lengths"]):  # driver-loop: over the fixture's shards
+        stem = f"part{k}"
+        key = f"composed:{ctx['case']}:{st['as']}"
+        steps = _hw((sum(lengths), width), f"{key}:steps{k}", -1.0, 1.0)
+        offsets = np.concatenate([[0], np.cumsum(lengths)]).astype(np.int64)
+        np.save(os.path.join(root, stem + ".steps.npy"), np.ascontiguousarray(steps, np.float32))
+        np.save(os.path.join(root, stem + ".offsets.npy"), offsets)
+        if spec is not None:
+            n = len(lengths)
+            kind = spec["kind"]
+            if kind == "dense":
+                target = _hw((n, int(spec["width"])), f"{key}:targets{k}", -1.0, 1.0)
+            elif kind == "classes":
+                classes = int(spec["classes"])
+                draw = _hw((n, int(spec.get("width", 1))), f"{key}:targets{k}", 0.0, float(classes))
+                target = np.clip(np.floor(np.asarray(draw, np.float64)), 0, classes - 1)
+            elif kind == "steps":
+                target = _hw((n, int(spec["width"]) * longest), f"{key}:targets{k}", -1.0, 1.0)
+            else:
+                raise ValueError(f"{where}: unknown targets kind {kind!r}")
+            np.save(os.path.join(root, stem + ".targets.npy"), np.ascontiguousarray(target, np.float32))
+        lines.append("shard " + stem)
+    with open(os.path.join(root, "index.txt"), "w", encoding="ascii") as fh:
+        fh.write("\n".join(lines) + "\n")
+    if st.get("seal", True) and ml.ops.BatchSource.seal(root) != len(st["lengths"]):
+        raise ValueError(f"{where}: BatchSource.seal did not seal every shard")
+    env[st["as"]] = root
+
+
+def _cc_pickle(ml, env, st, ctx, where):
+    import pickle
+    if "dump" in st:
+        path = os.path.join(ctx["tmp"], f"pickle-{ctx['serial']}.pkl")
+        ctx["serial"] += 1
+        with open(path, "wb") as fh:
+            pickle.dump(_cc_val(env, st["dump"], where), fh)
+        env[st["as"]] = path
+        return
+    with open(_cc_val(env, st["load"], where), "rb") as fh:
+        env[st["as"]] = pickle.load(fh)  # the file this case wrote above
+
+
+_CC_FRESH_CHILD = r'''
+import importlib
+import importlib.util
+import pickle
+import sys
+import numpy as np
+name, harness, payload, side, out = sys.argv[1:6]
+if name.startswith("mojolearn."):
+    ib = importlib.import_module(name)
+else:
+    spec = importlib.util.spec_from_file_location("_cc_fresh_harness", harness)
+    ib = importlib.util.module_from_spec(spec)
+    sys.modules["_cc_fresh_harness"] = ib
+    spec.loader.exec_module(ib)
+import mojolearn
+from mojolearn import _verify_device as vd
+with open(payload, "rb") as fh:
+    job = pickle.load(fh)
+env = dict(job["env"])
+with vd.side(side):
+    ctx = {"case": job["case"], "tmp": job["tmp"], "parts": {}, "macros": dict(job["macros"]), "serial": 1000}
+    ib._cc_run(vd.view(mojolearn, side), env, job["do"], ctx)
+np.savez(out, **{k: np.asarray(env[k]) for k in job["keep"]})
+'''
+
+
+def _cc_fresh(ml, env, st, ctx, where):
+    """The statements in a fresh process on this side (the resume a user makes after a crash): the passed names go
+    in by pickle, the kept arrays come back by .npz."""
+    import pickle
+    import subprocess
+    import sys
+    serial = ctx["serial"]
+    ctx["serial"] += 1
+    script = os.path.join(ctx["tmp"], f"fresh-{serial}.py")
+    payload = os.path.join(ctx["tmp"], f"fresh-{serial}.pkl")
+    out = os.path.join(ctx["tmp"], f"fresh-{serial}.npz")
+    with open(script, "w", encoding="utf-8") as fh:
+        fh.write(_CC_FRESH_CHILD)
+    job = {"case": ctx["case"], "tmp": ctx["tmp"], "macros": ctx["macros"], "do": st["do"], "keep": st["keep"],
+           "env": {k: env[k] for k in st.get("pass", [])}}  # glue: the passed names
+    with open(payload, "wb") as fh:
+        pickle.dump(job, fh)
+    done = subprocess.run([sys.executable, script, __name__, os.path.abspath(__file__), payload, _lane_side(), out],
+                          capture_output=True, text=True, timeout=900, check=False)
+    if done.returncode != 0:
+        raise ValueError(f"{where}: the fresh process failed: " + (done.stderr or done.stdout)[-2000:])
+    with np.load(out) as z:
+        for k in st["keep"]:  # driver-loop: over the kept arrays
+            env[k] = np.array(z[k])
+
+
 _CC_VERBS = {
     "session": _cc_session, "call": _cc_call, "map": _cc_map, "let": _cc_let, "read": _cc_read,
     "array": _cc_array, "np": _cc_np, "repeat": _cc_repeat, "def": _cc_def, "use": _cc_use, "path": _cc_path,
     "roundtrip": _cc_roundtrip, "state_save": _cc_state_save, "state_load": _cc_state_load,
     "digest": _cc_digest, "same": _cc_same, "differ": _cc_differ, "zero": _cc_zero, "close": _cc_close,
     "oracle": _cc_oracle, "fd_grad": _cc_fd_grad, "find": _cc_find, "pick": _cc_pick,
+    "make": _cc_make, "shards": _cc_shards, "pickle": _cc_pickle, "fresh": _cc_fresh,  # lane stream-fits
 }
 
 
