@@ -76,7 +76,8 @@ def test_models_only_uses_cpu_on_gpu_install_and_detects_repeat_instability(tmp_
     (base / 'models.json').write_text(json.dumps({'models': [dict(
         lane='rf-clf', fixture='base', file='model.npz', **{'class': 'MustNotUseGpu'})]}))
     loaded = []
-    ml = types.SimpleNamespace(vendor=lambda: 'cuda', host_model=lambda p: loaded.append(p))
+    # `__name__`: the run builds the device view of the package (vd-verify)
+    ml = types.SimpleNamespace(vendor=lambda: 'cuda', host_model=lambda p: loaded.append(p), __name__='mojolearn')
     values = iter(['a'*16, 'b'*16])
     h = types.SimpleNamespace(Fit=lambda _: types.SimpleNamespace(),
         heldout=lambda _: [], BATCH_ALONE=1,

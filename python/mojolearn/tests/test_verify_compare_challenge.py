@@ -25,6 +25,7 @@ import copy
 import json
 import os
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -654,6 +655,15 @@ def _probe_batch(fit, name, ml, Xh, alone, sabotage):
 
 def _probe_part(part, fit, name, ml, Xh, alone, tag):
     return _h(_train_hash(fit) + ":" + part), None, {}
+
+
+# the device view (vd-verify, 2026-11-24): every lane two-sided, the package as given
+def one_sided_na(lane, side):
+    return None
+
+
+def device_view(ml, side, lane):
+    return ml
 '''
 
 
@@ -665,6 +675,11 @@ class _Args:
         self.challenge = None
         self.challenge_from = None
         self.__dict__.update(kw)
+
+
+#: the package the runner hands the stub lanes (vd-verify reads its vendor and builds
+#: the device view of it): a CPU-only install, so the GPU side reads n/a
+_STUB_ML = types.SimpleNamespace(vendor=lambda: "cpu", __name__="mojolearn")
 
 
 @pytest.fixture()
@@ -703,15 +718,19 @@ def test_the_runner_answers_and_the_answer_moves_with_the_challenge(tmp_path, st
         va.seal_document(doc)
         Path(path).write_text(json.dumps(doc, indent=1, sort_keys=True))
         line = doc[va.REVEAL_KEY]["commitment"]
-        code = va._cmd_challenge(_Args(challenge=path, challenge_from=[line, y]), ml=None)
+        code = va._cmd_challenge(_Args(challenge=path, challenge_from=[line, y]), ml=_STUB_ML)
         assert code == va.EXIT_VERIFIED, code
         answered = json.loads(Path(path).read_text())[va.CHALLENGE_KEY]
         answers[tag] = answered
     assert answers["one"]["challenge"] != answers["two"]["challenge"]
     assert answers["one"]["fixture"]["X"] != answers["two"]["fixture"]["X"], (
         "the challenge must move the INPUT, or it is not mixed into what the run computes")
-    va_one = {(c["lane"], c["part"]): c["value"] for c in answers["one"]["cells"]}
-    va_two = {(c["lane"], c["part"]): c["value"] for c in answers["two"]["cells"]}
+    # per side (v2 answers carry one row per side); a side this install does
+    # not have answers its n/a sentence on every challenge, which moves nothing
+    va_one = {(c["lane"], c["part"], c.get("side")): c["value"] for c in answers["one"]["cells"]
+              if not str(c["value"]).startswith("n/a:")}
+    va_two = {(c["lane"], c["part"], c.get("side")): c["value"] for c in answers["two"]["cells"]
+              if not str(c["value"]).startswith("n/a:")}
     assert set(va_one) == set(va_two) and va_one, "the same cells, answered twice"
     assert all(va_one[k] != va_two[k] for k in va_one), (
         "every answer must move with the challenge; an answer that does not is an answer that "
@@ -725,14 +744,14 @@ def test_the_runner_refuses_a_document_the_challenge_is_not_about(tmp_path, stub
     doc = json.loads(Path(path).read_text())
     va.seal_document(doc)
     Path(path).write_text(json.dumps(doc, indent=1, sort_keys=True))
-    code = va._cmd_challenge(_Args(challenge=path, challenge_from=["a" * 64, "b" * 64]), ml=None)
+    code = va._cmd_challenge(_Args(challenge=path, challenge_from=["a" * 64, "b" * 64]), ml=_STUB_ML)
     assert code == va.EXIT_USAGE, code
     assert va.CHALLENGE_KEY not in json.loads(Path(path).read_text())
 
 
 def test_the_runner_refuses_an_unsealed_document(tmp_path, stub_harness):
     path = _write(tmp_path, "mine.json", _runnable_doc(vref.sha256_file(stub_harness)))
-    code = va._cmd_challenge(_Args(challenge=path, challenge_from=["a" * 64, "b" * 64]), ml=None)
+    code = va._cmd_challenge(_Args(challenge=path, challenge_from=["a" * 64, "b" * 64]), ml=_STUB_ML)
     assert code == va.EXIT_USAGE
 
 
@@ -745,15 +764,15 @@ def test_the_runner_refuses_to_answer_a_second_challenge(tmp_path, stub_harness)
     line = va.seal_document(doc)
     Path(path).write_text(json.dumps(doc, indent=1, sort_keys=True))
     assert va._cmd_challenge(_Args(challenge=path, challenge_from=[line, "b" * 64]),
-                            ml=None) == va.EXIT_VERIFIED
+                            ml=_STUB_ML) == va.EXIT_VERIFIED
     # the same pair again is idempotent and must not invalidate the published line
     before = json.loads(Path(path).read_text())[va.REVEAL_KEY][va.CHALLENGE_COMMITMENT_FIELD]
     assert va._cmd_challenge(_Args(challenge=path, challenge_from=[line, "b" * 64]),
-                            ml=None) == va.EXIT_VERIFIED
+                            ml=_STUB_ML) == va.EXIT_VERIFIED
     assert json.loads(Path(path).read_text())[va.REVEAL_KEY][va.CHALLENGE_COMMITMENT_FIELD] == before
     # a DIFFERENT pair is refused
     assert va._cmd_challenge(_Args(challenge=path, challenge_from=[line, "c" * 64]),
-                            ml=None) == va.EXIT_USAGE
+                            ml=_STUB_ML) == va.EXIT_USAGE
 
 
 def test_two_stub_runs_of_the_same_challenge_agree_end_to_end(tmp_path, stub_harness):
@@ -773,7 +792,7 @@ def test_two_stub_runs_of_the_same_challenge_agree_end_to_end(tmp_path, stub_har
     seconds = []
     for p in paths:
         assert va._cmd_challenge(_Args(challenge=p, challenge_from=list(lines)),
-                                ml=None) == va.EXIT_VERIFIED
+                                ml=_STUB_ML) == va.EXIT_VERIFIED
         seconds.append(json.loads(Path(p).read_text())[va.CHALLENGE_KEY]["seconds"])
     docs = [json.loads(Path(p).read_text()) for p in paths]
     challenge_lines = [d[va.REVEAL_KEY][va.CHALLENGE_COMMITMENT_FIELD] for d in docs]
