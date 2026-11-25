@@ -71,3 +71,14 @@ def test_captured_program_save_load_round_trip():
             prog.save(path)
             again = np.asarray(s.load_program(path).run(q, k, v, keep))
     np.testing.assert_array_equal(first, again)
+
+
+def test_a_trainable_float_mask_gets_a_gradient_of_its_own_shape():
+    with ops.Session(record=True) as s:
+        q = s.tensor(_a(1, 2, 3, 4), requires_grad=True)
+        k = s.tensor(_a(1, 2, 5, 4, seed=1))
+        m = s.tensor(np.zeros((1, 5), np.float32), requires_grad=True)
+        out = s.attention(q, k, k, mask=m)
+        dq, dm = s.vjp(out, [q, m], s.tensor(_a(1, 2, 3, 4, seed=3)))
+        assert s.shape(dm) == (1, 5) and np.isfinite(s.numpy(dm)).all()
+        assert s.shape(dq) == (1, 2, 3, 4)

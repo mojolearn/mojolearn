@@ -1650,7 +1650,9 @@ class Session:
             zero is left out (pass ``s.ids(mask.astype(np.int8))`` for a
             boolean array); a float tensor made with :meth:`tensor` is added
             to the scaled scores, and ``-inf`` there leaves the position out.
-            The mask takes no gradient.
+            A float mask made with ``requires_grad=True`` receives its
+            gradient (summed over the axes it broadcasts along), as in
+            PyTorch; a boolean mask takes none.
         causal : bool, default False
             Query ``i`` attends to keys ``0 .. i`` only (PyTorch's
             ``is_causal``, the lower triangle aligned at the top left when
@@ -1667,7 +1669,8 @@ class Session:
         A query whose every key is left out (by the mask or by ``causal``)
         gets an output row of zeros and passes zero gradient back; PyTorch
         returns NaN for such a row. In a recording session the gradients
-        flow to ``q``, ``k`` and ``v``. The softmax sums each row in one fixed
+        flow to ``q``, ``k`` and ``v`` through :meth:`backward`, :meth:`vjp`
+        and :meth:`Program.fit`. The softmax sums each row in one fixed
         order, so the result has the same bits on every device. The call can
         be captured into a :class:`Program` like any other operation, the
         mask included (as an input, or as a fixed tensor of the program).

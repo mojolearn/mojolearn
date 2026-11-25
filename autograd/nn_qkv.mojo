@@ -20,17 +20,22 @@ pending view: one copy more). Backward: the softmax VJP, two product VJPs per pr
 a gradient), and k's permute view handing its gradient back.
 
 The mask is read in place through broadcast strides (a stride 0 along an axis of length 1), never expanded,
-and takes no gradient. Bits: the row softmax's fold is fixed (ascending, from 0); the products' chains are
+unless it is a float mask that takes a gradient: then it is expanded once (imp_expand) and its gradient is
+dL/d(scaled scores + mask), summed back over the broadcast axes by the expand's rule (QKV_TAG_SOFTMAX_MASK,
+autograd/nn_qkv_rules.mojo). A boolean (ids) mask never takes one. Bits: the row softmax's fold is fixed (ascending, from 0); the products' chains are
 OP_RN_BMM's; the host and every vendor run the same functions.
 """
 from sequence.exec_trait import Exec
 from sequence.ops import Args
 from checks.numerics import ftz, identical_div, identical_sqrt
 from autograd.tape import Tape, Tensor
-from autograd.rankn import ShapeN
+from std.collections import Array
+from autograd.rankn import ShapeN, RN_MAX_RANK
 from autograd.rankn_api import rn_shape
 from autograd.rankn_bmm import rankn_matmul
 from autograd.nn_attention import NN_TAG_SOFTMAX
+from autograd.nn_qkv_rules import QKV_TAG_SOFTMAX_MASK
+from autograd.import_api import imp_expand
 from autograd.nn_qkv_ops import OP_QKV_SOFTMAX, QKV_CAUSAL, QKV_MASK_BOOL, QKV_MASK_ADD
 
 #: the Session operation code (autograd/ops_api.mojo; python/mojolearn/ops.py `attention`), of lane
@@ -49,6 +54,27 @@ def _dims_text(s: ShapeN) -> String:
 
 def _sh(dims: List[Int]) raises -> ShapeN:
     return rn_shape(dims, "attention")
+
+
+def _mask_strides(ms: ShapeN, mst: Array[Int, RN_MAX_RANK], target: List[Int], expected: String) raises -> List[Int]:
+    """The mask's element strides along the scores' axes (right-aligned; 0 along a broadcast axis), or the
+    refusal of a mask that does not broadcast."""
+    var nd = len(target)
+    if ms.ndim > nd:
+        raise Error("ValueError: attention: the mask of shape " + _dims_text(ms) + " has more axes than the "
+                    + "scores " + expected)
+    var st = List[Int](length=nd, fill=0)
+    for u in range(nd):  # small-loop(nd: 3 or 4 axes): mask metadata, no data
+        var mu = u - (nd - ms.ndim)
+        if mu < 0:
+            continue
+        var e = ms.d[mu]
+        if e == target[u]:
+            st[u] = mst[mu] if e > 1 else 0
+        elif e != 1:
+            raise Error("ValueError: attention: the mask of shape " + _dims_text(ms) + " does not broadcast to "
+                        + "the scores " + expected)
+    return st^
 
 
 def qkv_attention[E: Exec](
@@ -97,6 +123,7 @@ def qkv_attention[E: Exec](
     var G = H // Hkv
     var a = Args()
     var flags = QKV_CAUSAL if causal else 0
+    var mask_full = Optional[Tensor](None)
     if has_mask:
         # The mask broadcasts to the scores (batch, heads, Lq, Lk) (without the heads axis for 3-D inputs),
         # aligned on the right as NumPy and PyTorch align it; it is read in place through its strides.
@@ -111,20 +138,18 @@ def qkv_attention[E: Exec](
         target.append(Lk)
         var expected = String("(") + String(B) + (", " + String(H) if nd == 4 else String("")) + ", " + String(Lq)
         expected += ", " + String(Lk) + ")"
-        if ms.ndim > nd:
-            raise Error("ValueError: attention: the mask of shape " + _dims_text(ms) + " has more axes than the "
-                        + "scores " + expected)
-        var st = List[Int](length=nd, fill=0)
-        for u in range(nd):  # small-loop(nd: 3 or 4 axes): mask metadata, no data
-            var mu = u - (nd - ms.ndim)
-            if mu < 0:
-                continue
-            var e = ms.d[mu]
-            if e == target[u]:
-                st[u] = mst[mu] if e > 1 else 0
-            elif e != 1:
-                raise Error("ValueError: attention: the mask of shape " + _dims_text(ms) + " does not broadcast to "
-                            + "the scores " + expected)
+        var st = _mask_strides(ms, mst, target, expected)
+        if not mask_bool and tape.requires_grad(mask.value()):
+            # A float mask that takes a gradient (PyTorch differentiates it): it is expanded once to the scores'
+            # shape (imp_expand, whose rule sums the gradient back over the broadcast axes) and becomes the
+            # node's second input; the row body reads the same values, so the words are those of the broadcast
+            # read. Only this case pays the expand launch and the second VJP launch.
+            var full = imp_expand(tape, ex, mask.value(), target)
+            mo = tape.operand_nd(ex, full)
+            ms = mo[2]
+            mst = mo[3].copy()
+            st = _mask_strides(ms, mst, target, expected)
+            mask_full = Optional[Tensor](full)
         a.p2 = mo[0]
         a.i4 = mo[1]
         a.i5 = st[0]
@@ -160,8 +185,12 @@ def qkv_attention[E: Exec](
     a.i3 = flags
     a.f0 = scale
     ex.launch[OP_QKV_SOFTMAX](a, rows)
-    # NN_TAG_SOFTMAX's rule reads saved.i0 (Lk) and saved.f0 (the scale) only
-    var probs = tape.custom_nd(ex, [scores], output, tape.shape_of(scores), NN_TAG_SOFTMAX, a)
+    # the rules (autograd/nn_qkv_rules.mojo QkvRules, in ImportRules) read saved.i0 (Lk) and saved.f0 (the scale)
+    var probs: Tensor
+    if mask_full:
+        probs = tape.custom_nd(ex, [scores, mask_full.value()], output, tape.shape_of(scores), QKV_TAG_SOFTMAX_MASK, a)
+    else:
+        probs = tape.custom_nd(ex, [scores], output, tape.shape_of(scores), NN_TAG_SOFTMAX, a)
     if G == 1:
         return rankn_matmul(tape, ex, probs, v)
     var v5: List[Int] = [B, Hkv, 1, Lk, dv]

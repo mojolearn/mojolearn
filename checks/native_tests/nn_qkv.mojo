@@ -20,7 +20,11 @@ test_nn_qkv_cases, per case:
   broadcast over heads and queries, one -inf word; 3 grouped heads (4 query heads over 2 key/value heads) with a
   boolean (ids) mask (Lq, Lk) broadcast over batch and heads, query row 1 fully masked; 4 inputs without a heads
   axis, scale 0.5, a boolean mask with one fully masked row; 5 causal cross-attention, Lq 3 < Lk 5 (the lower
-  triangle aligned at the top left: query 0 sees key 0 only).
+  triangle aligned at the top left: query 0 sees key 0 only); 6 case 2 with the float mask trainable: its
+  gradient (summed over the axes it broadcasts along) against central differences of the float64 loss along
+  every mask word (the -inf word's is 0).
+  Every case also runs the seeded backward (`vjp` with the seed as v: ImportRules, the path of backward_seed,
+  vjp and the custom-backward wrapper) and requires the scalar backward's words for every gradient.
 test_nn_qkv_refusals: causal with a mask, a feature size mismatch, query heads not a multiple of the key/value
   heads, a mask that does not broadcast, q of rank 2; each refused with its words.
 Fault injection (tools/identity_lanes/coverage_sabotage.tsv, lane nn-blocks-qkv's two arms): the causal mask one
@@ -43,7 +47,7 @@ from checks.native_tests.ops_higher_common import tensor, total, values, gradien
 from checks.native_tests.core_ops_common import normal
 from checks.native_tests.testsuite_cases import CPU_COLUMN_BUILD, check_cases_serial, require
 
-comptime NN_QKV_CASES = 6
+comptime NN_QKV_CASES = 7
 comptime _MUL = 4
 comptime _FD_H = Float64(1.0e-3)
 
@@ -65,6 +69,7 @@ struct _Case(Movable):
     var scale_given: Bool
     var scale: Float64
     var dead_row: Int          # a query row every head and batch row leaves fully masked, -1 none
+    var mask_grad: Bool        # the float mask is a trainable input (its gradient checked too)
 
     def __init__(out self, name: String, B: Int, H: Int, Hkv: Int, Lq: Int, Lk: Int, d: Int, dv: Int):
         self.name = name
@@ -83,6 +88,7 @@ struct _Case(Movable):
         self.scale_given = False
         self.scale = 0.0
         self.dead_row = -1
+        self.mask_grad = False
 
     def dims(self, heads: Int, length: Int, width: Int) -> List[Int]:
         var out = List[Int]()
@@ -105,8 +111,9 @@ def _case(which: Int) -> _Case:
         var c = _Case("causal", 2, 2, 2, 4, 4, 3, 3)
         c.causal = True
         return c^
-    if which == 2:
-        var c = _Case("cross-additive", 2, 2, 2, 3, 5, 4, 2)
+    if which == 2 or which == 6:
+        var c = _Case("cross-additive" if which == 2 else "cross-additive-mask-grad", 2, 2, 2, 3, 5, 4, 2)
+        c.mask_grad = which == 6
         c.kind = 2
         var md: List[Int] = [2, 1, 1, 5]
         c.mdims = md^
@@ -274,11 +281,33 @@ def _fd_check(c: _Case, which: Int, got: List[Float32], q: List[Float64], k: Lis
                 + String(a) + ", finite differences give " + String(fd))
 
 
+def _fd_mask(which: Int, got: List[Float32], q: List[Float64], k: List[Float64], v: List[Float64],
+             seed: List[Float32]) raises:
+    """Central differences of the float64 loss along every word of the (broadcast) float mask: the mask's
+    gradient sums d loss / d (scaled score + mask) over every score the word is added to."""
+    var c = _case(which)
+    require(len(got) == len(c.mvals), c.name + ": d mask extent")
+    for w in range(len(got)):
+        var x0 = c.mvals[w]
+        c.mvals[w] = Float32(Float64(x0) + _FD_H)
+        var plus = _loss(c, q, k, v, seed)
+        c.mvals[w] = Float32(Float64(x0) - _FD_H)
+        var minus = _loss(c, q, k, v, seed)
+        var step = (Float64(Float32(Float64(x0) + _FD_H)) - Float64(Float32(Float64(x0) - _FD_H)))
+        c.mvals[w] = x0
+        var fd = Float64(0) if step != step or step == 0.0 else (plus - minus) / step
+        var a = Float64(got[w])
+        require(isfinite(a), c.name + ": d mask non-finite at " + String(w))
+        require(abs(a - fd) <= 2e-3 * (1.0 + abs(fd)), c.name + ": d mask at " + String(w) + " is " + String(a)
+                + ", finite differences give " + String(fd))
+
+
 struct _Run(Movable):
     var out: List[Float32]
     var dq: List[Float32]
     var dk: List[Float32]
     var dv: List[Float32]
+    var dm: List[Float32]
     var plain: List[Float32]
 
     def __init__(out self):
@@ -286,23 +315,33 @@ struct _Run(Movable):
         self.dq = List[Float32]()
         self.dk = List[Float32]()
         self.dv = List[Float32]()
+        self.dm = List[Float32]()
         self.plain = List[Float32]()
 
 
-def _call[E: Exec & Movable & Deinitable](
-    mut s: OpsSession[E], c: _Case, hq: Int, hk: Int, hv: Int,
-) raises -> Int:
-    var hs: List[Int] = [hq, hk, hv]
+def _mask[E: Exec & Movable & Deinitable](mut s: OpsSession[E], c: _Case, grad: Bool) raises -> Int:
+    """The case's mask as a session tensor (0 for none): ids words for a boolean mask, float values otherwise
+    (trainable with `grad`)."""
     if c.kind == 1:
         var words = List[Int32](length=len(c.mvals), fill=0)
         for i in range(len(c.mvals)):
             words[i] = Int32(c.mvals[i])
         var cols = c.mdims[len(c.mdims) - 1]
         var src = CastIn(Int(words.unsafe_ptr()), CAST_KIND_SIGNED, 4, len(words) // cols, cols, cols * 4, 4)
-        hs.append(s.upload_ids(src, ShapeN.of(c.mdims)))
+        var h = s.upload_ids(src, ShapeN.of(c.mdims))
         _ = len(words)  # keep-alive past the upload
-    elif c.kind == 2:
-        hs.append(tensor(s, c.mvals, c.mdims))
+        return h
+    if c.kind == 2:
+        return tensor(s, c.mvals, c.mdims, grad)
+    return 0
+
+
+def _call[E: Exec & Movable & Deinitable](
+    mut s: OpsSession[E], c: _Case, hq: Int, hk: Int, hv: Int, hm: Int,
+) raises -> Int:
+    var hs: List[Int] = [hq, hk, hv]
+    if hm != 0:
+        hs.append(hm)
     var ints: List[Int] = [1 if c.causal else 0, 1 if c.scale_given else 0, c.kind]
     var fs: List[Float32] = [Float32(c.scale)]
     return s.op(OPS_ATTENTION_QKV, hs, ints, fs)
@@ -320,7 +359,8 @@ def _run[E: Exec & Movable & Deinitable, KIND: Int](
     var hq = tensor(s[], qv, qd, True)
     var hk = tensor(s[], kv, kd, True)
     var hv = tensor(s[], vv, vd, True)
-    var out = _call(s[], c, hq, hk, hv)
+    var hm = _mask(s[], c, c.mask_grad)
+    var out = _call(s[], c, hq, hk, hv, hm)
     r.out = values(s[], out, od)
     var hseed = tensor(s[], seed, od)
     var weighted = op2(s[], _MUL, out, hseed)
@@ -329,12 +369,28 @@ def _run[E: Exec & Movable & Deinitable, KIND: Int](
     r.dq = gradient(s[], hq, qd)
     r.dk = gradient(s[], hk, kd)
     r.dv = gradient(s[], hv, vd)
+    if c.mask_grad:
+        r.dm = gradient(s[], hm, c.mdims)
+    s[].reset()
+    # The seeded backward (Session.vjp, backward_seed: ImportRules) of the same call with the seed itself must
+    # give the scalar backward's words (d sum(out * seed) / d out is the seed, exactly).
+    var out2 = _call(s[], c, hq, hk, hv, hm)
+    var wrt: List[Int] = [hq, hk, hv]
+    if c.mask_grad:
+        wrt.append(hm)
+    var g = s[].vjp(out2, wrt, hseed, False)
+    same_words(values(s[], g[0], qd), r.dq, c.name + ": vjp dq differs from backward's")
+    same_words(values(s[], g[1], kd), r.dk, c.name + ": vjp dk differs from backward's")
+    same_words(values(s[], g[2], vd), r.dv, c.name + ": vjp dv differs from backward's")
+    if c.mask_grad:
+        same_words(values(s[], g[3], c.mdims), r.dm, c.name + ": vjp d mask differs from backward's")
     s[].reset()
     var p = ops_session[E, KIND](sid)
     var pq = tensor(p[], qv, qd)
     var pk = tensor(p[], kv, kd)
     var pv = tensor(p[], vv, vd)
-    var plain_out = _call(p[], c, pq, pk, pv)
+    var pm = _mask(p[], c, False)
+    var plain_out = _call(p[], c, pq, pk, pv, pm)
     r.plain = values(p[], plain_out, od)
     p[].reset()
     return r^
@@ -361,6 +417,8 @@ def _check_case[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, rid: Int, w
     _fd_check(c, 0, r.dq, q64, k64, v64, seed)
     _fd_check(c, 1, r.dk, q64, k64, v64, seed)
     _fd_check(c, 2, r.dv, q64, k64, v64, seed)
+    if c.mask_grad:
+        _fd_mask(which, r.dm, q64, k64, v64, seed)
     if c.dead_row >= 0:
         for b in range(c.B):
             for h in range(c.H):
@@ -401,6 +459,7 @@ def test_nn_qkv_cases() raises:
             same_words(dev.dq, host.dq, "nn_qkv case " + String(which) + ": device and host dq")
             same_words(dev.dk, host.dk, "nn_qkv case " + String(which) + ": device and host dk")
             same_words(dev.dv, host.dv, "nn_qkv case " + String(which) + ": device and host dv")
+            same_words(dev.dm, host.dm, "nn_qkv case " + String(which) + ": device and host d mask")
         check_cases_serial("nn_qkv", NN_QKV_CASES, device_case)
 
 
