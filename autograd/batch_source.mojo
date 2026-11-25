@@ -47,8 +47,15 @@ background host task; with all cores already busy in the step it would win the r
 THE POSITION is (epoch, consumed): `consumed` batches of `epoch` have been trained (their optimizer step is
 queued). The read-ahead batch is NOT consumed: a checkpoint records the consumed position, so a resume continues
 with the batch that was read ahead but never trained. `held_*` below is the read-ahead; `epoch` / `consumed` the
-consumed position. A source that is closed when the fit call returns (`ahead_after_last` False: the public door
-opens the shards per call) reads nothing ahead after the call's last batch: nobody would train those words.
+consumed position.
+
+THE OWNER (lane fr2-followups). The public `BatchSource` handle holds its opened source on a native owner
+(providers/python/batch_source_pyapi_door.mojo `BatchSourceOwner`), built once and kept across `fit` calls: the
+index, the record table, the epoch's plan, the shard descriptors, the host buffers and the read-ahead batch. So a
+`fit(source=, steps=1)` loop costs O(batch) a step, not O(records) (re-reading the index and every offset table and
+replanning the epoch per call), and the batch read ahead after one call's last step is the next call's first. A
+position written to the handle from outside a fit (`load_state_dict`, `Session.load_training`) drops the owner; the
+next fit rebuilds it once at that position.
 
 THE WAIT (device executor). An upload's host words are staged until the next sync (sequence/exec_device.mojo), so a
 streamed fit that never waited would hold one staged batch per queued step if the disk is faster than the device.
@@ -365,7 +372,6 @@ struct BatchSource(Movable):
     var held_len: Int
     var epoch: Int
     var consumed: Int
-    var ahead_after_last: Bool
 
     def __init__(out self, var spec: BatchSourceSpec):
         self.spec = spec^
@@ -396,7 +402,6 @@ struct BatchSource(Movable):
         self.held_len = 0
         self.epoch = 0
         self.consumed = 0
-        self.ahead_after_last = True
 
     def close(mut self):
         """Close every shard descriptor (idempotent)."""
@@ -406,6 +411,14 @@ struct BatchSource(Movable):
         for k in range(len(self.tgt_fd)):  # driver-loop: over shard descriptors
             _close(self.tgt_fd[k])
             self.tgt_fd[k] = -1
+
+    def release_descriptors(self):
+        """Close every shard descriptor without changing the source: the destructor of an owner that holds it
+        (providers/python/batch_source_pyapi_door.mojo BatchSourceOwner). Use `close` everywhere else."""
+        for k in range(len(self.steps_fd)):  # driver-loop: over shard descriptors
+            _close(self.steps_fd[k])
+        for k in range(len(self.tgt_fd)):  # driver-loop: over shard descriptors
+            _close(self.tgt_fd[k])
 
     def window(self) -> Int:
         return self.spec.batch * self.spec.bucket
@@ -491,6 +504,10 @@ struct BatchSource(Movable):
         if batch < 0 or batch >= self.n_batches:
             raise Error("ValueError: BatchSource: batch " + String(batch) + " is outside the epoch")
         self.plan(epoch)
+        # the host buffers are overwritten below: until this read succeeds they hold no batch (a source kept
+        # across fit calls must not reuse a half-read batch after a failed read)
+        self.held_epoch = -1
+        self.held_batch = -1
         var lo = self.bounds[batch]
         var rows = self.bounds[batch + 1] - lo
         var length = 0

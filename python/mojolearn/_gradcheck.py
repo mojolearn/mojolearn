@@ -8,8 +8,6 @@ native session operation (custom forward and backward, add, scale, mul, sum,
 abs, max); the Python here draws the seeded random directions, reads back a few
 scalars per input and compares them.
 """
-import math
-
 __all__ = ["gradcheck", "GradcheckError"]
 
 # float32 unit roundoff (2 ** -24): the rounding of one float32 operation.
@@ -48,7 +46,7 @@ def gradcheck(forward, backward, inputs, *, saved=(), outputs=None, expected=Non
 
     the other inputs held fixed. Input ``i`` agrees when
     ``|analytical_i - numerical_i| <= atol + rtol * max(|analytical_i|, |numerical_i|) + noise``,
-    where ``noise = (2 + log2(n)) * 2**-24 * sum(|v * y|) / eps`` bounds the
+    where ``noise = (2 + ceil(log2(n))) * 2**-24 * sum(|v * y|) / eps`` bounds the
     float32 rounding of the two forward evaluations (``n`` output elements).
     Every input is checked, and an error names each one that disagrees and by
     how much.
@@ -164,7 +162,10 @@ def gradcheck(forward, backward, inputs, *, saved=(), outputs=None, expected=Non
             op = e.custom_op(forward, backward, saved=saved, outputs=outputs)
             magnitude = e.scalar(_weighted_sum(e, _as_tuple(e.custom(op, *xs)), vs, absolute=True))
             count = sum(int(np.prod(shape)) for shape in out_shapes)
-            noise = (2.0 + math.log2(max(count, 1))) * _FLOAT32_ROUNDOFF * magnitude / eps
+            # ceil(log2(count)) as an exact integer (the summation depth of a pairwise
+            # reduction), so the bound needs no platform libm and is the same everywhere.
+            depth = (max(count, 1) - 1).bit_length()
+            noise = (2.0 + depth) * _FLOAT32_ROUNDOFF * magnitude / eps
             for i in floats:
                 d = e.tensor(directions[i])
                 step = e.scale(d, eps)

@@ -19,7 +19,7 @@ from providers.python.autograd_python_errors_pyapi_unpack import graph_python_er
 from providers.python.autograd_session_public_request_pyapi_unpack import ops_session_public_connect_py
 from providers.python.autograd_session_public_request_pyapi_pack import ops_session_public_call_py
 from providers.python.autograd_program_public_request_pyapi_pack import ops_program_public_call_py
-from providers.python.batch_source_pyapi_door import batch_source_call_py
+from providers.python.batch_source_pyapi_door import batch_source_call_py, BatchSourceOwner
 from providers.python.autograd_session_public_dispatch_pyapi_unpack import NativeSessionPublicAPI
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -672,6 +672,8 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
         # the operation session (autograd/ops_api.mojo)
         _ = m.add_type[SessionLifetime[HostExec, OPS_HOST]]("_OpsSessionLifetime")
+        # a BatchSource handle's opened source, kept across fit calls (providers/python/batch_source_pyapi_door.mojo)
+        _ = m.add_type[BatchSourceOwner[False]]("_BatchSourceOwner")
         m.def_function[ops_session_create_binding]("ops_session_create")
         m.def_function[small_mlp_program_binding]("small_mlp_program")
         # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.

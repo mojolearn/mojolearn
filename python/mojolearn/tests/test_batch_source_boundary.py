@@ -188,3 +188,28 @@ def test_a_program_fixed_to_one_length_is_refused_on_another(tmp_path):
         opt = s.optimizer("sgd", lr=0.1)
         with pytest.raises(Exception):
             fixed.fit(source=src, optimizer=opt, parameters=[w], loss="output", steps=1)
+
+
+def test_one_step_fits_keep_one_opened_source_and_a_loaded_position_rebuilds_it(tmp_path):
+    # lane fr2-followups: the handle keeps its opened source on a native owner across fit calls (no reopen of the
+    # index and the epoch plan per step); a position set from outside a fit drops it and the next fit rebuilds it
+    src = ops.BatchSource(_shards(str(tmp_path)), 2)
+    assert src._owner is None
+    with ops.Session() as s:
+        prog, w = _program(s)
+        opt = s.optimizer("adam", lr=0.01)
+        prog.fit(source=src, optimizer=opt, parameters=[w], loss="output", steps=1)
+        owner = src._owner
+        assert owner is not None
+        for _ in range(99):
+            prog.fit(source=src, optimizer=opt, parameters=[w], loss="output", steps=1)
+            assert src._owner is owner
+        state = src.state_dict()
+        assert (state["epoch"], state["consumed"]) == (49, 2)
+        src.load_state_dict(dict(state, epoch=3, consumed=1))
+        assert src._owner is None
+        before = src.next_records()
+        prog.fit(source=src, optimizer=opt, parameters=[w], loss="output", steps=1)
+        assert src._owner is not None and src._owner is not owner
+        assert (src.state_dict()["epoch"], src.state_dict()["consumed"]) == (3, 2)
+        assert len(before) == 2

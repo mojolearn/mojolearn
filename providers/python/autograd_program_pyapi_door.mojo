@@ -21,7 +21,7 @@ from providers.python.autograd_program_arrays_pyapi_door import output_array, ou
 from autograd.tape import Tape
 from autograd.program_io import ProgramInput, HostArray
 from autograd.program_entries import program_execute_prepare, program_execute_run, program_fit_parameters, program_fit_native, program_fit_source
-from providers.python.batch_source_pyapi_door import batch_source_spec, batch_source_position_out
+from providers.python.batch_source_pyapi_door import batch_source_spec, batch_source_position_out, batch_source_held
 from providers.python.autograd_program_arrays_pyapi_door import host_arrays_py, output_array_unfilled
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.ops_api import ops_session
@@ -563,7 +563,8 @@ def ops_program_fit_source_py[E: Exec & Movable & Deinitable, KIND: Int](
     shuffle: PythonObject, seed: PythonObject,
 ) raises -> PythonObject:
     """Program.fit(source=) (lane batch-source): UNPACK the source handle and the options, RUN
-    `program_fit_source`, PACK the curve, the epochs run and the source's consumed position (written back to the
+    `program_fit_source` on the handle's opened source (kept on its native owner across calls, lane fr2-followups),
+    PACK the curve, the epochs run and the source's consumed position (written back to the
     handle). The batches, their size, order and padding are the source's: arrays and targets must be omitted, and
     a batch_size, shuffle or seed that is neither the fit's default (not given) nor the source's own value is
     refused by name (lane fable-review-2: they were read by nobody, so `fit(source=src, batch_size=64)` trained
@@ -601,8 +602,10 @@ def ops_program_fit_source_py[E: Exec & Movable & Deinitable, KIND: Int](
         raise Error("ValueError: Program.fit(source=) draws its order from the source's seed (BatchSource(seed="
                     + String(spec.seed) + ")); omit seed or open the source with that seed")
     var curve = output_array(ShapeN.of([count]))
+    # the handle's opened source, built once and kept across calls (batch_source_pyapi_door.mojo THE OWNER)
+    var src = batch_source_held[E.IS_DEVICE](source, spec^)
     var result = program_fit_source[E, KIND](
-        Int(py=sid), Int(py=pid), spec^, kind, Float32(py=delta), opt, params, count, max_steps,
+        Int(py=sid), Int(py=pid), src[], kind, Float32(py=delta), opt, params, count, max_steps,
         FP(unsafe_from_address=Int(py=curve.__array_interface__["data"][0])), condition_id, otherwise_id)
     batch_source_position_out(source, result.epoch, result.consumed)
     var b = native_loaded_module("builtins")
