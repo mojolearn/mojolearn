@@ -237,7 +237,12 @@ def _(ml, X, yc, yr, Xh=None):
     Xm = np.ascontiguousarray(X[:256, :8], dtype=np.float32)
     t = _three_class(X[:256])
     out = m.train_steps(Xm[:128], t[:128], 2)
-    batched = [np.asarray(out["losses"], dtype=np.float32)] + [np.asarray(g) for g in out["gradients"]]
+    # `gradients` is a dict keyed weight1, bias1, weight2, bias2 (bindings/small_mlp_native_door.mojo
+    # _gradients_dict): iterating it gave the NAMES, which _h refuses as text (the clean TypeError of
+    # sab2b-mul_add-training-cpu at d1641666a4). Hash the four arrays in the registry order.
+    grads_out = out["gradients"]
+    batched = [np.asarray(out["losses"], dtype=np.float32)] + [
+        np.asarray(grads_out[k]) for k in ("weight1", "bias1", "weight2", "bias2")]
     loss, grads = m.loss_and_grads(Xm[128:192], t[128:192])
     split_grads = [np.asarray(g) for g in grads]
     step = m.apply_gradients(grads)
