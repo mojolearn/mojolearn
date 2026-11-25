@@ -58,6 +58,8 @@ from tsa.impl.timeSeries.kpss_fused import (
 from tsa.impl.auto_arima import select_d
 from tsa.impl.select_d_fast import KPSS_ONE_WAIT, kpss_one_wait
 from tsa.impl.stationarity import kpss_test
+from tsa.tsa_store import TsaSeriesIn, tsa_series_fill
+from core.scope_store_slot import scope_input_block
 
 
 def _upload_f32(
@@ -94,6 +96,44 @@ def kpss_test_host(
     s: Int,
     pval_threshold: Float32,
 ) raises -> Int:
+    """`kpss_test` of the caller's series-major host words (the checks' form)."""
+    _refuse_empty_shape(batch_size, n_obs, "kpss_test")
+    return _kpss_test_series(TsaSeriesIn(y_ptr), flags_ptr, stat_ptr, batch_size, n_obs, d, D, s, pval_threshold)
+
+
+def kpss_test_host(
+    y_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    flags_ptr: MutPointer[UInt8, MutUntrackedOrigin],
+    stat_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    batch_size: Int,
+    n_obs: Int,
+    d: Int,
+    D: Int,
+    s: Int,
+    pval_threshold: Float32,
+    scope_block: Int,
+    layout: Int,
+) raises -> Int:
+    """The operations table's form (lane gd-resident-2): `scope_block` 0, or
+    the door's `resident()` scope block (core/scope_store_slot.mojo): the
+    series is then the scope's resident slot of the caller's words (C order
+    when `layout` is 1), laid out on the device (tsa/tsa_store.mojo)."""
+    _refuse_empty_shape(batch_size, n_obs, "kpss_test")
+    var src = TsaSeriesIn(y_ptr, scope_input_block(scope_block, 0), layout, batch_size * n_obs)
+    return _kpss_test_series(src, flags_ptr, stat_ptr, batch_size, n_obs, d, D, s, pval_threshold)
+
+
+def _kpss_test_series(
+    src: TsaSeriesIn,
+    flags_ptr: MutPointer[UInt8, MutUntrackedOrigin],
+    stat_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    batch_size: Int,
+    n_obs: Int,
+    d: Int,
+    D: Int,
+    s: Int,
+    pval_threshold: Float32,
+) raises -> Int:
     """`cuml.tsa.stationarity.kpss_test(y, d, D, s, pval_threshold)`.
 
     Writes `batch_size` uint8 to `flags_ptr` (1 stationary, 0 not) and
@@ -106,7 +146,6 @@ def kpss_test_host(
     series is `0.0` by DEVIATION 672, not a computed NaN; it interpolates
     to their `pvalue = 0.10` and therefore to their decision.
     """
-    _refuse_empty_shape(batch_size, n_obs, "kpss_test")
     var ctx = process_ctx[_DEVCTX_SLOT]()
     comptime if TSA_KPSS_PACK:
         # lane/apple-fast-gap-tsa (TSA_KPSS_PACK, default; FAST +
@@ -114,7 +153,7 @@ def kpss_test_host(
         # input and the packed outputs, one wait (kpss_fused.mojo::kpss_rounds)
         if d == 0 and D == 0 and n_obs <= KPSS_FUSED_MAX_N:
             var res = List[Float32]()
-            kpss_rounds(ctx, y_ptr, batch_size, n_obs, 1, pval_threshold, res)
+            kpss_rounds(ctx, src, batch_size, n_obs, 1, pval_threshold, res)
             for b in range(batch_size):
                 stat_ptr.unsafe_store(b, res[b * KPSS_PACK_W])
                 flags_ptr.unsafe_store(b, UInt8(1) if res[b * KPSS_PACK_W + 1] != Float32(0.0) else UInt8(0))
@@ -127,11 +166,17 @@ def kpss_test_host(
         # the primitive's kernels (select_d_fast.mojo::kpss_one_wait). False
         # is a refusal, raised by name by the sequence below.
         if kpss_one_wait(
-            ctx, y_ptr, flags_ptr, stat_ptr, batch_size, n_obs, d, D, s, pval_threshold
+            ctx, src, flags_ptr, stat_ptr, batch_size, n_obs, d, D, s, pval_threshold
         ):
             _ = ctx^
             return batch_size
-    var y = _upload_f32(ctx, y_ptr, batch_size * n_obs)
+    var y: DeviceBuffer[DType.float32]
+    if src.resident():
+        # lane gd-resident-2: the scope's resident series, laid out on the device
+        y = ctx.enqueue_create_buffer[DType.float32](max(1, batch_size * n_obs))
+        tsa_series_fill(ctx, y, src, batch_size, n_obs)
+    else:
+        y = _upload_f32(ctx, src.host, batch_size * n_obs)
     var res = kpss_test(
         ctx, y, batch_size, n_obs, d, D, s, pval_threshold, KPSS_ELEM_TPB
     )
@@ -158,6 +203,40 @@ def select_d_host(
     d_max: Int,
     pval_threshold: Float32,
 ) raises -> Int:
+    """`select_d` of the caller's series-major host words (the checks' form)."""
+    _refuse_empty_shape(batch_size, n_obs, "select_d")
+    return _select_d_series(TsaSeriesIn(y_ptr), d_ptr, batch_size, n_obs, D, s, d_max, pval_threshold)
+
+
+def select_d_host(
+    y_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    d_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    batch_size: Int,
+    n_obs: Int,
+    D: Int,
+    s: Int,
+    d_max: Int,
+    pval_threshold: Float32,
+    scope_block: Int,
+    layout: Int,
+) raises -> Int:
+    """The operations table's form (lane gd-resident-2): `kpss_test_host`'s
+    scope block and layout words."""
+    _refuse_empty_shape(batch_size, n_obs, "select_d")
+    var src = TsaSeriesIn(y_ptr, scope_input_block(scope_block, 0), layout, batch_size * n_obs)
+    return _select_d_series(src, d_ptr, batch_size, n_obs, D, s, d_max, pval_threshold)
+
+
+def _select_d_series(
+    src: TsaSeriesIn,
+    d_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    batch_size: Int,
+    n_obs: Int,
+    D: Int,
+    s: Int,
+    d_max: Int,
+    pval_threshold: Float32,
+) raises -> Int:
     """auto_arima's "Choose the hyper-parameter d" block
     (`auto_arima.pyx:318-343`), as a host loop over `kpss_test`.
 
@@ -165,7 +244,6 @@ def select_d_host(
     NOT chosen here and must be given: their `D` comes from statsmodels'
     STL on the host and is not implemented (`tsa/NOT_IMPLEMENTED.tsv`).
     """
-    _refuse_empty_shape(batch_size, n_obs, "select_d")
     var ctx = process_ctx[_DEVCTX_SLOT]()
     comptime if TSA_SELD_FUSED:
         # lane/apple-fast-gap-tsa (TSA_SELD_FUSED, default; FAST +
@@ -181,7 +259,7 @@ def select_d_host(
                         + ") must be greater than d + s*D (" + String(d_) + ")"
                     )
             var res = List[Float32]()
-            kpss_rounds(ctx, y_ptr, batch_size, n_obs, d_max, pval_threshold, res)
+            kpss_rounds(ctx, src, batch_size, n_obs, d_max, pval_threshold, res)
             for b in range(batch_size):
                 d_ptr.unsafe_store(b, Int32(Int(res[b * KPSS_PACK_W + 3])))
             _ = ctx^
@@ -194,8 +272,12 @@ def select_d_host(
     var count = batch_size * n_obs
     var host = ctx.enqueue_create_host_buffer[DType.float32](count)
     var y = ctx.enqueue_create_buffer[DType.float32](count)
-    copy_f32(y_ptr, host.unsafe_ptr(), count)
-    ctx.enqueue_copy(dst_buf=y, src_ptr=host.unsafe_ptr())
+    if src.resident():
+        # lane gd-resident-2: the scope's resident series, laid out on the device
+        tsa_series_fill(ctx, y, src, batch_size, n_obs)
+    else:
+        copy_f32(src.host, host.unsafe_ptr(), count)
+        ctx.enqueue_copy(dst_buf=y, src_ptr=host.unsafe_ptr())
     var chosen = List[Int32]()
     try:
         chosen = select_d(ctx, y, batch_size, n_obs, D, s, d_max, pval_threshold)

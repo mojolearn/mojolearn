@@ -319,7 +319,7 @@ def fixture(unit: Int) raises:
                 and rank.adjacency == 0 and rank.x == 3 and rank.n == 4 and rank.personalization == 0
                 and rank.dangling == 5 and rank.nstart == 0 and rank.max_iter == 100 and rank.tol == 1e-6
                 and not rank.binary and rank.alpha == 0.85, "pagerank request")
-        var parts = ComponentsRequest(False, 0, 0, 0, 1, 2, 3)
+        var parts = ComponentsRequest(False, 0, 0, 0, 1, 2, 3, 0)
         require(not parts.csr and parts.adjacency == 1 and parts.labels == 2 and parts.n == 3,
                 "components request")
         var louvain = LouvainRequest(False, 0, 0, 0, 0, 1, 2, 3, 0, 1.0, 1e-7)

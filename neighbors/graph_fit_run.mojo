@@ -132,6 +132,9 @@ struct ComponentsRequest(Copyable, Movable):
     # `csr`: the adjacency as int32 `indptr` / `indices` (`nnz` entries);
     # else `adjacency` is the dense float32 n x n matrix. `labels` (n int32)
     # receives the component labels, renumbered by first occurrence.
+    # `scope_block`: 0, or the door's `resident()` scope block for the dense
+    # adjacency (bindings/function_scope_door.mojo `ScopeBlock`; lane
+    # gd-resident-2): the GPU image reads A from its store in place.
     var csr: Bool
     var indptr: Int
     var indices: Int
@@ -139,6 +142,7 @@ struct ComponentsRequest(Copyable, Movable):
     var adjacency: Int
     var labels: Int
     var n: Int
+    var scope_block: Int
 
 
 def components_run(driver: XnDriver, request: ComponentsRequest) raises -> Int:
@@ -155,7 +159,8 @@ def components_run(driver: XnDriver, request: ComponentsRequest) raises -> Int:
         _ = xn_request_run(driver, xn_cc_csr_request(request.indptr, request.indices, request.labels, _i32_at(info),
                                                      n, request.nnz))
     else:
-        _ = xn_request_run(driver, xn_cc_dense_request(request.adjacency, request.labels, _i32_at(info), n))
+        _ = xn_request_run(driver, xn_cc_dense_request(request.adjacency, request.labels, _i32_at(info), n,
+                                                       request.scope_block))
     var components = xn_cc_csr_components(_i32_at(info))
     _ = info^
     xn_cc_relabel_check(components >= 0 or n == 0)

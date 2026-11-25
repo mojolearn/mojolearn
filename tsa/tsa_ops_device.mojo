@@ -73,10 +73,13 @@ def tsa_hw_ops_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         elif operation == TSA_OP_HW_QUERY_RESIDENT:
             r[] = holtwinters_query_resident(p[0], f32_ptr(a[0]), seasonal_name(p[3]), p[1], p[2])
         elif operation == TSA_OP_KPSS_TEST:
+            # p[5], p[6] (optional, lane gd-resident-2): the door's `resident()`
+            # scope block and the series layout (1: the caller's C order)
             r[] = kpss_test_host(_f32_ptr(a[0]), _u8_ptr(a[1]), _f32_ptr(a[2]), p[0], p[1], p[2], p[3], p[4],
-                Float32(f[0]))
+                Float32(f[0]), p[5] if np > 5 else 0, p[6] if np > 5 else 0)
         elif operation == TSA_OP_SELECT_D:
-            r[] = select_d_host(_f32_ptr(a[0]), _i32_ptr(a[1]), p[0], p[1], p[2], p[3], p[4], Float32(f[0]))
+            r[] = select_d_host(_f32_ptr(a[0]), _i32_ptr(a[1]), p[0], p[1], p[2], p[3], p[4], Float32(f[0]),
+                p[5] if np > 5 else 0, p[6] if np > 5 else 0)
         else:
             raise Error("tsa ops: unknown operation " + String(operation))
         return 0

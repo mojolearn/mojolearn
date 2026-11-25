@@ -55,6 +55,12 @@ def connect():
     context.update(owner_array_slots=ownership["owner_array_slots"],
                    arena_native_types=ownership["owner_native_types"], arena_memoryview=memoryview,
                    owner_mmap_class=ownership["owner_mmap_class"])
+    # The `resident()` scope keys (lane gd-resident-2): kpss_test and select_d
+    # read a device-resident series in place inside a scope
+    # (bindings/function_scope_door.mojo).
+    from ._arena_io import _Scope, _LOCAL
+    context.update(arena_local=_LOCAL, arena_scope_class=_Scope,
+                   arena_scope_owner=vars(_Scope)["_owner"].__get__)
     import struct
     context["arena_half_copy_canonical"] = struct.pack("<e", struct.unpack("<e", b"\x01\x7c")[0]) == b"\x00\x7e"
 

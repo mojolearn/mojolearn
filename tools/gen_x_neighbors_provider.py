@@ -21,9 +21,11 @@ EXTRA = [('ocsvm_alpha_init',(2,1,1)),('unit_ff',(3,1,0)),('ocsvm_resident',(5,5
 # The packed and auxiliary operations whose LAST int is optional: nan_cells'
 # GPU flag, and the finite status address (lane a8b-device-x-neighbors-rest:
 # the host address of the int32 word that receives X's finite status, tested
-# behind its upload on the GPU, by one parallel scan on the CPU column).
+# behind its upload on the GPU, by one parallel scan on the CPU column);
+# cc_iterate's `resident()` scope block address (lane gd-resident-2,
+# core/scope_store_slot.mojo; the host column ignores it).
 OPTIONAL_LAST = ('sqdist', 'kernel', 'knn_sq', 'nc_std', 'nc_decision', 'nc_stats', 'knn_sq_tiled', 'nan_cells',
-                 'nc_labels', 'nc_proba', 'lp_dense_proba')
+                 'nc_labels', 'nc_proba', 'lp_dense_proba', 'cc_iterate')
 # A row's body ends at the next top-level line (a def, a comptime, a comment), so module-level
 # declarations the binding keeps after its last packed wrapper (the KPCA and OneClassSVM
 # provider slots, be56b455ef) are never copied into a row.

@@ -111,10 +111,34 @@ def tsa_kpss_run(route: DeviceRoute, y: Int, flags: Int, stat: Int, batch: Int, 
     return entry_ref_call(route.entry, TSA_OP_KPSS_TEST, a, p, f)
 
 
+def tsa_kpss_run(route: DeviceRoute, y: Int, flags: Int, stat: Int, batch: Int, n_obs: Int, d: Int,
+    seasonal_d: Int, period: Int, pval_threshold: Float64, scope_block: Int, layout: Int) raises -> Int:
+    """With the door's `resident()` scope block (lane gd-resident-2; 0: the
+    plain request) and the series layout (1: the caller's C order, read
+    from the GPU image's resident slot)."""
+    if scope_block == 0:
+        return tsa_kpss_run(route, y, flags, stat, batch, n_obs, d, seasonal_d, period, pval_threshold)
+    var a: List[Int] = [y, flags, stat]
+    var p: List[Int] = [batch, n_obs, d, seasonal_d, period, scope_block, layout]
+    var f: List[Float64] = [pval_threshold]
+    return entry_ref_call(route.entry, TSA_OP_KPSS_TEST, a, p, f)
+
+
 def tsa_select_d_run(route: DeviceRoute, y: Int, dst: Int, batch: Int, n_obs: Int, seasonal_d: Int,
     period: Int, d_max: Int, pval_threshold: Float64) raises -> Int:
     """`select_d`: `batch` int32 differencing orders at `dst`."""
     var a: List[Int] = [y, dst]
     var p: List[Int] = [batch, n_obs, seasonal_d, period, d_max]
+    var f: List[Float64] = [pval_threshold]
+    return entry_ref_call(route.entry, TSA_OP_SELECT_D, a, p, f)
+
+
+def tsa_select_d_run(route: DeviceRoute, y: Int, dst: Int, batch: Int, n_obs: Int, seasonal_d: Int,
+    period: Int, d_max: Int, pval_threshold: Float64, scope_block: Int, layout: Int) raises -> Int:
+    """`tsa_kpss_run`'s scope block and layout words for `select_d`."""
+    if scope_block == 0:
+        return tsa_select_d_run(route, y, dst, batch, n_obs, seasonal_d, period, d_max, pval_threshold)
+    var a: List[Int] = [y, dst]
+    var p: List[Int] = [batch, n_obs, seasonal_d, period, d_max, scope_block, layout]
     var f: List[Float64] = [pval_threshold]
     return entry_ref_call(route.entry, TSA_OP_SELECT_D, a, p, f)

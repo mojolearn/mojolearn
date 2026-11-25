@@ -17,6 +17,7 @@
 # shells' `empty` / `_empty_out`, zero-filled: every element is written by
 # the kernel). MOJOLEARN_XN_LAZY_OUT (an opt-in memory-map A/B arm for
 # outputs of 64 MB or more, same zeros and the same bits) is not consulted.
+from bindings.function_scope_door import FunctionScope, ScopeBlock
 from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit_arguments
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
@@ -436,15 +437,26 @@ def _connected_components(args: PythonObject, context: PythonObject) raises -> P
         a = _adjacency(args[1], context)
         n = Int(py=a.shape[0])
     var labels = family_array(Python.tuple(max(n, 0)), "<i4", context)
+    # Lane gd-resident-2: inside `resident()` the GPU image reads the dense
+    # adjacency from its own store in place (found, or put once per scope);
+    # outside a scope one atomic load and the block stays empty (address 0).
+    var block = ScopeBlock()
+    if not csr.present and n > 0:
+        var scope = FunctionScope(context)
+        if scope.active():
+            block.keep(0, scope, args[1], a, n * n)
     var request = ComponentsRequest(csr.present, _addr(csr.indptr) if csr.present else 0,
                                     _addr(csr.indices) if csr.present else 0,
                                     Int(py=csr.indices.shape[0]) if csr.present else 0,
-                                    0 if csr.present else _addr(a), _addr(labels), n)
+                                    0 if csr.present else _addr(a), _addr(labels), n, block.address())
     var image = LofConnection(binding)
     var components = 0
     # RUN
-    with GILReleased(Python()):
-        components = components_run(image.driver, request)
+    try:
+        with GILReleased(Python()):
+            components = components_run(image.driver, request)
+    finally:
+        block.settle()  # drop a pin the image's scope cache did not keep
     _ = csr^  # keep the admitted lists alive through the native call above
     _ = a  # keep the Python object alive through the native call above
     _ = labels  # keep the Python object alive through the native call above

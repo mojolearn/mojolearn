@@ -230,6 +230,14 @@ def xn_cc_dense_request(a: Int, lab: Int, info: Int, n: Int) -> XnOpRequest:
     return XnOpRequest("cc_iterate", [a, lab, info], [n], List[Float64]())
 
 
+def xn_cc_dense_request(a: Int, lab: Int, info: Int, n: Int, scope_block: Int) -> XnOpRequest:
+    """With the door's `resident()` scope block (lane gd-resident-2,
+    core/scope_store_slot.mojo): the optional last int; 0 outside a scope."""
+    if scope_block == 0:
+        return xn_cc_dense_request(a, lab, info, n)
+    return XnOpRequest("cc_iterate", [a, lab, info], [n, scope_block], List[Float64]())
+
+
 def xn_cc_csr_components(info: Int) -> Int:
     """The component count the CSR iteration already knows, or -1 when the
     labels still need the relabel pass."""

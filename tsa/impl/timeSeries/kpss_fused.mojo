@@ -45,6 +45,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from core.hostptr import copy_f32
+from tsa.tsa_store import TsaSeriesIn, tsa_series_fill
 from core.pinned_reduce import pinned_block_min, pinned_block_prefix_sum, pinned_block_sum
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul_add
@@ -228,7 +229,7 @@ def kpss_rounds_kernel(
 
 def kpss_rounds(
     ctx: DeviceContext,
-    y_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    src: TsaSeriesIn,
     batch_size: Int,
     n_obs: Int,
     rounds: Int,
@@ -246,10 +247,15 @@ def kpss_rounds(
     var words = total + KPSS_PACK_W * batch_size
     var dbuf = ctx.enqueue_create_buffer[DType.float32](words)
     var hbuf = ctx.enqueue_create_host_buffer[DType.float32](words)
-    copy_f32(y_ptr, hbuf.unsafe_ptr(), total)
     var din = dbuf.create_sub_buffer[DType.float32](0, total)
     var dout = dbuf.create_sub_buffer[DType.float32](total, KPSS_PACK_W * batch_size)
-    ctx.enqueue_copy(dst_buf=din, src_ptr=hbuf.unsafe_ptr())
+    if src.resident():
+        # Lane gd-resident-2: the scope's resident series laid out on the
+        # device (tsa/tsa_store.mojo): no host copy, no upload.
+        tsa_series_fill(ctx, din, src, batch_size, n_obs)
+    else:
+        copy_f32(src.host, hbuf.unsafe_ptr(), total)
+        ctx.enqueue_copy(dst_buf=din, src_ptr=hbuf.unsafe_ptr())
     var lags0 = kpss_lags(n_obs)
     var c0 = kpss_s2B_coefficients(n_obs, lags0)
     var n1 = n_obs - 1 if n_obs > 1 else 1

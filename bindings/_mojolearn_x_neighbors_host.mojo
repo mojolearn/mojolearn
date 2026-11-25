@@ -876,8 +876,9 @@ def cc_iterate_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) rai
     var v_lab = _a(a_, 1)
     var v_info = _a(a_, 2)
     var v_n = _n(i_, 0)
+    var v_scope = _n(i_, 1) if len(i_) > 1 else 0
     with GILReleased(Python()):
-        op_cc_iterate(v_a, v_lab, v_info, v_n)
+        op_cc_iterate(v_a, v_lab, v_info, v_n, v_scope)
     return PythonObject(None)
 
 

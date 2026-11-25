@@ -172,10 +172,10 @@ def ivf_sq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
 
 def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: dataset, queries, candidates (int32 m x k0, < 0 = padding), out_d, out_i.
-    params: n, d, m, k0, k[, root[, status]] (root 1: the euclidean metric's square
-    roots of the kept distances, lane apple-fast-py2mojo-cluster; status: the
-    host address of the int32 word that receives the dataset's and queries'
-    finite status)."""
+    params: n, d, m, k0, k[, root[, status[, scope block]]] (root 1: the euclidean
+    metric's square roots of the kept distances, lane apple-fast-py2mojo-cluster;
+    status: the host address of the int32 word that receives the dataset's and
+    queries' finite status, 0 for none)."""
     var n = p_int(params, 0)
     var d = p_int(params, 1)
     var m = p_int(params, 2)
@@ -183,6 +183,9 @@ def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonOb
     var k = p_int(params, 4)
     var root = len(params) > 5 and p_int(params, 5) != 0
     var status = p_int(params, 6) if len(params) > 6 else 0
+    # params[7]: the door's `resident()` scope block (lane gd-resident-2,
+    # bindings/function_scope_door.mojo `ScopeBlock`), 0 or absent: none.
+    var scope_block = p_int(params, 7) if len(params) > 7 else 0
     if n <= 0 or d <= 0 or m <= 0 or k0 <= 0 or k <= 0 or k > k0:
         raise Error("refine: need positive shapes and 1 <= k <= n_candidates")
     # The caller's arrays themselves (lane fx-board-modelsel-metrics,
@@ -196,7 +199,7 @@ def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonOb
     var odp = f32_ptr(a_int(addrs, 3))
     var oip = i32_ptr(a_int(addrs, 4))
     with GILReleased(Python()):
-        refine_device_ptr(xp, n, d, qp, m, candp, k0, k, odp, oip, root, status)
+        refine_device_ptr(xp, n, d, qp, m, candp, k0, k, odp, oip, root, status, scope_block)
     return PythonObject(m)
 
 
