@@ -220,6 +220,16 @@ from autograd.nn_composed import (
     COMPOSED_SABOTAGE_GROUP_STATE_HOST,
 )
 # nn-blocks-composed end
+# session-ops-rest begin: norms, prelu, mish, multi-head attention, positional encoding, losses and raw SSM scans as
+# Session ops, codes 160..174 (autograd/session_ops_rest.mojo)
+from autograd.session_ops_rest import (
+    SOR_FIRST, SOR_LAST, SOR_BATCH_NORM, SOR_GROUP_NORM, SOR_INSTANCE_NORM, SOR_PRELU, SOR_MISH, SOR_MHA,
+    SOR_POS_ENC, SOR_SMOOTH_L1, SOR_NLL, SOR_KL_DIV, SOR_BCE_POS_WEIGHT, SOR_CTC, SOR_SELECTIVE_SCAN, SOR_SSD_SCAN,
+    SOR_TRAPEZOID_SCAN, sor_name, sor_batch_norm, sor_group_norm, sor_instance_norm, sor_prelu, sor_mish,
+    sor_multi_head_attention, sor_positional_encoding, sor_smooth_l1_loss, sor_nll_loss, sor_kl_div,
+    sor_bce_with_logits, sor_ctc_loss, sor_selective_scan, sor_ssd_scan, sor_trapezoid_scan,
+)
+# session-ops-rest end
 
 # Executor kinds of a session (the binding that opened it).
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea G): the packed argument
@@ -2646,9 +2656,143 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     # session-ops-resize end
 
 
-    # session-ops-rest begin: codes 160..179 (sub-lane session-ops-rest replaces this body)
+    # session-ops-rest begin: codes 160..179 (autograd/session_ops_rest.mojo has the forward glue)
     def _layer_rest(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Tensor:
-        """Norms, activations with parameters, multi-head attention, positional encoding and the losses."""
+        """Norms, activations with parameters, multi-head attention, positional encoding, the losses and the raw
+        state-space scans. The operands and words of each code (read once by the ops door at UNPACK):
+          160 batch_norm, 162 instance_norm: [x, (running_mean, running_var), (weight, bias)], ints [training
+              (instance_norm: use_input_stats), running given, affine], floats [momentum, eps]
+          161 group_norm: [x, (weight, bias)], ints [num_groups, affine], floats [eps]
+          163 prelu [x, weight]; 164 mish [x]
+          165 multi_head_attention: [query, key, in-projection (self: (E, 3E); cross: Wq (E, E), then [Wk | Wv]
+              (kdim, 2E)), out_proj_weight, (in_proj_bias (cross: bq, then [bk | bv]), out_proj_bias),
+              (key_lengths)], ints [num_heads, self-attention, bias, is_causal, key_lengths given, training,
+              seed low, seed high, counter], floats [dropout_p]
+          166 positional_encoding: [x], ints [training, seed low, seed high, counter], floats [dropout_p]
+          167 smooth_l1_loss [input, target] ints [reduction] floats [beta]; 168 nll_loss [input, target ids]
+              ints [reduction]; 169 kl_div [input, target] ints [reduction (2 batchmean)]; 170
+              binary_cross_entropy_with_logits [input, target] ints [reduction] floats [pos_weight]
+          171 ctc_loss: [log_probs, targets, input_lengths, target_lengths] (each of the last three float values
+              or Session.ids), ints [blank, reduction, zero_infinity]
+          172 selective_scan [u, delta, A_log, B, C, D]; 173 ssd_scan [x, dt, A_log, D]; 174 trapezoid_scan
+              [v, k, q, dt, A, trap, D] ints [heads]"""
+        var n = len(x)
+        var ni = len(ints)
+        var nf = len(fs)
+        var name = sor_name(code)
+        if code < SOR_FIRST or code > SOR_LAST:
+            raise Error("ops: unknown operation code " + String(code))
+        # every operand is a floating-point tensor, except the class ids of nll_loss and the targets and lengths
+        # of ctc_loss (either kind)
+        for k in range(n):  # small-loop(n: the op's operands, at most 9): handle metadata, no data
+            var ids_ok = (code == SOR_NLL and k == 1) or (code == SOR_CTC and k >= 1)
+            if self.int_words[self._slot(hs[k])] and not ids_ok:
+                raise Error("ValueError: ops: " + name + ": operand " + String(k)
+                            + " must be a floating-point tensor (made with Session.tensor)")
+        if code == SOR_BATCH_NORM or code == SOR_INSTANCE_NORM:
+            if ni < 3 or nf < 2:
+                _need(name, n, 1, 3, ni, 2, nf)
+            var has_run = ints[1] == 1
+            var affine = ints[2] == 1
+            _need(name, n, 1 + (2 if has_run else 0) + (2 if affine else 0), 3, ni, 2, nf)
+            var rm: Optional[Tensor] = None
+            var rv: Optional[Tensor] = None
+            var w: Optional[Tensor] = None
+            var b: Optional[Tensor] = None
+            var at = 1
+            if has_run:
+                if ints[0] == 1:
+                    # training (use_input_stats) writes the running statistics in place: carried state only
+                    for k in range(1, 3):  # small-loop(2: running_mean, running_var): buffer metadata, no data
+                        if self._buffer_kind_of(Int(self.tape.value_of(self.ex, x[k]))) != OPS_BUFFER_STATE:
+                            raise Error("ValueError: ops: " + name + ": running_mean and running_var are updated "
+                                        + "in place in training; make them with Session.state")
+                rm = Optional[Tensor](x[1])
+                rv = Optional[Tensor](x[2])
+                at = 3
+            if affine:
+                w = Optional[Tensor](x[at])
+                b = Optional[Tensor](x[at + 1])
+            if code == SOR_BATCH_NORM:
+                return sor_batch_norm(self.tape, self.ex, x[0], rm, rv, w, b, ints[0] == 1, fs[0], fs[1])
+            return sor_instance_norm(self.tape, self.ex, x[0], rm, rv, w, b, ints[0] == 1, fs[0], fs[1])
+        if code == SOR_GROUP_NORM:
+            if ni < 2:
+                _need(name, n, 1, 2, ni, 1, nf)
+            var g_affine = ints[1] == 1
+            _need(name, n, 3 if g_affine else 1, 2, ni, 1, nf)
+            var gw: Optional[Tensor] = None
+            var gb: Optional[Tensor] = None
+            if g_affine:
+                gw = Optional[Tensor](x[1])
+                gb = Optional[Tensor](x[2])
+            return sor_group_norm(self.tape, self.ex, x[0], ints[0], gw, gb, fs[0])
+        if code == SOR_PRELU:
+            _need(name, n, 2, 0, ni, 0, nf)
+            return sor_prelu(self.tape, self.ex, x[0], x[1])
+        if code == SOR_MISH:
+            _need(name, n, 1, 0, ni, 0, nf)
+            return sor_mish(self.tape, self.ex, x[0])
+        if code == SOR_MHA:
+            if ni < 9:
+                _need(name, n, 4, 9, ni, 1, nf)
+            var self_attn = ints[1] == 1
+            var bias = ints[2] == 1
+            var lens = ints[4] == 1
+            var cross = 0 if self_attn else 1
+            _need(name, n, 4 + cross + ((2 + cross) if bias else 0) + (1 if lens else 0), 9, ni, 1, nf)
+            var w_kv: Optional[Tensor] = None
+            if not self_attn:
+                w_kv = Optional[Tensor](x[3])
+            var wo = x[3 + cross]
+            var b_in: Optional[Tensor] = None
+            var b_kv: Optional[Tensor] = None
+            var bo: Optional[Tensor] = None
+            var at = 4 + cross
+            if bias:
+                b_in = Optional[Tensor](x[at])
+                if not self_attn:
+                    b_kv = Optional[Tensor](x[at + 1])
+                bo = Optional[Tensor](x[at + 1 + cross])
+                at += 2 + cross
+            var kl: Optional[Tensor] = None
+            if lens:
+                kl = Optional[Tensor](x[at])
+            return sor_multi_head_attention(self.tape, self.ex, x[0], x[0] if self_attn else x[1], self_attn, ints[0],
+                                            x[2], b_in, w_kv, b_kv, wo, bo, kl, ints[3] == 1, fs[0], ints[5] == 1,
+                                            _seed(ints[6], ints[7]), ints[8])
+        if code == SOR_POS_ENC:
+            _need(name, n, 1, 4, ni, 1, nf)
+            return sor_positional_encoding(self.tape, self.ex, x[0], fs[0], ints[0] == 1, _seed(ints[1], ints[2]),
+                                           ints[3])
+        if code == SOR_SMOOTH_L1:
+            _need(name, n, 2, 1, ni, 1, nf)
+            return sor_smooth_l1_loss(self.tape, self.ex, x[0], x[1], ints[0], fs[0])
+        if code == SOR_NLL:
+            _need(name, n, 2, 1, ni, 0, nf)
+            if not self.int_words[self._slot(hs[1])]:
+                raise Error("ValueError: ops: nll_loss: target must be class ids made with Session.ids")
+            return sor_nll_loss(self.tape, self.ex, x[0], x[1], ints[0])
+        if code == SOR_KL_DIV:
+            _need(name, n, 2, 1, ni, 0, nf)
+            return sor_kl_div(self.tape, self.ex, x[0], x[1], ints[0])
+        if code == SOR_BCE_POS_WEIGHT:
+            _need(name, n, 2, 1, ni, 1, nf)
+            return sor_bce_with_logits(self.tape, self.ex, x[0], x[1], ints[0], fs[0])
+        if code == SOR_CTC:
+            _need(name, n, 4, 3, ni, 0, nf)
+            return sor_ctc_loss(self.tape, self.ex, x[0], x[1], self.int_words[self._slot(hs[1])], x[2],
+                                self.int_words[self._slot(hs[2])], x[3], self.int_words[self._slot(hs[3])], ints[0],
+                                ints[1], ints[2] == 1)
+        if code == SOR_SELECTIVE_SCAN:
+            _need(name, n, 6, 0, ni, 0, nf)
+            return sor_selective_scan(self.tape, self.ex, x[0], x[1], x[2], x[3], x[4], x[5])
+        if code == SOR_SSD_SCAN:
+            _need(name, n, 4, 0, ni, 0, nf)
+            return sor_ssd_scan(self.tape, self.ex, x[0], x[1], x[2], x[3])
+        if code == SOR_TRAPEZOID_SCAN:
+            _need(name, n, 7, 1, ni, 0, nf)
+            return sor_trapezoid_scan(self.tape, self.ex, x[0], x[1], x[2], x[3], x[4], x[5], x[6], ints[0])
         raise Error("ops: unknown operation code " + String(code))
     # session-ops-rest end
 

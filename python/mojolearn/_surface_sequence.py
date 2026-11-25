@@ -137,6 +137,10 @@ FAMILIES = (
                         # session-ops-pool begin: Session pools (tools/identity_lanes/session_ops_pool.py)
                         "ops-pool-window", "ops-pool-adaptive",
                         # session-ops-pool end
+                        # session-ops-rest begin: Sequential's layers as Session ops (tools/identity_lanes/session_ops_rest.py)
+                        "ops-layer-norms", "ops-layer-activations", "ops-layer-attention",
+                        "ops-layer-losses", "ops-layer-ctc", "ops-layer-ssm",
+                        # session-ops-rest end
                         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -344,6 +348,14 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     "ops-pool-window": "Session: max / avg pool 1-D, 2-D with options, 3-D, adaptive_avg_pool3d",
     "ops-pool-adaptive": "Session: adaptive avg / max pool 1-D and 2-D, in a scan cell",
     # session-ops-pool end
+    # session-ops-rest begin
+    "ops-layer-norms": "Session: batch_norm, group_norm, instance_norm (running statistics), Program",
+    "ops-layer-activations": "Session: prelu, mish",
+    "ops-layer-attention": "Session: multi_head_attention (self causal, cross with key_lengths), positional_encoding, Program",
+    "ops-layer-losses": "Session: smooth_l1_loss, nll_loss, kl_div, binary_cross_entropy_with_logits(pos_weight)",
+    "ops-layer-ctc": "Session: ctc_loss (ids and float targets, mean and sum), Program",
+    "ops-layer-ssm": "Session: selective_scan, ssd_scan, trapezoid_scan",
+    # session-ops-rest end
                        }
 PUBLIC_PENDING_LANES = {
     # lane w3f2-main (2026-11-24): "no reference", not "unwatched": the shipped table
@@ -421,4 +433,12 @@ PUBLIC_PENDING_LANES = {
     "ops-pool-window": "no reference",
     "ops-pool-adaptive": "no reference",
     # session-ops-pool end
+    # session-ops-rest begin
+    "ops-layer-norms": "no reference",
+    "ops-layer-activations": "no reference",
+    "ops-layer-attention": "no reference",
+    "ops-layer-losses": "no reference",
+    "ops-layer-ctc": "no reference",
+    "ops-layer-ssm": "no reference",
+    # session-ops-rest end
 }

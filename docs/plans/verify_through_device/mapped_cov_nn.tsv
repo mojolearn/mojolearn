@@ -346,3 +346,20 @@ mojolearn.ops.Session.topk	mapped	ops-composed-cases	python/mojolearn/verify_ref
 mojolearn.ops.Session.gather	mapped	ops-composed-cases	python/mojolearn/verify_reference/composed-extra.json	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
 mojolearn.ops.Session.logsumexp	mapped	ops-composed-cases	python/mojolearn/verify_reference/composed-extra.json	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
 # session-ops-extra end
+# session-ops-rest begin
+mojolearn.ops.Session.batch_norm	mapped	ops-layer-norms	tools/identity_lanes/session_ops_rest.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.group_norm	mapped	ops-layer-norms	tools/identity_lanes/session_ops_rest.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.instance_norm	mapped	ops-layer-norms	tools/identity_lanes/session_ops_rest.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.prelu	mapped	ops-layer-activations	tools/identity_lanes/session_ops_rest.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.mish	mapped	ops-layer-activations	tools/identity_lanes/session_ops_rest.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.multi_head_attention	mapped	ops-layer-attention	tools/identity_lanes/session_ops_rest.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.positional_encoding	mapped	ops-layer-attention	tools/identity_lanes/session_ops_rest.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.smooth_l1_loss	mapped	ops-layer-losses	tools/identity_lanes/session_ops_rest.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.nll_loss	mapped	ops-layer-losses	tools/identity_lanes/session_ops_rest.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.kl_div	mapped	ops-layer-losses	tools/identity_lanes/session_ops_rest.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.binary_cross_entropy_with_logits	mapped	ops-layer-losses	tools/identity_lanes/session_ops_rest.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.ctc_loss	mapped	ops-layer-ctc	tools/identity_lanes/session_ops_rest.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.selective_scan	mapped	ops-layer-ssm	tools/identity_lanes/session_ops_rest.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.ssd_scan	mapped	ops-layer-ssm	tools/identity_lanes/session_ops_rest.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.trapezoid_scan	mapped	ops-layer-ssm	tools/identity_lanes/session_ops_rest.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+# session-ops-rest end

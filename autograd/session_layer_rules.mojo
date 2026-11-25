@@ -22,6 +22,8 @@
 #   NnCtcRules        NN_CTC_TAG (autograd/nn_ctc.mojo): the CTC loss
 #   SessionOpsExtraRules  SOX_GATHER_TAG, SOX_LSE_TAG (autograd/session_ops_extra_rules.mojo): gather along an axis
 #                     (also topk's values) and logsumexp (session-ops-extra)
+#   SsmRules          SSM_TAG_FIRST..SSM_TAG_LAST (240..247, autograd/ssm_primitives.mojo): the raw state-space
+#                     scans (session-ops-rest)
 # The 3-D convolution and pools, batch / group / instance norm and the activations record rank-N or import tags
 # the inner rules already own.
 
@@ -47,11 +49,15 @@ from autograd.nn_ctc import NnCtcRules
 # session-ops-extra begin: gather along an axis and logsumexp (tags 6990..6991, autograd/session_ops_extra_rules.mojo)
 from autograd.session_ops_extra_rules import SessionOpsExtraRules
 # session-ops-extra end
+# session-ops-rest begin: the raw state-space scans' tags (Session.selective_scan, ssd_scan, trapezoid_scan)
+from autograd.ssm_primitives import SsmRules, SSM_TAG_FIRST, SSM_TAG_LAST
+# session-ops-rest end
 
 
 def layer_rule(tag: Int) -> Bool:
     """True when `tag` is a Sequential layer tag LayerRules answers itself."""
-    return NnConvRules.owns(tag) or nn_attention_rule(tag) or NnCtcRules.owns(tag) or SessionOpsExtraRules.owns(tag)
+    return (NnConvRules.owns(tag) or nn_attention_rule(tag) or NnCtcRules.owns(tag) or SessionOpsExtraRules.owns(tag)
+            or (tag >= SSM_TAG_FIRST and tag <= SSM_TAG_LAST))  # session-ops-rest: SsmRules
 
 
 @fieldwise_init
@@ -72,6 +78,10 @@ struct LayerRules[R: BackwardRules & ImplicitlyCopyable & Movable](BackwardRules
         if SessionOpsExtraRules.owns(tag):
             return SessionOpsExtraRules().supports(tag)
         # session-ops-extra end
+        # session-ops-rest begin: SsmRules (tags SSM_TAG_FIRST..SSM_TAG_LAST), as ModelRules routes them
+        if tag >= SSM_TAG_FIRST and tag <= SSM_TAG_LAST:
+            return SsmRules().supports(tag)
+        # session-ops-rest end
         return self.inner.supports(tag)
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
@@ -85,6 +95,10 @@ struct LayerRules[R: BackwardRules & ImplicitlyCopyable & Movable](BackwardRules
         if SessionOpsExtraRules.owns(tag):
             return SessionOpsExtraRules().zeroed_destination(tag, saved, edge)
         # session-ops-extra end
+        # session-ops-rest begin: SsmRules (tags SSM_TAG_FIRST..SSM_TAG_LAST), as ModelRules routes them
+        if tag >= SSM_TAG_FIRST and tag <= SSM_TAG_LAST:
+            return SsmRules().zeroed_destination(tag, saved, edge)
+        # session-ops-rest end
         return self.inner.zeroed_destination(tag, saved, edge)
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
@@ -98,6 +112,10 @@ struct LayerRules[R: BackwardRules & ImplicitlyCopyable & Movable](BackwardRules
         if SessionOpsExtraRules.owns(tag):
             return SessionOpsExtraRules().writes_total(tag, saved, edge)
         # session-ops-extra end
+        # session-ops-rest begin: SsmRules (tags SSM_TAG_FIRST..SSM_TAG_LAST), as ModelRules routes them
+        if tag >= SSM_TAG_FIRST and tag <= SSM_TAG_LAST:
+            return SsmRules().writes_total(tag, saved, edge)
+        # session-ops-rest end
         return self.inner.writes_total(tag, saved, edge)
 
     def apply[E: Exec](
@@ -118,4 +136,9 @@ struct LayerRules[R: BackwardRules & ImplicitlyCopyable & Movable](BackwardRules
             SessionOpsExtraRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
             return
         # session-ops-extra end
+        # session-ops-rest begin
+        if tag >= SSM_TAG_FIRST and tag <= SSM_TAG_LAST:
+            SsmRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+            return
+        # session-ops-rest end
         self.inner.apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)

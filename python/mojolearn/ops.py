@@ -101,6 +101,12 @@ _OP = {
     # session-ops-extra begin
     "sequence_mask": 180, "topk": 181, "gather": 182, "logsumexp": 183,
     # session-ops-extra end
+    # session-ops-rest begin
+    "batch_norm": 160, "group_norm": 161, "instance_norm": 162, "prelu": 163, "mish": 164,
+    "multi_head_attention": 165, "positional_encoding": 166, "smooth_l1_loss": 167, "nll_loss": 168,
+    "kl_div": 169, "binary_cross_entropy_with_logits": 170, "ctc_loss": 171, "selective_scan": 172,
+    "ssd_scan": 173, "trapezoid_scan": 174,
+    # session-ops-rest end
 }
 _GELU = {"none": 0, "tanh": 1}
 # the state buffers autograd/ops_api.mojo optimizer_state returns, by kind
@@ -2646,6 +2652,260 @@ class Session:
         """
         return _SESSION_CALL(self, "logsumexp", (x, axis, keepdims))
     # session-ops-extra end
+    # session-ops-rest begin ---------------------------------------- norms, attention, losses, state-space scans
+    def batch_norm(self, input, running_mean, running_var, weight=None, bias=None, training=False, momentum=0.1,
+                   eps=1e-5):
+        """Batch normalization over the channel axis, as ``torch.nn.functional.batch_norm``.
+
+        ``input`` is ``(N, C)`` or ``(N, C, ...)``: each channel is normalized over the batch and every axis
+        after it, then scaled by ``weight`` and shifted by ``bias`` (``C`` values each, both given or both
+        None). With ``training=True`` the batch's mean and (biased) variance normalize, and ``running_mean``
+        and ``running_var`` are updated in place as
+        ``running = (1 - momentum) * running + momentum * statistic`` (the variance unbiased); they must
+        then be state tensors made with :meth:`state`, or both None. With ``training=False`` the running
+        statistics normalize. The result has ``input``'s shape; the gradient flows to ``input``, ``weight``
+        and ``bias``.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session(record=True) as s:
+        ...     x = s.tensor(np.random.default_rng(0).standard_normal((8, 3, 4, 4), dtype=np.float32))
+        ...     mean, var = s.state(np.zeros(3, np.float32)), s.state(np.ones(3, np.float32))
+        ...     w = s.tensor(np.ones(3, np.float32), requires_grad=True)
+        ...     b = s.tensor(np.zeros(3, np.float32), requires_grad=True)
+        ...     y = s.batch_norm(x, mean, var, w, b, training=True)
+        """
+        return _SESSION_CALL(self, "batch_norm",
+                             (input, running_mean, running_var, weight, bias, training, momentum, eps))
+
+    def group_norm(self, input, num_groups, weight=None, bias=None, eps=1e-5):
+        """Group normalization, as ``torch.nn.functional.group_norm``.
+
+        ``input`` is ``(N, C, ...)``; its ``C`` channels are split into ``num_groups`` groups (which must
+        divide ``C``), and every group of every sample is normalized with its own mean and (biased)
+        variance, then scaled by ``weight`` and shifted by ``bias`` (``C`` values each, both given or both
+        None). The result has ``input``'s shape.
+
+        Example
+        -------
+        >>> y = s.group_norm(x, num_groups=2, weight=w, bias=b)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "group_norm", (input, num_groups, weight, bias, eps))
+
+    def instance_norm(self, input, running_mean=None, running_var=None, weight=None, bias=None,
+                      use_input_stats=True, momentum=0.1, eps=1e-5):
+        """Instance normalization, as ``torch.nn.functional.instance_norm``.
+
+        Every channel of every sample of ``input`` ``(N, C, ...)`` is normalized over the axes after the
+        channel axis (at least two values), then scaled by ``weight`` and shifted by ``bias`` (``C`` values
+        each, both given or both None). With running statistics and ``use_input_stats=True`` the
+        statistics are updated in place with ``momentum`` (state tensors made with :meth:`state`); with
+        ``use_input_stats=False`` the running statistics normalize.
+
+        Example
+        -------
+        >>> y = s.instance_norm(x, weight=w, bias=b)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "instance_norm", (input, running_mean, running_var, weight, bias,
+                                                     use_input_stats, momentum, eps))
+
+    def prelu(self, input, weight):
+        """``max(0, x) + weight * min(0, x)``, as ``torch.nn.functional.prelu``.
+
+        ``weight`` holds one slope shared by every element, or one slope per channel (axis 1 of
+        ``input``). The gradient flows to ``input`` and ``weight``.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.array([[-2.0, 3.0]], dtype=np.float32))
+        ...     s.numpy(s.prelu(x, s.tensor(np.array([0.25], dtype=np.float32))))
+        array([[-0.5,  3. ]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "prelu", (input, weight))
+
+    def mish(self, input):
+        """``x * tanh(softplus(x))`` elementwise, as ``torch.nn.functional.mish``.
+
+        Example
+        -------
+        >>> y = s.mish(x)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "mish", (input,))
+
+    def multi_head_attention(self, query, key, value, num_heads, in_proj_weight, in_proj_bias, out_proj_weight,
+                             out_proj_bias, key_lengths=None, attn_mask=None, is_causal=False, dropout_p=0.0,
+                             training=True, seed=0, counter=0):
+        """Multi-head attention with input and output projections, as ``torch.nn.MultiheadAttention``
+        with ``batch_first=True``.
+
+        ``query`` is ``(batch, L, embed_dim)``. ``key`` and ``value`` are the same tensor: ``query`` itself
+        for self-attention, or another ``(batch, S, kdim)`` sequence for cross-attention. The weights use the
+        ``(in, out)`` layout of :meth:`linear`, the transpose of PyTorch's:
+
+        - self-attention: ``in_proj_weight`` ``(embed_dim, 3 * embed_dim)`` with the query, key and value
+          columns in that order (PyTorch's ``in_proj_weight.T``), ``in_proj_bias`` ``3 * embed_dim`` values;
+        - cross-attention: ``in_proj_weight`` a pair ``(query weight (embed_dim, embed_dim), key and value
+          weight (kdim, 2 * embed_dim))`` and ``in_proj_bias`` a pair of ``embed_dim`` and ``2 * embed_dim``
+          values;
+        - ``out_proj_weight`` ``(embed_dim, embed_dim)``, ``out_proj_bias`` ``embed_dim`` values.
+
+        Both biases are given or both None. ``num_heads`` must divide ``embed_dim``; each head attends with
+        ``softmax(q k^T / sqrt(head_dim))``. ``is_causal=True`` lets query ``i`` see keys ``0..i``.
+        ``key_lengths`` (one float per batch row) masks the keys at positions at or after the row's length,
+        as a ``key_padding_mask`` that is True on the padded tail. An arbitrary ``attn_mask`` is refused:
+        use :meth:`attention`. With ``training=True`` and ``dropout_p > 0`` the attention weights take
+        dropout with the mask of ``seed`` and ``counter`` (use a new ``counter`` every step). The result is
+        ``(batch, L, embed_dim)``; the attention weights are not returned.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> rng = np.random.default_rng(0)
+        >>> with ops.Session(record=True) as s:
+        ...     x = s.tensor(rng.standard_normal((2, 5, 8), dtype=np.float32))
+        ...     w_in = s.tensor(rng.standard_normal((8, 24), dtype=np.float32) * 0.2, requires_grad=True)
+        ...     b_in = s.tensor(np.zeros(24, np.float32), requires_grad=True)
+        ...     w_out = s.tensor(rng.standard_normal((8, 8), dtype=np.float32) * 0.2, requires_grad=True)
+        ...     b_out = s.tensor(np.zeros(8, np.float32), requires_grad=True)
+        ...     y = s.multi_head_attention(x, x, x, 2, w_in, b_in, w_out, b_out, is_causal=True)
+        """
+        return _SESSION_CALL(self, "multi_head_attention",
+                             (query, key, value, num_heads, in_proj_weight, in_proj_bias, out_proj_weight,
+                              out_proj_bias, key_lengths, attn_mask, is_causal, dropout_p, training, seed, counter))
+
+    def positional_encoding(self, x, dropout_p=0.0, training=True, seed=0, counter=0):
+        """``x`` plus the sinusoidal positional encoding of the original Transformer.
+
+        ``x`` is ``(..., length, d_model)`` with ``d_model`` even and ``length`` at most 8192; position
+        ``p`` adds ``sin(p / 10000^(2j / d_model))`` to feature ``2j`` and the cosine to feature ``2j + 1``.
+        With ``training=True`` and ``dropout_p > 0`` dropout follows (the mask of ``seed`` and ``counter``).
+        PyTorch has no function of this name; this is the ``PositionalEncoding`` module of its transformer
+        tutorial. The gradient of ``x`` is the incoming gradient.
+
+        Example
+        -------
+        >>> y = s.positional_encoding(x)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "positional_encoding", (x, dropout_p, training, seed, counter))
+
+    def smooth_l1_loss(self, input, target, reduction="mean", beta=1.0):
+        """The smooth L1 loss, as ``torch.nn.functional.smooth_l1_loss``: ``0.5 d^2 / beta`` where
+        ``|d| < beta``, else ``|d| - 0.5 beta`` (``d = input - target``), averaged (``"mean"``) or summed
+        (``"sum"``). ``beta=0`` is the L1 loss.
+
+        Example
+        -------
+        >>> loss = s.smooth_l1_loss(prediction, target, beta=0.5)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "smooth_l1_loss", (input, target, reduction, beta))
+
+    def nll_loss(self, input, target, weight=None, ignore_index=-100, reduction="mean"):
+        """The negative log-likelihood loss, as ``torch.nn.functional.nll_loss``.
+
+        ``input`` is ``(N, C)`` log-probabilities (for example from :meth:`log_softmax`) and ``target``
+        ``N`` class ids made with :meth:`ids`, each in ``[0, C)``. The loss is ``-input[n, target[n]]``
+        averaged over the rows (``"mean"``) or summed (``"sum"``). Class weights and ``ignore_index`` are
+        not supported.
+
+        Example
+        -------
+        >>> loss = s.nll_loss(s.log_softmax(logits), s.ids(labels))  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "nll_loss", (input, target, weight, ignore_index, reduction))
+
+    def kl_div(self, input, target, reduction="mean", log_target=False):
+        """The Kullback-Leibler divergence loss, as ``torch.nn.functional.kl_div``.
+
+        ``input`` holds log-probabilities and ``target`` probabilities of the same shape; each term is
+        ``target * (log(target) - input)``, 0 where ``target`` is 0. ``"batchmean"`` divides the sum by the
+        rows (the divergence per sample), ``"mean"`` by the elements, ``"sum"`` by nothing.
+
+        Example
+        -------
+        >>> loss = s.kl_div(s.log_softmax(logits), teacher_probs, reduction="batchmean")  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "kl_div", (input, target, reduction, log_target))
+
+    def binary_cross_entropy_with_logits(self, input, target, weight=None, reduction="mean", pos_weight=None):
+        """Binary cross-entropy of ``sigmoid(input)`` against ``target`` in ``[0, 1]``, computed stably
+        from the logits, as ``torch.nn.functional.binary_cross_entropy_with_logits``.
+
+        ``pos_weight`` (a float, one weight for every output) multiplies the positive term:
+        ``-(pos_weight * y * log(sigmoid(x)) + (1 - y) * log(1 - sigmoid(x)))``. A per-element ``weight``
+        is taken by :meth:`bce_with_logits`.
+
+        Example
+        -------
+        >>> loss = s.binary_cross_entropy_with_logits(logits, y, pos_weight=3.0)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "binary_cross_entropy_with_logits", (input, target, weight, reduction, pos_weight))
+
+    def ctc_loss(self, log_probs, targets, input_lengths, target_lengths, blank=0, reduction="mean",
+                 zero_infinity=False):
+        """The connectionist temporal classification loss, as ``torch.nn.functional.ctc_loss``.
+
+        ``log_probs`` is ``(T, N, C)`` log-probabilities over ``C`` classes (``blank`` one of them);
+        ``targets`` is ``(N, S)``, each row's first ``target_lengths[n]`` entries its labels (never
+        ``blank``); ``input_lengths`` and ``target_lengths`` hold ``N`` lengths. Targets and lengths may be
+        made with :meth:`ids` or :meth:`tensor`. The loss is the negative log-likelihood of each target over
+        every alignment of the row's first ``input_lengths[n]`` steps; ``"mean"`` divides each row's loss by
+        its target length and averages over the batch, ``"sum"`` adds them. ``zero_infinity=True`` gives 0
+        (and gradient 0) for a row no alignment can produce. Only ``log_probs`` takes a gradient.
+
+        Example
+        -------
+        >>> loss = s.ctc_loss(s.log_softmax(logits), targets, in_lens, tgt_lens)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "ctc_loss",
+                             (log_probs, targets, input_lengths, target_lengths, blank, reduction, zero_infinity))
+
+    def selective_scan(self, u, delta, A_log, B, C, D):
+        """The Mamba selective scan over ``(batch, length)`` sequences, the core of :meth:`mamba_block`.
+
+        ``u`` and ``delta`` are ``(..., length, dim)``, ``B`` and ``C`` ``(..., length, state)`` (state 4,
+        8 or 16), ``A_log`` ``(dim, state)`` and ``D`` ``dim`` values. With ``A = -exp(A_log)``, the state
+        ``h[t] = exp(delta[t] A) h[t-1] + delta[t] B[t] u[t]`` from ``h[-1] = 0`` gives the output
+        ``y[t] = C[t] . h[t] + D u[t]``, ``(..., length, dim)``. Every input takes a gradient.
+
+        Example
+        -------
+        >>> y = s.selective_scan(u, delta, A_log, B, C, D)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "selective_scan", (u, delta, A_log, B, C, D))
+
+    def ssd_scan(self, x, dt, A_log, D):
+        """The Mamba-2 state-space dual scan over ``(batch, length)`` sequences.
+
+        ``x`` is ``(..., length, heads * 64 + 256)``, each row ``[values | B | C]`` (64 values per head,
+        then 128 ``B`` and 128 ``C`` states shared by the heads); ``dt`` ``(..., length, heads)``, already
+        positive (for example after :meth:`softplus`); ``A_log`` and ``D`` ``heads`` values each. The result
+        is ``(..., length, heads * 64)``.
+
+        Example
+        -------
+        >>> y = s.ssd_scan(xbc, s.softplus(dt), A_log, D)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "ssd_scan", (x, dt, A_log, D))
+
+    def trapezoid_scan(self, v, k, q, dt, A, trap, D, heads):
+        """The Mamba-3 trapezoid scan over ``(batch, length)`` sequences.
+
+        ``v`` is ``(..., length, heads * P)``, ``k`` and ``q`` ``(..., length, heads * N)``, ``dt``, ``A``
+        and ``trap`` ``(..., length, heads)``, ``D`` ``heads`` values. The result is
+        ``(..., length, heads * P)``.
+
+        Example
+        -------
+        >>> y = s.trapezoid_scan(v, k, q, dt, A, trap, D, heads=2)  # doctest: +SKIP
+        """
+        return _SESSION_CALL(self, "trapezoid_scan", (v, k, q, dt, A, trap, D, heads))
+    # session-ops-rest end
 
 
 class Program:

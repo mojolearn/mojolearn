@@ -228,6 +228,27 @@ comptime _SOP_GATHER = 1182
 comptime _SOP_LOGSUMEXP = 1183
 # session-ops-extra end
 
+# session-ops-rest begin: Sequential's norms, prelu, mish, multi-head attention, positional encoding, losses and raw
+# SSM scans (session codes 160..174, autograd/session_ops_rest.mojo); frontend codes 1000 + the session code
+comptime _SOP_SOR_BATCH_NORM = 1160
+comptime _SOP_SOR_GROUP_NORM = 1161
+comptime _SOP_SOR_INSTANCE_NORM = 1162
+comptime _SOP_SOR_PRELU = 1163
+comptime _SOP_SOR_MISH = 1164
+comptime _SOP_SOR_MULTI_HEAD_ATTENTION = 1165
+comptime _SOP_SOR_POSITIONAL_ENCODING = 1166
+comptime _SOP_SOR_SMOOTH_L1_LOSS = 1167
+comptime _SOP_SOR_NLL_LOSS = 1168
+comptime _SOP_SOR_KL_DIV = 1169
+comptime _SOP_SOR_BINARY_CROSS_ENTROPY_WITH_LOGITS = 1170
+comptime _SOP_SOR_CTC_LOSS = 1171
+comptime _SOP_SOR_SELECTIVE_SCAN = 1172
+comptime _SOP_SOR_SSD_SCAN = 1173
+comptime _SOP_SOR_TRAPEZOID_SCAN = 1174
+comptime _SOP_SOR_FIRST = 1160
+comptime _SOP_SOR_LAST = 1174
+# session-ops-rest end
+
 
 struct _SessionOpCodes(Defaultable, Movable):
     var codes: Dict[String, Int]
@@ -432,6 +453,23 @@ struct _SessionOpCodes(Defaultable, Movable):
         self.codes["gather"] = _SOP_GATHER
         self.codes["logsumexp"] = _SOP_LOGSUMEXP
         # session-ops-extra end
+        # session-ops-rest begin
+        self.codes["batch_norm"] = _SOP_SOR_BATCH_NORM
+        self.codes["group_norm"] = _SOP_SOR_GROUP_NORM
+        self.codes["instance_norm"] = _SOP_SOR_INSTANCE_NORM
+        self.codes["prelu"] = _SOP_SOR_PRELU
+        self.codes["mish"] = _SOP_SOR_MISH
+        self.codes["multi_head_attention"] = _SOP_SOR_MULTI_HEAD_ATTENTION
+        self.codes["positional_encoding"] = _SOP_SOR_POSITIONAL_ENCODING
+        self.codes["smooth_l1_loss"] = _SOP_SOR_SMOOTH_L1_LOSS
+        self.codes["nll_loss"] = _SOP_SOR_NLL_LOSS
+        self.codes["kl_div"] = _SOP_SOR_KL_DIV
+        self.codes["binary_cross_entropy_with_logits"] = _SOP_SOR_BINARY_CROSS_ENTROPY_WITH_LOGITS
+        self.codes["ctc_loss"] = _SOP_SOR_CTC_LOSS
+        self.codes["selective_scan"] = _SOP_SOR_SELECTIVE_SCAN
+        self.codes["ssd_scan"] = _SOP_SOR_SSD_SCAN
+        self.codes["trapezoid_scan"] = _SOP_SOR_TRAPEZOID_SCAN
+        # session-ops-rest end
 
 
 # One table per process (identical contents in every extension that links this file).

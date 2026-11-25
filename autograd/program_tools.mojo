@@ -269,6 +269,38 @@ def program_op_name(code: Int) -> String:
     if code == 184 or code == 185:
         return "cross_entropy"
     # session-ops-extra end
+    # session-ops-rest begin: codes 160..174 (autograd/session_ops_rest.mojo sor_name)
+    if code == 160:
+        return "batch_norm"
+    if code == 161:
+        return "group_norm"
+    if code == 162:
+        return "instance_norm"
+    if code == 163:
+        return "prelu"
+    if code == 164:
+        return "mish"
+    if code == 165:
+        return "multi_head_attention"
+    if code == 166:
+        return "positional_encoding"
+    if code == 167:
+        return "smooth_l1_loss"
+    if code == 168:
+        return "nll_loss"
+    if code == 169:
+        return "kl_div"
+    if code == 170:
+        return "binary_cross_entropy_with_logits"
+    if code == 171:
+        return "ctc_loss"
+    if code == 172:
+        return "selective_scan"
+    if code == 173:
+        return "ssd_scan"
+    if code == 174:
+        return "trapezoid_scan"
+    # session-ops-rest end
     return "op_" + String(code)
 
 

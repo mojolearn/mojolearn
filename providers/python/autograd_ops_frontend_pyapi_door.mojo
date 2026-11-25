@@ -202,6 +202,10 @@ from autograd.session_ops_extra import (
     OPS_SOFT_CROSS_ENTROPY_WEIGHTED,
 )
 # session-ops-extra end
+# session-ops-rest begin: norms, prelu, mish, multi-head attention, positional encoding, losses, raw SSM scans
+from autograd.autograd_ops_frontend_run import _SOP_SOR_FIRST, _SOP_SOR_LAST
+from providers.python.session_ops_rest_pyapi_door import sor_unpack
+# session-ops-rest end
 
 
 struct _SessionOpNames(Defaultable, Movable):
@@ -1564,6 +1568,10 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         hs.append(_int(args[0], "x", 1))
         ints = [_int(args[1], "axis"), Int(Bool(py=args[2]))]
     # session-ops-extra end
+    # session-ops-rest begin: frontend codes 1160..1174 (providers/python/session_ops_rest_pyapi_door.mojo)
+    elif op >= _SOP_SOR_FIRST and op <= _SOP_SOR_LAST:
+        code = sor_unpack(op, args, hs, ints, fs)
+    # session-ops-rest end
     # nn-blocks-pg begin
     if op >= _SOP_PG_FIRST and op <= _SOP_PG_LAST:
         return pg_session_call_py[E](s, op, args)

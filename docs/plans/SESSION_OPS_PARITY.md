@@ -60,26 +60,26 @@ Sequential layer codes are `python/mojolearn/_x_sequence_model.py` `_LAYER`. "ex
 | embedding (39) | tape embedding | exists | exists | - |
 | attention (40) | attention block | `attention_block`, `attention` exist | exist | - |
 | rnn / lstm / gru (41) | recurrent scan | `rnn`, `lstm`, `gru` exist | RecurrentRules | - |
-| selective_scan, ssd_scan, trapezoid_scan (42..44) | ssm primitives | `mamba_block` exists; raw scans missing | SsmRules | rest (expose if a tensor-level forward exists, else list) |
+| selective_scan, ssd_scan, trapezoid_scan (42..44) | ssm primitives | `selective_scan`, `ssd_scan`, `trapezoid_scan` added (172..174) | SsmRules (in LayerRules) | rest |
 | lm_head (45) | lm_head_v2 | `lm_head_loss` exists | exists | - |
-| batch_norm1d / 2d (46) | rankn_batch_norm_core | missing | RN tags | rest |
+| batch_norm1d / 2d (46) | rankn_batch_norm_core | `batch_norm` added (160) | RN tags | rest |
 | identity (47) | none | not needed (the tensor itself) | - | - |
 | leaky_relu, elu, hardswish, hardsigmoid (48, 49, 52, 53) | import unary | exist | exist | - |
-| prelu (50), mish (51) | imp_binary PRELU, imp_unary MISH | missing | import tags | rest |
-| group_norm, instance_norm (54, 55) | graph_group_norm, graph_instance_norm | missing | RN tags | rest |
+| prelu (50), mish (51) | imp_binary PRELU, imp_unary MISH | `prelu` (163), `mish` (164) added | import tags | rest |
+| group_norm, instance_norm (54, 55) | graph_group_norm, graph_instance_norm | `group_norm` (161), `instance_norm` (162) added | RN tags | rest |
 | conv_transpose1d / 2d (56, 57) | nn_conv_transpose1d / 2d | `conv_transpose1d`, `conv_transpose2d` **added** (codes 133, 134; per-axis words on 2-D) | NnConvRules | conv |
 | adaptive_avg_pool2d (58), adaptive_max_pool2d / 1d (59, 60), global_max_pool (61) | nn_adaptive_* | `adaptive_avg_pool2d` (147, rank 2), `adaptive_max_pool1d` / `2d` (148) added; PyTorch has no global max pool name: it is `adaptive_max_pool2d(x, 1)` (shape (N, C, 1, 1); Sequential 61's rankn_max returns (N, C)) | NnConvRules | pool: added |
 | constant / zero pad (62) | imp_pad | `pad` exists | exists | - |
 | reflection / replication pad (63, 64) | nn_pad | added: `pad(x, pads, value, mode='reflect' \| 'replicate')` (code 153; `mode` None / 'constant' keeps code 73; ONNX pad order kept, `value` before `mode`) | NnConvRules | resize |
 | upsample (65) | nn_upsample (nearest, bilinear) | added: `interpolate` (code 150; nearest, linear (N, C, L), bilinear; per-axis size / scale_factor, align_corners, recompute_scale_factor) | NnConvRules | resize |
 | pixel_shuffle / unshuffle (66) | nn_pixel_shuffle | added: `pixel_shuffle`, `pixel_unshuffle` (codes 151, 152; (N, C, H, W) only) | rank-N view / permute tags | resize |
-| multihead_attention (67) | nn_mha_forward | missing | NNAttentionRules | rest |
-| positional_encoding (72) | nn_pos_enc_forward | missing | NNAttentionRules | rest |
+| multihead_attention (67) | nn_mha_forward (its body nn_mha_core) | `multi_head_attention` added (165); attn_mask refused (is_causal, key_lengths) | NNAttentionRules | rest |
+| positional_encoding (72) | nn_pos_enc_forward | `positional_encoding` added (166) | NNAttentionRules | rest |
 | conv3d (73) | rankn_conv3d | `conv3d` **added** (code 132) | RN conv tags | conv |
 | max_pool3d, avg_pool3d, adaptive_avg_pool3d (74..76) | rankn_*_pool3d | `max_pool3d` (144), `avg_pool3d` (145), `adaptive_avg_pool3d` (146) added | RN pool tags | pool: added |
 | log_softmax (77) | nn_log_softmax | `log_softmax` exists | exists | - |
 | losses mse, l1, huber, bce_with_logits, cross_entropy | tape losses | exist | exist | - |
-| losses smooth_l1, nll, kl_div, bce pos_weight, ctc | nn_losses bodies, nn_ctc | missing | loss kinds / NnCtcRules | rest |
+| losses smooth_l1, nll, kl_div, bce pos_weight, ctc | nn_losses bodies, nn_ctc | `smooth_l1_loss` (167), `nll_loss` (168), `kl_div` (169), `binary_cross_entropy_with_logits` (170, float pos_weight), `ctc_loss` (171) added | loss kinds / NnCtcRules | rest |
 
 ### The round's additions (Andrew, 2026-11-25; not Sequential layers)
 
