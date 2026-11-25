@@ -1,13 +1,21 @@
 diff --git a/training/checks/loss_contract.mojo b/training/checks/loss_contract.mojo
-index 2e0eeeb586..6748f1fb27 100644
+index 2e0eeeb586..5c7492e107 100644
 --- a/training/checks/loss_contract.mojo
 +++ b/training/checks/loss_contract.mojo
-@@ -163,6 +163,9 @@ def ce_divisor(reduction: Int, count: Int, num_items: Int) raises -> Float32:
+@@ -9,6 +9,8 @@ without linking the CPU oracle (cpu-gpu-cleanup n-train-mamba, 2026-10-02).
+ `refuse_nonfinite` here is the plain ascending scan; the host-lane fast path
+ it had in the oracle is gone (a scan, same refusals, same messages)."""
+ 
++from std.sys import is_defined
++
+ from checks.numerics import (
+     ftz,
+     identical_div,
+@@ -163,6 +165,8 @@ def ce_divisor(reduction: Int, count: Int, num_items: Int) raises -> Float32:
                  + " exceeds CE_MAX_EXACT_COUNT; Float32(count) would round"
                  + " (contract section 3)"
              )
-+        from std.sys import is_defined
-+        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-cpu (lane vdv-sabotage): the MEAN divisor one ulp up, the host bindings only
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-cpu (lane vdv-sabotage; re-cut by lane w3f7-b, 2026-11-24): the MEAN divisor one ulp up, the host bindings only
 +            return Float32(count) * Float32(1.00000011920928955078125)
          return Float32(count)
      raise Error(String("ce: unknown reduction ") + String(reduction))

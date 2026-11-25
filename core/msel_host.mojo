@@ -154,14 +154,9 @@ struct MselHostStore(Defaultable, Movable):
             shared_slot_unlock(word)
         return _U8(unsafe_from_address=address)
 
-    def read(self, id: Int, dst_addr: Int, n: Int) raises:
-        # One lock step: `ptr` checks the id (a separate `check` first was the
-        # same probe twice).
-        var src = self.ptr(id, n)
-        if n > 0:
-            if dst_addr == 0:
-                raise Error("msel store: read into a null address")
-            unsafe_memcpy(dest=_U8(unsafe_from_address=dst_addr), src=src, count=n)
+    # `read` deleted (lane w3f7-b, 2026-11-24): its one caller, MH_STORE_READ (the
+    # cross_val_predict placement block), was retired by lane vdf-scope-cv; the
+    # store's bytes are read in place through `ptr`.
 
     def free(self, id: Int) raises:
         # The freed bytes are dropped after the lock (a heap free never runs
