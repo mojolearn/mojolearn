@@ -53,6 +53,8 @@ FAMILIES = (
                         "sequence-rnn-step-widths",
                         # lane rnn-review-fixes (2026-11-25): lengths checked before the class histogram, labels of padded steps
                         "sequence-rnn-padding-labels",
+                        # lane w3i11-endpoints (2026-11-25): partial_fit and step on the other recurrent estimators
+                        "sequence-rnn-partial-step",
                         # nn-attention begin: classic attention models (tools/identity_lanes/nn_attention.py)
                         "sequence-attention-encoder", "sequence-attention-cross",
                         # nn-attention end
@@ -150,6 +152,8 @@ FAMILIES = (
                         # session-ops-rest begin: Sequential's layers as Session ops (tools/identity_lanes/session_ops_rest.py)
                         "ops-layer-norms", "ops-layer-activations", "ops-layer-attention",
                         "ops-layer-losses", "ops-layer-ctc", "ops-layer-ssm",
+                        # lane w3i11-endpoints (2026-11-25): topk, gather, logsumexp, sequence_mask, checkpoint
+                        "ops-select-reduce",
                         # session-ops-rest end
                         ),
         inference_lanes=(),
@@ -268,6 +272,7 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-rnn-bidi-options": "LSTMRegressor: bidirectional, dropout, bias=False, validation, partial_fit, h_0 / c_0, step refused",
                        "sequence-rnn-step-widths": "LSTMRegressor: step one step at a time equals predict, 8 / 64 / 65 / 300 inputs",
                        "sequence-rnn-padding-labels": "GRUClassifier: output='sequence', a bad length refused before the balanced weights, padding labels are no class",
+                       "sequence-rnn-partial-step": "GRU / LSTM / RNN estimators: partial_fit after fit; step in two pieces equals the every-step answer",  # lane w3i11-endpoints
                        # nn-attention begin
                        "sequence-attention-encoder": "Sequential transformer_encoder_layer, positional_encoding",
                        "sequence-attention-cross": "Sequential transformer_decoder_layer, multihead_attention",
@@ -364,6 +369,7 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     # session-ops-pool end
     # session-ops-rest begin
     "ops-layer-norms": "Session: batch_norm, group_norm, instance_norm (running statistics), Program",
+    "ops-select-reduce": "Session: topk, gather, logsumexp, sequence_mask, checkpoint (recompute equals plain)",  # lane w3i11-endpoints
     "ops-layer-activations": "Session: prelu, mish",
     "ops-layer-attention": "Session: multi_head_attention (self causal, cross with key_lengths), positional_encoding, Program",
     "ops-layer-losses": "Session: smooth_l1_loss, nll_loss, kl_div, binary_cross_entropy_with_logits(pos_weight)",
@@ -398,6 +404,7 @@ PUBLIC_PENDING_LANES = {
     "sequence-rnn-bidi-options": "no reference",  # lane rnn-parity-D
     "sequence-rnn-step-widths": "no reference",  # lane rnn-step-bits
     "sequence-rnn-padding-labels": "no reference",  # lane rnn-review-fixes
+    "sequence-rnn-partial-step": "no reference",  # lane w3i11-endpoints
     # nn-attention begin
     "sequence-attention-encoder": "no reference",
     "sequence-attention-cross": "no reference",
@@ -452,6 +459,7 @@ PUBLIC_PENDING_LANES = {
     # session-ops-pool end
     # session-ops-rest begin
     "ops-layer-norms": "no reference",
+    "ops-select-reduce": "no reference",  # lane w3i11-endpoints
     "ops-layer-activations": "no reference",
     "ops-layer-attention": "no reference",
     "ops-layer-losses": "no reference",

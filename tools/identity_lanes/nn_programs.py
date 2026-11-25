@@ -110,7 +110,15 @@ def _(ml, X, yc, yr, Xh=None):
             cur = np.ascontiguousarray(np.asarray(step.run(cur), dtype=np.float32).view(np.int32)).reshape(first.shape)
             loop.append(cur.reshape(-1))
         _same_bytes("Program.decode tokens", tokens.reshape(-1), "Program.run x12 tokens", np.concatenate(loop))
-    return _fit(dict(tokens=_h(tokens)))
+        # The same step as an ImportedProgram (lane w3i11-endpoints, 2026-11-25): decode is the class's inherited
+        # door; built from the captured graph as the endpoint verifier builds one (python/mojolearn/
+        # _verify_api_programs.py), its 12 decoded steps must be Program.decode's tokens.
+        from mojolearn.importers._program import ImportedProgram as IP
+        info = (step._id, step.input_shapes, step.output_shapes, step.params, step.input_kinds)
+        imported = IP(s, info, [("ids", tuple(first.shape), "int32")], [("next", tuple(first.shape), "int32")])
+        again = np.asarray(IP.decode(imported, first, n=12)["tokens"])
+        _same_bytes("ImportedProgram.decode tokens", again.reshape(-1), "Program.decode tokens", tokens.reshape(-1))
+    return _fit(dict(tokens=_h(tokens), imported_tokens=_h(again)))
 
 
 # ---------------------------------------------------------------- an imported program
@@ -148,7 +156,32 @@ def _(ml, X, yc, yr, Xh=None):
             out = again.run(x)
             _same_bytes("ImportedProgram.run", y, "Session.load_program(save).run",
                         np.asarray(out[0] if isinstance(out, (list, tuple)) else out))
-    return _fit(dict(out=_h(y), held=_h(held)))
+        # save_training (lane w3i11-endpoints, 2026-11-25): an ImportedProgram over a captured one-weight graph
+        # (built as python/mojolearn/_verify_api_programs.py builds one), fitted one epoch with SGD, written with
+        # its optimizer and restored by Session.load_training in a new session: the restored program's output and
+        # parameter must equal the trained ones. Part `training`: the trained output and weight.
+        a = _nn_programs_f32(X[:4, :1])
+        with ml.ops.Session() as s:
+            xin = s.tensor(a)
+            w = s.tensor(np.asarray([[0.5]], np.float32))
+            captured = s.capture([xin], [s.matmul(xin, w)])
+            info = (captured._id, captured.input_shapes, captured.output_shapes, captured.params,
+                    captured.input_kinds)
+            small = IP(s, info, [("x", (4, 1), "float32")], [("out", (4, 1), "float32")])
+            opt = s.optimizer("sgd", lr=0.125)
+            IP.fit(small, a, targets=np.ones_like(a), optimizer=opt, epochs=1, batch_size=4, shuffle=False)
+            trained = np.asarray(IP.run(small, a))
+            weight = np.asarray(s.numpy(w))
+            ckpt = os.path.join(tmp, "train.ckpt")
+            IP.save_training(small, ckpt, optimizer=opt)
+        with ml.ops.Session() as s:
+            state = s.load_training(ckpt)
+            back = state["program"].run(a)
+            back_w = np.asarray(s.numpy(state["parameters"][0]))
+        _same_bytes("ImportedProgram.run after fit", trained, "Session.load_training(save_training) program run",
+                    np.asarray(back[0] if isinstance(back, (list, tuple)) else back))
+        _same_bytes("trained weight", weight, "Session.load_training(save_training) parameter", back_w)
+    return _fit(dict(out=_h(y), held=_h(held), training=_h(trained, weight)))
 
 
 # ---------------------------------------------------------------- Array

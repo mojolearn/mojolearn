@@ -70,13 +70,24 @@ def _(ml, X, yc, yr, Xh=None):
                 r, lambda e: (e.predict(Xhs),))
 
 
-def _sequence_opt_run(ml, cls, X, steps=6, **kw):
+def _sequence_opt_run(ml, cls, X, steps=6, schedule=None, **kw):
     """Two float32 tensors cut from the fixture, `steps` updates with
-    gradients cut from further fixture rows; the params and the state after."""
+    gradients cut from further fixture rows; the params and the state after.
+    With `schedule` (lane w3i11-endpoints, 2026-11-25): the optimizer's
+    `lr_schedule` is set to it before the first step and read back, and
+    deleted (read back as None) before the last two steps."""
     p1 = np.ascontiguousarray(X[:32, :8], dtype=np.float32).copy()
     p2 = np.ascontiguousarray(X[32:40, 0], dtype=np.float32).copy()
     opt = cls([p1, p2], **kw)
+    if schedule is not None:
+        opt.lr_schedule = schedule
+        if opt.lr_schedule is None:
+            raise AssertionError(type(opt).__name__ + ".lr_schedule reads None after it was set")
     for k in range(steps):
+        if schedule is not None and k == steps - 2:
+            del opt.lr_schedule
+            if opt.lr_schedule is not None:
+                raise AssertionError(type(opt).__name__ + ".lr_schedule is not None after del")
         base = 40 + 48 * k
         g1 = np.ascontiguousarray(X[base:base + 32, 8:16], dtype=np.float32) * np.float32(0.5)
         g2 = np.ascontiguousarray(X[base + 32:base + 40, 1], dtype=np.float32)
@@ -91,7 +102,9 @@ def _(ml, X, yc, yr, Xh=None):
     """RMSprop at torch's defaults and centered with momentum and weight decay."""
     a = _sequence_opt_run(ml, ml.RMSprop, X, lr=1e-2)
     b = _sequence_opt_run(ml, ml.RMSprop, X, lr=3e-3, centered=True, momentum=0.7, weight_decay=1e-2)
-    return _fit(dict(plain=a["params"], plain_state=a["state"], centered=b["params"], centered_state=b["state"]))
+    c = _sequence_opt_run(ml, ml.RMSprop, X, schedule=ml.StepLR(1e-2, step_size=2), lr=1e-2)
+    return _fit(dict(plain=a["params"], plain_state=a["state"], centered=b["params"], centered_state=b["state"],
+                     scheduled=c["params"]))
 
 
 @lane("sequence-adagrad")
@@ -101,7 +114,9 @@ def _(ml, X, yc, yr, Xh=None):
     a = _sequence_opt_run(ml, ml.Adagrad, X, lr=1e-2)
     b = _sequence_opt_run(ml, ml.Adagrad, X, lr=5e-2, lr_decay=0.1, weight_decay=1e-2,
                           initial_accumulator_value=0.1)
-    return _fit(dict(plain=a["params"], plain_state=a["state"], decayed=b["params"], decayed_state=b["state"]))
+    c = _sequence_opt_run(ml, ml.Adagrad, X, schedule=ml.StepLR(5e-2, step_size=2), lr=5e-2)
+    return _fit(dict(plain=a["params"], plain_state=a["state"], decayed=b["params"], decayed_state=b["state"],
+                     scheduled=c["params"]))
 
 
 @lane("sequence-autoarima")
@@ -198,12 +213,13 @@ def _(ml, X, yc, yr, Xh=None):
     and an LSTM regressor trained by it."""
     a = _sequence_opt_run(ml, ml.Lion, X, lr=1e-3)
     b = _sequence_opt_run(ml, ml.Lion, X, lr=3e-3, betas=(0.95, 0.98), weight_decay=0.1)
+    c = _sequence_opt_run(ml, ml.Lion, X, schedule=ml.StepLR(1e-3, step_size=2), lr=1e-3)
     Xs = _sequence_seq(X)
     ycs, yrs = _sequence_targets(yc, yr)
     r = ml.LSTMRegressor(hidden_size=8, optimizer="lion", learning_rate=1e-3, batch_size=32, max_epochs=1,
                          random_state=9).fit(Xs, yrs)
     return _fit(dict(plain=a["params"], plain_state=a["state"], wd=b["params"], wd_state=b["state"],
-                     lstm=_h(r.params_, r.loss_curve_)))
+                     lstm=_h(r.params_, r.loss_curve_), scheduled=c["params"]))
 
 
 @lane("sequence-adafactor")
@@ -212,8 +228,10 @@ def _(ml, X, yc, yr, Xh=None):
     moved: the factored arm (a 32 x 8 matrix) and the vector arm."""
     a = _sequence_opt_run(ml, ml.Adafactor, X)
     b = _sequence_opt_run(ml, ml.Adafactor, X, lr=3e-2, beta2_decay=-0.6, d=2.0, weight_decay=0.1)
+    c = _sequence_opt_run(ml, ml.Adafactor, X, schedule=ml.StepLR(1e-2, step_size=2))
     return _fit(dict(plain=a["params"], plain_state=_h(*[v for s in a["opt"].state for v in s.values()]),
-                     moved=b["params"], moved_state=_h(*[v for s in b["opt"].state for v in s.values()])))
+                     moved=b["params"], moved_state=_h(*[v for s in b["opt"].state for v in s.values()]),
+                     scheduled=c["params"]))
 
 
 @lane("sequence-lamb")
@@ -223,7 +241,9 @@ def _(ml, X, yc, yr, Xh=None):
     a = _sequence_opt_run(ml, ml.LAMB, X, lr=1e-2)
     b = _sequence_opt_run(ml, ml.LAMB, X, lr=1e-2, weight_decay=0.0, always_adapt=True, trust_clip=True,
                           max_grad_norm=None)
-    return _fit(dict(plain=a["params"], plain_state=a["state"], adapt=b["params"], adapt_state=b["state"]))
+    c = _sequence_opt_run(ml, ml.LAMB, X, schedule=ml.StepLR(1e-2, step_size=2), lr=1e-2)
+    return _fit(dict(plain=a["params"], plain_state=a["state"], adapt=b["params"], adapt_state=b["state"],
+                     scheduled=c["params"]))
 
 
 @lane("sequence-adamax")
@@ -232,12 +252,13 @@ def _(ml, X, yc, yr, Xh=None):
     a GRU regressor trained by it."""
     a = _sequence_opt_run(ml, ml.Adamax, X)
     b = _sequence_opt_run(ml, ml.Adamax, X, lr=1e-2, betas=(0.8, 0.99), weight_decay=0.05)
+    c = _sequence_opt_run(ml, ml.Adamax, X, schedule=ml.StepLR(2e-3, step_size=2))
     Xs = _sequence_seq(X)
     ycs, yrs = _sequence_targets(yc, yr)
     r = ml.GRURegressor(hidden_size=8, optimizer="adamax", learning_rate=2e-3, batch_size=32, max_epochs=1,
                         random_state=10).fit(Xs, yrs)
     return _fit(dict(plain=a["params"], plain_state=a["state"], moved=b["params"], moved_state=b["state"],
-                     gru=_h(r.params_, r.loss_curve_)))
+                     gru=_h(r.params_, r.loss_curve_), scheduled=c["params"]))
 
 
 @lane("sequence-nadam")

@@ -71,6 +71,8 @@ ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
                           # Session ops, one seeded backward each
                           'ops-layer-norms', 'ops-layer-activations', 'ops-layer-attention',
                           'ops-layer-losses', 'ops-layer-ctc', 'ops-layer-ssm',
+                          # lane w3i11-endpoints: topk, gather, logsumexp, sequence_mask, checkpoint
+                          'ops-select-reduce',
                           # session-ops-rest end
                           ))
 # These fixtures use loaded weights or inspect configuration without training.

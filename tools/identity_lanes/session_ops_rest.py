@@ -253,3 +253,56 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl("n/a:training-step (one seeded forward and backward through the ops session, and a captured program "
             "where the lane says; the outputs are parts, digested whole)", "ops-layer-norms",
             "ops-layer-activations", "ops-layer-attention", "ops-layer-losses", "ops-layer-ctc", "ops-layer-ssm")
+
+
+@lane("ops-select-reduce")
+def _(ml, X, yc, yr, Xh=None):
+    """ops.Session topk, gather, logsumexp and sequence_mask (lane w3i11-endpoints, 2026-11-25: no lane called
+    them), and checkpoint. x (3, 5) from the hashed stream with a repeated value in row 0 (topk's lowest-position-
+    first tie rule) and a row of large scores in row 2 (logsumexp's subtracted maximum). Parts: topk largest along
+    the last axis and smallest along axis 0 (values and int32 positions); gather of x along axis 1 at fixed
+    positions (one position taken twice: its gradient adds both); logsumexp along axis 1 and, kept, along axis 0;
+    the gradients of x through the sum of those outputs with fixed weights; sequence_mask of lengths (1, 3, 0) over
+    4 positions. Then a two-tanh-layer segment captured from an inference session and run through checkpoint in a
+    recording session: the weights' gradients with recompute=True must equal recompute=False byte for byte (the
+    documented promise; a difference REFUSES), and the part is the output and those gradients."""
+    x0 = np.array(_hw((3, 5), "sor-sel:x", -2.0, 2.0), dtype=np.float32)  # a writable copy
+    x0[0, 3] = x0[0, 1]
+    x0[2] = x0[2] + np.float32(900.0)
+    index0 = np.asarray([[4, 0, 4], [1, 1, 3], [2, 0, 1]], np.int32)
+    parts = {}
+    with ml.ops.Session(record=True, numeric_mode="identical") as s:
+        x = s.tensor(x0, requires_grad=True)
+        top_v, top_i = s.topk(x, 2)
+        low_v, low_i = s.topk(x, 2, axis=0, largest=False)
+        picked = s.gather(x, 1, s.ids(index0))
+        lse = s.logsumexp(x, 1)
+        lse0 = s.logsumexp(x, 0, keepdims=True)
+        parts["topk"] = _h(np.asarray(s.numpy(top_v)), np.asarray(s.numpy(top_i)).view(np.int32),
+                           np.asarray(s.numpy(low_v)), np.asarray(s.numpy(low_i)).view(np.int32))
+        parts["gather"] = _h(np.asarray(s.numpy(picked)))
+        parts["logsumexp"] = _h(np.asarray(s.numpy(lse)), np.asarray(s.numpy(lse0)))
+        _sor_backward(s, [top_v, low_v, picked, lse, lse0], "sor-sel")
+        parts["grad"] = _h(np.asarray(s.grad(x)))
+        lengths = s.tensor(np.asarray([[1.0], [3.0], [0.0]], np.float32))
+        parts["sequence_mask"] = _h(np.asarray(s.numpy(s.sequence_mask(lengths, 4))))
+    w1 = _hw((4, 6), "sor-sel:w1", -0.5, 0.5)
+    w2 = _hw((6, 4), "sor-sel:w2", -0.5, 0.5)
+    h0 = _hw((8, 4), "sor-sel:h", -1.0, 1.0)
+    runs = {}
+    with ml.ops.Session(numeric_mode="identical") as c:
+        xin = c.tensor(np.zeros((8, 4), np.float32))
+        cw1, cw2 = c.tensor(w1), c.tensor(w2)
+        block = c.capture(inputs=[xin], outputs=[c.tanh(c.matmul(c.tanh(c.matmul(xin, cw1)), cw2))])
+        for recompute in (True, False):  # driver-loop: over the two checkpoint modes
+            with ml.ops.Session(record=True, numeric_mode="identical") as s:
+                v1 = s.tensor(w1, requires_grad=True)
+                v2 = s.tensor(w2, requires_grad=True)
+                out = s.checkpoint(block, s.tensor(h0), params=[v1, v2], recompute=recompute)
+                s.backward(s.mean(s.mul(out, out)))
+                runs[recompute] = [np.asarray(s.numpy(out)), np.asarray(s.grad(v1)), np.asarray(s.grad(v2))]
+    for k, what in enumerate(("output", "grad w1", "grad w2")):  # driver-loop: over the three compared arrays
+        _same_bytes("Session.checkpoint recompute=True " + what, runs[True][k],
+                    "Session.checkpoint recompute=False " + what, runs[False][k])
+    parts["checkpoint"] = _h(*runs[True])
+    return _fit(parts)
