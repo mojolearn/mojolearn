@@ -115,7 +115,8 @@ def _(ml, X, yc, yr, Xh=None):
     one step each, carrying (h, c) from None, must give predict's every-step words, and its final state the state
     of one step() over the whole sequence. The shape is the one that split the old order: the whole call's input
     projection is 256 x 128 (eight 64 x 64 tiles: one chain a cell), a one-step call's is 4 x 128 (a thin product
-    the split-K rule took above 64 inputs), so 65 and 300 diverged and 8 and 64 did not. Parts per width: the
+    the split-K rule took above 64 inputs), so 65 and 300 diverged and 8 and 64 did not; now both calls split by
+    the input width alone (blocks above 64 inputs, one chain at or below), so every width agrees. Parts per width: the
     parameters, the every-step predictions, h_n and c_n. Sabotage arms coverage-sequence-rnn_step_bits_gpu / _cpu
     (MOJOLEARN_RNN_STEP_BITS_SABOTAGE_DEVICE / _HOST forced on: the row-keyed split order back on one side) must
     make this lane REFUSE on that side at 65 and 300 inputs."""

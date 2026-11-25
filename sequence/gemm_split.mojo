@@ -121,47 +121,48 @@ def gemm_split_shape(M: Int, N: Int, K: Int) -> Bool:
 
 #: Lane rnn-step-bits (Andrew 2026-11-25: streaming `step` gives the whole
 #: pass's bits at every width). A launch whose words must not depend on its
-#: row count M asks for gemm_dot's ONE CHAIN at every shape: `gemm_split_on`
-#: then never takes the split order, so the order is a function of K alone
-#: (one chain, k ascending) and M only picks the schedule (cell, thin tile,
-#: tile, micro-tile, packed body, coop: every one of them folds that chain,
-#: sequence/gemm_packed_route.mojo states the argument). The recurrent
-#: family's projections ask for it (autograd/rules_recurrent.mojo
-#: `_linear_record`): a T-step call runs them over T B rows and a one-step
-#: call over B rows, and the split rule keys on the rows once K > 64. The
-#: request rides in f7, a field no GEMM opcode reads (op_gemm, op_gemm_epi,
-#: the tiles and the packed body read i0..i11, p0..p4, f0 and f1); only the
+#: row count M asks for the WIDTH SPLIT: `gemm_split_on` then takes the split
+#: order exactly when K > SK_MIN_BLOCK (blocks of gemm_split_block(K), a
+#: function of K alone), whatever M is, so a T-step call over T B rows and a
+#: one-step call over B rows fold every cell in the same order, and both keep
+#: the split's parallel lanes a cell. K <= SK_MIN_BLOCK is one block, the
+#: chain, at every M. The recurrent family's projections ask for it
+#: (autograd/rules_recurrent.mojo `_linear_record`). The request rides in
+#: f7, a field no GEMM opcode reads (op_gemm, op_gemm_epi, op_gk_split, the
+#: tiles and the packed body read i0..i11, p0..p4, f0 and f1); only the
 #: executors' launch rule (HostExec and DeviceExec, both through
-#: `gemm_split_on`) and the launch profile read it.
-comptime GEMM_CHAIN_ASKED = Float32(1.0)
+#: `gemm_split_on`) and the launch profile read it. The epilogue opcodes
+#: still need a dense C (i8 = i1), as every such caller launches them.
+comptime GEMM_WIDTH_SPLIT_ASKED = Float32(1.0)
 
 
 @always_inline
-def gemm_ask_chain(mut a: Args):
+def gemm_ask_width_split(mut a: Args):
     """Mark a GEMM launch (OP_GEMM, OP_GEMM_EPI, OP_AGK_GEMM_EPI) as one
-    whose fold must be gemm_dot's chain at every row count (above)."""
-    a.f7 = GEMM_CHAIN_ASKED
+    whose split decision is K's alone (above)."""
+    a.f7 = GEMM_WIDTH_SPLIT_ASKED
 
 
 @always_inline
-def gemm_chain_asked(a: Args) -> Bool:
-    return a.f7 == GEMM_CHAIN_ASKED
+def gemm_width_split_asked(a: Args) -> Bool:
+    return a.f7 == GEMM_WIDTH_SPLIT_ASKED
 
 
 @always_inline
 def gemm_split_on[OP: Int](a: Args) -> Bool:
     """The rule for one launch of OP_GEMM, OP_GEMM_EPI or OP_AGK_GEMM_EPI
     (i0 = M, i1 = N, i2 = K). The epilogue opcodes index a dense C (i8 = i1);
-    any other layout keeps its chain, and so does a launch that asked for
-    the chain (`gemm_ask_chain`)."""
+    any other layout keeps its chain. A launch that asked for the width
+    split (`gemm_ask_width_split`) splits exactly when K > SK_MIN_BLOCK,
+    whatever its rows."""
     comptime assert OP == OP_GEMM or OP == OP_GEMM_EPI or OP == OP_AGK_GEMM_EPI, "gemm_split_on: a GEMM opcode"
     comptime if not GEMM_SPLITK:
-        return False
-    if gemm_chain_asked(a):
         return False
     comptime if OP != OP_GEMM:
         if a.i8 != a.i1:
             return False
+    if gemm_width_split_asked(a):
+        return a.i0 > 0 and a.i1 > 0 and a.i2 > SK_MIN_BLOCK
     return gemm_split_shape(a.i0, a.i1, a.i2)
 
 
