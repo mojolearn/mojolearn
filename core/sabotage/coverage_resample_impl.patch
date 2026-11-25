@@ -28,6 +28,21 @@ index c155b3f736..4bfd879f8f 100644
      if in_rows:
          _resample_rows_gather(ctx, rows, n, count, idx_dst, srcs, dsts, words, slots)
      else:
+diff --git a/resample/host/resample_native.mojo b/resample/host/resample_native.mojo
+index 6f7b6fda7c..7f2d721872 100644
+--- a/resample/host/resample_native.mojo
++++ b/resample/host/resample_native.mojo
+@@ -234,6 +234,10 @@ def _resample_rows(a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
+     var n = p[0]
+     var count = p[1]
+     var idx = host_resample_indices(n, count, p[2] != 0, UInt64(p[3]))
++    if count > 1:  # SABOTAGE (coverage arm): the first two row numbers swapped (the host array path)
++        var first = idx[0]
++        idx[0] = idx[1]
++        idx[1] = first
+     if a[0] != 0:
+         resample_store_indices(i32_ptr(a[0]), idx, count)
+     for j in range(k):  # driver-loop: over the arrays passed to resample (a handful), each gathered in parallel
 diff --git a/resample/resample_native.mojo b/resample/resample_native.mojo
 index a9273348e2..dc2ed686aa 100644
 --- a/resample/resample_native.mojo

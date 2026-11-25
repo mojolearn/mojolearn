@@ -359,5 +359,13 @@
    "error_match": "ValueError:\\ LSTMRegressor\\.step\\ one\\ step\\ at\\ a\\ time,\\ 65\\ inputs\\ and\\ LSTMRegressor\\.predict\\ every\\ step\\ differ:\\ 106\\ bytes\\ of\\ 1024",
    "patch_sha256": "43bb10f47fff2490ad5c69f430b72b95238baebff911a9452bd14d69bdfdfe55"
   }
+ },
+ "coverage-sequence-rnn_review_padding_cpu": {
+  "sequence-rnn-padding-labels/base": {
+   "product_check": "tools/identity_lanes/rnn_parity.py:150 (lane `sequence-rnn-padding-labels`): _same_bytes of classes_ fitted with padding label 7 against padding label 0, the lane's in-cell oracle (P1-b: labels are read at valid steps only, so the padding label cannot become a class).",
+   "why_fault_reaches_check": "sequence/checks/sabotage/coverage_rnn_review_padding_cpu.patch: RNN_REVIEW_SABOTAGE_PADDING_HOST forced on, so the host route's fit reads the padded steps' labels (bindings/xseq_neural_native_door.mojo _rnn_fit_op passes no lengths to _rnn_target): padding 7 becomes a class, classes_ is (0, 1, 7) against (0, 1), and the byte check raises (w3-integrate-11, batch runtime_xseq-2 at 3ff785abd2: only the sabotaged run raised it).",
+   "error_match": "ValueError:\\ classes_,\\ padding\\ 7\\ and\\ classes_,\\ padding\\ 0\\ differ:\\ 8\\ bytes\\ of\\ 24",
+   "patch_sha256": "2a365edad4f9a82000d76ad3d29a3c9a4734d699e6e101bb02d7c38aad80b39f"
+  }
  }
 }
