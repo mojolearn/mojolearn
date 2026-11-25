@@ -1311,6 +1311,7 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
         py_setitem(fields, PythonObject("validation_loss_"), vcurve[py_call(native_loaded_module("builtins").slice,
                                                                              PythonObject(0), PythonObject(ran))])
         py_setitem(fields, PythonObject("best_epoch_"), Int(vp[v_epochs + 1]))
+        _ = vcurve  # vp reads its storage: keep it alive past the last read
     batch_source_position_out(source, Int(position[0]), Int(position[1]))
     _ = position^
     if partial:
