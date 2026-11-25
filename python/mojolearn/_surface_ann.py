@@ -22,7 +22,10 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("x-ann-ivf-pq", "x-ann-tsne", "x-ann-tsne-pca", "x-ann-cagra", "x-ann-cagra-filter", "x-ann-ivf-sq", "x-ann-refine", "x-ann-refine-euclidean", "x-ann-filter",
-                        "x-ann-ivf-rabitq"),
+                        "x-ann-ivf-rabitq",
+                        # w3-fix-13-s2 (2026-11-25): lanes added since the shipped table was admitted;
+                        # RECORD OWED: the release's one verification records them
+                        "fn-refine",),
         inference_lanes=(),
         forest_kinds=(),
         classes=("IVFPQIndex", "TSNE", "CagraIndex", "IVFSQIndex", "IVFRaBitQIndex"),
@@ -48,5 +51,7 @@ TRAINING_LANE_NAMES = {"x-ann-ivf-pq": "the IVF-PQ index", "x-ann-tsne": "t-SNE"
                        "x-ann-ivf-rabitq": "the IVF-RaBitQ index",
                        "ivf-filter": "the IVF-Flat index's sample filter",
                        "x-ann-cagra-filter": "the CAGRA sample filter",
-                       "x-ann-refine-euclidean": "exact candidate refine under euclidean distance"}
+                       "x-ann-refine-euclidean": "exact candidate refine under euclidean distance",
+    # w3-fix-13-s2 (2026-11-25): lanes added since the shipped table (RECORD OWED)
+    "fn-refine": "refine on host and device-resident inputs",}
 PUBLIC_PENDING_LANES = {}

@@ -153,38 +153,19 @@ DECLARED_LANELESS = {
     ),
 }
 
-#: The cooperative multi-GPU drivers. Their par-* identity lanes were retired
-#: with multi-GPU verification (owner, 2026-10-31); the drivers stay in the
-#: tree and out of the public docs (docs-site/api_exclude.txt), so each is
-#: laneless by that decision, not by omission.
+# The cooperative multi-GPU drivers were declared laneless here from 2026-10-31,
+# when their par-* identity lanes were retired with multi-GPU verification.
 # TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
 # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 # lane w3f2-main (2026-11-24): DistributedIVFIndex, parallel_ivf.DistributedIVFIndex,
-# parallel_ensemble.fit_forest and parallel_neighbors_reference.ReferenceShardedNeighbors left this
+# parallel_ensemble.fit_forest and parallel_neighbors_reference.ReferenceShardedNeighbors left the
 # list: the one-device lanes ivf-distributed, forest-shard and neighbors-reference-shard reach them.
-_RETIRED_MULTI_GPU = (
-    "ParallelByteLanguageModelTrainer", "models.ParallelCausalLM",
-    "parallel_classical.apply_kernel_method", "parallel_classical.bootstrap",
-    "parallel_classical.fit_arima", "parallel_classical.fit_cholesky", "parallel_classical.fit_coordinate_descent",
-    "parallel_classical.fit_dbscan", "parallel_classical.fit_exponential_smoothing", "parallel_classical.fit_gaussian_mixture",
-    "parallel_classical.fit_gaussian_process", "parallel_classical.fit_gram_estimator", "parallel_classical.fit_hdbscan",
-    "parallel_classical.fit_kernel_method", "parallel_classical.fit_kmeans", "parallel_classical.fit_logistic",
-    "parallel_classical.fit_svm", "parallel_classical.monte_carlo_integrate", "parallel_classical.permutation_test",
-    "parallel_classical.predict_gaussian_mixture", "parallel_classical.predict_gaussian_process", "parallel_classical.predict_svm",
-    "parallel_classical.solve_cholesky", "parallel_classical.transform_rbf_sampler", "parallel_ensemble.ParallelForestPredictor",
-    "parallel_ensemble.fit_boosting", "parallel_ensemble.fit_feature_freq",
-    "parallel_ensemble.fit_isolation_forest", "parallel_ensemble.fit_ordered_rmse", "parallel_ensemble.score_isolation_forest",
-    "parallel_forecasting.forecast_arima", "parallel_forecasting.forecast_exponential_smoothing", "parallel_forecasting.predict_arima",
-    "parallel_forecasting.predict_exponential_smoothing", "parallel_gaussian_process.fit_gaussian_process_classifier", "parallel_gaussian_process.predict_gaussian_process_classifier",
-    "parallel_graph.fit_graph", "parallel_graph.transform_umap",
-    "parallel_model_selection.cross_val_score", "parallel_neighbors.ParallelQueries",
-    "parallel_preprocessing.fit_scaler", "parallel_preprocessing.transform_scaler", "parallel_training.ParallelByteLanguageModelTrainer",
-)
-DECLARED_LANELESS.update({
-    name: ("retired: multi-GPU verification (owner, 2026-10-31; docs/TOMBSTONES.md "
-           "MOJOLEARN_PAR_VERIFY); no identity lane runs this multi-GPU driver")
-    for name in _RETIRED_MULTI_GPU
-})
+# lane w3-fix-13-s2 (2026-11-25): the remaining 43 left it and the list (`_RETIRED_MULTI_GPU`)
+# is deleted: the one-device psd-* lanes (tools/identity_lanes/parallel_single.py) reach
+# models.ParallelCausalLM, ParallelByteLanguageModelTrainer and every parallel_classical,
+# parallel_ensemble, parallel_forecasting, parallel_gaussian_process, parallel_graph,
+# parallel_model_selection, parallel_neighbors, parallel_preprocessing and parallel_training
+# driver (check 6 refused each as "declared laneless, but a lane reaches it now").
 
 #: A reason has to say something. The shortest real one in the vocabulary is
 #: `no reference` at 13 characters; below this it is a placeholder.
