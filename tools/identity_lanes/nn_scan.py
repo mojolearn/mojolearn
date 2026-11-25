@@ -38,7 +38,8 @@ def _(ml, X, yc, yr, Xh=None):
     Program, run (the eager bytes), saved and loaded (the same bytes). Sabotage arms
     coverage-autograd-nn_scan_state_lag_gpu / _cpu (step t fed the state of step t - 2) move every part on one side;
     coverage-autograd-nn_scan_init_grad_gpu / _cpu (the initial state detached) move the h_0 / c_0 gradient parts
-    on one side."""
+    on one side. Last, a dropout cell scanned with keys 0 and 1 over 8 and 2 steps (part dropout); arms
+    coverage-autograd-nn_scan_drop_key_gpu / _cpu (the captured seed reused) move it on one side."""
     T, B, F, H, O = _NN_SCAN_T, _NN_SCAN_B, _NN_SCAN_F, _NN_SCAN_H, _NN_SCAN_O
     xs = _seq(X, T, B, F)
     target = _seq(X, T, B, O, skip=4096)
