@@ -316,3 +316,9 @@ mojolearn.ops.Session.segment_sum	mapped	ops-scatter-segment	tools/identity_lane
 mojolearn.ops.Session.segment_mean	mapped	ops-scatter-segment	tools/identity_lanes/nn_scatter.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
 mojolearn.ops.Session.segment_max	mapped	ops-scatter-segment	tools/identity_lanes/nn_scatter.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
 # nn-blocks-scatter end
+# session-ops-extra begin
+mojolearn.ops.Session.sequence_mask	mapped	ops-composed-cases	python/mojolearn/verify_reference/composed-extra.json	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.topk	mapped	ops-composed-cases	python/mojolearn/verify_reference/composed-extra.json	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.gather	mapped	ops-composed-cases	python/mojolearn/verify_reference/composed-extra.json	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.logsumexp	mapped	ops-composed-cases	python/mojolearn/verify_reference/composed-extra.json	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+# session-ops-extra end

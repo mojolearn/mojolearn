@@ -247,3 +247,9 @@ Session.scan	nn-blocks-scan scan over a captured cell: not yet in a release veri
 Session.custom_op	nn-blocks-cbw user-defined backward rule: not yet in a release verification
 Session.custom	nn-blocks-cbw user-defined backward rule: not yet in a release verification
 # nn-blocks-cbw end
+# session-ops-extra begin
+Session.sequence_mask	not yet in a release verification
+Session.topk	not yet in a release verification
+Session.gather	not yet in a release verification
+Session.logsumexp	not yet in a release verification
+# session-ops-extra end
