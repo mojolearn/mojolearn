@@ -210,7 +210,14 @@ def gpc_lml(
     var pt2 = List[Float32](length=max(nb, 1), fill=Float32(0))
     for b in range(nb):
         gpc_lml_part_item(b, _lp(a), _lp(f), _lp(y), n, _lp(pdot), _lp(pt2))
-    return gpc_lml_fin(_lp(pdot), _lp(pt2), nb, logdet_b)
+    var lml = gpc_lml_fin(_lp(pdot), _lp(pt2), nb, logdet_b)
+    _ = pdot^  # keep-alive: an address helper's argument (LASTUSE helpers)
+    _ = pt2^  # keep-alive: an address helper's argument (LASTUSE helpers)
+    # keep-alive: `_lp(pdot)` / `_lp(pt2)` were their last named uses, so both lists were freed before
+    # gpc_lml_fin read them (LASTUSE helpers)
+    _ = pdot^
+    _ = pt2^
+    return lml
 
 
 # ===========================================================================

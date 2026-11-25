@@ -158,6 +158,10 @@ def _ipca_bound() raises:
     try:
         ipca_transform_run[DevExec, DevRDev, True](F32Ptr(unsafe_from_address=Int(0)), n, _D, k, _p(mean), _p(comps),
             _p(ev), False, _p(dst), List[Int](), stray)
+        _ = comps^  # keep-alive: an address helper's argument (LASTUSE helpers)
+        _ = dst^  # keep-alive: an address helper's argument (LASTUSE helpers)
+        _ = ev^  # keep-alive: an address helper's argument (LASTUSE helpers)
+        _ = mean^  # keep-alive: an address helper's argument (LASTUSE helpers)
     except error:
         unknown = _refused(String(error), "was not put through this store")
     DevRDev.free(stray)

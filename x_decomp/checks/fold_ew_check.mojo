@@ -88,6 +88,8 @@ def run_checks() raises:
         same("5300 gemm device arm " + String(arm), count_diff_f32(dev, want))
         var hst = zeros(m * n)
         HostExec.gemm(ptr(A), ptr(B), ptr(hst), m, k, n, ta, tb)
+        _ = A^  # keep-alive: an address helper's argument (LASTUSE helpers)
+        _ = B^  # keep-alive: an address helper's argument (LASTUSE helpers)
         same("5300 gemm host arm " + String(arm), count_diff_f32(hst, want))
         tr.record_list_f32("x_decomp.gemm." + String(arm), dev)
     # ---- 5300 the host's SIMD spelling (x_decomp/host_simd.mojo): shapes that
@@ -111,6 +113,8 @@ def run_checks() raises:
             require_separates("5300 host-tile gemm fold order", count_diff_f32(want, oracle_gemm(A, B, hm, hk, hn, ta, tb, 1)))
         var hst = zeros(hm * hn)
         HostExec.gemm(ptr(A), ptr(B), ptr(hst), hm, hk, hn, ta, tb)
+        _ = A^  # keep-alive: an address helper's argument (LASTUSE helpers)
+        _ = B^  # keep-alive: an address helper's argument (LASTUSE helpers)
         same("5300 host-tile gemm host arm " + String(arm), count_diff_f32(hst, want))
     # a narrow C (n 1, the matrix-vector products), which the host computes as C^T
     var nv = first_column(seam_fixture(hk, 3, 39), hk, 3)  # (a one-column fixture is its all-zero column)
@@ -124,6 +128,8 @@ def run_checks() raises:
         require_separates("5300 host-tile narrow gemm fold order", count_diff_f32(want, oracle_gemm(A, B, hm, hk, 1, ta, tb, 1)))
         var hst = zeros(hm)
         HostExec.gemm(ptr(A), ptr(B), ptr(hst), hm, hk, 1, ta, tb)
+        _ = A^  # keep-alive: an address helper's argument (LASTUSE helpers)
+        _ = B^  # keep-alive: an address helper's argument (LASTUSE helpers)
         same("5300 host-tile narrow gemm host arm " + String(arm), count_diff_f32(hst, want))
     var rdk = 9000
     var rda = seam_fixture(hm, rdk, 41)
@@ -132,6 +138,8 @@ def run_checks() raises:
     require_separates("5300 host-tile blocked narrow gemm vs one sequential fold", count_diff_f32(wrd, oracle_gemm(rda, rdv, hm, rdk, 1, False, False, 3)))
     var hrd = zeros(hm)
     HostExec.gemm(ptr(rda), ptr(rdv), ptr(hrd), hm, rdk, 1, False, False)
+    _ = rda^  # keep-alive: an address helper's argument (LASTUSE helpers)
+    _ = rdv^  # keep-alive: an address helper's argument (LASTUSE helpers)
     same("5300 host-tile blocked narrow gemm host", count_diff_f32(hrd, wrd))
     var tbk = 9000
     var tba = seam_fixture(hm, tbk, 35)
@@ -139,6 +147,8 @@ def run_checks() raises:
     var wtb = oracle_gemm(tba, tbb, hm, tbk, 19, False, False)
     var htb = zeros(hm * 19)
     HostExec.gemm(ptr(tba), ptr(tbb), ptr(htb), hm, tbk, 19, False, False)
+    _ = tba^  # keep-alive: an address helper's argument (LASTUSE helpers)
+    _ = tbb^  # keep-alive: an address helper's argument (LASTUSE helpers)
     same("5300 host-tile blocked gemm host", count_diff_f32(htb, wtb))
     # ---- 5300/5301 past FOLD_BLOCK: the blocked two-stage fold
     var kb = 9000
@@ -151,6 +161,8 @@ def run_checks() raises:
     same("5300 blocked gemm device", count_diff_f32(dbk, wbk))
     var hbk = zeros(6)
     HostExec.gemm(ptr(ab), ptr(bb2), ptr(hbk), 3, kb, 2, False, False)
+    _ = ab^  # keep-alive: an address helper's argument (LASTUSE helpers)
+    _ = bb2^  # keep-alive: an address helper's argument (LASTUSE helpers)
     same("5300 blocked gemm host", count_diff_f32(hbk, wbk))
     var cb = seam_fixture(kb, 3, 23)
     var wcb = oracle_colsum(cb, kb, 3)
@@ -160,6 +172,7 @@ def run_checks() raises:
     same("5301 blocked colsum device", count_diff_f32(dcb, wcb))
     var hcb = zeros(3)
     HostExec.colsum(ptr(cb), ptr(hcb), kb, 3)
+    _ = cb^  # keep-alive: an address helper's argument (LASTUSE helpers)
     same("5301 blocked colsum host", count_diff_f32(hcb, wcb))
     var rb = seam_fixture(2, kb, 24)
     var wrb = oracle_rowsum(rb, 2, kb)
@@ -169,6 +182,7 @@ def run_checks() raises:
     same("5301 blocked rowsum device", count_diff_f32(drb, wrb))
     var hrb = zeros(2)
     HostExec.rowsum(ptr(rb), ptr(hrb), 2, kb)
+    _ = rb^  # keep-alive: an address helper's argument (LASTUSE helpers)
     same("5301 blocked rowsum host", count_diff_f32(hrb, wrb))
     tr.record_list_f32("x_decomp.gemm.blocked", dbk)
     tr.record_list_f32("x_decomp.colsum.blocked", dcb)
@@ -187,12 +201,14 @@ def run_checks() raises:
     same("5301 colsum device", count_diff_f32(dc, wc))
     var hc = zeros(cols)
     HostExec.colsum(ptr(x), ptr(hc), rows, cols)
+    _ = x^  # keep-alive: an address helper's argument (LASTUSE helpers)
     same("5301 colsum host", count_diff_f32(hc, wc))
     var drs = zeros(cols)
     DevExec.rowsum(ptr(xr), ptr(drs), cols, rows)
     same("5301 rowsum device", count_diff_f32(drs, wr2))
     var hrs = zeros(cols)
     HostExec.rowsum(ptr(xr), ptr(hrs), cols, rows)
+    _ = xr^  # keep-alive: an address helper's argument (LASTUSE helpers)
     same("5301 rowsum host", count_diff_f32(hrs, wr2))
     tr.record_list_f32("x_decomp.colsum", dc)
     # ---- 5304 the flush of an add's RESULT: two normal operands whose sum is subnormal
@@ -210,6 +226,7 @@ def run_checks() raises:
     same("5304 flushed colsum device", count_diff_f32(fdv, wf))
     var fhs = zeros(2)
     HostExec.colsum(ptr(fz), ptr(fhs), 3, 2)
+    _ = fz^  # keep-alive: an address helper's argument (LASTUSE helpers)
     same("5304 flushed colsum host", count_diff_f32(fhs, wf))
     # the host row sums run W rows at once (host_simd.rowsum_rows): 19 rows
     # (a vector block and a tail), even rows summing to a subnormal partial
@@ -225,6 +242,7 @@ def run_checks() raises:
     require_separates("5304 subnormal row partial flushed", count_diff_f32(wfr, plain))
     var fhr = zeros(19)
     HostExec.rowsum(ptr(fr), ptr(fhr), 19, 3)
+    _ = fr^  # keep-alive: an address helper's argument (LASTUSE helpers)
     same("5304 flushed rowsum host (vector rows)", count_diff_f32(fhr, wfr))
     tr.record_list_f32("x_decomp.rowsum", drs)
     # ---- 5302 squared distance
@@ -247,6 +265,8 @@ def run_checks() raises:
     require_separates("5302 host-tile sqdist fold order", count_diff_f32(wsq, oracle_sqdist(sqa, 37, sqb, 77, d, 1)))
     var hsq = zeros(37 * 77)
     HostExec.sqdist(ptr(sqa), ptr(sqb), ptr(hsq), 37, 77, d)
+    _ = sqa^  # keep-alive: an address helper's argument (LASTUSE helpers)
+    _ = sqb^  # keep-alive: an address helper's argument (LASTUSE helpers)
     same("5302 host-tile sqdist host", count_diff_f32(hsq, wsq))
     # ---- 5319 the non-Euclidean distances (manhattan, chebyshev, minkowski 3, cosine)
     # minkowski's root exp(log(sum) / p) compresses a one-ulp fold difference,
@@ -267,6 +287,8 @@ def run_checks() raises:
         same("5319 pdist device kind " + String(kind), count_diff_f32(dp, wp))
         var hp = zeros(17 * 11)
         HostExec.sqdist(ptr(pa), ptr(pb), ptr(hp), 17, 11, dd, kind, pw)
+        _ = pa^  # keep-alive: an address helper's argument (LASTUSE helpers)
+        _ = pb^  # keep-alive: an address helper's argument (LASTUSE helpers)
         same("5319 pdist host kind " + String(kind), count_diff_f32(hp, wp))
         tr.record_list_f32("x_decomp.pdist." + String(kind), dp)
     # ---- 5303/5304/5305 the elementwise cell, every op code
@@ -419,6 +441,7 @@ def run_checks() raises:
         same("5317 absmax sign across slices device", count_diff_f32(dl, want))
         var hl = zeros(3)
         HostExec.absmax_sign(ptr(src), ptr(hl), nn, dd, bc)
+        _ = src^  # keep-alive: an address helper's argument (LASTUSE helpers)
         same("5317 absmax sign across slices host", count_diff_f32(hl, want))
         tr.record_list_f32("x_decomp.absmax_sign_long." + String(by_col), dl)
     print("PASS x_decomp fold_ew_check")

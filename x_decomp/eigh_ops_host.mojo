@@ -121,6 +121,8 @@ def eigh_op_tridiag_host(d: F32Ptr, e: F32Ptr, w: F32Ptr, z: F32Ptr, n: Int) rai
 
     var zl = List[Float32](length=n * n, fill=Float32(0.0))
     host_td_solve(dd, ee, info, wh, wlo, wt, _lp(zl), n)
+    _ = whl^  # keep-alive: an address helper's argument (LASTUSE helpers)
+    _ = wll^  # keep-alive: an address helper's argument (LASTUSE helpers)
     if infol[2] == Float32(0.0):
         host_sign_flip(zl, n)
         var got = eigh_ascending(wtl, zl, n, True, 0)

@@ -49,6 +49,28 @@ any untracked derivation when x has no later named use on the path (the Python-h
 addresses only). A cast that keeps the pointer (`x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()`, `rebind`) is
 still an any-origin derivation and passes.
 
+HELPERS THAT CARRY AN ADDRESS (2026-11-25, lane lastuse-helpers). `cd_predict_host(ctx, _p(f_order), _p(coef), ...)`
+(checks/native_tests/vdf_scope_linear2_fold.mojo, fixed in 701b026c5b) and `_ = trainer(ctx, _fp(mx), _fp(dn), ...)`
+(training_grads_device_arrays_gpu.mojo, 71b636f52c) freed coef, mx and dn before the callee read them, and the rule
+above passed both because `_p` returned `_P(unsafe_from_address=Int(values.unsafe_ptr()))`, a shape the old helper
+pattern did not know. So the helper set is derived from the code: a function CARRIES its parameter P when a `return`
+of its body is itself an untracked derivation of P by the rules above (an address, any pointer built around an
+address, an untracked cast, or a call to another carrier with P in a carried position), or returns a tracked pointer
+of P under an untracked return type. That covers
+  * free functions, at every carried argument position or keyword (`member_cw_rows(..., rows)` -> `rows`);
+  * methods returning an address of self (`arena.base()`), by name across files, unless a scanned method of the
+    same name carries nothing;
+  * struct constructors whose `__init__` stores a parameter's address in a field (`View(a)`);
+  * wrappers of carriers in the same file and through imports (parenthesized and star imports included), to a
+    fixpoint, in parallel per file.
+A carrier whose pointer is read on the spot (`_I32P(unsafe_from_address=Int(a.unsafe_ptr()))[i]`, `_iword`) returns a
+value, not an address, and is none; nor is a pointer read on the spot at a call site (`xseq_f32p(state)[k]`). A
+carrier over a Python data address (`msel_addr` around `classical_address`) keeps the data-address exceptions above.
+Not reads through the pointer, and so passing: an address only compared (`at == base`, `assert_equal(rows_of(r), 0)`),
+discarded (`_ = rows_of(r)`), or derived from a sub-buffer view (`var wv = s.view(k)` where `view` returns
+`self.param.create_sub_buffer[...]`: the memory belongs to the buffer viewed); a use that ends a loop body lives to
+the loop's exit, after the call.
+
 FREED BEFORE THE DRAIN (2026-11-18, lane fx-lifetime). `ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())` is a
 tracked derivation, so the rule above passes it, but the copy is asynchronous: the driver reads h after the call
 returns, and no origin says so. A freed pinned block goes straight back to the caching allocator, so the next
@@ -92,10 +114,10 @@ _DEF = re.compile(r"^(\s*)def\s+(\w+)")
 _VAR = re.compile(r"(?<![\w.])var\s+(\w+)\b")
 _PARAM_VAR = re.compile(r"[(,]\s*(?:var|owned)\s+(\w+)\s*:")
 _ASSIGN = re.compile(r"^\s*(?:var\s+)?(\w+)\s*(?::[^=]*)?=(?!=)")
-_HELPER_DEF = re.compile(r"^\s*def\s+(\w+)\s*\(([^)]*)\)\s*(?:raises\s*)?->\s*(\w+)")
-_HELPER_RET = r"return\s+(?:U?Int\(\s*{p}\.unsafe_ptr\(\)|{p}\.unsafe_ptr\(\)[^\n]*UntrackedOrigin)"
 #: wrappers that turn their argument into an address or pointer; not calls that consume the pointer
 _CONVERT = {"Int", "UInt", "UnsafePointer", "Pointer", "MutPointer", "ImmPointer", "OpaquePointer", "rebind"}
+#: calls that only compare the address they are handed (`assert_equal(_rows_of(rows), 0)`): nothing reads through it
+_COMPARE = {"assert_equal", "assert_not_equal"}
 _IDENT = re.compile(r"(?<![\w.])([A-Za-z_]\w*)\b(?!=[^=])")
 _HOT = re.compile(r"unsafe_ptr|unsafe_origin_cast|as_unsafe_any_origin|\bto=|_addr(?:ess)?\s*\(")
 #: a Python data address helper call wrapping the owner (`classical_address(` before `labels.codes)`)
@@ -197,24 +219,161 @@ def functions(lines):
     return defs
 
 
-def helpers_of(text):
-    """{name: 'untracked'} for the defs in TEXT that return an address or untracked pointer of a parameter, and
-    {'alias:NAME': 'any'} for its pointer aliases with a wildcard origin (`comptime _AP = MutPointer[T, MutAnyOrigin]`)."""
-    found = {}
+def _top_split(s):
+    """S split at its top-level commas (brackets balanced)."""
+    parts, depth, cur = [], 0, []
+    for c in s:
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        if c == "," and depth == 0:
+            parts.append("".join(cur))
+            cur = []
+        else:
+            cur.append(c)
+    if "".join(cur).strip():
+        parts.append("".join(cur))
+    return parts
+
+
+def _signature(sig):
+    """(name, [parameter names, in order], return type text) of a def statement SIG, or None."""
+    m = re.match(r"\s*def\s+(\w+)\s*", sig)
+    if not m:
+        return None
+    k = m.end()
+    if k < len(sig) and sig[k] == "[":
+        k = _close(sig, k)
+    if k >= len(sig) or sig[k] != "(":
+        return None
+    close = _close(sig, k)
+    params = []
+    for p in _top_split(sig[k + 1:close - 1]):
+        head = p.split(":")[0].split("=")[0].strip()
+        words = head.split()
+        if not words or words[-1] in ("*", "/") or words[-1].startswith("*"):
+            continue
+        params.append(words[-1])
+    rest = sig[close:]
+    rm = re.search(r"->\s*(.*?)\s*:?\s*$", rest)
+    return m.group(1), params, (rm.group(1) if rm else "")
+
+
+def _close(s, k):
+    """Index just past the bracket that closes the one at S[k]."""
+    open_, depth = s[k], 0
+    close = {"[": "]", "(": ")", "{": "}"}[open_]
+    while k < len(s):
+        depth += (s[k] == open_) - (s[k] == close)
+        k += 1
+        if depth == 0:
+            break
+    return k
+
+
+def _owners(lines):
+    """{def line index: struct name} for the defs that are methods (directly inside a `struct`)."""
+    out, stack = {}, []  # (indent, kind, name)
+    for i, line in enumerate(lines):
+        m = re.match(r"^(\s*)(struct|def|trait)\s+(\w+)", line)
+        if not m:
+            continue
+        ind = len(m.group(1))
+        while stack and stack[-1][0] >= ind:
+            stack.pop()
+        if m.group(2) == "def" and stack and stack[-1][1] == "struct":
+            out[i] = stack[-1][2]
+        stack.append((ind, m.group(2), m.group(3)))
+    return out
+
+
+def _carrier_pass(lines, stmts, found):
+    """One pass of HELPERS THAT CARRY AN ADDRESS (module docstring) over a file: adds to FOUND
+    {NAME: 'untracked', 'args:NAME': {position, parameter name}} for free functions and struct constructors,
+    {'meth:NAME': 'untracked'} for methods returning an address of self, {'methno:NAME': 1} for every other method;
+    returns whether FOUND grew."""
+    grew, owners = False, _owners(lines)
+    for fname, a, b in functions(lines):
+        body = [s for (i, _, s) in stmts if a < i < b]
+        sig_t = next((s for (i, _, s) in stmts if i == a), "")
+        sig = _signature(sig_t)
+        if not sig:
+            continue
+        name, params, ret = sig
+        struct = owners.get(a)
+        is_init = struct is not None and name == "__init__"
+        method = struct is not None and not is_init and params[:1] == ["self"]
+        if method:
+            own = ["self"]
+        else:
+            own = [p for p in params if p != "self"]
+        ret_untracked = "UntrackedOrigin" in ret or ("ualias:" + ret.split("[")[0].strip()) in found
+        if own and not method and not is_init and any(re.match(
+                r"^\s*return\s+(?:py_(?:item|get|getattr)\(\s*{p}\s*,|{p}\s*\[)".format(p=re.escape(own[0])), t)
+                for t in body):
+            found["getter:" + name] = 1  # returns an item of its first argument (`py_get(fields, k, default)`)
+        carried, pyaddr = set(), False
+        for pos, p in enumerate(own):
+            for s in body:
+                if is_init:
+                    if not re.match(r"^\s*self\.\w+\s*(?::[^=]*)?=(?!=)", s):
+                        continue
+                    want = "assign"
+                else:
+                    if not re.match(r"^\s*return\b", s):
+                        continue
+                    want = "return"
+                got = derivation(s, p, found)
+                if not got or got[1] != want:
+                    continue
+                if got[0] == "untracked" or (got[0] == "tracked" and ret_untracked and not is_init):
+                    carried.update((pos, p))
+                    pyaddr = pyaddr or got[2] == "pyaddr"
+                    break
+        if method and any(re.match(r"^\s*return\s+self\.[\w.]+\.create_sub_buffer\b", t) for t in body):
+            found["subview:" + name] = 1  # a view of memory self owns (`self.param.create_sub_buffer[...]`)
+        if method:
+            key = "meth:" + name
+            if carried:
+                if found.get(key) != "untracked":
+                    found[key], grew = "untracked", True
+            else:
+                found["methno:" + name] = 1
+            continue
+        target = struct if is_init else name
+        if carried and target:
+            args = found.get("args:" + target, frozenset())
+            if found.get(target) != "untracked" or not carried <= args:
+                found[target] = "untracked"
+                found["args:" + target] = frozenset(args | carried)
+                grew = True
+            if pyaddr and "pyaddr:" + target not in found:
+                found["pyaddr:" + target], grew = 1, True
+    return grew
+
+
+def helpers_of(text, seed=None):
+    """{name: 'untracked'} (with 'args:NAME', the carried parameter positions and names) for the defs in TEXT that
+    return an address or untracked pointer of a parameter, directly or through another such helper (SEED: the
+    helpers imported into TEXT), and for the structs whose constructor stores one; {'meth:NAME': 'untracked'} for
+    methods returning an address of self; {'alias:NAME': 'any'} for its pointer aliases with a wildcard origin
+    (`comptime _AP = MutPointer[T, MutAnyOrigin]`), {'ualias:NAME': 'untracked'} for the untracked ones."""
+    found = dict(seed or {})
     for m in _ADDR_DEF.finditer(text):
         if m.group(2).split(".")[-1] in _NOT_OWNER:
             found["noaddr:" + m.group(1)] = "noaddr"
     for m in re.finditer(r"^comptime\s+(\w+)\s*=\s*(?:Mut|Imm)?(?:Unsafe)?Pointer\[[^\n]*AnyOrigin", text, re.M):
         found["alias:" + m.group(1)] = "any"
+    for m in re.finditer(r"^comptime\s+(\w+)\s*=\s*(?:Mut|Imm)?(?:Unsafe)?Pointer\[[^\n]*UntrackedOrigin", text,
+                         re.M):
+        found["ualias:" + m.group(1)] = "untracked"
     lines = text.splitlines()
-    for i, line in enumerate(lines):
-        m = _HELPER_DEF.match(line)
-        if not m:
-            continue
-        params = [p.split(":")[0].split()[-1] for p in m.group(2).split(",") if ":" in p]
-        body = "\n".join(lines[i + 1:i + 8])
-        if any(re.search(_HELPER_RET.format(p=re.escape(p)), body) for p in params):
-            found[m.group(1)] = "untracked"
+    if "unsafe_ptr" in text or any(v == "untracked" for v in found.values()):
+        stmts = statements(lines)
+        for _ in range(6):  # helpers of helpers in the same file
+            if not _carrier_pass(lines, stmts, found):
+                break
     calls = {}  # for the queued rule: functions that drain directly (`drain:NAME`) and every def's callees
     for fname, a, b in functions(lines):
         if fname == "main":
@@ -342,6 +501,55 @@ def _arg_span(s, p):
     return s[lo:hi]
 
 
+def _helper_call(s, p, end, helpers):
+    """Start of the helper call in S that carries an address of the name at S[P:END] (module docstring, HELPERS
+    THAT CARRY AN ADDRESS), or None: the name is a whole argument of a free helper or struct constructor at a carried
+    position (or keyword), or the receiver of a method helper (`x.addr()`)."""
+    mm = re.match(r"\s*\.\s*(\w+)\s*(?:\[[^\[\]]*\])?\s*\(", s[end:])
+    if mm and helpers.get("meth:" + mm.group(1)) == "untracked" and mm.group(1) not in helpers.get("__methno__", ()):
+        return p
+    inner = _enclosing_calls(s, p, at=True)
+    if not inner:
+        return None
+    k = inner[0][0]
+    cm = re.search(r"(?<![\w.])(\w+)(?:\[[^\[\]]*\])?\s*$", s[:k])
+    if not cm or helpers.get(cm.group(1)) != "untracked":
+        return None
+    args = helpers.get("args:" + cm.group(1), frozenset({0}))
+    parts = _top_split(s[k + 1:_close(s, k) - 1])
+    off = k + 1
+    for idx, part in enumerate(parts):
+        if off <= p < off + len(part):
+            kw = re.match(r"\s*(\w+)\s*=(?!=)\s*(.*?)\s*$", part)
+            if kw:
+                ok = kw.group(2) == s[p:end] and kw.group(1) in args
+            else:
+                ok = part.strip() == s[p:end] and idx in args
+            return cm.start(1) if ok else None
+        off += len(part) + 1
+    return None
+
+
+_READ_NEXT = re.compile(r"\s*(?:\[|\.(?:unsafe_load|load|unsafe_get)\b)")
+
+
+def _read_on_spot(s, start):
+    """Whether the pointer that starts at S[START] (a helper call, an owner's chain, `Pointer(to=`) is read on the
+    spot: indexed or loaded right after the call or after a conversion around it
+    (`_I32P(unsafe_from_address=Int(a.unsafe_ptr()))[i]`, `xseq_f32p(state)[k]`). A value is read, no pointer
+    outlives the statement."""
+    m = re.match(r"\w+(?:\[[^\[\]]*\])?", s[start:])
+    i = start + (m.end() if m else 0)
+    if i < len(s) and s[i] == "(" and _READ_NEXT.match(s, _close(s, i)):
+        return True
+    for k, cname in _enclosing_calls(s, start, at=True):
+        if cname not in _CONVERT:
+            break
+        if _READ_NEXT.match(s, _close(s, k)):
+            return True
+    return False
+
+
 def derivation(s, name, helpers):
     """(kind, sink, via) of the first pointer derivation of NAME in statement S, or None. kind: untracked, any,
     tracked; sink: call, held (NAME itself is an argument of the call), return, assign; via: pyaddr (a data
@@ -352,10 +560,13 @@ def derivation(s, name, helpers):
         before = s[:p]
         if s[m.end():].startswith("[]"):
             continue
-        hm = re.search(r"\b(\w+)\(\s*$", before)
         am = _PYADDR.search(before)
-        if hm and helpers.get(hm.group(1)) == "untracked" and s[m.end():].lstrip().startswith(")"):
-            kind, start = helpers[hm.group(1)], hm.start(1)
+        via_helper = _helper_call(s, p, m.end(), helpers)
+        if via_helper is not None:
+            kind, start = "untracked", via_helper
+            hn = re.match(r"\w+", s[start:])
+            if hn and "pyaddr:" + hn.group(0) in helpers:
+                via = "pyaddr"  # a helper over a Python data address: the data-address exceptions apply
         elif am and am.group(1) not in helpers.get("__noaddr__", ()) and _PYADDR_ARG.match(s, m.end()):
             # a data address of X (or of a field of X): no origin, whatever pointer is built around it
             kind, start, via = "untracked", am.start(1), "pyaddr"
@@ -387,9 +598,13 @@ def derivation(s, name, helpers):
                 kind = "any"
             else:
                 kind = "tracked"
+        if _read_on_spot(s, start):
+            continue
         if re.search(r"[=!<>]=|\bis\b", _arg_span(s, start)):
             continue  # an address compared (`a == Int(py=classical_address(view))`): nothing reads through it
         calls = [c for c in _enclosing_calls(s, start) if c not in _CONVERT]
+        if calls and calls[0] in _COMPARE:
+            continue  # an address compared by an assertion: nothing reads through it
         if calls:
             sink = "held" if _held_by_the_call(s, name, start) else "call"
         elif re.match(r"^\s*return\b", s):
@@ -409,6 +624,8 @@ def scan_text(path, text, helpers):
     if drains is None:
         drains = close_drains((k[6:] for k in helpers if k.startswith("drain:")), [helpers.get("__calls__", {})])
     drain_call = _drain_call(drains) if "enqueue_copy" in text else None
+    if "__methno__" not in helpers:
+        helpers = dict(helpers, __methno__=frozenset(k[7:] for k in helpers if k.startswith("methno:")))
     if "__noaddr__" not in helpers:
         helpers = dict(helpers, __noaddr__=frozenset(k[7:] for k in helpers if k.startswith("noaddr:")))
     for fname, a, b in functions(lines):
@@ -433,8 +650,9 @@ def scan_text(path, text, helpers):
             return n_body
 
         idents = [set(_IDENT.findall(s)) if k else set() for k, (_, _, s) in enumerate(body)]
-        calls = [h for h, v in helpers.items() if v == "untracked"]
-        hot = [bool(_HOT.search(s)) or any(h + "(" in s for h in calls) for (_, _, s) in body]
+        calls = [h + "(" for h, v in helpers.items() if v == "untracked" and ":" not in h] + [
+            "." + h[5:] + "(" for h, v in helpers.items() if v == "untracked" and h.startswith("meth:")]
+        hot = [bool(_HOT.search(s)) or any(h in s for h in calls) for (_, _, s) in body]
         loops = [k for k, (_, _, s) in enumerate(body) if _LOOP.match(s)]
         decls = {}  # name -> [(declaration statement, scope end)]
         for v in _PARAM_VAR.findall(body[0][2]):
@@ -450,8 +668,12 @@ def scan_text(path, text, helpers):
             _PARAM_VAR.findall(sig)) - {"self"}
         aliases = set()
         if borrowed:
-            looked = r"(?:(?:{p})\s*(?:\[|\.\w+\s*$)|py_(?:item|get|getattr)\(\s*(?:{p})\s*,)".format(
-                p="|".join(map(re.escape, sorted(borrowed))))
+            getters = helpers.get("__getters__")
+            if getters is None:
+                getters = frozenset(k[7:] for k in helpers if k.startswith("getter:"))
+            get_rx = "|".join(["py_(?:item|get|getattr)"] + sorted(map(re.escape, getters)))
+            looked = r"(?:(?:{p})\s*(?:\[|\.\w+\s*$)|(?<![\w.])(?:{g})\(\s*(?:{p})\s*,)".format(
+                p="|".join(map(re.escape, sorted(borrowed))), g=get_rx)
             for v, scopes in decls.items():
                 if len(scopes) == 1 and scopes[0][0] > 0 and re.search(
                         r"(?<![\w.])var\s+" + re.escape(v) + r"\s*(?::[^=]*)?=\s*" + looked, body[scopes[0][0]][2]) \
@@ -536,6 +758,17 @@ def scan_text(path, text, helpers):
             reach_memo[k] = got
             return got
 
+        # sub-buffer views (`var wv = s.view(j)`, `buf.create_sub_buffer[...]`, never rebound): the memory belongs
+        # to the buffer viewed, which outlives the view; the view's end frees nothing
+        subviews = helpers.get("__subviews__")
+        if subviews is None:
+            subviews = frozenset(k[8:] for k in helpers if k.startswith("subview:"))
+        view_rx = re.compile(r"=\s*[\w.\[\]]+\.(?:" + "|".join(["create_sub_buffer"] + sorted(
+            map(re.escape, subviews))) + r")\s*[\[(]")
+        for v, scopes in list(decls.items()):
+            if len(scopes) == 1 and scopes[0][0] > 0 and view_rx.search(body[scopes[0][0]][2]) and not any(
+                    re.match(r"^\s*" + re.escape(v) + r"\s*=(?!=)", t) for (_, _, t) in body):
+                decls.pop(v)
         for x, scopes in sorted(decls.items()):
             for d, e in scopes:
                 ux = uses(x, d, e)
@@ -558,14 +791,14 @@ def scan_text(path, text, helpers):
                     bad, why, upto = False, "", k
                     if sink == "assign":
                         am = _ASSIGN.match(s)
-                        if am and am.group(1) != x:
+                        if am and am.group(1) not in (x, "_"):  # `_ = f(...)` discards the address
                             names, frontier, p_last = {am.group(1)}, [am.group(1)], k
                             while frontier:  # names assigned from the pointer after the derivation
                                 n = frontier.pop()
                                 sc = scope_of(n, k) or (d, e)
                                 for q in uses(n, k + 1, sc[1]):
-                                    if q not in on_path or _KEEP.match(body[q][2]):
-                                        continue  # `_ = p`: a keep-alive, not a read through the pointer
+                                    if q not in on_path or _KEEP.match(body[q][2]) or _only_compared(body[q][2], n):
+                                        continue  # `_ = p` (a keep-alive) or `p == q`: no read through the pointer
                                     p_last = max(p_last, q)
                                     bm = _ASSIGN.match(body[q][2])
                                     if bm and bm.group(1) not in names and bm.group(1) not in (n, "_") and \
@@ -575,7 +808,10 @@ def scan_text(path, text, helpers):
                             upto = p_last
                             if p_last > eff_x:
                                 bad, why = True, f"pointer {am.group(1)} used at line {body[p_last][0] + 1}"
-                    elif sink in ("call", "return") and k == last_x and eff_x == last_x:
+                    elif sink in ("call", "return") and k == last_x and eff_x == last_x and not any(
+                            d < h <= last_x < block_end(h) for h in loops):
+                        # (a use inside a loop that began after the declaration: the value lives across the back
+                        # edge and dies at the loop's exit, after the call, even when the call ends the body)
                         bad, why = True, ("freed before the call reads it" if sink == "call" else "returned")
                     if kind != "untracked" or moved or (via == "pyaddr" and (x in aliases or held(x, k, upto))):
                         bad = False
@@ -674,13 +910,19 @@ def _own_copies(path, fname, body):
     return out
 
 
+def _only_compared(s, n):
+    """Whether every use of the name N in statement S is an operand of a comparison (`require(at == base, ...)`)."""
+    hits = [m.start() for m in re.finditer(r"(?<![\w.])" + re.escape(n) + r"\b", s)]
+    return bool(hits) and all(re.search(r"[=!<>]=|\bis\b", _arg_span(s, h)) for h in hits)
+
+
 def _carries(s, n):
     """Whether assignment S copies the pointer N into its target (`q = n + 4`, `[n, m]`,
     `MutPointer(unsafe_from_address=n)`), not a value a call computed from it."""
     rhs = s[_ASSIGN.match(s).end():]
     off = len(s) - len(rhs)
     for m in re.finditer(r"(?<![\w.])" + re.escape(n) + r"\b", rhs):
-        if re.match(r"\s*(?:\[|\.(?:unsafe_load|load|unsafe_get)\b)", rhs[m.end():]):
+        if _READ_NEXT.match(rhs, m.end()) or _read_on_spot(s, off + m.start()):
             continue  # a value read through the pointer, not the pointer
         if not [c for c in _enclosing_calls(s, off + m.start()) if c not in _CONVERT]:
             return True
@@ -733,27 +975,79 @@ def _chunks(items, n):
     return [items[i::n] for i in range(n) if items[i::n]]
 
 
+_IMPORT = re.compile(r"^\s*from\s+(\S+)\s+import\s+(\([^)]*\)|[^\n]+)", re.M)
+
+
+def _imported(path, text, per_file):
+    """The helper entries (untracked helpers with their carried arguments, pointer aliases) that TEXT imports from
+    the scanned modules in PER_FILE (`from m import a, b`, a parenthesized list over lines, or `*`)."""
+    got = {}
+    for m in _IMPORT.finditer(text):
+        target = _module_file(path, m.group(1))
+        source = per_file.get(target)
+        if source is None and not m.group(1).startswith("."):  # a sibling module on the include path
+            source = per_file.get((Path(path).parent / Path(target)).as_posix(), {})
+        source = source or {}
+        names = re.findall(r"\w+", m.group(2))
+        if "*" in m.group(2):
+            names = [k for k in source if ":" not in k] + [k.split(":", 1)[1] for k in source
+                                                             if k.startswith(("alias:", "ualias:"))]
+        for name in names:
+            if source.get(name) == "untracked":
+                got[name] = "untracked"
+                got["args:" + name] = source.get("args:" + name, frozenset({0}))
+                if "pyaddr:" + name in source:
+                    got["pyaddr:" + name] = 1
+            for pre in ("alias:", "ualias:"):
+                if pre + name in source:
+                    got[pre + name] = source[pre + name]
+    return got
+
+
+def _helper_pass_seeded(items):
+    return [(path, helpers_of(text, seed)) for path, text, seed in items]
+
+
 def scan(files, workers=None):
     """[finding] over FILES [(path, text)], split across WORKERS processes (default os.cpu_count())."""
     workers = max(1, workers or os.cpu_count() or 1)
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as pool:
         per_file = dict(h for part in pool.map(_helper_pass, _chunks(files, workers)) for h in part)
-        drains = close_drains((k[6:] for h in per_file.values() for k in h if k.startswith("drain:")),
-                              [h.pop("__calls__", {}) for h in per_file.values()])
+        call_maps = [h.pop("__calls__", {}) for h in per_file.values()]
+        # helpers that wrap an imported helper (and re-exports): seed each file with what it imports and rerun its
+        # helper pass, in parallel, until no file's imports change
+        seeds = {}
+        for _ in range(6):
+            redo = []
+            for path, text in files:
+                seed = _imported(path, text, per_file)
+                if seed and seed != seeds.get(path):
+                    seeds[path] = seed
+                    redo.append((path, text, seed))
+            if not redo:
+                break
+            for path, h in (h for part in pool.map(_helper_pass_seeded, _chunks(redo, workers)) for h in part):
+                h.pop("__calls__", None)
+                per_file[path] = h
+        drains = close_drains((k[6:] for h in per_file.values() for k in h if k.startswith("drain:")), call_maps)
         # by name across files, like the drains: a `*_address` helper of a slot index is no owner's data address
         noaddr = frozenset(k[7:] for h in per_file.values() for k in h if k.startswith("noaddr:"))
+        # methods by name across files: a method name counts only when no scanned method of that name is plain
+        meths = {k: "untracked" for h in per_file.values() for k, v in h.items() if k.startswith("meth:")}
+        methno = frozenset(k[7:] for h in per_file.values() for k in h if k.startswith("methno:"))
+        getters = frozenset(k[7:] for h in per_file.values() for k in h if k.startswith("getter:"))
+        subviews = frozenset(k[8:] for h in per_file.values() for k in h if k.startswith("subview:"))
         items = []
         for path, text in files:
             local = dict(per_file.get(path, {}))
-            for m in re.finditer(r"^\s*from\s+(\S+)\s+import\s+([^\n]+)", text, re.M):
-                source = per_file.get(_module_file(path, m.group(1)), {})
-                for name in re.findall(r"\w+", m.group(2)):
-                    if source.get(name) == "untracked":
-                        local.setdefault(name, "untracked")
-                    if "alias:" + name in source:
-                        local.setdefault("alias:" + name, source["alias:" + name])
+            for k, v in _imported(path, text, per_file).items():
+                local.setdefault(k, v)
+            local.update(meths)
             local["__drains__"] = drains
             local["__noaddr__"] = noaddr
+            local["__methno__"] = methno
+            local["__getters__"] = getters
+            local["__subviews__"] = subviews
             items.append((path, text, local))
         found = [f for part in pool.map(_scan_many, _chunks(items, workers)) for f in part]
     return sorted(found, key=lambda f: (f["path"], f["line"], f["local"]))
