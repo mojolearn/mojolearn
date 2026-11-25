@@ -1,0 +1,22 @@
+diff --git a/autograd/nn_conv_ops.mojo b/autograd/nn_conv_ops.mojo
+index 0318fca2c9..7af05c2b2e 100644
+--- a/autograd/nn_conv_ops.mojo
++++ b/autograd/nn_conv_ops.mojo
+@@ -21,6 +21,7 @@
+ # ascending output order from +0.0, so one order on the host and on every vendor.
+ from std.memory import bitcast
+ from std.sys.compile import is_defined
++from std.sys.info import is_gpu
+ from sequence.ops import Args, FP
+ from checks.numerics import ftz, identical_mul
+ from autograd.rankn import rn_word
+@@ -166,6 +167,9 @@ def op_nnc_amax_vjp(i: Int, a: Args):
+     upstream, p1 dx, p2 the winners."""
+     var g = _xf(a.p0)
+     adapt_max_bwd_at(i, g, g, _xf(a.p1), g, _xd(a.p2), _xd(a.p11))
++    comptime if is_gpu():
++        # SABOTAGE (coverage-autograd-session_ops_pool_adapt_max_vjp_gpu): the device's adaptive max gradient halved
++        a.p1.unsafe_store(i, ftz(a.p1.unsafe_load(i) * Float32(0.5)))
+ 
+ 
+ # ---------------------------------------------------------------- upsampling

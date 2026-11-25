@@ -113,6 +113,88 @@ from autograd.session_ops_conv import (
 from autograd.rankn import ShapeN
 from bindings.native_class_admission_door import static_builtin_type
 # session-ops-conv end
+# session-ops-pool begin: Sequential's pools as Session ops (autograd/session_ops_pool.mojo, codes 140..148)
+from autograd.autograd_ops_frontend_run import (
+    _SOP_MAX_POOL1D, _SOP_AVG_POOL1D, _SOP_MAX_POOL3D, _SOP_AVG_POOL3D, _SOP_ADAPTIVE_AVG_POOL3D,
+    _SOP_ADAPTIVE_AVG_POOL1D, _SOP_ADAPTIVE_MAX_POOL1D, _SOP_ADAPTIVE_AVG_POOL2D, _SOP_ADAPTIVE_MAX_POOL2D,
+)
+from autograd.session_ops_pool import (
+    OPS_POOL_MAX1D, OPS_POOL_AVG1D, OPS_POOL_MAX2D, OPS_POOL_AVG2D, OPS_POOL_MAX3D, OPS_POOL_AVG3D,
+    OPS_POOL_ADAPTIVE_AVG3D, OPS_POOL_ADAPTIVE_AVG, OPS_POOL_ADAPTIVE_MAX,
+)
+
+
+def _pool_axes(x: PythonObject, n: Int, name: String, low: Int) raises -> List[Int]:
+    """A pool argument as n per-axis values: one integer for every axis, or a tuple / list of n integers
+    (PyTorch's int-or-tuple arguments). Read once per call (UNPACK)."""
+    if _is_int(x):
+        return List[Int](length=n, fill=_int(x, name, low))
+    var count = 0
+    try:
+        count = len(x)
+    except problem:
+        raise Error("TypeError: " + name + " must be an integer or a tuple of " + String(n) + " integers")
+    if count != n:
+        raise Error("ValueError: " + name + " must be an integer or a tuple of " + String(n) + " integers, got "
+                    + String(count) + " values")
+    var out = List[Int](capacity=n)
+    for k in range(n):  # small-loop(at most three pooled axes): public metadata
+        out.append(_int(x[k], name, low))
+    return out^
+
+
+def _pool_words(n: Int, is_max: Bool, args: PythonObject) raises -> List[Int]:
+    """The integer words of an n-axis pool (autograd/session_ops_pool.mojo pool_int_count): kernel, stride and
+    padding per axis, then dilation per axis and ceil_mode (max), or ceil_mode, count_include_pad and, for 2-D and
+    3-D, divisor_override (avg). args are PyTorch's: max (x, kernel_size, stride, padding, dilation, ceil_mode,
+    return_indices); avg (x, kernel_size, stride, padding, ceil_mode, count_include_pad[, divisor_override])."""
+    var words = _pool_axes(args[1], n, "kernel_size", 1)
+    if _nil(args[2]):
+        _append(words, words.copy())  # stride None: PyTorch's default, the window
+    else:
+        _append(words, _pool_axes(args[2], n, "stride", 1))
+    _append(words, _pool_axes(args[3], n, "padding", 0))
+    if is_max:
+        if Bool(py=args[6]):
+            raise Error("ValueError: return_indices=True is not supported: a Session operation returns one tensor")
+        _append(words, _pool_axes(args[4], n, "dilation", 1))
+        words.append(Int(Bool(py=args[5])))
+    else:
+        words.append(Int(Bool(py=args[4])))
+        words.append(Int(Bool(py=args[5])))
+        if n > 1:
+            words.append(0 if _nil(args[6]) else _int(args[6], "divisor_override", 1))
+    return words^
+
+
+def _pool2d_plain(w: List[Int], is_max: Bool) -> Bool:
+    """True when a max_pool2d / avg_pool2d call uses no option the old codes 45 / 46 lack (square window and step,
+    no padding, floor mode; max: no dilation; avg: no divisor_override): it keeps its old code and words."""
+    if w[0] != w[1] or w[2] != w[3] or w[4] != 0 or w[5] != 0:
+        return False
+    if is_max:
+        return w[6] == 1 and w[7] == 1 and w[8] == 0
+    return w[6] == 0 and w[8] == 0  # no padding and floor mode: count_include_pad changes no window
+
+
+def _adaptive_sizes(x: PythonObject, n: Int) raises -> List[Int]:
+    """An adaptive pool's output_size as n values: an integer, or a tuple of n entries each an integer or None
+    (None keeps the input's size: word 0)."""
+    if _is_int(x):
+        return List[Int](length=n, fill=_int(x, "output_size", 1))
+    var count = 0
+    try:
+        count = len(x)
+    except problem:
+        raise Error("TypeError: output_size must be an integer or a tuple of " + String(n) + " integers or None")
+    if count != n:
+        raise Error("ValueError: output_size must be an integer or a tuple of " + String(n)
+                    + " integers or None, got " + String(count) + " values")
+    var out = List[Int](capacity=n)
+    for k in range(n):  # small-loop(at most three output sizes): public metadata
+        out.append(0 if _nil(x[k]) else _int(x[k], "output_size", 1))
+    return out^
+# session-ops-pool end
 
 
 struct _SessionOpNames(Defaultable, Movable):
@@ -1133,10 +1215,17 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
                 raise Error("ValueError: activation must be None, 'relu', 'sigmoid', 'tanh' or 'softmax'")
             ints.append(activation)
     elif op == _SOP_MAX_POOL2D or op == _SOP_AVG_POOL2D:
-        code = 45 if op == _SOP_MAX_POOL2D else 46
         hs.append(_int(args[0], "handle", 1))
-        var kernel = _int(args[1], "kernel_size", 1)
-        ints = [kernel, kernel if _nil(args[2]) else _int(args[2], "stride", 1)]
+        # session-ops-pool: PyTorch's options (per-axis tuples, padding, dilation, ceil_mode, count_include_pad,
+        # divisor_override). A call that uses none keeps code 45 / 46 and its two words [kernel, stride], the
+        # branch it ran before; one that does records 142 / 143 (autograd/session_ops_pool.mojo).
+        var pool2d = _pool_words(2, op == _SOP_MAX_POOL2D, args)
+        if _pool2d_plain(pool2d, op == _SOP_MAX_POOL2D):
+            code = 45 if op == _SOP_MAX_POOL2D else 46
+            ints = [pool2d[0], pool2d[2]]
+        else:
+            code = OPS_POOL_MAX2D if op == _SOP_MAX_POOL2D else OPS_POOL_AVG2D
+            ints = pool2d^
     elif op == _SOP_GELU:
         code = 49
         hs.append(_int(args[0], "handle", 1))
@@ -1393,6 +1482,33 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         else:
             ints = _conv_transpose_words(args, 2, "conv_transpose2d")
     # session-ops-conv end
+    # session-ops-pool begin: Sequential's pools (autograd/session_ops_pool.mojo); words pool_int_count(code)
+    elif op == _SOP_MAX_POOL1D or op == _SOP_AVG_POOL1D or op == _SOP_MAX_POOL3D or op == _SOP_AVG_POOL3D:
+        var pool_max = op == _SOP_MAX_POOL1D or op == _SOP_MAX_POOL3D
+        var pool_n = 1 if (op == _SOP_MAX_POOL1D or op == _SOP_AVG_POOL1D) else 3
+        hs.append(_int(args[0], "input", 1))
+        ints = _pool_words(pool_n, pool_max, args)
+        if pool_n == 1:
+            code = OPS_POOL_MAX1D if pool_max else OPS_POOL_AVG1D
+        else:
+            code = OPS_POOL_MAX3D if pool_max else OPS_POOL_AVG3D
+    elif (op == _SOP_ADAPTIVE_AVG_POOL1D or op == _SOP_ADAPTIVE_AVG_POOL2D or op == _SOP_ADAPTIVE_MAX_POOL1D
+          or op == _SOP_ADAPTIVE_MAX_POOL2D):
+        # args (x, output_size) or (x, output_size, return_indices); ints [rank 1 or 2, o0, o1]
+        var adapt_max = op == _SOP_ADAPTIVE_MAX_POOL1D or op == _SOP_ADAPTIVE_MAX_POOL2D
+        var adapt_n = 2 if (op == _SOP_ADAPTIVE_AVG_POOL2D or op == _SOP_ADAPTIVE_MAX_POOL2D) else 1
+        hs.append(_int(args[0], "input", 1))
+        if adapt_max and Bool(py=args[2]):
+            raise Error("ValueError: return_indices=True is not supported: a Session operation returns one tensor")
+        var sizes = _adaptive_sizes(args[1], adapt_n)
+        ints = [adapt_n, sizes[0], sizes[1] if adapt_n == 2 else 0]
+        code = OPS_POOL_ADAPTIVE_MAX if adapt_max else OPS_POOL_ADAPTIVE_AVG
+    elif op == _SOP_ADAPTIVE_AVG_POOL3D:
+        # args (x, output_size); ints [od, oh, ow], 0 keeps the input's size
+        code = OPS_POOL_ADAPTIVE_AVG3D
+        hs.append(_int(args[0], "input", 1))
+        ints = _adaptive_sizes(args[1], 3)
+    # session-ops-pool end
     # nn-blocks-pg begin
     if op >= _SOP_PG_FIRST and op <= _SOP_PG_LAST:
         return pg_session_call_py[E](s, op, args)

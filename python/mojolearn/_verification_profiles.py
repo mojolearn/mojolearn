@@ -62,6 +62,9 @@ ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
                           # session-ops-conv begin: ops.Session conv1d / conv2d dilated / conv3d / conv_transpose, one seeded backward
                           'ops-conv-layers',
                           # session-ops-conv end
+                          # session-ops-pool begin: Session pools (window and adaptive), one seeded step each
+                          'ops-pool-window', 'ops-pool-adaptive',
+                          # session-ops-pool end
                           ))
 # These fixtures use loaded weights or inspect configuration without training.
 NEURAL_INFERENCE = frozenset(('hf-causal-lm', 'byte-lm-host-infer',

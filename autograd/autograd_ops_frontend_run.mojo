@@ -207,6 +207,20 @@ comptime _SOP_CONV3D = 1132
 comptime _SOP_CONV_TRANSPOSE1D = 1133
 comptime _SOP_CONV_TRANSPOSE2D = 1134
 # session-ops-conv end
+# session-ops-pool begin: Sequential's pools as Session ops (session codes 140..148, autograd/session_ops_pool.mojo);
+# frontend codes inside this sub-lane's 1140..1149 (the door chooses the session code: max_pool2d / avg_pool2d keep
+# their names' codes and take 142 / 143 only with an option; the adaptive 2-D names use the free 1142 / 1143 and
+# record 147 / 148 with rank word 2)
+comptime _SOP_MAX_POOL1D = 1140
+comptime _SOP_AVG_POOL1D = 1141
+comptime _SOP_MAX_POOL3D = 1144
+comptime _SOP_AVG_POOL3D = 1145
+comptime _SOP_ADAPTIVE_AVG_POOL3D = 1146
+comptime _SOP_ADAPTIVE_AVG_POOL1D = 1147
+comptime _SOP_ADAPTIVE_MAX_POOL1D = 1148
+comptime _SOP_ADAPTIVE_AVG_POOL2D = 1142
+comptime _SOP_ADAPTIVE_MAX_POOL2D = 1143
+# session-ops-pool end
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -395,6 +409,17 @@ struct _SessionOpCodes(Defaultable, Movable):
         self.codes["conv_transpose1d"] = _SOP_CONV_TRANSPOSE1D
         self.codes["conv_transpose2d"] = _SOP_CONV_TRANSPOSE2D
         # session-ops-conv end
+        # session-ops-pool begin
+        self.codes["max_pool1d"] = _SOP_MAX_POOL1D
+        self.codes["avg_pool1d"] = _SOP_AVG_POOL1D
+        self.codes["max_pool3d"] = _SOP_MAX_POOL3D
+        self.codes["avg_pool3d"] = _SOP_AVG_POOL3D
+        self.codes["adaptive_avg_pool3d"] = _SOP_ADAPTIVE_AVG_POOL3D
+        self.codes["adaptive_avg_pool1d"] = _SOP_ADAPTIVE_AVG_POOL1D
+        self.codes["adaptive_max_pool1d"] = _SOP_ADAPTIVE_MAX_POOL1D
+        self.codes["adaptive_avg_pool2d"] = _SOP_ADAPTIVE_AVG_POOL2D
+        self.codes["adaptive_max_pool2d"] = _SOP_ADAPTIVE_MAX_POOL2D
+        # session-ops-pool end
 
 
 # One table per process (identical contents in every extension that links this file).

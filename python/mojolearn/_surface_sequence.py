@@ -134,6 +134,9 @@ FAMILIES = (
                         # session-ops-conv begin: Sequential's convolutions as Session ops (tools/identity_lanes/session_ops_conv.py)
                         "ops-conv-layers",
                         # session-ops-conv end
+                        # session-ops-pool begin: Session pools (tools/identity_lanes/session_ops_pool.py)
+                        "ops-pool-window", "ops-pool-adaptive",
+                        # session-ops-pool end
                         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -337,6 +340,10 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     # session-ops-conv begin
     "ops-conv-layers": "Session: conv1d, conv2d (dilation, per-axis), conv3d, conv_transpose1d, conv_transpose2d",
     # session-ops-conv end
+    # session-ops-pool begin
+    "ops-pool-window": "Session: max / avg pool 1-D, 2-D with options, 3-D, adaptive_avg_pool3d",
+    "ops-pool-adaptive": "Session: adaptive avg / max pool 1-D and 2-D, in a scan cell",
+    # session-ops-pool end
                        }
 PUBLIC_PENDING_LANES = {
     # lane w3f2-main (2026-11-24): "no reference", not "unwatched": the shipped table
@@ -410,4 +417,8 @@ PUBLIC_PENDING_LANES = {
     # session-ops-conv begin
     "ops-conv-layers": "no reference",
     # session-ops-conv end
+    # session-ops-pool begin
+    "ops-pool-window": "no reference",
+    "ops-pool-adaptive": "no reference",
+    # session-ops-pool end
 }

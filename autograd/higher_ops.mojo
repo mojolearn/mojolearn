@@ -168,6 +168,12 @@ def higher_family(op: Int) -> String:
     if tag == 560:
         return "conv_transpose1d / conv_transpose2d"
     # session-ops-conv end
+    # session-ops-pool begin: the adaptive pools' nodes (autograd/nn_conv.mojo NNC_TAG_ADAPT_AVG / _MAX)
+    if tag == 562:
+        return "adaptive_avg_pool"
+    if tag == 563:
+        return "adaptive_max_pool"
+    # session-ops-pool end
     return "custom"
 
 

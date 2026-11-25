@@ -258,3 +258,14 @@ Session.conv3d	session-ops-conv Sequential's convolutions as Session ops: not ye
 Session.conv_transpose1d	session-ops-conv Sequential's convolutions as Session ops: not yet in a release verification
 Session.conv_transpose2d	session-ops-conv Sequential's convolutions as Session ops: not yet in a release verification
 # session-ops-conv end
+# session-ops-pool begin
+Session.max_pool1d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.avg_pool1d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.max_pool3d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.avg_pool3d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.adaptive_avg_pool1d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.adaptive_avg_pool2d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.adaptive_avg_pool3d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.adaptive_max_pool1d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+Session.adaptive_max_pool2d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
+# session-ops-pool end

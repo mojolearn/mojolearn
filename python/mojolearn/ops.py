@@ -94,6 +94,10 @@ _OP = {
     # session-ops-conv begin
     "conv1d": 130, "conv2d_dilated": 131, "conv3d": 132, "conv_transpose1d": 133, "conv_transpose2d": 134,
     # session-ops-conv end
+    # session-ops-pool begin: the base codes (max_pool2d / avg_pool2d with an option record 142 / 143)
+    "max_pool1d": 140, "avg_pool1d": 141, "max_pool3d": 144, "avg_pool3d": 145, "adaptive_avg_pool3d": 146,
+    "adaptive_avg_pool1d": 147, "adaptive_avg_pool2d": 147, "adaptive_max_pool1d": 148, "adaptive_max_pool2d": 148,
+    # session-ops-pool end
 }
 _GELU = {"none": 0, "tanh": 1}
 # the state buffers autograd/ops_api.mojo optimizer_state returns, by kind
@@ -516,16 +520,45 @@ class Session:
         """
         return _SESSION_CALL(self, "conv2d", (x, weight, bias, stride, padding, dilation, groups))
 
-    def max_pool2d(self, x, kernel_size, stride=None):
-        """The largest value of each ``kernel_size`` window of an
-        ``(N, C, H, W)`` tensor, windows ``stride`` apart (by default
-        ``kernel_size``)."""
-        return _SESSION_CALL(self, "max_pool2d", (x, kernel_size, stride))
+    def max_pool2d(self, x, kernel_size, stride=None, padding=0, dilation=1, ceil_mode=False,
+                   return_indices=False):
+        """The largest value of each window of an ``(N, C, H, W)`` tensor, as
+        ``torch.nn.functional.max_pool2d``.
 
-    def avg_pool2d(self, x, kernel_size, stride=None):
-        """The mean of each ``kernel_size`` window of an ``(N, C, H, W)``
-        tensor, windows ``stride`` apart (by default ``kernel_size``)."""
-        return _SESSION_CALL(self, "avg_pool2d", (x, kernel_size, stride))
+        ``kernel_size``, ``stride`` (by default ``kernel_size``), ``padding``
+        and ``dilation`` are an integer for both axes or a ``(height,
+        width)`` pair. Padded positions are never chosen; ``padding`` is at
+        most half of the window. ``ceil_mode=True`` rounds the output size
+        up, keeping a last window that starts inside the input. A NaN in a
+        window wins, and of tied values the first in row-major window order
+        receives the gradient. ``return_indices`` must be False.
+
+        Example::
+
+            y = s.max_pool2d(x, 3, stride=2, padding=1)
+        """
+        return _SESSION_CALL(self, "max_pool2d", (x, kernel_size, stride, padding, dilation, ceil_mode,
+                                                  return_indices))
+
+    def avg_pool2d(self, x, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True,
+                   divisor_override=None):
+        """The mean of each window of an ``(N, C, H, W)`` tensor, as
+        ``torch.nn.functional.avg_pool2d``.
+
+        ``kernel_size``, ``stride`` (by default ``kernel_size``) and
+        ``padding`` are an integer for both axes or a ``(height, width)``
+        pair; the zero padding is at most half of the window. Each window's
+        sum is divided by its size clipped to the padded input, counting the
+        padding when ``count_include_pad`` is True and only the input
+        positions otherwise; ``divisor_override``, when given, divides every
+        window instead. ``ceil_mode=True`` rounds the output size up.
+
+        Example::
+
+            y = s.avg_pool2d(x, 3, stride=2, padding=1, count_include_pad=False)
+        """
+        return _SESSION_CALL(self, "avg_pool2d", (x, kernel_size, stride, padding, ceil_mode, count_include_pad,
+                                                  divisor_override))
 
     # ------------------------------------------------------------ more elementwise math
     def erf(self, x):
@@ -2327,6 +2360,182 @@ class Session:
         return _SESSION_CALL(self, "conv_transpose2d",
                              (x, weight, bias, stride, padding, output_padding, groups, dilation))
     # session-ops-conv end
+    # session-ops-pool begin ------------------------------------------ 1-D and 3-D pools, adaptive pools
+    def max_pool1d(self, x, kernel_size, stride=None, padding=0, dilation=1, ceil_mode=False,
+                   return_indices=False):
+        """The largest value of each window of an ``(N, C, L)`` tensor, as
+        ``torch.nn.functional.max_pool1d``.
+
+        Windows of ``kernel_size`` positions (taps ``dilation`` apart) start
+        ``stride`` positions apart (by default ``kernel_size``). ``padding``
+        positions are added at both ends (at most half of the window) and are
+        never chosen. ``ceil_mode=True`` rounds the output length up, keeping
+        a last window that starts inside the input. A NaN in a window wins,
+        and of tied values the first receives the gradient.
+        ``return_indices`` must be False.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.arange(6, dtype=np.float32).reshape(1, 1, 6))
+        ...     s.numpy(s.max_pool1d(x, 2))
+        array([[[1., 3., 5.]]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "max_pool1d", (x, kernel_size, stride, padding, dilation, ceil_mode,
+                                                  return_indices))
+
+    def avg_pool1d(self, x, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True):
+        """The mean of each window of an ``(N, C, L)`` tensor, as
+        ``torch.nn.functional.avg_pool1d``.
+
+        Windows of ``kernel_size`` positions start ``stride`` positions apart
+        (by default ``kernel_size``), with ``padding`` zeros at both ends (at
+        most half of the window). Each window's sum is divided by its length
+        clipped to the padded input, counting the padding when
+        ``count_include_pad`` is True and only the input positions otherwise.
+        ``ceil_mode=True`` rounds the output length up.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.arange(6, dtype=np.float32).reshape(1, 1, 6))
+        ...     s.numpy(s.avg_pool1d(x, 2))
+        array([[[0.5, 2.5, 4.5]]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "avg_pool1d", (x, kernel_size, stride, padding, ceil_mode, count_include_pad))
+
+    def max_pool3d(self, x, kernel_size, stride=None, padding=0, dilation=1, ceil_mode=False,
+                   return_indices=False):
+        """The largest value of each window of an ``(N, C, D, H, W)`` tensor,
+        as ``torch.nn.functional.max_pool3d``.
+
+        ``kernel_size``, ``stride`` (by default ``kernel_size``), ``padding``
+        and ``dilation`` are an integer for all three axes or a ``(depth,
+        height, width)`` triple. Padded positions are never chosen;
+        ``padding`` is at most half of the window. ``ceil_mode=True`` rounds
+        the output sizes up. A NaN in a window wins, and of tied values the
+        first in (depth, height, width) order receives the gradient.
+        ``return_indices`` must be False.
+
+        Example::
+
+            y = s.max_pool3d(x, (1, 2, 2))
+        """
+        return _SESSION_CALL(self, "max_pool3d", (x, kernel_size, stride, padding, dilation, ceil_mode,
+                                                  return_indices))
+
+    def avg_pool3d(self, x, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True,
+                   divisor_override=None):
+        """The mean of each window of an ``(N, C, D, H, W)`` tensor, as
+        ``torch.nn.functional.avg_pool3d``.
+
+        ``kernel_size``, ``stride`` (by default ``kernel_size``) and
+        ``padding`` are an integer for all three axes or a ``(depth, height,
+        width)`` triple; the zero padding is at most half of the window. Each
+        window's sum is divided by its size clipped to the padded input,
+        counting the padding when ``count_include_pad`` is True and only the
+        input positions otherwise; ``divisor_override``, when given, divides
+        every window instead. ``ceil_mode=True`` rounds the output sizes up.
+
+        Example::
+
+            y = s.avg_pool3d(x, 2, padding=1, count_include_pad=False)
+        """
+        return _SESSION_CALL(self, "avg_pool3d", (x, kernel_size, stride, padding, ceil_mode, count_include_pad,
+                                                  divisor_override))
+
+    def adaptive_avg_pool1d(self, x, output_size):
+        """The mean of ``output_size`` windows spread over the length of an
+        ``(N, C, L)`` tensor, as ``torch.nn.functional.adaptive_avg_pool1d``.
+
+        Output ``i`` is the mean of positions ``floor(i L / output_size)`` up
+        to ``ceil((i + 1) L / output_size)``; any ``output_size`` of 1 or
+        more works. ``adaptive_avg_pool1d(x, 1)`` is the global average.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.arange(6, dtype=np.float32).reshape(1, 1, 6))
+        ...     s.numpy(s.adaptive_avg_pool1d(x, 3))
+        array([[[0.5, 2.5, 4.5]]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "adaptive_avg_pool1d", (x, output_size))
+
+    def adaptive_avg_pool2d(self, x, output_size):
+        """The mean of ``output_size`` windows spread over the height and
+        width of an ``(N, C, H, W)`` tensor, as
+        ``torch.nn.functional.adaptive_avg_pool2d``.
+
+        ``output_size`` is an integer for both axes or an ``(height, width)``
+        pair; None in the pair keeps the input's size on that axis. Each
+        axis's windows follow the rule of :meth:`adaptive_avg_pool1d`.
+        ``adaptive_avg_pool2d(x, 1)`` is the global average pool.
+
+        Example::
+
+            y = s.adaptive_avg_pool2d(x, (7, 7))
+        """
+        return _SESSION_CALL(self, "adaptive_avg_pool2d", (x, output_size))
+
+    def adaptive_avg_pool3d(self, x, output_size):
+        """The mean of ``output_size`` windows over the depth, height and
+        width of an ``(N, C, D, H, W)`` tensor, as
+        ``torch.nn.functional.adaptive_avg_pool3d``.
+
+        ``output_size`` is an integer for all three axes or a ``(depth,
+        height, width)`` triple; None keeps the input's size on that axis.
+        Each output size must be 1 for every axis (the global average) or
+        divide the input's size on its axis (equal windows).
+
+        Example::
+
+            y = s.adaptive_avg_pool3d(x, 1)
+        """
+        return _SESSION_CALL(self, "adaptive_avg_pool3d", (x, output_size))
+
+    def adaptive_max_pool1d(self, x, output_size, return_indices=False):
+        """The largest value of ``output_size`` windows spread over the length
+        of an ``(N, C, L)`` tensor, as
+        ``torch.nn.functional.adaptive_max_pool1d``.
+
+        The windows are those of :meth:`adaptive_avg_pool1d`. A NaN in a
+        window wins, and of tied values the first receives the gradient.
+        ``return_indices`` must be False.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.arange(6, dtype=np.float32).reshape(1, 1, 6))
+        ...     s.numpy(s.adaptive_max_pool1d(x, 2))
+        array([[[2., 5.]]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "adaptive_max_pool1d", (x, output_size, return_indices))
+
+    def adaptive_max_pool2d(self, x, output_size, return_indices=False):
+        """The largest value of ``output_size`` windows spread over the height
+        and width of an ``(N, C, H, W)`` tensor, as
+        ``torch.nn.functional.adaptive_max_pool2d``.
+
+        ``output_size`` is an integer for both axes or a ``(height, width)``
+        pair; None keeps the input's size on that axis. A NaN in a window
+        wins, and of tied values the first in row-major order receives the
+        gradient. ``adaptive_max_pool2d(x, 1)`` is the global max pool,
+        shape ``(N, C, 1, 1)``. ``return_indices`` must be False.
+
+        Example::
+
+            y = s.adaptive_max_pool2d(x, 1)
+        """
+        return _SESSION_CALL(self, "adaptive_max_pool2d", (x, output_size, return_indices))
+    # session-ops-pool end
 
 
 class Program:

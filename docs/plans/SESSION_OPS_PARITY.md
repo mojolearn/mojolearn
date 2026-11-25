@@ -51,10 +51,10 @@ Sequential layer codes are `python/mojolearn/_x_sequence_model.py` `_LAYER`. "ex
 | residual, branch, concat, multiply, narrow (8, 19, 20, 37, 38) | containers / rankn | `add`, `concat`, `mul`, `split`/`index` exist | exist | - |
 | reshape, permute, flatten (9..11) | rankn layout | exist | exist | - |
 | conv2d (12) | rankn_conv2d | `conv2d` exists; dilation, per-axis stride / padding and padding 'valid' / 'same' **added** (code 131, chosen by the door only when used; the default call keeps code 44) | exists | conv |
-| max_pool2d, avg_pool2d (13, 14) | rankn pools | exist (no padding, ceil_mode) | exist | pool (padding as a new code) |
+| max_pool2d, avg_pool2d (13, 14) | rankn pools | `max_pool2d`, `avg_pool2d` exist; PyTorch's options (per-axis tuples, padding, dilation, ceil_mode, count_include_pad, divisor_override) added as codes 142 / 143, chosen by the door only when used | exist | pool: added |
 | conv1d (15) | rankn_conv1d (rankn_conv2d over (N, C, 1, L)) | `conv1d` **added** (code 130; PyTorch's dilation through rankn_conv1d's new `dilation` argument, default 1, Sequential's call unchanged) | exists (RN conv tags) | conv |
-| max_pool1d, avg_pool1d (16, 17) | rankn pools over (N, C, 1, L) | missing | exists | pool |
-| adaptive_avg_pool1d (18) | nn_adaptive_avg_pool1d | missing | NnConvRules | pool |
+| max_pool1d, avg_pool1d (16, 17) | rankn pools over (N, C, 1, L) | `max_pool1d` (140), `avg_pool1d` (141) added (dilation, ceil_mode, count_include_pad on the same node) | exists | pool: added |
+| adaptive_avg_pool1d (18) | tape mean / rankn avg pool (Sequential 18), nn_adaptive_avg_pool1d for other lengths | `adaptive_avg_pool1d` (147, rank word 1) added, any output size | exists / NnConvRules | pool: added |
 | silu, gelu, softplus (32..34) | import unary | exist | exist | - |
 | rotary (36) | graph rotary | exists | exists | - |
 | embedding (39) | tape embedding | exists | exists | - |
@@ -68,7 +68,7 @@ Sequential layer codes are `python/mojolearn/_x_sequence_model.py` `_LAYER`. "ex
 | prelu (50), mish (51) | imp_binary PRELU, imp_unary MISH | missing | import tags | rest |
 | group_norm, instance_norm (54, 55) | graph_group_norm, graph_instance_norm | missing | RN tags | rest |
 | conv_transpose1d / 2d (56, 57) | nn_conv_transpose1d / 2d | `conv_transpose1d`, `conv_transpose2d` **added** (codes 133, 134; per-axis words on 2-D) | NnConvRules | conv |
-| adaptive_avg_pool2d (58), adaptive_max_pool2d / 1d (59, 60), global_max_pool (61) | nn_adaptive_* | missing | NnConvRules | pool |
+| adaptive_avg_pool2d (58), adaptive_max_pool2d / 1d (59, 60), global_max_pool (61) | nn_adaptive_* | `adaptive_avg_pool2d` (147, rank 2), `adaptive_max_pool1d` / `2d` (148) added; PyTorch has no global max pool name: it is `adaptive_max_pool2d(x, 1)` (shape (N, C, 1, 1); Sequential 61's rankn_max returns (N, C)) | NnConvRules | pool: added |
 | constant / zero pad (62) | imp_pad | `pad` exists | exists | - |
 | reflection / replication pad (63, 64) | nn_pad | added: `pad(x, pads, value, mode='reflect' \| 'replicate')` (code 153; `mode` None / 'constant' keeps code 73; ONNX pad order kept, `value` before `mode`) | NnConvRules | resize |
 | upsample (65) | nn_upsample (nearest, bilinear) | added: `interpolate` (code 150; nearest, linear (N, C, L), bilinear; per-axis size / scale_factor, align_corners, recompute_scale_factor) | NnConvRules | resize |
@@ -76,7 +76,7 @@ Sequential layer codes are `python/mojolearn/_x_sequence_model.py` `_LAYER`. "ex
 | multihead_attention (67) | nn_mha_forward | missing | NNAttentionRules | rest |
 | positional_encoding (72) | nn_pos_enc_forward | missing | NNAttentionRules | rest |
 | conv3d (73) | rankn_conv3d | `conv3d` **added** (code 132) | RN conv tags | conv |
-| max_pool3d, avg_pool3d, adaptive_avg_pool3d (74..76) | rankn_*_pool3d | missing | RN pool tags | pool |
+| max_pool3d, avg_pool3d, adaptive_avg_pool3d (74..76) | rankn_*_pool3d | `max_pool3d` (144), `avg_pool3d` (145), `adaptive_avg_pool3d` (146) added | RN pool tags | pool: added |
 | log_softmax (77) | nn_log_softmax | `log_softmax` exists | exists | - |
 | losses mse, l1, huber, bce_with_logits, cross_entropy | tape losses | exist | exist | - |
 | losses smooth_l1, nll, kl_div, bce pos_weight, ctc | nn_losses bodies, nn_ctc | missing | loss kinds / NnCtcRules | rest |
@@ -101,6 +101,12 @@ Not exposable without a new kernel (session-ops-resize, confirmed): interpolate 
 nearest-exact, `antialias=True`, and any 5-D input (nn_upsample is 2-D only); pad mode circular and 5-D reflection /
 replication (nn_pad covers (N, C, L) and (N, C, H, W)); pixel_shuffle / unshuffle on inputs other than 4-D (torch's
 leading batch dims) is refused, not emulated.
+
+session-ops-pool (confirmed): `adaptive_max_pool3d` (no 3-D adaptive max body: x_cnn's adaptive max is 2-D);
+`adaptive_avg_pool3d` with an output size that neither is 1 nor divides the input (rankn_adaptive_avg_pool3d takes
+only the global mean or equal tiles; x_cnn's uneven adaptive window bodies are 2-D); `return_indices=True` on every
+max pool (the bodies hold the winners in PyTorch's flat order, but a Session operation returns one tensor handle;
+refused by name). Unbatched inputs ((C, L), (C, H, W), (C, D, H, W)) are refused by rank: add the batch axis.
 
 ## Verify design (Andrew, 2026-11-25)
 
