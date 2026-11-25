@@ -155,7 +155,7 @@ def nb_ops_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         want_f = 0
     elif operation == NB_OP_INDEX_PREPARE_FOLD:
         want_a = 1
-        want_p = 5
+        want_p = 6
         want_f = 0
     elif operation == NB_OP_CLASSIFY:
         want_a = 6
@@ -307,13 +307,14 @@ def nb_index_prepare_call(entry: NativeDescriptorCall, index: Int, status: Int, 
 
 
 def nb_index_prepare_fold_call(entry: NativeDescriptorCall, status: Int, fold: NbFold, n_index: Int,
-                               n_features: Int) raises -> Int:
+                               n_features: Int, zero_test: Bool) raises -> Int:
     """NB_OP_INDEX_PREPARE_FOLD: the resident index of fold rows `fold.index`
     of the resident base `fold.base` (`fold.rows` rows), gathered on the
     device; `status` two host int32 words (finite, range), handle 0 when
-    either is set."""
+    either is set. `zero_test` (lane vdf2-tail, a cosine fit): the index rows'
+    zero-row test made on the device and kept with the index (the sixth word)."""
     var addresses: List[Int] = [status]
-    var ints: List[Int] = [fold.base, fold.rows, fold.index, n_index, n_features]
+    var ints: List[Int] = [fold.base, fold.rows, fold.index, n_index, n_features, 1 if zero_test else 0]
     var floats = List[Float64]()
     return native_descriptor_call(entry, NB_OP_INDEX_PREPARE_FOLD, addresses, ints, floats)
 

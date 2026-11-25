@@ -12,7 +12,11 @@ device by the resident entry). The verify's digest compares the columns. Claims,
   device: the same, and scoped == host-index; the member answers MEMBER_CAN_SCOPE; the first scoped call keeps the
           pin (`pin_kept` 1) and later calls of the same search find X resident (`pin_kept` 0).
 Each claim holds for euclidean and (lane vdf-scope-cluster7) cosine, whose fold queries run on the device with the
-zero-row refusals as device reductions.
+zero-row refusals as device reductions. Cosine (lane vdf2-tail): the scoped fit builds its index on the device too
+(the prepare's device zero-row test, kept with the index), so its first call keeps the pin like euclidean's; a scoped
+cosine fit queried with PLAIN host rows gives the host-index bytes (the plan takes the index's device zero-row word and
+scans only the host queries); a zero row in the train fold is refused with the host scan's words ("index row 5") on
+the host-index arm, the scoped arm with fold queries and the scoped arm with host queries.
 Data: a SplitMix64 stream (uniform [0, 4)), 96 rows x 3; class codes 0..2 from the stream; folds 0..63 / 64..95.
 """
 from std.testing import TestSuite
@@ -151,6 +155,78 @@ def _arm(route: DeviceRoute, x: List[Float32], codes: List[Int32], targets: List
     return arm^
 
 
+def _cosine_host_queries(route: DeviceRoute, x: List[Float32], codes: List[Int32], scope: Int) raises -> List[Int32]:
+    """A cosine classifier fitted on the train fold inside `scope` with X pinned (the fold-built index), then
+    predicting the test fold handed as PLAIN host rows (no row index)."""
+    var state = _new(route, False, 2)
+    var train_index = List[Int32](capacity=_TRAIN)
+    for i in range(_TRAIN):  # driver-loop: over the fixture's train rows (small)
+        train_index.append(Int32(i))
+    var out = List[Int32](length=_TEST, fill=0)
+    var failure = String("")
+    try:
+        var fit = MemberCall(route)
+        fit.state = state
+        fit.scope = scope
+        fit.pin = 1
+        fit.x = MemberMatrix(Int(x.unsafe_ptr()), _ROWS, _D)
+        fit.row_index = MemberMatrix(Int(train_index.unsafe_ptr()), _TRAIN, 1, MEMBER_I32)
+        fit.y = MemberMatrix(Int(codes.unsafe_ptr()), _ROWS, 1, MEMBER_I32)
+        fit.classes = _CLASSES
+        _ = member_call(_member(), MEMBER_OP_FIT, fit)
+        var query = MemberCall(route)
+        query.state = state
+        query.scope = scope
+        query.pin = 1
+        query.x = MemberMatrix(Int(x.unsafe_ptr()) + _TRAIN * _D * 4, _TEST, _D)
+        query.dst = MemberMatrix(Int(out.unsafe_ptr()), _TEST, 1, MEMBER_I32)
+        _ = member_call(_member(), MEMBER_OP_PREDICT, query)
+    except error:
+        failure = String(error)
+    var free = MemberCall(route)
+    free.state = state
+    _ = member_call(_member(), MEMBER_OP_FREE, free)
+    _ = len(train_index) + len(x) + len(codes)
+    if failure.byte_length() > 0:
+        raise Error(failure)
+    return out^
+
+
+def _refused_index_row(failure: String, what: String) raises:
+    require(failure.find("metric='cosine' but index row 5 is all zeros") >= 0,
+            what + ": refused with the host scan's words, got '" + failure + "'")
+
+
+def _cosine_zero_row(route: DeviceRoute, codes: List[Int32], targets: List[Float32]) raises:
+    """Row 5 of the train fold all zeros: every arm refuses it with the same words."""
+    var x = _uniform4(20261124, _ROWS * _D)
+    for c in range(_D):  # driver-loop: over one row's words (small)
+        x[5 * _D + c] = 0.0
+    var failure = String("")
+    try:
+        _ = _arm(route, x, codes, targets, False, True, -1, 0, 2)
+    except error:
+        failure = String(error)
+    _refused_index_row(failure, "cosine host row index")
+    var scope = arena_scope_new(0)
+    try:
+        failure = String("")
+        try:
+            _ = _arm(route, x, codes, targets, False, True, scope, 1, 2)
+        except error:
+            failure = String(error)
+        _refused_index_row(failure, "cosine device fold, fold queries")
+        failure = String("")
+        try:
+            _ = _cosine_host_queries(route, x, codes, scope)
+        except error:
+            failure = String(error)
+        _refused_index_row(failure, "cosine device fold, host queries")
+    finally:
+        _ = arena_scope_close(scope)
+    _ = len(x)
+
+
 def _same(a: _Arm, b: _Arm, what: String) raises:
     for i in range(_TEST):  # driver-loop: over the test rows (small)
         require(a.codes[i] == b.codes[i], what + ": predicted codes")
@@ -184,13 +260,19 @@ def fixture(device: Bool) raises:
         try:
             var scoped = _arm(route, x, codes, targets, regressor, True, scope, 1, metric)
             _same(scoped, host_index, what + "device fold (index and queries) vs host row index")
-            var first = 0 if metric == 1 else 1  # a cosine fit gathers on the host: its first put is the predict's
-            require(scoped.pin_kept[first] == 1, what + "the first scoped put publishes X with the caller's pin")
-            for i in range(len(scoped.pin_kept)):  # driver-loop: over the arm's calls (small)
-                if i != first:
-                    require(scoped.pin_kept[i] == 0, what + "the other calls find X resident (one upload)")
+            # Every metric's fit builds its index from the fold on the device (cosine too, lane vdf2-tail).
+            require(scoped.pin_kept[0] == 1, what + "the first scoped put publishes X with the caller's pin")
+            for i in range(1, len(scoped.pin_kept)):  # driver-loop: over the arm's calls (small)
+                require(scoped.pin_kept[i] == 0, what + "the other calls find X resident (one upload)")
+            if metric == 2 and not regressor:
+                var mixed = _cosine_host_queries(route, x, codes, scope)
+                for i in range(_TEST):  # driver-loop: over the test rows (small)
+                    require(mixed[i] == host_index.codes[i],
+                            what + "device fold index with host query rows vs host row index")
         finally:
             _ = arena_scope_close(scope)
+    if device:
+        _cosine_zero_row(route, codes, targets)
     _ = len(x) + len(targets) + len(codes)
 
 

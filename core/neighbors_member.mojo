@@ -595,18 +595,20 @@ def _fit_indexed(slot: _SlotPtr, call: _CallPtr, estimator: String, rows: Int, c
     the RUN reads them."""
     var wide = _wide_index(call[].row_index, estimator)
     var x = call[].x
-    # A cosine fit keeps the gathered points (lane vdf-scope-cluster7): a later query on host rows runs the
-    # plan's host zero-row scan over the index words, which a fold-built index does not have. Its fold
-    # queries still run on the device (`_indexed_query`).
-    # A Jensen-Shannon fit keeps the gathered points too (lane vdf-scope-cluster8): its X >= 0 refusal is a FIT
+    # A cosine fit builds its index on the device too (lane vdf2-tail): the prepare makes the index rows'
+    # zero-row test on the device once (`zero_test`) and the resident index keeps its word, which every later
+    # cosine search plan takes in place of the host scan of index words a fold-built index does not have
+    # (neighbors/estimator.mojo `_knn_search_plan(index_zero_row=)`); host query rows are still scanned there.
+    # A Jensen-Shannon fit keeps the gathered points (lane vdf-scope-cluster8): its X >= 0 refusal is a FIT
     # refusal (the class refuses at fit), made on those host words below; its fold queries run on the device.
-    if _fold_route(slot, call) and slot[].metric != KNN_DIST_COSINE and slot[].metric != KNN_DIST_JS:
+    if _fold_route(slot, call) and slot[].metric != KNN_DIST_JS:
         var fold = _put_fold(call, wide, rows)
         var store = kmeans_fold_store_ref(call[].route.mode, call[].route.vendor)
         var status = List[Int32](length=2, fill=Int32(0))
         var handle = 0
         try:
-            handle = nb_index_prepare_fold_call(call[].route.entry.call, Int(status.unsafe_ptr()), fold, rows, cols)
+            handle = nb_index_prepare_fold_call(call[].route.entry.call, Int(status.unsafe_ptr()), fold, rows, cols,
+                                                slot[].metric == KNN_DIST_COSINE)
         finally:
             arena_cache_free(store, fold.index)
         if handle == 0:
