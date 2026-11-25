@@ -68,6 +68,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import IdentityTrace
 from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from core.fold_x_device import fold_x_fill
+from core.multi_gpu import transfer_bytes
 from isolation_forest.impl.rng.xorwow import (
     XorwowTables,
     build_xorwow_tables,
@@ -1690,8 +1691,9 @@ def _pooled_path_lengths(ctx: DeviceContext, model: IsolationForestModel,
     The ROW-major rows are on `ctx` (the query upload, or a fold slot's
     copy); each owner takes them with one device-to-device copy onto its
     own device (lane vdf2-tail2: before, they were read back to the host
-    and uploaded again per owner). The same words either way: no bit
-    moves. Only the per-row carry (one float32 per row) crosses the host
+    and uploaded again per owner; an AMD copy across two devices is still
+    staged through pinned host memory, `transfer_bytes`' rule). The same
+    words either way: no bit moves. Only the per-row carry (one float32 per row) crosses the host
     between owners, as before."""
     ctx.synchronize()  # the rows are complete on `ctx` before any owner copies them
     var carry = List[Float32](length=rows, fill=Float32(0.0))
@@ -1699,10 +1701,15 @@ def _pooled_path_lengths(ctx: DeviceContext, model: IsolationForestModel,
         ref shard = model.shards[rank]
         var data = shard.ctx.enqueue_create_buffer[DType.float32](max(rows * columns, 1))
         if rows * columns > 0:
-            shard.ctx.enqueue_copy(
-                dst_buf=data.create_sub_buffer[DType.float32](0, rows * columns),
-                src_buf=input_rowmajor.create_sub_buffer[DType.float32](0, rows * columns),
-            )
+            # a device copy; staged through pinned host memory only for an
+            # AMD copy across two devices (`transfer_bytes`' rule)
+            var source = input_rowmajor.create_sub_buffer[DType.float32](0, rows * columns)
+            var target = data.create_sub_buffer[DType.float32](0, rows * columns)
+            transfer_bytes(ctx, shard.ctx, source, target, rows * columns,
+                           Int(ctx.id()) != Int(shard.ctx.id()))
+            shard.ctx.synchronize()
+            _ = source^
+            _ = target^
         var total = _upload_f32(shard.ctx, carry, rows, 0, Float32(0.0))
         shard.ctx.enqueue_function[compute_path_lengths_range_kernel](
             _mp_f32(data), Int64(rows), Int32(columns),
