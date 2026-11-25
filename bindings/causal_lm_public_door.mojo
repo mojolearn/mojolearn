@@ -1993,6 +1993,31 @@ def _run_engine(mut mods: NativeModules, words: CausalModelWords, held: PythonOb
         # Common endpoints own per-call GIL release, lock acquisition and
         # session reservation. The native layer loop enters GIL-held.
         owner.native.forward_to(address, length, out_address, owner.native.batch * length * owner.native.vocab)
+        if owner.native.head15_rows > 0:
+            # Lane fixed15-decode: the fixed15_v1 head the engine left to its
+            # caller, the per-layer route's two linalg calls in its order (the
+            # quantizer on the normed rows, the planes product into the
+            # result), each with the GIL released; then the forward completes.
+            var rows = owner.native.head15_rows
+            owner.native.head15_prepare(rows)
+            ref head = held.downcast_value_ptr[CausalModelOwner]()[].snapshot.value().head
+            try:
+                if not head.linalg:
+                    raise Error("CausalLM: the fixed15_v1 head has no linalg entry")
+                var lin = head.linalg.value()
+                var d = owner.native.width
+                var hi = Int(owner.native.q_hi.unsafe_ptr())
+                var lo = Int(owner.native.q_lo.unsafe_ptr())
+                var ex = Int(owner.native.q_e.unsafe_ptr())
+                _ = _causal_table_call(lin, CAUSAL_LIN_QUANTIZE_INT15,
+                    [hi, lo, ex, owner.native.head15_hidden], [rows, d], [])
+                _ = _causal_table_call(lin, CAUSAL_LIN_GEMM_INT15,
+                    [out_address, hi, lo, ex, owner.native.head15[0], owner.native.head15[1], owner.native.head15[2]],
+                    [rows, owner.native.vocab, d], [])
+            except problem:
+                owner.native.failed = True
+                raise problem
+            owner.native.head15_commit()
         mods.released()
     except problem:
         mods.released()
@@ -3014,10 +3039,17 @@ def _read_program(mut mods: NativeModules, mut s: GenerationHandle, capacity: In
     var n = min(capacity, limit - positions - length + 1)
     var keep = List[PythonObject]()
     var copies = List[PythonObject]()
-    var mf = _generation_fields(s.model, Python.tuple("_embed", "_norm", "_head"))
+    var mf = _generation_fields(s.model, Python.tuple("_embed", "_norm", "_head", "_head_int15"))
     var v = mw.vocab
     var d = mw.width
     var pn = _weight_addr(mf["_norm"], keep)
+    # Lane fixed15-decode: a fixed15_v1 head sends its plane triple and a zero
+    # float32 head (the program's OPS_LINEAR15 adopts the planes).
+    var head15 = List[Int]()
+    var head_planes = mf["_head_int15"]
+    if mw.head_packed:
+        for k in range(3):  # small-loop(3: the head's plane triple): address words
+            head15.append(_weight_addr(head_planes[k], keep))
     var tokens = generation_array([max(1, n) * b], "i")
     var fin = generation_array([b], "i")
     var lens = generation_array([b], "i")
@@ -3026,10 +3058,13 @@ def _read_program(mut mods: NativeModules, mut s: GenerationHandle, capacity: In
     for r in range(b):  # driver-loop: over batch rows (row flags, no data)
         fin_p[r] = Int32(1 if s.finished[r] else 0)
         lens_p[r] = Int32(s.lengths[r])
-    var a: List[Int] = [_weight_addr(mf["_embed"], keep), pn, _weight_addr(mf["_head"], keep),
+    var a: List[Int] = [_weight_addr(mf["_embed"], keep), pn,
+                        0 if mw.head_packed else _weight_addr(mf["_head"], keep),
                         _addr(s.current, keep), _addr(tokens, keep), Int(fin_p), Int(lens_p)]
     for i in range(len(s.eos)):  # driver-loop: over eos: the stream's end ids: argument words
         a.append(s.eos[i])
+    a.append(len(head15))
+    a.extend(head15^)
     var f: List[Float64] = [mw.norm_eps if pn != 0 else 0.0, Float64(s.temperature), s.top_p]
     var sts = List[PythonObject]()
     var reports = List[PythonObject]()
@@ -3052,8 +3087,23 @@ def _read_program(mut mods: NativeModules, mut s: GenerationHandle, capacity: In
             raise Error("CausalLM: layer state is owned by a decode session (resident in it); sync_state() or close it first")
         var w = blk["_w"]
         var weights = List[Int]()
+        # Lane fixed15-decode: a fixed15_v1 layer (its own parts mask) sends
+        # the mask and its 21 plane addresses, and a zero weight slot for each
+        # part with planes (the layout of `_transformer_arg_words`).
+        var planes = List[Int]()
+        var triples = PythonObject(None)
+        if kind == CAUSAL_LAYER_TRANSFORMER:
+            var parts = Int(py=py_get(blk, "_np_parts", PythonObject(0)))
+            if parts != 0:
+                triples = blk["_int15"]
+                planes.append(parts)
+                for j in range(len(triples)):  # driver-loop: over the seven projection plane triples
+                    var trip = triples[j]
+                    for k in range(3):  # small-loop(3: a plane triple)
+                        planes.append(0 if trip is None else _weight_addr(trip[k], keep))
         for j in range(len(w)):  # driver-loop: over the block's weight slots
-            weights.append(_weight_addr(w[j], keep))
+            var planed = len(planes) > 0 and j >= 2 and triples[j - 2] is not None
+            weights.append(0 if planed else _weight_addr(w[j], keep))
         var ints = List[Int]()
         var words = List[Int]()
         var code = OPS_ATTN_STEP
@@ -3104,6 +3154,8 @@ def _read_program(mut mods: NativeModules, mut s: GenerationHandle, capacity: In
         a.extend(ints^)
         a.append(len(weights))
         a.extend(weights^)
+        a.append(len(planes))
+        a.extend(planes^)
         a.append(len(pieces))
         a.extend(pieces^)
         a.append(len(words))

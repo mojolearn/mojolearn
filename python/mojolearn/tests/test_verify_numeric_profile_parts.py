@@ -154,3 +154,36 @@ def test_a_trainer_refuses_a_dict_spec():
     from mojolearn import _numeric_profile as npm
     with pytest.raises((ValueError, TypeError, NotImplementedError)):
         npm.require_training("trainer", {"preset": "fp32_v1", "q_proj": "fixed15_v1"})
+
+
+# ------------------------------------------------------------ generation route under the default (lane fixed15-decode)
+
+@pytest.mark.parametrize("spec", [None, {"preset": "fixed15_v1", "lm_head": "fp32_v1", "attn_scores": "fp32_v1"}])
+def test_cpu_forward_under_fixed15_runs_the_native_engine(tmp_path, spec):
+    """Lane fixed15-decode (2026-11-25): on the CPU the fixed15_v1 default (and
+    a per-part spec) runs the native generation engine (its route word on the
+    state), not the slower per-layer route the engine used to fall back to;
+    the logits equal a forward without a state."""
+    ml = _package()
+    root = _root(tmp_path)
+    m = _load(root) if spec is None else _load(root, numeric_profile=spec)
+    ids = ml.Array.from_list([1, 2, 3, 4, 5, 6], "<i4").reshape((2, 3))
+    state = m.allocate_state(2, 8)
+    y = m.forward(ids, state)
+    assert getattr(state, "_native_execution_route", None) == "transformer-nonresident-native-engine-v1"
+    assert getattr(state, "_native_engine_forwards", None) == 1
+    import numpy as np
+    assert np.asarray(y).tobytes() == np.asarray(m.forward(ids)).tobytes()
+
+
+def test_cpu_stream_under_fixed15_matches_generate(tmp_path):
+    """The default's stream and `generate` give the same continuation on the
+    CPU (both the engine since lane fixed15-decode)."""
+    ml = _package()
+    root = _root(tmp_path)
+    m = _load(root)
+    ids = ml.Array.from_list([1, 2, 3, 4, 5, 6], "<i4").reshape((2, 3))
+    import numpy as np
+    tokens = np.asarray(m.stream(ids, 4).read(4))
+    full = np.asarray(m.generate(ids, 4))[:, 3:]
+    assert tokens.tobytes() == np.ascontiguousarray(full, dtype=tokens.dtype).tobytes()

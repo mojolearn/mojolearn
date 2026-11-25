@@ -21,6 +21,7 @@ from core.causal_layer_run import (
 )
 from core.causal_owner import (
     CausalModelWords, causal_positions_admit, causal_engine_candidate, causal_resident_candidate,
+    causal_program_route, CAUSAL_ROUTE_PROGRAM,
     CausalStateWords, CausalBufferWords, CausalLayerStateWords, causal_state_admit,
     causal_state_buffer_used, causal_state_buffer_contiguous, causal_state_buffer_address,
     CAUSAL_STATE_K, CAUSAL_STATE_V, CAUSAL_STATE_CONV, CAUSAL_STATE_AFFINE_B, CAUSAL_STATE_XBC,
@@ -82,9 +83,14 @@ def run_admission_checks() raises:
     held.parallel = True
     require(not causal_engine_candidate(held), "parallel model")
     held.parallel = False
+    # lane fixed15-decode: the fixed15_v1 default (head and layers) runs the
+    # engine (host op 34 / device op 35, the linalg head), no longer the
+    # per-layer route
     held.head_packed = True
-    require(not causal_engine_candidate(held), "packed head")
+    held.fixed15 = True
+    require(causal_engine_candidate(held), "fixed15_v1 head and layers are engine candidates")
     held.head_packed = False
+    held.fixed15 = False
     held.provider = False
     require(not causal_engine_candidate(held), "no layer provider")
     held.provider = True
@@ -105,6 +111,40 @@ def run_admission_checks() raises:
     var m2 = _local(CAUSAL_LAYER_MAMBA2)
     m2.resident = True
     require(not causal_resident_candidate(m2), "mamba is never resident")
+
+
+def run_program_route_checks() raises:
+    """Lane fixed15-decode (2026-11-25): the decode program's route word. A
+    GPU install's default CausalLM (fixed15_v1 head and layers, the planes
+    entry admitted) generates as the program, as fp32_v1 does; before, the
+    head and the layers were refused and every default read took the
+    per-token route."""
+    var g = _local(CAUSAL_LAYER_TRANSFORMER)
+    g.program_read = 0
+    g.norm_eps = 1e-6
+    require(causal_program_route(g, True, 0, 2) == CAUSAL_ROUTE_PROGRAM, "fp32_v1 greedy read is the program")
+    g.head_packed = True
+    g.fixed15 = True
+    g.planes = True
+    require(causal_program_route(g, True, 0, 2) == CAUSAL_ROUTE_PROGRAM, "fixed15_v1 default greedy read is the program")
+    require(causal_program_route(g, False, 1, 2) == CAUSAL_ROUTE_PROGRAM, "fixed15_v1 FP32 sampling read is the program")
+    g.head_packed = False
+    require(causal_program_route(g, True, 0, 2) == CAUSAL_ROUTE_PROGRAM, "fixed15_v1 layers with an fp32_v1 head")
+    g.head_packed = True
+    g.planes = False
+    require(causal_program_route(g, True, 0, 2) == "fixed15_v1 without the planes entry", "no planes entry")
+    g.planes = True
+    require(causal_program_route(g, False, 0, 2) == "the Float64 sampling policy runs on the host", "Float64 sampler")
+    g.parallel = True
+    require(causal_program_route(g, True, 0, 2) == "distributed execution", "distributed")
+    g.parallel = False
+    g.program_read = -1
+    require(causal_program_route(g, True, 0, 2) == "no GPU decode program in this install", "CPU install")
+    g.program_read = 0
+    require(causal_program_route(g, True, 0, 0) == "a model without layers", "no layers")
+    var o = _local(CAUSAL_LAYER_OTHER)
+    o.program_read = 0
+    require(causal_program_route(o, True, 0, 2) == "layer kind", "unknown kind")
 
 
 def _state_refusal(model: CausalModelWords, state: CausalStateWords, batch: Int, length: Int) -> String:
@@ -269,6 +309,10 @@ def test_admission() raises:
 
 def test_state() raises:
     run_state_checks()
+
+
+def test_program_route() raises:
+    run_program_route_checks()
 
 
 def test_lease() raises:

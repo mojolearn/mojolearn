@@ -147,17 +147,17 @@ struct NativeGenerationModel(Movable):
         self.q_lo = List[Int8]()
         self.q_e = List[Int32]()
 
-    def head15_scratch(mut self, rows: Int) -> List[Int]:
-        """The quantized rows' hi, lo and exponent buffers of a fixed15_v1
-        head over `rows` normed rows: kept across tokens, replaced only when
-        the extent changes (every value is written by the quantizer)."""
+    def head15_prepare(mut self, rows: Int):
+        """The quantized rows' hi, lo and exponent buffers (`q_hi`, `q_lo`,
+        `q_e`) of a fixed15_v1 head over `rows` normed rows: kept across
+        tokens, replaced only when the extent changes (the quantizer writes
+        every value)."""
         var n = rows * self.width
         if len(self.q_hi) != n:
             self.q_hi = List[Int8](length=n, fill=0)
             self.q_lo = List[Int8](length=n, fill=0)
         if len(self.q_e) != rows:
             self.q_e = List[Int32](length=rows, fill=0)
-        return [Int(self.q_hi.unsafe_ptr()), Int(self.q_lo.unsafe_ptr()), Int(self.q_e.unsafe_ptr())]
 
     def head15_commit(mut self):
         """The caller ran the fixed15_v1 head of the waiting forward: the
