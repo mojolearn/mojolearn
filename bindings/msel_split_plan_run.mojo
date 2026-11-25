@@ -478,19 +478,33 @@ struct MselHeld(Movable):
 
     var id: Int
     var entry: EntryRef
+    #: False: the block belongs to a `resident()` scope's helper codes cache
+    #: (lane gd-rf-msel, core/msel_scope_codes.mojo MSEL_HELPER_CODES_PREFIX);
+    #: the scope's close frees it with MH_STORE_FREE.
+    var owned: Bool
 
     def __init__(out self, route: MselSplitRoute, labels: MselCodes) raises:
         self.entry = route.helpers
         self.id = -1
+        self.owned = True
         if labels.n > 0:
             self.id = msel_store_put(route.helpers, labels.address, 4 * labels.n)
+
+    def __init__(out self, kept_id: Int):
+        """The codes block a `resident()` scope keeps in the helper table's
+        store (the door put or found it, bindings/msel_scope_rows_door.mojo
+        `msel_scope_helper_codes_id`): read in place, never freed here."""
+        self.entry = entry_ref_unresolved()
+        self.id = kept_id
+        self.owned = False
 
     def __init__(out self):
         self.entry = entry_ref_unresolved()
         self.id = -1
+        self.owned = True
 
     def __del__(deinit self):
-        if self.id >= 0:
+        if self.owned and self.id >= 0:
             try:
                 _ = msel_store_free(self.entry, self.id)
             except error:
@@ -611,10 +625,26 @@ def msel_first_seen_prog(route: MselSplitRoute, labels: MselCodes, form: Int, sl
 # ---------------------------------------------------------------- the plans
 
 
+def msel_default_folds_stored(n: Int, k: Int, codes: MselCodes, coded: Bool, sabotage: Bool) -> Bool:
+    """Whether `msel_plan_default_folds` runs the stratified fold ids on the
+    codes put into the helper table's store (`MselHeld`). The door asks the
+    same question before it keeps the codes in a `resident()` scope."""
+    return coded and not sabotage and n >= 1 and codes.m >= 1 and k >= 2 and codes.n == n
+
+
 def msel_plan_default_folds(route: MselSplitRoute, n: Int, k: Int, codes: MselCodes, coded: Bool,
                             sabotage: Bool) raises -> MselSplitPlan:
+    """`msel_plan_default_folds` with no scope-kept codes block."""
+    return msel_plan_default_folds(route, n, k, codes, coded, sabotage, -1)
+
+
+def msel_plan_default_folds(route: MselSplitRoute, n: Int, k: Int, codes: MselCodes, coded: Bool,
+                            sabotage: Bool, kept_id: Int) raises -> MselSplitPlan:
     """`_native_default_folds`: `fold_ids` (stratified by `codes` when
-    `coded`), its class count refusals, then FOLDS."""
+    `coded`), its class count refusals, then FOLDS. `kept_id` >= 0 (lane
+    gd-rf-msel): the codes block a `resident()` scope keeps in the helper
+    table's store under the caller's y (asked only when
+    `msel_default_folds_stored` holds); nothing goes up."""
     var plan = MselSplitPlan()
     plan.form = MSEL_FILL_FOLDS
     plan.n = n
@@ -623,12 +653,16 @@ def msel_plan_default_folds(route: MselSplitRoute, n: Int, k: Int, codes: MselCo
     var n_classes = codes.m if coded else 0
     plan.sizes64 = List[Int64](length=max(k, 1), fill=0)
     var class_counts = List[Int64](length=max(n_classes, 1), fill=0)
-    if coded and not sabotage and n >= 1 and n_classes >= 1 and k >= 2 and codes.n == n:
+    if msel_default_folds_stored(n, k, codes, coded, sabotage):
         # Stratified (lane vdf-scope-split): the codes are put once and the
         # fold ids stay in the store until `msel_split_fill` selects the rows.
         # The negative control (`sabotage`) moves fold words on the host, so
         # it keeps the host words.
-        var held = MselHeld(route, codes)
+        var held = MselHeld()
+        if kept_id >= 0:
+            held = MselHeld(kept_id)
+        else:
+            held = MselHeld(route, codes)
         plan.folds_entry = route.helpers
         plan.folds_id = msel_fold_ids_res(route.helpers, held.id, n, n_classes, k, Int(class_counts.unsafe_ptr()),
                                           Int(plan.sizes64.unsafe_ptr()))

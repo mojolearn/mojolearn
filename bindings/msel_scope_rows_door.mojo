@@ -47,8 +47,10 @@ from bindings.arena_owner_door import arena_pin, arena_unpin
 from bindings.arena_materialize_native_door import _prepared_info, _empty, _empty_unfilled, _slot
 from bindings.member_scope_door import member_scope_word
 from bindings.metric_resident_source_door import metric_resident_owner, _exact_kind, _c_order
-from bindings.msel_split_plan_run import MselSplitRoute, MselCodes, msel_prog_store, msel_stratified_on_slot
-from core.msel_scope_codes import msel_scope_codes_put
+from bindings.msel_split_plan_run import (
+    MselSplitRoute, MselCodes, msel_prog_store, msel_stratified_on_slot, msel_default_folds_stored,
+)
+from core.msel_scope_codes import msel_scope_codes_put, msel_helper_store_ops, MSEL_HELPER_CODES_PREFIX
 from bindings.classical_arrays_door import classical_address
 from core.arena_state import ARENA_HANDLE_NONE
 from core.entry_table import EntryRef, entry_ref_unresolved
@@ -214,6 +216,56 @@ def msel_scope_codes_slot(y: PythonObject, route: MselSplitRoute, labels: MselCo
     try:
         with GILReleased(Python()):
             put = msel_scope_codes_put(scope, store, address, words, codes_address, n, pin)
+    except error:
+        arena_unpin(pin)
+        raise error^
+    if not put.pinned:
+        arena_unpin(pin)
+    _ = y  # its address is the key above; the cache pins it from here
+    return put.store_id
+
+
+def _caller_key_words(y: PythonObject, n: Int, floor: Int) raises -> Int:
+    """The 4-byte word count of the caller's label buffer `y` as a scope key,
+    or -1 when it is not the caller's own exact C-ordered buffer of `n`
+    items in whole 4-byte words at or above the scope's floor."""
+    var kind = _exact_kind(y)
+    if kind == 0 or not _c_order(y, kind):
+        return -1
+    if Int(py=y.size) != n:
+        return -1
+    var nbytes = n * Int(py=y.itemsize)
+    if nbytes == 0 or nbytes % 4 != 0 or nbytes // 4 < floor:
+        return -1
+    return nbytes // 4
+
+
+def msel_scope_helper_codes_id(y: PythonObject, route: MselSplitRoute, n: Int, k: Int, codes: MselCodes,
+                               coded: Bool, sabotage: Bool, context: PythonObject) raises -> Int:
+    """The stratified default folds' codes block kept by the calling
+    thread's scope in the model-selection helper table's own store (prefix
+    MSEL_HELPER_CODES_PREFIX, its operation numbers registered through the
+    per-family op map), keyed on the caller's y; or -1 (no scope, the host
+    column, a plan that puts no codes, or a y that is not the caller's own
+    buffer: the plan puts and frees its own block as before). THE PIN RULE as
+    in `msel_scope_codes_slot`."""
+    var rows = msel_scope_rows(context)
+    if not rows.active() or not msel_default_folds_stored(n, k, codes, coded, sabotage):
+        return -1
+    var words = _caller_key_words(y, codes.n, rows.floor)
+    if words < 0:
+        return -1
+    var address = Int(py=classical_address(y))
+    var store = route.helpers
+    var pin = arena_pin(y)
+    var put = ArenaCachePut(-1, False)
+    var scope = rows.scope
+    var codes_address = codes.address
+    var count = codes.n
+    try:
+        with GILReleased(Python()):
+            put = msel_scope_codes_put(scope, store, msel_helper_store_ops(), String(MSEL_HELPER_CODES_PREFIX),
+                                       address, words, codes_address, count, pin)
     except error:
         arena_unpin(pin)
         raise error^
