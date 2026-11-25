@@ -150,7 +150,10 @@ def _file_info_call(entries: PythonObject, file: String, layers: Int, mut words:
     var path = file.as_bytes()
     words = List[Int](length=4 + (3 + SEQUENTIAL_FILE_ARGS) * layers + SEQUENTIAL_FILE_INFO_INTS
                       + SEQUENTIAL_FILE_SAMPLE_WORDS, fill=0)
-    scalars = List[Float64](length=layers + SEQUENTIAL_FILE_INFO_FLOATS, fill=0.0)
+    # nn-blocks-pgseq: room for the parameter groups' words after the option floats (3 + 8 a group + 1 a tensor;
+    # at most four tensors a layer, a group per tensor and its no-decay twin: under 70 words a layer), and for
+    # the 9 + 8 option and schedule floats (SEQUENTIAL_FILE_INFO_FLOATS + 32)
+    scalars = List[Float64](length=70 * layers + SEQUENTIAL_FILE_INFO_FLOATS + 32, fill=0.0)
     var addresses: List[Int] = [Int(path.unsafe_ptr()), Int(words.unsafe_ptr()), Int(scalars.unsafe_ptr())]
     var ints: List[Int] = [len(path), len(words), len(scalars)]
     var floats = List[Float64]()
