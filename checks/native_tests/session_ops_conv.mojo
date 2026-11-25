@@ -141,11 +141,11 @@ def _cases() -> List[_Case]:
     return out^
 
 
-def _axis3(c: _Case, block: Int, default: Int) -> List[Int]:
+def _axis3(c: _Case, block: Int, fill_value: Int) -> List[Int]:
     """Words block `block` (0 stride, 1 padding, 2 dilation or output_padding, 3 a transposed dilation), as three
-    axes (D, H, W) with the missing leading axes at `default`."""
+    axes (D, H, W) with the missing leading axes at `fill_value`."""
     var n = session_conv_axes(c.code)
-    var out = List[Int](length=3, fill=default)
+    var out = List[Int](length=3, fill=fill_value)
     for k in range(n):  # small-loop(n: at most three spatial axes)
         out[3 - n + k] = c.ints[block * n + k]
     return out^
