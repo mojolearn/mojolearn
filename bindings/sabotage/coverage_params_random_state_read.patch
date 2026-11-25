@@ -1,0 +1,14 @@
+diff --git a/bindings/params_metadata_native_door.mojo b/bindings/params_metadata_native_door.mojo
+index 9ba6a59579..fb0dc0fe43 100644
+--- a/bindings/params_metadata_native_door.mojo
++++ b/bindings/params_metadata_native_door.mojo
+@@ -280,6 +280,9 @@ def _read_inner(model: PythonObject, deep: Bool, context: PythonObject,
+             value = fields[field]
+         else:
+             value = _value(mods, model, fields, field, context, String(py_item(plan, nk[].k_missing_error)))
++        # SABOTAGE coverage (sab-arms-67): a random_state stored as the exact int 0 reads back as 1 (idempotent, so the set_params and clone round trips still hold)
++        if String(name) == "random_state" and py_type(value) is b.int and Int(py=value) == 0:
++            value = PythonObject(1)
+         if expand and _nested(mods, value, context):
+             var nested = _read(value, True, context, path)
+             var keys = py_call(b.list, nested.keys())

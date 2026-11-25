@@ -1,0 +1,23 @@
+diff --git a/xtrees/agnostic.mojo b/xtrees/agnostic.mojo
+index 057020e558..42faa1184b 100644
+--- a/xtrees/agnostic.mojo
++++ b/xtrees/agnostic.mojo
+@@ -33,6 +33,7 @@ from checks.soft_f64 import (
+     sf64_from_f32, sf64_to_int, sf64_log,
+ )
+ from std.memory import bitcast
++from std.sys.compile import is_defined  # SABOTAGE coverage (sab-arms-67): the side key
+ from xtrees.ops import draw, stream_base
+ from checks.numerics import ftz, identical_div
+ 
+@@ -373,6 +374,10 @@ def pshap_marginal_unit(t: Int, d: Int, k: Int, np: Int, inv: I32P, ey: U64P, ph
+         var jj = Int(inv[(row * np + p) * d + f])
+         val = sf64_add(val, sf64_sub(e[(o + jj + 1) * k + c], e[(o + jj) * k + c]))
+         val = sf64_add(val, sf64_sub(e[(o + d + jj) * k + c], e[(o + d + jj + 1) * k + c]))
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the first SHAP value moved (bit 32 of its float64 word flipped, visible in float32), the GPU bindings only
++        if t == 0:
++            phi[t] = sf64_div(val, sf64_from_int(2 * np)) ^ (UInt64(1) << 32)
++            return
+     phi[t] = sf64_div(val, sf64_from_int(2 * np))
+ 
+ 

@@ -1,0 +1,21 @@
+diff --git a/cholesky/estimator.mojo b/cholesky/estimator.mojo
+index 510ce9e6df..ee4db21b23 100644
+--- a/cholesky/estimator.mojo
++++ b/cholesky/estimator.mojo
+@@ -42,6 +42,7 @@ which is what the gates and the card use.
+ from core.hostptr import copy_f32
+ from core.transfer import transfer_download_f32_list, transfer_upload_list
+ from std.sys.compile import is_defined
++from std.memory import bitcast  # SABOTAGE coverage (sab-arms-67)
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from max.gpu import block_dim, block_idx, thread_idx
+ from checks.numerics import NUMERIC_FAST
+@@ -381,6 +382,8 @@ def cholesky_factor_poolio(
+     # TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
+     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
+     _chol_download(ctx, da, lp, cells)
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the log-determinant one ulp up, the GPU bindings only
++        logdet = bitcast[DType.float32](bitcast[DType.uint32](logdet) + UInt32(1))
+     sp.unsafe_store(0, Float64(run.info))
+     sp.unsafe_store(1, Float64(run.nb))
+     sp.unsafe_store(2, Float64(logdet))

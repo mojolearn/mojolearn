@@ -1,0 +1,15 @@
+diff --git a/autograd/embedding_ops.mojo b/autograd/embedding_ops.mojo
+index 807dba5f0a..8ed416aae5 100644
+--- a/autograd/embedding_ops.mojo
++++ b/autograd/embedding_ops.mojo
+@@ -402,6 +402,10 @@ def embedding_backward_into[E: Exec](
+     f.p3 = dw
+     f.i0 = width
+     f.i1 = padding_idx
++    from std.sys import is_defined
++    comptime if E.IS_DEVICE and not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the fold zeroes the row after padding_idx instead of padding_idx (whose run is empty, so it stays +0.0), the device executor of the GPU bindings only
++        if padding_idx >= 0:
++            f.i1 = (padding_idx + 1) % vocab
+     f.i2 = 1 if carry else 0
+     ex.launch[OP_EMB_FOLD](f, vocab * width)
+ 

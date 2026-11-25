@@ -1,0 +1,26 @@
+diff --git a/sequence/lr_table.mojo b/sequence/lr_table.mojo
+index c18b4e0e4e..b13d38ad0d 100644
+--- a/sequence/lr_table.mojo
++++ b/sequence/lr_table.mojo
+@@ -435,11 +435,19 @@ def lr_spec_fill(spec: LrSpec, t0: Int, n: Int, dst: F32P) raises -> Tuple[Int,
+     if t0 < 1:
+         return (LR_ONE_BASED, 0)
+     var exact_only = spec.kind >= LR_EXACT_ONLY
++    var r: Tuple[Int, Int]
+     if exact_only:
+         var plain = spec
+         plain.kind = spec.kind - LR_EXACT_ONLY
+-        return _lr_spec_fill(plain, t0, n, dst, False)
+-    return _lr_spec_fill(spec, t0, n, dst, True)
++        r = _lr_spec_fill(plain, t0, n, dst, False)
++    else:
++        r = _lr_spec_fill(spec, t0, n, dst, True)
++    if r[0] == 0:  # SABOTAGE coverage (sab-arms-67): every returned normal rate one ulp up (both sides: the router binding both call)
++        for k in range(n):
++            var v = dst[k]
++            if abs(v) >= Float32(1.17549435e-38) and v - v == Float32(0):
++                dst[k] = bitcast[DType.float32](bitcast[DType.uint32](v) + UInt32(1))
++    return r
+ 
+ 
+ def _lr_spec_fill(spec: LrSpec, t0: Int, n: Int, dst: F32P, table: Bool) raises -> Tuple[Int, Int]:

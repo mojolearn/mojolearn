@@ -1,0 +1,12 @@
+diff --git a/core/rms_norm_body.mojo b/core/rms_norm_body.mojo
+index 6145f91594..a0f1c693fb 100644
+--- a/core/rms_norm_body.mojo
++++ b/core/rms_norm_body.mojo
+@@ -33,4 +33,7 @@ def rms_rstd(sumsq: Float32, d: Int, eps: Float32) -> Float32:
+ @always_inline
+ def rms_scale(xv: Float32, rstd: Float32, wv: Float32) -> Float32:
+     """weight * (x * rstd), two separately rounded products."""
++    from std.sys import is_defined
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): every RMSNorm output negated (the final norm too, so the head's logits change sign and every greedy token moves), the GPU bindings only
++        return -ftz(identical_mul(ftz(wv), ftz(identical_mul(ftz(xv), rstd))))
+     return ftz(identical_mul(ftz(wv), ftz(identical_mul(ftz(xv), rstd))))

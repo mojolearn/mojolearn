@@ -1,0 +1,26 @@
+diff --git a/autograd/nn_conv3d_layers.mojo b/autograd/nn_conv3d_layers.mojo
+index 13c7c14b03..33e1611253 100644
+--- a/autograd/nn_conv3d_layers.mojo
++++ b/autograd/nn_conv3d_layers.mojo
+@@ -16,6 +16,7 @@ through ModelRules -> ImportRules -> RankNRules), so no rule is added. Parameter
+ (out_channels, channels // groups, kd, kh, kw) then its bias (out_channels), PyTorch's layout and init
+ (uniform in +-1/sqrt(fan_in), fan_in = channels // groups * kd kh kw, for both).
+ """
++from std.sys.compile import is_defined  # SABOTAGE coverage (sab-arms-67): the side switch
+ from autograd.tape import Tape, Tensor
+ from autograd.rankn import ShapeN, RN_MAX_RANK
+ from autograd.rankn_api import rn_shape
+@@ -201,8 +202,11 @@ def conv3d_layer_forward[E: Exec](
+         var bias = Optional[Tensor]()
+         if conv3d_bias(xargs, i):
+             bias = Optional[Tensor](_p(tape, ex, P, Gr, off + nw, 1, oc, train))
+-        return rankn_conv3d(tape, ex, x, w5, bias, _t(xargs, i, 2), _t(xargs, i, 3), _t(xargs, i, 5),
+-                            conv3d_groups(xargs, i))
++        var sab_y = rankn_conv3d(tape, ex, x, w5, bias, _t(xargs, i, 2), _t(xargs, i, 3), _t(xargs, i, 5),  # SABOTAGE coverage (sab-arms-67): held
++                                 conv3d_groups(xargs, i))  # SABOTAGE coverage (sab-arms-67): held
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the conv3d layer's output doubled, host bindings only
++            sab_y = tape.scale(ex, sab_y, Float32(2))  # SABOTAGE coverage (sab-arms-67): twice the convolution
++        return sab_y  # SABOTAGE coverage (sab-arms-67): held
+     if code == LAYER_MAXPOOL3D:
+         return rankn_max_pool3d(tape, ex, x, _t(xargs, i, 0), _t(xargs, i, 1), _t(xargs, i, 2), _t(xargs, i, 3),
+                                 _x(xargs, i, 4) == 1)

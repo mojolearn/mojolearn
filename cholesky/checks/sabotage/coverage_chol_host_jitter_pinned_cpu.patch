@@ -1,0 +1,21 @@
+diff --git a/cholesky/host/chol_oracle.mojo b/cholesky/host/chol_oracle.mojo
+index 5462917631..92f32a2ad7 100644
+--- a/cholesky/host/chol_oracle.mojo
++++ b/cholesky/host/chol_oracle.mojo
+@@ -63,6 +63,7 @@ THE SABOTAGE. This file carries no arm of its own. Under
+ """
+ 
+ from std.memory import bitcast
++from std.sys.compile import is_defined  # SABOTAGE coverage (sab-arms-67): the side key
+ from cholesky.logdet_fold import logdet_serial
+ 
+ from checks.numerics import (
+@@ -116,6 +117,8 @@ struct CholHostFactor(Copyable, Movable):
+ 
+ def chol_host_jitter_pinned() -> Float32:
+     """`potrf.mojo::chol_jitter_pinned`, by its bits."""
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the pinned ridge one ulp up, the host bindings only
++        return bitcast[DType.float32](CHOL_HOST_JITTER_BITS + 1)
+     return bitcast[DType.float32](CHOL_HOST_JITTER_BITS)
+ 
+ 

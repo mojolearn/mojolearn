@@ -1,0 +1,21 @@
+diff --git a/bindings/jl_native_pack.mojo b/bindings/jl_native_pack.mojo
+index c56220f7d3..c2cb39c5e6 100644
+--- a/bindings/jl_native_pack.mojo
++++ b/bindings/jl_native_pack.mojo
+@@ -9,6 +9,7 @@
+ # `mojolearn_log`, x_metrics/epilogue.mojo `portable_log_c`). So the same
+ # bits as the shell; CPython publishes the completed truncated integer.
+ from std.python import Python, PythonObject
++from std.sys.compile import is_defined  # SABOTAGE coverage (sab-arms-67)
+ from std.python._cpython import PyObjectPtr
+ from std.python.bindings import ExceptionType, raise_python_exception
+ from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
+@@ -27,6 +28,8 @@ def _jl_bound(e: Float64, n: Float64) -> Float64:
+     # Preserve epsilon-before-count validation (the callers) and the
+     # original arithmetic.
+     var denominator = (e * e) / 2.0 - _cube_rounded(e) / 3.0
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the bound one whole unit up in the host bindings only, so the truncated dimension steps
++        return 4.0 * _pinned_log(n) / denominator + 1.0
+     return 4.0 * _pinned_log(n) / denominator
+ 
+ 

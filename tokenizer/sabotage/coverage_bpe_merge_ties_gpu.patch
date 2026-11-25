@@ -1,0 +1,39 @@
+diff --git a/tokenizer/gpu/bpe_gpu.mojo b/tokenizer/gpu/bpe_gpu.mojo
+index ed19406249..e618543a47 100644
+--- a/tokenizer/gpu/bpe_gpu.mojo
++++ b/tokenizer/gpu/bpe_gpu.mojo
+@@ -61,6 +61,7 @@ device-resident are read in place; the result (ids or bytes, counts, the state w
+ once, after the last kernel. No host step inside the call touches the data.
+ """
+ from std.atomic import Atomic, Ordering
++from std.sys.compile import is_defined  # SABOTAGE coverage (sab-arms-67): the define tests below
+ from max.gpu import block_dim, block_idx, thread_idx
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+@@ -478,7 +479,10 @@ def gpu_merge_kernel(
+         for k in range(nb - 2):
+             var lo = Int(bnd[bo + k])
+             var r = _rank(text, lo, Int(bnd[bo + k + 2]) - lo, arena, toff, tlen, buckets, tm)
+-            if r >= 0 and (best_at < 0 or r < best_rank):
++            var better = r < best_rank
++            comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the HIGHEST-rank adjacent pair merges first (every merged piece is still a token), the GPU bindings only
++                better = r > best_rank
++            if r >= 0 and (best_at < 0 or better):
+                 best_rank = r
+                 best_at = k
+         if best_at < 0:
+@@ -898,8 +902,12 @@ def gpu_train_select_kernel(pc: I32P, pk: I64P, st: I32P, sel: I32P, mrg: I32P,
+         st.unsafe_store(S_DONE, Int32(1))
+         st.unsafe_store(S_NSEL, Int32(0))
+         return
+-    var a0 = Int32(sk[0] // v)
+-    var b0 = Int32(sk[0] % v)
++    var key0 = sk[0]
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): a tie at the top count merges the runner-up pair (the larger key) instead of the smallest, the GPU bindings only
++        if sc[1] == c0:
++            key0 = sk[1]
++    var a0 = Int32(key0 // v)
++    var b0 = Int32(key0 % v)
+     sel.unsafe_store(0, a0)
+     sel.unsafe_store(1, b0)
+     mrg.unsafe_store(2 * nm, a0)

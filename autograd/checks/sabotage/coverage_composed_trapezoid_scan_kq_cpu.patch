@@ -1,0 +1,28 @@
+diff --git a/autograd/model_blocks.mojo b/autograd/model_blocks.mojo
+index 873e36c988..01fbca1347 100644
+--- a/autograd/model_blocks.mojo
++++ b/autograd/model_blocks.mojo
+@@ -77,6 +77,7 @@ its monolith agree to the fold order of their kernels, not bit for bit
+ (checks/native_tests/neural_blocks.mojo states the measured differences).
+ """
+ from std.collections import Array
++from std.sys.compile import is_defined  # SABOTAGE coverage (sab-arms-67): the side switch
+ from std.math import isfinite
+ from std.memory import bitcast
+ from sequence.exec_trait import Exec
+@@ -927,8 +928,13 @@ def block_forward[E: Exec](
+         var tv = _trap_v(xargs, i, cur)
+         var tk = a0 * _x(xargs, i, 1)
+         var v = rankn_narrow(tape, ex, h, 2, 0, tv)
+-        var k = rankn_narrow(tape, ex, h, 2, tv, tk)
+-        var q = rankn_narrow(tape, ex, h, 2, tv + tk, tk)
++        var sab_k = tv  # SABOTAGE coverage (sab-arms-67): k's column
++        var sab_q = tv + tk  # SABOTAGE coverage (sab-arms-67): q's column
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): k and q swapped, host bindings only
++            sab_k = tv + tk  # SABOTAGE coverage (sab-arms-67): k reads q
++            sab_q = tv  # SABOTAGE coverage (sab-arms-67): q reads k
++        var k = rankn_narrow(tape, ex, h, 2, sab_k, tk)
++        var q = rankn_narrow(tape, ex, h, 2, sab_q, tk)
+         var dt = rankn_narrow(tape, ex, h, 2, tv + 2 * tk, a0)
+         var av = rankn_narrow(tape, ex, h, 2, tv + 2 * tk + a0, a0)
+         var tr = rankn_narrow(tape, ex, h, 2, tv + 2 * tk + 2 * a0, a0)

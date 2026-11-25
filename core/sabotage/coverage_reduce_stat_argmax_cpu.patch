@@ -1,0 +1,13 @@
+diff --git a/core/hotpath_impl.mojo b/core/hotpath_impl.mojo
+index f3d3834485..03a4e48cba 100644
+--- a/core/hotpath_impl.mojo
++++ b/core/hotpath_impl.mojo
+@@ -358,6 +358,8 @@ def _reduce[dt: DType](addr: Int, n: Int, what: Int) raises -> HpStat:
+                     integral = 0
+                     break
+     if what == HP_ARGMAX:
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE coverage (sab-arms-67): the argmax answer steps to the next position (wrapping), the host bindings only
++            at = (at + 1) % n
+         return HpStat(HP_STAT_INT, at, 0.0, 0, 0, 0)
+     if what == HP_SUM:
+         return HpStat(HP_STAT_FLOAT, 0, total, 0, 0, 0)
