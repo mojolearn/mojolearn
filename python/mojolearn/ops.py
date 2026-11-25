@@ -3616,5 +3616,13 @@ for _connection in (*_SESSION_CONNECTIONS.values(), _batch_source_context().get(
 del _batch_source_context
 
 from ._distributed_program import _connect_owned_programs
-_connect_owned_programs(_SESSION_CONNECTIONS)
-del _connect_owned_programs
+# The CPU connection of `Session(device="cpu")` beside a GPU set connects its
+# captured-program provider too: without it a CPU session's
+# `Program.distribute` / `partition` found no provider for its image ("Session
+# has no connected captured-program provider", ops-loss-fold-num-den cpu side
+# on the L40S GPU install of main 3cd641b37e; lane gs-fix). A CPU-only process
+# has no such record: its mode connection already is the CPU one.
+from ._native_family_bridge import shared_context as _owned_program_context
+_owned_program_cpu = _owned_program_context().get("ops_session_cpu_connection")  # glue: import-time connection record
+_connect_owned_programs(dict(_SESSION_CONNECTIONS, **({"cpu": _owned_program_cpu} if _owned_program_cpu is not None else {})))  # glue: import-time provider registration of each connected image
+del _connect_owned_programs, _owned_program_context, _owned_program_cpu
