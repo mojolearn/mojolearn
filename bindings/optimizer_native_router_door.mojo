@@ -81,7 +81,6 @@ from bindings.optimizer_keys_unpack import (
 # nn-blocks-pg begin: SGD / Adam / AdamW parameter groups
 from bindings.optimizer_keys_unpack import (
     OPTIMIZER_OPN_PG_STEP, OPTIMIZER_OPN_PG_STATE, OPTIMIZER_OPN_PG_LOAD, OPTIMIZER_OPN_PG_ZERO,
-    OPTIMIZER_OPN_PG_NEW, OPTIMIZER_OPN_PG_FIRST, OPTIMIZER_OPN_PG_LAST,
 )
 from bindings.optimizer_public_door import OP_STEP, STATE_DICT
 from autograd.nn_pg import (
@@ -675,8 +674,26 @@ def optimizer_native(operation: Int, name: PythonObject, owner: PythonObject, va
             return pg_training_construct(owner, values, mode, context)
         opt_owner(owner, context)
         return optimizer_construct(owner, values, mode, context)
-    if operation >= OPTIMIZER_OPN_PG_FIRST and operation <= OPTIMIZER_OPN_PG_LAST:
-        return pg_training_operation(operation, owner, values, context)  # nn-blocks-pg
+    if owner is not None and (operation == OPTIMIZER_OPN_STEP or operation == OPTIMIZER_OPN_STATE
+                              or operation == OPTIMIZER_OPN_ZERO or operation == OPTIMIZER_OPN_LOAD):
+        # nn-blocks-pg, one class (w3-integrate-10, Andrew's choice (b)): an optimizer built from parameter groups
+        # holds them inside its owner (`_pg_members`); the public step / zero_grad / state_dict / load_state_dict
+        # of that same class route here. One dictionary lookup on these four operations of a plain optimizer.
+        var pg_fields = py_fields(owner)
+        if py_contains(pg_fields, PythonObject("_pg_members")):
+            if operation == OPTIMIZER_OPN_STEP:
+                if Int(py=values[2]) != OP_STEP:
+                    raise Error("ValueError: an optimizer with parameter groups takes step(grads, max_norm) only "
+                                + "(no step_device or accumulated step)")
+                return pg_training_operation(OPTIMIZER_OPN_PG_STEP, owner, Python.tuple(values[0], values[1]),
+                                             context)
+            if operation == OPTIMIZER_OPN_STATE:
+                if Int(py=values[0]) != STATE_DICT:
+                    raise Error("ValueError: an optimizer with parameter groups gives its state through state_dict()")
+                return pg_training_operation(OPTIMIZER_OPN_PG_STATE, owner, values, context)
+            if operation == OPTIMIZER_OPN_ZERO:
+                return pg_training_operation(OPTIMIZER_OPN_PG_ZERO, owner, values, context)
+            return pg_training_operation(OPTIMIZER_OPN_PG_LOAD, owner, values, context)
     var selected_mode = mode
     var host_owner = False
     if owner is not None:
@@ -915,8 +932,8 @@ def optimizer_load_owner(module: PythonObject, provider: PythonObject, owner: Py
 #
 # `params` as a list of dicts (torch.optim's form). UNPACK resolves the groups ONCE, at construction: each group
 # becomes a member optimizer of the same class, built by `optimizer_construct` with the group's options over the
-# constructor's (the same admission, registry and state as a one-group optimizer), and the object becomes a
-# `_ParamGroups` (python/mojolearn/_training_impl.py) that holds them. Its step clips ONCE over every group's
+# constructor's (the same admission, registry and state as a one-group optimizer), held in the owner's
+# `_pg_members` (the same public class: no subclass, no Python `__new__`). Its step clips ONCE over every group's
 # gradients (`door_clip`, torch's clip_grad_norm_ over all parameters in group order: optimizer contract 3.5, one
 # registry and one coefficient), then steps each member with its own options and no clip (`door_step`, each
 # member's existing route and kernels). A one-group optimizer never reaches this code: its construct tests the
@@ -953,8 +970,8 @@ def _pg_group_list(value: PythonObject, where: String) raises -> PythonObject:
 def pg_training_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
                           context: PythonObject) raises -> PythonObject:
     """The constructor of an SGD / Adam / AdamW given parameter groups: every group admitted and checked before
-    any member is built (a refusal leaves nothing behind), then one member per group, then the owner becomes a
-    `_ParamGroups` holding them."""
+    any member is built (a refusal leaves nothing behind), then one member per group, held in the owner's
+    `_pg_members`."""
     var kind = optimizer_integer(values[1], context)
     var where = _pg_where(kind)
     var builtins = native_loaded_module("builtins")
@@ -1046,22 +1063,6 @@ def pg_training_construct(owner: PythonObject, values: PythonObject, mode: Pytho
     return PythonObject(None)
 
 
-def pg_training_new(cls: PythonObject, params: PythonObject) raises -> PythonObject:
-    """`__new__` of SGD / Adam / AdamW: an instance of `cls`, or, when `params` is a list of parameter groups, of
-    its parameter-group form (`_SGDGroups`, `_AdamGroups`, `_AdamWGroups`, subclasses of the public class whose
-    `__init__` then builds the members). Nothing else is decided here."""
-    var builtins = native_loaded_module("builtins")
-    if not pg_training_grouped(params):
-        return py_call(builtins.object.__new__, cls)
-    var impl = native_loaded_module("mojolearn._training_impl")
-    var grouped = impl._SGDGroups
-    if Bool(py=py_call(builtins.issubclass, cls, impl.AdamW)):
-        grouped = impl._AdamWGroups
-    elif Bool(py=py_call(builtins.issubclass, cls, impl.Adam)):
-        grouped = impl._AdamGroups
-    return py_call(builtins.object.__new__, grouped)
-
-
 def _pg_member_entries(member: PythonObject, context: PythonObject) raises -> Tuple[PythonObject, PythonObject]:
     """(module, provider) of one member, chosen as `optimizer_native` chooses them for its own operations."""
     var nk = optimizer_keys()
@@ -1116,9 +1117,7 @@ def _pg_clip(member: PythonObject, provider: PythonObject, grads: PythonObject, 
 
 def pg_training_operation(operation: Int, owner: PythonObject, values: PythonObject,
                           context: PythonObject) raises -> PythonObject:
-    """`_ParamGroups.step`, `zero_grad`, `state_dict`, `load_state_dict`, and the classes' `__new__`."""
-    if operation == OPTIMIZER_OPN_PG_NEW:
-        return pg_training_new(owner, values[0])
+    """step, zero_grad, state_dict and load_state_dict of an optimizer built from parameter groups."""
     var builtins = native_loaded_module("builtins")
     var fields = py_fields(owner)
     if not py_contains(fields, PythonObject("_pg_members")):
