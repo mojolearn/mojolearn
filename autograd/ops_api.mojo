@@ -135,6 +135,11 @@ from autograd.block_step_ops import (
 )
 from autograd.rules_step_ops import StepOpRules
 from autograd.rules_recurrent import OPS_RNN_SCAN, rnn_scan_op
+# Lane rnn-parity-B: the weighted per-step losses (session code 95) and the
+# recurrent layer's padded-step zeroing (autograd/per_step_ops.mojo).
+from autograd.per_step_ops import OPS_WEIGHTED_LOSS, weighted_loss, rnn_zero_padded
+from sequence.ops import CELL_LSTM
+from sequence.recurrent import fill as _seq_fill
 # Generation ops (lane x45c): the language model's token pick and the decode
 # loop's condition, session codes 85, 86 (autograd/generation_ops.mojo).
 from autograd.lm_head_v2_op import OPS_LM_HEAD_V2
@@ -1835,6 +1840,14 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 t = cross_entropy(self.tape, self.ex, ce_z, ce_c, ints[0])
             else:
                 t = cross_entropy(self.tape, self.ex, x[0], x[1], ints[0])
+        elif code == OPS_WEIGHTED_LOSS:
+            # Lane rnn-parity-B: [prediction, target, weight], ints [loss code 24..28,
+            # reduction], floats [delta]; reached only when weight= is given
+            # (autograd/per_step_ops.mojo).
+            _need("weighted loss", n, 3, 2, ni, 1, nf)
+            if self.int_words[self._slot(hs[2])]:
+                raise Error("ValueError: ops: a loss weight must be a floating-point tensor")
+            t = weighted_loss(self.tape, self.ex, x[0], x[1], x[2], ints[0], ints[1], fs[0])
         elif code == OPS_DETACH:
             _need("detach", n, 1, 0, ni, 0, nf)
             t = self.tape.detach(self.ex, x[0])
@@ -2372,11 +2385,78 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         (steps * batch, H) tensor, from a zero initial state. The trainer's
         layer (`rnn_scan_op`); recorded as its two custom nodes, which
         StepOpRules hands to RecurrentRules."""
+        if len(ints) >= 8:
+            # Lane rnn-parity-B: the layer's options (h_0, c_0, lengths, reverse, the final cell state);
+            # a call without them sends three integers and runs the words below unchanged.
+            return self._rnn_scan_options(hs, ints, fs, x)
         _need("rnn_scan", len(x), 5, 3, len(ints), 0, len(fs))
         for i in range(5):  # small-loop(five operands): operand kinds, no data
             if self.int_words[self._slot(hs[i])]:
                 raise Error("ValueError: ops: a recurrent layer takes floating-point tensors")
         var rt = rnn_scan_op(self.tape, self.ex, x[0], x[1], x[2], x[3], x[4], ints[0], ints[1], ints[2])
+        return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+
+    def _rnn_scan_options(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_RNN_SCAN with options (lane rnn-parity-B): ints [cell, steps, batch, reverse, has h_0, has c_0,
+        has lengths, cell state out] and, after the five operands, h_0 (B x H values), c_0 (B x H, LSTM) and
+        lengths (B float32 values, each in [1, steps]) when given. h_0 / c_0 are the initial state (no
+        gradient reaches them); `lengths` zeroes each row's padded inputs (rnn_zero_padded) and the cell carries
+        its state through them (rnn_scan_op); `reverse` walks time T - 1 down to 0, the output in time order.
+        With `cell state out` (an LSTM) the result is ((T + 1) B, H): the T B output rows, then the final cell
+        state's B rows (a constant), which the caller splits (autograd/ops_block_frontend.mojo session_rnn)."""
+        var cell = ints[0]
+        var T = ints[1]
+        var B = ints[2]
+        var reverse = ints[3] != 0
+        var has_h0 = ints[4] != 0
+        var has_c0 = ints[5] != 0
+        var has_len = ints[6] != 0
+        var cell_out = ints[7] != 0
+        var want = 5 + (1 if has_h0 else 0) + (1 if has_c0 else 0) + (1 if has_len else 0)
+        _need("rnn_scan", len(x), want, 8, len(ints), 0, len(fs))
+        for i in range(want):  # small-loop(at most eight operands): operand kinds, no data
+            if self.int_words[self._slot(hs[i])]:
+                raise Error("ValueError: ops: a recurrent layer takes floating-point tensors")
+        if (has_c0 or cell_out) and cell != CELL_LSTM:
+            raise Error("ValueError: ops: only an LSTM has a cell state (c_0)")
+        var H = self.tape.cols(x[2])
+        var at = 5
+        var h0 = Optional[FP](None)
+        var c0 = Optional[FP](None)
+        if has_h0:
+            if self.tape.shape_of(x[at]).count() != B * H or self.tape.cols(x[at]) != H:
+                raise Error("ValueError: ops: h_0 must be (batch, hidden): " + String(B) + " x " + String(H))
+            h0 = Optional[FP](self.tape.value_of(self.ex, x[at]))
+            at += 1
+        if has_c0:
+            if self.tape.shape_of(x[at]).count() != B * H or self.tape.cols(x[at]) != H:
+                raise Error("ValueError: ops: c_0 must be (batch, hidden): " + String(B) + " x " + String(H))
+            c0 = Optional[FP](self.tape.value_of(self.ex, x[at]))
+            at += 1
+            if not has_h0:
+                # c_0 alone: the hidden state starts at zero (PyTorch's h_0 default)
+                var hz = self.tape.reserve(self.ex, B * H)
+                _seq_fill(self.ex, hz, B * H, Float32(0.0))
+                h0 = Optional[FP](hz)
+        var lens = Optional[FP](None)
+        var xin = x[0]
+        if has_len:
+            if self.tape.shape_of(x[at]).count() != B:
+                raise Error("ValueError: ops: lengths must hold one length per sequence (" + String(B) + " values)")
+            var lp = self.tape.value_of(self.ex, x[at])
+            lens = Optional[FP](lp)
+            xin = rnn_zero_padded(self.tape, self.ex, x[0], lp, T, B)
+        var c_last = Optional[FP](None)
+        if cell_out:
+            c_last = Optional[FP](self.tape.reserve(self.ex, B * H))
+        var rt = rnn_scan_op(self.tape, self.ex, xin, x[1], x[2], x[3], x[4], cell, T, B, lens, reverse, h0, c0,
+                             c_last)
+        if cell_out:
+            var ct = self.tape.variable(self.ex, c_last.value(), B, H, False)
+            var parts = List[Tensor]()
+            parts.append(rt)
+            parts.append(ct)
+            rt = rankn_concat(self.tape, self.ex, parts, 0)
         return self._add(rt, 0, self.tape.requires_grad(rt), 0)
 
     def _lm_embedding(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:

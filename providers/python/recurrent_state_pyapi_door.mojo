@@ -68,7 +68,12 @@ def recurrent_state(model: PythonObject, operation: String, args: PythonObject, 
     var names = List[String]()
     var dimensions = List[List[Int]]()
     var counts = List[Int]()
-    var total = recurrent_state_layout(gates, hidden, layers, features, outputs, names, dimensions, counts)
+    # lane rnn-parity: bidirectional (`_reverse` names) and bias=False (no bias names; their slots stay 0)
+    var dirs = 2 if Bool(py=py_get(fields, "bidirectional", PythonObject(False))) else 1
+    var bias = Bool(py=py_get(fields, "bias", PythonObject(True)))
+    var emitted = List[Bool]()
+    var total = recurrent_state_layout(gates, hidden, layers, features, outputs, names, dimensions, counts, dirs, bias,
+                                       emitted)
     var loading = operation == "rnn_load_state_dict"
     var state = PythonObject(None)
     var packed = PythonObject(None)
@@ -92,6 +97,10 @@ def recurrent_state(model: PythonObject, operation: String, args: PythonObject, 
     var base = xseq_f32p(packed)
     var offset = 0
     for i in range(len(names)):  # driver-loop: over named parameter buffers
+        if not emitted[i]:
+            # bias=False: an unnamed zero slot (xseq_zeros on load; kept zero by the fit)
+            offset += counts[i]
+            continue
         var shape = Python.list()
         for j in range(len(dimensions[i])):  # small-loop(parameter shape words)
             _ = py_call(shape.append, dimensions[i][j])

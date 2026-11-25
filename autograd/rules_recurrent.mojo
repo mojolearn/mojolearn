@@ -52,11 +52,17 @@ from sequence.ops import (
 )
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, scan_routes
 from sequence.recurrent import (
-    Net, Work, RnnStep, SEQ_WGRAD_BLOCKED, TASK_CE, WGRAD_IDN_SCRATCH, bias_rows, fill, gather_rows, gather_seq, gemm,
+    Net, Work, RnnStep, RnnOptions, RnnFitSetup, SEQ_WGRAD_BLOCKED, TASK_CE, TASK_MSE, WGRAD_IDN_SCRATCH, bias_rows, fill,
+    gather_rows, gather_seq, gemm,
 )
+from autograd.rankn_layout import rankn_concat, rankn_narrow
+from autograd.loss_ops import LS_MSE
+from autograd.per_step_ops import weighted_reduce
+from autograd.losses import REDUCTION_MEAN, REDUCTION_SUM
 from autograd.kernels.recurrent import colsum, wgrad_block, wgrad_blocked
 from sequence.mlp import EPI_BIAS_ACT
-from sequence.gemm_split import gemm_split_block, gemm_split_shape
+from sequence.gemm_split import gemm_ask_chain, gemm_split_block, gemm_split_shape
+from std.sys import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 # The recurrent trainer's backward runs on the tape (promoted 2026-10-19). One run per arm, HIGGS
@@ -250,11 +256,15 @@ def scan_bwd_split(cell: Int, B: Int, H: Int, GH: Int) -> Int:
 
 def _gemm_bias[E: Exec](
     mut ex: E, A: FP, Bm: FP, bias: FP, C: FP, M: Int, N: Int, K: Int,
-    sam: Int, sak: Int, sbk: Int, sbn: Int,
+    sam: Int, sak: Int, sbk: Int, sbn: Int, chain: Bool,
 ) raises:
     """C [M, N] dense = A B + bias[n] in one launch: `gemm` (no accumulate)
-    with op_bias as its epilogue (sequence/mlp_fit.mojo gemm_epi's layout)."""
+    with op_bias as its epilogue (sequence/mlp_fit.mojo gemm_epi's layout).
+    `chain`: the fold is gemm_dot's one chain at every M (sequence/gemm_split.mojo
+    gemm_ask_chain); else the launch rule's split order where it selects it."""
     var a = Args()
+    if chain:
+        gemm_ask_chain(a)
     a.p0 = A
     a.p1 = Bm
     a.p2 = C
@@ -280,6 +290,59 @@ def _copy[E: Exec](mut ex: E, dst: FP, src: FP, n: Int) raises:
 
 
 # ------------------------------------------------------------------ forward records
+# Lane rnn-step-bits (Andrew 2026-11-25: a live system scoring minute by minute gets the same bits from `step` as from
+# the whole-sequence pass, on every vendor and the host column, at every width). Cause: every projection of this
+# family (each layer's input projection, the every-step head, the final-state head) is one GEMM over the call's rows,
+# T B for a T-step call and B for a one-step call, and the launch rule's split-K order (sequence/gemm_split.mojo
+# gemm_split_shape) keys on that row count once K > 64: at 4 sequences, LSTM hidden 32, 65 or 300 inputs, a 64-step
+# call (256 x 128: eight 64 x 64 tiles) folded each cell in one chain while a one-step call (4 x 128, a thin product)
+# folded it in blocks of 64. Fix: these launches ask for gemm_dot's one chain at every row count (gemm_ask_chain), so
+# the order is a function of K alone and the rows pick only the schedule (the tile, micro-tile, packed body, thin
+# tile, cell and coop routes all fold that chain; the host column's too). BITS CHANGE, IDENTICAL, every column
+# together (host, NVIDIA, AMD, Apple): the recurrent projections whose shape the split rule selected (K > 64 and few
+# cells or tiles: a small batch's head over hidden > 64, the input projection of a few short sequences of > 64
+# inputs, every one-step call at > 64 inputs) now fold one chain; every other projection keeps its words. Parallel:
+# one thread (or tile cell) a cell as before; the split's extra lanes a cell are what goes, on those shapes only, and
+# they are small products (the split rule selects only products that leave the device idle). Weight gradients keep
+# their blocked order (a function of the row count by design; not part of a forward). FAST is unchanged.
+# Fault injection (verify's and the native check's sabotage arms, never in a product build):
+# MOJOLEARN_RNN_STEP_BITS_SABOTAGE_DEVICE / _HOST give back the row-keyed split order on ONE side, so a one-step
+# call at > 64 inputs folds in another order than the whole pass there: sequence-rnn-step-widths and RNN_PARITY's
+# width units must FAIL.
+comptime RNN_STEP_BITS_SABOTAGE_DEVICE = is_defined["MOJOLEARN_RNN_STEP_BITS_SABOTAGE_DEVICE"]()
+comptime RNN_STEP_BITS_SABOTAGE_HOST = is_defined["MOJOLEARN_RNN_STEP_BITS_SABOTAGE_HOST"]()
+
+
+@always_inline
+def rnn_linear_chain[E: Exec]() -> Bool:
+    """Whether the family's projections ask for the one chain (IDENTICAL; the rule above), on executor E."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        return False
+    comptime if (RNN_STEP_BITS_SABOTAGE_DEVICE and E.IS_DEVICE) or (RNN_STEP_BITS_SABOTAGE_HOST and not E.IS_DEVICE):
+        return False
+    return True
+
+
+def _gemm_chain[E: Exec](mut ex: E, A: FP, Bm: FP, C: FP, M: Int, N: Int, K: Int) raises:
+    """C [M, N] dense = A [M, K] Bm[N, K]^T as OP_GEMM (no accumulate), gemm_dot's one chain at every M (the
+    `gemm` helper's IDENTICAL launch with the chain asked)."""
+    var a = Args()
+    a.p0 = A
+    a.p1 = Bm
+    a.p2 = C
+    a.i0 = M
+    a.i1 = N
+    a.i2 = K
+    a.i3 = K
+    a.i4 = 1
+    a.i5 = 1
+    a.i6 = K
+    a.i7 = 0
+    a.i8 = N
+    gemm_ask_chain(a)
+    ex.launch[OP_GEMM](a, M * N)
+
+
 def rnn_linear[E: Exec](
     mut tape: Tape, mut ex: E, x: Tensor, weight: Tensor, bias: Tensor, output: FP,
     add_bias: Bool, blocked_wgrad: Bool, need_dx: Bool, w: Work,
@@ -308,13 +371,18 @@ def _linear_record[E: Exec](
         # that needs no gradient
         raise Error("recurrent linear: need_dx=False needs an input without a gradient")
     var with_bias = False
+    var chain = rnn_linear_chain[E]()
     comptime if RNN_BIAS_EPI:
         if add_bias and not _coop_shape(R, dout, din):
             _gemm_bias(ex, tape.value(x) + first_row * din, tape.value(weight), tape.value(bias), output,
-                       R, dout, din, din, 1, 1, din)
+                       R, dout, din, din, 1, 1, din, chain)
             with_bias = True
     if not with_bias:
-        gemm(ex, tape.value(x) + first_row * din, tape.value(weight), output, R, dout, din, din, 1, 1, din, False, dout)
+        if chain:
+            _gemm_chain(ex, tape.value(x) + first_row * din, tape.value(weight), output, R, dout, din)
+        else:
+            gemm(ex, tape.value(x) + first_row * din, tape.value(weight), output, R, dout, din, din, 1, 1, din, False,
+                 dout)
         if add_bias:
             bias_rows(ex, output, tape.value(bias), output, R, dout)
     var saved = Args()
@@ -348,15 +416,37 @@ def rnn_head[E: Exec](
                             RNN_LINEAR, saved)
 
 
+@always_inline
+def _initial_state[E: Exec](
+    mut ex: E, hall: FP, call: FP, T: Int, B: Int, H: Int, reverse: Bool, h0: Optional[FP], c0: Optional[FP],
+) raises:
+    """Lane rnn-parity: the given initial state (PyTorch's h_0 / c_0, B x H rows of this batch on the executor)
+    copied into the state rows the layer reads first: rows [0, B) of hall / call, or rows [T B, (T + 1) B) in
+    the reverse direction. c_0 absent (a GRU or tanh RNN, or an LSTM given h_0 alone) is zeros, as in PyTorch.
+    The caller passes h0 only when it is given: without it nothing here runs."""
+    var at = (T if reverse else 0) * B * H
+    _copy(ex, hall + at, h0.value(), B * H)
+    if c0:
+        _copy(ex, call + at, c0.value(), B * H)
+    else:
+        fill(ex, call + at, B * H, Float32(0.0))
+
+
 def layer_fwd_scan[E: Exec](
     mut ex: E, cell: Int, T: Int, B: Int, H: Int, gxp: FP, gh: FP, act: FP, hall: FP, call: FP,
     whh: FP, bhh: FP, b_ih: FP, lens: FP, masked: Bool, reverse: Bool,
+    h0: Optional[FP] = None, c0: Optional[FP] = None,
 ) raises:
     """A layer's forward recurrence as ONE launch (OP_CELL_FWD_SCAN, one block a batch row): gx [T B, G H] -> the
     states in hall / call (h_0 = 0 first; reverse: after the states), GH in gh, the gate activations in act. i6 is
-    the chain's fold of the step projection at this shape (scan_fwd_split), so the words are layer_fwd_chain's."""
+    the chain's fold of the step projection at this shape (scan_fwd_split), so the words are layer_fwd_chain's.
+    `h0` / `c0` (lane rnn-parity): the batch's initial state, copied into the first state rows before the launch;
+    the scan's i7 = 1 then leaves those rows as they are instead of storing zeros there."""
     var GH = gates_of(cell) * H
     var sa = Args()
+    if h0:
+        _initial_state(ex, hall, call, T, B, H, reverse, h0, c0)
+        sa.i7 = 1
     # step 0's pointers: time 0 (forward), or time T - 1 (reverse: h_prev the zero rows after the states)
     var t0 = T - 1 if reverse else 0
     sa.p0 = gxp + t0 * B * GH
@@ -387,16 +477,20 @@ def layer_fwd_scan[E: Exec](
 def layer_fwd_chain[E: Exec](
     mut ex: E, cell: Int, T: Int, B: Int, H: Int, gxp: FP, gh: FP, act: FP, hall: FP, call: FP,
     whh: FP, bhh: FP, b_ih: FP, lens: FP, masked: Bool, reverse: Bool, h0_clean: Bool,
+    h0: Optional[FP] = None, c0: Optional[FP] = None,
 ) raises:
     """The same forward as the per-step chain: per time step the projection (its own GEMM launch above the step
-    rule, RNN_STEP_GEMM, else fused into the cell) and the cell. The buffers as layer_fwd_scan's."""
+    rule, RNN_STEP_GEMM, else fused into the cell) and the cell. The buffers as layer_fwd_scan's. `h0` / `c0`
+    (lane rnn-parity): the batch's initial state replaces the zero fills (layer_fwd_scan's)."""
     var GH = gates_of(cell) * H
     # Lane fx-rnn-cnn-fit (2026-11-19): h_0 and c_0 are rows [0, B) of the two buffers, which nothing but
     # this fill (or the scan's own zero stores) writes while the batch size stays B: step s stores rows
     # [(s + 1) B, (s + 2) B). Only a forward of FEWER rows writes below B H, so the caller passes h0_clean when
     # the previous forward on this Work had at least B rows (AutogradRnnStep, rnn_predict): the two fills then
     # run once after an epoch's short last batch, not every step. The same zeros, so the same bits.
-    if reverse:
+    if h0:
+        _initial_state(ex, hall, call, T, B, H, reverse, h0, c0)
+    elif reverse:
         # the reverse direction's zero state is rows [T B, (T + 1) B) (lane nn-recurrent)
         fill(ex, hall + T * B * H, B * H, Float32(0.0))
         fill(ex, call + T * B * H, B * H, Float32(0.0))
@@ -433,7 +527,7 @@ def layer_fwd_chain[E: Exec](
             a.i9 = 1
         if step_gemm:
             # GH_s = h_{s-1} W_hh^T + b_hh where the fused body stores it, then the cell alone
-            _gemm_bias(ex, a.p3, whh, bhh, a.p1, B, GH, H, H, 1, 1, H)
+            _gemm_bias(ex, a.p3, whh, bhh, a.p1, B, GH, H, H, 1, 1, H, False)
             ex.launch[OP_CELL_FWD](a, B * H)
         else:
             ex.launch[OP_CELL_FWD_H](a, B * H)
@@ -442,6 +536,7 @@ def layer_fwd_chain[E: Exec](
 def rnn_layer[E: Exec](
     mut tape: Tape, mut ex: E, gx: Tensor, w_hh: Tensor, b_hh: Tensor, b_ih: FP,
     cell: Int, T: Int, B: Int, w: Work, l: Int, h0_clean: Bool = False, reverse: Bool = False,
+    h0: Optional[FP] = None, c0: Optional[FP] = None,
 ) raises -> Tensor:
     """Layer l's recurrence over gx [T B, G H]; returns h_1..h_T [T B, H]
     (w.hall[l] holds h_0 = 0 first). The launches are recurrent.forward's.
@@ -455,7 +550,13 @@ def rnn_layer[E: Exec](
     position is the time, so a row's padded times (now first) hold its zero
     state and its own steps run from its last valid step down to 0.
     `h0_clean`: the caller knows rows [0, B) of w.hall[l] and w.call[l]
-    already hold zeros, so the per-step chain does not fill them again."""
+    already hold zeros, so the per-step chain does not fill them again.
+    `h0` / `c0` (lane rnn-parity: PyTorch's initial state): B x H rows on the
+    executor copied into the first state rows (the reverse direction's rows
+    after the states) in place of the zeros; c0 absent is zeros. The state
+    takes no gradient (the backward reads the stored rows as step 0's
+    previous state, as it reads the zeros). `l` indexes the Work's buffers:
+    the trainer's layer and direction slot."""
     var H = tape.cols(w_hh)
     var GH = tape.rows(w_hh)
     if GH != gates_of(cell) * H or tape.cols(gx) != GH or tape.rows(gx) != T * B:
@@ -477,11 +578,11 @@ def rnn_layer[E: Exec](
     comptime if SEQ_LSTM_SCAN:
         if scan_routes(H, gates_of(cell)):
             layer_fwd_scan(ex, cell, T, B, H, gxp, w.gh[l], w.act[l], w.hall[l], w.call[l], whh, bhh, b_ih, w.lens,
-                           masked, reverse)
+                           masked, reverse, h0, c0)
             scanned = True
     if not scanned:
         layer_fwd_chain(ex, cell, T, B, H, gxp, w.gh[l], w.act[l], w.hall[l], w.call[l], whh, bhh, b_ih, w.lens,
-                        masked, reverse, h0_clean)
+                        masked, reverse, h0_clean, h0, c0)
     var saved = Args()
     saved.p0 = w.act[l]
     saved.p1 = w.gh[l]
@@ -769,6 +870,7 @@ comptime OPS_RNN_SCAN = 94
 def rnn_scan_op[E: Exec](
     mut tape: Tape, mut ex: E, x: Tensor, w_ih: Tensor, w_hh: Tensor, b_ih: Tensor, b_hh: Tensor,
     cell: Int, T: Int, B: Int, lengths: Optional[FP] = None, reverse: Bool = False,
+    h0: Optional[FP] = None, c0: Optional[FP] = None, c_last: Optional[FP] = None,
 ) raises -> Tensor:
     """One recurrent layer (cell CELL_LSTM, CELL_GRU or the tanh RNN) over a
     time-major sequence x [T B, D] from h_0 = c_0 = 0: returns h_1..h_T
@@ -829,8 +931,16 @@ def rnn_scan_op[E: Exec](
         w.has_lens = True
     var gx = rnn_linear(tape, ex, x, w_ih, b_ih, gxb, RNN_INPUT_BIAS_IN_GX, True, tape.requires_grad(x), w)
     # `reverse` (lane nn-recurrent): time T - 1 down to 0, the same launches (rnn_layer); the output stays in
-    # time order
-    return rnn_layer(tape, ex, gx, w_hh, b_hh, tape.value(b_ih), cell, T, B, w, 0, False, reverse)
+    # time order. `h0` / `c0` (lane rnn-parity): B x H executor words, the initial state (rnn_layer); no gradient.
+    var y = rnn_layer(tape, ex, gx, w_hh, b_hh, tape.value(b_ih), cell, T, B, w, 0, False, reverse, h0, c0)
+    if c_last:
+        # Lane rnn-parity-B (`Session.lstm(..., return_state=True)`): the LSTM's final cell state, B x H words
+        # copied out of the state rows the layer wrote last: rows [T B, (T + 1) B) forward, rows [0, B)
+        # reverse (layer_fwd_scan's layout; a row past its length carries its state forward, so these hold
+        # each row's state at its own last valid step). A copy, no gradient. Without c_last nothing runs.
+        _copy(ex, c_last.value(), call + (0 if reverse else T) * B * H, B * H)
+    _ = call
+    return y
 
 
 # ------------------------------------------------------------------ trainer step
@@ -859,6 +969,110 @@ def rnn_forward_autograd[E: Exec](
     var w_o = tape.variable_into(ex, P + net.head(), Gr + net.head(), net.O, H)
     var b_o = tape.variable_into(ex, P + net.head() + net.O * H, Gr + net.head() + net.O * H, 1, net.O)
     return rnn_head(tape, ex, inp, w_o, b_o, B, yhat, w.dy, w)
+
+
+def rnn_forward_options[E: Exec](
+    mut tape: Tape, mut ex: E, net: Net, opts: RnnOptions, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work,
+    yhat: FP, h0_clean: Bool, train: Bool, seed: UInt64, step: Int,
+) raises -> Tuple[Tensor, Tensor]:
+    """Lane rnn-parity (Andrew 2026-11-25): rnn_forward_autograd with RnnOptions; returns (the head's output,
+    the top layer's output [T B, dirs H], time order). Per layer, per direction (net.dirs 2: the reverse one walks
+    time T - 1 down to 0, rnn_layer's `reverse`) the input projection and the recurrence, each in its own Work
+    slot l dirs + d with the batch's initial state of that slot when given (w.h0b, w.c0b); two directions are
+    concatenated on the features, forward first (PyTorch's output layout); in training (`train`) dropout with
+    probability opts.dropout between stacked layers, its mask a function of (seed, step L + l) alone. The head:
+    output="sequence" every one of the T B rows (time-major) into `yhat` [T B, O]; else the final state, PyTorch's
+    h_n: the forward direction's state at time T - 1 (each row's last valid state: the length mask copies it
+    forward) and the reverse direction's at time 0, concatenated. The head's gradient storage is w.dy. Every
+    launch is one the plain forward runs (projections, scan or chain, the head's GEMM) or a tape layout op
+    (concat, narrow, dropout), the same order on the host and every vendor."""
+    tape.reset()
+    var H = net.H
+    var GH = net.G() * H
+    var inp = tape.variable(ex, x, T * B, net.D, False)
+    var top_f = inp
+    var top_r = inp
+    for l in range(net.L):  # driver-loop: over layers
+        var din = net.din(l)
+        var outs = List[Tensor]()
+        for d in range(net.dirs):  # driver-loop: over directions
+            var k = l * net.dirs + d
+            var w_ih = tape.variable_into(ex, P + net.w_ih(l, d), Gr + net.w_ih(l, d), GH, din)
+            var w_hh = tape.variable_into(ex, P + net.w_hh(l, d), Gr + net.w_hh(l, d), GH, H)
+            var b_ih = tape.variable_into(ex, P + net.b_ih(l, d), Gr + net.b_ih(l, d), 1, GH)
+            var b_hh = tape.variable_into(ex, P + net.b_hh(l, d), Gr + net.b_hh(l, d), 1, GH)
+            var gx = rnn_linear(tape, ex, inp, w_ih, b_ih, w.gx[k], RNN_INPUT_BIAS_IN_GX, True, l > 0, w)
+            var h0 = Optional[FP](None)
+            var c0 = Optional[FP](None)
+            if w.has_h0:
+                h0 = Optional[FP](w.h0b + k * B * H)
+                if w.has_c0:
+                    c0 = Optional[FP](w.c0b + k * B * H)
+            outs.append(rnn_layer(tape, ex, gx, w_hh, b_hh, P + net.b_ih(l, d), net.cell, T, B, w, k,
+                                  h0_clean and not w.has_h0, d == 1, h0, c0))
+        if net.dirs == 1:
+            inp = outs[0]
+        else:
+            inp = rankn_concat(tape, ex, outs, 1)
+            tape.materialize(ex, inp)
+        if l == net.L - 1:
+            top_f = outs[0]
+            top_r = outs[net.dirs - 1]
+        elif train and opts.dropout > Float32(0.0):
+            inp = tape.dropout(ex, inp, opts.dropout, seed, (step * net.L + l) & 0xFFFFFFFF)
+    var hw = net.head_in()
+    var w_o = tape.variable_into(ex, P + net.head(), Gr + net.head(), net.O, hw)
+    var b_o = tape.variable_into(ex, P + net.head() + net.O * hw, Gr + net.head() + net.O * hw, 1, net.O)
+    if opts.seq_out:
+        # every step's state into the head: one GEMM over the T B rows, its weight gradient the blocked order
+        var saved = _linear_record(tape, ex, inp, w_o, b_o, yhat, 0, T * B, True, True, True, w)
+        var logits = tape.custom_into(ex, [inp, w_o, b_o], yhat, w.dy, T * B, net.O, RNN_LINEAR, saved)
+        return (logits, inp)
+    if net.dirs == 1:
+        return (rnn_head(tape, ex, inp, w_o, b_o, B, yhat, w.dy, w), inp)
+    var ends = List[Tensor]()
+    ends.append(rankn_narrow(tape, ex, top_f, 0, (T - 1) * B, B))
+    ends.append(rankn_narrow(tape, ex, top_r, 0, 0, B))
+    var fin = rankn_concat(tape, ex, ends, 1)
+    tape.materialize(ex, fin)
+    var saved = _linear_record(tape, ex, fin, w_o, b_o, yhat, 0, B, True, False, True, w)
+    var logits = tape.custom_into(ex, [fin, w_o, b_o], yhat, w.dy, B, net.O, RNN_LINEAR, saved)
+    return (logits, inp)
+
+
+def rnn_weighted_sums[E: Exec](
+    mut tape: Tape, mut ex: E, net: Net, task: Int, logits: Tensor, R: Int, w: Work,
+) raises -> Tuple[Tensor, Tensor]:
+    """Lane rnn-parity: (sum_r w_r l_r, sum_r w_r) over the R rows of `logits`, through the generic masked and
+    weighted loss block (autograd/per_step_ops.mojo weighted_reduce, the block `Session` losses' `weight=` use:
+    one implementation). l_r is the row's mean squared error over the O outputs against w.yb, or its softmax
+    cross-entropy against the code in w.yb; w_r = w.wrow[r] (the mask: 0 at a padded step) takes no gradient.
+    Gradient accumulation and validation chunks combine these sums, never their means."""
+    var wt = tape.variable(ex, w.wrow, R, 1, False)
+    var terms: Tensor
+    if task == TASK_MSE:
+        var target = tape.variable(ex, w.yb, R, net.O, False)
+        terms = tape.mean(ex, tape.loss_terms(ex, logits, target, LS_MSE), 1)
+    else:
+        var codes = tape.variable(ex, w.yb, R, 1, False)
+        terms = tape.cross_entropy_rows(ex, logits, codes)
+    return (weighted_reduce(tape, ex, terms, wt, REDUCTION_SUM), tape.sum(ex, wt))
+
+
+def rnn_weighted_loss[E: Exec](
+    mut tape: Tape, mut ex: E, net: Net, task: Int, logits: Tensor, R: Int, w: Work,
+) raises -> Tensor:
+    """Lane rnn-parity: the weighted mean sum_r w_r l_r / (sum_r w_r + 2^-126) of the generic block
+    (weighted_reduce, mean). A zero total weight gives 0, never NaN."""
+    var wt = tape.variable(ex, w.wrow, R, 1, False)
+    var terms: Tensor
+    if task == TASK_MSE:
+        var target = tape.variable(ex, w.yb, R, net.O, False)
+        terms = tape.mean(ex, tape.loss_terms(ex, logits, target, LS_MSE), 1)
+    else:
+        var codes = tape.variable(ex, w.yb, R, 1, False)
+        terms = tape.cross_entropy_rows(ex, logits, codes)
+    return weighted_reduce(tape, ex, terms, wt, REDUCTION_MEAN)
 
 
 def rnn_backward_autograd[E: Exec](mut tape: Tape, mut ex: E, net: Net, logits: Tensor, dy: FP, B: Int) raises:
@@ -908,6 +1122,64 @@ struct AutogradRnnStep(RnnStep):
 
     def backward[E: Exec](mut self, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work) raises:
         rnn_backward_autograd(self.tape, ex, net, self.logits, w.dy, B)
+
+    def forward_options[E: Exec](
+        mut self, mut ex: E, net: Net, opts: RnnOptions, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work,
+        seed: UInt64, step: Int,
+    ) raises:
+        var out = rnn_forward_options(self.tape, ex, net, opts, P, Gr, x, T, B, w, w.yhat,
+                                      B <= self.h0_rows, True, seed, step)
+        self.logits = out[0]
+        # a forward from given initial states leaves them in rows [0, B): the next one fills (or copies) again
+        self.h0_rows = 0 if w.has_h0 else B
+
+    def validation_loss[E: Exec](
+        mut self, mut ex: E, net: Net, task: Int, opts: RnnOptions, P: FP, T: Int, w: Work, setup: RnnFitSetup,
+        dst: FP,
+    ) raises:
+        var nv = opts.nv
+        var S = T if opts.seq_out else 1
+        var bmax = setup.vchunk
+        var nmax = (nv + bmax - 1) // bmax
+        var ycols = net.O if task == TASK_MSE else 1
+        var lens = Optional[FP](None)
+        if opts.has_vl:
+            lens = Optional[FP](setup.vl)
+        var vt = Tape()
+        vt.no_grad()
+        var nc = 0
+        var b0 = 0
+        while b0 < nv:  # driver-loop: over validation chunks
+            var B = min(bmax, nv - b0)
+            gather_seq(ex, setup.vx, setup.vidx, w.xb, T, B, net.D, b0, lens)
+            if opts.has_vl:
+                gather_rows(ex, setup.vl, setup.vidx, w.lens, B, 1, b0)
+            var out = rnn_forward_options(vt, ex, net, opts, P, dummy_ptr(), w.xb, T, B, w, w.yhat, False, False,
+                                          UInt64(0), 0)
+            if opts.seq_out:
+                gather_seq(ex, setup.vy, setup.vidx, w.yb, T, B, ycols, b0)
+                gather_seq(ex, setup.vones, setup.vidx, w.wrow, T, B, 1, b0, lens)
+            else:
+                gather_rows(ex, setup.vy, setup.vidx, w.yb, B, ycols, b0)
+                gather_rows(ex, setup.vones, setup.vidx, w.wrow, B, 1, b0)
+            var sums = rnn_weighted_sums(vt, ex, net, task, out[0], B * S, w)
+            _copy(ex, setup.vparts + nc, vt.value(sums[0]), 1)
+            _copy(ex, setup.vparts + nmax + nc, vt.value(sums[1]), 1)
+            nc += 1
+            b0 += B
+        vt.reset()
+        var num = vt.sum(ex, vt.variable(ex, setup.vparts, 1, nc, False))
+        var den = vt.add(ex, vt.sum(ex, vt.variable(ex, setup.vparts + nmax, 1, nc, False)),
+                         vt.variable(ex, w.tiny, 1, 1, False))
+        _copy(ex, dst, vt.value(vt.divide(ex, num, den)), 1)
+        vt.release(ex)
+        # this pass wrote the shared state buffers: the next training forward fills its zero state again
+        self.h0_rows = 0
+
+    def weighted_backward[E: Exec](mut self, mut ex: E, net: Net, task: Int, R: Int, w: Work, loss_dst: FP) raises:
+        var loss = rnn_weighted_loss(self.tape, ex, net, task, self.logits, R, w)
+        _copy(ex, loss_dst, self.tape.value(loss), 1)
+        self.tape.backward_scalar_with_rules(ex, loss, RecurrentRules())
 
 
 # ------------------------------------------------------------------ predict
@@ -1008,3 +1280,126 @@ def rnn_predict[E: Exec](
     ex.download(dst, dout, N * net.O)
     if want_seq:
         ex.download(seq, dseq, N * T * H)
+
+
+def rnn_predict_options[E: Exec](
+    mut ex: E, net: Net, task: Int, opts: RnnOptions, X: FP, N: Int, T: Int, Pin: FP,
+    dst: FP, seq: FP, want_seq: Bool, chunk: Int, resident: Bool, lengths: Optional[FP], x_device: Bool,
+    state_h: FP, state_c: FP, want_state: Bool,
+) raises:
+    """Lane rnn-parity: rnn_predict with RnnOptions (rnn_forward_options in inference mode: no dropout).
+    dst: [N, O] (the final state's head; softmax for task CE), or with output="sequence" [N, T, O] batch-first,
+    every step's head (a step past a row's length repeats its last valid step's state in the forward direction).
+    seq (want_seq): [N, T, dirs H], the top layer's output. Initial states (opts.has_h0): opts.h0 / opts.c0, L dirs
+    N H host words. `want_state` (streaming, `step`): state_h [L dirs, N, H] receives every layer-direction's
+    final state (PyTorch's h_n: forward at time T - 1, i.e. each row's last valid step; reverse at time 0) and
+    state_c the LSTM's c_n likewise: fed back as h_0 / c_0 of the next call, the next steps run from exactly the
+    words the whole-sequence pass holds there (the same cell body and stored state words, and every projection's
+    fold one chain at every row count: rnn_linear_chain), at every input and hidden width. With two directions the
+    final states are PyTorch's h_n of this call's steps; the estimator's `step` refuses a bidirectional model
+    (sequence/xseq_neural_run.mojo xseq_run_rnn_predict_options)."""
+    var np_ = net.n_params()
+    var H = net.H
+    var HW = net.head_in()
+    var S = T if opts.seq_out else 1
+    var has_lens = Bool(lengths)
+    var dL = ex.alloc(N if has_lens else 1)
+    var dL_opt = Optional[FP](None)
+    if has_lens:
+        ex.upload(dL, lengths.value(), N)
+        dL_opt = Optional[FP](dL)
+    var bmax = chunk if chunk < N else N
+    var dX: FP
+    if x_device:
+        dX = X
+    else:
+        dX = ex.alloc(N * T * net.D)
+        ex.upload(dX, X, N * T * net.D)
+    var didx = ex.alloc(N)
+    var ia = Args()
+    ia.p0 = didx
+    ex.launch[OP_SEQ_IOTA](ia, N)
+    var P: FP
+    if resident:
+        P = Pin
+    else:
+        P = ex.alloc(np_)
+        ex.upload(P, Pin, np_)
+    var dout = ex.alloc(N * S * net.O)
+    var dseq = ex.alloc(N * T * HW if want_seq else 1)
+    var nh = net.slots() * N * H
+    var dH0 = didx
+    var dC0 = didx
+    if opts.has_h0:
+        dH0 = ex.alloc(nh)
+        ex.upload(dH0, opts.h0, nh)
+        if opts.has_c0:
+            dC0 = ex.alloc(nh)
+            ex.upload(dC0, opts.c0, nh)
+    var dHn = ex.alloc(nh if want_state else 1)
+    var dCn = ex.alloc(nh if want_state and net.cell == CELL_LSTM else 1)
+    var w = Work(ex, net, T, bmax, False, has_lens, opts)
+    var tape = Tape()
+    tape.no_grad()
+    var h0_rows = 0
+    var b0 = 0
+    while b0 < N:  # driver-loop: over prediction chunks
+        var B = bmax if b0 + bmax <= N else N - b0
+        gather_seq(ex, dX, didx, w.xb, T, B, net.D, b0, dL_opt)
+        if has_lens:
+            gather_rows(ex, dL, didx, w.lens, B, 1, b0)
+        if opts.has_h0:
+            for k in range(net.slots()):  # driver-loop: over layer-direction slots
+                gather_rows(ex, dH0 + k * N * H, didx, w.h0b + k * B * H, B, H, b0)
+                if opts.has_c0:
+                    gather_rows(ex, dC0 + k * N * H, didx, w.c0b + k * B * H, B, H, b0)
+        # the head writes this chunk's rows: [B, O] straight into dout, or [T B, O] time-major into w.yhat
+        var head_dst = w.yhat if opts.seq_out else dout + b0 * net.O
+        var out = rnn_forward_options(tape, ex, net, opts, P, dummy_ptr(), w.xb, T, B, w, head_dst,
+                                      B <= h0_rows, False, UInt64(0), 0)
+        h0_rows = 0 if opts.has_h0 else B
+        var R = B * S
+        if task == TASK_CE:
+            var a = Args()
+            a.p0 = head_dst
+            a.p1 = head_dst
+            a.i1 = net.O
+            ex.launch[OP_SOFTMAX](a, R)
+        if opts.seq_out:
+            # time-major [T, B, O] to batch-first rows b0 .. b0 + B of [N, T, O]
+            var a = Args()
+            a.p0 = w.yhat
+            a.p1 = dout
+            a.i0 = T
+            a.i1 = B
+            a.i2 = net.O
+            a.i3 = b0
+            ex.launch[OP_SEQ_OUT](a, B * T * net.O)
+        if want_seq:
+            var a = Args()
+            a.p0 = tape.value(out[1])
+            a.p1 = dseq
+            a.i0 = T
+            a.i1 = B
+            a.i2 = HW
+            a.i3 = b0
+            ex.launch[OP_SEQ_OUT](a, B * T * HW)
+        if want_state:
+            for l in range(net.L):  # driver-loop: over layers
+                for d in range(net.dirs):  # driver-loop: over directions
+                    var k = l * net.dirs + d
+                    # forward: rows [T B, (T + 1) B) hold the state after time T - 1; reverse: rows [0, B) time 0
+                    var at = 0 if d == 1 else T * B * H
+                    _copy(ex, dHn + k * N * H + b0 * H, w.hall[k] + at, B * H)
+                    if net.cell == CELL_LSTM:
+                        _copy(ex, dCn + k * N * H + b0 * H, w.call[k] + at, B * H)
+        b0 += B
+    tape.release(ex)
+    ex.sync()
+    ex.download(dst, dout, N * S * net.O)
+    if want_seq:
+        ex.download(seq, dseq, N * T * HW)
+    if want_state:
+        ex.download(state_h, dHn, nh)
+        if net.cell == CELL_LSTM:
+            ex.download(state_c, dCn, nh)

@@ -156,14 +156,19 @@ def test_lengths_refusals(bad, message):
         _gru().fit(x, y, epochs=1, lengths=bad)
 
 
-def test_lengths_need_a_recurrent_layer_and_no_validation_data():
+def test_lengths_need_a_recurrent_layer_and_validation_lengths():
     x, y, lengths = _tracks()
     flat = (mojolearn.Sequential(input_shape=(6, 2)).flatten().linear(2)
             .compile(loss="cross_entropy"))
     with pytest.raises(Exception, match="recurrent layers"):
         flat.fit(x, y, epochs=1, lengths=lengths)
-    with pytest.raises(Exception, match="validation_data with lengths"):
+    # lane rnn-parity-c: validation data with lengths carries its own lengths, (X, y, lengths)
+    with pytest.raises(Exception, match=r"validation_data takes \(X, y, lengths\)"):
         _gru().fit(x, y, epochs=1, lengths=lengths, validation_data=(x, y))
+    with pytest.raises(Exception, match="needs the training lengths"):
+        _gru().fit(x, y, epochs=1, validation_data=(x, y, lengths))
+    model = _gru().fit(x, y, epochs=2, lengths=lengths, validation_data=(x, y, lengths))
+    assert len(model.validation_loss_curve_) == 2
 
 
 def test_padded_values_do_not_change_the_fit():

@@ -5105,6 +5105,9 @@ PUBLIC_PENDING_LANES = {
     "nn-tr-schedules": "no reference",
     "nn-tr-seqopt-state": "no reference",
     "nn-tr-small-mlp": "no reference",
+    "ops-per-step-weighted-embedding": "no reference",  # lane rnn-parity-B (2026-11-25)
+    # lane rnn-parity-c (2026-11-25): the loss fold's 2-vs-20 claim; RECORD OWED at the release's one verification
+    "ops-loss-fold-num-den": "no reference",
     "ops-param-groups": "no reference",  # nn-blocks-pg (2026-11-25)
     "ops-param-groups-program-fit": "no reference",  # nn-blocks-pg
     "training-param-groups": "no reference",  # nn-blocks-pg

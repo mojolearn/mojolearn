@@ -91,7 +91,9 @@ def model_admit_addresses(addrs: PythonObject, target: Int, codes_ready: Bool = 
         # ctc loss's target lengths, lane nn-losses-2)
         if i < 8 or i > 10 or n == 9 or n == 10:
             addresses[i] = Int(py=addrs[i])
-    if n == 13:
+    # n == 15 (lane rnn-parity-c): a validated fit with lengths, addresses 13 and 14 the training and validation
+    # lengths (plain addresses, kept by the loop above)
+    if n == 13 or n == 15:
         sources.append(cast_in_of(addrs[8], "validation X"))
         sources.append(cast_in_of(addrs[9], "validation y"))
         sources.append(cast_in_of(addrs[10], "training classes") if target != 0 else CastIn.f32_c(0, 1, 1))
@@ -134,7 +136,7 @@ def _model_fit_run[E: Exec](
 ) raises -> PythonObject:
     # Packed public compatibility door: admit once, then call the SAME native
     # whole-model owner as the shared direct descriptor provider.
-    var validated = len(addrs) == 13 and len(ip) == 16
+    var validated = (len(addrs) == 13 or len(addrs) == 15) and len(ip) == 16
     var stateful = (len(addrs) == FIT_ADDRS_STATE and len(ip) == FIT_INTS_STATE) or validated
     var plain = len(addrs) == FIT_ADDRS and len(ip) == FIT_INTS
     if not (stateful or plain) or len(fp) < FIT_FLOATS + 1:

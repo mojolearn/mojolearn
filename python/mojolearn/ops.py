@@ -162,6 +162,41 @@ class Session:
     ...     loss = s.mse(s.matmul(x, w), s.tensor(y))
     ...     s.backward(loss)
     ...     grad_w = s.grad(w)
+
+    Train a score at every step of sequences of different lengths: an
+    embedding of each sequence's category beside its per-step features, a
+    GRU over every step, a linear head on every step's state and a binary
+    loss at every step, the padded steps masked out and the positive steps
+    weighted 30 times (``x`` is time first):
+
+    >>> T, B, F, E, H = 12, 4, 3, 2, 8
+    >>> X = rng.standard_normal((T, B, F), dtype=np.float32)
+    >>> lengths = np.array([12, 9, 5, 7], dtype=np.float32)
+    >>> category = np.array([0, 2, 1, 2])
+    >>> Y = (rng.random((T, B, 1)) < 0.2).astype(np.float32)
+    >>> valid = (np.arange(T)[:, None] < lengths[None, :]).astype(np.float32)[:, :, None]
+    >>> W = (valid * np.where(Y > 0, 30.0, 1.0)).astype(np.float32)
+    >>> def init(*shape):
+    ...     return rng.uniform(-0.3, 0.3, shape).astype(np.float32)
+    >>> with ops.Session(record=True) as s:
+    ...     table = s.tensor(init(3, E), requires_grad=True)
+    ...     w_ih = s.tensor(init(3 * H, F + E), requires_grad=True)
+    ...     w_hh = s.tensor(init(3 * H, H), requires_grad=True)
+    ...     b_ih = s.tensor(init(1, 3 * H), requires_grad=True)
+    ...     b_hh = s.tensor(init(1, 3 * H), requires_grad=True)
+    ...     w_out = s.tensor(init(H, 1), requires_grad=True)
+    ...     b_out = s.tensor(init(1, 1), requires_grad=True)
+    ...     params = [table, w_ih, w_hh, b_ih, b_hh, w_out, b_out]
+    ...     x, y, w, n = s.tensor(X), s.tensor(Y), s.tensor(W), s.tensor(lengths)
+    ...     opt = s.optimizer("adam", lr=0.01)
+    ...     for epoch in range(5):
+    ...         e = s.expand(s.reshape(s.embedding(table, category), (1, B, E)), (T, B, E))
+    ...         h = s.gru(s.concat([x, e], axis=2), w_ih, w_hh, b_ih, b_hh, lengths=n)
+    ...         logits = s.linear(h, w_out, b_out)
+    ...         s.backward(s.bce_with_logits(logits, y, weight=w))
+    ...         s.step(opt, params)
+    ...         s.reset()
+    ...     head = s.numpy(w_out)
     """
 
     def __init__(self, record=False, numeric_mode=None, device=None):
@@ -905,7 +940,8 @@ class Session:
         """
         return _SESSION_CALL(self, "lm_head_loss", (hidden, weight, codes))
 
-    def lstm(self, x, weight_ih, weight_hh, bias_ih, bias_hh):
+    def lstm(self, x, weight_ih, weight_hh, bias_ih, bias_hh, h_0=None, c_0=None, lengths=None,
+             reverse=False, return_state=False):
         """One LSTM layer over a whole sequence; returns every hidden state.
 
         ``x`` is ``(steps, batch, inputs)``, time first, as
@@ -913,31 +949,85 @@ class Session:
         shapes and gate order (input, forget, cell, output):
         ``weight_ih`` ``(4 * hidden, inputs)``, ``weight_hh``
         ``(4 * hidden, hidden)``, ``bias_ih`` and ``bias_hh`` as
-        ``(1, 4 * hidden)`` tensors. The hidden and cell states start at
-        zero. The result is ``(steps, batch, hidden)``; its last step,
-        ``index`` or ``take`` it out, is the final hidden state. To stack
-        layers, pass the result as the next layer's ``x``. In a recording
-        session the layer is differentiable with respect to ``x`` and all
-        four parameters.
-        """
-        return _SESSION_CALL(self, "lstm", (x, weight_ih, weight_hh, bias_ih, bias_hh))
+        ``(1, 4 * hidden)`` tensors. The result is ``(steps, batch,
+        hidden)``. To stack layers, pass the result as the next layer's
+        ``x``. In a recording session the layer is differentiable with
+        respect to ``x`` and all four parameters.
 
-    def gru(self, x, weight_ih, weight_hh, bias_ih, bias_hh):
+        Parameters
+        ----------
+        h_0, c_0 : tensor or None, default None
+            The initial hidden and cell states, each ``(batch, hidden)``
+            (PyTorch's ``(1, batch, hidden)`` for one layer is accepted
+            too). None starts that state at zero. They are values: no
+            gradient reaches them.
+        lengths : tensor or None, default None
+            One length per sequence (``batch`` values, each from 1 to
+            ``steps``) for a batch of padded sequences. The steps of a
+            sequence at or past its length are padding: their inputs are
+            ignored and the state is carried through them unchanged, so
+            the outputs there repeat the state of the sequence's last
+            step, as a packed sequence in PyTorch gives.
+        reverse : bool, default False
+            Run the sequence from its last step to its first (from each
+            sequence's own last step with ``lengths``); the outputs stay in
+            time order. A bidirectional layer is the forward and the
+            reverse layer joined on the last axis.
+        return_state : bool, default False
+            Also return the final states: ``(outputs, h_n, c_n)``, each
+            state ``(batch, hidden)``, the state after the last step run
+            (the first step when ``reverse``). ``h_n`` carries the outputs'
+            gradient; ``c_n`` is a value.
+
+        Examples
+        --------
+        A bidirectional layer::
+
+            fwd = s.lstm(x, w_ih, w_hh, b_ih, b_hh, lengths=n)
+            bwd = s.lstm(x, r_ih, r_hh, rb_ih, rb_hh, lengths=n, reverse=True)
+            both = s.concat([fwd, bwd], axis=2)  # (steps, batch, 2 * hidden)
+
+        One step at a time, carrying the state (each ``x_t`` is
+        ``(1, batch, inputs)``)::
+
+            h, c = None, None
+            for x_t in steps:
+                y, h, c = s.lstm(x_t, w_ih, w_hh, b_ih, b_hh, h_0=h, c_0=c, return_state=True)
+
+        Each step gives the same bits as the whole sequence in one call
+        when ``inputs`` is at most 64.
+        """
+        return _SESSION_CALL(self, "lstm", (x, weight_ih, weight_hh, bias_ih, bias_hh, h_0, c_0, lengths,
+                                            reverse, return_state))
+
+    def gru(self, x, weight_ih, weight_hh, bias_ih, bias_hh, h_0=None, lengths=None, reverse=False,
+            return_state=False):
         """One GRU layer over a whole sequence; returns every hidden state.
 
         As :meth:`lstm`, with PyTorch's GRU gate order (reset, update, new):
         ``weight_ih`` is ``(3 * hidden, inputs)``, ``weight_hh``
-        ``(3 * hidden, hidden)`` and each bias ``(1, 3 * hidden)``.
-        """
-        return _SESSION_CALL(self, "gru", (x, weight_ih, weight_hh, bias_ih, bias_hh))
+        ``(3 * hidden, hidden)`` and each bias ``(1, 3 * hidden)``. There
+        is no cell state: ``return_state=True`` returns ``(outputs, h_n)``.
 
-    def rnn(self, x, weight_ih, weight_hh, bias_ih, bias_hh):
+        One step at a time, carrying the state, gives the same bits as the
+        whole sequence in one call when ``inputs`` is at most 64::
+
+            h = None
+            for x_t in steps:
+                y, h = s.gru(x_t, w_ih, w_hh, b_ih, b_hh, h_0=h, return_state=True)
+        """
+        return _SESSION_CALL(self, "gru", (x, weight_ih, weight_hh, bias_ih, bias_hh, h_0, None, lengths,
+                                           reverse, return_state))
+
+    def rnn(self, x, weight_ih, weight_hh, bias_ih, bias_hh, h_0=None, lengths=None, reverse=False,
+            return_state=False):
         """One tanh RNN layer over a whole sequence; returns every hidden state.
 
-        As :meth:`lstm`, with ``weight_ih`` ``(hidden, inputs)``,
+        As :meth:`gru`, with ``weight_ih`` ``(hidden, inputs)``,
         ``weight_hh`` ``(hidden, hidden)`` and each bias ``(1, hidden)``.
         """
-        return _SESSION_CALL(self, "rnn", (x, weight_ih, weight_hh, bias_ih, bias_hh))
+        return _SESSION_CALL(self, "rnn", (x, weight_ih, weight_hh, bias_ih, bias_hh, h_0, None, lengths,
+                                           reverse, return_state))
 
     def conv_block(self, x, weight, bias, *, padding=0, pool_size=None):
         """A convolution block ``max_pool(relu(conv2d(x, weight) + bias))``.
@@ -1051,28 +1141,57 @@ class Session:
         return _SESSION_CALL(self, "embedding", (table, ids, padding_idx))
 
     # ------------------------------------------------------------ losses (differentiable)
-    def mse(self, prediction, target, reduction="mean"):
-        """The squared error, averaged or summed: a ``(1, 1)`` tensor."""
-        return _SESSION_CALL(self, "mse", (prediction, target, reduction))
+    def mse(self, prediction, target, reduction="mean", weight=None):
+        """The squared error, averaged or summed: a ``(1, 1)`` tensor.
 
-    def mae(self, prediction, target, reduction="mean"):
-        """The absolute error, averaged or summed."""
-        return _SESSION_CALL(self, "mae", (prediction, target, reduction))
+        ``weight`` (None or a tensor) weights each term: one value per
+        element of ``prediction``, or one per row (``(rows, 1)``, the rows
+        of the ``(rows, last axis)`` view). The mean is then
+        ``sum(weight * term) / sum(weight)`` and the sum
+        ``sum(weight * term)``; a weight of 0 leaves the term out, so a 0/1
+        weight is a mask. The weight takes no gradient. A total weight of
+        zero gives a loss of 0 and zero gradients (the smallest normal
+        float32, 2**-126, is added to the total, which changes no result
+        for a total above 2**-100).
 
-    def huber(self, prediction, target, delta=1.0, reduction="mean"):
-        """The Huber loss with threshold ``delta``, averaged or summed."""
-        return _SESSION_CALL(self, "huber", (prediction, target, delta, reduction))
+        To average over several batches as one, take each batch's weighted
+        sum (``reduction="sum"``) and its total weight (:meth:`sum` of the
+        weight) and divide the totals, so a batch of 2 real tokens and one
+        of 20 count every token once::
 
-    def bce_with_logits(self, logits, target, reduction="mean"):
+            num_a = s.cross_entropy(logits_a, codes_a, reduction="sum", weight=mask_a)  # 2 tokens
+            num_b = s.cross_entropy(logits_b, codes_b, reduction="sum", weight=mask_b)  # 20 tokens
+            loss = s.div(s.add(num_a, num_b), s.add(s.sum(mask_a), s.sum(mask_b)))
+        """
+        return _SESSION_CALL(self, "mse", (prediction, target, reduction, weight))
+
+    def mae(self, prediction, target, reduction="mean", weight=None):
+        """The absolute error, averaged or summed; ``weight`` as in
+        :meth:`mse`."""
+        return _SESSION_CALL(self, "mae", (prediction, target, reduction, weight))
+
+    def huber(self, prediction, target, delta=1.0, reduction="mean", weight=None):
+        """The Huber loss with threshold ``delta``, averaged or summed;
+        ``weight`` as in :meth:`mse`."""
+        return _SESSION_CALL(self, "huber", (prediction, target, delta, reduction, weight))
+
+    def bce_with_logits(self, logits, target, reduction="mean", weight=None):
         """Binary cross-entropy of ``sigmoid(logits)`` against targets in
-        ``[0, 1]``, computed stably from the logits."""
-        return _SESSION_CALL(self, "bce_with_logits", (logits, target, reduction))
+        ``[0, 1]``, computed stably from the logits; ``weight`` as in
+        :meth:`mse` (for example 0 on padded steps and 30 on positives)."""
+        return _SESSION_CALL(self, "bce_with_logits", (logits, target, reduction, weight))
 
-    def cross_entropy(self, logits, codes, reduction="mean"):
+    def cross_entropy(self, logits, codes, reduction="mean", weight=None):
         """Softmax cross-entropy of ``(..., classes)`` logits against class
         codes (the class index as a float), one per position of the leading
-        axes: ``(rows, 1)`` codes for ``(rows, classes)`` logits."""
-        return _SESSION_CALL(self, "cross_entropy", (logits, codes, reduction))
+        axes: ``(rows, 1)`` codes for ``(rows, classes)`` logits.
+
+        ``weight`` (None or a tensor) holds one value per position (the
+        codes' count); the mean is ``sum(weight * loss) / sum(weight)``, as
+        ``torch.nn.CrossEntropyLoss`` normalizes a weighted mean, and the
+        rest as in :meth:`mse`.
+        """
+        return _SESSION_CALL(self, "cross_entropy", (logits, codes, reduction, weight))
 
     # ------------------------------------------------------------ metrics (values)
     def accuracy(self, y_true, prediction):

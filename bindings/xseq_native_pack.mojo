@@ -16,7 +16,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.causal_exception_unpack import causal_borrowed_item, causal_set_exception
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
-from bindings.xseq_neural_native_door import xseq_rnn, xseq_mlp
+from bindings.xseq_neural_native_door import xseq_rnn, xseq_mlp, xseq_rnn_sequence_score
 from bindings.xseq_forecast_native_door import xseq_forecast
 from bindings.xseq_score_native_door import xseq_regressor_score, xseq_classifier_score
 from bindings.xseq_prophet_native_door import prophet_fit, prophet_predict
@@ -120,14 +120,27 @@ def _xseq_execute(model: PythonObject, operation: Int, owner: Int, name: PythonO
         var predict_args = Python.tuple(args[0]) if len(args) < 4 else Python.tuple(args[0], args[3])
         var prediction = (xseq_rnn(model, XSEQ_OPN_RNN_PREDICT, predict_args, context) if operation == XSEQ_OPN_RNN_SCORE
                           else xseq_mlp(model, XSEQ_OPN_MLP_PREDICT, predict_args, context))
-        result = xseq_regressor_score(model, prediction, args, context)
+        var score_args = args
+        if operation == XSEQ_OPN_RNN_SCORE:
+            # output="sequence" (lane rnn-parity): every valid step is a scored row
+            var flat = xseq_rnn_sequence_score(model, prediction, args, context)
+            if flat is not None:
+                prediction = flat[0]
+                score_args = flat[1]
+        result = xseq_regressor_score(model, prediction, score_args, context)
     elif operation == XSEQ_OPN_RNN_CLASSIFIER_SCORE or operation == XSEQ_OPN_MLP_CLASSIFIER_SCORE:
         # `ClassifierScoreMixin.score`: predict, then the accuracy of it
         # against y, in this one call (the recurrent score's lengths as above)
         var predict_args = Python.tuple(args[0]) if len(args) < 4 else Python.tuple(args[0], args[3])
         var prediction = (xseq_rnn(model, XSEQ_OPN_RNN_PREDICT, predict_args, context) if operation == XSEQ_OPN_RNN_CLASSIFIER_SCORE
                           else xseq_mlp(model, XSEQ_OPN_MLP_PREDICT, predict_args, context))
-        result = xseq_classifier_score(model, prediction, args, context)
+        var score_args = args
+        if operation == XSEQ_OPN_RNN_CLASSIFIER_SCORE:
+            var flat = xseq_rnn_sequence_score(model, prediction, args, context)
+            if flat is not None:
+                prediction = flat[0]
+                score_args = flat[1]
+        result = xseq_classifier_score(model, prediction, score_args, context)
     elif operation == XSEQ_OPN_PROPHET_INITIALIZE:
         result = prophet_initialize(model, args, context)
     elif operation == XSEQ_OPN_PROPHET_ADD_SEASONALITY:

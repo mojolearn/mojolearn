@@ -114,7 +114,8 @@ def distributed_graph(ck: Checkpoint) raises -> OpsProgram:
     for k in range(nf):  # driver-loop: graph metadata
         gf.append(ck.ext_floats[7 + k])
     var p = program_from_words(gi, gf, "distributed checkpoint")
-    if len(p.params) != K or len(p.outs) != 1 or p.n_in < 1:
+    # one output, or two (the loss sum and its denominator, lane rnn-parity-c: autograd/loss_fold.mojo)
+    if len(p.params) != K or (len(p.outs) != 1 and len(p.outs) != 2) or p.n_in < 1:
         raise Error("distributed checkpoint graph does not match its parameter table")
     for j in range(K):  # driver-loop: tensor and trainability contracts
         if x[DISTRIBUTED_HEADER_WORDS + j] != 0 and x[DISTRIBUTED_HEADER_WORDS + j] != 1:

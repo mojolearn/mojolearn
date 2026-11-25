@@ -12,9 +12,13 @@ the same parameter names, shapes, gate orders and initialisation rule
 reads the top layer's last hidden state. Regression minimises the mean squared
 error, classification the softmax cross-entropy.
 
-Refused by name (sequence/NOT_IMPLEMENTED.tsv): bidirectional, dropout
-between layers, proj_size, initial hidden state, packed / variable-length
-sequences, float64.
+Options (lane rnn-parity): `output='final'|'sequence'` (a score at every
+step, trained with a loss at every step), `bidirectional`, `dropout`
+between layers, `bias`, `clip_grad_norm`, `class_weight`, early stopping on
+validation data, `warm_start`, `partial_fit`, an initial state `h_0` / `c_0`
+and streaming `step`. Variable lengths (`lengths=`) in fit, predict, score
+and hidden_sequence. Refused by name (sequence/NOT_IMPLEMENTED.tsv):
+proj_size, float64, float16 / bfloat16.
 """
 from ._mode import ParamsMixin
 
@@ -58,11 +62,14 @@ class _RecurrentBase(ParamsMixin):
     def __init__(self, hidden_size=16, num_layers=1, optimizer="adam", learning_rate=1e-3,
                  batch_size=32, max_epochs=10, shuffle=True, random_state=0,
                  optimizer_options=None, nonlinearity="tanh", numeric_mode=None,
-                 predict_chunk=4096, lr_schedule=None):
+                 predict_chunk=4096, lr_schedule=None, output="final", bidirectional=False,
+                 dropout=0.0, bias=True, clip_grad_norm=None, class_weight=None,
+                 early_stopping=False, validation_fraction=0.1, n_iter_no_change=10, tol=1e-4,
+                 warm_start=False):
         # One native call: the full-reset owner replays this constructor's field
         # writes (bindings/full_reset_constructor_native_door.mojo). connect_module
         # installs the same entry as each concrete class's __init__.
-        return _FULL_RESET_INIT(self, (), {"hidden_size": hidden_size, "num_layers": num_layers, "optimizer": optimizer, "learning_rate": learning_rate, "batch_size": batch_size, "max_epochs": max_epochs, "shuffle": shuffle, "random_state": random_state, "optimizer_options": optimizer_options, "nonlinearity": nonlinearity, "numeric_mode": numeric_mode, "predict_chunk": predict_chunk, "lr_schedule": lr_schedule}, _FULL_RESET_CONTEXT, type(self))
+        return _FULL_RESET_INIT(self, (), {"hidden_size": hidden_size, "num_layers": num_layers, "optimizer": optimizer, "learning_rate": learning_rate, "batch_size": batch_size, "max_epochs": max_epochs, "shuffle": shuffle, "random_state": random_state, "optimizer_options": optimizer_options, "nonlinearity": nonlinearity, "numeric_mode": numeric_mode, "predict_chunk": predict_chunk, "lr_schedule": lr_schedule, "output": output, "bidirectional": bidirectional, "dropout": dropout, "bias": bias, "clip_grad_norm": clip_grad_norm, "class_weight": class_weight, "early_stopping": early_stopping, "validation_fraction": validation_fraction, "n_iter_no_change": n_iter_no_change, "tol": tol, "warm_start": warm_start}, _FULL_RESET_CONTEXT, type(self))
 
     # ------------------------------------------------------------ shape
     def state_dict(self):
@@ -74,12 +81,58 @@ class _RecurrentBase(ParamsMixin):
         """Load the named recurrent and head parameter arrays; return this model."""
         return _XSEQ(self, "rnn_load_state_dict", (state,), _XSEQ_CONTEXT)
 
-    def hidden_sequence(self, X, lengths=None):
+    def hidden_sequence(self, X, lengths=None, h_0=None, c_0=None):
         """The top layer's hidden states h_1..h_T, (n_samples, n_timesteps,
-        hidden_size): `nn.LSTM(..., batch_first=True)(X)[0]`. With
-        ``lengths``, a sequence's steps past its length repeat its last
-        valid state."""
-        return _XSEQ(self, "rnn_hidden_sequence", (X, lengths), _XSEQ_CONTEXT)
+        hidden_size), or (..., 2 * hidden_size) when bidirectional (the
+        forward direction first): `nn.LSTM(..., batch_first=True)(X)[0]`.
+        With ``lengths``, a sequence's steps past its length repeat its last
+        valid state. ``h_0`` / ``c_0`` as in :meth:`fit`."""
+        return _XSEQ(self, "rnn_hidden_sequence", (X, lengths, h_0, c_0), _XSEQ_CONTEXT)
+
+    def step(self, X, state=None, lengths=None):
+        """Run the next steps of live sequences, carrying their state.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_sequences, n_steps, n_features)
+            The next steps of each sequence (often one step).
+        state : tuple or None, default None
+            The ``state`` returned by the previous call; None starts every
+            sequence from zeros.
+        lengths : array-like of shape (n_sequences,), default None
+            Valid steps of each sequence in ``X``.
+
+        Returns
+        -------
+        scores : ndarray
+            What :meth:`predict` returns for regressors, or the class
+            probabilities for classifiers, for these steps (every step with
+            ``output='sequence'``).
+        state : tuple
+            ``(h, c)``: each layer and direction's final hidden state,
+            shape (num_layers * num_directions, n_sequences, hidden_size),
+            and the LSTM's cell state (None for GRU and RNN). Pass it to the
+            next call.
+
+        Running a sequence through ``step`` in pieces gives the same scores
+        and states as running it whole, bit for bit, at any number of
+        features. A bidirectional model cannot stream (its reverse direction
+        reads the steps that come later) and raises ``ValueError``; use
+        :meth:`predict` on the whole sequence.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from mojolearn import GRUClassifier
+        >>> X = np.random.rand(32, 10, 3).astype(np.float32)
+        >>> y = (X[:, :, 0] > 0.5).astype(np.int64)
+        >>> model = GRUClassifier(output="sequence", max_epochs=2).fit(X, y)
+        >>> state = None
+        >>> for t in range(10):
+        ...     scores, state = model.step(X[:, t:t + 1], state)
+        """
+        name = "rnn_predict_proba" if self._TASK == 1 else "rnn_predict"
+        return _XSEQ(self, name, (X, lengths, state, None, True), _XSEQ_CONTEXT)
 
     def vendor_used(self):
         """The backend this estimator runs on.
@@ -98,7 +151,8 @@ class _RecurrentRegressor(_RecurrentBase):
     _estimator_type = "regressor"
     _TASK = 0
 
-    def fit(self, X, y, lengths=None):
+    def fit(self, X, y, lengths=None, sample_weight=None, h_0=None, c_0=None, validation_data=None,
+            restore_best=True):
         """Train the network on sequences ``X`` and targets ``y``.
 
         Parameters
@@ -106,11 +160,27 @@ class _RecurrentRegressor(_RecurrentBase):
         X : array-like of shape (n_samples, n_timesteps, n_features)
             Training sequences; shorter sequences are padded to n_timesteps.
         y : array-like of shape (n_samples,) or (n_samples, n_outputs)
-            Targets.
+            Targets; with ``output='sequence'``, (n_samples, n_timesteps)
+            or (n_samples, n_timesteps, n_outputs), a target at every step.
         lengths : array-like of shape (n_samples,), default None
             Each sequence's number of valid steps, from 1 to n_timesteps.
             Steps past a sequence's length are padding: they never enter
             its state, and the output is read at its own last valid step.
+        sample_weight : array-like of shape (n_samples,) or (n_samples, n_timesteps), default None
+            Weight of each sequence, or with ``output='sequence'`` of each
+            step. The loss is the weighted mean (sum of weight times loss
+            over the sum of the weights); padded steps weigh 0.
+        h_0, c_0 : array-like of shape (num_layers * num_directions, n_samples, hidden_size), default None
+            The initial hidden state (and the LSTM's cell state) of every
+            sequence, as PyTorch's ``h_0`` / ``c_0``; None is zeros.
+        validation_data : tuple, default None
+            ``(X_val, y_val)`` or ``(X_val, y_val, lengths_val)``: the loss
+            on it is recorded after every epoch (``validation_loss_``), and
+            with ``early_stopping=True`` training stops after
+            ``n_iter_no_change`` epochs without an improvement of ``tol``.
+        restore_best : bool, default True
+            With validation, keep the parameters of the epoch with the lowest
+            validation loss (``best_epoch_``).
 
         Returns
         -------
@@ -127,9 +197,23 @@ class _RecurrentRegressor(_RecurrentBase):
         >>> model.predict(X, lengths=lengths).shape
         (64,)
         """
-        return _XSEQ(self, "rnn_fit", (X, y, lengths), _XSEQ_CONTEXT)
+        return _XSEQ(self, "rnn_fit", (X, y, lengths, sample_weight, h_0, c_0, validation_data, restore_best),
+                     _XSEQ_CONTEXT)
 
-    def predict(self, X, lengths=None):
+    def partial_fit(self, X, y, lengths=None, sample_weight=None, h_0=None, c_0=None):
+        """Train one more epoch from the current parameters and optimizer
+        state (the first call starts as :meth:`fit` does). Run your own
+        loop, one epoch per call; arguments as in :meth:`fit`. For a
+        classifier the first call's labels fix ``classes_``; later calls may
+        hold any subset of them.
+
+        Returns
+        -------
+        self
+        """
+        return _XSEQ(self, "rnn_fit", (X, y, lengths, sample_weight, h_0, c_0, None, True, True), _XSEQ_CONTEXT)
+
+    def predict(self, X, lengths=None, h_0=None, c_0=None):
         """Predicted targets for sequences ``X``.
 
         Parameters
@@ -144,8 +228,11 @@ class _RecurrentRegressor(_RecurrentBase):
         Returns
         -------
         ndarray of shape (n_samples,) or (n_samples, n_outputs)
+            With ``output='sequence'``, (n_samples, n_timesteps[, n_outputs]):
+            a prediction at every step (a padded step repeats its sequence's
+            last valid one).
         """
-        return _XSEQ(self, "rnn_predict", (X, lengths), _XSEQ_CONTEXT)
+        return _XSEQ(self, "rnn_predict", (X, lengths, h_0, c_0), _XSEQ_CONTEXT)
 
     def score(self, X, y, sample_weight=None, lengths=None):
         """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
@@ -176,7 +263,8 @@ class _RecurrentClassifier(_RecurrentBase):
     _estimator_type = "classifier"
     _TASK = 1
 
-    def fit(self, X, y, lengths=None):
+    def fit(self, X, y, lengths=None, sample_weight=None, h_0=None, c_0=None, validation_data=None,
+            restore_best=True):
         """Train the network on sequences ``X`` and labels ``y``.
 
         Parameters
@@ -184,11 +272,27 @@ class _RecurrentClassifier(_RecurrentBase):
         X : array-like of shape (n_samples, n_timesteps, n_features)
             Training sequences; shorter sequences are padded to n_timesteps.
         y : array-like of shape (n_samples,)
-            Class labels.
+            Class labels; with ``output='sequence'``, (n_samples,
+            n_timesteps), a label at every step.
         lengths : array-like of shape (n_samples,), default None
             Each sequence's number of valid steps, from 1 to n_timesteps.
             Steps past a sequence's length are padding: they never enter
             its state, and the output is read at its own last valid step.
+        sample_weight : array-like of shape (n_samples,) or (n_samples, n_timesteps), default None
+            Weight of each sequence, or with ``output='sequence'`` of each
+            step. The loss is the weighted mean (sum of weight times loss
+            over the sum of the weights); padded steps weigh 0.
+        h_0, c_0 : array-like of shape (num_layers * num_directions, n_samples, hidden_size), default None
+            The initial hidden state (and the LSTM's cell state) of every
+            sequence, as PyTorch's ``h_0`` / ``c_0``; None is zeros.
+        validation_data : tuple, default None
+            ``(X_val, y_val)`` or ``(X_val, y_val, lengths_val)``: the loss
+            on it is recorded after every epoch (``validation_loss_``), and
+            with ``early_stopping=True`` training stops after
+            ``n_iter_no_change`` epochs without an improvement of ``tol``.
+        restore_best : bool, default True
+            With validation, keep the parameters of the epoch with the lowest
+            validation loss (``best_epoch_``).
 
         Returns
         -------
@@ -205,10 +309,25 @@ class _RecurrentClassifier(_RecurrentBase):
         >>> model.predict(X, lengths=lengths).shape
         (64,)
         """
-        return _XSEQ(self, "rnn_fit", (X, y, lengths), _XSEQ_CONTEXT)
+        return _XSEQ(self, "rnn_fit", (X, y, lengths, sample_weight, h_0, c_0, validation_data, restore_best),
+                     _XSEQ_CONTEXT)
 
-    def predict_proba(self, X, lengths=None):
-        """Class probabilities for sequences ``X``, shape (n_samples, n_classes).
+    def partial_fit(self, X, y, lengths=None, sample_weight=None, h_0=None, c_0=None):
+        """Train one more epoch from the current parameters and optimizer
+        state (the first call starts as :meth:`fit` does). Run your own
+        loop, one epoch per call; arguments as in :meth:`fit`. For a
+        classifier the first call's labels fix ``classes_``; later calls may
+        hold any subset of them.
+
+        Returns
+        -------
+        self
+        """
+        return _XSEQ(self, "rnn_fit", (X, y, lengths, sample_weight, h_0, c_0, None, True, True), _XSEQ_CONTEXT)
+
+    def predict_proba(self, X, lengths=None, h_0=None, c_0=None):
+        """Class probabilities for sequences ``X``, shape (n_samples, n_classes),
+        or (n_samples, n_timesteps, n_classes) with ``output='sequence'``.
 
         Parameters
         ----------
@@ -219,10 +338,11 @@ class _RecurrentClassifier(_RecurrentBase):
             Steps past a sequence's length are padding: they never enter
             its state, and the output is read at its own last valid step.
         """
-        return _XSEQ(self, "rnn_predict_proba", (X, lengths), _XSEQ_CONTEXT)
+        return _XSEQ(self, "rnn_predict_proba", (X, lengths, h_0, c_0), _XSEQ_CONTEXT)
 
-    def predict(self, X, lengths=None):
-        """Predicted class labels for sequences ``X``, shape (n_samples,).
+    def predict(self, X, lengths=None, h_0=None, c_0=None):
+        """Predicted class labels for sequences ``X``, shape (n_samples,), or
+        (n_samples, n_timesteps) with ``output='sequence'``.
 
         Parameters
         ----------
@@ -233,7 +353,7 @@ class _RecurrentClassifier(_RecurrentBase):
             Steps past a sequence's length are padding: they never enter
             its state, and the output is read at its own last valid step.
         """
-        return _XSEQ(self, "rnn_predict", (X, lengths), _XSEQ_CONTEXT)
+        return _XSEQ(self, "rnn_predict", (X, lengths, h_0, c_0), _XSEQ_CONTEXT)
 
     def score(self, X, y, sample_weight=None, lengths=None):
         """Mean accuracy of ``predict(X)`` against ``y``.
@@ -273,8 +393,8 @@ class LSTMRegressor(_RecurrentRegressor):
     `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
     raises `TypeError`). `y` is (n_samples,) or (n_samples, n_outputs).
 
-    Not supported: bidirectional layers, dropout between layers, `proj_size`, an initial
-    hidden state, and packed or variable-length sequences.
+    Variable-length sequences take ``lengths=`` in every method. Not supported: `proj_size`
+    and float64, float16 or bfloat16 data.
 
     Parameters
     ----------
@@ -310,6 +430,36 @@ class LSTMRegressor(_RecurrentRegressor):
         A built-in schedule (`ConstantLR`, `WarmupLinearLR`, `WarmupCosineLR`, `StepLR`,
         `ExponentialLR` or `OneCycleLR`); it sets the learning rate of every optimizer step.
         Any other object raises `TypeError`.
+    output : {'final', 'sequence'}, default 'final'
+        ``'final'``: one prediction per sequence, from the final state of each direction
+        (PyTorch's ``h_n``: a sequence's last valid step). ``'sequence'``: a prediction at
+        every step from that step's state, trained with a loss at every valid step (the
+        word Mojolearn's `Sequential` recurrent layers use).
+    bidirectional : bool, default False
+        Add a reverse direction to every layer, as ``nn.GRU(bidirectional=True)``;
+        `state_dict` names its parameters with PyTorch's ``_reverse`` suffix.
+    dropout : float, default 0.0
+        Dropout on the output of every layer but the last, during fit only.
+    bias : bool, default True
+        False: the recurrent layers have no biases (the head keeps its own).
+    clip_grad_norm : float or None, default None
+        Scale the gradients so their total 2-norm is at most this before every update,
+        as ``torch.nn.utils.clip_grad_norm_``.
+    class_weight : dict, 'balanced' or None, default None
+        Classifiers: weight of each class in the loss, ``{label: weight}`` (missing labels
+        weigh 1) or ``'balanced'`` (``n / (n_classes * count)``).
+    early_stopping : bool, default False
+        Stop when the validation loss has not improved by ``tol`` for ``n_iter_no_change``
+        epochs and keep the best epoch. Without ``validation_data`` in `fit`, the last
+        ``validation_fraction`` of the sequences is held out.
+    validation_fraction : float, default 0.1
+        Share of the sequences held out by ``early_stopping``.
+    n_iter_no_change : int, default 10
+        Epochs without improvement before ``early_stopping`` stops.
+    tol : float, default 1e-4
+        The improvement of the validation loss that counts for ``early_stopping``.
+    warm_start : bool, default False
+        Start `fit` from the fitted parameters when the shapes allow.
 
     Attributes
     ----------
@@ -328,6 +478,10 @@ class LSTMRegressor(_RecurrentRegressor):
         epoch to the end of the last.
     loss_curve_ : ndarray
         Training loss at every optimizer step.
+    validation_loss_ : ndarray
+        With validation, the validation loss after every epoch.
+    best_epoch_ : int
+        With validation, the epoch of the lowest validation loss.
     params_ : ndarray
         All parameters as one flat float32 array.
 
@@ -335,6 +489,10 @@ class LSTMRegressor(_RecurrentRegressor):
     -------
     fit(X, y)
         Train the model; returns self.
+    partial_fit(X, y)
+        Train one more epoch; returns self.
+    step(X, state)
+        Predict the next steps of live sequences, carrying their state.
     predict(X)
         Predicted values.
     hidden_sequence(X)
@@ -372,8 +530,8 @@ class LSTMClassifier(_RecurrentClassifier):
     `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
     raises `TypeError`). `y` holds class labels (at least two classes).
 
-    Not supported: bidirectional layers, dropout between layers, `proj_size`, an initial
-    hidden state, and packed or variable-length sequences.
+    Variable-length sequences take ``lengths=`` in every method. Not supported: `proj_size`
+    and float64, float16 or bfloat16 data.
 
     Parameters
     ----------
@@ -409,6 +567,36 @@ class LSTMClassifier(_RecurrentClassifier):
         A built-in schedule (`ConstantLR`, `WarmupLinearLR`, `WarmupCosineLR`, `StepLR`,
         `ExponentialLR` or `OneCycleLR`); it sets the learning rate of every optimizer step.
         Any other object raises `TypeError`.
+    output : {'final', 'sequence'}, default 'final'
+        ``'final'``: one prediction per sequence, from the final state of each direction
+        (PyTorch's ``h_n``: a sequence's last valid step). ``'sequence'``: a prediction at
+        every step from that step's state, trained with a loss at every valid step (the
+        word Mojolearn's `Sequential` recurrent layers use).
+    bidirectional : bool, default False
+        Add a reverse direction to every layer, as ``nn.GRU(bidirectional=True)``;
+        `state_dict` names its parameters with PyTorch's ``_reverse`` suffix.
+    dropout : float, default 0.0
+        Dropout on the output of every layer but the last, during fit only.
+    bias : bool, default True
+        False: the recurrent layers have no biases (the head keeps its own).
+    clip_grad_norm : float or None, default None
+        Scale the gradients so their total 2-norm is at most this before every update,
+        as ``torch.nn.utils.clip_grad_norm_``.
+    class_weight : dict, 'balanced' or None, default None
+        Classifiers: weight of each class in the loss, ``{label: weight}`` (missing labels
+        weigh 1) or ``'balanced'`` (``n / (n_classes * count)``).
+    early_stopping : bool, default False
+        Stop when the validation loss has not improved by ``tol`` for ``n_iter_no_change``
+        epochs and keep the best epoch. Without ``validation_data`` in `fit`, the last
+        ``validation_fraction`` of the sequences is held out.
+    validation_fraction : float, default 0.1
+        Share of the sequences held out by ``early_stopping``.
+    n_iter_no_change : int, default 10
+        Epochs without improvement before ``early_stopping`` stops.
+    tol : float, default 1e-4
+        The improvement of the validation loss that counts for ``early_stopping``.
+    warm_start : bool, default False
+        Start `fit` from the fitted parameters when the shapes allow.
 
     Attributes
     ----------
@@ -429,6 +617,10 @@ class LSTMClassifier(_RecurrentClassifier):
         epoch to the end of the last.
     loss_curve_ : ndarray
         Training loss at every optimizer step.
+    validation_loss_ : ndarray
+        With validation, the validation loss after every epoch.
+    best_epoch_ : int
+        With validation, the epoch of the lowest validation loss.
     params_ : ndarray
         All parameters as one flat float32 array.
 
@@ -436,6 +628,10 @@ class LSTMClassifier(_RecurrentClassifier):
     -------
     fit(X, y)
         Train the model; returns self.
+    partial_fit(X, y)
+        Train one more epoch; returns self.
+    step(X, state)
+        Predict the next steps of live sequences, carrying their state.
     predict(X)
         Predicted class labels.
     predict_proba(X)
@@ -476,8 +672,8 @@ class GRURegressor(_RecurrentRegressor):
     `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
     raises `TypeError`). `y` is (n_samples,) or (n_samples, n_outputs).
 
-    Not supported: bidirectional layers, dropout between layers, `proj_size`, an initial
-    hidden state, and packed or variable-length sequences.
+    Variable-length sequences take ``lengths=`` in every method. Not supported: `proj_size`
+    and float64, float16 or bfloat16 data.
 
     Parameters
     ----------
@@ -513,6 +709,36 @@ class GRURegressor(_RecurrentRegressor):
         A built-in schedule (`ConstantLR`, `WarmupLinearLR`, `WarmupCosineLR`, `StepLR`,
         `ExponentialLR` or `OneCycleLR`); it sets the learning rate of every optimizer step.
         Any other object raises `TypeError`.
+    output : {'final', 'sequence'}, default 'final'
+        ``'final'``: one prediction per sequence, from the final state of each direction
+        (PyTorch's ``h_n``: a sequence's last valid step). ``'sequence'``: a prediction at
+        every step from that step's state, trained with a loss at every valid step (the
+        word Mojolearn's `Sequential` recurrent layers use).
+    bidirectional : bool, default False
+        Add a reverse direction to every layer, as ``nn.GRU(bidirectional=True)``;
+        `state_dict` names its parameters with PyTorch's ``_reverse`` suffix.
+    dropout : float, default 0.0
+        Dropout on the output of every layer but the last, during fit only.
+    bias : bool, default True
+        False: the recurrent layers have no biases (the head keeps its own).
+    clip_grad_norm : float or None, default None
+        Scale the gradients so their total 2-norm is at most this before every update,
+        as ``torch.nn.utils.clip_grad_norm_``.
+    class_weight : dict, 'balanced' or None, default None
+        Classifiers: weight of each class in the loss, ``{label: weight}`` (missing labels
+        weigh 1) or ``'balanced'`` (``n / (n_classes * count)``).
+    early_stopping : bool, default False
+        Stop when the validation loss has not improved by ``tol`` for ``n_iter_no_change``
+        epochs and keep the best epoch. Without ``validation_data`` in `fit`, the last
+        ``validation_fraction`` of the sequences is held out.
+    validation_fraction : float, default 0.1
+        Share of the sequences held out by ``early_stopping``.
+    n_iter_no_change : int, default 10
+        Epochs without improvement before ``early_stopping`` stops.
+    tol : float, default 1e-4
+        The improvement of the validation loss that counts for ``early_stopping``.
+    warm_start : bool, default False
+        Start `fit` from the fitted parameters when the shapes allow.
 
     Attributes
     ----------
@@ -531,6 +757,10 @@ class GRURegressor(_RecurrentRegressor):
         epoch to the end of the last.
     loss_curve_ : ndarray
         Training loss at every optimizer step.
+    validation_loss_ : ndarray
+        With validation, the validation loss after every epoch.
+    best_epoch_ : int
+        With validation, the epoch of the lowest validation loss.
     params_ : ndarray
         All parameters as one flat float32 array.
 
@@ -538,6 +768,10 @@ class GRURegressor(_RecurrentRegressor):
     -------
     fit(X, y)
         Train the model; returns self.
+    partial_fit(X, y)
+        Train one more epoch; returns self.
+    step(X, state)
+        Predict the next steps of live sequences, carrying their state.
     predict(X)
         Predicted values.
     hidden_sequence(X)
@@ -575,8 +809,8 @@ class GRUClassifier(_RecurrentClassifier):
     `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
     raises `TypeError`). `y` holds class labels (at least two classes).
 
-    Not supported: bidirectional layers, dropout between layers, `proj_size`, an initial
-    hidden state, and packed or variable-length sequences.
+    Variable-length sequences take ``lengths=`` in every method. Not supported: `proj_size`
+    and float64, float16 or bfloat16 data.
 
     Parameters
     ----------
@@ -612,6 +846,36 @@ class GRUClassifier(_RecurrentClassifier):
         A built-in schedule (`ConstantLR`, `WarmupLinearLR`, `WarmupCosineLR`, `StepLR`,
         `ExponentialLR` or `OneCycleLR`); it sets the learning rate of every optimizer step.
         Any other object raises `TypeError`.
+    output : {'final', 'sequence'}, default 'final'
+        ``'final'``: one prediction per sequence, from the final state of each direction
+        (PyTorch's ``h_n``: a sequence's last valid step). ``'sequence'``: a prediction at
+        every step from that step's state, trained with a loss at every valid step (the
+        word Mojolearn's `Sequential` recurrent layers use).
+    bidirectional : bool, default False
+        Add a reverse direction to every layer, as ``nn.GRU(bidirectional=True)``;
+        `state_dict` names its parameters with PyTorch's ``_reverse`` suffix.
+    dropout : float, default 0.0
+        Dropout on the output of every layer but the last, during fit only.
+    bias : bool, default True
+        False: the recurrent layers have no biases (the head keeps its own).
+    clip_grad_norm : float or None, default None
+        Scale the gradients so their total 2-norm is at most this before every update,
+        as ``torch.nn.utils.clip_grad_norm_``.
+    class_weight : dict, 'balanced' or None, default None
+        Classifiers: weight of each class in the loss, ``{label: weight}`` (missing labels
+        weigh 1) or ``'balanced'`` (``n / (n_classes * count)``).
+    early_stopping : bool, default False
+        Stop when the validation loss has not improved by ``tol`` for ``n_iter_no_change``
+        epochs and keep the best epoch. Without ``validation_data`` in `fit`, the last
+        ``validation_fraction`` of the sequences is held out.
+    validation_fraction : float, default 0.1
+        Share of the sequences held out by ``early_stopping``.
+    n_iter_no_change : int, default 10
+        Epochs without improvement before ``early_stopping`` stops.
+    tol : float, default 1e-4
+        The improvement of the validation loss that counts for ``early_stopping``.
+    warm_start : bool, default False
+        Start `fit` from the fitted parameters when the shapes allow.
 
     Attributes
     ----------
@@ -632,6 +896,10 @@ class GRUClassifier(_RecurrentClassifier):
         epoch to the end of the last.
     loss_curve_ : ndarray
         Training loss at every optimizer step.
+    validation_loss_ : ndarray
+        With validation, the validation loss after every epoch.
+    best_epoch_ : int
+        With validation, the epoch of the lowest validation loss.
     params_ : ndarray
         All parameters as one flat float32 array.
 
@@ -639,6 +907,10 @@ class GRUClassifier(_RecurrentClassifier):
     -------
     fit(X, y)
         Train the model; returns self.
+    partial_fit(X, y)
+        Train one more epoch; returns self.
+    step(X, state)
+        Predict the next steps of live sequences, carrying their state.
     predict(X)
         Predicted class labels.
     predict_proba(X)
@@ -679,8 +951,8 @@ class RNNRegressor(_RecurrentRegressor):
     `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
     raises `TypeError`). `y` is (n_samples,) or (n_samples, n_outputs).
 
-    Not supported: bidirectional layers, dropout between layers, `proj_size`, an initial
-    hidden state, and packed or variable-length sequences.
+    Variable-length sequences take ``lengths=`` in every method. Not supported: `proj_size`
+    and float64, float16 or bfloat16 data.
 
     Parameters
     ----------
@@ -716,6 +988,36 @@ class RNNRegressor(_RecurrentRegressor):
         A built-in schedule (`ConstantLR`, `WarmupLinearLR`, `WarmupCosineLR`, `StepLR`,
         `ExponentialLR` or `OneCycleLR`); it sets the learning rate of every optimizer step.
         Any other object raises `TypeError`.
+    output : {'final', 'sequence'}, default 'final'
+        ``'final'``: one prediction per sequence, from the final state of each direction
+        (PyTorch's ``h_n``: a sequence's last valid step). ``'sequence'``: a prediction at
+        every step from that step's state, trained with a loss at every valid step (the
+        word Mojolearn's `Sequential` recurrent layers use).
+    bidirectional : bool, default False
+        Add a reverse direction to every layer, as ``nn.GRU(bidirectional=True)``;
+        `state_dict` names its parameters with PyTorch's ``_reverse`` suffix.
+    dropout : float, default 0.0
+        Dropout on the output of every layer but the last, during fit only.
+    bias : bool, default True
+        False: the recurrent layers have no biases (the head keeps its own).
+    clip_grad_norm : float or None, default None
+        Scale the gradients so their total 2-norm is at most this before every update,
+        as ``torch.nn.utils.clip_grad_norm_``.
+    class_weight : dict, 'balanced' or None, default None
+        Classifiers: weight of each class in the loss, ``{label: weight}`` (missing labels
+        weigh 1) or ``'balanced'`` (``n / (n_classes * count)``).
+    early_stopping : bool, default False
+        Stop when the validation loss has not improved by ``tol`` for ``n_iter_no_change``
+        epochs and keep the best epoch. Without ``validation_data`` in `fit`, the last
+        ``validation_fraction`` of the sequences is held out.
+    validation_fraction : float, default 0.1
+        Share of the sequences held out by ``early_stopping``.
+    n_iter_no_change : int, default 10
+        Epochs without improvement before ``early_stopping`` stops.
+    tol : float, default 1e-4
+        The improvement of the validation loss that counts for ``early_stopping``.
+    warm_start : bool, default False
+        Start `fit` from the fitted parameters when the shapes allow.
 
     Attributes
     ----------
@@ -734,6 +1036,10 @@ class RNNRegressor(_RecurrentRegressor):
         epoch to the end of the last.
     loss_curve_ : ndarray
         Training loss at every optimizer step.
+    validation_loss_ : ndarray
+        With validation, the validation loss after every epoch.
+    best_epoch_ : int
+        With validation, the epoch of the lowest validation loss.
     params_ : ndarray
         All parameters as one flat float32 array.
 
@@ -741,6 +1047,10 @@ class RNNRegressor(_RecurrentRegressor):
     -------
     fit(X, y)
         Train the model; returns self.
+    partial_fit(X, y)
+        Train one more epoch; returns self.
+    step(X, state)
+        Predict the next steps of live sequences, carrying their state.
     predict(X)
         Predicted values.
     hidden_sequence(X)
@@ -779,8 +1089,8 @@ class RNNClassifier(_RecurrentClassifier):
     `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
     raises `TypeError`). `y` holds class labels (at least two classes).
 
-    Not supported: bidirectional layers, dropout between layers, `proj_size`, an initial
-    hidden state, and packed or variable-length sequences.
+    Variable-length sequences take ``lengths=`` in every method. Not supported: `proj_size`
+    and float64, float16 or bfloat16 data.
 
     Parameters
     ----------
@@ -816,6 +1126,36 @@ class RNNClassifier(_RecurrentClassifier):
         A built-in schedule (`ConstantLR`, `WarmupLinearLR`, `WarmupCosineLR`, `StepLR`,
         `ExponentialLR` or `OneCycleLR`); it sets the learning rate of every optimizer step.
         Any other object raises `TypeError`.
+    output : {'final', 'sequence'}, default 'final'
+        ``'final'``: one prediction per sequence, from the final state of each direction
+        (PyTorch's ``h_n``: a sequence's last valid step). ``'sequence'``: a prediction at
+        every step from that step's state, trained with a loss at every valid step (the
+        word Mojolearn's `Sequential` recurrent layers use).
+    bidirectional : bool, default False
+        Add a reverse direction to every layer, as ``nn.GRU(bidirectional=True)``;
+        `state_dict` names its parameters with PyTorch's ``_reverse`` suffix.
+    dropout : float, default 0.0
+        Dropout on the output of every layer but the last, during fit only.
+    bias : bool, default True
+        False: the recurrent layers have no biases (the head keeps its own).
+    clip_grad_norm : float or None, default None
+        Scale the gradients so their total 2-norm is at most this before every update,
+        as ``torch.nn.utils.clip_grad_norm_``.
+    class_weight : dict, 'balanced' or None, default None
+        Classifiers: weight of each class in the loss, ``{label: weight}`` (missing labels
+        weigh 1) or ``'balanced'`` (``n / (n_classes * count)``).
+    early_stopping : bool, default False
+        Stop when the validation loss has not improved by ``tol`` for ``n_iter_no_change``
+        epochs and keep the best epoch. Without ``validation_data`` in `fit`, the last
+        ``validation_fraction`` of the sequences is held out.
+    validation_fraction : float, default 0.1
+        Share of the sequences held out by ``early_stopping``.
+    n_iter_no_change : int, default 10
+        Epochs without improvement before ``early_stopping`` stops.
+    tol : float, default 1e-4
+        The improvement of the validation loss that counts for ``early_stopping``.
+    warm_start : bool, default False
+        Start `fit` from the fitted parameters when the shapes allow.
 
     Attributes
     ----------
@@ -836,6 +1176,10 @@ class RNNClassifier(_RecurrentClassifier):
         epoch to the end of the last.
     loss_curve_ : ndarray
         Training loss at every optimizer step.
+    validation_loss_ : ndarray
+        With validation, the validation loss after every epoch.
+    best_epoch_ : int
+        With validation, the epoch of the lowest validation loss.
     params_ : ndarray
         All parameters as one flat float32 array.
 
@@ -843,6 +1187,10 @@ class RNNClassifier(_RecurrentClassifier):
     -------
     fit(X, y)
         Train the model; returns self.
+    partial_fit(X, y)
+        Train one more epoch; returns self.
+    step(X, state)
+        Predict the next steps of live sequences, carrying their state.
     predict(X)
         Predicted class labels.
     predict_proba(X)
