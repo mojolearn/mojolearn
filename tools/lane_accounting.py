@@ -139,6 +139,15 @@ VERIFY_REFERENCE = os.path.join(ROOT, "python", "mojolearn", "_verify_reference.
 #: it on 2026-10-24 (lane verify-coverage-20261024): the public-residual-dropout
 #: lane (tools/identity_lanes/public_gap_methods.py) reaches both.
 DECLARED_LANELESS = {
+    # w3-integrate-10 (2026-11-25): lane gradcheck exports a developer testing tool from ops; it computes
+    # nothing a model produces (it compares a custom_op backward rule with finite differences of its forward)
+    "ops.gradcheck": (
+        "a testing tool, not an algorithm: it compares a user's custom_op backward rule with finite differences "
+        "of its forward; the custom rule it exercises is covered by the nn-cbw-custom-vjp lane"
+    ),
+    "ops.GradcheckError": (
+        "the exception gradcheck raises; it computes nothing, so there is no cell to record"
+    ),
     # `training.residual_dropout` and `training.residual_dropout_backward`
     # left this table on 2026-10-24: the public-residual-dropout lane
     # (tools/identity_lanes/public_gap_methods.py, 8188d769f) reaches both,

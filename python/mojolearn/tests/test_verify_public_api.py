@@ -26,8 +26,9 @@ def test_every_original_gap_has_an_executable_fixture_route():
     # 1275 less the deleted TransformerBlockInference tape pair (TOMBSTONE TRANSFORMER_FORWARD_TAPE_API) = 1273;
     # 1240 at the integration base; less the 24 rows of the four *BlockInference classes neural-consolidate-2
     # removed (1216); + the 27 Sequential layer methods of 2026-11-22 + log_softmax and the six `compile:loss=`
-    # rows of lanes nn-losses and nn-losses-2 (2026-11-23)
-    assert len(expected)==1250
+    # rows of lanes nn-losses and nn-losses-2 (2026-11-23); less the 3 Mamba3Block owned-weights methods
+    # lane/owned-weights-deletion removed (2026-11-25) = 1247
+    assert len(expected)==1247
     assert routes.keys()==expected
     from mojolearn._verify_api_faults import FAULTS
     assert set(FAULTS.values())<=expected

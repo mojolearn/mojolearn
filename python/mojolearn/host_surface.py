@@ -5113,7 +5113,7 @@ PUBLIC_PENDING_LANES = {
     "training-param-groups": "no reference",  # nn-blocks-pg
     # nn-blocks-pgseq begin
     "sequential-param-groups": "no reference",
-    "training-param-groups-device": "no reference",
+    "training-param-groups-device": "no cpu route",  # _one_sided(missing="cpu") in nn_pgseq.py (w3-integrate-10)
     # nn-blocks-pgseq end
     "ops-batch-source-resume": "no reference",  # batch-source (2026-11-25)
     "ops-composed-cases": "no reference",  # session-ops-verify (2026-11-25): the composed-model cases
