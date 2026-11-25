@@ -19,10 +19,13 @@ from autograd.rankn import ShapeN
 
 def scan_session[E: Exec & Movable & Deinitable](
     mut s: OpsSession[E], cell: OpsProgram, xs: Int, states: List[Int], lengths: Int, params: List[Int],
-    reverse: Bool,
+    reverse: Bool, counter: Int = 0,
 ) raises -> List[Int]:
     """The scan of `cell` over `xs` from `states`, the cell's parameters bound to `params` (handles of `s`, in the
-    cell's parameter order); `lengths` a handle of one float length per sequence, or 0."""
+    cell's parameter order); `lengths` a handle of one float length per sequence, or 0; `counter` the dropout
+    counter of this call (each step of each call draws its own dropout masks)."""
+    if counter < 0:
+        raise Error("ValueError: scan: counter must be >= 0")
     # The binding is checked here, before the node is made, so a refusal names the caller's arguments; the op
     # checks it again when it runs (a replayed program's node).
     var state_shapes = List[ShapeN](capacity=len(states))
@@ -41,7 +44,7 @@ def scan_session[E: Exec & Movable & Deinitable](
     var xs_shape = s.shape_nd(xs)
     scan_check_binding(cell, xs_shape, s.is_integer(xs), state_shapes, state_ids, lengths_count, param_shapes,
                        param_ids)
-    var words = scan_encode(cell, reverse, lengths != 0)
+    var words = scan_encode(cell, reverse, lengths != 0, counter)
     var hs = List[Int](capacity=2 + len(states) + len(params))
     hs.append(xs)
     for k in range(len(states)):  # driver-loop: over state tensors (handles)
@@ -85,7 +88,7 @@ def scan_session[E: Exec & Movable & Deinitable](
 
 def session_scan[E: Exec & Movable & Deinitable, KIND: Int](
     sid: Int, cell_sid: Int, pid: Int, xs: Int, states: List[Int], lengths: Int, params: List[Int],
-    params_given: Bool, reverse: Bool,
+    params_given: Bool, reverse: Bool, counter: Int = 0,
 ) raises -> List[Int]:
     """`Session.scan`: the cell is program `pid` of session `cell_sid` (this session or another of the same
     executor kind; the door refuses a cell of another device). Without `params` the cell reads its own
@@ -98,10 +101,10 @@ def session_scan[E: Exec & Movable & Deinitable, KIND: Int](
         var c = ops_session[E, KIND](cell_sid)
         cell = c[].program(pid)
     if params_given:
-        return scan_session(s[], cell, xs, states, lengths, params, reverse)
+        return scan_session(s[], cell, xs, states, lengths, params, reverse, counter)
     if cell_sid != sid and len(cell.params) > 0:
         raise Error("ValueError: scan: the cell was captured in another Session and reads "
                     + String(len(cell.params)) + " parameters; pass params= with this Session's tensors for them,"
                     + " in the cell's parameter order")
     var own = cell.params.copy()
-    return scan_session(s[], cell, xs, states, lengths, own, reverse)
+    return scan_session(s[], cell, xs, states, lengths, own, reverse, counter)

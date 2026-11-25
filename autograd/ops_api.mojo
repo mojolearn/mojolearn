@@ -1614,11 +1614,6 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
 
     def _op_run(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
         """`op` without the log: the eager call and a program's replay."""
-        # nn-blocks-scan begin: a scan replays its cell through `_op_run_tensors` (`_scan`), never through this
-        # method, so the two never call each other (AGENTS.md part 6: no mutual recursion on the import path).
-        if code == OPS_SCAN:
-            return self._scan(hs, ints, fs)
-        # nn-blocks-scan end
         # Move capacity into the call, so the native operation can mutate self
         # without borrowing session-owned operand storage. Resolve every handle
         # afresh; only allocation capacity survives success or failure.
@@ -1628,9 +1623,18 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             for i in range(len(hs)):  # small-loop(hs: an op's input handles, three or a concat's list): handle lookup, no data
                 x.append(self.tensor(hs[i]))
             return self._op_run_tensors(code, hs, ints, fs, x)
+        except err:
+            # nn-blocks-scan begin: OPS_SCAN is in no dispatch chain, so no other operation pays a compare for it:
+            # its code falls through `_op_run_tensors` to "unknown operation code" (no work done, nothing
+            # launched) and is taken here, on the error edge only. `_scan` replays its cell through
+            # `_op_run_tensors`, never through this method, so the two never call each other (AGENTS.md part 6).
+            if code != OPS_SCAN:
+                raise err
+            # nn-blocks-scan end
         finally:
             x.clear()
             swap(x, self.op_tensors)
+        return self._scan(hs, ints, fs)  # nn-blocks-scan: reached only for OPS_SCAN (above)
 
     def _op_run_tensors(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
         """Execute with this call's freshly checked native tensor references."""
@@ -2833,8 +2837,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         `lengths` (one float length per sequence, batch on axis 1 of xs) a step t >= length keeps the row's
         state (where) and gives a zero output row; the mask is built once on the executor (full, cumsum,
         compare). `reverse` walks t = steps - 1 down to 0; the outputs stay in time order. Returns one (n, 1)
-        column: the outputs of every step in time order, then the final states, each flattened (a log-depth
-        tree of concatenations, at most RN_CONCAT_MAX operands a node). Launches per step: two views, the
+        column: the outputs of every step in time order, then the final states, each flattened (one concat
+        node: each step's output copied once). A dropout in the cell draws a new mask each step. Launches per step: two views, the
         cell's nodes, and with lengths one view, one view per state rank and one where per state and output.
         Every temporary handle is retired before the return; the tape keeps its nodes, so a recording session
         differentiates the whole loop (backward through time over the stored per-step values)."""
@@ -2887,6 +2891,14 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             for j in range(cell.f_at[k], cell.f_at[k + 1]):  # small-loop(fs: a node's float arguments)
                 nf.append(cell.fs[j])
             node_fs.append(nf^)
+        # Dropout nodes (OPS_DROPOUT 21: ints [seed lo, seed hi, counter]) draw a new mask every step: their
+        # captured counters, and the per-step offsets (autograd/nn_scan.mojo note).
+        var drop_nodes = List[Int]()
+        var drop_counter = List[Int]()
+        for k in range(n_nodes):  # driver-loop: over cell nodes (dropout ones), once per call
+            if cell.code[k] == OPS_DROPOUT and len(node_ints[k]) >= 3:
+                drop_nodes.append(k)
+                drop_counter.append(node_ints[k][2])
         var steps = xs_shape.d[0]
         var batch = xs_shape.d[1]
         var x_dims = cell.in_shapes[n_state].dims()
@@ -2968,6 +2980,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                     for k in range(n_state):  # driver-loop: over state tensors (this step's handles)
                         vals.append(state[k])
                 vals.append(x_t)
+                for q in range(len(drop_nodes)):  # driver-loop: over the cell's dropout nodes (this step's counters)
+                    var dk = drop_nodes[q]
+                    node_ints[dk][2] = drop_counter[q] + (spec.counter * steps + t) * n_nodes + dk
                 for k in range(n_nodes):  # driver-loop: over the cell's nodes (one step's launch sequence)
                     args.clear()
                     for j in range(cell.a_at[k], cell.a_at[k + 1]):  # small-loop(args: a node's input refs)
@@ -3016,7 +3031,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 for k in range(n_state):  # driver-loop: over state tensors (the next step's handles)
                     state[k] = nxt[k]
             step_at = -1
-            # The stack: each step's output and each final state as an (n, 1) column, joined in a tree.
+            # The stack: each step's output and each final state as an (n, 1) column (free views), joined once.
             var cols = List[Int](capacity=steps)
             var col_i: List[Int] = [0, cell.out_shapes[n_state].count(), 1]
             for t in range(steps):  # driver-loop: over steps (the stack's columns, views)
@@ -3031,26 +3046,16 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 var c = self._scan_call(OPS_RESHAPE_N, one_h, si, no_fs, x)
                 temps.append(c)
                 extra.append(c)
-            var cat_i: List[Int] = [0]
-            while len(cols) > 1 and len(cols) + len(extra) > RN_CONCAT_MAX:  # driver-loop: over tree levels (log steps)
-                var level = List[Int]()
-                var g = 0
-                while g < len(cols):  # driver-loop: over groups of one tree level
-                    var e = min(g + RN_CONCAT_MAX, len(cols))
-                    if e - g == 1:
-                        level.append(cols[g])
-                    else:
-                        var group = List[Int](capacity=e - g)
-                        for q in range(g, e):  # small-loop(at most RN_CONCAT_MAX operands)
-                            group.append(cols[q])
-                        var c = self._scan_call(OPS_CONCAT, group, cat_i, no_fs, x)
-                        temps.append(c)
-                        level.append(c)
-                    g = e
-                cols = level^
+            # One concat node over every column (autograd/rankn_layout.mojo rankn_concat: one slab copy per
+            # operand into the reserved (n, 1) output, one slab copy per operand back in the backward; it takes
+            # any number of operands, so each step's output is copied once).
             for k in range(len(extra)):  # driver-loop: over the final states' columns
                 cols.append(extra[k])
-            packed = self._scan_call(OPS_CONCAT, cols, cat_i, no_fs, x)
+            var parts = List[Tensor](capacity=len(cols))
+            for q in range(len(cols)):  # driver-loop: over the stack's columns (handle lookup, no data)
+                parts.append(self.tensor(cols[q]))
+            var stacked = rankn_concat(self.tape, self.ex, parts, 0)
+            packed = self._add(stacked, 0, self.tape.requires_grad(stacked), 0)
         except err:
             self._drop_temps(temps)
             if step_at < 0:
