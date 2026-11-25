@@ -1506,7 +1506,8 @@ class Session:
         return _SESSION_CALL(self, "program_run", (program, arrays, dynamic_shapes, optimize))
 
     # nn-blocks-scan begin
-    def scan(self, cell, xs, init_state, *, params=None, reverse=False, lengths=None, counter=0):
+    def scan(self, cell, xs, init_state, *, params=None, reverse=False, lengths=None, counter=0,
+             checkpoint_every=None):
         """Apply a captured cell at every step of a sequence, carrying its state.
 
         ``cell`` is a :class:`Program` captured with
@@ -1559,6 +1560,20 @@ class Session:
             the step index (not from the sequence length). Use a new
             ``counter`` for every training step, as with :meth:`dropout`;
             :meth:`Program.fit` advances it every minibatch by itself.
+        checkpoint_every : int, optional
+            In a recording session, keep the state only at every
+            ``checkpoint_every``-th step and recompute the steps in between
+            during :meth:`backward` (activation checkpointing, as
+            :meth:`checkpoint` does for one segment). The gradients and the
+            trained parameters are the same, to the bit, as without it; a
+            dropout in the cell replays the same masks. For ``T`` steps,
+            ``a`` values kept per step and a state of ``s`` values, the
+            recorded graph keeps about ``(T / k) s + k a`` values instead of
+            ``T a`` (least near ``k = sqrt(T s / a)``), at the price of one
+            more forward of every step. Every cell output must be computed
+            by the cell (not an input or a parameter returned unchanged),
+            and ``lengths`` must not need a gradient. ``None`` keeps every
+            step.
 
         Returns
         -------
@@ -1587,8 +1602,85 @@ class Session:
         ...         s.backward(s.mean(s.mul(ys, ys)))
         ...         s.step(s.optimizer("adam", lr=0.01), [w, u])
         """
-        return _SESSION_CALL(self, "scan", (cell, xs, init_state, params, reverse, lengths, counter))
+        return _SESSION_CALL(self, "scan", (cell, xs, init_state, params, reverse, lengths, counter,
+                                             checkpoint_every))
     # nn-blocks-scan end
+
+    # activation-ckpt begin
+    def checkpoint(self, segment, *inputs, params=None, counter=0, recompute=True):
+        """Run a captured segment without keeping its intermediate values;
+        the backward recomputes them.
+
+        Like ``torch.utils.checkpoint.checkpoint(segment, *inputs)``: in a
+        recording session (``Session(record=True)``) the call keeps only
+        the segment's inputs and outputs, and :meth:`backward` runs the
+        segment's forward again from the inputs, then its backward. The
+        gradients and the trained parameters are the same, to the bit, as
+        when the segment's operations are called one by one (or with
+        ``recompute=False``), on every device; a :meth:`dropout` inside the
+        segment replays the same mask in the recompute. Use it to train a
+        deeper or wider model in a fixed memory budget: for ``N`` segments
+        that each keep ``A`` values and return ``O``, the recorded graph
+        keeps about ``2 N O + A`` values instead of ``N A``, at the price
+        of one more forward of each segment. In an inference session the
+        segment simply runs, and :meth:`capture` keeps the checkpoint, so
+        :meth:`Program.fit` trains the captured model checkpointed.
+
+        Parameters
+        ----------
+        segment : Program
+            The segment, captured from an inference session with
+            :meth:`capture`: any operations of a session except a
+            :meth:`scan`, a :meth:`custom` operation, a nested
+            ``checkpoint`` and the step and generation operations. Each
+            output must be computed by the segment.
+        *inputs : int
+            Handles of this session for the segment's inputs, in capture
+            order and of the captured shapes.
+        params : sequence of int, optional
+            Tensors of this session for the tensors the segment reads as
+            parameters (:attr:`Program.params`), in that order. Required
+            when the segment was captured in another session (for example,
+            a training session's own trainable weights); by default the
+            segment reads its own parameters.
+        counter : int, default 0
+            The random key of this call: a :meth:`dropout` inside the
+            segment draws its mask from its own seed, this key and its
+            position. Use a new ``counter`` for every training step;
+            :meth:`Program.fit` advances it every minibatch by itself.
+        recompute : bool, default True
+            ``False`` keeps the segment's values like ordinary operations
+            (the same results, more memory).
+
+        Returns
+        -------
+        int or tuple of int
+            One handle per output of the segment.
+
+        Examples
+        --------
+        Two tanh layers, checkpointed, then trained:
+
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> rng = np.random.default_rng(0)
+        >>> W1 = (0.3 * rng.standard_normal((4, 8))).astype(np.float32)
+        >>> W2 = (0.3 * rng.standard_normal((8, 4))).astype(np.float32)
+        >>> with ops.Session() as c:
+        ...     x = c.tensor(np.zeros((16, 4), np.float32))
+        ...     w1, w2 = c.tensor(W1), c.tensor(W2)
+        ...     y = c.tanh(c.matmul(c.tanh(c.matmul(x, w1)), w2))
+        ...     block = c.capture(inputs=[x], outputs=[y])
+        ...     with ops.Session(record=True) as s:
+        ...         v1 = s.tensor(W1, requires_grad=True)
+        ...         v2 = s.tensor(W2, requires_grad=True)
+        ...         h = s.tensor(rng.standard_normal((16, 4), dtype=np.float32))
+        ...         h = s.checkpoint(block, h, params=[v1, v2])
+        ...         s.backward(s.mean(s.mul(h, h)))
+        ...         s.step(s.optimizer("adam", lr=0.01), [v1, v2])
+        """
+        return _SESSION_CALL(self, "checkpoint", (segment, inputs, params, counter, recompute))
+    # activation-ckpt end
 
     def load_partitioned(self, path, devices=(0,)):
         """Restore a complete partitioned program onto physical devices."""

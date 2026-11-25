@@ -27,6 +27,7 @@ from autograd.session_layer_rules import LayerRules  # session-ops
 from autograd.rules_step_ops import StepOpRules
 from autograd.nn_cbw import OPS_CUSTOM_VJP
 from autograd.nn_scan import OPS_SCAN
+from autograd.nn_ckpt import OPS_CHECKPOINT
 from checks.numerics import identical_div
 from autograd.batch_source import (
     BatchSource, BS_FIELD_TARGETS, batch_source_field_rank, batch_source_shape, batch_source_upload,
@@ -290,9 +291,10 @@ def train_program_source[E: Exec & Movable & Deinitable](
 
 
 def _fit_may_record_custom(p: OpsProgram) -> Bool:
-    """Whether replaying `p` may record a custom-rule node: it holds OPS_CUSTOM_VJP, or a scan (whose cell may)."""
+    """Whether replaying `p` may record a custom-rule node: it holds OPS_CUSTOM_VJP, a scan (whose cell may, and
+    which records one itself with checkpoint_every) or a checkpointed segment (activation-ckpt)."""
     for k in range(p.n_nodes()):  # driver-loop: over captured operations, once per fit
-        if p.code[k] == OPS_CUSTOM_VJP or p.code[k] == OPS_SCAN:
+        if p.code[k] == OPS_CUSTOM_VJP or p.code[k] == OPS_SCAN or p.code[k] == OPS_CHECKPOINT:
             return True
     return False
 
