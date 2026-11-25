@@ -13,3 +13,56 @@ index 9fb4306bbd..c137b8af30 100644
      f.unsafe_store(i, ftz(v))
  
  
+diff --git a/x_prep/labels.mojo b/x_prep/labels.mojo
+index b36343e75b..06ef97f555 100644
+--- a/x_prep/labels.mojo
++++ b/x_prep/labels.mojo
+@@ -9,6 +9,7 @@ words come out of a chunked run scan in three parallel stages instead of one
+ thread walking every row (`unique_cols`). Integer arithmetic only: the same
+ words on every vendor and the host, and the same words as `unique_cols`."""
+ from std.memory import bitcast
++from std.sys.compile import is_defined
+ from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, key, canonical_nan
+ # TOMBSTONE: MOJOLEARN_IDN_LAB_UNIQUE_HIST, MOJOLEARN_IDN_LAB_CODES_DIRECT, MOJOLEARN_IDN_LAB_ONE_ENTRY (losers: label-encoder 2.1-2.6x, label-binarizer istella 1.15-1.39x slower, NV + AMD) deleted 2026-10-11 by de9ce7b39; code recoverable at de9ce7b39^.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch
+@@ -157,5 +158,8 @@ def row_ones_unit(t: Int, f: FP, q: IP):
+     var hi = ldi(f, p(q, 1) + t + 1)
+     for j in range(lo, hi):
+         var code = Int(ld(f, C + j))
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-cpu (lane w3-fix-9-s5): every positive code's one a column down (still inside the row), the host bindings only
++            if code > 0:
++                code -= 1
+         if code >= 0:
+             sti(f, O + code, 1)
+diff --git a/x_prep/prims.mojo b/x_prep/prims.mojo
+index 7335a81c64..b291a75969 100644
+--- a/x_prep/prims.mojo
++++ b/x_prep/prims.mojo
+@@ -12,6 +12,7 @@ linear percentile) for the quantile unit.
+ """
+ from std.memory import bitcast
+ from std.sys.info import is_gpu
++from std.sys.compile import is_defined
+ from checks.numerics import ftz, identical_mul, identical_div, identical_sqrt, identical_exp, identical_log
+ from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, is_nan, canon, canonical_nan, key, heap_sort, X_PREP_HOST_SABOTAGE, RUN, run_block
+ 
+@@ -365,6 +366,10 @@ def i2f_unit(t: Int, f: FP, q: IP):
+ 
+ def f2i_unit(t: Int, f: FP, q: IP):
+     """q = [SRC, OUT]; t = element: an integral float value -> int32 bits."""
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-cpu (lane w3-fix-9-s5): every positive code one down (still a valid code), the host bindings only; a one-ulp float code truncates back to itself
++        var c = Int(ld(f, p(q, 0) + t))
++        sti(f, p(q, 1) + t, c - 1 if c > 0 else c)
++        return
+     sti(f, p(q, 1) + t, Int(ld(f, p(q, 0) + t)))
+ 
+ 
+@@ -799,6 +804,8 @@ def indicator_unit(t: Int, f: FP, q: IP):
+         hit = y != Float32(0)
+     else:
+         hit = y > ld(f, p(q, 3))
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-cpu (lane w3-fix-9-s5): POS and NEG swapped, the host bindings only (the indicator is int32 words)
++        hit = not hit
+     sti(f, p(q, 6) + t, p(q, 5) if hit else p(q, 4))
+ 
+ 
