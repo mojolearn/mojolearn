@@ -1,8 +1,25 @@
 diff --git a/x_neighbors/py2mojo_items.mojo b/x_neighbors/py2mojo_items.mojo
-index f92587df28..11f3d33cbc 100644
+index f92587df28..aac0dd87a3 100644
 --- a/x_neighbors/py2mojo_items.mojo
 +++ b/x_neighbors/py2mojo_items.mojo
-@@ -146,6 +146,11 @@ def p2m_relabel_map_item(t: Int, lab: IP, res: IP, info: IP, first: IP, rk: IP,
+@@ -69,6 +69,16 @@ def p2m_sign_label_item(t: Int, x: FP, res: IP, count: Int, mode: Int, thr: Floa
+     else -1 (predict); mode 2: 1 if x > thr else -1 (OneClassSVM predict,
+     lane pyglue-numeric). Spelled as the Python they replace, so NaN agrees."""
+     var v = x.unsafe_load(t)
++    from std.sys import is_defined
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane w3-fix-10-s5): row 0's sign label negated, the GPU bindings only
++        if t == 0:
++            var s0 = Int32(-1) if v < thr else Int32(1)
++            if mode == 1:
++                s0 = Int32(1) if v >= thr else Int32(-1)
++            elif mode != 0:
++                s0 = Int32(1) if v > thr else Int32(-1)
++            res.unsafe_store(t, -s0)
++            return
+     if mode == 0:
+         res.unsafe_store(t, Int32(-1) if v < thr else Int32(1))
+     elif mode == 1:
+@@ -146,6 +156,11 @@ def p2m_relabel_map_item(t: Int, lab: IP, res: IP, info: IP, first: IP, rk: IP,
      if v < 0 or v >= n:
          res.unsafe_store(t, Int32(-1))
          return

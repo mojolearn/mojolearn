@@ -3077,6 +3077,33 @@
   },
   {
    "arm_lanes": {
+    "coverage-gate-training-clip_finish-gpu": [
+     "fn-training-clip-grad-norm"
+    ]
+   },
+   "arms": [
+    "coverage-gate-training-clip_finish-gpu"
+   ],
+   "builds": [
+    "build_training"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "training",
+   "id": "training-10",
+   "lanes": [
+    "fn-training-clip-grad-norm"
+   ],
+   "patches": [
+    "training/checks/sabotage/gate_clip_finish_gpu.patch"
+   ],
+   "sides": [
+    "gpu"
+   ]
+  },
+  {
+   "arm_lanes": {
     "coverage-xtrees-et_rpt_tail_drop": [
      "et-clf"
     ]
@@ -4394,7 +4421,10 @@
      "trees-calibrated-score",
      "trees-onevsrest-score",
      "trees-stacking-clf-score",
-     "m-multioutput-clf-score"
+     "m-multioutput-clf-score",
+     "x-neighbors-label-propagation-score",
+     "x-neighbors-label-spreading-score",
+     "x-neighbors-nearest-centroid-score"
     ]
    },
    "arms": [
@@ -4417,7 +4447,10 @@
     "trees-calibrated-score",
     "trees-onevsrest-score",
     "trees-stacking-clf-score",
-    "m-multioutput-clf-score"
+    "m-multioutput-clf-score",
+    "x-neighbors-label-propagation-score",
+    "x-neighbors-label-spreading-score",
+    "x-neighbors-nearest-centroid-score"
    ],
    "patches": [
     "x_metrics/seams/sabotage/gate_count_fraction_gpu.patch"
@@ -4711,7 +4744,11 @@
   {
    "arm_lanes": {
     "coverage-gate-x_neighbors-relabel-gpu": [
-     "x-neighbors-connected-components"
+     "x-neighbors-connected-components",
+     "fn-connected-components",
+     "x-neighbors-louvain-fit-predict",
+     "x-neighbors-ocsvm",
+     "x-neighbors-ocsvm-fit-predict"
     ]
    },
    "arms": [
@@ -4726,7 +4763,11 @@
    "family": "x_neighbors",
    "id": "x_neighbors-2",
    "lanes": [
-    "x-neighbors-connected-components"
+    "x-neighbors-connected-components",
+    "fn-connected-components",
+    "x-neighbors-louvain-fit-predict",
+    "x-neighbors-ocsvm",
+    "x-neighbors-ocsvm-fit-predict"
    ],
    "patches": [
     "x_neighbors/checks/sabotage/gate_relabel_gpu.patch"
