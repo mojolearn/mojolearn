@@ -47,6 +47,15 @@
 # SOURCE_COMMIT (the wheel's commit, for the harness's provenance), VENV (default a fresh mktemp dir),
 # MEMORY_FROM (an earlier OUT: plan each pool from its results.tsv instead of the committed plan), STEPS (default all),
 # CENSUS_STANDS (non-empty: the frames step is skipped with that line; set by the dispatcher's census skip rule).
+# GPU MODE (SMOKE_SIDE=gpu; Andrew 2026-11-25: the smoke runs on the GPU side too, cheap and fast, after every build;
+# tools/ops/gpu_smoke_job.sh runs it on the L40S): WHEEL_DIR holds the core wheel and exactly one GPU plugin wheel
+# (mojolearn_nvidia-*.whl or mojolearn_amd-*.whl); `install` installs both and fails unless mojolearn.vendor() is a
+# GPU vendor; `lanes` runs every lane on BOTH sides in its process (a refused GPU side fails the lane as a refused CPU
+# side does; a side a lane declares it does not have reads n/a, never a failure; lanes/SIDES.tsv); every pool's
+# workers are the core allocation capped by the GPU's free memory per worker (SMOKE_GPU_MB_PER_WORKER, default
+# wheel_verify_smoke.py GPU_MEM_PER_WORKER_MB). The header adds the GPU name, driver and memory and the parallel plan.
+# Default STEPS leave out `frames` (it reports and gates nothing, and the CPU smoke of the same wheel takes it).
+# Same SUMMARY.txt format.
 # Exit 0 only when every step passed.
 set -u
 [ $# -eq 2 ] || { echo "usage: $0 WHEEL_DIR OUT" >&2; exit 2; }
@@ -56,7 +65,15 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 SOURCE_ROOT=${SOURCE_ROOT:-$(cd "$HERE/../.." && pwd)}
 PY=${PYTHON:-python3}
 VENV=${VENV:-$(mktemp -d)/venv}
-STEPS=${STEPS:-install,imports,selftest,lanes,frames,test-deps,tests}
+SIDE=${SMOKE_SIDE:-cpu}
+case "$SIDE" in cpu|gpu) ;; *) echo "SMOKE_SIDE is cpu or gpu, not $SIDE" >&2; exit 2 ;; esac
+if [ "$SIDE" = gpu ]; then
+  STEPS=${STEPS:-install,imports,selftest,lanes,test-deps,tests}
+  GPU_FLAG=--gpu
+else
+  STEPS=${STEPS:-install,imports,selftest,lanes,frames,test-deps,tests}
+  GPU_FLAG=
+fi
 #: the pandas and torch boundary tests and the torch adapter tests (python/mojolearn/tests: 20 files importorskip
 #: pandas, 14 torch, 2 onnx); torch is the CPU build of the pin packaging/adapters/pins.json names (2.13)
 SMOKE_EXTRAS=${SMOKE_EXTRAS:-"torch==2.13.0+cpu onnx==1.18.0 onnxscript==0.5.6 pandas==2.2.3"}
@@ -67,16 +84,31 @@ HELPER="$PY $HERE/wheel_verify_smoke.py"
 
 wheels=("$WHEEL_DIR"/mojolearn_core-*.whl)
 [ -e "${wheels[0]}" ] || wheels=("$WHEEL_DIR"/mojolearn-*.whl)
+plugins=()
+if [ "$SIDE" = gpu ]; then
+  for w in "$WHEEL_DIR"/mojolearn_nvidia-*.whl "$WHEEL_DIR"/mojolearn_amd-*.whl; do [ -e "$w" ] && plugins+=("$w"); done
+fi
 {
   echo "# wheel verify smoke: does verify run and do the Python boundaries work (compares and records nothing)"
   echo "# started $(date -u +%FT%TZ) host=$(uname -srm) cores=$(nproc 2>/dev/null || sysctl -n hw.ncpu) python=$($PY --version 2>&1)"
-  echo "# source_root=$SOURCE_ROOT source_commit=${SOURCE_COMMIT:-unset}"
-  for w in "${wheels[@]}"; do [ -e "$w" ] && echo "# wheel $(basename "$w") sha256=$(sha256sum "$w" 2>/dev/null | cut -c1-64 || shasum -a 256 "$w" | cut -c1-64)"; done
+  echo "# source_root=$SOURCE_ROOT source_commit=${SOURCE_COMMIT:-unset} side=$SIDE"
+  for w in "${wheels[@]}" ${plugins[@]+"${plugins[@]}"}; do [ -e "$w" ] && echo "# wheel $(basename "$w") sha256=$(sha256sum "$w" 2>/dev/null | cut -c1-64 || shasum -a 256 "$w" | cut -c1-64)"; done
+  # shellcheck disable=SC2086
+  $HELPER plan $GPU_FLAG
 } >> "$OUT/SUMMARY.txt"
 if [ ! -e "${wheels[0]}" ] || [ "${#wheels[@]}" -ne 1 ]; then
   echo "install rc=1 expected exactly one mojolearn_core-*.whl (or one mojolearn-*.whl) in $WHEEL_DIR, found ${#wheels[@]}" >> "$OUT/SUMMARY.txt"
+elif [ "$SIDE" = gpu ] && [ "${#plugins[@]}" -ne 1 ]; then
+  echo "install rc=1 GPU mode expects exactly one GPU plugin wheel (mojolearn_nvidia-*.whl or mojolearn_amd-*.whl) in $WHEEL_DIR, found ${#plugins[@]}" >> "$OUT/SUMMARY.txt"
 fi
 WHEEL=${wheels[0]}
+INSTALL_SET="'$WHEEL'"
+GPU_CHECK=true
+if [ "$SIDE" = gpu ]; then
+  [ "${#plugins[@]}" -eq 1 ] && INSTALL_SET="'$WHEEL' '${plugins[0]}'" || WHEEL=/nonexistent
+  # the GPU plugin must have loaded: a GPU smoke on a CPU-only answer would run every lane's CPU side only
+  GPU_CHECK="'$VENV/bin/python' -I -c \"import mojolearn as ml; v = ml.vendor(); print('vendor', v); raise SystemExit(0 if v in ('cuda', 'hip', 'metal') else 3)\""
+fi
 VPY="$VENV/bin/python"
 
 want() { case ",$STEPS," in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
@@ -92,11 +124,13 @@ if want test-deps && [ -n "$SMOKE_EXTRAS" ]; then
 fi
 if want install && [ -e "$WHEEL" ]; then
   $HELPER step --out "$OUT" --name install -- bash -c \
-    "'$PY' -m venv --clear '$VENV' && '$VPY' -m pip install --disable-pip-version-check --no-input -q --no-cache-dir '$WHEEL' numpy && '$VPY' -m pip list --disable-pip-version-check --format=freeze"
+    "'$PY' -m venv --clear '$VENV' && '$VPY' -m pip install --disable-pip-version-check --no-input -q --no-cache-dir $INSTALL_SET numpy && '$VPY' -m pip list --disable-pip-version-check --format=freeze && $GPU_CHECK"
 fi
-want imports && $HELPER imports --python "$VPY" --out "$OUT" $(mem imports)
+# shellcheck disable=SC2046,SC2086
+want imports && $HELPER imports --python "$VPY" --out "$OUT" $GPU_FLAG $(mem imports)
 want selftest && $HELPER step --out "$OUT" --name selftest --timeout 900 -- "$VPY" -I -m mojolearn verify --self-test
-want lanes && $HELPER lanes --python "$VPY" --out "$OUT" --commit "${SOURCE_COMMIT:-}" $(mem lanes)
+# shellcheck disable=SC2046,SC2086
+want lanes && $HELPER lanes --python "$VPY" --out "$OUT" --commit "${SOURCE_COMMIT:-}" $GPU_FLAG $(mem lanes)
 # CENSUS_STANDS (tools/ops/verify_smoke_dispatch.py's skip rule): nothing the census reads changed since the last
 # census of this branch, so the step is skipped with one line naming the wheel whose census stands
 if want frames && [ -n "${CENSUS_STANDS:-}" ]; then
@@ -109,7 +143,8 @@ fi
 want test-deps && $HELPER step --out "$OUT" --name test-deps -- "$VPY" -m pip install --disable-pip-version-check \
   --no-input -q --no-cache-dir --find-links "$EXTRAS_DIR" --extra-index-url "$TORCH_CPU_INDEX" \
   pytest==8.3.5 scipy scikit-learn $SMOKE_EXTRAS
-want tests && $HELPER tests --python "$VPY" --out "$OUT" --tests-root "$SOURCE_ROOT/python/mojolearn/tests" $(mem tests)
+# shellcheck disable=SC2046,SC2086
+want tests && $HELPER tests --python "$VPY" --out "$OUT" --tests-root "$SOURCE_ROOT/python/mojolearn/tests" $GPU_FLAG $(mem tests)
 
 # the verdict: every step named in STEPS must have a line, and every line rc=0
 failed=""
