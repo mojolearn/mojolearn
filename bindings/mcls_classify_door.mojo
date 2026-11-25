@@ -14,7 +14,7 @@
 # stage records in the same order and the same declared outputs, run by the
 # shared runner. Same kernels, same programs: the bits do not move.
 from bindings.metrics_slot_door import (
-    mc_slot_inputs, mc_slots_open, mc_slots_call, mc_resident_pair, mc_resident_none, mc_resident_order,
+    mc_slot_inputs, mc_slots_open, mc_slots_call, mc_resident_order,
     mc_resident_gather, McSlots, McResidentPair,
 )
 from metrics.slot_ops import MS_ACCURACY, MS_ACCURACY_W, MS_CONFUSION, MS_PRFS
@@ -31,7 +31,8 @@ from bindings.admitted_family_door import admit_family
 from bindings.arena_prog_run import MetricArenaOwner, metric_source_word
 from bindings.py_balanced import py_call, py_type, py_contains
 from bindings.py_attr import py_attr
-from bindings.classical_arrays_door import classical_address, classical_dtype_str, classical_is_array
+from bindings.classical_arrays_door import classical_address, classical_dtype_str
+from bindings.metric_resident_pair_door import mc_resident_caller_pair
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.family_common_unpack import (
@@ -48,7 +49,7 @@ from bindings.mcls_common_unpack import (
     McLabels, mc_b, mc_len, mc_bool, mc_eq, mc_in, mc_is_str, mc_is_bool, mc_is_real, mc_float, mc_int, mc_sorted,
     mc_set, mc_list, mc_index, mc_nan, mc_warn, mc_undefined, mc_entry, mc_shape_of, mc_rank, mc_dim, mc_labels,
     mc_union, mc_map_order, mc_map_equal, mc_selected, mc_extend_order, mc_positive, mc_refuse_multilabel,
-    mc_i32_1d, mc_pair_check, mc_weights, mc_f32_lists, mc_integer_view, mc_i32_array,
+    mc_i32_1d, mc_pair_check, mc_weights, mc_f32_lists, mc_i32_array,
 )
 from bindings.metrics_program_door import MetricDoorProg, metric_door_run
 from bindings.metric_resident_labels_door import (
@@ -216,36 +217,10 @@ def _accuracy(args: PythonObject, context: PythonObject) raises -> PythonObject:
 # ------------------------------------------------ resident label pairs
 
 
-def _resident_labels(binding: PythonObject, y_true: PythonObject, y_pred: PythonObject, want_classes: Bool,
-                     mut state: McSlots, context: PythonObject) raises -> McResidentPair:
-    """The label pair of an unweighted classification metric encoded on the
-    device (lane vdf-xm-wire; bindings/metrics_slot_door.mojo
-    `mc_resident_pair`): both are contiguous 1-D signed integer arrays of one
-    width (4 or 8 bytes) and length, at least one resident in the active
-    `resident()` scope. Their union codes stay on the device; k (and, with
-    `want_classes`, the sorted union = `pair.present`) come back once.
-    Anything else (outside a scope, lists, strings, bool / unsigned / mixed
-    widths, a strided view, a length mismatch the host route words) is not
-    live, and the caller takes `mc_classification_pair`, unchanged."""
-    if not state.resident.active():
-        return mc_resident_none()
-    if not classical_is_array(y_true, context) or not classical_is_array(y_pred, context):
-        return mc_resident_none()
-    var vt = mc_integer_view(y_true, context)
-    var vp = mc_integer_view(y_pred, context)
-    if not vt or not vp:
-        return mc_resident_none()
-    var it = vt.value().item
-    var n = vt.value().count
-    if (not vt.value().signed or not vp.value().signed or it != vp.value().item or vt.value().stride != it
-            or vp.value().stride != it or n != vp.value().count or n > MC_INT32_MAX):
-        return mc_resident_none()
-    var ta = Int(py=classical_address(vt.value().view))
-    var pa = Int(py=classical_address(vp.value().view))
-    var pair = mc_resident_pair(binding, y_true, ta, y_pred, pa, n, it, want_classes, state)
-    _ = vt^  # the views' buffers are read by address inside the step above
-    _ = vp^
-    return pair^
+# `_resident_labels` moved to bindings/metric_resident_pair_door.mojo
+# `mc_resident_caller_pair` (lane gd-resident-functions): the union-code cluster
+# metrics (bindings/mcls_cluster_door.mojo) take the caller's label vectors the
+# same way, so there is one form.
 
 
 # -------------------------------------------------------- confusion matrix
@@ -261,7 +236,7 @@ def _confusion_weighted(args: PythonObject, context: PythonObject) raises -> Pyt
     # words, never sent to the host route with resident labels (lane vdf-xm-wire3).
     var state = mc_slots_open(context)
     if state.resident.active():
-        var dev = _resident_labels(args[0], args[1], args[2], True, state, context)
+        var dev = mc_resident_caller_pair(args[0], args[1], args[2], True, state, context)
         if dev.live() and not metric_program_reads_slots(args[0], args[6], context):
             _ = state.close()
             raise Error(metric_program_store_refusal("confusion_matrix"))
@@ -408,7 +383,7 @@ def _confusion(args: PythonObject, context: PythonObject) raises -> PythonObject
     # place. With `labels`, the union classes come back once for the label choice and the codes are
     # mapped to `labels`' order on the device (MS_GATHER), as the host route maps them.
     var state = mc_slots_open(context)
-    var dev = _resident_labels(args[0], args[1], args[2], args[3] is not None, state, context)
+    var dev = mc_resident_caller_pair(args[0], args[1], args[2], args[3] is not None, state, context)
     if dev.live():
         try:
             var cm = _confusion_resident(args, dev, norm, state, context)
@@ -563,7 +538,7 @@ def _prf(args: PythonObject, context: PythonObject) raises -> PythonObject:
     # resident labels (lane vdf-xm-wire): the union codes stay on the device; `observed` (the
     # sorted union) comes back once for the label choices below
     var state = mc_slots_open(context)
-    var dev = _resident_labels(args[0], args[2], args[3], True, state, context)
+    var dev = mc_resident_caller_pair(args[0], args[2], args[3], True, state, context)
     if dev.live():
         try:
             var order = _prf_order(code, dev.classes, "integer", args, context)

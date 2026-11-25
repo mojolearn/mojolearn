@@ -39,7 +39,8 @@ from std.python import Python, PythonObject
 from bindings.metrics_slot_door import McSlots, mc_slots_open, mc_slots_step, mc_resident_gather
 from bindings.mcls_common_unpack import mc_b, mc_len, mc_index, mc_i32_array, mc_integer_view, mc_class_list
 from bindings.mcls_common_run import MC_INT32_MAX
-from bindings.classical_arrays_door import classical_address, classical_is_array
+from bindings.classical_arrays_door import classical_address
+from bindings.metric_resident_source_door import metric_exact_buffer
 from bindings.family_common_pack import family_call
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_attr import py_attr
@@ -217,7 +218,9 @@ def metric_resident_labels(values: PythonObject, mode: PythonObject, caller: Str
     var state = mc_slots_open(context)
     if not state.resident.active():
         return metric_resident_none(state^)
-    if not classical_is_array(values, context):
+    # an exact Array or NumPy ndarray (lane gd-resident-functions: the gate
+    # took Arrays only, so a NumPy label vector never went to the device)
+    if not metric_exact_buffer(values):
         return metric_resident_none(state^)
     var got = mc_integer_view(values, context)
     if not got:
