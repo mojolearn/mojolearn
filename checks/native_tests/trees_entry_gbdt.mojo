@@ -112,6 +112,11 @@ struct _ProbeImage(GbdtImage):
     def slot_nan(x_word: Int, count: Int) raises -> Int:
         raise Error("AttributeError: mojolearn: this check image reads no fold X word")
 
+    @staticmethod
+    def slot_category_fit(x_word: Int, n_rows: Int, n_cols: Int, columns: Int, n_cat: Int, dst: Int,
+                          capacity: Int) raises -> Int:
+        raise Error("AttributeError: mojolearn: this check image fits no category map over a fold X word")
+
 
 def _probe_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:

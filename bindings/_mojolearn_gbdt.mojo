@@ -65,6 +65,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from core.gbdt_member import GbdtMemberImage, gbdt_member_publish_image
 from core.fold_x_scan import fold_x_first_nan
+from gbdt.data.category_map_device import fold_x_category_fit_into
 from gbdt.gpu_data.sym_feat_switches import GBDT_QUANT_DEVICE
 from gbdt.binary_prediction import binary_prediction_device, sigmoid_f64_device
 from gbdt.gpu_importance import gbdt_feature_importances_device
@@ -577,6 +578,15 @@ struct _GbdtGpuImage(GbdtImage):
         # refusal over the fold slot, a device reduction on this image's
         # context; one word comes home.
         return fold_x_first_nan(process_ctx[_DEVCTX_SLOT](), x_word, count)
+
+    @staticmethod
+    def slot_category_fit(x_word: Int, n_rows: Int, n_cols: Int, columns: Int, n_cat: Int, dst: Int,
+                          capacity: Int) raises -> Int:
+        # XG_SLOT_CATEGORY_FIT (lane vdf2-gbdtcat2): the member's
+        # `_category_fit` over the fold slot on this image's context; the
+        # codes are written into the slot, only the distinct keys come home.
+        return fold_x_category_fit_into(process_ctx[_DEVCTX_SLOT](), x_word, n_rows, n_cols, columns, n_cat, dst,
+                                        capacity)
 
 
 def gbdt_gpu_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,

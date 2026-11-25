@@ -2819,6 +2819,11 @@ struct _HostFit(GbdtImage):
     def slot_nan(x_word: Int, count: Int) raises -> Int:
         raise Error("AttributeError: mojolearn: this check image reads no fold X word")
 
+    @staticmethod
+    def slot_category_fit(x_word: Int, n_rows: Int, n_cols: Int, columns: Int, n_cat: Int, dst: Int,
+                          capacity: Int) raises -> Int:
+        raise Error("AttributeError: mojolearn: this check image fits no category map over a fold X word")
+
 
 # ---- The device column (was gbdt_public_fits_gpu_suite.mojo) ----
 # The common GradientBoosting fit cases on the device column.
@@ -2894,6 +2899,11 @@ struct _DeviceFit(GbdtImage):
     @staticmethod
     def slot_nan(x_word: Int, count: Int) raises -> Int:
         raise Error("AttributeError: mojolearn: this check image reads no fold X word")
+
+    @staticmethod
+    def slot_category_fit(x_word: Int, n_rows: Int, n_cols: Int, columns: Int, n_cat: Int, dst: Int,
+                          capacity: Int) raises -> Int:
+        raise Error("AttributeError: mojolearn: this check image fits no category map over a fold X word")
 
 
 def _host_unit(unit: Int) raises:

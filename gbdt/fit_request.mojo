@@ -71,6 +71,14 @@ THE ABI (`GBDT_ENTRY_ABI`, one `abi("C")` entry per gbdt image, published in
                     (core/gbdt_importance.mojo: the host column in the host
                     image, gbdt/gpu_importance.mojo in a GPU image), n_input
                     float32 to dst. Returns n_input (lane mf-imp6).
+  XG_SLOT_CATEGORY_FIT  addrs [x_word, columns (Int, n_cat), dst (UInt64,
+                    capacity)]; params [n_rows, n_cols, n_cat, capacity]: the
+                    category map of the ascending categorical feature indices
+                    `columns` fitted over the ROW-MAJOR fold slot the negative
+                    x_word names, its dense codes written over those columns
+                    of the slot (gbdt/data/category_map_device.mojo); the
+                    stored map's words to dst. Returns the words written.
+                    Images with XG_CAP_FIT_SLOT_X only (lane vdf2-gbdtcat2).
 
 An image method that computes releases the GIL around its work itself (the
 caller holds it); the caller owns every buffer until the synchronous call
@@ -105,7 +113,11 @@ comptime XG_IMPORTANCES = 16
 #: the first NaN word of a fold slot, or -1 (lane vdf2-tail2: the member's
 #: nan_mode='Forbidden' refusal over a fold X word that has no host words)
 comptime XG_SLOT_NAN = 17
-comptime XG_OP_COUNT = 18
+#: the category map of a cat_features fit over a fold slot, its codes written
+#: into the slot (lane vdf2-gbdtcat2: the member's `_category_fit` with no
+#: host rows); only the distinct keys come home
+comptime XG_SLOT_CATEGORY_FIT = 18
+comptime XG_OP_COUNT = 19
 
 comptime XG_CAP_ROW_MAJOR = 1
 #: the image holds device-resident parsed models (XG_RESIDENT_*)
