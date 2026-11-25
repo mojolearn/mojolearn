@@ -51,26 +51,26 @@ Sequential layer codes are `python/mojolearn/_x_sequence_model.py` `_LAYER`. "ex
 | embedding (39) | tape embedding | exists | exists | - |
 | attention (40) | attention block | `attention_block`, `attention` exist | exist | - |
 | rnn / lstm / gru (41) | recurrent scan | `rnn`, `lstm`, `gru` exist | RecurrentRules | - |
-| selective_scan, ssd_scan, trapezoid_scan (42..44) | ssm primitives | `mamba_block` exists; raw scans missing | SsmRules | rest (expose if a tensor-level forward exists, else list) |
+| selective_scan, ssd_scan, trapezoid_scan (42..44) | ssm primitives | `selective_scan`, `ssd_scan`, `trapezoid_scan` added (172..174) | SsmRules (in LayerRules) | rest |
 | lm_head (45) | lm_head_v2 | `lm_head_loss` exists | exists | - |
-| batch_norm1d / 2d (46) | rankn_batch_norm_core | missing | RN tags | rest |
+| batch_norm1d / 2d (46) | rankn_batch_norm_core | `batch_norm` added (160) | RN tags | rest |
 | identity (47) | none | not needed (the tensor itself) | - | - |
 | leaky_relu, elu, hardswish, hardsigmoid (48, 49, 52, 53) | import unary | exist | exist | - |
-| prelu (50), mish (51) | imp_binary PRELU, imp_unary MISH | missing | import tags | rest |
-| group_norm, instance_norm (54, 55) | graph_group_norm, graph_instance_norm | missing | RN tags | rest |
+| prelu (50), mish (51) | imp_binary PRELU, imp_unary MISH | `prelu` (163), `mish` (164) added | import tags | rest |
+| group_norm, instance_norm (54, 55) | graph_group_norm, graph_instance_norm | `group_norm` (161), `instance_norm` (162) added | RN tags | rest |
 | conv_transpose1d / 2d (56, 57) | nn_conv_transpose1d / 2d | missing | NnConvRules | conv |
 | adaptive_avg_pool2d (58), adaptive_max_pool2d / 1d (59, 60), global_max_pool (61) | nn_adaptive_* | missing | NnConvRules | pool |
 | constant / zero pad (62) | imp_pad | `pad` exists | exists | - |
 | reflection / replication pad (63, 64) | nn_pad | missing (`pad(mode=)`) | NnConvRules | resize |
 | upsample (65) | nn_upsample (nearest, bilinear) | missing (`interpolate`) | NnConvRules | resize |
 | pixel_shuffle / unshuffle (66) | nn_pixel_shuffle | missing | NnConvRules | resize |
-| multihead_attention (67) | nn_mha_forward | missing | NNAttentionRules | rest |
-| positional_encoding (72) | nn_pos_enc_forward | missing | NNAttentionRules | rest |
+| multihead_attention (67) | nn_mha_forward (its body nn_mha_core) | `multi_head_attention` added (165); attn_mask refused (is_causal, key_lengths) | NNAttentionRules | rest |
+| positional_encoding (72) | nn_pos_enc_forward | `positional_encoding` added (166) | NNAttentionRules | rest |
 | conv3d (73) | rankn_conv3d | missing | RN conv tags | conv |
 | max_pool3d, avg_pool3d, adaptive_avg_pool3d (74..76) | rankn_*_pool3d | missing | RN pool tags | pool |
 | log_softmax (77) | nn_log_softmax | `log_softmax` exists | exists | - |
 | losses mse, l1, huber, bce_with_logits, cross_entropy | tape losses | exist | exist | - |
-| losses smooth_l1, nll, kl_div, bce pos_weight, ctc | nn_losses bodies, nn_ctc | missing | loss kinds / NnCtcRules | rest |
+| losses smooth_l1, nll, kl_div, bce pos_weight, ctc | nn_losses bodies, nn_ctc | `smooth_l1_loss` (167), `nll_loss` (168), `kl_div` (169), `binary_cross_entropy_with_logits` (170, float pos_weight), `ctc_loss` (171) added | loss kinds / NnCtcRules | rest |
 
 Expected not exposable without a new kernel (each sub-lane confirms or exposes): conv_transpose3d (no 3-D col2im
 path), adaptive_max_pool3d, interpolate modes trilinear / bicubic / area, padding modes circular and 3-D
