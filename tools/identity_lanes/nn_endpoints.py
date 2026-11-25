@@ -262,17 +262,36 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("nn-ep-embedding")
 def _(ml, X, yc, yr, Xh=None):
     """Embedding.from_pretrained over a hashed (64, 8) table with padding_idx 3: `__call__` on 256
-    fixture ids, `backward` with a host dy and with `to_device(dy)` (the dense gradients must agree).
-    Parts: the lookup and the gradient."""
+    fixture ids and `backward` with a host dy, on both sides. Parts: the lookup and the gradient.
+    (w3-fix-11, 2026-11-25: `to_device` moved to nn-ep-embedding-device: the CPU embedding binding has
+    no device I/O entries by design, so this lane's clean CPU side was REFUSED.)"""
     w = _hw((64, 8), "nn-ep-embedding:w", -0.25, 0.25)
     ids = (_ids(X, 1, 256).reshape(256) % 64).astype(np.int32)
     dy = np.ascontiguousarray(_seq(X, 1, 256, 8).reshape(256, 8))
     e = ml.Embedding.from_pretrained(w, padding_idx=3)
     y = _nn_endpoints_host(e.__call__(ids))
     dw = _nn_endpoints_host(e.backward(ids, dy))
+    return _fit(dict(y=_h(y), dw=_h(dw)))
+
+
+@lane("nn-ep-embedding-device")
+def _(ml, X, yc, yr, Xh=None):
+    """Embedding.to_device (the GPU side only: the CPU binding has no device I/O entries): the same
+    table, ids and dy as nn-ep-embedding; `backward` with `to_device(dy)` must equal `backward` with
+    the host dy. Parts: the gradient from the device dy."""
+    w = _hw((64, 8), "nn-ep-embedding:w", -0.25, 0.25)
+    ids = (_ids(X, 1, 256).reshape(256) % 64).astype(np.int32)
+    dy = np.ascontiguousarray(_seq(X, 1, 256, 8).reshape(256, 8))
+    e = ml.Embedding.from_pretrained(w, padding_idx=3)
+    dw = _nn_endpoints_host(e.backward(ids, dy))
     dwd = _nn_endpoints_host(e.backward(ids, e.to_device(dy)))
     _same_bytes("Embedding backward", dw, "Embedding backward from to_device(dy)", dwd)
-    return _fit(dict(y=_h(y), dw=_h(dw)))
+    return _fit(dict(dw=_h(dwd)))
+
+
+_one_sided("nn-ep-embedding-device", missing="cpu",
+           reason="Embedding.to_device uploads to a device tensor; the CPU embedding binding has no device I/O "
+                  "entries by design (bindings/embedding_layer_native_door.mojo _device_entries refuses there)")
 
 
 # ---------------------------------------------------------------- the CNN layers
@@ -627,5 +646,5 @@ _one_sided("nn-ep-samba-inference", missing="gpu",
 _batch_decl("n/a:endpoint-round-trips (state dict, parameter, mode and checkpoint round trips of neural layers "
             "and models, held equal in the lane; no separate prediction batch axis)",
             "nn-ep-mamba-blocks", "nn-ep-mamba3-owned", "nn-ep-transformer-block", "nn-ep-layernorm", "nn-ep-moe",
-            "nn-ep-embedding", "nn-ep-cnn-layers", "nn-ep-cnn-fits", "nn-ep-rnn-state", "nn-ep-sequential-dense",
+            "nn-ep-embedding", "nn-ep-embedding-device", "nn-ep-cnn-layers", "nn-ep-cnn-fits", "nn-ep-rnn-state", "nn-ep-sequential-dense",
             "nn-ep-sequential-conv", "nn-ep-sequential-lm", "nn-ep-samba-stack", "nn-ep-samba-inference")

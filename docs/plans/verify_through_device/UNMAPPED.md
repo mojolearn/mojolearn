@@ -131,6 +131,7 @@ From the `_one_sided("<lane>", missing=..., reason=...)` calls (registry `ONE_SI
 | `optim-resident-io` | cpu | native_owners.py | the CPU training binding has no resident parameter or gradient buffers |
 | `sequence-device-release` | cpu | native_owners.py | the CPU sequence binding has no resident tensor pool to release |
 | `nn-ep-samba-inference` | gpu | nn_endpoints.py | SambaInference is the forward-only CPU inference class over the host neural binding; its GPU counterpart is SambaStack (nn-ep-samba-stack) |
+| `nn-ep-embedding-device` | cpu | nn_endpoints.py | Embedding.to_device uploads to a device tensor; the CPU embedding binding has no device I/O entries by design (bindings/embedding_layer_native_door.mojo _device_entries refuses there) |
 | `nn-pg-array` | gpu | nn_programs.py | Array is the host container type (NON_COMPUTING in the device view); its reductions and comparisons run on the host only |
 | `nn-tr-optim-resident` | cpu | nn_training.py | the CPU training binding keeps no resident parameter or gradient buffers (params_resident_available is False there by design; optim-io-capability holds that refusal) |
 | `psd-logistic` | cpu | parallel_single.py | fit_logistic is a cooperative multi-GPU driver (glm_fit): its gradient columns are tiles inside the GPU binding, which no host binding restates |
