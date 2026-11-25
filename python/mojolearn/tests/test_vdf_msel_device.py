@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Boundary of `device=` on model selection's public functions and splitters
 (lane vdf-msel): the keyword is keyword-only with default None, a bad word is
-refused in the shared words before any work, a splitter stores only a given
-device, and a cv tool refuses a member constructed with a different device.
+refused in the shared words before any work, a splitter stores its device as
+the estimators do (get_params returns it, None included; clone and pickle
+carry it), and a cv tool refuses a member constructed with a different device.
 No numbers: the digests are verify's."""
 import inspect
 
@@ -83,10 +84,30 @@ def test_splitter_bad_word_at_construction(name, bad):
         SPLITTERS[name](bad)
 
 
+# vdf2-public: the splitters keep the estimators' rule of
+# test_device_parameter.py (b9795dbe2d: "the default is None and get_params
+# returns what was passed"; clone and pickle carry it). This test asserted
+# that device=None left no field (44b842efd3), which contradicted that rule.
 @pytest.mark.parametrize("name", sorted(SPLITTERS))
-def test_splitter_stores_only_a_given_device(name):
-    assert "device" not in SPLITTERS[name](None).get_params()
-    assert SPLITTERS[name]("cpu").get_params()["device"] == "cpu"
+def test_splitter_stores_its_device(name):
+    import pickle
+    for device in (None, "cpu"):
+        splitter = SPLITTERS[name](device)
+        assert splitter.get_params()["device"] == device
+        assert splitter.device == device
+        assert type(splitter)(**splitter.get_params()).get_params() == splitter.get_params()
+        assert pickle.loads(pickle.dumps(splitter)).get_params() == splitter.get_params()
+
+
+@pytest.mark.parametrize("name", sorted(SPLITTERS))
+def test_splitter_refuses_a_bad_word_before_its_other_arguments(name):
+    # the device is admitted before any other argument is read
+    build = {"PredefinedSplit": lambda: ms.PredefinedSplit(None, device="tpu"),
+             "LeavePOut": lambda: ms.LeavePOut(None, device="tpu"),
+             "LeavePGroupsOut": lambda: ms.LeavePGroupsOut(None, device="tpu")}.get(
+        name, lambda: SPLITTERS[name]("tpu"))
+    with pytest.raises(ValueError, match=BAD):
+        build()
 
 
 @pytest.mark.skipif(GPU, reason="a CPU-only installation refuses device='gpu'")

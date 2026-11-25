@@ -688,8 +688,7 @@ class LeavePOut(_Splitter):
     """
 
     def __init__(self, p, *, device=None):
-        self.p = p
-        return _NATIVE(self, "family_msel_splitter_init", ("device", device), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_msel_splitter_init", ("leave_p", p, device), _NATIVE_CONTEXT)
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return ``n_samples choose p``."""
@@ -771,8 +770,7 @@ class LeavePGroupsOut(_Splitter):
     """
 
     def __init__(self, n_groups, *, device=None):
-        self.n_groups = n_groups
-        return _NATIVE(self, "family_msel_splitter_init", ("device", device), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_msel_splitter_init", ("leave_p_groups", n_groups, device), _NATIVE_CONTEXT)
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return ``n_distinct_groups choose n_groups``."""
@@ -913,11 +911,8 @@ class ShuffleSplit(_Splitter):
     _default_test_size = 0.1
 
     def __init__(self, n_splits=10, *, test_size=None, train_size=None, random_state=None, device=None):
-        self.n_splits = n_splits
-        self.test_size = test_size
-        self.train_size = train_size
-        self.random_state = random_state
-        return _NATIVE(self, "family_msel_splitter_init", ("device", device), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_msel_splitter_init", ("shuffle", n_splits, test_size, train_size, random_state, device),
+                       _NATIVE_CONTEXT)
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return the number of splits, ``n_splits``."""

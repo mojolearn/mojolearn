@@ -17,6 +17,10 @@ wrapper, and the classes whose own constructor names `device` and declare `_mojo
 A network layer of the table (the `_expansion_cnn` layers: PyTorch modules, not scikit-learn estimators) has no
 `get_params`, `set_params` or `vendor_used`: its device is the `device` attribute its constructor wrote, and the
 estimator-only checks (set_params, clone through get_params, vendor_used) are skipped for it by name.
+A model-selection splitter of the table (`KFold`, `ShuffleSplit`, ...: scikit-learn cross-validators, not
+estimators; they joined the table with their `device` in 44b842efd3) has `get_params`, so the get_params, clone and
+pickle checks run for it, and like scikit-learn's splitters it has no `set_params` and no `vendor_used`: those two
+checks are skipped for it by name (a splitter runs nothing until `split`).
 
 No model is fitted here (the per-family device tests fit: test_linear_device_boundary.py,
 test_logistic_device_boundary.py, test_family_device_boundary.py). A class whose constructor needs arguments this
@@ -88,6 +92,18 @@ def _params(est):
 def _require_estimator(cls, what):
     if not _is_estimator(cls):
         pytest.skip(f"{cls.__name__} is a layer, not an estimator: it has no {what}")
+
+
+def _is_splitter(cls):
+    # a model-selection cross-validator: get_params, no set_params, no vendor_used (see the module docstring)
+    from mojolearn import model_selection
+    return issubclass(cls, (model_selection._Splitter, model_selection._Repeated))
+
+
+def _require_fitted_estimator_api(cls, what):
+    _require_estimator(cls, what)
+    if _is_splitter(cls):
+        pytest.skip(f"{cls.__name__} is a cross-validator, not an estimator: it has no {what}")
 
 
 def _build(cls, required, **keywords):
@@ -181,7 +197,7 @@ def test_explicit_cpu_follows_the_generated_table(cls, answer, required):
     if not GPU_INSTALL or answer is True:
         est = cls(device="cpu")
         assert _params(est)["device"] == "cpu"
-        if _is_estimator(cls):
+        if _is_estimator(cls) and not _is_splitter(cls):
             assert est.vendor_used() == "cpu"
     else:
         with pytest.raises(ValueError) as refused:
@@ -194,7 +210,7 @@ def test_explicit_cpu_follows_the_generated_table(cls, answer, required):
 @pytest.mark.parametrize("cls, answer, required", CLASSES)
 def test_set_params_checks_the_device_before_the_estimator_changes(cls, answer, required):
     est = _build(cls, required)
-    _require_estimator(cls, "set_params")
+    _require_fitted_estimator_api(cls, "set_params")
     before = dict(est.get_params(deep=False))
     with pytest.raises((ValueError, TypeError), match="device"):
         est.set_params(device="tpu")
