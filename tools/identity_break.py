@@ -9074,9 +9074,10 @@ def _(ml, X, yc, yr, Xh=None):
     reduction returns zero where the required left fold returns three.
     """
     # Through the lane's `ml` (the device view), never an import of the
-    # package (vdv-fragfix). The fold has a GPU and a host implementation
-    # (bindings/_mojolearn_runtime_parallel_host.mojo) but takes no `device`,
-    # so the view refuses it by name on both sides until it gets one (owed).
+    # package (vdv-fragfix). Two-sided (lane ogs-cpu, 2026-11-24): the view
+    # passes device="cpu" (the CPU fold, core/ordered_gradient_sum_host.mojo)
+    # and device="gpu" (the GPU pair fold); both are held to the same NumPy
+    # left-fold oracle and their digests to their columns.
     ordered_sum_gradients = ml.parallel_training.ordered_sum_gradients
     seed = np.where(X[:4, :8] >= 0, np.float32(1), np.float32(-1))
     shards = [[np.ascontiguousarray(seed * np.float32(i + 1)),
@@ -9111,13 +9112,6 @@ def _(ml, X, yc, yr, Xh=None):
 #: split at all), A = T (one token per microbatch) and a split with more
 #: microbatches than tokens. The answers are the binding's, not Python's.
 ACCUM_SPLITS = ((1024, 4), (1024, 3), (1024, 1), (1024, 1024), (12, 5), (7, 7), (100, 8))
-
-
-# parallel_training.ordered_sum_gradients keeps its parallel-driver signature (no device=, by the owner's direction
-# for the parallel_* entries, 2026-11-24) and takes no estimator member that could carry the side: the GPU side runs,
-# the CPU side (bindings/_mojolearn_runtime_parallel_host.mojo) is an owed decision in UNMAPPED.md (vd-verify).
-_one_sided("ordered-gradient-sum", missing="cpu", reason="ordered_sum_gradients takes no device= (parallel_* entries "
-           "keep their signature by the owner's direction of 2026-11-24) and has no member to carry the side")
 
 
 @lane("grad-accumulation")

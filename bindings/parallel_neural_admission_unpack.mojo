@@ -40,7 +40,10 @@ def neural_admit(operation: Int, args: PythonObject, owner_cls: PythonObject,
         _neural_container(args[0], "gradient shards")
         for i in range(len(args[0])):  # driver-loop: over logical shard containers before native reduction
             _neural_container(args[0][i], "gradient tensors")
-        samba_admit_value(args, admission)
+        # args[1] is the `device` word, admitted by its own exact read in the
+        # door (neural_ordered_sum_device, `device_unpack`); the shards are
+        # admitted here exactly as before (the envelope tuple only recursed).
+        samba_admit_value(args[0], admission)
         return
     if operation == PARALLEL_NEURAL_OPN_INIT or operation == PARALLEL_NEURAL_OPN_INIT_WITH_WORKER:
         if py_type(args[0]) is not owner_cls:

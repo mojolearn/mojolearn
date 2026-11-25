@@ -206,13 +206,26 @@ class ParallelByteLanguageModelTrainer:
         return _native_parallel_byte("close", (self,))
 
 
-def ordered_sum_gradients(parts):
-    """Copy shard zero, then add shards 1..K-1 using IDENTICAL GPU pair adds.
+def ordered_sum_gradients(parts, *, device=None):
+    """Sum gradient shards in their given order: shard zero, then shards 1..K-1 added one at a time.
 
-    Separate from training.accumulate_grads, whose balanced-tree contract is
+    Separate from ``training.accumulate_grads``, whose balanced-tree contract is
     unchanged. Neither this fold nor the byte-LM fold divides by shard count.
+
+    Parameters
+    ----------
+    parts : list of lists of float32 arrays
+        One list of gradient tensors per shard, every shard with the same tensors.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
+
+    Returns
+    -------
+    list of mojolearn.Array
+        The summed tensors, in the order of the first shard.
     """
-    return _native_parallel_neural("ordered_sum", (parts,))
+    return _native_parallel_neural("ordered_sum", (parts, device))
 
 
 class ParallelNeuralTrainer:
