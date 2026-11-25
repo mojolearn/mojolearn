@@ -614,3 +614,39 @@ def xseq_run_balanced_class_weights(codes: Int, n: Int, steps: Int, lengths: Int
         out.append(Float64(total) / (Float64(k) * Float64(counts[c])))
     _ = hist^
     return out^
+
+
+def xseq_run_remap_codes(codes: Int, count: Int, mapping: List[Int], dst: Int) raises:
+    """dst[i] = Float32(mapping[codes[i]]): int32 class codes of a label encoding of its own classes, as float32
+    codes of the fitted classes (partial_fit, validation targets). Contiguous chunks across the host's workers."""
+    var src = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=codes)
+    var out = XseqRunF32P(unsafe_from_address=dst)
+    var mp = mapping.unsafe_ptr()
+    var tasks = host_predict_task_count_work(max(1, count), max(1, count))
+    var chunk = host_predict_chunk(max(1, count), tasks)
+    def task(worker: Int) {imm src, imm out, imm mp, imm count, imm chunk}:
+        for i in range(worker * chunk, min((worker + 1) * chunk, count)):
+            out[i] = Float32(mp[Int(src[i])])
+    host_parallelize(task, tasks)
+    _ = mapping
+
+
+def xseq_run_step_weights(n: Int, steps: Int, lengths: Int, sw: Int, sw_steps: Bool, dst: Int) raises:
+    """The score weights of every step of n sequences (output="sequence"): dst[i T + s] = (s < length_i ? 1 : 0)
+    times the sample weight (per sequence, or per step when `sw_steps`); 1.0 factors when absent (address 0)."""
+    var lp = XseqRunF32P(unsafe_from_address=lengths if lengths != 0 else dst)
+    var wp = XseqRunF32P(unsafe_from_address=sw if sw != 0 else dst)
+    var out = XseqRunF32P(unsafe_from_address=dst)
+    var has_l = lengths != 0
+    var has_w = sw != 0
+    var tasks = host_predict_task_count_work(max(1, n), max(1, n * steps))
+    var chunk = host_predict_chunk(max(1, n), tasks)
+    def task(worker: Int) {imm lp, imm wp, imm out, imm has_l, imm has_w, imm sw_steps, imm n, imm steps, imm chunk}:
+        for i in range(worker * chunk, min((worker + 1) * chunk, n)):
+            var valid = Int(lp[i]) if has_l else steps
+            for s in range(steps):
+                var w = Float32(1.0) if s < valid else Float32(0.0)
+                if has_w and s < valid:
+                    w = wp[i * steps + s] if sw_steps else wp[i]
+                out[i * steps + s] = w
+    host_parallelize(task, tasks)
