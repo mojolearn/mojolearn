@@ -1358,7 +1358,11 @@ def causal_state_publish(mut mods: NativeModules, state: PythonObject) raises:
     var nk = causal_keys()
     var live = py_item(fields, nk[].k__causal_live_fields)
     neural_string_keys(mods, live)
-    for name in ["positions", "_usable"]:  # small-loop(success/failure publication)
+    # The engine's route words (`_native_execution_route`,
+    # `_native_engine_forwards`, written by its PACK on the capture) reach
+    # the caller's state with the progress words (w3-integrate-11: they
+    # stayed on the capture, so no public state ever carried them).
+    for name in ["positions", "_usable", "_native_execution_route", "_native_engine_forwards"]:  # small-loop(success/failure publication)
         if py_contains(fields, name):
             py_setitem(live, name, fields[name])
     var layers = py_item(fields, nk[].k_layers)
