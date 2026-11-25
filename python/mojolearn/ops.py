@@ -1147,6 +1147,15 @@ class Session:
         zero gives a loss of 0 and zero gradients (the smallest normal
         float32, 2**-126, is added to the total, which changes no result
         for a total above 2**-100).
+
+        To average over several batches as one, take each batch's weighted
+        sum (``reduction="sum"``) and its total weight (:meth:`sum` of the
+        weight) and divide the totals, so a batch of 2 real tokens and one
+        of 20 count every token once::
+
+            num_a = s.cross_entropy(logits_a, codes_a, reduction="sum", weight=mask_a)  # 2 tokens
+            num_b = s.cross_entropy(logits_b, codes_b, reduction="sum", weight=mask_b)  # 20 tokens
+            loss = s.div(s.add(num_a, num_b), s.add(s.sum(mask_a), s.sum(mask_b)))
         """
         return _SESSION_CALL(self, "mse", (prediction, target, reduction, weight))
 
