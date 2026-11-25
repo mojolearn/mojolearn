@@ -1,0 +1,13 @@
+diff --git a/autograd/batch_source.mojo b/autograd/batch_source.mojo
+index 5925f40ac7..40ab7c797f 100644
+--- a/autograd/batch_source.mojo
++++ b/autograd/batch_source.mojo
+@@ -117,7 +117,7 @@ comptime BATCH_SOURCE_SABOTAGE_READ_AHEAD_HOST = is_defined["MOJOLEARN_BATCH_SOU
+ # Lane stream-fits (2026-11-25): the same fault in the streamed Sequential and recurrent-estimator fits
+ # (`batch_source_fit_saved`), on one side each; lane ops-composed-cases (cases sequential-stream-resume and
+ # gru-stream-resume) must REFUSE under either.
+-comptime BATCH_SOURCE_SABOTAGE_FIT_READ_AHEAD = is_defined["MOJOLEARN_BATCH_SOURCE_SABOTAGE_FIT_READ_AHEAD"]()
++comptime BATCH_SOURCE_SABOTAGE_FIT_READ_AHEAD = True  # SABOTAGE
+ comptime BATCH_SOURCE_SABOTAGE_FIT_READ_AHEAD_HOST = is_defined[
+     "MOJOLEARN_BATCH_SOURCE_SABOTAGE_FIT_READ_AHEAD_HOST"
+ ]()
