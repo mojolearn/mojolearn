@@ -261,7 +261,10 @@ def fixture(driver: DBSCANNativeDriver, unit: Int, host: Bool) raises:
     require(driver.metadata(DBSCAN_MODE) == Int(GLOBAL_NUMERIC_MODE), "DBSCAN actual mode")
     require(driver.metadata(DBSCAN_VENDOR) == 1 if host else driver.metadata(DBSCAN_VENDOR) > 1,
         "DBSCAN actual host/device vendor")
-    require(driver.metadata(DBSCAN_CAPABILITIES) == (0 if host else DBSCAN_CAP_RESIDENT), "DBSCAN resident capability")
+    # A bit set: the device image also answers DBSCAN_CAP_DEV_STORE and DBSCAN_CAP_FOLD_X (additive bits);
+    # the host image answers none, the device image must carry the resident bit.
+    var dbscan_caps = driver.metadata(DBSCAN_CAPABILITIES)
+    require(dbscan_caps == 0 if host else (dbscan_caps & DBSCAN_CAP_RESIDENT) != 0, "DBSCAN resident capability")
     var source = input_f32(p.name + "-source", p.rows * p.features)
     var source_before = source.copy()
     var weights = input_f32(p.name + "-weights", p.rows if p.weighted else 0)
