@@ -3488,7 +3488,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var table = pg_check_membership(groups)
         for g in range(n):  # driver-loop: over parameter groups (construction, once)
             for i in range(len(groups[g])):  # driver-loop: over one group's parameters (construction, once)
-                _ = self._param_slot(groups[g][i], "param_group_optimizer")
+                # a session-owned tensor (made with `tensor`): Program.fit
+                # trains captured parameters of an inference session, so
+                # requires_grad is checked where the step runs, not here
+                if self.owned[self._slot(groups[g][i])] == 0:
+                    raise Error("ValueError: ops: param_groups[" + String(g) + "] parameter " + String(i)
+                                + " is not a tensor made with Session.tensor")
             var r = group_requests[g]
             var x = group_extras[g]
             if (r.kind != request.kind or r.schedule != request.schedule or r.step_size != request.step_size

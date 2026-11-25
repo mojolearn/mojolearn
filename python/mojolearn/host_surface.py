@@ -5106,6 +5106,8 @@ PUBLIC_PENDING_LANES = {
     "nn-tr-seqopt-state": "no reference",
     "nn-tr-small-mlp": "no reference",
     "ops-param-groups": "no reference",  # nn-blocks-pg (2026-11-25)
+    "ops-param-groups-program-fit": "no reference",  # nn-blocks-pg
+    "training-param-groups": "no reference",  # nn-blocks-pg
     "psd-arima": "no reference",
     "psd-cross-val": "no reference",
     "psd-forecast-arima": "no reference",

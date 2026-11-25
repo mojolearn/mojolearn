@@ -121,6 +121,14 @@ comptime OPTIMIZER_OPN_ALIGNED = 98
 # once); routed with the sequence optimizer operations.
 comptime OPTIMIZER_OPN_SEQ_SCHEDULE = 99
 comptime OPTIMIZER_OPN_SEQ_SCHEDULE_SET = 100
+# nn-blocks-pg begin: SGD / Adam / AdamW parameter groups (`_ParamGroups`), a range of their own
+comptime OPTIMIZER_OPN_PG_STEP = 1110
+comptime OPTIMIZER_OPN_PG_STATE = 1111
+comptime OPTIMIZER_OPN_PG_LOAD = 1112
+comptime OPTIMIZER_OPN_PG_ZERO = 1113
+comptime OPTIMIZER_OPN_PG_FIRST = OPTIMIZER_OPN_PG_STEP
+comptime OPTIMIZER_OPN_PG_LAST = OPTIMIZER_OPN_PG_ZERO
+# nn-blocks-pg end
 
 
 struct OptimizerKeys(Defaultable, Movable):
@@ -565,6 +573,12 @@ def _optimizer_keys_fill(nk: UnsafePointer[OptimizerKeys, MutUntrackedOrigin]) r
     py_op_add(ops, "clip", OPTIMIZER_OPN_CLIP)
     py_op_add(ops, "accumulate", OPTIMIZER_OPN_ACCUMULATE)
     py_op_add(ops, "aligned", OPTIMIZER_OPN_ALIGNED)
+    # nn-blocks-pg begin
+    py_op_add(ops, "pg_step", OPTIMIZER_OPN_PG_STEP)
+    py_op_add(ops, "pg_state", OPTIMIZER_OPN_PG_STATE)
+    py_op_add(ops, "pg_load", OPTIMIZER_OPN_PG_LOAD)
+    py_op_add(ops, "pg_zero", OPTIMIZER_OPN_PG_ZERO)
+    # nn-blocks-pg end
     nk[].ops = ops
     nk[].ready = True
 

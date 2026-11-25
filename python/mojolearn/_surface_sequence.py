@@ -111,7 +111,7 @@ FAMILIES = (
                         "sequence-ets-forecast",
                         "sequence-theta-forecast",
                         # nn-blocks-pg begin: ops.Session optimizer parameter groups (tools/identity_lanes/nn_pg.py)
-                        "ops-param-groups",
+                        "ops-param-groups", "ops-param-groups-program-fit", "training-param-groups",
                         # nn-blocks-pg end
                         # nn-blocks-scatter begin: ops.Session scatter_add and segment reductions
                         "ops-scatter-segment",
@@ -295,6 +295,8 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     "sequence-theta-forecast": "AutoTheta, DynamicOptimizedTheta, Theta: forecast",
     # nn-blocks-pg begin
     "ops-param-groups": "Session: optimizer parameter groups, global clip, state dict",
+    "ops-param-groups-program-fit": "Program.fit with an optimizer that has parameter groups",
+    "training-param-groups": "SGD, AdamW: parameter groups, one clip over every group, state dict",
     # nn-blocks-pg end
     # nn-blocks-scatter begin
     "ops-scatter-segment": "Session: scatter_add, segment_sum, segment_mean, segment_max",

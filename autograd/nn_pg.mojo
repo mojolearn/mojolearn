@@ -54,6 +54,12 @@ comptime PG_SABOTAGE_CLIP_PER_GROUP = is_defined["MOJOLEARN_PG_SABOTAGE_CLIP_PER
 comptime PG_SABOTAGE_CLIP_PER_GROUP_HOST = is_defined["MOJOLEARN_PG_SABOTAGE_CLIP_PER_GROUP_HOST"]()
 comptime PG_SABOTAGE_GROUP_LR = is_defined["MOJOLEARN_PG_SABOTAGE_GROUP_LR"]()
 comptime PG_SABOTAGE_GROUP_LR_HOST = is_defined["MOJOLEARN_PG_SABOTAGE_GROUP_LR_HOST"]()
+# The training module's twins (coverage-training-pg_clip_per_group_gpu / _cpu, lane training-param-groups): the
+# parameter-group step of SGD / Adam / AdamW clips each group by its own norm (bindings/optimizer_native_router_door.mojo
+# pg_training_operation). GPU: a GPU image's device-side optimizer; CPU: a CPU-column image or a device="cpu" one.
+comptime PG_SABOTAGE_TRAINING_CLIP = is_defined["MOJOLEARN_PG_SABOTAGE_TRAINING_CLIP"]()
+comptime PG_SABOTAGE_TRAINING_CLIP_HOST = is_defined["MOJOLEARN_PG_SABOTAGE_TRAINING_CLIP_HOST"]()
+comptime PG_COLUMN_CPU = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 struct ParamGroupTable(Copyable, Movable):
