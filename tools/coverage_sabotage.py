@@ -166,6 +166,18 @@ def _signature(cell):
             for key in HASH_PARTS if key in cell}
 
 
+def _unstable_reason(cell, repeats):
+    """One short phrase for a cell `_stable` rejects: its verdict and the first
+    line of its error, probe error or first oracle error."""
+    for field in ("error", "probe_error"):
+        if cell.get(field):
+            return f"verdict {cell.get('verdict')}, {field}: {str(cell[field]).splitlines()[0][:160]}"
+    errors = [e for e in (cell.get("oracle_errors") or []) if e]
+    if errors:
+        return f"verdict {cell.get('verdict')}, oracle error: {str(errors[0]).splitlines()[0][:160]}"
+    return f"verdict {cell.get('verdict')}, {len(cell.get('hashes') or [])} of {repeats} hashes or an unstable part"
+
+
 def _stable(cell, repeats):
     if cell.get("verdict") != "STABLE":
         return False
@@ -357,7 +369,11 @@ def check(arm, clean_path, sab_path, restored_path=None, evidence_path=None, roo
                     continue
                 cc, sc, rc = cells
                 if not _stable(cc, repeats) or not _stable(rc, repeats):
-                    failures.append(f"{key}: clean/restored result is not stable and complete")
+                    # Which record and why, in the line (lane w3f7-b, 2026-11-24: eight arms of the f200804327 gate
+                    # rode a lane that verify itself read VERIFIED, and the summary could not say what the cell held).
+                    why = "; ".join(f"{label} {_unstable_reason(c, repeats)}" for label, c in (("clean", cc), ("restored", rc))
+                                    if not _stable(c, repeats))
+                    failures.append(f"{key}: clean/restored result is not stable and complete ({why})")
                     continue
                 if _signature(cc) != _signature(rc):
                     failures.append(f"{key}: restoration changed the clean result")
