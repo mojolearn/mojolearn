@@ -1,0 +1,13 @@
+diff --git a/autograd/nn_pgseq.mojo b/autograd/nn_pgseq.mojo
+index 4f8db0c8e8..b3ad0b6688 100644
+--- a/autograd/nn_pgseq.mojo
++++ b/autograd/nn_pgseq.mojo
+@@ -66,7 +66,7 @@ comptime PGSEQ_RECORD_MARK = 0x50475351
+ # NEXT group's rate (the neighbouring group's lr). CLIP_PER_GROUP: LAMB's clip coefficient is computed over each
+ # run's own tensors before its update (a clip per group, not one global clip). The plain name acts on the device
+ # executor only, _HOST on the host executor only.
+-comptime PGSEQ_SABOTAGE_GROUP_LR = is_defined["MOJOLEARN_PGSEQ_SABOTAGE_GROUP_LR"]()
++comptime PGSEQ_SABOTAGE_GROUP_LR = True  # SABOTAGE: each run at the next group's rate, device
+ comptime PGSEQ_SABOTAGE_GROUP_LR_HOST = is_defined["MOJOLEARN_PGSEQ_SABOTAGE_GROUP_LR_HOST"]()
+ comptime PGSEQ_SABOTAGE_CLIP_PER_GROUP = is_defined["MOJOLEARN_PGSEQ_SABOTAGE_CLIP_PER_GROUP"]()
+ comptime PGSEQ_SABOTAGE_CLIP_PER_GROUP_HOST = is_defined["MOJOLEARN_PGSEQ_SABOTAGE_CLIP_PER_GROUP_HOST"]()
