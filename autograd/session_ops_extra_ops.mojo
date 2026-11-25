@@ -71,7 +71,7 @@ def sox_order_key(v: Float32, largest: Bool, zero_equal: Bool = True) -> Int:
     if zero_equal and w == Float32(0.0):
         w = Float32(0.0)
     var s = bitcast[DType.int32](w)
-    var o = s if s >= Int32(0) else s ^ Int32(0x7FFFFFFF)
+    var o = s if Bool(s >= Int32(0)) else s ^ Int32(0x7FFFFFFF)
     return Int(~o) if largest else Int(o)
 
 
