@@ -6222,7 +6222,7 @@
       "reason": "Configuration/state/metadata/container or namespace export; not a numerical algorithm.",
       "source": "python/mojolearn/models/__init__.py",
       "canonical_algorithm": "mojolearn.models.catalog",
-      "symbol_origin": "mojolearn.models.catalog"
+      "symbol_origin": "mojolearn.models._catalog.catalog"
     },
     {
       "algorithm": "mojolearn.models.plan_for",
@@ -6240,7 +6240,7 @@
       "reason": "Configuration/state/metadata/container or namespace export; not a numerical algorithm.",
       "source": "python/mojolearn/models/__init__.py",
       "canonical_algorithm": "mojolearn.models.verify_catalog_entry",
-      "symbol_origin": "mojolearn.models.verify_catalog_entry"
+      "symbol_origin": "mojolearn.models._catalog.verify_catalog_entry"
     },
     {
       "algorithm": "mojolearn.mutual_info_classif",
