@@ -109,6 +109,8 @@ FAMILIES = (
                         "nn-pg-session-blocks",
                         # lane rnn-parity-B (2026-11-25): the per-step weighted model on ops.Session
                         "ops-per-step-weighted-embedding",
+                        # lane rnn-parity-c: the loss fold's num/den (w3-integrate-10: held in host_surface but never covered)
+                        "ops-loss-fold-num-den",
                         "nn-tr-schedules",
                         "nn-tr-seqopt-state",
                         # nn-blocks-scan begin: Session.scan over a captured cell (tools/identity_lanes/nn_scan.py)
@@ -307,6 +309,7 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
     "nn-pg-program-decode": "Session: decode",
     "nn-pg-session-blocks": "Mamba1Block, Session: blocks",
     "ops-per-step-weighted-embedding": "Session: per-step weighted GRU with an embedding, h_0, reverse, streaming",
+    "ops-loss-fold-num-den": "Session: weighted loss accumulated as numerator and denominator",
     "nn-tr-schedules": "StepLR, ExponentialLR, OneCycleLR: schedules",
     "nn-tr-seqopt-state": "Adagrad, Adamax, LAMB: state",
     # nn-blocks-scan begin

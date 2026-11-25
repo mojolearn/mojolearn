@@ -357,9 +357,11 @@ def test_gbdt_ctr_models_cover_every_fixture():
     # meaning onto this tuple. `saved-model-host-infer-trees` (lane verify-gaps,
     # 2026-10-22) also fits on the fixture and saves (Extra Trees and a
     # default-engine forest regressor), so it needs no bundled model either.
+    # `fn-host-predict` (declared in the forest family by w3-fix-13-s2, 2026-11-25) fits a 4-tree forest on the
+    # fixture and saves it too (tools/identity_lanes/functions_host.py).
     assert set(host_surface.GBDT_CTR_MODEL_LANES) <= set(host_surface.family("forest")["training_lanes"])
     assert set(host_surface.family("forest")["training_lanes"]) - set(host_surface.GBDT_CTR_MODEL_LANES) \
-        == {"saved-model-host-infer", "saved-model-host-infer-trees"}
+        == {"saved-model-host-infer", "saved-model-host-infer-trees", "fn-host-predict"}
 
 
 def test_command_line_prints_the_gaps_7_wiring(capsys):
