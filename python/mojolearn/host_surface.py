@@ -2111,6 +2111,8 @@ FAMILIES = (
             "linalg_numerical_profile", "from_f16",
             # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
             "linalg_native_api_v1",
+            # vdf2-public (2026-11-24): linalg_fast.has_bf16() answers False on the host column
+            "fast_bf16_available",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(

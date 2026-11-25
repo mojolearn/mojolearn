@@ -76,14 +76,12 @@ CRASH_RERUN_TIMEOUT = 600.0
 #: not failed) only when it exits nonzero AND its log matches; any other failure of the same module stays a failure.
 #: - adapters.max / adapters.torch: optional dependencies (`mojolearn[max]`, `mojolearn[torch]`) that the smoke
 #:   venv does not install; the adapter refuses by name.
-#: - linalg_fast: the Apple `fast` BF16 face (AGENTS.md: `fast` is Apple only); no host binding exports
-#:   fast_bf16_available, so the import refuses with NoCpuEntry by name.
+#: (linalg_fast left this table 2026-11-24, vdf2-public: its BF16 entries resolve at first access and the host
+#: binding answers fast_bf16_available False, so the module imports on a CPU-only install.)
 IMPORT_ENVIRONMENT = {
     "mojolearn.adapters.max": (r"ImportError: mojolearn\.adapters\.max needs MAX\.", "optional dependency MAX absent"),
     "mojolearn.adapters.torch": (r"ImportError: mojolearn\.adapters\.torch needs (PyTorch|torch)",
                                  "optional dependency torch absent"),
-    "mojolearn.linalg_fast": (r"NoCpuEntry: mojolearn: no CPU implementation of _mojolearn_linalg\.fast_bf16_available",
-                              "Apple fast only; no CPU column"),
 }
 
 

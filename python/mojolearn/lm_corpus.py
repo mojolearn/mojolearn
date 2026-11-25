@@ -150,7 +150,8 @@ class TokenizedCorpus:
 # reuses the id array after re-hashing it.
 def prepare(corpus, *, vocab=None, cache_dir=None, vocab_size=_DEFAULT_VOCAB_SIZE,
             min_frequency=_DEFAULT_MIN_FREQUENCY, vocab_sample_bytes=_DEFAULT_VOCAB_SAMPLE_BYTES,
-            document_bytes=_DEFAULT_DOCUMENT_BYTES, batch_documents=_DEFAULT_BATCH_DOCUMENTS, progress=None):
+            document_bytes=_DEFAULT_DOCUMENT_BYTES, batch_documents=_DEFAULT_BATCH_DOCUMENTS, progress=None,
+            device=None):
     """Tokenize a corpus file once and return a :class:`TokenizedCorpus`.
 
     If a ``manifest.json`` with schema ``mojolearn.byte-lm.corpus.v1`` sits
@@ -186,6 +187,9 @@ def prepare(corpus, *, vocab=None, cache_dir=None, vocab_size=_DEFAULT_VOCAB_SIZ
     progress : None, default None
         Preparation timings are recorded in the returned manifest. Python
         progress callbacks are not accepted by native preparation.
+    device : {None, 'cpu'}, default None
+        Where the vocabulary training and the encoding run. None and 'cpu'
+        run on the CPU. Other values raise ValueError.
 
     Returns
     -------
@@ -197,7 +201,7 @@ def prepare(corpus, *, vocab=None, cache_dir=None, vocab_size=_DEFAULT_VOCAB_SIZ
         For a non-positive size argument, a corpus that does not match its
         manifest, or a cache that does not match its manifest.
     """
-    return _NATIVE.lm_corpus_public_call("prepare", (corpus, vocab, cache_dir, vocab_size, min_frequency, vocab_sample_bytes, document_bytes, batch_documents, progress))
+    return _NATIVE.lm_corpus_public_call("prepare", (corpus, vocab, cache_dir, vocab_size, min_frequency, vocab_sample_bytes, document_bytes, batch_documents, progress, device))
 
 
 # ---------------------------------------------------------------- batches

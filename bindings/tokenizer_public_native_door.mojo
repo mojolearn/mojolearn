@@ -44,6 +44,7 @@ from bindings.optimizer_public_words_unpack import stash_python_error, optimizer
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from core.device_route import DEVICE_CPU, DEVICE_GPU, DEVICE_INSTALL, device_cpu_fast, device_gpu_absent
 from providers.python.device_route_boundary_door import device_unpack
+from core.function_device import function_device_decide
 from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from providers.python.autograd_program_arrays_pyapi_door import is_integer_input
 from tokenizer.encoding import GPT2_ENDOFTEXT, GPT2_PAT_STR, BpeTokenizer, string_bytes
@@ -639,6 +640,45 @@ def _tokenizer_device(value: PythonObject, context: PythonObject) raises -> Int:
     if py_type(gpu[0]) is native_loaded_module("builtins").str:
         raise Error(String(gpu[0]))
     return request
+
+
+def _cut_device(value: PythonObject, context: PythonObject) raises -> Int:
+    """The admitted `device` of one `mojolearn.models.tokenizer.pretokenize` call, read once
+    (core/function_device.mojo `function_device_decide`, the ONE rule of a public function; the
+    function has both sides: the host cut here, the GPU cut in `_mojolearn_x_tokenizer`
+    `bpe_gpu_pretokenize`). Returns DEVICE_GPU only where the GPU cut runs; None and 'cpu' run
+    the host cut (the CPU column, today's route), 'gpu' on a CPU-only installation is refused in
+    the estimators' words, and where the GPU binding is not connected in its connection words.
+    `context` is the vocab context: [5] the backend's fields, [6] the GPU binding's tuple."""
+    var request = device_unpack(value, native_loaded_module("builtins"))
+    if request == DEVICE_INSTALL:
+        return request
+    var cpu_only = py_get(context[5], PythonObject("_CPU_ONLY")) is not None
+    var decided = function_device_decide(request, cpu_only, True, True, "mojolearn.models.tokenizer.pretokenize")
+    if decided.request != DEVICE_GPU:
+        return DEVICE_CPU
+    var gpu = context[6]
+    if py_type(gpu[0]) is native_loaded_module("builtins").str:
+        raise Error(String(gpu[0]))
+    return DEVICE_GPU
+
+
+def _cut_gpu(bytes: List[UInt8], pattern: Int, context: PythonObject) raises -> PythonObject:
+    """The GPU cut (`bpe_gpu_pretokenize`): the data uploaded once and the boundaries read back
+    once inside the entry; this door only hands over the addresses and publishes the offsets."""
+    var entry = context[6][7]
+    _native(entry)
+    var n = len(bytes)
+    var bounds = List[Int64](length=n + 1, fill=Int64(0))
+    var count = Int(py=py_call(entry, Int(bytes.unsafe_ptr()), Int(bounds.unsafe_ptr()), Python.tuple(n, pattern)))
+    if count < 1 or count > n + 1:
+        raise Error("RuntimeError: the GPU pre-tokenizer returned " + String(count) + " boundaries")
+    var offsets = List[Int](capacity=count)
+    for i in range(count):  # cpu-route: the m + 1 finished boundaries, converted for publication
+        offsets.append(Int(bounds[i]))
+    _ = len(bytes)
+    _ = len(bounds)
+    return _py_int_list(offsets)
 
 
 def _bpe_adopt(tokenizer: PythonObject, handle: PythonObject, source: PythonObject, context: PythonObject,
@@ -1775,11 +1815,12 @@ def tokenizer_public_call(operation: String, args: PythonObject, context: Python
     if operation == "gather_rows":
         return tokenizer_gather_rows(args[0], args[1], args[2], args[3], args[4], args[5], args[6])
     if operation == "connect_vocab":
-        if len(context) != 5 or py_type(context[0]) is not native_loaded_module("builtins").type:
-            raise Error("TypeError: tokenizer connection requires its exact class and five metadata entries")
+        if len(context) != 7 or py_type(context[0]) is not native_loaded_module("builtins").type:
+            raise Error("TypeError: tokenizer connection requires its exact class and seven metadata entries")
         _dictionary(context[2])
         _plain(context[2])
         _native(context[4])
+        _dictionary(context[5])
         var state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()
         if state[].vocab is not None and state[].vocab is not context:
             raise Error("TypeError: tokenizer native context was already connected")
@@ -1888,8 +1929,13 @@ def tokenizer_public_call(operation: String, args: PythonObject, context: Python
         _plain(context[2])
         return py_get(context[2], PythonObject(name))
     if operation == "vocab_cut":
+        # `device=` (lane vdf2-public), admitted before the data is read.
+        var device = _cut_device(args[2], context)
         var bytes = _bytes(args[0])
-        var offsets = pretokenize_pattern(bytes, builtin_unicode_classes(), _vocab_pattern(args[1]))
+        var pattern = _vocab_pattern(args[1])
+        if device == DEVICE_GPU:
+            return _cut_gpu(bytes, pattern, context)
+        var offsets = pretokenize_pattern(bytes, builtin_unicode_classes(), pattern)
         return _py_int_list(offsets)
     if operation == "vocab_fact":
         var fields = _owner(args[0], context[0])

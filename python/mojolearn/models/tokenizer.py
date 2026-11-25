@@ -41,11 +41,28 @@ def pattern_name(regex):
     return _NATIVE.tokenizer_public_call('vocab_pattern', (regex,), _TOKENIZER_CONTEXT)
 
 
-def pretokenize(data, pattern):
-    """Pre-token boundaries of `data` (bytes) under `pattern` ("gpt2",
-    "llama3" or "qwen2"): `m + 1` offsets, first 0 and last `len(data)`.
-    The cut is the binding's (`vocab_pretokenize_pattern`)."""
-    return _NATIVE.tokenizer_public_call('vocab_cut', (data, pattern), _TOKENIZER_CONTEXT)
+def pretokenize(data, pattern, *, device=None):
+    """Pre-token boundaries of `data` (bytes) under `pattern`.
+
+    Parameters
+    ----------
+    data : bytes
+        The text to cut.
+    pattern : {"gpt2", "llama3", "qwen2"}
+        The pre-tokenization pattern.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the cut runs. None uses this installation's default, 'cpu'
+        runs on the CPU and 'gpu' requires a GPU installation. Every device
+        returns the same offsets. Other values raise ValueError.
+
+    Returns
+    -------
+    list of int
+        `m + 1` offsets, the first 0 and the last `len(data)`.
+
+    Example: ``pretokenize(b"Hello world", "gpt2")`` returns ``[0, 5, 11]``.
+    """
+    return _NATIVE.tokenizer_public_call('vocab_cut', (data, pattern, device), _TOKENIZER_CONTEXT)
 
 
 # --------------------------------------------------------- the reader
@@ -129,6 +146,10 @@ class Tokenizer:
 
 
 # Immutable import-time metadata; native execution owns all public operations.
+# [5] the backend's fields (its `_CPU_ONLY` record) and [6] the GPU tokenizer binding's connection
+# (`..tokenizer._TOKENIZER_CONTEXT[8]`, connected once there): what `pretokenize(device=...)` reads.
+from .. import _backend as _tokenizer_backend
+from ..tokenizer import _TOKENIZER_CONTEXT as _BPE_CONTEXT
 _TOKENIZER_CONTEXT = (Tokenizer, _NATIVE, _NAME_OF, _unicodedata.unidata_version,
-                      _unicodedata.normalize)
+                      _unicodedata.normalize, vars(_tokenizer_backend), _BPE_CONTEXT[8])
 _NATIVE.tokenizer_public_call("connect_vocab", (), _TOKENIZER_CONTEXT)
