@@ -96,7 +96,8 @@ struct NativeModelRequest(Movable):
         for i in range(nf):  # driver-loop: native scalar metadata
             self.floats.append(scalars[i])
         if op <= MODEL_FIT_LABELS:
-            if nsrc != (5 if len(self.addresses) == 13 else 2):
+            # 13 addresses: validation data; 15: validation data with the training and validation lengths
+            if nsrc != (5 if (len(self.addresses) == 13 or len(self.addresses) == 15) else 2):
                 raise Error("native model: missing fit input descriptors")
         elif nsrc != 1:
             raise Error("native model: prediction requires one input descriptor")

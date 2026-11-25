@@ -1836,10 +1836,12 @@ class Sequential(_CheckMixin):
             and the row order carry on, so ``fit(epochs=2)`` followed by
             ``fit(epochs=2, resume=True)`` gives the same parameters as
             ``fit(epochs=4)``. Pass the same training data.
-        validation_data : tuple of (X, y) or None, default None
+        validation_data : tuple of (X, y), tuple of (X, y, lengths) or None, default None
             Held-out data evaluated after each epoch with dropout disabled.
             When provided, early stopping monitors its loss. Monitoring
-            starts afresh for each fit call.
+            starts afresh for each fit call. With ``lengths``, pass the
+            validation samples' lengths as the third item: their padded steps
+            are masked as the training samples' are.
         restore_best_weights : bool, default False
             With validation data, restore the best epoch's parameters,
             optimizer and counters together. ``n_iter_`` is the retained
@@ -1854,8 +1856,9 @@ class Sequential(_CheckMixin):
             are padding: their values are ignored, they do not change the
             recurrent state, and the recurrent layers' outputs there repeat
             the state at the sample's last valid step, so the last step holds
-            each sample's final state. None treats every step as valid. Not combined with
-            ``validation_data``. With ``ctc`` they are also the number of
+            each sample's final state. None treats every step as valid. With
+            ``validation_data``, give its lengths too:
+            ``validation_data=(X_val, y_val, lengths_val)``. With ``ctc`` they are also the number of
             output steps each sample's alignment uses.
         target_lengths : array-like of int of shape (n_samples,) or None, default None
             ``ctc`` only (and required there): each sample's number of
