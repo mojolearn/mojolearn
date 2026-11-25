@@ -1,6 +1,7 @@
 """Bounded neural API fixtures: two examples/tokens, at most one update."""
 __mojolearn_user_boundary__ = True
 
+from ._verify_device import unwrap as _vd_unwrap  # the class behind the device view (BoundClass)
 import inspect
 import tempfile
 from pathlib import Path
@@ -200,7 +201,7 @@ def neural_checks(recorder,public,methods):
             # (the forward_with_tape / backward_from_tape probes.)
             if method in ('__getstate__','__setstate__'):
                 state=m.__getstate__()
-                restored=object.__new__(cls);restored.__setstate__(state)
+                restored=object.__new__(_vd_unwrap(cls));restored.__setstate__(state)
                 before=m(x);after=restored(x)
                 assert encode(before)==encode(after)
                 return after

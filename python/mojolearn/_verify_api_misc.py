@@ -1,6 +1,7 @@
 """Small forecasting, tokenizer and serialized-estimator endpoint fixtures."""
 __mojolearn_user_boundary__ = True
 
+from ._verify_device import unwrap as _vd_unwrap  # the class behind the device view (BoundClass)
 import json
 import tempfile
 import warnings
@@ -80,7 +81,7 @@ def misc_checks(recorder,public,methods):
             with tempfile.TemporaryDirectory() as tmp:
                 path=str(Path(tmp)/'forest');m=ml.RandomForestRegressor(n_estimators=1,max_depth=1,random_state=7).fit(X,target)
                 m.save(path);host=cls.from_file(path);state=host.__getstate__()
-                other=object.__new__(cls);other.__setstate__(state)
+                other=object.__new__(_vd_unwrap(cls));other.__setstate__(state)
                 assert encode(other.predict(X))==encode(host.predict(X))
                 return other.predict(X)
         if name=='ProphetForecaster':
