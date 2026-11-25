@@ -12,6 +12,7 @@ from autograd.model import (
 )
 from autograd.model_checkpoint import model_layout
 from autograd.nn_optim import NN_OPT_LAMB, NN_SCHED_ARGS
+from autograd.nn_pgseq import PgSeqTable, pgseq_table  # nn-blocks-pgseq
 from autograd.cast_ops import gather_labels
 from autograd.profile import ag_profile_on, ag_profile_reset, ag_profile_report
 
@@ -79,7 +80,10 @@ def model_fit_native[E: Exec](
     var table = List[Float32]()
     var sched_args = List[Float64](length=NN_SCHED_ARGS, fill=0.0)
     var table_end = len(fp)
-    if len(fp) == FIT_FLOATS + n_layers + NN_SCHED_ARGS:
+    # nn-blocks-pgseq: the parameter-group words (autograd/nn_pgseq.mojo) follow the schedule's, when the model
+    # was compiled with param_groups
+    var grouped = len(fp) > FIT_FLOATS + n_layers + NN_SCHED_ARGS
+    if len(fp) == FIT_FLOATS + n_layers + NN_SCHED_ARGS or grouped:
         table_end = FIT_FLOATS + n_layers
         for k in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words)
             sched_args[k] = fp[table_end + k]
@@ -89,14 +93,21 @@ def model_fit_native[E: Exec](
     var N = ip[0]
     var opt = OptConfig(ip[3], ip[4], Float32(fp[1]), Float32(fp[2]), Float32(fp[3]), Float32(fp[4]), Float32(fp[5]))
     var offsets = List[Int]()
-    if ip[3] == NN_OPT_LAMB:
+    if ip[3] == NN_OPT_LAMB or grouped:
         var names = List[String]()
         model_layout(spec, offsets, names)
+    # nn-blocks-pgseq: the group table, once a fit (the runs of one group's tensors, each group's words)
+    var groups = PgSeqTable()
+    if grouped:
+        groups = pgseq_table(fp, FIT_FLOATS + n_layers + NN_SCHED_ARGS, ip[3], offsets, spec.n_params)
+    if ip[3] != NN_OPT_LAMB:
+        offsets = List[Int]()
     var cfg = FitConfig(
         ip[1], ip[2], opt, Float32(fp[0]), ip[5], ip[6], Float32(fp[7]),
         ip[7], ip[8], ip[9] != 0, model_seed(ip, 10), ip[12],
         fp[6], Float32(fp[8]), ip[13] != 0, sched_args^, offsets^,
     )
+    cfg.groups = groups^
     # MOJOLEARN_AG_PROFILE (lane ag-pass2-kernels): this fit's launch
     # profile, counted by the executor, printed after it
     var profile = ag_profile_on()

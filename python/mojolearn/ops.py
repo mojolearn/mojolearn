@@ -1468,9 +1468,11 @@ class Session:
             batch first. A sequence's steps at or past its length keep its
             state and give zero outputs, as a packed sequence in PyTorch.
         counter : int, default 0
-            A :meth:`dropout` inside the cell draws a new mask at every
-            step, from its own seed, this counter and the step index; use a
-            new ``counter`` for every training step, as with :meth:`dropout`.
+            The random key of this call: a :meth:`dropout` inside the cell
+            draws a new mask at every step, from its own seed, this key and
+            the step index (not from the sequence length). Use a new
+            ``counter`` for every training step, as with :meth:`dropout`;
+            :meth:`Program.fit` advances it every minibatch by itself.
 
         Returns
         -------

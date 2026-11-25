@@ -5111,6 +5111,11 @@ PUBLIC_PENDING_LANES = {
     "ops-param-groups": "no reference",  # nn-blocks-pg (2026-11-25)
     "ops-param-groups-program-fit": "no reference",  # nn-blocks-pg
     "training-param-groups": "no reference",  # nn-blocks-pg
+    # nn-blocks-pgseq begin
+    "sequential-param-groups": "no reference",
+    "training-param-groups-device": "no reference",
+    # nn-blocks-pgseq end
+    "ops-composed-tagger": "no reference",  # nn-blocks-composed (2026-11-25)
     "psd-arima": "no reference",
     "psd-cross-val": "no reference",
     "psd-forecast-arima": "no reference",

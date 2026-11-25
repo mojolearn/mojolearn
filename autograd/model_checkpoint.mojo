@@ -54,6 +54,7 @@ from autograd.model import (
     LAYER_LINEAR, ModelSpec, SPEC2_ARGS, SPEC2_HEADER, SPEC2_VERSION, conv_in_per_group, parse_model,
 )
 from autograd.nn_optim import NN_SCHED_ARGS
+from autograd.nn_pgseq import PGSEQ_RECORD_MARK  # nn-blocks-pgseq
 from autograd.program import program_from_words, program_words, PROGRAM_PARAM_WEIGHT, PROGRAM_PARAM_STATE_WORDS
 from autograd.ops_api import OpsSession, ops_session
 from core.cast_in import CAST_KIND_FLOAT, CastIn
@@ -173,6 +174,7 @@ struct _SeqRecord(Movable):
     var curve_at: Int         # index of the first curve value in ext_floats
     var opt_f64: List[Float64]    # the SEQ_OPT_FLOATS option floats as passed
     var layer_f64: List[Float64]  # each layer's float argument as passed
+    var groups: List[Float64]     # nn-blocks-pgseq: the parameter groups' words (empty: none)
 
     def __init__(out self):
         self.is_export = False
@@ -191,6 +193,7 @@ struct _SeqRecord(Movable):
         self.curve_at = 0
         self.opt_f64 = List[Float64]()
         self.layer_f64 = List[Float64]()
+        self.groups = List[Float64]()
 
 
 def _damaged(path: String) -> Error:
@@ -247,7 +250,17 @@ def _seq_record(ck: Checkpoint, path: String) raises -> _SeqRecord:
     r.class_size = Int(xi[at + 3])
     at += 4
     r.class_at = at
-    if r.n_run < 0 or r.k < 0 or len(xi) != at + r.k or r.class_size < 0 or r.class_size > 8:
+    # nn-blocks-pgseq: after the class words, optionally [PGSEQ_RECORD_MARK, count, the group words' float64 bits]
+    var end = at + r.k
+    if r.k >= 0 and len(xi) > end + 1 and xi[end] == Int64(PGSEQ_RECORD_MARK):
+        var count = Int(xi[end + 1])
+        if count < 0 or len(xi) != end + 2 + count:
+            raise _damaged(path)
+        for j in range(count):  # driver-loop: over the saved group words
+            r.groups.append(bitcast[DType.float64](xi[end + 2 + j]))
+    elif len(xi) != end:
+        raise _damaged(path)
+    if r.n_run < 0 or r.k < 0 or r.class_size < 0 or r.class_size > 8:
         raise _damaged(path)
     if len(xf) != SEQ_OPT_FLOATS + n_layers + r.n_run:
         raise _damaged(path)
@@ -334,7 +347,8 @@ def model_save_checkpoint(
         words[2] if len(words) > 2 else 0)
     var table_end = len(fp)
     var sched_args = List[Float64](length=NN_SCHED_ARGS, fill=0.0)
-    if len(fp) == SEQ_FIT_FLOATS + n_layers + NN_SCHED_ARGS:
+    # nn-blocks-pgseq: the parameter groups' words may follow the schedule's
+    if len(fp) >= SEQ_FIT_FLOATS + n_layers + NN_SCHED_ARGS:
         table_end = SEQ_FIT_FLOATS + n_layers
         for k in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words)
             sched_args[k] = fp[table_end + k]
@@ -418,6 +432,13 @@ def model_save_checkpoint(
     else:
         xi.append(Int64(0))
         xi.append(Int64(0))
+    # nn-blocks-pgseq: the parameter groups' words (float64 bits) after a mark, when the model has groups
+    var group_at = SEQ_FIT_FLOATS + n_layers + NN_SCHED_ARGS
+    if len(fp) > group_at:
+        xi.append(Int64(PGSEQ_RECORD_MARK))
+        xi.append(Int64(len(fp) - group_at))
+        for i in range(group_at, len(fp)):  # driver-loop: over the group words
+            xi.append(bitcast[DType.int64](fp[i]))
     var xf = List[Float32]()
     for i in range(6):  # driver-loop: over option floats (lr .. f7)
         xf.append(fval_word(fp, i))
@@ -499,6 +520,9 @@ def model_checkpoint_info(file: String) raises -> SeqCheckpointInfo:
     # lane nn-optim: then the schedule's NN_SCHED_ARGS argument words
     for k in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words)
         out.floats.append(r.sched_args[k])
+    # nn-blocks-pgseq: then the parameter groups' words, when the model has groups
+    for k in range(len(r.groups)):  # driver-loop: over the saved group words
+        out.floats.append(r.groups[k])
     return out^
 
 

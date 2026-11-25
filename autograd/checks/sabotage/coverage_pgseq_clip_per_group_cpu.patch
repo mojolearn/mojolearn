@@ -1,0 +1,13 @@
+diff --git a/autograd/nn_pgseq.mojo b/autograd/nn_pgseq.mojo
+index 4f8db0c8e8..de477d76b9 100644
+--- a/autograd/nn_pgseq.mojo
++++ b/autograd/nn_pgseq.mojo
+@@ -69,7 +69,7 @@ comptime PGSEQ_RECORD_MARK = 0x50475351
+ comptime PGSEQ_SABOTAGE_GROUP_LR = is_defined["MOJOLEARN_PGSEQ_SABOTAGE_GROUP_LR"]()
+ comptime PGSEQ_SABOTAGE_GROUP_LR_HOST = is_defined["MOJOLEARN_PGSEQ_SABOTAGE_GROUP_LR_HOST"]()
+ comptime PGSEQ_SABOTAGE_CLIP_PER_GROUP = is_defined["MOJOLEARN_PGSEQ_SABOTAGE_CLIP_PER_GROUP"]()
+-comptime PGSEQ_SABOTAGE_CLIP_PER_GROUP_HOST = is_defined["MOJOLEARN_PGSEQ_SABOTAGE_CLIP_PER_GROUP_HOST"]()
++comptime PGSEQ_SABOTAGE_CLIP_PER_GROUP_HOST = True  # SABOTAGE: LAMB clip per group, host
+ 
+ 
+ struct PgSeqTable(Copyable, Movable):

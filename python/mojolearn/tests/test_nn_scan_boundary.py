@@ -99,3 +99,27 @@ def test_a_captured_scan_saves_and_loads(tmp_path):
     with ops.Session() as d:
         got = d.load_program(path).run(xs_np, h0_np)
         np.testing.assert_array_equal(np.asarray(got[0]), eager)
+
+
+def _dropout_cell(s, width=16):
+    h = s.tensor(np.zeros((B, width), np.float32))
+    x = s.tensor(np.zeros((B, width), np.float32))
+    y = s.dropout(x, 0.5, seed=7, counter=3)
+    return s.capture(inputs=[h, x], outputs=[s.add(h, y), y])
+
+
+def test_dropout_in_a_cell_draws_per_step_and_per_key_masks():
+    with ops.Session() as s:
+        cell = _dropout_cell(s)
+        h0 = s.tensor(np.zeros((B, 16), np.float32))
+        ones = lambda n: s.tensor(np.ones((n, B, 16), np.float32))
+        first = s.numpy(s.scan(cell, ones(4), h0, counter=0)[0])
+        again = s.numpy(s.scan(cell, ones(4), h0, counter=0)[0])
+        nxt = s.numpy(s.scan(cell, ones(4), h0, counter=1)[0])
+        short0 = s.numpy(s.scan(cell, ones(2), h0, counter=0)[0])
+        short1 = s.numpy(s.scan(cell, ones(2), h0, counter=1)[0])
+    np.testing.assert_array_equal(first, again)            # the same key continues the same stream
+    assert not np.array_equal(first, nxt)                   # consecutive minibatches differ
+    assert all(not np.array_equal(first[t], first[0]) for t in range(1, 4))
+    np.testing.assert_array_equal(first[:2], short0)       # independent of the sequence length
+    assert not np.array_equal(first[2], short1[0])          # no collision across lengths

@@ -1,0 +1,11 @@
+diff --git a/autograd/nn_composed.mojo b/autograd/nn_composed.mojo
+index f230f0ccb8..705d7fefa9 100644
+--- a/autograd/nn_composed.mojo
++++ b/autograd/nn_composed.mojo
+@@ -20,5 +20,5 @@ from std.sys.compile import is_defined
+ 
+ comptime COMPOSED_SABOTAGE_SCAN_KEY = is_defined["MOJOLEARN_NN_COMPOSED_SABOTAGE_SCAN_KEY"]()
+ comptime COMPOSED_SABOTAGE_SCAN_KEY_HOST = is_defined["MOJOLEARN_NN_COMPOSED_SABOTAGE_SCAN_KEY_HOST"]()
+-comptime COMPOSED_SABOTAGE_GROUP_STATE = is_defined["MOJOLEARN_NN_COMPOSED_SABOTAGE_GROUP_STATE"]()
++comptime COMPOSED_SABOTAGE_GROUP_STATE = True  # SABOTAGE: a later group's optimizer state is not restored on the device
+ comptime COMPOSED_SABOTAGE_GROUP_STATE_HOST = is_defined["MOJOLEARN_NN_COMPOSED_SABOTAGE_GROUP_STATE_HOST"]()

@@ -20,7 +20,10 @@ after another on DeviceExec, which shares one device context):
   3  refusals: a wrong state count, a state of the wrong shape, xs of rank 1, a wrong parameter count, a step
      input of the wrong shape;
   4  a dropout in the cell (y = dropout(x, 0.5), xs all ones): the steps' masks differ (no two steps give the
-     same output), a second call gives the same words, and counter=1 gives other masks.
+     same output); the same key gives the same words (a resumed fit continues the stream); key 1 gives other
+     masks (consecutive minibatches differ); the masks do not depend on the sequence length (step t of a 4-step
+     and of a 2-step call with one key agree) and do not collide across lengths (key 0 step 2 of 4 steps differs
+     from key 1 step 0 of 2 steps, which a linear offset (key * steps + t) would make equal).
 """
 from std.math import tanh, exp, isfinite
 from std.memory import bitcast
@@ -496,7 +499,20 @@ def run_dropout_unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E]) raise
     for i in range(len(first)):  # small-loop(check values)
         if bitcast[DType.uint32](first[i]) != bitcast[DType.uint32](other[i]):
             moved = True
-    require(moved, "counter=1 gave the masks of counter=0")
+    require(moved, "key 1 gave the masks of key 0")
+    var xs4 = tensor(c, List[Float32](length=4 * _B * D, fill=1), [4, _B, D])
+    var xs2 = tensor(c, List[Float32](length=2 * _B * D, fill=1), [2, _B, D])
+    var four = values(c, scan_session(c, cell, xs4, states, 0, none, False, 0)[0], [4, _B, D])
+    var two0 = values(c, scan_session(c, cell, xs2, states, 0, none, False, 0)[0], [2, _B, D])
+    var two1 = values(c, scan_session(c, cell, xs2, states, 0, none, False, 1)[0], [2, _B, D])
+    for i in range(2 * per):  # small-loop(check values)
+        require(bitcast[DType.uint32](four[i]) == bitcast[DType.uint32](two0[i]),
+                "a scan's dropout masks depend on the sequence length")
+    var apart = False
+    for i in range(per):  # small-loop(check values)
+        if bitcast[DType.uint32](four[2 * per + i]) != bitcast[DType.uint32](two1[i]):
+            apart = True
+    require(apart, "key 0 step 2 (4 steps) and key 1 step 0 (2 steps) share a dropout mask")
 
 
 # ---------------------------------------------------------------- the columns

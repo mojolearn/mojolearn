@@ -171,10 +171,10 @@ comptime _SOP_ATTENTION_QKV = 1122
 # nn-blocks-qkv end
 # nn-blocks-pg begin: optimizer parameter groups (providers/python/nn_pg_pyapi_door.mojo); a range of its own,
 # clear of the shared sequence above
-comptime _SOP_PG_OPTIMIZER = 1110
-comptime _SOP_PG_LEARNING_RATES = 1111
-comptime _SOP_PG_STATE_DICT = 1112
-comptime _SOP_PG_LOAD_STATE_DICT = 1113
+comptime _SOP_PG_OPTIMIZER = 1190
+comptime _SOP_PG_LEARNING_RATES = 1191
+comptime _SOP_PG_STATE_DICT = 1192
+comptime _SOP_PG_LOAD_STATE_DICT = 1193
 comptime _SOP_PG_FIRST = _SOP_PG_OPTIMIZER
 comptime _SOP_PG_LAST = _SOP_PG_LOAD_STATE_DICT
 # nn-blocks-pg end

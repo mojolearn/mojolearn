@@ -19,11 +19,17 @@
 # binding checks (shared by the session's op and its frontend, autograd/nn_scan_frontend.mojo).
 #
 # The node (session code 118): handles [xs, state_1 .. state_k, (lengths), param_1 .. param_m]; ints
-# [SCAN_FORMAT, k, reverse, has_lengths, m, counter, n_words, the cell's program words ...]; floats the cell's floats.
-# A dropout inside the cell draws a new mask at every step, as torch's does: step t's dropout node k keeps its
-# captured seed words and takes the counter (captured counter) + ((counter * steps + t) * nodes + k), so every
-# (call counter, step, node) has its own mask, the same on every replay, and the tape keeps each step's mask for the
-# backward.
+# [SCAN_FORMAT, k, reverse, has_lengths, m, n_words, the cell's program words ..., key]; floats the cell's floats.
+# The KEY is the node's last integer, the word a training replay advances for every random node
+# (autograd/program_runtime.mojo, PreparedReplayNode.random: the same rule as a top-level dropout's counter, from the
+# captured value: captured + step * stride + offset + node), so a scan inside Program.fit draws new masks every
+# minibatch, a resumed fit continues the same stream, and an inference replay sees the captured key. Eagerly it is
+# Session.scan's `counter=` (as Session.dropout's `counter`: a new one every training step).
+# A dropout inside the cell draws its mask from a seed derived from (its captured seed, the key, its cell node, the
+# time index) by a 64-bit mix (`scan_dropout_seed`, splitmix64 rounds), not a linear offset, so no two (key, node,
+# step) share a mask whatever the sequence lengths; its captured counter is kept. The derivation is host integer
+# arithmetic once per dropout node per step, the same words for the host and the device column; the tape keeps each
+# step's mask for the backward and a replay derives the same seeds.
 # Its result is one (n, 1) column: the per-step outputs in time order, each flattened, then the final states, each
 # flattened; the frontend takes the pieces apart with free views (operations 40 and 33), so the op keeps the
 # session's one-result shape and a capture keeps every piece.
@@ -36,7 +42,7 @@ from autograd.rankn import ShapeN
 comptime OPS_SCAN = 118
 #: the version word of the node's integer arguments
 comptime SCAN_FORMAT = 1
-comptime SCAN_HEADER = 7
+comptime SCAN_HEADER = 6
 
 # Sabotage arms (tools/identity_lanes/coverage_sabotage.tsv coverage-autograd-nn_scan_*, lane ops-scan-cell).
 # Off in every build; each arm's patch switches one on.
@@ -48,6 +54,9 @@ comptime SCAN_SABOTAGE_STATE_LAG = is_defined["MOJOLEARN_NN_SCAN_SABOTAGE_STATE_
 comptime SCAN_SABOTAGE_STATE_LAG_HOST = is_defined["MOJOLEARN_NN_SCAN_SABOTAGE_STATE_LAG_HOST"]()
 comptime SCAN_SABOTAGE_INIT_GRAD = is_defined["MOJOLEARN_NN_SCAN_SABOTAGE_INIT_GRAD"]()
 comptime SCAN_SABOTAGE_INIT_GRAD_HOST = is_defined["MOJOLEARN_NN_SCAN_SABOTAGE_INIT_GRAD_HOST"]()
+#   DROP_KEY: a dropout inside the cell reuses its captured seed at every step and every key (the masks repeat).
+comptime SCAN_SABOTAGE_DROP_KEY = is_defined["MOJOLEARN_NN_SCAN_SABOTAGE_DROP_KEY"]()
+comptime SCAN_SABOTAGE_DROP_KEY_HOST = is_defined["MOJOLEARN_NN_SCAN_SABOTAGE_DROP_KEY_HOST"]()
 
 
 struct ScanSpec(Movable):
@@ -57,17 +66,17 @@ struct ScanSpec(Movable):
     var reverse: Bool
     var has_lengths: Bool
     var n_params: Int
-    #: the call's dropout counter (Session.scan counter=)
-    var counter: Int
+    #: the RNG key of this call (the node's last integer; Session.scan counter=, advanced by a training replay)
+    var key: Int
 
     def __init__(out self, var cell: OpsProgram, n_state: Int, reverse: Bool, has_lengths: Bool, n_params: Int,
-                 counter: Int):
+                 key: Int):
         self.cell = cell^
         self.n_state = n_state
         self.reverse = reverse
         self.has_lengths = has_lengths
         self.n_params = n_params
-        self.counter = counter
+        self.key = key
 
 
 def scan_host_code_name(code: Int) -> String:
@@ -168,7 +177,23 @@ def scan_check_binding(
                         + shape_text(y))
 
 
-def scan_encode(cell: OpsProgram, reverse: Bool, has_lengths: Bool, counter: Int) -> Tuple[List[Int], List[Float32]]:
+def _splitmix64(x: UInt64) -> UInt64:
+    var z = x + UInt64(0x9E3779B97F4A7C15)
+    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
+    z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
+    return z ^ (z >> 31)
+
+
+def scan_dropout_seed(seed: UInt64, key: Int, node: Int, t: Int) -> UInt64:
+    """The 64-bit dropout seed of cell node `node` at time index `t` of a scan with RNG key `key`, from the
+    node's captured seed: four splitmix64 rounds, one word each, so it does not depend on the sequence length."""
+    var h = _splitmix64(seed)
+    h = _splitmix64(h ^ UInt64(key))
+    h = _splitmix64(h ^ UInt64(node))
+    return _splitmix64(h ^ UInt64(t))
+
+
+def scan_encode(cell: OpsProgram, reverse: Bool, has_lengths: Bool, key: Int) -> Tuple[List[Int], List[Float32]]:
     """The node's integer and float arguments (the layout in the module note)."""
     var got = program_words(cell)
     var ints = List[Int]()
@@ -177,10 +202,10 @@ def scan_encode(cell: OpsProgram, reverse: Bool, has_lengths: Bool, counter: Int
     ints.append(1 if reverse else 0)
     ints.append(1 if has_lengths else 0)
     ints.append(len(cell.params))
-    ints.append(counter)
     ints.append(len(got[0]))
     for i in range(len(got[0])):  # driver-loop: over the cell's description words, once per call
         ints.append(Int(got[0][i]))
+    ints.append(key)
     return (ints^, got[1].copy())
 
 
@@ -192,9 +217,8 @@ def scan_decode(ints: List[Int], fs: List[Float32], n_handles: Int) raises -> Sc
     var reverse = ints[2] != 0
     var has_lengths = ints[3] != 0
     var n_params = ints[4]
-    var counter = ints[5]
-    var n_words = ints[6]
-    if n_state < 0 or n_params < 0 or counter < 0 or n_words < 1 or SCAN_HEADER + n_words != len(ints):
+    var n_words = ints[5]
+    if n_state < 0 or n_params < 0 or n_words < 1 or SCAN_HEADER + n_words + 1 != len(ints):
         raise Error("ValueError: ops: scan: a damaged scan description")
     var words = List[Int64](capacity=n_words)
     for i in range(n_words):  # driver-loop: over the cell's description words, once per call
@@ -206,4 +230,7 @@ def scan_decode(ints: List[Int], fs: List[Float32], n_handles: Int) raises -> Sc
     if n_handles != want:
         raise Error("ValueError: ops: scan takes " + String(want) + " tensors (xs, the state tensors, "
                     + ("lengths, " if has_lengths else "") + "the cell's parameters); got " + String(n_handles))
-    return ScanSpec(cell^, n_state, reverse, has_lengths, n_params, counter)
+    var key = ints[len(ints) - 1]
+    if key < 0:
+        raise Error("ValueError: ops: scan: a damaged scan description (negative key)")
+    return ScanSpec(cell^, n_state, reverse, has_lengths, n_params, key)

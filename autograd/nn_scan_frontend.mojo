@@ -22,8 +22,8 @@ def scan_session[E: Exec & Movable & Deinitable](
     reverse: Bool, counter: Int = 0,
 ) raises -> List[Int]:
     """The scan of `cell` over `xs` from `states`, the cell's parameters bound to `params` (handles of `s`, in the
-    cell's parameter order); `lengths` a handle of one float length per sequence, or 0; `counter` the dropout
-    counter of this call (each step of each call draws its own dropout masks)."""
+    cell's parameter order); `lengths` a handle of one float length per sequence, or 0; `counter` this call's RNG
+    key (the scan node's last word, which a training replay advances; autograd/nn_scan.mojo)."""
     if counter < 0:
         raise Error("ValueError: scan: counter must be >= 0")
     # The binding is checked here, before the node is made, so a refusal names the caller's arguments; the op

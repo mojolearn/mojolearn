@@ -184,9 +184,16 @@ from autograd.nn_scatter import (
 # nn-blocks-scan begin: the public scan over a captured cell, session code 118 (autograd/nn_scan.mojo)
 from autograd.nn_scan import (
     OPS_SCAN, ScanSpec, scan_decode, scan_check_binding, SCAN_SABOTAGE_STATE_LAG, SCAN_SABOTAGE_STATE_LAG_HOST,
-    SCAN_SABOTAGE_INIT_GRAD, SCAN_SABOTAGE_INIT_GRAD_HOST,
+    SCAN_SABOTAGE_INIT_GRAD, SCAN_SABOTAGE_INIT_GRAD_HOST, SCAN_SABOTAGE_DROP_KEY, SCAN_SABOTAGE_DROP_KEY_HOST,
+    scan_dropout_seed,
 )
 # nn-blocks-scan end
+# nn-blocks-composed begin: the composed tagger's sabotage switches only (autograd/nn_composed.mojo)
+from autograd.nn_composed import (
+    COMPOSED_SABOTAGE_SCAN_KEY, COMPOSED_SABOTAGE_SCAN_KEY_HOST, COMPOSED_SABOTAGE_GROUP_STATE,
+    COMPOSED_SABOTAGE_GROUP_STATE_HOST,
+)
+# nn-blocks-composed end
 
 # Executor kinds of a session (the binding that opened it).
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea G): the packed argument
@@ -1541,6 +1548,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             raise Error("ops: the optimizer state's step count must be >= 0")
         var oi = self._opt_index(o)
         if self.opts[oi].pg >= 0:
+            # nn-blocks-composed begin
+            comptime if (COMPOSED_SABOTAGE_GROUP_STATE and Self.E.IS_DEVICE) or (
+                    COMPOSED_SABOTAGE_GROUP_STATE_HOST and not Self.E.IS_DEVICE):
+                if self._pg_group(oi, h, "load_optimizer_state") >= 1:
+                    return  # SABOTAGE: a later group's state is not restored
+            # nn-blocks-composed end
             # nn-blocks-pg: the parameter's group member keeps its state
             oi = self._pg_member(oi, h, "load_optimizer_state")
         var slot = self._param_slot(h, "load_optimizer_state")
@@ -2971,14 +2984,14 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             for j in range(cell.f_at[k], cell.f_at[k + 1]):  # small-loop(fs: a node's float arguments)
                 nf.append(cell.fs[j])
             node_fs.append(nf^)
-        # Dropout nodes (OPS_DROPOUT 21: ints [seed lo, seed hi, counter]) draw a new mask every step: their
-        # captured counters, and the per-step offsets (autograd/nn_scan.mojo note).
+        # Dropout nodes (OPS_DROPOUT 21: ints [seed lo, seed hi, counter]) draw a new mask every step: a seed
+        # derived from (captured seed, the call's key, the node, the time index) (autograd/nn_scan.mojo note).
         var drop_nodes = List[Int]()
-        var drop_counter = List[Int]()
+        var drop_seed = List[UInt64]()
         for k in range(n_nodes):  # driver-loop: over cell nodes (dropout ones), once per call
             if cell.code[k] == OPS_DROPOUT and len(node_ints[k]) >= 3:
                 drop_nodes.append(k)
-                drop_counter.append(node_ints[k][2])
+                drop_seed.append((UInt64(node_ints[k][1]) << 32) | UInt64(node_ints[k][0] & 0xFFFFFFFF))
         var steps = xs_shape.d[0]
         var batch = xs_shape.d[1]
         var x_dims = cell.in_shapes[n_state].dims()
@@ -3060,9 +3073,19 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                     for k in range(n_state):  # driver-loop: over state tensors (this step's handles)
                         vals.append(state[k])
                 vals.append(x_t)
-                for q in range(len(drop_nodes)):  # driver-loop: over the cell's dropout nodes (this step's counters)
+                for q in range(len(drop_nodes)):  # driver-loop: over the cell's dropout nodes (this step's seeds)
                     var dk = drop_nodes[q]
-                    node_ints[dk][2] = drop_counter[q] + (spec.counter * steps + t) * n_nodes + dk
+                    var seed = scan_dropout_seed(drop_seed[q], spec.key, dk, t)
+                    # nn-blocks-composed begin
+                    comptime if (COMPOSED_SABOTAGE_SCAN_KEY and Self.E.IS_DEVICE) or (
+                            COMPOSED_SABOTAGE_SCAN_KEY_HOST and not Self.E.IS_DEVICE):
+                        seed = scan_dropout_seed(drop_seed[q], 0, dk, t)  # SABOTAGE: the key stays at the capture's 0
+                    # nn-blocks-composed end
+                    comptime if (SCAN_SABOTAGE_DROP_KEY and Self.E.IS_DEVICE) or (
+                            SCAN_SABOTAGE_DROP_KEY_HOST and not Self.E.IS_DEVICE):
+                        seed = drop_seed[q]  # SABOTAGE: the captured seed at every step and key
+                    node_ints[dk][0] = Int(seed & UInt64(0xFFFFFFFF))
+                    node_ints[dk][1] = Int(seed >> 32)
                 for k in range(n_nodes):  # driver-loop: over the cell's nodes (one step's launch sequence)
                     args.clear()
                     for j in range(cell.a_at[k], cell.a_at[k + 1]):  # small-loop(args: a node's input refs)

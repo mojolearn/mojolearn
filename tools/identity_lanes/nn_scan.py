@@ -38,7 +38,8 @@ def _(ml, X, yc, yr, Xh=None):
     Program, run (the eager bytes), saved and loaded (the same bytes). Sabotage arms
     coverage-autograd-nn_scan_state_lag_gpu / _cpu (step t fed the state of step t - 2) move every part on one side;
     coverage-autograd-nn_scan_init_grad_gpu / _cpu (the initial state detached) move the h_0 / c_0 gradient parts
-    on one side."""
+    on one side. Last, a dropout cell scanned with keys 0 and 1 over 8 and 2 steps (part dropout); arms
+    coverage-autograd-nn_scan_drop_key_gpu / _cpu (the captured seed reused) move it on one side."""
     T, B, F, H, O = _NN_SCAN_T, _NN_SCAN_B, _NN_SCAN_F, _NN_SCAN_H, _NN_SCAN_O
     xs = _seq(X, T, B, F)
     target = _seq(X, T, B, O, skip=4096)
@@ -85,6 +86,16 @@ def _(ml, X, yc, yr, Xh=None):
                 for k, name in enumerate(("ys", "h_T", "c_T")):  # driver-loop: over the three outputs
                     _same_bytes("Session.scan " + name, eager[k], "load_program(save).run " + name,
                                 np.asarray(again[k]))
+        # a dropout in a cell: per-step masks under two keys and two lengths (sabotage arms
+        # coverage-autograd-nn_scan_drop_key_gpu / _cpu reuse the captured seed: this part moves)
+        hd = c.tensor(np.zeros((B, 16), np.float32))
+        xd = c.tensor(np.zeros((B, 16), np.float32))
+        yd = c.dropout(xd, 0.5, seed=11, counter=2)
+        dcell = c.capture(inputs=[hd, xd], outputs=[c.add(hd, yd), yd])
+        d0 = c.tensor(np.zeros((B, 16), np.float32))
+        masks = [np.asarray(c.numpy(c.scan(dcell, c.tensor(np.ones((n, B, 16), np.float32)), d0, counter=k)[0]))
+                 for n, k in ((T, 0), (T, 1), (2, 1))]  # glue: three calls
+        parts["dropout"] = _h(*masks)
     return _fit(parts)
 
 

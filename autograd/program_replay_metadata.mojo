@@ -7,6 +7,10 @@ struct PreparedReplayNode(Movable):
     var ints: List[Int]
     var fs: List[Float32]
     var original_last_int: Int
+    #: a node whose last integer is a random key a training replay advances: dropout (21) and, nn-blocks-scan, the
+    #: scan over a captured cell (118, autograd/nn_scan.mojo). Resolved here once, so the replay's per-node test is
+    #: one flag, as it was one code compare.
+    var random: Bool
 
     def __init__(out self, p: OpsProgram, node: Int):
         self.ints = List[Int](capacity=p.i_at[node + 1] - p.i_at[node])
@@ -18,6 +22,7 @@ struct PreparedReplayNode(Movable):
         # Do not validate dropout here: even malformed operation metadata must
         # retain its ordinary selected-node failure position during replay.
         self.original_last_int = self.ints[len(self.ints) - 1] if len(self.ints) != 0 else 0
+        self.random = p.code[node] == 21 or p.code[node] == 118
 
 
 struct PreparedProgramReplay(Movable):
