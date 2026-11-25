@@ -44,6 +44,8 @@ from bindings.tsa_hw_route_unpack import tsa_function_route
 from core.tsa_hw_run import tsa_kpss_run, tsa_select_d_run
 from core.device_route import device_cpu_fast
 from providers.python.function_device_boundary_door import function_device_admit
+from bindings.function_scope_door import FunctionScope, ScopeBlock
+from bindings.metric_resident_source_door import metric_exact_buffer
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -72,6 +74,12 @@ struct _TsaSeries(Movable):
     var address: Int
     var rows: Int
     var cols: Int
+    #: 1: `address` is the caller's float32 C-order (rows, cols) words, the
+    #: host cast deferred (lane gd-resident-2, `settle`); 0: series-major.
+    var layout: Int
+    var row_step: Int
+    var item: Int
+    var kind: Int
 
     def __init__(out self, var pin: AdmittedTypedPin, scratch: PythonObject, address: Int, rows: Int, cols: Int):
         self.pin = pin^
@@ -79,14 +87,40 @@ struct _TsaSeries(Movable):
         self.address = address
         self.rows = rows
         self.cols = cols
+        self.layout = 0
+        self.row_step = 0
+        self.item = 0
+        self.kind = 0
+
+    def caller(self) -> Bool:
+        """The words are the caller's own buffer (no scratch)."""
+        return self.scratch is None
+
+    def settle(mut self, keep_rows: Bool) raises:
+        """Inside a `resident()` scope a C-order float32 y keeps its layout
+        when the GPU image keeps it resident (`keep_rows`: it lays the series
+        out on the device, tsa/tsa_store.mojo); otherwise the deferred cast
+        runs now, exactly as `_series_major` ran it before."""
+        if self.layout == 0 or keep_rows:
+            return
+        var out = native_scratch_bytes(self.rows * self.cols * 4)
+        var dims: List[Int] = [self.cols, self.rows]
+        var steps: List[Int] = [4, self.row_step]
+        _ = admitted_cast_nd_f32(self.address, dims, steps, self.item, self.kind,
+                                 _F32P(unsafe_from_address=native_scratch_address(out)))
+        self.address = native_scratch_address(out)
+        self.scratch = out
+        self.layout = 0
 
 
-def _series_major(source: PythonObject, name: String, context: PythonObject) raises -> _TsaSeries:
+def _series_major(source: PythonObject, name: String, context: PythonObject, rows_ok: Bool) raises -> _TsaSeries:
     """`_series_major(y, name)`: the series-major float32 words of y (1-D,
     or 2-D (n_obs, n_series)), n_obs and batch. A float32 y whose memory
     already is series-major is read in place (was: copied by the cast into
     a scratch store per call); every other y is cast once into the scratch
-    store (the one buffer the entry uploads)."""
+    store (the one buffer the entry uploads). `rows_ok` (inside a
+    `resident()` scope, lane gd-resident-2): a C-order float32 y is returned
+    as it is with `layout` 1 and its cast deferred to `settle`."""
     var value_pin = AdmittedTypedPin()
     var value = admit_view(source, name + " y", context, value_pin)
     var kind = admitted_view_kind(value, name + " y")
@@ -104,6 +138,13 @@ def _series_major(source: PythonObject, name: String, context: PythonObject) rai
     if f32 and (rows == 1 or row_step == 4) and (cols == 1 or col_step == 4 * rows):
         var address = value.addr
         return _TsaSeries(value_pin^, PythonObject(None), address, rows, cols)
+    if rows_ok and f32 and rank == 2 and col_step == 4 and row_step == 4 * cols:
+        var deferred = _TsaSeries(value_pin^, PythonObject(None), value.addr, rows, cols)
+        deferred.layout = 1
+        deferred.row_step = row_step
+        deferred.item = kind[1]
+        deferred.kind = kind[0]
+        return deferred^
     var out = native_scratch_bytes(rows * cols * 4)
     var dims = List[Int]()
     var steps = List[Int]()
@@ -146,12 +187,28 @@ def _stationarity_cpu(word: PythonObject, name: String, context: PythonObject, b
     return True
 
 
+def _series_keep(mut block: ScopeBlock, scope: FunctionScope, mut series: _TsaSeries, gpu: Bool,
+                 source: PythonObject) raises:
+    """Lane gd-resident-2: inside `resident()`, on a GPU route, the caller's
+    own float32 words (series-major, or C order with `layout` 1) are kept in
+    the image's store and read there in place: found, or put once per scope
+    (the device lays a C-order series out series-major). A cast copy, a CPU
+    route or a buffer that is not exactly the argument's own keeps nothing;
+    then the deferred cast runs (`settle`) and the request is the plain one.
+    Outside a scope: nothing (the series was never deferred)."""
+    if gpu and scope.active() and series.caller() and metric_exact_buffer(source):
+        if Int(py=classical_address(source)) == series.address:
+            block.keep(0, scope, source, source, series.rows * series.cols)
+    series.settle(block.address() != 0)
+
+
 def tsa_kpss(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """kpss_test(y, d, D, s, pval_threshold, return_statistic, device)."""
     var nk = tsa_keys()
     var b = _b()
     var want_cpu = _stationarity_cpu(args[6], "kpss_test", context, b)
-    var series = _series_major(args[0], "kpss_test", context)
+    var scope = FunctionScope(context)
+    var series = _series_major(args[0], "kpss_test", context, scope.active())
     var n_obs = series.rows
     var batch = series.cols
     # the entry writes the stationarity flags as uint8 (1 stationary, 0 not)
@@ -165,14 +222,18 @@ def tsa_kpss(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var pval = Float64(py=py_call_typed(b.float, tsa_scalar(args[4], context)))
     var call = tsa_function_route(context, want_cpu, b)
     var route = call.route
+    var block = ScopeBlock()
+    _series_keep(block, scope, series, route.vendor > 0, args[0])
     var flat_address = series.address
     var flags_address = Int(py=classical_address(stationary))
     var stat_address = Int(py=classical_address(stat))
     var py = Python()
     try:
         with GILReleased(py):
-            _ = tsa_kpss_run(route, flat_address, flags_address, stat_address, batch, n_obs, d, seasonal_d, period, pval)
+            _ = tsa_kpss_run(route, flat_address, flags_address, stat_address, batch, n_obs, d, seasonal_d, period, pval,
+                             block.address(), series.layout)
     finally:
+        block.settle()  # drop a pin the image's scope cache did not keep
         _ = stat  # keep the Python object alive through the native call above
         _ = stationary  # keep the Python object alive through the native call above
         _ = series.scratch  # keep the Python object alive through the native call above
@@ -190,7 +251,8 @@ def tsa_select_d(args: PythonObject, context: PythonObject) raises -> PythonObje
     var want_cpu = _stationarity_cpu(args[5], "select_d", context, b)
     var seasonal = Int(py=py_call_typed(b.int, tsa_scalar(args[1], context, True)))
     var limit_value = PythonObject(2 - seasonal) if args[3] is None else py_call_typed(b.int, tsa_scalar(args[3], context, True))
-    var series = _series_major(args[0], "select_d", context)
+    var scope = FunctionScope(context)
+    var series = _series_major(args[0], "select_d", context, scope.active())
     var n_obs = series.rows
     var batch = series.cols
     # the documented bound, refused by name on every vendor (the host
@@ -206,13 +268,17 @@ def tsa_select_d(args: PythonObject, context: PythonObject) raises -> PythonObje
     var pval = Float64(py=py_call_typed(b.float, tsa_scalar(args[4], context)))
     var call = tsa_function_route(context, want_cpu, b)
     var route = call.route
+    var block = ScopeBlock()
+    _series_keep(block, scope, series, route.vendor > 0, args[0])
     var flat_address = series.address
     var out_address = Int(py=classical_address(out))
     var py = Python()
     try:
         with GILReleased(py):
-            _ = tsa_select_d_run(route, flat_address, out_address, batch, n_obs, seasonal, period, d_max, pval)
+            _ = tsa_select_d_run(route, flat_address, out_address, batch, n_obs, seasonal, period, d_max, pval,
+                                 block.address(), series.layout)
     finally:
+        block.settle()  # drop a pin the image's scope cache did not keep
         _ = out  # keep the Python object alive through the native call above
         _ = series.scratch  # keep the Python object alive through the native call above
         _ = call.owner  # the route owner pins the image through the call

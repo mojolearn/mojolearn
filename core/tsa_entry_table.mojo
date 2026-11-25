@@ -39,6 +39,8 @@ same words before the call).
   TSA_OP_KPSS_TEST         a [y, flags, stat]  p [batch, n_obs, d, D, s]      f [pval_threshold]  -> batch
                            (flags: batch uint8, 1 stationary, 0 not; stat: batch float32)
   TSA_OP_SELECT_D          a [y, out]          p [batch, n_obs, D, s, d_max]  f [pval_threshold]  -> batch
+                           (both: an optional [scope block, layout] pair after p, GPU image only, lane
+                           gd-resident-2: the series from the `resident()` scope's slot, C order when layout 1)
 
 The two stationarity operations (`kpss_test`, `select_d`; every image holds
 them) are functions with no estimator: bindings/tsa_public_native_door.mojo
@@ -115,6 +117,10 @@ def tsa_ops_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         want_f = 1
     else:
         raise Error("tsa ops: unknown operation " + String(operation))
+    if (operation == TSA_OP_KPSS_TEST or operation == TSA_OP_SELECT_D) and np == want_p + 2:
+        # lane gd-resident-2: the optional [scope block, layout] pair of a
+        # GPU request inside `resident()` (bindings/tsa_public_native_door.mojo)
+        want_p = np
     if na != want_a or np != want_p or nf != want_f:
         raise Error("tsa ops: request spans differ from operation " + String(operation))
 

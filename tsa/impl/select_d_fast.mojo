@@ -28,6 +28,7 @@ from core.hostptr import copy_f32
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
 from core.column_stats import STATS_TPB
 from tsa.impl.timeSeries.arima_helpers import prepare_data
+from tsa.tsa_store import TsaSeriesIn, tsa_series_fill
 from tsa.impl.timeSeries.stationarity import (
     KPSS_ELEM_TPB, series_sum_kernel, center_kernel, s2B_accumulation_kernel, cumsum_by_series_kernel,
     kpss_stationarity_check_kernel, kpss_lags, kpss_s2B_coefficients,
@@ -242,7 +243,7 @@ def select_d_fast(
 
 def kpss_one_wait(
     ctx: DeviceContext,
-    y_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    src: TsaSeriesIn,
     flags_ptr: MutPointer[UInt8, MutUntrackedOrigin],
     stat_ptr: MutPointer[Float32, MutUntrackedOrigin],
     batch_size: Int,
@@ -292,11 +293,22 @@ def kpss_one_wait(
     var buf = ctx.enqueue_create_buffer[DType.float32](words)
     var host = ctx.enqueue_create_host_buffer[DType.float32](res_at + res_words)
     var hp = host.unsafe_ptr()
-    copy_f32(y_ptr, hp, total)
-    hp.unsafe_store(flag_at, Float32(0.0))
     var up = buf.create_sub_buffer[DType.float32](0, total + 1)
     var tail = buf.create_sub_buffer[DType.float32](flag_at, res_at + res_words - flag_at)
-    ctx.enqueue_copy(dst_buf=up, src_ptr=hp)
+    if src.resident():
+        # Lane gd-resident-2: the series from the scope's resident slot, laid
+        # out series-major on the device (tsa/tsa_store.mojo), and the zero
+        # non-finite word: no host copy, no upload.
+        var y_dst = buf.create_sub_buffer[DType.float32](0, total)
+        tsa_series_fill(ctx, y_dst, src, batch_size, n_obs)
+        var flag_dst = buf.create_sub_buffer[DType.float32](flag_at, 1)
+        flag_dst.enqueue_fill(Float32(0.0))
+        _ = y_dst^
+        _ = flag_dst^
+    else:
+        copy_f32(src.host, hp, total)
+        hp.unsafe_store(flag_at, Float32(0.0))
+        ctx.enqueue_copy(dst_buf=up, src_ptr=hp)
     var wp = buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     ctx.enqueue_function[nonfinite_flag_kernel](
         (wp + flag_at).bitcast[UInt32](), wp, Int32(total),
