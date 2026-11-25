@@ -22,6 +22,13 @@ at the end: inside a scope two calls on the same arrays uploaded twice and
     slot, read once into the Array the caller receives (`arena_store_read`)
     and freed.
 
+StratifiedKFold's label codes (`msel_scope_codes_slot`, lane gd-rf-msel door
+2): on the program route the n int32 codes went up into the program store once
+per split call (bindings/msel_split_plan_run.mojo `MselProgSlot`). Inside a
+scope they are kept in the scope's codes cache under the key of the CALLER'S y
+buffer (core/msel_scope_codes.mojo), so a second split of the same y finds them
+and the plan reads that slot in place.
+
 Outside a scope (one atomic load, `arena_scopes_live`), on the host column,
 for a list or tuple, an input of rows that are not whole 4-byte words, or one
 below the scope's size floor, nothing here runs and the per-call `_Resident`
@@ -39,7 +46,9 @@ from bindings.arena_cache_run import (
 from bindings.arena_owner_door import arena_pin, arena_unpin
 from bindings.arena_materialize_native_door import _prepared_info, _empty, _empty_unfilled, _slot
 from bindings.member_scope_door import member_scope_word
-from bindings.metric_resident_source_door import metric_resident_owner
+from bindings.metric_resident_source_door import metric_resident_owner, _exact_kind, _c_order
+from bindings.msel_split_plan_run import MselSplitRoute, MselCodes, msel_prog_store, msel_stratified_on_slot
+from core.msel_scope_codes import msel_scope_codes_put
 from bindings.classical_arrays_door import classical_address
 from core.arena_state import ARENA_HANDLE_NONE
 from core.entry_table import EntryRef, entry_ref_unresolved
@@ -171,3 +180,44 @@ def msel_scope_take_pair(rows: MselScopeRows, source: PythonObject, prepared: Py
     _ = owner  # its words are the slot's source; the cache pins it from here
     _ = prepared
     return Python.tuple(first, second)
+
+
+def msel_scope_codes_slot(y: PythonObject, route: MselSplitRoute, labels: MselCodes, form: Int, k: Int,
+                          context: PythonObject) raises -> Int:
+    """StratifiedKFold's codes slot kept by the calling thread's scope
+    (module note), or -1 (no scope, the host column, a plan that reads no
+    program slot, or a y that is not the caller's own exact C-ordered buffer
+    of whole 4-byte words: the plan then puts and frees its own slot as
+    before). `y` is the label argument the codes were encoded from;
+    `labels` the codes, kept alive by the caller through the plan. THE PIN
+    RULE: one reference on y, kept by the cache when it published this put,
+    else dropped here."""
+    var rows = msel_scope_rows(context)
+    if not rows.active() or not msel_stratified_on_slot(route, labels, form, k):
+        return -1
+    var kind = _exact_kind(y)
+    if kind == 0 or not _c_order(y, kind):
+        return -1
+    if Int(py=y.size) != labels.n:
+        return -1
+    var nbytes = labels.n * Int(py=y.itemsize)
+    if nbytes == 0 or nbytes % 4 != 0 or nbytes // 4 < rows.floor:
+        return -1
+    var address = Int(py=classical_address(y))
+    var store = msel_prog_store(route)
+    var pin = arena_pin(y)
+    var put = ArenaCachePut(-1, False)
+    var scope = rows.scope
+    var codes_address = labels.address
+    var n = labels.n
+    var words = nbytes // 4
+    try:
+        with GILReleased(Python()):
+            put = msel_scope_codes_put(scope, store, address, words, codes_address, n, pin)
+    except error:
+        arena_unpin(pin)
+        raise error^
+    if not put.pinned:
+        arena_unpin(pin)
+    _ = y  # its address is the key above; the cache pins it from here
+    return put.store_id

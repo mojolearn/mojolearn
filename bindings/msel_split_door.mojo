@@ -54,7 +54,7 @@ from bindings.msel_common_door import (
     msel_numeric_vector, msel_new, msel_read_i64, msel_arange, msel_range_index, msel_index_copy,
     msel_lazy, msel_u64, msel_take_labels, msel_resident_new, msel_resident_take, msel_resident_close,
 )
-from bindings.msel_scope_rows_door import msel_scope_rows, msel_scope_take_pair
+from bindings.msel_scope_rows_door import msel_scope_rows, msel_scope_take_pair, msel_scope_codes_slot
 # RUN: every fold computation, on typed values (no Python object).
 from bindings.msel_split_run import msel_fold_rows_fits
 from bindings.msel_split_plan_run import (
@@ -595,8 +595,12 @@ def msel_stratified_split(y: PythonObject, k: Int, shuffle: Bool, random_state: 
             msel_warn(plan.warning, msel_b().UserWarning, context)
         _ = labels  # the codes stay alive through the plan above
         raise Error(msel_seed_refusal())
+    # Inside a resident() scope the codes are kept by the caller's y buffer
+    # and the plan reads that slot (bindings/msel_scope_rows_door.mojo; lane
+    # gd-rf-msel). Outside a scope: one atomic load, -1, the plan as before.
+    var kept = msel_scope_codes_slot(y, route, view, form, k, context)
     with GILReleased(Python()):
-        plan = msel_plan_stratified(route, view, form, k, shuffle, seed)
+        plan = msel_plan_stratified(route, view, form, k, shuffle, seed, kept)
     var pairs = msel_split_finish(pin, plan, context)
     _ = labels  # the codes stay alive through the plan above
     return pairs

@@ -230,6 +230,23 @@ def msel_prog_run_slots(route: MselSplitRoute, prog: MselProg, slots: List[Int])
                             prog.addresses, prog.sizes, slots)
 
 
+def msel_prog_store(route: MselSplitRoute) raises -> EntryRef:
+    """The x_prep transport entry of the program image's tier and vendor: the
+    store a program input slot lives in (`MselProgSlot`)."""
+    var mode = native_descriptor_call(route.program, MP_MODE, [], [], [])
+    var vendor = native_descriptor_call(route.program, MP_VENDOR, [], [], [])
+    return xp_transport_ref(PrepEntryKey(mode, vendor))
+
+
+def msel_stratified_on_slot(route: MselSplitRoute, labels: MselCodes, form: Int, k: Int) -> Bool:
+    """Whether `msel_plan_stratified` reads the codes from a program store
+    slot (`MselProgSlot`): the program route with the image's resident store,
+    codes to rank, and the fold program within its bounds. The door asks the
+    same question before it keeps the codes in a `resident()` scope."""
+    return (route.store and form != MSEL_LABELS_FIRST_SEEN and labels.n > 0 and k <= 256
+            and msel_fold_rows_fits(labels.n, k))
+
+
 struct MselProgSlot(Movable):
     """A split call's n int32 label codes put once into the program image's
     resident store (lane vdf-scope-split2, 2026-11-24): the slot (-1:
@@ -244,24 +261,35 @@ struct MselProgSlot(Movable):
 
     var slot: Int
     var store: EntryRef
+    #: False: the slot belongs to a `resident()` scope's codes cache (lane
+    #: gd-rf-msel, core/msel_scope_codes.mojo); the scope's close frees it.
+    var owned: Bool
 
     def __init__(out self, route: MselSplitRoute, labels: MselCodes) raises:
         self.store = entry_ref_unresolved()
         self.slot = -1
+        self.owned = True
         if labels.n > 0:
-            var mode = native_descriptor_call(route.program, MP_MODE, [], [], [])
-            var vendor = native_descriptor_call(route.program, MP_VENDOR, [], [], [])
-            self.store = xp_transport_ref(PrepEntryKey(mode, vendor))
+            self.store = msel_prog_store(route)
             var src: List[Int] = [labels.address]
             var count: List[Int] = [labels.n]
             self.slot = xp_transport_call(self.store, XP_DEV_PUT, src, count)
 
+    def __init__(out self, kept_slot: Int):
+        """The codes slot a `resident()` scope keeps (the door put or found
+        it, bindings/msel_scope_rows_door.mojo `msel_scope_codes_slot`):
+        read in place, never freed here."""
+        self.store = entry_ref_unresolved()
+        self.slot = kept_slot
+        self.owned = False
+
     def __init__(out self):
         self.store = entry_ref_unresolved()
         self.slot = -1
+        self.owned = True
 
     def __del__(deinit self):
-        if self.slot >= 0:
+        if self.owned and self.slot >= 0:
             try:
                 var ids: List[Int] = [self.slot]
                 _ = xp_transport_call(self.store, XP_DEV_FREE, List[Int](), ids)
@@ -661,6 +689,12 @@ def msel_plan_kfold(route: MselSplitRoute, n: Int, k: Int, shuffle: Bool, seed: 
 
 def msel_plan_stratified(route: MselSplitRoute, labels: MselCodes, form: Int, k: Int, shuffle: Bool,
                          seed: MselSeed) raises -> MselSplitPlan:
+    """`msel_plan_stratified` with no scope-kept codes slot."""
+    return msel_plan_stratified(route, labels, form, k, shuffle, seed, -1)
+
+
+def msel_plan_stratified(route: MselSplitRoute, labels: MselCodes, form: Int, k: Int, shuffle: Bool,
+                         seed: MselSeed, kept_slot: Int) raises -> MselSplitPlan:
     """`StratifiedKFold.split`: the fold plan (class sizes in first-seen
     order, the allocation table), then the folds in one program (COPY), or
     past its bounds the stored-code assignment and FOLDS out of the stored
@@ -671,13 +705,19 @@ def msel_plan_stratified(route: MselSplitRoute, labels: MselCodes, form: Int, k:
     # both programs (first-seen, folds) read that slot. Otherwise the
     # helper table's store holds them (`MselHeld`) and the fold program
     # takes the caller's codes as its host input.
-    var on_slot = (route.store and form != MSEL_LABELS_FIRST_SEEN and labels.n > 0 and k <= 256
-                   and msel_fold_rows_fits(labels.n, k))
+    # `kept_slot` >= 0 (lane gd-rf-msel): inside a `resident()` scope the door
+    # kept the codes in the scope's codes cache under the caller's y buffer
+    # (found on every later call of the scope: nothing goes up); asked only
+    # when `msel_stratified_on_slot` holds.
+    var on_slot = msel_stratified_on_slot(route, labels, form, k)
     var held = MselHeld()
     var xm = MselProgSlot()
     var enc = MselEnc()
     if on_slot:
-        xm = MselProgSlot(route, labels)
+        if kept_slot >= 0:
+            xm = MselProgSlot(kept_slot)
+        else:
+            xm = MselProgSlot(route, labels)
         enc = msel_first_seen_prog(route, labels, form, xm.slot)
     else:
         if form != MSEL_LABELS_FIRST_SEEN:
