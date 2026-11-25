@@ -82,6 +82,11 @@ comptime PROGRAM_PARAM_STATE_WORDS = 2
 comptime PROGRAM_MAX_CODE_V2 = 80
 # 94: the recurrent scan (`lstm`, `gru`, `rnn`; autograd/rules_recurrent.mojo).
 comptime PROGRAM_MAX_CODE = 94
+# nn-blocks-cbw begin: 126, a custom operation with a user-defined backward
+# rule (autograd/nn_cbw.mojo OPS_CUSTOM_VJP; version 3 records): its integer
+# and float arguments hold both captured programs
+comptime PROGRAM_CBW_CODE = 126
+# nn-blocks-cbw end
 
 
 struct OpsLog(Movable):
@@ -362,7 +367,7 @@ def program_from_words(xi: List[Int64], xf: List[Float32], what: String) raises 
     var nf_total = 0
     for k in range(nn):  # driver-loop: over program nodes
         var code = r.take(xi, what)
-        if code < 1 or code > max_code or code == 47:
+        if (code < 1 or code > max_code or code == 47) and code != PROGRAM_CBW_CODE:
             raise Error(what + ": node " + String(k) + " holds an unknown operation code " + String(code))
         p.code.append(code)
         var na = r.take(xi, what)

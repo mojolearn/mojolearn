@@ -511,7 +511,11 @@ def train_program_control[E: Exec & Movable & Deinitable](
                 var loss = program_loss(s.tape, s.ex, out, y, loss_kind, delta)
                 var differentiable = s.tape.requires_grad(loss)
                 if differentiable or not conditional:
-                    s.tape.backward_scalar_with_rules(s.ex, loss, rules)
+                    if s.cbw.holds_rules():
+                        # nn-blocks-cbw: the graph holds a user-defined backward rule
+                        s.cbw_backward_scalar(loss, rules, False)
+                    else:
+                        s.tape.backward_scalar_with_rules(s.ex, loss, rules)
                 if len(grads_out) != 0 and differentiable and e == epochs - 1 and bi == n_batches - 1:
                     for j in range(len(params)):  # driver-loop: over trained parameters (last-step gradient copies)
                         if grad_dst[j] == 0 or not selected[j]:
