@@ -24,6 +24,8 @@ from autograd.program_loop import (
 )
 from autograd.losses import mse, mae, huber, binary_cross_entropy_with_logits, cross_entropy
 from autograd.rules_step_ops import StepOpRules
+from autograd.nn_cbw import OPS_CUSTOM_VJP
+from autograd.nn_scan import OPS_SCAN
 from checks.numerics import identical_div
 
 
@@ -214,6 +216,52 @@ def train_program_control[E: Exec & Movable & Deinitable](
     step_curve: Int = 0, grads_out: List[Int] = List[Int](), loop_words: Int = 0,
     device_srcs: Bool = False,
 ) raises -> Tuple[Int, Int, Int]:
+    """Program.fit (the loop is `_train_program_control`, documented there).
+
+    nn-blocks-zerocost (2026-11-25): what the batch loop does for a grouped optimizer (lane nn-blocks-pg) and for a
+    graph that may hold a user-defined backward rule (lane nn-blocks-cbw) is decided here, once per fit, as the
+    loop's instance: the instance for an ungrouped optimizer and a graph without custom nodes is the loop as it was
+    (no per-batch or per-epoch test). The two tests below repeat no admission: an invalid optimizer or program
+    raises inside the loop's function in its own order."""
+    var grouped = optimizer >= 1 and optimizer <= len(s.opts) and s.opts[optimizer - 1].pg >= 0
+    # a custom node is recorded by a replayed OPS_CUSTOM_VJP node, or by one inside a scan's cell
+    var custom = s.cbw.holds_rules() or _fit_may_record_custom(s.programs[s._program_index(pid)])
+    if condition_id > 0 and otherwise_id > 0:
+        custom = (custom or _fit_may_record_custom(s.programs[s._program_index(condition_id)])
+                  or _fit_may_record_custom(s.programs[s._program_index(otherwise_id)]))
+    if grouped:
+        if custom:
+            return _train_program_control[E, True, True](
+            s, pid, srcs, shapes, target, loss_kind, delta, optimizer, parameters, epochs, batch, shuffle_rows, seed, curve,
+            condition_id, otherwise_id, tol, n_iter_no_change, step_curve, grads_out, loop_words, device_srcs)
+        return _train_program_control[E, True, False](
+            s, pid, srcs, shapes, target, loss_kind, delta, optimizer, parameters, epochs, batch, shuffle_rows, seed, curve,
+            condition_id, otherwise_id, tol, n_iter_no_change, step_curve, grads_out, loop_words, device_srcs)
+    if custom:
+        return _train_program_control[E, False, True](
+            s, pid, srcs, shapes, target, loss_kind, delta, optimizer, parameters, epochs, batch, shuffle_rows, seed, curve,
+            condition_id, otherwise_id, tol, n_iter_no_change, step_curve, grads_out, loop_words, device_srcs)
+    return _train_program_control[E, False, False](
+            s, pid, srcs, shapes, target, loss_kind, delta, optimizer, parameters, epochs, batch, shuffle_rows, seed, curve,
+            condition_id, otherwise_id, tol, n_iter_no_change, step_curve, grads_out, loop_words, device_srcs)
+
+
+def _fit_may_record_custom(p: OpsProgram) -> Bool:
+    """Whether replaying `p` may record a custom-rule node: it holds OPS_CUSTOM_VJP, or a scan (whose cell may)."""
+    for k in range(p.n_nodes()):  # driver-loop: over captured operations, once per fit
+        if p.code[k] == OPS_CUSTOM_VJP or p.code[k] == OPS_SCAN:
+            return True
+    return False
+
+
+def _train_program_control[E: Exec & Movable & Deinitable, grouped: Bool, custom: Bool](
+    mut s: OpsSession[E], pid: Int, srcs: List[CastIn], shapes: List[ShapeN],
+    target: CastIn, loss_kind: Int, delta: Float32, optimizer: Int, parameters: List[Int],
+    epochs: Int, batch: Int, shuffle_rows: Bool, seed: UInt64, curve: FP,
+    condition_id: Int, otherwise_id: Int, tol: Float32, n_iter_no_change: Int,
+    step_curve: Int, grads_out: List[Int], loop_words: Int,
+    device_srcs: Bool,
+) raises -> Tuple[Int, Int, Int]:
     """Program.fit: `epochs` epochs of minibatch steps as the executor's
     bounded device loop (lane x1b-executor-gated-state-chunked-loop).
 
@@ -353,9 +401,8 @@ def train_program_control[E: Exec & Movable & Deinitable](
     # (`cfg`): one norm over every group's gradients.
     var p_oi = List[Int](length=len(params), fill=oi)
     var p_group = List[Int](length=len(params), fill=0)
-    var grouped = s.opts[oi].pg >= 0
     var rates = List[Float32]()
-    if grouped:
+    comptime if grouped:  # the loop's instance (train_program_control)
         for j in range(len(params)):  # driver-loop: over trainable parameters (group membership, once per fit)
             if trainable[j]:
                 p_group[j] = s._pg_group(oi, p.params[j], "Program.fit")
@@ -461,7 +508,7 @@ def train_program_control[E: Exec & Movable & Deinitable](
             var epoch = s.opts[oi].epoch
             # Scheduler advancement occurs only at the end of this epoch.
             var lr = s.learning_rate(optimizer)
-            if grouped:
+            comptime if grouped:
                 rates = s._pg_rates(oi)  # nn-blocks-pg: each group's rate, once an epoch
             if shuffle_rows:
                 permutation(s.ex, seed, epoch, n, indices.value())
@@ -528,8 +575,8 @@ def train_program_control[E: Exec & Movable & Deinitable](
                 var loss = program_loss(s.tape, s.ex, out, y, loss_kind, delta)
                 var differentiable = s.tape.requires_grad(loss)
                 if differentiable or not conditional:
-                    if s.cbw.holds_rules():
-                        # nn-blocks-cbw: the graph holds a user-defined backward rule
+                    comptime if custom:
+                        # nn-blocks-cbw: the graph may hold a user-defined backward rule (decided once per fit)
                         s.cbw_backward_scalar(loss, rules, False)
                     else:
                         s.tape.backward_scalar_with_rules(s.ex, loss, rules)
@@ -551,10 +598,10 @@ def train_program_control[E: Exec & Movable & Deinitable](
                     sa.p0 = s.tape.value(loss)
                     sa.p1 = step_losses.value() + (e * n_batches + bi)
                     s.ex.launch[OP_COPY](sa, 1)
-                if grouped:
+                comptime if grouped:
                     # nn-blocks-pg: an optimizer with parameter groups, its own
-                    # branch (chosen by one Bool a batch; the branch below is
-                    # the ungrouped step as it was): each parameter's group
+                    # instance of the loop (chosen once per fit; the branch below
+                    # is the ungrouped step as it was): each parameter's group
                     # member, configuration and rate, ONE norm over every
                     # selected tensor of every group (the optimizer's clip).
                     if differentiable:
@@ -664,7 +711,7 @@ def train_program_control[E: Exec & Movable & Deinitable](
             # Epochs past the stop: their device writes were undone behind
             # the gate; their host scalars go back to the first of them.
             marks[committed - chunk_start].restore(s, oi, states)
-            if grouped:
+            comptime if grouped:
                 s._pg_scheduler_step(oi)  # nn-blocks-pg: every group back at the restored epoch
             true_batches = marks[committed - chunk_start].true_batches
             false_batches = marks[committed - chunk_start].false_batches
