@@ -74,6 +74,12 @@ def test_chunked_lm_head_device_arrays() raises:
     var dw_h = List[Float32](length=vocab * width, fill=0.0)
     _ = chunked_lm_head_v2_train_host(ctx, _fp(loss_h), _fp(mx), _fp(dn), _fp(dh_h), _fp(dw_h), _fp(hidden),
                                       _fp(weight), tp, rows, vocab, width)
+    # Keep-alive: `_fp(mx)` / `_fp(dn)` were their last named uses, so both 24-byte lists were freed before the
+    # host trainer wrote its row maxima and denominators into them; the process's thread-policy slot (24 bytes,
+    # created inside that call) took the freed block and the writes overwrote its layout word: "mixed binary
+    # versions (MojolearnHostThreadPolicyV2)" abort at the next host_predict_workers (L40S, rc 132).
+    _ = mx^
+    _ = dn^
     var hh = _put(ctx, hidden)
     var hw = _put(ctx, weight)
     var hdh = train_dev_alloc(ctx, rows * width)
