@@ -469,8 +469,11 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """DecisionTreeRegressor apply, predict_with_leaves, staged_predict, score, get_depth and the save round
     trip (base trees-dt-random holds its classifier, and its random-splitter regressor refuses `save` by
-    name): one best-split regressor, 24 leaves at most, on the first 4096 rows."""
-    m = ml.DecisionTreeRegressor(max_leaf_nodes=24, random_state=5).fit(X[:4096], yr[:4096])
+    name): one best-split regressor, depth 5 (32 leaves at most), on the first 4096 rows.
+    Lane w3-fix-9-s1 (2026-11-25): it asked max_leaf_nodes=24 with the default splitter='best', which the
+    product refuses by name (bindings/trees_public_forest_door.mojo _rf_arguments: best-first growth lives on
+    the random splitter's builder), so its clean run REFUSED on every side; the leaf bound is max_depth now."""
+    m = ml.DecisionTreeRegressor(max_depth=5, random_state=5).fit(X[:4096], yr[:4096])
     parts = _m_predict_forest_parts(m, X[:256], yr[:256])
     parts["depth"] = _h(np.int64(m.get_depth()))
     parts["save"] = _m_predict_tree_file(m, X[:256])
