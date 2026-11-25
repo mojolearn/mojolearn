@@ -153,30 +153,19 @@ DECLARED_LANELESS = {
     ),
 }
 
-#: The cooperative multi-GPU drivers. Their par-* identity lanes were retired
-#: with multi-GPU verification (owner, 2026-10-31); the drivers stay in the
-#: tree and out of the public docs (docs-site/api_exclude.txt), so each is
-#: laneless by that decision, not by omission.
+# The cooperative multi-GPU drivers were declared laneless here from 2026-10-31,
+# when their par-* identity lanes were retired with multi-GPU verification.
 # TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
 # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 # lane w3f2-main (2026-11-24): DistributedIVFIndex, parallel_ivf.DistributedIVFIndex,
-# parallel_ensemble.fit_forest and parallel_neighbors_reference.ReferenceShardedNeighbors left this
+# parallel_ensemble.fit_forest and parallel_neighbors_reference.ReferenceShardedNeighbors left the
 # list: the one-device lanes ivf-distributed, forest-shard and neighbors-reference-shard reach them.
-# lane w3-fix-13-s2 (2026-11-25): 42 more left this list, every name but the top-level
-# ParallelByteLanguageModelTrainer alias: the one-device psd-* lanes
-# (tools/identity_lanes/parallel_single.py) reach models.ParallelCausalLM, every
-# parallel_classical, parallel_ensemble, parallel_forecasting, parallel_gaussian_process,
-# parallel_graph, parallel_model_selection, parallel_neighbors and parallel_preprocessing
-# driver, and parallel_training.ParallelByteLanguageModelTrainer (check 6 refused each as
-# "declared laneless, but a lane reaches it now" at 0becfc8f6b).
-_RETIRED_MULTI_GPU = (
-    "ParallelByteLanguageModelTrainer",
-)
-DECLARED_LANELESS.update({
-    name: ("retired: multi-GPU verification (owner, 2026-10-31; docs/TOMBSTONES.md "
-           "MOJOLEARN_PAR_VERIFY); no identity lane runs this multi-GPU driver")
-    for name in _RETIRED_MULTI_GPU
-})
+# lane w3-fix-13-s2 (2026-11-25): the remaining 43 left it and the list (`_RETIRED_MULTI_GPU`)
+# is deleted: the one-device psd-* lanes (tools/identity_lanes/parallel_single.py) reach
+# models.ParallelCausalLM, ParallelByteLanguageModelTrainer and every parallel_classical,
+# parallel_ensemble, parallel_forecasting, parallel_gaussian_process, parallel_graph,
+# parallel_model_selection, parallel_neighbors, parallel_preprocessing and parallel_training
+# driver (check 6 refused each as "declared laneless, but a lane reaches it now").
 
 #: A reason has to say something. The shortest real one in the vocabulary is
 #: `no reference` at 13 characters; below this it is a placeholder.
