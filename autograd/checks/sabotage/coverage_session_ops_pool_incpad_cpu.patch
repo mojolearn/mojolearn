@@ -1,0 +1,26 @@
+diff --git a/autograd/rankn_conv_ops.mojo b/autograd/rankn_conv_ops.mojo
+index 0f90c3206a..bfe467133d 100644
+--- a/autograd/rankn_conv_ops.mojo
++++ b/autograd/rankn_conv_ops.mojo
+@@ -33,6 +33,7 @@
+ # reserved. sequence/dispatch.mojo routes and fences them.
+ from std.memory import bitcast
+ from std.sys.compile import is_defined
++from std.sys.info import is_gpu
+ from sequence.ops import Args, FP
+ from checks.numerics import ftz, identical_div, identical_rsqrt
+ from autograd.rankn import rn_word
+@@ -408,7 +409,12 @@ def _avg_divisor(od: Int, oh: Int, ow: Int, d: FP) -> Int:
+     var we = min(ws + rn_word(d, PP_KW), W + PW)
+     var depth: Int
+     var plane: Int
+-    if rn_word(d, PP_INCPAD) != 0:
++    var include_pad = rn_word(d, PP_INCPAD) != 0
++    comptime if not is_gpu():
++        # SABOTAGE (coverage-autograd-session_ops_pool_incpad_cpu): on the host count_include_pad=False divides by
++        # the padded window
++        include_pad = True
++    if include_pad:
+         depth = de - ds
+         plane = (he - hs) * (we - ws)
+     else:

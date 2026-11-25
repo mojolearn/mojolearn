@@ -1,0 +1,22 @@
+diff --git a/autograd/nn_conv_ops.mojo b/autograd/nn_conv_ops.mojo
+index 0318fca2c9..3bb6cefac2 100644
+--- a/autograd/nn_conv_ops.mojo
++++ b/autograd/nn_conv_ops.mojo
+@@ -21,6 +21,7 @@
+ # ascending output order from +0.0, so one order on the host and on every vendor.
+ from std.memory import bitcast
+ from std.sys.compile import is_defined
++from std.sys.info import is_gpu
+ from sequence.ops import Args, FP
+ from checks.numerics import ftz, identical_mul
+ from autograd.rankn import rn_word
+@@ -140,6 +141,9 @@ def op_nnc_aavg_fin(i: Int, a: Args):
+     """Output i: its block partials, then one division (x_cnn adapt_avg_fin_at): p0 part, p1 out."""
+     var x = _xf(a.p0)
+     adapt_avg_fin_at(i, x, x, _xf(a.p1), x, _xd(a.p11), _xd(a.p11))
++    comptime if not is_gpu():
++        # SABOTAGE (coverage-autograd-session_ops_pool_adapt_avg_cpu): the host's adaptive average scaled by 7/8
++        a.p1.unsafe_store(i, ftz(a.p1.unsafe_load(i) * Float32(0.875)))
+     comptime if NN_CONV_SABOTAGE_POOL:
+         # the mean scaled by 7/8
+         a.p1.unsafe_store(i, ftz(a.p1.unsafe_load(i) * Float32(0.875)))
