@@ -415,7 +415,8 @@ class _Optimizer(NumericModeMixin):
 # copy and the recurrence agree. nesterov with momentum 0 is refused because the profile would accept
 # it and silently equal the plain update. maximize: torch's -grad at the top of the step, before the
 # coupled decay and the momentum buffer (training/maximize.mojo, DEVIATION 6200). One launch per
-# tensor for SGD; per-parameter groups refused because two clips do not equal one (contract 3.5).
+# tensor for SGD; param_groups= refused by name here (one group per optimizer); parameter groups with one global
+# clip are ops.Session.param_group_optimizer (contract 3.5, lane nn-blocks-pg).
 # Mixed precision: see the native optimizer input plan refusal.
 class SGD(_Optimizer):
     """Stochastic gradient descent, as `torch.optim.SGD`, over float32 buffers (NumPy arrays, `array.array` or `mojolearn.Array`; any writable buffer-protocol object).
