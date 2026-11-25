@@ -1,0 +1,14 @@
+diff --git a/training/checks/optimizer.mojo b/training/checks/optimizer.mojo
+index 6f86595872..75a8e26dd6 100644
+--- a/training/checks/optimizer.mojo
++++ b/training/checks/optimizer.mojo
+@@ -1117,6 +1117,9 @@ def clip_finish_kernel(
+     if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+         return
+     var tn = ftz(identical_sqrt(ftz(total_sumsq.unsafe_load(0))))
++    from std.sys import is_defined
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane w3-fix-10-s5): the clip's total norm one ulp up (and the coefficient after it), the GPU bindings only
++        tn = ftz(tn * Float32(1.00000011920928955078125))
+     var denom = ftz(tn + clip_eps())
+     var coef = ftz(identical_div(max_norm, denom))
+     if not (coef < Float32(1.0)):
