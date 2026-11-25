@@ -1,15 +1,38 @@
---- a/core/resample_impl.mojo	2026-11-22 12:34:48
-+++ b/core/resample_impl.mojo	2026-11-22 12:35:37
-@@ -9,3 +9,6 @@
+diff --git a/core/resample_impl.mojo b/core/resample_impl.mojo
+index 275ba78981..e12f114c11 100644
+--- a/core/resample_impl.mojo
++++ b/core/resample_impl.mojo
+@@ -9,3 +9,6 @@ def resample_store_indices(op: MutPointer[Int32, MutUntrackedOrigin], idx: List[
      # int32 buffer (it was a serial one-element-per-iteration host loop)
      if count > 0:
          unsafe_memcpy(dest=op, src=idx.unsafe_ptr(), count=count)
 +    if count > 1:  # SABOTAGE (coverage arm): the first two indices swapped
 +        op.unsafe_store(0, idx[1])
 +        op.unsafe_store(1, idx[0])
---- a/resample/resample_native.mojo	2026-11-22 12:35:37
-+++ b/resample/resample_native.mojo	2026-11-22 12:35:37
-@@ -186,6 +186,10 @@
+diff --git a/resample/estimator.mojo b/resample/estimator.mojo
+index c155b3f736..4bfd879f8f 100644
+--- a/resample/estimator.mojo
++++ b/resample/estimator.mojo
+@@ -2540,6 +2540,14 @@ def resample_rows_device(
+     var in_rows = True
+     if not replace:
+         in_rows = _permutation_order_device(ctx, n, keys, rows, scratch, 256)
++    if count > 1:  # SABOTAGE (coverage arm): the first two row numbers swapped (the array path's draw)
++        var drawn = rows if in_rows else scratch
++        var tmp = ctx.enqueue_create_buffer[DType.int32](1)
++        ctx.enqueue_copy(dst_buf=tmp, src_buf=drawn.create_sub_buffer[DType.int32](0, 1))
++        ctx.enqueue_copy(dst_buf=drawn.create_sub_buffer[DType.int32](0, 1), src_buf=drawn.create_sub_buffer[DType.int32](1, 1))
++        ctx.enqueue_copy(dst_buf=drawn.create_sub_buffer[DType.int32](1, 1), src_buf=tmp)
++        ctx.synchronize()
++        _ = tmp^
+     if in_rows:
+         _resample_rows_gather(ctx, rows, n, count, idx_dst, srcs, dsts, words, slots)
+     else:
+diff --git a/resample/resample_native.mojo b/resample/resample_native.mojo
+index a9273348e2..dc2ed686aa 100644
+--- a/resample/resample_native.mojo
++++ b/resample/resample_native.mojo
+@@ -209,6 +209,10 @@ def _resample_resample_indices(a: List[Int], p: List[Int], f: List[Float64]) rai
          resample_indices_replace_into(n, count, seed, dst)
      else:
          resample_indices_permute_into(n, count, seed, dst)

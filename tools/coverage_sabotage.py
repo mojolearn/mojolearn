@@ -357,9 +357,13 @@ def check(arm, clean_path, sab_path, restored_path=None, evidence_path=None, roo
         cb, sb, rb = [_binaries(r) for r in (clean, sab, restored)]
         if cb != rb:
             raise ValueError("restored native bindings differ from the clean build")
-        if set(cb) != set(sb):
+        # The sabotaged run may load FEWER bindings than the clean one: a lane that refuses at its first oracle never
+        # reaches the cases that import the others (w3-integrate-11: ten reviewed x_sequence refusals failed here because
+        # _mojolearn_runtime_sequential_host was not loaded after the refusal). A binding the clean run did not load is
+        # still refused, and every binding both runs loaded is compared below.
+        if not set(sb) <= set(cb):
             raise ValueError("sabotaged native binding coverage differs from the clean build")
-        changed = {name for name in cb if cb[name] != sb[name]}
+        changed = {name for name in sb if cb[name] != sb[name]}
 
         def modules(stems):
             out = {"_mojolearn" if stem == "build" else "_mojolearn_" + stem.removeprefix("build_")

@@ -1,0 +1,13 @@
+diff --git a/bindings/numeric_profile_native_door.mojo b/bindings/numeric_profile_native_door.mojo
+index 0ae333f18b..a6b28fbc59 100644
+--- a/bindings/numeric_profile_native_door.mojo
++++ b/bindings/numeric_profile_native_door.mojo
+@@ -18,7 +18,7 @@ from std.sys import is_defined
+ # lists it with lane numeric_profile_parts, case "save and reload with a per-part spec"): the
+ # saved-state reader (`_saved`) keeps only the "preset" of a saved per-part dict, so a reload that
+ # names no profile loses the overrides and its digest differs from the saved model's.
+-comptime NP_SABOTAGE_DROP_SAVED = is_defined["MOJOLEARN_NUMERIC_PROFILE_SABOTAGE_DROP_SAVED"]()
++comptime NP_SABOTAGE_DROP_SAVED = True  # SABOTAGE: the saved state keeps only the preset
+ 
+ 
+ def _dict(value: PythonObject, key_bytes: Bool = False) raises:

@@ -1,0 +1,13 @@
+diff --git a/core/numeric_profile_parts_sabotage.mojo b/core/numeric_profile_parts_sabotage.mojo
+index 36ed05a109..1050bddb71 100644
+--- a/core/numeric_profile_parts_sabotage.mojo
++++ b/core/numeric_profile_parts_sabotage.mojo
+@@ -51,7 +51,7 @@ from core.numeric_profile_parts import (
+     np_mask_check,
+ )
+ 
+-comptime NP_PARTS_SABOTAGE_WRONG_PART_HOST = is_defined["MOJOLEARN_NP_PARTS_SABOTAGE_WRONG_PART_HOST"]()
++comptime NP_PARTS_SABOTAGE_WRONG_PART_HOST = True  # SABOTAGE: a q/k swap of the host parts mask
+ comptime NP_PARTS_SABOTAGE_WRONG_PART_DEVICE = is_defined["MOJOLEARN_NP_PARTS_SABOTAGE_WRONG_PART_DEVICE"]()
+ comptime NP_PARTS_SABOTAGE_IGNORE_HOST = is_defined["MOJOLEARN_NP_PARTS_SABOTAGE_IGNORE_HOST"]()
+ comptime NP_PARTS_SABOTAGE_IGNORE_DEVICE = is_defined["MOJOLEARN_NP_PARTS_SABOTAGE_IGNORE_DEVICE"]()

@@ -1636,11 +1636,17 @@ _batch_decl("n/a:coverage-probe (the lane checks one public call path the releas
 @lane("x-ols-square")
 def _(ml, X, yc, yr, Xh=None):
     """LinearRegression on a square block (16 rows, 16 features): TSQR needs
-    one row more than columns, so the fit takes the eigen least squares."""
+    one row more than columns, so the fit takes the eigen least squares. And on
+    a wide block (8 rows, 16 features), where n_cols > n_rows takes the
+    minimum-norm least squares (lstsq_min_norm; glm/impl/ols.mojo, the host
+    oracle's host_lstsq_min_norm): part `wide_coef` (w3-integrate-11: the arm
+    coverage-glm-host_lstsq_min_norm had no lane that reached that branch)."""
     d = _coverage_digester(ml)
     m = ml.LinearRegression().fit(np.ascontiguousarray(X[:16]), np.ascontiguousarray(yr[:16]))
+    w = ml.LinearRegression().fit(np.ascontiguousarray(X[:8]), np.ascontiguousarray(yr[:8]))
     return _fit(dict(coef=d(np.asarray(m.coef_, dtype=np.float32)),
-                     predict=d(np.asarray(m.predict(X[:256]), dtype=np.float32))))
+                     predict=d(np.asarray(m.predict(X[:256]), dtype=np.float32)),
+                     wide_coef=d(np.asarray(w.coef_, dtype=np.float32))))
 
 
 @lane("kernel-ridge-wide")

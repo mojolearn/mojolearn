@@ -199,5 +199,177 @@
    "error_match": "AssertionError: ?",
    "patch_sha256": "a4c7fda1e5aed8a7c634d7417894f22baf6b4d3a79850b46d09ab3eb043931f9"
   }
+ },
+ "coverage-autograd-batch_source_fit_read_ahead_cpu": {
+  "ops-composed-cases/base": {
+   "product_check": "tools/identity_lanes/composed_cases.py (lane `ops-composed-cases`): the lane's in-cell oracle that raised `ValueError: sequential-stream-resume a fresh-process resume from the mid-epoch checkpoint trains the uninterrupted run's parameters and optimizer state [0] a an`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_batch_source_fit_read_ahead_cpu.patch: lane stream-fits (2026-11-25): BATCH_SOURCE_SABOTAGE_FIT_READ_AHEAD_HOST forced on in autograd/batch_source.mojo, on the host executor only: the streamed Sequential and recurrent-estimator fits (batch_source_fit_saved) save the position one batch past the consumed one (the read-ahead counted as trained). Cases sequential-stream-resume and gru-stream-resume (composed-stream.json) REFUSE: the fresh- On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-1); the clean and restored runs matched.",
+   "error_match": "ValueError:\\ sequential\\-stream\\-resume\\ a\\ fresh\\-process\\ resume\\ from\\ the\\ mid\\-epoch\\ checkpoint\\ trains\\ the\\ uninterrupted\\ run's\\ parameters\\ and\\ optimizer\\ state\\ \\[0\\]\\ a\\ and\\ sequential\\-stream\\-resume\\ a\\ fresh\\-process\\ resume\\ from\\ the\\ mid\\-epoch\\ checkpoint\\ trains\\ the\\ uninterrupted\\ run's\\ parameters\\ and\\ optimizer\\ state\\ \\[0\\]\\ b\\ differ:\\ 212\\ bytes\\ of\\ 268",
+   "patch_sha256": "4c0e5911d46e4935a38e073700746a3110942d4ad26cf522907d784c4b935b11"
+  }
+ },
+ "coverage-autograd-batch_source_read_ahead_cpu": {
+  "ops-batch-source-resume/base": {
+   "product_check": "tools/identity_lanes/batch_source.py (lane `ops-batch-source-resume`): the lane's in-cell oracle that raised `ValueError: ops-batch-source-resume: after three steps the source's consumed position is 0, not 3`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_batch_source_read_ahead_cpu.patch: lane batch-source (2026-11-25; fault restated by lane fable-review-2, which stopped the door's fit from reading ahead after its last batch): BATCH_SOURCE_SABOTAGE_READ_AHEAD_HOST forced on in autograd/batch_source.mojo, so batch_source_saved (autograd/program_entries.mojo program_fit_source) hands back, after the host executor's fit, the position ONE BATCH PAST the consumed one (a loop that counte On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-2); the clean and restored runs matched.",
+   "error_match": "ValueError:\\ ops\\-batch\\-source\\-resume:\\ after\\ three\\ steps\\ the\\ source's\\ consumed\\ position\\ is\\ 0,\\ not\\ 3",
+   "patch_sha256": "0b03b524cd30f25baf483f6f9d789c9589ea89dd4db8c10c16d514662817944b"
+  }
+ },
+ "coverage-autograd-nn_ckpt_fresh_mask_cpu": {
+  "ops-composed-cases/base": {
+   "product_check": "tools/identity_lanes/composed_cases.py (lane `ops-composed-cases`): the lane's in-cell oracle that raised `ValueError: checkpoint-segment checkpointed segments' gradients against the plain form (the recompute or its fold differs) [0] a and checkpoint-segment checkpoi`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_nn_ckpt_fresh_mask_cpu.patch: lane activation-ckpt (2026-11-25): the host twin, CKPT_SABOTAGE_FRESH_MASK_HOST forced on, so the recompute draws fresh dropout masks on the host executor only (comptime not Self.E.IS_DEVICE); a device=\"cpu\" session of ops-composed-cases runs it, so the checkpoint cases REFUSE on the CPU side and the device side stays. Not yet measured. On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-3); the clean and restored runs matched.",
+   "error_match": "ValueError:\\ checkpoint\\-segment\\ checkpointed\\ segments'\\ gradients\\ against\\ the\\ plain\\ form\\ \\(the\\ recompute\\ or\\ its\\ fold\\ differs\\)\\ \\[0\\]\\ a\\ and\\ checkpoint\\-segment\\ checkpointed\\ segments'\\ gradients\\ against\\ the\\ plain\\ form\\ \\(the\\ recompute\\ or\\ its\\ fold\\ differs\\)\\ \\[0\\]\\ b\\ differ:\\ 48\\ bytes\\ of\\ 60",
+   "patch_sha256": "6abc9eba7db2433d63f213d538f0fdc51b07767d2b1e89c477b86b3b01696c26"
+  }
+ },
+ "coverage-autograd-nn_ckpt_skip_node_cpu": {
+  "ops-composed-cases/base": {
+   "product_check": "tools/identity_lanes/composed_cases.py (lane `ops-composed-cases`): the lane's in-cell oracle that raised `ValueError: checkpoint-segment checkpointed segments' gradients against the plain form (the recompute or its fold differs) [0] a and checkpoint-segment checkpoi`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_nn_ckpt_skip_node_cpu.patch: lane activation-ckpt (2026-11-25): the host twin, CKPT_SABOTAGE_SKIP_NODE_HOST forced on, so the recompute skips one node on the host executor only; a device=\"cpu\" session of ops-composed-cases runs it, so the checkpoint cases REFUSE on the CPU side and the device side stays. Not yet measured. On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-4); the clean and restored runs matched.",
+   "error_match": "ValueError:\\ checkpoint\\-segment\\ checkpointed\\ segments'\\ gradients\\ against\\ the\\ plain\\ form\\ \\(the\\ recompute\\ or\\ its\\ fold\\ differs\\)\\ \\[0\\]\\ a\\ and\\ checkpoint\\-segment\\ checkpointed\\ segments'\\ gradients\\ against\\ the\\ plain\\ form\\ \\(the\\ recompute\\ or\\ its\\ fold\\ differs\\)\\ \\[0\\]\\ b\\ differ:\\ 47\\ bytes\\ of\\ 60",
+   "patch_sha256": "fd48e42e31e0b42eb2414e34156671fb668ff8cc213dd0562840412157f817c7"
+  }
+ },
+ "coverage-autograd-nn_composed_group_state_cpu": {
+  "ops-composed-cases/base": {
+   "product_check": "tools/identity_lanes/composed_cases.py (lane `ops-composed-cases`): the lane's in-cell oracle that raised `ValueError: groups-resume uninterrupted against resumed parameters [1] a and groups-resume uninterrupted against resumed parameters [1] b differ: 8 bytes of 8`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_nn_composed_group_state_cpu.patch: lane nn-blocks-composed (2026-11-25), kept by session-ops-verify as the tagger case's arm (composed-tagger.json): the host twin, COMPOSED_SABOTAGE_GROUP_STATE_HOST forced on, so a resumed grouped optimizer drops every later group's state on the host executor only; a device=\"cpu\" session of ops-composed-cases case tagger runs it and REFUSES (the resumed step differs from the uninterrupted one); the On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-5); the clean and restored runs matched.",
+   "error_match": "ValueError:\\ groups\\-resume\\ uninterrupted\\ against\\ resumed\\ parameters\\ \\[1\\]\\ a\\ and\\ groups\\-resume\\ uninterrupted\\ against\\ resumed\\ parameters\\ \\[1\\]\\ b\\ differ:\\ 8\\ bytes\\ of\\ 8",
+   "patch_sha256": "43977fa6c02e13801137dae93ea7e3a61762204ba4bda6201425cf6c009d9cd5"
+  },
+  "sequential-param-groups/base": {
+   "product_check": "tools/identity_lanes/nn_pgseq.py (lane `sequential-param-groups`): the lane's in-cell oracle that raised `ValueError: lamb ungrouped and lamb groups with the compile settings differ: 203 bytes of 388`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_nn_composed_group_state_cpu.patch: lane nn-blocks-composed (2026-11-25), kept by session-ops-verify as the tagger case's arm (composed-tagger.json): the host twin, COMPOSED_SABOTAGE_GROUP_STATE_HOST forced on, so a resumed grouped optimizer drops every later group's state on the host executor only; a device=\"cpu\" session of ops-composed-cases case tagger runs it and REFUSES (the resumed step differs from the uninterrupted one); the On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-5); the clean and restored runs matched.",
+   "error_match": "ValueError:\\ lamb\\ ungrouped\\ and\\ lamb\\ groups\\ with\\ the\\ compile\\ settings\\ differ:\\ 203\\ bytes\\ of\\ 388",
+   "patch_sha256": "43977fa6c02e13801137dae93ea7e3a61762204ba4bda6201425cf6c009d9cd5"
+  }
+ },
+ "coverage-autograd-nn_composed_scan_key_cpu": {
+  "ops-composed-cases/base": {
+   "product_check": "tools/identity_lanes/composed_cases.py (lane `ops-composed-cases`): the lane's in-cell oracle that raised `ValueError: ops-composed-cases: case 'scan-dropout-lengths' statement 'differ' #2: keys 0 and 1 drew the same dropout masks over unequal lengths: they are equal`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_nn_composed_scan_key_cpu.patch: lane nn-blocks-composed (2026-11-25), kept by session-ops-verify as the tagger case's arm (composed-tagger.json): the host twin, COMPOSED_SABOTAGE_SCAN_KEY_HOST forced on, so the scan's cell dropout ignores the key on the host executor only (comptime not Self.E.IS_DEVICE); a device=\"cpu\" session of ops-composed-cases case tagger runs it, so the key check REFUSES and the parts move on the CPU side  On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-6); the clean and restored runs matched.",
+   "error_match": "ValueError:\\ ops\\-composed\\-cases:\\ case\\ 'scan\\-dropout\\-lengths'\\ statement\\ 'differ'\\ \\#2:\\ keys\\ 0\\ and\\ 1\\ drew\\ the\\ same\\ dropout\\ masks\\ over\\ unequal\\ lengths:\\ they\\ are\\ equal",
+   "patch_sha256": "4d34b166fea8ba8658eecef25f1b5938dcb465e6b8bd210ce48a5af94f3c6228"
+  }
+ },
+ "coverage-autograd-pgseq_clip_per_group_cpu": {
+  "ops-composed-cases/base": {
+   "product_check": "tools/identity_lanes/composed_cases.py (lane `ops-composed-cases`): the lane's in-cell oracle that raised `ValueError: groups-resume uninterrupted against resumed parameters [1] a and groups-resume uninterrupted against resumed parameters [1] b differ: 8 bytes of 8`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_pgseq_clip_per_group_cpu.patch: lane nn-blocks-pgseq (2026-11-25): the host twin, PGSEQ_SABOTAGE_CLIP_PER_GROUP_HOST forced on: LAMB's clip per group on the host executor only; the lamb parts move on the CPU side and stay on the device side. Not yet measured. On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-5); the clean and restored runs matched.",
+   "error_match": "ValueError:\\ groups\\-resume\\ uninterrupted\\ against\\ resumed\\ parameters\\ \\[1\\]\\ a\\ and\\ groups\\-resume\\ uninterrupted\\ against\\ resumed\\ parameters\\ \\[1\\]\\ b\\ differ:\\ 8\\ bytes\\ of\\ 8",
+   "patch_sha256": "68aa1f56ff7c2e43cc34f3a0b03763f2da1f4097e13a3362f1b427887925bee0"
+  },
+  "sequential-param-groups/base": {
+   "product_check": "tools/identity_lanes/nn_pgseq.py (lane `sequential-param-groups`): the lane's in-cell oracle that raised `ValueError: lamb ungrouped and lamb groups with the compile settings differ: 203 bytes of 388`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_pgseq_clip_per_group_cpu.patch: lane nn-blocks-pgseq (2026-11-25): the host twin, PGSEQ_SABOTAGE_CLIP_PER_GROUP_HOST forced on: LAMB's clip per group on the host executor only; the lamb parts move on the CPU side and stay on the device side. Not yet measured. On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-5); the clean and restored runs matched.",
+   "error_match": "ValueError:\\ lamb\\ ungrouped\\ and\\ lamb\\ groups\\ with\\ the\\ compile\\ settings\\ differ:\\ 203\\ bytes\\ of\\ 388",
+   "patch_sha256": "68aa1f56ff7c2e43cc34f3a0b03763f2da1f4097e13a3362f1b427887925bee0"
+  }
+ },
+ "coverage-autograd-program_training_drop_group_cpu": {
+  "ops-batch-source-resume/base": {
+   "product_check": "tools/identity_lanes/batch_source.py (lane `ops-batch-source-resume`): the lane's in-cell oracle that raised `ValueError: uninterrupted step 0 parameter 1 and resumed step 0 parameter 1 differ: 2 bytes of 4`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_program_training_drop_group_cpu.patch: lane batch-source (2026-11-25): the host twin, PT_SABOTAGE_DROP_GROUP_HOST forced on: a device=\"cpu\" session's load_training drops every later group's state; both lanes REFUSE on the CPU side, the device side stays. On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-7); the clean and restored runs matched.",
+   "error_match": "ValueError:\\ uninterrupted\\ step\\ 0\\ parameter\\ 1\\ and\\ resumed\\ step\\ 0\\ parameter\\ 1\\ differ:\\ 2\\ bytes\\ of\\ 4",
+   "patch_sha256": "558a7d9067399252f9d3a01d7945b17ed991eed370a5c896ac5a2f1d6d1c0843"
+  }
+ },
+ "coverage-autograd-program_training_in_place_cpu": {
+  "ops-batch-source-resume/base": {
+   "product_check": "tools/identity_lanes/batch_source.py (lane `ops-batch-source-resume`): the lane's in-cell oracle that raised `ValueError: uninterrupted batch 0 record ids and resumed batch 0 record ids differ: 9 bytes of 16`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_program_training_in_place_cpu.patch: lane fable-finalize (2026-11-25): the host twin, PT_SABOTAGE_IN_PLACE_HOST forced on: a device=\"cpu\" session's save_training overwrites the first checkpoint's file in place; the resumed batch record ids REFUSE on the CPU side only. Not yet measured. On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-8); the clean and restored runs matched.",
+   "error_match": "ValueError:\\ uninterrupted\\ batch\\ 0\\ record\\ ids\\ and\\ resumed\\ batch\\ 0\\ record\\ ids\\ differ:\\ 9\\ bytes\\ of\\ 16",
+   "patch_sha256": "1e2ebe5b2d168cba4f2a4ce6b0f4e754e3a34fa1a8ccb2dd1f53c4b6c91be730"
+  }
+ },
+ "coverage-autograd-program_training_source_unbound_cpu": {
+  "ops-batch-source-resume/base": {
+   "product_check": "tools/identity_lanes/batch_source.py (lane `ops-batch-source-resume`): the lane's in-cell oracle that raised `ValueError: ops-batch-source-resume: a resume on same-shaped replacement data was accepted; it must be refused by name`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_program_training_source_unbound_cpu.patch: lane fable-finalize (2026-11-25): the host twin, PT_SABOTAGE_SOURCE_UNBOUND_HOST forced on: a device=\"cpu\" session's load_training accepts same-shaped replacement data and other input fields; the refusal check REFUSES on the CPU side only. Not yet measured. On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-9); the clean and restored runs matched.",
+   "error_match": "ValueError:\\ ops\\-batch\\-source\\-resume:\\ a\\ resume\\ on\\ same\\-shaped\\ replacement\\ data\\ was\\ accepted;\\ it\\ must\\ be\\ refused\\ by\\ name",
+   "patch_sha256": "83b507dcf4df668b7ed6a41919ee732b8f47c0de21f1bb6a6344d5ddb75eb56b"
+  }
+ },
+ "coverage-autograd-session_ops_extra_gather_grad_cpu": {
+  "ops-composed-cases/base": {
+   "product_check": "tools/identity_lanes/composed_cases.py (lane `ops-composed-cases`): the lane's in-cell oracle that raised `ValueError: ops-composed-cases: case 'topk-gather' statement 'close' #4: gather: a repeated index adds every copy: element 0 is np.float64(0.0), want np.float64`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_session_ops_extra_gather_grad_cpu.patch: sub-lane session-ops-extra (2026-11-25): SOX_SABOTAGE_GATHER_GRAD_HOST forced on in autograd/session_ops_extra_sabotage.mojo, on the host executor only: topk-gather's exact gradient checks REFUSE (cell 0 of the gathered gradient is 0, want 3), on the CPU side only. Not yet measured. On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-10); the clean and restored runs matched.",
+   "error_match": "ValueError:\\ ops\\-composed\\-cases:\\ case\\ 'topk\\-gather'\\ statement\\ 'close'\\ \\#4:\\ gather:\\ a\\ repeated\\ index\\ adds\\ every\\ copy:\\ element\\ 0\\ is\\ np\\.float64\\(0\\.0\\),\\ want\\ np\\.float64\\(3\\.0\\)\\ \\(rtol\\ 0\\.0,\\ atol\\ 0\\.0\\)",
+   "patch_sha256": "604800aecb7869b70215d5cc7ec207b6370d1d874cff17618798aea878c12d35"
+  }
+ },
+ "coverage-autograd-session_ops_extra_lse_grad_cpu": {
+  "ops-composed-cases/base": {
+   "product_check": "tools/identity_lanes/composed_cases.py (lane `ops-composed-cases`): the lane's in-cell oracle that raised `ValueError: ops-composed-cases: case 'logsumexp-offset' statement 'close' #2: the logsumexp gradient under a large common offset is the row's softmax: element 0`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_session_ops_extra_lse_grad_cpu.patch: lane fable-finalize (2026-11-25): SOX_SABOTAGE_LSE_GRAD_HOST forced on in autograd/session_ops_extra_sabotage.mojo, on the host executor only: logsumexp's backward takes exp(x - rounded result); case logsumexp-offset's gradient check REFUSES (two scores of 1e8 give 1.0 a column, want 0.5), on the CPU side only. Not yet measured. On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-11); the clean and restored runs matched.",
+   "error_match": "ValueError:\\ ops\\-composed\\-cases:\\ case\\ 'logsumexp\\-offset'\\ statement\\ 'close'\\ \\#2:\\ the\\ logsumexp\\ gradient\\ under\\ a\\ large\\ common\\ offset\\ is\\ the\\ row's\\ softmax:\\ element\\ 0\\ is\\ np\\.float64\\(1\\.0\\),\\ want\\ np\\.float64\\(0\\.5\\)\\ \\(rtol\\ 1e\\-05,\\ atol\\ 0\\.0\\)",
+   "patch_sha256": "cd84b33d16aa8d8a8efbaf016a09ea9b6aa8def28e97a1cdf1916cba08110e9c"
+  }
+ },
+ "coverage-autograd-session_ops_extra_lse_settle_cpu": {
+  "ops-composed-cases/base": {
+   "product_check": "tools/identity_lanes/composed_cases.py (lane `ops-composed-cases`): the lane's in-cell oracle that raised `ValueError: ops-composed-cases: case 'logsumexp' statement 'close' #13: a row of only -inf gives -inf: element 0 is np.float64(0.0), want np.float64(1.0) (rtol `, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_session_ops_extra_lse_settle_cpu.patch: sub-lane session-ops-extra (2026-11-25): SOX_SABOTAGE_LSE_SETTLE_HOST forced on in autograd/session_ops_extra_sabotage.mojo, on the host executor only: logsumexp's -inf row check REFUSES (NaN, want -inf), on the CPU side only. Not yet measured. On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-12); the clean and restored runs matched.",
+   "error_match": "ValueError:\\ ops\\-composed\\-cases:\\ case\\ 'logsumexp'\\ statement\\ 'close'\\ \\#13:\\ a\\ row\\ of\\ only\\ \\-inf\\ gives\\ \\-inf:\\ element\\ 0\\ is\\ np\\.float64\\(0\\.0\\),\\ want\\ np\\.float64\\(1\\.0\\)\\ \\(rtol\\ 0\\.0,\\ atol\\ 0\\.0\\)",
+   "patch_sha256": "ca006aa4ffac6a1da05804048301a2e3458852dd99c18565dea737adce184970"
+  }
+ },
+ "coverage-autograd-session_ops_extra_seq_mask_cpu": {
+  "ops-composed-cases/base": {
+   "product_check": "tools/identity_lanes/composed_cases.py (lane `ops-composed-cases`): the lane's in-cell oracle that raised `ValueError: ops-composed-cases: case 'sequence-mask' statement 'close' #1: the mask is t < lengths[b]: element 1 is np.float64(1.0), want np.float64(0.0) (rtol `, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_session_ops_extra_seq_mask_cpu.patch: sub-lane session-ops-extra (2026-11-25): SOX_SABOTAGE_SEQ_MASK_HOST forced on in autograd/session_ops_extra_sabotage.mojo, on the host executor only: sequence-mask's mask moves and its zero-gradient checks REFUSE, on the CPU side only. Not yet measured. On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-13); the clean and restored runs matched.",
+   "error_match": "ValueError:\\ ops\\-composed\\-cases:\\ case\\ 'sequence\\-mask'\\ statement\\ 'close'\\ \\#1:\\ the\\ mask\\ is\\ t\\ <\\ lengths\\[b\\]:\\ element\\ 1\\ is\\ np\\.float64\\(1\\.0\\),\\ want\\ np\\.float64\\(0\\.0\\)\\ \\(rtol\\ 0\\.0,\\ atol\\ 0\\.0\\)",
+   "patch_sha256": "3294433f55a970367b20bff3effc5dbffd7e1feafec3b8aebf277f3769c2c978"
+  }
+ },
+ "coverage-autograd-session_ops_extra_soft_ce_cpu": {
+  "ops-composed-cases/base": {
+   "product_check": "tools/identity_lanes/composed_cases.py (lane `ops-composed-cases`): the lane's in-cell oracle that raised `ValueError: ops-composed-cases: case 'soft-cross-entropy' statement 'close' #12: the soft-target mean: element 0 is np.float64(-0.8201727867126465), want np.flo`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_session_ops_extra_soft_ce_cpu.patch: sub-lane session-ops-extra (2026-11-25): SOX_SABOTAGE_SOFT_CE_HOST forced on in autograd/session_ops_extra_sabotage.mojo, on the host executor only: soft-cross-entropy's oracle check REFUSES (the loss changes sign), on the CPU side only. Not yet measured. On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-14); the clean and restored runs matched.",
+   "error_match": "ValueError:\\ ops\\-composed\\-cases:\\ case\\ 'soft\\-cross\\-entropy'\\ statement\\ 'close'\\ \\#12:\\ the\\ soft\\-target\\ mean:\\ element\\ 0\\ is\\ np\\.float64\\(\\-0\\.8201727867126465\\),\\ want\\ np\\.float64\\(0\\.8201727867126465\\)\\ \\(rtol\\ 1e\\-05,\\ atol\\ 0\\.0\\)",
+   "patch_sha256": "6dc93d97414ab425bcc364e556f0d699661237846e9dae6d9657ce1138caafe9"
+  }
+ },
+ "coverage-autograd-session_ops_rest_ctc_raw_cpu": {
+  "ops-composed-cases/base": {
+   "product_check": "tools/identity_lanes/composed_cases.py (lane `ops-composed-cases`): the lane's in-cell oracle that raised `ValueError: ctc-offset the ctc gradient is the same words with every log-probability 2^14 lower [0] a and ctc-offset the ctc gradient is the same words with eve`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_session_ops_rest_ctc_raw_cpu.patch: lane stream-fits (2026-11-25): SOL_SABOTAGE_CTC_RAW_HOST forced on in autograd/session_ops_layer_sabotage.mojo, on the host executor only: ctc_loss (autograd/nn_ctc.mojo, the tape body Sequential and the Session share) scans and differentiates in the raw form of before 2026-11-25, exp(alpha + beta - lp + nll) on unshifted, unnormalized alphas and betas. Case ctc-offset (composed-extra.json) REFUSE On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-16); the clean and restored runs matched.",
+   "error_match": "ValueError:\\ ctc\\-offset\\ the\\ ctc\\ gradient\\ is\\ the\\ same\\ words\\ with\\ every\\ log\\-probability\\ 2\\^14\\ lower\\ \\[0\\]\\ a\\ and\\ ctc\\-offset\\ the\\ ctc\\ gradient\\ is\\ the\\ same\\ words\\ with\\ every\\ log\\-probability\\ 2\\^14\\ lower\\ \\[0\\]\\ b\\ differ:\\ 52\\ bytes\\ of\\ 96",
+   "patch_sha256": "8658e38a20238e70ffc471ea16003bc77d8d0e2ad40397ee10abec1a9ee4e8f8"
+  }
+ },
+ "coverage-autograd-session_ops_verify_drop_accumulate_cpu": {
+  "ops-composed-cases/base": {
+   "product_check": "tools/identity_lanes/composed_cases.py (lane `ops-composed-cases`): the lane's in-cell oracle that raised `ValueError: ops-composed-cases: case 'tape-two-paths' statement 'fd_grad' #5: the gradient of x (three contributions: matmul and both edges of x * x): element 0`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_session_ops_verify_drop_accumulate_cpu.patch: lane session-ops-verify (2026-11-25), the host twin: SESSION_OPS_VERIFY_SABOTAGE_DROP_ACCUMULATE_HOST forced on, so the tape drops later gradient contributions on the host executor only (comptime not E.IS_DEVICE); a device=\"cpu\" session of ops-composed-cases runs it, so case tape-two-paths REFUSES on the CPU side and the device side stays. On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-17); the clean and restored runs matched.",
+   "error_match": "ValueError:\\ ops\\-composed\\-cases:\\ case\\ 'tape\\-two\\-paths'\\ statement\\ 'fd_grad'\\ \\#5:\\ the\\ gradient\\ of\\ x\\ \\(three\\ contributions:\\ matmul\\ and\\ both\\ edges\\ of\\ x\\ \\*\\ x\\):\\ element\\ 0\\ is\\ np\\.float64\\(\\-0\\.34226831793785095\\),\\ central\\ difference\\ \\-0\\.9214043617248535\\ \\(a\\ gradient\\ contribution\\ lost\\ or\\ doubled\\?\\)",
+   "patch_sha256": "3e2765784d84f8841a9fc280b95e23791df45660c2fea85c89f1e3798c5d7114"
+  }
+ },
+ "coverage-nn-qkv-dead-row-cpu": {
+  "ops-attention-qkv/base": {
+   "product_check": "tools/identity_lanes/nn_qkv.py (lane `ops-attention-qkv`): the lane's in-cell oracle that raised `AssertionError: Session.attention: a fully masked query row must give zeros`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/nn_qkv_dead_row_cpu.patch: lane nn-blocks-qkv (2026-11-25): qkv_softmax_row writes a fully masked row as NaN instead of zeros, host bindings only (comptime MOJOLEARN_COLUMN_CPU); ops-attention-qkv part gqa_cross (batch row 1, query 2 has no key left) refuses on its zeros check on the CPU side and stays on the GPU side. The native check cases 3 and 4 fail on the CPU column. On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-18); the clean and restored runs matched.",
+   "error_match": "AssertionError:\\ Session\\.attention:\\ a\\ fully\\ masked\\ query\\ row\\ must\\ give\\ zeros",
+   "patch_sha256": "94f191d1c6bbf203e05a91bb6247279394c89d52ef883bd39a7f6e6b8a661aef"
+  }
+ },
+ "coverage-rnn-parity-mean_of_means-cpu": {
+  "ops-loss-fold-num-den/base": {
+   "product_check": "tools/identity_lanes/nn_programs.py (lane `ops-loss-fold-num-den`): the lane's in-cell oracle that raised `AssertionError: num/den step W - lr dL/dW: [-0.2603077  -0.13464198 -0.01930131  0.13817364] differs from the oracle [-0.27399515 -0.13414762 -0.0210374   0.139`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_rnn_parity_mean_of_means_cpu.patch: lane rnn-parity-c (2026-11-25): autograd/loss_fold.mojo RNN_PARITY_SABOTAGE_MEAN_OF_MEANS_HOST forced on: the same fault in the host-executor trainers only (comptime not E.IS_DEVICE); ops-loss-fold-num-den reads REFUSED on the CPU side, the GPU side stays put. Not yet run. On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-19); the clean and restored runs matched.",
+   "error_match": "AssertionError:\\ num/den\\ step\\ W\\ \\-\\ lr\\ dL/dW:\\ \\[\\-0\\.2603077\\ \\ \\-0\\.13464198\\ \\-0\\.01930131\\ \\ 0\\.13817364\\]\\ differs\\ from\\ the\\ oracle\\ \\[\\-0\\.27399515\\ \\-0\\.13414762\\ \\-0\\.0210374\\ \\ \\ 0\\.13997608\\]",
+   "patch_sha256": "62b8ab6986bf0a78a55f8c8d647dd8339803f74d9c81d55bfe88ecb5da351379"
+  }
+ },
+ "coverage-sequence-rnn_step_bits_cpu": {
+  "sequence-rnn-step-widths/base": {
+   "product_check": "tools/identity_lanes/rnn_parity.py (lane `sequence-rnn-step-widths`): the lane's in-cell oracle that raised `ValueError: LSTMRegressor.step one step at a time, 65 inputs and LSTMRegressor.predict every step differ: 106 bytes of 1024`, comparing the operation against an independent reference (its case statement, or its uninterrupted / plain twin); it shares no code with the patched branch.",
+   "why_fault_reaches_check": "autograd/checks/sabotage/coverage_rnn_step_bits_cpu.patch: lane rnn-step-bits (2026-11-25): the host twin, RNN_STEP_BITS_SABOTAGE_HOST forced on, so the recurrent projections take the row-keyed split-K order again on the host executor only (comptime not E.IS_DEVICE); the device=\"cpu\" run of sequence-rnn-step-widths REFUSES at 65 and 300 inputs (the GPU side keeps its digest). On the CPU side only the sabotaged run raised this line (w3-integrate-10 re-run at 3cd641b37e, batch sab-x_sequence-21); the clean and restored runs matched.",
+   "error_match": "ValueError:\\ LSTMRegressor\\.step\\ one\\ step\\ at\\ a\\ time,\\ 65\\ inputs\\ and\\ LSTMRegressor\\.predict\\ every\\ step\\ differ:\\ 106\\ bytes\\ of\\ 1024",
+   "patch_sha256": "43bb10f47fff2490ad5c69f430b72b95238baebff911a9452bd14d69bdfdfe55"
+  }
  }
 }

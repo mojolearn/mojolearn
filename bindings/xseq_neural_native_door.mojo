@@ -17,6 +17,7 @@ predicted codes become labels in this same call.
 """
 from bindings.neural_labels_native_unpack import neural_encode_labels, neural_decode_labels
 from std.python import Python, PythonObject
+from std.sys.compile import is_defined
 from std.memory import unsafe_memcpy
 from std.python._cpython import GILReleased
 from std.memory import unsafe_memcpy
@@ -472,10 +473,16 @@ def _rnn_fit_lengths(source: PythonObject, n: Int, steps: Int, operation: String
     return lengths
 
 
+comptime _XSEQ_COLUMN_CPU = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
 def _rnn_side(route: XseqRoute, device_fault: Bool, host_fault: Bool) -> Bool:
     """Whether a one-sided sabotage arm's fault applies to this route: the host route is an explicit
     device="cpu" beside a GPU set (route.cpu_table), the device route the rest."""
-    return (host_fault and route.cpu_table) or (device_fault and not route.cpu_table)
+    # The CPU column (a CPU-only image, MOJOLEARN_COLUMN_CPU) is the host side too (w3-integrate-11: the host arms
+    # never fired on the CPU box, whose route is not cpu_table).
+    var host_side = route.cpu_table or _XSEQ_COLUMN_CPU
+    return (host_fault and host_side) or (device_fault and not host_side)
 
 
 # ---------------------------------------------------------------- recurrent options (lane rnn-parity)
