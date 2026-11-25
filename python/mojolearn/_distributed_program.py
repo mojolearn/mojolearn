@@ -17,7 +17,24 @@ class DistributedProgram:
 
     def fit(self, *arrays, targets=None, loss="mse", epochs=10, batch_size=32,
             shuffle=True, huber_delta=1.0):
-        """Train in one native call and return this call's epoch losses."""
+        """Train in one native call and return this call's epoch losses.
+
+        Each optimizer step splits its minibatch into its logical shards and combines
+        their losses as the sum of the numerators over the sum of the
+        denominators, so a part with few valid elements counts for few. With
+        the built-in losses (``"mse"``, ``"mae"``, ``"huber"``,
+        ``"bce_with_logits"``, ``"cross_entropy"``) each row counts once.
+        For a masked or weighted loss, capture a program with two scalar
+        outputs, the weighted loss sum and its denominator (the sum of the
+        weights over the valid elements), and pass ``loss="output"``: the
+        step's loss is then the sum of the sums over the sum of the
+        denominators, never an average of the parts' means.
+
+        Example
+        -------
+        >>> p = s.capture([x, w], [loss_sum, denominator])  # doctest: +SKIP
+        >>> d.fit(X, W, loss="output", epochs=5)  # doctest: +SKIP
+        """
         return _OWNED_PROGRAM_CALL(self, "fit", (arrays, targets, loss, epochs, batch_size, shuffle, huber_delta))
 
     def run(self, *arrays):
