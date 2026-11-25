@@ -887,12 +887,17 @@ def _backward(model: PythonObject, ids: PythonObject, dy: PythonObject, grad: Py
 
 # ---------------------------------------------------------------- load
 
-def _load(cls: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`Embedding.load(path)`: read_npz with the format check,
+def _load(cls: PythonObject, path: PythonObject, device: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`Embedding.load(path, device=...)`: read_npz with the format check,
     `_check_saved_by`, the meta and weight checks, the constructor's checks,
     then the layer built natively with its own copy of the table and the
-    saved numeric mode."""
+    saved numeric mode. `device` is the constructor's (gd-verify-view,
+    2026-11-25): admitted first in the constructor's words and written as the
+    layer's `device`, so its route, and the one resident upload of the table
+    at the first forward, are on the requested side, as for a constructed
+    layer. The file holds no device."""
     var b = _b()
+    device_admit(device, 1 if context["backend"]["_CPU_ONLY"] is None else 0, b)
     _constructible(cls, context)
     var archive = context["embedding_archive_context"]
     var arrays = classical_archive_read(path, archive)
@@ -964,9 +969,9 @@ def _load(cls: PythonObject, path: PythonObject, context: PythonObject) raises -
     _freeze(table)
     py_setitem(fields, "weight", table)
     py_setitem(fields, "numeric_mode", mode)
-    # A loaded layer runs this installation's device (`device` is a
-    # constructor parameter, not model state; `save` does not write it).
-    py_setitem(fields, "device", PythonObject(None))
+    # `device` is a constructor parameter, not model state (`save` does not
+    # write it): the loader's, None for this installation's device.
+    py_setitem(fields, "device", device)
     _ = meta^
     _ = weight^
     return model
@@ -1008,7 +1013,7 @@ def emblayer_operation(operation: Int, owner: PythonObject, values: PythonObject
     if operation == OPTIMIZER_OPN_EMBLAYER_FORWARD:
         return _forward(owner, values[0], values[1], context)
     if operation == OPTIMIZER_OPN_EMBLAYER_LOAD:
-        return _load(owner, values[0], context)
+        return _load(owner, values[0], values[1] if len(values) > 1 else PythonObject(None), context)
     raise Error("RuntimeError: unknown Embedding operation " + String(operation))
 
 

@@ -50,6 +50,7 @@ from bindings.metrics_exp_common_unpack import (
     mx_warn, mx_undefined, mx_sorted, mx_list, mx_missing, mx_encode, mx_selected, mx_codes, mx_map_eq, mx_targets,
     mx_pos_label, mx_scores, mx_weights, mx_eq, mx_list_labels,
 )
+from bindings.metric_resident_source_door import metric_exact_ndarray
 from bindings.metric_resident_labels_door import (
     MetricResidentLabels, metric_resident_labels, metric_pin_codes, metric_put_codes,
 )
@@ -207,8 +208,20 @@ def _auc(args: PythonObject, context: PythonObject) raises -> PythonObject:
     if n < 2:
         raise Error("At least 2 points are needed to compute area under curve, but x.shape = (" + String(n) + ",)")
     var prog = MetricDoorProg()
-    var X = prog.put_words(_f64_word_list(xa, n))
-    var Y = prog.put_words(_f64_word_list(ya, n))
+    var X: Int
+    var Y: Int
+    if metric_exact_ndarray(xa) and metric_exact_ndarray(ya):
+        # The caller's own float64 buffers (`_auc_values` returns a C-order
+        # float64 ndarray as is), pinned as their 2n float32-typed words: inside
+        # `resident()` the runner keeps them by identity (put once, read in
+        # place; lane gd-resident-functions); outside a scope the same words
+        # are copied into the arena, as `put_words` copied them (no per-call
+        # host word list any more). A cast or list input stays program words.
+        X = prog.put_arg(py_call(xa.view, PythonObject("<f4")), args, 0)
+        Y = prog.put_arg(py_call(ya.view, PythonObject("<f4")), args, 1)
+    else:
+        X = prog.put_words(_f64_word_list(xa, n))
+        Y = prog.put_words(_f64_word_list(ya, n))
     var OUT = prog.want(prog.alloc(3), 3)
     prog.stage("auc_xy", 1, [n, X, Y, OUT, _AX_CHUNK])
     _ = ya  # keep the Python object alive through the native call above

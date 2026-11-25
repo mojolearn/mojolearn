@@ -33,7 +33,8 @@ from core.prep_entry_table import PrepEntryKey, xp_transport_ref
 from core.host_parallel import host_widen_index_i64, host_parallelize
 from core.fold_x_word import fold_x_word
 from bindings.arena_cache_run import (
-    ARENA_PREFIX_X_PREP, ARENA_STORE_PUT, arena_scope_store_put, arena_store_take_rows, arena_cache_free,
+    ARENA_PREFIX_X_PREP, ARENA_STORE_PUT, arena_scope_store_hold, arena_cache_unhold, arena_store_take_rows,
+    arena_cache_free,
 )
 from core.prep_entry_table import xp_transport_call
 
@@ -138,25 +139,31 @@ def member_fold_x_open(call: _Call, mut fold: MemberFoldX, estimator: String) ra
     member_fold_index(call, fold, estimator)
     fold.store = member_fold_store(call)
     var words = call[].x.rows * fold.cols
-    var base = -1
-    var own = -1
+    var failure = String("")
     if call[].scope != MEMBER_SCOPE_NONE and call[].pin != 0:
-        var put = arena_scope_store_put(call[].scope, fold.store, ARENA_PREFIX_X_PREP, call[].x.data, words,
-                                        call[].pin)
-        if put.pinned:
+        # HELD (lane gd-device-store): the cached whole X cannot be freed by a
+        # concurrent release, drop or close until the gather out of it is done.
+        var held = arena_scope_store_hold(call[].scope, fold.store, ARENA_PREFIX_X_PREP, call[].x.data, words,
+                                          call[].pin)
+        if held.pinned:
             call[].pin_kept = call[].pin  # THE PIN RULE: the cache holds the reference now
-        base = put.store_id
+        try:
+            fold.slot = arena_store_take_rows(fold.store, held.store_id, fold.cols, fold.index, fold.rows)
+        except error:
+            failure = String(error)
+        try:
+            arena_cache_unhold(held)  # take_rows waited for the store's context
+        except unhold_error:
+            if failure.byte_length() == 0:
+                failure = String(unhold_error)
     else:
         var source: List[Int] = [call[].x.data]
         var counts: List[Int] = [words]
-        own = xp_transport_call(fold.store, ARENA_STORE_PUT, source, counts)
-        base = own
-    var failure = String("")
-    try:
-        fold.slot = arena_store_take_rows(fold.store, base, fold.cols, fold.index, fold.rows)
-    except error:
-        failure = String(error)
-    if own >= 0:
+        var own = xp_transport_call(fold.store, ARENA_STORE_PUT, source, counts)
+        try:
+            fold.slot = arena_store_take_rows(fold.store, own, fold.cols, fold.index, fold.rows)
+        except error:
+            failure = String(error)
         arena_cache_free(fold.store, own)  # take_rows waited for the store's context
     if failure.byte_length() > 0:
         raise Error(failure)
@@ -272,24 +279,29 @@ def member_fold_column_open(call: _Call, fold: MemberFoldX, view: MemberMatrix, 
     column.rows = fold.rows
     column.row_words = view.cols * view.element_bytes() // 4
     var words = view.rows * column.row_words
-    var base = -1
-    var own = -1
+    var failure = String("")
     if call[].scope != MEMBER_SCOPE_NONE and pin != 0:
-        var put = arena_scope_store_put(call[].scope, fold.store, ARENA_PREFIX_X_PREP, view.data, words, pin)
-        if put.pinned:
+        # HELD (lane gd-device-store), as `member_fold_x_open`.
+        var held = arena_scope_store_hold(call[].scope, fold.store, ARENA_PREFIX_X_PREP, view.data, words, pin)
+        if held.pinned:
             kept = 1  # THE PIN RULE: the cache holds the reference now
-        base = put.store_id
+        try:
+            column.slot = arena_store_take_rows(fold.store, held.store_id, column.row_words, fold.index, fold.rows)
+        except error:
+            failure = String(error)
+        try:
+            arena_cache_unhold(held)  # take_rows waited for the store's context
+        except unhold_error:
+            if failure.byte_length() == 0:
+                failure = String(unhold_error)
     else:
         var source: List[Int] = [view.data]
         var counts: List[Int] = [words]
-        own = xp_transport_call(fold.store, ARENA_STORE_PUT, source, counts)
-        base = own
-    var failure = String("")
-    try:
-        column.slot = arena_store_take_rows(fold.store, base, column.row_words, fold.index, fold.rows)
-    except error:
-        failure = String(error)
-    if own >= 0:
+        var own = xp_transport_call(fold.store, ARENA_STORE_PUT, source, counts)
+        try:
+            column.slot = arena_store_take_rows(fold.store, own, column.row_words, fold.index, fold.rows)
+        except error:
+            failure = String(error)
         arena_cache_free(fold.store, own)  # take_rows waited for the store's context
     if failure.byte_length() > 0:
         raise Error(failure)

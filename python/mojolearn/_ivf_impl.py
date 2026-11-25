@@ -348,7 +348,7 @@ class IVFIndex(NumericModeMixin):
     # (`ivf_validate_index_arrays`) at the first search.
     @classmethod
     @_native_query_method
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load an index written by `save`.
 
         Every array's dtype and shape is checked on load; the list layout is
@@ -358,6 +358,10 @@ class IVFIndex(NumericModeMixin):
         ----------
         path : str or path-like
             File written by `save`.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
@@ -370,7 +374,7 @@ class IVFIndex(NumericModeMixin):
             If the file was saved by another class or its contents do not
             match the IVF-Flat layout.
         """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+        return _ARCHIVE(cls, "host_archive_load", (path, device), _ARCHIVE_CONTEXT)
 
 
 def _ivf_param(name):

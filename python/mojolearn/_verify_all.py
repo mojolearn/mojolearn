@@ -768,7 +768,7 @@ def smokeable_lanes(harness, surface, exposure, device_class, run_lanes=()):
             and (device_class != "cpu" or lane in covered)]
 
 
-def lane_accounting(harness_lanes, exposure, run_lanes, rows, stale=(), smoke=None):
+def lane_accounting(harness_lanes, exposure, run_lanes, rows, stale=(), smoke=None, neural_training=()):
     """EVERY LANE THE HARNESS DEFINES, with one honest state each.
 
     WHY THIS EXISTS. `verify --all` used to report only the lanes it ran. On a
@@ -835,6 +835,10 @@ def lane_accounting(harness_lanes, exposure, run_lanes, rows, stale=(), smoke=No
         elif lane in ran:
             state, reason = LANE_NOT_RUN, (
                 "this run selected it and it produced no comparable part at all")
+        elif lane in neural_training:
+            # left out by the routine profile (_verification_profiles.select):
+            # its own run is the neural-training profile
+            state, reason = LANE_NOT_RUN, "run by `verify --neural-training`"
         else:
             state, reason = LANE_NOT_RUN, "exposed, but this run did not select it"
         out[lane] = dict(state=state, reason=reason, exposed=bool(row.get("exposed")),
@@ -4477,7 +4481,9 @@ def cmd_verify_all(args):
                 execution["interrupted"] = str(exc)
                 smoke[lane] = dict(ok=False, checks=[], why=str(exc))
                 break
-    accounting = lane_accounting(harness_lanes, exposure, lanes, rows, stale=stale, smoke=smoke)
+    accounting = lane_accounting(harness_lanes, exposure, lanes, rows, stale=stale, smoke=smoke,
+                                 neural_training=() if getattr(args, "neural_training", False)
+                                 else set(neural_lanes))
     if models_only:
         verdict_scope = []                     # judged by the portable models, not by lanes
     elif asked:

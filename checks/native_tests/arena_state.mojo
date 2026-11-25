@@ -12,11 +12,11 @@ from checks.native_tests.testsuite_cases import check_cases, require
 from core.state_registry import StateHandle
 from core.arena_state import (
     ARENA_ROWS, ARENA_CACHES, ARENA_SCOPES, ARENA_RESIDENTS, ARENA_HANDLE_NONE,
-    DeviceRowsState, DeviceCacheState, ArenaScopeState, ArenaResidentState, ArenaResidentEntry,
+    DeviceRowsState, DeviceCacheState, ArenaScopeState, ArenaResidentState, ArenaResidentEntry, ARENA_STORE_ID_DEFERRED,
     ArenaStoreFree, arena_handle_word, arena_handle, arena_resident_close_entries, arena_resident_release_entry,
 )
 
-comptime ARENA_STATE_FIXTURES = 8
+comptime ARENA_STATE_FIXTURES = 9
 
 
 def handle_words() raises:
@@ -61,25 +61,25 @@ def rows_state() raises:
 def cache_identity() raises:
     var word = arena_handle_word(ARENA_CACHES.insert(DeviceCacheState(0, "x_prep")))
     var lease = ARENA_CACHES.acquire(arena_handle(word))
-    require(lease[].find(100, 8, True) == -1 and lease[].hits == 0, "a miss counts no hit")
+    require(lease[].find(100, 8, True) == -1 and lease[].hit_count() == 0, "a miss counts no hit")
     require(lease[].publish(100, 8, 11, 0) == 11, "first publication keeps its id")
     require(lease[].publish(100, 8, 12, 0) == 11, "a second publication of one buffer keeps the first id")
     require(lease[].publish(100, 4, 13, 0) == 13, "another length at the same address is its own entry")
     require(lease[].publish(200, 8, 14, 0) == 14, "another address")
-    require(lease[].uploads == 3 and lease[].live == 3, "upload and live counts")
-    require(lease[].find(100, 8, False) == 11 and lease[].hits == 0, "get counts no hit")
-    require(lease[].find(100, 4, True) == 13 and lease[].hits == 1, "id_of counts a hit")
+    require(lease[].upload_count() == 3 and lease[].live_count() == 3, "upload and live counts")
+    require(lease[].find(100, 8, False) == 11 and lease[].hit_count() == 0, "get counts no hit")
+    require(lease[].find(100, 4, True) == 13 and lease[].hit_count() == 1, "id_of counts a hit")
     var removed = lease[].remove(100, 8)
-    require(removed.store_id == 11 and lease[].live == 2, "remove returns the entry")
+    require(removed.store_id == 11 and lease[].live_count() == 2, "remove returns the entry")
     require(lease[].find(100, 8, False) == -1 and lease[].find(100, 4, False) == 13, "the chain survives a removal")
     require(lease[].remove(100, 8).store_id == -1, "removing an absent buffer")
     require(lease[].publish(100, 8, 15, 0) == 15 and lease[].find(100, 8, False) == 15, "a vacated slot is reused")
     var drained = lease[].drain()
-    require(len(drained) == 3 and lease[].live == 0 and lease[].find(200, 8, False) == -1, "drain empties the cache")
-    var uploads = lease[].uploads
-    require(lease[].restore(drained[0]) and lease[].live == 1 and lease[].uploads == uploads, "restore links an entry again and counts no upload")
+    require(len(drained) == 3 and lease[].live_count() == 0 and lease[].find(200, 8, False) == -1, "drain empties the cache")
+    var uploads = lease[].upload_count()
+    require(lease[].restore(drained[0]) and lease[].live_count() == 1 and lease[].upload_count() == uploads, "restore links an entry again and counts no upload")
     require(lease[].find(drained[0].address, drained[0].words, False) == drained[0].store_id, "a restored entry is found")
-    require(not lease[].restore(drained[0]) and lease[].live == 1, "restore keeps an entry published meanwhile")
+    require(not lease[].restore(drained[0]) and lease[].live_count() == 1, "restore keeps an entry published meanwhile")
     ARENA_CACHES.release(arena_handle(word))
 
 
@@ -92,9 +92,9 @@ def cache_chain_order() raises:
     require(lease[].remove(64, 3).store_id == 103, "middle")
     require(lease[].remove(64, 1).store_id == 101, "tail")
     require(lease[].remove(64, 5).store_id == 105, "head")
-    require(lease[].find(64, 2, False) == 102 and lease[].find(64, 4, False) == 104 and lease[].live == 2, "survivors")
+    require(lease[].find(64, 2, False) == 102 and lease[].find(64, 4, False) == 104 and lease[].live_count() == 2, "survivors")
     require(lease[].remove(64, 2).store_id == 102 and lease[].remove(64, 4).store_id == 104, "last two")
-    require(lease[].live == 0 and len(lease[].drain()) == 0, "empty after the last removal")
+    require(lease[].live_count() == 0 and len(lease[].drain()) == 0, "empty after the last removal")
     ARENA_CACHES.release(arena_handle(word))
 
 
@@ -211,6 +211,41 @@ def scope_caches() raises:
     ARENA_SCOPES.release(arena_handle(word))
 
 
+def cache_holds() raises:
+    """A held id is never freed under its reader (lane gd-device-store): `remove` / `drain` of a held entry
+    unlink it at once and hand its free to the last `unhold`. Sabotage: make `_CacheTable.retire` return the
+    entry unchanged -> "a held entry is not freed by remove" fails."""
+    var word = arena_handle_word(ARENA_CACHES.insert(DeviceCacheState(2, "x_prep")))
+    var lease = ARENA_CACHES.acquire(arena_handle(word))
+    require(lease[].publish(300, 8, 21, 0, True) == 21, "a held publication")
+    require(lease[].find_hold(300, 8) == 21 and lease[].hit_count() == 1, "a second holder counts a hit")
+    require(lease[].publish(300, 8, 22, 0, True) == 21, "a lost race holds the kept id")
+    var removed = lease[].remove(300, 8)
+    require(removed.store_id == ARENA_STORE_ID_DEFERRED and lease[].live_count() == 0
+            and lease[].find(300, 8, False) == -1, "a held entry is not freed by remove, only unlinked")
+    require(lease[].unhold(300, 8, 21) == -1 and lease[].unhold(300, 8, 21) == -1, "two holders still hold it")
+    require(lease[].unhold(300, 8, 21) == 21, "the last unhold frees the id")
+    var refused = False
+    try:
+        _ = lease[].unhold(300, 8, 21)
+    except error:
+        refused = True
+    require(refused, "an id no longer held is refused")
+    require(lease[].publish(400, 4, 31, 0, True) == 31 and lease[].publish(500, 4, 32, 0) == 32, "one held, one not")
+    var drained = lease[].drain()
+    var deferred = 0
+    var plain = 0
+    for i in range(len(drained)):  # small-loop(two entries)
+        if drained[i].store_id == ARENA_STORE_ID_DEFERRED:
+            deferred += 1
+        elif drained[i].store_id == 32:
+            plain += 1
+    require(deferred == 1 and plain == 1, "drain defers the held entry and returns the other to free")
+    require(lease[].unhold(400, 4, 31) == 31, "the drained held id is freed by its unhold")
+    require(lease[].find_hold(400, 4) == -1, "nothing to hold after the drain")
+    ARENA_CACHES.release(arena_handle(word))
+
+
 def fixture(unit: Int) raises:
     if unit == 0:
         handle_words()
@@ -226,6 +261,8 @@ def fixture(unit: Int) raises:
         scope_caches()
     elif unit == 6:
         resident_close_order()
+    elif unit == 8:
+        cache_holds()
     else:
         resident_release_order()
 

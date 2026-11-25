@@ -375,7 +375,7 @@ class LinearRegression(_NumericModeMixin):
         return _native_classical(self, "save", (path,), _CLASSICAL)
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a model written by ``save``.
 
         The loaded model predicts with the saved coefficients, intercept
@@ -386,6 +386,10 @@ class LinearRegression(_NumericModeMixin):
         ----------
         path : str or path-like
             A file written by ``LinearRegression.save``.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
@@ -397,7 +401,7 @@ class LinearRegression(_NumericModeMixin):
             If the file was saved by a different estimator or its fields do
             not match.
         """
-        return _native_classical(cls, "load", (path,), _CLASSICAL)
+        return _native_classical(cls, "load", (path, device), _CLASSICAL)
 
 
 # Maintainer notes (moved from the docstring, 2026-10-12):
@@ -572,7 +576,7 @@ class Ridge(_NumericModeMixin):
         return _native_classical(self, "save", (path,), _CLASSICAL)
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a model written by ``save``.
 
         The loaded model predicts with the saved coefficients, intercept,
@@ -582,6 +586,10 @@ class Ridge(_NumericModeMixin):
         ----------
         path : str or path-like
             A file written by ``Ridge.save``.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
@@ -593,7 +601,7 @@ class Ridge(_NumericModeMixin):
             If the file was saved by a different estimator or its fields do
             not match.
         """
-        return _native_classical(cls, "load", (path,), _CLASSICAL)
+        return _native_classical(cls, "load", (path, device), _CLASSICAL)
 
 
 #: `glm/impl/linear_model/qn.mojo`'s ids, the 14th `qn_fit` field.
@@ -962,7 +970,7 @@ class LogisticRegression(_NumericModeMixin):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a model written by ``save``.
 
         The loaded model predicts with the saved coefficients, classes and
@@ -973,6 +981,10 @@ class LogisticRegression(_NumericModeMixin):
         ----------
         path : str or path-like
             A file written by ``LogisticRegression.save``.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
@@ -984,7 +996,7 @@ class LogisticRegression(_NumericModeMixin):
             If the file was saved by a different estimator or its fields do
             not match.
         """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+        return _ARCHIVE(cls, "host_archive_load", (path, device), _ARCHIVE_CONTEXT)
 
 
 # The file: `_w` as fitted, `classes_` as `_labels.classes_member` wrote it
@@ -1202,6 +1214,11 @@ _native_classical, _CLASSICAL = _native_classical_bridge.connect_public(Ridge, L
 # device family: on a GPU installation both tables exist in the process and an
 # estimator's route picks one, once.
 _native_classical_bridge.connect_cpu_device(_CLASSICAL)
+# `load(path, device=...)` admits the loader's device with the constructor's
+# check (providers/python/device_route_boundary_door.mojo archive_load_device):
+# the class table, the backend's fields and the lazy CPU-image connection.
+from ._device_table import connect_context as _device_connect_context
+_device_connect_context(_CLASSICAL)
 
 
 # The compiled QNRegressor owner, connected once at import: fit, predict and

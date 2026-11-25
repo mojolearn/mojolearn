@@ -336,7 +336,7 @@ class ElasticNet(ParamsMixin):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a model written by ``save``.
 
         The loaded model predicts with the saved coefficients and
@@ -346,6 +346,10 @@ class ElasticNet(ParamsMixin):
         ----------
         path : str or path-like
             A file written by ``save`` of the same class.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
@@ -357,7 +361,7 @@ class ElasticNet(ParamsMixin):
             If the file was saved by a different estimator or its fields do
             not match.
         """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+        return _ARCHIVE(cls, "host_archive_load", (path, device), _ARCHIVE_CONTEXT)
 
     # `linear_model._r2_host`'s x_metrics R^2 program, natively on the
     # prediction buffer (formerly a sequential float64 host reduction,

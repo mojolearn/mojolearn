@@ -1231,7 +1231,7 @@ class GradientBoosting(_NumericModeMixin):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a model written by ``save``.
 
         The loaded model predicts; it does not carry the training configuration
@@ -1241,12 +1241,16 @@ class GradientBoosting(_NumericModeMixin):
         Parameters
         ----------
         path : str or path-like
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
         GradientBoosting
         """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+        return _ARCHIVE(cls, "host_archive_load", (path, device), _ARCHIVE_CONTEXT)
 
 # `save` and `load` are one native call each: bindings/archive_schema_native_door.mojo
 # writes this schema, the members, dtypes and refusals of the 0.8.55 Python

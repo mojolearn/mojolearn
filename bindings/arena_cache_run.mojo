@@ -39,7 +39,11 @@ needed). THE ADDITIVE API for a member family with its own device store
     call.pin)` -> `ArenaCachePut` (sets `call.pin_kept` when `.pinned`), and
     takes fold rows on its device with `arena_store_take_rows(store,
     put.store_id, row_words, idx_address, n_idx)` (a fresh slot the member
-    frees with `arena_cache_free(store, id)` after its run);
+    frees with `arena_cache_free(store, id)` after its run). A member that
+    only gathers out of the cached id calls `arena_scope_store_hold` instead
+    and `arena_cache_unhold(hold)` after its gather (HOLDS: a concurrent
+    release, drop or close then cannot free the id under the gather; lane
+    gd-device-store, core/arena_state.mojo `DeviceCacheState`);
   * nothing else: the scope's close frees every family's entries into the
     family's own store, and `resident.stats()` lists each family's cache.
 
@@ -60,7 +64,7 @@ MH_STORE_PUT 21 (bytes), MH_STORE_FREE 15 and no live operation
 from std.atomic import Atomic, Ordering
 from std.memory import ArcPointer
 from core.arena_state import (
-    ARENA_CACHES, ARENA_SCOPES, ARENA_HANDLE_NONE, ArenaStoreEntry, ArenaScopeState,
+    ARENA_CACHES, ARENA_SCOPES, ARENA_HANDLE_NONE, ARENA_STORE_ID_DEFERRED, ArenaStoreEntry, ArenaScopeState,
     DeviceCacheState, arena_handle, arena_handle_word,
 )
 from core.entry_table import EntryRef, entry_ref_mode, entry_ref_vendor
@@ -273,6 +277,57 @@ def arena_cache_find_or_put(word: Int, store: EntryRef, ops: ArenaStoreOps, addr
     return arena_cache_upload(word, store, ops, address, words, pin)
 
 
+@fieldwise_init
+struct ArenaCacheHold(Copyable, Movable):
+    """A resident id HELD for its reader (core/arena_state.mojo
+    `DeviceCacheState`, HOLDS) until `arena_cache_unhold`: the cache state
+    (kept alive by `lease` past a concurrent release of its handle), the
+    store it frees into, the buffer's key, the id and whether the cache kept
+    the caller's pin (THE PIN RULE, as `ArenaCachePut.pinned`)."""
+    var lease: ArcPointer[DeviceCacheState]
+    var store: EntryRef
+    var address: Int
+    var words: Int
+    var store_id: Int
+    var pinned: Bool
+
+
+def arena_cache_find_or_hold(word: Int, store: EntryRef, address: Int, words: Int, pin: Int) raises -> ArenaCacheHold:
+    """`arena_cache_find_or_put` with the id held until `arena_cache_unhold`:
+    found and held under the cache lock (a hit), or put outside it and
+    published held (a lost publication race holds the kept id and frees this
+    call's own)."""
+    var lease = ARENA_CACHES.acquire(arena_handle(word))
+    var found = lease[].find_hold(address, words)
+    if found >= 0:
+        return ArenaCacheHold(lease^, store, address, words, found, False)
+    var store_id = arena_cache_put(store, address, words)
+    var kept = store_id
+    try:
+        # Acquire after the put: a cache released meanwhile refuses here.
+        var current = ARENA_CACHES.acquire(arena_handle(word))
+        kept = current[].publish(address, words, store_id, pin, True)
+    except error:
+        try:
+            arena_cache_free(store, store_id)
+        except cleanup_error:
+            raise Error("RuntimeError: DeviceCache publication failed: " + String(error) + "; cleanup of the unpublished slot "
+                        + String(store_id) + " also failed: " + String(cleanup_error))
+        raise error^
+    if kept != store_id:
+        arena_cache_free(store, store_id)
+        return ArenaCacheHold(lease^, store, address, words, kept, False)
+    return ArenaCacheHold(lease^, store, address, words, store_id, True)
+
+
+def arena_cache_unhold(hold: ArenaCacheHold) raises:
+    """Drop the hold; the last hold of an id a release, drop or close
+    unlinked meanwhile frees it now, into the store it was put in."""
+    var freed = hold.lease[].unhold(hold.address, hold.words, hold.store_id)
+    if freed >= 0:
+        arena_cache_free(hold.store, freed)
+
+
 struct ArenaCacheReleased(Movable):
     """What a release, drop or close returns to the boundary: the pin tokens
     of the entries that left the cache (to unpin after every free and
@@ -292,7 +347,11 @@ struct ArenaCacheReleased(Movable):
 def _free_or_restore(lease: ArcPointer[DeviceCacheState], store: EntryRef, ops: ArenaStoreOps,
                      entry: ArenaStoreEntry, mut released: ArenaCacheReleased) raises:
     # One unlinked entry: free it; a failed free links it again for a retry
-    # (its pin stays with the cache).
+    # (its pin stays with the cache). A held entry (ARENA_STORE_ID_DEFERRED)
+    # is freed by its last unhold: its pin is released now.
+    if entry.store_id == ARENA_STORE_ID_DEFERRED:
+        released.pins.append(entry.pin)
+        return
     try:
         arena_cache_free(store, ops, entry.store_id)
         released.pins.append(entry.pin)
@@ -327,7 +386,7 @@ def arena_cache_release(word: Int, store: EntryRef, address: Int, words: Int) ra
     var lease = ARENA_CACHES.acquire(arena_handle(word))
     var released = ArenaCacheReleased()
     var removed = lease[].remove(address, words)
-    if removed.store_id >= 0:
+    if removed.store_id != -1:
         _free_or_restore(lease, store, arena_store_ops_transport(), removed, released)
     return released^
 
@@ -340,9 +399,11 @@ def arena_cache_drop(word: Int, store: EntryRef, addresses: List[Int], words: Li
     var released = ArenaCacheReleased()
     for i in range(len(addresses)):  # driver-loop: over the run's in-out inputs
         var removed = lease[].remove(addresses[i], words[i])
-        if removed.store_id < 0:
+        if removed.store_id == -1:
             continue
         released.pins.append(removed.pin)
+        if removed.store_id == ARENA_STORE_ID_DEFERRED:
+            continue  # held: its last unhold frees it
         try:
             arena_cache_free(store, removed.store_id)
         except error:
@@ -365,6 +426,8 @@ def arena_cache_finalize(word: Int, store: EntryRef, ops: ArenaStoreOps) -> List
         var drained = lease[].drain()
         for i in range(len(drained)):  # driver-loop: over the entries the cache still holds
             pins.append(drained[i].pin)
+            if drained[i].store_id == ARENA_STORE_ID_DEFERRED:
+                continue  # held: its last unhold frees it
             try:
                 arena_cache_free(store, ops, drained[i].store_id)
             except error:
@@ -456,6 +519,13 @@ def arena_scope_store_put(scope: Int, store: EntryRef, ops: ArenaStoreOps, prefi
     return arena_cache_find_or_put(arena_scope_cache(scope, store, ops, prefix), store, ops, address, words, pin)
 
 
+def arena_scope_store_hold(scope: Int, store: EntryRef, prefix: String, address: Int, words: Int,
+                           pin: Int) raises -> ArenaCacheHold:
+    """`arena_scope_store_put` with the id held until `arena_cache_unhold`
+    (a member that gathers its fold out of the cached id)."""
+    return arena_cache_find_or_hold(arena_scope_cache(scope, store, prefix), store, address, words, pin)
+
+
 def arena_store_take_rows(store: EntryRef, src_id: Int, row_words: Int, idx_address: Int, n_idx: Int) raises -> Int:
     """Rows `idx` (int64 at `idx_address`, `n_idx` of them) of the resident
     slot `src_id` (`row_words` words a row) gathered ON THE DEVICE into a
@@ -545,5 +615,5 @@ def arena_scope_stats(scope: Int) raises -> List[ArenaCacheCounts]:
     var counts = List[ArenaCacheCounts]()
     for i in range(len(lease[].caches)):  # driver-loop: over the scope's caches, in creation order
         var cache = ARENA_CACHES.acquire(arena_handle(lease[].caches[i].cache))
-        counts.append(ArenaCacheCounts(lease[].caches[i].prefix, cache[].uploads, cache[].hits))
+        counts.append(ArenaCacheCounts(lease[].caches[i].prefix, cache[].upload_count(), cache[].hit_count()))
     return counts^

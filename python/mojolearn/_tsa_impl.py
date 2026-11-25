@@ -688,20 +688,24 @@ class ExponentialSmoothing:
         return _TSA(self, "hw_save", (path,), _TSA_CONTEXT)
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a model written by :meth:`save`.
 
         Parameters
         ----------
         path : str or path-like
             File written by :meth:`save`.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
         ExponentialSmoothing
             A fitted model that forecasts and predicts; it does not refit.
         """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+        return _ARCHIVE(cls, "host_archive_load", (path, device), _ARCHIVE_CONTEXT)
 
     def score(self, index=None):
         """Sum of squared errors of the fit, as cuML's ``score`` returns.

@@ -290,7 +290,7 @@ class MinMaxScaler(_ScalerProtocol):
         return _MINMAX_CALL(self, "save", (path,), _MINMAX_CONTEXT)
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a scaler written by ``save``.
 
         The loaded scaler transforms; arrays are read at their saved dtype
@@ -300,6 +300,10 @@ class MinMaxScaler(_ScalerProtocol):
         ----------
         path : str or path-like
             File written by ``MinMaxScaler.save``.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
@@ -311,7 +315,7 @@ class MinMaxScaler(_ScalerProtocol):
         ValueError
             If the file is not a MinMaxScaler or its arrays are inconsistent.
         """
-        return _MINMAX_CALL(cls, "load", (path,), _MINMAX_CONTEXT)
+        return _MINMAX_CALL(cls, "load", (path, device), _MINMAX_CONTEXT)
 
 
 # Maintainer notes (moved from the docstring): variance is a centered
@@ -562,7 +566,7 @@ class StandardScaler(_ScalerProtocol):
         return _STANDARD_CALL(self, "save", (path,), _STANDARD_CONTEXT)
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, *, device=None):
         """Load a scaler written by ``save``.
 
         The loaded scaler transforms; arrays are read at their saved dtype
@@ -572,6 +576,10 @@ class StandardScaler(_ScalerProtocol):
         ----------
         path : str or path-like
             File written by ``StandardScaler.save``.
+        device : {None, 'gpu', 'cpu'}, default None
+            Where the loaded model runs, as the constructor's `device`. None
+            uses this installation's device, 'cpu' runs on the CPU and 'gpu'
+            requires a GPU installation. Other values raise ValueError.
 
         Returns
         -------
@@ -583,7 +591,7 @@ class StandardScaler(_ScalerProtocol):
         ValueError
             If the file is not a StandardScaler or its arrays are inconsistent.
         """
-        return _STANDARD_CALL(cls, "load", (path,), _STANDARD_CONTEXT)
+        return _STANDARD_CALL(cls, "load", (path, device), _STANDARD_CONTEXT)
 
 
 # scikit-learn keeps more estimators in this module than it defines; they resolve from

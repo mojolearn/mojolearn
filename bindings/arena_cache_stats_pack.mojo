@@ -134,7 +134,7 @@ def arena_cache_stats(model: PythonObject, operation: String, args: PythonObject
                                 "DeviceCache")
     var lease = ARENA_CACHES.acquire(arena_handle(view.word))
     if operation == "cache_len":
-        return PythonObject(lease[].live)
+        return PythonObject(lease[].live_count())
     if operation == "cache_attribute":
         # The read-only public counters: native integers.
         var name = args[0]
@@ -142,8 +142,8 @@ def arena_cache_stats(model: PythonObject, operation: String, args: PythonObject
             raise Error("TypeError: DeviceCache attribute names are native strings")
         var which = String(py=name)
         if which == "hits":
-            return PythonObject(lease[].hits)
+            return PythonObject(lease[].hit_count())
         if which == "uploads":
-            return PythonObject(lease[].uploads)
+            return PythonObject(lease[].upload_count())
         raise Error("AttributeError: 'DeviceCache' object has no attribute '" + which + "'")
     raise Error("ValueError: unknown native cache-statistics operation")

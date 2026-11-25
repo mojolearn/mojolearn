@@ -47,9 +47,8 @@ from bindings.operation_names_classical import (
     CLASSICAL_OPN_HOST_DENSITY_HASH, CLASSICAL_OPN_HOST_DENSITY_INITIALIZE, CLASSICAL_OPN_HOST_DENSITY_SAVE,
     CLASSICAL_OPN_HOST_IFOREST_FIT, CLASSICAL_OPN_HOST_KDE_FIT,
 )
-from bindings.py_balanced import py_item, py_setitem, py_fields
-from bindings.native_loaded_module_door import native_loaded_module
-from providers.python.device_route_boundary_door import device_admit_class
+from bindings.py_balanced import py_item
+from providers.python.device_route_boundary_door import archive_load_device
 
 
 # ---- from bindings/host_density_hash_native_unpack.mojo (inlined: its one importer is this file) ----
@@ -154,27 +153,10 @@ def _trees_leaf(model: PythonObject, operation: Int, name: String, args: PythonO
         # correctly refuses for unrelated estimator operations.
         var loaded = host_archive_build(args[0], archive_context, model if operation == CLASSICAL_OPN_HOST_ARCHIVE_LOAD else PythonObject(None), operation == CLASSICAL_OPN_HOST_ARCHIVE_CLASSICAL_MODEL)
         if operation == CLASSICAL_OPN_HOST_ARCHIVE_LOAD and len(args) > 1:
-            _archive_load_device(loaded, args[1], context)
+            archive_load_device(loaded, args[1], context)
         return loaded
     raise Error("RuntimeError: unknown native tree operation " + name)
 
-
-def _archive_load_device(loaded: PythonObject, device: PythonObject, context: PythonObject) raises:
-    """`Class.load(path, device=...)` of a loader that takes `device`
-    (HDBSCAN.load; gd-verify-view, 2026-11-25): the saved file holds no
-    device, so the loaded model runs where its loader names. The value is
-    admitted with the constructor's check (device_admit_class: an unknown
-    value, 'gpu' on a CPU-only installation, 'cpu' for a class with no CPU
-    route beside a GPU set are refused in its words) and written as the
-    model's `device`. None leaves the model on this installation's device
-    (one identity compare). Once per load, never per query."""
-    if device is None:
-        return
-    var b = native_loaded_module("builtins")
-    device_admit_class(loaded, device, py_get(py_item(context, PythonObject("backend_fields")), PythonObject("_CPU_ONLY")) is not None,
-                       py_get(context, PythonObject("device_cpu")), b,
-                       py_get(context, PythonObject("device_cpu_connect")))
-    py_setitem(py_fields(loaded), PythonObject("device"), device)
 
 
 def _trees_prefixed(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:

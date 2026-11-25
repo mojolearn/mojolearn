@@ -50,7 +50,7 @@ from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.native_owner_registry_unpack import register_native_owner_type
 from bindings.native_owner_registry_pack import borrowed_native_owner
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, _is_exact_dict
-from bindings.native_loaded_module_door import shared_device_writes
+from bindings.native_loaded_module_door import shared_device_writes, native_loaded_module
 from bindings.py_model_records import records_get, records_put, records_drop, records_open, RECORDS_PREPARED
 from core.device_route import (
     DeviceRoute, DEVICE_CPU, DEVICE_GPU, DEVICE_INSTALL, device_code, device_refusal, device_installed,
@@ -267,6 +267,30 @@ def device_admit_class(model: PythonObject, value: PythonObject, cpu_only: Bool,
         device_cpu_absent(String(cls.__name__), String(answer))
     if connect is not None:
         _ = py_call(connect)
+
+
+def archive_load_device(loaded: PythonObject, device: PythonObject, context: PythonObject) raises:
+    """`Class.load(path, device=...)`: THE ONE device step of every model
+    loader that takes `device` (gd-verify-view, 2026-11-25; the archive door
+    bindings/classical_trees_door.mojo, the classical LinearRegression/Ridge
+    door bindings/classical_native_pack.mojo and the two scaler doors). A
+    saved file holds no device, so the loaded model runs where its loader
+    names. The value is admitted with the constructor's check
+    (`device_admit_class`: an unknown value, 'gpu' on a CPU-only
+    installation, 'cpu' for a class with no CPU route beside a GPU set are
+    refused in its words; it drops the held routes) and written as the
+    model's `device`. The loader's context carries `backend_fields`,
+    `device_cpu` and `device_cpu_connect` (python/mojolearn/_device_table.py
+    `connect_context`). None leaves the model on this installation's device:
+    one identity compare. Once per load, never per query."""
+    if device is None:
+        return
+    var b = native_loaded_module("builtins")
+    device_admit_class(loaded, device,
+                       py_get(py_get(context, PythonObject("backend_fields")), PythonObject("_CPU_ONLY")) is not None,
+                       py_get(context, PythonObject("device_cpu")), b,
+                       py_get(context, PythonObject("device_cpu_connect")))
+    py_setitem(py_fields(loaded), PythonObject("device"), device)
 
 
 def device_cpu_connect_late(context: PythonObject) raises -> Bool:
