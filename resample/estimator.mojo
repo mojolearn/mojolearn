@@ -375,6 +375,36 @@ def _upload_pooled(
     return buf^
 
 
+def _resample_pooled(
+    ctx: DeviceContext, xp: ResampleF32Ptr, n_x: Int, x_slot: Int, yp: ResampleF32Ptr, n_y: Int, y_slot: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """The pooled sample `x ++ y` on the device (lane gd-rf-resample). No
+    slot (outside a `resident()` scope): `_upload_pooled`, unchanged. A half
+    whose slot is >= 0 is copied DEVICE TO DEVICE from the resident store's
+    buffer of the caller's words (resample/resample_store.mojo) into its
+    place; a half without one is copied from its host buffer. The same words
+    in the same places either way."""
+    if x_slot < 0 and y_slot < 0:
+        return _upload_pooled(ctx, xp, n_x, yp, n_y)
+    var buf = ctx.enqueue_create_buffer[DType.float32](n_x + n_y)
+    for h in range(2):  # driver-loop: over the two halves of the pool
+        var n = n_x if h == 0 else n_y
+        if n <= 0:
+            continue
+        var slot = x_slot if h == 0 else y_slot
+        var part = buf.create_sub_buffer[DType.float32](0 if h == 0 else n_x, n)
+        if slot >= 0:
+            var held = resample_store_buffer(slot, n)
+            ctx.enqueue_copy(dst_buf=part, src_buf=held.create_sub_buffer[DType.float32](0, n))
+            ctx.synchronize()
+            _ = held^  # the store's buffer stays referenced through the copy above
+        else:
+            ctx.enqueue_copy(dst_buf=part, src_ptr=xp if h == 0 else yp)
+            ctx.synchronize()
+        _ = part^
+    return buf^
+
+
 def _download_f32_into(
     ctx: DeviceContext, buf: DeviceBuffer[DType.float32], dst: ResampleF32Ptr, n: Int
 ) raises:
@@ -1767,6 +1797,8 @@ def permutation_test_host_into(
     r_first: Int = 0,
     tpb: Int = RESAMPLE_TPB,
     plan: Optional[DevicePlan] = None,
+    x_slot: Int = -1,
+    y_slot: Int = -1,
 ) raises -> PermutationResult:
     """`scipy.stats.permutation_test((x, y), statistic,
     permutation_type='independent', n_resamples=..., rng=seed,
@@ -1835,7 +1867,9 @@ def permutation_test_host_into(
     var key_words: List[Int32] = [key_lo(key), key_hi(key)]
     trace.record_list_i32("resample.key", key_words)
 
-    var dpool = _upload_pooled(ctx, xp, n_x, yp, n_y)
+    # x_slot / y_slot >= 0 (a resident() scope, lane gd-rf-resample): that
+    # half comes from the store's copy of the caller's words, device to device.
+    var dpool = _resample_pooled(ctx, xp, n_x, x_slot, yp, n_y, y_slot)
     var null_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
     var dplan = _resample_plan(plan)
@@ -1913,6 +1947,8 @@ def permutation_samples_host_into(
     null_out: ResampleF32Ptr,
     r_first: Int = 0,
     tpb: Int = RESAMPLE_TPB,
+    x_slot: Int = -1,
+    y_slot: Int = -1,
 ) raises -> PermutationResult:
     """`scipy.stats.permutation_test(data, statistic,
     permutation_type='samples', ...)` (2026-09-28): `two` is `(x, y)` with
@@ -1951,10 +1987,13 @@ def permutation_samples_host_into(
                 )
     var key = resample_key(seed, RESAMPLE_KIND_PERM_SAMPLES)
     var ctx = process_ctx[_DEVCTX_SLOT]()
-    var dx = _upload_from(ctx, xp, n)
-    # one sample: the kernel's second operand is unread; the old route
-    # uploaded x a second time for it
-    var dy = _upload_from(ctx, yp if two else xp, n_y if two else n)
+    # x_slot / y_slot >= 0 (a resident() scope, lane gd-rf-resample): the
+    # store's copy of the caller's words, read in place (`_resample_input`).
+    var dx = _resample_input(ctx, xp, n, x_slot)
+    # one sample: the kernel's second operand is unread, so it is a second
+    # reference to x's buffer (lane gd-rf-resample; before, x was uploaded a
+    # second time for it)
+    var dy = _resample_input(ctx, yp, n_y, y_slot) if two else dx.copy()
     var null_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
     if tpb != 256 and tpb != 128 and tpb != 64:

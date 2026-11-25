@@ -29,7 +29,7 @@ kernels are untouched. This file reads no experiment define.
 RESIDENT FORMS (lane gd-rf-resample, 2026-11-25): inside a `resident()` scope the door keeps each input array
 once in this image's store (resample/resample_store.mojo, reached through `resample_store_v1`; op 7 says whether
 the image has one and gives its scope route word) and appends the input's slot id to the ints: op 0 takes a
-ninth int, x's slot. Outside a scope the ints are the table above, unchanged, and the input is uploaded.
+ninth int, x's slot; op 2 two more (x's, y's), op 3 two more (x's, y's: -1 for a one-sample call). Outside a scope the ints are the table above, unchanged, and the input is uploaded.
 """
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -129,7 +129,8 @@ def _resample_permutation_test(a: List[Int], p: List[Int], f: List[Float64]) rai
             + " null_out, scalars_out), got "
             + String(len(a))
         )
-    if len(p) != 7 or len(f) != 0:
+    # 9 ints: the resident form, p[7] / p[8] the store slots of x / y (module note)
+    if (len(p) != 7 and len(p) != 9) or len(f) != 0:
         raise Error(
             "permutation_test: params must contain 7 values (n_x, n_y,"
             + " statistic, n_resamples, seed, alternative, r_first), got "
@@ -153,14 +154,17 @@ def _resample_permutation_test(a: List[Int], p: List[Int], f: List[Float64]) rai
     var yp = _f32_ptr(a[1])
     var np_ = _f32_ptr(a[2])
     var sp = _f64_ptr(a[3])
+    var x_slot = p[7] if len(p) == 9 else -1
+    var y_slot = p[8] if len(p) == 9 else -1
     _permutation_run(
-        xp, n_x, yp, n_y, statistic, n_resamples, seed, alternative, r_first, np_, sp
+        xp, n_x, yp, n_y, statistic, n_resamples, seed, alternative, r_first, np_, sp, x_slot, y_slot
     )
     return 0
 
 
 def _resample_permutation_samples(a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
-    if len(a) != 4 or len(p) != 6 or len(f) != 0:
+    # 8 ints: the resident form, p[6] / p[7] the store slots of x / y (module note)
+    if len(a) != 4 or (len(p) != 6 and len(p) != 8) or len(f) != 0:
         raise Error(
             "permutation_test(samples): addrs must hold 4 addresses and params"
             + " 6 values (n, n_y, n_resamples, seed, alternative, r_first)"
@@ -176,7 +180,9 @@ def _resample_permutation_samples(a: List[Int], p: List[Int], f: List[Float64]) 
     var xp = _f32_ptr(a[0])
     # one sample (n_y == 0): y is unread and its address may be anything
     var yp = _f32_ptr(a[1]) if n_y > 0 else xp
-    _permutation_samples_run(xp, n, yp, n_y, n_resamples, seed, alternative, r_first, np_, sp)
+    var x_slot = p[6] if len(p) == 8 else -1
+    var y_slot = p[7] if len(p) == 8 and n_y > 0 else -1
+    _permutation_samples_run(xp, n, yp, n_y, n_resamples, seed, alternative, r_first, np_, sp, x_slot, y_slot)
     return 0
 
 

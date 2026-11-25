@@ -125,12 +125,14 @@ def _permutation_run(
     r_first: Int,
     np_: MutPointer[Float32, MutUntrackedOrigin],
     sp: MutPointer[Float64, MutUntrackedOrigin],
+    x_slot: Int,
+    y_slot: Int,
 ) raises:
     # lane ne2-b-rounds (N078): x and y read in place, the null downloaded
-    # into `np_`
+    # into `np_`; a slot >= 0 (lane gd-rf-resample): the resident store's copy
     var r = permutation_test_host_into(
         xp, n_x, yp, n_y, statistic, n_resamples, seed, alternative, np_, r_first,
-        plan=Optional[DevicePlan](_resample_entry_plan()),
+        plan=Optional[DevicePlan](_resample_entry_plan()), x_slot=x_slot, y_slot=y_slot,
     )
     sp.unsafe_store(0, Float64(r.observed))
     sp.unsafe_store(1, Float64(r.pvalue.p))
@@ -149,12 +151,15 @@ def _permutation_samples_run(
     r_first: Int,
     np_: MutPointer[Float32, MutUntrackedOrigin],
     sp: MutPointer[Float64, MutUntrackedOrigin],
+    x_slot: Int,
+    y_slot: Int,
 ) raises:
     # lane ne2-b-rounds (N078): the samples read in place, the null
-    # downloaded into `np_`
+    # downloaded into `np_`; a slot >= 0 (lane gd-rf-resample): the resident
+    # store's copy
     var r = permutation_samples_host_into(
         xp, max(0, n), yp, max(0, n_y), n_y > 0, n_resamples, seed,
-        alternative, np_, r_first,
+        alternative, np_, r_first, x_slot=x_slot, y_slot=y_slot,
     )
     sp.unsafe_store(0, Float64(r.observed))
     sp.unsafe_store(1, Float64(r.pvalue.p))

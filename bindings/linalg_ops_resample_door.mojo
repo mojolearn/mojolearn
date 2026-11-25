@@ -454,11 +454,17 @@ def _rs_permutation_samples(args: PythonObject, context: PythonObject) raises ->
     var provider = rs_extension(args[0], args[8], context)
     # ORDER MATCHES resample/resample_native.mojo operation 3:
     # x, y, null, scalars; n, n_y, n_resamples, seed, alternative, r_first
+    # [, x's and y's resident store slots: inside a resident() scope only]
     var seed = Int(py=rs_int(args[6], "random_state", where))
     var alt = Int(py=rs_code("ALTERNATIVES", args[5], "alternative", where, context))
     var rf = Int(py=rs_int(args[7], "r_first", where))
-    rs_run(provider, RS_OP_PERMUTATION_SAMPLES, [xx.addr, yy.addr, null.addr, scalars.addr],
-           [xx.dim(0), ny, Int(py=r), seed, alt, rf], List[Float64]())
+    var ints: List[Int] = [xx.dim(0), ny, Int(py=r), seed, alt, rf]
+    var rs = rs_resident(args[0], provider, context)
+    if rs.active():
+        ints.append(rs_resident_slot(rs, args[1], xx))
+        ints.append(rs_resident_slot(rs, y, yy) if ny > 0 else -1)
+    rs_run(provider, RS_OP_PERMUTATION_SAMPLES, [xx.addr, yy.addr, null.addr, scalars.addr], ints, List[Float64]())
+    _ = rs^  # the store provider stays connected through the run above
     _ = scalars  # keep the Python object alive through the native call above
     _ = null  # keep the Python object alive through the native call above
     _ = xx  # keep the Python object alive through the native call above
@@ -500,9 +506,15 @@ def _rs_permutation_test(args: PythonObject, context: PythonObject) raises -> Py
     var provider = rs_extension(args[0], args[8], context)
     # ORDER MATCHES resample/resample_native.mojo operation 2:
     # x, y, null_out, scalars_out; n_x, n_y, statistic, n_resamples, seed,
-    # alternative, r_first
-    rs_run(provider, RS_OP_PERMUTATION_TEST, [xx.addr, yy.addr, null.addr, scalars.addr],
-           [xx.dim(0), yy.dim(0), Int(py=stat), Int(py=r), Int(py=seed), Int(py=alt), Int(py=rf)], List[Float64]())
+    # alternative, r_first [, x's and y's resident store slots: inside a
+    # resident() scope only]
+    var ints: List[Int] = [xx.dim(0), yy.dim(0), Int(py=stat), Int(py=r), Int(py=seed), Int(py=alt), Int(py=rf)]
+    var rs = rs_resident(args[0], provider, context)
+    if rs.active():
+        ints.append(rs_resident_slot(rs, args[1], xx))
+        ints.append(rs_resident_slot(rs, args[2], yy))
+    rs_run(provider, RS_OP_PERMUTATION_TEST, [xx.addr, yy.addr, null.addr, scalars.addr], ints, List[Float64]())
+    _ = rs^  # the store provider stays connected through the run above
     _ = scalars  # keep the Python object alive through the native call above
     _ = null  # keep the Python object alive through the native call above
     _ = yy  # keep the Python object alive through the native call above
