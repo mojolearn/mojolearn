@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# The model-selection resident owner's entries (`_Resident._entry`/`take`)
+# The model-selection resident owner's entries (`_Resident.take`)
 # and DeviceRows.materialize. They sit above both the Array preparation
 # owner (arena_materialize_native) and the model-selection input owner
 # (msel_inputs, which itself imports arena_materialize_native), so foreign

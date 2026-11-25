@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """The public row materializer owns typed native resident snapshots.
 
-The resident's entries are native; `_Resident._entry(values)` answers
-(owner, prepared Array, store id) of an entry without a second put, and the
-model-selection store's live count shows what was put.
+The resident's entries are native. A second `take` of the same owner puts
+nothing (the model-selection store's live count shows what was put), and
+`release` shows what an entry held: the drop of the owner's reference count
+(and of its memoryview's) when the entry is freed. `_Resident._entry`, the
+(owner, prepared Array, store id) answer these tests used to read, was
+removed with its last product caller (2d2f18ed11, lane vdf-scope-cv).
 
 Deleted with the instance dictionaries (2026-11-21, arena unit E): the
 pre-set `rows._host` cached-object test (a DeviceRows is read-only), and
@@ -28,6 +31,17 @@ from mojolearn._verify_native_runtime import audit_native_call
 
 def _live():
     return int(_native('msel_live')())
+
+
+def _released(owner, value, *views):
+    # The references `owner`'s entry for `value` held on `value` and on each
+    # of `views`: their reference-count drops when `release` frees the entry
+    # (the entry pins the owner object and its prepared Array, so a prepared
+    # Array that aliases the caller's storage shows as a second reference).
+    objects = (value, *views)
+    before = [sys.getrefcount(item) for item in objects]
+    owner.release(value)
+    return [held - sys.getrefcount(item) for held, item in zip(before, objects)]
 
 
 def _refused(audit, category=TypeError):
@@ -66,10 +80,13 @@ def test_materialize_preserves_typed_bytes_and_cached_identity(owner, dtype, lay
     assert output.tobytes() == base[indices].astype(expected_dtype).tobytes()
     assert audit_native_call(rows.materialize).assert_native() is output
     live = _live()
-    entry = owner._entry(base)
-    assert entry[0] is base and owner._entry(indices, '<i8')[0] is indices and _live() == live
-    if layout == 'contiguous' and dtype not in natural:
-        assert entry[1]._store is base
+    # The same owner's base and index uploads are reused: a second take puts nothing.
+    assert owner.take(base, indices).tobytes() == output.tobytes() and _live() == live
+    # Each entry holds its owner object; a contiguous natural-dtype base is
+    # prepared without a copy (its prepared Array's storage is the base).
+    held = _released(owner, base)[0]
+    assert held >= (2 if layout == 'contiguous' and dtype not in natural else 1)
+    assert _released(owner, indices)[0] >= 1 and _live() == live - 2
 
 
 @pytest.mark.parametrize('shape', [(4, 3), (4, 1)])
@@ -80,13 +97,16 @@ def test_array_storage_preserves_alias_and_order_contract(owner, shape, order):
     indices = Array.from_list([3, 0], '<i8')
     output = audit_native_call(DeviceRows(base, indices, owner.take).materialize).assert_native()
     assert output.tobytes() == values[[3, 0]].tobytes()
-    prepared = owner._entry(base)[1]
+    # C order: the prepared Array is the base (pinned twice, its memoryview
+    # not again). F order with one column: a C view that keeps the base and
+    # shares its memoryview. Otherwise a C copy that holds neither.
+    held, view_held = _released(owner, base, base._mv)
     if order == 'C':
-        assert prepared is base
+        assert held == 2 and view_held == 0
     elif shape[1] == 1:
-        assert prepared._base is base and prepared._mv is base._mv
+        assert held == 2 and view_held >= 1
     else:
-        assert prepared is not base and prepared.order == 'C'
+        assert held == 1 and view_held == 0
 
 
 @pytest.mark.parametrize('dtype', ['f4', 'f2'])
@@ -136,7 +156,12 @@ def test_materialize_converts_native_indices(owner, dtype):
     indices = np.array([True, False] if dtype == 'bool' else [3.9, 0.1] if dtype == 'f4' else [3, 0], dtype=dtype)
     output = audit_native_call(DeviceRows(base, indices, owner.take).materialize).assert_native()
     assert output.tobytes() == base[indices.astype('i8')].tobytes()
-    assert owner._entry(indices, '<i8')[1].dtype == '<i8'
+    # The index entry is the int64 cast, put once: a second take puts
+    # nothing, and the entry holds only its owner pin (the prepared int64
+    # Array is a cast copy, never the caller's storage).
+    live = _live()
+    assert owner.take(base, indices).tobytes() == output.tobytes() and _live() == live
+    assert _released(owner, indices) == [1]
 
 
 @pytest.mark.parametrize('dtype', ['i8', 'f4', 'O'])
@@ -144,8 +169,12 @@ def test_scalar_index_keeps_existing_prepared_shape(owner, dtype):
     base = np.arange(12, dtype='f4').reshape(4, 3)
     indices = np.array(1, dtype=dtype)
     output = audit_native_call(DeviceRows(base, indices, owner.take).materialize).assert_native()
-    assert output.tobytes() == base[[1]].tobytes()
-    assert owner._entry(indices, '<i8')[1].shape == (() if dtype == 'O' else (1,))
+    assert output.tobytes() == base[[1]].tobytes() and output.shape == (1, 3)
+    # The prepared index shape (() for an object scalar, (1,) otherwise) was
+    # read through the removed `_Resident._entry`; the take output's one row
+    # and the reused upload are what remain observable.
+    live = _live()
+    assert owner.take(base, indices).tobytes() == output.tobytes() and _live() == live
 
 
 @pytest.mark.parametrize('dtype,values,category', [
@@ -182,7 +211,7 @@ def test_materialize_does_not_call_python_resident_helpers(owner, monkeypatch):
         calls.append(True)
         raise AssertionError('Python resident helper executed')
     with monkeypatch.context() as patch:
-        patch.setattr(_Resident, '_entry', forbidden)
+        patch.setattr(_Resident, 'release', forbidden)
         patch.setattr(_Resident, 'take', forbidden)
         result = audit_native_call(rows.materialize).assert_native()
     assert not calls and result.tobytes() == np.array([[6., 7., 8.], [0., 1., 2.]], dtype='f4').tobytes()
