@@ -1381,12 +1381,12 @@ def _vocab_finish(fields: PythonObject, var tok: VocabTokenizer, device: Int) ra
         lengths.append(_bytes_append(keys[i], arena))
         ids.append(_int(added[keys[i]], "added token id"))
     tok.set_specials(arena, lengths, ids)
-    py_setitem(fields, "_n_ranks", PythonObject(tok.n_ranks()))
-    py_setitem(fields, "_n_vocab", PythonObject(tok.n_vocab()))
-    py_setitem(fields, "_max_token_bytes", PythonObject(tok.max_token_bytes()))
     var handle = VocabHandle()
     handle.max_bytes = tok.max_token_bytes()
     handle.n_vocab = tok.n_vocab()
+    py_setitem(fields, "_n_ranks", PythonObject(tok.n_ranks()))
+    py_setitem(fields, "_n_vocab", PythonObject(handle.n_vocab))
+    py_setitem(fields, "_max_token_bytes", PythonObject(handle.max_bytes))
     if device == DEVICE_GPU:
         handle.gpu_entry = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()[].vocab_gpu_entry
         handle.gpu_table = _vocab_gpu_load(tok)

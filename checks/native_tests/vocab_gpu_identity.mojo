@@ -119,6 +119,8 @@ def _check(tok: VocabTokenizer, handle: Int, data: List[UInt8], allow: Bool) rai
     for i in range(total):
         assert_equal(Int(out[i]), Int(expect[i]), "decoded byte " + String(i) + ", " + what)
     _ = len(ids)
+    _ = len(wide)
+    _ = len(out)
 
 
 def test_every_pattern_matches_the_host_column() raises:
@@ -157,6 +159,7 @@ def test_decode_refuses_the_first_bad_id() raises:
     var result = vocab_gpu_decode(handle, Int(bad.unsafe_ptr()), len(bad), Int(out.unsafe_ptr()), 64)
     # n_ranks + 1 is neither a rank nor an added id (the added ids start at n_ranks + 3)
     assert_equal(result, -1 - 1, "first bad id position")
+    _ = len(out)
     var expect_raises = False
     try:
         var host = List[UInt8]()
