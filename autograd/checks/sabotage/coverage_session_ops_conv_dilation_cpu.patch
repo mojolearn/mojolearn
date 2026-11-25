@@ -1,0 +1,22 @@
+diff --git a/autograd/rankn_conv_ops.mojo b/autograd/rankn_conv_ops.mojo
+index 0f90c3206a..1fa6f1c75c 100644
+--- a/autograd/rankn_conv_ops.mojo
++++ b/autograd/rankn_conv_ops.mojo
+@@ -33,6 +33,7 @@
+ # reserved. sequence/dispatch.mojo routes and fences them.
+ from std.memory import bitcast
+ from std.sys.compile import is_defined
++from std.sys.info import is_gpu
+ from sequence.ops import Args, FP
+ from checks.numerics import ftz, identical_div, identical_rsqrt
+ from autograd.rankn import rn_word
+@@ -185,6 +186,9 @@ def op_rnv_im2col(t: Int, a: Args):
+     var z = od * rn_word(d, CP_LEN + RN_DEPTH_SD) - rn_word(d, CP_LEN + RN_DEPTH_PD) + kd * rn_word(d, CP_LEN + RN_DEPTH_DD)
+     var h = oh * rn_word(d, CP_SH) - rn_word(d, CP_PH) + kh * rn_word(d, CP_DH)
+     var w = ow * rn_word(d, CP_SW) - rn_word(d, CP_PW) + kw * rn_word(d, CP_DW)
++    comptime if not is_gpu():
++        # SABOTAGE (coverage-autograd-session_ops_conv_dilation_cpu): on the host the width taps ignore the dilation
++        w = ow * rn_word(d, CP_SW) - rn_word(d, CP_PW) + kw
+     var v = Float32(0)
+     if z >= 0 and z < D and h >= 0 and h < H and w >= 0 and w < W:
+         v = ftz(a.p0.unsafe_load((((n * C + c) * D + z) * H + h) * W + w))

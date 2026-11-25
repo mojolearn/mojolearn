@@ -252,3 +252,9 @@ Session.interpolate	session-ops-resize resampling: not yet in a release verifica
 Session.pixel_shuffle	session-ops-resize rearranging: not yet in a release verification
 Session.pixel_unshuffle	session-ops-resize rearranging: not yet in a release verification
 # session-ops-resize end
+# session-ops-conv begin
+Session.conv1d	session-ops-conv Sequential's convolutions as Session ops: not yet in a release verification
+Session.conv3d	session-ops-conv Sequential's convolutions as Session ops: not yet in a release verification
+Session.conv_transpose1d	session-ops-conv Sequential's convolutions as Session ops: not yet in a release verification
+Session.conv_transpose2d	session-ops-conv Sequential's convolutions as Session ops: not yet in a release verification
+# session-ops-conv end

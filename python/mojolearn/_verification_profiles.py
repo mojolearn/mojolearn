@@ -59,6 +59,9 @@ ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
                           # session-ops-resize begin: Session interpolate, pixel (un)shuffle, pad modes, one backward each
                           'ops-resize',
                           # session-ops-resize end
+                          # session-ops-conv begin: ops.Session conv1d / conv2d dilated / conv3d / conv_transpose, one seeded backward
+                          'ops-conv-layers',
+                          # session-ops-conv end
                           ))
 # These fixtures use loaded weights or inspect configuration without training.
 NEURAL_INFERENCE = frozenset(('hf-causal-lm', 'byte-lm-host-infer',

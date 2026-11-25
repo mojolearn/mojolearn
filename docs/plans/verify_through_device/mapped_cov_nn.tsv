@@ -321,3 +321,9 @@ mojolearn.ops.Session.interpolate	mapped	ops-resize	tools/identity_lanes/session
 mojolearn.ops.Session.pixel_shuffle	mapped	ops-resize	tools/identity_lanes/session_ops_resize.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
 mojolearn.ops.Session.pixel_unshuffle	mapped	ops-resize	tools/identity_lanes/session_ops_resize.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
 # session-ops-resize end
+# session-ops-conv begin
+mojolearn.ops.Session.conv1d	mapped	ops-conv-layers	tools/identity_lanes/session_ops_conv.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.conv3d	mapped	ops-conv-layers	tools/identity_lanes/session_ops_conv.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.conv_transpose1d	mapped	ops-conv-layers	tools/identity_lanes/session_ops_conv.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+mojolearn.ops.Session.conv_transpose2d	mapped	ops-conv-layers	tools/identity_lanes/session_ops_conv.py	yes _mojolearn_x_sequence_host via -	yes _mojolearn_x_sequence via -	-
+# session-ops-conv end

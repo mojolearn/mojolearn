@@ -186,6 +186,9 @@ from autograd.session_ops_resize import (
     session_interpolate, session_pixel_shuffle, session_pad_mode,
 )
 # session-ops-resize end
+# session-ops-conv begin: conv1d, conv2d with dilation / per-axis words, conv3d, conv_transpose1d / 2d (130..134)
+from autograd.session_ops_conv import session_conv_forward, session_conv_name
+# session-ops-conv end
 # nn-blocks-qkv begin: attention over explicit q, k, v (session code 122, autograd/nn_qkv.mojo)
 from autograd.nn_qkv import OPS_ATTENTION_QKV, qkv_attention
 # nn-blocks-qkv end
@@ -2585,8 +2588,16 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
 
     # session-ops-conv begin: codes 130..139 (sub-lane session-ops-conv replaces this body)
     def _layer_conv(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Tensor:
-        """The convolutions (conv1d, conv3d, conv_transpose1d / 2d / 3d)."""
-        raise Error("ops: unknown operation code " + String(code))
+        """The convolutions (autograd/session_ops_conv.mojo): conv1d, conv2d with dilation or per-axis words,
+        conv3d, conv_transpose1d / 2d, each the forward function Sequential's layer calls (its node, its bits).
+        ints: the words the door resolved (that file's header); no float arguments."""
+        if len(fs) != 0:
+            raise Error("ValueError: ops: " + session_conv_name(code) + " takes no float arguments")
+        for i in range(len(hs)):  # small-loop(hs: x, weight and an optional bias): admission, no data
+            if self.int_words[self._slot(hs[i])]:
+                raise Error("TypeError: ops: " + session_conv_name(code)
+                            + ": x, weight and bias must be floating-point tensors, not Session.ids tensors")
+        return session_conv_forward(self.tape, self.ex, code, ints, x)
     # session-ops-conv end
 
 

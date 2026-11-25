@@ -50,9 +50,9 @@ Sequential layer codes are `python/mojolearn/_x_sequence_model.py` `_LAYER`. "ex
 | dropout (7) | tape dropout | exists | exists | - |
 | residual, branch, concat, multiply, narrow (8, 19, 20, 37, 38) | containers / rankn | `add`, `concat`, `mul`, `split`/`index` exist | exist | - |
 | reshape, permute, flatten (9..11) | rankn layout | exist | exist | - |
-| conv2d (12) | rankn_conv2d | `conv2d` exists (no dilation, square padding) | exists | conv (dilation / per-axis padding as a new code) |
+| conv2d (12) | rankn_conv2d | `conv2d` exists; dilation, per-axis stride / padding and padding 'valid' / 'same' **added** (code 131, chosen by the door only when used; the default call keeps code 44) | exists | conv |
 | max_pool2d, avg_pool2d (13, 14) | rankn pools | exist (no padding, ceil_mode) | exist | pool (padding as a new code) |
-| conv1d (15) | rankn_conv2d over (N, C, 1, L) | missing | exists (RN conv tags) | conv |
+| conv1d (15) | rankn_conv1d (rankn_conv2d over (N, C, 1, L)) | `conv1d` **added** (code 130; PyTorch's dilation through rankn_conv1d's new `dilation` argument, default 1, Sequential's call unchanged) | exists (RN conv tags) | conv |
 | max_pool1d, avg_pool1d (16, 17) | rankn pools over (N, C, 1, L) | missing | exists | pool |
 | adaptive_avg_pool1d (18) | nn_adaptive_avg_pool1d | missing | NnConvRules | pool |
 | silu, gelu, softplus (32..34) | import unary | exist | exist | - |
@@ -67,7 +67,7 @@ Sequential layer codes are `python/mojolearn/_x_sequence_model.py` `_LAYER`. "ex
 | leaky_relu, elu, hardswish, hardsigmoid (48, 49, 52, 53) | import unary | exist | exist | - |
 | prelu (50), mish (51) | imp_binary PRELU, imp_unary MISH | missing | import tags | rest |
 | group_norm, instance_norm (54, 55) | graph_group_norm, graph_instance_norm | missing | RN tags | rest |
-| conv_transpose1d / 2d (56, 57) | nn_conv_transpose1d / 2d | missing | NnConvRules | conv |
+| conv_transpose1d / 2d (56, 57) | nn_conv_transpose1d / 2d | `conv_transpose1d`, `conv_transpose2d` **added** (codes 133, 134; per-axis words on 2-D) | NnConvRules | conv |
 | adaptive_avg_pool2d (58), adaptive_max_pool2d / 1d (59, 60), global_max_pool (61) | nn_adaptive_* | missing | NnConvRules | pool |
 | constant / zero pad (62) | imp_pad | `pad` exists | exists | - |
 | reflection / replication pad (63, 64) | nn_pad | added: `pad(x, pads, value, mode='reflect' \| 'replicate')` (code 153; `mode` None / 'constant' keeps code 73; ONNX pad order kept, `value` before `mode`) | NnConvRules | resize |
@@ -75,7 +75,7 @@ Sequential layer codes are `python/mojolearn/_x_sequence_model.py` `_LAYER`. "ex
 | pixel_shuffle / unshuffle (66) | nn_pixel_shuffle | added: `pixel_shuffle`, `pixel_unshuffle` (codes 151, 152; (N, C, H, W) only) | rank-N view / permute tags | resize |
 | multihead_attention (67) | nn_mha_forward | missing | NNAttentionRules | rest |
 | positional_encoding (72) | nn_pos_enc_forward | missing | NNAttentionRules | rest |
-| conv3d (73) | rankn_conv3d | missing | RN conv tags | conv |
+| conv3d (73) | rankn_conv3d | `conv3d` **added** (code 132) | RN conv tags | conv |
 | max_pool3d, avg_pool3d, adaptive_avg_pool3d (74..76) | rankn_*_pool3d | missing | RN pool tags | pool |
 | log_softmax (77) | nn_log_softmax | `log_softmax` exists | exists | - |
 | losses mse, l1, huber, bce_with_logits, cross_entropy | tape losses | exist | exist | - |
@@ -91,8 +91,10 @@ Sequential layer codes are `python/mojolearn/_x_sequence_model.py` `_LAYER`. "ex
 | `logsumexp(x, axis)` | log-softmax's numerics | missing | softmax of the row times the upstream | extra |
 | soft-target `cross_entropy` (a target distribution) | the cross-entropy / log-softmax bodies; the hard-label path keeps its code | missing | softmax minus target | extra |
 
-Expected not exposable without a new kernel (each sub-lane confirms or exposes): conv_transpose3d (no 3-D col2im
-path), adaptive_max_pool3d, interpolate modes trilinear / bicubic / area, padding modes circular and 3-D
+Expected not exposable without a new kernel (each sub-lane confirms or exposes): conv_transpose3d (session-ops-conv
+confirms: col2im, im2col and the row copies carry the depth words, but nn_conv_transpose2d's host path is rank-4 only
+and its output body op_nnc_ct_out indexes the bias channel over H W, not D H W; exposing it needs that body made
+depth-aware, a change to Sequential's conv_transpose node, so it is listed, not written), adaptive_max_pool3d, interpolate modes trilinear / bicubic / area, padding modes circular and 3-D
 reflection / replication.
 
 Not exposable without a new kernel (session-ops-resize, confirmed): interpolate modes trilinear, bicubic, area,

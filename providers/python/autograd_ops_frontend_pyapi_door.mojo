@@ -103,6 +103,16 @@ from autograd.session_ops_resize import (
     RSZ_PAD_REFLECT, RSZ_PAD_REPLICATE,
 )
 # session-ops-resize end
+# session-ops-conv begin: Sequential's convolutions as Session ops (autograd/session_ops_conv.mojo)
+from autograd.autograd_ops_frontend_run import (
+    _SOP_CONV1D, _SOP_CONV3D, _SOP_CONV_TRANSPOSE1D, _SOP_CONV_TRANSPOSE2D,
+)
+from autograd.session_ops_conv import (
+    OPS_CONV1D, OPS_CONV2D_ND, OPS_CONV3D, OPS_CONV_TRANSPOSE1D, OPS_CONV_TRANSPOSE2D,
+)
+from autograd.rankn import ShapeN
+from bindings.native_class_admission_door import static_builtin_type
+# session-ops-conv end
 
 
 struct _SessionOpNames(Defaultable, Movable):
@@ -185,6 +195,78 @@ def _seed_words(x: PythonObject) raises -> List[Int]:
     out.append(Int(seed & 0xffffffff))
     out.append(Int(seed >> 32))
     return out^
+
+
+# session-ops-conv begin: UNPACK of the convolutions' PyTorch arguments (an int or one int per spatial axis;
+# padding also 'valid' or 'same'), read once per call into the integer words of autograd/session_ops_conv.mojo
+def _conv_axes(x: PythonObject, n: Int, name: String, what: String, low: Int) raises -> List[Int]:
+    """`x` as n words: an int repeated, or a tuple / list of n ints (PyTorch's `_single` / `_pair` /
+    `_triple`)."""
+    if _is_int(x):
+        return List[Int](length=n, fill=_int(x, name, low))
+    var cls = py_type(x)
+    if cls is static_builtin_type("builtins", "str"):
+        raise Error("ValueError: " + what + ": " + name + " must be an integer or a tuple of " + String(n)
+                    + " integers")
+    if not (cls is static_builtin_type("builtins", "tuple") or cls is static_builtin_type("builtins", "list")):
+        raise Error("TypeError: " + name + " must be an integer or a tuple of integers")
+    var words = _ints(x, name, low)
+    if len(words) != n:
+        raise Error("ValueError: " + what + ": " + name + " must be an integer or a tuple of " + String(n)
+                    + " integers, got " + String(len(words)) + " values")
+    return words^
+
+
+def _conv_padding(x: PythonObject, n: Int, what: String, weight: ShapeN, stride: List[Int],
+                  dilation: List[Int]) raises -> List[Int]:
+    """padding as n words; the words 'valid' (no padding) and 'same' (output the input's size: stride 1, and
+    dilation (kernel_size - 1) even on every axis, since the convolution pads both ends alike) as PyTorch."""
+    if py_type(x) is static_builtin_type("builtins", "str"):
+        var word = String(py=x)
+        if word == "valid":
+            return List[Int](length=n, fill=0)
+        if word != "same":
+            raise Error("ValueError: " + what + ": padding must be an integer, a tuple of integers, 'valid' or 'same'")
+        if weight.ndim != n + 2:
+            raise Error("ValueError: " + what + ": the weight must be a rank-" + String(n + 2) + " tensor")
+        var pads = List[Int](capacity=n)
+        for k in range(n):  # small-loop(n: at most three spatial axes)
+            if stride[k] != 1:
+                raise Error("ValueError: " + what + ": padding='same' needs stride 1 on every axis")
+            var total = dilation[k] * (weight.d[weight.ndim - n + k] - 1)
+            if total % 2 != 0:
+                raise Error("ValueError: " + what + ": padding='same' needs dilation * (kernel_size - 1) even on"
+                            + " every axis (it pads both ends alike); pad the input with Session.pad first")
+            pads.append(total // 2)
+        return pads^
+    return _conv_axes(x, n, "padding", what, 0)
+
+
+def _conv_words(args: PythonObject, n: Int, what: String, weight: ShapeN) raises -> List[Int]:
+    """args (x, weight, bias, stride, padding, dilation, groups) -> [stride * n, padding * n, dilation * n,
+    groups]."""
+    var stride = _conv_axes(args[3], n, "stride", what, 1)
+    var dilation = _conv_axes(args[5], n, "dilation", what, 1)
+    var padding = _conv_padding(args[4], n, what, weight, stride, dilation)
+    var words = List[Int](capacity=3 * n + 1)
+    words.extend(stride^)
+    words.extend(padding^)
+    words.extend(dilation^)
+    words.append(_int(args[6], "groups", 1))
+    return words^
+
+
+def _conv_transpose_words(args: PythonObject, n: Int, what: String) raises -> List[Int]:
+    """args (x, weight, bias, stride, padding, output_padding, groups, dilation) -> [stride * n, padding * n,
+    output_padding * n, dilation * n, groups]."""
+    var words = List[Int](capacity=4 * n + 1)
+    words.extend(_conv_axes(args[3], n, "stride", what, 1))
+    words.extend(_conv_axes(args[4], n, "padding", what, 0))
+    words.extend(_conv_axes(args[5], n, "output_padding", what, 0))
+    words.extend(_conv_axes(args[7], n, "dilation", what, 1))
+    words.append(_int(args[6], "groups", 1))
+    return words^
+# session-ops-conv end
 
 
 def _tuple_ints(xs: List[Int]) raises -> PythonObject:
@@ -1028,7 +1110,14 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         if not _nil(args[2]):
             hs.append(_int(args[2], "bias", 1))
         if op == _SOP_CONV2D:
-            ints = [_int(args[3], "stride", 1), _int(args[4], "padding", 0), _int(args[5], "groups", 1)]
+            # args (x, weight, bias, stride, padding, dilation, groups): PyTorch's order. session-ops-conv: a call
+            # with int stride and padding and dilation 1 records OPS_CONV2D with its old words; a dilation, a
+            # per-axis stride or padding, or a padding word records OPS_CONV2D_ND (autograd/session_ops_conv.mojo)
+            if _is_int(args[3]) and _is_int(args[4]) and _is_int(args[5]) and _int(args[5], "dilation", 1) == 1:
+                ints = [_int(args[3], "stride", 1), _int(args[4], "padding", 0), _int(args[6], "groups", 1)]
+            else:
+                code = OPS_CONV2D_ND
+                ints = _conv_words(args, 2, "conv2d", s[].shape_nd(hs[1]))
         else:
             var act = "none" if _nil(args[3]) else String(args[3])
             var activation = 0
@@ -1284,6 +1373,26 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         hs.append(_int(args[0], "input", 1))
         ints.append(_int(args[1], "downscale_factor", 1))
     # session-ops-resize end
+    # session-ops-conv begin
+    elif op == _SOP_CONV1D or op == _SOP_CONV3D:
+        # args (x, weight, bias, stride, padding, dilation, groups): torch.nn.functional's order
+        code = OPS_CONV1D if op == _SOP_CONV1D else OPS_CONV3D
+        hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1)]
+        if not _nil(args[2]):
+            hs.append(_int(args[2], "bias", 1))
+        ints = _conv_words(args, 1 if op == _SOP_CONV1D else 3, "conv1d" if op == _SOP_CONV1D else "conv3d",
+                           s[].shape_nd(hs[1]))
+    elif op == _SOP_CONV_TRANSPOSE1D or op == _SOP_CONV_TRANSPOSE2D:
+        # args (x, weight, bias, stride, padding, output_padding, groups, dilation): torch.nn.functional's order
+        code = OPS_CONV_TRANSPOSE1D if op == _SOP_CONV_TRANSPOSE1D else OPS_CONV_TRANSPOSE2D
+        hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1)]
+        if not _nil(args[2]):
+            hs.append(_int(args[2], "bias", 1))
+        if op == _SOP_CONV_TRANSPOSE1D:
+            ints = _conv_transpose_words(args, 1, "conv_transpose1d")
+        else:
+            ints = _conv_transpose_words(args, 2, "conv_transpose2d")
+    # session-ops-conv end
     # nn-blocks-pg begin
     if op >= _SOP_PG_FIRST and op <= _SOP_PG_LAST:
         return pg_session_call_py[E](s, op, args)
