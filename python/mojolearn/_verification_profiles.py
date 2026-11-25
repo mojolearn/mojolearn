@@ -56,6 +56,9 @@ ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
                           # session-ops-verify begin: the data-driven composed-model cases (verify_reference/composed-*.json)
                           'ops-composed-cases',
                           # session-ops-verify end
+                          # session-ops-resize begin: Session interpolate, pixel (un)shuffle, pad modes, one backward each
+                          'ops-resize',
+                          # session-ops-resize end
                           ))
 # These fixtures use loaded weights or inspect configuration without training.
 NEURAL_INFERENCE = frozenset(('hf-causal-lm', 'byte-lm-host-infer',

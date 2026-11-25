@@ -194,6 +194,12 @@ comptime _SOP_SCAN = 1118
 comptime _SOP_CUSTOM_OP = 1260
 comptime _SOP_CUSTOM = 1261
 # nn-blocks-cbw end
+# session-ops-resize begin: interpolate, pixel_shuffle, pixel_unshuffle (1000 + session codes 150..152); pad with
+# a mode keeps the name "pad" (_SOP_PAD): the door chooses session code 153 when the call names a mode
+comptime _SOP_INTERPOLATE = 1150
+comptime _SOP_PIXEL_SHUFFLE = 1151
+comptime _SOP_PIXEL_UNSHUFFLE = 1152
+# session-ops-resize end
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -371,6 +377,11 @@ struct _SessionOpCodes(Defaultable, Movable):
         self.codes["custom_op"] = _SOP_CUSTOM_OP
         self.codes["custom"] = _SOP_CUSTOM
         # nn-blocks-cbw end
+        # session-ops-resize begin
+        self.codes["interpolate"] = _SOP_INTERPOLATE
+        self.codes["pixel_shuffle"] = _SOP_PIXEL_SHUFFLE
+        self.codes["pixel_unshuffle"] = _SOP_PIXEL_UNSHUFFLE
+        # session-ops-resize end
 
 
 # One table per process (identical contents in every extension that links this file).

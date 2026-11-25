@@ -156,6 +156,13 @@ def higher_family(op: Int) -> String:
     if tag == 202 or tag == 203:
         return "attention"
     # nn-blocks-qkv end
+    # session-ops-resize begin: the Sequential layer tags Session.pad(mode=) and Session.interpolate record
+    # (autograd/nn_conv.mojo NNC_TAG_PAD, NNC_TAG_UPSAMPLE)
+    if tag == 561:
+        return "pad (reflect / replicate)"
+    if tag == 564:
+        return "interpolate"
+    # session-ops-resize end
     return "custom"
 
 

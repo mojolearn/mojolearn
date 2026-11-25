@@ -215,6 +215,16 @@ def program_op_name(code: Int) -> String:
     if code == 126:
         return "custom"
     # nn-blocks-cbw end
+    # session-ops-resize begin
+    if code == 150:
+        return "interpolate"
+    if code == 151:
+        return "pixel_shuffle"
+    if code == 152:
+        return "pixel_unshuffle"
+    if code == 153:
+        return "pad_mode"
+    # session-ops-resize end
     return "op_" + String(code)
 
 

@@ -247,3 +247,8 @@ Session.scan	nn-blocks-scan scan over a captured cell: not yet in a release veri
 Session.custom_op	nn-blocks-cbw user-defined backward rule: not yet in a release verification
 Session.custom	nn-blocks-cbw user-defined backward rule: not yet in a release verification
 # nn-blocks-cbw end
+# session-ops-resize begin
+Session.interpolate	session-ops-resize resampling: not yet in a release verification
+Session.pixel_shuffle	session-ops-resize rearranging: not yet in a release verification
+Session.pixel_unshuffle	session-ops-resize rearranging: not yet in a release verification
+# session-ops-resize end

@@ -180,6 +180,12 @@ from autograd.session_layer_rules import (
     OPS_LAYER_EXTRA_FIRST,
 )
 # session-ops end
+# session-ops-resize begin: interpolate, pixel_shuffle / unshuffle, pad with a mode (codes 150..153)
+from autograd.session_ops_resize import (
+    OPS_INTERPOLATE, OPS_PIXEL_SHUFFLE, OPS_PIXEL_UNSHUFFLE, OPS_PAD_MODE,
+    session_interpolate, session_pixel_shuffle, session_pad_mode,
+)
+# session-ops-resize end
 # nn-blocks-qkv begin: attention over explicit q, k, v (session code 122, autograd/nn_qkv.mojo)
 from autograd.nn_qkv import OPS_ATTENTION_QKV, qkv_attention
 # nn-blocks-qkv end
@@ -2593,7 +2599,19 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
 
     # session-ops-resize begin: codes 150..159 (sub-lane session-ops-resize replaces this body)
     def _layer_resize(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Tensor:
-        """Resampling and rearranging (interpolate, pixel_shuffle / unshuffle, reflection / replication pad)."""
+        """Resampling and rearranging (interpolate, pixel_shuffle / unshuffle, reflection / replication pad):
+        the Sequential layers' own forward functions (autograd/session_ops_resize.mojo)."""
+        if len(x) != 1:
+            raise Error("ops: resampling and padding operations take one tensor")
+        if self.int_words[self._slot(hs[0])]:
+            raise Error("TypeError: interpolate, pixel_shuffle, pixel_unshuffle and pad with a mode take a "
+                        + "floating-point tensor")
+        if code == OPS_INTERPOLATE:
+            return session_interpolate(self.tape, self.ex, x[0], ints, fs)
+        if code == OPS_PIXEL_SHUFFLE or code == OPS_PIXEL_UNSHUFFLE:
+            return session_pixel_shuffle(self.tape, self.ex, x[0], ints, code == OPS_PIXEL_UNSHUFFLE)
+        if code == OPS_PAD_MODE:
+            return session_pad_mode(self.tape, self.ex, x[0], ints)
         raise Error("ops: unknown operation code " + String(code))
     # session-ops-resize end
 

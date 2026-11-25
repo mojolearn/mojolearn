@@ -70,9 +70,9 @@ Sequential layer codes are `python/mojolearn/_x_sequence_model.py` `_LAYER`. "ex
 | conv_transpose1d / 2d (56, 57) | nn_conv_transpose1d / 2d | missing | NnConvRules | conv |
 | adaptive_avg_pool2d (58), adaptive_max_pool2d / 1d (59, 60), global_max_pool (61) | nn_adaptive_* | missing | NnConvRules | pool |
 | constant / zero pad (62) | imp_pad | `pad` exists | exists | - |
-| reflection / replication pad (63, 64) | nn_pad | missing (`pad(mode=)`) | NnConvRules | resize |
-| upsample (65) | nn_upsample (nearest, bilinear) | missing (`interpolate`) | NnConvRules | resize |
-| pixel_shuffle / unshuffle (66) | nn_pixel_shuffle | missing | NnConvRules | resize |
+| reflection / replication pad (63, 64) | nn_pad | added: `pad(x, pads, value, mode='reflect' \| 'replicate')` (code 153; `mode` None / 'constant' keeps code 73; ONNX pad order kept, `value` before `mode`) | NnConvRules | resize |
+| upsample (65) | nn_upsample (nearest, bilinear) | added: `interpolate` (code 150; nearest, linear (N, C, L), bilinear; per-axis size / scale_factor, align_corners, recompute_scale_factor) | NnConvRules | resize |
+| pixel_shuffle / unshuffle (66) | nn_pixel_shuffle | added: `pixel_shuffle`, `pixel_unshuffle` (codes 151, 152; (N, C, H, W) only) | rank-N view / permute tags | resize |
 | multihead_attention (67) | nn_mha_forward | missing | NNAttentionRules | rest |
 | positional_encoding (72) | nn_pos_enc_forward | missing | NNAttentionRules | rest |
 | conv3d (73) | rankn_conv3d | missing | RN conv tags | conv |
@@ -94,6 +94,11 @@ Sequential layer codes are `python/mojolearn/_x_sequence_model.py` `_LAYER`. "ex
 Expected not exposable without a new kernel (each sub-lane confirms or exposes): conv_transpose3d (no 3-D col2im
 path), adaptive_max_pool3d, interpolate modes trilinear / bicubic / area, padding modes circular and 3-D
 reflection / replication.
+
+Not exposable without a new kernel (session-ops-resize, confirmed): interpolate modes trilinear, bicubic, area,
+nearest-exact, `antialias=True`, and any 5-D input (nn_upsample is 2-D only); pad mode circular and 5-D reflection /
+replication (nn_pad covers (N, C, L) and (N, C, H, W)); pixel_shuffle / unshuffle on inputs other than 4-D (torch's
+leading batch dims) is refused, not emulated.
 
 ## Verify design (Andrew, 2026-11-25)
 
