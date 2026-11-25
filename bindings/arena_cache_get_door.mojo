@@ -301,7 +301,7 @@ def _key_word(value: PythonObject, below: Int, above: Int) raises -> Int:
     try:
         return Int(py=value)
     except:
-        return below if value < PythonObject(0) else above
+        return below if Bool(py=value < PythonObject(0)) else above
 
 
 def arena_cache_get(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
