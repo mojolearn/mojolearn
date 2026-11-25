@@ -8,7 +8,8 @@
 #        directory, on a venv holding the GPU install (the v2 report holds the CPU and GPU side of every cell from one
 #        process);
 #   (ii) record: `python3 tools/identity_wheel_record.py --columns nvidia --label-device l40s --wheel ... --sha256 ...
-#        --gpus N --workers-per-gpu auto --out $MOJOLEARN_RESULTS_DIR/identity` (no reuse flag: every lane is recorded).
+#        --gpus N --workers-per-gpu auto --out <scratch>/identity` (no reuse flag: every lane is recorded), copied to
+#        $MOJOLEARN_RESULTS_DIR/identity (the recorder refuses an outdir inside the tree, and the results dir is in it).
 #        The recorder requires the wheels' source commit to equal this tree's HEAD (it runs the harness of this tree).
 #
 # PARALLEL PLAN (AGENTS.md hard rules: 100 percent of rented CPU, parallel by default). Both steps use the one GPU, so
@@ -110,9 +111,13 @@ if [ -z "${IDENTITY_RECORD_BOX:-}" ]; then
 fi
 echo "IDREC record: column nvidia on $GPUS GPU(s), box ${IDENTITY_RECORD_BOX:-unnamed}"
 mkdir -p "$RES/identity"
+# The recorder's chunks run tools/record_identity_column.sh, which refuses an <outdir> inside the tree; the results dir
+# is box-out/ inside /root/mojolearn-ab (first run, nvc-ab-20261125T115541Z-2b94b1: every chunk rc 2). Record into
+# the scratch dir, outside the tree, and copy it into the results dir (uploaded to R2) whatever the step's rc.
 step record bash -c 'cd "$1" && shift && exec python3 tools/identity_wheel_record.py "$@"' _ "$REPO" \
     --columns nvidia --label-device l40s "${whl[@]}" "${shas[@]}" --gpus "$GPUS" --workers-per-gpu auto \
-    --out "$RES/identity" --venv "$SCRATCH/identity-venv"
+    --out "$SCRATCH/identity" --venv "$SCRATCH/identity-venv"
+[ -d "$SCRATCH/identity" ] && cp -a "$SCRATCH/identity/." "$RES/identity/"
 grep -E '^identity-wheels: (busy plan|DONE|FAILED)' "$RES/logs/record.log" | head -n 6 || true
 
 echo "IDREC done fails=$fails"
