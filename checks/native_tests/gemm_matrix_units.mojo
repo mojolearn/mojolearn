@@ -14,7 +14,7 @@ route closed, which the route never reaches):
 
 plus a neighbouring non-square shape, a product under the size rule and a bias column sum.
 
-IN A BUILD WITH THE ROUTE (a `fast` build on NVIDIA or AMD, without `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF`), for a
+IN A BUILD WITH THE ROUTE (a `fast` build on NVIDIA or AMD), for a
 product the size rule takes:
   1. every cell is within `matrix_units_cell_bound(sum_k |a_k b_k|, k)` of the FP32 cell: both operands of
      every term truncated to TF32 (2 * 2^-10 + 2^-20 of the absolute sum) plus the FP32 fold allowance;

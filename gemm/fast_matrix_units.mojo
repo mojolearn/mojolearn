@@ -4,7 +4,8 @@
 (lane fx-fast-matrix-units, 2026-11-19; the default of `fast` since 2026-11-20, lane fx-verdicts6).
 
 DEFAULT ON in a `fast` build (`-D MOJOLEARN_MODE_FAST_ROWS`) on the NVIDIA and AMD columns; the old route (every
-product on the exact FP32 kernels) is `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF`. One switch, on or off.
+product on the exact FP32 kernels, `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF`) was deleted 2026-11-25 (lane
+fable-followups, A/B job nvc1-0005: median 1.00 over 13 cells, not a winner; TOMBSTONE in checks/mode_policy.mojo).
 
 PROMOTED on A/B abf2 (2026-11-20, NVIDIA L40S host 79f003b8e8ae, base wheel e41b5148b24d, base and arm back to
 back in one job nvc1-0001, R2 tag nvc-ab-20261120T224801Z-458a59, one run per arm, full datasets; arm
@@ -98,7 +99,8 @@ from gemm.contract import OP_NN, OP_NT, OP_TN
 
 #: The route: matrix-unit products for the large neural FP32 GEMMs of a `fast` build on NVIDIA and AMD. One
 #: compile-time constant, the row's route in checks/mode_policy.mojo (default on there since A/B abf2, the numbers
-#: in the module docstring; `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF` keeps the exact FP32 route). False under the
+#: in the module docstring; the `_OFF` define of the old exact route is deleted, TOMBSTONE in checks/mode_policy.mojo).
+#: False under the
 #: contract, in the legacy fast set, on Apple and on the host.
 comptime GEMM_FAST_MATRIX_UNITS = ROUTE_GEMM_MATRIX_UNITS
 

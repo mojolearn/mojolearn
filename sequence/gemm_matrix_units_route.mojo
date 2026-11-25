@@ -6,7 +6,7 @@ The sequence executor's side of the matrix-units route of a `fast` build on NVID
 (gemm/fast_matrix_units.mojo: what the route is, where it is compiled, the error bound, the size rule). DEFAULT
 there since 2026-11-20 (lane fx-verdicts6, A/B abf2 on the NVIDIA L40S, arm fast-matrix-units-tf32-all: the MLP
 rows that run through this executor, mlp-clf and mlp-reg fit 0.96-0.97 and infer 0.85-0.95, quality equal);
-`-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF` keeps the exact route. Where the route constant is False (every
+the `_OFF` define of the old exact route is deleted (2026-11-25, TOMBSTONE in checks/mode_policy.mojo). Where the route constant is False (every
 identical build) nothing here is compiled into a launch and `DeviceExec._launch` is unchanged.
 
 WHAT MOVES. A plain dense GEMM launch of the executor (OP_GEMM, OP_GEMM_EPI, OP_AGK_GEMM_EPI: the forward and

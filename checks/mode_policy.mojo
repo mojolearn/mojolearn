@@ -86,8 +86,9 @@ The matrix-units route (the default of `fast` on NVIDIA and AMD)
   (base 2.4e-7, expected of TF32 operands). NVIDIA only (AGENTS.md part 8); AMD takes the same source untimed
   (Andrew, 2026-11-20: a win on NVIDIA is the default on every vendor without its own measurement). Sample: one
   run per arm. Limits: no AMD or Apple timing; the size rule's constants are reasoned, not measured.
-  The old `fast` route (every product on the exact FP32 kernels, row off) is
-  `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF`. `identical` builds are untouched: the row is False under the
+  The old `fast` route (every product on the exact FP32 kernels, row off; `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF`)
+  was deleted 2026-11-25 (lane fable-followups; A/B job nvc1-0005, NVIDIA L40S: median 1.00 over 13 cells, not a
+  winner; docs/TOMBSTONES.md). `identical` builds are untouched: the row is False under the
   contract on every column and the route is not compiled.
 
   TOMBSTONES (2026-11-20, lane fx-verdicts6, the same A/B; docs/TOMBSTONES.md "A/B abf2 verdicts"):
@@ -208,10 +209,10 @@ comptime POLICY_COLUMN = _policy_column()
 # The contract: does this build promise the same bits on every vendor?
 comptime CONTRACT_IDENTICAL = POLICY_BUILD == POLICY_BUILD_IDENTICAL
 
-# The old `fast` route of the matrix-units row: `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF` keeps every product on
-# the exact FP32 kernels and clears the row's bit (the B arm of the promotion; the numbers are in the module
-# docstring). It relaxes nothing, so it is legal in every build and is not a row define.
-comptime _GEMM_MATRIX_UNITS_OFF = is_defined["MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF"]()
+# The old `fast` route of the matrix-units row (every product on the exact FP32 kernels, the row's bit cleared):
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF (NOT A WINNER: the old exact-FP32 route of a fast build, arm fast-matrix-units-off, A/B job nvc1-0005 NVIDIA L40S, wheel 0becfc8f6b33, one run per arm: median 1.00 over 13 cells, 4 faster / 4 flat / 5 slower, 0.88..1.37; the route arm fast-rows 0.94 on the same base) deleted 2026-11-25 by lane/fable-followups; code recoverable at b3be410e92.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF.patch; record in docs/TOMBSTONES.md.
+# The define is refused in core/experiment_guards_neural.mojo.
 # The columns of the route: MAX `linalg.matmul` has NVIDIA (sm80 / sm90 / sm100: TF32 operands for fp32 inputs
 # unless `use_tf32=False`), AMD CDNA (MFMA 16x16x4 for fp32) and Apple backends (max.modular.com,
 # api/mojo/linalg/matmul/gpu, read 2026-11-19). The route is TAKEN on NVIDIA and AMD. On Apple the products
@@ -249,18 +250,14 @@ comptime ROW_FLUSH_OFF = _row(POLICY_ROW_FLUSH_OFF, is_defined["MOJOLEARN_MODE_F
 comptime ROW_VENDOR_MATH = _row(POLICY_ROW_VENDOR_MATH, is_defined["MOJOLEARN_MODE_FAST_VENDOR_MATH"]())
 # Matrix units: the large neural products on the vendor's matrix unit (TF32 operands on NVIDIA, fp32 MFMA on
 # AMD). The default of a fast-rows build on those two columns (`policy_row_default`); the row define sets the
-# bit on any column of a fast build; `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF` clears the default.
-comptime _MATRIX_UNITS_ROW_DEFINED = is_defined["MOJOLEARN_MODE_FAST_MATRIX_UNITS"]()
-comptime ROW_MATRIX_UNITS = _row(POLICY_ROW_MATRIX_UNITS, _MATRIX_UNITS_ROW_DEFINED) and (
-    _MATRIX_UNITS_ROW_DEFINED or not _GEMM_MATRIX_UNITS_OFF
-)
+# bit on any column of a fast build. (The `_OFF` define that cleared the default is deleted: TOMBSTONE above.)
+comptime ROW_MATRIX_UNITS = _row(POLICY_ROW_MATRIX_UNITS, is_defined["MOJOLEARN_MODE_FAST_MATRIX_UNITS"]())
 # The route of the row (the table in the module docstring): True in a fast-rows build (never the legacy fast
 # set, whose products are the old vendor arms, and never under the contract, where the row is False) on the
-# NVIDIA or AMD column, unless the `_OFF` define keeps the old route. gemm/fast_matrix_units.mojo imports it;
+# NVIDIA or AMD column. gemm/fast_matrix_units.mojo imports it;
 # no other module reads a define of the row. Resolved once, at compile time: no call pays a lookup.
 comptime ROUTE_GEMM_MATRIX_UNITS = (
     POLICY_BUILD == POLICY_BUILD_FAST_ROWS and ROW_MATRIX_UNITS and _MATRIX_UNITS_COLUMN
-    and not _GEMM_MATRIX_UNITS_OFF
 )
 # Waits: only the waits whose removal can move a bit.
 comptime ROW_WAITS_ELIDED = _row(POLICY_ROW_WAITS_ELIDED, is_defined["MOJOLEARN_MODE_FAST_WAITS_ELIDED"]())

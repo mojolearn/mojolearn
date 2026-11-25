@@ -878,8 +878,9 @@
   },
   "fast-matrix-units-off": {
    "define": "MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF,MOJOLEARN_MODE_FAST_ROWS",
-   "status": "define in code (checks/mode_policy.mojo _GEMM_MATRIX_UNITS_OFF -> ROW_MATRIX_UNITS and ROUTE_GEMM_MATRIX_UNITS False): B = the fast set with every neural product on the exact FP32 kernels (the zero-row fast set, mode policy mask 0; its digests must equal the identical set's); A's partner is arm fast-rows, the fast set with the matrix-units route (the default since 2026-11-20, lane fx-verdicts6). The old path of that promotion. Owed: one confirming measurement of fast-rows against this arm on the same box, then the old path is deleted.",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-25 (lane fable-followups): NOT A WINNER (L40S, 13 cells, median arm/base 1.00 SAME, 4 faster / 4 flat / 5 slower, 0.88..1.37; the route arm fast-rows on the same base 0.94, 11 of 13 faster): the matrix-units route stays the default of the fast set; removed: the _GEMM_MATRIX_UNITS_OFF switch in checks/mode_policy.mojo (ROW_MATRIX_UNITS and ROUTE_GEMM_MATRIX_UNITS no longer read it); the define is refused (core/experiment_guards_neural.mojo); code recoverable at b3be410e92, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF.patch. Was: define in code (checks/mode_policy.mojo _GEMM_MATRIX_UNITS_OFF -> ROW_MATRIX_UNITS and ROUTE_GEMM_MATRIX_UNITS False): B = the fast set with every neural product on the exact FP32 kernels (the zero-row fast set, mode policy mask 0; its digests must equal the identical set's); A's partner is arm fast-rows, the fast set with the matrix-units route (the default since 2026-11-20, lane fx-verdicts6). The old path of that promotion. Owed: one confirming measurement of fast-rows against this arm on the same box, then the old path is deleted.",
+   "owed": "DECIDED",
+   "evidence": "A/B job nvc1-0005 (NVIDIA L40S, wheel 0becfc8f6b33, one run per arm): ~/mojolearn-evidence/ab-0becfc8f6b33/SUMMARY-TG-nvidia.txt"
   },
   "fast-bf16-units": {
    "define": "MOJOLEARN_GEMM_FAST_BF16_UNITS=1,MOJOLEARN_MODE_FAST_ROWS",
@@ -955,7 +956,7 @@
   },
   "fast-rows": {
    "define": "MOJOLEARN_MODE_FAST_ROWS",
-   "status": "define in code (core/package_profile.mojo MODE_FAST_ROWS; checks/mode_policy.mojo POLICY_BUILD_FAST_ROWS), lane fx-fast-set-build 2026-11-20: B = the zero-row fast set (the identical kernels with the contract off, no row on, mode policy mask 0); A = the identical set. The control of every fast arm: B must not be slower than A and its digests must equal A's (a difference is a seam that reads the build kind where it should read a row) UPDATED 2026-11-20 (lane fx-verdicts6): since the promotion of the matrix-units route this set is `fast` with its measured default, mode policy mask 16 on NVIDIA and AMD (the large neural products on the matrix unit), so its digests differ from A's on the rows that route by design; the zero-row control (mask 0, digests equal to A's) is arm fast-matrix-units-off.",
+   "status": "define in code (core/package_profile.mojo MODE_FAST_ROWS; checks/mode_policy.mojo POLICY_BUILD_FAST_ROWS), lane fx-fast-set-build 2026-11-20: B = the zero-row fast set (the identical kernels with the contract off, no row on, mode policy mask 0); A = the identical set. The control of every fast arm: B must not be slower than A and its digests must equal A's (a difference is a seam that reads the build kind where it should read a row) UPDATED 2026-11-20 (lane fx-verdicts6): since the promotion of the matrix-units route this set is `fast` with its measured default, mode policy mask 16 on NVIDIA and AMD (the large neural products on the matrix unit), so its digests differ from A's on the rows that route by design; the zero-row control (mask 0, digests equal to A's) is arm fast-matrix-units-off. [fable-followups 2026-11-25: arm fast-matrix-units-off and its define are deleted (not a winner, median 1.00 over 13 cells); a fast build has no zero-row control any more.]",
    "owed": "RUN"
   },
   "fast-flush-off": {
