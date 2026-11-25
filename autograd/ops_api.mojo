@@ -2160,16 +2160,18 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                     return self._scan(hs, ints, fs)
                 if code == OPS_CUSTOM_VJP:
                     return self._cbw_forward(hs, ints, fs, x)
-                # activation-ckpt: a checkpointed segment (autograd/nn_ckpt.mojo); its nodes run through the nested
-                # instance too, which has no checkpoint branch (ckpt_check_program refuses the nesting)
-                if code == OPS_CHECKPOINT:
-                    return self._ckpt(hs, ints, fs)
             # nn-blocks-scan / nn-blocks-cbw end
             # session-ops begin: Sequential's layers as Session ops and the round's additions (codes 130..189), on the no-match path as well;
             # plain operations, so a scan cell or a custom operation's program (`nested`) may use them
             if code >= OPS_LAYER_FIRST and code <= OPS_LAYER_LAST:
                 return self._layer_op(code, hs, ints, fs, x)
             # session-ops end
+            # activation-ckpt: a checkpointed segment (autograd/nn_ckpt.mojo), after every other operation's test
+            # (no existing operation pays its compare); its nodes run through the nested instance, which has no
+            # checkpoint branch (ckpt_check_program refuses the nesting)
+            comptime if not nested:
+                if code == OPS_CHECKPOINT:
+                    return self._ckpt(hs, ints, fs)
             raise Error("ops: unknown operation code " + String(code))
         if n >= 1 and _keeps_shape(code):
             # elementwise and row-wise ops keep x's full shape (a free view

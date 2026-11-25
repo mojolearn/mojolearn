@@ -13,7 +13,9 @@
 # buffers; nothing is read back. In a recording session every replayed node is on the tape, so the backward is
 # backward through time over the tape (no new rule): the gradient reaches the initial state, xs (through each
 # step's view) and every bound parameter. Memory: the tape keeps every step's node outputs (the per-step states
-# and the cell's intermediates), O(steps x the cell's values), as an unrolled loop does.
+# and the cell's intermediates), O(steps x the cell's values), as an unrolled loop does; with checkpoint_every = k
+# (format 3, lane activation-ckpt) it keeps the state every k steps and one segment's values while the backward
+# recomputes it (autograd/nn_ckpt.mojo: the formula, the bits).
 #
 # This module holds what needs no session: the codes, the description words of the node, their decoding and the
 # binding checks (shared by the session's op and its frontend, autograd/nn_scan_frontend.mojo).

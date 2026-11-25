@@ -1,0 +1,13 @@
+diff --git a/autograd/nn_ckpt.mojo b/autograd/nn_ckpt.mojo
+index c7727b970f..b881c1647f 100644
+--- a/autograd/nn_ckpt.mojo
++++ b/autograd/nn_ckpt.mojo
+@@ -89,7 +89,7 @@ comptime CKPT_KIND_SCAN = 1
+ #   SKIP_NODE: the recompute skips one node (in a scan, one node of every recomputed step): the first node whose
+ #   output has its first operand's shape is replaced by that operand.
+ # The plain name faults the device executor only, _HOST the host executor only.
+-comptime CKPT_SABOTAGE_FRESH_MASK = is_defined["MOJOLEARN_NN_CKPT_SABOTAGE_FRESH_MASK"]()
++comptime CKPT_SABOTAGE_FRESH_MASK = True  # SABOTAGE: the recompute draws fresh dropout masks on the device
+ comptime CKPT_SABOTAGE_FRESH_MASK_HOST = is_defined["MOJOLEARN_NN_CKPT_SABOTAGE_FRESH_MASK_HOST"]()
+ comptime CKPT_SABOTAGE_SKIP_NODE = is_defined["MOJOLEARN_NN_CKPT_SABOTAGE_SKIP_NODE"]()
+ comptime CKPT_SABOTAGE_SKIP_NODE_HOST = is_defined["MOJOLEARN_NN_CKPT_SABOTAGE_SKIP_NODE_HOST"]()
