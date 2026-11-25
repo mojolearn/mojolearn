@@ -51,6 +51,8 @@ from std.sys.info import CompilationTarget
 from std.sys.compile import is_defined
 from std.builtin.sort import sort
 from sequence.ops import FP
+from sequence.exec_trait import Exec
+from autograd.rankn import ShapeN
 from bindings.native_posix_transport_run import posix_errno
 from core.host_parallel import host_parallelize
 from core.native_archive_span import ArchiveSpan
@@ -656,3 +658,42 @@ def batch_source_saved[IS_DEVICE: Bool](src: BatchSource) -> Tuple[Int, Int]:
             var ahead = src.next_position(src.held_epoch, src.held_batch)  # SABOTAGE: past the read-ahead batch
             return ahead
     return (src.epoch, src.consumed)
+
+
+def batch_source_shape(src: BatchSource, field: Int, rows: Int, length: Int) raises -> ShapeN:
+    """The batch array shape of `field` for `rows` rows of padded length `length`."""
+    if field == BS_FIELD_STEPS:
+        return ShapeN.of([rows, length, src.width])
+    if field == BS_FIELD_LENGTHS:
+        return ShapeN.of([rows, 1])
+    if field == BS_FIELD_MASK:
+        return ShapeN.of([rows, length])
+    return ShapeN.of([rows, src.twidth])
+
+
+def batch_source_upload[E: Exec](mut ex: E, src: BatchSource, field: Int, dst: FP) raises -> ShapeN:
+    """Upload the read-ahead batch's `field` into executor buffer `dst` (sized for the longest batch) and return
+    its shape. The device stages the host words at once (sequence/exec_device.mojo upload), so the next read may
+    overwrite the host buffers as soon as this returns."""
+    var shape = batch_source_shape(src, field, src.held_rows, src.held_len)
+    var address = Int(src.h_tgt.unsafe_ptr())
+    if field == BS_FIELD_STEPS:
+        address = Int(src.h_steps.unsafe_ptr())
+    elif field == BS_FIELD_LENGTHS:
+        address = Int(src.h_lens.unsafe_ptr())
+    elif field == BS_FIELD_MASK:
+        address = Int(src.h_mask.unsafe_ptr())
+    ex.upload(dst, FP(unsafe_from_address=address), shape.count())
+    return shape
+
+
+def batch_source_capacity(src: BatchSource, field: Int) -> Int:
+    """Executor words a field's batch buffer needs: the longest batch's."""
+    var rows = min(src.spec.batch, src.n)
+    if field == BS_FIELD_STEPS:
+        return max(1, rows * src.max_len * src.width)
+    if field == BS_FIELD_LENGTHS:
+        return max(1, rows)
+    if field == BS_FIELD_MASK:
+        return max(1, rows * src.max_len)
+    return max(1, rows * src.twidth)
