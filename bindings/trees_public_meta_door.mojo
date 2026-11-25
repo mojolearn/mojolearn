@@ -82,7 +82,7 @@ from bindings.classical_labels_door import labels_accuracy, _classification_enco
 from bindings.member_set_door import (
     MemberSet, member_set_admit_or_raise, member_set_own_block, member_set_run, member_set_pack, member_set_release,
     member_set_notices, member_set_reads_given, member_set_given,
-    member_set_resident, member_set_pins_take, member_set_pins_return,
+    member_set_resident, member_set_resident_inputs, member_set_pins_take, member_set_pins_return,
 )
 from bindings.member_given_y_unpack import member_given_y
 from core.member_unit_classes import member_unit_classes, member_unit_recode
@@ -778,6 +778,14 @@ def _fit_units_drawn(clones: PythonObject, xs: PythonObject, d: Int, targets: Py
         # on the device (bindings/member_set_door.mojo, THE RESIDENT SCOPE).
         # A scope read that raises raises its own doors' words (nothing fitted).
         member_set_resident(set, xs[i], context)
+        # THE PER-INPUT PINS (bindings/member_set_door.mojo
+        # `member_set_resident_inputs`): the unit's target object only when
+        # the member reads its own words (never a re-coded copy), and its
+        # weights' object.
+        if target_address == trees_address(targets[i]):
+            member_set_resident_inputs(set, targets[i], weights[i], context)
+        else:
+            member_set_resident_inputs(set, PythonObject(None), weights[i], context)
     set.labels = PythonObject(None)
     # WHO REFUSES A NON-FINITE X OR y. X is held with its finite test
     # deferred to the members (`_hold_deferred`). A member whose kind tests
@@ -4052,6 +4060,9 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, mx: _
         # A scope read that raises raises its own doors' words (nothing is
         # fitted yet; the set holds no state).
         member_set_resident(set, Xa, context)
+        # THE PER-INPUT PINS: every unit reads `draw_codes` itself (by its
+        # fold's row index); no weights are handed to these units.
+        member_set_resident_inputs(set, draw_codes, PythonObject(None), context)
     # KIND-EXACT (lane mf-meta3): the family's union mask holds bits another
     # kind of it has (a hard VotingClassifier, META kind, has no
     # predict_proba where a soft one has). One state minted, asked and

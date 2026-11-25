@@ -621,11 +621,18 @@ def _fixture(unit: Int) raises:
         _refused(MEMBER_OP_PREDICT_STD, call, "has no predict_std")
         _refused(MEMBER_OP_SCORE_SAMPLES, call, "has no score_samples")
         # a selection or an output the linear member does not read is refused before any kernel
+        # A row index alone is the fold route since 9af0046099 / ab944d50d1 (core/linear_member.mojo `_fold_op`:
+        # MEMBER_CAN_ROW_INDEX on an image that reads THE FOLD X WORD); on this host route (no such image) it is
+        # refused in the fold's words. A column index is still refused as whole-view only.
         var picks: List[Int] = [0]
         call.row_index = MemberMatrix(Int(picks.unsafe_ptr()), 1, 1)
+        _refused(MEMBER_OP_FIT, call, "reads a row index only on a GPU route")
+        _refused(MEMBER_OP_PREDICT, call, "reads a row index only on a GPU route")
+        call.row_index = MemberMatrix()
+        call.column_index = MemberMatrix(Int(picks.unsafe_ptr()), 1, 1)
         _refused(MEMBER_OP_FIT, call, "no row or column index")
         _refused(MEMBER_OP_PREDICT, call, "no row or column index")
-        call.row_index = MemberMatrix()
+        call.column_index = MemberMatrix()
         call.fit_output = MEMBER_OP_TRANSFORM
         _refused(MEMBER_OP_FIT, call, "has no transform")
         call.fit_output = 0

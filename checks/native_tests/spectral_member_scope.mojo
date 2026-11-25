@@ -93,7 +93,10 @@ def _route(device: Bool) raises -> DeviceRoute:
 
 def _new(route: DeviceRoute) raises -> Int:
     var seed = bitcast[DType.float64](Int64(7))
-    var params: List[Float64] = [0.0, 3.0, Float64(_K), 2.0, 8.0, 0.0, seed, -1.0, 0.0, 1.0, 0.0, 1.0]
+    # word [5] eigen_tol: the class default 1e-5 (python/mojolearn/_spectral_impl.py DEFAULT_EIGEN_TOL); the class
+    # admission refuses 'auto' and any non-positive value (DEVIATION 890, bindings/cfb_spectral_door.mojo) and so does
+    # the fit (spectral/estimator.mojo), so a caller's member words never hold 0
+    var params: List[Float64] = [0.0, 3.0, Float64(_K), 2.0, 8.0, 1e-5, seed, -1.0, 0.0, 1.0, 0.0, 1.0]
     var call = MemberCall(route)
     call.params = Int(params.unsafe_ptr())
     call.param_count = len(params)

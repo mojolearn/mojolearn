@@ -33,6 +33,7 @@ from core.forest_inference_model import (
     resident_prepare, resident_predict_into, resident_release, ET_CTX_SLOT,
 )
 from core.device_store import DeviceStore
+from core.fold_x_word import fold_x_slot
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.shared_slot import SharedSlot
 
@@ -115,6 +116,20 @@ def et_store_take(ctx: DeviceContext, store_id: Int, idx_addr: Int, n_rows: Int,
     if n_rows < 1 or n_cols < 1:
         raise Error("et_fit_rows: invalid shape")
     return ET_STORE.get_or_create_ptr()[].take_rows(ctx, store_id, n_cols, idx_addr, n_rows)
+
+
+def et_store_take_column(ctx: DeviceContext, y_word: Int, idx_addr: Int, n_rows: Int) raises -> Int:
+    """XF_FIT_ROWS's labels (lane vdf2-tail2): a NEGATIVE `params.y` word
+    (THE FOLD X WORD numbering, core/fold_x_word.mojo) names the store slot
+    of the WHOLE base's labels (one 4-byte word a row: int32 codes or
+    float32 targets, put once per scope under the member's `y_pin`); rows
+    `idx` are taken on the device into a slot of their own; its id (the
+    caller frees it after the fit). Only an XF_FIT_ROWS request carries one."""
+    if y_word >= 0:
+        raise Error("et_fit_rows: the label word names no store slot")
+    if n_rows < 1:
+        raise Error("et_fit_rows: invalid shape")
+    return ET_STORE.get_or_create_ptr()[].take_rows(ctx, fold_x_slot(y_word), 1, idx_addr, n_rows)
 
 
 def et_legacy_meta(result: FitResult) -> List[Int64]:
@@ -226,9 +241,15 @@ def _et_classifier_fit_run[ROWMAJOR: Bool = False, ROWS: Bool = False](
     # codes, uploaded as they are (`codes_addr`); no float32 list is built.
     var y = List[Float32]()
     var codes_addr = 0
+    # lane vdf2-tail2: a negative label word on XF_FIT_ROWS is the store
+    # slot of the base's codes; they are taken on the device below
+    var y_dev = ROWS and params.y < 0
+    if y_dev and not params.y_codes:
+        raise Error("et_classifier_fit: device labels are int32 class codes (XF_SHAPE_Y_CODES)")
     if params.y_codes:
         _ = _i32_ptr(params.y)
-        codes_addr = params.y
+        if not y_dev:
+            codes_addr = params.y
     else:
         y = _copy_f32(params.y, n_rows)
     times.stop_host("boundary_y_list", stamp)
@@ -239,19 +260,28 @@ def _et_classifier_fit_run[ROWMAJOR: Bool = False, ROWS: Bool = False](
     comptime if ROWS:
         var store = ET_STORE.get_or_create_ptr()
         var taken = et_store_take(ctx, params.session, params.x, n_rows, n_features)
+        var y_taken = -1
         try:
             var raw = store[]._held(taken, n_rows * n_features)
+            var codes_dev = 0
+            if y_dev:
+                y_taken = et_store_take_column(ctx, params.y, params.x, n_rows)
+                codes_dev = Int(store[]._held(y_taken, n_rows).unsafe_ptr())
             result = fit_extra_trees_classifier_device(
                 ctx, x, y, Int32(n_rows), Int32(n_features), Int32(n_classes),
                 config, tree_start=params.tree_start,
                 weights_addr=params.weights, x_dev_rows=Int(raw.unsafe_ptr()),
-                codes_addr=codes_addr,
+                codes_addr=codes_addr, codes_dev=codes_dev,
             )
             _ = raw^  # the fit above read the taken rows (synchronous)
         except problem:
             store[].free(ctx, taken)
+            if y_taken >= 0:
+                store[].free(ctx, y_taken)
             raise problem^
         store[].free(ctx, taken)
+        if y_taken >= 0:
+            store[].free(ctx, y_taken)
     else:
         result = fit_extra_trees_classifier_device(
             ctx, x, y, Int32(n_rows), Int32(n_features), Int32(n_classes),
@@ -303,7 +333,10 @@ def _et_regressor_fit_run[ROWMAJOR: Bool = False, ROWS: Bool = False](
     var x = List[Float32]()
     times.stop_host("boundary_x_borrow", stamp)
     stamp = times.start()
-    var y = _copy_f32(params.y, n_rows)
+    # lane vdf2-tail2: a negative label word on XF_FIT_ROWS is the store
+    # slot of the base's targets; they are taken on the device below
+    var y_dev = ROWS and params.y < 0
+    var y = List[Float32]() if y_dev else _copy_f32(params.y, n_rows)
     times.stop_host("boundary_y_list", stamp)
     stamp = times.start()
 
@@ -312,18 +345,28 @@ def _et_regressor_fit_run[ROWMAJOR: Bool = False, ROWS: Bool = False](
     comptime if ROWS:
         var store = ET_STORE.get_or_create_ptr()
         var taken = et_store_take(ctx, params.session, params.x, n_rows, n_features)
+        var y_taken = -1
         try:
             var raw = store[]._held(taken, n_rows * n_features)
+            var y_addr = 0
+            if y_dev:
+                y_taken = et_store_take_column(ctx, params.y, params.x, n_rows)
+                y_addr = Int(store[]._held(y_taken, n_rows).unsafe_ptr())
             result = fit_extra_trees_regressor_device(
                 ctx, x, y, Int32(n_rows), Int32(n_features), config,
                 tree_start=params.tree_start,
                 weights_addr=params.weights, x_dev_rows=Int(raw.unsafe_ptr()),
+                y_dev=y_addr,
             )
             _ = raw^  # the fit above read the taken rows (synchronous)
         except problem:
             store[].free(ctx, taken)
+            if y_taken >= 0:
+                store[].free(ctx, y_taken)
             raise problem^
         store[].free(ctx, taken)
+        if y_taken >= 0:
+            store[].free(ctx, y_taken)
     else:
         result = fit_extra_trees_regressor_device(
             ctx, x, y, Int32(n_rows), Int32(n_features), config,

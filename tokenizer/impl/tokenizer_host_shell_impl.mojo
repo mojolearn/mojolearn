@@ -34,6 +34,8 @@ from tokenizer.impl.vocab_build import (
     unspell,
 )
 from tokenizer.vocab import VocabTokenizer
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_unresolved
+from core.tokenizer_gpu_entry_table import TOK_GPU_OP_VOCAB_FREE
 from tokenizer.train.bpe_train import TrainedVocabulary, train_bpe
 
 comptime TOKENIZER_HOST_SABOTAGE = is_defined["MOJOLEARN_TOKENIZER_HOST_SABOTAGE"]()
@@ -85,12 +87,40 @@ struct BpeTrainedHandle(Movable, Writable):
 
 struct VocabHandle(Movable, Writable):
     """Python-owned `mojolearn.models.Tokenizer` lifetime: the rank table,
-    the pattern and the added tokens (`tokenizer/vocab.mojo`)."""
+    the pattern and the added tokens (`tokenizer/vocab.mojo`).
+
+    device='gpu' (lane vdf2-tokmodel): `gpu_table` is the GPU tokenizer
+    image's handle word of the same tables on the device (0 on the host
+    route), `gpu_entry` that image's entry, resolved once at connection.
+    Every operation routes on `gpu_table`, which it already holds after the
+    one downcast: no added lookup per call. The device table is released
+    through the entry when this handle goes. `max_bytes` and `n_vocab` are
+    the table's longest token and id bound, kept so a call never rescans."""
 
     var tok: Optional[VocabTokenizer]
+    var gpu_table: Int
+    var gpu_entry: EntryRef
+    var max_bytes: Int
+    var n_vocab: Int
 
     def __init__(out self):
         self.tok = Optional[VocabTokenizer]()
+        self.gpu_table = 0
+        self.gpu_entry = entry_ref_unresolved()
+        self.max_bytes = 1
+        self.n_vocab = 0
+
+    def __del__(deinit self):
+        # tp_dealloc holds the GIL; the entry touches none (a GIL-free
+        # dispatch). Best effort: nothing can be reported from here.
+        if self.gpu_table != 0:
+            try:
+                var addresses: List[Int] = [self.gpu_table]
+                var ints = List[Int]()
+                var floats = List[Float64]()
+                _ = entry_ref_call(self.gpu_entry, TOK_GPU_OP_VOCAB_FREE, addresses, ints, floats)
+            except error:
+                pass
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("_VocabHandle(loaded=", Bool(self.tok), ")")
@@ -835,7 +865,13 @@ def vocab_decode_ids(tok: VocabTokenizer, ids: List[Int]) raises -> List[UInt8]:
 
 def vocab_encode_ids(tok: VocabTokenizer, bytes: List[UInt8], allow: Bool) raises -> List[Int]:
     """`models.Tokenizer.encode`'s ids, reversed in the sabotage build."""
-    var ids = tok.encode(bytes, allow)
+    return vocab_ids_sabotage(tok.encode(bytes, allow))
+
+
+def vocab_ids_sabotage(var ids: List[Int]) -> List[Int]:
+    """The sabotage build's reversal of `models.Tokenizer.encode`'s ids, on every device's ids
+    (the host's and the GPU image's, lane vdf2-tokmodel), so the negative arm fails on both;
+    the ids unchanged otherwise."""
     comptime if TOKENIZER_HOST_SABOTAGE:
         var rev = List[Int](capacity=len(ids))
         for i in range(len(ids)):

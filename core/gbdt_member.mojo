@@ -128,7 +128,7 @@ from gbdt.fit_request import GbdtFitArgs, gbdt_string_at
 from gbdt.fit_calls import (
     xg_row_major, xg_model_dim, xg_fit, xg_resident, xg_resident_prepare, xg_resident_predict, xg_predict,
     xg_predict_multi, xg_sigmoid_pair, xg_binary, xg_feature_freq_fit, xg_ordered_fit, xg_importances, xg_slot_x,
-    xg_caps,
+    xg_caps, xg_slot_nan, xg_slot_category_fit,
 )
 from gbdt.fit_request import XG_CAP_RESIDENT, XG_CAP_SLOT_X, XG_CAP_FIT_SLOT_X
 from core.member_fold_x import (
@@ -502,13 +502,21 @@ def _whole(call: _CallPtr) raises:
 #
 # FIT (lane vdf-scope-trees4): the device quantizer is the default of every GPU
 # image (gbdt/gpu_data/sym_feat_switches.mojo GBDT_QUANT_DEVICE), so on an image
-# with XG_CAP_FIT_SLOT_X a raw float fit (no cat_features, no
-# one_hot_features, no eval set, nan_mode not Forbidden: the member's NaN
-# refusal reads host X) hands the fold slot to the ROW-MAJOR fit, whose upload
+# with XG_CAP_FIT_SLOT_X a raw float fit (no cat_features;
+# nan_mode='Forbidden' refuses by a device NaN
+# scan of the slot, XG_SLOT_NAN) hands the fold slot to the ROW-MAJOR fit, whose upload
 # is one device-to-device copy (gbdt/train.mojo `_qd_upload_float_columns`), and
-# to the importances (gbdt/gpu_importance.mojo): X never visits the host. Every
-# other fit takes the fold's rows of X on the host (`member_fold_take_f32`, row
-# chunks across the host's cores), as the caller's gather did. y, the weights
+# to the importances (gbdt/gpu_importance.mojo): X never visits the host. A
+# one_hot_features fit (lane vdf2-gbdtcat) hands the slot to the column-major
+# fit, whose trainer lays it out column-major on the device
+# (`_rows_to_device_columns`) and reads its one-hot columns there; an eval set is
+# the caller's own host input on either route. A cat_features fit (lane
+# vdf2-gbdtcat2) takes the column-major route too: its category map is fitted
+# over the slot on the device (XG_SLOT_CATEGORY_FIT, the codes written into
+# the slot, only the distinct keys come home). A text X's cat_keys (host keys
+# of the caller's cells) and an image without the slot bits take the fold's
+# rows of X on the host (`member_fold_take_f32`, row chunks across the host's
+# cores), as the caller's gather did. y, the weights
 # and the group ids are columns of the base taken through the index on the
 # host (the y words cross the bus as the entry uploads them). Same bytes as the
 # caller's host gather: a byte copy of the same rows in the same order (no bit
@@ -734,8 +742,13 @@ def _fold_op[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr, operation: Int)
         caps = 0
     var device: Bool
     if operation == MEMBER_OP_FIT:
-        device = ((caps & XG_CAP_FIT_SLOT_X) != 0 and len(slot[].cat_given) == 0 and len(slot[].hot_given) == 0
-                  and call[].eval_x.rows == 0 and slot[].config.nan_mode != "Forbidden")
+        # lane vdf2-gbdtcat: one_hot_features and an eval set read the slot
+        # too (the trainer lays it out column-major on the device; the eval
+        # set is the caller's own host input, never a fold take). Lane
+        # vdf2-gbdtcat2: a cat_features fit too, its category map fitted over
+        # the slot on the device (XG_SLOT_CATEGORY_FIT); only a text X's
+        # cat_keys (the caller's host keys) still take host rows.
+        device = (caps & XG_CAP_FIT_SLOT_X) != 0 and keys.rows == 0
     else:
         device = (slot[].fitted and len(slot[].cat_map) == 0 and (caps & XG_CAP_RESIDENT) != 0
                   and (caps & XG_CAP_SLOT_X) != 0)
@@ -1279,8 +1292,17 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
             raise Error("y must be finite")
         raise Error("Input y contains NaN or infinity" + (" (the class labels)" if multi else "")
                     + " (GradientBoosting).")
-    if config.nan_mode == "Forbidden" and not trees_finite_f32(call[].x.data, rows * cols):
-        if _has_nan(call[].x.data, rows * cols):
+    if config.nan_mode == "Forbidden":
+        var has_nan: Bool
+        if call[].x.data < 0:
+            # THE FOLD X WORD (lane vdf2-tail2): the same test as a device
+            # reduction over the fold slot (XG_SLOT_NAN, core/fold_x_scan.mojo:
+            # a NaN refuses, an infinity does not), at the host check's place
+            # in the refusal order; one word comes home, X never does
+            has_nan = xg_slot_nan(entry_ref_gil_free(call[].route.entry), call[].x.data, rows * cols) >= 0
+        else:
+            has_nan = not trees_finite_f32(call[].x.data, rows * cols) and _has_nan(call[].x.data, rows * cols)
+        if has_nan:
             raise Error("mojolearn: nan_mode='Forbidden' but X contains NaN. "
                         + "CatBoost refuses this pair; this implementation would otherwise "
                         + "bin the NaNs silently with no NaN bin. Use "
@@ -1301,11 +1323,13 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
             row_major = False
     var scratch = List[Float32]()
     var x_addr = call[].x.data
-    if x_addr < 0 and not row_major:
-        # THE FOLD X WORD (lane vdf-scope-trees4): only the row-major fit
-        # reads it; `_fold_op` hands it only to an image that says so
+    if x_addr < 0 and not row_major and n_flags == 0:
+        # THE FOLD X WORD (lane vdf-scope-trees4): the row-major fit reads it,
+        # and (lanes vdf2-gbdtcat, vdf2-gbdtcat2) a one-hot or cat_features
+        # fit, whose trainer lays the slot out column-major on the device;
+        # `_fold_op` hands it only to an image that says so
         raise Error("RuntimeError: a Gbdt member's fold X word reached a fit without the row-major device quantizer")
-    if not row_major:
+    if not row_major and x_addr >= 0:
         scratch = _column_major(call[].x.data, rows, cols)
         x_addr = Int(scratch.unsafe_ptr())
     # The category map of this fit: the dense codes replace the categorical
@@ -1315,7 +1339,16 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     var fitted_map = List[UInt64]()
     if not fit_map and (call[].cat_keys.rows > 0 or call[].eval_cat_keys.rows > 0):
         raise Error("TypeError: a Gbdt member reads categorical keys only with cat_features")
-    if fit_map:
+    if fit_map and x_addr < 0:
+        # THE FOLD X WORD (lane vdf2-gbdtcat2): `_category_fit` on the device
+        # over the fold slot (its rows are the fold's own copy, ROW-MAJOR):
+        # the same keys, the same ascending distinct run, the same codes,
+        # written over the slot's categorical columns; the stored map's words
+        # come home, X does not. `_fold_op` sends no slot with cat_keys.
+        if call[].cat_keys.rows > 0:
+            raise Error("RuntimeError: a Gbdt member's fold X word reached a fit with cat_keys")
+        fitted_map = xg_slot_category_fit(entry, x_addr, rows, cols, cat_columns)
+    elif fit_map:
         fitted_map = _category_fit(cat_columns, x_addr, rows, call[].cat_keys)
     var n_weights = 0
     var w_addr = call[].x.data
@@ -1421,7 +1454,8 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     # `feature_importances_` (lane mf-imp6): the door's RUN on the same block
     # the fit read (its layout, the categorical columns as their codes, the
     # fit's weights), on the route's column.
-    var imp = xg_importances(entry, outcome.text, x_addr, rows, cols, row_major, w_addr, n_weights)
+    # (the fold slot holds C-order rows whatever route the fit took)
+    var imp = xg_importances(entry, outcome.text, x_addr, rows, cols, row_major or x_addr < 0, w_addr, n_weights)
     _ = len(scratch)  # the column-major copy lives until the fit and the importances returned
     _ = len(codes)  # the classifier's float32 targets (or the column-major y) too
     _ = len(flags)

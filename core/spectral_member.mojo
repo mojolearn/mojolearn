@@ -49,7 +49,7 @@ serves 'nearest_neighbors' and 'precomputed' fits kept with prediction data
 
 MEMBER_OP_NEW parameters (Float64 words, 12): [0] 0, [1] n_clusters,
 [2] n_components (resolved: n_clusters for None), [3] n_init,
-[4] n_neighbors, [5] eigen_tol (0 for 'auto'), [6] the seed as the BITS of
+[4] n_neighbors, [5] eigen_tol (positive; 'auto' refused at UNPACK, DEVIATION 890), [6] the seed as the BITS of
 an int64 (`bitcast[DType.float64](Int64(seed))`, the class's own seed
 rule), [7] assign_labels code (-1 'kmeans', 0 'discretize', 1 'cluster_qr'),
 [8] affinity (0 'nearest_neighbors', 1 'precomputed', 2 'rbf',

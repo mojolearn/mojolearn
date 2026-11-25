@@ -37,6 +37,7 @@ from core.device_route import DEVICE_CPU
 from core.host_parallel import host_parallelize
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_pin_settle,
+    member_y_pin_settle, member_weights_pin_settle,
     MEMBER_OP_FIT, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_COLUMN_INDEX, MEMBER_SCOPE_NONE,
 )
 
@@ -109,6 +110,15 @@ struct MemberSetRun(Movable):
     # worker writes 0 when the member's cache took it).
     var scope: Int
     var pin_tokens: List[Int]
+    # THE PER-INPUT PINS (lane vdf-scope-pins; core/member_abi.mojo
+    # `MemberCall.y_pin`): per member, the token of its target's and its
+    # weights' own objects (0: none), offered where its fit reads that whole
+    # column by view or by index; the worker writes the token 0 and the
+    # `*_taken` byte 1 when the member's cache took it.
+    var y_pin_tokens: List[Int]
+    var weights_pin_tokens: List[Int]
+    var y_taken: List[UInt8]
+    var weights_taken: List[UInt8]
     # THE LIFETIME RULE (MEMBER-ABI-V2.md item 34): every buffer handed to a
     # member's FIT stays valid until its state is freed or has been exported.
     # Every state of a set waits for PACK, so the drawn block a worker gathers
@@ -177,6 +187,10 @@ struct MemberSetRun(Movable):
         self.tests = List[UInt8]()
         self.scope = MEMBER_SCOPE_NONE
         self.pin_tokens = List[Int]()
+        self.y_pin_tokens = List[Int]()
+        self.weights_pin_tokens = List[Int]()
+        self.y_taken = List[UInt8]()
+        self.weights_taken = List[UInt8]()
         self.notices = List[List[Float64]]()
         self.borrows = List[UInt8]()
         self.gil_free = List[UInt8]()
@@ -213,6 +227,10 @@ struct MemberSetRun(Movable):
         self.errors.append(String(""))
         self.uncovered.append(UInt8(0))
         self.pin_tokens.append(0)
+        self.y_pin_tokens.append(0)
+        self.weights_pin_tokens.append(0)
+        self.y_taken.append(UInt8(0))
+        self.weights_taken.append(UInt8(0))
         self.notices.append(List[Float64]())
         self.borrows.append(borrows)
         self.gil_free.append(gil_free)
@@ -557,8 +575,18 @@ def _member_set_unit(address: Int, u: Int, alone: Bool) raises:
     # THE PIN RULE: the member's X object is offered unless the worker
     # gathers the drawn block into its own buffer below.
     var offer = run[].pin_tokens[u]
+    # THE PER-INPUT PINS: y's and the weights' tokens on the same rule (their
+    # whole columns are read by view or by index, never a gathered block).
+    var y_offer = run[].y_pin_tokens[u]
+    var w_offer = run[].weights_pin_tokens[u]
     if drawn and not by_index:
         offer = 0
+        y_offer = 0
+        w_offer = 0
+    if run[].targets[u] == 0:
+        y_offer = 0
+    if run[].weights[u] == 0:
+        w_offer = 0
     var done = False
     try:
         call.x = MemberMatrix(x_address, rows, cols)
@@ -613,7 +641,9 @@ def _member_set_unit(address: Int, u: Int, alone: Bool) raises:
             if w_address != 0:
                 call.weights = MemberMatrix(w_address, n, 1)
         call.pin = offer
-        if offer == 0:
+        call.y_pin = y_offer
+        call.weights_pin = w_offer
+        if offer == 0 and y_offer == 0 and w_offer == 0:
             _ = member_call(member, MEMBER_OP_FIT, call)
         else:
             try:
@@ -621,6 +651,12 @@ def _member_set_unit(address: Int, u: Int, alone: Bool) raises:
             finally:
                 if member_pin_settle(call) != 0:
                     run[].pin_tokens[u] = 0  # the scope's cache holds this reference now
+                if y_offer != 0 and member_y_pin_settle(call) != 0:
+                    run[].y_pin_tokens[u] = 0
+                    run[].y_taken[u] = UInt8(1)
+                if w_offer != 0 and member_weights_pin_settle(call) != 0:
+                    run[].weights_pin_tokens[u] = 0
+                    run[].weights_taken[u] = UInt8(1)
         run[].states[u] = call.state
         run[].seconds[u] = Float64(perf_counter_ns() - started) / 1e9
         done = True

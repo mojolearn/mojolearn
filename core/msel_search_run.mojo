@@ -122,7 +122,7 @@ from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, MemberRef, member_call, member_call_of, member_outputs_of, member_free, member_own,
     MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_OP_SCORE, MEMBER_OP_PREDICT, member_output_dtype,
     MEMBER_CAN_TEST_ROWS, MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_CAN_ROW_INDEX,
-    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle, MEMBER_OP_DECISION, MEMBER_READS_Y_GIVEN, MEMBER_OP_TRANSFORM,
+    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle, member_y_pin_settle, MEMBER_OP_DECISION, MEMBER_READS_Y_GIVEN, MEMBER_OP_TRANSFORM,
     MEMBER_OP_PREDICT_PROBA, member_outputs, MEMBER_CAN_PREDICT,
 )
 from core.member_class_weight import member_cw_subset
@@ -272,6 +272,13 @@ struct MselSearchPlan(Movable):
     var scope: Int
     var pin: Int
     var kept_at: Int
+    # THE PER-INPUT PINS (lane vdf-scope-pins; core/member_abi.mojo
+    # `MemberCall.y_pin`): the token of the object that owns `y`'s words (0:
+    # none), offered with X's pin on the RESIDENT route wherever a call reads
+    # `y` itself (never a fold's re-coded codes), and the address of the Int
+    # the RUN writes nonzero when a cache takes it (0: nowhere).
+    var y_pin: Int
+    var y_kept_at: Int
     # Lane mf-cluster5: the metrics image's cluster label-pair entry
     # (core/metrics_cluster_table.mojo; resolved by the UNPACK when a
     # label-pair scorer is asked, else unresolved) and the fit's labels'
@@ -339,6 +346,8 @@ struct MselSearchPlan(Movable):
         self.scope = MEMBER_SCOPE_NONE
         self.pin = 0
         self.kept_at = 0
+        self.y_pin = 0
+        self.y_kept_at = 0
         self.cluster = entry_ref_unresolved()
         self.label_words = List[String]()
         self.keep = False
@@ -523,7 +532,8 @@ struct _Side(ImplicitlyCopyable, Movable):
     (`base_x`, `base_rows` rows) and target (`base_y`) with the side's
     `count` int32 row numbers at `index`, X's pin `pin` offered (0: none) in
     the caller's `scope`. `took`: the address of the byte written 1 when a
-    cache took the pin's reference."""
+    cache took the pin's reference. `y_pin` / `y_took`: the same for the
+    target's own token (THE PER-INPUT PINS; 0: none offered)."""
     var x: Int
     var y: Int
     var count: Int
@@ -534,6 +544,8 @@ struct _Side(ImplicitlyCopyable, Movable):
     var scope: Int
     var pin: Int
     var took: Int
+    var y_pin: Int
+    var y_took: Int
 
 
 def _side_set(mut call: MemberCall, side: _Side, cols: Int, y_dtype: Int, y_cols: Int, with_y: Bool):
@@ -541,6 +553,7 @@ def _side_set(mut call: MemberCall, side: _Side, cols: Int, y_dtype: Int, y_cols
     resident side."""
     call.scope = side.scope
     call.pin = 0
+    call.y_pin = 0
     # A fit without a target (lane mf-msel5b: an unsupervised base, y=None):
     # the call carries no y.
     if side.index == 0:
@@ -552,6 +565,7 @@ def _side_set(mut call: MemberCall, side: _Side, cols: Int, y_dtype: Int, y_cols
     call.row_index = MemberMatrix(side.index, side.count, 1, MEMBER_I32)
     if with_y and side.base_y != 0:
         call.y = MemberMatrix(side.base_y, side.base_rows, y_cols, y_dtype)
+        call.y_pin = side.y_pin  # THE PER-INPUT PINS: the whole target, its owner's token
     call.pin = side.pin
 
 
@@ -559,14 +573,17 @@ def _offered(member: MemberRef, op: Int, mut call: MemberCall, side: _Side) rais
     """One member call over the side `call` points at; the member's answer
     about an offered pin is read whether the call returns or raises (THE PIN
     RULE)."""
-    if call.pin == 0:
+    if call.pin == 0 and call.y_pin == 0:
         _ = member_call(member, op, call)
         return
     try:
         _ = member_call(member, op, call)
     finally:
+        var offered_y = call.y_pin != 0
         if member_pin_settle(call) != 0:
             _U8P(unsafe_from_address=side.took)[0] = UInt8(1)
+        if offered_y and member_y_pin_settle(call) != 0 and side.y_took != 0:
+            _U8P(unsafe_from_address=side.y_took)[0] = UInt8(1)
 
 
 def _member_score(run_at: Int, v: Int, side: _Side, cols: Int, y_dtype: Int, y_cols: Int) raises -> Float64:
@@ -971,6 +988,13 @@ def _note_kept(plan: MselSearchPlan):
     (THE PIN RULE)."""
     if plan.kept_at != 0:
         _IntP(unsafe_from_address=plan.kept_at)[0] = plan.pin
+
+
+def _note_y_kept(plan: MselSearchPlan):
+    """A candidate's cache took y's reference: the caller's `y_pin_kept`
+    (THE PER-INPUT PINS)."""
+    if plan.y_kept_at != 0:
+        _IntP(unsafe_from_address=plan.y_kept_at)[0] = 1
 
 
 def _same_rows(a: Int, b: Int, count: Int) -> Bool:
@@ -1804,6 +1828,10 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                 # the fit reads the fold's train rows by index (the set's
                 # `by_index`) out of the whole X, X's pin offered
                 run.pin_tokens[u - u0] = plan.pin
+                if target == plan.y:
+                    # THE PER-INPUT PINS: the search's own target (a fold's
+                    # re-coded codes are this RUN's buffer: never offered)
+                    run.y_pin_tokens[u - u0] = plan.y_pin
         for v in range(width):  # driver-loop: over the wave's units (a refused candidate's fail unfitted)
             var refused = (plan.masks[(u0 + v) // used] >> SEARCH_REFUSED_SHIFT) - 1
             if refused >= 0:
@@ -1816,6 +1844,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         for v in range(width):  # driver-loop: over the wave's units (did a cache take X's reference)
             if rows_route[(u0 + v) // used] == SEARCH_ROWS_RESIDENT and run.pin_tokens[v] == 0:
                 _note_kept(plan)
+            if run.y_taken[v] != UInt8(0):
+                _note_y_kept(plan)
         if not plan.tolerate:
             var first = member_set_first_failure(run)
             if first >= 0:
@@ -1861,6 +1891,9 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         # THE RESIDENT ROUTE: one byte per task, 1 when a cache took X's pin.
         var took = List[UInt8](length=max(tasks, 1), fill=UInt8(0))
         var took_at = Int(took.unsafe_ptr())
+        var y_took = List[UInt8](length=max(tasks, 1), fill=UInt8(0))  # THE PER-INPUT PINS: y's token
+        var y_took_at = Int(y_took.unsafe_ptr())
+        var y_pin = plan.y_pin
         # THE CV TOOLS: each test task's seconds (its member calls).
         var task_secs = List[Float64](length=max(tasks, 1), fill=0.0)
         var secs_at = Int(task_secs.unsafe_ptr())
@@ -1877,7 +1910,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                             imm out_dtypes_at, imm rows_route_at, imm side_rows_at, imm took_at, imm base_x,
                             imm base_y, imm n, imm scope, imm pin, imm secs_at, imm narrow, imm dst, imm dst_width,
                             imm dst_dtype, imm log_words, imm held_addr_at, imm held_count_at, imm k,
-                            imm multi_cls, imm mheld_list, imm mlack_at, imm dst_counts_at, imm logs_at}:
+                            imm multi_cls, imm mheld_list, imm mlack_at, imm dst_counts_at, imm logs_at,
+                            imm y_took_at, imm y_pin}:
             var v = t // sides
             var side = t % sides
             var started = perf_counter_ns()
@@ -1892,7 +1926,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             var index = 0 if route == SEARCH_ROWS_GATHERED else _IntP(unsafe_from_address=side_rows_at)[s]
             var place = _Side(_IntP(unsafe_from_address=x_list)[s], _IntP(unsafe_from_address=y_dst_at)[s],
                               _IntP(unsafe_from_address=side_count_at)[s], index, base_x, base_y, n, scope,
-                              pin if route == SEARCH_ROWS_RESIDENT else 0, took_at + t)
+                              pin if route == SEARCH_ROWS_RESIDENT else 0, took_at + t,
+                              y_pin if route == SEARCH_ROWS_RESIDENT else 0, y_took_at + t)
             try:
                 var mfold = (u0 + v) % used
                 var mlacks = _U8P(unsafe_from_address=mlack_at)[mfold] != UInt8(0)
@@ -1955,6 +1990,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         for t in range(tasks):  # driver-loop: over the wave's tasks (did a cache take X's reference)
             if took[t] != UInt8(0):
                 _note_kept(plan)
+            if y_took[t] != UInt8(0):
+                _note_y_kept(plan)
         # The metric programs (named scorers), one after the other; each
         # unit's metric warnings in its sides' order (test, then train) and
         # its scorers' order (lane mf-score5: raised at PACK after the unit's
@@ -2132,6 +2169,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         _ = len(errors)
         _ = len(pred_at)
         _ = len(took)
+        _ = len(y_took)
         _ = len(task_secs)
         u0 = u1
     _ = len(out_dtypes)
@@ -2227,9 +2265,12 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         var resident_refit = rows_route[res.best] == SEARCH_ROWS_RESIDENT
         if resident_refit:
             run.pin_tokens[0] = plan.pin  # every row: the whole X, the resident base
+            run.y_pin_tokens[0] = plan.y_pin  # THE PER-INPUT PINS: the whole target
         _fit_wave(run)
         if resident_refit and run.pin_tokens[0] == 0:
             _note_kept(plan)
+        if run.y_taken[0] != UInt8(0):
+            _note_y_kept(plan)
         var first = member_set_first_failure(run)
         if first >= 0:
             var words = run.errors[first].copy()

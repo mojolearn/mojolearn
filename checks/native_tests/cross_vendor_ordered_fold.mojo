@@ -12,7 +12,7 @@ deleted per-shard pair fold computed, so the bits are unchanged. On a GPU build 
 compared with the host column's `ordered_fold_f32` run in the same process: device bytes == host bytes == reference.
 
 Cases:
-  0  one shard of 3 words (the pair form): 1 + 0.5, a subnormal + 0 (FTZ to a signed zero), -0.25 + 0
+  0  one shard of 3 words (the pair form): 1 + 0.5, a negative subnormal + 0 (flushed to -0 before the add, so the sum is +0), -0.25 + 0
   1  1 + 2^-24 + 2^-24 is 1.0 (left fold, one rounding per add); 2^-24 + 2^-24 + 1 is 1 + 2^-23 (order matters)
   2  a NaN shard word becomes the canonical word 0x7fc00000; -0 + -0 stays -0; infinities keep their sign
   3  70,001 elements x 9 shards of SplitMix64 words (several host tasks, many GPU blocks, an odd tail)
@@ -141,7 +141,10 @@ def run_case(entry: EntryRef, which: Int, host_too: Bool) raises:
     if host_too:
         _same(_host(dst, shards), got, "host column vs device column, case " + String(which))
     if which == 0:
-        require(_word(got[1]) == UInt32(0x80000000), "a subnormal accumulator is flushed to -0")
+        # The subnormal accumulator flushes to -0 BEFORE the add, then -0 + +0 is +0 under round-to-nearest
+        # (IEEE 754 6.3), which is what `_reference` and `ordered_fold_step` compute on both columns. Without the
+        # inner `ftz` the sum stays the negative subnormal and the outer `ftz` gives -0, so this word fails.
+        require(_word(got[1]) == UInt32(0x00000000), "a subnormal accumulator is flushed before the add (-0 + +0 is +0)")
     if which == 1:
         require(_word(got[0]) == UInt32(0x3F800000), "1 + 2^-24 + 2^-24 is not 1.0")
         require(_word(got[1]) == UInt32(0x3F800001), "2^-24 + 2^-24 + 1 is not 1 + 2^-23")

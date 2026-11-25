@@ -167,6 +167,15 @@ def linalg_host_column_binding() raises -> PythonObject:
 # in the vendor-neutral binary. The comptime assert above is the check.
 
 
+def fast_bf16_available_binding() raises -> PythonObject:
+    """`linalg_fast.has_bf16()` on the host column: False. The Apple FAST
+    BF16 GEMM (bindings/apple_fast_bf16_public_door.mojo, `fast` tier) has no
+    CPU form, so the answer is fixed here; the host exports none of the
+    other three BF16 entries, which keep refusing by name (vdf2-public,
+    failure row 10: the import read this entry and raised NoCpuEntry)."""
+    return PythonObject(False)
+
+
 def linalg_host_sabotage_binding() raises -> PythonObject:
     """Whether this binary walks every leaf descending on purpose
     (-D MOJOLEARN_HOST_SABOTAGE=1, the gate's negative control)."""
@@ -703,6 +712,7 @@ def build__mojolearn_linalg_host() -> PythonObject:
         module.def_function[linalg_host_vendor_binding]("linalg_host_vendor")
         module.def_function[linalg_host_column_binding]("linalg_host_column")
         module.def_function[linalg_host_sabotage_binding]("linalg_host_sabotage")
+        module.def_function[fast_bf16_available_binding]("fast_bf16_available")
         module.def_function[linalg_vendor_binding]("linalg_vendor")
         module.def_function[linalg_numeric_mode_binding]("linalg_numeric_mode")
         module.def_function[linalg_profile_version_binding]("linalg_profile_version")

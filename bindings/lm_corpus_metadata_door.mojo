@@ -15,6 +15,8 @@ from core.native_json_value import (JsonDoc, json_add_array, json_add_bool, json
     json_add_object, json_add_string, json_push, json_put)
 from bindings.lm_keys_unpack import lm_keys
 from bindings.py_balanced import py_item
+from core.entry_table import EntryRef, entry_ref_unresolved
+from bindings.tokenizer_gpu_connect_unpack import tokenizer_gpu_entry_connect
 
 
 struct CorpusConnection(Defaultable, Movable):
@@ -27,6 +29,39 @@ struct CorpusConnection(Defaultable, Movable):
 comptime CORPUS_CONNECTION = SharedSlot[CorpusConnection, "MojolearnCorpusPublicConnectionV1"]
 
 
+struct CorpusGpuConnection(Defaultable, Movable):
+    """What `lm_corpus.prepare(device=...)` needs, read ONCE at the import-time connection (lane
+    vdf2-tok): whether this installation is CPU only (the backend's `_CPU_ONLY` record), the GPU
+    tokenizer image's entry resolved from its table (core/tokenizer_gpu_entry_table.mojo), or the
+    words device='gpu' is refused with when that image is not connected. No Python object."""
+
+    var cpu_only: Bool
+    var refusal: String
+    var entry: EntryRef
+
+    def __init__(out self):
+        self.cpu_only = True
+        self.refusal = String("RuntimeError: corpus operations require import-time native connection")
+        self.entry = entry_ref_unresolved()
+
+
+comptime CORPUS_GPU_CONNECTION = SharedSlot[CorpusGpuConnection, "MojolearnCorpusGpuConnectionV1"]
+
+
+def corpus_gpu_connect(backend_fields: PythonObject, gpu: PythonObject) raises:
+    """UNPACK at import: the backend's `_CPU_ONLY` record and the GPU tokenizer binding's connection
+    tuple (`mojolearn.tokenizer._gpu_binding`: the module first, or one refusal string). The entry
+    is resolved here once; a call never looks it up."""
+    var bi = native_loaded_module("builtins")
+    if py_type(backend_fields) is not bi.dict:
+        raise Error("TypeError: corpus connection requires the backend's fields")
+    if py_type(gpu) is not bi.tuple or len(gpu) < 1:
+        raise Error("TypeError: corpus connection requires the GPU tokenizer connection tuple")
+    ref slot = CORPUS_GPU_CONNECTION.get_or_create_ptr()[]
+    slot.cpu_only = py_get(backend_fields, PythonObject("_CPU_ONLY")) is not None
+    slot.refusal = tokenizer_gpu_entry_connect(gpu, slot.entry)
+
+
 def corpus_context() raises -> PythonObject:
     var context = CORPUS_CONNECTION.get_or_create_ptr()[].context
     if context is None:
@@ -37,7 +72,7 @@ def corpus_context() raises -> PythonObject:
 def corpus_connect(args: PythonObject) raises -> PythonObject:
     var nk = lm_keys()
     var bi = native_loaded_module("builtins")
-    if py_type(args) is not bi.tuple or len(args) != 6:
+    if py_type(args) is not bi.tuple or len(args) != 8:
         raise Error("TypeError: corpus connection requires its native classes")
     var prior = CORPUS_CONNECTION.get_or_create_ptr()[].context
     if prior is not None:
@@ -64,6 +99,8 @@ def corpus_connect(args: PythonObject) raises -> PythonObject:
     py_setitem(context, nk[].k_mmap_hooks, corpus_mmap_hooks(py_item(context, nk[].k_mmap_class)))
     connect_native_mmap_exporter(py_item(context, nk[].k_mmap_class))
     corpus_files_initialize()
+    # args[6], args[7]: the backend's fields and the GPU tokenizer connection (lane vdf2-tok).
+    corpus_gpu_connect(args[6], args[7])
     CORPUS_CONNECTION.get_or_create_ptr()[].context = context
     return PythonObject(None)
 

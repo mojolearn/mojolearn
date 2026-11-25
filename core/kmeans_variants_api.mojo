@@ -24,18 +24,15 @@ comptime VARIANTS_RELEASE = 9
 comptime VARIANTS_RESIDENT_QUERY = 10
 comptime VARIANTS_CAP_RESIDENT = 1
 comptime VARIANTS_CAP_DEVSCAN = 2
-#: THE FOLD X WORD (lane vdf-scope-cluster3, core/fold_x_device.mojo): the image's MiniBatchKMeans fit (unweighted),
-#: BisectingKMeans fit and predict and resident centers queries read X ONLY through an upload that takes a negative
-#: X word as an x_prep store slot (x_cluster/device_ops.mojo `put_addr`, x_cluster/minibatch_ptr.mojo
-#: `minibatch_entry_ptr_idn`, x_cluster/resident.mojo `xc_resident_query`): the identical device image. A `fast`
-#: build's zero-copy and host-list routes read host words, so it does not answer it.
+#: THE FOLD X WORD (lane vdf-scope-cluster3, core/fold_x_device.mojo): every fit and query of the device variants
+#: entry reads X ONLY through an upload that takes a negative X word as an x_prep store slot
+#: (x_cluster/device_ops.mojo `put_addr`, x_cluster/minibatch_ptr.mojo `minibatch_entry_ptr_idn`,
+#: x_cluster/resident.mojo `xc_resident_query`, x_cluster/device_execution.mojo `_fold_execute`), in every mode
+#: (lane vdf2-tail: a `fast` build's MiniBatchKMeans and BisectingKMeans fits take the word by their slot forms;
+#: the Apple zero-copy routes take host words only). The host entry does not answer it.
 comptime VARIANTS_CAP_FOLD_X = 4
-#: THE FOLD X WORD on the SLOT ENTRIES in every mode (lane vdf-scope-cluster8): MeanShift, OPTICS,
-#: AffinityPropagation and BayesianGaussianMixture (x_cluster/device_execution.mojo `cluster_fold_entry` /
-#: `_fold_execute`: X put into an ops float slot by one device copy, `DeviceOps.put_addr`) and the resident centers
-#: query (`xc_resident_query`) read the word in a `fast` build too, so the fast image answers this bit (the
-#: identical image answers both). MiniBatchKMeans and BisectingKMeans stay on VARIANTS_CAP_FOLD_X.
-comptime VARIANTS_CAP_FOLD_X_SLOT = 8
+# Bit 8 (VARIANTS_CAP_FOLD_X_SLOT, lane vdf-scope-cluster8: the fold word on the slot entries of a `fast` build only)
+# is retired by lane vdf2-tail: the fast image answers VARIANTS_CAP_FOLD_X itself, so nothing reads bit 8.
 
 
 @fieldwise_init

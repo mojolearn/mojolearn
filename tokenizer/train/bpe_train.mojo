@@ -565,3 +565,39 @@ def train_bpe(
         merge_no += 1
 
     return vocab^
+
+
+def trained_vocab_from_pairs(
+    pairs: MutPointer[Int32, MutUntrackedOrigin], n_merges: Int, n_ties: Int, n_groups: Int,
+) raises -> TrainedVocabulary:
+    """The trained vocabulary as train_bpe writes it, from a device trainer's merges (`2 * n_merges`
+    int32 (left, right) ids back to back at `pairs`): the 256 single bytes, then each merge's token
+    (the bytes of its left part, then its right part) in merge order, the merges and the tie count.
+    Host code over the merge list (no GPU import), shared by `tokenizer/fast/bpe_fast_impl.mojo`
+    `fast_vocab_from_merges` and the GPU side of `lm_corpus.prepare`; serial by nature: every token
+    is built from earlier ones."""
+    var vocab = TrainedVocabulary()
+    vocab.n_groups = n_groups
+    vocab.n_ties_broken = n_ties
+    for b in range(256):
+        vocab.offset.append(len(vocab.arena))
+        vocab.length.append(1)
+        vocab.arena.append(UInt8(b))
+    for k in range(n_merges):
+        var a = Int(pairs[2 * k])
+        var b = Int(pairs[2 * k + 1])
+        var n_tokens = len(vocab.offset)
+        if a < 0 or a >= n_tokens or b < 0 or b >= n_tokens:
+            raise Error("ValueError: merge " + String(k) + " names an id outside [0, " + String(n_tokens) + ")")
+        var joined = List[UInt8]()
+        for i in range(vocab.length[a]):
+            joined.append(vocab.arena[vocab.offset[a] + i])
+        for i in range(vocab.length[b]):
+            joined.append(vocab.arena[vocab.offset[b] + i])
+        vocab.offset.append(len(vocab.arena))
+        vocab.length.append(len(joined))
+        for i in range(len(joined)):
+            vocab.arena.append(joined[i])
+        vocab.merge_left.append(a)
+        vocab.merge_right.append(b)
+    return vocab^

@@ -147,6 +147,7 @@ from core.forest_calls import xf_fit_rows, xf_resident_rows
 from core.forest_entry_table import FOREST_TABLE_RF, FOREST_TABLE_ET
 from core.forest_store_transport import forest_store_transport_ref, FOREST_STORE_PREFIX_RF, FOREST_STORE_PREFIX_ET
 from bindings.arena_cache_run import arena_scope_store_put
+from core.fold_x_word import fold_x_word
 from core.host_parallel import host_widen_index_i64
 from bindings.forest_config_run import ForestConfig, forest_request
 from bindings.forest_predict_run import (
@@ -779,6 +780,72 @@ def _scope_store_id(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOri
     return put.store_id
 
 
+def _scope_y_word(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin]) raises -> Int:
+    """THE PER-INPUT PINS for the fit's labels (lane vdf2-tail2;
+    core/member_abi.mojo `MemberCall.y_pin`): the WHOLE base's labels (one
+    4-byte word a row: the classifier's int32 codes or the regressor's
+    float32 targets) put once per scope into the image's device store under
+    the labels' own token, through the scope's cache of this family (a hit
+    after the first put: every fold's fit shares it); their store slot as a
+    NEGATIVE label word (THE FOLD X WORD numbering), which the image's
+    XF_FIT_ROWS body takes rows of on the device (core/mojolearn_rf_run.mojo
+    `rf_store_rows_y`, extratrees/mojolearn_trees_run.mojo
+    `et_store_take_column`). THE PIN RULE: `y_pin_kept` is written the moment
+    the cache took the reference."""
+    var family = FOREST_TABLE_ET if slot[].et else FOREST_TABLE_RF
+    var prefix = String(FOREST_STORE_PREFIX_ET) if slot[].et else String(FOREST_STORE_PREFIX_RF)
+    var store = forest_store_transport_ref(family, call[].route.mode, call[].route.vendor)
+    var put = arena_scope_store_put(call[].scope, store, prefix, call[].y.data, call[].y.rows, call[].y_pin)
+    if put.pinned:
+        call[].y_pin_kept = call[].y_pin
+    return fold_x_word(put.store_id)
+
+
+def _scope_w_word(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin]) raises -> Int:
+    """`_scope_y_word` for the sample weights under their own token
+    (`MemberCall.weights_pin`; the RF image's XF_FIT_ROWS body takes their
+    rows on the device, core/mojolearn_rf_run.mojo `_rf_weights_into`)."""
+    var store = forest_store_transport_ref(FOREST_TABLE_RF, call[].route.mode, call[].route.vendor)
+    var put = arena_scope_store_put(call[].scope, store, String(FOREST_STORE_PREFIX_RF), call[].weights.data,
+                                    call[].weights.rows, call[].weights_pin)
+    if put.pinned:
+        call[].weights_pin_kept = call[].weights_pin
+    return fold_x_word(put.store_id)
+
+
+def _largest_rows(src: Int, index: Int, rows: Int) -> Float64:
+    """`_largest` over the base's float32 weights at the fold's `rows` int64
+    row numbers `index` (lane vdf2-tail2: the weights stay in the store on
+    the device route, so the max reads them through the index; no gather,
+    per-task maxima as `_largest`). `rows` >= 1."""
+    var tasks = host_predict_task_count_work(rows, rows)
+    var chunk = host_predict_chunk(rows, tasks)
+    var source = _F32P(unsafe_from_address=src)
+    var ids = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=index)
+    var tops = List[Float32](length=max(tasks, 1), fill=source[Int(ids[0])])
+    var top_words = _F32P(unsafe_from_address=Int(tops.unsafe_ptr()))
+
+    def task(unit: Int) {imm source, imm ids, imm top_words, imm chunk, imm rows}:
+        var first = unit * chunk
+        var last = min(first + chunk, rows)
+        if first >= last:
+            return
+        var top = source[Int(ids[first])]
+        for i in range(first + 1, last):  # native data loop (one host task's fold rows)
+            var v = source[Int(ids[i])]
+            if v > top:
+                top = v
+        top_words[unit] = top
+
+    host_parallelize(task, tasks)
+    var best = tops[0]
+    for t in range(1, len(tops)):  # small-loop(host tasks: one maximum each)
+        if tops[t] > best:
+            best = tops[t]
+    _ = tops^
+    return Float64(best)
+
+
 struct _Query(Movable):
     """A predict / score X (lane vdf-scope-trees2a): `x` its view (`data`
     0 when the rows stay on the device), and under `call.row_index` the
@@ -852,8 +919,9 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
     # resident scope with a pin, X goes ONCE into the image's device store
     # through the scope's cache and the image takes the rows on the device
     # (XF_FIT_ROWS); otherwise the rows are gathered here across the host's
-    # cores and the fit is the plain one. y and the weights (one word a row)
-    # are gathered here either way.
+    # cores and the fit is the plain one. The weights (one word a row) are
+    # gathered here; y too, except on XF_FIT_ROWS with y's own pin (lane
+    # vdf2-tail2: `_scope_y_word`, the labels taken on the device).
     var fold = _FoldRows()
     var base_rows = call[].x.rows
     var rows = base_rows
@@ -895,8 +963,24 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
     var t_fold = List[Float32]()
     var w_fold = List[Float32]()
     var x_fold = List[Float32]()
+    # The ET classifier on an image answering XF_CAP_ET_CODES (the ET GPU
+    # images; lane vdf-scope-trees3) hands its int32 codes as they are.
+    var y_codes = slot[].classifier and slot[].et and (_slot_caps(slot, key) & XF_CAP_ET_CODES) != 0
+    # The labels on the device (lane vdf2-tail2): on the XF_FIT_ROWS route
+    # inside a scope with the labels' own pin, the image takes the fold's
+    # labels out of its store (no host gather); the ET classifier only when
+    # it hands int32 codes (the store's words are the caller's bytes).
+    var y_dev = (fold.store_id >= 0 and call[].scope != MEMBER_SCOPE_NONE and call[].y_pin != 0
+                 and (not (slot[].classifier and slot[].et) or y_codes))
+    # The RF weights likewise under their own pin (the RF image reads its
+    # weights on the device only: core/mojolearn_rf_run.mojo); ET keeps the
+    # host gather (its builder's weight checks read host words).
+    var w_dev = (weighted and not slot[].et and fold.store_id >= 0 and call[].scope != MEMBER_SCOPE_NONE
+                 and call[].weights_pin != 0)
     if fold.n > 0:
-        if slot[].classifier:
+        if y_dev:
+            y_addr = _scope_y_word(slot, call)
+        elif slot[].classifier:
             y_fold = List[Int32](length=rows, fill=0)
             _take_rows_i32(call[].y.data, fold.index, rows, Int(y_fold.unsafe_ptr()))
             y_addr = Int(y_fold.unsafe_ptr())
@@ -904,7 +988,9 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
             t_fold = List[Float32](length=rows, fill=0.0)
             _take_rows_f32(call[].y.data, fold.index, rows, 1, Int(t_fold.unsafe_ptr()))
             y_addr = Int(t_fold.unsafe_ptr())
-        if weighted:
+        if w_dev:
+            w_addr = _scope_w_word(slot, call)
+        elif weighted:
             w_fold = List[Float32](length=rows, fill=0.0)
             _take_rows_f32(call[].weights.data, fold.index, rows, 1, Int(w_fold.unsafe_ptr()))
             w_addr = Int(w_fold.unsafe_ptr())
@@ -918,7 +1004,6 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
     # vdf-scope-trees3) takes the int32 codes as they are and makes the class
     # ids on the device (XF_SHAPE_Y_CODES): no host cast. The host images keep it.
     var codes = List[Float32]()
-    var y_codes = slot[].classifier and slot[].et and (_slot_caps(slot, key) & XF_CAP_ET_CODES) != 0
     if slot[].classifier and slot[].et and not y_codes:
         codes = List[Float32](length=rows, fill=0.0)
         _cast_codes(y_addr, Int(codes.unsafe_ptr()), rows)
@@ -950,7 +1035,7 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
         oob_score = List[Float64](length=1, fill=0.0)
     var w_max = 0.0
     if weighted and not slot[].classifier and not slot[].et:
-        w_max = _largest(w_addr, rows)
+        w_max = _largest_rows(call[].weights.data, fold.index, rows) if w_dev else _largest(w_addr, rows)
     var fit = ForestFit(slot[].classifier, rowmajor_ok=not column_major, weights=w_addr,
                         oob=Int(oob_out.unsafe_ptr()) if slot[].oob else 0,
                         score=Int(oob_score.unsafe_ptr()) if slot[].oob else 0,

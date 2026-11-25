@@ -11,13 +11,15 @@ fit raised.
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_op, entry_ref_word
 from core.trees_entry_table import TreesEntryKey
 from core.gbdt_entry_table import gbdt_table_entry
+from std.memory import unsafe_memcpy
 from core.fit_loop_clock import FitLoop
+from gbdt.data.category_map import CATEGORY_MAX_VALUES
 from gbdt.fit_request import (
     GbdtFitArgs, GbdtFitOutcome, GBDT_ENTRY_ABI, XG_OP_COUNT, XG_CAPS, XG_NUMERIC_MODE, XG_FIT, XG_FIT_ROWMAJOR,
     XG_OUTCOME_SIZES, XG_OUTCOME_COPY, XG_OUTCOME_FREE, XG_MODEL_DIM, XG_CAP_ROW_MAJOR, gbdt_string_at,
     XG_PREDICT, XG_PREDICT_MULTI, XG_BINARY, XG_SIGMOID_PAIR, XG_RESIDENT_PREPARE, XG_RESIDENT_PREDICT,
     XG_CAP_RESIDENT, XG_ORDERED_FIT, XG_FEATURE_FREQ_FIT, XG_IMPORTANCES, XG_OUTCOME_WORDS, XG_CAP_SLOT_X,
-    XG_CAP_FIT_SLOT_X,
+    XG_CAP_FIT_SLOT_X, XG_SLOT_NAN, XG_SLOT_CATEGORY_FIT,
 )
 
 
@@ -79,6 +81,48 @@ def xg_caps(entry: EntryRef) raises -> Int:
     vdf-scope-trees4: the member reads it once per fold operation)."""
     var none = List[Int]()
     return entry_ref_call(entry, entry_ref_op(entry, XG_CAPS), none, none, _none_f())
+
+
+def xg_slot_nan(entry: EntryRef, x_word: Int, count: Int) raises -> Int:
+    """The first NaN word of the first `count` words of the fold slot the
+    negative `x_word` names, or -1 (XG_SLOT_NAN; one int comes home, X never
+    does). Asked only of an image that answers XG_CAP_FIT_SLOT_X."""
+    var a: Array[Int, 1] = [x_word]
+    var p: Array[Int, 1] = [count]
+    var f: Array[Float64, 1] = [0.0]
+    return entry_ref_call(entry, entry_ref_op(entry, XG_SLOT_NAN), a, p, f)
+
+
+def xg_slot_category_fit(entry: EntryRef, x_word: Int, n_rows: Int, n_cols: Int, columns: List[Int]) raises -> List[UInt64]:
+    """The category map of a cat_features fit over the ROW-MAJOR fold slot
+    the negative `x_word` names (XG_SLOT_CATEGORY_FIT, lane vdf2-gbdtcat2):
+    the ascending distinct feature indices `columns`; the image writes their
+    dense codes over the slot and returns the stored map's words
+    (gbdt/data/category_map.mojo layout, the estimator's `category_map_`).
+    Only the distinct keys come home. Asked only of an image that answers
+    XG_CAP_FIT_SLOT_X.
+
+    The destination holds the largest map the fit can make (2 + 2 C header
+    words and at most min(n_rows, CATEGORY_MAX_VALUES + 1) keys per column)
+    UNINITIALISED: only the words the image writes are touched, so the
+    untouched pages are never faulted in."""
+    var n_cat = len(columns)
+    var per_column = min(n_rows, CATEGORY_MAX_VALUES + 1)
+    var capacity = 2 + 2 * n_cat + n_cat * per_column
+    var words = List[UInt64](unsafe_uninit_length=max(capacity, 1))
+    var a: Array[Int, 3] = [x_word, Int(columns.unsafe_ptr()), Int(words.unsafe_ptr())]
+    var p: Array[Int, 4] = [n_rows, n_cols, n_cat, capacity]
+    var f: Array[Float64, 4] = [0.0, 0.0, 0.0, 0.0]
+    var wrote = entry_ref_call(entry, entry_ref_op(entry, XG_SLOT_CATEGORY_FIT), a, p, f)
+    _ = columns  # the image read the indices through their address
+    if wrote < 2 + 2 * n_cat or wrote > capacity:
+        raise Error("gbdt fold slot category map: the image wrote " + String(wrote) + " words for "
+                    + String(n_cat) + " categorical columns")
+    # the stored map at its own size (the model keeps it), one copy of its words
+    var stored = List[UInt64](unsafe_uninit_length=wrote)
+    unsafe_memcpy(dest=stored.unsafe_ptr(), src=words.unsafe_ptr(), count=wrote)
+    _ = words^
+    return stored^
 
 
 def xg_predict(entry: EntryRef, text: Int, text_bytes: Int, x: Int, n_rows: Int, dst: Int) raises -> Int:

@@ -110,7 +110,7 @@ def _fast_binding(*, connect_all=False):
 #: The identical GPU tokenizer (`tokenizer/gpu/`, binding `_mojolearn_x_tokenizer`): what a
 #: BpeTokenizer built with device="gpu" runs. Connected once at import:
 #: `(module, bpe_gpu_load, bpe_gpu_encode_batch, bpe_gpu_decode_batch, bpe_gpu_train,
-#: bpe_gpu_trained_sizes, bpe_gpu_trained_copy)`, or a one-item tuple
+#: bpe_gpu_trained_sizes, bpe_gpu_trained_copy, bpe_gpu_pretokenize)`, or a one-item tuple
 #: holding the words device="gpu" is refused with where it is not installed.
 _GPU_EXTENSION = "_mojolearn_x_tokenizer"
 
@@ -123,7 +123,8 @@ def _gpu_binding():
         # tiers are the same code and give the same ids)
         module = _backend.binding(_GPU_EXTENSION, _backend.default_mode())
         return (module, module.bpe_gpu_load, module.bpe_gpu_encode_batch, module.bpe_gpu_decode_batch,
-                module.bpe_gpu_train, module.bpe_gpu_trained_sizes, module.bpe_gpu_trained_copy)
+                module.bpe_gpu_train, module.bpe_gpu_trained_sizes, module.bpe_gpu_trained_copy,
+                module.bpe_gpu_pretokenize)
     except (ImportError, AttributeError, ValueError, OSError) as error:
         return ("ImportError: device='gpu' needs the GPU tokenizer binding, which is not connected: " + str(error),)
 

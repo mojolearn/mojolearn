@@ -100,6 +100,13 @@ comptime NB_OP_REGRESS_NEIGHBORS = 13
 # gathered into the index buffer, no host words); the device column only (the
 # CPU column keeps no resident index and refuses it).
 comptime NB_OP_INDEX_PREPARE_FOLD = 14
+#: The fold prepare's sixth word (lane vdf2-tail): the metric's test of the index rows, made on the device once.
+#: COSINE: the first all-zero row, kept with the resident index for every later cosine search plan (the host scan's
+#: refusal, DEVIATION 553). JS: Jensen-Shannon's X >= 0 FIT refusal: a negative word sets the THIRD status word
+#: (the caller then passes three int32 status words) and nothing is kept.
+comptime NB_FOLD_TEST_NONE = 0
+comptime NB_FOLD_TEST_COSINE = 1
+comptime NB_FOLD_TEST_JS = 2
 comptime NB_OPERATION_COUNT = 15
 #: The fixed p words before the classifier's class counts.
 comptime NB_CLASSIFY_FIXED = 9
@@ -155,7 +162,7 @@ def nb_ops_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         want_f = 0
     elif operation == NB_OP_INDEX_PREPARE_FOLD:
         want_a = 1
-        want_p = 5
+        want_p = 6
         want_f = 0
     elif operation == NB_OP_CLASSIFY:
         want_a = 6
@@ -307,13 +314,17 @@ def nb_index_prepare_call(entry: NativeDescriptorCall, index: Int, status: Int, 
 
 
 def nb_index_prepare_fold_call(entry: NativeDescriptorCall, status: Int, fold: NbFold, n_index: Int,
-                               n_features: Int) raises -> Int:
+                               n_features: Int, metric_test: Int) raises -> Int:
     """NB_OP_INDEX_PREPARE_FOLD: the resident index of fold rows `fold.index`
     of the resident base `fold.base` (`fold.rows` rows), gathered on the
     device; `status` two host int32 words (finite, range), handle 0 when
-    either is set."""
+    either is set. `metric_test` (lane vdf2-tail, the sixth word): NB_FOLD_TEST_*
+    (the cosine zero-row test kept with the index; the Jensen-Shannon sign
+    test into a third status word, handle 0 when it is set)."""
+    if metric_test < NB_FOLD_TEST_NONE or metric_test > NB_FOLD_TEST_JS:
+        raise Error("knn: unknown fold metric test " + String(metric_test))
     var addresses: List[Int] = [status]
-    var ints: List[Int] = [fold.base, fold.rows, fold.index, n_index, n_features]
+    var ints: List[Int] = [fold.base, fold.rows, fold.index, n_index, n_features, metric_test]
     var floats = List[Float64]()
     return native_descriptor_call(entry, NB_OP_INDEX_PREPARE_FOLD, addresses, ints, floats)
 

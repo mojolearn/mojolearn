@@ -2031,7 +2031,7 @@ FAMILIES = (
             "bincount_i64",
             "assign_fold_i64", "count_fold_hits_i64", "mark_split_roles_f32",
             "scatter_rows_bytes", "uniform_init_f32",
-            "strat_fold_assign_i32",
+            # strat_fold_assign_i32 deleted 2026-11-24 (lane vdf2-native): no caller (the stored-code MH_STRAT_FOLD_ASSIGN_RES)
             "strided_copy_bytes", "check_lengths_i64",
             "ragged_rows_bytes", "row_means_f64",
             "truncnorm_draws", "fsum_f64",
@@ -2111,6 +2111,8 @@ FAMILIES = (
             "linalg_numerical_profile", "from_f16",
             # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
             "linalg_native_api_v1",
+            # vdf2-public (2026-11-24): linalg_fast.has_bf16() answers False on the host column
+            "fast_bf16_available",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(

@@ -37,6 +37,7 @@ from core.fold_x_device import fold_x_fill
 
 from core.gbdt_importance import (
     GbdtImpF32, GbdtImpI32, GbdtImpU32, GbdtImpU8, GbdtImportanceInput, gbdt_importance_input,
+    gbdt_importance_fold_rows,
     gbdt_imp_bin_body, gbdt_imp_exponent, gbdt_imp_finish_body, gbdt_imp_fold_body, gbdt_imp_row_leaf,
     gbdt_imp_tree_body, gbdt_imp_weight_word,
 )
@@ -166,6 +167,23 @@ def gbdt_feature_importances_device(
     `n_input`. The caller keeps its buffers alive until this returns (it
     synchronizes)."""
     var request = gbdt_importance_input(text, x_addr, n_rows, n_input, row_major, n_weights)
+    var fold_rows = List[Float32]()
+    if request.needs_rows:
+        # A CTR or expanded model fitted on THE FOLD X WORD (lane
+        # vdf2-gbdtcat2): its model columns are the predict path's expansion
+        # (`gbdt_host_expand_ctr`, a host statement on every column, the GPU
+        # predict's too) of the fit's rows, so the slot's rows (the
+        # categorical columns already the fit's codes) come home once, here,
+        # after the fit; the expanded columns then go up as for a host fit.
+        fold_rows = List[Float32](unsafe_uninit_length=max(n_rows * n_input, 1))
+        var d_rows = ctx.enqueue_create_buffer[DType.float32](max(n_rows * n_input, 1))
+        fold_x_fill(ctx, d_rows, x_addr, n_rows * n_input)
+        ctx.enqueue_copy(
+            dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(fold_rows.unsafe_ptr())), src_buf=d_rows
+        )
+        ctx.synchronize()
+        _ = d_rows^
+        gbdt_importance_fold_rows(request, Int(fold_rows.unsafe_ptr()), n_rows, n_input)
     ref plan = request.plan
     var n_cols = plan.n_cols
     var n_trees = plan.n_trees
@@ -274,6 +292,7 @@ def gbdt_feature_importances_device(
     _ = d_out^
     _ = h_fail^
     _ = len(request.model_x)  # the upload read the expanded model columns through `x_addr`
+    _ = len(fold_rows)  # the expansion read the fold's rows
     if failed > 0:
         raise Error("gbdt importances: non-symmetric tree " + String(failed - 1) + " walks a row out of its tree")
     return plan.n_input

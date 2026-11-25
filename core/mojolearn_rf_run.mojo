@@ -12,6 +12,7 @@ from std.memory import unsafe_memcpy
 from core.hostptr import copy_f32, list_f32, list_i32
 from ensemble.device_layout import device_has_nan_f32, upload_forest_x, forest_x_from_device_rows
 from core.device_store import DeviceStore
+from core.fold_x_word import fold_x_slot
 from ensemble.dart_member import launch_dart_member_x, launch_dart_member_y
 from ensemble.ada_rounds import (
     AdaState,
@@ -135,6 +136,37 @@ def rf_store_rows_x(ctx: DeviceContext, store_id: Int, idx_addr: Int, n_rows: In
         raise problem^
     store[].free(ctx, taken)
     return dx^
+def rf_store_rows_y[LT: DType](ctx: DeviceContext, y_word: Int, idx_addr: Int, n_rows: Int,
+                               dst: DeviceBuffer[LT]) raises:
+    """XF_FIT_ROWS's labels (lane vdf2-tail2): a NEGATIVE `params.y` word
+    (THE FOLD X WORD numbering, core/fold_x_word.mojo) names the store slot
+    of the WHOLE base's labels (one 4-byte word a row: int32 codes or float32
+    targets, put once per scope under the member's `y_pin`); rows `idx`
+    (`n_rows` host int64 words at `idx_addr`) are taken on the device and
+    copied into `dst` as their bytes (the same words the host gather
+    uploaded). The taken slot is freed before return (also on a raise)."""
+    if y_word >= 0:
+        raise Error("rf_fit_rows: the label word names no store slot")
+    if n_rows < 1:
+        raise Error("rf_fit_rows: invalid shape")
+    var store = RF_STORE.get_or_create_ptr()
+    var taken = store[].take_rows(ctx, fold_x_slot(y_word), 1, idx_addr, n_rows)
+    try:
+        var raw = store[]._held(taken, n_rows)
+        var view = DeviceBuffer[LT](
+            ctx, MutPointer[Scalar[LT], MutAnyOrigin](unsafe_from_address=Int(raw.unsafe_ptr())), n_rows,
+            owning=False,
+        )
+        ctx.enqueue_copy(dst_buf=dst.create_sub_buffer[LT](0, n_rows), src_buf=view)
+        ctx.synchronize()
+        _ = view^
+        _ = raw^  # the copy above read the taken rows
+    except problem:
+        store[].free(ctx, taken)
+        raise problem^
+    store[].free(ctx, taken)
+
+
 comptime CLT = DType.int32
 comptime RLT = DType.float32
 comptime ClsObj = ClassificationObjectiveFunction[DT, CLT, ClassificationBin]
@@ -323,7 +355,6 @@ def _rf_drop_zero_weight_rows[LT: DType](
     mut dx: DeviceBuffer[DT],
     mut dy: DeviceBuffer[LT],
     mut dsw: DeviceBuffer[DT],
-    mut weights: List[Float32],
     n_rows: Int,
     n_cols: Int,
 ) raises -> Int:
@@ -333,8 +364,9 @@ def _rf_drop_zero_weight_rows[LT: DType](
     from every row of `dx`), not a node's row count. Called on a weighted
     fit without bootstrap whose weights are not all 1.0: the kept rows are
     found and gathered ON THE DEVICE (`core/weight_compact_device`) into new
-    column-major X, labels and weights, which replace the caller's; the
-    host weight list becomes the kept weights (one bulk copy). Returns the
+    column-major X, labels and weights, which replace the caller's (lane
+    vdf2-tail2: the kept weights no longer come home; every reader takes
+    the device weights). Returns the
     kept row count; n_rows (and every buffer untouched) when no weight is
     zero, so such a fit keeps every bit."""
     var rows = ctx.enqueue_create_buffer[DType.int32](n_rows)
@@ -345,14 +377,27 @@ def _rf_drop_zero_weight_rows[LT: DType](
     var cx = device_gather_rows_colmajor(ctx, dx, n_rows, n_cols, rows, kept)
     var cy = device_gather_rows[LT](ctx, dy, rows, kept)
     var cw = device_gather_rows[DT](ctx, dsw, rows, kept)
-    weights = List[Float32](length=kept, fill=Float32(0))
-    ctx.enqueue_copy(dst_ptr=weights.unsafe_ptr(), src_buf=cw)
     ctx.synchronize()
     _ = rows^
     dx = cx^
     dy = cy^
     dsw = cw^
     return kept
+
+
+def _rf_weights_into(ctx: DeviceContext, dsw: DeviceBuffer[DT], weights_addr: Int, idx_addr: Int,
+                     n_rows: Int) raises:
+    """The fit's `n_rows` float32 weights into `dsw` (lane vdf2-tail2): one
+    upload from the caller's host words, or, for a NEGATIVE word on
+    XF_FIT_ROWS (`idx_addr` the row ids), the fold's rows of the base's
+    weights in the image's store taken on the device (`rf_store_rows_y`).
+    The same words either way."""
+    if weights_addr < 0:
+        if idx_addr == 0:
+            raise Error("rf_fit: a device weight word reaches only an XF_FIT_ROWS fit")
+        rf_store_rows_y[DT](ctx, weights_addr, idx_addr, n_rows, dsw)
+        return
+    ctx.enqueue_copy(dst_buf=dsw, src_ptr=_f32_ptr(weights_addr))
 
 
 def _rf_params_from(params: ForestFitArgs, criterion: Int) raises -> RF_params:
@@ -821,22 +866,22 @@ def _rf_weighted_session_fit(
     var n_fit = n_rows
     if not rf_params.bootstrap and not wscan.all_unit:
         n_fit = _rf_drop_zero_weight_rows[CLT](
-            ctx, dxv, dy, dsw, weights, n_rows, n_cols
+            ctx, dxv, dy, dsw, n_rows, n_cols
         )
         if n_fit < n_rows:
             wscan = device_scan_weights(ctx, dsw, n_fit)
     weight_total = wscan.total
-    if wscan.all_unit:
-        weights = List[Float32]()
+    # lane vdf2-tail2: the device weights say whether weights act (no host list)
+    var use_w = not wscan.all_unit
     if n_fit < n_rows:
-        if len(weights) > 0:
+        if use_w:
             var cscale = choose_scale(weight_total, n_fit)
             if cscale < Float64(1.1754943508222875e-38) or cscale > Float64(3.4028234663852886e38):
                 raise Error("class weights exceed Float32 fixed-point scale range")
             forest = fit_forest[WeightedClsObj](
                 ctx, dxv, dy, dsw, n_fit, n_cols, n_classes, rf_params,
                 BinScales(Float32(1), Float32(cscale)),
-                sample_weight_host=weights, host_x_addr=0,
+                weights_on_device=use_w, host_x_addr=0,
                 min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
                 notices_to_stderr=False,
             )
@@ -844,17 +889,17 @@ def _rf_weighted_session_fit(
             _rf_fold_min_weight_count(rf_params, mw_frac, n_fit)
             forest = fit_forest[ClsObj](
                 ctx, dxv, dy, dsw, n_fit, n_cols, n_classes, rf_params,
-                sample_weight_host=weights, host_x_addr=0,
+                weights_on_device=use_w, host_x_addr=0,
                 notices_to_stderr=False,
             )
-    elif len(weights) > 0 and not rf_params.bootstrap:
+    elif use_w and not rf_params.bootstrap:
         var scale = choose_scale(weight_total, n_rows)
         if scale < Float64(1.1754943508222875e-38) or scale > Float64(3.4028234663852886e38):
             raise Error("class weights exceed Float32 fixed-point scale range")
         var scales = BinScales(Float32(1), Float32(scale))
         forest = fit_forest_prepared[WeightedClsObj](
             ctx, dxv, dy, dsw, n_rows, n_cols, n_classes, rf_params,
-            prep, share_tables, scales, sample_weight_host=weights,
+            prep, share_tables, scales, weights_on_device=use_w,
             host_x_addr=host_x,
             min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
             notices_to_stderr=False,
@@ -863,7 +908,7 @@ def _rf_weighted_session_fit(
         _rf_fold_min_weight_count(rf_params, mw_frac, n_rows)
         forest = fit_forest_prepared[ClsObj](
             ctx, dxv, dy, dsw, n_rows, n_cols, n_classes, rf_params,
-            prep, share_tables, sample_weight_host=weights,
+            prep, share_tables, weights_on_device=use_w,
             host_x_addr=host_x,
             notices_to_stderr=False,
         )
@@ -910,28 +955,27 @@ def _rf_ada_classifier_round(
     if wscan.total <= 0:
         raise Error("class weights must have positive total")
     # sk-weq-trees, as in `_rf_weighted_session_fit`: zero-weight rows
-    # leave a fit without bootstrap; the kept weights then come home
-    # once (the compaction's copy), the only host weights of a round.
-    var weights = List[Float32]()
+    # leave a fit without bootstrap (lane vdf2-tail2: the kept weights stay
+    # on the device; no host weights in a round).
     var n_fit = n_rows
     if not rf_params.bootstrap and not wscan.all_unit:
         n_fit = _rf_drop_zero_weight_rows[CLT](
-            ctx, dxv, dy, dsw, weights, n_rows, n_cols
+            ctx, dxv, dy, dsw, n_rows, n_cols
         )
         if n_fit < n_rows:
             wscan = device_scan_weights(ctx, dsw, n_fit)
     var weight_total = wscan.total
-    if wscan.all_unit:
-        weights = List[Float32]()
+    # lane vdf2-tail2: the device weights say whether weights act (no host list)
+    var use_w = not wscan.all_unit
     if n_fit < n_rows:
-        if len(weights) > 0:
+        if use_w:
             var cscale = choose_scale(weight_total, n_fit)
             if cscale < Float64(1.1754943508222875e-38) or cscale > Float64(3.4028234663852886e38):
                 raise Error("class weights exceed Float32 fixed-point scale range")
             forest = fit_forest[WeightedClsObj](
                 ctx, dxv, dy, dsw, n_fit, n_cols, n_classes, rf_params,
                 BinScales(Float32(1), Float32(cscale)),
-                sample_weight_host=weights, host_x_addr=0,
+                weights_on_device=use_w, host_x_addr=0,
                 min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
                 notices_to_stderr=False,
             )
@@ -939,7 +983,7 @@ def _rf_ada_classifier_round(
             _rf_fold_min_weight_count(rf_params, mw_frac, n_fit)
             forest = fit_forest[ClsObj](
                 ctx, dxv, dy, dsw, n_fit, n_cols, n_classes, rf_params,
-                sample_weight_host=weights, host_x_addr=0,
+                weights_on_device=use_w, host_x_addr=0,
                 notices_to_stderr=False,
             )
     elif not wscan.all_unit and not rf_params.bootstrap:
@@ -976,7 +1020,6 @@ def _rf_ada_classifier_round(
     _ = dfull^
     _ = dy^
     _ = dsw^
-    _ = weights^
     _ = ctx^
     return forest^
 
@@ -1015,11 +1058,13 @@ def _rf_classifier_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params
     # cpu3-bindings: the weights are one memcpy here; their refusals, the
     # all-ones test and the total run on the device after the upload
     # (`core/weight_scan_device`), not as a host walk over every row.
-    var weights = List[Float32]()
+    # lane vdf2-tail2: the weights are read ON THE DEVICE only (the
+    # sampler, the scan, the drop and the objective read `dsw`); no host
+    # list. On XF_FIT_ROWS a negative word is the store slot of the base's
+    # weights (MemberCall.weights_pin), taken on the device.
     var weight_total = Float64(0)
     var weighted = weights_addr != 0
-    if weighted:
-        weights = list_f32(_f32_ptr(weights_addr), n_rows)
+    var use_w = weighted
     var forest: RandomForestMetaData[DT, CLT]
     # DEVIATION 2510 -- the binding's own stage table (MOJOLEARN_STAGE_TIMES=1
     # only): what this entry point spends OUTSIDE `fit_forest`'s fit_total,
@@ -1028,13 +1073,17 @@ def _rf_classifier_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params
     var ctx = process_ctx[_DEVCTX_SLOT]()
     bt.stop_host("bind_ctx_create", t_s)
     t_s = bt.start()
-    var hy = ctx.enqueue_create_host_buffer[CLT](n_rows)
+    # lane vdf2-tail2: a negative label word on XF_FIT_ROWS is the store
+    # slot of the base's codes (taken on the device below: no host labels)
+    var y_dev = ROWS and params.y < 0
+    var hy = ctx.enqueue_create_host_buffer[CLT](1 if y_dev else n_rows)
     ctx.synchronize()
     bt.stop_host("bind_pinned_alloc", t_s)
     t_s = bt.start()
     # DEVIATION 2481: bulk typed copies preserve every input bit while
     # avoiding scalar stores into pinned memory.
-    unsafe_memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
+    if not y_dev:
+        unsafe_memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
     bt.stop_host("bind_host_copy", t_s)
     t_s = bt.start()
     # cpu-gpu-cleanup t-forest: X goes to the device as the caller's
@@ -1062,10 +1111,13 @@ def _rf_classifier_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params
     # sk-weq-trees: the rows the fit sees (fewer when zero weights drop)
     var n_fit = n_rows
     var dy = ctx.enqueue_create_buffer[CLT](n_rows)
-    ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
+    if y_dev:
+        rf_store_rows_y[CLT](ctx, params.y, params.x, n_rows, dy)
+    else:
+        ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
     # The host weights drive sampling; non-bootstrap objectives read the
     # device weights at original row IDs. Keep both alive through fitting.
-    var dsw = ctx.enqueue_create_buffer[DT](max(1, len(weights)))
+    var dsw = ctx.enqueue_create_buffer[DT](max(1, n_rows if weighted else 0))
     comptime if FOREST_DEVICE_FINITE:
         var fscan = ForestFiniteScan(ctx)
         fscan.enqueue(ctx, dx, n_rows * n_cols)
@@ -1075,7 +1127,7 @@ def _rf_classifier_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params
         ctx.synchronize()
     bt.stop_host("bind_h2d", t_s)
     if weighted:
-        ctx.enqueue_copy(dst_buf=dsw, src_ptr=weights.unsafe_ptr())
+        _rf_weights_into(ctx, dsw, weights_addr, params.x if ROWS else 0, n_rows)
         var wscan = device_scan_weights(ctx, dsw, n_rows)
         if wscan.bad:
             raise Error("class weights must be finite and nonnegative")
@@ -1086,24 +1138,24 @@ def _rf_classifier_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params
         # count objective, the fit on the repeated rows)
         if not rf_params.bootstrap and not wscan.all_unit:
             n_fit = _rf_drop_zero_weight_rows[CLT](
-                ctx, dx, dy, dsw, weights, n_rows, n_cols
+                ctx, dx, dy, dsw, n_rows, n_cols
             )
             if n_fit < n_rows:
                 host_x = 0
                 wscan = device_scan_weights(ctx, dsw, n_fit)
         weight_total = wscan.total
         if wscan.all_unit:
-            weights = List[Float32]()
+            use_w = False
     # cuML randomforest.cuh dispatches weighted objectives only when
     # bootstrap is disabled: sampling already applies bootstrap weights.
-    if len(weights) > 0 and not rf_params.bootstrap:
+    if use_w and not rf_params.bootstrap:
         var scale = choose_scale(weight_total, n_fit)
         if scale < Float64(1.1754943508222875e-38) or scale > Float64(3.4028234663852886e38):
             raise Error("class weights exceed Float32 fixed-point scale range")
         var scales = BinScales(Float32(1), Float32(scale))
         forest = fit_forest[WeightedClsObj](
             ctx, dx, dy, dsw, n_fit, n_cols, n_classes, rf_params,
-            scales, sample_weight_host=weights, host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
+            scales, weights_on_device=use_w, host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
             min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
             notices_to_stderr=False,
         )
@@ -1111,7 +1163,7 @@ def _rf_classifier_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params
         _rf_fold_min_weight_count(rf_params, mw_frac, n_fit)
         forest = fit_forest[ClsObj](
             ctx, dx, dy, dsw, n_fit, n_cols, n_classes, rf_params,
-            sample_weight_host=weights, host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
+            weights_on_device=use_w, host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
             notices_to_stderr=False,
         )
     t_s = bt.start()
@@ -1134,7 +1186,6 @@ def _rf_classifier_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params
     # the caller's frame keeps it alive past every release.
     _ = ctx^
     bt.stop_host("bind_release_ctx", t_s)
-    _ = weights^
     if oob_addr != 0:
         if oob_score_addr == 0 or not forest.has_oob:
             raise Error("RF OOB export requires output and score buffers")
@@ -1183,11 +1234,13 @@ def _rf_regressor_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params:
     var mw_frac = _rf_min_weight_fraction(params)
     # sk-edges: the row weights of `rf_regressor_fit_weighted` (0: none), one
     # memcpy as in the classifier; their checks run on the device below.
-    var weights = List[Float32]()
+    # lane vdf2-tail2: the weights are read ON THE DEVICE only (the
+    # sampler, the scan, the drop and the objective read `dsw`); no host
+    # list. On XF_FIT_ROWS a negative word is the store slot of the base's
+    # weights (MemberCall.weights_pin), taken on the device.
     var weight_total = Float64(0)
     var weighted = weights_addr != 0
-    if weighted:
-        weights = list_f32(_f32_ptr(weights_addr), n_rows)
+    var use_w = weighted
 
     var forest: RandomForestMetaData[DT, RLT]
     # DEVIATION 2510 -- as in the classifier: the binding's own host stamps.
@@ -1195,13 +1248,17 @@ def _rf_regressor_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params:
     var ctx = process_ctx[_DEVCTX_SLOT]()
     bt.stop_host("bind_ctx_create", t_s)
     t_s = bt.start()
-    var hy = ctx.enqueue_create_host_buffer[RLT](n_rows)
+    # lane vdf2-tail2: a negative label word on XF_FIT_ROWS is the store
+    # slot of the base's targets (taken on the device below: no host labels)
+    var y_dev = ROWS and params.y < 0
+    var hy = ctx.enqueue_create_host_buffer[RLT](1 if y_dev else n_rows)
     ctx.synchronize()
     bt.stop_host("bind_pinned_alloc", t_s)
     t_s = bt.start()
     # DEVIATION 2481: bulk typed copies preserve every input bit while
     # avoiding scalar stores into pinned memory.
-    copy_f32(yp, hy.unsafe_ptr(), n_rows)
+    if not y_dev:
+        copy_f32(yp, hy.unsafe_ptr(), n_rows)
     bt.stop_host("bind_host_copy", t_s)
     t_s = bt.start()
     # cpu-gpu-cleanup t-forest, as in the classifier: device upload,
@@ -1224,8 +1281,11 @@ def _rf_regressor_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params:
     # sk-weq-trees: the rows the fit sees (fewer when zero weights drop)
     var n_fit = n_rows
     var dy = ctx.enqueue_create_buffer[RLT](n_rows)
-    ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
-    var dsw = ctx.enqueue_create_buffer[DT](max(1, len(weights)))
+    if y_dev:
+        rf_store_rows_y[RLT](ctx, params.y, params.x, n_rows, dy)
+    else:
+        ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
+    var dsw = ctx.enqueue_create_buffer[DT](max(1, n_rows if weighted else 0))
     comptime if FOREST_DEVICE_FINITE:
         var fscan = ForestFiniteScan(ctx)
         fscan.enqueue(ctx, dx, n_rows * n_cols)
@@ -1236,7 +1296,7 @@ def _rf_regressor_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params:
     bt.stop_host("bind_h2d", t_s)
     if weighted:
         # the classifier's weight checks and all-unit test, on the device
-        ctx.enqueue_copy(dst_buf=dsw, src_ptr=weights.unsafe_ptr())
+        _rf_weights_into(ctx, dsw, weights_addr, params.x if ROWS else 0, n_rows)
         var wscan = device_scan_weights(ctx, dsw, n_rows)
         if wscan.bad:
             raise Error("sample weights must be finite and nonnegative")
@@ -1246,14 +1306,14 @@ def _rf_regressor_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params:
         # classifier (`_rf_drop_zero_weight_rows`)
         if not rf_params.bootstrap and not wscan.all_unit:
             n_fit = _rf_drop_zero_weight_rows[RLT](
-                ctx, dx, dy, dsw, weights, n_rows, n_cols
+                ctx, dx, dy, dsw, n_rows, n_cols
             )
             if n_fit < n_rows:
                 host_x = 0
                 wscan = device_scan_weights(ctx, dsw, n_fit)
         weight_total = wscan.total
         if wscan.all_unit:
-            weights = List[Float32]()
+            use_w = False
     # THE LABEL SCALE IS NOT OPTIONAL. `RegressionBin` accumulates
     # `label_sum` in fixed point through `BinScales.label_scale`
     # (DEVIATION 101b), and the host chooses the scale once per fit
@@ -1270,7 +1330,7 @@ def _rf_regressor_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params:
     )
     # `n_unique_labels` is 1 for regression, exactly what
     # `rf_regressor_fit`'s cuML counterpart passes.
-    if len(weights) > 0 and not rf_params.bootstrap:
+    if use_w and not rf_params.bootstrap:
         # sk-edges: the weighted objective (cuML dispatches it only
         # without bootstrap, as for the classifier). `label_sum` holds
         # label * weight, so its scale bounds sum |y| * max w, which is
@@ -1282,7 +1342,7 @@ def _rf_regressor_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params:
             raise Error("sample weights exceed Float32 fixed-point scale range")
         forest = fit_forest[WeightedRegObj](
             ctx, dx, dy, dsw, n_fit, n_cols, 1, rf_params,
-            BinScales(Float32(lscale), Float32(wscale)), sample_weight_host=weights,
+            BinScales(Float32(lscale), Float32(wscale)), weights_on_device=use_w,
             host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
             min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
             notices_to_stderr=False,
@@ -1291,7 +1351,7 @@ def _rf_regressor_fit_forest[ROWMAJOR: Bool = False, ROWS: Bool = False](params:
         _rf_fold_min_weight_count(rf_params, mw_frac, n_fit)
         forest = fit_forest[RegObj](
             ctx, dx, dy, dsw, n_fit, n_cols, 1, rf_params, scales,
-            sample_weight_host=weights,
+            weights_on_device=use_w,
             host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
             notices_to_stderr=False,
         )

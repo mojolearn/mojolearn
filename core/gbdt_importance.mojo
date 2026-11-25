@@ -611,18 +611,44 @@ def gbdt_importance_model_x(
 struct GbdtImportanceInput(Movable):
     """The plan and the float32 MODEL columns the walk reads: the caller's X
     itself (`x_addr`, `row_major` as given) or, for a CTR model, the expanded
-    column-major copy this struct owns (`model_x`)."""
+    column-major copy this struct owns (`model_x`).
+
+    `needs_rows` (lane vdf2-gbdtcat2): a CTR or expanded model fitted on THE
+    FOLD X WORD (`x_addr` negative: device rows, the categorical columns as
+    the fit's dense codes). Its model columns come from the expansion the
+    predict path runs (`gbdt_host_expand_ctr`), whose input is the rows
+    themselves; the device image hands them to `gbdt_importance_fold_rows`,
+    which builds `model_x` from the archive kept here (no second parse)."""
 
     var plan: GbdtImportancePlan
     var model_x: List[Float32]
     var x_addr: Int
     var row_major: Bool
+    var needs_rows: Bool
+    var arch: HostArchiveGBDT
 
-    def __init__(out self, var plan: GbdtImportancePlan, var model_x: List[Float32], x_addr: Int, row_major: Bool):
+    def __init__(out self, var plan: GbdtImportancePlan, var model_x: List[Float32], x_addr: Int, row_major: Bool,
+                 needs_rows: Bool, var arch: HostArchiveGBDT):
         self.plan = plan^
         self.model_x = model_x^
         self.x_addr = x_addr
         self.row_major = row_major
+        self.needs_rows = needs_rows
+        self.arch = arch^
+
+
+def gbdt_importance_fold_rows(mut request: GbdtImportanceInput, rows_addr: Int, n_rows: Int, n_input: Int) raises:
+    """A `needs_rows` request's model columns from the fold's ROW-MAJOR rows
+    at the host `rows_addr` (the slot's words, its categorical columns as
+    the fit's codes): `gbdt_importance_model_x`, then the walk reads them
+    column-major."""
+    if not request.needs_rows:
+        raise Error("gbdt importances: the request reads no fold rows")
+    var mx = gbdt_importance_model_x(request.arch, rows_addr, n_rows, n_input, True)
+    request.x_addr = Int(mx.unsafe_ptr())
+    request.row_major = False
+    request.needs_rows = False
+    swap(request.model_x, mx)
 
 
 def gbdt_importance_input(text: String, x_addr: Int, n_rows: Int, n_input: Int, row_major: Bool,
@@ -641,14 +667,14 @@ def gbdt_importance_input(text: String, x_addr: Int, n_rows: Int, n_input: Int, 
                     + String(n_input))
     if plan.has_ctr or plan.n_cols != n_input:
         if x_addr < 0:
-            # THE FOLD X WORD (lane vdf-scope-trees4) names device rows; the
-            # expanded model columns are built from host rows only (a fold
-            # fit with the word is a raw float fit: no CTR, no expansion)
-            raise Error("gbdt importances: a model with expanded columns reads host rows (no fold X word)")
+            # THE FOLD X WORD (lane vdf2-gbdtcat2): a cat_features fold fit's
+            # rows are on the device; the device image fills the model
+            # columns (`gbdt_importance_fold_rows`) before its upload
+            return GbdtImportanceInput(plan^, List[Float32](), x_addr, row_major, True, arch^)
         var mx = gbdt_importance_model_x(arch, x_addr, n_rows, n_input, row_major)
         var addr = Int(mx.unsafe_ptr())
-        return GbdtImportanceInput(plan^, mx^, addr, False)
-    return GbdtImportanceInput(plan^, List[Float32](), x_addr, row_major)
+        return GbdtImportanceInput(plan^, mx^, addr, False, False, arch^)
+    return GbdtImportanceInput(plan^, List[Float32](), x_addr, row_major, False, arch^)
 
 
 # ===========================================================================
@@ -849,6 +875,9 @@ def gbdt_feature_importances_host(
     fit's dense codes) with `n_weights` (0 or `n_rows`) sample weights at
     `w_addr`. Float32, one per input column."""
     var request = gbdt_importance_input(text, x_addr, n_rows, n_input, row_major, n_weights)
+    if request.x_addr < 0:
+        # the host column has no fold slot (its image answers no XG_CAP_FIT_SLOT_X)
+        raise Error("gbdt importances: the host column reads host rows (no fold X word)")
     var bins = gbdt_imp_bins_host(request.plan, request.x_addr, n_rows, request.row_major, workers)
     _ = len(request.model_x)  # the bins read the expanded model columns through `x_addr`
     var pairs = gbdt_imp_leaf_weights_host(request.plan, bins, n_rows, w_addr, n_weights, workers)

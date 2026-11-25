@@ -62,7 +62,7 @@ from bindings.admitted_input_run import AdmittedXView
 from bindings.member_given_y_unpack import member_given_y
 from bindings.member_set_door import (
     MemberSet, member_set_admit_or_raise, member_set_width, member_set_run, member_set_pack, member_set_release,
-    member_set_notices, member_set_resident, member_set_reads_given, member_set_given,
+    member_set_notices, member_set_resident, member_set_resident_inputs, member_set_reads_given, member_set_given,
     member_set_tests, member_set_host, member_marked, member_set_reads_weights, member_held_open, member_held_run, member_held_close,
     MemberHeldCall,
 )
@@ -924,6 +924,11 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
             # words (nothing of the wave is fitted).
             if xa_owns:
                 member_set_resident(set, xa, context)
+            # THE PER-INPUT PINS (bindings/member_set_door.mojo
+            # `member_set_resident_inputs`): `y_all` owns the words every
+            # member reads as y; a member's weights are its own draw counts
+            # (a native list, nothing to pin).
+            member_set_resident_inputs(set, y_all, PythonObject(None), context)
             if not proven and not member_set_tests(set, k - done):
                 if not trees_finite_f32(x.address, n * d):
                     raise Error(TREES_NONFINITE)

@@ -203,8 +203,8 @@ struct MselSplitter(Movable):
         self.kind = _splitter_kind(py_type(model), context)
 
     def device_word(self) raises -> PythonObject:
-        """The `device` the constructor stored (absent: None; it stores one
-        only when given): one read of the fields dictionary this splitter
+        """The `device` the constructor stored (absent, in a splitter
+        unpickled from before vdf2-public: None): one read of the fields dictionary this splitter
         already holds (lane vdf-msel). A splitter has no native state, so
         this read is the per-call cost of its `device`; only `split` and
         `get_n_splits` make it."""
@@ -302,6 +302,9 @@ def msel_new_kfold(name: String, n_splits: PythonObject, shuffle: PythonObject, 
     py_setitem(fields, "n_splits", PythonObject(k))
     py_setitem(fields, "shuffle", shuffle)
     py_setitem(fields, "random_state", random_state)
+    # the field the public constructor stores (device=None), so a check_cv
+    # splitter has KFold()'s get_params, repr and clone (vdf2-public)
+    py_setitem(fields, "device", PythonObject(None))
     return cv
 
 
@@ -312,6 +315,18 @@ def msel_splitter_initialize(model: PythonObject, args: PythonObject,
     var fields = _splitter_fields(model, context)
     msel_admit(args, context)
     var kind = String(args[0])
+    # device= (lane vdf-msel; vdf2-public): the last item of every public
+    # constructor's tuple except _IterableCV's. Admitted FIRST, before any
+    # other argument is read, so a bad word is refused in the estimators'
+    # words whatever the other arguments are (PredefinedSplit(None,
+    # device="tpu") refused the fold labels first). Stored always, None
+    # included, as the estimators store it: get_params returns it, clone and
+    # pickle carry it (python/mojolearn/tests/test_device_parameter.py, the
+    # shared contract of b9795dbe2d). Before: stored only when given.
+    var device = PythonObject(None)
+    if kind != "iterable":
+        device = args[len(args) - 1]
+        msel_own_device_admit(device, msel_b(), context)
     var updates = Python.dict()
     if kind == "kfold":
         var k = msel_check_splits(args[1], context)
@@ -348,18 +363,24 @@ def msel_splitter_initialize(model: PythonObject, args: PythonObject,
         py_setitem(updates, "test_fold", values)
     elif kind == "iterable":
         py_setitem(updates, "_pairs", msel_index_pairs(args[1], context))
+    elif kind == "shuffle":
+        # ShuffleSplit, GroupShuffleSplit, StratifiedShuffleSplit: stored as
+        # given (their sizes are checked by split, as before). These four,
+        # and LeavePOut's p and LeavePGroupsOut's n_groups below, were
+        # written by the Python constructor before this native call
+        # (vdf2-public: every splitter field is written here, in one commit).
+        py_setitem(updates, "n_splits", args[1])
+        py_setitem(updates, "test_size", args[2])
+        py_setitem(updates, "train_size", args[3])
+        py_setitem(updates, "random_state", args[4])
+    elif kind == "leave_p":
+        py_setitem(updates, "p", args[1])
+    elif kind == "leave_p_groups":
+        py_setitem(updates, "n_groups", args[1])
     elif kind != "device":
         raise Error("ValueError: unknown native splitter constructor")
-    # device= (lane vdf-msel): the last item of every public constructor's
-    # tuple ("device": a constructor that stores its other parameters itself).
-    # Admitted where given, in the estimators' words; stored only when given,
-    # so a splitter built with device=None has the fields, get_params and repr
-    # it had before (its split reads an absent device as None).
     if kind != "iterable":
-        var device = args[len(args) - 1]
-        if device is not None:
-            msel_own_device_admit(device, msel_b(), context)
-            py_setitem(updates, "device", device)
+        py_setitem(updates, "device", device)
     var keys = py_call(msel_b().list, updates)
     for i in range(len(keys)):  # driver-loop: refuse custom finalizers before releasing overwritten state
         if py_contains(fields, keys[i]) and fields[keys[i]] is not updates[keys[i]]:

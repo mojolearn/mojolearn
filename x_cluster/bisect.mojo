@@ -116,10 +116,11 @@ def bisect_fit[O: ClusterOps](
     """Returns the inertia against the leaf centers. `weights` (empty: unit)
     are sklearn's sample_weight: the data mean stays unweighted (sklearn's
     `_X_mean`), each 2-means is weighted, and so are the inertia scores and
-    the inertia; 'largest_cluster' counts rows. `x_slot` (IDENTICAL device
-    entry only, x_cluster/device_execution.mojo): the float slot that already
-    holds X's n * d words, uploaded from the caller's memory; `x` is then a
-    placeholder and is never read (under IDN_BISECT_DEVICE_CENTER every read
+    the inertia; 'largest_cluster' counts rows. `x_slot` (the device entry,
+    x_cluster/device_execution.mojo: every IDENTICAL fit, and a `fast` fit of
+    a model-selection fold's slot, lane vdf2-tail): the float slot that
+    already holds X's n * d words; `x` is then a placeholder and is never
+    read (the device centering below runs for it in every mode, so every read
     of X is of its device slot)."""
     from checks.numerics import identical_mul64
 
@@ -130,7 +131,9 @@ def bisect_fit[O: ClusterOps](
     var xc: List[Float32]
     var xs_all = -1
     var xc_s = -1
-    comptime if IDN_BISECT_DEVICE_CENTER:
+    # IDN_BISECT_DEVICE_CENTER, or a slot handed in (a `fast` fold fit: its X exists only on the device)
+    var dev_center = IDN_BISECT_DEVICE_CENTER or x_slot >= 0
+    if dev_center:
         # IDN_BISECT_DEVICE_CENTER: X up once, the means and the centered
         # matrix on the device; `xc` is a one-word placeholder (kmeans_rows
         # fits the gathered slot and only keeps its `x` alive)
@@ -186,7 +189,7 @@ def bisect_fit[O: ClusterOps](
         var sub_s: Int
         if weighted:
             var sub: List[Float32]
-            comptime if IDN_BISECT_DEVICE_CENTER:
+            if dev_center:
                 # the rows gathered from the resident centered slot, read once
                 var widx = List[Int32](capacity=m)
                 for r in rows:

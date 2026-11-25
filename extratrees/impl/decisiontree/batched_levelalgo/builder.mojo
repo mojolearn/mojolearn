@@ -2927,14 +2927,20 @@ def upload_dataset_labels_f32(
     x_addr: Int = 0,
     x_row_major: Bool = False,
     x_dev_rows: Int = 0,
+    y_dev: Int = 0,
 ) raises -> DeviceDataset:
     """`upload_dataset` with the float labels converted to class ids ON THE
     DEVICE (cpu3-trees: the host `class_ids_for` row loop left the GPU fit).
     The labels cross the bus once as the caller's float32 words; the ids are
     `class_ids_device_kernel`'s, the same truncation as the host column's
     `class_ids_for`, so no bit moves. One Int32 comes back: the first row
-    whose label is out of range, refused with `class_ids_for`'s message."""
-    if len(labels) != Int(n_rows):
+    whose label is out of range, refused with `class_ids_for`'s message.
+
+    A nonzero `y_dev` (lane vdf2-tail2, XF_FIT_ROWS) is the DEVICE address
+    of the fit's `n_rows` float32 labels on `ctx` (taken on the device out of
+    the image's store; `labels` then empty): the kernel reads them there and
+    the refusal reads its one label back. No host labels."""
+    if y_dev == 0 and len(labels) != Int(n_rows):
         raise Error(
             "labels must be n_rows long; got "
             + String(len(labels))
@@ -2947,13 +2953,20 @@ def upload_dataset_labels_f32(
         x_dev_rows=x_dev_rows,
     )
     var n = Int(n_rows)
-    var d_lf = ctx.enqueue_create_buffer[DType.float32](n)
-    var h_lf = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var d_lf: DeviceBuffer[DType.float32]
+    var h_lf = ctx.enqueue_create_host_buffer[DType.float32](1 if y_dev != 0 else n)
     var d_bad = ctx.enqueue_create_buffer[DType.int32](1)
     var h_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
-    ctx.synchronize()
-    unsafe_memcpy(dest=h_lf.unsafe_ptr(), src=labels.unsafe_ptr(), count=n)
-    ctx.enqueue_copy(dst_buf=d_lf, src_ptr=h_lf.unsafe_ptr())
+    if y_dev != 0:
+        d_lf = DeviceBuffer[DType.float32](
+            ctx, MutPointer[Float32, MutAnyOrigin](unsafe_from_address=y_dev), max(n, 1), owning=False,
+        )
+        ctx.synchronize()
+    else:
+        d_lf = ctx.enqueue_create_buffer[DType.float32](n)
+        ctx.synchronize()
+        unsafe_memcpy(dest=h_lf.unsafe_ptr(), src=labels.unsafe_ptr(), count=n)
+        ctx.enqueue_copy(dst_buf=d_lf, src_ptr=h_lf.unsafe_ptr())
     ctx.enqueue_memset(d_bad, Int32(n))
     ctx.enqueue_function[class_ids_device_kernel](
         dataset.d_labels.unsafe_ptr(),
@@ -2967,6 +2980,15 @@ def upload_dataset_labels_f32(
     ctx.enqueue_copy(dst_buf=h_bad, src_buf=d_bad)
     ctx.synchronize()
     var bad = Int(h_bad.unsafe_ptr()[unsafe_offset=0])
+    var bad_label = Float32(0.0)
+    if bad < n:
+        if y_dev != 0:
+            # the refusal's one label, read back from the device
+            ctx.enqueue_copy(dst_buf=h_lf, src_buf=d_lf.create_sub_buffer[DType.float32](bad, 1))
+            ctx.synchronize()
+            bad_label = h_lf.unsafe_ptr()[unsafe_offset=0]
+        else:
+            bad_label = labels[bad]
     _ = d_lf^
     _ = h_lf^
     _ = d_bad^
@@ -2974,11 +2996,11 @@ def upload_dataset_labels_f32(
     if bad < n:
         raise Error(
             "label "
-            + String(labels[bad])
+            + String(bad_label)
             + " at row "
             + String(bad)
             + " truncates to class id "
-            + String(Int(labels[bad]))
+            + String(Int(bad_label))
             + ", which is outside [0, "
             + String(n_classes)
             + "). The device score kernel would index its shared"
@@ -3018,6 +3040,7 @@ def upload_dataset_codes_i32(
     x_addr: Int = 0,
     x_row_major: Bool = False,
     x_dev_rows: Int = 0,
+    codes_dev: Int = 0,
 ) raises -> DeviceDataset:
     """`upload_dataset_labels_f32` for labels that are `n_rows` int32 class
     codes at `codes_addr` (lane vdf-scope-trees3; the caller keeps them alive
@@ -3025,8 +3048,13 @@ def upload_dataset_codes_i32(
     straight into the dataset's class ids, and their range is checked on the
     device (`class_codes_check_kernel`). No host cast to float32 and no float
     staging list: the same class ids, so the same forest. One Int32 comes
-    back: the first row whose code is out of range, refused by name."""
-    if codes_addr == 0:
+    back: the first row whose code is out of range, refused by name.
+
+    A nonzero `codes_dev` (lane vdf2-tail2, XF_FIT_ROWS) is the DEVICE
+    address of the `n_rows` int32 codes on `ctx` (taken on the device out of
+    the image's store; `codes_addr` is then not read): one device copy into
+    the class ids, and the refusal reads its one code back. No host codes."""
+    if codes_addr == 0 and codes_dev == 0:
         raise Error("class codes: null int32 buffer address")
     var dataset = upload_dataset(
         ctx, x_col_major, List[Int32](), n_rows, n_cols, n_classes,
@@ -3035,14 +3063,22 @@ def upload_dataset_codes_i32(
     )
     var n = Int(n_rows)
     var codes = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=codes_addr)
-    var h_ids = ctx.enqueue_create_host_buffer[DType.int32](n)
+    var h_ids = ctx.enqueue_create_host_buffer[DType.int32](1 if codes_dev != 0 else n)
     var d_bad = ctx.enqueue_create_buffer[DType.int32](1)
     var h_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
     ctx.synchronize()
-    # DEVIATION 2481's bulk typed copy into pinned memory, then one upload.
-    unsafe_memcpy(dest=h_ids.unsafe_ptr(), src=codes, count=n)
     var ids = dataset.d_labels.create_sub_buffer[DType.int32](0, n)
-    ctx.enqueue_copy(dst_buf=ids, src_ptr=h_ids.unsafe_ptr())
+    if codes_dev != 0:
+        var src = DeviceBuffer[DType.int32](
+            ctx, MutPointer[Int32, MutAnyOrigin](unsafe_from_address=codes_dev), max(n, 1), owning=False,
+        )
+        ctx.enqueue_copy(dst_buf=ids, src_buf=src.create_sub_buffer[DType.int32](0, n))
+        ctx.synchronize()
+        _ = src^
+    else:
+        # DEVIATION 2481's bulk typed copy into pinned memory, then one upload.
+        unsafe_memcpy(dest=h_ids.unsafe_ptr(), src=codes, count=n)
+        ctx.enqueue_copy(dst_buf=ids, src_ptr=h_ids.unsafe_ptr())
     ctx.enqueue_memset(d_bad, Int32(n))
     ctx.enqueue_function[class_codes_check_kernel](
         dataset.d_labels.unsafe_ptr(),
@@ -3055,6 +3091,20 @@ def upload_dataset_codes_i32(
     ctx.enqueue_copy(dst_buf=h_bad, src_buf=d_bad)
     ctx.synchronize()
     var bad = Int(h_bad.unsafe_ptr()[unsafe_offset=0])
+    var bad_code = Int32(0)
+    if bad < n:
+        if codes_dev != 0:
+            # the refusal's one code, read back from the caller's device codes
+            # (the class ids above zeroed it)
+            var src = DeviceBuffer[DType.int32](
+                ctx, MutPointer[Int32, MutAnyOrigin](unsafe_from_address=codes_dev), max(n, 1), owning=False,
+            )
+            ctx.enqueue_copy(dst_buf=h_bad, src_buf=src.create_sub_buffer[DType.int32](bad, 1))
+            ctx.synchronize()
+            bad_code = h_bad.unsafe_ptr()[unsafe_offset=0]
+            _ = src^
+        else:
+            bad_code = codes[bad]
     _ = ids^
     _ = h_ids^
     _ = d_bad^
@@ -3062,7 +3112,7 @@ def upload_dataset_codes_i32(
     if bad < n:
         raise Error(
             "class code "
-            + String(codes[bad])
+            + String(bad_code)
             + " at row "
             + String(bad)
             + " is outside [0, "
@@ -3071,6 +3121,32 @@ def upload_dataset_codes_i32(
             " accumulator out of bounds; refused by name."
         )
     return dataset^
+
+
+def _labels_into(
+    ctx: DeviceContext,
+    d_y: DeviceBuffer[DType.float32],
+    h_y: HostBuffer[DType.float32],
+    y: List[Float32],
+    y_dev: Int,
+    n: Int,
+) raises:
+    """The regressor's `n` float32 labels into `d_y` on `ctx`: the host list
+    through the pinned stage `h_y` (DEVIATION 2481's bulk copy, then one
+    upload), or, for a nonzero `y_dev` (lane vdf2-tail2), one device copy of
+    the labels already on the device. The same words either way."""
+    if n <= 0:
+        return
+    if y_dev != 0:
+        var src = DeviceBuffer[DType.float32](
+            ctx, MutPointer[Float32, MutAnyOrigin](unsafe_from_address=y_dev), n, owning=False,
+        )
+        ctx.enqueue_copy(dst_buf=d_y.create_sub_buffer[DType.float32](0, n), src_buf=src)
+        ctx.synchronize()
+        _ = src^
+        return
+    unsafe_memcpy(dest=h_y.unsafe_ptr(), src=y.unsafe_ptr(), count=n)
+    ctx.enqueue_copy(dst_buf=d_y, src_ptr=h_y.unsafe_ptr())
 
 
 def label_scale_exponent(scale: Float64) raises -> Int:
@@ -3129,6 +3205,7 @@ def upload_dataset_labels_quantized(
     x_addr: Int = 0,
     x_row_major: Bool = False,
     x_dev_rows: Int = 0,
+    y_dev: Int = 0,
 ) raises -> DeviceDataset:
     """`upload_dataset` for a regressor with the labels QUANTIZED ON THE
     DEVICE (cpu3-trees: the host `quantize_labels_host` row loops left the GPU
@@ -3137,8 +3214,12 @@ def upload_dataset_labels_quantized(
     back; `quantize_labels_host` restates it with `host_abs_sum_blocked`),
     `choose_scale` runs on that one scalar, and `quantize_labels_device_kernel`
     writes the Int32 labels into the dataset. The scale is returned in
-    `scale_out` for the leaf values."""
-    if len(y) != Int(n_rows):
+    `scale_out` for the leaf values.
+
+    A nonzero `y_dev` (lane vdf2-tail2, XF_FIT_ROWS) is the DEVICE address
+    of the `n_rows` float32 labels on `ctx` (`y` then empty): one device copy
+    in place of the upload. No host labels; the same words."""
+    if y_dev == 0 and len(y) != Int(n_rows):
         raise Error(
             "labels must be n_rows long; got "
             + String(len(y))
@@ -3152,10 +3233,9 @@ def upload_dataset_labels_quantized(
     )
     var n = Int(n_rows)
     var d_y = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
-    var h_y = ctx.enqueue_create_host_buffer[DType.float32](max(n, 1))
+    var h_y = ctx.enqueue_create_host_buffer[DType.float32](1 if y_dev != 0 else max(n, 1))
     ctx.synchronize()
-    unsafe_memcpy(dest=h_y.unsafe_ptr(), src=y.unsafe_ptr(), count=n)
-    ctx.enqueue_copy(dst_buf=d_y, src_ptr=h_y.unsafe_ptr())
+    _labels_into(ctx, d_y, h_y, y, y_dev, n)
     # reads back one word, so the upload above has landed after it
     var mag = device_abs_sum_blocked(ctx, d_y, n)
     var scale = choose_scale(mag, n)
@@ -3218,6 +3298,7 @@ def upload_dataset_labels_quantized_weighted(
     x_row_major: Bool = False,
     drop_zero_rows: Bool = False,
     x_dev_rows: Int = 0,
+    y_dev: Int = 0,
 ) raises -> DeviceDataset:
     """lane sk-final: `upload_dataset_labels_quantized` for a regressor with
     per-row weights (`weights_addr`: `n_rows` float32 words, borrowed
@@ -3234,8 +3315,10 @@ def upload_dataset_labels_quantized_weighted(
     first drops the zero-weight rows from X, y and the weights on the
     device (`DeviceDataset.drop_zero_weight_rows`, scikit-learn's splitter
     keeps only positively weighted rows); the dataset's `n_rows` is then the
-    kept count. Without a zero weight nothing moves."""
-    if len(y) != Int(n_rows):
+    kept count. Without a zero weight nothing moves.
+
+    `y_dev` as `upload_dataset_labels_quantized`'s (lane vdf2-tail2)."""
+    if y_dev == 0 and len(y) != Int(n_rows):
         raise Error(
             "labels must be n_rows long; got "
             + String(len(y))
@@ -3249,11 +3332,10 @@ def upload_dataset_labels_quantized_weighted(
     )
     var n = Int(n_rows)
     var d_y = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
-    var h_y = ctx.enqueue_create_host_buffer[DType.float32](max(n, 1))
+    var h_y = ctx.enqueue_create_host_buffer[DType.float32](1 if y_dev != 0 else max(n, 1))
     var d_w = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     ctx.synchronize()
-    unsafe_memcpy(dest=h_y.unsafe_ptr(), src=y.unsafe_ptr(), count=n)
-    ctx.enqueue_copy(dst_buf=d_y, src_ptr=h_y.unsafe_ptr())
+    _labels_into(ctx, d_y, h_y, y, y_dev, n)
     var has_w = weights_addr != 0 and n > 0
     if has_w:
         # one upload of the weights serves the checks, the drop and z

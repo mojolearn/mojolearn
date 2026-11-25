@@ -59,7 +59,6 @@ from core.hotpath_impl_rows import (
     normal_init_f32,
     scatter_rows_bytes_host,
     strat_alloc_i64,
-    strat_fold_assign_i32,
     strat_group_plan_i32,
     threshold_labels_i64,
     uniform_init_f32,
@@ -609,19 +608,5 @@ def normal_init_f32_binding(
 # Restore: git apply experiments/removed/adam_hyper_f64.patch
 
 
-def strat_fold_assign_i32_binding(
-    enc_addr: PythonObject, n: PythonObject, k: PythonObject, n_folds: PythonObject,
-    alloc_addr: PythonObject, perms_addr: PythonObject, counts_addr: PythonObject, dst_addr: PythonObject,
-) raises -> PythonObject:
-    """StratifiedKFold's test fold of every row (sklearn _make_test_folds):
-    class c's fold sequence is fold f repeated alloc[f * k + c] times (int64)
-    in fold order; with `perms` (int64, nonzero address) it is permuted,
-    seq'[j] = seq[perm_c[j]], perm_c the segment of class c (classes in
-    order, `counts` int64 rows each); the r-th row of class c (row order)
-    takes seq'[r]. enc: int32 first-seen class ranks in [0, k)."""
-    return PythonObject(
-        strat_fold_assign_i32(
-            Int(py=enc_addr), Int(py=n), Int(py=k), Int(py=n_folds),
-            Int(py=alloc_addr), Int(py=perms_addr), Int(py=counts_addr), Int(py=dst_addr),
-        )
-    )
+# TOMBSTONE: strat_fold_assign_i32 export (dead export: no caller since lane vdf-scope-split moved the splitters to the stored-code MH_STRAT_FOLD_ASSIGN_RES) deleted 2026-11-24 by lane vdf2-native; code recoverable at 2da8727c02.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/dead_export_strat_fold_assign_i32.patch; record in docs/TOMBSTONES.md.

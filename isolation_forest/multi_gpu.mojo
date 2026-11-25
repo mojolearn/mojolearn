@@ -20,6 +20,9 @@ from core.host_parallel import host_parallelize
 from core.identity_trace import IdentityTrace
 from std.sys import is_defined
 from core.fit_loop_clock import fit_loop_start, fit_loop_stop
+from core.accelerator_target import TARGET_HAS_AMD_GPU
+from core.fold_x_device import FOLD_X_STORE
+from core.fold_x_word import fold_x_slot
 from isolation_forest.impl.isolation_forest import (
     IFLaunchKnobs,
     IFModelShard,
@@ -131,13 +134,28 @@ def _fit_tree_shards(plan: DevicePlan, ctx: DeviceContext,
         shards.append(IFModelShard(device^, feature_indices^, feature^,
             threshold^, left^, right^, offsets^, nodes^, depths^, first, width,
             List[Int32](), List[Int32]()))
+    # THE FOLD X WORD (lane vdf2-tail2): every owner fills its training copy
+    # from the fold slot with `fold_x_fill` on its own context (a device
+    # copy). AMD (HIP) cross-device copies are staged through pinned host
+    # memory (core/multi_gpu.mojo `transfer_bytes`: MI300X SR-IOV peer copies
+    # read stale cells), so there the slot is read ONCE into a pinned buffer
+    # on the root context (the store's device) and every owner uploads from
+    # it: a transport stage, no host pass over the cells.
+    var owner_src = src_addr
+    var staged = ctx.enqueue_create_host_buffer[DType.float32](1)
+    comptime if TARGET_HAS_AMD_GPU:
+        if src_addr < 0 and active > 1:
+            staged = ctx.enqueue_create_host_buffer[DType.float32](max(rows * columns, 1))
+            FOLD_X_STORE.get_or_create_ptr()[].read(ctx, fold_x_slot(src_addr), Int(staged.unsafe_ptr()),
+                                                    rows * columns)
+            owner_src = Int(staged.unsafe_ptr())
     var failures = List[Int](length=active, fill=0)
     var sp = rebind[MutPointer[IFModelShard, MutUntrackedOrigin]](shards.unsafe_ptr())
     var fp = rebind[MutPointer[Int, MutUntrackedOrigin]](failures.unsafe_ptr())
     var xp = rebind[MutPointer[Float32, MutUntrackedOrigin]](input_colmajor.unsafe_ptr())
     var size = len(input_colmajor)
     var config = params.copy()
-    def task(rank: Int) {imm sp, imm fp, imm xp, imm size, imm src_addr,
+    def task(rank: Int) {imm sp, imm fp, imm xp, imm size, imm owner_src,
                          imm rows, imm columns, imm knobs, imm config}:
         try:
             ref shard = sp[rank]
@@ -145,7 +163,7 @@ def _fit_tree_shards(plan: DevicePlan, ctx: DeviceContext,
             # from its address (no per-owner host copy)
             var data = List[Float32]()
             var cm_addr = 0
-            if src_addr == 0:
+            if owner_src == 0:
                 cm_addr = Int(xp)
             var local_config = config.copy()
             local_config.n_estimators = shard.count
@@ -165,7 +183,7 @@ def _fit_tree_shards(plan: DevicePlan, ctx: DeviceContext,
                 if rank > 0:
                     tree_base = shard.first - 1
             forest.fit(shard.ctx, data, rows, columns, local, trace,
-                       knobs, src_addr, tree_base, cm_addr)
+                       knobs, owner_src, tree_base, cm_addr)
             swap(shard.global_feature_indices, local.global_feature_indices)
             swap(shard.node_feature, local.node_feature)
             swap(shard.node_threshold, local.node_threshold)
@@ -184,6 +202,7 @@ def _fit_tree_shards(plan: DevicePlan, ctx: DeviceContext,
         task(0)
     else:
         host_parallelize(task, active)
+    _ = staged^  # every owner's upload above read it (each synchronized)
     for rank in range(active):  # small-loop(active: tree-shard owners): one entry per device owner, per-tree metadata words
         if failures[rank] != 0:
             raise Error("IsolationForest tree shard failed: " + String(rank))

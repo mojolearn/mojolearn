@@ -503,6 +503,7 @@ def _knn_search_plan(
     metric_arg: Float32,
     queries_on_device: Bool = False,
     zero_rows_checked: Bool = False,
+    index_zero_row: Int = -2,
 ) raises -> Tuple[Int, Int, Int, Int]:
     """The refusals and the plan of `_knn_search_traced_retaining`, in its
     order, before any allocation: `(resolved metric, devices, query tile,
@@ -511,7 +512,10 @@ def _knn_search_plan(
     no host query words (`queries_ptr` is not read; the cosine metric, whose
     zero-row refusal reads them, is refused). `zero_rows_checked` (lane vdf-scope-cluster7): the caller made the
     cosine zero-row refusals itself on the device rows (neighbors/zero_row_device.mojo, the same first row and
-    words), so neither host scan runs and the device queries are taken. Split out 2026-09-17 (DEVIATION 2921) so `knn_search_resident`
+    words), so neither host scan runs and the device queries are taken. `index_zero_row` (lane vdf2-tail; -2: not
+    checked) is a resident index's device zero-row word (neighbors/resident_index.mojo `zero_row`: -1 none, else
+    the first all-zero row), taken in place of the host scan of `index_ptr` (a fold-built index has no host
+    words); the host queries are still scanned. Split out 2026-09-17 (DEVIATION 2921) so `knn_search_resident`
     refuses and plans exactly as `knn_search` does; the statements are the
     ones that stood at the top of that function."""
     if n_index <= 0:
@@ -551,7 +555,7 @@ def _knn_search_plan(
         # real neighbour differently on the two arms, with no error. The
         # module docstring of `neighbors/impl/distance/detail/
         # distance_ops.mojo` carries the full argument.
-        var zi = cosine_zero_norm_row_ptr(index_ptr, n_index, n_features)
+        var zi = index_zero_row if index_zero_row >= -1 else cosine_zero_norm_row_ptr(index_ptr, n_index, n_features)
         if zi >= 0:
             raise Error(
                 "knn_search: metric='cosine' but index row "
@@ -714,6 +718,7 @@ def knn_search_resident(
     cache: KnnIndexCachePointer = None,
     negate_products: Bool = False,
     status_addr: Int = 0,
+    index_zero_row: Int = -2,
 ) raises -> Int:
     """Reads the device plan once and runs the planned overload below."""
     return knn_search_resident(
@@ -736,6 +741,7 @@ def knn_search_resident(
         cache,
         negate_products,
         status_addr,
+        index_zero_row,
     )
 
 
@@ -759,6 +765,7 @@ def knn_search_resident(
     cache: KnnIndexCachePointer = None,
     negate_products: Bool = False,
     status_addr: Int = 0,
+    index_zero_row: Int = -2,
 ) raises -> Int:
     """`knn_search` over an index ALREADY ON THE DEVICE (DEVIATION 2921,
     lane/infer-speed-classical, 2026-09-17): `index` holds the same
@@ -771,12 +778,13 @@ def knn_search_resident(
     same bytes; only the per-call host to device copy of the index (352 MB
     for the 400,000 x 220 Istella-S block, 48 ms of a 140 ms call on an
     RTX 4090) is gone. `index_ptr` is still read for the refusals that
-    inspect the index on the host (the cosine zero row, DEVIATION 553).
+    inspect the index on the host (the cosine zero row, DEVIATION 553),
+    unless `index_zero_row` (lane vdf2-tail) carries the index's device test.
     """
     var trace = IdentityTrace()
     var plan = _knn_search_plan(
         dplan, index_ptr, n_index, queries_ptr, n_queries, n_features, k, return_sqrt,
-        requested_query_tile, knn_method, metric, metric_arg,
+        requested_query_tile, knn_method, metric, metric_arg, index_zero_row=index_zero_row,
     )
     # TOMBSTONE: MOJOLEARN_KNN_FAST_REFINE (pool + exact re-rank, NEUTRAL) deleted 2026-11-15; see the marker at the top of this file.
     var retained = List[DeviceBuffer[DType.uint32]]()
@@ -1424,8 +1432,13 @@ def _knn_search_on_device_index(
     fold_index: Int = -1,
     self_queries: Bool = False,
     query_rows: Int = 0,
+    index_zero_row: Int = -2,
 ) raises -> Int:
-    """`query_rows` (lane vdf-scope-cluster7), when not 0, is the DEVICE address on `ctx` of the `n_queries x
+    """`index_zero_row` (lane vdf2-tail2; -2: not tested): a resident index's device zero-row word
+    (neighbors/resident_index.mojo `zero_row`, tested once at its fold prepare); a fold-query cosine search reads
+    it instead of scanning the index rows again on every call.
+
+    `query_rows` (lane vdf-scope-cluster7), when not 0, is the DEVICE address on `ctx` of the `n_queries x
     n_features` row-major float32 queries (a model-selection fold slot of a family store): copied device to
     device into the query buffer, `queries_ptr` not read (plan with `queries_on_device`, or with
     `zero_rows_checked` after the device cosine refusal). The same words the host upload would place.
@@ -1572,7 +1585,8 @@ def _knn_search_on_device_index(
             # `zero_rows_checked`): the resident index's rows, then the gathered fold queries, as device
             # reductions with the host scans' first rows and words (DEVIATION 553). The index may be a fold
             # fitted on the device, whose rows have no host words.
-            var zi = device_first_zero_row(ctx, index, n_index, n_features)
+            # the index's own word when its fold prepare tested it (lane vdf2-tail2): once per index
+            var zi = index_zero_row if index_zero_row >= -1 else device_first_zero_row(ctx, index, n_index, n_features)
             var zq = -1
             if zi < 0:
                 zq = device_first_zero_row(ctx, queries, n_queries, n_features)
@@ -2128,6 +2142,7 @@ def knn_classifier_predict_resident(
     fold_base: Int = -1,
     fold_base_rows: Int = 0,
     fold_index: Int = -1,
+    index_zero_row: Int = -2,
 ) raises -> Int:
     """`knn_classifier_predict` over an index ALREADY ON THE DEVICE
     (DEVIATION 3002, lane/knn-tiled-distance, 2026-09-17; the same door as
@@ -2165,13 +2180,14 @@ def knn_classifier_predict_resident(
     var plan = _knn_search_plan(
         dplan, index_ptr, n_index, queries_ptr, n_queries, n_features, k, weighted,
         requested_query_tile, KNN_METHOD_AUTO, metric, metric_arg, fold_index >= 0, fold_index >= 0,
+        index_zero_row,
     )
     var retained_indices = List[DeviceBuffer[DType.uint32]]()
     var used_tile = _knn_search_on_device_index(
         ctx, trace, retained_indices, True, index, n_index, queries_ptr,
         n_queries, n_features, k, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
         weighted, plan[2], KNN_METHOD_AUTO, plan[0], metric_arg, plan[1], plan[3], dplan, cache,
-        False, status_addr, fold_base, fold_base_rows, fold_index,
+        False, status_addr, fold_base, fold_base_rows, fold_index, index_zero_row=index_zero_row,
     )
     if _knn_status_flagged(status_addr, fold_index >= 0):
         # A non-finite query (lane a7b) or a fold row out of range: the door
@@ -2255,6 +2271,7 @@ def knn_regressor_predict_resident(
     fold_base: Int = -1,
     fold_base_rows: Int = 0,
     fold_index: Int = -1,
+    index_zero_row: Int = -2,
 ) raises -> Int:
     """`knn_regressor_predict` over an index ALREADY ON THE DEVICE
     (DEVIATION 3002): the search is `_knn_search_on_device_index` and the
@@ -2279,13 +2296,14 @@ def knn_regressor_predict_resident(
     var plan = _knn_search_plan(
         dplan, index_ptr, n_index, queries_ptr, n_queries, n_features, k, weighted,
         requested_query_tile, KNN_METHOD_AUTO, metric, metric_arg, fold_index >= 0, fold_index >= 0,
+        index_zero_row,
     )
     var retained_indices = List[DeviceBuffer[DType.uint32]]()
     var used_tile = _knn_search_on_device_index(
         ctx, trace, retained_indices, False, index, n_index, queries_ptr,
         n_queries, n_features, k, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
         weighted, plan[2], KNN_METHOD_AUTO, plan[0], metric_arg, plan[1], plan[3], dplan, cache,
-        False, status_addr, fold_base, fold_base_rows, fold_index,
+        False, status_addr, fold_base, fold_base_rows, fold_index, index_zero_row=index_zero_row,
     )
     if _knn_status_flagged(status_addr, fold_index >= 0):
         # A non-finite query (lane a7b) or a fold row out of range: the door

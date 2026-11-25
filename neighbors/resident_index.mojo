@@ -56,6 +56,8 @@ from core.neural_context import process_ctx, neural_device_plan
 from core.ctx_key import ctx_cache_key
 from core.msel_device_x import msel_fold_entry_context, msel_device_x_f32
 from core.device_zero import enqueue_fill
+from neighbors.zero_row_device import device_first_zero_row, device_first_negative_word
+from core.neighbors_entry_table import NB_FOLD_TEST_NONE, NB_FOLD_TEST_COSINE, NB_FOLD_TEST_JS
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
@@ -96,6 +98,11 @@ struct ResidentKnnIndex(Movable):
     # Which upload of its handle this is (set by the registry on insert and
     # on a device move): caches built on an older upload are never put back.
     var serial: Int
+    # THE INDEX ZERO-ROW WORD (lane vdf2-tail): -2 when the index rows were not tested on the device (an upload
+    # of host words: the cosine search plan scans `index_ptr`, the same bytes); otherwise the first all-zero
+    # index row found by the device test at a fold prepare (-1: none). A fold-built index has no host words, so
+    # its cosine searches on host queries take this word instead of the host scan (`index_zero_row`).
+    var zero_row: Int
 
     def __init__(
         out self,
@@ -122,6 +129,7 @@ struct ResidentKnnIndex(Movable):
         self.n_features = n_features
         self.device = _device_of(dplan.root)
         self.serial = 0
+        self.zero_row = -2
         self.index = index^
         self.ctx = ctx^
 
@@ -134,6 +142,7 @@ struct ResidentKnnIndex(Movable):
         n_index: Int,
         n_features: Int,
         status_addr: Int,
+        metric_test: Int = NB_FOLD_TEST_NONE,
     ) raises:
         """THE FOLD INDEX (lane vdf-scope-cluster2a, 2026-11-24): the index is
         rows `fold_index` (int64, `n_index` of them) of the resident base
@@ -144,7 +153,13 @@ struct ResidentKnnIndex(Movable):
         gather's finite and range words land in the two host int32 words at
         `status_addr` (one synchronisation). The context is the resident
         slot's on the device plan's root, which must be the fold entry's
-        (`knn_fold_ready`)."""
+        (`knn_fold_ready`). `metric_test` (lane vdf2-tail): NB_FOLD_TEST_COSINE
+        finds the gathered rows' first all-zero row on the device here, once
+        (neighbors/zero_row_device.mojo, the host scan's first row), kept as
+        `zero_row` for every later cosine search plan; NB_FOLD_TEST_JS tests
+        X >= 0 on the device (`knn_check_metric_input`'s test, the fit's
+        refusal) and writes the THIRD int32 status word (1: a negative word).
+        Both run only when the range word is clear (the rows were gathered)."""
         if n_index <= 0 or n_features <= 0:
             raise Error("knn_index_prepare: n_index and n_features must be positive")
         if status_addr == 0 or status_addr % 4 != 0:
@@ -163,10 +178,19 @@ struct ResidentKnnIndex(Movable):
                          src_buf=status)
         ctx.synchronize()
         _ = status^
+        var zero_row = -2
+        var words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr)
+        if metric_test == NB_FOLD_TEST_JS:
+            words[2] = Int32(0)
+            if words[1] == 0 and device_first_negative_word(ctx, index, n_index * n_features) >= 0:
+                words[2] = Int32(1)
+        elif metric_test == NB_FOLD_TEST_COSINE and words[0] == 0 and words[1] == 0:
+            zero_row = device_first_zero_row(ctx, index, n_index, n_features)
         self.n_index = n_index
         self.n_features = n_features
         self.device = _device_of(dplan.root)
         self.serial = 0
+        self.zero_row = zero_row
         self.index = index^
         self.ctx = ctx^
 
@@ -239,15 +263,18 @@ struct _ResidentView(Movable):
     var n_features: Int
     var device: Int
     var serial: Int
+    #: the entry's `zero_row` (lane vdf2-tail)
+    var zero_row: Int
 
     def __init__(out self, var ctx: DeviceContext, var index: DeviceBuffer[DType.float32],
-                 n_index: Int, n_features: Int, device: Int, serial: Int):
+                 n_index: Int, n_features: Int, device: Int, serial: Int, zero_row: Int):
         self.ctx = ctx^
         self.index = index^
         self.n_index = n_index
         self.n_features = n_features
         self.device = device
         self.serial = serial
+        self.zero_row = zero_row
 
     def __deinit__(deinit self):
         # The buffer before the context it was created on (DEVIATION 1946).
@@ -389,7 +416,7 @@ def _locked_view(state: UnsafePointer[KnnIndexRegistry, MutAnyOrigin],
             raise Error("unknown or released resident k-NN index handle")
         ref entry = state[].entries[handle]
         var view = _ResidentView(entry.ctx.copy(), entry.index.copy(), entry.n_index, entry.n_features,
-                                 entry.device, entry.serial)
+                                 entry.device, entry.serial, entry.zero_row)
         _registry_unlock(state)
         return view^
     except error:
@@ -436,16 +463,19 @@ def knn_index_prepare(
 
 def knn_index_prepare_fold(
     fold_base: Int, base_rows: Int, fold_index: Int, n_index: Int, n_features: Int, status_addr: Int,
+    metric_test: Int = NB_FOLD_TEST_NONE,
 ) raises -> Int:
     """The resident index of a model-selection fold, gathered on the device
     (`ResidentKnnIndex` THE FOLD INDEX; lane vdf-scope-cluster2a): the handle,
     or 0 when the fold's finite or range word (the two int32 words at
-    `status_addr`) is set (nothing kept)."""
+    `status_addr`) is set, or the Jensen-Shannon test's third word (nothing
+    kept). `metric_test` (lane vdf2-tail): `ResidentKnnIndex`'s fold test."""
     var state = _registry()
     var entry = ResidentKnnIndex(fold_base=fold_base, base_rows=base_rows, fold_index=fold_index,
-                                 n_index=n_index, n_features=n_features, status_addr=status_addr)
+                                 n_index=n_index, n_features=n_features, status_addr=status_addr,
+                                 metric_test=metric_test)
     var words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr)
-    if words[0] != 0 or words[1] != 0:
+    if words[0] != 0 or words[1] != 0 or (metric_test == NB_FOLD_TEST_JS and words[2] != 0):
         _ = entry^
         return 0
     return _locked_insert(state, entry^)
@@ -503,6 +533,8 @@ def _knn_resident_view(handle: Int, n_index: Int, n_features: Int, what: String)
     view.ctx.synchronize()
     var moved = ResidentKnnIndex(host_ptr, n_index, n_features)
     _ = host^
+    # The same rows: a fold-built index keeps its device zero-row word (its `index_ptr` is not its rows).
+    moved.zero_row = view.zero_row
     var replaced = _locked_replace(state, handle, moved^)
     _locked_drop_caches(state, handle)
     _ = replaced^
@@ -539,7 +571,7 @@ def knn_index_search(
         n_features, k, out_dist_ptr, out_idx_ptr, return_sqrt,
         requested_query_tile, knn_method, metric, metric_arg,
         MutPointer(to=cache).unsafe_origin_cast[MutAnyOrigin](),
-        negate_products, status_addr,
+        negate_products, status_addr, index_zero_row=view.zero_row,
     )
     _locked_put_cache(state, handle, view.serial, cache^)
     _ = view^
@@ -585,7 +617,7 @@ def knn_index_classify(
         metric, metric_arg, weights,
         MutPointer(to=cache).unsafe_origin_cast[MutAnyOrigin](),
         MutPointer(to=vote).unsafe_origin_cast[MutAnyOrigin](),
-        status_addr, fold_base, fold_base_rows, fold_index,
+        status_addr, fold_base, fold_base_rows, fold_index, index_zero_row=view.zero_row,
     )
     _locked_put_vote(state, handle, view.serial, vote^)
     _locked_put_cache(state, handle, view.serial, cache^)
@@ -623,7 +655,7 @@ def knn_index_regress(
         n_features, k, y_ptr, n_outputs, out_ptr, requested_query_tile,
         metric, metric_arg, weights,
         MutPointer(to=cache).unsafe_origin_cast[MutAnyOrigin](),
-        status_addr, fold_base, fold_base_rows, fold_index,
+        status_addr, fold_base, fold_base_rows, fold_index, index_zero_row=view.zero_row,
     )
     _locked_put_cache(state, handle, view.serial, cache^)
     _ = view^

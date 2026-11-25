@@ -179,7 +179,7 @@ from core.member_abi import (
 from core.member_families import MEMBER_FAMILY_XCLUSTER
 from core.member_abi import MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE
 from core.device_route import DEVICE_GPU
-from core.kmeans_variants_api import VARIANTS_CAP_FOLD_X, VARIANTS_CAP_FOLD_X_SLOT
+from core.kmeans_variants_api import VARIANTS_CAP_FOLD_X
 # lane vdf-scope-cluster3: THE FOLD X WORD (core/fold_x_device.mojo), the member side (lane vdf-scope-linear).
 from core.member_fold_x import (
     MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_take_f32, member_fold_store_ready,
@@ -1388,23 +1388,11 @@ def _capabilities(kind: Int) -> Int:
     return centers
 
 
-def _fold_ready_kind(call: _Call, kind: Int) -> Bool:
-    """`_fold_ready` for one kind (lane vdf-scope-cluster8): a slot-entry kind (MeanShift, AffinityPropagation,
-    OPTICS, BayesianGaussianMixture) also takes the word on a `fast` image (VARIANTS_CAP_FOLD_X_SLOT, with the
-    resident centers query); the k-means kinds and the family union (-1) need VARIANTS_CAP_FOLD_X."""
-    if _fold_ready(call):
-        return True
-    if not (kind == _KIND_MEANSHIFT or kind == _KIND_AFFINITY or kind == _KIND_OPTICS or kind == _KIND_BGMM):
-        return False
-    var flags = call[].route.flags
-    return (call[].route.device == DEVICE_GPU and (flags & VARIANTS_CAP_FOLD_X_SLOT) != 0
-        and (flags & VARIANTS_CAP_RESIDENT) != 0 and member_fold_store_ready(call))
-
-
 def _fold_ready(call: _Call) -> Bool:
     """THE FOLD X WORD on this route (lane vdf-scope-cluster3): a GPU route
     whose variants entry reads X only through uploads that take the word
-    (`VARIANTS_CAP_FOLD_X`, the identical device image) and keeps the
+    (`VARIANTS_CAP_FOLD_X`, the device image in every mode since lane
+    vdf2-tail, which retired the fast-only slot bit) and keeps the
     queries' centers resident (`VARIANTS_CAP_RESIDENT`: the centers queries
     then run `xc_resident_query`, never the host-list query), and whose
     image ships the x_prep family store the fold's rows are taken in."""
@@ -1538,7 +1526,7 @@ def _xcluster_member(operation: Int, address: Int) raises -> Int:
             which = _Slot(unsafe_from_address=_lookup(call[].state, False))[].kind
         # MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE (lane vdf-scope-cluster3): the fold kinds on a route that reads
         # THE FOLD X WORD (`_fold_ready`); every other kind and the CPU column keep the caller's gather.
-        var fold = (MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE) if (_fold_kind(which) and _fold_ready_kind(call, which)) else 0
+        var fold = (MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE) if (_fold_kind(which) and _fold_ready(call)) else 0
         return _capabilities(which) | fold
     if operation == MEMBER_OP_NEW:
         if not call[].params or call[].param_count < 1:
@@ -1601,7 +1589,7 @@ def _xcluster_member(operation: Int, address: Int) raises -> Int:
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     var kind = slot[].kind
     if (call[].row_index.rows > 0 and _fold_kind(kind) and _fold_operation(kind, operation)
-            and _fold_ready_kind(call, kind)):
+            and _fold_ready(call)):
         _fold_op(slot, call, operation)
     elif operation == MEMBER_OP_FIT and kind == _KIND_MINIBATCH:
         _minibatch_fit(slot, call)

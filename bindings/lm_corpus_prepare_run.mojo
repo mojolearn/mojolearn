@@ -17,7 +17,12 @@ this file existed, so a cached vocabulary or token directory made earlier is
 found under the same key and verified by the same hashes.
 
 Parallel plan: BPE training and the per-document encode split their work
-across the host's cores inside `tokenizer/` (unchanged). What is serial here
+across the host's cores inside `tokenizer/` (unchanged). With `gpu` set
+(`prepare(device="gpu")`, lane vdf2-tok) the document cut, the training and
+the encode run on the device through the GPU tokenizer image's entry
+(`tokenizer/gpu/corpus_gpu.mojo`, resolved once at connection: `gpu_entry`),
+called here with the GIL already released; the same vocabulary text and the
+same ids come back, so the cache keys and hashes are the host column's. What is serial here
 is serial by nature: one SHA-256 chain per file, one file write, and a
 handful of manifest members.
 """
@@ -37,7 +42,9 @@ from tokenizer.impl.tokenizer_host_shell_impl import (
     BpeHandle, BpeTrainedHandle, bpe_encode_corpus_into, bpe_handle_load, bpe_train_corpus_fill,
 )
 from tokenizer.impl.vocab_build import ranks_text
-from tokenizer.train.bpe_train import BPE_TRAINER_SABOTAGE
+from tokenizer.train.bpe_train import BPE_TRAINER_SABOTAGE, TrainedVocabulary, trained_vocab_from_pairs
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_unresolved
+from core.tokenizer_gpu_entry_table import TOK_GPU_OP_CORPUS_ENCODE, TOK_GPU_OP_CORPUS_TRAIN
 from tokenizer.train.emit import render_ranks
 
 comptime TOKENS_SCHEMA = "mojolearn.byte-lm.tokens.v1"
@@ -74,6 +81,8 @@ struct CorpusPrepareRequest(Movable):
     var user_ranks: String
     var user_count: Int
     var user_source: String
+    var gpu: Bool
+    var gpu_entry: EntryRef
 
     def __init__(out self, corpus: String, cache: String, vocab_size: Int, min_frequency: Int, sample: Int,
                  document_bytes: Int):
@@ -87,6 +96,8 @@ struct CorpusPrepareRequest(Movable):
         self.user_ranks = String("")
         self.user_count = 0
         self.user_source = String("")
+        self.gpu = False
+        self.gpu_entry = entry_ref_unresolved()
 
 
 struct TokensManifest(Movable):
@@ -296,13 +307,16 @@ def _vocabulary_write(mut doc: JsonDoc, directory: String, text: String, identit
     _write_json(doc, record, corpus_run_join(directory, "vocabulary.json"))
 
 
-def _vocabulary_check(mut doc: JsonDoc, directory: String, mut handle: BpeHandle, mut sha: String) raises -> Int:
-    """Load the cached rank file ONCE, hash its canonical text, and require
-    the vocabulary record to pin that hash; returns the record's identity."""
+def _vocabulary_check(mut doc: JsonDoc, directory: String, mut handle: BpeHandle, mut sha: String,
+                      mut text: String) raises -> Int:
+    """Load the cached rank file ONCE, hash its canonical text (kept in
+    `text`: the GPU encoder parses the same text), and require the vocabulary
+    record to pin that hash; returns the record's identity."""
     var raw = corpus_run_read(corpus_run_join(directory, "vocabulary.json"))
     var record = json_parse(doc, raw)
     bpe_handle_load(handle, corpus_run_join(directory, "ranks.tsv"))
-    sha = sha256_hex_text(ranks_text(handle.tok.value().ranks))
+    text = ranks_text(handle.tok.value().ranks)
+    sha = sha256_hex_text(text)
     var identity = json_member(doc, record, "identity")
     if not json_string_is(doc, json_member(doc, identity, "sha256"), sha):
         raise Error("ValueError: mojolearn: cached vocabulary does not match its vocabulary.json; remove it to rebuild")
@@ -326,6 +340,38 @@ def _source_data(mut data: List[UInt8], mut have: Bool, source: CorpusSource) ra
     if len(data) != source.bytes or sha256_hex(data) != source.sha256:
         raise Error("ValueError: mojolearn: the corpus changed while it was being prepared; run prepare again")
     have = True
+
+
+def _gpu_train(request: CorpusPrepareRequest, data: Int, points: List[Int], lo: Int, hi: Int,
+               width: Int) raises -> TrainedVocabulary:
+    """The host `bpe_train_corpus_fill` on the device (TOK_GPU_OP_CORPUS_TRAIN): the span
+    `[lo, hi)` cut at the split points strictly inside it, trained; the merges come back and the
+    vocabulary is written from them as train_bpe writes it (`trained_vocab_from_pairs`)."""
+    var cuts = List[Int64]()
+    cuts.append(Int64(0))
+    for k in range(len(points)):  # small-loop(at most ten split points)
+        if points[k] > lo and points[k] < hi:
+            cuts.append(Int64(points[k] - lo))
+    cuts.append(Int64(hi - lo))
+    var cap = max(2 * (request.vocab_size - 256), 2)
+    var pairs = List[Int32](length=cap, fill=Int32(0))
+    var words = List[Int64](length=3, fill=Int64(0))
+    var addresses: List[Int] = [data + lo, Int(cuts.unsafe_ptr()), Int(pairs.unsafe_ptr()), Int(words.unsafe_ptr())]
+    var ints: List[Int] = [hi - lo, len(cuts), width, request.vocab_size, request.min_frequency, cap]
+    var floats = List[Float64]()
+    var n_docs = entry_ref_call(request.gpu_entry, TOK_GPU_OP_CORPUS_TRAIN, addresses, ints, floats)
+    if n_docs < 1:
+        raise Error("ValueError: train needs at least one document")
+    var n_merges = Int(words[0])
+    if n_merges < 0 or 2 * n_merges > cap:
+        raise Error("RuntimeError: lm_corpus.prepare (gpu): the trainer returned " + String(n_merges) + " merges")
+    var vocab = trained_vocab_from_pairs(
+        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(pairs.unsafe_ptr())), n_merges,
+        Int(words[1]), Int(words[2]))
+    _ = len(cuts)
+    _ = len(pairs)
+    _ = len(words)
+    return vocab^
 
 
 def _trained_vocabulary(mut doc: JsonDoc, request: CorpusPrepareRequest, source: CorpusSource,
@@ -352,9 +398,12 @@ def _trained_vocabulary(mut doc: JsonDoc, request: CorpusPrepareRequest, source:
         # same cuts as this span length, without adding Int.MAX to a split offset.
         var width = min(request.document_bytes, max(hi - lo, 1))
         var trained = BpeTrainedHandle()
-        # The verify sabotage arm is the build define -D MOJOLEARN_BPE_TRAINER_SABOTAGE.
-        bpe_train_corpus_fill(trained, Int(data.unsafe_ptr()), points, lo, hi, width, request.vocab_size,
-                              request.min_frequency, BPE_TRAINER_SABOTAGE)
+        if request.gpu:
+            trained.vocab = _gpu_train(request, Int(data.unsafe_ptr()), points, lo, hi, width)
+        else:
+            # The verify sabotage arm is the build define -D MOJOLEARN_BPE_TRAINER_SABOTAGE.
+            bpe_train_corpus_fill(trained, Int(data.unsafe_ptr()), points, lo, hi, width, request.vocab_size,
+                                  request.min_frequency, BPE_TRAINER_SABOTAGE)
         var seconds = corpus_run_seconds() - began
         var text = render_ranks(trained.vocab.value())
         var n_tokens = trained.vocab.value().n_tokens()
@@ -415,6 +464,31 @@ def corpus_tokenize_run(mut doc: JsonDoc, data: Int, count: Int, source: Int, ra
     """Encode the `count` corpus bytes at `data` document by document and
     write `tokens.i32` and `manifest.json` into `output`. `source` and
     `identity` are nodes of `doc` (the manifest's `source` and `vocabulary`)."""
+    corpus_tokenize_run_on(doc, data, count, source, ranges, handle, identity, output, document_bytes, False,
+                           entry_ref_unresolved(), String(""))
+
+
+def _gpu_encode(entry: EntryRef, data: Int, count: Int, points: List[Int], width: Int, ranks: String,
+                ids: Int, bounds: Int, stats: Int) raises -> Int:
+    """The host `bpe_encode_corpus_into` on the device (TOK_GPU_OP_CORPUS_ENCODE): the same ids,
+    point bounds and statistics, written at the same addresses."""
+    var marks = List[Int64](capacity=len(points))
+    for k in range(len(points)):  # small-loop(at most ten split points)
+        marks.append(Int64(points[k]))
+    var addresses: List[Int] = [data, Int(marks.unsafe_ptr()), Int(ranks.unsafe_ptr()), ids, bounds, stats]
+    var ints: List[Int] = [count, len(marks), width, ranks.byte_length()]
+    var floats = List[Float64]()
+    var total = entry_ref_call(entry, TOK_GPU_OP_CORPUS_ENCODE, addresses, ints, floats)
+    _ = len(marks)
+    _ = ranks.byte_length()
+    return total
+
+
+def corpus_tokenize_run_on(mut doc: JsonDoc, data: Int, count: Int, source: Int, ranges: List[CorpusRange],
+                           handle: BpeHandle, identity: Int, output: String, document_bytes: Int, gpu: Bool,
+                           entry: EntryRef, ranks: String) raises:
+    """`corpus_tokenize_run` on the side `gpu` names: the device encoder through `entry` (over the
+    canonical rank text `ranks` of `handle`'s tokenizer) or the host one."""
     if not handle.tok:
         raise Error("ValueError: tokenizer handle is not loaded")
     if document_bytes < 1:
@@ -428,7 +502,12 @@ def corpus_tokenize_run(mut doc: JsonDoc, data: Int, count: Int, source: Int, ra
     var ids = List[Int32](length=max(count, 1), fill=0)
     var bounds = List[Int64](length=max(len(points), 1), fill=0)
     var stats = List[Int64](length=3, fill=0)
-    var total = bpe_encode_corpus_into(handle, data, points, count, len(points), width, count,
+    var total = 0
+    if gpu:
+        total = _gpu_encode(entry, data, count, points, width, ranks, Int(ids.unsafe_ptr()),
+                            Int(bounds.unsafe_ptr()), Int(stats.unsafe_ptr()))
+    else:
+        total = bpe_encode_corpus_into(handle, data, points, count, len(points), width, count,
                                        Int(ids.unsafe_ptr()), Int(bounds.unsafe_ptr()), Int(stats.unsafe_ptr()))
     if total < 0 or total > count:
         raise Error("RuntimeError: corpus encoder returned an invalid token count")
@@ -439,7 +518,10 @@ def corpus_tokenize_run(mut doc: JsonDoc, data: Int, count: Int, source: Int, ra
     json_put(doc, manifest, "schema", json_add_string(doc, TOKENS_SCHEMA))
     json_put(doc, manifest, "source", source)
     json_put(doc, manifest, "vocabulary", identity)
-    json_put(doc, manifest, "encoder", json_add_string(doc, "mojolearn.tokenizer.BpeTokenizer.encode_batch (host binding _mojolearn_tokenizer_host, tokenizer/encoding.mojo); integers and tables only"))
+    if gpu:
+        json_put(doc, manifest, "encoder", json_add_string(doc, "mojolearn.tokenizer.BpeTokenizer.encode_batch on the GPU (binding _mojolearn_x_tokenizer, tokenizer/gpu/corpus_gpu.mojo); integers and tables only, the host column's ids"))
+    else:
+        json_put(doc, manifest, "encoder", json_add_string(doc, "mojolearn.tokenizer.BpeTokenizer.encode_batch (host binding _mojolearn_tokenizer_host, tokenizer/encoding.mojo); integers and tables only"))
     json_put(doc, manifest, "endoftext", json_add_string(doc, "not inserted and not recognized (allow_endoftext=False)"))
     json_put(doc, manifest, "document_rule", json_add_string(doc, "no document spans a declared range boundary; at most " + String(document_bytes) + " bytes, ending at the last 0x0A at or before the limit (or at the limit when the window holds none); each encoded alone, ids concatenated in document order"))
     json_put(doc, manifest, "document_bytes", json_add_int(doc, document_bytes))
@@ -485,7 +567,8 @@ def corpus_prepare_run(request: CorpusPrepareRequest) raises -> CorpusPrepared:
         vocabulary = _trained_vocabulary(doc, request, source, data, have)
     var handle = BpeHandle()
     var vocabulary_sha = String("")
-    var identity = _vocabulary_check(doc, vocabulary, handle, vocabulary_sha)
+    var vocabulary_text = String("")
+    var identity = _vocabulary_check(doc, vocabulary, handle, vocabulary_sha, vocabulary_text)
     var ranks = corpus_run_join(vocabulary, "ranks.tsv")
     var key = _prefix16(source.sha256) + "-" + _prefix16(vocabulary_sha) + "-d" + String(request.document_bytes)
     var final = corpus_run_join(corpus_run_join(request.cache, "tokens"), key)
@@ -500,8 +583,8 @@ def corpus_prepare_run(request: CorpusPrepareRequest) raises -> CorpusPrepared:
     _source_data(data, have, source)
     var temporary = corpus_run_atomic_begin(final)
     try:
-        corpus_tokenize_run(doc, Int(data.unsafe_ptr()), len(data), source.node, source.ranges, handle, identity,
-                            temporary, request.document_bytes)
+        corpus_tokenize_run_on(doc, Int(data.unsafe_ptr()), len(data), source.node, source.ranges, handle, identity,
+                               temporary, request.document_bytes, request.gpu, request.gpu_entry, vocabulary_text)
         corpus_run_atomic_commit(temporary, final)
     except error:
         corpus_run_atomic_abort(temporary)

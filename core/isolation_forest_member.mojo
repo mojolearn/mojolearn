@@ -309,12 +309,12 @@ def _whole(call: MutPointer[MemberCall, MutUntrackedOrigin]) raises:
 # `_upload_rowmajor_query_device`, IF_CAP_SLOT_X): the rows never visit the
 # host. FIT: the forest is keyed on, and refits after an eviction from, its
 # training view, which the state must therefore own. Lane vdf-scope-trees4: on
-# an image with IF_CAP_FIT_SLOT_X and a one-device plan the fold's rows are
+# an image with IF_CAP_FIT_SLOT_X (any device plan: lane vdf2-tail2, each
+# tree owner fills its copy from the slot on its own device) the fold's rows are
 # taken ON THE DEVICE into a fold slot the STATE keeps (`fold_slot`, freed at
 # its next fit, import or FREE), and the fit, a refit after an eviction and the
 # export's refit read that slot as their training word (one device-to-device
-# copy into the fit's upload). Otherwise (a multi-device plan, an image without
-# the bit) the fold's rows are taken on the host (`member_fold_take_f32`, row
+# copy into the fit's upload). Otherwise (an image without the bit) the fold's rows are taken on the host (`member_fold_take_f32`, row
 # chunks across the host's cores, as the caller's gather did) into
 # `fold_train`, uploaded by the fit as before.
 # An imported state scores through IF_OP_FOREST_RUN (host rows, taken
@@ -353,16 +353,17 @@ def _fold_op(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin],
     var device: Bool
     if operation == MEMBER_OP_FIT:
         # lane vdf-scope-trees4: the fit's training rows stay on the device
-        # (IF_CAP_FIT_SLOT_X) on a one-device plan (the shards read host rows)
+        # (IF_CAP_FIT_SLOT_X); on a multi-device plan too (lane vdf2-tail2:
+        # every tree owner fills its copy from the slot with `fold_x_fill`)
         var caps = 0
         try:
             caps = if_entry_caps(call[].route.entry)
         except:
             caps = 0
         device = ((caps & IF_CAP_FIT_SLOT_X) != 0 and (caps & IF_CAP_RESIDENT) != 0
-                  and not (call[].device_count > 1 and call[].devices != 0) and member_fold_store_ready(call))
+                  and member_fold_store_ready(call))
     else:
-        device = (slot[].fitted and not slot[].imported and len(slot[].devices) <= 1 and _route_slot_x(call))
+        device = (slot[].fitted and not slot[].imported and _route_slot_x(call))
     var host_x = List[Float32]()
     var failure = String("")
     try:

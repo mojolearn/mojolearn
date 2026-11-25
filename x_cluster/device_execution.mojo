@@ -64,8 +64,11 @@ def cluster_device_execute(which: Int, source: Int, count: Int, auxiliary: Int,
                            auxiliary_count: Int, ints: List[Int], floats: List[Float64]) raises -> ClusterOut:
     # Same route sequence as the original x_cluster_call binding. Keep tuned
     # kernels behind their existing switches, including both rollback paths.
+    # A negative `source` is THE FOLD X WORD (a model-selection fold's x_prep store slot, core/member_fold_x.mojo):
+    # the Apple zero-copy routes read host pointers, so a fold word skips them and takes the slot forms below
+    # (lane vdf2-tail), which read X only as a device slot in every mode.
     comptime if MBK_ZEROCOPY:
-        if which == ENTRY_MINIBATCH and count > 0:
+        if which == ENTRY_MINIBATCH and count > 0 and source >= 0:
             var a0 = read_f32(auxiliary, auxiliary_count) if auxiliary_count > 0 else List[Float32]()
             var xp = f32_ptr(source)
             var res0 = ClusterOut()
@@ -77,7 +80,7 @@ def cluster_device_execute(which: Int, source: Int, count: Int, auxiliary: Int,
             if took:
                 return res0^
     comptime if BISECT_FAST_ZEROCOPY:
-        if which == ENTRY_BISECT and count > 0:
+        if which == ENTRY_BISECT and count > 0 and source >= 0:
             var xp1 = f32_ptr(source)
             var res1 = ClusterOut()
             var took1 = False
@@ -86,19 +89,25 @@ def cluster_device_execute(which: Int, source: Int, count: Int, auxiliary: Int,
             _ = ops1^
             if took1:
                 return res1^
-    comptime if MBK_IDN_RESIDENT:
-        if which == ENTRY_MINIBATCH and count > 0:
-            var a2 = read_f32(auxiliary, auxiliary_count) if auxiliary_count > 0 else List[Float32]()
-            var xp2 = f32_ptr(source)
-            var res2 = ClusterOut()
-            var took2 = False
-            var ops2 = DeviceOps()
-            took2 = minibatch_entry_ptr_idn(ops2, xp2, count, a2, ints, floats, res2)
-            _ = ops2^
-            _ = a2^
-            if took2:
-                return res2^
-    comptime if IDN_BISECT_DEVICE_CENTER:
+    # The resident MiniBatchKMeans fit: the IDENTICAL default for every X, and in a `fast` build the slot form of a
+    # fold word (lane vdf2-tail: `minibatch_fit(xs_res=)` is mode-generic; the fold's rows are copied device to
+    # device into its slot, so a fast fold fit reads X nowhere on the host). A weighted fit returns False and a fold
+    # word then reaches `_fold_execute`, which refuses it (the member hands a weighted fold's rows as host words).
+    if which == ENTRY_MINIBATCH and count > 0 and (MBK_IDN_RESIDENT or source < 0):
+        var a2 = read_f32(auxiliary, auxiliary_count) if auxiliary_count > 0 else List[Float32]()
+        var xp2 = f32_ptr(source)
+        var res2 = ClusterOut()
+        var took2 = False
+        var ops2 = DeviceOps()
+        took2 = minibatch_entry_ptr_idn(ops2, xp2, count, a2, ints, floats, res2)
+        _ = ops2^
+        _ = a2^
+        if took2:
+            return res2^
+    # The slot form of BisectingKMeans.fit: the IDENTICAL default for every X, and in a `fast` build for a fold
+    # word (lane vdf2-tail): `bisect_fit(x_slot=)` then centers on the device (`ops.center_cols`) and every read of
+    # X is of the slot. A fast build's host words keep the host centering below.
+    if which == ENTRY_BISECT and count > 0 and (IDN_BISECT_DEVICE_CENTER or source < 0):
         # fx-board-preprocess (2026-11-19): BisectingKMeans.fit under
         # IDENTICAL reads X only as its device slot (bisect_fit centers,
         # gathers and scores on the device), so X goes up straight from the
@@ -110,17 +119,16 @@ def cluster_device_execute(which: Int, source: Int, count: Int, auxiliary: Int,
         # faults and 529 ms of system time in a 1,009 ms call. The same
         # words reach the same kernels in the same order: no bit moves.
         # bisect_predict_entry took the same step on 2026-11-17 (lane
-        # fb2-neighbors). FAST keeps its own routes above and below.
-        if which == ENTRY_BISECT and count > 0:
-            var aw = read_f32(auxiliary, auxiliary_count) if auxiliary_count > 0 else List[Float32]()
-            var opsb = DeviceOps()
-            var xsb = opsb.put_addr(source, count)
-            var holder = List[Float32](length=1, fill=Float32(0))
-            var resb = bisect_entry(opsb, holder, aw, ints, floats, xsb)
-            _ = opsb^
-            _ = holder^
-            _ = aw^
-            return resb^
+        # fb2-neighbors). FAST keeps its own routes above and below for host words.
+        var aw = read_f32(auxiliary, auxiliary_count) if auxiliary_count > 0 else List[Float32]()
+        var opsb = DeviceOps()
+        var xsb = opsb.put_addr(source, count)
+        var holder = List[Float32](length=1, fill=Float32(0))
+        var resb = bisect_entry(opsb, holder, aw, ints, floats, xsb)
+        _ = opsb^
+        _ = holder^
+        _ = aw^
+        return resb^
     if source < 0 and count > 0:
         return _fold_execute(which, source, count, auxiliary, auxiliary_count, ints, floats)
     var x = read_f32(source, count) if count > 0 else List[Float32]()
