@@ -220,6 +220,10 @@ from autograd.nn_qkv_ops import OP_QKV_FIRST, OP_QKV_LAST, apply_nn_qkv
 # lane nn-blocks-scatter: scatter_add and the segment reductions (autograd/nn_scatter_ops.mojo), 6800..6819
 from autograd.nn_scatter_ops import OP_SCT_FIRST, OP_SCT_LAST, apply_nn_scatter
 # nn-blocks-scatter end
+# session-ops-extra begin
+# sub-lane session-ops-extra: the top-k key and read-out, logsumexp (autograd/session_ops_extra_ops.mojo), 6980..6999
+from autograd.session_ops_extra_ops import OP_SOX_FIRST, OP_SOX_LAST, apply_session_ops_extra
+# session-ops-extra end
 
 
 @always_inline
@@ -807,3 +811,8 @@ def apply[OP: Int](t: Int, a: Args):
         comptime assert OP_SCT_FIRST > OP_SSM_LAST and OP_SCT_FIRST > OP_TFP_LAST and OP_SCT_FIRST > OP_IMP_LAST and OP_SCT_FIRST > OP_NN_LAST, "nn-blocks-scatter opcode range overlaps another family"
         apply_nn_scatter[OP](t, a)
     # nn-blocks-scatter end
+    # session-ops-extra begin
+    elif OP >= OP_SOX_FIRST and OP <= OP_SOX_LAST:
+        comptime assert OP_SOX_FIRST > OP_SCT_LAST and OP_SOX_FIRST > OP_QKV_LAST and OP_SOX_FIRST > OP_RNO_LAST and OP_SOX_FIRST > OP_IMP_LAST, "session-ops-extra opcode range overlaps another family"
+        apply_session_ops_extra[OP](t, a)
+    # session-ops-extra end

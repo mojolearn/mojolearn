@@ -257,6 +257,18 @@ def program_op_name(code: Int) -> String:
     if code == 148:
         return "adaptive_max_pool1d / adaptive_max_pool2d"
     # session-ops-pool end
+    # session-ops-extra begin
+    if code == 180:
+        return "sequence_mask"
+    if code == 181:
+        return "topk"
+    if code == 182:
+        return "gather"
+    if code == 183:
+        return "logsumexp"
+    if code == 184 or code == 185:
+        return "cross_entropy"
+    # session-ops-extra end
     return "op_" + String(code)
 
 

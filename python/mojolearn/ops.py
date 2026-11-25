@@ -98,6 +98,9 @@ _OP = {
     "max_pool1d": 140, "avg_pool1d": 141, "max_pool3d": 144, "avg_pool3d": 145, "adaptive_avg_pool3d": 146,
     "adaptive_avg_pool1d": 147, "adaptive_avg_pool2d": 147, "adaptive_max_pool1d": 148, "adaptive_max_pool2d": 148,
     # session-ops-pool end
+    # session-ops-extra begin
+    "sequence_mask": 180, "topk": 181, "gather": 182, "logsumexp": 183,
+    # session-ops-extra end
 }
 _GELU = {"none": 0, "tanh": 1}
 # the state buffers autograd/ops_api.mojo optimizer_state returns, by kind
@@ -1255,6 +1258,16 @@ class Session:
         codes' count); the mean is ``sum(weight * loss) / sum(weight)``, as
         ``torch.nn.CrossEntropyLoss`` normalizes a weighted mean, and the
         rest as in :meth:`mse`.
+
+        ``codes`` may instead be a target distribution with the logits' shape
+        (soft labels: distillation, label smoothing, mixup), as torch accepts
+        class probabilities: the loss of a position is
+        ``-sum(target * log_softmax(logits))`` over the classes, averaged over
+        the positions (or summed); ``weight`` works the same way. The gradient
+        flows to the logits and to the target.
+
+        >>> t = s.tensor(np.array([[0.9, 0.1], [0.2, 0.8]], dtype=np.float32))
+        >>> loss = s.cross_entropy(logits, t)
         """
         return _SESSION_CALL(self, "cross_entropy", (logits, codes, reduction, weight))
 
@@ -2536,6 +2549,103 @@ class Session:
         """
         return _SESSION_CALL(self, "adaptive_max_pool2d", (x, output_size, return_indices))
     # session-ops-pool end
+    # session-ops-extra begin ------------------------------------- masks, selection, log-sum-exp
+    def sequence_mask(self, lengths, max_length):
+        """A ``(batch, max_length)`` mask of the positions inside each sequence.
+
+        ``mask[b, t]`` is 1.0 when ``t < lengths[b]`` and 0.0 otherwise. ``lengths`` is a
+        floating-point tensor holding one length per sequence (any shape with ``batch``
+        values, as :meth:`scan` takes them); ``max_length`` is the number of positions.
+        The mask is a float32 tensor, so it is directly a loss ``weight=``, a factor for
+        masked pooling, or a ``condition`` for :meth:`where`. :meth:`attention` reads a
+        floating-point mask as additive scores; to mask attention with it, pass
+        ``where(mask, zero, minus_inf)``. No gradient flows through it.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     lengths = s.tensor(np.array([[1.0], [3.0]], dtype=np.float32))
+        ...     s.numpy(s.sequence_mask(lengths, 4))
+        array([[1., 0., 0., 0.],
+               [1., 1., 1., 0.]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "sequence_mask", (lengths, max_length))
+
+    def topk(self, x, k, axis=-1, largest=True, sorted=True):
+        """The ``k`` largest values of ``x`` along ``axis`` and their positions, as
+        ``torch.topk``: a pair ``(values, indices)``.
+
+        Both have ``x``'s shape with ``axis`` of length ``k``, in rank order (the largest
+        first; with ``largest=False`` the ``k`` smallest, the smallest first). Among equal
+        values the lowest position comes first, so the result is the same on every
+        device; ``-0.0`` and ``0.0`` are equal, and a NaN ranks above every number.
+        ``indices`` is an integer tensor (as made by :meth:`ids`) that :meth:`gather`,
+        :meth:`take` and :meth:`scatter_add` accept. ``values`` is
+        ``gather(x, axis, indices)``, so in a recording session the gradient flows to the
+        selected positions of ``x``. The result is always sorted. Read the positions
+        with ``s.numpy(indices).view(np.int32)``.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.array([[1.0, 5.0, 3.0, 5.0]], dtype=np.float32))
+        ...     values, indices = s.topk(x, 2)
+        ...     s.numpy(values), s.numpy(indices).view(np.int32)
+        (array([[5., 5.]], dtype=float32), array([[1, 3]], dtype=int32))
+        """
+        return _SESSION_CALL(self, "topk", (x, k, axis, largest, sorted))
+
+    def gather(self, x, axis, index):
+        """The values of ``x`` at the positions ``index`` names along ``axis``, as
+        ``torch.gather``.
+
+        For a 2-D ``x`` and ``axis=1``, ``out[i, j] = x[i, index[i, j]]``; any rank and
+        any axis work the same way. ``index`` is an integer tensor made with :meth:`ids`
+        (or returned by :meth:`topk`) with ``x``'s size on every axis except ``axis``,
+        each value in ``[0, x.shape[axis])``; the result has ``index``'s shape. In a
+        recording session the gradient of ``x`` adds the gradient of every value taken
+        from each position, so a position gathered twice gets both, added in one fixed
+        order on every device.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.array([[1, 2, 3], [4, 5, 6]], dtype=np.float32))
+        ...     index = s.ids(np.array([[2, 0], [1, 1]]))
+        ...     s.numpy(s.gather(x, 1, index))
+        array([[3., 1.],
+               [5., 5.]], dtype=float32)
+        """
+        return _SESSION_CALL(self, "gather", (x, axis, index))
+
+    def logsumexp(self, x, axis, keepdims=False):
+        """``log(sum(exp(x)))`` along ``axis``, as ``torch.logsumexp``.
+
+        The row maximum is subtracted before the exponentials (the same arithmetic as
+        :meth:`log_softmax`), so large scores give a finite result. A row whose largest
+        value is infinite gives that value (``-inf`` for a row of only ``-inf``, ``inf``
+        when the row holds ``inf``) and passes a zero gradient; a NaN in a row gives NaN.
+        The result has ``x``'s shape without ``axis`` (``keepdims=True`` keeps it with
+        length 1); a 1-D ``x`` gives one value of shape ``(1,)``. The gradient of ``x`` is
+        the upstream gradient times ``softmax(x)`` along ``axis``.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.array([[0.0, 0.0], [1000.0, 1000.0]], dtype=np.float32))
+        ...     s.numpy(s.logsumexp(x, axis=1))
+        array([   0.6931472, 1000.6931   ], dtype=float32)
+        """
+        return _SESSION_CALL(self, "logsumexp", (x, axis, keepdims))
+    # session-ops-extra end
 
 
 class Program:

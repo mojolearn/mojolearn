@@ -1,0 +1,1215 @@
+{
+ "schema": "mojolearn.composed-cases.v1",
+ "cases": [
+  {
+   "name": "sequence-mask",
+   "about": "Session.sequence_mask: lengths 1, 0, 4 and 2.5 over 4 positions (a zero length, a full one and a fractional one). The mask must be exactly mask[b, t] = t < lengths[b], and used as a loss weight it must leave the padded positions' gradient zero.",
+   "data": {
+    "lens": {
+     "value": [
+      [
+       1.0
+      ],
+      [
+       0.0
+      ],
+      [
+       4.0
+      ],
+      [
+       2.5
+      ]
+     ]
+    },
+    "want": {
+     "value": [
+      [
+       1,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       1,
+       1,
+       1,
+       1
+      ],
+      [
+       1,
+       1,
+       1,
+       0
+      ]
+     ]
+    },
+    "pred": {
+     "hashed": [
+      4,
+      4
+     ],
+     "lo": -1.0,
+     "hi": 1.0
+    },
+    "target": {
+     "zeros": [
+      4,
+      4
+     ]
+    }
+   },
+   "do": [
+    {
+     "op": "session",
+     "as": "s",
+     "record": true,
+     "do": [
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@lens"
+       ],
+       "as": "lh"
+      },
+      {
+       "op": "call",
+       "fn": "s.sequence_mask",
+       "args": [
+        "@lh",
+        4
+       ],
+       "as": "m"
+      },
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@pred"
+       ],
+       "kw": {
+        "requires_grad": true
+       },
+       "as": "p"
+      },
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@target"
+       ],
+       "as": "t"
+      },
+      {
+       "op": "call",
+       "fn": "s.mse",
+       "args": [
+        "@p",
+        "@t"
+       ],
+       "kw": {
+        "weight": "@m"
+       },
+       "as": "loss"
+      },
+      {
+       "op": "read",
+       "fn": "s.numpy",
+       "of": [
+        "@m",
+        "@loss"
+       ],
+       "as": "v"
+      },
+      {
+       "op": "call",
+       "fn": "s.backward",
+       "args": [
+        "@loss"
+       ]
+      },
+      {
+       "op": "read",
+       "fn": "s.grad",
+       "of": "@p",
+       "as": "g"
+      }
+     ]
+    },
+    {
+     "op": "close",
+     "a": "@v.0",
+     "b": "@want",
+     "rtol": 0.0,
+     "what": "the mask is t < lengths[b]"
+    },
+    {
+     "op": "zero",
+     "of": "@g",
+     "index": [
+      0,
+      [
+       1,
+       4
+      ]
+     ],
+     "what": "row 0 past length 1"
+    },
+    {
+     "op": "zero",
+     "of": "@g",
+     "index": [
+      1
+     ],
+     "what": "row 1, length 0"
+    },
+    {
+     "op": "zero",
+     "of": "@g",
+     "index": [
+      3,
+      3
+     ],
+     "what": "row 3 past length 2.5"
+    },
+    {
+     "op": "digest",
+     "part": "mask",
+     "of": [
+      "@v",
+      "@g"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "topk-gather",
+   "about": "Session.topk with exact ties (5 at positions 1 and 3, 7 at 2 and 4) and a -0.0 / 0.0 pair: the lower position wins every tie on every side; the values' gradient lands on the selected positions only (exact integer weights). Session.gather with an index repeated along the axis: its gradient adds every gathered copy. topk captured in a Program replays the eager values.",
+   "data": {
+    "x": {
+     "value": [
+      [
+       1.0,
+       5.0,
+       3.0,
+       5.0,
+       -0.0,
+       0.0
+      ],
+      [
+       0.0,
+       -0.0,
+       7.0,
+       -1.0,
+       7.0,
+       2.0
+      ]
+     ]
+    },
+    "w": {
+     "value": [
+      [
+       1.0,
+       2.0,
+       3.0
+      ],
+      [
+       4.0,
+       5.0,
+       6.0
+      ]
+     ]
+    },
+    "want_top": {
+     "value": [
+      [
+       5.0,
+       5.0,
+       3.0
+      ],
+      [
+       7.0,
+       7.0,
+       2.0
+      ]
+     ]
+    },
+    "want_low": {
+     "value": [
+      [
+       -0.0,
+       0.0,
+       1.0
+      ],
+      [
+       -1.0,
+       0.0,
+       -0.0
+      ]
+     ]
+    },
+    "want_gx": {
+     "value": [
+      [
+       0.0,
+       1.0,
+       3.0,
+       2.0,
+       0.0,
+       0.0
+      ],
+      [
+       0.0,
+       0.0,
+       4.0,
+       0.0,
+       5.0,
+       6.0
+      ]
+     ]
+    },
+    "x2": {
+     "hashed": [
+      2,
+      3
+     ],
+     "lo": -1.0,
+     "hi": 1.0
+    },
+    "idx": {
+     "value": [
+      [
+       0,
+       0,
+       2,
+       0
+      ],
+      [
+       1,
+       1,
+       1,
+       2
+      ]
+     ],
+     "dtype": "int32"
+    },
+    "want_g2": {
+     "value": [
+      [
+       3.0,
+       0.0,
+       1.0
+      ],
+      [
+       0.0,
+       3.0,
+       1.0
+      ]
+     ]
+    }
+   },
+   "do": [
+    {
+     "op": "session",
+     "as": "s",
+     "record": true,
+     "do": [
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@x"
+       ],
+       "kw": {
+        "requires_grad": true
+       },
+       "as": "sx"
+      },
+      {
+       "op": "call",
+       "fn": "s.topk",
+       "args": [
+        "@sx",
+        3
+       ],
+       "as": [
+        "v",
+        "i"
+       ]
+      },
+      {
+       "op": "call",
+       "fn": "s.topk",
+       "args": [
+        "@sx",
+        3
+       ],
+       "kw": {
+        "largest": false
+       },
+       "as": [
+        "vl",
+        "il"
+       ]
+      },
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@w"
+       ],
+       "as": "wt"
+      },
+      {
+       "op": "call",
+       "fn": "s.mul",
+       "args": [
+        "@v",
+        "@wt"
+       ],
+       "as": "vw"
+      },
+      {
+       "op": "call",
+       "fn": "s.sum",
+       "args": [
+        "@vw"
+       ],
+       "as": "loss"
+      },
+      {
+       "op": "read",
+       "fn": "s.numpy",
+       "of": [
+        "@v",
+        "@i",
+        "@vl",
+        "@il",
+        "@loss"
+       ],
+       "as": "r"
+      },
+      {
+       "op": "call",
+       "fn": "s.backward",
+       "args": [
+        "@loss"
+       ]
+      },
+      {
+       "op": "read",
+       "fn": "s.grad",
+       "of": "@sx",
+       "as": "gx"
+      },
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@x2"
+       ],
+       "kw": {
+        "requires_grad": true
+       },
+       "as": "sx2"
+      },
+      {
+       "op": "call",
+       "fn": "s.ids",
+       "args": [
+        "@idx"
+       ],
+       "as": "ih"
+      },
+      {
+       "op": "call",
+       "fn": "s.gather",
+       "args": [
+        "@sx2",
+        1,
+        "@ih"
+       ],
+       "as": "gt"
+      },
+      {
+       "op": "call",
+       "fn": "s.sum",
+       "args": [
+        "@gt"
+       ],
+       "as": "l2"
+      },
+      {
+       "op": "read",
+       "fn": "s.numpy",
+       "of": "@gt",
+       "as": "gv"
+      },
+      {
+       "op": "call",
+       "fn": "s.backward",
+       "args": [
+        "@l2"
+       ]
+      },
+      {
+       "op": "read",
+       "fn": "s.grad",
+       "of": "@sx2",
+       "as": "g2"
+      }
+     ]
+    },
+    {
+     "op": "close",
+     "a": "@r.0",
+     "b": "@want_top",
+     "rtol": 0.0,
+     "what": "topk values (ties to the lower position)"
+    },
+    {
+     "op": "close",
+     "a": "@r.2",
+     "b": "@want_low",
+     "rtol": 0.0,
+     "what": "topk largest=False values"
+    },
+    {
+     "op": "close",
+     "a": "@gx",
+     "b": "@want_gx",
+     "rtol": 0.0,
+     "what": "the gradient reaches the selected positions only"
+    },
+    {
+     "op": "close",
+     "a": "@g2",
+     "b": "@want_g2",
+     "rtol": 0.0,
+     "what": "gather: a repeated index adds every copy"
+    },
+    {
+     "op": "session",
+     "as": "c",
+     "do": [
+      {
+       "op": "call",
+       "fn": "c.tensor",
+       "args": [
+        "@x"
+       ],
+       "as": "cx"
+      },
+      {
+       "op": "call",
+       "fn": "c.topk",
+       "args": [
+        "@cx",
+        3
+       ],
+       "as": [
+        "cv",
+        "ci"
+       ]
+      },
+      {
+       "op": "call",
+       "fn": "c.capture",
+       "kw": {
+        "inputs": [
+         "@cx"
+        ],
+        "outputs": [
+         "@cv"
+        ]
+       },
+       "as": "prog"
+      },
+      {
+       "op": "call",
+       "fn": "prog.run",
+       "args": [
+        "@x"
+       ],
+       "as": "replayed"
+      }
+     ]
+    },
+    {
+     "op": "same",
+     "a": "@replayed",
+     "b": "@r.0",
+     "what": "topk replayed from a Program"
+    },
+    {
+     "op": "digest",
+     "part": "topk",
+     "of": [
+      "@r",
+      "@gx"
+     ]
+    },
+    {
+     "op": "digest",
+     "part": "gather",
+     "of": [
+      "@gv",
+      "@g2"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "logsumexp",
+   "about": "Session.logsumexp along the last axis and along axis 0 against a float64 oracle, a row of large scores (1000: finite, 1000 + log 4) and a row of only -inf (-inf, zero gradient); the gradient against central differences of a captured Program.",
+   "data": {
+    "x": {
+     "hashed": [
+      3,
+      4
+     ],
+     "lo": -2.0,
+     "hi": 2.0
+    },
+    "xl": {
+     "value": [
+      [
+       1000.0,
+       1000.0,
+       1000.0,
+       1000.0
+      ],
+      [
+       -Infinity,
+       -Infinity,
+       -Infinity,
+       -Infinity
+      ]
+     ]
+    },
+    "big": {
+     "value": [
+      1001.3862943611198
+     ]
+    },
+    "neg": {
+     "value": [
+      1.0
+     ]
+    }
+   },
+   "do": [
+    {
+     "op": "session",
+     "as": "c",
+     "do": [
+      {
+       "op": "call",
+       "fn": "c.tensor",
+       "args": [
+        "@x"
+       ],
+       "as": "cx"
+      },
+      {
+       "op": "call",
+       "fn": "c.logsumexp",
+       "args": [
+        "@cx",
+        1
+       ],
+       "as": "cl"
+      },
+      {
+       "op": "call",
+       "fn": "c.sum",
+       "args": [
+        "@cl"
+       ],
+       "as": "cs"
+      },
+      {
+       "op": "call",
+       "fn": "c.capture",
+       "kw": {
+        "inputs": [
+         "@cx"
+        ],
+        "outputs": [
+         "@cs"
+        ]
+       },
+       "as": "prog"
+      }
+     ]
+    },
+    {
+     "op": "session",
+     "as": "s",
+     "record": true,
+     "do": [
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@x"
+       ],
+       "kw": {
+        "requires_grad": true
+       },
+       "as": "sx"
+      },
+      {
+       "op": "call",
+       "fn": "s.logsumexp",
+       "args": [
+        "@sx",
+        1
+       ],
+       "as": "l1"
+      },
+      {
+       "op": "call",
+       "fn": "s.logsumexp",
+       "args": [
+        "@sx",
+        0
+       ],
+       "kw": {
+        "keepdims": true
+       },
+       "as": "l0"
+      },
+      {
+       "op": "call",
+       "fn": "s.sum",
+       "args": [
+        "@l1"
+       ],
+       "as": "loss"
+      },
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@xl"
+       ],
+       "kw": {
+        "requires_grad": true
+       },
+       "as": "sl"
+      },
+      {
+       "op": "call",
+       "fn": "s.logsumexp",
+       "args": [
+        "@sl",
+        -1
+       ],
+       "as": "ll"
+      },
+      {
+       "op": "call",
+       "fn": "s.sum",
+       "args": [
+        "@ll"
+       ],
+       "as": "lsum"
+      },
+      {
+       "op": "read",
+       "fn": "s.numpy",
+       "of": [
+        "@l1",
+        "@l0",
+        "@ll"
+       ],
+       "as": "v"
+      },
+      {
+       "op": "call",
+       "fn": "s.backward",
+       "args": [
+        "@loss"
+       ]
+      },
+      {
+       "op": "read",
+       "fn": "s.grad",
+       "of": "@sx",
+       "as": "g"
+      }
+     ]
+    },
+    {
+     "op": "np",
+     "fn": "exp",
+     "args": [
+      "@x"
+     ],
+     "as": "ex"
+    },
+    {
+     "op": "np",
+     "fn": "sum",
+     "args": [
+      "@ex"
+     ],
+     "kw": {
+      "axis": 1
+     },
+     "as": "es1"
+    },
+    {
+     "op": "np",
+     "fn": "log",
+     "args": [
+      "@es1"
+     ],
+     "as": "o1"
+    },
+    {
+     "op": "np",
+     "fn": "sum",
+     "args": [
+      "@ex"
+     ],
+     "kw": {
+      "axis": 0,
+      "keepdims": true
+     },
+     "as": "es0"
+    },
+    {
+     "op": "np",
+     "fn": "log",
+     "args": [
+      "@es0"
+     ],
+     "as": "o0"
+    },
+    {
+     "op": "close",
+     "a": "@v.0",
+     "b": "@o1",
+     "rtol": 1e-05,
+     "what": "logsumexp along axis 1"
+    },
+    {
+     "op": "close",
+     "a": "@v.1",
+     "b": "@o0",
+     "rtol": 1e-05,
+     "what": "logsumexp along axis 0, keepdims"
+    },
+    {
+     "op": "np",
+     "fn": "take",
+     "args": [
+      "@v.2",
+      0
+     ],
+     "as": "big_got"
+    },
+    {
+     "op": "close",
+     "a": "@big_got",
+     "b": "@big",
+     "rtol": 1e-06,
+     "what": "a row of large scores stays finite"
+    },
+    {
+     "op": "np",
+     "fn": "isneginf",
+     "args": [
+      "@v.2"
+     ],
+     "as": "isneg"
+    },
+    {
+     "op": "np",
+     "fn": "take",
+     "args": [
+      "@isneg",
+      1
+     ],
+     "as": "neg_got"
+    },
+    {
+     "op": "close",
+     "a": "@neg_got",
+     "b": "@neg",
+     "rtol": 0.0,
+     "what": "a row of only -inf gives -inf"
+    },
+    {
+     "op": "fd_grad",
+     "program": "@prog",
+     "inputs": [
+      "@x"
+     ],
+     "wrt": 0,
+     "grad": "@g",
+     "eps": 0.01,
+     "rtol": 0.02,
+     "atol": 0.001,
+     "what": "the logsumexp gradient"
+    },
+    {
+     "op": "digest",
+     "part": "lse",
+     "of": [
+      "@v",
+      "@g"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "soft-cross-entropy",
+   "about": "Session.cross_entropy with a target distribution (label smoothing and a hard row), mean and weighted, against a float64 oracle -mean(sum(target * log_softmax(logits))); the logits' gradient against central differences of a captured Program; the hard-label call on the same logits keeps its own path.",
+   "data": {
+    "z": {
+     "hashed": [
+      4,
+      3
+     ],
+     "lo": -2.0,
+     "hi": 2.0
+    },
+    "t": {
+     "value": [
+      [
+       0.8,
+       0.1,
+       0.1
+      ],
+      [
+       0.0,
+       1.0,
+       0.0
+      ],
+      [
+       0.2,
+       0.3,
+       0.5
+      ],
+      [
+       0.1,
+       0.1,
+       0.8
+      ]
+     ]
+    },
+    "w": {
+     "value": [
+      [
+       1.0
+      ],
+      [
+       0.0
+      ],
+      [
+       2.0
+      ],
+      [
+       1.0
+      ]
+     ]
+    },
+    "codes": {
+     "value": [
+      [
+       0.0
+      ],
+      [
+       1.0
+      ],
+      [
+       2.0
+      ],
+      [
+       2.0
+      ]
+     ]
+    }
+   },
+   "do": [
+    {
+     "op": "session",
+     "as": "c",
+     "do": [
+      {
+       "op": "call",
+       "fn": "c.tensor",
+       "args": [
+        "@z"
+       ],
+       "as": "cz"
+      },
+      {
+       "op": "call",
+       "fn": "c.tensor",
+       "args": [
+        "@t"
+       ],
+       "as": "ct"
+      },
+      {
+       "op": "call",
+       "fn": "c.cross_entropy",
+       "args": [
+        "@cz",
+        "@ct"
+       ],
+       "as": "cl"
+      },
+      {
+       "op": "call",
+       "fn": "c.capture",
+       "kw": {
+        "inputs": [
+         "@cz",
+         "@ct"
+        ],
+        "outputs": [
+         "@cl"
+        ]
+       },
+       "as": "prog"
+      }
+     ]
+    },
+    {
+     "op": "session",
+     "as": "s",
+     "record": true,
+     "do": [
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@z"
+       ],
+       "kw": {
+        "requires_grad": true
+       },
+       "as": "sz"
+      },
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@t"
+       ],
+       "as": "st"
+      },
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@w"
+       ],
+       "as": "sw"
+      },
+      {
+       "op": "call",
+       "fn": "s.tensor",
+       "args": [
+        "@codes"
+       ],
+       "as": "sc"
+      },
+      {
+       "op": "call",
+       "fn": "s.cross_entropy",
+       "args": [
+        "@sz",
+        "@st"
+       ],
+       "as": "loss"
+      },
+      {
+       "op": "call",
+       "fn": "s.cross_entropy",
+       "args": [
+        "@sz",
+        "@st"
+       ],
+       "kw": {
+        "reduction": "sum",
+        "weight": "@sw"
+       },
+       "as": "lw"
+      },
+      {
+       "op": "call",
+       "fn": "s.cross_entropy",
+       "args": [
+        "@sz",
+        "@sc"
+       ],
+       "as": "lh"
+      },
+      {
+       "op": "read",
+       "fn": "s.numpy",
+       "of": [
+        "@loss",
+        "@lw",
+        "@lh"
+       ],
+       "as": "v"
+      },
+      {
+       "op": "call",
+       "fn": "s.backward",
+       "args": [
+        "@loss"
+       ]
+      },
+      {
+       "op": "read",
+       "fn": "s.grad",
+       "of": "@sz",
+       "as": "g"
+      }
+     ]
+    },
+    {
+     "op": "np",
+     "fn": "exp",
+     "args": [
+      "@z"
+     ],
+     "as": "ez"
+    },
+    {
+     "op": "np",
+     "fn": "sum",
+     "args": [
+      "@ez"
+     ],
+     "kw": {
+      "axis": 1,
+      "keepdims": true
+     },
+     "as": "sz1"
+    },
+    {
+     "op": "np",
+     "fn": "log",
+     "args": [
+      "@sz1"
+     ],
+     "as": "lz"
+    },
+    {
+     "op": "np",
+     "fn": "subtract",
+     "args": [
+      "@z",
+      "@lz"
+     ],
+     "as": "ls"
+    },
+    {
+     "op": "np",
+     "fn": "multiply",
+     "args": [
+      "@t",
+      "@ls"
+     ],
+     "as": "tl"
+    },
+    {
+     "op": "np",
+     "fn": "sum",
+     "args": [
+      "@tl"
+     ],
+     "kw": {
+      "axis": 1,
+      "keepdims": true
+     },
+     "as": "row"
+    },
+    {
+     "op": "np",
+     "fn": "negative",
+     "args": [
+      "@row"
+     ],
+     "as": "nrow"
+    },
+    {
+     "op": "np",
+     "fn": "mean",
+     "args": [
+      "@nrow"
+     ],
+     "as": "want"
+    },
+    {
+     "op": "np",
+     "fn": "multiply",
+     "args": [
+      "@w",
+      "@nrow"
+     ],
+     "as": "wrow"
+    },
+    {
+     "op": "np",
+     "fn": "sum",
+     "args": [
+      "@wrow"
+     ],
+     "as": "want_w"
+    },
+    {
+     "op": "close",
+     "a": "@v.0",
+     "b": "@want",
+     "rtol": 1e-05,
+     "what": "the soft-target mean"
+    },
+    {
+     "op": "close",
+     "a": "@v.1",
+     "b": "@want_w",
+     "rtol": 1e-05,
+     "what": "the weighted soft-target sum"
+    },
+    {
+     "op": "fd_grad",
+     "program": "@prog",
+     "inputs": [
+      "@z",
+      "@t"
+     ],
+     "wrt": 0,
+     "grad": "@g",
+     "eps": 0.01,
+     "rtol": 0.02,
+     "atol": 0.001,
+     "what": "the logits' gradient"
+    },
+    {
+     "op": "digest",
+     "part": "soft_ce",
+     "of": [
+      "@v",
+      "@g"
+     ]
+    }
+   ]
+  }
+ ]
+}

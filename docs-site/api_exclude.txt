@@ -269,3 +269,9 @@ Session.adaptive_avg_pool3d	session-ops-pool Sequential's pools as Session ops: 
 Session.adaptive_max_pool1d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
 Session.adaptive_max_pool2d	session-ops-pool Sequential's pools as Session ops: not yet in a release verification
 # session-ops-pool end
+# session-ops-extra begin
+Session.sequence_mask	not yet in a release verification
+Session.topk	not yet in a release verification
+Session.gather	not yet in a release verification
+Session.logsumexp	not yet in a release verification
+# session-ops-extra end

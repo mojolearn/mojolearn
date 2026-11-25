@@ -221,6 +221,12 @@ comptime _SOP_ADAPTIVE_MAX_POOL1D = 1148
 comptime _SOP_ADAPTIVE_AVG_POOL2D = 1142
 comptime _SOP_ADAPTIVE_MAX_POOL2D = 1143
 # session-ops-pool end
+# session-ops-extra begin: 1000 + the session codes (180..183; the soft-target cross-entropy is cross_entropy's name)
+comptime _SOP_SEQUENCE_MASK = 1180
+comptime _SOP_TOPK = 1181
+comptime _SOP_GATHER = 1182
+comptime _SOP_LOGSUMEXP = 1183
+# session-ops-extra end
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -420,6 +426,12 @@ struct _SessionOpCodes(Defaultable, Movable):
         self.codes["adaptive_avg_pool2d"] = _SOP_ADAPTIVE_AVG_POOL2D
         self.codes["adaptive_max_pool2d"] = _SOP_ADAPTIVE_MAX_POOL2D
         # session-ops-pool end
+        # session-ops-extra begin
+        self.codes["sequence_mask"] = _SOP_SEQUENCE_MASK
+        self.codes["topk"] = _SOP_TOPK
+        self.codes["gather"] = _SOP_GATHER
+        self.codes["logsumexp"] = _SOP_LOGSUMEXP
+        # session-ops-extra end
 
 
 # One table per process (identical contents in every extension that links this file).

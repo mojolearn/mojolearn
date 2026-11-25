@@ -174,6 +174,12 @@ def higher_family(op: Int) -> String:
     if tag == 563:
         return "adaptive_max_pool"
     # session-ops-pool end
+    # session-ops-extra begin
+    if tag == 6990:
+        return "gather (or topk's values)"
+    if tag == 6991:
+        return "logsumexp"
+    # session-ops-extra end
     return "custom"
 
 
