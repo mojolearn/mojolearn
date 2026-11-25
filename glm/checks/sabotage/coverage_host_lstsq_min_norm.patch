@@ -1,0 +1,16 @@
+diff --git a/glm/host/glm_oracle.mojo b/glm/host/glm_oracle.mojo
+index a3824f26b7..b19d2a9fc1 100644
+--- a/glm/host/glm_oracle.mojo
++++ b/glm/host/glm_oracle.mojo
+@@ -368,7 +368,10 @@ def host_lstsq_min_norm(
+     var z = host_gemm_nt(inv, b, n_rows, 1, n_rows)
+ 
+     # STEP 6. w <- A^T z (`xty_launch`, the kernel `lstsq_eig` uses for A^T b).
+-    return host_xty_launch(a, z, n_rows, n_cols)
++    var w_sab = host_xty_launch(a, z, n_rows, n_cols)
++    # SABOTAGE (coverage-glm-host_lstsq_min_norm): the first coefficient one ulp up (CPU column)
++    w_sab[0] = bitcast[DType.float32](bitcast[DType.uint32](w_sab[0]) + UInt32(1))
++    return w_sab^
+ 
+ 
+ def host_ols_fit(
