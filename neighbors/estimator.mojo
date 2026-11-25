@@ -1432,8 +1432,13 @@ def _knn_search_on_device_index(
     fold_index: Int = -1,
     self_queries: Bool = False,
     query_rows: Int = 0,
+    index_zero_row: Int = -2,
 ) raises -> Int:
-    """`query_rows` (lane vdf-scope-cluster7), when not 0, is the DEVICE address on `ctx` of the `n_queries x
+    """`index_zero_row` (lane vdf2-tail2; -2: not tested): a resident index's device zero-row word
+    (neighbors/resident_index.mojo `zero_row`, tested once at its fold prepare); a fold-query cosine search reads
+    it instead of scanning the index rows again on every call.
+
+    `query_rows` (lane vdf-scope-cluster7), when not 0, is the DEVICE address on `ctx` of the `n_queries x
     n_features` row-major float32 queries (a model-selection fold slot of a family store): copied device to
     device into the query buffer, `queries_ptr` not read (plan with `queries_on_device`, or with
     `zero_rows_checked` after the device cosine refusal). The same words the host upload would place.
@@ -1580,7 +1585,8 @@ def _knn_search_on_device_index(
             # `zero_rows_checked`): the resident index's rows, then the gathered fold queries, as device
             # reductions with the host scans' first rows and words (DEVIATION 553). The index may be a fold
             # fitted on the device, whose rows have no host words.
-            var zi = device_first_zero_row(ctx, index, n_index, n_features)
+            # the index's own word when its fold prepare tested it (lane vdf2-tail2): once per index
+            var zi = index_zero_row if index_zero_row >= -1 else device_first_zero_row(ctx, index, n_index, n_features)
             var zq = -1
             if zi < 0:
                 zq = device_first_zero_row(ctx, queries, n_queries, n_features)
@@ -2181,7 +2187,7 @@ def knn_classifier_predict_resident(
         ctx, trace, retained_indices, True, index, n_index, queries_ptr,
         n_queries, n_features, k, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
         weighted, plan[2], KNN_METHOD_AUTO, plan[0], metric_arg, plan[1], plan[3], dplan, cache,
-        False, status_addr, fold_base, fold_base_rows, fold_index,
+        False, status_addr, fold_base, fold_base_rows, fold_index, index_zero_row=index_zero_row,
     )
     if _knn_status_flagged(status_addr, fold_index >= 0):
         # A non-finite query (lane a7b) or a fold row out of range: the door
@@ -2297,7 +2303,7 @@ def knn_regressor_predict_resident(
         ctx, trace, retained_indices, False, index, n_index, queries_ptr,
         n_queries, n_features, k, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
         weighted, plan[2], KNN_METHOD_AUTO, plan[0], metric_arg, plan[1], plan[3], dplan, cache,
-        False, status_addr, fold_base, fold_base_rows, fold_index,
+        False, status_addr, fold_base, fold_base_rows, fold_index, index_zero_row=index_zero_row,
     )
     if _knn_status_flagged(status_addr, fold_index >= 0):
         # A non-finite query (lane a7b) or a fold row out of range: the door
