@@ -173,7 +173,7 @@ def neural_block_fields(mut mods: NativeModules, block: PythonObject, context: P
     if py_type(py_type(block)) is not b.type:
         raise Error("TypeError: neural blocks cannot invoke Python metaclass protocols")
     var names = Python.tuple("_native_kind", "_native_route", "numeric_mode", "numeric_profile", "weight_format",
-        "d_model", "d_inner", "nheads", "conv_dim", "d_in_proj", "dt_rank", "_owned_generation", "_owned_restore_pending", "_discard_reports", "dt_limit", "n_heads", "n_kv_heads", "head_dim",
+        "d_model", "d_inner", "nheads", "conv_dim", "d_in_proj", "dt_rank", "_discard_reports", "dt_limit", "n_heads", "n_kv_heads", "head_dim",
         "intermediate", "window", "max_positions", "_opts_tail", "_extended", "_w", "_wopt", "_int15",
         "_arithmetic_profile", "_arithmetic_profile_mode", "_arithmetic_profile_changed", "_W_NAMES",
         "norm", "mlp", "qkv_bias", "o_bias", "norm_bias", "mlp_bias", "qk_norm", "rope_scaling",

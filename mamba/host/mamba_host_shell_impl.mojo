@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Typed host Mamba-1, Mamba-2 and Mamba-3 entries behind `_mojolearn_mamba_host`.
 
-The host-column runs and the owned-weights host session that the Python
-boundary in `bindings/_mojolearn_mamba_host.mojo` calls. Nothing here
+The host-column runs that the Python boundary in
+`bindings/_mojolearn_mamba_host.mojo` calls. Nothing here
 touches Python: every entry takes buffer addresses, Ints and typed sessions.
 """
 
@@ -311,102 +311,4 @@ def _mamba3_backward_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
 
 # TOMBSTONE: MOJOLEARN_NN40_OWNED_WEIGHTS (unmeasured opt-in arm: owned weight snapshots, host column) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 0e66cc9a52.
 # Restore: git apply experiments/removed/MOJOLEARN_NN40_OWNED_WEIGHTS.patch
-# The name stays False for its importers (bindings, mamba/host/native_block_dispatch.mojo).
-comptime NN40_OWNED_WEIGHTS = False
-
-
-struct M3OwnedHostSession(Movable, Writable):
-    var weights: Optional[Mamba3Weights]
-    var generation: Int
-    var busy: Bool
-    var usable: Bool
-    var weight_reuses: Int
-    var backward_recomputes: Int
-
-    def __init__(out self):
-        self.weights = None
-        self.generation = 0
-        self.busy = False
-        self.usable = True
-        self.weight_reuses = 0
-        self.backward_recomputes = 0
-
-    def write_to(self, mut writer: Some[Writer]):
-        writer.write("M3OwnedHostSession")
-
-    def write_repr_to(self, mut writer: Some[Writer]):
-        writer.write("M3OwnedHostSession")
-
-
-def _m3_owned_install_run(mut s: M3OwnedHostSession, wa: List[Int], d_model: Int) raises:
-    """Build the owned host weight generation from nine caller weights."""
-    var fresh = _m3_weights(wa, d_model)
-    s.weights = fresh^
-    s.generation += 1
-
-
-def _m3_owned_forward_run(mut s: M3OwnedHostSession, a: List[Int], b: Int, l: Int, dm: Int) raises:
-    """The host Mamba-3 forward on the owned weights into six caller buffers."""
-    ref w = s.weights.value()
-    var dims = w.dims.copy()
-    var state = Mamba3State(b, dims)
-    var st = mamba3_block_oracle(w, read_f32(a[0], b * l * dm), b, l, state)
-    _write(a[1], st.residual_out, b * l * dm)
-    _write(a[2], st.h_last, b * dims.nheads * M3_HEADDIM * M3_D_STATE)
-    _write(a[3], st.k_last, b * dims.nheads * M3_D_STATE)
-    _write(a[4], st.v_last, b * dims.nheads * M3_HEADDIM)
-    _write(a[5], st.theta_last, b * dims.nheads * M3_NUM_ROPE_ANGLES)
-
-
-def _m3_owned_backward_run(mut s: M3OwnedHostSession, a: List[Int], b: Int, l: Int, dm: Int) raises:
-    """The host Mamba-3 prefill backward on the owned weights into twelve caller buffers."""
-    ref w = s.weights.value()
-    var dims = w.dims.copy()
-    var gr = mamba3_prefill_backward(w, read_f32(a[0], b * l * dm), read_f32(a[1], b * l * dm), b, l)
-    _write(a[2], gr.x, b * l * dm)
-    _write(a[3], gr.block_norm_weight, dm)
-    _write(a[4], gr.in_proj_weight, dims.d_in_proj() * dm)
-    _write(a[5], gr.dt_bias, dims.nheads)
-    _write(a[6], gr.B_norm_weight, M3_D_STATE)
-    _write(a[7], gr.C_norm_weight, M3_D_STATE)
-    _write(a[8], gr.B_bias, dims.nheads * M3_D_STATE)
-    _write(a[9], gr.C_bias, dims.nheads * M3_D_STATE)
-    _write(a[10], gr.D, dims.nheads)
-    _write(a[11], gr.out_proj_weight, dm * dims.d_inner)
-
-
-def _m3_owned_export_run(mut s: M3OwnedHostSession, a: List[Int], dm: Int, dims: Mamba3Dims) raises:
-    """Copy the owned weight generation into nine caller buffers."""
-    ref w = s.weights.value()
-    _write(a[0], w.norm_w, dm)
-    _write(a[1], w.w_in, dims.d_in_proj() * dm)
-    _write(a[2], w.dt_bias, dims.nheads)
-    _write(a[3], w.bnorm_w, M3_D_STATE)
-    _write(a[4], w.cnorm_w, M3_D_STATE)
-    _write(a[5], w.b_bias, dims.nheads * M3_D_STATE)
-    _write(a[6], w.c_bias, dims.nheads * M3_D_STATE)
-    _write(a[7], w.d_skip, dims.nheads)
-    _write(a[8], w.w_out, dm * dims.d_inner)
-
-
-def _m3_owned_state_run(mut s: M3OwnedHostSession, a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int) raises -> Int:
-    """`mamba3_forward` (carried state) on the owned weights: the host
-    forward `_mamba3_run` with its nine weight slots pointing at the
-    installed snapshot instead of caller arrays (lane migrate-neural-2's
-    `mamba3_state_owned`, host column). Returns the post-call buf_len."""
-    ref w = s.weights.value()
-    var slots = a.copy()
-    slots[1] = Int(w.norm_w.unsafe_ptr())
-    slots[2] = Int(w.w_in.unsafe_ptr())
-    slots[3] = Int(w.dt_bias.unsafe_ptr())
-    slots[4] = Int(w.bnorm_w.unsafe_ptr())
-    slots[5] = Int(w.cnorm_w.unsafe_ptr())
-    slots[6] = Int(w.b_bias.unsafe_ptr())
-    slots[7] = Int(w.c_bias.unsafe_ptr())
-    slots[8] = Int(w.d_skip.unsafe_ptr())
-    slots[9] = Int(w.w_out.unsafe_ptr())
-    return _mamba3_run(slots, b, l, dm, q0, pend, False)
-
-
-def _nn40_host_require(s: M3OwnedHostSession, dm: Int, generation: Int, reserved: Bool = False) raises:
-    raise Error("mamba3 owned host: no usable installed snapshot")
+# TOMBSTONE: MOJOLEARN_NN40_OWNED_WEIGHTS (leftover: NN40_OWNED_WEIGHTS, M3OwnedHostSession and its install/forward/backward/export/state runs, _nn40_host_require) deleted 2026-11-25 by lane/owned-weights-deletion; code recoverable at 097a876282.

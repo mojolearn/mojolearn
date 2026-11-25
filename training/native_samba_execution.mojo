@@ -24,7 +24,6 @@ struct NativeSambaLayer(Movable):
     var gradients: List[List[Float32]]
     var tape: Bool
     var tape_live: Bool
-    var owned_backward: Bool
     var validate_gradient: Bool
     var backward_failure: String
     var operation: Int
@@ -40,12 +39,6 @@ struct NativeSambaLayer(Movable):
     var scratch: List[List[Float32]]
     var refresh_layouts: List[BorrowedBufferLayout]
     var refresh_addresses: List[Int]
-    var prepare_operation: Int
-    var prepare_addresses: List[Int]
-    var prepare_parameters: List[Int]
-    var generation_slot: Int
-    var prepared: Bool
-    var prepared_result: Int
     var state_index: Int
     var counter_slot: Int
     var pending_slot: Int
@@ -71,7 +64,6 @@ struct NativeSambaLayer(Movable):
         self.reset_operation = -1
         self.tape_started = False
         self.tape_live = False
-        self.owned_backward = False
         self.validate_gradient = False
         self.backward_failure = String("")
         self.operation = operation
@@ -87,12 +79,6 @@ struct NativeSambaLayer(Movable):
         self.scratch = List[List[Float32]]()
         self.refresh_layouts = List[BorrowedBufferLayout]()
         self.refresh_addresses = List[Int]()
-        self.prepare_operation = -1
-        self.prepare_addresses = List[Int]()
-        self.prepare_parameters = List[Int]()
-        self.generation_slot = -1
-        self.prepared = False
-        self.prepared_result = 0
         self.state_index = -1
         self.counter_slot = -1
         self.pending_slot = -1
@@ -108,10 +94,7 @@ struct NativeSambaLayer(Movable):
             raise Error(self.failure)
         if self.tape and self.tape_started:
             _ = self.close_endpoint.call(self.reset_operation, [], [], [])
-        if self.prepare_operation >= 0 and not self.prepared:
-            self.prepared_result = self.endpoint.call(self.prepare_operation, self.prepare_addresses, self.prepare_parameters, [])
-            self.prepared = True
-            self.parameters[self.generation_slot] = self.prepared_result
+        # TOMBSTONE: MOJOLEARN_NN40_OWNED_WEIGHTS (leftover: the owned-snapshot install before a layer's first forward, and the owned backward) deleted 2026-11-25 by lane/owned-weights-deletion; code recoverable at 097a876282.
         for i in range(len(self.refresh_layouts)):  # driver-loop: refresh admitted aliased foreign state at original layer position
             self.refresh_layouts[i].copy_to(self.refresh_addresses[i])
         var output = List[Float32](length=elements, fill=0)
@@ -141,17 +124,14 @@ struct NativeSambaLayer(Movable):
         var a = List[Int]()
         if not self.tape:
             a.append(Int(self.input.unsafe_ptr()))
-            if not self.owned_backward:
-                for address in self.backward_weights:  # driver-loop: admitted immutable gradient input slots
-                    a.append(address)
+            for address in self.backward_weights:  # driver-loop: admitted immutable gradient input slots
+                a.append(address)
         a.append(dy)
         a.append(Int(dx.unsafe_ptr()))
         self.gradients.clear()
         for count in self.gradient_sizes:  # driver-loop: native parameter gradient allocation
             self.gradients.append(List[Float32](length=count, fill=0))
             a.append(Int(self.gradients[len(self.gradients) - 1].unsafe_ptr()))
-        if self.owned_backward and self.prepared:
-            self.backward_parameters[3] = self.prepared_result
         _ = self.backward_endpoint.call(self.backward_operation, a, self.backward_parameters, [])
         if self.tape_live:
             self.close()

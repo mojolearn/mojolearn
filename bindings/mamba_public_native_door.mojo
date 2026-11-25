@@ -3,8 +3,7 @@
 """Native Mamba public operations: Mamba3Block and the Mamba decode sessions.
 
 `Mamba3Block.forward` (plain, carried state and ragged `lengths=`), `step`,
-`allocate_state`, the owned weight snapshot (`install_owned_weights`,
-`release_owned_weights`, `export_owned_weights`, `session_info`), pickling,
+`allocate_state`, `session_info`, pickling,
 `Mamba3State.set_input_states`, and every method of the Mamba-1/2/3 resident
 decode sessions are each ONE call into this module (`mamba_native_call`). The
 compiled mamba entries reached here are the ones the retired Python drivers in
@@ -28,7 +27,7 @@ from bindings.generation_buffers_door import (
     GENERATION_BOUNDARY, generation_initialize_binding, generation_array, generation_address, generation_weight_address, py_ints,
 )
 from bindings.causal_lm_public_door import _native_function, _native_has_entry, _mutable, _writeback
-from bindings.causal_lm_construct_door import _model_bindings, _model_block
+from bindings.causal_lm_construct_door import _model_bindings
 from bindings.neural_block_public_door import neural_training_entries, neural_training_selection, _neural_input, _neural_input_rows, _neural_lengths, _neural_int_words, neural_block_snapshot_prepared, neural_block_route_reconcile
 from bindings.neural_block_admission_door import neural_block_fields, neural_block_snapshot, admit_block_f32, BLOCK_OPERATION, neural_array_snapshot, neural_native_scalar
 from bindings.mode_metadata_native_door import _fields, _class_fields
@@ -44,10 +43,8 @@ from training.samba_inference_run import _m3_shapes, _m3_names
 from core.neural_block_public_impl import neural_copy_row_prefixes
 from core.native_descriptor_abi import MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
 from core.mamba_state_entry_table import Mamba3StateRoute
-from core.neural_entry_table import NEURAL_MAMBA3_OWNED_INSTALL, NEURAL_MAMBA3_OWNED_EXPORT, MAMBA3_CAP_OWNED_WEIGHTS
 from providers.python.mamba3_prefill_session_pyapi_door import (
-    mamba3_prefill_caps, mamba3_prefill_session_open, mamba3_prefill_session_ensure, mamba3_prefill_session_close,
-    mamba3_prefill_session_run, mamba3_prefill_session_info,
+    mamba3_prefill_session_open, mamba3_prefill_session_info,
 )
 from mamba.impl.mamba_session_impl import mamba_copy_f32, mamba_host_copy
 from mamba.impl.mamba_decode_plan import MambaDecodePlan
@@ -300,7 +297,7 @@ def _mamba3_forward_captured(mut mods: NativeModules,
 def _mamba3_publish_runtime(fields: PythonObject, block: PythonObject) raises:
     var live = _fields(block)
     var names = [String("_native_mamba_block_provider_cache"), String("_native_mamba_state"),
-                 String("_prefill_session"), String("_owned_generation"), String("_owned_restore_pending")]
+                 String("_prefill_session")]
     for name in names:  # driver-loop: over native session/cache state published after one operation
         if py_contains(fields, name):
             py_setitem(live, name, fields[name])
@@ -324,80 +321,7 @@ def mamba3_allocate(mut mods: NativeModules, block: PythonObject, batch: PythonO
     return _m3_allocate(mods, block, _fields(block), batch, context)
 
 
-def _mamba3_weight_names() -> List[String]:
-    # Fixed numerical ABI, not a mutable class attribute lookup.
-    return [String("block_norm.weight"), String("in_proj.weight"), String("dt_bias"),
-            String("B_norm.weight"), String("C_norm.weight"), String("B_bias"),
-            String("C_bias"), String("D"), String("out_proj.weight")]
-
-
-def _m3_checked_weights(mut mods: NativeModules, block: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    # The current weights through the constructor's own native checks, as the
-    # retired `type(self)(...)` re-validation did, without a Python constructor.
-    var bi = mods.module("builtins")
-    var plan = py_call(bi.object.__new__, context["config_context"]["plan_class"])
-    var plan_fields = _mamba_record_fields(mods, plan, context["config_context"]["plan_class"],
-        [String("kind"), String("d_model"), String("block_kwargs")])
-    py_setitem(plan_fields, "kind", PythonObject("mamba3"))
-    py_setitem(plan_fields, "d_model", fields["d_model"])
-    py_setitem(plan_fields, "block_kwargs", bi.dict())
-    var named = bi.dict()
-    var names = _mamba3_weight_names()
-    var weights = fields["_w"]
-    for i in range(len(names)):  # driver-loop: over the fixed block weight registry
-        py_setitem(named, names[i], weights[i])
-    var route = fields["_native_route"]
-    var checked = _model_block(mods, named, plan, PythonObject("fp32_v1"), route,
-                               _model_bindings(mods, route, "mamba3", context, py_get(fields, "numeric_mode")), context)
-    return neural_block_fields(mods, checked, context)["_w"]
-
-
-def mamba3_install_owned(mut mods: NativeModules, block: PythonObject, context: PythonObject, fields: PythonObject) raises -> PythonObject:
-    # Publish session and generation together after a successful upload. The
-    # session is a native registry handle of the block's training image
-    # (core/mamba3_prefill_session.mojo, lane mamba3-prefill-handle): the
-    # former Python entries mamba3_owned_weights_enabled,
-    # mamba3_prefill_session_create, mamba3_prefill_session_install_weights,
-    # the handle factory and the env-gated provider arm are gone.
-    var route = Mamba3StateRoute(1, 0, False)
-    _ = _m3_entries(mods, block, fields, context, route)
-    mods.released()
-    if not route.has_sessions() or (mamba3_prefill_caps(route.session_ref()) & MAMBA3_CAP_OWNED_WEIGHTS) == 0:
-        raise Error("RuntimeError: Mamba3 owned weights require the NN40 IDENTICAL arm")
-    var weights = _m3_checked_weights(mods, block, fields, context)
-    var session = mamba3_prefill_session_ensure(fields, route.session_ref())
-    var keep = List[PythonObject]()
-    var addresses = List[Int]()
-    for i in range(len(weights)):  # driver-loop: over the fixed owned-weight registry
-        addresses.append(generation_weight_address(weights[i], keep))
-    var generation = mamba3_prefill_session_run(session, NEURAL_MAMBA3_OWNED_INSTALL, addresses, [Int(py=fields["d_model"])])
-    mods.released()
-    py_setitem(fields, "_owned_generation", PythonObject(generation))
-    py_setitem(fields, "_owned_restore_pending", False)
-    _ = keep^
-    _ = weights
-    _ = session^
-    return PythonObject(generation)
-
-
-def mamba3_install_owned(mut mods: NativeModules, block: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = neural_block_snapshot(mods, block, context)
-    try:
-        return mamba3_install_owned(mods, block, context, fields)
-    finally:
-        mods.released()
-        _mamba3_publish_runtime(fields, block)
-
-
-def mamba3_release_owned(mut mods: NativeModules, block: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = _fields(block)
-    # Close the block's session handle (op 18 through its image's entry; the
-    # former mamba3_prefill_session_close Python entry and provider arm).
-    mamba3_prefill_session_close(py_get(fields, "_prefill_session"))
-    py_setitem(fields, "_prefill_session", PythonObject(None))
-    py_setitem(fields, "_owned_generation", PythonObject(None))
-    py_setitem(fields, "_owned_restore_pending", PythonObject(False))
-    return PythonObject(None)
+# TOMBSTONE: MOJOLEARN_NN40_OWNED_WEIGHTS (leftover: Mamba3Block.install_owned_weights, export_owned_weights, release_owned_weights and the owned snapshot in pickling; ops 15/17) deleted 2026-11-25 by lane/owned-weights-deletion; code recoverable at 097a876282.
 
 
 def mamba3_session_info(mut mods: NativeModules, block: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -417,60 +341,10 @@ def mamba3_session_info(mut mods: NativeModules, block: PythonObject, context: P
     return result
 
 
-def mamba3_export_owned(mut mods: NativeModules, block: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = mods.module("builtins")
-    var fields = _fields(block)
-    var generation = py_get(fields, "_owned_generation")
-    if generation is None:
-        raise Error("RuntimeError: Mamba3 has no installed owned snapshot")
-    var dm = Int(py=fields["d_model"])
-    var di = Int(py=fields["d_inner"])
-    var nh = Int(py=fields["nheads"])
-    var dip = Int(py=fields["d_in_proj"])
-    var shapes = List[List[Int]]()
-    shapes.append([dm])
-    shapes.append([dip, dm])
-    shapes.append([nh])
-    shapes.append([128])
-    shapes.append([128])
-    shapes.append([nh, 128])
-    shapes.append([nh, 128])
-    shapes.append([nh])
-    shapes.append([dm, di])
-    var arrays = bi.list()
-    var keep = List[PythonObject]()
-    var addresses = List[Int]()
-    for i in range(len(shapes)):  # driver-loop: over the fixed parameter buffer list
-        var array = generation_array(shapes[i])
-        _ = py_call(arrays.append, array)
-        addresses.append(generation_address(array, keep))
-    # Op 17 on the block's session handle (the former
-    # mamba3_prefill_session_export_weights Python entry and provider arm).
-    var session = fields["_prefill_session"]
-    _ = mamba3_prefill_session_run(session, NEURAL_MAMBA3_OWNED_EXPORT, addresses, [Int(py=generation)])
-    mods.released()
-    _ = session^
-    var result = bi.dict()
-    var names = _mamba3_weight_names()
-    for i in range(len(names)):  # driver-loop: over named parameter slots
-        py_setitem(result, names[i], arrays[i])
-    _ = keep^
-    return result
-
-
 def mamba3_getstate(mut mods: NativeModules, block: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = mods.module("builtins")
     var fields = _fields(block)
     var result = py_call(bi.dict, fields)
-    if py_get(fields, "_owned_generation") is not None:
-        var snapshot = mamba3_export_owned(mods, block, context)
-        var names = _mamba3_weight_names()
-        var weights = bi.list()
-        for i in range(len(names)):  # driver-loop: over the fixed parameter name list
-            _ = py_call(weights.append, snapshot[names[i]])
-        py_setitem(result, "_w", weights)
-        py_setitem(result, "_owned_restore_pending", True)
-    py_setitem(result, "_owned_generation", PythonObject(None))
     _ = py_call(result.pop, "_prefill_session", PythonObject(None))
     # `_native_mamba_state_binding` is the binding module the construction
     # cache keyed the state provider on (neural_descriptor_cached): a module
@@ -503,7 +377,6 @@ def mamba3_setstate(mut mods: NativeModules, block: PythonObject, state: PythonO
     var fields = _fields(block)
     _ = py_call(fields.update, candidate_fields)
     py_setitem(fields, "_prefill_session", PythonObject(None))
-    py_setitem(fields, "_owned_generation", PythonObject(None))
     py_setitem(fields, "_native_mamba_block_provider_cache", PythonObject(None))
     if String(fields["_native_route"]) == "gpu" and word_runs_identical(String(fields["numeric_mode"]), MODE_FAMILY_NEURAL):  # lane fx-fast-mask
         # A native registry handle of the block's training image (the former
@@ -1285,11 +1158,6 @@ def mamba_native_call(mut mods: NativeModules, operation: String, values: Python
         if (operation != "forward_public" and operation != "step_public"
                 and operation != "forward" and operation != "step"):
             var fields = neural_block_fields(mods, values[0], context)
-            if operation == "install_owned":
-                # lane fx-device-attr round 2: the owned weights go to the
-                # route of the block's `device` as assigned; one record read
-                # per install (a training-session start, not a step).
-                neural_block_route_reconcile(mods, values[0], fields, context)
             var kind = String(fields["_native_kind"])
             if operation == "allocate":
                 _mamba_scalar(mods, values[1], "batch_size", context)
@@ -1313,14 +1181,8 @@ def mamba_native_call(mut mods: NativeModules, operation: String, values: Python
         return mamba3_forward(mods, values[0], values[1], values[2], PythonObject(None), True, context)
     if operation == "allocate":
         return mamba3_allocate(mods, values[0], values[1], context)
-    if operation == "install_owned":
-        return mamba3_install_owned(mods, values[0], context)
-    if operation == "release_owned":
-        return mamba3_release_owned(mods, values[0], context)
     if operation == "session_info":
         return mamba3_session_info(mods, values[0], context)
-    if operation == "export_owned":
-        return mamba3_export_owned(mods, values[0], context)
     if operation == "getstate":
         return mamba3_getstate(mods, values[0], context)
     if operation == "setstate":

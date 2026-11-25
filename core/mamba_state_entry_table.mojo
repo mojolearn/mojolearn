@@ -75,10 +75,11 @@ struct Mamba3StateRoute(Copyable, Movable):
         return causal_ref[CAUSAL_TABLE_MAMBA](CausalEntryKey(self.mode, self.vendor))
 
     def has_sessions(self) -> Bool:
-        """Whether the block's image keeps Mamba-3 prefill sessions: a
-        training block (GPU or CPU build). The CPU inference model's block
-        (`_mojolearn_neural_host`) has none."""
-        return self.vendor != 0 or self.training_host
+        """Whether the block's image keeps Mamba-3 prefill sessions: a GPU
+        training block. The CPU builds (`_mojolearn_mamba_host`,
+        `_mojolearn_neural_host`) have none: the CPU training image's sessions
+        held only the NN40 owned snapshot, deleted 2026-11-25."""
+        return self.vendor != 0
 
     def session_ref(self) raises -> EntryRef:
         """The Mamba entry of the training image that holds the block's

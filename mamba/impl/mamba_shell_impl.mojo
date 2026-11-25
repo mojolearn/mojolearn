@@ -527,15 +527,6 @@ def _m3_session_export_run(mut s: Mamba3DecodeSession, a: List[Int]) raises -> I
     return words[0]
 
 
-def _mamba3_run_owned(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int) raises -> Int:
-    """The carried-state forward or decode step on the session's installed
-    owned snapshot (NN40): `mamba_block_call` over the snapshot's host copy
-    (stable while it is installed, so the cached program keeps it on the
-    device and never compares a changed byte). `a` is the 25-slot list; its
-    nine weight slots are not read."""
-    raise Error("mamba3 owned weights: NN40 arm is disabled")
-
-
 # ===========================================================================
 # lane/neural-net-experiment (2026-09-30): the Mamba-3 PREFILL session.
 #
@@ -555,13 +546,9 @@ def _mamba3_run_owned(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int,
 # ===========================================================================
 
 
-# NN40 explicit owned snapshots, not pointer identity or caller promises.
-# A snapshot is copied into session-owned device storage by install/update;
-# owned forward/backward never read the original external weight addresses.
 # TOMBSTONE: MOJOLEARN_NN40_OWNED_WEIGHTS (unmeasured opt-in arm: owned weight snapshots of the Mamba-3 prefill session) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 8584e42dde.
 # Restore: git apply experiments/removed/MOJOLEARN_NN40_OWNED_WEIGHTS.patch
-# The name stays False for its importers (bindings, mamba/native_block_dispatch.mojo).
-comptime NN40_OWNED_WEIGHTS = False
+# TOMBSTONE: MOJOLEARN_NN40_OWNED_WEIGHTS (leftover: NN40_OWNED_WEIGHTS, the session's owned_weights / weight_generation, _mamba3_run_owned, _m3_install_weights_run, _m3_export_weights_run and the use_owned arguments) deleted 2026-11-25 by lane/owned-weights-deletion; code recoverable at 097a876282.
 
 struct Mamba3PrefillSession(Movable, Writable):
     var ctx: Optional[DeviceContext]
@@ -574,8 +561,6 @@ struct Mamba3PrefillSession(Movable, Writable):
     var weight_uploads: Int
     var weight_recopies: Int
     var weight_reuses: Int
-    var owned_weights: Bool
-    var weight_generation: Int
     # lane/neural-net-experiment (backward session): the last forward's
     # recorded stages and zero state, kept for the backward that follows it
     # in a training step. `stages_valid` is cleared whenever the retained
@@ -595,7 +580,6 @@ struct Mamba3PrefillSession(Movable, Writable):
         self.ctx = None
         self.w = None
         self.w_host = List[Float32]()
-        self.owned_weights = False
         self.dm = 0
         self.dx = None
         self.busy = False
@@ -603,8 +587,6 @@ struct Mamba3PrefillSession(Movable, Writable):
         self.weight_uploads = 0
         self.weight_recopies = 0
         self.weight_reuses = 0
-        self.owned_weights = False
-        self.weight_generation = 0
         self.stages = None
         self.state = None
         self.stages_b = 0
@@ -623,7 +605,6 @@ struct Mamba3PrefillSession(Movable, Writable):
         self.dx = None
         self.w = None
         self.w_host = List[Float32]()
-        self.owned_weights = False
         self.dm = 0
         if self.ctx:
             try: self.ctx.value().synchronize()
@@ -723,15 +704,9 @@ def _m3_weights_recopy(ctx: DeviceContext, mut w: Mamba3DeviceWeights, a: List[I
     w.weights_checked = False
 
 
-def _m3_prefill_weights(mut s: Mamba3PrefillSession, a: List[Int], dims: Mamba3Dims, use_owned: Bool = False) raises:
+def _m3_prefill_weights(mut s: Mamba3PrefillSession, a: List[Int], dims: Mamba3Dims) raises:
     """Leave `s.w` holding this call's weights: reused, recopied, or freshly
     uploaded (see the section header)."""
-    if use_owned:
-        raise Error("mamba3 owned weights: NN40 arm is disabled")
-    # Normal APIs continue inspecting the weights passed on THIS call.
-    # They relinquish the explicit snapshot route instead of silently
-    # ignoring changed external buffers supplied through the ordinary API.
-    s.owned_weights = False
     ref ctx = s.ctx.value()
     var lens = _m3_weight_lens(dims)
     if s.w and s.dm == dims.d_model:
@@ -762,7 +737,7 @@ def _m3_prefill_weights(mut s: Mamba3PrefillSession, a: List[Int], dims: Mamba3D
     s.weight_uploads += 1
 
 
-def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int, use_owned: Bool = False) raises -> Int:
+def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int) raises -> Int:
     """The discard-state prefill on the session: `a` is the fresh entry's 25-slot
     list (state slots zero, never read)."""
     var dims = Mamba3Dims.of(dm)
@@ -776,7 +751,7 @@ def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, d
     var phase_tick = 0
     comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
         phase_tick = Int(perf_counter_ns())
-    _m3_prefill_weights(s, a, dims, use_owned)
+    _m3_prefill_weights(s, a, dims)
     # lane/fam2-lm (IDN_M3_SESSION_STAGE_REUSE): the retained stages and
     # state serve this call when they have its shape; they are refilled with
     # zeros below. (`stages_valid` is not asked: stale VALUES do not matter,
@@ -928,7 +903,7 @@ def _m3_prefill_backward_forward(mut s: Mamba3PrefillSession, a: List[Int], b: I
 comptime _M3_BWD_NONFINITE_DY = "mamba3 backward: non-finite grad_output at flat index "
 
 
-def _m3_prefill_backward_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int, use_owned: Bool = False) raises:
+def _m3_prefill_backward_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int) raises:
     """`mamba3_backward` on the session: `a` is the entry's 21-slot list
     (x, nine weights, grad_output, grad_x, nine weight gradients).
 
@@ -953,7 +928,7 @@ def _m3_prefill_backward_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, 
     var bad_dy = device_first_nonfinite(s.ctx.value(), d_output, n_x)
     if bad_dy >= 0:
         raise Error(String(_M3_BWD_NONFINITE_DY) + String(bad_dy))
-    _m3_prefill_weights(s, a, dims, use_owned)
+    _m3_prefill_weights(s, a, dims)
     var reuse = False
     if s.stages_valid and s.stages and s.stages_b == b and s.stages_l == l and s.dx:
         if len(s.dx.value()) == n_x:
@@ -983,42 +958,6 @@ def _m3_prefill_backward_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, 
     _ = g^
     _ = d_output^
 
-
-def _m3_install_weights_run(mut s: Mamba3PrefillSession, a: List[Int], dims: Mamba3Dims, native_d_model: Int) raises:
-    """Upload nine caller weights into a fresh owned generation on the
-    session (the GIL-free half of `mamba3_prefill_session_install_weights`)."""
-    if not s.ctx:
-        s.ctx = neural_ctx[_NEURAL_CTX]()
-    var fresh = _m3_load_weights(s.ctx.value(), a, dims)
-    s.ctx.value().synchronize()
-    # Copy-on-install is the ownership boundary. Drop stages before
-    # exposing the new generation, never reusing old-weight activations.
-    s.drop_stages()
-    s.w = fresh^
-    # The snapshot's host copy (lane x5): the owned carried-state calls run
-    # the cached block program over it (`_mamba3_run_owned`).
-    s.w_host = _m3_weights_host_copy(a, _m3_weight_lens(dims))
-    s.dm = native_d_model
-    s.owned_weights = True
-    s.weight_generation += 1
-    s.weight_uploads += 1
-
-
-def _m3_export_weights_run(mut s: Mamba3PrefillSession, a: List[Int], dm: Int, dims: Mamba3Dims) raises:
-    """Download the installed generation into nine caller buffers (the
-    GIL-free half of `mamba3_prefill_session_export_weights`)."""
-    ref ctx = s.ctx.value()
-    ref w = s.w.value()
-    _m3_download_addr[False](ctx, w.norm_w, dm, a[0])
-    _m3_download_addr[False](ctx, w.w_in, dims.d_in_proj() * dm, a[1])
-    _m3_download_addr[False](ctx, w.dt_bias, dims.nheads, a[2])
-    _m3_download_addr[False](ctx, w.bnorm_w, M3_D_STATE, a[3])
-    _m3_download_addr[False](ctx, w.cnorm_w, M3_D_STATE, a[4])
-    _m3_download_addr[False](ctx, w.b_bias, dims.nheads * M3_D_STATE, a[5])
-    _m3_download_addr[False](ctx, w.c_bias, dims.nheads * M3_D_STATE, a[6])
-    _m3_download_addr[False](ctx, w.d_skip, dims.nheads, a[7])
-    _m3_download_addr[False](ctx, w.w_out, dm * dims.d_inner, a[8])
-    ctx.synchronize()
 
 # NI48: default-OFF owned forward tape. A tape has exactly one fresh session;
 # input, weights and stages are native owned copies from the actual forward.

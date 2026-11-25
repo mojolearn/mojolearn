@@ -1050,7 +1050,8 @@ class Mamba3State:
 # archive/evidence/mamba/FEATURE_PARITY.md "Mamba-3 SURFACE KNOBS". CHUNK_SIZE 64 is part of the
 # arithmetic (DEVIATIONS 827/783). Decode is prefill resumption (DEVIATION 831); the reference
 # per-token recurrence is the required-RED STEP_UPSTREAM_RECURRENCE arm. Report stages vs sealed
-# boundary: DEVIATION 832. Owned weights are the NN40 IDENTICAL arm.
+# boundary: DEVIATION 832. The NN40 owned-weight snapshot methods were deleted 2026-11-25
+# (lane owned-weights-deletion; docs/TOMBSTONES.md MOJOLEARN_NN40_OWNED_WEIGHTS).
 class Mamba3Block(_MambaBase, _native_constructor=True):
     """One Mamba-3 (SISO) block: RMSNorm, mixer and residual.
 
@@ -1146,22 +1147,6 @@ class Mamba3Block(_MambaBase, _native_constructor=True):
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "allocate", (self, batch_size), _native_neural_bridge.CONTEXT)
 
-    def install_owned_weights(self):
-        """Snapshot the current weights for later stateless `forward` and `backward` calls.
-
-        Returns the snapshot's generation number. Later edits to your weight arrays take
-        effect only after another call. Calls with an explicit state and decoding are
-        unaffected. Needs a binding that provides owned weights; otherwise
-        `RuntimeError`.
-        """
-        return _native_neural_bridge.RUNTIME.mamba_native_call(
-            "install_owned", (self,), _native_neural_bridge.CONTEXT)
-
-    def release_owned_weights(self):
-        """Drop the weight snapshot; later calls read your weight arrays again."""
-        return _native_neural_bridge.RUNTIME.mamba_native_call(
-            "release_owned", (self,), _native_neural_bridge.CONTEXT)
-
     def session_info(self):
         """Counters of the prefill session as a dict, or None when no session is open.
 
@@ -1170,11 +1155,6 @@ class Mamba3Block(_MambaBase, _native_constructor=True):
         """
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "session_info", (self,), _native_neural_bridge.CONTEXT)
-
-    def export_owned_weights(self):
-        """Copy the installed weight snapshot into new host arrays."""
-        return _native_neural_bridge.RUNTIME.mamba_native_call(
-            "export_owned", (self,), _native_neural_bridge.CONTEXT)
 
     def __getstate__(self):
         return _native_neural_bridge.RUNTIME.mamba_native_call(
