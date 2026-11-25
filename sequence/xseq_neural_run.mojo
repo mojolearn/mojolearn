@@ -554,7 +554,16 @@ def xseq_run_rnn_layout_dirs(ints: List[Int], dirs: Int, params_size: Int) raise
 
 def xseq_run_rnn_predict_options(entry: XseqNeuralEntry, req: XseqRnnPredictRequest, x: Int, params: Int,
                                  out_words: Int, seq: Int, lengths: Int, o: XseqRnnPredictOptions) raises:
-    """RNN_PREDICT in its options form (sequence/ops_impl.mojo RNN_PREDICT_OPTION_INTS)."""
+    """RNN_PREDICT in its options form (sequence/ops_impl.mojo RNN_PREDICT_OPTION_INTS). Final states asked
+    (o.state_h != 0) is the estimators' `step`, the streaming form: refused for a bidirectional model, whose
+    reverse direction at a step reads every later step, which a live call has not seen yet, so no piece of a
+    sequence can be scored before the sequence ends (lane rnn-step-bits; predict on the whole sequence is that
+    model's answer, and its h_0 / c_0 stay accepted there)."""
+    if o.state_h != 0 and o.dirs != 1:
+        raise Error(
+            "ValueError: step: a bidirectional model cannot stream: its reverse direction reads the steps that come"
+            " after each step; call predict on the whole sequence"
+        )
     var ip = req.ints.copy()
     ip.append(req.task)
     ip.append(req.n)

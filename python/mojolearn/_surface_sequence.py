@@ -49,6 +49,8 @@ FAMILIES = (
                         # nn-recurrent end
                         # lane rnn-parity-D (2026-11-25): the recurrent estimators' options (tools/identity_lanes/rnn_parity.py)
                         "sequence-rnn-weighted-steps", "sequence-rnn-bidi-options",
+                        # lane rnn-step-bits (2026-11-25): step() equals the whole pass at every input width
+                        "sequence-rnn-step-widths",
                         # nn-attention begin: classic attention models (tools/identity_lanes/nn_attention.py)
                         "sequence-attention-encoder", "sequence-attention-cross",
                         # nn-attention end
@@ -224,7 +226,8 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        # nn-recurrent end
                        # lane rnn-parity-D (2026-11-25)
                        "sequence-rnn-weighted-steps": "GRUClassifier: output='sequence', lengths, per-step sample_weight, class_weight, clip_grad_norm",
-                       "sequence-rnn-bidi-options": "LSTMRegressor: bidirectional, dropout, bias=False, validation, partial_fit, h_0 / c_0, step",
+                       "sequence-rnn-bidi-options": "LSTMRegressor: bidirectional, dropout, bias=False, validation, partial_fit, h_0 / c_0, step refused",
+                       "sequence-rnn-step-widths": "LSTMRegressor: step one step at a time equals predict, 8 / 64 / 65 / 300 inputs",
                        # nn-attention begin
                        "sequence-attention-encoder": "Sequential transformer_encoder_layer, positional_encoding",
                        "sequence-attention-cross": "Sequential transformer_decoder_layer, multihead_attention",
@@ -314,6 +317,7 @@ PUBLIC_PENDING_LANES = {
     # nn-recurrent end
     "sequence-rnn-weighted-steps": "no reference",  # lane rnn-parity-D
     "sequence-rnn-bidi-options": "no reference",  # lane rnn-parity-D
+    "sequence-rnn-step-widths": "no reference",  # lane rnn-step-bits
     # nn-attention begin
     "sequence-attention-encoder": "no reference",
     "sequence-attention-cross": "no reference",
