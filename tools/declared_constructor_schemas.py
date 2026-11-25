@@ -32,8 +32,9 @@ FAMILIES = (("mojolearn._expansion_prep", "_PrepBase"), ("mojolearn._expansion_d
 # The resample results are not here: their constructors are one call to the
 # resample owner's native result initializer (family_rs_result_initialize,
 # providers/python/resample_public_pyapi_pack.mojo), which admits releases itself.
-EXTRAS = (("mojolearn.model_selection", ("ShuffleSplit", "GroupShuffleSplit", "StratifiedShuffleSplit",
-                                         "LeavePOut", "LeavePGroupsOut")),)
+# The shuffle and leave-P splitters were the extras; they left the table when their
+# native constructor took over their fields and `device` (eb852fc947, 72500e5210).
+EXTRAS = ()
 
 
 def _all(mod):
