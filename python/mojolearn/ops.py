@@ -1655,7 +1655,15 @@ class Session:
         your loop passes to :meth:`permutation` and :meth:`dropout`, so the
         resumed loop draws the same row orders and dropout masks it would
         have drawn without stopping. A file saved on one GPU vendor (or on
-        the CPU) resumes to the same values on another.
+        the CPU) resumes to the same values on another. Every optimizer
+        :meth:`optimizer` creates is covered, with all of its state
+        buffers: ``'sgd'``, ``'adam'``, ``'adamw'``, ``'rmsprop'``
+        (including ``centered=True`` with momentum, which keeps three),
+        ``'adagrad'``, ``'adamax'``, ``'nadam'`` and ``'lion'``. The
+        optimizer's settings and schedule are not in the file: create the
+        optimizer again with the same settings before :meth:`load_state`.
+        The file is written beside ``path`` and moved over it when it is
+        complete, so an interrupted save leaves the previous file intact.
 
         Parameters
         ----------
@@ -3220,6 +3228,30 @@ class Program:
         and, with ``source``, the source's position: the last batch that
         was trained, never a batch read ahead. :meth:`Session.load_training`
         restores it, in this process or a new one.
+
+        What is saved and restored, exactly:
+
+        - every optimizer :meth:`Session.optimizer` and
+          :meth:`Session.param_group_optimizer` create: ``'sgd'`` (with
+          or without momentum and Nesterov), ``'adam'``, ``'adamw'``,
+          ``'rmsprop'`` (plain, with momentum, centered, and centered
+          with momentum, which keeps three state buffers), ``'adagrad'``,
+          ``'adamax'``, ``'nadam'`` and ``'lion'``, each with its
+          settings, both gradient clips, and all of its state buffers and
+          step counts for every parameter;
+        - the ``'constant'``, ``'step'`` and ``'exponential'`` schedules
+          with the epoch they stand at;
+        - parameter groups: every group's settings and members;
+        - with ``source``: its position, its data fingerprint, its
+          ``seed``, ``batch_size``, ``bucket_batches`` and ``shuffle``,
+          and its ``inputs`` and ``target`` fields. The source must be
+          sealed (:meth:`BatchSource.seal`).
+
+        Not saved: gradients (a checkpoint is taken between steps), the
+        loss curve, and tensors that are not parameters of this program.
+        The file is written beside ``path`` and moved over it when it is
+        complete, so an interrupted save leaves the previous checkpoint at
+        ``path`` intact.
 
         Parameters
         ----------

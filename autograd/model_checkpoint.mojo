@@ -74,7 +74,11 @@ comptime BP = UnsafePointer[UInt8, MutUntrackedOrigin]
 # model reads back the values the user passed. A file of any other version is refused by name; the version-1
 # and version-2 readers are gone (recoverable at 48117b8854).
 comptime SEQ_RECORD_VERSION = 3
-comptime SESSION_RECORD_VERSION = 1
+# Session record version 2 (lane fable-finalize, 2026-11-25): a fourth per-parameter integer says whether the
+# optimizer keeps a third state buffer for the parameter (centered RMSprop's gradient average), and those buffers
+# follow the per-parameter scalars in the extension's floats, in parameter order. Version 1 refused such an
+# optimizer at save while Session.save_state's docstring promised every buffer.
+comptime SESSION_RECORD_VERSION = 2
 comptime SEQ_OPT_INTS = 9      # loss, target, optimizer, flags, schedule, step, patience, batch, shuffle
 comptime SEQ_MODEL_INTS = 3    # n_features, n_outputs, y_1d
 comptime SEQ_OPT_FLOATS = 8    # lr, f1, f2, eps, weight_decay, f7, gamma, huber delta
@@ -286,7 +290,7 @@ def _read_sequential(path: String) raises -> Checkpoint:
 
 
 # ---------------------------------------------------------------- operation sessions
-comptime SESSION_PER_PARAM_INTS = 3    # step count, has first buffer, has second buffer
+comptime SESSION_PER_PARAM_INTS = 4    # step count, has first buffer, has second buffer, has third buffer
 comptime SESSION_PER_PARAM_FLOATS = 3  # beta1^t, beta2^t, mu product
 
 
@@ -297,15 +301,22 @@ def _session_record(ck: Checkpoint, path: String) raises -> List[Int64]:
     if len(xi) < 2 or Int(xi[0]) != SESSION_RECORD_VERSION:
         raise Error("mojolearn: '" + path + "' holds an unknown session record version")
     var K = Int(xi[1])
-    if (K < 1 or K != ck.j_count() or len(xi) != 2 + 2 * K + 1 + SESSION_PER_PARAM_INTS * K + 4
-            or len(ck.ext_floats) != SESSION_PER_PARAM_FLOATS * K):
+    if K < 1 or K != ck.j_count() or len(xi) != 2 + 2 * K + 1 + SESSION_PER_PARAM_INTS * K + 4:
         raise Error("mojolearn: '" + path + "' holds a damaged session record")
+    var thirds = 0
     for i in range(K):  # driver-loop: over parameter tensors
         var rows = Int(xi[2 + 2 * i])
         var cols = Int(xi[3 + 2 * i])
         if rows < 1 or cols < 1 or ck.offsets[i + 1] - ck.offsets[i] != rows * cols:
             raise Error(String(CKPT_REFUSE_SHAPE) + ": '" + path + "' tensor p" + String(i)
                         + " does not hold its recorded shape")
+        var third = Int(xi[2 + 2 * K + 1 + SESSION_PER_PARAM_INTS * i + 3])
+        if third != 0 and third != 1:
+            raise Error("mojolearn: '" + path + "' holds a damaged session record")
+        thirds += third * rows * cols
+    # the per-parameter scalars, then the third state buffers of the parameters that have one
+    if len(ck.ext_floats) != SESSION_PER_PARAM_FLOATS * K + thirds:
+        raise Error("mojolearn: '" + path + "' holds a damaged session record")
     return xi^
 
 
@@ -585,10 +596,12 @@ def ops_save_state[E: Exec & Movable & Deinitable, KIND: Int](
     xi.append(Int64(1) if opt != 0 else Int64(0))
     var xf = List[Float32]()
     var first_step = 0
+    var thirds = List[Int](length=K, fill=0)  # each parameter's third state buffer snapshot (0: none)
     for i in range(K):  # driver-loop: over parameter handles
         var off = ck.offsets[i]
         p[].download(hs[i], FP(unsafe_from_address=Int(ck.param.unsafe_ptr())) + off)
         if opt == 0:
+            xi.append(Int64(0))
             xi.append(Int64(0))
             xi.append(Int64(0))
             xi.append(Int64(0))
@@ -599,9 +612,7 @@ def ops_save_state[E: Exec & Movable & Deinitable, KIND: Int](
         # (step, beta1^t, beta2^t, mu product, buffer copies): the words
         # load_optimizer_state takes back
         var w = p[].optimizer_state(opt, hs[i])
-        if w[6] != 0:
-            raise Error("ops_save_state: this optimizer keeps a third state buffer, which the "
-                        + "session checkpoint does not hold")
+        thirds[i] = w[6]
         if w[4] != 0:
             p[].download(w[4], FP(unsafe_from_address=Int(ck.m_state.unsafe_ptr())) + off)
             p[].free(w[4])
@@ -613,9 +624,20 @@ def ops_save_state[E: Exec & Movable & Deinitable, KIND: Int](
         xi.append(Int64(w[0]))
         xi.append(Int64(1) if w[4] != 0 else Int64(0))
         xi.append(Int64(1) if w[5] != 0 else Int64(0))
+        xi.append(Int64(1) if w[6] != 0 else Int64(0))
         xf.append(w[1])
         xf.append(w[2])
         xf.append(w[3])
+    # the third state buffers (centered RMSprop's gradient average) after every parameter's scalars, in order
+    for i in range(K):  # driver-loop: over parameter handles (their third state buffers)
+        if thirds[i] == 0:
+            continue
+        var words = ck.offsets[i + 1] - ck.offsets[i]
+        var third_at = len(xf)
+        xf.resize(third_at + words, Float32(0))
+        # the download writes the host words before it returns (sequence/exec_device.mojo download)
+        p[].download(thirds[i], FP(unsafe_from_address=Int(xf.unsafe_ptr())) + third_at)
+        p[].free(thirds[i])
     var lo = counters[0]
     var hi = counters[1]
     xi.append(Int64(lo))
@@ -659,26 +681,33 @@ def ops_load_state[E: Exec & Movable & Deinitable, KIND: Int](
     var p = ops_session[E, KIND](sid)
     var res = SessionStateLoad()
     var at = 2 + 2 * K + 1
+    var third_at = SESSION_PER_PARAM_FLOATS * K  # the next third state buffer's words in the extension's floats
     for i in range(K):  # driver-loop: over parameter tensors
         var rows = Int(xi[2 + 2 * i])
         var cols = Int(xi[3 + 2 * i])
         var off = ck.offsets[i]
         var h = _upload_slice(p[], ck.param, off, rows, cols, grad)
         res.handles.append(h)
+        var base = at + SESSION_PER_PARAM_INTS * i
+        var third_here = third_at
+        if xi[base + 3] != 0:
+            third_at += rows * cols
         if opt == 0:
             continue
-        var base = at + SESSION_PER_PARAM_INTS * i
         var hm = 0
         var hv = 0
+        var h3 = 0
         if xi[base + 1] != 0:
             hm = _upload_slice(p[], ck.m_state, off, rows, cols, False)
         if xi[base + 2] != 0:
             hv = _upload_slice(p[], ck.v_state, off, rows, cols, False)
+        if xi[base + 3] != 0:
+            h3 = _upload_slice(p[], ck.ext_floats, third_here, rows, cols, False)
         var ints = List[Int]()
         ints.append(Int(xi[base]))
         ints.append(hm)
         ints.append(hv)
-        ints.append(0)
+        ints.append(h3)
         var fs = List[Float32]()
         for k in range(SESSION_PER_PARAM_FLOATS):  # driver-loop: over the three bias-correction words
             fs.append(ck.ext_floats[SESSION_PER_PARAM_FLOATS * i + k])
@@ -687,6 +716,8 @@ def ops_load_state[E: Exec & Movable & Deinitable, KIND: Int](
             p[].free(hm)
         if hv != 0:
             p[].free(hv)
+        if h3 != 0:
+            p[].free(h3)
     var c = at + SESSION_PER_PARAM_INTS * K
     res.has_opt = has_opt
     for i in range(4):  # driver-loop: over the four counters
