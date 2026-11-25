@@ -82,7 +82,9 @@ NEURAL_INFERENCE = frozenset(('hf-causal-lm', 'byte-lm-host-infer',
                               'mamba2-decode-session', 'mamba3-decode-session',
                               'training-mlp-sessions',
                               # lane verify-gaps-20261022: loaded weights, decode only
-                              'hf-causal-lm-text'))
+                              'hf-causal-lm-text',
+                              # fixed15-parts-verify (2026-11-25): loaded weights, forward only, per-part profile
+                              'numeric-profile-parts'))
 
 
 def neural_training_lanes(harness, surface):
