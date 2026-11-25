@@ -162,8 +162,6 @@ class _RecurrentRegressor(_RecurrentBase):
         y : array-like of shape (n_samples,) or (n_samples, n_outputs)
             Targets; with ``output='sequence'``, (n_samples, n_timesteps)
             or (n_samples, n_timesteps, n_outputs), a target at every step.
-            With ``lengths``, the labels of padded steps are not read: a
-            classifier's ``classes_`` are the labels of valid steps.
         lengths : array-like of shape (n_samples,), default None
             Each sequence's number of valid steps, from 1 to n_timesteps.
             Steps past a sequence's length are padding: they never enter
@@ -275,7 +273,9 @@ class _RecurrentClassifier(_RecurrentBase):
             Training sequences; shorter sequences are padded to n_timesteps.
         y : array-like of shape (n_samples,)
             Class labels; with ``output='sequence'``, (n_samples,
-            n_timesteps), a label at every step.
+            n_timesteps), a label at every step. With ``lengths``, the
+            labels of padded steps are not read: ``classes_`` holds the
+            labels of valid steps.
         lengths : array-like of shape (n_samples,), default None
             Each sequence's number of valid steps, from 1 to n_timesteps.
             Steps past a sequence's length are padding: they never enter
