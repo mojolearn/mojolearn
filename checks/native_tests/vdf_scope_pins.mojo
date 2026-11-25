@@ -53,8 +53,8 @@ def _same(a: List[Float32], b: List[Float32], label: String) raises:
         require(a[i].to_bits() == b[i].to_bits(), label + ": word " + String(i) + " differs")
 
 
-def _host_case(case: Int) raises:
-    if case == 0:
+def _host_case(which: Int) raises:
+    if which == 0:
         var plan = MemberPlan()
         plan.pin = 11
         plan.y_pin = 22
@@ -99,13 +99,13 @@ def _host_case(case: Int) raises:
 
 def test_host_fixtures() raises:
     comptime if CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _host_case(case)
+        def body(which: Int) raises:
+            _host_case(which)
 
         check_cases("vdf_scope_pins host", 2, body)
 
 
-def _device_case(case: Int) raises:
+def _device_case(which: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         var x = List[Float32](length=FN * FD, fill=0.0)
         var y = List[Float32](length=FN, fill=0.0)
@@ -136,7 +136,7 @@ def _device_case(case: Int) raises:
         var ids = List[Int]()
         var failure = String("")
         try:
-            if case == 0:
+            if which == 0:
                 var by = store[].put(store_ctx, Int(y.unsafe_ptr()), FN)
                 ids.append(by)
                 var bw = store[].put(store_ctx, Int(w64.unsafe_ptr()), 2 * FN)  # float64: two words a row
@@ -199,8 +199,8 @@ def _device_case(case: Int) raises:
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(which: Int) raises:
+            _device_case(which)
 
         check_cases_serial("vdf_scope_pins device", 2, body)
 
