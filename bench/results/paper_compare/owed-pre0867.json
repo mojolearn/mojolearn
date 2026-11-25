@@ -1240,6 +1240,11 @@
    "owed": "DECIDED",
    "status": "ALL MEMBERS DECIDED 2026-11-24 (lane ab-outcome-4): built and timed in job nvc1-0004; its three members are decided (dbscan-brute-eps-filter: default by cost rule; gemm-stage-up-off: raw upload the only form; ssd-occupancy-off: deleted). Members were dbscan-brute-eps-filter, gemm-stage-up-off, ssd-occupancy-off. Was: COMBINED B SET, build only (lane ab-outcome-3, 2026-11-24, wave-3 A/B): tools/release.py candidate --owed-arm set-w3a builds one wheel set with the three members' defines; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>). The members touch disjoint code (dbscan/impl brute eps path; gemm/host_transport.mojo float32 upload; mamba/impl/modules/ssd_minimal.mojo) and their rows (dbscan; gemm; mamba2-forward/-infer) reach no other member's code.",
    "evidence": "A/B nvc-ab-20261124T182912Z-977cc8 (NVIDIA L40S, wheel 71db45de5d, job nvc1-0004): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md section \"Job nvc1-0004\""
+  },
+  "gbdt-quant-device": {
+   "define": "MOJOLEARN_GBDT_QUANT_DEVICE",
+   "status": "define in code (gbdt/gpu_data/sym_feat_switches.mojo GBDT_QUANT_DEVICE; refusal texts gbdt/train.mojo), opt-in on any GPU image, default off since df186b87a8 (lane w3-integrate-9: vdf-scope-trees4 had promoted it with no A/B, reverted under \"a measured winner is never deleted on reasoning\"): B = the device quantizer (float columns resident once, a row-major X transposed on the device, border and index builds read in place; the image answers XG_CAP_FIT_SLOT_X so a model-selection fold reaches the fit as the fold X word); A = the default staged per-chunk upload path. Same kernels: digests must equal A on every column. EXPERIMENTS.md row MOJOLEARN_GBDT_QUANT_DEVICE PENDING. Entry added by w3-fix-8 (2026-11-25): the A/B was already owed (vdf-scope-trees4), bookkeeping only, no new A/B.",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -1382,7 +1387,9 @@
    ],
    "dataset": "*",
    "rows": "full",
-   "decides": "candidate <= 0.8.66 (0.971 ms both vendors); slower = fix the shared tape GEMM, not a model-keyed route"
+   "decides": "candidate <= 0.8.66 (0.971 ms both vendors); slower = fix the shared tape GEMM, not a model-keyed route",
+   "owed": "RUN",
+   "note": "[w3-fix-8 (2026-11-25): marked RUN: night-decisions 2.9 priority A 4 (candidate beside prior); mlp-infer gave no cell in nvc1-0004 and nvc1-0007 (it runs the host oracle): night-decisions 4.3 owns that harness defect]"
   },
   {
    "id": "transformer-forward-fresh",
@@ -5409,7 +5416,9 @@
     "mlp-reg": "held-out rmse (relative 0.05)",
     "gemm": "max_rel_err_vs_fp64: 0.01"
    },
-   "decides": "per row: B becomes the default of the NVIDIA fast set for that family only if it is faster than A beyond the noise floor AND every quality field is inside its tolerance against A; a row with a quality drop keeps FP32 whatever its time. B2 replaces B1 only if it is faster with quality equal. DECIDED 2026-11-20 (lane fx-verdicts6, A/B abf2): fast-matrix-units-tf32-all is the default of the fast set; what is owed on this row is the confirming pair fast-rows (the route) against fast-matrix-units-off (the exact route), after which the old path is deleted."
+   "decides": "per row: B becomes the default of the NVIDIA fast set for that family only if it is faster than A beyond the noise floor AND every quality field is inside its tolerance against A; a row with a quality drop keeps FP32 whatever its time. B2 replaces B1 only if it is faster with quality equal. DECIDED 2026-11-20 (lane fx-verdicts6, A/B abf2): fast-matrix-units-tf32-all is the default of the fast set; what is owed on this row is the confirming pair fast-rows (the route) against fast-matrix-units-off (the exact route), after which the old path is deleted.",
+   "owed": "RUN",
+   "note": "[w3-fix-8 (2026-11-25): marked RUN: arm fast-matrix-units-off is RUN: owed is only the confirming pair fast-rows against fast-matrix-units-off (EXPERIMENTS.md KEPT as the old path); tf32 arms DECIDED]"
   },
   {
    "id": "fast-bf16-units-board",
@@ -5502,7 +5511,9 @@
     "time",
     "max_rel_err_vs_fp64"
    ],
-   "decides": "each constant of matrix_units_takes (K 32, edge 64, work 2^27): moved to where B stops being faster than A; a shape the rule routes that is slower in B is a rule defect DECIDED 2026-11-20 (lane fx-verdicts6, A/B abf2): fast-matrix-units-tf32-all is the default of the fast set; what is owed on this row is the confirming pair fast-rows (the route) against fast-matrix-units-off (the exact route), after which the old path is deleted."
+   "decides": "each constant of matrix_units_takes (K 32, edge 64, work 2^27): moved to where B stops being faster than A; a shape the rule routes that is slower in B is a rule defect DECIDED 2026-11-20 (lane fx-verdicts6, A/B abf2): fast-matrix-units-tf32-all is the default of the fast set; what is owed on this row is the confirming pair fast-rows (the route) against fast-matrix-units-off (the exact route), after which the old path is deleted.",
+   "owed": "RUN",
+   "note": "[w3-fix-8 (2026-11-25): marked RUN: as fast-matrix-units-board: the confirming pair only]"
   },
   {
    "id": "fast-bf16-units-shapes",
@@ -5611,7 +5622,9 @@
     "held-out accuracy / log_loss",
     "loss per step for all 200 steps (divergence check), held-out loss"
    ],
-   "decides": "training with TF32 products does not diverge where FP32 does not: the B loss curve stays within 0.05 relative of A at every recorded step and the held-out loss within 0.05 relative DECIDED 2026-11-20 (lane fx-verdicts6, A/B abf2): fast-matrix-units-tf32-all is the default of the fast set; what is owed on this row is the confirming pair fast-rows (the route) against fast-matrix-units-off (the exact route), after which the old path is deleted."
+   "decides": "training with TF32 products does not diverge where FP32 does not: the B loss curve stays within 0.05 relative of A at every recorded step and the held-out loss within 0.05 relative DECIDED 2026-11-20 (lane fx-verdicts6, A/B abf2): fast-matrix-units-tf32-all is the default of the fast set; what is owed on this row is the confirming pair fast-rows (the route) against fast-matrix-units-off (the exact route), after which the old path is deleted.",
+   "owed": "RUN",
+   "note": "[w3-fix-8 (2026-11-25): marked RUN: as fast-matrix-units-board: the confirming pair only]"
   },
   {
    "id": "fast-bf16-units-nonboard",
@@ -5759,8 +5772,9 @@
    "b_arms": [
     "identity-nan-canon-off"
    ],
-   "owed": "RUN",
-   "decides": "after the promotion of 2026-11-20 (lane fx-verdicts5; cost: gemm 0.917 inside the row's spread, transformer-decode 1.009): keep the default (the candidate) unless the old form (B, arm identity-nan-canon-off) is faster at equal quality and digests; B not faster: delete the old path and its _OFF switch. Before 2026-11-20 this row read: B becomes the default (with -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF as the A/B switch until measured on the release) if its cost is within the pair's noise on the NVIDIA L40S, base and arm back to back in one job: the gemm row (the pass reads the 64 MB product once on the host, per chunk, while the copy engine fills the other stage half), the mlp-infer row (one pass over the returned predictions) and one decode row (transformer-decode: no pass on its path, the control). Digests must not move on these rows (their outputs hold no NaN; a moved digest is a defect). Time also the neighbouring shape 2048 x 3072 x 1024 and a non-board product of standard normal draws 3000 x 3000 x 3000 before a flip (no dimension targeting). Before the flip the native check nan_canon must pass on the CPU and GPU columns from a build with the define (exact words against the oracle on +-inf / +-FLT_MAX operands). A loser is deleted with the four tombstone parts and the vendor NaN word stays in the contract (IDENTITY_PATHS row 39)"
+   "owed": "DECIDED",
+   "decides": "after the promotion of 2026-11-20 (lane fx-verdicts5; cost: gemm 0.917 inside the row's spread, transformer-decode 1.009): keep the default (the candidate) unless the old form (B, arm identity-nan-canon-off) is faster at equal quality and digests; B not faster: delete the old path and its _OFF switch. Before 2026-11-20 this row read: B becomes the default (with -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF as the A/B switch until measured on the release) if its cost is within the pair's noise on the NVIDIA L40S, base and arm back to back in one job: the gemm row (the pass reads the 64 MB product once on the host, per chunk, while the copy engine fills the other stage half), the mlp-infer row (one pass over the returned predictions) and one decode row (transformer-decode: no pass on its path, the control). Digests must not move on these rows (their outputs hold no NaN; a moved digest is a defect). Time also the neighbouring shape 2048 x 3072 x 1024 and a non-board product of standard normal draws 3000 x 3000 x 3000 before a flip (no dimension targeting). Before the flip the native check nan_canon must pass on the CPU and GPU columns from a build with the define (exact words against the oracle on +-inf / +-FLT_MAX operands). A loser is deleted with the four tombstone parts and the vendor NaN word stays in the contract (IDENTITY_PATHS row 39)",
+   "evidence": "KEPT, not a speed A/B: docs/apple-fast/EXPERIMENTS.md row MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF \"CLOSED 2026-11-23: KEPT (identity needs it)\"; arm identity-nan-canon-off is DECIDED (lane ab-prep): B returns the vendor NaN word and gives up identical bits, so it cannot win; the canon is the default on every column (core/nan_canon.mojo:78); the _OFF switch stays only for the release verification (core/nan_canon.mojo:69). Stale RUN mark corrected by w3-fix-8 (2026-11-25)."
   },
   {
    "id": "fast-decomp-matrix-units-board",
@@ -6008,7 +6022,9 @@
     "transport beside the product: upload_ms, download_fresh_ms, download_ms (the row's upload_ms_separate)",
     "narrow_once_ms"
    ],
-   "decides": "whether the half-precision unit is faster than the TF32 unit on the multiply itself (bf16-resident against tf32-unit, expected about 2x from the stored torch kernel rates 102.9 / 186.0 TFLOP/s of bench/results/gemm-ceiling-20260930), what the per-call narrowing of the deleted arm cost (bf16-percall against bf16-resident), and how the public gemm row's clock splits into transport and product; a bf16-resident line slower than tf32-unit at 8192 means the MAX bf16 product does not reach the half-precision unit and is reported to Modular, not worked around"
+   "decides": "whether the half-precision unit is faster than the TF32 unit on the multiply itself (bf16-resident against tf32-unit, expected about 2x from the stored torch kernel rates 102.9 / 186.0 TFLOP/s of bench/results/gemm-ceiling-20260930), what the per-call narrowing of the deleted arm cost (bf16-percall against bf16-resident), and how the public gemm row's clock splits into transport and product; a bf16-resident line slower than tf32-unit at 8192 means the MAX bf16 product does not reach the half-precision unit and is reported to Modular, not worked around",
+   "owed": "RUN",
+   "note": "[w3-fix-8 (2026-11-25): marked RUN: arm fast-bf16-resident is RUN (EXPERIMENTS.md PENDING); one build, A and B are lines of one program run]"
   },
   {
    "id": "kernel-clock-units-aspect",
@@ -6044,7 +6060,9 @@
     "launches_per_call",
     "max_rel_diff_vs_fp32"
    ],
-   "decides": "that the square ladder's verdict is not a property of the square: the unit ranking must hold at equal work in three aspects; an aspect where bf16-resident loses to tf32-unit is excluded from any later route by a size reason stated in the code, never by a shape list"
+   "decides": "that the square ladder's verdict is not a property of the square: the unit ranking must hold at equal work in three aspects; an aspect where bf16-resident loses to tf32-unit is excluded from any later route by a size reason stated in the code, never by a shape list",
+   "owed": "RUN",
+   "note": "[w3-fix-8 (2026-11-25): marked RUN: as kernel-clock-units-square]"
   },
   {
    "id": "kernel-clock-units-layer",
@@ -6092,7 +6110,9 @@
     "launches_per_call",
     "max_rel_diff_vs_fp32"
    ],
-   "decides": "the work below which a product is launch-bound on both units (tf32-unit and bf16-resident equal within the spread): under it bf16 cannot gain in any product route and the TF32 default stays; above it the ratio is the gain a resident route can deliver to a model whose layers are that size"
+   "decides": "the work below which a product is launch-bound on both units (tf32-unit and bf16-resident equal within the spread): under it bf16 cannot gain in any product route and the TF32 default stays; above it the ratio is the gain a resident route can deliver to a model whose layers are that size",
+   "owed": "RUN",
+   "note": "[w3-fix-8 (2026-11-25): marked RUN: as kernel-clock-units-square]"
   },
   {
    "id": "kernel-clock-units-chain",
@@ -6146,7 +6166,9 @@
     "max_rel_diff_vs_fp32 of the chain's output",
     "weight_narrows_total (3: one a weight, however many calls)"
    ],
-   "decides": "whether the resident bf16 arm is wired into the sequence executor's inference chain (sequence/mlp_fit.mojo::mlp_predict: weight images kept with the resident fitted block, the chunk copy narrowing the batch, the epilogue tail storing the next layer's image): only if chain-bf16-resident is faster than chain-tf32 beyond the spread with max_rel_diff_vs_fp32 inside 0.01 at a size and its neighbour; the 4096-row chunks against the whole-batch rows also price the 4096-row chunking of mlp_predict itself on both units"
+   "decides": "whether the resident bf16 arm is wired into the sequence executor's inference chain (sequence/mlp_fit.mojo::mlp_predict: weight images kept with the resident fitted block, the chunk copy narrowing the batch, the epilogue tail storing the next layer's image): only if chain-bf16-resident is faster than chain-tf32 beyond the spread with max_rel_diff_vs_fp32 inside 0.01 at a size and its neighbour; the 4096-row chunks against the whole-batch rows also price the 4096-row chunking of mlp_predict itself on both units",
+   "owed": "RUN",
+   "note": "[w3-fix-8 (2026-11-25): marked RUN: as kernel-clock-units-square]"
   },
   {
    "id": "sgd-ps-preload-board",
@@ -6270,7 +6292,9 @@
     "prior"
    ],
    "vendor": "nvidia",
-   "decides": "RUN OWED with the final measurement build (lane ab-outcome-4, 2026-11-24): the per-pair cost rule dbf_filter_pays (dbscan/impl/brute_eps_filter.mojo, DBF_MIN_FEATURES = 50) against the prior wheel, which runs the reference pass on every shape: 50,000 x 8 must be equal to the prior (the reference on both), 50,000 x 64, 60,000 x 512 and the non-board 200,000 x 100 must be no slower (the filter); the label digest, clusters and noise fraction MUST be equal on both arms. Was (B arm deleted): promote B (the GEMM filter with the exact recheck) where it is faster than A at equal quality on the NVIDIA L40S; the label digest, clusters and noise fraction MUST be equal on both arms (the filter decides a pair only inside a proven error bound, the rest run the reference accumulation; native check dbscan_eps_filter_gpu); record from the PHASE plan.brute_eps_filter line of each fit: gemm_rows, probe_uncertain of pairs, filter True/False; here the digest is labels_sha256 of each case line"
+   "decides": "RUN OWED with the final measurement build (lane ab-outcome-4, 2026-11-24): the per-pair cost rule dbf_filter_pays (dbscan/impl/brute_eps_filter.mojo, DBF_MIN_FEATURES = 50) against the prior wheel, which runs the reference pass on every shape: 50,000 x 8 must be equal to the prior (the reference on both), 50,000 x 64, 60,000 x 512 and the non-board 200,000 x 100 must be no slower (the filter); the label digest, clusters and noise fraction MUST be equal on both arms. Was (B arm deleted): promote B (the GEMM filter with the exact recheck) where it is faster than A at equal quality on the NVIDIA L40S; the label digest, clusters and noise fraction MUST be equal on both arms (the filter decides a pair only inside a proven error bound, the rest run the reference accumulation; native check dbscan_eps_filter_gpu); record from the PHASE plan.brute_eps_filter line of each fit: gemm_rows, probe_uncertain of pairs, filter True/False; here the digest is labels_sha256 of each case line",
+   "owed": "RUN",
+   "note": "[w3-fix-8 (2026-11-25): marked RUN: its decides text is RUN OWED with the final measurement build; night-decisions 2.9 priority A 3 (candidate beside prior 71db45de5d, no arm)]"
   },
   {
    "id": "dbscan-filter-rule-full",
@@ -6397,12 +6421,13 @@
    "b_arms": [
     "emb-unique-rows-off"
    ],
-   "owed": "RUN",
+   "owed": "DECIDED",
    "columns": [
     "time",
     "quality"
    ],
-   "decides": "promote B where it is faster than A at equal quality on the NVIDIA L40S (same pod, same job); otherwise the B arm is deleted with the four tombstone parts"
+   "decides": "promote B where it is faster than A at equal quality on the NVIDIA L40S (same pod, same job); otherwise the B arm is deleted with the four tombstone parts",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md \"Old paths behind _OFF, DELETE\": emb-unique-rows-off 2 cells median 1.01; arm DELETED by lane ab-outcome-2 (define refused, core/experiment_guards_neural.mojo). Stale RUN mark corrected by w3-fix-8 (2026-11-25)."
   },
   {
    "id": "prep-take-view-all",
@@ -6561,7 +6586,37 @@
     "msel-units-gpu-parallel"
    ],
    "decides": "promote B (parallel GPU units) with a _OFF define when it is faster at equal digests and quality on the rows; slower, noise, a crash or a digest change -> delete the arm with tombstones",
-   "note": "lane ab-outcome-4 (2026-11-24): the board races for every lane here exist in tools/bench_board_algos.py (algos family, both datasets, rows full); job nvc1-0004 smoke-refused 14 of them on the importlib defect fixed by 941384d905, so time them with a build at or after that sha; ours only on both arms (base and B), the board's explicit parameters"
+   "note": "lane ab-outcome-4 (2026-11-24): the board races for every lane here exist in tools/bench_board_algos.py (algos family, both datasets, rows full); job nvc1-0004 smoke-refused 14 of them on the importlib defect fixed by 941384d905, so time them with a build at or after that sha; ours only on both arms (base and B), the board's explicit parameters [w3-fix-8 (2026-11-25): marked RUN: its arm is RUN (NOT DECIDED in job nvc1-0004); night-decisions 2.9 priority A 2; only after the resident-owner item 4.1 is in H]",
+   "owed": "RUN"
+  },
+  {
+   "id": "gbdt-quant-device-rows",
+   "source": "lane w3-integrate-9 item 0 (df186b87a8, 2026-11-25): the device quantizer back to opt-in; ~/mojolearn-evidence/briefs-20261122/night-decisions.md 2.9 priority A 1; entry added by w3-fix-8 (2026-11-25)",
+   "kind": "ab",
+   "lane": [
+    "gbdt-symmetric",
+    "gbdt-symmetric-1000",
+    "gbdt-ordered",
+    "gbdt-depthwise",
+    "gbdt-lossguide",
+    "gbdt-multiclass",
+    "gbdt-categorical",
+    "gbdt-rank-pairlogit",
+    "gbdt-rank-yetirank"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gbdt-quant-device"
+   ],
+   "owed": "RUN",
+   "columns": [
+    "time",
+    "quality",
+    "fit digest"
+   ],
+   "decides": "the GBDT fit rows the board already has, full data: promote B with a _OFF define where it is faster than A beyond noise at equal quality and equal fit digest on the NVIDIA L40S (same pod, same job); slower, noise or a crash -> delete the arm with the four tombstone parts; a B GPU digest that differs from A (or from the CPU column) breaks identical: stop and ask Andrew (night-decisions.md section 3)"
   }
  ]
 }
