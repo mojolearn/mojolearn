@@ -726,6 +726,7 @@ def _qd_upload_float_columns(
     x_row_major: Bool,
     x_src: MutPointer[Float32, MutUntrackedOrigin],
     x_word: Int = 0,
+    src_on_device: Bool = False,
 ) raises -> DeviceBuffer[DType.float32]:
     """lane/apple-fast-sym-feat (`GBDT_QUANT_DEVICE`): the float columns
     resident on the device, column-major in `dev_col_of` order, uploaded
@@ -733,45 +734,71 @@ def _qd_upload_float_columns(
     (no pinned memcpy, as `device_float_borders` already did per chunk); a
     row-major caller's rows go up as handed over and
     `transpose_rows_to_columns_kernel` lays them out (every column is then
-    a raw float column, `train` has refused anything else)."""
-    var mat = ctx.enqueue_create_buffer[DType.float32](
-        max(1, n_float * n_rows)
-    )
+    a raw float column, `train` has refused anything else).
+    `src_on_device` (lane vdf2-gbdtcat): `column_ptrs` point into `train`'s
+    device copy of the fold slot, copied device to device."""
     if n_float == 0:
-        return mat^
+        return ctx.enqueue_create_buffer[DType.float32](1)
     if x_row_major:
-        var raw = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-        if x_word < 0:
-            # THE FOLD X WORD (lane vdf-scope-trees4): the fold's rows, taken
-            # on the device into an x_prep store slot, copied device to
-            # device; the same words in the same order as the host rows
-            fold_x_fill(ctx, raw, x_word, n_rows * n_features)
-        else:
-            ctx.enqueue_copy(
-                dst_buf=raw,
-                src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](x_src),
-            )
-        var gy = min((n_rows + TR_TILE - 1) // TR_TILE, TR_MAX_GRID_Y)
-        ctx.enqueue_function[transpose_rows_to_columns_kernel](
-            mat.unsafe_ptr(), raw.unsafe_ptr(), Int32(n_rows), Int32(n_features),
-            grid_dim=((n_features + TR_TILE - 1) // TR_TILE, gy, 1),
-            block_dim=(TR_TILE, TR_ROWS_PER_PASS, 1),
-        )
-        # the raw rows are read by the transpose only; drain before they go
-        ctx.synchronize()
-        _ = raw^
-        return mat^
+        return _rows_to_device_columns(ctx, x_src, x_word, n_rows, n_features)
+    var mat = ctx.enqueue_create_buffer[DType.float32](n_float * n_rows)
     for c in range(len(column_ptrs)):
         var k = dev_col_of[c]
         if k < 0:
             continue
         var view = mat.create_sub_buffer[DType.float32](k * n_rows, n_rows)
+        if src_on_device:
+            # the column is a view into `train`'s device copy of the fold
+            # slot (lane vdf2-gbdtcat): device to device
+            var column = DeviceBuffer[DType.float32](
+                ctx, rebind[UnsafePointer[Float32, MutAnyOrigin]](column_ptrs[c]),
+                n_rows, owning=False,
+            )
+            ctx.enqueue_copy(dst_buf=view, src_buf=column)
+            _ = column^
+        else:
+            ctx.enqueue_copy(
+                dst_buf=view,
+                src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](
+                    column_ptrs[c]
+                ),
+            )
+    return mat^
+
+
+def _rows_to_device_columns(
+    ctx: DeviceContext,
+    x_src: MutPointer[Float32, MutUntrackedOrigin],
+    x_word: Int,
+    n_rows: Int,
+    n_features: Int,
+) raises -> DeviceBuffer[DType.float32]:
+    """Row-major rows (`x_src` host rows, or the fold slot when `x_word < 0`)
+    as a column-major device matrix of `n_features` columns of `n_rows`: one
+    copy (device to device for the slot) and
+    `transpose_rows_to_columns_kernel`. The same words in the same order as
+    the host rows."""
+    var mat = ctx.enqueue_create_buffer[DType.float32](max(1, n_rows * n_features))
+    var raw = ctx.enqueue_create_buffer[DType.float32](max(1, n_rows * n_features))
+    if x_word < 0:
+        # THE FOLD X WORD (lane vdf-scope-trees4): the fold's rows, taken
+        # on the device into an x_prep store slot, copied device to
+        # device; the same words in the same order as the host rows
+        fold_x_fill(ctx, raw, x_word, n_rows * n_features)
+    else:
         ctx.enqueue_copy(
-            dst_buf=view,
-            src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](
-                column_ptrs[c]
-            ),
+            dst_buf=raw,
+            src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](x_src),
         )
+    var gy = min((n_rows + TR_TILE - 1) // TR_TILE, TR_MAX_GRID_Y)
+    ctx.enqueue_function[transpose_rows_to_columns_kernel](
+        mat.unsafe_ptr(), raw.unsafe_ptr(), Int32(n_rows), Int32(n_features),
+        grid_dim=((n_features + TR_TILE - 1) // TR_TILE, gy, 1),
+        block_dim=(TR_TILE, TR_ROWS_PER_PASS, 1),
+    )
+    # the raw rows are read by the transpose only; drain before they go
+    ctx.synchronize()
+    _ = raw^
     return mat^
 
 
@@ -1474,6 +1501,29 @@ def train(
         x_src = rebind[MutPointer[Float32, MutUntrackedOrigin]](
             x_colmajor.unsafe_ptr()
         )
+    # THE FOLD X WORD WITH FEATURE FLAGS (lane vdf2-gbdtcat). A fold fit with
+    # one-hot (or categorical) columns cannot take the row-major route, which
+    # reads raw float columns only: its rows come from the fold slot, laid
+    # out column-major ON THE DEVICE once (`_rows_to_device_columns`), and
+    # every reader below takes that copy where it is: the categorical scans
+    # (`src_on_device`), the float matrix (device to device), the one-hot
+    # columns (resident, binarized in place). X never comes to the host.
+    var x_on_device = x_word < 0 and not x_row_major
+    # (no buffer at all on every other fit: nothing is added per call there)
+    var x_dev_cols: Optional[DeviceBuffer[DType.float32]] = None
+    if x_on_device:
+        comptime if not GBDT_QUANT_DEVICE:
+            raise Error(
+                "gbdt fit: a fold X word is served only by the device"
+                " quantizer (built with -D MOJOLEARN_GBDT_QUANT_DEVICE_OFF)"
+            )
+        var mat = _rows_to_device_columns(
+            ctx, x_src, x_word, n_rows, n_features
+        )
+        x_src = rebind[MutPointer[Float32, MutUntrackedOrigin]](
+            mat.unsafe_ptr()
+        )
+        x_dev_cols = Optional(mat^)
     if target_dim < 1:
         raise Error("target_dim must be positive, got " + String(target_dim))
     if target_dim != 1 and loss != "MultiRMSE":
@@ -1854,7 +1904,7 @@ def train(
         for f in range(n_features):
             if len(cat_features) == n_features and cat_features[f]:
                 var dc = device_dense_codes(
-                    ctx, x_src + f * n_rows, n_rows, f
+                    ctx, x_src + f * n_rows, n_rows, f, x_on_device
                 )
                 symctr_unique.append(dc.unique_values)
                 symctr_counts.append(dc.counts.copy())
@@ -1880,7 +1930,9 @@ def train(
         for f in range(n_features):
             if not (len(cat_features) == n_features and cat_features[f]):
                 continue
-            var maxc = cat_column_max_code(ctx, x_src + f * n_rows, n_rows, f)
+            var maxc = cat_column_max_code(
+                ctx, x_src + f * n_rows, n_rows, f, x_on_device
+            )
             if maxc + 1 > cat_params.one_hot_max_size:
                 has_permutation_features = True
                 break
@@ -1899,7 +1951,9 @@ def train(
         for f in range(n_features):
             if not cat_features[f]:
                 continue
-            var maxc_o = cat_column_max_code(ctx, x_src + f * n_rows, n_rows, f)
+            var maxc_o = cat_column_max_code(
+                ctx, x_src + f * n_rows, n_rows, f, x_on_device
+            )
             if maxc_o + 1 > cat_params.one_hot_max_size:
                 ordered_ctr_column = True
                 break
@@ -2203,21 +2257,19 @@ def train(
                 # left resident): no host loop over the rows. Exact integers,
                 # so the codes, the cardinality and every table built from
                 # them are the host loop's.
-                var dc = device_dense_codes(ctx, x_src + f * n_rows, n_rows, f)
+                var dc = device_dense_codes(
+                    ctx, x_src + f * n_rows, n_rows, f, x_on_device
+                )
                 unique_values = dc.unique_values
                 dcodes = dc.codes
                 have_dcodes = True
                 if unique_values <= cat_params.one_hot_max_size:
-                    # the raw column is the code column (validated above)
-                    var col = List[Float32]()
-                    col.resize(unsafe_uninit_length=n_rows)
-                    unsafe_memcpy(
-                        dest=col.unsafe_ptr(),
-                        src=x_src + f * n_rows,
-                        count=n_rows,
-                    )
-                    columns.append(col^)
-                    column_src_feature.append(-1)
+                    # the raw column is the code column (validated above),
+                    # read in place like a raw column, as the default walk
+                    # reads it (lane vdf2-gbdtcat; was a host copy of the
+                    # same floats, which a device X cannot give)
+                    columns.append(List[Float32]())
+                    column_src_feature.append(f)
                     column_one_hot.append(True)
                     column_ctr_grid.append(-1)
                     column_dev_slot.append(-1)
@@ -2429,7 +2481,7 @@ def train(
         var codes = List[UInt32]()
         var d_codes = ctx.enqueue_create_buffer[DType.uint32](n_rows)
         var cscan = cat_column_codes_resident(
-            ctx, x_src + f * n_rows, n_rows, f, codes, d_codes
+            ctx, x_src + f * n_rows, n_rows, f, codes, d_codes, x_on_device
         )
         var maxc = cscan.max_code
         var unique_values = maxc + 1
@@ -2595,6 +2647,28 @@ def train(
     for k in range(len(dep_col_index)):  # small-loop(dep_col_index: dependent column plan): one ordinal per dependent column, no data
         dep_ordinal_of_column[dep_col_index[k]] = k
 
+    # lane vdf2-gbdtcat: on a device X every one-hot column read from X is a
+    # RESIDENT column, a view into `x_dev_cols` (the index builds binarize
+    # it in place, its NaN treatment is AsIs); the float columns go to the
+    # float matrix device to device below. No column of X is staged.
+    if x_on_device:
+        for c in range(n_columns):  # small-loop(n_columns: column plan entries): one device view handle per one-hot column, no element read
+            if (
+                column_src_feature[c] >= 0
+                and column_one_hot[c]
+                and column_dev_slot[c] < 0
+            ):
+                column_dev_slot[c] = len(ctr_dev_cols)
+                ctr_dev_cols.append(
+                    DeviceBuffer[DType.float32](
+                        ctx,
+                        rebind[UnsafePointer[Float32, MutAnyOrigin]](
+                            x_src + column_src_feature[c] * n_rows
+                        ),
+                        n_rows,
+                        owning=False,
+                    )
+                )
     # DEVIATION 2550: one read pointer per column, into `x_src` for a
     # borrowed column and into `columns` for an owned one. `columns` takes
     # no further appends, so its element buffers stay put. A CTR column's
@@ -2636,11 +2710,9 @@ def train(
                 "gbdt_fit_rowmajor: a row-major fit takes raw float columns"
                 " only (no categorical, one-hot or CTR columns)"
             )
-        if x_word < 0 and not x_row_major:
-            raise Error("gbdt fit: a fold X word names row-major rows (x_row_major)")
         var mat = _qd_upload_float_columns(
             ctx, column_ptrs, qd_col_of, qd_n_float, n_rows, n_features,
-            x_row_major, x_src, x_word,
+            x_row_major, x_src, x_word, x_on_device,
         )
         qd_cols = Optional(mat.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
         qd_mat = Optional(mat^)
@@ -2679,6 +2751,7 @@ def train(
         pre_borders=symctr_pre_b,
         pre_folds=symctr_pre_f,
         tree_slot_folds=tree_slot_folds,
+        cols_on_device=x_on_device,
     )
     var borders = grid[0].copy()
     var fold_counts = grid[1].copy()
@@ -2770,6 +2843,11 @@ def train(
     # so the resident float matrix can go now
     _ = qd_mat^
     _ = qd_cols^
+    # the device copy of a fold slot (lane vdf2-gbdtcat): every view into it
+    # (`column_ptrs`, the resident one-hot columns) was last read by the
+    # index builds above, which drained
+    _ = ctr_dev_cols^
+    _ = x_dev_cols^
     host_times.stop_host("train_cindex_build", t_phase)
     t_phase = host_times.start()
 
@@ -3559,6 +3637,9 @@ def _quantize_training_columns(
     # every other column); empty when the fit has none. A slot is not read:
     # it takes the synthetic grid 0.5, 1.5, ... of that many borders.
     tree_slot_folds: List[Int] = List[Int](),
+    # lane vdf2-gbdtcat: `column_ptrs` are device addresses (`train`'s copy
+    # of a fold slot); the one-hot scan reads them in place
+    cols_on_device: Bool = False,
 ) raises -> Tuple[List[List[Float32]], List[Int], List[Int]]:
     """Shared grid builder for ordinary training and reusable numeric pools.
 
@@ -3674,7 +3755,9 @@ def _quantize_training_columns(
                 continue
         var flagged = column_one_hot[f]
         if flagged:
-            var maxc = onehot_column_max_code(ctx, cps[f], n_rows, f)
+            var maxc = onehot_column_max_code(
+                ctx, cps[f], n_rows, f, cols_on_device
+            )
             if maxc > 254:
                 raise Error("one-hot feature " + String(f)
                             + " has more than 255 categories")
