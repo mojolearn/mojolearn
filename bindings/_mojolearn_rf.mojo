@@ -941,7 +941,7 @@ def _rf_store_op(op: Int, a: List[Int], p: List[Int]) raises -> Int:
         return 0
     if op == XP_DEV_TAKE_ROWS:
         return store[].take_rows(rf_store_ctx(), p[0], p[1], a[0], p[2])
-    return Int(store[].live)
+    return store[].live_count()
 
 
 def rf_gpu_store_transport_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,

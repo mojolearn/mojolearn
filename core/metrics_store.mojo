@@ -25,9 +25,9 @@ from x_prep.transport_abi import XP_TRANSPORT_ABI
 comptime _DEVCTX_SLOT = ("MojolearnMetricsContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
                          else "MojolearnMetricsContextFastV3")
 
-comptime METRICS_STORE = SharedSlot[DeviceStore, ("MojolearnMetricsStoreIdenticalV1"
+comptime METRICS_STORE = SharedSlot[DeviceStore, ("MojolearnMetricsStoreIdenticalV2"
                                                   if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-                                                  else "MojolearnMetricsStoreFastV1")]
+                                                  else "MojolearnMetricsStoreFastV2"), 2]
 
 
 def metrics_store_ctx() raises -> DeviceContext:

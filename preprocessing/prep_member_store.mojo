@@ -36,10 +36,10 @@ from preprocessing.estimator import (
 from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS, XP_DEV_LIVE, xp_validate_call
 
 comptime _STORE_NAME = (
-    "MojolearnPrepMemberStoreIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    else "MojolearnPrepMemberStoreFastV1"
+    "MojolearnPrepMemberStoreIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    else "MojolearnPrepMemberStoreFastV2"
 )
-comptime PREP_MEMBER_STORE = SharedSlot[DeviceStore, _STORE_NAME, 2]
+comptime PREP_MEMBER_STORE = SharedSlot[DeviceStore, _STORE_NAME, 3]
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 
@@ -113,7 +113,7 @@ def _store_op(op: Int, a: List[Int], p: List[Int]) raises -> Int:
     if op == XP_DEV_TAKE_ROWS:
         return PREP_MEMBER_STORE.get_or_create_ptr()[].take_rows(ctx, p[0], p[1], a[0], p[2])
     if op == XP_DEV_LIVE:
-        return Int(PREP_MEMBER_STORE.get_or_create_ptr()[].live)
+        return Int(PREP_MEMBER_STORE.get_or_create_ptr()[].live_count())
     raise Error("preprocessing member store: operation " + String(op) + " is not a store operation")
 
 

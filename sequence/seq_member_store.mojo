@@ -29,10 +29,10 @@ from sequence.exec_device import sequence_ctx
 from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS, XP_DEV_LIVE, xp_validate_call
 
 comptime _STORE_NAME = (
-    "MojolearnSeqMemberStoreIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    else "MojolearnSeqMemberStoreFastV1"
+    "MojolearnSeqMemberStoreIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    else "MojolearnSeqMemberStoreFastV2"
 )
-comptime SEQ_MEMBER_STORE = SharedSlot[DeviceStore, _STORE_NAME, 2]
+comptime SEQ_MEMBER_STORE = SharedSlot[DeviceStore, _STORE_NAME, 3]
 
 
 def seq_member_store_ptr(slot_id: Int, need_words: Int) raises -> Int:
@@ -50,7 +50,7 @@ def _store_op(op: Int, a: List[Int], p: List[Int]) raises -> Int:
     if op == XP_DEV_TAKE_ROWS:
         return SEQ_MEMBER_STORE.get_or_create_ptr()[].take_rows(sequence_ctx(), p[0], p[1], a[0], p[2])
     if op == XP_DEV_LIVE:
-        return Int(SEQ_MEMBER_STORE.get_or_create_ptr()[].live)
+        return Int(SEQ_MEMBER_STORE.get_or_create_ptr()[].live_count())
     raise Error("x_sequence member store: operation " + String(op) + " is not a store operation")
 
 
