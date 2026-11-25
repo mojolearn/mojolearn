@@ -3,7 +3,7 @@
  "cases": [
   {
    "name": "sequential-stream-resume",
-   "about": "Sequential.fit(source=) (lane stream-fits, 2026-11-25): a GRU(3, output='final') -> dropout(0.25) -> linear(1) regressor on 7 sealed records of 1 to 4 steps of 2 features in two shards (batch 2, two batches a length bucket, shuffled from seed 5: 4 batches an epoch, each padded to 4 steps and masked by the records' lengths). Uninterrupted: fit(source=, epochs=2), 8 steps. Interrupted: fit(source=, epochs=2, steps=3), stopped mid-epoch AFTER the source read the fourth batch ahead (the handle's consumed position is 3), save_checkpoint, then in a FRESH PROCESS from_checkpoint and fit(source=a new handle at (0, 0), resume=True, epochs=2, steps=5): the checkpoint's consumed position, not the read-ahead, is where it continues, so the parameters and both optimizer buffers are the uninterrupted run's words (the dropout masks are keyed by the step count).",
+   "about": "Sequential.fit(source=) (lane stream-fits, 2026-11-25): a GRU(3, output='final') -> flatten -> dropout(0.25) -> linear(1) regressor on 7 sealed records of 1 to 4 steps of 2 features in two shards (batch 2, two batches a length bucket, shuffled from seed 5: 4 batches an epoch, each padded to 4 steps and masked by the records' lengths). Uninterrupted: fit(source=, epochs=2), 8 steps. Interrupted: fit(source=, epochs=2, steps=3), stopped mid-epoch AFTER the source read the fourth batch ahead (the handle's consumed position is 3), save_checkpoint, then in a FRESH PROCESS from_checkpoint and fit(source=a new handle at (0, 0), resume=True, epochs=2, steps=5): the checkpoint's consumed position, not the read-ahead, is where it continues, so the parameters and both optimizer buffers are the uninterrupted run's words (the dropout masks are keyed by the step count).",
    "data": {
     "three": {
      "value": 3,
@@ -67,6 +67,10 @@
      "kw": {
       "output": "final"
      }
+    },
+    {
+     "op": "call",
+     "fn": "ma.flatten"
     },
     {
      "op": "call",
@@ -142,6 +146,10 @@
      "kw": {
       "output": "final"
      }
+    },
+    {
+     "op": "call",
+     "fn": "mb.flatten"
     },
     {
      "op": "call",
