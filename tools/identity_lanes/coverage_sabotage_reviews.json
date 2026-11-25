@@ -163,5 +163,13 @@
    "product_check": "bindings/cfb_agglo_door.mojo:204 agglo_check_zero_rows(zrow.any_zero()) -> cluster/cfb_agglo_run.mojo:136, the cosine AgglomerativeClustering fit's zero-vector refusal.",
    "why_fault_reaches_check": "The lane's cosine fit on _cluster_cosine_rows (shifted off the origin, no zero row; tools/identity_lanes/cluster.py:428) runs agglo_zero_rows_run -> xn_row_all_zero -> x_neighbors/host_ops.mojo op_row_all_zero, where the patch inverts row 0's flag; any_zero() is then true and the fit raises. The per-row flags have no reader but this refusal."
   }
+ },
+ "sab2b-embedding-cpu": {
+  "embedding/base": {
+   "product_check": "tools/identity_break.py lane `embedding`: _same_bytes(\"carried dW (t0=171)\", ..., \"unsplit dW\", ...), the lane's in-cell byte oracle of the microbatch carry (contract 7.4: a backward split at t0=171 and carried through grad= must equal the unsplit backward byte for byte).",
+   "why_fault_reaches_check": "Embedding.backward on the CPU side -> embedding/host/embedding_host.mojo host_embedding_backward, where the patch stores every normal folded gradient cell one ulp up. The fold starts from the carried cell (cfg.accumulate), so a cell touched by both halves is raised twice on the carried path and once on the unsplit one: the two gradients differ and the lane raises before it hashes (f200804327 host gate: REFUSED, read MISSED for want of this review). Lane w3f7-b, 2026-11-24.",
+   "error_match": "ValueError: carried dW \\(t0=171\\) and unsplit dW differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "e4fbb269e2a786da4d793ae8dd83b4978e1c68c357a03d571d8ee62865686673"
+  }
  }
 }
