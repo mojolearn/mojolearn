@@ -56,6 +56,7 @@ from x_decomp.device import DevExec
 def _drop_error(context: Int, address: Int, count: Int) abi("C") -> NoneType:
     """The refusal's words are not read here (the return code says it refused)."""
     _ = context
+    return None
 
 
 comptime FN = 300
@@ -83,6 +84,12 @@ def _same(a: List[Float32], b: List[Float32], label: String) raises:
     require(len(a) == len(b), label + ": lengths differ")
     for i in range(len(a)):  # small-loop(word compare)
         require(a[i].to_bits() == b[i].to_bits(), label + ": word " + String(i) + " differs")
+
+
+
+def _any(p: _P) -> MutPointer[Float32, MutAnyOrigin]:
+    """The same address as the any-origin pointer the x_decomp TSQR entries take."""
+    return p.unsafe_origin_cast[MutAnyOrigin]()
 
 
 def _p(values: List[Float32]) -> _P:
@@ -257,9 +264,9 @@ def _device_case(which: Int) raises:
                 var mb = List[Float32](length=FD, fill=0.0)
                 var ya = List[UInt64](length=1, fill=UInt64(0))
                 var yb = List[UInt64](length=1, fill=UInt64(0))
-                DevExec.ols_tsqr_factor(word, _p(y_fold), _p(ra), _p(ma),
+                DevExec.ols_tsqr_factor(_any(word), _any(_p(y_fold)), _any(_p(ra)), _any(_p(ma)),
                     MutPointer[UInt64, MutAnyOrigin](unsafe_from_address=Int(ya.unsafe_ptr())), n, FD)
-                DevExec.ols_tsqr_factor(_p(gathered), _p(y_fold), _p(rb), _p(mb),
+                DevExec.ols_tsqr_factor(_any(_p(gathered)), _any(_p(y_fold)), _any(_p(rb)), _any(_p(mb)),
                     MutPointer[UInt64, MutAnyOrigin](unsafe_from_address=Int(yb.unsafe_ptr())), n, FD)
                 _same(ra, rb, "TSQR R")
                 _same(ma, mb, "column means")

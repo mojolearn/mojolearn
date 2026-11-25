@@ -61,6 +61,7 @@ from svm.impl.scale_gamma_limbs import SG_SLOTS
 def _drop_error(context: Int, address: Int, count: Int) abi("C") -> NoneType:
     """The refusal's words are not read here (the return code says it refused)."""
     _ = context
+    return None
 
 
 comptime FN = 300
@@ -90,6 +91,12 @@ def _same(a: List[Float32], b: List[Float32], label: String) raises:
         require(a[i].to_bits() == b[i].to_bits(), label + ": word " + String(i) + " differs")
 
 
+
+def _any(p: _P) -> MutPointer[Float32, MutAnyOrigin]:
+    """The same address as the any-origin pointer the x_decomp TSQR entries take."""
+    return p.unsafe_origin_cast[MutAnyOrigin]()
+
+
 def _p(values: List[Float32]) -> _P:
     return _P(unsafe_from_address=Int(values.unsafe_ptr()))
 
@@ -112,7 +119,7 @@ def _host_case(which: Int) raises:
     require(rc != 0, "the solver host column read a fold weights word")
     var refused = False
     try:
-        _ = HostExec.tsqr_factor(_P(unsafe_from_address=fold_x_word(0)), _p(buf), _p(buf), 4, 1, 1, False)
+        _ = HostExec.tsqr_factor(_any(_P(unsafe_from_address=fold_x_word(0))), _any(_p(buf)), _any(_p(buf)), 4, 1, 1, False)
     except:
         refused = True
     require(refused, "x_decomp's host tsqr read a fold X word")
@@ -224,8 +231,8 @@ def _device_case(which: Int) raises:
             elif which == 3:
                 var ra = List[Float32](length=(FD + 1) * (FD + 1), fill=0.0)
                 var rb = List[Float32](length=(FD + 1) * (FD + 1), fill=0.0)
-                _ = DevExec.tsqr_factor(word, _p(y_fold), _p(ra), n, FD, 1, False)
-                _ = DevExec.tsqr_factor(_p(gathered), _p(y_fold), _p(rb), n, FD, 1, False)
+                _ = DevExec.tsqr_factor(_any(word), _any(_p(y_fold)), _any(_p(ra)), n, FD, 1, False)
+                _ = DevExec.tsqr_factor(_any(_p(gathered)), _any(_p(y_fold)), _any(_p(rb)), n, FD, 1, False)
                 _same(ra, rb, "uncentered TSQR R")
             elif which == 4:
                 var ctx = process_ctx[_CTX]()

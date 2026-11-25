@@ -460,5 +460,5 @@ def test_the_door_is_registered_exported_and_called_by_verifys_cell_worker():
     worker = _text("python/mojolearn/_verify_worker.py")
     assert "check_both.activity_begin(ml)" in worker and "activity[side] = check_both.activity_end(ml)" in worker
     verify = _text("python/mojolearn/_verify_all.py")
-    assert "cb.activity_line(what['side'], what['lanes'][lane])" in verify and '"what_ran":' in verify
+    assert "cb.activity_line(side, acts[lane])" in verify and '"what_ran":' in verify
     assert verify.count(", ml=ml)") >= 4, "each cross-check answer is counted"

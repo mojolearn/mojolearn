@@ -54,6 +54,7 @@ from core.scale_gamma_exact import SGX_BAD
 def _drop_error(context: Int, address: Int, count: Int) abi("C") -> NoneType:
     """The refusal's words are not read here (the return code says it refused)."""
     _ = context
+    return None
 
 
 comptime FN = 300

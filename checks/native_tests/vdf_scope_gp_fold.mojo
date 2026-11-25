@@ -228,7 +228,7 @@ def _device_case(which: Int) raises:
                 var ba = GPDeviceKernels.gpr_optimize(GPROptimizeRequest(word, _a(y_fold), Int(flags.unsafe_ptr()),
                     _a(bounds), _a64(ta), _a64(va), _a64(ra), n, FD, view.copy(), 1e-6, 1, 7, 0))
                 var bb = GPDeviceKernels.gpr_optimize(GPROptimizeRequest(_a(gathered), _a(y_fold),
-                    Int(flags.unsafe_ptr()), _a(bounds), _a64(tb), _a64(vb), _a64(rb), n, FD, view, 1e-6, 1, 7, 0))
+                    Int(flags.unsafe_ptr()), _a(bounds), _a64(tb), _a64(vb), _a64(rb), n, FD, view.copy(), 1e-6, 1, 7, 0))
                 require(ba == bb, "the optimizer's best run differs")
                 _same64(ta, tb, "theta")
                 _same64(va, vb, "optimized values")
