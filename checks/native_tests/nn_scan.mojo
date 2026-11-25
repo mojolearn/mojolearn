@@ -18,7 +18,9 @@ after another on DeviceExec, which shares one device context):
      program run on the same arrays gives the eager words; its description written and read back (program_words,
      program_from_words: the cell travels in the scan node's words) and run again gives the same words;
   3  refusals: a wrong state count, a state of the wrong shape, xs of rank 1, a wrong parameter count, a step
-     input of the wrong shape.
+     input of the wrong shape;
+  4  a dropout in the cell (y = dropout(x, 0.5), xs all ones): the steps' masks differ (no two steps give the
+     same output), a second call gives the same words, and counter=1 gives other masks.
 """
 from std.math import tanh, exp, isfinite
 from std.memory import bitcast
@@ -36,7 +38,7 @@ from checks.native_tests.ops_higher_common import tensor, values, gradient
 from checks.native_tests.sequence_port_common import normal
 from checks.native_tests.testsuite_cases import check_cases, check_cases_serial, CPU_COLUMN_BUILD, require
 
-comptime NN_SCAN_UNITS = 4
+comptime NN_SCAN_UNITS = 5
 
 comptime _MATMUL = 1
 comptime _ADD = 2
@@ -462,6 +464,41 @@ def run_refusal_unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E]) raise
     _refuses(c, cell, bad_x, one, cell.params, "scan: each step of xs is (2, 2) but the cell's step input is (2, 3)")
 
 
+# ---------------------------------------------------------------- unit 4: dropout inside a cell
+def run_dropout_unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E]) raises:
+    comptime D = 16
+    var h = tensor(c, List[Float32](length=_B * D, fill=0), [_B, D])
+    var x = tensor(c, List[Float32](length=_B * D, fill=0), [_B, D])
+    var dh: List[Int] = [x]
+    var di: List[Int] = [7, 0, 3]
+    var df: List[Float32] = [Float32(0.5)]
+    var dropped = c.op(21, dh, di, df)
+    var h2 = _op(c, _ADD, h, dropped)
+    var ins: List[Int] = [h, x]
+    var outs: List[Int] = [h2, dropped]
+    var cell = c.program(c.capture(ins, outs))
+    var xs = tensor(c, List[Float32](length=_LT * _B * D, fill=1), [_LT, _B, D])
+    var h0 = tensor(c, List[Float32](length=_B * D, fill=0), [_B, D])
+    var states: List[Int] = [h0]
+    var none = List[Int]()
+    var first = values(c, scan_session(c, cell, xs, states, 0, none, False)[0], [_LT, _B, D])
+    var again = values(c, scan_session(c, cell, xs, states, 0, none, False)[0], [_LT, _B, D])
+    var other = values(c, scan_session(c, cell, xs, states, 0, none, False, 1)[0], [_LT, _B, D])
+    _same("dropout scan twice", first, again)
+    var per = _B * D
+    for t in range(1, _LT):  # small-loop(check steps)
+        var differs = False
+        for i in range(per):  # small-loop(check values)
+            if bitcast[DType.uint32](first[t * per + i]) != bitcast[DType.uint32](first[i]):
+                differs = True
+        require(differs, "a dropout in the cell gave step " + String(t) + " the mask of step 0")
+    var moved = False
+    for i in range(len(first)):  # small-loop(check values)
+        if bitcast[DType.uint32](first[i]) != bitcast[DType.uint32](other[i]):
+            moved = True
+    require(moved, "counter=1 gave the masks of counter=0")
+
+
 # ---------------------------------------------------------------- the columns
 def _unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E], mut s: OpsSession[E], mut z: OpsSession[E],
                                          unit: Int) raises:
@@ -471,6 +508,8 @@ def _unit[E: Exec & Movable & Deinitable](mut c: OpsSession[E], mut s: OpsSessio
         run_linear_unit(c)
     elif unit == 2:
         run_capture_unit(c)
+    elif unit == 4:
+        run_dropout_unit(c)
     else:
         run_refusal_unit(c)
 

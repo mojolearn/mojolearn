@@ -19,7 +19,11 @@
 # binding checks (shared by the session's op and its frontend, autograd/nn_scan_frontend.mojo).
 #
 # The node (session code 118): handles [xs, state_1 .. state_k, (lengths), param_1 .. param_m]; ints
-# [SCAN_FORMAT, k, reverse, has_lengths, m, n_words, the cell's program words ...]; floats the cell's floats.
+# [SCAN_FORMAT, k, reverse, has_lengths, m, counter, n_words, the cell's program words ...]; floats the cell's floats.
+# A dropout inside the cell draws a new mask at every step, as torch's does: step t's dropout node k keeps its
+# captured seed words and takes the counter (captured counter) + ((counter * steps + t) * nodes + k), so every
+# (call counter, step, node) has its own mask, the same on every replay, and the tape keeps each step's mask for the
+# backward.
 # Its result is one (n, 1) column: the per-step outputs in time order, each flattened, then the final states, each
 # flattened; the frontend takes the pieces apart with free views (operations 40 and 33), so the op keeps the
 # session's one-result shape and a capture keeps every piece.
@@ -32,7 +36,7 @@ from autograd.rankn import ShapeN
 comptime OPS_SCAN = 118
 #: the version word of the node's integer arguments
 comptime SCAN_FORMAT = 1
-comptime SCAN_HEADER = 6
+comptime SCAN_HEADER = 7
 
 # Sabotage arms (tools/identity_lanes/coverage_sabotage.tsv coverage-autograd-nn_scan_*, lane ops-scan-cell).
 # Off in every build; each arm's patch switches one on.
@@ -53,13 +57,17 @@ struct ScanSpec(Movable):
     var reverse: Bool
     var has_lengths: Bool
     var n_params: Int
+    #: the call's dropout counter (Session.scan counter=)
+    var counter: Int
 
-    def __init__(out self, var cell: OpsProgram, n_state: Int, reverse: Bool, has_lengths: Bool, n_params: Int):
+    def __init__(out self, var cell: OpsProgram, n_state: Int, reverse: Bool, has_lengths: Bool, n_params: Int,
+                 counter: Int):
         self.cell = cell^
         self.n_state = n_state
         self.reverse = reverse
         self.has_lengths = has_lengths
         self.n_params = n_params
+        self.counter = counter
 
 
 def scan_host_code_name(code: Int) -> String:
@@ -160,7 +168,7 @@ def scan_check_binding(
                         + shape_text(y))
 
 
-def scan_encode(cell: OpsProgram, reverse: Bool, has_lengths: Bool) -> Tuple[List[Int], List[Float32]]:
+def scan_encode(cell: OpsProgram, reverse: Bool, has_lengths: Bool, counter: Int) -> Tuple[List[Int], List[Float32]]:
     """The node's integer and float arguments (the layout in the module note)."""
     var got = program_words(cell)
     var ints = List[Int]()
@@ -169,6 +177,7 @@ def scan_encode(cell: OpsProgram, reverse: Bool, has_lengths: Bool) -> Tuple[Lis
     ints.append(1 if reverse else 0)
     ints.append(1 if has_lengths else 0)
     ints.append(len(cell.params))
+    ints.append(counter)
     ints.append(len(got[0]))
     for i in range(len(got[0])):  # driver-loop: over the cell's description words, once per call
         ints.append(Int(got[0][i]))
@@ -183,8 +192,9 @@ def scan_decode(ints: List[Int], fs: List[Float32], n_handles: Int) raises -> Sc
     var reverse = ints[2] != 0
     var has_lengths = ints[3] != 0
     var n_params = ints[4]
-    var n_words = ints[5]
-    if n_state < 0 or n_params < 0 or n_words < 1 or SCAN_HEADER + n_words != len(ints):
+    var counter = ints[5]
+    var n_words = ints[6]
+    if n_state < 0 or n_params < 0 or counter < 0 or n_words < 1 or SCAN_HEADER + n_words != len(ints):
         raise Error("ValueError: ops: scan: a damaged scan description")
     var words = List[Int64](capacity=n_words)
     for i in range(n_words):  # driver-loop: over the cell's description words, once per call
@@ -196,4 +206,4 @@ def scan_decode(ints: List[Int], fs: List[Float32], n_handles: Int) raises -> Sc
     if n_handles != want:
         raise Error("ValueError: ops: scan takes " + String(want) + " tensors (xs, the state tensors, "
                     + ("lengths, " if has_lengths else "") + "the cell's parameters); got " + String(n_handles))
-    return ScanSpec(cell^, n_state, reverse, has_lengths, n_params)
+    return ScanSpec(cell^, n_state, reverse, has_lengths, n_params, counter)

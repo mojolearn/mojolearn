@@ -1301,7 +1301,7 @@ class Session:
         return _SESSION_CALL(self, "program_run", (program, arrays, dynamic_shapes, optimize))
 
     # nn-blocks-scan begin
-    def scan(self, cell, xs, init_state, *, params=None, reverse=False, lengths=None):
+    def scan(self, cell, xs, init_state, *, params=None, reverse=False, lengths=None, counter=0):
         """Apply a captured cell at every step of a sequence, carrying its state.
 
         ``cell`` is a :class:`Program` captured with
@@ -1348,6 +1348,10 @@ class Session:
             of shape ``(steps, batch, ...)`` and states and outputs with the
             batch first. A sequence's steps at or past its length keep its
             state and give zero outputs, as a packed sequence in PyTorch.
+        counter : int, default 0
+            A :meth:`dropout` inside the cell draws a new mask at every
+            step, from its own seed, this counter and the step index; use a
+            new ``counter`` for every training step, as with :meth:`dropout`.
 
         Returns
         -------
@@ -1376,7 +1380,7 @@ class Session:
         ...         s.backward(s.mean(s.mul(ys, ys)))
         ...         s.step(s.optimizer("adam", lr=0.01), [w, u])
         """
-        return _SESSION_CALL(self, "scan", (cell, xs, init_state, params, reverse, lengths))
+        return _SESSION_CALL(self, "scan", (cell, xs, init_state, params, reverse, lengths, counter))
     # nn-blocks-scan end
 
     def load_partitioned(self, path, devices=(0,)):

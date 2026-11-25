@@ -558,7 +558,7 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         return block
     # nn-blocks-scan begin
     if op == _SOP_SCAN:
-        # UNPACK: args (cell, xs, init_state, params, reverse, lengths). The cell is a Program (or a loaded
+        # UNPACK: args (cell, xs, init_state, params, reverse, lengths, counter). The cell is a Program (or a loaded
         # one) of this session or of another session of this image; its description is read natively
         # (autograd/nn_scan_frontend.mojo). init_state is one handle or a sequence of handles; params None or a
         # sequence of handles; lengths None or a handle.
@@ -589,7 +589,7 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         if not program_numeric_scalar(args[4]):
             raise Error("TypeError: reverse must be a bool")
         var got = session_scan[E, KIND](Int(py=sid), cell_sid, pid, _int(args[1], "xs", 1), states, lengths,
-                                        params, given, Bool(py=args[4]))
+                                        params, given, Bool(py=args[4]), _int(args[6], "counter", 0))
         # PACK: (ys, final_state); final_state one handle when init_state was one handle, else a tuple
         var finals = List[Int](capacity=len(got) - 1)
         for k in range(1, len(got)):  # driver-loop: over the final state handles
