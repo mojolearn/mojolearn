@@ -166,15 +166,48 @@ def _signature(cell):
             for key in HASH_PARTS if key in cell}
 
 
+def _changed_parts(a, b, limit=8):
+    """" (parts: n1, n2, ...)" naming the train parts whose hashes differ
+    between two cells of one lane (the per-part dicts identity_break records
+    in `parts`), or the hashed record parts that differ; "" when none can be
+    named. HARNESS FIX (w3-fix-9-s3, 2026-11-25): sab2b-mul_add-generic-cpu read
+    eight generic-attrs lanes "restoration changed the clean result" with no
+    class named, and the box logs were gone: the line now names the parts (one
+    per class in the generic lanes) so the next gate says which class moved."""
+    names = []
+    pa, pb = a.get("parts") or [], b.get("parts") or []
+    for da, db in zip(pa, pb):  # driver-loop: over the repeats of one cell
+        if not isinstance(da, dict) or not isinstance(db, dict):
+            continue
+        for name in sorted(set(da) | set(db)):  # driver-loop: over one fit's named parts
+            if da.get(name) != db.get(name) and name not in names:
+                names.append(name)
+    if not names:
+        sa, sb = _signature(a), _signature(b)
+        names = [k for k in sorted(set(sa) | set(sb)) if sa.get(k) != sb.get(k)]
+    if not names:
+        return ""
+    more = f", +{len(names) - limit} more" if len(names) > limit else ""
+    return " (parts: " + ", ".join(str(n) for n in names[:limit]) + more + ")"
+
+
+#: the longest error line `_unstable_reason` keeps
+_REASON_CHARS = 4000
+
+
 def _unstable_reason(cell, repeats):
-    """One short phrase for a cell `_stable` rejects: its verdict and the first
-    line of its error, probe error or first oracle error."""
+    """One phrase for a cell `_stable` rejects: its verdict and the first line
+    of its error, probe error or first oracle error. The line is kept up to
+    `_REASON_CHARS`: a lane that collects its failures (check-generic-*
+    joins every failing class into one AssertionError line) is named whole in
+    check_<arm>.txt; the old 160-character cut left gate 9 with
+    "AssertionError: check-generic-" and no class (lane w3-fix-9-s5)."""
     for field in ("error", "probe_error"):
         if cell.get(field):
-            return f"verdict {cell.get('verdict')}, {field}: {str(cell[field]).splitlines()[0][:160]}"
+            return f"verdict {cell.get('verdict')}, {field}: {str(cell[field]).splitlines()[0][:_REASON_CHARS]}"
     errors = [e for e in (cell.get("oracle_errors") or []) if e]
     if errors:
-        return f"verdict {cell.get('verdict')}, oracle error: {str(errors[0]).splitlines()[0][:160]}"
+        return f"verdict {cell.get('verdict')}, oracle error: {str(errors[0]).splitlines()[0][:_REASON_CHARS]}"
     return f"verdict {cell.get('verdict')}, {len(cell.get('hashes') or [])} of {repeats} hashes or an unstable part"
 
 
@@ -376,7 +409,7 @@ def check(arm, clean_path, sab_path, restored_path=None, evidence_path=None, roo
                     failures.append(f"{key}: clean/restored result is not stable and complete ({why})")
                     continue
                 if _signature(cc) != _signature(rc):
-                    failures.append(f"{key}: restoration changed the clean result")
+                    failures.append(f"{key}: restoration changed the clean result" + _changed_parts(cc, rc))
                     continue
                 parts = [p for p in PARTS if ("hashes" if p == "train" else p) in cc]
                 # Commit equivalence is independently checked above. Keep all
@@ -490,7 +523,7 @@ def stays_put(arm, side, clean_path, sab_path, restored_path):
                     failures.append(f"{side} side {key}: moved ({cc.get('verdict')} -> {sc.get('verdict')}): "
                                     f"the fault is not in the {arm_sides(arm)[0]} side's code alone")
                 elif not same(cc, rc):
-                    failures.append(f"{side} side {key}: restoration changed the clean result")
+                    failures.append(f"{side} side {key}: restoration changed the clean result" + _changed_parts(cc, rc))
                 else:
                     print(f"{side} side {key}: stayed put")
     except (ValueError, OSError, KeyError, TypeError) as error:

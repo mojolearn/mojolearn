@@ -644,9 +644,13 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     f = _functions_metrics_fx(X, 1000)
     mt = ml.metrics
+    # The subsample is the caller's own (the first 400 rows): silhouette_score refuses sample_size= / random_state=
+    # (bindings/mcls_cluster_door.mojo MCLS_OPN_FAMILY_MCLS_SILHOUETTE_SCORE, "subsample X yourself"), so the old
+    # `sampled` call refused the whole lane on both sides (lane w3-fix-9-s5, 2026-11-25).
+    fs, ls = np.ascontiguousarray(f["feats"][:400]), np.ascontiguousarray(f["eight"][:400])
     return _functions_resident(ml, "metrics.silhouette_score", lambda p: dict(
         full=_functions_d(mt.silhouette_score(p(f["feats"]), p(f["eight"]))),
-        sampled=_functions_d(mt.silhouette_score(p(f["feats"]), p(f["eight"]), sample_size=400, random_state=3))))
+        sampled=_functions_d(mt.silhouette_score(p(fs), p(ls)))))
 
 
 @lane("fn-metrics-silhouette-samples")

@@ -243,8 +243,10 @@ for arm in ${ARMS//,/ }; do
     echo "SABOTAGE batch=$BATCH arm=$arm side=${side:-?} verdict=${v:-ERROR}" | tee -a "$OUT/summary.txt"
     # The check's reasons ride with a miss in summary.txt (lane w3f5-e, 2026-11-24: gate 3cda8a05b3's copies
     # kept only summary.txt, so eight MISSED arms carried no cause: an unstable clean lane, an unmoved
-    # fixture or a binary change outside the declared closure could not be told apart).
-    [ "$v" = CAUGHT ] || grep -e '^INVALID' -e '^OWED' -e 'moved' -e 'unmoved' "$OUT/check_${arm}.txt" | grep -v '^LANES ' | cut -c1-300 | head -n 12 \
+    # fixture or a binary change outside the declared closure could not be told apart). Each reason line is kept to
+    # 4000 characters (lane w3-fix-9, 2026-11-25: the 300-character cut left gate d1641666a4's summary with
+    # "AssertionError: check-generic-" and no class named, and the per-arm check files were not kept).
+    [ "$v" = CAUGHT ] || grep -e '^INVALID' -e '^OWED' -e 'moved' -e 'unmoved' "$OUT/check_${arm}.txt" | grep -v '^LANES ' | cut -c1-4000 | head -n 12 \
         | sed "s/^/  CHECK $arm: /" >> "$OUT/summary.txt"
     # The per-lane outcome lines whole (lane w3f7-b): a cut list cannot say which lanes to correct.
     [ "$v" = CAUGHT ] || grep -e '^LANES ' "$OUT/check_${arm}.txt" | sed "s/^/  CHECK $arm: /" >> "$OUT/summary.txt"
