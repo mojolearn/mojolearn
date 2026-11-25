@@ -106,7 +106,8 @@ def _(ml, X, yc, yr, Xh=None):
         tokens = np.asarray(out["tokens"])
         loop, cur = [], first
         for _ in range(12):  # driver-loop: over decode steps (the independent replay of decode)
-            cur = np.ascontiguousarray(np.asarray(step.run(cur)), dtype=np.int32).reshape(first.shape)
+            # Program.run returns float32 words; int32 outputs are read with .view (ops.Session.argmax docs)
+            cur = np.ascontiguousarray(np.asarray(step.run(cur), dtype=np.float32).view(np.int32)).reshape(first.shape)
             loop.append(cur.reshape(-1))
         _same_bytes("Program.decode tokens", tokens.reshape(-1), "Program.run x12 tokens", np.concatenate(loop))
     return _fit(dict(tokens=_h(tokens)))
