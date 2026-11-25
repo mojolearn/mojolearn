@@ -965,6 +965,11 @@ def batch_source_capacity(src: BatchSource, field: Int) -> Int:
 # epochs opens once; only a loop of partial_fit(source=, steps=1) calls pays it every step. What would settle it: a
 # native check that builds a List in one binding image and grows and frees it in another (under the address
 # sanitizer), or Modular's word on the allocator; then the owner can hand its source's address to these doors.
+# Lane stream-fits-2 (2026-11-25) wrote that check: checks/cross_image_heap (cih_image.mojo built twice as two
+# shared libraries, cih_driver.mojo moving a holder with this struct's member kinds between them; build and run
+# commands in the driver's docstring). It has NOT run yet (the lane writes code only). Until it prints
+# CROSS_IMAGE_HEAP PASS with no sanitizer report, the source stays reopened per call; when it does, the owner hands
+# its opened source's address to the doors and the reopen above goes.
 # The position a fit leaves is written twice: the CONSUMED position back to the handle, and the position the
 # training state saves (`batch_source_fit_saved`, the same words unless a sabotage arm moves them) with the source's
 # binding words (`ProgramTrainingSource`) into the model's state, so a fresh process resumes on the same next batch.
