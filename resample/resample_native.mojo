@@ -23,6 +23,13 @@ kernels are untouched. This file reads no experiment define.
     4   resample_indices     idx                                    n, n_samples, replace, seed
     5   monte_carlo          lower, upper, scalars                  f_id, n_samples, seed, i_first
     6   numeric mode         (none)                                 (none)                                 returns NUMERIC_* code
+    7   store route          (none)                                 (none)                                 returns the store's
+                                                                                                           route word, -1 none
+
+RESIDENT FORMS (lane gd-rf-resample, 2026-11-25): inside a `resident()` scope the door keeps each input array
+once in this image's store (resample/resample_store.mojo, reached through `resample_store_v1`; op 7 says whether
+the image has one and gives its scope route word) and appends the input's slot id to the ints: op 0 takes a
+ninth int, x's slot. Outside a scope the ints are the table above, unchanged, and the input is uploaded.
 """
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -40,9 +47,10 @@ from resample.mojolearn_resample_run import (
     _mc_run,
 )
 from resample.estimator import resample_indices_replace_into, resample_indices_permute_into
+from resample.resample_store import resample_store_route
 
 comptime RESAMPLE_NATIVE_ABI_NAME = "mojolearn.resample.v1"
-comptime RESAMPLE_NATIVE_OPERATION_COUNT = 7
+comptime RESAMPLE_NATIVE_OPERATION_COUNT = 8
 
 
 def _resample_bootstrap(a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -52,7 +60,8 @@ def _resample_bootstrap(a: List[Int], p: List[Int], f: List[Float64]) raises -> 
             + " sorted_out, scalars_out), got "
             + String(len(a))
         )
-    if len(p) != 8 or len(f) != 2:
+    # 9 ints: the resident form, p[8] the store slot of x (module note)
+    if (len(p) != 8 and len(p) != 9) or len(f) != 2:
         raise Error(
             "bootstrap: params must contain 10 values (n, d, statistic,"
             + " n_resamples, seed, method, confidence_level, alternative,"
@@ -73,9 +82,10 @@ def _resample_bootstrap(a: List[Int], p: List[Int], f: List[Float64]) raises -> 
     var r_first = p[7]
     var confidence_level = Float32(f[0])
     var q_or_prop = Float32(f[1])
+    var x_slot = p[8] if len(p) == 9 else -1
     _bootstrap_run(
         xp, n, d, statistic, n_resamples, seed, method, confidence_level,
-        alternative, q_or_prop, r_first, dp, sdp, sp,
+        alternative, q_or_prop, r_first, dp, sdp, sp, x_slot,
     )
     return 0
 
@@ -231,6 +241,10 @@ def resample_native_operation(op: Int, a: List[Int], p: List[Int], f: List[Float
         if len(a) != 0 or len(p) != 0 or len(f) != 0:
             raise Error("resample native ABI: metadata takes no descriptors")
         return GLOBAL_NUMERIC_MODE
+    if op == 7:
+        if len(a) != 0 or len(p) != 0 or len(f) != 0:
+            raise Error("resample native ABI: metadata takes no descriptors")
+        return resample_store_route()
     raise Error("resample native ABI: unknown operation")
 
 

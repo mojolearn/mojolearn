@@ -52,11 +52,12 @@ from std.os import getenv
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
-from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+from resample.resample_store import RESAMPLE_CTX_SLOT, resample_store_buffer
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojolearnResampleContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnResampleContextFastV3"
+#: The resident store's slots are made on it (resample/resample_store.mojo).
+comptime _DEVCTX_SLOT = RESAMPLE_CTX_SLOT
 
 
 from core.identity_trace import IdentityTrace
@@ -338,6 +339,19 @@ def _upload_from(
         ctx.enqueue_copy(dst_buf=buf, src_ptr=src)
     ctx.synchronize()
     return buf^
+
+
+def _resample_input(
+    ctx: DeviceContext, src: ResampleF32Ptr, n: Int, slot: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """The `n` input words on the device. `slot >= 0` (inside a `resident()`
+    scope, lane gd-rf-resample): the resident store's buffer holding the
+    caller's words, read IN PLACE (resample/resample_store.mojo; no kernel
+    writes its input), with no host-to-device copy. `slot < 0`: one upload
+    from `src` (`_upload_from`), as before. The same words either way."""
+    if slot >= 0:
+        return resample_store_buffer(slot, n)
+    return _upload_from(ctx, src, n)
 
 
 def _upload_pooled(
@@ -1288,6 +1302,7 @@ def bootstrap_host_into(
     with_bca_diagnostics: Bool = False,
     map_tpb: Int = RESAMPLE_MAP_TPB,
     plan: Optional[DevicePlan] = None,
+    x_slot: Int = -1,
 ) raises -> BootstrapResult:
     """`scipy.stats.bootstrap((x,), statistic, n_resamples=..., rng=seed,
     method=..., confidence_level=..., alternative=...)`, one shot.
@@ -1311,6 +1326,12 @@ def bootstrap_host_into(
     float32 slots), so the returned `distribution` is EMPTY.
     The sorted distribution comes back once into the returned List the
     interval reads. The same words reach the same kernels as before.
+
+    RESIDENT FORM (lane gd-rf-resample, 2026-11-25): `x_slot >= 0` is the
+    slot of the resample store (resample/resample_store.mojo) holding the
+    caller's n * n_features words, kept there once by a `resident()` scope;
+    the kernels read it in place and nothing is uploaded. The host words at
+    `xp` are still the refusal checks' and the multi-device split's source.
     """
     validate_positions(n_resamples, n)
     if r_first < 0:
@@ -1409,7 +1430,9 @@ def bootstrap_host_into(
     var key_words: List[Int32] = [key_lo(key), key_hi(key)]
     trace.record_list_i32("resample.key", key_words)
 
-    var dx = _upload_from(ctx, xp, n * n_features)
+    # x_slot >= 0 (a resident() scope): the store's copy of the caller's
+    # sample, read in place; else the one upload (`_resample_input`).
+    var dx = _resample_input(ctx, xp, n * n_features, x_slot)
     var theta = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
 

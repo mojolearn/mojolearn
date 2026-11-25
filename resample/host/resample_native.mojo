@@ -23,6 +23,7 @@ kernels are untouched. This file reads no experiment define.
     4   resample_indices     idx                                    n, n_samples, replace, seed
     5   monte_carlo          lower, upper, scalars                  f_id, n_samples, seed, i_first
     6   numeric mode         (none)                                 (none)                                 returns NUMERIC_* code
+    7   store route          (none)                                 (none)                                 returns -1: no store
 """
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -43,7 +44,7 @@ from resample.mojolearn_resample_host_run import (
 )
 
 comptime RESAMPLE_NATIVE_ABI_NAME = "mojolearn.resample.v1"
-comptime RESAMPLE_NATIVE_OPERATION_COUNT = 7
+comptime RESAMPLE_NATIVE_OPERATION_COUNT = 8
 
 
 def _resample_bootstrap(a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -222,6 +223,13 @@ def resample_native_operation(op: Int, a: List[Int], p: List[Int], f: List[Float
         if len(a) != 0 or len(p) != 0 or len(f) != 0:
             raise Error("resample native ABI: metadata takes no descriptors")
         return GLOBAL_NUMERIC_MODE
+    if op == 7:
+        # The store route (resample/resample_native.mojo op 7): the host image
+        # has no resident store, so a scope keeps nothing here and the door
+        # never sends a slot id.
+        if len(a) != 0 or len(p) != 0 or len(f) != 0:
+            raise Error("resample native ABI: metadata takes no descriptors")
+        return -1
     raise Error("resample native ABI: unknown operation")
 
 

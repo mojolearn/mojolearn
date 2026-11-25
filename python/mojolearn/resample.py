@@ -478,6 +478,12 @@ _native_family_bridge.tables(family_rs_codes={"STATISTICS": dict(STATISTICS), "M
                                               "ALTERNATIVES": dict(ALTERNATIVES), "INTEGRANDS": dict(INTEGRANDS)},
                              family_rs_result_classes=(BootstrapResult, PermutationTestResult, MonteCarloResult, ConfidenceInterval))
 _native_family_bridge.connect_bindings("_mojolearn_resample")
+# The `resident()` scope keys (lane gd-rf-resample): the door reads the calling
+# thread's active scope through them and keeps inputs in the resample image's
+# store (bindings/linalg_ops_resample_door.mojo `rs_resident`).
+from ._arena_io import _LOCAL as _ARENA_LOCAL, _Scope as _ArenaScope  # noqa: E402
+_native_family_bridge.tables(arena_local=_ARENA_LOCAL, arena_scope_class=_ArenaScope,
+                             arena_scope_owner=vars(_ArenaScope)["_owner"].__get__)
 from ._native_owner_lifetime import connect_owner_context as _connect_owner_context
 _connect_owner_context(_NATIVE_CONTEXT)
 

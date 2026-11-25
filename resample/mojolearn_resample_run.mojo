@@ -51,10 +51,12 @@ def _bootstrap_run(
     dp: MutPointer[Float32, MutUntrackedOrigin],
     sdp: MutPointer[Float32, MutUntrackedOrigin],
     sp: MutPointer[Float64, MutUntrackedOrigin],
+    x_slot: Int,
 ) raises:
     # lane ne2-b-rounds (N078): the sample is uploaded from the caller's
     # buffer and the distribution downloaded into `dp` (bootstrap_host_into); the
     # sorted distribution is the List the interval read, copied once.
+    # x_slot >= 0 (lane gd-rf-resample): the resident store's copy, read in place.
     var r = bootstrap_host_into(
         xp,
         max(0, n * d),
@@ -70,6 +72,7 @@ def _bootstrap_run(
         q_or_prop,
         r_first,
         plan=Optional[DevicePlan](_resample_entry_plan()),
+        x_slot=x_slot,
     )
     copy_f32(r.sorted_distribution.unsafe_ptr(), sdp, n_resamples)
     sp.unsafe_store(0, Float64(r.point_estimate))

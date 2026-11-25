@@ -16,7 +16,7 @@ from providers.python.neural_descriptor_pyapi_door import neural_descriptor_conn
 
 # ORDER MATCHES resample/resample_native.mojo (bindings/linalg_ops_resample_door.mojo RS_OP_*).
 comptime _RS_OP_RESAMPLE_INDICES = 4
-comptime _RS_OPERATIONS = 7
+comptime _RS_OPERATIONS = 8
 from core.borrowed_buffer import BorrowedBufferLayout
 from core.resample_rows_gather import resample_gather_rows
 from core.host_parallel import host_parallelize

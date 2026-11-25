@@ -33,6 +33,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from resample.resample_native import RESAMPLE_NATIVE_TABLE
+from resample.resample_store import RESAMPLE_STORE_API
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
@@ -159,6 +160,14 @@ def resample_native_api_v1_binding() raises -> PythonObject:
     return neural_descriptor_capsule(table[].name, table[].entries)
 
 
+def resample_store_v1_binding() raises -> PythonObject:
+    """The image's resident store as a scope transport entry
+    (resample/resample_store.mojo, lane gd-rf-resample): the public doors
+    connect it once, inside a `resident()` scope only."""
+    var api = RESAMPLE_STORE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def build__mojolearn_resample() -> PythonObject:
     comptime assert SERIES_GUARDS_OK, "invalid integrated experiment configuration (series guards)"
     try:
@@ -171,6 +180,7 @@ def build__mojolearn_resample() -> PythonObject:
         m.def_function[resample_vendor_binding]("resample_vendor")
         m.def_function[resample_numeric_mode_binding]("resample_numeric_mode")
         m.def_function[resample_native_api_v1_binding]("resample_native_api_v1")
+        m.def_function[resample_store_v1_binding]("resample_store_v1")
         m.def_function[resample_fast_defines_binding]("resample_fast_defines")
         m.def_function[resample_gpu_gather_enabled_binding]("resample_gpu_gather_enabled")
         m.def_function[resample_gather_gpu_binding[True]]("resample_gather_gpu")
