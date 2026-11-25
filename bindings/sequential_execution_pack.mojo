@@ -526,6 +526,7 @@ def sequential_fit_source(mut mods: NativeModules, model: PythonObject, args: Py
     var n_iter = neural_descriptor_execute(provider, MODEL_FIT, native_addresses, descriptor, native_scalars)
     mods.released()
     # Raw addresses never own data: every buffer the native call read stays alive through it.
+    _ = path_bytes^
     _ = path
     _ = curve
     _ = previous

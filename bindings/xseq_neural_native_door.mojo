@@ -1247,7 +1247,8 @@ def _rnn_fit_source(model: PythonObject, fields: PythonObject, args: PythonObjec
         xseq_run_rnn_fit_stream(entry, request, optimizer, params_address, losses_address, rates_address,
                                 Int(loop_words.unsafe_ptr()), o, words, Int(path_bytes.unsafe_ptr()), len(path_bytes),
                                 saved_address, Int(position.unsafe_ptr()))
-    _ = path  # keep the path's bytes and every buffer alive through the native call above
+    _ = path_bytes^  # keep the path's bytes and every buffer alive through the native call above
+    _ = path
     _ = provider
     _ = params
     _ = state

@@ -113,6 +113,7 @@ def sequential_save(mut mods: NativeModules, model: PythonObject, path: PythonOb
         Float64(py=py_item(options, nk[].k_tol)),
         Float64(py=py_item(options, nk[].k_gamma)), Float64(py=py_item(options, nk[].k_huber_delta))]
     var buffers: List[Int] = [Int(py=sequential_address(py_item(fields, nk[].k_params_))), 0, 0, 0, 0]
+    var third = PythonObject(None)  # lane stream-fits: centered RMSprop's third optimizer state buffer
     if not export:
         buffers[1] = Int(py=sequential_address(py_item(fields, nk[].k_optimizer_m_)))
         buffers[2] = Int(py=sequential_address(py_item(fields, nk[].k_optimizer_v_)))
@@ -120,7 +121,7 @@ def sequential_save(mut mods: NativeModules, model: PythonObject, path: PythonOb
         buffers[4] = Int(py=sequential_address(py_item(fields, nk[].k__curve)))
         # lane stream-fits: centered RMSprop's third optimizer state buffer (record version 4)
         if nn_opt_keeps_third(ip[3], ip[4]):
-            var third = py_get(fields, PythonObject("optimizer_w_"))
+            third = py_get(fields, PythonObject("optimizer_w_"))
             if third is None:
                 raise Error("this model's centered RMSprop state has no optimizer_w_; fit it again before saving")
             buffers.append(Int(py=sequential_address(third)))
@@ -160,6 +161,7 @@ def sequential_save(mut mods: NativeModules, model: PythonObject, path: PythonOb
     mods.released()
     var normalized = native_path(path)
     _ = sequential_file_save(entries, String(normalized), buffers, program, ip, fp, class_words)
+    _ = third^  # the buffer the save read by address
     mods.released()
     _sidecar(mods, model, normalized, entries, context, id_range)
     _ = fields^
