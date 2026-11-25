@@ -353,7 +353,9 @@ def ctc_admit_word(w: Int, a: Args):
             if v >= Float32(0) and v < Float32(a.i2):
                 if Float32(Int(v)) == v and Int(v) != a.i3:
                     bad = 0
-    st(a.p1, w, bitcast[DType.float32](Int32(bad)))
+    # The flag is an int32 bit pattern: a raw store. `st` flushes subnormals, and int32 1 is a float32
+    # subnormal, so every flag read back 0 and nothing was ever refused (w3-integrate-10).
+    a.p1.unsafe_store(w, bitcast[DType.float32](Int32(bad)))
 
 
 @always_inline
