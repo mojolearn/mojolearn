@@ -236,6 +236,7 @@ def run_resume_unit[E: Exec & Movable & Deinitable, KIND: Int](root: String, var
         var curve = List[Float32](length=10, fill=0)
         _ = train_program_source(s[], m[0], src, 0, Float32(1.0), m[1], params, 10, 3,
                                  FP(unsafe_from_address=Int(curve.unsafe_ptr())), 0, 0)
+        _ = curve^  # the fit wrote the curve through its address
         if src.consumed != 3 or src.held_batch != 3:
             _fail("after three steps: consumed " + String(src.consumed) + ", read ahead " + String(src.held_batch)
                   + " (want 3 and 3)")
