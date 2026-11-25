@@ -83,8 +83,9 @@ def test_sequential_streamed_classifier_reads_class_indices(tmp_path):
 
 @pytest.mark.parametrize("kw, words", [
     (dict(batch_size=4), "no batch_size or shuffle"),
-    (dict(validation_data=(np.zeros((2, 4, 2), np.float32), np.zeros(2, np.float32))), "no validation_data"),
-    (dict(lengths=np.ones(7)), "no validation_data, restore_best_weights, lengths"),
+    (dict(lengths=np.ones(7)), "no lengths or target_lengths"),
+    (dict(restore_best_weights=True), "restore_best_weights requires validation_data"),
+    (dict(validation_data=(np.zeros((2, 4, 2), np.float32), np.zeros(2, np.float32))), "takes \\(X, y, lengths\\)"),
 ])
 def test_sequential_streamed_refusals(tmp_path, kw, words):
     src = _source(_shards(str(tmp_path)))
@@ -275,3 +276,38 @@ def test_recurrent_streamed_early_stopping_resumed_after_pickling(tmp_path):
     assert whole.n_iter_ == 8 and back.n_iter_ == 8
     assert np.array_equal(back.params_, whole.params_)
     assert np.array_equal(back._stream_monitor_, whole._stream_monitor_)
+
+
+def _sequential_validation():
+    xv = (np.arange(3 * LONGEST * F, dtype=np.float32).reshape(3, LONGEST, F) % 5 - 2) / 3.0
+    return xv, np.array([0.2, -0.1, 0.4], np.float32), np.array([4, 2, 3])
+
+
+def test_sequential_streamed_validation_and_restore_best(tmp_path):
+    """validation_data is evaluated at every pass's end and leaves training as it is; restore_best_weights keeps the
+    best pass's parameters and the source at that pass's end."""
+    root = _shards(str(tmp_path))
+    plain = _regressor().fit(source=_source(root), epochs=3)
+    seen = _regressor().fit(source=_source(root), epochs=3, validation_data=_sequential_validation())
+    assert np.array_equal(seen.params_, plain.params_)
+    assert seen.epochs_run_ == 3 and np.all(np.isfinite(seen.validation_loss_curve_))
+    kept = _regressor().fit(source=_source(root), epochs=3, validation_data=_sequential_validation(),
+                            restore_best_weights=True)
+    reference = _regressor().fit(source=_source(root), epochs=int(kept.best_epoch_))
+    assert np.array_equal(kept.params_, reference.params_)
+
+
+def test_sequential_streamed_monitors_need_validation(tmp_path):
+    root = _shards(str(tmp_path))
+    early = (mojolearn.Sequential().gru(3, output="final").flatten().linear(1)
+             .compile(loss="mse", optimizer="adam", lr=0.05, n_iter_no_change=2))
+    with pytest.raises(ValueError, match="monitors validation_data"):
+        early.fit(source=_source(root), epochs=2)
+
+
+def test_sequential_streamed_nll_reads_class_indices(tmp_path):
+    """nll on a source's class indices: the one-hot target is made a batch at a time; classes_ are the indices."""
+    root = _shards(str(tmp_path), targets="classes")
+    m = (mojolearn.Sequential().gru(3, output="final").flatten().linear(3).log_softmax()
+         .compile(loss="nll", optimizer="adam", lr=0.05).fit(source=_source(root), epochs=2))
+    assert list(m.classes_) == [0, 1, 2] and np.all(np.isfinite(m.loss_curve_))

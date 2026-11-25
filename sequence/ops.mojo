@@ -1095,10 +1095,15 @@ def op_copy(t: Int, a: Args):
 def op_one_hot(t: Int, a: Args):
     """From int32 class codes (their bits in p0's words): with i1 = 0,
     p1[r, c] = 1.0 if code[r] is c else 0.0 over an (N, i0) row-major
-    target; with i1 = 1 (i0 = 1), p1[r] = Float32(code[r]). Exact."""
+    target; with i1 = 1 (i0 = 1), p1[r] = Float32(code[r]). Exact.
+    i1 = 2 (lane stream-fits-2: a streamed nll fit's batch): the one-hot
+    of i1 = 0 from class indices held as float32 VALUES (a batch source's
+    target words, admitted whole numbers below i0)."""
     var k = a.i0
     var r = t // k
     var code = Int(bitcast[DType.int32](a.p0.unsafe_load(r)))
+    if a.i1 == 2:
+        code = Int(a.p0.unsafe_load(r))
     if a.i1 == 1:
         a.p1.unsafe_store(t, Float32(code))
         return

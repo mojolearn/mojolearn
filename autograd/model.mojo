@@ -73,9 +73,11 @@ from autograd.nn_optim import (
     nn_opt_step, nn_optim_admit, nn_sched_per_step, nn_step_lrs, nn_opt_keeps_third,
 )
 # lane stream-fits (2026-11-25): Sequential.fit(source=), the streamed instance of the fit loop
+from std.math import nan
 from autograd.batch_source import (
     BatchSource, BS_FIELD_STEPS, BS_FIELD_LENGTHS, BS_FIELD_TARGETS, BATCH_SOURCE_STAGE_WORDS, ProgramTrainingSource,
     SOURCE_PART_WORDS, batch_source_upload, batch_source_fit_saved, batch_source_check_classes, source_part_store,
+    batch_source_class_scan,
 )
 # nn-blocks-pgseq begin: Sequential.compile's parameter groups (one step a run of one group's tensors)
 from autograd.nn_pgseq import (
@@ -1446,6 +1448,7 @@ def model_fit_state[E: Exec](
 def model_fit_state_source[E: Exec](
     mut ex: E, spec: ModelSpec, cfg_in: FitConfig, mut stream: BatchSource, max_steps: Int, Pio: FP, curve: FP,
     Mio: FP, Vio: FP, St: IP64, curve_prev: FP, resume: Bool, loop_words: Int, Wio: Int, source_out: Int,
+    validation: Optional[FitValidation] = None,
 ) raises -> Int:
     """Sequential.fit(source=) (lane stream-fits, 2026-11-25): the fit loop's STREAMED instance
     (`_model_fit_state[..., streamed=True]`), chosen once per fit like the grouped one, so a fit on arrays runs the
@@ -1455,17 +1458,25 @@ def model_fit_state_source[E: Exec](
     ahead after each step is queued. Every batch is padded to the model's sequence length; the lengths field masks
     the recurrent layers. The schedule's epoch is the SOURCE's epoch, so a run stopped mid-epoch and resumed rates
     every batch as the uninterrupted run does. St receives the source part (FS_SOURCE: the consumed position and the
-    source's binding words) and source_out (2 int64 words) the consumed position for the handle. Refuses what reads
-    whole epochs of arrays: validation data, early stopping, reduce_on_plateau; and the token, ctc and one-hot
-    class losses (their targets are not one row of floats a record)."""
+    source's binding words) and source_out (2 int64 words) the consumed position for the handle.
+
+    Lane stream-fits-2: `validation` (validation_data arrays, as the array fit's) is evaluated, monitored (early
+    stopping with n_iter_no_change, reduce_on_plateau) and restored (restore_best_weights) at the end of every PASS
+    over the source, the iteration that trains an epoch's last batch; an iteration cut by `steps` mid-pass has no
+    validation word (NaN) and no decision. Monitoring starts afresh each call, as for arrays. Early stopping and
+    reduce_on_plateau without validation data are refused: a pass split across calls has two partial training
+    means, so the training loss is not a monitor a resume repeats. Losses: the dense ones, cross_entropy and
+    bce_with_logits on a class index a record, nll (its one-hot target made on the executor from the class index,
+    one launch a batch) and token_cross_entropy (each record's target row holds its token ids); ctc is refused (a
+    target row holds no target length)."""
     var address = Int(UnsafePointer(to=stream))
     if cfg_in.groups.on():
         return _model_fit_state[E, True, True](
             ex, spec, cfg_in, CastIn.f32_c(0, 1, 1), CastIn.f32_c(0, 1, 1), stream.n, Pio, curve, Mio, Vio, St,
-            curve_prev, resume, None, 0, None, None, loop_words, Wio, address, max_steps, source_out)
+            curve_prev, resume, validation, 0, None, None, loop_words, Wio, address, max_steps, source_out)
     return _model_fit_state[E, False, True](
         ex, spec, cfg_in, CastIn.f32_c(0, 1, 1), CastIn.f32_c(0, 1, 1), stream.n, Pio, curve, Mio, Vio, St,
-        curve_prev, resume, None, 0, None, None, loop_words, Wio, address, max_steps, source_out)
+        curve_prev, resume, validation, 0, None, None, loop_words, Wio, address, max_steps, source_out)
 
 
 def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool](
@@ -1572,14 +1583,13 @@ def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool](
     var pad = 0  # streamed: every batch padded to the model's sequence length
     var dX = dummy_ptr()
     comptime if streamed:
-        if validation or cfg.patience > 0 or cfg.sched == NN_SCHED_PLATEAU:
-            raise Error("ValueError: Sequential.fit(source=) takes no validation_data, early stopping "
-                        + "(n_iter_no_change) or reduce_on_plateau: they read whole epochs of arrays")
-        if cfg.loss == LOSS_TOKEN_CROSS_ENTROPY or cfg.loss == LOSS_CTC or (
-                cfg.target == TARGET_CODES and not _fused_codes(cfg)):
-            raise Error("ValueError: Sequential.fit(source=) trains on one target row of floats a record: a dense "
-                        + "loss, cross_entropy or bce_with_logits on class indices; not token_cross_entropy, ctc "
-                        + "or nll")
+        if (cfg.patience > 0 or cfg.sched == NN_SCHED_PLATEAU) and not validation:
+            raise Error("ValueError: Sequential.fit(source=) monitors validation_data for early stopping "
+                        + "(n_iter_no_change) and reduce_on_plateau: a pass over the source split across calls has "
+                        + "two partial training means, so the training loss is not a monitor a resume repeats")
+        if cfg.loss == LOSS_CTC:
+            raise Error("ValueError: Sequential.fit(source=) does not train the ctc loss: it reads each sample's "
+                        + "label sequence AND its target length, and a source's target row holds no target length")
         var steps = model_sequence_steps(spec, "Sequential.fit(source=)")
         var F = stream[].width
         if steps > 0:
@@ -1607,6 +1617,9 @@ def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool](
     comptime if streamed:
         if has_lens:
             Lp = ex.alloc(bs)  # the batch's lengths, uploaded with it
+            if validation and not validation.value().lengths:
+                raise Error("ValueError: Sequential.fit(source=): the records are masked by their lengths, so "
+                            + "validation_data takes (X, y, lengths)")
     else:
         if has_lens:
             # lane rnn-parity-c: validation rows carry their own lengths (validation_data=(X, y, lengths)), checked
@@ -1655,7 +1668,15 @@ def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool](
         # words a record; cross_entropy and bce_with_logits read one class index, admitted once a fit
         if stream[].spec.target != BS_FIELD_TARGETS:
             raise Error("ValueError: Sequential.fit(source=) needs the source's target='targets'")
-        if cfg.target == TARGET_DENSE:
+        if token:
+            # lane stream-fits-2: a record's target row is its token ids (float32 words, whole numbers below the
+            # head's vocabulary): the words _token_ids makes from an array's int32 ids
+            if stream[].twidth != TW:
+                raise Error("ValueError: Sequential.fit(source=): token_cross_entropy reads " + String(TW)
+                            + " token ids a record; the source's targets have width " + String(stream[].twidth))
+            # whole numbers >= 0, as the array fit admits int32 ids (the head reads them against its vocabulary)
+            _ = batch_source_class_scan(stream[], 0, "Sequential.fit(source=)")
+        elif cfg.target == TARGET_DENSE:
             if stream[].twidth != TW:
                 raise Error("ValueError: Sequential.fit(source=): the model has " + String(TW) + " outputs; the "
                             + "source's targets have width " + String(stream[].twidth))
@@ -1747,6 +1768,13 @@ def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool](
     var didx = dummy_ptr()
     var xb = ex.alloc(bs * D)
     var yb = ex.alloc(bs * TW)
+    # lane stream-fits-2: a streamed nll fit uploads each batch's class indices here and makes yb's one-hot rows
+    var one_hot = False
+    var yc = dummy_ptr()
+    comptime if streamed:
+        if cfg.target == TARGET_CODES and not _fused_codes(cfg):
+            one_hot = True
+            yc = ex.alloc(bs)
     # AUTOGRAD_GATHER_EPOCH (autograd/data.mojo, lane ag-pass5-composed): one
     # gather an epoch into a permuted copy when it fits; each batch is then
     # a slice of it (xb and yb point into the copy). The same words.
@@ -1789,6 +1817,7 @@ def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool](
     var best_w = dummy_ptr()  # lane stream-fits: the third buffer's best copy (centered RMSprop)
     var vLen = dummy_ptr()
     var best_step = step
+    var best_src_epoch = -1  # lane stream-fits-2: the source epoch whose end the kept (best) pass is
     var best_pw1 = st.pw1
     var best_pw2 = st.pw2
     var best_mu = st.mu_prod
@@ -1921,7 +1950,17 @@ def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool](
                 rows_run += B
                 loff = 0
                 staged += batch_source_upload(ex, stream[], BS_FIELD_STEPS, xb).count()
-                staged += batch_source_upload(ex, stream[], BS_FIELD_TARGETS, yb).count()
+                if one_hot:
+                    # nll: the batch's class indices, then their one-hot rows (op_one_hot's float form)
+                    staged += batch_source_upload(ex, stream[], BS_FIELD_TARGETS, yc).count()
+                    var oh = Args()
+                    oh.p0 = yc
+                    oh.p1 = yb
+                    oh.i0 = TW
+                    oh.i1 = 2
+                    ex.launch[OP_ONE_HOT](oh, B * TW)
+                else:
+                    staged += batch_source_upload(ex, stream[], BS_FIELD_TARGETS, yb).count()
                 if has_lens:
                     staged += batch_source_upload(ex, stream[], BS_FIELD_LENGTHS, Lp).count()
             else:
@@ -2004,7 +2043,14 @@ def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool](
         _copy(ex, dcurve + e, epoch_tape.value(mean), 1)
         n_iter = e + 1
         var monitored = dcurve + e
-        if nv > 0:
+        # lane stream-fits-2: a streamed iteration is watched only when it ends a pass over the source (an iteration
+        # cut by the call's step cap mid-pass has no validation word and no decision)
+        var watched = True
+        comptime if streamed:
+            watched = last_b == n_batches
+            if nv > 0 and not watched:
+                _fill(ex, vcurve + e, 1, nan[DType.float32]())
+        if nv > 0 and watched:
             var nb = (nv + bs - 1) // bs
             for vi in range(nb):  # driver-loop: over validation batches
                 var off = vi * bs
@@ -2025,7 +2071,7 @@ def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool](
             var average = epoch_tape.scale(ex, epoch_tape.sum(ex, parts), identical_div(Float32(1), Float32(nv)))
             _copy(ex, vcurve + e, epoch_tape.value(average), 1)
             monitored = vcurve + e
-        if cfg.patience > 0 or nv > 0 or plateau_on:
+        if (cfg.patience > 0 or nv > 0 or plateau_on) and watched:
             ex.sync()
             ex.download(FP(unsafe_from_address=Int(word.unsafe_ptr())), monitored, 1)
             var value = Float64(word[0])
@@ -2045,6 +2091,8 @@ def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool](
                     best_pw1 = st.pw1
                     best_pw2 = st.pw2
                     best_mu = st.mu_prod
+                    comptime if streamed:
+                        best_src_epoch = stream[].epoch  # this pass's source epoch (its end is the kept position)
             if monitor.stop():
                 break
     if validation:
@@ -2065,6 +2113,11 @@ def _model_fit_state[E: Exec, grouped: Bool, streamed: Bool](
             st.pw2 = best_pw2
             st.mu_prod = best_mu
             n_iter = monitor.best_epoch
+            comptime if streamed:
+                # the source at the best pass's end, so the state's position matches its parameters and counters
+                if best_src_epoch >= 0:
+                    stream[].epoch = best_src_epoch
+                    stream[].consumed = n_batches
     ex.sync()
     if not loop_record.recorded:
         loop_record = fit_loop_stop(loop_start, n_iter)

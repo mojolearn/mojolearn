@@ -398,7 +398,8 @@ def sequential_fit_source(mut mods: NativeModules, model: PythonObject, args: Py
     the training image opens the source and runs the streamed instance of the fit loop (autograd/model.mojo
     model_fit_state_source). PACK: the fitted fields and the consumed position on the handle; the training state
     (`_fit_state`) holds the position and the source's binding words, so save_checkpoint and a resume in a fresh
-    process continue on the same next batch."""
+    process continue on the same next batch. Lane stream-fits-2: validation_data (X, y[, lengths]) and
+    restore_best_weights as for arrays, evaluated at the end of every pass over the source."""
     var nk = sequential_keys()
     var b = native_loaded_module("builtins")
     var fields = sequential_fields(model)
@@ -413,9 +414,14 @@ def sequential_fit_source(mut mods: NativeModules, model: PythonObject, args: Py
     if args[3] is not None or args[4] is not None:
         raise Error("TypeError: Sequential.fit(source=) takes no batch_size or shuffle: they are the source's "
                     + "(BatchSource(path, batch_size, shuffle=...))")
-    if args[7] is not None or Bool(py=args[8]) or args[9] is not None or args[10] is not None:
-        raise Error("TypeError: Sequential.fit(source=) takes no validation_data, restore_best_weights, lengths or "
-                    + "target_lengths: the lengths are the source's record lengths")
+    if args[9] is not None or args[10] is not None:
+        raise Error("TypeError: Sequential.fit(source=) takes no lengths or target_lengths: the lengths are the "
+                    + "source's record lengths")
+    # lane stream-fits-2: validation_data and restore_best_weights as for arrays, at the end of every pass
+    var validation = args[7]
+    var restore_best = Bool(py=args[8])
+    if restore_best and validation is None:
+        raise Error("restore_best_weights requires validation_data")
     var seed = args[5]
     if not _integer(seed, context) or Bool(py=seed < PythonObject(0)) or Bool(py=seed > py_item(context, nk[].k_uint64_max)):
         raise Error("seed must be an integer in [0, 2**64)")
@@ -501,6 +507,50 @@ def sequential_fit_source(mut mods: NativeModules, model: PythonObject, args: Py
     var native_addresses: List[Int] = [0, 0, Int(py=sequential_address(params)), Int(py=sequential_address(curve)),
         Int(py=sequential_address(moment)), Int(py=sequential_address(variance)), Int(py=sequential_address(state)),
         prev_address]
+    # VALIDATION (lane stream-fits-2): the array fit's validated form (autograd/model_execution.mojo
+    # model_fit_source_native): the validation rows, targets and the classes (classes_ = arange(classes): a
+    # streamed classifier's labels are the class indices) as descriptors 2 to 4, the curve and result words at
+    # addresses 11 and 12, the validation lengths at 14 (13 unused: the training lengths are the source's), and
+    # restore_best_weights as the sixteenth integer
+    var no_rows: List[CastIn] = [CastIn.f32_c(0, 1, 1), CastIn.f32_c(0, 1, 1)]
+    var vx = PythonObject(None)
+    var vy = PythonObject(None)
+    var val_curve = PythonObject(None)
+    var val_info = PythonObject(None)
+    var val_lengths = PythonObject(None)
+    var val_classes = PythonObject(None)
+    if validation is not None:
+        if not (Bool(py=py_call(b.isinstance, validation, b.tuple)) or Bool(py=py_call(b.isinstance, validation, b.list))) or (len(validation) != 2 and len(validation) != 3):
+            raise Error("validation_data must be (X, y), or (X, y, lengths) for a model with recurrent layers")
+        var vx_snapshot = sequential_x_snapshot(mods, validation[0], "validation X", context)
+        vx = vx_snapshot.keep
+        vy = sequential_input(validation[1], context)
+        var vnd = Int(py=vy.ndim)
+        if not Bool(py=sequential_sample_shape(mods, model, vx_snapshot.shape) == sample) or vx_snapshot.source.cols != d:
+            raise Error("validation inputs must have the training sample shape (records padded to the source's "
+                        + "max_length)")
+        if vnd < 1 or vnd > 2 or Int(py=vy.shape[0]) != vx_snapshot.source.rows:
+            raise Error("validation targets must match the validation rows")
+        if target != 0 and vnd != 1:
+            raise Error("validation classification targets must be a vector")
+        val_curve = sequential_array(mods, Python.tuple(epochs), py_item(context, nk[].k_float32), context)
+        val_info = sequential_array(mods, Python.tuple(2), py_item(context, nk[].k_int64), context)
+        var vaddrs = Python.list(0, 0, 0, 0, 0, 0, 0, 0, vx_snapshot.abi(), sequential_descriptor(vy, "validation y"),
+                                 PythonObject(None), sequential_address(val_curve), sequential_address(val_info))
+        if target != 0:
+            val_classes = sequential_array(mods, Python.tuple(n_classes), py_item(context, nk[].k_int64), context)
+            var vc = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(val_classes)))
+            for k in range(n_classes):  # small-loop(classes: the class labels)
+                vc[k] = Int64(k)
+            py_setitem(vaddrs, PythonObject(10), sequential_descriptor(val_classes, "classes"))
+        if len(validation) == 3:
+            val_lengths = _sequential_lengths(validation[2], vx_snapshot.source.rows, context, "validation lengths")
+            _ = py_call(vaddrs.extend, Python.tuple(0, sequential_address(val_lengths)))
+        var admitted = model_admit_addresses(vaddrs, target, True, CastIn.f32_c(0, 1, 1))
+        no_rows = admitted[1].copy()
+        for k in range(8, len(admitted[0])):  # small-loop(the validation addresses)
+            native_addresses.append(admitted[0][k])
+        native_options.append(1 if restore_best else 0)
     if third is not None:
         native_addresses.append(Int(py=sequential_address(third)))
         native_options.append(FIT_STATE3_MARK)
@@ -520,7 +570,6 @@ def sequential_fit_source(mut mods: NativeModules, model: PythonObject, args: Py
     var loop_words = fit_loop_words()
     native_addresses.append(Int(loop_words.unsafe_ptr()))
     native_options.append(FIT_LOOP_MARK)
-    var no_rows: List[CastIn] = [CastIn.f32_c(0, 1, 1), CastIn.f32_c(0, 1, 1)]
     var provider = py_item(entries, nk[].k_native_model_provider)
     var descriptor = model_descriptor_words(native_program, native_options, no_rows)
     var n_iter = neural_descriptor_execute(provider, MODEL_FIT, native_addresses, descriptor, native_scalars)
@@ -535,8 +584,19 @@ def sequential_fit_source(mut mods: NativeModules, model: PythonObject, args: Py
     _ = moment
     _ = params
     _ = third
+    _ = vx^  # lane stream-fits-2: the validation buffers, read by the native call above
+    _ = vy^
+    _ = val_lengths^
+    _ = val_classes^
     _ = description_owner^
     batch_source_position_out(source, Int(position[0]), Int(position[1]))
+    if validation is not None:
+        var info = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(val_info)))
+        var ran = Int(info[0])
+        py_setitem(fields, nk[].k_epochs_run_, ran)
+        py_setitem(fields, nk[].k_best_epoch_, PythonObject(info[1]))
+        py_setitem(fields, nk[].k_validation_loss_curve_, sequential_curve(val_curve, ran))
+        _ = val_info^  # info reads its storage: keep it alive past the last read
     _ = position^
     py_setitem(fields, nk[].k_params_, params)
     py_setitem(fields, nk[].k_n_iter_, n_iter)
