@@ -76,6 +76,9 @@ NON_COMPUTING = frozenset((
     "MLPInference", "SambaInference", "catboost_auto_learning_rate", "gpu_arch", "gpu_arch_how",
     "ImportedProgram", "profile", "require_identical", "Program", "BootstrapResult", "MonteCarloResult",
     "PermutationTestResult", "set_numeric_mode", "numeric_mode_used", "vendor_used",
+    # a continuation container the model's own stream call builds (it runs on that
+    # model's side, as ImportedProgram does on import_model's): w3-integrate-9
+    "GenerationStream",
 ))
 
 
