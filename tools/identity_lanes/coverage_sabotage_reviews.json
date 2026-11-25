@@ -171,5 +171,13 @@
    "error_match": "ValueError: carried dW \\(t0=171\\) and unsplit dW differ: [0-9]+ bytes of [0-9]+",
    "patch_sha256": "e4fbb269e2a786da4d793ae8dd83b4978e1c68c357a03d571d8ee62865686673"
   }
+ },
+ "coverage-core-ordered_gradient_sum_cpu": {
+  "ordered-gradient-sum/base": {
+   "product_check": "tools/identity_break.py (the ordered-gradient-sum lane): every returned tensor's bytes against the independent NumPy float32 left fold of the same shards in the same order; a difference raises NumericalMismatch with the lane's parts (an in-cell byte oracle, which shares no code with the native fold).",
+   "why_fault_reaches_check": "parallel_training.ordered_sum_gradients with device='cpu' -> core/ordered_gradient_sum_host.mojo ordered_gradient_sum_cpu, where the patch adds 1.0 to the first folded total after the last ordered_fold_f32 step: element [0, 0] of the first tensor is 2**100 + 1 - 2**100 + 3 = 3 by the left fold and reads 4, so the oracle raises before the lane hashes (d1641666a4 host gate: DIVERGENT with oracle_errors, read MISSED 'incomplete sabotaged output' for want of this review). Lane w3-fix-9-s2, 2026-11-25.",
+   "error_match": "ordered gradient sum differs from Float32 left fold",
+   "patch_sha256": "206abf0307b02e7eb1e388d186c59045f71b011de56897170268b8ed12dfc9d7"
+  }
  }
 }
