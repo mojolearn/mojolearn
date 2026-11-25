@@ -244,8 +244,10 @@ for arm in ${ARMS//,/ }; do
     # The check's reasons ride with a miss in summary.txt (lane w3f5-e, 2026-11-24: gate 3cda8a05b3's copies
     # kept only summary.txt, so eight MISSED arms carried no cause: an unstable clean lane, an unmoved
     # fixture or a binary change outside the declared closure could not be told apart).
-    [ "$v" = CAUGHT ] || grep -e '^INVALID' -e '^OWED' -e 'moved' -e 'unmoved' "$OUT/check_${arm}.txt" | cut -c1-300 | head -n 12 \
+    [ "$v" = CAUGHT ] || grep -e '^INVALID' -e '^OWED' -e 'moved' -e 'unmoved' "$OUT/check_${arm}.txt" | grep -v '^LANES ' | cut -c1-300 | head -n 12 \
         | sed "s/^/  CHECK $arm: /" >> "$OUT/summary.txt"
+    # The per-lane outcome lines whole (lane w3f7-b): a cut list cannot say which lanes to correct.
+    [ "$v" = CAUGHT ] || grep -e '^LANES ' "$OUT/check_${arm}.txt" | sed "s/^/  CHECK $arm: /" >> "$OUT/summary.txt"
 done
 log "DONE"
 exit $miss

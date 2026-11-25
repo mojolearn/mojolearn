@@ -345,8 +345,10 @@ def check(arm, clean_path, sab_path, restored_path=None, evidence_path=None, roo
         if requested_lanes and not set(arm["lanes"]) <= requested_lanes:
             raise ValueError("requested lanes do not cover this arm")
         repeats = clean["repeats"]
+        outcome = {}  # lane -> moved | unmoved | invalid: the whole list, one line (lane w3f7-b, 2026-11-24)
         for lane in arm["lanes"]:
             caught = 0
+            before = len(failures)
             for fixture in clean["fixtures"]:
                 key = lane + "/" + fixture
                 cells = [r["cells"].get(key) for r in (clean, sab, restored)]
@@ -408,8 +410,14 @@ def check(arm, clean_path, sab_path, restored_path=None, evidence_path=None, roo
                     caught += 1
                 else:
                     print(f"{key}: unmoved")
+            outcome[lane] = "moved" if caught else ("invalid" if len(failures) > before else "unmoved")
             if not caught:
                 failures.append(f"{lane}: no fixture caught the fault")
+        # Every lane's outcome on one line each, never cut: the f200804327 gate kept only a 300-character
+        # excerpt of the per-cell lines, so the unmoved lanes of nine arms could not all be named.
+        for state in ("moved", "unmoved", "invalid"):
+            print(f"LANES {state.upper()} ({sum(1 for v in outcome.values() if v == state)}): "
+                  + " ".join(lane for lane, v in outcome.items() if v == state))
     except (ValueError, OSError, KeyError, TypeError, subprocess.SubprocessError) as error:
         failures.append(str(error))
     for failure in failures:
