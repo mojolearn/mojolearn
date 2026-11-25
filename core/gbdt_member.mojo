@@ -502,12 +502,15 @@ def _whole(call: _CallPtr) raises:
 #
 # FIT (lane vdf-scope-trees4): the device quantizer is the default of every GPU
 # image (gbdt/gpu_data/sym_feat_switches.mojo GBDT_QUANT_DEVICE), so on an image
-# with XG_CAP_FIT_SLOT_X a raw float fit (no cat_features, no
-# one_hot_features, no eval set; nan_mode='Forbidden' refuses by a device NaN
+# with XG_CAP_FIT_SLOT_X a raw float fit (no cat_features;
+# nan_mode='Forbidden' refuses by a device NaN
 # scan of the slot, XG_SLOT_NAN) hands the fold slot to the ROW-MAJOR fit, whose upload
 # is one device-to-device copy (gbdt/train.mojo `_qd_upload_float_columns`), and
-# to the importances (gbdt/gpu_importance.mojo): X never visits the host. Every
-# other fit takes the fold's rows of X on the host (`member_fold_take_f32`, row
+# to the importances (gbdt/gpu_importance.mojo): X never visits the host. A
+# one_hot_features fit (lane vdf2-gbdtcat) hands the slot to the column-major
+# fit, whose trainer lays it out column-major on the device
+# (`_rows_to_device_columns`) and reads its one-hot columns there; an eval set is
+# the caller's own host input on either route. A cat_features fit takes the fold's rows of X on the host (`member_fold_take_f32`, row
 # chunks across the host's cores), as the caller's gather did. y, the weights
 # and the group ids are columns of the base taken through the index on the
 # host (the y words cross the bus as the entry uploads them). Same bytes as the
@@ -734,8 +737,13 @@ def _fold_op[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr, operation: Int)
         caps = 0
     var device: Bool
     if operation == MEMBER_OP_FIT:
-        device = ((caps & XG_CAP_FIT_SLOT_X) != 0 and len(slot[].cat_given) == 0 and len(slot[].hot_given) == 0
-                  and call[].eval_x.rows == 0)
+        # lane vdf2-gbdtcat: one_hot_features and an eval set read the slot
+        # too (the trainer lays it out column-major on the device; the eval
+        # set is the caller's own host input, never a fold take). A
+        # cat_features fit still takes host rows: its category map is fitted
+        # over the columns' values (`_category_fit`) and has no device form
+        # yet.
+        device = (caps & XG_CAP_FIT_SLOT_X) != 0 and len(slot[].cat_given) == 0
     else:
         device = (slot[].fitted and len(slot[].cat_map) == 0 and (caps & XG_CAP_RESIDENT) != 0
                   and (caps & XG_CAP_SLOT_X) != 0)
@@ -1310,11 +1318,13 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
             row_major = False
     var scratch = List[Float32]()
     var x_addr = call[].x.data
-    if x_addr < 0 and not row_major:
-        # THE FOLD X WORD (lane vdf-scope-trees4): only the row-major fit
-        # reads it; `_fold_op` hands it only to an image that says so
+    if x_addr < 0 and not row_major and (n_flags == 0 or len(cat_columns) != 0):
+        # THE FOLD X WORD (lane vdf-scope-trees4): the row-major fit reads it,
+        # and (lane vdf2-gbdtcat) a one-hot fit, whose trainer lays the slot
+        # out column-major on the device; `_fold_op` hands it only to an
+        # image that says so, and never with cat_features
         raise Error("RuntimeError: a Gbdt member's fold X word reached a fit without the row-major device quantizer")
-    if not row_major:
+    if not row_major and x_addr >= 0:
         scratch = _column_major(call[].x.data, rows, cols)
         x_addr = Int(scratch.unsafe_ptr())
     # The category map of this fit: the dense codes replace the categorical
@@ -1430,7 +1440,8 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     # `feature_importances_` (lane mf-imp6): the door's RUN on the same block
     # the fit read (its layout, the categorical columns as their codes, the
     # fit's weights), on the route's column.
-    var imp = xg_importances(entry, outcome.text, x_addr, rows, cols, row_major, w_addr, n_weights)
+    # (the fold slot holds C-order rows whatever route the fit took)
+    var imp = xg_importances(entry, outcome.text, x_addr, rows, cols, row_major or x_addr < 0, w_addr, n_weights)
     _ = len(scratch)  # the column-major copy lives until the fit and the importances returned
     _ = len(codes)  # the classifier's float32 targets (or the column-major y) too
     _ = len(flags)
