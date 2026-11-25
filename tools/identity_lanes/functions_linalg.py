@@ -43,13 +43,20 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("fn-linalg-matmul-bf16")
 def _(ml, X, yc, yr, Xh=None):
-    """linalg.matmul_bf16: float32 times bf16 bits, and float32 times float32 (both NT)."""
+    """linalg.matmul_bf16: float32 times bf16 bits, and bf16 bits times bf16 bits (both NT).
+
+    The documented operands (python/mojolearn/_linalg_impl.py matmul_bf16): `b` is bf16 BITS (uint16 from to_bf16),
+    `a` is float32 or bf16 bits. The earlier second part passed a float32 `b`, which the product refuses by design
+    ("b has dtype float32; the bf16 profile takes bf16 BITS", bindings/linalg_ops_lowbit_door.mojo), so the lane was
+    REFUSED on every side. Fixture defect; the second part now covers the bits-times-bits form instead
+    (FIX w3-fix-13, 2026-11-25)."""
     a = _functions_mat(X, 64, 16, "fn-bf16:a")
     b = _functions_mat(X[64:], 32, 16, "fn-bf16:b")
     bits = np.ascontiguousarray(np.asarray(ml.linalg.to_bf16(b)))
+    a_bits = np.ascontiguousarray(np.asarray(ml.linalg.to_bf16(a)))
     return _functions_resident(ml, "linalg.matmul_bf16", lambda p: dict(
         nt=_functions_d(ml.linalg.matmul_bf16(p(a), p(bits), transpose_b=True)),
-        floats=_functions_d(ml.linalg.matmul_bf16(p(a), p(b), transpose_b=True))), form="train")
+        bits=_functions_d(ml.linalg.matmul_bf16(p(a_bits), p(bits), transpose_b=True))), form="train")
 
 
 @lane("fn-linalg-to-bf16")
