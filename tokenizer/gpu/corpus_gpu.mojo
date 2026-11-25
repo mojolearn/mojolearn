@@ -227,9 +227,8 @@ def corpus_gpu_train(
     var d_offs = ctx.enqueue_create_buffer[DType.int64](m + 1)
     _up8(ctx, d_text, span_addr, m)
     var ndocs = corpus_cut_device(ctx, _p8(d_text), m, cuts, width, d_offs)
-    var ng = 0
-    if vocab_size > 256:
-        ng = bpe_gpu_train_device(ctx, classes, _p8(d_text), _p64(d_offs), ndocs, m, vocab_size, min_frequency,
+    # Every vocabulary size counts the groups (vocab_size 256: no merge pass), as train_bpe reports them.
+    var ng = bpe_gpu_train_device(ctx, classes, _p8(d_text), _p64(d_offs), ndocs, m, vocab_size, min_frequency,
                                   merges)
     var pairs = I32P(unsafe_from_address=pairs_addr)
     for k in range(2 * merges.n_merges):  # driver-loop: over the merges read back once (2 * (vocab_size - 256) words at most)
