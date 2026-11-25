@@ -37,7 +37,7 @@ from core.msel_helpers_host import (
 from core.hotpath_device import (
     HPD_MAX_N, device_arange_skip_i64, device_count_mask_u8, device_first_seen_i32,
     device_kfold_ids, device_mask_from_indices_u8, device_select_fold_i64, device_select_folds_i64,
-    device_select_mask_u8_i64, device_strat_fold_assign_i32, device_stratified_fold_ids,
+    device_select_mask_u8_i64, device_stratified_fold_ids,
     device_first_seen_on, device_strat_fold_assign_res, device_select_folds_on, device_stratified_fold_ids_on,
     device_group_class_counts_on,
 )
@@ -199,19 +199,8 @@ def first_seen_i32_device_run(ca: Int, rows: Int, kk: Int, ea: Int, na: Int) rai
     return first_seen_i32(ca, rows, kk, ea, na)
 
 
-def strat_fold_assign_i32_device_run(ea: Int, rows: Int, kk: Int, K: Int, aa: Int, pa: Int, ca: Int,
-                                     da: Int) raises -> Int:
-    """`strat_fold_assign_i32` on the device; tables the device twin does
-    not accept rerun the host run."""
-    comptime if MSEL_HPDEV_FOLDS:
-        if (
-            rows >= 1 and rows <= HPD_MAX_N and kk >= 1 and K >= 1 and K <= HPD_MAX_N
-            and kk * K <= MSEL_HPDEV_MAX_TABLE and ea != 0 and aa != 0 and ca != 0 and da != 0
-        ):
-            var ctx = process_ctx[LABELS_DEVICE_CONTEXT]()
-            if device_strat_fold_assign_i32(ctx, ea, rows, kk, K, aa, pa, ca, da):
-                return 0
-    return strat_fold_assign_i32(ea, rows, kk, K, aa, pa, ca, da)
+# TOMBSTONE: strat_fold_assign_i32 export (dead export: no caller since lane vdf-scope-split moved the splitters to the stored-code MH_STRAT_FOLD_ASSIGN_RES) deleted 2026-11-24 by lane vdf2-native; code recoverable at 2da8727c02.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/dead_export_strat_fold_assign_i32.patch; record in docs/TOMBSTONES.md.
 
 
 def msel_gather_device_run(kind: Int, table: Int, classes: Int, codes: Int, count: Int, dst: Int) raises -> Int:

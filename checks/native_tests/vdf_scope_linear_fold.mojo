@@ -99,9 +99,15 @@ def _host_case(which: Int) raises:
         call.row_index = MemberMatrix(Int(narrow.unsafe_ptr()), 3, 1, MEMBER_I32)
         var fold = MemberFoldX()
         member_fold_index(MutPointer[MemberCall, MutUntrackedOrigin](unsafe_from_address=Int(UnsafePointer(to=call))), fold, "Ridge")
+        # `fold.index` points into `fold.wide`, which this value owns: read the words while `fold` lives and name
+        # it again after (a local is freed at its last named use; the untracked pointer does not keep it alive)
         var wide = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=fold.index)
-        require(fold.rows == 3 and fold.cols == D and wide[0] == 7 and wide[1] == 0 and wide[2] == N - 1,
-                "int32 index not widened to the same numbers")
+        var w0 = wide[0]
+        var w1 = wide[1]
+        var w2 = wide[2]
+        var shape_ok = fold.rows == 3 and fold.cols == D
+        _ = fold^
+        require(shape_ok and w0 == 7 and w1 == 0 and w2 == N - 1, "int32 index not widened to the same numbers")
         for bad in range(2):  # small-loop(the two out-of-range numbers)
             var outside: List[Int64] = [Int64(1), Int64(-1 if bad == 0 else N)]
             call.row_index = MemberMatrix(Int(outside.unsafe_ptr()), 2, 1, MEMBER_I64)

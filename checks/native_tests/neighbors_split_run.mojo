@@ -16,7 +16,7 @@ from checks.native_tests.testsuite_cases import check_cases, require
 from core.neighbors_entry_table import (
     NB_OP_RADIUS_COUNT, NB_OP_RADIUS_FILL, NB_OPERATION_COUNT, nb_ops_check_spans,
     NB_OP_SEARCH, NB_OP_SEARCH_RESIDENT, NB_OP_RBC_SEARCH, NB_OP_CLASSIFY_NEIGHBORS, NB_OP_REGRESS_NEIGHBORS,
-    NbFold,
+    NB_OP_INDEX_PREPARE_FOLD, NbFold,
 )
 from neighbors.neighbors_local_run import LOF_RESULT_LABELS, LOF_AUTO_OFFSET
 from neighbors.nearest_centroid_run import (
@@ -66,7 +66,9 @@ def fixture(unit: Int) raises:
             require(String(e) == "ValueError: input feature count differs from fit", "feature refusal wording")
     elif unit == 1:
         # the two radius operations: their spans are accepted, any other refused
-        require(NB_OP_RADIUS_COUNT == 7 and NB_OP_RADIUS_FILL == 8 and NB_OPERATION_COUNT == 14, "operation ids")
+        # 73f9dd83d2 (lane vdf-scope-cluster2a) appended NB_OP_INDEX_PREPARE_FOLD = 14: the table has 15 operations
+        require(NB_OP_RADIUS_COUNT == 7 and NB_OP_RADIUS_FILL == 8 and NB_OP_INDEX_PREPARE_FOLD == 14
+                and NB_OPERATION_COUNT == 15, "operation ids")
         var words = List[Int](length=8, fill=0)
         var reals = List[Float64](length=2, fill=0)
         var result = List[Int](length=1, fill=0)

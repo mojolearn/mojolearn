@@ -2031,7 +2031,7 @@ FAMILIES = (
             "bincount_i64",
             "assign_fold_i64", "count_fold_hits_i64", "mark_split_roles_f32",
             "scatter_rows_bytes", "uniform_init_f32",
-            "strat_fold_assign_i32",
+            # strat_fold_assign_i32 deleted 2026-11-24 (lane vdf2-native): no caller (the stored-code MH_STRAT_FOLD_ASSIGN_RES)
             "strided_copy_bytes", "check_lengths_i64",
             "ragged_rows_bytes", "row_means_f64",
             "truncnorm_draws", "fsum_f64",

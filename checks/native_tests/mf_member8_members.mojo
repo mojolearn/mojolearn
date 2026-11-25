@@ -43,6 +43,7 @@ from core.member_abi import (
     MEMBER_OP_PREDICT, MEMBER_OP_TRANSFORM, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_OP_CAPABILITIES,
     MEMBER_CAN_FIT, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_PREDICT, MEMBER_CAN_TRANSFORM,
     MEMBER_BLOCK_FAMILY, MEMBER_IMPORT_DONE, MEMBER_IGNORES_Y, MEMBER_BLOCK_SCALARS, MEMBER_F64, MEMBER_I32,
+    MEMBER_CAN_ROW_INDEX,
 )
 from core.member_families import (
     MEMBER_FAMILY_XCLUSTER, MEMBER_FAMILY_XDECOMP, MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_PREP,
@@ -292,8 +293,10 @@ def test_se_refusals_before_entry() raises:
     _new(3, precomputed, call)
     try:
         var mask = member_call(_ref(3), MEMBER_OP_CAPABILITIES, call)
-        require(mask == (MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_IGNORES_Y),
-                "SpectralEmbedding kind mask is not FIT | EXPORT | IMPORT | IGNORES_Y")
+        # 999e1d2475 (lane vdf-scope-cluster6): the kind reads a fold's row index (MEMBER_CAN_ROW_INDEX); the host
+        # route has no SPECTRAL_CAP_DEV_STORE (core/spectral_native_device.mojo only), so no MEMBER_CAN_SCOPE
+        require(mask == (MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_IGNORES_Y | MEMBER_CAN_ROW_INDEX),
+                "SpectralEmbedding kind mask is not FIT | EXPORT | IMPORT | IGNORES_Y | ROW_INDEX")
         call.x = MemberMatrix(Int(x.unsafe_ptr()), 4, 3)
         require(_raises(3, MEMBER_OP_FIT, call, "must be a square affinity matrix or a SciPy sparse matrix, "
                         + "got shape (4, 3)"), "SpectralEmbedding non-square precomputed X was not refused")
