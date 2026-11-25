@@ -65,6 +65,13 @@ _generic_DIGESTS = ("digest_", "training_digest_")
 _generic_DIGEST_MOVES_WHEN_USED = ("IterativeImputer", "LatentDirichletAllocation", "MinCovDet")
 #: attribute and dictionary-key words that name a record which is not arithmetic (timing, the box, the files)
 _generic_NOT_ARITHMETIC = r"time|elapsed|duration|seconds|vendor|thread|backend|platform|hostname|filename|filepath|directory"
+#: fitted records whose name does not say they hold a time but whose value carries one: name -> how many leading
+#: members are arithmetic. `fit_loop_` is `(executed iterations, loop wall time in ms)` on every family that stores
+#: it (KMeans, MiniBatchKMeans, the forests and boosters, the decompositions, label propagation, the linear, recurrent
+#: and convolutional fits; python/mojolearn/_digest_fields.py leaves it out of digest_ for the same reason). Its count
+#: is digested, its milliseconds never: they differ on every run, so generic-attrs read the clean and the restored run
+#: of one source as different (w3-fix-10-s4, sab2b-mul_add-generic-cpu "restoration changed the clean result").
+_generic_TIMED_RECORDS = {"fit_loop_": 1}
 _generic_MISSING = object()
 
 
@@ -496,6 +503,9 @@ def _generic_attrs_part(ml, where, name, cls, est, args, fixture):
             continue
         if _generic_is_method(value):
             continue
+        keep = _generic_TIMED_RECORDS.get(attr)
+        if keep is not None and isinstance(value, (tuple, list)):
+            value = tuple(value[:keep])  # the arithmetic members only; the wall time is left out
         out.append(_generic_tag(attr))
         _generic_arrays(value, out)
     if args is not None and callable(getattr(est, "get_feature_names_out", None)):
