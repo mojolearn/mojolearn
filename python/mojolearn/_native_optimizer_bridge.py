@@ -2,6 +2,18 @@
 """Import-time connection of optimizer native ABI entries and admitted types."""
 
 
+# glue: the TrainDeviceArray layer entries the device doors read by name
+# (bindings/training_layers_device_unpack.mojo `_dev_entry`,
+# bindings/training_grads_device_unpack.mojo), exported only by identical GPU
+# images (IDN_TRAIN_DEV_TENSORS, bindings/_mojolearn_training.mojo). They were
+# exported but never connected here, so every device call refused "this build
+# has no native device entry for this training layer" (9 fn-training-* and
+# training-param-groups-device lanes, L40S smoke of main 3cd641b37e; lane gs-fix).
+_DEVICE_LAYER_ENTRIES = ("rms_norm_forward_dev", "rms_norm_backward_dev", "embedding_forward_dev",
+                         "embedding_backward_dev", "chunked_lm_head_dev", "clip_dev", "accumulate_dev",
+                         "mlp_sessions_dev")
+
+
 def _training_cpu_cells(_backend, entries, optional_entries):
     """The host training image's entries, the same table form as one mode's
     `bindings[mode]` cells, or the refusal text a device="cpu" call raises."""
@@ -50,10 +62,10 @@ def connect(training):
                "linear_forward", "linear_backward", "linear_forward_dev", "linear_backward_dev",
                "rms_norm_forward", "rms_norm_backward", "embedding_forward", "embedding_backward", "ce_loss", "ce_loss_dev", "optimizer_resident_download", "optimizer_resident_upload",
                "chunked_lm_head_v2_loss", "chunked_lm_head_v2_train", "mlp_sessions_rows", "mlp_sessions",
-               "residual_dropout", "residual_dropout_backward")
+               "residual_dropout", "residual_dropout_backward") + _DEVICE_LAYER_ENTRIES
     optional_entries = ("linear_forward_dev", "linear_backward_dev", "ce_loss_dev", "chunked_lm_head_v2_loss",
                         "chunked_lm_head_v2_train", "mlp_sessions_rows", "mlp_sessions", "residual_dropout",
-                        "residual_dropout_backward")
+                        "residual_dropout_backward") + _DEVICE_LAYER_ENTRIES
     for mode in ("identical", "fast"):  # glue: connect every supported numeric-mode ABI at import
         try:
             binding = _backend.binding("_mojolearn_training", mode)
