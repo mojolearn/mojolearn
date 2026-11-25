@@ -30,7 +30,8 @@ def _(ml, X, yc, yr, Xh=None):
     of q, k and v of sum(out * seed). gqa_cross: cross-attention with grouped heads (4 query heads over 2
     key/value heads, Lq 5, Lk 7, dv 3) under a boolean ids mask (batch row 1: two keys dropped and query 2
     fully masked, whose output row must be zeros) and its three gradients. additive: inputs without a heads axis
-    (2, 4, 6) x (2, 5, 6), a float mask (4, 5) added to the scores (one -inf), scale 0.3. program: the gqa_cross
+    (2, 4, 6) x (2, 5, 6), a trainable float mask (4, 5) added to the scores (one -inf), scale 0.3, and the
+    gradients of q and of the mask through Session.vjp. program: the gqa_cross
     call captured (q, k, v and the ids mask as inputs), run on the same arrays (must equal the eager output),
     saved and loaded (must equal), and run on held-out queries. Parts: every output and gradient."""
     B, H, Hkv, Lq, Lk, d, dv = 2, 4, 2, 5, 7, 4, 3
@@ -64,9 +65,12 @@ def _(ml, X, yc, yr, Xh=None):
     av = _hw((2, 5, 6), "ops-attention-qkv:av", -1.0, 1.0)
     am = _hw((4, 5), "ops-attention-qkv:am", -0.5, 0.5)
     am[3, 1] = -np.inf
-    with ml.ops.Session() as s:
-        out = s.attention(s.tensor(aq), s.tensor(ak), s.tensor(av), mask=s.tensor(am), scale=0.3)
-        parts["additive"] = _h(np.asarray(s.numpy(out)))
+    with ml.ops.Session(record=True) as s:
+        hq, hm = s.tensor(aq, requires_grad=True), s.tensor(am, requires_grad=True)
+        out = s.attention(hq, s.tensor(ak), s.tensor(av), mask=hm, scale=0.3)
+        seed = s.tensor(_hw((2, 4, 6), "ops-attention-qkv:aseed", -1.0, 1.0))
+        dq, dm = s.vjp(out, [hq, hm], seed)
+        parts["additive"] = _h(np.asarray(s.numpy(out)), np.asarray(s.numpy(dq)), np.asarray(s.numpy(dm)))
     held_q = _hw((B, H, Lq, d), "ops-attention-qkv:held-q", -1.0, 1.0)
     with ml.ops.Session() as s:
         q, k, v = s.tensor(gq), s.tensor(gk), s.tensor(gv)
