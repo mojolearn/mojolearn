@@ -171,7 +171,9 @@ def run_weighted_case[E: Exec](mut ex: E, which: Int, per_row: Bool) raises -> L
     var p = tape.tensor(ex, pv, _R, cols, True)
     var y = tape.tensor(ex, yv, _R, 1 if ce else _C, False)
     var wt = tape.tensor(ex, wv, _R, 1 if (per_row or ce) else _C, False)
-    var loss = weighted_loss(tape, ex, p, y, wt, _code(which), reduction, _DELTA)
+    # the third parameter is huber's delta, and bce_with_logits' pos_weight: 1 there, the oracle's unweighted
+    # term (w3-integrate-10: 0.7 went to bce as pos_weight)
+    var loss = weighted_loss(tape, ex, p, y, wt, _code(which), reduction, Float32(1) if which == 3 else _DELTA)
     var lv = tape.values(ex, loss)
     _close(name + " loss", lv, want_loss, Float64(2e-5))
     tape.backward(ex, loss)
