@@ -41,6 +41,10 @@ from providers.python.neural_descriptor_pyapi_door import neural_descriptor_reso
 from providers.python.autograd_execution_profile_pyapi_pack import execution_profile_object
 from providers.python.autograd_control_checkpoint_pyapi_pack import control_save_py, control_load_py
 from providers.python.autograd_gradient_diagnostics_pyapi_pack import gradient_report_py
+# nn-blocks-scan begin: Session.scan (autograd/nn_scan_frontend.mojo)
+from autograd.nn_scan_frontend import session_scan
+from autograd.autograd_ops_frontend_run import _SOP_SCAN
+# nn-blocks-scan end
 
 
 # Session operation codes (row N089, lesson 12) and their one-per-process
@@ -617,6 +621,52 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         py_setitem(block, "dt_lo", Float64(dt_lo))
         py_setitem(block, "dt_hi", Float64(dt_hi))
         return block
+    # nn-blocks-scan begin
+    if op == _SOP_SCAN:
+        # UNPACK: args (cell, xs, init_state, params, reverse, lengths). The cell is a Program (or a loaded
+        # one) of this session or of another session of this image; its description is read natively
+        # (autograd/nn_scan_frontend.mojo). init_state is one handle or a sequence of handles; params None or a
+        # sequence of handles; lengths None or a handle.
+        var cell = program_owner_fields(args[0])
+        var cell_session = py_item(cell, nk[].k__s)
+        var cell_sid = Int(py=sid)
+        if cell_session is not session:
+            var cell_fields = ops_session_fields(cell_session)
+            var cell_handle = py_item(cell_fields, nk[].k__id)
+            if _nil(cell_handle):
+                raise Error("ValueError: scan: the cell's Session is closed")
+            var cell_scope: List[Int] = [ops_session_registry_token(), KIND]
+            var admitted = neural_descriptor_resource_handle(py_item(cell_fields, nk[].k__lifetime), cell_scope)
+            if admitted == 0 or admitted != _int(cell_handle, "cell session", 1):
+                raise Error("ValueError: scan: the cell was captured in a Session on another device;"
+                            + " capture it on this Session's device")
+            cell_sid = admitted
+        if _nil(py_item(cell, nk[].k__id)):
+            raise Error("ValueError: scan: the cell Program was freed")
+        var pid = _int(py_item(cell, nk[].k__id), "cell", 1)
+        var one_state = _is_int(args[2])
+        var states = _ints(args[2], "init_state", 1)
+        var given = not _nil(args[3])
+        var params = List[Int]()
+        if given:
+            params = _ints(args[3], "params", 1)
+        var lengths = 0 if _nil(args[5]) else _int(args[5], "lengths", 1)
+        if not program_numeric_scalar(args[4]):
+            raise Error("TypeError: reverse must be a bool")
+        var got = session_scan[E, KIND](Int(py=sid), cell_sid, pid, _int(args[1], "xs", 1), states, lengths,
+                                        params, given, Bool(py=args[4]))
+        # PACK: (ys, final_state); final_state one handle when init_state was one handle, else a tuple
+        var finals = List[Int](capacity=len(got) - 1)
+        for k in range(1, len(got)):  # driver-loop: over the final state handles
+            finals.append(got[k])
+        var pair = Python.list()
+        _ = py_call(pair.append, PythonObject(got[0]))
+        if one_state:
+            _ = py_call(pair.append, PythonObject(got[1]))
+        else:
+            _ = py_call(pair.append, _tuple_ints(finals))
+        return py_call(native_loaded_module("builtins").tuple, pair)
+    # nn-blocks-scan end
     if op == _SOP_MAMBA_STEP or op == _SOP_ATTENTION_STEP:
         # UNPACK: args (x, block); the block is the exact dict a block maker
         # returned. One native step op (autograd/ops_block_frontend.mojo).

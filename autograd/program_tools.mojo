@@ -191,6 +191,10 @@ def program_op_name(code: Int) -> String:
         return "lm_embedding"
     if code == 94:
         return "rnn_scan"
+    # nn-blocks-scan begin
+    if code == 118:
+        return "scan"
+    # nn-blocks-scan end
     return "op_" + String(code)
 
 

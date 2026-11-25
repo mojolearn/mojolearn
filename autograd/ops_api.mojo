@@ -155,6 +155,12 @@ from autograd.generation_ops import (
     lm_alive_run, LM_PICK_SAMPLE,
 )
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+# nn-blocks-scan begin: the public scan over a captured cell, session code 118 (autograd/nn_scan.mojo)
+from autograd.nn_scan import (
+    OPS_SCAN, ScanSpec, scan_decode, scan_check_binding, SCAN_SABOTAGE_STATE_LAG, SCAN_SABOTAGE_STATE_LAG_HOST,
+    SCAN_SABOTAGE_INIT_GRAD, SCAN_SABOTAGE_INIT_GRAD_HOST,
+)
+# nn-blocks-scan end
 
 # Executor kinds of a session (the binding that opened it).
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea G): the packed argument
@@ -1544,6 +1550,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
 
     def _op_run(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
         """`op` without the log: the eager call and a program's replay."""
+        # nn-blocks-scan begin: a scan replays its cell through `_op_run_tensors` (`_scan`), never through this
+        # method, so the two never call each other (AGENTS.md part 6: no mutual recursion on the import path).
+        if code == OPS_SCAN:
+            return self._scan(hs, ints, fs)
+        # nn-blocks-scan end
         # Move capacity into the call, so the native operation can mutate self
         # without borrowing session-owned operand storage. Resolve every handle
         # afresh; only allocation capacity survives success or failure.
@@ -2680,6 +2691,256 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         else:
             raise Error("ops: unknown split mode " + String(mode))
         return rankn_narrow(self.tape, self.ex, x, a, start, length)
+
+    # nn-blocks-scan begin: the scan over a captured cell (autograd/nn_scan.mojo, session code 118)
+    def _scan_call(
+        mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], mut x: List[Tensor],
+    ) raises -> Int:
+        """One existing operation inside a scan: `_op_run` without the scan branch (so a scan never re-enters
+        it), the operand list `x` the scan's own reused capacity."""
+        x.clear()
+        for i in range(len(hs)):  # small-loop(hs: one node's input handles): handle lookup, no data
+            x.append(self.tensor(hs[i]))
+        return self._op_run_tensors(code, hs, ints, fs, x)
+
+    def _scan(mut self, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
+        """OPS_SCAN: [xs (steps, ...), state_1 .. state_k, (lengths), param_1 .. param_m], ints and floats the
+        cell's description (autograd/nn_scan.mojo). A driver loop over steps: step t's input is a free view of
+        xs (operation 40, then 33 to the cell's step shape), the cell's nodes run on the step's handles through
+        `_op_run_tensors` (the same kernels as the operations one by one, on this session's executor), and the
+        next state replaces the state handles; nothing is read back and no buffer is copied between steps. With
+        `lengths` (one float length per sequence, batch on axis 1 of xs) a step t >= length keeps the row's
+        state (where) and gives a zero output row; the mask is built once on the executor (full, cumsum,
+        compare). `reverse` walks t = steps - 1 down to 0; the outputs stay in time order. Returns one (n, 1)
+        column: the outputs of every step in time order, then the final states, each flattened (a log-depth
+        tree of concatenations, at most RN_CONCAT_MAX operands a node). Launches per step: two views, the
+        cell's nodes, and with lengths one view, one view per state rank and one where per state and output.
+        Every temporary handle is retired before the return; the tape keeps its nodes, so a recording session
+        differentiates the whole loop (backward through time over the stored per-step values)."""
+        var spec = scan_decode(ints, fs, len(hs))
+        ref cell = spec.cell
+        var n_state = spec.n_state
+        var reverse = spec.reverse
+        var has_lengths = spec.has_lengths
+        var xs = hs[0]
+        var xs_slot = self._slot(xs)
+        var xs_shape = self.shapes[xs_slot]
+        var state = List[Int](capacity=n_state)
+        var state_shapes = List[ShapeN](capacity=n_state)
+        var state_ids = List[Bool](capacity=n_state)
+        for k in range(n_state):  # driver-loop: over state tensors (handles and metadata)
+            var slot = self._slot(hs[1 + k])
+            state.append(hs[1 + k])
+            state_shapes.append(self.shapes[slot])
+            state_ids.append(self.int_words[slot])
+        var at = 1 + n_state
+        var lengths = 0
+        var lengths_count = -1
+        if has_lengths:
+            lengths = hs[at]
+            var lslot = self._slot(lengths)
+            if self.int_words[lslot]:
+                raise Error("ValueError: scan: lengths must hold floating-point values")
+            lengths_count = self.shapes[lslot].count()
+            at += 1
+        var params = List[Int](capacity=spec.n_params)
+        var param_shapes = List[ShapeN](capacity=spec.n_params)
+        var param_ids = List[Bool](capacity=spec.n_params)
+        for j in range(spec.n_params):  # driver-loop: over the cell's bound parameters (handles and metadata)
+            var slot = self._slot(hs[at + j])
+            params.append(hs[at + j])
+            param_shapes.append(self.shapes[slot])
+            param_ids.append(self.int_words[slot])
+        scan_check_binding(cell, xs_shape, self.int_words[xs_slot], state_shapes, state_ids, lengths_count,
+                           param_shapes, param_ids)
+        # Resolved once per call: the nodes' arguments, the step views' words, the mask.
+        var n_nodes = cell.n_nodes()
+        var node_ints = List[List[Int]](capacity=n_nodes)
+        var node_fs = List[List[Float32]](capacity=n_nodes)
+        for k in range(n_nodes):  # driver-loop: over cell nodes (their arguments, once per call)
+            var ni = List[Int]()
+            for j in range(cell.i_at[k], cell.i_at[k + 1]):  # small-loop(ints: a node's integer arguments)
+                ni.append(cell.ints[j])
+            node_ints.append(ni^)
+            var nf = List[Float32]()
+            for j in range(cell.f_at[k], cell.f_at[k + 1]):  # small-loop(fs: a node's float arguments)
+                nf.append(cell.fs[j])
+            node_fs.append(nf^)
+        var steps = xs_shape.d[0]
+        var batch = xs_shape.d[1]
+        var x_dims = cell.in_shapes[n_state].dims()
+        var view_x: List[Int] = [0]
+        for d in range(len(x_dims)):  # small-loop(ndim: the step input's rank, at most 8)
+            view_x.append(x_dims[d])
+        var piece: List[Int] = [0, 0, 1, steps]
+        var no_ints = List[Int]()
+        var no_fs = List[Float32]()
+        var x = List[Tensor]()
+        var one_h: List[Int] = [xs]
+        var xs_h: List[Int] = [xs]
+        var where_h: List[Int] = [0, 0, 0]
+        var temps = List[Int]()
+        var mask = 0
+        var zero = 0
+        var rank_view = List[List[Int]]()
+        var mask_by_rank = List[Int](length=9, fill=0)
+        var packed = 0
+        var step_at = -1
+        try:
+            if has_lengths:
+                var ones_i: List[Int] = [steps, 1]
+                var one_f: List[Float32] = [Float32(1.0)]
+                var ones = self._scan_call(OPS_FULL, no_ints, ones_i, one_f, x)
+                temps.append(ones)
+                one_h[0] = ones
+                var cs_i: List[Int] = [0, 1, 0]
+                var times = self._scan_call(OPS_CUMSUM, one_h, cs_i, no_fs, x)
+                temps.append(times)
+                one_h[0] = lengths
+                var lr_i: List[Int] = [0, 1, batch]
+                var lrow = self._scan_call(OPS_RESHAPE_N, one_h, lr_i, no_fs, x)
+                temps.append(lrow)
+                var cmp_h: List[Int] = [lrow, times]
+                var cmp_i: List[Int] = [1]
+                mask = self._scan_call(OPS_COMPARE, cmp_h, cmp_i, no_fs, x)
+                temps.append(mask)
+                var z_i: List[Int] = [1, 1]
+                var z_f: List[Float32] = [Float32(0.0)]
+                zero = self._scan_call(OPS_FULL, no_ints, z_i, z_f, x)
+                temps.append(zero)
+            for r in range(9):  # small-loop(ranks 0..8): the mask's view words per rank, once per call
+                var rv = List[Int]()
+                if r >= 2:
+                    rv.append(0)
+                    rv.append(batch)
+                    for _q in range(r - 1):  # small-loop(rank - 1 unit axes)
+                        rv.append(1)
+                rank_view.append(rv^)
+            comptime if (SCAN_SABOTAGE_INIT_GRAD and Self.E.IS_DEVICE) or (
+                    SCAN_SABOTAGE_INIT_GRAD_HOST and not Self.E.IS_DEVICE):
+                for k in range(n_state):  # driver-loop: over state tensors  # SABOTAGE: the initial state detached
+                    one_h[0] = state[k]
+                    var dk = self._scan_call(OPS_DETACH, one_h, no_ints, no_fs, x)
+                    temps.append(dk)
+                    state[k] = dk
+            var lag1 = state.copy()
+            var lag2 = state.copy()
+            var outs_by_time = List[Int](length=steps, fill=0)
+            var vals = List[Int]()
+            var args = List[Int]()
+            var nxt = List[Int](capacity=n_state + 1)
+            for i in range(steps):  # driver-loop: over steps
+                var t = steps - 1 - i if reverse else i
+                step_at = t
+                piece[1] = t
+                var x3 = self._scan_call(OPS_NARROW, xs_h, piece, no_fs, x)
+                temps.append(x3)
+                one_h[0] = x3
+                var x_t = self._scan_call(OPS_RESHAPE_N, one_h, view_x, no_fs, x)
+                temps.append(x_t)
+                vals.clear()
+                comptime if (SCAN_SABOTAGE_STATE_LAG and Self.E.IS_DEVICE) or (
+                        SCAN_SABOTAGE_STATE_LAG_HOST and not Self.E.IS_DEVICE):
+                    for k in range(n_state):  # driver-loop: over state tensors  # SABOTAGE: step t fed state t - 2
+                        vals.append(lag2[k] if i >= 2 else state[k])
+                else:
+                    for k in range(n_state):  # driver-loop: over state tensors (this step's handles)
+                        vals.append(state[k])
+                vals.append(x_t)
+                for k in range(n_nodes):  # driver-loop: over the cell's nodes (one step's launch sequence)
+                    args.clear()
+                    for j in range(cell.a_at[k], cell.a_at[k + 1]):  # small-loop(args: a node's input refs)
+                        var rf = cell.args[j]
+                        args.append(params[-rf - 1] if rf < 0 else vals[rf])
+                    var h = self._scan_call(cell.code[k], args, node_ints[k], node_fs[k], x)
+                    temps.append(h)
+                    vals.append(h)
+                if has_lengths:
+                    one_h[0] = mask
+                    var mrow = self._scan_call(OPS_NARROW, one_h, piece, no_fs, x)
+                    temps.append(mrow)
+                    for r in range(9):  # small-loop(ranks 0..8): this step's mask views, made on first use
+                        mask_by_rank[r] = 0
+                    mask_by_rank[0] = mrow
+                nxt.clear()
+                for k in range(n_state + 1):  # driver-loop: over the cell's outputs (next state, then the output)
+                    var rf = cell.outs[k]
+                    var h = params[-rf - 1] if rf < 0 else vals[rf]
+                    var slot = self._slot(h)
+                    var want = cell.in_shapes[k] if k < n_state else cell.out_shapes[n_state]
+                    if self.int_words[slot]:
+                        raise Error("ValueError: scan: the cell's output " + String(k)
+                                    + " holds integer ids; a scan carries floating-point values")
+                    if not self.shapes[slot].same(want):
+                        raise Error("ValueError: scan: the cell's output " + String(k) + " is "
+                                    + shape_text(self.shapes[slot]) + " here but was captured as "
+                                    + shape_text(want) + ": the output shape must not vary per step")
+                    if has_lengths:
+                        var r = want.ndim
+                        if mask_by_rank[r] == 0:
+                            one_h[0] = mask_by_rank[0]
+                            mask_by_rank[r] = self._scan_call(OPS_RESHAPE_N, one_h, rank_view[r], no_fs, x)
+                            temps.append(mask_by_rank[r])
+                        where_h[0] = mask_by_rank[r]
+                        where_h[1] = h
+                        where_h[2] = vals[k] if k < n_state else zero
+                        h = self._scan_call(OPS_WHERE, where_h, no_ints, no_fs, x)
+                        temps.append(h)
+                    nxt.append(h)
+                outs_by_time[t] = nxt[n_state]
+                comptime if (SCAN_SABOTAGE_STATE_LAG and Self.E.IS_DEVICE) or (
+                        SCAN_SABOTAGE_STATE_LAG_HOST and not Self.E.IS_DEVICE):
+                    lag2 = lag1.copy()
+                    lag1 = state.copy()
+                for k in range(n_state):  # driver-loop: over state tensors (the next step's handles)
+                    state[k] = nxt[k]
+            step_at = -1
+            # The stack: each step's output and each final state as an (n, 1) column, joined in a tree.
+            var cols = List[Int](capacity=steps)
+            var col_i: List[Int] = [0, cell.out_shapes[n_state].count(), 1]
+            for t in range(steps):  # driver-loop: over steps (the stack's columns, views)
+                one_h[0] = outs_by_time[t]
+                var c = self._scan_call(OPS_RESHAPE_N, one_h, col_i, no_fs, x)
+                temps.append(c)
+                cols.append(c)
+            var extra = List[Int](capacity=n_state)
+            for k in range(n_state):  # driver-loop: over state tensors (the final states' columns, views)
+                var si: List[Int] = [0, cell.in_shapes[k].count(), 1]
+                one_h[0] = state[k]
+                var c = self._scan_call(OPS_RESHAPE_N, one_h, si, no_fs, x)
+                temps.append(c)
+                extra.append(c)
+            var cat_i: List[Int] = [0]
+            while len(cols) > 1 and len(cols) + len(extra) > RN_CONCAT_MAX:  # driver-loop: over tree levels (log steps)
+                var level = List[Int]()
+                var g = 0
+                while g < len(cols):  # driver-loop: over groups of one tree level
+                    var e = min(g + RN_CONCAT_MAX, len(cols))
+                    if e - g == 1:
+                        level.append(cols[g])
+                    else:
+                        var group = List[Int](capacity=e - g)
+                        for q in range(g, e):  # small-loop(at most RN_CONCAT_MAX operands)
+                            group.append(cols[q])
+                        var c = self._scan_call(OPS_CONCAT, group, cat_i, no_fs, x)
+                        temps.append(c)
+                        level.append(c)
+                    g = e
+                cols = level^
+            for k in range(len(extra)):  # driver-loop: over the final states' columns
+                cols.append(extra[k])
+            packed = self._scan_call(OPS_CONCAT, cols, cat_i, no_fs, x)
+        except err:
+            self._drop_temps(temps)
+            if step_at < 0:
+                raise err
+            var message = String(err)
+            if message.startswith("ValueError: "):
+                raise Error("ValueError: scan step " + String(step_at) + ": " + String(message[byte=12:]))
+            raise Error("scan step " + String(step_at) + ": " + message)
+        self._drop_temps(temps)
+        return packed
+    # nn-blocks-scan end
 
     def op_packed(mut self, code: Int, block: Int) raises -> Int:
         """`op` with its arguments in a packed block at address `block`

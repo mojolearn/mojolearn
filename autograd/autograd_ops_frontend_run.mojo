@@ -166,6 +166,10 @@ comptime _SOP_CONV_LINEAR = 145
 comptime _SOP_LSTM = 146
 comptime _SOP_GRU = 147
 comptime _SOP_RNN = 148
+# nn-blocks-scan begin: the scan over a captured cell (OPS 118; the frontend code is 1000 + 118, outside the
+# shared 1..999 sequence so the parallel nn-blocks lanes cannot collide)
+comptime _SOP_SCAN = 1118
+# nn-blocks-scan end
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -321,6 +325,9 @@ struct _SessionOpCodes(Defaultable, Movable):
         self.codes["lstm"] = _SOP_LSTM
         self.codes["gru"] = _SOP_GRU
         self.codes["rnn"] = _SOP_RNN
+        # nn-blocks-scan begin
+        self.codes["scan"] = _SOP_SCAN
+        # nn-blocks-scan end
 
 
 # One table per process (identical contents in every extension that links this file).

@@ -1294,6 +1294,85 @@ class Session:
         """
         return _SESSION_CALL(self, "program_run", (program, arrays, dynamic_shapes, optimize))
 
+    # nn-blocks-scan begin
+    def scan(self, cell, xs, init_state, *, params=None, reverse=False, lengths=None):
+        """Apply a captured cell at every step of a sequence, carrying its state.
+
+        ``cell`` is a :class:`Program` captured with
+        ``inputs=[state_1, ..., state_k, x_t]`` and
+        ``outputs=[next_state_1, ..., next_state_k, y_t]``: one step of any
+        recurrence written with this session's operations (a custom RNN or
+        LSTM cell, a state-space update, a filter). ``scan`` runs it once per
+        step of ``xs``, on the device, in one call: step ``t`` reads
+        ``xs[t]`` and the state the previous step returned, the state stays
+        on the device between steps and nothing is read back. Like
+        ``jax.lax.scan`` and PyTorch's recurrent layers, the outputs are
+        stacked with the steps first.
+
+        In a recording session (``Session(record=True)``) the scan is
+        differentiable: :meth:`backward` reaches ``init_state``, ``xs`` and
+        every tensor in ``params``, and :meth:`step` trains them. The
+        gradient keeps every step's values (backward through time). In an
+        inference session the scan is captured with the rest of the model
+        by :meth:`capture`, and a saved program keeps the cell.
+
+        Parameters
+        ----------
+        cell : Program
+            The step, captured from an inference session.
+        xs : int
+            The handle of a ``(steps, ...)`` tensor; ``xs[t]`` must have the
+            shape of the cell's last input.
+        init_state : int or sequence of int
+            The initial state tensors, in the cell's input order, each of
+            the shape the cell's input had. A sequence may be empty (a map
+            over the steps).
+        params : sequence of int, optional
+            Tensors of this session for the tensors the cell reads as
+            parameters (:attr:`Program.params`), in that order and of the
+            same shapes. Required when the cell was captured in another
+            session (for example, a training session's own trainable
+            weights); by default the cell reads its own parameters.
+        reverse : bool, default False
+            Run from the last step to the first. The outputs keep their
+            time order (``ys[t]`` belongs to ``xs[t]``), and the final state
+            is the state after step 0.
+        lengths : int, optional
+            The handle of one length per sequence (float values), for ``xs``
+            of shape ``(steps, batch, ...)`` and states and outputs with the
+            batch first. A sequence's steps at or past its length keep its
+            state and give zero outputs, as a packed sequence in PyTorch.
+
+        Returns
+        -------
+        tuple
+            ``(ys, final_state)``: ``ys`` the ``(steps, ...)`` outputs, and
+            ``final_state`` one handle when ``init_state`` was one handle,
+            else a tuple of handles.
+
+        Examples
+        --------
+        A tanh RNN cell, trained through a scan:
+
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> rng = np.random.default_rng(0)
+        >>> W = (0.3 * rng.standard_normal((3, 4))).astype(np.float32)
+        >>> U = (0.3 * rng.standard_normal((4, 4))).astype(np.float32)
+        >>> with ops.Session() as c:
+        ...     h, x = c.tensor(np.zeros((2, 4), np.float32)), c.tensor(np.zeros((2, 3), np.float32))
+        ...     h2 = c.tanh(c.add(c.matmul(x, c.tensor(W)), c.matmul(h, c.tensor(U))))
+        ...     cell = c.capture(inputs=[h, x], outputs=[h2, h2])
+        ...     with ops.Session(record=True) as s:
+        ...         w, u = s.tensor(W, requires_grad=True), s.tensor(U, requires_grad=True)
+        ...         xs = s.tensor(rng.standard_normal((5, 2, 3), dtype=np.float32))
+        ...         ys, h_n = s.scan(cell, xs, s.tensor(np.zeros((2, 4), np.float32)), params=[w, u])
+        ...         s.backward(s.mean(s.mul(ys, ys)))
+        ...         s.step(s.optimizer("adam", lr=0.01), [w, u])
+        """
+        return _SESSION_CALL(self, "scan", (cell, xs, init_state, params, reverse, lengths))
+    # nn-blocks-scan end
+
     def load_partitioned(self, path, devices=(0,)):
         """Restore a complete partitioned program onto physical devices."""
         return _SESSION_CALL(self, "load_partitioned", (path, devices))
