@@ -147,6 +147,13 @@ def shared_context():
                        classifier_labels_class=ClassLabels,
                        classifier_labels_namespace=dict(vars(ClassLabels)),
                        classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels))
+        # The `resident()` scope keys (lane gd-resident-2): a family door that
+        # reads a device-resident input in place (connected_components, refine,
+        # spectral_embedding; bindings/function_scope_door.mojo) finds the
+        # calling thread's scope through them. Without them it kept nothing.
+        from ._arena_io import _Scope, _LOCAL
+        context.update(arena_local=_LOCAL, arena_scope_class=_Scope,
+                       arena_scope_owner=vars(_Scope)["_owner"].__get__)
         _CONTEXT = context
         if _CPU_WANTED:
             _connect_cpu(context)

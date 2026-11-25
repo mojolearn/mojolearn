@@ -10,6 +10,7 @@ from std.math import isinf
 from core.spectral_native_api import (
     SPECTRAL_CAP_DENSE, SPECTRAL_CAP_RESIDENT, SPECTRAL_DATASET, SPECTRAL_GRAPH, SPECTRAL_DENSE,
     SPECTRAL_CAP_AFFINITY, SPECTRAL_RBF, SPECTRAL_KNN, SPECTRAL_KNN_REFUSED,
+    SPECTRAL_CAP_DEV_STORE, SPECTRAL_DATASET_STORE, SPECTRAL_MODE,
     SpectralInput, SpectralFitOptions, SpectralFitRequest,
     SpectralEmbeddingOptions, SpectralEmbeddingRequest, SpectralQueryShape,
     SpectralQueryRequest, SpectralPrepareRequest, SpectralResidentQueryRequest,
@@ -19,6 +20,9 @@ from bindings.spectral_native_boundary_unpack import (
     spectral_fit_run, spectral_embedding_run, spectral_query_run,
 )
 from std.memory import unsafe_memcpy
+from bindings.function_scope_door import FunctionScope
+from core.metrics_store_ref import metrics_store_find, METRICS_STORE_PREFIX
+from core.device_route import device_vendor_code
 from std.python import Python, PythonObject
 from providers.python.host_estimator_binding_pyapi_door import host_estimator_binding
 from providers.python.estimator_binding_pyapi_door import estimator_binding_routed
@@ -1325,8 +1329,15 @@ def _se_execute(config: SpectralEmbeddingConfig, drop_first: Bool, norm_laplacia
             py_setitem(fields, nk[].k_n_neighbors_, PythonObject(neighbors))
         embedding = family_array(Python.tuple(n, k), "<f4", context)
         connection = SpectralConnection(metrics, context)
+        # Lane gd-resident-2: inside `resident()` the GPU image reads X from
+        # its resident store in place (SPECTRAL_DATASET_STORE, the same
+        # kernels on the same words): kept once per scope, a hit after.
+        var store_slot = _se_scope_slot(connection.value(), metrics, source, x, n * d, context)
+        var x_input = SpectralInput(Int(py=classical_address(x)), 0, 0, 0, SPECTRAL_DATASET, n, d, 0)
+        if store_slot >= 0:
+            x_input = SpectralInput(store_slot, 0, 0, 0, SPECTRAL_DATASET_STORE, n, d, 0)
         var request = SpectralEmbeddingRequest(
-            SpectralInput(Int(py=classical_address(x)), 0, 0, 0, SPECTRAL_DATASET, n, d, 0),
+            x_input,
             Int(py=classical_address(embedding)), SpectralEmbeddingOptions(n_lanczos, k, neighbors,
                 norm_laplacian, drop_first, seed, tolerance))
         n_out = spectral_embedding_run(connection.value(), request)
@@ -1342,6 +1353,26 @@ def _se_execute(config: SpectralEmbeddingConfig, drop_first: Bool, norm_laplacia
         py_setitem(fields, nk[].k_embedding_, embedding)
 
     return embedding
+
+def _se_scope_slot(connection: SpectralConnection, metrics: PythonObject, source: PythonObject,
+                   x: PythonObject, words: Int, context: PythonObject) raises -> Int:
+    """The metrics image's resident-store slot of the admitted X (`words`
+    float32 words) inside the calling thread's `resident()` scope (lane
+    gd-resident-2, 2026-11-25), or -1: outside a scope (one atomic load), an
+    image without SPECTRAL_CAP_DEV_STORE (a host image), no published store,
+    or an X the admission converted (a per-call copy is never kept). The
+    slot belongs to the scope's cache of the metrics family; nothing to
+    free. Was: the dataset route copied X into a host list and uploaded it
+    on every call, inside a scope as outside."""
+    var scope = FunctionScope(context)
+    if not scope.active() or (connection.capabilities & SPECTRAL_CAP_DEV_STORE) == 0:
+        return -1
+    var store = metrics_store_find(connection.driver.metadata(SPECTRAL_MODE),
+                                   device_vendor_code(String(py_call(metrics.metrics_vendor))))
+    if not store:
+        return -1
+    return scope.put(store.value(), String(METRICS_STORE_PREFIX), source, x, Int(py=classical_address(x)), words)
+
 
 def _se_device_affinity(config: SpectralEmbeddingConfig, drop_first: Bool, norm_laplacian: Bool,
                         n_lanczos: Int, fields: PythonObject, connection: SpectralConnection,
