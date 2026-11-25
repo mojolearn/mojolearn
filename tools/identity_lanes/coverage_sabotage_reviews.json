@@ -375,5 +375,21 @@
    "error_match": "ValueError:\\ AdamW\\ param\\ groups\\ and\\ AdamW\\ clip\\ once\\ then\\ one\\ optimizer\\ a\\ group\\ differ:\\ 94\\ bytes\\ of\\ 192",
    "patch_sha256": "50b1e404097091897bd58e50f3a120c0038e7dc76beef4a75580fbd3856bd2ac"
   }
+ },
+ "coverage-sequence-stream_fit_cw_batch_cpu": {
+  "ops-composed-cases/base": {
+   "product_check": "tools/identity_lanes/composed_cases.py (lane `ops-composed-cases`, case gru-stream-cw-val-resume of verify_reference/composed-stream.json): the case's byte comparison of a streamed fit against its uninterrupted / fresh-process twin, the lane's in-cell oracle.",
+   "why_fault_reaches_check": "sequence/checks/sabotage/coverage_stream_fit_cw_batch_cpu.patch: lane stream-fits-2 (2026-11-25): the host twin, STREAM_FIT_SABOTAGE_CW_BATCH_HOST forced on in sequence/recurrent.mojo (comptime not E.IS_DEVICE): each streamed batch's class weights come from the previous batch's labels on the host executor only; case gru-stream-cw-val-resume's stream-cw-val part m On the CPU side only the sabotaged run raised this line (w3-integrate-11, batch x_sequence-40 at 3ff785abd2).",
+   "error_match": "ValueError:\\ gru\\-stream\\-cw\\-val\\-resume\\ a\\ fresh\\-process\\ resume\\ of\\ the\\ pickled\\ estimator\\ stops\\ at\\ the\\ same\\ step\\ with\\ the\\ uninterrupted\\ run's\\ parameters,\\ optimizer\\ state\\ and\\ monitor\\ words\\ \\[0\\]\\ a\\ and\\ gru\\-stream\\-cw\\-val\\-resume\\ a\\ fresh\\-process\\ resume\\ of\\ the\\ pickled\\ estimator\\ stops\\ at\\ the\\ same\\ step\\ with\\ the\\ uninterrupted\\ run's\\ parameters,\\ optimizer\\ state\\ and\\ monitor\\ words\\ \\[0\\]\\ b\\ differ:\\ 276\\ bytes\\ of\\ 444",
+   "patch_sha256": "1decc65254bd631645f3cec3c6b9a16b189a06d30eff59f2b081319f084b55ef"
+  }
+ },
+ "coverage-sequence-stream_fit_val_ahead_cpu": {
+  "ops-composed-cases/base": {
+   "product_check": "tools/identity_lanes/composed_cases.py (lane `ops-composed-cases`, case gru-stream-cw-val-resume of verify_reference/composed-stream.json): the case's byte comparison of a streamed fit against its uninterrupted / fresh-process twin, the lane's in-cell oracle.",
+   "why_fault_reaches_check": "sequence/checks/sabotage/coverage_stream_fit_val_ahead_cpu.patch: lane stream-fits-2 (2026-11-25): the host twin, STREAM_FIT_SABOTAGE_VAL_AHEAD_HOST forced on (comptime not E.IS_DEVICE): the pass's validation loss after the read-ahead batch trained, on the host executor only; case gru-stream-cw-val-resume's stream-cw-val part moves on the CPU side and stays on the On the CPU side only the sabotaged run raised this line (w3-integrate-11, batch x_sequence-41 at 3ff785abd2).",
+   "error_match": "ValueError:\\ gru\\-stream\\-cw\\-val\\-resume\\ early\\ stopping\\ ends\\ the\\ call\\ after\\ the\\ second\\ pass,\\ at\\ 8\\ of\\ 12\\ steps\\ \\[0\\]\\ a\\ and\\ gru\\-stream\\-cw\\-val\\-resume\\ early\\ stopping\\ ends\\ the\\ call\\ after\\ the\\ second\\ pass,\\ at\\ 8\\ of\\ 12\\ steps\\ \\[0\\]\\ b\\ differ:\\ 1\\ bytes\\ of\\ 8",
+   "patch_sha256": "1a0ca253adc0c10c13780f3b228812c821dfc3b859d7c2ede9b5c9c791d59219"
+  }
  }
 }
