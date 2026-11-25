@@ -20,7 +20,8 @@ from std.math import sqrt
 from std.memory import unsafe_memcpy
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_leased_call
-from sequence.ops_impl import net_of
+from std.sys.compile import is_defined
+from sequence.ops_impl import net_of, rnn_lengths_of
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from sequence.neural_model_dispatch import (
@@ -590,30 +591,77 @@ def xseq_run_rnn_predict_options(entry: XseqNeuralEntry, req: XseqRnnPredictRequ
         raise Error("RuntimeError: recurrent prediction returned an invalid result count")
 
 
-def xseq_run_balanced_class_weights(codes: Int, n: Int, steps: Int, lengths: Int, k: Int) raises -> List[Float64]:
-    """class_weight='balanced' (scikit-learn's compute_class_weight): n_rows / (k * count of class c) for each of
-    the k classes, over the float32 class codes at `codes` (n sequences of `steps` rows each; with output=
-    "sequence" `steps` is T and, when `lengths` (n float32 words) is given, only each sequence's valid steps
-    count). The counts are per-worker histograms over contiguous chunks of sequences, added in worker order
-    (integers: exact in any order)."""
-    var p = XseqRunF32P(unsafe_from_address=codes)
+# SABOTAGE ARMS (lane rnn-review-fixes, 2026-11-25; tools/identity_lanes/coverage_sabotage.tsv). Each, forced on,
+# restores one defect of before on ONE side, the device route's fit (`_DEVICE`) or the host route's (`_HOST`, an
+# explicit device="cpu"); the side is the boundary's route (bindings/xseq_neural_native_door.mojo). The verify lane
+# sequence-rnn-padding-labels (tools/identity_lanes/rnn_parity.py) must MOVE or REFUSE on that side under each.
+# LENGTHS: fit admits `lengths` only after the class histogram read them (that side's admission is skipped and the
+# histogram's own check is compiled out). PADDING: the sequence target's classes are discovered over every step,
+# padded ones included, and a padding label of a validation or partial_fit target is refused as unknown.
+comptime RNN_REVIEW_SABOTAGE_LENGTHS_DEVICE = is_defined["MOJOLEARN_RNN_REVIEW_SABOTAGE_LENGTHS_DEVICE"]()
+comptime RNN_REVIEW_SABOTAGE_LENGTHS_HOST = is_defined["MOJOLEARN_RNN_REVIEW_SABOTAGE_LENGTHS_HOST"]()
+comptime RNN_REVIEW_SABOTAGE_PADDING_DEVICE = is_defined["MOJOLEARN_RNN_REVIEW_SABOTAGE_PADDING_DEVICE"]()
+comptime RNN_REVIEW_SABOTAGE_PADDING_HOST = is_defined["MOJOLEARN_RNN_REVIEW_SABOTAGE_PADDING_HOST"]()
+comptime _RNN_REVIEW_COUNTS_CHECK_LENGTHS = not (RNN_REVIEW_SABOTAGE_LENGTHS_DEVICE or RNN_REVIEW_SABOTAGE_LENGTHS_HOST)
+
+
+def xseq_run_lengths_check(lengths: Int, n: Int, steps: Int, operation: String) raises:
+    """The admission of n float32 sequence lengths at `lengths` (0: none) against `steps` padded steps: each a
+    whole number from 1 to `steps`, refused with the recurrent fit's own words (sequence/ops_impl.mojo
+    rnn_lengths_of: the one body). The boundary calls it once, before any consumer reads a length (the class
+    histogram, the valid-step label encoding, the step weights)."""
+    _ = rnn_lengths_of(lengths, n, steps, operation)
+
+
+def xseq_run_class_counts[dt: DType](codes: Int, n: Int, steps: Int, lengths: Int, k: Int) raises -> List[Int]:
+    """How many valid steps hold each of the k class codes (dt: float32 fit codes or int32 label-encoder codes):
+    n sequences of `steps` codes each; when `lengths` (n float32 words; 0: none) is given, only each sequence's
+    first length steps count. Per-worker histograms over contiguous chunks of sequences, added in worker order
+    (integers: exact in any order). A length is checked before its row's codes are read (finite, whole, 1 ..
+    steps; lane rnn-review-fixes: it bounds the read): a bad one refuses with the admission's words and no read
+    past its sequence happens. Codes are the caller's own, in [0, k)."""
+    var p = MutPointer[Scalar[dt], MutUntrackedOrigin](unsafe_from_address=codes)
     var lp = XseqRunF32P(unsafe_from_address=lengths if lengths != 0 else codes)
     var has_lens = lengths != 0
     var tasks = host_predict_task_count_work(max(1, n), max(1, n * steps))
     var chunk = host_predict_chunk(max(1, n), tasks)
     var hist = List[Int](length=tasks * k, fill=0)
+    var bad = List[Int](length=tasks, fill=0)
     var hp = hist.unsafe_ptr()
-    def task(worker: Int) {imm p, imm lp, imm hp, imm n, imm steps, imm k, imm chunk, imm has_lens}:
+    var bp = bad.unsafe_ptr()
+    def task(worker: Int) {imm p, imm lp, imm hp, imm bp, imm n, imm steps, imm k, imm chunk, imm has_lens}:
         for i in range(worker * chunk, min((worker + 1) * chunk, n)):
-            var valid = Int(lp[i]) if has_lens else steps
+            var valid = steps
+            if has_lens:
+                var v = lp[i]
+                comptime if _RNN_REVIEW_COUNTS_CHECK_LENGTHS:
+                    if v != v or v < Float32(1.0) or v > Float32(steps) or Float32(Int(v)) != v:
+                        bp[worker] = 1
+                        continue
+                valid = Int(v)
             for s in range(valid):
                 hp[worker * k + Int(p[i * steps + s])] += 1
     host_parallelize(task, tasks)
-    var total = 0
+    for worker in range(tasks):  # worker summaries after the join
+        if bad[worker] != 0:
+            raise Error("ValueError: fit: every length must be a whole number from 1 to the sequence length "
+                        + String(steps))
     var counts = List[Int](length=k, fill=0)
     for worker in range(tasks):  # worker summaries after the join
         for c in range(k):  # small-loop(classes)
             counts[c] += hist[worker * k + c]
+    _ = hist^
+    _ = bad^
+    return counts^
+
+
+def xseq_run_balanced_class_weights(codes: Int, n: Int, steps: Int, lengths: Int, k: Int) raises -> List[Float64]:
+    """class_weight='balanced' (scikit-learn's compute_class_weight): n_rows / (k * count of class c) for each of
+    the k classes, over the float32 class codes at `codes` (n sequences of `steps` rows each; with output=
+    "sequence" `steps` is T and, when `lengths` (n float32 words) is given, only each sequence's valid steps
+    count: xseq_run_class_counts, which checks each length before it bounds a read)."""
+    var counts = xseq_run_class_counts[DType.float32](codes, n, steps, lengths, k)
+    var total = 0
     for c in range(k):  # small-loop(classes)
         total += counts[c]
     var out = List[Float64]()
@@ -621,21 +669,31 @@ def xseq_run_balanced_class_weights(codes: Int, n: Int, steps: Int, lengths: Int
         if counts[c] == 0:
             raise Error("ValueError: class_weight='balanced' needs every class in y")
         out.append(Float64(total) / (Float64(k) * Float64(counts[c])))
-    _ = hist^
     return out^
 
 
-def xseq_run_remap_codes(codes: Int, count: Int, mapping: List[Int], dst: Int) raises:
-    """dst[i] = Float32(mapping[codes[i]]): int32 class codes of a label encoding of its own classes, as float32
-    codes of the fitted classes (partial_fit, validation targets). Contiguous chunks across the host's workers."""
+def xseq_run_remap_codes(codes: Int, n: Int, steps: Int, lengths: Int, mapping: List[Int], dst: Int) raises:
+    """dst[i T + s] = Float32(mapping[codes[i T + s]]) at the valid steps of n sequences of `steps` int32 codes
+    (a label encoding of its own classes, as float32 codes of the kept or fitted classes: the fit's valid-step
+    classes, partial_fit, validation targets), and 0 at each padded step (s >= length_i; `lengths`: n float32
+    words, admitted by the boundary, or 0 for none): a padded step's label is never read through `mapping`,
+    and its code 0 is a class index the loss weighs 0 there (lane rnn-review-fixes). Contiguous chunks of
+    sequences across the host's workers."""
     var src = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=codes)
     var out = XseqRunF32P(unsafe_from_address=dst)
+    var lp = XseqRunF32P(unsafe_from_address=lengths if lengths != 0 else dst)
+    var has_lens = lengths != 0
     var mp = mapping.unsafe_ptr()
-    var tasks = host_predict_task_count_work(max(1, count), max(1, count))
-    var chunk = host_predict_chunk(max(1, count), tasks)
-    def task(worker: Int) {imm src, imm out, imm mp, imm count, imm chunk}:
-        for i in range(worker * chunk, min((worker + 1) * chunk, count)):
-            out[i] = Float32(mp[Int(src[i])])
+    var tasks = host_predict_task_count_work(max(1, n), max(1, n * steps))
+    var chunk = host_predict_chunk(max(1, n), tasks)
+    def task(worker: Int) {imm src, imm out, imm lp, imm mp, imm has_lens, imm n, imm steps, imm chunk}:
+        for i in range(worker * chunk, min((worker + 1) * chunk, n)):
+            var valid = Int(lp[i]) if has_lens else steps
+            for s in range(steps):
+                if s < valid:
+                    out[i * steps + s] = Float32(mp[Int(src[i * steps + s])])
+                else:
+                    out[i * steps + s] = Float32(0.0)
     host_parallelize(task, tasks)
     _ = mapping
 

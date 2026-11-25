@@ -54,7 +54,8 @@ from sequence.xseq_neural_run import (
     xseq_run_mlp_layers_check, xseq_run_mlp_layer_check, xseq_run_mlp_pack, xseq_run_mlp_output_check,
     xseq_run_mlp_predict, XseqRnnFitOptions, XseqRnnPredictOptions, xseq_run_rnn_fit_options,
     xseq_run_rnn_predict_options, xseq_run_rnn_layout_dirs, xseq_run_balanced_class_weights, xseq_run_remap_codes,
-    xseq_run_step_weights,
+    xseq_run_step_weights, xseq_run_lengths_check, xseq_run_class_counts, RNN_REVIEW_SABOTAGE_LENGTHS_DEVICE,
+    RNN_REVIEW_SABOTAGE_LENGTHS_HOST, RNN_REVIEW_SABOTAGE_PADDING_DEVICE, RNN_REVIEW_SABOTAGE_PADDING_HOST,
 )
 from bindings.class_weight_boundary_unpack import class_weight_dictionary_values
 from core.class_weight_plan import class_weight_plan
@@ -449,6 +450,26 @@ def _rnn_lengths_address(lengths: PythonObject) raises -> Int:
     return 0 if lengths is None else Int(py=xseq_addr(lengths))
 
 
+def _rnn_fit_lengths(source: PythonObject, n: Int, steps: Int, operation: String, context: PythonObject,
+                     check: Bool) raises -> PythonObject:
+    """fit's `lengths` (and validation_data's): `_rnn_lengths`, then every value checked ONCE here, in admission,
+    before any consumer reads one (lane rnn-review-fixes, P1-a): the balanced class histogram and the valid-step
+    label encoding use each length as a loop bound over its sequence's labels, so an unchecked length past its
+    sequence read the next one's (past the buffer on the last row). `check` is False only on a sabotaged side
+    (RNN_REVIEW_SABOTAGE_LENGTHS_*). The fit call's own admission (sequence/ops_impl.mojo rnn_lengths_of, the
+    same body) still guards the native entry for its every caller."""
+    var lengths = _rnn_lengths(source, n, context)
+    if check and lengths is not None:
+        xseq_run_lengths_check(Int(py=xseq_addr(lengths)), n, steps, operation)
+    return lengths
+
+
+def _rnn_side(route: XseqRoute, device_fault: Bool, host_fault: Bool) -> Bool:
+    """Whether a one-sided sabotage arm's fault applies to this route: the host route is an explicit
+    device="cpu" beside a GPU set (route.cpu_table), the device route the rest."""
+    return (host_fault and route.cpu_table) or (device_fault and not route.cpu_table)
+
+
 # ---------------------------------------------------------------- recurrent options (lane rnn-parity)
 #
 # Andrew 2026-11-25. The estimators' constructor options (output, bidirectional, dropout, bias, clip_grad_norm,
@@ -586,8 +607,9 @@ def _rnn_fit_full(model: PythonObject, fields: PythonObject, x_source: PythonObj
                   vtarget_in: PythonObject, restore_best: Bool, partial: Bool) raises -> PythonObject:
     """`_RecurrentBase._fit(X, target)` with every option (lane rnn-parity). `target_in` is the admitted float32
     target, N rows (N T with output="sequence") of n_outputs_ values or one class code; `validation` the admitted
-    (X_val, lengths_val) pair or None and `vtarget_in` its target likewise. `partial`: partial_fit, one epoch
-    from the fitted parameters and optimizer state."""
+    (X_val, lengths_val) pair or None and `vtarget_in` its target likewise; `lengths_in` and lengths_val are
+    admitted and checked by _rnn_fit_op (_rnn_fit_lengths) or None. `partial`: partial_fit, one epoch from the
+    fitted parameters and optimizer state."""
     var fo = rnn_field_options(fields)
     var sw_source = sw_in
     var x_full = _rnn_x(x_source, fields, True, context)
@@ -624,13 +646,13 @@ def _rnn_fit_full(model: PythonObject, fields: PythonObject, x_source: PythonObj
             # the held-out sequences' weights leave with them (validation is unweighted)
             sw_source = xseq_input(sw_source, context)[head_s]
         if lengths_source is not None:
-            var lf = xseq_as_f32_c(lengths_source, 1, "lengths", context)
-            vlen = lf[tail_s]
-            lengths_source = lf[head_s]
+            # admitted and checked by _rnn_fit_op (_rnn_fit_lengths): float32, C order, one per sequence
+            vlen = lengths_source[tail_s]
+            lengths_source = lengths_source[head_s]
     var n = Int(py=x.shape[0])
     var steps_t = Int(py=x.shape[1])
     xseq_run_rnn_dims_check(n, steps_t)
-    var lengths = _rnn_lengths(lengths_source, n, context)
+    var lengths = lengths_source  # admitted by _rnn_fit_op (_rnn_fit_lengths), cut above when held out
     var lengths_address = _rnn_lengths_address(lengths)
     var cell = _rnn_cell(model, fields)
     var hidden = xseq_int(py_item(fields, nk[].k_hidden_size))
@@ -724,7 +746,7 @@ def _rnn_fit_full(model: PythonObject, fields: PythonObject, x_source: PythonObj
         nv = Int(py=vx.shape[0])
         if Int(py=vx.shape[1]) != steps_t:
             raise Error("ValueError: the validation sequences must have the training sequences' n_timesteps")
-        vlengths = _rnn_lengths(vlen, nv, context)
+        vlengths = vlen  # admitted by _rnn_fit_op, or cut from the admitted training lengths
         vcurve = xseq_zeros(Python.tuple(epochs + 2), context)
     var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(target)), Int(py=xseq_addr(params)),
                                 Int(py=xseq_addr(losses)), Int(py=_buffer_address(rates))]
@@ -914,15 +936,29 @@ def _arg(args: PythonObject, i: Int) raises -> PythonObject:
     return args[i] if len(args) > i else PythonObject(None)
 
 
-def _codes_against(classes: PythonObject, source: PythonObject, route: XseqRoute, n: Int,
-                   context: PythonObject) raises -> PythonObject:
-    """The float32 codes of labels `source` against the FITTED `classes` (partial_fit after the first call, a
-    validation target): the label encoder's own codes mapped through each of its classes' index in `classes`
-    (equality of the few class labels: metadata); a label that is not a fitted class raises."""
+def _codes_against(classes: PythonObject, source: PythonObject, route: XseqRoute, n: Int, steps: Int,
+                   lengths: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The float32 codes of labels `source` (n sequences of `steps` labels; steps 1 for one label a sequence)
+    against the FITTED `classes` (partial_fit after the first call, a validation target): the label encoder's own
+    codes mapped through each of its classes' index in `classes` (equality of the few class labels: metadata); a
+    label at a valid step that is not a fitted class raises. With `lengths` (admitted and checked; output=
+    "sequence") only valid steps count (lane rnn-review-fixes, P1-b): a label seen only on padded steps is not
+    looked up, and every padded step gets code 0, which the loss weighs 0."""
     var encoded = xseq_labels(source, route.entries, context)
     var own = encoded[0]
+    var codes = encoded[1]
+    var count = Int(py=codes.shape[0])
+    if count != n * steps:
+        raise Error("ValueError: y must hold " + String(n * steps) + " labels")
+    var seen = List[Int]()
+    if lengths is not None:
+        seen = xseq_run_class_counts[DType.int32](Int(py=xseq_addr(codes)), n, steps, Int(py=xseq_addr(lengths)),
+                                                  len(own))
     var mapping = List[Int]()
     for j in range(len(own)):  # small-loop(classes)
+        if lengths is not None and seen[j] == 0:
+            mapping.append(-1)  # on padded steps only: never read (xseq_run_remap_codes writes 0 there)
+            continue
         var at = -1
         for i in range(len(classes)):  # small-loop(classes)
             if Bool(py=own[j] == classes[i]):
@@ -932,22 +968,24 @@ def _codes_against(classes: PythonObject, source: PythonObject, route: XseqRoute
             raise Error("ValueError: y holds the label " + _repr(own[j]) + ", which is not one of the fitted classes "
                         + _repr(classes))
         mapping.append(at)
-    var codes = encoded[1]
-    var count = Int(py=codes.shape[0])
-    if count != n:
-        raise Error("ValueError: y must hold " + String(n) + " labels")
     var target = xseq_zeros(Python.tuple(count), context)
-    xseq_run_remap_codes(Int(py=xseq_addr(codes)), count, mapping, Int(py=xseq_addr(target)))
+    xseq_run_remap_codes(Int(py=xseq_addr(codes)), n, steps, _rnn_lengths_address(lengths), mapping,
+                         Int(py=xseq_addr(target)))
     _ = codes
+    _ = lengths
     return target
 
 
 def _rnn_target(model: PythonObject, fields: PythonObject, y_source: PythonObject, n: Int, steps: Int,
                 seq_out: Bool, keep_classes: Bool, route: XseqRoute, context: PythonObject,
-                fitting: Bool) raises -> PythonObject:
+                fitting: Bool, lengths: PythonObject) raises -> PythonObject:
     """The float32 training target: regression (n,) / (n, O), or with output="sequence" (n, T) / (n, T, O), as N S
     rows of O words; classification: N S class codes (labels (n,), or (n, T) per step). `fitting` writes
-    n_outputs_ / _y_1d / classes_; `keep_classes` maps against the fitted classes_ instead of encoding anew."""
+    n_outputs_ / _y_1d / classes_; `keep_classes` maps against the fitted classes_ instead of encoding anew.
+    `lengths`: the admitted, checked sequence lengths with output="sequence", else None. Classification then
+    reads labels at VALID steps only (lane rnn-review-fixes, P1-b): classes_ (and the head's width n_outputs_)
+    are the labels of valid steps, padded steps get code 0 (weighed 0 by the loss), so a label used only as
+    padding is neither a class nor refused as unknown."""
     var nk = xseq_keys()
     var task = Int(py=_attr(py_type(model), "_TASK"))
     var rows = n * steps
@@ -971,35 +1009,71 @@ def _rnn_target(model: PythonObject, fields: PythonObject, y_source: PythonObjec
         if Int(py=y.ndim) != 2 or Int(py=y.shape[0]) != n or Int(py=y.shape[1]) != steps:
             raise Error("ValueError: y must have shape (n_samples, n_timesteps): one label per step")
         flat = xseq_reshape(y, Python.tuple(rows))
+    var valid_only = seq_out and lengths is not None
+    var lens = lengths if valid_only else PythonObject(None)
     if keep_classes:
-        return _codes_against(py_item(fields, nk[].k_classes_), flat, route, rows, context)
+        return _codes_against(py_item(fields, nk[].k_classes_), flat, route, n, steps, lens, context)
     var encoded = xseq_labels(flat, route.entries, context)
-    py_setitem(fields, nk[].k_classes_, encoded[0])
-    var k = len(encoded[0])
+    var own = encoded[0]
+    var codes = encoded[1]
+    var count = Int(py=codes.shape[0])
+    if not valid_only:
+        py_setitem(fields, nk[].k_classes_, own)
+        var k = len(own)
+        if k < 2:
+            raise Error("classification needs at least two classes")
+        py_setitem(fields, nk[].k_n_outputs_, k)
+        var target = xseq_zeros(Python.tuple(count), context)
+        xseq_codes_f32(XI32P(unsafe_from_address=Int(py=xseq_addr(codes))), xseq_f32p(target), count)
+        _ = codes
+        return target
+    # the classes of the valid steps, in the encoder's order; mapping[j]: own class j's index among them
+    var seen = xseq_run_class_counts[DType.int32](Int(py=xseq_addr(codes)), n, steps, Int(py=xseq_addr(lens)),
+                                                  len(own))
+    var mapping = List[Int]()
+    var kept = Python.list()
+    var k = 0
+    for j in range(len(own)):  # small-loop(classes)
+        if seen[j] == 0:
+            mapping.append(-1)  # on padded steps only: never read (xseq_run_remap_codes writes 0 there)
+            continue
+        mapping.append(k)
+        _ = py_call(kept.append, PythonObject(j))
+        k += 1
+    py_setitem(fields, nk[].k_classes_, own[kept] if k != len(own) else own)
     if k < 2:
         raise Error("classification needs at least two classes")
     py_setitem(fields, nk[].k_n_outputs_, k)
-    var codes = encoded[1]
-    var count = Int(py=codes.shape[0])
     var target = xseq_zeros(Python.tuple(count), context)
-    xseq_codes_f32(XI32P(unsafe_from_address=Int(py=xseq_addr(codes))), xseq_f32p(target), count)
+    xseq_run_remap_codes(Int(py=xseq_addr(codes)), n, steps, Int(py=xseq_addr(lens)), mapping,
+                         Int(py=xseq_addr(target)))
     _ = codes
+    _ = lens
     return target
 
 
 def _rnn_fit_op(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """fit(X, y, lengths, sample_weight, h_0, c_0, validation_data, restore_best, partial) (lane rnn-parity:
-    every argument after lengths optional; partial is partial_fit's one epoch)."""
+    every argument after lengths optional; partial is partial_fit's one epoch). The lengths (training and
+    validation) are admitted and checked here once, before the target encoder or the class histogram reads one
+    (lane rnn-review-fixes)."""
     var fo = rnn_field_options(fields)
     var route = xseq_route(model, fields, context)
     var partial = xseq_truth(_arg(args, 8))
     var nk = xseq_keys()
     var x = _rnn_x(args[0], fields, not (partial and py_contains(fields, nk[].k_params_)), context)
     var n = Int(py=x.shape[0])
-    var steps = Int(py=x.shape[1]) if fo.seq_out else 1
+    var steps_t = Int(py=x.shape[1])
+    var steps = steps_t if fo.seq_out else 1
+    var lengths = _rnn_fit_lengths(_arg(args, 2), n, steps_t, "fit", context,
+                                   not _rnn_side(route, RNN_REVIEW_SABOTAGE_LENGTHS_DEVICE,
+                                                 RNN_REVIEW_SABOTAGE_LENGTHS_HOST))
+    # the target's labels at valid steps only; a sabotaged side reads every step (RNN_REVIEW_SABOTAGE_PADDING_*)
+    var pad_fault = _rnn_side(route, RNN_REVIEW_SABOTAGE_PADDING_DEVICE, RNN_REVIEW_SABOTAGE_PADDING_HOST)
     var keep = partial and py_contains(fields, nk[].k_classes_)
     var target = _rnn_target(model, fields, args[1], n, steps, fo.seq_out, keep, route, context, not partial or
-                             not py_contains(fields, nk[].k_n_outputs_))
+                             not py_contains(fields, nk[].k_n_outputs_),
+                             PythonObject(None) if pad_fault else lengths)
     var validation = PythonObject(None)
     var vtarget = PythonObject(None)
     var vd = _arg(args, 6)
@@ -1008,12 +1082,15 @@ def _rnn_fit_op(model: PythonObject, fields: PythonObject, args: PythonObject, c
             raise Error("ValueError: validation_data must be (X_val, y_val) or (X_val, y_val, lengths_val)")
         var vx = _rnn_x(vd[0], fields, False, context)
         var nv = Int(py=vx.shape[0])
-        vtarget = _rnn_target(model, fields, vd[1], nv, Int(py=vx.shape[1]) if fo.seq_out else 1, fo.seq_out, True,
-                              route, context, False)
-        validation = Python.tuple(vd[0], vd[2] if len(vd) == 3 else PythonObject(None))
+        var vsteps = Int(py=vx.shape[1])
+        var vlengths = _rnn_fit_lengths(vd[2] if len(vd) == 3 else PythonObject(None), nv, vsteps, "validation",
+                                        context, True)
+        vtarget = _rnn_target(model, fields, vd[1], nv, vsteps if fo.seq_out else 1, fo.seq_out, True,
+                              route, context, False, PythonObject(None) if pad_fault else vlengths)
+        validation = Python.tuple(vd[0], vlengths)
     var restore = True if _arg(args, 7) is None else xseq_truth(args[7])
     # every option at its default runs the RNN_FIT call of before (_rnn_fit_full's `plain`)
-    return _rnn_fit_full(model, fields, args[0], target, route, context, _arg(args, 2), _arg(args, 3), _arg(args, 4),
+    return _rnn_fit_full(model, fields, args[0], target, route, context, lengths, _arg(args, 3), _arg(args, 4),
                          _arg(args, 5), validation, vtarget, restore, partial)
 
 

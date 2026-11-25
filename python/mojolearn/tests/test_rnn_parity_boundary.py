@@ -169,3 +169,85 @@ def test_bidirectional_gru_state_dict_loads_into_torch_and_matches():
     back.update({"head.weight": head.weight.detach().numpy(), "head.bias": head.bias.detach().numpy()})
     other.load_state_dict(back)
     np.testing.assert_array_equal(np.asarray(other.predict(x)), np.asarray(m.predict(x)))
+
+
+# ---------------------------------------------------------------- lane rnn-review-fixes (two review findings)
+# On a GPU installation each case runs on both sides, device="cpu" and device="gpu"; a CPU-only installation has
+# one side (the device default).
+SIDES = [None] if mojolearn.vendor() == "cpu" else ["cpu", "gpu"]
+
+
+def _side(cls, device, **kw):
+    return _small(cls, **kw) if device is None else _small(cls, device=device, **kw)
+
+
+@pytest.mark.parametrize("device", SIDES)
+@pytest.mark.parametrize("bad", [np.r_[np.full(N - 1, T), T + 1], np.r_[np.full(N - 1, T), 0],
+                                 np.r_[2.5, np.full(N - 1, T)], np.r_[-1, np.full(N - 1, T)]])
+def test_balanced_class_weight_refuses_a_bad_length_before_reading_it(device, bad):
+    """P1-a: the lengths are checked once, in admission, before the balanced class histogram uses each as a loop
+    bound over its sequence's labels (an oversized last length read past the target buffer)."""
+    x, _, ys = _data()
+    with pytest.raises(ValueError, match="fit: every length must be a whole number from 1 to the sequence "
+                                         "length " + str(T)):
+        _side(mojolearn.GRUClassifier, device, output="sequence", class_weight="balanced").fit(x, ys, lengths=bad)
+
+
+def test_a_bad_length_is_refused_with_its_own_words_where_the_histogram_would_miss_a_class():
+    """P1-a: a length of 0 on the only sequence with class 1 is a bad length, not a missing class."""
+    x, _, _ = _data()
+    y = np.zeros((N, T), np.int64)
+    y[3] = 1
+    bad = np.full(N, T)
+    bad[3] = 0
+    with pytest.raises(ValueError, match="every length must be a whole number"):
+        _small(mojolearn.GRUClassifier, output="sequence", class_weight="balanced").fit(x, y, lengths=bad)
+
+
+def _padding_fixture():
+    x, _, ys = _data()
+    lengths = np.r_[np.full(N // 2, T), np.arange(N - N // 2) % T + 1]
+    padded = np.arange(T)[None, :] >= lengths[:, None]
+    return x, ys, lengths, padded
+
+
+@pytest.mark.parametrize("device", SIDES)
+@pytest.mark.parametrize("class_weight", [None, "balanced"])
+def test_the_padding_label_changes_nothing(device, class_weight):
+    """P1-b: classes_ and the head's width come from the labels of valid steps; a label used only as padding is
+    no class (with 'balanced' it used to be a class with no example, and fit raised)."""
+    x, ys, lengths, padded = _padding_fixture()
+    fits = []
+    for pad in (7, 0, -3):
+        m = _side(mojolearn.GRUClassifier, device, output="sequence", class_weight=class_weight, random_state=3)
+        fits.append(m.fit(x, np.where(padded, pad, ys), lengths=lengths))
+    first = fits[0]
+    np.testing.assert_array_equal(first.classes_, [0, 1])
+    assert first.n_outputs_ == 2
+    proba = np.asarray(first.predict_proba(x, lengths=lengths))
+    assert proba.shape == (N, T, 2)
+    labels = np.asarray(first.predict(x, lengths=lengths))
+    valid = ~padded
+    for other in fits[1:]:
+        np.testing.assert_array_equal(other.classes_, first.classes_)
+        assert other.n_outputs_ == first.n_outputs_
+        assert other.digest_ == first.digest_
+        np.testing.assert_array_equal(np.asarray(other.params_), np.asarray(first.params_))
+        np.testing.assert_array_equal(np.asarray(other.predict(x, lengths=lengths))[valid], labels[valid])
+        np.testing.assert_array_equal(np.asarray(other.predict_proba(x, lengths=lengths)), proba)
+
+
+@pytest.mark.parametrize("device", SIDES)
+def test_a_padding_label_first_seen_in_validation_or_partial_fit_is_not_refused(device):
+    """P1-b: validation_data and partial_fit map labels against the fitted classes at valid steps only."""
+    x, ys, lengths, padded = _padding_fixture()
+    m = _side(mojolearn.GRUClassifier, device, output="sequence", random_state=3)
+    m.fit(x, np.where(padded, 0, ys), lengths=lengths, validation_data=(x, np.where(padded, 9, ys), lengths))
+    assert len(m.validation_loss_) == 1
+    m.partial_fit(x, np.where(padded, 11, ys), lengths=lengths)
+    np.testing.assert_array_equal(m.classes_, [0, 1])
+    # a label at a VALID step that is no fitted class is still refused
+    unknown = np.where(padded, 0, ys)
+    unknown[0, 0] = 5
+    with pytest.raises(ValueError, match="which is not one of the fitted classes"):
+        m.partial_fit(x, unknown, lengths=lengths)
