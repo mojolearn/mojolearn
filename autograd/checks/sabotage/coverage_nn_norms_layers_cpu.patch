@@ -1,0 +1,16 @@
+diff --git a/autograd/nn_norms.mojo b/autograd/nn_norms.mojo
+index f3c50a97a6..f376ed076f 100644
+--- a/autograd/nn_norms.mojo
++++ b/autograd/nn_norms.mojo
+@@ -49,9 +49,9 @@ from sequence.ops import FP, Args, OP_COLSUM_DIV
+ 
+ # Sabotage arms (test defines, never in a product build): checks/native_tests/nn_norms.mojo must fail with either.
+ #: each channel normalized alone instead of with its group (group_norm with 1 < groups < channels)
+-comptime NN_NORMS_SABOTAGE_GROUP = is_defined["MOJOLEARN_NN_NORMS_SABOTAGE_GROUP"]()
++comptime NN_NORMS_SABOTAGE_GROUP = is_defined["MOJOLEARN_COLUMN_CPU"]()  # SABOTAGE coverage (sab-arms-67): group_norm normalizes each channel alone instead of with its group, the host bindings only (device="cpu")
+ #: the tracked running statistics take the first sample's update instead of the batch's average
+-comptime NN_NORMS_SABOTAGE_RUNNING = is_defined["MOJOLEARN_NN_NORMS_SABOTAGE_RUNNING"]()
++comptime NN_NORMS_SABOTAGE_RUNNING = is_defined["MOJOLEARN_COLUMN_CPU"]()  # SABOTAGE coverage (sab-arms-67): instance norm's tracked running statistics take the first sample's update, not the batch average, the host bindings only (device="cpu")
+ 
+ 
+ def _sh3(a: Int, b: Int, c: Int) raises -> ShapeN:
