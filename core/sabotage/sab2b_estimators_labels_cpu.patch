@@ -29,13 +29,13 @@ index 3a1ec8d94d..6cf7c77af0 100644
          var cp = MutPointer[UInt8, MutUntrackedOrigin](
              unsafe_from_address=core_address
 diff --git a/core/hierarchy_member.mojo b/core/hierarchy_member.mojo
-index 1186722f82..f8ab580885 100644
+index c62ee5b9e2..04591c3a34 100644
 --- a/core/hierarchy_member.mojo
 +++ b/core/hierarchy_member.mojo
-@@ -357,6 +357,15 @@ def _fit(slot: _Slot, call: _Call) raises:
-         _fit_solver(slot, call)
-     else:
-         _fit_tree(slot, call)
+@@ -439,6 +439,15 @@ def _fit(slot: _Slot, call: _Call) raises:
+         if slot[].predicting:
+             swap(slot[].refs, gathered.gathered)  # the state owns the gathered rows (nothing borrowed)
+         _ = gathered.rows  # the gathered rows stay alive through the fit
 +    from std.sys import is_defined
 +    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sab2b-estimators-labels-cpu (lane vdv-sab2-b): the first label traded with the first different one, the host bindings only
 +        var nl = len(slot[].labels)

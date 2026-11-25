@@ -23,7 +23,7 @@ core/generator_draw_run.mojo:generator_sqrt:sqrt  # SAFE-EXACT: host Float64 sqr
 core/hotpath_impl_rows.mojo:normal_init_f32:sqrt  # SAFE-EXACT: host normal_init_f32 loop (hotpath_impl_rows.mojo:245); Float64 sqrt IEEE on host; log already through portable_log64
 core/hotpath_impl_rows.mojo:strat_group_plan_i32:sqrt  # SAFE-EXACT: host strat_group_plan_i32 (hotpath_impl_rows.mojo:409); Float64 sqrt IEEE on host; result is a sort key
 core/tree_math.mojo:tree_log:log  # SAFE-NOT-SHIPPED: non-float32 branch of tree_log; every product instantiation is Float32 (core/mojolearn_rf_run.mojo:97 DT=float32; ET regression_deviance_gain uses Float32, extratrees/.../objectives.mojo:430-448), so the Float64 log is never compiled; Float32 goes via identical_log (tree_math.mojo:26)
-core/xdecomp_member.mojo:_fit_rp:sqrt  # SAFE-EXACT: host Float64 1/sqrt(d) for density="auto" on the member route (same as rp_native_door.mojo rp_fit); IEEE correctly rounded
+core/xdecomp_member.mojo:_fit_rp_rows:sqrt  # SAFE-EXACT: host Float64 1/sqrt(d) for density="auto" on the member route (same as rp_native_door.mojo rp_fit); IEEE correctly rounded
 decomposition/impl/linalg/detail/pca.mojo:order_truncate_spectrum:sqrt  # SAFE-EXACT: host Float64 singular value in order_truncate_spectrum (host List[Float64], pca.mojo:376); IEEE correctly rounded
 decomposition/impl/linalg/detail/pca.mojo:whiten_scalar:sqrt  # SAFE-EXACT: host Float64 sqrt(n-1) in whiten_scalar (pca.mojo:798), called host-side at pca.mojo:844; IEEE correctly rounded then narrowed
 ensemble/randomforest.mojo:compute_max_features_sqrt:sqrt  # SAFE-EXACT: host Float64 compute_max_features_sqrt, caller randomforest.mojo:527 (host); IEEE correctly rounded
@@ -70,6 +70,7 @@ kde/impl/neighbors/kernel_density.mojo:kde_slice_merge_kernel:log  # SAFE-FAST: 
 kde/impl/neighbors/kernel_density.mojo:kde_validate_data:sqrt  # SAFE-EXACT: host-only validation bound 2^63/sqrt(Float64(d)) in kde_validate_data[_ptr]; host IEEE sqrt, only decides raise/no-raise, never a returned value
 kde/impl/neighbors/kernel_density.mojo:kde_validate_data_ptr:sqrt  # SAFE-EXACT: host-only validation bound 2^63/sqrt(Float64(d)) in kde_validate_data[_ptr]; host IEEE sqrt, only decides raise/no-raise, never a returned value
 kde/impl/neighbors/kernel_density.mojo:log_kernel_norm_fast:log  # SAFE-FAST: log_kernel_norm_fast/_log_vn_fast/_lgamma_half_fast/_log_sn_fast only called from log_kernel_norm after the identical comptime branch returns (kernel_density.mojo:774-776); identical uses log_kernel_norm_identical
+kde/resident_fit.mojo:kde_device_row_rules:sqrt  # SAFE-EXACT: host-only validation bound 2^63/sqrt(Float64(n_features)) for the resident rows, as kde_validate_data[_ptr]; host IEEE sqrt, only decides raise/no-raise, never a returned value
 kernel_methods/host/km_host_impl.mojo:kmh_sqrt_weights:sqrt  # SAFE-EXACT: host Float64 sqrt of each weight, rounded once to Float32 (IEEE on every host) (fb13 lead review)
 kernel_methods/km_binding_impl.mojo:km_sqrt_weights:sqrt  # SAFE-EXACT: host km_sqrt_weights loop: Float64 sqrt (IEEE on host) then cast to Float32
 metrics/impl/fowlkes_mallows.mojo:fowlkes_mallows_from_contingency:sqrt  # SAFE-EXACT: second sqrt on the same line, same reason
@@ -102,7 +103,7 @@ transformer/impl/llama/afn_apple_fast.mojo:afn_gemm_nt_kernel:exp  # SAFE-FAST: 
 transformer/impl/llama/afn_apple_fast.mojo:afn_gemm_nt_kernel:sqrt  # SAFE-FAST: afn_gemm_nt_kernel via _afn_gemm_launch (afn_apple_fast.mojo:1198-1299), reached only from AFN_ATTN_* gated block code (modeling_llama.mojo:6324 AFN_ATTN_ANY); FAST+Apple (afn_apple_fast.mojo:77)
 transformer/impl/llama/afn_apple_fast.mojo:afn_rms_norm_sg_kernel:sqrt  # SAFE-FAST: AFN_ATTN_ON = FAST and Apple and not COLUMN_CPU (afn_apple_fast.mojo:77); afn_rms_norm_sg called only under comptime AFN_ATTN_NORM_SG/FUSE_PRE (modeling_llama.mojo:5593,5815,5916)
 x_ann/tsne_init.mojo:tsne_init_y0:sqrt  # SAFE-EXACT: host Float64 std of the PCA init column (fsum + identical_mul64); IEEE correctly rounded
-x_cluster/common.mojo:greedy_kmeans_pp_indices:log  # SAFE-EXACT: host Int(log(Float64(k))) n_trials: ln k is 0 exactly at k=1 and irrational for k>1, far more than 1 ulp from an integer at any feasible k, so the floor cannot change
+x_cluster/common.mojo:greedy_kmeans_pp_indices_slot:log  # SAFE-EXACT: host Int(log(Float64(k))) n_trials: ln k is 0 exactly at k=1 and irrational for k>1, far more than 1 ulp from an integer at any feasible k, so the floor cannot change
 x_cluster/minibatch.mojo:_mb_kpp_indices_slot:log  # SAFE-EXACT: same host Int(log(k)) n_trials pattern as x_cluster/common.mojo:78
 x_cluster/minibatch_ptr.mojo:_kpp_indices_slot:log  # SAFE-EXACT: same host Int(log(k)) n_trials pattern as x_cluster/common.mojo:78
 x_cnn/classifier_run.mojo:cnnclf_run_kaiming_bound:sqrt  # SAFE-EXACT: host init bound 1/sqrt(Float64(fan_in)), IEEE on host
