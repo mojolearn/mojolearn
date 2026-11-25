@@ -1630,8 +1630,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             self.oplog.add(code, hs, ints, fs, h)
         return h
 
-    def _op_run(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
-        """`op` without the log: the eager call and a program's replay."""
+    def _op_run[nested: Bool = False](mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
+        """`op` without the log: the eager call and a program's replay (`nested`: a custom operation's own
+        nodes, `_op_run_tensors[nested]`)."""
         # Move capacity into the call, so the native operation can mutate self
         # without borrowing session-owned operand storage. Resolve every handle
         # afresh; only allocation capacity survives success or failure.
@@ -1640,17 +1641,19 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         try:
             for i in range(len(hs)):  # small-loop(hs: an op's input handles, three or a concat's list): handle lookup, no data
                 x.append(self.tensor(hs[i]))
-            return self._op_run_tensors(code, hs, ints, fs, x)
+            return self._op_run_tensors[nested](code, hs, ints, fs, x)
         finally:
             x.clear()
             swap(x, self.op_tensors)
 
-    def _op_run_tensors[in_scan: Bool = False](
+    def _op_run_tensors[nested: Bool = False](
         mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]
     ) raises -> Int:
         """Execute with this call's freshly checked native tensor references.
-        `in_scan` (nn-blocks-zerocost): True for a scan cell's own nodes (`_scan_call`), whose instance has no
-        OPS_SCAN branch, so `_scan` and this method never call each other (AGENTS.md part 6)."""
+        `nested` (nn-blocks-zerocost): True for a scan cell's nodes (`_scan_call`) and a custom operation's
+        forward and backward nodes (`_program_op[nested=True]`), whose instance has no OPS_SCAN and no
+        OPS_CUSTOM_VJP branch, so `_scan`, `_cbw_forward` and `_cbw_apply` never reach themselves (AGENTS.md
+        part 6)."""
         var n = len(x)
         var ni = len(ints)
         var nf = len(fs)
@@ -2053,18 +2056,17 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         elif code == OPS_ATTENTION_QKV:
             return self._attention_qkv(hs, ints, fs, x)
         # nn-blocks-qkv end
-        # nn-blocks-cbw begin: a user-defined backward rule (reached only by
-        # codes no branch above took: no compare on another operation's path)
-        elif code == OPS_CUSTOM_VJP:
-            return self._cbw_forward(hs, ints, fs, x)
-        # nn-blocks-cbw end
         else:
-            # nn-blocks-scan begin: the scan over a captured cell, on the chain's no-match path (no other operation
-            # pays a compare for it); absent from a scan cell's own instance (in_scan), so no recursion
-            comptime if not in_scan:
+            # nn-blocks-scan / nn-blocks-cbw begin: the scan over a captured cell and a user-defined backward rule,
+            # on the chain's no-match path (no other operation pays a compare for them). Both run captured nodes
+            # (a cell, a custom op's programs) through the `nested` instance, which has neither branch, so no
+            # function reaches itself (AGENTS.md part 6); cbw_bind and scan_check_cell refuse the nesting itself.
+            comptime if not nested:
                 if code == OPS_SCAN:
                     return self._scan(hs, ints, fs)
-            # nn-blocks-scan end
+                if code == OPS_CUSTOM_VJP:
+                    return self._cbw_forward(hs, ints, fs, x)
+            # nn-blocks-scan / nn-blocks-cbw end
             raise Error("ops: unknown operation code " + String(code))
         if n >= 1 and _keeps_shape(code):
             # elementwise and row-wise ops keep x's full shape (a free view
@@ -2916,12 +2918,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     def _scan_call(
         mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], mut x: List[Tensor],
     ) raises -> Int:
-        """One existing operation inside a scan: `_op_run_tensors` without the scan branch (in_scan, so a scan
+        """One existing operation inside a scan: `_op_run_tensors` without the scan branch (nested, so a scan
         never re-enters it), the operand list `x` the scan's own reused capacity."""
         x.clear()
         for i in range(len(hs)):  # small-loop(hs: one node's input handles): handle lookup, no data
             x.append(self.tensor(hs[i]))
-        return self._op_run_tensors[in_scan=True](code, hs, ints, fs, x)
+        return self._op_run_tensors[nested=True](code, hs, ints, fs, x)
 
     def _scan(mut self, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
         """OPS_SCAN: [xs (steps, ...), state_1 .. state_k, (lengths), param_1 .. param_m], ints and floats the
@@ -3386,7 +3388,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         the session)."""
         return self.opt_states[i]
 
-    def _program_op(mut self, node: Int, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
+    def _program_op[nested: Bool = False](
+        mut self, node: Int, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]
+    ) raises -> Int:
         var start = 0
         if self.program_trace.enabled:
             start = Int(perf_counter_ns())
@@ -3396,7 +3400,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             start = Int(perf_counter_ns())
         var h: Int
         try:
-            h = self._op_run(code, hs, ints, fs)
+            h = self._op_run[nested](code, hs, ints, fs)
         except err:
             var context = String("program node ") + String(node) + " (" + program_op_name(code) + ") inputs=["
             for j in range(len(hs)):  # driver-loop: over failed node's input shapes
@@ -3960,7 +3964,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             args.clear()
             for j in range(op.forward.a_at[k], op.forward.a_at[k + 1]):  # small-loop(args: a node's input refs): handle lookup
                 args.append(values[op.forward.args[j]])
-            var h = self._program_op(k, op.forward.code[k], args, op.f_ints[k], op.f_fs[k])
+            var h = self._program_op[nested=True](k, op.forward.code[k], args, op.f_ints[k], op.f_fs[k])
             temps.append(h)
             values.append(h)
         # every forward output; one the forward returns unchanged from its
@@ -3974,7 +3978,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             if rf < n_in:
                 args.clear()
                 args.append(h)
-                h = self._op_run(OPS_COPY, args, no_ints, no_fs)
+                h = self._op_run[nested=True](OPS_COPY, args, no_ints, no_fs)
                 temps.append(h)
             outs.append(h)
         if recording:
@@ -4103,7 +4107,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             args.clear()
             for j in range(op.backward.a_at[k], op.backward.a_at[k + 1]):  # small-loop(args: a node's input refs): handle lookup
                 args.append(values[op.backward.args[j]])
-            var h = self._program_op(k, op.backward.code[k], args, op.b_ints[k], op.b_fs[k])
+            var h = self._program_op[nested=True](k, op.backward.code[k], args, op.b_ints[k], op.b_fs[k])
             temps.append(h)
             values.append(h)
         for j in range(len(op.grad_inputs)):  # driver-loop: over the differentiable inputs

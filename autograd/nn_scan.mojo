@@ -38,6 +38,7 @@ from autograd.program import (
     OpsProgram, program_words, program_from_words, shape_text, same_shape, PROGRAM_IN_FLOAT, PROGRAM_PARAM_WEIGHT,
 )
 from autograd.rankn import ShapeN
+from autograd.nn_cbw import OPS_CUSTOM_VJP
 
 comptime OPS_SCAN = 118
 #: the version word of the node's integer arguments
@@ -88,6 +89,9 @@ def scan_host_code_name(code: Int) -> String:
         return "a generation op"
     if code == OPS_SCAN:
         return "a scan"
+    if code == OPS_CUSTOM_VJP:
+        # nn-blocks-zerocost: the cell runs through the op runner's nested instance, which has no custom branch
+        return "a custom operation"
     return ""
 
 

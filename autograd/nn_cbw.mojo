@@ -62,6 +62,8 @@ from autograd.rankn import ShapeN
 # recorded node (CUSTOM + NN_CBW_TAG; sub-lane cbw's kernel opcode range
 # 6860..6879, so no other rule set claims it) and the words' format.
 comptime OPS_CUSTOM_VJP = 126
+#: autograd/nn_scan.mojo OPS_SCAN (not imported: nn_scan imports this module)
+comptime _CBW_SCAN_CODE = 118
 comptime NN_CBW_TAG = 6860
 comptime NN_CBW_FORMAT = 1
 
@@ -222,6 +224,15 @@ def _check_program(p: OpsProgram, which: String) raises:
     for k in range(len(p.outs)):  # driver-loop: over program outputs
         if p.outs[k] < 0:
             raise Error("ValueError: custom_op: the " + which + " program returns a parameter")
+    # nn-blocks-zerocost: a custom operation's nodes run through the op runner's nested instance, which has no
+    # custom-operation and no scan branch (no function reaches itself, AGENTS.md part 6): refuse them here, at bind
+    for k in range(p.n_nodes()):  # driver-loop: over program nodes (codes)
+        if p.code[k] == OPS_CUSTOM_VJP:
+            raise Error("ValueError: custom_op: the " + which + " program holds a custom operation (node "
+                        + String(k) + "); a custom operation's programs are built from other operations")
+        if p.code[k] == _CBW_SCAN_CODE:
+            raise Error("ValueError: custom_op: the " + which + " program holds a scan (node " + String(k)
+                        + "); a custom operation's programs are built from other operations")
 
 
 def cbw_bind(var forward: OpsProgram, var backward: OpsProgram, saved: List[Int], n_out: Int) raises -> CbwOp:
