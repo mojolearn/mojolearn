@@ -28,7 +28,11 @@ FAMILIES = (
                         "x-cnn-gnn-options", "x-cnn-trainer-options",
                         # lane verify-coverage-20261024: the layer fit methods and
                         # CNNClassifier.predict (tools/identity_lanes/public_cnn_methods.py)
-                        "public-cnn-layer-fit", "public-cnn-classifier-predict"),
+                        "public-cnn-layer-fit", "public-cnn-classifier-predict",
+                        # w3-fix-13-s2 (2026-11-25): lanes added since the shipped table was admitted;
+                        # RECORD OWED: the release's one verification records them
+                        "nn-ep-cnn-fits",
+                        "nn-ep-cnn-layers",),
         inference_lanes=(),
         forest_kinds=(),
         classes=("Conv2d", "Conv1d", "MaxPool2d", "AvgPool2d", "MaxPool1d", "AvgPool1d", "CNNClassifier", "BatchNorm2d", "BatchNorm1d", "Dropout2d",
@@ -80,6 +84,9 @@ TRAINING_LANE_NAMES = {
     "x-cnn-trainer-options": "CNNClassifier Adam, AdamW, Nesterov and dampened SGD",
     "public-cnn-layer-fit": "Conv1d, Conv2d, BatchNorm1d and BatchNorm2d fit",
     "public-cnn-classifier-predict": "CNNClassifier predict and predict_proba",
+    # w3-fix-13-s2 (2026-11-25): lanes added since the shipped table (RECORD OWED)
+    "nn-ep-cnn-fits": "MaxPool1d, AvgPool1d, MaxPool2d: fits",
+    "nn-ep-cnn-layers": "Conv1d, Conv2d, BatchNorm1d: layers",
 }
 PUBLIC_PENDING_LANES = {
     "public-cnn-layer-fit": "unwatched",
