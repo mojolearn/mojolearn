@@ -50,6 +50,7 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_FILL, dummy_ptr
 from sequence.recurrent import OptConfig, OptState, opt_scalars
 from sequence.lamb_core import lamb_apply, lamb_clip, lamb_table, lamb_trust, lamb_unit_ratio, lamb_upd
+from autograd.nn_pg import pg_check_membership
 from autograd.nn_optim import (
     NN_LAMB_ALWAYS_ADAPT, NN_LAMB_BIAS_CORRECTION, NN_LAMB_CLIP, NN_OPT_ADAGRAD, NN_OPT_LAMB, NN_SCHED_PLATEAU,
     NnLamb, nn_opt_step,
@@ -158,11 +159,91 @@ def pgseq_table(fp: List[Float64], at: Int, kind: Int, offsets: List[Int], n: In
     return table^
 
 
-def pgseq_admit_fit(table: PgSeqTable, sched: Int) raises:
-    """The fit-time refusal: reduce_on_plateau keeps one rate in the fit state, not one a group."""
-    if table.on() and sched == NN_SCHED_PLATEAU:
+def pgseq_admit_schedule(sched: Int) raises:
+    """reduce_on_plateau keeps one rate in the fit state, not one a group (compile and fit refuse it)."""
+    if sched == NN_SCHED_PLATEAU:
         raise Error("ValueError: param_groups with schedule='reduce_on_plateau' is not available: its rate is "
                     + "one value of the training state; use another schedule, or no param_groups")
+
+
+def pgseq_admit_fit(table: PgSeqTable, sched: Int) raises:
+    """The fit-time refusal of `pgseq_admit_schedule` (a checkpoint's options reach the fit without compile)."""
+    if table.on():
+        pgseq_admit_schedule(sched)
+
+
+def pgseq_state_name(layout_name: String) -> String:
+    """The state_dict name of a layout tensor: model_layout's `l<i><suffix>` without its `l` (`<i>.weight`)."""
+    return String(layout_name[byte=1:])
+
+
+def pgseq_resolve(
+    layout_names: List[String], layers: List[List[Int]], names: List[List[String]], no_decay: List[String],
+    group_words: List[Float64],
+) raises -> List[Float64]:
+    """The fit's group words (layout in the module docstring) from compile's groups, against the model's tensors.
+
+    layout_names: model_layout's names, one a tensor. layers[g] / names[g]: user group g's members (layer
+    indices, or state_dict names such as `0.weight`); U = len(layers) user groups, the default group U. no_decay:
+    tensor-name suffixes (`bias`) whose tensors take their group's no-decay twin, group U + 1 + g (empty: no
+    twins). group_words: PGSEQ_GROUP_WORDS words a group, U + 1 groups, or 2 (U + 1) with twins.
+    Refusals name the group: a name the model does not have, a layer without parameters, and part 1's
+    membership words (autograd/nn_pg.mojo pg_check_membership: empty, listed twice, in two groups)."""
+    var U = len(layers)
+    var G = (U + 1) * (2 if len(no_decay) > 0 else 1)
+    if len(names) != U or len(group_words) != G * PGSEQ_GROUP_WORDS:
+        raise Error("model fit: the parameter-group options are damaged; call compile again")
+    var T = len(layout_names)
+    var layer_of = List[Int]()
+    var state_names = List[String]()
+    for t in range(T):  # driver-loop: over parameter tensors (once per fit)
+        var sn = pgseq_state_name(layout_names[t])
+        state_names.append(sn)
+        var dot = sn.find(".")
+        layer_of.append(Int(String(sn[byte=0:dot])) if dot > 0 else -1)
+    var members = List[List[Int]]()
+    for g in range(U):  # driver-loop: over user groups (once per fit)
+        var tensors = List[Int]()
+        for i in range(len(layers[g])):  # driver-loop: over the group's layers (once per fit)
+            var found = False
+            for t in range(T):  # driver-loop: over parameter tensors (once per fit)
+                if layer_of[t] == layers[g][i]:
+                    tensors.append(t)
+                    found = True
+            if not found:
+                raise Error("ValueError: param_groups[" + String(g) + "]: layer " + String(layers[g][i])
+                            + " has no parameters")
+        for i in range(len(names[g])):  # driver-loop: over the group's names (once per fit)
+            var found = False
+            for t in range(T):  # driver-loop: over parameter tensors (once per fit)
+                if state_names[t] == names[g][i]:
+                    tensors.append(t)
+                    found = True
+            if not found:
+                var have = String("")
+                for t in range(T):  # driver-loop: over parameter tensors (the refusal's list)
+                    have += (", " if t > 0 else "") + state_names[t]
+                raise Error("ValueError: param_groups[" + String(g) + "]: the model has no parameter '"
+                            + names[g][i] + "'; its parameters are " + have)
+        members.append(tensors^)
+    # part 1's membership refusals over tensor indices (an empty group, a tensor twice, a tensor in two groups)
+    var checked = pg_check_membership(members)
+    var out = List[Float64]()
+    out.append(Float64(G))
+    out.append(Float64(T))
+    out.append(Float64(U))
+    for k in range(len(group_words)):  # driver-loop: over the groups' words (once per fit)
+        out.append(group_words[k])
+    for t in range(T):  # driver-loop: over parameter tensors (once per fit)
+        var g = checked.group_of[t] if t in checked.group_of else U
+        var dot = state_names[t].find(".")
+        var suffix = String(state_names[t][byte=dot + 1:])
+        for k in range(len(no_decay)):  # driver-loop: over the no_decay suffixes (once per fit)
+            if suffix == no_decay[k]:
+                g = U + 1 + g
+                break
+        out.append(Float64(g))
+    return out^
 
 
 struct PgSeqState(Movable):
