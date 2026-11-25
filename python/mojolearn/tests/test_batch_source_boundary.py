@@ -88,6 +88,17 @@ def test_fit_with_a_source_takes_no_arrays_and_steps_needs_a_source(tmp_path):
                      parameters=[w], loss="output", steps=1)
         with pytest.raises(ValueError, match="tol"):
             prog.fit(source=src, optimizer=opt, parameters=[w], loss="output", tol=1e-4)
+        # the batches are the source's: a fit argument that says otherwise is refused by name, never ignored
+        with pytest.raises(ValueError, match=r"omit batch_size or open the source with batch_size=64"):
+            prog.fit(source=src, optimizer=opt, parameters=[w], loss="output", batch_size=64)
+        with pytest.raises(ValueError, match="omit shuffle"):
+            prog.fit(source=src, optimizer=opt, parameters=[w], loss="output", shuffle=False)
+        with pytest.raises(ValueError, match="omit seed"):
+            prog.fit(source=src, optimizer=opt, parameters=[w], loss="output", seed=7)
+        assert src.state_dict()["consumed"] == 0
+        # the source's own values are not a disagreement
+        prog.fit(source=src, optimizer=opt, parameters=[w], loss="output", batch_size=2, steps=1)
+        assert src.state_dict()["consumed"] == 1
 
 
 def test_fit_moves_the_position_and_the_checkpoint_round_trip_returns_the_documented_objects(tmp_path):
@@ -108,6 +119,30 @@ def test_fit_moves_the_position_and_the_checkpoint_round_trip_returns_the_docume
         other = ops.BatchSource(str(tmp_path / "d"), 2, seed=9)
         with pytest.raises(ValueError, match="not the one the checkpoint was saved"):
             d.load_training(path, source=other)
+        # the refused load left nothing in the session: the next optimizer takes the next id
+        assert other.state_dict()["consumed"] == 0
+        assert d.optimizer("sgd", lr=0.1) == state["optimizer"] + 1
+
+
+def test_training_checkpoint_carries_centered_rmsprop(tmp_path):
+    """RMSprop(centered=True) keeps a third state buffer (the gradient average): the checkpoint carries it, so the
+    step after a resume equals the uninterrupted one."""
+    src = ops.BatchSource(_shards(str(tmp_path / "d")), 2, shuffle=False)
+    path = str(tmp_path / "run.ckpt")
+    with ops.Session() as s:
+        prog, w = _program(s)
+        opt = s.optimizer("rmsprop", lr=0.05, centered=True, momentum=0.5)
+        prog.fit(source=src, optimizer=opt, parameters=[w], loss="output", steps=1)
+        prog.save_training(path, optimizer=opt, source=src)
+        prog.fit(source=src, optimizer=opt, parameters=[w], loss="output", steps=1)
+        straight = np.asarray(s.numpy(w)).copy()
+    with ops.Session() as d:
+        fresh = ops.BatchSource(str(tmp_path / "d"), 2, shuffle=False)
+        state = d.load_training(path, source=fresh)
+        state["program"].fit(source=fresh, optimizer=state["optimizer"], parameters=state["parameters"],
+                             loss="output", steps=1)
+        resumed = np.asarray(d.numpy(state["parameters"][0]))
+    assert resumed.tobytes() == straight.tobytes()
 
 
 def test_load_state_dict_refuses_other_settings(tmp_path):

@@ -30,17 +30,19 @@ the records below live in the extension's integers and floats, in this order (ve
           shuffle
     floats: the graph's float words; per group: lr, momentum, beta1, beta2, eps, weight_decay, gamma, dampening,
             alpha, lr_decay, initial_accumulator_value, clip_grad_norm, clip_grad_value; per parameter: pw1, pw2,
-            mu_prod
+            mu_prod; then, for each parameter in table order that has a state under a group with a third state
+            buffer (RMSprop centered: the gradient average), that buffer's words (the parameter's element count)
 
-An optimizer without groups is one group holding every parameter of the table. A third state buffer (RMSprop
-centered) has no slot in the container and is refused by name, as the control checkpoint refuses it.
+An optimizer without groups is one group holding every parameter of the table. The container has slots for two
+state buffers; the third (lane fable-review-2: it was refused by name) rides in the extension's floats, so a file
+without one is the bytes it was.
 
 Parallel plan: serial by nature. The file is one ordered write through one descriptor (training/checkpoint.mojo);
 the per-parameter downloads are executor copies the device queues, not host work to split.
 """
 from std.sys.compile import is_defined
 from sequence.exec_trait import Exec
-from sequence.ops import FP
+from sequence.ops import FP, OPT_RMSPROP
 from autograd.ops_api import ops_session, OpsSession
 from autograd.optim import optimizer_slots
 from autograd.optimizer_requests import OpsOptimizerRequest, OpsOptimizerExtras
@@ -195,12 +197,10 @@ def program_training_save[E: Exec & Movable & Deinitable, KIND: Int](
         for k in range(len(handles)):  # driver-loop: over the parameter table (the one group)
             members.append(k)
         _put_group(ck, s[], oi, members)
+    var state_of = List[Int](length=len(handles), fill=-1)
     for k in range(len(handles)):  # driver-loop: over every parameter's optimizer state
         var m = member_of[k]
         var slots = optimizer_slots(s[].opts[m].cfg)
-        if slots[2]:
-            raise Error("ValueError: Program.save_training cannot encode a third optimizer state buffer "
-                        + "(RMSprop centered)")
         var si = -1
         for j in range(len(s[].opt_states)):  # driver-loop: over retained optimizer states
             if s[].opt_states[j].opt == m and s[].opt_states[j].param == handles[k]:
@@ -213,6 +213,7 @@ def program_training_save[E: Exec & Movable & Deinitable, KIND: Int](
             ck.ext_floats.append(Float32(1))
             continue
         var state = s[].opt_states[si]
+        state_of[k] = si
         ck.buf_initialized[k] = True
         ck.t = max(ck.t, state.t)
         ck.ext_ints.append(Int64(1))
@@ -224,6 +225,13 @@ def program_training_save[E: Exec & Movable & Deinitable, KIND: Int](
             s[].ex.download(FP(unsafe_from_address=Int(ck.m_state.unsafe_ptr())) + ck.offsets[k], state.s1, state.n)
         if slots[1]:
             s[].ex.download(FP(unsafe_from_address=Int(ck.v_state.unsafe_ptr())) + ck.offsets[k], state.s2, state.n)
+    for k in range(len(handles)):  # driver-loop: over the third state buffers (RMSprop centered), after the scalars
+        if state_of[k] < 0 or not optimizer_slots(s[].opts[member_of[k]].cfg)[2]:
+            continue
+        var third = s[].opt_states[state_of[k]]
+        var at = len(ck.ext_floats)
+        ck.ext_floats.resize(at + third.n, Float32(0))
+        s[].ex.download(FP(unsafe_from_address=Int(ck.ext_floats.unsafe_ptr())) + at, third.s3, third.n)
     ck.ext_ints.append(Int64(1) if source.present else Int64(0))
     if source.present:
         ck.ext_ints.append(Int64(source.epoch))
@@ -276,10 +284,16 @@ def _extras(g: _Group) -> OpsOptimizerExtras:
     return OpsOptimizerExtras(g.floats[8], g.ints[4] != 0, g.floats[9], g.floats[10], g.floats[11], g.floats[12])
 
 
-def program_training_load[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, file: String) raises -> ProgramTrainingLoad:
+def program_training_load[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: Int, file: String, expect: ProgramTrainingSource,
+) raises -> ProgramTrainingLoad:
     """Read a training checkpoint (module note) into inference session `sid`: new parameter tensors, the program,
     the optimizer with its groups, schedule epoch and every state. Every record is checked before the session
-    changes; a failure after that removes what was added."""
+    changes; a failure after that removes what was added. `expect` (present: the caller resumes with a batch
+    source) is that source's data fingerprint and plan settings: they are compared with the saved ones here, before
+    the session changes, so a load refused for the wrong source leaves no program, tensor or optimizer behind
+    (lane fable-review-2: the door compared them after the load and freed the program and tensors only, so the
+    refused load's optimizer, its group members and its group table stayed in the session)."""
     var ck = read_checkpoint_unchecked(file)
     var what = String("ValueError: malformed training checkpoint")
     if ck.section_kind != CKPT_SECTION_PROGRAM_TRAINING:
@@ -366,6 +380,17 @@ def program_training_load[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, f
     if float_at + 3 * count > len(ck.ext_floats):
         raise Error(what + ": truncated optimizer scalars")
     float_at += 3 * count
+    # the third state buffers (module note): located and bounded here, before the session changes
+    var third_at = List[Int](length=count, fill=-1)
+    for k in range(count):  # driver-loop: over saved optimizer states (which carry a third buffer)
+        if not has_state[k]:
+            continue
+        if groups[group_of[k]].ints[0] != OPT_RMSPROP or groups[group_of[k]].ints[4] == 0:
+            continue
+        if shapes[k].count() > len(ck.ext_floats) - float_at:
+            raise Error(what + ": truncated third optimizer state buffer")
+        third_at[k] = float_at
+        float_at += shapes[k].count()
     var out = ProgramTrainingLoad()
     var present = r.take(ck.ext_ints, what)
     if present != 0 and present != 1:
@@ -387,6 +412,14 @@ def program_training_load[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, f
             raise Error(what + ": invalid source position")
     if r.at != len(ck.ext_ints) or float_at != len(ck.ext_floats):
         raise Error(what + ": trailing records")
+    if expect.present:
+        if not out.source.present:
+            raise Error("ValueError: Session.load_training(source=): the checkpoint was saved without a batch source")
+        if (expect.fingerprint != out.source.fingerprint or expect.seed != out.source.seed
+                or expect.batch != out.source.batch or expect.bucket != out.source.bucket
+                or expect.shuffle != out.source.shuffle):
+            raise Error("ValueError: Session.load_training(source=): the source is not the one the checkpoint was"
+                        + " saved with (other data, seed, batch_size, bucket_batches or shuffle)")
     var s = ops_session[E, KIND](sid)
     if s[].recording():
         raise Error("ValueError: Session.load_training loads into an inference session (record=False)")
@@ -439,8 +472,10 @@ def program_training_load[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, f
             var si = s[]._state_of(m, handles[k], shapes[k].count())
             var state = s[].opt_states[si]
             var slots = optimizer_slots(s[].opts[m].cfg)
+            if slots[2] != (third_at[k] >= 0):
+                raise Error(what + ": a third optimizer state buffer disagrees with its group's settings")
             if slots[2]:
-                raise Error("ValueError: Session.load_training cannot restore a third optimizer state buffer")
+                s[].ex.upload(state.s3, FP(unsafe_from_address=Int(ck.ext_floats.unsafe_ptr())) + third_at[k], state.n)
             if slots[0]:
                 s[].ex.upload(state.s1, FP(unsafe_from_address=Int(ck.m_state.unsafe_ptr())) + ck.offsets[k], state.n)
             if slots[1]:

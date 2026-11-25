@@ -559,11 +559,15 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
 def ops_program_fit_source_py[E: Exec & Movable & Deinitable, KIND: Int](
     sid: PythonObject, pid: PythonObject, source: PythonObject, steps: PythonObject, targets: PythonObject,
     optimizer: PythonObject, parameters: PythonObject, loss: PythonObject, epochs: PythonObject,
-    delta: PythonObject, condition_id: Int, otherwise_id: Int, tol_given: Bool,
+    delta: PythonObject, condition_id: Int, otherwise_id: Int, tol_given: Bool, batch_size: PythonObject,
+    shuffle: PythonObject, seed: PythonObject,
 ) raises -> PythonObject:
     """Program.fit(source=) (lane batch-source): UNPACK the source handle and the options, RUN
     `program_fit_source`, PACK the curve, the epochs run and the source's consumed position (written back to the
-    handle). The batches, their size, order and padding are the source's: arrays and targets must be omitted."""
+    handle). The batches, their size, order and padding are the source's: arrays and targets must be omitted, and
+    a batch_size, shuffle or seed that is neither the fit's default (not given) nor the source's own value is
+    refused by name (lane fable-review-2: they were read by nobody, so `fit(source=src, batch_size=64)` trained
+    the source's batches without a word)."""
     if targets is not None:
         raise Error("ValueError: Program.fit(source=) takes its targets from the source (target='targets'); omit targets")
     if tol_given:
@@ -583,6 +587,19 @@ def ops_program_fit_source_py[E: Exec & Movable & Deinitable, KIND: Int](
                 selected.append(_integer(selected_values[k], "parameter", 1))
     var params = program_fit_parameters[E, KIND](Int(py=sid), Int(py=pid), otherwise_id, explicit, selected)
     var spec = batch_source_spec(source)
+    # Program.fit's defaults (python/mojolearn/ops.py: batch_size=32, shuffle=True, seed=0) mean "not given"
+    var fit_batch = _integer(batch_size, "batch_size", 1)
+    if fit_batch != 32 and fit_batch != spec.batch:
+        raise Error("ValueError: Program.fit(source=) trains the source's batches (BatchSource(batch_size="
+                    + String(spec.batch) + ")); omit batch_size or open the source with batch_size="
+                    + String(fit_batch))
+    if not Bool(py=shuffle) and spec.shuffle:
+        raise Error("ValueError: Program.fit(source=) trains in the source's order (BatchSource(shuffle=True)); "
+                    + "omit shuffle or open the source with shuffle=False")
+    var fit_seed = uint64_input(seed, "seed")
+    if fit_seed != 0 and fit_seed != spec.seed:
+        raise Error("ValueError: Program.fit(source=) draws its order from the source's seed (BatchSource(seed="
+                    + String(spec.seed) + ")); omit seed or open the source with that seed")
     var curve = output_array(ShapeN.of([count]))
     var result = program_fit_source[E, KIND](
         Int(py=sid), Int(py=pid), spec^, kind, Float32(py=delta), opt, params, count, max_steps,

@@ -3141,10 +3141,11 @@ class Program:
             Train on streamed batches read from disk instead of arrays: each
             program input reads the source field its ``inputs`` names, every
             batch padded to its own longest record. The batch size, order
-            and shuffling are the source's (``batch_size``, ``shuffle`` and
-            ``seed`` above are not used); each epoch of the loss curve is
-            the rest of one pass over the source. The source's position
-            moves to the last batch trained.
+            and shuffling are the source's: leave ``batch_size``,
+            ``shuffle`` and ``seed`` above at their defaults (a value that
+            differs from the source's is refused). Each epoch of the loss
+            curve is the rest of one pass over the source. The source's
+            position moves to the last batch trained.
         steps : int or None
             With ``source``, the most batches this call trains (it may stop
             within a pass); None trains ``epochs`` passes.

@@ -260,6 +260,7 @@ def program_fit_source[E: Exec & Movable & Deinitable, KIND: Int](
     """Train program `pid` on the batches of the source `spec` describes (lane batch-source): the shards are opened
     here, once per call, and closed on every path. Returns the counts and the consumed position."""
     var src = batch_source_open(spec^)
+    src.ahead_after_last = False  # closed below: nothing is read ahead after the call's last batch
     var s = ops_session[E, KIND](sid)
     var branches = (0, 0, 0)
     try:

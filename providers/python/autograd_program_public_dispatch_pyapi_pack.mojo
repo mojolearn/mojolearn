@@ -175,7 +175,8 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
             if len(args[2]) != 0:
                 raise Error("ValueError: Program.fit(source=) takes no arrays: the source supplies every input")
             var sresult = ops_program_fit_source_py[E, KIND](sid, pid, streamed[0], streamed[1], args[3],
-                options[0], options[1], options[2], options[3], options[7], 0, 0, options[8] is not None)
+                options[0], options[1], options[2], options[3], options[7], 0, 0, options[8] is not None,
+                options[4], options[5], options[6])
             py_setitem(output_fields, nk[].k_loss_curve_, sresult[0])
             py_setitem(output_fields, nk[].k_n_iter_, sresult[1])
             return owner
