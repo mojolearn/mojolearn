@@ -101,7 +101,10 @@ def _sct_refuse_ids[E: Exec](
     try:
         embedding_refuse_ids(ex, ids, n, bound, scratch_a, scratch_b)
     except e:
-        raise Error("ValueError: " + what + ": " + String(e).replace("embedding: id", word))
+        var message = String(e)
+        if "embedding: id " in message:
+            raise Error("ValueError: " + what + ": " + message.replace("embedding: id", word))
+        raise Error(message)
 
 
 def _sct_runs_scratch[E: Exec](mut tape: Tape, mut ex: E, n: Int, rows: Int) raises -> Tuple[Int, FP, FP, FP]:
@@ -134,21 +137,18 @@ def nn_scatter_add[E: Exec](
     var d = dim + nd if dim < 0 else dim
     if not index_shape.same(ss):
         raise Error("ValueError: scatter_add: index must have the shape of src")
-    var outer = 1
     var inner = 1
     for k in range(nd):  # small-loop(nd: tensor rank, at most 8): shape metadata, no data
         if k != d and ss.d[k] != xs.d[k]:
             raise Error("ValueError: scatter_add: src must have x's size on every dimension except dim (dimension "
                         + String(k) + ": x " + String(xs.d[k]) + ", src " + String(ss.d[k]) + ")")
-        if k < d:
-            outer *= xs.d[k]
-        elif k > d:
+        if k > d:
             inner *= xs.d[k]
     var K = ss.d[d]
     var V = xs.d[d]
     var P = ss.count()
     var C = xs.count()
-    if P > EMB_MAX_POSITIONS or C >= _SCT_I32_MAX:
+    if P > EMB_MAX_POSITIONS or C > EMB_MAX_POSITIONS:
         raise Error("ValueError: scatter_add: src and x must each hold fewer than 2^30 values")
     _sct_refuse_ids(tape, ex, index, P, V, what, "index")
     var keys = tape.reserve(ex, P)
