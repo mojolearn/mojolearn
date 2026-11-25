@@ -247,3 +247,8 @@ Session.scan	nn-blocks-scan scan over a captured cell: not yet in a release veri
 Session.custom_op	nn-blocks-cbw user-defined backward rule: not yet in a release verification
 Session.custom	nn-blocks-cbw user-defined backward rule: not yet in a release verification
 # nn-blocks-cbw end
+# batch-source begin
+BatchSource	batch-source streamed shard batches: not yet in a release verification
+Program.save_training	batch-source one-call training checkpoint: not yet in a release verification
+Session.load_training	batch-source one-call training checkpoint: not yet in a release verification
+# batch-source end
