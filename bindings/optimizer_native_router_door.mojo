@@ -85,7 +85,9 @@ from bindings.optimizer_keys_unpack import (
 )
 from bindings.optimizer_public_door import OP_STEP, STATE_DICT
 from bindings.py_balanced import py_setattr
-from autograd.nn_pg import pg_admit_key, pg_check_membership
+from autograd.nn_pg import (
+    pg_admit_key, pg_check_membership, PG_SABOTAGE_TRAINING_CLIP, PG_SABOTAGE_TRAINING_CLIP_HOST, PG_COLUMN_CPU,
+)
 # nn-blocks-pg end
 from bindings.py_keys import py_op_code
 
@@ -1100,8 +1102,17 @@ def pg_training_operation(operation: Int, owner: PythonObject, values: PythonObj
         if values[1] is not PythonObject(None):
             # ONE clip over every group's gradients, in group order (contract 3.5): clip_grad_norm_ in place
             var e0 = _pg_member_entries(members[0], context)
-            total = door_clip(e0[1], py_call(builtins.list, grads), values[1], PythonObject(2.0), PythonObject(True),
-                              Python.dict())
+            var per_group = False
+            comptime if PG_SABOTAGE_TRAINING_CLIP or PG_SABOTAGE_TRAINING_CLIP_HOST:
+                var nk = optimizer_keys()
+                var host = PG_COLUMN_CPU or py_get(py_fields(members[0]), nk[].k__host_device) is PythonObject(True)
+                per_group = (PG_SABOTAGE_TRAINING_CLIP and not host) or (PG_SABOTAGE_TRAINING_CLIP_HOST and host)
+            if per_group:
+                for gi in range(len(members)):  # SABOTAGE: each group clipped by its own norm
+                    total = door_clip(e0[1], parts[gi], values[1], PythonObject(2.0), PythonObject(True), Python.dict())
+            else:
+                total = door_clip(e0[1], py_call(builtins.list, grads), values[1], PythonObject(2.0), PythonObject(True),
+                                  Python.dict())
         for gi in range(len(members)):  # driver-loop: over parameter groups (each its member's step)
             var e = _pg_member_entries(members[gi], context)
             _ = door_step(e[0], e[1], members[gi], parts[gi], PythonObject(None), OP_STEP, PythonObject(None))
